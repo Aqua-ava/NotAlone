@@ -11,6 +11,8 @@ from notalone.server.contact_context_handoff import (
     ContactContextHandoff, is_contact_context_request,
 )
 
+from notalone.front_sync.wechat_scope_remote import WechatScopeOwnedByTypeScript
+
 import json
 import psycopg
 import logging
@@ -551,6 +553,7 @@ class BackendApp:
         "_source_service",
         "_setup_service",
         "_wechat_setup_service",
+        "_wechat_scope_transferred",
         "_skill_service",
         "_skill_learning",
         "_expression_preferences",
@@ -588,6 +591,7 @@ class BackendApp:
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
         wechat_setup_service: WechatSetupService | None = None,
+        wechat_scope_transferred: bool = False,
         expression_preferences: ExpressionPreferenceService | None = None,
         runtime_shutdown: Callable[[], None] | None = None,
         contact_context: ContactContextHandoff | None = None,
@@ -623,6 +627,7 @@ class BackendApp:
         self._owner_id = owner_id
         self._setup_service = setup_service
         self._wechat_setup_service = wechat_setup_service
+        self._wechat_scope_transferred = wechat_scope_transferred
         self._skill_service = skill_service
         self._skill_learning = skill_learning
         self._sync_control = sync_control
@@ -753,6 +758,16 @@ class BackendApp:
         request_headers = headers or {}
         if not self._authorized(request_headers):
             return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+        # 迁移责任由启动配置固定；任何旧HTTP入口都不能重新成为授权写入方。
+        if self._wechat_scope_transferred and urlsplit(path).path in {
+            "/api/setup/wechat", "/api/setup/wechat/detect", "/api/setup/wechat/confirm",
+            "/api/sync/cli-sessions", "/api/sync/cli-bindings",
+            "/api/sync/cli-bindings/confirm", "/api/sync/cli-bindings/revoke",
+            "/api/sync/scope", "/api/sync/history-authorization",
+            "/api/sync/confirm", "/api/sync/confirm-pending",
+        }:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE,
+                                  {"error": "wechat_scope_owned_by_typescript"})
         from notalone.application.manual_input_scope import manual_input_contact
         manual_value = _header_value(request_headers, "X-NotAlone-Manual-Contact")
         try:
@@ -779,6 +794,9 @@ class BackendApp:
                 headers=request_headers,
                 body=request_body,
             )
+        except WechatScopeOwnedByTypeScript:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE,
+                                  {"error": "wechat_scope_owned_by_typescript"})
         except ManagedUpdateBackupError:
             return _json_response(HTTPStatus.CONFLICT, {"error": "update_backup_cleanup_required"})
         except (SyncHostStopped, ModelWorkStopped):
@@ -831,6 +849,23 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
             )
+        if path_value == "/api/runtime/wechat-scope/revoke":
+            if not self._wechat_scope_transferred or method_upper != "POST":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            try:
+                payload = _parse_task_json(request_body)
+                if not isinstance(payload, dict) or set(payload) != {"contact_id", "binding_id"}:
+                    raise ValueError()
+                contact_id, binding_id = UUID(payload["contact_id"]), UUID(payload["binding_id"])
+            except (ValueError, TypeError, AttributeError):
+                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "cli_binding_revoke_invalid"})
+            revoke = getattr(self._sync_control, "revoke_transferred_binding", None)
+            if not callable(revoke):
+                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "sync_unavailable"})
+            try:
+                return _json_response(HTTPStatus.OK, revoke(contact_id=contact_id, binding_id=binding_id))
+            except SyncHostBusy:
+                return _json_response(HTTPStatus.CONFLICT, {"error": "cli_binding_revoke_busy"})
         handoff_path = "/api/runtime/contact-context/"
         if path_value.startswith(handoff_path):
             action = path_value[len(handoff_path):]
@@ -3320,6 +3355,7 @@ def create_app(
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
     wechat_setup_service: WechatSetupService | None = None,
+    wechat_scope_transferred: bool = False,
     expression_preferences: ExpressionPreferenceService | None = None,
     follow_smoke: FollowSmokeController | None = None,
     runtime_shutdown: Callable[[], None] | None = None,
@@ -3391,6 +3427,7 @@ def create_app(
         ledger_service=ledger_service,
         setup_service=setup_service,
         wechat_setup_service=wechat_setup_service,
+        wechat_scope_transferred=wechat_scope_transferred,
         runtime_shutdown=runtime_shutdown,
     )
 

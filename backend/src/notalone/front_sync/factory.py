@@ -28,6 +28,7 @@ from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
 )
 from notalone.persistence.sync_scope import PostgresSyncScopeStore
+from notalone.front_sync.wechat_scope_remote import RemoteWechatScope, RemoteHistoryAuthorization
 from notalone.persistence.backfill_state import PostgresBackfillStateStore
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
 from notalone.persistence.history_authorization import (
@@ -55,10 +56,21 @@ def build_cli_full_sync_engine(
 ) -> CliFullSyncEngine:
     """装配 CLI 后台全量同步与前台 OCR 定位双通道引擎。"""
 
-    # 生产装配始终使用持久化授权版本；测试可注入内存实现。
+    remote_url = os.environ.get("NOTALONE_WECHAT_SCOPE_URL")
+    remote_token = os.environ.get("NOTALONE_WECHAT_SCOPE_TOKEN")
+    if (remote_url is None) != (remote_token is None):
+        raise ValueError("wechat_scope_remote_config_incomplete")
+    scope_store = (
+        RemoteWechatScope(url=remote_url, token=remote_token, owner_id=owner_id,
+                          account_scope=account_scope)
+        if remote_url is not None else PostgresSyncScopeStore(database_url)
+    )
+
+    # 移交后不能通过旧账号级注入恢复历史全范围读取。
     authorization = (
-        history_authorization
-        or PostgresHistorySyncAuthorizationStore(database_url)
+        RemoteHistoryAuthorization(scope_store)
+        if isinstance(scope_store, RemoteWechatScope)
+        else history_authorization or PostgresHistorySyncAuthorizationStore(database_url)
     )
 
     cli = LocalWechatCli(
@@ -137,7 +149,7 @@ def build_cli_full_sync_engine(
         foreground=foreground,
         binding_coordinator=binding_coordinator,
         fallback=fallback,
-        scope_store=PostgresSyncScopeStore(database_url),
+        scope_store=scope_store,
         history_authorization=authorization,
         clock=clock,
     )

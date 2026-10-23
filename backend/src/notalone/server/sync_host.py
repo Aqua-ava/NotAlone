@@ -96,6 +96,9 @@ class SyncEnginePort(Protocol):
     def list_cli_bindings(self, *, include_revoked: bool = False) -> tuple[PersistedConversationBinding, ...]:
         """读取当前运行范围的保存状态；默认只含 active 授权。"""
 
+    def revoke_transferred_binding(self, *, contact_id: UUID, binding_id: UUID) -> dict:
+        ...
+
     def revoke_cli_binding(
         self, *, contact_id: UUID, binding_id: UUID,
     ) -> PersistedConversationBinding:
@@ -179,6 +182,9 @@ class SyncControlPort(Protocol):
 
     def cli_bindings(self, *, include_revoked: bool = False) -> tuple[PersistedConversationBinding, ...]:
         """读取当前运行范围的保存状态；默认只含 active 授权。"""
+
+    def revoke_transferred_binding(self, *, contact_id: UUID, binding_id: UUID) -> dict:
+        ...
 
     def revoke_cli_binding(
         self, *, contact_id: UUID, binding_id: UUID,
@@ -431,6 +437,13 @@ class SyncHost:
         with self._active_engine():
             return self._engine.list_cli_bindings(include_revoked=include_revoked)
 
+    def revoke_transferred_binding(self, *, contact_id: UUID, binding_id: UUID) -> dict:
+        """在旧读取排空后转交 TS 撤销，不从内部请求反向调用宿主。"""
+        if not isinstance(contact_id, UUID) or not isinstance(binding_id, UUID):
+            raise TypeError("绑定和联系人必须是 UUID。")
+        with self._authority_change(timeout=4.0):
+            return self._engine.revoke_transferred_binding(contact_id=contact_id, binding_id=binding_id)
+
     def revoke_cli_binding(
         self, *, contact_id: UUID, binding_id: UUID,
     ) -> PersistedConversationBinding:
@@ -540,12 +553,22 @@ class SyncHost:
         with self._state_lock:
             self._observation_generation += 1
             self._observation_mutations += 1
+        deadline = None if timeout is None else monotonic() + timeout
         try:
-            with self._active_engine(timeout=timeout), self._foreground_lock:
-                # 等待前台观察收尾期间也可能停机；拿齐锁后再次关闭门禁。
-                if self._stop_event.is_set():
-                    raise SyncHostStopped("同步宿主已停止。")
-                yield
+            with self._active_engine(timeout=timeout):
+                acquired = (
+                    self._foreground_lock.acquire() if deadline is None
+                    else self._foreground_lock.acquire(timeout=max(0.0, deadline - monotonic()))
+                )
+                if not acquired:
+                    raise SyncHostBusy("前台观察仍在收尾，请重试。")
+                try:
+                    # 等待前台观察收尾期间也可能停机；拿齐锁后再次关闭门禁。
+                    if self._stop_event.is_set():
+                        raise SyncHostStopped("同步宿主已停止。")
+                    yield
+                finally:
+                    self._foreground_lock.release()
         finally:
             with self._state_lock:
                 self._observation_mutations -= 1

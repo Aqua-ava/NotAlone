@@ -1,5 +1,5 @@
 import type { BackendHost } from '../backend/host';
-import type { WechatSetupConfirmation, WechatSetupState } from '../../shared/wechat-setup-bridge';
+import { validWechatSetupConfirmation, type WechatSetupConfirmation, type WechatSetupState } from '../../shared/wechat-setup-bridge';
 
 type Operation = { generation: number; epoch: number };
 type Report = { state: WechatSetupState['phase']; account_id: string | null; candidate_token: string | null; failure_code: string | null };
@@ -89,7 +89,7 @@ export class WechatSetupController {
     this.publish({ phase: value.state, accountId: value.account_id, failureCode: value.failure_code });
   }
   async confirm(request: WechatSetupConfirmation): Promise<void> {
-    if (request.confirmed !== true || request.revision !== this.state.revision) throw new Error('微信连接页面已变化，请重新核对');
+    if (!validWechatSetupConfirmation(request) || request.revision !== this.state.revision) throw new Error('微信连接页面已变化，请重新核对');
     if (this.busy || this.state.phase !== 'ready' || !this.token) return;
     const operation = this.begin();
     if (!operation) return;
@@ -101,7 +101,7 @@ export class WechatSetupController {
     try {
       try {
         const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/wechat/confirm',
-          body: { candidate_token: token, confirmed: true }, timeoutMs: 30_000, maxResponseBytes: 4096 });
+          body: { candidate_token: token, confirmed: true, mode: request.mode, history_authorized: request.historyAuthorized }, timeoutMs: 30_000, maxResponseBytes: 4096 });
         const value = report(result.data);
         if (!this.current(operation)) return;
         if (['connected', 'restart_required'].includes(value.state) && value.account_id !== accountId) throw new Error('account changed');

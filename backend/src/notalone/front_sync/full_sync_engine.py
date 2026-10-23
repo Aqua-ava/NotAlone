@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from notalone.front_sync.wechat_scope_remote import RemoteWechatScope, WechatScopeOwnedByTypeScript
+
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
@@ -111,7 +113,7 @@ class CliFullSyncEngine:
         binding_coordinator: CliBindingCoordinator,
         fallback: LegacyForegroundEnginePort,
         clock: Callable[[], datetime] | None = None,
-        scope_store: PostgresSyncScopeStore | None = None,
+        scope_store: PostgresSyncScopeStore | RemoteWechatScope | None = None,
         history_authorization: HistoryAuthorizationStorePort | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
@@ -154,6 +156,8 @@ class CliFullSyncEngine:
     def close(self) -> None:
         """关闭后台与兼容前台读取资源，但不改变持久化开关。"""
 
+        if isinstance(self._scope_store, RemoteWechatScope):
+            self._scope_store.close()
         self._close_foreground()
         self._background.close()
         close_fallback = getattr(self._fallback, "close", None)
@@ -166,6 +170,8 @@ class CliFullSyncEngine:
     def cancel_pending_io(self) -> None:
         """在同步线程退出前中断 CLI 与原生定位的在途等待。"""
 
+        if isinstance(self._scope_store, RemoteWechatScope):
+            self._scope_store.close()
         self._close_foreground()
         close_cli = getattr(self._cli, "close", None)
         if callable(close_cli):
@@ -372,8 +378,13 @@ class CliFullSyncEngine:
         )
         return report
 
+    def _require_local_scope_writer(self) -> None:
+        if isinstance(self._scope_store, RemoteWechatScope):
+            raise WechatScopeOwnedByTypeScript()
+
     def set_sync_scope(self, mode: str) -> None:
         """保存已明确确认的账号范围；保持总开关原值。"""
+        self._require_local_scope_writer()
         if mode not in ("selected", "all_private"):
             raise ValueError("同步范围无效。")
         if self._scope_store is None:
@@ -391,6 +402,7 @@ class CliFullSyncEngine:
     def set_history_authorization(self, decision: HistoryAuthorizationDecision) -> None:
         """保存一次明确的历史读取决定；重复确认保持幂等。"""
 
+        self._require_local_scope_writer()
         store = self._history_authorization_store
         if store is None:
             raise RuntimeError("历史同步授权存储不可用。")
@@ -446,10 +458,13 @@ class CliFullSyncEngine:
         try:
             self._scope_state = self._scope_store.read(**scope)
             if enabled and self._scope_state.mode == "all_private":
-                sessions = self._cli.sessions(type_filter="private", limit=5000, timeout_seconds=1.0)
-                if len(sessions) >= 5000:
-                    raise ValueError("sync_scope_session_limit")
-                created = self._scope_store.enroll(**scope, sessions=sessions)
+                if isinstance(self._scope_store, RemoteWechatScope):
+                    created = self._scope_store.discover(**scope)
+                else:
+                    sessions = self._cli.sessions(type_filter="private", limit=5000, timeout_seconds=1.0)
+                    if len(sessions) >= 5000:
+                        raise ValueError("sync_scope_session_limit")
+                    created = self._scope_store.enroll(**scope, sessions=sessions)
                 if created:
                     request = getattr(self._background, "request_backfill_check", None)
                     if callable(request):
@@ -481,11 +496,18 @@ class CliFullSyncEngine:
 
         return self._binding_coordinator.list_bindings(include_revoked=include_revoked)
 
+    def revoke_transferred_binding(self, *, contact_id: UUID, binding_id: UUID) -> dict:
+        """宿主排空后调用 TS 唯一写入方，不重启同步周期。"""
+        if not isinstance(self._scope_store, RemoteWechatScope):
+            raise RuntimeError("wechat_scope_not_transferred")
+        return self._scope_store.revoke(contact_id=contact_id, binding_id=binding_id)
+
     def revoke_cli_binding(
         self, *, contact_id: UUID, binding_id: UUID,
     ) -> PersistedConversationBinding:
         """撤销授权，不主动执行读取；下一轮使用新的 active 快照。"""
 
+        self._require_local_scope_writer()
         return self._binding_coordinator.revoke_binding(
             contact_id=contact_id, binding_id=binding_id,
         )
@@ -496,6 +518,7 @@ class CliFullSyncEngine:
     ) -> FrontSyncCycleReport:
         """提交一次性批量绑定，然后返回双通道最新状态。"""
 
+        self._require_local_scope_writer()
         created = self._binding_coordinator.confirm(selections)
         if created:
             # 用户刚刚明确确认了这些会话，读取其既有历史属于同一次授权。
@@ -541,11 +564,13 @@ class CliFullSyncEngine:
         return self._background_step()
 
     def confirm_binding(self, *, contact_id: UUID, locator: str) -> FrontSyncCycleReport:
+        self._require_local_scope_writer()
         return self._fallback.confirm_binding(contact_id=contact_id, locator=locator)
 
     def confirm_pending_binding(
         self, *, contact_id: UUID, locator: str
     ) -> FrontSyncCycleReport:
+        self._require_local_scope_writer()
         return self._fallback.confirm_pending_binding(
             contact_id=contact_id,
             locator=locator,

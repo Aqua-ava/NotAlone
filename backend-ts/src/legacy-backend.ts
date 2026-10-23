@@ -6,7 +6,11 @@ import { captureProcessIdentity } from './process-identity.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 
 /** 迁移期唯一旧业务执行方；03不转移联系人、回复、同步、任务和删除的写入权。 */
-export const ownership = Object.freeze({setup:'typescript',credentials:'typescript',schemaUpdates:'python-migration-command',contacts:'python',replies:'python',memory:'python',skills:'python',imports:'python',deletion:'python',wechat:'python',tasks:'python'});
+export const ownership = Object.freeze({setup:'typescript',credentials:'typescript',schemaUpdates:'python-migration-command',contacts:'python',replies:'python',memory:'python',skills:'python',imports:'python',deletion:'python',wechat:'split',wechatScope:'typescript',wechatBodySync:'python',tasks:'python'});
+export class LegacyControlError extends Error {
+  readonly status: number;readonly code: string;
+  constructor(status:number,code:string){super('LEGACY_CONTROL_FAILED');this.status=status;this.code=code;}
+}
 export class LegacyBackend {
   private connection?: {address:string;token:string;pid:number};
   private exited: Promise<void>;
@@ -48,10 +52,13 @@ export class LegacyBackend {
       throw new Error('LEGACY_START_FAILED');
     }catch(error){await legacy.stop();throw error;}
   }
-  async control(endpoint:string,method:string,body?:Record<string,string>):Promise<{state?:string;active_requests?:number}>{
+  async control(endpoint:string,method:string,body?:Record<string,unknown>,timeoutMs=5500,signal?:AbortSignal):Promise<{state?:string;active_requests?:number}>{
     const c=this.connection;if(!c)throw new Error('LEGACY_NOT_READY');
-    const response=await fetch(`http://${c.address}${endpoint}`,{method,headers:{Authorization:`Bearer ${c.token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(5500),redirect:'error'});
-    if(!response.ok)throw new Error('LEGACY_CONTROL_FAILED');
+    const response=await fetch(`http://${c.address}${endpoint}`,{method,headers:{Authorization:`Bearer ${c.token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),redirect:'error'});
+    if(!response.ok){
+      const code=endpoint==='/api/runtime/wechat-scope/revoke' ? ({400:'cli_binding_revoke_invalid',404:'cli_binding_not_found',409:'cli_binding_revoke_busy'} as Record<number,string>)[response.status] ?? 'cli_binding_revoke_failed' : 'legacy_control_failed';
+      throw new LegacyControlError(response.status,code);
+    }
     return await response.json() as {state?:string;active_requests?:number};
   }
   proxy(req:IncomingMessage,res:ServerResponse):void {

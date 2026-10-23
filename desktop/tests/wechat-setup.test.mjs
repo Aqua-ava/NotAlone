@@ -26,14 +26,14 @@ test('首次连接只读展示账号，明确一次确认后保存并重启，�
  assert.equal(f.controller.getState().phase,'ready');
  assert.ok(!JSON.stringify(f.controller.getState()).includes('synthetic-token'));
  assert.equal(f.requests.filter(r=>r.path.endsWith('/detect')).length,1);
- await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true});
- assert.deepEqual(f.requests.find(r=>r.path.endsWith('/confirm')).body,{candidate_token:'synthetic-token',confirmed:true});
+ await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});
+ assert.deepEqual(f.requests.find(r=>r.path.endsWith('/confirm')).body,{candidate_token:'synthetic-token',confirmed:true,mode:'selected',history_authorized:false});
  assert.equal(f.control.restarts,1);assert.equal(f.controller.getState().phase,'connected');
 });
 
 test('授权响应丢失通过只读状态恢复，失败重启只重试加载，不重复授权',async()=>{
  const f=fixture();f.control.postLost=true;f.control.restartOk=false;await f.controller.detect();
- await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true});
+ await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});
  assert.equal(f.controller.getState().phase,'restart-failed');assert.equal(f.control.restarts,1);
  f.control.restartOk=true;await f.controller.retryRestart();
  assert.equal(f.controller.getState().phase,'connected');assert.equal(f.control.restarts,2);
@@ -46,9 +46,9 @@ test('应用重新打开可识别已保存授权并只重新加载，已有连�
 });
 test('旧页面确认被拒绝；双击或刷新不能重复写入，旧连接迟到写入不触发重启',async()=>{
  const f=fixture();await f.controller.detect();const old=f.controller.getState().revision;await f.controller.refresh();
- await assert.rejects(f.controller.confirm({revision:old,confirmed:true}));
+ await assert.rejects(f.controller.confirm({revision:old,confirmed:true,mode:'selected',historyAuthorized:false}));
  let release;f.control.postBarrier=new Promise(resolve=>release=resolve);
- const request={revision:f.controller.getState().revision,confirmed:true};const writing=f.controller.confirm(request);
+ const request={revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false};const writing=f.controller.confirm(request);
  await flush();await assert.rejects(f.controller.confirm(request));await f.controller.refresh();
  f.connect(undefined);release();await writing;
  assert.equal(f.controller.getState().phase,'offline');assert.equal(f.control.restarts,0);assert.equal(f.requests.filter(r=>r.path.endsWith('/confirm')).length,1);
@@ -59,12 +59,12 @@ test('迟到旧读取和错误不能覆盖新连接，工具未准备好不会�
  assert.equal(f.controller.getState().phase,'offline');f.control.readBarrier=null;
  f.control.status={state:'tool_not_ready',account_id:null,candidate_token:null,failure_code:'cli_not_initialized'};
  f.connect(3);await flush();assert.equal(f.controller.getState().phase,'tool_not_ready');
- await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true});assert.ok(f.requests.every(r=>r.method==='GET'));
+ await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});assert.ok(f.requests.every(r=>r.method==='GET'));
 });
 test('重启后的不同微信账号不能被当成原授权连接成功',async()=>{
  const f=fixture();await f.controller.detect();let release;
  f.control.restartBarrier=new Promise(resolve=>release=resolve);
- const writing=f.controller.confirm({revision:f.controller.getState().revision,confirmed:true});await flush();
+ const writing=f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});await flush();
  // 后端服务重建后返回错误账号，必须保留未完成状态。
  f.control.restartBarrier=null;
  f.control.connectedAccount='another-account';
@@ -77,26 +77,26 @@ test('桥接仅供管理窗口操作，拒绝额外字段和未确认请求，�
  const controller={getState:()=>({}),onStateChanged:()=>()=>{},refresh:async()=>{},detect:async()=>calls.push('detect'),confirm:async v=>calls.push(v),retryRestart:async()=>{}};
  installWechatSetupBridge(commands,controller);
  assert.ok([...roles.values()].every(role=>role==='manager'));
- for(const args of [[],[{}],[{revision:1,confirmed:false}],[{revision:1,confirmed:true,account_id:'injected'}],[{revision:NaN,confirmed:true}],[{revision:1,confirmed:true},{}]])assert.throws(()=>handlers.get('wechat-setup:confirm')(...args));
+ for(const args of [[],[{}],[{revision:1,confirmed:false}],[{revision:1,confirmed:true,mode:'selected',historyAuthorized:false,account_id:'injected'}],[{revision:NaN,confirmed:true,mode:'selected',historyAuthorized:false}],[{revision:1,confirmed:true,mode:'selected',historyAuthorized:false},{}]])assert.throws(()=>handlers.get('wechat-setup:confirm')(...args));
  assert.throws(()=>handlers.get('wechat-setup:detect')('injected'));
- await handlers.get('wechat-setup:detect')();await handlers.get('wechat-setup:confirm')({revision:1,confirmed:true});
- assert.deepEqual(calls,['detect',{revision:1,confirmed:true}]);
+ await handlers.get('wechat-setup:detect')();await handlers.get('wechat-setup:confirm')({revision:1,confirmed:true,mode:'selected',historyAuthorized:false});
+ assert.deepEqual(calls,['detect',{revision:1,confirmed:true,mode:'selected',historyAuthorized:false}]);
  const invokes=[];const preload=createWechatSetupBridge({invoke:async(...args)=>invokes.push(args)});
- await preload.detect();await preload.confirm({revision:1,confirmed:true});
+ await preload.detect();await preload.confirm({revision:1,confirmed:true,mode:'selected',historyAuthorized:false});
  await assert.rejects(preload.detect('injected'));await assert.rejects(preload.confirm());
- assert.deepEqual(invokes,[['wechat-setup:detect'],['wechat-setup:confirm',{revision:1,confirmed:true}]]);
+ assert.deepEqual(invokes,[['wechat-setup:detect'],['wechat-setup:confirm',{revision:1,confirmed:true,mode:'selected',historyAuthorized:false}]]);
 });
 test('迟到重启失败不能覆盖新连接，当前连接状态只读复核后保留',async()=>{
  const f=fixture();await f.controller.detect();let reject;
  f.backend.restart=()=>new Promise((_resolve,fail)=>reject=fail);
- const writing=f.controller.confirm({revision:f.controller.getState().revision,confirmed:true});await flush();
+ const writing=f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});await flush();
  f.control.status=status('connected');f.connect(4);reject(new Error('old restart failed'));await writing;
  assert.equal(f.controller.getState().phase,'connected');assert.equal(f.requests.filter(r=>r.path.endsWith('/confirm')).length,1);
 });
 test('重启后的旧核验响应不能覆盖再次变化的连接',async()=>{
  const f=fixture();await f.controller.detect();let release;
  f.control.readBarrier=new Promise(resolve=>release=resolve);
- const writing=f.controller.confirm({revision:f.controller.getState().revision,confirmed:true});await flush();
+ const writing=f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});await flush();
  f.connect(undefined);release();await writing;
  assert.equal(f.controller.getState().phase,'offline');
 });
@@ -104,7 +104,7 @@ test('确认时工具读取失败保留后端失败原因，不读回或误报�
  const f=fixture();await f.controller.detect();
  f.control.confirmResult={state:'tool_not_ready',account_id:null,candidate_token:null,failure_code:'cli_unreadable'};
  const count=f.requests.length;
- await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true});
+ await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});
  assert.equal(f.controller.getState().phase,'tool_not_ready');assert.equal(f.controller.getState().failureCode,'cli_unreadable');
  assert.equal(f.requests.length,count+1);assert.equal(f.control.restarts,0);
 });
@@ -112,7 +112,27 @@ test('确认时真实账号变化保留后端冲突原因，不重复探测或�
  const f=fixture();await f.controller.detect();
  f.control.confirmResult={state:'conflict',account_id:null,candidate_token:null,failure_code:'wechat_account_changed'};
  const count=f.requests.length;
- await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true});
+ await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});
  assert.equal(f.controller.getState().phase,'conflict');assert.equal(f.controller.getState().failureCode,'wechat_account_changed');
  assert.equal(f.requests.length,count+1);assert.equal(f.control.restarts,0);
+});
+
+test('全部私聊与历史必须显式传递，非法或缺省字段不能越过控制器和预加载桥接',async()=>{
+ const f=fixture();await f.controller.detect();
+ const request={revision:f.controller.getState().revision,confirmed:true,mode:'all_private',historyAuthorized:true};
+ const invalid=[null,{}, {...request,mode:'all'}, {...request,historyAuthorized:'true'},
+  {revision:request.revision,confirmed:true}, {...request,summary:'synthetic-private-summary'}];
+ const calls=[];const preload=createWechatSetupBridge({invoke:async(...args)=>calls.push(args)});
+ for(const value of invalid){await assert.rejects(f.controller.confirm(value));await assert.rejects(preload.confirm(value));}
+ assert.equal(calls.length,0);assert.equal(f.requests.filter(r=>r.path.endsWith('/confirm')).length,0);
+ await f.controller.confirm(request);
+ assert.deepEqual(f.requests.find(r=>r.path.endsWith('/confirm')).body,{candidate_token:'synthetic-token',confirmed:true,mode:'all_private',history_authorized:true});
+});
+
+test('状态响应夹带摘要不能进入渲染状态',async()=>{
+ const f=fixture();f.control.status={...status(),summary:'synthetic-private-summary',messages:['synthetic-body']};
+ await f.controller.refresh();assert.equal(f.controller.getState().phase,'ready');
+ assert.ok(!JSON.stringify(f.controller.getState()).includes('synthetic-private-summary'));
+ assert.ok(!JSON.stringify(f.controller.getState()).includes('synthetic-body'));
+ assert.ok(f.requests.every(r=>r.method==='GET'));
 });

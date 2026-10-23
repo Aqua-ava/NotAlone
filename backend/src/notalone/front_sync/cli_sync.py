@@ -24,6 +24,7 @@ from notalone.front_sync.event_publisher import (
     NullMessageEventPublisher,
 )
 from notalone.front_sync.tail_lifecycle import FollowRuntimeStatus
+from notalone.front_sync.wechat_scope_remote import RemoteHistoryAuthorization
 from notalone.persistence.backfill_state import (
     BackfillPhase,
     BackfillStatePersistenceError,
@@ -1325,6 +1326,10 @@ class CliBackgroundSync:
         store = self._history_state
         if store is None:
             return
+        if isinstance(self._history_authorization, RemoteHistoryAuthorization):
+            # 显式授权可能在 active 集合未变化时增加，不复用旧账号级缓存。
+            self.start_history_for_bindings(bindings)
+            return
         binding_ids = frozenset(binding.binding_id for binding in bindings)
         if not binding_ids or binding_ids == self._history_ensured_binding_ids:
             return
@@ -1378,6 +1383,13 @@ class CliBackgroundSync:
         if store is None or not bindings:
             return 0
         binding_ids = tuple(binding.binding_id for binding in bindings)
+        if isinstance(self._history_authorization, RemoteHistoryAuthorization):
+            allowed = self._remote_history_binding_ids()
+            if allowed is None:
+                return 0
+            binding_ids = tuple(identifier for identifier in binding_ids if identifier in allowed)
+            if not binding_ids:
+                return 0
         try:
             created = store.ensure_bindings_started(
                 owner_id=self._owner_id,
@@ -1399,6 +1411,27 @@ class CliBackgroundSync:
         self._history_ensured_binding_ids = frozenset()
         self._history_start_requested = True
 
+    def _remote_history_binding_ids(self) -> frozenset[UUID] | None:
+        try:
+            return self._history_authorization.authorized_binding_ids(
+                owner_id=self._owner_id, channel=self._channel,
+                account_scope=self._account_scope,
+            )
+        except Exception:
+            self._failure_code = "history_authorization_unavailable"
+            return None
+
+    def _remote_history_read_allowed(self, binding: object) -> bool:
+        if not isinstance(self._history_authorization, RemoteHistoryAuthorization):
+            return True
+        allowed = self._remote_history_binding_ids()
+        if allowed is None:
+            return False
+        if binding.binding_id not in allowed:
+            self._failure_code = "history_authorization_required"
+            return False
+        return True
+
     def _prepare_history_read(
         self, binding: object
     ) -> HistorySyncState | _HistoryReadDeferred | None:
@@ -1418,6 +1451,8 @@ class CliBackgroundSync:
             return _HISTORY_RETRY_WAIT
         if state is None or state.phase is HistorySyncPhase.COMPLETE:
             return None
+        if not self._remote_history_read_allowed(binding):
+            return _HISTORY_RETRY_WAIT
         # 写入失败保留 syncing；优先队列与对账重新排队也必须遵守退避。
         retry = self._history_retries.get(binding.binding_id)
         if retry is not None and self._clock() < retry[1]:
@@ -1455,6 +1490,9 @@ class CliBackgroundSync:
         cli_started: float | None = None
         store_started: float | None = None
         try:
+            if not self._remote_history_read_allowed(binding):
+                failure_code = self._failure_code
+                return 0, False
             timeout = self._remaining_cli_timeout(cli_deadline)
             cli_started = self._monotonic_clock()
             if timing is not None and timing.pending_requested_at is not None:
@@ -1518,6 +1556,11 @@ class CliBackgroundSync:
                 last_local_id=result.last_local_id,
                 last_cursor=result.cursor,
             )
+            cli_version = self._cli_version_value(timing=timing, cli_deadline=cli_deadline)
+            # CLI 返回后复验，撤销、排除或授权读取失败均不能提交迟到历史页。
+            if not self._remote_history_read_allowed(binding):
+                failure_code = self._failure_code
+                return 0, False
             store_started = self._monotonic_clock()
             try:
                 batch = self._observation_store.record_batch_with_messages(
@@ -1525,9 +1568,7 @@ class CliBackgroundSync:
                     contact_id=contact_id,
                     binding_id=binding.binding_id,
                     mode=ObservationMode.CLI_HISTORY,
-                    cli_version=self._cli_version_value(
-                        timing=timing, cli_deadline=cli_deadline
-                    ),
+                    cli_version=cli_version,
                     conversation_locator=binding.conversation_locator,
                     since_local_id=state.last_local_id,
                     since_cursor=state.last_cursor,

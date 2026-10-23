@@ -6,15 +6,15 @@ import path from 'node:path';
 import { build } from 'esbuild';
 
 const directory = await mkdtemp(path.join(tmpdir(), 'notalone-binding-startup-'));
-const result = await build({ entryPoints: ['src/main/bindings/controller.ts'], bundle: true,
+const result = await build({ stdin: { contents: `export {BindingConsentController} from './src/main/bindings/controller'; export {installBindingConsentBridge} from './src/main/bindings/bridge'; export {createBindingConsentBridge} from './src/preload/binding-consent';`, resolveDir: process.cwd() }, bundle: true,
   platform: 'node', format: 'esm', write: false });
 await writeFile(path.join(directory, 'controller.mjs'), result.outputFiles[0].text);
-const { BindingConsentController } = await import(path.join(directory, 'controller.mjs'));
+const { BindingConsentController, installBindingConsentBridge, createBindingConsentBridge } = await import(path.join(directory, 'controller.mjs'));
 after(() => rm(directory, { recursive: true, force: true }));
 
 function fixture({ withBinding = false, revokeFails = false } = {}) {
   let generation, listener;
-  const calls = [];
+  const calls = [], requests = [];
   const binding = { binding_id: '11111111-1111-4111-8111-111111111111',
     contact_id: '22222222-2222-4222-8222-222222222222',
     conversation_locator: 'wxid_synthetic', display_name: '合成联系人', status: 'active' };
@@ -23,7 +23,9 @@ function fixture({ withBinding = false, revokeFails = false } = {}) {
   const backend = {
     getConnectionGeneration: () => generation,
     onStateChanged: (callback) => { listener = callback; },
-    async requestJson({ path }) {
+    async requestJson(request) {
+      requests.push(request);
+      const { path } = request;
       calls.push(path);
       if (path === '/api/sync/cli-bindings/revoke') {
         if (revokeFails) throw new Error('合成撤销失败');
@@ -46,7 +48,7 @@ function fixture({ withBinding = false, revokeFails = false } = {}) {
     generation = value; listener();
     await new Promise((resolve) => setImmediate(resolve));
   }
-  return { controller, calls, connect, changes };
+  return { controller, calls, connect, changes, requests };
 }
 
 test('启动、重连和新宿主不主动读取微信会话，仍加载已保存授权', async () => {
@@ -145,4 +147,42 @@ test('确认新授权前及完成后均使旧读取范围失效', async () => {
   }] });
   assert.equal(controller.getState().errorCode, null);
   assert.deepEqual(changes, ['started', 'settled']);
+});
+
+for (const historyAuthorized of [undefined, false, true]) test(`所选会话历史选择${historyAuthorized}明确传至HTTP，旧调用默认false`, async () => {
+  const f = fixture(); await f.connect(1); await f.controller.refresh();
+  await f.controller.confirmSelections({ scopeRevision: f.controller.getState().scopeRevision,
+    selections: [{locator:'wxid_synthetic',displayName:'合成联系人',contactId:null}],
+    ...(historyAuthorized === undefined ? {} : {historyAuthorized}) });
+  const request = f.requests.find(request => request.path === '/api/sync/cli-bindings/confirm');
+  assert.equal(request.body.history_authorized, historyAuthorized ?? false);
+  assert.equal(request.body.selections.length, 1);
+});
+test('非法历史选择在重新读取列表或写入前被拒绝', async () => {
+  const f = fixture(); await f.connect(1); await f.controller.refresh();
+  const count = f.requests.length;
+  for(const historyAuthorized of ['true', null, 1, undefined]) {
+    await assert.rejects(f.controller.confirmSelections({scopeRevision:f.controller.getState().scopeRevision,
+      selections:[{locator:'wxid_synthetic',displayName:'合成联系人',contactId:null}],historyAuthorized}));
+  }
+  assert.equal(f.requests.length,count);
+});
+
+test('绑定IPC与预加载拒绝非布尔历史字段，保留旧缺省调用', async () => {
+  const handlers = new Map();
+  installBindingConsentBridge({handle:(name, fn)=>handlers.set(name,fn),publish(){}},
+    {getConnectionGeneration:()=>undefined,onStateChanged:()=>{}}, {getState:()=>({contacts:[]})});
+  const calls=[];const preload=createBindingConsentBridge({invoke:async(...args)=>calls.push(args)});
+  const request={scopeRevision:1,selections:[{locator:'synthetic',displayName:'合成',contactId:null}]};
+  for(const historyAuthorized of ['true',null,1,undefined]) {
+    assert.throws(()=>handlers.get('bindings:confirm-selections')({...request,historyAuthorized}));
+    await assert.rejects(preload.confirmSelections({...request,historyAuthorized}));
+  }
+  assert.throws(()=>handlers.get('bindings:confirm-selections')({...request,historyAuthorized:true,ownerId:'injected'}));
+  assert.deepEqual(calls,[]);
+  for(const value of [request,{...request,historyAuthorized:false},{...request,historyAuthorized:true}]) {
+    await preload.confirmSelections(value);
+    await assert.rejects(handlers.get('bindings:confirm-selections')(value),/本次授权选择已失效/);
+  }
+  assert.deepEqual(calls.map(call=>call[1]),[request,{...request,historyAuthorized:false},{...request,historyAuthorized:true}]);
 });

@@ -1,3 +1,4 @@
+import { validBindingHistoryChoice } from '../../shared/binding-consent-bridge';
 import type { BindingConfirmation, BindingConsentState, BindingRevocation, BindingSelection, BindingSummary, CliSessionSummary } from '../../shared/binding-consent-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
@@ -121,7 +122,7 @@ export class BindingConsentController {
   }
   async confirmSelections(confirmation: BindingConfirmation): Promise<void> {
     const generation = this.backend.getConnectionGeneration();
-    if (generation === undefined || this.state.busy || this.state.phase !== 'ready'
+    if (!validBindingHistoryChoice(confirmation) || generation === undefined || this.state.busy || this.state.phase !== 'ready'
       || confirmation.scopeRevision !== this.state.scopeRevision) throw new Error('本次授权选择已失效，请刷新后重新确认。');
     const operation = { generation, epoch: ++this.epoch };
     this.publish({ busy: 'confirm', errorCode: null, notice: null });
@@ -136,6 +137,7 @@ export class BindingConsentController {
       if (!this.current(operation)) return;
       this.validateSelections(confirmation.selections, sessions(metadata.data), bindings(directory.data));
       const result = await this.backend.requestJson({ method: 'POST', path: '/api/sync/cli-bindings/confirm', body: {
+        history_authorized: confirmation.historyAuthorized ?? false,
         selections: confirmation.selections.map((item) => ({ locator: item.locator, display_name: item.displayName,
           observed_display_name: item.displayName,
           ...(item.contactId === null ? {} : { contact_id: item.contactId }) })),

@@ -6,8 +6,8 @@ import './bindings.css';
 
 export function BindingPrivacyNotice({ allPrivate = false }: { allPrivate?: boolean }) {
   return <details className="bindings-explanation"><summary>读取范围与隐私说明</summary>
-    <p>{allPrivate ? '你已确认同步全部微信私聊。应用会自动发现并关联现有及新增会话；已单独停止的会话不会自动重新加入。' : '只有你明确确认的微信会话才能读取文字；进入联系人页面只查询已保存的关联与授权，点击添加或刷新微信会话后才读取会话名单。'}</p>
-    <p>应用运行且总开关开启时，可以在微信不在前台时同步已授权会话。关闭总开关或正常退出会停读；重新开启后按检查点继续。每个会话首次授权会读取其在本机现有的全部文字历史，再持续同步新消息。</p>
+    <p>{allPrivate ? '你已确认同步全部微信私聊。应用会自动发现并关联现有及新增会话；已单独停止的会话不会自动重新加入。' : '只有你明确确认的微信会话才能读取文字；进入联系人页面只查询已保存的关联与授权，添加页面中明确点击刷新微信会话后才读取会话名单。'}</p>
+    <p>应用运行且总开关开启时，可以在微信不在前台时同步已授权会话。关闭总开关或正常退出会停读；重新开启后按检查点继续。新绑定默认仅从本次绑定起同步；读取更早历史需要独立明确授权。</p>
     <p>停止某个联系人的同步会撤销该会话的读取授权，已保存的资料仍保留。删除资料需使用独立的来源删除流程。</p>
     <p>前台识别只在本机内存分析微信窗口并识别会话名称，不读取聊天正文，画面不保存、不上传。候选由你修改并亲自发送。</p>
   </details>;
@@ -26,7 +26,9 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
       <button className="button" disabled={!!state.busy} onClick={onClose}>返回联系人</button>
     </div></div>
     <p>{allPrivate ? '全部私聊已纳入自动同步范围，无需逐个添加。这里用于处理身份冲突，或重新开启你曾单独停止的会话。' : '选择要同步的微信会话，再确认新建联系人或关联已有联系人。没有勾选的会话不会获得授权。'}</p>
-    <p>{state.syncEnabled === true ? '总开关已开启：确认后会读取所选会话在本机现有的全部文字历史，并立即允许持续同步新消息。' : state.syncEnabled === false ? '总开关已关闭：确认后保留授权；开启总开关后会读取所选会话现有的全部文字历史，再持续同步新消息。' : '总开关状态尚未确认；开启后确认会读取所选会话现有的全部文字历史，并持续同步新消息。'}</p>
+    <p>{state.syncEnabled === true ? '总开关已开启：确认后允许所选会话从本次绑定起持续同步新消息。' : state.syncEnabled === false ? '总开关已关闭：确认后保留授权，开启总开关后从本次绑定起同步。' : '总开关状态尚未确认；确认绑定并开启后，从本次绑定起同步。'}</p>
+    <p>点击“刷新微信会话”表示同意读取当前微信账号的会话列表，以便核对并选择联系人；列表附带的消息摘要会立即丢弃，不保存或用于回复。此操作不授权读取聊天正文。</p>
+    <p>更早的历史消息需独立确认；本次历史选择仅覆盖本次所选会话，后续新增会话不会继承。已有明确历史授权仍按其原范围执行。</p>
     {state.phase === 'ready' && <section aria-label="可添加的微信会话">
       <div className="bindings-toolbar"><h3>{allPrivate ? '待处理或已停止同步的会话' : '可添加的微信会话'}</h3><span>已选 {Object.keys(selection).length} 个</span></div>
       {state.sessionIssue === 'not-requested' ? <p>点击“刷新微信会话”后读取列表，系统可能请求访问微信数据。</p> : unbound.length === 0 && <p>当前没有可添加的微信会话。</p>}
@@ -41,6 +43,9 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
           {contacts.state.contacts.map((contact) => <option key={contact.contactId} value={contact.contactId}>{contact.displayName} · {contact.contactId}</option>)}
         </select>
       </div>)}</div>
+      <label><input type="checkbox" checked={consent.historyAuthorized ?? false} disabled={!!state.busy || !Object.keys(selection).length}
+        onChange={event => consent.setHistoryAuthorized(event.target.checked)} />同时读取本次所选会话在本机可用的历史消息</label>
+      <p>默认不读取绑定以前的历史。更改所选会话、对应联系人或刷新列表后，需要重新勾选历史授权。</p>
       <div className="bindings-submit"><span>同名联系人请核对会话与联系人标识。取消勾选不会撤销已有授权。</span><button className="button primary"
         disabled={!!state.busy || !Object.keys(selection).length || Object.values(selection).some((item) => !item.target)} onClick={() => void consent.confirm()}>确认并授权所选会话</button></div>
     </section>}

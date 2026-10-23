@@ -6,7 +6,20 @@ export interface WechatSetupState {
   failureCode: string | null;
   revision: number;
 }
-export interface WechatSetupConfirmation { revision: number; confirmed: true }
+export interface WechatSetupConfirmation {
+  revision: number;
+  confirmed: true;
+  mode: 'selected' | 'all_private';
+  historyAuthorized: boolean;
+}
+export function validWechatSetupConfirmation(value: unknown): value is WechatSetupConfirmation {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const fields = value as Record<string, unknown>;
+  return Object.keys(fields).length === 4
+    && ['revision', 'confirmed', 'mode', 'historyAuthorized'].every(key => Object.hasOwn(fields, key))
+    && fields.confirmed === true && Number.isSafeInteger(fields.revision) && (fields.revision as number) >= 0
+    && (fields.mode === 'selected' || fields.mode === 'all_private') && typeof fields.historyAuthorized === 'boolean';
+}
 export interface WechatSetupBridge {
   getState(): Promise<WechatSetupState>;
   refresh(): Promise<void>;

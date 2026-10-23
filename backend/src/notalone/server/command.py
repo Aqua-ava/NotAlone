@@ -123,7 +123,8 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
         events=events,
         task_host=task_host,
     )
-    wechat_setup_service = _build_wechat_setup_service(
+    wechat_scope_transferred = bool(os.environ.get("NOTALONE_WECHAT_SCOPE_URL"))
+    wechat_setup_service = None if wechat_scope_transferred else _build_wechat_setup_service(
         database_url=database_url, owner_id=owner_id,
         runtime_account=owner_wechat_account_scope(database_url, owner_id)
         if owner_id is not None and sync_host is not None else None,
@@ -179,6 +180,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
             ledger_service=ledger_service,
             setup_service=setup_service,
             wechat_setup_service=wechat_setup_service,
+            wechat_scope_transferred=wechat_scope_transferred,
             follow_smoke=follow_smoke,
             runtime_shutdown=stop_runtime,
         )

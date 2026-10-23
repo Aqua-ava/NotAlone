@@ -1,14 +1,14 @@
 import { noArguments, type PageCommands } from '../page-commands';
 import type { BackendHost } from '../backend/host';
 import { BindingConsentController } from './controller';
-import type { BindingConfirmation, BindingRevocation } from '../../shared/binding-consent-bridge';
+import { validBindingHistoryChoice, type BindingConfirmation, type BindingRevocation } from '../../shared/binding-consent-bridge';
 import type { ContactSession } from '../contacts/session';
 import { isBindingIdentifier, isConversationLocator } from './validation';
 
 function confirmation(args: unknown[]): BindingConfirmation {
   const value = args[0] as Record<string, unknown> | undefined;
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)
-    || Object.keys(value).length !== 2 || !Object.keys(value).every((key) => ['scopeRevision', 'selections'].includes(key))
+    || !validBindingHistoryChoice(value) || !Object.keys(value).every((key) => ['scopeRevision', 'selections', 'historyAuthorized'].includes(key))
     || !Number.isSafeInteger(value.scopeRevision) || typeof value.scopeRevision !== 'number' || value.scopeRevision < 0
     || !Array.isArray(value.selections) || !value.selections.length || value.selections.length > 5000) throw new Error('授权操作不可用。');
   const selections = value.selections.map((item: unknown) => {
@@ -21,7 +21,7 @@ function confirmation(args: unknown[]): BindingConfirmation {
     return { locator: choice.locator, displayName: choice.displayName, contactId: choice.contactId === null ? null : (choice.contactId as string).toLowerCase() };
   });
   if (new Set(selections.map((item) => item.locator)).size !== selections.length) throw new Error('授权操作不可用。');
-  return { scopeRevision: value.scopeRevision, selections };
+  return { scopeRevision: value.scopeRevision, selections, ...(Object.hasOwn(value, 'historyAuthorized') ? { historyAuthorized: value.historyAuthorized as boolean } : {}) };
 }
 
 function revocation(args: unknown[]): BindingRevocation {

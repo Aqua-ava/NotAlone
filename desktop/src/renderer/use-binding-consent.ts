@@ -11,6 +11,7 @@ export function useBindingConsent(contacts: ContactSessionView) {
   const [state, setState] = useState(initial);
   const latest = useRef(initial);
   const [selection, setSelection] = useState<Record<string, Selection>>({});
+  const [historyAuthorized, setHistoryAuthorized] = useState(false);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
   const [revocation, setRevocation] = useState<BindingSummary | null>(null);
@@ -38,14 +39,16 @@ export function useBindingConsent(contacts: ContactSessionView) {
       && !state.bindings.some((binding) => binding.locator === locator)
       && (!item.target || item.target === 'new' || contacts.state.contacts.some((contact) => contact.contactId === item.target)))));
   }, [state, contacts.state.contacts]);
+  useEffect(() => { setHistoryAuthorized(false); }, [selection, state.sessions, state.scopeRevision]);
   async function refresh() {
+    setHistoryAuthorized(false);
     try { await window.notalone.bindings.refresh(); setError(''); }
     catch { setError('会话与授权暂时无法刷新，请重试。'); }
   }
   async function confirm() {
     const scopeRevision = state.scopeRevision;
     try {
-      await window.notalone.bindings.confirmSelections({ scopeRevision, selections: Object.entries(selection).map(([locator, item]) =>
+      await window.notalone.bindings.confirmSelections({ scopeRevision, historyAuthorized, selections: Object.entries(selection).map(([locator, item]) =>
         ({ locator, displayName: item.displayName, contactId: item.target === 'new' ? null : item.target })) });
       if (scopeRevision === latest.current.scopeRevision) setError('');
     } catch { if (scopeRevision === latest.current.scopeRevision) setError('本次授权选择已失效，请刷新后重新确认。'); }
@@ -60,6 +63,6 @@ export function useBindingConsent(contacts: ContactSessionView) {
     try { await window.notalone.bindings.refreshSaved(); setError(''); }
     catch { setError('联系人同步状态暂时无法刷新，请重试。'); }
   }
-  return { state, selection, setSelection, error, readError, retryRead, revocation, setRevocation, refresh, refreshSaved, confirm, revoke };
+  return { state, selection, setSelection, historyAuthorized, setHistoryAuthorized, error, readError, retryRead, revocation, setRevocation, refresh, refreshSaved, confirm, revoke };
 }
 export type BindingConsentView = ReturnType<typeof useBindingConsent>;

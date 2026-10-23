@@ -38,6 +38,8 @@ export async function bindingInitialSelection({ manager, bindingBackend, screens
     await expect.poll(async () => (await manager.evaluate(() => window.notalone.bindings.getState())).busy).toBe(null);
     expect(metadataReads).toBe(0);
     await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+    expect(metadataReads).toBe(0);
+    await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
     await expect(manager.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' })).toBeVisible();
     if (proxy) expect(metadataReads).toBeGreaterThan(0);
   } finally { proxy?.server.off('request', observe); }
@@ -72,6 +74,7 @@ export async function bindingRevokeBusy({ manager, bindingBackend, screenshot }:
   await bindingBackend.request('/api/sync/enable', {});
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   const authorized = await selectContactSync(manager, bindingBackend.data.contact_ids[0]);
   await authorized.getByRole('button', { name: '停止会话 wxid_synthetic_a 的自动同步', exact: true }).click();
   const dialog = manager.getByRole('dialog', { name: '撤销后台读取授权确认' });
@@ -109,6 +112,7 @@ export async function bindingRevokeBusy({ manager, bindingBackend, screenshot }:
 export async function bindingMetadataStale({ manager, bindingBackend }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   const pending = manager.getByRole('region', { name: '可添加的微信会话' });
   const choice = pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' });
   const target = pending.getByRole('combobox', { name: '会话 wxid_synthetic_a 对应联系人' });
@@ -146,6 +150,7 @@ export async function bindingMetadataStale({ manager, bindingBackend }: BindingP
 export async function bindingFinalNameStale({ manager, bindingBackend, screenshot }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   const pending = manager.getByRole('region', { name: '可添加的微信会话' });
   await pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' }).check();
   await pending.getByRole('combobox', { name: '会话 wxid_synthetic_a 对应联系人' }).selectOption(bindingBackend.data.contact_ids[0]);
@@ -174,6 +179,7 @@ export async function bindingFinalNameStale({ manager, bindingBackend, screensho
 export async function bindingNoChannel({ manager, bindingBackend }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   await expect(manager.getByText('微信同步尚未就绪', { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(manager.getByRole('button', { name: '前往从文件导入', exact: true })).toBeVisible();
   expect((await bindingBackend.request('/api/sync/cli-sessions')).status).toBe(503);
@@ -189,6 +195,7 @@ export async function bindingCliUnavailable({ manager, bindingBackend }: Binding
   await rm(path.join(bindingBackend.directory, 'controlled-cli'));
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   await expect(manager.getByText('微信会话名单暂时无法读取，已保存的授权仍有效；可在联系人详情中停止同步。', { exact: true })).toBeVisible();
   await expect(manager.getByRole('region', { name: '可添加的微信会话' }).getByRole('checkbox')).toHaveCount(0);
   await selectContactSync(manager, bindingBackend.data.contact_ids[0]);
@@ -220,6 +227,7 @@ export async function bindingCliUnavailable({ manager, bindingBackend }: Binding
 export async function bindingNamedArguments({ manager, bindingBackend, openHelper }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   const pending = manager.getByRole('region', { name: '可添加的微信会话' });
   await pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' }).check();
   const rejected = await manager.evaluate(async (foreign) => {
@@ -267,6 +275,7 @@ export async function bindingNamedArguments({ manager, bindingBackend, openHelpe
 export async function bindingStableContacts({ manager, bindingBackend, screenshot }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   const pending = manager.getByRole('region', { name: '可添加的微信会话' });
   const authorized = await selectContactSync(manager, bindingBackend.data.contact_ids[0]);
   const submit = manager.getByRole('button', { name: '确认并授权所选会话', exact: true });
@@ -323,6 +332,7 @@ export async function bindingReconfirm({ manager, bindingBackend, screenshot }: 
   await bindingBackend.setCli(state);
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   const authorized = await selectContactSync(manager, bindingBackend.data.contact_ids[0]);
   await expect(authorized.getByText('微信会话已改名为“改名后的合成会话”。请停止同步后重新关联，原绑定不会静默改名。', { exact: true })).toBeVisible();
   await selectContactSync(manager, bindingBackend.data.contact_ids[1]);
@@ -360,6 +370,7 @@ export async function bindingReconfirm({ manager, bindingBackend, screenshot }: 
 export async function bindingReconnect({ manager, bindingBackend }: BindingPage, bindingProxy: ContactHttpProxy, failure: boolean): Promise<void> {
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   const pending = manager.getByRole('region', { name: '可添加的微信会话' });
   await pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' }).check();
   await pending.getByRole('combobox', { name: '会话 wxid_synthetic_a 对应联系人' }).selectOption(bindingBackend.data.contact_ids[0]);
@@ -397,6 +408,7 @@ export async function bindingReconnect({ manager, bindingBackend }: BindingPage,
 export async function bindingConcurrentNew({ manager, bindingBackend, screenshot }: BindingPage, proxy: ContactHttpProxy): Promise<void> {
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   const pending = manager.getByRole('region', { name: '可添加的微信会话' });
   for (const locator of ['wxid_synthetic_b', 'wxid_synthetic_a']) {
     await pending.getByRole('checkbox', { name: `选择会话 ${locator}` }).check();
@@ -458,6 +470,7 @@ export async function bindingRevokeWaiting({ manager, bindingBackend }: BindingP
   expect((await bindingBackend.request('/api/sync/enable', {})).status).toBe(200);
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '添加微信联系人', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
   const authorized = await selectContactSync(manager, bindingBackend.data.contact_ids[0]);
   await authorized.getByRole('button', { name: '停止会话 wxid_synthetic_a 的自动同步', exact: true }).click();
   const dialog = manager.getByRole('dialog', { name: '撤销后台读取授权确认' });
