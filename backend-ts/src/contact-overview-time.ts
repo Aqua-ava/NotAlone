@@ -64,7 +64,7 @@ export async function projectTiming(client: Client,row:Row):Promise<Row> {
       AND ref.contact_id=message.contact_id AND ${activeRef})`,[row.owner_id,row.contact_id,row.source_ids])).rows;
   const known=new Map<string,{time:string|null;anchor:string|null;text:string}>();
   for(const item of rows) {
-    const anchors:string[]=item.source_times.filter((value:any)=>typeof value==='string' && /(Z|[+-]\d\d:\d\d)$/.test(value)
+    const anchors:string[]=item.source_times.filter((value:any)=>item.occurred_at!==null && typeof value==='string' && /(Z|[+-]\d\d:\d\d)$/.test(value)
       && Number.isFinite(Date.parse(value)) && epochMicros(value)===epochMicros(item.occurred_at));
     const anchor=anchors.length && new Set(anchors.map(offset)).size===1?pythonISO(anchors[0]):null;
     known.set(item.id,{time:anchor??pythonISO(item.occurred_at),anchor,text:item.text_content});

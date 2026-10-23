@@ -66,3 +66,24 @@ test('合成PG：手录关系资料保持微秒和稳定偏好，不将文档日
 
   } finally { await f.close(); }
 });
+
+test('合成PG：消息时间为空时不借来源time_iso补时间，和Python读取一致', async () => {
+  const f=await createStorageFixture();
+  const owner=randomUUID(),contact=randomUUID(),source=randomUUID(),message=randomUUID(),id=randomUUID();
+  try {
+    await f.client.query('INSERT INTO public.owner(id,display_name) VALUES($1,$2)',[owner,'合成本人']);
+    await f.client.query('INSERT INTO public.contact(id,owner_id,display_name) VALUES($1,$2,$3)',[contact,owner,'合成联系人']);
+    await f.client.query("INSERT INTO public.source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'wechat_jsonl','synthetic-null-time.jsonl',$4,1)",[source,owner,contact,'a'.repeat(64)]);
+    await f.client.query("INSERT INTO public.message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) VALUES($1,$2,$3,'contact','text','喜欢清淡食物',NULL)",[message,owner,contact]);
+    await f.client.query("INSERT INTO public.message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,'source_document',$4,'line:1',$5)",[message,owner,contact,source,{time_iso:'2026-10-01T01:02:03.123456+08:00',synthetic:true}]);
+    await f.client.query("INSERT INTO public.confirmed_memory(id,owner_id,contact_id,text_content,category,source_ids,adoption_method) VALUES($1,$2,$3,'喜欢清淡食物','preference',$4,'manual')",[id,owner,contact,[message]]);
+    const expected=JSON.parse(execFileSync(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),['-c',
+      "import sys,json; from uuid import UUID; from notalone.persistence.memory_store import PostgresMemoryStore; from notalone.scopes import ContactScope; items=PostgresMemoryStore('host=/tmp dbname='+sys.argv[1]).list_confirmed(ContactScope(UUID(sys.argv[2]),UUID(sys.argv[3]))); print(json.dumps(items[0].timing.to_payload()))",
+      f.client.database,owner,contact],{env:{...process.env,NOTALONE_DISABLE_DOTENV:'1',PYTHONPATH:new URL('../../backend/src',import.meta.url).pathname},encoding:'utf8'}));
+    assert.equal(expected.source_started_at,null);
+    assert.equal(expected.source_ended_at,null);
+    assert.equal(expected.source_time_complete,false);
+    const row=(await f.client.query('SELECT to_jsonb(m) AS value FROM public.confirmed_memory m WHERE id=$1',[id])).rows[0].value;
+    assert.deepEqual((await projectOverviewMemory(f.client,row)).timing,expected);
+  } finally { await f.close(); }
+});
