@@ -1,0 +1,59 @@
+{
+  "frozen_v2_inputs": {
+    "manifest.json": "aaf05c47acbdae1755d620eb0f48a616c133e2350cc8d1d95cf925c7f1ecf2ac",
+    "cleanup-v2.delta.patch": "59009268ebf04e1626fd58bcb881663e2504274c30d8aea0b8418185a98a1e75",
+    "candidate/reply-background-public.test.mjs": "e14cdf325ced9fc566f9f712d8808a148bef7cffae2ed5e7ab31c4b91029cbd8",
+    "candidate/reply-background-cleanup.mjs": "9e2e8925795a32ae3b5cc61a95d3d3e69af34bfcf3b1766efd7941011b8bdbdf",
+    "candidate/reply-background-cleanup.test.mjs": "4e861c621988a81e1ac1eca38d52beb7133db37d9fb37f9198c28033bf14e39f",
+    "candidate/reply-fixture-cleanup.mjs": "6a05fd23620e2779b7fa01728777601787df4b5c39adde43fbb742a5a58c3b23",
+    "../background-public.test.mjs": "3f1010f39b6a479e5341025873707f42d6aec54022c363712c4411dbc0e85c3f",
+    "../accepted-candidate-manifest.json": "68e1bb26366f0c44dbe277046210fb418c846d1bb6c9529e952cb36849b3cdd6",
+    "backend-ts/test/reply-service-runtime-support.mjs": "3be39abfe7e12a28af829305795bc3d10f1a46b714596c6ab9015a20d0aa9d22"
+  },
+  "actual_independent_runs": [
+    {
+      "name": "existing-pure14",
+      "returncode": 0,
+      "command": [
+        "${NODE}",
+        "--test",
+        "${B501_V2}/candidate/reply-background-cleanup.test.mjs"
+      ],
+      "log": "b501-pure14-independent.log",
+      "log_sha256": "adfdfb09a385349ff1cec19e31f401d89ed9bc37adf582a04dbec0f94839942a"
+    },
+    {
+      "name": "duplicate-release-in-memory-probe",
+      "returncode": 0,
+      "command": [
+        "${NODE}",
+        "${REVIEW}/b501-duplicate-release-probe.mjs",
+        "${B501}"
+      ],
+      "probe_sha256": "a4d9a3e9c636ff47187fa642e6cf7e87008271568bd730907d95e2ce517f4b80",
+      "log": "b501-duplicate-release-probe.log",
+      "log_sha256": "cb98a45bb2859d0f3ff26a96e99652218777155a3e7aea6518cb9fcfb9582366"
+    },
+    {
+      "name": "hung-query-in-actual-hook-probe",
+      "returncode": 0,
+      "command": [
+        "${NODE}",
+        "${REVIEW}/b501-hung-query-probe.mjs",
+        "${B501}"
+      ],
+      "probe_sha256": "44f27e944f73d999b7a2910367919e3b61a237186af1859c2dc2dcf178d66e1d",
+      "log": "b501-hung-query-probe.log",
+      "log_sha256": "998c9a4c6e05761d2eb7b39453c42b9839dd16dab286b39d0078eb0e60c97ddb"
+    }
+  ],
+  "shared_helper_sha_matches_prior_review": true,
+  "original_b50203_review_sha": "f3da43a83b13d2faa35702468719ffafb1d600e2cfb25eae901216d3781fec42",
+  "business_diff_scope": [
+    "adapter import",
+    "artifact initialization/default0700",
+    "control handle scope",
+    "after-hook lifecycle replacement"
+  ],
+  "data_impact": "仅已有14纯用例及两项纯内存故障复现；0监听/网络请求/SDK/PG/App/微信/新业务；历史graceful=false与原证据未改写"
+}

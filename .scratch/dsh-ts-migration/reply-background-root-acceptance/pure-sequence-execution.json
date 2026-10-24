@@ -1,0 +1,13 @@
+{
+  "exit_code": 0,
+  "raw_sha256": "7cff18f0ad94f44b6dd9263ed9ab2942eee05adb72f28759c68770d0c66db901",
+  "public_sha256": "7cff18f0ad94f44b6dd9263ed9ab2942eee05adb72f28759c68770d0c66db901",
+  "formal_paths": {
+    "backend-ts/test/reply-background-public.test.mjs": "0cb791e841cca3b7cdc3b0cabfd19b0d975da64b0f7fc1ca54ee685f1f838210",
+    "backend-ts/test/reply-background-cleanup.mjs": "52ae2ff4f0f3acde9a4749b7aad294483efcf6a518864d7bbad36565bed09a4e",
+    "backend-ts/test/reply-background-sequence.test.mjs": "b79850cf2d86fbca62e0b3b86e1f901bb727c1c3c683ad64896ebe5f95c28cf5",
+    "backend-ts/test/reply-background-cleanup.test.mjs": "4e861c621988a81e1ac1eca38d52beb7133db37d9fb37f9198c28033bf14e39f"
+  },
+  "command": "NODE24 --test test/reply-background-sequence.test.mjs",
+  "SDK_HTTP_PG_App": 0
+}

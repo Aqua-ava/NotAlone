@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "scope": "B5-01 v3仅修迟到SSE重复释放和PG核查悬挂漏end；不自行关闭finding",
+  "frozen_v2": {
+    "test_sha256": "e14cdf325ced9fc566f9f712d8808a148bef7cffae2ed5e7ab31c4b91029cbd8",
+    "manifest_sha256": "aaf05c47acbdae1755d620eb0f48a616c133e2350cc8d1d95cf925c7f1ecf2ac",
+    "patch_sha256": "59009268ebf04e1626fd58bcb881663e2504274c30d8aea0b8418185a98a1e75",
+    "raw_unchanged": true
+  },
+  "targets": {
+    "backend-ts/test/reply-background-public.test.mjs": {
+      "source": "candidate/reply-background-public.test.mjs",
+      "base_sha256": "e14cdf325ced9fc566f9f712d8808a148bef7cffae2ed5e7ab31c4b91029cbd8",
+      "target_sha256": "0cb791e841cca3b7cdc3b0cabfd19b0d975da64b0f7fc1ca54ee685f1f838210"
+    },
+    "backend-ts/test/reply-background-cleanup.mjs": {
+      "source": "candidate/reply-background-cleanup.mjs",
+      "base_sha256": "9e2e8925795a32ae3b5cc61a95d3d3e69af34bfcf3b1766efd7941011b8bdbdf",
+      "target_sha256": "52ae2ff4f0f3acde9a4749b7aad294483efcf6a518864d7bbad36565bed09a4e"
+    },
+    "backend-ts/test/reply-background-sequence.test.mjs": {
+      "source": "candidate/reply-background-sequence.test.mjs",
+      "base_sha256": null,
+      "target_sha256": "b79850cf2d86fbca62e0b3b86e1f901bb727c1c3c683ad64896ebe5f95c28cf5"
+    }
+  },
+  "execution_dependencies": {
+    "shared_helper_sha256": "6a05fd23620e2779b7fa01728777601787df4b5c39adde43fbb742a5a58c3b23",
+    "shared_helper_matches_frozen_v2": true,
+    "existing_14_pure_tests_sha256": "4e861c621988a81e1ac1eca38d52beb7133db37d9fb37f9198c28033bf14e39f",
+    "existing_14_tests_match_frozen_v2": true,
+    "actual_sendEvents_source": "backend-ts/test/reply-service-runtime-support.mjs:24",
+    "actual_sendEvents_source_sha256": "3be39abfe7e12a28af829305795bc3d10f1a46b714596c6ab9015a20d0aa9d22"
+  },
+  "delta_sha256": "cb2e407c124fef22c8f00d4e75bcdbe53a3c16bf588f19b2bf1cd67aeb90a932",
+  "exact_business_bytes_preserved_after_reversing_two_cleanup_changes": true,
+  "adapter_delta": "仅在已确认正常spawn退出后的stopChild阶段增加可选checkClientConnections回调；该阶段共享deadline，独立closeClient阶段只end。共享helper不改。",
+  "late_release": "pending标志只消费一次，先撤自身绑定，再检查writableEnded/destroyed；已释放或旧闭包重复调用无操作，失败路径仍释放尚未完成的SSE。",
+  "validation": {
+    "initial_v2_red": {
+      "tests": 6,
+      "pass": 1,
+      "fail": 5,
+      "skipped": 0
+    },
+    "combined_capture_query_red": {
+      "tests": 7,
+      "pass": 6,
+      "fail": 1,
+      "skipped": 0
+    },
+    "minimal_green": {
+      "tests": 7,
+      "pass": 7,
+      "fail": 0,
+      "skipped": 0
+    },
+    "related_green": {
+      "tests": 21,
+      "pass": 21,
+      "fail": 0,
+      "skipped": 0
+    },
+    "green_minimal_sha256": "321b3a121162c59d2cc4b1ffd19d9f64e505b0763399a02af5f842f54cdc68d0",
+    "green_related_sha256": "30e85e105dc130438b8bb0049e57793455cfe5fbdfaf4d7775b2d1d95d90887c",
+    "network_listeners": 0,
+    "network_requests": 0,
+    "sdk_pg_app_wechat_runs": 0,
+    "real_ServerResponse_no_socket": true,
+    "actual_late_branch_and_afterhook_extracted": true
+  },
+  "raw_public_logs": [
+    {
+      "file": "red.log",
+      "raw_private_file": "/tmp/notalone-b5-redaction-udj13o63/cleanup-fix-v3/red.log",
+      "raw_sha256": "95678eff31b473ddda52692fb3fd22134638b00b3dde242d2f86382d8c8b9b67",
+      "public_sha256": "3746acaecc8a072d62f2ed14bc0561f7723a1e6ddfd3da4f06d1f4477fb0a02a"
+    },
+    {
+      "file": "combined-red.log",
+      "raw_private_file": "/tmp/notalone-b5-redaction-udj13o63/cleanup-fix-v3/combined-red.log",
+      "raw_sha256": "3cabe6037a02c03646e79eb2ea321cfe94c0e0308ba62602470453ad90f2a6ae",
+      "public_sha256": "f66579aa4fa8e1ed8e0eaed8c1445d52f96cc4c230a8092f95042b8ecd5e0263"
+    }
+  ],
+  "review_state": "候选，等待根与独立审查；不认证实际业务/App/生命周期重跑",
+  "source_only": "仅个人scratch新v3目录，未动main/index、冻结v2、68e1/3f或原round raw。"
+}

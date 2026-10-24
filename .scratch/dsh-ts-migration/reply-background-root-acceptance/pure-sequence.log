@@ -1,0 +1,15 @@
+✔ 实际sendEvents：正常body先释放，再after清理不会重复写已结束响应 (1.796375ms)
+✔ 实际sendEvents：失败路径尚未完成的SSE由after释放且重复调用无操作 (0.404917ms)
+✔ 实际sendEvents：响应已结束时释放闭包无操作 (0.313167ms)
+✔ 实际afterhook：只读query永不返回仍独立尝试client.end，保留超时和现场 (10.699041ms)
+✔ 实际afterhook：query超时与end异常均保留 (10.60475ms)
+✔ 实际afterhook：独立end永不返回也有界失败并保留现场 (11.49475ms)
+✔ 实际afterhook：query悬挂仍保留独立provider与end原异常 (10.566792ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 80.713458
