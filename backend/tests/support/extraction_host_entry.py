@@ -1,4 +1,4 @@
-"""实际主宿主入口的原Python A/B验收；只接受显式合成库参数。"""
+"""实际主宿主入口的TS A/B与Python只读消费验收；只接受显式合成库参数。"""
 from datetime import datetime, timedelta, timezone
 from dataclasses import asdict
 import json

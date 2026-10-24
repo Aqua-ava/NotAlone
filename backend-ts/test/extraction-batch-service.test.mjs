@@ -65,14 +65,14 @@ test('原Python窗口→TS批处理保留同一claim/trace，重复结果只读�
   const abortedInput={...input,...seedTrace()},controller=new AbortController();
   afterCommit=async()=>{await c.query("UPDATE background_task_step SET lease_expires_at=now()-interval '1 second' WHERE id=$1",[step]);controller.abort();};
   await assert.rejects(service.run(abortedInput,controller.signal),{name:'AbortError'});assert.equal(calls,2);
-  assert.equal((await c.query("SELECT 1 FROM memory_extraction_trace_event WHERE trace_id=$1 AND stage='typescript_a_not_sent'",[abortedInput.trace_id])).rowCount,1);
+  assert.equal((await c.query("SELECT 1 FROM memory_extraction_trace_event WHERE trace_id=$1 AND stage='typescript_a_not_sent'",[abortedInput.trace_id])).rowCount,0,
+   '已消费A只读恢复，不生成新的零派发证明');
   await c.query("UPDATE background_task_step SET lease_expires_at=now()+interval '5 minutes' WHERE id=$1",[step]);
   const retryInput={...input,...seedTrace()};
-  const retried=await service.run(retryInput,new AbortController().signal);assert.equal(calls,4);assert.notEqual(retried.a_execution_id,first.a_execution_id);
-  await c.query("DELETE FROM memory_extraction_trace_event WHERE trace_id=$1 AND stage='typescript_a_result'",[retryInput.trace_id]);
-  await assert.rejects(service.run({...input,...seedTrace()},new AbortController().signal),{code:'extraction_batch_outcome_unknown'});assert.equal(calls,4);
+  const retried=await service.run(retryInput,new AbortController().signal);
+  assert.equal(calls,2);assert.equal(retried.a_execution_id,first.a_execution_id);
   await c.query("UPDATE source_document SET status='delete_requested' WHERE id=$1",[source]);
-  await assert.rejects(service.run(input,new AbortController().signal),{code:'extraction_batch_stale'});assert.equal(calls,4);
+  await assert.rejects(service.run(input,new AbortController().signal),{code:'extraction_batch_stale'});assert.equal(calls,2);
  }finally{if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await db.close();}
 });
 

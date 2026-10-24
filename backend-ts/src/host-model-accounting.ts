@@ -7,12 +7,18 @@ type Transaction=<T>(work:(client:pg.Client)=>Promise<T>)=>Promise<T>;
 export class HostModelAccountingError extends Error {readonly code:string;constructor(code:string){super(code);this.code=code;}}
 const reject=(code:string):never=>{throw new HostModelAccountingError(code);};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export type ModelTaskRequestPurpose='extraction'|'adjudication'|'relation_verification'|'merge_verification'|'skill_learning';
 /** 与Python uuid.uuid5(uuid.NAMESPACE_URL, name)逐字节一致。 */
-export function modelTaskRequestId(kind:'extraction'|'skill_learning',task:string,key:string):string {
+export function modelTaskRequestId(kind:ModelTaskRequestPurpose,task:string,key:string):string {
  const namespace=Buffer.from('6ba7b8119dad11d180b400c04fd430c8','hex');
  const bytes=createHash('sha1').update(namespace).update(`notalone:${kind}:${task}:${key}`,'utf8').digest().subarray(0,16);
  bytes[6]=(bytes[6]!&15)|80;bytes[8]=(bytes[8]!&63)|128;
  const h=bytes.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+/** 与 ExtractionAdoptionService 的 UUIDv5 名称保持一致；detail 为 batch 或候选索引。 */
+function adoptionRequestId(purpose:Exclude<ModelTaskRequestPurpose,'extraction'|'skill_learning'>,
+ task:string,batchKey:string,detail:'batch'|number):string {
+ return modelTaskRequestId(purpose,task,`${batchKey}:${detail}`);
 }
 function claimValue(value:ModelTaskClaim|undefined):ModelTaskClaim {
  if(!value||Object.keys(value).sort().join(',')!=='lease_generation,step_id,step_name,task_id,worker_id'
@@ -36,13 +42,38 @@ async function authority(client:pg.Client,r:ModelLedgerReceipt,c:ModelTaskClaim)
    if(!(await client.query("SELECT 1 FROM source_document WHERE id=$1 AND owner_id=$2 AND contact_id=$3 AND status='active'",[task.source_document_id,r.owner_id,r.contact_id])).rowCount)reject('model_accounting_source_stale');
   }else if(!await bound())reject('model_accounting_source_stale');
   // 仅投影批次键；不选择window正文或完整JSON载荷。
-  const traces=(await client.query(`SELECT DISTINCT tr.batch_key FROM memory_extraction_trace tr
+  const traces=(await client.query(`SELECT DISTINCT tr.batch_key,
+   (SELECT jsonb_array_length(result.payload#>'{outcome,accepted}')
+    FROM memory_extraction_trace source_trace
+    JOIN memory_extraction_trace_event result ON result.trace_id=source_trace.trace_id
+    JOIN memory_extraction_trace_event source_window ON source_window.trace_id=source_trace.trace_id
+     AND source_window.stage='window'
+     AND source_window.payload#>>'{task_runtime,task_id}'=$3
+     AND source_window.payload#>>'{task_runtime,step_id}'=$4
+     AND source_window.payload#>>'{task_runtime,step_name}'=$5
+     AND source_window.payload#>>'{task_runtime,worker_id}'=$6
+     AND source_window.payload#>>'{task_runtime,lease_generation}'=$7
+    WHERE source_trace.owner_id=$1 AND source_trace.contact_id=$2 AND source_trace.batch_key=tr.batch_key
+      AND result.stage='typescript_a_result'
+    ORDER BY result.position DESC LIMIT 1) AS accepted_count
+   FROM memory_extraction_trace tr
    JOIN memory_extraction_trace_event e ON e.trace_id=tr.trace_id AND e.owner_id=tr.owner_id AND e.contact_id=tr.contact_id
    WHERE tr.owner_id=$1 AND tr.contact_id=$2 AND tr.status='running' AND e.stage='window'
    AND e.payload#>>'{task_runtime,task_id}'=$3 AND e.payload#>>'{task_runtime,step_id}'=$4
    AND e.payload#>>'{task_runtime,step_name}'=$5 AND e.payload#>>'{task_runtime,worker_id}'=$6
    AND e.payload#>>'{task_runtime,lease_generation}'=$7`,[r.owner_id,r.contact_id,c.task_id,c.step_id,c.step_name,c.worker_id,String(c.lease_generation)])).rows;
-  if(!traces.some(row=>typeof row.batch_key==='string'&&/^[a-f0-9]{64}$/.test(row.batch_key)&&modelTaskRequestId('extraction',c.task_id,row.batch_key)===r.request_id))reject('model_accounting_request_invalid');
+  const allowed=new Set<string>();
+  for(const row of traces){
+   if(typeof row.batch_key!=='string'||!/^[a-f0-9]{64}$/.test(row.batch_key))continue;
+   const batch=row.batch_key;
+   allowed.add(modelTaskRequestId('extraction',c.task_id,batch));
+   if(!Number.isSafeInteger(Number(row.accepted_count))||Number(row.accepted_count)<0||Number(row.accepted_count)>100)continue;
+   allowed.add(adoptionRequestId('adjudication',c.task_id,batch,'batch'));
+   allowed.add(adoptionRequestId('relation_verification',c.task_id,batch,'batch'));
+   for(let index=0;index<Number(row.accepted_count);index++)
+     allowed.add(adoptionRequestId('merge_verification',c.task_id,batch,index));
+  }
+  if(!allowed.has(r.request_id))reject('model_accounting_request_invalid');
   return {limit:129};
  }
  if(task.task_type==='skill_learning') {

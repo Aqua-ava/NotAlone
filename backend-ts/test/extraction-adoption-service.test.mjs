@@ -37,9 +37,10 @@ async function setupA(messageText='联系人两项运动都安排'){
   VALUES($1,$2,'extract_memory',3,'running',$3,1,1,now()+interval '5 minutes')`,[step,task,worker]);
  const claim={task_id:task,step_id:step,step_name:'extract_memory',worker_id:worker,lease_generation:1};
  const config=await readFile(fixture.envFilePath,'utf8'),dsn=config.match(/^NOTALONE_DATABASE_URL=(.*)$/m)[1];
- const script=`import sys,json\nfrom uuid import UUID,uuid4\nfrom notalone.scopes import ContactScope\nfrom notalone.memory_extraction.cli_support import load_contact_messages\nfrom notalone.memory_extraction.command import _plan_batch\nfrom notalone.persistence.extraction_trace import PostgresExtractionTraceStore\nscope=ContactScope(UUID(sys.argv[2]),UUID(sys.argv[3])); messages=load_contact_messages(scope,sys.argv[1]); claim=json.loads(sys.argv[4])\nplan=_plan_batch(batch=messages,messages=messages,message_positions={m.message_id:i for i,m in enumerate(messages)},scope=scope,context_before=5,context_after=0,batch_size=10,provider='deepseek',model_name='synthetic-model',task_metadata={'task_runtime':claim},selection_receipts=(),previous_watermark=None)\ntrace=PostgresExtractionTraceStore(sys.argv[1]).begin(scope,run_id=uuid4(),batch_key=plan.batch_key,payload=plan.window_payload)\nprint(json.dumps({'trace_id':str(trace),'batch_key':plan.batch_key}))`;
- const seeded=JSON.parse(execFileSync(`${homedir()}/miniconda3/envs/NotAlone/bin/python`,['-c',script,dsn,owner,contact,JSON.stringify(claim)],{
+ const script=`import sys,json\nfrom uuid import UUID,uuid4\nfrom notalone.scopes import ContactScope\nfrom notalone.memory_extraction.cli_support import load_contact_messages\nfrom notalone.memory_extraction.command import _plan_batch\nfrom notalone.persistence.extraction_trace import PostgresExtractionTraceStore\nscope=ContactScope(UUID(sys.argv[2]),UUID(sys.argv[3]));target=UUID(sys.argv[4]);messages=[m for m in load_contact_messages(scope,sys.argv[1]) if m.message_id==target];claim=json.loads(sys.argv[5])\nplan=_plan_batch(batch=messages,messages=messages,message_positions={m.message_id:i for i,m in enumerate(messages)},scope=scope,context_before=0,context_after=0,batch_size=1,provider='deepseek',model_name='synthetic-model',task_metadata={'task_runtime':claim},selection_receipts=(),previous_watermark=None)\ntrace=PostgresExtractionTraceStore(sys.argv[1]).begin(scope,run_id=uuid4(),batch_key=plan.batch_key,payload=plan.window_payload)\nprint(json.dumps({'trace_id':str(trace),'batch_key':plan.batch_key}))`;
+ const seedTrace=()=>JSON.parse(execFileSync(`${homedir()}/miniconda3/envs/NotAlone/bin/python`,['-c',script,dsn,owner,contact,message,JSON.stringify(claim)],{
   env:{...process.env,NOTALONE_DISABLE_DOTENV:'1',PYTHONPATH:new URL('../../backend/src',import.meta.url).pathname},encoding:'utf8'}));
+ const seeded=seedTrace();
  const seededWindow=(await c.query("SELECT payload FROM public.memory_extraction_trace_event WHERE trace_id=$1 AND stage='window'",[seeded.trace_id])).rows[0].payload;
  assert.deepEqual(seededWindow.task_runtime,claim);
  await c.query('INSERT INTO public.memory_processing_plan(task_id,owner_id,contact_id)VALUES($1,$2,$3)',[task,owner,contact]);
@@ -64,7 +65,7 @@ async function setupA(messageText='联系人两项运动都安排'){
  const aResult=await aService.run(aInput,new AbortController().signal);
  assert.equal(extractionCalls,2);assert.equal(aResult.accepted.length,1);
  return {fixture,c,pool:new pg.Pool({host:'/tmp',database:dsn.match(/dbname=([^\s]+)/)[1]}),owner,contact,source,message,task,step,worker,claim,
-  seeded,aInput,aResult,addMessage};
+  seeded,aInput,aResult,addMessage,aService,seedTrace};
 }
 
 async function addParent(x,index){
@@ -154,6 +155,43 @@ test('A结果在真实租约围栏内完成三类裁决、合并、trace与水�
   assert.equal(replay.cached,true);assert.equal(runtime.calls.length,callsBefore);assert.deepEqual(replay.stats,result.stats);
   assert.equal((await x.c.query("SELECT count(*)::int AS n FROM public.memory_extraction_trace_event WHERE trace_id=$1 AND stage='batch_end'",
    [x.seeded.trace_id])).rows[0].n,1);
+  const recovered=x.seedTrace();
+  const recoverableA=await x.c.query(`SELECT b.payload AS begun,r.payload->'outcome' AS outcome,
+   EXISTS(SELECT 1 FROM memory_extraction_trace_event e WHERE e.owner_id=$1 AND e.contact_id=$2
+    AND e.stage='batch_end' AND e.payload#>>'{typescript_a_receipt,a_execution_id}'=b.payload->>'execution_id'
+    AND e.payload#>>'{typescript_a_receipt,a_input_sha256}'=b.payload->>'input_sha256'
+    AND e.payload#>>'{typescript_a_receipt,a_rule_version}'=b.payload->>'rule_version') AS consumed
+   FROM memory_extraction_trace_event b JOIN memory_extraction_trace tr ON tr.trace_id=b.trace_id
+   LEFT JOIN memory_extraction_trace_event r ON r.trace_id=b.trace_id AND r.stage='typescript_a_result'
+   WHERE tr.owner_id=$1 AND tr.contact_id=$2 AND tr.batch_key=$3 AND b.stage='typescript_a_begin'
+    AND b.payload->>'task_id'=$4`,[x.owner,x.contact,x.seeded.batch_key,x.task]);
+  assert.equal(recoverableA.rowCount,1);
+  assert.equal(recoverableA.rows[0].begun.input_sha256,x.aResult.a_input_sha256);
+  assert.equal(recoverableA.rows[0].consumed,true);
+  assert.equal(recoverableA.rows[0].begun.rule_version,x.aResult.a_rule_version);
+  assert.equal(recoverableA.rows[0].outcome.a_execution_id,x.aResult.a_execution_id);
+  assert.equal(recoverableA.rows[0].outcome.a_input_sha256,x.aResult.a_input_sha256);
+  assert.deepEqual(recoverableA.rows[0].outcome.model_call_ids,x.aResult.model_call_ids);
+  const recoveredA=await x.aService.run({...x.aInput,...recovered},new AbortController().signal);
+  assert.equal(recoveredA.a_execution_id,x.aResult.a_execution_id,JSON.stringify({
+   stored:{execution:x.aResult.a_execution_id,input:x.aResult.a_input_sha256,rule:x.aResult.a_rule_version},
+   recovered:{execution:recoveredA.a_execution_id,input:recoveredA.a_input_sha256,rule:recoveredA.a_rule_version},
+  }));
+  const recoveredB=await service.run({owner_id:x.owner,contact_id:x.contact,...recovered,claim:x.claim,a_result:recoveredA},
+   new AbortController().signal);
+  assert.equal(recoveredB.cached,true);assert.equal(recoveredB.trace_id,recovered.trace_id);
+  assert.deepEqual(recoveredB.stats,result.stats);assert.equal(runtime.calls.length,callsBefore);
+  assert.equal((await x.c.query("SELECT count(*)::int AS n FROM public.memory_extraction_trace_event WHERE trace_id=$1 AND stage='typescript_b_recovered'",
+   [recovered.trace_id])).rows[0].n,1);
+  assert.equal((await x.c.query("SELECT count(*)::int AS n FROM public.memory_extraction_trace_event WHERE trace_id=$1 AND stage='batch_end'",
+   [recovered.trace_id])).rows[0].n,1);
+  assert.equal((await x.c.query("SELECT count(*)::int AS n FROM public.memory_extraction_trace_event WHERE owner_id=$1 AND contact_id=$2 AND stage='batch_end'",
+   [x.owner,x.contact])).rows[0].n,2);
+  const recoveredReplay=await service.run({owner_id:x.owner,contact_id:x.contact,...recovered,claim:x.claim,a_result:recoveredA},
+   new AbortController().signal);
+  assert.equal(recoveredReplay.cached,true);assert.equal(runtime.calls.length,callsBefore);
+  assert.equal((await x.c.query("SELECT last_message_id FROM public.memory_extraction_watermark WHERE owner_id=$1 AND contact_id=$2",
+   [x.owner,x.contact])).rows[0].last_message_id,x.message);
  }finally{await close(x);}
 });
 

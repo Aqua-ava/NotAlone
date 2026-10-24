@@ -150,10 +150,11 @@ function validStats(value:unknown,expected:number):value is AdoptionStats{
   &&stats.results.every((row,index)=>Number.isSafeInteger(row.candidate_index)&&row.candidate_index===index&&typeof row.disposition==='string')
   &&Array.isArray(stats.usages)&&stats.usages.every(row=>row===null||typeof row==='object');
 }
-function validReceipt(value:unknown,input:ExtractionAdoptionInput,bExecutionId:string):value is ExtractionAdoptionReceipt{
+function validReceipt(value:unknown,input:ExtractionAdoptionInput,bExecutionId:string,
+ traceId=input.trace_id):value is ExtractionAdoptionReceipt{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const receipt=value as ExtractionAdoptionReceipt;
- return receipt.version===1&&receipt.b_execution_id===bExecutionId&&receipt.trace_id===input.trace_id
+ return receipt.version===1&&receipt.b_execution_id===bExecutionId&&receipt.trace_id===traceId
   &&receipt.a_execution_id===input.a_result.a_execution_id&&receipt.a_input_sha256===input.a_result.a_input_sha256
   &&receipt.a_rule_version===input.a_result.a_rule_version
   &&canonicalJSON(receipt.candidate_trace_ids)===canonicalJSON(input.a_result.candidate_trace_ids.map(id=>id.toLowerCase()))
@@ -266,7 +267,8 @@ export class ExtractionAdoptionService {
    JOIN public.memory_extraction_trace_event b ON b.trace_id=tr.trace_id AND b.stage='typescript_a_begin'
    JOIN public.memory_extraction_trace_event r ON r.trace_id=tr.trace_id AND r.stage='typescript_a_result'
    WHERE tr.trace_id=$1 AND tr.owner_id=$2 AND tr.contact_id=$3 AND tr.batch_key=$4
-   AND r.payload->'outcome'=$5::jsonb`,
+   AND r.payload->'outcome'=$5::jsonb
+   ORDER BY r.position DESC LIMIT 1`,
    [input.a_result.a_execution_id,input.owner_id,input.contact_id,input.batch_key,canonicalJSON(input.a_result)])).rows;
   if(originals.length!==1)failure('adoption_a_result_unavailable');
   const begun=parseStoredJSON(originals[0]!.begun);
@@ -297,15 +299,55 @@ export class ExtractionAdoptionService {
     trace_id:input.trace_id,b_execution_id:bExecutionId,stats:receipt.stats,receipt,watermark:receipt.watermark_after,cached:true}};
   }
   if(current.status!=='running'||resultRows.length)failure('adoption_trace_state_invalid');
-  if((await client.query(`SELECT 1 FROM public.memory_extraction_trace_event
-   WHERE owner_id=$1 AND contact_id=$2 AND stage='batch_end'
-   AND payload#>>'{typescript_a_receipt,a_execution_id}'=$3 LIMIT 1`,
-   [input.owner_id,input.contact_id,input.a_result.a_execution_id])).rowCount)failure('adoption_a_result_consumed');
+  const aReceipt={a_execution_id:input.a_result.a_execution_id,a_input_sha256:input.a_result.a_input_sha256,
+   a_rule_version:input.a_result.a_rule_version};
+  const prior=(await client.query(`SELECT e.trace_id,e.payload->'typescript_b_receipt' AS receipt,tr.status
+   FROM public.memory_extraction_trace_event e
+   JOIN public.memory_extraction_trace tr ON tr.trace_id=e.trace_id
+    AND tr.owner_id=e.owner_id AND tr.contact_id=e.contact_id
+   WHERE e.owner_id=$1 AND e.contact_id=$2 AND e.stage='batch_end'
+    AND e.payload#>>'{typescript_a_receipt,a_execution_id}'=$3
+   FOR UPDATE OF tr`,[input.owner_id,input.contact_id,input.a_result.a_execution_id])).rows;
+  if(prior.length>1)failure('adoption_trace_state_invalid');
+  if(prior.length===1){
+   const sourceTrace=String(prior[0].trace_id),sourceReceipt=prior[0].receipt;
+   if(prior[0].status!=='succeeded'||!uuid.test(sourceTrace)
+    ||!validReceipt(sourceReceipt,input,bExecutionId,sourceTrace))failure('adoption_trace_state_invalid');
+   const receipt={...sourceReceipt,trace_id:input.trace_id};
+   if(!validReceipt(receipt,input,bExecutionId))failure('adoption_trace_state_invalid');
+   if(writeBegin){
+    const recovered=(await client.query(`SELECT payload::text AS payload
+     FROM public.memory_extraction_trace_event
+     WHERE trace_id=$1 AND owner_id=$2 AND contact_id=$3 AND stage='typescript_b_recovered'`,
+     [input.trace_id,input.owner_id,input.contact_id])).rows;
+    if(recovered.length>1||recovered.some(row=>{
+      const value=parseStoredJSON(row.payload);
+      return value.b_execution_id!==bExecutionId||value.source_trace_id!==sourceTrace;
+    }))failure('adoption_trace_state_invalid');
+    if(!recovered.length){
+     await appendEvent(client,input,'typescript_b_recovered',{version:1,b_execution_id:bExecutionId,
+      source_trace_id:sourceTrace,receipt});
+     await appendEvent(client,input,'typescript_b_result',{receipt,recovered_from_trace_id:sourceTrace});
+     await appendEvent(client,input,'batch_end',{extracted:receipt.accepted_count,rejected:receipt.rejected_count,
+      adoption:receipt.stats,watermark_before:receipt.watermark_before,
+      watermark_planned:receipt.watermark_planned,watermark_after:receipt.watermark_after,
+      watermark_commit:'already_committed_with_trace',typescript_a_receipt:aReceipt,
+      typescript_b_receipt:receipt,recovered_from_trace_id:sourceTrace});
+    }
+    const finished=await client.query(`UPDATE public.memory_extraction_trace
+     SET status='succeeded',finished_at=now(),failure_stage=NULL,error_code=NULL
+     WHERE trace_id=$1 AND owner_id=$2 AND contact_id=$3 AND status='running'`,
+     [input.trace_id,input.owner_id,input.contact_id]);
+    if(finished.rowCount!==1)failure('adoption_trace_state_invalid');
+   }
+   return {target_ids:targetIds,message_ids:messageIds,b_execution_id:bExecutionId,a_receipt:aReceipt,cached:{
+    trace_id:input.trace_id,b_execution_id:bExecutionId,stats:receipt.stats,receipt,
+    watermark:receipt.watermark_after,cached:true}};
+  }
   const begins=(await client.query(`SELECT payload::text AS payload FROM public.memory_extraction_trace_event
    WHERE trace_id=$1 AND owner_id=$2 AND contact_id=$3 AND stage='typescript_b_begin'`,
    [input.trace_id,input.owner_id,input.contact_id])).rows;
   if(begins.length>1||begins.some(row=>parseStoredJSON(row.payload).b_execution_id!==bExecutionId))failure('adoption_trace_state_invalid');
-  const aReceipt={a_execution_id:input.a_result.a_execution_id,a_input_sha256:input.a_result.a_input_sha256,a_rule_version:input.a_result.a_rule_version};
   if(writeBegin&&!begins.length)await appendEvent(client,input,'typescript_b_begin',{version:1,b_execution_id:bExecutionId,
    a_receipt:aReceipt,candidate_trace_ids:input.a_result.candidate_trace_ids.map(id=>id.toLowerCase()),
    embedding:{model:this.options.embedding.model,revision:this.options.embedding.revision},purposes:purposeList});

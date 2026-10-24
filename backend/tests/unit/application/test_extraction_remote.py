@@ -245,7 +245,7 @@ class ExtractionRemoteDecodeTest(unittest.TestCase):
                 with self.assertRaises(ExtractionRemoteInvalidResponse):
                     decode(changed)
 
-    def test_remote_b_allows_null_adoption_only_for_a_failure_or_no_candidates(self):
+    def test_remote_b_allows_null_adoption_only_for_an_a_failure(self):
         window, outcome = fixture()
         task_id, trace_id, batch_key = uuid4(), uuid4(), "c" * 64
 
@@ -269,10 +269,8 @@ class ExtractionRemoteDecodeTest(unittest.TestCase):
             candidate_trace_ids=[],
             rejected_count=1,
         )
-        decoded = decode(no_candidates)
-        self.assertEqual(decoded.adoption_runtime, "typescript")
-        self.assertIsNone(decoded.adoption_receipt)
-        self.assertEqual(decoded.rejected_count, 1)
+        with self.assertRaises(ExtractionRemoteInvalidResponse):
+            decode(no_candidates)
 
         failed = deepcopy(no_candidates)
         failed.update(
@@ -386,7 +384,7 @@ class ExtractionRemoteTransportTest(unittest.TestCase):
         self.assertEqual(actual.adoption_receipt.stats.adopted, 1)
         self.assertEqual(actual.adoption_receipt.payload, adoption)
 
-    def test_remote_b_null_adoption_keeps_a_failure_and_zero_candidate_paths(self):
+    def test_remote_b_null_adoption_keeps_an_a_failure_path(self):
         from notalone.application.extraction_remote import RemoteExtractionRuntime
         window, successful = fixture()
         no_candidates = deepcopy(successful)
@@ -397,7 +395,7 @@ class ExtractionRemoteTransportTest(unittest.TestCase):
             failure_kind="invalid_output",
             failure_reason="合成A输出不可用",
         )
-        for outcome in (no_candidates, failed):
+        for outcome in (failed,):
             with self.subTest(
                 failure_kind=outcome["failure_kind"],
             ):

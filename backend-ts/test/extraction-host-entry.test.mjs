@@ -30,7 +30,7 @@ async function copyVerified(source,target){
  return async()=>{for(const[name,hash]of hashes){assert.equal(createHash('sha256').update(await readFile(join(target,name))).digest('hex'),hash);assert.equal(createHash('sha256').update(await readFile(join(source,name))).digest('hex'),hash);}};
 }
 
-test('实际host-plugin→host-model-runtime→host-reply：私有A入口、原B消费与零重复HTTP',{timeout:60000},async t=>{
+test('实际host-plugin→host-model-runtime→host-reply：私有A+B入口、finalized消费与零重复HTTP',{timeout:60000},async t=>{
  const db=await createExtractionFixture(),c=db.client;
  const owner=randomUUID(),contact=randomUUID(),source=randomUUID(),message=randomUUID(),task=randomUUID(),step=randomUUID(),worker=randomUUID();
  const text='我喜欢绿茶。',seen=[];let child,exited,output='',connection,legacyPid,stopped=false;
@@ -57,6 +57,8 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A入口、原B
  await c.query("INSERT INTO message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload)VALUES($1,$2,$3,'source_document',$4,'line:1',$5)",[message,owner,contact,source,{time_iso:'2026-01-01T08:00:00.123456+08:00'}]);
  await c.query("INSERT INTO background_task(id,owner_id,contact_id,source_document_id,task_type,status,current_step,message_count)VALUES($1,$2,$3,$4,'import','running','extract_memory',1)",[task,owner,contact,source]);
  await c.query("INSERT INTO background_task_step(id,task_id,step_name,step_order,status,worker_id,lease_generation,attempt_count,lease_expires_at)VALUES($1,$2,'extract_memory',3,'running',$3,1,1,now()+interval '5 minutes')",[step,task,worker]);
+ await c.query('INSERT INTO memory_processing_plan(task_id,owner_id,contact_id)VALUES($1,$2,$3)',[task,owner,contact]);
+ await c.query('INSERT INTO memory_processing_target(task_id,message_id,owner_id,contact_id)VALUES($1,$2,$3,$4)',[task,message,owner,contact]);
  const claim={task_id:task,step_id:step,step_name:'extract_memory',worker_id:worker,lease_generation:1};
  const dsn=`host=/tmp dbname=${c.database}`;
  await writeFile(db.envFilePath,`NOTALONE_DATABASE_URL=${dsn}\nNOTALONE_OWNER_ID=${owner}\nNOTALONE_REPLY_RUNTIME=typescript\nNOTALONE_EXTRACTION_RUNTIME=typescript\nNOTALONE_DEEPSEEK_API_KEY=synthetic-only\nNOTALONE_EXTRACTION_BATCH_CONCURRENCY=1\nNOTALONE_SKILLS_DIR=${db.directory}/skills\n`,{mode:0o600});
@@ -75,7 +77,7 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A入口、原B
  const base=`http://${connection.address}`;
  async function request(path,body,token=connection.token){const response=await fetch(base+path,{method:body?'POST':'GET',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:body&&JSON.stringify(body),signal:AbortSignal.timeout(15000)});return {status:response.status,body:await response.json()};}
  const status=await request('/api/runtime/status');legacyPid=status.body.legacyPid;assert.ok(legacyPid);assert.equal(status.body.reply.state,'ready');assert.equal(status.body.ownership.replies,'typescript');
- assert.equal((await request('/internal/extraction/run',{})).status,401);assert.equal(seen.length,0);
+ assert.equal((await request('/internal/extraction/run',{})).status,401);assert.equal((await request('/internal/extraction/run-b',{})).status,401);assert.equal(seen.length,0);
  const progressRoute=`/api/contacts/${contact}/memory-processing`;
  const progress=await request(progressRoute);assert.equal(progress.status,200);assert.equal(progress.body.tasks[0].task_id,task);assert.equal(progress.body.tasks[0].status,'extracting');
  const busy=await request(progressRoute+'/resume',{task_id:task,action:'resume'});assert.deepEqual(busy,{status:200,body:{task_id:task,status:'busy'}});assert.equal(seen.length,0);
@@ -83,10 +85,9 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A入口、原B
  // 启用处理状态路由后，其他POST正文仍完整交给原入口；已初始化owner使恢复被拒绝而非丢正文。
  const untouched=await request('/api/setup/initialize',{display_name:'合成不应创建',create_only:true});assert.equal(untouched.status,409);assert.equal(untouched.body.error,'owner_already_configured');
  const bridge=JSON.parse(await readFile(bridgeFile,'utf8'));assert.equal((await stat(bridgeFile)).mode&0o777,0o600);
- assert.equal(bridge.NOTALONE_EXTRACTION_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_REPLY_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_REMOTE_URL,base);assert.ok(bridge.NOTALONE_EXTRACTION_REMOTE_TOKEN!==connection.token);
+ assert.equal(bridge.NOTALONE_EXTRACTION_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_B_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_REPLY_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_REMOTE_URL,base);assert.ok(bridge.NOTALONE_EXTRACTION_REMOTE_TOKEN!==connection.token);
  const runPython=async mode=>{try{return JSON.parse((await execute(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),[resolve('../backend/tests/support/extraction_host_entry.py'),mode,dsn,owner,contact,source,JSON.stringify(claim),base],{cwd:project,env:{PATH:process.env.PATH,USER:process.env.USER,HOME:db.directory,PYTHONPATH:join(project,'backend/src'),PYTHONDONTWRITEBYTECODE:'1',NOTALONE_DISABLE_DOTENV:'1',...bridge},timeout:25000,maxBuffer:1048576})).stdout);}catch(error){throw Error((error.stderr??'').slice(-1800)+'\n'+safeOutput().slice(-1800));}};
- const lost=await runPython('lost');assert.equal(lost.extracted,1);assert.equal(lost.watermark,null);assert.equal(seen.length,2);
- const result=await runPython('run');assert.equal(result.stats.processed_messages,1);assert.equal(result.stats.adopted,1);assert.equal(result.watermark,message);assert.equal(seen.length,2,'新trace恢复A不能重复发送');
+ const result=await runPython('run');assert.equal(result.stats.processed_messages,1);assert.equal(result.stats.adopted,1);assert.equal(result.watermark,message);assert.equal(seen.length,2,'A与V各执行一次，B零模型调用仍由TS finalize');
  assert.deepEqual(seen.map(row=>row.body.tools[0].name),['DirectMemoryExtractionOutput','SourceVerificationOutput']);
  assert.ok(seen.every(row=>row.path==='/anthropic/v1/messages'&&row.headers['x-api-key']==='synthetic-only'&&row.headers['x-deepseek-harness-user-id']));
  assert.equal((await c.query('SELECT count(*)::int n FROM outbound_ledger_entry')).rows[0].n,2);
@@ -97,5 +98,5 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A入口、原B
  assert.equal((await c.query("SELECT count(*)::int n FROM memory_extraction_trace_event WHERE stage='batch_end' AND payload?'typescript_a_receipt'")).rows[0].n,1);
  const again=await runPython('run');assert.equal(again.stats.processed_messages,0);assert.equal(seen.length,2);
  assert.equal((await request('/api/runtime/shutdown',{})).body.state,'stopped');await stop();await verifyPython();await verifyMigrations();
- t.diagnostic('实际host-plugin与唯一Legacy已运行；原A/B显式claim验收通过，未据此认证Worker领取/完整队列、App或微信。');
+ t.diagnostic('实际host-plugin与唯一Legacy已运行；TS A+B finalized消费通过，未据此认证Worker领取/完整队列、App或微信。');
 });

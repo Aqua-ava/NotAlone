@@ -8,7 +8,7 @@ import {execFileSync} from 'node:child_process';
 import pg from 'pg';
 import {HostStorage} from '../src/host-storage.ts';
 
-test('110升级111保留原数据与unknown收据，学习claim完整约束和级联',async t=>{
+test('110升级112保留原数据与unknown收据，学习claim完整约束和级联',async t=>{
   const root=new URL('../../',import.meta.url).pathname;
   const directory=await mkdtemp(join(tmpdir(),'notalone-learning-claim-upgrade-'));
   const {mkdir}=await import('node:fs/promises');
@@ -18,7 +18,7 @@ test('110升级111保留原数据与unknown收据，学习claim完整约束和�
     if(!/^\d{3}_.*\.sql$/.test(file))continue;
     const version=Number(file.slice(0,3));
     if(version<=110)await copyFile(join(root,'backend/database/migrations',file),join(baseline,file));
-    if(version<=111)await copyFile(join(root,'backend/database/migrations',file),join(current,file));
+    if(version<=112)await copyFile(join(root,'backend/database/migrations',file),join(current,file));
   }
   const name=`notalone_learning_claim_upgrade_${randomUUID().replaceAll('-','')}_test`;
   const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();
@@ -62,21 +62,21 @@ test('110升级111保留原数据与unknown收据，学习claim完整约束和�
   const original=(await client.query('SELECT attempt_id,outcome,input_tokens,output_tokens,cost_amount FROM model_call_receipt WHERE attempt_id=$1',[originalAttempt])).rows[0];
   assert.deepEqual(original,{attempt_id:originalAttempt,outcome:'unknown',input_tokens:null,output_tokens:null,cost_amount:null});
   const ledger=(await client.query('SELECT name,checksum FROM notalone_schema_migration ORDER BY name')).rows;
-  assert.equal(ledger.length,111);
-  for(const [entry,code] of [[ledger[109],'migration_history_mismatch'],[ledger[110],'migration_pending']]){
+  assert.equal(ledger.length,112);
+  for(const [entry,code] of [[ledger[110],'migration_history_mismatch'],[ledger[111],'migration_pending']]){
     await client.query('DELETE FROM notalone_schema_migration WHERE name=$1',[entry.name]);
     assert.deepEqual(await storage.compatibility(),{code});
     await assert.rejects(storage.businessReadTransaction(async()=>{}),{code});
     await client.query('INSERT INTO notalone_schema_migration(name,checksum) VALUES($1,$2)',[entry.name,entry.checksum]);
   }
-  await client.query("UPDATE notalone_schema_migration SET checksum='wrong' WHERE name=$1",[ledger[110].name]);
+  await client.query("UPDATE notalone_schema_migration SET checksum='wrong' WHERE name=$1",[ledger[111].name]);
   assert.deepEqual(await storage.compatibility(),{code:'migration_history_mismatch'});
-  await client.query('UPDATE notalone_schema_migration SET checksum=$2 WHERE name=$1',[ledger[110].name,ledger[110].checksum]);
-  await writeFile(join(current,'112_unknown.sql'),'SELECT 1;\n');
-  assert.deepEqual(await storage.compatibility(),{code:'migration_files_invalid'});await rm(join(current,'112_unknown.sql'));
-  await client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('112_unknown.sql',$1)",['a'.repeat(64)]);
+  await client.query('UPDATE notalone_schema_migration SET checksum=$2 WHERE name=$1',[ledger[111].name,ledger[111].checksum]);
+  await writeFile(join(current,'113_unknown.sql'),'SELECT 1;\n');
+  assert.deepEqual(await storage.compatibility(),{code:'migration_files_invalid'});await rm(join(current,'113_unknown.sql'));
+  await client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('113_unknown.sql',$1)",['a'.repeat(64)]);
   assert.deepEqual(await storage.compatibility(),{code:'migration_history_mismatch'});
-  await client.query("DELETE FROM notalone_schema_migration WHERE name='112_unknown.sql'");
+  await client.query("DELETE FROM notalone_schema_migration WHERE name='113_unknown.sql'");
   const receipt=async(own=owner,con=contact,request=randomUUID())=>{
     const attempt=randomUUID();await client.query(`INSERT INTO model_call_receipt(attempt_id,owner_id,contact_id,request_id,permit_id,provider,model_name,called_at,dispatch,outcome,cost_status)
       VALUES($1,$2,$3,$4,$5,'synthetic','synthetic-model',now(),'authorized_unconfirmed','pending','unknown')`,[attempt,own,con,request,randomUUID()]);return {attempt,request};

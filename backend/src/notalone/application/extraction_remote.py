@@ -425,10 +425,7 @@ def decode_extraction_outcome(
             if task_id is None or trace_id is None or batch_key is None:
                 raise ValueError("extraction_remote_adoption_receipt_missing")
             if adoption is None:
-                if (
-                    outcome.failure_reason is None
-                    and (not outcome.extraction_completed or outcome.accepted)
-                ):
+                if outcome.failure_reason is None:
                     raise ValueError(
                         "extraction_remote_adoption_receipt_missing",
                     )

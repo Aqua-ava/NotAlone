@@ -81,6 +81,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
     }
     reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
       ledger,token,configuration:activeConfiguration,extractionEnabled:extractionMode==='typescript',
+      extractionAdoptionEnabled:extractionMode==='typescript',
       discussionSkillsRoot:configuredSkillsRoot,
       ...(options.sourceTraces?{sourceTraces:options.sourceTraces}:{}),
       ...(options.l2Quality?{l2Quality:options.l2Quality}:{}),
@@ -95,7 +96,9 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
         if(!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}$/.test(address))throw new HostModelRuntimeError('reply_remote_address_invalid');
         return {...modelHost.pythonEnvironment,NOTALONE_REPLY_RUNTIME:'typescript',
           NOTALONE_REPLY_REMOTE_URL:address,NOTALONE_REPLY_REMOTE_TOKEN:token,
-          ...(extractionMode==='typescript'?{NOTALONE_EXTRACTION_RUNTIME:'typescript',NOTALONE_EXTRACTION_REMOTE_URL:address,NOTALONE_EXTRACTION_REMOTE_TOKEN:token}:{}),
+          ...(extractionMode==='typescript'?{NOTALONE_EXTRACTION_RUNTIME:'typescript',
+            NOTALONE_EXTRACTION_B_RUNTIME:'typescript',
+            NOTALONE_EXTRACTION_REMOTE_URL:address,NOTALONE_EXTRACTION_REMOTE_TOKEN:token}:{}),
           // 仅宿主到本次Legacy的允许列表协议；配置保存后整体重启，不热切换。
           NOTALONE_MODEL_UNCONFIGURED_REASON:unavailable??'',
           ...(!ownerConfigured?{NOTALONE_OWNER_ID:''}:{})};

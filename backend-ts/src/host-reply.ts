@@ -15,6 +15,9 @@ import {createExplorationHttp} from './exploration-http.ts';
 import {createExtractionModelCaller,extractionUnconfirmedRequests,type ExtractionModelInput,type ExtractionPermitEndpoint} from './extraction-model.ts';
 import {ExtractionBatchService,ExtractionBatchError} from './extraction-batch-service.ts';
 import {createExtractionBatchHttp} from './extraction-batch-http.ts';
+import {createExtractionAdoptionHost,runExtractionWithAdoption} from './extraction-adoption-host.ts';
+import {ExtractionTaskStore} from './extraction-task-store.ts';
+import {createLocalEmbeddingLifecycle} from './local-embedding-lifecycle.ts';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {AssistantDiscussionError,AssistantDiscussionService} from './assistant-discussion-service.ts';
@@ -46,6 +49,8 @@ export interface HostReplyOptions {
   configuration:HostReplyConfiguration|null;
   extractionPermit?:ExtractionPermitEndpoint;
   extractionEnabled?:boolean;
+  extractionAdoptionEnabled?:boolean;
+  embeddingFactory?:Parameters<typeof createLocalEmbeddingLifecycle>[0];
   discussionSkillsRoot?:string;
   sourceTraces?:Pick<SourceProcessingTraceStore,
     'findMemoryTraceRecordInTransaction'|'validateMemoryTraceRecordInTransaction'>;
@@ -61,6 +66,8 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   let exploration:ExplorationService|undefined;
   let extraction:ReturnType<typeof createExtractionModelCaller>|undefined;
   let batches:ExtractionBatchService|undefined;
+  let adoptionHost:ReturnType<typeof createExtractionAdoptionHost>|undefined;
+  let adoptionPool:pg.Pool|undefined;
   let l2Scenarios:L2ScenarioHostCandidate|undefined;
   async function extractionTransaction<T>(work:(client:pg.Client)=>Promise<T>):Promise<T>{
     let businessFailure:ExtractionBatchError|undefined;
@@ -139,10 +146,15 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   const http=createReplyHttp({ownerId:owner,token:options.token,available:options.configuration!==null,
     read:work=>options.storage.businessReadTransaction(work),service:delegated});
   const explorationHttp=createExplorationHttp({ownerId:owner,token:options.token,available:options.configuration!==null,service:{execute:(scope,session,action,request,signal,internal)=>execute(signal,combined=>exploration!.execute(scope,session,action,request,combined,internal))}});
-  const extractionHttp=createExtractionBatchHttp({token:options.token,execute:(input,signal)=>execute(signal,combined=>{
-    if(!batches)throw new ExtractionBatchError('extraction_batch_unavailable');
-    return batches.run(input,combined);
-  })});
+  const extractionHttp=createExtractionBatchHttp({token:options.token,
+    execute:(input,signal)=>execute(signal,combined=>{
+      if(!batches)throw new ExtractionBatchError('extraction_batch_unavailable');
+      return batches.run(input,combined);
+    }),
+    ...(options.extractionAdoptionEnabled?{executeWithAdoption:(input,signal)=>execute(signal,combined=>{
+      if(!batches||!adoptionHost)throw new ExtractionBatchError('extraction_adoption_unavailable');
+      return runExtractionWithAdoption(batches,adoptionHost,input,combined);
+    })}:{})});
   if(options.configuration){
     provider=installModelProvider(options.ctx,options.configuration.provider);
     if(options.extractionPermit)extraction=createExtractionModelCaller({ctx:options.ctx,provider,permit:options.extractionPermit});
@@ -175,12 +187,27 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
         const modules=['extraction-flow.ts','extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-arguments.ts','extraction-evidence.ts','extraction-prompts.ts','extraction-bounded.ts','extraction-bounded-proof.ts','contact-overview-bounded-body.ts','contact-overview-bounded-contract.ts','contact-overview-bounded-graph.ts'];
         const sources=await Promise.all(modules.map(file=>readFile(new URL(file,import.meta.url))));
         const ruleVersion=createHash('sha256').update(Buffer.concat(sources)).digest('hex'),m=options.configuration.model;
+        const call=(input:ExtractionModelInput)=>extraction!.call({...input,signal:AbortSignal.any([input.signal,AbortSignal.timeout(m.deadline_ms)])});
         batches=new ExtractionBatchService({ownerId:owner,transaction:extractionTransaction,ruleVersion,
           model:{binding:{provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,reasoningEffort:m.reasoningEffort},profile:m.budgetProfile},
           unconfirmedRequests:scope=>extractionUnconfirmedRequests(options.extractionPermit!,scope),
-          call:input=>extraction!.call({...input,signal:AbortSignal.any([input.signal,AbortSignal.timeout(m.deadline_ms)])})});
+          call});
+        if(options.extractionAdoptionEnabled){
+          adoptionPool=await options.storage.businessPool();
+          const store=new ExtractionTaskStore(adoptionPool);
+          const binding={provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,
+            reasoningEffort:m.reasoningEffort},profile=m.budgetProfile;
+          adoptionHost=createExtractionAdoptionHost({ownerId:owner,taskStore:store,
+            transaction:work=>options.storage.businessTransaction(work),call,binding,profile,
+            ...(options.embeddingFactory?{embeddingFactory:options.embeddingFactory}:{})});
+        }
       }
-    }catch(error){await provider.dispose();throw error;}
+    }catch(error){
+      await adoptionHost?.close().catch(()=>{});
+      await adoptionPool?.end().catch(()=>{});
+      await provider.dispose();
+      throw error;
+    }
   }
   let closing:Promise<void>|undefined;
   return {
@@ -205,6 +232,8 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
         stopping.abort();
         // 取消只通知业务；服务退出前仍持有真实物理许可，不能以HTTP断连代替结算。
         await Promise.allSettled([...pending]);
+        await adoptionHost?.close();
+        await adoptionPool?.end();
         await provider?.dispose();
       })();
     },

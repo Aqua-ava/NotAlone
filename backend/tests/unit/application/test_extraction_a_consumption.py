@@ -190,66 +190,63 @@ class ExtractionAConsumptionTest(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(completed, [])
 
-    def test_remote_b_null_adoption_keeps_existing_a_success_and_failure_finalization(self):
-        for failure in (False, True):
-            with self.subTest(failure=failure):
-                scope = ContactScope(uuid4(), uuid4())
-                message = uuid4()
-                outcome = ExtractionOutcome(
-                    accepted=(),
-                    rejected_count=2,
-                    extraction_completed=not failure,
-                    failure_kind=(
-                        ExtractionFailureKind.UNAVAILABLE if failure else None
-                    ),
-                    failure_reason="合成A不可用" if failure else None,
-                    model_accounting_owner="typescript",
-                    a_execution_id=uuid4(),
-                    a_input_sha256="b" * 64,
-                    a_rule_version="c" * 64,
-                    adoption_runtime="typescript",
-                )
-                completed = []
-                adoption_calls = []
-                stopped = _commit_batch(
+    def test_remote_b_null_adoption_rejects_success_and_keeps_an_a_failure(self):
+        def commit(failure):
+            scope = ContactScope(uuid4(), uuid4())
+            message = uuid4()
+            outcome = ExtractionOutcome(
+                accepted=(),
+                rejected_count=2,
+                extraction_completed=not failure,
+                failure_kind=(
+                    ExtractionFailureKind.UNAVAILABLE if failure else None
+                ),
+                failure_reason="合成A不可用" if failure else None,
+                model_accounting_owner="typescript",
+                a_execution_id=uuid4(),
+                a_input_sha256="b" * 64,
+                a_rule_version="c" * 64,
+                adoption_runtime="typescript",
+            )
+            completed = []
+            stopped = _commit_batch(
+                SimpleNamespace(
+                    batch=(SimpleNamespace(message_id=message),),
+                    next_watermark=message,
+                    previous_watermark=None,
+                ),
+                _BatchExtraction(
+                    outcome,
+                    not failure,
+                    0,
+                    1,
+                    datetime.now(timezone.utc),
+                ),
+                trace=TraceSession(
                     SimpleNamespace(
-                        batch=(SimpleNamespace(message_id=message),),
-                        next_watermark=message,
-                        previous_watermark=None,
-                    ),
-                    _BatchExtraction(
-                        outcome,
-                        not failure,
-                        0,
-                        1,
-                        datetime.now(timezone.utc),
-                    ),
-                    trace=TraceSession(
-                        SimpleNamespace(
-                            complete=lambda *args, **kwargs: (
-                                completed.append(kwargs)
-                            ),
+                        complete=lambda *args, **kwargs: (
+                            completed.append(kwargs)
                         ),
-                        scope,
-                        uuid4(),
                     ),
-                    progress=_RunProgress(None),
-                    adoption=SimpleNamespace(
-                        adopt=lambda *_: adoption_calls.append(True),
-                    ),
-                    scope=scope,
-                    ledger=None,
-                    watermark_port=None,
-                    provider="deepseek",
-                    model_name="synthetic",
-                )
-                self.assertEqual(stopped, failure)
-                self.assertEqual(adoption_calls, [])
-                self.assertEqual(len(completed), 1)
-                self.assertEqual(
-                    completed[0]["status"],
-                    "model_failed" if failure else "succeeded",
-                )
+                    scope,
+                    uuid4(),
+                ),
+                progress=_RunProgress(None),
+                adoption=SimpleNamespace(adopt=lambda *_: None),
+                scope=scope,
+                ledger=None,
+                watermark_port=None,
+                provider="deepseek",
+                model_name="synthetic",
+            )
+            return stopped, completed
+
+        with self.assertRaises(ExtractionRuntimeError):
+            commit(False)
+        stopped, completed = commit(True)
+        self.assertTrue(stopped)
+        self.assertEqual(len(completed), 1)
+        self.assertEqual(completed[0]["status"], "model_failed")
 
     def test_unfinalized_remote_b_is_rejected_without_writes_or_stats(self):
         scope = ContactScope(uuid4(), uuid4())

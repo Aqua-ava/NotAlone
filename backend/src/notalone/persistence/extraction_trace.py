@@ -564,31 +564,6 @@ class PostgresExtractionTraceStore:
                 ).fetchone()[0]
                 if completed != len(targets):
                     raise ValueError()
-                for usage in payload["stats"]["usages"]:
-                    call = connection.execute(
-                        "SELECT call.purpose,ledger.model_name "
-                        "FROM public.memory_extraction_trace_call AS call "
-                        "JOIN public.outbound_ledger_entry AS ledger "
-                        "ON ledger.id=call.ledger_entry_id "
-                        "AND ledger.owner_id=call.owner_id "
-                        "AND ledger.contact_id=call.contact_id "
-                        "WHERE call.call_id=%s AND call.trace_id=%s "
-                        "AND call.owner_id=%s AND call.contact_id=%s "
-                        "AND call.ledger_commit_status='committed' "
-                        "AND ledger.outcome='succeeded'",
-                        (
-                            usage["call_id"],
-                            trace_id,
-                            scope.owner_id,
-                            scope.contact_id,
-                        ),
-                    ).fetchone()
-                    if (
-                        call is None
-                        or column(call, "purpose", 0) != usage["purpose"]
-                        or column(call, "model_name", 1) != usage["model_name"]
-                    ):
-                        raise ValueError()
                 a_execution_id = receipt.get("a_execution_id")
                 a_rows = connection.execute(
                     """
@@ -639,6 +614,34 @@ class PostgresExtractionTraceStore:
                     != receipt.get("accepted_count")
                 ):
                     raise ValueError()
+                for usage in payload["stats"]["usages"]:
+                    call = connection.execute(
+                        "SELECT call.trace_id,call.purpose,ledger.model_name "
+                        "FROM public.memory_extraction_trace_call AS call "
+                        "JOIN public.outbound_ledger_entry AS ledger "
+                        "ON ledger.id=call.ledger_entry_id "
+                        "AND ledger.owner_id=call.owner_id "
+                        "AND ledger.contact_id=call.contact_id "
+                        "WHERE call.call_id=%s AND call.owner_id=%s "
+                        "AND call.contact_id=%s AND call.trace_id IN (%s,%s) "
+                        "AND call.ledger_commit_status='committed' "
+                        "AND ledger.outcome='succeeded'",
+                        (
+                            usage["call_id"],
+                            scope.owner_id,
+                            scope.contact_id,
+                            trace_id,
+                            original_trace_id,
+                        ),
+                    ).fetchone()
+                    if (
+                        call is None
+                        or str(column(call, "trace_id", 0))
+                        not in {str(trace_id), str(original_trace_id)}
+                        or column(call, "purpose", 1) != usage["purpose"]
+                        or column(call, "model_name", 2) != usage["model_name"]
+                    ):
+                        raise ValueError()
                 if original_trace_id != trace_id:
                     recovered = connection.execute(
                         "SELECT count(*) FROM public.memory_extraction_trace_event "

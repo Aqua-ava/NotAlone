@@ -4,6 +4,7 @@ import pg from 'pg';
 import {randomUUID} from 'node:crypto';
 import {readdir,readFile} from 'node:fs/promises';
 import {createHostModelAccounting,modelTaskRequestId} from '../src/host-model-accounting.ts';
+import {adoptionPurposeRequestId} from '../src/extraction-adoption-service.ts';
 async function fixture(t){
  const db=`notalone_accounting_${randomUUID().replaceAll('-','')}_test`,admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();let c;
  t.after(async()=>{await c?.end();await admin.query(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`);await admin.end();});
@@ -56,8 +57,28 @@ test('提取只按window真实claim与batch反算，跨permit pending拒绝',asy
  await c.query("INSERT INTO memory_extraction_trace_event(event_id,trace_id,owner_id,contact_id,position,stage,payload) VALUES($1,$2,$3,$4,1,'window',$5)",[randomUUID(),tr,owner,contact,{task_runtime:claim,body:'合成正文不应读取'}]);
  await a.reserve(r,claim);await assert.rejects(a.reserve({...r,attempt_id:randomUUID(),permit_id:randomUUID()},claim),/unsettled|claim_spent/);
  await a.recordReserved(done(r));await a.reserve({...r,attempt_id:randomUUID()},claim);
+ await c.query("INSERT INTO memory_extraction_trace_event(event_id,trace_id,owner_id,contact_id,position,stage,payload) VALUES($1,$2,$3,$4,2,'typescript_a_result',$5)",
+  [randomUUID(),tr,owner,contact,{outcome:{accepted:[{}]}}]);
+ const bRequests={
+  adjudication:adoptionPurposeRequestId('adjudication',claim.task_id,key),
+  relation:adoptionPurposeRequestId('relation_verification',claim.task_id,key),
+  merge:adoptionPurposeRequestId('merge_verification',claim.task_id,key,'0'),
+ };
+ assert.equal(new Set(Object.values(bRequests)).size,3);
+ for(const requestId of [bRequests.adjudication,bRequests.merge]){
+  const request=receipt(requestId);
+  await a.reserve(request,claim);
+  await a.recordReserved(done(request));
+ }
+ const relation=receipt(bRequests.relation);
+ await a.reserve(relation,claim);
+ await a.recordReserved({...relation,outcome:'unknown'});
+ await assert.rejects(a.reserve({...relation,attempt_id:randomUUID(),permit_id:randomUUID()},claim),/unsettled|unknown/);
+ await assert.rejects(a.reserve(receipt(adoptionPurposeRequestId('merge_verification',claim.task_id,key,'1')),claim),/request_invalid/);
+ await assert.rejects(a.reserve(receipt(modelTaskRequestId('adjudication',claim.task_id,key)),claim),/request_invalid/);
+ await assert.rejects(a.reserve(receipt(adoptionPurposeRequestId('adjudication',randomUUID(),key)),claim),/request_invalid/);
  await c.query("UPDATE background_task_step SET lease_expires_at=now()-interval '1 second' WHERE id=$1",[claim.step_id]);
- await assert.rejects(a.reserve({...r,attempt_id:randomUUID()},claim),/claim_stale/);
+ await assert.rejects(a.reserve(receipt(adoptionPurposeRequestId('adjudication',claim.task_id,key,'batch')),claim),/claim_stale/);
 });
 test('升级跨batch共享原job剩余额度，同attempt幂等不二扣，失败回滚',async t=>{
  const {c,owner,contact,accounting:a,task,receipt}=await fixture(t);

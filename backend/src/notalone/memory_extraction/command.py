@@ -443,7 +443,6 @@ def _commit_batch(
         if (
             not remote_b_finalized
             and outcome.failure_reason is None
-            and (not outcome.extraction_completed or outcome.accepted)
         ):
             error = ExtractionRuntimeError("远程采纳回执缺失或无效。")
             error.preserve_trace = True
