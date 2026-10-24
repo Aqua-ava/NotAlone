@@ -1,0 +1,51 @@
+{
+  "schema_version": "task19_parent_loss_root_test_acceptance_v1",
+  "base_commit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+  "input_patch_sha256": "ebf33403aab2cd7a15196a042651dc167dcd8fcb585855ad59b75ca15f64866b",
+  "input_test_manifest_sha256": "305463ca157a1640428c321b8a750687f6f6b8405a9ce3b3fe5f11125d82bf06",
+  "files": {
+    "backend-ts/test/sync-incremental-parent-loss.test.mjs": {
+      "draft_sha256": "5e649e6fa3ba1dfabd8264622bcd591f9bfcb3dc35388495642cf46fb0743d9f",
+      "executed_sha256": "5e649e6fa3ba1dfabd8264622bcd591f9bfcb3dc35388495642cf46fb0743d9f",
+      "bytes": 19188
+    },
+    "backend-ts/test/sync-incremental-parent-loss-helper.mjs": {
+      "draft_sha256": "4f857a975158c1b8212c74505383f51fc87b945e942e4b7992afb59427e0ee6f",
+      "executed_sha256": "4f857a975158c1b8212c74505383f51fc87b945e942e4b7992afb59427e0ee6f",
+      "bytes": 592
+    }
+  },
+  "command": [
+    "node",
+    "--test",
+    "--test-concurrency=1",
+    "--test-reporter=tap",
+    "backend-ts/test/sync-incremental-parent-loss.test.mjs"
+  ],
+  "environment_keys_explicit": [
+    "NOTALONE_TEST_PYTHON",
+    "PGHOST",
+    "PGPORT",
+    "PGUSER",
+    "PATH"
+  ],
+  "exit_code": 0,
+  "summary": {
+    "tests": 1,
+    "pass": 1,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "raw_log_sha256": "e884870a234593183390b9f83776d3b9f3c14159cbd01919185a2721947543f5",
+  "share_log_sha256": "e884870a234593183390b9f83776d3b9f3c14159cbd01919185a2721947543f5",
+  "raw_alias": "$ROOT_PARENT_LOSS_RAW",
+  "real_model_calls": 0,
+  "app_wechat_operations": 0,
+  "production_source_changes": 0,
+  "peer_manifest_sha256": "1cc60bfa13dacd0a9dcd0997f68bd3b7f42f3cd8542b74d464b24e46370700b3",
+  "parent_loss_standards_or_spec_blockers": 0,
+  "reconnect_fixture_P2_is_separate_and_not_accepted_here": true,
+  "owned_raw_copy_removed_after_exact_share_byte_verification": true,
+  "raw_bytes_retained_as_identical_share_log": true
+}

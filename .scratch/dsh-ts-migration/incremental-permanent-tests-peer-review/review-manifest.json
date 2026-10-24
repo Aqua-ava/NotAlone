@@ -1,0 +1,38 @@
+{
+  "observed_head": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+  "mode": "只读独立代码审查，未执行测试/语法检查/DB/HTTP/CLI/网络/App",
+  "standards_findings": 1,
+  "spec_behavior_findings": 0,
+  "severity": "P2",
+  "reviewed_files": [
+    {
+      "candidate": "incremental-stream-reconnect-test-promotion",
+      "path": "backend-ts/test/sync-incremental-reconnect-fixture.mjs",
+      "sha256": "bb0a6e6286c3bbd148ce43e281680a431e4dcf31ecd2b2571431d14814e34427",
+      "lines": 94
+    },
+    {
+      "candidate": "incremental-stream-reconnect-test-promotion",
+      "path": "backend-ts/test/sync-incremental-reconnect.test.mjs",
+      "sha256": "a751910a3c3626e318908fb3bccafff3909ae4b5a1c1706c283498dceb0324e5",
+      "lines": 66
+    },
+    {
+      "candidate": "incremental-abrupt-restart-test-promotion",
+      "path": "backend-ts/test/sync-incremental-parent-loss.test.mjs",
+      "sha256": "5e649e6fa3ba1dfabd8264622bcd591f9bfcb3dc35388495642cf46fb0743d9f",
+      "lines": 230
+    },
+    {
+      "candidate": "incremental-abrupt-restart-test-promotion",
+      "path": "backend-ts/test/sync-incremental-parent-loss-helper.mjs",
+      "sha256": "4f857a975158c1b8212c74505383f51fc87b945e942e4b7992afb59427e0ee6f",
+      "lines": 17
+    }
+  ],
+  "handoff_lines": 15,
+  "artifacts": {
+    "findings.md": "840b25dffe34bd897cd18ab7b7a88e362d4df0b17a8091b67a55aca05377bf70",
+    "handoff.md": "75ef47fce0d9f2cd84c1e3e0884e358bb6e29df04c20ef8133485b1ce1b8b4f8"
+  }
+}

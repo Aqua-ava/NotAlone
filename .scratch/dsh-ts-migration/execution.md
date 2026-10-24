@@ -60,3 +60,7 @@ cc263095已整合唯一模型宿主、原SDK物理许可、已知终态ACK未知
 ## 19 根最终签收（2026-10-24）
 
 原26原子矩阵24项已有具名分级证据，补齐官方profile下D5自然code7退避重开与D6带数据launcher父丢失同库恢复。独立原始/归档/当前源及清理核对0产品问题/0新增阻塞；原始RED保留，不改产品。根核运行源无漂移及最终制品/review摘要，复用既有真实微信正向，不再发消息、不重跑已绿矩阵。selected/new-only直接补证与既有all_private/非空排除/109组合，不能扩大为真实Electron崩溃或20追赶。详见incremental-root-final-acceptance/validation.md。19 resolved，原blocked子目标未改；20仍等10，21及最终切换未签。
+
+## 19 永久回归：带数据父丢失（2026-10-24）
+
+只新增parent-loss测试及专属helper，冻结patch ebf33403；根主树最小1/1、0skip、10.04秒，原同库/路径自然恢复与UUID/来源/receipt保持，全部自有资源清理、模型0。独立审查本对无阻碍，reconnect夹具失败清理P2由独立角色修，不夹带接收。详见incremental-parent-loss-root-acceptance/validation.md；不扩大19原签收或20/App崩溃范围。
