@@ -9,7 +9,7 @@ export class ReplyRejected extends ReplyError {
 export async function requireReplyScope(client:pg.Client,scope:VerifiedReplyScope,input:ReplyRequestInput):Promise<void> {
   if(scope.contact_id!==input.contact_id)throw new ReplyRejected('scope_mismatch');
   if(!(await client.query('SELECT 1 FROM public.contact WHERE owner_id=$1 AND id=$2',[scope.owner_id,scope.contact_id])).rowCount)throw new ReplyRejected('no_active_binding');
-  // 108的逐绑定授权不因同账号新增绑定而扩大；历史检查点仍保持可见。
+  // 只认当前绑定的逐绑定授权；ADR-100 运行时新纳入绑定由范围事务单独授权。
   const rows=await client.query(`SELECT coalesce(h.phase,'not_started') AS phase
     FROM public.conversation_binding b
     LEFT JOIN public.cli_history_sync_state h ON h.owner_id=b.owner_id AND h.contact_id=b.contact_id AND h.binding_id=b.id

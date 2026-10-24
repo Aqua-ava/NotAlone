@@ -158,7 +158,7 @@ test('显式全部历史读取当前快照后复验账号；selected不读取或
   const selected=fixture({historySessions:async()=>assert.fail()});const r=await selected.service.detect();
   assert.equal((await selected.service.confirm({candidate_token:r.candidate_token,mode:'selected',historyAuthorized:true})).state,'restart_required');
 });
-test('首连历史快照复用稳定身份，保留排除且未来绑定不继承',async()=>{
+test('首连历史快照复用稳定身份并保留排除；绕开运行时建联的直接插入不扩权',async()=>{
   const f=await createStorageFixture();const storage=await HostStorage.open(f.options);
   try {
     const owner=randomUUID(),contact=randomUUID(),account='wxid_snapshot';

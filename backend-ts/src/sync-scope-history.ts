@@ -1,4 +1,4 @@
-/** 历史授权只覆盖明确确认时的绑定集合，不授权未来新增绑定。 */
+/** 逐绑定授权不可借用展示名；账号快照只作用于当时绑定，运行时纳入另按 ADR-100 追加。 */
 import type pg from 'pg';
 export interface HistoryScope { ownerId:string; accountScope:string; channel?:string }
 const notExcluded = `NOT EXISTS (SELECT 1 FROM public.wechat_sync_exclusion e

@@ -1,4 +1,4 @@
-/** 账号级授权只由明确用户操作改变；不读取正文，也不调用模型。 */
+/** 账号级范围与历史决定只由明确用户操作改变；新绑定授权按已接受决定在同一范围事务派生。 */
 import type pg from 'pg';
 import { createHash } from 'node:crypto';
 import { grantBindingHistory, authorizedHistoryBindings } from './sync-scope-history.ts';
@@ -113,6 +113,9 @@ export class SyncScopeService {
     return this.transaction(async client => {
       const state = await this.state(client);
       if (!state.enabled || state.mode !== 'all_private') return {created:0,conflicts:[]};
+      const history = await this.history(client);
+      // version 2 等在 history() 中降为 required，不能借旧决定静默扩权。
+      const grantNewHistory = history.state === 'accepted' && history.version === 1;
       const known = new Set((await client.query('SELECT conversation_locator FROM public.conversation_binding WHERE owner_id=$1 AND channel=$2 AND account_scope=$3',[ownerId,channel,accountScope])).rows.map(row => row.conversation_locator));
       const excluded = new Set((await client.query('SELECT locator_hash FROM public.wechat_sync_exclusion WHERE owner_id=$1 AND channel=$2 AND account_scope=$3',[ownerId,channel,accountScope])).rows.map(row => (row.locator_hash as Buffer).toString('hex')));
       const identities = (await client.query('SELECT external_id,contact_id,status FROM public.channel_identity WHERE owner_id=$1 AND channel=$2 AND external_id=ANY($3)',[ownerId,channel,sessions.map(s => s.username)])).rows;
@@ -131,9 +134,13 @@ export class SyncScopeService {
         const contact = active.size ? [...active][0] : (await client.query('INSERT INTO public.contact(owner_id,display_name) VALUES($1,$2) RETURNING id',[ownerId,name])).rows[0].id;
         const binding = (await client.query(`INSERT INTO public.conversation_binding(owner_id,contact_id,channel,account_scope,conversation_locator,display_name)
           VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,[ownerId,contact,channel,accountScope,session.username,name])).rows[0].id;
-        // 新发现会话从本次绑定起点开始；显式历史资格由独立授权表负责。
+        const enrolledAt=(this.options.clock ?? (() => new Date()))();
         await client.query(`INSERT INTO public.wechat_observation_baseline(owner_id,contact_id,binding_id,conversation_locator,baseline_at)
-          VALUES($1,$2,$3,$4,$5)`,[ownerId,contact,binding,session.username,(this.options.clock ?? (() => new Date()))()]);
+          VALUES($1,$2,$3,$4,$5)`,[ownerId,contact,binding,session.username,enrolledAt]);
+        // ADR-100：已接受的账号级全部私聊授权覆盖此后首次进入范围的新私聊；
+        // selected、declined、required、未知版本和排除项都已在前面单独阻断。
+        if (grantNewHistory && await grantBindingHistory(client,this.options,[binding],enrolledAt) !== 1)
+          throw new SyncScopeError('history_binding_authorization_failed',500);
         known.add(session.username);created++;
       }
       return {created,conflicts};

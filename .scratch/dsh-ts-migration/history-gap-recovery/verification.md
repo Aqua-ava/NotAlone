@@ -17,6 +17,9 @@
   `incomplete`，不得标记完整。当前联系人优先且交替让出队列；单联系人失败不阻塞其他绑定。
 - 历史页不逐条发布模型/消息事件；只按既有持久回执排队关系提取。消息历史完整与关系资料
   处理完成保持分离。
+- 运行时自动纳入遵循 ADR-100：账号级 `accepted/version=1 + all_private + 总开关开启`
+  的新私聊在同一事务获得逐绑定版本 1 授权；`selected`、`declined`、`required`、
+  未知版本及排除项不扩权。108 迁移仍只快照升级时已有有效绑定，不回填迁移前新增。
 - 当前联系人生成门禁复用既有 `requireReplyScope`：`syncing/not_started` 拒绝；
   `incomplete` 必须显式 `allow_incomplete_history`，持久请求保存固定警告。
 
@@ -33,6 +36,12 @@
 - Desktop 历史/同步相关 26 项：通过（历史警告、范围授权、四态覆盖、状态恢复、
   优先指标）。本票未改 UI。
 - Backend TS 回复范围/准备/HTTP 16 项：通过（含历史未完成门禁）。
+- 范围与历史授权回归覆盖 accepted 新私聊、selected/declined/required/未知版本拒绝、
+  排除保留、重复及并发发现幂等、owner/account 隔离、授权触发失败整体回滚，以及
+  `SyncScopeService.historyBindings`、`SyncHistory` 对新授权可见。
+- 本轮窄修正定向组合 `sync-scope`、`sync-scope-migration`、`wechat-setup`、
+  `sync-history` 为 27/27，0 跳过；`wechat-scope-api` 与 `reply-scope` 为 11/11。
+  工作树公开历史扫描 issues=0。
 - 基线失败复跑遗留的 4 个随机 `_test` PG 库已在确认无连接后按精确名称清理，
   复核均不存在；本票通过测试的随机库由夹具自行关闭和删除。
 

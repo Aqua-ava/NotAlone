@@ -125,7 +125,7 @@ test('已撤销账号返回可见conflict且不阻断整个宿主启动',async t
 });
 
 
-test('所选绑定历史必须显式同意，既有账号accepted不授予新增绑定',async t=>{
+test('selected新增绑定必须显式历史同意，不借用既有账号accepted',async t=>{
   const f=await fixture(t);
   assert.equal((await f.api.handle('POST','/api/sync/cli-bindings/confirm',{selections:[],history_authorized:'yes'})).status,400);
   assert.equal((await f.api.handle('POST','/api/sync/cli-bindings/confirm',{selections:[{locator:'friend-a'}],history_authorized:true})).status,200);

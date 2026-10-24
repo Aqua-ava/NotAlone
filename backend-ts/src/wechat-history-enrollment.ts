@@ -1,4 +1,4 @@
-/** 首连历史同意只覆盖当次完整元数据快照；事务失败不留下部分绑定。 */
+/** 首连历史同意覆盖当次完整元数据快照；后续运行时新绑定由范围入口按 ADR-100 授权。 */
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
 import { HostStorageError } from './host-storage.ts';
