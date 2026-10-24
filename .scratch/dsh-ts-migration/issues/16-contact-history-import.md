@@ -116,3 +116,16 @@ Spec: ../spec.md
   未打包、push 或 PR。
 - 未覆盖：TS Worker 当前只处理 `parse|normalize|extract_memory`，`index|verify`、来源删除
   任务、L2 `organization` 领取与完整 App 验收仍由后续票／根处理，因此本票保持 `claimed`。
+
+2026-10-25（根主线集成复核）：
+
+- 已把隔离提交 `f90545aa` 无冲突合入主树，主线提交为 `21564070`；用户原有三处未提交
+  桌面夹具修改未暂存、未覆盖。
+- 主树重新通过 backend-ts 严格类型检查；真实宿主、唯一 Worker、A/B、trace、处理回执、
+  水位失败/取消、导入和任务接口共 19 项通过；导入/任务/Gateway/任务存储 29 项通过；
+  Python 任务运行与 TS Worker 门禁 23 项通过。
+- 只读核对真实开发库：`ran` 的原观察任务仍为同一 task UUID，`extract_memory` 和后续
+  `index|verify` 均未推进；当前没有因本次集成产生重复任务、trace 或真实资料写入。
+- 当前开发宿主仍由 Python 任务执行者领取存量任务，TS Worker 尚未开启；票 16 仍保持
+  `claimed`，待票 13 补齐 L2 唯一领取链后，由根切换并完成 `ran` 的实际 App、资料、
+  来源与水位验收。
