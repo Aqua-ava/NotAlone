@@ -1,0 +1,24 @@
+{
+  "scope": "B5-02/03正式test/helper与清理v2；不签App或整05",
+  "base_commit": "8dc8623db2532de354b0ad3ba314e9d92741a244",
+  "formal_paths": {
+    "backend-ts/test/reply-arbitration-handover.test.mjs": "cb0e2d0cc2056fefab8f6ced664c88c8a48553fb4a5e78d0ff7537dfb1df179b",
+    "backend-ts/test/reply-fixture-cleanup.mjs": "6a05fd23620e2779b7fa01728777601787df4b5c39adde43fbb742a5a58c3b23",
+    "backend-ts/test/reply-fixture-cleanup.test.mjs": "4d0c3b49070387496a4a4650b02625e8a6b66cf9e17a97355f9e7adb98a0c8b3",
+    "backend-ts/test/reply-arbitration-observe.mjs": "c846a6d524ec8752d350f0d16c5503369343a07de1f85a27553e4c9bd7ce9e6f",
+    "backend-ts/test/reply-arbitration-python.py": "1157d9c5144c354e0dcba9d681bb14f7488ce022d61eee752cf1fe8036d132b6"
+  },
+  "frozen_original_manifest_sha256": "c39fc95410e852a525078938ff11a0a0d11f8990ddc5feb1f5a1b916c6917958",
+  "cleanup_v2_manifest_sha256": "aaa6a4394ff3a4ba989e64bd6f4e84173799afa05aea2ac5f7df97facdc7f7af",
+  "independent_standards_delta_sha256": "f3da43a83b13d2faa35702468719ffafb1d600e2cfb25eae901216d3781fec42",
+  "original_findings": {
+    "P2_failure_cleanup": "v2修复且独立复核关闭",
+    "P3_fixture_root_probe": "review-only v2修复且独立复核关闭；原打包与raw不改写"
+  },
+  "new_delta_findings": 0,
+  "original_spec_findings": 0,
+  "production_code_changes": 0,
+  "app_verified": false,
+  "whole_issue_complete": false,
+  "validation": "根正式位置实际2/2、local HTTP5/vendor0；9已知进程/2库/2目录清理核验，详accepted-manifest-v2.json"
+}

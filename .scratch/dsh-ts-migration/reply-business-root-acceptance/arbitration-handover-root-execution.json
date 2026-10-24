@@ -1,0 +1,18 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 10.253,
+  "command": "NODE24 --test --test-concurrency=1 test/reply-arbitration-handover.test.mjs",
+  "cwd": "${REPO_ROOT}/backend-ts",
+  "private_run": "${PRIVATE_DIAGNOSTICS}/business-proof-promotion-1",
+  "raw_log_sha256": "90592106048ecd0c2d2652e6509d28218a08e55b628540cd2e390d6cfc30d6a4",
+  "public_log_sha256": "90592106048ecd0c2d2652e6509d28218a08e55b628540cd2e390d6cfc30d6a4",
+  "artifacts": {
+    "handover-cleanup.json": "735e5fd40cab07242c060bd4e856359d091e1ad130a3ce5218db3e2b8f1a7238",
+    "priority-observe.jsonl": "eb5cc60f8a29095123373376f0956008cb01c75b488012ab20fce0a296f376ef",
+    "handover-result.json": "6336137a04039a07f1a40d2861f68297e745c9ab05c6e73ca6548a6fe1e11eea",
+    "priority-cleanup.json": "90beddc8d6f7ba2460301c97e6132e7cac4d20749380207a13dc80a5f55e193f",
+    "priority-result.json": "5fd9f3b97db0f3fe975b1e2ae4c76b88f966e0a9c43156568169beb85c535c7c",
+    "root-run.raw.log": "90592106048ecd0c2d2652e6509d28218a08e55b628540cd2e390d6cfc30d6a4"
+  },
+  "data_scope": "合成PG+loopback两SDK，不使用真实资料或供应商、不运行App/微信"
+}

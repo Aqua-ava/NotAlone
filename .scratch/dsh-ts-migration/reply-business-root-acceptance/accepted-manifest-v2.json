@@ -1,0 +1,44 @@
+{
+  "scope": "原05六条中的B5-02物理仲裁、B5-03同库正常交接/回退；不签完整05/App/25/切换",
+  "base_commit": "8dc8623db2532de354b0ad3ba314e9d92741a244",
+  "formal_paths": {
+    "backend-ts/test/reply-arbitration-handover.test.mjs": "cb0e2d0cc2056fefab8f6ced664c88c8a48553fb4a5e78d0ff7537dfb1df179b",
+    "backend-ts/test/reply-fixture-cleanup.mjs": "6a05fd23620e2779b7fa01728777601787df4b5c39adde43fbb742a5a58c3b23",
+    "backend-ts/test/reply-fixture-cleanup.test.mjs": "4d0c3b49070387496a4a4650b02625e8a6b66cf9e17a97355f9e7adb98a0c8b3",
+    "backend-ts/test/reply-arbitration-observe.mjs": "c846a6d524ec8752d350f0d16c5503369343a07de1f85a27553e4c9bd7ce9e6f",
+    "backend-ts/test/reply-arbitration-python.py": "1157d9c5144c354e0dcba9d681bb14f7488ce022d61eee752cf1fe8036d132b6"
+  },
+  "root_actual_exit_code": 0,
+  "root_actual_passed": 2,
+  "root_actual_failed": 0,
+  "root_actual_skipped": 0,
+  "root_pure_afterhook_passed": 9,
+  "root_pure_child_exit_note": "首轮经tail输出，直接子exit未单独持久化；工具与摘要明确9通过0失败。实际业务子exit已独立记录0，不重跑以美化日志。",
+  "local_model_http": 5,
+  "supplier_http": 0,
+  "arbitration": "B1→TS候选提交→B2；B2先排队、TS后登记；max physical concurrency1",
+  "handover": "TS→Python→TS；公开session原UUID/编辑/显选/删除/幂等保留，restart新增HTTP0",
+  "cleanup": {
+    "known_processes_absent": 9,
+    "owned_database_absent": 2,
+    "owned_fixture_directories_absent": 2,
+    "shared_pg_alive": true,
+    "unknown_cleanup": false
+  },
+  "independent_spec_findings": 0,
+  "original_standards_findings": 2,
+  "standards_v2_new_findings": 0,
+  "P3_packager_delta": "仅review-only候选；不改写历史打包/raw，本轮不使用旧脚本重包",
+  "production_code_changes": 0,
+  "B501": "单独afterhook v2处理中，未纳本次正式集成",
+  "app": "锁屏待用户解锁；已启动dev轮次已清理且HTTP0，不签UI",
+  "receipts": {
+    ".scratch/dsh-ts-migration/reply-business-root-acceptance/promotion-v2.json": "9ba07310a768e3f5a0bf5e84c40d309fc76ddf09e202a697965907567121c064",
+    ".scratch/dsh-ts-migration/reply-business-root-acceptance/arbitration-handover-root-execution.json": "df5e5ff5f21787ec9f270026dd2e375311d8de554b1ab1f5f63f7b4b28f2549c",
+    ".scratch/dsh-ts-migration/reply-business-root-acceptance/arbitration-handover-root.log": "90592106048ecd0c2d2652e6509d28218a08e55b628540cd2e390d6cfc30d6a4",
+    ".scratch/dsh-ts-migration/reply-generation/reply-business-proofs-spec-review/report.md": "fd551dbe6ae93e094fdca19dadd2f951a64b5b209fe13fb688c4eea6599f8b82",
+    ".scratch/dsh-ts-migration/reply-generation/reply-business-proofs-standards-review/review.md": "827a26215c82ee76d74a863b3131465b16334c0cbcb2a72d31e08a03f917875b",
+    ".scratch/dsh-ts-migration/reply-generation/reply-business-proofs-standards-review/delta-review.md": "f3da43a83b13d2faa35702468719ffafb1d600e2cfb25eae901216d3781fec42",
+    ".scratch/dsh-ts-migration/reply-generation/reply-business-proofs-standards-review/delta-input-sha256.json": "2adf56260bd2a4cbb55746407ea33275cdefda38bb908c835dd329c6681fbd0c"
+  }
+}
