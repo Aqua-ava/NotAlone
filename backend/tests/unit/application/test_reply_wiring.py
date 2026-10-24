@@ -172,10 +172,14 @@ class ReplyWiringTest(unittest.TestCase):
     def test_command_closes_remote_before_model_stop_on_normal_and_startup_failure(self):
         from notalone.server import command
         from notalone.application import organization_runtime
+        from notalone.application.model_permit_client import SharedModelPriorityControl
         for stage in ('normal','memory','app'):
             with self.subTest(stage=stage),self.isolated(ENV),ExitStack() as stack:
                 service=self.wiring.build_reply_service(database_url='synthetic-unused',owner_id=OWNER,model_priority=object())
-                remote=service._reply;order=[];priority=Mock();priority.stop.side_effect=lambda:order.append('priority-stop')
+                remote=service._reply;order=[]
+                priority=SharedModelPriorityControl(socket_path='/tmp/synthetic-unused.sock',token='synthetic-'*5,background_limit=1)
+                original_stop=priority.stop
+                stack.enter_context(patch.object(priority,'stop',side_effect=lambda:(order.append('priority-stop'),original_stop())[1]))
                 original_close=RemoteReplyPort.close
                 def close(actual):
                     self.assertIs(actual,remote);order.append('remote-close');original_close(actual)

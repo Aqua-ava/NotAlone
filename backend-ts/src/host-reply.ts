@@ -44,8 +44,8 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     generate:(scope,body,signal,internal)=>execute(signal,combined=>service!.generate(scope,body,combined,internal)),
   };
   const owner=options.storage.runtimeOwnerId;
-  const http=owner?createReplyHttp({ownerId:owner,token:options.token,
-    read:work=>options.storage.businessReadTransaction(work),service:delegated}):undefined;
+  const http=createReplyHttp({ownerId:owner,token:options.token,available:options.configuration!==null,
+    read:work=>options.storage.businessReadTransaction(work),service:delegated});
   if(options.configuration){
     provider=installModelProvider(options.ctx,options.configuration.provider);
     try{
@@ -58,7 +58,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   let closing:Promise<void>|undefined;
   return {
     configured:Boolean(service),
-    handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{return http?.handle(req,res)??Promise.resolve(false);},
+    handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{return http.handle(req,res);},
     stopAccepting(){stopping.abort();},
     close():Promise<void>{
       return closing??=(async()=>{

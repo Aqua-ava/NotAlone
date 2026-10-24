@@ -472,6 +472,8 @@ class PostgresMemoryProcessingStore:
     ) -> dict[str, object]:
         if host is None:
             raise BackgroundTaskStateError("任务执行器不可用。")
+        if getattr(host, "model_work_available", True) is False:
+            host.require_model_work()
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             # 本人页仍从任务的真实联系人确定锁及授权范围。
             task = connection.execute(

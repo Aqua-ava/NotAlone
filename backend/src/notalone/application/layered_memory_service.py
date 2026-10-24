@@ -101,6 +101,8 @@ class LayeredMemoryService:
                     for i, adapter in enumerate(ports)))
 
     def _organization_available(self, owner_id):
+        if getattr(self._task_host, "model_work_available", True) is False:
+            return False
         return (owner_id is not None and (self._synthetic or self._real_adapters)
             and (not self._quality_required or self._quality.status(owner_id)['organization']['status'] == 'verified'))
 
@@ -199,6 +201,16 @@ class LayeredMemoryService:
         return self._quality._store.prepare(scope, versions, self._quality.organization_contract)
 
     def command(self, scope, action, expected_generation, expected_work_revision=None):
+        if getattr(self._task_host, "model_work_available", True) is False:
+            if action in {'enable', 'refresh', 'continue'}:
+                self._task_host.require_model_work()
+            if action == 'pause':
+                state, _, _, _ = self._store.read(scope)
+                if state['settings_generation'] != expected_generation:
+                    raise LayeredMemoryConflict('范围设置已变化。')
+                self._store.enqueue(scope, self._budget, self._contract_for(scope), action='pause',
+                    revision=expected_work_revision, profile_required=self._profile_proposer is not None)
+                return self.read(scope)
         if action in {'pause','continue'}:
             if not self._organization_available(scope.owner_id):
                 raise LayeredMemoryConflict('当前没有已获资格的覆盖工作。')

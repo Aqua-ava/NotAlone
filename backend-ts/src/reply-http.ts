@@ -12,7 +12,9 @@ export interface ReplyHttpService {
  generate(scope:VerifiedReplyScope,body:unknown,signal:AbortSignal,internal?:ReplyInternalContext):Promise<unknown>;
 }
 export interface ReplyHttpOptions {
- ownerId:string;token:string;
+ ownerId?:string;token:string;
+ /** 明确未配置时，认证后在正文/DB/预算之前拒绝。 */
+ available?:boolean;
  read<T>(work:(client:Client)=>Promise<T>):Promise<T>;
  service:ReplyHttpService;
 }
@@ -55,7 +57,7 @@ function errorBody(error:unknown):{status:number;body:Record<string,unknown>}{
  return {status:Number.isInteger(error.status)&&error.status>=400&&error.status<=599?error.status:503,body};
 }
 export function createReplyHttp(options:ReplyHttpOptions){
- if(!uuid.test(options.ownerId)||typeof options.token!=='string'||options.token.length<32||!/^[\x21-\x7e]+$/.test(options.token)||typeof options.read!=='function'||typeof options.service?.prepare!=='function'||typeof options.service?.generate!=='function')throw new Error('reply_http_config_invalid');
+ if((options.ownerId!==undefined&&!uuid.test(options.ownerId))||(options.available!==false&&!options.ownerId)||(options.available!==undefined&&typeof options.available!=='boolean')||typeof options.token!=='string'||options.token.length<32||!/^[\x21-\x7e]+$/.test(options.token)||typeof options.read!=='function'||typeof options.service?.prepare!=='function'||typeof options.service?.generate!=='function')throw new Error('reply_http_config_invalid');
  const expected=Buffer.from(`Bearer ${options.token}`),owner=options.ownerId;
  return {async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   if(!(req.url??'').startsWith('/internal/reply'))return false;
@@ -64,6 +66,7 @@ export function createReplyHttp(options:ReplyHttpOptions){
   const authCount=req.rawHeaders.filter((_,index)=>index%2===0&&req.rawHeaders[index].toLowerCase()==='authorization').length;
   if(!['127.0.0.1','::ffff:127.0.0.1','::1'].includes(address??'')||authCount!==1||req.headers.origin!==undefined||supplied.length!==expected.length||!timingSafeEqual(supplied,expected)){respond(401,{error:'unauthorized'});return true;}
   if(req.method!=='POST'||!['/internal/reply/prepare','/internal/reply/generate'].includes(req.url!)){respond(404,{error:'not_found'});return true;}
+  if(!owner||options.available===false){respond(503,{error:'reply_remote_unavailable'});return true;}
   const controller=new AbortController(),abort=()=>controller.abort();req.once('aborted',abort);res.once('close',abort);
   try{
    if((req.headers['content-type']??'').split(';')[0].trim()!=='application/json')invalid();

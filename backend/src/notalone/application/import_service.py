@@ -159,6 +159,7 @@ class TaskHost:
         "_threads",
         "_worker_builder",
         "_model_priority",
+        "_model_work_available",
         "_stopped",
         "_stop_complete",
         "_connections",
@@ -176,11 +177,15 @@ class TaskHost:
         event_publisher: ProgressEvent,
         model_priority: ModelPriorityControl | None = None,
         task_repository: PostgresBackgroundTaskRepository | None = None,
+        model_work_available: bool = True,
     ) -> None:
+        if type(model_work_available) is not bool:
+            raise TypeError("模型任务能力必须是布尔值。")
         self._worker_builder = worker_builder
         self._lock_connection_builder = lock_connection_builder
         self._event_publisher = event_publisher
         self._model_priority = model_priority
+        self._model_work_available = model_work_available
         self._task_repository = task_repository
         self._schedule_thread = None
         self._stopped = threading.Event()
@@ -195,10 +200,30 @@ class TaskHost:
         self._pending: dict[tuple[UUID, UUID], dict[UUID | None, bool]] = {}
         self._active: dict[tuple[UUID, UUID], UUID | None] = {}
 
+    @property
+    def model_work_available(self) -> bool:
+        return self._model_work_available
+
+    def require_model_work(self) -> None:
+        if not self._model_work_available:
+            raise ModelWorkStopped("模型尚未配置，后台模型任务暂不可执行。")
+
+    def require_task_execution(self, *, owner_id, contact_id, task_id) -> None:
+        """在任何重排或领取前按原任务身份核对执行能力。"""
+        if self._model_work_available:
+            return
+        if task_id is not None and self._task_repository is not None:
+            task = self._task_repository.get_task(owner_id=owner_id, contact_id=contact_id, task_id=task_id)
+            if task.task_type is BackgroundTaskType.DELETE:
+                return
+        self.require_model_work()
+
     def start_scheduling(self, *, owner_id: UUID, interval_seconds: float = 2.0) -> None:
         """应用启动时恢复已提交工作；计时线程只唤醒原TaskHost，不执行业务。"""
         if not isinstance(owner_id, UUID) or interval_seconds <= 0:
             raise ValueError('调度需要明确用户和正数扫描间隔。')
+        if not self._model_work_available:
+            return
         with self._lock:
             if self._stopped.is_set() or self._schedule_thread is not None:
                 return
@@ -226,6 +251,7 @@ class TaskHost:
         with self._lock:
             if self._stopped.is_set():
                 raise ModelWorkStopped("任务宿主正在停止。")
+            self.require_task_execution(owner_id=owner_id, contact_id=contact_id, task_id=task_id)
             scope = (owner_id, contact_id)
             existing = self._threads.get(scope)
             if existing is not None and existing.is_alive():
@@ -244,6 +270,7 @@ class TaskHost:
                 raise ModelWorkStopped("任务宿主正在停止。")
             if self._task_repository is None:
                 raise RuntimeError("自动处理缺少持久任务状态仓储。")
+            self.require_task_execution(owner_id=owner_id, contact_id=contact_id, task_id=task_id)
             scope = (owner_id, contact_id)
             # 显式执行可能在锁忙后结束；同任务唤醒仍须保留可靠等待。
             self._pending.setdefault(scope, {})[task_id] = True
@@ -266,6 +293,8 @@ class TaskHost:
                 and self._model_priority.stop_event.is_set()
             ):
                 return {"status": "stopped"}
+            if not self._model_work_available:
+                return {"status": "deferred"}
             if self._task_repository is None:
                 raise RuntimeError("观察自动处理缺少持久任务状态仓储。")
             task_id = self._task_repository.enqueue_observation_message(
@@ -402,6 +431,8 @@ class TaskHost:
                 owner_id=scope[0], contact_id=scope[1], task_id=task_id,
             )
         except BackgroundTaskNotFoundError:
+            return False
+        if not self._model_work_available and task.task_type is not BackgroundTaskType.DELETE:
             return False
         if task.task_type is BackgroundTaskType.OBSERVATION and task.status is BackgroundTaskStatus.FAILED:
             return self._task_repository.retry_pending_observation(

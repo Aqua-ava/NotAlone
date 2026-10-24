@@ -88,9 +88,12 @@ async function authority(client:pg.Client,r:ModelLedgerReceipt,c:ModelTaskClaim)
  }
  return reject('model_accounting_purpose_invalid');
 }
-export function createHostModelAccounting(options:{transaction:Transaction;provider:string;model:string;unconfirmedPermitIds:()=>readonly string[]}) {
+export function createHostModelAccounting(options:{transaction:Transaction;unconfirmedPermitIds:()=>readonly string[]} & (
+ {provider:string;model:string;route?:undefined}|{route:null;provider?:undefined;model?:undefined}
+)) {
  if(typeof options.unconfirmedPermitIds!=='function')reject('model_accounting_configuration_invalid');
- if(!options.provider.trim()||!options.model.trim()||options.model==='ecnu-max')reject('model_accounting_configuration_invalid');
+ const route=options.route===null?null:{provider:options.provider,model:options.model};
+ if(route&&(typeof route.provider!=='string'||typeof route.model!=='string'||!route.provider.trim()||!route.model.trim()||route.model==='ecnu-max'))reject('model_accounting_configuration_invalid');
  const ledger=new PostgresModelLedger({transaction:options.transaction,details:new PostgresModelLedgerDetails()});
  const unconfirmed=async(client:pg.Client,owner:string,contact:string|null):Promise<string[]>=>{
   if(!uuid.test(owner)||(contact!==null&&!uuid.test(contact)))reject('model_accounting_scope_invalid');
@@ -104,8 +107,10 @@ export function createHostModelAccounting(options:{transaction:Transaction;provi
    return options.transaction(client=>unconfirmed(client,scope.owner_id,scope.contact_id));
   },
   async reserve(receipt:ModelLedgerReceipt,claim?:ModelTaskClaim):Promise<void> {
+   // 未配置只保留可信恢复/查询/已有结算；不能落新收据或消费预算。
+   if(!route)return reject('model_accounting_unconfigured');
    validateModelLedgerReceipt(receipt);const r=structuredClone(receipt),c=claimValue(claim);
-   if(r.provider!==options.provider||r.model!==options.model||r.outcome!=='pending'||r.dispatch!=='authorized_unconfirmed')reject('model_accounting_route_invalid');
+   if(r.provider!==route.provider||r.model!==route.model||r.outcome!=='pending'||r.dispatch!=='authorized_unconfirmed')reject('model_accounting_route_invalid');
    await options.transaction(async client=>{
     if(r.contact_id!==null)await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${r.owner_id}:${r.contact_id}`]);
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${r.owner_id}`]);

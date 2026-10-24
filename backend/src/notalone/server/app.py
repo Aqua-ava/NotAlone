@@ -2721,6 +2721,8 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "task_unavailable"},
             )
+        except ModelWorkStopped:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "model_configuration_unavailable"})
         except SourceProcessingWriteError:
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -2874,6 +2876,9 @@ class BackendApp:
                             owner_id=owner_id, contact_id=task_identity[0],
                             task_id=task_identity[1],
                         )
+                    except ModelWorkStopped:
+                        deferred_reason = ("model_configuration_unavailable"
+                            if getattr(task_host, "model_work_available", True) is False else "wake_failed")
                     except Exception as error:
                         # 消息已经提交，后台执行不可用不能改变导入结果；
                         # 用稳定原因让调用方知道提取被延后，异常正文不进响应。
@@ -2894,6 +2899,8 @@ class BackendApp:
                     try:
                         task_service.defer(
                             owner_id=owner_id, contact_id=task_identity[0], task_id=task_identity[1],
+                            **({"error_code": "model_configuration_unavailable"}
+                               if deferred_reason == "model_configuration_unavailable" else {}),
                         )
                         deferred_queued = True
                     except Exception as error:
@@ -3446,6 +3453,8 @@ def create_app(
     follow_smoke: FollowSmokeController | None = None,
     runtime_shutdown: Callable[[], None] | None = None,
     contact_context: ContactContextHandoff | None = None,
+    model_work_available: bool = True,
+    unconfirmed_model_requests=None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -3462,13 +3471,18 @@ def create_app(
     contact_context = contact_context or ContactContextHandoff()
     contacts = ContactDirectory(PostgresContactDirectory(database_url))
     layered_memory = layered_memory or LayeredMemoryService(PostgresLayeredMemoryStore(database_url, contact_context=contact_context))
+    if type(model_work_available) is not bool:
+        raise TypeError("模型任务能力必须是布尔值。")
+    model_work_available = getattr(task_host, "model_work_available", model_work_available) is not False
     if task_host is not None:
         layered_memory.attach_task_host(task_host)
-        layered_memory.resume_pending(owner_id)
+        if model_work_available:
+            layered_memory.resume_pending(owner_id)
     else:
         from notalone.tasks.organization_dispatch import EmbeddedOrganizationDispatcher
         layered_memory.attach_dispatcher(EmbeddedOrganizationDispatcher(database_url))
-    layered_memory.start_maintenance(owner_id)
+    if model_work_available:
+        layered_memory.start_maintenance(owner_id)
     events = events or EventBus()
     skill_learning = skill_learning or SkillLearningService(
         PostgresSkillLearningStore(database_url), task_host=task_host,
@@ -3505,7 +3519,10 @@ def create_app(
         expression_preferences=expression_preferences or ExpressionPreferenceService(
             PostgresExpressionPreferenceStore(database_url),
         ),
-        source_service=source_service or SourceService(database_url),
+        source_service=source_service or SourceService(
+            database_url, model_work_available=model_work_available,
+            unconfirmed_model_requests=unconfirmed_model_requests,
+        ),
         memory_service=memory_service,
         overview_service=overview_service or RelationshipOverviewService(PostgresRelationshipOverviewStore(database_url, contact_context=contact_context)),
         layered_memory=layered_memory,
@@ -3513,7 +3530,8 @@ def create_app(
         task_host=task_host,
         task_service=task_service
         or TaskService(
-            repository=PostgresBackgroundTaskRepository(database_url),
+            repository=PostgresBackgroundTaskRepository(database_url, unconfirmed_model_requests=unconfirmed_model_requests),
+            task_host=task_host,
         ),
         trace_service=trace_service
         or TraceService(

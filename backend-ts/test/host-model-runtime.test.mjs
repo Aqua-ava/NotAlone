@@ -12,12 +12,11 @@ test('默认Python及无模型不安装模型宿主、读资料或改配置',asy
  const options=new Proxy(allowed,{get(target,key){if(Object.hasOwn(target,key))return target[key];throw Error('不应读取storage、ctx或模型配置');}});
  assert.equal(await startHostModelRuntime(options),undefined);assert.deepEqual(await readdir(home),[]);
 });
-test('未知模式、私有配置冲突、无凭据及废除ECNU在资源创建前失败关闭',async()=>{
+test('未知模式、私有配置冲突及废除ECNU在资源创建前失败关闭',async()=>{
  for(const [environment,code] of [
   [{NOTALONE_REPLY_RUNTIME:'typo'},'reply_runtime_invalid'],
   [{NOTALONE_REPLY_REMOTE_URL:'http://127.0.0.1:12345'},'reply_runtime_ownership_conflict'],
   [{NOTALONE_MODEL_PERMIT_TOKEN:'synthetic'},'reply_runtime_ownership_conflict'],
-  [{NOTALONE_REPLY_RUNTIME:'typescript'},'reply_model_unconfigured'],
   [{NOTALONE_REPLY_RUNTIME:'typescript',NOTALONE_DEEPSEEK_MODEL:'ecnu-max'},'ecnu_provider_retired'],
  ])await assert.rejects(startHostModelRuntime({environment}),{code});
 });

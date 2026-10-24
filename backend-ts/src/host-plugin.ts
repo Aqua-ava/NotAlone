@@ -125,7 +125,7 @@ async function start(ctx: Context) {
     // 私有候选先自行认证；公共token及其他内部token都不能进入这条信道。
     if((req.url??'').startsWith('/internal/reply')){
       if(!modelRuntime){respond(401,{error:'unauthorized'});return;}
-      await modelRuntime.handle(req,res);return;
+      if(!await modelRuntime.handle(req,res))respond(404,{error:'not_found'});return;
     }
     if(await skills.privateHttp(req,res))return;
     const supplied=Buffer.from(req.headers.authorization ?? '');
@@ -155,7 +155,7 @@ async function start(ctx: Context) {
         }:undefined);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,ownership:{...ownership,skills:skills.status().owner,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus}}:{}),ownership:{...ownership,skills:skills.status().owner,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }

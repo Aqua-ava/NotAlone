@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from collections.abc import Mapping
+from uuid import UUID
 
 from notalone.application.model_priority import ModelPriorityControl
 from notalone.application.model_permit_client import SharedModelPriorityControl
@@ -26,3 +27,32 @@ def build_model_priority_control(*, background_limit: int,
             or any(ord(char) < 33 or ord(char) > 126 for char in token)):
         raise ValueError("model_runtime_shared_configuration_invalid")
     return SharedModelPriorityControl(socket_path=path, token=token, background_limit=background_limit)
+
+
+def model_work_available(*, control: ModelPriorityControl, owner_id: UUID | None,
+                         environment: Mapping[str, str] | None = None) -> bool:
+    """只接受宿主已确认的缺key/owner；配置齐全仍走原08严格装配。"""
+    values = os.environ if environment is None else environment
+    mode = values.get('NOTALONE_REPLY_RUNTIME', 'python')
+    reason = values.get('NOTALONE_MODEL_UNCONFIGURED_REASON', '')
+    if mode == 'python':
+        if reason:
+            raise ValueError('model_runtime_ownership_conflict')
+        return True
+    if (mode != 'typescript' or values.get('NOTALONE_TS_HOST') != '1'
+            or not isinstance(control, SharedModelPriorityControl)):
+        raise ValueError('model_runtime_shared_configuration_invalid')
+    if not reason:
+        if owner_id is None:
+            raise ValueError('model_runtime_shared_configuration_invalid')
+        return True
+    if reason == 'reply_model_unconfigured':
+        key = values.get('NOTALONE_DEEPSEEK_API_KEY')
+        if key is not None and key.strip():
+            raise ValueError('model_runtime_readiness_conflict')
+    elif reason == 'reply_owner_unconfigured':
+        if owner_id is not None:
+            raise ValueError('model_runtime_readiness_conflict')
+    else:
+        raise ValueError('model_runtime_readiness_invalid')
+    return False

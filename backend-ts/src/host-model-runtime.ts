@@ -3,9 +3,9 @@ import type {Context} from '@deepseek-ai/cordis';
 import {getOrCreateAnonymousUserId} from '@deepseek-ai/dsh-anonymous-user-id';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {mkdir,lstat} from 'node:fs/promises';
-import {dirname,join,resolve} from 'node:path';
-import {randomBytes} from 'node:crypto';
+import {dirname,join} from 'node:path';
 import {resolveSkillsRoot} from './skills-root.ts';
+import {randomBytes} from 'node:crypto';
 import type {HostStorage} from './host-storage.ts';
 import {resolveHostReplyConfiguration} from './host-reply-config.ts';
 import {createHostReplyRuntime} from './host-reply.ts';
@@ -35,14 +35,16 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
     return undefined;
   }
   const configuration=resolveHostReplyConfiguration(environment);
-  if(configuration.status!=='configured')throw new HostModelRuntimeError(configuration.code);
-  if(!options.storage.runtimeOwnerId||!(await options.storage.setupStatus()).runtime_owner_configured)
-    throw new HostModelRuntimeError('reply_owner_unconfigured');
+  if(configuration.status!=='configured'&&configuration.code!=='reply_model_unconfigured')throw new HostModelRuntimeError(configuration.code);
+  const ownerConfigured=Boolean(options.storage.runtimeOwnerId&&(await options.storage.setupStatus()).runtime_owner_configured);
+  const unavailable=configuration.status!=='configured'?'reply_model_unconfigured':!ownerConfigured?'reply_owner_unconfigured':undefined;
+  const replyStatus=unavailable?{state:'unconfigured' as const,reason:unavailable}:{state:'ready' as const};
   const transaction=options.storage.businessTransaction.bind(options.storage);
   const ledger=new PostgresModelLedger({transaction,details:new PostgresModelLedgerDetails()});
   // Python010/真实transport使用供应商名deepseek；不拿TS内部路由名替代其台账身份。
   let currentHost:Awaited<ReturnType<typeof startModelHost>>|undefined;
-  const accounting=createHostModelAccounting({transaction,provider:'deepseek',model:configuration.model.model,
+  const accounting=createHostModelAccounting({transaction,...(configuration.status==='configured'&&!unavailable
+    ?{provider:'deepseek',model:configuration.model.model}:{route:null}),
     unconfirmedPermitIds:()=>{
       if(!currentHost)throw new HostModelRuntimeError('model_runtime_starting');
       return currentHost.unconfirmedPermitIds();
@@ -54,27 +56,33 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
   try{
     // journal只有在核实旧进程消失后才给出unknown；提交PG恢复先于任何Python队列启动。
     const recovered=await ledger.recoverUnknownPermits(modelHost.unknownSettlements().map(item=>item.id));
-    const anonymousHome=join(dirname(modelHost.statePath),'identity');
-    try{await mkdir(anonymousHome,{mode:0o700});}
-    catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
-    const identityDirectory=await lstat(anonymousHome);
-    if(!identityDirectory.isDirectory()||(identityDirectory.mode&0o077)!==0
-      ||process.getuid&&identityDirectory.uid!==process.getuid())throw new HostModelRuntimeError('model_identity_directory_not_private');
-    const anonymousId=getOrCreateAnonymousUserId({env:{DSH_HOME:anonymousHome}});
-    const skillsRoot=resolveSkillsRoot(environment,options.businessHome,options.projectDirectory);
     const token=randomBytes(32).toString('base64url');
+    let activeConfiguration:Parameters<typeof createHostReplyRuntime>[0]['configuration']=null;
+    if(configuration.status==='configured'&&!unavailable){
+      const anonymousHome=join(dirname(modelHost.statePath),'identity');
+      try{await mkdir(anonymousHome,{mode:0o700});}
+      catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
+      const identityDirectory=await lstat(anonymousHome);
+      if(!identityDirectory.isDirectory()||(identityDirectory.mode&0o077)!==0
+        ||process.getuid&&identityDirectory.uid!==process.getuid())throw new HostModelRuntimeError('model_identity_directory_not_private');
+      const anonymousId=getOrCreateAnonymousUserId({env:{DSH_HOME:anonymousHome}});
+      activeConfiguration={skillsRoot:resolveSkillsRoot(environment,options.businessHome,options.projectDirectory),model:configuration.model,
+        provider:{...configuration.provider,resolveUserId:()=>anonymousId}};
+    }
     reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
-      ledger,token,configuration:{skillsRoot,model:configuration.model,
-        provider:{...configuration.provider,resolveUserId:()=>anonymousId}}});
+      ledger,token,configuration:activeConfiguration});
     const runtime=reply;
     let closing:Promise<void>|undefined;
     const stopAccepting=()=>{runtime.stopAccepting();modelHost.arbiter.stop();};
     return {
-      statePath:modelHost.statePath,recoveredUnknown:recovered.length,
+      statePath:modelHost.statePath,recoveredUnknown:recovered.length,replyStatus,
       pythonEnvironment(address:string){
         if(!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}$/.test(address))throw new HostModelRuntimeError('reply_remote_address_invalid');
         return {...modelHost.pythonEnvironment,NOTALONE_REPLY_RUNTIME:'typescript',
-          NOTALONE_REPLY_REMOTE_URL:address,NOTALONE_REPLY_REMOTE_TOKEN:token};
+          NOTALONE_REPLY_REMOTE_URL:address,NOTALONE_REPLY_REMOTE_TOKEN:token,
+          // 仅宿主到本次Legacy的允许列表协议；配置保存后整体重启，不热切换。
+          NOTALONE_MODEL_UNCONFIGURED_REASON:unavailable??'',
+          ...(!ownerConfigured?{NOTALONE_OWNER_ID:''}:{})};
       },
       handle(req:IncomingMessage,res:ServerResponse){return runtime.handle(req,res);},
       stopAccepting,

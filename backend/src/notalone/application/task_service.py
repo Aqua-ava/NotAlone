@@ -8,8 +8,9 @@ from notalone.tasks.extraction_runtime import runtime_config_for_mode
 
 
 class TaskService:
-    def __init__(self, *, repository: PostgresBackgroundTaskRepository) -> None:
+    def __init__(self, *, repository: PostgresBackgroundTaskRepository, task_host=None) -> None:
         self._repository = repository
+        self._task_host = task_host
 
     def memory_processing(self, *, owner_id, contact_id=None, host=None):
         from notalone.persistence.memory_processing import PostgresMemoryProcessingStore
@@ -34,6 +35,8 @@ class TaskService:
     def retry(
         self, *, owner_id: UUID, contact_id: UUID, task_id: UUID,
     ) -> dict[str, object]:
+        if getattr(self._task_host, "model_work_available", True) is False:
+            self._task_host.require_task_execution(owner_id=owner_id, contact_id=contact_id, task_id=task_id)
         task = self._repository.retry_failed_task(
             owner_id=owner_id, contact_id=contact_id, task_id=task_id,
         )
@@ -43,6 +46,8 @@ class TaskService:
         self, *, owner_id: UUID, contact_id: UUID, task_id: UUID,
         mode: ExtractionRuntimeMode,
     ) -> dict[str, object]:
+        if getattr(self._task_host, "model_work_available", True) is False:
+            self._task_host.require_model_work()
         config = runtime_config_for_mode(mode)
         saved = self._repository.configure_extraction_runtime(
             owner_id=owner_id, contact_id=contact_id, task_id=task_id, config=config,

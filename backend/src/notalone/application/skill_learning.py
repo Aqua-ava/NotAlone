@@ -83,10 +83,14 @@ class SkillLearningService:
         return self.store.list(scope)
 
     def resume(self, scope: ContactScope) -> dict[str, object]:
+        if getattr(self.task_host, "model_work_available", True) is False:
+            self.task_host.require_model_work()
         self.notify(scope, force_retry=True)
         return self.store.list(scope)
 
     def notify(self, scope: ContactScope, *, force_retry=False) -> None:
+        if getattr(self.task_host, "model_work_available", True) is False:
+            return
         task_id = self.store.enqueue(scope, force_retry=force_retry)
         if task_id is not None and self.task_host is not None:
             try:

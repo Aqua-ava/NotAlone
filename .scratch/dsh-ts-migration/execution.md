@@ -48,3 +48,7 @@ cc263095已整合唯一模型宿主、原SDK物理许可、已知终态ACK未知
 ## 06 根签收（2026-10-24）
 
 既有普通 Skill 模块与移交门经最终 12 路径装配完成：单一 TS 管理、原来源 C、官方逐轮只读 scope，默认 Python 回复不变。根固定基线 RED→最小 1/1→相关 41/41、Python 21/21、provider／PG 端口 14/14、strict 0；双轴和五项覆盖核对无阻碍。实际 npm run dev 经原 API 操作、CUA 核对 v1／正文／启停／删除，正常退出并清理合成资源。原 artifact 两文件碰撞单列；详见 skill-host-root-acceptance/validation.md。06 resolved，07 仍等 05；不签其他票或最终切换，不恢复受限子目标。
+
+## 显式 TS 未配置管理能力（2026-10-24）
+
+根组合 Core＋TaskHost＋已签 Skill，26 路径；缺 key／owner 时保留真实共享 ModelHost、恢复和管理接口，生成明确 unconfigured，删除五步继续，模型动作写前拒绝。根最小 profile1→相关38／Python16→已配置 profile1／strict0；独立 core／TaskHost 0 finding。实际 App 两态及合成本人初始化的原完整重启通过并清理；一度 fixture 禁读刚保存配置的失败保留原证据，经单变量红绿及实际复验仅修 fixture。详见 ts-controlplane-root-acceptance/validation.md。默认 Python、schema111及其余依赖票不变，不把此切片算 05／22／24 完成。

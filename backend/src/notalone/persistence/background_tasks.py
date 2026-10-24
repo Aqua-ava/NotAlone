@@ -52,13 +52,21 @@ class BackgroundTaskStateError(BackgroundTaskPersistenceError):
 class PostgresBackgroundTaskRepository:
     """创建任务模板并读取不含正文的任务状态。"""
 
-    __slots__ = ("_database_url", "_unconfirmed_model_requests")
+    __slots__ = ("_database_url", "_unconfirmed_model_requests", "_executable_steps")
 
-    def __init__(self, database_url: str, *, unconfirmed_model_requests=None) -> None:
+    def __init__(self, database_url: str, *, unconfirmed_model_requests=None,
+                 executable_steps: Iterable[BackgroundTaskStepName] | None = None) -> None:
         if not database_url.strip():
             raise ValueError("database_url 不能为空。")
         self._database_url = database_url
         self._unconfirmed_model_requests = unconfirmed_model_requests
+        if executable_steps is None:
+            self._executable_steps = None
+        else:
+            values = tuple(executable_steps)
+            if any(not isinstance(value, BackgroundTaskStepName) for value in values):
+                raise TypeError("可执行步骤必须来自固定任务枚举。")
+            self._executable_steps = tuple(sorted({value.value for value in values}))
 
     @property
     def database_url(self) -> str:
@@ -592,12 +600,15 @@ class PostgresBackgroundTaskRepository:
             for step in supported_steps
             if isinstance(step, BackgroundTaskStepName)
         )
+        if self._executable_steps is not None:
+            step_names = tuple(name for name in step_names if name in self._executable_steps)
         if not step_names:
             return None
         try:
             with psycopg.connect(self._database_url) as connection:
                 self._lock_scope(connection, owner_id, contact_id)
-                self._expire_leases(connection, owner_id, contact_id, unconfirmed_requests=self._unconfirmed_model_requests)
+                self._expire_leases(connection, owner_id, contact_id, unconfirmed_requests=self._unconfirmed_model_requests,
+                                    executable_steps=self._executable_steps)
                 active = connection.execute(
                     f"""
                     SELECT 1
@@ -1195,13 +1206,16 @@ class PostgresBackgroundTaskRepository:
         connection: psycopg.Connection[Any],
         owner_id: UUID,
         contact_id: UUID,
-        *, unconfirmed_requests=None,
+        *, unconfirmed_requests=None, executable_steps=None,
     ) -> None:
         settled = _model_attempts_settled_sql(connection, owner_id, contact_id, allow_fresh_extraction=False, unconfirmed_requests=unconfirmed_requests)
+        # 能力范围同时约束领取前恢复，不能由删除顺带重排无关模型租约。
+        step_filter = "" if executable_steps is None else " AND step.step_name=ANY(%s::text[])"
+        step_parameters = () if executable_steps is None else (list(executable_steps),)
         expired=connection.execute("SELECT DISTINCT task.id FROM public.background_task task "
             "JOIN public.background_task_step step ON step.task_id=task.id WHERE task.owner_id=%s "
-            "AND task.contact_id IS NOT DISTINCT FROM %s AND step.status='running' AND step.lease_expires_at<=now()",
-            (owner_id,contact_id)).fetchall()
+            "AND task.contact_id IS NOT DISTINCT FROM %s AND step.status='running' AND step.lease_expires_at<=now()" + step_filter,
+            (owner_id,contact_id) + step_parameters).fetchall()
         for (identifier,) in expired:
             _quarantine_model_targets(connection,owner_id,contact_id,identifier)
         connection.execute(
@@ -1222,11 +1236,12 @@ class PostgresBackgroundTaskRepository:
               AND task.contact_id IS NOT DISTINCT FROM %s
               AND step.status = 'running'
               AND step.lease_expires_at <= now()
+              {step_filter}
             """,
-            (MAX_AUTOMATIC_ATTEMPTS, owner_id, contact_id),
+            (MAX_AUTOMATIC_ATTEMPTS, owner_id, contact_id) + step_parameters,
         )
         connection.execute(
-            """
+            f"""
             UPDATE public.background_task AS task
             SET status = 'failed',
                 last_error_code = CASE WHEN EXISTS (SELECT 1 FROM public.background_task_step s WHERE s.task_id=task.id AND s.last_error_code='model_call_outcome_unknown') THEN 'model_call_outcome_unknown' ELSE 'lease_expired' END,
@@ -1241,9 +1256,10 @@ class PostgresBackgroundTaskRepository:
                   WHERE step.task_id = task.id
                     AND step.status = 'failed'
                     AND step.last_error_code IN ('lease_expired','model_call_outcome_unknown')
+                    {step_filter}
               )
             """,
-            (owner_id, contact_id),
+            (owner_id, contact_id) + step_parameters,
         )
 
     @staticmethod

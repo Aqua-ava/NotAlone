@@ -51,7 +51,10 @@ from notalone.server.follow_smoke import (
     PostgresFollowSmokeSnapshotReader,
 )
 from notalone.server.reply_wiring import build_reply_service, close_reply_service
-from notalone.server.model_control import build_model_priority_control
+from notalone.server.model_control import (
+    build_model_priority_control, model_work_available as resolve_model_work_available,
+)
+from notalone.application.model_permit_client import SharedModelPriorityControl
 from notalone.server.sync_host import SyncHost
 
 
@@ -110,6 +113,12 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
     except ValueError:
         print('共享模型许可配置无效。', file=sys.stderr)
         return 2
+    try:
+        model_work_available = resolve_model_work_available(control=model_priority, owner_id=owner_id)
+    except ValueError:
+        model_priority.stop()
+        print('共享模型启动能力无效。', file=sys.stderr)
+        return 2
     # 迁移期首用写入已交给 TS；旧业务进程不再提供第二个身份／凭据写入口。
     setup_service = (None if os.environ.get("NOTALONE_TS_HOST") == "1"
                      else _build_setup_service(database_url))
@@ -120,7 +129,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
         model_priority.stop()
         print('本地整理质量operator配置无效。', file=sys.stderr)
         return 2
-    task_host = _build_task_host(database_url, events, model_priority=model_priority,organization_runner=layered_memory, batch_concurrency=batch_concurrency)
+    task_host = _build_task_host(database_url, events, model_priority=model_priority,organization_runner=layered_memory, batch_concurrency=batch_concurrency, model_work_available=model_work_available)
     layered_memory.attach_task_host(task_host)
     sync_host = _build_sync_host(
         database_url=database_url,
@@ -167,7 +176,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
                 database_url=database_url, owner_id=owner_id, model_priority=model_priority,
                 layered_memory=layered_memory, contact_context=contact_context,
             )
-            if owner_id is not None
+            if owner_id is not None and model_work_available
             else None
         )
         memory_service = _build_memory_service(database_url)
@@ -185,6 +194,9 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
             layered_memory=layered_memory,
             import_service=import_service,
             task_host=task_host,
+            model_work_available=model_work_available,
+            unconfirmed_model_requests=(model_priority.unconfirmed_requests
+                if isinstance(model_priority, SharedModelPriorityControl) else None),
             skill_service=skill_service,
             ledger_service=ledger_service,
             setup_service=setup_service,
@@ -374,6 +386,7 @@ def _build_task_host(
     dimension_release: DimensionRelease | None = None,
     organization_runner=None,
     batch_concurrency: int = 1,
+    model_work_available: bool = True,
 ) -> TaskHost | None:
     """装配任务宿主；执行前再检查模型与资源，不提前领取持久任务。"""
 
@@ -411,6 +424,17 @@ def _build_task_host(
     )
 
     def build_worker() -> BackgroundTaskWorker:
+        if not model_work_available:
+            from notalone.tasks.models import DELETE_TASK_STEPS
+            return BackgroundTaskWorker(
+                repository=PostgresBackgroundTaskRepository(
+                    database_url, unconfirmed_model_requests=unconfirmed_model_requests,
+                    executable_steps=tuple(name for _, name in DELETE_TASK_STEPS),
+                ),
+                deletion_repository=PostgresSourceDeletionRepository(database_url),
+                lease_duration=DEFAULT_WORKER_LEASE_DURATION,
+                model_priority=model_priority,
+            )
         extraction: ExtractionTaskRunner
         components = None
         if model_priority is None:
@@ -497,6 +521,7 @@ def _build_task_host(
             event_publisher=publish_progress,
             model_priority=model_priority,
             task_repository=PostgresBackgroundTaskRepository(database_url, unconfirmed_model_requests=unconfirmed_model_requests),
+            model_work_available=model_work_available,
         )
     except Exception as error:
         # 任务宿主装配失败会让导入后的后台提取停在待执行；保留稳定告警，

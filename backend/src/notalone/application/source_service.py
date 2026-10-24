@@ -10,15 +10,21 @@ from notalone.persistence.background_tasks import PostgresBackgroundTaskReposito
 from notalone.persistence.source_deletion import PostgresSourceDeletionRepository
 from notalone.persistence.source_tasks import PostgresSourceTasks
 from notalone.tasks.command import run_worker, WorkerCommandStatus
-from notalone.tasks.models import BackgroundTaskStatus
+from notalone.tasks.models import BackgroundTaskStatus, DELETE_TASK_STEPS
 from notalone.tasks.worker import BackgroundTaskWorker
 
 
 class SourceService:
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, *, model_work_available: bool = True,
+                 unconfirmed_model_requests=None) -> None:
+        if type(model_work_available) is not bool:
+            raise TypeError("模型任务能力必须是布尔值。")
         self._database_url = database_url
         self._sources = PostgresSourceTasks(database_url)
-        self._tasks = PostgresBackgroundTaskRepository(database_url)
+        self._tasks = PostgresBackgroundTaskRepository(
+            database_url, unconfirmed_model_requests=unconfirmed_model_requests,
+            executable_steps=None if model_work_available else tuple(name for _, name in DELETE_TASK_STEPS),
+        )
         self._lock = Lock()
         self._running: set[tuple[UUID, UUID]] = set()
 
