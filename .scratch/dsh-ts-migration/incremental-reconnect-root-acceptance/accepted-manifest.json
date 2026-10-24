@@ -1,0 +1,65 @@
+{
+  "schema_version": "root-incremental-reconnect-acceptance-v1",
+  "base_commit": "c943f91c7241f0a18c11a5ba0e9eb95fb3d3fd57",
+  "accepted_at_utc": "2026-10-24T09:24:38.609976+00:00",
+  "accepted_formal_files": {
+    "sync-incremental-reconnect-fixture.mjs": "d095a27712d03ff68fcb1580e6d293ede32ad7084cb8febf8470a8f470f34752",
+    "sync-incremental-reconnect.test.mjs": "1e3f345ca1d61c40abf03384eb2c88a3d7f2707f1c91f810c0f06bb7c714f1a0"
+  },
+  "reviews_and_repair_artifacts": {
+    "incremental-reconnect-fixture-delta-review/review-manifest.json": "2580fa572435b980b2f60cadf414b7b0be4e150d070d6cf5095bd561b12c94d3",
+    "incremental-reconnect-launch-failure-delta-review/review-manifest.json": "1c2d1265fe361ffa81d260df9e0c9ed5487e9b3cd970c2eb084ea157193ac0eb",
+    "incremental-reconnect-launch-failure-repair/artifact-manifest.json": "5ed6888b192ce4b2b20f9b75a6e12a2955276626ae20a4fa8261ee4acf1a40b7"
+  },
+  "validation": {
+    "minimal_pure_module_cases_passed": 6,
+    "formal_profile_cases_passed": 2,
+    "formal_profile_cases_skipped": 0,
+    "formal_elapsed_seconds": 26.726,
+    "real_launcher_cleanup_failure_naturally_reproduced": false,
+    "test_only_changes": true,
+    "emergency_cleanup": false,
+    "shared_pg_preserved": true,
+    "real_vendor_calls": 0,
+    "app_wechat_operations": 0
+  },
+  "accepted_paths": [
+    "backend-ts/test/sync-incremental-reconnect-fixture.mjs",
+    "backend-ts/test/sync-incremental-reconnect.test.mjs",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/accepted-manifest.json",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/validation.md",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/main-result.json",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/test.log",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/seam-result.json",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/seam-test.log",
+    ".scratch/dsh-ts-migration/incremental-reconnect-fixture-delta-review/findings.md",
+    ".scratch/dsh-ts-migration/incremental-reconnect-fixture-delta-review/handoff.md",
+    ".scratch/dsh-ts-migration/incremental-reconnect-fixture-delta-review/review-manifest.json",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-delta-review/handoff.md",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-delta-review/review-manifest.json",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-repair/handoff.md",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-repair/artifact-manifest.json",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-repair/validation.md",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-repair/launch-failure-seam.test.mjs",
+    ".scratch/dsh-ts-migration/execution.md"
+  ],
+  "files_sha256": {
+    "backend-ts/test/sync-incremental-reconnect-fixture.mjs": "d095a27712d03ff68fcb1580e6d293ede32ad7084cb8febf8470a8f470f34752",
+    "backend-ts/test/sync-incremental-reconnect.test.mjs": "1e3f345ca1d61c40abf03384eb2c88a3d7f2707f1c91f810c0f06bb7c714f1a0",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/validation.md": "790a7d04f014fe8c50b94c192626d57355b68c6c1a7adc2a18cfd52edc7c144b",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/main-result.json": "d02aff1ba50ff12b9500abf967ae15c369a6233de75b8082211be2ef7a0ef31a",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/test.log": "3a1aad56d913f5deece2e425c6939ca77415a49b361565999079279985868d10",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/seam-result.json": "0f096010d0243b280038ae6ff436dfa2223aed2e9faa53b1ec24861d650bcba5",
+    ".scratch/dsh-ts-migration/incremental-reconnect-root-acceptance/seam-test.log": "f41c3baa202d95955d95216a0a2fce6bc4ae8c7f27bd1c821fd5283b61b8bf91",
+    ".scratch/dsh-ts-migration/incremental-reconnect-fixture-delta-review/findings.md": "66db6993fa294a219387e833128b6bdcf8907d41b78c7376c29c7a8a1fb72bf7",
+    ".scratch/dsh-ts-migration/incremental-reconnect-fixture-delta-review/handoff.md": "92f9b9918a5e661f0ec2b92421514cbb90746ea518c6705185f7f3eb0c971ff2",
+    ".scratch/dsh-ts-migration/incremental-reconnect-fixture-delta-review/review-manifest.json": "2580fa572435b980b2f60cadf414b7b0be4e150d070d6cf5095bd561b12c94d3",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-delta-review/handoff.md": "00ca718ff126dae58941c4fcbbd29426d9468e6c320612ecf544290a4a4cebfc",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-delta-review/review-manifest.json": "1c2d1265fe361ffa81d260df9e0c9ed5487e9b3cd970c2eb084ea157193ac0eb",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-repair/handoff.md": "722a7d57b046032b0948da42caec5a03115533f577c6c1bdec3c3a588e0b562c",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-repair/artifact-manifest.json": "5ed6888b192ce4b2b20f9b75a6e12a2955276626ae20a4fa8261ee4acf1a40b7",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-repair/validation.md": "e04398fe5798417807904022ddd1718aedcbc4de87c7d940903af6f3a9f060ac",
+    ".scratch/dsh-ts-migration/incremental-reconnect-launch-failure-repair/launch-failure-seam.test.mjs": "3ede3302b1629407641cb8426a0e33917c9822bf2cff88c19f1bb2b48009634a",
+    ".scratch/dsh-ts-migration/execution.md": "ccebaa623dad4de52156bfc4c6033512f53ce81ff73de116283f941fff983941"
+  }
+}

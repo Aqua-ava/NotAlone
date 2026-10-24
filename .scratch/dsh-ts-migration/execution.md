@@ -64,3 +64,7 @@ cc263095已整合唯一模型宿主、原SDK物理许可、已知终态ACK未知
 ## 19 永久回归：带数据父丢失（2026-10-24）
 
 只新增parent-loss测试及专属helper，冻结patch ebf33403；根主树最小1/1、0skip、10.04秒，原同库/路径自然恢复与UUID/来源/receipt保持，全部自有资源清理、模型0。独立审查本对无阻碍，reconnect夹具失败清理P2由独立角色修，不夹带接收。详见incremental-parent-loss-root-acceptance/validation.md；不扩大19原签收或20/App崩溃范围。
+
+## 19 永久回归：自然重连及失败清理（2026-10-24）
+
+根精确接收两个reconnect专属测试路径；先完整fixture纯seam6/6，再主树真实官方profile/Legacy/PG两case2/2、0skip。自然code7后5122ms重连、metadata cursor接续、消息2/复用4、关闭停读和正常退出均通过；真实active=1原断言/缓存错误保留且清理完成。原两轮清理P2保留、最后独立delta0，未知退出不强删活库；该极端启动失败仅纯seam覆盖，不冒称真实自然复现。自有库/目录/宿主清理0、无应急；模型/App/微信0，详见incremental-reconnect-root-acceptance/validation.md。19状态与parent-loss既有证据不改。

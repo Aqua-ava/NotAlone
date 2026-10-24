@@ -1,0 +1,23 @@
+{
+  "mode": "独立只读源码delta；零测试/DB/HTTP/CLI/App执行",
+  "reviewed_final_sources": {
+    "backend-ts/test/sync-incremental-reconnect-fixture.mjs": "e3fbfdfe4e6e3c12ebb62b49d11f75b395bb20dad2699a8c6082ed656809300f",
+    "backend-ts/test/sync-incremental-reconnect.test.mjs": "1e3f345ca1d61c40abf03384eb2c88a3d7f2707f1c91f810c0f06bb7c714f1a0"
+  },
+  "original_active_1_P2_closed": true,
+  "remaining_findings": [
+    {
+      "priority": "P2",
+      "path": "backend-ts/test/sync-incremental-reconnect-fixture.mjs",
+      "line": 38,
+      "condition": "launch已尝试却因backend_cleanup_failed拒绝，无handle仍视为stopped，49–51可FORCE删活库"
+    }
+  ],
+  "normal_case_behavior_unchanged": true,
+  "handoff_lines": 11,
+  "observed_head": "c943f91c7241f0a18c11a5ba0e9eb95fb3d3fd57",
+  "artifacts": {
+    "findings.md": "66db6993fa294a219387e833128b6bdcf8907d41b78c7376c29c7a8a1fb72bf7",
+    "handoff.md": "92f9b9918a5e661f0ec2b92421514cbb90746ea518c6705185f7f3eb0c971ff2"
+  }
+}

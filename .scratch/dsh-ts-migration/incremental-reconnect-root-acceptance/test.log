@@ -1,0 +1,24 @@
+TAP version 13
+# Subtest: 官方profile：全局流code7后自然退避重连，metadata cursor接续且重复消息不重建
+ok 1 - 官方profile：全局流code7后自然退避重连，metadata cursor接续且重复消息不重建
+  ---
+  duration_ms: 23589.34525
+  type: 'test'
+  ...
+# {"stream_generations":2,"exit_to_restart_ms":5122,"metadata_cursor":"global-1-outside","message_count":2,"created_receipts":2,"reused_receipts":4,"history_queries":0,"outside_body_queries":0,"disabled_no_new_commands":true,"normal_shutdown":true,"database_and_fixture_removed":true}
+# Subtest: 官方profile：排空断言失败仍回收本轮测试库和目录，失败不会被清理吞掉
+ok 2 - 官方profile：排空断言失败仍回收本轮测试库和目录，失败不会被清理吞掉
+  ---
+  duration_ms: 2892.9435
+  type: 'test'
+  ...
+# {"expected_active_assertion":1,"original_failure_preserved":true,"cached_failure_preserved":true,"owned_host_stopped":true,"database_and_fixture_removed":true}
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 26577.191125

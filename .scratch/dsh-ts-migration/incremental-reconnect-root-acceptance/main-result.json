@@ -1,0 +1,21 @@
+{
+  "schema_version": "incremental-reconnect-root-main-v1",
+  "head_before_commit": "c943f91c7241f0a18c11a5ba0e9eb95fb3d3fd57",
+  "command": "node24 --no-warnings --test --test-concurrency=1 --test-reporter=tap backend-ts/test/sync-incremental-reconnect.test.mjs",
+  "exit_code": 0,
+  "elapsed_seconds": 26.726,
+  "formal_files": {
+    "sync-incremental-reconnect-fixture.mjs": "d095a27712d03ff68fcb1580e6d293ede32ad7084cb8febf8470a8f470f34752",
+    "sync-incremental-reconnect.test.mjs": "1e3f345ca1d61c40abf03384eb2c88a3d7f2707f1c91f810c0f06bb7c714f1a0"
+  },
+  "new_fixture_databases_remaining": 0,
+  "new_owned_directory_candidates_remaining": 0,
+  "shared_pg_alive": true,
+  "raw_log_sha256": "3a1aad56d913f5deece2e425c6939ca77415a49b361565999079279985868d10",
+  "shared_log_sha256": "3a1aad56d913f5deece2e425c6939ca77415a49b361565999079279985868d10",
+  "raw_and_shared_equal": true,
+  "real_vendor_calls": 0,
+  "app_wechat_operations": 0,
+  "emergency_cleanup": false,
+  "verified_at_utc": "2026-10-24T09:23:02.895380+00:00"
+}
