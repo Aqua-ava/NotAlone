@@ -1,6 +1,8 @@
 /** 原legacy-v4核验的version1依据：摘要绑定真实候选和完整窗口，不把来源核验当采纳门槛。 */
 import {canonicalJSON,digest,parseStoredJSON,sha} from './contact-overview-evidence.ts';
 import {instantMicros,uuid,when,validateExtractionWindow,type ExtractedFact,type ExtractionWindow,type ExtractionMessage,type SourceVerificationResult,type MemoryEvent} from './extraction-protocol.ts';
+import {boundedMessages,normalizeBoundedWindow,validateBoundedBodySources} from './extraction-bounded.ts';
+import {verifyBoundedProof} from './extraction-bounded-proof.ts';
 export interface EvidenceMessage {
  message_id:string;text_sha256:string;text_length:number;sender:string;message_type:string;text_representation:string;
  source_state_sha256:string|null;occurred_at:string|null;source_refs:{ref_id:string;source_id:string}[];
@@ -13,8 +15,17 @@ export interface LegacyDimensionEvidence {
  reference:null;media:{message_id:string;message_type:string;representation:string}[]|null;reported:null;
  readonly source_bound:boolean;
 }
+export interface BoundedDimensionEvidence {
+ version:4;scope:{owner_id:string;contact_id:string};candidate_sha256:string;window_sha256:string;
+ pragmatics:{speech_act:string;assertion_status:string;figurative_type:string};messages:EvidenceMessage[];
+ paraphrase:{candidate:EvidenceSpan;source:{message_id:string;span:EvidenceSpan}}[]|null;
+ reference:null;media:{message_id:string;message_type:string;representation:string}[]|null;reported:null;
+ semantic_basis:Record<string,unknown>|null;target_message_ids:string[];
+ readonly source_bound:boolean;
+}
+export type ExtractionDimensionEvidence=LegacyDimensionEvidence|BoundedDimensionEvidence;
 export type VerifiedSourceReceipt=readonly [string,string,'any'|'all',boolean];
-export type EvidenceFact=ExtractedFact&{dimension_evidence:LegacyDimensionEvidence;verified_source_receipt:VerifiedSourceReceipt|null};
+export type EvidenceFact=ExtractedFact&{dimension_evidence:ExtractionDimensionEvidence|null;verified_source_receipt:VerifiedSourceReceipt|null};
 export class ExtractionEvidenceError extends Error {
  readonly code:string;constructor(code:string){super(code);this.code=code;}
 }
@@ -43,8 +54,9 @@ function pythonFloat(value:number):unknown{
  if(!/[.eE]/.test(token))token+='.0';
  return parseStoredJSON(`{"value":${token}}`).value;
 }
-export function candidateDigest(fact:ExtractedFact):string {
- return digest({text:fact.text,category:fact.category,topic:fact.topic,subject:fact.subject,
+export function candidateDigest(fact:ExtractedFact,version=1):string {
+ if(version!==1&&version!==4)fail('candidate_digest_version_invalid');if(version===4&&fact.source_dependency_mode!=='all')fail('candidate_digest_requires_all');
+ return digest({...(version===4?{source_dependency_mode:'all'}:{}),text:fact.text,category:fact.category,topic:fact.topic,subject:fact.subject,
   source_ids:fact.source_message_ids.map(uuid).sort(),valid_at:evidenceTimestamp(fact.valid_at),invalid_at:evidenceTimestamp(fact.invalid_at),
   confidence:pythonFloat(fact.confidence),risk_flags:fact.risk_flags,alternatives:fact.alternatives,interpretation_reason:fact.interpretation_reason,
   ...(fact.event?{event:eventPayload(fact.event)}:{}),...(fact.conditions?{conditions:fact.conditions}:{})});
@@ -77,18 +89,18 @@ function metadata(window:ExtractionWindow):EvidenceMessage[]{
    message_type:messageType(m),text_representation:representation,source_state_sha256:sourceStateDigest(m.source_snapshots??[]),occurred_at:evidenceTimestamp(m.occurred_at),source_refs:refs};
  });
 }
-export function dimensionEvidencePayload(evidence:LegacyDimensionEvidence):Omit<LegacyDimensionEvidence,'source_bound'>{
- const {version,scope,candidate_sha256,window_sha256,pragmatics,messages,paraphrase,reference,media,reported}=evidence;
- return {version,scope,candidate_sha256,window_sha256,pragmatics,messages,paraphrase,reference,media,reported};
+export function dimensionEvidencePayload(evidence:ExtractionDimensionEvidence):Record<string,unknown>{
+ const {version,scope,candidate_sha256,window_sha256,pragmatics,messages,paraphrase,reference,media,reported,source_bound,...rest}=evidence;
+ return {version,scope,candidate_sha256,window_sha256,pragmatics,messages,paraphrase,reference,media,reported,...rest};
 }
-function runtime(payload:Omit<LegacyDimensionEvidence,'source_bound'>,bound:boolean):LegacyDimensionEvidence {
- const result={...payload} as LegacyDimensionEvidence;Object.defineProperty(result,'source_bound',{value:bound,enumerable:false});
+function runtime<T extends ExtractionDimensionEvidence>(payload:Omit<T,'source_bound'>,bound:boolean):T {
+ const result={...payload} as T;Object.defineProperty(result,'source_bound',{value:bound,enumerable:false});
  const freeze=(value:unknown):void=>{if(value&&typeof value==='object'){for(const child of Object.values(value))freeze(child);Object.freeze(value);}};
  freeze(result);return result;
 }
 /** JSON往返只恢复未绑定依据；每次绑定必须重算实际正文、来源和完整context窗口。 */
 export function bindDimensionEvidence(evidence:LegacyDimensionEvidence,window:ExtractionWindow,fact:ExtractedFact):LegacyDimensionEvidence {
- const unbound=()=>runtime(dimensionEvidencePayload(evidence),false);
+ const unbound=()=>runtime<LegacyDimensionEvidence>(dimensionEvidencePayload(evidence) as Omit<LegacyDimensionEvidence,'source_bound'>,false);
  if(evidence.version!==1||fact.source_dependency_mode==='all')return unbound();
  const messages=metadata(window),pragmatics={speech_act:fact.speech_act,assertion_status:fact.assertion_status,figurative_type:fact.figurative_type};
  if(canonicalJSON(evidence.scope)!==canonicalJSON({owner_id:uuid(window.owner_id),contact_id:uuid(window.contact_id)})
@@ -103,7 +115,7 @@ export function bindDimensionEvidence(evidence:LegacyDimensionEvidence,window:Ex
   if(!source||!Number.isSafeInteger(span.start)||!Number.isSafeInteger(span.end)||span.start<0||span.start>=span.end||span.end>source.length||sha(source.slice(span.start,span.end).join(''))!==span.sha256
    ||!Number.isSafeInteger(candidate.start)||!Number.isSafeInteger(candidate.end)||candidate.start<0||candidate.start>=candidate.end||candidate.end>[...fact.text].length||sha([...fact.text].slice(candidate.start,candidate.end).join(''))!==candidate.sha256)return unbound();
  }
- return runtime(dimensionEvidencePayload(evidence),true);
+ return runtime<LegacyDimensionEvidence>(dimensionEvidencePayload(evidence) as Omit<LegacyDimensionEvidence,'source_bound'>,true);
 }
 export function buildDimensionEvidence(window:ExtractionWindow,fact:ExtractedFact,verification:SourceVerificationResult|null=null,options:{verificationMode?:'legacy-v4'}={}):LegacyDimensionEvidence {
  validateExtractionWindow(window);
@@ -115,15 +127,37 @@ export function buildDimensionEvidence(window:ExtractionWindow,fact:ExtractedFac
   if(quote.quote!==source.text||fact.text!==source.text)continue;
   const span={start:0,end:[...fact.text].length,sha256:sha(fact.text)};alignments.push({candidate:span,source:{message_id:uuid(source.message_id),span:{...span}}});
  }
- const evidence=runtime({version:1,scope:{owner_id:uuid(window.owner_id),contact_id:uuid(window.contact_id)},candidate_sha256:candidateDigest(fact),
+ const evidence=runtime<LegacyDimensionEvidence>({version:1,scope:{owner_id:uuid(window.owner_id),contact_id:uuid(window.contact_id)},candidate_sha256:candidateDigest(fact),
   window_sha256:digest({owner_id:uuid(window.owner_id),contact_id:uuid(window.contact_id),messages}),messages,
   pragmatics:{speech_act:fact.speech_act,assertion_status:fact.assertion_status,figurative_type:fact.figurative_type},paraphrase:alignments.length?alignments:null,
   reference:null,media:window.messages.filter(m=>fact.source_message_ids.map(uuid).includes(uuid(m.message_id))).map(m=>({message_id:uuid(m.message_id),message_type:messageType(m),representation:m.text_representation??'unknown'})),reported:null},false);
  return bindDimensionEvidence(evidence,window,fact);
 }
+function boundedMetadata(window:ExtractionWindow):EvidenceMessage[]{
+ const current=new Map(boundedMessages(window).map(message=>[message.message_id,message.occurred_at])),rows=metadata(window);
+ return rows.map(row=>({...row,occurred_at:current.get(row.message_id)??row.occurred_at}));
+}
+export function buildBoundedDimensionEvidence(window:ExtractionWindow,fact:ExtractedFact,verification:SourceVerificationResult|null=null):BoundedDimensionEvidence|null{
+ validateExtractionWindow(window);if(fact.source_dependency_mode!=='all')fail('bounded_evidence_requires_all');
+ validateBoundedBodySources(window,fact);
+ if(window.messages.length>4||[...fact.text].length>4096||window.messages.some(message=>[...message.text].length>4096))return null;
+ const proof=verification?.proof_verification??verifyBoundedProof(verification?.proof??null,window,fact,
+  new Map(window.messages.map(message=>[uuid(message.message_id),message.text])));
+ const messages=boundedMetadata(window),targets=(window.target_message_ids??[]).map(uuid)
+  .filter(id=>window.messages.some(message=>uuid(message.message_id)===id));
+ const semantic_basis=proof.status==='verified'?proof.semantic_basis:null;
+ const payload:Omit<BoundedDimensionEvidence,'source_bound'>=({version:4,scope:{owner_id:uuid(window.owner_id),contact_id:uuid(window.contact_id)},candidate_sha256:candidateDigest(fact,4),
+  window_sha256:digest({version:4,scope:{owner_id:uuid(window.owner_id),contact_id:uuid(window.contact_id)},messages,target_message_ids:targets}),
+  pragmatics:{speech_act:fact.speech_act,assertion_status:fact.assertion_status,figurative_type:fact.figurative_type},messages,
+  paraphrase:null,reference:null,media:window.messages.filter(message=>fact.source_message_ids.includes(uuid(message.message_id))).map(message=>({
+   message_id:uuid(message.message_id),message_type:messageType(message),representation:message.text_representation??'unknown'})),reported:null,
+  semantic_basis,target_message_ids:targets});
+ return runtime<BoundedDimensionEvidence>(payload,true);
+}
 /** 保留原Flow同次回执合同；风险与采纳算法由后续职责判断，不代签supported。 */
 export function attachVerifiedSourceReceipt(window:ExtractionWindow,fact:ExtractedFact,verification:SourceVerificationResult|null):EvidenceFact {
  const changed={...fact,event:verification?verification.event:fact.event,conditions:verification?verification.conditions:fact.conditions};
+ if(changed.source_dependency_mode==='all')return {...changed,dimension_evidence:buildBoundedDimensionEvidence(normalizeBoundedWindow(window),changed,verification),verified_source_receipt:null};
  const evidence=buildDimensionEvidence(window,changed,verification);
  return {...changed,dimension_evidence:evidence,verified_source_receipt:verification?.verdict==='supported'&&evidence.source_bound?
   [evidence.candidate_sha256,evidence.window_sha256,changed.source_dependency_mode,changed.requires_all_sources]:null};

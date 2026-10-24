@@ -153,16 +153,25 @@ function parse(parts: Part[], requestedFrame: string, source: boolean): Graph | 
   return {rule,frame,roles,atoms,qualifiers,bindings,event};
 }
 const semantic=(graph:Graph):Evidence=>({roles:graph.roles.map(({span,...rest})=>rest),atoms:graph.atoms.map(({span,...rest})=>rest),qualifiers:graph.qualifiers.map(({span,...rest})=>rest),frame:graph.frame});
-export function boundedBasis(candidate: Evidence,evidence: Evidence,messages: Message[],rep: Representation): Evidence|null {
+export type BoundedBasisResult =
+  | {status:'verified';basis:Evidence;reason:''}
+  | {status:'unsupported'|'unknown';basis:null;reason:string};
+export function boundedBasisResult(candidate: Evidence,evidence: Evidence,messages: Message[],rep: Representation): BoundedBasisResult {
   const pragmatics=evidence.pragmatics,frame=pragmatics?.speech_act === 'report'?'reported_request':'received_request';
   const original=parse(sourceParts(messages),frame,true), projected=parse(candidateParts(messages,candidate.text_content,rep),frame,false);
-  if(!original || !projected || original.event.message.message_id!==rep.target.message_id || original.event.text!==trimSpaces(rep.main.map(unit=>unit.text).join('')) || !keysEqual(semantic(original),semantic(projected))) return null;
+  if(!original || !projected)return {status:'unknown',basis:null,reason:'unsupported_grammar'};
+  if(original.event.message.message_id!==rep.target.message_id || original.event.text!==trimSpaces(rep.main.map(unit=>unit.text).join('')))return {status:'unknown',basis:null,reason:'uncovered_main_structure'};
+  if(!keysEqual(semantic(original),semantic(projected)))return {status:'unsupported',basis:null,reason:'known_graph_difference'};
   const expected:Record<string,string[]>={BR_AUTHOR_ARRIVAL_V1:['common_fact','assertion','asserted'],BR_COMPLETED_QA_V1:['common_fact','assertion','asserted'],BR_KIN_LEND_V1:['relationship_note','assertion','asserted'],BR_TWO_ROLES_V1:['relationship_note','assertion','asserted'],BR_REQUEST_V1:frame==='reported_request'?['relationship_note','report','reported']:['relationship_note','assertion','asserted'],BR_COND_RUN_V1:['recent_state','plan','conditional']};
-  if(!keysEqual([candidate.category,pragmatics?.speech_act,pragmatics?.assertion_status],expected[original.rule]) || pragmatics?.figurative_type!=='literal' || candidate.alternatives?.length) return null;
-  if(original.rule==='BR_COND_RUN_V1') {const interval=original.qualifiers.find(item=>item.kind==='time')!.value.interval;if(!candidate.valid_at || !candidate.invalid_at || instant(candidate.valid_at)!==instant(interval.start) || instant(candidate.invalid_at)!==instant(interval.end)) return null;}
-  else if(candidate.valid_at || candidate.invalid_at) return null;
+  if(!keysEqual([candidate.category,pragmatics?.speech_act,pragmatics?.assertion_status],expected[original.rule]) || pragmatics?.figurative_type!=='literal' || candidate.alternatives?.length)return {status:'unknown',basis:null,reason:'pragmatics_not_supported'};
+  if(original.rule==='BR_COND_RUN_V1') {const interval=original.qualifiers.find(item=>item.kind==='time')!.value.interval;if(!candidate.valid_at || !candidate.invalid_at || instant(candidate.valid_at)!==instant(interval.start) || instant(candidate.invalid_at)!==instant(interval.end))return {status:'unsupported',basis:null,reason:'known_time_difference'};}
+  else if(candidate.valid_at || candidate.invalid_at)return {status:'unsupported',basis:null,reason:'known_time_difference'};
   const origin=([part,start,end]:Location):Evidence=>messageSpan(part.message,start,end);
   const rows=(name:'roles'|'atoms'|'qualifiers'):Evidence[]=>original[name].map((left,index)=>{const {span,value,...row}=left;return {...row,...('value' in left?{value_sha256:digest(value)}:{}),source:origin(span),candidate:textSpan(candidate.text_content,projected[name][index].span[1],projected[name][index].span[2])};});
   const roles=rows('roles');roles.find(row=>row.kind==='author')!.candidate=textSpan(candidate.text_content,rep.author_start,rep.author_start+length(rep.author));
-  return {version:3,rule_set_sha256:contract.RULE_SET_SHA256,rules:[{rule_id:original.rule,rule_version:1}],roles,atoms:rows('atoms'),qualifiers:rows('qualifiers'),reference_bindings:original.bindings.map(row=>({role_id:row.role_id,method:row.method,mention:origin(row.mention),target:origin(row.target),binding:row.binding?origin(row.binding):null})),frame:original.frame,unresolved:[],source_graph_sha256:digest(semantic(original)),candidate_graph_sha256:digest(semantic(projected)),representation:representationPayload(rep,messages,candidate.text_content),capabilities:contract.CAPABILITIES.filter(item=>item!==(original.frame==='direct'?'reported_attribution':'direct_attribution'))};
+  const basis={version:3,rule_set_sha256:contract.RULE_SET_SHA256,rules:[{rule_id:original.rule,rule_version:1}],roles,atoms:rows('atoms'),qualifiers:rows('qualifiers'),reference_bindings:original.bindings.map(row=>({role_id:row.role_id,method:row.method,mention:origin(row.mention),target:origin(row.target),binding:row.binding?origin(row.binding):null})),frame:original.frame,unresolved:[],source_graph_sha256:digest(semantic(original)),candidate_graph_sha256:digest(semantic(projected)),representation:representationPayload(rep,messages,candidate.text_content),capabilities:contract.CAPABILITIES.filter(item=>item!==(original.frame==='direct'?'reported_attribution':'direct_attribution'))};
+  return {status:'verified',basis,reason:''};
+}
+export function boundedBasis(candidate: Evidence,evidence: Evidence,messages: Message[],rep: Representation): Evidence|null {
+  return boundedBasisResult(candidate,evidence,messages,rep).basis;
 }

@@ -6,6 +6,7 @@ import {readExtractionToolArguments,ExtractionArgumentsError} from './extraction
 import {parseDirectExtraction,parseSourceVerification,ExtractionProtocolError,validateExtractionWindow} from './extraction-protocol.ts';
 import {buildSourceVerificationContract,buildSourceVerificationPayload,sourceCalendarPayload} from './extraction-protocol-contract.ts';
 import type {ExtractionWindow,ExtractedFact,SourceVerificationResult} from './extraction-protocol.ts';
+import {boundedExtractionInput,boundedExtractionPrompt,boundedExtractionSchema,bindBoundedFact,compileGroundedLabels,normalizeBoundedWindow,prepareBoundedForAdoption,sourceUnits} from './extraction-bounded.ts';
 
 export interface ExtractionInvocation {
  purpose:'extraction'|'verification';system:string;user:string;tool:{name:string;description:string;parameters:Record<string,unknown>};
@@ -67,9 +68,14 @@ function rawCandidates(payload:unknown){
 }
 
 export async function runExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
+ if(options.mode==='bounded-runtime-v1')return runBoundedExtractionFlow(options);
+ return runLegacyExtractionFlow(options);
+}
+
+async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
  const retries=options.max_retries??5,retryDelay=options.retry_delay_ms??30000;
  if(!Number.isSafeInteger(retries)||retries<0||retries>5||!Number.isSafeInteger(retryDelay)||retryDelay<0||retryDelay>30000)throw new ExtractionProtocolError();
- if(options.mode!==undefined&&options.mode!=='legacy')throw new ExtractionProtocolError('显式历史协议尚未迁移，不允许自动改用默认提取。');
+ if(options.mode!==undefined&&options.mode!=='legacy')throw new ExtractionProtocolError();
  validateExtractionWindow(options.window);options.signal.throwIfAborted();await options.requireCurrent();
  const user=extractionWindowText(options.window);let candidates:ReturnType<typeof rawCandidates>=[];
  for(let attempt=0;attempt<=retries;attempt++){
@@ -149,4 +155,89 @@ export async function runExtractionFlow(options:ExtractionFlowOptions):Promise<E
  }
  await options.record({stage:'verification_contract',payload:{results,rejected_count:rejected}});
  return {accepted,candidate_trace_ids,rejected_count:rejected,extraction_completed:true,failure_kind:null,failure_reason:null,verification};
+}
+
+async function runBoundedExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
+ const retries=options.max_retries??5,retryDelay=options.retry_delay_ms??30000;
+ if(!Number.isSafeInteger(retries)||retries<0||retries>5||!Number.isSafeInteger(retryDelay)||retryDelay<0||retryDelay>30000)throw new ExtractionProtocolError();
+ const window=normalizeBoundedWindow(options.window);validateExtractionWindow(window);options.signal.throwIfAborted();await options.requireCurrent();
+ const schema=boundedExtractionSchema(window),prompt=boundedExtractionPrompt();
+ const targetIds=sourceUnits(window).filter(unit=>unit.target).map(unit=>unit.id);
+ let draft:unknown,raw:readonly unknown[]|undefined;
+ for(let attempt=0;attempt<=retries;attempt++){
+  let error:unknown;
+  try{
+   options.signal.throwIfAborted();await options.requireCurrent();
+   const request=invocation('extraction',prompt,schema,boundedExtractionInput(window),blocks=>{
+    const decoded=readExtractionToolArguments(blocks,schema.title,{repair:true,field_names:['units',...targetIds]});
+    compileGroundedLabels(window,decoded.value);
+   });
+   raw=(await options.invoke(request,options.signal)).blocks;
+   const decoded=readExtractionToolArguments(raw,schema.title,{repair:true,field_names:['units',...targetIds]});
+   draft=decoded.value;compileGroundedLabels(window,draft);
+   await options.record({stage:'grounded_draft',payload:{protocol:'grounded-v2',compiler_version:'grounded-source-event-v1',prompt_profile:'bounded-dependency-teaching-v2',draft}});
+   break;
+  }catch(caught){error=caught;}
+  options.signal.throwIfAborted();
+  const retryable=invalid(error)||safeTransient(error);
+  if(!retryable&&!modelFailure(error))throw error;
+  await options.record({stage:'extraction_recovery',payload:{attempt:attempt+1,raw:raw??null,will_retry:retryable&&attempt<retries,
+   failure_kind:invalid(error)?'invalid_output':'unavailable'}});
+  if(!retryable||attempt===retries)return failure(invalid(error)?'invalid_output':'unavailable',false,0);
+  await delay(retryDelay,undefined,{signal:options.signal});
+ }
+ let compiled:ExtractedFact[];
+ try{compiled=compileGroundedLabels(window,draft);}
+ catch{return failure('invalid_output',true,0);}
+ const traceIds=new Map<ExtractedFact,string>(),accepted:ExtractedFact[]=[];let rejected=0;
+ for(const [index,fact] of compiled.entries()){
+  const candidate_trace_id=randomUUID();traceIds.set(fact,candidate_trace_id);
+  await options.record({stage:'candidate_raw',candidate_trace_id,payload:{index,fields:fact}});
+  try{
+   const ids=new Set(window.messages.map(message=>message.message_id)),targets=new Set((window.target_message_ids??window.messages.map(message=>message.message_id)));
+   if(!fact.source_message_ids.every(id=>ids.has(id))||!fact.source_message_ids.some(id=>targets.has(id)))throw new ExtractionProtocolError();
+   const bound=bindBoundedFact(window,fact);accepted.push(bound);traceIds.delete(fact);traceIds.set(bound,candidate_trace_id);
+   await options.record({stage:'parse',candidate_trace_id,payload:{status:'accepted',before:fact,after:bound}});
+  }catch{
+   rejected++;await options.record({stage:'parse',candidate_trace_id,payload:{status:'rejected',disposition:'source_rejected',not_executed:['verification','adoption','write']}});
+  }
+ }
+ const review=accepted.filter(reviewable);
+ if(review.length>60)return failure('invalid_output',true,rejected);
+ if(!review.length)return {accepted,candidate_trace_ids:accepted.map(fact=>traceIds.get(fact)!),rejected_count:rejected,
+  extraction_completed:true,failure_kind:null,failure_reason:null,verification:[]};
+ await options.record({stage:'verification_input',payload:{window,facts:review,candidate_trace_ids:review.map(fact=>traceIds.get(fact)!)}});
+ const contract=buildSourceVerificationContract(review,'nullable-proof-v3');
+ const request=invocation('verification',contract.prompt,contract.schema,JSON.stringify(buildSourceVerificationPayload(window,review,{positionGuide:true})),blocks=>{
+  const decoded=readExtractionToolArguments(blocks,contract.schema.title);
+  parseSourceVerification(decoded.value,window,review,{isolate_items:true,mode:'nullable-proof-v3'});
+ });
+ let results:SourceVerificationResult[];
+ try{
+  options.signal.throwIfAborted();await options.requireCurrent();
+  const verificationRaw=(await options.invoke(request,options.signal)).blocks;
+  await options.record({stage:'verification_return',payload:{blocks:verificationRaw}});
+  const decoded=readExtractionToolArguments(verificationRaw,contract.schema.title);
+  results=parseSourceVerification(decoded.value,window,review,{isolate_items:true,mode:'nullable-proof-v3'});
+ }catch(error){
+  options.signal.throwIfAborted();
+  if(invalid(error))return failure('invalid_output',true,rejected);
+  if(modelFailure(error))return failure('unavailable',true,rejected);
+  throw error;
+ }
+ await options.requireCurrent();options.signal.throwIfAborted();
+ const checked=new Map(review.map((fact,index)=>[fact,results.find(result=>result.candidate_index===index)!]));
+ const output:ExtractedFact[]=[],candidate_trace_ids:string[]=[],verification:ExtractionFlowOutcome['verification']=[];
+ for(const fact of accepted){
+  const candidate_trace_id=traceIds.get(fact)!,result=checked.get(fact);
+  if(!result){const prepared=prepareBoundedForAdoption(fact);output.push(prepared);candidate_trace_ids.push(candidate_trace_id);continue;}
+  await options.record({stage:'verification',candidate_trace_id,payload:{status:'validated',result,before:fact,
+   disposition:result.verdict==='unsupported'?'unsupported_rejected':'continue'}});
+  if(result.verdict==='unsupported'){rejected++;continue;}
+  const updated={...fact,event:result.event,conditions:result.conditions};
+  const prepared=prepareBoundedForAdoption(updated);
+  output.push(prepared);candidate_trace_ids.push(candidate_trace_id);verification.push({fact:prepared,result});
+ }
+ await options.record({stage:'verification_contract',payload:{results,rejected_count:rejected}});
+ return {accepted:output,candidate_trace_ids,rejected_count:rejected,extraction_completed:true,failure_kind:null,failure_reason:null,verification};
 }
