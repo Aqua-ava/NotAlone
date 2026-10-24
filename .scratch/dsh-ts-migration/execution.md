@@ -1,5 +1,5 @@
 # 全迁移执行交接
-2026-10-23：用户授权全部任务持续执行、目标模式及多个独立会话并行；仍按已批准依赖解锁，不能同时盲跑26票。
+2026-10-23授权全部任务持续执行、目标模式及独立会话并行；2026-10-24用户重申必须并行：依赖满足、文件及运行资源不冲突者直接并行推进，不逐次询问，后续交接沿用；依赖未满足者继续等待。
 主目标：完成02—26的实现、逐票验收、兼容切换与退役；01已在 `10135184` 验收。
 入口：[规格](spec.md)、[依赖索引](planning.md)、[01基线](baseline/README.md)。
 
@@ -25,7 +25,7 @@
 主目标与05现active且无已知额度阻碍；05三依赖端口2546d21d已归档（隔离9/9、双轴0、扫描0）。06/09仍usageLimited，19/21仍blocked，其会话不执行；主目标继续整合已交接成果，不改子目标或重建。05完整验收后才解锁23。
 24等待17、20、21、22、23，25等待24，26等待25；不把预先写空壳当依赖完成。
 自动删除抑制窄前置已开独立目标会话，票auto-read-deletion/issues/01-durable-guard.md，109/Python已在7f4a1729提交，TS独立模块998ec226、Python移交cb0b17b0已归档；窄票d2698519已resolved且goal complete；109归此修复，05未落盘台账顺延110，取代此前预留。根持久恢复单例1/1与移交端口15/15已记录。
-共享8覆盖的verify-integrated-host.py最终官方13/13、隔离tsc0及Python36/36。Spec已知回执误suspend已修并实测；合成CLI首次exec超250ms用有界准备修复，产品预算不改。见integrated-host-validation.md；实际App复核通过并清理，见integrated-app-validation.md；09票已resolved，子目标未改，05台账/装配仍待验。
+共享8覆盖的verify-integrated-host.py最终官方13/13、隔离tsc0及Python36/36。Spec已知回执误suspend已修并实测；合成CLI首次exec超250ms用有界准备修复，产品预算不改。见integrated-host-validation.md；实际App复核通过并清理，见integrated-app-validation.md；09票已resolved，子目标未改，05台账/装配仍待验。 19时间边界a268f206：29/29+官方焦点1/1+tsc；真实单私聊新消息验收已做开关/退出/同库重启并清理，暂无新消息；21真实OCR与纯合成均卡ANE编译，保持未签收；历史提示缓存回执c9cc31cb已修：专项2/2、相关16例与真实开发App合成CUA通过并清理。见real-wechat-acceptance-20261024.md。
 
 ## 不可丢失的执行约束
 

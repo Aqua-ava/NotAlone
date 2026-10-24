@@ -1,0 +1,227 @@
+{
+  "checked_at": "2026-10-24T03:04:38.912017+00:00",
+  "source_sha256": "41fd1509ff906e8812881130fe4cd87cef4e5449aa373d4de59eee738a05c3ae",
+  "runner_sha256": "db936ccb5a06c350e8232d7eaddcc293a10f510e6ff5bc92e7430dfad334fa2c",
+  "core_sha256_before": "dd8b19019add02b2a01e6ab9e3bbaf42838ea6876e9c0f1a474d2795ffb4801d",
+  "environment_keys": [
+    "PATH",
+    "LANG",
+    "LC_ALL"
+  ],
+  "cases": [
+    {
+      "mode": "cpu",
+      "timeout_ms": 2500,
+      "pid": 20026,
+      "timed_out": true,
+      "exit_code": -9,
+      "duration_ms": 2509.5,
+      "stderr_bytes": 0,
+      "events": [
+        {
+          "elapsed_ms": 0,
+          "event": "started",
+          "home_present": false,
+          "main_thread": true,
+          "mode": "cpu",
+          "nsapp_initialized": false,
+          "raw_images_saved": false,
+          "synthetic_input": true,
+          "tmpdir_present": false
+        },
+        {
+          "elapsed_ms": 9.5,
+          "event": "frame_ready",
+          "height": 72,
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "synthetic_input": true,
+          "synthetic_pixel_sha256": "2de93b11fa1b3cebd299528b3f057f8bf3d5aa9c5a64d50675ea31aa355009a9",
+          "width": 800
+        },
+        {
+          "elapsed_ms": 9.5,
+          "event": "request_create_started",
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 9.6,
+          "event": "request_created",
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "revision": 3,
+          "synthetic_input": true
+        },
+        {
+          "accurate": true,
+          "automatic_language": false,
+          "correction": false,
+          "elapsed_ms": 9.7,
+          "event": "request_configured",
+          "language_count": 2,
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 9.7,
+          "event": "supported_devices_started",
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 13.9,
+          "event": "supported_devices_completed",
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "stage_count": 1,
+          "synthetic_input": true
+        },
+        {
+          "devices": [
+            "neural_engine",
+            "gpu",
+            "cpu"
+          ],
+          "elapsed_ms": 13.9,
+          "event": "supported_stage",
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "stage": "main",
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 13.9,
+          "event": "cpu_selected",
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "readback_confirmed": true,
+          "stage": "main",
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 13.9,
+          "event": "handler_create_started",
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 14.3,
+          "event": "handler_created",
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 14.3,
+          "event": "perform_started",
+          "main_thread": true,
+          "mode": "cpu",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        }
+      ]
+    },
+    {
+      "mode": "direct",
+      "timeout_ms": 30000,
+      "pid": 20027,
+      "timed_out": true,
+      "exit_code": -9,
+      "duration_ms": 30012.0,
+      "stderr_bytes": 0,
+      "events": [
+        {
+          "elapsed_ms": 0,
+          "event": "started",
+          "home_present": false,
+          "main_thread": true,
+          "mode": "direct",
+          "nsapp_initialized": false,
+          "raw_images_saved": false,
+          "synthetic_input": true,
+          "tmpdir_present": false
+        },
+        {
+          "elapsed_ms": 12.3,
+          "event": "frame_ready",
+          "height": 72,
+          "main_thread": true,
+          "mode": "direct",
+          "raw_images_saved": false,
+          "synthetic_input": true,
+          "synthetic_pixel_sha256": "2de93b11fa1b3cebd299528b3f057f8bf3d5aa9c5a64d50675ea31aa355009a9",
+          "width": 800
+        },
+        {
+          "elapsed_ms": 12.4,
+          "event": "request_create_started",
+          "main_thread": true,
+          "mode": "direct",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 12.6,
+          "event": "request_created",
+          "main_thread": true,
+          "mode": "direct",
+          "raw_images_saved": false,
+          "revision": 3,
+          "synthetic_input": true
+        },
+        {
+          "accurate": true,
+          "automatic_language": false,
+          "correction": false,
+          "elapsed_ms": 12.7,
+          "event": "request_configured",
+          "language_count": 2,
+          "main_thread": true,
+          "mode": "direct",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 12.7,
+          "event": "handler_create_started",
+          "main_thread": true,
+          "mode": "direct",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 21,
+          "event": "handler_created",
+          "main_thread": true,
+          "mode": "direct",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        },
+        {
+          "elapsed_ms": 21.1,
+          "event": "perform_started",
+          "main_thread": true,
+          "mode": "direct",
+          "raw_images_saved": false,
+          "synthetic_input": true
+        }
+      ]
+    }
+  ],
+  "core_sha256_after": "dd8b19019add02b2a01e6ab9e3bbaf42838ea6876e9c0f1a474d2795ffb4801d"
+}

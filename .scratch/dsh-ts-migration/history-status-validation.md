@@ -26,4 +26,10 @@ node --test test/wechat-scope-host.test.mjs test/foreground-location-host.test.m
 npm run typecheck
 ```
 
-本轮使用随机 `_test` PG、合成账号与 CLI，未读取真实微信或业务库，未调用外部模型。实际开发 App 的修复后界面验收尚待完成；真实原生 OCR 与真实新消息正向入库仍分别保留原有限制。
+本轮使用随机 `_test` PG、合成账号与 CLI，未读取真实微信或业务库，未调用外部模型。
+
+## 实际开发 App 复验
+
+固定源码提交 `c9cc31cb`，复用干净隔离工作树，独立用户目录、合成 CLI，只运行 `npm run dev`。Computer Use 依次打开同步设置、点击「暂不读取」、立即开启同步、刷新、关闭同步：历史区始终显示「历史读取未开启」，首次询问及「暂不读取」按钮未再次出现。公开报告为 `declined/1/selected`，PG 决定相同；消息、历史授权、回复和外发调用均为零，baseline 未变。
+
+随后正常退出，npm 与夹具均退出 0；独立核对测试库、夹具目录、合成范围目录、会话元数据均已移除，自有开发／孤儿实例为零，见[结构化证据](history-status-ui-evidence.json)。这是合成资料经过真实开发 App 的修复验收，真实原生 OCR 与真实新消息正向入库仍分别保留原有限制。
