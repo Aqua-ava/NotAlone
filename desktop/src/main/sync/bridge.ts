@@ -35,8 +35,8 @@ export function installSyncControlBridge(commands: PageCommands, backend: Backen
   beginReadingScopeChange?: () => (() => void)): SyncControlController {
   const sync = new SyncControlController(backend, contacts, beginReadingScopeChange);
   sync.onStateChanged((state) => commands.publish('sync-control:state-changed', state));
-  commands.handle('sync-control:get-state', (...args: unknown[]) => { noArguments(args); return sync.getState(); }, 'manager');
-  commands.handle('sync-control:refresh', (...args: unknown[]) => { noArguments(args); return sync.refresh(); }, 'manager');
+  commands.handle('sync-control:get-state', (...args: unknown[]) => { noArguments(args); return sync.getState(); }, ['manager','helper']);
+  commands.handle('sync-control:refresh', (...args: unknown[]) => { noArguments(args); return sync.refresh(); }, ['manager','helper']);
   commands.handle('sync-control:set-scope', (...args: unknown[]) => sync.setScope(scopeRequest(args)), 'manager');
   commands.handle('sync-control:set-history-authorization', (...args: unknown[]) => sync.setHistoryAuthorization(historyAuthorizationRequest(args)), 'manager');
   commands.handle('sync-control:enable', (...args: unknown[]) => sync.enable(controlRequest(args)), 'manager');

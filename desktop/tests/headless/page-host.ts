@@ -24,7 +24,7 @@ import { coordinateSkillLearningDeletion, coordinateSkillLearningSourceDeletion 
 import { installBindingConsentBridge } from '../../src/main/bindings/bridge';
 import { installSyncControlBridge } from '../../src/main/sync/bridge';
 import { SyncPriorityController } from '../../src/main/sync/priority';
-import { noArguments, type PageCommands, type PageRole } from '../../src/main/page-commands';
+import { noArguments, type PageCommands, type PageRole, type PageRoleScope } from '../../src/main/page-commands';
 import { ownResource } from './cleanup';
 
 // 只托管本轮构建资源；具名控制通道由 Playwright 的本轮 page 对象提供，不监听业务 HTTP。
@@ -51,7 +51,7 @@ export async function servePageAssets() {
 }
 
 export class PageHost implements PageCommands {
-  private readonly handlers = new Map<string, { handler: (...args: unknown[]) => unknown; role?: PageRole }>();
+  private readonly handlers = new Map<string, { handler: (...args: unknown[]) => unknown; role?: PageRoleScope }>();
   private readonly pages = new Map<Page, PageRole>();
   private readonly pendingEvents = new Set<Promise<unknown>>();
   private readonly pendingCommands = new Set<Promise<unknown>>();
@@ -114,7 +114,7 @@ export class PageHost implements PageCommands {
     this.backend.onStateChanged((state) => this.publish('backend:state-changed', state));
     this.diagnostics.onStateChanged((state) => this.publish('startup:state-changed', state));
   }
-  handle(channel: string, handler: (...args: unknown[]) => unknown, role?: PageRole) {
+  handle(channel: string, handler: (...args: unknown[]) => unknown, role?: PageRoleScope) {
     if (this.handlers.has(channel)) throw new Error('重复页面操作。');
     this.handlers.set(channel, { handler, role });
   }
@@ -151,7 +151,8 @@ export class PageHost implements PageCommands {
         finally { this.pendingWindowCommands.delete(pending); }
       }
       const command = this.handlers.get(channel);
-      if (!command || (command.role && command.role !== this.pages.get(page))) throw new Error('页面操作不可用。');
+      if (!command || (command.role && !(typeof command.role === 'string'
+        ? command.role === this.pages.get(page) : command.role.includes(this.pages.get(page)!)))) throw new Error('页面操作不可用。');
       const pending = Promise.resolve(command.handler(...args));
       this.pendingCommands.add(pending);
       try { return await pending; }

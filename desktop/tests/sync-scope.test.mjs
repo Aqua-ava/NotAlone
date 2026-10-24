@@ -30,11 +30,19 @@ function fixture(t, extra = {}, sharedContacts) {
  const state={directoryPhase:'ready',scopeRevision:1,contacts:[]};
  const contacts=sharedContacts ?? {getState:()=>state,onStateChanged:()=>()=>{},refreshContactsInBackground:async()=>{refreshes.push(true);return true;}};
  const changes=[];
- const handlers=new Map();
- const sync=ports.installSyncControlBridge({handle:(name,handler)=>handlers.set(name,handler),publish(){}},backend,contacts,()=>{changes.push('started');return()=>changes.push('settled');});
+ const handlers=new Map(),roles=new Map();
+ const sync=ports.installSyncControlBridge({handle:(name,handler,role)=>{handlers.set(name,handler);roles.set(name,role);},publish(){}},backend,contacts,()=>{changes.push('started');return()=>changes.push('settled');});
  t.after(()=>sync.dispose());
- return {sync,handlers,requests,refreshes,control,state,changes,connect(value){generation=value;for(const listener of listeners)listener();}};
+ return {sync,handlers,roles,requests,refreshes,control,state,changes,connect(value){generation=value;for(const listener of listeners)listener();}};
 }
+
+test('输入小窗只读同步状态，所有同步变更仍仅限管理窗口',async t=>{
+ const f=fixture(t);await flush();
+ assert.deepEqual(f.roles.get('sync-control:get-state'),['manager','helper']);
+ assert.deepEqual(f.roles.get('sync-control:refresh'),['manager','helper']);
+ for(const name of ['sync-control:set-scope','sync-control:set-history-authorization','sync-control:enable',
+  'sync-control:disable','sync-control:pause','sync-control:retry'])assert.equal(f.roles.get(name),'manager');
+});
 
 test('同步范围只在明确操作后写入全部私聊模式，保持总开关并兼容旧状态',async t=>{
  const f=fixture(t);await flush();
