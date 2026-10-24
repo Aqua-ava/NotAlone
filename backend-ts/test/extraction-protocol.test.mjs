@@ -70,6 +70,8 @@ test('事件发生日期只接受活动来源原偏移与独立V位置，过期�
  assert.equal(parseSourceVerification({results:[{...quotes,evidence:[{message_id:id,quote:'去年去了北京'}]}]},ambiguous,facts,{isolate_items:true})[0].verdict,'unsupported');
  const unknown=validateSourceVerification([result],{...scoped,messages:[{...source,source_snapshots:[]}]},facts)[0].event;
  assert.equal(unknown.occurrence_start,null);assert.equal(unknown.occurrence_verified,false);
+ const unverified=validateSourceVerification([{...result,event_verification:{...result.event_verification,occurrence_verdict:'uncertain'}}],scoped,facts)[0];
+ assert.equal(unverified.verdict,'unsupported');assert.ok(unverified.issues.includes('time'));assert.equal(unverified.model_verdict,'supported');
  assert.throws(()=>validateSourceVerification([{...result,event_verification:{...result.event_verification,stage_evidence:[]}}],scoped,facts),ExtractionProtocolError);
 });
 
@@ -79,6 +81,8 @@ test('条件必须独立覆盖且核验位置按Unicode码点回指正文',()=>{
  const facts=parseDirectExtraction(direct(memory({conditions})),scoped).accepted;
  const result={candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:id,quote:'出差时不打电话'}],condition_verification:[{index:0,verdict:'supported',evidence:[{message_id:id,char_start:1,char_end:4}]}]};
  assert.equal(validateSourceVerification([result],scoped,facts)[0].conditions.items[0].source_supported,true);
+ const unverified=validateSourceVerification([{...result,condition_verification:[{index:0,verdict:'uncertain',evidence:[]}]}],scoped,facts)[0];
+ assert.equal(unverified.verdict,'unsupported');assert.ok(unverified.issues.includes('condition'));
  assert.equal(facts[0].conditions.items[0].source_supported,false);
  for(const bad of [[],[{index:0,verdict:'supported',evidence:[]}],[{index:0,verdict:'supported',evidence:[{message_id:id,char_start:1,char_end:10}]}]])assert.throws(()=>validateSourceVerification([{...result,condition_verification:bad}],scoped,facts),ExtractionProtocolError);
 });

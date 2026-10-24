@@ -154,6 +154,12 @@ function verifyConditions(raw:unknown,fact:ExtractedFact,window:ExtractionWindow
   }
   return {version:1,items:Array.from({length:fact.conditions.items.length},(_,index)=>items.get(index)!)};
 }
+function eventAdoptionVerified(event:ExtractedFact['event']):boolean {
+ return event===null||event.stage_verified&&(event.occurrence_verified||event.stage==='cancelled');
+}
+function conditionsAdoptionVerified(conditions:ExtractedFact['conditions']):boolean {
+ return conditions===null||conditions.items.every(item=>item.source_supported);
+}
 
 export function validateSourceVerification(payload:unknown,window:ExtractionWindow,facts:ExtractedFact[]):SourceVerificationResult[] {
   validateExtractionWindow(window);requireValid(facts.length<=60&&Array.isArray(payload)&&payload.length===facts.length);
@@ -161,8 +167,8 @@ export function validateSourceVerification(payload:unknown,window:ExtractionWind
   for(const item of payload){const raw=object(item),required=['candidate_index','verdict','issues','evidence'];
     requireValid(required.every(k=>Object.hasOwn(raw,k))&&Object.keys(raw).every(k=>[...required,'event_verification','condition_verification'].includes(k)));
     const index=raw.candidate_index;requireValid(Number.isInteger(index)&&index>=0&&index<facts.length&&!results.has(index));
-    const verdict=choices(raw.verdict,['supported','uncertain','unsupported']) as SourceVerificationResult['verdict'];
-    const issues=stringArray(raw.issues).map(issue=>choices(issue,['meaning','subject','negation','degree','quantity','condition','time','pragmatics','disconnected_context','insufficient_evidence']));
+    let verdict=choices(raw.verdict,['supported','uncertain','unsupported']) as SourceVerificationResult['verdict'];
+    let issues=stringArray(raw.issues).map(issue=>choices(issue,['meaning','subject','negation','degree','quantity','condition','time','pragmatics','disconnected_context','insufficient_evidence']));
     requireValid(verdict==='supported'?issues.length===0:issues.length>0);requireValid(Array.isArray(raw.evidence));
     const fact=facts[index],evidence=raw.evidence.map((entry:unknown)=>{const quote=object(entry);exactFields(quote,['message_id','quote']);
       const message_id=uuid(quote.message_id),message=window.messages.find(m=>uuid(m.message_id)===message_id);
@@ -170,8 +176,16 @@ export function validateSourceVerification(payload:unknown,window:ExtractionWind
       return {message_id,quote:quote.quote as string};});
     const targets=new Set((window.target_message_ids??window.messages.map(m=>m.message_id)).map(uuid));
     requireValid(verdict!=='supported'||evidence.length>0&&evidence.some((e:{message_id:string})=>targets.has(e.message_id)));
+    const modelVerdict=verdict,modelIssues=[...issues];
     const unresolved=verdict==='supported'&&unresolvedAuthorQuote(window,fact);
-    results.set(index,{candidate_index:index,verdict:unresolved?'uncertain':verdict,issues:unresolved?['pragmatics']:issues,evidence,model_verdict:verdict,model_issues:[...issues],verification_mode:'legacy-v4',event:verifyEvent(raw.event_verification,fact,window),conditions:verifyConditions(raw.condition_verification,fact,window),proof:null,proof_verification:null});
+    if(unresolved){verdict='uncertain';issues=['pragmatics'];}
+    const event=verifyEvent(raw.event_verification,fact,window),conditions=verifyConditions(raw.condition_verification,fact,window);
+    if(!eventAdoptionVerified(event)||!conditionsAdoptionVerified(conditions)){
+      verdict='unsupported';if(!eventAdoptionVerified(event)&&!issues.includes('time'))issues=[...issues,'time'];
+      if(!conditionsAdoptionVerified(conditions)&&!issues.includes('condition'))issues=[...issues,'condition'];
+    }
+    results.set(index,{candidate_index:index,verdict,issues,evidence,model_verdict:modelVerdict,model_issues:modelIssues,
+      verification_mode:'legacy-v4',event,conditions,proof:null,proof_verification:null});
   }
   return Array.from({length:facts.length},(_,index)=>results.get(index)!);
 }
@@ -196,8 +210,13 @@ function validateSourceVerificationV3(payload:unknown,window:ExtractionWindow,fa
     const checked=verifyBoundedProof(proof,window,fact,new Map(window.messages.map(message=>[uuid(message.message_id),message.text])));
     if(checked.status==='unsupported'){verdict='unsupported';issues=[...new Set([...issues,'meaning'])];}
     if(verdict==='supported'&&unresolvedAuthorQuote(window,fact)){verdict='uncertain';issues=['pragmatics'];}
+    const event=verifyEvent(raw.event_verification,fact,window),conditions=verifyConditions(raw.condition_verification,fact,window);
+    if(!eventAdoptionVerified(event)||!conditionsAdoptionVerified(conditions)){
+      verdict='unsupported';if(!eventAdoptionVerified(event)&&!issues.includes('time'))issues=[...issues,'time'];
+      if(!conditionsAdoptionVerified(conditions)&&!issues.includes('condition'))issues=[...issues,'condition'];
+    }
     results.set(index,{candidate_index:index,verdict,issues,evidence,verification_mode:'nullable-proof-v3',model_verdict,model_issues,
-      event:verifyEvent(raw.event_verification,fact,window),conditions:verifyConditions(raw.condition_verification,fact,window),proof,proof_verification:checked});
+      event,conditions,proof,proof_verification:checked});
   }
   return Array.from({length:facts.length},(_,index)=>results.get(index)!);
 }

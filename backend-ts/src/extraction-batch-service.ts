@@ -137,7 +137,17 @@ export class ExtractionBatchService {
      WHERE e.owner_id=$1 AND e.contact_id=$2 AND e.stage='batch_end'
      AND e.payload#>>'{typescript_a_receipt,a_execution_id}'=b.payload->>'execution_id'
      AND e.payload#>>'{typescript_a_receipt,a_input_sha256}'=b.payload->>'input_sha256'
-     AND e.payload#>>'{typescript_a_receipt,a_rule_version}'=b.payload->>'rule_version') AS consumed
+     AND e.payload#>>'{typescript_a_receipt,a_rule_version}'=b.payload->>'rule_version') AS consumed,
+    EXISTS(SELECT 1 FROM memory_extraction_trace_event end_event
+     WHERE end_event.trace_id=b.trace_id AND end_event.owner_id=$1 AND end_event.contact_id=$2
+     AND end_event.stage='batch_end' AND end_event.payload->>'watermark_commit'='not_advanced'
+     AND end_event.payload->'watermark_before'=end_event.payload->'watermark_after'
+     AND end_event.payload->'not_executed' @> '["remaining_adoption","remaining_write"]'::jsonb
+     AND NOT EXISTS(SELECT 1 FROM memory_extraction_trace_event b_event
+      WHERE b_event.trace_id=b.trace_id AND b_event.stage='typescript_b_begin')
+     AND NOT EXISTS(SELECT 1 FROM memory_extraction_trace_event receipt_event
+      WHERE receipt_event.trace_id=b.trace_id AND receipt_event.stage='batch_end'
+      AND receipt_event.payload ? 'typescript_a_receipt')) AS no_write
     FROM memory_extraction_trace_event b JOIN memory_extraction_trace tr ON tr.trace_id=b.trace_id
     LEFT JOIN memory_extraction_trace_event r ON r.trace_id=b.trace_id AND r.stage='typescript_a_result'
     WHERE tr.owner_id=$1 AND tr.contact_id=$2 AND tr.batch_key=$3 AND b.stage='typescript_a_begin'
@@ -152,26 +162,44 @@ export class ExtractionBatchService {
     [input.owner_id,input.contact_id,input.batch_key,input.claim.task_id])).rows;
    let prior:null|{trace_id:string;consumed:boolean;cached:ExtractionBatchWireOutcome}=null;
    if(executions.length){
-    const checked=[];
+    const checked:{trace_id:string;consumed:boolean;cached:ExtractionBatchWireOutcome|null;same:boolean;noWrite:boolean}[]=[];
     for(const execution of executions){
      const cached=priorOutcome(execution.outcome,execution.begun);
-     if(cached===null)reject('extraction_batch_outcome_unknown');
+     if(cached===null){
+      if(execution.no_write!==true)reject('extraction_batch_outcome_unknown');
+      const calls=(await client.query(`SELECT c.ledger_commit_status,r.outcome FROM memory_extraction_trace_call c
+       LEFT JOIN model_call_receipt r ON r.ledger_entry_id=c.ledger_entry_id AND r.owner_id=c.owner_id AND r.contact_id=c.contact_id
+       WHERE c.trace_id=$1 AND c.owner_id=$2 AND c.contact_id=$3 AND r.request_id=$4`,
+       [execution.trace_id,input.owner_id,input.contact_id,requestId])).rows;
+      if(calls.length<1||calls.some(call=>call.ledger_commit_status!=='committed'||!call.outcome||['pending','unknown'].includes(call.outcome)))reject('extraction_batch_outcome_unknown');
+      checked.push({trace_id:execution.trace_id,consumed:execution.consumed,
+       cached:null,same:false,noWrite:true});
+      continue;
+     }
      const known=(await client.query(`SELECT c.call_id FROM memory_extraction_trace_call c JOIN model_call_receipt r
       ON r.ledger_entry_id=c.ledger_entry_id AND r.owner_id=c.owner_id AND r.contact_id=c.contact_id
       WHERE c.trace_id=$1 AND c.owner_id=$2 AND c.contact_id=$3 AND c.call_id=ANY($4::uuid[])
       AND c.ledger_commit_status='committed' AND r.outcome NOT IN ('pending','unknown') AND r.request_id=$5`,
       [execution.trace_id,input.owner_id,input.contact_id,cached!.model_call_ids,requestId])).rows;
      if(known.length!==cached!.model_call_ids.length)reject('extraction_batch_outcome_unknown');
-     checked.push({...execution,cached,same:execution.begun.input_sha256===inputSha&&execution.begun.rule_version===this.options.ruleVersion});
+     checked.push({trace_id:execution.trace_id,consumed:execution.consumed,cached,
+      same:execution.begun.input_sha256===inputSha&&execution.begun.rule_version===this.options.ruleVersion,noWrite:noWriteOutcome(cached)});
     }
-    if(executions.length===1&&checked[0]!.same&&(checked[0]!.trace_id===input.trace_id
-     ||checked[0]!.consumed===true||!failedOutcome(checked[0]!.cached)))prior=checked[0]!;
+    const only=checked[0]!;
+    if(executions.length===1&&only.cached!==null&&only.same&&(only.trace_id===input.trace_id
+     ||only.consumed===true||!failedOutcome(only.cached)))prior={trace_id:only.trace_id,consumed:only.consumed,cached:only.cached};
     else{
-     if(checked.some(execution=>execution.consumed===true||!noWriteOutcome(execution.cached)))reject('extraction_batch_outcome_unknown');
-     for(const execution of checked)await append(client,input,'typescript_a_superseded',{
-      prior_trace_id:execution.trace_id,a_execution_id:execution.cached.a_execution_id,
-      a_input_sha256:execution.cached.a_input_sha256,a_rule_version:execution.cached.a_rule_version,
-      reason:'unconsumed_terminal_without_accepted'},this.options.ruleVersion);
+     if(checked.some(execution=>execution.consumed===true||!execution.noWrite))reject('extraction_batch_outcome_unknown');
+     for(const execution of checked){
+      const begun=(await client.query(`SELECT payload FROM memory_extraction_trace_event
+       WHERE trace_id=$1 AND owner_id=$2 AND contact_id=$3 AND stage='typescript_a_begin'
+       AND payload->>'execution_id'=$4`,[execution.trace_id,input.owner_id,input.contact_id,execution.cached?.a_execution_id??execution.trace_id])).rows[0]?.payload;
+      if(!begun)reject('extraction_batch_outcome_unknown');
+      await append(client,input,'typescript_a_superseded',{
+       prior_trace_id:execution.trace_id,a_execution_id:begun.execution_id,
+       a_input_sha256:begun.input_sha256,a_rule_version:begun.rule_version,
+       reason:execution.cached===null?'terminal_trace_without_a_result_or_write':'unconsumed_terminal_without_accepted'},this.options.ruleVersion);
+     }
     }
    }
    if(prior){
