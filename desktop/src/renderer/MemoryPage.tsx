@@ -6,6 +6,7 @@ import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './memory.css';
 import { MemoryList } from './MemoryList';
+import { MemoryConditionsDetails, MemoryConditionsEditor, conditionEditorText, conditionEditProposal, conditionEditorValid } from './MemoryConditionsDetails';
 import { LayeredMemorySections } from './LayeredMemorySections';
 import { memoryAvailability, memoryRemovalTarget } from './memory-availability';
 import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } from '../shared/memory-bridge';
@@ -176,6 +177,7 @@ export function MemoryCard({ content, memory, removalTarget = memory, candidate,
   const [removing, setRemoving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [text, setText] = useState(displayText);
+  const [conditionText, setConditionText] = useState(conditionEditorText(content.conditions));
   const moreActions = useRef<HTMLDetailsElement>(null);
   const availability = memory ? memoryAvailability(memory) : null;
   const retired = availability?.excluded === true;
@@ -195,7 +197,13 @@ export function MemoryCard({ content, memory, removalTarget = memory, candidate,
             else if (memory) trace(memory.level === 'owner' ? 'owner_memory' : 'contact_memory', memory.memoryId, content.text);
           }}>查看依据</button>
           {memory?.status === 'active' && correct && <button className="button" disabled={busy}
-            aria-label={`修正资料：${displayText}`} onClick={() => { closeMenu(); setRemoving(false); setEditing(true); }}>编辑</button>}
+            aria-label={`修正资料：${displayText}`} onClick={() => {
+              closeMenu();
+              setRemoving(false);
+              setText(displayText);
+              setConditionText(conditionEditorText(content.conditions));
+              setEditing(true);
+            }}>编辑</button>}
           {memory && remove && <button className="button" disabled={busy}
             aria-label={`${memory.adoptionMethod === 'auto' ? '撤销自动采纳' : '删除资料'}：${displayText}`}
             onClick={() => { closeMenu(); setEditing(false); setRemoving(true); }}>移除</button>}
@@ -207,9 +215,11 @@ export function MemoryCard({ content, memory, removalTarget = memory, candidate,
     {candidate && <p className="memory-subject">尚未记住 · 关于{candidate.subject === 'self' ? '我' : candidate.subject === 'contact' ? '对方' : '我们'}</p>}
     {Boolean(candidate?.correctionReview?.length) && <p className="memory-availability">涉及此前人工决定，请先核对依据。</p>}
     {editing && memory?.status === 'active' && correct && <form aria-label={memory.level === 'owner' ? '修正本人资料' : '修正联系人资料'} className="memory-edit-form" onSubmit={(event) => {
-      event.preventDefault(); void correct(memory, text, content.category, 'error_correction');
+      event.preventDefault(); void correct(memory, text, content.category, 'error_correction', conditionEditProposal(conditionText, content.conditions));
     }}><label>记忆内容<textarea aria-label="资料正文" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /></label>
-      <button className="button" type="submit" aria-label="保存修正" disabled={busy || !text.trim()}>保存</button>
+      <MemoryConditionsDetails conditions={content.conditions} />
+      <MemoryConditionsEditor value={conditionText} onChange={setConditionText} disabled={busy} />
+      <button className="button" type="submit" aria-label="保存修正" disabled={busy || !text.trim() || !conditionEditorValid(conditionText)}>保存</button>
       <button className="button" type="button" aria-label="取消修正" disabled={busy} onClick={() => setEditing(false)}>取消</button>
     </form>}
     {removing && memory && remove && <div className="memory-edit-form" role="group" aria-label="确认删除资料">

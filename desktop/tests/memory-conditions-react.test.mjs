@@ -22,24 +22,28 @@ for (const level of ['contact', 'owner']) test(`实际 ${level} 页面区分条�
       : request.path.endsWith('/sources') ? { sources: [] } : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [memory] } };
   });
   await withMemoryPage(f, t.signal, async page => {
-    if (level === 'contact') await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '对方', exact: true }).click();
+    await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: level === 'owner' ? '我' : '对方', exact: true }).click();
+    const modify = async () => {
+      await page.getByLabel(`更多操作：${memory.text}`, { exact: true }).click();
+      await page.getByRole('button', { name: `修正资料：${memory.text}`, exact: true }).click();
+    };
+    const save = () => page.getByRole('button', { name: '保存修正', exact: true });
+    await modify();
     await page.getByText('适用条件：出差期间', { exact: true }).waitFor();
     await page.getByText('来源支持限定，当前是否满足未知', { exact: true }).waitFor();
     await page.getByText('已关联 1 条来源消息，可在本条资料的来源中核对原话。', { exact: true }).waitFor();
     const conditionDetails = page.getByRole('group', { name: '记忆适用条件', exact: true });
     assert.doesNotMatch(await conditionDetails.innerText(), /44444444|字符 0 至 4/);
-    const modify = () => page.getByRole('button', { name: level === 'owner' ? '修正本人记忆' : `修正资料：${memory.text}`, exact: true });
-    const save = () => page.getByRole('button', { name: level === 'owner' ? '保存本人记忆修正' : '保存修正', exact: true });
-    await modify().click();
     await page.getByLabel('适用条件', { exact: true }).fill('旅行期间');
     await save().click();
+    await page.getByLabel(`更多操作：${memory.text}`, { exact: true }).waitFor();
+    assert.deepEqual(posts.at(-1).body.conditions, { version: 1, items: [{ text: '旅行期间', evidence: [] }] });
+    await modify();
     await page.getByText('适用条件：旅行期间', { exact: true }).waitFor();
     await page.getByText('条件依据未核实，当前是否满足未知', { exact: true }).waitFor();
-    assert.deepEqual(posts.at(-1).body.conditions, { version: 1, items: [{ text: '旅行期间', evidence: [] }] });
-    await modify().click();
     await page.getByLabel('适用条件', { exact: true }).fill('');
     await save().click();
-    await page.getByText('适用条件：未知', { exact: true }).waitFor();
+    await page.getByLabel(`更多操作：${memory.text}`, { exact: true }).waitFor();
     assert.equal(posts.at(-1).body.conditions, null);
   }, { ownerPanel: level === 'owner' });
 });
