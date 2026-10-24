@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 用户最新要求：没有互相依赖的任务使用全新 Codex 会话并行，会话间直接通信，主会话统一集成并独占桌面验收。当前01—07、09、18、19及23已验收；10已有冻结纵切、唯一Worker和主树整合候选，但生产Worker责任、B执行器及桌面路径未完成，保持claimed；21在当前macOS 27的accurate Vision路径持续超过2500ms，保持claimed并等待健康Mac对照或Apple修复。08已因07关闭解锁；11等待10。原规格和验收不降低。
+> 用户最新要求：没有互相依赖的任务使用全新 Codex 会话并行，会话间直接通信，主会话统一集成并独占桌面验收。当前01—07、09、10、18、19及23已验收；10的实现、bounded/nullable-proof、显式恢复和根回归已签收，生产 Worker 切换、B采纳/trace及真实 App 仍分别由24、11/12、25把关；21在当前macOS 27的accurate Vision路径持续超过2500ms，保持claimed并等待健康Mac对照或Apple修复。08已因07关闭解锁；11、16、20已因10关闭解锁。原规格和验收不降低。
 
 ## 逐项任务与阻塞关系
 
@@ -15,7 +15,7 @@
 | [07 探索方向并使用 Skill 生成候选](issues/07-exploration-skill-replies.md) | 05、06 | ready-for-agent | resolved |
 | [08 继续讨论和改写候选](issues/08-discussion-continuity.md) | 07 | ready-for-agent | open |
 | [09 查看和修正记忆及表达偏好](issues/09-memory-and-preferences.md) | 04 | ready-for-agent | resolved |
-| [10 从现有消息提取并核验候选](issues/10-memory-extraction-verification.md) | 05、09 | ready-for-agent | claimed |
+| [10 从现有消息提取并核验候选](issues/10-memory-extraction-verification.md) | 05、09 | ready-for-agent | resolved |
 | [11 裁决和正式采纳记忆](issues/11-memory-adjudication-adoption.md) | 10 | ready-for-agent | open |
 | [12 查看完整来源和处理追踪](issues/12-source-processing-trace.md) | 11 | ready-for-agent | open |
 | [13 整理 L2 场景](issues/13-l2-scenario-organization.md) | 11 | ready-for-agent | open |
@@ -33,7 +33,7 @@
 | [25 完成模型与实际桌面验收](issues/25-integrated-acceptance.md) | 24 | ready-for-agent | open |
 | [26 退役 Python 和旧框架](issues/26-retire-python-frameworks.md) | 25 | ready-for-agent | open |
 
-01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。03已在`9f39d6c2`验收，04已在`f4acc05d`/`2dd9ad4a`验收；05、06、09、19、21已派发独立目标会话；18已在`b4276969`/`9a5f6cf0`验收。19的自动删除抑制窄前置见[任务](auto-read-deletion/issues/01-durable-guard.md)，109/Python保护已在`7f4a1729`提交，TS消费998ec226与窄前置d2698519已验收；19整票已在`9ed7770d`完成验收；05已在`b0a68175`关闭，23已在`3e044a0`完成原五条及实际App验收，根签收见task23-root-acceptance/；07／10继续独立并行实现。ready-for-agent表示规格足够清楚，不表示前置已完成。实施时逐票使用新上下文，先读规格、当前规则及最新前置结果；认领时改为claimed，通过验收才改为resolved。
+01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。03已在`9f39d6c2`验收，04已在`f4acc05d`/`2dd9ad4a`验收；05、06、09、19、21已派发独立目标会话；18已在`b4276969`/`9a5f6cf0`验收。19的自动删除抑制窄前置见[任务](auto-read-deletion/issues/01-durable-guard.md)，109/Python保护已在`7f4a1729`提交，TS消费998ec226与窄前置d2698519已验收；19整票已在`9ed7770d`完成验收；05已在`b0a68175`关闭，10已由根签收`d00a01a2`并见[root-next-10/root-acceptance.md](root-next-10/root-acceptance.md)，23已在`3e044a0`完成原五条及实际App验收，根签收见task23-root-acceptance/；07已关闭，08继续独立实现。ready-for-agent表示规格足够清楚，不表示前置已完成。实施时逐票使用新上下文，先读规格、当前规则及最新前置结果；认领时改为claimed，通过验收才改为resolved。
 
 ## 必须先看 DSH，禁止凭猜测修改
 
