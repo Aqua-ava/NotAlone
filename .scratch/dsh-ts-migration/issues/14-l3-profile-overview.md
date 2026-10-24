@@ -91,3 +91,12 @@ Spec: ../spec.md
 - 现场：owner `6b0faa77-8bcf-4a14-a627-7629265624da`、task `0c5b9add-5006-4cfe-aef3-4c964b5d22ce`、job revision `13`、model calls `31/208`、`run_remaining=1`。唯一 profile batch 的 20 项输入与 59,328 字节 payload 已冻结，`output_payload=null`；4 个新增 receipt 全部成功，最后一次请求序列化 134,298 字节，随后在第五轮物理调用前触发 `l3_profile_context_budget_exceeded`。因此失败发生在多轮提案历史累积，不在核验、重试或初始输入。
 - 修复：达到既有 `max_characters` 时保留初始任务消息和当前 `profile.md`，移除已执行且可由工作区重建的旧 tool-call 参数，只携带最后一次工具名称／错误；未提高或取消预算。先在快速回归中稳定复现同一错误，再通过 workspace 与合成 PostgreSQL 发布用例。
 - 可重新 continue 的前置条件：当前 dev runtime 已加载本修复；正式 state 仍为 settings generation `0`、job revision `13`、job failed，且当前目标 key／资料集合未变化。根线程使用 revision `13` 发起 continue 后应得到 revision `14`、state active、step pending；新一轮模型调用上限会按既有合同增加 `16` 到 `224`。
+
+### 第二轮真实验收阻塞与修复
+
+- 根线程从 job revision `13` continue 后，正式 job 变为 revision `14`、state failed、`profile_status=failed`、`run_remaining=1`、model calls `36/224`；background task 为 failed、retry `13`、`last_error_code=l3_profile_document_round_limit`。新建 profile batch `c4712e14-460a-44d5-a641-2ec5b2e92e45` 为 `attempt_count=1`，输入 `59,328` 字节，`output_payload=null`，失败发生在独立核验和发布之前。
+- 同一窗口新增的 5 条 model receipt 全部 `succeeded/response_observed`，请求序列化大小为 `110,819`、`112,122`、`124,421`、`136,558`、`124,348` 字节。receipt 不保存 tool 名称或参数，也没有可恢复的持久 agent journal，因此这里只确认五次物理提案调用及成功时序，不把未落盘的工具序列说成已取证。
+- 代码根因：提案工作区的成功写入位在每轮开始时重置；首轮成功 `write` 后若末轮只成功 `read`，循环结束时写入位为 false、末轮错误位也为 false，已有合法工作区被误报为 `l3_profile_document_round_limit`。快速 workspace 用例先稳定复现同一错误，再由修复转绿。
+- 修复提交：`9f8ec3ac36824845e5cd76314382bb9314aeb07b`。成功 `write/edit` 状态跨轮保留，后续只读确认不会撤销；末轮仍有真实工具错误时继续失败关闭，最终 proposal 仍经过完整编译、结构校验、独立核验和原子发布。五轮上限、字符预算及模型调用预算均未改变。
+- 验证：L3 工作区、服务、公开 HTTP `28/28`；L2 服务、Worker、宿主及模型记账 `25/25`；共享官方 DSH profile `2/2`；TypeScript 类型检查通过。合成 PostgreSQL 用例明确经过 1 次写入、4 次只读、独立核验，再发布 generation，并断言 batch `attempt_count=1`、`output_payload` 非空。
+- 正式数据库仅只读核对，未修改失败现场。修复尚需 dev runtime 实际加载后由根线程基于 revision `14` 再次 continue；只有真实模型完成画像提案及核验、实际 App／微信入口和用户可见纠错／撤回验收通过后，才能将本票改为 resolved。
