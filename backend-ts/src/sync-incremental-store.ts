@@ -8,7 +8,12 @@ import {filterAutoRead} from './sync-auto-read-suppression.ts';
 import {saveIncrementalMessages, saveIncrementalProcessing} from './sync-incremental-store-write.ts';
 export interface IncrementalBinding {binding_id:string; contact_id:string; conversation_locator:string}
 export interface IncrementalCursor {last_local_id:string; last_cursor:string}
-export interface IncrementalPosition {baseline_at:string;cursor:IncrementalCursor|null;history_busy:boolean;position_token:string}
+export interface IncrementalPosition {
+  baseline_at:string;
+  /** PG 按原始微秒精确向上取整的正文查询下界，不用于改写授权起点。 */
+  query_since_at:string;
+  cursor:IncrementalCursor|null;history_busy:boolean;position_token:string;
+}
 export interface IncrementalStorage {businessTransaction<T>(operation:(client:pg.Client)=>Promise<T>):Promise<T>}
 export interface IncrementalSave {
   binding:IncrementalBinding;page:IncrementalTailResult;messages:readonly NormalizedIncrementalMessage[];
@@ -75,7 +80,12 @@ export class SyncIncrementalStore {
   async readPosition(b:IncrementalBinding,check:()=>void=current):Promise<IncrementalPosition>{return this.transaction(check,async c=>{
     await this.lock(c,b);const busy=await this.historyBusy(c,b);
     await c.query(`INSERT INTO public.wechat_observation_baseline(owner_id,contact_id,binding_id,conversation_locator,baseline_at) VALUES($1,$2,$3,$4,now()) ON CONFLICT(owner_id,contact_id,binding_id) DO NOTHING`,[this.options.ownerId,b.contact_id,b.binding_id,b.conversation_locator]);
-    const baseline=(await c.query('SELECT baseline_at FROM public.wechat_observation_baseline WHERE owner_id=$1 AND contact_id=$2 AND binding_id=$3 AND conversation_locator=$4',[this.options.ownerId,b.contact_id,b.binding_id,b.conversation_locator])).rows[0];
+    // 在 PG 内取整，避免 timestamp 微秒先被 JS Date 截断成毫秒；UTC 不受回拨影响。
+    const baseline=(await c.query(`SELECT baseline_at,CASE
+      WHEN baseline_at=date_trunc('second',baseline_at,'UTC') THEN baseline_at
+      ELSE date_trunc('second',baseline_at,'UTC')+interval '1 second'
+      END AS query_since_at FROM public.wechat_observation_baseline
+      WHERE owner_id=$1 AND contact_id=$2 AND binding_id=$3 AND conversation_locator=$4`,[this.options.ownerId,b.contact_id,b.binding_id,b.conversation_locator])).rows[0];
     if(!baseline)fail('sync_baseline_invalid');
     let cursor=(await c.query('SELECT binding_id,conversation_locator,last_local_id,last_cursor FROM public.wechat_observation_cursor WHERE owner_id=$1 AND contact_id=$2 FOR UPDATE',[this.options.ownerId,b.contact_id])).rows[0];
     if(!busy){
@@ -88,7 +98,7 @@ export class SyncIncrementalStore {
         cursor=reliable;
       }
     }
-    return {baseline_at:baseline.baseline_at.toISOString(),cursor:cursor?{last_local_id:String(cursor.last_local_id),last_cursor:cursor.last_cursor}:null,history_busy:busy,position_token:await this.token(c,b)};
+    return {baseline_at:baseline.baseline_at.toISOString(),query_since_at:baseline.query_since_at.toISOString(),cursor:cursor?{last_local_id:String(cursor.last_local_id),last_cursor:cursor.last_cursor}:null,history_busy:busy,position_token:await this.token(c,b)};
   });}
   private async putCursor(c:pg.Client,b:IncrementalBinding,id:string,cursor:string):Promise<void>{
     await c.query(`INSERT INTO public.wechat_observation_cursor(owner_id,contact_id,binding_id,conversation_locator,last_local_id,last_cursor) VALUES($1,$2,$3,$4,$5,$6)

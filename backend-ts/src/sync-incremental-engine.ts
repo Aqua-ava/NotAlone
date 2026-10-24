@@ -22,8 +22,13 @@ const errorCode=(error:unknown)=>{
 const retryDelay=(count:number)=>Math.min(60_000,3000*2**Math.min(count-1,5));
 const localTime=(iso:string)=>{
   const d=new Date(iso);if(!Number.isFinite(+d))throw new Error('baseline_invalid');
+  // CLI以整数秒执行>=查询；向上取整，避免读到授权所在秒内更早的消息。
+  d.setTime(Math.ceil(d.getTime()/1000)*1000);
   const pad=(n:number)=>String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const value=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  // 无时区参数不能表达回拨后的重复时刻；拒绝退回更早的同名本地时间。
+  if(new Date(value).getTime()!==d.getTime())throw new Error('baseline_invalid');
+  return value;
 };
 
 export class SyncIncrementalEngine {
@@ -251,7 +256,7 @@ export class SyncIncrementalEngine {
         }
         recovery=await this.options.recovery.prepare(binding,{triggerAt:this.recoveryPending.has(locator)?this.recoveryTrigger??undefined:undefined,paused:this.recoveryPaused,liveRead:live},check);
         if(recovery?.phase==='paused'&&!live)continue;
-        const page=await callCli(()=>this.options.cli.tail(locator,{...(position.cursor?{cursor:position.cursor.last_cursor}:{sinceTime:localTime(position.baseline_at)}),signal,timeoutMs:remaining()}));check();
+        const page=await callCli(()=>this.options.cli.tail(locator,{...(position.cursor?{cursor:position.cursor.last_cursor}:{sinceTime:localTime(position.query_since_at)}),signal,timeoutMs:remaining()}));check();
         await callCli(()=>this.options.cli.configuredAccount({expectedAccount:this.options.accountScope,signal,timeoutMs:remaining()}));check();
         if(binding===priority)this.currentStatus={...this.currentStatus,priority_local_history_state:page.local_history_state};
         if(page.local_history_state)throw Object.assign(new Error('本机历史不可读。'),{code:`local_history_${page.local_history_state}`});
