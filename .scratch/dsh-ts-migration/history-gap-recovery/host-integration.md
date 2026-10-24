@@ -1,32 +1,28 @@
 # 票 20 根宿主集成说明
 
-本组件默认 `historyOwner` 为 Python，以避免当前官方宿主中 TS 与 Python 同时执行
-历史读取。根只在同一业务切片切换到 TS 后启用；不能先启用第二个写入方再排空旧方。
+历史执行方是启动期唯一配置，不提供请求级切换或双写回退。
 
-## 1. 启用 TS 执行方
+## 1. 配置边界
 
-在 `backend-ts/src/host-plugin.ts` 构造 `createSyncIncrementalApi` 时传入：
+`NOTALONE_HISTORY_RUNTIME` 只接受：
 
-```ts
-historyOwner: 'typescript',
-```
+- 缺省或 `python`：保持迁移前 Python history-only + TS 增量交替单页。
+- `typescript`：Python 不再构造 history-only `CliBackgroundSync`，每轮只调用 TS
+  `/api/runtime/sync-incremental/cycle`；该 TS 页负责历史和增量。
 
-启用条件应由根的一次性切换配置固定，建议使用显式环境值；“字段缺失”继续表示 Python，
-不要用同步总开关或范围模式推断责任方。
+非法值失败关闭。`typescript` 缺少完整认证增量远端时也拒绝启动，不能进入半切换。
+官方宿主由自身提供该远端，并按配置向 `createSyncIncrementalApi` 传同一个执行方；
+`/api/runtime/status` 的 `ownership.wechatHistory` 直接反映该值。
 
-## 2. 停用 Python 历史读取
+## 2. Python 适配器
 
-当前 `backend/src/notalone/front_sync/factory.py` 在增量移交后仍创建
-`CliBackgroundSync(history_only=True)`，并由
-`RemoteIncrementalBackground.cycle()` 交替执行 Python 历史页和 TS 增量页。切换时必须：
+`RemoteIncrementalBackground` 的 `history` 可为 `None`。Python 模式构造并排空旧的
+history-only 实例；TS 模式完全不创建该实例。`enable`、`disable`、`close`、
+`shutdown`、`cancel_pending_io`、检查、暂停、重试、历史启动和 cycle 均按模式分支，
+不会访问空 history。
 
-1. 在 `SyncHost` 锁内停止新领取并排空正在执行的 Python 历史页；
-2. 让 `RemoteIncrementalBackground` 不再创建或调用 Python `CliBackgroundSync`；
-3. 普通周期只调用 TS `/api/runtime/sync-incremental/cycle`，由 TS 在同一循环内先读历史页，
-   历史完成后下一片再读增量；
-4. `enable`、`disable`、`stop`、重启恢复均仍走原控制/排空语义，禁止请求级双实现回退。
-
-若 Python 历史进程无法在同一部署中停止，应保持 `historyOwner` 未启用并延期接线。
+Python 模式的 TS 状态覆盖仍由本地 history 投影；TS 模式严格解析远端
+`history_coverages`，503、字段缺失、非法阶段/计数/游标/时间都失败关闭。
 
 ## 3. 公开同步状态
 
@@ -38,21 +34,13 @@ history_coverages: [{ binding_id, contact_id, phase, failure_code,
   started_at, completed_at, updated_at, last_local_id, last_cursor }]
 ```
 
-`history_coverages` 只含元数据。根的公开 `/api/sync/status` 装饰应读取
-`incremental.status()`，并把该字段映射为既有桌面接口的
-`cli_history_coverages`。不要让缺失字段自动变成 `complete`；行缺失或无授权时为
-`not_started`。
+`history_coverages` 只含元数据。TS 模式下公开 `/api/sync/status` 从
+`incremental.status()` 读取该字段并投影为既有桌面 `cli_history_coverages` 合同，
+不向桌面暴露内部 `last_local_id`。缺失或坏字段返回 `sync_status_unavailable`，
+不能因为字段缺失把覆盖判成 `complete`。Python 模式不改写本地权威覆盖。
 
-```ts
-const incrementalStatus = await incremental.status(check);
-return {
-  ...legacyReport,
-  cli_history_coverages: incrementalStatus.history_coverages,
-};
-```
-
-根还需把 `/api/runtime/status` 的 `ownership.wechatHistory` 从 `python` 改为
-`typescript`，且只在上面的单一执行方切换完成后修改。
+无副作用的内部认证 `/status` 可在 Python legacy 赋值前响应，解决 TS 模式首轮
+同步状态播种的顺序环；内部 `cycle`、事件和其他控制仍要求 Python 后端已就绪。
 
 ## 4. 新绑定授权边界
 
@@ -67,12 +55,12 @@ return {
 公开 `not_started` 也必须结合真实逐绑定授权解释：没有历史快照的旧增量联系人显示未知，
 不能自动标成待读或阻塞其仍获准的增量路径。历史执行器不得再按账号状态自行补授权。
 
-## 5. 必需验收
+## 5. 已验收范围
 
-- 官方 profile 测试走实际认证 HTTP：历史分页、重启续读、状态覆盖、同步中门禁、
-  不完整确认、停读/撤销、TS 单执行方。
-- 桌面控制器读取真实公开状态字段，确认当前联系人覆盖、其他联系人汇总和
-  “消息覆盖 / 关系资料处理”分离。
-- 实际 App/微信仍由根按用户范围单独验收；本组件没有操作 App、微信、真实库或发送消息。
+- 官方 profile 和认证 HTTP 验证默认 Python 合同、显式 TS 单写者、TS 历史分页与
+  公开覆盖字段、关闭/退出停读、挂起读取排空、远端 503/坏响应失败关闭。
+- Python `history=None` 单元验证所有生命周期和控制路径无空引用。
 
-本票没有新增数据库迁移，复用 104/107/108 与现有消息、来源、处理回执和删除路径。
+实际 App/微信、真实资料和真实模型仍未验收。本切片只使用合成 `_test` PG 与临时 CLI；
+票 20 保持 claimed。本票没有新增数据库迁移，复用 104/107/108 与既有消息、来源、
+处理回执和删除路径。

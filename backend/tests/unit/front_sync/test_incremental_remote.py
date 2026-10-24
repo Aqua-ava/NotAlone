@@ -14,6 +14,14 @@ from uuid import UUID
 from notalone.front_sync.cli_sync import CliSyncStatus, CliSyncPhase, CliSyncCycleResult
 from notalone.front_sync import incremental_remote as module
 OWNER=UUID('11111111-1111-1111-1111-111111111111')
+BINDING=UUID('22222222-2222-2222-2222-222222222222')
+CONTACT=UUID('33333333-3333-3333-3333-333333333333')
+HISTORY_COVERAGE={
+    'binding_id':str(BINDING),'contact_id':str(CONTACT),'phase':'syncing','failure_code':'cli_timeout',
+    'message_count':3,'non_text_count':1,'page_count':2,'last_local_id':'9','last_cursor':'history-cursor',
+    'watermark_at':'2026-10-25T00:00:00Z','started_at':'2026-10-25T00:01:00Z',
+    'completed_at':None,'updated_at':'2026-10-25T00:02:00Z',
+}
 
 class History:
     _history_only=True
@@ -35,6 +43,7 @@ class History:
 class RemoteTest(unittest.TestCase):
     def setUp(self):
         self.requests=[];self.response_code=200
+        self.history_coverages=[dict(HISTORY_COVERAGE)]
         outer=self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*args):pass
@@ -42,6 +51,8 @@ class RemoteTest(unittest.TestCase):
                 body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 outer.requests.append((self.path,body,self.headers.get('Authorization')))
                 value={'phase':'active','stream_active':True,'stream_mode':'global_follow','failure_code':None,'bound_count':2,'batch_message_count':2,'enabled':True,'cli_available':True,'cli_failure_code':None}
+                if outer.history_coverages is not None:
+                    value['history_coverages']=outer.history_coverages
                 if self.path.rsplit('/',1)[-1].startswith('follow-'):
                     value={'enabled':True,'stream_active':True,'process_id':123,'mode':'global_follow','watermark':None}
                 if outer.response_code!=200:value={'error':'runtime_stopping'}
@@ -85,6 +96,64 @@ class RemoteTest(unittest.TestCase):
         names=[r[0].rsplit('/',1)[-1] for r in self.requests]
         self.assertEqual(names,['enable','check','pause','retry','follow-enable','disable'])
         self.assertIn('pause',self.history.calls);self.assertIn('retry',self.history.calls)
+    def test_typescript_owns_history_when_local_adapter_is_absent(self):
+        remote=module.RemoteIncrementalBackground(
+            url='http://127.0.0.1:'+str(self.server.server_port),token='synthetic-token',
+            owner_id=OWNER,account_scope='synthetic_account',history=None,
+        )
+        try:
+            remote.enable()
+            result=remote.cycle(enabled=True,max_bindings=1)
+            self.assertEqual(result.status.history_coverages[0].binding_id,BINDING)
+            self.assertEqual(result.status.history_coverages[0].last_local_id,9)
+            self.assertEqual(result.batch_message_count,2)
+            remote.request_safety_sweep();remote.request_backfill_check()
+            remote.pause_backfill();remote.retry_backfill()
+            disabled=remote.cycle(enabled=False)
+            self.assertEqual(disabled.status.phase,CliSyncPhase.DISABLED)
+            self.assertEqual(disabled.status.history_coverages[0].page_count,2)
+            self.assertEqual(remote.start_history_for_bindings(()),0)
+            remote.request_history_start()
+            remote.disable()
+            remote.close()
+            before=len(self.requests)
+            with self.assertRaises(module.IncrementalRemoteError):
+                remote.cycle(enabled=True)
+            self.assertEqual(len(self.requests),before)
+        finally:
+            remote.shutdown()
+        names=[r[0].rsplit('/',1)[-1] for r in self.requests]
+        self.assertEqual(names,['enable','cycle','check','check','pause','retry','status','disable','stop'])
+    def test_remote_history_metadata_and_failures_are_strict(self):
+        self.history.pending=False
+        self.history_coverages=None
+        with self.assertRaisesRegex(module.IncrementalRemoteError,'invalid_response'):
+            self.remote.cycle(enabled=True)
+        self.history_coverages=[{**HISTORY_COVERAGE,'message_count':-1}]
+        with self.assertRaisesRegex(module.IncrementalRemoteError,'invalid_response'):
+            self.remote.cycle(enabled=True)
+    def test_factory_fails_closed_and_never_builds_python_history_in_typescript_mode(self):
+        with patch.dict('os.environ',{'NOTALONE_HISTORY_RUNTIME':'typo'},clear=True):
+            with self.assertRaisesRegex(ValueError,'history_runtime_invalid'):
+                module.configured_history_runtime(__import__('os').environ)
+        with patch.dict('os.environ',{'NOTALONE_HISTORY_RUNTIME':'typescript'},clear=True):
+            from notalone.front_sync.factory import build_cli_full_sync_engine
+            with self.assertRaisesRegex(ValueError,'history_runtime_incremental_required'):
+                build_cli_full_sync_engine(database_url='synthetic',owner_id=OWNER,account_scope='synthetic')
+        environment={
+            'NOTALONE_HISTORY_RUNTIME':'typescript',
+            'NOTALONE_SYNC_INCREMENTAL_URL':'http://127.0.0.1:1234',
+            'NOTALONE_SYNC_INCREMENTAL_TOKEN':'synthetic',
+            'NOTALONE_SYNC_INCREMENTAL_TRANSFERRED':'1',
+            'NOTALONE_WECHAT_SCOPE_URL':'http://127.0.0.1:1234',
+            'NOTALONE_WECHAT_SCOPE_TOKEN':'synthetic',
+        }
+        with patch.dict('os.environ',environment,clear=True), patch(
+            'notalone.front_sync.factory.CliBackgroundSync',side_effect=AssertionError('python history built')
+        ):
+            from notalone.front_sync.factory import build_cli_full_sync_engine
+            engine=build_cli_full_sync_engine(database_url='synthetic',owner_id=OWNER,account_scope='synthetic')
+        self.assertIsNone(engine._background._history)
     def test_transfer_configuration_requires_complete_valid_trio(self):
         check=module.incremental_transfer_enabled
         self.assertFalse(check({}))

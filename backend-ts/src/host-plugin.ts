@@ -23,6 +23,7 @@ import { createWechatScopeApi, isWechatScopeRoute, wechatScopeBodyLimit, type We
 import {createForegroundLocationApi,foregroundLocationPath,isForegroundAuthorityMutation} from './foreground-location-api.ts';
 import {NativeForegroundProbe} from './foreground-location-probe.ts';
 import { createSyncIncrementalApi } from './sync-incremental-api.ts';
+import {projectHistoryCoverages,resolveHistoryRuntime} from './history-runtime.ts';
 import {startHostModelRuntime} from './host-model-runtime.ts';
 import {usageSummary} from './usage-summary.ts';
 import {ExtractionTaskStore} from './extraction-task-store.ts';
@@ -84,7 +85,10 @@ async function start(ctx: Context) {
   let memoryHandoff: MemoryManagementHandoff | undefined;
   let modelRuntime:Awaited<ReturnType<typeof startHostModelRuntime>>;
   const runtimeEnvironment: NodeJS.ProcessEnv = {...process.env,...storage.runtimeEnvironment(),HOME:config.businessHome};
+  // 本宿主自身提供唯一认证增量端点；typescript 历史模式不回退到 Python 写者。
+  const historyRuntime=resolveHistoryRuntime(runtimeEnvironment,{incrementalRemoteAvailable:true});
   const incremental = await createSyncIncrementalApi({storage,executable:runtimeEnvironment.NOTALONE_WECHAT_CLI ?? '',environment:runtimeEnvironment,
+    historyOwner:historyRuntime,
     publish:async(events,signal)=>{
       if(!legacy || state!=='running' || signal.aborted)throw new HostStorageError('runtime_stopping');
       // 已提交消息仅传稳定身份；Python只派发事件与唤醒派生，不读取或重复写入正文。
@@ -176,11 +180,15 @@ async function start(ctx: Context) {
       legacy!.proxy(req,res,release?{settled:release,uncertain:()=>{void foreground.suspend().finally(release).catch(()=>{});}}:undefined,
         syncStatus?async report=>{
           if(!report||typeof report!=='object'||Array.isArray(report))throw new Error('sync_status_unavailable');
-          return wechatScope.decorateSyncStatus(report as Record<string,unknown>,()=>{if(state!=='running')throw new HostStorageError('runtime_stopping');});
+          const check=()=>{if(state!=='running')throw new HostStorageError('runtime_stopping');};
+          const decorated=await wechatScope.decorateSyncStatus(report as Record<string,unknown>,check);
+          if(historyRuntime==='python')return decorated;
+          const current=await incremental.status(check);
+          return {...decorated,cli_history_coverages:projectHistoryCoverages(current.history_coverages)};
         }:undefined);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus}}:{}),ownership:{...ownership,skills:skills.status().owner,imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus}}:{}),ownership:{...ownership,skills:skills.status().owner,imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
@@ -236,7 +244,9 @@ async function start(ctx: Context) {
       if(req.url==='/api/settings/credentials' && req.method==='GET'){respond(200,storage.credentialStatus());return;}
       if(incrementalPath){
         // Python初始化不在构造器同步等待cycle；握手就绪前不提交无法派发的事件。
-        if(!legacy){respond(503,{error:'runtime_starting'});return;}
+        // 只读status必须允许作为初始化握手：TS历史模式下Python首轮状态依赖它，
+        // 而legacy赋值要等Python完成启动。cycle和事件仍等待可派发事件的后端。
+        if(!legacy&&url.pathname!=='/api/runtime/sync-incremental/status'){respond(503,{error:'runtime_starting'});return;}
         const cancelled=new AbortController();
         const abort=()=>cancelled.abort();req.once('aborted',abort);res.once('close',abort);
         try {

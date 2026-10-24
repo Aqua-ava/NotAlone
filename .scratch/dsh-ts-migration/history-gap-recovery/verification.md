@@ -42,6 +42,12 @@
 - 本轮窄修正定向组合 `sync-scope`、`sync-scope-migration`、`wechat-setup`、
   `sync-history` 为 27/27，0 跳过；`wechat-scope-api` 与 `reply-scope` 为 11/11。
   工作树公开历史扫描 issues=0。
+- 单执行方宿主切片：Backend TS 与 Desktop `tsc --noEmit` 通过；历史执行方、
+  官方 DSH profile、认证宿主、HTTP 与历史页组合 26/26；Python 远端、history-only、
+  FullSyncEngine 与 SyncHost 组合 63/63。默认 Python 与显式 TS 两种模式均覆盖。
+- 官方 profile 实测显式 TS 时所有历史 tail 属于 TS 宿主且 Python 历史调用为 0；
+  TS 历史分页完成后的 `cli_history_coverages` 经公开认证 HTTP 返回，关闭和退出后无
+  新读取。远端 503、覆盖字段缺失或非法值失败关闭；非法配置不发布业务握手。
 - 基线失败复跑遗留的 4 个随机 `_test` PG 库已在确认无连接后按精确名称清理，
   复核均不存在；本票通过测试的随机库由夹具自行关闭和删除。
 
@@ -54,7 +60,7 @@
 
 ## 未闭环
 
-- 共享官方宿主尚未启用 `historyOwner: 'typescript'`，也未停止 Python 历史执行方；
-  因此公开认证 HTTP、官方 profile 单执行方和实际 App/微信验收仍由根接线后完成。
+- 实际 App/微信、真实聊天资料与真实模型仍由根按用户范围单独验收；本切片没有启动
+  App/微信，也没有处理真实资料。票 20 保持 claimed。
 - 基线提交的 `sync-incremental-reconnect.test.mjs` 清理断言在独立干净基线 worktree
   同样失败，属于既有测试问题，不由本票修复或计为通过。

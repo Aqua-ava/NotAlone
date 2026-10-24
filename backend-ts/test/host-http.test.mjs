@@ -174,6 +174,18 @@ test('未知数据库版本不发布业务握手且保留原库和配置',async 
   assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM notalone_schema_migration')).rows[0].n,112);
 });
 
+test('非法历史执行方配置失败关闭且不发布业务握手',async t=>{
+  const fixture=await createStorageFixture();
+  t.after(async()=>{for(const host of fixture.hosts??[])await host.terminate();await fixture.close();});
+  const infoPath=join(fixture.directory,'backend.info');
+  const host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:resolve('..'),envFilePath:fixture.envFilePath,
+    infoPath,businessHome:fixture.directory,pythonExecutable:process.env.NOTALONE_TEST_PYTHON||join(homedir(),'miniconda3/envs/NotAlone/bin/python'),
+    environment:{NOTALONE_HISTORY_RUNTIME:'typo'}},()=>true);
+  (fixture.hosts??=[]).push(host);
+  assert.equal(await host.waitForExit(7000),true);
+  await assert.rejects(readFile(infoPath,'utf8'));
+});
+
 test('旧业务执行器不存在时启动有界失败并允许修复后重试',async t=>{
   const fixture=await createStorageFixture();t.after(async()=>{for(const host of fixture.hosts??[])assert.equal(await host.terminate(),true);await fixture.close();});
   const host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:resolve('..'),envFilePath:fixture.envFilePath,infoPath:join(fixture.directory,'backend.info'),businessHome:fixture.directory,pythonExecutable:join(fixture.directory,'missing-python'),environment:{}},()=>true);

@@ -23,7 +23,12 @@ from notalone.front_sync import (
     TailLifecycle,
 )
 from notalone.front_sync.event_publisher import MessageEventPublisher
-from notalone.front_sync.incremental_remote import RemoteIncrementalBackground, IncrementalReadOnlyState, incremental_transfer_enabled
+from notalone.front_sync.incremental_remote import (
+    IncrementalReadOnlyState,
+    RemoteIncrementalBackground,
+    configured_history_runtime,
+    incremental_transfer_enabled,
+)
 from notalone.front_sync.sync_engine import FrontSyncEngine
 from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
@@ -57,10 +62,12 @@ def build_cli_full_sync_engine(
 ) -> CliFullSyncEngine:
     """装配 CLI 后台全量同步与前台 OCR 定位双通道引擎。"""
 
+    history_owner = configured_history_runtime(os.environ)
+    incremental_enabled = incremental_transfer_enabled(os.environ)
+    if history_owner == "typescript" and not incremental_enabled:
+        raise ValueError("history_runtime_incremental_required")
     incremental_url = os.environ.get("NOTALONE_SYNC_INCREMENTAL_URL")
     incremental_token = os.environ.get("NOTALONE_SYNC_INCREMENTAL_TOKEN")
-    transferred = os.environ.get("NOTALONE_SYNC_INCREMENTAL_TRANSFERRED")
-    incremental_transfer_enabled(os.environ)
     remote_url = os.environ.get("NOTALONE_WECHAT_SCOPE_URL")
     remote_token = os.environ.get("NOTALONE_WECHAT_SCOPE_TOKEN")
     if (remote_url is None) != (remote_token is None):
@@ -71,7 +78,7 @@ def build_cli_full_sync_engine(
         if remote_url is not None else PostgresSyncScopeStore(database_url)
     )
 
-    if incremental_url is not None and not isinstance(scope_store, RemoteWechatScope):
+    if incremental_enabled and not isinstance(scope_store, RemoteWechatScope):
         raise ValueError("sync_incremental_remote_scope_required")
 
     # 移交后不能通过旧账号级注入恢复历史全范围读取。
@@ -94,7 +101,7 @@ def build_cli_full_sync_engine(
     bindings = PostgresConversationBindingRepository(database_url)
     observation_store = PostgresObservationStore(database_url)
     sync_state = PostgresFrontSyncStateStore(database_url)
-    if incremental_url is not None:
+    if incremental_enabled:
         sync_state = IncrementalReadOnlyState(sync_state)
 
     lifecycle = TailLifecycle(
@@ -118,25 +125,30 @@ def build_cli_full_sync_engine(
         sync_state=sync_state,
         cli=cli,
     )
-    background = CliBackgroundSync(
-        owner_id=owner_id,
-        channel=CHANNEL,
-        account_scope=account_scope,
-        cli=cli,
-        bindings=bindings,
-        observation_store=observation_store,
-        backfill_state=PostgresBackfillStateStore(database_url),
-        history_state=PostgresHistorySyncStateStore(database_url),
-        history_authorization=authorization,
-        history_only=incremental_url is not None,
-        sync_state=sync_state,
-        message_events=message_events,
-        clock=clock,
-    )
-    if incremental_url is not None:
+    def cli_background(*, history_only: bool) -> CliBackgroundSync:
+        return CliBackgroundSync(
+            owner_id=owner_id,
+            channel=CHANNEL,
+            account_scope=account_scope,
+            cli=cli,
+            bindings=bindings,
+            observation_store=observation_store,
+            backfill_state=PostgresBackfillStateStore(database_url),
+            history_state=PostgresHistorySyncStateStore(database_url),
+            history_authorization=authorization,
+            history_only=history_only,
+            sync_state=sync_state,
+            message_events=message_events,
+            clock=clock,
+        )
+
+    if not incremental_enabled:
+        background = cli_background(history_only=False)
+    else:
+        local_history = cli_background(history_only=True) if history_owner == "python" else None
         background = RemoteIncrementalBackground(
             url=incremental_url, token=incremental_token, owner_id=owner_id,
-            account_scope=account_scope, history=background,
+            account_scope=account_scope, history=local_history,
         )
     foreground = ForegroundLocator(
         owner_id=owner_id,

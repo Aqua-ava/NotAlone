@@ -1,4 +1,4 @@
-"""迁移期串行组合：交替执行 Python 历史单页与 TS 增量单页，无请求级回退。"""
+"""迁移期串行组合：Python 模式交替历史/增量页，TS 模式只由 TS 单页完成两者。"""
 from __future__ import annotations
 
 from dataclasses import fields, replace
@@ -14,6 +14,7 @@ from uuid import UUID
 
 from notalone.front_sync.cli_sync import CliBackgroundSync, CliSyncCycleResult, CliSyncPhase, CliSyncStatus
 from notalone.front_sync.tail_lifecycle import FollowRuntimeStatus
+from notalone.persistence.history_sync_state import HistoryCoverage, HistoryCoveragePhase
 
 
 class IncrementalRemoteError(RuntimeError):
@@ -44,11 +45,75 @@ def incremental_transfer_enabled(environment) -> bool:
     return True
 
 
+def configured_history_runtime(environment) -> str:
+    """历史执行方只接受显式两值；缺省保持 Python，未知配置失败关闭。"""
+    runtime = environment.get('NOTALONE_HISTORY_RUNTIME', 'python')
+    if runtime not in {'python', 'typescript'}:
+        raise ValueError('history_runtime_invalid')
+    return runtime
+
+
+def _history_count(value) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError()
+    return value
+
+
+def _history_timestamp(value) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise ValueError()
+    parsed = datetime.fromisoformat(value[:-1] + '+00:00' if value.endswith('Z') else value)
+    if parsed.tzinfo is None:
+        raise ValueError()
+    return parsed
+
+
+def _history_coverage(value) -> HistoryCoverage:
+    if not isinstance(value, dict):
+        raise ValueError()
+    last_local_id = value.get('last_local_id')
+    if last_local_id is not None:
+        if isinstance(last_local_id, str) and last_local_id.isdecimal():
+            last_local_id = int(last_local_id)
+        if not isinstance(last_local_id, int) or isinstance(last_local_id, bool) or last_local_id <= 0:
+            raise ValueError()
+    failure = value.get('failure_code')
+    if failure is not None and (not isinstance(failure, str)
+                                or re.fullmatch(r'[a-z][a-z0-9_]{0,95}', failure) is None):
+        raise ValueError()
+    cursor = value.get('last_cursor')
+    if cursor is not None and (not isinstance(cursor, str) or not cursor.strip()):
+        raise ValueError()
+    return HistoryCoverage(
+        binding_id=UUID(value['binding_id']),
+        contact_id=UUID(value['contact_id']),
+        phase=HistoryCoveragePhase(value['phase']),
+        failure_code=failure,
+        message_count=_history_count(value['message_count']),
+        non_text_count=_history_count(value['non_text_count']),
+        page_count=_history_count(value['page_count']),
+        last_local_id=last_local_id,
+        last_cursor=cursor,
+        watermark_at=_history_timestamp(value['watermark_at']),
+        started_at=_history_timestamp(value['started_at']),
+        completed_at=_history_timestamp(value['completed_at']),
+        updated_at=_history_timestamp(value['updated_at']),
+    )
+
+
+def _history_coverages(value) -> tuple[HistoryCoverage, ...]:
+    if not isinstance(value, list):
+        raise ValueError()
+    return tuple(_history_coverage(item) for item in value)
+
+
 class RemoteIncrementalBackground:
     """只有现有 SyncHost 驱动 cycle；本适配器不启动线程循环或 CLI。"""
 
     def __init__(self, *, url: str, token: str, owner_id: UUID,
-                 account_scope: str, history: CliBackgroundSync) -> None:
+                 account_scope: str, history: CliBackgroundSync | None = None) -> None:
         try:
             parsed = urlsplit(url)
             valid = (parsed.scheme == 'http' and parsed.hostname == '127.0.0.1'
@@ -58,11 +123,12 @@ class RemoteIncrementalBackground:
             valid = False
         if not valid or not token or any(ord(c) < 33 or ord(c) > 126 for c in token):
             raise ValueError('sync_incremental_remote_config_invalid')
-        if not history._history_only:
+        if history is not None and not history._history_only:
             raise ValueError('sync_incremental_history_only_required')
         # factory 构造的新实例尚无在途；仍明确关闭旧流/队列再移交。
         # 活跃实例的移交必须先在 SyncHost 锁内取消 I/O 和排空，不能只调用此构造器。
-        history.close()
+        if history is not None:
+            history.close()
         self._history = history
         self._port, self._token = parsed.port, token
         self._scope = {'owner_id': str(owner_id), 'channel': 'wechat', 'account_scope': account_scope}
@@ -140,6 +206,7 @@ class RemoteIncrementalBackground:
             names = {f.name for f in fields(CliSyncStatus)} - {'history_coverages'}
             values = {k: v for k, v in payload.items() if k in names}
             values['phase'] = CliSyncPhase(values['phase'])
+            values['history_coverages'] = _history_coverages(payload['history_coverages'])
             if not isinstance(values.get('stream_active'), bool) or not isinstance(values.get('bound_count'), int):
                 raise ValueError()
             for key in ('priority_contact_id', 'backfill_contact_id'):
@@ -159,17 +226,27 @@ class RemoteIncrementalBackground:
                 raise IncrementalRemoteError('runtime_stopping')
             epoch = self._epoch
         if not enabled:
-            # 正常关闭后的宿主心跳仍须可报告状态；只读本地覆盖，不恢复远端执行。
-            history = self._history.cycle(enabled=False, max_bindings=1)
-            status = replace(self._last_status, phase=CliSyncPhase.DISABLED,
-                             stream_active=False, stream_mode=None, pending_count=0,
-                             bound_count=history.status.bound_count,
-                             failure_code=history.status.failure_code,
-                             history_coverages=history.status.history_coverages)
-            return CliSyncCycleResult(status, 0, history.cli_available, history.cli_failure_code)
-        # 现有 SyncHost 的 engine_lock 持有整个片；只做一类正文单页。
-        # 授权和状态检查不读 CLI，完成历史后直接移交下一次 TS 片。
-        pending_history = enabled and self._history.history_only_pending()
+            if self._history is not None:
+                # Python 模式保持原合同：关闭后的心跳只读本地覆盖。
+                history = self._history.cycle(enabled=False, max_bindings=1)
+                status = replace(self._last_status, phase=CliSyncPhase.DISABLED,
+                                 stream_active=False, stream_mode=None, pending_count=0,
+                                 bound_count=history.status.bound_count,
+                                 failure_code=history.status.failure_code,
+                                 history_coverages=history.status.history_coverages)
+                return CliSyncCycleResult(status, 0, history.cli_available, history.cli_failure_code)
+            # typescript 模式无本地历史对象；只读 TS 状态取得权威覆盖，不恢复执行。
+            payload = self._request('status', timeout=3.0)
+            status = self._status(payload)
+            with self._lock:
+                if self._closed or self._epoch != epoch:
+                    raise IncrementalRemoteError('runtime_stopping')
+            disabled = replace(status, phase=CliSyncPhase.DISABLED,
+                               stream_active=False, stream_mode=None, pending_count=0)
+            return CliSyncCycleResult(disabled, 0, payload.get('cli_available'),
+                                      payload.get('cli_failure_code'))
+        # Python 模式每片只执行一类正文；无本地 history 时 TS 在同一片处理历史与增量。
+        pending_history = enabled and self._history is not None and self._history.history_only_pending()
         if pending_history and self._history_turn:
             history = self._history.cycle(enabled=True, priority_contact_id=priority_contact_id,
                                           max_bindings=1, priority_requested_at=priority_requested_at,
@@ -187,9 +264,7 @@ class RemoteIncrementalBackground:
             return CliSyncCycleResult(status, history.batch_message_count,
                                       history.cli_available, history.cli_failure_code)
         self._history_turn = True
-        if not enabled:
-            self._history.cycle(enabled=False, max_bindings=1)
-        coverages = self._history.current_history_coverages()
+        coverages = self._history.current_history_coverages() if self._history is not None else ()
         with self._lock:
             if self._closed or self._suspended or self._epoch != epoch:
                 raise IncrementalRemoteError('runtime_stopping')
@@ -211,7 +286,9 @@ class RemoteIncrementalBackground:
         if not pending_history:
             self._history_failure = None
         failure = status.failure_code or self._history_failure
-        status = replace(status, history_coverages=coverages, failure_code=failure,
+        if self._history is not None:
+            status = replace(status, history_coverages=coverages)
+        status = replace(status, failure_code=failure,
                          phase=CliSyncPhase.DEGRADED if enabled and failure else status.phase)
         return CliSyncCycleResult(status, payload.get('batch_message_count', 0) if enabled else 0,
                                   payload.get('cli_available'), payload.get('cli_failure_code'))
@@ -231,11 +308,13 @@ class RemoteIncrementalBackground:
 
     def enable(self) -> None:
         self._control('enable')
-        self._history.request_history_start()
+        if self._history is not None:
+            self._history.request_history_start()
 
     def disable(self) -> None:
         self._control('disable')
-        self._history.close()
+        if self._history is not None:
+            self._history.close()
 
     def resume(self) -> None:
         # 只供明确的恢复控制调用；cycle 不自动解除 stop。
@@ -256,7 +335,8 @@ class RemoteIncrementalBackground:
             # Node 可能已经关闭 API 或尚未握手；不重试、不等待重入 close。
             pass
         finally:
-            self._history.close()
+            if self._history is not None:
+                self._history.close()
             self._last_follow = FollowRuntimeStatus(False, False)
 
     def close(self) -> None:
@@ -274,25 +354,30 @@ class RemoteIncrementalBackground:
 
     def request_safety_sweep(self) -> None:
         self._request('check')
-        self._history.request_safety_sweep()
+        if self._history is not None:
+            self._history.request_safety_sweep()
 
     def request_backfill_check(self) -> None:
         self.request_safety_sweep()
-        self._history.request_history_start()
+        if self._history is not None:
+            self._history.request_history_start()
 
     def pause_backfill(self) -> None:
         self._request('pause')
-        self._history.pause_backfill()
+        if self._history is not None:
+            self._history.pause_backfill()
 
     def retry_backfill(self) -> None:
         self._request('retry')
-        self._history.retry_backfill()
+        if self._history is not None:
+            self._history.retry_backfill()
 
     def start_history_for_bindings(self, bindings):
-        return self._history.start_history_for_bindings(bindings)
+        return 0 if self._history is None else self._history.start_history_for_bindings(bindings)
 
     def request_history_start(self) -> None:
-        self._history.request_history_start()
+        if self._history is not None:
+            self._history.request_history_start()
 
     def _follow(self, command: str) -> FollowRuntimeStatus:
         value = self._request(command, timeout=2.0)

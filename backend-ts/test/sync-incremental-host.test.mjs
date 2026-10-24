@@ -47,7 +47,7 @@ async function overlay(t){
   } catch(error) {await rm(directory,{recursive:true,force:true});throw error;}
 }
 async function until(fn,label,timeout=20000){const end=Date.now()+timeout;let last;while(Date.now()<end){last=await fn();if(last)return last;await delay(100);}throw new Error(`等待失败：${label}`);}
-async function fixture(t){
+async function fixture(t,environment={}){
   const isolated=process.env.NOTALONE_TEST_INCREMENTAL_OVERLAY==='1';
   const project=isolated?await overlay(t):root,f=await createStorageFixture();
   t.after(async()=>{for(const host of f.hosts??[])await host.terminate();await f.close();if(isolated)await rm(project,{recursive:true,force:true});});
@@ -74,10 +74,10 @@ else if(args[0]==='tail'){
  emit({events:messages.map(m=>({type:'message',cursor:m.cursor,message:{id:{local_id:m.id,talker:args[1]},kind:'text',text:m.text,is_from_me:false,create_time:1792803600+m.id}})),cursor:messages.at(-1)?.cursor??cursor,freshness:{message_source:'live_message_db'},query:{chat:args[1],has_more:false,history}});
 }else process.exit(2);`,{mode:0o700});
   await appendFile(f.envFilePath,`NOTALONE_OWNER_ID=${owner}\nNOTALONE_WECHAT_CLI=${executable}\n`);
-  const app=await start(t,f,{},project);
+  const app=await start(t,f,environment,project);
   return {...f,owner,app,control,log,secrets,async commands(){return (await readFile(log,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}};
 }
-test('官方profile：公开开关、原消息事件、历史唯一写者与私有认证', {timeout:90000},async t=>{
+test('官方profile默认python：公开开关、原消息事件、历史唯一写者与私有认证', {timeout:90000},async t=>{
   const f=await fixture(t);
   const runtime=await f.app.request('/api/runtime/status');assert.equal(runtime.data.runtime,'dsh');
   assert.equal(runtime.data.ownership.wechatBodySync,'split');
@@ -91,6 +91,11 @@ test('官方profile：公开开关、原消息事件、历史唯一写者与私�
   t.after(async()=>{abort.abort();await eventReader;});
   const on=await f.app.request('/api/sync/enable',{});assert.equal(on.status,200,JSON.stringify(on));
   const history=await until(async()=>{const r=await f.app.request(`/api/contacts/${binding.contact_id}/messages`);return r.data.messages?.length===1?r.data.messages[0]:null;},'既有历史');
+  const pythonCoverage=await until(async()=>{
+    const status=await f.app.request('/api/sync/status');
+    return status.data.cli_history_coverages?.find(row=>row.contact_id===binding.contact_id&&row.phase==='complete');
+  },'Python历史覆盖公开');
+  assert.equal(pythonCoverage.message_count,1);
   await writeFile(f.control,JSON.stringify({incremental:true}));
   assert.equal((await f.app.request('/api/sync/check',{})).status,200);
   const messages=await until(async()=>{const r=await f.app.request(`/api/contacts/${binding.contact_id}/messages`);return r.data.messages?.length===2?r.data.messages:null;},'增量入库');
@@ -111,6 +116,50 @@ test('官方profile：公开开关、原消息事件、历史唯一写者与私�
   const before=(await f.commands()).length;assert.equal((await f.app.request('/api/sync/check',{})).status,200);assert.equal((await f.commands()).length,before);
   const revoked=await f.app.request('/api/sync/cli-bindings/revoke',{contact_id:binding.contact_id,binding_id:binding.binding_id});assert.equal(revoked.status,200,JSON.stringify(revoked));
   assert.equal((await f.app.request('/api/sync/cli-bindings')).data.bindings.length,0);
+});
+
+test('官方profile显式typescript：Python历史调用为0，TS分页覆盖经认证HTTP公开', {timeout:90000},async t=>{
+  const f=await fixture(t,{NOTALONE_HISTORY_RUNTIME:'typescript'});
+  const runtime=await f.app.request('/api/runtime/status');
+  assert.equal(runtime.status,200);
+  assert.equal(runtime.data.ownership.wechatHistory,'typescript');
+  assert.equal(runtime.data.ownership.wechatIncremental,'typescript');
+  await until(async()=>(await f.app.request('/api/sync/status')).status===200,'启动状态恢复',15000).catch(async error=>{
+    t.diagnostic(JSON.stringify({runtime:runtime.data,sync:await f.app.request('/api/sync/status'),
+      check:await f.app.request('/api/sync/check',{}),
+      commands:await f.commands()}));
+    throw error;
+  });
+  const confirmed=await f.app.request('/api/sync/cli-bindings/confirm',{
+    selections:[{locator:'friend-a'}],history_authorized:true});
+  assert.equal(confirmed.status,200,JSON.stringify(confirmed));
+  const binding=(await f.app.request('/api/sync/cli-bindings')).data.bindings[0];
+  assert.ok(binding);
+  assert.equal((await f.app.request('/api/sync/enable',{})).status,200);
+  const coverage=await until(async()=>{
+    const status=await f.app.request('/api/sync/status');
+    return status.data.cli_history_coverages?.find(row=>row.contact_id===binding.contact_id&&row.phase==='complete');
+  },'TS历史覆盖完成',20000);
+  assert.deepEqual(Object.keys(coverage).sort(),[
+    'binding_id','completed_at','contact_id','failure_code','last_cursor','message_count',
+    'non_text_count','page_count','phase','started_at','updated_at','watermark_at',
+  ]);
+  assert.equal(coverage.binding_id,binding.binding_id);
+  assert.equal(coverage.message_count,1);
+  assert.equal(coverage.non_text_count,0);
+  assert.equal(coverage.page_count,1);
+  const commands=await f.commands(),history=commands.filter(row=>row.args[0]==='tail'&&row.args.includes('--history'));
+  assert.ok(history.length>0);
+  assert.ok(history.every(row=>row.parent===runtime.data.pid),'历史只能由TS宿主读取');
+  assert.ok(!history.some(row=>row.parent===runtime.data.legacyPid),'Python不得读取历史');
+  assert.equal((await f.app.request('/api/sync/disable',{})).status,200);
+  const stoppedAt=(await f.commands()).length;
+  assert.equal((await f.app.request('/api/sync/check',{})).status,200);
+  await new Promise(resolve=>setTimeout(resolve,500));
+  assert.equal((await f.commands()).length,stoppedAt,'关闭后检查不得重启历史读取');
+  assert.equal((await f.app.request('/api/runtime/shutdown',{})).status,200);
+  assert.equal(await f.app.host.waitForExit(7000),true);
+  assert.equal((await f.commands()).length,stoppedAt,'宿主退出后不得追加历史读取');
 });
 
 for(const action of ['disable','revoke','shutdown'])test(`官方profile：挂起增量读取时${action}排空且不保存迟到消息`,{timeout:30000},async t=>{
