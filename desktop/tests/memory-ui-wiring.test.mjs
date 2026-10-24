@@ -11,7 +11,7 @@ import { build } from 'esbuild';
 // 记忆卡片接线：正文与单一操作入口后的卡片不得重新暴露版本历史和技术元数据。
 const require = createRequire(path.resolve('package.json'));
 const compiled = await build({
-  stdin: { contents: `export { MemoryCard } from './src/renderer/MemoryPage';`, resolveDir: process.cwd() },
+  stdin: { contents: `export { MemoryCard } from './src/renderer/MemoryPage'; export { LayeredMemorySections } from './src/renderer/LayeredMemorySections';`, resolveDir: process.cwd() },
   bundle: true, platform: 'node', format: 'esm', write: false, loader: { '.css': 'empty' },
   plugins: [{ name: 'shared-react', setup(builder) {
     builder.onResolve({ filter: /^react(?:\/.*)?$/ }, args => ({ path: pathToFileURL(require.resolve(args.path)).href, external: true }));
@@ -50,6 +50,26 @@ test('记忆卡片不展示版本历史和详细元数据', () => {
 
 test('记忆页接线复用既有 preload 能力，不新增通道并保留 correctionTarget 依赖', () => {
   assert.match(pageSource, /layeredMemory\.value\?\.correctionTarget/, '必须保留既有纠错定位依赖');
-  assert.match(pageSource, /<LayeredMemorySections state=\{state\.layeredMemory\} \/>/, '联系人记忆下方须展示整理结果');
+  assert.match(pageSource, /<LayeredMemorySections state=\{state\.layeredMemory\}/, '联系人记忆下方须展示整理结果');
+  assert.match(pageSource, /<OwnerLayeredMemoryPanel \/>/, '本人视图须读取独立的本人主题资料');
   assert.doesNotMatch(pageSource, /invoke\(/, 'renderer 不得直接新增 IPC 通道');
+});
+
+test('主题资料可见正文、引用、修正和撤回入口', () => {
+  const reference = { memoryId: ids.current, revision: 1, level: 'contact', provenanceKind: 'source_supported',
+    timing: { recordedAt: null, sourceStartedAt: null, sourceEndedAt: null, sourceTimeComplete: false,
+      currentStatus: 'current_unverified', currentStatusReason: '合成状态未核实。' } };
+  const value = { status: 'failed', maintenancePending: true, updatedAt: null, organizationGeneration: 1,
+    profile: null, scenarios: [{ scenarioId: ids.previous, versionId: ids.current, title: '合成主题',
+      hint: '合成提示', systemGenerated: true, updatedAt: '2026-10-25T00:00:00Z',
+      paragraphs: [{ text: '合成主题正文。', references: [reference] }] }] };
+  const html = renderToStaticMarkup(createElement(ports.LayeredMemorySections, {
+    state: { phase: 'ready', value }, busy: false, manage: async () => {},
+    trace: () => {},
+  }));
+  assert.match(html, /合成主题正文/);
+  assert.match(html, /查看依据/);
+  assert.match(html, /修正这段/);
+  assert.match(html, /删除这段/);
+  assert.match(html, /撤回主题/);
 });

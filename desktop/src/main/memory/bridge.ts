@@ -216,14 +216,14 @@ function layeredMemoryArguments(args: unknown[], owner = false): OwnerLayeredMem
       targetKind: fields.targetKind as 'scenario' | 'profile', versionId: (fields.versionId as string).toLowerCase(), itemIndex: fields.itemIndex as number,
       ...(summary ? { reason: fields.reason as string, operationId: (fields.operationId as string).toLowerCase() } : { memoryId: (fields.memoryId as string).toLowerCase() }) };
   }
-  const enable = fields.action === 'enable', scenario = owner && fields.action === 'withdraw-scenario';
+  const enable = fields.action === 'enable', scenario = fields.action === 'withdraw-scenario';
   const withdraw = fields.action === 'withdraw-profile' || scenario;
   const workAction = fields.action === 'pause' || fields.action === 'continue';
   if (Object.keys(fields).length !== ((withdraw ? 6 : enable || workAction ? 5 : 4) - (owner ? 2 : 0))
     || !Object.keys(fields).every((key) => [...(owner ? [] : ['contactId', 'scopeRevision']), 'action', 'settingsGeneration',
       ...(enable ? ['purposeConfirmed'] : []), ...(workAction ? ['workRevision'] : []),
       ...(withdraw ? ['organizationGeneration', scenario ? 'scenarioVersionId' : 'profileVersionId'] : [])].includes(key))
-    || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue', ...(owner ? ['withdraw-scenario'] : [])].includes(fields.action as string)
+    || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'withdraw-scenario', 'pause', 'continue'].includes(fields.action as string)
     || typeof fields.settingsGeneration !== 'number' || !Number.isSafeInteger(fields.settingsGeneration) || fields.settingsGeneration < 0
     || (enable && fields.purposeConfirmed !== true)
     || (workAction && (typeof fields.workRevision !== 'number' || !Number.isSafeInteger(fields.workRevision) || fields.workRevision < 1))

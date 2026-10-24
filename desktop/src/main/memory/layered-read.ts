@@ -39,6 +39,7 @@ function reference(value: unknown): LayeredMemoryReference {
     || (timing.source_time_complete && sourceStartedAt === null)
     || (sourceStartedAt && sourceEndedAt && Date.parse(sourceStartedAt) > Date.parse(sourceEndedAt))) throw invalid();
   return { ...memoryTemporalFields(entry), memoryId: identifier(entry.memory_id), revision: integer(entry.revision, 1),
+    level: entry.level === undefined ? null : enumeration(entry.level, ['owner', 'contact'] as const),
     provenanceKind: enumeration(entry.provenance_kind, ['manual_entry', 'source_supported']),
     timing: { recordedAt: date(timing.recorded_at), sourceStartedAt, sourceEndedAt,
       sourceTimeComplete: timing.source_time_complete, ...readCurrentStatus(timing) } };
@@ -143,7 +144,7 @@ export function layeredMemory(value: unknown, contactId: string | null): Layered
     correctionRevision: entry.correction_revision === undefined ? 0 : integer(entry.correction_revision),
     protectedCount: entry.protected_count === undefined ? 0 : integer(entry.protected_count),
     pendingFactCount: entry.pending_fact_count === undefined ? 0 : integer(entry.pending_fact_count),
-    correctionTarget: entry.correction_target === undefined ? null : {
+    correctionTarget: entry.correction_target == null ? null : {
       memoryId: identifier(record(entry.correction_target).memory_id), revision: integer(record(entry.correction_target).revision, 1) },
     feedback: entry.feedback === undefined ? [] : list(entry.feedback, value => {
       const feedback = record(value);

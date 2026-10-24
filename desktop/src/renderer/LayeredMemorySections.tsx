@@ -1,6 +1,13 @@
+import { useState } from 'react';
 import { MemoryList } from './MemoryList';
 import { memoryTimeText } from './memory-time-format';
-import type { LayeredMemory, MemoryOverviewState } from '../shared/memory-bridge';
+import type {
+  LayeredMemory,
+  LayeredMemoryManagementOptions,
+  LayeredMemoryReference,
+  LayeredMemoryScenario,
+  MemoryOverviewState,
+} from '../shared/memory-bridge';
 
 const statusNotes: Partial<Record<LayeredMemory['status'], string>> = {
   disabled: '整理已停用，下方为现有结果。',
@@ -22,8 +29,124 @@ function timeNote(updatedAt: string | null): string {
   return updatedAt ? `系统整理 · 更新于 ${memoryTimeText(updatedAt)}` : '系统整理';
 }
 
-// L2 主题资料与 L3 长期背景沿用当前记忆列表的只读行式展示；管理、纠错与删除仍从底层记忆处理。
-export function LayeredMemorySections({ state }: { state: MemoryOverviewState<LayeredMemory> }) {
+export type LayeredMemoryAction = 'summary-error' | 'withdraw-scenario';
+
+function operationId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function ScenarioCard({ scenario, value, busy, manage, trace }: {
+  scenario: LayeredMemoryScenario;
+  value: LayeredMemory;
+  busy: boolean;
+  manage?: (action: LayeredMemoryAction, options: LayeredMemoryManagementOptions) => Promise<void>;
+  trace?: (reference: LayeredMemoryReference) => void;
+}) {
+  const [correction, setCorrection] = useState<{ index: number; reason: string; operationId: string; removal: boolean } | null>(null);
+  const [removingScenario, setRemovingScenario] = useState(false);
+  const [error, setError] = useState('');
+  const [working, setWorking] = useState(false);
+
+  function beginCorrection(index: number, removal = false) {
+    setError('');
+    setCorrection({
+      index,
+      removal,
+      reason: removal ? '用户删除该段落；撤回整份派生主题，底层合法资料保持不变。' : '',
+      operationId: operationId(),
+    });
+  }
+
+  async function submitCorrection() {
+    if (!manage || !correction || working) return;
+    if (!correction.removal && !correction.reason.trim()) return;
+    setWorking(true);
+    setError('');
+    try {
+      await manage('summary-error', {
+        targetKind: 'scenario',
+        versionId: scenario.versionId,
+        itemIndex: correction.index,
+        reason: correction.reason.trim(),
+        operationId: correction.operationId,
+      });
+      setCorrection(null);
+    } catch {
+      setError('这次修正尚未确认完成，请重新读取资料后再试。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function withdraw() {
+    if (!manage || working) return;
+    setWorking(true);
+    setError('');
+    try {
+      await manage('withdraw-scenario', {
+        organizationGeneration: value.organizationGeneration,
+        scenarioVersionId: scenario.versionId,
+      });
+      setRemovingScenario(false);
+    } catch {
+      setError('主题资料撤回尚未确认完成，请重新读取后再试。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return <div className="layered-scenario">
+    <div className="layered-scenario-heading">
+      <div><h3 className="layered-scenario-title">{scenario.title}</h3><p className="memory-section-note">{scenario.hint}</p></div>
+      {manage && <button className="button" disabled={busy || working} onClick={() => setRemovingScenario(true)}>撤回主题</button>}
+    </div>
+    <MemoryList label="主题资料段落" items={scenario.paragraphs}>
+      {(paragraph, index) => <article className="memory-card" key={`${scenario.versionId}:${index}`}>
+        <p className="memory-text" style={{ whiteSpace: 'pre-wrap' }}>{paragraph.text}</p>
+        <details className="memory-details">
+          <summary>引用与修正</summary>
+          <div className="layered-memory-references">
+            {paragraph.references.map(reference => <div className="layered-memory-reference" key={`${reference.memoryId}:${reference.revision}`}>
+              <span>资料 {reference.memoryId.slice(0, 8)} · 版本 {reference.revision}</span>
+              {reference.level && trace && <button className="button" onClick={() => trace(reference)}>查看依据</button>}
+            </div>)}
+          </div>
+          {manage && <div className="layered-memory-actions">
+            <button className="button" disabled={busy || working} onClick={() => beginCorrection(index)}>修正这段</button>
+            <button className="button" disabled={busy || working} onClick={() => beginCorrection(index, true)}>删除这段</button>
+          </div>}
+          {correction?.index === index && <form className="memory-edit-form" aria-label={correction.removal ? '确认删除主题段落' : '修正主题段落'}
+            onSubmit={event => { event.preventDefault(); void submitCorrection(); }}>
+            {correction.removal ? <p>这段会被撤回；由于主题是整份版本，整份主题也会撤回，底层合法资料保持不变。</p>
+              : <label>哪里不正确或需要调整？<textarea aria-label="主题段落修正说明" value={correction.reason} disabled={busy || working}
+                onChange={event => setCorrection({ ...correction, reason: event.target.value })} /></label>}
+            <button className="button" type="submit" disabled={busy || working || !correction.reason.trim()}>
+              {working ? '正在提交…' : correction.removal ? '确认删除这段' : '提交修正'}
+            </button>
+            <button className="button" type="button" disabled={busy || working} onClick={() => setCorrection(null)}>取消</button>
+          </form>}
+        </details>
+      </article>}
+    </MemoryList>
+    {removingScenario && manage && <div className="memory-edit-form" role="group" aria-label="确认撤回主题资料">
+      <p>确认撤回“{scenario.title}”？这一版不会自动恢复，底层合法记忆保持不变。</p>
+      <button className="button" disabled={busy || working} onClick={() => void withdraw()}>{working ? '正在撤回…' : '确认撤回主题'}</button>
+      <button className="button" disabled={busy || working} onClick={() => setRemovingScenario(false)}>取消</button>
+    </div>}
+    {error && <p role="alert">{error}</p>}
+  </div>;
+}
+
+export function LayeredMemorySections({ state, manage, trace, busy = false }: {
+  state: MemoryOverviewState<LayeredMemory>;
+  manage?: (action: LayeredMemoryAction, options: LayeredMemoryManagementOptions) => Promise<void>;
+  trace?: (reference: LayeredMemoryReference) => void;
+  busy?: boolean;
+}) {
   const value = state.value;
   // 未读到结果或该联系人还没有任何整理内容时不额外占位，避免与记忆列表混在一起。
   if (state.phase !== 'ready' || !value || (value.scenarios.length === 0 && value.profile === null)) return null;
@@ -32,15 +155,8 @@ export function LayeredMemorySections({ state }: { state: MemoryOverviewState<La
     <section className="memory-section" aria-label="主题资料">
       <header><div><h2>主题资料</h2><p>{note}</p></div></header>
       {value.scenarios.length === 0 ? <p className="memory-section-note">还没有整理好的主题资料。</p>
-        : value.scenarios.map((scenario) => <div className="layered-scenario" key={scenario.versionId}>
-          <h3 className="layered-scenario-title">{scenario.title}</h3>
-          <p className="memory-section-note">{scenario.hint}</p>
-          <MemoryList label="主题资料段落" items={scenario.paragraphs}>
-            {(paragraph, index) => <article className="memory-card" key={index}>
-              <p className="memory-text">{paragraph.text}</p>
-            </article>}
-          </MemoryList>
-        </div>)}
+        : value.scenarios.map(scenario => <ScenarioCard key={scenario.versionId} scenario={scenario} value={value}
+          busy={busy} manage={manage} trace={trace} />)}
     </section>
     <section className="memory-section" aria-label="长期背景">
       <header><div><h2>长期背景</h2><p>{value.profile ? timeNote(value.profile.updatedAt) : ''}</p></div></header>

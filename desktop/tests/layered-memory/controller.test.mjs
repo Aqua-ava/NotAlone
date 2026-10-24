@@ -21,6 +21,17 @@ test('已验证整理与回复资格经公开 bridge 保留各自合同和报告
   } finally { f.disconnect(); }
 });
 
+test('公开响应显式返回无纠错目标时仍展示已有主题资料', async () => {
+  const f = await fixture(async () => ({ generation: 1, data: readyPayload({ correction_target: null }) }));
+  try {
+    await f.bridge.readLayeredMemory(f.selection());
+    const state = (await f.bridge.getState()).layeredMemory;
+    assert.equal(state.phase, 'ready');
+    assert.equal(state.value.correctionTarget, null);
+    assert.equal(state.value.scenarios[0].title, '合成读书计划');
+  } finally { f.disconnect(); }
+});
+
 test('整理资格变化只关闭自动使用，未知或未通过仍可回看来源有效的已有正文', async () => {
   for (const status of ['unknown', 'failed']) {
     const f = await fixture(async () => ({ generation: 1, data: profilePayload({ quality_status: status, status: 'blocked', quality: {
@@ -373,6 +384,26 @@ test('当前长期背景保留逐项依据与不确定性，并绑定一致版�
   assert.deepEqual(posted.body, { settings_generation: 1, organization_generation: 1, profile_version_id: ids.profile });
   assert.equal((await f.bridge.getState()).layeredMemory.value.profile, null);
   assert.equal((await f.bridge.getState()).layeredMemory.value.scenarios[0].title, '合成读书计划');
+});
+
+test('联系人主题资料可绑定当前版本撤回，不误关整个资料范围', async () => {
+  let posted;
+  const f = await fixture(async request => {
+    if (request.method === 'POST') {
+      posted = request;
+      return { generation: 1, data: readyPayload({ scenarios: [], profile: null, organization_generation: 2 }) };
+    }
+    return { generation: 1, data: readyPayload() };
+  });
+  try {
+    await f.bridge.readLayeredMemory(f.selection());
+    await f.bridge.manageLayeredMemory({ ...f.selection(), action: 'withdraw-scenario', settingsGeneration: 1,
+      organizationGeneration: 1, scenarioVersionId: ids.version });
+    assert.equal(posted.path, `/api/contacts/${ids.contact}/layered-memory/withdraw-scenario`);
+    assert.deepEqual(posted.body, { settings_generation: 1, organization_generation: 1, scenario_version_id: ids.version });
+    assert.equal((await f.bridge.getState()).layeredMemory.value.scenarios.length, 0);
+    assert.equal((await f.bridge.getState()).layeredMemory.value.enabled, true);
+  } finally { f.disconnect(); }
 });
 
 test('旧协议、无依据或非法时间状态的长期背景不能填回当前资料', async () => {

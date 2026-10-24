@@ -38,6 +38,7 @@ function memory(text = '双方共同参加过合成课程') {
   return {
     memory_id: memoryId,
     revision: 1,
+    level: 'contact',
     text,
     category: 'common_fact',
     provenance_kind: 'source_supported',
@@ -118,6 +119,7 @@ test('文档工具只暴露read/write/edit，且模型只能依赖内存暂存�
   assert.equal(calls, 2);
   assert.equal(result.scenarios.length, 1);
   assert.equal(result.scenarios[0].paragraphs[0].text, fact.text);
+  assert.equal(result.scenarios[0].paragraphs[0].references[0].level, 'contact');
   assert.equal(result.receipts.length, 2);
 });
 

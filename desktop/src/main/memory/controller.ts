@@ -199,16 +199,20 @@ export class MemoryReadingController {
     const scope = this.scope, value = this.state.layeredMemory.value;
     const workAction = request.action === 'pause' || request.action === 'continue';
     const correction = request.action === 'summary-error' || request.action === 'fact-error';
+    const scenario = request.action === 'withdraw-scenario';
+    const withdraw = scenario || request.action === 'withdraw-profile';
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision || this.mutation
       || this.sourceDeletionDepth || this.state.layeredMemory.phase !== 'ready' || !value || value.settingsGeneration !== request.settingsGeneration
-      || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue', 'summary-error', 'fact-error'].includes(request.action)
+      || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'withdraw-scenario', 'pause', 'continue', 'summary-error', 'fact-error'].includes(request.action)
       || (correction && !validCorrectionTarget(value, request))
       || (workAction && (!value.workId || request.workRevision !== value.workRevision || value.workRevision < 1))
       || (!workAction && request.workRevision !== undefined)
       || (request.action === 'enable' && request.purposeConfirmed !== true)
       || (request.action === 'withdraw-profile' && (!value.profile || request.organizationGeneration !== value.organizationGeneration
         || request.profileVersionId !== value.profile.versionId))
-      || (!correction && request.action !== 'withdraw-profile' && (request.organizationGeneration !== undefined || request.profileVersionId !== undefined))) {
+      || (scenario && (request.organizationGeneration !== value.organizationGeneration
+        || !value.scenarios.some(item => item.versionId === request.scenarioVersionId)))
+      || (!correction && !withdraw && (request.organizationGeneration !== undefined || request.profileVersionId !== undefined || request.scenarioVersionId !== undefined))) {
       throw new Error('主题资料范围或设置已变化，请重新读取后操作。');
     }
     this.clearLayered();
@@ -222,6 +226,7 @@ export class MemoryReadingController {
       const command = { method: 'POST' as const, path: `/api/contacts/${scope.contactId}/layered-memory/${request.action}`,
         body: { ...(workAction ? { work_revision: request.workRevision } : {}), settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
           ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}),
+          ...(scenario ? { organization_generation: request.organizationGeneration, scenario_version_id: request.scenarioVersionId } : {}),
           ...(correction ? correctionBody(request) : {}) },
         signal: operation.abort.signal };
       const result = await retryFactCorrection(request.action === 'fact-error', current, () => this.backend.requestJson(command));
@@ -229,7 +234,8 @@ export class MemoryReadingController {
       const value = layeredMemory(result.data, scope.contactId);
       this.publish({ layeredMemory: { phase: 'ready', value }, mutation: { phase: 'success', message: request.action === 'delete'
         ? '主题资料整理结果已删除，本范围已关闭。底层记忆可另行管理。' : request.action === 'withdraw-profile'
-          ? '本版长期背景已撤回，未自动恢复旧版。底层记忆可另行管理。' : '主题资料操作已完成并核对。' } });
+          ? '本版长期背景已撤回，未自动恢复旧版。底层记忆可另行管理。' : scenario
+            ? '本版主题资料已撤回，未自动恢复旧版。底层记忆可另行管理。' : '主题资料操作已完成并核对。' } });
     } catch (error) {
       if (!current()) return;
       await this.readLayered(scope);

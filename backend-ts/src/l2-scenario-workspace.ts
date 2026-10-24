@@ -39,6 +39,7 @@ export const DEFAULT_L2_SCENARIO_BUDGET: Readonly<L2ScenarioBudget> = Object.fre
 export interface L2ScenarioMemory {
   memory_id: string;
   revision: number;
+  level?: 'owner' | 'contact';
   text: string;
   category: string;
   provenance_kind: 'manual_entry' | 'source_supported';
@@ -57,6 +58,7 @@ export interface L2ScenarioMemory {
 export interface L2ScenarioReference {
   memory_id: string;
   revision: number;
+  level?: 'owner' | 'contact';
   provenance_kind: 'manual_entry' | 'source_supported';
   timing: Record<string, unknown>;
   event: Record<string, unknown> | null;
@@ -269,7 +271,7 @@ export function validateScenarioDocument(
         if (
           !object(reference)
           || Object.keys(reference).some(key => ![
-            'memory_id', 'revision', 'provenance_kind', 'timing', 'event', 'conditions', 'evolution', 'valid_at', 'invalid_at',
+            'memory_id', 'revision', 'level', 'provenance_kind', 'timing', 'event', 'conditions', 'evolution', 'valid_at', 'invalid_at',
           ].includes(key))
           || !['memory_id', 'revision'].every(key => Object.hasOwn(reference, key))
           || typeof memoryId !== 'string'
@@ -286,6 +288,7 @@ export function validateScenarioDocument(
         references.push({
           memory_id: memory.memory_id,
           revision: memory.revision,
+          ...(memory.level ? {level: memory.level} : {}),
           provenance_kind: memory.provenance_kind,
           timing: clone(memory.timing),
           event: clone(memory.event),

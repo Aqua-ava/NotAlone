@@ -8,6 +8,7 @@ import './memory.css';
 import { MemoryList } from './MemoryList';
 import { MemoryConditionsDetails, MemoryConditionsEditor, conditionEditorText, conditionEditProposal, conditionEditorValid } from './MemoryConditionsDetails';
 import { LayeredMemorySections } from './LayeredMemorySections';
+import { OwnerLayeredMemoryPanel } from './OwnerLayeredMemoryPanel';
 import { memoryAvailability, memoryRemovalTarget } from './memory-availability';
 import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } from '../shared/memory-bridge';
 import { MemoryEvidence } from './MemoryEvidence';
@@ -77,10 +78,11 @@ function useMemoryReading(session: ContactSessionView) {
     setError('');
     try { await window.notalone.memory.manageLayeredMemory({ contactId: selectedContactId, scopeRevision, action, settingsGeneration,
       ...options }); }
-    catch {
+    catch (error) {
       if (active.current && scope.current.selectedContactId === selectedContactId && scope.current.scopeRevision === scopeRevision) {
         setError('主题资料范围或设置已变化，请重新读取后重试。');
       }
+      throw error;
     }
   }
   useEffect(() => {
@@ -367,7 +369,14 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
             initiallyEditing={factTarget?.scope === scopeKey && factTarget.memoryId === entry.memoryId && factTarget.revision === entry.revision && factTarget.editing}
             trace={trace} correct={memory.correct} remove={memory.remove} busy={state.mutation.phase === 'working'} />}</MemoryList>
         </ReadingSection>
-          <LayeredMemorySections state={state.layeredMemory} />
+          <LayeredMemorySections state={state.layeredMemory}
+            busy={state.mutation.phase === 'working'}
+            manage={(action, options) => memory.manageLayeredMemory(action, state.layeredMemory.value!.settingsGeneration, options)}
+            trace={reference => {
+              if (!reference.level) return;
+              trace(reference.level === 'owner' ? 'owner_memory' : 'contact_memory', reference.memoryId,
+                `主题资料引用的${reference.level === 'owner' ? '本人' : '联系人'}资料`);
+            }} />
         </div>}
         {view === 'owner' && <ReadingSection title="我的记忆" note="" empty="还没有记住你和这位联系人交流中的事。"
           state={state.owner} retry={() => void memory.refresh('owner')}>
@@ -376,6 +385,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
             key={`${entry.memoryId}:${entry.revision}`} content={entry} memory={entry} removalTarget={memoryRemovalTarget(entry, state[entry.level].items)} sources={state.sources}
             trace={trace} correct={memory.correct} remove={memory.remove} busy={state.mutation.phase === 'working'} />}</MemoryList>
         </ReadingSection>}
+        {view === 'owner' && <OwnerLayeredMemoryPanel />}
         {view === 'pending' && <ReadingSection title="待确认候选" note="这些内容还没记住，需要你核对一下。" empty="暂时没有需要确认的内容。"
           state={state.pending} retry={() => void memory.refresh('pending')}>
           <MemoryList key={scopeKey} items={state.pending.items} label="待确认候选">{(entry) => <MemoryCard key={entry.candidateId} content={entry} candidate={entry} sources={state.sources}

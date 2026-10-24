@@ -144,6 +144,7 @@ export interface LayeredMemoryReference {
   invalidAt?: string | null;
   memoryId: string;
   revision: number;
+  level: 'owner' | 'contact' | null;
   provenanceKind: 'manual_entry' | 'source_supported';
   timing: MemoryTiming;
 }

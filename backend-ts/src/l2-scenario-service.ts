@@ -262,6 +262,7 @@ function memoryFrom(entry: ContextMetadata, now: number): L2ScenarioMemory | nul
   return {
     memory_id: memory.memory_id,
     revision: memory.revision,
+    level: memory.level === 'owner' ? 'owner' : 'contact',
     text: memory.text,
     category: String(memory.category),
     provenance_kind: provenance as 'manual_entry' | 'source_supported',
@@ -870,6 +871,16 @@ export class L2ScenarioService {
       const entries = await overview(client, scope);
       const now = this.now().getTime();
       const allEligible = currentInputs(entries, new Set(), new Set(), now);
+      const memoryLevels = new Map(allEligible.map(memory => [memory.memory_id, memory.level]));
+      for (const scenario of scenarios) {
+        for (const paragraph of scenario.paragraphs) {
+          for (const reference of paragraph.references) {
+            if (!reference.level && memoryLevels.has(reference.memory_id)) {
+              reference.level = memoryLevels.get(reference.memory_id);
+            }
+          }
+        }
+      }
       const eligible = currentInputs(
         entries,
         protectedMemoryIds(feedback),
@@ -925,7 +936,7 @@ export class L2ScenarioService {
           max_scenarios: this.budget.max_scenarios,
           max_paragraphs: this.budget.max_paragraphs,
           max_characters: this.budget.max_characters,
-          max_model_calls: this.budget.max_model_calls,
+          max_model_calls: limit,
           max_profile_entries: 16,
           model_calls_used: used,
           model_calls_remaining: Math.max(0, limit - used),

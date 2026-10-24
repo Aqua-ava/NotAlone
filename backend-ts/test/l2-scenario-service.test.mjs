@@ -118,6 +118,12 @@ test('合成PG：合格记忆经受控文档、核验后事务发布；回放幂
     assert.equal(run.state.scenarios.length,1);
     assert.equal(run.state.scenarios[0].paragraphs[0].text,x.memory.text);
     assert.equal(run.state.scenarios[0].paragraphs[0].references[0].memory_id,x.memoryId);
+    const stored=await f.client.query("SELECT id,paragraphs FROM scenario_document_version WHERE owner_id=$1 AND contact_id=$2",[x.ownerId,x.contactId]);
+    const oldParagraphs=structuredClone(stored.rows[0].paragraphs);
+    for(const paragraph of oldParagraphs)for(const reference of paragraph.references)delete reference.level;
+    await f.client.query("UPDATE scenario_document_version SET paragraphs=$2 WHERE id=$1",[stored.rows[0].id,JSON.stringify(oldParagraphs)]);
+    const reread=await l2.read(x.scope);
+    assert.equal(reread.scenarios[0].paragraphs[0].references[0].level,'contact');
     assert.equal((await f.client.query("SELECT count(*)::int n FROM scenario_document_version WHERE owner_id=$1 AND contact_id=$2",[x.ownerId,x.contactId])).rows[0].n,1);
     assert.equal((await f.client.query("SELECT count(*)::int n FROM layered_memory_generation WHERE owner_id=$1 AND contact_id=$2",[x.ownerId,x.contactId])).rows[0].n,1);
     const replay=await l2.run(x.scope,x.claim,new AbortController().signal);
@@ -215,6 +221,18 @@ test('合成PG：核验拒绝保留实际核验结果且不发布场景',async()
     assert.equal(batch.error_code,'l2_scenario_verification_rejected');
     assert.equal(batch.output_payload.verification_result.results[0].supported,false);
     assert.equal((await f.client.query('SELECT count(*)::int n FROM scenario_document_version')).rows[0].n,0);
+  }finally{await f.close();}
+});
+
+test('合成PG：覆盖工作的实际预算上限同步到公开budget，不返回互相矛盾额度',async()=>{
+  const f=await createStorageFixture();try{
+    const x=await createScope(f),l2=service(f,{async call(){throw new Error('not_called');}});
+    await f.client.query("UPDATE layered_memory_job SET model_call_limit=192,model_calls_used=27 WHERE task_id=$1",[x.taskId]);
+    const state=await l2.read(x.scope);
+    assert.equal(state.model_call_limit,192);
+    assert.equal(state.budget.max_model_calls,192);
+    assert.equal(state.budget.model_calls_used,27);
+    assert.equal(state.budget.model_calls_remaining,165);
   }finally{await f.close();}
 });
 
