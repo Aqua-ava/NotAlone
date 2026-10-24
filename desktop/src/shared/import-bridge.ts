@@ -1,4 +1,4 @@
-export type ImportTarget = { kind: 'existing'; contactId: string } | { kind: 'new'; displayName: string };
+export type ImportTarget = { kind: 'existing'; contactId: string };
 
 export interface ImportIdentity { externalId: string; observedName: string; }
 export interface ImportPreviewSummary {

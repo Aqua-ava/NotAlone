@@ -18,8 +18,6 @@ function target(args: unknown[]): ImportTarget {
     const contactId = normalizeUuid(value.contactId);
     if (contactId !== null) return { kind: 'existing', contactId };
   }
-  if ('kind' in value && value.kind === 'new' && 'displayName' in value && typeof value.displayName === 'string'
-    && value.displayName.length <= 100 && !/[\u0000-\u001f]/.test(value.displayName)) return { kind: 'new', displayName: value.displayName };
   throw new Error('历史导入操作不可用。');
 }
 

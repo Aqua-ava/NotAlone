@@ -1,0 +1,43 @@
+diff --git a/backend-ts/src/host-plugin.ts b/backend-ts/src/host-plugin.ts
+index efb45fcd..2324fb03 100644
+--- a/backend-ts/src/host-plugin.ts
++++ b/backend-ts/src/host-plugin.ts
+@@ -27,5 +27,6 @@ import {startHostModelRuntime} from './host-model-runtime.ts';
+ import {usageSummary} from './usage-summary.ts';
+ import {ExtractionTaskStore} from './extraction-task-store.ts';
+ import {ExtractionProgressApi} from './extraction-progress-http.ts';
++import {HistoryImportApi} from './history-import-api.ts';
+ export const name = 'notalone-host';
+ export const inject = ['appReady','llm','agents','sessions','tools','systemPrompt','skills'];
+@@ -66,6 +67,10 @@ async function start(ctx: Context) {
+   const progress=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
+     ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId)
+     : undefined;
++  const imports=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
++    ? new HistoryImportApi({transaction:work=>storage.businessTransaction(work),ownerId:storage.runtimeOwnerId})
++    : undefined;
++  // 根装配唯一ExtractionWorker后，向HistoryImportApi注入wake；未注入时响应如实标记processing_deferred。
+   let legacy: LegacyBackend | undefined;
+   let handoff: ContactHandoff | undefined;
+   let memoryHandoff: MemoryManagementHandoff | undefined;
+@@ -167,11 +172,19 @@ async function start(ctx: Context) {
+         }:undefined);
+     };
+     try {
+-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus}}:{}),ownership:{...ownership,skills:skills.status().owner,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
++      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus}}:{}),ownership:{...ownership,skills:skills.status().owner,imports:imports?'typescript':'python',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
+         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
+       }
+       if(state!=='running'){respond(503,{error:'runtime_stopping'});return;}
++      if(url.pathname==='/api/imports/preview'||url.pathname==='/api/imports/commit'){
++        if(!imports){respond(503,{error:'import_unavailable'});return;}
++        if(url.search){respond(400,{error:'import_request_invalid'});return;}
++        const body=req.method==='POST'?await readBody(req):undefined;
++        const result=await imports.handle(req.method??'',url.pathname,body);
++        if(!result){respond(404,{error:'not_found'});return;}
++        respond(result.status,result.body);return;
++      }
+       const progressPath=/^\/api\/contacts\/[^/]+\/memory-processing(?:\/resume)?$|^\/api\/owner\/memory-processing(?:\/resume)?$/.test(url.pathname);
+       if(progress&&progressPath){
+         let body:Record<string,any>|undefined;

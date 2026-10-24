@@ -172,8 +172,13 @@ for (const invalid of ['mixed', 'broken', 'group', 'multiple-owners'] as const) 
 test('库内本人渠道冲突在页面明确拒绝，既有资料保持原范围', async ({ runningApp: { app }, contactBackend }) => {
   const filePath = await syntheticFile(contactBackend);
   const manager = await app.firstWindow();
-  await expect(manager.getByText('还没有联系人', { exact: true })).toBeVisible({ timeout: 15_000 });
-  const imported = await importHttp(contactBackend, '/api/imports/commit', { path: filePath, new_contact_name: '已导入合成联系人' });
+  await prepareImportContact(manager, '已导入合成联系人', contactBackend);
+  const contactId = await manager.evaluate(async () => (await window.notalone.contacts.getState()).selectedContactId);
+  if (!contactId) throw new Error('合成联系人尚未选择。');
+  const preview = await importHttp(contactBackend, '/api/imports/preview', { path: filePath, contact_id: contactId });
+  const imported = await importHttp(contactBackend, '/api/imports/commit', {
+    path: filePath, contact_id: contactId, expected_content_sha256: preview.data.content_sha256,
+  });
   expect(imported.status).toBe(200);
   await writeFile(filePath, (await readFile(filePath, 'utf8')).replaceAll('wxid_synthetic_owner', 'wxid_changed_owner'));
   await chooseNewImport(app, filePath, contactBackend);

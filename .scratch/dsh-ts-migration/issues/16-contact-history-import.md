@@ -1,7 +1,7 @@
 # 16：导入单联系人历史
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 04, 10
 Spec: ../spec.md
@@ -14,7 +14,7 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
+- [x] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
 - [ ] 已有联系人选择文件后，预览与确认仍属于单联系人；混有多联系人的资料明确拆分或拒绝，不猜测归属。
 - [ ] 原始资料、规范消息、来源和导入批次分层保存，重试去重，只有确认后的数据进入后续业务。
 - [ ] 导入提交唤醒既有记忆处理而不把消息同步与模型处理混成一个事务；模型不可用时保持可恢复状态。
@@ -45,4 +45,32 @@ Spec: ../spec.md
 
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+2026-10-25：已从 `65464802f8160082840a050e90ecd16809d3b8f9` 建立隔离分支
+`codex/task16-contact-history-import` 实施；共享宿主接线仍待根集成，因此票保持 `claimed`。
+
+- DSH 查证：锁定 `@deepseek-ai/dsh* 0.2.1-rc.2`、官方仓库 commit
+  `687f282e8625c6b8d11ff58211a90524be2e4317`，核对了
+  [生命周期与 effect](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/cordis-tutorial/02-lifecycle-and-effects.zh.md)、
+  [app-boot](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/boot/app-boot/README.zh.md)、
+  [cmdline/appReady](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/boot/cmdline/README.zh.md)
+  及本地锁定安装包源码。
+- 适配结论：JSONL 读取、校验、规范化、PostgreSQL 事务和任务唤醒均为普通 TS 业务，
+  不直接调用 DSH API，也不把 DSH 会话当业务状态。宿主只按 profile 公开生命周期装配路由：
+  `appReady` 后才发布业务入口，`ctx.effect` 负责关闭服务器与存储；未修改 DSH 核心。
+- 实现：新增确定性解析器、业务服务和 HTTP 适配器；只接受已确认的既有联系人，原子保存
+  `source_document`、确认、规范消息、微信身份、来源引用、处理批次/回执及原导入任务。
+  同 SHA 重放复用原来源/任务；不同文件稳定消息重叠、非 active 来源和多联系人/群聊/损坏
+  输入在写入前或事务回滚中拒绝。事务提交后才调用注入的 `wake`，Worker 未就绪时返回
+  `processing_deferred=true` 且保留 queued 任务。
+- 桌面：`ImportTarget` 与桥接收窄为既有联系人，移除了 `new`/`new_contact_name` 路径；
+  既有控制器对取消、轮询、迟到结果和联系人切换的测试保持通过。
+- 验证：backend 类型检查通过；`history-import-api`、`extraction-task-store`、
+  `contact-context`、`host-storage` 共 51/51 通过；desktop 类型检查通过，
+  `import-existing-contact-target` 与 `background-task-polling` 共 10/10 通过；
+  `git apply --check` 验证宿主补丁可应用。
+- 数据影响：测试只使用随机 `*_test` PostgreSQL、合成 JSONL 和临时目录，每库/目录测试后
+  清理；未读取真实聊天、未运行 App/微信、未调用模型、未外发、未打包、未 push。
+- 根集成：应用 [宿主集成交接](16-history-import-host-integration.patch)，将
+  `/api/imports/preview|commit` 从 Python 路由切到 TS，并注入唯一 ExtractionWorker 的
+  `wake`；同时迁移桌面仍读取的 `/api/tasks/status|run|retry`。完整来源删除及索引/候选
+  闭包仍由票 17/根统一验收；实际 HTTP、App、500k 上限与真实既有联系人未在本票验证。

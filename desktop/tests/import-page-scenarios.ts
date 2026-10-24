@@ -37,7 +37,10 @@ export async function originalImport(fixture: ImportFixture) {
   expect(response.status).toBe(200);
   const contact = (response.data.contacts as Array<{ contact_id: string; display_name: string }>).find((item) => item.display_name === '合成导入联系人');
   if (!contact) throw new Error('本轮合成联系人尚未保存。');
-  const repeated = await fixture.request('/api/imports/commit', { path: fixture.data.file_path, contact_id: contact.contact_id });
+  const preview = await fixture.request('/api/imports/preview', { path: fixture.data.file_path, contact_id: contact.contact_id });
+  const repeated = await fixture.request('/api/imports/commit', {
+    path: fixture.data.file_path, contact_id: contact.contact_id, expected_content_sha256: preview.data.content_sha256,
+  });
   expect(repeated.status).toBe(200);
   return repeated.data as { contact_id: string; task_id: string };
 }
@@ -73,6 +76,7 @@ export async function changedImport(pages: ImportPages): Promise<void> {
   expect(await helper.evaluate(async () => {
     const outcomes: string[] = [];
     for (const action of [() => window.notalone.imports.chooseFile(),
+      // @ts-expect-error 新建联系人入口已退役，运行时也必须由具名桥接拒绝。
       () => window.notalone.imports.setTarget({ kind: 'new', displayName: '未授权联系人' }),
       () => window.notalone.imports.submit({ selectionRevision: 0 })]) {
       try { await action(); outcomes.push('accepted'); } catch { outcomes.push('rejected'); }

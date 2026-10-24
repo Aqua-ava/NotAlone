@@ -15,7 +15,7 @@ export type ImportFileSelector = () => Promise<{ canceled: boolean; filePaths: s
 
 export interface ConfirmedImportSelection {
   generation: number;
-  body: { path: string; expected_content_sha256: string } & ({ contact_id: string } | { new_contact_name: string });
+  body: { path: string; expected_content_sha256: string; contact_id: string };
 }
 
 function identity(value: unknown): ImportIdentity {
@@ -97,7 +97,7 @@ export class ImportController {
   setTarget(target: ImportTarget): void {
     this.assertAvailable();
     if (this.state.phase === 'choosing') throw new Error(staleMessage);
-    if (target.kind === 'existing' && !this.contacts.getState().contacts.some((entry) => entry.contactId === target.contactId)) throw new Error(staleMessage);
+    if (target.kind !== 'existing' || !this.contacts.getState().contacts.some((entry) => entry.contactId === target.contactId)) throw new Error(staleMessage);
     this.invalidate({ target: { ...target }, phase: 'idle' });
   }
 
@@ -144,7 +144,7 @@ export class ImportController {
     const target = this.state.target!;
     const selection: ConfirmedImportSelection = { generation: this.generation, body: {
       path: this.selectedPath!, expected_content_sha256: this.previewDigest,
-      ...(target.kind === 'existing' ? { contact_id: target.contactId } : { new_contact_name: target.displayName.trim() }),
+      contact_id: target.contactId,
     } };
     this.invalidate({ phase: 'idle' });
     return selection;
@@ -181,7 +181,7 @@ export class ImportController {
       const rejected = error instanceof BackendRequestFailure && error.code === 'import_commit_failed';
       this.publish({ phase: 'error', error: changed ? fileChangedMessage : rejected
         ? '导入被拒绝，未通过文件或归属校验。请重新预览并确认。'
-        : '本次保存结果尚未确认。请重新预览并确认同一份文件和原联系人；原新建名称未变且归属仍有效时，后端会复用已保存的联系人与任务。归属变化时须明确选择既有联系人。' });
+        : '本次保存结果尚未确认。请重新预览并确认同一份文件和原联系人；文件和归属仍有效时，后端会复用已保存的来源与任务。' });
       await this.contacts.refreshContacts();
     } finally { this.pending.delete(abort); }
   }
@@ -331,17 +331,16 @@ export class ImportController {
     this.assertAvailable();
     const target = this.state.target;
     if (selectionRevision !== this.state.selectionRevision || !this.selectedPath || !target
-      || (target.kind === 'new' && !target.displayName.trim())
-      || (target.kind === 'existing' && !this.contacts.getState().contacts.some((entry) => entry.contactId === target.contactId))) throw new Error(staleMessage);
+      || target.kind !== 'existing'
+      || !this.contacts.getState().contacts.some((entry) => entry.contactId === target.contactId)) throw new Error(staleMessage);
   }
 
   private async readPreview(): Promise<{ summary: ImportPreviewSummary; digest: string }> {
     const generation = this.generation;
     const target = this.state.target!;
-    const targetName = target.kind === 'new' ? target.displayName.trim()
-      : this.contacts.getState().contacts.find((entry) => entry.contactId === target.contactId)!.displayName;
+    const targetName = this.contacts.getState().contacts.find((entry) => entry.contactId === target.contactId)!.displayName;
     const result = await this.backend.requestJson({ method: 'POST', path: '/api/imports/preview',
-      body: { path: this.selectedPath, ...(target.kind === 'existing' ? { contact_id: target.contactId } : {}) }, timeoutMs: 30_000 });
+      body: { path: this.selectedPath, contact_id: target.contactId }, timeoutMs: 30_000 });
     if (result.generation !== generation || this.backend.getConnectionGeneration() !== generation) throw new Error(staleMessage);
     return previewSummary(result.data, targetName);
   }
