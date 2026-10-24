@@ -160,7 +160,7 @@ export class HostStorage {
     let migrations: {name: string; checksum: string}[];
     try {
       const names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
-      if (names.length !== 110 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
+      if (names.length !== 111 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
       migrations = await Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') })));
     } catch { return 'migration_files_invalid'; }
     const metadata = await client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
@@ -192,10 +192,10 @@ export class HostStorage {
       offset = 35;
     }
     const completed = (await client.query('SELECT name,checksum FROM public.notalone_schema_migration ORDER BY name')).rows;
-    if (completed.length + offset > 110 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
-    if (completed.length + offset !== 110) return 'migration_pending';
+    if (completed.length + offset > 111 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
+    if (completed.length + offset !== 111) return 'migration_pending';
     if (REQUIRED_TABLES.some(table => !tables.has(table)) || Object.entries(REQUIRED_COLUMNS).some(([table,columns]) => Object.entries(columns).some(([column,kind]) => tables.get(table)?.get(column) !== kind))) return 'schema_incomplete';
-    if (!(await receiptSchemaReady(client))) return 'schema_incomplete';
+    if (!(await receiptSchemaReady(client)) || !(await learningClaimSchemaReady(client))) return 'schema_incomplete';
     return 'ready';
   }
   private async persist(values: Record<string, string>): Promise<void> {
@@ -275,6 +275,7 @@ const REQUIRED_TABLES = [
   "memory_extraction_watermark",
   "message",
   "message_source_ref",
+  "model_call_learning_claim",
   "model_call_receipt",
   "outbound_ledger_entry",
   "owner",
@@ -296,6 +297,17 @@ const REQUIRED_TABLES = [
   "wechat_observation_cursor"
 ];
 const REQUIRED_COLUMNS: Record<string, Record<string,string>> = {
+  "model_call_learning_claim": {
+      "attempt_id": "uuid",
+      "owner_id": "uuid",
+      "contact_id": "uuid",
+      "request_id": "uuid",
+      "task_id": "uuid",
+      "step_id": "uuid",
+      "worker_id": "uuid",
+      "step_name": "text",
+      "lease_generation": "bigint"
+  },
   "model_call_receipt": {
       "attempt_id": "uuid",
       "owner_id": "uuid",
@@ -515,18 +527,42 @@ async function connectConfigured(configuration: DatabaseConnection): Promise<pg.
 
 /** 110窄表的PG16约束契约；来自冻结迁移，防止同列同类型但删除/未知用量约束缺失。 */
 async function receiptSchemaReady(client: pg.Client): Promise<boolean> {
-  const columns = (await client.query(`SELECT attname,attnotnull FROM pg_catalog.pg_attribute
-    WHERE attrelid='public.model_call_receipt'::regclass AND attnum>0 AND NOT attisdropped`)).rows;
-  if (columns.some(row => row.attnotnull !== RECEIPT_NOT_NULL.has(row.attname))) return false;
-  const constraints = (await client.query(`SELECT c.contype,c.convalidated,c.condeferrable,c.condeferred,
+  return constrainedModelTableReady(client,'model_call_receipt',RECEIPT_CONSTRAINTS,RECEIPT_NOT_NULL);
+}
+/** 只核对110/111的两张模型元数据表及旧step新增候选键；不扩展为通用schema迁移器。 */
+async function constrainedModelTableReady(client: pg.Client,
+    table:'model_call_receipt'|'model_call_learning_claim'|'background_task_step',
+    expected:readonly string[],notNull?:ReadonlySet<string>):Promise<boolean> {
+  if(notNull){
+    const columns=(await client.query(`SELECT attname,attnotnull FROM pg_catalog.pg_attribute
+      WHERE attrelid=$1::regclass AND attnum>0 AND NOT attisdropped`,[`public.${table}`])).rows;
+    if(columns.some(row=>row.attnotnull!==notNull.has(row.attname)))return false;
+  }
+  const constraints=(await client.query(`SELECT c.contype,c.convalidated,c.condeferrable,c.condeferred,
       pg_catalog.pg_get_constraintdef(c.oid) AS definition,i.indisvalid,i.indisready
     FROM pg_catalog.pg_constraint c LEFT JOIN pg_catalog.pg_index i ON i.indexrelid=c.conindid
-    WHERE c.conrelid='public.model_call_receipt'::regclass`)).rows;
-  if (constraints.some(row => !row.convalidated || row.condeferrable || row.condeferred ||
-      (['p','u'].includes(row.contype) && (!row.indisvalid || !row.indisready)))) return false;
-  const actual = constraints.map(row => `${row.contype}:${row.definition}`).sort();
-  return actual.length === RECEIPT_CONSTRAINTS.length && actual.every((item,index) => item === RECEIPT_CONSTRAINTS[index]);
+    WHERE c.conrelid=$1::regclass`,[`public.${table}`])).rows;
+  const selected=table==='background_task_step'?constraints.filter(row=>expected.includes(`${row.contype}:${row.definition}`)):constraints;
+  if(selected.some(row=>!row.convalidated||row.condeferrable||row.condeferred||
+    (['p','u'].includes(row.contype)&&(!row.indisvalid||!row.indisready))))return false;
+  const actual=selected.map(row=>`${row.contype}:${row.definition}`).sort();
+  return actual.length===expected.length&&actual.every((item,index)=>item===expected[index]);
 }
+async function learningClaimSchemaReady(client: pg.Client):Promise<boolean> {
+  return await constrainedModelTableReady(client,'model_call_learning_claim',LEARNING_CLAIM_CONSTRAINTS,
+    new Set(['attempt_id','owner_id','contact_id','request_id','task_id','step_id','step_name','worker_id','lease_generation']))
+    && await constrainedModelTableReady(client,'background_task_step',['u:UNIQUE (id, task_id)']);
+}
+const LEARNING_CLAIM_CONSTRAINTS=[
+  "c:CHECK ((lease_generation > 0))",
+  "c:CHECK ((step_name = 'propose_skill'::text))",
+  "f:FOREIGN KEY (attempt_id, owner_id, contact_id, request_id) REFERENCES model_call_receipt(attempt_id, owner_id, contact_id, request_id) ON DELETE CASCADE",
+  "f:FOREIGN KEY (step_id, task_id) REFERENCES background_task_step(id, task_id) ON DELETE CASCADE",
+  "f:FOREIGN KEY (task_id, owner_id, contact_id) REFERENCES background_task(id, owner_id, contact_id) ON DELETE CASCADE",
+  "p:PRIMARY KEY (attempt_id)",
+  "u:UNIQUE (step_id, lease_generation)"
+];
+
 const RECEIPT_NOT_NULL = new Set(['attempt_id','owner_id','scope_kind','request_id','permit_id',
   'provider','model_name','called_at','dispatch','outcome','cost_status','created_at','updated_at']);
 const RECEIPT_CONSTRAINTS = [
@@ -553,5 +589,6 @@ const RECEIPT_CONSTRAINTS = [
   "f:FOREIGN KEY (owner_id) REFERENCES owner(id) ON DELETE CASCADE",
   "f:FOREIGN KEY (owner_id, contact_id) REFERENCES contact(owner_id, id) ON DELETE CASCADE",
   "p:PRIMARY KEY (attempt_id)",
+  "u:UNIQUE (attempt_id, owner_id, contact_id, request_id)",
   "u:UNIQUE (ledger_entry_id)"
 ];
