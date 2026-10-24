@@ -68,3 +68,7 @@ cc263095已整合唯一模型宿主、原SDK物理许可、已知终态ACK未知
 ## 19 永久回归：自然重连及失败清理（2026-10-24）
 
 根精确接收两个reconnect专属测试路径；先完整fixture纯seam6/6，再主树真实官方profile/Legacy/PG两case2/2、0skip。自然code7后5122ms重连、metadata cursor接续、消息2/复用4、关闭停读和正常退出均通过；真实active=1原断言/缓存错误保留且清理完成。原两轮清理P2保留、最后独立delta0，未知退出不强删活库；该极端启动失败仅纯seam覆盖，不冒称真实自然复现。自有库/目录/宿主清理0、无应急；模型/App/微信0，详见incremental-reconnect-root-acceptance/validation.md。19状态与parent-loss既有证据不改。
+
+## 05 回复对比报告器 v3 组件（2026-10-24）
+
+根精确接收reporter与原测试两路径，patch85c22144，最终70fc72f2/6746abf0；核作者46+Standards8+Spec32文件及七只读依赖，双轴0。主树新增8/8→相关78/78（均0skip）→TS7 tsc/noEmit 0；日志原字节相同并清临时副本。固定字段投影关闭元数据额外正文出口，完整原证据摘要/合法理由/96分母/原阈值保持，最终持久结果为延迟门、首token仅诊断。不合实验hardcoded覆盖；multi source/caller/盲绑定及正式fixture仍后继，05/真实质量/切换false。详见reply-reporter-v3-root-acceptance/validation.md；外联/SDK/PG/App/微信0。

@@ -1,0 +1,30 @@
+# 05 reporter 元数据出口修正 v3
+
+- 作者交付待独立双轴，不自签全出口封闭、审查通过或真实模型资格。
+- v2 父包 40 件及原父包 44 件、70/64 日志、审查历史逐 SHA 未改；绑定见 `parent-proof.json`。
+- 基底 `43ae208f3c4bc38116bfee62ed4665923674e682`；冻结 HEAD `c943f91c7241f0a18c11a5ba0e9eb95fb3d3fd57`，原相关 7 文件无漂移。
+- 仅 2 正式路径：reporter 与原测试；`formal-tree/` 最小 2 文件；`tree/` 含 7 只读依赖/冻结材料供重放，均不提交。
+- full `candidate.patch` SHA `85c221443543bd0ba312417e73e156756045db4a89680af4df57519ba90ef383`。
+- 相对 v2 `review-fix-delta.patch` SHA `eef2cc6996606b2514857da55070689139846bed0c18f96bc04faa8605fa3fef`。
+- reporter SHA `70fc72f2efa90c67c687b58d042afa273d366594b467753dacc2781cad77fde2`。
+- test SHA `6746abf0cdfd38aed3eaafd18935d7961bdeadd84b7d51f9f7aeef239e4a43bc`；精确 base/7 依赖见 `candidate-sha256.json`。
+- 全部输入派生容器逐出口清单见 `sink-audit.md`；usage/cost/checks、价目/两臂、评审/评分、来源、timing 改为固定字段元数据视图。
+- 当前 source_audit 不含 contract_scope/derived_proof，multi attempt 仍未定；后续来源 v2 必须另候选显式接入，不在本版扩展。
+- 移除 reporter 的全部 structuredClone 与 record ...rest 透传；非业务额外对象留输入，非法已知字段仍先拒绝，不按名字递归删正文。
+- 对象型模型/版本/时间元数据输出 null，原 unknown 原因/门槛保留；合同文字 reason/basis 原样保留。
+- 所有 SHA/subject 继续绑定原完整输入证据，不重算为投影视图摘要；报告不能由投影复算原始对象摘要。
+- TDD：原 usage/cost/checks 三反例自然 3 red→3 green；其他容器/标量自然 2 red→2 green，失败原件保留。
+- 新增 8 例定向 8/8，最终 reporter 78/78（原 70+新 8）；原模块和冻结材料不缩减。
+- 完整 DTO 来源模块只选既有 3 例，3/3：输出/risk_notes、messages/Skill/PG/旧审阅、确定性来源摘要负控；未跑全 48/97。
+- 四组正常完整 report 与 v2 逐值相同：v1、合法 v2+overhead、未知/缺失、完整 runtime；见 `compatibility.json`。
+- 完整 runtime 三 metadata 变异仍来源 verified，原完整 output/source/review subject SHA 与统计/unknown 不变，正文不输出；坏 request/output 两负控拒绝。
+- strict/noEmit：TS 7.0.2 公共 API，140 文件/138 root 内存快照，实际编译 reporter SHA 相同，0 诊断。
+- full/delta 分别在普通仓外 base/v2 快照 check/apply 均 0，结果等于候选；临时快照清理，见 `apply-validation.json`。
+- 原始 9 份 Node 日志仓外 0700/0600；公开别名、真实退出码、raw/public 双 SHA/替换行号全核，见 `validation.jsonl`。
+- 重放先设 `NODE="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"`；以下均仓库根运行。
+- reporter：`$NODE --test .scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-fix-v3/tree/backend-ts/test/reply-comparison.test.mjs`。
+- strict：`$NODE .scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-fix-v3/strict.mjs`；兼容性：同目录 `compatibility.mjs`。
+- 兼容性脚本临时生成的 fixture-only 模块已 finally 清理；依赖普通副本/父包只读，无 symlink/node_modules 写入。
+- 阈值、96 分母、usage 算法、评分/完整原输出/subject/hash 门槛与两个 false 认证均不变；8 项字节核对见 `invariants.json`。
+- 真实阶段/精确 COMMIT/完整采集资格仍未证明；不宣称 05 性能/质量/切换完成，usage 耦合仍后续。
+- 0 HTTP/PG/真实模型/App/共享写/索引/提交/打包；桌面约束仍仅 npm run dev 且先复用。

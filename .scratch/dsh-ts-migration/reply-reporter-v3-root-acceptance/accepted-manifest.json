@@ -1,0 +1,73 @@
+{
+  "schema_version": "root-reply-reporter-v3-acceptance-v1",
+  "base_commit": "083230787ecf8ea0a0fd0fb7edaa7aaed2266626",
+  "accepted_at_utc": "2026-10-24T09:35:32.845182+00:00",
+  "formal_files": {
+    "backend-ts/src/reply-comparison.ts": "70fc72f2efa90c67c687b58d042afa273d366594b467753dacc2781cad77fde2",
+    "backend-ts/test/reply-comparison.test.mjs": "6746abf0cdfd38aed3eaafd18935d7961bdeadd84b7d51f9f7aeef239e4a43bc"
+  },
+  "patch_sha256": "85c221443543bd0ba312417e73e156756045db4a89680af4df57519ba90ef383",
+  "reviews": {
+    "standards": {
+      "manifest": "reply-qualification-contract-standards-v3-review/review-manifest.json",
+      "sha256": "835004f7e52f4a3e85a61b72f12f2321da5c5b3d272a629b9463e7720aaf9c6b",
+      "files_verified": 8,
+      "findings": 0
+    },
+    "spec": {
+      "manifest": "reply-qualification-contract-spec-v3-review/review-sha256.json",
+      "sha256": "dd4b108216799cb31c7b9dc910770dde620c6655ea861b8a7cbfbe305fbb5de3",
+      "files_verified": 32,
+      "findings": 0
+    }
+  },
+  "validation": {
+    "minimal_passed": 8,
+    "module_passed": 78,
+    "skipped": 0,
+    "strict_exit_code": 0,
+    "real_model_quality_verified": false,
+    "production_switch_approved": false,
+    "multi_attempt_integration_pending": true,
+    "new_http_pg_model_app_operations": 0
+  },
+  "accepted_paths": [
+    "backend-ts/src/reply-comparison.ts",
+    "backend-ts/test/reply-comparison.test.mjs",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/incoming-verification.json",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/incoming-source-manifest.json",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/validation-results.json",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/minimal.log",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/module.log",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/strict.log",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/validation.md",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/accepted-manifest.json",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-standards-v3-review/handoff.md",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-standards-v3-review/review.json",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-standards-v3-review/review-manifest.json",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-spec-v3-review/review.md",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-spec-v3-review/review-sha256.json",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-fix-v3/handoff.md",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-fix-v3/candidate-sha256.json",
+    ".scratch/dsh-ts-migration/execution.md"
+  ],
+  "files_sha256": {
+    "backend-ts/src/reply-comparison.ts": "70fc72f2efa90c67c687b58d042afa273d366594b467753dacc2781cad77fde2",
+    "backend-ts/test/reply-comparison.test.mjs": "6746abf0cdfd38aed3eaafd18935d7961bdeadd84b7d51f9f7aeef239e4a43bc",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/incoming-verification.json": "19cda5bb9d0b92d9b6c9b6674a3d177213027717af3cdd65ebac2ea25585ac3e",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/incoming-source-manifest.json": "9ba28e05fac97b7c491a5f11f76b4bcb8f88a366952564d7b02280b7b5066821",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/validation-results.json": "f3d48543c3d4159cf4664f6a6233a00b5e8a57fc675c5da266933332e182b400",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/minimal.log": "46cb4c342852fd2403110a45404210be094a865a2b10625c83d05667c8c0fab3",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/module.log": "95778d96811e9bf79fa4140d50268ed7cd0737b9d2ddab7f24771858ffc4bcc8",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/strict.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".scratch/dsh-ts-migration/reply-reporter-v3-root-acceptance/validation.md": "c88d8291a3875d7074a5ac7fa4782753a9da7f298ad5d25ec75fa50288c135c1",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-standards-v3-review/handoff.md": "fbd28d0b15910e9448e5828ef13f2d367545062175937032c5051bff13cdee19",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-standards-v3-review/review.json": "efd9be84ad2fd7d5d3d7ab18b70b06b7fbb3d174f4ee537f8cc5978700a13314",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-standards-v3-review/review-manifest.json": "835004f7e52f4a3e85a61b72f12f2321da5c5b3d272a629b9463e7720aaf9c6b",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-spec-v3-review/review.md": "3f70affccbc8cd19428b00a009a4edbbc0235267f332b1026c7488cc653ce998",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-spec-v3-review/review-sha256.json": "dd4b108216799cb31c7b9dc910770dde620c6655ea861b8a7cbfbe305fbb5de3",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-fix-v3/handoff.md": "82558011f6652f95e9433738c47cacb1d173f3da6c4cc68ba75454b26a40d9e8",
+    ".scratch/dsh-ts-migration/reply-generation/reply-qualification-contract-fix-v3/candidate-sha256.json": "2721c50efe349c8138d7bca0841f2f2a6dec6ff13c7794b8310d957f532e7435",
+    ".scratch/dsh-ts-migration/execution.md": "909e5db5e67e2ce1dd51c2d48a6386930149294fcf64f37190b89adcd48983b0"
+  }
+}

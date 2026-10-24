@@ -1,0 +1,78 @@
+{
+  "schema_version": "independent-reporter-v3-spec-review-v1",
+  "review_axis": "Spec",
+  "findings": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 0,
+    "P3": 0
+  },
+  "previous_metadata_P2_closed": 1,
+  "previous_stream_timing_P2_no_regression": true,
+  "source_sha256": "70fc72f2efa90c67c687b58d042afa273d366594b467753dacc2781cad77fde2",
+  "candidate_manifest_sha256": "2721c50efe349c8138d7bca0841f2f2a6dec6ff13c7794b8310d957f532e7435",
+  "delivery_sha256": "1c435707fa9800bf1c8563d9320e242ed0a8bf7dbb7fa482bf86f3cc4590ddf9",
+  "full_patch_sha256": "85c221443543bd0ba312417e73e156756045db4a89680af4df57519ba90ef383",
+  "delta_patch_sha256": "eef2cc6996606b2514857da55070689139846bed0c18f96bc04faa8605fa3fef",
+  "source_test_sha256": "6746abf0cdfd38aed3eaafd18935d7961bdeadd84b7d51f9f7aeef239e4a43bc",
+  "initial_independent_run": {
+    "groups": 15,
+    "passed": 13,
+    "harness_failures": 2
+  },
+  "targeted_harness_fix_run": {
+    "groups": 2,
+    "passed": 2
+  },
+  "additional_source_controls": {
+    "groups": 1,
+    "negative_controls": 4,
+    "passed": 1
+  },
+  "single_final_full_matrix_run_claimed": false,
+  "external_actions": {
+    "http": 0,
+    "sdk": 0,
+    "models": 0,
+    "pg": 0,
+    "app": 0,
+    "shared_index_commit_writes": 0
+  },
+  "real_model_quality_verified": false,
+  "production_switch_approved": false,
+  "public_path_scan_issues": 0,
+  "files_sha256": {
+    "execution.json": "c7dbfe0bce39a29ec9774c8412637713d2f67f9df670e071c012f1ff70a1fd4f",
+    "history-initial-harness/execution.json": "847e4be1fcf3653d8fb8d035153ef08a0265ec19ef150f8e5e7d2db5287c7e60",
+    "history-initial-harness/metadata.test.mjs": "29adc6f98458b0d9cc34139610ed52a37d715f9fc9ede9ad2dd12addebfc4c9c",
+    "history-initial-harness/provenance.json": "5ef230b05d9a4307407975779cd3bb5e1ed3c1b2a784e9b91ca9bd5ce771c631",
+    "history-initial-harness/raw-log-location.txt": "1782a03ecd8b5391f39ffa5fddec30526a7a2ee66d9f8659be26d0e20f41b942",
+    "history-initial-harness/tests.log": "1a42c1a5594f2ff13c8d87f6a8f5117ddf02b4807e6ab1c35891222688711c34",
+    "inputs.json": "16420833ff0f71c0527e99dd86bae6fa5f3d9e90d2989423140e1bf7ad45e9c4",
+    "invariants-and-logs.json": "80f2e5ff561d03c076fd7118c8077e039854d0a6b318a4af8151d5debb06ee06",
+    "metadata.test.mjs": "354a1e55d350da56c23a0ee33c53cdb095d11227a4eae5acbee1237418b2fd6b",
+    "parent-src/reply-comparison-sources.ts": "27943b4f2c348a2a121e6337701eb5df186df51ddbdfd8becc9402691bd080e5",
+    "parent-src/reply-comparison-statistics.ts": "ef01fb4d98ad605dd1bf8334352966536b46d19d206adc140fe7b0e5ca6f38a2",
+    "parent-src/reply-comparison.ts": "e6e9a74a5e76745fd82a5c0e40b5175c6089b09697863a5d25a19f56bb00bcc9",
+    "parent-src/reply-contract.ts": "252ce0c6ace5e37dd88481f83c0f9e50879a016be9176faa4a9497c07496e51b",
+    "raw-log-location.txt": "71fdc7d00cf77e805dc6474a933a3efd440f322998696e6d70f935f6d784ad32",
+    "review.md": "3f70affccbc8cd19428b00a009a4edbbc0235267f332b1026c7488cc653ce998",
+    "snapshot/.scratch/dsh-ts-migration/baseline/material-manifest.json": "84b81a3255bffe8bc69da6f38c0dd79e1ba83510454ef8a9091c947b995b362b",
+    "snapshot/backend/tests/fixtures/fidelity/synthetic-v1.json": "088df6b1729c5b9445e1648e495e4bde005580eb838216e84d3ba569caebe607",
+    "snapshot/backend-ts/src/reply-comparison-sources.ts": "27943b4f2c348a2a121e6337701eb5df186df51ddbdfd8becc9402691bd080e5",
+    "snapshot/backend-ts/src/reply-comparison-statistics.ts": "ef01fb4d98ad605dd1bf8334352966536b46d19d206adc140fe7b0e5ca6f38a2",
+    "snapshot/backend-ts/src/reply-comparison.ts": "70fc72f2efa90c67c687b58d042afa273d366594b467753dacc2781cad77fde2",
+    "snapshot/backend-ts/src/reply-contract.ts": "252ce0c6ace5e37dd88481f83c0f9e50879a016be9176faa4a9497c07496e51b",
+    "snapshot/backend-ts/test/fixture-only.mjs": "51c5d70180ea9b2bab0ec9c392ee76ecf2b572e262beda321154e4a45b8e4fc4",
+    "snapshot/backend-ts/test/fixtures/reply-comparison-source-pilot.json": "1101416c74380d8504f2b966e05a3eed5c71d94c5f05a0c8524ec1a4f039a8f6",
+    "snapshot/backend-ts/test/reply-comparison-sources.test.mjs": "b485f5505d28109357c7dd8ffc63dc41bd8badffe1e3253ca1e42da406bf6296",
+    "snapshot/backend-ts/test/reply-comparison.test.mjs": "6746abf0cdfd38aed3eaafd18935d7961bdeadd84b7d51f9f7aeef239e4a43bc",
+    "snapshot/backend-ts/test/source-fixture-only.mjs": "d8dcaddb3753e79a24a1d2027f27985d72c379b98f378dc47c2403ebdee61150",
+    "source-controls.log": "b63ed6d355fb8122b9b85a350ceff981a349542b05c461e6fce5b49c5abd4857",
+    "source-controls.test.mjs": "59d6dea370645eaeb236626ed8d317ac0f74b5ef452136919185b1d991343704",
+    "source-execution.json": "34bfe315148c36dffd0fceb166dff4414e673f5154e2335d3570077777cab19e",
+    "source-raw-log-location.txt": "58562e12628850077fe68a6f046d585ede99e170b88c4697dc0b217739e2eee3",
+    "tests.log": "537eab1d1d09d882b21d8e9759f80a79f691c2360e16f8de9a34162a410b3a44",
+    "timing-regression.test.mjs": "6e777e83e96e12a1990e5618d1db81480fa06e5914ca6c034771dad0ff5dce8e"
+  }
+}

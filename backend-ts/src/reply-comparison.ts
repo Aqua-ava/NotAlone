@@ -47,7 +47,16 @@ export function createReplyComparisonPlan(manifestText:string,datasetText:string
 }
 interface Audited {record:Row|null;id:string;case_id:string;arm:'old'|'new';repeat:number;status:string;pass:number;usability:number|null;severe:Row|null;reviews:Row[];output_sha256:string|null;source_audit?:ReplyRuntimeSourceAudit}
 interface Issue {record_id:string|null;reason:string;blocking?:boolean}
-const reviewProjection=(r:Row)=>({review_id:r.review_id,reviewer_id:r.reviewer_id,reviewer_type:r.reviewer_type,reviewer_model:r.reviewer_model??null,reviewer_version:r.reviewer_version??null,subject_sha256:r.subject_sha256,candidates:structuredClone(r.candidates)});
+/** 只投影合同列出的标量元数据；其余对象仍留在显式输入证据中。 */
+function metadataFields(value:unknown,fields:readonly string[]):Row|null {
+ if(!object(value))return null;
+ return Object.fromEntries(fields.filter(key=>Object.hasOwn(value,key)).map(key=>{const item=value[key];return [key,typeof item==='string'||typeof item==='boolean'||typeof item==='number'&&Number.isFinite(item)?item:null];}));
+}
+const metadataText=(value:unknown):string|null=>typeof value==='string'?value:null;
+const reviewProjection=(r:Row)=>({review_id:r.review_id,reviewer_id:r.reviewer_id,reviewer_type:r.reviewer_type,reviewer_model:metadataText(r.reviewer_model),reviewer_version:metadataText(r.reviewer_version),subject_sha256:r.subject_sha256,candidates:r.candidates.map((candidate:Row)=>({...metadataFields(candidate,['candidate_id','basis']),scores:metadataFields(candidate.scores,DIMENSIONS),severe_errors:metadataFields(candidate.severe_errors,SEVERE)}))});
+function sourceAuditProjection(audit:ReplyRuntimeSourceAudit):Row {
+ return {...metadataFields(audit,['status','reason','binding_sha256','output_scope','attempt_count','request_id']),allowed_citation_ids:[...audit.allowed_citation_ids],attempt_ids:[...audit.attempt_ids],attempt_observations:audit.attempt_observations.map(value=>metadataFields(value,['attempt_id','request_sha256','request_hash_kind','catalog_sha256','response_started_at']))};
+}
 function scoreReview(review:unknown,row:Row,output:Row,subject:string):Row {
  if(!object(review)||!text(review.review_id)||review.blind_id!==row.blind_id||review.subject_sha256!==subject||!text(review.reviewer_id)||review.reviewer_id===row.generated_by||!['human','agent'].includes(review.reviewer_type)||review.independent!==true||review.blinded!==true)invalid('independent_blind_review_binding');
  if(!Array.isArray(review.candidates)||review.candidates.length!==output.candidates.length||new Set(review.candidates.map((c:Row)=>c.candidate_id)).size!==output.candidates.length)invalid('review_all_candidates');
@@ -61,38 +70,121 @@ function scoreReview(review:unknown,row:Row,output:Row,subject:string):Row {
 function combineStatus(states:Status[]):Status{return states.includes('failed')?'failed':states.includes('undetermined')?'undetermined':'passed';}
 function lowerGate(interval:{estimate:number;ci95:number[]},limit:number):Status{return interval.ci95[0]>=limit-1e-12?'passed':interval.ci95[1]<limit-1e-12?'failed':'undetermined';}
 function upperGate(interval:{estimate:number;ci95:number[]},limit:number):Status{return interval.ci95[1]<=limit+1e-12?'passed':interval.ci95[0]>limit+1e-12?'failed':'undetermined';}
+interface LatencyAudit {latency_ms:number|null;diagnostics:Row;phase_coverage:Row|null}
+const DIAGNOSTICS=['first_event_ms','first_token_ms'] as const;
+const LATENCY_PHASES=['queue','retrieval','network_model','validation','persistence'];
+interface TimingSegment {name:string;started_ms:number;ended_ms:number}
+const spanProjection=(value:Row):Row=>({...metadataFields(value,['started_ms','ended_ms']),...value.markers!==undefined?{markers:metadataFields(value.markers,['start','end'])}:{}});
+const overheadProjection=(entries:Row[]):Row[]=>entries.map(entry=>({...spanProjection(entry),...metadataFields(entry,['kind','reason'])}));
+function timingProjection(value:unknown):Row|null {
+ if(!object(value))return null;
+ const phase=(entry:any):any=>entry==null?null:Array.isArray(entry)?entry.map(spanProjection):spanProjection(entry);
+ return {...metadataFields(value,['schema_version','clock','observed_ms','first_event_ms','first_token_ms','final_persisted_result_ms']),phases:Object.fromEntries(LATENCY_PHASES.map(name=>[name,phase(value.phases[name])])),
+  ...value.overhead!==undefined?{overhead:overheadProjection(value.overhead)}:{},
+  ...value.diagnostics!==undefined?{diagnostics:value.diagnostics===null?null:{...metadataFields(value.diagnostics,['request_sha256']),...Object.fromEntries(DIAGNOSTICS.map(name=>[name,metadataFields(value.diagnostics[name],['observability','definition','reason'])]))}}:{}};
+}
+/** 使用区间并集保留真实重叠和间隙，不把方法时长相加或猜给某个阶段。 */
+function timingRegions(segments:readonly TimingSegment[]):{started_ms:number;ended_ms:number}[]{
+ const regions:{started_ms:number;ended_ms:number}[]=[];
+ for(const segment of [...segments].filter(item=>item.ended_ms>item.started_ms).sort((a,b)=>a.started_ms-b.started_ms)){
+  const last=regions.at(-1);
+  if(last&&segment.started_ms<=last.ended_ms)last.ended_ms=Math.max(last.ended_ms,segment.ended_ms);
+  else regions.push({started_ms:segment.started_ms,ended_ms:segment.ended_ms});
+ }
+ return regions;
+}
+function auditPhaseCoverage(timing:Row,id:string,unknown:(id:string,reason:string,blocking?:boolean)=>void):{segments:TimingSegment[];coverage:Row}{
+ if(Object.keys(timing.phases).sort().join(',')!==[...LATENCY_PHASES].sort().join(','))invalid('latency_phases');
+ const markerTimes=new Map<string,number>();let distinguished=true;
+ const interval=(value:unknown,name:string,fields:readonly string[]=['started_ms','ended_ms','markers']):TimingSegment=>{if(!object(value)||!nonnegative(value.started_ms)||!nonnegative(value.ended_ms)||value.ended_ms<value.started_ms||value.ended_ms>timing.observed_ms)invalid('latency_phase_order');if(Object.keys(value).some(key=>!fields.includes(key)))invalid('latency_interval_fields');return {name,started_ms:value.started_ms,ended_ms:value.ended_ms};};
+ const markers=(value:Row,segment:TimingSegment):boolean=>{
+  if(value.markers==null)return false;
+  if(!object(value.markers)||Object.keys(value.markers).sort().join(',')!=='end,start'||!text(value.markers.start)||!text(value.markers.end)||value.markers.start===value.markers.end)invalid('latency_phase_markers');
+  for(const [marker,at]of [[value.markers.start,segment.started_ms],[value.markers.end,segment.ended_ms]] as [string,number][]){if(markerTimes.has(marker)&&markerTimes.get(marker)!==at)invalid('latency_phase_marker_time');markerTimes.set(marker,at);}
+  return true;
+ };
+ const segments:TimingSegment[]=[],observedPhases:string[]=[];
+ for(const name of LATENCY_PHASES){
+  const value=timing.phases[name],entries=value==null?[]:Array.isArray(value)?value:[value];let knownPhase=entries.length>0;
+  for(const entry of entries){const segment=interval(entry,name),marked=markers(entry,segment);segments.push(segment);if((timing.schema_version==='reply-latency-v2'||segment.started_ms===segment.ended_ms)&&!marked)knownPhase=false;}
+  if(knownPhase)observedPhases.push(name);else{distinguished=false;unknown(id,'latency_phase_'+name+'_unknown');}
+ }
+ if(timing.overhead!==undefined&&!Array.isArray(timing.overhead))invalid('latency_overhead');
+ const overhead:TimingSegment[]=(timing.overhead??[]).map((entry:unknown)=>{
+  const segment=interval(entry,'framework_overhead',['started_ms','ended_ms','kind','reason','markers']);
+  if(!object(entry)||entry.kind!=='framework_overhead'||!text(entry.reason)||!markers(entry,segment))invalid('latency_overhead');
+  if(segments.some(phase=>Math.max(phase.started_ms,segment.started_ms)<Math.min(phase.ended_ms,segment.ended_ms)))invalid('latency_overhead_phase_overlap');
+  return segment;
+ });
+ const phaseRegions=timingRegions(segments),overheadRegions=timingRegions(overhead),allRegions=timingRegions([...segments,...overhead]);
+ const unclassified:Row[]=[];let end=0;
+ for(const region of allRegions){if(region.started_ms>end)unclassified.push({started_ms:end,ended_ms:region.started_ms});end=region.ended_ms;}
+ if(end<timing.observed_ms)unclassified.push({started_ms:end,ended_ms:timing.observed_ms});
+ if(unclassified.length){distinguished=false;unknown(id,'latency_unclassified_may_include_target_phase');}
+ const duration=(regions:{started_ms:number;ended_ms:number}[])=>comparisonTotal(regions.map(region=>region.ended_ms-region.started_ms));
+ return {segments,coverage:{observed_phases:observedPhases,observed_phase_union_ms:duration(phaseRegions),framework_overhead_ms:duration(overheadRegions),framework_overhead:overheadProjection(timing.overhead??[]),unclassified,unclassified_ms:duration(unclassified as {started_ms:number;ended_ms:number}[]),target_phases_distinguished:distinguished,exclusive_partition_required:false,durations_not_summed:true,marker_contract:timing.schema_version==='reply-latency-v2'?'explicit_start_end_markers':'legacy_declared_positive_intervals'}};
+}
+/** 复用实际请求观测的摘要合同；请求正文不复制到报告。 */
+function diagnosticRequest(row:Row,id:string,unknown:(id:string,reason:string,blocking?:boolean)=>void):boolean|null {
+ const attempts=row.runtime_sources?.attempts;
+ const request=Array.isArray(attempts)&&attempts.length===1?attempts[0]?.request:row.runtime_sources===undefined?row.request_observation:undefined;
+ if(request==null||!hashString(row.request_sha256)){unknown(id,'latency_diagnostic_request_unknown');return null;}
+ if(!object(request)||!object(request.body)||request.sha256!==row.request_sha256)invalid('latency_diagnostic_request_binding');
+ if(request.hash_kind==='wire_utf8_sha256'){
+  if(typeof request.raw_utf8!=='string'||digest(request.raw_utf8)!==request.sha256)invalid('latency_diagnostic_request_hash');
+  let parsed:unknown;try{parsed=JSON.parse(request.raw_utf8);}catch{return invalid('latency_diagnostic_request_json');}
+  if(canonical(parsed)!==canonical(request.body))invalid('latency_diagnostic_request_body');
+ }else if(request.hash_kind!=='canonical_json_sha256'||request.raw_utf8!==undefined||digest(request.body)!==request.sha256)invalid('latency_diagnostic_request_hash');
+ if(typeof request.body.stream!=='boolean'){unknown(id,'latency_diagnostic_stream_mode_unknown');return null;}
+ return request.body.stream;
+}
 /** 所有阶段使用同一单调时钟的相对毫秒；墙钟只按ISO毫秒精度核对总时长。 */
-function auditLatency(row:Row,id:string,unknown:(id:string,reason:string)=>void):number|null {
+function auditLatency(row:Row,id:string,unknown:(id:string,reason:string,blocking?:boolean)=>void,persistedResultKnown:boolean):LatencyAudit {
+ const result:LatencyAudit={latency_ms:null,diagnostics:{},phase_coverage:null};
  if(row.latency_ms!==null&&!nonnegative(row.latency_ms))invalid('latency');
  const timing=row.timing;
- if(timing===null||timing===undefined){unknown(id,'latency_evidence_unknown');return null;}
- if(!object(timing)||timing.schema_version!=='reply-latency-v1'||timing.clock!=='monotonic'||!object(timing.phases))invalid('latency_evidence_structure');
- const phases=['queue','retrieval','network_model','validation','persistence'];
- if(Object.keys(timing.phases).sort().join(',')!==[...phases].sort().join(','))invalid('latency_phases');
+ if(timing===null||timing===undefined){unknown(id,'latency_evidence_unknown');return result;}
+ if(!object(timing)||!['reply-latency-v1','reply-latency-v2'].includes(timing.schema_version)||timing.clock!=='monotonic'||!object(timing.phases))invalid('latency_evidence_structure');
+ if(Object.keys(timing).some(key=>!['schema_version','clock','observed_ms','first_event_ms','first_token_ms','final_persisted_result_ms','phases','overhead','diagnostics'].includes(key)))invalid('latency_timing_fields');
  if(!nonnegative(timing.observed_ms))invalid('latency_observed');
- const segments=phases.flatMap(name=>{const entries=Array.isArray(timing.phases[name])?timing.phases[name]:[timing.phases[name]];return entries.map((phase:unknown)=>{if(!object(phase)||!nonnegative(phase.started_ms)||!nonnegative(phase.ended_ms)||phase.ended_ms<phase.started_ms||phase.ended_ms>timing.observed_ms)invalid('latency_phase_order');return {name,started_ms:phase.started_ms,ended_ms:phase.ended_ms};});});
- const active=segments.filter(segment=>segment.ended_ms>segment.started_ms).sort((a,b)=>a.started_ms-b.started_ms);
- let prior=0;
- for(const segment of active){if(segment.started_ms!==prior)invalid('latency_phase_order');prior=segment.ended_ms;}
- if(prior!==timing.observed_ms)invalid('latency_phase_total');
+ const {segments,coverage}=auditPhaseCoverage(timing,id,unknown);result.phase_coverage=coverage;
  const model=segments.filter(segment=>segment.name==='network_model');
  let resultTimeKnown=true;
- // 首事件与首token是独立诊断项；未知仍阻断整体资格，但不抹去已证最终时长。
- for(const name of ['first_event_ms','first_token_ms']){
-  if(timing[name]===null){if(row.terminal_status==='succeeded'){unknown(id,'latency_'+name+'_unknown');}}
-  else if(!nonnegative(timing[name])||!model.some(segment=>timing[name]>=segment.started_ms&&timing[name]<=segment.ended_ms))invalid('latency_'+name);
+ const declared=timing.schema_version==='reply-latency-v2'||timing.diagnostics!==undefined?timing.diagnostics:null;
+ if(timing.schema_version==='reply-latency-v2'&&declared===null||declared!==null&&(!object(declared)||Object.keys(declared).sort().join(',')!=='first_event_ms,first_token_ms,request_sha256'||declared.request_sha256!==row.request_sha256))invalid('latency_diagnostic_contract');
+ const stream=declared!==null||row.runtime_sources!==undefined||row.request_observation!==undefined?diagnosticRequest(row,id,unknown):null;
+ if(stream===false&&timing.first_token_ms!==null)invalid('latency_diagnostic_contradiction');
+ // 可观测性未知不能伪装不可观测；旧v1的保守处理不构成协议额外阈值。
+ for(const name of DIAGNOSTICS){
+  let unobservable=false,definition:string|null=null,reason:string|null=null;
+  if(declared!==null){
+   const entry=declared[name];
+   if(!object(entry)||Object.keys(entry).sort().join(',')!=='definition,observability,reason'||!['observable','unobservable'].includes(entry.observability)||!['first_incremental_event','completed_sdk_response','first_incremental_token'].includes(entry.definition)||name==='first_token_ms'&&entry.definition!=='first_incremental_token'||name==='first_event_ms'&&entry.definition==='first_incremental_token'||entry.reason!==null&&!text(entry.reason))invalid('latency_diagnostic_observability');
+   definition=entry.definition;reason=entry.reason;
+   if(entry.observability==='unobservable'){
+    if(!text(reason)||timing[name]!==null||stream===true||definition==='completed_sdk_response')invalid('latency_diagnostic_contradiction');
+    unobservable=stream===false;
+   }else if(name==='first_token_ms'&&stream===false)invalid('latency_diagnostic_contradiction');
+   if(name==='first_event_ms'&&(stream===true&&definition==='completed_sdk_response'||stream===false&&definition==='first_incremental_event'&&entry.observability==='observable'))invalid('latency_diagnostic_contradiction');
+  }
+  if(timing[name]===null){
+   reason??='缺少可观测性绑定或实际marker，不能把未知写成0。';
+   if(row.terminal_status==='succeeded')unknown(id,'latency_'+name+'_unknown',!unobservable);
+  }else if(!nonnegative(timing[name])||!model.some(segment=>timing[name]>=segment.started_ms&&timing[name]<=segment.ended_ms))invalid('latency_'+name);
+  result.diagnostics[name]={value_ms:timing[name],observability:timing[name]!==null?'observed':unobservable?'unobservable':'missing',definition,reason,request_sha256:declared?.request_sha256??null};
  }
  if(timing.first_event_ms!==null&&timing.first_token_ms!==null&&timing.first_token_ms<timing.first_event_ms)invalid('latency_event_token_order');
  if(row.terminal_status==='succeeded'){
   if(timing.final_persisted_result_ms===null){unknown(id,'latency_final_persisted_result_unknown');resultTimeKnown=false;}
-  else if(!nonnegative(timing.final_persisted_result_ms)||timing.final_persisted_result_ms!==timing.observed_ms||!segments.some(segment=>segment.name==='persistence'&&segment.ended_ms===timing.observed_ms)||timing.observed_ms>0&&active.at(-1)?.name!=='persistence')invalid('latency_final_persisted_result');
+  else if(!nonnegative(timing.final_persisted_result_ms)||timing.final_persisted_result_ms!==timing.observed_ms)invalid('latency_final_persisted_result');
+  if(!persistedResultKnown){unknown(id,'latency_persisted_result_binding_unknown');resultTimeKnown=false;}
  }else if(timing.final_persisted_result_ms!==null)invalid('latency_failed_result_persisted');
- if(!known(row.started_at)||!known(row.ended_at)||!Number.isFinite(Date.parse(row.started_at))||!Number.isFinite(Date.parse(row.ended_at))){unknown(id,'run_times_unknown');return null;}
+ if(!known(row.started_at)||!known(row.ended_at)||!Number.isFinite(Date.parse(row.started_at))||!Number.isFinite(Date.parse(row.ended_at))){unknown(id,'run_times_unknown');return result;}
  const elapsed=Date.parse(row.ended_at)-Date.parse(row.started_at);
  if(elapsed<0||Math.abs(elapsed-timing.observed_ms)>1)invalid('latency_wall_clock_duration');
- if(row.latency_ms===null)return null;
+ if(row.latency_ms===null)return result;
  if(row.latency_ms!==timing.observed_ms)invalid('latency_duration_binding');
- return resultTimeKnown?row.latency_ms:null;
+ result.latency_ms=resultTimeKnown?row.latency_ms:null;return result;
 }
 /**
  * 唯一报告接缝：原始输入不改写，输出不复制正文。前3维所有候选均须为2才满足事实/意图；
@@ -130,6 +222,7 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
   if(!known(row.generated_by))unknown(id,'generator_identity_unknown');
   if(!known(row.actual_model))unknown(id,'actual_model_unknown',false);if(!known(row.model_fingerprint))unknown(id,'model_fingerprint_unknown',false);
   checkHash(row.request_sha256,id,'request_sha256_unknown');
+  if(run.evidence_kind!=='reporter_fixture'&&row.request_observation!==undefined)invalid('latency_diagnostic_fixture_request_forbidden');
   if(!object(row.deterministic_checks)||!['passed','failed','unknown'].includes(row.deterministic_checks.status))invalid('deterministic_checks');
   if(row.deterministic_checks.source_binding_sha256===null)unknown(id,'deterministic_source_binding_unknown');else if(row.deterministic_checks.source_binding_sha256!==row.input_sha256)invalid('deterministic_source_binding');
   if(row.deterministic_checks.status==='unknown')unknown(id,'deterministic_checks_unknown');if(row.deterministic_checks.status==='failed')failures.push({record_id:id,reason:'deterministic_checks_failed'});
@@ -205,14 +298,16 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
  }));
  const semanticStatus:Status=combineStatus([semanticComplete?combineStatus([lowerGate(passDifference!,-0.03),lowerGate(usabilityDifference!,-0.10)]):'undetermined',...Object.values(severe).map(v=>v.newly_introduced>0?'failed' as const:'passed' as const)]);
  const telemetryFields=['physical_calls','total_tokens','cost','latency_ms'] as const;
- const measurements=new Map<string,Row>();
+ const measurements=new Map<string,Row>(),latencyAudits=new Map<string,LatencyAudit>();
  for(const item of audited){const row=item.record;if(!row)continue;const usage=row.usage;
   if(row.physical_calls!==null&&!integer(row.physical_calls))invalid('physical_calls');
   let total:number|null=null;
   if(usage!==null){if(!object(usage)||['input_tokens','output_tokens','reasoning_tokens','cache_hit_tokens','cache_miss_tokens'].some(k=>usage[k]!==null&&!integer(usage[k])))invalid('usage');if(Object.values(usage).every(v=>v!==null)){if(usage.reasoning_tokens>usage.output_tokens||usage.cache_hit_tokens+usage.cache_miss_tokens>usage.input_tokens)invalid('usage_components');total=usage.input_tokens+usage.output_tokens;}}
   if(row.cost!==null&&(!object(row.cost)||!nonnegative(row.cost.amount)||row.cost.currency!==run.price_snapshot?.currency||row.cost.price_snapshot_sha256!==run.price_snapshot?.sha256))invalid('cost_or_price_binding');
-  const measuredLatency=auditLatency(row,item.id,unknown);
-  const metric={physical_calls:row.physical_calls,total_tokens:total,cost:row.cost?.amount??null,latency_ms:measuredLatency};measurements.set(item.id,metric);
+  const runtime=run.evidence_kind==='model_run'||row.runtime_sources!==undefined;
+  const persistedResultKnown=runtime?item.source_audit?.status==='verified':row.deterministic_checks.status==='passed'&&object(row.output)&&row.deterministic_checks.output_sha256===digest(row.output);
+  const measuredLatency=auditLatency(row,item.id,unknown,persistedResultKnown);latencyAudits.set(item.id,measuredLatency);
+  const metric={physical_calls:row.physical_calls,total_tokens:total,cost:row.cost?.amount??null,latency_ms:measuredLatency.latency_ms};measurements.set(item.id,metric);
   for(const k of telemetryFields)if(metric[k]===null)unknown(item.id,k+'_unknown');
  }
  const actualModels=new Set(audited.flatMap(r=>r.record&&known(r.record.actual_model)?[r.record.actual_model]:[])),fingerprints=new Set(audited.flatMap(r=>r.record&&known(r.record.model_fingerprint)?[r.record.model_fingerprint]:[]));
@@ -240,16 +335,19 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
   return {status:upperGate(interval,limit),limit,statistic,interval:{estimate:Number.isFinite(interval.estimate)?interval.estimate:null,ci95:interval.ci95.map(v=>Number.isFinite(v)?v:null),unbounded:interval.ci95.some(v=>!Number.isFinite(v))},observed,totals,samples};
  };
  const metrics={physical_calls:metricGate('physical_calls',1.05,'total_ratio'),total_tokens:metricGate('total_tokens',1.10,'total_ratio'),cost:metricGate('cost',1.10,'total_ratio'),latency_p50:metricGate('latency_ms',1.15,'p50_ratio'),latency_p95:metricGate('latency_ms',1.25,'p95_ratio')};
+ const latencyDiagnostics=Object.fromEntries(DIAGNOSTICS.map(name=>[name,Object.fromEntries(ARMS.map(arm=>{const rows=audited.filter(row=>row.arm===arm),count=(status:string)=>rows.filter(row=>(latencyAudits.get(row.id)?.diagnostics[name]?.observability??'missing')===status).length;return [arm,{denominator:48,observed:count('observed'),unobservable:count('unobservable'),missing:count('missing')}];}))]));
  const overall=combineStatus([semanticStatus,failureRate.status,...Object.values(metrics).map(m=>m.status),failures.some(f=>f.blocking!==false)?'failed':unknowns.some(u=>u.blocking!==false)?'undetermined':'passed']);
  return {schema_version:'reply-migration-report-v1',protocol_version:run.protocol_version,domain:'reply',evidence_kind:run.evidence_kind,
   audit_scope:'offline_supplied_evidence_only',production_switch_approved:false,real_model_quality_verified:false,
   model_equivalence:{conclusion:unknowns.some(u=>['actual_model_unknown','model_fingerprint_unknown','response_model_or_fingerprint_drift_requires_split'].includes(u.reason))?'same_request_configuration_only':'same_observed_response_version',underlying_model_equivalence_verified:false},
-  bindings:{manifest_sha256:MANIFEST_SHA,dataset_sha256:run.dataset_sha256,config_hash:run.config_hash,price_snapshot:structuredClone(run.price_snapshot),arms:structuredClone(run.bindings)},
+  bindings:{manifest_sha256:MANIFEST_SHA,dataset_sha256:run.dataset_sha256,config_hash:run.config_hash,price_snapshot:metadataFields(run.price_snapshot,['currency','sha256']),arms:{old:metadataFields(run.bindings.old,['commit','lock_hash','profile_hash']),new:metadataFields(run.bindings.new,['commit','lock_hash','profile_hash','dsh_commit'])}},
   population:{planned:96,received:run.records.length,missing:96-run.records.length},bootstrap:REPLY_COMPARISON_BOOTSTRAP,
   scoring:{factual_dimensions: DIMENSIONS.slice(0,3),required_factual_score:2,usable_dimensions:DIMENSIONS.slice(3),minimum_group_mean:1.5,zero_disallowed:true},
   arms,semantic_quality:{status:semanticStatus,pass_rate_difference:passDifference,usability_difference:usabilityDifference,severe_errors:severe,limits:{pass_rate_difference:-0.03,usability_difference:-0.10},absolute_quality_verified:false},
-  failure_rate:failureRate,latency_observations:audited.map(r=>({record_id:r.id,status:r.status,kind:r.status==='succeeded'?'final_persisted_result':r.status==='timeout'?'timeout_lower_bound':'terminal_observation',elapsed_ms:r.record?.timing?.observed_ms??null})),metrics,overall:{status:overall},unknowns,failures,records:audited.map(({record,...rest})=>({...rest,
-   ...Object.fromEntries(['blind_id','order','case_sha256','input_sha256','config_hash','commit','request_sha256','actual_model','model_fingerprint','started_at','ended_at','logical_calls','physical_calls','usage','cost','latency_ms','timing','deterministic_checks'].map(k=>[k,record?.[k]===undefined?null:structuredClone(record[k])]))}))};
+  failure_rate:failureRate,latency_diagnostics:latencyDiagnostics,latency_observations:audited.map(r=>({record_id:r.id,status:r.status,kind:r.status==='succeeded'?'final_persisted_result':r.status==='timeout'?'timeout_lower_bound':'terminal_observation',elapsed_ms:r.record?.timing?.observed_ms??null,diagnostics:latencyAudits.get(r.id)?.diagnostics??{},phase_coverage:latencyAudits.get(r.id)?.phase_coverage??null})),metrics,overall:{status:overall},unknowns,failures,records:audited.map(r=>({id:r.id,case_id:r.case_id,arm:r.arm,repeat:r.repeat,status:r.status,pass:r.pass,usability:r.usability,severe:r.severe,reviews:r.reviews,output_sha256:r.output_sha256,...r.source_audit?{source_audit:sourceAuditProjection(r.source_audit)}:{},
+   ...Object.fromEntries(['blind_id','order','case_sha256','input_sha256','config_hash','commit','request_sha256','actual_model','model_fingerprint','started_at','ended_at'].map(k=>[k,metadataText(r.record?.[k])])),logical_calls:r.record?.logical_calls??null,physical_calls:r.record?.physical_calls??null,latency_ms:r.record?.latency_ms??null,
+   usage:metadataFields(r.record?.usage,['input_tokens','output_tokens','reasoning_tokens','cache_hit_tokens','cache_miss_tokens']),cost:metadataFields(r.record?.cost,['amount','currency','price_snapshot_sha256']),timing:timingProjection(r.record?.timing),
+   deterministic_checks:metadataFields(r.record?.deterministic_checks,['status','source_binding_sha256','output_sha256','runtime_sources_sha256'])}))};
 }
 /** 只读取四个显式参数路径；退出2表示证据未通过，退出1表示结构或摘要非法。 */
 async function cli(){

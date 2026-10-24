@@ -176,7 +176,8 @@ test('普通旧臂失败保留固定分母并可比较，新臂失败率不得�
  assert.equal(report.arms.old.usability_mean,94/48);assert.ok(report.arms.old.known_failure_ids.includes(`${old.case_id}:old:${old.repeat}`));
  assert.ok(report.semantic_quality.pass_rate_difference);assert.ok(report.semantic_quality.usability_difference);assert.equal(report.semantic_quality.status,'passed');
  assert.equal(report.failure_rate.status,'passed');assert.equal(report.failure_rate.old,1/48);assert.equal(report.failure_rate.new,0);
- assert.equal(report.metrics.cost.totals.old.known,48);assert.equal(report.metrics.latency_p50.samples.paired_successes,47);assert.equal(report.overall.status,'passed');
+ assert.equal(report.metrics.cost.totals.old.known,48);assert.equal(report.metrics.latency_p50.samples.paired_successes,47);
+ assert.equal(report.overall.status,'undetermined');assert.ok(report.unknowns.some(item=>item.reason==='latency_phase_persistence_unknown'));
  const worse=fixture(),fresh=worse.records.find(r=>r.arm==='new');markTerminal(fresh,'failed');
  report=buildReplyComparisonReport(manifestText,datasetText,worse);assert.equal(report.failure_rate.status,'failed');assert.equal(report.overall.status,'failed');
 });
@@ -206,7 +207,7 @@ test('响应版本不可辨认时保留unknown并仅给同请求配置结论',()
 });
 
 test('首事件token、阶段和墙钟持久时间相矛盾时均拒绝，诊断未知时资格未定',()=>{
- const mutations=[r=>r.timing.first_event_ms=40,r=>r.timing.first_token_ms=95,r=>r.timing.final_persisted_result_ms=90,r=>r.timing.phases.persistence.started_ms=91,r=>r.timing.phases.network_model.ended_ms=101,r=>r.ended_at=new Date(Date.parse(r.started_at)+1000).toISOString()];
+ const mutations=[r=>r.timing.first_event_ms=40,r=>r.timing.first_token_ms=95,r=>r.timing.final_persisted_result_ms=90,r=>r.timing.phases.persistence.started_ms=101,r=>r.timing.phases.network_model.ended_ms=101,r=>r.ended_at=new Date(Date.parse(r.started_at)+1000).toISOString()];
  for(const mutate of mutations){const run=fixture();mutate(run.records[0]);assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency/);}
  const unknown=fixture();unknown.records[0].timing.first_token_ms=null;
  let report=buildReplyComparisonReport(manifestText,datasetText,unknown);assert.equal(report.overall.status,'undetermined');assert.equal(report.metrics.latency_p50.status,'passed');assert.ok(report.unknowns.some(item=>item.reason==='latency_first_token_ms_unknown'));
@@ -236,10 +237,11 @@ test('一臂失败时仍保留另一臂对应的成功延迟，不能删掉慢�
  assert.ok(Math.abs(report.metrics.latency_p95.observed.new-685)<1e-8);assert.notEqual(report.metrics.latency_p95.status,'passed');
 });
 
-test('真实工具轮可交错检索与模型阶段，但所有区间仍须完整无重叠',()=>{
+test('真实工具轮可交错或嵌套，阶段重叠用并集保留而不强制互斥',()=>{
  const run=fixture(),row=run.records[0];row.timing.phases.retrieval=[{started_ms:10,ended_ms:20},{started_ms:40,ended_ms:50}];row.timing.phases.network_model=[{started_ms:20,ended_ms:40},{started_ms:50,ended_ms:80}];
  let report=buildReplyComparisonReport(manifestText,datasetText,run);assert.equal(report.overall.status,'passed');
- row.timing.phases.network_model[1].started_ms=49;assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_phase_order/);
+ row.timing.phases.network_model[1].started_ms=49;report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.overall.status,'passed');assert.equal(report.latency_observations[0].phase_coverage.observed_phase_union_ms,100);
 });
 
 function setSevereCounts(row,counts){
@@ -318,8 +320,274 @@ test('墙钟、阶段或延迟本身缺证据不冒充已知最终结果',()=>{
  assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,malformed),/latency_phases/);
 });
 test('独立诊断未知不能跳过已知的首token、阶段、持久点或墙钟矛盾',()=>{
- for(const mutate of [row=>row.timing.first_token_ms=95,row=>row.timing.final_persisted_result_ms=90,row=>row.timing.phases.persistence.started_ms=91,row=>row.ended_at=new Date(Date.parse(row.started_at)+1000).toISOString()]){
+ for(const mutate of [row=>row.timing.first_token_ms=95,row=>row.timing.final_persisted_result_ms=90,row=>row.timing.phases.persistence.started_ms=101,row=>row.ended_at=new Date(Date.parse(row.started_at)+1000).toISOString()]){
   const run=fixture(),row=run.records[0];row.timing.first_event_ms=null;mutate(row);
   assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency/);
  }
+});
+
+// 仅构造报告器的合成观测合同，不冒充新增SDK请求或历史采集。
+function timingV2(row,{stream=true}={}){
+ const member=dataset.cases.find(member=>member.case_id===row.case_id);
+ const body={model:'synthetic-model',stream,messages:[{role:'user',content:canonical(inputFor(member))}]};
+ row.request_sha256=hash(body);row.request_observation={hash_kind:'canonical_json_sha256',sha256:row.request_sha256,body};
+ row.timing.schema_version='reply-latency-v2';
+ row.timing.diagnostics={request_sha256:row.request_sha256,
+  first_event_ms:{observability:'observable',definition:stream?'first_incremental_event':'completed_sdk_response',reason:null},
+  first_token_ms:{observability:stream?'observable':'unobservable',definition:'first_incremental_token',reason:stream?null:'非流式请求不提供增量token信号。'}};
+ if(!stream)row.timing.first_token_ms=null;
+ for(const [name,span]of Object.entries(row.timing.phases))span.markers={start:name+':start',end:name+':end'};
+ return row;
+}
+test('资格合同：已绑定非流式不可观测诊断保留48分母和原因，不额外阻断最终指标及overall',()=>{
+ const run=fixture();for(const row of run.records.filter(row=>row.arm==='old'))timingV2(row,{stream:false});
+ const before=structuredClone(run),report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.overall.status,'passed');assert.equal(report.metrics.latency_p50.status,'passed');assert.equal(report.metrics.latency_p95.status,'passed');
+ assert.equal(report.latency_diagnostics.first_token_ms.old.denominator,48);assert.equal(report.latency_diagnostics.first_token_ms.old.unobservable,48);assert.equal(report.latency_diagnostics.first_token_ms.old.missing,0);
+ assert.equal(report.unknowns.filter(item=>item.reason==='latency_first_token_ms_unknown').length,48);
+ assert.ok(report.unknowns.filter(item=>item.reason==='latency_first_token_ms_unknown').every(item=>item.blocking===false));
+ assert.ok(report.latency_observations.filter(item=>item.record_id.includes(':old:')).every(item=>item.diagnostics.first_token_ms.reason==='非流式请求不提供增量token信号。'));
+ assert.equal(report.arms.old.denominator,48);assert.equal(report.arms.new.denominator,48);assert.deepEqual(run,before);
+ assert.equal(report.real_model_quality_verified,false);assert.equal(report.production_switch_approved,false);
+});
+test('资格合同：有marker的真实返回开销独立记录，不要求persistence结束等于最终可用结果',()=>{
+ const run=fixture();for(const row of run.records){
+  timingV2(row);row.timing.phases.persistence.ended_ms=95;
+  row.timing.overhead=[{started_ms:95,ended_ms:100,kind:'framework_overhead',reason:'已保存结果的框架返回处理。',markers:{start:'persistence:end',end:'service:return'}}];
+ }
+ const before=structuredClone(run),report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.overall.status,'passed');assert.equal(report.metrics.latency_p50.status,'passed');assert.equal(report.metrics.latency_p95.limit,1.25);
+ for(const observation of report.latency_observations){
+  assert.equal(observation.phase_coverage.observed_phase_union_ms,95);assert.equal(observation.phase_coverage.framework_overhead_ms,5);
+  assert.deepEqual(observation.phase_coverage.unclassified,[]);assert.equal(observation.phase_coverage.target_phases_distinguished,true);
+ }
+ assert.deepEqual(run,before);assert.equal(run.records[0].timing.final_persisted_result_ms,100);assert.equal(report.production_switch_approved,false);
+});
+test('资格合同：非流式可观测性按请求而不按arm，两项不可观测原因分别保留',()=>{
+ const run=fixture();for(const row of run.records){
+  timingV2(row,{stream:false});row.timing.first_event_ms=null;
+  row.timing.diagnostics.first_event_ms={observability:'unobservable',definition:'first_incremental_event',reason:'非流式请求不提供增量首事件。'};
+ }
+ const report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.overall.status,'passed');
+ for(const field of ['first_event_ms','first_token_ms'])for(const arm of ['old','new'])assert.deepEqual(report.latency_diagnostics[field][arm],{denominator:48,observed:0,unobservable:48,missing:0});
+ assert.ok(report.unknowns.filter(item=>item.reason.startsWith('latency_first_')).every(item=>item.blocking===false));
+});
+test('资格合同：流式漏采marker仍blocking，v1缺可观测性声明也不假认证',()=>{
+ for(const version of ['reply-latency-v1','reply-latency-v2']){
+  const run=fixture(),row=run.records.find(row=>row.arm==='new');if(version.endsWith('v2'))timingV2(row);
+  row.timing.first_token_ms=null;const report=buildReplyComparisonReport(manifestText,datasetText,run);
+  assert.equal(report.overall.status,'undetermined');assert.equal(report.metrics.latency_p50.status,'passed');
+  assert.ok(report.unknowns.some(item=>item.reason==='latency_first_token_ms_unknown'&&item.blocking===true));
+  assert.equal(report.latency_diagnostics.first_token_ms.new.missing,1);assert.equal(report.latency_diagnostics.first_token_ms.new.denominator,48);
+ }
+});
+test('资格合同：缺非流式请求证明保留未知，不把单独不可观测声明当证据',()=>{
+ const run=fixture(),row=timingV2(run.records[0],{stream:false});delete row.request_observation;
+ const report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.overall.status,'undetermined');assert.ok(report.unknowns.some(item=>item.reason==='latency_diagnostic_request_unknown'));
+ assert.equal(report.latency_diagnostics.first_token_ms.old.unobservable,0);assert.equal(report.latency_diagnostics.first_token_ms.old.missing,1);
+});
+test('资格合同：可观测性与实际请求、定义或数值矛盾时拒绝',()=>{
+ for(const mutate of [
+  row=>{row.timing.first_token_ms=null;row.timing.diagnostics.first_token_ms={observability:'unobservable',definition:'first_incremental_token',reason:'声明无增量信号。'};},
+  row=>{row.request_observation.body.stream=false;},
+  row=>{row.timing.diagnostics.request_sha256='0'.repeat(64);},
+  row=>{row.timing.first_event_ms=null;row.timing.diagnostics.first_event_ms={observability:'unobservable',definition:'completed_sdk_response',reason:'不能把本可观测的完成回调声明为不可观测。'};},
+ ]){const run=fixture(),row=timingV2(run.records[0]);mutate(row);assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_diagnostic/);}
+ const known=fixture(),row=timingV2(known.records[0],{stream:false});row.timing.first_token_ms=30;
+ assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,known),/latency_diagnostic_contradiction/);
+});
+test('资格合同：wire请求证明按原字节校验，JSON值摘要不能代替wire摘要',()=>{
+ const run=fixture(),row=timingV2(run.records[0],{stream:false}),body=row.request_observation.body,raw=JSON.stringify(body,null,2);
+ row.request_observation={body,raw_utf8:raw,hash_kind:'wire_utf8_sha256',sha256:hash(raw)};
+ row.request_sha256=hash(raw);row.timing.diagnostics.request_sha256=row.request_sha256;
+ assert.equal(buildReplyComparisonReport(manifestText,datasetText,run).overall.status,'passed');
+ row.request_observation.raw_utf8+='\n';assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_diagnostic_request_hash/);
+});
+test('资格合同：未分类间隙明示但不抹去已证最终延迟，目标阶段区分仍未完成',()=>{
+ const run=fixture(),row=timingV2(run.records[0]);row.timing.phases.persistence.ended_ms=95;
+ const report=buildReplyComparisonReport(manifestText,datasetText,run),observed=report.latency_observations.find(item=>item.record_id===row.case_id+':'+row.arm+':'+row.repeat);
+ assert.equal(report.overall.status,'undetermined');assert.equal(report.metrics.latency_p50.status,'passed');assert.equal(report.metrics.latency_p50.totals.old.known,48);
+ assert.deepEqual(observed.phase_coverage.unclassified,[{started_ms:95,ended_ms:100}]);assert.equal(observed.phase_coverage.unclassified_ms,5);
+ assert.equal(observed.phase_coverage.target_phases_distinguished,false);assert.ok(report.unknowns.some(item=>item.reason==='latency_unclassified_may_include_target_phase'));
+});
+test('资格合同：全空阶段或无marker的0跨度不能被整段overhead伪装成已区分',()=>{
+ for(const zero of [false,true]){
+  const run=fixture(),row=timingV2(run.records[0]);for(const name of Object.keys(row.timing.phases))row.timing.phases[name]=zero?{started_ms:0,ended_ms:0}:[];
+  row.timing.first_event_ms=null;row.timing.first_token_ms=null;
+  row.timing.overhead=[{started_ms:0,ended_ms:100,kind:'framework_overhead',reason:'只观察到框架区间，不能证明目标阶段。',markers:{start:'framework:start',end:'framework:end'}}];
+  const report=buildReplyComparisonReport(manifestText,datasetText,run),observed=report.latency_observations.find(item=>item.record_id===row.case_id+':'+row.arm+':'+row.repeat);
+  assert.equal(report.overall.status,'undetermined');assert.equal(observed.phase_coverage.target_phases_distinguished,false);assert.equal(observed.phase_coverage.observed_phases.length,0);
+  for(const phase of ['queue','retrieval','network_model','validation','persistence'])assert.ok(report.unknowns.some(item=>item.reason==='latency_phase_'+phase+'_unknown'));
+ }
+});
+test('资格合同：有真实成对marker的0跨度保留，不猜未发生阶段为0',()=>{
+ const run=fixture(),row=timingV2(run.records[0]);row.timing.phases.validation.ended_ms=80;row.timing.phases.persistence.started_ms=80;
+ const report=buildReplyComparisonReport(manifestText,datasetText,run);assert.equal(report.overall.status,'passed');
+ assert.ok(report.latency_observations[0].phase_coverage.observed_phases.includes('validation'));
+});
+test('资格合同：真实重叠阶段用并集表达不相加，framework开销不能重叠目标阶段',()=>{
+ const run=fixture(),row=timingV2(run.records[0]);row.timing.phases.network_model.ended_ms=85;
+ const report=buildReplyComparisonReport(manifestText,datasetText,run);assert.equal(report.overall.status,'passed');assert.equal(report.latency_observations[0].phase_coverage.observed_phase_union_ms,100);assert.equal(report.latency_observations[0].phase_coverage.durations_not_summed,true);
+ row.timing.overhead=[{started_ms:82,ended_ms:88,kind:'framework_overhead',reason:'不能把实际目标阶段重标框架开销。',markers:{start:'framework:start',end:'framework:end'}}];
+ assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_overhead_phase_overlap/);
+});
+test('资格合同：阶段marker时间矛盾、无依据overhead和区间越界均拒绝',()=>{
+ for(const mutate of [
+  row=>{row.timing.phases.persistence.markers.start='network_model:start';},
+  row=>{row.timing.overhead=[{started_ms:95,ended_ms:100,kind:'framework_overhead',reason:'无marker不能证明开销。'}];},
+  row=>{row.timing.phases.persistence.ended_ms=101;},
+ ]){const run=fixture(),row=timingV2(run.records[0]);mutate(row);assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_(phase|overhead)/);}
+});
+test('资格合同：最终点或持久结果绑定未知不计已知最终延迟，不造COMMIT要求',()=>{
+ for(const mutate of [row=>{row.timing.final_persisted_result_ms=null;},row=>{row.deterministic_checks.status='unknown';}]){
+  const run=fixture(),row=timingV2(run.records[0]);mutate(row);const report=buildReplyComparisonReport(manifestText,datasetText,run);
+  assert.equal(report.overall.status,'undetermined');assert.equal(report.metrics.latency_p50.status,'undetermined');assert.equal(report.metrics.latency_p50.totals.old.known,47);assert.equal(report.metrics.latency_p50.totals.old.denominator,48);
+ }
+});
+test('资格合同：诊断不可观测不能放宽最终延迟、调用、token及费用阈值',()=>{
+ const run=fixture();for(const row of run.records)timingV2(row,{stream:false});let index=0;
+ for(const pair of createReplyComparisonPlan(manifestText,datasetText))for(const arm of pair.order==='AB'?['old','new']:['new','old']){
+  const row=run.records.find(row=>row.case_id===pair.case_id&&row.repeat===pair.repeat&&row.arm===arm),start=Date.UTC(2026,9,24)+index++*1000;
+  if(arm==='new'){row.latency_ms=130;row.timing.observed_ms=130;row.timing.final_persisted_result_ms=130;row.timing.phases.network_model.ended_ms=110;row.timing.phases.validation.started_ms=110;row.timing.phases.validation.ended_ms=120;row.timing.phases.persistence.started_ms=120;row.timing.phases.persistence.ended_ms=130;}
+  row.started_at=new Date(start).toISOString();row.ended_at=new Date(start+row.latency_ms).toISOString();
+ }
+ const report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.metrics.latency_p50.limit,1.15);assert.equal(report.metrics.latency_p95.limit,1.25);assert.equal(report.metrics.physical_calls.limit,1.05);assert.equal(report.metrics.total_tokens.limit,1.10);assert.equal(report.metrics.cost.limit,1.10);
+ assert.equal(report.metrics.latency_p50.status,'failed');assert.equal(report.metrics.latency_p95.status,'failed');assert.equal(report.overall.status,'failed');assert.equal(report.population.planned,96);assert.equal(report.real_model_quality_verified,false);assert.equal(report.production_switch_approved,false);
+});
+test('资格合同：首事件定义必须与绑定的实际stream模式一致，请求正文不复制到报告',()=>{
+ for(const stream of [false,true]){
+  const run=fixture(),row=timingV2(run.records[0],{stream});
+  row.timing.diagnostics.first_event_ms.definition=stream?'completed_sdk_response':'first_incremental_event';
+  assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_diagnostic_contradiction/);
+ }
+ const run=fixture(),row=timingV2(run.records[0],{stream:false});
+ row.request_observation.body.metadata={synthetic_private_request_marker:'request-body-must-stay-out-of-report'};
+ row.request_observation.sha256=hash(row.request_observation.body);row.request_sha256=row.request_observation.sha256;row.timing.diagnostics.request_sha256=row.request_sha256;
+ const report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.overall.status,'passed');assert.equal(JSON.stringify(report).includes('request-body-must-stay-out-of-report'),false);
+});
+test('资格修复：overhead不能通过额外调试对象把请求正文带进报告',()=>{
+ const run=fixture(),row=timingV2(run.records[0]);row.timing.phases.persistence.ended_ms=95;
+ row.timing.overhead=[{started_ms:95,ended_ms:100,kind:'framework_overhead',reason:'已保存结果的框架返回处理。',markers:{start:'persistence:end',end:'service:return'},request_debug:{body:{messages:[{role:'user',content:'SYNTHETIC_PRIVATE_BODY_MUST_NOT_COPY'}]}}}];
+ assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_.*fields/);
+});
+test('资格修复：v1不能忽略已提供且摘要绑定的非流式请求与已知token矛盾',()=>{
+ for(const keepDeclaration of [true,false]){
+  const run=fixture(),row=timingV2(run.records[0],{stream:false});row.timing.schema_version='reply-latency-v1';row.timing.first_token_ms=30;
+  if(!keepDeclaration)delete row.timing.diagnostics;
+  assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_diagnostic_contradiction/);
+ }
+});
+test('资格修复：timing、阶段、marker与diagnostics未知子字段都不能外带正文',()=>{
+ const body={body:{messages:[{role:'user',content:'SYNTHETIC_NESTED_PRIVATE_BODY'}]}};
+ const mutations=[
+  row=>{row.timing.request_debug=body;},
+  row=>{row.timing.phases.queue.request_debug=body;},
+  row=>{row.timing.phases.queue.markers.request_debug=body;},
+  row=>{row.timing.overhead[0].markers.request_debug=body;},
+  row=>{row.timing.diagnostics.request_debug=body;},
+  row=>{row.timing.diagnostics.first_token_ms.request_debug=body;},
+  row=>{row.timing.schema_version='reply-latency-v1';row.timing.diagnostics.first_token_ms.request_debug=body;},
+  row=>{row.timing.diagnostics=null;},
+ ];
+ for(const mutate of mutations){
+  const run=fixture(),row=timingV2(run.records[0]);row.timing.phases.persistence.ended_ms=95;
+  row.timing.overhead=[{started_ms:95,ended_ms:100,kind:'framework_overhead',reason:'合成返回处理。',markers:{start:'persistence:end',end:'service:return'}}];
+  mutate(row);assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_(timing_fields|interval_fields|phase_markers|diagnostic_)/);
+ }
+});
+test('资格修复：v1有无请求证明分别处理，不能用声明版本跳过摘要矛盾或推断不可观测',()=>{
+ const streaming=fixture(),known=timingV2(streaming.records[0]);known.timing.schema_version='reply-latency-v1';delete known.timing.diagnostics;
+ assert.equal(buildReplyComparisonReport(manifestText,datasetText,streaming).overall.status,'passed');
+ const legacy=fixture(),row=timingV2(legacy.records[0],{stream:false});row.timing.schema_version='reply-latency-v1';delete row.timing.diagnostics;
+ let report=buildReplyComparisonReport(manifestText,datasetText,legacy);
+ assert.equal(report.overall.status,'undetermined');assert.equal(report.latency_diagnostics.first_token_ms.old.unobservable,0);assert.equal(report.latency_diagnostics.first_token_ms.old.missing,1);
+ assert.ok(report.unknowns.some(item=>item.reason==='latency_first_token_ms_unknown'&&item.blocking===true));
+ row.request_observation.body.stream=true;
+ assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,legacy),/latency_diagnostic_request_hash/);
+ const noProof=fixture();assert.equal(buildReplyComparisonReport(manifestText,datasetText,noProof).overall.status,'passed');
+});
+test('资格修复：model_run禁止借fixture请求观测，真实来源缺失仍记missing而非不可观测',()=>{
+ const run=fixture(),row=timingV2(run.records[0],{stream:false});run.evidence_kind='model_run';
+ assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_diagnostic_fixture_request_forbidden/);
+ delete row.request_observation;
+ const report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.overall.status,'undetermined');assert.equal(report.latency_diagnostics.first_token_ms.old.unobservable,0);assert.equal(report.latency_diagnostics.first_token_ms.old.missing,1);
+ assert.ok(report.unknowns.some(item=>item.reason==='latency_diagnostic_request_unknown'&&item.blocking===true));
+ assert.ok(report.unknowns.some(item=>item.reason==='latency_first_token_ms_unknown'&&item.blocking===true));
+});
+test('资格修复：严格元数据保留合法开销原因、诊断原因与null，已知数值矛盾仍拒绝',()=>{
+ const run=fixture(),row=timingV2(run.records[0],{stream:false});row.timing.first_event_ms=null;
+ row.timing.diagnostics.first_event_ms.reason='合成：完成响应marker漏采，不能写0。';row.timing.phases.persistence.ended_ms=95;
+ row.timing.overhead=[{started_ms:95,ended_ms:100,kind:'framework_overhead',reason:'合成：持久化完成后的返回处理。',markers:{start:'persistence:end',end:'service:return'}}];
+ const before=structuredClone(run),report=buildReplyComparisonReport(manifestText,datasetText,run),observed=report.latency_observations[0];
+ assert.equal(report.overall.status,'undetermined');assert.equal(report.metrics.latency_p50.status,'passed');assert.equal(report.latency_diagnostics.first_token_ms.old.unobservable,1);
+ assert.equal(observed.diagnostics.first_event_ms.value_ms,null);assert.equal(observed.diagnostics.first_event_ms.reason,row.timing.diagnostics.first_event_ms.reason);
+ assert.equal(observed.diagnostics.first_token_ms.reason,'非流式请求不提供增量token信号。');assert.deepEqual(observed.phase_coverage.framework_overhead,row.timing.overhead);
+ assert.deepEqual(report.records[0].timing,row.timing);assert.deepEqual(run,before);
+ row.timing.phases.persistence.ended_ms=101;
+ assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/latency_phase_order/);
+});
+for(const field of ['usage','cost','deterministic_checks'])test('出口修复：'+field+'额外请求正文仅留输入，报告保留合法统计元数据',()=>{
+ const run=fixture(),row=run.records[0],canary='SYNTHETIC_PRIVATE_METADATA_'+field.toUpperCase(),baseline=buildReplyComparisonReport(manifestText,datasetText,run);
+ row[field].request_debug={body:{messages:[{role:'user',content:canary}]}};
+ const before=structuredClone(run),report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(JSON.stringify(report).includes(canary),false);assert.deepEqual(run,before);
+ assert.deepEqual(report.population,baseline.population);assert.deepEqual(report.metrics,baseline.metrics);assert.deepEqual(report.semantic_quality,baseline.semantic_quality);assert.deepEqual(report.unknowns,baseline.unknowns);
+ assert.equal(report.overall.status,'passed');assert.deepEqual(report.records[0][field],baseline.records[0][field]);
+ assert.equal(report.records[0].output_sha256,hash(row.output));assert.equal(report.real_model_quality_verified,false);assert.equal(report.production_switch_approved,false);
+});
+test('出口修复：价格、两臂版本绑定和评审容器的额外对象不复制到报告',()=>{
+ const mutations=[run=>run.price_snapshot,run=>run.bindings,run=>run.bindings.old,run=>run.bindings.new,run=>run.records[0].reviews[0],run=>run.records[0].reviews[0].candidates[0]];
+ const baseline=buildReplyComparisonReport(manifestText,datasetText,fixture());
+ for(const target of mutations){
+  const run=fixture(),canary='SYNTHETIC_PRIVATE_METADATA_OTHER_CONTAINER';target(run).extension={body:{messages:[{role:'user',content:canary}]}};
+  const before=structuredClone(run),report=buildReplyComparisonReport(manifestText,datasetText,run);
+  assert.equal(JSON.stringify(report).includes(canary),false);assert.deepEqual(run,before);assert.equal(report.overall.status,'passed');
+  assert.deepEqual(report.bindings,baseline.bindings);assert.deepEqual(report.records[0].reviews,baseline.records[0].reviews);assert.deepEqual(report.metrics,baseline.metrics);assert.deepEqual(report.unknowns,baseline.unknowns);
+ }
+});
+test('出口修复：未知的模型、版本和时间标量不能把对象作为元数据透传',()=>{
+ for(const mutate of [
+  (run,value)=>{run.records[0].actual_model=value;},(run,value)=>{run.records[0].model_fingerprint=value;},
+  (run,value)=>{run.records[0].started_at=value;},(run,value)=>{run.records[0].ended_at=value;},
+  (run,value)=>{run.records[0].reviews[0].reviewer_model=value;},(run,value)=>{run.records[0].reviews[0].reviewer_version=value;},
+ ]){
+  const run=fixture(),canary='SYNTHETIC_PRIVATE_METADATA_WRONG_SCALAR';mutate(run,{body:{messages:[{content:canary}]}});
+  const before=structuredClone(run),report=buildReplyComparisonReport(manifestText,datasetText,run);
+  assert.equal(JSON.stringify(report).includes(canary),false);assert.deepEqual(run,before);assert.ok(report.unknowns.length>0);assert.equal(report.population.planned,96);
+  assert.equal(report.real_model_quality_verified,false);assert.equal(report.production_switch_approved,false);
+ }
+});
+test('出口修复：投影前仍校验金额、计数、评分和绑定矛盾，不以删字段掩盖错误',()=>{
+ for(const mutate of [
+  run=>{run.records[0].usage.input_tokens={body:{messages:[]}};},run=>{run.records[0].cost.amount=-1;},
+  run=>{run.records[0].deterministic_checks.output_sha256='0'.repeat(64);},run=>{run.price_snapshot.sha256='invalid';},
+  run=>{run.bindings.old.lock_hash={body:{messages:[]}};},run=>{run.records[0].reviews[0].candidates[0].scores.request_debug={body:{messages:[]}};},
+ ]){const run=fixture();mutate(run);assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/usage|cost_or_price_binding|deterministic_output_binding|price_snapshot|lock_hash_unknown|review_scores/);}
+});
+test('出口修复：保留合同文字理由和完整原输出摘要，投影视图不冒充原证据',()=>{
+ const run=fixture(),row=run.records[0],outputBody='SYNTHETIC_FULL_OUTPUT_PRIVATE_BODY',reason='合成评审理由保留字段词：request_debug/body/messages。';
+ row.output.candidates[0].messages=[{message_id:'synthetic-message',text:outputBody}];row.output.candidates[0].risk_notes=['合成风险说明'];
+ row.deterministic_checks.output_sha256=hash(row.output);
+ const subject=hash({blind_id:row.blind_id,case_sha256:row.case_sha256,input_sha256:row.input_sha256,output:row.output});
+ for(const review of row.reviews){review.subject_sha256=subject;review.candidates[0].basis=reason;}
+ const before=structuredClone(run),report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.overall.status,'passed');assert.equal(report.records[0].output_sha256,hash(row.output));assert.equal(report.records[0].deterministic_checks.output_sha256,hash(row.output));
+ assert.equal(report.records[0].reviews[0].subject_sha256,subject);assert.equal(report.records[0].reviews[0].candidates[0].basis,reason);
+ assert.equal(JSON.stringify(report).includes(outputBody),false);assert.deepEqual(run,before);
+ report.records[0].reviews[0].candidates[0].scores.chinese_usability=0;report.records[0].usage.input_tokens=99;report.records[0].timing.phases.queue.started_ms=5;report.bindings.arms.old.commit='changed-in-report';
+ assert.deepEqual(run,before);
+ row.output.candidates[0].messages[0].text='摘要绑定后被改写';assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/deterministic_output_binding/);
+});
+test('出口修复：未定的实际来源只输出完整逐次摘要，SDK请求对象仍留输入',()=>{
+ const run=fixture(),row=run.records[0],canary='SYNTHETIC_PRIVATE_PENDING_REQUEST';row.physical_calls=2;
+ row.runtime_sources={schema_version:'reply-runtime-sources-v1',attempts:[1,2].map(index=>({attempt_id:`a0000000-0000-4000-8000-00000000000${index}`,request:{hash_kind:'canonical_json_sha256',sha256:row.request_sha256,body:{messages:[{content:canary}]}},response_started_at:'2026-10-24T00:00:00.020Z',request_debug:{body:{messages:[{content:canary}]}}}))};
+ const before=structuredClone(run),report=buildReplyComparisonReport(manifestText,datasetText,run),audit=report.records[0].source_audit;
+ assert.equal(report.overall.status,'undetermined');assert.equal(audit.status,'undetermined');assert.equal(audit.attempt_count,2);assert.equal(audit.attempt_observations.length,2);
+ assert.equal(audit.reason,'runtime_multiple_attempts_unsupported');assert.equal(JSON.stringify(report).includes(canary),false);assert.deepEqual(run,before);
+ assert.equal(report.arms.old.denominator,48);assert.equal(report.population.planned,96);
 });
