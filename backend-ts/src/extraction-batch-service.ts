@@ -66,6 +66,22 @@ function eventPayload(value:unknown,rule:string){
  const now=new Date().toISOString();
  return {...payload,_execution:{kind:'snapshot_capture',started_at:now,finished_at:now,status:'recorded',rule_version:rule,payload_sha256:digest(payload)}};
 }
+function priorOutcome(value:unknown,begun:Record<string,any>):ExtractionBatchWireOutcome|null {
+ if(!value||typeof value!=='object'||Array.isArray(value))return null;
+ const outcome=value as ExtractionBatchWireOutcome;
+ if(outcome.a_execution_id!==begun.execution_id||outcome.a_input_sha256!==begun.input_sha256
+  ||outcome.a_rule_version!==begun.rule_version||!Array.isArray(outcome.accepted)
+  ||!Array.isArray(outcome.candidate_trace_ids)||!Array.isArray(outcome.model_call_ids)
+  ||new Set(outcome.model_call_ids).size!==outcome.model_call_ids.length)return null;
+ return outcome;
+}
+/** 只有明确未产生 accepted 的旧执行才能在新trace下让位；任何可能已写的成功结果仍保持unknown。 */
+function noWriteOutcome(outcome:ExtractionBatchWireOutcome):boolean{
+ return outcome.accepted.length===0&&outcome.candidate_trace_ids.length===0;
+}
+function failedOutcome(outcome:ExtractionBatchWireOutcome):boolean{
+ return outcome.failure_kind!==null||outcome.extraction_completed!==true;
+}
 async function append(client:pg.Client,input:ExtractionBatchInput,stage:string,payload:unknown,rule:string,callId:string|null=null,candidateTraceId:string|null=null){
  const trace=(await client.query('SELECT status FROM memory_extraction_trace WHERE trace_id=$1 AND owner_id=$2 AND contact_id=$3 FOR UPDATE',[input.trace_id,input.owner_id,input.contact_id])).rows[0];
  if(trace?.status!=='running')reject();
@@ -129,27 +145,40 @@ export class ExtractionBatchService {
     AND NOT EXISTS(SELECT 1 FROM memory_extraction_trace_event n WHERE n.trace_id=b.trace_id AND n.stage='typescript_a_not_sent'
      AND n.payload->>'proof' IN ('before_model_invocation','known_not_sent_receipts')
      AND n.payload->>'a_execution_id'=b.payload->>'execution_id'
-     AND n.payload->>'a_input_sha256'=b.payload->>'input_sha256' AND n.payload->>'a_rule_version'=b.payload->>'rule_version')`,
+     AND n.payload->>'a_input_sha256'=b.payload->>'input_sha256' AND n.payload->>'a_rule_version'=b.payload->>'rule_version')
+    AND NOT EXISTS(SELECT 1 FROM memory_extraction_trace_event s WHERE s.owner_id=$1 AND s.contact_id=$2
+     AND s.stage='typescript_a_superseded' AND s.payload->>'a_execution_id'=b.payload->>'execution_id'
+     AND s.payload->>'a_input_sha256'=b.payload->>'input_sha256' AND s.payload->>'a_rule_version'=b.payload->>'rule_version')`,
     [input.owner_id,input.contact_id,input.batch_key,input.claim.task_id])).rows;
-   if(executions.length>1)reject('extraction_batch_outcome_unknown');
-   const prior=executions[0];
+   let prior:null|{trace_id:string;consumed:boolean;cached:ExtractionBatchWireOutcome}=null;
+   if(executions.length){
+    const checked=[];
+    for(const execution of executions){
+     const cached=priorOutcome(execution.outcome,execution.begun);
+     if(cached===null)reject('extraction_batch_outcome_unknown');
+     const known=(await client.query(`SELECT c.call_id FROM memory_extraction_trace_call c JOIN model_call_receipt r
+      ON r.ledger_entry_id=c.ledger_entry_id AND r.owner_id=c.owner_id AND r.contact_id=c.contact_id
+      WHERE c.trace_id=$1 AND c.owner_id=$2 AND c.contact_id=$3 AND c.call_id=ANY($4::uuid[])
+      AND c.ledger_commit_status='committed' AND r.outcome NOT IN ('pending','unknown') AND r.request_id=$5`,
+      [execution.trace_id,input.owner_id,input.contact_id,cached!.model_call_ids,requestId])).rows;
+     if(known.length!==cached!.model_call_ids.length)reject('extraction_batch_outcome_unknown');
+     checked.push({...execution,cached,same:execution.begun.input_sha256===inputSha&&execution.begun.rule_version===this.options.ruleVersion});
+    }
+    if(executions.length===1&&checked[0]!.same&&(checked[0]!.trace_id===input.trace_id
+     ||checked[0]!.consumed===true||!failedOutcome(checked[0]!.cached)))prior=checked[0]!;
+    else{
+     if(checked.some(execution=>execution.consumed===true||!noWriteOutcome(execution.cached)))reject('extraction_batch_outcome_unknown');
+     for(const execution of checked)await append(client,input,'typescript_a_superseded',{
+      prior_trace_id:execution.trace_id,a_execution_id:execution.cached.a_execution_id,
+      a_input_sha256:execution.cached.a_input_sha256,a_rule_version:execution.cached.a_rule_version,
+      reason:'unconsumed_terminal_without_accepted'},this.options.ruleVersion);
+    }
+   }
    if(prior){
-    if((prior.consumed!==true&&prior.begun.input_sha256!==inputSha)
-     ||prior.begun.rule_version!==this.options.ruleVersion||!prior.outcome)reject('extraction_batch_outcome_unknown');
-    const cached=prior.outcome as ExtractionBatchWireOutcome;
-    if(cached.a_execution_id!==prior.begun.execution_id||cached.a_input_sha256!==prior.begun.input_sha256
-     ||cached.a_rule_version!==this.options.ruleVersion)reject('extraction_batch_outcome_unknown');
-    if(!Array.isArray(cached.model_call_ids)||new Set(cached.model_call_ids).size!==cached.model_call_ids.length)reject('extraction_batch_outcome_unknown');
-    const known=(await client.query(`SELECT c.call_id FROM memory_extraction_trace_call c JOIN model_call_receipt r
-     ON r.ledger_entry_id=c.ledger_entry_id AND r.owner_id=c.owner_id AND r.contact_id=c.contact_id
-     WHERE c.trace_id=$1 AND c.owner_id=$2 AND c.contact_id=$3 AND c.call_id=ANY($4::uuid[])
-     AND c.ledger_commit_status='committed' AND r.outcome NOT IN ('pending','unknown') AND r.request_id=$5`,
-     [prior.trace_id,input.owner_id,input.contact_id,cached.model_call_ids,requestId])).rows;
-    if(known.length!==cached.model_call_ids.length)reject('extraction_batch_outcome_unknown');
     if(prior.trace_id!==input.trace_id)await append(client,input,'typescript_a_recovered',{
-     a_execution_id:cached.a_execution_id,a_input_sha256:cached.a_input_sha256,
-     a_rule_version:cached.a_rule_version},this.options.ruleVersion);
-   return {frozen,window,inputSha,cached,mode};
+     a_execution_id:prior.cached.a_execution_id,a_input_sha256:prior.cached.a_input_sha256,
+     a_rule_version:prior.cached.a_rule_version},this.options.ruleVersion);
+   return {frozen,window,inputSha,cached:prior.cached,mode};
    }
    if((await client.query("SELECT 1 FROM memory_extraction_trace_event WHERE trace_id=$1 AND stage IN ('typescript_a_begin','typescript_a_recovered') LIMIT 1",[input.trace_id])).rowCount)reject('extraction_batch_already_consumed');
    // 正文清除不等于结果已被业务消费；原最小调用关联仍能阻止同一request重发。
