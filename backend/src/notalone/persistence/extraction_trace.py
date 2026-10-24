@@ -6,6 +6,7 @@ from typing import Any
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from uuid import UUID, uuid4
+import re
 
 import psycopg
 from psycopg.rows import dict_row
@@ -351,6 +352,9 @@ class PostgresExtractionTraceStore:
                     contact_id=scope.contact_id,
                 )
                 lock_owner_scope(connection, owner_id=scope.owner_id)
+                receipt = payload.get("typescript_a_receipt")
+                if receipt is not None:
+                    self._verify_typescript_a_consumption(connection, scope, trace_id, receipt)
                 if watermark_port is not None:
                     if (
                         getattr(watermark_port, "database_url", None)
@@ -384,6 +388,41 @@ class PostgresExtractionTraceStore:
                 )
         except Exception:
             raise TraceWriteError("batch_end", trace_id) from None
+
+    @staticmethod
+    def _verify_typescript_a_consumption(connection, scope, trace_id, receipt):
+        """只在原B事务确认持久A结果；HTTP返回或trace失败都不能充当消费ACK。"""
+        keys = {"a_execution_id", "a_input_sha256", "a_rule_version"}
+        if type(receipt) is not dict or set(receipt) != keys:
+            raise ValueError("提取结果关联无效。")
+        execution = UUID(receipt["a_execution_id"])
+        if str(execution) != receipt["a_execution_id"] or any(
+            type(receipt[key]) is not str or re.fullmatch(r"[a-f0-9]{64}", receipt[key]) is None
+            for key in ("a_input_sha256", "a_rule_version")
+        ):
+            raise ValueError("提取结果关联无效。")
+        row = connection.execute(
+            "SELECT 1 FROM public.memory_extraction_trace original "
+            "JOIN public.memory_extraction_trace current ON current.owner_id=original.owner_id "
+            "AND current.contact_id=original.contact_id AND current.batch_key=original.batch_key "
+            "JOIN public.memory_extraction_trace_event b ON b.trace_id=original.trace_id AND b.stage='typescript_a_begin' "
+            "JOIN public.memory_extraction_trace_event r ON r.trace_id=original.trace_id AND r.stage='typescript_a_result' "
+            "JOIN public.memory_extraction_trace_event w ON w.trace_id=current.trace_id AND w.stage='window' "
+            "WHERE original.trace_id=%s AND original.owner_id=%s AND original.contact_id=%s AND current.trace_id=%s "
+            "AND current.status='running' AND b.payload->>'execution_id'=%s "
+            "AND b.payload->>'input_sha256'=%s AND b.payload->>'rule_version'=%s "
+            "AND b.payload->>'task_id'=w.payload#>>'{task_runtime,task_id}' "
+            "AND r.payload->'outcome' @> %s::jsonb "
+            "AND (original.trace_id=current.trace_id OR EXISTS(SELECT 1 FROM public.memory_extraction_trace_event recovery "
+            "WHERE recovery.trace_id=current.trace_id AND recovery.stage='typescript_a_recovered' AND recovery.payload @> %s::jsonb)) "
+            "AND NOT EXISTS(SELECT 1 FROM public.memory_extraction_trace_event consumed "
+            "WHERE consumed.owner_id=original.owner_id AND consumed.contact_id=original.contact_id AND consumed.stage='batch_end' "
+            "AND consumed.payload#>>'{typescript_a_receipt,a_execution_id}'=%s)",
+            (execution, scope.owner_id, scope.contact_id, trace_id, str(execution),
+             receipt["a_input_sha256"], receipt["a_rule_version"], Jsonb(receipt), Jsonb(receipt), str(execution)),
+        ).fetchone()
+        if row is None:
+            raise ValueError("提取结果尚未确认或已经消费。")
 
     def mark_failed(
         self,

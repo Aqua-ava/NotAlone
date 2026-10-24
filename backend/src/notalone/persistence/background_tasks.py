@@ -1444,14 +1444,74 @@ def _layered_task_eligible_sql(connection) -> str:
 
 
 def _unconfirmed_model_requests(connection,owner_id,contact_id):
-    """合并物理未知与原台账结果ACK未知；只读取无正文身份关联。"""
-    return {row[0] for row in connection.execute(
+    """合并物理未知、台账ACK未知与A段业务未知；只读取无正文身份关联。"""
+    requests = {row[0] for row in connection.execute(
         "SELECT DISTINCT r.request_id FROM public.model_call_receipt r "
         "WHERE r.owner_id=%s AND r.contact_id IS NOT DISTINCT FROM %s AND "
         "(r.outcome IN ('pending','unknown') OR EXISTS ("
         "SELECT 1 FROM public.memory_extraction_trace_call c WHERE c.owner_id=r.owner_id "
         "AND c.contact_id=r.contact_id AND c.ledger_entry_id=r.ledger_entry_id "
         "AND c.ledger_commit_status='unknown'))",(owner_id,contact_id)).fetchall()}
+    requests.update(_unconfirmed_extraction_a_requests(connection,owner_id,contact_id))
+    return requests
+
+
+def _unconfirmed_extraction_a_requests(connection,owner_id,contact_id):
+    """A结果落盘前中断不重放；完整结果留给恢复，只有原B事务确认消费。"""
+    from uuid import uuid5, NAMESPACE_URL
+    if contact_id is None:
+        return set()
+    tasks = {row[0] for row in connection.execute(
+        "SELECT id FROM public.background_task WHERE owner_id=%s AND contact_id=%s "
+        "AND task_type IN ('import','observation')",(owner_id,contact_id)).fetchall()}
+    rows = connection.execute(
+        "SELECT tr.trace_id,tr.batch_key,e.stage,e.payload->>'execution_id',e.payload->>'task_id',"
+        "e.payload->>'request_id',e.payload->>'input_sha256',e.payload->>'rule_version',"
+        "e.payload#>>'{typescript_a_receipt,a_execution_id}',"
+        "e.payload#>>'{typescript_a_receipt,a_input_sha256}',"
+        "e.payload#>>'{typescript_a_receipt,a_rule_version}',"
+        "jsonb_typeof(e.payload->'outcome')='object',e.payload->>'a_execution_id',"
+        "e.payload->>'a_input_sha256',e.payload->>'a_rule_version',e.payload->>'proof' FROM public.memory_extraction_trace tr "
+        "JOIN public.memory_extraction_trace_event e ON e.trace_id=tr.trace_id "
+        "AND e.owner_id=tr.owner_id AND e.contact_id=tr.contact_id "
+        "WHERE tr.owner_id=%s AND tr.contact_id=%s AND e.stage IN "
+        "('typescript_a_begin','typescript_a_result','typescript_a_not_sent','batch_end')",(owner_id,contact_id)).fetchall()
+    completed = {row[0] for row in rows if row[2]=='typescript_a_result' and row[11]}
+    consumed = {(row[8],row[9],row[10]) for row in rows if row[2]=='batch_end'}
+    not_sent = {(row[0],row[12],row[13],row[14]) for row in rows
+                if row[2]=='typescript_a_not_sent' and row[15] in ('before_model_invocation','known_not_sent_receipts')}
+    consumed_traces = set()
+    requests = set()
+    for trace,key,stage,execution,raw_task,request,input_sha,rule,*_ in rows:
+        if stage != 'typescript_a_begin':
+            continue
+        if (execution,input_sha,rule) in consumed or (trace,execution,input_sha,rule) in not_sent:
+            consumed_traces.add(trace)
+            continue
+        if trace in completed:
+            continue
+        try:
+            task = UUID(raw_task)
+            if task in tasks and UUID(execution) and request == str(uuid5(NAMESPACE_URL,f'notalone:extraction:{task}:{key}')):
+                requests.add(UUID(request))
+        except (ValueError,TypeError,AttributeError):
+            continue
+    # 正文清除保留真实调用/原request与input关联；PG terminal不等于A结果已消费。
+    erased = connection.execute(
+        "SELECT DISTINCT tr.trace_id,tr.batch_key,r.request_id FROM public.memory_extraction_trace tr "
+        "JOIN public.memory_extraction_trace_call c ON c.trace_id=tr.trace_id AND c.owner_id=tr.owner_id AND c.contact_id=tr.contact_id "
+        "JOIN public.model_call_receipt r ON r.ledger_entry_id=c.ledger_entry_id AND r.owner_id=c.owner_id AND r.contact_id=c.contact_id "
+        "WHERE tr.owner_id=%s AND tr.contact_id=%s AND (c.provider_attempts>0 OR r.dispatch IN ('http_accepted','response_observed')) "
+        "AND NOT EXISTS (SELECT 1 FROM public.memory_extraction_trace_event e "
+        "WHERE e.trace_id=tr.trace_id AND e.owner_id=tr.owner_id AND e.contact_id=tr.contact_id AND e.stage='window')",
+        (owner_id,contact_id)).fetchall()
+    for trace,key,request in erased:
+        if trace in completed or trace in consumed_traces:
+            continue
+        for task in tasks:
+            if key and uuid5(NAMESPACE_URL,f'notalone:extraction:{task}:{key}') == request:
+                requests.add(request)
+    return requests
 
 
 def _model_attempts_settled_sql(connection, owner_id, contact_id, *, allow_fresh_extraction=True, unconfirmed_requests=None) -> str:
