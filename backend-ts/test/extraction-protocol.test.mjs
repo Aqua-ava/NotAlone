@@ -72,6 +72,9 @@ test('事件发生日期只接受活动来源原偏移与独立V位置，过期�
  assert.equal(unknown.occurrence_start,null);assert.equal(unknown.occurrence_verified,false);
  const unverified=validateSourceVerification([{...result,event_verification:{...result.event_verification,occurrence_verdict:'uncertain'}}],scoped,facts)[0];
  assert.equal(unverified.verdict,'unsupported');assert.ok(unverified.issues.includes('time'));assert.equal(unverified.model_verdict,'supported');
+ const isolated=parseSourceVerification({results:[{...result,event_verification:{...result.event_verification,
+  stage_evidence:[{message_id:id,char_start:0,char_end:999}]}}]},scoped,facts,{isolate_items:true})[0];
+ assert.equal(isolated.verdict,'unsupported');assert.deepEqual(isolated.issues,['insufficient_evidence']);
  assert.throws(()=>validateSourceVerification([{...result,event_verification:{...result.event_verification,stage_evidence:[]}}],scoped,facts),ExtractionProtocolError);
 });
 

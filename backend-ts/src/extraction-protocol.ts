@@ -267,10 +267,17 @@ export function parseSourceVerification(payload:unknown,window:ExtractionWindow,
     return isolated.map((result,index)=>({...result,candidate_index:index}));
   }
   if(!options.isolate_items)return validateSourceVerification(converted,window,facts);
-  const isolated=facts.map((fact,index)=>{
+  return facts.map((fact,index)=>{
     const matches=converted.filter((value:unknown)=>value!==null&&typeof value==='object'&&!Array.isArray(value)&&Number.isInteger((value as any).candidate_index)&&(value as any).candidate_index===index);
-    try{requireValid(matches.length===1);validateSourceVerification([{...(matches[0] as object),candidate_index:0}],window,[fact]);return matches[0];}
-    catch(error){if(!(error instanceof ExtractionProtocolError))throw error;return {candidate_index:index,verdict:'unsupported',issues:['insufficient_evidence'],evidence:[]};}
+   try{
+    requireValid(matches.length===1);
+    const result=validateSourceVerification([{...(matches[0] as object),candidate_index:0}],window,[fact])[0]!;
+    return {...result,candidate_index:index};
+   }catch(error){
+    if(!(error instanceof ExtractionProtocolError))throw error;
+    return {candidate_index:index,verdict:'unsupported' as const,issues:['insufficient_evidence'],evidence:[],
+     verification_mode:'legacy-v4' as const,model_verdict:'unsupported' as const,model_issues:['insufficient_evidence'],
+     event:fact.event,conditions:fact.conditions,proof:null,proof_verification:null};
+   }
   });
-  return validateSourceVerification(isolated,window,facts);
 }
