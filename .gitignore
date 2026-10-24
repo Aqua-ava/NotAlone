@@ -24,3 +24,6 @@ __pycache__/
 
 # Computer Use 与本机会话产物（含真实界面截图，不入仓）
 .dsh-computer-use/
+
+# 本机模型许可运行状态
+/model-permits/

@@ -1,5 +1,8 @@
-# 根本轮已自然收尾
-用户要求后续交其他Agent；不要自动开启下一波或恢复全量迁移。
-完整接手入口：[next-agent-handoff.md](next-agent-handoff.md)。
-07代码已提交但整票claimed/UI待验；10仅冻结未合主树、整票claimed；21原生阻塞。
-本轮自有App/测试/子Agent资源已清；共享PG及其他保留库见完整交接。
+# 根迁移持续目标
+用户明确要求把“全新 Codex 会话，不是 sub-agent；会话直接通信；主会话统一集成并独占 App/微信验收”作为目标约束。
+当前结论：DSH/TS 回复切片已由根完成 `ran` 实际 App 验收，票 08 已 resolved；证据见 [记录](reply-app-acceptance/ts-l3-real-app-20261025.md)。
+`assistant-generation-quit-http` 已按异步 prepare/status 契约拆分修复并完整通过 42／42；失败与清理见仓库外私有证据目录。
+下一步必须创建 11、16、20 三个全新 Codex 会话，它们是并列任务而非 sub-agent；会话之间直接发送 thread ID 协调。
+已创建并运行三个会话；thread ID 只保存在仓库外私有协调记录，避免公开历史泄露内部标识。
+每个新会话使用独立临时 worktree 与合成 `_test` PG，不写主树、不运行实际 App/微信、不发送外部消息、不 push/打包。
+主会话继续负责唯一共享源集成、冲突裁决和真实桌面／微信验收；本文件只作持久交接，不替代系统目标状态。

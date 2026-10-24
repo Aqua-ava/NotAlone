@@ -28,6 +28,15 @@ test('分层读取必须匹配当前事务完整指纹；旧缓存存在不授�
  const tampered=access.receipts;tampered[0].budget.used_characters=0;assert.throws(()=>requireScenarioReceipts(material,tampered),/回执/);
  assert.equal(await validateLayeredSnapshot(f.client,{...snapshot,dependency_ids:[owner]}),false);
  assert.equal(await validateLayeredSnapshot(f.client,{...snapshot,scenarios:[{...snapshot.scenarios[0],title:'伪造标题'}]}),false);
+ const blocked=randomUUID(),contact=randomUUID(),source=randomUUID();
+ await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);
+ await f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'wechat_jsonl','synthetic.jsonl',$4,1)",[source,owner,contact,'a'.repeat(64)]);
+ await f.client.query("INSERT INTO memory_candidate(id,owner_id,contact_id,text_content,category,source_ids,status) VALUES($1,$2,$3,'合成拒绝记忆','preference',$4,'rejected')",[blocked,owner,contact,[source]]);
+ await f.client.query("UPDATE layered_memory_batch SET dependency_ids=dependency_ids||$2::uuid[] WHERE id=$1",[batch,[blocked]]);
+ await f.client.query("UPDATE layered_memory_generation SET dependency_ids=dependency_ids||$2::uuid[] WHERE owner_id=$1 AND contact_id IS NULL AND organization_generation=1",[owner,[blocked]]);
+ // ADR-080：owner层也要沿完整依赖复验；rejected候选不能让派生快照继续进入模型。
+ assert.equal(await captureLayeredSnapshot(f.client,scope),null);
+ assert.equal(await validateLayeredSnapshot(f.client,{...snapshot,dependency_ids:[...snapshot.dependency_ids,blocked]}),false);
  await f.client.query("UPDATE layered_memory_batch SET input_manifest=jsonb_set(input_manifest,'{0,record_sha256}','\"changed\"') WHERE id=$1",[batch]);assert.equal(await captureLayeredSnapshot(f.client,scope),null);await assert.rejects(requireLayeredMaterial(f.client,scope,material,OWNER_LAYERED_BUDGET),/整理资料已变化/);
 });
 test('分层材料预算与旧Python选择器逐字段及JSON字符对齐',async()=>{

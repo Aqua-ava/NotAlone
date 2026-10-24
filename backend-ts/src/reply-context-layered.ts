@@ -4,6 +4,7 @@ import {readReplyContactOverview,readReplyOwnerOverview} from './reply-context-o
 import {canonicalJSON,digest} from './contact-overview-evidence.ts';
 import {epochMicros} from './contact-overview-time.ts';
 import {ReplyContextError,type ContextMetadata} from './reply-context-types.ts';
+import {forbiddenGenerationMemoryDependencies} from './reply-source-guards.ts';
 export interface LayeredScope {owner_id:string;contact_id:string|null}
 export interface LayeredSnapshot {schema_version:2;scope:LayeredScope;settings_generation:number;organization_generation:number;scenarios:ContextMetadata[];dependency_ids:string[];profile_version_id:string|null;profile_entries:ContextMetadata[];quality_receipt?:string|null}
 export interface LayeredBudget {profile_entries:number;directory_entries:number;characters:number;scenario_read:{calls:number;paragraphs:number;characters:number}|null}
@@ -21,6 +22,8 @@ async function stored(client:Client,scope:LayeredScope,generation:number){
 export async function validateLayeredSnapshot(client:Client,snapshot:LayeredSnapshot):Promise<boolean>{
  if(snapshot.schema_version!==2)return false;
  const scope=snapshot.scope;
+ // ADR-080：派生快照不能绕过任一底层记忆的失效或过期资格。
+ if((await forbiddenGenerationMemoryDependencies(client,{owner_id:scope.owner_id,contact_id:scope.contact_id??scope.owner_id},snapshot.dependency_ids)).length)return false;
  const state=(await client.query('SELECT * FROM public.layered_memory_state WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid',[scope.owner_id,scope.contact_id])).rows[0];
  if(!state?.enabled||!['ready','paused','failed','updating','stale'].includes(state.status)||Number(state.settings_generation)!==snapshot.settings_generation||Number(state.organization_generation)!==snapshot.organization_generation)return false;
  const result=await stored(client,scope,snapshot.organization_generation);if(!result)return false;

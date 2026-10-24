@@ -171,9 +171,12 @@ test('受控退出等待迟到实际prepare及interrupt确认才关闭Host，准
   await withPublicFixture(async (f) => {
     f.contacts.setDraft({ ...f.scope, text: '合成退出等待中的草稿。' });
     const prepared = f.gateResponse((item) => item.path.endsWith('/replies/prepare'));
+    const preparation = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'));
     const interrupted = f.gateResponse((item) => item.path.endsWith('/interrupt'));
     const generating = f.bridge.generate({ ...f.scope, newRequest: true });
-    const actual = await prepared.arrived.promise;
+    const preparedPayload = await prepared.arrived.promise;
+    assert.equal(preparedPayload.state, 'preparing');
+    assert.equal(typeof preparedPayload.preparation_id, 'string');
     assert.equal(f.replies.pendingGenerationReceipts().length, 0);
     f.installQuit(); f.event.application.quit();
     // 只观察公开退出与真实 HTTP；等待一个事件回合而不猜内部调用顺序。
@@ -181,6 +184,9 @@ test('受控退出等待迟到实际prepare及interrupt确认才关闭Host，准
     assert.equal(f.event.counts().confirmed, 0, '实际准备身份未知前不能确认退出。');
     assert(!f.observed.some((item) => item.path === '/api/runtime/shutdown'), 'prepare仍在返回途中，不能先关闭认证后端。');
     prepared.release.resolve();
+    const actual = await preparation.arrived.promise;
+    assert.equal(typeof actual?.turn_id, 'string'); assert.equal(typeof actual?.input_version_id, 'string');
+    preparation.release.resolve();
     const result = await interrupted.arrived.promise;
     assert.equal(result.turn_id, actual.turn_id); assert.equal(result.input_version_id, actual.input_version_id);
     assert.equal(result.state, 'failed'); assert.equal(result.interruption_reason, 'app_quit');
@@ -234,9 +240,11 @@ test('公开重试中断使用权威原输入与新key，同时保留当前未�
     f.contacts.setDraft({ ...f.scope, text: '合成原保存草稿：只说稍后回复。' });
     await f.bridge.updateOptions({ ...f.scope, options: { tone: 'original', instruction: '原保存要求：不增加承诺。', includeRelationshipContext: false } });
     const prepared = f.gateResponse((item) => item.path.endsWith('/replies/prepare'));
+    const preparation = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'));
     const generating = f.bridge.generate({ ...f.scope, newRequest: true });
-    const actual = await prepared.arrived.promise;
-    f.installQuit(); f.event.application.quit(); prepared.release.resolve(); await generating;
+    const started = await prepared.arrived.promise; assert.equal(started.state, 'preparing');
+    f.installQuit(); f.event.application.quit(); prepared.release.resolve();
+    const actual = await preparation.arrived.promise; preparation.release.resolve(); await generating;
     await eventually(() => f.event.counts(), (value) => value.confirmed === 1, '未完成退出。');
     const scope = await f.reopen();
     f.contacts.setDraft({ ...scope, text: '当前未保存的新草稿不能被覆盖。' });
@@ -269,9 +277,11 @@ test('合法最大改写要求加语气说明后中断重试完整保留权威�
     f.contacts.setDraft({ ...f.scope, text: '合成边界草稿：稍后回复。' });
     await f.bridge.updateOptions({ ...f.scope, options: { tone: 'concise', instruction: original, includeRelationshipContext: false } });
     const prepared = f.gateResponse((item) => item.path.endsWith('/replies/prepare'));
+    const preparation = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'));
     const generating = f.bridge.generate({ ...f.scope, newRequest: true });
-    const actual = await prepared.arrived.promise;
-    f.installQuit(); f.event.application.quit(); prepared.release.resolve(); await generating;
+    const started = await prepared.arrived.promise; assert.equal(started.state, 'preparing');
+    f.installQuit(); f.event.application.quit(); prepared.release.resolve();
+    const actual = await preparation.arrived.promise; preparation.release.resolve(); await generating;
     await eventually(() => f.event.counts(), (value) => value.confirmed === 1, '未完成边界输入退出。');
     const scope = await f.reopen();
     const savedInstruction = (await f.bridge.getState()).savedSession.turns[0].input.content.user_instruction;
@@ -392,9 +402,14 @@ async function reserveAndQuit(f, mode = 'rewrite_draft') {
     await f.bridge.updateSkill({ ...f.scope, skill: { mode: 'disabled', versionId: null } });
   }
   const gate = f.gateResponse((item) => item.path.endsWith('/replies/prepare'));
+  const preparation = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'));
   const generating = f.bridge.generate({ ...f.scope, newRequest: true });
-  const receipt = await gate.arrived.promise;
-  f.installQuit(); f.event.application.quit(); gate.release.resolve(); await generating;
+  const started = await gate.arrived.promise;
+  assert.equal(started.state, 'preparing');
+  f.installQuit(); f.event.application.quit(); gate.release.resolve();
+  const receipt = await preparation.arrived.promise;
+  assert.equal(typeof receipt.turn_id, 'string'); assert.equal(typeof receipt.input_version_id, 'string');
+  preparation.release.resolve(); await generating;
   await eventually(() => f.event.counts(), (value) => value.confirmed === 1, '受控退出未确认。');
   return receipt;
 }
@@ -472,7 +487,8 @@ test('中断重试读取后CURRENT推进触发prepare409，随后普通同key重
     } });
     gate.release.resolve(); await retrying;
     assert.equal((await f.bridge.getState()).phase, 'failed');
-    assert.equal(f.observed.filter((item) => item.path.endsWith('/retry-interrupted/prepare')).at(-1).status, 409,
+    assert(f.observed.some((item) => item.method === 'GET'
+      && item.path.includes('/retry-interrupted/prepare/status/') && item.status === 409),
       '首次明确恢复必须实际经旧CURRENT的CAS拒绝。');
     assert.equal((await f.fixture.command('counts')).actual_calls, 0);
     const beforeOrdinaryRetry = (await f.host.requestJson({ method: 'GET', path })).data;
@@ -481,7 +497,8 @@ test('中断重试读取后CURRENT推进触发prepare409，随后普通同key重
     await f.fixture.plan({ text: '失去CAS的旧输入不应调用模型。', count: 1 });
     await f.bridge.generate({ ...scope, newRequest: false });
     assert.equal((await f.fixture.command('counts')).actual_calls, 0, '普通同key重试不得绕过明确恢复的CURRENT守卫。');
-    assert.equal(f.observed.filter((item) => item.path.endsWith('/retry-interrupted/prepare')).at(-1).status, 409);
+    assert(f.observed.some((item) => item.method === 'GET'
+      && item.path.includes('/retry-interrupted/prepare/status/') && item.status === 409));
     assert.deepEqual((await f.host.requestJson({ method: 'GET', path })).data, beforeOrdinaryRetry,
       '没有领取的新key不能追加旧输入或推进独立CURRENT。');
     assert.equal(f.contacts.getState().draft, editing.draft); assert.deepEqual((await f.bridge.getState()).options, editing.options);
@@ -517,12 +534,15 @@ test('实际会话删除先于迟到prepare回执，退出核对404后完成，�
   await withPublicFixture(async (f) => {
     f.contacts.setDraft({ ...f.scope, text: '合成待删除草稿不能复活。' });
     const gate = f.gateResponse((item) => item.path.endsWith('/replies/prepare'));
+    const preparation = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'));
     const generating = f.bridge.generate({ ...f.scope, newRequest: true });
-    const actual = await gate.arrived.promise;
+    const started = await gate.arrived.promise; assert.equal(started.state, 'preparing');
+    gate.release.resolve();
+    const actual = await preparation.arrived.promise;
     const path = `/api/contacts/${f.scope.contactId}/assistant-sessions/${actual.session_id}`;
     const deleted = await f.host.requestJson({ method: 'DELETE', path, body: { confirmed: true } });
     assert.equal(deleted.data.state, 'deleted');
-    f.installQuit(); f.event.application.quit(); gate.release.resolve(); await generating;
+    f.installQuit(); f.event.application.quit(); preparation.release.resolve(); await generating;
     await eventually(() => f.event.counts(), (value) => value.confirmed === 1, '删除后退出未获确认。');
     const scope = await f.reopen(); const state = await f.bridge.getState();
     assert.notEqual(state.savedSession.sessionId, actual.session_id); assert.equal(state.savedSession.turns.length, 0);
@@ -541,14 +561,17 @@ test('真实来源删除先赢时中断只接受无正文占位，重建和旧�
     await f.bridge.updateDirection({ ...f.scope, direction: '合成退出前来源意愿。' });
     await f.bridge.updateSkill({ ...f.scope, skill: { mode: 'disabled', versionId: null } });
     const gate = f.gateResponse((item) => item.path.endsWith('/replies/prepare'));
+    const preparation = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'));
     const generating = f.bridge.generate({ ...f.scope, newRequest: true });
-    const actual = await gate.arrived.promise;
+    const started = await gate.arrived.promise; assert.equal(started.state, 'preparing');
+    gate.release.resolve();
+    const actual = await preparation.arrived.promise;
     const sources = await f.host.requestJson({ method: 'GET', path: `/api/contacts/${f.scope.contactId}/sources` });
     const sourceId = sources.data.sources[0].source_id;
     await f.host.requestJson({ method: 'DELETE', path: `/api/contacts/${f.scope.contactId}/sources/${sourceId}` });
     await eventually(() => f.host.requestJson({ method: 'GET', path: `/api/contacts/${f.scope.contactId}/sources` }),
       (response) => response.data.sources.find((item) => item.source_id === sourceId)?.status === 'deleted', '实际来源删除Worker未完成。');
-    f.installQuit(); f.event.application.quit(); gate.release.resolve(); await generating;
+    f.installQuit(); f.event.application.quit(); preparation.release.resolve(); await generating;
     await eventually(() => f.event.counts(), (value) => value.confirmed === 1, '来源删除后退出未确认。');
     const scope = await f.reopen(); const state = await f.bridge.getState();
     assert.equal(state.savedSession.turns[0].state, 'redacted'); assert.equal(state.savedSession.turns[0].input, null);
@@ -563,7 +586,7 @@ test('真实来源删除先赢时中断只接受无正文占位，重建和旧�
 test('真实prepare已提交但身份回执丢失，退出failclosed且不发长请求或shutdown', async () => {
   await withPublicFixture(async (f) => {
     f.contacts.setDraft({ ...f.scope, text: '合成未知准备回执输入。' });
-    const gate = f.gateResponse((item) => item.path.endsWith('/replies/prepare'), true);
+    const gate = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'), true);
     const generating = f.bridge.generate({ ...f.scope, newRequest: true });
     const actual = await gate.arrived.promise; assert.equal(actual.state, 'running');
     f.installQuit(); f.event.application.quit(); gate.release.resolve(); await generating;
@@ -581,7 +604,7 @@ test('真实prepare已提交但身份回执丢失，退出failclosed且不发长
 test('prepare回执丢失的首次退出失败后，明确退出重试读取原实际身份并中断且零模型', async () => {
   await withPublicFixture(async (f) => {
     f.contacts.setDraft({ ...f.scope, text: '合成准备回执丢失后再退出。' });
-    const gate = f.gateResponse((item) => item.path.endsWith('/replies/prepare'), true);
+    const gate = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'), true);
     const generating = f.bridge.generate({ ...f.scope, newRequest: true });
     const actual = await gate.arrived.promise;
     f.installQuit(); f.event.application.quit(); gate.release.resolve(); await generating;
@@ -611,7 +634,7 @@ test('prepare回执丢失的首次退出失败后，明确退出重试读取原�
 test('prepare身份ACK丢失且公开生成已结束后再退出，仍保留未知归属并阻止shutdown', async () => {
   await withPublicFixture(async (f) => {
     f.contacts.setDraft({ ...f.scope, text: '合成先结束传输的未知准备输入。' });
-    const gate = f.gateResponse((item) => item.path.endsWith('/replies/prepare'), true);
+    const gate = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'), true);
     const generating = f.bridge.generate({ ...f.scope, newRequest: true });
     const actual = await gate.arrived.promise; assert.equal(actual.state, 'running');
     gate.release.resolve(); await generating;
@@ -740,8 +763,9 @@ test('实际模型failed允许普通新请求并保留已完成结果，退出�
     const beforeNew = f.observed.length;
     await f.bridge.generate({ ...f.scope, newRequest: true });
     assert.equal((await f.bridge.getState()).phase, 'ready', '已结束的模型失败不能误走运行中替换。');
-    const nextPrepare = f.observed.slice(beforeNew).find((item) => item.path.endsWith('/prepare'));
-    assert.equal(nextPrepare.path, `${path}/replies/prepare`); assert.equal(nextPrepare.status, 200);
+    const nextPrepare = f.observed.slice(beforeNew).find((item) => item.method === 'GET'
+      && item.path.startsWith(`${path}/replies/prepare/status/`));
+    assert.equal(nextPrepare.status, 200);
     const completed = (await f.host.requestJson({ method: 'GET', path })).data;
     assert.equal(completed.turns.length, 2); assert.equal(completed.turns[0].state, 'failed');
     assert.equal(completed.turns[0].interruption_reason, null); assert.equal(completed.turns[1].state, 'completed');
@@ -858,12 +882,14 @@ test('prepare ACK丢失后同key取得实际回执可清除旧未知归属，唯
     f.contacts.setDraft({ ...f.scope, text: '合成同key恢复准备身份的草稿。' });
     const lost = f.gateResponse((item) => item.path.endsWith('/replies/prepare'), true);
     const original = f.bridge.generate({ ...f.scope, newRequest: true });
-    const actual = await lost.arrived.promise; lost.release.resolve(); await original;
+    const started = await lost.arrived.promise; assert.equal(started.state, 'preparing');
+    lost.release.resolve(); await original;
     assert.equal((await f.bridge.getState()).phase, 'failed');
-    const recovered = f.gateResponse((item) => item.path.endsWith('/replies/prepare'));
+    const recovered = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'));
     await f.fixture.plan({ text: '恢复原actual身份后的唯一完成。', count: 1 });
     const retrying = f.bridge.generate({ ...f.scope, newRequest: false });
-    assert.deepEqual(await recovered.arrived.promise, actual, '同key只能恢复原实际turn/input身份。');
+    const actual = await recovered.arrived.promise;
+    assert.equal(actual.state, 'running'); assert.equal(typeof actual.turn_id, 'string');
     recovered.release.resolve(); await retrying;
     assert.equal((await f.bridge.getState()).phase, 'ready');
     const saved = (await f.host.requestJson({ method: 'GET',
@@ -884,7 +910,7 @@ test('实际prepare因已撤销绑定明确409且未领取turn，退出不保留
     await f.fixture.command('revoke', { contact_id: f.scope.contactId });
     await f.bridge.generate({ ...f.scope, newRequest: true });
     assert.equal((await f.bridge.getState()).phase, 'failed');
-    const prepare = f.observed.find((item) => item.path.endsWith('/replies/prepare'));
+    const prepare = f.observed.find((item) => item.method === 'GET' && item.path.includes('/replies/prepare/status/'));
     assert.equal(prepare.status, 409);
     const saved = (await f.host.requestJson({ method: 'GET',
       path: `/api/contacts/${f.scope.contactId}/assistant-sessions/${(await f.bridge.getState()).savedSession.sessionId}` })).data;
@@ -916,8 +942,9 @@ test('长HTTP断开后服务端完成，同key重放取得completed后新请求�
     await f.fixture.plan({ text: '同key完成消歧后的新候选。', count: 1 });
     const beforeNew = f.observed.length; await f.bridge.generate({ ...f.scope, newRequest: true });
     assert.equal((await f.bridge.getState()).phase, 'ready', '旧已完成身份不能误作运行中替换。');
-    const prepared = f.observed.slice(beforeNew).find((item) => item.path.endsWith('/prepare'));
-    assert.equal(prepared.path, `${path}/replies/prepare`); assert.equal(prepared.status, 200);
+    const prepared = f.observed.slice(beforeNew).find((item) => item.method === 'GET'
+      && item.path.startsWith(`${path}/replies/prepare/status/`));
+    assert.equal(prepared.status, 200);
     const newer = (await f.host.requestJson({ method: 'GET', path })).data;
     assert.equal(newer.turns.length, 2); assert.equal(newer.turns[0].turn_id, saved.turns[0].turn_id);
     assert.equal(newer.turns.filter((turn) => turn.state === 'completed').length, 2);
@@ -1200,7 +1227,8 @@ test('同键已实际运行而本次准备因撤销绑定409，拒绝不能直�
         (counts) => counts.actual_calls === 1 && counts.entered, '同key必须实际进入受控C模型。');
       await f.fixture.command('revoke', { contact_id: f.scope.contactId });
       requestGate.release.resolve(); await generating;
-      const refused = f.observed.find((item) => item.path === attempted.path);
+      const refused = f.observed.find((item) => item.method === 'GET'
+        && item.path.startsWith(`${attempted.path}/status/`));
       assert.equal(refused.status, 409, '必须是原真实prepare业务拒绝，不能伪造负回包。');
       assert.equal((await f.bridge.getState()).phase, 'failed');
       assert.equal((await f.fixture.command('counts')).actual_calls, 1);
@@ -1220,7 +1248,7 @@ test('真实零领取证明响应丢失后同key再证明，释放本次及已�
   await withPublicFixture(async (f) => {
     f.contacts.setDraft({ ...f.scope, text: '合成零领取证明与同key未知旧句柄。' });
     await f.fixture.command('revoke', { contact_id: f.scope.contactId });
-    const lost = f.gateResponse((item) => item.path.endsWith('/replies/prepare'), true);
+    const lost = f.gateResponse((item) => item.method === 'GET' && item.path.includes('/status/'), true);
     const generating = f.bridge.generate({ ...f.scope, newRequest: true });
     const rejected = await lost.arrived.promise;
     assert.equal(rejected.no_generation.state, 'not_reserved');
