@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "predecessor_05_accepted": true,
-  "state": "05六条实际验收已resolved、本地元数据提交b0a68175及pre/postscan0；07/10/23已claimed可独立实现",
-  "current_base_commit": "b0a6817582d92b4142977c486fe7a9366496cb88",
+  "state": "05原六条及23原五条已resolved；23源3e044a0及实际App/源pre-postscan0，07/10继续并行实现",
+  "current_base_commit": "3e044a046f66dedf65120e664c2d9b1ee04ae112",
   "implementation_rule": "05 accepted为true后才开始07/10/23依赖实现；此前只读已有准备，不重复准备工程",
   "main_source_and_index_owner": "root",
   "desktop_owner": "root；只npm run dev，实际App/微信与共享桌面串行协调",
@@ -16,5 +16,13 @@
   "model_scope": "默认合成PG/loopback，真实模型完整对照留25，原首次小批已结案不得重置复跑",
   "resolved_metadata_commit": "b0a6817582d92b4142977c486fe7a9366496cb88",
   "predecessor_05_acceptance": ".scratch/dsh-ts-migration/05-final-root-acceptance/accepted-manifest.json",
-  "postcommit_scan_issues": 0
+  "postcommit_scan_issues": 0,
+  "active_implementation_tasks": [
+    "07",
+    "10"
+  ],
+  "task23_accepted": true,
+  "task23_source_commit": "3e044a046f66dedf65120e664c2d9b1ee04ae112",
+  "task23_acceptance": ".scratch/dsh-ts-migration/task23-root-acceptance/accepted-manifest.json",
+  "subagent_rule": "用户明确允许各会话委派独立subagent，主会话整合并按文件/资源避冲突；共享源码/index/App根独占"
 }

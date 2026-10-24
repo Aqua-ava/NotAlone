@@ -1,0 +1,15 @@
+{
+  "command": "node scripts/check_public_history.mjs --ref HEAD --working-tree",
+  "exit_code": 0,
+  "duration_seconds": 4.38,
+  "raw_alias": "raw:source-postcommit-publicscan.raw.json",
+  "raw_sha256": "b747476887df4987aad3d82406739b5ef1081e63dbc061f478e3bd9f15abcdfa",
+  "result": {
+    "commit": "3e044a046f66dedf65120e664c2d9b1ee04ae112",
+    "historicalBlobs": 14868,
+    "historicalCommits": 2225,
+    "currentFiles": 16202,
+    "issues": 0,
+    "locations": []
+  }
+}
