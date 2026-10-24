@@ -470,6 +470,12 @@ def record_ledger_entry(
     """沿原台账写入一次；提交回执未知时只保存该 ID 的最小关联。"""
     trace = current_trace()
     call = trace.observations.get(trace.calls.get(purpose)) if trace else None
+    if (
+        call is not None
+        and call.ledger_entry is not None
+        and call.ledger_commit_status == "committed"
+    ):
+        return
     if call is not None and call.physical_call is not None and not call.physical_call.dispatched:
         return
     if trace is not None:
@@ -486,6 +492,38 @@ def record_ledger_entry(
             trace.persist_ledger(purpose, committed=False)
         raise
     record_ledger_call(purpose, entry, started_at=started_at)
+
+
+def settle_successful_call(purpose: str) -> bool:
+    """在下一物理调用前结算已返回且已通过适配器解析的调用。"""
+    trace = current_trace()
+    if trace is None or trace.ledger is None or not trace.call_was_invoked(purpose):
+        return False
+    call_id = trace.calls.get(purpose)
+    call = trace.observations.get(call_id) if call_id is not None else None
+    if call is None or call.ledger_entry is not None:
+        return False
+    finished = call.finished_at or datetime.now(timezone.utc)
+    entry = LedgerEntry(
+        entry_id=(
+            call.physical_call.ledger_entry_id
+            if call.physical_call is not None
+            else uuid4()
+        ),
+        owner_id=trace.scope.owner_id,
+        contact_id=trace.scope.contact_id,
+        provider=trace.provider,
+        model_name=trace.model_name,
+        input_tokens=None,
+        output_tokens=None,
+        latency_ms=max(
+            0, int((finished - call.called_at).total_seconds() * 1000)
+        ),
+        outcome=LedgerOutcome.SUCCEEDED,
+        called_at=call.called_at,
+    )
+    record_ledger_entry(purpose, trace.ledger, entry, started_at=finished)
+    return True
 
 
 def trace_ledger_identity(purpose: str, called_at: datetime) -> tuple[UUID, datetime]:

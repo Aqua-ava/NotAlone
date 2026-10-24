@@ -35,7 +35,12 @@ from notalone.memory_extraction.verification import (
     SourceVerificationMode,
     validate_source_verification,
 )
-from notalone.memory_trace.context import current_trace, record, snapshot
+from notalone.memory_trace.context import (
+    current_trace,
+    record,
+    settle_successful_call,
+    snapshot,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +102,8 @@ class ExtractionFlow:
         extraction_started_at = datetime.now(timezone.utc)
         try:
             payloads = self._runtime.extract(window)
+            # A 的物理回执必须先结算，B 才能用同一提取请求预约下一次调用。
+            settle_successful_call("extraction")
         except ExtractionRuntimeError as error:
             record(
                 "extraction_failure",
