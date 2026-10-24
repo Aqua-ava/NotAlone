@@ -751,6 +751,14 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
         if not isinstance(snapshot, LayeredMemorySnapshot) or snapshot.schema_version != 2:
             return False
         scope = snapshot.scope
+        from notalone.persistence.reply_basis_changes import (
+            forbidden_generation_memory_dependencies,
+        )
+        # ADR-080：派生快照不能绕过任一底层记忆的失效或过期资格。
+        if forbidden_generation_memory_dependencies(
+            connection, scope, snapshot.dependency_ids,
+        ):
+            return False
         overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id, organization=True)
                 if isinstance(scope, OwnerScope) else self._overview.read_contact_in_transaction(connection, scope))
         state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",

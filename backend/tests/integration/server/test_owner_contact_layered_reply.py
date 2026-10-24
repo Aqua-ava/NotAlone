@@ -1,5 +1,12 @@
 """09 本人与当前联系人沿真实 HTTP、PG 和受控模型组合。"""
 import unittest
+from uuid import UUID, uuid4
+
+import psycopg
+
+from notalone.memory.models import MemoryCandidate, MemoryCategory
+from notalone.persistence.memory_store import PostgresMemoryStore
+from notalone.scopes import ContactScope, OwnerScope
 from tests.integration.server import test_layered_reply_context as layered_support
 from tests.integration.server.overview_reply_support import OverviewReplyHttpFixture
 
@@ -110,6 +117,40 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
             self.assertIn('memory_generation_forbidden', [item['reason'] for item in evidence['basis_changes']])
         self.assertEqual(self.backend.request(self.evidence_path(second, unrelated))[0], 200)
         self.assertNotEqual(self.backend.request(path + '/replies', prepared)[0], 200)
+
+    def test_owner_layer_with_rejected_dependency_is_omitted_from_new_reply(self):
+        contact, _, _, _, path = self.dual_scope()
+        scope = ContactScope(self.owner_id, UUID(contact))
+        candidate = PostgresMemoryStore(self.database_url).create_candidate(MemoryCandidate(
+            candidate_id=uuid4(), scope=scope, text="合成拒绝候选不应进入后续生成。",
+            category=MemoryCategory.COMMON_FACT, source_ids=(self.layered_source_message,),
+        ))
+        PostgresMemoryStore(self.database_url).reject_candidate(
+            scope=scope, candidate_id=candidate.candidate_id,
+        )
+        with psycopg.connect(self.database_url) as connection:
+            for table in ("layered_memory_batch", "layered_profile_batch"):
+                changed = connection.execute(
+                    f"UPDATE public.{table} SET dependency_ids=ARRAY(SELECT DISTINCT unnest("
+                    "dependency_ids || %s::uuid[])) WHERE owner_id=%s AND contact_id IS NULL",
+                    ([candidate.candidate_id], self.owner_id),
+                ).rowcount
+                self.assertGreater(changed, 0, table)
+            changed = connection.execute(
+                "UPDATE public.layered_memory_generation SET dependency_ids=ARRAY(SELECT DISTINCT unnest("
+                "dependency_ids || %s::uuid[])) WHERE owner_id=%s AND contact_id IS NULL",
+                ([candidate.candidate_id], self.owner_id),
+            ).rowcount
+            self.assertGreater(changed, 0, "layered_memory_generation")
+        self.assertIsNone(self.service._store.capture(OwnerScope(self.owner_id)))
+
+        self.reply_model.plans.append({"text": "全新合成候选。", "basis": "按本次草稿。"})
+        status, turn = self.backend.request(
+            path + '/replies', self.rewrite_body(contact, "写一条不引用已拒绝资料的新草稿。"),
+        )
+        self.assertEqual(status, 200, turn)
+        evidence = self._get(self.backend, self.evidence_path(contact, turn))
+        self.assertIsNone(evidence['owner_layered_context'])
 
     def test_owner_disable_preserves_history_and_reconnect_never_resigns_old_prepare(self):
         contact, management, ready, _, path = self.dual_scope()
