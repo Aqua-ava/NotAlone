@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -50,6 +51,43 @@ test('未迁移业务保留唯一旧后台执行且随DSH退出',async t=>{
   await app.request('/api/runtime/shutdown',{});
   assert.equal(await app.host.waitForExit(7000),true);
   assert.throws(()=>process.kill(health.data.legacyPid,0));
+});
+
+test('真实DSH宿主公开导入只接受既有联系人，事务提交后如实保留待处理任务',async t=>{
+  const fixture=await createStorageFixture();t.after(async()=>{for(const host of fixture.hosts??[])assert.equal(await host.terminate(),true);await fixture.close();});
+  const owner=randomUUID(),contact=randomUUID();
+  await fixture.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成本人')",[owner]);
+  await fixture.client.query("INSERT INTO owner_channel_identity(owner_id,channel,external_id,observed_name) VALUES($1,'wechat','wxid_synthetic_owner','合成本人')",[owner]);
+  await fixture.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);
+  await fixture.client.query("INSERT INTO channel_identity(owner_id,contact_id,channel,external_id,observed_name) VALUES($1,$2,'wechat','wxid_synthetic_contact','合成联系人')",[owner,contact]);
+  const cli=join(fixture.directory,'synthetic-cli');
+  await writeFile(cli,`#!${process.execPath}
+const args=process.argv.slice(2),emit=data=>console.log(JSON.stringify({ok:true,data}));
+if(args[0]==='--version')emit({version:'synthetic-host-1'});
+else if(args[0]==='status')emit({status:{account:{identity_configured:true,schema2_ready:true},live_read_ok:true,readiness:'ready',mode:{strict_read_only:true},account_debug:{wxid:'wxid_synthetic_owner'}}});
+else process.exit(2);
+`,{mode:0o700});
+  await writeFile(fixture.envFilePath,`${await readFile(fixture.envFilePath,'utf8')}NOTALONE_OWNER_ID=${owner}\nNOTALONE_REPLY_RUNTIME=typescript\nNOTALONE_WECHAT_CLI=${cli}\n`,{mode:0o600});
+  const filePath=join(fixture.directory,'synthetic-host-import.jsonl');
+  const rows=[
+    {id:{local_id:1,server_id_str:'server-1',talker:'wxid_synthetic_contact'},create_time:1792461600,is_from_me:false,
+      kind:'text',sender:'合成联系人',sender_wxid:'wxid_synthetic_contact',text:'合成消息一',time:'2026-10-20 10:00:00',time_iso:'2026-10-20T10:00:00+08:00'},
+    {id:{local_id:2,server_id_str:'server-2',talker:'wxid_synthetic_contact'},create_time:1792461660,is_from_me:true,
+      kind:'text',sender:'合成本人',sender_wxid:'wxid_synthetic_owner',text:'合成消息二',time:'2026-10-20 10:01:00',time_iso:'2026-10-20T10:01:00+08:00'},
+  ];
+  await writeFile(filePath,rows.map(row=>JSON.stringify(row)).join('\n')+'\n');
+  const app=await start(t,fixture);
+  assert.equal((await app.request('/api/runtime/status')).data.ownership.imports,'typescript');
+  assert.equal((await app.request('/api/imports/preview?unexpected=1',{})).status,400);
+  const preview=await app.request('/api/imports/preview',{path:filePath,contact_id:contact});
+  assert.equal(preview.status,200);assert.equal(preview.data.record_count,2);
+  const committed=await app.request('/api/imports/commit',{path:filePath,contact_id:contact,expected_content_sha256:preview.data.content_sha256});
+  assert.equal(committed.status,200);assert.equal(committed.data.imported_count,2);
+  assert.equal(committed.data.processing_deferred,true);assert.equal(committed.data.deferred_reason,'worker_unavailable');
+  assert.deepEqual((await fixture.client.query("SELECT status,current_step FROM background_task")).rows,[{status:'queued',current_step:'parse'}]);
+  assert.equal((await fixture.client.query('SELECT count(*)::int AS count FROM message')).rows[0].count,2);
+  assert.equal((await fixture.client.query('SELECT count(*)::int AS count FROM model_call_receipt')).rows[0].count,0);
+  await app.request('/api/runtime/shutdown',{});assert.equal(await app.host.waitForExit(7000),true);
 });
 
 test('已配置owner与凭据原地恢复，重启不重放迁移',async t=>{
