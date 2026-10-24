@@ -7,3 +7,7 @@
 工具保留全部候选正文、依据、风险提示、有序分段和引用来源全文，拒绝未知语义及原运行身份进入呈现。`bindSubmittedReview` 仅恢复调用者已提交评审的对象绑定，不产生分数或证明评审者独立性。失败记录和完整计划分母仍由原统一报告器处理，本工具不判定质量或生产切换资格。
 
 当前版本只支持本机假供应商采集格式；真实供应商运行的接收格式及实际语义评审仍需单独验收，不能把本工具成功呈现视为真实模型通过。
+
+多次物理 attempt 只接来源审计已验证的 `constant_workspace_noSkill_read_denied_v1`：两次恒定 workspace/noSkill 来源与一次实际 read_file 拒绝过渡。首目录只有在这份恒定来源证明成立时才能用于呈现；新增来源、成功工具读取或其它范围不能据此接收。
+
+报告器和盲包共用 `replyRuntimeSourceSubjectBinding`。单 attempt 的原 subject 公式保持不变；multi 另以 `runtime_source_proof_sha256` 绑定完整派生 proof，其中包括原 runtime、有序 attempt bundle、actual/partial/physical/transition 摘要。`runtime_sources_sha256` 仍指原 runtime 整包，记录的 `request_sha256` 保持 null，不用首尾请求摘要代替。callback 证据变化后须重新绑定评审，旧 subject 不能复用。

@@ -1,0 +1,1885 @@
+{
+  "schema_version": "migration-material-manifest-v1",
+  "protocol_version": "migration-comparison-v1",
+  "baseline_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+  "created_on": "2026-10-23",
+  "synthetic_only": true,
+  "execution_status": "materials_frozen_not_model_evaluated",
+  "canonicalization": "UTF-8 JSON, ensure_ascii=false, sort_keys=true, separators comma/colon; dataclass asdict; tuple as array; date/time ISO-8601; enum value. Hash includes input and oracle.",
+  "materials": [
+    {
+      "path": "backend/src/notalone/__init__.py",
+      "sha256": "17556826c7117142032d0b10bbea7da07c15c210fc16b5e11b9f956f281c483c",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/ledger/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/ledger/models.py",
+      "sha256": "d3497dc22ec938260bb55424d7f0c85d0a9953e0dd2bdf5fab9803d2d029ef6c",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/ledger/ports.py",
+      "sha256": "3c0e92ce8f05788cf4096808327d75021dfcbdeaa8b2121df33324cefea1e52b",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/__init__.py",
+      "sha256": "01aa7333115ac8ee5de7b52ad32909a973bc8a784b00dd0b0acecb0c076d3331",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/adapters.py",
+      "sha256": "d00549f5d7fefc01c9be188a8845a001759a34bab7d7eca14f05b4f869fbefff",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/candidates.py",
+      "sha256": "50454269088c5527f2b6bebcf02bf4ab3dc80833a7e058b84ed812775159e76a",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/conditions.py",
+      "sha256": "8010662c0fd89664af25077e2640cc0922b2f488f70a5c95a4ac041cf4a39d09",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/correction.py",
+      "sha256": "5b5680031c496c9d54d1a1b09e06b327169b78a5895ae1afb714773d34ea412b",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/dimension_evidence.py",
+      "sha256": "c041c523c2994987d1822fb47b826bfed9792b13566e03a6810bb17f1debdafb",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/events.py",
+      "sha256": "6fa3e83c62fc4851dfbd42e6e761bc22e29da0cf913869e50d0ae8b920794357",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/evidence_binding.py",
+      "sha256": "cb4ffac0f38e6e45c44409ca6cb3a5d602cd7ca7c0f96e6e06ccef1e88374ecb",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/evolution.py",
+      "sha256": "90776e6f895feb7a2259c6f195eebb6204f016e511375d22623a51a8f1d163d6",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/models.py",
+      "sha256": "89027f729187c22c7d4a2dd6b5c3073e94a7f30b5b1ae405a2e8231d4150195e",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/ports.py",
+      "sha256": "5464282a6afd31517b637db5f1ff0961fb157d4b4ed93ad92c2c4a9c1f811f8b",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/pragmatics.py",
+      "sha256": "a6d7b9235c689b6ac787b2cb1b23f7a21922a9654bdc6fc716350780ef040daf",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/retirement.py",
+      "sha256": "dacd370d6fa332d12e9009db558ba2141749379fbf4c3fb2e19d5aa13d057d22",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/timing.py",
+      "sha256": "64b99ae5504485e55615ca2060a720f9340bb4d41abf715cea5bbf2670ec7f58",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/version_evidence.py",
+      "sha256": "6175e2e784ec60ded1845e24904603e0ecd777700a6d60b2a3902e981bb15489",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory/versions.py",
+      "sha256": "5a7893a879458afe8b7ad7ac98a2e48c847680fcce041a05ef345d5577df18d9",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/__init__.py",
+      "sha256": "9e120dd52d57b712a4a1ab39914ce6be38b1a8db60529890cf11900d39e1b6e9",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/__init__.py",
+      "sha256": "208b7f1d45706a914d332bd580d412c57ef7a8d77a92708a79d2c887344a7221",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/media.py",
+      "sha256": "b8143cb0a15657cdb508aa673de3f28f6fb874bbb5dd746a3e3337f6a6d47a7f",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/paraphrase.py",
+      "sha256": "b7b5cd1370491be2a005b4fa49b8b87bb2093b57617cba6dc13902d7a58133dc",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/reference.py",
+      "sha256": "1ea49516267a9b35016a4d1b0872f893f34df098c02a7dab453351d83ada4072",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/reported.py",
+      "sha256": "ea0ba406e6551ca6667061cd81f3e6f194f65c6986bfb50ed42e78c6d22038a4",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/subject.py",
+      "sha256": "09156269bc4e96459ca8de4b8500f38154ac9cce52824ba8088eea172071a2b3",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/time.py",
+      "sha256": "8d4c1437e28c4160014ad0a4b55a4d7665dd2f5a04bbd094d385d3bfb8f8ed8e",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/truth_intent.py",
+      "sha256": "b27393025feea79f66bf89bfecd03a712f19e66e4689bff433ac58f43a953445",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/types.py",
+      "sha256": "849ec5837881de1f130b6a399453d83b34761af17a8019d6ac02ec78d69684e2",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/errors.py",
+      "sha256": "fc8b17193d69b2858f9ebc3fd3b0e4a982e152c771070541d451dd4fbf43c5a0",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_cases.py",
+      "sha256": "e0ddbede2caa2d196a3aa33f98f59d78db099163e67758d0ed21397e14ce8327",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evidence.py",
+      "sha256": "53463458243513ec567a6d49eed90c38fef8f189762c2e9db8e464def0b5f8ea",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/flow.py",
+      "sha256": "2aa35564f419c20f2ca44e659eac30b01b803d9508c3f1f2b26a981ea1dbe01c",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/models.py",
+      "sha256": "0ccb8c48f8d9a62d7b97bde5b571c438d62669f09fa6d0cc59fd508f5fe01843",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/pragmatics.py",
+      "sha256": "275f2b5d9ff9027c5c4dbf3fdb83d82436a28ce0c84f9e6a670ef9c3fac3e778",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/runtime.py",
+      "sha256": "91fa35aabc912c4275afbc966e25db348ee0adc942d7df434c1bcea00ce93e03",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/semantic_evaluation_cases.py",
+      "sha256": "d3224647dcdae69fc76b7e6cd33a83be38360b192278ab9081609e598201fda3",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/verification.py",
+      "sha256": "dd58742b82a56533d8ad3272155e06a11f41cbab25228b58322a7cfe724dc269",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/__init__.py",
+      "sha256": "9067ad83f5a120d261de201db290fe440e4d7811563b64806ebc8eb6d33e332d",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/context.py",
+      "sha256": "7bba20d87f3c6a413e9b81ffef4ea2e815da3434e145a9e8eb2a590d03aa5f6c",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/ports.py",
+      "sha256": "4e33749d6684863f82172effc0d13d78e24b309a5266aa3396a5d59f1a763560",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/__init__.py",
+      "sha256": "48e6bf77f27a1d6968c19e5736ca305a33fc6bd9feb629cd6a54d63d7888399a",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/adapters.py",
+      "sha256": "f0d8484b4a5c3cb7a9840dadbaf317e56de6632b57b6e3ac2b3e6b72b9482c71",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/errors.py",
+      "sha256": "bbcd2c09f6ef87f538f48a040c42d0bda7f58f64c3b1d90d2c5be84c79b0d4db",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/feature_flags.py",
+      "sha256": "dce7f9f864fdd3700b6b97987ba1546f888a46ed334bc19ae1534a53f0713db0",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/lexical.py",
+      "sha256": "93ec53f0a40db5200ba673898d9461015c21a6879ca0bcaa55ebfe4d9105b233",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/models.py",
+      "sha256": "c3708ecd3ceb294243cf54a97730d85990dcb87c073bb672cd33655962623ac0",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/pending.py",
+      "sha256": "db09f0e17aae1916e69dae61f5b5ca23ef89f900e0032e90523f4fce4bb89508",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/ports.py",
+      "sha256": "a7e36dba41a8bfca20e13b76a2a6a18f0b01b1a1e18ea917fb91ca92a65534a4",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/ranking.py",
+      "sha256": "aeb4e28b4f8d7a0315f51c9298b0d368e4b55f96b2eef746bba50a4b13474665",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/recall_cases.py",
+      "sha256": "310f6102e8d0f0c1a0d971fc22436b6fa346ae1cfb462aa932f5e8bfe52b1c03",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/src/notalone/scopes.py",
+      "sha256": "e6d9fe7c21039186be421c38669d5a91f6dff30260621dbb756fa38bb01af0b2",
+      "source_ref": "3c168296",
+      "role": "definition_import_dependency"
+    },
+    {
+      "path": "backend/tests/fixtures/fidelity/controlled-v1.json",
+      "sha256": "f9c93b60f3bfe7cee8e83a28a313b76f2dde5a0cec94a0a3e13a4f1f23de6623",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": "backend/tests/fixtures/fidelity/synthetic-v1.json",
+      "sha256": "088df6b1729c5b9445e1648e495e4bde005580eb838216e84d3ba569caebe607",
+      "source_ref": "3c168296",
+      "role": "synthetic_material"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/baseline/organization-learning-cases.json",
+      "sha256": "c44898018e23352f5eebd5a203bbd90e2f9a66100832aaf8a1ad97d888f3137a",
+      "source_ref": "migration-comparison-v1-new-synthetic",
+      "role": "synthetic_material"
+    }
+  ],
+  "suites": [
+    {
+      "suite": "memory_extraction",
+      "count": 140,
+      "case_id_field": "name",
+      "cases": [
+        {
+          "case_id": "复核：未知第三人部门",
+          "dimension": "reference",
+          "canonical_case_sha256": "3d779eb403d1101083125921fb32456cc2d885044e555c46ca15c6f61410b5eb"
+        },
+        {
+          "case_id": "复核：机构提及不等于身份",
+          "dimension": "subject",
+          "canonical_case_sha256": "dedb8990b974dd880e6d8430aeb3f0cfa2ec05ca5827c268439b9ced29a07b46"
+        },
+        {
+          "case_id": "复核：明确学生身份",
+          "dimension": "subject",
+          "canonical_case_sha256": "9ff5365ac7f398daa5b3bb4b25e7e8f1ff24fcd758b6be97fea89d9ade070a34"
+        },
+        {
+          "case_id": "复核：借款未来计划",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "6c878e79b9beaa8cfe33b3fa0be6c53a2b2b904985dc20108bce12d030844db2"
+        },
+        {
+          "case_id": "复核：夸张口号不等于偏好",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "ad22dd550fa2e05f84a3dbe9fb4e7c009e840dfe90eae822ef2604676b51b41b"
+        },
+        {
+          "case_id": "复核：反讽收益不等于价值观",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "3f610c2acded71830207f934b994b5a170965218e250812bfa0daa190b3c1371"
+        },
+        {
+          "case_id": "复核：短期方向不等于习惯",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "9c2bfa03a9de907228785b6dc421795b287b9a4df3b4eaa114680e595885ce81"
+        },
+        {
+          "case_id": "复核：临时状态保留期间",
+          "dimension": "time",
+          "canonical_case_sha256": "f847b25723ddd3242a8c96767f3264d59bc76a03b5755d797126ae34c61831a2"
+        },
+        {
+          "case_id": "明确事实",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "52cc1f2700d48e233c8a56ce3d498f11d81d261e86b34a22bf5460dd834b1585"
+        },
+        {
+          "case_id": "未来计划",
+          "dimension": "time",
+          "canonical_case_sha256": "2821b37e792f5b0f86b1ceccffb16b045c196b5c0ecc6607745d34a5e972a825"
+        },
+        {
+          "case_id": "条件假设",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "7a5c2d2809c1e3845057bbb0bb5ca186c0d428370da8bd819c0d9e8b1d14a0ec"
+        },
+        {
+          "case_id": "吹牛被点破",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "6636b5150098c27cf45c852b4a3233b60459b35831fdf59a6b1feefae32961f3"
+        },
+        {
+          "case_id": "第三方引用",
+          "dimension": "reported",
+          "canonical_case_sha256": "2bb46e0d43563aecd39e2106f9715d69e9e6ccf844b58add98c1e94a2201c463"
+        },
+        {
+          "case_id": "不确定表达",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "bae2355bb323c860eb43872aa6e826a62d11789bb4c4c72ae2d19e7486d71e82"
+        },
+        {
+          "case_id": "纠正撤回",
+          "dimension": "time",
+          "canonical_case_sha256": "de492d0ed7564d6bf4f4741f9d8a13efef297c60403ad440c2d9a09f36da814a"
+        },
+        {
+          "case_id": "已发生行动",
+          "dimension": "reported",
+          "canonical_case_sha256": "c14d5ff3469554f60914d40f75d1d6215637887dd663b4738b7bb29faa396e58"
+        },
+        {
+          "case_id": "反讽",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "a71704643e91b7bc0d631b96fe71287bf5a79b26335fa0977d237e7cf36b7b14"
+        },
+        {
+          "case_id": "反话称赞",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "c3d4e590ea3948c5af1f9a1b1d567388380422ff51ad1941b3ace4b99304f44a"
+        },
+        {
+          "case_id": "修辞反问",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "b740f3fd307c7ebf5b7c6be93cebd7e9626bbc4623c4a2072475d9f4a2c90348"
+        },
+        {
+          "case_id": "夸张情绪",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "d11849a0f92e07e2c76e026aa77f30063fd9c67630234c53df74ab8dc4738f2b"
+        },
+        {
+          "case_id": "玩笑自夸",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "e00ec16260479a686793ff8950e9f83fd49132764b2866ab384ff28c82fe9954"
+        },
+        {
+          "case_id": "转发外部内容",
+          "dimension": "reported",
+          "canonical_case_sha256": "d45f91ebe8b307edb0286b8f24f4ce9b2f1fc359f828aa090a3648f94319c653"
+        },
+        {
+          "case_id": "字面现状陈述",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "b7ebc01c7c1460f9cc4890276c0445266381f17dab64bc1b2d6454d02a481767"
+        },
+        {
+          "case_id": "无标记转述",
+          "dimension": "reported",
+          "canonical_case_sha256": "d18d98f50fab3bfa406a1cb1b266170d5bedc2808df16df254d0002714f766c9"
+        },
+        {
+          "case_id": "窗口内自我更正",
+          "dimension": "time",
+          "canonical_case_sha256": "7c9c684215edcc912f7a476453f8db75150ccf5e64c59b0ba4014f228f3a5d31"
+        },
+        {
+          "case_id": "条件承诺",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "70a0975fe6bfb9d92bd4d4ba26a5af982471d9b3aa50241dc1021439f9feaf66"
+        },
+        {
+          "case_id": "习惯偏好",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "4bb8a292df6f75ad35c7264a6e762da0e5bf2620b59e43c6e498a34de3315d16"
+        },
+        {
+          "case_id": "否定事实",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "f069d1b00f3d2908545aab0a04bef8186a648082f4af30a068292bc22af0ee14"
+        },
+        {
+          "case_id": "主体归属：用户计划",
+          "dimension": "subject",
+          "canonical_case_sha256": "05aa08c7d967a05c198db6235bd24ccb431ca87ad7ea72a1a7ed075509bdc5cc"
+        },
+        {
+          "case_id": "含糊健康",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "7a5e6250fcd938bcfedc1c8e0589326cd715abcb3ff78cc3e0b79897c876e49f"
+        },
+        {
+          "case_id": "疑问邀约",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "b8a143293955004f921c7402a5fb3bd406cea7160aff9d875121113926f6cf75"
+        },
+        {
+          "case_id": "明确承诺",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "436716f52484f442b5c2ed058af74ca987730c37ea06e31449f9d83e41aa05a5"
+        },
+        {
+          "case_id": "对第三方的情绪",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "6b2ffde7f8cc363888c8c689b5e01dbde565c2c5fd1dc7f69cc62e56f66d4bd5"
+        },
+        {
+          "case_id": "已取消的安排",
+          "dimension": "time",
+          "canonical_case_sha256": "936c8b74cce8ceff672d374361b800b02326658085fc10d3c38110669367b8ee"
+        },
+        {
+          "case_id": "主体：联系人自述状态",
+          "dimension": "subject",
+          "canonical_case_sha256": "982bfec624962534f9e5b9cda8c89e705d4f944d23f76e9c32c890c4bc116f2b"
+        },
+        {
+          "case_id": "主体：用户自述状态",
+          "dimension": "subject",
+          "canonical_case_sha256": "a28a7b9cee594161f6b67ed6d5579f19a4762978cb871ff1b263176060eef499"
+        },
+        {
+          "case_id": "明确转述",
+          "dimension": "reported",
+          "canonical_case_sha256": "bbe827c41c6a08cb1c78ab3c703008c573559d437589afb88fd1b0a5383dfd00"
+        },
+        {
+          "case_id": "听闻公司变动",
+          "dimension": "reported",
+          "canonical_case_sha256": "fe512454e6693c93f33622979c0869cd86e012abf87d52b8fe780ef59ded6414"
+        },
+        {
+          "case_id": "转述医生建议",
+          "dimension": "reported",
+          "canonical_case_sha256": "3d39888c062aa636f077a77efb95cafe8f144ebc9c71383e902d70d3a52812d8"
+        },
+        {
+          "case_id": "转发文章",
+          "dimension": "reported",
+          "canonical_case_sha256": "a502798a6cd01f3d99994ad45756d2ce8b87354c178fb3b07be68ee650937789"
+        },
+        {
+          "case_id": "转述领导评价",
+          "dimension": "reported",
+          "canonical_case_sha256": "a0988dc7e7750dd45538541f83f862aab2940eb88963bf9152f52675db1f87f3"
+        },
+        {
+          "case_id": "第三方婚礼",
+          "dimension": "reported",
+          "canonical_case_sha256": "8f4cf09ec4c96b7730888de998e3778e28bb8f1b51a0b6a0d491c7a96d8b3ded"
+        },
+        {
+          "case_id": "听说天气",
+          "dimension": "reported",
+          "canonical_case_sha256": "ac084106e6fabd5a64ce2661ddac996ce4527ee3073e03cae363644661b495ef"
+        },
+        {
+          "case_id": "问换工作",
+          "dimension": "reported",
+          "canonical_case_sha256": "e1c6d82dd1c27137a853dddd77faf2ee5fa0b1173e9278db8b87ce7c40a88c48"
+        },
+        {
+          "case_id": "问减肥",
+          "dimension": "reported",
+          "canonical_case_sha256": "f574b9402dc170d3d1176d998e6c3752cd9c723078893d8cdfb4f2c0acb4bc08"
+        },
+        {
+          "case_id": "占位：单图",
+          "dimension": "media",
+          "canonical_case_sha256": "5557cd45789bff19d4acb4c0611001f1647a33a3a376ef4f559b4d3cf9710a6e"
+        },
+        {
+          "case_id": "占位：单语音",
+          "dimension": "media",
+          "canonical_case_sha256": "9e23d762f121bed572c7f7795927e8bb8916e5dd595fdc169014193edb308bc2"
+        },
+        {
+          "case_id": "占位：单表情",
+          "dimension": "media",
+          "canonical_case_sha256": "a90b670fc74bc48a82835fdc987c5fd8d422ca07de53f9459bece2d4a8b96ac2"
+        },
+        {
+          "case_id": "占位：动画表情",
+          "dimension": "media",
+          "canonical_case_sha256": "dc33d88cbafbbfbd870e5784006069f596ba80f2d7770e74b717a00807c95232"
+        },
+        {
+          "case_id": "占位：单视频",
+          "dimension": "media",
+          "canonical_case_sha256": "ba0ef9e6789a844bdb6e77ec2cf2160f402e96b752a9f42b06f6094b70ede577"
+        },
+        {
+          "case_id": "占位：单文件",
+          "dimension": "media",
+          "canonical_case_sha256": "d809be09926f84be451a3e3729e9c2f13934bd43c0b6695de9fe2e3f30b8a2f2"
+        },
+        {
+          "case_id": "占位：单链接",
+          "dimension": "media",
+          "canonical_case_sha256": "03a2490093f4f549cb5aa2f47028f03bbd7a4cd8ec753b293b2d4b30228fe7d1"
+        },
+        {
+          "case_id": "占位：用户发图",
+          "dimension": "media",
+          "canonical_case_sha256": "0b934c7553b89ec7bd9b2de01e14cff2f9a6e94dc24bc3bd4d110ec1fb030558"
+        },
+        {
+          "case_id": "占位：转账",
+          "dimension": "media",
+          "canonical_case_sha256": "97c18afa6f66ed487958f31c85503b48b049f0669d1ef32d72e04584d777ca76"
+        },
+        {
+          "case_id": "占位：名片",
+          "dimension": "media",
+          "canonical_case_sha256": "3602b07576fa1567fba082d86cd01a2c1bdb0d183169dcc9d6c953f7dc3d5871"
+        },
+        {
+          "case_id": "占位：视频号",
+          "dimension": "media",
+          "canonical_case_sha256": "86a28afc225ec089f56dc7d99fca872c078ef411099c794195c43319b5f0f6ee"
+        },
+        {
+          "case_id": "占位：视频内容",
+          "dimension": "media",
+          "canonical_case_sha256": "553f2dbd48ac2886a21cb3b46000a9b5d71d920be2a0fa126b6291b34da581bf"
+        },
+        {
+          "case_id": "占位：语音加文字",
+          "dimension": "media",
+          "canonical_case_sha256": "7c6c4aed34822aeb7ccaf813eecc0833911035b425dcb9c2f868c3f04c7c2362"
+        },
+        {
+          "case_id": "占位：图片加文字",
+          "dimension": "media",
+          "canonical_case_sha256": "116de94205a1ac295d922c524150cf100d050244245cfa4771c5abfe0431256b"
+        },
+        {
+          "case_id": "占位：文件加文字",
+          "dimension": "media",
+          "canonical_case_sha256": "46ec61012714b0ca31670dcc28c3f46881d71ede22849d5e3d8bf9f3c7cfe47d"
+        },
+        {
+          "case_id": "占位：混合加计划",
+          "dimension": "media",
+          "canonical_case_sha256": "024bcbcb891d8f8853b57cb60980324320ddec03a2febaa79a800d578e9bd042"
+        },
+        {
+          "case_id": "保真：否定喝酒",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "31bdc105c9db1915d6befe9259e77633d70b3c805917a6248d143ade92da58fd"
+        },
+        {
+          "case_id": "保真：否认借钱",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "ae384a126b122c1142a333b9ed2486316d8e8de20f5dc29dfdf8bb54d17c3286"
+        },
+        {
+          "case_id": "保真：海鲜过敏",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "5d047c1cf8f4c8a492a3ee6c654cbe7ea8c152943074db52ea4ae6a78c027275"
+        },
+        {
+          "case_id": "保真：可能出差",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "65b56c7bc61b3120af5d1df5762371b50f644e269835e9973808ae4d3034ca3c"
+        },
+        {
+          "case_id": "保真：未定换工作",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "43ba8b18ae033f5838a1b7c7df0fd70b1191cfea75d65ee0244af3359fb8c993"
+        },
+        {
+          "case_id": "保真：讨厌香菜",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "0504b4c0d3aa5996fcfa4034e2df23a4af7c9df4267335abe5747516260a9966"
+        },
+        {
+          "case_id": "保真：条件爬山",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "15da4fb8db0a2b8dfc44429f0c105d17aa669d2f14afbdb1f3dbb003de122fa2"
+        },
+        {
+          "case_id": "保真：下周三回来",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "35fadc91fc5fda132b9678db5856351ebf21f6d1c6cdb35a8d50df75d1f832f7"
+        },
+        {
+          "case_id": "保真：取消见面",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "9d5072e8f0c9bc16a3594f0e332d8b30cf2cc795d9d6f3a6ba7972226cf01caa"
+        },
+        {
+          "case_id": "保真：只喝一点",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "f8a760374b763f36c4f375a2ca14cac1caa9780e55cabe52173f508fbc410a1c"
+        },
+        {
+          "case_id": "保真：下周一到周三",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "679cb7bff85792f41eee076dfd096add2fde0976bf881cc633bdd42bd31d92c8"
+        },
+        {
+          "case_id": "保真：只有周日有空",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "c894de22a431fce3c6d37e647edfaa483f1659a5fa1517eeb48d87fdd2a29f90"
+        },
+        {
+          "case_id": "保真：去年换工作",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "80492e0ad57198adf7684688302488464097582d0b710c379ca1aed2722eb968"
+        },
+        {
+          "case_id": "保真：条件完工",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "bf6893b6cf269591013860c11a93bba162385b5db0a25a446f2f3f79f9b637c6"
+        },
+        {
+          "case_id": "保真：没去过日本",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "f08f2939e4eeeb6b833f02d4b4a299eee46f5adc0e591a51f1ec07b68ea2b385"
+        },
+        {
+          "case_id": "指代：跨消息老李",
+          "dimension": "reference",
+          "canonical_case_sha256": "7a9213ffe1df5887c96d41e5cf4ff536a6274ece8117de0a2dc265d21def0438"
+        },
+        {
+          "case_id": "指代：他借钱",
+          "dimension": "reference",
+          "canonical_case_sha256": "14c85d684f3d069235701d1d267cbe7077c853d27401b3a4c784c3e390986421"
+        },
+        {
+          "case_id": "指代：那个事",
+          "dimension": "reference",
+          "canonical_case_sha256": "55ad467bb4f105b1102cc026d931a6bcfdfea18983977d991978138ac22d7738"
+        },
+        {
+          "case_id": "指代：姐借车",
+          "dimension": "reference",
+          "canonical_case_sha256": "4073822d61ecfa7a7b596630b23c6a4d6c5b1651cab2c7bcf9f8c182f375fd62"
+        },
+        {
+          "case_id": "指代：机场等行李",
+          "dimension": "reference",
+          "canonical_case_sha256": "eda4c895f8bbdfdb63db5725e128c39283095dc279419489c1b9fcc1dd494e52"
+        },
+        {
+          "case_id": "指代：他们来家",
+          "dimension": "reference",
+          "canonical_case_sha256": "53f169d9038726b14f53f43c67e4e83024b3de85eb6f61bf10c2eb0c6fcef963"
+        },
+        {
+          "case_id": "指代：那本书",
+          "dimension": "reference",
+          "canonical_case_sha256": "a11da3294fc6b8ec7998bdaaafb932df2d6760abc4db993688c8af2c1579fd9a"
+        },
+        {
+          "case_id": "指代：那人",
+          "dimension": "reference",
+          "canonical_case_sha256": "b6892bf3314db2115f86909ac940ad21b1b137a7f01f3e66832e103205fea6fb"
+        },
+        {
+          "case_id": "指代：多第三方借钱",
+          "dimension": "reference",
+          "canonical_case_sha256": "0925a45f5fc1eedc40ecb12caefa22b76132e4305f99cd9bb235616903dbc25a"
+        },
+        {
+          "case_id": "指代：感冒好点",
+          "dimension": "reference",
+          "canonical_case_sha256": "760a7f9df7b453b323a8ab3a4d15fd7fd5fda2cff299db5dee24e0efc4677591"
+        },
+        {
+          "case_id": "指代：咱们那家店",
+          "dimension": "reference",
+          "canonical_case_sha256": "14476173def8481ac793020f3cf23b7117e40d9f07af80ed019af9c0ab1fb087"
+        },
+        {
+          "case_id": "指代：门票",
+          "dimension": "reference",
+          "canonical_case_sha256": "4a12f014874e79f6bb63fe973475babbc7b4d8f370134dcfeca5dc489316e13f"
+        },
+        {
+          "case_id": "指代：发地址",
+          "dimension": "reference",
+          "canonical_case_sha256": "b075ee865cc40aa72357490ff57a0ff6f4615d6d3358850220e68bc832c21c90"
+        },
+        {
+          "case_id": "指代：借书看完",
+          "dimension": "reference",
+          "canonical_case_sha256": "4de388cca6d8a45a864b7d762f42539998a5bd60838433252595fd10511bb920"
+        },
+        {
+          "case_id": "指代：面试结果",
+          "dimension": "reference",
+          "canonical_case_sha256": "57710b02f47892f086c7b6b6a5e5449540acccec4c677178a0d832a7fa39253b"
+        },
+        {
+          "case_id": "转述老张来访",
+          "dimension": "reported",
+          "canonical_case_sha256": "d135d5af10be41174a676a6544c116f2f687954d84bc1e9f9d595b23867e81d0"
+        },
+        {
+          "case_id": "领导通知加班",
+          "dimension": "reported",
+          "canonical_case_sha256": "6802c4cd55bd0834e7eff20cafa91d4f434e5a98fb419a34bbc3ea787ab456cd"
+        },
+        {
+          "case_id": "上个月旅行",
+          "dimension": "time",
+          "canonical_case_sha256": "cc54c5849dd407844f47e52ced929b8c0ae9a08195a4425bb243054cde43ca90"
+        },
+        {
+          "case_id": "固定习惯",
+          "dimension": "time",
+          "canonical_case_sha256": "810b4bff2e34c49b506d89cb39b27c7874528c1652ddacda0d1b1ffbfb03a3c2"
+        },
+        {
+          "case_id": "下周出差",
+          "dimension": "time",
+          "canonical_case_sha256": "e3c4abd302d96765980702d3fdc6b138a62df346c258a13715418b7670738387"
+        },
+        {
+          "case_id": "下月旅行",
+          "dimension": "time",
+          "canonical_case_sha256": "6be538dd5172afb36a53c426975a8ee0268b070f5239c67174841026c59fe94a"
+        },
+        {
+          "case_id": "取消出差",
+          "dimension": "time",
+          "canonical_case_sha256": "54931a50e303e13183bf43fc344dcd29ac35b68ea09a245baaf94e6b7ecfeb75"
+        },
+        {
+          "case_id": "行程改期",
+          "dimension": "time",
+          "canonical_case_sha256": "dba20a9220aa7c05c0c97dbf42803e8dc50a830e538126645135b0137770c6bf"
+        },
+        {
+          "case_id": "临时借住",
+          "dimension": "time",
+          "canonical_case_sha256": "1125e2e3f0149f1b9e0bd2b4486ccba0a39488005b8a0acd7d689d26c7f228d7"
+        },
+        {
+          "case_id": "出差中",
+          "dimension": "time",
+          "canonical_case_sha256": "d83355f2a970b3c91c4d561c19e8d98f4b637b49137693ffa5811d2c2d0ddc13"
+        },
+        {
+          "case_id": "短期：次日日程",
+          "dimension": "time",
+          "canonical_case_sha256": "4443a7a0a7907a95428e483cc4626624bf6434685a7f11202b91e2472c50a596"
+        },
+        {
+          "case_id": "短期：当天瞬时状态",
+          "dimension": "time",
+          "canonical_case_sha256": "9cd78a5daa9c20751df0d8a565156a8656204916a27bc534637d6f956db50e76"
+        },
+        {
+          "case_id": "长期：稳定习惯留空有效期",
+          "dimension": "time",
+          "canonical_case_sha256": "fb02380d88d72f974b93f44ba4fa983e72236cefdedc43705f7f76bfd26625f0"
+        },
+        {
+          "case_id": "条件邀约",
+          "dimension": "time",
+          "canonical_case_sha256": "43f5f8b152f7b212ad192c20e8b0a109333635f07a83501549ccb7d65d061ac0"
+        },
+        {
+          "case_id": "约定饭局",
+          "dimension": "time",
+          "canonical_case_sha256": "d2706fc96d8ff453c8510a3e14e89e0f04df7597c170c50ffa235ff905f6caa8"
+        },
+        {
+          "case_id": "模糊未来",
+          "dimension": "time",
+          "canonical_case_sha256": "3e259a126ab58a66c593a45724892ea515742a856ba3e2cf3fec76178d927a08"
+        },
+        {
+          "case_id": "出差已结束",
+          "dimension": "time",
+          "canonical_case_sha256": "af2bbbd3d7135ff9f2316b269abca2f5eeecfee523ef334faa1fa03e58b72f66"
+        },
+        {
+          "case_id": "主体：联系人自述习惯",
+          "dimension": "subject",
+          "canonical_case_sha256": "d6692765c08abcc923677a689c5b1c7952452bed851dde2160ec641501e351cf"
+        },
+        {
+          "case_id": "主体：联系人确认用户的事",
+          "dimension": "subject",
+          "canonical_case_sha256": "d053e54da54fad9bececa0e3a2c5fadb28751e1e28ffc7c315b86b3a74cf0015"
+        },
+        {
+          "case_id": "主体：共同经历",
+          "dimension": "subject",
+          "canonical_case_sha256": "ca81cd212b388b4bd73c41270cd2237919880565efc94bcbc049c2114281de77"
+        },
+        {
+          "case_id": "主体：共同计划",
+          "dimension": "subject",
+          "canonical_case_sha256": "c87af471a5a07749e2a52fcb99a6fd889726dfd311180b39a9738fce9ca79d39"
+        },
+        {
+          "case_id": "主体：上下文计划归属联系人",
+          "dimension": "subject",
+          "canonical_case_sha256": "81c61aff67285f1e24ac58d6045563fdcca05118e130b8ce96341fb6211b4c1d"
+        },
+        {
+          "case_id": "主体：联系人转述用户计划",
+          "dimension": "subject",
+          "canonical_case_sha256": "b3dd720aa318a99e78a8451d4adfa0ec02032812ba39eb35e3ec7bebd8fdf4e3"
+        },
+        {
+          "case_id": "主体：第三方事件里的联系人行动",
+          "dimension": "subject",
+          "canonical_case_sha256": "5368c7018cfd0539d065be2ea0e8e92ab06ba89b086c6508c48f2a4ff56e855f"
+        },
+        {
+          "case_id": "主体：用户健康状态",
+          "dimension": "subject",
+          "canonical_case_sha256": "e7eac952ffe875079aad249676b6a29d15f3f74441d234480d4d213fccc99422"
+        },
+        {
+          "case_id": "主体：混淆线索下的联系人计划",
+          "dimension": "subject",
+          "canonical_case_sha256": "b7f847ac0670d5a94d010db98694b6d7bda95bb1f8eab0a9aa03d297300cb108"
+        },
+        {
+          "case_id": "主体：混淆线索下的用户事实",
+          "dimension": "subject",
+          "canonical_case_sha256": "beafdcb2d7be3963d352130b9cad3f835b977fad64ed9ed734f6ff2513451970"
+        },
+        {
+          "case_id": "主体：联系人的偏好否定",
+          "dimension": "subject",
+          "canonical_case_sha256": "0b6f912ddf88a91a0ec5c926f65ef89df034058888f0d146cc79a47d47595b2c"
+        },
+        {
+          "case_id": "主体：用户的偏好否定",
+          "dimension": "subject",
+          "canonical_case_sha256": "5235ff27dc989dc4dd5fd434a35ceb5062a48a852e388417d7b8ecdd2120748b"
+        },
+        {
+          "case_id": "主体：用户被同事请托",
+          "dimension": "subject",
+          "canonical_case_sha256": "d0517b76c11417c5869678d795b711ea0fa5fa54c6bca527f46ce8501b49b0d6"
+        },
+        {
+          "case_id": "真假：跨话题拼接",
+          "dimension": "truth_intent",
+          "canonical_case_sha256": "19a1a02967c5b7573a2ae7d69b82b51a55faf83ddfb247d3c074bbb2f7c6705c"
+        },
+        {
+          "case_id": "主体：昵称称呼",
+          "dimension": "subject",
+          "canonical_case_sha256": "ea8e3c0e3c53da46889cf3c0c16af4810bf3356ba0a438a06f1e50de73553635"
+        },
+        {
+          "case_id": "严格：否定饮酒",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "c88095c3c8dae414d9cd3f7cb465ec5640574b0eb0b51fc0551919e540ee5f34"
+        },
+        {
+          "case_id": "严格：否定牛奶",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "0c71374344d62ae7e4a894ad84cf887c2470ab41488acde82fc7c05734a86d6a"
+        },
+        {
+          "case_id": "严格：偶尔徒步",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "3711f5c396cac44eab73703e9272e2dfe2a366f7dde24c0cdaf50b5bfd1fcc5d"
+        },
+        {
+          "case_id": "严格：养猫数量",
+          "dimension": "quantity",
+          "canonical_case_sha256": "d95143f611e4ca3f4e5f157e3fd731965ef9d20a4726e3d1be21c35e190074a9"
+        },
+        {
+          "case_id": "严格：门票省略数量",
+          "dimension": "reference",
+          "canonical_case_sha256": "39eae5e29708c4d62e2f80e95663f67704332e45468e998166f3378305ff6265"
+        },
+        {
+          "case_id": "严格：降雨前提",
+          "dimension": "condition",
+          "canonical_case_sha256": "2a5308a134ed030918b518cd20e71865c6f8d23a1527cfcb5df5c24da3743d97"
+        },
+        {
+          "case_id": "严格：现场工作限定",
+          "dimension": "condition",
+          "canonical_case_sha256": "19184998f49e7f8294d6aabe3211d8a17f333321e9fc9c2e758e8a7c15bb3fa0"
+        },
+        {
+          "case_id": "严格：姐姐职业",
+          "dimension": "reported",
+          "canonical_case_sha256": "de17c13c631a3ba418c822675621f3221da5885542814779dfef9691828b684a"
+        },
+        {
+          "case_id": "严格：跨消息第三人",
+          "dimension": "reference",
+          "canonical_case_sha256": "18478dd0906d98e49da7f24ca1ceb806e41a1ba0dbd91fc5bdea743f9a032157"
+        },
+        {
+          "case_id": "严格：工作期间跨度",
+          "dimension": "time",
+          "canonical_case_sha256": "e9e4721307a135329499a0c619340e15a587418f375f1f9b40f2085505879e9d"
+        },
+        {
+          "case_id": "严格：历史学习时间",
+          "dimension": "time",
+          "canonical_case_sha256": "0cfd74eadc5b68d49898fc27ec6bec13a64188f7df076d22e51aade8c470a95d"
+        },
+        {
+          "case_id": "严格：取消安排",
+          "dimension": "time",
+          "canonical_case_sha256": "ffb7ae94c8d15ded3c4289c57d5c50dd78554f16a4b2e7ebefef1620a1c62909"
+        },
+        {
+          "case_id": "严格：当前与未来分离",
+          "dimension": "time",
+          "canonical_case_sha256": "4d7e61d3081a93a2f9b1dacc3a70a23e748685c9dce701f023e3755590279e73"
+        },
+        {
+          "case_id": "严格：跨话题拼接",
+          "dimension": "reference",
+          "canonical_case_sha256": "1b94bbeeec688c1f5f02dcc62cf528fa046b18a74879a8758d24a7e5bc214872"
+        },
+        {
+          "case_id": "严格：明确职业正向",
+          "dimension": "subject",
+          "canonical_case_sha256": "bb468d78c05c259aa47d26e0865f6a55b1fa48ae0d5ca4fff59f77936fcb9547"
+        },
+        {
+          "case_id": "严格：报价判断与条件咨询",
+          "dimension": "condition",
+          "canonical_case_sha256": "475516b1a25d51323d75c128f73269eb6ffda12afa55740c0ee11d67d3ff508c"
+        },
+        {
+          "case_id": "严格：第三人历史经历与当前未知",
+          "dimension": "reported",
+          "canonical_case_sha256": "99b08e599c345f850c23b7d8f831634029c91f13e7d6cebd127e2e0bc8076f84"
+        }
+      ]
+    },
+    {
+      "suite": "reply_fidelity",
+      "count": 16,
+      "case_id_field": "case_id",
+      "cases": [
+        {
+          "case_id": "prototype-gap",
+          "dimension": "development",
+          "canonical_case_sha256": "8905eb41502c2cffd6e9addf40e4c74906eabb5c83c34a13c2f394f68b0d3a65"
+        },
+        {
+          "case_id": "prototype-thought",
+          "dimension": "development",
+          "canonical_case_sha256": "0e5e944b61e190dc8ef3cdf2878d7ee9b88ec087cfae972e0df7259c15af1f61"
+        },
+        {
+          "case_id": "paired-decline",
+          "dimension": "development",
+          "canonical_case_sha256": "13171137acec2f8c036fd1eb282deb0e3254c393badf226cf7e041f519f0517a"
+        },
+        {
+          "case_id": "paired-accept",
+          "dimension": "development",
+          "canonical_case_sha256": "4d85c92bb4dbd0e1a7a0b70ba77124eca57a168157ebb46e13e6dd5c15ce065e"
+        },
+        {
+          "case_id": "intent-only",
+          "dimension": "holdout",
+          "canonical_case_sha256": "981e2bbaa35f446d046e99f4cdb6f5744b2ec554299f4a49d36ec25238dd107a"
+        },
+        {
+          "case_id": "experience",
+          "dimension": "holdout",
+          "canonical_case_sha256": "12f4dd19cb69eeb91be52c9e36581c1c26439e05a501cfcd5ad58d8afe8fd6c8"
+        },
+        {
+          "case_id": "emotion",
+          "dimension": "holdout",
+          "canonical_case_sha256": "93e664668767768b47ce097fb59e3dfe94d728fd39eadd2caf9efdc96b3faf66"
+        },
+        {
+          "case_id": "commitment",
+          "dimension": "holdout",
+          "canonical_case_sha256": "3bd18efc65e4ea40e1233579b2e72fdf502ad85f7a6745582699df094d6263b5"
+        },
+        {
+          "case_id": "motive",
+          "dimension": "holdout",
+          "canonical_case_sha256": "988ee0f2f1d496cad5879cb758b3d535097cc38bfe064462ff600e856168d53d"
+        },
+        {
+          "case_id": "stale",
+          "dimension": "holdout",
+          "canonical_case_sha256": "41d6a487c39ab238d7ea9f39391398f312500eb2a21165bc94f7b2cdfe88487c"
+        },
+        {
+          "case_id": "contact-style",
+          "dimension": "holdout",
+          "canonical_case_sha256": "9082e16fe8dbaad9e8941e8039783bca74f50b2f3d7d7cd43a2d5e723b9ded4d"
+        },
+        {
+          "case_id": "style-conflict",
+          "dimension": "holdout",
+          "canonical_case_sha256": "a3aa10e6e9b8f2c40e4c8eadce6881d668c8e891f0b3fa522f37cac2aaea6df1"
+        },
+        {
+          "case_id": "no-history",
+          "dimension": "holdout",
+          "canonical_case_sha256": "c60b4ec5560a24ab5b230c82bf16cfa42f6c219a6eb967f357a59e65bd61c68b"
+        },
+        {
+          "case_id": "group",
+          "dimension": "holdout",
+          "canonical_case_sha256": "4fdbf47c4f7d7fb9553abc2196f055ebf9e9179b6dbbc6534aa5e893917843f3"
+        },
+        {
+          "case_id": "timeout",
+          "dimension": "holdout",
+          "canonical_case_sha256": "3f375a0753508ca289a7dab12ca4bb67e9fff50e3aa21cee219150807f1c1b83"
+        },
+        {
+          "case_id": "missing",
+          "dimension": "holdout",
+          "canonical_case_sha256": "f66edaf2ef1df3d75ee8435ce5bad319ae92bab5b26442382c2843a5ac9958e5"
+        }
+      ]
+    },
+    {
+      "suite": "memory_recall",
+      "count": 109,
+      "case_id_field": "name",
+      "cases": [
+        {
+          "case_id": "直述 1",
+          "dimension": "direct",
+          "canonical_case_sha256": "1656279d9636f5d17faf628d03f21bba2502db4063672a0a6cdd2bc128f40c2a"
+        },
+        {
+          "case_id": "直述 2",
+          "dimension": "direct",
+          "canonical_case_sha256": "b2012d762c942af21e49f169c297df75d169b3f1d045aca919e9d11b975a06fc"
+        },
+        {
+          "case_id": "直述 3",
+          "dimension": "direct",
+          "canonical_case_sha256": "4f27684b24a37dc014a56b703b837ffe30063bdd1fa20dda1baf20544cd36675"
+        },
+        {
+          "case_id": "直述 4",
+          "dimension": "direct",
+          "canonical_case_sha256": "710890786e0bae9a3b239ae0b4a6ed45d5dd0fd5c023ec60f6e22fdd106fd0cc"
+        },
+        {
+          "case_id": "直述 5",
+          "dimension": "direct",
+          "canonical_case_sha256": "70a39cb90ba7bb20833b21ad0e3a3cabd8f6acde8cc963f3732cdfed815f2ed9"
+        },
+        {
+          "case_id": "直述 6",
+          "dimension": "direct",
+          "canonical_case_sha256": "0685e631754836ccdc323718b76027fd197f4f35c5a72c2019e7c9115809be6c"
+        },
+        {
+          "case_id": "直述 7",
+          "dimension": "direct",
+          "canonical_case_sha256": "67ab2852a2452d2aa6eb8c82e71801b437748a7cc51ea0e20a6138125e68edff"
+        },
+        {
+          "case_id": "直述 8",
+          "dimension": "direct",
+          "canonical_case_sha256": "5dd83f8f9337c08bcf6d2553e70f585dd2614ecb838c7ca55c4847a8efd615c2"
+        },
+        {
+          "case_id": "直述 9",
+          "dimension": "direct",
+          "canonical_case_sha256": "7bc9717f6d1e9e91ca747bc12859a1dc22e529397f8f622b9493ba341b7f0b42"
+        },
+        {
+          "case_id": "直述 10",
+          "dimension": "direct",
+          "canonical_case_sha256": "ecd24198e87dab7180f8736b8b2e364118a47d8c92a02bcd3f1912a5f0024e25"
+        },
+        {
+          "case_id": "直述 11",
+          "dimension": "direct",
+          "canonical_case_sha256": "e9533f6563097748567eb1e00af92c8c705d273bf683fa53f2a0ed1b0ce47a7b"
+        },
+        {
+          "case_id": "直述 12",
+          "dimension": "direct",
+          "canonical_case_sha256": "e3dfeb09c9db7492dcb85061852c8a9243d089abd08150ec163d0c3df0fb8395"
+        },
+        {
+          "case_id": "直述 13",
+          "dimension": "direct",
+          "canonical_case_sha256": "448de1e6fe0a889356147fa253837cce3372a43812015f0d71249298de00d9ae"
+        },
+        {
+          "case_id": "直述 14",
+          "dimension": "direct",
+          "canonical_case_sha256": "5afe65c3aaea5764c9fd60d232e498d8d3264328e7ae7bbaf58e8f3a2c5d9bf9"
+        },
+        {
+          "case_id": "直述 15",
+          "dimension": "direct",
+          "canonical_case_sha256": "50697c6960139c76521b661b9e42da0014802219043c12f3b0c66434e41fa719"
+        },
+        {
+          "case_id": "改写 1",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "b7ef2368525ccad5824dad0b09c3688669476e44d42f7b3cd5587e44f398ba67"
+        },
+        {
+          "case_id": "改写 2",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "22445f6be6a16b08fabddabe7abfc787693fe8e1edf0523feda3dcea23ee2745"
+        },
+        {
+          "case_id": "改写 3",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "142133866a22b559053eae8a85e91dbc8066a7dfbd6011d5fcb87fd8eec247bf"
+        },
+        {
+          "case_id": "改写 4",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "6bf04f0e95e5d87c22bc642ebbbb8ea2c8f5bcdb524b389b1ac74a3d0eebed11"
+        },
+        {
+          "case_id": "改写 5",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "5e95ca226b685674305d38585b312e8c5baa08b03bfe480b6b63c571834ff65a"
+        },
+        {
+          "case_id": "改写 6",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "63c9e03374bb99775679c46bba89e8e0305f4d7a57abf9c1272eb0c72788ca47"
+        },
+        {
+          "case_id": "改写 7",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "b0e4129d9d15e3698b0bab12e5ba7c7737e7c5392f8a676d8ecfb8eba3099af2"
+        },
+        {
+          "case_id": "改写 8",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "3e0014dff903d5ed744a009ae20ef903cb6aca8dd7811352e3af3c1620e35bfa"
+        },
+        {
+          "case_id": "改写 9",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "f5aae9c71c62350c58e685fe468a320c2342febcf7000aaf01fa9bd438241583"
+        },
+        {
+          "case_id": "改写 10",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "5aea52b70ee76b6ec31e879dab8fc9c95f1aec4c089b3bd8c25bc50a2144ac3e"
+        },
+        {
+          "case_id": "改写 11",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "482df5f1db5b02f18e9056779eefa4026a82be488b2fb41bc26a31946adbb2a5"
+        },
+        {
+          "case_id": "改写 12",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "1246395908f31b2e055085e41a78be0166d504c4df71b0bd9e1a9677591b75c5"
+        },
+        {
+          "case_id": "改写 13",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "ab9a2c2da247a617a2a2d7464b75f33dda26d3ede6363eac4b479c42329405a8"
+        },
+        {
+          "case_id": "改写 14",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "a146d2a0a7feb3933c4743cad89fdf913471efcabc8a0c4e69a583f6eed5cd95"
+        },
+        {
+          "case_id": "改写 15",
+          "dimension": "paraphrase",
+          "canonical_case_sha256": "5a952216c0dd5f80e12eef9e843aeb78804d065a9164bca9c63dcbd74521553a"
+        },
+        {
+          "case_id": "无关 1",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "08ef78635f19b1c9f79edb47f69b24e029b538ca1772c0958bfdecefb20c06b2"
+        },
+        {
+          "case_id": "无关 2",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "3dc0b0973517536828e47f21a9d038b353723d91aefc8e94ad4a290d1e9255d7"
+        },
+        {
+          "case_id": "无关 3",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "010639f73bfb58a180d6a56790bf7947798d88ff5fe4b8a2f7e338d9af281884"
+        },
+        {
+          "case_id": "无关 4",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "bf257f1adc86418a703459291d57b0d6a56a22c05aaa163fd7d5e05359bea050"
+        },
+        {
+          "case_id": "无关 5",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "808fec1034f6dad8ea0e412c0a4771bb1bd3513bb9cc728488bd896de85df62b"
+        },
+        {
+          "case_id": "无关 6",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "14765b25745527ff123019161b747544a8be670b01b85d422e21b565a027cef4"
+        },
+        {
+          "case_id": "无关 7",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "5da15012fec43595d692a5f12f91dca10de63be4cc7085b7bbaa89756f8f539b"
+        },
+        {
+          "case_id": "无关 8",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "084dd071a620be1e4c5c86c2fddf5de031c99dbca3514f1729fbf95a34e48bc1"
+        },
+        {
+          "case_id": "无关 9",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "8cd667f6cdff3fd151af7d47da5abc1e2a3803e6320c88ab0dbe90666d194099"
+        },
+        {
+          "case_id": "无关 10",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "d41b40e800270f543e1226e0508a9b3c9ae6b3ba7fc191b0dd075be05194d1aa"
+        },
+        {
+          "case_id": "无关 11",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "ce8a36f1abe11a2059a90b424920535510d08030befbf4fe736caa10c38711a8"
+        },
+        {
+          "case_id": "无关 12",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "4d18a330e0b1f44c5a55d1fefc808d1398bca1ee2c9231d495b0b37d32ed70c5"
+        },
+        {
+          "case_id": "无关 13",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "12869a2afc5f9a18c5b52782e1d47f0128af62cd89041b16657702373cecd41e"
+        },
+        {
+          "case_id": "无关 14",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "53bd945943b922c1112a1db867d3eded41f812e6774678c4d1dc6a36e302c203"
+        },
+        {
+          "case_id": "无关 15",
+          "dimension": "irrelevant",
+          "canonical_case_sha256": "187f2fa1490230da0037a57b67ee67560d31d27a2ac375a107eae1865b5ce244"
+        },
+        {
+          "case_id": "隔离 1",
+          "dimension": "isolation",
+          "canonical_case_sha256": "cfabeda6c6c2369c6517e97a6dd1b17258ca559573da1aeedb00ee86b8070520"
+        },
+        {
+          "case_id": "隔离 2",
+          "dimension": "isolation",
+          "canonical_case_sha256": "affeed517e876ed49b4aaca5c00ff4bf30612e0c81c8995844046d6e8a31d143"
+        },
+        {
+          "case_id": "隔离 3",
+          "dimension": "isolation",
+          "canonical_case_sha256": "9bedc64cd1a7847b6d846f7c63edaedae493400062383a87ca2bc5e641f4570b"
+        },
+        {
+          "case_id": "隔离 4",
+          "dimension": "isolation",
+          "canonical_case_sha256": "4964ec7f047c0c70d526c60e489126b8f1c8822217ca9b50700772291c162c4b"
+        },
+        {
+          "case_id": "隔离 5",
+          "dimension": "isolation",
+          "canonical_case_sha256": "dc0729d2d3fec4347f26164b88048c79996f4bdbcf958e9083553c2304e16b0f"
+        },
+        {
+          "case_id": "隔离 6",
+          "dimension": "isolation",
+          "canonical_case_sha256": "0e59ba037fdc6d09c22ec79aca531a24a21072a25a6baef9f59d22a28b6f8097"
+        },
+        {
+          "case_id": "隔离 7",
+          "dimension": "isolation",
+          "canonical_case_sha256": "f06ef7a6236e9d7cd21e1ea3b474f35163095e05381f8e799dcae295943574a4"
+        },
+        {
+          "case_id": "隔离 8",
+          "dimension": "isolation",
+          "canonical_case_sha256": "ef3fc06366a74084d2e0af9c2bddf89439f2bd8162190cc0e38ec5afb5882497"
+        },
+        {
+          "case_id": "隔离 9",
+          "dimension": "isolation",
+          "canonical_case_sha256": "01a0ed02dd8180be4b59cc6c70134b036e543578b5c75024daf4aa02b35bf85b"
+        },
+        {
+          "case_id": "隔离 10",
+          "dimension": "isolation",
+          "canonical_case_sha256": "2346df201f9af6ad41c182c72defe866da1ab4c878b1352823d093ab9f0bf32c"
+        },
+        {
+          "case_id": "隔离 11",
+          "dimension": "isolation",
+          "canonical_case_sha256": "9e09007fa3fc7984750ecae9ae435ac070285eb6eac8447a576f61707370e366"
+        },
+        {
+          "case_id": "隔离 12",
+          "dimension": "isolation",
+          "canonical_case_sha256": "745bb95fd41028bb502cb1077745d845cc9d53a2e2e8f9cc28b10a59be15a1be"
+        },
+        {
+          "case_id": "隔离 13",
+          "dimension": "isolation",
+          "canonical_case_sha256": "f22975aa0daad1d575e15de98db68622260a7b6ebbac55d43688d32bd2743b01"
+        },
+        {
+          "case_id": "隔离 14",
+          "dimension": "isolation",
+          "canonical_case_sha256": "78771bd70fc67a7c14bad8cbe01a8912c0e768d984934dbf470e857e1d660c05"
+        },
+        {
+          "case_id": "隔离 15",
+          "dimension": "isolation",
+          "canonical_case_sha256": "4edccf65b9845364b3071b28b11bb65f90be3ed4a837ccf1707367b9b4c49686"
+        },
+        {
+          "case_id": "失效 1",
+          "dimension": "invalid",
+          "canonical_case_sha256": "9682dc67d8e679ff97c839a3a67081857d9e656c0ef2ec6d11260cf47b4e9792"
+        },
+        {
+          "case_id": "失效 2",
+          "dimension": "invalid",
+          "canonical_case_sha256": "0d823c9bd59904575c0d1b2e946d0f5374a425037c117e29a486439332ae2262"
+        },
+        {
+          "case_id": "失效 3",
+          "dimension": "invalid",
+          "canonical_case_sha256": "b8cef6b338a4557c9b2bee0c710426342361f567f34d4a7318d695e1a629b62c"
+        },
+        {
+          "case_id": "失效 4",
+          "dimension": "invalid",
+          "canonical_case_sha256": "d7431ee27bd55604e8ea9bcfc76db7a7f589e349415892705ad4685824d93969"
+        },
+        {
+          "case_id": "失效 5",
+          "dimension": "invalid",
+          "canonical_case_sha256": "a01cb6eb04d85aec1386c1ea2612cee42e21c0acc1a56134b171b0cf65691d24"
+        },
+        {
+          "case_id": "失效 6",
+          "dimension": "invalid",
+          "canonical_case_sha256": "d8eddcdf91b372afdfa27d012e8d51ecc22e3674e9c446ac457ff6d61cc0747c"
+        },
+        {
+          "case_id": "失效 7",
+          "dimension": "invalid",
+          "canonical_case_sha256": "8ee0729325b04f5381d177f014dc7dabeb9c34b97a2bd2eb35f3aaaed9f5006d"
+        },
+        {
+          "case_id": "失效 8",
+          "dimension": "invalid",
+          "canonical_case_sha256": "cbfa52a383fd3383fa04ae6ffe7cc8a5f866444a056e7d19d73ce6208f721bc2"
+        },
+        {
+          "case_id": "失效 9",
+          "dimension": "invalid",
+          "canonical_case_sha256": "659d72693d01cff0ba32aaf535b865b05ce7b4dec1cc28c24639dc8dea38a7bf"
+        },
+        {
+          "case_id": "失效 10",
+          "dimension": "invalid",
+          "canonical_case_sha256": "8c8644702d4a37057ab9ec35f2878f1f6ad95ec19fdc88c037a1a9fad5d3a92e"
+        },
+        {
+          "case_id": "失效 11",
+          "dimension": "invalid",
+          "canonical_case_sha256": "c6b082176b643d00560d637e67c718cf3530444c26030d6ab1072544d8d7cb63"
+        },
+        {
+          "case_id": "失效 12",
+          "dimension": "invalid",
+          "canonical_case_sha256": "1017f114adceffc65636f91b85fe329c37c6c33865c90e5b6acff40b7575177a"
+        },
+        {
+          "case_id": "失效 13",
+          "dimension": "invalid",
+          "canonical_case_sha256": "293ec086f7318448d171352589c3a1b6ddc650a2d4772c9992c255dbb0ba9d81"
+        },
+        {
+          "case_id": "失效 14",
+          "dimension": "invalid",
+          "canonical_case_sha256": "3c1da633d504a3ea52775f822a13323676c1651e0f93f9067b8b63ca924be56f"
+        },
+        {
+          "case_id": "失效 15",
+          "dimension": "invalid",
+          "canonical_case_sha256": "35c5dc212cb0e26669c0250f60010f17ba791dcf38345ce51b5d48d8e8ef60a3"
+        },
+        {
+          "case_id": "失效本人 1",
+          "dimension": "invalid",
+          "canonical_case_sha256": "d9d036db65b671cb4215ab7ee32578e692d87f6aba8cd9d4cbee0a51fbe134a8"
+        },
+        {
+          "case_id": "失效本人 2",
+          "dimension": "invalid",
+          "canonical_case_sha256": "6acc56dd6387bb2b7b949445dab77ef08b8ab8e19813b6e3b785e6c8c23c969c"
+        },
+        {
+          "case_id": "失效本人 3",
+          "dimension": "invalid",
+          "canonical_case_sha256": "14fc1ca7aff29107815682bf285cce4fb2ec0e3bb6ab9b0cd8015b2081e91cfd"
+        },
+        {
+          "case_id": "预算 1",
+          "dimension": "budget",
+          "canonical_case_sha256": "c97b2fcce68006f9ec095c66b82516c0855fb9ae5f80b0e2d168e4cb693b3d0a"
+        },
+        {
+          "case_id": "预算 2",
+          "dimension": "budget",
+          "canonical_case_sha256": "085eecb13988282cb26dec9a0e0dbedc63591ac2e5631e85ed4cad363b0f2580"
+        },
+        {
+          "case_id": "预算 3",
+          "dimension": "budget",
+          "canonical_case_sha256": "4bb5bfc7b730cb8401583a02fdb6bf29db3e117909b1c4e5801faba71bb4e6f7"
+        },
+        {
+          "case_id": "预算 4",
+          "dimension": "budget",
+          "canonical_case_sha256": "19995e70fddfc25b889d095359c6d1fa88360591661f1e161fccfe5b2a6f7e93"
+        },
+        {
+          "case_id": "预算 5",
+          "dimension": "budget",
+          "canonical_case_sha256": "d9aaf3d2d50e6d7813196681f56333050138f831a222f88ef1541accce855113"
+        },
+        {
+          "case_id": "预算 6",
+          "dimension": "budget",
+          "canonical_case_sha256": "703d25f9dedfd3c11d3d5be9b51d7a72d036222e12dcb0f36649aa427cd8efc8"
+        },
+        {
+          "case_id": "预算 7",
+          "dimension": "budget",
+          "canonical_case_sha256": "7d933ec97f15406d8e0299af78c5205d65b0ffb34cfd43cf2f5e6ef11db64526"
+        },
+        {
+          "case_id": "预算 8",
+          "dimension": "budget",
+          "canonical_case_sha256": "fd2cdc223ddb1adc7358d732fac6efef2594a5934b91e3c0bbc4d271fc53fde8"
+        },
+        {
+          "case_id": "预算 9",
+          "dimension": "budget",
+          "canonical_case_sha256": "93ac0f142737acbe21f2c58d8910997c5e51477b1ebe0b2579709de482ea8539"
+        },
+        {
+          "case_id": "预算 10",
+          "dimension": "budget",
+          "canonical_case_sha256": "822818593fdf4de8d5429c4605cba7b336f5d7770105a7b7fd6dfd637a62cfb1"
+        },
+        {
+          "case_id": "预算 11",
+          "dimension": "budget",
+          "canonical_case_sha256": "964c63a86194509e4131d6ea2d7bf70e98b634d210d4135b55b572adbf284c87"
+        },
+        {
+          "case_id": "预算 12",
+          "dimension": "budget",
+          "canonical_case_sha256": "c3291521b5b1cf72964bc6aab08ed6adec058274f58061ebc9c0fd2db3143fb5"
+        },
+        {
+          "case_id": "预算 13",
+          "dimension": "budget",
+          "canonical_case_sha256": "db4bd29ebc863ff29a27477fc2604d2814f1fc648737f0aea4131a12b551b819"
+        },
+        {
+          "case_id": "预算 14",
+          "dimension": "budget",
+          "canonical_case_sha256": "ff4c1c6375b37cb7234e9687a77d87e271024e1b8cd9aec149cf1079337160fe"
+        },
+        {
+          "case_id": "预算 15",
+          "dimension": "budget",
+          "canonical_case_sha256": "2bde56a5603c1bfaa1ebc22cfa38a21990e614b8d4e6b3f3c613a503916ecaa8"
+        },
+        {
+          "case_id": "预算 16",
+          "dimension": "budget",
+          "canonical_case_sha256": "d49e89323d58a3fedaa520f44d1bff36eb9b1460331e506fc6e82af93d6ece01"
+        },
+        {
+          "case_id": "排序 1",
+          "dimension": "ordering",
+          "canonical_case_sha256": "24fd33db1c658fc67783773ae7535d6e347dee7bfdd662697efa643e92ff4542"
+        },
+        {
+          "case_id": "排序 2",
+          "dimension": "ordering",
+          "canonical_case_sha256": "856a340117f01afc37286b8c7f3abc7cc797ea50ab04d71cec55fa2ef012b2a7"
+        },
+        {
+          "case_id": "排序 3",
+          "dimension": "ordering",
+          "canonical_case_sha256": "342fc8453a483435140210d5f65bba5d95585743dc101b47015de4b2da87f084"
+        },
+        {
+          "case_id": "排序 4",
+          "dimension": "ordering",
+          "canonical_case_sha256": "b03ac71b2c835758f2ee6d0db9fa0fb26e20352f1900c23af4d3681359cd01ef"
+        },
+        {
+          "case_id": "排序 5",
+          "dimension": "ordering",
+          "canonical_case_sha256": "5a4a8f757bf09318a851fcfb9687ebb5a16eec72059c4630bc1b694cc6c90025"
+        },
+        {
+          "case_id": "排序 6",
+          "dimension": "ordering",
+          "canonical_case_sha256": "29b0cd462f63a9b3b14205f8352e6654f5c74d601b8dcc32312777e2654c0139"
+        },
+        {
+          "case_id": "排序 7",
+          "dimension": "ordering",
+          "canonical_case_sha256": "3a2b6a97852fbbfd03fbba2405e128a05208f990e2b469d9289289e2bf405415"
+        },
+        {
+          "case_id": "排序 8",
+          "dimension": "ordering",
+          "canonical_case_sha256": "825c9c7f8ac705edc367990d778de3f85898216a95941caa813c590c1ebb2da2"
+        },
+        {
+          "case_id": "排序 9",
+          "dimension": "ordering",
+          "canonical_case_sha256": "4b3bf67e19b12e5e8c4f8a9dafdd343d089e868b917ffdb84a1de91e2f1dc440"
+        },
+        {
+          "case_id": "排序 10",
+          "dimension": "ordering",
+          "canonical_case_sha256": "1588f44d65b4156721937e9f2f49147a96e5ad8fcfdd63b7dea0606617a50d0f"
+        },
+        {
+          "case_id": "排序 11",
+          "dimension": "ordering",
+          "canonical_case_sha256": "e633ee71cf2f38b8f04b6282d80dc6ef8bf9a563b231ba3a2d3cb8bb06500cbe"
+        },
+        {
+          "case_id": "排序 12",
+          "dimension": "ordering",
+          "canonical_case_sha256": "70192b7450a4e0617d24d49679fb4426ca2d0d8b1f1f2b9f4b5d2cb218ff8323"
+        },
+        {
+          "case_id": "排序 13",
+          "dimension": "ordering",
+          "canonical_case_sha256": "0922fdfad1dd7e1cf4b62e4cbf75ea48d485161e64aa22b153708972c55c4c05"
+        },
+        {
+          "case_id": "排序 14",
+          "dimension": "ordering",
+          "canonical_case_sha256": "ffc9281709d5183041d449cb9db98b87c9216684b50a403078d14af56b84c416"
+        },
+        {
+          "case_id": "排序 15",
+          "dimension": "ordering",
+          "canonical_case_sha256": "ad07179465b4a457b1e8578b62d49160b172753bd056b479fe6b860c762564c8"
+        }
+      ]
+    },
+    {
+      "suite": "organization_learning",
+      "count": 36,
+      "case_id_field": "case_id",
+      "cases": [
+        {
+          "case_id": "l2_scenario-01",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "ef1b9039a8d50fad939ef04eb4e6e6369c2927959b16e20bd0db2f17d0e2c5a1"
+        },
+        {
+          "case_id": "l2_scenario-02",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "7c0a997a7bf7aa4ea61688c8e3ace1d0c2c87979b7a3ca3e8539ab8b0a4ad474"
+        },
+        {
+          "case_id": "l2_scenario-03",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "4c8bc0df32416fe2e68aa8cc786e09973535fc55dfab9e743ef919bb16518d7f"
+        },
+        {
+          "case_id": "l2_scenario-04",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "12f14f2dccbe46df7f0164660bbc31b8f4336d55ac1b4d086605ba98a00e6711"
+        },
+        {
+          "case_id": "l2_scenario-05",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "5c089156c66d30e16279a4e903583ae1136541462b2107485ec24854ed2fdfde"
+        },
+        {
+          "case_id": "l2_scenario-06",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "7c85d25b5d3047ee7615ce2a3351e7c20ae599c6159f9b60a293113de992cd88"
+        },
+        {
+          "case_id": "l2_scenario-07",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "dd6cbadba8afb566969e1b6d860aa2be1b7f1cea9d352adf2a37ce9e9014134b"
+        },
+        {
+          "case_id": "l2_scenario-08",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "d184b3b2fbaee609b14b8252f6256e46b74b3d78b175bf4c64282b4a3f6d5ccd"
+        },
+        {
+          "case_id": "l2_scenario-09",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "53ec009af9e5d8d43ca5206486ebb4a588483d7cfdf75cabfe49ac3735a73be0"
+        },
+        {
+          "case_id": "l2_scenario-10",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "1e664a7c2aad3be17972e94cd4c5ffc0f77f6a208264bf30819e5717e1b378fa"
+        },
+        {
+          "case_id": "l2_scenario-11",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "0105648c461043369b046943273157e250ad8de4f7aeaef6a051e3512ba18ca6"
+        },
+        {
+          "case_id": "l2_scenario-12",
+          "dimension": "l2_scenario",
+          "canonical_case_sha256": "3481b03b68695b113299dafe47017fa4f90e1667c45d4e8b79d9703272b7444d"
+        },
+        {
+          "case_id": "l3_profile-01",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "9a1f9c75301794f9596af39c245ea4ea20bd38a6c9c205e7313a2cf4adc4ccf1"
+        },
+        {
+          "case_id": "l3_profile-02",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "17174c9e69f694c5f9cda989de1ddc19f5afccf17cd004e7b77eb96f9e91595b"
+        },
+        {
+          "case_id": "l3_profile-03",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "57b657e2bedfe1e2db82d0dbab3d2afe6bfdb5f11c7d83d6f29fb2cc08699797"
+        },
+        {
+          "case_id": "l3_profile-04",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "3d7a3e1f999d1e5c8faddacc64037331fcdcff1e1d144ee6dbbb23f4e77d199a"
+        },
+        {
+          "case_id": "l3_profile-05",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "01156d845b2e24d419c7cd5ed3990abea911842e74128c3d7e9bcaae596a6294"
+        },
+        {
+          "case_id": "l3_profile-06",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "7d16696bbfa4ed1a8ec599e09da1d34f25808bab8485ad7ea8b232dc49c5d65c"
+        },
+        {
+          "case_id": "l3_profile-07",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "a4d2129c4b6cee8c6b9b4ac98b3520ce3e64b063ea0fdd3264764c45305ee670"
+        },
+        {
+          "case_id": "l3_profile-08",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "9a692ecc5cccebbce5cd76fca451a421e59b5e54d3560f95eb796827c4d17209"
+        },
+        {
+          "case_id": "l3_profile-09",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "2f13351acfe0b9cb3c563d7f991607d5748ccb716302d512d379d50abc34ab88"
+        },
+        {
+          "case_id": "l3_profile-10",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "0fbf48f35a413fda2b1d0832c6f1fbf9e97a22704b61e467c5ddad36fee173f9"
+        },
+        {
+          "case_id": "l3_profile-11",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "3c7f6ab00ab4bd6ff113c0a67b8679f8b8932796e0930ce08e17173ae9789481"
+        },
+        {
+          "case_id": "l3_profile-12",
+          "dimension": "l3_profile",
+          "canonical_case_sha256": "3ddd51ed99917a6e78d88305cdf4fcabd1f5d4a2145834a1e563d57b84f50d6c"
+        },
+        {
+          "case_id": "skill_learning-01",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "e325f5c892446243def197da7b19cc7a6c4b8ede4c843fdd4f65d8119472f175"
+        },
+        {
+          "case_id": "skill_learning-02",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "5d965376b97f072dcd846618e0a8bb9170d0ca99cf1b3060f53702a192517bd8"
+        },
+        {
+          "case_id": "skill_learning-03",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "476968158a850e5507eeeea5ce4250ebafae3c59f2e45e0852cc302eb274f2eb"
+        },
+        {
+          "case_id": "skill_learning-04",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "74c3cd1b81f65319a6eae7a72ebb6073b31c436927ffee03d2be73361cc74435"
+        },
+        {
+          "case_id": "skill_learning-05",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "b989f2544172ec98d455d0b2c9e0f35671fde262235b60803362861ca8f2777a"
+        },
+        {
+          "case_id": "skill_learning-06",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "a523b67e0b13821902b3e87a452e8ac16fd41833f2505572f37ee014b669da9f"
+        },
+        {
+          "case_id": "skill_learning-07",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "3f643be00ed1977697520f5ba5eaece4c66d38940a97b4721ba724e69e331081"
+        },
+        {
+          "case_id": "skill_learning-08",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "badf8d9966f744ca09e9b2f6edd8c68bd1f42903558276bd4e2fef2cc77a41d3"
+        },
+        {
+          "case_id": "skill_learning-09",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "62bd941a4ba0b80018f24852a84f2581c97abb89afc2dd3cc0f27c8d51929b63"
+        },
+        {
+          "case_id": "skill_learning-10",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "c295455fd895985ab2d1eb15da949fddad8ec74725a31cf643b9845731f0dd6d"
+        },
+        {
+          "case_id": "skill_learning-11",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "8da80679986a2d2a08a1edad3cc5554e1d21b026b296a9591676535a72d7b1fe"
+        },
+        {
+          "case_id": "skill_learning-12",
+          "dimension": "skill_learning",
+          "canonical_case_sha256": "3131a42faf3a829f2745a87f169c40898095fe0b649a4046c4ea0dd65d200adf"
+        }
+      ]
+    }
+  ],
+  "total_unique_cases": 301,
+  "model_calls_performed": 0,
+  "database_access_performed": false
+}

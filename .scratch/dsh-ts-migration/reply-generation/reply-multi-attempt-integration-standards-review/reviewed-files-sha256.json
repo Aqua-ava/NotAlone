@@ -1,0 +1,81 @@
+{
+  "schema_version": "reply-multi-attempt-integration-standards-review-v1",
+  "review_scope": "冻结候选差分 Standards 轴；不重复审查已接收 reporter v3",
+  "read_scope_note": "架构/领域和官方资料仅按相关行段读取；SHA 对整份文件字节签名，不表示整读或执行。",
+  "candidate_directory": ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration",
+  "candidate_artifacts_sha256": {
+    "candidate.patch": "c2dc61e96cda6fed54dc79edfe83f220ffef16fe848317fe78307059d89c6f3d",
+    "candidate-sha256.json": "f653b88e33dacd2b2a57ad3f544c388e787b130ca0f3913f5d081979f5ae04b2",
+    "base-manifest.json": "5178dd268b7526368339b36d58fb2cae8be87a53a128fbf0b3c463cd8c5d41a2",
+    "contract.md": "cc02dab493ec50ddfb8277af130d1b7a7cfd4cfa36261e23e2c32ec60a924471",
+    "handoff.md": "56113232208bac42754ff4110ecd2ffe8be800838baf4b7ab43109b730e30041",
+    "apply-validation.json": "d22e8d044b2eab918ef5747ad5ce7d715e8cbb68f4691923f33bbbc34c8b9c19",
+    "public-boundary-check.json": "d692721cfa0460fda06bc6ae442ed70948ae8cb7f7014f3197ddf0e735b3e2b9",
+    "validation.jsonl": "1dd406939cd2af24fd936f814043a4ec5d641f14c93820b9e8c8d0645ad865bb",
+    "validation/final-diagnostic-affected-reporter-integration.log": "627697a431295f94245d88ea76a4546e52e78dd44fe1a1b9cb0e4904a1df7d62",
+    "validation/final-ordinary-integration.log": "b1e733aabaf60139923f94557acccd37dcb7aaed8d7335994b369ffcc649fdba",
+    "validation/final-two-overlay-strict.log": "b177e8ff0bc275fc0801a4efcb72e1a8faa23d53b5939684ba94f666a61b0ad2"
+  },
+  "formal_files_sha256": {
+    "backend-ts/experiments/README.md": "88439532180251373f12b2c1d5e609ebce0737d996a0839071d187191de009c9",
+    "backend-ts/experiments/reply-blind-packet.mjs": "549cba48bf31a31e01d826096b56a2a312302d38b3069fc82ec31b0750244ec6",
+    "backend-ts/src/reply-comparison-sources.ts": "ed2934772c823736a868e2cc309aa028fe4e2b721c24a11925679a14b9fcff2c",
+    "backend-ts/src/reply-comparison.ts": "4e82b803f0e0dda170ef79cf063f55232f2498fd5aeeffb28828edcc084609d6",
+    "backend-ts/test/fixtures/reply-comparison-material-manifest.json": "84b81a3255bffe8bc69da6f38c0dd79e1ba83510454ef8a9091c947b995b362b",
+    "backend-ts/test/fixtures/reply-comparison-multi-attempt-v4.json": "7ccaff5445d3ba12db5bd7483e6732ab88a5e54153ebba688260a8cdd4c334b6",
+    "backend-ts/test/reply-comparison-multi-attempt-integration.test.mjs": "1040bde904edffd1127ce396ab3ba61a95ae0889f1049758d2975e23580081e0",
+    "backend-ts/test/reply-comparison-multi-attempt-sources.test.mjs": "df5b1b44a45a5cd0ba4ab87725dc8963abad1fb4530ea790e6a4f1112465dd81",
+    "backend-ts/test/reply-comparison-source-callback.test.mjs": "26fcb10f30d83c49968d6de432e01bb1c73dbee835a32a1610b81c0a01d94ee4",
+    "backend-ts/test/reply-comparison-sources.test.mjs": "022c082ad6c29cdc2837b8f2d5d8cf413d230251a547424cf38598e6fe504645",
+    "backend-ts/test/reply-comparison.test.mjs": "b601e5a4b83a0c814a539bb5afe602fb59ec38f254427361f7a3fb6b4b4272b2"
+  },
+  "shared_base_files_sha256": {
+    "backend-ts/src/reply-comparison.ts": "70fc72f2efa90c67c687b58d042afa273d366594b467753dacc2781cad77fde2",
+    "backend-ts/src/reply-comparison-sources.ts": "27943b4f2c348a2a121e6337701eb5df186df51ddbdfd8becc9402691bd080e5",
+    "backend-ts/experiments/reply-blind-packet.mjs": "27ff23ebb0832160025d737a585827febd522a6f20ab06fefe8bd3ff90040fe4",
+    "backend-ts/experiments/README.md": "a978cde9f22186670575e07c1fce593f49edcdc69c0d7c1beb431251f316302a",
+    "backend-ts/test/reply-comparison.test.mjs": "6746abf0cdfd38aed3eaafd18935d7961bdeadd84b7d51f9f7aeef239e4a43bc",
+    "backend-ts/test/reply-comparison-sources.test.mjs": "b485f5505d28109357c7dd8ffc63dc41bd8badffe1e3253ca1e42da406bf6296"
+  },
+  "readonly_dependencies_sha256": {
+    "backend/tests/fixtures/fidelity/synthetic-v1.json": "088df6b1729c5b9445e1648e495e4bde005580eb838216e84d3ba569caebe607",
+    "backend-ts/experiments/build-reply-blind-packet.mjs": "43f465e73cbb3a4aafbfef69a727366b6ee816375e6f4040d183a2b44b90b605",
+    "backend-ts/package.json": "3a4499ee28b52842bff2c988eae4c9210959985dd5cafd2a2a5c3b3f981b7aad",
+    "backend-ts/src/reply-comparison-statistics.ts": "ef01fb4d98ad605dd1bf8334352966536b46d19d206adc140fe7b0e5ca6f38a2",
+    "backend-ts/src/reply-contract.ts": "252ce0c6ace5e37dd88481f83c0f9e50879a016be9176faa4a9497c07496e51b",
+    "backend-ts/test/fixtures/reply-blind-packet-pilot.json": "2c3c8d89f92efb4d49cf3fd348d271334115e92b1621da4768a557bb4df86c4f",
+    "backend-ts/test/fixtures/reply-comparison-source-pilot.json": "1101416c74380d8504f2b966e05a3eed5c71d94c5f05a0c8524ec1a4f039a8f6",
+    "backend-ts/test/reply-blind-packet.test.mjs": "9306ec5c36ac36a9e17447f2c25e93ed71f56c1c4628589bba16e78df06c86ed"
+  },
+  "context_files_sha256": {
+    "AGENTS.md": "7095e1a67b67fcaf115ad6f6554c698384961ab0b49da3625ce4a663676a6bd8",
+    "docs/agents/workflow.md": "634636a93c9d105744013535b21a7e6f613f3ad8100cbbf23ad1c599645a6a8e",
+    "docs/agents/engineering.md": "d20d6f95bb31e25190a12e6384b80d21db9763b9dfe56f96892f40792a165d13",
+    "docs/agents/domain.md": "3a11c0131b777915833a6ebe65614bba39ae0481df1eec8b6507905c1f24be26",
+    "docs/agents/issue-tracker.md": "9b2a56b84f85db6b54e413d285114f36ba86d6a9e35c9c510623aad836f87fa4",
+    "CONTEXT.md": "b1e4096fef6ded7b40812dbce82054aa2d319fa31bbb60061331cc7ac0686fa8",
+    "architecture/README.md": "08a61ac43feb3e9bc3efcc278391b7e71971e25805c4203b73a66464fa71d8e9",
+    "architecture/adr/102-dsh-typescript-backend-migration.md": "1d0eb2fdb0d4b8b33a38e35fce5f75da0165f5b45c67c06fdcc9a79ba1534997",
+    "architecture/current/core-flows.md": "9881e14d4fbd42ee2f9562638de544afb96e53ffe9c9015790ea3fc64597ff7f",
+    "architecture/current/privacy-deletion.md": "8afb76adcbb6c88b44923d971ef7d4021bbb07c9dac2c32b2cc10e1ae751fa0c",
+    "${AGENT_SKILLS}/code-review/SKILL.md": "09eb147f793e4647949edd32dbad278f0554dfb56e0d46b699cd4c2c55bf0357",
+    "backend-ts/package.json": "3a4499ee28b52842bff2c988eae4c9210959985dd5cafd2a2a5c3b3f981b7aad",
+    "backend-ts/pnpm-lock.yaml": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+    ".scratch/dsh-ts-migration/reply-generation/contract-audit.md": "4635851183b244f61889194b6176349654a5434ccdb3ff3dff8569b8a8f39f83",
+    ".scratch/dsh-ts-migration/baseline/dsh-official-evidence.md": "3321d710491d321231a9f748d6a739d5e35d34aa4a527fcff389877d01ab6652",
+    "${DSH_OFFICIAL_687f282}/packages/llm/llm/src/types.ts": "3ced1a7f722bdf2d8391fc660b0c19dd809d9c0f3f7eb74e8a128d0216b37585",
+    "${DSH_OFFICIAL_687f282}/packages/llm/llm-deepseek/src/adapter.ts": "40aa0cc4730d9dc31c66e1e62e84dcaba787b4f6fa956fd6c2185f799bb538c7"
+  },
+  "findings": {
+    "documented_standard_violations": 0,
+    "actionable_fowler_heuristics": 0
+  },
+  "execution": {
+    "new_test_runs": 0,
+    "new_http_requests": 0,
+    "new_pg_runs": 0,
+    "new_model_runs": 0,
+    "new_app_runs": 0,
+    "source_or_git_mutations": 0
+  }
+}

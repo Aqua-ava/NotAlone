@@ -1,0 +1,177 @@
+{
+  "review_axis": "Spec",
+  "findings": [],
+  "mode": "independent_static_review_no_execution",
+  "base_commit_supplied": "8de29d7210df33f5d5316883c97add347afff406",
+  "comparison_kind": "frozen_unapplied_candidate_patch_WIP_not_three_dot_commit_diff",
+  "checks": {
+    "candidate.patch": {
+      "sha256": "c2dc61e96cda6fed54dc79edfe83f220ffef16fe848317fe78307059d89c6f3d",
+      "matches": true
+    },
+    "candidate-sha256.json": {
+      "sha256": "f653b88e33dacd2b2a57ad3f544c388e787b130ca0f3913f5d081979f5ae04b2",
+      "matches": true
+    },
+    "base_files": {
+      "count": 6,
+      "mismatches": []
+    },
+    "formal_files_sha256": {
+      "count": 11,
+      "mismatches": []
+    },
+    "readonly_dependencies_sha256": {
+      "count": 8,
+      "mismatches": []
+    },
+    "formal_tree_exact": true,
+    "formal_tree_symlinks": [],
+    "in_memory_patch_reconstruction": {
+      "count": 11,
+      "exact_path_set": true,
+      "files": [
+        {
+          "path": "backend-ts/experiments/README.md",
+          "sha256": "88439532180251373f12b2c1d5e609ebce0737d996a0839071d187191de009c9",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/experiments/reply-blind-packet.mjs",
+          "sha256": "549cba48bf31a31e01d826096b56a2a312302d38b3069fc82ec31b0750244ec6",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/src/reply-comparison-sources.ts",
+          "sha256": "ed2934772c823736a868e2cc309aa028fe4e2b721c24a11925679a14b9fcff2c",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/src/reply-comparison.ts",
+          "sha256": "4e82b803f0e0dda170ef79cf063f55232f2498fd5aeeffb28828edcc084609d6",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/test/fixtures/reply-comparison-material-manifest.json",
+          "sha256": "84b81a3255bffe8bc69da6f38c0dd79e1ba83510454ef8a9091c947b995b362b",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/test/fixtures/reply-comparison-multi-attempt-v4.json",
+          "sha256": "7ccaff5445d3ba12db5bd7483e6732ab88a5e54153ebba688260a8cdd4c334b6",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/test/reply-comparison-multi-attempt-integration.test.mjs",
+          "sha256": "1040bde904edffd1127ce396ab3ba61a95ae0889f1049758d2975e23580081e0",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/test/reply-comparison-multi-attempt-sources.test.mjs",
+          "sha256": "df5b1b44a45a5cd0ba4ab87725dc8963abad1fb4530ea790e6a4f1112465dd81",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/test/reply-comparison-source-callback.test.mjs",
+          "sha256": "26fcb10f30d83c49968d6de432e01bb1c73dbee835a32a1610b81c0a01d94ee4",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/test/reply-comparison-sources.test.mjs",
+          "sha256": "022c082ad6c29cdc2837b8f2d5d8cf413d230251a547424cf38598e6fe504645",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        },
+        {
+          "path": "backend-ts/test/reply-comparison.test.mjs",
+          "sha256": "b601e5a4b83a0c814a539bb5afe602fb59ec38f254427361f7a3fb6b4b4272b2",
+          "matches_formal_tree": true,
+          "matches_manifest": true
+        }
+      ]
+    },
+    "v4_fixture": {
+      "capture_sha256": "87fdbede4768298a40ca6e5ac7f2d79dcff70057b077cec46e4a5fc1e08c8d98",
+      "capture_sha_matches": true,
+      "complete_records_deep_equal": true,
+      "record_count": 2,
+      "new_execution": false
+    },
+    "frozen_material_bytes_equal": true,
+    "parent_manifests": {
+      "reporter_v3": {
+        "manifest_matches": true,
+        "delivery_matches": true
+      },
+      "source_v2": {
+        "manifest_matches": true,
+        "delivery_matches": true
+      },
+      "formal_fixtures": {
+        "manifest_matches": true,
+        "delivery_matches": true
+      }
+    },
+    "peer_formal_files_exact": true,
+    "source_v2_body_unchanged": true,
+    "existing_tests_only_resource_path": {
+      "backend-ts/test/reply-comparison.test.mjs": true,
+      "backend-ts/test/reply-comparison-sources.test.mjs": true
+    }
+  },
+  "read_inputs_sha256": {
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/candidate.patch": "c2dc61e96cda6fed54dc79edfe83f220ffef16fe848317fe78307059d89c6f3d",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/candidate-sha256.json": "f653b88e33dacd2b2a57ad3f544c388e787b130ca0f3913f5d081979f5ae04b2",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/contract.md": "cc02dab493ec50ddfb8277af130d1b7a7cfd4cfa36261e23e2c32ec60a924471",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-fix-v2/contract.md": "157f6a4871412fb6166ba052acd819b8708716b5874884d33b5e5481d410b311",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-fix-v2/handoff.md": "c2827ed3e5caf3cc1ae53c84c3c8d5a49592dd2022b7c18523f88a1697a1f3c0",
+    ".scratch/dsh-ts-migration/reply-generation/reply-source-formal-fixture-promotion/handoff.md": "35341a427943a7fde2dc78689800c0019174ad152ce8358b676d56fb8357ef1f",
+    ".scratch/dsh-ts-migration/reply-generation/reply-vendor-first-pilot/priority.md": "8070eb8b5cee08dce35a8ff5241130800f86eae0f61fa76e0247cdca1f9b4c6e",
+    ".scratch/dsh-ts-migration/spec.md": "c3bfd92f261a018862ec648c86181ed2a66e4f64e3d1237788a35a94f6b0ca90",
+    ".scratch/dsh-ts-migration/issues/05-traceable-replies.md": "274b32a835981923d7174bc10877e906a6cd2055327c6b20ebcae9a7411506c0",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/experiments/README.md": "88439532180251373f12b2c1d5e609ebce0737d996a0839071d187191de009c9",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/experiments/reply-blind-packet.mjs": "549cba48bf31a31e01d826096b56a2a312302d38b3069fc82ec31b0750244ec6",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/src/reply-comparison-sources.ts": "ed2934772c823736a868e2cc309aa028fe4e2b721c24a11925679a14b9fcff2c",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/src/reply-comparison.ts": "4e82b803f0e0dda170ef79cf063f55232f2498fd5aeeffb28828edcc084609d6",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/test/fixtures/reply-comparison-material-manifest.json": "84b81a3255bffe8bc69da6f38c0dd79e1ba83510454ef8a9091c947b995b362b",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/test/fixtures/reply-comparison-multi-attempt-v4.json": "7ccaff5445d3ba12db5bd7483e6732ab88a5e54153ebba688260a8cdd4c334b6",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/test/reply-comparison-multi-attempt-integration.test.mjs": "1040bde904edffd1127ce396ab3ba61a95ae0889f1049758d2975e23580081e0",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/test/reply-comparison-multi-attempt-sources.test.mjs": "df5b1b44a45a5cd0ba4ab87725dc8963abad1fb4530ea790e6a4f1112465dd81",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/test/reply-comparison-source-callback.test.mjs": "26fcb10f30d83c49968d6de432e01bb1c73dbee835a32a1610b81c0a01d94ee4",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/test/reply-comparison-sources.test.mjs": "022c082ad6c29cdc2837b8f2d5d8cf413d230251a547424cf38598e6fe504645",
+    ".scratch/dsh-ts-migration/reply-generation/reply-multi-attempt-source-integration/formal-tree/backend-ts/test/reply-comparison.test.mjs": "b601e5a4b83a0c814a539bb5afe602fb59ec38f254427361f7a3fb6b4b4272b2"
+  },
+  "official_boundary": {
+    "locked_version": "0.2.1-rc.2",
+    "locked_commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+    "no_direct_dsh_api_change": true,
+    "local_archive_not_independent_commit_authentication": true,
+    "read_files_sha256": {
+      "/tmp/notalone-dsh-official-687f282/package.json": "12bb41cd8212021a784b33a20c2b84372189a9505b42081d5e3869e21ff5cffc",
+      "/tmp/notalone-dsh-official-687f282/packages/core/agent/README.md": "652a3283721fb5b52f0671c43d458b04c039d5bfe7e900894cc0f64229b68641",
+      "/tmp/notalone-dsh-official-687f282/packages/llm/llm-deepseek/src/adapter.ts": "40aa0cc4730d9dc31c66e1e62e84dcaba787b4f6fa956fd6c2185f799bb538c7"
+    },
+    "reason": "报告/来源/盲包为离线普通模块，不改官方profile、Agent/SDK调用或生命周期；本轮未联网。"
+  },
+  "execution": {
+    "product_tests": 0,
+    "typechecks": 0,
+    "network": 0,
+    "model": 0,
+    "pg": 0,
+    "app": 0,
+    "wechat": 0,
+    "git": 0,
+    "installation": 0,
+    "shared_writes": 0
+  }
+}

@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {buildReplyComparisonReport} from '../src/reply-comparison.ts';
 const canonical=value=>value===null||typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?'['+value.map(canonical).join(',')+']':'{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}';
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:canonical(value)).digest('hex');
-const manifestText=await readFile(new URL('../../.scratch/dsh-ts-migration/baseline/material-manifest.json',import.meta.url),'utf8');
+const manifestText=await readFile(new URL('./fixtures/reply-comparison-material-manifest.json',import.meta.url),'utf8');
 const datasetText=await readFile(new URL('../../backend/tests/fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8');
 const originalPilot=JSON.parse(await readFile(new URL('./fixtures/reply-comparison-source-pilot.json',import.meta.url),'utf8'));
 function reportRun(collection){

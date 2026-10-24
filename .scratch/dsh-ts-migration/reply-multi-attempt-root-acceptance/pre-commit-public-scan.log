@@ -1,0 +1,19 @@
+{
+  "commit": "8de29d7210df33f5d5316883c97add347afff406",
+  "historicalBlobs": 14708,
+  "historicalCommits": 2219,
+  "currentFiles": 15545,
+  "issues": 2,
+  "locations": [
+    {
+      "location": ".scratch/dsh-ts-migration/parallel-root-coordination/first-real-pilot-authorization.json",
+      "line": 22,
+      "kind": "内部会话标识"
+    },
+    {
+      "location": ".scratch/dsh-ts-migration/reply-generation/reply-vendor-first-pilot/plan-check.json",
+      "line": 8,
+      "kind": "内部会话标识"
+    }
+  ]
+}

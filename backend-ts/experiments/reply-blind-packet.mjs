@@ -1,6 +1,6 @@
 /** 只处理显式提供的合成采集；哈希只能证明内部一致性，不能认证历史采集。 */
 import {createHash,createHmac} from 'node:crypto';
-import {auditReplyRuntimeSources} from '../src/reply-comparison-sources.ts';
+import {auditReplyRuntimeSources,replyRuntimeSourceSubjectBinding} from '../src/reply-comparison-sources.ts';
 const INPUT=['current_intent','available_facts','unknowns','allowed_changes','current_message','recent_context'];
 const SOURCE_FIELDS=['evidence_id','kind','factual_role','text','status','selection_reason','timing','event','conditions','evolution','valid_at','invalid_at','text_sha256','case_fields','origin','source_ids','not_confirmed_memory'];
 const TIME_FIELDS=['recorded_at','source_started_at','source_ended_at','source_time_complete','current_status','current_status_reason'];
@@ -44,7 +44,8 @@ function protectedIdentities(records){
  };
  visit(records,'records');return [...found];
 }
-function sourcesFor(row){
+function sourcesFor(row,audit,binding){
+ if(audit.attempt_count!==1&&(audit.attempt_count!==2||audit.contract_scope!=='constant_workspace_noSkill_read_denied_v1'||!binding?.runtime_source_proof_sha256||binding.runtime_source_proof_sha256!==audit.derived_proof?.sha256))fail('constant_multi_sources_required');
  return row.runtime_sources.attempts[0].catalog.entries.map((source,index)=>{
   exactKeys(source,SOURCE_FIELDS,'source_fields_unknown');
   exactKeys(source.timing,TIME_FIELDS,'source_time_fields_unknown');
@@ -75,10 +76,11 @@ export function createBlindPacket({capture,dataset,seed}){
   if(row.output.basis_changes!==undefined&&(!Array.isArray(row.output.basis_changes)||row.output.basis_changes.length!==0))fail('basis_changes_semantics_unsupported');
   const audit=auditReplyRuntimeSources(member,row,row.output);
   if(audit.status!=='verified'||audit.output_scope!=='complete_http_result')fail('complete_source_audit_required:'+audit.reason);
+  const sourceSubject=replyRuntimeSourceSubjectBinding(audit);if(!sourceSubject)fail('complete_source_subject_required');
   if(requestIds.has(audit.request_id)||audit.attempt_ids.some(id=>attemptIds.has(id)))fail('cross_record_identity_reused');
   requestIds.add(audit.request_id);audit.attempt_ids.forEach(id=>attemptIds.add(id));
   if(row.deterministic_checks?.status!=='passed'||row.deterministic_checks.output_sha256!==digest(row.output)||row.deterministic_checks.source_binding_sha256!==row.input_sha256||row.deterministic_checks.runtime_sources_sha256!==audit.binding_sha256)fail('deterministic_binding');
-  const sources=sourcesFor(row),originalSources=row.runtime_sources.attempts[0].catalog.entries;
+  const sources=sourcesFor(row,audit,sourceSubject),originalSources=row.runtime_sources.attempts[0].catalog.entries;
   const sourceMap=new Map(originalSources.map((source,index)=>[source.evidence_id,sources[index].source_id]));
   const candidateMap=[],messageMap=[];
   const candidates=row.output.candidates.map((candidate,index)=>{
@@ -93,13 +95,13 @@ export function createBlindPacket({capture,dataset,seed}){
   const first=secret(['label',pair]).slice(0,8),aArm=parseInt(first,16)%2===0?'old':'new';
   const semantic={pair_id,blind_id,label:row.arm===aArm?'A':'B',input:structuredClone(input),case_constraints:{forbidden_additions:structuredClone(member.forbidden_additions??[])},candidates,sources};
   const raw_output_sha256=digest(row.output);
-  const review_subject_sha256=digest({semantic,raw_output_sha256,runtime_sources_sha256:audit.binding_sha256,case_sha256:row.case_sha256,input_sha256:row.input_sha256});
+  const review_subject_sha256=digest({semantic,raw_output_sha256,...sourceSubject,case_sha256:row.case_sha256,input_sha256:row.input_sha256});
   const visible={...semantic,review_subject_sha256};
   // 任一记录的身份都不能经当前输入、候选或来源原文泄漏；命中时拒绝，不删改原文。
   const semanticText=canonical(semantic);
   if(rawIdentities.some(id=>semanticText.includes(id)))fail('raw_identity_in_semantic_text');
-  const reporter_subject_sha256=digest({blind_id:row.blind_id,case_sha256:row.case_sha256,input_sha256:row.input_sha256,output:row.output,runtime_sources_sha256:audit.binding_sha256,request_sha256:row.request_sha256});
-  return {sort:secret(['shuffle',key]),visible,binding:{blind_id,pair_id,label:visible.label,original_blind_id:row.blind_id,case_id:row.case_id,repeat:row.repeat,arm:row.arm,case_sha256:row.case_sha256,input_sha256:row.input_sha256,raw_output_sha256,runtime_sources_sha256:audit.binding_sha256,request_sha256:row.request_sha256,reporter_subject_sha256,review_subject_sha256,visible_sha256:digest(visible),aliases:{candidates:candidateMap,messages:messageMap,sources:[...sourceMap].map(([original,alias])=>({alias,original}))}}};
+  const reporter_subject_sha256=digest({blind_id:row.blind_id,case_sha256:row.case_sha256,input_sha256:row.input_sha256,output:row.output,...sourceSubject,request_sha256:row.request_sha256});
+  return {sort:secret(['shuffle',key]),visible,binding:{blind_id,pair_id,label:visible.label,original_blind_id:row.blind_id,case_id:row.case_id,repeat:row.repeat,arm:row.arm,case_sha256:row.case_sha256,input_sha256:row.input_sha256,raw_output_sha256,...sourceSubject,request_sha256:row.request_sha256,reporter_subject_sha256,review_subject_sha256,visible_sha256:digest(visible),aliases:{candidates:candidateMap,messages:messageMap,sources:[...sourceMap].map(([original,alias])=>({alias,original}))}}};
  });
  for(const arms of pairs.values())if(arms.length!==2||new Set(arms).size!==2)fail('complete_pair_required');
  prepared.sort((a,b)=>a.sort.localeCompare(b.sort));

@@ -1,0 +1,19 @@
+{
+  "stage": "six_affected_modules",
+  "exit_code": 0,
+  "duration_ms": 17539.286,
+  "raw_sha256": "49b18405f01996df89220ef72d82978495ea26145420e8a230fa3f5ab14955cf",
+  "public_sha256": "49b18405f01996df89220ef72d82978495ea26145420e8a230fa3f5ab14955cf",
+  "command": [
+    "${HOME}/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "--experimental-transform-types",
+    "--test",
+    "--test-reporter=tap",
+    "backend-ts/test/reply-comparison-multi-attempt-integration.test.mjs",
+    "backend-ts/test/reply-comparison-multi-attempt-sources.test.mjs",
+    "backend-ts/test/reply-comparison-source-callback.test.mjs",
+    "backend-ts/test/reply-comparison-sources.test.mjs",
+    "backend-ts/test/reply-comparison.test.mjs",
+    "backend-ts/test/reply-blind-packet.test.mjs"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "stage": "actual_typescript_strict_noemit",
+  "compiler_version": "7.0.2",
+  "exit_code": 0,
+  "duration_ms": 176.601,
+  "diagnostics_output_bytes": 0,
+  "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "command": [
+    "${HOME}/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "backend-ts/node_modules/typescript/bin/tsc",
+    "--noEmit",
+    "-p",
+    "backend-ts/tsconfig.json"
+  ]
+}

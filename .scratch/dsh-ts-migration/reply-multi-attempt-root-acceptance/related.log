@@ -1,0 +1,1542 @@
+TAP version 13
+# (node:75119) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 实际两臂完整采集可交付风险、分段及引用原文，且别名不暴露旧新实现
+ok 1 - 实际两臂完整采集可交付风险、分段及引用原文，且别名不暴露旧新实现
+  ---
+  duration_ms: 19.273125
+  type: 'test'
+  ...
+# Subtest: 同组重复候选ID不能经中性别名掩盖
+ok 2 - 同组重复候选ID不能经中性别名掩盖
+  ---
+  duration_ms: 1.445125
+  type: 'test'
+  ...
+# Subtest: 整capture身份：本联系人ID不能从候选依据进入可见包
+ok 3 - 整capture身份：本联系人ID不能从候选依据进入可见包
+  ---
+  duration_ms: 2.825833
+  type: 'test'
+  ...
+# Subtest: 整capture身份：原blind_id不能从候选依据进入可见包
+ok 4 - 整capture身份：原blind_id不能从候选依据进入可见包
+  ---
+  duration_ms: 2.966959
+  type: 'test'
+  ...
+# Subtest: 整capture身份：另一臂请求ID不能从当前候选依据进入可见包
+ok 5 - 整capture身份：另一臂请求ID不能从当前候选依据进入可见包
+  ---
+  duration_ms: 2.388542
+  type: 'test'
+  ...
+# Subtest: 整capture身份：普通UUID形状的非身份正文原样保留
+ok 6 - 整capture身份：普通UUID形状的非身份正文原样保留
+  ---
+  duration_ms: 3.6635
+  type: 'test'
+  ...
+# Subtest: 整capture身份：跨记录owner、binding、attempt及已声明permit和ledger身份都受保护
+ok 7 - 整capture身份：跨记录owner、binding、attempt及已声明permit和ledger身份都受保护
+  ---
+  duration_ms: 9.739708
+  type: 'test'
+  ...
+# Subtest: 整capture身份：来源选择说明含另一记录身份时也拒绝，完整来源审计仍自洽
+ok 8 - 整capture身份：来源选择说明含另一记录身份时也拒绝，完整来源审计仍自洽
+  ---
+  duration_ms: 2.99375
+  type: 'test'
+  ...
+# Subtest: SDK身份：Anthropic content tool_use.id不能进入依据，自洽来源审计仍verified
+ok 9 - SDK身份：Anthropic content tool_use.id不能进入依据，自洽来源审计仍verified
+  ---
+  duration_ms: 5.260916
+  type: 'test'
+  ...
+# Subtest: SDK身份：Anthropic tool_result.tool_use_id不能进入依据，自洽来源审计仍verified
+ok 10 - SDK身份：Anthropic tool_result.tool_use_id不能进入依据，自洽来源审计仍verified
+  ---
+  duration_ms: 8.869834
+  type: 'test'
+  ...
+# Subtest: SDK身份：OpenAI tool_calls.id与tool_call_id对称拒绝，已有调用保护不回退
+ok 11 - SDK身份：OpenAI tool_calls.id与tool_call_id对称拒绝，已有调用保护不回退
+  ---
+  duration_ms: 5.7305
+  type: 'test'
+  ...
+# Subtest: SDK响应身份：已记录request字段及响应header请求ID不能进入依据
+ok 12 - SDK响应身份：已记录request字段及响应header请求ID不能进入依据
+  ---
+  duration_ms: 8.509209
+  type: 'test'
+  ...
+# Subtest: SDK响应身份：Anthropic与OpenAI类型明确的响应envelope.id不能跨记录进入依据
+ok 13 - SDK响应身份：Anthropic与OpenAI类型明确的响应envelope.id不能跨记录进入依据
+  ---
+  duration_ms: 6.052875
+  type: 'test'
+  ...
+# Subtest: SDK身份：真实声明不外露时合法，普通术语、非身份UUID及正文JSON保持原文
+ok 14 - SDK身份：真实声明不外露时合法，普通术语、非身份UUID及正文JSON保持原文
+  ---
+  duration_ms: 3.593416
+  type: 'test'
+  ...
+# Subtest: 两臂都可呈现多候选、有序分段、全部风险提示及引用，不截成四字段
+ok 15 - 两臂都可呈现多候选、有序分段、全部风险提示及引用，不截成四字段
+  ---
+  duration_ms: 6.561708
+  type: 'test'
+  ...
+# Subtest: 遗漏风险、分段、来源原文或插入运行身份的可见包不能沿用绑定
+ok 16 - 遗漏风险、分段、来源原文或插入运行身份的可见包不能沿用绑定
+  ---
+  duration_ms: 17.332875
+  type: 'test'
+  ...
+# Subtest: 原始DTO语义变化及隐藏预算元数据变化都更新评审对象，旧包不可复用
+ok 17 - 原始DTO语义变化及隐藏预算元数据变化都更新评审对象，旧包不可复用
+  ---
+  duration_ms: 16.533375
+  type: 'test'
+  ...
+# Subtest: 未知或未呈现的额外语义必须明确拒绝，不能静默截断
+ok 18 - 未知或未呈现的额外语义必须明确拒绝，不能静默截断
+  ---
+  duration_ms: 4.2465
+  type: 'test'
+  ...
+# Subtest: 重复消息、缺失引用及未绑定来源不能作为正常评审项
+ok 19 - 重复消息、缺失引用及未绑定来源不能作为正常评审项
+  ---
+  duration_ms: 2.663125
+  type: 'test'
+  ...
+# Subtest: 不完整成对、重复原始blindID及失败记录会整体拒绝而非缩分母
+ok 20 - 不完整成对、重复原始blindID及失败记录会整体拒绝而非缩分母
+  ---
+  duration_ms: 2.257375
+  type: 'test'
+  ...
+# Subtest: 重排采集数组不泄露原执行顺序；私密种子可重现中性顺序
+ok 21 - 重排采集数组不泄露原执行顺序；私密种子可重现中性顺序
+  ---
+  duration_ms: 9.64225
+  type: 'test'
+  ...
+# Subtest: 原样接收评审者的未知评分，用私有清单恢复reporter绑定而不编造身份或分数
+ok 22 - 原样接收评审者的未知评分，用私有清单恢复reporter绑定而不编造身份或分数
+  ---
+  duration_ms: 11.62025
+  type: 'test'
+  ...
+# Subtest: 报告器subject与独立Python规范JSON计算的冻结结果一致
+ok 23 - 报告器subject与独立Python规范JSON计算的冻结结果一致
+  ---
+  duration_ms: 2.962833
+  type: 'test'
+  ...
+# Subtest: 即使动态来源审计自洽，未识别来源语义仍须拒绝而非从展示静默删除
+ok 24 - 即使动态来源审计自洽，未识别来源语义仍须拒绝而非从展示静默删除
+  ---
+  duration_ms: 1.781166
+  type: 'test'
+  ...
+# Subtest: 完整自洽摘要不能使重复来源ID变成合法来源
+ok 25 - 完整自洽摘要不能使重复来源ID变成合法来源
+  ---
+  duration_ms: 0.902417
+  type: 'test'
+  ...
+# Subtest: 消息ID在不同候选内复用保留合法分组语义，私有别名映射按候选区分
+ok 26 - 消息ID在不同候选内复用保留合法分组语义，私有别名映射按候选区分
+  ---
+  duration_ms: 3.95975
+  type: 'test'
+  ...
+# (node:75120) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 多attempt接线：合法callback时间变化必须改变盲评和报告subject，原runtime摘要不变
+ok 27 - 多attempt接线：合法callback时间变化必须改变盲评和报告subject，原runtime摘要不变
+  ---
+  duration_ms: 41.476
+  type: 'test'
+  ...
+# Subtest: 多attempt接线：两独立合成评审绑定后可报告，94缺失仍未定且不发明单请求hash
+ok 28 - 多attempt接线：两独立合成评审绑定后可报告，94缺失仍未定且不发明单请求hash
+  ---
+  duration_ms: 67.490833
+  type: 'test'
+  ...
+# Subtest: 多attempt接线：callback变化后的新包不能复用旧盲评或旧reporter评审
+ok 29 - 多attempt接线：callback变化后的新包不能复用旧盲评或旧reporter评审
+  ---
+  duration_ms: 96.359166
+  type: 'test'
+  ...
+# Subtest: 多attempt接线：公共subject接缝只接完整匹配的已核proof及有序bundle
+ok 30 - 多attempt接线：公共subject接缝只接完整匹配的已核proof及有序bundle
+  ---
+  duration_ms: 3.631709
+  type: 'test'
+  ...
+# Subtest: 多attempt接线：未核验的拒绝scope及其它工具结果不能借首目录通过或豁免未知
+ok 31 - 多attempt接线：未核验的拒绝scope及其它工具结果不能借首目录通过或豁免未知
+  ---
+  duration_ms: 13.075083
+  type: 'test'
+  ...
+# Subtest: 多attempt接线：单臂和缺原来源均保持未知，不能从其它原始观察猜证明
+ok 32 - 多attempt接线：单臂和缺原来源均保持未知，不能从其它原始观察猜证明
+  ---
+  duration_ms: 13.009541
+  type: 'test'
+  ...
+# Subtest: 多attempt接线：原single attempt公共片段与盲评及reporter公式保持原样
+ok 33 - 多attempt接线：原single attempt公共片段与盲评及reporter公式保持原样
+  ---
+  duration_ms: 6.77325
+  type: 'test'
+  ...
+# Subtest: 多attempt诊断：完整proof绑定全部请求模式，不额外造singlehash未知且缺点阶段仍未知
+ok 34 - 多attempt诊断：完整proof绑定全部请求模式，不额外造singlehash未知且缺点阶段仍未知
+  ---
+  duration_ms: 53.581208
+  type: 'test'
+  ...
+# Subtest: 多attempt诊断：缺失模式不猜默认值，未核proof不借原请求模式，混合配置仍拒绝
+ok 35 - 多attempt诊断：缺失模式不猜默认值，未核proof不借原请求模式，混合配置仍拒绝
+  ---
+  duration_ms: 18.178791
+  type: 'test'
+  ...
+# (node:75121) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 正式v4来源回放 / old
+ok 36 - 正式v4来源回放 / old
+  ---
+  duration_ms: 12.040417
+  type: 'test'
+  ...
+# Subtest: 正式v4来源回放 / new
+ok 37 - 正式v4来源回放 / new
+  ---
+  duration_ms: 4.70375
+  type: 'test'
+  ...
+# Subtest: v4两臂两attempt恒定workspace来源及真实read_file拒绝可核验，原capture不变
+ok 38 - v4两臂两attempt恒定workspace来源及真实read_file拒绝可核验，原capture不变
+  ---
+  duration_ms: 8.49475
+  type: 'test'
+  ...
+# Subtest: 第二attempt范围改变，即使catalog重签也拒绝 / new
+ok 39 - 第二attempt范围改变，即使catalog重签也拒绝 / new
+  ---
+  duration_ms: 2.16125
+  type: 'test'
+  ...
+# Subtest: 第二attempt范围改变，即使catalog重签也拒绝 / old
+ok 40 - 第二attempt范围改变，即使catalog重签也拒绝 / old
+  ---
+  duration_ms: 1.811208
+  type: 'test'
+  ...
+# Subtest: 第二attempt原请求hash损坏拒绝 / new
+ok 41 - 第二attempt原请求hash损坏拒绝 / new
+  ---
+  duration_ms: 0.881041
+  type: 'test'
+  ...
+# Subtest: 第二attempt原请求hash损坏拒绝 / old
+ok 42 - 第二attempt原请求hash损坏拒绝 / old
+  ---
+  duration_ms: 2.514084
+  type: 'test'
+  ...
+# Subtest: 第二attempt输入改写并重签仍拒绝 / new
+ok 43 - 第二attempt输入改写并重签仍拒绝 / new
+  ---
+  duration_ms: 4.737125
+  type: 'test'
+  ...
+# Subtest: 第二attempt输入改写并重签仍拒绝 / old
+ok 44 - 第二attempt输入改写并重签仍拒绝 / old
+  ---
+  duration_ms: 2.180833
+  type: 'test'
+  ...
+# Subtest: 第二attempt引用身份全自洽变更不得并集或只取首轮 / new
+ok 45 - 第二attempt引用身份全自洽变更不得并集或只取首轮 / new
+  ---
+  duration_ms: 2.21175
+  type: 'test'
+  ...
+# Subtest: 第二attempt引用身份全自洽变更不得并集或只取首轮 / old
+ok 46 - 第二attempt引用身份全自洽变更不得并集或只取首轮 / old
+  ---
+  duration_ms: 2.441916
+  type: 'test'
+  ...
+# Subtest: 第二attempt来源正文改变并重签拒绝 / new
+ok 47 - 第二attempt来源正文改变并重签拒绝 / new
+  ---
+  duration_ms: 2.49125
+  type: 'test'
+  ...
+# Subtest: 第二attempt来源正文改变并重签拒绝 / old
+ok 48 - 第二attempt来源正文改变并重签拒绝 / old
+  ---
+  duration_ms: 2.135
+  type: 'test'
+  ...
+# Subtest: 第二attempt来源状态失效不能复活 / new
+ok 49 - 第二attempt来源状态失效不能复活 / new
+  ---
+  duration_ms: 1.971667
+  type: 'test'
+  ...
+# Subtest: 第二attempt来源状态失效不能复活 / old
+ok 50 - 第二attempt来源状态失效不能复活 / old
+  ---
+  duration_ms: 2.307042
+  type: 'test'
+  ...
+# Subtest: 第二attempt多出有效来源拒绝 / new
+ok 51 - 第二attempt多出有效来源拒绝 / new
+  ---
+  duration_ms: 2.302125
+  type: 'test'
+  ...
+# Subtest: 第二attempt多出有效来源拒绝 / old
+ok 52 - 第二attempt多出有效来源拒绝 / old
+  ---
+  duration_ms: 2.062833
+  type: 'test'
+  ...
+# Subtest: 第二attempt catalog在响应后采集拒绝 / new
+ok 53 - 第二attempt catalog在响应后采集拒绝 / new
+  ---
+  duration_ms: 2.722792
+  type: 'test'
+  ...
+# Subtest: 第二attempt catalog在响应后采集拒绝 / old
+ok 54 - 第二attempt catalog在响应后采集拒绝 / old
+  ---
+  duration_ms: 2.252375
+  type: 'test'
+  ...
+# Subtest: 第二attempt早于前次响应拒绝 / new
+ok 55 - 第二attempt早于前次响应拒绝 / new
+  ---
+  duration_ms: 1.919209
+  type: 'test'
+  ...
+# Subtest: 第二attempt早于前次响应拒绝 / old
+ok 56 - 第二attempt早于前次响应拒绝 / old
+  ---
+  duration_ms: 1.773625
+  type: 'test'
+  ...
+# Subtest: 调换完整attempt及trace顺序拒绝 / new
+ok 57 - 调换完整attempt及trace顺序拒绝 / new
+  ---
+  duration_ms: 1.8645
+  type: 'test'
+  ...
+# Subtest: 调换完整attempt及trace顺序拒绝 / old
+ok 58 - 调换完整attempt及trace顺序拒绝 / old
+  ---
+  duration_ms: 2.081125
+  type: 'test'
+  ...
+# Subtest: 两次attempt重复身份拒绝 / new
+ok 59 - 两次attempt重复身份拒绝 / new
+  ---
+  duration_ms: 1.826875
+  type: 'test'
+  ...
+# Subtest: 两次attempt重复身份拒绝 / old
+ok 60 - 两次attempt重复身份拒绝 / old
+  ---
+  duration_ms: 2.157667
+  type: 'test'
+  ...
+# Subtest: PG锚不能改成另一次catalog / new
+ok 61 - PG锚不能改成另一次catalog / new
+  ---
+  duration_ms: 2.580125
+  type: 'test'
+  ...
+# Subtest: PG锚不能改成另一次catalog / old
+ok 62 - PG锚不能改成另一次catalog / old
+  ---
+  duration_ms: 4.036584
+  type: 'test'
+  ...
+# Subtest: PG锚必须在原catalog列表 / new
+ok 63 - PG锚必须在原catalog列表 / new
+  ---
+  duration_ms: 2.139334
+  type: 'test'
+  ...
+# Subtest: PG锚必须在原catalog列表 / old
+ok 64 - PG锚必须在原catalog列表 / old
+  ---
+  duration_ms: 2.63425
+  type: 'test'
+  ...
+# Subtest: PG快照正文重签仍不得背离恒定来源 / new
+ok 65 - PG快照正文重签仍不得背离恒定来源 / new
+  ---
+  duration_ms: 2.876625
+  type: 'test'
+  ...
+# Subtest: PG快照正文重签仍不得背离恒定来源 / old
+ok 66 - PG快照正文重签仍不得背离恒定来源 / old
+  ---
+  duration_ms: 3.321958
+  type: 'test'
+  ...
+# Subtest: 多attempt不能伪填最后一次single请求hash / new
+ok 67 - 多attempt不能伪填最后一次single请求hash / new
+  ---
+  duration_ms: 0.236125
+  type: 'test'
+  ...
+# Subtest: 多attempt不能伪填最后一次single请求hash / old
+ok 68 - 多attempt不能伪填最后一次single请求hash / old
+  ---
+  duration_ms: 0.22725
+  type: 'test'
+  ...
+# Subtest: 取消终态不能借成功持久快照通过 / new
+ok 69 - 取消终态不能借成功持久快照通过 / new
+  ---
+  duration_ms: 0.251583
+  type: 'test'
+  ...
+# Subtest: 取消终态不能借成功持久快照通过 / old
+ok 70 - 取消终态不能借成功持久快照通过 / old
+  ---
+  duration_ms: 0.239208
+  type: 'test'
+  ...
+# Subtest: 缺失PG完整输出仍未定 / new
+ok 71 - 缺失PG完整输出仍未定 / new
+  ---
+  duration_ms: 2.745042
+  type: 'test'
+  ...
+# Subtest: 缺失PG完整输出仍未定 / old
+ok 72 - 缺失PG完整输出仍未定 / old
+  ---
+  duration_ms: 2.393042
+  type: 'test'
+  ...
+# Subtest: 物理trace请求hash种类必须与对应原请求一致 / new
+ok 73 - 物理trace请求hash种类必须与对应原请求一致 / new
+  ---
+  duration_ms: 1.769833
+  type: 'test'
+  ...
+# Subtest: 物理trace请求hash种类必须与对应原请求一致 / old
+ok 74 - 物理trace请求hash种类必须与对应原请求一致 / old
+  ---
+  duration_ms: 1.76375
+  type: 'test'
+  ...
+# Subtest: 错误tool结果call ID即使wire重签也拒绝 / new
+ok 75 - 错误tool结果call ID即使wire重签也拒绝 / new
+  ---
+  duration_ms: 1.798791
+  type: 'test'
+  ...
+# Subtest: 错误tool结果call ID即使wire重签也拒绝 / old
+ok 76 - 错误tool结果call ID即使wire重签也拒绝 / old
+  ---
+  duration_ms: 1.69875
+  type: 'test'
+  ...
+# Subtest: 额外tool结果不得压成一条成功过渡 / new
+ok 77 - 额外tool结果不得压成一条成功过渡 / new
+  ---
+  duration_ms: 1.551
+  type: 'test'
+  ...
+# Subtest: 额外tool结果不得压成一条成功过渡 / old
+ok 78 - 额外tool结果不得压成一条成功过渡 / old
+  ---
+  duration_ms: 1.592625
+  type: 'test'
+  ...
+# Subtest: 成功读取不能把拒绝观察当来源证明 / new
+ok 79 - 成功读取不能把拒绝观察当来源证明 / new
+  ---
+  duration_ms: 1.740458
+  type: 'test'
+  ...
+# Subtest: 成功读取不能把拒绝观察当来源证明 / old
+ok 80 - 成功读取不能把拒绝观察当来源证明 / old
+  ---
+  duration_ms: 1.667875
+  type: 'test'
+  ...
+# Subtest: 未知工具即使伪用相同拒绝文字仍未定 / new
+ok 81 - 未知工具即使伪用相同拒绝文字仍未定 / new
+  ---
+  duration_ms: 1.641375
+  type: 'test'
+  ...
+# Subtest: 未知工具即使伪用相同拒绝文字仍未定 / old
+ok 82 - 未知工具即使伪用相同拒绝文字仍未定 / old
+  ---
+  duration_ms: 1.802541
+  type: 'test'
+  ...
+# Subtest: 非法工具参数不得借无新增来源通过 / new
+ok 83 - 非法工具参数不得借无新增来源通过 / new
+  ---
+  duration_ms: 1.456792
+  type: 'test'
+  ...
+# Subtest: 非法工具参数不得借无新增来源通过 / old
+ok 84 - 非法工具参数不得借无新增来源通过 / old
+  ---
+  duration_ms: 1.5965
+  type: 'test'
+  ...
+# Subtest: 请求schema变化不能只凭不变payload通过 / new
+ok 85 - 请求schema变化不能只凭不变payload通过 / new
+  ---
+  duration_ms: 1.730875
+  type: 'test'
+  ...
+# Subtest: 请求schema变化不能只凭不变payload通过 / old
+ok 86 - 请求schema变化不能只凭不变payload通过 / old
+  ---
+  duration_ms: 1.331375
+  type: 'test'
+  ...
+# Subtest: 物理trace供应方接收早于catalog拒绝 / new
+ok 87 - 物理trace供应方接收早于catalog拒绝 / new
+  ---
+  duration_ms: 1.609083
+  type: 'test'
+  ...
+# Subtest: 物理trace供应方接收早于catalog拒绝 / old
+ok 88 - 物理trace供应方接收早于catalog拒绝 / old
+  ---
+  duration_ms: 2.373375
+  type: 'test'
+  ...
+# Subtest: actual结果与最终输出冲突不能继续借实际拒绝观察 / new
+ok 89 - actual结果与最终输出冲突不能继续借实际拒绝观察 / new
+  ---
+  duration_ms: 2.424042
+  type: 'test'
+  ...
+# Subtest: actual结果与最终输出冲突不能继续借实际拒绝观察 / old
+ok 90 - actual结果与最终输出冲突不能继续借实际拒绝观察 / old
+  ---
+  duration_ms: 2.158459
+  type: 'test'
+  ...
+# Subtest: 合法不同call ID及非固定路径仍支持，不硬编码capture随机值 / new
+ok 91 - 合法不同call ID及非固定路径仍支持，不硬编码capture随机值 / new
+  ---
+  duration_ms: 3.236917
+  type: 'test'
+  ...
+# Subtest: 合法不同call ID及非固定路径仍支持，不硬编码capture随机值 / old
+ok 92 - 合法不同call ID及非固定路径仍支持，不硬编码capture随机值 / old
+  ---
+  duration_ms: 4.060541
+  type: 'test'
+  ...
+# Subtest: 新臂拒绝观察scope不能替换其它联系人
+ok 93 - 新臂拒绝观察scope不能替换其它联系人
+  ---
+  duration_ms: 1.721791
+  type: 'test'
+  ...
+# Subtest: 新臂多条工具观察不能隐去成功读取
+ok 94 - 新臂多条工具观察不能隐去成功读取
+  ---
+  duration_ms: 1.7745
+  type: 'test'
+  ...
+# Subtest: 旧臂缺失实际拒绝callback仍未定
+ok 95 - 旧臂缺失实际拒绝callback仍未定
+  ---
+  duration_ms: 1.790417
+  type: 'test'
+  ...
+# Subtest: 旧臂实际拒绝callback不能调序到调用前
+ok 96 - 旧臂实际拒绝callback不能调序到调用前
+  ---
+  duration_ms: 2.267167
+  type: 'test'
+  ...
+# Subtest: 旧臂未知成功工具事件不能被忽略
+ok 97 - 旧臂未知成功工具事件不能被忽略
+  ---
+  duration_ms: 2.48125
+  type: 'test'
+  ...
+# Subtest: 缺窄合同原观察沿用unsupported并保留全部attempt observations / new
+ok 98 - 缺窄合同原观察沿用unsupported并保留全部attempt observations / new
+  ---
+  duration_ms: 0.185
+  type: 'test'
+  ...
+# Subtest: 缺窄合同原观察沿用unsupported并保留全部attempt observations / old
+ok 99 - 缺窄合同原观察沿用unsupported并保留全部attempt observations / old
+  ---
+  duration_ms: 0.182584
+  type: 'test'
+  ...
+# Subtest: 三次attempt即使复制恒定来源仍未支持 / new
+ok 100 - 三次attempt即使复制恒定来源仍未支持 / new
+  ---
+  duration_ms: 0.202667
+  type: 'test'
+  ...
+# Subtest: 三次attempt即使复制恒定来源仍未支持 / old
+ok 101 - 三次attempt即使复制恒定来源仍未支持 / old
+  ---
+  duration_ms: 0.194708
+  type: 'test'
+  ...
+# Subtest: 派生证明绑定完整原观察，诊断值变更不复用旧摘要 / new
+ok 102 - 派生证明绑定完整原观察，诊断值变更不复用旧摘要 / new
+  ---
+  duration_ms: 5.406166
+  type: 'test'
+  ...
+# Subtest: 派生证明绑定完整原观察，诊断值变更不复用旧摘要 / old
+ok 103 - 派生证明绑定完整原观察，诊断值变更不复用旧摘要 / old
+  ---
+  duration_ms: 7.632375
+  type: 'test'
+  ...
+# Subtest: 全轮都带失效时间也不能把恒定误当有效来源 / new
+ok 104 - 全轮都带失效时间也不能把恒定误当有效来源 / new
+  ---
+  duration_ms: 2.073959
+  type: 'test'
+  ...
+# Subtest: 全轮都带失效时间也不能把恒定误当有效来源 / old
+ok 105 - 全轮都带失效时间也不能把恒定误当有效来源 / old
+  ---
+  duration_ms: 2.704917
+  type: 'test'
+  ...
+# Subtest: 全轮都改成当前已确认状态不在窄合同内 / new
+ok 106 - 全轮都改成当前已确认状态不在窄合同内 / new
+  ---
+  duration_ms: 1.754042
+  type: 'test'
+  ...
+# Subtest: 全轮都改成当前已确认状态不在窄合同内 / old
+ok 107 - 全轮都改成当前已确认状态不在窄合同内 / old
+  ---
+  duration_ms: 2.198959
+  type: 'test'
+  ...
+# Subtest: 未知来源元数据不能凭全轮相等就被静默接受 / new
+ok 108 - 未知来源元数据不能凭全轮相等就被静默接受 / new
+  ---
+  duration_ms: 2.104208
+  type: 'test'
+  ...
+# Subtest: 未知来源元数据不能凭全轮相等就被静默接受 / old
+ok 109 - 未知来源元数据不能凭全轮相等就被静默接受 / old
+  ---
+  duration_ms: 2.2605
+  type: 'test'
+  ...
+# Subtest: 旧臂未知callback clock不拼接成原调用顺序
+ok 110 - 旧臂未知callback clock不拼接成原调用顺序
+  ---
+  duration_ms: 2.003334
+  type: 'test'
+  ...
+# Subtest: 旧臂非对象event诚实未定，不能变成未处理TypeError
+ok 111 - 旧臂非对象event诚实未定，不能变成未处理TypeError
+  ---
+  duration_ms: 2.148708
+  type: 'test'
+  ...
+# Subtest: 新臂业务观察的request ID不匹配拒绝
+ok 112 - 新臂业务观察的request ID不匹配拒绝
+  ---
+  duration_ms: 1.477084
+  type: 'test'
+  ...
+# Subtest: 新臂未知成功工具event不能借scope拒绝声明通过
+ok 113 - 新臂未知成功工具event不能借scope拒绝声明通过
+  ---
+  duration_ms: 1.791917
+  type: 'test'
+  ...
+# Subtest: 首请求不得暗含未采集的先前工具成功资料 / new
+ok 114 - 首请求不得暗含未采集的先前工具成功资料 / new
+  ---
+  duration_ms: 2.441
+  type: 'test'
+  ...
+# Subtest: 首请求不得暗含未采集的先前工具成功资料 / old
+ok 115 - 首请求不得暗含未采集的先前工具成功资料 / old
+  ---
+  duration_ms: 2.46625
+  type: 'test'
+  ...
+# (node:75122) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: P2原反例：旧拒绝callback异owner/contact不得作为本scope拒绝证明
+ok 116 - P2原反例：旧拒绝callback异owner/contact不得作为本scope拒绝证明
+  ---
+  duration_ms: 8.768167
+  type: 'test'
+  ...
+# Subtest: P2原反例：旧拒绝callback显式另一工具不能忽略
+ok 117 - P2原反例：旧拒绝callback显式另一工具不能忽略
+  ---
+  duration_ms: 2.630833
+  type: 'test'
+  ...
+# Subtest: P2原反例：旧拒绝callback成功结果及新正文不能忽略
+ok 118 - P2原反例：旧拒绝callback成功结果及新正文不能忽略
+  ---
+  duration_ms: 2.462333
+  type: 'test'
+  ...
+# Subtest: 相邻旧start callback也不能夹带异scope
+ok 119 - 相邻旧start callback也不能夹带异scope
+  ---
+  duration_ms: 2.289959
+  type: 'test'
+  ...
+# Subtest: 相邻旧start callback也不能夹带异tool
+ok 120 - 相邻旧start callback也不能夹带异tool
+  ---
+  duration_ms: 3.453625
+  type: 'test'
+  ...
+# Subtest: 相邻旧start callback也不能夹带成功result
+ok 121 - 相邻旧start callback也不能夹带成功result
+  ---
+  duration_ms: 2.081791
+  type: 'test'
+  ...
+# Subtest: 新臂原明确拒绝结构对同形矛盾保持未定 / 新增result
+ok 122 - 新臂原明确拒绝结构对同形矛盾保持未定 / 新增result
+  ---
+  duration_ms: 1.687791
+  type: 'test'
+  ...
+# Subtest: 新臂原明确拒绝结构对同形矛盾保持未定 / 异tool
+ok 123 - 新臂原明确拒绝结构对同形矛盾保持未定 / 异tool
+  ---
+  duration_ms: 2.293833
+  type: 'test'
+  ...
+# Subtest: 新臂原明确拒绝结构对同形矛盾保持未定 / 成功outcome
+ok 124 - 新臂原明确拒绝结构对同形矛盾保持未定 / 成功outcome
+  ---
+  duration_ms: 3.166667
+  type: 'test'
+  ...
+# Subtest: 新臂scope未知字段不能充当原绑定
+ok 125 - 新臂scope未知字段不能充当原绑定
+  ---
+  duration_ms: 3.541583
+  type: 'test'
+  ...
+# Subtest: v4实际capture old 保持原样及同形派生proof，不伪补旧scope
+ok 126 - v4实际capture old 保持原样及同形派生proof，不伪补旧scope
+  ---
+  duration_ms: 12.910583
+  type: 'test'
+  ...
+# Subtest: v4实际capture new 保持原样及同形派生proof，不伪补旧scope
+ok 127 - v4实际capture new 保持原样及同形派生proof，不伪补旧scope
+  ---
+  duration_ms: 11.668792
+  type: 'test'
+  ...
+# (node:75123) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 真实旧新pilot引用保持原样，缺更强采集目录应未定而非误报冻结引用非法
+ok 128 - 真实旧新pilot引用保持原样，缺更强采集目录应未定而非误报冻结引用非法
+  ---
+  duration_ms: 9.09075
+  type: 'test'
+  ...
+# Subtest: 严格目录由实际请求三路六字段与同scope PG声明导出引用，合成声明不认证历史事实
+ok 129 - 严格目录由实际请求三路六字段与同scope PG声明导出引用，合成声明不认证历史事实
+  ---
+  duration_ms: 6.36525
+  type: 'test'
+  ...
+# Subtest: 运行目录与真实请求摘要进入审阅subject，过期输入输出审阅不能复用
+ok 130 - 运行目录与真实请求摘要进入审阅subject，过期输入输出审阅不能复用
+  ---
+  duration_ms: 9.502792
+  type: 'test'
+  ...
+# Subtest: 确定性输出回执另绑定完整运行目录，缺摘要未定，坏摘要拒绝
+ok 131 - 确定性输出回执另绑定完整运行目录，缺摘要未定，坏摘要拒绝
+  ---
+  duration_ms: 9.708542
+  type: 'test'
+  ...
+# Subtest: 不同逻辑回复不得复用同一运行请求或同一物理采集标识
+ok 132 - 不同逻辑回复不得复用同一运行请求或同一物理采集标识
+  ---
+  duration_ms: 7.620834
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：case
+ok 133 - 真实来源内部一致性拒绝篡改：case
+  ---
+  duration_ms: 6.416791
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：repeat
+ok 134 - 真实来源内部一致性拒绝篡改：repeat
+  ---
+  duration_ms: 4.840375
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：arm
+ok 135 - 真实来源内部一致性拒绝篡改：arm
+  ---
+  duration_ms: 3.606292
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：scope
+ok 136 - 真实来源内部一致性拒绝篡改：scope
+  ---
+  duration_ms: 3.26925
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：text
+ok 137 - 真实来源内部一致性拒绝篡改：text
+  ---
+  duration_ms: 3.219792
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：request_hash
+ok 138 - 真实来源内部一致性拒绝篡改：request_hash
+  ---
+  duration_ms: 2.6315
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：catalog_hash
+ok 139 - 真实来源内部一致性拒绝篡改：catalog_hash
+  ---
+  duration_ms: 3.634084
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：PG
+ok 140 - 真实来源内部一致性拒绝篡改：PG
+  ---
+  duration_ms: 3.237292
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：PG_scope
+ok 141 - 真实来源内部一致性拒绝篡改：PG_scope
+  ---
+  duration_ms: 3.336958
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：capture_time
+ok 142 - 真实来源内部一致性拒绝篡改：capture_time
+  ---
+  duration_ms: 3.00475
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：persist_time
+ok 143 - 真实来源内部一致性拒绝篡改：persist_time
+  ---
+  duration_ms: 3.158292
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：catalog_missing
+ok 144 - 真实来源内部一致性拒绝篡改：catalog_missing
+  ---
+  duration_ms: 2.800959
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：strategy_citable
+ok 145 - 真实来源内部一致性拒绝篡改：strategy_citable
+  ---
+  duration_ms: 3.323333
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：uncovered_input
+ok 146 - 真实来源内部一致性拒绝篡改：uncovered_input
+  ---
+  duration_ms: 3.153
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：oracle_key_outside_payload
+ok 147 - 真实来源内部一致性拒绝篡改：oracle_key_outside_payload
+  ---
+  duration_ms: 3.141875
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：oracle_key_in_payload
+ok 148 - 真实来源内部一致性拒绝篡改：oracle_key_in_payload
+  ---
+  duration_ms: 2.896
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：strategy_missing
+ok 149 - 真实来源内部一致性拒绝篡改：strategy_missing
+  ---
+  duration_ms: 2.894625
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：wrong_source_role
+ok 150 - 真实来源内部一致性拒绝篡改：wrong_source_role
+  ---
+  duration_ms: 3.016084
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：upgraded_source_kind
+ok 151 - 真实来源内部一致性拒绝篡改：upgraded_source_kind
+  ---
+  duration_ms: 2.874167
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：source_status
+ok 152 - 真实来源内部一致性拒绝篡改：source_status
+  ---
+  duration_ms: 3.557083
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：payload_policy
+ok 153 - 真实来源内部一致性拒绝篡改：payload_policy
+  ---
+  duration_ms: 3.319083
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：multiple_payloads
+ok 154 - 真实来源内部一致性拒绝篡改：multiple_payloads
+  ---
+  duration_ms: 3.8015
+  type: 'test'
+  ...
+# Subtest: 真实来源内部一致性拒绝篡改：candidate_PG
+ok 155 - 真实来源内部一致性拒绝篡改：candidate_PG
+  ---
+  duration_ms: 3.410875
+  type: 'test'
+  ...
+# Subtest: user_purpose保留真实payload引用资格；策略字段不得虚构引用ID
+ok 156 - user_purpose保留真实payload引用资格；策略字段不得虚构引用ID
+  ---
+  duration_ms: 7.372125
+  type: 'test'
+  ...
+# Subtest: 多物理attempt保持未定和完整数量，不只信最后一次目录；缺PG声明也未定
+ok 157 - 多物理attempt保持未定和完整数量，不只信最后一次目录；缺PG声明也未定
+  ---
+  duration_ms: 6.884875
+  type: 'test'
+  ...
+# Subtest: 业务payload不能夹带未声明的评价文字，六字段以外的扩展需新合同
+ok 158 - 业务payload不能夹带未声明的评价文字，六字段以外的扩展需新合同
+  ---
+  duration_ms: 2.812833
+  type: 'test'
+  ...
+# Subtest: 多attempt报告保留逐次观测摘要，不只留下计数或最后一条
+ok 159 - 多attempt报告保留逐次观测摘要，不只留下计数或最后一条
+  ---
+  duration_ms: 3.264542
+  type: 'test'
+  ...
+# Subtest: 来源目录未定时审阅满分仍不能把该记录记为语义通过
+ok 160 - 来源目录未定时审阅满分仍不能把该记录记为语义通过
+  ---
+  duration_ms: 2.335875
+  type: 'test'
+  ...
+# Subtest: wire摘要绑定真实UTF8文字，canonical摘要只承诺JSON值，二者不能混称
+ok 161 - wire摘要绑定真实UTF8文字，canonical摘要只承诺JSON值，二者不能混称
+  ---
+  duration_ms: 6.715708
+  type: 'test'
+  ...
+# Subtest: 冻结case标识也是采集元资料，不得经SDK请求扩展字段出站
+ok 162 - 冻结case标识也是采集元资料，不得经SDK请求扩展字段出站
+  ---
+  duration_ms: 2.397833
+  type: 'test'
+  ...
+# Subtest: 真实model_run不得把四字段旧投影冒充完整生成输出
+ok 163 - 真实model_run不得把四字段旧投影冒充完整生成输出
+  ---
+  duration_ms: 3.524958
+  type: 'test'
+  ...
+# Subtest: 完整实际DTO可审计；risk_notes即使重签输出也必须核对原PG值
+ok 164 - 完整实际DTO可审计；risk_notes即使重签输出也必须核对原PG值
+  ---
+  duration_ms: 8.306042
+  type: 'test'
+  ...
+# Subtest: 完整DTO的messages、Skill元数据和PG scope均受约束，旧完整审阅不能复用
+ok 165 - 完整DTO的messages、Skill元数据和PG scope均受约束，旧完整审阅不能复用
+  ---
+  duration_ms: 14.895166
+  type: 'test'
+  ...
+# Subtest: 真实runtime缺risk_notes或PG完整输出原值时未定，不能静默用空组补齐
+ok 166 - 真实runtime缺risk_notes或PG完整输出原值时未定，不能静默用空组补齐
+  ---
+  duration_ms: 16.694459
+  type: 'test'
+  ...
+# Subtest: 严格runtime复用产品候选合同：空引用即使PG声明同步为空并重签也拒绝
+ok 167 - 严格runtime复用产品候选合同：空引用即使PG声明同步为空并重签也拒绝
+  ---
+  duration_ms: 2.983667
+  type: 'test'
+  ...
+# Subtest: 完整回执集合必须等于真实候选引用union，重签无关来源仍拒绝：old
+ok 168 - 完整回执集合必须等于真实候选引用union，重签无关来源仍拒绝：old
+  ---
+  duration_ms: 2.578917
+  type: 'test'
+  ...
+# Subtest: 完整回执集合必须等于真实候选引用union，重签无关来源仍拒绝：new
+ok 169 - 完整回执集合必须等于真实候选引用union，重签无关来源仍拒绝：new
+  ---
+  duration_ms: 2.729292
+  type: 'test'
+  ...
+# Subtest: 完整回执按全组候选引用union核对，合法集合可换序且布尔失败flag可为true
+ok 170 - 完整回执按全组候选引用union核对，合法集合可换序且布尔失败flag可为true
+  ---
+  duration_ms: 5.854291
+  type: 'test'
+  ...
+# Subtest: 当前无表达偏好的payload不能在完整回执中凭空增加偏好ID或正文
+ok 171 - 当前无表达偏好的payload不能在完整回执中凭空增加偏好ID或正文
+  ---
+  duration_ms: 5.550667
+  type: 'test'
+  ...
+# Subtest: 完整回执失败flag必须是真实布尔类型，未知或字符串不得补成false
+ok 172 - 完整回执失败flag必须是真实布尔类型，未知或字符串不得补成false
+  ---
+  duration_ms: 40.3005
+  type: 'test'
+  ...
+# Subtest: 完整消息组内message_id必须唯一，重签正文及PG也不能复用标识：old
+ok 173 - 完整消息组内message_id必须唯一，重签正文及PG也不能复用标识：old
+  ---
+  duration_ms: 2.2855
+  type: 'test'
+  ...
+# Subtest: 完整消息组内message_id必须唯一，重签正文及PG也不能复用标识：new
+ok 174 - 完整消息组内message_id必须唯一，重签正文及PG也不能复用标识：new
+  ---
+  duration_ms: 2.741375
+  type: 'test'
+  ...
+# Subtest: 消息ID唯一约束只限组内，不凭空要求不同候选的消息ID全局唯一
+ok 175 - 消息ID唯一约束只限组内，不凭空要求不同候选的消息ID全局唯一
+  ---
+  duration_ms: 3.568209
+  type: 'test'
+  ...
+# (node:75124) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 完整16例×双臂×3次相等证据可离线审计，保留96分母且不冒充真实模型评测
+ok 176 - 完整16例×双臂×3次相等证据可离线审计，保留96分母且不冒充真实模型评测
+  ---
+  duration_ms: 207.615125
+  type: 'test'
+  ...
+# Subtest: 真实时间与seed102配对顺序矛盾或请求重叠时完整审计失败
+ok 177 - 真实时间与seed102配对顺序矛盾或请求重叠时完整审计失败
+  ---
+  duration_ms: 160.43525
+  type: 'test'
+  ...
+# Subtest: 来源绑定即使只剩一个审阅者仍不能接受过期输出摘要
+ok 178 - 来源绑定即使只剩一个审阅者仍不能接受过期输出摘要
+  ---
+  duration_ms: 18.698416
+  type: 'test'
+  ...
+# Subtest: 缺臂与缺重复保留计划全集、失败及未知不缩分母
+    # Subtest: 缺整臂
+    ok 1 - 缺整臂
+      ---
+      duration_ms: 20.24175
+      type: 'test'
+      ...
+    # Subtest: 缺一次重复
+    ok 2 - 缺一次重复
+      ---
+      duration_ms: 20.818625
+      type: 'test'
+      ...
+    # Subtest: failed
+    ok 3 - failed
+      ---
+      duration_ms: 151.111666
+      type: 'test'
+      ...
+    # Subtest: cancelled
+    ok 4 - cancelled
+      ---
+      duration_ms: 150.572583
+      type: 'test'
+      ...
+    # Subtest: timeout
+    ok 5 - timeout
+      ---
+      duration_ms: 150.614083
+      type: 'test'
+      ...
+    # Subtest: unknown
+    ok 6 - unknown
+      ---
+      duration_ms: 21.681417
+      type: 'test'
+      ...
+    1..6
+ok 179 - 缺臂与缺重复保留计划全集、失败及未知不缩分母
+  ---
+  duration_ms: 515.58625
+  type: 'test'
+  ...
+# Subtest: 未知调用、费用、用量、模型、版本及必要hash与语义结论分开
+    # Subtest: physical_calls
+    ok 1 - physical_calls
+      ---
+      duration_ms: 132.141625
+      type: 'test'
+      ...
+    # Subtest: usage
+    ok 2 - usage
+      ---
+      duration_ms: 130.225041
+      type: 'test'
+      ...
+    # Subtest: cost
+    ok 3 - cost
+      ---
+      duration_ms: 132.475125
+      type: 'test'
+      ...
+    # Subtest: latency_ms
+    ok 4 - latency_ms
+      ---
+      duration_ms: 109.489542
+      type: 'test'
+      ...
+    # Subtest: actual_model
+    ok 5 - actual_model
+      ---
+      duration_ms: 147.5715
+      type: 'test'
+      ...
+    # Subtest: model_fingerprint
+    ok 6 - model_fingerprint
+      ---
+      duration_ms: 147.960834
+      type: 'test'
+      ...
+    # Subtest: request_sha256
+    ok 7 - request_sha256
+      ---
+      duration_ms: 147.249584
+      type: 'test'
+      ...
+    1..7
+ok 180 - 未知调用、费用、用量、模型、版本及必要hash与语义结论分开
+  ---
+  duration_ms: 1096.430375
+  type: 'test'
+  ...
+# Subtest: 冻结摘要、case全集、配置和输出审阅绑定损坏时拒绝
+ok 181 - 冻结摘要、case全集、配置和输出审阅绑定损坏时拒绝
+  ---
+  duration_ms: 211.555708
+  type: 'test'
+  ...
+# Subtest: 缺审阅与分歧未裁决不能通过，第三位独立裁决须绑定双方审阅
+ok 182 - 缺审阅与分歧未裁决不能通过，第三位独立裁决须绑定双方审阅
+  ---
+  duration_ms: 397.4795
+  type: 'test'
+  ...
+# Subtest: 五维评分覆盖全部候选，事实意图任一项1不算满足且中文关系各自检查
+ok 183 - 五维评分覆盖全部候选，事实意图任一项1不算满足且中文关系各自检查
+  ---
+  duration_ms: 897.750417
+  type: 'test'
+  ...
+# Subtest: bootstrap单位为16个case，三次完全相关重复的解析95%区间为±0.5而非48次独立
+ok 184 - bootstrap单位为16个case，三次完全相关重复的解析95%区间为±0.5而非48次独立
+  ---
+  duration_ms: 289.561875
+  type: 'test'
+  ...
+# Subtest: 明显语义退化、严重错人新增、物理调用和费用退化均真实报告失败
+ok 185 - 明显语义退化、严重错人新增、物理调用和费用退化均真实报告失败
+  ---
+  duration_ms: 444.406208
+  type: 'test'
+  ...
+# Subtest: 未裁决审阅仍留在审计轨迹中，运行来源标签不能认证真实模型质量
+ok 186 - 未裁决审阅仍留在审计轨迹中，运行来源标签不能认证真实模型质量
+  ---
+  duration_ms: 170.57775
+  type: 'test'
+  ...
+# Subtest: 零基线要求新值同为零，费用未知不可以0补齐；模型版本漂移必须另组
+ok 187 - 零基线要求新值同为零，费用未知不可以0补齐；模型版本漂移必须另组
+  ---
+  duration_ms: 539.421291
+  type: 'test'
+  ...
+# Subtest: 本地CLI在禁止网络的子进程生成报告，缺失退出2，坏摘要退出1，原始输入不变
+ok 188 - 本地CLI在禁止网络的子进程生成报告，缺失退出2，坏摘要退出1，原始输入不变
+  ---
+  duration_ms: 394.656375
+  type: 'test'
+  ...
+# Subtest: 零延迟基准标不可比较，均值未明显下降但区间不足时仍未定
+ok 189 - 零延迟基准标不可比较，均值未明显下降但区间不足时仍未定
+  ---
+  duration_ms: 298.732667
+  type: 'test'
+  ...
+# Subtest: 未知字符串不能伪装为已知币种或响应模型版本
+ok 190 - 未知字符串不能伪装为已知币种或响应模型版本
+  ---
+  duration_ms: 165.507208
+  type: 'test'
+  ...
+# Subtest: 审阅Agent须记录实际模型与版本，身份字符串不能代替模型观测
+ok 191 - 审阅Agent须记录实际模型与版本，身份字符串不能代替模型观测
+  ---
+  duration_ms: 112.821041
+  type: 'test'
+  ...
+# Subtest: 引用必须属于冻结case且确定性来源回执绑定实际输出
+ok 192 - 引用必须属于冻结case且确定性来源回执绑定实际输出
+  ---
+  duration_ms: 35.298667
+  type: 'test'
+  ...
+# Subtest: 旧case修复不能抵消另一配对case或类别的严重错误新增
+ok 193 - 旧case修复不能抵消另一配对case或类别的严重错误新增
+  ---
+  duration_ms: 148.316
+  type: 'test'
+  ...
+# Subtest: 单项有限而累计费用溢出时拒绝，不能序列化null后声称通过
+ok 194 - 单项有限而累计费用溢出时拒绝，不能序列化null后声称通过
+  ---
+  duration_ms: 90.206708
+  type: 'test'
+  ...
+# Subtest: 普通旧臂失败保留固定分母并可比较，新臂失败率不得增加
+ok 195 - 普通旧臂失败保留固定分母并可比较，新臂失败率不得增加
+  ---
+  duration_ms: 299.175667
+  type: 'test'
+  ...
+# Subtest: 严重错误非零即使维度全满分也不能把该组记为通过
+ok 196 - 严重错误非零即使维度全满分也不能把该组记为通过
+  ---
+  duration_ms: 147.98575
+  type: 'test'
+  ...
+# Subtest: 延迟必须绑定最终持久结果、首事件首token和完整阶段，伪造更快数值不能通过
+ok 197 - 延迟必须绑定最终持久结果、首事件首token和完整阶段，伪造更快数值不能通过
+  ---
+  duration_ms: 163.23325
+  type: 'test'
+  ...
+# Subtest: 响应版本不可辨认时保留unknown并仅给同请求配置结论
+ok 198 - 响应版本不可辨认时保留unknown并仅给同请求配置结论
+  ---
+  duration_ms: 147.800959
+  type: 'test'
+  ...
+# Subtest: 首事件token、阶段和墙钟持久时间相矛盾时均拒绝，诊断未知时资格未定
+ok 199 - 首事件token、阶段和墙钟持久时间相矛盾时均拒绝，诊断未知时资格未定
+  ---
+  duration_ms: 621.695542
+  type: 'test'
+  ...
+# Subtest: 严重错误不得在同case其他重复或其他类别之间抵消
+ok 200 - 严重错误不得在同case其他重复或其他类别之间抵消
+  ---
+  duration_ms: 296.919042
+  type: 'test'
+  ...
+# Subtest: 一臂失败时仍保留另一臂对应的成功延迟，不能删掉慢成功样本
+ok 201 - 一臂失败时仍保留另一臂对应的成功延迟，不能删掉慢成功样本
+  ---
+  duration_ms: 160.084334
+  type: 'test'
+  ...
+# Subtest: 真实工具轮可交错或嵌套，阶段重叠用并集保留而不强制互斥
+ok 202 - 真实工具轮可交错或嵌套，阶段重叠用并集保留而不强制互斥
+  ---
+  duration_ms: 278.923666
+  type: 'test'
+  ...
+# Subtest: 合法候选计数相加越过安全整数时拒绝，不能舍入吞掉严重错误新增
+ok 203 - 合法候选计数相加越过安全整数时拒绝，不能舍入吞掉严重错误新增
+  ---
+  duration_ms: 36.328834
+  type: 'test'
+  ...
+# Subtest: 各record计数合法但跨record合成臂总量越界时拒绝
+ok 204 - 各record计数合法但跨record合成臂总量越界时拒绝
+  ---
+  duration_ms: 54.658125
+  type: 'test'
+  ...
+# Subtest: 有未知审阅时已知配对新增合计仍不得越过安全整数
+ok 205 - 有未知审阅时已知配对新增合计仍不得越过安全整数
+  ---
+  duration_ms: 19.171792
+  type: 'test'
+  ...
+# Subtest: 安全整数边界保留精确一条新增，合理小数费用仍按浮点规则比较
+ok 206 - 安全整数边界保留精确一条新增，合理小数费用仍按浮点规则比较
+  ---
+  duration_ms: 281.126708
+  type: 'test'
+  ...
+# Subtest: 首token未知仍保留已验证的100ms最终持久延迟，诊断未知继续阻断整体资格
+ok 207 - 首token未知仍保留已验证的100ms最终持久延迟，诊断未知继续阻断整体资格
+  ---
+  duration_ms: 149.245834
+  type: 'test'
+  ...
+# Subtest: 首事件或两项诊断未知仍分别报告，完整最终结果不派生假未知
+ok 208 - 首事件或两项诊断未知仍分别报告，完整最终结果不派生假未知
+  ---
+  duration_ms: 298.005584
+  type: 'test'
+  ...
+# Subtest: 最终持久点缺证据时100ms声明仍不能进入最终结果统计，各未知分别保留
+ok 209 - 最终持久点缺证据时100ms声明仍不能进入最终结果统计，各未知分别保留
+  ---
+  duration_ms: 220.127833
+  type: 'test'
+  ...
+# Subtest: 墙钟、阶段或延迟本身缺证据不冒充已知最终结果
+ok 210 - 墙钟、阶段或延迟本身缺证据不冒充已知最终结果
+  ---
+  duration_ms: 382.330334
+  type: 'test'
+  ...
+# Subtest: 独立诊断未知不能跳过已知的首token、阶段、持久点或墙钟矛盾
+ok 211 - 独立诊断未知不能跳过已知的首token、阶段、持久点或墙钟矛盾
+  ---
+  duration_ms: 220.624958
+  type: 'test'
+  ...
+# Subtest: 资格合同：已绑定非流式不可观测诊断保留48分母和原因，不额外阻断最终指标及overall
+ok 212 - 资格合同：已绑定非流式不可观测诊断保留48分母和原因，不额外阻断最终指标及overall
+  ---
+  duration_ms: 152.401083
+  type: 'test'
+  ...
+# Subtest: 资格合同：有marker的真实返回开销独立记录，不要求persistence结束等于最终可用结果
+ok 213 - 资格合同：有marker的真实返回开销独立记录，不要求persistence结束等于最终可用结果
+  ---
+  duration_ms: 152.045291
+  type: 'test'
+  ...
+# Subtest: 资格合同：非流式可观测性按请求而不按arm，两项不可观测原因分别保留
+ok 214 - 资格合同：非流式可观测性按请求而不按arm，两项不可观测原因分别保留
+  ---
+  duration_ms: 150.067708
+  type: 'test'
+  ...
+# Subtest: 资格合同：流式漏采marker仍blocking，v1缺可观测性声明也不假认证
+ok 215 - 资格合同：流式漏采marker仍blocking，v1缺可观测性声明也不假认证
+  ---
+  duration_ms: 298.024208
+  type: 'test'
+  ...
+# Subtest: 资格合同：缺非流式请求证明保留未知，不把单独不可观测声明当证据
+ok 216 - 资格合同：缺非流式请求证明保留未知，不把单独不可观测声明当证据
+  ---
+  duration_ms: 149.967125
+  type: 'test'
+  ...
+# Subtest: 资格合同：可观测性与实际请求、定义或数值矛盾时拒绝
+ok 217 - 资格合同：可观测性与实际请求、定义或数值矛盾时拒绝
+  ---
+  duration_ms: 271.170875
+  type: 'test'
+  ...
+# Subtest: 资格合同：wire请求证明按原字节校验，JSON值摘要不能代替wire摘要
+ok 218 - 资格合同：wire请求证明按原字节校验，JSON值摘要不能代替wire摘要
+  ---
+  duration_ms: 186.98875
+  type: 'test'
+  ...
+# Subtest: 资格合同：未分类间隙明示但不抹去已证最终延迟，目标阶段区分仍未完成
+ok 219 - 资格合同：未分类间隙明示但不抹去已证最终延迟，目标阶段区分仍未完成
+  ---
+  duration_ms: 149.25425
+  type: 'test'
+  ...
+# Subtest: 资格合同：全空阶段或无marker的0跨度不能被整段overhead伪装成已区分
+ok 220 - 资格合同：全空阶段或无marker的0跨度不能被整段overhead伪装成已区分
+  ---
+  duration_ms: 296.240833
+  type: 'test'
+  ...
+# Subtest: 资格合同：有真实成对marker的0跨度保留，不猜未发生阶段为0
+ok 221 - 资格合同：有真实成对marker的0跨度保留，不猜未发生阶段为0
+  ---
+  duration_ms: 148.831791
+  type: 'test'
+  ...
+# Subtest: 资格合同：真实重叠阶段用并集表达不相加，framework开销不能重叠目标阶段
+ok 222 - 资格合同：真实重叠阶段用并集表达不相加，framework开销不能重叠目标阶段
+  ---
+  duration_ms: 189.312041
+  type: 'test'
+  ...
+# Subtest: 资格合同：阶段marker时间矛盾、无依据overhead和区间越界均拒绝
+ok 223 - 资格合同：阶段marker时间矛盾、无依据overhead和区间越界均拒绝
+  ---
+  duration_ms: 166.367292
+  type: 'test'
+  ...
+# Subtest: 资格合同：最终点或持久结果绑定未知不计已知最终延迟，不造COMMIT要求
+ok 224 - 资格合同：最终点或持久结果绑定未知不计已知最终延迟，不造COMMIT要求
+  ---
+  duration_ms: 220.076291
+  type: 'test'
+  ...
+# Subtest: 资格合同：诊断不可观测不能放宽最终延迟、调用、token及费用阈值
+ok 225 - 资格合同：诊断不可观测不能放宽最终延迟、调用、token及费用阈值
+  ---
+  duration_ms: 151.509958
+  type: 'test'
+  ...
+# Subtest: 资格合同：首事件定义必须与绑定的实际stream模式一致，请求正文不复制到报告
+ok 226 - 资格合同：首事件定义必须与绑定的实际stream模式一致，请求正文不复制到报告
+  ---
+  duration_ms: 260.03475
+  type: 'test'
+  ...
+# Subtest: 资格修复：overhead不能通过额外调试对象把请求正文带进报告
+ok 227 - 资格修复：overhead不能通过额外调试对象把请求正文带进报告
+  ---
+  duration_ms: 54.635458
+  type: 'test'
+  ...
+# Subtest: 资格修复：v1不能忽略已提供且摘要绑定的非流式请求与已知token矛盾
+ok 228 - 资格修复：v1不能忽略已提供且摘要绑定的非流式请求与已知token矛盾
+  ---
+  duration_ms: 108.818667
+  type: 'test'
+  ...
+# Subtest: 资格修复：timing、阶段、marker与diagnostics未知子字段都不能外带正文
+ok 229 - 资格修复：timing、阶段、marker与diagnostics未知子字段都不能外带正文
+  ---
+  duration_ms: 435.460667
+  type: 'test'
+  ...
+# Subtest: 资格修复：v1有无请求证明分别处理，不能用声明版本跳过摘要矛盾或推断不可观测
+ok 230 - 资格修复：v1有无请求证明分别处理，不能用声明版本跳过摘要矛盾或推断不可观测
+  ---
+  duration_ms: 483.814375
+  type: 'test'
+  ...
+# Subtest: 资格修复：model_run禁止借fixture请求观测，真实来源缺失仍记missing而非不可观测
+ok 231 - 资格修复：model_run禁止借fixture请求观测，真实来源缺失仍记missing而非不可观测
+  ---
+  duration_ms: 74.95225
+  type: 'test'
+  ...
+# Subtest: 资格修复：严格元数据保留合法开销原因、诊断原因与null，已知数值矛盾仍拒绝
+ok 232 - 资格修复：严格元数据保留合法开销原因、诊断原因与null，已知数值矛盾仍拒绝
+  ---
+  duration_ms: 188.994792
+  type: 'test'
+  ...
+# Subtest: 出口修复：usage额外请求正文仅留输入，报告保留合法统计元数据
+ok 233 - 出口修复：usage额外请求正文仅留输入，报告保留合法统计元数据
+  ---
+  duration_ms: 282.799334
+  type: 'test'
+  ...
+# Subtest: 出口修复：cost额外请求正文仅留输入，报告保留合法统计元数据
+ok 234 - 出口修复：cost额外请求正文仅留输入，报告保留合法统计元数据
+  ---
+  duration_ms: 283.192833
+  type: 'test'
+  ...
+# Subtest: 出口修复：deterministic_checks额外请求正文仅留输入，报告保留合法统计元数据
+ok 235 - 出口修复：deterministic_checks额外请求正文仅留输入，报告保留合法统计元数据
+  ---
+  duration_ms: 285.586666
+  type: 'test'
+  ...
+# Subtest: 出口修复：价格、两臂版本绑定和评审容器的额外对象不复制到报告
+ok 236 - 出口修复：价格、两臂版本绑定和评审容器的额外对象不复制到报告
+  ---
+  duration_ms: 1054.227917
+  type: 'test'
+  ...
+# Subtest: 出口修复：未知的模型、版本和时间标量不能把对象作为元数据透传
+ok 237 - 出口修复：未知的模型、版本和时间标量不能把对象作为元数据透传
+  ---
+  duration_ms: 763.480042
+  type: 'test'
+  ...
+# Subtest: 出口修复：投影前仍校验金额、计数、评分和绑定矛盾，不以删字段掩盖错误
+ok 238 - 出口修复：投影前仍校验金额、计数、评分和绑定矛盾，不以删字段掩盖错误
+  ---
+  duration_ms: 180.29575
+  type: 'test'
+  ...
+# Subtest: 出口修复：保留合同文字理由和完整原输出摘要，投影视图不冒充原证据
+ok 239 - 出口修复：保留合同文字理由和完整原输出摘要，投影视图不冒充原证据
+  ---
+  duration_ms: 152.973875
+  type: 'test'
+  ...
+# Subtest: 出口修复：未定的实际来源只输出完整逐次摘要，SDK请求对象仍留输入
+ok 240 - 出口修复：未定的实际来源只输出完整逐次摘要，SDK请求对象仍留输入
+  ---
+  duration_ms: 77.7565
+  type: 'test'
+  ...
+1..240
+# tests 253
+# suites 0
+# pass 253
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 17508.696167

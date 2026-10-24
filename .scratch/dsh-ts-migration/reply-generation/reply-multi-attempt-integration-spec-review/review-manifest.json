@@ -1,0 +1,17 @@
+{
+  "schema_version": "reply-multi-attempt-integration-spec-review-v1",
+  "independent_axis": "Spec",
+  "confirmed_findings": 0,
+  "candidate_patch_sha256": "c2dc61e96cda6fed54dc79edfe83f220ffef16fe848317fe78307059d89c6f3d",
+  "candidate_manifest_sha256": "f653b88e33dacd2b2a57ad3f544c388e787b130ca0f3913f5d081979f5ae04b2",
+  "base_commit_supplied": "8de29d7210df33f5d5316883c97add347afff406",
+  "output_files_sha256": {
+    "review-report.md": "da0e33387989ee98aabd3e40018337585b3b44f4777481783341b2c628d3a353",
+    "static-verification.json": "bc4a6ffaffa77eb08d968687010b5f5f259982ce988c3d69a77c70b489171475",
+    "handoff.md": "ccfab51a0794171e0fc5afce331f1130098faa9fa773c8963019bd5de6369d8c"
+  },
+  "static_only": true,
+  "not_issue05_or_migration_signoff": true,
+  "real_model_quality_verified": false,
+  "production_switch_approved": false
+}

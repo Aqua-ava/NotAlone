@@ -4,7 +4,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {comparisonPairOrders,comparisonTotal,pairedCaseInterval,REPLY_COMPARISON_BOOTSTRAP,type ComparisonStatistic} from './reply-comparison-statistics.ts';
-import {auditReplyRuntimeSources,type ReplyRuntimeSourceAudit} from './reply-comparison-sources.ts';
+import {auditReplyRuntimeSources,replyRuntimeSourceSubjectBinding,type ReplyRuntimeSourceAudit,type ReplyRuntimeSourceSubjectBinding} from './reply-comparison-sources.ts';
 type Row=Record<string,any>;
 type Status='passed'|'failed'|'undetermined';
 const MANIFEST_SHA='84b81a3255bffe8bc69da6f38c0dd79e1ba83510454ef8a9091c947b995b362b';
@@ -55,7 +55,7 @@ function metadataFields(value:unknown,fields:readonly string[]):Row|null {
 const metadataText=(value:unknown):string|null=>typeof value==='string'?value:null;
 const reviewProjection=(r:Row)=>({review_id:r.review_id,reviewer_id:r.reviewer_id,reviewer_type:r.reviewer_type,reviewer_model:metadataText(r.reviewer_model),reviewer_version:metadataText(r.reviewer_version),subject_sha256:r.subject_sha256,candidates:r.candidates.map((candidate:Row)=>({...metadataFields(candidate,['candidate_id','basis']),scores:metadataFields(candidate.scores,DIMENSIONS),severe_errors:metadataFields(candidate.severe_errors,SEVERE)}))});
 function sourceAuditProjection(audit:ReplyRuntimeSourceAudit):Row {
- return {...metadataFields(audit,['status','reason','binding_sha256','output_scope','attempt_count','request_id']),allowed_citation_ids:[...audit.allowed_citation_ids],attempt_ids:[...audit.attempt_ids],attempt_observations:audit.attempt_observations.map(value=>metadataFields(value,['attempt_id','request_sha256','request_hash_kind','catalog_sha256','response_started_at']))};
+ return {...metadataFields(audit,['status','reason','binding_sha256','output_scope','attempt_count','request_id','contract_scope']),allowed_citation_ids:[...audit.allowed_citation_ids],attempt_ids:[...audit.attempt_ids],attempt_observations:audit.attempt_observations.map(value=>metadataFields(value,['attempt_id','request_sha256','request_hash_kind','catalog_sha256','response_started_at'])),...audit.derived_proof?{derived_proof:{...metadataFields(audit.derived_proof,['schema_version','contract_scope','internal_consistency_only','derived_after_capture','runtime_sources_sha256','transition_sha256','partial_observations_sha256','actual_result_sha256','physical_trace_sha256','real_model_quality_verified','production_switch_approved','sha256']),attempt_bundle:audit.derived_proof.attempt_bundle.map((attempt:Row)=>metadataFields(attempt,['attempt_id','request_sha256','catalog_sha256']))}}:{}};
 }
 function scoreReview(review:unknown,row:Row,output:Row,subject:string):Row {
  if(!object(review)||!text(review.review_id)||review.blind_id!==row.blind_id||review.subject_sha256!==subject||!text(review.reviewer_id)||review.reviewer_id===row.generated_by||!['human','agent'].includes(review.reviewer_type)||review.independent!==true||review.blinded!==true)invalid('independent_blind_review_binding');
@@ -125,21 +125,28 @@ function auditPhaseCoverage(timing:Row,id:string,unknown:(id:string,reason:strin
  return {segments,coverage:{observed_phases:observedPhases,observed_phase_union_ms:duration(phaseRegions),framework_overhead_ms:duration(overheadRegions),framework_overhead:overheadProjection(timing.overhead??[]),unclassified,unclassified_ms:duration(unclassified as {started_ms:number;ended_ms:number}[]),target_phases_distinguished:distinguished,exclusive_partition_required:false,durations_not_summed:true,marker_contract:timing.schema_version==='reply-latency-v2'?'explicit_start_end_markers':'legacy_declared_positive_intervals'}};
 }
 /** 复用实际请求观测的摘要合同；请求正文不复制到报告。 */
-function diagnosticRequest(row:Row,id:string,unknown:(id:string,reason:string,blocking?:boolean)=>void):boolean|null {
+function diagnosticRequest(row:Row,id:string,unknown:(id:string,reason:string,blocking?:boolean)=>void,sourceAudit?:ReplyRuntimeSourceAudit):{stream:boolean|null;runtime_source_proof_sha256?:string} {
  const attempts=row.runtime_sources?.attempts;
+ const binding=sourceAudit?replyRuntimeSourceSubjectBinding(sourceAudit):null;
+ if(binding?.runtime_source_proof_sha256){
+  if(!object(row.runtime_sources)||digest(row.runtime_sources)!==binding.runtime_sources_sha256||!Array.isArray(attempts)||attempts.length!==sourceAudit!.attempt_count)invalid('latency_diagnostic_source_binding');
+  const modes=attempts.map((attempt:Row)=>attempt.request?.body?.stream),proof={runtime_source_proof_sha256:binding.runtime_source_proof_sha256};
+  if(modes.some(mode=>typeof mode!=='boolean')||!modes.every(mode=>mode===modes[0])){unknown(id,'latency_diagnostic_stream_mode_unknown');return {stream:null,...proof};}
+  return {stream:modes[0],...proof};
+ }
  const request=Array.isArray(attempts)&&attempts.length===1?attempts[0]?.request:row.runtime_sources===undefined?row.request_observation:undefined;
- if(request==null||!hashString(row.request_sha256)){unknown(id,'latency_diagnostic_request_unknown');return null;}
+ if(request==null||!hashString(row.request_sha256)){unknown(id,'latency_diagnostic_request_unknown');return {stream:null};}
  if(!object(request)||!object(request.body)||request.sha256!==row.request_sha256)invalid('latency_diagnostic_request_binding');
  if(request.hash_kind==='wire_utf8_sha256'){
   if(typeof request.raw_utf8!=='string'||digest(request.raw_utf8)!==request.sha256)invalid('latency_diagnostic_request_hash');
   let parsed:unknown;try{parsed=JSON.parse(request.raw_utf8);}catch{return invalid('latency_diagnostic_request_json');}
   if(canonical(parsed)!==canonical(request.body))invalid('latency_diagnostic_request_body');
  }else if(request.hash_kind!=='canonical_json_sha256'||request.raw_utf8!==undefined||digest(request.body)!==request.sha256)invalid('latency_diagnostic_request_hash');
- if(typeof request.body.stream!=='boolean'){unknown(id,'latency_diagnostic_stream_mode_unknown');return null;}
- return request.body.stream;
+ if(typeof request.body.stream!=='boolean'){unknown(id,'latency_diagnostic_stream_mode_unknown');return {stream:null};}
+ return {stream:request.body.stream};
 }
 /** 所有阶段使用同一单调时钟的相对毫秒；墙钟只按ISO毫秒精度核对总时长。 */
-function auditLatency(row:Row,id:string,unknown:(id:string,reason:string,blocking?:boolean)=>void,persistedResultKnown:boolean):LatencyAudit {
+function auditLatency(row:Row,id:string,unknown:(id:string,reason:string,blocking?:boolean)=>void,persistedResultKnown:boolean,sourceAudit?:ReplyRuntimeSourceAudit):LatencyAudit {
  const result:LatencyAudit={latency_ms:null,diagnostics:{},phase_coverage:null};
  if(row.latency_ms!==null&&!nonnegative(row.latency_ms))invalid('latency');
  const timing=row.timing;
@@ -152,7 +159,7 @@ function auditLatency(row:Row,id:string,unknown:(id:string,reason:string,blockin
  let resultTimeKnown=true;
  const declared=timing.schema_version==='reply-latency-v2'||timing.diagnostics!==undefined?timing.diagnostics:null;
  if(timing.schema_version==='reply-latency-v2'&&declared===null||declared!==null&&(!object(declared)||Object.keys(declared).sort().join(',')!=='first_event_ms,first_token_ms,request_sha256'||declared.request_sha256!==row.request_sha256))invalid('latency_diagnostic_contract');
- const stream=declared!==null||row.runtime_sources!==undefined||row.request_observation!==undefined?diagnosticRequest(row,id,unknown):null;
+ const request=declared!==null||row.runtime_sources!==undefined||row.request_observation!==undefined?diagnosticRequest(row,id,unknown,sourceAudit):{stream:null},stream=request.stream;
  if(stream===false&&timing.first_token_ms!==null)invalid('latency_diagnostic_contradiction');
  // 可观测性未知不能伪装不可观测；旧v1的保守处理不构成协议额外阈值。
  for(const name of DIAGNOSTICS){
@@ -171,7 +178,7 @@ function auditLatency(row:Row,id:string,unknown:(id:string,reason:string,blockin
    reason??='缺少可观测性绑定或实际marker，不能把未知写成0。';
    if(row.terminal_status==='succeeded')unknown(id,'latency_'+name+'_unknown',!unobservable);
   }else if(!nonnegative(timing[name])||!model.some(segment=>timing[name]>=segment.started_ms&&timing[name]<=segment.ended_ms))invalid('latency_'+name);
-  result.diagnostics[name]={value_ms:timing[name],observability:timing[name]!==null?'observed':unobservable?'unobservable':'missing',definition,reason,request_sha256:declared?.request_sha256??null};
+  result.diagnostics[name]={value_ms:timing[name],observability:timing[name]!==null?'observed':unobservable?'unobservable':'missing',definition,reason,request_sha256:declared?.request_sha256??null,...request.runtime_source_proof_sha256?{runtime_source_proof_sha256:request.runtime_source_proof_sha256}:{}};
  }
  if(timing.first_event_ms!==null&&timing.first_token_ms!==null&&timing.first_token_ms<timing.first_event_ms)invalid('latency_event_token_order');
  if(row.terminal_status==='succeeded'){
@@ -208,7 +215,7 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
  if(run.bindings.old.commit!==manifest.baseline_commit||run.bindings.new.dsh_commit!==DSH_COMMIT)invalid('baseline_or_dsh_commit');
  if(run.price_snapshot!==null&&(!object(run.price_snapshot)||!known(run.price_snapshot.currency)||!hashString(run.price_snapshot.sha256)))invalid('price_snapshot');
  if(run.price_snapshot===null)unknown(null,'price_snapshot_unknown');
- const byId=new Map<string,Row>(),blindIds=new Set<string>(),orders=new Map(createReplyComparisonPlan(manifestText,datasetText).map(p=>[p.case_id+':'+p.repeat,p.order]));
+ const byId=new Map<string,Row>(),blindIds=new Set<string>(),deferredRequestHashes=new Set<string>(),orders=new Map(createReplyComparisonPlan(manifestText,datasetText).map(p=>[p.case_id+':'+p.repeat,p.order]));
  const members=new Map(cases.map(c=>[c.case_id,c]));
  for(const row of run.records){
   if(!object(row)||!members.has(row.case_id)||!ARMS.includes(row.arm)||![1,2,3].includes(row.repeat))invalid('case_arm_repeat');
@@ -221,14 +228,15 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
   if(!['succeeded','failed','cancelled','timeout','unknown'].includes(row.terminal_status)||row.logical_calls!==1)invalid('terminal_status_or_logical_calls');
   if(!known(row.generated_by))unknown(id,'generator_identity_unknown');
   if(!known(row.actual_model))unknown(id,'actual_model_unknown',false);if(!known(row.model_fingerprint))unknown(id,'model_fingerprint_unknown',false);
-  checkHash(row.request_sha256,id,'request_sha256_unknown');
+  // 只延后候选multi的null；最终必须完整来源审计与公共subject接缝成立，否则仍unknown。
+  if(row.request_sha256===null&&Array.isArray(row.runtime_sources?.attempts)&&row.runtime_sources.attempts.length>1)deferredRequestHashes.add(id);else checkHash(row.request_sha256,id,'request_sha256_unknown');
   if(run.evidence_kind!=='reporter_fixture'&&row.request_observation!==undefined)invalid('latency_diagnostic_fixture_request_forbidden');
   if(!object(row.deterministic_checks)||!['passed','failed','unknown'].includes(row.deterministic_checks.status))invalid('deterministic_checks');
   if(row.deterministic_checks.source_binding_sha256===null)unknown(id,'deterministic_source_binding_unknown');else if(row.deterministic_checks.source_binding_sha256!==row.input_sha256)invalid('deterministic_source_binding');
   if(row.deterministic_checks.status==='unknown')unknown(id,'deterministic_checks_unknown');if(row.deterministic_checks.status==='failed')failures.push({record_id:id,reason:'deterministic_checks_failed'});
   byId.set(id,row);
  }
- const audited:Audited[]=[],runtimeRequestIds=new Set<string>(),runtimeAttemptIds=new Set<string>();
+ const audited:Audited[]=[],runtimeRequestIds=new Set<string>(),runtimeAttemptIds=new Set<string>(),sourceSubjects=new Map<string,ReplyRuntimeSourceSubjectBinding>();
  for(const member of cases)for(const arm of ARMS)for(const repeat of [1,2,3]){
   const id=`${member.case_id}:${arm}:${repeat}`,row=byId.get(id),base={id,case_id:member.case_id,arm,repeat,pass:0,usability:null,severe:null,reviews:[],output_sha256:null};
   if(!row){unknown(id,'record_missing');audited.push({...base,record:null,status:'missing'});continue;}
@@ -243,6 +251,7 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
   const runtime=run.evidence_kind==='model_run'||row.runtime_sources!==undefined;
   if(runtime){
    item.source_audit=auditReplyRuntimeSources(member,row,output,run.evidence_kind);
+   const binding=replyRuntimeSourceSubjectBinding(item.source_audit);if(binding)sourceSubjects.set(id,binding);
    if(item.source_audit.status==='verified'){
     if(runtimeRequestIds.has(item.source_audit.request_id!))invalid('runtime_request_reused');
     runtimeRequestIds.add(item.source_audit.request_id!);
@@ -255,7 +264,7 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
   }else if(output.candidates.some((c:Row)=>c.citation_ids.some((citation:string)=>!(member.allowed_citations??[]).includes(citation))))invalid('citation_allowlist');
   item.output_sha256=digest(output);
   if(row.deterministic_checks.output_sha256===null)unknown(id,'deterministic_output_binding_unknown');else if(row.deterministic_checks.output_sha256!==item.output_sha256)invalid('deterministic_output_binding');
-  const subject=digest({blind_id:row.blind_id,case_sha256:row.case_sha256,input_sha256:row.input_sha256,output,...item.source_audit?.status==='verified'?{runtime_sources_sha256:item.source_audit.binding_sha256,request_sha256:row.request_sha256}:{}});
+  const subject=digest({blind_id:row.blind_id,case_sha256:row.case_sha256,input_sha256:row.input_sha256,output,...sourceSubjects.has(id)?{...sourceSubjects.get(id),request_sha256:row.request_sha256}:{}});
   if(!Array.isArray(row.reviews))invalid('initial_reviews');
   const reviews=row.reviews.map((r:unknown)=>scoreReview(r,row,output,subject));
   item.reviews=reviews.map(reviewProjection);
@@ -281,6 +290,7 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
   item.usability=(mean('relationship_fit')+mean('chinese_usability'))/2;
   item.severe=Object.fromEntries(SEVERE.map(k=>[k,integerTotal(scores.map((c:Row)=>c.severe_errors[k]))]));
  }
+ for(const id of deferredRequestHashes)if(!sourceSubjects.get(id)?.runtime_source_proof_sha256)unknown(id,'request_sha256_unknown');
  const arms=Object.fromEntries(ARMS.map(arm=>{const rows=audited.filter(r=>r.arm===arm),knownRows=rows.filter(r=>r.usability!==null);return [arm,{denominator:48,completed:rows.filter(r=>r.status==='succeeded').length,missing:rows.filter(r=>r.status==='missing').length,failed:rows.filter(r=>r.status==='failed').length,cancelled:rows.filter(r=>r.status==='cancelled').length,timeout:rows.filter(r=>r.status==='timeout').length,unknown:rows.filter(r=>r.status==='unknown').length,reviewed:knownRows.filter(r=>r.status==='succeeded').length,scored:knownRows.length,passed:rows.reduce((s,r)=>s+r.pass,0),pass_rate:rows.reduce((s,r)=>s+r.pass,0)/48,usability_mean:knownRows.length===48?knownRows.reduce((s,r)=>s+r.usability!,0)/48:null,known_failure_ids:rows.filter(r=>r.usability!==null&&!r.pass).map(r=>r.id)}];}));
  const paired=(get:(r:Audited)=>number)=>cases.map(c=>Object.fromEntries(ARMS.map(a=>[a,audited.filter(r=>r.case_id===c.case_id&&r.arm===a).map(get)])) as {old:number[];new:number[]});
  const terminalComplete=audited.every(r=>!['missing','unknown'].includes(r.status));
@@ -306,7 +316,7 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
   if(row.cost!==null&&(!object(row.cost)||!nonnegative(row.cost.amount)||row.cost.currency!==run.price_snapshot?.currency||row.cost.price_snapshot_sha256!==run.price_snapshot?.sha256))invalid('cost_or_price_binding');
   const runtime=run.evidence_kind==='model_run'||row.runtime_sources!==undefined;
   const persistedResultKnown=runtime?item.source_audit?.status==='verified':row.deterministic_checks.status==='passed'&&object(row.output)&&row.deterministic_checks.output_sha256===digest(row.output);
-  const measuredLatency=auditLatency(row,item.id,unknown,persistedResultKnown);latencyAudits.set(item.id,measuredLatency);
+  const measuredLatency=auditLatency(row,item.id,unknown,persistedResultKnown,item.source_audit);latencyAudits.set(item.id,measuredLatency);
   const metric={physical_calls:row.physical_calls,total_tokens:total,cost:row.cost?.amount??null,latency_ms:measuredLatency.latency_ms};measurements.set(item.id,metric);
   for(const k of telemetryFields)if(metric[k]===null)unknown(item.id,k+'_unknown');
  }

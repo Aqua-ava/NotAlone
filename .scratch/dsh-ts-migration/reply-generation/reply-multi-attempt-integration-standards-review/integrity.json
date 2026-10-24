@@ -1,0 +1,21 @@
+{
+  "patch_sha256": "c2dc61e96cda6fed54dc79edfe83f220ffef16fe848317fe78307059d89c6f3d",
+  "candidate_manifest_sha256": "f653b88e33dacd2b2a57ad3f544c388e787b130ca0f3913f5d081979f5ae04b2",
+  "head": "8de29d7210df33f5d5316883c97add347afff406",
+  "base_commit": "8de29d7210df33f5d5316883c97add347afff406",
+  "base_file_mismatches": [],
+  "formal_file_mismatches": [],
+  "readonly_dependency_mismatches": [],
+  "formal_tree_exact_paths": true,
+  "patch_headers_exact_formal_paths": true,
+  "base_commit_files_match": true,
+  "new_paths_present_in_shared_tree": [],
+  "review_execution": {
+    "new_test_runs": 0,
+    "new_http_requests": 0,
+    "new_pg_runs": 0,
+    "new_model_runs": 0,
+    "new_app_runs": 0,
+    "source_or_git_mutations": 0
+  }
+}

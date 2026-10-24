@@ -5,7 +5,9 @@ type Row=Record<string,any>;
 export interface ReplyRuntimeSourceAudit {
  status:'verified'|'undetermined';reason?:string;binding_sha256:string|null;output_scope:'complete_http_result'|'legacy_four_field_fixture'|'undetermined';
  allowed_citation_ids:string[];attempt_count:number;request_id:string|null;attempt_ids:string[];attempt_observations:Row[];
+ contract_scope?:'constant_workspace_noSkill_read_denied_v1';derived_proof?:Row;
 }
+export interface ReplyRuntimeSourceSubjectBinding {runtime_sources_sha256:string;runtime_source_proof_sha256?:string}
 const INPUT=['current_intent','available_facts','unknowns','allowed_changes','current_message','recent_context'];
 const ORACLE=['forbidden_additions','tags','split'];
 const object=(value:unknown):value is Row=>value!==null&&typeof value==='object'&&!Array.isArray(value);
@@ -47,16 +49,9 @@ function payloadOf(body:Row,excludedFields:string[]):Row {
 const hashString=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const observations=(attempts:unknown[]):Row[]=>attempts.map(value=>{const attempt=object(value)?value:{},request=object(attempt.request)?attempt.request:{};return {attempt_id:uuid(attempt.attempt_id)?attempt.attempt_id:null,request_sha256:hashString(request.sha256)?request.sha256:null,request_hash_kind:request.hash_kind==='wire_utf8_sha256'||request.hash_kind==='canonical_json_sha256'?request.hash_kind:null,catalog_sha256:hashString(attempt.catalog_sha256)?attempt.catalog_sha256:null,response_started_at:typeof attempt.response_started_at==='string'?attempt.response_started_at:null};});
 const pending=(reason:string,attempts:unknown[]=[]):ReplyRuntimeSourceAudit=>({status:'undetermined',reason,binding_sha256:null,output_scope:'undetermined',allowed_citation_ids:[],attempt_count:attempts.length,request_id:null,attempt_ids:[],attempt_observations:observations(attempts)});
-/** 单物理请求合同；多请求需累积来源关系证明，当前明确未定且不丢弃原观测。 */
-export function auditReplyRuntimeSources(member:Row,row:Row,output:Row,mode:'model_run'|'reporter_fixture'='model_run'):ReplyRuntimeSourceAudit {
- const evidence=row.runtime_sources;
- if(evidence===null||evidence===undefined)return pending('runtime_sources_missing');
- if(!object(evidence)||evidence.schema_version!=='reply-runtime-sources-v1'||!Array.isArray(evidence.attempts))invalid('sources_structure');
- if(evidence.attempts.length!==row.physical_calls)invalid('physical_attempt_count');
- if(evidence.attempts.length!==1)return pending('runtime_multiple_attempts_unsupported',evidence.attempts);
- const actualScope=scope(evidence.scope);equal(scope(row.scope),actualScope,'record_scope');
- if(!uuid(evidence.request_id))invalid('request_id');
- const attempt=evidence.attempts[0];
+interface AttemptAudit {attempt:Row;request:Row;payload:Row;catalog:Row;expectedEntries:Row[];ids:string[];captured:number;responded:number;ended:number}
+/** 每次实际发送分别复用完整输入/来源/时间合同；不修改原采集。 */
+function auditAttempt(member:Row,row:Row,evidence:Row,attempt:Row,actualScope:Row,single:boolean):AttemptAudit {
  if(!object(attempt)||!uuid(attempt.attempt_id)||attempt.attempt_id_kind!=='collector_http_observation_not_ledger_id'||!object(attempt.request)||!object(attempt.request.body))invalid('attempt');
  const request=attempt.request;
  if(!['wire_utf8_sha256','canonical_json_sha256'].includes(request.hash_kind))invalid('request_hash_kind');
@@ -66,7 +61,7 @@ export function auditReplyRuntimeSources(member:Row,row:Row,output:Row,mode:'mod
   equal(parsed,request.body,'request_wire_body');
   if(digest(request.raw_utf8)!==request.sha256)invalid('request_wire_hash');
  }else if(digest(request.body)!==request.sha256||request.raw_utf8!==undefined)invalid('request_canonical_hash');
- if(row.request_sha256!==request.sha256)invalid('record_request_hash');
+ if(single&&row.request_sha256!==request.sha256)invalid('record_request_hash');
  const payload=payloadOf(request.body,Object.keys(member).filter(key=>!INPUT.includes(key)));
  equal(Object.keys(payload).sort(),['input_mode','draft_text','user_instruction','include_relationship_context','workspace_action','context_text','skill_selection','expression_actor','recipient_role','message_order','evidence','citation_policy','fidelity_contract','risk_notes'].sort(),'payload_fields');
  const input=Object.fromEntries(INPUT.filter(key=>key in member).map(key=>[key,member[key]]));
@@ -104,6 +99,11 @@ export function auditReplyRuntimeSources(member:Row,row:Row,output:Row,mode:'mod
  equal(catalog.entries,expectedEntries,'catalog_entries');
  const ids=sources.map(source=>source.evidence_id);
  equal(payload.citation_policy,{allowed_evidence_ids:ids,additional_evidence_ids:'successful_history_tool_evidence_only',references_are_not_citations:true},'payload_citation_policy');
+ return {attempt,request,payload,catalog,expectedEntries,ids,captured,responded,ended};
+}
+/** 最终结果只核验一次；多次恒定来源以原首catalog为PG锚。 */
+function auditPersistence(evidence:Row,actualScope:Row,anchor:AttemptAudit,output:Row,mode:'model_run'|'reporter_fixture'):'complete_http_result'|'legacy_four_field_fixture'|ReplyRuntimeSourceAudit {
+ const {attempt,expectedEntries,ids,ended}=anchor;
  const persisted=evidence.persistence;
  if(persisted===null||persisted===undefined)return pending('runtime_persistence_missing',evidence.attempts);
  if(!object(persisted)||persisted.verified_after_completion!==true||persisted.catalog_sha256!==attempt.catalog_sha256||persisted.request_id!==evidence.request_id)invalid('persistence_binding');
@@ -146,5 +146,149 @@ export function auditReplyRuntimeSources(member:Row,row:Row,output:Row,mode:'mod
  }
  if(persisted.output_sha256!==digest(persisted.output)||persisted.output_sha256!==digest(output))invalid('persistence_output_hash');
  equal(persisted.output,output,'persistence_output');
- return {status:'verified',output_scope:legacy?'legacy_four_field_fixture':'complete_http_result',binding_sha256:digest(evidence),allowed_citation_ids:ids,attempt_count:1,request_id:evidence.request_id,attempt_ids:[attempt.attempt_id],attempt_observations:observations(evidence.attempts)};
+ return legacy?'legacy_four_field_fixture':'complete_http_result';
+}
+const MULTI_SCOPE='constant_workspace_noSkill_read_denied_v1' as const;
+const DENIED='[Skill 不可用]';
+const nonempty=(value:unknown):value is string=>typeof value==='string'&&!!value.trim();
+const keysEqual=(value:unknown,keys:string[])=>object(value)&&canonical(Object.keys(value).sort())===canonical([...keys].sort());
+/** 当前分支只认识原workspace声明状态；恒定相等不能证明新增状态或失效授权。 */
+function narrowSourceState(sources:Row[]):boolean {
+ return sources.every(source=>keysEqual(source,['evidence_id','kind','factual_role','text','status','selection_reason','timing','event','conditions','evolution','valid_at','invalid_at'])
+  &&nonempty(source.selection_reason)&&['event','conditions','evolution','valid_at','invalid_at'].every(key=>source[key]===null)
+  &&keysEqual(source.timing,['recorded_at','source_started_at','source_ended_at','source_time_complete','current_status','current_status_reason'])
+  &&['recorded_at','source_started_at','source_ended_at'].every(key=>source.timing[key]===null)
+  &&source.timing.source_time_complete===false&&source.timing.current_status==='current_unverified'&&nonempty(source.timing.current_status_reason));
+}
+/** 只认识当前read_file拒绝过渡；成功资料或其它工具不合并进来源。 */
+function deniedTransition(row:Row,evidence:Row,audits:AttemptAudit[],output:Row):Row|null {
+ const [first,second]=audits,initial=first.request.body,later=second.request.body;
+ if(!Array.isArray(initial.messages)||!Array.isArray(later.messages)||later.messages.length!==initial.messages.length+2)return null;
+ const plainText=(message:unknown,role:string,allowString=false)=>object(message)&&keysEqual(message,['role','content'])&&message.role===role
+  &&(allowString&&nonempty(message.content)||Array.isArray(message.content)&&message.content.length>0&&message.content.every((block:unknown)=>object(block)&&keysEqual(block,['type','text'])&&block.type==='text'&&nonempty(block.text)));
+ if(row.arm==='new'?(initial.messages.length!==1||!plainText(initial.messages[0],'user')):(initial.messages.length!==2||!plainText(initial.messages[0],'system')||!plainText(initial.messages[1],'user',true)))return null;
+ equal(later.messages.slice(0,-2),initial.messages,'multi_prior_messages_changed');
+ const configuration=(body:Row)=>Object.fromEntries(Object.entries(body).filter(([key])=>key!=='messages'));
+ equal(configuration(later),configuration(initial),'multi_request_configuration_changed');
+ const [assistant,result]=later.messages.slice(-2);let call:Row,args:Row,toolResult:unknown;
+ if(row.arm==='new'){
+  if(!keysEqual(assistant,['role','content'])||assistant.role!=='assistant'||!Array.isArray(assistant.content)||assistant.content.length!==1)return null;
+  call=assistant.content[0];
+  if(!keysEqual(call,['type','id','name','input'])||call.type!=='tool_use'||call.name!=='read_file')return null;
+  args=call.input;
+  if(!keysEqual(result,['role','content'])||result.role!=='user'||!Array.isArray(result.content)||result.content.length!==1)return null;
+  const block=result.content[0];
+  if(!keysEqual(block,['type','tool_use_id','content','is_error'])||block.type!=='tool_result'||block.is_error!==false)return null;
+  if(!nonempty(call.id)||call.id!==block.tool_use_id)invalid('multi_tool_call_binding');
+  if(canonical(block.content)!==canonical([{type:'text',text:DENIED}]))return null;
+  toolResult=block.content;
+ }else if(row.arm==='old'){
+  if(!keysEqual(assistant,['content','role','tool_calls'])||assistant.role!=='assistant'||assistant.content!==null||!Array.isArray(assistant.tool_calls)||assistant.tool_calls.length!==1)return null;
+  call=assistant.tool_calls[0];
+  if(!keysEqual(call,['type','id','function'])||call.type!=='function'||!keysEqual(call.function,['name','arguments'])||call.function.name!=='read_file'||typeof call.function.arguments!=='string')return null;
+  try{args=JSON.parse(call.function.arguments);}catch{return invalid('multi_tool_arguments');}
+  if(!keysEqual(result,['content','role','tool_call_id'])||result.role!=='tool')return null;
+  if(!nonempty(call.id)||call.id!==result.tool_call_id)invalid('multi_tool_call_binding');
+  if(result.content!==DENIED)return null;
+  toolResult=result.content;
+ }else return null;
+ if(!object(args)||!nonempty(args.file_path)||Object.keys(args).some(key=>!['file_path','offset','limit'].includes(key))||['offset','limit'].some(key=>args[key]!==undefined&&!Number.isSafeInteger(args[key])))return null;
+ if(!Array.isArray(initial.tools))return null;
+ const tools=initial.tools.map((tool:Row)=>row.arm==='old'?tool.function:tool),readers=tools.filter((tool:Row)=>object(tool)&&tool.name==='read_file');
+ if(readers.length!==1)return null;
+ const schema=row.arm==='old'?readers[0].parameters:readers[0].input_schema;
+ equal(schema,{properties:{file_path:{type:'string'},offset:{default:0,type:'integer'},limit:{default:1000,type:'integer'}},required:['file_path'],type:'object'},'multi_read_file_schema');
+ const partial=row.partial_observations;let observation:unknown;
+ if(!object(partial)||!Array.isArray(partial.events))return null;
+ if(!object(row.actual)||row.actual.status!=='succeeded'||!object(row.actual.result))return null;
+ equal(row.actual.result,output,'multi_actual_result');
+ if(row.arm==='new'){
+  const knownEvents=['business_service_start','queue_acquire_start','queue_acquire_end','model_stream_start','model_stream_chunk','model_stream_end','business_service_returned_after_persistence'];
+  // host HTTP request ID与持久reply_request_id属于不同域；只校验原host观察自身一致。
+  if(partial.clock!=='host_request_relative_monotonic'||partial.events.some((event:unknown)=>!object(event)||!knownEvents.includes(event.type)||!uuid(event.request_id)||event.clock!==partial.clock))return null;
+  if(new Set(partial.events.map((event:Row)=>event.request_id)).size!==1)return null;
+  let prior=-1;
+  for(const event of partial.events){if(typeof event.at_ms!=='number'||!Number.isFinite(event.at_ms)||event.at_ms<0||event.at_ms<prior)return null;prior=event.at_ms;}
+  const toolEvents=partial.primary_tool_events;
+  if(!Array.isArray(toolEvents)||toolEvents.length!==1)return null;
+  const denied=toolEvents[0];
+  if(!keysEqual(denied,['tool','outcome','scope'])||denied.tool!=='read_file'||denied.outcome!=='actual_runtime_scope_denied'||!keysEqual(denied.scope,['ownerId','contactId','scene']))return null;
+  equal(denied.scope,{ownerId:evidence.scope.owner_id,contactId:evidence.scope.contact_id,scene:''},'multi_tool_scope');
+  observation=denied;
+ }else{
+  if(!object(row.actual)||canonical(row.actual.partial_observations)!==canonical(partial))return null;
+  const knownEvents=['business_service_start','context_build_start','context_build_end','context_validate_start','context_validate_end','sdk_complete_message','tool_start_read_file','actual_read_file_scope_denied','store_save_start','store_save_committed','business_service_returned_after_persistence'];
+  // 原callback只观测type/at_ms；新增范围、工具或结果字段不能被已知type掩盖。
+  if(partial.clock!=='python_service_relative_monotonic'||partial.events.some((event:unknown)=>!object(event)||!keysEqual(event,['type','at_ms'])||!knownEvents.includes(event.type)))return null;
+  const starts=partial.events.filter((event:Row)=>event.type==='tool_start_read_file'),denials=partial.events.filter((event:Row)=>event.type==='actual_read_file_scope_denied');
+  if(starts.length!==1||denials.length!==1)return null;
+  let prior=-1;
+  for(const event of partial.events){if(typeof event.at_ms!=='number'||!Number.isFinite(event.at_ms)||event.at_ms<0||event.at_ms<prior)return null;prior=event.at_ms;}
+  const started=partial.events.indexOf(starts[0]),ended=partial.events.indexOf(denials[0]);
+  if(started>=ended||!partial.events.slice(0,started).some((event:Row)=>event.type==='sdk_complete_message')||!partial.events.slice(ended+1).some((event:Row)=>event.type==='sdk_complete_message'))return null;
+  observation={start:starts[0],denial:denials[0],clock:partial.clock};
+ }
+ if(!Array.isArray(row.physical_attempts)||row.physical_attempts.length!==2)return null;
+ for(const [index,trace]of row.physical_attempts.entries()){
+  const audited=audits[index];
+  if(!object(trace)||trace.attempt_id!==audited.attempt.attempt_id||trace.attempt_identity_kind!==audited.attempt.attempt_id_kind||trace.case_id!==row.case_id||trace.repeat!==row.repeat||trace.arm!==row.arm)invalid('multi_physical_trace_binding');
+  equal(trace.request,audited.request.body,'multi_physical_request');
+  equal(trace.evidence,audited.payload.evidence,'multi_physical_sources');
+  equal(trace.source_catalog,audited.catalog,'multi_physical_catalog');
+  if(trace.request_sha256!==audited.request.sha256||trace.request_hash_kind!==audited.request.hash_kind||trace.source_catalog_sha256!==audited.attempt.catalog_sha256||trace.response_started_at!==audited.attempt.response_started_at)invalid('multi_physical_hash_binding');
+  if(!(audited.captured<=time(trace.supplier_received_at)&&time(trace.supplier_received_at)<=audited.responded))invalid('multi_physical_order');
+  if(audited.request.hash_kind==='wire_utf8_sha256'&&trace.raw_utf8!==audited.request.raw_utf8)invalid('multi_physical_wire');
+ }
+ const proof={schema_version:'reply-multi-attempt-derived-proof-v1',contract_scope:MULTI_SCOPE,internal_consistency_only:true,derived_after_capture:true,
+  runtime_sources_sha256:digest(evidence),attempt_bundle:audits.map(audit=>({attempt_id:audit.attempt.attempt_id,request_sha256:audit.request.sha256,catalog_sha256:audit.attempt.catalog_sha256})),
+  transition_sha256:digest({call_id:call.id,tool:'read_file',arguments:args,result:toolResult,observation}),partial_observations_sha256:digest(partial),actual_result_sha256:digest(row.actual.result),physical_trace_sha256:digest(row.physical_attempts),
+  real_model_quality_verified:false,production_switch_approved:false};
+ return {...proof,sha256:digest(proof)};
+}
+/** 保留单attempt合同；只为两次恒定workspace/noSkill拒绝过渡增加内部一致性分支。 */
+export function auditReplyRuntimeSources(member:Row,row:Row,output:Row,mode:'model_run'|'reporter_fixture'='model_run'):ReplyRuntimeSourceAudit {
+ const evidence=row.runtime_sources;
+ if(evidence===null||evidence===undefined)return pending('runtime_sources_missing');
+ if(!object(evidence)||evidence.schema_version!=='reply-runtime-sources-v1'||!Array.isArray(evidence.attempts))invalid('sources_structure');
+ if(evidence.attempts.length!==row.physical_calls)invalid('physical_attempt_count');
+ if(![1,2].includes(evidence.attempts.length))return pending('runtime_multiple_attempts_unsupported',evidence.attempts);
+ const multiple=evidence.attempts.length===2;
+ // 没有窄合同所需的原业务观察和物理trace，沿用原多attempt未定结果。
+ if(multiple&&(!object(row.actual)||!object(row.partial_observations)||!Array.isArray(row.physical_attempts)))return pending('runtime_multiple_attempts_unsupported',evidence.attempts);
+ if(multiple&&((row.terminal_status??row.actual?.status)!=='succeeded'||row.actual?.status!==undefined&&row.actual.status!=='succeeded'))return pending('runtime_multi_terminal_unsupported',evidence.attempts);
+ if(multiple&&row.request_sha256!==null)invalid('multi_record_request_hash');
+ const actualScope=scope(evidence.scope);equal(scope(row.scope),actualScope,'record_scope');
+ if(!uuid(evidence.request_id))invalid('request_id');
+ const audits:AttemptAudit[]=evidence.attempts.map((attempt:Row)=>auditAttempt(member,row,evidence,attempt,actualScope,!multiple));
+ let derived:Row|null=null;
+ if(multiple){
+  if(new Set(audits.map(audit=>audit.attempt.attempt_id)).size!==2)invalid('multi_attempt_reused');
+  if(audits[0].responded>audits[1].captured)invalid('multi_attempt_order');
+  equal(audits[1].expectedEntries,audits[0].expectedEntries,'multi_sources_changed');
+  if(!narrowSourceState(audits[0].payload.evidence))return pending('runtime_multi_source_state_unsupported',evidence.attempts);
+  derived=deniedTransition(row,evidence,audits,output);
+  if(!derived)return pending('runtime_multi_transition_unsupported',evidence.attempts);
+ }
+ const outputScope=auditPersistence(evidence,actualScope,audits[0],output,mode);
+ if(typeof outputScope!=='string')return outputScope;
+ if(multiple&&outputScope!=='complete_http_result')return pending('runtime_multi_complete_output_required',evidence.attempts);
+ return {status:'verified',output_scope:outputScope,binding_sha256:digest(evidence),allowed_citation_ids:audits[0].ids,attempt_count:audits.length,request_id:evidence.request_id,attempt_ids:audits.map(audit=>audit.attempt.attempt_id),attempt_observations:observations(evidence.attempts),
+  ...derived?{contract_scope:MULTI_SCOPE,derived_proof:derived}:{}};
+}
+/** 只为已完成来源审计构造公共subject片段；摘要不认证采集历史。单attempt字段保持原样。 */
+export function replyRuntimeSourceSubjectBinding(audit:ReplyRuntimeSourceAudit):ReplyRuntimeSourceSubjectBinding|null {
+ if(audit.status!=='verified')return null;
+ if(!hashString(audit.binding_sha256))invalid('subject_runtime_hash');
+ const binding={runtime_sources_sha256:audit.binding_sha256};
+ if(audit.attempt_count===1){if(audit.contract_scope!==undefined||audit.derived_proof!==undefined)invalid('subject_single_proof');return binding;}
+ const proof=audit.derived_proof;
+ if(audit.attempt_count!==2||audit.contract_scope!==MULTI_SCOPE||!object(proof)||!keysEqual(proof,['schema_version','contract_scope','internal_consistency_only','derived_after_capture','runtime_sources_sha256','attempt_bundle','transition_sha256','partial_observations_sha256','actual_result_sha256','physical_trace_sha256','real_model_quality_verified','production_switch_approved','sha256']))invalid('subject_derived_proof');
+ if(proof.schema_version!=='reply-multi-attempt-derived-proof-v1'||proof.contract_scope!==MULTI_SCOPE||proof.internal_consistency_only!==true||proof.derived_after_capture!==true||proof.real_model_quality_verified!==false||proof.production_switch_approved!==false||proof.runtime_sources_sha256!==audit.binding_sha256)invalid('subject_proof_contract');
+ const {sha256,...originalProof}=proof;
+ if(!hashString(sha256)||digest(originalProof)!==sha256||['transition_sha256','partial_observations_sha256','actual_result_sha256','physical_trace_sha256'].some(key=>!hashString(proof[key])))invalid('subject_proof_hash');
+ if(!Array.isArray(proof.attempt_bundle)||proof.attempt_bundle.length!==2||audit.attempt_ids.length!==2||audit.attempt_observations.length!==2)invalid('subject_attempt_bundle');
+ for(const [index,attempt]of proof.attempt_bundle.entries()){
+  if(!keysEqual(attempt,['attempt_id','request_sha256','catalog_sha256'])||!uuid(attempt.attempt_id)||!hashString(attempt.request_sha256)||!hashString(attempt.catalog_sha256)||attempt.attempt_id!==audit.attempt_ids[index]||attempt.attempt_id!==audit.attempt_observations[index].attempt_id||attempt.request_sha256!==audit.attempt_observations[index].request_sha256||attempt.catalog_sha256!==audit.attempt_observations[index].catalog_sha256)invalid('subject_attempt_binding');
+ }
+ return {...binding,runtime_source_proof_sha256:sha256};
 }
