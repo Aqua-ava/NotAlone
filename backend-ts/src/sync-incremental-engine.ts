@@ -6,11 +6,13 @@ import type {IncrementalBinding,SyncIncrementalStore} from './sync-incremental-s
 import {normalizeCliEvents,type IncrementalProcessingRecord} from './sync-incremental-normalize.ts';
 import {SyncIncrementalRecovery,incrementalRecoveryStatus,type IncrementalRecoveryState} from './sync-incremental-recovery.ts';
 import {parseJson} from './host-json.ts';
+import type {SyncHistory} from './sync-history.ts';
 
 interface MessageCreated {owner_id:string;contact_id:string;message_id:string;occurred_at:string}
 interface Options {
   ownerId:string;accountScope:string;store:SyncIncrementalStore;scope:SyncScopeService;
   sessions:WechatSessions;cli:SyncIncrementalCli;recovery:SyncIncrementalRecovery;
+  history?:SyncHistory;
   publish:(events:readonly MessageCreated[],signal:AbortSignal)=>Promise<void>;
   clock?:()=>Date;heartbeatMs?:number;
 }
@@ -65,7 +67,7 @@ export class SyncIncrementalEngine {
   private followEnabled=false;
   private cliAvailable:boolean|null=null;
   private cliFailure:string|null=null;
-  private currentStatus:Record<string,unknown>={phase:'disabled',stream_active:false,stream_mode:null,failure_code:null,bound_count:0,pending_count:0};
+  private currentStatus:Record<string,unknown>={phase:'disabled',stream_active:false,stream_mode:null,failure_code:null,bound_count:0,pending_count:0,history_coverages:[]};
   constructor(options:Options){this.options=options;this.recoveryTrigger=this.now();}
   private now(){return (this.options.clock??(()=>new Date()))();}
   status(){return {...this.currentStatus,cli_available:this.cliAvailable,cli_failure_code:this.cliFailure,sync_scope_failure_code:this.scopeFailure};}
@@ -173,8 +175,9 @@ export class SyncIncrementalEngine {
     if(!enabled){
       const stream=this.stream;this.stream=null;await stream?.close();this.queue.clear();this.initial=true;
       const bindings=await this.options.store.listBindings(check);
+      const historyCoverages=this.options.history?await this.options.history.coverages(bindings,check):[];
       this.currentStatus={phase:'disabled',stream_active:false,stream_mode:null,failure_code:null,bound_count:bindings.length,pending_count:0,
-        ...incrementalRecoveryStatus(bindings,await this.options.recovery.list(check),this.priority)};
+        history_coverages:historyCoverages,...incrementalRecoveryStatus(bindings,await this.options.recovery.list(check),this.priority)};
       return this.status();
     }
     const now=+this.now();
@@ -198,7 +201,9 @@ export class SyncIncrementalEngine {
     for(const locator of this.queue.keys())if(!byLocator.has(locator))this.queue.delete(locator);
     for(const id of this.retries.keys())if(!bindings.some(b=>b.binding_id===id))this.retries.delete(id);
     if(!bindings.length){await this.stream?.close();this.stream=null;this.initial=true;
-      this.currentStatus={phase:'waiting_bindings',stream_active:false,stream_mode:null,failure_code:null,bound_count:0,pending_count:0};return this.status();}
+      this.currentStatus={phase:'waiting_bindings',stream_active:false,stream_mode:null,failure_code:null,bound_count:0,pending_count:0,history_coverages:[]};return this.status();}
+    let historyFailure:string|null=null;
+    if(this.options.history)try{await this.options.history.ensureStarted(bindings,check);}catch(error){check();historyFailure='history_state_unavailable';}
     await this.options.cli.configuredAccount({expectedAccount:this.options.accountScope,signal,timeoutMs:remaining()});check();
     this.cliAvailable=true;this.cliFailure=null;
     if(!this.stream&&now>=this.streamRetryAt){
@@ -248,6 +253,18 @@ export class SyncIncrementalEngine {
       };
       try{
         if(!await this.options.store.readEnabled(check))throw new SyncStopped();
+        if(this.options.history){
+          const historyStep=await this.options.history.readPage(binding,{signal,timeoutMs:remaining,check});
+          if(historyStep.phase!=='not_required'){
+            this.cliAvailable=true;this.cliFailure=null;
+            written+=historyStep.message_count;
+            this.retries.delete(binding.binding_id);
+            // 历史页完成后下一片才进入增量；期间不发布逐条消息事件。
+            this.enqueue(locator,live);
+            if(binding===priority)this.currentStatus={...this.currentStatus,priority_last_success_at:this.now().toISOString(),priority_last_failure_code:null};
+            continue;
+          }
+        }
         const position=await this.options.store.readPosition(binding,check);check();
         if(position.history_busy){this.recoveryPending.delete(locator);continue;}
         const resolved=await callCli(()=>this.options.cli.resolveChat(locator,{signal,timeoutMs:Math.min(1000,remaining())}));check();
@@ -292,8 +309,13 @@ export class SyncIncrementalEngine {
         check();const code=errorCode(error);failure=code;
         const failureRecord=(error as {failure_record?:IncrementalProcessingRecord}).failure_record;
         if(failureRecord)try{await this.options.store.recordInputFailure(binding,failureRecord,check);}catch{check();failure='source_processing_write_failed';}
+        if(this.options.history&&['cli_scope_unverified','cli_chat_not_private'].includes(code)){
+          try{await this.options.history.markScopeIncomplete(binding,code,check);}
+          catch{check();failure='history_state_unavailable';}
+        }
         const count=(retry?.count??0)+1;
-        this.retries.set(binding.binding_id,{count,at:now+(['cli_scope_unverified','cli_chat_not_private','local_history_deleted','local_history_empty'].includes(code)?300_000:Math.min(300_000,5000*2**Math.min(count-1,6))),code});
+        if(code.startsWith('cli_')){this.cliAvailable=false;this.cliFailure=code;}
+        this.retries.set(binding.binding_id,{count,at:now+(['cli_scope_unverified','cli_chat_not_private','local_history_deleted','local_history_empty','history_empty'].includes(code)?300_000:Math.min(300_000,5000*2**Math.min(count-1,6))),code});
         if(recovery)try{await this.options.recovery.fail(binding,code,['cli_freshness_unknown','cli_output_invalid','local_history_deleted','local_history_empty'].includes(code),check);}catch{check();failure='backfill_state_unavailable';}
         if(binding===priority)this.currentStatus={...this.currentStatus,priority_last_failure_code:code};
       }finally{if(binding===priority){this.priorityAt=now;this.currentStatus={...this.currentStatus,
@@ -303,11 +325,13 @@ export class SyncIncrementalEngine {
     }
     if(!this.recoveryPending.size)this.recoveryTrigger=null;
     const states=await this.options.recovery.list(check);check();
+    const historyCoverages=this.options.history?await this.options.history.coverages(bindings,check):[];
     const scopeFailure=[...this.retries.values()].find(r=>['cli_scope_unverified','cli_chat_not_private'].includes(r.code));
-    failure=scopeFailure?.code??failure;
+    failure=historyFailure??scopeFailure?.code??failure;
     this.currentStatus={...this.currentStatus,phase:failure||!this.stream?'degraded':'active',stream_active:!!this.stream&&!this.stream.closed,
       stream_mode:this.stream?'global_follow':'bounded_polling',failure_code:failure,bound_count:bindings.length,pending_count:this.queue.size,
-      priority_contact_id:this.priority,batch_message_count:written,...incrementalRecoveryStatus(bindings,states,this.priority,this.recoveryPending.size>0)};
+      history_coverages:historyCoverages,priority_contact_id:this.priority,batch_message_count:written,
+      ...incrementalRecoveryStatus(bindings,states,this.priority,this.recoveryPending.size>0)};
     return this.status();
   }
 }

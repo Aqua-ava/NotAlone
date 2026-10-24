@@ -8,6 +8,7 @@ import {SyncIncrementalCli} from './sync-incremental-cli.ts';
 import {SyncIncrementalStore} from './sync-incremental-store.ts';
 import {SyncIncrementalRecovery} from './sync-incremental-recovery.ts';
 import {SyncIncrementalEngine} from './sync-incremental-engine.ts';
+import {SyncHistory} from './sync-history.ts';
 
 const prefix='/api/runtime/sync-incremental/';
 const commands=new Set(['cycle','status','enable','disable','check','priority','pause','retry','stop','resume','follow-status','follow-enable','follow-disable','follow-interrupt']);
@@ -15,7 +16,7 @@ export function isSyncIncrementalRoute(path:string):boolean{return path.startsWi
 export function syncIncrementalBodyLimit(_path?:string):number{return 16*1024;}
 export interface SyncIncrementalResponse {status:number;body:unknown}
 export interface IncrementalMessageCreated {owner_id:string;contact_id:string;message_id:string;occurred_at:string}
-interface Options {storage:HostStorage;executable:string;environment?:NodeJS.ProcessEnv;publish:(events:readonly IncrementalMessageCreated[],signal:AbortSignal)=>Promise<void>}
+interface Options {storage:HostStorage;executable:string;environment?:NodeJS.ProcessEnv;publish:(events:readonly IncrementalMessageCreated[],signal:AbortSignal)=>Promise<void>;historyOwner?:'python'|'typescript';historyPageLimit?:number}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const response=(body:unknown,status=200):SyncIncrementalResponse=>({status,body});
 export async function createSyncIncrementalApi(options:Options){
@@ -28,7 +29,13 @@ export async function createSyncIncrementalApi(options:Options){
  const cli=scope?new SyncIncrementalCli(options):undefined;
  const store=scope?new SyncIncrementalStore({storage:options.storage,ownerId:owner!,accountScope:account!}):undefined;
  const recovery=store?new SyncIncrementalRecovery({store,storage:options.storage,ownerId:owner!}):undefined;
- const engine=store?new SyncIncrementalEngine({ownerId:owner!,accountScope:account!,store,scope:scope!,sessions:sessions!,cli:cli!,recovery:recovery!,publish:options.publish}):undefined;
+ const history=store&&options.historyOwner==='typescript'?new SyncHistory({store,cli:cli!,accountScope:account!,pageLimit:options.historyPageLimit}):undefined;
+ const engine=store?new SyncIncrementalEngine({ownerId:owner!,accountScope:account!,store,scope:scope!,sessions:sessions!,cli:cli!,recovery:recovery!,history,publish:options.publish}):undefined;
+ async function runtimeStatus(check:()=>void=()=>{}):Promise<Record<string,unknown>>{
+  if(!engine||!store)throw new HostStorageError('sync_unavailable');
+  const enabled=await store.readEnabled(check);check();
+  return {...engine.status(),enabled};
+ }
  async function executeInternal(method:string,path:string,raw:unknown,assertCurrent:()=>void,signal:AbortSignal):Promise<SyncIncrementalResponse>{
   try{
    const check=()=>{if(closed||signal.aborted)throw new HostStorageError('runtime_stopping');assertCurrent();};check();
@@ -59,8 +66,7 @@ export async function createSyncIncrementalApi(options:Options){
    else if(command==='follow-enable'||command==='follow-disable')engine.setFollowEnabled(command==='follow-enable');
    else if(command==='follow-interrupt')await engine.interruptFollow();
    check();
-   const enabled=await store!.readEnabled(check);check();
-   return response(command.startsWith('follow-')?engine.followStatus():{...engine.status(),enabled});
+   return response(command.startsWith('follow-')?engine.followStatus():await runtimeStatus(check));
   }catch(error){
    const code=(error as {code?:string})?.code;
    if(closed||signal.aborted||['runtime_stopping','cli_cancelled'].includes(code??''))return response({error:'runtime_stopping'},503);
@@ -73,6 +79,10 @@ export async function createSyncIncrementalApi(options:Options){
   const work=executeInternal(method,path,raw,assertCurrent,combined);pending.add(work);void work.finally(()=>pending.delete(work));return work;
  }
  return {execute,handle:execute,
+  async status(assertCurrent:()=>void=()=>{}):Promise<Record<string,unknown>>{
+   const check=()=>{if(closed||stopping.signal.aborted)throw new HostStorageError('runtime_stopping');assertCurrent();};
+   check();return runtimeStatus(check);
+  },
   async invalidateAndDrain(reason:string){return await engine?.invalidateAndDrain(reason);},
   resume(expectedVersion?:number){return !closed&&engine?.resume(expectedVersion);},
   close():Promise<void>{if(!closing){closed=true;stopping.abort();scope?.close();closing=(async()=>{await engine?.close();await Promise.allSettled([...pending]);})();}return closing;},

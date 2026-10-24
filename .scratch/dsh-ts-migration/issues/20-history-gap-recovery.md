@@ -1,7 +1,7 @@
 # 20：同步既有历史并恢复缺口
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 19, 10
 Spec: ../spec.md
@@ -14,9 +14,9 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
-- [ ] 授权私聊首次读取本机可读历史，旧授权按既有确认规则处理；重开补齐仅在有效范围，不恢复排除或已删资料。
-- [ ] 暂停／重试、当前联系人优先、其他联系人不饥饿、分页去重、水位与中断恢复遵循基线。
+- [x] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
+- [x] 授权私聊首次读取本机可读历史，旧授权按既有确认规则处理；重开补齐仅在有效范围，不恢复排除或已删资料。
+- [x] 暂停／重试、当前联系人优先、其他联系人不饥饿、分页去重、水位与中断恢复遵循基线。
 - [ ] 覆盖状态、不完整原因及用户明确接受部分历史的提示贯穿界面、后端和回复依据，未满足门禁不生成候选。
 - [ ] 消息入库与记忆派生分离，历史进度不冒充关系处理完成；停读、来源删除和新旧责任切换无重复写入。
 
@@ -45,4 +45,25 @@ Spec: ../spec.md
 
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+2026-10-25：TS 历史追平组件、PG 原子检查点和门禁已实现并提交待根集成。DSH
+锁定 `0.2.1-rc.2`／`687f282e8625c6b8d11ff58211a90524be2e4317`；本票没有
+直接 DSH 模型/Tool/Session 接口，未采用 Session 范围、随进程消失的 `ctx.jobs`，
+也没有新增独立 timer/连接。官方依据和适配结论见
+[DSH 查证](../history-gap-recovery/dsh-evidence.md)。
+
+实现新增 `SyncHistory`，并在既有 `SyncIncrementalEngine` 内以显式
+`historyOwner=typescript` 启用：按绑定授权建任务、分页读取、同一事务保存
+`cli_history` 来源/消息/处理回执/覆盖状态、完成页接续增量游标。空、删除、缺表、
+freshness/游标异常保持 incomplete；当前联系人优先而不饥饿其他绑定；历史页不逐条
+发布事件，关系提取仍独立排队。已有回复门禁覆盖 `syncing/not_started/incomplete`
+和显式不完整确认。
+
+严格合成 PG 回归 `node --test test/sync-history.test.mjs` 为 8/8；相关增量、范围、
+规范化组合 88/88、类型检查通过；Desktop 同步/历史视图 26/26、TS 回复范围/准备/
+HTTP 16/16 通过。测试不读实际
+App、微信、模型或真实资料。数据处理影响和清理见[实现验证](../history-gap-recovery/verification.md)。
+
+本票保持 claimed：共享官方宿主仍执行 Python 历史，公开 `/api/sync/status` 尚未把
+TS `history_coverages` 映射为 `cli_history_coverages`，`ownership.wechatHistory`
+仍为 Python。根须在单一执行方切换时按[宿主集成说明](../history-gap-recovery/host-integration.md)
+启用并独立验收；当前不得宣称公开 HTTP/App 闭环已完成。
