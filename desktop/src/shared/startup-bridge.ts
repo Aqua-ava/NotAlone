@@ -24,7 +24,11 @@ export interface StartupState {
   revision: number;
   helperWarnings: Array<'cli_unavailable' | 'probe_unavailable'>;
 }
+export interface DiagnosticPreview { previewId: string; json: string; }
+export interface DiagnosticExportResult { status: 'saved' | 'cancelled'; }
 export interface StartupBridge {
+  previewDiagnostics(): Promise<DiagnosticPreview>;
+  exportDiagnostics(previewId: string): Promise<DiagnosticExportResult>;
   getState(): Promise<StartupState>;
   getPaths(): Promise<StartupPaths>;
   savePaths(paths: StartupPaths): Promise<void>;

@@ -34,13 +34,14 @@ export function SetupPanel() {
           <button className="button" onClick={() => void window.notalone.setup.refresh()}>重试查询配置</button></>
           : state.phase === 'saving' ? <p>正在保存配置…</p>
             : state.phase === 'restarting' ? <p>正在停读并重新加载配置…</p>
-              : state.phase === 'restart-failed' ? <><p role="alert">后端重启未获确认。请检查受控配置后重试加载。</p>
+              : state.phase === 'restart-failed' ? <><p role="alert">{state.errorCode === 'configuration-environment-override' ? '已保存的配置仍被启动环境覆盖。请由启动方更新或移除对应环境设置并重启服务后，再重试加载。' : state.configurationPending ? '配置已保存，但尚未确认在本次运行生效。请重试加载；外部启动的服务需先由其启动方重启。' : '后端重启未获确认。请检查受控配置后重试加载。'}</p>
                 <button className="button" onClick={() => void window.notalone.setup.retryRestart()}>重试加载配置</button></>
           : <>
             {!state.ownerReady && <p>{state.phase === 'needs-owner' ? '本人身份尚未初始化'
               : state.recoverableOwner ? '检测到唯一已有本人，确认后恢复原身份。'
                 : '检测到既有本人资料，但无法唯一确认本次身份。请检查受控配置，不会自动选择本人。'}</p>}
             <p>{state.credentialsConfigured ? 'DeepSeek · 已配置' : 'DeepSeek · 尚未配置'}</p>
+            <p>密钥和模型配置保存后需重启本机服务才会生效；保存本身不会发起模型调用。</p>
             {state.officialDefaults === false && <><p>当前保留了自定义模型或接收地址。仅更新密钥会继续使用原配置；旧模型若无法核验输入预算，生成会停止。</p>
               {state.phase === 'ready' && <button className="button" onClick={() => { setKey(''); setEditingKey(true); setOfficialRecovery(true); setConfirmedOfficial(false); }}>改用官方 DeepSeek 默认配置</button>}</>}
             {state.phase === 'identity-unbound' && state.recoverableOwner && <button className="button" onClick={() => {
@@ -79,6 +80,7 @@ export function SetupPanel() {
                 <button className="button" type="button" onClick={() => setKey('')}>清空输入</button>
               </form>)}
           </>}
+    {state.errorCode === 'configuration-environment-override' && state.phase !== 'restart-failed' && <p role="alert">启动环境覆盖或禁止读取受控配置文件，本次更改未保存。请由启动方更新环境后重试。</p>}
     {(error || state.errorCode === 'initialize-failed' || state.errorCode === 'credentials-failed') && <p role="alert">{error || (state.errorCode === 'credentials-failed'
       ? 'DeepSeek 密钥未能保存，请重新输入后重试。' : '本人初始化未完成，请重试。')}</p>}
     <FirstFrameError message={readError} retry={() => { setReadError(''); setReadAttempt((value) => value + 1); }} />

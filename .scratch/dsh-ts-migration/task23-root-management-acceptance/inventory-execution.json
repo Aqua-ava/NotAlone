@@ -1,0 +1,9 @@
+{
+  "command": "node scripts/test-inventory.mjs",
+  "cwd": "desktop",
+  "exit_code": 1,
+  "raw_alias": "raw:inventory.log",
+  "raw_sha256": "eef29493e90992877e89a161fc096deda0d7ed36539a968274ecfe9e8c9a7295",
+  "preexisting_unregistered_test": "tests/expression-preferences/bigint.test.mjs",
+  "candidate_reported_baseline_issue": true
+}

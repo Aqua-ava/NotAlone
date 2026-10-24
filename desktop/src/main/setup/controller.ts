@@ -1,4 +1,5 @@
 import { isUuid } from '../uuid';
+import { BackendRequestFailure } from '../backend/json-client';
 import type { SetupState } from '../../shared/setup-bridge';
 import type { BackendHost } from '../backend/host';
 
@@ -37,13 +38,20 @@ export class SetupController {
     this.publish({ phase: 'loading', ownerReady: false, credentialsConfigured: false, errorCode: undefined });
     try {
       const { data } = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
-      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown };
+      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown; runtime_configuration_pending?: unknown; runtime_configuration_environment_override?: unknown };
       if (!status || typeof status.initialized !== 'boolean' || typeof status.owner_configured !== 'boolean'
-        || typeof status.credentials_configured !== 'boolean' || typeof status.runtime_owner_configured !== 'boolean') throw new Error();
+        || typeof status.credentials_configured !== 'boolean' || typeof status.runtime_owner_configured !== 'boolean'
+        || status.runtime_configuration_pending !== undefined && typeof status.runtime_configuration_pending !== 'boolean'
+        || status.runtime_configuration_environment_override !== undefined && typeof status.runtime_configuration_environment_override !== 'boolean') throw new Error();
       const ownerReady = status.runtime_owner_configured;
       if (!this.isCurrent(operation)) return;
-      this.publish({ phase: ownerReady ? 'ready' : status.owner_configured ? 'identity-unbound' : 'needs-owner',
-        ownerReady, recoverableOwner: !ownerReady && status.recoverable_owner === true, credentialsConfigured: status.credentials_configured,
+      const pending = status.runtime_configuration_pending === true;
+      if (pending) {
+        if (!this.savedConfigPending) this.savedExpectation = 'credentials';
+        this.savedConfigPending = true;
+      }
+      this.publish({ phase: pending ? 'restart-failed' : ownerReady ? 'ready' : status.owner_configured ? 'identity-unbound' : 'needs-owner',
+        ownerReady, configurationPending: pending, errorCode: pending ? status.runtime_configuration_environment_override === true ? 'configuration-environment-override' : 'reload-failed' : undefined, recoverableOwner: !ownerReady && status.recoverable_owner === true, credentialsConfigured: status.credentials_configured,
         officialDefaults: typeof status.official_deepseek_defaults === 'boolean' ? status.official_deepseek_defaults : undefined });
     } catch { if (this.isCurrent(operation)) this.publish({ phase: 'failed', ownerReady: false, credentialsConfigured: false }); }
   }
@@ -97,14 +105,16 @@ export class SetupController {
       if (!this.isCurrent(operation)) return;
       this.savedConfigPending = true;
       this.savedExpectation = kind;
+      this.publish({ configurationPending: true });
       await this.reloadConfiguration();
-    } catch {
+    } catch (error) {
       if (!this.isCurrent(operation)) return;
+      const environmentOverride = error instanceof BackendRequestFailure && error.code === 'configuration_environment_override';
       const recovery = this.beginOperation();
       if (!recovery || recovery.generation !== operation.generation) return;
       await this.readStatus(recovery);
       // 自己的恢复查询返回也需复核；断线或较新查询不能被旧保存错误覆盖。
-      if (this.isCurrent(recovery)) this.publish({ errorCode: kind === 'owner' ? 'initialize-failed' : 'credentials-failed' });
+      if (this.isCurrent(recovery)) this.publish({ errorCode: kind === 'owner' ? 'initialize-failed' : environmentOverride ? 'configuration-environment-override' : 'credentials-failed' });
     } finally { this.busy = false; }
   }
   async retryRestart(): Promise<void> {
@@ -121,7 +131,9 @@ export class SetupController {
   }
   private async reloadConfiguration(): Promise<void> {
     this.publish({ phase: 'restarting', ownerReady: false, credentialsConfigured: false, errorCode: undefined });
-    if (!await this.backend.restart()) {
+    // 保存已经成功；重启异常只能报告待加载，不能回退成保存失败。
+    const restarted = await this.backend.restart().catch(() => false);
+    if (!restarted) {
       this.publish({ phase: 'restart-failed', errorCode: 'reload-failed' }); return;
     }
     const operation = this.beginOperation();
@@ -130,7 +142,7 @@ export class SetupController {
     if (!this.isCurrent(operation)) return;
     if (this.state.phase === 'ready' && (this.savedExpectation === 'owner' || this.state.credentialsConfigured
       && (this.savedExpectation !== 'official' || this.state.officialDefaults === true))) this.savedConfigPending = false;
-    else this.publish({ phase: 'restart-failed', errorCode: 'reload-failed' });
+    else this.publish({ phase: 'restart-failed', errorCode: this.state.errorCode === 'configuration-environment-override' ? 'configuration-environment-override' : 'reload-failed' });
   }
   private beginOperation(): Operation | undefined {
     const generation = this.backend.getConnectionGeneration();

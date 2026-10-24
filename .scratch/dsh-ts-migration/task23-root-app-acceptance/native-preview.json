@@ -1,0 +1,22 @@
+{
+  "formatVersion": 1,
+  "product": "NotAlone",
+  "generatedAt": "2026-10-24T13:13:12.251Z",
+  "automaticUpload": false,
+  "startup": {
+    "phase": "ready",
+    "mode": "external",
+    "step": null,
+    "code": "ready",
+    "helperWarnings": [
+      "cli_unavailable",
+      "probe_unavailable"
+    ]
+  },
+  "backend": {
+    "phase": "connected",
+    "errorCode": null,
+    "canRetryConnection": false,
+    "canRetryShutdown": false
+  }
+}

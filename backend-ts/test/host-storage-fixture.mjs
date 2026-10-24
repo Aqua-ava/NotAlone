@@ -24,7 +24,7 @@ export async function createStorageFixture() {
     options: { envFilePath, migrationsDirectory, environment: {} },
     async close() {
       await client.end();
-      execFileSync(python, ['-c', "import sys,psycopg\nfrom psycopg import sql\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c:\n c.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(sys.argv[1])))", name], { env: environment, timeout: 15000, stdio: 'pipe' });
+      execFileSync(python, ['-c', "import sys,psycopg\nfrom psycopg import sql\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c:\n c.execute(sql.SQL('DROP DATABASE {}').format(sql.Identifier(sys.argv[1])))", name], { env: environment, timeout: 15000, stdio: 'pipe' });
       await rm(directory, { recursive: true, force: true });
     },
   };

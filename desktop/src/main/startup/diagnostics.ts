@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { StartupCode, StartupPaths, StartupState } from '../../shared/startup-bridge';
 import { backendEnvironment, configurationPaths, loadBackendConfiguration, saveBackendConfiguration, type BackendConfiguration } from '../backend/config';
 import { BackendFailure, readConnection } from '../backend/connection';
@@ -157,9 +158,11 @@ export class StartupDiagnostics {
     } catch { return 'project_unavailable'; }
     try {
       const source = path.join(config.projectDirectory!, 'backend/src/notalone');
-      if (!(await stat(path.join(source, 'server/command.py'))).isFile()
+      if (config.runtime === 'dsh') {
+        if (!(await stat(path.join(config.projectDirectory!, 'backend-ts/src/host-storage.ts'))).isFile()) return 'runtime_components_unavailable';
+      } else if (!(await stat(path.join(source, 'server/command.py'))).isFile()
         || !(await stat(path.join(source, 'startup_diagnostics.py'))).isFile()) return 'backend_package_missing';
-    } catch { return 'backend_package_missing'; }
+    } catch { return config.runtime === 'dsh' ? 'runtime_components_unavailable' : 'backend_package_missing'; }
     for (const [selected, code] of [[config.envFilePath || path.join(config.projectDirectory!, '.env'), 'env_path_unavailable'],
       [config.infoPath, 'info_path_unavailable']] as const) {
       if (!path.isAbsolute(selected)) return code;
@@ -177,12 +180,24 @@ export class StartupDiagnostics {
   }
 
   private async probe(config: BackendConfiguration, canStart: () => boolean, prepareSchema = false): Promise<StartupCode> {
-    const python = await realpath(config.pythonExecutable!);
+    const typescript = config.runtime === 'dsh' && !prepareSchema;
+    if (typescript && Number(process.versions.node.split('.')[0]) < 24) return 'runtime_components_unavailable';
+    const executable = typescript ? process.execPath : await realpath(config.pythonExecutable!);
     const project = await realpath(config.projectDirectory!);
+    // 普通 DSH 诊断只读复用03的 TS 兼容性合同；结构写入仍由03既有准备生命周期负责。
+    // 独立子进程保留硬超时与退出回收，不装配模型、业务任务或 DSH 遥测。
+    const program = `const {HostStorage}=await import(${JSON.stringify(pathToFileURL(path.join(project, 'backend-ts/src/host-storage.ts')).href)});
+      let storage; let code='diagnostic_failed';
+      try { storage=await HostStorage.open({envFilePath:process.env.NOTALONE_ENV_FILE,migrationsDirectory:${JSON.stringify(path.join(project, 'backend/database/migrations'))},environment:process.env});
+        code=(await storage.compatibility()).code; } catch {} finally { await storage?.close(); }
+      console.log(JSON.stringify({code}));`;
     if (!canStart() || this.closing) return 'diagnostic_failed';
     return new Promise((resolve) => {
-      const child = spawn(python, [...(config.source === 'managed' ? ['-I', '-B'] : []), '-m', prepareSchema ? 'notalone.startup_database' : 'notalone.startup_diagnostics', '--migrations', path.join(project, 'backend/database/migrations')], {
-        cwd: project, env: backendEnvironment({ ...config, projectDirectory: project }, this.userData), stdio: ['ignore', 'pipe', 'ignore'],
+      const args = typescript ? ['--experimental-strip-types', '--input-type=module', '-e', program]
+        : [...(config.source === 'managed' ? ['-I', '-B'] : []), '-m', prepareSchema ? 'notalone.startup_database' : 'notalone.startup_diagnostics', '--migrations', path.join(project, 'backend/database/migrations')];
+      const child = spawn(executable, args, {
+        cwd: project, env: { ...backendEnvironment({ ...config, projectDirectory: project }, this.userData),
+          ...(typescript ? { ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: undefined, NODE_NO_WARNINGS: '1' } : {}) }, stdio: ['ignore', 'pipe', 'ignore'],
       });
       let output = '';
       let settled = false;
@@ -209,15 +224,15 @@ export class StartupDiagnostics {
         output += chunk.toString('utf8');
         if (Buffer.byteLength(output) > 4096) stop('diagnostic_failed');
       });
-      child.once('error', () => finish('python_unavailable'));
+      child.once('error', () => finish(typescript ? 'runtime_components_unavailable' : 'python_unavailable'));
       child.once('close', () => {
         clearTimeout(killTimer);
         if (interrupted) { finish(interrupted); return; }
         try {
           const result: unknown = JSON.parse(output);
           const code = (result as { code?: unknown })?.code;
-          finish(typeof code === 'string' && reportCodes.has(code as StartupCode) ? code as StartupCode : 'backend_package_missing');
-        } catch { finish('backend_package_missing'); }
+          finish(typeof code === 'string' && reportCodes.has(code as StartupCode) ? code as StartupCode : typescript ? 'runtime_components_unavailable' : 'backend_package_missing');
+        } catch { finish(typescript ? 'runtime_components_unavailable' : 'backend_package_missing'); }
       });
     });
   }

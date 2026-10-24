@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import {parseJson,stringifyJson} from './host-json.ts';
 
 /** 迁移期唯一旧业务执行方；03不转移联系人、回复、同步、任务和删除的写入权。 */
-export const ownership = Object.freeze({setup:'typescript',credentials:'typescript',schemaUpdates:'python-migration-command',contacts:'python',replies:'python',memory:'python',skills:'python',imports:'python',deletion:'python',wechat:'split',wechatScope:'typescript',wechatBodySync:'python',tasks:'python'});
+export const ownership = Object.freeze({setup:'typescript',credentials:'typescript',ledger:'typescript',schemaUpdates:'python-migration-command',contacts:'python',replies:'python',memory:'python',skills:'python',imports:'python',deletion:'python',wechat:'split',wechatScope:'typescript',wechatBodySync:'python',tasks:'python'});
 export class LegacyControlError extends Error {
   readonly status: number;readonly code: string;
   constructor(status:number,code:string){super('LEGACY_CONTROL_FAILED');this.status=status;this.code=code;}

@@ -37,22 +37,45 @@ async function readConfiguration(path: string): Promise<string> {
     throw new HostStorageError('configuration_unavailable');
   } finally { await file?.close(); }
 }
+const MODEL_CONFIGURATION_KEYS = ['NOTALONE_DEEPSEEK_API_KEY', 'NOTALONE_DEEPSEEK_MODEL', 'NOTALONE_DEEPSEEK_BASE_URL'] as const;
 export class HostStorage {
   private closed = false;
+  private configurationPending = false;
   private pending = new Set<Promise<void>>();
   private assertOpen(): void { if (this.closed) throw new HostStorageError('runtime_stopping'); }
   private readonly options: HostStorageOptions;
   private readonly values: Record<string, string | undefined>;
-  private constructor(options: HostStorageOptions, values: Record<string, string | undefined>) { this.options = options; this.values = values; }
+  private readonly explicitConfiguration: Record<string, string | undefined>;
+  private readonly dotenvDisabled: boolean;
+  private readonly configurationEnvironmentOverride: boolean;
+  private constructor(options: HostStorageOptions, values: Record<string, string | undefined>,
+    explicitConfiguration: Record<string, string | undefined>, dotenvDisabled: boolean, configurationEnvironmentOverride: boolean) {
+    this.options = options; this.values = values; this.configurationPending = configurationEnvironmentOverride;
+    this.explicitConfiguration = explicitConfiguration; this.dotenvDisabled = dotenvDisabled; this.configurationEnvironmentOverride = configurationEnvironmentOverride;
+  }
   static async open(options: HostStorageOptions): Promise<HostStorage> {
-    const values = { ...(options.environment ?? process.env) };
-    if (values.NOTALONE_DISABLE_DOTENV !== '1') {
+    const environment = { ...(options.environment ?? process.env) };
+    const values = { ...environment }, fileValues: Record<string, string | undefined> = {};
+    const dotenvDisabled = environment.NOTALONE_DISABLE_DOTENV === '1';
+    if (!dotenvDisabled) {
       for (const line of (await readConfiguration(options.envFilePath)).split(/\r?\n/)) {
         const entry = parseLine(line);
+        if (entry && fileValues[entry[0]] === undefined) fileValues[entry[0]] = entry[1];
         if (entry && values[entry[0]] === undefined) values[entry[0]] = entry[1];
       }
     }
-    return new HostStorage(options, values);
+    const explicitConfiguration = Object.fromEntries(MODEL_CONFIGURATION_KEYS.map(key => [key, environment[key]]));
+    const overridden = MODEL_CONFIGURATION_KEYS.some(key => environment[key] !== undefined
+      && fileValues[key] !== undefined && environment[key] !== fileValues[key]);
+    return new HostStorage(options, values, explicitConfiguration, dotenvDisabled, overridden);
+  }
+  private assertModelConfigurationWritable(changes: Record<string, string>): void {
+    this.assertOpen();
+    // 显式环境优先于文件；拒绝无法由本次保存兑现的更改，不回显覆盖值。
+    if (this.dotenvDisabled || Object.entries(changes).some(([key, value]) =>
+      this.explicitConfiguration[key] !== undefined && this.explicitConfiguration[key] !== value)) {
+      throw new HostStorageError('configuration_environment_override');
+    }
   }
   get databaseUrl(): string { return this.values.NOTALONE_DATABASE_URL?.trim() ?? ''; }
   get runtimeOwnerId(): string | undefined { return this.values.NOTALONE_OWNER_ID?.trim() || undefined; }
@@ -75,6 +98,8 @@ export class HostStorage {
         ? (await client.query('SELECT EXISTS(SELECT 1 FROM public.owner WHERE id=$1::uuid) AS present', [runtime])).rows[0].present : false;
       return { initialized: ownerCount > 0, owner_configured: ownerCount > 0, recoverable_owner: ownerCount === 1 && !runtime,
         credentials_configured: this.credentialStatus().configured, runtime_owner_configured: Boolean(exists),
+        runtime_configuration_pending: this.configurationPending,
+        runtime_configuration_environment_override: this.configurationEnvironmentOverride,
         official_deepseek_defaults: (this.values.NOTALONE_DEEPSEEK_MODEL ?? 'deepseek-flash') === 'deepseek-flash'
           && ['https://api.deepseek.com', 'https://api.deepseek.com/v1'].includes((this.values.NOTALONE_DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')) };
     });
@@ -103,21 +128,23 @@ export class HostStorage {
       return { owner_id: owners[0].id, created: false };
     });
   }
-  async writeCredentials(apiKey: string): Promise<{ provider: string; configured: true }> {
+  async writeCredentials(apiKey: string): Promise<{ provider: string; configured: true; restart_required: true }> {
     if (typeof apiKey !== 'string' || !apiKey.trim() || apiKey.length > 4096 || /[\r\n\0]/.test(apiKey)) throw new HostStorageError('setup_request_invalid');
+    this.assertModelConfigurationWritable({ NOTALONE_DEEPSEEK_API_KEY: apiKey.trim() });
     await this.withClient(true, async client => {
       await this.requireReady(client);
       await this.persist({ NOTALONE_DEEPSEEK_API_KEY: apiKey.trim() });
     });
-    return { provider: 'deepseek', configured: true };
+    return { provider: 'deepseek', configured: true, restart_required: true };
   }
-  async useOfficialDeepseek(apiKey: string): Promise<{ provider: string; configured: true; official_deepseek_defaults: true }> {
+  async useOfficialDeepseek(apiKey: string): Promise<{ provider: string; configured: true; official_deepseek_defaults: true; restart_required: true }> {
     if (typeof apiKey !== 'string' || !/^[A-Za-z0-9_-]{1,4096}$/.test(apiKey)) throw new HostStorageError('setup_request_invalid');
+    this.assertModelConfigurationWritable({ NOTALONE_DEEPSEEK_API_KEY: apiKey, NOTALONE_DEEPSEEK_MODEL: 'deepseek-flash', NOTALONE_DEEPSEEK_BASE_URL: 'https://api.deepseek.com' });
     await this.withClient(true, async client => {
       await this.requireReady(client);
       await this.persist({ NOTALONE_DEEPSEEK_API_KEY: apiKey, NOTALONE_DEEPSEEK_MODEL: 'deepseek-flash', NOTALONE_DEEPSEEK_BASE_URL: 'https://api.deepseek.com' });
     });
-    return { provider: 'deepseek', configured: true, official_deepseek_defaults: true };
+    return { provider: 'deepseek', configured: true, official_deepseek_defaults: true, restart_required: true };
   }
   /** 已认证业务复用原连接；事务收尾仍受宿主关闭屏障约束。 */
   async businessTransaction<T>(operation: (client: pg.Client) => Promise<T>): Promise<T> {
@@ -212,6 +239,8 @@ export class HostStorage {
       try { await file.writeFile(output); await file.sync(); } finally { await file.close(); }
       this.assertOpen();
       await rename(temporary, path);
+      // 模型装配持有启动时快照；磁盘保存与当前进程采用配置是两个事实。
+      if (MODEL_CONFIGURATION_KEYS.some(key => key in values)) this.configurationPending = true;
       Object.assign(this.values, values);
     } catch (error) { if (error instanceof HostStorageError) throw error; throw new HostStorageError('configuration_write_failed'); }
     finally { if (temporary) await unlink(temporary).catch(() => {}); }

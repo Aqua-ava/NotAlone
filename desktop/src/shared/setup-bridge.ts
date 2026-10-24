@@ -3,10 +3,12 @@ export interface SetupState {
   phase: SetupPhase;
   ownerReady: boolean;
   credentialsConfigured: boolean;
+  /** 配置已保存，但当前宿主尚未确认采用新启动快照。 */
+  configurationPending?: boolean;
   officialDefaults?: boolean;
   recoverableOwner?: boolean;
   revision: number;
-  errorCode?: 'initialize-failed' | 'credentials-failed' | 'reload-failed';
+  errorCode?: 'initialize-failed' | 'credentials-failed' | 'reload-failed' | 'configuration-environment-override';
 }
 export interface SetupBridge {
   getState(): Promise<SetupState>;

@@ -1,0 +1,16 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 0.493,
+  "cwd": ".",
+  "command": [
+    "${HOME}/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "${REPO_ROOT}/desktop/node_modules/typescript/bin/tsc",
+    "--noEmit",
+    "-p",
+    "${REPO_ROOT}/desktop/tsconfig.json"
+  ],
+  "compiler_version": "Version 7.0.2",
+  "counts": {},
+  "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

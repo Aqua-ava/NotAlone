@@ -48,7 +48,13 @@ test('凭据原子保存保留其余配置、权限0600，账本漂移后阻止�
   try {
     await writeFile(fixture.envFilePath, (await readFile(fixture.envFilePath, 'utf8')) + 'NOTALONE_DEEPSEEK_MODEL=custom-model\nNOTALONE_DEEPSEEK_BASE_URL=https://example.invalid/v1\nexport NOTALONE_DEEPSEEK_API_KEY=old-key\nNOTALONE_DEEPSEEK_API_KEY=duplicate-key\n');
     const storage = await HostStorage.open(fixture.options);
-    assert.deepEqual(await storage.writeCredentials('new-synthetic-key'), {provider:'deepseek', configured:true});
+    assert.equal((await storage.setupStatus()).runtime_configuration_pending, false);
+    assert.deepEqual(await storage.writeCredentials('new-synthetic-key'), {provider:'deepseek', configured:true, restart_required:true});
+    assert.equal((await storage.setupStatus()).runtime_configuration_pending, true);
+    assert.doesNotMatch(JSON.stringify(await storage.setupStatus()), /new-synthetic-key|old-key|duplicate-key/);
+    const fresh = await HostStorage.open(fixture.options);
+    assert.equal((await fresh.setupStatus()).runtime_configuration_pending, false);
+    await fresh.close();
     await storage.writeCredentials('custom.token+synthetic=');
     assert.equal((await HostStorage.open(fixture.options)).runtimeEnvironment().NOTALONE_DEEPSEEK_API_KEY, 'custom.token+synthetic=');
     const saved = await readFile(fixture.envFilePath, 'utf8');
@@ -58,7 +64,7 @@ test('凭据原子保存保留其余配置、权限0600，账本漂移后阻止�
     assert.equal((await stat(fixture.envFilePath)).mode & 0o777, 0o600);
     assert.equal((await storage.setupStatus()).official_deepseek_defaults, false);
     await assert.rejects(storage.writeCredentials('bad\nNOTALONE_OWNER_ID=attack'), {code:'setup_request_invalid'});
-    assert.deepEqual(await storage.useOfficialDeepseek('official-synthetic-key'), {provider:'deepseek', configured:true, official_deepseek_defaults:true});
+    assert.deepEqual(await storage.useOfficialDeepseek('official-synthetic-key'), {provider:'deepseek', configured:true, official_deepseek_defaults:true, restart_required:true});
     await fixture.client.query("UPDATE public.notalone_schema_migration SET checksum='changed' WHERE name='107_history_message_count_comment.sql'");
     assert.deepEqual(await storage.compatibility(), {code:'migration_history_mismatch'});
     const before = await readFile(fixture.envFilePath, 'utf8');
@@ -238,4 +244,42 @@ test('本机hostaddr保留目标且受控密码经PG协议传入，sslmode不静
     await new Promise(resolve=>server.close(resolve));
     await rm(directory,{recursive:true,force:true});
   }
+});
+
+
+test('启动环境覆盖历史已保存凭据或模型时，重开仍待加载且拒绝冲突写入', async () => {
+  const fixture = await createStorageFixture();
+  try {
+    await writeFile(fixture.envFilePath, (await readFile(fixture.envFilePath, 'utf8')) + 'NOTALONE_DEEPSEEK_API_KEY=file-new-synthetic-key\nNOTALONE_DEEPSEEK_MODEL=file-new-model\nNOTALONE_DEEPSEEK_BASE_URL=https://file.example.invalid\n');
+    const before = await readFile(fixture.envFilePath, 'utf8');
+    for (const [field, old] of Object.entries({ NOTALONE_DEEPSEEK_API_KEY: 'environment-old-synthetic-key', NOTALONE_DEEPSEEK_MODEL: 'environment-old-model', NOTALONE_DEEPSEEK_BASE_URL: 'https://environment.example.invalid' })) {
+      const storage = await HostStorage.open({ ...fixture.options, environment: { [field]: old } });
+      try {
+        const status = await storage.setupStatus();
+        assert.equal(status.runtime_configuration_pending, true);
+        assert.equal(status.runtime_configuration_environment_override, true);
+        assert.doesNotMatch(JSON.stringify(status), /synthetic-key|file-new-model|environment-old-model|example.invalid/);
+        await assert.rejects(storage.useOfficialDeepseek('proposed-synthetic-key'), { code: 'configuration_environment_override' });
+        if (field === 'NOTALONE_DEEPSEEK_API_KEY') await assert.rejects(storage.writeCredentials('proposed-synthetic-key'), { code: 'configuration_environment_override' });
+        assert.equal(await readFile(fixture.envFilePath, 'utf8'), before);
+      } finally { await storage.close(); }
+    }
+    const accepted = await HostStorage.open(fixture.options);
+    try { assert.equal((await accepted.setupStatus()).runtime_configuration_pending, false); }
+    finally { await accepted.close(); }
+  } finally { await fixture.close(); }
+});
+
+test('禁止dotenv时不读取受控文件，凭据保存不能承诺重启生效', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'notalone-disabled-settings-'));
+  try {
+    // 目录不能按配置文件读取；open仍须成功，证明没有偷读被禁用的dotenv。
+    const storage = await HostStorage.open({ envFilePath: directory, migrationsDirectory, environment: { NOTALONE_DISABLE_DOTENV: '1', NOTALONE_DEEPSEEK_API_KEY: 'environment-only-synthetic-key' } });
+    try {
+      await assert.rejects(storage.writeCredentials('new-synthetic-key'), { code: 'configuration_environment_override' });
+      await assert.rejects(storage.useOfficialDeepseek('new-synthetic-key'), { code: 'configuration_environment_override' });
+      assert.doesNotMatch(JSON.stringify(storage.credentialStatus()), /synthetic-key/);
+      assert.equal((await stat(directory)).isDirectory(), true);
+    } finally { await storage.close(); }
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

@@ -1,3 +1,4 @@
+import { UsagePanel } from './UsagePanel';
 import { historyReplyEligibility } from '../shared/history-reply-eligibility';
 import type { HistoryCoveragePhase, SyncControlState } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
@@ -139,7 +140,7 @@ export function App() {
         {!(page === 'config' && advancedOpen && diagnosticsOpen && startup.mode !== 'managed')
           && <StartupReadiness state={startup} backend={backend} onConfigure={showDiagnostics} />}
         {(page === 'config' || startup.mode === 'managed' && backend.phase === 'connected') && <SetupPanel />}
-        {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls />
+        {page === 'config' && <><UsagePanel /><ScreenPermissionPanel view={permission} /><DesktopControls />
           <details className="startup-settings" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
             <summary>高级</summary>
             <p>从文件补充旧记录，或管理已导入资料。已通过自动同步获取的记录，无需重复导入。</p>

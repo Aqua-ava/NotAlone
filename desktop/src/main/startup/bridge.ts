@@ -1,11 +1,32 @@
-import { ipcMain, shell } from 'electron';
+import { dialog, ipcMain, shell } from 'electron';
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 import type { AppWindows } from '../windows';
 import type { BackendHost } from '../backend/host';
 import type { StartupDiagnostics } from './diagnostics';
+import { DiagnosticExportController } from './diagnostic-export';
 
 export function installStartupBridge(windows: AppWindows, diagnostics: StartupDiagnostics, backend: BackendHost, userData: string): void {
+  const diagnosticExport = new DiagnosticExportController(() => diagnostics.getState(), () => backend.getState());
+  const requireManager = (event: Parameters<AppWindows['validateCaller']>[0], args: unknown[]) => {
+    const caller = windows.validateCaller(event, args);
+    if (!caller.webContents.getURL().endsWith('#manager')) throw new Error('诊断导出不可用');
+    return caller;
+  };
+  ipcMain.handle('startup:preview-diagnostics', (event, ...args: unknown[]) => {
+    requireManager(event, args);
+    return diagnosticExport.preview();
+  });
+  ipcMain.handle('startup:export-diagnostics', async (event, ...args: unknown[]) => {
+    const caller = requireManager(event, []);
+    if (args.length !== 1) throw new Error('请先预览诊断');
+    return diagnosticExport.export(args[0], async () => {
+      const result = await dialog.showSaveDialog(caller, { title: '将已预览诊断保存到本机',
+        defaultPath: 'NotAlone-diagnostics.json', filters: [{ name: '诊断 JSON', extensions: ['json'] }],
+        properties: ['showOverwriteConfirmation'] });
+      return result.canceled ? undefined : result.filePath;
+    });
+  });
   ipcMain.handle('startup:get-state', (event, ...args: unknown[]) => {
     windows.validateCaller(event, args);
     return diagnostics.getState();

@@ -1,3 +1,5 @@
+import { UsageController } from './usage/controller';
+import { installUsageBridge } from './usage/bridge';
 import { WechatSetupController } from './setup/wechat-controller';
 import { installWechatSetupBridge } from './setup/wechat-bridge';
 import { installForegroundBridge } from './foreground/bridge';
@@ -76,6 +78,7 @@ void app.whenReady().then(async () => {
   const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory);
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory,
     () => diagnostics.stopManagedRuntime());
+  installUsageBridge(windows, new UsageController(backend));
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
   const foreground = installForegroundBridge(commands, backend, contacts);

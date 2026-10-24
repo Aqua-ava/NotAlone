@@ -1,0 +1,57 @@
+{
+  "development_only": true,
+  "electron_node_version": "24.21.0",
+  "ordinary_ts_probe_native_ui": "机器环境已就绪。",
+  "usage_ui": {
+    "confirmed": 4,
+    "authorized_unconfirmed": 2,
+    "not_sent": 1,
+    "total": 7,
+    "total_tokens": null,
+    "known_tokens_each": 17,
+    "unknown_usage": 2,
+    "unknown_cost": 2,
+    "estimated_cny": "3.3",
+    "known_usd": "0.2",
+    "owner_memory_visible": true,
+    "cancelled_visible": true
+  },
+  "owned_restart": {
+    "before": true,
+    "offline_old_summary_cleared": true,
+    "after_ready": true,
+    "pid_replaced": true,
+    "configuration_pending": false,
+    "record_hash_unchanged": true
+  },
+  "usage_failure_retry": {
+    "failure_visible": true,
+    "fixed_message": "用量读取失败，请刷新重试。刷新只读取台账，不会重新调用模型。",
+    "restored_summary": true,
+    "receipt_and_ledger_unchanged": true
+  },
+  "diagnostic": {
+    "cancel_no_export": true,
+    "saved_mode": "0600",
+    "preview_bytes_equal": true,
+    "automatic_upload": false,
+    "whitelist": true,
+    "first_save_typing_mismatch": "原生输入未全选导致合成文件名拼接；首次文件也只在自有目录且字节相同，第二次AX setValue核实名称后保存，均纳入清理"
+  },
+  "data": {
+    "synthetic_only": true,
+    "messages_read": 0,
+    "bindings": 0,
+    "history_reads": 0,
+    "wechat_operations": 0,
+    "actual_model_calls": 0,
+    "active_permits": 0,
+    "unknown_permits": 0,
+    "model_receipts": 6,
+    "legacy_ledger_rows": 2,
+    "receipts_were_seeded": true
+  },
+  "normal_log_contains_dummy_values": false,
+  "normal_log_sha256": "0a92ea779e55f550a28c6ead9537ab4474905ea3fc25ee267fcbba049982a7b6",
+  "interruption_recovery": "控制器handle已失、PID已退出；按ps核实原npm监督器和App仍活、复用原实例，没有重启第二App。"
+}

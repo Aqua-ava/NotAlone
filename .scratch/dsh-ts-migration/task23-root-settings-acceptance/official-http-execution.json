@@ -1,0 +1,22 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 5.585,
+  "cwd": "backend-ts",
+  "command": [
+    "${HOME}/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "--test",
+    "--test-reporter=tap",
+    "--test-name-pattern=已配置owner与凭据原地恢复",
+    "test/host-http.test.mjs"
+  ],
+  "compiler_version": null,
+  "counts": {
+    "tests": 1,
+    "pass": 1,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "raw_sha256": "71317a932edcfc39e07f7878b857a2511c03775353bda7a88c6bd3fb1ea1b73b",
+  "public_sha256": "71317a932edcfc39e07f7878b857a2511c03775353bda7a88c6bd3fb1ea1b73b"
+}

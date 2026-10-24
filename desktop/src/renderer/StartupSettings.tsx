@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { readInitialState } from './initial-read';
 import type { BackendState } from '../shared/backend-bridge';
-import type { StartupCode, StartupPaths, StartupState } from '../shared/startup-bridge';
+import type { DiagnosticPreview, StartupCode, StartupPaths, StartupState } from '../shared/startup-bridge';
 import './startup-settings.css';
 
 export function useStartupState(): { state: StartupState; error: string; retry: () => void } {
@@ -67,11 +67,41 @@ function StartupDiagnostics({ state }: { state: StartupState }) {
 export function StartupSettings({ state, backend, open = false, onOpenChange }: {
   state: StartupState; backend: BackendState; open?: boolean; onOpenChange?: (open: boolean) => void;
 }) {
-  if (state.mode === 'managed') return null;
   return <details className="startup-troubleshooting" open={open} onToggle={(event) => onOpenChange?.(event.currentTarget.open)}>
     <summary>故障排查</summary>
-    {open && <StartupPathSettings state={state} backend={backend} />}
+    {open && <>{state.mode === 'managed' ? <StartupDiagnostics state={state} /> : <StartupPathSettings state={state} backend={backend} />}<DiagnosticExport /></>}
   </details>;
+}
+
+function DiagnosticExport() {
+  const [preview, setPreview] = useState<DiagnosticPreview>();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  async function inspect() {
+    if (busy) return;
+    setBusy(true); setError(''); setMessage(''); setPreview(undefined);
+    try { setPreview(await window.notalone.startup.previewDiagnostics()); }
+    catch { setError('诊断暂时无法预览，请重试。'); }
+    finally { setBusy(false); }
+  }
+  async function save() {
+    if (!preview || busy) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const result = await window.notalone.startup.exportDiagnostics(preview.previewId);
+      setMessage(result.status === 'saved' ? '已将本次预览保存到你选择的本机位置。' : '已取消保存。');
+    } catch { setError('诊断未能导出，请检查本机保存位置后重试；也可重新预览。'); }
+    finally { setBusy(false); }
+  }
+  return <section className="startup-settings" aria-label="诊断预览与本机导出">
+    <h2>脱敏诊断</h2>
+    <p>只包含固定启动状态和恢复入口是否可用。请先查看下面的完整预览，再选择本机位置保存；不会自动上传。</p>
+    <button className="button" disabled={busy} onClick={() => void inspect()}>{busy ? '正在处理…' : '预览诊断'}</button>
+    {preview && <><pre aria-label="诊断完整预览" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.json}</pre>
+      <button className="button" disabled={busy} onClick={() => void save()}>将此预览导出到本机…</button></>}
+    {message && <p role="status">{message}</p>}{error && <p role="alert">{error}</p>}
+  </section>;
 }
 
 function StartupPathSettings({ state, backend }: { state: StartupState; backend: BackendState }) {

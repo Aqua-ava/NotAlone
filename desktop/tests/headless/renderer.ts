@@ -1,3 +1,4 @@
+import { createUsageBridge } from '../../src/preload/usage';
 import { createWechatSetupBridge } from '../../src/preload/wechat-setup';
 import { createForegroundBridge } from '../../src/preload/foreground';
 import { createCandidateCopyBridge } from '../../src/preload/candidate-copy';
@@ -43,6 +44,7 @@ pageWindow.pageEvent = (channel, state) => {
 const unsupported = () => Promise.reject(new Error('无头页面未支持此原生或业务入口。'));
 const noEvents = () => () => {};
 const bridge: AppBridge = {
+  usage: createUsageBridge(transport),
   candidateCopy: createCandidateCopyBridge(transport),
   sources: createSourceDeletionBridge(transport),
   traces: createTraceBridge(transport),

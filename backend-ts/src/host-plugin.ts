@@ -24,6 +24,7 @@ import {createForegroundLocationApi,foregroundLocationPath,isForegroundAuthority
 import {NativeForegroundProbe} from './foreground-location-probe.ts';
 import { createSyncIncrementalApi } from './sync-incremental-api.ts';
 import {startHostModelRuntime} from './host-model-runtime.ts';
+import {usageSummary} from './usage-summary.ts';
 export const name = 'notalone-host';
 export const inject = ['appReady','llm','agents','sessions','tools','systemPrompt','skills'];
 
@@ -160,6 +161,12 @@ async function start(ctx: Context) {
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
       if(state!=='running'){respond(503,{error:'runtime_stopping'});return;}
+      if(url.pathname==='/api/ledger/summary'){
+        if(req.method!=='GET'){respond(405,{error:'method_not_allowed'});return;}
+        if(req.url!==url.pathname){respond(400,{error:'invalid_request'});return;}
+        try{respond(200,await usageSummary(storage));}
+        catch{respond(503,{error:'ledger_summary_unavailable'});}return;
+      }
       if(url.pathname.startsWith('/api/runtime/foreground-location/')){respond(404,{error:'not_found'});return;}
       if(url.pathname===foregroundLocationPath){
         const cancelled=new AbortController();const abort=()=>cancelled.abort();req.once('aborted',abort);res.once('close',abort);

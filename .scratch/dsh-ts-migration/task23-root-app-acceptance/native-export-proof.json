@@ -1,0 +1,13 @@
+{
+  "operation": "native_save_dialog_export",
+  "computer_use": true,
+  "observed_ui": "已将本次预览保存到你选择的本机位置。",
+  "mode": "0600",
+  "regular_file": true,
+  "bytes": 441,
+  "sha256": "1c0b6a265aaec1c8bf353cfc80e874518f1d6544a19b667260802585f98e5f82",
+  "preview_bytes_equal": true,
+  "automatic_upload": false,
+  "keys_whitelisted": true,
+  "earlier_location_verification": "首份未命中预定文件名；重复打开原对话框已核对Where为自有临时目录，AX setValue确认diagnostic.json后显式Save，非生产源码缺陷"
+}

@@ -1,0 +1,11 @@
+{
+  "command": "node --test tests/background-task-polling.test.mjs tests/sync-status-recovery.test.mjs tests/sync-priority-status.test.mjs",
+  "cwd": "desktop",
+  "exit_code": 0,
+  "duration_seconds": 0.137,
+  "passed": 19,
+  "failed": 0,
+  "skipped": 0,
+  "raw_alias": "raw:status-consumers.log",
+  "raw_sha256": "7a438b7ee45857469d1257cbe71f8f7f418f732706e50b870a581f938879b3f7"
+}

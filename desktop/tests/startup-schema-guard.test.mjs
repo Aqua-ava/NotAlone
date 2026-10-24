@@ -75,3 +75,80 @@ test('旧复制库只有verified标记而没有完成凭证时，不能当成可
   assert.equal(current.diagnostics.getState().code, 'runtime_configuration_invalid');
   assert.equal(await readFile(current.marker, 'utf8').catch(() => ''), '');
 });
+
+test('DSH普通诊断复用TS存储兼容性，Python诊断模块缺失仍可核验固定状态', async () => {
+  const current = await fixture('typescript-diagnostic');
+  const { copyFile, symlink } = await import('node:fs/promises');
+  await mkdir(path.join(current.config.projectDirectory, 'backend-ts/src'), { recursive: true });
+  await copyFile(path.resolve('../backend-ts/src/host-storage.ts'), path.join(current.config.projectDirectory, 'backend-ts/src/host-storage.ts'));
+  await symlink(path.resolve('../backend-ts/node_modules'), path.join(current.config.projectDirectory, 'backend-ts/node_modules'), 'dir');
+  await rm(path.join(current.config.projectDirectory, 'backend/src/notalone/startup_diagnostics.py'));
+  const previousUrl = process.env.NOTALONE_DATABASE_URL;
+  process.env.NOTALONE_DATABASE_URL = '';
+  try {
+    await assert.rejects(current.diagnostics.ensureReady({ ...current.config, runtime: 'dsh' }, () => true));
+    assert.equal(current.diagnostics.getState().code, 'database_unconfigured');
+    assert.equal(await readFile(current.marker, 'utf8').catch(() => ''), '');
+  } finally {
+    if (previousUrl === undefined) delete process.env.NOTALONE_DATABASE_URL;
+    else process.env.NOTALONE_DATABASE_URL = previousUrl;
+  }
+});
+
+test('DSH的TS执行组件不可用时固定报错，不静默回退Python普通诊断', async () => {
+  const current = await fixture('typescript-component-failed');
+  await mkdir(path.join(current.config.projectDirectory, 'backend-ts/src'), { recursive: true });
+  await writeFile(path.join(current.config.projectDirectory, 'backend-ts/src/host-storage.ts'), 'invalid typescript source synthetic secret');
+  await assert.rejects(current.diagnostics.ensureReady({ ...current.config, runtime: 'dsh' }, () => true));
+  assert.equal(current.diagnostics.getState().code, 'runtime_components_unavailable');
+  assert.equal(await readFile(current.marker, 'utf8').catch(() => ''), '');
+});
+
+test('DSH待更新只把结构写入交给既有03生命周期，完成后仍用TS复验', async () => {
+  const current = await fixture('typescript-schema-prepare');
+  const ordinaryPythonProbe = path.join(current.userData, 'ordinary-python-probe');
+  await mkdir(path.join(current.config.projectDirectory, 'backend-ts/src'), { recursive: true });
+  await writeFile(path.join(current.config.projectDirectory, 'backend-ts/src/host-storage.ts'), `
+    import {existsSync} from 'node:fs';
+    export class HostStorage { static async open() {return new HostStorage()}
+      async compatibility(){return {code:existsSync(${JSON.stringify(current.marker)})?'ready':'migration_pending'}} async close(){} }
+  `);
+  await writeFile(current.config.pythonExecutable, `#!${process.execPath}
+const fs=require('node:fs');
+if(process.argv.includes('notalone.startup_database')) {fs.writeFileSync(${JSON.stringify(current.marker)},'updated');console.log('{"code":"ready"}');}
+else {fs.writeFileSync(${JSON.stringify(ordinaryPythonProbe)},'unexpected');console.log('{"code":"diagnostic_failed"}');}
+`, { mode: 0o700 });
+  await current.diagnostics.ensureReady({ ...current.config, runtime: 'dsh' }, () => true);
+  assert.equal(current.diagnostics.getState().code, 'ready');
+  assert.equal(await readFile(current.marker, 'utf8'), 'updated');
+  assert.equal(await readFile(ordinaryPythonProbe, 'utf8').catch(() => ''), '');
+});
+
+test('取消DSH普通诊断回收本次TS子进程，不遗留后台读取', async () => {
+  const current = await fixture('typescript-cancel');
+  const started = path.join(current.userData, 'ts-started');
+  const stopped = path.join(current.userData, 'ts-stopped');
+  await mkdir(path.join(current.config.projectDirectory, 'backend-ts/src'), { recursive: true });
+  await writeFile(path.join(current.config.projectDirectory, 'backend-ts/src/host-storage.ts'), `
+    import {writeFileSync} from 'node:fs';
+    export class HostStorage { static async open() {return new HostStorage()}
+      async compatibility(){
+        process.on('SIGTERM',()=>{writeFileSync(${JSON.stringify(stopped)},'stopped');process.exit(0)});
+        writeFileSync(${JSON.stringify(started)},'started');
+        return new Promise(()=>{setInterval(()=>{},1000)});
+      } async close(){} }
+  `);
+  const { watch } = await import('node:fs');
+  const watching = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { watcher.close(); reject(new Error('合成TS诊断未启动')); }, 5000);
+    const watcher = watch(current.userData, (_event, file) => {
+      if (file === 'ts-started') { clearTimeout(timer); watcher.close(); resolve(); }
+    });
+  });
+  const pending = current.diagnostics.ensureReady({ ...current.config, runtime: 'dsh' }, () => true);
+  await watching;
+  current.diagnostics.cancel();
+  await pending;
+  assert.equal(await readFile(stopped, 'utf8'), 'stopped');
+  assert.equal(await readFile(current.marker, 'utf8').catch(() => ''), '');
+});

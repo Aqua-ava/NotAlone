@@ -1,3 +1,4 @@
+import { createUsageBridge } from './usage';
 import { createWechatSetupBridge } from './wechat-setup';
 import { createForegroundBridge } from './foreground';
 import { createCandidateCopyBridge } from './candidate-copy';
@@ -20,6 +21,7 @@ import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 
 const bridge: AppBridge = {
+  usage: createUsageBridge(ipcRenderer),
   backend: createBackendBridge(ipcRenderer),
   setup: createSetupBridge(),
   wechatSetup: createWechatSetupBridge(ipcRenderer),

@@ -1,0 +1,11 @@
+{
+  "command": "node node_modules/typescript/bin/tsc --noEmit",
+  "cwd": "desktop",
+  "exit_code": 0,
+  "duration_seconds": 0.418,
+  "passed": null,
+  "failed": null,
+  "skipped": null,
+  "raw_alias": "raw:desktop-typecheck.log",
+  "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

@@ -1,5 +1,10 @@
 {
   "safe-node": [
+    "tests/diagnostic-export.test.mjs",
+    "tests/usage/bridge.test.mjs",
+    "tests/usage/controller.test.mjs",
+    "tests/usage/react.test.mjs",
+    "tests/setup-configuration.test.mjs",
     "tests/assistant-candidate-carry-contract.test.mjs",
     "tests/assistant-candidate-version-ports.test.mjs",
     "tests/assistant-candidate-versions.test.mjs",

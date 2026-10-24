@@ -1,0 +1,11 @@
+{
+  "command": "node --test tests/startup-schema-guard.test.mjs tests/startup-continuity.test.mjs tests/diagnostic-export.test.mjs tests/backend-startup-budget.test.mjs tests/usage/bridge.test.mjs tests/usage/controller.test.mjs tests/usage/react.test.mjs",
+  "cwd": "desktop",
+  "exit_code": 0,
+  "duration_seconds": 52.229,
+  "passed": 39,
+  "failed": 0,
+  "skipped": 0,
+  "raw_alias": "raw:desktop.log",
+  "raw_sha256": "f1423dc7c9e6426db2739fdf99f4d2d1649220349c880dd251aa5eda569b6e88"
+}
