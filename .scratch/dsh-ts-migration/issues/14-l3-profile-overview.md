@@ -121,3 +121,14 @@ Spec: ../spec.md
 - 合成回归复现真实的 `write/write/read/write/write` 非收敛形状，并验证每轮均落到 `l3_profile_section_invalid`、画像不发布；另一条回归先写错误 `section`，从工具结果读到完整枚举后修正，在五轮内显式完成并在第 6 次调用核验发布。
 - 验证：L3 工作区、服务、公开 HTTP `34/34`；L2 服务、Worker、宿主及模型记账 `25/25`；共享官方 DSH profile `2/2`；TypeScript 类型检查通过。
 - revision `16` 重试条件：确认 dev runtime 已加载 `cf99f432`，正式 job 仍为 revision `16` failed、calls `46/256`、目标 key／资料集合未变化，再基于 revision `16` continue；预计得到 revision `17`、active、step pending，模型调用上限按既有合同增加 16 到 272。下一次若仍失败，`proposal_trace.profile_error_code` 应直接指出具体字段；成功仍需完成真实 App／微信与用户可见纠错／撤回验收后才能 resolved。
+
+### 第五轮 quote 核验诊断
+
+- revision `16` continue 后得到 revision `17`；提案通过字段级 schema 并进入独立核验，但约 17 秒后 failed，`last_error_code=l3_profile_quote_invalid`、calls `49/272`、`run_remaining=1`、`pending_receipt=true`、`profile_status=failed`，未发布。
+- 最新 profile batch `1c4b71e6-dbcd-4af3-9a5c-b752b0707641` 输入 `59,328` 字节，`proposal_trace` 2 轮，`verification_result=null`。三条 receipt 均成功：`52444/1807` tokens、`112,877` bytes；`54346/23` tokens、`119,799` bytes；`30415/1500` tokens、`70,611` bytes。后两者对应提案完成和一次独立核验。
+- verifier 的原始参数没有持久化，无法恢复实际 quote，不能断言它是提案正文、转述、拼接、错误 memory_id 还是包裹字符。原实现的工程缺口明确：`parseProfileVerification` 只调用一次并执行严格 `verbatim memory text.includes(quote)`，首次失败立即抛错，没有纠正文具。
+- 修复提交：`198f15d781fecd684fa5abba52b05a134910c39f`。核验输入改称 `memories[].verbatim_text`，显式给出每条的 `allowed_memory_ids` 和逐字契约；无法确定时必须复制完整 `verbatim_text`，不得使用 proposal 正文或补造。
+- 核验格式或 quote 非法时，仅在当前 job 实际剩余额度内进行一次有界重采样；最多两次核验。第二次仍非法、非可纠正核验错误或只剩一次核验额度时立即失败关闭。逐字子串校验、独立核验、五轮提案上限、模型总预算和原子发布条件均未放宽。
+- `verification_trace` 仅记录尝试序号、`succeeded/tool_error`、具体错误码和 receipt id，不保存 quote、原文或工具参数；失败时与既有 `proposal_trace` JSON 合并，不覆盖提案取证。错误码区分 `quote_invalid`、`quote_memory_invalid`、`quote_proposal_invalid`、`quote_wrapper_invalid` 和 `verification_invalid`。
+- 合成 PostgreSQL 回归覆盖：第一次 quote 非法→得到明确逐字规则与允许 memory_id→第二次成功并发布；连续两次非法→`quote_invalid` 失败且无版本；只剩一次核验额度→不再调用、轨迹仅一次失败。L3 工作区、服务、公开 HTTP `37/37`；L2 服务、Worker、宿主及模型记账 `25/25`；共享官方 DSH profile `2/2`；TypeScript 类型检查通过。
+- revision `17` 重试条件：确认 dev runtime 已加载 `198f15d7`，正式 job 仍为 revision `17`、failed、calls `49/272`、`run_remaining=1`，目标 key／资料集合与冻结输入未变化，再基于 revision `17` continue；预计得到 revision `18`、active、step pending，模型调用上限按既有合同增加 16 到 288。下一次失败应读取 `verification_trace`；若成功仍需真实 App／微信与用户可见纠错／撤回验收后才能 resolved。
