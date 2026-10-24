@@ -111,3 +111,13 @@ Spec: ../spec.md
 - 为让下一轮可直接定位真实工具行为，成功与失败批次的 `output_payload` 都增加 `proposal_trace`：仅含轮次、受限工具名、参数键名、profile/scenario/invalid 分类、结果、错误码和工作区是否变化；不保存画像正文、记忆正文或工具参数值。
 - 验证：精确五轮“读→错误写→合法写→场景读→显式完成”回归通过，并在第 6 次调用执行独立核验后发布；五次均无合法写入及无写完成均在核验前失败。L3 工作区、服务、公开 HTTP `32/32`；L2 服务、Worker、宿主及模型记账 `25/25`；共享官方 DSH profile `2/2`；TypeScript 类型检查通过。
 - 当前正式现场未修改，仍为 job revision `15`、failed、calls `41/240`、`run_remaining=1`。root 可重试条件：确认 dev runtime 已加载 `a82f6f0c` 且正式目标 key／资料集合未变化后，基于 revision `15` continue；预计得到 revision `16`、active、step pending，并沿用既有合同将模型调用上限增加 16 到 256。下一次失败应直接读取 `proposal_trace`，若成功则仍需真实 App／微信与用户可见纠错／撤回验收后才能 resolved。
+
+### 第四轮字段级诊断
+
+- 第四轮基于 revision `16` 现场读取 profile batch `190b33c2-804e-4cd5-876a-e9b42d5ce5ca` 的无正文轨迹：第 1、2、4、5 轮均为 `write/profile/tool_error/l3_profile_proposal_invalid`，第 3 轮为成功读取；所有轮 `completed_by=null`，`profile_changed` 依次为 `true/true/false/false/true`，画像始终不可编译。当前 job 为 revision `16`、failed、calls `46/256`、`run_remaining=1`，background task retry `15`。
+- 持续重复且无法纠正的工程原因落在 `checkedEntry` 的错误映射：未知字段、`kind`、`section`、`temporal_status`、正文、依据和不确定性校验此前几乎统一抛 `l3_profile_proposal_invalid`，工具结果无法定位字段；模型虽然拿到允许字段说明，仍无法从同一粗码判断需要修哪一项。真实批次未保存参数正文，因此不能断言最初是哪个字段无效；此前首轮输入未枚举 `section` 等完整允许值，`section` 是当前最高风险项。
+- 修复提交：`cf99f43270b369db1570c3fd2046d80a2903fa3e`。校验现区分 `document_header_invalid`、`document_format_invalid`、`entry_format_invalid`、`entry_metadata_invalid`、`unexpected_keys`、`kind_invalid`、`section_invalid`、`temporal_status_invalid`、`text_invalid`、`basis_invalid`、`uncertainty_invalid` 和已有的 `reference_invalid`；工具结果包含条目序号、允许枚举及纠正要求，未放宽任何字段或引用校验。
+- 首轮输入现显式提供 ENTRY 元数据字段、`kind/section/temporal_status` 完整枚举、正文位置和精确引用规则。失败轨迹仍只保存受限错误码，不保存真实画像、记忆正文、工具参数值或本轮工具错误详情。
+- 合成回归复现真实的 `write/write/read/write/write` 非收敛形状，并验证每轮均落到 `l3_profile_section_invalid`、画像不发布；另一条回归先写错误 `section`，从工具结果读到完整枚举后修正，在五轮内显式完成并在第 6 次调用核验发布。
+- 验证：L3 工作区、服务、公开 HTTP `34/34`；L2 服务、Worker、宿主及模型记账 `25/25`；共享官方 DSH profile `2/2`；TypeScript 类型检查通过。
+- revision `16` 重试条件：确认 dev runtime 已加载 `cf99f432`，正式 job 仍为 revision `16` failed、calls `46/256`、目标 key／资料集合未变化，再基于 revision `16` continue；预计得到 revision `17`、active、step pending，模型调用上限按既有合同增加 16 到 272。下一次若仍失败，`proposal_trace.profile_error_code` 应直接指出具体字段；成功仍需完成真实 App／微信与用户可见纠错／撤回验收后才能 resolved。
