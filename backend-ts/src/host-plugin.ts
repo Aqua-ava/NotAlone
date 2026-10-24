@@ -89,7 +89,10 @@ async function start(ctx: Context) {
     return close?close.call(activeTaskControl):Promise.resolve();
   };
   const progress=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
-    ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId)
+    ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId,{
+      // progress先于模型运行时装配；这里必须在请求时转发到启动后绑定的唯一TaskControl。
+      wake:(scope,taskId)=>taskControl.wake(scope,taskId).then(()=>undefined),
+    })
     : undefined;
   const traceStore=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new SourceProcessingTraceStore(progressPool)

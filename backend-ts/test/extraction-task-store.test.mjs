@@ -230,6 +230,73 @@ test('owner进度复用联系人任务行，并保持owner与contact范围',asyn
  }finally{await f.close();}
 });
 
+test('导入与观察恢复只唤醒原任务，busy和completed不提示且Worker不可用仍保留queued',async()=>{
+ const f=await fixture();try{
+  const binding=randomUUID();
+  await f.pool.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic','synthetic')",[binding,f.scope.ownerId,f.scope.contactId]);
+  const observed=await addObservation(f,binding,1);
+  const observation=await f.store.enqueueObservation(f.scope,[observed.message]);
+  assert.ok(observation);
+  const imported=await f.store.enqueueImport(f.scope,f.sourceId,2);
+  for(const task of [imported,observation]){
+   await f.pool.query("UPDATE background_task SET status='failed',current_step='extract_memory',last_error_code='synthetic_resume',finished_at=now() WHERE id=$1",[task]);
+   await f.pool.query("UPDATE background_task_step SET status='failed',last_error_code='synthetic_resume' WHERE task_id=$1 AND step_name='extract_memory'",[task]);
+  }
+  const taskCount=(await f.pool.query('SELECT count(*)::int AS count FROM background_task')).rows[0].count;
+  const wakes=[];
+  const api=new ExtractionProgressApi(f.store,f.scope.ownerId,{wake:(scope,task)=>wakes.push({scope,task})});
+
+  assert.deepEqual(await api.handle('POST',`/api/contacts/${f.scope.contactId}/memory-processing/resume`,{
+   task_id:imported,action:'resume',
+  }),{status:200,body:{task_id:imported,status:'queued'}});
+  assert.deepEqual(await api.handle('POST','/api/owner/memory-processing/resume',{
+   task_id:observation,action:'resume',
+  }),{status:200,body:{task_id:observation,status:'queued'}});
+  assert.deepEqual(wakes,[
+   {scope:{ownerId:f.scope.ownerId,contactId:f.scope.contactId},task:imported},
+   {scope:{ownerId:f.scope.ownerId,contactId:f.scope.contactId},task:observation},
+  ]);
+  assert.deepEqual((await f.pool.query("SELECT id,task_type,status,retry_count FROM background_task ORDER BY id")).rows.map(row=>({...row})),
+   [
+    {id:imported,task_type:'import',status:'queued',retry_count:1},
+    {id:observation,task_type:'observation',status:'queued',retry_count:1},
+   ].sort((a,b)=>a.id.localeCompare(b.id)));
+  assert.equal((await f.pool.query('SELECT count(*)::int AS count FROM background_task')).rows[0].count,taskCount);
+
+  await f.pool.query("UPDATE background_task SET status='running',current_step='parse' WHERE id=$1",[imported]);
+  await f.pool.query("UPDATE background_task_step SET status='running',lease_expires_at=now()+interval '1 minute' WHERE task_id=$1 AND step_name='parse'",[imported]);
+  const wakeCount=wakes.length;
+  assert.deepEqual(await api.handle('POST','/api/owner/memory-processing/resume',{
+   task_id:imported,action:'resume',
+  }),{status:200,body:{task_id:imported,status:'busy'}});
+  assert.equal(wakes.length,wakeCount);
+
+  await f.pool.query("UPDATE background_task SET status='succeeded',current_step='verify',finished_at=now() WHERE id=$1",[observation]);
+  await f.pool.query("UPDATE background_task_step SET status='succeeded',lease_expires_at=NULL WHERE task_id=$1",[observation]);
+  assert.deepEqual(await api.handle('POST','/api/owner/memory-processing/resume',{
+   task_id:observation,action:'resume',
+  }),{status:200,body:{task_id:observation,status:'completed'}});
+  assert.equal(wakes.length,wakeCount);
+
+  await f.pool.query("UPDATE background_task SET status='cancelled',current_step='parse' WHERE id=$1",[imported]);
+  await f.pool.query("UPDATE background_task_step SET status='cancelled',lease_expires_at=NULL WHERE task_id=$1",[imported]);
+  assert.deepEqual(await api.handle('POST',`/api/contacts/${f.scope.contactId}/memory-processing/resume`,{
+   task_id:imported,action:'resume',
+  }),{status:409,body:{error:'memory_processing_state_conflict'}});
+  assert.equal(wakes.length,wakeCount);
+
+  await f.pool.query("UPDATE background_task SET status='failed',current_step='extract_memory' WHERE id=$1",[imported]);
+  await f.pool.query("UPDATE background_task_step SET status='failed' WHERE task_id=$1 AND step_name='extract_memory'",[imported]);
+  const unavailable=new ExtractionProgressApi(f.store,f.scope.ownerId,{wake:()=>{throw new Error('synthetic_worker_unavailable');}});
+  assert.deepEqual(await unavailable.handle('POST',`/api/contacts/${f.scope.contactId}/memory-processing/resume`,{
+   task_id:imported,action:'resume',
+  }),{status:503,body:{error:'memory_processing_unavailable'}});
+  assert.deepEqual((await f.pool.query('SELECT id,status,retry_count FROM background_task WHERE id=$1',[imported])).rows[0],{
+   id:imported,status:'queued',retry_count:2,
+  });
+ }finally{await f.close();}
+});
+
 test('完整观察回执进入唯一Worker，全局锁阻止第二只，owner进度读真实处理量',async()=>{
  const f=await fixture();let firstWorker,secondWorker;try{
   const binding=randomUUID();await f.pool.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic','synthetic')",[binding,f.scope.ownerId,f.scope.contactId]);

@@ -119,6 +119,11 @@ else process.exit(2);
   assert.deepEqual((await fixture.client.query("SELECT status,current_step,retry_count,last_error_code FROM background_task WHERE id=$1",[taskId])).rows[0],
     failedBefore,'模型不可用时不得把失败任务重排');
   assert.equal((await fixture.client.query('SELECT count(*)::int AS count FROM model_call_receipt')).rows[0].count,0);
+  assert.deepEqual(await app.request(`/api/contacts/${contact}/memory-processing/resume`,{task_id:taskId,action:'resume'}),
+    {status:503,data:{error:'memory_processing_unavailable'}},
+    '已持久化的恢复必须在唯一Worker不可用时失败关闭');
+  assert.deepEqual((await fixture.client.query("SELECT id,status,current_step,retry_count FROM background_task WHERE owner_id=$1 AND contact_id=$2",[owner,contact])).rows,
+    [{id:taskId,status:'queued',current_step:'parse',retry_count:1}],'恢复不得创建新任务或扩大范围');
   const inFlight=Array.from({length:4},()=>app.request('/api/tasks/run',{contact_id:contact,task_id:taskId})
     .catch(error=>error));
   const shutdown=await app.request('/api/runtime/shutdown',{});

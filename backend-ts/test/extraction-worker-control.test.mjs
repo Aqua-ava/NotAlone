@@ -65,3 +65,64 @@ test('任务控制只唤醒同一TS Worker并可在失败后恢复原任务',{ti
  await assert.rejects(control.run(scope,taskId),error=>
   error instanceof TaskControlError&&error.code==='worker_unavailable');
 });
+
+test('未启动或已关闭任务控制失败关闭，同一任务重复唤醒只执行一次',{timeout:20000},async t=>{
+ const fixture=await createExtractionFixture(),client=fixture.client;
+ const pool=new pg.Pool({host:'/tmp',database:client.database,max:4});
+ const owner=randomUUID(),contact=randomUUID(),source=randomUUID();
+ let worker,control;
+ t.after(async()=>{
+  await worker?.stop();
+  await pool.end();
+  await fixture.close();
+ });
+ await client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成本人')",[owner]);
+ await client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);
+ await client.query(`INSERT INTO source_document
+  (id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)
+  VALUES($1,$2,$3,'wechat_jsonl','synthetic-idempotent.jsonl',$4,1)`,[source,owner,contact,'b'.repeat(64)]);
+ const store=new ExtractionTaskStore(pool),scope={ownerId:owner,contactId:contact};
+ const taskId=await store.enqueueImport(scope,source,1);
+ await client.query("UPDATE background_task SET status='failed',current_step='extract_memory' WHERE id=$1",[taskId]);
+ await client.query("UPDATE background_task_step SET status='succeeded' WHERE task_id=$1 AND step_name IN ('parse','normalize')",[taskId]);
+ await client.query("UPDATE background_task_step SET status='failed' WHERE task_id=$1 AND step_name='extract_memory'",[taskId]);
+ let runs=0;
+ worker=new ExtractionWorker({store,ownerId:owner,runner:{async run(){runs++;return {processedCount:1,totalCount:1};}},
+  idleMs:60000,leaseMs:5000,heartbeatMs:1000});
+ control=new ExtractionWorkerTaskControl({store,worker});
+ await assert.rejects(control.wake(scope,taskId),error=>
+  error instanceof TaskControlError&&error.code==='worker_unavailable');
+ assert.equal(await worker.start(),true);
+ await delay(100);
+ assert.equal((await store.resume(scope,taskId,'resume')).status,'queued');
+ assert.deepEqual(await Promise.all([control.wake(scope,taskId),control.wake(scope,taskId)]),['started','started']);
+ await waitFor(()=>runs===1);
+ await delay(100);
+ assert.equal(runs,1,'重复提示必须合并，不能领取或执行第二条任务');
+ await control.close();
+ await assert.rejects(control.wake(scope,taskId),error=>
+  error instanceof TaskControlError&&error.code==='worker_unavailable');
+});
+
+test('TS任务控制关闭时排空在途原任务恢复',async()=>{
+ let releaseResume,resumeCalls=0,wakeCalls=0;
+ const resumeGate=new Promise(resolve=>{releaseResume=resolve;});
+ const taskId=randomUUID(),scope={ownerId:randomUUID(),contactId:randomUUID()};
+ const control=new ExtractionWorkerTaskControl({
+  store:{async resume(){resumeCalls++;await resumeGate;return {task_id:taskId,status:'queued'};}},
+  worker:{wake(){wakeCalls++;return true;}},
+ });
+ const retry=control.retry(scope,taskId);
+ await new Promise(resolve=>setImmediate(resolve));
+ let closed=false;
+ const closing=control.close().then(()=>{closed=true;});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(closed,false,'关闭必须等待已登记恢复');
+ assert.equal(resumeCalls,1);assert.equal(wakeCalls,0);
+ releaseResume();
+ assert.deepEqual(await retry,{task_id:taskId,status:'queued'});
+ await closing;
+ assert.equal(wakeCalls,1);
+ await assert.rejects(control.wake(scope,taskId),error=>
+  error instanceof TaskControlError&&error.code==='worker_unavailable');
+});
