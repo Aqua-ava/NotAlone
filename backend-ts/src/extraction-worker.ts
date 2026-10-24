@@ -19,6 +19,7 @@ export interface ExtractionWorkerOptions {
   store:ExtractionTaskStore;
   ownerId:string;
   runner:ExtractionWorkerRunner;
+  organizationRunner?:ExtractionWorkerRunner;
   workerId?:string;
   leaseMs?:number;
   heartbeatMs?:number;
@@ -48,6 +49,7 @@ export class ExtractionWorker {
   private readonly store:ExtractionTaskStore;
   private readonly ownerId:string;
   private readonly runner:ExtractionWorkerRunner;
+  private readonly organizationRunner:ExtractionWorkerRunner|undefined;
   private readonly workerId:string;
   private readonly leaseMs:number;
   private readonly heartbeatMs:number;
@@ -70,6 +72,7 @@ export class ExtractionWorker {
     this.heartbeatMs=positiveInteger(options.heartbeatMs??Math.max(250,Math.floor(this.leaseMs/3)),'worker_heartbeat_invalid',this.leaseMs);
     this.idleMs=positiveInteger(options.idleMs??1_000,'worker_idle_invalid',60_000);
     this.store=options.store;this.ownerId=options.ownerId.toLowerCase();this.runner=options.runner;
+    this.organizationRunner=options.organizationRunner;
   }
 
   status():{state:WorkerState;worker_id:string}{
@@ -99,8 +102,12 @@ export class ExtractionWorker {
   /** 事件只是提示；持久回执和 due_at 已先提交，通知丢失仍由轮询补偿。 */
   wake(scope?:ExtractionScope,taskId?:string):boolean{
     if(this.state!=='running')return false;
-    if(scope&&(scope.ownerId.toLowerCase()!==this.ownerId||!uuid.test(scope.contactId)))return false;
-    if(scope)this.wakes.set(`${this.ownerId}:${scope.contactId.toLowerCase()}`,{scope:{ownerId:this.ownerId,contactId:scope.contactId.toLowerCase()},...(taskId?{taskId}:{})});
+    if(scope&&(scope.ownerId.toLowerCase()!==this.ownerId
+      ||scope.contactId!==null&&!uuid.test(scope.contactId)))return false;
+    if(scope){
+      const contactId=scope.contactId?.toLowerCase()??null;
+      this.wakes.set(`${this.ownerId}:${contactId??'owner'}`,{scope:{ownerId:this.ownerId,contactId},...(taskId?{taskId}:{})});
+    }
     else this.wakes.set(undefined,{...(taskId?{taskId}:{})});
     this.notify();
     return true;
@@ -153,10 +160,12 @@ export class ExtractionWorker {
     const hinted=[...this.wakes.entries()];
     this.wakes.clear();
     const hintedScopes=hinted.flatMap(([,value])=>value.scope?[value.scope]:[]);
-    let scopes=await this.store.readyScopes(this.ownerId);
+    let scopes=await this.store.readyScopes(
+      this.ownerId,64,['legacy','bounded-runtime-v1'],this.organizationRunner!==undefined,
+    );
     if(hintedScopes.length){
       const ordered=[...hintedScopes,...scopes];
-      scopes=[...new Map(ordered.map(scope=>[scope.contactId,scope])).values()];
+      scopes=[...new Map(ordered.map(scope=>[scope.contactId??'owner',scope])).values()];
     }
     const taskHint=hinted.find(([key])=>key===undefined)?.[1].taskId;
     const scopedHints=new Map(hinted.flatMap(([,value])=>value.scope&&value.taskId?[[value.scope.contactId,value.taskId] as const]:[]));
@@ -164,11 +173,13 @@ export class ExtractionWorker {
       if(signal.aborted)return false;
       let claim:ExtractionClaim|null;
       try{
-        await this.store.claimScheduled(scope);
+        if(scope.contactId!==null)await this.store.claimScheduled(scope);
         const taskId=scopedHints.get(scope.contactId)??taskHint;
+        const supportedSteps=['parse','normalize','extract_memory',
+          ...(this.organizationRunner?['organize_memory']:[])];
         claim=await this.store.claim(scope,{
           ...(taskId?{taskId}:{}),workerId:this.workerId,leaseMs:this.leaseMs,
-          supportedSteps:['parse','normalize','extract_memory'],
+          supportedSteps,
         });
       }catch(error){
         // 一个联系人的配置或来源冲突不能饿死其他联系人；真实PG故障仍由外层停止交付。
@@ -187,7 +198,9 @@ export class ExtractionWorker {
       await this.store.complete(claim,claim.messageCount,claim.messageCount);
       return;
     }
-    if(claim.stepName!=='extract_memory')throw new ExtractionTaskError('worker_step_unsupported');
+    const runner=claim.stepName==='organize_memory'?this.organizationRunner
+      :claim.stepName==='extract_memory'?this.runner:undefined;
+    if(!runner)throw new ExtractionTaskError('worker_step_unsupported');
     const stepAbort=new AbortController();
     const signal=AbortSignal.any([globalSignal,stepAbort.signal]);
     let heartbeatError:unknown;
@@ -199,7 +212,7 @@ export class ExtractionWorker {
       });
     },this.heartbeatMs);
     try{
-      const result=await this.runner.run(claim,signal);
+      const result=await runner.run(claim,signal);
       if(heartbeatError)throw heartbeatError;
       if(signal.aborted)throw new ExtractionTaskError('worker_stopped');
       if(!Number.isSafeInteger(result.processedCount)||result.processedCount<0

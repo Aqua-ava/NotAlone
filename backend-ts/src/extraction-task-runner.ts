@@ -83,6 +83,8 @@ export class ExtractionTaskRunner implements ExtractionWorkerRunner {
 
  async run(claim:ExtractionClaim,signal:AbortSignal):Promise<ExtractionWorkerResult>{
   if(claim.stepName!=='extract_memory')throw new ExtractionTaskRunnerError('extraction_task_step_invalid');
+  if(claim.contactId===null)throw new ExtractionTaskRunnerError('extraction_task_scope_invalid');
+  const contactId=claim.contactId;
   const runId=randomUUID(),ruleVersion=this.options.ruleVersion??'typescript-extraction-v1';
   let processed=0;
   while(true){
@@ -94,14 +96,14 @@ export class ExtractionTaskRunner implements ExtractionWorkerRunner {
     if(!targetState.targetIds.every(id=>ids.includes(id)))
      throw new ExtractionTaskRunnerError('extraction_task_targets_invalid');
     const messages=await loadExtractionSourceMessages(client,{
-     ownerId:claim.ownerId,contactId:claim.contactId,
+     ownerId:claim.ownerId,contactId,
     },ids);
     const watermark=(await client.query(`SELECT last_message_id FROM public.memory_extraction_watermark
-     WHERE owner_id=$1 AND contact_id=$2`,[claim.ownerId,claim.contactId])).rows[0]?.last_message_id??null;
+     WHERE owner_id=$1 AND contact_id=$2`,[claim.ownerId,contactId])).rows[0]?.last_message_id??null;
     return {messages,watermark};
    });
    const plans=planExtractionBatches({
-    scope:{owner_id:claim.ownerId,contact_id:claim.contactId},
+    scope:{owner_id:claim.ownerId,contact_id:contactId},
     messages:snapshots.messages,
     target_message_ids:targetState.targetIds,
     initial_watermark:snapshots.watermark,
@@ -121,7 +123,7 @@ export class ExtractionTaskRunner implements ExtractionWorkerRunner {
      attempt.set(plan.index,traceId);
      try{
       const outcome=await this.options.batches.run({
-       owner_id:claim.ownerId,contact_id:claim.contactId,
+       owner_id:claim.ownerId,contact_id:contactId,
        trace_id:traceId,batch_key:plan.batch_key,claim:claimIdentity(claim),
       },batchSignal);
       return {traceId,outcome};
@@ -147,7 +149,7 @@ export class ExtractionTaskRunner implements ExtractionWorkerRunner {
      let adopted;
      try{
       adopted=await this.options.adopt({
-       owner_id:claim.ownerId,contact_id:claim.contactId,
+       owner_id:claim.ownerId,contact_id:contactId,
        trace_id:value.traceId,batch_key:plan.batch_key,claim:claimIdentity(claim),
       },value.outcome,commitSignal);
      }catch(error){
@@ -182,12 +184,14 @@ export class ExtractionTaskRunner implements ExtractionWorkerRunner {
  private async beginTrace(
   claim:ExtractionClaim,plan:Plan,runId:string,ruleVersion:string,
  ):Promise<string>{
+  if(claim.contactId===null)throw new ExtractionTaskRunnerError('extraction_task_scope_invalid');
+  const contactId=claim.contactId;
   return this.options.store.fenced(claim,async client=>{
    const targets=plan.window.target_message_ids;
    const selected=new Set(targets);
    const context=plan.window.messages.map(message=>message.message_id).filter(id=>!selected.has(id));
    const frozen=await freezeExtractionSources(client,{
-    ownerId:claim.ownerId,contactId:claim.contactId,
+    ownerId:claim.ownerId,contactId,
    },{target_message_ids:[...targets],context_message_ids:context});
    if(canonicalJSON(frozen.messages.map(message=>message.message_id))
     !==canonicalJSON(plan.window.messages.map(message=>message.message_id)))

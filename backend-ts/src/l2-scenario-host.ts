@@ -37,6 +37,7 @@ export interface L2ScenarioHostCandidate {
   run(scope: L2ScenarioScope, claim: L2ScenarioClaim, signal: AbortSignal): Promise<{
     state: Record<string, any>;
     status: 'completed'|'idle';
+    processed_count: number;
   }>;
   read(scope: L2ScenarioScope, mappingCursor?: string|null): Promise<Record<string, any>>;
 }

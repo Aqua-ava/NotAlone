@@ -25,7 +25,7 @@ class LayeredMemoryService:
     def __init__(self, store, *, proposer=None, verifier=None, synthetic=False,
                  budget=None, model_priority=None, call_timeout_seconds=30.0, task_host=None, dispatcher=None,
                  profile_proposer=None, profile_verifier=None, quality=None, synthetic_quality_required=False, adapter_close=None,
-                 runtime_policy="qualified_suite"):
+                 runtime_policy="qualified_suite", execution_enabled=True):
         if (not isinstance(call_timeout_seconds, (int, float)) or isinstance(call_timeout_seconds, bool)
                 or not math.isfinite(call_timeout_seconds) or not 0 < call_timeout_seconds <= 120):
             raise ValueError("整理调用必须有不超过120秒的有限等待。")
@@ -50,6 +50,9 @@ class LayeredMemoryService:
         self._maintenance_stopped = False
         self._adapter_close = adapter_close
         self._dispatcher = dispatcher
+        if type(execution_enabled) is not bool:
+            raise TypeError("整理执行开关必须是布尔值。")
+        self._execution_enabled = execution_enabled
         self._contract = "scenario-v3:deadline-v1:coverage-v1:correction-v1:" + runtime_policy
         if getattr(proposer, "personal", False):
             self._contract += ":personal-background-v1:l2-1500:l3-2000"
@@ -119,8 +122,14 @@ class LayeredMemoryService:
         if self._dispatcher is None:
             self._dispatcher=dispatcher
 
+    def set_execution_enabled(self, enabled):
+        if type(enabled) is not bool:
+            raise TypeError("整理执行开关必须是布尔值。")
+        self._execution_enabled = enabled
+
     def start_maintenance(self, owner_id):
-        if owner_id is None or not (self._synthetic or self._real_adapters) or (self._task_host is None and self._dispatcher is None):
+        if (owner_id is None or not (self._synthetic or self._real_adapters)
+                or (self._task_host is None and self._dispatcher is None)):
             return
         with self._maintenance_lock:
             if self._maintenance_stopped or self._change_feed is not None:
@@ -155,7 +164,9 @@ class LayeredMemoryService:
             close()
 
     def resume_pending(self, owner_id):
-        if owner_id is None or not self._organization_available(owner_id) or (self._task_host is None and self._dispatcher is None):
+        if (not self._execution_enabled or owner_id is None
+                or not self._organization_available(owner_id)
+                or (self._task_host is None and self._dispatcher is None)):
             return
         for scope in self._store.pending_scopes(owner_id):
             task_id=self._store.pending(scope,self._contract_for(scope))
@@ -235,6 +246,8 @@ class LayeredMemoryService:
             self._dispatch(scope,task_id)
 
     def _dispatch(self, scope, task_id):
+        if not self._execution_enabled:
+            return
         if self._task_host is not None:
             self._task_host.wake(owner_id=scope.owner_id,contact_id=scope.contact_id,task_id=task_id)
             return
@@ -243,6 +256,8 @@ class LayeredMemoryService:
         self._dispatcher(scope,task_id,runner=self,model_priority=self._priority)
 
     def run_batch(self, claim):
+        if not self._execution_enabled:
+            raise PermissionError("TS任务Worker拥有整理执行权。")
         from notalone.scopes import organization_scope
         scope=organization_scope(claim.owner_id,claim.contact_id)
         if not self._organization_available(scope.owner_id):

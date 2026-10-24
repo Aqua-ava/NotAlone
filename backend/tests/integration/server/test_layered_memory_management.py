@@ -58,13 +58,14 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(enabled["layered_memory"]["scenarios"], [])
         self.assertEqual(self._get(self.backend, path)["layered_memory"]["status"], "blocked")
 
-    def controlled(self, *, proposer=None, verifier=None, budget=None, clock=None, call_timeout_seconds=30, model_priority=None, asynchronous=False):
+    def controlled(self, *, proposer=None, verifier=None, budget=None, clock=None, call_timeout_seconds=30,
+                   model_priority=None, asynchronous=False, execution_enabled=True):
         self.proposal = proposer or ControlledProposal()
         self.verification = verifier or ControlledVerification()
         self.service = LayeredMemoryService(PostgresLayeredMemoryStore(self.database_url, clock=clock),
             proposer=self.proposal, verifier=self.verification, synthetic=True,
             budget=budget or OrganizationBudget(), call_timeout_seconds=call_timeout_seconds,
-            model_priority=model_priority)
+            model_priority=model_priority, execution_enabled=execution_enabled)
         task_host=None
         if asynchronous:
             import psycopg
@@ -92,9 +93,61 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
             self.addCleanup(task_host.stop)
         backend = HttpBackend(create_controlled_layered_app(automatic_maintenance=asynchronous,
             database_url=self.database_url, owner_id=self.owner_id,
-            token="synthetic-layered-token", layered_memory=self.service,task_host=task_host), self.owner_id)
+            token="synthetic-layered-token", layered_memory=self.service,task_host=task_host,
+            organization_execution_enabled=execution_enabled), self.owner_id)
         self.addCleanup(backend.close)
         return backend
+
+    def test_ts_owned_execution_keeps_management_enqueue_but_cannot_run_python_model(self):
+        import psycopg
+        contact, _, message = self.import_contact("合成TS所有权管理。")
+        self.confirm(contact, "双方共同参加合成课程。", message)
+        backend = self.controlled(execution_enabled=False)
+        state = self.enable(backend, contact)
+        self.assertEqual((state["status"], state["scenarios"]), ("updating", []))
+        status, refreshed = backend.request(
+            f"/api/contacts/{contact}/layered-memory/refresh",
+            {"settings_generation": state["settings_generation"]},
+        )
+        self.assertEqual(status, 200, refreshed)
+        self.assertEqual((refreshed["layered_memory"]["status"],
+                          refreshed["layered_memory"]["scenarios"]), ("updating", []))
+        self.assertEqual(self.proposal.inputs, [])
+        with psycopg.connect(self.database_url) as connection:
+            task = connection.execute(
+                "SELECT t.status,j.state,j.pending_receipt,s.status,s.worker_id,s.lease_expires_at "
+                "FROM public.background_task t JOIN public.layered_memory_job j ON j.task_id=t.id "
+                "JOIN public.background_task_step s ON s.task_id=t.id "
+                "WHERE t.owner_id=%s AND t.contact_id=%s AND t.task_type='layered_memory'",
+                (self.owner_id, contact)).fetchone()
+        self.assertEqual(task, ("queued", "active", False, "pending", None, None))
+        from types import SimpleNamespace
+        with self.assertRaisesRegex(PermissionError, "TS任务Worker"):
+            self.service.run_batch(SimpleNamespace(owner_id=self.owner_id))
+
+    def test_ts_owned_execution_keeps_automatic_maintenance_enqueue_inert(self):
+        from threading import Event
+        import psycopg
+        contact, _, _ = self.import_contact("合成TS所有权维护。")
+        status, added = self.backend.request("/api/memories/manual-contact", {
+            "contact_id": contact, "text": "双方共同整理合成课程。", "category": "common_fact",
+        })
+        self.assertEqual(status, 200, added)
+        backend = self.controlled(execution_enabled=False, asynchronous=True)
+        task = None
+        for _ in range(50):
+            with psycopg.connect(self.database_url) as connection:
+                task = connection.execute(
+                    "SELECT t.status,j.state,s.status FROM public.background_task t "
+                    "JOIN public.layered_memory_job j ON j.task_id=t.id "
+                    "JOIN public.background_task_step s ON s.task_id=t.id "
+                    "WHERE t.owner_id=%s AND t.contact_id=%s AND t.task_type='layered_memory'",
+                    (self.owner_id, contact)).fetchone()
+            if task is not None:
+                break
+            Event().wait(0.05)
+        self.assertEqual(task, ("queued", "active", "pending"))
+        self.assertEqual(self.proposal.inputs, [])
 
     def enable(self, backend, contact):
         path = f"/api/contacts/{contact}/layered-memory"

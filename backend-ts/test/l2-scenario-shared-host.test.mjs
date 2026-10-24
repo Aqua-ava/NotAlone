@@ -7,6 +7,7 @@ import {sendEvents,useTool} from './support.mjs';
 import {startReplyServiceHost} from './reply-service-runtime-support.mjs';
 import {readReplyContactOverview} from '../src/reply-context-overview.ts';
 import {captureSnapshot} from '../src/contact-overview-evidence.ts';
+import {completeL2ScenarioWorkerStep} from '../src/l2-scenario-worker.ts';
 
 test('共享官方profile：一次L2装配经手录来源发布、读取、summary-error和关闭排空',{timeout:60000},async t=>{
   const f=await createStorageFixture();
@@ -111,6 +112,8 @@ ${latestMemoryText}
   assert.deepEqual(profileReplay,{status:202,body:{replayed:true}});
 
   const claim={task_id:task,step_id:step,step_name:'organize_memory',worker_id:worker,lease_generation:1};
+  const workerClaim={ownerId:owner,contactId:contact,taskId:task,stepId:step,stepName:'organize_memory',
+    workerId:worker,leaseGeneration:1,messageCount:0};
   const unauthorizedRun=await fetch(host.url+'/internal/layered-memory/run',{method:'POST',
     headers:{Authorization:'Bearer synthetic-public-token','content-type':'application/json'},
     body:JSON.stringify({scope:{owner_id:owner,contact_id:contact},claim})});
@@ -121,6 +124,7 @@ ${latestMemoryText}
   const runBody=await run.json();
   assert.equal(run.status,200,JSON.stringify(runBody));
   assert.equal(runBody.status,'completed');
+  assert.equal(runBody.processed_count,1);
   assert.equal(runBody.state.scenarios.length,1);
   assert.equal(host.requests.length,3);
   assert.deepEqual(host.requests.map(request=>(request.body.tools??[]).map(tool=>tool.name)),[
@@ -128,6 +132,20 @@ ${latestMemoryText}
   ]);
   assert.equal((await f.client.query('SELECT model_calls_used FROM layered_memory_job WHERE task_id=$1',[task])).rows[0].model_calls_used,3);
   const scenario=runBody.state.scenarios[0];
+  await f.client.query('BEGIN');
+  try{
+    const completion=await completeL2ScenarioWorkerStep(f.client,workerClaim,runBody.processed_count);
+    await f.client.query('COMMIT');
+    assert.deepEqual(completion,{processedCount:runBody.processed_count,totalCount:0,state:'complete'});
+  }catch(error){
+    await f.client.query('ROLLBACK');
+    throw error;
+  }
+  assert.deepEqual((await f.client.query(`SELECT j.state AS job_state,j.pending_receipt,
+    t.status AS task_status,s.status AS step_status
+    FROM layered_memory_job j JOIN background_task t ON t.id=j.task_id
+    JOIN background_task_step s ON s.task_id=t.id WHERE j.task_id=$1`,[task])).rows[0],
+  {job_state:'complete',pending_receipt:false,task_status:'succeeded',step_status:'succeeded'});
   const earlyWrongScope=await fetch(host.url+'/internal/layered-memory/run',{method:'POST',
     headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},
     body:JSON.stringify({scope:{owner_id:owner,contact_id:randomUUID()},claim})});
@@ -276,4 +294,139 @@ ${latestMemoryText}
     headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},
     body:JSON.stringify({scope:{owner_id:owner,contact_id:contact},claim})});
   assert.equal(after.status,503);
+});
+
+test('共享官方profile：唯一TS Worker自动领取L2并在关闭时释放租约',{timeout:60000},async t=>{
+  const f=await createStorageFixture();
+  const owner=randomUUID(),contact=randomUUID(),token=randomUUID()+randomUUID();
+  const firstSource=randomUUID(),firstMemory=randomUUID(),firstTask=randomUUID(),firstStep=randomUUID();
+  const secondSource=randomUUID(),secondMemory=randomUUID(),secondTask=randomUUID(),secondStep=randomUUID();
+  const firstText='双方自动完成合成课程。',secondText='双方继续整理自动课程笔记。';
+  let host,closing;
+  const closeFixture=()=>closing??=f.close();
+  t.after(async()=>{if(host)await host.stop();await closeFixture();});
+  await f.client.query("INSERT INTO owner(id,display_name)VALUES($1,'合成自动Worker本人')",[owner]);
+  await f.client.query("INSERT INTO contact(id,owner_id,display_name)VALUES($1,$2,'合成自动Worker联系人')",[contact,owner]);
+  await f.client.query(`INSERT INTO source_document
+    (id,owner_id,contact_id,source_type,file_name,content_sha256,record_count,status)
+    VALUES($1,$2,$3,'manual','synthetic-auto-worker-1',$4,1,'active')`,
+  [firstSource,owner,contact,'1'.repeat(64)]);
+  await f.client.query(`INSERT INTO confirmed_memory
+    (id,owner_id,contact_id,text_content,category,topic,source_ids,adoption_method,status,revision)
+    VALUES($1,$2,$3,$4,'common_fact','study',$5,'manual','active',1)`,
+  [firstMemory,owner,contact,firstText,[firstSource]]);
+  await f.client.query(`INSERT INTO layered_memory_state
+    (owner_id,contact_id,enabled,settings_generation,status,organization_generation)
+    VALUES($1,$2,true,1,'stale',0) ON CONFLICT DO NOTHING`,[owner,contact]);
+  await f.client.query(`UPDATE layered_memory_state SET enabled=true,settings_generation=1,status='stale',
+    organization_generation=0 WHERE owner_id=$1 AND contact_id=$2`,[owner,contact]);
+  const seedTask=async(task,step,memory,text)=>{
+    await f.client.query(`INSERT INTO background_task
+      (id,owner_id,contact_id,task_type,status,current_step,message_count)
+      VALUES($1,$2,$3,'layered_memory','queued','organize_memory',1)`,[task,owner,contact]);
+    await f.client.query(`INSERT INTO background_task_step
+      (id,task_id,step_name,step_order,status,total_count,attempt_count)
+      VALUES($1,$2,'organize_memory',1,'pending',1,0)`,[step,task]);
+    await f.client.query(`INSERT INTO layered_memory_job
+      (task_id,owner_id,contact_id,settings_generation,target_key,contract,target_manifest,dependency_ids,
+       state,run_remaining,model_call_limit,profile_required)
+      VALUES($1,$2,$3,1,$4,'scenario-v3:document-tools-v1',$5::jsonb,'{}','active',1,8,false)`,
+    [task,owner,contact,`synthetic-auto:${task}`,JSON.stringify([{memory_id:memory,text}])]);
+  };
+  await seedTask(firstTask,firstStep,firstMemory,firstText);
+
+  let latestMemory=null,latestText=null,secondStartedResolve;
+  const secondStarted=new Promise(resolve=>{secondStartedResolve=resolve;});
+  host=await startReplyServiceHost(t,{name:f.client.database,user:f.client.user,replyOwner:owner,replyToken:token,close:closeFixture},
+    async(req,res,requests,events)=>{
+      const body=requests.at(-1).body,names=(body.tools??[]).map(tool=>tool.name);
+      if(names.join(',')==='read,write,edit'){
+        if(body.messages.length===1){
+          const payload=JSON.parse(body.messages[0].content.find(block=>block.type==='text').text);
+          const selected=payload.memories.find(memory=>memory.text===secondText)
+            ??payload.memories.find(memory=>memory.text===firstText);
+          if(!selected)throw new Error('l2_auto_memory_missing');
+          latestMemory=selected.memory_id;latestText=selected.text;
+          if(latestText===secondText){
+            secondStartedResolve();
+            await new Promise(resolve=>{
+              req.once('aborted',resolve);
+              res.once('close',resolve);
+            });
+            return;
+          }
+          useTool(events,'write',{path:`auto-${latestMemory}.md`,content:`<!-- META {"topic_key":"auto-worker","title":"自动整理课程","hint":"共同经历与当前状态"} -->
+
+${latestText}
+<!-- SOURCES [{"memory_id":"${latestMemory}","revision":1}] -->`},'auto-write');
+        }
+        sendEvents(res,events);
+        return;
+      }
+      if(names.join(',')==='ScenarioVerificationOutput'){
+        useTool(events,'ScenarioVerificationOutput',{results:[{
+          scenario_index:0,paragraph_index:0,supported:true,
+          evidence:[{memory_id:latestMemory,quote:latestText}],
+        }]},'auto-verify');
+        sendEvents(res,events);
+        return;
+      }
+      res.statusCode=500;res.end('{}');
+    },{pluginPath:'test/host-reply-runtime-plugin.ts',environment:{
+      NOTALONE_SYNTHETIC_L2:'1',NOTALONE_SYNTHETIC_EXTRACTION:'1',
+    }});
+
+  const deadline=Date.now()+10000;
+  let firstDone=false;
+  while(Date.now()<deadline&&!firstDone){
+    const row=(await f.client.query(`SELECT t.status AS task_status,j.state AS job_state,
+      s.status AS step_status,s.attempt_count,s.worker_id,s.lease_expires_at,
+      state.status AS layer_status,state.organization_generation
+      FROM background_task t JOIN layered_memory_job j ON j.task_id=t.id
+      JOIN background_task_step s ON s.task_id=t.id
+      JOIN layered_memory_state state ON state.owner_id=j.owner_id
+        AND state.contact_id IS NOT DISTINCT FROM j.contact_id
+      WHERE t.id=$1`,[firstTask])).rows[0];
+    firstDone=row.task_status==='succeeded'&&row.job_state==='complete'&&row.step_status==='succeeded';
+    if(!firstDone)await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  assert.equal(firstDone,true,'唯一TS Worker未自动领取并收口L2任务');
+  assert.deepEqual((await f.client.query(`SELECT s.attempt_count,s.worker_id,s.lease_expires_at,
+    j.pending_receipt,j.state AS job_state,state.status AS layer_status
+    FROM background_task_step s JOIN layered_memory_job j ON j.task_id=s.task_id
+    JOIN layered_memory_state state ON state.owner_id=j.owner_id
+      AND state.contact_id IS NOT DISTINCT FROM j.contact_id
+    WHERE j.task_id=$1`,[firstTask])).rows[0],{
+    attempt_count:1,worker_id:null,lease_expires_at:null,pending_receipt:false,
+    job_state:'complete',layer_status:'ready',
+  });
+  assert.equal((await f.client.query(`SELECT count(*)::int AS versions
+    FROM scenario_document_version WHERE owner_id=$1 AND contact_id=$2`,[owner,contact])).rows[0].versions,1);
+  assert.equal(host.requests.length,3);
+
+  await f.client.query(`INSERT INTO source_document
+    (id,owner_id,contact_id,source_type,file_name,content_sha256,record_count,status)
+    VALUES($1,$2,$3,'manual','synthetic-auto-worker-2',$4,1,'active')`,
+  [secondSource,owner,contact,'2'.repeat(64)]);
+  await f.client.query(`INSERT INTO confirmed_memory
+    (id,owner_id,contact_id,text_content,category,topic,source_ids,adoption_method,status,revision)
+    VALUES($1,$2,$3,$4,'common_fact','study',$5,'manual','active',1)`,
+  [secondMemory,owner,contact,secondText,[secondSource]]);
+  await seedTask(secondTask,secondStep,secondMemory,secondText);
+  await Promise.race([secondStarted,new Promise((_,reject)=>setTimeout(
+    ()=>reject(new Error('唯一TS Worker未自动领取第二项L2任务')),10000,
+  ))]);
+  const closed=await host.request('/close-reply',{});
+  assert.equal(closed.closed,true);
+  assert.equal(closed.permits.backgroundActive,0);
+  assert.deepEqual((await f.client.query(`SELECT j.state AS job_state,j.pending_receipt,
+    t.status AS task_status,s.status AS step_status,s.attempt_count,s.worker_id,s.lease_expires_at
+    FROM layered_memory_job j JOIN background_task t ON t.id=j.task_id
+    JOIN background_task_step s ON s.task_id=j.task_id WHERE j.task_id=$1`,[secondTask])).rows[0],{
+    job_state:'active',pending_receipt:false,task_status:'queued',step_status:'pending',
+    attempt_count:0,worker_id:null,lease_expires_at:null,
+  });
+  assert.equal((await f.client.query(`SELECT count(*)::int AS live
+    FROM background_task_step s JOIN background_task t ON t.id=s.task_id
+    WHERE t.owner_id=$1 AND s.status='running' AND s.lease_expires_at IS NOT NULL`,[owner])).rows[0].live,0);
 });

@@ -68,8 +68,15 @@
 
 ## 未覆盖与剩余边界
 
-- 生产 Worker、默认运行时、桌面控制器与页面仍未切换；票保持 claimed，待实际 App／微信验收。
+- 唯一 TS Worker 已在隔离宿主接入；默认运行时、桌面控制器与页面仍未由根验收，票保持 claimed。
 - 未调用真实模型、真实 embedding、微信或发布包，无法认证真实语义质量、provider 延迟、实际桌面交互和线上 DSH 生命周期。
 - 隔离测试可显式注入 synthetic 资格；共享宿主缺省为 unknown 且禁止自动使用，根必须注入真实 quality 状态。
 - 票 17 的整体来源删除编排和票 14 的 L3 生成仍由各自 owner 完成；本票只验证 L2 发布/失效接缝。
 - 全量 5 个环境/既有失败不属于本票范围，未通过安装 desktop 依赖或修改既有夹具掩盖；本票最终提交不包含工作树临时 `node_modules` symlink。
+
+## 唯一 Worker 与执行权验证
+
+- 官方 DSH profile 纵切从 `queued/pending` L2 任务开始，由唯一 `ExtractionWorker` 自动领取并完成 3 次物理调用、场景发布、batch/job/task/step 收口；`attempt_count=1`、无残留 Worker 或租约。
+- 第二项 L2 任务在模型响应在途时关闭宿主：`backgroundActive=0`，步骤回到 `pending`、`attempt_count=0`、`worker_id/lease_expires_at=NULL`，任务回到 `queued`，不产生成功版本或错误水位推进。
+- Python 回归确认 TS 所有权下 enable/refresh 和自动维护仍会 enqueue，proposal/verifier 零调用，`run_batch()` 明确拒绝；`profile_required` 的 L2 回执不被再生成或被伪标 L3。
+- 本轮 `tsc --noEmit` 0 错误；TS L2 16/16、task store/runner/control 19/19、source trace/host/shared 12/12。Python runtime/组织相关单元 47/47，管理门禁重点 2/2，质量/profile 重点 4/4；完整 `test_layered_memory_management` 37/38，唯一自然过期边界失败在基提交 `f90545aa` 同样复现。

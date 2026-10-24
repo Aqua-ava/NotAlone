@@ -716,12 +716,16 @@ export class L2ScenarioService {
     });
   }
 
-  async run(scope: L2ScenarioScope, claim: L2ScenarioClaim, signal: AbortSignal): Promise<{state: Row; status: 'completed'|'idle'}> {
+  async run(scope: L2ScenarioScope, claim: L2ScenarioClaim, signal: AbortSignal): Promise<{
+    state: Row;
+    status: 'completed'|'idle';
+    processed_count: number;
+  }> {
     signal.throwIfAborted();
     const work = await this.prepare(scope, claim);
     if (!work) {
       signal.throwIfAborted();
-      return {state: await this.read(scope), status: 'idle'};
+      return {state: await this.read(scope), status: 'idle', processed_count: 0};
     }
     try {
       signal.throwIfAborted();
@@ -756,7 +760,11 @@ export class L2ScenarioService {
       });
       signal.throwIfAborted();
       await this.publish(work, proposal.scenarios, signal);
-      return {state: await this.read(scope), status: 'completed'};
+      return {
+        state: await this.read(scope),
+        status: 'completed',
+        processed_count: work.inputs.length,
+      };
     } catch (error) {
       const code = error instanceof L2ScenarioError || error instanceof L2ScenarioConflict
         ? error.code

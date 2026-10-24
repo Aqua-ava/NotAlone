@@ -20,6 +20,7 @@ export interface L2ScenarioHttpService {
   run(scope:L2ScenarioScope,claim:L2ScenarioClaim,signal:AbortSignal):Promise<{
     state:Record<string,unknown>;
     status:'completed'|'idle';
+    processed_count:number;
   }>;
   read(scope:L2ScenarioScope,mappingCursor:string|null,signal:AbortSignal):Promise<Record<string,unknown>>;
   reportParagraphError(

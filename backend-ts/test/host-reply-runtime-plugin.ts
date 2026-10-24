@@ -26,6 +26,7 @@ export async function apply(ctx:Context){
   const arbiter=new ModelPermitArbiter();
   const ledger=new PostgresModelLedger({transaction:work=>storage.businessTransaction(work),details:new PostgresModelLedgerDetails()});
   const l2Enabled=process.env.NOTALONE_SYNTHETIC_L2==='1';
+  const extractionEnabled=l2Enabled&&process.env.NOTALONE_SYNTHETIC_EXTRACTION==='1';
   const l2Pool=l2Enabled?await storage.businessPool():undefined;
   const traceStore=l2Pool?new SourceProcessingTraceStore(l2Pool):undefined;
   const l2Token=`synthetic-l2-permit-${randomBytes(24).toString('hex')}`;
@@ -42,6 +43,7 @@ export async function apply(ctx:Context){
     permitServer=await startModelPermitServer({path:join(home,'l2-permit.sock'),token:l2Token,arbiter,accounting});
   }
   const runtime=await createHostReplyRuntime({ctx,storage,arbiter,ledger,token:process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN!,
+    ...(extractionEnabled?{extractionEnabled:true,extractionAdoptionEnabled:true}:{}),
     ...(traceStore?{sourceTraces:traceStore}:{}),
     ...(permitServer?{extractionPermit:{path:join(home,'l2-permit.sock'),token:l2Token}}:{}),
     configuration:{skillsRoot,

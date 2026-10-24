@@ -269,3 +269,71 @@ test('完整观察回执进入唯一Worker，全局锁阻止第二只，owner进
   await secondWorker?.stop();await firstWorker?.stop();await f.close();
  }
 });
+
+test('L2任务失败、重试和取消保持job与租约可恢复',async()=>{
+ const f=await fixture();try{
+  await f.pool.query(`INSERT INTO layered_memory_state
+    (owner_id,contact_id,enabled,settings_generation,status,organization_generation)
+    VALUES($1,$2,true,1,'updating',0)`,[f.scope.ownerId,f.scope.contactId]);
+  const enqueue=async()=>{
+   const task=randomUUID(),step=randomUUID();
+   await f.pool.query(`INSERT INTO background_task
+     (id,owner_id,contact_id,task_type,status,current_step,message_count)
+     VALUES($1,$2,$3,'layered_memory','queued','organize_memory',1)`,
+   [task,f.scope.ownerId,f.scope.contactId]);
+   await f.pool.query(`INSERT INTO background_task_step
+     (id,task_id,step_name,step_order,status,total_count,attempt_count)
+     VALUES($1,$2,'organize_memory',1,'pending',1,0)`,[step,task]);
+   await f.pool.query(`INSERT INTO layered_memory_job
+     (task_id,owner_id,contact_id,settings_generation,target_key,contract,target_manifest,dependency_ids,
+      state,run_remaining,model_call_limit,profile_required)
+     VALUES($1,$2,$3,1,$4,'scenario-v3:document-tools-v1','[]','{}','active',1,8,false)`,
+   [task,f.scope.ownerId,f.scope.contactId,`synthetic-l2:${task}`]);
+   return task;
+  };
+  const claim=async task=>{
+   const value=await f.store.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000,
+     supportedSteps:['organize_memory']});
+   assert.equal(value?.stepName,'organize_memory');
+   return value;
+  };
+
+  const failedTask=await enqueue(),failedClaim=await claim(failedTask);
+  assert.equal(await f.store.fail(failedClaim,'l2_scenario_model_failed',false),'failed');
+  assert.deepEqual((await f.pool.query(`SELECT j.state AS job_state,t.status AS task_status,
+    s.status AS step_status,state.status AS layer_status,state.error_code
+    FROM layered_memory_job j JOIN background_task t ON t.id=j.task_id
+    JOIN background_task_step s ON s.task_id=j.task_id
+    JOIN layered_memory_state state ON state.owner_id=j.owner_id
+      AND state.contact_id IS NOT DISTINCT FROM j.contact_id
+    WHERE j.task_id=$1`,[failedTask])).rows[0],{
+    job_state:'failed',task_status:'failed',step_status:'failed',layer_status:'failed',
+    error_code:'l2_scenario_model_failed',
+  });
+
+  await f.pool.query(`UPDATE layered_memory_state SET status='updating',error_code=NULL
+    WHERE owner_id=$1 AND contact_id=$2`,[f.scope.ownerId,f.scope.contactId]);
+  const retryTask=await enqueue(),retryClaim=await claim(retryTask);
+  assert.equal(await f.store.fail(retryClaim,'l2_scenario_transient',true),'retryable');
+  assert.deepEqual((await f.pool.query(`SELECT j.state AS job_state,t.status AS task_status,
+    s.status AS step_status
+    FROM layered_memory_job j JOIN background_task t ON t.id=j.task_id
+    JOIN background_task_step s ON s.task_id=j.task_id WHERE j.task_id=$1`,[retryTask])).rows[0],
+  {job_state:'active',task_status:'running',step_status:'retryable'});
+
+  await f.pool.query(`UPDATE layered_memory_state SET status='updating',error_code=NULL
+    WHERE owner_id=$1 AND contact_id=$2`,[f.scope.ownerId,f.scope.contactId]);
+  const pausedTask=await enqueue(),pausedClaim=await claim(pausedTask);
+  assert.equal(await f.store.pause(pausedClaim),true);
+  assert.deepEqual((await f.pool.query(`SELECT j.state AS job_state,t.status AS task_status,
+    s.status AS step_status,s.attempt_count,s.worker_id,s.lease_expires_at
+    FROM layered_memory_job j JOIN background_task t ON t.id=j.task_id
+    JOIN background_task_step s ON s.task_id=j.task_id WHERE j.task_id=$1`,[pausedTask])).rows[0],{
+    job_state:'active',task_status:'queued',step_status:'pending',attempt_count:0,
+    worker_id:null,lease_expires_at:null,
+  });
+  await assert.rejects(f.store.check(pausedClaim),{code:'lease_stale'});
+  const reclaimed=await claim(pausedTask);
+  assert.ok(reclaimed.leaseGeneration>pausedClaim.leaseGeneration);
+ }finally{await f.close();}
+});

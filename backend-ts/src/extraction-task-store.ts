@@ -3,10 +3,11 @@ import type pg from 'pg';
 import {extractionTargets,extractionCheckpoint,extractionProgress,ownerExtractionProgress,type ExtractionTargets} from './extraction-task-store-processing.ts';
 import {unsettledExtraction,blockedExtraction,quarantineExtraction} from './extraction-task-store-recovery.ts';
 import {recordExtractionObservation,claimExtractionSchedule,enqueueExtractionObservation} from './extraction-task-store-schedule.ts';
-export interface ExtractionScope {ownerId:string;contactId:string;}
+import {completeL2ScenarioWorkerStep} from './l2-scenario-worker.ts';
+export interface ExtractionScope {ownerId:string;contactId:string|null;}
 export interface ExtractionClaim extends ExtractionScope {
  taskId:string;stepId:string;stepName:string;workerId:string;leaseGeneration:number;
- attemptCount:number;messageCount:number;sourceDocumentId:string|null;taskType:'import'|'observation';
+ attemptCount:number;messageCount:number;sourceDocumentId:string|null;taskType:'import'|'observation'|'layered_memory';
  leaseExpiresAt:Date;runtimeConfig:Record<string,unknown>|null;
 }
 export interface ExtractionStoreOptions {
@@ -24,7 +25,8 @@ export const processingSourceAllowed=`(${sourceAllowed} AND (t.task_type='import
  JOIN conversation_binding b ON b.id=o.binding_id AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id
  WHERE o.owner_id=t.owner_id AND o.contact_id=t.contact_id AND b.status='active' AND o.memory_enqueued_at IS NOT NULL)))`;
 export async function lockExtractionScope(c:pg.ClientBase,scope:ExtractionScope):Promise<void>{
- await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${scope.ownerId}:${scope.contactId}`]);
+ const lock=scope.contactId===null?`owner:${scope.ownerId}`:`contact:${scope.ownerId}:${scope.contactId}`;
+ await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[lock]);
 }
 export class ExtractionTaskStore {
  readonly pool:pg.Pool;readonly options:ExtractionStoreOptions;
@@ -68,13 +70,60 @@ export class ExtractionTaskStore {
    await c.query(`UPDATE background_task t SET status='failed',last_error_code='lease_expired',finished_at=now(),updated_at=now()
     WHERE t.owner_id=$1 AND t.contact_id=$2 AND t.status IN ('queued','running','verifying')
     AND EXISTS(SELECT 1 FROM background_task_step s WHERE s.task_id=t.id AND s.step_name='extract_memory' AND s.status='failed' AND s.last_error_code='lease_expired')`,[scope.ownerId,scope.contactId]);
+   await c.query(`UPDATE background_task_step step
+    SET status=CASE WHEN job.pending_receipt AND batch.status='succeeded'
+      AND batch.settings_generation=job.settings_generation THEN 'pending'
+      WHEN step.attempt_count>=3 THEN 'failed' ELSE 'retryable' END,
+     attempt_count=CASE WHEN job.pending_receipt AND batch.status='succeeded'
+      AND batch.settings_generation=job.settings_generation THEN 0 ELSE attempt_count END,
+     worker_id=NULL,lease_expires_at=NULL,
+     last_error_code=CASE WHEN job.pending_receipt AND batch.status='succeeded'
+      AND batch.settings_generation=job.settings_generation THEN NULL ELSE 'lease_expired' END,
+     finished_at=CASE WHEN step.attempt_count>=3 AND NOT(job.pending_receipt AND batch.status='succeeded'
+      AND batch.settings_generation=job.settings_generation) THEN now() ELSE step.finished_at END,
+     updated_at=now()
+    FROM background_task task
+    JOIN layered_memory_job job ON job.task_id=task.id AND job.owner_id=task.owner_id
+      AND job.contact_id IS NOT DISTINCT FROM task.contact_id
+    LEFT JOIN layered_memory_batch batch ON batch.id=job.receipt_batch_id
+      AND batch.task_id=job.task_id AND batch.owner_id=job.owner_id
+      AND batch.contact_id IS NOT DISTINCT FROM job.contact_id
+    WHERE step.task_id=task.id AND task.id=step.task_id AND task.owner_id=$1
+      AND task.contact_id IS NOT DISTINCT FROM $2::uuid AND task.task_type='layered_memory'
+      AND step.step_name='organize_memory' AND step.status='running'
+      AND step.lease_expires_at<=clock_timestamp()`,
+   [scope.ownerId,scope.contactId]);
+   await c.query(`UPDATE background_task task SET status='failed',last_error_code='lease_expired',
+    finished_at=now(),updated_at=now()
+    WHERE task.owner_id=$1 AND task.contact_id IS NOT DISTINCT FROM $2::uuid
+      AND task.task_type='layered_memory' AND task.status IN ('queued','running','verifying')
+      AND EXISTS(SELECT 1 FROM background_task_step step WHERE step.task_id=task.id
+       AND step.step_name='organize_memory' AND step.status='failed'
+       AND step.last_error_code='lease_expired')`,
+   [scope.ownerId,scope.contactId]);
+   await c.query(`UPDATE background_task task SET status='queued',last_error_code=NULL,
+    finished_at=NULL,updated_at=now()
+    WHERE task.owner_id=$1 AND task.contact_id IS NOT DISTINCT FROM $2::uuid
+      AND task.task_type='layered_memory' AND task.status='failed'
+      AND EXISTS(SELECT 1 FROM background_task_step step WHERE step.task_id=task.id
+       AND step.step_name='organize_memory' AND step.status='pending')`,
+   [scope.ownerId,scope.contactId]);
    if((await c.query(`SELECT 1 FROM background_task t JOIN background_task_step s ON s.task_id=t.id
-    WHERE t.owner_id=$1 AND t.contact_id=$2 AND s.status='running' AND s.lease_expires_at>now() LIMIT 1`,[scope.ownerId,scope.contactId])).rowCount)return null;
+    WHERE t.owner_id=$1 AND t.contact_id IS NOT DISTINCT FROM $2::uuid
+      AND s.status='running' AND s.lease_expires_at>now() LIMIT 1`,[scope.ownerId,scope.contactId])).rowCount)return null;
    const blocked=[...unsettled.direct];
    for(const task of unsettled.windows.keys())if(await blockedExtraction(c,unsettled,task,true))blocked.push(task);
    const row=(await c.query(`SELECT t.id AS task_id,t.*,s.id AS step_id,s.step_name,s.attempt_count,s.lease_generation
-    FROM background_task t JOIN background_task_step s ON s.task_id=t.id WHERE t.owner_id=$1 AND t.contact_id=$2
-    AND t.task_type IN ('import','observation') AND ${sourceAllowed} AND t.status IN ('queued','running','verifying')
+    FROM background_task t JOIN background_task_step s ON s.task_id=t.id
+    WHERE t.owner_id=$1 AND t.contact_id IS NOT DISTINCT FROM $2::uuid
+    AND ((t.task_type IN ('import','observation') AND ${sourceAllowed})
+      OR (t.task_type='layered_memory' AND EXISTS(
+       SELECT 1 FROM layered_memory_job job JOIN layered_memory_state state
+        ON state.owner_id=job.owner_id AND state.contact_id IS NOT DISTINCT FROM job.contact_id
+       WHERE job.task_id=t.id AND job.owner_id=t.owner_id
+        AND job.contact_id IS NOT DISTINCT FROM t.contact_id AND job.state='active'
+        AND state.enabled AND 'document-tools-v1'=ANY(string_to_array(job.contract,':')))))
+    AND t.status IN ('queued','running','verifying')
     AND ($3::uuid IS NULL OR t.id=$3) AND s.step_name=ANY($4::text[]) AND s.status IN ('pending','retryable')
     AND NOT(t.id=ANY($5::uuid[]))
     AND (s.status='pending' OR s.attempt_count<3)
@@ -116,7 +165,22 @@ export class ExtractionTaskStore {
  async fail(claim:ExtractionClaim,errorCode:string,retryable:boolean):Promise<'failed'|'retryable'>{
   if(!/^[a-zA-Z0-9_]{1,64}$/.test(errorCode))throw new ExtractionTaskError('task_error_code_invalid');
   return this.transaction(claim,async c=>{
-   await this.assertLease(c,claim);const unsettled=await unsettledExtraction(this,c,claim);
+   await this.assertLease(c,claim);
+   if(claim.taskType==='layered_memory'){
+    const status=retryable&&claim.attemptCount<3?'retryable':'failed';
+    await c.query("UPDATE background_task_step SET status=$2,worker_id=NULL,lease_expires_at=NULL,last_error_code=$3,updated_at=now() WHERE id=$1",[claim.stepId,status,errorCode]);
+    await c.query("UPDATE background_task SET status=$2,retry_count=retry_count+1,last_error_code=$3,finished_at=CASE WHEN $2='failed' THEN now() ELSE NULL END,updated_at=now() WHERE id=$1",[claim.taskId,status==='failed'?'failed':'running',errorCode]);
+    if(status==='failed'){
+     await c.query(`UPDATE layered_memory_job SET state='failed'
+       WHERE task_id=$1 AND owner_id=$2 AND contact_id IS NOT DISTINCT FROM $3::uuid AND state='active'`,
+     [claim.taskId,claim.ownerId,claim.contactId]);
+     await c.query(`UPDATE layered_memory_state SET status='failed',error_code=$3,updated_at=now()
+       WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid AND enabled`,
+     [claim.ownerId,claim.contactId,errorCode]);
+    }
+    return status;
+   }
+   const unsettled=await unsettledExtraction(this,c,claim);
    if(await blockedExtraction(c,unsettled,claim.taskId,false)){
     await quarantineExtraction(c,claim,claim.taskId,unsettled.windows.get(claim.taskId)??new Set());
     await this.markUnknown(c,claim.taskId,claim.stepId);return 'failed';
@@ -129,7 +193,19 @@ export class ExtractionTaskStore {
  }
  async pause(claim:ExtractionClaim):Promise<boolean>{
   return this.transaction(claim,async c=>{
-   await this.assertLease(c,claim);const unsettled=await unsettledExtraction(this,c,claim);
+   await this.assertLease(c,claim);
+   if(claim.taskType==='layered_memory'){
+    const released=await c.query(`UPDATE background_task_step
+      SET status='pending',attempt_count=GREATEST(0,attempt_count-1),processed_count=0,
+        worker_id=NULL,lease_expires_at=NULL,finished_at=NULL,updated_at=now()
+      WHERE id=$1 AND status='running' AND worker_id=$2 AND lease_generation=$3`,
+    [claim.stepId,claim.workerId,claim.leaseGeneration]);
+    if(!released.rowCount)return false;
+    await c.query(`UPDATE background_task SET status='queued',finished_at=NULL,updated_at=now()
+      WHERE id=$1 AND status='running'`,[claim.taskId]);
+    return true;
+   }
+   const unsettled=await unsettledExtraction(this,c,claim);
    if(await blockedExtraction(c,unsettled,claim.taskId,false)){
     await quarantineExtraction(c,claim,claim.taskId,unsettled.windows.get(claim.taskId)??new Set());await this.markUnknown(c,claim.taskId,claim.stepId);return false;
    }
@@ -139,6 +215,12 @@ export class ExtractionTaskStore {
  }
  async complete(claim:ExtractionClaim,processedCount:number,totalCount?:number):Promise<void>{
   if(!Number.isSafeInteger(processedCount)||processedCount<0||totalCount!==undefined&&(!Number.isSafeInteger(totalCount)||totalCount<0))throw new ExtractionTaskError('task_count_invalid');
+  if(claim.stepName==='organize_memory'){
+   await this.transaction(claim,async c=>{
+    await completeL2ScenarioWorkerStep(c,claim,processedCount);
+   });
+   return;
+  }
   await this.transaction(claim,async c=>{
    await this.assertLease(c,claim);
    await c.query(`UPDATE background_task_step SET status='succeeded',processed_count=$2,total_count=COALESCE($3,total_count),
@@ -156,9 +238,12 @@ export class ExtractionTaskStore {
  }
  async assertLease(c:pg.ClientBase,claim:ExtractionClaim):Promise<void>{
   const result=await c.query(`SELECT 1 FROM background_task t JOIN background_task_step s ON s.task_id=t.id
-   WHERE t.id=$1 AND t.owner_id=$2 AND t.contact_id=$3 AND s.id=$4 AND s.worker_id=$5 AND s.lease_generation=$6
+   WHERE t.id=$1 AND t.owner_id=$2 AND t.contact_id IS NOT DISTINCT FROM $3::uuid
+   AND s.id=$4 AND s.worker_id=$5 AND s.lease_generation=$6
    AND s.step_name=$7 AND s.status='running' AND s.lease_expires_at>clock_timestamp()
-   AND t.status IN ('queued','running','verifying') AND ${sourceAllowed} FOR UPDATE OF t,s`,
+   AND t.status IN ('queued','running','verifying')
+   AND ((t.task_type IN ('import','observation') AND ${sourceAllowed}) OR t.task_type='layered_memory')
+   FOR UPDATE OF t,s`,
    [claim.taskId,claim.ownerId,claim.contactId,claim.stepId,claim.workerId,claim.leaseGeneration,claim.stepName]);
   if(!result.rowCount)throw new ExtractionTaskError('lease_stale');
  }
@@ -198,10 +283,13 @@ export class ExtractionTaskStore {
   return this.resume({ownerId,contactId:row.contact_id},taskId,action);
  }
  /** 只列出可交给提取 Worker 的联系人范围；真正领取仍走 claim 的原子租约。 */
- async readyScopes(ownerId:string,limit=64,runtimeModes:readonly ('legacy'|'bounded-runtime-v1')[]=['legacy']):Promise<ExtractionScope[]>{
+ async readyScopes(ownerId:string,limit=64,runtimeModes:readonly ('legacy'|'bounded-runtime-v1')[]=['legacy'],
+  includeOrganization=false,
+ ):Promise<ExtractionScope[]>{
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId)
    ||!Number.isSafeInteger(limit)||limit<1||limit>256||!runtimeModes.length
-   ||runtimeModes.some(mode=>!['legacy','bounded-runtime-v1'].includes(mode)))throw new ExtractionTaskError('worker_scan_invalid');
+   ||runtimeModes.some(mode=>!['legacy','bounded-runtime-v1'].includes(mode))
+   ||typeof includeOrganization!=='boolean')throw new ExtractionTaskError('worker_scan_invalid');
   const rows=(await this.pool.query(`WITH candidates AS (
     SELECT s.contact_id,0 AS priority,COALESCE(s.due_at,s.last_input_at) AS ready_at
     FROM memory_extraction_schedule s
@@ -217,9 +305,24 @@ export class ExtractionTaskStore {
      AND t.status IN ('queued','running','verifying') AND ${sourceAllowed}
      AND s.step_name IN ('parse','normalize','extract_memory') AND s.status IN ('pending','retryable')
      AND COALESCE(t.extraction_runtime_config->>'mode','legacy')=ANY($3::text[])
+    UNION ALL
+    SELECT t.contact_id,0 AS priority,COALESCE(t.started_at,t.created_at) AS ready_at
+    FROM background_task t
+    JOIN background_task_step s ON s.task_id=t.id AND s.step_name='organize_memory'
+    JOIN layered_memory_job job ON job.task_id=t.id AND job.owner_id=t.owner_id
+      AND job.contact_id IS NOT DISTINCT FROM t.contact_id
+    JOIN layered_memory_state state ON state.owner_id=job.owner_id
+      AND state.contact_id IS NOT DISTINCT FROM job.contact_id
+    WHERE $4::boolean AND t.owner_id=$1 AND t.task_type='layered_memory'
+     AND t.status IN ('queued','running','verifying') AND job.state='active' AND state.enabled
+     AND 'document-tools-v1'=ANY(string_to_array(job.contract,':'))
+     AND (s.status IN ('pending','retryable')
+      OR s.status='running' AND s.lease_expires_at<=clock_timestamp())
+     AND (s.status='pending' OR s.attempt_count<3)
    )
    SELECT contact_id FROM candidates GROUP BY contact_id
-   ORDER BY min(priority),min(ready_at),contact_id LIMIT $2`,[ownerId,limit,[...new Set(runtimeModes)]])).rows;
+   ORDER BY min(priority),min(ready_at),contact_id LIMIT $2`,
+  [ownerId,limit,[...new Set(runtimeModes)],includeOrganization])).rows;
   return rows.map(row=>({ownerId,contactId:row.contact_id}));
  }
  /** 会话锁必须贯穿整个Worker寿命；release只能在在途run全部退出后调用。 */

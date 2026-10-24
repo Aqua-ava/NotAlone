@@ -1,6 +1,6 @@
 # 票 13 根集成说明
 
-状态：业务纵切、共享宿主候选、私有Worker入口、来源复验和管理HTTP薄桥均已完成隔离验证；未切换Python生产Worker或默认运行时，待根集成和实际App验收。
+状态：业务纵切、共享宿主、唯一TS Worker、Python执行权门禁和管理HTTP薄桥已完成隔离验证；默认运行时和实际App验收仍由根处理。
 
 ## 已交付边界
 
@@ -40,16 +40,22 @@ const l2Scenarios = createL2ScenarioHost({
 
 合成接线参考 [l2-scenario-host-plugin.ts](../../../backend-ts/test/l2-scenario-host-plugin.ts) 与 [l2-scenario-host.test.mjs](../../../backend-ts/test/l2-scenario-host.test.mjs)。该 plugin 仅测试，不进入正式 profile。
 
+## 唯一TS Worker与Python执行权
+
+- `extraction-worker.ts` 的同一全局 Worker 同时领取导入/观察任务和 `organize_memory`；L2 使用独立 `organizationRunner`，但共用同一全局锁、步骤租约、心跳、取消、唤醒和关闭排空。
+- `completeL2ScenarioWorkerStep()` 在同一 Worker 事务内复验租约、job、批次、generation 和回执。仍有未覆盖资料时重排 pending 步骤并保持 job paused；预算错误码不被清空；`profile_required` 只保留已发布L2回执并把失败/暂停交给票14，不伪造L3或任务成功。
+- Python `LayeredMemoryService` 在 TS Task Worker 模式下仍负责 enable、refresh、pause、continue 和维护发现/入队，但 `_dispatch()` 与 `run_batch()` 不再执行 Python L2 模型；取消会立即释放 `organize_memory` 租约。
+
 ## 票 12 对齐
 
 - 已对齐提交 `bba2dc11e3f202de3de272bad6d0d6b39df404e3` 的 fail-closed 来源读取与 `eraseSourceTraces()` 删除接缝；本票不复制 trace 正文，也不新增来源副本。
 - `SourceProcessingTraceStore` 新增同事务无正文验证入口；自动来源的窗口source snapshot摘要变化会拒绝；直接依赖与本人记忆的候选、来源或消息关联都固定owner+contact。
 - L2 batch 的 `dependency_ids` 包含本批合法记忆、递归来源、已读旧场景依赖和修正 guard；来源/记忆覆盖或删除继续由现有 PG 触发器物理清理批次，generation 消费者拒绝旧版本。
-- 根仍需把来源删除和L2发布放在同一业务切换流程，避免Python L2 writer与TS L2 host双写；本候选没有修改Python文件或生产TaskHost。
+- 根未在真实 App 上切换或验收；来源删除与L2发布的整体编排仍由票17负责，单写门禁已在Python执行入口收口。
 
 ## 本次未切换的部分
 
-- 生产 Python `TaskHost`、唯一Worker完成器和L3写入未切换；没有启动第二Worker。
+- 默认 Python Task Worker 保留；显式 `NOTALONE_TASK_WORKER_RUNTIME=typescript` 时不启动 Python TaskHost，由唯一 TS Worker执行。L3写入仍属票14。
 - TypeScript运行时未配置时，公共L2薄桥认证后稳定返回`layered_memory_unavailable`；Python默认运行时路径未改变。
 - 实际App/微信、桌面页面动作和使用真实数据的端到端验收尚未执行。
 - TS quality store尚不存在；根必须注入真实读取器后才能打开自动使用，当前不声明任何正式质量资格。

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {L2ScenarioService} from '../src/l2-scenario-service.ts';
+import {completeL2ScenarioWorkerStep} from '../src/l2-scenario-worker.ts';
 import {readReplyContactOverview} from '../src/reply-context-overview.ts';
 import {captureLayeredSnapshot,validateLayeredSnapshot} from '../src/reply-context-layered.ts';
 
@@ -284,6 +285,124 @@ test('合成PG：质量状态必须由注入读取器提供，缺省和读取失
     assert.equal(failed.quality_status,'unknown');
     assert.equal(failed.quality.automatic_use_allowed,false);
     assert.deepEqual(failed.quality.organization.reasons,['quality_store_unavailable']);
+  }finally{await f.close();}
+});
+
+test('合成PG：仍依赖L3的任务可发布L2，但保留回执等待L3且不伪造任务成功',async()=>{
+  const f=await createStorageFixture();try{
+    const x=await createScope(f),port=fakePort(x.memory),l2=service(f,port);
+    await f.client.query(`UPDATE layered_memory_job
+      SET profile_required=true,profile_status='pending' WHERE task_id=$1`,[x.taskId]);
+    const run=await l2.run(x.scope,x.claim,new AbortController().signal);
+    assert.equal(run.status,'completed');
+    assert.equal(run.state.scenarios.length,1);
+    assert.equal((await f.client.query(
+      'SELECT pending_receipt,profile_status FROM layered_memory_job WHERE task_id=$1',[x.taskId],
+    )).rows[0].pending_receipt,true);
+    await f.client.query('BEGIN');
+    let committed=false;
+    try{
+      const completion=await completeL2ScenarioWorkerStep(f.client,{
+        ownerId:x.ownerId,contactId:x.contactId,taskId:x.taskId,stepId:x.claim.step_id,
+        stepName:'organize_memory',workerId:x.claim.worker_id,
+        leaseGeneration:x.claim.lease_generation,messageCount:0,
+      },run.processed_count);
+      assert.deepEqual(completion,{processedCount:run.processed_count,totalCount:0,state:'failed'});
+      await f.client.query('COMMIT');
+      committed=true;
+    }finally{
+      if(!committed)await f.client.query('ROLLBACK');
+    }
+    assert.equal(port.calls,3);
+    assert.deepEqual((await f.client.query(`SELECT j.state AS job_state,j.pending_receipt,j.profile_status,
+      t.status AS task_status,t.last_error_code AS task_error,s.status AS step_status,
+      s.worker_id,s.lease_expires_at,state.status AS layer_status,state.error_code AS layer_error,b.status AS batch_status
+      FROM layered_memory_job j JOIN background_task t ON t.id=j.task_id
+      JOIN background_task_step s ON s.task_id=t.id
+      JOIN layered_memory_state state ON state.owner_id=j.owner_id
+        AND state.contact_id IS NOT DISTINCT FROM j.contact_id
+      JOIN layered_memory_batch b ON b.id=j.receipt_batch_id
+      WHERE j.task_id=$1`,[x.taskId])).rows[0],{
+      job_state:'failed',pending_receipt:true,profile_status:'pending',
+      task_status:'failed',task_error:'profile_attempt_interrupted',
+      step_status:'failed',worker_id:null,lease_expires_at:null,
+      layer_status:'failed',layer_error:'profile_attempt_interrupted',batch_status:'succeeded',
+    });
+  }finally{await f.close();}
+});
+
+test('合成PG：仍有未覆盖资料时暂停并重排唯一步骤；预算错误码不被清空',async()=>{
+  const f=await createStorageFixture();try{
+    for(const exhausted of [false,true]){
+      const x=await createScope(f),port=fakePort(x.memory),l2=service(f,port);
+      await f.client.query(`UPDATE layered_memory_job
+        SET target_manifest=$2::jsonb WHERE task_id=$1`,
+      [x.taskId,JSON.stringify([{memory_id:x.memoryId},{memory_id:randomUUID()}])]);
+      const run=await l2.run(x.scope,x.claim,new AbortController().signal);
+      assert.equal(run.status,'completed');
+      if(exhausted){
+        await f.client.query(`UPDATE layered_memory_state SET error_code='model_call_budget_exhausted'
+          WHERE owner_id=$1 AND contact_id=$2`,[x.ownerId,x.contactId]);
+        await f.client.query(`UPDATE background_task SET last_error_code='model_call_budget_exhausted' WHERE id=$1`,
+          [x.taskId]);
+        await f.client.query(`UPDATE background_task_step SET last_error_code='model_call_budget_exhausted'
+          WHERE id=$1`,[x.claim.step_id]);
+      }
+      await f.client.query('BEGIN');
+      let completion;
+      try{
+        completion=await completeL2ScenarioWorkerStep(f.client,{
+          ownerId:x.ownerId,contactId:x.contactId,taskId:x.taskId,stepId:x.claim.step_id,
+          stepName:'organize_memory',workerId:x.claim.worker_id,
+          leaseGeneration:x.claim.lease_generation,messageCount:0,
+        },run.processed_count);
+        await f.client.query('COMMIT');
+      }catch(error){
+        await f.client.query('ROLLBACK');
+        throw error;
+      }
+      assert.equal(completion.state,'paused');
+      const row=(await f.client.query(`SELECT j.state AS job_state,j.pending_receipt,j.run_remaining,
+        t.status AS task_status,t.last_error_code AS task_error,s.status AS step_status,
+        s.last_error_code AS step_error,state.status AS layer_status,state.error_code AS layer_error
+        FROM layered_memory_job j JOIN background_task t ON t.id=j.task_id
+        JOIN background_task_step s ON s.task_id=t.id
+        JOIN layered_memory_state state ON state.owner_id=j.owner_id
+          AND state.contact_id IS NOT DISTINCT FROM j.contact_id
+        WHERE j.task_id=$1`,[x.taskId])).rows[0];
+      assert.deepEqual(row,{
+        job_state:'paused',pending_receipt:false,run_remaining:0,
+        task_status:'queued',task_error:exhausted?'model_call_budget_exhausted':null,
+        step_status:'pending',step_error:exhausted?'model_call_budget_exhausted':null,
+        layer_status:'paused',layer_error:exhausted?'model_call_budget_exhausted':null,
+      });
+    }
+  }finally{await f.close();}
+});
+
+test('合成PG：发布后断连回执恢复使用成功批次的实际处理量',async()=>{
+  const f=await createStorageFixture();try{
+    const x=await createScope(f),port=fakePort(x.memory),l2=service(f,port);
+    await f.client.query(`UPDATE layered_memory_job SET target_manifest=$2::jsonb WHERE task_id=$1`,
+      [x.taskId,JSON.stringify([{memory_id:x.memoryId}])]);
+    const run=await l2.run(x.scope,x.claim,new AbortController().signal);
+    assert.equal(run.processed_count,1);
+    await f.client.query('BEGIN');
+    let completion;
+    try{
+      completion=await completeL2ScenarioWorkerStep(f.client,{
+        ownerId:x.ownerId,contactId:x.contactId,taskId:x.taskId,stepId:x.claim.step_id,
+        stepName:'organize_memory',workerId:x.claim.worker_id,
+        leaseGeneration:x.claim.lease_generation,messageCount:1,
+      },0);
+      await f.client.query('COMMIT');
+    }catch(error){
+      await f.client.query('ROLLBACK');
+      throw error;
+    }
+    assert.deepEqual(completion,{processedCount:1,totalCount:1,state:'complete'});
+    assert.equal((await f.client.query('SELECT processed_count FROM background_task_step WHERE id=$1',
+      [x.claim.step_id])).rows[0].processed_count,1);
   }finally{await f.close();}
 });
 

@@ -206,6 +206,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
             incremental_events_transferred=incremental_transfer_enabled(os.environ),
             follow_smoke=follow_smoke,
             runtime_shutdown=stop_runtime,
+            organization_execution_enabled=_task_worker_runtime(os.environ) == "python",
         )
         server = BackendServer(app, host=args.host, port=args.port)
         host, port = server.start()

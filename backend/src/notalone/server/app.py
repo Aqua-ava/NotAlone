@@ -3532,6 +3532,7 @@ def create_app(
     contact_context: ContactContextHandoff | None = None,
     model_work_available: bool = True,
     unconfirmed_model_requests=None,
+    organization_execution_enabled: bool = True,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -3550,8 +3551,11 @@ def create_app(
     layered_memory = layered_memory or LayeredMemoryService(PostgresLayeredMemoryStore(database_url, contact_context=contact_context))
     if type(model_work_available) is not bool:
         raise TypeError("模型任务能力必须是布尔值。")
+    if type(organization_execution_enabled) is not bool:
+        raise TypeError("整理执行开关必须是布尔值。")
+    layered_memory.set_execution_enabled(organization_execution_enabled)
     model_work_available = getattr(task_host, "model_work_available", model_work_available) is not False
-    if task_host is not None:
+    if task_host is not None and organization_execution_enabled:
         layered_memory.attach_task_host(task_host)
         if model_work_available:
             layered_memory.resume_pending(owner_id)

@@ -31,6 +31,7 @@ import {
 } from './l2-scenario-host.ts';
 import {createL2ScenarioHttp} from './l2-scenario-http.ts';
 import {createL2ScenarioSourceValidator} from './l2-scenario-source-validation.ts';
+import {createL2ScenarioWorkerRunner} from './l2-scenario-worker.ts';
 import {
   L2ScenarioConflict,
   type L2ScenarioQualityReader,
@@ -213,7 +214,8 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
             concurrency:options.extractionConcurrency??1,ruleVersion,
             provider:m.provider,modelName:m.model,
           });
-          extractionWorker=new ExtractionWorker({store,ownerId:owner,runner});
+          extractionWorker=new ExtractionWorker({store,ownerId:owner,runner,
+            ...(l2Scenarios?{organizationRunner:createL2ScenarioWorkerRunner(l2Scenarios)}:{})});
           if(!await extractionWorker.start())throw new Error('extraction_worker_already_running');
           extractionControl=new ExtractionWorkerTaskControl({store,worker:extractionWorker});
         }
