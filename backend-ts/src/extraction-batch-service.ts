@@ -142,9 +142,9 @@ export class ExtractionBatchService {
      WHERE end_event.trace_id=b.trace_id AND end_event.owner_id=$1 AND end_event.contact_id=$2
      AND end_event.stage='batch_end' AND end_event.payload->>'watermark_commit'='not_advanced'
      AND end_event.payload->'watermark_before'=end_event.payload->'watermark_after'
-     AND end_event.payload->'not_executed' @> '["remaining_adoption","remaining_write"]'::jsonb
-     AND NOT EXISTS(SELECT 1 FROM memory_extraction_trace_event b_event
-      WHERE b_event.trace_id=b.trace_id AND b_event.stage='typescript_b_begin')
+     AND end_event.payload->'not_executed' @> '["remaining_write"]'::jsonb
+     AND (tr.status='business_failed' OR NOT EXISTS(SELECT 1 FROM memory_extraction_trace_event b_event
+      WHERE b_event.trace_id=b.trace_id AND b_event.stage='typescript_b_begin'))
      AND NOT EXISTS(SELECT 1 FROM memory_extraction_trace_event receipt_event
       WHERE receipt_event.trace_id=b.trace_id AND receipt_event.stage='batch_end'
       AND receipt_event.payload ? 'typescript_a_receipt')) AS no_write
@@ -183,7 +183,8 @@ export class ExtractionBatchService {
       [execution.trace_id,input.owner_id,input.contact_id,cached!.model_call_ids,requestId])).rows;
      if(known.length!==cached!.model_call_ids.length)reject('extraction_batch_outcome_unknown');
      checked.push({trace_id:execution.trace_id,consumed:execution.consumed,cached,
-      same:execution.begun.input_sha256===inputSha&&execution.begun.rule_version===this.options.ruleVersion,noWrite:noWriteOutcome(cached)});
+      same:execution.begun.input_sha256===inputSha&&execution.begun.rule_version===this.options.ruleVersion,
+      noWrite:execution.no_write===true||noWriteOutcome(cached)});
     }
     const only=checked[0]!;
     if(executions.length===1&&only.cached!==null&&only.same&&(only.trace_id===input.trace_id

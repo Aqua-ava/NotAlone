@@ -88,7 +88,17 @@ test('仅无候选旧失败可在新trace下显式让位，已有候选非空仍
   const third=await service.run(thirdInput,new AbortController().signal);
   assert.equal(third.failure_kind,null);assert.equal(third.accepted.length,1);assert.equal(calls,8);
   const changedInput={owner_id:owner,contact_id:contact,claim,...seedTrace()};
-  await assert.rejects(serviceFor('c'.repeat(64)).run(changedInput,new AbortController().signal),{code:'extraction_batch_outcome_unknown'});
+  const changedService=serviceFor('c'.repeat(64));
+  await assert.rejects(changedService.run(changedInput,new AbortController().signal),{code:'extraction_batch_outcome_unknown'});
   assert.equal(calls,8);
+  await c.query(`INSERT INTO memory_extraction_trace_event(event_id,trace_id,owner_id,contact_id,position,stage,payload)
+   SELECT $1,$2,$3,$4,COALESCE(max(position),0)+1,'batch_end',$5::jsonb FROM memory_extraction_trace_event WHERE trace_id=$2`,
+   [randomUUID(),thirdInput.trace_id,owner,contact,{watermark_before:null,watermark_after:null,watermark_commit:'not_advanced',
+    not_executed:['remaining_write'],error_code:'adoption_event_unverified'}]);
+  await c.query("UPDATE memory_extraction_trace SET status='business_failed',finished_at=now(),failure_stage='batch_end',error_code='adoption_event_unverified' WHERE trace_id=$1",[thirdInput.trace_id]);
+  const acceptedRecoveryInput={owner_id:owner,contact_id:contact,claim,...seedTrace()};
+  const acceptedRecovery=await changedService.run(acceptedRecoveryInput,new AbortController().signal);
+  assert.equal(acceptedRecovery.failure_kind,null);assert.equal(acceptedRecovery.accepted.length,1);assert.equal(calls,10);
+  assert.equal((await c.query("SELECT count(*)::int n FROM memory_extraction_trace_event WHERE trace_id=$1 AND stage='typescript_a_superseded'",[acceptedRecoveryInput.trace_id])).rows[0].n,1);
  }finally{await db.close();}
 });
