@@ -92,6 +92,81 @@ test('L3画像拒绝行动建议，不把一次性策略写成人物资料', () 
   }]}, [memory], budget), /action|建议|策略/i);
 });
 
+test('L3画像文档工具为常见 schema 字段错误返回可区分且可纠正的工具结果', () => {
+  const cases = [
+    {
+      name:'section',
+      value:{...entry, section:'communication'},
+      code:'l3_profile_section_invalid',
+      detail:/section|basic_information|life_context/i,
+    },
+    {
+      name:'kind',
+      value:{...entry, kind:'observation'},
+      code:'l3_profile_kind_invalid',
+      detail:/kind|fact|preference|inference|contradiction/i,
+    },
+    {
+      name:'temporal_status',
+      value:{...entry, temporal_status:'current'},
+      code:'l3_profile_temporal_status_invalid',
+      detail:/temporal_status|stable|historical|uncertain/i,
+    },
+    {
+      name:'unexpected_keys',
+      value:{...entry, confidence:0.8},
+      code:'l3_profile_unexpected_keys',
+      detail:/confidence|unexpected|允许字段/i,
+    },
+    {
+      name:'reference',
+      value:{...entry, references:[{memory_id:memory.memory_id, revision:2}]},
+      code:'l3_profile_reference_invalid',
+      detail:/reference|引用|revision/i,
+    },
+  ];
+  for (const item of cases) {
+    const workspace = new L3ProfileWorkspace(null, [scenario], [memory], budget);
+    const result = workspace.write(
+      'profile.md',
+      `# 长期背景\n\n<!-- ENTRY ${JSON.stringify(item.value)} -->\n${item.value.text}`,
+    );
+    assert.match(result, new RegExp(item.code), item.name);
+    assert.match(result, item.detail, item.name);
+  }
+});
+
+test('L3画像文档工具区分标题、自由格式与ENTRY元数据错误', () => {
+  const cases = [
+    {
+      name:'header',
+      content:'# 错误标题\n',
+      code:'l3_profile_document_header_invalid',
+    },
+    {
+      name:'free_format',
+      content:'# 长期背景\n\n## 生活背景\n没有ENTRY元数据。',
+      code:'l3_profile_document_format_invalid',
+    },
+    {
+      name:'entry_format',
+      content:'# 长期背景\n\n<!-- ENTRY {"kind":"fact"} -->',
+      code:'l3_profile_entry_format_invalid',
+    },
+    {
+      name:'entry_metadata',
+      content:'# 长期背景\n\n<!-- ENTRY {not-json} -->\n正文',
+      code:'l3_profile_entry_metadata_invalid',
+    },
+  ];
+  for (const item of cases) {
+    const workspace = new L3ProfileWorkspace(null, [scenario], [memory], budget);
+    const result = workspace.write('profile.md', item.content);
+    assert.match(result, new RegExp(item.code), item.name);
+    assert.match(result, /ENTRY|长期背景|JSON|正文/, item.name);
+  }
+});
+
 test('L3画像纠错正文逐项隔离，合法新条目仍可核验发布', () => {
   const rejected = '双方一定长期喜欢课程。';
   const filtered = filterProfileProposal({entries: [

@@ -644,7 +644,7 @@ test('合成PG：五轮内错误写修复后显式完成，独立核验后发布
     const x = await createScope(f);
     await f.client.query(`UPDATE layered_memory_job SET model_calls_used=0
       WHERE task_id=$1`, [x.taskId]);
-    let calls = 0, system = '', limits;
+    let calls = 0, system = '', limits, schema, correctionText = '';
     const port = {async call(input) {
       calls++;
       await input.requireCurrent();
@@ -654,17 +654,27 @@ test('合成PG：五轮内错误写修复后显式完成，独立核验后发布
       });
       if (calls === 1) {
         system = input.system;
-        limits = JSON.parse(input.messages[0].content.find(block => block.type === 'text').text).profile_limits;
+        const payload = JSON.parse(input.messages[0].content.find(block => block.type === 'text').text);
+        limits = payload.profile_limits;
+        schema = payload.profile_schema;
         return tool('read', {path:'profile.md'});
       }
-      if (calls === 2) return tool('write', {
-        path:'profile.md',
-        content:'# 长期背景\n\n## 错误分组标题\n这条缺少逐条ENTRY元数据。',
-      });
-      if (calls === 3) return tool('write', {
-        path:'profile.md',
-        content:renderProfile({entries:[entry(x.memory)]}),
-      });
+      if (calls === 2) {
+        const invalid = {...entry(x.memory), section:'relationship'};
+        return tool('write', {
+          path:'profile.md',
+          content:`# 长期背景\n\n<!-- ENTRY ${JSON.stringify(invalid)} -->\n${invalid.text}`,
+        });
+      }
+      if (calls === 3) {
+        correctionText = input.messages.flatMap(message => message.content)
+          .find(block => block.type === 'text' && block.text.startsWith('工具错误：l3_profile_section_invalid'))
+          ?.text ?? '';
+        return tool('write', {
+          path:'profile.md',
+          content:renderProfile({entries:[entry(x.memory)]}),
+        });
+      }
       if (calls === 4) return tool('read', {path:`${x.scenarioId}.md`});
       if (calls === 5) return tool('ProfileProposalComplete', {});
       if (calls === 6) return tool('ProfileVerificationOutput', {results:[{
@@ -685,6 +695,10 @@ test('合成PG：五轮内错误写修复后显式完成，独立核验后发布
     assert.match(system, /不得添加##标题/);
     assert.match(system, /ProfileProposalComplete/);
     assert.deepEqual(limits, {max_entries:16,max_characters:2000});
+    assert.ok(schema.section_values.includes('life_context'));
+    assert.ok(schema.section_values.includes('contradictions'));
+    assert.match(correctionText, /l3_profile_section_invalid/);
+    assert.match(correctionText, /basic_information/);
     const batch = (await f.client.query(`SELECT status,output_payload
       FROM layered_profile_batch WHERE task_id=$1`, [x.taskId])).rows[0];
     assert.equal(batch.status, 'succeeded');
@@ -692,7 +706,7 @@ test('合成PG：五轮内错误写修复后显式完成，独立核验后发布
     assert.deepEqual(batch.output_payload.proposal_trace.map(round => round.completed_by),
       [null,null,null,null,'tool']);
     assert.equal(batch.output_payload.proposal_trace[1].calls[0].outcome, 'tool_error');
-    assert.equal(batch.output_payload.proposal_trace[1].calls[0].error_code, 'l3_profile_document_invalid');
+    assert.equal(batch.output_payload.proposal_trace[1].calls[0].error_code, 'l3_profile_section_invalid');
     assert.equal(batch.output_payload.proposal_trace[2].calls[0].outcome, 'succeeded');
     assert.deepEqual(batch.output_payload.proposal_trace[2].calls[0].argument_keys, ['content','path']);
   } finally { await f.close(); }
@@ -704,8 +718,15 @@ test('合成PG：五轮均未成功写入时失败关闭且只保存无正文工
     const x = await createScope(f);
     await f.client.query(`UPDATE layered_memory_job SET model_calls_used=0
       WHERE task_id=$1`, [x.taskId]);
-    const invalid = '# 长期背景\n\n## 错误分组标题\n这条缺少逐条ENTRY元数据。';
-    let calls = 0;
+    const invalid = suffix => {
+      const raw = {
+        ...entry(x.memory),
+        section:'relationship',
+        text:`双方合成课程画像第${suffix}轮。`,
+      };
+      return `# 长期背景\n\n<!-- ENTRY ${JSON.stringify(raw)} -->\n${raw.text}`;
+    };
+    let calls = 0, previous = '';
     const port = {async call(input) {
       calls++;
       await input.requireCurrent();
@@ -713,8 +734,17 @@ test('合成PG：五轮均未成功写入时失败关闭且只保存无正文工
         blocks:[{type:'tool-call',id:`nonconverging-${calls}`,name,arguments:JSON.stringify(args)}],
         receipt_id:randomUUID(),
       });
-      if (calls === 1 || calls === 5) return tool('read', {path:'profile.md'});
-      return tool('write', {path:'profile.md',content:invalid});
+      if (calls === 1) {
+        previous = invalid('一');
+        return tool('write', {path:'profile.md',content:previous});
+      }
+      if (calls === 2) {
+        previous = invalid('二');
+        return tool('write', {path:'profile.md',content:previous});
+      }
+      if (calls === 3) return tool('read', {path:'profile.md'});
+      if (calls === 4) return tool('write', {path:'profile.md',content:previous});
+      return tool('write', {path:'profile.md',content:invalid('末')});
     }};
     await assert.rejects(
       service(f, port).run(x.scope, x.claim, new AbortController().signal),
@@ -728,12 +758,16 @@ test('合成PG：五轮均未成功写入时失败关闭且只保存无正文工
     assert.equal(batch.output_payload.proposal_trace.length, 5);
     assert.deepEqual(batch.output_payload.proposal_trace.map(round =>
       round.calls.map(call => `${call.name}:${call.outcome}`)), [
+      ['write:tool_error'],
+      ['write:tool_error'],
       ['read:succeeded'],
       ['write:tool_error'],
       ['write:tool_error'],
-      ['write:tool_error'],
-      ['read:succeeded'],
     ]);
+    assert.deepEqual(batch.output_payload.proposal_trace.map(round => round.profile_changed),
+      [true,true,false,false,true]);
+    assert.deepEqual(batch.output_payload.proposal_trace.map(round => round.profile_error_code),
+      Array(5).fill('l3_profile_section_invalid'));
     assert.equal(Object.hasOwn(batch.output_payload, 'original'), false);
     assert.doesNotMatch(JSON.stringify(batch.output_payload), new RegExp(x.memory.text));
     assert.equal((await f.client.query(`SELECT count(*)::int n FROM layered_profile_version
