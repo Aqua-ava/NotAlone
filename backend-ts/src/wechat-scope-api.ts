@@ -130,6 +130,16 @@ export async function createWechatScopeApi(options: {storage: HostStorage; execu
   }
   let closing: Promise<void> | undefined;
   return {
+    async decorateSyncStatus(report: Record<string,unknown>,assertCurrent: () => void = () => {}) {
+      const check=()=>{if(closed || !scope)throw new HostStorageError('runtime_stopping');assertCurrent();};
+      check();
+      const authority=await state(check);check();
+      // 账号范围与历史决定由TS持有；进度、健康和运行失败原因仍来自原执行方。
+      return {...report,sync_scope:authority.sync_scope,
+        cli_history_authorization_state:authority.cli_history_authorization_state,
+        cli_history_authorization_version:authority.cli_history_authorization_version,
+        cli_history_authorization_current_version:authority.cli_history_authorization_current_version};
+    },
     handle(method: string,path: string,body: unknown = {},assertCurrent: () => void = () => {},signal?: AbortSignal) {
       const combined = signal ? AbortSignal.any([signal,stopping.signal]) : stopping.signal;
       const work = execute(method,path,body,assertCurrent,combined);

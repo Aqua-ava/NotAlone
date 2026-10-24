@@ -123,7 +123,13 @@ async function start(ctx: Context) {
     let releaseAuthority:(()=>void)|undefined;
     const proxyLegacy=()=>{
       const release=releaseAuthority;releaseAuthority=undefined;
-      legacy!.proxy(req,res,release?{settled:release,uncertain:()=>{void foreground.suspend().finally(release).catch(()=>{});}}:undefined);
+      const syncStatus=req.method==='GET'&&url.pathname==='/api/sync/status'
+        || req.method==='POST'&&/^\/api\/sync\/(?:enable|disable|check|priority|confirm|confirm-pending|backfill\/(?:pause|retry))$/.test(url.pathname);
+      legacy!.proxy(req,res,release?{settled:release,uncertain:()=>{void foreground.suspend().finally(release).catch(()=>{});}}:undefined,
+        syncStatus?async report=>{
+          if(!report||typeof report!=='object'||Array.isArray(report))throw new Error('sync_status_unavailable');
+          return wechatScope.decorateSyncStatus(report as Record<string,unknown>,()=>{if(state!=='running')throw new HostStorageError('runtime_stopping');});
+        }:undefined);
     };
     try {
       if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,ownership:{...ownership,wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}

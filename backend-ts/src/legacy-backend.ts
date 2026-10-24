@@ -4,6 +4,7 @@ import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { captureProcessIdentity } from './process-identity.ts';
 import { setTimeout as delay } from 'node:timers/promises';
+import {parseJson,stringifyJson} from './host-json.ts';
 
 /** 迁移期唯一旧业务执行方；03不转移联系人、回复、同步、任务和删除的写入权。 */
 export const ownership = Object.freeze({setup:'typescript',credentials:'typescript',schemaUpdates:'python-migration-command',contacts:'python',replies:'python',memory:'python',skills:'python',imports:'python',deletion:'python',wechat:'split',wechatScope:'typescript',wechatBodySync:'python',tasks:'python'});
@@ -61,15 +62,41 @@ export class LegacyBackend {
     }
     return await response.json() as {state?:string;active_requests?:number};
   }
-  proxy(req:IncomingMessage,res:ServerResponse,completion?:{settled:()=>void;uncertain:()=>void}):void {
+  proxy(req:IncomingMessage,res:ServerResponse,completion?:{settled:()=>void;uncertain:()=>void},mapJson?:(value:unknown)=>Promise<unknown>):void {
     const c=this.connection;
     if(!c || this.stopping){res.writeHead(503);res.end('{"error":"legacy_unavailable"}');completion?.settled();return;}
     let finished=false;
     let timer:NodeJS.Timeout|undefined;
     const finish=(known:boolean)=>{if(finished)return;finished=true;clearTimeout(timer);if(known)completion?.settled();else completion?.uncertain();};
     const upstream=request(`http://${c.address}${req.url}`,{method:req.method,headers:{...req.headers,host:c.address,authorization:`Bearer ${c.token}`}},response=>{
-      response.once('end',()=>finish(true));response.once('aborted',()=>finish(false));response.once('error',()=>finish(false));
-      if(!res.destroyed){res.writeHead(response.statusCode??502,{...response.headers,'cache-control':'no-store'});response.pipe(res);}
+      response.once('aborted',()=>finish(false));response.once('error',()=>finish(false));
+      if(mapJson && response.statusCode===200){
+        const chunks:Buffer[]=[];let bytes=0;
+        response.on('data',(chunk:Buffer)=>{
+          bytes+=chunk.length;
+          if(bytes>4_194_304){upstream.destroy(new Error('sync_status_too_large'));return;}
+          chunks.push(chunk);
+        });
+        response.once('end',()=>{
+          clearTimeout(timer);
+          void (async()=>{
+            try{
+              const value=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
+              const body=stringifyJson(await mapJson(value));
+              if(!res.destroyed){
+                const headers={...response.headers,'cache-control':'no-store','content-length':String(Buffer.byteLength(body))};
+                delete headers['transfer-encoding'];
+                res.writeHead(200,headers);res.end(body);
+              }
+            }catch{
+              if(!res.destroyed){res.writeHead(503,{'content-type':'application/json','cache-control':'no-store'});res.end('{"error":"sync_status_unavailable"}');}
+            }finally{finish(true);}
+          })();
+        });
+      }else{
+        response.once('end',()=>finish(true));
+        if(!res.destroyed){res.writeHead(response.statusCode??502,{...response.headers,'cache-control':'no-store'});response.pipe(res);}
+      }
       // 下游离开后仍排空完整上游响应；只有业务端确认结束才释放身份变更门。
       if(completion){res.once('close',()=>response.resume());response.resume();}
     });
