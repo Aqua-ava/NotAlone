@@ -3,7 +3,7 @@ import {captureLayeredSnapshot,selectLayeredMaterial,requireLayeredMaterial,CONT
 import {readReplyContactOverview,readReplyOwnerOverview,type ReplyOverviewSnapshot} from './reply-context-overview.ts';
 import {ReplyHistory} from './reply-history.ts';
 import {readContextMemories,selectContextMemories,memoryEvidence,pendingSelectionReason,type MemoryKind} from './reply-context-memory.ts';
-import {readContextMessages,readOptionalContext,selectReplyMessageWindow,requireReplyMessageWindowBudget} from './reply-context-read.ts';
+import {readContextMessages,readOptionalContext,selectReplyMessageWindow,requireReplyMessageWindowCount} from './reply-context-read.ts';
 import type {Client} from 'pg';
 import {randomUUID} from 'node:crypto';
 import {canonicalJSON} from './contact-overview-evidence.ts';
@@ -161,7 +161,7 @@ export class PostgresReplyContext {
    }
   }
   if(canonicalJSON(await this.revisions(context.scope))!==canonicalJSON({memory_revision:context.memory_revision,index_revision:context.index_revision}))throw new ReplyContextError('记忆目录版本已变化。');
-  requireReplyMessageWindowBudget(context);
+  requireReplyMessageWindowCount(context);
  }
 }
 

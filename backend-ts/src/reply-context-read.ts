@@ -19,4 +19,4 @@ export async function readOptionalContext<T>(client:Client,read:()=>Promise<T>):
  catch(error){if(savepoint){await client.query('ROLLBACK TO SAVEPOINT reply_context_optional_read');await client.query('RELEASE SAVEPOINT reply_context_optional_read');}return {value:null,failed:true};}
 }
 
-export {measureReplyMessageWindow,selectReplyMessageWindow,requireReplyMessageWindowBudget} from './reply-message-window.ts';
+export {selectReplyMessageWindow,requireReplyMessageWindowCount} from './reply-message-window.ts';
