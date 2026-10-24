@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir,homedir} from 'node:os';
+import {join} from 'node:path';
+import {spawn} from 'node:child_process';
+import {createInterface} from 'node:readline';
+import {once} from 'node:events';
+import {createStorageFixture} from './host-storage-fixture.mjs';
+import {PostgresModelLedger,PostgresModelLedgerDetails} from '../src/model-ledger.ts';
+import {ModelPermitArbiter} from '../src/model-permits.ts';
+import {startModelPermitServer} from '../src/model-permit-server.ts';
+
+test('真实Python/socket/PG：ACK前持久预约、多attempt同permit、超额拒发、原ledger UUID及未知保留',{timeout:30000},async t=>{
+ const fixture=await createStorageFixture();const c=fixture.client;
+ assert.equal((await c.query("SELECT to_regclass('public.model_call_receipt') IS NOT NULL AS migrated")).rows[0].migrated,true,'正式migrator必须建立110模型回执表');
+ const config={owner_id:randomUUID(),contact_id:randomUUID(),request_id:randomUUID(),legacy_id:randomUUID(),called_at:'2026-10-24T01:00:00+00:00',input_budget:{measurement_id:'synthetic-fixture-v1',measurement_kind:'approximate',input_tokens:100,max_output_tokens:10,context_window_tokens:200,safety_margin_tokens:20,request_sha256:'a'.repeat(64),serialized_bytes:100}};
+ await c.query("INSERT INTO owner(id,display_name)VALUES($1,'合成本人')",[config.owner_id]);await c.query("INSERT INTO contact(owner_id,id,display_name)VALUES($1,$2,'合成联系人')",[config.owner_id,config.contact_id]);
+ await c.query("INSERT INTO outbound_ledger_entry(id,owner_id,contact_id,provider,model_name,latency_ms,outcome,called_at)VALUES($1,$2,$3,'synthetic','synthetic-model',12,'succeeded',$4)",[config.legacy_id,config.owner_id,config.contact_id,config.called_at]);
+ const transaction=async work=>{await c.query('BEGIN');try{const r=await work(c);await c.query('COMMIT');return r;}catch(e){await c.query('ROLLBACK');throw e;}};
+ const ledger=new PostgresModelLedger({transaction,details:new PostgresModelLedgerDetails()});
+ const dir=await mkdtemp(join(tmpdir(),'na-account-'));
+ const options={path:join(dir,'p.sock'),token:'synthetic-accounting-token-'.repeat(3),arbiter:new ModelPermitArbiter(2),accounting:{reserve:r=>ledger.reserve(r,2),recordReserved:r=>ledger.recordReserved(r)}};
+ const server=await startModelPermitServer(options);
+ const child=spawn(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),[new URL('./model-accounting-python-fixture.py',import.meta.url).pathname],{env:{...process.env,NOTALONE_DISABLE_DOTENV:'1',PYTHONPATH:new URL('../../backend/src',import.meta.url).pathname},stdio:['pipe','pipe','pipe']});
+ t.after(async()=>{if(child.exitCode===null)child.kill('SIGKILL');await server.shutdown();await rm(dir,{recursive:true,force:true});await fixture.close();});let errors='';child.stderr.on('data',d=>errors+=d);const exit=once(child,'exit');
+ const lines=createInterface({input:child.stdout})[Symbol.asyncIterator]();child.stdin.write(JSON.stringify({...config,path:options.path,token:options.token})+'\n');
+ assert.equal((await lines.next()).value,'reserved',errors);
+ const before=(await c.query('SELECT * FROM model_call_receipt')).rows;assert.equal(before.length,1);assert.equal(before[0].outcome,'pending');assert.equal(before[0].dispatch,'authorized_unconfirmed');assert.deepEqual(before[0].input_budget,config.input_budget);
+ child.stdin.write('settle\n');const ids=JSON.parse((await lines.next()).value);assert.equal((await exit)[0],0,errors);
+ const rows=(await c.query('SELECT * FROM model_call_receipt ORDER BY outcome')).rows;assert.equal(rows.length,2);assert.ok(rows.every(r=>r.permit_id===ids.permit));
+ assert.equal(rows.find(r=>r.attempt_id===ids.first).ledger_entry_id,config.legacy_id);assert.deepEqual(rows.find(r=>r.attempt_id===ids.first).input_budget,config.input_budget);const unknown=rows.find(r=>r.attempt_id===ids.second);assert.equal(unknown.outcome,'unknown');assert.equal(unknown.cost_amount,null);
+ assert.equal((await c.query('SELECT count(*)::int AS n FROM outbound_ledger_entry')).rows[0].n,1);assert.equal(options.arbiter.snapshot().backgroundActive,0);
+ await assert.rejects(ledger.recordReserved({...before[0],attempt_id:randomUUID(),model:'synthetic-model',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null},called_at:config.called_at}),/reservation_missing/);
+});

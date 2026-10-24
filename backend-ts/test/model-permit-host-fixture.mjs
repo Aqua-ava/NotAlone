@@ -1,0 +1,10 @@
+import { createInterface } from 'node:readline';
+import { ModelPermitArbiter } from '../src/model-permits.ts';
+import { startModelPermitServer } from '../src/model-permit-server.ts';
+const lines = createInterface({input:process.stdin})[Symbol.asyncIterator]();
+const options = JSON.parse((await lines.next()).value);
+const arbiter = new ModelPermitArbiter();
+await startModelPermitServer({...options,arbiter});
+if (options.active) await arbiter.acquire('foreground');
+console.log('ready');
+await lines.next();

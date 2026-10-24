@@ -1,0 +1,27 @@
+--- a/backend/src/notalone/application/reply_service.py
++++ b/backend/src/notalone/application/reply_service.py
+@@ -168,13 +168,17 @@
+                 return ReplyServiceResult(reply=None, reason="invalid_reply_input")
+         # 生成阶段的异常（含持久层/基础设施故障）不折叠为业务拒绝：
+         # 由调用方映射为 5xx，避免把服务端故障伪装成客户端冲突。
+-        if prepare_only:
+-            self._reply.prepare(command=command, verified_scope=verification.scope)
+-            return ReplyServiceResult(reply=None, reason=None)
+-        outcome = self._reply.generate(
+-            command=command,
+-            verified_scope=verification.scope,
+-        )
++        from notalone.application.reply_remote import ReplyRemoteRejected
++        try:
++            if prepare_only:
++                self._reply.prepare(command=command, verified_scope=verification.scope)
++                return ReplyServiceResult(reply=None, reason=None)
++            outcome = self._reply.generate(
++                command=command,
++                verified_scope=verification.scope,
++            )
++        except ReplyRemoteRejected as error:
++            return ReplyServiceResult(reply=None, reason=error.reason)
+         if outcome is None:
+             return ReplyServiceResult(reply=None, reason="no_reply_outcome")
+         return ReplyServiceResult(reply=outcome, reason=None)

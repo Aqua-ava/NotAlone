@@ -1,0 +1,138 @@
+import test from 'node:test';
+import pg from 'pg';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {PostgresModelLedger,PostgresModelLedgerDetails,legacyLedgerProjection,validateModelLedgerReceipt,modelLedgerInputBudget} from '../src/model-ledger.ts';
+import {MESSAGES_MEASUREMENT_ID} from '../src/model-input-budget.ts';
+import {createStorageFixture} from './host-storage-fixture.mjs';
+const receipt=()=>({attempt_id:randomUUID(),permit_id:randomUUID(),request_id:randomUUID(),owner_id:randomUUID(),contact_id:randomUUID(),provider:'synthetic-official',model:'synthetic-model',called_at:'2026-10-24T00:00:00.000Z',latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}});
+test('恢复unknown后拒绝重发授权，迟到pending不能解除未知门禁；真实迟到结算仍可细化', {timeout:60000},async t=>{
+ const fixture=await createStorageFixture();t.after(()=>fixture.close());const c=fixture.client;
+ assert.equal((await c.query("SELECT to_regclass('public.model_call_receipt') IS NOT NULL AS migrated")).rows[0].migrated,true,'正式migrator必须建立110模型回执表');
+ const scope=receipt();await c.query("INSERT INTO owner(id,display_name)VALUES($1,'合成恢复本人')",[scope.owner_id]);await c.query("INSERT INTO contact(owner_id,id,display_name)VALUES($1,$2,'合成恢复联系人')",[scope.owner_id,scope.contact_id]);
+ const transaction=async work=>{await c.query('BEGIN');try{const result=await work(c);await c.query('COMMIT');return result;}catch(error){await c.query('ROLLBACK');throw error;}};
+ const ledger=new PostgresModelLedger({transaction,details:new PostgresModelLedgerDetails()});
+ for(const mode of ['reserve','recordReserved','record'])await t.test(mode,async()=>{
+  const value={...scope,request_id:randomUUID(),permit_id:randomUUID(),attempt_id:randomUUID()};
+  const state=async()=> (await c.query('SELECT outcome,dispatch,input_tokens,cost_amount FROM model_call_receipt WHERE attempt_id=$1',[value.attempt_id])).rows[0];
+  await ledger.reserve(value,10);await ledger.recoverUnknownPermits([value.permit_id]);
+  await assert.rejects(ledger.reserve({...value,attempt_id:randomUUID()},10),/unknown_requires_resolution/);
+  if(mode==='reserve')await assert.rejects(ledger.reserve(value,10),/unknown_requires_resolution/);
+  else await ledger[mode](value);
+  assert.deepEqual(await state(),{outcome:'unknown',dispatch:'authorized_unconfirmed',input_tokens:null,cost_amount:null});
+  await assert.rejects(ledger.reserve({...value,attempt_id:randomUUID()},10),/unknown_requires_resolution/);
+  assert.equal((await c.query('SELECT count(*)::int AS n FROM model_call_receipt WHERE request_id=$1',[value.request_id])).rows[0].n,1);
+  const done={...value,outcome:'succeeded',dispatch:'response_observed',usage:{input_tokens:7,output_tokens:2,cache_read_tokens:null,cache_write_tokens:null}};
+  await ledger.recordReserved(done);await ledger.recordReserved(value);
+  assert.deepEqual(await state(),{outcome:'succeeded',dispatch:'response_observed',input_tokens:7,cost_amount:null});
+  await assert.rejects(ledger.reserve(value,10),/attempt_already_settled/);
+  await ledger.reserve({...value,attempt_id:randomUUID()},10);
+  assert.equal((await c.query('SELECT count(*)::int AS n FROM model_call_receipt WHERE request_id=$1',[value.request_id])).rows[0].n,2);
+ });
+});
+test('未知发送不冒充物理HTTP；未知用量/费用不能记0，原ledger UUID不变',()=>{
+ const value=receipt();assert.equal(legacyLedgerProjection(value),null);
+ assert.throws(()=>validateModelLedgerReceipt({...value,cost:{...value.cost,amount:'0'}}),/invalid/);
+ const legacy=randomUUID(),projected=legacyLedgerProjection({...value,ledger_entry_id:legacy,dispatch:'response_observed',outcome:'failed'});
+ assert.equal(projected.id,legacy);assert.equal(projected.input_tokens,null);assert.equal(projected.output_tokens,null);
+ assert.throws(()=>new PostgresModelLedger({transaction:async()=>{},details:null}),/details_required/);
+});
+test('正式110真实PG：授权/结算、旧UUID、迟到usage幂等、多attempt同permit、恢复未知及删除', {timeout:60000},async t=>{
+ const fixture=await createStorageFixture();t.after(()=>fixture.close());const client=fixture.client;
+ assert.equal((await client.query("SELECT to_regclass('public.model_call_receipt') IS NOT NULL AS migrated")).rows[0].migrated,true,'正式migrator必须建立110模型回执表');
+ const value=receipt();await client.query("INSERT INTO owner(id,display_name)VALUES($1,'合成本人')",[value.owner_id]);
+ await client.query("INSERT INTO contact(owner_id,id,display_name)VALUES($1,$2,'合成联系人')",[value.owner_id,value.contact_id]);
+ const transaction=async work=>{await client.query('BEGIN');try{const result=await work(client);await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK');throw error;}};
+ const details=new PostgresModelLedgerDetails(),ledger=new PostgresModelLedger({transaction,details});
+ await ledger.reserve(value,2);await ledger.reserve(value,2);assert.equal((await client.query('SELECT count(*)::int AS n FROM outbound_ledger_entry')).rows[0].n,0);
+ const originalLedger=randomUUID();
+ const done={...value,ledger_entry_id:originalLedger,dispatch:'http_accepted',outcome:'succeeded',latency_ms:20};
+ await ledger.record(done);await ledger.record(done);
+ const late={...done,usage:{input_tokens:10,output_tokens:2,cache_read_tokens:3,cache_write_tokens:null}};
+ await ledger.record(late);await ledger.record(late);
+ const row=(await client.query('SELECT * FROM model_call_receipt WHERE attempt_id=$1',[value.attempt_id])).rows[0];
+ assert.equal(row.ledger_entry_id,originalLedger);assert.equal(row.input_tokens,10);assert.equal(row.cache_write_tokens,null);assert.equal(row.cost_amount,null);
+ assert.equal((await client.query('SELECT count(*)::int AS n FROM outbound_ledger_entry')).rows[0].n,1);
+ await assert.rejects(ledger.record({...late,usage:{...late.usage,input_tokens:11}}),/conflict/);
+ await assert.rejects(ledger.record({...late,request_id:randomUUID()}),/conflict/);
+ const pending={...value,attempt_id:randomUUID()};await ledger.reserve(pending,2);
+ await transaction(async c=>{await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${value.owner_id}`]);assert.deepEqual(await details.markUnsettledUnknown(c,value.owner_id,[value.permit_id]),[pending.attempt_id]);});
+ assert.equal((await client.query('SELECT count(*)::int AS n FROM model_call_receipt WHERE permit_id=$1',[value.permit_id])).rows[0].n,2);
+ const unknown=(await client.query('SELECT * FROM model_call_receipt WHERE attempt_id=$1',[pending.attempt_id])).rows[0];assert.equal(unknown.outcome,'unknown');assert.equal(unknown.dispatch,'authorized_unconfirmed');assert.equal(unknown.input_tokens,null);
+ assert.deepEqual(await ledger.recoverUnknownPermits([value.permit_id]),[{owner_id:value.owner_id,request_id:value.request_id,attempt_id:pending.attempt_id}]);
+ await assert.rejects(ledger.reserve({...value,attempt_id:randomUUID()},10),/unknown_requires_resolution/);
+ await assert.rejects(ledger.reserve({...value,attempt_id:randomUUID()},2),/budget_exceeded/);
+ assert.equal((await client.query('SELECT count(*)::int AS n FROM model_call_receipt')).rows[0].n,2);
+ const observedUnknown={...pending,dispatch:'response_observed',outcome:'unknown',cost:{status:'known',amount:'0.12',currency:'CNY',pricing_version:'synthetic-v1'}};
+ await ledger.record(observedUnknown);
+ const resolved={...observedUnknown,outcome:'succeeded',cost:value.cost,usage:{input_tokens:4,output_tokens:1,cache_read_tokens:null,cache_write_tokens:null}};
+ await ledger.record(resolved);await ledger.record(resolved);await ledger.record(observedUnknown);
+ assert.equal((await client.query('SELECT outcome FROM outbound_ledger_entry WHERE id=$1',[pending.attempt_id])).rows[0].outcome,'succeeded');
+ assert.equal((await client.query('SELECT outcome FROM model_call_receipt WHERE attempt_id=$1',[pending.attempt_id])).rows[0].outcome,'succeeded');
+ assert.equal((await client.query('SELECT cost_amount FROM model_call_receipt WHERE attempt_id=$1',[pending.attempt_id])).rows[0].cost_amount,'0.12');
+ await assert.rejects(ledger.record({...resolved,outcome:'failed'}),/conflict/);
+
+ const concurrentLedger=new PostgresModelLedger({details,transaction:async work=>{
+  const c=new pg.Client({host:'/tmp',database:client.connectionParameters.database});await c.connect();
+  try{await c.query('BEGIN');const result=await work(c);await c.query('COMMIT');return result;}catch(e){await c.query('ROLLBACK');throw e;}finally{await c.end();}
+ }});
+ const other={...value,request_id:randomUUID(),permit_id:randomUUID(),attempt_id:randomUUID()};
+ const raced=await Promise.allSettled([concurrentLedger.reserve(other,1),concurrentLedger.reserve({...other,attempt_id:randomUUID()},1)]);
+ assert.equal(raced.filter(r=>r.status==='fulfilled').length,1);assert.match(raced.find(r=>r.status==='rejected').reason.message,/budget_exceeded/);
+ await assert.rejects(ledger.reserve({...other,attempt_id:randomUUID(),request_id:randomUUID()},10),/conflict/);
+ await client.query('DELETE FROM model_call_receipt WHERE request_id=$1',[other.request_id]);
+ // 旧台账删除级联清理详情；没有更换原UUID或新建第二份完成调用。
+ await client.query('DELETE FROM outbound_ledger_entry WHERE id=$1',[originalLedger]);assert.equal((await client.query('SELECT count(*)::int AS n FROM model_call_receipt WHERE attempt_id=$1',[value.attempt_id])).rows[0].n,0);
+ await client.query('DELETE FROM contact WHERE owner_id=$1 AND id=$2',[value.owner_id,value.contact_id]);
+ assert.equal((await client.query('SELECT count(*)::int AS n FROM model_call_receipt')).rows[0].n,0);
+ await assert.rejects(ledger.record(pending),/scope_deleted/);
+ const ownerCall={...value,contact_id:null,scope_kind:'owner_memory',permit_id:randomUUID(),request_id:randomUUID(),attempt_id:randomUUID()};
+ assert.throws(()=>validateModelLedgerReceipt({...ownerCall,scope_kind:'contact'}),/invalid/);
+ await ledger.reserve(ownerCall,1);await ledger.record({...ownerCall,dispatch:'response_observed',outcome:'succeeded'});
+ assert.equal((await client.query('SELECT scope_kind FROM model_call_receipt WHERE attempt_id=$1',[ownerCall.attempt_id])).rows[0].scope_kind,'owner_memory');
+ assert.equal((await client.query('SELECT count(*)::int AS n FROM outbound_ledger_entry WHERE id=$1',[ownerCall.attempt_id])).rows[0].n,0);
+ await client.query('DELETE FROM owner WHERE id=$1',[value.owner_id]);
+ assert.equal((await client.query('SELECT count(*)::int AS n FROM model_call_receipt')).rows[0].n,0);
+ await assert.rejects(ledger.record(ownerCall),/scope_deleted/);
+
+});
+
+test('正式110结构兼容原ledger UUID/拒绝结果/未知tokens，新详情可关联原记录', {timeout:60000},async t=>{
+ const fixture=await createStorageFixture();t.after(()=>fixture.close());const c=fixture.client,value=receipt(),legacy=randomUUID();
+ await c.query("INSERT INTO owner(id,display_name)VALUES($1,'合成旧本人')",[value.owner_id]);await c.query("INSERT INTO contact(owner_id,id,display_name)VALUES($1,$2,'合成旧联系人')",[value.owner_id,value.contact_id]);
+ await c.query("INSERT INTO outbound_ledger_entry(id,owner_id,contact_id,provider,model_name,input_tokens,output_tokens,latency_ms,outcome,called_at)VALUES($1,$2,$3,$4,$5,NULL,NULL,NULL,'rejected_by_validation',$6)",[legacy,value.owner_id,value.contact_id,value.provider,value.model,value.called_at]);
+ const original=(await c.query('SELECT * FROM outbound_ledger_entry WHERE id=$1',[legacy])).rows[0];
+ assert.equal((await c.query("SELECT to_regclass('public.model_call_receipt') IS NOT NULL AS migrated")).rows[0].migrated,true,'正式migrator必须建立110模型回执表');
+ const transaction=async work=>{await c.query('BEGIN');try{const result=await work(c);await c.query('COMMIT');return result;}catch(error){await c.query('ROLLBACK');throw error;}};
+ const ledger=new PostgresModelLedger({transaction,details:new PostgresModelLedgerDetails()});
+ await ledger.record({...value,ledger_entry_id:legacy,legacy_outcome:'rejected_by_validation',dispatch:'response_observed',outcome:'failed'});
+ assert.deepEqual((await c.query('SELECT * FROM outbound_ledger_entry WHERE id=$1',[legacy])).rows[0],original);
+ assert.equal((await c.query('SELECT ledger_entry_id FROM model_call_receipt WHERE attempt_id=$1',[value.attempt_id])).rows[0].ledger_entry_id,legacy);
+});
+test('最终Messages预算只持久安全白名单；同attempt SHA不可更换，unknown/晚结算不能清空或补造',{timeout:60000},async t=>{
+ const fixture=await createStorageFixture();t.after(()=>fixture.close());const c=fixture.client;
+ assert.equal((await c.query("SELECT to_regclass('public.model_call_receipt') IS NOT NULL AS migrated")).rows[0].migrated,true,'正式migrator必须建立110模型回执表');
+ const raw={provider:'synthetic',model:'synthetic',maxTokens:100,measurement_id:MESSAGES_MEASUREMENT_ID,measurement_kind:'approximate',input_tokens:123,context_window_tokens:1000,safety_margin_tokens:20,serialized_bytes:123,request_sha256:'a'.repeat(64),covered_components:['messages','system','tools','controls'],messages:'不允许持久的合成正文',credential:'不允许持久的合成凭据'};
+ const budget=modelLedgerInputBudget(raw),value={...receipt(),input_budget:budget};
+ assert.deepEqual(Object.keys(budget).sort(),['measurement_id','measurement_kind','input_tokens','max_output_tokens','context_window_tokens','safety_margin_tokens','request_sha256','serialized_bytes'].sort());
+ assert.throws(()=>validateModelLedgerReceipt({...value,input_budget:{...budget,messages:'合成正文'}}),/budget_invalid/);
+ assert.throws(()=>validateModelLedgerReceipt({...value,input_budget:{...budget,request_sha256:null}}),/budget_invalid/);
+ await c.query("INSERT INTO owner(id,display_name)VALUES($1,'合成预算本人')",[value.owner_id]);await c.query("INSERT INTO contact(owner_id,id,display_name)VALUES($1,$2,'合成预算联系人')",[value.owner_id,value.contact_id]);
+ const transaction=async work=>{await c.query('BEGIN');try{const r=await work(c);await c.query('COMMIT');return r;}catch(e){await c.query('ROLLBACK');throw e;}};
+ const ledger=new PostgresModelLedger({transaction,details:new PostgresModelLedgerDetails()});
+ await ledger.reserve(value,2);await ledger.reserve(structuredClone(value),2);
+ await assert.rejects(ledger.reserve({...value,input_budget:{...budget,request_sha256:'b'.repeat(64)}},2),/conflict/);
+ await assert.rejects(ledger.recordReserved({...value,input_budget:{...budget,serialized_bytes:124}}),/conflict/);
+ await ledger.recoverUnknownPermits([value.permit_id]);
+ const withoutBudget={...value};delete withoutBudget.input_budget;
+ await ledger.recordReserved({...withoutBudget,outcome:'succeeded',dispatch:'response_observed'});
+ await ledger.recordReserved({...withoutBudget,input_budget:null,outcome:'unknown'});
+ const row=(await c.query('SELECT input_budget,outcome FROM model_call_receipt WHERE attempt_id=$1',[value.attempt_id])).rows[0];
+ assert.deepEqual(row.input_budget,budget);assert.equal(row.outcome,'succeeded');
+ await assert.rejects(c.query('UPDATE model_call_receipt SET input_budget=$2 WHERE attempt_id=$1',[value.attempt_id,{...budget,tools:[]}]),/check constraint/);
+ await assert.rejects(c.query('UPDATE model_call_receipt SET input_budget=$2 WHERE attempt_id=$1',[value.attempt_id,{...budget,measurement_id:null}]),/check constraint/);
+ const legacy={...receipt(),owner_id:value.owner_id,contact_id:value.contact_id,input_budget:null};await ledger.reserve(legacy,2);
+ await assert.rejects(ledger.recordReserved({...legacy,input_budget:budget,outcome:'unknown'}),/conflict/);
+ assert.equal((await c.query('SELECT input_budget FROM model_call_receipt WHERE attempt_id=$1',[legacy.attempt_id])).rows[0].input_budget,null);
+});
