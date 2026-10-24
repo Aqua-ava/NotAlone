@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {homedir} from 'node:os';
 import pg from 'pg';
-import {freezeExtractionSources,loadExtractionSources,requireCurrent} from '../src/extraction-sources.ts';
+import {freezeExtractionSources,loadExtractionSourceMessages,loadExtractionSources,requireCurrent} from '../src/extraction-sources.ts';
 import {canonicalJSON} from '../src/contact-overview-evidence.ts';
 
 async function fixture(){
@@ -46,6 +46,9 @@ test('真实PG：有界target/context冻结、微秒/大整数保真；辅助来
   await f.c.query('DELETE FROM message_source_ref WHERE id=$1',[f.refs[0]]);await assert.rejects(requireCurrent(f.c,f.scope,frozen),{code:'extraction_sources_changed'});
   await assert.rejects(freezeExtractionSources(f.c,f.scope,{target_message_ids:[randomUUID()],context_message_ids:[]}),{code:'extraction_sources_unavailable'});
   await assert.rejects(freezeExtractionSources(f.c,f.scope,{target_message_ids:[f.ids[1]],context_message_ids:Array.from({length:640},()=>randomUUID())}),{code:'extraction_sources_bounds'});
+  await assert.rejects(loadExtractionSourceMessages(f.c,f.scope,Array.from({length:641},()=>randomUUID())),{code:'extraction_sources_bounds'});
+  await assert.rejects(loadExtractionSourceMessages(f.c,f.scope,Array.from({length:640},()=>randomUUID())),{code:'extraction_sources_unavailable'},
+   '任务规划允许原提取窗口的600目标与最多40辅助上下文');
   await assert.rejects(requireCurrent(f.c,{...f.scope,contactId:randomUUID()},frozen),{code:'extraction_sources_scope'});
  }finally{await f.close();}
 });

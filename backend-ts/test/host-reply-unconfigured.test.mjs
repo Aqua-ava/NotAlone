@@ -9,9 +9,9 @@ test('无owner或无模型的私有候选入口认证后稳定unavailable，公�
  for(const owner of [undefined,'11111111-1111-4111-8111-111111111111']){
   const token='synthetic-private-token-'.repeat(3);
   const runtime=await createHostReplyRuntime({ctx:new Proxy({},{get(){throw Error('不应安装模型');}}),
-   storage:{runtimeOwnerId:owner,businessReadTransaction(){throw Error('未配置不应读业务资料');}},
+   storage:{runtimeOwnerId:owner,businessReadTransaction(){throw Error('未配置不应读业务资料');},runtimeEnvironment(){return {};}},
    arbiter:{acquire(){throw Error('未配置不应领取许可');}},ledger:{reserve(){throw Error('未配置不应写预算');}},
-   token,configuration:null});
+   token,configuration:null,discussionSkillsRoot:'/tmp/notalone-synthetic-unconfigured-skills'});
   const server=createServer((req,res)=>void runtime.handle(req,res).then(handled=>{if(!handled)res.writeHead(404).end('{}');}));
   server.listen(0,'127.0.0.1');await once(server,'listening');
   try{

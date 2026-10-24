@@ -17,6 +17,9 @@ import {ExtractionBatchService,ExtractionBatchError} from './extraction-batch-se
 import {createExtractionBatchHttp} from './extraction-batch-http.ts';
 import {createExtractionAdoptionHost,runExtractionWithAdoption} from './extraction-adoption-host.ts';
 import {ExtractionTaskStore} from './extraction-task-store.ts';
+import {ExtractionTaskRunner} from './extraction-task-runner.ts';
+import {ExtractionWorker} from './extraction-worker.ts';
+import {ExtractionWorkerTaskControl,type TaskControlPort} from './task-control.ts';
 import {createLocalEmbeddingLifecycle} from './local-embedding-lifecycle.ts';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
@@ -50,6 +53,7 @@ export interface HostReplyOptions {
   extractionPermit?:ExtractionPermitEndpoint;
   extractionEnabled?:boolean;
   extractionAdoptionEnabled?:boolean;
+  extractionConcurrency?:number;
   embeddingFactory?:Parameters<typeof createLocalEmbeddingLifecycle>[0];
   discussionSkillsRoot?:string;
   sourceTraces?:Pick<SourceProcessingTraceStore,
@@ -68,6 +72,8 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   let batches:ExtractionBatchService|undefined;
   let adoptionHost:ReturnType<typeof createExtractionAdoptionHost>|undefined;
   let adoptionPool:pg.Pool|undefined;
+  let extractionWorker:ExtractionWorker|undefined;
+  let extractionControl:ExtractionWorkerTaskControl|undefined;
   let l2Scenarios:L2ScenarioHostCandidate|undefined;
   async function extractionTransaction<T>(work:(client:pg.Client)=>Promise<T>):Promise<T>{
     let businessFailure:ExtractionBatchError|undefined;
@@ -200,6 +206,16 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
           adoptionHost=createExtractionAdoptionHost({ownerId:owner,taskStore:store,
             transaction:work=>options.storage.businessTransaction(work),call,binding,profile,
             ...(options.embeddingFactory?{embeddingFactory:options.embeddingFactory}:{})});
+          const runner=new ExtractionTaskRunner({
+            store,batches,
+            adopt:(input,aResult,signal)=>adoptionHost!.run(input,aResult,signal),
+            batchSize:10,contextBefore:5,contextAfter:0,
+            concurrency:options.extractionConcurrency??1,ruleVersion,
+            provider:m.provider,modelName:m.model,
+          });
+          extractionWorker=new ExtractionWorker({store,ownerId:owner,runner});
+          if(!await extractionWorker.start())throw new Error('extraction_worker_already_running');
+          extractionControl=new ExtractionWorkerTaskControl({store,worker:extractionWorker});
         }
       }
     }catch(error){
@@ -212,6 +228,8 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   let closing:Promise<void>|undefined;
   return {
     configured:Boolean(service),
+    extractionControl:extractionControl as TaskControlPort|undefined,
+    extractionWorkerStatus:extractionWorker?.status()??null,
     callExtraction(input:ExtractionModelInput){return execute(input.signal,signal=>{
       if(!extraction)throw new ReplyError('reply_remote_unavailable',503);
       return extraction.call({...input,signal});
@@ -230,10 +248,13 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     close():Promise<void>{
       return closing??=(async()=>{
         stopping.abort();
+        await extractionControl?.close();
+        if(extractionWorker&&!await extractionWorker.stop())throw new Error('extraction_worker_unsettled');
         // 取消只通知业务；服务退出前仍持有真实物理许可，不能以HTTP断连代替结算。
         await Promise.allSettled([...pending]);
         await adoptionHost?.close();
         await adoptionPool?.end();
+        extractionWorker=undefined;extractionControl=undefined;
         await provider?.dispose();
       })();
     },

@@ -99,3 +99,20 @@ Spec: ../spec.md
 - 未覆盖并保持 `claimed`：B 段采纳/trace/watermark/index/verify 仍不完整，本次没有
   启动第二领取者，也没有以 started/busy 伪造任务成功；完整来源删除、索引与候选失效
   仍由票 17 和根统一验收，真实 Worker 执行、实际 App/微信与真实模型质量未验证。
+
+2026-10-25（TS Worker 宿主接线）：
+
+- `host-reply` 在模型、提取许可、来源 trace 与采纳宿主就绪后只启动一个 TS `ExtractionWorker`；
+  `host-plugin` 的导入 wake 与 `/api/tasks/run|retry` 共用该 Worker，运行时状态公开
+  `ownership.tasks=typescript` 和真实 worker 状态。
+- `ExtractionTaskRunner` 从原任务目标读取有界来源，执行 A、B、trace、逐消息处理回执和
+  水位提交；模型失败、B 采纳失败和取消分别保留稳定错误码，只收尾一次 trace 且不推进
+  失败批次水位。批次来源变更或删除仍在领取、冻结与提交门禁下拒绝。
+- Python 仅在 `NOTALONE_TASK_WORKER_RUNTIME=typescript` 且提取/B 已切 TS 时停止装配
+  `TaskHost`；其余配置保持原 Python 责任。
+- 验证：backend-ts 类型检查及相关定向套件通过；全量 1124/1125，唯一失败的增量重连清理
+  单例已在 `50306523` 基点复现。Python command/reply/route 相关 56 项通过。仅使用随机
+  合成 `_test` PostgreSQL、临时目录和 loopback 模型；未操作 App/微信、真实资料或模型，
+  未打包、push 或 PR。
+- 未覆盖：TS Worker 当前只处理 `parse|normalize|extract_memory`，`index|verify`、来源删除
+  任务、L2 `organization` 领取与完整 App 验收仍由后续票／根处理，因此本票保持 `claimed`。

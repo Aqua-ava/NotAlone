@@ -398,6 +398,18 @@ def _extraction_runtime_modes(
     return extraction_runtime, b_runtime
 
 
+def _task_worker_runtime(environment: Mapping[str, str]) -> str:
+    """明确每个进程的任务执行责任，避免 TS 与 Python 同时领取模型任务。"""
+
+    runtime = environment.get("NOTALONE_TASK_WORKER_RUNTIME", "python")
+    if runtime not in {"python", "typescript"}:
+        raise ValueError("task_worker_runtime_invalid")
+    extraction_runtime, _ = _extraction_runtime_modes(environment)
+    if runtime == "typescript" and extraction_runtime != "typescript":
+        raise ValueError("task_worker_runtime_requires_typescript_extraction")
+    return runtime
+
+
 def _build_task_host(
     database_url: str, events: EventBus,
     *, model_priority: ModelPriorityControl | None = None,
@@ -407,6 +419,9 @@ def _build_task_host(
     model_work_available: bool = True,
 ) -> TaskHost | None:
     """装配任务宿主；执行前再检查模型与资源，不提前领取持久任务。"""
+
+    if _task_worker_runtime(os.environ) != "python":
+        return None
 
     import psycopg
 

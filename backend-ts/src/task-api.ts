@@ -1,4 +1,4 @@
-/** 桌面后台任务的TS只读/控制适配层；持久任务与领取权仍归现有业务。 */
+/** 桌面后台任务的TS状态/控制适配层；run/retry只承接已迁移的导入任务。 */
 import type pg from 'pg';
 import type {TaskControlPort,TaskScope} from './task-control.ts';
 import {TaskControlError} from './task-control.ts';
@@ -139,7 +139,7 @@ export class TaskApi {
       if(pathname==='/api/tasks/run'){
         return {status:200,body:{status:await this.options.control.run(request.scope,request.taskId)}};
       }
-      // Python保留模型可用性、固定运行配置和失败恢复门禁；TS只在调用前核对原身份与active来源。
+      // retry先在原任务表内完成来源、租约和恢复动作复核，再唤醒同一TS Worker。
       return {status:200,body:await this.options.control.retry(request.scope,request.taskId)};
     }catch(error){
       if(error instanceof TaskControlError)return this.controlError(error);

@@ -40,6 +40,7 @@ if _bridge_file:
             json.dump({key: os.environ[key] for key in (
                 "NOTALONE_MODEL_PERMIT_SOCKET", "NOTALONE_MODEL_PERMIT_TOKEN",
                 "NOTALONE_EXTRACTION_RUNTIME", "NOTALONE_EXTRACTION_B_RUNTIME",
+                "NOTALONE_TASK_WORKER_RUNTIME",
                 "NOTALONE_EXTRACTION_REMOTE_URL",
                 "NOTALONE_EXTRACTION_REMOTE_TOKEN", "NOTALONE_REPLY_RUNTIME",
                 "NOTALONE_OWNER_ID",

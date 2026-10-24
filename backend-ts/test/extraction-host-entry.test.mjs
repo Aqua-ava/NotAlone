@@ -36,7 +36,7 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A+B入口、fi
  const text='我喜欢绿茶。',seen=[];let child,exited,output='',connection,legacyPid,stopped=false;
  const provider=createServer(async(req,res)=>{
   let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw),name=body.tools[0].name;seen.push({path:req.url,headers:req.headers,body});
-  const args=name==='DirectMemoryExtractionOutput'?{scenes:[{scene_name:'饮食偏好',memories:[{text,category:'preference',subject:'contact',topic:'other',source_message_ids:[message],confidence:0.9,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],interpretation_reason:'原话明确表达偏好'}]}]}:
+  const args=name==='DirectMemoryExtractionOutput'?(raw.includes(text)?{scenes:[{scene_name:'饮食偏好',memories:[{text,category:'preference',subject:'contact',topic:'other',source_message_ids:[message],confidence:0.9,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],interpretation_reason:'原话明确表达偏好'}]}]}:{scenes:[]}):
    {results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:message,quote:text}]}]};
   const events=[{type:'message_start',message:{id:randomUUID(),model:'deepseek-flash',usage:{input_tokens:3,output_tokens:0}}},{},{},{},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:2}},{type:'message_stop'}];
   useTool(events,name,args,randomUUID());sendEvents(res,events);
@@ -85,7 +85,7 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A+B入口、fi
  // 启用处理状态路由后，其他POST正文仍完整交给原入口；已初始化owner使恢复被拒绝而非丢正文。
  const untouched=await request('/api/setup/initialize',{display_name:'合成不应创建',create_only:true});assert.equal(untouched.status,409);assert.equal(untouched.body.error,'owner_already_configured');
  const bridge=JSON.parse(await readFile(bridgeFile,'utf8'));assert.equal((await stat(bridgeFile)).mode&0o777,0o600);
- assert.equal(bridge.NOTALONE_EXTRACTION_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_B_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_REPLY_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_REMOTE_URL,base);assert.ok(bridge.NOTALONE_EXTRACTION_REMOTE_TOKEN!==connection.token);
+ assert.equal(bridge.NOTALONE_EXTRACTION_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_B_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_TASK_WORKER_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_REPLY_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_REMOTE_URL,base);assert.ok(bridge.NOTALONE_EXTRACTION_REMOTE_TOKEN!==connection.token);
  const runPython=async mode=>{try{return JSON.parse((await execute(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),[resolve('../backend/tests/support/extraction_host_entry.py'),mode,dsn,owner,contact,source,JSON.stringify(claim),base],{cwd:project,env:{PATH:process.env.PATH,USER:process.env.USER,HOME:db.directory,PYTHONPATH:join(project,'backend/src'),PYTHONDONTWRITEBYTECODE:'1',NOTALONE_DISABLE_DOTENV:'1',...bridge},timeout:25000,maxBuffer:1048576})).stdout);}catch(error){throw Error((error.stderr??'').slice(-1800)+'\n'+safeOutput().slice(-1800));}};
  const result=await runPython('run');assert.equal(result.stats.processed_messages,1);assert.equal(result.stats.adopted,1);assert.equal(result.watermark,message);assert.equal(seen.length,2,'A与V各执行一次，B零模型调用仍由TS finalize');
  assert.deepEqual(seen.map(row=>row.body.tools[0].name),['DirectMemoryExtractionOutput','SourceVerificationOutput']);
@@ -97,6 +97,45 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A+B入口、fi
  assert.equal((await c.query("SELECT count(*)::int n FROM confirmed_memory WHERE adoption_method='auto'")).rows[0].n,1);
  assert.equal((await c.query("SELECT count(*)::int n FROM memory_extraction_trace_event WHERE stage='batch_end' AND payload?'typescript_a_receipt'")).rows[0].n,1);
  const again=await runPython('run');assert.equal(again.stats.processed_messages,0);assert.equal(seen.length,2);
+ const importContact=randomUUID(),importIdentity='synthetic-import-contact';
+ await c.query("INSERT INTO owner_channel_identity(owner_id,channel,external_id,observed_name)VALUES($1,'wechat','synthetic-owner','合成主宿主本人')",[owner]);
+ await c.query("INSERT INTO contact(id,owner_id,display_name)VALUES($1,$2,'合成导入联系人')",[importContact,owner]);
+ await c.query("INSERT INTO channel_identity(owner_id,contact_id,channel,external_id,observed_name)VALUES($1,$2,'wechat',$3,'合成导入联系人')",[owner,importContact,importIdentity]);
+ const importPath=join(db.directory,'synthetic-host-import.jsonl');
+ const importedRows=[
+  {id:{local_id:9001,server_id_str:'server-9001',talker:importIdentity},create_time:1792461600,
+   is_from_me:false,kind:'text',sender:'合成导入联系人',sender_wxid:importIdentity,text:'合成导入无候选消息',
+   time:'2026-10-20 10:00:00',time_iso:'2026-10-20T10:00:00+08:00'},
+  {id:{local_id:9002,server_id_str:'server-9002',talker:importIdentity},create_time:1792461660,
+   is_from_me:true,kind:'text',sender:'合成主宿主本人',sender_wxid:'synthetic-owner',text:'合成导入回复消息',
+   time:'2026-10-20 10:01:00',time_iso:'2026-10-20T10:01:00+08:00'},
+ ];
+ await writeFile(importPath,importedRows.map(row=>JSON.stringify(row)).join('\n')+'\n');
+ const preview=await request('/api/imports/preview',{path:importPath,contact_id:importContact});
+ assert.equal(preview.status,200);
+ const imported=await request('/api/imports/commit',{
+  path:importPath,contact_id:importContact,expected_content_sha256:preview.body.content_sha256,
+ });
+ assert.equal(imported.status,200);
+ assert.equal(imported.body.processing_deferred,undefined);
+ const importedTask=imported.body.task_id;
+ let importedStatus;
+ for(let attempt=0;attempt<150;attempt++){
+  importedStatus=await request(`/api/tasks/status?contact_id=${importContact}&task_id=${importedTask}`);
+  const extraction=importedStatus.body.steps?.find(step=>step.name==='extract_memory');
+  if(extraction?.status==='succeeded')break;
+  await delay(50);
+ }
+ assert.equal(importedStatus.status,200);
+ assert.equal(importedStatus.body.steps.find(step=>step.name==='extract_memory').status,'succeeded');
+ assert.equal(seen.length,3,'公开导入的零候选批次只执行一次A，B不再调用模型');
+ assert.equal((await c.query(`SELECT count(*)::int n FROM memory_extraction_trace
+  WHERE owner_id=$1 AND contact_id=$2 AND status='succeeded'`,[owner,importContact])).rows[0].n,1);
+ assert.equal((await c.query(`SELECT count(*)::int n FROM memory_processing_receipt
+  WHERE owner_id=$1 AND contact_id=$2 AND outcome='succeeded'`,[owner,importContact])).rows[0].n,2);
+ const workerStatus=await request('/api/runtime/status');
+ assert.equal(workerStatus.body.ownership.tasks,'typescript');
+ assert.equal(workerStatus.body.taskWorker.state,'running');
  assert.equal((await request('/api/runtime/shutdown',{})).body.state,'stopped');await stop();await verifyPython();await verifyMigrations();
- t.diagnostic('实际host-plugin与唯一Legacy已运行；TS A+B finalized消费通过，未据此认证Worker领取/完整队列、App或微信。');
+ t.diagnostic('实际host-plugin、唯一TS Worker与Legacy已运行；公开导入、零候选A+B、trace与回执通过；未认证App或微信。');
 });

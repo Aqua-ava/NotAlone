@@ -67,7 +67,7 @@ if(args[0]==='--version')emit({version:'synthetic-host-1'});
 else if(args[0]==='status')emit({status:{account:{identity_configured:true,schema2_ready:true},live_read_ok:true,readiness:'ready',mode:{strict_read_only:true},account_debug:{wxid:'wxid_synthetic_owner'}}});
 else process.exit(2);
 `,{mode:0o700});
-  await writeFile(fixture.envFilePath,`${await readFile(fixture.envFilePath,'utf8')}NOTALONE_OWNER_ID=${owner}\nNOTALONE_REPLY_RUNTIME=typescript\nNOTALONE_WECHAT_CLI=${cli}\n`,{mode:0o600});
+  await writeFile(fixture.envFilePath,`${await readFile(fixture.envFilePath,'utf8')}NOTALONE_OWNER_ID=${owner}\nNOTALONE_REPLY_RUNTIME=typescript\nNOTALONE_EXTRACTION_RUNTIME=typescript\nNOTALONE_WECHAT_CLI=${cli}\n`,{mode:0o600});
   const filePath=join(fixture.directory,'synthetic-host-import.jsonl');
   const rows=[
     {id:{local_id:1,server_id_str:'server-1',talker:'wxid_synthetic_contact'},create_time:1792461600,is_from_me:false,
@@ -80,7 +80,7 @@ else process.exit(2);
   const ownership=(await app.request('/api/runtime/status')).data.ownership;
   assert.equal(ownership.imports,'typescript');
   assert.equal(ownership.taskApi,'typescript');
-  assert.equal(ownership.tasks,'python','任务领取和完成仍归唯一Python Worker');
+  assert.equal(ownership.tasks,'typescript','任务领取和完成归唯一TS Worker');
   assert.equal((await app.request('/api/imports/preview?unexpected=1',{})).status,400);
   const preview=await app.request('/api/imports/preview',{path:filePath,contact_id:contact});
   assert.equal(preview.status,200);assert.equal(preview.data.record_count,2);

@@ -560,6 +560,39 @@ class RuntimeExecutionTest(unittest.TestCase):
             worker._extraction_runner._runner._batch_concurrency, 3
         )
 
+    def test_typescript_task_worker_runtime_disables_python_task_host(self) -> None:
+        from notalone.server.command import _build_task_host
+        from notalone.server.event_bus import EventBus
+
+        with patch.dict(
+            os.environ,
+            {
+                "NOTALONE_TASK_WORKER_RUNTIME": "typescript",
+                "NOTALONE_EXTRACTION_RUNTIME": "typescript",
+                "NOTALONE_EXTRACTION_B_RUNTIME": "typescript",
+            },
+            clear=True,
+        ):
+            self.assertIsNone(
+                _build_task_host(
+                    "postgresql:///synthetic_unused_test", EventBus()
+                )
+            )
+
+    def test_typescript_task_worker_requires_typescript_extraction(self) -> None:
+        from notalone.server.command import _task_worker_runtime
+
+        with self.assertRaisesRegex(
+            ValueError, "task_worker_runtime_requires_typescript_extraction"
+        ):
+            _task_worker_runtime(
+                {"NOTALONE_TASK_WORKER_RUNTIME": "typescript"}
+            )
+        with self.assertRaisesRegex(ValueError, "task_worker_runtime_invalid"):
+            _task_worker_runtime(
+                {"NOTALONE_TASK_WORKER_RUNTIME": "synthetic-invalid"}
+            )
+
     def test_serial_extraction_ignores_parallel_lease_guard_factory(self) -> None:
         scope = ContactScope(uuid4(), uuid4())
 

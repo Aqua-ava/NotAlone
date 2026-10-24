@@ -52,6 +52,17 @@ async function readMessages(client:pg.ClientBase,scope:ExtractionSourceScope,ids
  if(messages.length!==ids.length)throw new ExtractionSourcesError('extraction_sources_unavailable');
  return messages;
 }
+/** 任务规划只读取显式同scope身份；每批最终提交仍走freezeExtractionSources重新冻结。 */
+export async function loadExtractionSourceMessages(
+ client:pg.ClientBase,
+ scope:ExtractionSourceScope,
+ ids:readonly string[],
+):Promise<ScopedExtractionMessage[]>{
+ checkScope(scope);
+ if(ids.length>640||new Set(ids).size!==ids.length
+  ||ids.some(id=>typeof id!=='string'||!uuid.test(id)))throw new ExtractionSourcesError('extraction_sources_bounds');
+ return freeze(await readMessages(client,scope,[...ids],null));
+}
 /** 只读取明确的同scope ID，最多完整run600目标+40辅助上下文。持久化须用canonicalJSON保留raw大整数。 */
 export async function freezeExtractionSources(client:pg.ClientBase,scope:ExtractionSourceScope,selection:{target_message_ids:string[];context_message_ids:string[]}):Promise<FrozenExtractionSources>{
  checkScope(scope);const ids=checkSelection(selection),ownedScope={...scope};

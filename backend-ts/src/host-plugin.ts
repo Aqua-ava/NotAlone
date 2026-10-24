@@ -32,7 +32,10 @@ import {SourceProcessingTraceStore} from './source-processing-trace.ts';
 import {SourceProcessingTraceApi} from './source-processing-trace-http.ts';
 import {HistoryImportApi} from './history-import-api.ts';
 import {PostgresTaskStatusStore,TaskApi} from './task-api.ts';
-import {PythonTaskControlGateway} from './task-control.ts';
+import {
+ PythonTaskControlGateway,UnavailableTaskControl,
+ type TaskControlPort,type TaskScope,
+} from './task-control.ts';
 export const name = 'notalone-host';
 export const inject = ['appReady','llm','agents','sessions','tools','systemPrompt','skills'];
 
@@ -69,6 +72,22 @@ async function start(ctx: Context) {
   if (compatibility.code !== 'ready') throw new Error('HOST_DATABASE_UNAVAILABLE');
   const ownerStatus=await storage.setupStatus();
   const progressPool=await storage.businessPool();
+  const runtimeEnvironment: NodeJS.ProcessEnv = {...process.env,...storage.runtimeEnvironment(),HOME:config.businessHome};
+  const extractionWorkerRuntime=runtimeEnvironment.NOTALONE_EXTRACTION_RUNTIME??'python';
+  if(!['python','typescript'].includes(extractionWorkerRuntime))
+    throw new Error('EXTRACTION_WORKER_RUNTIME_INVALID');
+  const pythonTaskControl=extractionWorkerRuntime==='typescript'
+    ?undefined:new PythonTaskControlGateway();
+  let activeTaskControl:TaskControlPort=pythonTaskControl??new UnavailableTaskControl('worker_unavailable');
+  const taskControl:TaskControlPort={
+    run:(scope:TaskScope,taskId:string)=>activeTaskControl.run(scope,taskId),
+    retry:(scope:TaskScope,taskId:string)=>activeTaskControl.retry(scope,taskId),
+    wake:(scope:TaskScope,taskId:string)=>activeTaskControl.wake(scope,taskId),
+  };
+  const closeTaskControl=()=>{
+    const close=(activeTaskControl as TaskControlPort&{close?:()=>Promise<void>}).close;
+    return close?close.call(activeTaskControl):Promise.resolve();
+  };
   const progress=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId)
     : undefined;
@@ -78,7 +97,6 @@ async function start(ctx: Context) {
   const traces=traceStore&&storage.runtimeOwnerId
     ? new SourceProcessingTraceApi(traceStore,storage.runtimeOwnerId)
     : undefined;
-  const taskControl=new PythonTaskControlGateway();
   const imports=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new HistoryImportApi({
       transaction:work=>storage.businessTransaction(work),ownerId:storage.runtimeOwnerId,
@@ -92,7 +110,6 @@ async function start(ctx: Context) {
   let handoff: ContactHandoff | undefined;
   let memoryHandoff: MemoryManagementHandoff | undefined;
   let modelRuntime:Awaited<ReturnType<typeof startHostModelRuntime>>;
-  const runtimeEnvironment: NodeJS.ProcessEnv = {...process.env,...storage.runtimeEnvironment(),HOME:config.businessHome};
   // 本宿主自身提供唯一认证增量端点；typescript 历史模式不回退到 Python 写者。
   const historyRuntime=resolveHistoryRuntime(runtimeEnvironment,{incrementalRemoteAvailable:true});
   const incremental = await createSyncIncrementalApi({storage,executable:runtimeEnvironment.NOTALONE_WECHAT_CLI ?? '',environment:runtimeEnvironment,
@@ -136,7 +153,7 @@ async function start(ctx: Context) {
     state='stopping';modelRuntime?.stopAccepting();
     // 先排空任务控制，再保留增量→范围/资料门禁→模型/Python→数据库顺序。
     const failures:unknown[]=[];
-    for(const release of [()=>taskControl.close(),()=>incremental.close(),
+    for(const release of [closeTaskControl,()=>incremental.close(),
       async()=>{
         const closed=await Promise.allSettled([()=>foreground.close(),()=>wechatScope.close(),
           ()=>handoff?.close(),()=>memoryHandoff?.close(),()=>skills.close()].map(release=>Promise.resolve().then(release)));
@@ -197,7 +214,7 @@ async function start(ctx: Context) {
         }:undefined,replayBody);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus}}:{}),ownership:{...ownership,skills:skills.status().owner,imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus},taskWorker:modelRuntime.extractionWorkerStatus}:{}),ownership:{...ownership,skills:skills.status().owner,imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',tasks:extractionWorkerRuntime,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
@@ -399,13 +416,18 @@ async function start(ctx: Context) {
     modelRuntime=await startHostModelRuntime({ctx,storage,environment:runtimeEnvironment,
       businessHome:config.businessHome,projectDirectory:config.projectDirectory,infoPath:config.infoPath,envFilePath:config.envFilePath,
       ...(traceStore?{sourceTraces:traceStore}:{})});
+    if(extractionWorkerRuntime==='typescript'){
+      const control=modelRuntime?.extractionControl;
+      if(!control)throw new Error('EXTRACTION_WORKER_UNAVAILABLE');
+      activeTaskControl=control;
+    }
     legacy=await LegacyBackend.start(config,{...runtimeEnvironment,
       ...(modelRuntime?.pythonEnvironment(`http://127.0.0.1:${address.port}`)??{}),
       NOTALONE_OWNER_ID:ownerStatus.runtime_owner_configured ? storage.runtimeOwnerId : '',
       NOTALONE_WECHAT_SCOPE_URL:`http://127.0.0.1:${address.port}`,NOTALONE_WECHAT_SCOPE_TOKEN:scopeToken,
       NOTALONE_SYNC_INCREMENTAL_URL:`http://127.0.0.1:${address.port}`,NOTALONE_SYNC_INCREMENTAL_TOKEN:incrementalToken,
       NOTALONE_SYNC_INCREMENTAL_TRANSFERRED:'1'},terminate);
-    taskControl.bind(legacy);
+    pythonTaskControl?.bind(legacy);
     handoff=new ContactHandoff(storage,legacy);
     memoryHandoff=new MemoryManagementHandoff(storage,legacy);
   } catch(error) {

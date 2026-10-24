@@ -11,10 +11,11 @@ import {resolveHostReplyConfiguration} from './host-reply-config.ts';
 import {createHostReplyRuntime} from './host-reply.ts';
 import {createHostModelAccounting} from './host-model-accounting.ts';
 import {PostgresModelLedger,PostgresModelLedgerDetails} from './model-ledger.ts';
-import {startModelHost,assertModelHostFallbackSafe} from './model-host.ts';
+import {startModelHost,assertModelHostFallbackSafe,modelBackgroundConcurrency} from './model-host.ts';
 import type {SourceProcessingTraceStore} from './source-processing-trace.ts';
 import type {L2ScenarioQualityReader} from './l2-scenario-service.ts';
 import type {L2ScenarioBudget} from './l2-scenario-workspace.ts';
+import {UnavailableTaskControl,type TaskControlPort} from './task-control.ts';
 
 export class HostModelRuntimeError extends Error {
   readonly code:string;
@@ -82,12 +83,19 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
     reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
       ledger,token,configuration:activeConfiguration,extractionEnabled:extractionMode==='typescript',
       extractionAdoptionEnabled:extractionMode==='typescript',
+      extractionConcurrency:modelBackgroundConcurrency(environment),
       discussionSkillsRoot:configuredSkillsRoot,
       ...(options.sourceTraces?{sourceTraces:options.sourceTraces}:{}),
       ...(options.l2Quality?{l2Quality:options.l2Quality}:{}),
       ...(options.l2Budget?{l2Budget:options.l2Budget}:{}),
       extractionPermit:{path:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_SOCKET,token:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_TOKEN}});
     const runtime=reply;
+    if(extractionMode==='typescript'&&!unavailable&&!runtime.extractionControl)
+      throw new HostModelRuntimeError('extraction_worker_unavailable');
+    const extractionControl:TaskControlPort|undefined=extractionMode==='typescript'
+      ? runtime.extractionControl??new UnavailableTaskControl(unavailable
+        ?'model_configuration_unavailable':'worker_unavailable')
+      : undefined;
     let closing:Promise<void>|undefined;
     const stopAccepting=()=>{runtime.stopAccepting();modelHost.arbiter.stop();};
     return {
@@ -98,6 +106,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
           NOTALONE_REPLY_REMOTE_URL:address,NOTALONE_REPLY_REMOTE_TOKEN:token,
           ...(extractionMode==='typescript'?{NOTALONE_EXTRACTION_RUNTIME:'typescript',
             NOTALONE_EXTRACTION_B_RUNTIME:'typescript',
+            NOTALONE_TASK_WORKER_RUNTIME:'typescript',
             NOTALONE_EXTRACTION_REMOTE_URL:address,NOTALONE_EXTRACTION_REMOTE_TOKEN:token}:{}),
           // 仅宿主到本次Legacy的允许列表协议；配置保存后整体重启，不热切换。
           NOTALONE_MODEL_UNCONFIGURED_REASON:unavailable??'',
@@ -106,6 +115,8 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
       handle(req:IncomingMessage,res:ServerResponse){return runtime.handle(req,res);},
       handleLayeredMemory(req:IncomingMessage,res:ServerResponse,url:URL){return runtime.handleLayeredMemory(req,res,url);},
       callExtraction:runtime.callExtraction,
+      extractionControl,
+      extractionWorkerStatus:runtime.extractionWorkerStatus,
       stopAccepting,
       close(stopPython:()=>Promise<void>):Promise<void>{
         return closing??=(async()=>{
