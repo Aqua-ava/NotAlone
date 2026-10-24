@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "predecessor_05_accepted": true,
+  "state": "05六条实际验收已resolved、本地元数据提交b0a68175及pre/postscan0；07/10/23已claimed可独立实现",
+  "current_base_commit": "b0a6817582d92b4142977c486fe7a9366496cb88",
+  "implementation_rule": "05 accepted为true后才开始07/10/23依赖实现；此前只读已有准备，不重复准备工程",
+  "main_source_and_index_owner": "root",
+  "desktop_owner": "root；只npm run dev，实际App/微信与共享桌面串行协调",
+  "dsh_version": "0.2.1-rc.2",
+  "dsh_official_commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "tasks": [
+    "07",
+    "10",
+    "23"
+  ],
+  "model_scope": "默认合成PG/loopback，真实模型完整对照留25，原首次小批已结案不得重置复跑",
+  "resolved_metadata_commit": "b0a6817582d92b4142977c486fe7a9366496cb88",
+  "predecessor_05_acceptance": ".scratch/dsh-ts-migration/05-final-root-acceptance/accepted-manifest.json",
+  "postcommit_scan_issues": 0
+}

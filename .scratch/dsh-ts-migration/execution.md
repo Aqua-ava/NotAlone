@@ -72,3 +72,11 @@ cc263095已整合唯一模型宿主、原SDK物理许可、已知终态ACK未知
 ## 05 回复对比报告器 v3 组件（2026-10-24）
 
 根精确接收reporter与原测试两路径，patch85c22144，最终70fc72f2/6746abf0；核作者46+Standards8+Spec32文件及七只读依赖，双轴0。主树新增8/8→相关78/78（均0skip）→TS7 tsc/noEmit 0；日志原字节相同并清临时副本。固定字段投影关闭元数据额外正文出口，完整原证据摘要/合法理由/96分母/原阈值保持，最终持久结果为延迟门、首token仅诊断。不合实验hardcoded覆盖；multi source/caller/盲绑定及正式fixture仍后继，05/真实质量/切换false。详见reply-reporter-v3-root-acceptance/validation.md；外联/SDK/PG/App/微信0。
+
+## 2026-10-24：05验收收口与下一批并行实现
+
+- 05原六条已逐项验收并同步resolved，关闭元数据提交`b0a68175`；[根接收](05-final-root-acceptance/accepted-manifest.json)与[提交后扫描](05-final-root-acceptance/postcommit-publicscan.json)为当前状态入口，原六条文字和25完整门槛不变。
+- 业务证据：`ca94d34f`完成实际同Host仲裁与TS→Python→TS同库回退；`431a5d4d`完成背景公开业务与实际npm run dev+Cua App。根最小9+2、7+1通过，App另本机HTTP3，真实供应商0；原供应商两臂2次另有原始已结案证据。
+- App查看依据、编辑自动保存、甲乙隔离、复制、真实超时和生成中会话删除后晚结果不保存已完成；没有独立取消按钮，普通切联系人不取消，复制不冒充selection写入。菜单正常退出、独占进程/库/temp/snapshot/App目录清理，共享PG保留。
+- 07探索与Skill、10消息提取核验、23用量设置诊断已建立独立目标会话并认领；[依赖门禁](parallel-root-coordination/next-wave-gate.json)为true，可并行实施。三会话复用既有冻结准备，先查锁定DSH官方文档源码，只在自有候选/snapshot工作；正式源/index/桌面根统一集成，禁止打包/push/微信发送。
+- 默认真实用户回复仍Python，quality/switch=false；完整96及质量/费用/性能保留25。19已resolved；21原生Vision阻塞未解除，本轮未扩大其验收结论。
