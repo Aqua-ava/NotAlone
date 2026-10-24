@@ -64,3 +64,15 @@
   App/微信，也没有处理真实资料。票 20 保持 claimed。
 - 基线提交的 `sync-incremental-reconnect.test.mjs` 清理断言在独立干净基线 worktree
   同样失败，属于既有测试问题，不由本票修复或计为通过。
+
+## 根级实际 App 验收（2026-10-25）
+
+- 开发实例显式设置 `NOTALONE_HISTORY_RUNTIME=typescript` 与
+  `NOTALONE_REPLY_RUNTIME=typescript`；`/api/runtime/status` 返回
+  `ownership.wechatHistory=typescript`。
+- 同步总开关关闭，公开 `/api/sync/status` 返回 `cli_history_coverages=[]`；
+  `ran` 页面显示 78 条已保存消息，但覆盖状态为“尚未确认”，符合停止读取边界。
+- 输入小窗未把该“尚未确认”覆盖作为生成门禁：仍允许发起一次生成，随后返回
+  “未收到生成结果”，没有候选。该请求保持 unknown，未重试。
+- 未修改同步总开关、范围、资料或记忆，未发送外部消息。覆盖展示与回复门禁不一致，
+  因此本票保持 claimed；修复后需重新做一次实际 App 门禁验收。

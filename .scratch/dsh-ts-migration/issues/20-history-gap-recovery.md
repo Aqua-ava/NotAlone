@@ -63,7 +63,10 @@ freshness/游标异常保持 incomplete；当前联系人优先而不饥饿其�
 HTTP 16/16 通过。测试不读实际
 App、微信、模型或真实资料。数据处理影响和清理见[实现验证](../history-gap-recovery/verification.md)。
 
-本票保持 claimed：共享官方宿主仍执行 Python 历史，公开 `/api/sync/status` 尚未把
-TS `history_coverages` 映射为 `cli_history_coverages`，`ownership.wechatHistory`
-仍为 Python。根须在单一执行方切换时按[宿主集成说明](../history-gap-recovery/host-integration.md)
-启用并独立验收；当前不得宣称公开 HTTP/App 闭环已完成。
+根已在 `51cf3690` 完成单一历史执行方与公开覆盖映射。2026-10-25 实际 App
+验收显示 `ownership.wechatHistory=typescript`，但总开关关闭时
+`/api/sync/status` 的 `cli_history_coverages=[]`，`ran` 界面显示
+“消息历史覆盖尚未确认”。此时仍被允许发起一次生成，最终得到
+“未收到生成结果”且没有候选；该次请求保持 unknown，不盲目重试。覆盖状态
+与实际回复门禁不一致，未达到本票完整验收条件。票保持 `claimed`，不得宣称
+桌面闭环完成。
