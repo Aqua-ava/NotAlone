@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 用户已授权全部26项按依赖持续执行、目标模式和独立会话并行。当前01—04及18已验收；05、06、09、19、21仍为claimed，其余保持原依赖等待。模块测试或本地提交不等于整票验收；最新交接见[执行记录](execution.md)。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
+> 用户已授权全部26项按依赖持续执行、目标模式和独立会话并行。当前01—04、09及18已验收；05、06、19、21仍为claimed，其余保持原依赖等待。模块测试或本地提交不等于整票验收；最新交接见[执行记录](execution.md)。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
 
 ## 逐项任务与阻塞关系
 
@@ -14,7 +14,7 @@
 | [06 管理并受控读取现有回复 Skill](issues/06-reply-skill-library.md) | 04 | ready-for-agent | claimed |
 | [07 探索方向并使用 Skill 生成候选](issues/07-exploration-skill-replies.md) | 05、06 | ready-for-agent | open |
 | [08 继续讨论和改写候选](issues/08-discussion-continuity.md) | 07 | ready-for-agent | open |
-| [09 查看和修正记忆及表达偏好](issues/09-memory-and-preferences.md) | 04 | ready-for-agent | claimed |
+| [09 查看和修正记忆及表达偏好](issues/09-memory-and-preferences.md) | 04 | ready-for-agent | resolved |
 | [10 从现有消息提取并核验候选](issues/10-memory-extraction-verification.md) | 05、09 | ready-for-agent | open |
 | [11 裁决和正式采纳记忆](issues/11-memory-adjudication-adoption.md) | 10 | ready-for-agent | open |
 | [12 查看完整来源和处理追踪](issues/12-source-processing-trace.md) | 11 | ready-for-agent | open |
@@ -33,7 +33,7 @@
 | [25 完成模型与实际桌面验收](issues/25-integrated-acceptance.md) | 24 | ready-for-agent | open |
 | [26 退役 Python 和旧框架](issues/26-retire-python-frameworks.md) | 25 | ready-for-agent | open |
 
-01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。03已在`9f39d6c2`验收，04已在`f4acc05d`/`2dd9ad4a`验收；05、06、09、19、21已派发独立目标会话；18已在`b4276969`/`9a5f6cf0`验收。19的自动删除抑制窄前置见[任务](auto-read-deletion/issues/01-durable-guard.md)，109/Python保护已在`7f4a1729`提交，TS消费归档及整票验收仍需闭合。ready-for-agent表示规格足够清楚，不表示前置已完成。实施时逐票使用新上下文，先读规格、当前规则及最新前置结果；认领时改为claimed，通过验收才改为resolved。
+01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。03已在`9f39d6c2`验收，04已在`f4acc05d`/`2dd9ad4a`验收；05、06、09、19、21已派发独立目标会话；18已在`b4276969`/`9a5f6cf0`验收。19的自动删除抑制窄前置见[任务](auto-read-deletion/issues/01-durable-guard.md)，109/Python保护已在`7f4a1729`提交，TS消费998ec226与窄前置d2698519已验收；19整票仍待完整验收。ready-for-agent表示规格足够清楚，不表示前置已完成。实施时逐票使用新上下文，先读规格、当前规则及最新前置结果；认领时改为claimed，通过验收才改为resolved。
 
 ## 必须先看 DSH，禁止凭猜测修改
 

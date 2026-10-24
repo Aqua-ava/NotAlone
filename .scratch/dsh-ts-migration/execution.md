@@ -10,7 +10,7 @@
 | 主会话 | 总目标、依赖调度、planning及整合验收；不重复实现子会话模块 | 持续协调02—26 |
 | 05回复与模型会话 | reply/retrieval/model模块及测试、05证据 | claimed；完整本地冻结召回/向量对照通过，运行时与宿主待验 |
 | 06Skill会话 | skill模块及测试、06证据 | claimed；领域测试通过，宿主与App待验 |
-| 09记忆偏好会话 | memory/preference及共用managed-update-backups，限定04时间/版本scope参数化 | claimed；根已归档memory/preference组件，最终宿主整合待验 |
+| 09记忆偏好会话 | memory/preference及共用managed-update-backups，限定04时间/版本scope参数化 | 票resolved；根完成闭包、官方宿主与实际App签收 |
 
 18已签收b4276969/9a5f6cf0，108为db1d9cbd；58TS/22Python/32UI、双轴及两轮合成App通过，工具准备原任务保持open。
 04已在f4acc05d/2dd9ad4a验收；05、06、09合同审计已归档，18独立审计已归档于wechat-scope/contract-audit.md；05/06/09/18已分别派发目标实现会话。
@@ -19,13 +19,13 @@
 
 ## 后续调度
 
-02—04、18已验收；05/06/09独占各自领域；19增量同步与21前台定位已开独立目标会话并核验active，各先查锁定官方源码。
+02—04、09、18已验收；05/06独占各自领域，09既有成果已由根整合；19增量同步与21前台定位已开独立目标会话并核验active，各先查锁定官方源码。
 09分层503修复已过37后端/7Python及双轴；21已接线并短占host/app，根09+21官方HTTP联合8/8。恢复后09/21/19已串行完成合成实际App验收，根分别核验stopped/pids空；证据见app-resumption-20261024.md。
 06独立交接/RPC已提交f56bd0be；根在05端口提交后整合既有09/21成果：memory323b5972（19/19）、preferenceacfcc5e0（13/13）、21领域ee2b0a33（串行20/20），各隔离tsc/双轴/scan通过。109删除抑制及19组件已归档，整票仍待宿主最终验证。
 主目标与05现active且无已知额度阻碍；05三依赖端口2546d21d已归档（隔离9/9、双轴0、扫描0）。06/09仍usageLimited，19/21仍blocked，其会话不执行；主目标继续整合已交接成果，不改子目标或重建。05完整验收后才解锁23。
 24等待17、20、21、22、23，25等待24，26等待25；不把预先写空壳当依赖完成。
 自动删除抑制窄前置已开独立目标会话，票auto-read-deletion/issues/01-durable-guard.md，109/Python已在7f4a1729提交，TS独立模块998ec226、Python移交cb0b17b0已归档；窄票d2698519已resolved且goal complete；109归此修复，05未落盘台账顺延110，取代此前预留。根持久恢复单例1/1与移交端口15/15已记录。
-共享8覆盖的verify-integrated-host.py最终官方13/13、隔离tsc0及Python36/36。Spec已知回执误suspend已修并实测；合成CLI首次exec超250ms用有界准备修复，产品预算不改。见integrated-host-validation.md；实际App最终核验待做，05台账/装配仍待验。
+共享8覆盖的verify-integrated-host.py最终官方13/13、隔离tsc0及Python36/36。Spec已知回执误suspend已修并实测；合成CLI首次exec超250ms用有界准备修复，产品预算不改。见integrated-host-validation.md；实际App复核通过并清理，见integrated-app-validation.md；09票已resolved，子目标未改，05台账/装配仍待验。
 
 ## 不可丢失的执行约束
 
