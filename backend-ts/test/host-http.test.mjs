@@ -77,17 +77,57 @@ else process.exit(2);
   ];
   await writeFile(filePath,rows.map(row=>JSON.stringify(row)).join('\n')+'\n');
   const app=await start(t,fixture);
-  assert.equal((await app.request('/api/runtime/status')).data.ownership.imports,'typescript');
+  const ownership=(await app.request('/api/runtime/status')).data.ownership;
+  assert.equal(ownership.imports,'typescript');
+  assert.equal(ownership.taskApi,'typescript');
+  assert.equal(ownership.tasks,'python','任务领取和完成仍归唯一Python Worker');
   assert.equal((await app.request('/api/imports/preview?unexpected=1',{})).status,400);
   const preview=await app.request('/api/imports/preview',{path:filePath,contact_id:contact});
   assert.equal(preview.status,200);assert.equal(preview.data.record_count,2);
   const committed=await app.request('/api/imports/commit',{path:filePath,contact_id:contact,expected_content_sha256:preview.data.content_sha256});
   assert.equal(committed.status,200);assert.equal(committed.data.imported_count,2);
-  assert.equal(committed.data.processing_deferred,true);assert.equal(committed.data.deferred_reason,'worker_unavailable');
+  assert.equal(committed.data.processing_deferred,true);
+  assert.equal(committed.data.deferred_reason,'model_configuration_unavailable');
   assert.deepEqual((await fixture.client.query("SELECT status,current_step FROM background_task")).rows,[{status:'queued',current_step:'parse'}]);
   assert.equal((await fixture.client.query('SELECT count(*)::int AS count FROM message')).rows[0].count,2);
   assert.equal((await fixture.client.query('SELECT count(*)::int AS count FROM model_call_receipt')).rows[0].count,0);
-  await app.request('/api/runtime/shutdown',{});assert.equal(await app.host.waitForExit(7000),true);
+  const taskId=committed.data.task_id,sourceId=(await fixture.client.query('SELECT id FROM source_document')).rows[0].id;
+  const status=await app.request(`/api/tasks/status?contact_id=${contact}&task_id=${taskId}`);
+  assert.equal(status.status,200);
+  assert.deepEqual({id:status.data.task_id,type:status.data.task_type,state:status.data.status,step:status.data.step,
+    count:status.data.message_count,retries:status.data.retry_count},
+  {id:taskId,type:'import',state:'queued',step:'parse',count:2,retries:0});
+  assert.deepEqual(status.data.steps.map(step=>step.name),['parse','normalize','extract_memory','index','verify']);
+  assert.deepEqual(status.data.steps.map(step=>step.status),['pending','pending','pending','pending','pending']);
+  const wrong=await app.request(`/api/tasks/status?contact_id=${randomUUID()}&task_id=${taskId}`);
+  assert.deepEqual(wrong,{status:404,data:{error:'task_not_found'}});
+
+  const run=await app.request('/api/tasks/run',{contact_id:contact,task_id:taskId});
+  assert.deepEqual(run,{status:503,data:{error:'model_configuration_unavailable'}});
+  assert.deepEqual((await fixture.client.query("SELECT status,current_step,retry_count FROM background_task WHERE id=$1",[taskId])).rows,
+    [{status:'queued',current_step:'parse',retry_count:0}]);
+
+  await fixture.client.query("UPDATE source_document SET status='delete_requested' WHERE id=$1",[sourceId]);
+  assert.deepEqual(await app.request('/api/tasks/run',{contact_id:contact,task_id:taskId}),
+    {status:409,data:{error:'task_retry_conflict'}});
+  await fixture.client.query("UPDATE source_document SET status='active' WHERE id=$1",[sourceId]);
+  await fixture.client.query("UPDATE background_task SET status='failed',current_step='extract_memory',last_error_code='memory_extraction_failed' WHERE id=$1",[taskId]);
+  await fixture.client.query("UPDATE background_task_step SET status='failed',last_error_code='memory_extraction_failed' WHERE task_id=$1 AND step_name='extract_memory'",[taskId]);
+  const failedBefore=(await fixture.client.query("SELECT status,current_step,retry_count,last_error_code FROM background_task WHERE id=$1",[taskId])).rows[0];
+  assert.deepEqual(await app.request('/api/tasks/retry',{contact_id:contact,task_id:taskId}),
+    {status:503,data:{error:'model_configuration_unavailable'}});
+  assert.deepEqual((await fixture.client.query("SELECT status,current_step,retry_count,last_error_code FROM background_task WHERE id=$1",[taskId])).rows[0],
+    failedBefore,'模型不可用时不得把失败任务重排');
+  assert.equal((await fixture.client.query('SELECT count(*)::int AS count FROM model_call_receipt')).rows[0].count,0);
+  const inFlight=Array.from({length:4},()=>app.request('/api/tasks/run',{contact_id:contact,task_id:taskId})
+    .catch(error=>error));
+  const shutdown=await app.request('/api/runtime/shutdown',{});
+  assert.equal(shutdown.status,200);
+  for(const response of await Promise.all(inFlight)){
+    assert.equal(response instanceof Error,false,'宿主关闭不得截断在途任务控制响应');
+    assert.ok([200,503].includes(response.status));
+  }
+  assert.equal(await app.host.waitForExit(7000),true);
 });
 
 test('已配置owner与凭据原地恢复，重启不重放迁移',async t=>{

@@ -65,6 +65,8 @@ class FakeTaskService:
 
     def __init__(self) -> None:
         self.run_calls: list[UUID] = []
+        self.wake_calls: list[tuple[UUID, UUID, UUID]] = []
+        self.task_type = "import"
         self.progress = {
             "task_id": str(uuid4()),
             "step": "extract_memory",
@@ -82,7 +84,11 @@ class FakeTaskService:
         return {"status": "started"}
 
     def wake(self, *, owner_id: UUID, contact_id: UUID, task_id: UUID) -> dict[str, object]:
+        self.wake_calls.append((owner_id, contact_id, task_id))
         return {"status": "started"}
+
+    def status(self, *, owner_id: UUID, contact_id: UUID, task_id: UUID) -> dict[str, object]:
+        return {"task_id": str(task_id), "task_type": self.task_type}
 
     def current(self, *, owner_id: UUID, contact_id: UUID) -> dict[str, object]:
         if self.busy:
@@ -100,6 +106,7 @@ class ImportTaskApiContractTest(unittest.TestCase):
             token="test-token",
             import_service=self.imports,  # type: ignore[arg-type]
             task_host=self.tasks,  # type: ignore[arg-type]
+            task_service=self.tasks,  # type: ignore[arg-type]
         )
         self.client = InProcessClient(self.app)
         self.headers = {"Authorization": "Bearer test-token"}
@@ -304,6 +311,53 @@ class ImportTaskApiContractTest(unittest.TestCase):
         self.assertEqual(progress["processed_count"], 12)
         self.assertEqual(progress["attempt_count"], 2)
         self.assertEqual(progress["retry_count"], 1)
+
+    def test_internal_wake_accepts_one_verified_import_identity(self) -> None:
+        task_id = uuid4()
+        response = self.client.request(
+            "POST",
+            "/internal/tasks/wake",
+            headers=self.headers,
+            body=json.dumps({
+                "contact_id": str(CONTACT_ID), "task_id": str(task_id),
+            }).encode("utf-8"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "started"})
+        self.assertEqual(self.tasks.wake_calls, [(OWNER_ID, CONTACT_ID, task_id)])
+        invalid = self.client.request(
+            "POST",
+            "/internal/tasks/wake",
+            headers=self.headers,
+            body=json.dumps({
+                "contact_id": str(CONTACT_ID), "task_id": str(task_id), "scan_all": True,
+            }).encode("utf-8"),
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(invalid.json(), {"error": "import_request_invalid"})
+        query = self.client.request(
+            "POST",
+            "/internal/tasks/wake?scan_all=true",
+            headers=self.headers,
+            body=json.dumps({
+                "contact_id": str(CONTACT_ID), "task_id": str(task_id),
+            }).encode("utf-8"),
+        )
+        self.assertEqual(query.status_code, 400)
+        self.assertEqual(query.json(), {"error": "invalid_request"})
+        self.tasks.task_type = "delete"
+        not_import = self.client.request(
+            "POST",
+            "/internal/tasks/wake",
+            headers=self.headers,
+            body=json.dumps({
+                "contact_id": str(CONTACT_ID), "task_id": str(task_id),
+            }).encode("utf-8"),
+        )
+        self.assertEqual(not_import.status_code, 404)
+        self.assertEqual(not_import.json(), {"error": "task_not_found"})
+        self.assertEqual(len(self.tasks.wake_calls), 1)
 
 
 if __name__ == "__main__":

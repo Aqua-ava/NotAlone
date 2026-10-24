@@ -7,7 +7,9 @@ import {HostStorageError} from './host-storage.ts';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type HistoryImportTransaction=<T>(work:(client:pg.ClientBase)=>Promise<T>)=>Promise<T>;
 export interface HistoryImportScope {ownerId:string;contactId:string}
-export type HistoryImportWake=(scope:HistoryImportScope,taskId:string)=>boolean|void|Promise<boolean|void>;
+export type HistoryImportWakeResult=boolean|void|'started'|'busy'|'queued';
+export type HistoryImportWake=(scope:HistoryImportScope,taskId:string)=>
+  HistoryImportWakeResult|Promise<HistoryImportWakeResult>;
 export interface HistoryImportServiceOptions {
   transaction:HistoryImportTransaction;
   ownerId:string;
@@ -24,6 +26,13 @@ export interface HistoryImportReceipt {
 export class HistoryImportError extends HostStorageError {
   readonly status:number;
   constructor(code:string,status=409){super(code);this.status=status;this.name='HistoryImportError';}
+}
+
+function wakeFailureReason(error:unknown):string{
+  const reason=error&&typeof error==='object'&&'deferredReason' in error
+    ? (error as {deferredReason?:unknown}).deferredReason : undefined;
+  return reason==='worker_unavailable'||reason==='model_configuration_unavailable'
+    ? reason : 'wake_failed';
 }
 
 interface PersistedImport {receipt:HistoryImportReceipt;scope:HistoryImportScope}
@@ -61,8 +70,8 @@ export class HistoryImportService {
       const awakened=await this.wake(persisted.scope,persisted.receipt.task_id);
       if(awakened===false)return {...persisted.receipt,processing_deferred:true,deferred_reason:'worker_unavailable'};
       return persisted.receipt;
-    }catch{
-      return {...persisted.receipt,processing_deferred:true,deferred_reason:'wake_failed'};
+    }catch(error){
+      return {...persisted.receipt,processing_deferred:true,deferred_reason:wakeFailureReason(error)};
     }
   }
 

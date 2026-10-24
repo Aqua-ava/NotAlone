@@ -74,3 +74,28 @@ Spec: ../spec.md
   `/api/imports/preview|commit` 从 Python 路由切到 TS，并注入唯一 ExtractionWorker 的
   `wake`；同时迁移桌面仍读取的 `/api/tasks/status|run|retry`。完整来源删除及索引/候选
   闭包仍由票 17/根统一验收；实际 HTTP、App、500k 上限与真实既有联系人未在本票验证。
+
+2026-10-25（宿主任务适配续作）：
+
+- 根已完成 `/api/imports` 交接；本切片没有重复添加导入路由。新增 TS
+  `/api/tasks/status|run|retry`：`status` 直接按 `owner_id + contact_id + task_id`
+  读取原 PostgreSQL 任务与步骤，错联系人返回 404；`run/retry` 只接受该原导入任务，
+  写控制前复核来源仍为 active，失效时 409 且不调用 Worker。
+- 当前 Python `TaskHost` 仍是唯一生产领取者，TS Worker 未启用。任务控制通过显式
+  `PythonTaskControlGateway` 固定映射到 `/api/tasks/run|retry` 和本机
+  `/internal/tasks/wake`，没有通用 URL 代理、联系人扫描或新任务创建。`retry` 继续走
+  Python，因为模型可用性、固定运行配置、失败步骤恢复和来源复检仍只在 Python 内完整；
+  TS 只做原身份与 active 来源预检，不能安全替代这些门禁。
+- 同一 gateway 在导入事务提交后唤醒原任务。Worker/模型不可用分别保留
+  `worker_unavailable`、`model_configuration_unavailable`，响应仍为
+  `processing_deferred=true`；宿主关闭先拒绝新控制并排空已登记的控制回执，再停止
+  增量、模型/Python 与数据库。
+- 验证：backend-ts 相关 65/65 通过，覆盖真实 DSH HTTP 的同任务身份、错联系人 404、
+  queued 状态、无模型 run/retry 不重排且零模型调用、来源失效冲突、导入提交后固定
+  wake、关闭并发请求及删除任务状态读取；Python `test_import_task_api` 13/13 通过；
+  backend-ts 与 desktop 类型检查通过。测试仅使用随机 `*_test` PostgreSQL、合成身份/
+  JSONL 和临时目录，测试后清理；未运行 App/微信、未使用真实资料或模型、未外发、
+  未打包、未 push。
+- 未覆盖并保持 `claimed`：B 段采纳/trace/watermark/index/verify 仍不完整，本次没有
+  启动第二领取者，也没有以 started/busy 伪造任务成功；完整来源删除、索引与候选失效
+  仍由票 17 和根统一验收，真实 Worker 执行、实际 App/微信与真实模型质量未验证。

@@ -53,14 +53,25 @@ export class LegacyBackend {
       throw new Error('LEGACY_START_FAILED');
     }catch(error){await legacy.stop();throw error;}
   }
-  async control(endpoint:string,method:string,body?:Record<string,unknown>,timeoutMs=5500,signal?:AbortSignal):Promise<{state?:string;active_requests?:number}>{
+  async control(endpoint:string,method:string,body?:Record<string,unknown>,timeoutMs=5500,signal?:AbortSignal):Promise<{
+    state?:string;active_requests?:number;status?:string;task_id?:string;[key:string]:unknown;
+  }>{
     const c=this.connection;if(!c)throw new Error('LEGACY_NOT_READY');
     const response=await fetch(`http://${c.address}${endpoint}`,{method,headers:{Authorization:`Bearer ${c.token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),redirect:'error'});
+    const text=await response.text();
     if(!response.ok){
-      const code=endpoint==='/api/runtime/wechat-scope/revoke' ? ({400:'cli_binding_revoke_invalid',404:'cli_binding_not_found',409:'cli_binding_revoke_busy'} as Record<number,string>)[response.status] ?? 'cli_binding_revoke_failed' : 'legacy_control_failed';
+      let remote:string|undefined;
+      try{
+        const parsed=parseJson(text);
+        if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&'error' in parsed
+          &&typeof parsed.error==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(parsed.error))remote=parsed.error;
+      }catch{}
+      const code=endpoint==='/api/runtime/wechat-scope/revoke'
+        ? ({400:'cli_binding_revoke_invalid',404:'cli_binding_not_found',409:'cli_binding_revoke_busy'} as Record<number,string>)[response.status] ?? 'cli_binding_revoke_failed'
+        : remote??'legacy_control_failed';
       throw new LegacyControlError(response.status,code);
     }
-    return await response.json() as {state?:string;active_requests?:number};
+    return parseJson(text) as {state?:string;active_requests?:number;status?:string;task_id?:string;[key:string]:unknown};
   }
   proxy(req:IncomingMessage,res:ServerResponse,completion?:{settled:()=>void;uncertain:()=>void},mapJson?:(value:unknown)=>Promise<unknown>):void {
     const c=this.connection;

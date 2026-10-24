@@ -28,6 +28,8 @@ import {usageSummary} from './usage-summary.ts';
 import {ExtractionTaskStore} from './extraction-task-store.ts';
 import {ExtractionProgressApi} from './extraction-progress-http.ts';
 import {HistoryImportApi} from './history-import-api.ts';
+import {PostgresTaskStatusStore,TaskApi} from './task-api.ts';
+import {PythonTaskControlGateway} from './task-control.ts';
 export const name = 'notalone-host';
 export const inject = ['appReady','llm','agents','sessions','tools','systemPrompt','skills'];
 
@@ -67,10 +69,16 @@ async function start(ctx: Context) {
   const progress=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId)
     : undefined;
+  const taskControl=new PythonTaskControlGateway();
   const imports=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
-    ? new HistoryImportApi({transaction:work=>storage.businessTransaction(work),ownerId:storage.runtimeOwnerId})
+    ? new HistoryImportApi({
+      transaction:work=>storage.businessTransaction(work),ownerId:storage.runtimeOwnerId,
+      wake:(scope,taskId)=>taskControl.wake(scope,taskId),
+    })
     : undefined;
-  // 唯一 ExtractionWorker 启用后注入 wake；当前未注入时响应如实标记 processing_deferred。
+  const tasks=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
+    ? new TaskApi({ownerId:storage.runtimeOwnerId,store:new PostgresTaskStatusStore(progressPool),control:taskControl})
+    : undefined;
   let legacy: LegacyBackend | undefined;
   let handoff: ContactHandoff | undefined;
   let memoryHandoff: MemoryManagementHandoff | undefined;
@@ -114,9 +122,9 @@ async function start(ctx: Context) {
   let closing: Promise<void> | undefined;
   const closeResources = () => closing ??= (async () => {
     state='stopping';modelRuntime?.stopAccepting();
-    // 保留增量→范围/资料门禁→模型/Python→数据库顺序；一项失败仍收尾后续资源。
+    // 先排空任务控制，再保留增量→范围/资料门禁→模型/Python→数据库顺序。
     const failures:unknown[]=[];
-    for(const release of [()=>incremental.close(),
+    for(const release of [()=>taskControl.close(),()=>incremental.close(),
       async()=>{
         const closed=await Promise.allSettled([()=>foreground.close(),()=>wechatScope.close(),
           ()=>handoff?.close(),()=>memoryHandoff?.close(),()=>skills.close()].map(release=>Promise.resolve().then(release)));
@@ -172,7 +180,7 @@ async function start(ctx: Context) {
         }:undefined);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus}}:{}),ownership:{...ownership,skills:skills.status().owner,imports:imports?'typescript':'python',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus}}:{}),ownership:{...ownership,skills:skills.status().owner,imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
@@ -182,6 +190,14 @@ async function start(ctx: Context) {
         if(url.search){respond(400,{error:'import_request_invalid'});return;}
         const body=req.method==='POST'?await readBody(req):undefined;
         const result=await imports.handle(req.method??'',url.pathname,body);
+        if(!result){respond(404,{error:'not_found'});return;}
+        respond(result.status,result.body);return;
+      }
+      if(url.pathname==='/api/tasks/status'||url.pathname==='/api/tasks/run'||url.pathname==='/api/tasks/retry'){
+        if(!tasks){respond(503,{error:'task_unavailable'});return;}
+        if(req.method==='POST'&&url.search){respond(400,{error:'import_request_invalid'});return;}
+        const body=req.method==='POST'?await readBody(req):undefined;
+        const result=await tasks.handle(req.method??'',url.pathname,url.searchParams,body);
         if(!result){respond(404,{error:'not_found'});return;}
         respond(result.status,result.body);return;
       }
@@ -351,6 +367,7 @@ async function start(ctx: Context) {
       NOTALONE_WECHAT_SCOPE_URL:`http://127.0.0.1:${address.port}`,NOTALONE_WECHAT_SCOPE_TOKEN:scopeToken,
       NOTALONE_SYNC_INCREMENTAL_URL:`http://127.0.0.1:${address.port}`,NOTALONE_SYNC_INCREMENTAL_TOKEN:incrementalToken,
       NOTALONE_SYNC_INCREMENTAL_TRANSFERRED:'1'},terminate);
+    taskControl.bind(legacy);
     handoff=new ContactHandoff(storage,legacy);
     memoryHandoff=new MemoryManagementHandoff(storage,legacy);
   } catch(error) {

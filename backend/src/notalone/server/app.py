@@ -461,6 +461,17 @@ _ROUTE_TABLE: tuple[_Route, ...] = (
             body=request.body,
         ),
     ),
+    # TS宿主专用固定唤醒入口；不开放任意任务控制或通用代理。
+    _Route(
+        None,
+        lambda p: p == "/internal/tasks/wake",
+        lambda app, request: app._handle_internal_task_wake(
+            method=request.method,
+            path=request.path,
+            headers=request.headers,
+            body=request.body,
+        ),
+    ),
     # 账本摘要。
     _Route(
         None,
@@ -2728,6 +2739,72 @@ class BackendApp:
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {"error": "source_processing_write_failed"},
                 headers={"Cache-Control": "no-store"},
+            )
+
+    def _handle_internal_task_wake(
+        self,
+        *,
+        method: str,
+        path: str,
+        headers: Mapping[str, str],
+        body: bytes,
+    ) -> Response:
+        """只唤醒调用方已核验的原导入任务，执行租约仍由唯一 TaskHost 领取。"""
+
+        if self._task_host is None or self._task_service is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "import_task_unavailable"},
+            )
+        if _header_value(headers, "Origin"):
+            return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+        if path != "/internal/tasks/wake":
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+        try:
+            if method != "POST":
+                raise ImportTaskRequestInvalid()
+            payload = _parse_task_json(body)
+            if set(payload) != {"contact_id", "task_id"}:
+                raise ImportTaskRequestInvalid()
+            values: dict[str, UUID] = {}
+            for name in ("contact_id", "task_id"):
+                value = payload[name]
+                if not isinstance(value, str):
+                    raise ImportTaskRequestInvalid()
+                try:
+                    values[name] = UUID(value)
+                except ValueError:
+                    raise ImportTaskRequestInvalid() from None
+            task = self._task_service.status(
+                owner_id=self._owner_id,
+                contact_id=values["contact_id"],
+                task_id=values["task_id"],
+            )
+            if task.get("task_type") != "import":
+                raise BackgroundTaskNotFoundError("指定范围内不存在该导入任务。")
+            return _json_response(
+                HTTPStatus.OK,
+                self._task_host.wake(
+                    owner_id=self._owner_id,
+                    contact_id=values["contact_id"],
+                    task_id=values["task_id"],
+                ),
+            )
+        except ImportTaskRequestInvalid:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "import_request_invalid"},
+            )
+        except BackgroundTaskNotFoundError:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "task_not_found"})
+        except BackgroundTaskStateError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "task_retry_conflict"})
+        except BackgroundTaskPersistenceError:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "task_unavailable"},
+            )
+        except ModelWorkStopped:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "model_configuration_unavailable"},
             )
 
     def _dispatch_import_task(
