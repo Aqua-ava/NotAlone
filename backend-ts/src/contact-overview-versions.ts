@@ -35,7 +35,7 @@ export async function projectEvolution(client:Client,row:Row):Promise<{current:R
   }
   return {current:stored,stored};
 }
-export async function projectVersionEvidence(client:Client,row:Row,storedEvolution:Row|null):Promise<{evidence:Row|null;current:boolean;canRevert:boolean}> {
+export async function projectVersionEvidence(client:Client,row:Row,storedEvolution:Row|null,scope:'contact'|'owner'='contact'):Promise<{evidence:Row|null;current:boolean;canRevert:boolean}> {
   const evidence=row.version_evidence??null;
   if(!evidence) return {evidence:null,current:false,canRevert:false};
   const keys=['version','previous','current','previous_window','current_window'];
@@ -59,10 +59,11 @@ export async function projectVersionEvidence(client:Client,row:Row,storedEvoluti
       await validateFrozen(client,row.owner_id,window);
       if(!await decisionAvailable(client,row.owner_id,window)) return {evidence,current:false,canRevert:false};
     }
-    const previous=(await client.query('SELECT to_jsonb(memory) AS value FROM public.confirmed_memory memory WHERE owner_id=$1 AND id=$2',
+    const table=scope==='owner'?'owner_memory':'confirmed_memory';
+    const previous=(await client.query(`SELECT to_jsonb(memory) AS value FROM public.${table} memory WHERE owner_id=$1 AND id=$2`,
       [row.owner_id,evidence.previous.memory_id])).rows[0]?.value;
     const available=previous && previous.status==='invalidated' && row.supersedes_memory_id===evidence.previous.memory_id
-      && previous.contact_id===row.contact_id && previous.revision===evidence.previous.revision+1
+      && (scope==='owner'||previous.contact_id===row.contact_id) && previous.revision===evidence.previous.revision+1
       && overviewRecordDigest(previous,normalizeEvolution(previous.evolution),evidence.previous.revision,evidence.previous.invalid_at)===evidence.previous.record_sha256;
     current=Boolean(available&&row.id===evidence.current.memory_id&&row.revision===evidence.current.revision
       &&overviewRecordDigest(row,storedEvolution)===evidence.current.record_sha256);

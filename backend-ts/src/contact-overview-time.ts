@@ -55,13 +55,13 @@ function interval(text: string, anchor: string | null): [number,number,string,st
   else { if(['明天','明日'].includes(match[0])) a+=86400000;b=a+86400000; }
   return [a,b,localISO(a,zone),localISO(b,zone)];
 }
-export async function projectTiming(client: Client,row:Row):Promise<Row> {
+export async function projectTiming(client: Client,row:Row,scope: 'contact'|'owner' = 'contact'):Promise<Row> {
   const rows=(await client.query(`SELECT message.id,message.occurred_at::text AS occurred_at,message.text_content,
     ARRAY(SELECT ref.raw_payload->>'time_iso' FROM public.message_source_ref ref
       WHERE ref.message_id=message.id AND ref.owner_id=message.owner_id AND ref.contact_id=message.contact_id AND ${activeRef}) AS source_times
-    FROM public.message message WHERE message.owner_id=$1 AND message.contact_id=$2 AND message.id=ANY($3::uuid[])
+    FROM public.message message WHERE message.owner_id=$1 AND ($4::boolean OR message.contact_id=$2) AND message.id=ANY($3::uuid[])
     AND EXISTS(SELECT 1 FROM public.message_source_ref ref WHERE ref.message_id=message.id AND ref.owner_id=message.owner_id
-      AND ref.contact_id=message.contact_id AND ${activeRef})`,[row.owner_id,row.contact_id,row.source_ids])).rows;
+      AND ref.contact_id=message.contact_id AND ${activeRef})`,[row.owner_id,row.contact_id??null,row.source_ids,scope==='owner'])).rows;
   const known=new Map<string,{time:string|null;anchor:string|null;text:string}>();
   for(const item of rows) {
     const anchors:string[]=item.source_times.filter((value:any)=>item.occurred_at!==null && typeof value==='string' && /(Z|[+-]\d\d:\d\d)$/.test(value)
