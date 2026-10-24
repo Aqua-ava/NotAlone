@@ -22,7 +22,7 @@
 
 - 已在 `0e835b0d` 之后将 `SourceProcessingTraceStore`／`SourceProcessingTraceApi` 接入现有 `progressPool`，位置在通用认证之后、legacy proxy 之前。
 - 单文件真实 PG 适配器回归 2/2、相关模块回归 41/41、TypeScript 类型检查均通过。
-- 仍待根用 `npm run dev` 与实际 App 对 `ran` 联系人做只读追踪验收；票保持 `claimed`。
+- 已完成 `npm run dev` + 实际 App 对 `ran` 的只读追踪验收：实际来源处理批次、93 条详情与消息反查均可见；未删除、未修改资料、未发送外部消息。
 
 ## 协议与兼容
 

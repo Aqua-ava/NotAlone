@@ -75,9 +75,17 @@ issues: 0
 
 ## 未覆盖与后续
 
-- `host-plugin.ts` 未修改；根需按补丁接入并独占实际 App／微信验收。
+- 根已按补丁接入 `host-plugin.ts`，并独占完成实际 App 只读验收。
 - `SourceProcessingTraceApi` 仅以真实 `URL` 直接调用适配器验证路由与状态码；没有启动 DSH host／HTTP server。来源删除回归直接调用共享 erasure seam，没有经过完整来源删除任务入口。
 - Python 仍是现有完整追踪写入方与 `batch_end`／watermark 原子尾提交方；宿主切换 B 段时必须完成票 11 的业务唯一写方移交。
 - DSH 实际最终 wire 捕获、真实 ModelHost ACK／台账和真实模型质量仍由票 05／24／25 验收。
 - 桌面任务导航 UI／控制器尚未增加；本票只交付服务与 HTTP 入口。
 - 整联系人／账户的最小台账与可恢复副本彻底清除仍由票 17／24 负责。
+
+## 根级实际 App 验收
+
+- 日期：2026-10-25。使用临时官方 Node 24.22.1 启动 `npm run dev`，开发监督器与唯一 `--notalone-dev` 宿主正常存活。
+- 因既有模型许可 journal 含 5 条已核实旧 PID 消失的 `unknown`，Python 默认回退按要求 fail-closed；仅对本次开发进程显式设置 `NOTALONE_REPLY_RUNTIME=typescript`，未改 `.env` 或默认切换。
+- 在 App 选择验收联系人 `ran`：显示 78 条文字、历史覆盖“完整”、已读取 1 页。
+- 设置 → 高级 → 开发者调试 → 来源处理：列出 1 个实际批次，详情显示 93 条原始记录／规范化记录；按其中消息 ID 反查回到同一批次。
+- 全程只读，未点击“删除这份过程记录”，未修改联系人资料或记忆，未发送外部消息，未调用新模型。
