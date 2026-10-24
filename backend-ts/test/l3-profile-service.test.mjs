@@ -547,6 +547,50 @@ test('合成PG：仅剩提案与核验两次额度时仍完成并保留一次核
   } finally { await f.close(); }
 });
 
+test('合成PG：多轮提案压缩历史后在预算内完成核验与发布', async () => {
+  const f = await createStorageFixture();
+  try {
+    const constrained = {...budget, max_characters:6_000};
+    const x = await createScope(f);
+    await f.client.query(`UPDATE layered_memory_job SET model_calls_used=0
+      WHERE task_id=$1`, [x.taskId]);
+    let calls = 0;
+    const port = {async call(input) {
+      calls++;
+      await input.requireCurrent();
+      const tool = (name,args) => ({
+        blocks:[{type:'tool-call',id:`compact-${calls}`,name,arguments:JSON.stringify(args)}],
+        receipt_id:randomUUID(),
+      });
+      if (calls < 5) return tool('write', {
+        path:'profile.md',
+        content:renderProfile({entries:[{
+          ...entry(x.memory),
+          text:`第${calls}轮合成课程背景。`,
+          basis:`第${calls}轮依据。${'合成依据'.repeat(70)}`,
+        }]}),
+      });
+      if (calls === 5) return {blocks:[],receipt_id:randomUUID()};
+      if (calls === 6) return tool('ProfileVerificationOutput', {results:[{
+        entry_index:0,
+        supported:true,
+        evidence:[{memory_id:x.memoryId,quote:x.memory.text}],
+      }]});
+      throw new Error('unexpected_compacted_profile_call');
+    }};
+    const ready = await service(f, port, {budget:constrained}).run(
+      x.scope,
+      x.claim,
+      new AbortController().signal,
+    );
+    assert.equal(calls, 6);
+    assert.equal(ready.status, 'ready');
+    assert.equal(ready.error_code, null);
+    assert.equal(ready.profile.entries[0].text, '第4轮合成课程背景。');
+    assert.equal(ready.organization_generation, 2);
+  } finally { await f.close(); }
+});
+
 test('合成PG：画像撤回同步清除依赖回复并保留合法L2', async () => {
   const f = await createStorageFixture();
   try {

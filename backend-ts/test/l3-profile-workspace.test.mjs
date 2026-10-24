@@ -5,6 +5,7 @@ import {
   L3ProfileWorkspace,
   filterProfileProposal,
   renderProfile,
+  runProfileDocumentAgent,
   validateIncrementalProfile,
   validateProfile,
   verifyProfileProposal,
@@ -155,4 +156,59 @@ test('L3核验输入超预算时在物理调用前拒绝', async () => {
     corrections:[],
   }), /context_budget/);
   assert.equal(port.calls, 0);
+});
+
+test('L3多轮提案压缩已执行工具历史，不以旧写入参数耗尽下一轮预算', async () => {
+  const constrained = {...budget, max_characters:6_000};
+  const workspace = new L3ProfileWorkspace(null, [scenario], [memory], constrained);
+  let calls = 0, compacted;
+  const port = {async call(input) {
+    calls++;
+    if (calls < 5) {
+      return {
+        blocks:[{
+          type:'tool-call',
+          id:`profile-round-${calls}`,
+          name:'write',
+          arguments:JSON.stringify({
+            path:'profile.md',
+            content:renderProfile({entries:[{
+              ...entry,
+              text:`第${calls}轮合成课程背景。`,
+              basis:`第${calls}轮依据。${'合成依据'.repeat(70)}`,
+            }]}),
+          }),
+        }],
+        receipt_id:randomUUID(),
+      };
+    }
+    compacted = JSON.parse(input.messages.at(-1).content.find(block => block.type === 'text').text);
+    return {blocks:[],receipt_id:randomUUID()};
+  }};
+  const result = await runProfileDocumentAgent({
+    workspace,
+    existing:null,
+    scenarios:[scenario],
+    memories:[memory],
+    changedScenarios:[scenario],
+    removedScenarioVersionIds:[],
+    baseProfileVersionId:null,
+    corrections:[],
+    port,
+    claim:{task_id:randomUUID(),step_id:randomUUID(),step_name:'organize_memory',worker_id:randomUUID(),lease_generation:1},
+    owner_id:randomUUID(),
+    contact_id:randomUUID(),
+    batch_id:randomUUID(),
+    binding:{provider:'synthetic-provider',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off'},
+    profile:{context_window_tokens:32_000,safety_margin_tokens:512},
+    signal:new AbortController().signal,
+    requireCurrent:async()=>{},
+    remainingCalls:6,
+  });
+  assert.equal(calls, 5);
+  assert.match(result.proposal.entries[0].text, /第4轮/);
+  assert.equal(compacted.history_compacted, true);
+  assert.equal(compacted.completed_tool_calls[0].name, 'write');
+  assert.match(compacted.current_profile_markdown, /第4轮合成课程背景/);
+  assert.doesNotMatch(JSON.stringify(compacted), /profile-round-/);
 });

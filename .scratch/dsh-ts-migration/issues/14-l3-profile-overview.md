@@ -73,7 +73,7 @@ Spec: ../spec.md
 ### 验证结果
 
 - `node node_modules/typescript/bin/tsc --noEmit`：通过。
-- L3 工作区、服务、公开 HTTP：`23/23` 通过，覆盖增量／无变化跳过、generation 精确闭合、部分旧场景失效后重建、亚毫秒时间资格、核验输入预算、本人／联系人隔离、纠错、撤回、来源物理删除、晚结果、取消重试、仅剩两次额度及 HTTP 错误映射。
+- L3 工作区、服务、公开 HTTP：`25/25` 通过，覆盖增量／无变化跳过、generation 精确闭合、部分旧场景失效后重建、亚毫秒时间资格、核验输入预算、多轮工具历史压缩、本人／联系人隔离、纠错、撤回、来源物理删除、晚结果、取消重试、仅剩两次额度及 HTTP 错误映射。
 - L2 服务、Worker、宿主及模型记账：`25/25` 通过，覆盖 L2→L3 同租约、成功 L2 回执只补 L3、Worker 完成后收口、共享预算和 pending 幂等。
 - 共享官方 DSH profile、分层回复读取、Skill 来源导航：`26/26` 通过（`9/9`、`17/17`），覆盖 6 次真实合成模型请求的 L2→L3、公开撤回、回复／审核来源的当前 generation 核验与冻结快照失效。
 - 桌面类型检查通过；长期背景可见、引用、逐条修正／删除和整份撤回入口专项用例 `7/7` 通过。
@@ -85,3 +85,9 @@ Spec: ../spec.md
 - 自动化只使用测试临时 PostgreSQL 与合成模型／来源；测试 fixture 自动销毁数据库，无真实消息发送或外部资料扩大。
 - 正式数据库仅做只读状态核对，未写入画像、任务或验收结果。当前等待根线程复用已运行的 `npm run dev` 实例，从正式范围的有效性检查出发完成实际 App／微信恢复、画像查看／纠错／撤回和真实模型质量验收；不得用测试库结果代替。全量回归中的既有清理失败也须在最终验收前复查。
 - 未执行打包、推送、远端分支、PR、外部消息或 DSH 核心修改。
+
+### 真实验收阻塞诊断
+
+- 现场：owner `6b0faa77-8bcf-4a14-a627-7629265624da`、task `0c5b9add-5006-4cfe-aef3-4c964b5d22ce`、job revision `13`、model calls `31/208`、`run_remaining=1`。唯一 profile batch 的 20 项输入与 59,328 字节 payload 已冻结，`output_payload=null`；4 个新增 receipt 全部成功，最后一次请求序列化 134,298 字节，随后在第五轮物理调用前触发 `l3_profile_context_budget_exceeded`。因此失败发生在多轮提案历史累积，不在核验、重试或初始输入。
+- 修复：达到既有 `max_characters` 时保留初始任务消息和当前 `profile.md`，移除已执行且可由工作区重建的旧 tool-call 参数，只携带最后一次工具名称／错误；未提高或取消预算。先在快速回归中稳定复现同一错误，再通过 workspace 与合成 PostgreSQL 发布用例。
+- 可重新 continue 的前置条件：当前 dev runtime 已加载本修复；正式 state 仍为 settings generation `0`、job revision `13`、job failed，且当前目标 key／资料集合未变化。根线程使用 revision `13` 发起 continue 后应得到 revision `14`、state active、step pending；新一轮模型调用上限会按既有合同增加 `16` 到 `224`。
