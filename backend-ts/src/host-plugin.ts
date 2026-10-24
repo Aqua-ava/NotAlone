@@ -123,7 +123,7 @@ async function start(ctx: Context) {
     let url: URL;
     try {url=new URL(req.url??'','http://localhost');}catch {respond(400,{error:'invalid_request'});return;}
     // 私有候选先自行认证；公共token及其他内部token都不能进入这条信道。
-    if((req.url??'').startsWith('/internal/reply')){
+    if((req.url??'').startsWith('/internal/reply')||(req.url??'').startsWith('/internal/extraction')){
       if(!modelRuntime){respond(401,{error:'unauthorized'});return;}
       if(!await modelRuntime.handle(req,res))respond(404,{error:'not_found'});return;
     }

@@ -24,6 +24,8 @@ export interface HostModelRuntimeOptions {
 /** 默认Python只是一项启动决定，不安装提供者或第二套后台仲裁器。 */
 export async function startHostModelRuntime(options:HostModelRuntimeOptions){
   const environment=options.environment,mode=environment.NOTALONE_REPLY_RUNTIME??'python';
+  const extractionMode=environment.NOTALONE_EXTRACTION_RUNTIME??'python';
+  if(!['python','typescript'].includes(extractionMode)||extractionMode==='typescript'&&mode!=='typescript')throw new HostModelRuntimeError('extraction_runtime_ownership_invalid');
   if(mode!=='python'&&mode!=='typescript')throw new HostModelRuntimeError('reply_runtime_invalid');
   if(mode==='python'){
     if(environment.NOTALONE_REPLY_REMOTE_URL!==undefined||environment.NOTALONE_REPLY_REMOTE_TOKEN!==undefined
@@ -44,7 +46,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
   // Python010/真实transport使用供应商名deepseek；不拿TS内部路由名替代其台账身份。
   let currentHost:Awaited<ReturnType<typeof startModelHost>>|undefined;
   const accounting=createHostModelAccounting({transaction,...(configuration.status==='configured'&&!unavailable
-    ?{provider:'deepseek',model:configuration.model.model}:{route:null}),
+    ?{provider:'deepseek',typescriptProvider:configuration.provider.provider,model:configuration.model.model}:{route:null}),
     unconfirmedPermitIds:()=>{
       if(!currentHost)throw new HostModelRuntimeError('model_runtime_starting');
       return currentHost.unconfirmedPermitIds();
@@ -70,7 +72,8 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
         provider:{...configuration.provider,resolveUserId:()=>anonymousId}};
     }
     reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
-      ledger,token,configuration:activeConfiguration});
+      ledger,token,configuration:activeConfiguration,extractionEnabled:extractionMode==='typescript',
+      extractionPermit:{path:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_SOCKET,token:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_TOKEN}});
     const runtime=reply;
     let closing:Promise<void>|undefined;
     const stopAccepting=()=>{runtime.stopAccepting();modelHost.arbiter.stop();};
@@ -80,11 +83,13 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
         if(!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}$/.test(address))throw new HostModelRuntimeError('reply_remote_address_invalid');
         return {...modelHost.pythonEnvironment,NOTALONE_REPLY_RUNTIME:'typescript',
           NOTALONE_REPLY_REMOTE_URL:address,NOTALONE_REPLY_REMOTE_TOKEN:token,
+          ...(extractionMode==='typescript'?{NOTALONE_EXTRACTION_RUNTIME:'typescript',NOTALONE_EXTRACTION_REMOTE_URL:address,NOTALONE_EXTRACTION_REMOTE_TOKEN:token}:{}),
           // 仅宿主到本次Legacy的允许列表协议；配置保存后整体重启，不热切换。
           NOTALONE_MODEL_UNCONFIGURED_REASON:unavailable??'',
           ...(!ownerConfigured?{NOTALONE_OWNER_ID:''}:{})};
       },
       handle(req:IncomingMessage,res:ServerResponse){return runtime.handle(req,res);},
+      callExtraction:runtime.callExtraction,
       stopAccepting,
       close(stopPython:()=>Promise<void>):Promise<void>{
         return closing??=(async()=>{

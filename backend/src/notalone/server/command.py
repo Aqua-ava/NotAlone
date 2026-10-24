@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 from uuid import UUID
+from weakref import WeakSet
 
 if TYPE_CHECKING:
     # 装配函数内仍按需局部导入，避免启动路径拉起全部应用服务；
@@ -422,8 +423,31 @@ def _build_task_host(
         model_priority.unconfirmed_requests
         if isinstance(model_priority, SharedModelPriorityControl) else None
     )
+    extraction_runtime = os.environ.get("NOTALONE_EXTRACTION_RUNTIME", "python")
+    if extraction_runtime not in {"python", "typescript"}:
+        raise ValueError("extraction_runtime_invalid")
+    if extraction_runtime == "typescript" and not isinstance(model_priority, SharedModelPriorityControl):
+        raise ValueError("extraction_runtime_shared_host_required")
+    # 活跃Worker持有自己的历史教学与账务；停止登记不延长已结束Worker的模型寿命。
+    remote_resources = WeakSet()
+    remote_resource_lock = threading.Lock()
+    remote_stopping = False
+
+    def stop_remote_resources() -> None:
+        nonlocal remote_stopping
+        with remote_resource_lock:
+            remote_stopping = True
+            resources = tuple(remote_resources)
+            remote_resources.clear()
+        for resource in resources:
+            resource.close()
 
     def build_worker() -> BackgroundTaskWorker:
+        with remote_resource_lock:
+            stopping = remote_stopping
+        if stopping:
+            from notalone.application.model_priority import ModelWorkStopped
+            raise ModelWorkStopped("runtime_stopping")
         if not model_work_available:
             from notalone.tasks.models import DELETE_TASK_STEPS
             return BackgroundTaskWorker(
@@ -447,12 +471,28 @@ def _build_task_host(
             accounting = MemoryCallAccounting(
                 components.ledger, model_name=components.model_name,
             )
+            legacy_extraction = PriorityExtractionRuntime(
+                DirectExtractionRuntime(model=components.model), model_priority,
+                accounting=accounting,
+            )
+            selected_extraction = legacy_extraction
+            if extraction_runtime == "typescript":
+                from notalone.application.extraction_remote import RemoteExtractionRuntime
+
+                selected_extraction = RemoteExtractionRuntime.from_environment(
+                    os.environ, historical_runtime=legacy_extraction,
+                )
+                with remote_resource_lock:
+                    stopping = remote_stopping
+                    if not stopping:
+                        remote_resources.add(selected_extraction)
+                if stopping:
+                    selected_extraction.close()
+                    from notalone.application.model_priority import ModelWorkStopped
+                    raise ModelWorkStopped("runtime_stopping")
             extraction = AccountedExtractionRunner(PostgresMemoryExtractionRunner(
                 database_url,
-                runtime=PriorityExtractionRuntime(
-                    DirectExtractionRuntime(model=components.model), model_priority,
-                    accounting=accounting,
-                ),
+                runtime=selected_extraction,
                 verification_runtime=PriorityVerificationRuntime(
                     LangChainSourceVerificationRuntime(
                     isolate_items=True,
@@ -522,6 +562,7 @@ def _build_task_host(
             model_priority=model_priority,
             task_repository=PostgresBackgroundTaskRepository(database_url, unconfirmed_model_requests=unconfirmed_model_requests),
             model_work_available=model_work_available,
+            stop_callback=stop_remote_resources,
         )
     except Exception as error:
         # 任务宿主装配失败会让导入后的后台提取停在待执行；保留稳定告警，

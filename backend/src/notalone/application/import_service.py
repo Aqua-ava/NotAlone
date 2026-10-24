@@ -160,6 +160,7 @@ class TaskHost:
         "_worker_builder",
         "_model_priority",
         "_model_work_available",
+        "_stop_callback",
         "_stopped",
         "_stop_complete",
         "_connections",
@@ -178,6 +179,7 @@ class TaskHost:
         model_priority: ModelPriorityControl | None = None,
         task_repository: PostgresBackgroundTaskRepository | None = None,
         model_work_available: bool = True,
+        stop_callback: Callable[[], None] | None = None,
     ) -> None:
         if type(model_work_available) is not bool:
             raise TypeError("模型任务能力必须是布尔值。")
@@ -186,6 +188,7 @@ class TaskHost:
         self._event_publisher = event_publisher
         self._model_priority = model_priority
         self._model_work_available = model_work_available
+        self._stop_callback = stop_callback
         self._task_repository = task_repository
         self._schedule_thread = None
         self._stopped = threading.Event()
@@ -330,6 +333,10 @@ class TaskHost:
         """拒绝新工作并有界等待；无法中断的旧调用依靠原租约恢复。"""
 
         self._stopped.set()
+        with self._lock:
+            stop_callback, self._stop_callback = self._stop_callback, None
+        if stop_callback is not None:
+            stop_callback()
         if self._model_priority is not None:
             self._model_priority.stop()
         if self._stop_complete.is_set():

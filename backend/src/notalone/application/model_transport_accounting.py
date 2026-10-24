@@ -293,6 +293,19 @@ class AsyncAccountingTransport(httpx.AsyncBaseTransport):
 _TASK: ContextVar[tuple | None] = ContextVar('physical_model_task', default=None)
 
 
+def current_physical_task_metadata() -> Mapping[str, object] | None:
+    """返回本线程已显式进入的原任务身份；不暴露许可控制器或派发能力。"""
+    task = _TASK.get()
+    if task is None:
+        return None
+    _, request_id, owner_id, contact_id, scope_kind, _, claim = task
+    return MappingProxyType({
+        "request_id": request_id, "owner_id": owner_id,
+        "contact_id": contact_id, "scope_kind": scope_kind,
+        "claim": MappingProxyType(dict(claim)) if claim is not None else None,
+    })
+
+
 @contextmanager
 def physical_model_task(control, *, request_id: UUID, owner_id: UUID, contact_id: UUID | None,
                         scope_kind: str = 'contact', before_dispatch=None, claim: Mapping[str, object] | None = None):

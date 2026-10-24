@@ -64,8 +64,8 @@ class _TimedExtractionRuntime:
     """只测量首次提取调用，避免核验和采纳耗时重复进入其台账。"""
 
     runtime: MemoryExtractionRuntime
-    called_at: datetime = field(init=False)
-    latency_ms: int = field(init=False)
+    called_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc), init=False)
+    latency_ms: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if self.runtime is None:
@@ -80,6 +80,20 @@ class _TimedExtractionRuntime:
             self.latency_ms = max(
                 0, int((time.perf_counter() - started) * 1000)
             )
+
+    @property
+    def run_remote_flow(self):
+        remote = getattr(self.runtime, "run_remote_flow", None)
+        if not callable(remote):
+            return None
+        def run(window):
+            self.called_at = datetime.now(timezone.utc)
+            started = time.perf_counter()
+            try:
+                return remote(window)
+            finally:
+                self.latency_ms = max(0, int((time.perf_counter() - started) * 1000))
+        return run
 
 
 @dataclass(frozen=True, slots=True)
@@ -391,6 +405,12 @@ def _commit_batch(
     """
 
     outcome = extraction.outcome
+    remote_a = getattr(extraction.outcome, "model_accounting_owner", "python") == "typescript"
+    if remote_a:
+        trace.typescript_a_receipt = {
+            key: str(getattr(extraction.outcome, key))
+            for key in ("a_execution_id", "a_input_sha256", "a_rule_version")
+        }
     adoption_stats = AdoptionStats()
     try:
         if outcome.failure_reason is None:
@@ -410,19 +430,20 @@ def _commit_batch(
         )
     progress.processed_messages += len(plan.batch)
     progress.batches += 1
-    _record_extraction_ledger(
-        ledger,
-        scope,
-        (
-            LedgerOutcome.SUCCEEDED
-            if outcome.extraction_completed
-            else LedgerOutcome.RUN_FAILED
-        ),
-        latency_ms=extraction.latency_ms,
-        called_at=extraction.called_at,
-        provider=provider,
-        model_name=model_name,
-    )
+    if not remote_a:
+        _record_extraction_ledger(
+            ledger,
+            scope,
+            (
+                LedgerOutcome.SUCCEEDED
+                if outcome.extraction_completed
+                else LedgerOutcome.RUN_FAILED
+            ),
+            latency_ms=extraction.latency_ms,
+            called_at=extraction.called_at,
+            provider=provider,
+            model_name=model_name,
+        )
     if outcome.failure_reason is None:
         progress.extracted += extraction.extracted
         progress.adopted += adoption_stats.adopted
