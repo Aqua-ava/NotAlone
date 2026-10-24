@@ -18,6 +18,12 @@
 4. 用同一条路由门禁选择 TS 或 Python 责任，不做请求级双读写回退。根切换时保持 trace 查询无需模型运行；宿主退出继续由原 `progressPool.end()` 排在模型和 Python 排空之后。
 5. 本票不提交 `host-plugin.ts` 改动；精确 patch 见 `host-integration.patch`，需在主树集成时重新核对行号与当前路由顺序。
 
+## 根集成结果
+
+- 已在 `0e835b0d` 之后将 `SourceProcessingTraceStore`／`SourceProcessingTraceApi` 接入现有 `progressPool`，位置在通用认证之后、legacy proxy 之前。
+- 单文件真实 PG 适配器回归 2/2、相关模块回归 41/41、TypeScript 类型检查均通过。
+- 仍待根用 `npm run dev` 与实际 App 对 `ran` 联系人做只读追踪验收；票保持 `claimed`。
+
 ## 协议与兼容
 
 - 保留现有桌面控制器所需字段：列表 `batches`／`next_before`；详情 `trace_id`／`batch_id`、`status`、`events` 或 `records`、`calls`、`links`、`write_receipts`、`candidates`。

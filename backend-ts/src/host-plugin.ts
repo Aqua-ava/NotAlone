@@ -28,6 +28,8 @@ import {startHostModelRuntime} from './host-model-runtime.ts';
 import {usageSummary} from './usage-summary.ts';
 import {ExtractionTaskStore} from './extraction-task-store.ts';
 import {ExtractionProgressApi} from './extraction-progress-http.ts';
+import {SourceProcessingTraceStore} from './source-processing-trace.ts';
+import {SourceProcessingTraceApi} from './source-processing-trace-http.ts';
 import {HistoryImportApi} from './history-import-api.ts';
 import {PostgresTaskStatusStore,TaskApi} from './task-api.ts';
 import {PythonTaskControlGateway} from './task-control.ts';
@@ -69,6 +71,9 @@ async function start(ctx: Context) {
   const progressPool=await storage.businessPool();
   const progress=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId)
+    : undefined;
+  const traces=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
+    ? new SourceProcessingTraceApi(new SourceProcessingTraceStore(progressPool),storage.runtimeOwnerId)
     : undefined;
   const taskControl=new PythonTaskControlGateway();
   const imports=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
@@ -223,6 +228,14 @@ async function start(ctx: Context) {
         if(req.method==='POST'&&url.pathname.includes('/memory-processing')){
           respond(400,{error:'memory_processing_request_invalid'});return;
         }
+      }
+      const tracePath=/^\/api\/contacts\/[^/]+\/(?:memory-traces|source-processing-traces)(?:\/|$)/.test(url.pathname);
+      if(tracePath){
+        if(!traces){respond(503,{error:'source_processing_trace_unavailable'});return;}
+        if(req.method!=='GET'&&req.method!=='DELETE'){respond(405,{error:'method_not_allowed'});return;}
+        const result=await traces.handle(req.method,url);
+        if(!result){respond(404,{error:'not_found'});return;}
+        respond(result.status,result.body);return;
       }
       if(url.pathname==='/api/ledger/summary'){
         if(req.method!=='GET'){respond(405,{error:'method_not_allowed'});return;}
