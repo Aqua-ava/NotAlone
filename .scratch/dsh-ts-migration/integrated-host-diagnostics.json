@@ -1,0 +1,51 @@
+{
+  "base": "ee2b0a335c69af665325cd8f09dbd8da673d15f4",
+  "baseline": {
+    "pass": 0,
+    "fail": 4,
+    "duration_ms": 12860.381292
+  },
+  "direct_startup_measurements": [
+    {
+      "mode": "direct",
+      "attempt": 0,
+      "elapsed_ms": 353.71283299900824,
+      "exit": 0,
+      "stdout_bytes": 111,
+      "stderr": ""
+    },
+    {
+      "mode": "direct",
+      "attempt": 1,
+      "elapsed_ms": 9.373291999509092,
+      "exit": 0,
+      "stdout_bytes": 111,
+      "stderr": ""
+    },
+    {
+      "mode": "interpreter",
+      "attempt": 0,
+      "elapsed_ms": 8.161208003002685,
+      "exit": 0,
+      "stdout_bytes": 111,
+      "stderr": ""
+    },
+    {
+      "mode": "interpreter",
+      "attempt": 1,
+      "elapsed_ms": 6.330833006359171,
+      "exit": 0,
+      "stdout_bytes": 111,
+      "stderr": ""
+    }
+  ],
+  "prepared": {
+    "pass": 4,
+    "fail": 0,
+    "duration_ms": 13004.2865
+  },
+  "cleanup": {
+    "live_process_references": 0,
+    "removed_kib": 34492
+  }
+}

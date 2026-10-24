@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from notalone.front_sync.incremental_events import IncrementalEventReceiver, IncrementalEventUnavailable
+from notalone.server.event_publisher import EventBusMessagePublisher
+
 from notalone.reply.errors import (
     ReplyBudgetError, ReplyCandidatesRejectedError, ReplyError, ReplyProviderContextLimitError, ReplyReviewInvalidError, ReplyTimeoutError,
 )
@@ -11,9 +14,14 @@ from notalone.server.contact_context_handoff import (
     ContactContextHandoff, is_contact_context_request,
 )
 
+from notalone.server.memory_management_handoff import (
+    MemoryManagementHandoff, is_memory_management_request,
+)
+
 from notalone.front_sync.wechat_scope_remote import WechatScopeOwnedByTypeScript
 
 import json
+import os
 import psycopg
 import logging
 import secrets
@@ -533,6 +541,7 @@ class BackendApp:
         "_candidate_versions",
         "_contact_directory",
         "_contact_context_handoff",
+        "_memory_management_handoff",
         "_degraded_lock",
         "_degraded",
         "_events",
@@ -554,6 +563,7 @@ class BackendApp:
         "_setup_service",
         "_wechat_setup_service",
         "_wechat_scope_transferred",
+        "_incremental_events",
         "_skill_service",
         "_skill_learning",
         "_expression_preferences",
@@ -592,6 +602,7 @@ class BackendApp:
         setup_service: SetupService | None = None,
         wechat_setup_service: WechatSetupService | None = None,
         wechat_scope_transferred: bool = False,
+        incremental_events: IncrementalEventReceiver | None = None,
         expression_preferences: ExpressionPreferenceService | None = None,
         runtime_shutdown: Callable[[], None] | None = None,
         contact_context: ContactContextHandoff | None = None,
@@ -602,6 +613,7 @@ class BackendApp:
             raise ValueError("token 不能为空。")
         self._contact_directory = contact_directory
         self._contact_context_handoff = contact_context or ContactContextHandoff()
+        self._memory_management_handoff = MemoryManagementHandoff()
         # 本次运行期内不可自愈的后台能力降级；只存稳定码、原因与时间。
         self._degraded_lock = threading.Lock()
         self._degraded: dict[str, dict[str, str]] = {}
@@ -628,6 +640,7 @@ class BackendApp:
         self._setup_service = setup_service
         self._wechat_setup_service = wechat_setup_service
         self._wechat_scope_transferred = wechat_scope_transferred
+        self._incremental_events = incremental_events
         self._skill_service = skill_service
         self._skill_learning = skill_learning
         self._sync_control = sync_control
@@ -786,6 +799,14 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "contact_context_transferred"}
             )
+        # 仅封公开管理入口；10/11后台提取、裁决、自动采纳仍沿原存储执行。
+        management_request = is_memory_management_request(method.upper(), path)
+        if management_request and not self._memory_management_handoff.enter():
+            if scoped_request:
+                self._contact_context_handoff.leave()
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "memory_management_transferred"}
+            )
         manual_token = manual_input_contact.set(manual_id)
         try:
             return self._handle_authenticated(
@@ -819,6 +840,8 @@ class BackendApp:
             manual_input_contact.reset(manual_token)
             if scoped_request:
                 self._contact_context_handoff.leave()
+            if management_request:
+                self._memory_management_handoff.leave()
 
     def _handle_authenticated(
         self,
@@ -849,6 +872,34 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
             )
+        if path_value == "/api/runtime/foreground-location/stop":
+            if os.environ.get("NOTALONE_TS_HOST") != "1" or method_upper != "POST":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            transfer = getattr(self._sync_control, "transfer_foreground_location", None)
+            if not callable(transfer):
+                # 无同步服务时也不存在可运行的旧探针。
+                return _json_response(HTTPStatus.OK, {"state": "stopped", "active_requests": 0})
+            try:
+                return _json_response(HTTPStatus.OK, transfer())
+            except SyncHostBusy:
+                return _json_response(HTTPStatus.CONFLICT, {"error": "foreground_observation_busy"})
+        if path_value == "/api/runtime/sync-incremental/events":
+            # 仅沿原内部token认证；公开TS宿主不代理此路径。
+            if any(key.lower() == "origin" for key in headers):
+                return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            if path != path_value:
+                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            if self._incremental_events is None or method_upper != "POST":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            if len(request_body) > 256 * 1024:
+                return _json_response(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "request_body_too_large"})
+            try:
+                accepted = self._incremental_events.receive(_parse_task_json(request_body))
+            except IncrementalEventUnavailable:
+                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "incremental_event_unavailable"})
+            except (ValueError, TypeError):
+                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "incremental_event_invalid"})
+            return _json_response(HTTPStatus.OK, {"accepted": accepted})
         if path_value == "/api/runtime/wechat-scope/revoke":
             if not self._wechat_scope_transferred or method_upper != "POST":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
@@ -866,6 +917,22 @@ class BackendApp:
                 return _json_response(HTTPStatus.OK, revoke(contact_id=contact_id, binding_id=binding_id))
             except SyncHostBusy:
                 return _json_response(HTTPStatus.CONFLICT, {"error": "cli_binding_revoke_busy"})
+        management_path = "/api/runtime/memory-management/"
+        if path_value.startswith(management_path):
+            action = path_value[len(management_path):]
+            gate = self._memory_management_handoff
+            if method_upper == "GET" and action == "status":
+                return _json_response(HTTPStatus.OK, gate.status())
+            if method_upper == "POST" and action == "stop":
+                return _json_response(HTTPStatus.OK, gate.stop())
+            if method_upper == "POST" and action == "start":
+                status = gate.start()
+                if status is None:
+                    return _json_response(
+                        HTTPStatus.CONFLICT, {"error": "memory_management_draining"}
+                    )
+                return _json_response(HTTPStatus.OK, status)
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         handoff_path = "/api/runtime/contact-context/"
         if path_value.startswith(handoff_path):
             action = path_value[len(handoff_path):]
@@ -3356,6 +3423,7 @@ def create_app(
     setup_service: SetupService | None = None,
     wechat_setup_service: WechatSetupService | None = None,
     wechat_scope_transferred: bool = False,
+    incremental_events_transferred: bool = False,
     expression_preferences: ExpressionPreferenceService | None = None,
     follow_smoke: FollowSmokeController | None = None,
     runtime_shutdown: Callable[[], None] | None = None,
@@ -3383,10 +3451,24 @@ def create_app(
         from notalone.tasks.organization_dispatch import EmbeddedOrganizationDispatcher
         layered_memory.attach_dispatcher(EmbeddedOrganizationDispatcher(database_url))
     layered_memory.start_maintenance(owner_id)
+    events = events or EventBus()
+    skill_learning = skill_learning or SkillLearningService(
+        PostgresSkillLearningStore(database_url), task_host=task_host,
+        review=reply_service.skill_review if reply_service is not None else None,
+    )
+    incremental_events = None
+    if incremental_events_transferred and owner_id is not None:
+        incremental_events = IncrementalEventReceiver(
+            database_url=database_url, owner_id=owner_id,
+            publisher=EventBusMessagePublisher(
+                events, owner_id=owner_id, task_host=task_host,
+                learning_notify=skill_learning.notify,
+            ),
+        )
     return BackendApp(
         contact_directory=contacts,
         contact_context=contact_context,
-        events=events or EventBus(),
+        events=events,
         owner_id=owner_id,
         token=token or secrets.token_urlsafe(32),
         sync_control=sync_control,
@@ -3422,12 +3504,12 @@ def create_app(
             processing=PostgresSourceProcessingStore(database_url),
         ),
         skill_service=skill_service,
-        skill_learning=skill_learning or SkillLearningService(PostgresSkillLearningStore(database_url), task_host=task_host,
-            review=reply_service.skill_review if reply_service is not None else None),
+        skill_learning=skill_learning,
         ledger_service=ledger_service,
         setup_service=setup_service,
         wechat_setup_service=wechat_setup_service,
         wechat_scope_transferred=wechat_scope_transferred,
+        incremental_events=incremental_events,
         runtime_shutdown=runtime_shutdown,
     )
 

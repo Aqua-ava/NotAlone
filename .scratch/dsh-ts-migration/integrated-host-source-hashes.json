@@ -1,0 +1,15 @@
+{
+  "base": "ee2b0a335c69af665325cd8f09dbd8da673d15f4",
+  "files": {
+    "backend-ts/src/host-plugin.ts": "3e4534226eb06cc11992d92324298e86ba2453043e1040b7327a09e8a876753b",
+    "backend/src/notalone/server/app.py": "46575024832405207e42d391036bd2658a9fda8a55632c4684a8a3a2e6669009",
+    "backend/src/notalone/server/command.py": "b560d598f13a86d5ce3214f292bbdab3990b5712f82afde4c16cba3595658235",
+    "backend/src/notalone/server/memory_management_handoff.py": "8f4b1db504fbe86d9e50bcfc8c92af55f2fc15872de0f1a099780f0daefe9dda",
+    "backend-ts/test/memory-preferences-host.test.mjs": "b0e6a46d5634671de9e80a61cdae70efcd0d00a32ff0a2bc497a447ce728193d",
+    "backend-ts/test/foreground-location-host.test.mjs": "47a9f155e61c5ebf954f66f15d06b1cd9f46f6cb5103837014965e8873c7de19",
+    "backend-ts/test/sync-incremental-host.test.mjs": "29ed38bc02f6675c9c785f55e550432faf7b4a369c3dd80af13658b23d96d489",
+    "backend-ts/test/foreground-location-fixture.mjs": "126844f70fccf9188a3404602acf2210b2e26d8aec28a0cadc1f89e92cf10bb4"
+  },
+  "mode": "integrated",
+  "typecheck": "passed"
+}
