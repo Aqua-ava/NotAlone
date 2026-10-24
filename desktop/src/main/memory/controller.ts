@@ -565,7 +565,9 @@ export class MemoryReadingController {
       checked = true;
       const refreshed = await refreshAfterWrite();
       if (!current()) return;
-      if (!refreshed.every(Boolean)) throw new Error('资料已提交，但当前列表核对失败，请刷新确认结果。');
+      // 分层投影和概览是补充读取；它们失败时保留各自错误态，但不能否定
+      // 已成功写入并重新核对的权威底层资料。
+      if (!refreshed.slice(0, sections.length).every(Boolean)) throw new Error('资料已提交，但当前列表核对失败，请刷新确认结果。');
       this.publish({ mutation: { phase: 'success', message: '资料操作已完成并重新核对。' } });
     } catch (error) {
       const backupCleanupRequired = error instanceof BackendRequestFailure && error.code === 'update_backup_cleanup_required';

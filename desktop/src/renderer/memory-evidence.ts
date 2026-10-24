@@ -42,6 +42,33 @@ export function readMemoryEvidence(detail: TraceDocument, contactId: string, kin
     linked = true;
     if (Array.isArray(actual.source_ids)) for (const id of actual.source_ids) if (typeof id === 'string') sourceIds.add(id);
   }
+  const directCandidateSources = new Map<string, Set<string>>();
+  for (const event of events) {
+    if (event.stage !== 'candidate_raw' || typeof event.candidate_trace_id !== 'string') continue;
+    const fields = object(object(event.payload).fields);
+    if (!Array.isArray(fields.source_message_ids)) continue;
+    const direct = directCandidateSources.get(event.candidate_trace_id) ?? new Set<string>();
+    for (const id of fields.source_message_ids) if (typeof id === 'string') direct.add(id);
+    directCandidateSources.set(event.candidate_trace_id, direct);
+  }
+  for (const event of events) {
+    if (event.stage !== 'candidate_result' || typeof event.candidate_trace_id !== 'string') continue;
+    const actual = object(object(event.payload).result);
+    const candidateId = actual.candidate_id;
+    if (typeof candidateId !== 'string') continue;
+    const candidateLinked = links.some((link) => link.record_kind === 'candidate'
+      && link.record_id === candidateId && link.commit_status === 'committed');
+    if (!candidateLinked) continue;
+    const direct = kind === 'candidate'
+      ? candidateId === recordId
+      : (kind === 'contact_memory' || kind === 'owner_memory')
+        && actual.memory_id === recordId && targetCandidates.has(candidateId)
+        && links.some((link) => link.record_kind === kind
+          && link.record_id === recordId && link.commit_status === 'committed');
+    if (!direct) continue;
+    linked = true;
+    for (const id of directCandidateSources.get(event.candidate_trace_id) ?? []) sourceIds.add(id);
+  }
   const messages = new Map<string, EvidenceMessage>();
   const conflicts = new Set<string>();
   for (const event of events) {

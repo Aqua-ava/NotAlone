@@ -44,6 +44,45 @@ test('本人记忆只接受当前联系人批次中对应类型的权威关联',
   assert.equal(readMemoryEvidence(detail, scope, 'owner_memory', 'memory-a').messages.length, 1);
   assert.equal(read(detail).messages.length, 0);
 });
+test('TypeScript 提取链路从已提交候选结果和对应候选原样恢复直接来源', () => {
+  const detail = fixture();
+  detail.links = [
+    { record_kind: 'candidate', record_id: 'candidate-a', commit_status: 'committed' },
+    { record_kind: 'owner_memory', record_id: 'memory-a', commit_status: 'committed' },
+  ];
+  detail.write_receipts = [{ record_kind: 'owner_memory', record_id: 'memory-a',
+    source_candidate_id: 'candidate-a', commit_status: 'committed' }];
+  detail.events = [
+    detail.events[0],
+    { stage: 'candidate_raw', candidate_trace_id: 'candidate-trace-a',
+      payload: { fields: { source_message_ids: ['message-a'] } } },
+    { stage: 'candidate_result', candidate_trace_id: 'candidate-trace-a',
+      payload: { result: { candidate_id: 'candidate-a', memory_id: 'memory-a', disposition: 'adopted' } } },
+  ];
+  assert.equal(readMemoryEvidence(detail, scope, 'owner_memory', 'memory-a').messages[0].text, '合成直接依据');
+  assert.equal(readMemoryEvidence(detail, scope, 'candidate', 'candidate-a').messages[0].text, '合成直接依据');
+  assert.deepEqual(readMemoryEvidence(detail, scope, 'owner_memory', 'memory-other').messages, []);
+});
+test('TypeScript 候选结果未提交或候选轨迹不匹配时不回显原话', () => {
+  const detail = fixture();
+  detail.links = [
+    { record_kind: 'candidate', record_id: 'candidate-a', commit_status: 'committed' },
+    { record_kind: 'owner_memory', record_id: 'memory-a', commit_status: 'committed' },
+  ];
+  detail.write_receipts = [{ record_kind: 'owner_memory', record_id: 'memory-a',
+    source_candidate_id: 'candidate-a', commit_status: 'committed' }];
+  detail.events = [
+    detail.events[0],
+    { stage: 'candidate_raw', candidate_trace_id: 'candidate-trace-a',
+      payload: { fields: { source_message_ids: ['message-a'] } } },
+    { stage: 'candidate_result', candidate_trace_id: 'candidate-trace-b',
+      payload: { result: { candidate_id: 'candidate-a', memory_id: 'memory-a', disposition: 'adopted' } } },
+  ];
+  assert.deepEqual(readMemoryEvidence(detail, scope, 'owner_memory', 'memory-a').messages, []);
+  detail.events[2].candidate_trace_id = 'candidate-trace-a';
+  detail.links[1].commit_status = 'unknown';
+  assert.deepEqual(readMemoryEvidence(detail, scope, 'owner_memory', 'memory-a').messages, []);
+});
 test('跨联系人和已删除过程不返回正文', () => {
   const detail = fixture();
   detail.contact_id = 'contact-b';

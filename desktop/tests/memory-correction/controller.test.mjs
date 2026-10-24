@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
+import { payload as layeredPayload } from '../layered-memory/support.mjs';
 
 async function withController(run) {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-correction-controller-'));
@@ -51,6 +52,48 @@ test('更新备份清理失败保留删除恢复说明，解除读取保护后�
   assert.equal(controller.getState().mutation.phase, 'success');
   assert.deepEqual(controller.getState().contact.items, []);
   assert.equal(writes, 2);
+}));
+
+test('底层资料提交成功后，可选分层刷新失败不否定已核对的权威资料', async () => withController(async (MemoryReadingController) => {
+  const contactId = '11111111-1111-4111-8111-111111111111';
+  const memoryId = '22222222-2222-4222-8222-222222222222';
+  const messageId = '44444444-4444-4444-8444-444444444444';
+  let committed = false, layeredReads = 0;
+  const common = {
+    category: 'common_fact', topic: 'other', source_ids: [messageId], confidence: 1, risk_flags: [],
+    valid_at: null, invalid_at: null, timing: { recorded_at: null, source_started_at: null,
+      source_ended_at: null, source_time_complete: false },
+  };
+  const backend = { getConnectionGeneration: () => 1, requestJson: async (request) => {
+    if (request.path.endsWith('/layered-memory')) {
+      if (++layeredReads > 1) throw new Error('合成分层刷新失败');
+      return { generation: 1, data: layeredPayload() };
+    }
+    if (request.method === 'POST') {
+      committed = true;
+      return { generation: 1, data: {} };
+    }
+    if (request.path.endsWith('/memory-candidates')) return { generation: 1, data: { candidates: [] } };
+    return { generation: 1, data: { memories: [{ ...common, memory_id: memoryId, level: 'owner',
+      contact_id: contactId, text: committed ? '已核对的新资料。' : '待修正的旧资料。', status: 'active',
+      adoption_method: committed ? 'manual' : 'auto', revision: committed ? 2 : 1,
+      supersedes_memory_id: committed ? memoryId : null,
+      source_candidate_id: committed ? null : '33333333-3333-4333-8333-333333333333',
+    }] } };
+  } };
+  const contacts = { getState: () => ({ selectedContactId: contactId, scopeRevision: 1,
+    directoryPhase: 'ready', contacts: [{ contactId }] }) };
+  const controller = new MemoryReadingController(backend, contacts);
+  await controller.refresh({ contactId, scopeRevision: 1, section: 'owner' });
+  await controller.refresh({ contactId, scopeRevision: 1, section: 'pending' });
+  await controller.readLayeredMemory({ contactId, scopeRevision: 1 });
+  await controller.correct({ contactId, scopeRevision: 1, memoryId, level: 'owner', revision: 1,
+    text: '已核对的新资料。', category: 'common_fact' });
+  assert.equal(controller.getState().mutation.phase, 'success');
+  assert.match(controller.getState().mutation.message, /已完成并重新核对/);
+  assert.equal(controller.getState().owner.items[0].text, '已核对的新资料。');
+  assert.deepEqual(controller.getState().layeredMemory, { phase: 'error', value: null });
+  assert.equal(layeredReads, 2);
 }));
 
 test('生产资料控制器保留新证据与原人工决定的差异', async () => withController(async (MemoryReadingController) => {
