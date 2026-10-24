@@ -50,12 +50,17 @@ def main():
         elif "--foreground-revoke" in sys.argv:
             tests = ["test/foreground-location-host.test.mjs"]
             arguments.append("--test-name-pattern=授权撤销等待事务时客户端断连")
+        elif "--incremental-ownership" in sys.argv:
+            tests = ["test/sync-incremental-host.test.mjs"]
+            arguments.append("--test-name-pattern=官方profile：公开开关")
         print(json.dumps({"phase": "before_tests", "base": base, "files": hashes}, ensure_ascii=False), flush=True)
         subprocess.run([*arguments, *tests], cwd=temporary / "backend-ts", env=environment, check=True, timeout=240)
         subprocess.run([str(NODE), "node_modules/typescript/bin/tsc", "--noEmit"], cwd=temporary / "backend-ts", env=environment, check=True, timeout=60)
     if any(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest for name, digest in hashes.items()):
         raise RuntimeError("验证期间共享覆盖文件发生变化，结果无效")
     mode = "smoke" if "--smoke" in sys.argv else "foreground-revoke" if "--foreground-revoke" in sys.argv else "integrated"
+    if "--incremental-ownership" in sys.argv:
+        mode = "incremental-ownership"
     print(json.dumps({"base": base, "files": hashes, "mode": mode, "typecheck": "passed"}, ensure_ascii=False))
 
 

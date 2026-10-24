@@ -80,6 +80,9 @@ else if(args[0]==='tail'){
 test('官方profile：公开开关、原消息事件、历史唯一写者与私有认证', {timeout:90000},async t=>{
   const f=await fixture(t);
   const runtime=await f.app.request('/api/runtime/status');assert.equal(runtime.data.runtime,'dsh');
+  assert.equal(runtime.data.ownership.wechatBodySync,'split');
+  assert.equal(runtime.data.ownership.wechatIncremental,'typescript');
+  assert.equal(runtime.data.ownership.wechatHistory,'python');
   await until(async()=>(await f.app.request('/api/sync/status')).status===200,'启动状态恢复',15000);
   const confirmed=await f.app.request('/api/sync/cli-bindings/confirm',{selections:[{locator:'friend-a'}],history_authorized:true});if(confirmed.status!==200){t.diagnostic(JSON.stringify({sync:await f.app.request('/api/sync/status'),bindings:await f.app.request('/api/sync/cli-bindings'),commands:await f.commands()}));}assert.equal(confirmed.status,200,JSON.stringify(confirmed));
   const bindings=await f.app.request('/api/sync/cli-bindings'),binding=bindings.data.bindings[0];assert.ok(binding);
