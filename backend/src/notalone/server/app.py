@@ -3497,6 +3497,24 @@ def create_app(
                 learning_notify=skill_learning.notify,
             ),
         )
+    local_assistant_sessions = assistant_sessions or AssistantSessionService(
+        store=PostgresAssistantSessionStore(database_url), reply=reply_service,
+        catalog=PostgresAssistantSessionCatalog(database_url),
+        continuation_store=PostgresAssistantContinuationStore(database_url),
+    )
+    local_candidate_versions = candidate_versions or PostgresAssistantCandidateVersions(database_url)
+    discussion_client = None
+    if owner_id is not None and os.environ.get("NOTALONE_REPLY_RUNTIME") == "typescript":
+        from notalone.application.assistant_discussion_remote import build_remote_discussion
+        local_assistant_sessions, local_candidate_versions, discussion_client = build_remote_discussion(
+            os.environ, owner_id=owner_id, local=local_assistant_sessions,
+        )
+        local_runtime_shutdown = runtime_shutdown
+        def stop_with_discussion() -> None:
+            discussion_client.close()
+            if local_runtime_shutdown is not None:
+                local_runtime_shutdown()
+        runtime_shutdown = stop_with_discussion
     return BackendApp(
         contact_directory=contacts,
         contact_context=contact_context,
@@ -3508,12 +3526,8 @@ def create_app(
         message_stream=message_stream
         or MessageStream(PostgresMessageStream(database_url)),
         reply_service=reply_service,
-        assistant_sessions=assistant_sessions or AssistantSessionService(
-            store=PostgresAssistantSessionStore(database_url), reply=reply_service,
-            catalog=PostgresAssistantSessionCatalog(database_url),
-            continuation_store=PostgresAssistantContinuationStore(database_url),
-        ),
-        candidate_versions=candidate_versions or PostgresAssistantCandidateVersions(database_url),
+        assistant_sessions=local_assistant_sessions,
+        candidate_versions=local_candidate_versions,
         reply_evidence=reply_evidence
         or ReplyEvidenceService(PostgresReplyStore(database_url)),
         expression_preferences=expression_preferences or ExpressionPreferenceService(

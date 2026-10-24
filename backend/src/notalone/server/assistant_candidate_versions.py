@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timezone
 from urllib.parse import parse_qs
 from uuid import UUID
 
@@ -63,7 +64,7 @@ def _history_payload(history: AssistantCandidateHistory) -> dict[str, object]:
             "messages": [{"message_id": str(message.message_id), "text": message.text}
                          for message in version.messages],
             "requirements": version.requirements,
-            "created_at": version.created_at.isoformat(),
+            "created_at": version.created_at.astimezone(timezone.utc).isoformat(),
         } for version in history.versions],
     }
 

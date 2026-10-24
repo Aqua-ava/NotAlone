@@ -9,6 +9,7 @@ import {installModelProvider,type ModelProviderConfiguration} from './model-prov
 import {ReplyGenerationService,type ReplyServiceModel} from './reply-service.ts';
 import {createReplyHttp,type ReplyHttpService} from './reply-http.ts';
 import {ReplyError} from './reply-contract.ts';
+import {ReplyStoreError} from './reply-store.ts';
 import {ExplorationService} from './exploration-service.ts';
 import {createExplorationHttp} from './exploration-http.ts';
 import {createExtractionModelCaller,extractionUnconfirmedRequests,type ExtractionModelInput,type ExtractionPermitEndpoint} from './extraction-model.ts';
@@ -16,6 +17,8 @@ import {ExtractionBatchService,ExtractionBatchError} from './extraction-batch-se
 import {createExtractionBatchHttp} from './extraction-batch-http.ts';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {AssistantDiscussionError,AssistantDiscussionService} from './assistant-discussion-service.ts';
+import {createAssistantDiscussionHttp} from './assistant-discussion-http.ts';
 
 export interface HostReplyConfiguration {
   provider:ModelProviderConfiguration;
@@ -31,6 +34,7 @@ export interface HostReplyOptions {
   configuration:HostReplyConfiguration|null;
   extractionPermit?:ExtractionPermitEndpoint;
   extractionEnabled?:boolean;
+  discussionSkillsRoot?:string;
 }
 
 export async function createHostReplyRuntime(options:HostReplyOptions) {
@@ -45,6 +49,16 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     let businessFailure:ExtractionBatchError|undefined;
     try{return await options.storage.businessTransaction(async client=>{
       try{return await work(client);}catch(error){if(error instanceof ExtractionBatchError)businessFailure=error;throw error;}
+    });}catch(error){throw businessFailure??error;}
+  }
+  async function discussionTransaction<T>(work:(client:pg.Client)=>Promise<T>):Promise<T>{
+    let businessFailure:AssistantDiscussionError|ReplyStoreError|undefined;
+    try{return await options.storage.businessTransaction(async client=>{
+      try{return await work(client);}
+      catch(error){
+        if(error instanceof AssistantDiscussionError||error instanceof ReplyStoreError)businessFailure=error;
+        throw error;
+      }
     });}catch(error){throw businessFailure??error;}
   }
   async function execute<T>(signal:AbortSignal,operation:(combined:AbortSignal)=>Promise<T>):Promise<T>{
@@ -63,6 +77,14 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     generate:(scope,body,signal,internal)=>execute(signal,combined=>service!.generate(scope,body,combined,internal)),
   };
   const owner=options.storage.runtimeOwnerId;
+  const discussionSkillsRoot=options.discussionSkillsRoot??options.configuration?.skillsRoot;
+  if(!discussionSkillsRoot?.trim())throw new Error('discussion_skills_root_required');
+  const discussionHttp=createAssistantDiscussionHttp({ownerId:owner,token:options.token,
+    service:new AssistantDiscussionService({
+      transaction:discussionTransaction,
+      skillsRoot:discussionSkillsRoot,
+      environment:options.storage.runtimeEnvironment(),
+    })});
   const http=createReplyHttp({ownerId:owner,token:options.token,available:options.configuration!==null,
     read:work=>options.storage.businessReadTransaction(work),service:delegated});
   const explorationHttp=createExplorationHttp({ownerId:owner,token:options.token,available:options.configuration!==null,service:{execute:(scope,session,action,request,signal,internal)=>execute(signal,combined=>exploration!.execute(scope,session,action,request,combined,internal))}});
@@ -99,6 +121,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     });},
     async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
       return await extractionHttp.handle(req,res)
+        || await discussionHttp.handle(req,res)
         || await http.handle(req,res)
         || await explorationHttp.handle(req,res);
     },

@@ -1,7 +1,7 @@
 # 08：继续讨论和改写候选
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 07
 Spec: ../spec.md
@@ -45,4 +45,12 @@ Spec: ../spec.md
 
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+已完成隔离实现与自动验证，待根 Agent 完成真实 App/微信验收后签收。
+
+- DSH 锁定 `0.2.1-rc.2` / `687f282e8625c6b8d11ff58211a90524be2e4317`。依据、源码位置、哈希和适配结论见 [审计](../root-next-08/audit.md)。
+- 新增 TS 讨论业务责任方与私有 HTTP 桥；Python 在 TS runtime 下只把讨论 CRUD、候选版本和选择委托 TS，准备、生成、替换、续答仍走原 authority。
+- 重开、编辑、显式选择、携入、中断和删除均按 `owner_id + contact_id` 持久化；候选版本查询保留微秒并统一 UTC 投影。
+- 删除会失效迟到请求、清理请求/候选/学习依赖/更新备份和 Skill 文件清单；携入不复制候选正文，源删除后只显示不可用占位。
+- 验证通过：TS typecheck；讨论业务与 HTTP 6 项；回复存储 9 项；真实主宿主 1 项；TS→Python→TS B5-03 1 项；桌面目录/投影/删除门禁 22 项；公开生成队列 15 项；Python 会话 API 与 wiring 7 项（1 skip）。
+- `assistant-generation-quit-http` 在 10 分钟上限内未完成，已终止且不记为通过；根 Agent 需补跑。实际开发 App 首次尝试显示数据库不可连接，已正常退出并恢复 `dev:status=stopped`；未操作微信或发送消息。
+- 数据处理影响：只新增临时合成数据库/目录验证，无真实聊天或凭据写入仓库；没有 push、PR、打包或外部发送。

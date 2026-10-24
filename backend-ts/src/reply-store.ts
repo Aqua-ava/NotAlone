@@ -132,8 +132,8 @@ export class PostgresReplyStore {
       signal?.throwIfAborted();
       const row=await this.current(client,request,true);
       if(row.state==='completed') { await this.options.guards.replay(client,request); return this.readResult(client,row); }
-      this.validateCandidates(context,candidates);
-      this.validateSkill(used_skill);
+      validateReplyCandidates(context,candidates);
+      validateReplySkill(used_skill);
       await this.options.guards.commit(client,request,context,used_skill);
       signal?.throwIfAborted();
       const completedSnapshot={...context.snapshot,...used_skill?{
@@ -162,38 +162,6 @@ export class PostgresReplyStore {
       return result;
     });
   }
-  private validateSkill(skill: Record<string, unknown> | null): void {
-    if (skill === null) return;
-    if (typeof skill !== 'object' || !uuid.test(String(skill.skill_id)) || !uuid.test(String(skill.version_id))
-      || typeof skill.name !== 'string' || !skill.name.trim()
-      || !['auto','user'].includes(String(skill.selection_method))
-      || typeof skill.selection_reason !== 'string' || !skill.selection_reason.trim()
-      || !['loaded','resource_failed'].includes(String(skill.load_state))
-      || !Array.isArray(skill.resource_paths) || skill.resource_paths.some(x=>typeof x!=='string'||!x.trim())) {
-      throw new ReplyStoreError('reply_candidates_rejected');
-    }
-    if(skill.execution_view!==undefined&&skill.execution_view!==null){
-      const view=skill.execution_view as Record<string,unknown>;
-      if(typeof view!=='object'||Array.isArray(view)||Object.keys(view).sort().join(',')!=='method_ids,policy_revision,sha256'
-        ||!Number.isSafeInteger(view.policy_revision)||Number(view.policy_revision)<0||typeof view.sha256!=='string'||!/^[a-f0-9]{64}$/.test(view.sha256)
-        ||!Array.isArray(view.method_ids)||new Set(view.method_ids).size!==view.method_ids.length||view.method_ids.some(id=>typeof id!=='string'||!uuid.test(id)))throw new ReplyStoreError('reply_candidates_rejected');
-    }
-  }
-  private validateCandidates(context: ReplyStoreContext, candidates: ReplyStoreCandidate[]): void {
-    const reject=()=>{throw new ReplyStoreError('reply_candidates_rejected');};
-    if(!Array.isArray(context.evidence)||!Number.isInteger(context.skill_library_revision)||context.skill_library_revision<0||!context.snapshot||typeof context.snapshot!=='object'||Array.isArray(context.snapshot)) reject();
-    const evidence=new Set<string>();
-    for(const e of context.evidence) {requireUuid(e.evidence_id);if(evidence.has(e.evidence_id)||!e.text?.trim()) reject();evidence.add(e.evidence_id);for(const id of e.source_ids) requireUuid(id);}
-    if(!Array.isArray(candidates)||candidates.length<1||candidates.length>3) reject();
-    const ids=new Set<string>();
-    for(const c of candidates) {
-      requireUuid(c.candidate_id);
-      if(ids.has(c.candidate_id)||!c.text?.trim()||!c.basis?.trim()||!Array.isArray(c.citation_ids)||c.citation_ids.length===0||c.citation_ids.some(id=>!evidence.has(id))||!Array.isArray(c.risk_notes)||c.risk_notes.some(x=>typeof x!=='string'||!x.trim())) reject();
-      ids.add(c.candidate_id);
-      if(!Array.isArray(c.messages)||c.messages.length<1||c.messages.length>8||c.messages.map(m=>m.text).join('\n\n')!==c.text||new Set(c.messages.map(m=>m.message_id)).size!==c.messages.length) reject();
-      for(const m of c.messages) {requireUuid(m.message_id);if(typeof m.text!=='string'||!m.text.trim()) reject();}
-    }
-  }
   async fail(request: ReplyStoreRequest, reason: string): Promise<void> {
     const safe=/^[a-z][a-z0-9_]{0,63}$/.test(reason)?reason:'reply_failed';
     await this.transaction(request.owner_id,async client=>{
@@ -215,6 +183,12 @@ export class PostgresReplyStore {
     });
   }
   private async readResult(client: pg.Client, row: Row): Promise<ReplyStoreResult> {
+    return readStoredReplyResult(client, row);
+  }
+}
+
+/** 供同一事务内的讨论重开和回复重放共享，避免另造一套候选投影。 */
+export async function readStoredReplyResult(client: pg.Client, row: Row): Promise<ReplyStoreResult> {
     // pg默认JSON解码会截断旧Python bigint；范围锁内重读原文保留偏好等修订号。
     const snapshot=(await client.query('SELECT context_snapshot::text AS text FROM reply_request WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[row.owner_id,row.contact_id,row.id])).rows[0]?.text;
     if(typeof snapshot!=='string')throw new ReplyStoreError('reply_candidates_rejected');
@@ -226,11 +200,45 @@ export class PostgresReplyStore {
       candidates.push({candidate_id:c.id,text:c.candidate_text,basis:c.basis,risk_notes:c.risk_notes,messages:c.message_group,citation_ids:refs.map(r=>r.evidence_id)});
     }
     const evidence=(await client.query('SELECT evidence_id,kind,evidence_text AS text,source_ids,selection_reason,evidence_status AS status FROM reply_context_evidence WHERE reply_request_id=$1 ORDER BY ordinal',[row.id])).rows as ReplyStoreEvidence[];
-    this.validateCandidates({evidence,snapshot:row.context_snapshot,skill_library_revision:row.skill_library_revision},candidates);
+    validateReplyCandidates({evidence,snapshot:row.context_snapshot,skill_library_revision:row.skill_library_revision},candidates);
     const used_skill=row.skill_id?{skill_id:row.skill_id,version_id:row.skill_version_id,name:row.skill_name,selection_method:row.skill_selection_method,selection_reason:row.skill_selection_reason,load_state:row.skill_load_state,resource_paths:row.skill_loaded_resources??[],
         version_number:row.context_snapshot?.skill_version_number??null,scope_kind:row.context_snapshot?.skill_runtime_scope?.kind??'owner',scope_contact_id:row.context_snapshot?.skill_runtime_scope?.contact_id??null,scope_scene:row.context_snapshot?.skill_runtime_scope?.scene??null,
         execution_view:row.context_snapshot?.skill_execution_view??null}:null;
-    this.validateSkill(used_skill);
+    validateReplySkill(used_skill);
     return {reply_request_id:row.id,candidates,context_snapshot:row.context_snapshot,skill_library_revision:row.skill_library_revision,used_skill};
+}
+
+function validateReplySkill(skill: Record<string, unknown> | null): void {
+  if (skill === null) return;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (typeof skill !== 'object' || !uuid.test(String(skill.skill_id)) || !uuid.test(String(skill.version_id))
+    || typeof skill.name !== 'string' || !skill.name.trim()
+    || !['auto','user'].includes(String(skill.selection_method))
+    || typeof skill.selection_reason !== 'string' || !skill.selection_reason.trim()
+    || !['loaded','resource_failed'].includes(String(skill.load_state))
+    || !Array.isArray(skill.resource_paths) || skill.resource_paths.some(x=>typeof x!=='string'||!x.trim())) {
+    throw new ReplyStoreError('reply_candidates_rejected');
+  }
+  if(skill.execution_view!==undefined&&skill.execution_view!==null){
+    const view=skill.execution_view as Record<string,unknown>;
+    if(typeof view!=='object'||Array.isArray(view)||Object.keys(view).sort().join(',')!=='method_ids,policy_revision,sha256'
+      ||!Number.isSafeInteger(view.policy_revision)||Number(view.policy_revision)<0||typeof view.sha256!=='string'||!/^[a-f0-9]{64}$/.test(view.sha256)
+      ||!Array.isArray(view.method_ids)||new Set(view.method_ids).size!==view.method_ids.length||view.method_ids.some(id=>typeof id!=='string'||!uuid.test(id)))throw new ReplyStoreError('reply_candidates_rejected');
+  }
+}
+
+function validateReplyCandidates(context: ReplyStoreContext, candidates: ReplyStoreCandidate[]): void {
+  const reject=()=>{throw new ReplyStoreError('reply_candidates_rejected');};
+  if(!Array.isArray(context.evidence)||!Number.isInteger(context.skill_library_revision)||context.skill_library_revision<0||!context.snapshot||typeof context.snapshot!=='object'||Array.isArray(context.snapshot)) reject();
+  const evidence=new Set<string>();
+  for(const e of context.evidence) {requireUuid(e.evidence_id);if(evidence.has(e.evidence_id)||!e.text?.trim()) reject();evidence.add(e.evidence_id);for(const id of e.source_ids) requireUuid(id);}
+  if(!Array.isArray(candidates)||candidates.length<1||candidates.length>3) reject();
+  const ids=new Set<string>();
+  for(const c of candidates) {
+    requireUuid(c.candidate_id);
+    if(ids.has(c.candidate_id)||!c.text?.trim()||!c.basis?.trim()||!Array.isArray(c.citation_ids)||c.citation_ids.length===0||c.citation_ids.some(id=>!evidence.has(id))||!Array.isArray(c.risk_notes)||c.risk_notes.some(x=>typeof x!=='string'||!x.trim())) reject();
+    ids.add(c.candidate_id);
+    if(!Array.isArray(c.messages)||c.messages.length<1||c.messages.length>8||c.messages.map(m=>m.text).join('\n\n')!==c.text||new Set(c.messages.map(m=>m.message_id)).size!==c.messages.length) reject();
+    for(const m of c.messages) {requireUuid(m.message_id);if(typeof m.text!=='string'||!m.text.trim()) reject();}
   }
 }

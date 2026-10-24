@@ -46,9 +46,18 @@ test('真实主宿主public→Python→私有TS→官方provider本机SSE',{time
  for(let i=0;i<150&&child.exitCode===null;i++){try{connection=Object.fromEntries((await readFile(info,'utf8')).trim().split('\n').map(l=>l.split('=')));break;}catch{}await delay(100);}
  const safeOutput=()=>output.replaceAll(homedir(),'${HOME}').replaceAll(resolve('..'),'${REPO_ROOT}').replace(/token=[A-Za-z0-9_-]+/g,'token=<synthetic-redacted>');
  assert.ok(connection,'主宿主应发布握手 '+safeOutput());
- async function request(path,body,token=connection.token){const r=await fetch(`http://${connection.address}${path}`,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:body&&JSON.stringify(body),signal:AbortSignal.timeout(15000)});return{status:r.status,data:await r.json()};}
+ async function request(path,body,token=connection.token,method=body?'POST':'GET'){const r=await fetch(`http://${connection.address}${path}`,{method,headers:{...(token?{Authorization:`Bearer ${token}`}:{}),'content-type':'application/json'},body:body&&JSON.stringify(body),signal:AbortSignal.timeout(15000)});return{status:r.status,data:await r.json()};}
  const status=await request('/api/runtime/status');assert.equal(status.data.ownership.replies,'typescript');assert.ok(status.data.legacyPid);t.diagnostic('真实主宿主及唯一Legacy已启动');
  assert.equal((await request('/internal/reply/generate',{})).status,401);assert.equal(seen.length,0);
+ const discussionBody={owner_id:owner,contact_id:contact,action:'default',request:{}};
+ assert.equal((await request('/internal/discussion',discussionBody)).status,401);
+ assert.equal((await request('/internal/discussion',discussionBody,null)).status,401);
+ const discussion=await request(`/api/contacts/${contact}/assistant-sessions`,{});
+ assert.equal(discussion.status,200,JSON.stringify({discussion,seen:seen.length,output:safeOutput()}));
+ assert.match(discussion.data.session_id,/^[0-9a-f-]{36}$/);assert.equal(seen.length,0);
+ const discussionPath=`/api/contacts/${contact}/assistant-sessions/${discussion.data.session_id}`;
+ assert.equal((await request(discussionPath,{confirmed:true},connection.token,'DELETE')).status,200);
+ assert.equal((await request(discussionPath)).status,404);
  const body={contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',input_kind:'draft',draft_text:'明天见',include_relationship_context:false},skill_disabled:true};
  const result=await request('/api/reply/generate',body);assert.equal(result.status,200,JSON.stringify({result,http:seen.length,output:safeOutput()}));assert.equal(result.data.candidates[0].text,'明天见');assert.equal(seen.length,1);
  assert.deepEqual(await request('/api/reply/generate',body),result);assert.equal(seen.length,1);

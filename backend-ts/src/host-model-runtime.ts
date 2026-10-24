@@ -56,6 +56,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
   currentHost=modelHost;
   let reply:Awaited<ReturnType<typeof createHostReplyRuntime>>|undefined;
   try{
+    const configuredSkillsRoot=resolveSkillsRoot(environment,options.businessHome,options.projectDirectory);
     // journal只有在核实旧进程消失后才给出unknown；提交PG恢复先于任何Python队列启动。
     const recovered=await ledger.recoverUnknownPermits(modelHost.unknownSettlements().map(item=>item.id));
     const token=randomBytes(32).toString('base64url');
@@ -68,11 +69,12 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
       if(!identityDirectory.isDirectory()||(identityDirectory.mode&0o077)!==0
         ||process.getuid&&identityDirectory.uid!==process.getuid())throw new HostModelRuntimeError('model_identity_directory_not_private');
       const anonymousId=getOrCreateAnonymousUserId({env:{DSH_HOME:anonymousHome}});
-      activeConfiguration={skillsRoot:resolveSkillsRoot(environment,options.businessHome,options.projectDirectory),model:configuration.model,
+      activeConfiguration={skillsRoot:configuredSkillsRoot,model:configuration.model,
         provider:{...configuration.provider,resolveUserId:()=>anonymousId}};
     }
     reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
       ledger,token,configuration:activeConfiguration,extractionEnabled:extractionMode==='typescript',
+      discussionSkillsRoot:configuredSkillsRoot,
       extractionPermit:{path:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_SOCKET,token:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_TOKEN}});
     const runtime=reply;
     let closing:Promise<void>|undefined;
