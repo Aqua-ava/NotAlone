@@ -133,6 +133,12 @@ Spec: ../spec.md
 - 合成 PostgreSQL 回归覆盖：第一次 quote 非法→得到明确逐字规则与允许 memory_id→第二次成功并发布；连续两次非法→`quote_invalid` 失败且无版本；只剩一次核验额度→不再调用、轨迹仅一次失败。L3 工作区、服务、公开 HTTP `37/37`；L2 服务、Worker、宿主及模型记账 `25/25`；共享官方 DSH profile `2/2`；TypeScript 类型检查通过。
 - revision `17` 重试条件：确认 dev runtime 已加载 `198f15d7`，正式 job 仍为 revision `17`、failed、calls `49/272`、`run_remaining=1`，目标 key／资料集合与冻结输入未变化，再基于 revision `17` continue；预计得到 revision `18`、active、step pending，模型调用上限按既有合同增加 16 到 288。下一次失败应读取 `verification_trace`；若成功仍需真实 App／微信与用户可见纠错／撤回验收后才能 resolved。
 
+### 根全量残余回归修复
+
+- 复跑 `sync-incremental-reconnect.test.mjs` 稳定得到 1 通过、1 失败：失败用例故意保留第二条 PG 连接，宿主关闭后排空断言按预期失败，但清理夹具仍尝试直接删除数据库，因该连接的存在产生 `AggregateError`，遮蔽了原断言码。
+- 测试夹具修复：保留首次排空断言作为原失败，随后先关闭夹具自身 client，再仅对当前随机 `_test` 数据库终止残余测试连接，最后执行原数据库与目录清理。产品运行时代码、排空语义和失败优先顺序未改变。
+- `sync-incremental-*` 全部 11 个测试文件复跑为 `77/77` 通过，零失败、零取消、零跳过；覆盖真实 DSH 重连、延迟清理、父进程丢失恢复、增量边界和来源删除抑制。
+
 ### 根正式验收证据
 
 - 修复加载：DSH 开发子进程 PID `79808` 与 Python 开发子进程 PID `79818` 均启动于 `2026-10-25 06:56:16`，晚于 `l3-profile-service.ts` 的 `06:55:21` 和 `l3-profile-workspace.ts` 的 `06:56:13` 修改时间。只读复核两文件相对 `198f15d7` 无差异，确认运行时加载的是 quote 有界纠正版本。

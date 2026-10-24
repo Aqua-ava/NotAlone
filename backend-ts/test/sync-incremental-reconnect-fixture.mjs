@@ -50,6 +50,15 @@ export async function createReconnectFixture(t){
       finally{
         if(stopped){
           // 退出已核实后，独立回收本轮资源，即使上面的排空断言失败。
+          await collect(()=>f.client.end());
+          await collect(async()=>{
+            const admin=new pg.Client({host:'/tmp',database:'postgres'});
+            try{
+              await admin.connect();
+              // 故意保留的测试连接也必须由本轮夹具收口；原始排空断言已在上面留存。
+              await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1 AND pid<>pg_backend_pid()',[database]);
+            }finally{await admin.end();}
+          });
           await collect(()=>f.close());
           await collect(async()=>{
             const admin=new pg.Client({host:'/tmp',database:'postgres'});
