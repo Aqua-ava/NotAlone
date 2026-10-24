@@ -1,0 +1,12 @@
+{
+  "remaining_scope_processes": 0,
+  "shared_postgres_running": true,
+  "shared_postgres_directory": "/tmp/notalone-dsh-migration-pg-20261024",
+  "client_connections_excluding_inspector": 0,
+  "retained_non_template_databases": 3,
+  "retained_databases_all_test_named": false,
+  "cleanup_responsibility": "共享PG及保留库交接给后续Agent；未证明属于本轮的资源不删除",
+  "private_inventory_alias": "PRIVATE_RAW/task07-root-runtime/closeout-resource-inventory.raw.json",
+  "private_inventory_sha256": "3ed18d32527cf98df1c370182073a00ff17962087fc9f1d40991091918ea91b5",
+  "private_mode": "0o600"
+}

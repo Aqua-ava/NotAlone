@@ -1,0 +1,10 @@
+✔ 官方profile/原adapter/真实ModelHost与PG：E/V单次attempt、预算、五字段claim、晚结果与record_ack未知 (1105.561542ms)
+✔ 官方profile/原adapter/真实ModelHost与PG：E/V单次attempt、预算、五字段claim、晚结果与trace_receipt未知 (979.752125ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2187.828792

@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 用户已授权全部26项按依赖持续执行、目标模式和独立会话并行。当前01—06、09、18、19及23已验收；07、10已认领并行实现，21仍为claimed且原生Vision验收阻塞；其余保持原依赖等待。2026-10-24 明确废除 ECNU，不再作为兼容验收项，见[范围更正](provider-scope-update.md)；其他条件不变。模块测试或本地提交不等于整票验收；最新交接见[执行记录](execution.md)。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
+> 用户最新要求：当前迁移工作自然收尾后交其他 Agent，不再自动展开下一批。当前01—06、09、18、19及23已验收；07代码已提交但实际UI验收未齐，10只冻结默认A纵切且未合主树，两票保持claimed、剩余目标暂停；21原生Vision正例仍阻塞。其余按原依赖等待。完整交接见[next-agent-handoff.md](next-agent-handoff.md)，原规格和验收不降低。
 
 ## 逐项任务与阻塞关系
 

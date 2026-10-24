@@ -1,0 +1,19 @@
+# 任务10 默认A纵切冻结交接（整票未完成）
+- base：`b0a6817582d92b4142977c486fe7a9366496cb88`；target：`6e3a864ca5653311957b106e16130084b5f5c12a`；只在自有snapshot提交。
+- 50路径patch：`default-a.patch`；SHA256：`1ecd1de9ed84a0a3452af983332ba213638991694c299d3a8378fc45e4b50658`；逐文件与依赖摘要见manifest。
+- 真实主宿主：官方host.patch → host-plugin → host-model-runtime → host-reply → 原SDK → 私有HTTP → PythonRemote → 原B。
+- 显式双flag为typescript才启用默认A；原Python Worker仍唯一领取，B保持原顺序、采纳、trace及水位路径。
+- E/V各1真实loopback HTTP；错token0HTTP，未消费A跨trace恢复/按水位重跑均0额外HTTP；原账本2笔无重复E。
+- 候选raw解析前稳定UUID贯穿拒绝/核验/采纳；来源、scope、原claim及窗口内容每次复验。
+- 恢复：原B事务确认消费；unknown不重放；明确0派发可重试；清正文后不补造body。
+- 实际调用：保持原TS provider/UUID，pending不投影未建010外键；真实HTTP暂态仅E业务重试，SDK隐式重试0。
+- terminal ACK → 最小trace-call持久化 → settled；回调失败保留journal orphan，PG known不解除。
+- 最终TS44/44、Python44/44、tsc通过；真实主宿主及Legacy正常退出；自有随机库普通DROP。
+- pre/post公开历史与当前文件扫描均issues0；原54日志私存0700/0600逐字SHA复核通过，新证据双SHA见manifest。
+- 早期相关既有05测试用了原WITH(FORCE)清理；最终本票矩阵使用普通DROP，不把早期组描述为普通DROP。
+- 数据影响：只沿原表/原删除路径保存当前联系人敏感trace；无新schema、真实资料、付费模型、发送能力。
+- 独立Standards/Spec及恢复复核的阻断项已修；根实际App/微信尚未验收；未运行打包或push。
+- TS task-store/pipeline已做合成PG测试但未接生产唯一Worker；历史bounded仍显式走原模式，整票10继续claimed。
+- 根需按integration-notes合07/23共享路径；不得整文件覆盖当前主树，旧冻结证据保持不变。
+- 旧87私有baseline含本机依赖link；交付分支已接回canonical base，link只在本地exclude，旧引用保留不发布。
+- v2仅清理一行EOF空白，v1已冻结文件/证据不改写；本轮收尾后按用户指令暂停剩余目标。
