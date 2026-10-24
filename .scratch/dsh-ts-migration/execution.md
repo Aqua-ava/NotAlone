@@ -52,3 +52,7 @@ cc263095已整合唯一模型宿主、原SDK物理许可、已知终态ACK未知
 ## 显式 TS 未配置管理能力（2026-10-24）
 
 根组合 Core＋TaskHost＋已签 Skill，26 路径；缺 key／owner 时保留真实共享 ModelHost、恢复和管理接口，生成明确 unconfigured，删除五步继续，模型动作写前拒绝。根最小 profile1→相关38／Python16→已配置 profile1／strict0；独立 core／TaskHost 0 finding。实际 App 两态及合成本人初始化的原完整重启通过并清理；一度 fixture 禁读刚保存配置的失败保留原证据，经单变量红绿及实际复验仅修 fixture。详见 ts-controlplane-root-acceptance/validation.md。默认 Python、schema111及其余依赖票不变，不把此切片算 05／22／24 完成。
+
+## 05 离线盲评工具组件（2026-10-24）
+
+冻结5个正式路径f0983fe6在基线43ae208f应用，根最小1/1→相关26/26；实际CLI实产2项、0700/0600、拒绝覆盖且原文件不变、缺参提示和临时清理通过。来源与完整语义保留，身份仅私有绑定；外模/DB/App/微信0。详见reply-blind-root-acceptance/validation.md，manifest 2dafb60854794789ba59cceb106b07fb189d16edb50f4252920c8a47465aefa2。仅组件通过，当前只支持本机假供应商采集，语义评审0、真实质量/切换false，05保持claimed。

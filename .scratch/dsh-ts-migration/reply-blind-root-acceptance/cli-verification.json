@@ -1,0 +1,36 @@
+{
+  "new_output": {
+    "items": 2,
+    "verification": "verified_internal_consistency_only",
+    "visible_directory": "visible/",
+    "private_binding_directory": "private/",
+    "real_model_quality_verified": false,
+    "production_switch_approved": false
+  },
+  "modes": {
+    ".": "0700",
+    "private": "0700",
+    "private/binding.json": "0600",
+    "private/provenance.json": "0600"
+  },
+  "output_sha256": {
+    "visible/packet.md": "f4162aac7bd7d10d5f83dfb475baad5cef39cf9be5552001bf7a9f0fb94a8b63",
+    "visible/packet.json": "62610f4841de2da16b70fc05084518a7266d0c8e75abc2e11543f4ad213f7dbe",
+    "private/provenance.json": "8794af2ec4a5552197e3a43e6d11ab269fd333f9b6b1146bbda293df58c8eea7",
+    "private/binding.json": "81bf09b3a4ee406414c79f769ec51517f56ac52e500e0916d6c5c0281bf59a2c"
+  },
+  "existing_output_rejected_unchanged": true,
+  "duplicate_exit": 1,
+  "duplicate_stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "duplicate_stderr_sha256": "0c0821dcdd5965e4e30f7982399757a5636881af5b1a9c26ebb97c18e9d4df0d",
+  "missing_arguments_exit": 1,
+  "missing_arguments_usage_points_to_formal_entry": true,
+  "external_calls": 0,
+  "temporary_tree_removed": true,
+  "verifier_correction": {
+    "initial_verifier_exit": 1,
+    "initial_failure": "验收脚本误把返回状态写成verified，首轮CLI自身exit0，尚未运行覆盖检查即触发断言",
+    "correct_status": "verified_internal_consistency_only",
+    "product_sources_changed": false
+  }
+}
