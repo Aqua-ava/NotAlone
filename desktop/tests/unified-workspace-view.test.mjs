@@ -127,6 +127,9 @@ test('状态读取失败保留原警告，明确完整才清除，旧增量不�
   assert.equal(view.historyReplyEligibility(null, 'a', 'incomplete'), 'incomplete');
   const row = phase => ({ contactId: 'a', phase });
   assert.equal(view.historyReplyEligibility({ historyAuthorizationState: 'declined', historyCoverages: [row('not_started')] }, 'a'), undefined);
+  assert.equal(view.historyReplyEligibility({ historyAuthorizationState: 'accepted', historyCoverages: [] }, 'a'), 'not_started');
+  assert.equal(view.historyReplyEligibility({ historyAuthorizationState: 'accepted', historyCoverages: undefined }, 'a'), 'not_started');
+  assert.equal(view.historyReplyEligibility({ historyAuthorizationState: 'accepted', historyCoverages: [{ contactId: 'b', phase: 'complete' }] }, 'a'), 'not_started');
   assert.equal(view.historyReplyEligibility({ historyAuthorizationState: 'accepted', historyCoverages: [row('incomplete'), row('not_started')] }, 'a'), 'not_started');
   assert.equal(view.historyReplyEligibility({ historyCoverages: [row('complete')] }, 'a', 'incomplete'), 'complete');
 });
