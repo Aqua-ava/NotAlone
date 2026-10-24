@@ -271,7 +271,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection,scope,state,manifest,dependencies,contract,budget,
                 action=action,revision=revision,profile_required=profile_required)
-            self._prepare_current_generation(connection, scope, state, overview, task_id, execute,
+            self._prepare_current_generation(connection, scope, state, overview, task_id,
                 defer_valid=":document-tools-v1" in contract)
             return task_id, execute
 
@@ -279,10 +279,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
         from notalone.persistence.layered_change_feed import LayeredChangeFeed
         return LayeredChangeFeed(self._database_url, owner_id, callback)
 
-    def _prepare_current_generation(self, connection, scope, state, overview, task_id, execute, *, defer_valid=False):
+    def _prepare_current_generation(self, connection, scope, state, overview, task_id, *, defer_valid=False):
         generation, rows = self.generation_rows(connection,scope,state['organization_generation'])
         job = connection.execute("SELECT pending_receipt FROM public.layered_memory_job WHERE task_id=%s",(task_id,)).fetchone()
-        if not execute or not generation:
+        # 空目标同样可能由真实时间边界产生；即时完成的空任务也必须撤下旧世代。
+        if not generation:
             return
         current = {item['memory_id']: item for item in self._manifest(
             connection, scope, self.unprotected(connection, scope, self.eligible(overview)))}
@@ -303,8 +304,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
             rows = connection.execute("SELECT contact_id,next_due_at,next_boundary_at,maintenance_allowed,"
                 "dirty_revision,consumed_revision FROM public.layered_memory_state "
-                "WHERE owner_id=%s AND enabled AND (next_boundary_at IS NOT NULL OR "
-                "maintenance_allowed AND dirty_revision>consumed_revision AND next_due_at IS NOT NULL)",
+                "WHERE owner_id=%s AND enabled AND maintenance_allowed AND (next_boundary_at IS NOT NULL OR "
+                "next_due_at IS NOT NULL AND (dirty_revision>consumed_revision OR status='stale'))",
                 (owner_id,)).fetchall()
         now, wall_now = self._clock(), datetime.now(timezone.utc)
         due, delays = [], []
@@ -312,7 +313,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             deadlines = []
             if row['next_boundary_at'] is not None:
                 deadlines.append((row['next_boundary_at']-now).total_seconds())
-            if row['maintenance_allowed'] and row['next_due_at'] is not None:
+            if row['next_due_at'] is not None:
                 deadlines.append((row['next_due_at']-wall_now).total_seconds())
             if min(deadlines, default=3600) <= 0:
                 due.append(organization_scope(owner_id, row['contact_id']))
@@ -322,8 +323,9 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
 
     def enqueue_maintenance(self, scope, budget, contract, *, profile_required=False):
         with self.transaction(scope) as (connection, state, overview):
-            if (not state['enabled'] or not state['maintenance_allowed']
-                    or state['dirty_revision'] <= state['consumed_revision']):
+            revision_due = state['dirty_revision'] > state['consumed_revision']
+            time_due = state['status'] == 'stale' and state['next_due_at'] is not None
+            if not state['enabled'] or not state['maintenance_allowed'] or not (revision_due or time_due):
                 return None
             if any(job['state'] == 'active' and job['settings_generation'] == state['settings_generation']
                    for job in current_job(connection, scope)):
@@ -335,7 +337,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection, scope, state, manifest, dependencies,
                 contract, budget, action='refresh', revision=None, profile_required=profile_required)
-            self._prepare_current_generation(connection, scope, state, overview, task_id, execute,
+            self._prepare_current_generation(connection, scope, state, overview, task_id,
                 defer_valid=":document-tools-v1" in contract)
             connection.execute("UPDATE public.layered_memory_job SET target_dirty_revision=%s WHERE task_id=%s",
                                (state['dirty_revision'], task_id))

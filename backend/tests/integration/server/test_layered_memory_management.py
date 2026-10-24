@@ -217,7 +217,7 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
             self.assertTrue(self.task_finished.wait(5))
             self.assertTrue(changed.wait(5), "自然失效须按已保存边界唤醒，不依赖页面轮询")
         state = self._get(backend, f"/api/contacts/{contact}/layered-memory")["layered_memory"]
-        self.assertEqual(state['status'], 'stale', state)
+        self.assertEqual(state['status'], 'empty', state)
         self.assertEqual((state['eligible_count'], state['covered_count'], state['remaining_count']), (0, 0, 0))
         self.assertEqual(proposer.calls, 1, "失效资料不得重新参与历史主题生成。")
         with psycopg.connect(self.database_url) as connection:
@@ -1008,23 +1008,24 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
                 "AND contact_id=%s", (self.owner_id,contact)).fetchone()[0]
         self.assertEqual(count, 0)
 
-    def test_clock_boundary_invalidates_a_frozen_current_paragraph_and_refresh_preserves_history(self):
+    def test_clock_boundary_retires_expired_paragraph_without_regeneration(self):
         from notalone.scopes import ContactScope
         contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")
         self.confirm(contact, "双方共同参加过课程。", message,
             valid_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
             invalid_at=datetime(2099, 1, 2, tzinfo=timezone.utc))
         now = [datetime(2099, 1, 1, tzinfo=timezone.utc)]
-        class HistoricalProposal(ControlledProposal):
-            def propose(inner, *, memories, budget, deadline):
-                result = super().propose(memories=memories, budget=budget, deadline=deadline)
-                if memories[0].timing['current_status'] == 'historical':
-                    result['scenarios'][0]['topic_key'] = 'historical-experience'
-                return result
-        backend = self.controlled(proposer=HistoricalProposal(), clock=lambda: now[0])
+        backend = self.controlled(clock=lambda: now[0])
         ready = self.enable(backend, contact)
         snapshot = self.service.capture(ContactScope(self.owner_id,UUID(contact)))
         self.assertTrue(self.service.validate(snapshot))
+        import psycopg
+        with psycopg.connect(self.database_url) as connection:
+            dirty, consumed = connection.execute(
+                "SELECT dirty_revision,consumed_revision FROM public.layered_memory_state "
+                "WHERE owner_id=%s AND contact_id=%s",
+                (self.owner_id, contact)).fetchone()
+            self.assertEqual(dirty, consumed, "首轮完成后时间边界尚未来临，只允许下一次到达边界时唤醒维护")
         # 首批冻结后启动真实维护，单独检验时钟边界，避免首批enable与后台抢跑。
         self.service.start_maintenance(self.owner_id)
         now[0] = datetime(2099, 1, 3, tzinfo=timezone.utc)
@@ -1033,24 +1034,102 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         from threading import Event
         for _ in range(50):
             current = self._get(backend,path)["layered_memory"]
-            if current['status'] == 'ready':
+            if current['status'] == 'empty':
                 break
-            self.assertIn(current['status'], {'stale', 'updating'})
+            self.assertIn(current['status'], {'stale', 'updating', 'empty'})
             Event().wait(0.05)
-        self.assertEqual(current['status'], 'ready')
+        self.assertEqual(current['status'], 'empty', current)
+        self.assertEqual(current["scenarios"], [], "ADR-080 禁止过期资料重新进入主题生成")
         status, refreshed = backend.request(path+"/refresh", {"settings_generation": ready["settings_generation"]})
         self.assertEqual(status, 200, refreshed)
-        reference = refreshed["layered_memory"]["scenarios"][0]["paragraphs"][0]["references"][0]
-        self.assertEqual(reference["timing"]["current_status"], "historical")
-        self.assertEqual(datetime.fromisoformat(self.proposal.inputs[-1][0].invalid_at),
-                         datetime(2099, 1, 2, tzinfo=timezone.utc))
+        self.assertEqual((refreshed["layered_memory"]["status"],
+                          refreshed["layered_memory"]["scenarios"]), ("empty", []))
+        self.assertEqual(len(self.proposal.inputs), 1, "重复刷新不得让过期资料再次进入模型")
         self.assertFalse(self.service.validate(snapshot), "旧当前资料快照不可因历史重建复活")
-        import psycopg
         with psycopg.connect(self.database_url) as connection:
             old = connection.execute('SELECT paragraphs FROM public.scenario_document_version '
                 'WHERE owner_id=%s AND contact_id=%s AND id=%s',
                 (self.owner_id, UUID(contact), ready['scenarios'][0]['version_id'])).fetchone()
             self.assertEqual(old[0], ready['scenarios'][0]['paragraphs'], "旧正文仅供审计，不能被历史版本覆盖")
+            self.assertEqual(connection.execute(
+                "SELECT scenario_version_ids FROM public.layered_memory_generation "
+                "WHERE owner_id=%s AND contact_id=%s AND organization_generation=%s",
+                (self.owner_id, contact, refreshed["layered_memory"]["organization_generation"])).fetchone(),
+                ([],), "维护须原子撤下当前集合，而不是停在旧 stale 世代")
+
+    def test_clock_boundary_refreshes_remaining_current_material(self):
+        from notalone.scopes import ContactScope
+        from threading import Event
+        contact, _, expired_message = self.import_contact("合成经历：双方共同参加过课程。")
+        expired = self.confirm(contact, "双方共同参加过课程。", expired_message,
+            valid_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            invalid_at=datetime(2099, 1, 2, tzinfo=timezone.utc))
+        _, _, current_message = self.import_contact(
+            "合成练习：双方共同完成练习。", contact_id=contact,
+            when=datetime(2024, 2, 1, tzinfo=timezone.utc))
+        current = self.confirm(contact, "双方共同完成合成练习。", current_message)
+        now = [datetime(2099, 1, 1, tzinfo=timezone.utc)]
+        class RemainingCurrentProposal(ControlledProposal):
+            def propose(inner, *, memories, budget, deadline):
+                result = super().propose(memories=memories, budget=budget, deadline=deadline)
+                if len(memories) == 1:
+                    result["scenarios"][0]["topic_key"] = "remaining-current"
+                return result
+        backend = self.controlled(proposer=RemainingCurrentProposal(), clock=lambda: now[0])
+        ready = self.enable(backend, contact)
+        self.assertEqual(ready["status"], "ready")
+        snapshot = self.service.capture(ContactScope(self.owner_id, UUID(contact)))
+        self.assertTrue(self.service.validate(snapshot))
+        self.service.start_maintenance(self.owner_id)
+        now[0] = datetime(2099, 1, 3, tzinfo=timezone.utc)
+        self.assertFalse(self.service.validate(snapshot))
+        path = f"/api/contacts/{contact}/layered-memory"
+        for _ in range(50):
+            refreshed = self._get(backend, path)["layered_memory"]
+            if (refreshed["status"] == "ready"
+                    and refreshed["organization_generation"] > ready["organization_generation"]):
+                break
+            self.assertIn(refreshed["status"], {"stale", "updating", "ready"}, refreshed)
+            Event().wait(0.05)
+        self.assertEqual(refreshed["status"], "ready", refreshed)
+        self.assertGreater(refreshed["organization_generation"], ready["organization_generation"])
+        self.assertEqual([item.memory_id for item in self.proposal.inputs[-1]], [UUID(current["memory_id"])])
+        self.assertNotIn(UUID(expired["memory_id"]),
+            {UUID(reference["memory_id"]) for scenario in refreshed["scenarios"]
+             for paragraph in scenario["paragraphs"] for reference in paragraph["references"]})
+        self.assertEqual(len(self.proposal.inputs), 2, "时间维护只生成一次，重复读取不得重复调用模型")
+
+    def test_consumed_revision_does_not_drop_a_due_time_maintenance(self):
+        from notalone.scopes import ContactScope
+        import psycopg
+        contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact, "双方共同参加过课程。", message)
+        backend = self.controlled()
+        ready = self.enable(backend, contact)
+        self.assertEqual(ready["status"], "ready")
+        status, added = self.backend.request("/api/memories/manual-contact", {
+            "contact_id": contact, "text": "双方共同完成合成练习。", "category": "common_fact",
+        })
+        self.assertEqual(status, 200, added)
+        with psycopg.connect(self.database_url) as connection:
+            dirty, consumed = connection.execute(
+                "SELECT dirty_revision,consumed_revision FROM public.layered_memory_state "
+                "WHERE owner_id=%s AND contact_id=%s",
+                (self.owner_id, contact)).fetchone()
+            self.assertGreater(dirty, consumed)
+            connection.execute(
+                "UPDATE public.layered_memory_state SET consumed_revision=dirty_revision,"
+                "status='stale',maintenance_allowed=true,next_due_at=now()-interval '1 second' "
+                "WHERE owner_id=%s AND contact_id=%s", (self.owner_id, contact))
+        scope = ContactScope(self.owner_id, UUID(contact))
+        due, _ = self.service._store.maintenance_due(self.owner_id)
+        self.assertIn(scope, due, "到期时间信号不得因 revision 已消费而丢失")
+        task_id = self.service._store.enqueue_maintenance(
+            scope, self.service._budget, self.service._contract_for(scope))
+        self.assertIsNotNone(task_id, "时间维护不得依赖 dirty_revision 新增")
+        self.assertIsNone(self.service._store.enqueue_maintenance(
+            scope, self.service._budget, self.service._contract_for(scope)),
+            "同一在途维护须幂等复用且不重复入队")
 
     def test_public_read_port_freezes_one_generation_and_revokes_snapshot_on_disable(self):
         from notalone.scopes import ContactScope
