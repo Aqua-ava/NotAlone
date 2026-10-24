@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 用户已授权全部26项按依赖持续执行、目标模式和独立会话并行。当前01—04、09及18已验收；05、06、19、21仍为claimed，其余保持原依赖等待。模块测试或本地提交不等于整票验收；最新交接见[执行记录](execution.md)。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
+> 用户已授权全部26项按依赖持续执行、目标模式和独立会话并行。当前01—04、09及18已验收；05、06、19、21仍为claimed，其余保持原依赖等待。2026-10-24 明确废除 ECNU，不再作为兼容验收项，见[范围更正](provider-scope-update.md)；其他条件不变。模块测试或本地提交不等于整票验收；最新交接见[执行记录](execution.md)。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
 
 ## 逐项任务与阻塞关系
 

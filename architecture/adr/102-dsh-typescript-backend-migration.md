@@ -10,7 +10,7 @@
 - 通用模型、Agent 循环、工具与 Skill 基础能力优先采用官方插件。确定性业务流程、联系人权限、来源核验、任务领取、事务、预算、采纳和删除仍由业务代码控制；原有单次语义调用不自动扩大为开放式循环。
 - 保留 PostgreSQL、现有身份与资料，优先兼容现有表结构，不重新导入或提取全部资料。必要结构变更使用兼容迁移，不改写已执行 SQL 或账本。
 - 持续助手讨论由业务记录保存；DSH 会话只承担临时运行，不额外保存长期聊天日志或上报完整会话。进程中断后按业务记录和幂等规则重新开始，不承诺恢复 Agent 内部断点；业务任务恢复规则保持。
-- 保留现有用户功能与模型配置，最终移除产品对 Python 后端及旧框架的运行依赖；原生 macOS 能力继续复用。通用 Harness 插件与用户管理的回复 Skill 是两类能力，不以禁止插件市场取消现有 Skill 导入、管理和审核功能。
+- 保留现有用户功能与模型配置，最终移除产品对 Python 后端及旧框架的运行依赖；原生 macOS 能力继续复用。唯一已明确撤销的配置保留项是 ECNU：用户于 2026-10-24 决定废除 ECNU／ecnu-max，不再要求迁移兼容。通用 Harness 插件与用户管理的回复 Skill 是两类能力，不以禁止插件市场取消现有 Skill 导入、管理和审核功能。
 - 插件由开发阶段选择、验证并随产品交付，固定框架及插件版本组合；不增加任意安装入口，不自动升级最新版。优先使用公开扩展接口；必须修改核心时重新讨论，不长期维护核心分叉。
 
 实施前必须核对锁定版本 DSH 官方文档、相关源码和示例，记录版本、依据与适配理由；不得凭印象猜接口、绕过官方机制或擅改核心。此为用户发布任务时追加的硬要求，能力缺口先给证据再讨论。
@@ -32,11 +32,14 @@
 | ADR-007、ADR-020 | Python Worker／常驻后台的语言实现选择 | 持久任务、租约、幂等、明确恢复、应用生命周期和停读规则 |
 | ADR-074《参考腾讯源码自行实现自动记忆》 | 现有 Python 后端实现及不增加 Node 运行面的语言限定 | 算法行为、来源核验、受限文档工具、本地语义向量及不接入腾讯服务／MemoryCore |
 | ADR-048 | DSH 搁置及沿用旧框架的阶段决定 | 记忆与 Skill 生命周期、审核、范围、预算和删除 |
+| ADR-045、ADR-062 的 ECNU 部分 | 用户于 2026-10-24 明确废除 ECNU／ecnu-max；不再为其保留 Chat Completions 适配、插件依赖或迁移验收 | 官方模型配置必须具备经核实的预算与协议，未知配置失败关闭，不继承其他供应商容量 |
+
+遇到旧 ECNU 配置时明确提示需要重新配置，不自动改为官方 DeepSeek，不静默重写原配置或恢复旧生成器。既有资料、身份、模型调用记录及未知用量仍保留。此次范围更正不取消其他功能、统一物理调用预算、恢复或真实验收要求；详见[范围记录](../../.scratch/dsh-ts-migration/provider-scope-update.md)。
 
 ADR-042／091 的持续讨论和不自动摘要，ADR-061／066／101 的本机资料、原库升级及交付规则，以及其他现行产品约束均保持。旧文档中的 Python 配置在迁移前仍描述实际实现，不能按新目标误报现状。
 
 ## 实施入口与证据
 
-[实施规格](../../.scratch/dsh-ts-migration/spec.md)记录行为与测试，[拆分](../../.scratch/dsh-ts-migration/ticket-proposal.md)及验收入口已获认可，[26份任务](../../.scratch/dsh-ts-migration/planning.md)已发布且均未开始；[讨论记录](../../.scratch/dsh-ts-migration/discussion.md)保留决策来历。
+[实施规格](../../.scratch/dsh-ts-migration/spec.md)记录行为与测试，[拆分](../../.scratch/dsh-ts-migration/ticket-proposal.md)及验收入口已获认可；[26份任务](../../.scratch/dsh-ts-migration/planning.md)已发布，当前状态见[执行交接](../../.scratch/dsh-ts-migration/execution.md)。[讨论记录](../../.scratch/dsh-ts-migration/discussion.md)保留决策来历。
 
 前期仅核对[官方启动架构](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)、[公开 Agent 接口](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/agent/README.md)与[最小配置](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/bundle/sdk-minimal/cordis.patch.yml)。这些为可变分支链接，不能当锁定版本；首项验证须固定具体版本／提交、核验依赖与出站行为。官方 minimal 不等于 NotAlone 最小配置，尚未证明无持久化、取消、工具及结构化结果的组合满足产品要求。
