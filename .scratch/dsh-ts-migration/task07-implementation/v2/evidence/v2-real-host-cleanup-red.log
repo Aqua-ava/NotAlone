@@ -1,0 +1,28 @@
+✖ 正式宿主关闭钩子异常仍结束自有进程并回收数据库与临时目录 (8750.070959ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8809.088125
+
+✖ failing tests:
+
+test at test/exploration-real-host.test.mjs:70:1
+✖ 正式宿主关闭钩子异常仍结束自有进程并回收数据库与临时目录 (8750.070959ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file://<SNAPSHOT>/backend-ts/test/exploration-real-host.test.mjs:82:9)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

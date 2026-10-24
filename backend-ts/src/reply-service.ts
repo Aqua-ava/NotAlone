@@ -29,6 +29,7 @@ import type {installModelProvider} from './model-provider.ts';
 import {ModelInputBudgetError,type MessagesBudgetProfile,type MessagesBudgetReceipt} from './model-input-budget.ts';
 import {readReplyBasisChanges} from './reply-source-guards.ts';
 import {createReplyExploredContextValidator} from './reply-exploration-guards.ts';
+import {exploredSkillUse} from './exploration-skill-use.ts';
 
 export interface ReplyServiceModel {
  provider:string;model:string;maxTokens:number;temperature:number;reasoningEffort:'off'|'low'|'high'|'max';
@@ -193,7 +194,8 @@ export class ReplyGenerationService {
      if(history)preparation.finalizeHistory(prepared,history);preparation.updateScenarioReceipts(prepared);
      const finalBudget=budgets.at(-1);if(!finalBudget)throw new ReplyError('reply_budget_unavailable',502);
      const context=preparation.finalize(prepared,publicBudget(finalBudget,model.warning_ratio));
-     saved=await store.save(request,context,candidateRows(candidates),skill!.use as unknown as Record<string,unknown>|null,commitSignal);
+     const used=input.suggestion?await transaction(client=>exploredSkillUse(client,verified,input,skill!.use)):skill!.use;
+     saved=await store.save(request,context,candidateRows(candidates),used as unknown as Record<string,unknown>|null,commitSignal);
     }},signal);
    if(!saved)throw new ReplyError('reply_persistence_unavailable',503);
    return await resultPayload(saved);

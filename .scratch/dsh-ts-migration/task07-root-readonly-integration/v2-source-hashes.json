@@ -1,0 +1,460 @@
+{
+  "schema_version": 1,
+  "scope": "07 v2只读静态集成核对；不重复Standards/Spec或运行验证",
+  "checked_at_utc": "2026-10-24T14:12:25.789627+00:00",
+  "root_head_at_start": "1a1f13670ee8cbb54d1ed5057745df041574c41b",
+  "root_head_at_finish": "1a1f13670ee8cbb54d1ed5057745df041574c41b",
+  "frozen_manifest_sha256": "bcd3c0cb902a1acb6a76cff5db76beebe543ce9a135ac955204e6ceecfdb8ad0",
+  "base_commit": "3e044a046f66dedf65120e664c2d9b1ee04ae112",
+  "target_commit": "a94a3d76d886227f96125744bc1ef71ec5492245",
+  "patch_sha256_claim": "743cbf71e37e708c795ce3ee48a151252b643570647a344544930a86d9aed211",
+  "integration_rule": "v2包含v1；仅以3e044a04根23为base应用v2，不叠加v1",
+  "selected_source_checks": [
+    {
+      "path": "backend-ts/src/host-plugin.ts",
+      "before_sha256": "53cf7b1e91c4a8e3d6986f6a1b13858d8460c6dd36a6df7e64bf3b8c8bc3693e",
+      "target_sha256": "41266a7031a2a6f63c1f31e589b382381c1e1e1aabdf7c43d300b34c19e8e486",
+      "actual_target_sha256": "41266a7031a2a6f63c1f31e589b382381c1e1e1aabdf7c43d300b34c19e8e486",
+      "current_at_review_sha256": "41266a7031a2a6f63c1f31e589b382381c1e1e1aabdf7c43d300b34c19e8e486",
+      "target_matches": true
+    },
+    {
+      "path": "backend-ts/src/host-reply.ts",
+      "before_sha256": "29389a0f593825c30549ad07298c27883d4f08f3b28e1947b0a03e1bd912ba6f",
+      "target_sha256": "0834be77122a5b9e5810490455216cad752685f523ce75469806e093827922fc",
+      "actual_target_sha256": "0834be77122a5b9e5810490455216cad752685f523ce75469806e093827922fc",
+      "current_at_review_sha256": "0834be77122a5b9e5810490455216cad752685f523ce75469806e093827922fc",
+      "target_matches": true
+    },
+    {
+      "path": "backend-ts/src/exploration-http.ts",
+      "before_sha256": null,
+      "target_sha256": "8dacb960b0335e3e506bfb8d15e0379c546af93a008a82d1a24a375d6297611c",
+      "actual_target_sha256": "8dacb960b0335e3e506bfb8d15e0379c546af93a008a82d1a24a375d6297611c",
+      "current_at_review_sha256": "8dacb960b0335e3e506bfb8d15e0379c546af93a008a82d1a24a375d6297611c",
+      "target_matches": true
+    },
+    {
+      "path": "backend-ts/src/reply-service.ts",
+      "before_sha256": "5c0840593566b8c4aeec138922f86c8187bff00f6ecfb1a2868763602773c4a9",
+      "target_sha256": "d9db8fe32d820eead476af66faf4056b9bd164b5504562a95315e171b908d2be",
+      "actual_target_sha256": "d9db8fe32d820eead476af66faf4056b9bd164b5504562a95315e171b908d2be",
+      "current_at_review_sha256": "d9db8fe32d820eead476af66faf4056b9bd164b5504562a95315e171b908d2be",
+      "target_matches": true
+    },
+    {
+      "path": "backend-ts/src/exploration-skill-use.ts",
+      "before_sha256": null,
+      "target_sha256": "ae2f46d9ebc64bbac95c8b2dc04480ef57501b97d0b6b91381cd2e0b8dff39d1",
+      "actual_target_sha256": "ae2f46d9ebc64bbac95c8b2dc04480ef57501b97d0b6b91381cd2e0b8dff39d1",
+      "current_at_review_sha256": "ae2f46d9ebc64bbac95c8b2dc04480ef57501b97d0b6b91381cd2e0b8dff39d1",
+      "target_matches": true
+    },
+    {
+      "path": "backend-ts/test/exploration-real-host.test.mjs",
+      "before_sha256": null,
+      "target_sha256": "6991736baa1078e4182469b5d2733b7c5a3188c6ccf8afdc041b502a43caab5f",
+      "actual_target_sha256": "6991736baa1078e4182469b5d2733b7c5a3188c6ccf8afdc041b502a43caab5f",
+      "current_at_review_sha256": "6991736baa1078e4182469b5d2733b7c5a3188c6ccf8afdc041b502a43caab5f",
+      "target_matches": true
+    },
+    {
+      "path": "backend-ts/test/exploration-real-host-support.mjs",
+      "before_sha256": null,
+      "target_sha256": "393b8a30b33114fcda0fcaa594ff1e51242696b1d789ff9b6c91b59bbce30329",
+      "actual_target_sha256": "393b8a30b33114fcda0fcaa594ff1e51242696b1d789ff9b6c91b59bbce30329",
+      "current_at_review_sha256": "393b8a30b33114fcda0fcaa594ff1e51242696b1d789ff9b6c91b59bbce30329",
+      "target_matches": true
+    },
+    {
+      "path": "backend-ts/test/exploration-real-host-guard.mjs",
+      "before_sha256": null,
+      "target_sha256": "321dc8d0243bd47be5f125969d7c58af2ef5ab247d21c95f8af48bdf2745eae5",
+      "actual_target_sha256": "321dc8d0243bd47be5f125969d7c58af2ef5ab247d21c95f8af48bdf2745eae5",
+      "current_at_review_sha256": "321dc8d0243bd47be5f125969d7c58af2ef5ab247d21c95f8af48bdf2745eae5",
+      "target_matches": true
+    },
+    {
+      "path": "backend-ts/test/exploration-real-host-guard.py",
+      "before_sha256": null,
+      "target_sha256": "dc1a41f2a778283dd644abd60bfbb3f28778ad64091268cfb5af7a0581335745",
+      "actual_target_sha256": "dc1a41f2a778283dd644abd60bfbb3f28778ad64091268cfb5af7a0581335745",
+      "current_at_review_sha256": "dc1a41f2a778283dd644abd60bfbb3f28778ad64091268cfb5af7a0581335745",
+      "target_matches": true
+    },
+    {
+      "path": "backend/src/notalone/application/exploration_remote.py",
+      "before_sha256": null,
+      "target_sha256": "f490222325410f7d06ad5de9ff2be522def49be161145dbb77bb5ff137646487",
+      "actual_target_sha256": "f490222325410f7d06ad5de9ff2be522def49be161145dbb77bb5ff137646487",
+      "current_at_review_sha256": "f490222325410f7d06ad5de9ff2be522def49be161145dbb77bb5ff137646487",
+      "target_matches": true
+    }
+  ],
+  "dependency_binding_checks": [
+    {
+      "path": "backend-ts/package.json",
+      "base_sha256": "3a4499ee28b52842bff2c988eae4c9210959985dd5cafd2a2a5c3b3f981b7aad",
+      "target_sha256": "3a4499ee28b52842bff2c988eae4c9210959985dd5cafd2a2a5c3b3f981b7aad",
+      "checked_base_sha256": "3a4499ee28b52842bff2c988eae4c9210959985dd5cafd2a2a5c3b3f981b7aad",
+      "checked_target_sha256": "3a4499ee28b52842bff2c988eae4c9210959985dd5cafd2a2a5c3b3f981b7aad",
+      "current_at_review_sha256": "3a4499ee28b52842bff2c988eae4c9210959985dd5cafd2a2a5c3b3f981b7aad"
+    },
+    {
+      "path": "backend-ts/pnpm-lock.yaml",
+      "base_sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+      "target_sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+      "checked_base_sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+      "checked_target_sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+      "current_at_review_sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798"
+    },
+    {
+      "path": "backend-ts/profile/cordis.patch.yml",
+      "base_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+      "target_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+      "checked_base_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+      "checked_target_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+      "current_at_review_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f"
+    },
+    {
+      "path": "backend-ts/profile/host.patch.yml",
+      "base_sha256": "5c95caec7c4a40b5bb36151ac213b1c9823e7368b1136cbbefcf806fcfe1bc9f",
+      "target_sha256": "5c95caec7c4a40b5bb36151ac213b1c9823e7368b1136cbbefcf806fcfe1bc9f",
+      "checked_base_sha256": "5c95caec7c4a40b5bb36151ac213b1c9823e7368b1136cbbefcf806fcfe1bc9f",
+      "checked_target_sha256": "5c95caec7c4a40b5bb36151ac213b1c9823e7368b1136cbbefcf806fcfe1bc9f",
+      "current_at_review_sha256": "5c95caec7c4a40b5bb36151ac213b1c9823e7368b1136cbbefcf806fcfe1bc9f"
+    },
+    {
+      "path": "backend-ts/src/model-host.ts",
+      "base_sha256": "71de905f4089c8ced201508d5a9c2f885e22ae44db8fca4ab60e1844239a8176",
+      "target_sha256": "71de905f4089c8ced201508d5a9c2f885e22ae44db8fca4ab60e1844239a8176",
+      "checked_base_sha256": "71de905f4089c8ced201508d5a9c2f885e22ae44db8fca4ab60e1844239a8176",
+      "checked_target_sha256": "71de905f4089c8ced201508d5a9c2f885e22ae44db8fca4ab60e1844239a8176",
+      "current_at_review_sha256": "71de905f4089c8ced201508d5a9c2f885e22ae44db8fca4ab60e1844239a8176"
+    },
+    {
+      "path": "backend-ts/src/model-provider.ts",
+      "base_sha256": "e99c3e004cf559ac9790ad6fb62bcaf044a9ec24415a7eb15e02815f32f4dd6b",
+      "target_sha256": "e99c3e004cf559ac9790ad6fb62bcaf044a9ec24415a7eb15e02815f32f4dd6b",
+      "checked_base_sha256": "e99c3e004cf559ac9790ad6fb62bcaf044a9ec24415a7eb15e02815f32f4dd6b",
+      "checked_target_sha256": "e99c3e004cf559ac9790ad6fb62bcaf044a9ec24415a7eb15e02815f32f4dd6b",
+      "current_at_review_sha256": "e99c3e004cf559ac9790ad6fb62bcaf044a9ec24415a7eb15e02815f32f4dd6b"
+    },
+    {
+      "path": "backend-ts/src/model-ledger.ts",
+      "base_sha256": "585334184816d6f3055a4771bbd7b8c6354a7200d12b2c6afff952df1f2b88e1",
+      "target_sha256": "585334184816d6f3055a4771bbd7b8c6354a7200d12b2c6afff952df1f2b88e1",
+      "checked_base_sha256": "585334184816d6f3055a4771bbd7b8c6354a7200d12b2c6afff952df1f2b88e1",
+      "checked_target_sha256": "585334184816d6f3055a4771bbd7b8c6354a7200d12b2c6afff952df1f2b88e1",
+      "current_at_review_sha256": "585334184816d6f3055a4771bbd7b8c6354a7200d12b2c6afff952df1f2b88e1"
+    },
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "base_sha256": "e5fd419e9dc4566495520f2ba1b64491e562b365a0552ad3ceb2db1c421f4e0b",
+      "target_sha256": "e5fd419e9dc4566495520f2ba1b64491e562b365a0552ad3ceb2db1c421f4e0b",
+      "checked_base_sha256": "e5fd419e9dc4566495520f2ba1b64491e562b365a0552ad3ceb2db1c421f4e0b",
+      "checked_target_sha256": "e5fd419e9dc4566495520f2ba1b64491e562b365a0552ad3ceb2db1c421f4e0b",
+      "current_at_review_sha256": "e5fd419e9dc4566495520f2ba1b64491e562b365a0552ad3ceb2db1c421f4e0b"
+    },
+    {
+      "path": "backend-ts/src/host-plugin.ts",
+      "base_sha256": "53cf7b1e91c4a8e3d6986f6a1b13858d8460c6dd36a6df7e64bf3b8c8bc3693e",
+      "target_sha256": "41266a7031a2a6f63c1f31e589b382381c1e1e1aabdf7c43d300b34c19e8e486",
+      "checked_base_sha256": "53cf7b1e91c4a8e3d6986f6a1b13858d8460c6dd36a6df7e64bf3b8c8bc3693e",
+      "checked_target_sha256": "41266a7031a2a6f63c1f31e589b382381c1e1e1aabdf7c43d300b34c19e8e486",
+      "current_at_review_sha256": "41266a7031a2a6f63c1f31e589b382381c1e1e1aabdf7c43d300b34c19e8e486"
+    },
+    {
+      "path": "backend-ts/src/legacy-backend.ts",
+      "base_sha256": "524b6b93c5b1e0311aee8a2d20593051d28356d70c6c1ac39addd8a401492eb6",
+      "target_sha256": "524b6b93c5b1e0311aee8a2d20593051d28356d70c6c1ac39addd8a401492eb6",
+      "checked_base_sha256": "524b6b93c5b1e0311aee8a2d20593051d28356d70c6c1ac39addd8a401492eb6",
+      "checked_target_sha256": "524b6b93c5b1e0311aee8a2d20593051d28356d70c6c1ac39addd8a401492eb6",
+      "current_at_review_sha256": "524b6b93c5b1e0311aee8a2d20593051d28356d70c6c1ac39addd8a401492eb6"
+    },
+    {
+      "path": "backend-ts/src/host-reply-config.ts",
+      "base_sha256": "43e67a404f4abeeef009b5e7c1da5692546d51f5fe12ba6589f45aaac29b8ee8",
+      "target_sha256": "43e67a404f4abeeef009b5e7c1da5692546d51f5fe12ba6589f45aaac29b8ee8",
+      "checked_base_sha256": "43e67a404f4abeeef009b5e7c1da5692546d51f5fe12ba6589f45aaac29b8ee8",
+      "checked_target_sha256": "43e67a404f4abeeef009b5e7c1da5692546d51f5fe12ba6589f45aaac29b8ee8",
+      "current_at_review_sha256": "43e67a404f4abeeef009b5e7c1da5692546d51f5fe12ba6589f45aaac29b8ee8"
+    },
+    {
+      "path": "backend-ts/src/launch.ts",
+      "base_sha256": "6a476b91594906113a0f62a999b73356e9d3f41b84edad361b8789685f37a503",
+      "target_sha256": "6a476b91594906113a0f62a999b73356e9d3f41b84edad361b8789685f37a503",
+      "checked_base_sha256": "6a476b91594906113a0f62a999b73356e9d3f41b84edad361b8789685f37a503",
+      "checked_target_sha256": "6a476b91594906113a0f62a999b73356e9d3f41b84edad361b8789685f37a503",
+      "current_at_review_sha256": "6a476b91594906113a0f62a999b73356e9d3f41b84edad361b8789685f37a503"
+    },
+    {
+      "path": "desktop/src/main/backend/process.ts",
+      "base_sha256": "10b878d4c5116fcc39860bdf2c061f76f11964531d40e400088e96359c15f416",
+      "target_sha256": "10b878d4c5116fcc39860bdf2c061f76f11964531d40e400088e96359c15f416",
+      "checked_base_sha256": "10b878d4c5116fcc39860bdf2c061f76f11964531d40e400088e96359c15f416",
+      "checked_target_sha256": "10b878d4c5116fcc39860bdf2c061f76f11964531d40e400088e96359c15f416",
+      "current_at_review_sha256": "10b878d4c5116fcc39860bdf2c061f76f11964531d40e400088e96359c15f416"
+    },
+    {
+      "path": "desktop/src/main/index.ts",
+      "base_sha256": "83f5e8397be2d9b53f956cd60fa97330ba649798aec59ae80e05f37ae92bad6c",
+      "target_sha256": "83f5e8397be2d9b53f956cd60fa97330ba649798aec59ae80e05f37ae92bad6c",
+      "checked_base_sha256": "83f5e8397be2d9b53f956cd60fa97330ba649798aec59ae80e05f37ae92bad6c",
+      "checked_target_sha256": "83f5e8397be2d9b53f956cd60fa97330ba649798aec59ae80e05f37ae92bad6c",
+      "current_at_review_sha256": "83f5e8397be2d9b53f956cd60fa97330ba649798aec59ae80e05f37ae92bad6c"
+    },
+    {
+      "path": "desktop/src/main/reply/client.ts",
+      "base_sha256": "945530f372b712146dad25d890d5f4b33ecffeda2092cf558fd13f49c487ce6f",
+      "target_sha256": "945530f372b712146dad25d890d5f4b33ecffeda2092cf558fd13f49c487ce6f",
+      "checked_base_sha256": "945530f372b712146dad25d890d5f4b33ecffeda2092cf558fd13f49c487ce6f",
+      "checked_target_sha256": "945530f372b712146dad25d890d5f4b33ecffeda2092cf558fd13f49c487ce6f",
+      "current_at_review_sha256": "945530f372b712146dad25d890d5f4b33ecffeda2092cf558fd13f49c487ce6f"
+    },
+    {
+      "path": "desktop/src/main/reply/exploration-client.ts",
+      "base_sha256": "e7dc74ba862f957447c5b98b5d7e733b343f0ff7da3bb90751add37c603b267d",
+      "target_sha256": "e7dc74ba862f957447c5b98b5d7e733b343f0ff7da3bb90751add37c603b267d",
+      "checked_base_sha256": "e7dc74ba862f957447c5b98b5d7e733b343f0ff7da3bb90751add37c603b267d",
+      "checked_target_sha256": "e7dc74ba862f957447c5b98b5d7e733b343f0ff7da3bb90751add37c603b267d",
+      "current_at_review_sha256": "e7dc74ba862f957447c5b98b5d7e733b343f0ff7da3bb90751add37c603b267d"
+    },
+    {
+      "path": "backend-ts/test/main-host-reply-chain-preload.mjs",
+      "base_sha256": "5f09adf61a551decfe14a2c03a384de79d998afcdb62c1beed24822880ede16e",
+      "target_sha256": "5f09adf61a551decfe14a2c03a384de79d998afcdb62c1beed24822880ede16e",
+      "checked_base_sha256": "5f09adf61a551decfe14a2c03a384de79d998afcdb62c1beed24822880ede16e",
+      "checked_target_sha256": "5f09adf61a551decfe14a2c03a384de79d998afcdb62c1beed24822880ede16e",
+      "current_at_review_sha256": "5f09adf61a551decfe14a2c03a384de79d998afcdb62c1beed24822880ede16e"
+    },
+    {
+      "path": "backend-ts/test/reply-service-runtime-support.mjs",
+      "base_sha256": "3be39abfe7e12a28af829305795bc3d10f1a46b714596c6ab9015a20d0aa9d22",
+      "target_sha256": "3be39abfe7e12a28af829305795bc3d10f1a46b714596c6ab9015a20d0aa9d22",
+      "checked_base_sha256": "3be39abfe7e12a28af829305795bc3d10f1a46b714596c6ab9015a20d0aa9d22",
+      "checked_target_sha256": "3be39abfe7e12a28af829305795bc3d10f1a46b714596c6ab9015a20d0aa9d22",
+      "current_at_review_sha256": "3be39abfe7e12a28af829305795bc3d10f1a46b714596c6ab9015a20d0aa9d22"
+    },
+    {
+      "path": "backend-ts/test/host-storage-fixture.mjs",
+      "base_sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a",
+      "target_sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a",
+      "checked_base_sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a",
+      "checked_target_sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a",
+      "current_at_review_sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a"
+    },
+    {
+      "path": "desktop/package.json",
+      "base_sha256": "7fd35a480fb85ee104c972de861fc2fb1b7e95dddd2c780ed2b884ef1e9d27fb",
+      "target_sha256": "7fd35a480fb85ee104c972de861fc2fb1b7e95dddd2c780ed2b884ef1e9d27fb",
+      "checked_base_sha256": "7fd35a480fb85ee104c972de861fc2fb1b7e95dddd2c780ed2b884ef1e9d27fb",
+      "checked_target_sha256": "7fd35a480fb85ee104c972de861fc2fb1b7e95dddd2c780ed2b884ef1e9d27fb",
+      "current_at_review_sha256": "7fd35a480fb85ee104c972de861fc2fb1b7e95dddd2c780ed2b884ef1e9d27fb"
+    },
+    {
+      "path": "desktop/package-lock.json",
+      "base_sha256": "6c224326e51d509d4272bb66a84fbe54746f9023c9c0a66d3fb4625684fbda87",
+      "target_sha256": "6c224326e51d509d4272bb66a84fbe54746f9023c9c0a66d3fb4625684fbda87",
+      "checked_base_sha256": "6c224326e51d509d4272bb66a84fbe54746f9023c9c0a66d3fb4625684fbda87",
+      "checked_target_sha256": "6c224326e51d509d4272bb66a84fbe54746f9023c9c0a66d3fb4625684fbda87",
+      "current_at_review_sha256": "6c224326e51d509d4272bb66a84fbe54746f9023c9c0a66d3fb4625684fbda87"
+    }
+  ],
+  "task23_formal_paths_protected": [
+    "backend-ts/src/host-plugin.ts",
+    "backend-ts/src/host-storage.ts",
+    "backend-ts/src/legacy-backend.ts",
+    "backend-ts/src/usage-summary.ts",
+    "backend-ts/test/host-http.test.mjs",
+    "backend-ts/test/host-storage-fixture.mjs",
+    "backend-ts/test/host-storage.test.mjs",
+    "backend-ts/test/usage-summary-fixture.mjs",
+    "backend-ts/test/usage-summary-http.test.mjs",
+    "desktop/src/main/index.ts",
+    "desktop/src/main/setup/controller.ts",
+    "desktop/src/main/startup/bridge.ts",
+    "desktop/src/main/startup/diagnostic-export.ts",
+    "desktop/src/main/startup/diagnostics.ts",
+    "desktop/src/main/usage/bridge.ts",
+    "desktop/src/main/usage/client.ts",
+    "desktop/src/main/usage/controller.ts",
+    "desktop/src/preload/index.ts",
+    "desktop/src/preload/startup.ts",
+    "desktop/src/preload/usage.ts",
+    "desktop/src/renderer/SetupPanel.tsx",
+    "desktop/src/renderer/StartupSettings.tsx",
+    "desktop/src/renderer/UsagePanel.tsx",
+    "desktop/src/renderer/index.tsx",
+    "desktop/src/shared/app-bridge.ts",
+    "desktop/src/shared/setup-bridge.ts",
+    "desktop/src/shared/startup-bridge.ts",
+    "desktop/src/shared/usage-bridge.ts",
+    "desktop/tests/diagnostic-export.test.mjs",
+    "desktop/tests/headless/renderer.ts",
+    "desktop/tests/inventory.json",
+    "desktop/tests/setup-configuration.test.mjs",
+    "desktop/tests/startup-continuity.test.mjs",
+    "desktop/tests/startup-schema-guard.test.mjs",
+    "desktop/tests/usage/bridge.test.mjs",
+    "desktop/tests/usage/controller.test.mjs",
+    "desktop/tests/usage/react.test.mjs"
+  ],
+  "task23_path_intersection": [
+    "backend-ts/src/host-plugin.ts"
+  ],
+  "host_plugin_delta_exact": {
+    "verified": true,
+    "scope": "只修改一行中文注释与一个if条件；精确新增req.url===/internal/exploration；其余字节与3e044a04相同",
+    "retained_handlers": [
+      "原/internal/reply前缀分派",
+      "公共token与Origin门卫",
+      "GET /api/ledger/summary且拒绝query或非GET",
+      "设置与凭据路由",
+      "既有同步/范围/前台路由"
+    ]
+  },
+  "static_seams": [
+    {
+      "source": "TASK07_V2_TARGET/backend-ts/src/host-plugin.ts:127",
+      "assertion": "精确探索入口进入createHostReplyRuntime，结束后return，不落入公共或Legacy鉴权"
+    },
+    {
+      "source": "TASK07_V2_TARGET/backend-ts/src/exploration-http.ts:64",
+      "assertion": "Loopback、单一Authorization、独立私有token、Origin存在即拒绝；POST与原始URL精确验证保持"
+    },
+    {
+      "source": "TASK07_V2_TARGET/backend-ts/src/host-reply.ts:49",
+      "assertion": "探索复用回复已锁定配置、provider、ModelHost和ledger；不是新增独立后台或开放工具"
+    },
+    {
+      "source": "backend-ts/src/host-storage.ts:72",
+      "assertion": "未随07修改，保留23显式环境覆盖拒绝、pending/restart_required；配置保存不能等同当前模型已采用"
+    },
+    {
+      "source": "TASK07_V2_TARGET/backend-ts/test/exploration-real-host.test.mjs:21",
+      "assertion": "正式链用量两条receipt/唯一候选/重放；credentials仅GET200，不能扩张为写入和重启验收"
+    }
+  ],
+  "selected_author_evidence_checks": [
+    {
+      "public_path": "evidence/v2-real-host-final-guard-chain.log",
+      "sha256": "52e1481c799868f7fa438ff78a3fb0cd8b744f7fc2395ecb7eb724c983ce71e6",
+      "summary": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "source_stage": "作者记录为根23组合后的分阶段工作树，非本子Agent运行，非最终target整套重跑"
+    },
+    {
+      "public_path": "evidence/v2-real-host-auth-confirmed.log",
+      "sha256": "a938f883d6db76f2712a5a0adf11318df820c4d48a677a2681828d2ea7f521f7",
+      "summary": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "source_stage": "作者记录为根23组合后的分阶段工作树，非本子Agent运行，非最终target整套重跑"
+    },
+    {
+      "public_path": "evidence/v2-real-host-stop-drain.log",
+      "sha256": "ee350764eaf791e61b415e99d08c372cdacd0891d46d573356aebcc0a1e71d12",
+      "summary": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "source_stage": "作者记录为根23组合后的分阶段工作树，非本子Agent运行，非最终target整套重跑"
+    },
+    {
+      "public_path": "evidence/v2-real-host-cleanup-green.log",
+      "sha256": "1b734e8d624325797b825fde9581615661be44c46b6a139a5f5d9110598d251f",
+      "summary": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "source_stage": "作者记录为根23组合后的分阶段工作树，非本子Agent运行，非最终target整套重跑"
+    }
+  ],
+  "official_source_hash_checks": [
+    {
+      "path": "docs/user/develop/basic/tool.zh.md",
+      "sha256": "67f7985635af581a076084a565b2581a81ef7369ad4b3cd1b18b7a3285b211ce",
+      "matches": true
+    },
+    {
+      "path": "docs/subsystems/scope.md",
+      "sha256": "e0c374a5d8ec48dc0750e05524e2054ba51d0306c2287679b4a1ccb34dd9ad0d",
+      "matches": true
+    },
+    {
+      "path": "packages/core/scope/src/index.ts",
+      "sha256": "074b8f0c3fa2e240effd0a7e65c54be7c14debc1e53bb712334ce20d15affe4a",
+      "matches": true
+    },
+    {
+      "path": "packages/core/tools/src/index.ts",
+      "sha256": "398bcdeb221e450d088510830b77d99a513e65ab31e40ade71688a19cdf5e6aa",
+      "matches": true
+    },
+    {
+      "path": "packages/core/agent/src/index.ts",
+      "sha256": "218b30227cdc55d4c193112495a852507d12070028572ac95e6f9d1f954d1077",
+      "matches": true
+    },
+    {
+      "path": "packages/skill/skill/src/index.ts",
+      "sha256": "af4fad67fb086c3f5c93aed4604830718b4535e7e59a60d680404b07ea08477c",
+      "matches": true
+    }
+  ],
+  "evidence_scope_limits": {
+    "progressive_public_cases": 18,
+    "formal_host_cases": 4,
+    "single_final_target_suite": false,
+    "early_full_tree_hashes_recorded": false,
+    "native_app_run_by_author": false,
+    "real_vendor_run": false,
+    "independent_delta_review": "保留作者manifest既有结论；本核对不重新出具0问题复审结论"
+  },
+  "root_runtime_entries_pending": [
+    {
+      "cwd": "backend-ts",
+      "command": "$NODE24 --test test/exploration-real-host.test.mjs",
+      "scope": "根主树正式launchDsh/profile、NoSkill完整公开链/ledger、私有/伪路径鉴权、在途停止排空、关闭失败清理；4个case"
+    },
+    {
+      "cwd": "backend-ts",
+      "command": "$NODE24 --test test/exploration-skill-service.test.mjs test/exploration-discussion-service.test.mjs test/exploration-workspace-service.test.mjs test/reply-service-exploration.test.mjs",
+      "scope": "根最终源码的Skill/讨论/工作区及共享C候选守卫相关矩阵；范围按根最小→相关阶梯执行"
+    },
+    {
+      "cwd": "backend-ts",
+      "command": "$NODE24 node_modules/typescript/bin/tsc --noEmit",
+      "scope": "最终集成源码类型检查"
+    },
+    {
+      "cwd": "desktop",
+      "command": "npm run dev",
+      "scope": "先核验复用开发实例；真实UI确认B不替用户确认、选择后C、停止/换组/澄清/联系人切换、Skill来历及23用量刷新；不占用微信或调用真实供应商"
+    }
+  ],
+  "task10_note": "10未冻结，未读取活动snapshot；后续合并/internal/extraction须并列保留精确探索入口、原私有认证与23ledger路由，本结论不覆盖10",
+  "our_mutations": "仅本v2报告与JSON；未改正式源码/index、未建临时源码或运行App/PG/模型/测试/提交",
+  "not_proven": [
+    "根集成后的运行结果",
+    "实际App验收",
+    "07整票完成",
+    "真实模型质量费用性能"
+  ]
+}

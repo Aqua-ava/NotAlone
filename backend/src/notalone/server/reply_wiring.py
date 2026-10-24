@@ -2,7 +2,7 @@
 
 只做适配器组装，不包含业务逻辑：会话验证用既有 PostgresConversationPort
 （观察来自已确认绑定）。显式TS候选模式使用唯一RemoteReplyPort，未迁模式
-保留原ReplyGenerator；探索producer与Skill审核仍使用其原执行模块。
+保留原ReplyGenerator；探索由TS负责业务状态；Skill审核仍使用其原执行模块。
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ def build_reply_service(
     reply_thinking_effort: str | None = None,
     contact_context=None,
 ) -> ReplyService | None:
-    """启动时一次性选择候选执行方；08探索producer与选择服务保持原实现。"""
+    """启动时一次性选择候选与探索执行方。"""
     from notalone.application.reply_remote import RemoteReplyPort, ReplyRemoteUnavailable
     mode = os.environ.get('NOTALONE_REPLY_RUNTIME', 'python')
     if mode not in ('python', 'typescript'):
@@ -165,6 +165,9 @@ def close_reply_service(service: ReplyService | None) -> None:
     from notalone.application.reply_remote import RemoteReplyPort
     if service is not None and isinstance(service._reply, RemoteReplyPort):
         service._reply.close()
+        from notalone.application.exploration_remote import RemoteExplorationService
+        if isinstance(service.exploration, RemoteExplorationService):
+            service.exploration.close()
 
 
 def _build_reply_service(
@@ -294,20 +297,34 @@ def _build_reply_service(
             # 实际模型轮已分别记账，外层不能再写一条汇总而重复计算。
             ledger=None,
         )
-    exploration = ReplyExplorationService(
-        store=PostgresExplorationStore(database_url, evidence=evidence), evidence=evidence,
-        skills=ExploredSkillSyncPort(
-            PostgresSkillPort(database_url), synchronize=synchronize_skill_round,
-        ),
-        runtime=LangChainExplorationRuntime(
-            model=model, ledger=PostgresOutboundLedger(database_url), priority=model_priority,
-            input_budget_profile=input_budget_profile, input_token_counter=input_token_counter,
-            on_input_budget=on_input_budget,
-        ),
-        generation=AssistantExplorationGeneration(lambda: AssistantSessionService(
-            store=PostgresAssistantSessionStore(database_url), reply=reply_service,
-        )),
-    )
+    generation = AssistantExplorationGeneration(lambda: AssistantSessionService(
+        store=PostgresAssistantSessionStore(database_url), reply=reply_service,
+    ))
+    if remote_reply is not None:
+        from notalone.application.exploration_remote import (
+            RemoteExplorationService, PostgresExplorationCommandReader,
+        )
+        exploration_store = PostgresExplorationStore(database_url, evidence=evidence)
+        exploration = RemoteExplorationService.from_environment(
+            os.environ, owner_id=owner_id,
+            store=exploration_store, generation=generation,
+            read_command=PostgresExplorationCommandReader(
+                database_url=database_url, store=exploration_store,
+            ),
+        )
+    else:
+        exploration = ReplyExplorationService(
+            store=PostgresExplorationStore(database_url, evidence=evidence), evidence=evidence,
+            skills=ExploredSkillSyncPort(
+                PostgresSkillPort(database_url), synchronize=synchronize_skill_round,
+            ),
+            runtime=LangChainExplorationRuntime(
+                model=model, ledger=PostgresOutboundLedger(database_url), priority=model_priority,
+                input_budget_profile=input_budget_profile, input_token_counter=input_token_counter,
+                on_input_budget=on_input_budget,
+            ),
+            generation=generation,
+        )
     if remote_reply is None:
         round_reply = RoundSkillSyncPort(generator, synchronize=synchronize_skill_round)
         candidate_reply = (PriorityReplyPort(round_reply, model_priority)

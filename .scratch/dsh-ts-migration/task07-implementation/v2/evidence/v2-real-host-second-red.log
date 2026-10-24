@@ -1,0 +1,21 @@
+✖ 正式launchDsh与host-plugin经Legacy公开入口完成NoSkill B→A→C且重放零额外调用 (1536.960709ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1613.526
+
+✖ failing tests:
+
+test at test/exploration-real-host.test.mjs:6:1
+✖ 正式launchDsh与host-plugin经Legacy公开入口完成NoSkill B→A→C且重放零额外调用 (1536.960709ms)
+  Error: 真实宿主提前退出 
+      at file://<SNAPSHOT>/backend-ts/test/exploration-real-host-support.mjs:68:96
+      at async until (file://<SNAPSHOT>/backend-ts/test/exploration-real-host-support.mjs:18:41)
+      at async realHost (file://<SNAPSHOT>/backend-ts/test/exploration-real-host-support.mjs:67:13)
+      at async TestContext.<anonymous> (file://<SNAPSHOT>/backend-ts/test/exploration-real-host.test.mjs:7:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

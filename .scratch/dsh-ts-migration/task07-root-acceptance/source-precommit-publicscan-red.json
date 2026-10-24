@@ -1,0 +1,15 @@
+{
+  "exit_code": 1,
+  "issues": 1,
+  "command": [
+    "NODE24",
+    "scripts/check_public_history.mjs",
+    "--ref",
+    "HEAD",
+    "--working-tree"
+  ],
+  "raw_alias": "PRIVATE_RAW/task07-root-runtime/source-precommit-publicscan-v2.raw.json",
+  "raw_sha256": "b02528ffa7de0d7ed2dc402f176d76bd792236c79dad4f3b8ccc5c0f953ace1a",
+  "root_head": "1a1f13670ee8cbb54d1ed5057745df041574c41b",
+  "previous_parser_failure": "precommit-parser-attempt.json"
+}

@@ -1,0 +1,8 @@
+{
+  "wrapper_exit_code": 1,
+  "failure": "校验器issues为数字，根首次解析误当数组；原扫描输出保留",
+  "scanner_exit_code_not_persisted": true,
+  "reported_issues": 1,
+  "raw_alias": "PRIVATE_RAW/task07-root-runtime/source-precommit-publicscan.raw.json",
+  "raw_sha256": "09125943e649e14e6007b111847bcb66b3ded91b063c428cff0186a552ef805c"
+}

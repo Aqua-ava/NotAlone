@@ -8,6 +8,8 @@ import {installModelProvider,type ModelProviderConfiguration} from './model-prov
 import {ReplyGenerationService,type ReplyServiceModel} from './reply-service.ts';
 import {createReplyHttp,type ReplyHttpService} from './reply-http.ts';
 import {ReplyError} from './reply-contract.ts';
+import {ExplorationService} from './exploration-service.ts';
+import {createExplorationHttp} from './exploration-http.ts';
 
 export interface HostReplyConfiguration {
   provider:ModelProviderConfiguration;
@@ -28,6 +30,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   const pending=new Set<Promise<unknown>>();
   let provider:ReturnType<typeof installModelProvider>|undefined;
   let service:ReplyGenerationService|undefined;
+  let exploration:ExplorationService|undefined;
   async function execute<T>(signal:AbortSignal,operation:(combined:AbortSignal)=>Promise<T>):Promise<T>{
     if(stopping.signal.aborted)throw new ReplyError('reply_remote_unavailable',503);
     const combined=AbortSignal.any([signal,stopping.signal]);
@@ -46,6 +49,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   const owner=options.storage.runtimeOwnerId;
   const http=createReplyHttp({ownerId:owner,token:options.token,available:options.configuration!==null,
     read:work=>options.storage.businessReadTransaction(work),service:delegated});
+  const explorationHttp=createExplorationHttp({ownerId:owner,token:options.token,available:options.configuration!==null,service:{execute:(scope,session,action,request,signal,internal)=>execute(signal,combined=>exploration!.execute(scope,session,action,request,combined,internal))}});
   if(options.configuration){
     provider=installModelProvider(options.ctx,options.configuration.provider);
     try{
@@ -53,12 +57,13 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
         transaction:work=>options.storage.businessTransaction(work),
         arbiter:options.arbiter,ledger:options.ledger,provider,
         skillsRoot:options.configuration.skillsRoot,model:options.configuration.model});
+      exploration=new ExplorationService({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),arbiter:options.arbiter,ledger:options.ledger,provider,skillsRoot:options.configuration.skillsRoot,model:options.configuration.model});
     }catch(error){await provider.dispose();throw error;}
   }
   let closing:Promise<void>|undefined;
   return {
     configured:Boolean(service),
-    handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{return http.handle(req,res);},
+    async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{return await http.handle(req,res)||await explorationHttp.handle(req,res);},
     stopAccepting(){stopping.abort();},
     close():Promise<void>{
       return closing??=(async()=>{

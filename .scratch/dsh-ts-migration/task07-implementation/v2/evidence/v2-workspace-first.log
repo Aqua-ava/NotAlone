@@ -1,0 +1,38 @@
+✖ 工作区空想法直接候选与有想法表达沿原桌面适配器；50条含长正文逐字保留 (2781.711416ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2891.515083
+
+✖ failing tests:
+
+test at test/exploration-workspace-service.test.mjs:11:1
+✖ 工作区空想法直接候选与有想法表达沿原桌面适配器；50条含长正文逐字保留 (2781.711416ms)
+  error: new row for relation "message" violates check constraint "message_speaker_check"
+      at <REPO>/backend-ts/node_modules/.pnpm/pg@8.16.3/node_modules/pg/lib/client.js:545:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<SNAPSHOT>/backend-ts/test/exploration-workspace-service.test.mjs:21:3)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    length: 417,
+    severity: 'ERROR',
+    code: '23514',
+    detail: 'Failing row contains (9770c3f8-8ea9-4d19-8a21-71ac743f624f, 01455f92-d24e-4ba9-a0cb-8eda6cb9aa87, cad7b066-bf19-4dec-926f-e26b82cd4e1f, owner, text, 合成消息1, 2026-01-02 08:00:01.123456+08, 2026-10-24 21:18:54.320637+08, null).',
+    hint: undefined,
+    position: undefined,
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: 'public',
+    table: 'message',
+    column: undefined,
+    dataType: undefined,
+    constraint: 'message_speaker_check',
+    file: 'execMain.c',
+    line: '2114',
+    routine: 'ExecConstraints'
+  }

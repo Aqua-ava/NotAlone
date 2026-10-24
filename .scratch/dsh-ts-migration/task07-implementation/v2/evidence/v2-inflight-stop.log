@@ -1,0 +1,9 @@
+✔ 公开在途停止保留原暂停状态；晚模型结果不提交且SDK退出后才释放共享许可 (4318.251042ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4468.965666

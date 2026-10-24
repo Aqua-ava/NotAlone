@@ -8,6 +8,7 @@ from unittest.mock import patch, Mock
 from uuid import UUID
 
 from notalone.application.reply_remote import RemoteReplyPort, ReplyRemoteUnavailable
+from notalone.application.exploration_remote import RemoteExplorationService
 from notalone.application.assistant_session_service import AssistantSessionService
 from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
 from notalone.reply.interface import RewriteDraft, ReplyGenerated, ContextReceipt
@@ -40,7 +41,7 @@ class ReplyWiringTest(unittest.TestCase):
         stack.enter_context(patch.dict(os.environ, environment, clear=True))
         stack.enter_context(patch('socket.socket.connect', new=guarded_connect))
         # 不运行旧生成/检索，也不触及任何真实数据库。
-        for name in ('ReplyGenerator', 'LangChainReplyRuntime', 'PriorityReplyPort', 'RoundSkillSyncPort'):
+        for name in ('ReplyGenerator', 'LangChainReplyRuntime', 'PriorityReplyPort', 'RoundSkillSyncPort', 'ReplyExplorationService', 'LangChainExplorationRuntime'):
             stack.enter_context(patch.object(self.wiring, name, side_effect=AssertionError('不得进入旧回复链')))
         stack.enter_context(patch.object(self.wiring, 'build_deepseek_model', return_value=SimpleNamespace(model_name='synthetic-08-model')))
         stack.enter_context(patch.object(self.wiring, 'build_deepseek_input_budget', return_value=None))
@@ -58,8 +59,7 @@ class ReplyWiringTest(unittest.TestCase):
                                                       model_priority=object())
             remote = service._reply
             self.assertIs(type(remote), RemoteReplyPort)
-            self.assertIsInstance(service.exploration, self.wiring.ReplyExplorationService)
-            self.assertIsInstance(service.exploration._runtime, self.wiring.LangChainExplorationRuntime)
+            self.assertIsInstance(service.exploration, RemoteExplorationService)
             self.assertIsInstance(service.exploration._generation, self.wiring.AssistantExplorationGeneration)
             self.assertIs(service.exploration._generation._sessions()._reply, service)
             self.assertIsNotNone(service.skill_review)
@@ -85,7 +85,8 @@ class ReplyWiringTest(unittest.TestCase):
                 self.assertIs(prepare.call_args.args[0], remote)
             with patch.object(RemoteReplyPort, 'close', autospec=True) as close:
                 self.wiring.close_reply_service(service)
-                close.assert_called_once_with(remote)
+                self.assertEqual(close.call_args_list, [unittest.mock.call(remote),
+                    unittest.mock.call(service.exploration._transport)])
 
     def test_missing_invalid_or_conflicting_mode_never_falls_back(self):
         variants = []
@@ -182,7 +183,9 @@ class ReplyWiringTest(unittest.TestCase):
                 stack.enter_context(patch.object(priority,'stop',side_effect=lambda:(order.append('priority-stop'),original_stop())[1]))
                 original_close=RemoteReplyPort.close
                 def close(actual):
-                    self.assertIs(actual,remote);order.append('remote-close');original_close(actual)
+                    self.assertIn(actual,(remote,service.exploration._transport))
+                    order.append('remote-close' if actual is remote else 'exploration-close')
+                    original_close(actual)
                 stack.enter_context(patch.object(RemoteReplyPort,'close',autospec=True,side_effect=close))
                 stack.enter_context(patch.dict(os.environ,NOTALONE_DATABASE_URL='synthetic-unused',NOTALONE_OWNER_ID=str(OWNER)))
                 for name,value in {'load_project_env':None,'extraction_batch_concurrency':1,'has_active_backend':False,
@@ -204,7 +207,7 @@ class ReplyWiringTest(unittest.TestCase):
                 if stage=='memory':
                     with self.assertRaisesRegex(RuntimeError,'synthetic-startup'):command._run(args,Mock())
                 else:self.assertEqual(command._run(args,Mock()),0 if stage=='normal' else 2)
-                self.assertEqual(order[:2],['remote-close','priority-stop'])
+                self.assertEqual(order[:3],['remote-close','exploration-close','priority-stop'])
                 with self.assertRaises(ReplyRemoteUnavailable):remote._request('generate',{})
 
     def test_remote_business_reasons_preserve_result_for_prepare_and_generate(self):

@@ -1,0 +1,11 @@
+✔ 正式宿主探索精确路径与私有token、owner/contact/session边界拒绝且零物理调用 (3496.42675ms)
+ℹ {"exact_path":true,"public_and_wrong_tokens_rejected":true,"owner_contact_session_checked":true,"physical_calls":0}
+ℹ {"cleanup":{"owned_host_exited":true,"own_database_dropped_without_force":true,"fixture_removed":true,"shared_pg_preserved":true}}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3551.967209

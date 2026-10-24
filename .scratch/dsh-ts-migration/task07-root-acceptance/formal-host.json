@@ -1,0 +1,24 @@
+{
+  "command": [
+    "USER_HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "--test",
+    "--test-reporter=tap",
+    "test/exploration-real-host.test.mjs"
+  ],
+  "cwd": "backend-ts",
+  "exit_code": 0,
+  "duration_seconds": 15.747,
+  "counts": {
+    "tests": 4,
+    "pass": 4,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "raw_alias": "PRIVATE_RAW/task07-root-runtime/formal-host.raw.log",
+  "raw_sha256": "eb1e884985f091505bb915fd1413fe5df11faa6d5bed9d21b97ce16fb971932e",
+  "public_log": "formal-host.log",
+  "public_sha256": "eb1e884985f091505bb915fd1413fe5df11faa6d5bed9d21b97ce16fb971932e",
+  "credential_env_removed": true
+}

@@ -1,0 +1,25 @@
+✖ 工作区空想法直接候选与有想法表达沿原桌面适配器；50条含长正文逐字保留 (2343.313542ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2431.109459
+
+✖ failing tests:
+
+test at test/exploration-workspace-service.test.mjs:11:1
+✖ 工作区空想法直接候选与有想法表达沿原桌面适配器；50条含长正文逐字保留 (2343.313542ms)
+  Error: input_budget_exceeded
+      at Object.requestJson (file://<SNAPSHOT>/backend-ts/test/exploration-workspace-service.test.mjs:24:362)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async ownedPreparation (<BUNDLED_DESKTOP_CLIENT>:386:12)
+      at async Module.generateReply (<BUNDLED_DESKTOP_CLIENT>:301:20)
+      at async TestContext.<anonymous> (file://<SNAPSHOT>/backend-ts/test/exploration-workspace-service.test.mjs:26:14)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    status: 409,
+    code: 'input_budget_exceeded'
+  }

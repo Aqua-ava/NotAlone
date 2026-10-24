@@ -1,0 +1,31 @@
+{
+  "command": [
+    "USER_HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "--test",
+    "--test-reporter=tap",
+    "test/exploration-runtime.test.mjs",
+    "test/exploration-store.test.mjs",
+    "test/exploration-skill-sources.test.mjs",
+    "test/exploration-service.test.mjs",
+    "test/exploration-skill-service.test.mjs",
+    "test/exploration-discussion-service.test.mjs",
+    "test/exploration-workspace-service.test.mjs",
+    "test/exploration-cleanup-service.test.mjs"
+  ],
+  "cwd": "backend-ts",
+  "exit_code": 0,
+  "duration_seconds": 46.584,
+  "counts": {
+    "tests": 42,
+    "pass": 42,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "raw_alias": "PRIVATE_RAW/task07-root-runtime/related-exploration.raw.log",
+  "raw_sha256": "0e7fb712686bb8ea8c89f1fb869d0cf5de7fe414be568a63699897a7b0c9733e",
+  "public_log": "related-exploration.log",
+  "public_sha256": "0e7fb712686bb8ea8c89f1fb869d0cf5de7fe414be568a63699897a7b0c9733e",
+  "credential_env_removed": true
+}

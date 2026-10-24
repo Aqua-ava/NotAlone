@@ -1,0 +1,53 @@
+✖ 公开夹具异常退出仍关闭全部连接并非强制删除自有合成库 (2373.978291ms)
+✖ 兼容缺少选择完成标记的auto探索实际版本沿原A到C固定使用，候选依据保留选择来历 (5755.074833ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5898.75275
+
+✖ failing tests:
+
+test at test/exploration-cleanup-service.test.mjs:8:1
+✖ 公开夹具异常退出仍关闭全部连接并非强制删除自有合成库 (2373.978291ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   {
+  +     datname: 'notalone_ts_host_48386da65a1b4589864aa0706ad5a3fd_test'
+  +   }
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<SNAPSHOT>/backend-ts/test/exploration-cleanup-service.test.mjs:19:9)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ { datname: 'notalone_ts_host_48386da65a1b4589864aa0706ad5a3fd_test' } ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at test/exploration-skill-service.test.mjs:71:84
+✖ 兼容缺少选择完成标记的auto探索实际版本沿原A到C固定使用，候选依据保留选择来历 (5755.074833ms)
+  AssertionError [ERR_ASSERTION]: {"error":"exploration_failed"}
+  
+  503 !== 200
+  
+      at TestContext.<anonymous> (file://<SNAPSHOT>/backend-ts/test/exploration-skill-service.test.mjs:78:176)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 503,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

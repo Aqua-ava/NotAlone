@@ -1,0 +1,16 @@
+{
+  "command": [
+    "USER_HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "node_modules/typescript/bin/tsc",
+    "--noEmit"
+  ],
+  "cwd": "backend-ts",
+  "exit_code": 0,
+  "duration_seconds": 0.402,
+  "counts": {},
+  "raw_alias": "PRIVATE_RAW/task07-root-runtime/backend-typecheck.raw.log",
+  "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "public_log": "backend-typecheck.log",
+  "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "credential_env_removed": true
+}

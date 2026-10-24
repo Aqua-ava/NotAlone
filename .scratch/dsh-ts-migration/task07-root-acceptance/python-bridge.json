@@ -1,0 +1,19 @@
+{
+  "command": [
+    "USER_HOME/miniconda3/envs/NotAlone/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/unit/application/test_exploration_remote.py",
+    "tests/unit/application/test_reply_wiring.py"
+  ],
+  "cwd": "backend",
+  "exit_code": 1,
+  "duration_seconds": 0.011,
+  "counts": {},
+  "raw_alias": "PRIVATE_RAW/task07-root-runtime/python-bridge.raw.log",
+  "raw_sha256": "6cbd9ac27759f699b1f90a024a8ebc6672598130c978c37b527383a44196e11d",
+  "public_log": "python-bridge.log",
+  "public_sha256": "da19812d4f607767544672594e091ba89a01ce33197c776280da1889d645351f",
+  "credential_env_removed": true
+}

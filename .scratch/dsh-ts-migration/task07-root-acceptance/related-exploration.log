@@ -1,0 +1,262 @@
+TAP version 13
+# Subtest: 公开夹具异常退出仍关闭全部连接并非强制删除自有合成库
+ok 1 - 公开夹具异常退出仍关闭全部连接并非强制删除自有合成库
+  ---
+  duration_ms: 3180.098
+  type: 'test'
+  ...
+# Subtest: 桌面正式适配器经公开HTTP澄清；回答不确认，明确选择后原A准备与C仅生成一次
+ok 2 - 桌面正式适配器经公开HTTP澄清；回答不确认，明确选择后原A准备与C仅生成一次
+  ---
+  duration_ms: 7870.23125
+  type: 'test'
+  ...
+# Subtest: 已选意愿经原问题回答续接A准备，保留原选择并重放唯一C候选
+ok 3 - 已选意愿经原问题回答续接A准备，保留原选择并重放唯一C候选
+  ---
+  duration_ms: 7528.699125
+  type: 'test'
+  ...
+# Subtest: 换组拒绝重复方向；同一失败操作可有界重试且不刷新原根时效或重选Skill
+ok 4 - 换组拒绝重复方向；同一失败操作可有界重试且不刷新原根时效或重选Skill
+  ---
+  duration_ms: 5315.377625
+  type: 'test'
+  ...
+# Subtest: 公开在途停止保留原暂停状态；晚模型结果不提交且SDK退出后才释放共享许可
+ok 5 - 公开在途停止保留原暂停状态；晚模型结果不提交且SDK退出后才释放共享许可
+  ---
+  duration_ms: 3428.591042
+  type: 'test'
+  ...
+# Subtest: 并发切换联系人保留各自输入与Skill；旧任务身份不能给另一联系人确认
+ok 6 - 并发切换联系人保留各自输入与Skill；旧任务身份不能给另一联系人确认
+  ---
+  duration_ms: 4112.357834
+  type: 'test'
+  ...
+# Subtest: 回应探索固定原目标，用户直填意愿经桌面适配器进入唯一C候选
+ok 7 - 回应探索固定原目标，用户直填意愿经桌面适配器进入唯一C候选
+  ---
+  duration_ms: 4132.131625
+  type: 'test'
+  ...
+# Subtest: 探索保留未确认意愿并校验当前来源、不同方向与换组
+ok 8 - 探索保留未确认意愿并校验当前来源、不同方向与换组
+  ---
+  duration_ms: 1.053916
+  type: 'test'
+  ...
+# Subtest: 官方profile自动策略选择和探索分别一次，共用原request身份及真实共享宿主许可
+ok 9 - 官方profile自动策略选择和探索分别一次，共用原request身份及真实共享宿主许可
+  ---
+  duration_ms: 535.125042
+  type: 'test'
+  ...
+# Subtest: 官方探索禁用策略只调用一次且不提供资源或历史工具
+ok 10 - 官方探索禁用策略只调用一次且不提供资源或历史工具
+  ---
+  duration_ms: 393.771125
+  type: 'test'
+  ...
+# Subtest: 官方探索空自动目录只调用一次且不提供资源或历史工具
+ok 11 - 官方探索空自动目录只调用一次且不提供资源或历史工具
+  ---
+  duration_ms: 458.790083
+  type: 'test'
+  ...
+# Subtest: 官方探索显式静态Skill只调用一次且不提供资源或历史工具
+ok 12 - 官方探索显式静态Skill只调用一次且不提供资源或历史工具
+  ---
+  duration_ms: 399.5095
+  type: 'test'
+  ...
+# Subtest: 官方探索拒绝read_file且没有修复重试
+ok 13 - 官方探索拒绝read_file且没有修复重试
+  ---
+  duration_ms: 362.874875
+  type: 'test'
+  ...
+# Subtest: 官方探索拒绝conversation_search且没有修复重试
+ok 14 - 官方探索拒绝conversation_search且没有修复重试
+  ---
+  duration_ms: 377.888542
+  type: 'test'
+  ...
+# Subtest: 官方探索拒绝send_message且没有修复重试
+ok 15 - 官方探索拒绝send_message且没有修复重试
+  ---
+  duration_ms: 368.226792
+  type: 'test'
+  ...
+# Subtest: 官方探索拒绝同次响应多个输出工具，不追加调用
+ok 16 - 官方探索拒绝同次响应多个输出工具，不追加调用
+  ---
+  duration_ms: 329.601958
+  type: 'test'
+  ...
+# Subtest: 官方探索缺少结构化输出只失败，不追加修复或语义复核
+ok 17 - 官方探索缺少结构化输出只失败，不追加修复或语义复核
+  ---
+  duration_ms: 313.52275
+  type: 'test'
+  ...
+# Subtest: 完整序列化预算与Skill撤权均在物理发送前拒绝
+ok 18 - 完整序列化预算与Skill撤权均在物理发送前拒绝
+  ---
+  duration_ms: 301.90525
+  type: 'test'
+  ...
+# Subtest: 响应等待中来源撤销拒绝晚结果且真实SDK无追加调用
+ok 19 - 响应等待中来源撤销拒绝晚结果且真实SDK无追加调用
+  ---
+  duration_ms: 338.482459
+  type: 'test'
+  ...
+# Subtest: 真实在途取消排空SDK后才结算共享前台许可
+ok 20 - 真实在途取消排空SDK后才结算共享前台许可
+  ---
+  duration_ms: 329.827834
+  type: 'test'
+  ...
+# Subtest: 真实SDK超时仅一次调用，未知token/费用不伪零
+ok 21 - 真实SDK超时仅一次调用，未知token/费用不伪零
+  ---
+  duration_ms: 405.872
+  type: 'test'
+  ...
+# Subtest: 公开探索→原A准备→真实C候选；建议未确认、停止、新开、同键不重发及跨联系人拒绝
+ok 22 - 公开探索→原A准备→真实C候选；建议未确认、停止、新开、同键不重发及跨联系人拒绝
+  ---
+  duration_ms: 9114.492041
+  type: 'test'
+  ...
+# Subtest: 公开auto探索真实导入Skill版本，分别一次选择和探索并返回真实引用
+ok 23 - 公开auto探索真实导入Skill版本，分别一次选择和探索并返回真实引用
+  ---
+  duration_ms: 6764.026084
+  type: 'test'
+  ...
+# Subtest: 公开user探索只发一次，保留真实策略资格与当前引用
+ok 24 - 公开user探索只发一次，保留真实策略资格与当前引用
+  ---
+  duration_ms: 3579.128708
+  type: 'test'
+  ...
+# Subtest: 公开disabled探索只发一次，保留真实策略资格与当前引用
+ok 25 - 公开disabled探索只发一次，保留真实策略资格与当前引用
+  ---
+  duration_ms: 5151.498917
+  type: 'test'
+  ...
+# Subtest: 公开empty探索只发一次，保留真实策略资格与当前引用
+ok 26 - 公开empty探索只发一次，保留真实策略资格与当前引用
+  ---
+  duration_ms: 3246.175333
+  type: 'test'
+  ...
+# Subtest: 真实目录revision在选择响应前撤销，拒绝晚选择且不发送探索正文
+ok 27 - 真实目录revision在选择响应前撤销，拒绝晚选择且不发送探索正文
+  ---
+  duration_ms: 2943.6885
+  type: 'test'
+  ...
+# Subtest: 在途来源撤销拒绝晚探索结果，实际异CID访问不新增模型调用
+ok 28 - 在途来源撤销拒绝晚探索结果，实际异CID访问不新增模型调用
+  ---
+  duration_ms: 3119.982709
+  type: 'test'
+  ...
+# Subtest: auto明确NoSkill经公开确认与原A到C仍固定不用目录中的策略
+ok 29 - auto明确NoSkill经公开确认与原A到C仍固定不用目录中的策略
+  ---
+  duration_ms: 5006.938291
+  type: 'test'
+  ...
+# Subtest: auto探索实际版本沿原A到C固定使用，候选依据保留选择来历
+ok 30 - auto探索实际版本沿原A到C固定使用，候选依据保留选择来历
+  ---
+  duration_ms: 5428.118125
+  type: 'test'
+  ...
+# Subtest: user探索实际版本沿原A到C固定使用，候选依据保留选择来历
+ok 31 - user探索实际版本沿原A到C固定使用，候选依据保留选择来历
+  ---
+  duration_ms: 5004.244166
+  type: 'test'
+  ...
+# Subtest: 兼容缺少选择完成标记的auto探索实际版本沿原A到C固定使用，候选依据保留选择来历
+ok 32 - 兼容缺少选择完成标记的auto探索实际版本沿原A到C固定使用，候选依据保留选择来历
+  ---
+  duration_ms: 6010.442042
+  type: 'test'
+  ...
+# Subtest: 探索目录保留带真实讨论来源的已发布Skill，按历史绑定复验且来源删除失效
+ok 33 - 探索目录保留带真实讨论来源的已发布Skill，按历史绑定复验且来源删除失效
+  ---
+  duration_ms: 1618.143291
+  type: 'test'
+  ...
+# Subtest: TS捕获回应±2/主动5并与Python原快照逐字兼容
+ok 34 - TS捕获回应±2/主动5并与Python原快照逐字兼容
+  ---
+  duration_ms: 1655.595958
+  type: 'test'
+  ...
+# Subtest: 原表begin/重放/选择/停止/失败重试/跨联系人及原根TTL
+ok 35 - 原表begin/重放/选择/停止/失败重试/跨联系人及原根TTL
+  ---
+  duration_ms: 963.679417
+  type: 'test'
+  ...
+# Subtest: 自动更新严格三次并保留根时间；NoSkill固定与旧来源失效
+ok 36 - 自动更新严格三次并保留根时间；NoSkill固定与旧来源失效
+  ---
+  duration_ms: 943.466125
+  type: 'test'
+  ...
+# Subtest: 失败A确认新键保留原根及固定NoSkill，完成态重放核原选择
+ok 37 - 失败A确认新键保留原根及固定NoSkill，完成态重放核原选择
+  ---
+  duration_ms: 869.498416
+  type: 'test'
+  ...
+# Subtest: 记忆最多两条，原零相关度排序仍保留，时间/说话人与指纹同Python
+ok 38 - 记忆最多两条，原零相关度排序仍保留，时间/说话人与指纹同Python
+  ---
+  duration_ms: 983.814584
+  type: 'test'
+  ...
+# Subtest: 自动选择None被固定，失败重试不重选；替换与来源删除拒晚complete
+ok 39 - 自动选择None被固定，失败重试不重选；替换与来源删除拒晚complete
+  ---
+  duration_ms: 672.7635
+  type: 'test'
+  ...
+# Subtest: finish仅接受原A真实完成关联；stop不撤销已领取生成
+ok 40 - finish仅接受原A真实完成关联；stop不撤销已领取生成
+  ---
+  duration_ms: 708.263709
+  type: 'test'
+  ...
+# Subtest: 澄清应答重放绑定原问题/输入/operation，改回答或问题拒绝
+ok 41 - 澄清应答重放绑定原问题/输入/operation，改回答或问题拒绝
+  ---
+  duration_ms: 702.240208
+  type: 'test'
+  ...
+# Subtest: 工作区空想法直接候选与有想法表达沿原桌面适配器；50条含长正文逐字保留
+ok 42 - 工作区空想法直接候选与有想法表达沿原桌面适配器；50条含长正文逐字保留
+  ---
+  duration_ms: 6836.333083
+  type: 'test'
+  ...
+1..42
+# tests 42
+# suites 0
+# pass 42
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 46546.631666

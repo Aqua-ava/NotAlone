@@ -1,0 +1,22 @@
+{
+  "manifest_sha256": "bcd3c0cb902a1acb6a76cff5db76beebe543ce9a135ac955204e6ceecfdb8ad0",
+  "patch_sha256": "743cbf71e37e708c795ce3ee48a151252b643570647a344544930a86d9aed211",
+  "source_target": "a94a3d76d886227f96125744bc1ef71ec5492245",
+  "root_base_head": "1a1f13670ee8cbb54d1ed5057745df041574c41b",
+  "applied_paths": 33,
+  "target_hash_mismatches": [],
+  "foreign_before": {
+    "desktop/tests/fixtures/expression-preference-backend.py": "81c03746ff8325d77e83c9d9af92dfef6d94706f8be70f5400592e8bc1fc5060",
+    "desktop/tests/fixtures/expression-preferences-page.py": "5801bb2f8837e0e44c914256dfdf0beac161444205c4488447bdb08f3c9b1233",
+    "desktop/tests/memory-correction/retirement-react.test.mjs": "7ef577ca1ce00b5b604edff435e3fdf6a37754ed64acb28e794e2fc08829e4b9"
+  },
+  "foreign_after": {
+    "desktop/tests/fixtures/expression-preference-backend.py": "81c03746ff8325d77e83c9d9af92dfef6d94706f8be70f5400592e8bc1fc5060",
+    "desktop/tests/fixtures/expression-preferences-page.py": "5801bb2f8837e0e44c914256dfdf0beac161444205c4488447bdb08f3c9b1233",
+    "desktop/tests/memory-correction/retirement-react.test.mjs": "7ef577ca1ce00b5b604edff435e3fdf6a37754ed64acb28e794e2fc08829e4b9"
+  },
+  "foreign_unchanged": true,
+  "index_empty": true,
+  "actual_apply_exit": 0,
+  "runtime_verified": false
+}
