@@ -59,6 +59,26 @@ test('调用端未知身份在PG已知后仍阻重放，失败入口保留unknow
  }finally{await f.close();}
 });
 
+test('脱敏让位事件结算旧A请求后允许同一任务进入index',async()=>{
+ const f=await fixture();try{
+  const task=await f.store.enqueueImport(f.scope,f.sourceId,0);
+  await f.pool.query("UPDATE background_task_step SET status='succeeded' WHERE task_id=$1 AND step_name IN ('parse','normalize')",[task]);
+  const claim=await f.store.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000});
+  await f.store.complete(claim,0,0);
+  const trace=randomUUID(),batchKey='a'.repeat(64),inputSha='b'.repeat(64),rule='c'.repeat(64);
+  await f.pool.query("INSERT INTO memory_extraction_trace(trace_id,owner_id,contact_id,run_id,batch_key) VALUES($1,$2,$3,$4,$5)",
+   [trace,f.scope.ownerId,f.scope.contactId,randomUUID(),batchKey]);
+  await f.pool.query("INSERT INTO memory_extraction_trace_event(event_id,trace_id,owner_id,contact_id,position,stage,payload) VALUES($1,$2,$3,$4,1,'typescript_a_begin',$5)",
+   [randomUUID(),trace,f.scope.ownerId,f.scope.contactId,{execution_id:trace,task_id:task,
+    request_id:modelTaskRequestId('extraction',task,batchKey),input_sha256:inputSha,rule_version:rule}]);
+  assert.equal(await f.store.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000,supportedSteps:['index']}),null);
+  await f.pool.query("INSERT INTO memory_extraction_trace_event(event_id,trace_id,owner_id,contact_id,position,stage,payload) VALUES($1,$2,$3,$4,2,'typescript_a_superseded',$5)",
+   [randomUUID(),trace,f.scope.ownerId,f.scope.contactId,{a_execution_id:trace,a_input_sha256:inputSha,a_rule_version:rule}]);
+  const next=await f.store.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000,supportedSteps:['index']});
+  assert.equal(next?.stepName,'index');
+ }finally{await f.close();}
+});
+
 test('global-worker会话锁贯穿run与步骤完成，退出释放后才允许另一宿主',async()=>{
  const f=await fixture();let held;try{
   held=await f.store.acquireWorker();assert.ok(held);
