@@ -14,11 +14,11 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
-- [ ] 从合格记忆与有变化场景增量更新 L3 画像及关系概览，无需更新时按原规则跳过。
-- [ ] 本人和联系人范围隔离，保留来源、版本、不确定性、时间资格和合法推断，不把行为建议写成关系事实。
+- [x] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
+- [x] 从合格记忆与有变化场景增量更新 L3 画像及关系概览，无需更新时按原规则跳过。
+- [x] 本人和联系人范围隔离，保留来源、版本、不确定性、时间资格和合法推断，不把行为建议写成关系事实。
 - [ ] 用户可查看、修正及删除；来源失效、人工修改或输入变化时，旧摘要、缓存及晚结果不能覆盖当前状态。
-- [ ] 回复和 Skill 审核读取的 L2 目录／L3 条目与实际发布 generation 一致，预算、取消和任务恢复保持。
+- [x] 回复和 Skill 审核读取的 L2 目录／L3 条目与实际发布 generation 一致，预算、取消和任务恢复保持。
 
 ## 验证
 
@@ -132,3 +132,15 @@ Spec: ../spec.md
 - `verification_trace` 仅记录尝试序号、`succeeded/tool_error`、具体错误码和 receipt id，不保存 quote、原文或工具参数；失败时与既有 `proposal_trace` JSON 合并，不覆盖提案取证。错误码区分 `quote_invalid`、`quote_memory_invalid`、`quote_proposal_invalid`、`quote_wrapper_invalid` 和 `verification_invalid`。
 - 合成 PostgreSQL 回归覆盖：第一次 quote 非法→得到明确逐字规则与允许 memory_id→第二次成功并发布；连续两次非法→`quote_invalid` 失败且无版本；只剩一次核验额度→不再调用、轨迹仅一次失败。L3 工作区、服务、公开 HTTP `37/37`；L2 服务、Worker、宿主及模型记账 `25/25`；共享官方 DSH profile `2/2`；TypeScript 类型检查通过。
 - revision `17` 重试条件：确认 dev runtime 已加载 `198f15d7`，正式 job 仍为 revision `17`、failed、calls `49/272`、`run_remaining=1`，目标 key／资料集合与冻结输入未变化，再基于 revision `17` continue；预计得到 revision `18`、active、step pending，模型调用上限按既有合同增加 16 到 288。下一次失败应读取 `verification_trace`；若成功仍需真实 App／微信与用户可见纠错／撤回验收后才能 resolved。
+
+### 根正式验收证据
+
+- 修复加载：DSH 开发子进程 PID `79808` 与 Python 开发子进程 PID `79818` 均启动于 `2026-10-25 06:56:16`，晚于 `l3-profile-service.ts` 的 `06:55:21` 和 `l3-profile-workspace.ts` 的 `06:56:13` 修改时间。只读复核两文件相对 `198f15d7` 无差异，确认运行时加载的是 quote 有界纠正版本。
+- 根回归：L3 workspace/service/HTTP `37/37`、L2 service/worker/host/accounting `25/25`、共享官方 DSH profile `2/2`、TypeScript 严格类型检查均通过。第一次回归因根 shell 缺少 `PGUSER/USER` 未建立测试连接，修正测试环境后全绿，不属于代码失败。
+- 正式任务：revision `17` 为 failed、calls `49/272`、`run_remaining=1`，最近三次冻结 input SHA 相同；根仅发起一次 continue，得到 revision `18` active、calls `50/288`。终态为 revision `18` paused、`profile_status=succeeded`、`pending_receipt=false`，累计 calls `52/288`。
+- 发布：profile batch `8d7f8594-55d6-43e7-a02e-e9642c2650f1` succeeded，`proposal_trace` 2 轮、`verification_trace` 1 次 succeeded；profile version `ee86bbfd-b003-5df7-9eba-981506dd0795` 含 4 条且未撤回，发布于 `2026-10-25 07:00:21+08`。state organization generation `4`、status paused、error_code null；generation `4` 同时指向第 3 代 scenario `e462dc7b-feeb-550e-a6ce-b010032c79bd` 和上述 profile，L2／L3 同代装配一致。
+- 真实 App：`ran → 记忆 → 我` 显示 4 条长期背景，更新时间 `2026-10-24 23:00:21 UTC`，与发布时刻一致；每条可展开“引用与修正”，首条显示两条来源版本、修正和删除按钮，“撤回长期背景”可见。打开修正表单且说明为空时“提交修正”禁用，取消后无数据变化。
+- 已可签收：真实模型完成 L2→L3 发布，App 可查看四条例项、来源和版本时间，发布 generation 与 L2 目录一致；上述 DSH、scope、失败隔离、来源／修正防复活、回复与 Skill 同代读取等条件已有根回归或合成 PostgreSQL 证据。
+- 尚不能签收“用户可修正及删除”：当前只验证了入口、空输入禁用和取消，尚未验证任何真实 GUI 提交能落到持久状态。验收至少需要一次实际“提交修正”和一次实际“确认删除长期背景条目”；两者都必须逐字核验 profile withdrew、generation 前进、旧回复快照失效，修正还须产生 active feedback 并保护底层输入，删除须保留底层合法资料。修正和单条删除都会撤回整份当前画像，不能在同一 profile 版本上先后完成，也不能把对话框取消当作完成。
+- “确认撤回长期背景”是独立于逐条删除的后端路径。票面的“查看、修正及删除”可由修正加单条删除满足，整份撤回不是逐字验收项的独立必要条件；但它是已暴露的不可逆用户操作，若不在隔离环境实点，应作为明确残余风险记录，不能宣称三种管理路径都已实机覆盖。
+- 最安全最小矩阵：保持正式 owner 的 generation `4` profile 不变，优先在实际 App 配合隔离测试数据库／用户目录，用两份合成的临时 profile 分别完成“提交修正”和“单条删除”并核对接口／数据库回读；若确需在正式库操作，则使用专用合成联系人或可丢弃范围，逐动作取得用户确认，且每次撤回后另建一份 profile，不能复用同一版本。整份撤回可再使用第三份一次性 profile，或在明确接受残余风险后暂不执行。
