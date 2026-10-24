@@ -100,3 +100,14 @@ Spec: ../spec.md
 - 修复提交：`9f8ec3ac36824845e5cd76314382bb9314aeb07b`。成功 `write/edit` 状态跨轮保留，后续只读确认不会撤销；末轮仍有真实工具错误时继续失败关闭，最终 proposal 仍经过完整编译、结构校验、独立核验和原子发布。五轮上限、字符预算及模型调用预算均未改变。
 - 验证：L3 工作区、服务、公开 HTTP `28/28`；L2 服务、Worker、宿主及模型记账 `25/25`；共享官方 DSH profile `2/2`；TypeScript 类型检查通过。合成 PostgreSQL 用例明确经过 1 次写入、4 次只读、独立核验，再发布 generation，并断言 batch `attempt_count=1`、`output_payload` 非空。
 - 正式数据库仅只读核对，未修改失败现场。修复尚需 dev runtime 实际加载后由根线程基于 revision `14` 再次 continue；只有真实模型完成画像提案及核验、实际 App／微信入口和用户可见纠错／撤回验收通过后，才能将本票改为 resolved。
+
+### 第三轮现场与五轮协议收敛
+
+- revision `14` continue 后得到 revision `15`；约 40 秒后再次 failed，`profile_status=failed`、`run_remaining=1`、model calls `41/240`、background task retry `14`，仍为 `l3_profile_document_round_limit`。新 profile batch `522cf488-3b51-41cb-a5de-4f2063dfe71b` 为 `attempt_count=1`，输入 `59,328` 字节，`output_payload=null`。
+- `06:40:21–06:40:59` 的 5 条 receipt 全部为 `succeeded/response_observed`，依次记录 input/output tokens `52000/61`、`52363/3181`、`55591/3130`、`58768/2705`、`55028/37`，请求序列化 `110,819`、`112,122`、`122,967`、`133,604`、`120,471` 字节。前四轮产出量表明存在多次实质尝试，末轮只产生 37 个输出 token，但 receipt 不保存工具名或参数。
+- DSH journal 不可恢复：该 host 使用临时 `$DSH_HOME`，revision 15 对应目录只有 profile 配置、legacy pid/info 与 host 配置，没有 `sessions/`、`logs/` 或 journal；L3 通过公开 `prepareCall/stream` 直接发起模型调用，只持久化 model receipt。因此无法对真实五轮断言“读取几次、写过几次、哪个参数执行失败”，不能根据 token 大小补造工具序列。
+- 9f8ec3ac 仅保留“已有成功写入”，无法让持续无效的整份写入变成合法，也没有给模型确定的完成信号。此次增加无参数 `ProfileProposalComplete`、轮间进度提示、重复读取提示和精确档案模板；明确最多 16 条、合计最多 2,000 字且标题后不得出现二级标题，避免模型按未暴露上限重复整份重写。
+- 修复提交：`a82f6f0c4c261c3ef00253408f1297e6911e58dd`。只有最后写入成功、没有后续未解决工具错误且工作区可编译时才接受完成；无写、错误写、空完成和只读代替完成均失败关闭。完成后的独立核验及原子发布未改变，五轮、字符和模型调用预算也未改变。
+- 为让下一轮可直接定位真实工具行为，成功与失败批次的 `output_payload` 都增加 `proposal_trace`：仅含轮次、受限工具名、参数键名、profile/scenario/invalid 分类、结果、错误码和工作区是否变化；不保存画像正文、记忆正文或工具参数值。
+- 验证：精确五轮“读→错误写→合法写→场景读→显式完成”回归通过，并在第 6 次调用执行独立核验后发布；五次均无合法写入及无写完成均在核验前失败。L3 工作区、服务、公开 HTTP `32/32`；L2 服务、Worker、宿主及模型记账 `25/25`；共享官方 DSH profile `2/2`；TypeScript 类型检查通过。
+- 当前正式现场未修改，仍为 job revision `15`、failed、calls `41/240`、`run_remaining=1`。root 可重试条件：确认 dev runtime 已加载 `a82f6f0c` 且正式目标 key／资料集合未变化后，基于 revision `15` continue；预计得到 revision `16`、active、step pending，并沿用既有合同将模型调用上限增加 16 到 256。下一次失败应直接读取 `proposal_trace`，若成功则仍需真实 App／微信与用户可见纠错／撤回验收后才能 resolved。
