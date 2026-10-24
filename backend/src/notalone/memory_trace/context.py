@@ -191,15 +191,16 @@ class TraceSession:
                 error_code = "background_task_guard_failed"
             else:
                 error_code = "business_write_failed"
-            try:
-                self.store.mark_failed(
-                    self.scope,
-                    self.trace_id,
-                    stage=self.stage,
-                    error_code=error_code,
-                )
-            except Exception:
-                pass
+            if not getattr(error, "preserve_trace", False):
+                try:
+                    self.store.mark_failed(
+                        self.scope,
+                        self.trace_id,
+                        stage=self.stage,
+                        error_code=error_code,
+                    )
+                except Exception:
+                    pass
         try:
             for call in self.observations.values():
                 if call.physical_call is not None:
@@ -399,6 +400,40 @@ class TraceSession:
             self.store.complete(self.scope, self.trace_id, **kwargs)
         except Exception:
             self.failure = TraceWriteError(self.stage, self.trace_id)
+            raise self.failure from None
+
+    def confirm_typescript_b_finalization(
+        self,
+        *,
+        task_id: UUID,
+        batch_key: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """只读确认TS最终事务；成功后Python不得再写trace、receipt或水位。"""
+
+        self.stage = "batch_end"
+        if self.failure is not None:
+            raise self.failure
+        verify = getattr(
+            self.store,
+            "verify_typescript_b_finalization",
+            None,
+        )
+        if not callable(verify):
+            self.failure = TraceWriteError(self.stage, self.trace_id)
+            self.failure.preserve_trace = True
+            raise self.failure
+        try:
+            verify(
+                self.scope,
+                self.trace_id,
+                payload,
+                task_id=task_id,
+                batch_key=batch_key,
+            )
+        except Exception:
+            self.failure = TraceWriteError(self.stage, self.trace_id)
+            self.failure.preserve_trace = True
             raise self.failure from None
 
 

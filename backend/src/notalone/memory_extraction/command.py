@@ -11,7 +11,7 @@ import time
 from contextvars import copy_context
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -105,6 +105,7 @@ class ExtractionRunStats:
     extracted: int = 0
     adopted: int = 0
     updated: int = 0
+    merged: int = 0
     pending: int = 0
     skipped_duplicate: int = 0
     skipped_deleted: int = 0
@@ -112,6 +113,8 @@ class ExtractionRunStats:
     failed_batches: int = 0
     skipped_batches: int = 0
     skipped_non_memory: int = 0
+    skipped_noop: int = 0
+    failed: int = 0
     skipped_ranges: tuple[FailureRange, ...] = ()
 
 
@@ -158,6 +161,7 @@ class _RunProgress:
     extracted: int = 0
     adopted: int = 0
     updated: int = 0
+    merged: int = 0
     pending: int = 0
     skipped_duplicate: int = 0
     skipped_deleted: int = 0
@@ -165,6 +169,8 @@ class _RunProgress:
     failed_batches: int = 0
     skipped_batches: int = 0
     skipped_non_memory: int = 0
+    skipped_noop: int = 0
+    failed: int = 0
     skipped_ranges: list[FailureRange] = field(default_factory=list)
 
     def finish(self) -> ExtractionRunStats:
@@ -174,6 +180,7 @@ class _RunProgress:
             extracted=self.extracted,
             adopted=self.adopted,
             updated=self.updated,
+            merged=self.merged,
             pending=self.pending,
             skipped_duplicate=self.skipped_duplicate,
             skipped_deleted=self.skipped_deleted,
@@ -181,6 +188,8 @@ class _RunProgress:
             failed_batches=self.failed_batches,
             skipped_batches=self.skipped_batches,
             skipped_non_memory=self.skipped_non_memory,
+            skipped_noop=self.skipped_noop,
+            failed=self.failed,
             skipped_ranges=tuple(self.skipped_ranges),
         )
 
@@ -399,34 +408,82 @@ def _commit_batch(
     provider: str,
     model_name: str | None,
 ) -> bool:
-    """B 段：裁决与采纳、失败／跳过处理、完成过程记录并提交水位。
+    """B 段：本地执行或只读核对TS已finalize结果，再累计本轮统计。
 
     返回 True 表示本批失败且整轮停止；返回 False 表示继续下一批。
     """
 
     outcome = extraction.outcome
     remote_a = getattr(extraction.outcome, "model_accounting_owner", "python") == "typescript"
+    remote_b_selected = (
+        getattr(extraction.outcome, "adoption_runtime", "python")
+        == "typescript"
+    )
+    remote_adoption = getattr(extraction.outcome, "adoption_receipt", None)
+    remote_b_finalized = remote_b_selected and remote_adoption is not None
     if remote_a:
         trace.typescript_a_receipt = {
             key: str(getattr(extraction.outcome, key))
             for key in ("a_execution_id", "a_input_sha256", "a_rule_version")
         }
-    adoption_stats = AdoptionStats()
+    if remote_b_selected:
+        if not remote_a:
+            error = ExtractionRuntimeError("远程采纳范围缺失或无效。")
+            error.preserve_trace = True
+            raise error
+        if remote_b_finalized and (
+                not isinstance(getattr(remote_adoption, "payload", None), dict)
+                or not isinstance(getattr(remote_adoption, "stats", None), AdoptionStats)
+                or not isinstance(getattr(remote_adoption, "task_id", None), UUID)
+                or not isinstance(getattr(remote_adoption, "batch_key", None), str)
+                or outcome.failure_reason is not None):
+            error = ExtractionRuntimeError("远程采纳回执缺失或无效。")
+            error.preserve_trace = True
+            raise error
+        if (
+            not remote_b_finalized
+            and outcome.failure_reason is None
+            and (not outcome.extraction_completed or outcome.accepted)
+        ):
+            error = ExtractionRuntimeError("远程采纳回执缺失或无效。")
+            error.preserve_trace = True
+            raise error
+    adoption_stats = (
+        replace(
+            remote_adoption.stats,
+            rejected_by_contract=outcome.rejected_count,
+        )
+        if remote_b_finalized
+        else AdoptionStats(
+            rejected_by_contract=(
+                outcome.rejected_count if remote_b_selected else 0
+            ),
+        )
+    )
     try:
         if outcome.failure_reason is None:
-            adoption_stats = adoption.adopt(scope, outcome)
+            if not remote_b_selected:
+                adoption_stats = adoption.adopt(scope, outcome)
     except ExtractionRuntimeError as error:
         # 写入裁决等批次级模型调用失败：与提取失败同一策略，
         # 分类后计数或停止，不让整轮无记录地中断。失败发生在采纳
         # 阶段，必须保留 flow 已给出的本批统计，不能用一个空 outcome
         # 覆盖掉已通过的提取与拒绝计数。
         preserved_rejections = outcome.rejected_count
-        outcome = ExtractionOutcome(
+        outcome = replace(
+            outcome,
             accepted=(),
             rejected_count=preserved_rejections,
             failure_reason=str(error),
             failure_kind=error.failure_kind,
             extraction_completed=extraction.extraction_completed,
+            candidate_trace_ids=(),
+        )
+    if remote_b_finalized:
+        trace.confirm_typescript_b_finalization(
+            task_id=remote_adoption.task_id,
+            batch_key=remote_adoption.batch_key,
+            payload=dict(remote_adoption.payload),
         )
     progress.processed_messages += len(plan.batch)
     progress.batches += 1
@@ -444,13 +501,30 @@ def _commit_batch(
             provider=provider,
             model_name=model_name,
         )
+    if remote_b_finalized:
+        progress.extracted += extraction.extracted
+        progress.adopted += adoption_stats.adopted
+        progress.updated += adoption_stats.updated
+        progress.merged += adoption_stats.merged
+        progress.pending += adoption_stats.pending
+        progress.skipped_duplicate += adoption_stats.skipped_duplicate
+        progress.skipped_deleted += adoption_stats.skipped_deleted
+        progress.skipped_noop += adoption_stats.skipped_noop
+        progress.failed += adoption_stats.failed
+        progress.rejected_by_contract += adoption_stats.rejected_by_contract
+        progress.skipped_non_memory += adoption_stats.skipped_non_memory
+        progress.previous_watermark = remote_adoption.watermark
+        return False
     if outcome.failure_reason is None:
         progress.extracted += extraction.extracted
         progress.adopted += adoption_stats.adopted
         progress.updated += adoption_stats.updated
+        progress.merged += adoption_stats.merged
         progress.pending += adoption_stats.pending
         progress.skipped_duplicate += adoption_stats.skipped_duplicate
         progress.skipped_deleted += adoption_stats.skipped_deleted
+        progress.skipped_noop += adoption_stats.skipped_noop
+        progress.failed += adoption_stats.failed
         progress.rejected_by_contract += adoption_stats.rejected_by_contract
         progress.skipped_non_memory += adoption_stats.skipped_non_memory
         trace.complete(
@@ -699,10 +773,19 @@ def _run_batch_pipeline(
                         provider=provider,
                         model_name=model_name,
                     )
+                remote_adoption = getattr(
+                    extraction.outcome, "adoption_receipt", None,
+                )
+                committed_watermark = (
+                    remote_adoption.watermark
+                    if getattr(extraction.outcome, "adoption_runtime", "python")
+                    == "typescript" and remote_adoption is not None
+                    else step.next_watermark
+                )
                 gate.finish(
                     step.index,
                     abort=stop,
-                    watermark=step.next_watermark,
+                    watermark=committed_watermark,
                 )
         except BaseException:
             # TraceSession 已在异常路径标记本批失败；先唤醒所有等待者，

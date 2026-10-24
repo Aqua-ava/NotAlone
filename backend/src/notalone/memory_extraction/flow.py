@@ -49,16 +49,21 @@ class ExtractionOutcome:
     # 初始提取成功与后续来源核验成功分开，供各次调用独立记账。
     extraction_completed: bool = False
     candidate_trace_ids: tuple[UUID, ...] = ()
-    # TS A段已由同一宿主记实际调用账；B段只消费原执行身份，不重复记账。
+    # TS A/B均已由同一宿主记实际调用账；Python只读消费结果，不重复记账。
     model_accounting_owner: str = "python"
     model_call_ids: tuple[UUID, ...] = ()
     a_execution_id: UUID | None = None
     a_input_sha256: str | None = None
     a_rule_version: str | None = None
+    adoption_runtime: str = "python"
+    # typescript 模式只携带已 finalize 的只读结果，不承接写入动作。
+    adoption_receipt: object | None = None
 
     def __post_init__(self) -> None:
         if (self.failure_reason is None) != (self.failure_kind is None):
             raise ValueError("失败原因与失败分类必须同时出现或同时为空。")
+        if self.adoption_runtime not in {"python", "typescript"}:
+            raise ValueError("未知的采纳运行方式。")
 
 
 class ExtractionFlow:

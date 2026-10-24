@@ -9,7 +9,7 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 from uuid import UUID
 from weakref import WeakSet
@@ -381,6 +381,23 @@ def _build_import_service(database_url: str) -> ImportService | None:
         return None
 
 
+def _extraction_runtime_modes(
+    environment: Mapping[str, str],
+) -> tuple[str, str]:
+    """B段TS只与TS A共用原宿主；关闭时保持原Python采纳。"""
+
+    extraction_runtime = environment.get(
+        "NOTALONE_EXTRACTION_RUNTIME", "python",
+    )
+    b_runtime = environment.get("NOTALONE_EXTRACTION_B_RUNTIME", "python")
+    if extraction_runtime not in {"python", "typescript"}:
+        raise ValueError("extraction_runtime_invalid")
+    if (b_runtime not in {"python", "typescript"}
+            or b_runtime == "typescript" and extraction_runtime != "typescript"):
+        raise ValueError("extraction_b_runtime_invalid")
+    return extraction_runtime, b_runtime
+
+
 def _build_task_host(
     database_url: str, events: EventBus,
     *, model_priority: ModelPriorityControl | None = None,
@@ -423,9 +440,7 @@ def _build_task_host(
         model_priority.unconfirmed_requests
         if isinstance(model_priority, SharedModelPriorityControl) else None
     )
-    extraction_runtime = os.environ.get("NOTALONE_EXTRACTION_RUNTIME", "python")
-    if extraction_runtime not in {"python", "typescript"}:
-        raise ValueError("extraction_runtime_invalid")
+    extraction_runtime, _ = _extraction_runtime_modes(os.environ)
     if extraction_runtime == "typescript" and not isinstance(model_priority, SharedModelPriorityControl):
         raise ValueError("extraction_runtime_shared_host_required")
     # 活跃Worker持有自己的历史教学与账务；停止登记不延长已结束Worker的模型寿命。

@@ -1,7 +1,7 @@
-"""默认提取A段的宿主私有桥；原Worker、来源窗口和B段事务保持唯一。"""
+"""默认提取A/B段的宿主私有桥；原Worker、追踪与水位提交保持唯一。"""
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from collections.abc import Mapping
 import hashlib
 import http.client
@@ -21,6 +21,7 @@ from notalone.memory.events import MemoryEvent
 from notalone.memory.evidence_binding import bind_dimension_evidence
 from notalone.memory.models import SourceDependencyMode
 from notalone.memory.timing import MemoryTiming
+from notalone.memory_extraction.adoption import AdoptionStats
 from notalone.memory_extraction.evidence import build_dimension_evidence
 from notalone.memory_extraction.flow import ExtractionOutcome, _to_fact
 from notalone.memory_extraction.models import ExtractionFailureKind, ExtractionWindow
@@ -29,11 +30,26 @@ from notalone.scopes import ContactScope
 
 
 class ExtractionRemoteUnavailable(ModelWorkStopped):
-    """A段结果未能确认；停止原任务，不据此计为可跳过的模型坏输出。"""
+    """远端A/B结果未能确认；停止原任务，不据此跳过模型坏输出。"""
+
+    preserve_trace = False
 
 
 class ExtractionRemoteInvalidResponse(ExtractionRemoteUnavailable):
     """宿主响应不符合原候选、来源或执行身份契约。"""
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteAdoptionReceipt:
+    """TS B最终事务的结果；Python只读核对，不再次提交。"""
+
+    payload: dict[str, object]
+    stats: AdoptionStats
+    task_id: UUID
+    batch_key: str
+    trace_id: UUID
+    b_execution_id: UUID
+    watermark: UUID | None
 
 
 def _object(value: object, fields: set[str]) -> dict:
@@ -142,14 +158,243 @@ def _fact(value: object, window: ExtractionWindow):
     return replace(fact, dimension_evidence=rebound, verified_source_receipt=receipt)
 
 
-def decode_extraction_outcome(value: object, window: ExtractionWindow) -> ExtractionOutcome:
+_ADOPTION_DISPOSITIONS = {
+    "adopted", "updated", "merged", "pending", "skipped_duplicate",
+    "skipped_deleted", "skipped_noop", "failed",
+}
+_ADOPTION_DECISIONS = {"add", "update", "noop", "keep", "merge"}
+_ADOPTION_PURPOSES = {
+    "adjudication", "relation_verification", "merge_verification",
+}
+_ADOPTION_RESULT_FIELDS = {
+    "candidate_index", "disposition", "candidate_id", "memory_id",
+    "parent_memory_ids", "decision", "reason",
+}
+_ADOPTION_USAGE_FIELDS = {
+    "call_id", "model_name", "input_tokens", "output_tokens", "purpose",
+}
+
+
+def _count(value: object, *, maximum: int = 1000) -> int:
+    if type(value) is not int or not 0 <= value <= maximum:
+        raise ValueError("extraction_remote_count_invalid")
+    return value
+
+
+def _nullable_uuid(value: object) -> UUID | None:
+    return None if value is None else _uuid(value)
+
+
+def _adoption_stats(
+    value: object, *, accepted_count: int,
+) -> tuple[AdoptionStats, dict[str, object]]:
+    fields = {
+        "adopted", "updated", "merged", "pending", "skipped_duplicate",
+        "skipped_deleted", "skipped_noop", "failed", "results", "usages",
+    }
+    data = _object(value, fields)
+    counts = {
+        key: _count(data[key]) for key in fields - {"results", "usages"}
+    }
+    results = data["results"]
+    usages = data["usages"]
+    if type(results) is not list or len(results) > 60:
+        raise ValueError("extraction_remote_adoption_results_invalid")
+    if type(usages) is not list or len(usages) > 64:
+        raise ValueError("extraction_remote_adoption_usages_invalid")
+
+    normalized_results: list[dict[str, object]] = []
+    indexes: set[int] = set()
+    observed_counts = {key: 0 for key in counts}
+    for item in results:
+        row = _object(item, _ADOPTION_RESULT_FIELDS)
+        index = _count(row["candidate_index"], maximum=59)
+        disposition = row["disposition"]
+        if (index in indexes or index != len(indexes)
+                or index >= accepted_count
+                or disposition not in _ADOPTION_DISPOSITIONS):
+            raise ValueError("extraction_remote_adoption_result_invalid")
+        indexes.add(index)
+        candidate_id = _nullable_uuid(row["candidate_id"])
+        memory_id = _nullable_uuid(row["memory_id"])
+        parents = _ids(row["parent_memory_ids"], maximum=8)
+        decision = row["decision"]
+        if decision is not None and decision not in _ADOPTION_DECISIONS:
+            raise ValueError("extraction_remote_adoption_result_invalid")
+        reason = row["reason"]
+        if reason is not None and (type(reason) is not str or not reason):
+            raise ValueError("extraction_remote_adoption_result_invalid")
+        if (disposition in {"adopted", "updated", "merged"}
+                and (candidate_id is None or memory_id is None)):
+            raise ValueError("extraction_remote_adoption_result_invalid")
+        observed_counts[disposition] += 1
+        normalized_results.append({
+            "candidate_index": index,
+            "disposition": disposition,
+            "candidate_id": None if candidate_id is None else str(candidate_id),
+            "memory_id": None if memory_id is None else str(memory_id),
+            "parent_memory_ids": [str(parent) for parent in parents],
+            "decision": decision,
+            "reason": reason,
+        })
+
+    normalized_usages: list[dict[str, object]] = []
+    usage_ids: set[str] = set()
+    for item in usages:
+        row = _object(item, _ADOPTION_USAGE_FIELDS)
+        call_id = _uuid(row["call_id"])
+        if str(call_id) in usage_ids or row["purpose"] not in _ADOPTION_PURPOSES:
+            raise ValueError("extraction_remote_adoption_usage_invalid")
+        model_name = row["model_name"]
+        if type(model_name) is not str or not model_name.strip():
+            raise ValueError("extraction_remote_adoption_usage_invalid")
+        input_tokens = row["input_tokens"]
+        output_tokens = row["output_tokens"]
+        if input_tokens is not None:
+            _count(input_tokens, maximum=2_147_483_647)
+        if output_tokens is not None:
+            _count(output_tokens, maximum=2_147_483_647)
+        usage_ids.add(str(call_id))
+        normalized_usages.append({
+            "call_id": str(call_id),
+            "model_name": model_name,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "purpose": row["purpose"],
+        })
+
+    if (any(counts[key] != count for key, count in observed_counts.items())
+            or len(results) != accepted_count or counts["failed"]):
+        raise ValueError("extraction_remote_adoption_stats_invalid")
+    stats = AdoptionStats(
+        **counts,
+        results=tuple(normalized_results),
+        usages=tuple(normalized_usages),
+    )
+    payload = {
+        **counts,
+        "results": normalized_results,
+        "usages": normalized_usages,
+    }
+    return stats, payload
+
+
+def _adoption_result(
+    value: object,
+    outcome: ExtractionOutcome,
+    *,
+    task_id: UUID,
+    trace_id: UUID,
+    batch_key: str,
+) -> RemoteAdoptionReceipt:
+    """解析TS单次finalize返回；没有失败回执或Python收尾分支。"""
+
+    data = _object(
+        value,
+        {"trace_id", "b_execution_id", "stats", "receipt", "watermark", "cached"},
+    )
+    if (outcome.failure_reason is not None
+            or not outcome.extraction_completed
+            or _uuid(data["trace_id"]) != trace_id
+            or type(data["cached"]) is not bool):
+        raise ValueError("extraction_remote_adoption_result_invalid")
+    b_execution_id = _uuid(data["b_execution_id"])
+    expected_b_execution_id = uuid5(
+        UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8"),
+        "notalone:extraction_adoption:"
+        f"{outcome.a_execution_id}:{outcome.a_input_sha256}:{task_id}:{batch_key}",
+    )
+    if b_execution_id != expected_b_execution_id:
+        raise ValueError("extraction_remote_adoption_result_invalid")
+    stats, stats_payload = _adoption_stats(
+        data["stats"],
+        accepted_count=len(outcome.accepted),
+    )
+    receipt = _object(
+        data["receipt"],
+        {
+            "version", "b_execution_id", "trace_id", "a_execution_id",
+            "a_input_sha256", "a_rule_version", "candidate_trace_ids",
+            "accepted_count", "rejected_count", "stats", "watermark_before",
+            "watermark_planned", "watermark_after",
+        },
+    )
+    receipt_stats, receipt_stats_payload = _adoption_stats(
+        receipt["stats"],
+        accepted_count=len(outcome.accepted),
+    )
+    candidate_trace_ids = _ids(
+        receipt["candidate_trace_ids"],
+        maximum=60,
+    )
+    before = None if receipt["watermark_before"] is None else _uuid(
+        receipt["watermark_before"],
+    )
+    planned = _uuid(receipt["watermark_planned"])
+    after = None if receipt["watermark_after"] is None else _uuid(
+        receipt["watermark_after"],
+    )
+    watermark = None if data["watermark"] is None else _uuid(data["watermark"])
+    if (type(receipt["version"]) is not int or receipt["version"] != 1
+            or _uuid(receipt["b_execution_id"]) != b_execution_id
+            or _uuid(receipt["trace_id"]) != trace_id
+            or _uuid(receipt["a_execution_id"]) != outcome.a_execution_id
+            or receipt["a_input_sha256"] != outcome.a_input_sha256
+            or receipt["a_rule_version"] != outcome.a_rule_version
+            or candidate_trace_ids != outcome.candidate_trace_ids
+            or _count(receipt["accepted_count"]) != len(outcome.accepted)
+            or _count(receipt["rejected_count"]) != outcome.rejected_count
+            or receipt_stats != stats
+            or receipt_stats_payload != stats_payload
+            or watermark != after):
+        raise ValueError("extraction_remote_adoption_result_invalid")
+    normalized_receipt = {
+        **receipt,
+        "b_execution_id": str(b_execution_id),
+        "trace_id": str(trace_id),
+        "a_execution_id": str(outcome.a_execution_id),
+        "candidate_trace_ids": [str(item) for item in candidate_trace_ids],
+        "stats": receipt_stats_payload,
+        "watermark_before": None if before is None else str(before),
+        "watermark_planned": str(planned),
+        "watermark_after": None if after is None else str(after),
+    }
+    payload = {
+        **data,
+        "trace_id": str(trace_id),
+        "b_execution_id": str(b_execution_id),
+        "stats": stats_payload,
+        "receipt": normalized_receipt,
+        "watermark": None if watermark is None else str(watermark),
+    }
+    return RemoteAdoptionReceipt(
+        payload=payload,
+        stats=stats,
+        task_id=task_id,
+        batch_key=batch_key,
+        trace_id=trace_id,
+        b_execution_id=b_execution_id,
+        watermark=watermark,
+    )
+
+
+def decode_extraction_outcome(
+    value: object,
+    window: ExtractionWindow,
+    *,
+    adoption: object | None = None,
+    adoption_runtime: str = "python",
+    task_id: UUID | None = None,
+    trace_id: UUID | None = None,
+    batch_key: str | None = None,
+) -> ExtractionOutcome:
     """从私有JSON恢复原领域对象；持久化source_bound从不作为信任输入。"""
     try:
         data = _object(value, {"accepted", "rejected_count", "extraction_completed", "failure_kind",
             "failure_reason", "candidate_trace_ids", "model_accounting_owner", "model_call_ids",
             "a_execution_id", "a_input_sha256", "a_rule_version"})
+        rejected_count = _count(data["rejected_count"])
         if (type(data["accepted"]) is not list or len(data["accepted"]) > 60
-                or type(data["rejected_count"]) is not int or data["rejected_count"] < 0
                 or type(data["extraction_completed"]) is not bool
                 or data["model_accounting_owner"] != "typescript"):
             raise ValueError()
@@ -163,12 +408,46 @@ def decode_extraction_outcome(value: object, window: ExtractionWindow) -> Extrac
                 or kind is not None and data["accepted"]
                 or kind is None and not data["extraction_completed"]):
             raise ValueError()
-        return ExtractionOutcome(accepted=tuple(_fact(item, window) for item in data["accepted"]),
-            rejected_count=data["rejected_count"], extraction_completed=data["extraction_completed"],
-            failure_kind=kind, failure_reason=reason, candidate_trace_ids=candidate_ids,
-            model_accounting_owner="typescript", model_call_ids=call_ids,
-            a_execution_id=_uuid(data["a_execution_id"]), a_input_sha256=_hash(data["a_input_sha256"]),
-            a_rule_version=_hash(data["a_rule_version"]))
+        outcome = ExtractionOutcome(
+            accepted=tuple(_fact(item, window) for item in data["accepted"]),
+            rejected_count=rejected_count,
+            extraction_completed=data["extraction_completed"],
+            failure_kind=kind,
+            failure_reason=reason,
+            candidate_trace_ids=candidate_ids,
+            model_accounting_owner="typescript",
+            model_call_ids=call_ids,
+            a_execution_id=_uuid(data["a_execution_id"]),
+            a_input_sha256=_hash(data["a_input_sha256"]),
+            a_rule_version=_hash(data["a_rule_version"]),
+        )
+        if adoption_runtime == "typescript":
+            if task_id is None or trace_id is None or batch_key is None:
+                raise ValueError("extraction_remote_adoption_receipt_missing")
+            if adoption is None:
+                if (
+                    outcome.failure_reason is None
+                    and (not outcome.extraction_completed or outcome.accepted)
+                ):
+                    raise ValueError(
+                        "extraction_remote_adoption_receipt_missing",
+                    )
+                return replace(outcome, adoption_runtime="typescript")
+            receipt = _adoption_result(
+                adoption,
+                outcome,
+                task_id=task_id,
+                trace_id=trace_id,
+                batch_key=batch_key,
+            )
+            return replace(
+                outcome,
+                adoption_runtime="typescript",
+                adoption_receipt=receipt,
+            )
+        if adoption_runtime != "python" or adoption is not None:
+            raise ValueError("extraction_remote_adoption_mode_invalid")
+        return outcome
     except (ValueError, TypeError, KeyError, OverflowError):
         raise ExtractionRemoteInvalidResponse("extraction_remote_response_invalid") from None
 
@@ -183,10 +462,11 @@ def _json_pairs(pairs: list[tuple[str, object]]) -> dict:
 
 
 class RemoteExtractionRuntime:
-    """显式选择默认TS模式；历史教学profile由原适配器选择，不作失败回退。"""
+    """显式选择TS A/B；B结果只读核对，历史profile不作失败回退。"""
 
     def __init__(self, *, url: str, token: str, historical_runtime,
-                 owner_id: UUID | None = None, timeout: float = 600):
+                 owner_id: UUID | None = None, timeout: float = 600,
+                 b_runtime: str = "python"):
         try:
             parsed = urlsplit(url)
             valid = (parsed.scheme == "http" and parsed.hostname == "127.0.0.1"
@@ -199,10 +479,12 @@ class RemoteExtractionRuntime:
                 or any(ord(item) < 33 or ord(item) > 126 for item in token)
                 or owner_id is not None and not isinstance(owner_id, UUID)
                 or type(timeout) not in (int, float) or not 0 < timeout <= 900
+                or b_runtime not in {"python", "typescript"}
                 or historical_runtime is None):
             raise ValueError("extraction_remote_config_invalid")
         self._port, self._token, self._owner = parsed.port, token, owner_id
         self._timeout, self._historical = timeout, historical_runtime
+        self._b_runtime = b_runtime
         self._lock, self._closed, self._connections = threading.Lock(), False, set()
 
     @classmethod
@@ -211,7 +493,10 @@ class RemoteExtractionRuntime:
         try:
             return cls(url=environment["NOTALONE_EXTRACTION_REMOTE_URL"],
                 token=environment["NOTALONE_EXTRACTION_REMOTE_TOKEN"],
-                historical_runtime=historical_runtime, owner_id=owner_id)
+                historical_runtime=historical_runtime, owner_id=owner_id,
+                b_runtime=environment.get(
+                    "NOTALONE_EXTRACTION_B_RUNTIME", "python",
+                ))
         except (KeyError, ValueError, TypeError):
             raise ExtractionRemoteUnavailable("extraction_remote_config_invalid") from None
 
@@ -247,12 +532,46 @@ class RemoteExtractionRuntime:
                 "trace_id": str(trace.trace_id), "batch_key": batch_key, "claim": claim}
         except (ValueError, TypeError, KeyError):
             raise ExtractionRemoteUnavailable("extraction_remote_scope_invalid") from None
-        result = self._request(payload)
+        path = (
+            "/internal/extraction/run-b"
+            if self._b_runtime == "typescript"
+            else "/internal/extraction/run"
+        )
         try:
-            _object(result, {"outcome"})
-        except ValueError:
-            raise ExtractionRemoteInvalidResponse("extraction_remote_response_invalid") from None
-        return decode_extraction_outcome(result["outcome"], window)
+            result = self._request(payload, path)
+            try:
+                # run-b 只返回 A wire outcome 与 TS 已 finalize 的 adoption result。
+                _object(
+                    result,
+                    {"outcome", "adoption"}
+                    if self._b_runtime == "typescript"
+                    else {"outcome"},
+                )
+            except ValueError:
+                raise ExtractionRemoteInvalidResponse(
+                    "extraction_remote_response_invalid",
+                ) from None
+            return decode_extraction_outcome(
+                result["outcome"],
+                window,
+                adoption=(
+                    result["adoption"]
+                    if self._b_runtime == "typescript"
+                    else None
+                ),
+                adoption_runtime=self._b_runtime,
+                task_id=(
+                    UUID(str(claim["task_id"]))
+                    if self._b_runtime == "typescript"
+                    else None
+                ),
+                trace_id=trace.trace_id if self._b_runtime == "typescript" else None,
+                batch_key=batch_key if self._b_runtime == "typescript" else None,
+            )
+        except ExtractionRemoteUnavailable as error:
+            if self._b_runtime == "typescript":
+                error.preserve_trace = True
+            raise
 
     @staticmethod
     def _interrupt(connection: http.client.HTTPConnection) -> None:
@@ -264,7 +583,7 @@ class RemoteExtractionRuntime:
                 pass
         connection.close()
 
-    def _request(self, payload: dict) -> dict:
+    def _request(self, payload: dict, path: str) -> dict:
         connection = http.client.HTTPConnection("127.0.0.1", self._port, timeout=self._timeout)
         connection.auto_open = 0
         with self._lock:
@@ -286,7 +605,7 @@ class RemoteExtractionRuntime:
             with self._lock:
                 if self._closed or expired.is_set():
                     raise ExtractionRemoteUnavailable("extraction_remote_closed")
-            connection.request("POST", "/internal/extraction/run", body=body,
+            connection.request("POST", path, body=body,
                 headers={"Authorization": "Bearer " + self._token, "Content-Type": "application/json"})
             response = connection.getresponse()
             raw = response.read(4194305)

@@ -73,12 +73,17 @@ class AdoptionStats:
 
     adopted: int = 0
     updated: int = 0
+    merged: int = 0
     pending: int = 0
     skipped_duplicate: int = 0
     skipped_deleted: int = 0
     rejected_by_contract: int = 0
     skipped_non_memory: int = 0
     skipped_changed: int = 0
+    skipped_noop: int = 0
+    failed: int = 0
+    results: tuple[dict[str, object], ...] = ()
+    usages: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,6 +6,7 @@ from typing import Any
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from uuid import UUID, uuid4
+import hashlib
 import re
 
 import psycopg
@@ -423,6 +424,241 @@ class PostgresExtractionTraceStore:
         ).fetchone()
         if row is None:
             raise ValueError("提取结果尚未确认或已经消费。")
+
+    def verify_typescript_b_finalization(
+        self,
+        scope: ContactScope,
+        trace_id: UUID,
+        payload: dict[str, Any],
+        *,
+        task_id: UUID,
+        batch_key: str,
+    ) -> None:
+        """只读核对TS已提交的B结果、处理回执、trace结束与水位。"""
+
+        try:
+            def column(row, name: str, index: int):
+                return row[name] if isinstance(row, dict) else row[index]
+
+            if type(payload) is not dict:
+                raise ValueError()
+            receipt = payload.get("receipt")
+            if (type(receipt) is not dict
+                    or receipt.get("trace_id") != str(trace_id)
+                    or payload.get("trace_id") != str(trace_id)
+                    or payload.get("watermark") != receipt.get("watermark_after")):
+                raise ValueError()
+            a_receipt = {
+                "a_execution_id": receipt.get("a_execution_id"),
+                "a_input_sha256": receipt.get("a_input_sha256"),
+                "a_rule_version": receipt.get("a_rule_version"),
+            }
+            with self._connect() as connection:
+                trace_row = connection.execute(
+                    "SELECT status,batch_key,finished_at,failure_stage,error_code "
+                    "FROM public.memory_extraction_trace "
+                    "WHERE trace_id=%s AND owner_id=%s AND contact_id=%s",
+                    (trace_id, scope.owner_id, scope.contact_id),
+                ).fetchone()
+                if (
+                    trace_row is None
+                    or column(trace_row, "status", 0) != "succeeded"
+                    or column(trace_row, "batch_key", 1) != batch_key
+                    or column(trace_row, "finished_at", 2) is None
+                    or column(trace_row, "failure_stage", 3) is not None
+                    or column(trace_row, "error_code", 4) is not None
+                ):
+                    raise ValueError()
+                window_rows = connection.execute(
+                    "SELECT payload FROM public.memory_extraction_trace_event "
+                    "WHERE trace_id=%s AND owner_id=%s AND contact_id=%s "
+                    "AND stage='window'",
+                    (trace_id, scope.owner_id, scope.contact_id),
+                ).fetchall()
+                if len(window_rows) != 1:
+                    raise ValueError()
+                window_payload = column(window_rows[0], "payload", 0)
+                targets = window_payload.get("target_message_ids")
+                if (window_payload.get("task_runtime") or {}).get("task_id") != str(task_id):
+                    raise ValueError()
+                if (
+                    type(targets) is not list
+                    or not targets
+                    or len(targets) > 20
+                    or len(set(targets)) != len(targets)
+                    or hashlib.sha256("|".join(targets).encode()).hexdigest()
+                    != batch_key
+                ):
+                    raise ValueError()
+                result_rows = connection.execute(
+                    "SELECT payload FROM public.memory_extraction_trace_event "
+                    "WHERE trace_id=%s AND owner_id=%s AND contact_id=%s "
+                    "AND stage='typescript_b_result'",
+                    (trace_id, scope.owner_id, scope.contact_id),
+                ).fetchall()
+                if (
+                    len(result_rows) != 1
+                    or column(result_rows[0], "payload", 0).get("receipt")
+                    != receipt
+                ):
+                    raise ValueError()
+                end_rows = connection.execute(
+                    "SELECT payload FROM public.memory_extraction_trace_event "
+                    "WHERE trace_id=%s AND owner_id=%s AND contact_id=%s "
+                    "AND stage='batch_end'",
+                    (trace_id, scope.owner_id, scope.contact_id),
+                ).fetchall()
+                if (
+                    len(end_rows) != 1
+                    or column(end_rows[0], "payload", 0).get(
+                        "typescript_b_receipt",
+                    ) != receipt
+                    or column(end_rows[0], "payload", 0).get(
+                        "typescript_a_receipt",
+                    ) != a_receipt
+                    or column(end_rows[0], "payload", 0).get("adoption")
+                    != receipt.get("stats")
+                    or column(end_rows[0], "payload", 0).get("extracted")
+                    != receipt.get("accepted_count")
+                    or column(end_rows[0], "payload", 0).get("rejected")
+                    != receipt.get("rejected_count")
+                    or column(end_rows[0], "payload", 0).get(
+                        "watermark_before",
+                    ) != receipt.get("watermark_before")
+                    or column(end_rows[0], "payload", 0).get(
+                        "watermark_planned",
+                    ) != receipt.get("watermark_planned")
+                    or column(end_rows[0], "payload", 0).get("watermark_after")
+                    != receipt.get("watermark_after")
+                ):
+                    raise ValueError()
+                watermark_row = connection.execute(
+                    "SELECT last_message_id FROM public.memory_extraction_watermark "
+                    "WHERE owner_id=%s AND contact_id=%s",
+                    (scope.owner_id, scope.contact_id),
+                ).fetchone()
+                actual_watermark = (
+                    None
+                    if watermark_row is None
+                    else column(watermark_row, "last_message_id", 0)
+                )
+                expected_watermark = receipt.get("watermark_after")
+                if actual_watermark is not None:
+                    actual_watermark = str(actual_watermark)
+                if actual_watermark != expected_watermark:
+                    raise ValueError()
+                target_count = connection.execute(
+                    "SELECT count(*) FROM public.memory_processing_target "
+                    "WHERE task_id=%s AND owner_id=%s AND contact_id=%s "
+                    "AND message_id=ANY(%s::uuid[]) "
+                    "AND completed_at IS NOT NULL AND outcome='succeeded'",
+                    (task_id, scope.owner_id, scope.contact_id, targets),
+                ).fetchone()[0]
+                if target_count != len(targets):
+                    raise ValueError()
+                completed = connection.execute(
+                    "SELECT count(*) FROM public.memory_processing_receipt "
+                    "WHERE owner_id=%s AND contact_id=%s "
+                    "AND message_id=ANY(%s::uuid[]) AND outcome='succeeded'",
+                    (scope.owner_id, scope.contact_id, targets),
+                ).fetchone()[0]
+                if completed != len(targets):
+                    raise ValueError()
+                for usage in payload["stats"]["usages"]:
+                    call = connection.execute(
+                        "SELECT call.purpose,ledger.model_name "
+                        "FROM public.memory_extraction_trace_call AS call "
+                        "JOIN public.outbound_ledger_entry AS ledger "
+                        "ON ledger.id=call.ledger_entry_id "
+                        "AND ledger.owner_id=call.owner_id "
+                        "AND ledger.contact_id=call.contact_id "
+                        "WHERE call.call_id=%s AND call.trace_id=%s "
+                        "AND call.owner_id=%s AND call.contact_id=%s "
+                        "AND call.ledger_commit_status='committed' "
+                        "AND ledger.outcome='succeeded'",
+                        (
+                            usage["call_id"],
+                            trace_id,
+                            scope.owner_id,
+                            scope.contact_id,
+                        ),
+                    ).fetchone()
+                    if (
+                        call is None
+                        or column(call, "purpose", 0) != usage["purpose"]
+                        or column(call, "model_name", 1) != usage["model_name"]
+                    ):
+                        raise ValueError()
+                a_execution_id = receipt.get("a_execution_id")
+                a_rows = connection.execute(
+                    """
+                    SELECT original.trace_id,
+                           r.payload->'outcome' AS a_outcome
+                    FROM public.memory_extraction_trace_event AS b
+                    JOIN public.memory_extraction_trace AS original
+                      ON original.trace_id=b.trace_id
+                     AND original.owner_id=b.owner_id
+                     AND original.contact_id=b.contact_id
+                    JOIN public.memory_extraction_trace_event AS r
+                      ON r.trace_id=b.trace_id
+                     AND r.owner_id=b.owner_id
+                     AND r.contact_id=b.contact_id
+                     AND r.stage='typescript_a_result'
+                    WHERE b.owner_id=%s AND b.contact_id=%s
+                      AND b.stage='typescript_a_begin'
+                      AND b.payload->>'execution_id'=%s
+                      AND b.payload->>'input_sha256'=%s
+                      AND b.payload->>'rule_version'=%s
+                      AND b.payload->>'task_id'=%s
+                      AND original.batch_key=%s
+                    """,
+                    (
+                        scope.owner_id,
+                        scope.contact_id,
+                        a_execution_id,
+                        receipt.get("a_input_sha256"),
+                        receipt.get("a_rule_version"),
+                        str(task_id),
+                        batch_key,
+                    ),
+                ).fetchall()
+                if len(a_rows) != 1:
+                    raise ValueError()
+                original_trace_id = column(a_rows[0], "trace_id", 0)
+                a_outcome = column(a_rows[0], "a_outcome", 1)
+                if type(a_outcome) is not dict or any(
+                    a_outcome.get(key) != value
+                    for key, value in a_receipt.items()
+                ) or (
+                    a_outcome.get("candidate_trace_ids")
+                    != receipt.get("candidate_trace_ids")
+                    or a_outcome.get("rejected_count")
+                    != receipt.get("rejected_count")
+                    or type(a_outcome.get("accepted")) is not list
+                    or len(a_outcome["accepted"])
+                    != receipt.get("accepted_count")
+                ):
+                    raise ValueError()
+                if original_trace_id != trace_id:
+                    recovered = connection.execute(
+                        "SELECT count(*) FROM public.memory_extraction_trace_event "
+                        "WHERE trace_id=%s AND owner_id=%s AND contact_id=%s "
+                        "AND stage='typescript_a_recovered' "
+                        "AND payload @> %s::jsonb",
+                        (
+                            trace_id,
+                            scope.owner_id,
+                            scope.contact_id,
+                            Jsonb(a_receipt),
+                        ),
+                    ).fetchone()[0]
+                    if recovered != 1:
+                        raise ValueError()
+                planned = receipt.get("watermark_planned")
+                if planned != targets[-1]:
+                    raise ValueError()
+        except Exception:
+            raise ValueError("提取采纳最终提交尚未确认。") from None
 
     def mark_failed(
         self,

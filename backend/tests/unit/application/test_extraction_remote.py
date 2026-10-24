@@ -5,11 +5,12 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 from contextvars import copy_context
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
 import hashlib
 import json
 import threading
 import unittest
-from uuid import uuid4, uuid5, NAMESPACE_URL
+from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
 
 from notalone.application.extraction_remote import (
     ExtractionRemoteInvalidResponse, decode_extraction_outcome,
@@ -55,6 +56,59 @@ def fixture(*, event=False):
         "model_accounting_owner": "typescript", "model_call_ids": [str(uuid4()), str(uuid4())],
         "a_execution_id": str(uuid4()), "a_input_sha256": "a" * 64, "a_rule_version": "b" * 64}
     return window, result
+
+
+def adoption_result(outcome, *, task_id, trace_id, batch_key):
+    stats = {
+        "adopted": 1,
+        "updated": 0,
+        "merged": 0,
+        "pending": 0,
+        "skipped_duplicate": 0,
+        "skipped_deleted": 0,
+        "skipped_noop": 0,
+        "failed": 0,
+        "usages": [],
+        "results": [{
+            "candidate_index": 0,
+            "disposition": "adopted",
+            "candidate_id": str(uuid4()),
+            "memory_id": str(uuid4()),
+            "parent_memory_ids": [],
+            "decision": "add",
+            "reason": None,
+        }],
+    }
+    b_execution_id = uuid5(
+        UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8"),
+        "notalone:extraction_adoption:"
+        f"{outcome['a_execution_id']}:{outcome['a_input_sha256']}:"
+        f"{task_id}:{batch_key}",
+    )
+    planned = uuid4()
+    receipt = {
+        "version": 1,
+        "b_execution_id": str(b_execution_id),
+        "trace_id": str(trace_id),
+        "a_execution_id": outcome["a_execution_id"],
+        "a_input_sha256": outcome["a_input_sha256"],
+        "a_rule_version": outcome["a_rule_version"],
+        "candidate_trace_ids": outcome["candidate_trace_ids"],
+        "accepted_count": len(outcome["accepted"]),
+        "rejected_count": outcome["rejected_count"],
+        "stats": deepcopy(stats),
+        "watermark_before": None,
+        "watermark_planned": str(planned),
+        "watermark_after": str(planned),
+    }
+    return {
+        "trace_id": str(trace_id),
+        "b_execution_id": str(b_execution_id),
+        "stats": stats,
+        "receipt": receipt,
+        "watermark": str(planned),
+        "cached": False,
+    }
 
 
 class ExtractionRemoteDecodeTest(unittest.TestCase):
@@ -108,9 +162,132 @@ class ExtractionRemoteDecodeTest(unittest.TestCase):
         with self.assertRaises(ExtractionRemoteInvalidResponse):
             decode_extraction_outcome(original, changed)
 
+    def test_remote_b_result_requires_complete_final_receipt(self):
+        window, outcome = fixture()
+        task_id, trace_id, batch_key = uuid4(), uuid4(), "c" * 64
+        valid = adoption_result(
+            outcome, task_id=task_id, trace_id=trace_id, batch_key=batch_key,
+        )
+
+        def decode(value):
+            return decode_extraction_outcome(
+                outcome,
+                window,
+                adoption=value,
+                adoption_runtime="typescript",
+                task_id=task_id,
+                trace_id=trace_id,
+                batch_key=batch_key,
+            )
+
+        decoded = decode(valid)
+        self.assertEqual(decoded.adoption_receipt.payload, valid)
+        self.assertEqual(decoded.adoption_receipt.stats.adopted, 1)
+        self.assertEqual(decoded.adoption_receipt.trace_id, trace_id)
+        self.assertEqual(
+            str(decoded.adoption_receipt.watermark),
+            valid["receipt"]["watermark_after"],
+        )
+        replayed = deepcopy(valid)
+        replayed["cached"] = True
+        self.assertTrue(decode(replayed).adoption_receipt.payload["cached"])
+
+        mutations = (
+            lambda item: item.clear(),
+            lambda item: item.update(extra=True),
+            lambda item: item.update(trace_id=str(uuid4())),
+            lambda item: item.update(b_execution_id=str(uuid4())),
+            lambda item: item.update(cached="false"),
+            lambda item: item.update(watermark=str(uuid4())),
+            lambda item: item["receipt"].update(version=True),
+            lambda item: item["receipt"].update(trace_id=str(uuid4())),
+            lambda item: item["receipt"].update(b_execution_id=str(uuid4())),
+            lambda item: item["receipt"].update(a_execution_id=str(uuid4())),
+            lambda item: item["receipt"].update(a_input_sha256="d" * 64),
+            lambda item: item["receipt"].update(a_rule_version="d" * 64),
+            lambda item: item["receipt"].update(
+                candidate_trace_ids=[str(uuid4())],
+            ),
+            lambda item: item["receipt"].update(accepted_count=0),
+            lambda item: item["receipt"].update(rejected_count=1),
+            lambda item: item["receipt"].update(watermark_planned="invalid"),
+            lambda item: item["receipt"].update(watermark_before="invalid"),
+            lambda item: item["receipt"].update(watermark_after=None),
+            lambda item: item["stats"].update(adopted=2),
+            lambda item: item["stats"].update(results=[]),
+            lambda item: item["stats"]["results"][0].update(candidate_index=1),
+            lambda item: item["stats"]["results"][0].update(
+                disposition="failed", decision=None, reason="synthetic_failure",
+            ),
+            lambda item: item["stats"].update(
+                failed=1,
+                adopted=0,
+                results=[{
+                    **item["stats"]["results"][0],
+                    "disposition": "failed",
+                    "decision": None,
+                    "reason": "synthetic_failure",
+                }],
+            ),
+            lambda item: item["stats"]["usages"].append({
+                "call_id": str(uuid4()),
+                "model_name": "",
+                "input_tokens": 1,
+                "output_tokens": 1,
+                "purpose": "adjudication",
+            }),
+            lambda item: item["receipt"]["stats"].update(adopted=2),
+        )
+        for mutate in mutations:
+            with self.subTest(mutate=mutate):
+                changed = deepcopy(valid)
+                mutate(changed)
+                with self.assertRaises(ExtractionRemoteInvalidResponse):
+                    decode(changed)
+
+    def test_remote_b_allows_null_adoption_only_for_a_failure_or_no_candidates(self):
+        window, outcome = fixture()
+        task_id, trace_id, batch_key = uuid4(), uuid4(), "c" * 64
+
+        def decode(value):
+            return decode_extraction_outcome(
+                value,
+                window,
+                adoption=None,
+                adoption_runtime="typescript",
+                task_id=task_id,
+                trace_id=trace_id,
+                batch_key=batch_key,
+            )
+
+        with self.assertRaises(ExtractionRemoteInvalidResponse):
+            decode(outcome)
+
+        no_candidates = deepcopy(outcome)
+        no_candidates.update(
+            accepted=[],
+            candidate_trace_ids=[],
+            rejected_count=1,
+        )
+        decoded = decode(no_candidates)
+        self.assertEqual(decoded.adoption_runtime, "typescript")
+        self.assertIsNone(decoded.adoption_receipt)
+        self.assertEqual(decoded.rejected_count, 1)
+
+        failed = deepcopy(no_candidates)
+        failed.update(
+            extraction_completed=False,
+            failure_kind="unavailable",
+            failure_reason="合成A失败",
+        )
+        decoded_failure = decode(failed)
+        self.assertEqual(decoded_failure.adoption_runtime, "typescript")
+        self.assertIsNone(decoded_failure.adoption_receipt)
+        self.assertIsNotNone(decoded_failure.failure_kind)
+
 
 @contextmanager
-def serve(value, *, blocked=None, arrived=None):
+def serve(value, *, blocked=None, arrived=None, status=200, raw=None):
     requests = []
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -120,8 +297,8 @@ def serve(value, *, blocked=None, arrived=None):
                 arrived.set()
             if blocked is not None:
                 blocked.wait(3)
-            body = json.dumps(value).encode()
-            self.send_response(200)
+            body = raw if raw is not None else json.dumps(value).encode()
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -166,6 +343,188 @@ class ExtractionRemoteTransportTest(unittest.TestCase):
             {"owner_id": str(window.owner_id), "contact_id": str(window.contact_id),
              "trace_id": str(trace_id), "batch_key": batch, "claim": claim})])
 
+    def test_explicit_remote_b_runtime_uses_only_run_b_and_attaches_receipt(self):
+        from notalone.application.extraction_remote import RemoteExtractionRuntime
+        window, outcome = fixture()
+        claim = {"task_id": str(uuid4()), "step_id": str(uuid4()), "step_name": "extract_memory",
+            "worker_id": str(uuid4()), "lease_generation": 1}
+        batch = hashlib.sha256(str(window.messages[0].message_id).encode()).hexdigest()
+        request_id = uuid5(NAMESPACE_URL, f"notalone:extraction:{claim['task_id']}:{batch}")
+        trace_id = uuid4()
+        adoption = adoption_result(
+            outcome, task_id=claim["task_id"], trace_id=trace_id, batch_key=batch,
+        )
+        control = SharedModelPriorityControl(
+            socket_path="synthetic-unused", token="x" * 32,
+        )
+        environment = {
+            "NOTALONE_EXTRACTION_REMOTE_URL": "synthetic",
+            "NOTALONE_EXTRACTION_REMOTE_TOKEN": "t" * 32,
+            "NOTALONE_EXTRACTION_B_RUNTIME": "typescript",
+        }
+        with serve({"outcome": outcome, "adoption": adoption}) as (url, requests):
+            environment["NOTALONE_EXTRACTION_REMOTE_URL"] = url
+            runtime = RemoteExtractionRuntime.from_environment(
+                environment, historical_runtime=object(),
+            )
+            with physical_model_task(
+                control,
+                request_id=request_id,
+                owner_id=window.owner_id,
+                contact_id=window.contact_id,
+                claim=claim,
+            ):
+                with TraceSession(
+                    object(),
+                    ContactScope(window.owner_id, window.contact_id),
+                    trace_id,
+                ):
+                    actual = ExtractionFlow(runtime=runtime).run(window)
+            runtime.close()
+        self.assertEqual([item[0] for item in requests], ["/internal/extraction/run-b"])
+        self.assertEqual(actual.adoption_runtime, "typescript")
+        self.assertEqual(actual.adoption_receipt.stats.adopted, 1)
+        self.assertEqual(actual.adoption_receipt.payload, adoption)
+
+    def test_remote_b_null_adoption_keeps_a_failure_and_zero_candidate_paths(self):
+        from notalone.application.extraction_remote import RemoteExtractionRuntime
+        window, successful = fixture()
+        no_candidates = deepcopy(successful)
+        no_candidates.update(accepted=[], candidate_trace_ids=[], rejected_count=1)
+        failed = deepcopy(no_candidates)
+        failed.update(
+            extraction_completed=False,
+            failure_kind="invalid_output",
+            failure_reason="合成A输出不可用",
+        )
+        for outcome in (no_candidates, failed):
+            with self.subTest(
+                failure_kind=outcome["failure_kind"],
+            ):
+                claim = {
+                    "task_id": str(uuid4()),
+                    "step_id": str(uuid4()),
+                    "step_name": "extract_memory",
+                    "worker_id": str(uuid4()),
+                    "lease_generation": 1,
+                }
+                batch = hashlib.sha256(
+                    str(window.messages[0].message_id).encode()
+                ).hexdigest()
+                request_id = uuid5(
+                    NAMESPACE_URL,
+                    f"notalone:extraction:{claim['task_id']}:{batch}",
+                )
+                control = SharedModelPriorityControl(
+                    socket_path="synthetic-unused", token="x" * 32,
+                )
+                with serve({"outcome": outcome, "adoption": None}) as (
+                    url, requests,
+                ):
+                    runtime = RemoteExtractionRuntime(
+                        url=url,
+                        token="t" * 32,
+                        historical_runtime=object(),
+                        b_runtime="typescript",
+                    )
+                    with physical_model_task(
+                        control,
+                        request_id=request_id,
+                        owner_id=window.owner_id,
+                        contact_id=window.contact_id,
+                        claim=claim,
+                    ):
+                        with TraceSession(
+                            object(),
+                            ContactScope(
+                                window.owner_id, window.contact_id,
+                            ),
+                            uuid4(),
+                        ):
+                            actual = ExtractionFlow(
+                                runtime=runtime,
+                            ).run(window)
+                    runtime.close()
+                self.assertEqual(
+                    [item[0] for item in requests],
+                    ["/internal/extraction/run-b"],
+                )
+                self.assertEqual(actual.adoption_runtime, "typescript")
+                self.assertIsNone(actual.adoption_receipt)
+
+    def test_remote_b_http_unknown_and_malformed_responses_never_fallback(self):
+        from notalone.application.extraction_remote import (
+            ExtractionRemoteUnavailable,
+            RemoteExtractionRuntime,
+        )
+        window, outcome = fixture()
+        claim = {"task_id": str(uuid4()), "step_id": str(uuid4()),
+            "step_name": "extract_memory", "worker_id": str(uuid4()),
+            "lease_generation": 1}
+        batch = hashlib.sha256(
+            str(window.messages[0].message_id).encode()
+        ).hexdigest()
+        request_id = uuid5(
+            NAMESPACE_URL, f"notalone:extraction:{claim['task_id']}:{batch}",
+        )
+        control = SharedModelPriorityControl(
+            socket_path="synthetic-unused", token="x" * 32,
+        )
+        trace_id = uuid4()
+        adoption = adoption_result(
+            outcome, task_id=claim["task_id"], trace_id=trace_id, batch_key=batch,
+        )
+
+        def reject(*, status=200, value=None, raw=None):
+            failure_marks = []
+            trace_store = SimpleNamespace(
+                mark_failed=lambda *args, **kwargs: failure_marks.append(
+                    (args, kwargs),
+                ),
+            )
+            with serve(value, status=status, raw=raw) as (url, requests):
+                runtime = RemoteExtractionRuntime(
+                    url=url,
+                    token="t" * 32,
+                    historical_runtime=object(),
+                    b_runtime="typescript",
+                )
+                with physical_model_task(
+                    control,
+                    request_id=request_id,
+                    owner_id=window.owner_id,
+                    contact_id=window.contact_id,
+                    claim=claim,
+                ):
+                    with TraceSession(
+                        trace_store,
+                        ContactScope(window.owner_id, window.contact_id),
+                        trace_id,
+                    ):
+                        with self.assertRaises(
+                            ExtractionRemoteUnavailable,
+                        ) as rejected:
+                            ExtractionFlow(runtime=runtime).run(window)
+                runtime.close()
+            self.assertTrue(rejected.exception.preserve_trace)
+            self.assertEqual(failure_marks, [])
+            self.assertEqual(
+                [item[0] for item in requests],
+                ["/internal/extraction/run-b"],
+            )
+
+        reject(status=409, value={"outcome": outcome, "adoption": adoption})
+        reject(value={"outcome": outcome})
+        reject(value={"outcome": outcome, "adoption": adoption, "extra": True})
+        incomplete = deepcopy(adoption)
+        incomplete.pop("stats")
+        reject(value={"outcome": outcome, "adoption": incomplete})
+        reject(raw=(
+            b'{"outcome":' + json.dumps(outcome).encode()
+            + b',"adoption":' + json.dumps(adoption).encode()
+            + b',"adoption":' + json.dumps(adoption).encode() + b"}"
+        ))
+
     def test_close_interrupts_pending_response_without_http_retry_or_fallback(self):
         from notalone.application.extraction_remote import RemoteExtractionRuntime, ExtractionRemoteUnavailable
         window, result = fixture()
@@ -193,6 +552,86 @@ class ExtractionRemoteTransportTest(unittest.TestCase):
                     thread.join(1)
                     self.assertFalse(thread.is_alive())
             self.assertEqual(len(requests), 1)
+        self.assertEqual(len(failed), 1)
+        self.assertIsInstance(failed[0], ExtractionRemoteUnavailable)
+
+    def test_close_interrupts_pending_remote_b_without_run_fallback(self):
+        from notalone.application.extraction_remote import (
+            ExtractionRemoteUnavailable,
+            RemoteExtractionRuntime,
+        )
+        window, outcome = fixture()
+        claim = {
+            "task_id": str(uuid4()),
+            "step_id": str(uuid4()),
+            "step_name": "extract_memory",
+            "worker_id": str(uuid4()),
+            "lease_generation": 1,
+        }
+        batch = hashlib.sha256(
+            str(window.messages[0].message_id).encode()
+        ).hexdigest()
+        request_id = uuid5(
+            NAMESPACE_URL,
+            f"notalone:extraction:{claim['task_id']}:{batch}",
+        )
+        trace_id = uuid4()
+        adoption = adoption_result(
+            outcome,
+            task_id=claim["task_id"],
+            trace_id=trace_id,
+            batch_key=batch,
+        )
+        control = SharedModelPriorityControl(
+            socket_path="synthetic-unused", token="x" * 32,
+        )
+        blocked, arrived, failed = (
+            threading.Event(), threading.Event(), [],
+        )
+
+        def work():
+            try:
+                ExtractionFlow(runtime=runtime).run(window)
+            except Exception as error:
+                failed.append(error)
+
+        with serve(
+            {"outcome": outcome, "adoption": adoption},
+            blocked=blocked,
+            arrived=arrived,
+        ) as (url, requests):
+            runtime = RemoteExtractionRuntime(
+                url=url,
+                token="t" * 32,
+                historical_runtime=object(),
+                timeout=2,
+                b_runtime="typescript",
+            )
+            with physical_model_task(
+                control,
+                request_id=request_id,
+                owner_id=window.owner_id,
+                contact_id=window.contact_id,
+                claim=claim,
+            ):
+                with TraceSession(
+                    object(),
+                    ContactScope(window.owner_id, window.contact_id),
+                    trace_id,
+                ):
+                    context = copy_context()
+                    thread = threading.Thread(
+                        target=lambda: context.run(work),
+                    )
+                    thread.start()
+                    self.assertTrue(arrived.wait(1))
+                    runtime.close()
+                    thread.join(1)
+                    self.assertFalse(thread.is_alive())
+            self.assertEqual(
+                [item[0] for item in requests],
+                ["/internal/extraction/run-b"],
+            )
         self.assertEqual(len(failed), 1)
         self.assertIsInstance(failed[0], ExtractionRemoteUnavailable)
 

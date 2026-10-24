@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from unittest.mock import patch
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 import psycopg
 from psycopg import sql
@@ -20,6 +21,7 @@ from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.persistence.watermark_store import PostgresWatermarkStore
 from notalone.scopes import ContactScope
+from notalone.memory_trace.context import snapshot
 from tests.unit.memory_extraction.test_command import _payload
 
 DATABASE_URL = os.environ.get("NOTALONE_TEST_DATABASE_URL", "")
@@ -132,6 +134,376 @@ class ExtractionTraceTest(unittest.TestCase):
             batch_size=2,
             **options,
         )
+
+    def prepare_remote_b_consumption(
+        self, *, finalize=True, batch_key=None, with_usage=False,
+    ):
+        task_id = uuid4()
+        batch_key = batch_key or hashlib.sha256(
+            "|".join(str(item) for item in self.message_ids).encode()
+        ).hexdigest()
+        trace_id = self.traces.begin(
+            self.scope,
+            run_id=uuid4(),
+            batch_key=batch_key,
+            payload={
+                "task_runtime": {"task_id": str(task_id)},
+                "messages": [snapshot(message) for message in self.messages],
+                "target_message_ids": [
+                    str(message_id) for message_id in self.message_ids
+                ],
+            },
+        )
+        a_receipt = {
+            "a_execution_id": str(trace_id),
+            "a_input_sha256": "a" * 64,
+            "a_rule_version": "b" * 64,
+        }
+        self.traces.append(
+            self.scope,
+            trace_id,
+            stage="typescript_a_begin",
+            payload={
+                "execution_id": str(trace_id),
+                "input_sha256": a_receipt["a_input_sha256"],
+                "rule_version": a_receipt["a_rule_version"],
+                "task_id": str(task_id),
+            },
+        )
+        self.traces.append(
+            self.scope,
+            trace_id,
+            stage="typescript_a_result",
+            payload={"outcome": {
+                **a_receipt,
+                "accepted": [],
+                "candidate_trace_ids": [],
+                "rejected_count": 0,
+            }},
+        )
+        usage = None
+        if with_usage:
+            usage = {
+                "call_id": str(uuid4()),
+                "model_name": "synthetic-adjudicator",
+                "input_tokens": 11,
+                "output_tokens": 3,
+                "purpose": "adjudication",
+            }
+        stats = {
+            "adopted": 0,
+            "updated": 0,
+            "merged": 0,
+            "pending": 0,
+            "skipped_duplicate": 0,
+            "skipped_deleted": 0,
+            "skipped_noop": 0,
+            "failed": 0,
+            "results": [],
+            "usages": [] if usage is None else [usage],
+        }
+        b_execution_id = uuid5(
+            UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8"),
+            "notalone:extraction_adoption:"
+            f"{a_receipt['a_execution_id']}:{a_receipt['a_input_sha256']}:"
+            f"{task_id}:{batch_key}",
+        )
+        b_receipt = {
+            "version": 1,
+            "b_execution_id": str(b_execution_id),
+            "trace_id": str(trace_id),
+            **a_receipt,
+            "candidate_trace_ids": [],
+            "accepted_count": 0,
+            "rejected_count": 0,
+            "stats": stats,
+            "watermark_before": None,
+            "watermark_planned": str(self.message_ids[-1]),
+            "watermark_after": (
+                str(self.message_ids[-1]) if finalize else None
+            ),
+        }
+        adoption_result = {
+            "trace_id": str(trace_id),
+            "b_execution_id": str(b_execution_id),
+            "stats": stats,
+            "receipt": b_receipt,
+            "watermark": (
+                str(self.message_ids[-1]) if finalize else None
+            ),
+            "cached": False,
+        }
+        self.traces.append(
+            self.scope,
+            trace_id,
+            stage="typescript_b_result",
+            payload={"receipt": b_receipt},
+        )
+        if not finalize:
+            return {
+                "task_id": task_id,
+                "trace_id": trace_id,
+                "batch_key": batch_key,
+                "a_receipt": a_receipt,
+                "b_receipt": b_receipt,
+                "adoption_result": adoption_result,
+            }
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO public.background_task"
+                "(id,owner_id,contact_id,source_document_id,task_type,status,"
+                "current_step,message_count) VALUES "
+                "(%s,%s,%s,%s,'import','running','extract_memory',%s)",
+                (
+                    task_id,
+                    self.scope.owner_id,
+                    self.scope.contact_id,
+                    self.source_ids[0],
+                    len(self.message_ids),
+                ),
+            )
+            if usage is not None:
+                ledger_entry_id = uuid4()
+                connection.execute(
+                    "INSERT INTO public.outbound_ledger_entry"
+                    "(id,owner_id,contact_id,provider,model_name,input_tokens,"
+                    "output_tokens,outcome,called_at) VALUES "
+                    "(%s,%s,%s,'synthetic-route',%s,%s,%s,'succeeded',now())",
+                    (
+                        ledger_entry_id,
+                        self.scope.owner_id,
+                        self.scope.contact_id,
+                        usage["model_name"],
+                        usage["input_tokens"],
+                        usage["output_tokens"],
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO public.memory_extraction_trace_call"
+                    "(call_id,trace_id,owner_id,contact_id,purpose,called_at,"
+                    "finished_at,response_status,provider_attempts,"
+                    "ledger_entry_id,ledger_commit_status,disposition) VALUES "
+                    "(%s,%s,%s,%s,%s,now(),now(),'returned',1,%s,"
+                    "'committed','consumed')",
+                    (
+                        usage["call_id"],
+                        trace_id,
+                        self.scope.owner_id,
+                        self.scope.contact_id,
+                        usage["purpose"],
+                        ledger_entry_id,
+                    ),
+                )
+            connection.execute(
+                "INSERT INTO public.memory_processing_plan"
+                "(task_id,owner_id,contact_id) VALUES (%s,%s,%s) "
+                "ON CONFLICT DO NOTHING",
+                (task_id, self.scope.owner_id, self.scope.contact_id),
+            )
+            connection.execute(
+                "INSERT INTO public.memory_processing_target"
+                "(task_id,message_id,owner_id,contact_id) "
+                "SELECT %s,id,owner_id,contact_id FROM public.message "
+                "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[]) "
+                "ON CONFLICT DO NOTHING",
+                (
+                    task_id,
+                    self.scope.owner_id,
+                    self.scope.contact_id,
+                    self.message_ids,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO public.memory_processing_receipt"
+                "(message_id,owner_id,contact_id,outcome) "
+                "SELECT id,owner_id,contact_id,'succeeded' "
+                "FROM public.message WHERE owner_id=%s AND contact_id=%s "
+                "AND id=ANY(%s::uuid[])",
+                (self.scope.owner_id, self.scope.contact_id, self.message_ids),
+            )
+            connection.execute(
+                "UPDATE public.memory_processing_target AS target "
+                "SET completed_at=receipt.completed_at,outcome=receipt.outcome "
+                "FROM public.memory_processing_receipt AS receipt "
+                "WHERE target.task_id=%s AND target.owner_id=%s "
+                "AND target.contact_id=%s AND target.message_id=ANY(%s::uuid[]) "
+                "AND target.message_id=receipt.message_id "
+                "AND target.owner_id=receipt.owner_id "
+                "AND target.contact_id=receipt.contact_id",
+                (
+                    task_id,
+                    self.scope.owner_id,
+                    self.scope.contact_id,
+                    self.message_ids,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO public.memory_extraction_watermark"
+                "(owner_id,contact_id,last_message_id) VALUES (%s,%s,%s)",
+                (self.scope.owner_id, self.scope.contact_id, self.message_ids[-1]),
+            )
+        self.traces.append(
+            self.scope,
+            trace_id,
+            stage="batch_end",
+            payload={
+                "extracted": 0,
+                "rejected": 0,
+                "adoption": b_receipt["stats"],
+                "watermark_before": b_receipt["watermark_before"],
+                "watermark_planned": b_receipt["watermark_planned"],
+                "typescript_b_receipt": b_receipt,
+                "watermark_after": str(self.message_ids[-1]),
+                "watermark_commit": "committed_with_trace",
+                "typescript_a_receipt": a_receipt,
+            },
+        )
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.memory_extraction_trace SET status='succeeded',"
+                "finished_at=now() WHERE trace_id=%s AND owner_id=%s "
+                "AND contact_id=%s",
+                (trace_id, self.scope.owner_id, self.scope.contact_id),
+            )
+        return {
+            "task_id": task_id,
+            "trace_id": trace_id,
+            "batch_key": batch_key,
+            "a_receipt": a_receipt,
+            "b_receipt": b_receipt,
+            "adoption_result": adoption_result,
+        }
+
+    def test_remote_b_finalization_is_read_only_bound_and_replay_safe(self):
+        prepared = self.prepare_remote_b_consumption()
+        for task_id, batch_key in (
+            (uuid4(), prepared["batch_key"]),
+            (prepared["task_id"], hashlib.sha256(b"wrong-batch").hexdigest()),
+        ):
+            with self.subTest(task_id=task_id, batch_key=batch_key):
+                with self.assertRaises(ValueError):
+                    self.traces.verify_typescript_b_finalization(
+                        self.scope,
+                        prepared["trace_id"],
+                        prepared["adoption_result"],
+                        task_id=task_id,
+                        batch_key=batch_key,
+                    )
+        for _ in range(2):
+            self.traces.verify_typescript_b_finalization(
+                self.scope,
+                prepared["trace_id"],
+                prepared["adoption_result"],
+                task_id=prepared["task_id"],
+                batch_key=prepared["batch_key"],
+            )
+        self.assertEqual(self.watermark.get(self.scope), self.message_ids[-1])
+        detail = self.traces.get_batch(self.scope, prepared["trace_id"])
+        self.assertEqual(detail["status"], "succeeded")
+        self.assertEqual(
+            sum(event["stage"] == "batch_end" for event in detail["events"]),
+            1,
+        )
+        self.assertEqual(
+            sum(
+                event["stage"] == "typescript_b_result"
+                for event in detail["events"]
+            ),
+            1,
+        )
+
+    def test_remote_b_missing_finalization_is_rejected_without_watermark(self):
+        prepared = self.prepare_remote_b_consumption(finalize=False)
+        with self.assertRaises(ValueError):
+            self.traces.verify_typescript_b_finalization(
+                self.scope,
+                prepared["trace_id"],
+                prepared["adoption_result"],
+                task_id=prepared["task_id"],
+                batch_key=prepared["batch_key"],
+            )
+        self.assertIsNone(self.watermark.get(self.scope))
+        detail = self.traces.get_batch(self.scope, prepared["trace_id"])
+        self.assertEqual(detail["status"], "running")
+        self.assertFalse(
+            any(event["stage"] == "batch_end" for event in detail["events"])
+        )
+
+        completed = self.prepare_remote_b_consumption(
+            batch_key=hashlib.sha256(b"synthetic-processing-missing").hexdigest(),
+        )
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                "DELETE FROM public.memory_processing_receipt "
+                "WHERE owner_id=%s AND contact_id=%s AND message_id=%s",
+                (
+                    self.scope.owner_id,
+                    self.scope.contact_id,
+                    self.message_ids[0],
+                ),
+            )
+        with self.assertRaises(ValueError):
+            self.traces.verify_typescript_b_finalization(
+                self.scope,
+                completed["trace_id"],
+                completed["adoption_result"],
+                task_id=completed["task_id"],
+                batch_key=completed["batch_key"],
+            )
+
+    def test_remote_b_finalization_is_rejected_after_source_deletion(self):
+        from notalone.persistence.source_deletion import (
+            PostgresSourceDeletionRepository,
+        )
+
+        prepared = self.prepare_remote_b_consumption()
+        PostgresSourceDeletionRepository(DATABASE_URL).delete_source(
+            owner_id=self.scope.owner_id,
+            contact_id=self.scope.contact_id,
+            source_document_id=self.source_ids[0],
+        )
+        self.assertEqual(
+            self.traces.get_batch(
+                self.scope, prepared["trace_id"],
+            )["status"],
+            "deleted",
+        )
+        with self.assertRaises(ValueError):
+            self.traces.verify_typescript_b_finalization(
+                self.scope,
+                prepared["trace_id"],
+                prepared["adoption_result"],
+                task_id=prepared["task_id"],
+                batch_key=prepared["batch_key"],
+            )
+
+    def test_remote_b_finalization_binds_usage_to_committed_trace_call(self):
+        prepared = self.prepare_remote_b_consumption(with_usage=True)
+        self.traces.verify_typescript_b_finalization(
+            self.scope,
+            prepared["trace_id"],
+            prepared["adoption_result"],
+            task_id=prepared["task_id"],
+            batch_key=prepared["batch_key"],
+        )
+        usage = prepared["adoption_result"]["stats"]["usages"][0]
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.outbound_ledger_entry AS ledger "
+                "SET outcome='run_failed' "
+                "FROM public.memory_extraction_trace_call AS call "
+                "WHERE call.call_id=%s AND ledger.id=call.ledger_entry_id "
+                "AND ledger.owner_id=%s",
+                (usage["call_id"], self.scope.owner_id),
+            )
+        with self.assertRaises(ValueError):
+            self.traces.verify_typescript_b_finalization(
+                self.scope,
+                prepared["trace_id"],
+                prepared["adoption_result"],
+                task_id=prepared["task_id"],
+                batch_key=prepared["batch_key"],
+            )
 
     def test_default_production_runner_records_filtering_when_no_model_window_is_eligible(
         self,
