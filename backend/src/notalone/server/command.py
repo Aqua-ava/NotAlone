@@ -50,7 +50,7 @@ from notalone.server.follow_smoke import (
     FollowSmokeController,
     PostgresFollowSmokeSnapshotReader,
 )
-from notalone.server.reply_wiring import build_reply_service
+from notalone.server.reply_wiring import build_reply_service, close_reply_service
 from notalone.server.sync_host import SyncHost
 
 
@@ -139,21 +139,12 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
         if owner_id is not None and sync_host is not None
         else None
     )
-    reply_service = (
-        build_reply_service(
-            database_url=database_url, owner_id=owner_id, model_priority=model_priority,
-            layered_memory=layered_memory, contact_context=contact_context,
-        )
-        if owner_id is not None
-        else None
-    )
-    memory_service = _build_memory_service(database_url)
-    import_service = _build_import_service(database_url)
-    skill_service = _build_skill_service(database_url)
-    ledger_service = _build_ledger_service(database_url)
+    reply_service = None
     server: BackendServer | None = None
 
     def stop_runtime() -> None:
+        # 停业务后先中断唯一回复薄桥；TS宿主仍等待真实SDK排空。
+        close_reply_service(reply_service)
         # 共享一个等待预算；同步收尾与任务收尾不能依次各等一轮。
         model_priority.stop()
         deadline = time.monotonic() + 4.0
@@ -166,6 +157,18 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
         if sync_thread is not None:
             sync_thread.join(timeout=max(0.0, deadline - time.monotonic()))
     try:
+        reply_service = (
+            build_reply_service(
+                database_url=database_url, owner_id=owner_id, model_priority=model_priority,
+                layered_memory=layered_memory, contact_context=contact_context,
+            )
+            if owner_id is not None
+            else None
+        )
+        memory_service = _build_memory_service(database_url)
+        import_service = _build_import_service(database_url)
+        skill_service = _build_skill_service(database_url)
+        ledger_service = _build_ledger_service(database_url)
         app = create_app(
             contact_context=contact_context,
             database_url=database_url,
@@ -192,6 +195,9 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
         stop_runtime()
         print("本地后端配置无效。", file=sys.stderr)
         return 2
+    except BaseException:
+        stop_runtime()
+        raise
     if owner_id is None:
         print(
             "owner 尚未初始化；首启向导请使用 /api/setup 端点。",

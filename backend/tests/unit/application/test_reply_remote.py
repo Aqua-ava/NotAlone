@@ -216,54 +216,35 @@ class ReplyRemoteHttpTest(unittest.TestCase):
             self.remote.generate(COMMAND, verified_scope=SCOPE)
         self.assertIsNone(caught.exception.decision.input_tokens)
 
-    def test_shared_rejection_patch_on_temporary_copy_preserves_service_result(self):
-        import importlib.util
-        import pathlib
-        import subprocess
-        import sys
-        import tempfile
+    def test_business_rejections_preserve_actual_service_results(self):
         from notalone.application.reply_remote import ReplyRemoteRejected, _REJECTION_REASONS
         from notalone.application.assistant_session_service import AssistantSessionRejected
-        from notalone.application.reply_service import ReplyService as OriginalReplyService, ReplyServiceRequest
-        root = pathlib.Path(__file__).resolve().parents[4]
-        relative = pathlib.Path('backend/src/notalone/application/reply_service.py')
-        patch = root / '.scratch/dsh-ts-migration/reply-generation/reply-remote-rejection.patch'
-        with tempfile.TemporaryDirectory(prefix='synthetic-reply-rejection-') as directory:
-            copied = pathlib.Path(directory) / relative
-            copied.parent.mkdir(parents=True)
-            copied.write_bytes((root / relative).read_bytes())
-            subprocess.run(['/usr/bin/patch', '-p1', '-i', str(patch)], cwd=directory, check=True, capture_output=True)
-            name = 'synthetic_patched_reply_service'
-            spec = importlib.util.spec_from_file_location(name, copied)
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[name] = module
-            try:
-                spec.loader.exec_module(module)
-                class Port:
-                    def prepare(self, **kwargs):
-                        raise ReplyRemoteRejected(reason)
-                    generate = prepare
-                request = module.ReplyServiceRequest(idempotency_key=uid(70), content=RewriteDraft('合成原稿'), skill_disabled=True)
-                service = module.ReplyService(binding_lookup=lambda *_: None, conversation_factory=lambda _: None,
-                    manual_scope_lookup=lambda *_: SCOPE, reply=Port())
-                for reason in _REJECTION_REASONS:
-                    for prepare_only in (False, True):
-                        result = service.generate(owner_id=SCOPE.owner_id, contact_id=SCOPE.contact_id,
-                            request=request, prepare_only=prepare_only)
-                        self.assertTrue(result.rejected)
-                        self.assertIsNone(result.reply)
-                        self.assertEqual(result.reason, reason)
-                        # 原08外层对拒绝结果执行同一转换。
-                        wrapped = AssistantSessionRejected(result.reason)
-                        self.assertEqual(wrapped.reason, reason)
-                for coverage, reason in (('syncing', 'history_sync_pending'), ('incomplete', 'history_incomplete_confirmation_required')):
-                    old = OriginalReplyService(binding_lookup=lambda *_: None, conversation_factory=lambda _: None,
-                        history_coverage=lambda *_: coverage, reply=Port())
-                    original = old.generate(owner_id=SCOPE.owner_id, contact_id=SCOPE.contact_id,
-                        request=ReplyServiceRequest(idempotency_key=uid(71), content=RewriteDraft('合成原稿')))
-                    self.assertEqual((original.reply, original.reason), (None, reason))
-            finally:
-                sys.modules.pop(name, None)
+        from notalone.application.reply_service import ReplyService, ReplyServiceRequest
+
+        class Port:
+            def prepare(self, **kwargs):
+                raise ReplyRemoteRejected(reason)
+            generate = prepare
+
+        request = ReplyServiceRequest(idempotency_key=uid(70), content=RewriteDraft('合成原稿'), skill_disabled=True)
+        service = ReplyService(binding_lookup=lambda *_: None, conversation_factory=lambda _: None,
+            manual_scope_lookup=lambda *_: SCOPE, reply=Port())
+        for reason in _REJECTION_REASONS:
+            for prepare_only in (False, True):
+                with self.subTest(reason=reason, prepare_only=prepare_only):
+                    result = service.generate(owner_id=SCOPE.owner_id, contact_id=SCOPE.contact_id,
+                        request=request, prepare_only=prepare_only)
+                    self.assertTrue(result.rejected)
+                    self.assertIsNone(result.reply)
+                    self.assertEqual(result.reason, reason)
+                    self.assertEqual(AssistantSessionRejected(result.reason).reason, reason)
+        for coverage, reason in (('syncing', 'history_sync_pending'), ('incomplete', 'history_incomplete_confirmation_required')):
+            with self.subTest(coverage=coverage):
+                existing = ReplyService(binding_lookup=lambda *_: None, conversation_factory=lambda _: None,
+                    history_coverage=lambda *_: coverage, reply=Port())
+                original = existing.generate(owner_id=SCOPE.owner_id, contact_id=SCOPE.contact_id,
+                    request=ReplyServiceRequest(idempotency_key=uid(71), content=RewriteDraft('合成原稿')))
+                self.assertEqual((original.reply, original.reason), (None, reason))
 
     def test_close_interrupts_inflight_and_rejects_new_requests(self):
         self.block = True

@@ -1,8 +1,8 @@
 """候选回复服务的常驻后端装配（薄壳接线）。
 
 只做适配器组装，不包含业务逻辑：会话验证用既有 PostgresConversationPort
-（观察来自已确认绑定），回复生成用既有 ReplyGenerator（DeepSeek 运行时、
-Postgres 技能库、Postgres 存储与出站台账）。
+（观察来自已确认绑定）。显式TS候选模式使用唯一RemoteReplyPort，未迁模式
+保留原ReplyGenerator；探索producer与Skill审核仍使用其原执行模块。
 """
 
 from __future__ import annotations
@@ -46,7 +46,6 @@ from notalone.persistence.expression_preferences import PostgresExpressionPrefer
 from notalone.application.expression_preference_context import ExpressionPreferenceContext
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.adapters.deepseek_input_budget import build_deepseek_input_budget
-from notalone.reply.adapters.ecnu_input_budget import build_ecnu_input_budget, ECNU_BASE_URL, ECNU_MODEL
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import RetrievalReplyContext
 from notalone.reply.generator import ReplyGenerator
@@ -130,6 +129,54 @@ def build_reply_service(
     reply_thinking_effort: str | None = None,
     contact_context=None,
 ) -> ReplyService | None:
+    """启动时一次性选择候选执行方；08探索producer与选择服务保持原实现。"""
+    from notalone.application.reply_remote import RemoteReplyPort, ReplyRemoteUnavailable
+    mode = os.environ.get('NOTALONE_REPLY_RUNTIME', 'python')
+    if mode not in ('python', 'typescript'):
+        raise ValueError('reply_runtime_invalid')
+    remote = None
+    if mode == 'typescript':
+        if os.environ.get('NOTALONE_TS_HOST') != '1':
+            raise ValueError('reply_runtime_host_required')
+        remote = RemoteReplyPort.from_environment(os.environ, owner_id=owner_id)
+    elif 'NOTALONE_REPLY_REMOTE_URL' in os.environ or 'NOTALONE_REPLY_REMOTE_TOKEN' in os.environ:
+        raise ValueError('reply_runtime_ownership_conflict')
+    try:
+        service = _build_reply_service(
+            database_url=database_url, owner_id=owner_id, model_priority=model_priority,
+            input_budget_profile=input_budget_profile, input_token_counter=input_token_counter,
+            on_input_budget=on_input_budget, layered_memory=layered_memory,
+            layered_reply_budget=layered_reply_budget, owner_layered_reply_budget=owner_layered_reply_budget,
+            reply_thinking_effort=reply_thinking_effort, contact_context=contact_context,
+            remote_reply=remote,
+        )
+        if remote is not None and service is None:
+            # 不能以静默禁用08 producer/选择功能换取候选迁移。
+            raise ReplyRemoteUnavailable()
+        return service
+    except BaseException:
+        if remote is not None:
+            remote.close()
+        raise
+
+
+def close_reply_service(service: ReplyService | None) -> None:
+    """停业务入口后关闭唯一薄桥；TS仍负责等待物理调用结算。"""
+    from notalone.application.reply_remote import RemoteReplyPort
+    if service is not None and isinstance(service._reply, RemoteReplyPort):
+        service._reply.close()
+
+
+def _build_reply_service(
+    *, database_url: str, owner_id: UUID,
+    model_priority: ModelPriorityControl | None = None,
+    input_budget_profile: InputBudgetProfile | None = None,
+    input_token_counter: InputTokenCounter | None = None,
+    on_input_budget: Callable[[InputBudgetDecision], None] | None = None,
+    layered_memory=None, layered_reply_budget=None, owner_layered_reply_budget=None,
+    reply_thinking_effort: str | None = None,
+    contact_context=None, remote_reply=None,
+) -> ReplyService | None:
     """有 active 绑定且模型凭据可用时装配回复服务；否则返回 None。
 
     回复端点不可用时返回 503 reply_unavailable。
@@ -139,11 +186,8 @@ def build_reply_service(
         raise ValueError('回复思考强度须为 low/high/max 或 None。')
     try:
         # 默认关闭思考；显式实验使用普通终止工具，保持正式核验和原超时。
-        # 已批准ECNU配置沿既有协议构造，之后才给实际实例绑定计量器。
-        ecnu = (os.environ.get('NOTALONE_DEEPSEEK_MODEL') == ECNU_MODEL
-                and os.environ.get('NOTALONE_DEEPSEEK_BASE_URL', '').rstrip('/') == ECNU_BASE_URL)
         model = build_deepseek_model(max_retries=0,
-            extra_body=None if ecnu else {'thinking': {'type': 'enabled' if reply_thinking_effort else 'disabled'}})
+            extra_body={'thinking': {'type': 'enabled' if reply_thinking_effort else 'disabled'}})
         if reply_thinking_effort is not None:
             from notalone.reply.adapters.deepseek_provider import is_official_deepseek_flash
             if not is_official_deepseek_flash(model):
@@ -152,7 +196,7 @@ def build_reply_service(
     except (ValueError, OSError):
         return None
     if input_budget_profile is None and input_token_counter is None:
-        budget = build_deepseek_input_budget(model) or build_ecnu_input_budget(model)
+        budget = build_deepseek_input_budget(model)
         if budget is not None:
             input_budget_profile, input_token_counter = budget
     if layered_memory is not None:
@@ -196,59 +240,60 @@ def build_reply_service(
         layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget,
     )
     evidence = ExplorationEvidence(retrieval)
-    from notalone.persistence.assistant_prepared_context import PreparedAssistantContext
-    reply_context = PreparedAssistantContext(PostgresAssistantDiscussionContext(
-        ExploredReplyContext(ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
-                             database_url=database_url, evidence=evidence),
-        database_url=database_url,
-    ), database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget, contact_context=contact_context)
-    from langchain_core.globals import get_llm_cache
-    from langchain_deepseek import ChatDeepSeek
-    from notalone.reply.adapters.model_call_ledger import ModelCallLedger
-    ledger = PostgresOutboundLedger(database_url)
+    if remote_reply is None:
+        from notalone.persistence.assistant_prepared_context import PreparedAssistantContext
+        reply_context = PreparedAssistantContext(PostgresAssistantDiscussionContext(
+            ExploredReplyContext(ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
+                                 database_url=database_url, evidence=evidence),
+            database_url=database_url,
+        ), database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget, contact_context=contact_context)
+        from langchain_core.globals import get_llm_cache
+        from langchain_deepseek import ChatDeepSeek
+        from notalone.reply.adapters.model_call_ledger import ModelCallLedger
+        ledger = PostgresOutboundLedger(database_url)
 
-    def call_ledger(prepared):
-        from notalone.reply.runtime import current_model_request_validator
-        validate_request = current_model_request_validator()
+        def call_ledger(prepared):
+            from notalone.reply.runtime import current_model_request_validator
+            validate_request = current_model_request_validator()
 
-        def validate():
-            if validate_request is None:
-                raise ValueError('实际模型调用缺少确定性外壳的运行租约。')
-            # 外壳按同一 prepared 同时复验租约与完整来源；每轮执行一次即可。
-            validate_request()
-            if (model.rate_limiter is not None or model.cache is not False
-                    and (model.cache is not None or get_llm_cache() is not None)):
-                raise ValueError("逐次台账不接受缓存或本地限流模型。")
-            if isinstance(model, ChatDeepSeek) and any(value != 0 for value in (
-                model.max_retries, model.root_client.max_retries, model.root_async_client.max_retries)):
-                raise ValueError("逐次台账不接受隐藏的供应商自动重试。")
-            if layered_memory is not None:
-                layered_memory.validate_reply_model(prepared, model, input_budget_profile,
-                    layered_reply_budget, owner_layered_reply_budget)
-            if model_priority is not None:
-                model_priority.check_running()
-        return ModelCallLedger(scope=prepared.scope, ledger=ledger,
-            model_name=getattr(model, 'model_name', None) or 'unreported',
-            validate=validate, record_call=lambda identifier: None)
+            def validate():
+                if validate_request is None:
+                    raise ValueError('实际模型调用缺少确定性外壳的运行租约。')
+                # 外壳按同一 prepared 同时复验租约与完整来源；每轮执行一次即可。
+                validate_request()
+                if (model.rate_limiter is not None or model.cache is not False
+                        and (model.cache is not None or get_llm_cache() is not None)):
+                    raise ValueError("逐次台账不接受缓存或本地限流模型。")
+                if isinstance(model, ChatDeepSeek) and any(value != 0 for value in (
+                    model.max_retries, model.root_client.max_retries, model.root_async_client.max_retries)):
+                    raise ValueError("逐次台账不接受隐藏的供应商自动重试。")
+                if layered_memory is not None:
+                    layered_memory.validate_reply_model(prepared, model, input_budget_profile,
+                        layered_reply_budget, owner_layered_reply_budget)
+                if model_priority is not None:
+                    model_priority.check_running()
+            return ModelCallLedger(scope=prepared.scope, ledger=ledger,
+                model_name=getattr(model, 'model_name', None) or 'unreported',
+                validate=validate, record_call=lambda identifier: None)
 
-    generator = ReplyGenerator(
-        store=PostgresReplyStore(database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget, contact_context=contact_context),
-        runtime=LangChainReplyRuntime(
-            model=model, layered_memory=layered_memory,
-            on_model_response=layered_memory.check_reply_response if layered_memory is not None else None,
-            skill_port=PostgresSkillPort(database_url),
-            retrieval=retrieval,
-            input_budget_profile=input_budget_profile,
-            input_token_counter=input_token_counter,
-            on_input_budget=on_input_budget,
-            model_callback_factory=call_ledger,
-            skill_selection_method=lambda prepared: explored_skill_selection_method(database_url, prepared),
-            # 候选经确定性来源与结构检查后交用户选择，不追加模型复核（ADR-068）。
-        ),
-        context=reply_context,
-        # 实际模型轮已分别记账，外层不能再写一条汇总而重复计算。
-        ledger=None,
-    )
+        generator = ReplyGenerator(
+            store=PostgresReplyStore(database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget, contact_context=contact_context),
+            runtime=LangChainReplyRuntime(
+                model=model, layered_memory=layered_memory,
+                on_model_response=layered_memory.check_reply_response if layered_memory is not None else None,
+                skill_port=PostgresSkillPort(database_url),
+                retrieval=retrieval,
+                input_budget_profile=input_budget_profile,
+                input_token_counter=input_token_counter,
+                on_input_budget=on_input_budget,
+                model_callback_factory=call_ledger,
+                skill_selection_method=lambda prepared: explored_skill_selection_method(database_url, prepared),
+                # 候选经确定性来源与结构检查后交用户选择，不追加模型复核（ADR-068）。
+            ),
+            context=reply_context,
+            # 实际模型轮已分别记账，外层不能再写一条汇总而重复计算。
+            ledger=None,
+        )
     exploration = ReplyExplorationService(
         store=PostgresExplorationStore(database_url, evidence=evidence), evidence=evidence,
         skills=ExploredSkillSyncPort(
@@ -263,10 +308,13 @@ def build_reply_service(
             store=PostgresAssistantSessionStore(database_url), reply=reply_service,
         )),
     )
-    round_reply = RoundSkillSyncPort(
-        generator,
-        synchronize=synchronize_skill_round,
-    )
+    if remote_reply is None:
+        round_reply = RoundSkillSyncPort(generator, synchronize=synchronize_skill_round)
+        candidate_reply = (PriorityReplyPort(round_reply, model_priority)
+                           if model_priority is not None else round_reply)
+    else:
+        # 08探索生成回调也经reply_service进入同一实例；不可再取Python前台许可。
+        candidate_reply = remote_reply
     from notalone.persistence.reply_history_coverage import PostgresReplyHistoryCoverage
     reply_service = ReplyService(
         history_coverage=PostgresReplyHistoryCoverage(database_url),
@@ -277,8 +325,7 @@ def build_reply_service(
             owner_id=owner_id,
             observation=ConversationObservation.confirmed(binding.binding_id),
         ),
-        reply=(PriorityReplyPort(round_reply, model_priority)
-               if model_priority is not None else round_reply),
+        reply=candidate_reply,
         exploration=exploration,
         skill_review=build_skill_review_service(database_url=database_url, model=model,
             context=ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
