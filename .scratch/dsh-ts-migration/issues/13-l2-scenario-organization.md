@@ -58,3 +58,5 @@ Spec: ../spec.md
 - 质量投影接入 `L2ScenarioQualityReader` seam；主树没有TS质量Store，所以未注入或读取失败时返回`unknown`和`automatic_use_allowed=false`，不宣称`synthetic`或开放自动使用。共享官方DSH profile测试覆盖手录发布、自动来源调用前拒绝/恢复发布、两种撤回、认证/scope边界和关闭permit归零；最终相关矩阵47/47、类型检查0错误。默认运行时和实际App/微信验收仍由根完成。
 - 唯一 Worker 补强（2026-10-25）：`ExtractionWorker` 在唯一全局锁内自动领取 `organize_memory`，与提取步骤共用租约、心跳、取消、唤醒和关闭排空；官方 DSH profile 纵切已验证首次自动发布及第二任务在途关闭后立即释放租约。Python 管理动作仍可 enqueue，但 TS 所有权下不派发或执行 Python L2 模型。
 - L3 尚未迁移：`profile_required` 的已发布 L2 回执保持 `pending_receipt=true`，任务/job 标为可恢复失败并保留稳定错误码，由票14继续；本票不声明 L3 完成。
+- 根已无冲突合入 `31b0980f` 为主树 `c9fae483`，用户原有三处未提交修改保持未暂存。主树重跑结果：类型检查零错误；L2 工作区/服务/Worker/宿主 16/16；任务存储/提取 Runner/Worker 控制 19/19；来源追踪、回复宿主配置与共享官方 profile 12/12；Python 任务/组织单元 47/47；TS 所有权管理门禁 2/2；`py_compile` 与 diff 检查通过。
+- 完整 Python `test_layered_memory_management` 仍为 37/38，唯一失败是自然过期到达后任务到期但未入队的既有缺陷，已在 `f90545aa` 干净基座复现；它不归本提交，但属于最终真实维护体验的待修风险。当前 `ran` 任务仍未被该接线推进，票保持 `claimed`，等待索引/验证 Worker 补齐后由根做实际 App 验收。
