@@ -12,9 +12,9 @@
 | 05回复与模型会话 | reply/retrieval/model模块及测试、05证据 | resolved；原六条已在b0a68175关闭，完整质量/最终切换留25—26 |
 | 06Skill会话 | skill模块及测试、06证据 | 票resolved；根完成宿主、来源C、官方profile与实际App签收，原受限子目标不恢复 |
 | 09记忆偏好会话 | memory/preference及共用managed-update-backups，限定04时间/版本scope参数化 | 票resolved；根完成闭包、官方宿主与实际App签收 |
-| 07探索会话 | 自有snapshot实现、来源与Skill矩阵；主树根集成 | claimed；只读UI审计并行，主会话负责 ran 实操及缺陷修复 |
+| 07探索会话 | 自有snapshot实现、来源与Skill矩阵；主树根集成 | resolved；恢复态Skill展示、生产页面与 ran 实际 App 已由根签收 |
 | 10消息提取会话 | 自有snapshot窗口/trace/A段与唯一写入移交 | claimed；隔离集成审查并行，整票未完成 |
-| 21前台定位会话 | 原生探针、定位领域/宿主验收；主树根集成 | claimed；只读Vision阻塞审计并行，主会话统一验收 |
+| 21前台定位会话 | 原生探针、定位领域/宿主验收；主树根集成 | claimed；当前 macOS accurate Vision 超时，证据已归档，等待健康 Mac 或系统修复 |
 | 23用量设置诊断会话 | 两冻结切片与根签收证据 | resolved；3e044a0源提交及实际npm run dev验收 |
 
 18已签收b4276969/9a5f6cf0，108为db1d9cbd；58TS/22Python/32UI、双轴及两轮合成App通过，工具准备原任务保持open。

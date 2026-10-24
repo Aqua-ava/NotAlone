@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 用户最新要求：当前迁移工作自然收尾后交其他 Agent，不再自动展开下一批。当前01—06、09、18、19及23已验收；07代码已提交但实际UI验收未齐，10只冻结默认A纵切且未合主树，两票保持claimed、剩余目标暂停；21原生Vision正例仍阻塞。其余按原依赖等待。完整交接见[next-agent-handoff.md](next-agent-handoff.md)，原规格和验收不降低。
+> 用户最新要求：没有互相依赖的任务使用全新 Codex 会话并行，会话间直接通信，主会话统一集成并独占桌面验收。当前01—07、09、18、19及23已验收；10已有冻结纵切、唯一Worker和主树整合候选，但生产Worker责任、B执行器及桌面路径未完成，保持claimed；21在当前macOS 27的accurate Vision路径持续超过2500ms，保持claimed并等待健康Mac对照或Apple修复。08已因07关闭解锁；11等待10。原规格和验收不降低。
 
 ## 逐项任务与阻塞关系
 
@@ -12,7 +12,7 @@
 | [04 选择已有联系人并读取上下文](issues/04-contact-context.md) | 03 | ready-for-agent | resolved |
 | [05 生成可追溯的基础候选](issues/05-traceable-replies.md) | 04 | ready-for-agent | resolved |
 | [06 管理并受控读取现有回复 Skill](issues/06-reply-skill-library.md) | 04 | ready-for-agent | resolved |
-| [07 探索方向并使用 Skill 生成候选](issues/07-exploration-skill-replies.md) | 05、06 | ready-for-agent | claimed |
+| [07 探索方向并使用 Skill 生成候选](issues/07-exploration-skill-replies.md) | 05、06 | ready-for-agent | resolved |
 | [08 继续讨论和改写候选](issues/08-discussion-continuity.md) | 07 | ready-for-agent | open |
 | [09 查看和修正记忆及表达偏好](issues/09-memory-and-preferences.md) | 04 | ready-for-agent | resolved |
 | [10 从现有消息提取并核验候选](issues/10-memory-extraction-verification.md) | 05、09 | ready-for-agent | claimed |
