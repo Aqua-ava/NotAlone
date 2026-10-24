@@ -123,8 +123,10 @@ async function start(ctx: Context) {
     const respond=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(stringifyJson(value));};
     let url: URL;
     try {url=new URL(req.url??'','http://localhost');}catch {respond(400,{error:'invalid_request'});return;}
-    // 私有候选与精确探索入口先自行认证；公开token及其他内部token不能进入。
-    if((req.url??'').startsWith('/internal/reply') || req.url==='/internal/exploration'){
+    // 私有候选、探索与提取入口先自行认证；公开token及其他内部token不能进入。
+    if((req.url??'').startsWith('/internal/reply')
+      || (req.url??'').startsWith('/internal/extraction')
+      || req.url==='/internal/exploration'){
       if(!modelRuntime){respond(401,{error:'unauthorized'});return;}
       if(!await modelRuntime.handle(req,res))respond(404,{error:'not_found'});return;
     }

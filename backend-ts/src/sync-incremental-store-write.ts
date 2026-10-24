@@ -7,6 +7,7 @@ import type pg from 'pg';
 import {HostStorageError} from './host-storage.ts';
 import {parseJson,stringifyJson} from './host-json.ts';
 import type {NormalizedIncrementalMessage,IncrementalProcessingRecord} from './sync-incremental-normalize.ts';
+import {recordExtractionObservation} from './extraction-task-store-schedule.ts';
 type Receipt=Record<string,unknown>;
 export async function saveIncrementalMessages(c:pg.Client,owner:string,contact:string,observation:string,messages:readonly NormalizedIncrementalMessage[]){
   const ids:string[]=[],created:(string|null)[]=[],receipts=new Map<string,Receipt>();
@@ -27,7 +28,7 @@ export async function saveIncrementalMessages(c:pg.Client,owner:string,contact:s
       dedup_rule:'stable_local_id_and_create_time_or_minus_one',execution:{started_at:startedAt,finished_at:new Date().toISOString(),status:'prepared_for_commit',rule_version:ruleVersion}};
     receipts.set(m.processing_record.record_id,receipt);
   }
-  await schedule(c,owner,contact,observation,created.filter((v):v is string=>v!==null));
+  await recordExtractionObservation(c,{ownerId:owner,contactId:contact},observation,created.filter((v):v is string=>v!==null));
   return {ids,created,receipts};
 }
 export async function saveIncrementalProcessing(c:pg.Client,owner:string,contact:string,source:string|null,records:readonly IncrementalProcessingRecord[],receipts:Map<string,Receipt>,status:'recorded'|'failed'='recorded'){
@@ -41,23 +42,4 @@ export async function saveIncrementalProcessing(c:pg.Client,owner:string,contact
     payload.capture_record_id=r.record_id;payload.persistence=receipt;payload.model_read_status='not_claimed';
     await c.query('INSERT INTO public.source_processing_record(record_id,batch_id,owner_id,contact_id,position,locator,message_id,source_ref_id,outcome,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[randomUUID(),batch,owner,contact,position,r.locator,receipt.message_id??null,receipt.source_ref_id??null,receipt.outcome??payload.outcome??'filtered',stringifyJson(payload)]);
   }
-}
-async function schedule(c:pg.Client,owner:string,contact:string,observation:string,ids:string[]){
-  if(!ids.length)return;
-  await c.query('INSERT INTO public.memory_extraction_schedule(owner_id,contact_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[owner,contact]);
-  const added=(await c.query('INSERT INTO public.memory_extraction_receipt(message_id,owner_id,contact_id,observation_id) SELECT unnest($1::uuid[]),$2,$3,$4 ON CONFLICT DO NOTHING RETURNING message_id',[ids,owner,contact,observation])).rows.map(r=>r.message_id);
-  if(!added.length)return;
-  // 045 的 observation_scope_unique 保证每 owner/contact 仅一行，不能任取历史任务。
-  const previous=(await c.query("SELECT id,status FROM public.background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type='observation' FOR UPDATE",[owner,contact])).rows[0];
-  if(previous?.status==='cancelled'){
-    await c.query('UPDATE public.memory_extraction_receipt SET task_id=$1 WHERE owner_id=$2 AND contact_id=$3 AND task_id IS NULL AND NOT(message_id=ANY($4::uuid[]))',[previous.id,owner,contact,added]);
-    await c.query('DELETE FROM public.memory_processing_plan WHERE task_id=$1',[previous.id]);
-    await c.query('UPDATE public.memory_extraction_schedule SET threshold=1,task_id=NULL WHERE owner_id=$1 AND contact_id=$2',[owner,contact]);
-  }
-  const count=(await c.query(`SELECT count(*)::int AS n FROM public.memory_extraction_receipt r
-    JOIN public.local_wechat_observation o ON o.id=r.observation_id AND o.owner_id=r.owner_id AND o.contact_id=r.contact_id
-    JOIN public.conversation_binding b ON b.id=o.binding_id AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id
-    WHERE r.owner_id=$1 AND r.contact_id=$2 AND r.task_id IS NULL AND b.status='active'
-    AND EXISTS(SELECT 1 FROM public.message_source_ref ref WHERE ref.message_id=r.message_id AND ref.observation_id=o.id)`,[owner,contact])).rows[0].n;
-  await c.query("UPDATE public.memory_extraction_schedule SET pending_count=$3,last_input_at=now(),due_at=CASE WHEN $3>=threshold THEN now() ELSE now()+interval '600 seconds' END WHERE owner_id=$1 AND contact_id=$2",[owner,contact,count]);
 }

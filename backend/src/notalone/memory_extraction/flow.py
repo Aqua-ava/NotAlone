@@ -49,6 +49,12 @@ class ExtractionOutcome:
     # 初始提取成功与后续来源核验成功分开，供各次调用独立记账。
     extraction_completed: bool = False
     candidate_trace_ids: tuple[UUID, ...] = ()
+    # TS A段已由同一宿主记实际调用账；B段只消费原执行身份，不重复记账。
+    model_accounting_owner: str = "python"
+    model_call_ids: tuple[UUID, ...] = ()
+    a_execution_id: UUID | None = None
+    a_input_sha256: str | None = None
+    a_rule_version: str | None = None
 
     def __post_init__(self) -> None:
         if (self.failure_reason is None) != (self.failure_kind is None):
@@ -72,6 +78,9 @@ class ExtractionFlow:
         self._verification_runtime = verification_runtime
 
     def run(self, window: ExtractionWindow) -> ExtractionOutcome:
+        remote = getattr(self._runtime, "run_remote_flow", None)
+        if callable(remote):
+            return remote(window)
         verification_mode = getattr(
             self._verification_runtime, "verification_mode",
             SourceVerificationMode.LEGACY_V4,

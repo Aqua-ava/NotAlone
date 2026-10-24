@@ -1,4 +1,4 @@
-/** 过渡Python模型调用的宿主资格：只读任务元数据，同事务扣原job额度和预约收据。 */
+/** 过渡后台模型调用的宿主资格：同事务核原任务、额度和预约收据。 */
 import {createHash} from 'node:crypto';
 import type pg from 'pg';
 import {PostgresModelLedger,PostgresModelLedgerDetails,validateModelLedgerReceipt,type ModelLedgerReceipt} from './model-ledger.ts';
@@ -89,11 +89,14 @@ async function authority(client:pg.Client,r:ModelLedgerReceipt,c:ModelTaskClaim)
  return reject('model_accounting_purpose_invalid');
 }
 export function createHostModelAccounting(options:{transaction:Transaction;unconfirmedPermitIds:()=>readonly string[]} & (
- {provider:string;model:string;route?:undefined}|{route:null;provider?:undefined;model?:undefined}
+ {provider:string;typescriptProvider?:string;model:string;route?:undefined}|{route:null;provider?:undefined;typescriptProvider?:undefined;model?:undefined}
 )) {
  if(typeof options.unconfirmedPermitIds!=='function')reject('model_accounting_configuration_invalid');
  const route=options.route===null?null:{provider:options.provider,model:options.model};
  if(route&&(typeof route.provider!=='string'||typeof route.model!=='string'||!route.provider.trim()||!route.model.trim()||route.model==='ecnu-max'))reject('model_accounting_configuration_invalid');
+ if(options.typescriptProvider!==undefined&&(typeof options.typescriptProvider!=='string'||!options.typescriptProvider.trim()))reject('model_accounting_configuration_invalid');
+ // 来自宿主的实际安装配置；两条执行路径各自保留原账本身份，不做 alias 或历史重写。
+ const providers=new Set(route?[route.provider,...(options.typescriptProvider?[options.typescriptProvider]:[])]:[]);
  const ledger=new PostgresModelLedger({transaction:options.transaction,details:new PostgresModelLedgerDetails()});
  const unconfirmed=async(client:pg.Client,owner:string,contact:string|null):Promise<string[]>=>{
   if(!uuid.test(owner)||(contact!==null&&!uuid.test(contact)))reject('model_accounting_scope_invalid');
@@ -110,7 +113,9 @@ export function createHostModelAccounting(options:{transaction:Transaction;uncon
    // 未配置只保留可信恢复/查询/已有结算；不能落新收据或消费预算。
    if(!route)return reject('model_accounting_unconfigured');
    validateModelLedgerReceipt(receipt);const r=structuredClone(receipt),c=claimValue(claim);
-   if(r.provider!==route.provider||r.model!==route.model||r.outcome!=='pending'||r.dispatch!=='authorized_unconfirmed')reject('model_accounting_route_invalid');
+   if(!providers.has(r.provider)||r.model!==route.model||r.outcome!=='pending'||r.dispatch!=='authorized_unconfirmed')reject('model_accounting_route_invalid');
+   // 本票只迁移提取；不能顺带把未移交的 Python 学习或整理调用改成 TS 路由身份。
+   if(r.provider!==route.provider&&c.step_name!=='extract_memory')reject('model_accounting_route_invalid');
    await options.transaction(async client=>{
     if(r.contact_id!==null)await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${r.owner_id}:${r.contact_id}`]);
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${r.owner_id}`]);

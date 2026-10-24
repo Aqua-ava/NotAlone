@@ -157,6 +157,7 @@ class TraceSession:
         self.provider = provider
         self.model_name = model_name or "unreported"
         self.verification_candidate_ids: tuple[UUID, ...] = ()
+        self.typescript_a_receipt: dict[str, str] | None = None
         self.versions = versions or {}
         self._token: Token[TraceSession | None] | None = None
 
@@ -390,6 +391,11 @@ class TraceSession:
         if self.failure is not None:
             raise self.failure
         try:
+            if self.typescript_a_receipt is not None:
+                kwargs["payload"] = {
+                    **kwargs["payload"],
+                    "typescript_a_receipt": dict(self.typescript_a_receipt),
+                }
             self.store.complete(self.scope, self.trace_id, **kwargs)
         except Exception:
             self.failure = TraceWriteError(self.stage, self.trace_id)
