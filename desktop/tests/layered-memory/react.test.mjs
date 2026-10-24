@@ -46,7 +46,7 @@ for (const level of ['contact']) test(`${level} 记忆直接查看、修改和�
   });
 });
 
-test('联系人记忆下方按只读行式展示主题资料与长期背景', { timeout: 20000 }, async t => {
+test('联系人记忆下方按行式展示可核对的主题资料与长期背景', { timeout: 20000 }, async t => {
   const f = await fixture(async request => ({ generation: 1, data: request.path.includes('/layered-memory') ? profilePayload()
     : request.path.endsWith('/sources') ? { sources: [] }
     : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } }));

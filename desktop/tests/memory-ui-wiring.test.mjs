@@ -55,12 +55,15 @@ test('记忆页接线复用既有 preload 能力，不新增通道并保留 corr
   assert.doesNotMatch(pageSource, /invoke\(/, 'renderer 不得直接新增 IPC 通道');
 });
 
-test('主题资料可见正文、引用、修正和撤回入口', () => {
+test('主题资料与长期背景可见正文、引用、修正和撤回入口', () => {
   const reference = { memoryId: ids.current, revision: 1, level: 'contact', provenanceKind: 'source_supported',
     timing: { recordedAt: null, sourceStartedAt: null, sourceEndedAt: null, sourceTimeComplete: false,
       currentStatus: 'current_unverified', currentStatusReason: '合成状态未核实。' } };
   const value = { status: 'failed', maintenancePending: true, updatedAt: null, organizationGeneration: 1,
-    profile: null, scenarios: [{ scenarioId: ids.previous, versionId: ids.current, title: '合成主题',
+    profile: { versionId: ids.previous, systemGenerated: true, updatedAt: '2026-10-25T00:00:00Z',
+      entries: [{ text: '合成长期背景。', temporalStatus: 'uncertain', uncertainty: '持续状态未核实。',
+        references: [reference] }] },
+    scenarios: [{ scenarioId: ids.previous, versionId: ids.current, title: '合成主题',
       hint: '合成提示', systemGenerated: true, updatedAt: '2026-10-25T00:00:00Z',
       paragraphs: [{ text: '合成主题正文。', references: [reference] }] }] };
   const html = renderToStaticMarkup(createElement(ports.LayeredMemorySections, {
@@ -72,4 +75,8 @@ test('主题资料可见正文、引用、修正和撤回入口', () => {
   assert.match(html, /修正这段/);
   assert.match(html, /删除这段/);
   assert.match(html, /撤回主题/);
+  assert.match(html, /合成长期背景/);
+  assert.match(html, /修正这条背景/);
+  assert.match(html, /删除这条背景/);
+  assert.match(html, /撤回长期背景/);
 });

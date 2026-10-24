@@ -4,6 +4,7 @@ import { memoryTimeText } from './memory-time-format';
 import type {
   LayeredMemory,
   LayeredMemoryManagementOptions,
+  LayeredMemoryProfile,
   LayeredMemoryReference,
   LayeredMemoryScenario,
   MemoryOverviewState,
@@ -29,7 +30,7 @@ function timeNote(updatedAt: string | null): string {
   return updatedAt ? `系统整理 · 更新于 ${memoryTimeText(updatedAt)}` : '系统整理';
 }
 
-export type LayeredMemoryAction = 'summary-error' | 'withdraw-scenario';
+export type LayeredMemoryAction = 'summary-error' | 'withdraw-scenario' | 'withdraw-profile';
 
 function operationId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -37,6 +38,18 @@ function operationId(): string {
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function ReferenceList({ references, trace }: {
+  references: LayeredMemoryReference[];
+  trace?: (reference: LayeredMemoryReference) => void;
+}) {
+  return <div className="layered-memory-references">
+    {references.map(reference => <div className="layered-memory-reference" key={`${reference.memoryId}:${reference.revision}`}>
+      <span>资料 {reference.memoryId.slice(0, 8)} · 版本 {reference.revision}</span>
+      {reference.level && trace && <button className="button" onClick={() => trace(reference)}>查看依据</button>}
+    </div>)}
+  </div>;
 }
 
 function ScenarioCard({ scenario, value, busy, manage, trace }: {
@@ -109,12 +122,7 @@ function ScenarioCard({ scenario, value, busy, manage, trace }: {
         <p className="memory-text" style={{ whiteSpace: 'pre-wrap' }}>{paragraph.text}</p>
         <details className="memory-details">
           <summary>引用与修正</summary>
-          <div className="layered-memory-references">
-            {paragraph.references.map(reference => <div className="layered-memory-reference" key={`${reference.memoryId}:${reference.revision}`}>
-              <span>资料 {reference.memoryId.slice(0, 8)} · 版本 {reference.revision}</span>
-              {reference.level && trace && <button className="button" onClick={() => trace(reference)}>查看依据</button>}
-            </div>)}
-          </div>
+          <ReferenceList references={paragraph.references} trace={trace} />
           {manage && <div className="layered-memory-actions">
             <button className="button" disabled={busy || working} onClick={() => beginCorrection(index)}>修正这段</button>
             <button className="button" disabled={busy || working} onClick={() => beginCorrection(index, true)}>删除这段</button>
@@ -141,6 +149,104 @@ function ScenarioCard({ scenario, value, busy, manage, trace }: {
   </div>;
 }
 
+function ProfileCard({ profile, value, busy, manage, trace }: {
+  profile: LayeredMemoryProfile;
+  value: LayeredMemory;
+  busy: boolean;
+  manage?: (action: LayeredMemoryAction, options: LayeredMemoryManagementOptions) => Promise<void>;
+  trace?: (reference: LayeredMemoryReference) => void;
+}) {
+  const [correction, setCorrection] = useState<{ index: number; reason: string; operationId: string; removal: boolean } | null>(null);
+  const [removingProfile, setRemovingProfile] = useState(false);
+  const [error, setError] = useState('');
+  const [working, setWorking] = useState(false);
+
+  function beginCorrection(index: number, removal = false) {
+    setError('');
+    setCorrection({
+      index,
+      removal,
+      reason: removal ? '用户删除该长期背景条目；撤回整份派生画像，底层合法资料保持不变。' : '',
+      operationId: operationId(),
+    });
+  }
+
+  async function submitCorrection() {
+    if (!manage || !correction || working) return;
+    if (!correction.removal && !correction.reason.trim()) return;
+    setWorking(true);
+    setError('');
+    try {
+      await manage('summary-error', {
+        targetKind: 'profile',
+        versionId: profile.versionId,
+        itemIndex: correction.index,
+        reason: correction.reason.trim(),
+        operationId: correction.operationId,
+      });
+      setCorrection(null);
+    } catch {
+      setError('这次长期背景修正尚未确认完成，请重新读取资料后再试。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function withdraw() {
+    if (!manage || working) return;
+    setWorking(true);
+    setError('');
+    try {
+      await manage('withdraw-profile', {
+        organizationGeneration: value.organizationGeneration,
+        profileVersionId: profile.versionId,
+      });
+      setRemovingProfile(false);
+    } catch {
+      setError('长期背景撤回尚未确认完成，请重新读取后再试。');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return <div className="layered-profile">
+    <div className="layered-scenario-heading">
+      <div><h3 className="layered-scenario-title">系统整理画像</h3><p className="memory-section-note">逐条核对来源；任一修正会撤回整份派生画像。</p></div>
+      {manage && <button className="button" disabled={busy || working} onClick={() => setRemovingProfile(true)}>撤回长期背景</button>}
+    </div>
+    <MemoryList label="长期背景" items={profile.entries}>
+      {(entry, index) => <article className="memory-card" key={`${profile.versionId}:${index}`}>
+        <p className="memory-text">{entry.text}</p>
+        <p className="memory-section-note">{temporalStatusNames[entry.temporalStatus]}{entry.uncertainty ? ` · ${entry.uncertainty}` : ''}</p>
+        <details className="memory-details">
+          <summary>引用与修正</summary>
+          <ReferenceList references={entry.references} trace={trace} />
+          {manage && <div className="layered-memory-actions">
+            <button className="button" disabled={busy || working} onClick={() => beginCorrection(index)}>修正这条背景</button>
+            <button className="button" disabled={busy || working} onClick={() => beginCorrection(index, true)}>删除这条背景</button>
+          </div>}
+          {correction?.index === index && <form className="memory-edit-form" aria-label={correction.removal ? '确认删除长期背景条目' : '修正长期背景'}
+            onSubmit={event => { event.preventDefault(); void submitCorrection(); }}>
+            {correction.removal ? <p>这条背景会被撤回；由于画像按整份版本发布，整份长期背景也会撤回，底层合法资料保持不变。</p>
+              : <label>哪里不正确或需要调整？<textarea aria-label="长期背景修正说明" value={correction.reason} disabled={busy || working}
+                onChange={event => setCorrection({ ...correction, reason: event.target.value })} /></label>}
+            <button className="button" type="submit" disabled={busy || working || !correction.reason.trim()}>
+              {working ? '正在提交…' : correction.removal ? '确认删除这条背景' : '提交修正'}
+            </button>
+            <button className="button" type="button" disabled={busy || working} onClick={() => setCorrection(null)}>取消</button>
+          </form>}
+        </details>
+      </article>}
+    </MemoryList>
+    {removingProfile && manage && <div className="memory-edit-form" role="group" aria-label="确认撤回长期背景">
+      <p>确认撤回整份长期背景？这一版不会自动恢复，底层合法记忆保持不变。</p>
+      <button className="button" disabled={busy || working} onClick={() => void withdraw()}>{working ? '正在撤回…' : '确认撤回长期背景'}</button>
+      <button className="button" disabled={busy || working} onClick={() => setRemovingProfile(false)}>取消</button>
+    </div>}
+    {error && <p role="alert">{error}</p>}
+  </div>;
+}
+
 export function LayeredMemorySections({ state, manage, trace, busy = false }: {
   state: MemoryOverviewState<LayeredMemory>;
   manage?: (action: LayeredMemoryAction, options: LayeredMemoryManagementOptions) => Promise<void>;
@@ -161,12 +267,7 @@ export function LayeredMemorySections({ state, manage, trace, busy = false }: {
     <section className="memory-section" aria-label="长期背景">
       <header><div><h2>长期背景</h2><p>{value.profile ? timeNote(value.profile.updatedAt) : ''}</p></div></header>
       {value.profile === null ? <p className="memory-section-note">还没有整理好的长期背景。</p>
-        : <MemoryList label="长期背景" items={value.profile.entries}>
-          {(entry, index) => <article className="memory-card" key={index}>
-            <p className="memory-text">{entry.text}</p>
-            <p className="memory-section-note">{temporalStatusNames[entry.temporalStatus]}{entry.uncertainty ? ` · ${entry.uncertainty}` : ''}</p>
-          </article>}
-        </MemoryList>}
+        : <ProfileCard profile={value.profile} value={value} busy={busy} manage={manage} trace={trace} />}
     </section>
   </>;
 }

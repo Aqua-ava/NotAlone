@@ -66,7 +66,9 @@ Spec: ../spec.md
 
 - 新增：`backend-ts/src/l3-profile-workspace.ts`、`backend-ts/src/l3-profile-service.ts`
 - 接入：`backend-ts/src/l2-scenario-service.ts`、`backend-ts/src/l2-scenario-http.ts`、`backend-ts/src/l2-scenario-source-validation.ts`、`backend-ts/src/host-reply.ts`、`backend-ts/src/host-model-accounting.ts`
+- 桌面：`desktop/src/renderer/LayeredMemorySections.tsx`
 - 测试：`backend-ts/test/l3-profile-workspace.test.mjs`、`backend-ts/test/l3-profile-service.test.mjs`、`backend-ts/test/l2-scenario-http.test.mjs`、`backend-ts/test/l2-scenario-service.test.mjs`、`backend-ts/test/l2-scenario-shared-host.test.mjs`、`backend-ts/test/host-model-accounting.test.mjs`
+- 桌面测试：`desktop/tests/layered-memory/react.test.mjs`、`desktop/tests/memory-ui-wiring.test.mjs`
 
 ### 验证结果
 
@@ -74,6 +76,7 @@ Spec: ../spec.md
 - L3 工作区、服务、公开 HTTP：`23/23` 通过，覆盖增量／无变化跳过、generation 精确闭合、部分旧场景失效后重建、亚毫秒时间资格、核验输入预算、本人／联系人隔离、纠错、撤回、来源物理删除、晚结果、取消重试、仅剩两次额度及 HTTP 错误映射。
 - L2 服务、Worker、宿主及模型记账：`25/25` 通过，覆盖 L2→L3 同租约、成功 L2 回执只补 L3、Worker 完成后收口、共享预算和 pending 幂等。
 - 共享官方 DSH profile、分层回复读取、Skill 来源导航：`26/26` 通过（`9/9`、`17/17`），覆盖 6 次真实合成模型请求的 L2→L3、公开撤回、回复／审核来源的当前 generation 核验与冻结快照失效。
+- 桌面类型检查通过；长期背景可见、引用、逐条修正／删除和整份撤回入口专项用例 `7/7` 通过。
 - 后端全量回归：`1184` 项中 `1181` 通过；3 个失败均不在本票变更路径。`exploration-store` 与 `foreground-location-api` 单例复跑通过，`sync-incremental-reconnect` 的清理断言在共享工作树中仍失败，已作为剩余风险保留。
 - `git diff --check`：通过。
 
