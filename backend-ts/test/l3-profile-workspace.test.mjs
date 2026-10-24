@@ -229,6 +229,7 @@ test('L3核验输入超预算时在物理调用前拒绝', async () => {
     signal:new AbortController().signal,
     async requireCurrent(){},
     corrections:[],
+    remainingCalls:1,
   }), /context_budget/);
   assert.equal(port.calls, 0);
 });

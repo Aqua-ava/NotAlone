@@ -19,6 +19,7 @@ import {
 } from './l2-scenario-workspace.ts';
 import {
   L3ProfileDocumentError,
+  L3ProfileVerificationError,
   L3ProfileWorkspace,
   filterProfileProposal,
   profileDigest,
@@ -31,6 +32,7 @@ import {
   type L3ProfileDraft,
   type L3ProfileEntry,
   type L3ProfileRoundTrace,
+  type L3ProfileVerificationAttemptTrace,
   type ProfileVerification,
 } from './l3-profile-workspace.ts';
 
@@ -780,15 +782,23 @@ export class L3ProfileService {
     });
   }
 
-  async recordVerification(work: L3ProfilePreparedWork, result: ProfileVerification, errorCode: string|null): Promise<void> {
+  async recordVerification(
+    work: L3ProfilePreparedWork,
+    result: ProfileVerification,
+    errorCode: string|null,
+    attempts: readonly L3ProfileVerificationAttemptTrace[],
+  ): Promise<void> {
     await this.transaction(async client => {
       await lockScope(client, work.scope);
       await this.assertCurrent(client, work);
       await client.query(`UPDATE public.layered_profile_batch
-        SET output_payload=jsonb_set(COALESCE(output_payload,'{}'::jsonb),'{verification_result}',$2::jsonb),
+        SET output_payload=jsonb_set(
+              jsonb_set(COALESCE(output_payload,'{}'::jsonb),'{verification_result}',$2::jsonb),
+              '{verification_trace}',$4::jsonb
+            ),
           error_code=$3
         WHERE id=$1 AND status='running'`,
-      [work.profile_batch_id, JSON.stringify(result), errorCode]);
+      [work.profile_batch_id, JSON.stringify(result), errorCode, JSON.stringify(attempts)]);
     });
   }
 
@@ -833,7 +843,7 @@ export class L3ProfileService {
   async fail(
     work: L3ProfilePreparedWork,
     code: string,
-    trace?: readonly L3ProfileRoundTrace[],
+    diagnostics?: Record<string, unknown>,
   ): Promise<void> {
     if (!/^[a-z0-9_]{1,80}$/.test(code)) throw new L2ScenarioError('l3_profile_failure_code_invalid');
     await this.transaction(async client => {
@@ -849,9 +859,9 @@ export class L3ProfileService {
         || Number(state.correction_revision ?? 0) !== work.correction_revision) return;
       const failed = await client.query(`UPDATE public.layered_profile_batch
         SET status='failed',error_code=$2,
-          output_payload=CASE WHEN $3::text IS NULL THEN output_payload ELSE $3::jsonb END
+          output_payload=COALESCE(output_payload,'{}'::jsonb)||$3::jsonb
         WHERE id=$1 AND status='running'`,
-      [work.profile_batch_id, code, trace?.length ? JSON.stringify({proposal_trace:trace}) : null]);
+      [work.profile_batch_id, code, JSON.stringify(diagnostics ?? {})]);
       if (!failed.rowCount) return;
       await client.query(`UPDATE public.layered_memory_job SET profile_status='failed'
         WHERE task_id=$1 AND state='active'`, [work.claim.task_id]);
@@ -924,8 +934,9 @@ export class L3ProfileService {
         signal,
         requireCurrent:() => this.requireCurrent(work),
         corrections,
+        remainingCalls:Math.max(0, work.model_calls_remaining - agent.calls),
       });
-      await this.recordVerification(work, verification.result, null);
+      await this.recordVerification(work, verification.result, null, verification.attempts);
       const supported = filtered.entries.filter((_entry,index) =>
         verification.result.results.some(result => result.entry_index === index && result.supported));
       if (filtered.entries.length && !supported.length) throw new L2ScenarioError('l3_profile_faithfulness_rejected');
@@ -936,8 +947,12 @@ export class L3ProfileService {
       const code = error instanceof L2ScenarioError || error instanceof L3ProfileServiceConflict
         ? error.code
         : signal.aborted ? 'l3_profile_cancelled' : 'l3_profile_model_failed';
-      const trace = error instanceof L3ProfileDocumentError ? error.trace : undefined;
-      await this.fail(work, code, trace).catch(() => {});
+      const diagnostics = error instanceof L3ProfileDocumentError
+        ? {proposal_trace:error.trace}
+        : error instanceof L3ProfileVerificationError
+          ? {verification_trace:error.trace}
+          : undefined;
+      await this.fail(work, code, diagnostics).catch(() => {});
       throw error;
     }
   }

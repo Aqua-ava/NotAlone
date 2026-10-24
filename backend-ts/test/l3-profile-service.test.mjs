@@ -550,6 +550,159 @@ test('合成PG：仅剩提案与核验两次额度时仍完成并保留一次核
   } finally { await f.close(); }
 });
 
+test('合成PG：核验quote非法后在同job预算内纠正一次并发布', async () => {
+  const f = await createStorageFixture();
+  try {
+    const x = await createScope(f);
+    let calls = 0, correctionText = '', retryPayload, verificationInput;
+    const port = {async call(input) {
+      calls++;
+      await input.requireCurrent();
+      const tool = (name,args) => ({
+        blocks:[{type:'tool-call',id:`quote-repair-${calls}`,name,arguments:JSON.stringify(args)}],
+        receipt_id:randomUUID(),
+      });
+      if (calls === 1) return tool('write', {
+        path:'profile.md',
+        content:renderProfile({entries:[entry(x.memory)]}),
+      });
+      if (calls === 2) return {blocks:[],receipt_id:randomUUID()};
+      if (calls === 3) {
+        verificationInput = JSON.parse(input.messages[0].content
+          .find(block => block.type === 'text').text);
+        return tool('ProfileVerificationOutput', {results:[{
+          entry_index:0,
+          supported:true,
+          evidence:[{memory_id:x.memoryId,quote:'冻结资料中没有的合成短语'}],
+        }]});
+      }
+      if (calls === 4) {
+        correctionText = input.messages.flatMap(message => message.content)
+          .find(block => block.type === 'text' && block.text.startsWith('工具错误：l3_profile_quote_invalid'))
+          ?.text ?? '';
+        retryPayload = JSON.parse(input.messages.at(-1).content
+          .find(block => block.type === 'text').text);
+        return tool('ProfileVerificationOutput', {results:[{
+          entry_index:0,
+          supported:true,
+          evidence:[{memory_id:x.memoryId,quote:x.memory.text}],
+        }]});
+      }
+      throw new Error('unexpected_quote_repair_call');
+    }};
+    const ready = await service(f, port).run(
+      x.scope,
+      x.claim,
+      new AbortController().signal,
+    );
+    assert.equal(calls, 4);
+    assert.equal(ready.status, 'ready');
+    assert.ok(ready.profile);
+    assert.equal(verificationInput.memories[0].verbatim_text, x.memory.text);
+    assert.deepEqual(verificationInput.evidence_targets[0].allowed_memory_ids, [x.memoryId]);
+    assert.equal(verificationInput.verification_contract.quote_must_be_exact, true);
+    assert.match(correctionText, /逐字/);
+    assert.equal(retryPayload.failure_code, 'l3_profile_quote_invalid');
+    assert.deepEqual(retryPayload.evidence_targets, [{
+      entry_index:0,
+      allowed_memory_ids:[x.memoryId],
+    }]);
+    assert.match(retryPayload.quote_rule, /verbatim_text/);
+    const batch = (await f.client.query(`SELECT output_payload
+      FROM layered_profile_batch WHERE task_id=$1`, [x.taskId])).rows[0];
+    assert.deepEqual(batch.output_payload.verification_trace.map(({attempt,outcome,error_code}) =>
+      ({attempt,outcome,error_code})), [
+      {attempt:1,outcome:'tool_error',error_code:'l3_profile_quote_invalid'},
+      {attempt:2,outcome:'succeeded',error_code:null},
+    ]);
+    assert.ok(batch.output_payload.verification_trace.every(item =>
+      /^[0-9a-f-]{36}$/i.test(item.receipt_id)));
+  } finally { await f.close(); }
+});
+
+test('合成PG：核验连续两次quote非法时失败关闭且不发布', async () => {
+  const f = await createStorageFixture();
+  try {
+    const x = await createScope(f);
+    let calls = 0;
+    const port = {async call(input) {
+      calls++;
+      await input.requireCurrent();
+      const tool = (name,args) => ({
+        blocks:[{type:'tool-call',id:`quote-invalid-${calls}`,name,arguments:JSON.stringify(args)}],
+        receipt_id:randomUUID(),
+      });
+      if (calls === 1) return tool('write', {
+        path:'profile.md',
+        content:renderProfile({entries:[entry(x.memory)]}),
+      });
+      if (calls === 2) return {blocks:[],receipt_id:randomUUID()};
+      return tool('ProfileVerificationOutput', {results:[{
+        entry_index:0,
+        supported:true,
+        evidence:[{memory_id:x.memoryId,quote:'冻结资料中没有的合成短语'}],
+      }]});
+    }};
+    await assert.rejects(
+      service(f, port).run(x.scope, x.claim, new AbortController().signal),
+      /quote_invalid/,
+    );
+    assert.equal(calls, 4);
+    const batch = (await f.client.query(`SELECT status,error_code,output_payload
+      FROM layered_profile_batch WHERE task_id=$1`, [x.taskId])).rows[0];
+    assert.equal(batch.status, 'failed');
+    assert.equal(batch.error_code, 'l3_profile_quote_invalid');
+    assert.ok(batch.output_payload.proposal_trace);
+    assert.deepEqual(batch.output_payload.verification_trace.map(({attempt,outcome,error_code}) =>
+      ({attempt,outcome,error_code})), [
+      {attempt:1,outcome:'tool_error',error_code:'l3_profile_quote_invalid'},
+      {attempt:2,outcome:'tool_error',error_code:'l3_profile_quote_invalid'},
+    ]);
+    assert.equal((await f.client.query(`SELECT count(*)::int n FROM layered_profile_version
+      WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid`,
+    [x.ownerId,x.contactId])).rows[0].n, 0);
+  } finally { await f.close(); }
+});
+
+test('合成PG：仅剩一次核验额度时quote非法不再重试且不突破预算', async () => {
+  const f = await createStorageFixture();
+  try {
+    const x = await createScope(f);
+    await f.client.query(`UPDATE layered_memory_job
+      SET model_calls_used=6,model_call_limit=8 WHERE task_id=$1`, [x.taskId]);
+    let calls = 0;
+    const port = {async call(input) {
+      calls++;
+      await input.requireCurrent();
+      const tool = (name,args) => ({
+        blocks:[{type:'tool-call',id:`quote-no-retry-${calls}`,name,arguments:JSON.stringify(args)}],
+        receipt_id:randomUUID(),
+      });
+      if (calls === 1) return tool('write', {
+        path:'profile.md',
+        content:renderProfile({entries:[entry(x.memory)]}),
+      });
+      if (calls === 2) return tool('ProfileVerificationOutput', {results:[{
+        entry_index:0,
+        supported:true,
+        evidence:[{memory_id:x.memoryId,quote:'冻结资料中没有的合成短语'}],
+      }]});
+      throw new Error('unexpected_quote_budget_call');
+    }};
+    await assert.rejects(
+      service(f, port).run(x.scope, x.claim, new AbortController().signal),
+      /quote_invalid/,
+    );
+    assert.equal(calls, 2);
+    const batch = (await f.client.query(`SELECT output_payload
+      FROM layered_profile_batch WHERE task_id=$1`, [x.taskId])).rows[0];
+    assert.deepEqual(batch.output_payload.verification_trace.map(({attempt,outcome,error_code}) =>
+      ({attempt,outcome,error_code})), [
+      {attempt:1,outcome:'tool_error',error_code:'l3_profile_quote_invalid'},
+    ]);
+  } finally { await f.close(); }
+});
+
 test('合成PG：多轮提案压缩历史后在预算内完成核验与发布', async () => {
   const f = await createStorageFixture();
   try {
