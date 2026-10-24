@@ -6,7 +6,9 @@
 - 冻结 base：`b0a6817582d92b4142977c486fe7a9366496cb88`；冻结 target：`6e3a864ca5653311957b106e16130084b5f5c12a`，应用后 tree `352716403a4c2e23a1631cd81e4721240e751142`，50/50 文件 SHA 一致。
 - 冻结纵切提交 `f07d7e405f35f75f50e0e6ebdcc3c6f2ab957484`；唯一 Worker/owner 进度提交 `f8bdde0bc0a4a907230e9316751e60b2fe5bc23f`。
 - 最新主树整合 base：`8ce975e83e25d30f3de2247a6261489bae177826`；整合提交：`11dbf0632723e6eeefab6d65ec095d48e8ef7e6b`，tree `3137c0b1ed0f9269db28d954e3e7a59b63205125`。
+- 主树接收后的纵切：显式恢复入口 `1195aff8`、POST 正文隔离修复 `a6dd5623`、历史 bounded/nullable-proof `4c936d1e`。
 - 全量可应用补丁：`task10-current-main.patch`，SHA256 `62927c03971b12fb4ae9e256eeb471cb2b2b09c00dfc838e4617f58f8341fb1e`；仅 Worker 补丁 SHA256 `a2c8487e3985302ae8f3348036be4ade69120a797f4f03f38c7ce35437073f28`。
+- closeout 累计补丁：`e9dd6e39..4c936d1e -- backend-ts` 导出为 `task10-owned-closeout.patch.gz`，压缩包 SHA256 `ad7017dfe87759199e00ac3599548b2da73433f6e568a687437cdee5b3ad8b74`；解压后补丁 SHA256 `e9b76f45f19568a26200e3653d0dccc72a1f341faafe21cb08135497d1fabe80`。
 - 本地分支：`codex/task10-integration`/`codex/task10-worker` 指向 `f8bdde0b`；`codex/task10-current-main-integration` 指向 `11dbf063`。未 push、PR、打包或发送外部消息。
 
 ## 精确冲突与整合顺序
@@ -21,19 +23,21 @@
 - owner/contact 进度共用原任务、target、receipt 行；owner 查询真正跨联系人，仍校验 owner 与 `owner_id + contact_id` 隔离。
 - 增量同步的消息、来源、回执与观察调度在同一事务内提交；调度调用统一到持久提取入口，事件丢失仍由 due 扫描恢复。
 - 新增只读 memory-processing HTTP 适配器，不读正文、不启动模型。Worker 明确要求执行器在同一 claim 围栏内完成 B、trace、watermark 后返回真实处理量。
+- `GET/POST /api/contacts/{contact_id}/memory-processing/resume` 已有显式恢复入口：严格校验 owner/contact/task/action，区分 404/409/503；只在精确路径读取 POST 正文，不吞原设置等入口的请求体，且不自行启动 Worker。
+- 已迁移显式 `bounded-runtime-v1`：E 使用 `GroundedMemoryLabels` / `grounded-v2` 动态 schema，V 使用 `nullable-proof-v3`，候选按 ALL 依赖和有限六类图重新验真；结果生成可持久化的 v4 依据，null proof 只保留可恢复正文证据、不授予语义支持。批处理缓存和新 trace 恢复复用同一 E/V 执行，不回落 legacy。
 - DSH 仍锁定 `0.2.1-rc.2` / `687f282e8625c6b8d11ff58211a90524be2e4317`；本次 Worker 工作走 PG、AbortSignal 和业务租约，不涉及直接 DSH 接口，未改官方核心。
 
 ## 验证
-- 最小：`extraction-task-store.test.mjs` 12/12；含 2 Worker 争锁、完整观察入队、owner 进度和真实 checkpoint。
-- 相关：14 个 extraction 测试 46/46；`sync-incremental-store.test.mjs` 11/11；07 exploration 相关 42/42（两项先因临时树缺 `esbuild` 链接失败，补只读依赖链接后 7/7 复跑通过）。
+- 最小：`extraction-batch-service.test.mjs` 2/2；bounded 批处理断言 E/V 工具各一次、ALL/v4 依据、trace/result 恢复；合成物理调用 2、`model_call_receipt` 2、`outbound_ledger_entry` 2、committed `memory_extraction_trace_call` 2，恢复后均不再增加，未配置外部网络。
+- 相关：15 个 extraction 测试 52/52；`model-permits`、`extraction-pipeline`、`extraction-task-store`、`extraction-sources`、`extraction-a-recovery` 组合 31/31；联系人概览 11/11。
 - Python 相关：`test_extraction_remote`、`test_extraction_a_consumption`、`test_command` 44/44。
-- 类型：`tsc --noEmit` exit 0；`git diff --check` 通过；全量补丁对 `8ce975e8` `git apply --check` 通过。
-- 公开扫描：`HEAD 11dbf063 --working-tree`，4463 当前文件、15087 历史 blob、issues 0。
+- 类型：`tsc --noEmit` exit 0；`git diff --check` 通过；closeout 补丁在 base `e9dd6e39` 的独立 worktree `git apply --check` 通过。
+- 公开扫描：最终 closeout `HEAD --working-tree`，4472 当前文件、15117 历史 blob、2244 提交，issues 0。
 
 ## 剩余项
 - 未把 `ExtractionWorker` 启动接入生产 host effect；Python `TaskHost` 仍是当前唯一领取者。切换到 TS 前必须先停读/排空旧 Worker、复验租约，并提供 B 段采纳、trace、watermark 及 index/verify 的完整执行器。
-- 自动裁决/采纳仍属票11，完整 trace 与来源处理仍属票12，不能把本次 Worker 空接为成功。显式历史 bounded/nullable-proof 仍未迁移。
-- TS resume HTTP、实际桌面 App/微信、真实模型质量与费用未验收；本票仍 claimed，不能标 resolved。
+- 自动裁决/采纳仍属票11，完整 trace 与来源处理仍属票12，不能把本次 Worker 空接为成功。
+- 历史 bounded/nullable-proof 目前以合成 PG、固定 Python oracle 和 loopback/合成调用验收；实际桌面 App/微信、真实模型质量与费用仍未验收，本票仍 claimed，不能标 resolved。
 
 ## 数据与清理
 - 只使用 `/tmp` 合成 PG `_test` 库、临时目录和合成消息；未读真实 `.env`/资料、未调用真实模型/微信、未写主工作树 source 或 index。
