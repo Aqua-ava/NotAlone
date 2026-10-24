@@ -212,3 +212,94 @@ test('L3多轮提案压缩已执行工具历史，不以旧写入参数耗尽下
   assert.match(compacted.current_profile_markdown, /第4轮合成课程背景/);
   assert.doesNotMatch(JSON.stringify(compacted), /profile-round-/);
 });
+
+test('L3多轮提案保留跨轮成功写入，末轮只读确认仍可提交', async () => {
+  const workspace = new L3ProfileWorkspace(null, [scenario], [memory], budget);
+  let calls = 0;
+  const port = {async call() {
+    calls++;
+    return {
+      blocks:[calls === 1 ? {
+        type:'tool-call',
+        id:'profile-write',
+        name:'write',
+        arguments:JSON.stringify({
+          path:'profile.md',
+          content:renderProfile({entries:[entry]}),
+        }),
+      } : {
+        type:'tool-call',
+        id:`profile-read-${calls}`,
+        name:'read',
+        arguments:JSON.stringify({path:'profile.md'}),
+      }],
+      receipt_id:randomUUID(),
+    };
+  }};
+  const result = await runProfileDocumentAgent({
+    workspace,
+    existing:null,
+    scenarios:[scenario],
+    memories:[memory],
+    changedScenarios:[scenario],
+    removedScenarioVersionIds:[],
+    baseProfileVersionId:null,
+    corrections:[],
+    port,
+    claim:{task_id:randomUUID(),step_id:randomUUID(),step_name:'organize_memory',worker_id:randomUUID(),lease_generation:1},
+    owner_id:randomUUID(),
+    contact_id:randomUUID(),
+    batch_id:randomUUID(),
+    binding:{provider:'synthetic-provider',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off'},
+    profile:{context_window_tokens:32_000,safety_margin_tokens:512},
+    signal:new AbortController().signal,
+    requireCurrent:async()=>{},
+    remainingCalls:6,
+  });
+  assert.equal(calls, 5);
+  assert.equal(result.calls, 5);
+  assert.equal(result.proposal.entries[0].text, entry.text);
+});
+
+test('L3多轮提案末轮工具错误不会被此前的成功写入掩盖', async () => {
+  const workspace = new L3ProfileWorkspace(null, [scenario], [memory], budget);
+  let calls = 0;
+  const port = {async call() {
+    calls++;
+    return {
+      blocks:[{
+        type:'tool-call',
+        id:`profile-error-${calls}`,
+        name:calls === 1 ? 'write' : 'read',
+        arguments:JSON.stringify(calls === 1 ? {
+          path:'profile.md',
+          content:renderProfile({entries:[entry]}),
+        } : {
+          path:calls === 5 ? '../profile.md' : 'profile.md',
+        }),
+      }],
+      receipt_id:randomUUID(),
+    };
+  }};
+  await assert.rejects(runProfileDocumentAgent({
+    workspace,
+    existing:null,
+    scenarios:[scenario],
+    memories:[memory],
+    changedScenarios:[scenario],
+    removedScenarioVersionIds:[],
+    baseProfileVersionId:null,
+    corrections:[],
+    port,
+    claim:{task_id:randomUUID(),step_id:randomUUID(),step_name:'organize_memory',worker_id:randomUUID(),lease_generation:1},
+    owner_id:randomUUID(),
+    contact_id:randomUUID(),
+    batch_id:randomUUID(),
+    binding:{provider:'synthetic-provider',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off'},
+    profile:{context_window_tokens:32_000,safety_margin_tokens:512},
+    signal:new AbortController().signal,
+    requireCurrent:async()=>{},
+    remainingCalls:6,
+  }), /round_limit/);
+  assert.equal(calls, 5);
+});

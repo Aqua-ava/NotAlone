@@ -536,7 +536,7 @@ export async function runProfileDocumentAgent(options: {
   const rounds = Math.min(5, Math.max(1,
     Math.min(workspace.budget.max_model_calls - 1, options.remainingCalls - 1)));
   let lastToolError = false;
-  let lastValidWrite = false;
+  let hasValidWrite = false;
   let lastCompleted: {name:string;error:string|null}[] = [];
   for (let round = 0; round < rounds; round++) {
     options.signal.throwIfAborted();
@@ -571,7 +571,6 @@ export async function runProfileDocumentAgent(options: {
     if (!calls.length) return {proposal:workspace.compile(), calls:round + 1, receipts};
     if (calls.length > 8) invalid('l3_profile_tool_call_budget_exceeded');
     lastToolError = false;
-    lastValidWrite = false;
     messages.push(createAssistantMessage({
       content:response.blocks as ContentBlock[],
       source:{provider:options.binding.provider, model:options.binding.model},
@@ -584,7 +583,8 @@ export async function runProfileDocumentAgent(options: {
       try {
         result = workspace.execute(call.name, JSON.parse(call.arguments));
         isError = result.startsWith('工具错误：');
-        if (!isError && (call.name === 'write' || call.name === 'edit')) lastValidWrite = true;
+        // 成功写入跨轮保留；后续只读确认不能撤销已可发布的工作区。
+        if (!isError && (call.name === 'write' || call.name === 'edit')) hasValidWrite = true;
       } catch (error) {
         result = `工具错误：${errorMessage(error)} 请按目录和参数规范纠正。`;
         isError = true;
@@ -599,7 +599,7 @@ export async function runProfileDocumentAgent(options: {
     }
     lastCompleted = completed;
   }
-  if (lastValidWrite && !lastToolError) return {proposal:workspace.compile(), calls:rounds, receipts};
+  if (hasValidWrite && !lastToolError) return {proposal:workspace.compile(), calls:rounds, receipts};
   invalid('l3_profile_document_round_limit');
 }
 

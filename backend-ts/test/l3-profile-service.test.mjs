@@ -591,6 +591,50 @@ test('合成PG：多轮提案压缩历史后在预算内完成核验与发布', 
   } finally { await f.close(); }
 });
 
+test('合成PG：成功写入后四轮只读仍受五轮提案上限约束并完成核验发布', async () => {
+  const f = await createStorageFixture();
+  try {
+    const x = await createScope(f);
+    await f.client.query(`UPDATE layered_memory_job SET model_calls_used=0
+      WHERE task_id=$1`, [x.taskId]);
+    let calls = 0;
+    const port = {async call(input) {
+      calls++;
+      await input.requireCurrent();
+      const tool = (name,args) => ({
+        blocks:[{type:'tool-call',id:`read-only-${calls}`,name,arguments:JSON.stringify(args)}],
+        receipt_id:randomUUID(),
+      });
+      if (calls === 1) return tool('write', {
+        path:'profile.md',
+        content:renderProfile({entries:[entry(x.memory)]}),
+      });
+      if (calls < 6) return tool('read', {path:'profile.md'});
+      if (calls === 6) return tool('ProfileVerificationOutput', {results:[{
+        entry_index:0,
+        supported:true,
+        evidence:[{memory_id:x.memoryId,quote:x.memory.text}],
+      }]});
+      throw new Error('unexpected_read_only_profile_call');
+    }};
+    const ready = await service(f, port).run(
+      x.scope,
+      x.claim,
+      new AbortController().signal,
+    );
+    assert.equal(calls, 6);
+    assert.equal(ready.status, 'ready');
+    assert.equal(ready.error_code, null);
+    assert.equal(ready.profile.entries[0].text, entry(x.memory).text);
+    assert.equal(ready.organization_generation, 2);
+    const batch = (await f.client.query(`SELECT status,attempt_count,output_payload
+      FROM layered_profile_batch WHERE task_id=$1`, [x.taskId])).rows[0];
+    assert.equal(batch.status, 'succeeded');
+    assert.equal(batch.attempt_count, 1);
+    assert.ok(batch.output_payload);
+  } finally { await f.close(); }
+});
+
 test('合成PG：画像撤回同步清除依赖回复并保留合法L2', async () => {
   const f = await createStorageFixture();
   try {
