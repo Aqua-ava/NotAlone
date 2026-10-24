@@ -1,3 +1,4 @@
+import { isExpressionPreferenceRevision } from '../../shared/expression-preference-json';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import type { ExpressionPreferenceRemoval, ExpressionPreferenceSave, ExpressionPreferenceUpdate } from '../../shared/expression-preference-bridge';
 import type { BackendHost } from '../backend/host';
@@ -20,17 +21,17 @@ function selection(args: unknown[], extra: string[] = []): Record<string, unknow
 function save(args: unknown[], update = false): ExpressionPreferenceSave | ExpressionPreferenceUpdate {
   const fields = selection(args, ['text', 'appliesTo', 'replyMode', 'confirmLongTerm',
     ...(update ? ['preferenceId', 'expectedRevision'] : [])]);
-  if (typeof fields.text !== 'string' || !fields.text.trim() || fields.text.trim().length > 512
+  if (typeof fields.text !== 'string' || !fields.text.trim() || [...fields.text.trim()].length > 512
     || !['owner', 'contact'].includes(fields.appliesTo as string) || fields.confirmLongTerm !== true
     || fields.replyMode !== null && !['reply_to_message', 'rewrite_draft', 'initiate_conversation'].includes(fields.replyMode as string)
-    || update && (!isUuid(fields.preferenceId) || !Number.isSafeInteger(fields.expectedRevision) || (fields.expectedRevision as number) < 1)) {
+    || update && (!isUuid(fields.preferenceId) || !isExpressionPreferenceRevision(fields.expectedRevision))) {
     throw new Error('请明确长期保存，并核对偏好内容与适用范围。');
   }
   return fields as unknown as ExpressionPreferenceSave | ExpressionPreferenceUpdate;
 }
 function removal(args: unknown[]): ExpressionPreferenceRemoval {
   const fields = selection(args, ['preferenceId', 'expectedRevision']);
-  if (!isUuid(fields.preferenceId) || !Number.isSafeInteger(fields.expectedRevision) || (fields.expectedRevision as number) < 1) {
+  if (!isUuid(fields.preferenceId) || !isExpressionPreferenceRevision(fields.expectedRevision)) {
     throw new Error('长期偏好操作无效。');
   }
   return fields as unknown as ExpressionPreferenceRemoval;

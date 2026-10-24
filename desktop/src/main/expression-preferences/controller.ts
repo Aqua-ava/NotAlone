@@ -1,3 +1,4 @@
+import { stringifyPreferenceJson, isExpressionPreferenceRevision } from '../../shared/expression-preference-json';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { randomUUID } from 'node:crypto';
 import type { ExpressionPreferenceRemoval, ExpressionPreferenceSave, ExpressionPreferenceState, ExpressionPreferenceUpdate } from '../../shared/expression-preference-bridge';
@@ -108,13 +109,13 @@ export class ExpressionPreferenceController {
   }
   private requireVersion(request: ExpressionPreferenceRemoval): void {
     const previous = this.state.preferences.find((item) => item.preferenceId === request.preferenceId);
-    if (this.state.phase !== 'ready' || !previous || previous.revision !== request.expectedRevision) {
+    if (this.state.phase !== 'ready' || !previous || !isExpressionPreferenceRevision(request.expectedRevision) || BigInt(previous.revision) !== BigInt(request.expectedRevision)) {
       throw new Error('长期偏好范围或版本已变化，请刷新后再操作。');
     }
   }
   private confirmedContent(request: ExpressionPreferenceSave, scope: Scope): Record<string, unknown> {
     if (this.writing || request.confirmLongTerm !== true || typeof request.text !== 'string'
-      || !request.text.trim() || request.text.trim().length > 512
+      || !request.text.trim() || [...request.text.trim()].length > 512
       || !['owner', 'contact'].includes(request.appliesTo)
       || request.replyMode !== null && !['reply_to_message', 'rewrite_draft', 'initiate_conversation'].includes(request.replyMode)) {
       throw new Error('请明确长期保存，并核对偏好内容与适用范围。');
@@ -130,7 +131,7 @@ export class ExpressionPreferenceController {
     const pending = new AbortController();
     this.writing = pending;
     // 仅在本次可信范围的内存中保留未确认动作；恢复时先重读，不自动重放正文。
-    const signature = `${method} ${path} ${JSON.stringify(body)}`;
+    const signature = `${method} ${path} ${stringifyPreferenceJson(body)}`;
     const action = this.retry?.signature === signature ? this.retry : { signature, operationKey: randomUUID() };
     this.retry = action;
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.writing === pending; };
@@ -152,7 +153,7 @@ export class ExpressionPreferenceController {
     } finally { if (this.writing === pending) { this.writing = undefined; this.publish({ busy: false }); } }
   }
   private retryIs(method: string, path: string, body: Record<string, unknown>): boolean {
-    return this.retry?.signature === `${method} ${path} ${JSON.stringify(body)}`;
+    return this.retry?.signature === `${method} ${path} ${stringifyPreferenceJson(body)}`;
   }
   private requireScope(selection: ContactSelection): Scope {
     const scope = this.scope;

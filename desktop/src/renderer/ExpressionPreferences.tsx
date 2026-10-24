@@ -69,7 +69,7 @@ export function ExpressionPreferences({ replies }: { replies: ReplySessionView }
     <h3>已保存的偏好</h3>
     {!view.state.preferences.length && <p className="section-empty">还没有保存长期表达偏好。</p>}
     <ul aria-label="长期表达偏好目录">{view.state.preferences.map((item) => <li key={item.preferenceId}><p>{item.text}</p>
-      <small>{item.scope.contactId ? '当前联系人' : '本人全局'} · {item.scope.replyMode ? modeNames[item.scope.replyMode] : '全部输入模式'} · 版本{item.revision}</small>
+      <small>{item.scope.contactId ? '当前联系人' : '本人全局'} · {item.scope.replyMode ? modeNames[item.scope.replyMode] : '全部输入模式'} · 版本{String(item.revision)}</small>
       <details className="record-metadata"><summary>来源与修改记录</summary><small>
         {item.origin.kind === 'manual' ? '用户手动明确保存' : `用户明确保存，消息来源 ${item.origin.id}`} · 修改于 {item.updatedAt}<br />
         用户操作 {item.confirmedOperationKey}{item.sourceIds.length ? ` · 依赖来源 ${item.sourceIds.join('、')}` : ''}</small></details>

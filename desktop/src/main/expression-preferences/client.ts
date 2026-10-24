@@ -1,3 +1,4 @@
+import { isExpressionPreferenceRevision } from '../../shared/expression-preference-json';
 import type { ExpressionPreference, ExpressionPreferenceReceipt, ExpressionReplyMode } from '../../shared/expression-preference-bridge';
 import { isUuid } from '../uuid';
 
@@ -5,14 +6,14 @@ export function readExpressionPreferenceReceipt(value: unknown): ExpressionPrefe
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('长期偏好格式无效。');
   const row = value as Record<string, unknown>;
   const scope = row.scope as Record<string, unknown> | undefined;
-  if (!isUuid(row.preference_id) || typeof row.text !== 'string' || !row.text.trim() || row.text.length > 512
+  if (!isUuid(row.preference_id) || typeof row.text !== 'string' || !row.text.trim() || [...row.text].length > 512
     || !scope || typeof scope !== 'object' || Array.isArray(scope)
     || scope.contact_id !== null && !isUuid(scope.contact_id)
     || scope.reply_mode !== null && !['reply_to_message', 'rewrite_draft', 'initiate_conversation'].includes(scope.reply_mode as string)
-    || !Number.isSafeInteger(row.revision) || (row.revision as number) < 1) throw new Error('长期偏好格式无效。');
+    || !isExpressionPreferenceRevision(row.revision)) throw new Error('长期偏好格式无效。');
   return { preferenceId: row.preference_id.toLowerCase(), text: row.text,
     scope: { contactId: scope.contact_id === null ? null : (scope.contact_id as string).toLowerCase(),
-      replyMode: scope.reply_mode as ExpressionReplyMode | null }, revision: row.revision as number };
+      replyMode: scope.reply_mode as ExpressionReplyMode | null }, revision: row.revision };
 }
 
 export function readExpressionPreference(value: unknown): ExpressionPreference {

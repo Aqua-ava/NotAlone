@@ -1,3 +1,4 @@
+import { parsePreferenceJson, stringifyPreferenceJson } from '../../shared/expression-preference-json';
 import { request, type ClientRequest } from 'node:http';
 import type { BackendConnection } from './connection';
 import { isUuid } from '../uuid';
@@ -127,7 +128,7 @@ export class JsonClient {
       return Promise.reject(new BackendRequestFailure('response'));
     }
     let body: Buffer;
-    try { body = Buffer.from(options.body === undefined ? '' : JSON.stringify(options.body)); }
+    try { body = Buffer.from(options.body === undefined ? '' : stringifyPreferenceJson(options.body)); }
     catch { return Promise.reject(new BackendRequestFailure('response')); }
     if (body.length > 1_048_576) return Promise.reject(new BackendRequestFailure('response'));
     if (signal?.aborted) return Promise.reject(new BackendRequestFailure('cancelled'));
@@ -160,7 +161,7 @@ export class JsonClient {
           if (settled) return;
           if (!response.headers['content-type']?.startsWith('application/json')) { fail(new BackendRequestFailure('response')); return; }
           try {
-            const data: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            const data: unknown = parsePreferenceJson(Buffer.concat(chunks).toString('utf8'));
             const status = response.statusCode ?? 0;
             if (status < 200 || status >= 300) {
               const parts = responseFor.path.split('/');

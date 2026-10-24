@@ -1,3 +1,4 @@
+import type { ExpressionPreferenceRevision } from './expression-preference-json';
 import type { ContactSelection } from './contact-session-bridge';
 
 export type ExpressionReplyMode = 'reply_to_message' | 'rewrite_draft' | 'initiate_conversation';
@@ -5,7 +6,7 @@ export type ExpressionPreference = {
   preferenceId: string;
   text: string;
   scope: { contactId: string | null; replyMode: ExpressionReplyMode | null };
-  revision: number;
+  revision: ExpressionPreferenceRevision;
   confirmedOperationKey: string;
   origin: { kind: 'manual' } | { kind: 'message'; id: string };
   sourceIds: string[];
@@ -29,8 +30,8 @@ export type ExpressionPreferenceSave = ContactSelection & {
   replyMode: ExpressionReplyMode | null;
   confirmLongTerm: boolean;
 };
-export type ExpressionPreferenceUpdate = ExpressionPreferenceSave & { preferenceId: string; expectedRevision: number };
-export type ExpressionPreferenceRemoval = ContactSelection & { preferenceId: string; expectedRevision: number };
+export type ExpressionPreferenceUpdate = ExpressionPreferenceSave & { preferenceId: string; expectedRevision: ExpressionPreferenceRevision };
+export type ExpressionPreferenceRemoval = ContactSelection & { preferenceId: string; expectedRevision: ExpressionPreferenceRevision };
 export type ExpressionPreferenceBridge = {
   getState(): Promise<ExpressionPreferenceState>;
   refresh(selection: ContactSelection): Promise<void>;
