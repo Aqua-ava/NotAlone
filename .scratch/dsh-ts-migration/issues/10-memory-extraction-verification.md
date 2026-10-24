@@ -1,7 +1,7 @@
 # 10：从现有消息提取并核验候选
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 05, 09
 Spec: ../spec.md

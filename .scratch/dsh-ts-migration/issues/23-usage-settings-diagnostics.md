@@ -1,7 +1,7 @@
 # 23：保留用量、配置和诊断界面
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 03, 05
 Spec: ../spec.md

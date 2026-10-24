@@ -1,7 +1,7 @@
 # 07：探索方向并使用 Skill 生成候选
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 05, 06
 Spec: ../spec.md
