@@ -1,6 +1,6 @@
 # 票21 Vision／ANE 阻塞审计与最小可行边界
 
-> 2026-10-25 后续证据：从 `50306523` 重新核对后，ANECompilerService 资源报告显示实际长时编译与大额写入，且新增 entitlement／新语种／像素路径边界。结论更新与唯一桌面矩阵见[追加审计](ane-compiler-addendum.md)。原票仍保持 claimed。
+> 2026-10-25 后续证据：从 `50306523` 重新核对后，ANECompilerService 资源报告显示实际长时编译与大额写入，且新增 entitlement／新语种／像素路径边界。结论更新与唯一桌面矩阵见[追加审计](ane-compiler-addendum.md)。从 `13223bd4` 复核当前代码、系统和签名条件见[当前状态](current-state-13223bd4.md)。原票仍保持 claimed。
 
 日期：2026-10-25。代码基线：`dd1f3070f21a4a37dd06d11c6ea5a504ea4fd9a7`；隔离 worktree 为 `/private/tmp/notalone-21-vision.NOomqD`。本审计不修改产品、07 UI、10 extraction、共享宿主编排、数据库或发布材料。
 
