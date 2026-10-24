@@ -19,6 +19,7 @@ import {createExtractionAdoptionHost,runExtractionWithAdoption} from './extracti
 import {ExtractionTaskStore} from './extraction-task-store.ts';
 import {ExtractionTaskRunner} from './extraction-task-runner.ts';
 import {ExtractionWorker} from './extraction-worker.ts';
+import {ContactMemoryIndexRunner} from './contact-memory-index.ts';
 import {ExtractionWorkerTaskControl,type TaskControlPort} from './task-control.ts';
 import {createLocalEmbeddingLifecycle} from './local-embedding-lifecycle.ts';
 import {readFile} from 'node:fs/promises';
@@ -215,6 +216,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
             provider:m.provider,modelName:m.model,
           });
           extractionWorker=new ExtractionWorker({store,ownerId:owner,runner,
+            indexRunner:new ContactMemoryIndexRunner({store}),
             ...(l2Scenarios?{organizationRunner:createL2ScenarioWorkerRunner(l2Scenarios)}:{})});
           if(!await extractionWorker.start())throw new Error('extraction_worker_already_running');
           extractionControl=new ExtractionWorkerTaskControl({store,worker:extractionWorker});

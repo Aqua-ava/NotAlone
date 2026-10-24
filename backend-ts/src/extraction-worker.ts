@@ -1,4 +1,4 @@
-/** 原 PostgreSQL 队列的唯一提取 Worker；只领取一个步骤，不起第二个计时循环。 */
+/** 原 PostgreSQL 队列的唯一后台任务 Worker；只领取一个步骤，不起第二个计时循环。 */
 import {randomUUID} from 'node:crypto';
 import {ExtractionTaskError,type ExtractionClaim,type ExtractionScope,type ExtractionTaskStore} from './extraction-task-store.ts';
 
@@ -19,6 +19,7 @@ export interface ExtractionWorkerOptions {
   store:ExtractionTaskStore;
   ownerId:string;
   runner:ExtractionWorkerRunner;
+  indexRunner?:ExtractionWorkerRunner;
   organizationRunner?:ExtractionWorkerRunner;
   workerId?:string;
   leaseMs?:number;
@@ -49,6 +50,7 @@ export class ExtractionWorker {
   private readonly store:ExtractionTaskStore;
   private readonly ownerId:string;
   private readonly runner:ExtractionWorkerRunner;
+  private readonly indexRunner:ExtractionWorkerRunner|undefined;
   private readonly organizationRunner:ExtractionWorkerRunner|undefined;
   private readonly workerId:string;
   private readonly leaseMs:number;
@@ -72,6 +74,7 @@ export class ExtractionWorker {
     this.heartbeatMs=positiveInteger(options.heartbeatMs??Math.max(250,Math.floor(this.leaseMs/3)),'worker_heartbeat_invalid',this.leaseMs);
     this.idleMs=positiveInteger(options.idleMs??1_000,'worker_idle_invalid',60_000);
     this.store=options.store;this.ownerId=options.ownerId.toLowerCase();this.runner=options.runner;
+    this.indexRunner=options.indexRunner;
     this.organizationRunner=options.organizationRunner;
   }
 
@@ -162,6 +165,7 @@ export class ExtractionWorker {
     const hintedScopes=hinted.flatMap(([,value])=>value.scope?[value.scope]:[]);
     let scopes=await this.store.readyScopes(
       this.ownerId,64,['legacy','bounded-runtime-v1'],this.organizationRunner!==undefined,
+      this.indexRunner!==undefined,
     );
     if(hintedScopes.length){
       const ordered=[...hintedScopes,...scopes];
@@ -176,6 +180,7 @@ export class ExtractionWorker {
         if(scope.contactId!==null)await this.store.claimScheduled(scope);
         const taskId=scopedHints.get(scope.contactId)??taskHint;
         const supportedSteps=['parse','normalize','extract_memory',
+          ...(this.indexRunner?['index','verify']:[]),
           ...(this.organizationRunner?['organize_memory']:[])];
         claim=await this.store.claim(scope,{
           ...(taskId?{taskId}:{}),workerId:this.workerId,leaseMs:this.leaseMs,
@@ -199,7 +204,9 @@ export class ExtractionWorker {
       return;
     }
     const runner=claim.stepName==='organize_memory'?this.organizationRunner
-      :claim.stepName==='extract_memory'?this.runner:undefined;
+      :claim.stepName==='extract_memory'?this.runner
+      :claim.stepName==='index'||claim.stepName==='verify'?this.indexRunner
+      :undefined;
     if(!runner)throw new ExtractionTaskError('worker_step_unsupported');
     const stepAbort=new AbortController();
     const signal=AbortSignal.any([globalSignal,stepAbort.signal]);

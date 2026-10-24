@@ -70,6 +70,27 @@ export class ExtractionTaskStore {
    await c.query(`UPDATE background_task t SET status='failed',last_error_code='lease_expired',finished_at=now(),updated_at=now()
     WHERE t.owner_id=$1 AND t.contact_id=$2 AND t.status IN ('queued','running','verifying')
     AND EXISTS(SELECT 1 FROM background_task_step s WHERE s.task_id=t.id AND s.step_name='extract_memory' AND s.status='failed' AND s.last_error_code='lease_expired')`,[scope.ownerId,scope.contactId]);
+   const supported=input.supportedSteps??['extract_memory'];
+   const indexSteps=['index','verify'].filter(step=>supported.includes(step));
+   if(indexSteps.length){
+    await c.query(`UPDATE background_task_step step
+     SET status=CASE WHEN step.attempt_count>=3 THEN 'failed' ELSE 'retryable' END,
+      worker_id=NULL,lease_expires_at=NULL,last_error_code='lease_expired',updated_at=now()
+     FROM background_task task
+     WHERE task.id=step.task_id AND task.owner_id=$1 AND task.contact_id=$2
+      AND task.task_type IN ('import','observation')
+      AND step.step_name=ANY($3::text[]) AND step.status='running'
+      AND step.lease_expires_at<=clock_timestamp()`,
+    [scope.ownerId,scope.contactId,indexSteps]);
+    await c.query(`UPDATE background_task task SET status='failed',last_error_code='lease_expired',
+     finished_at=now(),updated_at=now()
+     WHERE task.owner_id=$1 AND task.contact_id=$2 AND task.status IN ('queued','running','verifying')
+      AND task.task_type IN ('import','observation')
+      AND EXISTS(SELECT 1 FROM background_task_step step WHERE step.task_id=task.id
+       AND step.step_name=ANY($3::text[]) AND step.status='failed'
+       AND step.last_error_code='lease_expired')`,
+    [scope.ownerId,scope.contactId,indexSteps]);
+   }
    await c.query(`UPDATE background_task_step step
     SET status=CASE WHEN job.pending_receipt AND batch.status='succeeded'
       AND batch.settings_generation=job.settings_generation THEN 'pending'
@@ -282,14 +303,15 @@ export class ExtractionTaskStore {
   if(!row)throw new ExtractionTaskError('task_not_found');
   return this.resume({ownerId,contactId:row.contact_id},taskId,action);
  }
- /** 只列出可交给提取 Worker 的联系人范围；真正领取仍走 claim 的原子租约。 */
+ /** 只列出可交给唯一任务 Worker 的联系人范围；真正领取仍走 claim 的原子租约。 */
  async readyScopes(ownerId:string,limit=64,runtimeModes:readonly ('legacy'|'bounded-runtime-v1')[]=['legacy'],
-  includeOrganization=false,
+  includeOrganization=false,includeIndex=false,
  ):Promise<ExtractionScope[]>{
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId)
    ||!Number.isSafeInteger(limit)||limit<1||limit>256||!runtimeModes.length
    ||runtimeModes.some(mode=>!['legacy','bounded-runtime-v1'].includes(mode))
-   ||typeof includeOrganization!=='boolean')throw new ExtractionTaskError('worker_scan_invalid');
+   ||typeof includeOrganization!=='boolean'||typeof includeIndex!=='boolean')throw new ExtractionTaskError('worker_scan_invalid');
+  const extractionSteps=['parse','normalize','extract_memory',...(includeIndex?['index','verify']:[])];
   const rows=(await this.pool.query(`WITH candidates AS (
     SELECT s.contact_id,0 AS priority,COALESCE(s.due_at,s.last_input_at) AS ready_at
     FROM memory_extraction_schedule s
@@ -303,7 +325,12 @@ export class ExtractionTaskStore {
     FROM background_task t JOIN background_task_step s ON s.task_id=t.id
     WHERE t.owner_id=$1 AND t.task_type IN ('import','observation')
      AND t.status IN ('queued','running','verifying') AND ${sourceAllowed}
-     AND s.step_name IN ('parse','normalize','extract_memory') AND s.status IN ('pending','retryable')
+     AND s.step_name=ANY($5::text[])
+     AND (
+       s.status IN ('pending','retryable')
+       OR ($6::boolean AND s.step_name IN ('index','verify')
+         AND s.status='running' AND s.lease_expires_at<=clock_timestamp())
+     )
      AND COALESCE(t.extraction_runtime_config->>'mode','legacy')=ANY($3::text[])
     UNION ALL
     SELECT t.contact_id,0 AS priority,COALESCE(t.started_at,t.created_at) AS ready_at
@@ -322,7 +349,7 @@ export class ExtractionTaskStore {
    )
    SELECT contact_id FROM candidates GROUP BY contact_id
    ORDER BY min(priority),min(ready_at),contact_id LIMIT $2`,
-  [ownerId,limit,[...new Set(runtimeModes)],includeOrganization])).rows;
+  [ownerId,limit,[...new Set(runtimeModes)],includeOrganization,extractionSteps,includeIndex])).rows;
   return rows.map(row=>({ownerId,contactId:row.contact_id}));
  }
  /** 会话锁必须贯穿整个Worker寿命；release只能在在途run全部退出后调用。 */

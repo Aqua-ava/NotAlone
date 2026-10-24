@@ -129,3 +129,37 @@ Spec: ../spec.md
 - 当前开发宿主仍由 Python 任务执行者领取存量任务，TS Worker 尚未开启；票 16 仍保持
   `claimed`，待票 13 补齐 L2 唯一领取链后，由根切换并完成 `ran` 的实际 App、资料、
   来源与水位验收。
+
+2026-10-25（TS `index|verify` 唯一 Worker 切片）：
+
+- 从主树 `d5cd0e677071070f595726c97994ff1e65f0e2cc` 建立独立 worktree 实施；
+  未修改主工作树或主 Git index。票 16 继续保持 `claimed`。
+- DSH 查证：锁定依赖为 `@deepseek-ai/dsh* 0.2.1-rc.2`。官方 release commit
+  [`687f282e8625c6b8d11ff58211a90524be2e4317`](https://github.com/deepseek-ai/deepseek-harness/commit/687f282e8625c6b8d11ff58211a90524be2e4317)
+  的提交说明明确为 `dsh@0.2.1-rc.2`；同 commit 的
+  [`packages/bundle/sdk-minimal/package.json`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/bundle/sdk-minimal/package.json)
+  `version` 同为 `0.2.1-rc.2`。核对了同 commit 的
+  [`ctx.effect` 生命周期文档](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/cordis-tutorial/02-lifecycle-and-effects.zh.md)
+  与 [`appReady` cmdline 文档及源码](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/boot/cmdline/README.zh.md)：
+  effect disposer 随插件卸载，`appReady` 是 Loader 成功后的启动信号。本切片没有调用
+  DSH 私有 API，只在既有 `host-reply` 生命周期内给原唯一 `ExtractionWorker` 注入确定性
+  Runner；没有新增 Worker、计时循环、DSH 任务或持久会话。
+- 实现：在原任务 `index|verify` 步骤内复用同一租约、心跳、取消和 `store.fenced`
+  事务；在 `contact_memory_state` 行锁下读取 `memory_revision`，只投影当前范围、
+  active、有效期内且至少一个有效来源的 `confirmed_memory`。主题按条目数降序、
+  category/topic 与 memory UUID 稳定升序，最多 20 个；目录只含分类、主题提示和 UUID。
+  写入前重复构建，写入后回读并再次核对 revision、主题和有效来源；失败由原事务回滚，
+  旧目录保留。`verify` 保持 `index_missing|index_not_active|index_stale|
+  index_reference_invalid`，数据库故障可重试。Worker 扫描、过期租约恢复与分派已覆盖
+  `index|verify`，未接管删除任务族或全任务管理。
+- 验证：新增 11 项随机 `_test` PostgreSQL 合同测试；组合任务 Store/Runner/Worker
+  控制 30/30、导入与真实 DSH 宿主接线 28/28、backend-ts 严格类型检查均通过。覆盖空目录、
+  过期及来源失效、20 主题上限、稳定排序与 revision、owner/contact/本人记忆隔离、
+  写入后失败回滚、verify 连续失败与显式恢复、来源删除拒绝领取、旧租约晚到、关闭取消、
+  无 wake 的过期 verify 恢复，以及同 Worker 完成 `index|verify`。提交前
+  `check_public_history --ref HEAD --working-tree` 扫描 15,367 个历史 blob、
+  2,275 个历史提交和 4,549 个当前文件，问题数为 0。
+- 数据影响：仅创建并清理随机 `notalone_ts_host_*_test` 数据库与临时目录，使用合成
+  owner/contact/source/memory；未读取真实资料或 `ran`，未启动 App/微信、未调用模型/
+  embedding、未外发、未打包、未 push。真实 App/资料/来源与水位验收仍由根会话独占；
+  票 17 的删除闭环、票 22 的任务管理及真实模型质量不在本切片。
