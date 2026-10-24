@@ -33,6 +33,33 @@ class SourceProcessingWriteError(RuntimeError):
         super().__init__("来源处理记录写入失败，本批未继续保存。")
 
 
+def assert_processing_captures_writable(
+    connection: psycopg.Connection[Any],
+    *,
+    scope: ContactScope,
+    records: tuple[ProcessingRecord, ...],
+) -> None:
+    """任何过滤前先拒绝已删除捕获，避免自动读取抑制掩盖重放。"""
+
+    try:
+        for start in range(0, len(records), _CAPTURE_CHECK_ROWS):
+            capture_ids = list(dict.fromkeys(
+                record.record_id for record in records[start:start + _CAPTURE_CHECK_ROWS]
+            ))
+            deleted_capture = connection.execute(
+                "SELECT 1 FROM public.source_processing_capture_tombstone "
+                "WHERE owner_id=%s AND contact_id=%s "
+                "AND capture_record_id=ANY(%s::uuid[]) LIMIT 1",
+                (scope.owner_id, scope.contact_id, capture_ids),
+            ).fetchone()
+            if deleted_capture is not None:
+                raise SourceProcessingWriteError()
+    except SourceProcessingWriteError:
+        raise
+    except (psycopg.Error, TypeError, ValueError):
+        raise SourceProcessingWriteError() from None
+
+
 def save_processing_batch(
     connection: psycopg.Connection[Any],
     *,
@@ -47,18 +74,9 @@ def save_processing_batch(
 
     batch_id = uuid4()
     try:
-        for start in range(0, len(records), _CAPTURE_CHECK_ROWS):
-            capture_ids = list(dict.fromkeys(
-                record.record_id for record in records[start:start + _CAPTURE_CHECK_ROWS]
-            ))
-            deleted_capture = connection.execute(
-                "SELECT 1 FROM public.source_processing_capture_tombstone "
-                "WHERE owner_id=%s AND contact_id=%s "
-                "AND capture_record_id=ANY(%s::uuid[]) LIMIT 1",
-                (scope.owner_id, scope.contact_id, capture_ids),
-            ).fetchone()
-            if deleted_capture is not None:
-                raise SourceProcessingWriteError()
+        assert_processing_captures_writable(
+            connection, scope=scope, records=records,
+        )
         connection.execute(
             "INSERT INTO public.source_processing_batch (batch_id, owner_id, contact_id, source_kind, source_id, status) VALUES (%s, %s, %s, %s, %s, %s)",
             (

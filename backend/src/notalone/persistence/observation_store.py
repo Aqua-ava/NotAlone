@@ -39,6 +39,7 @@ from notalone.persistence.source_memory_erasure import (
     collect_all_source_memory_ids, erase_source_memories,
 )
 from notalone.persistence.source_processing import (
+    assert_processing_captures_writable,
     erase_source_processing,
     save_processing_batch,
 )
@@ -676,6 +677,11 @@ class PostgresObservationStore:
                         raise ObservationPersistenceError(
                             "消息会话与已确认观察范围不一致。"
                         )
+                    assert_processing_captures_writable(
+                        connection,
+                        scope=ContactScope(owner_id, contact_id),
+                        records=records,
+                    )
                 _, records = filter_auto_read(
                     connection, owner_id=owner_id, contact_id=contact_id,
                     messages=messages, records=records,
@@ -804,6 +810,12 @@ class PostgresObservationStore:
                         if message.processing_record is not None
                     )
                 )
+                if records:
+                    assert_processing_captures_writable(
+                        connection,
+                        scope=ContactScope(owner_id, contact_id),
+                        records=records,
+                    )
                 accepted_messages, records = filter_auto_read(
                     connection, owner_id=owner_id, contact_id=contact_id,
                     messages=messages, records=records,

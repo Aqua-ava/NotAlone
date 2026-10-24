@@ -81,9 +81,49 @@ class AutoMemoryModel(ScriptedCoreModel):
                     "alternatives": [], "interpretation_reason": "合成来源中的直接偏好陈述。"})
             response = tool_response("DirectMemoryExtractionOutput", {"scenes": [{"scene_name": "合成偏好", "memories": facts}]})
         elif requested == ("BatchMemoryAdjudicationOutput",):
-            response = tool_response("BatchMemoryAdjudicationOutput", {"decisions": [
-                {"candidate_index": item["candidate_index"], "action": "add", "replaced_memory_id": None}
-                for item in json.loads(content)]})
+            decisions = []
+            for item in json.loads(content):
+                evidence = [
+                    {"message_id": source["message_id"], "quote": source["text"]}
+                    for value in [item["candidate"], *item["similar"]]
+                    for source in value["sources"]
+                ]
+                relation = None
+                if item["similar"]:
+                    relation = {
+                        "kind": "independent",
+                        "related_memory_ids": [
+                            memory["memory_id"] for memory in item["similar"]
+                        ],
+                        "explanation": "两条来源涉及同一联系人的独立口味偏好。",
+                        "evidence": evidence,
+                        "claim_changed": False,
+                        "condition_changed": False,
+                    }
+                decisions.append({
+                    "candidate_index": item["candidate_index"],
+                    "action": "add",
+                    "replaced_memory_id": None,
+                    "merged_memory_ids": [],
+                    "merged_text": None,
+                    "duplicate_memory_id": None,
+                    "relation": relation,
+                })
+            response = tool_response(
+                "BatchMemoryAdjudicationOutput", {"decisions": decisions},
+            )
+        elif requested == ("MemoryRelationVerificationOutput",):
+            response = tool_response("MemoryRelationVerificationOutput", {"results": [
+                {
+                    "candidate_index": item["candidate_index"],
+                    "verdict": "supported",
+                    "same_subject_and_matter": False,
+                    "claim_changed": item["relation"]["claim_changed"],
+                    "condition_changed": item["relation"]["condition_changed"],
+                    "evidence": item["relation"]["evidence"],
+                }
+                for item in json.loads(content)
+            ]})
         elif requested == ("GroundedMemoryLabels",):
             labels = {}
             unit_schemas = kwargs["tools"][0]["function"]["parameters"]["properties"]["units"]["properties"]
@@ -519,10 +559,12 @@ class ImportAutoFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         )
         self._memory(reopened, current)
         self.assertEqual(self._task(reopened, old), original)
-        # 调度固定新任务；既有联系人执行器仍可覆盖同范围有效历史消息。
+        # 自动唤醒固定本次原任务；较早排队资料只能由用户显式恢复。
         self.assertEqual({row["text"] for row in self._get(
             reopened, f"/api/contacts/{old['contact_id']}/memories",
-        )["memories"]}, {f"联系人原话：“{item['fact_message']['text']}”" for item in (old, current)})
+        )["memories"]}, {
+            f"联系人原话：“{current['fact_message']['text']}”",
+        })
 
     def test_shutdown_ends_global_lock_wait_and_restart_does_not_resume_it(self):
         with psycopg.connect(self.database_url, autocommit=True) as connection:
