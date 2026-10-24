@@ -13,7 +13,17 @@ async function unconfirmedARequests(c:pg.ClientBase,scope:ExtractionScope):Promi
   jsonb_typeof(e.payload->'outcome')='object' AS has_outcome,e.payload->>'a_execution_id' AS not_sent_id,
   e.payload->>'a_input_sha256' AS not_sent_input,e.payload->>'a_rule_version' AS not_sent_rule,e.payload->>'proof' AS not_sent_proof,
   e.payload->>'a_execution_id' AS superseded_id,e.payload->>'a_input_sha256' AS superseded_input,
-  e.payload->>'a_rule_version' AS superseded_rule
+  e.payload->>'a_rule_version' AS superseded_rule,tr.status AS trace_status,
+  EXISTS(SELECT 1 FROM memory_extraction_trace_event end_event
+   WHERE end_event.trace_id=tr.trace_id AND end_event.owner_id=tr.owner_id AND end_event.contact_id=tr.contact_id
+   AND end_event.stage='batch_end' AND end_event.payload->>'watermark_commit'='not_advanced'
+   AND end_event.payload->'watermark_before'=end_event.payload->'watermark_after'
+   AND end_event.payload->'not_executed' @> '["remaining_write"]'::jsonb
+   AND (tr.status='business_failed' OR NOT EXISTS(SELECT 1 FROM memory_extraction_trace_event b_event
+    WHERE b_event.trace_id=tr.trace_id AND b_event.stage='typescript_b_begin'))
+   AND NOT EXISTS(SELECT 1 FROM memory_extraction_trace_event receipt_event
+    WHERE receipt_event.trace_id=tr.trace_id AND receipt_event.stage='batch_end'
+    AND receipt_event.payload ? 'typescript_a_receipt')) AS no_write
   FROM memory_extraction_trace tr JOIN memory_extraction_trace_event e ON e.trace_id=tr.trace_id
    AND e.owner_id=tr.owner_id AND e.contact_id=tr.contact_id
   WHERE tr.owner_id=$1 AND tr.contact_id=$2 AND e.stage IN ('typescript_a_begin','typescript_a_result','typescript_a_not_sent','typescript_a_superseded','batch_end')`,[scope.ownerId,scope.contactId])).rows;
@@ -24,6 +34,7 @@ async function unconfirmedARequests(c:pg.ClientBase,scope:ExtractionScope):Promi
   if(consumed.some(r=>r.consumed_id===row.execution_id&&r.consumed_input===row.input_sha256&&r.consumed_rule===row.rule_version)
    ||rows.some(r=>r.stage==='typescript_a_superseded'&&r.superseded_id===row.execution_id
     &&r.superseded_input===row.input_sha256&&r.superseded_rule===row.rule_version)
+   ||rows.some(r=>r.trace_id===row.trace_id&&r.no_write===true)
    ||rows.some(r=>r.trace_id===row.trace_id&&r.stage==='typescript_a_not_sent'&&['before_model_invocation','known_not_sent_receipts'].includes(r.not_sent_proof)
     &&r.not_sent_id===row.execution_id&&r.not_sent_input===row.input_sha256&&r.not_sent_rule===row.rule_version)){
    consumedTraces.add(row.trace_id);continue;
