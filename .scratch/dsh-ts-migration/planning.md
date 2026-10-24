@@ -19,7 +19,7 @@
 | [11 裁决和正式采纳记忆](issues/11-memory-adjudication-adoption.md) | 10 | ready-for-agent | resolved |
 | [12 查看完整来源和处理追踪](issues/12-source-processing-trace.md) | 11 | ready-for-agent | resolved |
 | [13 整理 L2 场景](issues/13-l2-scenario-organization.md) | 11 | ready-for-agent | resolved |
-| [14 更新 L3 画像与关系概览](issues/14-l3-profile-overview.md) | 13 | ready-for-agent | open |
+| [14 更新 L3 画像与关系概览](issues/14-l3-profile-overview.md) | 13 | ready-for-agent | claimed |
 | [15 学习、审核和发布 Skill 草稿](issues/15-skill-learning-review.md) | 06、10、13、14 | ready-for-agent | open |
 | [16 导入单联系人历史](issues/16-contact-history-import.md) | 04、10 | ready-for-agent | claimed |
 | [17 接管资料整体删除与管理入口](issues/17-cross-domain-deletion.md) | 08、12、14、15、16 | ready-for-agent | open |

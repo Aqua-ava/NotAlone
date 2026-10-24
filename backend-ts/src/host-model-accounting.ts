@@ -114,7 +114,8 @@ async function authority(client:pg.Client,r:ModelLedgerReceipt,c:ModelTaskClaim)
   if(l3[0]&&!(await client.query('SELECT 1 FROM layered_profile_batch WHERE id=$1 AND lease_expires_at>clock_timestamp()',[l3[0].id])).rowCount)reject('model_accounting_work_stale');
   const work=l2[0]??l3[0],profile=l3.length===1,contract=new Set(String(row.contract).split(':'));
   const tools=contract.has(profile?'profile-tools-v1':'document-tools-v1');
-  const tail=work.proposal&&tools?(profile?1:row.profile_required?7:1):0;
+  // 文档工具有多轮提案；每轮只为后续核验保留一个额度，不能把整个下一步一次性锁死。
+  const tail=work.proposal&&tools?1:0;
   return {limit:row.model_call_limit,job:{table:'layered_memory_job',key:'task_id',id:row.task_id,tail}};
  }
  return reject('model_accounting_purpose_invalid');

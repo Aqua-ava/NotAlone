@@ -1,4 +1,4 @@
-/** L2共享宿主的私有Worker入口与已认证公共管理薄桥；profile修正仍回放旧执行方。 */
+/** L2/L3共享宿主的私有Worker入口与已认证公共管理薄桥。 */
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {timingSafeEqual} from 'node:crypto';
 import {parseJson,stringifyJson} from './host-json.ts';
@@ -28,11 +28,23 @@ export interface L2ScenarioHttpService {
     command:L2ScenarioManagement,
     signal:AbortSignal,
   ):Promise<Record<string,unknown>>;
+  reportProfileError(
+    scope:L2ScenarioScope,
+    command:L2ScenarioManagement,
+    signal:AbortSignal,
+  ):Promise<Record<string,unknown>>;
   withdrawScenario(
     scope:L2ScenarioScope,
     settingsGeneration:number,
     organizationGeneration:number,
     versionId:string,
+    signal:AbortSignal,
+  ):Promise<Record<string,unknown>>;
+  withdrawProfile(
+    scope:L2ScenarioScope,
+    settingsGeneration:number,
+    organizationGeneration:number,
+    profileVersionId:string,
     signal:AbortSignal,
   ):Promise<Record<string,unknown>>;
 }
@@ -93,10 +105,11 @@ function statusFor(error:unknown):{status:number;error:string}{
   if(error instanceof WechatHttpBodyError)return {status:error.status,error:error.code};
   const code=object(error)&&typeof error.code==='string'?error.code:undefined;
   if(code){
-    if(code==='l2_scenario_not_found')return {status:404,error:code};
+    if(['l2_scenario_not_found','l3_profile_not_found'].includes(code))return {status:404,error:code};
     if([
       'l2_scenario_scope_invalid','l2_scenario_claim_invalid','l2_scenario_management_invalid',
-      'l2_scenario_mapping_cursor_invalid','l2_scenario_budget_invalid',
+      'l2_scenario_mapping_cursor_invalid','l2_scenario_budget_invalid','l3_profile_scope_invalid',
+      'l3_profile_claim_invalid','l3_profile_management_invalid','l3_profile_budget_invalid',
     ].includes(code)) return {status:400,error:code};
     if(
       /_(?:stale|changed|conflict|required|disabled|not_found|no_changes)$/.test(code)
@@ -119,7 +132,8 @@ function publicLayeredPath(path:string):boolean{
     || /^\/api\/contacts\/[^/]+\/layered-memory$/.test(path)
     || path==='/api/memories/owner/layered-memory/summary-error'
     || path==='/api/memories/owner/layered-memory/withdraw-scenario'
-    || /^\/api\/contacts\/[^/]+\/layered-memory\/(?:summary-error|withdraw-scenario)$/.test(path);
+    || path==='/api/memories/owner/layered-memory/withdraw-profile'
+    || /^\/api\/contacts\/[^/]+\/layered-memory\/(?:summary-error|withdraw-scenario|withdraw-profile)$/.test(path);
 }
 
 export function createL2ScenarioHttp(options:L2ScenarioHttpOptions){
@@ -236,13 +250,11 @@ export function createL2ScenarioHttp(options:L2ScenarioHttpOptions){
           return {handled:true};
         }
         if(url.search)throw new L2ScenarioError('l2_scenario_management_invalid');
-        const {value:body,bytes}=await readJson(req,64*1024);
-        if(action==='/summary-error'&&object(body)&&body.target_kind==='profile')
-          return {handled:false,replayBody:bytes};
+        const {value:body}=await readJson(req,64*1024);
         if(action==='/summary-error'){
           if(
             !exact(body,managementKeys)
-            || body.target_kind!=='scenario'
+            || !['scenario','profile'].includes(body.target_kind)
             || !identifier(body.version_id)
             || !identifier(body.operation_id)
           ) throw new L2ScenarioError('l2_scenario_management_invalid');
@@ -254,7 +266,9 @@ export function createL2ScenarioHttp(options:L2ScenarioHttpOptions){
             operation_id:body.operation_id,
             reason:body.reason,
           };
-          const state=await options.service.reportParagraphError(scope,command,controller.signal);
+          const state=body.target_kind==='profile'
+            ? await options.service.reportProfileError(scope,command,controller.signal)
+            : await options.service.reportParagraphError(scope,command,controller.signal);
           controller.signal.throwIfAborted();
           respond(res,200,{layered_memory:state});
           return {handled:true};
@@ -267,6 +281,20 @@ export function createL2ScenarioHttp(options:L2ScenarioHttpOptions){
             body.settings_generation,
             body.organization_generation,
             body.scenario_version_id,
+            controller.signal,
+          );
+          controller.signal.throwIfAborted();
+          respond(res,200,{layered_memory:state});
+          return {handled:true};
+        }
+        if(action==='/withdraw-profile'){
+          if(!exact(body,['settings_generation','organization_generation','profile_version_id']))
+            throw new L2ScenarioError('l3_profile_management_invalid');
+          const state=await options.service.withdrawProfile(
+            scope,
+            body.settings_generation,
+            body.organization_generation,
+            body.profile_version_id,
             controller.signal,
           );
           controller.signal.throwIfAborted();

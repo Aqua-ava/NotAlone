@@ -1,9 +1,6 @@
 /** L2发布前的票12来源复验；只返回判定，不复制处理事件或来源正文。 */
 import type {Client} from 'pg';
-import {
-  L2ScenarioConflict,
-  type L2ScenarioPreparedWork,
-} from './l2-scenario-service.ts';
+import {L2ScenarioConflict} from './l2-scenario-service.ts';
 import type {L2ScenarioMemory, L2ScenarioScope} from './l2-scenario-workspace.ts';
 import {
   SourceProcessingTraceError,
@@ -16,6 +13,10 @@ type TraceStore = Pick<
   SourceProcessingTraceStore,
   'findMemoryTraceRecordInTransaction' | 'validateMemoryTraceRecordInTransaction'
 >;
+interface LayeredSourceWork {
+  scope: L2ScenarioScope;
+  inputs: readonly L2ScenarioMemory[];
+}
 
 function conflict(code: string): L2ScenarioConflict {
   return new L2ScenarioConflict(code);
@@ -87,7 +88,7 @@ async function ownerCandidateContact(
 
 /** 票13唯一来源 validator；根宿主在L2最终事务内复用同一client。 */
 export function createL2ScenarioSourceValidator(traces: TraceStore) {
-  return async function validateSources(client: Client, work: L2ScenarioPreparedWork): Promise<void> {
+  return async function validateSources(client: Client, work: LayeredSourceWork): Promise<void> {
     for (const memory of work.inputs) {
       if (memory.provenance_kind === 'manual_entry') {
         await assertManualInput(client, work.scope, memory);

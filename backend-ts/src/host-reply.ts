@@ -138,9 +138,17 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
         if(!l2Scenarios)throw new ReplyError('reply_remote_unavailable',503);
         return l2Scenarios.service.reportParagraphError(scope,command);
       }),
+      reportProfileError:(scope,command,signal)=>execute(signal,()=>{
+        if(!l2Scenarios)throw new ReplyError('reply_remote_unavailable',503);
+        return l2Scenarios.service.reportProfileError(scope,command);
+      }),
       withdrawScenario:(scope,settings,organization,version,signal)=>execute(signal,()=>{
         if(!l2Scenarios)throw new ReplyError('reply_remote_unavailable',503);
         return l2Scenarios.service.withdrawScenario(scope,settings,organization,version);
+      }),
+      withdrawProfile:(scope,settings,organization,version,signal)=>execute(signal,()=>{
+        if(!l2Scenarios)throw new ReplyError('reply_remote_unavailable',503);
+        return l2Scenarios.service.withdrawProfile(scope,settings,organization,version);
       }),
     }});
   const discussionSkillsRoot=options.discussionSkillsRoot??options.configuration?.skillsRoot;

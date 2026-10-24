@@ -5,6 +5,7 @@ import type {MessagesBudgetProfile} from './model-input-budget.ts';
 import type {ContextMetadata} from './reply-context-types.ts';
 import {readReplyContactOverview, readReplyOwnerOverview} from './reply-context-overview.ts';
 import {deleteSourceReplies} from './preference-erasure.ts';
+import {L3ProfileService} from './l3-profile-service.ts';
 import {
   L2ScenarioDocumentWorkspace,
   L2ScenarioError,
@@ -46,6 +47,7 @@ export interface L2ScenarioPreparedWork {
   inputs: L2ScenarioMemory[];
   current: L2ScenarioVersion[];
   dependency_ids: string[];
+  profile_required: boolean;
 }
 
 export interface L2ScenarioQualityStage {
@@ -88,7 +90,7 @@ export interface L2ScenarioServiceOptions {
    * 根集成接入票 12 的 SourceProcessingTraceStore 时，在最终事务中再次
    * fail-closed 核验实际来源；实现不得返回或复制来源正文。
    */
-  validateSources?: (client: Client, work: L2ScenarioPreparedWork) => Promise<void>;
+  validateSources?: (client: Client, work: {scope: L2ScenarioScope; inputs: L2ScenarioMemory[]}) => Promise<void>;
 }
 
 export interface L2ScenarioManagement {
@@ -381,6 +383,7 @@ export class L2ScenarioService {
   private readonly now: () => Date;
   private readonly validateSources: L2ScenarioServiceOptions['validateSources'];
   private readonly quality: L2ScenarioQualityReader | undefined;
+  private readonly l3: L3ProfileService;
 
   constructor(options: L2ScenarioServiceOptions) {
     this.transaction = options.transaction;
@@ -391,6 +394,15 @@ export class L2ScenarioService {
     this.now = options.now ?? (() => new Date());
     this.validateSources = options.validateSources;
     this.quality = options.quality;
+    this.l3 = new L3ProfileService({
+      transaction:options.transaction,
+      model:options.model,
+      binding:options.binding,
+      profile:options.profile,
+      budget:this.budget,
+      now:this.now,
+      ...(options.validateSources ? {validateSources:options.validateSources} : {}),
+    });
   }
 
   async prepare(scope: L2ScenarioScope, claim: L2ScenarioClaim): Promise<L2ScenarioPreparedWork | null> {
@@ -490,6 +502,7 @@ export class L2ScenarioService {
         inputs: eligible,
         current,
         dependency_ids: [...dependencies].sort(),
+        profile_required: Boolean(job.profile_required),
       };
     });
   }
@@ -742,6 +755,7 @@ export class L2ScenarioService {
     const work = await this.prepare(scope, claim);
     if (!work) {
       signal.throwIfAborted();
+      await this.l3.run(scope, claim, signal);
       return {state: await this.read(scope), status: 'idle', processed_count: 0};
     }
     try {
@@ -778,6 +792,8 @@ export class L2ScenarioService {
       await this.recordVerification(work, verification.result, null);
       signal.throwIfAborted();
       await this.publish(work, proposal.scenarios, signal);
+      signal.throwIfAborted();
+      if (work.profile_required) await this.l3.run(scope, claim, signal);
       return {
         state: await this.read(scope),
         status: 'completed',
@@ -1093,6 +1109,30 @@ export class L2ScenarioService {
       await client.query(`UPDATE public.layered_memory_job SET state='invalidated'
         WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid AND state='active'`,
       [scope.owner_id, contactParameter(scope)]);
+    });
+    return this.read(scope);
+  }
+
+  async withdrawProfile(
+    scope: L2ScenarioScope,
+    settingsGeneration: number,
+    organizationGeneration: number,
+    profileVersionId: string,
+  ): Promise<Row> {
+    await this.l3.withdraw(scope, settingsGeneration, organizationGeneration, profileVersionId);
+    return this.read(scope);
+  }
+
+  async reportProfileError(scope: L2ScenarioScope, command: L2ScenarioManagement): Promise<Row> {
+    this.validateScope(scope);
+    this.validateManageCommand(command);
+    await this.l3.reportError(scope, {
+      settings_generation:command.settings_generation,
+      organization_generation:command.organization_generation,
+      version_id:command.version_id,
+      item_index:command.item_index,
+      operation_id:command.operation_id,
+      reason:command.reason,
     });
     return this.read(scope);
   }

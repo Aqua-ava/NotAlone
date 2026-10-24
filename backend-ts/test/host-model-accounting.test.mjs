@@ -132,14 +132,15 @@ test('两条真实PG连接竞争原job最后额度，仅一预约成功',async t
  assert.equal((await c.query('SELECT model_calls_used FROM layered_memory_job')).rows[0].model_calls_used,1);
  assert.equal((await c.query('SELECT count(*)::int n FROM model_call_receipt')).rows[0].n,1);
 });
-test('PG实际work反算L2预留7及L3预留1，verification可使用预留，pending幂等',async t=>{
+test('PG实际work为文档多轮只预留核验额度，L2/L3共享预算且pending幂等',async t=>{
  const {c,owner,accounting:a,task,receipt}=await fixture(t),claim=await task('layered_memory','organize_memory',null);
  await c.query("INSERT INTO layered_memory_state(owner_id,contact_id,enabled,settings_generation) VALUES($1,NULL,true,1)",[owner]);
  await c.query("INSERT INTO layered_memory_job(task_id,owner_id,contact_id,settings_generation,target_key,contract,target_manifest,dependency_ids,state,run_remaining,model_call_limit,profile_required,profile_status) VALUES($1,$2,NULL,1,'synthetic','scenario:document-tools-v1:profile-tools-v1','{}','{}','active',1,8,true,'pending')",[claim.task_id,owner]);
  const batch=await l2(c,owner,null,claim.task_id),r=receipt(claim.task_id,null);
  await a.reserve(r,claim);await a.reserve(r,claim);await a.recordReserved(done(r));
- await assert.rejects(a.reserve({...r,attempt_id:randomUUID()},claim),/budget_exceeded|claim_spent/);
- assert.equal((await c.query('SELECT model_calls_used FROM layered_memory_job')).rows[0].model_calls_used,1);
+ const secondProposal={...r,attempt_id:randomUUID()};
+ await a.reserve(secondProposal,claim);await a.recordReserved(done(secondProposal));
+ assert.equal((await c.query('SELECT model_calls_used FROM layered_memory_job')).rows[0].model_calls_used,2);
  await c.query("UPDATE layered_memory_batch SET output_payload='{}' WHERE id=$1",[batch]);
  const verification={...r,attempt_id:randomUUID()};await a.reserve(verification,claim);await a.recordReserved(done(verification));
  await c.query("UPDATE layered_memory_batch SET status='succeeded' WHERE id=$1",[batch]);

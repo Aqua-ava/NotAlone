@@ -1,7 +1,7 @@
 # 14：更新 L3 画像与关系概览
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 13
 Spec: ../spec.md
@@ -45,4 +45,39 @@ Spec: ../spec.md
 
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+2026-10-25：代码与合成验证完成，`State` 保持 `claimed`，等待根线程完成实际 App／微信及真实模型验收后再改为 `resolved`。
+
+### DSH 查证
+
+- 锁定版本：`@deepseek-ai/dsh@0.2.1-rc.2`，commit `687f282e8625c6b8d11ff58211a90524be2e4317`；核对的是该 commit 的官方源码树，不以可变 master 为依据。
+- 官方依据：`docs/user/develop/basic/tool.zh.md:13`（`defineTool`）、`:36`（参数、执行与渲染契约）；`docs/tool-execution-pipeline.zh.md:8`（工具调用流水线）；`packages/core/tools/src/index.ts:1071`（工具注册）、`:1144`（执行守卫）；`packages/llm/llm/README.md:34`、`:63`、`:93`（单次 provider attempt、`prepareCall`、终止 chunk）；`apps/cli/src/profile-boot.ts:283`（官方 profile 启动与清理边界）。
+- 核验结论与适配：L3 使用公开的 `defineTool` 定义只读场景、暂存 `profile.md` 与独立核验工具；文档执行、范围、轮次、预算、核验、发布、取消均由业务代码控制。模型只提交工具调用，不能直接写数据库、文件系统或发送消息。未发现需要修改 DSH 私有 API 或核心的缺口，因此未改动框架源码。
+
+### 已实现
+
+- 新增 L3 内存工作区、逐条结构／版本／时间／不确定性／行动建议校验、独立忠实度核验、增量保留、纠错正文隔离及短事务发布。
+- L3 与 L2 在同一 Worker 租约内衔接：L2 发布后继续 L3；已有成功 L2 回执时只补 L3，不重新生成场景。无变化时复用同一画像版本，不调用模型。
+- 画像版本、场景版本集合和 `organization_generation` 原子推进；generation 场景缺失、重复、跨范围、清单或底层 revision 变化时失败关闭，不投影部分目录。部分旧场景失效时不用覆盖失效集合的旧画像做增量基准，改从当前有效集合重建。
+- 本人与联系人按 `owner_id + contact_id` 隔离；回复上下文及 Skill 审核导航复用同一冻结 generation、revision 和依赖摘要。画像可查看、总结纠错、撤回和删除，来源失效会物理清除 L3 批次并令旧快照失效。
+- 用户纠错撤下当前画像并保护完整实际输入窗口；纠错正文只作为最小错误对照进入后续提案和核验，不能再由其他来源换入发布。
+- 多轮文档调用改为每次只为后续核验保留一个额度；提案与核验输入都在物理调用前执行字符预算检查。L2／L3 共享累计 job 预算，取消与显式重试仍有界。
+
+变更文件：
+
+- 新增：`backend-ts/src/l3-profile-workspace.ts`、`backend-ts/src/l3-profile-service.ts`
+- 接入：`backend-ts/src/l2-scenario-service.ts`、`backend-ts/src/l2-scenario-http.ts`、`backend-ts/src/l2-scenario-source-validation.ts`、`backend-ts/src/host-reply.ts`、`backend-ts/src/host-model-accounting.ts`
+- 测试：`backend-ts/test/l3-profile-workspace.test.mjs`、`backend-ts/test/l3-profile-service.test.mjs`、`backend-ts/test/l2-scenario-http.test.mjs`、`backend-ts/test/l2-scenario-service.test.mjs`、`backend-ts/test/l2-scenario-shared-host.test.mjs`、`backend-ts/test/host-model-accounting.test.mjs`
+
+### 验证结果
+
+- `node node_modules/typescript/bin/tsc --noEmit`：通过。
+- L3 工作区、服务、公开 HTTP：`22/22` 通过，覆盖增量／无变化跳过、generation 精确闭合、部分旧场景失效后重建、核验输入预算、本人／联系人隔离、纠错、撤回、来源物理删除、晚结果、取消重试、仅剩两次额度及 HTTP 错误映射。
+- L2 服务、Worker、宿主及模型记账：`25/25` 通过，覆盖 L2→L3 同租约、成功 L2 回执只补 L3、Worker 完成后收口、共享预算和 pending 幂等。
+- 共享官方 DSH profile、分层回复读取、Skill 来源导航：`15/15` 通过，覆盖 6 次真实合成模型请求的 L2→L3、公开撤回、回复／审核来源的当前 generation 核验与冻结快照失效。
+- `git diff --check`：通过。
+
+### 数据与遗留
+
+- 自动化只使用测试临时 PostgreSQL 与合成模型／来源；测试 fixture 自动销毁数据库，无真实消息发送或外部资料扩大。
+- 正式数据库仅做只读状态核对，未写入画像、任务或验收结果。当前等待根线程复用已运行的 `npm run dev` 实例，从正式范围的有效性检查出发完成实际 App／微信恢复、画像查看／纠错／撤回和真实模型质量验收；不得用测试库结果代替。
+- 未执行打包、推送、远端分支、PR、外部消息或 DSH 核心修改。

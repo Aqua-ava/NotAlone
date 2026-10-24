@@ -6,6 +6,7 @@ import {L2ScenarioService} from '../src/l2-scenario-service.ts';
 import {completeL2ScenarioWorkerStep} from '../src/l2-scenario-worker.ts';
 import {readReplyContactOverview} from '../src/reply-context-overview.ts';
 import {captureLayeredSnapshot,validateLayeredSnapshot} from '../src/reply-context-layered.ts';
+import {renderProfile} from '../src/l3-profile-workspace.ts';
 
 const budget = {
   max_memories: 20,
@@ -331,17 +332,42 @@ test('合成PG：质量状态必须由注入读取器提供，缺省和读取失
   }finally{await f.close();}
 });
 
-test('合成PG：仍依赖L3的任务可发布L2，但保留回执等待L3且不伪造任务成功',async()=>{
+test('合成PG：同一租约从L2回执继续L3，成功后才完成任务',async()=>{
   const f=await createStorageFixture();try{
-    const x=await createScope(f),port=fakePort(x.memory),l2=service(f,port);
+    const x=await createScope(f);
     await f.client.query(`UPDATE layered_memory_job
-      SET profile_required=true,profile_status='pending' WHERE task_id=$1`,[x.taskId]);
+      SET profile_required=true,profile_status='pending',target_manifest=$2::jsonb WHERE task_id=$1`,
+    [x.taskId,JSON.stringify([{memory_id:x.memoryId,revision:1}])]);
+    let calls=0;
+    const port={async call(input){
+      calls++;await input.requireCurrent();
+      const tool=(name,args)=>({blocks:[{type:'tool-call',id:`combined-${calls}`,name,arguments:JSON.stringify(args)}],receipt_id:randomUUID()});
+      if(calls===1)return tool('write',{path:'course.md',content:markdown(x.memory)});
+      if(calls===2)return {blocks:[],receipt_id:randomUUID()};
+      if(calls===3)return tool('ScenarioVerificationOutput',{results:[{
+        scenario_index:0,paragraph_index:0,supported:true,evidence:[{memory_id:x.memoryId,quote:x.memory.text}],
+      }]});
+      if(calls===4)return tool('write',{path:'profile.md',content:renderProfile({entries:[{
+        text:'双方有二〇二四年的共同课程经历。',kind:'fact',section:'life_context',
+        basis:'底层记忆直接记载共同参加课程。',temporal_status:'historical',uncertainty:'',
+        references:[{memory_id:x.memoryId,revision:1}],
+      }]})});
+      if(calls===5)return {blocks:[],receipt_id:randomUUID()};
+      if(calls===6)return tool('ProfileVerificationOutput',{results:[{
+        entry_index:0,supported:true,evidence:[{memory_id:x.memoryId,quote:x.memory.text}],
+      }]});
+      throw new Error('unexpected_combined_call');
+    }};
+    const l2=service(f,port);
     const run=await l2.run(x.scope,x.claim,new AbortController().signal);
     assert.equal(run.status,'completed');
     assert.equal(run.state.scenarios.length,1);
+    assert.equal(run.state.profile.entries.length,1);
+    assert.equal(run.state.organization_generation,2);
+    assert.equal(calls,6);
     assert.equal((await f.client.query(
       'SELECT pending_receipt,profile_status FROM layered_memory_job WHERE task_id=$1',[x.taskId],
-    )).rows[0].pending_receipt,true);
+    )).rows[0].profile_status,'succeeded');
     await f.client.query('BEGIN');
     let committed=false;
     try{
@@ -350,27 +376,68 @@ test('合成PG：仍依赖L3的任务可发布L2，但保留回执等待L3且不
         stepName:'organize_memory',workerId:x.claim.worker_id,
         leaseGeneration:x.claim.lease_generation,messageCount:0,
       },run.processed_count);
-      assert.deepEqual(completion,{processedCount:run.processed_count,totalCount:0,state:'failed'});
+      assert.deepEqual(completion,{processedCount:run.processed_count,totalCount:0,state:'complete'});
       await f.client.query('COMMIT');
       committed=true;
     }finally{
       if(!committed)await f.client.query('ROLLBACK');
     }
-    assert.equal(port.calls,3);
     assert.deepEqual((await f.client.query(`SELECT j.state AS job_state,j.pending_receipt,j.profile_status,
       t.status AS task_status,t.last_error_code AS task_error,s.status AS step_status,
-      s.worker_id,s.lease_expires_at,state.status AS layer_status,state.error_code AS layer_error,b.status AS batch_status
+      s.worker_id,s.lease_expires_at,state.status AS layer_status,state.error_code AS layer_error
       FROM layered_memory_job j JOIN background_task t ON t.id=j.task_id
       JOIN background_task_step s ON s.task_id=t.id
       JOIN layered_memory_state state ON state.owner_id=j.owner_id
         AND state.contact_id IS NOT DISTINCT FROM j.contact_id
-      JOIN layered_memory_batch b ON b.id=j.receipt_batch_id
       WHERE j.task_id=$1`,[x.taskId])).rows[0],{
-      job_state:'failed',pending_receipt:true,profile_status:'pending',
-      task_status:'failed',task_error:'profile_attempt_interrupted',
-      step_status:'failed',worker_id:null,lease_expires_at:null,
-      layer_status:'failed',layer_error:'profile_attempt_interrupted',batch_status:'succeeded',
+      job_state:'complete',pending_receipt:false,profile_status:'succeeded',
+      task_status:'succeeded',task_error:null,
+      step_status:'succeeded',worker_id:null,lease_expires_at:null,
+      layer_status:'ready',layer_error:null,
     });
+  }finally{await f.close();}
+});
+
+test('合成PG：恢复pending L2回执时只补L3，不重新提案L2',async()=>{
+  const f=await createStorageFixture();try{
+    const x=await createScope(f),l2Port=fakePort(x.memory),l2=service(f,l2Port);
+    const first=await l2.run(x.scope,x.claim,new AbortController().signal);
+    assert.equal(first.state.organization_generation,1);assert.equal(l2Port.calls,3);
+    await f.client.query(`UPDATE layered_memory_job
+      SET profile_required=true,profile_status='pending' WHERE task_id=$1`,[x.taskId]);
+    let calls=0;
+    const profilePort={async call(input){
+      calls++;await input.requireCurrent();
+      const tool=(name,args)=>({blocks:[{type:'tool-call',id:`resume-${calls}`,name,arguments:JSON.stringify(args)}],receipt_id:randomUUID()});
+      if(calls===1)return tool('write',{path:'profile.md',content:renderProfile({entries:[{
+        text:'双方有二〇二四年的共同课程经历。',kind:'fact',section:'life_context',
+        basis:'底层记忆直接记载共同参加课程。',temporal_status:'historical',uncertainty:'',
+        references:[{memory_id:x.memoryId,revision:1}],
+      }]})});
+      if(calls===2)return {blocks:[],receipt_id:randomUUID()};
+      if(calls===3)return tool('ProfileVerificationOutput',{results:[{
+        entry_index:0,supported:true,evidence:[{memory_id:x.memoryId,quote:x.memory.text}],
+      }]});
+      throw new Error('unexpected_resume_call');
+    }};
+    const resumed=await service(f,profilePort).run(x.scope,x.claim,new AbortController().signal);
+    assert.equal(calls,3);assert.equal(l2Port.calls,3);
+    assert.equal(resumed.state.profile.entries.length,1);
+    assert.equal(resumed.state.organization_generation,2);
+    await f.client.query('BEGIN');
+    let completion;
+    try{
+      completion=await completeL2ScenarioWorkerStep(f.client,{
+        ownerId:x.ownerId,contactId:x.contactId,taskId:x.taskId,stepId:x.claim.step_id,
+        stepName:'organize_memory',workerId:x.claim.worker_id,
+        leaseGeneration:x.claim.lease_generation,messageCount:1,
+      },resumed.processed_count);
+      await f.client.query('COMMIT');
+    }catch(error){
+      await f.client.query('ROLLBACK');
+      throw error;
+    }
+    assert.deepEqual(completion,{processedCount:1,totalCount:1,state:'complete'});
   }finally{await f.close();}
 });
 

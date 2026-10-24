@@ -48,11 +48,11 @@ test('共享官方profile：一次L2装配经手录来源发布、读取、summa
     organization_generation=0 WHERE owner_id=$1 AND contact_id=$2`,[owner,contact]);
   await f.client.query(`INSERT INTO layered_memory_job
     (task_id,owner_id,contact_id,settings_generation,target_key,contract,target_manifest,dependency_ids,
-     state,run_remaining,model_call_limit,profile_required)
-    VALUES($1,$2,$3,1,$4,'scenario-v3:document-tools-v1','[]','{}','active',1,8,false)`,
+     state,run_remaining,model_call_limit,profile_required,profile_status)
+    VALUES($1,$2,$3,1,$4,'scenario-v3:document-tools-v1:profile-tools-v1','[]','{}','active',1,8,true,'pending')`,
   [task,owner,contact,`synthetic:${task}`]);
 
-  let latestMemory=null,latestMemoryText=null,preferredMemoryText=null;
+  let latestMemory=null,latestMemoryText=null,preferredMemoryText=null,profileMemory=null,profileMemoryText=null;
   host=await startReplyServiceHost(t,{name:f.client.database,user:f.client.user,replyOwner:owner,replyToken:token,close:closeFixture},
     (_req,res,requests,events)=>{
       const body=requests.at(-1).body;
@@ -60,6 +60,22 @@ test('共享官方profile：一次L2装配经手录来源发布、读取、summa
       if(names.join(',')==='read,write,edit'){
         if(body.messages.length===1){
           const payload=JSON.parse(body.messages[0].content.find(block=>block.type==='text').text);
+          if(payload.layer==='l3'){
+            const selected=payload.memories[0];
+            if(!selected)throw new Error('l3_synthetic_memory_missing');
+            profileMemory=selected.memory_id;
+            profileMemoryText=selected.text;
+            useTool(events,'write',{path:'profile.md',content:`# 长期背景
+
+<!-- ENTRY ${JSON.stringify({
+  kind:'fact',section:'life_context',basis:'共享宿主合成记忆直接记载双方共同课程。',
+  temporal_status:'historical',uncertainty:'',
+  references:[{memory_id:selected.memory_id,revision:selected.revision}],
+})} -->
+双方有二〇二四年的共享宿主合成课程经历。`},'profile-write');
+            sendEvents(res,events);
+            return;
+          }
           const selected=preferredMemoryText
             ? payload.memories.find(memory=>memory.text===preferredMemoryText)
             : payload.memories.at(-1);
@@ -71,6 +87,13 @@ test('共享官方profile：一次L2装配经手录来源发布、读取、summa
 ${latestMemoryText}
 <!-- SOURCES [{"memory_id":"${latestMemory}","revision":1}] -->`},'shared-write');
         }
+        sendEvents(res,events);
+        return;
+      }
+      if(names.join(',')==='ProfileVerificationOutput'){
+        useTool(events,'ProfileVerificationOutput',{results:[{
+          entry_index:0,supported:true,evidence:[{memory_id:profileMemory,quote:profileMemoryText}],
+        }]},'profile-verify');
         sendEvents(res,events);
         return;
       }
@@ -106,11 +129,6 @@ ${latestMemoryText}
   const missing=await publicRequest(`/api/contacts/${randomUUID()}/layered-memory`);
   assert.equal(missing.status,404,JSON.stringify(missing.body));
 
-  const profileSummary={settings_generation:1,organization_generation:0,target_kind:'profile',
-    version_id:randomUUID(),item_index:0,reason:'profile修正仍由旧执行方处理。',operation_id:randomUUID()};
-  const profileReplay=await publicRequest(`/api/contacts/${contact}/layered-memory/summary-error`,profileSummary);
-  assert.deepEqual(profileReplay,{status:202,body:{replayed:true}});
-
   const claim={task_id:task,step_id:step,step_name:'organize_memory',worker_id:worker,lease_generation:1};
   const workerClaim={ownerId:owner,contactId:contact,taskId:task,stepId:step,stepName:'organize_memory',
     workerId:worker,leaseGeneration:1,messageCount:0};
@@ -126,12 +144,16 @@ ${latestMemoryText}
   assert.equal(runBody.status,'completed');
   assert.equal(runBody.processed_count,1);
   assert.equal(runBody.state.scenarios.length,1);
-  assert.equal(host.requests.length,3);
+  assert.equal(runBody.state.profile.entries.length,1);
+  assert.equal(runBody.state.organization_generation,2);
+  assert.equal(host.requests.length,6);
   assert.deepEqual(host.requests.map(request=>(request.body.tools??[]).map(tool=>tool.name)),[
     ['read','write','edit'],['read','write','edit'],['ScenarioVerificationOutput'],
+    ['read','write','edit'],['read','write','edit'],['ProfileVerificationOutput'],
   ]);
-  assert.equal((await f.client.query('SELECT model_calls_used FROM layered_memory_job WHERE task_id=$1',[task])).rows[0].model_calls_used,3);
+  assert.equal((await f.client.query('SELECT model_calls_used FROM layered_memory_job WHERE task_id=$1',[task])).rows[0].model_calls_used,6);
   const scenario=runBody.state.scenarios[0];
+  const profile=runBody.state.profile;
   await f.client.query('BEGIN');
   try{
     const completion=await completeL2ScenarioWorkerStep(f.client,workerClaim,runBody.processed_count);
@@ -146,14 +168,23 @@ ${latestMemoryText}
     FROM layered_memory_job j JOIN background_task t ON t.id=j.task_id
     JOIN background_task_step s ON s.task_id=t.id WHERE j.task_id=$1`,[task])).rows[0],
   {job_state:'complete',pending_receipt:false,task_status:'succeeded',step_status:'succeeded'});
+  const profileWithdrawn=await publicRequest(`/api/contacts/${contact}/layered-memory/withdraw-profile`,{
+    settings_generation:runBody.state.settings_generation,
+    organization_generation:runBody.state.organization_generation,
+    profile_version_id:profile.version_id,
+  });
+  assert.equal(profileWithdrawn.status,200,JSON.stringify(profileWithdrawn.body));
+  assert.equal(profileWithdrawn.body.layered_memory.profile,null);
+  assert.equal(profileWithdrawn.body.layered_memory.scenarios.length,1);
+  assert.equal(profileWithdrawn.body.layered_memory.organization_generation,3);
   const earlyWrongScope=await fetch(host.url+'/internal/layered-memory/run',{method:'POST',
     headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},
     body:JSON.stringify({scope:{owner_id:owner,contact_id:randomUUID()},claim})});
   const earlyWrongScopeBody=await earlyWrongScope.json();
   assert.equal(earlyWrongScope.status,409,JSON.stringify(earlyWrongScopeBody));
   const corrected=await publicRequest(`/api/contacts/${contact}/layered-memory/summary-error`,{
-    settings_generation:runBody.state.settings_generation,
-    organization_generation:runBody.state.organization_generation,
+    settings_generation:profileWithdrawn.body.layered_memory.settings_generation,
+    organization_generation:profileWithdrawn.body.layered_memory.organization_generation,
     target_kind:'scenario',version_id:scenario.version_id,item_index:0,
     reason:'共享宿主合成段落需要撤回。',operation_id:randomUUID(),
   });
