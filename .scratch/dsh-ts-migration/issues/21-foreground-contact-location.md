@@ -54,3 +54,5 @@ Spec: ../spec.md
 真实窗口置前后的原生 worker 进入采集并完成顶部定位，但卡在 headerOcrStarted，2500ms 超时；纯合成图、后台线程与环境单变量、官方 CPU 设置读回及一次 30 秒诊断仍未返回；公开支持固定中英准确模式的 revision 2、3 也均超时，已按预定条件停止该分支。堆栈定位 Vision/TextRecognition→ANE 模型编译 XPC 等待，服务为何不回复尚未证明；没有可通过的修复，不延长预算或改 DSH 核心。见[原生诊断](../foreground-location/native-ocr-diagnosis-conclusion.md)及[真实范围、App 和清理证据](../real-wechat-acceptance-20261024.md)。原始视觉帧未保存上传，未 OCR 聊天正文、发送消息或调用外部模型。
 
 当前仍缺真实原生名称的正向观察及完整新鲜身份链。已验证合成匹配／协议、当前真实失败与用户体验反馈分别记录，不宣称集成可用。测试库、私有范围文件、用户目录和自有进程均已清理，保留受保护的源码工作树及其他任务使用的共享 PG。
+
+2026-10-25 追加诊断（已并入主树 `f9381923`）：同一固定合成图在 accurate revision 3 下，中英、仅简中、自动语言及 32BGRA CVPixelBuffer 路径均约 2505–2510ms；fast 仅 36ms 且零结果，VisionKit 可快速返回但无产品要求的置信度。系统资源报告确认等待伴随 ANECompilerService 长时间编译，而不是单纯 XPC 死锁；当前开发签名二进制没有 macOS 27 Background Inference entitlement，临时 ad-hoc 声明会被系统终止，不能在现有开发签名路径据以修复。完整探针、负载门和权限证据见[补充审计](../root-next-21/ane-compiler-addendum.md)。accurate、0.90、2500ms 门槛均未降低，票继续保持 claimed，等待健康 Mac 对照或系统修复。
