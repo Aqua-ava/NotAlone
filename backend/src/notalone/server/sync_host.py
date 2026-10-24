@@ -238,6 +238,7 @@ class SyncHost:
         "_engine_lock",
         "_foreground_lock",
         "_observation_generation",
+        "_foreground_transferred",
         "_observation_mutations",
         "_state_lock",
         "_latest",
@@ -268,6 +269,7 @@ class SyncHost:
         self._engine_lock = threading.Lock()
         self._foreground_lock = threading.Lock()
         self._observation_generation = 0
+        self._foreground_transferred = False
         self._observation_mutations = 0
         self._state_lock = threading.Lock()
         self._latest: FrontSyncCycleReport | None = None
@@ -331,6 +333,22 @@ class SyncHost:
     # ------------------------------------------------------------------
     # 状态与控制端口
     # ------------------------------------------------------------------
+
+    def transfer_foreground_location(self) -> dict:
+        """只移交前台定位：先停收、取消，再确认原生观察已排空。"""
+
+        with self._state_lock:
+            self._foreground_transferred = True
+            self._observation_generation += 1
+        cancel = getattr(self._engine, "cancel_foreground_observation", None)
+        if callable(cancel):
+            cancel()
+        if not self._foreground_lock.acquire(timeout=3.5):
+            raise SyncHostBusy("前台定位仍在收尾。")
+        try:
+            return {"state": "stopped", "active_requests": 0}
+        finally:
+            self._foreground_lock.release()
 
     def observe_foreground(self) -> FreshForegroundObservation:
         """前台锁预算200ms、单轮预算3.2秒；后台正文 I/O 不占前台锁。"""
@@ -581,8 +599,8 @@ class SyncHost:
 
         def check_current() -> None:
             with self._state_lock:
-                if self._stop_event.is_set():
-                    raise SyncHostStopped("同步宿主已停止。")
+                if self._stop_event.is_set() or self._foreground_transferred:
+                    raise SyncHostStopped("同步宿主已停止或前台定位已移交。")
                 if self._observation_mutations or generation != self._observation_generation:
                     raise SyncHostBusy("观察授权已变化，请重新观察。")
 

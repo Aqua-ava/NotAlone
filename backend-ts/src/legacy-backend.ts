@@ -61,15 +61,25 @@ export class LegacyBackend {
     }
     return await response.json() as {state?:string;active_requests?:number};
   }
-  proxy(req:IncomingMessage,res:ServerResponse):void {
+  proxy(req:IncomingMessage,res:ServerResponse,completion?:{settled:()=>void;uncertain:()=>void}):void {
     const c=this.connection;
-    if(!c || this.stopping){res.writeHead(503);res.end('{"error":"legacy_unavailable"}');return;}
+    if(!c || this.stopping){res.writeHead(503);res.end('{"error":"legacy_unavailable"}');completion?.settled();return;}
+    let finished=false;
+    let timer:NodeJS.Timeout|undefined;
+    const finish=(known:boolean)=>{if(finished)return;finished=true;clearTimeout(timer);if(known)completion?.settled();else completion?.uncertain();};
     const upstream=request(`http://${c.address}${req.url}`,{method:req.method,headers:{...req.headers,host:c.address,authorization:`Bearer ${c.token}`}},response=>{
-      res.writeHead(response.statusCode??502,{...response.headers,'cache-control':'no-store'});response.pipe(res);
+      response.once('end',()=>finish(true));response.once('aborted',()=>finish(false));response.once('error',()=>finish(false));
+      if(!res.destroyed){res.writeHead(response.statusCode??502,{...response.headers,'cache-control':'no-store'});response.pipe(res);}
+      // 下游离开后仍排空完整上游响应；只有业务端确认结束才释放身份变更门。
+      if(completion){res.once('close',()=>response.resume());response.resume();}
     });
     // 连接中断不重放请求，停止/取消仍沿原业务HTTP合同执行。
-    upstream.on('error',()=>{if(!res.headersSent)res.writeHead(503,{'content-type':'application/json'});res.end('{"error":"legacy_unavailable"}');});
-    res.once('close',()=>upstream.destroy());req.pipe(upstream);
+    upstream.on('error',()=>{finish(false);if(!res.destroyed){if(!res.headersSent)res.writeHead(503,{'content-type':'application/json'});res.end('{"error":"legacy_unavailable"}');}});
+    if(completion){
+      timer=setTimeout(()=>{finish(false);upstream.destroy();},30000);timer.unref();
+      req.once('aborted',()=>{finish(false);upstream.destroy();});
+    }else res.once('close',()=>upstream.destroy());
+    req.pipe(upstream);
   }
   async stop():Promise<void>{
     if(this.stopping)return this.exited;
