@@ -400,8 +400,10 @@ class PostgresRelationshipOverviewStore:
 
     @staticmethod
     def _bind_dependencies(entries: list[OverviewEntry], dependencies: list[dict]) -> list[OverviewEntry]:
-        by_id = {item["memory_id"]: item["source_ids"] for item in dependencies}
-        return [replace(entry, dependency_ids=tuple(UUID(item) for item in by_id[str(entry.memory.memory_id)]))
+        by_id = {item["memory_id"]: item for item in dependencies}
+        return [replace(entry,
+                        dependency_ids=tuple(UUID(item) for item in by_id[str(entry.memory.memory_id)]["source_ids"]),
+                        dependency_manifest=by_id[str(entry.memory.memory_id)])
                 for entry in entries]
 
     @staticmethod

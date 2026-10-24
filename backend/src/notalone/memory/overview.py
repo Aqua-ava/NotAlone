@@ -32,6 +32,8 @@ class OverviewEntry:
     provenance_kind: Literal["manual_entry", "source_supported", "unknown"]
     references: tuple[OverviewSourceReference, ...]
     dependency_ids: tuple[UUID, ...] = ()
+    # 仅事务内消费者使用完整指纹；公开概览不序列化该字段。
+    dependency_manifest: dict | None = None
 
     @property
     def is_latest(self) -> bool:

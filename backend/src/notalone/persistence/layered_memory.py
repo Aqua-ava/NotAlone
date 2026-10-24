@@ -129,12 +129,15 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
 
     @staticmethod
     def _manifest(connection, scope, entries):
-        manifest = connection.execute("SELECT manifest FROM public.relationship_overview_projection "
-            "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND scope_kind=%s",
-            (scope.owner_id, scope.contact_id, "owner" if isinstance(scope, OwnerScope) else "contact")).fetchone()["manifest"]
-        by_id = {str(entry.memory.memory_id): entry for entry in entries}
-        return [{**item, "organization_timing_sha256": _digest(by_id[item["memory_id"]].memory.timing.to_payload())}
-                for item in manifest["memories"] if item["memory_id"] in by_id]
+        # 移交后概览缓存可以不存在或过期；只消费本次锁内读取绑定的指纹。
+        result = []
+        for entry in entries:
+            manifest = entry.dependency_manifest
+            if manifest is None or manifest.get("memory_id") != str(entry.memory.memory_id):
+                raise LayeredMemoryConflict("整理实际输入指纹不可核验。")
+            result.append({**manifest,
+                "organization_timing_sha256": _digest(entry.memory.timing.to_payload())})
+        return result
 
     def read(self, scope, *, mapping_cursor=None):
         with self.transaction(scope) as (connection, state, overview):
