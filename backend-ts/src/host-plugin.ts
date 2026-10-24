@@ -170,9 +170,10 @@ async function start(ctx: Context) {
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
       if(state!=='running'){respond(503,{error:'runtime_stopping'});return;}
-      if(progress){
+      const progressPath=/^\/api\/contacts\/[^/]+\/memory-processing(?:\/resume)?$|^\/api\/owner\/memory-processing(?:\/resume)?$/.test(url.pathname);
+      if(progress&&progressPath){
         let body:Record<string,any>|undefined;
-        if(req.method==='POST'){
+        if(req.method==='POST'&&url.pathname.endsWith('/resume')){
           try{body=await readBody(req);}catch{body=undefined;}
         }
         const result=await progress.handle(req.method??'',url.pathname,body);

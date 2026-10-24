@@ -80,6 +80,8 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A入口、原B
  const progress=await request(progressRoute);assert.equal(progress.status,200);assert.equal(progress.body.tasks[0].task_id,task);assert.equal(progress.body.tasks[0].status,'extracting');
  const busy=await request(progressRoute+'/resume',{task_id:task,action:'resume'});assert.deepEqual(busy,{status:200,body:{task_id:task,status:'busy'}});assert.equal(seen.length,0);
  assert.equal((await request(progressRoute+'/resume',{task_id:task,action:'retry'})).status,400);assert.equal(seen.length,0);
+ // 启用处理状态路由后，其他POST正文仍完整交给原入口；已初始化owner使恢复被拒绝而非丢正文。
+ const untouched=await request('/api/setup/initialize',{display_name:'合成不应创建',create_only:true});assert.equal(untouched.status,409);assert.equal(untouched.body.error,'owner_already_configured');
  const bridge=JSON.parse(await readFile(bridgeFile,'utf8'));assert.equal((await stat(bridgeFile)).mode&0o777,0o600);
  assert.equal(bridge.NOTALONE_EXTRACTION_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_REPLY_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_REMOTE_URL,base);assert.ok(bridge.NOTALONE_EXTRACTION_REMOTE_TOKEN!==connection.token);
  const runPython=async mode=>{try{return JSON.parse((await execute(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),[resolve('../backend/tests/support/extraction_host_entry.py'),mode,dsn,owner,contact,source,JSON.stringify(claim),base],{cwd:project,env:{PATH:process.env.PATH,USER:process.env.USER,HOME:db.directory,PYTHONPATH:join(project,'backend/src'),PYTHONDONTWRITEBYTECODE:'1',NOTALONE_DISABLE_DOTENV:'1',...bridge},timeout:25000,maxBuffer:1048576})).stdout);}catch(error){throw Error((error.stderr??'').slice(-1800)+'\n'+safeOutput().slice(-1800));}};
