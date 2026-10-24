@@ -154,6 +154,13 @@ export class HostStorage {
   async businessReadTransaction<T>(operation: (client: pg.Client) => Promise<T>): Promise<T> {
     return this.withClient(false, async client => { await this.requireReady(client); return operation(client); }, true);
   }
+  /** 供共享任务存储复用同一受控连接配置；调用方负责关闭。 */
+  async businessPool(): Promise<pg.Pool> {
+    this.assertOpen();
+    if (!this.databaseUrl) throw new HostStorageError('database_unconfigured');
+    const configuration = await connectionOptions(this.databaseUrl, this.values);
+    return new pg.Pool(configuration.options);
+  }
   private async withClient<T>(write: boolean, operation: (client: pg.Client) => Promise<T>, business = false): Promise<T> {
     this.assertOpen();
     if (!this.databaseUrl) throw new HostStorageError('database_unconfigured');

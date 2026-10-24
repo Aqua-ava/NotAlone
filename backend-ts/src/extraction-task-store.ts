@@ -187,6 +187,16 @@ export class ExtractionTaskStore {
    return {task_id:taskId,status:'queued'};
   });
  }
+ /** owner入口先从任务行确定真实联系人，再复用同一contact锁与来源门禁。 */
+ async resumeOwner(ownerId:string,taskId:string,action:'resume'|'restart'):Promise<{task_id:string;status:string}>{
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId)
+   ||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)
+   ||!['resume','restart'].includes(action))throw new ExtractionTaskError('resume_request_invalid');
+  const row=(await this.pool.query(`SELECT contact_id FROM background_task WHERE id=$1 AND owner_id=$2
+   AND task_type IN ('import','observation')`,[taskId,ownerId])).rows[0];
+  if(!row)throw new ExtractionTaskError('task_not_found');
+  return this.resume({ownerId,contactId:row.contact_id},taskId,action);
+ }
  /** 只列出可交给提取 Worker 的联系人范围；真正领取仍走 claim 的原子租约。 */
  async readyScopes(ownerId:string,limit=64,runtimeModes:readonly ('legacy'|'bounded-runtime-v1')[]=['legacy']):Promise<ExtractionScope[]>{
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId)

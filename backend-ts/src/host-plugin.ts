@@ -25,6 +25,8 @@ import {NativeForegroundProbe} from './foreground-location-probe.ts';
 import { createSyncIncrementalApi } from './sync-incremental-api.ts';
 import {startHostModelRuntime} from './host-model-runtime.ts';
 import {usageSummary} from './usage-summary.ts';
+import {ExtractionTaskStore} from './extraction-task-store.ts';
+import {ExtractionProgressApi} from './extraction-progress-http.ts';
 export const name = 'notalone-host';
 export const inject = ['appReady','llm','agents','sessions','tools','systemPrompt','skills'];
 
@@ -60,6 +62,10 @@ async function start(ctx: Context) {
   const compatibility = await storage.compatibility();
   if (compatibility.code !== 'ready') throw new Error('HOST_DATABASE_UNAVAILABLE');
   const ownerStatus=await storage.setupStatus();
+  const progressPool=await storage.businessPool();
+  const progress=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
+    ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId)
+    : undefined;
   let legacy: LegacyBackend | undefined;
   let handoff: ContactHandoff | undefined;
   let memoryHandoff: MemoryManagementHandoff | undefined;
@@ -113,6 +119,7 @@ async function start(ctx: Context) {
         if(errors.length)throw new AggregateError(errors,'范围与资料资源未完整关闭');
       },
       ()=>modelRuntime?modelRuntime.close(async()=>{await legacy?.stop();}):legacy?.stop(),
+      ()=>progressPool.end(),
       ()=>storage.close()]){
       try{await release();}catch(error){failures.push(error);}
     }
@@ -163,6 +170,20 @@ async function start(ctx: Context) {
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
       if(state!=='running'){respond(503,{error:'runtime_stopping'});return;}
+      if(progress){
+        let body:Record<string,any>|undefined;
+        if(req.method==='POST'){
+          try{body=await readBody(req);}catch{body=undefined;}
+        }
+        const result=await progress.handle(req.method??'',url.pathname,body);
+        if(result){
+          if(url.search){respond(400,{error:'memory_processing_request_invalid'});return;}
+          respond(result.status,result.body);return;
+        }
+        if(req.method==='POST'&&url.pathname.includes('/memory-processing')){
+          respond(400,{error:'memory_processing_request_invalid'});return;
+        }
+      }
       if(url.pathname==='/api/ledger/summary'){
         if(req.method!=='GET'){respond(405,{error:'method_not_allowed'});return;}
         if(req.url!==url.pathname){respond(400,{error:'invalid_request'});return;}

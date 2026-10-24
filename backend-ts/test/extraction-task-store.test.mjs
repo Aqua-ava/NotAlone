@@ -206,11 +206,27 @@ test('owner进度复用联系人任务行，并保持owner与contact范围',asyn
   assert.equal((await f.store.progress(f.scope,first)).tasks.length,1);
   assert.equal((await f.store.progress(f.scope,second)).tasks.length,0);
   await assert.rejects(f.store.ownerProgress(randomUUID()),{code:'owner_not_found'});
-  const api=new ExtractionProgressApi(f.store,f.scope.ownerId);
+  const wakes=[];const api=new ExtractionProgressApi(f.store,f.scope.ownerId,{wake:(scope,task)=>wakes.push([scope,task])});
   assert.equal((await api.handle('GET','/api/owner/memory-processing')).status,200);
   assert.equal((await api.handle('GET',`/api/contacts/${otherContact}/memory-processing`)).status,200);
   assert.equal(await api.handle('POST','/api/owner/memory-processing'),null);
   assert.equal((await api.handle('GET','/api/contacts/not-a-uuid/memory-processing')).status,400);
+  for(const body of [null,{}, {task_id:'bad',action:'resume'},{task_id:first,action:'retry'},{task_id:first,action:'resume',extra:true}]){
+   assert.equal((await api.handle('POST','/api/owner/memory-processing/resume',body)).status,400);
+  }
+  assert.equal((await api.handle('POST',`/api/contacts/${otherContact}/memory-processing/resume`,{task_id:first,action:'resume'})).status,404);
+  assert.equal((await api.handle('POST','/api/owner/memory-processing/resume',{task_id:randomUUID(),action:'resume'})).status,404);
+  assert.deepEqual((await api.handle('POST','/api/owner/memory-processing/resume',{task_id:first,action:'resume'})),{status:200,body:{task_id:first,status:'queued'}});
+  assert.deepEqual(wakes.at(-1),[{ownerId:f.scope.ownerId,contactId:f.scope.contactId},first]);
+  assert.equal((await api.handle('POST','/api/owner/memory-processing/resume',{task_id:first,action:'resume'})).status,200);
+  await f.pool.query("UPDATE background_task SET status='cancelled' WHERE id=$1",[first]);
+  await f.pool.query("UPDATE background_task_step SET status='cancelled' WHERE task_id=$1",[first]);
+  assert.equal((await api.handle('POST',`/api/contacts/${f.scope.contactId}/memory-processing/resume`,{task_id:first,action:'resume'})).status,409);
+  assert.deepEqual((await api.handle('POST',`/api/contacts/${f.scope.contactId}/memory-processing/resume`,{task_id:first,action:'restart'})),{status:200,body:{task_id:first,status:'queued'}});
+  const unavailable=new ExtractionProgressApi(null,f.scope.ownerId);
+  assert.equal((await unavailable.handle('GET','/api/owner/memory-processing')).status,503);
+  await f.pool.query("UPDATE source_document SET status='delete_requested' WHERE id=$1",[f.sourceId]);
+  assert.equal((await api.handle('POST',`/api/contacts/${f.scope.contactId}/memory-processing/resume`,{task_id:first,action:'resume'})).status,409);
  }finally{await f.close();}
 });
 
