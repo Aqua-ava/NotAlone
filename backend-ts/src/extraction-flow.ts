@@ -7,10 +7,11 @@ import {parseDirectExtraction,parseSourceVerification,ExtractionProtocolError,va
 import {buildSourceVerificationContract,buildSourceVerificationPayload,sourceCalendarPayload} from './extraction-protocol-contract.ts';
 import type {ExtractionWindow,ExtractedFact,SourceVerificationResult} from './extraction-protocol.ts';
 import {boundedExtractionInput,boundedExtractionPrompt,boundedExtractionSchema,bindBoundedFact,compileGroundedLabels,normalizeBoundedWindow,prepareBoundedForAdoption,sourceUnits} from './extraction-bounded.ts';
+import {verificationFailureDiagnostic} from './extraction-verification-diagnostics.ts';
 
 export interface ExtractionInvocation {
  purpose:'extraction'|'verification';system:string;user:string;tool:{name:string;description:string;parameters:Record<string,unknown>};
- validateOutput(blocks:readonly unknown[]):void;
+ validateOutput(blocks:readonly unknown[]):void|Promise<void>;
 }
 export interface ExtractionFlowOutcome {
  accepted:ExtractedFact[];rejected_count:number;extraction_completed:boolean;
@@ -40,6 +41,7 @@ export function extractionWindowText(window:ExtractionWindow):string {
   +`\n[calendar message_id=${message.message_id}] source_calendar_at=${sourceCalendarPayload(message)} text_length=${Array.from(message.text).length}`).join('\n');
 }
 const directFields=Object.keys(DIRECT_EXTRACTION_SCHEMA.properties.scenes.items.properties.memories.items.properties);
+const verificationFields=['results','candidate_index','verdict','issues','evidence','proof','event_verification','condition_verification','stage_evidence','occurrence_evidence','message_id','quote'] as const;
 function invocation(purpose:ExtractionInvocation['purpose'],prompt:string,schema:Record<string,any>,user:string,validateOutput:ExtractionInvocation['validateOutput']):ExtractionInvocation {
  return {purpose,system:prompt,user,tool:{name:schema.title,description:schema.description??'',parameters:schema},validateOutput};
 }
@@ -48,6 +50,20 @@ function failure(kind:ExtractionFlowOutcome['failure_kind'],completed:boolean,re
   failure_reason:kind==='invalid_output'?'模型输出未通过提取或来源核验，本批未写入记忆。':'模型调用不可用，本批保留待恢复。',verification:[]};
 }
 function invalid(error:unknown):boolean{return error instanceof ExtractionArgumentsError||error instanceof ExtractionProtocolError||Boolean(error&&typeof error==='object'&&'code' in error&&error.code==='extraction_model_validation_failed');}
+async function parseVerificationReply(
+  blocks:readonly unknown[],contract:ReturnType<typeof buildSourceVerificationContract>,window:ExtractionWindow,
+  facts:ExtractedFact[],mode:'legacy-v4'|'nullable-proof-v3'|undefined,record:ExtractionFlowOptions['record'],
+):Promise<SourceVerificationResult[]>{
+  try{
+    // 只收拢唯一、可逆的外层包络；候选覆盖、字段枚举、逐字引文仍由严格协议校验。
+    const decoded=readExtractionToolArguments(blocks,contract.schema.title,{repair:true,field_names:verificationFields,root_array_key:'results'});
+    return parseSourceVerification(decoded.value,window,facts,{isolate_items:true,...(mode?{mode}:{})});
+  }catch(error){
+    if(invalid(error))await record({stage:'verification_validation_failure',
+      payload:verificationFailureDiagnostic(blocks,contract.schema.title,facts.length,error)});
+    throw error;
+  }
+}
 function modelFailure(error:unknown):boolean{return Boolean(error&&typeof error==='object'&&'code' in error&&String(error.code).startsWith('extraction_model_'));}
 function safeTransient(error:unknown):boolean {
  // 调用端必须明确证明已知失败且允许重试；未知 dispatch 或 ACK 绝不盲重放。
@@ -124,16 +140,14 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
  await options.record({stage:'verification_input',payload:{window:options.window,facts:review,candidate_trace_ids:review.map(fact=>traceIds.get(fact)!)}});
  const contract=buildSourceVerificationContract(review),request=invocation('verification',contract.prompt,contract.schema,
   JSON.stringify(buildSourceVerificationPayload(options.window,review)),blocks=>{
-   const decoded=readExtractionToolArguments(blocks,contract.schema.title);
-   parseSourceVerification(decoded.value,options.window,review,{isolate_items:true});
+   return parseVerificationReply(blocks,contract,options.window,review,undefined,options.record).then(()=>{});
   });
  let results:SourceVerificationResult[];
  try{
   options.signal.throwIfAborted();await options.requireCurrent();
   const raw=(await options.invoke(request,options.signal)).blocks;
   await options.record({stage:'verification_return',payload:{blocks:raw}});
-  const decoded=readExtractionToolArguments(raw,contract.schema.title);
-  results=parseSourceVerification(decoded.value,options.window,review,{isolate_items:true});
+  results=await parseVerificationReply(raw,contract,options.window,review,undefined,options.record);
  }catch(error){
   options.signal.throwIfAborted();
   if(invalid(error))return failure('invalid_output',true,parsedRejections);
@@ -209,16 +223,14 @@ async function runBoundedExtractionFlow(options:ExtractionFlowOptions):Promise<E
  await options.record({stage:'verification_input',payload:{window,facts:review,candidate_trace_ids:review.map(fact=>traceIds.get(fact)!)}});
  const contract=buildSourceVerificationContract(review,'nullable-proof-v3');
  const request=invocation('verification',contract.prompt,contract.schema,JSON.stringify(buildSourceVerificationPayload(window,review,{positionGuide:true})),blocks=>{
-  const decoded=readExtractionToolArguments(blocks,contract.schema.title);
-  parseSourceVerification(decoded.value,window,review,{isolate_items:true,mode:'nullable-proof-v3'});
+  return parseVerificationReply(blocks,contract,window,review,'nullable-proof-v3',options.record).then(()=>{});
  });
  let results:SourceVerificationResult[];
  try{
   options.signal.throwIfAborted();await options.requireCurrent();
   const verificationRaw=(await options.invoke(request,options.signal)).blocks;
   await options.record({stage:'verification_return',payload:{blocks:verificationRaw}});
-  const decoded=readExtractionToolArguments(verificationRaw,contract.schema.title);
-  results=parseSourceVerification(decoded.value,window,review,{isolate_items:true,mode:'nullable-proof-v3'});
+  results=await parseVerificationReply(verificationRaw,contract,window,review,'nullable-proof-v3',options.record);
  }catch(error){
   options.signal.throwIfAborted();
   if(invalid(error))return failure('invalid_output',true,rejected);

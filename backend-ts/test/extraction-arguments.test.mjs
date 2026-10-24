@@ -10,3 +10,13 @@ test('原始工具参数拒绝重复键和截断，只允许白名单字段起�
  assert.throws(()=>read('{unknown":[]}'),{code:'extraction_arguments_invalid'});
  assert.throws(()=>read('{"scenes":[],"value":1e999}'),{code:'extraction_arguments_invalid'});
 });
+
+test('唯一根数组只由调用点显式映射为命名包络',()=>{
+ const raw=JSON.stringify([{candidate_index:0,verdict:'supported',issues:[],evidence:[]}]);
+ assert.throws(()=>readExtractionToolArguments(block(raw),'DirectMemoryExtractionOutput',{repair:true}),{
+  code:'extraction_arguments_invalid',
+ });
+ assert.deepEqual(readExtractionToolArguments(block(raw),'DirectMemoryExtractionOutput',{
+  repair:true,root_array_key:'results',
+ }),{value:{results:JSON.parse(raw)},repaired:true});
+});

@@ -192,7 +192,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
         });
       }
       if(options.extractionEnabled&&extraction&&owner){
-        const modules=['extraction-flow.ts','extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-arguments.ts','extraction-evidence.ts','extraction-prompts.ts','extraction-bounded.ts','extraction-bounded-proof.ts','contact-overview-bounded-body.ts','contact-overview-bounded-contract.ts','contact-overview-bounded-graph.ts'];
+        const modules=['extraction-flow.ts','extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-arguments.ts','extraction-verification-diagnostics.ts','extraction-evidence.ts','extraction-prompts.ts','extraction-bounded.ts','extraction-bounded-proof.ts','contact-overview-bounded-body.ts','contact-overview-bounded-contract.ts','contact-overview-bounded-graph.ts'];
         const sources=await Promise.all(modules.map(file=>readFile(new URL(file,import.meta.url))));
         const ruleVersion=createHash('sha256').update(Buffer.concat(sources)).digest('hex'),m=options.configuration.model;
         const call=(input:ExtractionModelInput)=>extraction!.call({...input,signal:AbortSignal.any([input.signal,AbortSignal.timeout(m.deadline_ms)])});

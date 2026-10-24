@@ -1,4 +1,4 @@
-/** 只修复可确定的 JSON 语法；重复键、截断正文和猜测字段值始终拒绝。 */
+/** 只修复可确定的 JSON 语法；根数组仅由调用点显式映射为唯一命名包络。 */
 export class ExtractionArgumentsError extends Error {
  readonly code='extraction_arguments_invalid';readonly failure_kind='invalid_output';
  constructor(){super('extraction_arguments_invalid');}
@@ -59,17 +59,14 @@ function parse(raw:string,allowControls:boolean):unknown {
  };
  const result=value();whitespace();if(index!==raw.length)fail('end');return result;
 }
-function argumentObject(raw:string,options:{repair:boolean;field_names:readonly string[]}):{value:Record<string,unknown>;repaired:boolean}{
- const object=(value:unknown):Record<string,unknown>=>{
-  if(!value||typeof value!=='object'||Array.isArray(value))throw new ExtractionArgumentsError();return value as Record<string,unknown>;
- };
- try{return {value:object(parse(raw,false)),repaired:false};}
+function argumentValue(raw:string,options:{repair:boolean;field_names:readonly string[]}):{value:unknown;repaired:boolean}{
+ try{return {value:parse(raw,false),repaired:false};}
  catch(error){if(!(error instanceof SyntaxFailure)||!options.repair)throw new ExtractionArgumentsError();}
  let fixed=raw.trim();
  if(fixed.startsWith('```json\n')&&fixed.endsWith('```'))fixed=fixed.slice(8,-3).trim();
  else if(fixed.startsWith('```\n')&&fixed.endsWith('```'))fixed=fixed.slice(4,-3).trim();
  for(let attempt=0;attempt<=8;attempt++){
-  try{return {value:object(parse(fixed,true)),repaired:true};}
+  try{return {value:parse(fixed,true),repaired:true};}
   catch(error){
    if(!(error instanceof SyntaxFailure)||attempt===8)throw new ExtractionArgumentsError();
    const position=error.position,match=fixed.slice(position).match(/^([A-Za-z_][A-Za-z_0-9]*)"\s*:/);
@@ -83,12 +80,18 @@ function argumentObject(raw:string,options:{repair:boolean;field_names:readonly 
  }
  throw new ExtractionArgumentsError();
 }
-export function readExtractionToolArguments(blocks:readonly unknown[],name:string,options:{repair?:boolean;field_names?:readonly string[]}={}):{value:Record<string,unknown>;repaired:boolean}{
+export function readExtractionToolArguments(blocks:readonly unknown[],name:string,options:{repair?:boolean;field_names?:readonly string[];root_array_key?:string}={}):{value:Record<string,unknown>;repaired:boolean}{
  const calls=blocks.filter((block):block is Record<string,unknown>=>Boolean(block&&typeof block==='object'&&(block as Record<string,unknown>).type==='tool-call'));
  if(calls.length!==1||calls[0]!.name!==name||typeof calls[0]!.arguments!=='string')throw new ExtractionArgumentsError();
- return argumentObject(calls[0]!.arguments,{repair:options.repair??false,field_names:options.field_names??[]});
+ const decoded=argumentValue(calls[0]!.arguments,{repair:options.repair??false,field_names:options.field_names??[]});
+ if(Array.isArray(decoded.value)&&options.root_array_key)
+  return {value:{[options.root_array_key]:decoded.value},repaired:true};
+ if(!decoded.value||typeof decoded.value!=='object'||Array.isArray(decoded.value))throw new ExtractionArgumentsError();
+ return {value:decoded.value as Record<string,unknown>,repaired:decoded.repaired};
 }
 /** 私有身份协议使用同一严格解码器，绝不启用模型输出修复。 */
 export function decodeExtractionArguments(raw:string):Record<string,unknown>{
- return argumentObject(raw,{repair:false,field_names:[]}).value;
+ const value=argumentValue(raw,{repair:false,field_names:[]}).value;
+ if(!value||typeof value!=='object'||Array.isArray(value))throw new ExtractionArgumentsError();
+ return value as Record<string,unknown>;
 }
