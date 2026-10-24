@@ -2,11 +2,12 @@
 import type {HostStorage} from './host-storage.ts';
 import {ForegroundLocator,ForegroundLocationError,type ForegroundProbe,type ForegroundBinding} from './foreground-location-locator.ts';
 import {ForegroundSessions} from './foreground-location-sessions.ts';
+import type {WechatCliRunner} from './wechat-setup-probe.ts';
 export const foregroundLocationPath='/api/sync/foreground/observe';
 export interface ForegroundLocationResponse {status:number;body:Record<string,unknown>}
 interface Scope {owner:string;account:string;enabled:boolean}
 
-export async function createForegroundLocationApi(options:{storage:HostStorage;probe:ForegroundProbe;executable:string;environment?:NodeJS.ProcessEnv}) {
+export async function createForegroundLocationApi(options:{storage:HostStorage;probe:ForegroundProbe;executable:string;environment?:NodeJS.ProcessEnv;runner?:WechatCliRunner}) {
   const sessions=new ForegroundSessions(options);
   let activated=false,closed=false,revision=0,mutations=0,observing=false;
   let locator:ForegroundLocator|undefined,locatorScope:Scope|undefined;

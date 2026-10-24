@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {writeFile,appendFile,chmod} from 'node:fs/promises';
+import {appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {HostStorage} from '../src/host-storage.ts';
 import {createForegroundLocationApi} from '../src/foreground-location-api.ts';
@@ -18,15 +18,10 @@ test('原PG身份及开关控制定位公开合同，暂停后拒收且不写入
  await appendFile(f.envFilePath,`NOTALONE_OWNER_ID=${owner}\n`);
  storage=await HostStorage.open(f.options);
  const executable=join(f.directory,'synthetic-foreground-cli');
- // 本用例测PG门禁；用无Node冷启动成本的合成CLI保留原250ms预算。
- await writeFile(executable,`#!/bin/sh
-[ "$1" = sessions ] || exit 2
-case " $* " in *" --strict-read-only "*) ;; *) exit 2;; esac
-case " $* " in *" all "*) ;; *) exit 2;; esac
-printf '%s\\n' '{"ok":true,"data":{"sessions":[{"username":"fixture-a","display_name":"合成甲友","chat_type":"private","summary":"DO_NOT_KEEP"}]}}'
-`);await chmod(executable,0o700);
+ // 本用例只测PG身份和生命周期；CLI预算与进程约束由 foreground-location-sessions 单独覆盖。
+ const runner={run:async()=>({sessions:[{username:'fixture-a',display_name:'合成甲友',chat_type:'private',summary:'DO_NOT_KEEP'}]}),close:async()=>{}};
  const probe={observe:async()=>({wechat_in_front:true,display_name:'合成甲友',captured_at:new Date().toISOString(),capture_version:'automatic-header-v4',quality:{layout_verified:true,display_name_confidence:0.98,name_complete:true}}),close:async()=>{},dispose:async()=>{}};
- api=await createForegroundLocationApi({storage,probe,executable});
+ api=await createForegroundLocationApi({storage,probe,executable,runner});
  assert.equal((await api.handle('POST',Buffer.from('{}'))).status,409);
  api.activate();
  assert.equal((await api.handle('POST',Buffer.from('{}'))).status,503);
@@ -59,7 +54,7 @@ printf '%s\\n' '{"ok":true,"data":{"sessions":[{"username":"fixture-a","display_
 });
 
 test('最终数据库响应超过总预算时不发布已取得的联系人',async t=>{
- const {mkdtemp,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');
+ const {mkdtemp,rm,writeFile,chmod}=await import('node:fs/promises');const {tmpdir}=await import('node:os');
  const directory=await mkdtemp(join(tmpdir(),'notalone-foreground-deadline-'));let api;
  t.after(async()=>{await api?.close();await rm(directory,{recursive:true,force:true});});
  const owner=randomUUID(),contact=randomUUID(),binding=randomUUID();let scopes=0,closedProbe=0;

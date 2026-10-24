@@ -138,6 +138,9 @@ Spec: ../spec.md
 - 复跑 `sync-incremental-reconnect.test.mjs` 稳定得到 1 通过、1 失败：失败用例故意保留第二条 PG 连接，宿主关闭后排空断言按预期失败，但清理夹具仍尝试直接删除数据库，因该连接的存在产生 `AggregateError`，遮蔽了原断言码。
 - 测试夹具修复：保留首次排空断言作为原失败，随后先关闭夹具自身 client，再仅对当前随机 `_test` 数据库终止残余测试连接，最后执行原数据库与目录清理。产品运行时代码、排空语义和失败优先顺序未改变。
 - `sync-incremental-*` 全部 11 个测试文件复跑为 `77/77` 通过，零失败、零取消、零跳过；覆盖真实 DSH 重连、延迟清理、父进程丢失恢复、增量边界和来源删除抑制。
+- 默认不限文件并发跑完整 1204 项时，`foreground-location-api` 的 250ms 合成 CLI 预算受整机资源竞争影响偶发 `binding_verification_unavailable`；单例复跑 2/2 通过。未放宽产品预算。
+- backend-ts 默认测试命令改为 `node --test --test-concurrency=4 test/*.test.mjs`，同一完整套件 `1204/1204` 通过，零失败、零取消、零跳过。14 票原先记录的 3 个全量残余失败至此全部收口。
+- `foreground-location-api` 的 PG／公开生命周期用例改用该类既有的 runner 注入接缝，不再让进程启动延迟参与身份门禁断言；真实 CLI 的 250ms 预算、进程复用和取消仍由 `foreground-location-sessions`、probe 与 host 用例单独验证，前台定位相关 `50/50` 通过。
 
 ### 根正式验收证据
 
