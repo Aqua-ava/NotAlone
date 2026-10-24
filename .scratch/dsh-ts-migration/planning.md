@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 用户最新要求：没有互相依赖的任务必须创建全新 Codex 会话并行，明确不是 sub-agent；会话间直接通信，主会话统一集成并独占桌面验收。当前01—10、18、19及23已验收；10的生产 Worker 切换、B采纳/trace及真实 App 仍分别由24、11/12、25把关；21在当前macOS 27的accurate Vision路径持续超过2500ms，保持claimed并等待健康Mac对照或Apple修复。08已由根完成真实 App 验收；11、16、20已因10关闭解锁。原规格和验收不降低。
+> 用户最新要求：没有互相依赖的任务必须创建全新 Codex 会话并行，明确不是 sub-agent；会话间直接通信，主会话统一集成并独占桌面验收。当前01—11、18、19及23已验收；10的生产 Worker 切换由24把关，11的生产 B 段由根集成接线，完整 trace 和真实 App 分别由12、25把关；21在当前macOS 27的accurate Vision路径持续超过2500ms，保持claimed并等待健康Mac对照或Apple修复。08已由根完成真实 App 验收；11、16、20已因10关闭解锁。原规格和验收不降低。
 
 ## 逐项任务与阻塞关系
 
@@ -16,7 +16,7 @@
 | [08 继续讨论和改写候选](issues/08-discussion-continuity.md) | 07 | ready-for-agent | resolved |
 | [09 查看和修正记忆及表达偏好](issues/09-memory-and-preferences.md) | 04 | ready-for-agent | resolved |
 | [10 从现有消息提取并核验候选](issues/10-memory-extraction-verification.md) | 05、09 | ready-for-agent | resolved |
-| [11 裁决和正式采纳记忆](issues/11-memory-adjudication-adoption.md) | 10 | ready-for-agent | open |
+| [11 裁决和正式采纳记忆](issues/11-memory-adjudication-adoption.md) | 10 | ready-for-agent | resolved |
 | [12 查看完整来源和处理追踪](issues/12-source-processing-trace.md) | 11 | ready-for-agent | open |
 | [13 整理 L2 场景](issues/13-l2-scenario-organization.md) | 11 | ready-for-agent | open |
 | [14 更新 L3 画像与关系概览](issues/14-l3-profile-overview.md) | 13 | ready-for-agent | open |
