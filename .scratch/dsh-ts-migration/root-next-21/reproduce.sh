@@ -2,6 +2,11 @@
 set -eu
 
 repo_root=${1:?用法：reproduce.sh <NotAlone 主仓路径>}
+if [ "${NOTALONE_ALLOW_ANE_PROBE:-0}" != "1" ]; then
+  printf '%s\n' "拒绝在未确认时重复 OCR：每次超时会让系统 ANECompilerService 继续编译并产生高磁盘写入。" >&2
+  printf '%s\n' "仅在健康 Mac 对照或明确诊断窗口设置 NOTALONE_ALLOW_ANE_PROBE=1。" >&2
+  exit 2
+fi
 repo_root=$(cd "$repo_root" && pwd -P)
 runner="$repo_root/.scratch/dsh-ts-migration/foreground-location/native-ocr-diagnosis-run.py"
 source_file="$(cd "$(dirname "$0")" && pwd -P)/modern-vision-probe.swift"

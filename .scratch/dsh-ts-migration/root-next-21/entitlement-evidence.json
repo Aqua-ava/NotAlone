@@ -1,0 +1,46 @@
+{
+  "schema": "notalone-background-inference-entitlement-evidence-v1",
+  "checked_at": "2026-10-25",
+  "key": "com.apple.developer.background-tasks.continued-processing.inference",
+  "probe_source_sha256": "544cd178649dc2fee7a04e9fdf98ff59897069a85f0e9c5a7df17377d10129fb",
+  "entitlements_file_sha256": "005aa04d4bd09a26b0faaeffb4a0bafcb00e608a66ee6781d5f825a4061c502c",
+  "official_documentation": {
+    "url": "https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.background-tasks.continued-processing.inference",
+    "title": "Background Inference",
+    "macos_introduced_at": "27.0",
+    "summary": "Lets a background task run Neural Engine inference; also required for Neural Engine access while the app is in the background.",
+    "json_sha256": "abd8364a3270cd121492890b760948c97827f5f60807d32b8a45c34e2f95369a"
+  },
+  "current_binaries": [
+    {
+      "path": "native/macos/build/cli/notalone-sync-probe",
+      "entitlements_present": false
+    },
+    {
+      "path": "native/macos/build/cli/notalone-header-change-source",
+      "entitlements_present": false
+    },
+    {
+      "path": "desktop/node_modules/electron/dist/Electron.app",
+      "entitlements_present": false
+    }
+  ],
+  "temporary_probe": {
+    "source": "entitlement-read-probe.swift",
+    "no_entitlement": {
+      "binary_sha256": "dcc53040eb2720af9b1104760e05d0ff6513d69ac8a9ffcf3f66b5865a673c35",
+      "launched": true,
+      "exit": 1,
+      "stdout": "background_inference=false",
+      "stderr_bytes": 0
+    },
+    "ad_hoc_with_entitlement": {
+      "binary_sha256": "2f6ed84a97eeeae329f5a8dd9bffe7a3e58c7843ba1c9e9a47e8e59944259b61",
+      "codesign_verify": "passed",
+      "displayed_entitlement": true,
+      "launch_result": 137,
+      "interpretation": "the system killed the process after launch"
+    }
+  },
+  "conclusion": "The current ad-hoc development path cannot claim the restricted macOS entitlement. A correctly provisioned signed helper may be a candidate external validation, but this evidence does not prove the entitlement would fix the 2500 ms compiler delay."
+}
