@@ -24,7 +24,7 @@
 | [16 导入单联系人历史](issues/16-contact-history-import.md) | 04、10 | ready-for-agent | open |
 | [17 接管资料整体删除与管理入口](issues/17-cross-domain-deletion.md) | 08、12、14、15、16 | ready-for-agent | open |
 | [18 管理微信账号与同步授权](issues/18-wechat-scope-binding.md) | 03、04 | ready-for-agent | resolved |
-| [19 持续同步授权私聊增量](issues/19-private-incremental-sync.md) | 18 | ready-for-agent | claimed |
+| [19 持续同步授权私聊增量](issues/19-private-incremental-sync.md) | 18 | ready-for-agent | resolved |
 | [20 同步既有历史并恢复缺口](issues/20-history-gap-recovery.md) | 19、10 | ready-for-agent | open |
 | [21 根据前台会话定位联系人](issues/21-foreground-contact-location.md) | 18 | ready-for-agent | claimed |
 | [22 管理全部业务后台任务](issues/22-background-task-management.md) | 10、13、14、15、20 | ready-for-agent | open |

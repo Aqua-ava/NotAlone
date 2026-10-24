@@ -1,0 +1,24 @@
+{
+  "scope": "19原票范围最终根核对，等待独立窄审后才改票",
+  "base_commit": "256fecc1fb1a3dcb49070bfaf663c635cb958491",
+  "original_matrix_sha256": "126b06ebd731fe2ce032876b14bbdc1f8c28465642821f7e8c77bf5f25af7c3a",
+  "closure_sha256": "883cbcf230a5dc147fb49d6848a187f0ac087460123d3492c1c46acec58a40f2",
+  "closure_handoff_sha256": "11297b5920bc0dbd42fdd03f1f12c56df51afa9e797edc8be00c9daae2cd36ea",
+  "incoming_probe_hashes": {
+    "incremental-stream-reconnect-probe": {
+      "result.json": "312fdf792dd09f13358ec665ac5fd3294ca8e8ae9c95cb6755eb6e457dae1150",
+      "artifact-hashes.json": "65820bd318c6f7c9315dc5400d7dcd11960a19b354ee91652e5ee7a5499b45b7"
+    },
+    "incremental-abrupt-restart-probe": {
+      "result.json": "8fedbbc4cef8119cc61b7d5f855d5693300353df2b6ad00eab28bb186706d9de",
+      "artifact-hashes.json": "f72622aa81cdbbf97ae9d1879db342247845be692ddda2d25071da078a1bf30c"
+    }
+  },
+  "runtime_delta_since_43ae": [],
+  "new_executions_by_root": 0,
+  "source_unchanged_is_not_execution_evidence": true,
+  "selected_new_only_directly_tested": true,
+  "all_private_nonempty_exclusion_only_composed_existing_evidence": true,
+  "no_real_electron_crash_or_history_catchup_claim": true,
+  "issue_status_changed": false
+}

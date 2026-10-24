@@ -1,0 +1,22 @@
+# 19-D5/D6 冻结证据最终独立交接
+- 结论：支持原根按原26原子验收范围签收19；产品finding0、新增阻塞0，实际票据及原blocked目标由根处理。
+- 原24项具名分级证据保持冻结；本次只核D5/D6补证和closure，不冒称26项本轮重跑。
+- D5：首流PID48244真code7→4748ms后PID48406自然重开；原heartbeat/3秒退避，有公开degraded→global_follow。
+- D5 enable→disable间95次请求全GET status；enable总1次，无check/retry/follow重置或改clock。
+- 第二流metadata cursor=global-1-outside；正文message-2→message-3；原probe无metadata显式assert，本次只读核同轮raw事实，不回填原断言。
+- ID2断流前已存，两次重放2+3后仅2规范消息；6 source_ref/6回执（created2/reused4），2派生receipt task_id=null。
+- D6：非空库1消息后仅SIGKILL身份核验的helper49925；DSH49927/Legacy49949/CLI自然退出，旧锁保留，journal.host=null。
+- 原同库/env/business/info/ModelHost路径helper50078重启，DSH50080自然回收旧锁，GET观察约4657ms携incremental-2读取。
+- 原UUID/原source/created record/派生receipt保持；新增1个同scope来源有message_reused；规范消息仍1，来源共2，模型/任务/出站/reply0。
+- D6旧source_ref_count=1为过严探针RED，原store按observation合法多来源；RED及更早配置/身份失败均保留，产品未改。
+- 最终D6无紧急kill；早期失败轮曾有自有紧急收尾。最终两轮helper/DSH/Legacy/CLI、库/fixture/info/锁/profile/socket及自有cache/staging清理记录自洽。
+- 覆盖E1事实保留：两case均selected/new-only，非空排除未直测；outside-b只证明未授权不读。
+- closure-addendum:94–99、176–181、199–235已明确此边界，并具名组合原B3–B6/E2的全部范围/非空排除/109证据；不要求新笛卡尔矩阵，E1不再构成整19新增阻塞。
+- 记录E2不阻断：D5 handoff:22漏列夹具--mode===sessions收紧，实际两代argv均sessions；详见findings.md。
+- D5 30条raw/shared匹配，两归档各734文件吻合；D6 18对+9raw+3share匹配，899源/归档/当前吻合，均只读核hash无执行。
+- D6 result8fedbbc4cef8119cc61b7d5f855d5693300353df2b6ad00eab28bb186706d9de，latest artifact f72622aa81cdbbf97ae9d1879db342247845be692ddda2d25071da078a1bf30c。
+- 43ae→256fecc1仅离线工具/测试/记录提交；核心输入逐字同，另有生成egg-info/已有测试输入。来源身份未当执行替代。
+- DSH固定0.2.1-rc.2/687f282；D5官方5文件、D6官方4+installed3 hash全同；原26矩阵/旧handoff SHA均保持冻结。
+- 不签真实Electron/App崩溃、全部私聊全部故障分支、20停机历史追赶、21 OCR、17全部删除产品闭环或整体迁移。
+- 最终结论final-review.md；D5旧发现findings.md；两套*-frozen-facts.json、*-sha-review.json记录独立原始投影/哈希。
+- 零新执行/测试/DB/HTTP/网络/App/微信/模型/安装/打包；无主树/index/票据/旧目标操作，写入仅本审查目录。只完成本独立只读准备目标。

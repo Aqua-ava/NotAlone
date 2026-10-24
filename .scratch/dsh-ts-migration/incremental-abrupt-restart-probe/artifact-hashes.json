@@ -1,0 +1,157 @@
+{
+  "raw_alias": "$RUN",
+  "raw_evidence_kept_outside_repository": true,
+  "pairs": [
+    {
+      "raw": "$RUN/logs/probe.stdout.txt",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/probe.stdout.txt",
+      "raw_sha256": "91c44659fe73e9ac55c882a66b2c9e8ade61c481721aa2049b9d3767c3d52484",
+      "share_sha256": "91c44659fe73e9ac55c882a66b2c9e8ade61c481721aa2049b9d3767c3d52484"
+    },
+    {
+      "raw": "$RUN/logs/probe.stderr.txt",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/probe.stderr.txt",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "share_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw": "$RUN/logs/dsh.stdout.txt",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/dsh.stdout.txt",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "share_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw": "$RUN/logs/dsh.stderr.txt",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/dsh.stderr.txt",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "share_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw": "$RUN/logs/attempt-0.probe.stderr.txt",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/attempt-0.probe.stderr.txt",
+      "raw_sha256": "d9f3f2bdbf797e31246556704c2f5eaeee913d100efe5ffc7d95bca0667b6116",
+      "share_sha256": "f2b19a7f48e3a0e1f8346957f05dfd1e069e4eb94fe1f7615f113de674a32848"
+    },
+    {
+      "raw": "$RUN/logs/attempt-1.probe.stderr.txt",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/attempt-1.probe.stderr.txt",
+      "raw_sha256": "11ef53ee4ac242777e6c66d859caa6ca349bdabae4fd8fff2b569ac3a872f2a7",
+      "share_sha256": "8c3c68688de26487507dc81e4575c947a21f87493011cc54c03698b56367449e"
+    },
+    {
+      "raw": "$RUN/logs/attempt-2.probe.stderr.txt",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/attempt-2.probe.stderr.txt",
+      "raw_sha256": "1b40cbb9f29198b5fb397231b110db6de175b1517ada923de68e59bd8f0124e4",
+      "share_sha256": "a1af70b1c5896e1fcd26207bf32a82d49b99b22825ed67470bd9d5d7f5ba6d73"
+    },
+    {
+      "raw": "$RUN/node-network-audit.jsonl",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/node-network-audit.jsonl",
+      "raw_sha256": "086a186c60167935b81c0fb8d9d923115853cacec6849d305911b5656478eb87",
+      "share_sha256": "d281e12df4466e5a3b4968209761e350cbb3f79e4bd723c82ac8e1eb7f6e1893"
+    },
+    {
+      "raw": "$RUN/python-network-audit.jsonl",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/python-network-audit.jsonl",
+      "raw_sha256": "ef79b1041d7e8a42bfecf8ac0f7d777f18a90ad2d55a796e24a18d9c35c4165e",
+      "share_sha256": "ef79b1041d7e8a42bfecf8ac0f7d777f18a90ad2d55a796e24a18d9c35c4165e"
+    },
+    {
+      "raw": "$RUN/attempt-0.result.json",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/attempt-0.result.json",
+      "raw_sha256": "964880eec566ccdc6917da709eed16ba13b9c70ce8eca93c2155caa5d56add03",
+      "share_sha256": "276746f4d5256ba8ccb7afcc285fbd5403f4f683a49a988ae8f722a9eecbf6ab"
+    },
+    {
+      "raw": "$RUN/attempt-1.result.json",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/attempt-1.result.json",
+      "raw_sha256": "1d62278f35314155e023ef6295cd6543132ee7d44a07384e3d8af0a3fe06e181",
+      "share_sha256": "0f0a4db46052b0f46f6100300f94b2b12b1c51dabf7fd2d1337497655b11b898"
+    },
+    {
+      "raw": "$RUN/attempt-2.result.json",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/logs/attempt-2.result.json",
+      "raw_sha256": "29fcc8c2b19487dc2696bd6bfbf70d9a7d176403b4acaea8f29e35d9eecee8ae",
+      "share_sha256": "a7eafcd2a335ab9eea0b12f206df4f64ea70ac3f0b38cc080e43bbbfb2b63bb4"
+    },
+    {
+      "raw": "$RUN/probe.mjs",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/probe.mjs",
+      "raw_sha256": "266e6170c7920f343be8d6e415c89b3da1e9537285c47ff178ab79d9c8feb1e0",
+      "share_sha256": "266e6170c7920f343be8d6e415c89b3da1e9537285c47ff178ab79d9c8feb1e0"
+    },
+    {
+      "raw": "$RUN/helper.mjs",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/launcher-helper.mjs",
+      "raw_sha256": "4bffc574def0bc3358ce18097e7ec94329e81f52878f11626852b692b9517968",
+      "share_sha256": "4bffc574def0bc3358ce18097e7ec94329e81f52878f11626852b692b9517968"
+    },
+    {
+      "raw": "$RUN/audit/network.mjs",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/network-audit.mjs",
+      "raw_sha256": "06dc8f71fe4645980d750e2a7737ff05cf0a139735000beaf2fc4453f411973e",
+      "share_sha256": "06dc8f71fe4645980d750e2a7737ff05cf0a139735000beaf2fc4453f411973e"
+    },
+    {
+      "raw": "$RUN/audit/sitecustomize.py",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/sitecustomize.py",
+      "raw_sha256": "3b6a66bff1c8000e70e27a4cf617d988536dd5de35f1711b98d8018e441ce01e",
+      "share_sha256": "3b6a66bff1c8000e70e27a4cf617d988536dd5de35f1711b98d8018e441ce01e"
+    },
+    {
+      "raw": "$RUN/prepare-original.py",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/prepare.py",
+      "raw_sha256": "8ed715f9c04f9568eccf9f67b3c84252515c0d5d089100d162dfb5e5cfe63805",
+      "share_sha256": "e348d3eeb2284ae984bedbc3b6ed1e86f4c974a0d632e61feb7797a5eebe2f5d"
+    },
+    {
+      "raw": "$RUN/result-with-cleanup-raw.json",
+      "share": ".scratch/dsh-ts-migration/incremental-abrupt-restart-probe/result.json",
+      "raw_sha256": "8fedbbc4cef8119cc61b7d5f855d5693300353df2b6ad00eab28bb186706d9de",
+      "share_sha256": "8fedbbc4cef8119cc61b7d5f855d5693300353df2b6ad00eab28bb186706d9de"
+    }
+  ],
+  "raw_only": [
+    {
+      "path": "$RUN/source-snapshot.tar.gz",
+      "sha256": "e3253be15563bfc689227730a1ac6e6a0cfd1f0709980909dd3b9974eac39e6c"
+    },
+    {
+      "path": "$RUN/meta.json",
+      "sha256": "ea7a5f98e28afe56ec57cbfa73744618e18307428a7fb3208b6b572f8d406081"
+    },
+    {
+      "path": "$RUN/before-kill.json",
+      "sha256": "e5c151202e2928f10325e18de5447eaebf461159af1c6457c5a09fcc3b607639"
+    },
+    {
+      "path": "$RUN/after-parent-loss.json",
+      "sha256": "d10cdb9e271b0950ed024eefd47a47e66f3f14b8224c3c2c7258a5bd43420766"
+    },
+    {
+      "path": "$RUN/restart-observed-before-assertions.json",
+      "sha256": "1642d0581aa2d17c258029d0fc6f7de1a67a261554bb2e6910e15831043fc017"
+    },
+    {
+      "path": "$RUN/after-restart.json",
+      "sha256": "0d48fc1c8a31dc5b5ba156e6dca828a5c97664e4230d6831a03d5cc50199cc0f"
+    },
+    {
+      "path": "$RUN/attempt-2.probe.mjs",
+      "sha256": "a031629e7526356cbabfc66869cede66b4e7b6a72611f147e7107f38ca89cfae"
+    },
+    {
+      "path": "$RUN/attempt-2.before-kill.json",
+      "sha256": "9fbe43ab6e3874a6f15422a6435954ff4c9d69edc809d9ea65ee13b3f4e98fed"
+    },
+    {
+      "path": "$RUN/attempt-2.after-parent-loss.json",
+      "sha256": "ac93426b2435680b81dc03bf4be5868c592019b15285ad4f72631d1beda71b77"
+    }
+  ],
+  "share_only": {
+    "source-hashes.json": "2679e41eae2fbcbd6e6a8af8ae6e65f5062326101ea54a08895d739216a5c799",
+    "official-source-hashes.json": "8428e41aab2b1a641adfc4d4b90d8d447916fbfc77b3a8048bed25ea396b2440",
+    "handoff.md": "377bbe9308469ea4dbc07c9e2a41ebdb65810aae0ac919cf5e8fca3ab19bf9d7"
+  }
+}

@@ -1,0 +1,155 @@
+{
+  "raw_files_schema": {
+    "before_kill": [
+      "first",
+      "before",
+      "journalBefore",
+      "commands",
+      "stableBefore"
+    ],
+    "after_loss": [
+      "first",
+      "info_exists",
+      "lock_exists",
+      "profile_exists",
+      "model_socket_exists",
+      "journal",
+      "commands",
+      "database"
+    ],
+    "after_restart": [
+      "second",
+      "after",
+      "journalAfter",
+      "commands",
+      "counters"
+    ]
+  },
+  "process_ids": {
+    "first_helper": 49925,
+    "first_dsh": 49927,
+    "first_legacy": 49949,
+    "second_helper": 50078,
+    "second_dsh": 50080,
+    "second_legacy": 50092
+  },
+  "parent_loss": {
+    "info_removed": true,
+    "old_lock_preserved": true,
+    "profile_removed": true,
+    "model_socket_removed": true,
+    "journal_host_null": true,
+    "journal_active": 0,
+    "journal_unknown": 0,
+    "message_count_before": 1,
+    "message_count_after_loss": 1
+  },
+  "restart": {
+    "new_helper_and_dsh_pid": true,
+    "lock_nonce_changed": true,
+    "enabled": true,
+    "same_message": true,
+    "same_scope": true,
+    "same_bindings": true,
+    "same_baseline": true,
+    "same_exclusions": true,
+    "exclusion_count": 0,
+    "history_grants_before_after": [
+      0,
+      0
+    ],
+    "old_source_ref_preserved": true,
+    "old_created_record_preserved": true,
+    "old_receipt_preserved": true,
+    "cursor_before_after": [
+      "incremental-2",
+      "incremental-2"
+    ],
+    "body_after_restart": [
+      {
+        "at": 1792830108959,
+        "pid": 50133,
+        "parent": 50080,
+        "args": [
+          "tail",
+          "friend-a",
+          "--cursor",
+          "incremental-2",
+          "--include-media-paths",
+          "false",
+          "--strict-read-only"
+        ]
+      }
+    ],
+    "new_source_count": 1,
+    "new_source_reused_receipts": true,
+    "all_source_same_scope": true,
+    "all_source_same_binding": true
+  },
+  "counters": {
+    "message": 1,
+    "message_source_ref": 2,
+    "background_task": 0,
+    "background_task_step": 0,
+    "model_call_receipt": 0,
+    "model_call_learning_claim": 0,
+    "outbound_ledger_entry": 0,
+    "reply_request": 0,
+    "reply_attempt": 0
+  },
+  "cleanup_record": {
+    "emergency_owned_process_cleanup": false,
+    "processes": [
+      {
+        "kind": "helper-1",
+        "state": "gone"
+      },
+      {
+        "kind": "dsh-1",
+        "state": "gone"
+      },
+      {
+        "kind": "legacy-1",
+        "state": "gone"
+      },
+      {
+        "kind": "cli-stream-first",
+        "state": "gone"
+      },
+      {
+        "kind": "helper-2",
+        "state": "gone"
+      },
+      {
+        "kind": "dsh-2",
+        "state": "gone"
+      },
+      {
+        "kind": "legacy-2",
+        "state": "gone"
+      }
+    ],
+    "cli_gone": true,
+    "info_removed": true,
+    "launcher_lock_removed": true,
+    "profiles_removed": [
+      true,
+      true
+    ],
+    "model_socket_removed": true,
+    "database_dropped": true,
+    "fixture_removed": true,
+    "database_absent": true,
+    "shared_pg_alive": true,
+    "expanded_frozen_source_removed": true,
+    "source_archive_verified": true,
+    "own_native_cache_removed": true,
+    "own_native_cache_bytes": 226120,
+    "runtime_directory_empty": true
+  },
+  "execution_boundary": {
+    "helper_sigkill_not_Electron_crash": true,
+    "no_downtime_new_message": true,
+    "selected_new_only_empty_exclusions": true
+  }
+}

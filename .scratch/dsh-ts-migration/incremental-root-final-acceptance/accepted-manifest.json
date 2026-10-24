@@ -1,0 +1,31 @@
+{
+  "schema_version": "task19_root_final_acceptance_v1",
+  "base_commit": "256fecc1fb1a3dcb49070bfaf663c635cb958491",
+  "incoming_evidence_sha256": "415f90a9bf3034bd399ad013fc7db1a4fd3ae984c26b29aa7cbcb3e9dcf94ef9",
+  "peer_manifest_sha256": "219bb571bd33917ce5836ca258f8baaf40db846b8f69f1a70cca8979e1de5e3f",
+  "peer_final_review_sha256": "928fbc436295507bf22fb16621413ae89ad0e18f916ef84bec91519c1907007f",
+  "original_requirements": 26,
+  "original_covered_requirements": 24,
+  "newly_closed_evidence_gaps": [
+    "19-D5",
+    "19-D6"
+  ],
+  "all_26_directly_retested": false,
+  "product_findings": 0,
+  "new_blockers": 0,
+  "ticket19_accepted": true,
+  "old_blocked_child_goal_changed": false,
+  "current_root_new_tests_or_model_calls": 0,
+  "data_impact": "仅本机合成独占库与进程补证，原真实微信授权结果复用；本轮根仅只读验收/记录",
+  "direct_scope": "selected/new-only无key；D6为launcher helper父丢失",
+  "composed_scope": "all_private/非空撤销删除排除/109抑制复用原具名已验G3证据",
+  "not_accepted": [
+    "真实Electron崩溃全分支",
+    "20历史与停机追赶",
+    "21原生OCR",
+    "17全部删除闭环",
+    "完整TS切换及退役Python"
+  ],
+  "cleanup_evidence": "两case原始清理均核对，独占库/进程/socket/锁/profile/临时文件已清，共享PG保留",
+  "remaining_nonblocking_record_precision": "D5 handoff漏列--mode===sessions夹具收紧，真实两代命令均sessions；原件不改，详见独立findings"
+}

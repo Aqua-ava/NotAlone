@@ -1,0 +1,150 @@
+{
+  "scope": "19全局CLI流code7异常关闭后自然退避自动重建",
+  "source_tree_sha256": "5aa9d99c2792d99cb456142206a31d3c28059e18e02afeddab3aed3194d8b7c7",
+  "checks": {
+    "profile": {
+      "private": true,
+      "dsh": {
+        "profile": {
+          "bundles": []
+        }
+      }
+    },
+    "runtime": {
+      "state": "running",
+      "runtime": "dsh",
+      "pid": 48208,
+      "legacyPid": 48218,
+      "reply": {
+        "runtime": "typescript",
+        "state": "unconfigured",
+        "reason": "reply_model_unconfigured"
+      },
+      "ownership": {
+        "setup": "typescript",
+        "credentials": "typescript",
+        "schemaUpdates": "python-migration-command",
+        "contacts": "python",
+        "replies": "typescript",
+        "memory": "typescript",
+        "skills": "typescript",
+        "imports": "python",
+        "deletion": "python",
+        "wechat": "split",
+        "wechatScope": "typescript",
+        "wechatBodySync": "split",
+        "tasks": "python",
+        "wechatIncremental": "typescript",
+        "wechatHistory": "python",
+        "foregroundLocation": "typescript",
+        "contactContext": "typescript",
+        "expressionPreferences": "typescript"
+      }
+    },
+    "elapsed_ms": 12688,
+    "reconnect": {
+      "first_exit_code": 7,
+      "stream_generations": 2,
+      "distinct_pids": true,
+      "exit_to_restart_ms": 4748,
+      "first_message_saved_before_restart": true,
+      "degraded_failure_observed": true,
+      "automatic_only": true,
+      "initial_enable_count": 1,
+      "forbidden_check_retry_calls": 0,
+      "replay_pages": 2
+    },
+    "persisted": {
+      "message_count": 2,
+      "stable_ids": [
+        "2",
+        "3"
+      ],
+      "source_ref_count": 6,
+      "processing_receipt_count": 6,
+      "extraction_receipt_count": 2,
+      "extraction_task_null": true,
+      "authority_baseline_unchanged": true,
+      "history_queries": 0,
+      "outside_body_queries": 0,
+      "body_writer": "typescript",
+      "model_task_counters": {
+        "background_task": 0,
+        "background_task_step": 0,
+        "model_call_receipt": 0,
+        "model_call_learning_claim": 0,
+        "outbound_ledger_entry": 0,
+        "reply_request": 0,
+        "reply_attempt": 0
+      }
+    },
+    "disabled_no_commands": true,
+    "normal_shutdown": true,
+    "network_audit": {
+      "node": {
+        "event_count": 402,
+        "external_attempts": 0,
+        "types": {
+          "connect": 396,
+          "lookup": 6
+        }
+      },
+      "python": {
+        "event_count": 38,
+        "external_attempts": 0,
+        "types": {
+          "socket.getaddrinfo": 19,
+          "socket.connect": 19
+        }
+      }
+    },
+    "processing_outcomes": {
+      "message_created": 2,
+      "message_reused": 4
+    },
+    "public_requests": {
+      "enable_count": 1,
+      "check_retry_follow_mutations": 0,
+      "observation_method": "仅GET /api/sync/status",
+      "status_get_count": 97
+    }
+  },
+  "cleanup": {
+    "dsh_gone": true,
+    "legacy_gone": true,
+    "cli_gone": true,
+    "info_removed": true,
+    "lock_removed": true,
+    "profile_removed": true,
+    "model_socket_removed": true,
+    "database_dropped": true,
+    "fixture_removed": true,
+    "both_test_databases_absent": true,
+    "shared_postgres_preserved": true,
+    "attempt1_runner_gone": true,
+    "attempt1_dsh_gone": true,
+    "attempt1_legacy_gone": true,
+    "attempt1_info_removed": true,
+    "attempt1_lock_removed": true,
+    "attempt1_profile_removed": true,
+    "attempt1_model_socket_removed": true,
+    "attempt1_fixture_removed": true,
+    "pass_runner_gone": true,
+    "attempt1_archived_before_drop": true
+  },
+  "pass": true,
+  "last_stage": "normal-shutdown",
+  "attempt1": {
+    "pass": false,
+    "stage": "public-new-only-authority",
+    "public_confirm_status": 500,
+    "classified_as": "fixture_exec_format_error",
+    "product_defect_proven": false,
+    "evidence": "合成CLI日志为空；同文件直接exec返回macOS errno8；shebang指向脚本包装器；修正为真实Node并显式import审计后只复跑本case",
+    "changes": [
+      "fake CLI shebang与审计装配",
+      "authority查询表名拼写"
+    ],
+    "same_product_source": true
+  }
+}

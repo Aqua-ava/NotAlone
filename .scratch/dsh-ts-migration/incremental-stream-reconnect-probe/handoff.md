@@ -1,0 +1,30 @@
+# 19 自动退避重建全局流：独立合成验收
+- 结论：本缺口 PASS；未改19票、blocked依赖或产品源，不宣称整票完成。
+- 基准 HEAD：`43ae208f3c4bc38116bfee62ed4665923674e682`；实际输入含原有 dirty，734文件先冻结再执行。
+- 源树前后与冻结 SHA256 均为 `5aa9d99c2792d99cb456142206a31d3c28059e18e02afeddab3aed3194d8b7c7`，原件逐文件无变化。
+- DSH：0.2.1-rc.2 / `687f282e8625c6b8d11ff58211a90524be2e4317`；官方profile boot/shutdown、effects生命周期与sdk-minimal真实示例均核对锁定字节。
+- 实际链：launchDsh→官方 named profile notalone→host-plugin→LegacyBackend原生宿主heartbeat→真实 SyncIncrementalEngine/CLI/PG。
+- 首退避3秒及到期重开见 engine:22、165–167、204–207；原宿主heartbeat见 sync_host.py:258、634–675。
+- 既有合成 owner、显式TS、无模型key；公开confirm(history_authorized=false)后仅初次enable，默认selected/new-only。
+- 后续只GET /api/sync/status观察；没有check、retry、follow控制、二次enable或改clock。
+- 合成CLI仅在真实全局tail --mode sessions --follow命令首代自然code7退出；第二代新PID自动启动，exit→restart 4748ms。
+- 公开status实际经历 cli_follow_failed / bounded_polling，再恢复global_follow；恢复时间不是手动触发。
+- stable ID2在断流前先保存；第二代两页均重放ID2并带ID3；最终规范消息仅2条，回执2 created+4 reused。
+- 来源6条、处理回执6条；两条消息均属于同owner/contact/binding，原始时间晚于baseline，派生收据2条且task_id=null。
+- 账号身份、selected授权、排除项、绑定及baseline原始JSON逐字段不变；未扩大范围，范围外事件不读正文，history查询0。
+- background_task/step、model_call_receipt、learning_claim、outbound_ledger、reply_request/attempt均0。
+- Node本机传输审计402条、Python38条，外网尝试均0；进程内TCP/socket/DNS审计，不改系统网络或DNS。
+- disable后跨过3.5秒原宿主heartbeat，零新增CLI命令；公开/api/runtime/shutdown正常完成。
+- 两轮自有runner/DSH/Legacy/CLI、info、锁、profile与模型socket均消失；两轮随机_test库确认不存在，共享PG保留且启动时间不变。
+- 原始日志、逐文件核验后的源码归档及首轮完整失败夹具/数据库只读快照仅留仓外；展开staging共16,454,308字节已清理。
+- 首轮RED在confirm前置返回500，未enable；原fake CLI shebang指向脚本包装器，直接执行及归档逐字重放均为macOS errno8。
+- 首轮仅属夹具传输失败，不证明产品缺陷；原库先全表归档后无连接清理，没有清journal或改业务行绕过门禁。
+- 修正仅fake CLI shebang为真实Node并显式import审计、后续authority查询表名拼写；只复跑同一个最小case通过。
+- prepare分享脚本另将静态本机路径改为环境变量/Path.home，并移除仓内私有指针；原执行字节仓外留双SHA，没有为路径调整重跑case。
+- 制品：result.json、coverage-check.json、source-hashes.json、official-source-hashes.json、cleanup-proof.json、exec-format-proof.json、artifact-hashes.json。
+- 路径别名：$RUN=通过轮私有证据，$ATTEMPT1=首轮，$FROZEN=冻结源，$PROJECT/$NODE/$PYTHON/$DSH_OFFICIAL仅指端侧输入。
+- 命令：最小隔离环境下 `$NODE --import $RUN/node-audit.mjs $RUN/probe.mjs`；只运行本case及原fake CLI传输诊断。
+- 数据影响：仅本轮合成身份、消息和来源；无真实资料、App/微信、模型、外发、安装、打包、提交或push。
+- 剩余边界：未覆盖全部私聊、停机追赶、连续多次断连/指数退避、真实微信或整票验收。
+- result SHA256：`312fdf792dd09f13358ec665ac5fd3294ca8e8ae9c95cb6755eb6e457dae1150`。
+- artifact-hashes SHA256：`65820bd318c6f7c9315dc5400d7dcd11960a19b354ee91652e5ee7a5499b45b7`。

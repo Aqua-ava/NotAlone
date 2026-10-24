@@ -1,0 +1,12 @@
+{
+  "commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "has_git_metadata": false,
+  "files": {
+    "apps/cli/package.json": "d42efe9f3ff424f602f11598af8805ad25039953ebbbd3c163d67875f7e8658b",
+    "apps/cli/src/profile-boot.ts": "77a244c7dce0dacdd1f33dc7fc2cb220983706306e3fe5de15bb055aca1d9da2",
+    "apps/cli/src/process-shutdown.ts": "30743d5ac88154b25fd2d14ac22f7ff1b8d94e915547383de1ca7e49d1bbfc66",
+    "docs/cordis-tutorial/02-lifecycle-and-effects.md": "109dec778aa71245e17beb2df51d12e9a962db4e2ef7f1221ade268ac4b8a019",
+    "packages/bundle/sdk-minimal/cordis.patch.yml": "464ea07c03d3639c2c387fa3a684f5d4001e7ca39f8257b361c604f19487af66"
+  },
+  "version": "0.2.1-rc.2"
+}

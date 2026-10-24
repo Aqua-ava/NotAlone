@@ -1,0 +1,17 @@
+{
+  "version": "0.2.1-rc.2",
+  "commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "source_alias": "$DSH_OFFICIAL",
+  "git_metadata": false,
+  "official_files": {
+    "apps/cli/src/profile-boot.ts": "77a244c7dce0dacdd1f33dc7fc2cb220983706306e3fe5de15bb055aca1d9da2",
+    "apps/cli/src/process-shutdown.ts": "30743d5ac88154b25fd2d14ac22f7ff1b8d94e915547383de1ca7e49d1bbfc66",
+    "docs/cordis-tutorial/02-lifecycle-and-effects.md": "109dec778aa71245e17beb2df51d12e9a962db4e2ef7f1221ade268ac4b8a019",
+    "packages/bundle/sdk-minimal/cordis.patch.yml": "464ea07c03d3639c2c387fa3a684f5d4001e7ca39f8257b361c604f19487af66"
+  },
+  "installed_files": {
+    "backend-ts/node_modules/@deepseek-ai/dsh/package.json": "bea4288aa88eb54efe829686553100a75fdf09d11c5e3bf6b329badb9a0368dd",
+    "backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js": "80112efe368efb1a39720c7ada0af00442e5131fb2744edaaff8a3e8bb499e6f",
+    "backend-ts/node_modules/@deepseek-ai/dsh/lib/profile-boot.js": "30dc487766b018f20a2f54a646b2ea49974704d8b4eca2ec5a87cc0e88e79087"
+  }
+}
