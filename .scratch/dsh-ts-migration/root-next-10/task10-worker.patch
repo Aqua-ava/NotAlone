@@ -1,0 +1,505 @@
+diff --git a/backend-ts/src/extraction-progress-http.ts b/backend-ts/src/extraction-progress-http.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b193401e2aa7c017d0bb9e85c23589eaa74d50f6
+--- /dev/null
++++ b/backend-ts/src/extraction-progress-http.ts
+@@ -0,0 +1,40 @@
++/** 记忆处理只读投影的路由适配；不读消息正文，也不触发排队或模型调用。 */
++import {ExtractionTaskError,type ExtractionTaskStore} from './extraction-task-store.ts';
++
++const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++export interface ExtractionProgressResponse {status:number;body:unknown}
++
++export class ExtractionProgressApi {
++  private readonly store:ExtractionTaskStore;
++  private readonly ownerId:string;
++  constructor(store:ExtractionTaskStore,ownerId:string) {
++    if(!uuid.test(ownerId))throw new ExtractionTaskError('progress_owner_invalid');
++    this.store=store;this.ownerId=ownerId.toLowerCase();
++  }
++
++  /** 只接管原GET路径；其他方法或路径返回null，继续走现有公开入口。 */
++  async handle(method:string,pathname:string):Promise<ExtractionProgressResponse|null>{
++    if(method!=='GET')return null;
++    if(pathname==='/api/owner/memory-processing'){
++      return this.read(()=>this.store.ownerProgress(this.ownerId));
++    }
++    const match=/^\/api\/contacts\/([^/]+)\/memory-processing$/.exec(pathname);
++    if(!match)return null;
++    if(!uuid.test(match[1]!))return {status:400,body:{error:'memory_processing_request_invalid'}};
++    const contactId=match[1]!.toLowerCase();
++    return this.read(()=>this.store.progress({ownerId:this.ownerId,contactId}));
++  }
++
++  private async read(operation:()=>Promise<unknown>):Promise<ExtractionProgressResponse>{
++    try{return {status:200,body:await operation()};}
++    catch(error){
++      if(error instanceof ExtractionTaskError&&['contact_not_found','owner_not_found'].includes(error.code)){
++        return {status:404,body:{error:'memory_processing_not_found'}};
++      }
++      if(error instanceof ExtractionTaskError&&error.code==='worker_scan_invalid'){
++        return {status:400,body:{error:'memory_processing_request_invalid'}};
++      }
++      return {status:503,body:{error:'memory_processing_unavailable'}};
++    }
++  }
++}
+diff --git a/backend-ts/src/extraction-task-store-processing.ts b/backend-ts/src/extraction-task-store-processing.ts
+index 9e69b975888edb0ba0fa3c911c2f40793962e26e..a2833b16c7c25a2985111eb190d590dc14b8e512 100644
+--- a/backend-ts/src/extraction-task-store-processing.ts
++++ b/backend-ts/src/extraction-task-store-processing.ts
+@@ -62,27 +62,28 @@ export async function extractionCheckpoint(store:ExtractionTaskStore,c:pg.Client
+   AND x.message_id=r.message_id AND x.owner_id=r.owner_id AND x.contact_id=r.contact_id AND x.completed_at IS NULL`,[claim.taskId,claim.ownerId,claim.contactId,ids]);
+  await c.query('UPDATE memory_processing_plan SET updated_at=now() WHERE task_id=$1',[claim.taskId]);
+ }
+-export async function extractionProgress(store:ExtractionTaskStore,scope:ExtractionScope,taskId?:string){
++async function extractionProgressFor(store:ExtractionTaskStore,ownerId:string,contactId:string|null,taskId?:string){
+  const c=await store.pool.connect();try{
+   await c.query('BEGIN READ ONLY');
+-  if(!(await c.query('SELECT 1 FROM contact WHERE owner_id=$1 AND id=$2',[scope.ownerId,scope.contactId])).rowCount)throw new ExtractionTaskError('contact_not_found');
++  if(contactId!==null&&!(await c.query('SELECT 1 FROM contact WHERE owner_id=$1 AND id=$2',[ownerId,contactId])).rowCount)throw new ExtractionTaskError('contact_not_found');
++  if(contactId===null&&!(await c.query('SELECT 1 FROM owner WHERE id=$1',[ownerId])).rowCount)throw new ExtractionTaskError('owner_not_found');
+   const rows=(await c.query(`SELECT t.*,p.task_id AS planned,p.updated_at AS progress_at,${processingSourceAllowed} AS source_allowed,
+    (SELECT count(*)::int FROM memory_processing_target x WHERE x.task_id=t.id) AS total,
+    (SELECT count(*)::int FROM memory_processing_target x WHERE x.task_id=t.id AND x.completed_at IS NOT NULL) AS processed,
+    (SELECT count(*)::int FROM memory_processing_target x WHERE x.task_id=t.id AND x.outcome='skipped') AS skipped,
+    (SELECT count(*)::int FROM memory_processing_target x WHERE x.task_id=t.id AND x.outcome='unknown') AS unknown,
+    EXISTS(SELECT 1 FROM background_task_step s WHERE s.task_id=t.id AND s.status='running' AND s.lease_expires_at>clock_timestamp()) AS live
+-   FROM background_task t LEFT JOIN memory_processing_plan p ON p.task_id=t.id WHERE t.owner_id=$1 AND t.contact_id=$2
++   FROM background_task t LEFT JOIN memory_processing_plan p ON p.task_id=t.id WHERE t.owner_id=$1 AND ($2::uuid IS NULL OR t.contact_id=$2)
+    AND ($3::uuid IS NULL OR t.id=$3) AND t.task_type IN ('import','observation')
+-   ORDER BY CASE WHEN t.status IN ('queued','running','verifying') THEN 0 ELSE 1 END,t.updated_at DESC,t.id LIMIT 101`,[scope.ownerId,scope.contactId,taskId??null])).rows;
++   ORDER BY CASE WHEN t.status IN ('queued','running','verifying') THEN 0 ELSE 1 END,t.updated_at DESC,t.id LIMIT 101`,[ownerId,contactId,taskId??null])).rows;
+   const pending=(await c.query(`SELECT count(*)::int AS n FROM memory_extraction_receipt r JOIN local_wechat_observation o
+    ON o.id=r.observation_id AND o.owner_id=r.owner_id AND o.contact_id=r.contact_id JOIN conversation_binding b
+    ON b.id=o.binding_id AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id
+-   WHERE r.owner_id=$1 AND r.contact_id=$2 AND r.task_id IS NULL AND b.status='active'
+-   AND EXISTS(SELECT 1 FROM message_source_ref ref WHERE ref.message_id=r.message_id AND ref.observation_id=o.id)`,[scope.ownerId,scope.contactId])).rows[0].n;
++   WHERE r.owner_id=$1 AND ($2::uuid IS NULL OR r.contact_id=$2) AND r.task_id IS NULL AND b.status='active'
++   AND EXISTS(SELECT 1 FROM message_source_ref ref WHERE ref.message_id=r.message_id AND ref.observation_id=o.id)`,[ownerId,contactId])).rows[0].n;
+   await c.query('COMMIT');
+-  return {scope:'contact',contact_id:scope.contactId,pending_count:pending,has_more:rows.length>100,tasks:rows.slice(0,100).map(row=>{
+-   const scheduled=store.options.processingState?.(scope,row.id);
++  return {scope:contactId===null?'owner':'contact',contact_id:contactId,pending_count:pending,has_more:rows.length>100,tasks:rows.slice(0,100).map(row=>{
++   const scheduled=store.options.processingState?.({ownerId,contactId:row.contact_id},row.id);
+    let status='interrupted',reason=row.last_error_code??'execution_interrupted',action:string|null='resume';
+    if(row.status==='succeeded'){status='completed';action=null;reason=row.skipped?'batches_skipped':row.unknown?'processing_outcome_unknown':row.last_error_code;}
+    else if(row.status==='cancelled'){status='stopped';action='restart';reason=row.last_error_code??'task_cancelled';}
+@@ -96,3 +97,10 @@ export async function extractionProgress(store:ExtractionTaskStore,scope:Extract
+   })};
+  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
+ }
++export async function extractionProgress(store:ExtractionTaskStore,scope:ExtractionScope,taskId?:string){
++ return extractionProgressFor(store,scope.ownerId,scope.contactId,taskId);
++}
++/** owner 页面与联系人页面共享同一任务行；只按 owner 放宽查询，不重建任务或统计。 */
++export async function ownerExtractionProgress(store:ExtractionTaskStore,ownerId:string,taskId?:string){
++ return extractionProgressFor(store,ownerId,null,taskId);
++}
+diff --git a/backend-ts/src/extraction-task-store.ts b/backend-ts/src/extraction-task-store.ts
+index aa471cdc86397246c0a748cdc069784f219bf01f..a270d23c59c72f62c68336c914ac554662c94e19 100644
+--- a/backend-ts/src/extraction-task-store.ts
++++ b/backend-ts/src/extraction-task-store.ts
+@@ -1,6 +1,6 @@
+ /** 原后台任务表的确定性持久层；生命周期由宿主 effect 持有，不创建 DSH 私有任务。 */
+ import type pg from 'pg';
+-import {extractionTargets,extractionCheckpoint,extractionProgress,type ExtractionTargets} from './extraction-task-store-processing.ts';
++import {extractionTargets,extractionCheckpoint,extractionProgress,ownerExtractionProgress,type ExtractionTargets} from './extraction-task-store-processing.ts';
+ import {unsettledExtraction,blockedExtraction,quarantineExtraction} from './extraction-task-store-recovery.ts';
+ import {recordExtractionObservation,claimExtractionSchedule,enqueueExtractionObservation} from './extraction-task-store-schedule.ts';
+ export interface ExtractionScope {ownerId:string;contactId:string;}
+@@ -32,6 +32,7 @@ export class ExtractionTaskStore {
+  targets(claim:ExtractionClaim):Promise<ExtractionTargets>{return extractionTargets(this,claim);}
+  checkpoint(c:pg.ClientBase,claim:ExtractionClaim,ids:readonly string[],outcome:'succeeded'|'skipped'|'unknown'):Promise<void>{return extractionCheckpoint(this,c,claim,ids,outcome);}
+  progress(scope:ExtractionScope,taskId?:string){return extractionProgress(this,scope,taskId);}
++ ownerProgress(ownerId:string,taskId?:string){return ownerExtractionProgress(this,ownerId,taskId);}
+  recordObservation(c:pg.ClientBase,scope:ExtractionScope,observationId:string,ids:readonly string[]){return recordExtractionObservation(c,scope,observationId,ids);}
+  claimScheduled(scope:ExtractionScope){return this.transaction(scope,c=>claimExtractionSchedule(c,scope));}
+  enqueueObservation(scope:ExtractionScope,ids:readonly string[]){return enqueueExtractionObservation(this,scope,ids);}
+@@ -186,6 +187,31 @@ export class ExtractionTaskStore {
+    return {task_id:taskId,status:'queued'};
+   });
+  }
++ /** 只列出可交给提取 Worker 的联系人范围；真正领取仍走 claim 的原子租约。 */
++ async readyScopes(ownerId:string,limit=64,runtimeModes:readonly ('legacy'|'bounded-runtime-v1')[]=['legacy']):Promise<ExtractionScope[]>{
++  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId)
++   ||!Number.isSafeInteger(limit)||limit<1||limit>256||!runtimeModes.length
++   ||runtimeModes.some(mode=>!['legacy','bounded-runtime-v1'].includes(mode)))throw new ExtractionTaskError('worker_scan_invalid');
++  const rows=(await this.pool.query(`WITH candidates AS (
++    SELECT s.contact_id,0 AS priority,COALESCE(s.due_at,s.last_input_at) AS ready_at
++    FROM memory_extraction_schedule s
++    JOIN conversation_binding b ON b.owner_id=s.owner_id AND b.contact_id=s.contact_id AND b.status='active'
++    LEFT JOIN background_task scheduled_task ON scheduled_task.id=s.task_id
++    WHERE s.owner_id=$1 AND s.due_at IS NOT NULL AND s.due_at<=clock_timestamp()
++     AND (s.pending_count>0 OR s.task_id IS NOT NULL)
++     AND (scheduled_task.id IS NULL OR COALESCE(scheduled_task.extraction_runtime_config->>'mode','legacy')=ANY($3::text[]))
++    UNION ALL
++    SELECT t.contact_id,1 AS priority,COALESCE(t.started_at,t.created_at) AS ready_at
++    FROM background_task t JOIN background_task_step s ON s.task_id=t.id
++    WHERE t.owner_id=$1 AND t.task_type IN ('import','observation')
++     AND t.status IN ('queued','running','verifying') AND ${sourceAllowed}
++     AND s.step_name IN ('parse','normalize','extract_memory') AND s.status IN ('pending','retryable')
++     AND COALESCE(t.extraction_runtime_config->>'mode','legacy')=ANY($3::text[])
++   )
++   SELECT contact_id FROM candidates GROUP BY contact_id
++   ORDER BY min(priority),min(ready_at),contact_id LIMIT $2`,[ownerId,limit,[...new Set(runtimeModes)]])).rows;
++  return rows.map(row=>({ownerId,contactId:row.contact_id}));
++ }
+  /** 会话锁必须贯穿整个Worker寿命；release只能在在途run全部退出后调用。 */
+  async acquireWorker():Promise<{release:()=>Promise<void>}|null>{
+   const c=await this.pool.connect();
+diff --git a/backend-ts/src/extraction-worker.ts b/backend-ts/src/extraction-worker.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..01bb56d7f6254788c87e8d71a36939d61fde0ab9
+--- /dev/null
++++ b/backend-ts/src/extraction-worker.ts
+@@ -0,0 +1,219 @@
++/** 原 PostgreSQL 队列的唯一提取 Worker；只领取一个步骤，不起第二个计时循环。 */
++import {randomUUID} from 'node:crypto';
++import {ExtractionTaskError,type ExtractionClaim,type ExtractionScope,type ExtractionTaskStore} from './extraction-task-store.ts';
++
++export interface ExtractionWorkerResult {
++  processedCount:number;
++  totalCount?:number;
++}
++
++/**
++ * 执行器必须在同一 claim 围栏内完成 B 段、追踪与水位提交，再返回真实处理量。
++ * Worker 只负责原任务/步骤租约、心跳与最终 complete/fail，不据此伪造采纳。
++ */
++export interface ExtractionWorkerRunner {
++  run(claim:ExtractionClaim,signal:AbortSignal):Promise<ExtractionWorkerResult>;
++}
++
++export interface ExtractionWorkerOptions {
++  store:ExtractionTaskStore;
++  ownerId:string;
++  runner:ExtractionWorkerRunner;
++  workerId?:string;
++  leaseMs?:number;
++  heartbeatMs?:number;
++  idleMs?:number;
++}
++
++type Wake = {scope?:ExtractionScope;taskId?:string};
++type WorkerState = 'idle'|'running'|'stopping'|'stopped';
++const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++
++function positiveInteger(value:number,name:string,maximum:number):number {
++  if(!Number.isSafeInteger(value)||value<1||value>maximum)throw new ExtractionTaskError(name);
++  return value;
++}
++
++function errorCode(error:unknown):string {
++  const raw=error&&typeof error==='object'&&'code' in error?String(error.code):'';
++  return /^[A-Za-z0-9_]{1,64}$/.test(raw)?raw:'extraction_worker_failed';
++}
++
++function retryable(error:unknown):boolean {
++  return Boolean(error&&typeof error==='object'&&'retryable' in error&&error.retryable===true);
++}
++
++/** 单进程、单 owner 的唯一 Worker；全局 advisory lock 在使用期始终由本实例持有。 */
++export class ExtractionWorker {
++  private readonly store:ExtractionTaskStore;
++  private readonly ownerId:string;
++  private readonly runner:ExtractionWorkerRunner;
++  private readonly workerId:string;
++  private readonly leaseMs:number;
++  private readonly heartbeatMs:number;
++  private readonly idleMs:number;
++  private state:WorkerState='idle';
++  private abort:AbortController|null=null;
++  private release:null|(()=>Promise<void>)=null;
++  private loop:Promise<void>|null=null;
++  private starting:Promise<boolean>|null=null;
++  private wakeSignal:Promise<void>|null=null;
++  private wakeResolve:(()=>void)|null=null;
++  private wakeTimer:NodeJS.Timeout|null=null;
++  private readonly wakes=new Map<string|undefined,Wake>();
++
++  constructor(options:ExtractionWorkerOptions){
++    if(!uuid.test(options.ownerId))throw new ExtractionTaskError('worker_scope_invalid');
++    this.workerId=(options.workerId??randomUUID()).toLowerCase();
++    if(!uuid.test(this.workerId))throw new ExtractionTaskError('worker_identity_invalid');
++    this.leaseMs=positiveInteger(options.leaseMs??30_000,'worker_lease_invalid',300_000);
++    this.heartbeatMs=positiveInteger(options.heartbeatMs??Math.max(250,Math.floor(this.leaseMs/3)),'worker_heartbeat_invalid',this.leaseMs);
++    this.idleMs=positiveInteger(options.idleMs??1_000,'worker_idle_invalid',60_000);
++    this.store=options.store;this.ownerId=options.ownerId.toLowerCase();this.runner=options.runner;
++  }
++
++  status():{state:WorkerState;worker_id:string}{
++    return {state:this.state,worker_id:this.workerId};
++  }
++
++  /** 返回 false 表示另一个进程或实例已经持有原 global-worker 会话锁。 */
++  start():Promise<boolean>{
++    if(this.starting)return this.starting;
++    if(this.loop)return Promise.resolve(true);
++    this.starting=(async()=>{
++      const held=await this.store.acquireWorker();
++      if(!held){this.state='stopped';return false;}
++      this.release=held.release;this.abort=new AbortController();this.state='running';
++      this.loop=this.runLoop(this.abort.signal).finally(async()=>{
++        this.state='stopped';this.loop=null;this.abort=null;
++        const release=this.release;this.release=null;
++        if(release)await release();
++      });
++      void this.loop.catch(()=>{});
++      this.notify();
++      return true;
++    })().finally(()=>{this.starting=null;});
++    return this.starting;
++  }
++
++  /** 事件只是提示；持久回执和 due_at 已先提交，通知丢失仍由轮询补偿。 */
++  wake(scope?:ExtractionScope,taskId?:string):boolean{
++    if(this.state!=='running')return false;
++    if(scope&&(scope.ownerId.toLowerCase()!==this.ownerId||!uuid.test(scope.contactId)))return false;
++    if(scope)this.wakes.set(`${this.ownerId}:${scope.contactId.toLowerCase()}`,{scope:{ownerId:this.ownerId,contactId:scope.contactId.toLowerCase()},...(taskId?{taskId}:{})});
++    else this.wakes.set(undefined,{...(taskId?{taskId}:{})});
++    this.notify();
++    return true;
++  }
++
++  /** 超时不会强抢运行中的模型调用；未排空时仍由原租约在进程退出后恢复。 */
++  async stop(timeoutMs=4_000):Promise<boolean>{
++    if(!this.loop)return true;
++    if(this.state==='running')this.state='stopping';
++    this.abort?.abort();this.notify();
++    let timer:NodeJS.Timeout|undefined;
++    try{
++      const drained=await Promise.race([
++        this.loop.then(()=>true),
++        new Promise<boolean>(resolve=>{timer=setTimeout(()=>resolve(false),timeoutMs);}),
++      ]);
++      return drained;
++    }finally{if(timer)clearTimeout(timer);}
++  }
++
++  private notify():void{
++    if(this.wakeTimer){clearTimeout(this.wakeTimer);this.wakeTimer=null;}
++    const resolve=this.wakeResolve;this.wakeResolve=null;this.wakeSignal=null;resolve?.();
++  }
++
++  private async waitForWake(signal:AbortSignal):Promise<void>{
++    if(signal.aborted)return;
++    this.wakeSignal??=new Promise(resolve=>{this.wakeResolve=resolve;});
++    this.wakeTimer??=setTimeout(()=>this.notify(),this.idleMs);
++    await Promise.race([
++      this.wakeSignal,
++      new Promise<void>(resolve=>signal.addEventListener('abort',()=>resolve(),{once:true})),
++    ]);
++  }
++
++  private async runLoop(signal:AbortSignal):Promise<void>{
++    while(!signal.aborted){
++      try{
++        if(await this.runOne(signal))continue;
++      }catch(error){
++        if(signal.aborted)break;
++        // 扫描或租约存储故障不解锁另一个 Worker；短暂退避后仍在同一全局锁内重试。
++        if(!(error instanceof ExtractionTaskError))throw error;
++      }
++      await this.waitForWake(signal);
++    }
++  }
++
++  private async runOne(signal:AbortSignal):Promise<boolean>{
++    const hinted=[...this.wakes.entries()];
++    this.wakes.clear();
++    const hintedScopes=hinted.flatMap(([,value])=>value.scope?[value.scope]:[]);
++    let scopes=await this.store.readyScopes(this.ownerId);
++    if(hintedScopes.length){
++      const ordered=[...hintedScopes,...scopes];
++      scopes=[...new Map(ordered.map(scope=>[scope.contactId,scope])).values()];
++    }
++    const taskHint=hinted.find(([key])=>key===undefined)?.[1].taskId;
++    const scopedHints=new Map(hinted.flatMap(([,value])=>value.scope&&value.taskId?[[value.scope.contactId,value.taskId] as const]:[]));
++    for(const scope of scopes){
++      if(signal.aborted)return false;
++      let claim:ExtractionClaim|null;
++      try{
++        await this.store.claimScheduled(scope);
++        const taskId=scopedHints.get(scope.contactId)??taskHint;
++        claim=await this.store.claim(scope,{
++          ...(taskId?{taskId}:{}),workerId:this.workerId,leaseMs:this.leaseMs,
++          supportedSteps:['parse','normalize','extract_memory'],
++        });
++      }catch(error){
++        // 一个联系人的配置或来源冲突不能饿死其他联系人；真实PG故障仍由外层停止交付。
++        if(error instanceof ExtractionTaskError)continue;
++        throw error;
++      }
++      if(!claim)continue;
++      await this.execute(claim,signal);
++      return true;
++    }
++    return false;
++  }
++
++  private async execute(claim:ExtractionClaim,globalSignal:AbortSignal):Promise<void>{
++    if(claim.stepName==='parse'||claim.stepName==='normalize'){
++      await this.store.complete(claim,claim.messageCount,claim.messageCount);
++      return;
++    }
++    if(claim.stepName!=='extract_memory')throw new ExtractionTaskError('worker_step_unsupported');
++    const stepAbort=new AbortController();
++    const signal=AbortSignal.any([globalSignal,stepAbort.signal]);
++    let heartbeatError:unknown;
++    const heartbeat=setInterval(()=>{
++      if(signal.aborted)return;
++      void this.store.renew(claim,this.leaseMs).catch(error=>{
++        heartbeatError=error;stepAbort.abort();
++        void this.store.pause(claim).catch(()=>{});
++      });
++    },this.heartbeatMs);
++    try{
++      const result=await this.runner.run(claim,signal);
++      if(heartbeatError)throw heartbeatError;
++      if(signal.aborted)throw new ExtractionTaskError('worker_stopped');
++      if(!Number.isSafeInteger(result.processedCount)||result.processedCount<0
++       ||result.totalCount!==undefined&&(!Number.isSafeInteger(result.totalCount)||result.totalCount<0)){
++        throw new ExtractionTaskError('worker_result_invalid');
++      }
++      await this.store.complete(claim,result.processedCount,result.totalCount??claim.messageCount);
++    }catch(error){
++      if(signal.aborted){
++        await this.store.pause(claim).catch(()=>{});
++        return;
++      }
++      if(error instanceof ExtractionTaskError&&error.code==='lease_stale')return;
++      await this.store.fail(claim,errorCode(error),retryable(error)).catch(()=>{});
++    }finally{clearInterval(heartbeat);}
++  }
++}
+diff --git a/backend-ts/src/sync-incremental-store-write.ts b/backend-ts/src/sync-incremental-store-write.ts
+index d108030832218f3c486aec766d0761059d8912dc..f75af163164b71d5572c0d8e1a79df2f065b4e47 100644
+--- a/backend-ts/src/sync-incremental-store-write.ts
++++ b/backend-ts/src/sync-incremental-store-write.ts
+@@ -7,6 +7,7 @@ import type pg from 'pg';
+ import {HostStorageError} from './host-storage.ts';
+ import {parseJson,stringifyJson} from './host-json.ts';
+ import type {NormalizedIncrementalMessage,IncrementalProcessingRecord} from './sync-incremental-normalize.ts';
++import {recordExtractionObservation} from './extraction-task-store-schedule.ts';
+ type Receipt=Record<string,unknown>;
+ export async function saveIncrementalMessages(c:pg.Client,owner:string,contact:string,observation:string,messages:readonly NormalizedIncrementalMessage[]){
+   const ids:string[]=[],created:(string|null)[]=[],receipts=new Map<string,Receipt>();
+@@ -27,7 +28,7 @@ export async function saveIncrementalMessages(c:pg.Client,owner:string,contact:s
+       dedup_rule:'stable_local_id_and_create_time_or_minus_one',execution:{started_at:startedAt,finished_at:new Date().toISOString(),status:'prepared_for_commit',rule_version:ruleVersion}};
+     receipts.set(m.processing_record.record_id,receipt);
+   }
+-  await schedule(c,owner,contact,observation,created.filter((v):v is string=>v!==null));
++  await recordExtractionObservation(c,{ownerId:owner,contactId:contact},observation,created.filter((v):v is string=>v!==null));
+   return {ids,created,receipts};
+ }
+ export async function saveIncrementalProcessing(c:pg.Client,owner:string,contact:string,source:string|null,records:readonly IncrementalProcessingRecord[],receipts:Map<string,Receipt>,status:'recorded'|'failed'='recorded'){
+@@ -42,22 +43,3 @@ export async function saveIncrementalProcessing(c:pg.Client,owner:string,contact
+     await c.query('INSERT INTO public.source_processing_record(record_id,batch_id,owner_id,contact_id,position,locator,message_id,source_ref_id,outcome,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)',[randomUUID(),batch,owner,contact,position,r.locator,receipt.message_id??null,receipt.source_ref_id??null,receipt.outcome??payload.outcome??'filtered',stringifyJson(payload)]);
+   }
+ }
+-async function schedule(c:pg.Client,owner:string,contact:string,observation:string,ids:string[]){
+-  if(!ids.length)return;
+-  await c.query('INSERT INTO public.memory_extraction_schedule(owner_id,contact_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[owner,contact]);
+-  const added=(await c.query('INSERT INTO public.memory_extraction_receipt(message_id,owner_id,contact_id,observation_id) SELECT unnest($1::uuid[]),$2,$3,$4 ON CONFLICT DO NOTHING RETURNING message_id',[ids,owner,contact,observation])).rows.map(r=>r.message_id);
+-  if(!added.length)return;
+-  // 045 的 observation_scope_unique 保证每 owner/contact 仅一行，不能任取历史任务。
+-  const previous=(await c.query("SELECT id,status FROM public.background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type='observation' FOR UPDATE",[owner,contact])).rows[0];
+-  if(previous?.status==='cancelled'){
+-    await c.query('UPDATE public.memory_extraction_receipt SET task_id=$1 WHERE owner_id=$2 AND contact_id=$3 AND task_id IS NULL AND NOT(message_id=ANY($4::uuid[]))',[previous.id,owner,contact,added]);
+-    await c.query('DELETE FROM public.memory_processing_plan WHERE task_id=$1',[previous.id]);
+-    await c.query('UPDATE public.memory_extraction_schedule SET threshold=1,task_id=NULL WHERE owner_id=$1 AND contact_id=$2',[owner,contact]);
+-  }
+-  const count=(await c.query(`SELECT count(*)::int AS n FROM public.memory_extraction_receipt r
+-    JOIN public.local_wechat_observation o ON o.id=r.observation_id AND o.owner_id=r.owner_id AND o.contact_id=r.contact_id
+-    JOIN public.conversation_binding b ON b.id=o.binding_id AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id
+-    WHERE r.owner_id=$1 AND r.contact_id=$2 AND r.task_id IS NULL AND b.status='active'
+-    AND EXISTS(SELECT 1 FROM public.message_source_ref ref WHERE ref.message_id=r.message_id AND ref.observation_id=o.id)`,[owner,contact])).rows[0].n;
+-  await c.query("UPDATE public.memory_extraction_schedule SET pending_count=$3,last_input_at=now(),due_at=CASE WHEN $3>=threshold THEN now() ELSE now()+interval '600 seconds' END WHERE owner_id=$1 AND contact_id=$2",[owner,contact,count]);
+-}
+diff --git a/backend-ts/test/extraction-task-store.test.mjs b/backend-ts/test/extraction-task-store.test.mjs
+index 9e31c5b92bbfbadbe4442d673c8402b57a4b0f7e..eacf1654baf8d16a23a25d6c3b3f0837d2705678 100644
+--- a/backend-ts/test/extraction-task-store.test.mjs
++++ b/backend-ts/test/extraction-task-store.test.mjs
+@@ -5,6 +5,8 @@ import {execFileSync} from 'node:child_process';
+ import {homedir} from 'node:os';
+ import pg from 'pg';
+ import {ExtractionTaskStore} from '../src/extraction-task-store.ts';
++import {ExtractionWorker} from '../src/extraction-worker.ts';
++import {ExtractionProgressApi} from '../src/extraction-progress-http.ts';
+ import {modelTaskRequestId} from '../src/host-model-accounting.ts';
+ 
+ // 原迁移建立随机合成库；只在所有自有连接退出后普通 DROP，不终止其他进程。
+@@ -182,9 +184,72 @@ test('显式历史模式保留固定规则，版本不匹配时不改变任务
+  const f=await fixture();try{
+   const task=await f.store.enqueueImport(f.scope,f.sourceId,0);await f.pool.query("UPDATE background_task_step SET status='succeeded' WHERE task_id=$1 AND step_name IN ('parse','normalize')",[task]);
+   await f.pool.query('UPDATE background_task SET extraction_runtime_config=$2 WHERE id=$1',[task,{version:1,mode:'bounded-runtime-v1',rule_set_sha256:'b'.repeat(64)}]);
++  assert.deepEqual(await f.store.readyScopes(f.scope.ownerId),[]);
++  assert.deepEqual(await f.store.readyScopes(f.scope.ownerId,64,['bounded-runtime-v1']),[{ownerId:f.scope.ownerId,contactId:f.scope.contactId}]);
+   await assert.rejects(f.store.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000}),{code:'extraction_runtime_rule_unavailable'});
+   assert.equal((await f.pool.query("SELECT lease_generation FROM background_task_step WHERE task_id=$1 AND step_name='extract_memory'",[task])).rows[0].lease_generation,'0');
+   const claim=await f.store.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000,runtimeRuleSetSha256:'b'.repeat(64)});
+   assert.equal(claim.runtimeConfig.mode,'bounded-runtime-v1');
+  }finally{await f.close();}
+ });
++
++test('owner进度复用联系人任务行，并保持owner与contact范围',async()=>{
++ const f=await fixture();try{
++  const otherContact=randomUUID(),otherSource=randomUUID();
++  await f.pool.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'另一合成联系人')",[otherContact,f.scope.ownerId]);
++  await f.pool.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'wechat_jsonl','synthetic-other.jsonl',$4,1)",[otherSource,f.scope.ownerId,otherContact,'b'.repeat(64)]);
++  const first=await f.store.enqueueImport(f.scope,f.sourceId,2);
++  const second=await f.store.enqueueImport({ownerId:f.scope.ownerId,contactId:otherContact},otherSource,1);
++  const owner=await f.store.ownerProgress(f.scope.ownerId);
++  assert.equal(owner.scope,'owner');assert.equal(owner.contact_id,null);
++  assert.deepEqual(new Set(owner.tasks.map(task=>task.task_id)),new Set([first,second]));
++  assert.equal((await f.store.progress(f.scope,first)).tasks.length,1);
++  assert.equal((await f.store.progress(f.scope,second)).tasks.length,0);
++  await assert.rejects(f.store.ownerProgress(randomUUID()),{code:'owner_not_found'});
++  const api=new ExtractionProgressApi(f.store,f.scope.ownerId);
++  assert.equal((await api.handle('GET','/api/owner/memory-processing')).status,200);
++  assert.equal((await api.handle('GET',`/api/contacts/${otherContact}/memory-processing`)).status,200);
++  assert.equal(await api.handle('POST','/api/owner/memory-processing'),null);
++  assert.equal((await api.handle('GET','/api/contacts/not-a-uuid/memory-processing')).status,400);
++ }finally{await f.close();}
++});
++
++test('完整观察回执进入唯一Worker，全局锁阻止第二只，owner进度读真实处理量',async()=>{
++ const f=await fixture();let firstWorker,secondWorker;try{
++  const binding=randomUUID();await f.pool.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic','synthetic')",[binding,f.scope.ownerId,f.scope.contactId]);
++  const observed=await addObservation(f,binding,1);
++  assert.deepEqual(await f.store.readyScopes(f.scope.ownerId),[{ownerId:f.scope.ownerId,contactId:f.scope.contactId}]);
++  let releaseRun,runStarted;
++  const started=new Promise(resolve=>{runStarted=resolve;});
++  const gate=new Promise(resolve=>{releaseRun=resolve;});
++  const runner={
++   async run(claim,signal){
++    runStarted();await Promise.race([gate,new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}))]);
++    assert.equal(signal.aborted,false);
++    const targets=await f.store.targets(claim);assert.deepEqual(targets.targetIds,[observed.message]);
++    await f.store.fenced(claim,c=>f.store.checkpoint(c,claim,[observed.message],'succeeded'));
++    return {processedCount:1,totalCount:1};
++   },
++  };
++  firstWorker=new ExtractionWorker({store:f.store,ownerId:f.scope.ownerId,runner,idleMs:20,leaseMs:5000,heartbeatMs:1000});
++  secondWorker=new ExtractionWorker({store:f.store,ownerId:f.scope.ownerId,runner,idleMs:20,leaseMs:5000,heartbeatMs:1000});
++  assert.equal(await firstWorker.start(),true);
++  assert.equal(await secondWorker.start(),false);
++  await Promise.race([started,new Promise((_,reject)=>setTimeout(()=>reject(new Error('worker_start_timeout')),1000))]);
++  releaseRun();
++  const deadline=Date.now()+2000;
++  let progress;
++  while(Date.now()<deadline){
++   progress=await f.store.ownerProgress(f.scope.ownerId);
++   if(progress.tasks[0]?.processed_count===1&&progress.tasks[0]?.status==='interrupted')break;
++   await new Promise(resolve=>setTimeout(resolve,20));
++  }
++  assert.equal(progress.tasks[0].processed_count,1);
++  assert.equal(progress.tasks[0].total_count,1);
++  assert.equal(progress.tasks[0].contact_id,f.scope.contactId);
++  assert.equal(await firstWorker.stop(),true);
++  assert.equal(await secondWorker.start(),true);
++ }finally{
++  await secondWorker?.stop();await firstWorker?.stop();await f.close();
++ }
++});
