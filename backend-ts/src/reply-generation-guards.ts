@@ -1,10 +1,11 @@
+import {createReplyAssistantGuards} from './reply-assistant-factory.ts';
 /** 每轮生成的同事务守卫组装；历史重放不重新选择当前资料或偏好。 */
 import type pg from 'pg';
 import {isDeepStrictEqual} from 'node:util';
 import {normalizeReplyInput,replyUuid,type ReplyRequestInput} from './reply-contract.ts';
 import {requireReplyScope,type VerifiedReplyScope} from './reply-scope.ts';
 import {ReplyStoreError,type ReplyStoreGuards,type ReplyStoreInput,type ReplyStoreRequest,type ReplyStoreContext} from './reply-store.ts';
-import {ReplyAssistantGuards,type ReplyAssistantPorts,type AuthenticatedContinuation,type ReplyAssistantContext} from './reply-assistant-guards.ts';
+import {type AuthenticatedContinuation,type ReplyAssistantContext} from './reply-assistant-guards.ts';
 import {PostgresReplyDiscussionContext,type ReplyDiscussionContext} from './reply-discussion-context.ts';
 import {PostgresReplyContext,type BuiltReplyContext,type ReplyContextOptions} from './reply-context.ts';
 import {requireCurrentReplyMemory} from './reply-context-guards.ts';
@@ -53,15 +54,10 @@ export function createReplyGenerationGuards(options:ReplyGenerationGuardOptions)
  const scope=structuredClone(options.scope),input=structuredClone(options.input),auth=options.authenticatedContinuation?structuredClone(options.authenticatedContinuation):undefined;
  let prepared:PreparedGenerationState|undefined;
  const matches=(r:ReplyStoreInput)=>{if(r.owner_id!==scope.owner_id||r.contact_id!==scope.contact_id||r.conversation_binding_id!==scope.conversation_binding_id||r.idempotency_key!==input.idempotency_key||r.continued_from_candidate_id!==input.continued_from_candidate_id||r.normalized_input!==normalizeReplyInput(input))invalid();};
- const ports:ReplyAssistantPorts={
-   ...sources,requireCurrentReplyMemory,
-   requireReplySourcesCurrent:(client,s,id,historical)=>sources.requireReplySourcesCurrent(client,s,id,historical,(c,s,r)=>assistant.requireReplyDiscussionById(c,s,r)),
-   readReplyBasisChanges:(client,s,id)=>sources.readReplyBasisChanges(client,s,id,options.savedSkill.savedSkillPolicyChange),
-   requireSavedSkillPolicy:options.savedSkill.requireSavedSkillPolicy,
-   requireActiveBinding:async(client,s)=>{if(s.owner_id!==scope.owner_id||s.contact_id!==scope.contact_id)invalid();await requireReplyScope(client,scope,input);return scope.conversation_binding_id;},
-   navigationDependencyIds:context=>{const ids=context.snapshot.navigation_dependency_ids;if(!Array.isArray(ids))invalid();return ids as string[];},
- };
- const assistant=new ReplyAssistantGuards(ports),discussion=new PostgresReplyDiscussionContext({guards:assistant,ports});
+ const {assistant,ports}=createReplyAssistantGuards(options.savedSkill,async(client,s)=>{
+  if(s.owner_id!==scope.owner_id||s.contact_id!==scope.contact_id)invalid();await requireReplyScope(client,scope,input);return scope.conversation_binding_id;
+ });
+ const discussion=new PostgresReplyDiscussionContext({guards:assistant,ports});
  const assistantContext=(context:ReplyStoreContext):ReplyAssistantContext=>({...context,continuation_basis:prepared!.context.continuation_basis,assistant_discussion_snapshot:prepared!.discussion?.snapshot??null});
  async function validate(client:pg.Client,request:ReplyStoreRequest,context:ReplyStoreContext):Promise<PreparedGenerationState>{
    if(!prepared)unavailable();matches(request);const state=prepared!,built=state.context;if(state.preferences.revision===null&&!isLegacyEmptyPreferences(state.preferences))invalid();

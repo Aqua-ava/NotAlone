@@ -565,6 +565,7 @@ class BackendApp:
         "_wechat_scope_transferred",
         "_incremental_events",
         "_skill_service",
+        "_skill_management_control",
         "_skill_learning",
         "_expression_preferences",
         "_sync_control",
@@ -642,6 +643,8 @@ class BackendApp:
         self._wechat_scope_transferred = wechat_scope_transferred
         self._incremental_events = incremental_events
         self._skill_service = skill_service
+        from notalone.server.skill_management_control import SkillManagementControl
+        self._skill_management_control = SkillManagementControl(owner_id)
         self._skill_learning = skill_learning
         self._sync_control = sync_control
         self._task_host = task_host
@@ -706,6 +709,7 @@ class BackendApp:
         with self._runtime_shutdown_lock:
             if self._runtime_stopped.is_set():
                 return
+            self._skill_management_control.close()
             if self._runtime_shutdown is not None:
                 self._runtime_shutdown()
             if self._layered_memory is not None:
@@ -872,6 +876,20 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
             )
+        if path_value.startswith("/api/runtime/skill-management/"):
+            if os.environ.get("NOTALONE_TS_HOST") != "1" or any(key.lower() == "origin" for key in headers):
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            if path != path_value or len(request_body) > 2048:
+                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "skill_management_request_invalid"})
+            from notalone.persistence.skill_management_handoff import SkillManagementUnavailable
+            try:
+                payload = _parse_skill_json(request_body) if method_upper == "POST" else {}
+                value = self._skill_management_control.handle(path_value.rsplit("/", 1)[-1], method_upper, payload)
+                return _json_response(HTTPStatus.OK, value)
+            except (ValueError, SkillRequestInvalid):
+                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "skill_management_request_invalid"})
+            except SkillManagementUnavailable:
+                return _json_response(HTTPStatus.CONFLICT, {"error": "skill_management_unavailable"})
         if path_value == "/api/runtime/foreground-location/stop":
             if os.environ.get("NOTALONE_TS_HOST") != "1" or method_upper != "POST":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})

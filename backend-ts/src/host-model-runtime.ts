@@ -5,6 +5,7 @@ import type {IncomingMessage,ServerResponse} from 'node:http';
 import {mkdir,lstat} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
+import {resolveSkillsRoot} from './skills-root.ts';
 import type {HostStorage} from './host-storage.ts';
 import {resolveHostReplyConfiguration} from './host-reply-config.ts';
 import {createHostReplyRuntime} from './host-reply.ts';
@@ -60,8 +61,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
     if(!identityDirectory.isDirectory()||(identityDirectory.mode&0o077)!==0
       ||process.getuid&&identityDirectory.uid!==process.getuid())throw new HostModelRuntimeError('model_identity_directory_not_private');
     const anonymousId=getOrCreateAnonymousUserId({env:{DSH_HOME:anonymousHome}});
-    const rawSkills=environment.NOTALONE_SKILLS_DIR??join(options.businessHome,'.notalone','skills');
-    const skillsRoot=resolve(options.projectDirectory,rawSkills.replace(/^~(?=\/|$)/,options.businessHome));
+    const skillsRoot=resolveSkillsRoot(environment,options.businessHome,options.projectDirectory);
     const token=randomBytes(32).toString('base64url');
     reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
       ledger,token,configuration:{skillsRoot,model:configuration.model,

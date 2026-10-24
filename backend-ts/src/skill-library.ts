@@ -55,6 +55,7 @@ export class SkillLibrary {
   async handle(method: string,url: URL,body?: unknown,assertCurrent: () => void = () => {}): Promise<unknown> {
     const owner=this.owner(); assertCurrent();
     const path=url.pathname;
+    if(path==='/api/skills/health' && method==='GET')return this.fileHealth(owner);
     if(path==='/api/skills' && method==='GET')return {skills:await this.list(owner,assertCurrent)};
     if(path==='/api/skills/import' && method==='POST') {
       const value=body as {package_path?:unknown};
@@ -82,7 +83,7 @@ export class SkillLibrary {
     }).catch(error=>{if(error instanceof SkillLibraryError)throw error;throw new SkillLibraryError('skill_persistence_failed');});
   }
   private async readTransaction<T>(operation: (client: pg.Client)=>Promise<T>,assertCurrent: ()=>void): Promise<T> {
-    return this.storage.businessReadTransaction(async client=>{assertCurrent();const result=await operation(client);assertCurrent();return result;})
+    return this.storage.businessReadTransaction(async client=>{assertCurrent();await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${this.owner()}`]);const result=await operation(client);assertCurrent();return result;})
       .catch(error=>{if(error instanceof SkillLibraryError)throw error;throw new SkillLibraryError('skill_persistence_failed');});
   }
   private async skill(client: pg.Client,owner: string,id: string,allowDeleted=false,lock=true): Promise<pg.QueryResultRow> {

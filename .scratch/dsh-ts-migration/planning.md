@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 用户已授权全部26项按依赖持续执行、目标模式和独立会话并行。当前01—04、09及18已验收；05、06、19、21仍为claimed，其余保持原依赖等待。2026-10-24 明确废除 ECNU，不再作为兼容验收项，见[范围更正](provider-scope-update.md)；其他条件不变。模块测试或本地提交不等于整票验收；最新交接见[执行记录](execution.md)。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
+> 用户已授权全部26项按依赖持续执行、目标模式和独立会话并行。当前01—04、06、09及18已验收；05、19、21仍为claimed，其余保持原依赖等待。2026-10-24 明确废除 ECNU，不再作为兼容验收项，见[范围更正](provider-scope-update.md)；其他条件不变。模块测试或本地提交不等于整票验收；最新交接见[执行记录](execution.md)。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
 
 ## 逐项任务与阻塞关系
 
@@ -11,7 +11,7 @@
 | [03 从桌面启动和管理 TS 后台](issues/03-desktop-backend-lifecycle.md) | 02 | ready-for-agent | resolved |
 | [04 选择已有联系人并读取上下文](issues/04-contact-context.md) | 03 | ready-for-agent | resolved |
 | [05 生成可追溯的基础候选](issues/05-traceable-replies.md) | 04 | ready-for-agent | claimed |
-| [06 管理并受控读取现有回复 Skill](issues/06-reply-skill-library.md) | 04 | ready-for-agent | claimed |
+| [06 管理并受控读取现有回复 Skill](issues/06-reply-skill-library.md) | 04 | ready-for-agent | resolved |
 | [07 探索方向并使用 Skill 生成候选](issues/07-exploration-skill-replies.md) | 05、06 | ready-for-agent | open |
 | [08 继续讨论和改写候选](issues/08-discussion-continuity.md) | 07 | ready-for-agent | open |
 | [09 查看和修正记忆及表达偏好](issues/09-memory-and-preferences.md) | 04 | ready-for-agent | resolved |

@@ -9,7 +9,7 @@
 | --- | --- | --- |
 | 主会话 | 总目标、依赖调度、planning及整合验收；不重复实现子会话模块 | 持续协调02—26 |
 | 05回复与模型会话 | reply/retrieval/model模块及测试、05证据 | claimed；cc263095宿主与恢复接线已验，真实回复质量/最终切换待验 |
-| 06Skill会话 | skill模块及测试、06证据 | claimed；领域测试通过，宿主与App待验 |
+| 06Skill会话 | skill模块及测试、06证据 | 票resolved；根完成宿主、来源C、官方profile与实际App签收，原受限子目标不恢复 |
 | 09记忆偏好会话 | memory/preference及共用managed-update-backups，限定04时间/版本scope参数化 | 票resolved；根完成闭包、官方宿主与实际App签收 |
 
 18已签收b4276969/9a5f6cf0，108为db1d9cbd；58TS/22Python/32UI、双轴及两轮合成App通过，工具准备原任务保持open。
@@ -44,3 +44,7 @@
 cc263095已整合唯一模型宿主、原SDK物理许可、已知终态ACK未知保护和正常DSH入口的跨模式恢复门禁；根最小1→相关42、strict0及SDK/profile/公开链14/14，实际npm run dev默认无模型正常导航/退出与隔离资源清理完成。默认仍Python，不等于最终TS切换。原材料上下文28×3×2=168/168通过且独立核原UUID/全文/来源/作者/微秒。
 
 当前接收6路径离线来源/完整输出报告及计时修复：根最小4/4→相关97/97→strict0，独立0finding；来源缺失/多attempt/时序未知保留未定，两认证始终false。详见comparison-root-integration/validation.md。实际paired collector跨臂累计预算、配置等价、真实供应商固定材料/预算与完整输出盲评仍待，05保持claimed。06既有模块整合审计并行进行，不恢复受限子目标。
+
+## 06 根签收（2026-10-24）
+
+既有普通 Skill 模块与移交门经最终 12 路径装配完成：单一 TS 管理、原来源 C、官方逐轮只读 scope，默认 Python 回复不变。根固定基线 RED→最小 1/1→相关 41/41、Python 21/21、provider／PG 端口 14/14、strict 0；双轴和五项覆盖核对无阻碍。实际 npm run dev 经原 API 操作、CUA 核对 v1／正文／启停／删除，正常退出并清理合成资源。原 artifact 两文件碰撞单列；详见 skill-host-root-acceptance/validation.md。06 resolved，07 仍等 05；不签其他票或最终切换，不恢复受限子目标。

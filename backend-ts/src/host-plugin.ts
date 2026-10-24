@@ -1,3 +1,6 @@
+import {SkillHost} from './skill-host.ts';
+import {SkillLibraryError,skillLibraryRoute} from './skill-library.ts';
+import {resolveSkillsRoot} from './skills-root.ts';
 import type {} from '@deepseek-ai/dsh-cmdline';
 import type { Context } from '@deepseek-ai/cordis';
 import { createServer } from 'node:http';
@@ -95,6 +98,7 @@ async function start(ctx: Context) {
   const contacts=new ContactContext(storage);
   const memories=new MemoryService(storage);
   const preferences=new PreferenceService(storage);
+  const skills=new SkillHost(storage,resolveSkillsRoot(runtimeEnvironment,config.businessHome,config.projectDirectory));
   let closing: Promise<void> | undefined;
   const closeResources = () => closing ??= (async () => {
     state='stopping';modelRuntime?.stopAccepting();
@@ -103,7 +107,7 @@ async function start(ctx: Context) {
     for(const release of [()=>incremental.close(),
       async()=>{
         const closed=await Promise.allSettled([()=>foreground.close(),()=>wechatScope.close(),
-          ()=>handoff?.close(),()=>memoryHandoff?.close()].map(release=>Promise.resolve().then(release)));
+          ()=>handoff?.close(),()=>memoryHandoff?.close(),()=>skills.close()].map(release=>Promise.resolve().then(release)));
         const errors=closed.filter(result=>result.status==='rejected').map(result=>result.reason);
         if(errors.length)throw new AggregateError(errors,'范围与资料资源未完整关闭');
       },
@@ -123,6 +127,7 @@ async function start(ctx: Context) {
       if(!modelRuntime){respond(401,{error:'unauthorized'});return;}
       await modelRuntime.handle(req,res);return;
     }
+    if(await skills.privateHttp(req,res))return;
     const supplied=Buffer.from(req.headers.authorization ?? '');
     const expected=Buffer.from(`Bearer ${token}`),internalExpected=Buffer.from(`Bearer ${contextToken}`);
     const internal=supplied.length===internalExpected.length && timingSafeEqual(supplied,internalExpected);
@@ -150,7 +155,7 @@ async function start(ctx: Context) {
         }:undefined);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,ownership:{...ownership,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,ownership:{...ownership,skills:skills.status().owner,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
@@ -235,6 +240,14 @@ async function start(ctx: Context) {
         }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);lease.finish();}
         return;
       }
+      if(skillLibraryRoute(req.method??'',url.pathname)){
+        const lease=skills.enter();const cancelled=new AbortController();const abort=()=>cancelled.abort();req.once('aborted',abort);res.once('close',abort);
+        try{
+          const assertCurrent=()=>{lease.assertCurrent();if(cancelled.signal.aborted)throw new SkillLibraryError('skill_unavailable',503);};
+          const body=req.method==='POST'?await readBody(req):undefined;
+          const result=await skills.library.handle(req.method??'',url,body,assertCurrent);assertCurrent();respond(200,result);
+        }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);lease.finish();}return;
+      }
       if(contactContextRoute(req.method??'',url.pathname)){
         if(internal && handoff.status().owner!=='typescript')throw new ContactContextError('contact_context_transferring',503);
         const lease=handoff.enter();
@@ -269,7 +282,7 @@ async function start(ctx: Context) {
         respond(200,await storage.useOfficialDeepseek(payload.api_key));return;
       }
       respond(404,{error:'not_found'});
-    }catch(error){if(error instanceof WechatHttpBodyError){res.setHeader('Connection','close');respond(error.status,{error:error.code});return;}const code=error instanceof HostStorageError?error.code:'invalid_request';respond(error instanceof ContactContextError || error instanceof MemoryError || error instanceof PreferenceError?error.status:['owner_already_configured','owner_recovery_ambiguous','owner_recovery_conflict'].includes(code)?409:400,{error:code});}
+    }catch(error){if(error instanceof WechatHttpBodyError){res.setHeader('Connection','close');respond(error.status,{error:error.code});return;}const code=error instanceof HostStorageError?error.code:'invalid_request';respond(error instanceof ContactContextError || error instanceof MemoryError || error instanceof PreferenceError || error instanceof SkillLibraryError?error.status:['owner_already_configured','owner_recovery_ambiguous','owner_recovery_conflict'].includes(code)?409:400,{error:code,...(error instanceof SkillLibraryError&&error.reason?{reason:error.reason}:{})});}
     finally{releaseAuthority?.();}
   });
   // Node解析器会先拒绝非法长度和半关闭的残缺请求；保留原HTTP稳定错误码。
@@ -304,6 +317,7 @@ async function start(ctx: Context) {
     foreground.activate();
     await handoff!.transfer('typescript');
     await memoryHandoff!.transfer('typescript');
+    await skills.transfer(legacy!,address.port);
     const pendingInfo = `${config.infoPath}.${randomBytes(16).toString('hex')}.pending`;
     try {
       await writeFile(pendingInfo,`address=127.0.0.1:${address.port}\ntoken=${token}\npid=${process.pid}\n`,{mode:0o600,flag:'wx'});
