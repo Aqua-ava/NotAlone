@@ -8,9 +8,23 @@ export async function eraseTraceBodies(client:Client,owner:string,ids:string[],r
   await client.query('DELETE FROM public.memory_extraction_trace_dependency WHERE owner_id=$1 AND trace_id=ANY($2::uuid[])',[owner,ids]);
   await client.query("UPDATE public.memory_extraction_trace SET status='deleted',deletion_reason=$3,failure_stage=NULL,error_code=NULL WHERE owner_id=$1 AND trace_id=ANY($2::uuid[])",[owner,ids,reason]);
 }
-export async function eraseSourceTraces(client:Client,owner:string,ids:string[]):Promise<void> {
-  const rows=(await client.query('SELECT DISTINCT trace_id FROM public.memory_extraction_trace_dependency WHERE owner_id=$1 AND source_id=ANY($2::uuid[]) UNION SELECT trace_id FROM public.memory_extraction_trace_link WHERE owner_id=$1 AND record_id=ANY($2::uuid[])',[owner,ids])).rows;
-  await eraseTraceBodies(client,owner,rows.map(r=>r.trace_id),'source_deleted');
+export async function eraseSourceTraces(client:Client,owner:string,ids:string[],contact:string|null=null,reason='source_deleted'):Promise<void> {
+  if(!ids.length)return;
+  const rows=(await client.query(`SELECT DISTINCT trace_id FROM public.memory_extraction_trace_dependency
+    WHERE owner_id=$1 AND source_id=ANY($2::uuid[]) AND ($3::uuid IS NULL OR contact_id=$3)
+   UNION SELECT DISTINCT trace_id FROM public.memory_extraction_trace_link
+    WHERE owner_id=$1 AND record_id=ANY($2::uuid[]) AND ($3::uuid IS NULL OR contact_id=$3)
+   UNION SELECT DISTINCT event.trace_id FROM public.memory_extraction_trace_event event
+    WHERE event.owner_id=$1 AND ($3::uuid IS NULL OR event.contact_id=$3) AND event.stage='window'
+     AND ((event.payload->'target_message_ids') ?| $4::text[] OR EXISTS(
+      SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(event.payload->'messages')='array'
+       THEN event.payload->'messages' ELSE '[]'::jsonb END) message
+      WHERE message->>'message_id'=ANY($4::text[]) OR EXISTS(
+       SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(message->'source_snapshots')='array'
+        THEN message->'source_snapshots' ELSE '[]'::jsonb END) source
+       WHERE source->>'source_id'=ANY($4::text[]) OR source->>'source_ref_id'=ANY($4::text[]))))`,
+   [owner,ids,contact,ids])).rows;
+  await eraseTraceBodies(client,owner,rows.map(r=>r.trace_id),reason);
 }
 export async function eraseRecordTraces(client:Client,owner:string,kind:string,id:string):Promise<void> {
   let candidate=null;
