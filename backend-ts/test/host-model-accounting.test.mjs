@@ -21,7 +21,7 @@ async function fixture(t){
   return {task_id:id,step_id:sid,step_name:step,worker_id:worker,lease_generation:1};
  };
  const receipt=(id,scope=contact)=>({attempt_id:randomUUID(),permit_id:randomUUID(),request_id:id,owner_id:owner,contact_id:scope,scope_kind:scope===null?'owner_memory':'contact',provider:'synthetic',model:'deepseek-flash',called_at:'2026-10-24T00:00:00Z',latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}});
- return {c,db,owner,contact,accounting,task,receipt};
+ return {c,db,owner,contact,accounting,task,receipt,tx};
 }
 const done=r=>({...r,outcome:'succeeded',dispatch:'response_observed'});
 async function l2(c,owner,contact,task,status='running'){
@@ -105,6 +105,19 @@ test('本人整理合法NULL scope，同事务扣计/预约失败回滚并拒绝
  await c.query("UPDATE layered_memory_state SET settings_generation=2 WHERE owner_id=$1",[owner]);
  await assert.rejects(a.reserve({...r,attempt_id:randomUUID()},claim),/job_stale/);
  assert.equal((await c.query('SELECT model_calls_used FROM layered_memory_job')).rows[0].model_calls_used,1);
+});
+test('本人整理接收已登记TS provider，未知provider仍拒绝',async t=>{
+ const {c,owner,contact,task,receipt,tx}=await fixture(t),claim=await task('layered_memory','organize_memory',null);
+ await c.query("INSERT INTO layered_memory_state(owner_id,contact_id,enabled,settings_generation) VALUES($1,NULL,true,1)",[owner]);
+ await c.query("INSERT INTO layered_memory_job(task_id,owner_id,contact_id,settings_generation,target_key,contract,target_manifest,dependency_ids,state,run_remaining,model_call_limit) VALUES($1,$2,NULL,1,'synthetic','synthetic','{}','{}','active',1,2)",[claim.task_id,owner]);
+ await l2(c,owner,null,claim.task_id);
+ const accounting=createHostModelAccounting({transaction:tx,provider:'deepseek',typescriptProvider:'notalone-deepseek',
+   model:'deepseek-flash',unconfirmedPermitIds:()=>[]});
+ const request={...receipt(claim.task_id,null),provider:'notalone-deepseek'};
+ await assert.rejects(accounting.reserve({...request,attempt_id:randomUUID(),provider:'synthetic-other'},claim),/route_invalid/);
+ await accounting.reserve(request,claim);
+ await accounting.recordReserved(done(request));
+ assert.equal((await c.query('SELECT model_calls_used FROM layered_memory_job WHERE task_id=$1',[claim.task_id])).rows[0].model_calls_used,1);
 });
 test('两条真实PG连接竞争原job最后额度，仅一预约成功',async t=>{
  const {c,db,owner,task,receipt}=await fixture(t),claim=await task('layered_memory','organize_memory',null);

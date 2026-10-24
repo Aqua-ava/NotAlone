@@ -193,6 +193,31 @@ test('合成PG：合格记忆经受控文档、核验后事务发布；回放幂
   }finally{await f.close();}
 });
 
+test('合成PG：核验拒绝保留实际核验结果且不发布场景',async()=>{
+  const f=await createStorageFixture();try{
+    const x=await createScope(f);
+    let calls=0;
+    const port={async call(input){
+      calls++;await input.requireCurrent();
+      const tool=(name,argumentsValue)=>({blocks:[{type:'tool-call',id:`reject-${calls}`,name,
+        arguments:JSON.stringify(argumentsValue)}],receipt_id:randomUUID()});
+      if(calls===1)return tool('write',{path:'course.md',content:markdown(x.memory)});
+      if(calls===2)return {blocks:[],receipt_id:randomUUID()};
+      if(calls===3)return tool('ScenarioVerificationOutput',{results:[{
+        scenario_index:0,paragraph_index:0,supported:false,evidence:[],
+      }]});
+      throw new Error('unexpected_verification_call');
+    }};
+    await assert.rejects(service(f,port).run(x.scope,x.claim,new AbortController().signal),/verification_rejected/);
+    const batch=(await f.client.query(`SELECT status,error_code,output_payload
+      FROM layered_memory_batch WHERE task_id=$1`,[x.taskId])).rows[0];
+    assert.equal(batch.status,'failed');
+    assert.equal(batch.error_code,'l2_scenario_verification_rejected');
+    assert.equal(batch.output_payload.verification_result.results[0].supported,false);
+    assert.equal((await f.client.query('SELECT count(*)::int n FROM scenario_document_version')).rows[0].n,0);
+  }finally{await f.close();}
+});
+
 test('合成PG：停用、人工修正、来源删除、并发世代、模型失败和取消都不发布旧文档',async()=>{
   const f=await createStorageFixture();try{
     const cases=[

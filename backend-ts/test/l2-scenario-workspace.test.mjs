@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {
   L2ScenarioDocumentWorkspace,
+  L2ScenarioVerificationError,
   runScenarioDocumentAgent,
   validateScenarioDocument,
   verifyScenarioProposal,
@@ -100,6 +101,8 @@ test('文档工具只暴露read/write/edit，且模型只能依赖内存暂存�
     async call(input) {
       calls++;
       assert.deepEqual(input.tools.map(tool => tool.name), ['read', 'write', 'edit']);
+      assert.match(input.system,/不得把表情、沉默、未回复或单次行为解释为情绪、态度、意图或关系信号/);
+      assert.match(input.system,/旧主题中无法由来源逐字支持的解释必须删除，不因为曾发布而保留/);
       await input.requireCurrent();
       if (calls === 1) {
         return {blocks: [{type: 'tool-call', id: 'call-1', name: 'write',
@@ -132,6 +135,23 @@ test('旧场景修改必须先读，保留身份并要求显式完整替换',asy
   assert.match(compiled[0].paragraphs[0].text, /状态仍未知/);
   assert.throws(() => validateScenarioDocument({scenarios: [{...compiled[0], scenario_id: randomUUID()}]},
     [fact], [old], budget), /proposal_invalid/);
+});
+
+test('已有场景写入也即时校验并返回可纠正的格式原因',()=>{
+  const fact=memory(),old=scenario(fact),workspace=new L2ScenarioDocumentWorkspace([fact],[old],budget);
+  const path=`${old.scenario_id}.md`;
+  workspace.read(path);
+  const invalid=`<!-- META ${JSON.stringify({
+    topic_key:'continued-course',
+    title:'合成课程',
+    hint:'共同经历与当前状态',
+  })} -->
+
+正文缺少来源注释。`;
+  const result=workspace.write(path,invalid);
+  assert.match(result,/^工具错误：/);
+  assert.match(result,/SOURCES/);
+  assert.match(result,/尚未发布/);
 });
 
 test('两个已读旧主题可合并为一个显式替换的新版本',()=>{
@@ -180,6 +200,11 @@ test('独立核验拒绝非逐字引用和缺失段落，成功时才返回回�
       batch_id: randomUUID(), binding, profile, signal: new AbortController().signal, requireCurrent: async()=>{},
     });
   };
-  assert.equal((await run(fact.text)).length, 1);
-  await assert.rejects(run('合成模型改写过的引用'), /quote_invalid/);
+  const accepted = await run(fact.text);
+  assert.equal(accepted.receipts.length, 1);
+  assert.equal(accepted.result.results.length, 1);
+  const rejected = await run('合成模型改写过的引用').catch(error => error);
+  assert.ok(rejected instanceof L2ScenarioVerificationError);
+  assert.match(rejected.code, /quote_invalid/);
+  assert.equal(rejected.verification.results[0].evidence[0].quote, '合成模型改写过的引用');
 });

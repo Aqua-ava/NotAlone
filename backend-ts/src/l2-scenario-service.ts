@@ -8,6 +8,7 @@ import {deleteSourceReplies} from './preference-erasure.ts';
 import {
   L2ScenarioDocumentWorkspace,
   L2ScenarioError,
+  L2ScenarioVerificationError,
   DEFAULT_L2_SCENARIO_BUDGET,
   canonicalScenarioJSON,
   runScenarioDocumentAgent,
@@ -556,6 +557,21 @@ export class L2ScenarioService {
     });
   }
 
+  async recordVerification(
+    work: L2ScenarioPreparedWork,
+    result: unknown,
+    errorCode: string | null,
+  ): Promise<void> {
+    await this.transaction(async client => {
+      await lockScope(client, work.scope);
+      await this.assertCurrent(client, work);
+      await client.query(`UPDATE public.layered_memory_batch
+        SET output_payload=jsonb_set(COALESCE(output_payload,'{}'::jsonb),'{verification_result}',$2::jsonb),error_code=$3
+        WHERE id=$1`,
+      [work.batch_id, JSON.stringify(result), errorCode]);
+    });
+  }
+
   async publish(
     work: L2ScenarioPreparedWork,
     scenarios: readonly L2ScenarioDraft[],
@@ -745,7 +761,7 @@ export class L2ScenarioService {
       signal.throwIfAborted();
       await this.recordProposal(work, proposal.scenarios);
       signal.throwIfAborted();
-      await verifyScenarioProposal({
+      const verification = await verifyScenarioProposal({
         scenarios: proposal.scenarios,
         memories: work.inputs,
         port: this.model,
@@ -758,6 +774,7 @@ export class L2ScenarioService {
         signal,
         requireCurrent: () => this.requireCurrent(work),
       });
+      await this.recordVerification(work, verification.result, null);
       signal.throwIfAborted();
       await this.publish(work, proposal.scenarios, signal);
       return {
@@ -766,6 +783,9 @@ export class L2ScenarioService {
         processed_count: work.inputs.length,
       };
     } catch (error) {
+      if (error instanceof L2ScenarioVerificationError) {
+        await this.recordVerification(work, error.verification, error.code).catch(() => {});
+      }
       const code = error instanceof L2ScenarioError || error instanceof L2ScenarioConflict
         ? error.code
         : 'l2_scenario_model_failed';
