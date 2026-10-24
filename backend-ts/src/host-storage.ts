@@ -160,7 +160,7 @@ export class HostStorage {
     let migrations: {name: string; checksum: string}[];
     try {
       const names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
-      if (names.length !== 109 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
+      if (names.length !== 110 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
       migrations = await Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') })));
     } catch { return 'migration_files_invalid'; }
     const metadata = await client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
@@ -192,9 +192,10 @@ export class HostStorage {
       offset = 35;
     }
     const completed = (await client.query('SELECT name,checksum FROM public.notalone_schema_migration ORDER BY name')).rows;
-    if (completed.length + offset > 109 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
-    if (completed.length + offset !== 109) return 'migration_pending';
+    if (completed.length + offset > 110 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
+    if (completed.length + offset !== 110) return 'migration_pending';
     if (REQUIRED_TABLES.some(table => !tables.has(table)) || Object.entries(REQUIRED_COLUMNS).some(([table,columns]) => Object.entries(columns).some(([column,kind]) => tables.get(table)?.get(column) !== kind))) return 'schema_incomplete';
+    if (!(await receiptSchemaReady(client))) return 'schema_incomplete';
     return 'ready';
   }
   private async persist(values: Record<string, string>): Promise<void> {
@@ -274,6 +275,7 @@ const REQUIRED_TABLES = [
   "memory_extraction_watermark",
   "message",
   "message_source_ref",
+  "model_call_receipt",
   "outbound_ledger_entry",
   "owner",
   "owner_channel_identity",
@@ -294,6 +296,32 @@ const REQUIRED_TABLES = [
   "wechat_observation_cursor"
 ];
 const REQUIRED_COLUMNS: Record<string, Record<string,string>> = {
+  "model_call_receipt": {
+      "attempt_id": "uuid",
+      "owner_id": "uuid",
+      "contact_id": "uuid",
+      "scope_kind": "text",
+      "request_id": "uuid",
+      "permit_id": "uuid",
+      "ledger_entry_id": "uuid",
+      "provider": "text",
+      "model_name": "text",
+      "called_at": "timestamp with time zone",
+      "input_budget": "jsonb",
+      "latency_ms": "integer",
+      "dispatch": "text",
+      "outcome": "text",
+      "input_tokens": "integer",
+      "output_tokens": "integer",
+      "cache_read_tokens": "integer",
+      "cache_write_tokens": "integer",
+      "cost_status": "text",
+      "cost_amount": "numeric",
+      "currency": "text",
+      "pricing_version": "text",
+      "created_at": "timestamp with time zone",
+      "updated_at": "timestamp with time zone"
+  },
   "wechat_auto_read_suppression": {
     "owner_id": "uuid",
     "contact_id": "uuid",
@@ -484,3 +512,46 @@ async function connectConfigured(configuration: DatabaseConnection): Promise<pg.
     throw error;
   }
 }
+
+/** 110窄表的PG16约束契约；来自冻结迁移，防止同列同类型但删除/未知用量约束缺失。 */
+async function receiptSchemaReady(client: pg.Client): Promise<boolean> {
+  const columns = (await client.query(`SELECT attname,attnotnull FROM pg_catalog.pg_attribute
+    WHERE attrelid='public.model_call_receipt'::regclass AND attnum>0 AND NOT attisdropped`)).rows;
+  if (columns.some(row => row.attnotnull !== RECEIPT_NOT_NULL.has(row.attname))) return false;
+  const constraints = (await client.query(`SELECT c.contype,c.convalidated,c.condeferrable,c.condeferred,
+      pg_catalog.pg_get_constraintdef(c.oid) AS definition,i.indisvalid,i.indisready
+    FROM pg_catalog.pg_constraint c LEFT JOIN pg_catalog.pg_index i ON i.indexrelid=c.conindid
+    WHERE c.conrelid='public.model_call_receipt'::regclass`)).rows;
+  if (constraints.some(row => !row.convalidated || row.condeferrable || row.condeferred ||
+      (['p','u'].includes(row.contype) && (!row.indisvalid || !row.indisready)))) return false;
+  const actual = constraints.map(row => `${row.contype}:${row.definition}`).sort();
+  return actual.length === RECEIPT_CONSTRAINTS.length && actual.every((item,index) => item === RECEIPT_CONSTRAINTS[index]);
+}
+const RECEIPT_NOT_NULL = new Set(['attempt_id','owner_id','scope_kind','request_id','permit_id',
+  'provider','model_name','called_at','dispatch','outcome','cost_status','created_at','updated_at']);
+const RECEIPT_CONSTRAINTS = [
+  "c:CHECK ((((cost_status = 'unknown'::text) AND (cost_amount IS NULL) AND (currency IS NULL) AND (pricing_version IS NULL)) OR ((cost_status = ANY (ARRAY['estimated'::text, 'known'::text])) AND (cost_amount IS NOT NULL) AND (currency IS NOT NULL) AND (pricing_version IS NOT NULL) AND (length(btrim(currency)) > 0) AND (length(btrim(pricing_version)) > 0))))",
+  "c:CHECK ((((scope_kind = 'contact'::text) AND (contact_id IS NOT NULL)) OR ((scope_kind = 'owner_memory'::text) AND (contact_id IS NULL) AND (ledger_entry_id IS NULL))))",
+  "c:CHECK (((COALESCE(cache_read_tokens, 0) + COALESCE(cache_write_tokens, 0)) <= input_tokens))",
+  "c:CHECK (((input_budget IS NULL) OR (((jsonb_typeof(input_budget) = 'object'::text) AND (input_budget ?& ARRAY['measurement_id'::text, 'measurement_kind'::text, 'input_tokens'::text, 'max_output_tokens'::text, 'context_window_tokens'::text, 'safety_margin_tokens'::text, 'request_sha256'::text, 'serialized_bytes'::text]) AND ((input_budget - ARRAY['measurement_id'::text, 'measurement_kind'::text, 'input_tokens'::text, 'max_output_tokens'::text, 'context_window_tokens'::text, 'safety_margin_tokens'::text, 'request_sha256'::text, 'serialized_bytes'::text]) = '{}'::jsonb) AND (jsonb_typeof((input_budget -> 'measurement_id'::text)) = 'string'::text) AND ((input_budget ->> 'measurement_id'::text) ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$'::text) AND ((input_budget ->> 'measurement_kind'::text) = 'approximate'::text) AND ((input_budget ->> 'request_sha256'::text) ~ '^[a-f0-9]{64}$'::text) AND (jsonb_typeof((input_budget -> 'input_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'input_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'max_output_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'max_output_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'context_window_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'context_window_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'safety_margin_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'safety_margin_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'serialized_bytes'::text)) = 'number'::text) AND ((input_budget ->> 'serialized_bytes'::text) ~ '^[1-9][0-9]*$'::text)) IS TRUE)))",
+  "c:CHECK (((input_tokens IS NOT NULL) OR ((cache_read_tokens IS NULL) AND (cache_write_tokens IS NULL))))",
+  "c:CHECK (((input_tokens IS NULL) = (output_tokens IS NULL)))",
+  "c:CHECK (((outcome <> 'succeeded'::text) OR (dispatch = ANY (ARRAY['response_observed'::text, 'http_accepted'::text]))))",
+  "c:CHECK ((cache_read_tokens >= 0))",
+  "c:CHECK ((cache_write_tokens >= 0))",
+  "c:CHECK ((cost_amount >= (0)::numeric))",
+  "c:CHECK ((cost_status = ANY (ARRAY['unknown'::text, 'estimated'::text, 'known'::text])))",
+  "c:CHECK ((dispatch = ANY (ARRAY['authorized_unconfirmed'::text, 'response_observed'::text, 'http_accepted'::text, 'not_sent'::text])))",
+  "c:CHECK ((input_tokens >= 0))",
+  "c:CHECK ((latency_ms >= 0))",
+  "c:CHECK ((length(btrim(model_name)) > 0))",
+  "c:CHECK ((length(btrim(provider)) > 0))",
+  "c:CHECK ((outcome = ANY (ARRAY['pending'::text, 'succeeded'::text, 'failed'::text, 'cancelled'::text, 'unknown'::text])))",
+  "c:CHECK ((output_tokens >= 0))",
+  "c:CHECK ((scope_kind = ANY (ARRAY['contact'::text, 'owner_memory'::text])))",
+  "f:FOREIGN KEY (ledger_entry_id) REFERENCES outbound_ledger_entry(id) ON DELETE CASCADE",
+  "f:FOREIGN KEY (owner_id) REFERENCES owner(id) ON DELETE CASCADE",
+  "f:FOREIGN KEY (owner_id, contact_id) REFERENCES contact(owner_id, id) ON DELETE CASCADE",
+  "p:PRIMARY KEY (attempt_id)",
+  "u:UNIQUE (ledger_entry_id)"
+];

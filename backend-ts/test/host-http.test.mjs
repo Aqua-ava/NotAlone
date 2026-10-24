@@ -81,14 +81,14 @@ test('迁移期Python不再提供已移交的首用写入入口',async t=>{
 
 test('未知数据库版本不发布业务握手且保留原库和配置',async t=>{
   const fixture=await createStorageFixture();t.after(async()=>{for(const host of fixture.hosts??[])assert.equal(await host.terminate(),true);await fixture.close();});
-  await fixture.client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('109_unknown.sql','unknown')");
+  await fixture.client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('111_unknown.sql','unknown')");
   const before=await readFile(fixture.envFilePath,'utf8');
   const host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:resolve('..'),envFilePath:fixture.envFilePath,infoPath:join(fixture.directory,'backend.info'),businessHome:fixture.directory,pythonExecutable:join(homedir(),'miniconda3/envs/NotAlone/bin/python'),environment:{}},()=>true);
   t.after(()=>host.terminate());
   assert.equal(await host.waitForExit(7000),true);
   await assert.rejects(readFile(join(fixture.directory,'backend.info'),'utf8'));
   assert.equal(await readFile(fixture.envFilePath,'utf8'),before);
-  assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM notalone_schema_migration')).rows[0].n,109);
+  assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM notalone_schema_migration')).rows[0].n,111);
 });
 
 test('旧业务执行器不存在时启动有界失败并允许修复后重试',async t=>{

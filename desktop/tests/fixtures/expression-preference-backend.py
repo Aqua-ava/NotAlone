@@ -27,7 +27,9 @@ def main():
     try:
         fixture.setUpClass()
         os.environ.update(NOTALONE_DATABASE_URL=fixture.database_url, NOTALONE_TEST_DATABASE_URL=fixture.database_url)
-        migration_proof = guard_test_migrations(fixture.database_url, fixture.database_name, ROOT)
+        migration_proof = guard_test_migrations(
+            fixture.database_url, fixture.database_name, ROOT, expected_count=110,
+            expected_tail="110_model_call_receipt.sql")
         fixture.setUp()
         fixture._bind(fixture.contact_id)
         fixture._bind(fixture.second_contact_id)
