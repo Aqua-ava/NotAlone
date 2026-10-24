@@ -31,3 +31,26 @@ test('授权代理上游响应中断只能报告未知，不能伪装业务完�
  await fetch(`http://127.0.0.1:${host.address().port}/synthetic`,{method:'POST',body:'{}'});
  assert.equal(await ended,'uncertain');
 });
+
+test('授权代理可回放已读取的profile修正请求体',async t=>{
+ const payload=JSON.stringify({target_kind:'profile',synthetic:'replay'});
+ let received='';
+ const upstream=createServer(async(req,res)=>{
+  for await(const chunk of req)received+=chunk;
+  res.writeHead(200,{'content-type':'application/json'});res.end('{"replayed":true}');
+ });
+ upstream.listen(0,'127.0.0.1');await once(upstream,'listening');
+ const legacy=Object.assign(Object.create(LegacyBackend.prototype),{connection:{address:`127.0.0.1:${upstream.address().port}`,token:'synthetic'}});
+ const host=createServer(async(req,res)=>{
+  for await(const _chunk of req){}
+  legacy.proxy(req,res,undefined,undefined,Buffer.from(payload));
+ });
+ host.listen(0,'127.0.0.1');await once(host,'listening');
+ t.after(()=>{host.closeAllConnections();host.close();upstream.closeAllConnections();upstream.close();});
+ const response=await fetch(`http://127.0.0.1:${host.address().port}/synthetic`,{
+  method:'POST',headers:{'content-type':'application/json'},body:payload,
+ });
+ assert.equal(response.status,200);
+ assert.deepEqual(await response.json(),{replayed:true});
+ assert.equal(received,payload);
+});

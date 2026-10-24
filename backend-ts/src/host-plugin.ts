@@ -72,8 +72,11 @@ async function start(ctx: Context) {
   const progress=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId)
     : undefined;
-  const traces=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
-    ? new SourceProcessingTraceApi(new SourceProcessingTraceStore(progressPool),storage.runtimeOwnerId)
+  const traceStore=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
+    ? new SourceProcessingTraceStore(progressPool)
+    : undefined;
+  const traces=traceStore&&storage.runtimeOwnerId
+    ? new SourceProcessingTraceApi(traceStore,storage.runtimeOwnerId)
     : undefined;
   const taskControl=new PythonTaskControlGateway();
   const imports=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
@@ -156,6 +159,7 @@ async function start(ctx: Context) {
     const privateDiscussion=/^\/internal\/discussion(?:[/?]|$)/.test(req.url??'');
     if((req.url??'').startsWith('/internal/reply')
       || (req.url??'').startsWith('/internal/extraction')
+      || (req.url??'').startsWith('/internal/layered-memory')
       || privateDiscussion
       || req.url==='/internal/exploration'){
       if(!modelRuntime){respond(401,{error:'unauthorized'});return;}
@@ -178,7 +182,7 @@ async function start(ctx: Context) {
     const internalRead=internal && req.headers['x-notalone-owner-id']===storage.runtimeOwnerId?.toLowerCase() && typeof req.headers['x-notalone-owner-id']==='string' && req.method==='GET' && /^\/api\/contacts\/[^/]+\/relationship-overview$/.test(req.url??'');
     if ((!scopePath && !incrementalPath && !internalRead && (supplied.length !== expected.length || !timingSafeEqual(supplied,expected))) || req.headers.origin) {respond(401,{error:'unauthorized'});return;}
     let releaseAuthority:(()=>void)|undefined;
-    const proxyLegacy=()=>{
+    const proxyLegacy=(replayBody?:Buffer)=>{
       const release=releaseAuthority;releaseAuthority=undefined;
       const syncStatus=req.method==='GET'&&url.pathname==='/api/sync/status'
         || req.method==='POST'&&/^\/api\/sync\/(?:enable|disable|check|priority|confirm|confirm-pending|backfill\/(?:pause|retry))$/.test(url.pathname);
@@ -190,7 +194,7 @@ async function start(ctx: Context) {
           if(historyRuntime==='python')return decorated;
           const current=await incremental.status(check);
           return {...decorated,cli_history_coverages:projectHistoryCoverages(current.history_coverages)};
-        }:undefined);
+        }:undefined,replayBody);
     };
     try {
       if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus}}:{}),ownership:{...ownership,skills:skills.status().owner,imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
@@ -198,6 +202,16 @@ async function start(ctx: Context) {
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
       if(state!=='running'){respond(503,{error:'runtime_stopping'});return;}
+      const layeredMemoryPath=url.pathname.startsWith('/api/memories/owner/layered-memory')
+        || /^\/api\/contacts\/[^/]+\/layered-memory(?:\/|$)/.test(url.pathname);
+      if(layeredMemoryPath&&modelRuntime){
+        const layered=await modelRuntime.handleLayeredMemory(req,res,url);
+        if(layered.handled)return;
+        if(layered.replayBody){
+          if(!legacy||!handoff||!memoryHandoff){respond(503,{error:'runtime_starting'});return;}
+          proxyLegacy(layered.replayBody);return;
+        }
+      }
       if(url.pathname==='/api/imports/preview'||url.pathname==='/api/imports/commit'){
         if(!imports){respond(503,{error:'import_unavailable'});return;}
         if(url.search){respond(400,{error:'import_request_invalid'});return;}
@@ -383,7 +397,8 @@ async function start(ctx: Context) {
   const address=server.address();if(!address || typeof address==='string')throw new Error('HOST_LISTEN_FAILED');
   try {
     modelRuntime=await startHostModelRuntime({ctx,storage,environment:runtimeEnvironment,
-      businessHome:config.businessHome,projectDirectory:config.projectDirectory,infoPath:config.infoPath,envFilePath:config.envFilePath});
+      businessHome:config.businessHome,projectDirectory:config.projectDirectory,infoPath:config.infoPath,envFilePath:config.envFilePath,
+      ...(traceStore?{sourceTraces:traceStore}:{})});
     legacy=await LegacyBackend.start(config,{...runtimeEnvironment,
       ...(modelRuntime?.pythonEnvironment(`http://127.0.0.1:${address.port}`)??{}),
       NOTALONE_OWNER_ID:ownerStatus.runtime_owner_configured ? storage.runtimeOwnerId : '',

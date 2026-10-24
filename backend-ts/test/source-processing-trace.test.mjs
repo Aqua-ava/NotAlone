@@ -7,6 +7,7 @@ import pg from 'pg';
 import {SourceProcessingTraceStore} from '../src/source-processing-trace.ts';
 import {SourceProcessingTraceApi} from '../src/source-processing-trace-http.ts';
 import {eraseSourceTraces} from '../src/memory-mutations-erasure.ts';
+import {createL2ScenarioSourceValidator} from '../src/l2-scenario-source-validation.ts';
 
 const syntheticText='合成联系人喜欢周三散步';
 const syntheticSecret='合成敏感正文不得进入诊断';
@@ -208,5 +209,78 @@ test('合成PG：过程与来源删除清除正文和恢复路径，联系删除
   assert.equal(checked,'trace_not_found');
   assert.equal((await f.pool.query('SELECT count(*)::int n FROM memory_extraction_trace WHERE owner_id=$1 AND contact_id=$2',
    [f.owner,f.contact])).rows[0].n,0);
+ }finally{await f.close();}
+});
+
+test('合成PG：L2来源validator同事务拒绝未记录、处理中、快照变化和跨联系人，只兼容当前手录',async()=>{
+ const f=await fixture();try{
+  const x=await primaryTrace(f),validator=createL2ScenarioSourceValidator(f.store);
+  const scope={owner_id:f.owner,contact_id:f.contact};
+  const work=memoryId=>({scope,inputs:[{memory_id:memoryId,revision:1,provenance_kind:'source_supported'}]});
+  const validate=async input=>{
+   const client=await f.pool.connect();
+   try{await client.query('BEGIN');await validator(client,input);await client.query('COMMIT');}
+   catch(error){await client.query('ROLLBACK');throw error;}
+   finally{client.release();}
+  };
+  await validate(work(x.memory));
+  const ownerAuto=randomUUID();
+  await f.pool.query(`INSERT INTO owner_memory
+   (id,owner_id,text_content,category,topic,source_ids,source_candidate_id,adoption_method,status,revision)
+   VALUES($1,$2,'本人自动背景','common_fact','other',ARRAY[$3::uuid],$4,'auto','active',1)`,
+  [ownerAuto,f.owner,x.message,x.candidate]);
+  await validate({scope:{owner_id:f.owner,contact_id:null},inputs:[{
+    memory_id:ownerAuto,revision:1,provenance_kind:'source_supported',
+  }]});
+  const foreignCandidate=randomUUID(),foreignOwnerMemory=randomUUID();
+  await f.pool.query(`INSERT INTO memory_candidate
+   (id,owner_id,contact_id,text_content,category,source_ids,status)
+   VALUES($1,$2,$3,'跨联系人自动背景','common_fact',ARRAY[$4::uuid],'confirmed')`,
+  [foreignCandidate,f.owner,f.otherContact,f.otherSource]);
+  await f.pool.query(`INSERT INTO owner_memory
+   (id,owner_id,text_content,category,topic,source_ids,source_candidate_id,adoption_method,status,revision)
+   VALUES($1,$2,'跨联系人本人自动背景','common_fact','other',ARRAY[$3::uuid],$4,'auto','active',1)`,
+  [foreignOwnerMemory,f.owner,f.otherSource,foreignCandidate]);
+  await f.pool.query(`INSERT INTO memory_extraction_trace_dependency
+   (trace_id,owner_id,contact_id,source_id)VALUES($1,$2,$3,$4)`,
+  [x.trace,f.owner,f.contact,foreignOwnerMemory]);
+  await assert.rejects(validate(work(x.memory)),{code:'l2_scenario_source_changed'});
+  await f.pool.query(`DELETE FROM memory_extraction_trace_dependency
+   WHERE trace_id=$1 AND owner_id=$2 AND contact_id=$3 AND source_id=$4`,
+  [x.trace,f.owner,f.contact,foreignOwnerMemory]);
+  await f.pool.query("UPDATE memory_extraction_trace SET status='running',finished_at=NULL WHERE trace_id=$1",[x.trace]);
+  await assert.rejects(validate(work(x.memory)),{code:'l2_scenario_source_processing'});
+  await f.pool.query("UPDATE memory_extraction_trace SET status='succeeded',finished_at=now() WHERE trace_id=$1",[x.trace]);
+  await f.pool.query("UPDATE source_document SET content_sha256=$2 WHERE id=$1",[x.source,'c'.repeat(64)]);
+  await assert.rejects(validate(work(x.memory)),{code:'l2_scenario_source_changed'});
+  await f.pool.query("UPDATE source_document SET content_sha256=$2 WHERE id=$1",[x.source,x.sourceSha]);
+  await assert.rejects(validate({...work(x.memory),scope:{owner_id:f.owner,contact_id:f.otherContact}}),
+   {code:'l2_scenario_source_not_recorded'});
+
+  const missing=randomUUID();
+  await f.pool.query(`INSERT INTO confirmed_memory(id,owner_id,contact_id,text_content,category,source_ids,adoption_method,status,revision)
+   VALUES($1,$2,$3,'未记录自动来源','common_fact',ARRAY[$4::uuid],'auto','active',1)`,
+  [missing,f.owner,f.contact,x.message]);
+  await assert.rejects(validate(work(missing)),{code:'l2_scenario_source_not_recorded'});
+
+  const manualSource=randomUUID(),manual=randomUUID();
+  await f.pool.query(`INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count,status)
+   VALUES($1,$2,$3,'manual','synthetic-manual-l2.jsonl',$4,1,'active')`,
+  [manualSource,f.owner,f.contact,manualSource.replaceAll('-','').padEnd(64,'0')]);
+  await f.pool.query(`INSERT INTO confirmed_memory(id,owner_id,contact_id,text_content,category,source_ids,adoption_method,status,revision)
+   VALUES($1,$2,$3,'当前手录合法输入','common_fact',ARRAY[$4::uuid],'manual','active',1)`,
+  [manual,f.owner,f.contact,manualSource]);
+  await validate({scope,inputs:[{memory_id:manual,revision:1,provenance_kind:'manual_entry'}]});
+  await f.pool.query("UPDATE source_document SET status='deleting' WHERE id=$1",[manualSource]);
+  await assert.rejects(validate({scope,inputs:[{memory_id:manual,revision:1,provenance_kind:'manual_entry'}]}),
+   {code:'l2_scenario_source_changed'});
+  const ownerManual=randomUUID();
+  await f.pool.query(`INSERT INTO owner_memory
+   (id,owner_id,text_content,category,topic,source_ids,adoption_method,status,revision)
+   VALUES($1,$2,'本人当前手录输入','common_fact','other',ARRAY[$2::uuid],'manual','active',1)`,
+  [ownerManual,f.owner]);
+  await validate({scope:{owner_id:f.owner,contact_id:null},inputs:[{
+    memory_id:ownerManual,revision:1,provenance_kind:'manual_entry',
+  }]});
  }finally{await f.close();}
 });

@@ -88,9 +88,10 @@ async function addScenarioReply(f,x,versionId){
   return request;
 }
 
-function service(f, port) {
+function service(f, port, quality) {
   const transaction=async work=>{await f.client.query('BEGIN');try{const value=await work(f.client);await f.client.query('COMMIT');return value;}catch(error){await f.client.query('ROLLBACK');throw error;}};
-  return new L2ScenarioService({transaction,model:port,binding,profile,budget,now:()=>new Date('2026-10-25T02:00:00Z')});
+  return new L2ScenarioService({transaction,model:port,binding,profile,budget,now:()=>new Date('2026-10-25T02:00:00Z'),
+    ...(quality?{quality}:{})});
 }
 
 async function addTask(f,x){
@@ -261,6 +262,28 @@ test('合成PG：同一纠错操作不能跨停用再启用世代回放',async()
     await l2.reportParagraphError(x.scope,command);
     await f.client.query('UPDATE layered_memory_state SET settings_generation=settings_generation+1 WHERE owner_id=$1 AND contact_id=$2',[x.ownerId,x.contactId]);
     await assert.rejects(l2.reportParagraphError(x.scope,command),/operation_changed/);
+  }finally{await f.close();}
+});
+
+test('合成PG：质量状态必须由注入读取器提供，缺省和读取失败都禁止自动使用',async()=>{
+  const f=await createStorageFixture();try{
+    const x=await createScope(f);
+    const missing=await service(f,fakePort(x.memory)).read(x.scope);
+    assert.equal(missing.quality_status,'unknown');
+    assert.equal(missing.quality.automatic_use_allowed,false);
+    assert.deepEqual(missing.quality.organization.reasons,['quality_store_unconfigured']);
+    const verified={
+      organization:{status:'verified',reasons:[],contract_id:'synthetic-contract',report_id:'synthetic-report'},
+      reply:{status:'verified',reasons:[],contract_id:'synthetic-reply-contract',report_id:'synthetic-reply-report'},
+      automatic_use_allowed:true,synthetic:false,
+    };
+    const injected=await service(f,fakePort(x.memory),{async read(){return verified;}}).read(x.scope);
+    assert.equal(injected.quality_status,'verified');
+    assert.equal(injected.quality.automatic_use_allowed,true);
+    const failed=await service(f,fakePort(x.memory),{async read(){throw new Error('synthetic_quality_failure');}}).read(x.scope);
+    assert.equal(failed.quality_status,'unknown');
+    assert.equal(failed.quality.automatic_use_allowed,false);
+    assert.deepEqual(failed.quality.organization.reasons,['quality_store_unavailable']);
   }finally{await f.close();}
 });
 

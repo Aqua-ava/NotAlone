@@ -12,6 +12,7 @@ import {
   L2ScenarioService,
   type L2ScenarioClaim,
   type L2ScenarioPreparedWork,
+  type L2ScenarioQualityReader,
   type L2ScenarioServiceOptions,
 } from './l2-scenario-service.ts';
 import type {L2ScenarioBudget, L2ScenarioScope} from './l2-scenario-workspace.ts';
@@ -25,6 +26,7 @@ export interface L2ScenarioHostOptions {
   profile: MessagesBudgetProfile;
   budget?: L2ScenarioBudget;
   validateSources?: L2ScenarioServiceOptions['validateSources'];
+  quality?: L2ScenarioQualityReader;
   costForUsage?: Parameters<typeof createL2ScenarioModel>[0]['costForUsage'];
   now?: () => Date;
 }
@@ -58,6 +60,7 @@ export function createL2ScenarioHost(options: L2ScenarioHostOptions): L2Scenario
     ...(options.budget ? {budget: options.budget} : {}),
     ...(options.now ? {now: options.now} : {}),
     ...(options.validateSources ? {validateSources: options.validateSources} : {}),
+    ...(options.quality ? {quality: options.quality} : {}),
   });
   return {
     service,

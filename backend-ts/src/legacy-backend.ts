@@ -73,7 +73,7 @@ export class LegacyBackend {
     }
     return parseJson(text) as {state?:string;active_requests?:number;status?:string;task_id?:string;[key:string]:unknown};
   }
-  proxy(req:IncomingMessage,res:ServerResponse,completion?:{settled:()=>void;uncertain:()=>void},mapJson?:(value:unknown)=>Promise<unknown>):void {
+  proxy(req:IncomingMessage,res:ServerResponse,completion?:{settled:()=>void;uncertain:()=>void},mapJson?:(value:unknown)=>Promise<unknown>,replayBody?:Buffer):void {
     const c=this.connection;
     if(!c || this.stopping){res.writeHead(503);res.end('{"error":"legacy_unavailable"}');completion?.settled();return;}
     let finished=false;
@@ -117,7 +117,8 @@ export class LegacyBackend {
       timer=setTimeout(()=>{finish(false);upstream.destroy();},30000);timer.unref();
       req.once('aborted',()=>{finish(false);upstream.destroy();});
     }else res.once('close',()=>upstream.destroy());
-    req.pipe(upstream);
+    if(replayBody)upstream.end(replayBody);
+    else req.pipe(upstream);
   }
   async stop():Promise<void>{
     if(this.stopping)return this.exited;

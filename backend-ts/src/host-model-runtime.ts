@@ -12,6 +12,9 @@ import {createHostReplyRuntime} from './host-reply.ts';
 import {createHostModelAccounting} from './host-model-accounting.ts';
 import {PostgresModelLedger,PostgresModelLedgerDetails} from './model-ledger.ts';
 import {startModelHost,assertModelHostFallbackSafe} from './model-host.ts';
+import type {SourceProcessingTraceStore} from './source-processing-trace.ts';
+import type {L2ScenarioQualityReader} from './l2-scenario-service.ts';
+import type {L2ScenarioBudget} from './l2-scenario-workspace.ts';
 
 export class HostModelRuntimeError extends Error {
   readonly code:string;
@@ -20,6 +23,10 @@ export class HostModelRuntimeError extends Error {
 export interface HostModelRuntimeOptions {
   ctx:Context;storage:HostStorage;environment:Readonly<NodeJS.ProcessEnv>;
   businessHome:string;projectDirectory:string;infoPath:string;envFilePath:string;
+  sourceTraces?:Pick<SourceProcessingTraceStore,
+    'findMemoryTraceRecordInTransaction'|'validateMemoryTraceRecordInTransaction'>;
+  l2Quality?:L2ScenarioQualityReader;
+  l2Budget?:L2ScenarioBudget;
 }
 /** 默认Python只是一项启动决定，不安装提供者或第二套后台仲裁器。 */
 export async function startHostModelRuntime(options:HostModelRuntimeOptions){
@@ -75,6 +82,9 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
     reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
       ledger,token,configuration:activeConfiguration,extractionEnabled:extractionMode==='typescript',
       discussionSkillsRoot:configuredSkillsRoot,
+      ...(options.sourceTraces?{sourceTraces:options.sourceTraces}:{}),
+      ...(options.l2Quality?{l2Quality:options.l2Quality}:{}),
+      ...(options.l2Budget?{l2Budget:options.l2Budget}:{}),
       extractionPermit:{path:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_SOCKET,token:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_TOKEN}});
     const runtime=reply;
     let closing:Promise<void>|undefined;
@@ -91,6 +101,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
           ...(!ownerConfigured?{NOTALONE_OWNER_ID:''}:{})};
       },
       handle(req:IncomingMessage,res:ServerResponse){return runtime.handle(req,res);},
+      handleLayeredMemory(req:IncomingMessage,res:ServerResponse,url:URL){return runtime.handleLayeredMemory(req,res,url);},
       callExtraction:runtime.callExtraction,
       stopAccepting,
       close(stopPython:()=>Promise<void>):Promise<void>{

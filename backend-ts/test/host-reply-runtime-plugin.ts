@@ -10,6 +10,10 @@ import {createHostReplyRuntime} from '../src/host-reply.ts';
 import {ModelPermitArbiter} from '../src/model-permits.ts';
 import {PostgresModelLedger,PostgresModelLedgerDetails} from '../src/model-ledger.ts';
 import {stringifyJson} from '../src/host-json.ts';
+import {randomBytes} from 'node:crypto';
+import {createHostModelAccounting} from '../src/host-model-accounting.ts';
+import {startModelPermitServer} from '../src/model-permit-server.ts';
+import {SourceProcessingTraceStore} from '../src/source-processing-trace.ts';
 export const name='notalone-host-reply-test';
 export const inject=['llm','agents','tools','sessions','systemPrompt','skills','appReady'];
 export async function apply(ctx:Context){
@@ -21,13 +25,44 @@ export async function apply(ctx:Context){
   const storage=await HostStorage.open({envFilePath,migrationsDirectory:new URL('../../backend/database/migrations',import.meta.url).pathname,environment:{HOME:home}});
   const arbiter=new ModelPermitArbiter();
   const ledger=new PostgresModelLedger({transaction:work=>storage.businessTransaction(work),details:new PostgresModelLedgerDetails()});
-  const runtime=await createHostReplyRuntime({ctx,storage,arbiter,ledger,token:process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN!,configuration:{skillsRoot,
+  const l2Enabled=process.env.NOTALONE_SYNTHETIC_L2==='1';
+  const l2Pool=l2Enabled?await storage.businessPool():undefined;
+  const traceStore=l2Pool?new SourceProcessingTraceStore(l2Pool):undefined;
+  const l2Token=`synthetic-l2-permit-${randomBytes(24).toString('hex')}`;
+  let permitServer:Awaited<ReturnType<typeof startModelPermitServer>>|undefined;
+  let l2Closing:Promise<void>|undefined;
+  const closeL2=()=>l2Closing??=(async()=>{await permitServer?.shutdown();await l2Pool?.end();})();
+  if(l2Enabled){
+    const accounting=createHostModelAccounting({
+      transaction:work=>storage.businessTransaction(work),
+      provider:'notalone-host-reply-test',
+      model:'deepseek-flash',
+      unconfirmedPermitIds:()=>permitServer?.unconfirmedPermitIds()??[],
+    });
+    permitServer=await startModelPermitServer({path:join(home,'l2-permit.sock'),token:l2Token,arbiter,accounting});
+  }
+  const runtime=await createHostReplyRuntime({ctx,storage,arbiter,ledger,token:process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN!,
+    ...(traceStore?{sourceTraces:traceStore}:{}),
+    ...(permitServer?{extractionPermit:{path:join(home,'l2-permit.sock'),token:l2Token}}:{}),
+    configuration:{skillsRoot,
     provider:{provider:'notalone-host-reply-test',connection:resolveAdapterOptions({baseURL:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL!,thinking:'disabled',maxTokens:256,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous' as never},
     model:{provider:'notalone-host-reply-test',model:'deepseek-flash',maxTokens:256,temperature:0,reasoningEffort:'off',physical_limit:2,deadline_ms:10000,warning_ratio:0.8,budgetProfile:{context_window_tokens:65536,safety_margin_tokens:128}}}});
   const server=createServer(async(req,res)=>{
+    const url=new URL(req.url??'','http://localhost');
+    if(url.pathname.startsWith('/api/memories/owner/layered-memory')||/^\/api\/contacts\/[^/]+\/layered-memory/.test(url.pathname)){
+      if(req.headers.authorization!==`Bearer ${process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN}`){
+        res.writeHead(401,{'content-type':'application/json'});res.end('{"error":"unauthorized"}');return;
+      }
+      const layered=await runtime.handleLayeredMemory(req,res,url);
+      if(layered.handled)return;
+      if(layered.replayBody){
+        res.writeHead(202,{'content-type':'application/json'});res.end(stringifyJson({replayed:true}));return;
+      }
+    }
     if(await runtime.handle(req,res))return;
     if(req.method==='POST'&&req.url==='/close-reply'){
       runtime.stopAccepting();await Promise.all([runtime.close(),runtime.close()]);
+      await closeL2();
       res.setHeader('content-type','application/json');res.end(stringifyJson({closed:true,permits:arbiter.snapshot()}));return;
     }
     res.writeHead(404);res.end('{}');
@@ -36,6 +71,6 @@ export async function apply(ctx:Context){
   ctx.effect(()=>async()=>{
     ready();runtime.stopAccepting();server.closeAllConnections();
     await new Promise<void>(resolve=>server.close(()=>resolve()));
-    await runtime.close();await storage.close();
+    await runtime.close();await closeL2();await storage.close();
   });
 }

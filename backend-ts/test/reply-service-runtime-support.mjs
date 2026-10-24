@@ -34,7 +34,7 @@ export function useTool(events, name, args = {}, id = 'synthetic-call') {
   events[4].delta.stop_reason = 'tool_use';
 }
 
-export async function startReplyServiceHost(t, database, reply, {pluginPath = 'test/reply-service-runtime-plugin.ts'} = {}) {
+export async function startReplyServiceHost(t, database, reply, {pluginPath = 'test/reply-service-runtime-plugin.ts', environment = {}} = {}) {
   const home = await mkdtemp(join(tmpdir(), 'notalone-dsh-validation-'));
   const requests = [];
   const provider = createServer(async (req, res) => {
@@ -60,7 +60,7 @@ export async function startReplyServiceHost(t, database, reply, {pluginPath = 't
   patch = patch.replace('    - id: tools\n', "    - id: reply-skill-registry\n      name: '@deepseek-ai/dsh-skill'\n    - id: tools\n");
   await writeFile(join(profileDir, 'cordis.patch.yml'), patch);
   const child = spawn(process.execPath, ['--import', resolve('test/observe.mjs'), resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'notalone'], {
-    cwd: home, env: { PATH: process.env.PATH, HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', DEEPSEEK_API_KEY: 'synthetic-only', NOTALONE_SYNTHETIC_PROVIDER_URL: `http://127.0.0.1:${provider.address().port}/anthropic`, NOTALONE_SYNTHETIC_DATABASE: database.name, NOTALONE_SYNTHETIC_DATABASE_USER: database.user, ...(database.replyOwner?{NOTALONE_SYNTHETIC_REPLY_OWNER:database.replyOwner}:{}), ...(database.replyToken?{NOTALONE_SYNTHETIC_REPLY_TOKEN:database.replyToken}:{}) }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: home, env: { PATH: process.env.PATH, HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', DEEPSEEK_API_KEY: 'synthetic-only', NOTALONE_SYNTHETIC_PROVIDER_URL: `http://127.0.0.1:${provider.address().port}/anthropic`, NOTALONE_SYNTHETIC_DATABASE: database.name, NOTALONE_SYNTHETIC_DATABASE_USER: database.user, ...(database.replyOwner?{NOTALONE_SYNTHETIC_REPLY_OWNER:database.replyOwner}:{}), ...(database.replyToken?{NOTALONE_SYNTHETIC_REPLY_TOKEN:database.replyToken}:{}), ...environment }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = ''; child.stderr.on('data', b => { output += b; });
   const exited = once(child, 'exit');
@@ -77,7 +77,9 @@ export async function startReplyServiceHost(t, database, reply, {pluginPath = 't
       assert.doesNotMatch(JSON.stringify(request), /dsh_session_log|dsh_plugin_packages/);
     }
     const connections = output.split('\n').filter(l => l.startsWith('VALIDATION_NETWORK ')).map(l => JSON.parse(l.slice(19)));
-    assert.ok(connections.every(c => (c.host === '127.0.0.1' && Number(c.port) === providerPort) || c.path === '/tmp/.s.PGSQL.5432' || c.port === '/tmp/.s.PGSQL.5432'), JSON.stringify(connections));
+    assert.ok(connections.every(c => (c.host === '127.0.0.1' && Number(c.port) === providerPort)
+      || c.path === '/tmp/.s.PGSQL.5432' || c.port === '/tmp/.s.PGSQL.5432'
+      || environment.NOTALONE_SYNTHETIC_L2 === '1' && c.path === join(home, 'l2-permit.sock')), JSON.stringify(connections));
   });
   const url = await new Promise((resolveReady, reject) => {
     const timer = setTimeout(() => reject(new Error(`启动超时 ${output}`)), 15000);

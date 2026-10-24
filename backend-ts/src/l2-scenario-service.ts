@@ -47,6 +47,24 @@ export interface L2ScenarioPreparedWork {
   dependency_ids: string[];
 }
 
+export interface L2ScenarioQualityStage {
+  status: 'unknown' | 'failed' | 'verified';
+  reasons: string[];
+  contract_id: string | null;
+  report_id: string | null;
+}
+
+export interface L2ScenarioQuality {
+  organization: L2ScenarioQualityStage;
+  reply: L2ScenarioQualityStage;
+  automatic_use_allowed: boolean;
+  synthetic: boolean;
+}
+
+export interface L2ScenarioQualityReader {
+  read(client: Client, scope: L2ScenarioScope): Promise<L2ScenarioQuality>;
+}
+
 export interface L2ScenarioServiceOptions {
   transaction: Transaction;
   model: ScenarioDocumentCallPort;
@@ -61,6 +79,11 @@ export interface L2ScenarioServiceOptions {
   budget?: L2ScenarioBudget;
   now?: () => Date;
   /**
+   * TS质量存储的明确注入点。未注入时只能返回 unknown + 禁止自动使用，
+   * 不能把合成评测或未知状态宣称为正式资格。
+   */
+  quality?: L2ScenarioQualityReader;
+  /**
    * 根集成接入票 12 的 SourceProcessingTraceStore 时，在最终事务中再次
    * fail-closed 核验实际来源；实现不得返回或复制来源正文。
    */
@@ -74,7 +97,7 @@ export interface L2ScenarioManagement {
   item_index: number;
   operation_id: string;
   reason: string;
-  memory_id: string;
+  memory_id?: string;
 }
 
 export interface L2ScenarioParagraphRemoval {
@@ -100,6 +123,59 @@ const SOURCE_KINDS = new Set(['manual_entry', 'source_supported']);
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+function failClosedQuality(): L2ScenarioQuality {
+  return {
+    organization: {
+      status: 'unknown',
+      reasons: ['quality_store_unconfigured'],
+      contract_id: null,
+      report_id: null,
+    },
+    reply: {
+      status: 'unknown',
+      reasons: ['quality_store_unconfigured'],
+      contract_id: null,
+      report_id: null,
+    },
+    automatic_use_allowed: false,
+    synthetic: false,
+  };
+}
+
+function checkedQuality(value: L2ScenarioQuality): L2ScenarioQuality {
+  const stage = (item: L2ScenarioQualityStage): L2ScenarioQualityStage => {
+    if (
+      !item
+      || !['unknown', 'failed', 'verified'].includes(item.status)
+      || !Array.isArray(item.reasons)
+      || !item.reasons.every(reason => typeof reason === 'string' && reason.length <= 1000)
+      || item.contract_id !== null && (typeof item.contract_id !== 'string' || item.contract_id.length > 200)
+      || item.report_id !== null && (typeof item.report_id !== 'string' || item.report_id.length > 200)
+      || item.status === 'verified' && (item.contract_id === null || item.report_id === null || item.reasons.length)
+    ) throw new L2ScenarioError('l2_scenario_quality_invalid');
+    return {
+      status: item.status,
+      reasons: [...item.reasons],
+      contract_id: item.contract_id,
+      report_id: item.report_id,
+    };
+  };
+  if (
+    !value
+    || typeof value.synthetic !== 'boolean'
+    || typeof value.automatic_use_allowed !== 'boolean'
+  ) throw new L2ScenarioError('l2_scenario_quality_invalid');
+  const organization = stage(value.organization);
+  const reply = stage(value.reply);
+  if (
+    value.synthetic && (organization.status === 'verified' || reply.status === 'verified')
+    || value.automatic_use_allowed && (
+      value.synthetic || organization.status !== 'verified' || reply.status !== 'verified'
+    )
+  ) throw new L2ScenarioError('l2_scenario_quality_invalid');
+  return {organization, reply, automatic_use_allowed: value.automatic_use_allowed, synthetic: value.synthetic};
 }
 
 function positive(value: unknown, fallback = 0): number {
@@ -302,6 +378,7 @@ export class L2ScenarioService {
   private readonly profile: MessagesBudgetProfile;
   private readonly now: () => Date;
   private readonly validateSources: L2ScenarioServiceOptions['validateSources'];
+  private readonly quality: L2ScenarioQualityReader | undefined;
 
   constructor(options: L2ScenarioServiceOptions) {
     this.transaction = options.transaction;
@@ -311,6 +388,7 @@ export class L2ScenarioService {
     this.budget = validBudget(options.budget ?? DEFAULT_L2_SCENARIO_BUDGET);
     this.now = options.now ?? (() => new Date());
     this.validateSources = options.validateSources;
+    this.quality = options.quality;
   }
 
   async prepare(scope: L2ScenarioScope, claim: L2ScenarioClaim): Promise<L2ScenarioPreparedWork | null> {
@@ -777,6 +855,14 @@ export class L2ScenarioService {
         FROM public.layered_memory_fact_correction
         WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid`,
       [scope.owner_id, contactParameter(scope)])).rows[0]?.count ?? 0);
+      let quality=failClosedQuality();
+      if(this.quality){
+        try{quality=checkedQuality(await this.quality.read(client,scope));}
+        catch{
+          quality={...failClosedQuality(),organization:{...failClosedQuality().organization,reasons:['quality_store_unavailable']},
+            reply:{...failClosedQuality().reply,reasons:['quality_store_unavailable']}};
+        }
+      }
       const used = positive(job?.model_calls_used);
       const limit = positive(job?.model_call_limit, this.budget.max_model_calls);
       return {
@@ -786,13 +872,8 @@ export class L2ScenarioService {
         settings_generation: positive(state.settings_generation),
         enabled: Boolean(state.enabled),
         runtime_policy: 'verified_items',
-        quality_status: 'synthetic',
-        quality: {
-          organization: {status: 'unknown', reasons: [], contract_id: null, report_id: null},
-          reply: {status: 'unknown', reasons: [], contract_id: null, report_id: null},
-          automatic_use_allowed: false,
-          synthetic: true,
-        },
+        quality_status: quality.synthetic ? 'synthetic' : quality.organization.status,
+        quality,
         status: STATUS.includes(state.status) ? state.status : 'failed',
         work_id: job?.task_id ?? null,
         work_revision: positive(job?.revision),
@@ -877,14 +958,17 @@ export class L2ScenarioService {
       if (
         !target
         || !paragraph
-        || !paragraph.references.some(reference => reference.memory_id === command.memory_id)
+        || command.memory_id !== undefined
+          && !paragraph.references.some(reference => reference.memory_id === command.memory_id)
       ) throw new L2ScenarioConflict('l2_scenario_feedback_target_stale');
       const entries = (await overview(client, scope))
         .map(entry => memoryFrom(entry, this.now().getTime()))
         .filter(Boolean) as L2ScenarioMemory[];
       const byKey = new Map(entries.map(memory => [`${memory.memory_id}:${memory.revision}`, memory]));
       const protectedMemories = target.input_manifest.map(entry => byKey.get(`${entry.memory_id}:${entry.revision}`));
-      const memory = protectedMemories.find(item => item?.memory_id === command.memory_id);
+      const memory = command.memory_id === undefined
+        ? protectedMemories[0]
+        : protectedMemories.find(item => item?.memory_id === command.memory_id);
       if (protectedMemories.some(item => !item) || !memory) {
         throw new L2ScenarioConflict('l2_scenario_feedback_target_stale');
       }
@@ -893,8 +977,7 @@ export class L2ScenarioService {
       const batch = (await client.query('SELECT input_manifest,dependency_ids FROM public.layered_memory_batch WHERE id=$1',
         [target.input_manifest.length ? (await client.query(`SELECT batch_id FROM public.scenario_document_version WHERE id=$1`, [target.version_id])).rows[0]?.batch_id : null])).rows[0];
       const dependencies = [...new Set<string>([
-        memory.memory_id,
-        ...memory.dependency_ids,
+        ...protectedMemories.flatMap(item => [item!.memory_id,...item!.dependency_ids]),
         ...protectedMemoryIds,
         ...(batch?.dependency_ids ?? []),
         ...target.dependency_ids,
@@ -1001,7 +1084,8 @@ export class L2ScenarioService {
       || !Number.isSafeInteger(command.item_index)
       || command.item_index < 0
       || command.item_index >= 100
-      || [command.operation_id, command.version_id, command.memory_id].some(value => typeof value !== 'string' || !UUID.test(value))
+      || [command.operation_id, command.version_id].some(value => typeof value !== 'string' || !UUID.test(value))
+      || command.memory_id !== undefined && !UUID.test(command.memory_id)
       || typeof command.reason !== 'string'
       || !command.reason.trim()
       || count(command.reason.trim()) > 500

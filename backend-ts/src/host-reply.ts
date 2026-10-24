@@ -19,6 +19,18 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {AssistantDiscussionError,AssistantDiscussionService} from './assistant-discussion-service.ts';
 import {createAssistantDiscussionHttp} from './assistant-discussion-http.ts';
+import {
+  createL2ScenarioHost,
+  type L2ScenarioHostCandidate,
+} from './l2-scenario-host.ts';
+import {createL2ScenarioHttp} from './l2-scenario-http.ts';
+import {createL2ScenarioSourceValidator} from './l2-scenario-source-validation.ts';
+import {
+  L2ScenarioConflict,
+  type L2ScenarioQualityReader,
+} from './l2-scenario-service.ts';
+import {L2ScenarioError,type L2ScenarioBudget} from './l2-scenario-workspace.ts';
+import type {SourceProcessingTraceStore} from './source-processing-trace.ts';
 
 export interface HostReplyConfiguration {
   provider:ModelProviderConfiguration;
@@ -35,6 +47,10 @@ export interface HostReplyOptions {
   extractionPermit?:ExtractionPermitEndpoint;
   extractionEnabled?:boolean;
   discussionSkillsRoot?:string;
+  sourceTraces?:Pick<SourceProcessingTraceStore,
+    'findMemoryTraceRecordInTransaction'|'validateMemoryTraceRecordInTransaction'>;
+  l2Quality?:L2ScenarioQualityReader;
+  l2Budget?:L2ScenarioBudget;
 }
 
 export async function createHostReplyRuntime(options:HostReplyOptions) {
@@ -45,6 +61,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   let exploration:ExplorationService|undefined;
   let extraction:ReturnType<typeof createExtractionModelCaller>|undefined;
   let batches:ExtractionBatchService|undefined;
+  let l2Scenarios:L2ScenarioHostCandidate|undefined;
   async function extractionTransaction<T>(work:(client:pg.Client)=>Promise<T>):Promise<T>{
     let businessFailure:ExtractionBatchError|undefined;
     try{return await options.storage.businessTransaction(async client=>{
@@ -61,22 +78,56 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       }
     });}catch(error){throw businessFailure??error;}
   }
+  async function l2Transaction<T>(work:(client:pg.Client)=>Promise<T>):Promise<T>{
+    let businessFailure:L2ScenarioError|L2ScenarioConflict|undefined;
+    try{return await options.storage.businessTransaction(async client=>{
+      try{return await work(client);}
+      catch(error){
+        if(error instanceof L2ScenarioError||error instanceof L2ScenarioConflict)businessFailure=error;
+        throw error;
+      }
+    });}catch(error){throw businessFailure??error;}
+  }
   async function execute<T>(signal:AbortSignal,operation:(combined:AbortSignal)=>Promise<T>):Promise<T>{
     if(stopping.signal.aborted)throw new ReplyError('reply_remote_unavailable',503);
     const combined=AbortSignal.any([signal,stopping.signal]);
     const work=Promise.resolve().then(()=>{
       combined.throwIfAborted();
-      if(!service)throw new ReplyError('reply_remote_unavailable',503);
       return operation(combined);
     });
     pending.add(work);
     try{return await work;}finally{pending.delete(work);}
   }
   const delegated:ReplyHttpService={
-    prepare:(scope,body,signal,internal)=>execute(signal,combined=>service!.prepare(scope,body,combined,internal)),
-    generate:(scope,body,signal,internal)=>execute(signal,combined=>service!.generate(scope,body,combined,internal)),
+    prepare:(scope,body,signal,internal)=>execute(signal,combined=>{
+      if(!service)throw new ReplyError('reply_remote_unavailable',503);
+      return service.prepare(scope,body,combined,internal);
+    }),
+    generate:(scope,body,signal,internal)=>execute(signal,combined=>{
+      if(!service)throw new ReplyError('reply_remote_unavailable',503);
+      return service.generate(scope,body,combined,internal);
+    }),
   };
   const owner=options.storage.runtimeOwnerId;
+  const l2Http=createL2ScenarioHttp({...(owner?{ownerId:owner}:{}),token:options.token,
+    service:{
+      run:(scope,claim,signal)=>execute(signal,combined=>{
+        if(!l2Scenarios)throw new ReplyError('reply_remote_unavailable',503);
+        return l2Scenarios.run(scope,claim,combined);
+      }),
+      read:(scope,cursor,signal)=>execute(signal,()=>{
+        if(!l2Scenarios)throw new ReplyError('reply_remote_unavailable',503);
+        return l2Scenarios.read(scope,cursor);
+      }),
+      reportParagraphError:(scope,command,signal)=>execute(signal,()=>{
+        if(!l2Scenarios)throw new ReplyError('reply_remote_unavailable',503);
+        return l2Scenarios.service.reportParagraphError(scope,command);
+      }),
+      withdrawScenario:(scope,settings,organization,version,signal)=>execute(signal,()=>{
+        if(!l2Scenarios)throw new ReplyError('reply_remote_unavailable',503);
+        return l2Scenarios.service.withdrawScenario(scope,settings,organization,version);
+      }),
+    }});
   const discussionSkillsRoot=options.discussionSkillsRoot??options.configuration?.skillsRoot;
   if(!discussionSkillsRoot?.trim())throw new Error('discussion_skills_root_required');
   const discussionHttp=createAssistantDiscussionHttp({ownerId:owner,token:options.token,
@@ -101,6 +152,25 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
         arbiter:options.arbiter,ledger:options.ledger,provider,
         skillsRoot:options.configuration.skillsRoot,model:options.configuration.model});
       exploration=new ExplorationService({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),arbiter:options.arbiter,ledger:options.ledger,provider,skillsRoot:options.configuration.skillsRoot,model:options.configuration.model});
+      if(owner&&options.extractionPermit&&options.sourceTraces){
+        l2Scenarios=createL2ScenarioHost({
+          ctx:options.ctx,
+          transaction:l2Transaction,
+          provider,
+          permit:options.extractionPermit,
+          binding:{
+            provider:options.configuration.model.provider,
+            model:options.configuration.model.model,
+            maxTokens:options.configuration.model.maxTokens,
+            temperature:options.configuration.model.temperature,
+            reasoningEffort:options.configuration.model.reasoningEffort,
+          },
+          profile:options.configuration.model.budgetProfile,
+          ...(options.l2Budget?{budget:options.l2Budget}:{}),
+          ...(options.l2Quality?{quality:options.l2Quality}:{}),
+          validateSources:createL2ScenarioSourceValidator(options.sourceTraces),
+        });
+      }
       if(options.extractionEnabled&&extraction&&owner){
         const modules=['extraction-flow.ts','extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-arguments.ts','extraction-evidence.ts','extraction-prompts.ts','extraction-bounded.ts','extraction-bounded-proof.ts','contact-overview-bounded-body.ts','contact-overview-bounded-contract.ts','contact-overview-bounded-graph.ts'];
         const sources=await Promise.all(modules.map(file=>readFile(new URL(file,import.meta.url))));
@@ -120,10 +190,14 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       return extraction.call({...input,signal});
     });},
     async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
-      return await extractionHttp.handle(req,res)
+      return await l2Http.handlePrivate(req,res)
+        || await extractionHttp.handle(req,res)
         || await discussionHttp.handle(req,res)
         || await http.handle(req,res)
         || await explorationHttp.handle(req,res);
+    },
+    handleLayeredMemory(req:IncomingMessage,res:ServerResponse,url:URL){
+      return l2Http.handlePublic(req,res,url);
     },
     stopAccepting(){stopping.abort();},
     close():Promise<void>{

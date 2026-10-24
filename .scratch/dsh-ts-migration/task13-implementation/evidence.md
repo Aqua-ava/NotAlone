@@ -24,7 +24,7 @@
 - `backend-ts/src/l2-scenario-workspace.ts`：内存 Markdown 工作区、三工具限制、先读后改、唯一替换、场景/段落/来源结构校验和逐字核验。
 - `backend-ts/src/l2-scenario-service.ts`：冻结 eligible L1、持久 batch、最终事务复验、版本/映射/generation 发布、读取、段落反馈、段落安全撤回和场景撤回。
 - `backend-ts/src/l2-scenario-model.ts`：每次物理模型轮次的官方 `prepareCall`/stream、后台 permit、预约和终态 receipt。
-- `backend-ts/src/l2-scenario-host.ts`：独立宿主候选；共享主宿主未改。
+- `backend-ts/src/l2-scenario-host.ts`：独立宿主候选；当时共享主宿主未改，后续共享接线见下节。
 - `backend-ts/test/l2-scenario-workspace.test.mjs`、`l2-scenario-service.test.mjs`、`l2-scenario-host.test.mjs`：纯工作区、随机 `_test` PG 和真实官方 profile/ModelPermit 合成纵切。
 - 最终自审补强了多旧主题合并、完整旧输入窗口保护、`erased_guard` 续用、陈旧失败隔离、明确预约拒绝后的 permit 释放，以及场景/段落撤回时的既有回复副本清理。
 
@@ -57,10 +57,19 @@
 
 未启动 App/微信，未运行桌面页面或打包版，未调用真实模型/embedding/外部消息。
 
+## 共享宿主接线验证
+
+- 起点主树 `e0ba85275e90072884d6d90d592e39a99ff30856`，票13业务已集成为 `31b98736`。
+- `host-reply.ts` 在同一provider/permit/accounting生命周期内只装配一次L2 host；私有run与已认证公共读/summary-error/withdraw-scenario由同一个HTTP薄桥映射。
+- `SourceProcessingTraceStore` 新增同事务无正文验证入口；自动联系人/本人来源覆盖成功、未记录、处理中、快照摘要变化和跨联系人，manual只兼容当前active/revision一致的manual来源。本人记忆作为依赖时也须通过其候选、来源或消息关联当前contact。
+- 官方DSH profile共享宿主测试经本地回环provider真实完成：手录来源发布、公开读取、无`memory_id`的summary-error、第二任务场景撤回、自动来源快照变化在模型调用前409、恢复后发布、错误token401、错误scope409、关闭后私有run503且permit归零。不存在范围返回404；profile summary-error请求体由旧路由原样回放。
+- `tsc --noEmit` 0错误；最终相关矩阵在原40/40基础上加入旧代理请求体回放回归，通过后提交。
+- Shared host未注入TS quality store时读取为`unknown`且`automatic_use_allowed=false`；注入成功、缺省和读取失败的质量投影均有合成PG回归，不继续硬编码`synthetic`。
+
 ## 未覆盖与剩余边界
 
-- 未修改共享 `host-plugin.ts`、`host-reply.ts`、生产 Worker、HTTP/desktop 控制器或页面；票保持 claimed，待根统一接线和实际 App 验收。
+- 生产 Worker、默认运行时、桌面控制器与页面仍未切换；票保持 claimed，待实际 App／微信验收。
 - 未调用真实模型、真实 embedding、微信或发布包，无法认证真实语义质量、provider 延迟、实际桌面交互和线上 DSH 生命周期。
-- 本地读取质量字段固定为 synthetic 仅用于隔离测试；根必须注入现有 quality 状态。
+- 隔离测试可显式注入 synthetic 资格；共享宿主缺省为 unknown 且禁止自动使用，根必须注入真实 quality 状态。
 - 票 17 的整体来源删除编排和票 14 的 L3 生成仍由各自 owner 完成；本票只验证 L2 发布/失效接缝。
 - 全量 5 个环境/既有失败不属于本票范围，未通过安装 desktop 依赖或修改既有夹具掩盖；本票最终提交不包含工作树临时 `node_modules` symlink。

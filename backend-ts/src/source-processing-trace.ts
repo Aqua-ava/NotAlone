@@ -186,22 +186,66 @@ export class SourceProcessingTraceStore {
   const s=scope(value);if(!memoryKinds.has(kind))invalid('trace_record_kind_invalid');
   const id=identifier(recordId,'trace_record_id_invalid');
   if(kind==='task')return this.findTaskTrace(s,id);
-  return this.read(async c=>{
-   await this.contact(c,s);
-   let origin:Record<string,any>|undefined,candidateId:string|null=null;
-   if(kind==='message'){
-    origin=(await c.query(`SELECT id FROM public.message WHERE owner_id=$1 AND contact_id=$2 AND id=$3`,
-     [s.ownerId,s.contactId,id])).rows[0];
-   }else if(kind==='contact_memory'){
-    origin=(await c.query(`SELECT id,status,revision,source_candidate_id,source_ids,adoption_method
-     FROM public.confirmed_memory WHERE owner_id=$1 AND contact_id=$2 AND id=$3`,
-     [s.ownerId,s.contactId,id])).rows[0];
-    candidateId=origin?.source_candidate_id??null;
-   }else if(kind==='owner_memory'){
-    origin=(await c.query(`SELECT memory.id,memory.status,memory.revision,memory.source_candidate_id,
-      memory.source_ids,memory.adoption_method
-     FROM public.owner_memory memory LEFT JOIN public.memory_candidate candidate
-      ON candidate.id=memory.source_candidate_id AND candidate.owner_id=memory.owner_id
+  return this.read(c=>this.findMemoryTraceRecordOn(c,s,kind,id));
+ }
+
+ /** L2最终事务复用原client，避免来源在读取与发布之间跨事务变化。 */
+ async findMemoryTraceRecordInTransaction(
+  client:pg.ClientBase,value:TraceScope,kind:MemoryTraceRecordKind,recordId:string,
+ ):Promise<Record<string,any>> {
+  const s=scope(value);if(!memoryKinds.has(kind)||kind==='task')invalid('trace_record_kind_invalid');
+  return this.findMemoryTraceRecordOn(client,s,kind as Exclude<MemoryTraceRecordKind,'task'>,
+   identifier(recordId,'trace_record_id_invalid'));
+ }
+
+ /**
+  * 只返回无正文可用性、trace身份和来源依赖。自动来源必须完整成功且每个窗口
+  * 来源快照仍与当前内容摘要一致；运行中/失败/不完整均拒绝。
+  */
+ async validateMemoryTraceRecordInTransaction(
+  client:pg.ClientBase,value:TraceScope,kind:MemoryTraceRecordKind,recordId:string,
+ ):Promise<{availability:string;trace_ids:string[];dependency_ids:string[];record:Record<string,any>|null}> {
+  const found=await this.findMemoryTraceRecordInTransaction(client,value,kind,recordId);
+  const s=scope(value),record=found.record as Record<string,any>;
+  const traces=(found.batches as Record<string,any>[]).filter(trace=>trace.status!=='deleted');
+  if(found.availability!=='recorded'||!traces.length)return {
+   availability:String(found.availability),trace_ids:[],dependency_ids:[],record:record??null,
+  };
+  if(traces.some(trace=>trace.status==='running'))invalid('trace_processing_in_progress');
+  if(traces.some(trace=>trace.status!=='succeeded'))invalid('trace_not_usable');
+  const traceIds=traces.map(trace=>trace.trace_id as string);
+  const stages=(await client.query(`SELECT trace_id,
+    bool_or(stage='window') AS has_window,bool_or(stage='batch_end') AS has_batch_end
+    FROM public.memory_extraction_trace_event
+    WHERE owner_id=$1 AND contact_id=$2 AND trace_id=ANY($3::uuid[])
+    GROUP BY trace_id`,[s.ownerId,s.contactId,traceIds])).rows;
+  if(stages.length!==traceIds.length||stages.some(row=>!row.has_window||!row.has_batch_end))invalid('trace_not_usable');
+  for(const traceId of traceIds)await this.requireTraceSources(client,s,traceId);
+  const dependencyIds=(await client.query(`SELECT DISTINCT source_id
+    FROM public.memory_extraction_trace_dependency
+    WHERE owner_id=$1 AND contact_id=$2 AND trace_id=ANY($3::uuid[])
+    ORDER BY source_id`,[s.ownerId,s.contactId,traceIds])).rows.map(row=>row.source_id as string);
+  return {availability:'recorded',trace_ids:traceIds,dependency_ids:dependencyIds,record};
+ }
+
+ private async findMemoryTraceRecordOn(
+  c:pg.ClientBase,s:TraceScope,kind:Exclude<MemoryTraceRecordKind,'task'>,id:string,
+ ):Promise<Record<string,any>> {
+  await this.contact(c,s);
+  let origin:Record<string,any>|undefined,candidateId:string|null=null;
+  if(kind==='message'){
+   origin=(await c.query(`SELECT id FROM public.message WHERE owner_id=$1 AND contact_id=$2 AND id=$3`,
+    [s.ownerId,s.contactId,id])).rows[0];
+  }else if(kind==='contact_memory'){
+   origin=(await c.query(`SELECT id,status,revision,source_candidate_id,source_ids,adoption_method
+    FROM public.confirmed_memory WHERE owner_id=$1 AND contact_id=$2 AND id=$3`,
+    [s.ownerId,s.contactId,id])).rows[0];
+   candidateId=origin?.source_candidate_id??null;
+  }else if(kind==='owner_memory'){
+   origin=(await c.query(`SELECT memory.id,memory.status,memory.revision,memory.source_candidate_id,
+     memory.source_ids,memory.adoption_method
+    FROM public.owner_memory memory LEFT JOIN public.memory_candidate candidate
+     ON candidate.id=memory.source_candidate_id AND candidate.owner_id=memory.owner_id
      WHERE memory.owner_id=$1 AND memory.id=$2 AND (candidate.contact_id=$3 OR EXISTS(
       SELECT 1 FROM public.source_document source WHERE source.owner_id=memory.owner_id
        AND source.contact_id=$3 AND source.id=ANY(memory.source_ids)) OR EXISTS(
@@ -209,35 +253,33 @@ export class SourceProcessingTraceStore {
        AND message.contact_id=$3 AND message.id=ANY(memory.source_ids)) OR (
       memory.source_candidate_id IS NULL AND memory.adoption_method='manual'
        AND memory.source_ids=ARRAY[memory.owner_id]))`,[s.ownerId,id,s.contactId])).rows[0];
-    candidateId=origin?.source_candidate_id??null;
-   }else{
-    origin=(await c.query(`SELECT id,status,source_ids FROM public.memory_candidate
-     WHERE owner_id=$1 AND contact_id=$2 AND id=$3`,[s.ownerId,s.contactId,id])).rows[0];
-   }
-   if(!origin)throw new SourceProcessingTraceError('trace_record_not_found');
-   const found=origin;
-   const rows=(await c.query(`SELECT DISTINCT trace.* FROM public.memory_extraction_trace trace
-    LEFT JOIN public.memory_extraction_trace_link link
-     ON link.trace_id=trace.trace_id AND link.owner_id=trace.owner_id AND link.contact_id=trace.contact_id
-    WHERE trace.owner_id=$1 AND trace.contact_id=$2 AND ((link.record_kind=$3 AND link.record_id=$4)
-     OR (link.record_kind='candidate' AND link.record_id=$5) OR ($3='message' AND EXISTS(
-      SELECT 1 FROM public.memory_extraction_trace_event event WHERE event.trace_id=trace.trace_id
-       AND event.owner_id=trace.owner_id AND event.contact_id=trace.contact_id AND event.stage='window'
-       AND event.payload->'messages' @> $6::jsonb)))
-    ORDER BY trace.started_at DESC,trace.trace_id DESC`,[s.ownerId,s.contactId,kind,id,candidateId,
-     JSON.stringify([{message_id:id}])])).rows.map(batchRow);
-   const manualOnly=kind==='owner_memory'&&found.source_candidate_id==null&&found.adoption_method==='manual'
-    &&Array.isArray(found.source_ids)&&found.source_ids.length===1&&found.source_ids[0]===s.ownerId;
-   let recoveryManual=manualOnly;
-   if(!manualOnly&&kind!=='message'&&!rows.length&&found.source_ids?.length){
-    const sources=(await c.query(`SELECT id FROM public.source_document WHERE owner_id=$1 AND contact_id=$2
-     AND source_type='manual' AND id=ANY($3::uuid[])`,[s.ownerId,s.contactId,found.source_ids])).rows;
-    recoveryManual=sources.length===found.source_ids.length;
-   }
-   return {availability:rows.some(row=>row.status!=='deleted')?'recorded':rows.length?'deleted':recoveryManual?'not_applicable':'not_recorded',
-    batches:rows,record_exists:true,record:{kind,record_id:id,status:found.status??null,adoption_method:found.adoption_method??null,
-     revision:found.revision??null,source_candidate_id:candidateId,source_ids:found.source_ids??[]}};
-  });
+   candidateId=origin?.source_candidate_id??null;
+  }else{
+   origin=(await c.query(`SELECT id,status,source_ids FROM public.memory_candidate
+    WHERE owner_id=$1 AND contact_id=$2 AND id=$3`,[s.ownerId,s.contactId,id])).rows[0];
+  }
+  if(!origin)throw new SourceProcessingTraceError('trace_record_not_found');
+  const rows=(await c.query(`SELECT DISTINCT trace.* FROM public.memory_extraction_trace trace
+   LEFT JOIN public.memory_extraction_trace_link link
+    ON link.trace_id=trace.trace_id AND link.owner_id=trace.owner_id AND link.contact_id=trace.contact_id
+   WHERE trace.owner_id=$1 AND trace.contact_id=$2 AND ((link.record_kind=$3 AND link.record_id=$4)
+    OR (link.record_kind='candidate' AND link.record_id=$5) OR ($3='message' AND EXISTS(
+     SELECT 1 FROM public.memory_extraction_trace_event event WHERE event.trace_id=trace.trace_id
+      AND event.owner_id=trace.owner_id AND event.contact_id=trace.contact_id AND event.stage='window'
+      AND event.payload->'messages' @> $6::jsonb)))
+   ORDER BY trace.started_at DESC,trace.trace_id DESC`,[s.ownerId,s.contactId,kind,id,candidateId,
+    JSON.stringify([{message_id:id}])])).rows.map(batchRow);
+  const manualOnly=kind==='owner_memory'&&origin.source_candidate_id==null&&origin.adoption_method==='manual'
+   &&Array.isArray(origin.source_ids)&&origin.source_ids.length===1&&origin.source_ids[0]===s.ownerId;
+  let recoveryManual=manualOnly;
+  if(!manualOnly&&kind!=='message'&&!rows.length&&origin.source_ids?.length){
+   const sources=(await c.query(`SELECT id FROM public.source_document WHERE owner_id=$1 AND contact_id=$2
+    AND source_type='manual' AND status='active' AND id=ANY($3::uuid[])`,[s.ownerId,s.contactId,origin.source_ids])).rows;
+   recoveryManual=sources.length===origin.source_ids.length;
+  }
+  return {availability:rows.some(row=>row.status!=='deleted')?'recorded':rows.length?'deleted':recoveryManual?'not_applicable':'not_recorded',
+   batches:rows,record_exists:true,record:{kind,record_id:id,status:origin.status??null,adoption_method:origin.adoption_method??null,
+    revision:origin.revision??null,source_candidate_id:candidateId,source_ids:origin.source_ids??[]}};
  }
 
  async findTaskTrace(value:TraceScope,taskId:string):Promise<Record<string,any>> {
@@ -445,7 +487,8 @@ export class SourceProcessingTraceStore {
    WHERE event.trace_id=$1 AND event.owner_id=$2 AND event.contact_id=$3 AND event.stage='window'
     AND (((snapshot->>'source_kind')='source_document' AND NOT EXISTS(
       SELECT 1 FROM public.source_document source WHERE source.id=(snapshot->>'source_id')::uuid
-       AND source.owner_id=$2 AND source.contact_id=$3 AND source.status='active'))
+       AND source.owner_id=$2 AND source.contact_id=$3 AND source.status='active'
+       AND source.content_sha256=(snapshot->>'source_content_sha256')))
      OR ((snapshot->>'source_kind')='local_wechat_observation' AND NOT EXISTS(
       SELECT 1 FROM public.local_wechat_observation observation WHERE observation.id=(snapshot->>'source_id')::uuid
        AND observation.owner_id=$2 AND observation.contact_id=$3))
@@ -601,11 +644,11 @@ export class SourceProcessingTraceStore {
 
 function dependencyAvailable(column:string):string {
  return `(EXISTS(SELECT 1 FROM public.source_document source WHERE source.id=${column}
-   AND source.owner_id=$2 AND source.status='active')
+   AND source.owner_id=$2 AND source.contact_id=$3 AND source.status='active')
   OR EXISTS(SELECT 1 FROM public.local_wechat_observation observation WHERE observation.id=${column}
-   AND observation.owner_id=$2)
+   AND observation.owner_id=$2 AND observation.contact_id=$3)
   OR EXISTS(SELECT 1 FROM public.source_processing_batch batch WHERE batch.batch_id=${column}
-   AND batch.owner_id=$2 AND batch.status<>'deleted')
+   AND batch.owner_id=$2 AND batch.contact_id=$3 AND batch.status<>'deleted')
   OR EXISTS(SELECT 1 FROM public.message message WHERE message.id=${column} AND message.owner_id=$2
    AND EXISTS(SELECT 1 FROM public.message_source_ref ref WHERE ref.message_id=message.id
     AND ref.owner_id=message.owner_id AND ref.contact_id=message.contact_id AND (
@@ -614,11 +657,22 @@ function dependencyAvailable(column:string):string {
      OR EXISTS(SELECT 1 FROM public.local_wechat_observation observation WHERE observation.id=ref.observation_id
       AND observation.owner_id=ref.owner_id AND observation.contact_id=ref.contact_id))))
   OR EXISTS(SELECT 1 FROM public.memory_candidate candidate WHERE candidate.id=${column}
-   AND candidate.owner_id=$2 AND candidate.status<>'deleted')
+   AND candidate.owner_id=$2 AND candidate.contact_id=$3 AND candidate.status<>'deleted')
   OR EXISTS(SELECT 1 FROM public.confirmed_memory memory WHERE memory.id=${column}
-   AND memory.owner_id=$2 AND memory.status<>'deleted')
+   AND memory.owner_id=$2 AND memory.contact_id=$3 AND memory.status<>'deleted')
   OR EXISTS(SELECT 1 FROM public.owner_memory memory WHERE memory.id=${column}
-   AND memory.owner_id=$2 AND memory.status<>'deleted'))`;
+   AND memory.owner_id=$2 AND memory.status<>'deleted' AND (
+    EXISTS(SELECT 1 FROM public.memory_candidate candidate
+     WHERE candidate.id=memory.source_candidate_id AND candidate.owner_id=memory.owner_id
+      AND candidate.contact_id=$3 AND candidate.status<>'deleted')
+    OR EXISTS(SELECT 1 FROM public.source_document source
+     WHERE source.id=ANY(memory.source_ids) AND source.owner_id=memory.owner_id
+      AND source.contact_id=$3 AND source.status='active')
+    OR EXISTS(SELECT 1 FROM public.message message
+     WHERE message.id=ANY(memory.source_ids) AND message.owner_id=memory.owner_id
+      AND message.contact_id=$3)
+    OR (memory.source_candidate_id IS NULL AND memory.adoption_method='manual'
+     AND memory.source_ids=ARRAY[memory.owner_id]))))`;
 }
 function processingSourceValidity(alias:string):string {
  return `(((${alias}.task_type='import' AND EXISTS(SELECT 1 FROM public.source_document source
