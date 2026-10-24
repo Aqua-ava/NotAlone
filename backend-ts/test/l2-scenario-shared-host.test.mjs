@@ -57,7 +57,8 @@ test('共享官方profile：一次L2装配经手录来源发布、读取、summa
     (_req,res,requests,events)=>{
       const body=requests.at(-1).body;
       const names=(body.tools??[]).map(tool=>tool.name);
-      if(names.join(',')==='read,write,edit'){
+      if(['read','write','edit'].every(name=>names.includes(name))
+        && (names.length===3 || names.length===4 && names.includes('ProfileProposalComplete'))){
         if(body.messages.length===1){
           const payload=JSON.parse(body.messages[0].content.find(block=>block.type==='text').text);
           if(payload.layer==='l3'){
@@ -140,16 +141,31 @@ ${latestMemoryText}
     headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},
     body:JSON.stringify({scope:{owner_id:owner,contact_id:contact},claim})});
   const runBody=await run.json();
-  assert.equal(run.status,200,JSON.stringify(runBody));
+  assert.equal(run.status,200,JSON.stringify({
+    body:runBody,
+    requests:host.requests.map(request=>({
+      names:(request.body.tools??[]).map(tool=>tool.name),
+      message_count:request.body.messages?.length,
+      payload:(()=>{
+        const value=JSON.parse(request.body.messages?.[0]?.content?.find(block=>block.type==='text')?.text??'{}');
+        return {layer:value.layer,memory_count:value.memories?.length,documents:value.documents?.map(item=>item.path)};
+      })(),
+    })),
+    output:host.output.slice(-2000),
+  }));
   assert.equal(runBody.status,'completed');
   assert.equal(runBody.processed_count,1);
   assert.equal(runBody.state.scenarios.length,1);
   assert.equal(runBody.state.profile.entries.length,1);
   assert.equal(runBody.state.organization_generation,2);
   assert.equal(host.requests.length,6);
-  assert.deepEqual(host.requests.map(request=>(request.body.tools??[]).map(tool=>tool.name)),[
-    ['read','write','edit'],['read','write','edit'],['ScenarioVerificationOutput'],
-    ['read','write','edit'],['read','write','edit'],['ProfileVerificationOutput'],
+  assert.deepEqual(host.requests.map(request=>(request.body.tools??[]).map(tool=>tool.name).sort()),[
+    ['edit','read','write'],
+    ['edit','read','write'],
+    ['ScenarioVerificationOutput'],
+    ['ProfileProposalComplete','edit','read','write'],
+    ['ProfileProposalComplete','edit','read','write'],
+    ['ProfileVerificationOutput'],
   ]);
   assert.equal((await f.client.query('SELECT model_calls_used FROM layered_memory_job WHERE task_id=$1',[task])).rows[0].model_calls_used,6);
   const scenario=runBody.state.scenarios[0];

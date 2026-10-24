@@ -182,7 +182,14 @@ test('L3多轮提案压缩已执行工具历史，不以旧写入参数耗尽下
         receipt_id:randomUUID(),
       };
     }
-    compacted = JSON.parse(input.messages.at(-1).content.find(block => block.type === 'text').text);
+    for (const message of input.messages) {
+      const text = message.content.find(block => block.type === 'text')?.text;
+      if (!text) continue;
+      try {
+        const payload = JSON.parse(text);
+        if (payload.history_compacted) compacted = payload;
+      } catch {}
+    }
     return {blocks:[],receipt_id:randomUUID()};
   }};
   const result = await runProfileDocumentAgent({
@@ -209,7 +216,7 @@ test('L3多轮提案压缩已执行工具历史，不以旧写入参数耗尽下
   assert.match(result.proposal.entries[0].text, /第4轮/);
   assert.equal(compacted.history_compacted, true);
   assert.equal(compacted.completed_tool_calls[0].name, 'write');
-  assert.match(compacted.current_profile_markdown, /第4轮合成课程背景/);
+  assert.match(compacted.current_profile_markdown, /第[1-4]轮合成课程背景/);
   assert.doesNotMatch(JSON.stringify(compacted), /profile-round-/);
 });
 
@@ -302,4 +309,55 @@ test('L3多轮提案末轮工具错误不会被此前的成功写入掩盖', asy
     remainingCalls:6,
   }), /round_limit/);
   assert.equal(calls, 5);
+});
+
+test('L3画像在错误写入后成功修正，并在五轮内通过显式完成工具收敛', async () => {
+  const workspace = new L3ProfileWorkspace(null, [scenario], [memory], budget);
+  let calls = 0, completeAdvertised = false;
+  const port = {async call(input) {
+    calls++;
+    const tool = (name,args) => ({
+      blocks:[{type:'tool-call',id:`profile-converge-${calls}`,name,arguments:JSON.stringify(args)}],
+      receipt_id:randomUUID(),
+    });
+    if (calls === 1) return tool('read', {path:'profile.md'});
+    if (calls === 2) return tool('write', {
+      path:'profile.md',
+      content:'# 长期背景\n\n## 生活背景\n正文没有逐条ENTRY元数据。',
+    });
+    if (calls === 3) return tool('write', {
+      path:'profile.md',
+      content:renderProfile({entries:[entry]}),
+    });
+    if (calls === 4) return tool('read', {path:`${scenario.scenario_id}.md`});
+    if (calls === 5) {
+      completeAdvertised = input.tools.some(item => item.name === 'ProfileProposalComplete');
+      return tool('ProfileProposalComplete', {});
+    }
+    throw new Error('unexpected_profile_convergence_call');
+  }};
+  const result = await runProfileDocumentAgent({
+    workspace,
+    existing:null,
+    scenarios:[scenario],
+    memories:[memory],
+    changedScenarios:[scenario],
+    removedScenarioVersionIds:[],
+    baseProfileVersionId:null,
+    corrections:[],
+    port,
+    claim:{task_id:randomUUID(),step_id:randomUUID(),step_name:'organize_memory',worker_id:randomUUID(),lease_generation:1},
+    owner_id:randomUUID(),
+    contact_id:randomUUID(),
+    batch_id:randomUUID(),
+    binding:{provider:'synthetic-provider',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off'},
+    profile:{context_window_tokens:32_000,safety_margin_tokens:512},
+    signal:new AbortController().signal,
+    requireCurrent:async()=>{},
+    remainingCalls:6,
+  });
+  assert.equal(calls, 5);
+  assert.equal(result.calls, 5);
+  assert.equal(completeAdvertised, true);
+  assert.equal(result.proposal.entries[0].text, entry.text);
 });

@@ -18,6 +18,7 @@ import {
   type ScenarioDocumentCallPort,
 } from './l2-scenario-workspace.ts';
 import {
+  L3ProfileDocumentError,
   L3ProfileWorkspace,
   filterProfileProposal,
   profileDigest,
@@ -29,6 +30,7 @@ import {
   type L3ProfileDocument,
   type L3ProfileDraft,
   type L3ProfileEntry,
+  type L3ProfileRoundTrace,
   type ProfileVerification,
 } from './l3-profile-workspace.ts';
 
@@ -756,13 +758,25 @@ export class L3ProfileService {
       WHERE task_id=$1 AND state='active'`, [taskId]);
   }
 
-  async recordProposal(work: L3ProfilePreparedWork, original: unknown, filtered: L3ProfileDraft, rejected: unknown): Promise<void> {
+  async recordProposal(
+    work: L3ProfilePreparedWork,
+    original: unknown,
+    filtered: L3ProfileDraft,
+    rejected: unknown,
+    trace: readonly L3ProfileRoundTrace[],
+  ): Promise<void> {
     await this.transaction(async client => {
       await lockScope(client, work.scope);
       await this.assertCurrent(client, work);
       await client.query(`UPDATE public.layered_profile_batch
         SET output_payload=$2 WHERE id=$1 AND status='running'`,
-      [work.profile_batch_id, JSON.stringify({original, filtered, rejected, verification_result:null})]);
+      [work.profile_batch_id, JSON.stringify({
+        original,
+        filtered,
+        rejected,
+        proposal_trace:trace,
+        verification_result:null,
+      })]);
     });
   }
 
@@ -816,7 +830,11 @@ export class L3ProfileService {
     });
   }
 
-  async fail(work: L3ProfilePreparedWork, code: string): Promise<void> {
+  async fail(
+    work: L3ProfilePreparedWork,
+    code: string,
+    trace?: readonly L3ProfileRoundTrace[],
+  ): Promise<void> {
     if (!/^[a-z0-9_]{1,80}$/.test(code)) throw new L2ScenarioError('l3_profile_failure_code_invalid');
     await this.transaction(async client => {
       await lockScope(client, work.scope);
@@ -829,8 +847,11 @@ export class L3ProfileService {
       if (!state?.enabled || Number(state.settings_generation) !== work.settings_generation
         || Number(state.organization_generation) !== work.organization_generation
         || Number(state.correction_revision ?? 0) !== work.correction_revision) return;
-      const failed = await client.query(`UPDATE public.layered_profile_batch SET status='failed',error_code=$2
-        WHERE id=$1 AND status='running'`, [work.profile_batch_id, code]);
+      const failed = await client.query(`UPDATE public.layered_profile_batch
+        SET status='failed',error_code=$2,
+          output_payload=CASE WHEN $3::text IS NULL THEN output_payload ELSE $3::jsonb END
+        WHERE id=$1 AND status='running'`,
+      [work.profile_batch_id, code, trace?.length ? JSON.stringify({proposal_trace:trace}) : null]);
       if (!failed.rowCount) return;
       await client.query(`UPDATE public.layered_memory_job SET profile_status='failed'
         WHERE task_id=$1 AND state='active'`, [work.claim.task_id]);
@@ -877,7 +898,13 @@ export class L3ProfileService {
         this.budget,
         rejectedTexts,
       );
-      await this.recordProposal(work, agent.proposal, {entries:filtered.entries}, filtered.rejected);
+      await this.recordProposal(
+        work,
+        agent.proposal,
+        {entries:filtered.entries},
+        filtered.rejected,
+        agent.trace,
+      );
       if (agent.proposal.entries.length && !filtered.entries.length) {
         throw new L2ScenarioError('l3_profile_proposal_invalid');
       }
@@ -909,7 +936,8 @@ export class L3ProfileService {
       const code = error instanceof L2ScenarioError || error instanceof L3ProfileServiceConflict
         ? error.code
         : signal.aborted ? 'l3_profile_cancelled' : 'l3_profile_model_failed';
-      await this.fail(work, code).catch(() => {});
+      const trace = error instanceof L3ProfileDocumentError ? error.trace : undefined;
+      await this.fail(work, code, trace).catch(() => {});
       throw error;
     }
   }

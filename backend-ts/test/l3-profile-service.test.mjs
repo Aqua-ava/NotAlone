@@ -334,7 +334,10 @@ test('合成PG：画像批次清单与冻结场景或底层版本不一致时拒
         WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid AND status='running'`,
       [x.ownerId,x.contactId]);
       await assert.rejects(input.requireCurrent(), /batch_stale|changed/i);
-      return {blocks:[],receipt_id:randomUUID()};
+      return {blocks:[{type:'tool-call',id:'late-write',name:'write',arguments:JSON.stringify({
+        path:'profile.md',
+        content:renderProfile({entries:[entry(x.memory)]}),
+      })}],receipt_id:randomUUID()};
     }};
     await assert.rejects(service(f, port).run(x.scope, x.claim, new AbortController().signal), /batch_stale|changed/i);
     assert.equal((await f.client.query(`SELECT count(*)::int n FROM layered_profile_version
@@ -632,6 +635,143 @@ test('合成PG：成功写入后四轮只读仍受五轮提案上限约束并完
     assert.equal(batch.status, 'succeeded');
     assert.equal(batch.attempt_count, 1);
     assert.ok(batch.output_payload);
+  } finally { await f.close(); }
+});
+
+test('合成PG：五轮内错误写修复后显式完成，独立核验后发布并保留工具摘要', async () => {
+  const f = await createStorageFixture();
+  try {
+    const x = await createScope(f);
+    await f.client.query(`UPDATE layered_memory_job SET model_calls_used=0
+      WHERE task_id=$1`, [x.taskId]);
+    let calls = 0, system = '', limits;
+    const port = {async call(input) {
+      calls++;
+      await input.requireCurrent();
+      const tool = (name,args) => ({
+        blocks:[{type:'tool-call',id:`explicit-complete-${calls}`,name,arguments:JSON.stringify(args)}],
+        receipt_id:randomUUID(),
+      });
+      if (calls === 1) {
+        system = input.system;
+        limits = JSON.parse(input.messages[0].content.find(block => block.type === 'text').text).profile_limits;
+        return tool('read', {path:'profile.md'});
+      }
+      if (calls === 2) return tool('write', {
+        path:'profile.md',
+        content:'# 长期背景\n\n## 错误分组标题\n这条缺少逐条ENTRY元数据。',
+      });
+      if (calls === 3) return tool('write', {
+        path:'profile.md',
+        content:renderProfile({entries:[entry(x.memory)]}),
+      });
+      if (calls === 4) return tool('read', {path:`${x.scenarioId}.md`});
+      if (calls === 5) return tool('ProfileProposalComplete', {});
+      if (calls === 6) return tool('ProfileVerificationOutput', {results:[{
+        entry_index:0,
+        supported:true,
+        evidence:[{memory_id:x.memoryId,quote:x.memory.text}],
+      }]});
+      throw new Error('unexpected_explicit_complete_call');
+    }};
+    const ready = await service(f, port).run(
+      x.scope,
+      x.claim,
+      new AbortController().signal,
+    );
+    assert.equal(calls, 6);
+    assert.equal(ready.status, 'ready');
+    assert.ok(ready.profile);
+    assert.match(system, /不得添加##标题/);
+    assert.match(system, /ProfileProposalComplete/);
+    assert.deepEqual(limits, {max_entries:16,max_characters:2000});
+    const batch = (await f.client.query(`SELECT status,output_payload
+      FROM layered_profile_batch WHERE task_id=$1`, [x.taskId])).rows[0];
+    assert.equal(batch.status, 'succeeded');
+    assert.equal(batch.output_payload.proposal_trace.length, 5);
+    assert.deepEqual(batch.output_payload.proposal_trace.map(round => round.completed_by),
+      [null,null,null,null,'tool']);
+    assert.equal(batch.output_payload.proposal_trace[1].calls[0].outcome, 'tool_error');
+    assert.equal(batch.output_payload.proposal_trace[1].calls[0].error_code, 'l3_profile_document_invalid');
+    assert.equal(batch.output_payload.proposal_trace[2].calls[0].outcome, 'succeeded');
+    assert.deepEqual(batch.output_payload.proposal_trace[2].calls[0].argument_keys, ['content','path']);
+  } finally { await f.close(); }
+});
+
+test('合成PG：五轮均未成功写入时失败关闭且只保存无正文工具轨迹', async () => {
+  const f = await createStorageFixture();
+  try {
+    const x = await createScope(f);
+    await f.client.query(`UPDATE layered_memory_job SET model_calls_used=0
+      WHERE task_id=$1`, [x.taskId]);
+    const invalid = '# 长期背景\n\n## 错误分组标题\n这条缺少逐条ENTRY元数据。';
+    let calls = 0;
+    const port = {async call(input) {
+      calls++;
+      await input.requireCurrent();
+      const tool = (name,args) => ({
+        blocks:[{type:'tool-call',id:`nonconverging-${calls}`,name,arguments:JSON.stringify(args)}],
+        receipt_id:randomUUID(),
+      });
+      if (calls === 1 || calls === 5) return tool('read', {path:'profile.md'});
+      return tool('write', {path:'profile.md',content:invalid});
+    }};
+    await assert.rejects(
+      service(f, port).run(x.scope, x.claim, new AbortController().signal),
+      /round_limit/,
+    );
+    assert.equal(calls, 5);
+    const batch = (await f.client.query(`SELECT status,error_code,output_payload
+      FROM layered_profile_batch WHERE task_id=$1`, [x.taskId])).rows[0];
+    assert.equal(batch.status, 'failed');
+    assert.equal(batch.error_code, 'l3_profile_document_round_limit');
+    assert.equal(batch.output_payload.proposal_trace.length, 5);
+    assert.deepEqual(batch.output_payload.proposal_trace.map(round =>
+      round.calls.map(call => `${call.name}:${call.outcome}`)), [
+      ['read:succeeded'],
+      ['write:tool_error'],
+      ['write:tool_error'],
+      ['write:tool_error'],
+      ['read:succeeded'],
+    ]);
+    assert.equal(Object.hasOwn(batch.output_payload, 'original'), false);
+    assert.doesNotMatch(JSON.stringify(batch.output_payload), new RegExp(x.memory.text));
+    assert.equal((await f.client.query(`SELECT count(*)::int n FROM layered_profile_version
+      WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid`,
+    [x.ownerId,x.contactId])).rows[0].n, 0);
+  } finally { await f.close(); }
+});
+
+test('合成PG：没有成功写入时完成工具被拒绝且不发布空画像', async () => {
+  const f = await createStorageFixture();
+  try {
+    const x = await createScope(f);
+    await f.client.query(`UPDATE layered_memory_job SET model_calls_used=0
+      WHERE task_id=$1`, [x.taskId]);
+    let calls = 0;
+    const port = {async call(input) {
+      calls++;
+      await input.requireCurrent();
+      return {blocks:[{
+        type:'tool-call',
+        id:`empty-complete-${calls}`,
+        name:'ProfileProposalComplete',
+        arguments:'{}',
+      }],receipt_id:randomUUID()};
+    }};
+    await assert.rejects(
+      service(f, port).run(x.scope, x.claim, new AbortController().signal),
+      /round_limit/,
+    );
+    assert.equal(calls, 5);
+    const batch = (await f.client.query(`SELECT status,output_payload
+      FROM layered_profile_batch WHERE task_id=$1`, [x.taskId])).rows[0];
+    assert.equal(batch.status, 'failed');
+    assert.equal(batch.output_payload.proposal_trace[0].calls[0].error_code,
+      'l3_profile_completion_not_ready');
+    assert.equal((await f.client.query(`SELECT count(*)::int n FROM layered_profile_version
+      WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid`,
+    [x.ownerId,x.contactId])).rows[0].n, 0);
   } finally { await f.close(); }
 });
 
