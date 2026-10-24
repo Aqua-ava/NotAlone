@@ -278,6 +278,7 @@ test('可见页面按真实进展更新记忆，新增结果不清空正在编�
   await withMemoryPage(f, t.signal, async page => {
     const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByText('已处理 20 / 53 条聊天', { exact: true }).first().waitFor();
+    await page.getByLabel('更多操作：原有合成偏好。', { exact: true }).click();
     await page.getByRole('button', { name: '修正资料：原有合成偏好。', exact: true }).click();
     const input = page.getByRole('textbox', { name: '资料正文', exact: true });
     await input.fill('尚未保存的人工草稿。');
