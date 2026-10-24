@@ -1,7 +1,7 @@
 # 13：整理 L2 场景
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 11
 Spec: ../spec.md
@@ -45,4 +45,12 @@ Spec: ../spec.md
 
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+票内 TS 业务纵切和隔离宿主候选已完成，仍为 `claimed`；共享宿主、生产 Worker、真实 HTTP/桌面控制器与页面尚未接线，不能标为 `resolved`。
+
+- DSH 固定为 `0.2.1-rc.2`、tag `dsh-v0.2.1-rc.2`、commit `687f282e8625c6b8d11ff58211a90524be2e4317`。依据锁定 [Tool 教程](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/user/develop/basic/tool.zh.md#L13)、[执行流水线](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/tool-execution-pipeline.zh.md#L8)、`defineTool` 注册/限制/guard 源码和 `prepareCall()`/单次 stream 说明。业务代码保留轮次、分发、取消和发布权；模型只获 `read/write/edit`，没有文件系统、Shell、MCP、发送或新 Tool 注册能力。
+- 已实现 [工作区](../../../backend-ts/src/l2-scenario-workspace.ts)、[服务](../../../backend-ts/src/l2-scenario-service.ts)、[物理模型桥](../../../backend-ts/src/l2-scenario-model.ts) 和 [独立宿主候选](../../../backend-ts/src/l2-scenario-host.ts)。严格工作区支持创建、先读后改、显式完整替换、多旧主题合并及逐字引用核验；服务在最终事务复验 claim/settings/organization/correction/batch/输入/旧场景完整快照后发布，并支持查看、段落反馈、安全段落撤回、场景撤回和映射分页。
+- 反馈 guard 覆盖完整旧输入窗口和规范消息；回复正文擦除后仍以 `erased_guard` 排除 L1。段落/场景撤回在同一事务清除依赖回复副本并使冻结快照失效。来源记录按 `owner_id + contact_id` 隔离，`contact_id=NULL` 的本人范围也走完整纵切。
+- 独立合成宿主已从官方 DSH profile 经本地回环 provider、真实 ModelPermit/accounting/PG 跑通发布、取消和预算拒绝。共享接线的参数、source validator 和唯一 Worker 边界记录在 [root-integration.md](../task13-implementation/root-integration.md)；没有修改共享宿主或生产 Worker。
+- 数据影响：合成 PG 只写随机 `_test` 库和合成正文；未持久化真实聊天、截图、语音或凭据。L2 批次保存本批输入、旧场景修订和精确 `dependency_ids`；场景正文不可变版本化。未新增 schema/迁移。票 12 `SourceProcessingTraceStore` fail-closed validator 仍需根线程传入 `validateSources(client, work)`，本票不复制 trace 正文。
+- 验证：`tsc --noEmit` 0 错误；工作区/服务 9 通过；独立宿主 1 通过；相关既有模块 14 通过。全量 `test/*.test.mjs` 为 1096 项、1091 通过、5 失败；失败均在本票外（desktop `esbuild` 缺失 3 项、缺 `discussion_skills_root` 1 项、既有 sync 清理断言 1 项），票内与相关模块独立运行全绿。详见 [evidence.md](../task13-implementation/evidence.md)。
+- 清理：所有测试临时 PG/目录自行回收，提交前删除 `backend-ts/node_modules` 临时 symlink；未启动 App/微信、未调用真实模型/embedding/外部消息、未打包、未 push。剩余覆盖包括共享 `host-plugin.ts`/`host-reply.ts`、生产 Worker、HTTP/desktop 路由与页面、实际 App/微信和真实模型质量。
