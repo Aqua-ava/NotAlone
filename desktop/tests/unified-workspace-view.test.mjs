@@ -32,6 +32,27 @@ function render({ draft = '', contactId = 'synthetic-contact', historyCoverage, 
   }));
 }
 
+function renderCandidates(usedSkill, restored = false) {
+  const contactId = 'synthetic-contact', sessionId = 'synthetic-session', replyRequestId = 'synthetic-request';
+  const candidate = { candidateId: 'synthetic-candidate', text: '最近怎么样？', basis: '从近况开始，方便对方接话。',
+    citationIds: [], riskNotes: [] };
+  const reply = { replyRequestId, assistantSessionId: sessionId, contextEvidenceIds: [], usedSkill,
+    input: { mode: 'rewrite_draft', inputKind: 'workspace', workspaceAction: 'suggest', draftText: '',
+      contactDisplayName: '合成联系人', includeRelationshipContext: true } };
+  const currentReply = { ...reply, candidates: [{ original: candidate, editedText: candidate.text }] };
+  const savedReply = { ...reply, candidates: [candidate] };
+  const state = { contactId, scopeRevision: 1, phase: 'ready', mode: 'rewrite_draft',
+    options: { inputKind: 'workspace', workspaceAction: 'suggest', includeRelationshipContext: true },
+    skillChoices: [], exploration: { phase: 'idle', result: null }, messageNotice: { changed: false },
+    messages: { phase: 'ready', items: [] }, candidateVersions: { phase: 'loading', items: [] },
+    savedSession: restored ? { phase: 'ready', sessionId, currentInputVersionId: null, inputs: [], turns: [{
+      turnId: 'synthetic-turn', inputVersionId: 'synthetic-input', requestKey: 'synthetic-key', state: 'completed',
+      interruptionReason: null, placeholder: null, input: { content: reply.input }, reply: savedReply,
+    }] } : { phase: 'idle', sessionId, turns: [], inputs: [], currentInputVersionId: null },
+    result: restored ? null : currentReply };
+  return view.renderToStaticMarkup(view.createElement(view.ReplyCandidates, { replies: { state } }));
+}
+
 test('没有思路可直接请求建议，表达动作要求输入，不出现旧场景选择', () => {
   const html = render();
   assert.match(html, /aria-label="帮我表达"[^>]*disabled/);
@@ -79,6 +100,16 @@ test('工作区候选直接展示理由，版本未核验前不开放编辑', ()
   assert.match(html, /从近况开始，方便对方接话。/);
   assert.match(html, /正在读取本组版本/);
   assert.doesNotMatch(html, /aria-label="候选1编辑文本"/);
+});
+
+test('当前与重开候选都直接展示实际Skill版本或通用流程', () => {
+  const usedSkill = { name: '合成当前对话Skill', versionId: 'synthetic-version-id', versionNumber: 3,
+    loadState: 'loaded', scope: { kind: 'contact', contact_id: 'synthetic-contact', scene: null } };
+  for (const html of [renderCandidates(usedSkill), renderCandidates(usedSkill, true)]) {
+    assert.match(html, /aria-label="本次回复方法"[^>]*>本次实际回复方法：合成当前对话Skill · 版本 3/);
+  }
+  assert.match(renderCandidates(null), /aria-label="本次回复方法"[^>]*>本次使用通用流程/);
+  assert.match(renderCandidates(undefined, true), /aria-label="本次回复方法"[^>]*>本次快照未记录回复方法/);
 });
 
 test('历史同步中阻止新候选，不完整状态显示显式继续且不能静默消失', () => {

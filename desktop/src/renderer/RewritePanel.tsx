@@ -1,6 +1,6 @@
 import type { HistoryCoveragePhase } from '../shared/sync-control-bridge';
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from 'react';
-import type { AssistantSessionDeletion, ReplyMode, ReplySessionState, RewriteOptions } from '../shared/reply-bridge';
+import type { AssistantSessionDeletion, ReplyMode, ReplySessionState, ReplyUsedSkill, RewriteOptions } from '../shared/reply-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import './rewrite.css';
 import { useReplyEvidence } from './ReplyEvidence';
@@ -164,15 +164,28 @@ function CandidateEditor({ text, candidateId, number, edit, copy, validatePaste,
   </>;
 }
 
+function replyMethodText(usedSkill: ReplyUsedSkill | null | undefined, version?: number | string | null) {
+  if (usedSkill === undefined) return '本次快照未记录回复方法，无法确认是否使用 Skill。';
+  if (usedSkill === null) return '本次使用通用流程（未使用回复 Skill）。';
+  const shownVersion = version ?? usedSkill.versionNumber ?? usedSkill.versionId;
+  const loadState = usedSkill.loadState === 'resource_failed' ? '，部分资源读取失败' : '';
+  const scope = usedSkill.scope
+    ? usedSkill.scope.kind === 'scene' ? ` · 精确场景「${usedSkill.scope.scene}」`
+      : usedSkill.scope.kind === 'contact' ? ' · 当前联系人' : ' · 本人通用'
+    : '';
+  return `本次实际回复方法：${usedSkill.name} · 版本 ${shownVersion}${loadState}${scope}`;
+}
+
 export function ReplyCandidates({ replies, currentDraft, historyCoverage }: { replies: ReplySessionView; currentDraft?: string; historyCoverage?: HistoryCoveragePhase }) {
   const { state } = replies;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const evidence = useReplyEvidence();
-  const usedSkill = state.result?.usedSkill;
-  const usedVersion = usedSkill && (usedSkill.versionNumber ?? state.skillChoices.find((item) => item.versionId === usedSkill.versionId)?.versionNumber);
   const recovered = !state.result && state.savedSession?.phase === 'ready'
     ? state.savedSession.turns.filter((turn) => turn.state === 'completed' && turn.reply).at(-1) : undefined;
-  const replyRequestId = state.result?.replyRequestId ?? recovered?.reply?.replyRequestId;
+  const displayedReply = state.result ?? recovered?.reply;
+  const usedSkill = displayedReply?.usedSkill;
+  const usedVersion = usedSkill && (usedSkill.versionNumber ?? state.skillChoices.find((item) => item.versionId === usedSkill.versionId)?.versionNumber);
+  const replyRequestId = displayedReply?.replyRequestId;
   const candidates = state.result?.candidates.map((item) => item.original) ?? recovered?.reply?.candidates ?? [];
   const resultRegion = useRef<HTMLElement>(null);
   const visibleResult = useRef('');
@@ -225,6 +238,9 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage }: { re
   return <><section ref={resultRegion} className={`reply-candidates compact-replies${detailsOpen ? ' show-candidate-details' : ''}`} aria-label="候选回复">
     <header className="reply-results-heading"><h2>候选回复</h2>
       {candidates.length > 0 && <span>{candidates.length} 种说法 · 可直接编辑</span>}</header>
+    {replyRequestId && candidates.length > 0 && <p className="reply-note" role="status" aria-label="本次回复方法">
+      {replyMethodText(usedSkill, usedVersion)}
+    </p>}
     {candidates.length > 0 && (!state.result || state.exploration.result || state.exploration.phase === 'waiting' || state.exploration.phase === 'failed'
       || state.phase === 'waiting' || state.phase === 'failed' || hasChangedReplyInput(state, currentDraft))
       && <p className="reply-generation-guidance" role="status">上一组候选，尚未按当前输入重新生成。</p>}
@@ -295,10 +311,8 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage }: { re
       <summary><span>生成说明与更多操作</span><span>{candidates.some((candidate) => candidate.riskNotes.length) ? '有表达提醒 · 查看依据' : '输入与依据'}</span></summary>
       <p className="reply-note">展开后可查看各条建议的说明与提醒，并使用回复旁的更多操作。</p>
       {state.result && <>
-      {usedSkill === null ? <p className="reply-note">这组候选使用通用流程。</p> : usedSkill && <p className="reply-note">
-        这组候选实际 Skill：{usedSkill.name} · 版本 {usedVersion ?? usedSkill.versionId}{usedSkill.loadState === 'resource_failed' ? '（部分资源读取失败）' : ''}
-        {usedSkill.scope && ` · 范围：${usedSkill.scope.kind === 'scene' ? `精确场景「${usedSkill.scope.scene}」` : usedSkill.scope.kind === 'contact' ? '当前联系人' : '本人通用'}`}
-        {!!usedSkill.executionView?.policyRevision && ` · 已排除本范围停用方法，允许${usedSkill.executionView.methodIds.length}种做法`}
+      {usedSkill?.executionView && <p className="reply-note">
+        实际策略执行视图已核对：已排除本范围停用方法，允许{usedSkill.executionView.methodIds.length}种做法。
       </p>}
       <details className="reply-input-snapshot"><summary>这组候选的生成输入 · {state.result.input.contactDisplayName}</summary>
         <p>精确场景：{state.result.input.scene ?? '未声明'}</p>

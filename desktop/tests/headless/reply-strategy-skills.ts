@@ -44,8 +44,8 @@ export async function replyStrategySkills(browser: Browser, origin: string) {
       expect(afterRetry.payloads, '响应丢失后重试不得重新调用模型或读取Skill').toEqual(beforeRetry.payloads);
       expect(afterRetry.skill_reads).toEqual(beforeRetry.skill_reads);
       const candidates = helper.getByRole('region', { name: '候选回复', exact: true });
-      if (match) await expect(candidates).toContainText(`这组候选实际 Skill：${selected.name} · 版本 2`);
-      else await expect(candidates).toContainText('这组候选使用通用流程。');
+      if (match) await expect(candidates).toContainText(`本次实际回复方法：${selected.name} · 版本 2`);
+      else await expect(candidates).toContainText('本次使用通用流程（未使用回复 Skill）。');
       const reads = (afterRetry.skill_reads as string[][]).at(-1)!;
       expect(reads).toEqual(match ? [expect.stringContaining(selected.marker)] : []);
       const outbound = JSON.stringify(afterRetry.outbound);
@@ -84,7 +84,7 @@ export async function replyStrategySkillInvalidation(browser: Browser, origin: s
       expect(replyTransport.requests.at(-1)!.idempotency_key).not.toBe(oldRequest.idempotency_key);
       expect(replyTransport.results.at(-1)!.data.used_skill).toBeNull();
       expect(replyTransport.explorationRequests).toEqual([]);
-      await expect(helper.getByRole('region', { name: '候选回复', exact: true })).toContainText('这组候选使用通用流程。');
+      await expect(helper.getByRole('region', { name: '候选回复', exact: true })).toContainText('本次使用通用流程（未使用回复 Skill）。');
       const observed = await rewriteBackend.command('observations');
       expect(observed.payloads).toHaveLength(3);
       expect((observed.skill_reads as string[][]).at(-1)).toEqual([]);
