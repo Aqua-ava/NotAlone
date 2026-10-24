@@ -1,0 +1,27 @@
+{
+  "base": "323b59721af7efdae8c9ccc0efd7455d0fff34b1",
+  "files": {
+    "backend-ts/src/foreground-location-api.ts": "310a945b316d49788e0886066a72be6adfe4c8ac4a8d6d4f884642f3a757dc73",
+    "backend-ts/src/foreground-location-locator.ts": "50fc4bfd8c0c2d5d15d1ae495d1be5a61eadb2181e7440fa7a03eb5a969322fc",
+    "backend-ts/src/foreground-location-name-matching.ts": "15e88e93a8c85b76f390d438f134056b80522d03798d0a286294c21c2bd6c1c0",
+    "backend-ts/src/foreground-location-sessions.ts": "6050d29d4f098f09b5e79ed948b6d61ab6bb72f217d5f9936a0d2ce7fc481e45",
+    "backend-ts/test/foreground-location-api.test.mjs": "30158b98467784363113915fe0af7b56ba86a25b29d4f8fdc00e3ad7d7eb2cc1",
+    "backend-ts/test/foreground-location-authority.test.mjs": "13beb8fcea1bcf6f14f3ac096c7d6e89f4d238f3aa57ead55f9d733c56dd9697",
+    "backend-ts/test/foreground-location-locator.test.mjs": "b0fafe10a288fddf7252ca0c66f792e14c71db07d8de502c4e4acd72334d3ef4",
+    "backend-ts/test/foreground-location-name-matching.test.mjs": "445f1cbf1ee025a6d0e520db369d66bcf137af5670d3a39e9d921849e84b7756",
+    "backend-ts/test/foreground-location-sessions.test.mjs": "86e42cb5fbddec5bf892e2fd546d8284003c70dadf501be8190c15bfe6c22c98",
+    "backend-ts/test/foreground-location-frozen.test.mjs": "412fad80496e0ba4fcc4697f956c67c8ab15160bbf9e2d8dfb2f47c97e925305",
+    "backend-ts/test/foreground-location-fixture.mjs": "e1a700a45ce9a200ac6f99d352a1b9321b0e302a530d616295f6b47340e5c1b0",
+    "backend-ts/test/foreground-location-frozen-fixture.py": "04fe89e5166053a2b07a06727bf38ed15c78c904fcffb245f31a0bc5c5dae55b"
+  },
+  "tests": 6,
+  "typecheck": "passed",
+  "history": "readonly git show frozen baseline",
+  "post_validation_whitespace": {
+    "backend-ts/test/foreground-location-fixture.mjs": {
+      "tested_sha256": "e1a700a45ce9a200ac6f99d352a1b9321b0e302a530d616295f6b47340e5c1b0",
+      "committed_sha256": "bbb00cbc31496870658c1eb0ffef5b7ad0ff5bbefbcfad72423961e302cd3154",
+      "change": "仅移除文件末尾多余空行，无执行语句变化"
+    }
+  }
+}
