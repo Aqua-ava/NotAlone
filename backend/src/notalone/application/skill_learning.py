@@ -118,7 +118,15 @@ class SkillLearningTaskRunner:
             runtime = PrioritySkillProposalRuntime(runtime, self.model_priority, validate=validate)
         else:
             validate()
-        proposal = runtime.propose(scope=scope, batch=batch)
+        from notalone.application.model_transport_accounting import physical_model_task, physical_task_claim
+        from notalone.application.model_permit_client import SharedModelPriorityControl
+        from uuid import uuid5, NAMESPACE_URL
+        shared = isinstance(self.model_priority, SharedModelPriorityControl)
+        with physical_model_task(self.model_priority,
+                request_id=uuid5(NAMESPACE_URL, f'notalone:skill_learning:{claim.task_id}:{batch.key}'),
+                owner_id=scope.owner_id, contact_id=scope.contact_id,
+                claim=physical_task_claim(claim) if shared else None):
+            proposal = runtime.propose(scope=scope, batch=batch)
         return self.store.save(scope, claim, batch, proposal)
 
     def verify(self, *, scope: ContactScope) -> None:

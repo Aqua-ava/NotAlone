@@ -115,6 +115,9 @@ def build_deepseek_model(
     if type(max_retries) is not int or not 0 <= max_retries <= 2:
         raise ValueError("DeepSeek 重试次数必须是0至2的整数。")
 
+    # 共享逐物理许可模式不接受SDK内部重试；每个新业务调用须显式新边界。
+    if os.environ.get('NOTALONE_MODEL_PERMIT_SOCKET'):
+        max_retries = 0
     options: dict[str, Any] = {
         "model": resolved_model,
         "api_key": resolved_key,

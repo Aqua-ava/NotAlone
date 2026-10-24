@@ -64,9 +64,20 @@ class UpgradeModelCalls:
         from uuid import uuid4
         from notalone.ledger.models import LedgerEntry, LedgerOutcome
         from notalone.memory_trace.context import record_ledger_entry, current_trace
-        with self.priority.background_call() if self.priority else nullcontext():
-            # 预算和来源在许可之后检查，排队期间删除不得进入 SDK。
-            self.store.charge(self.claim)
+        from notalone.application.model_permit_client import SharedModelPriorityControl
+        from notalone.application.model_transport_accounting import physical_model_task, physical_task_claim
+        from notalone.memory_trace.context import trace_ledger_identity
+        shared = isinstance(self.priority, SharedModelPriorityControl)
+        physical_context = (physical_model_task(
+                self.priority, request_id=self.claim.task_id, owner_id=self.claim.owner_id,
+                contact_id=self.claim.contact_id,
+                scope_kind='owner_memory' if self.claim.contact_id is None else 'contact',
+                before_dispatch=lambda: self.store.validate(self.claim),
+                claim=physical_task_claim(self.claim)) if shared else nullcontext())
+        with (self.priority.background_call() if self.priority else nullcontext()), physical_context:
+            # 共享模式由宿主同事务扣原job并预约；Python只保留实际来源和租约复验。
+            if not shared:
+                self.store.charge(self.claim)
             called_at, started = datetime.now(timezone.utc), time.perf_counter()
             succeeded = False
             try:
@@ -76,7 +87,8 @@ class UpgradeModelCalls:
                 trace = current_trace()
                 invoked = trace is None or trace.call_was_invoked(purpose)
                 if self.ledger is not None and not accounted and invoked:
-                    record_ledger_entry(purpose, self.ledger, LedgerEntry(entry_id=uuid4(), owner_id=self.scope.owner_id,
+                    ledger_id, called_at = trace_ledger_identity(purpose, called_at)
+                    record_ledger_entry(purpose, self.ledger, LedgerEntry(entry_id=ledger_id, owner_id=self.scope.owner_id,
                         contact_id=self.scope.contact_id, provider='deepseek', model_name=self.model_name,
                         input_tokens=None, output_tokens=None,
                         latency_ms=max(0, int((time.perf_counter()-started)*1000)),

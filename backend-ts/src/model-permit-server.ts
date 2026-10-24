@@ -1,4 +1,4 @@
-import type { ModelLedgerReceipt } from './model-ledger.ts';
+import { ModelLedgerError, type ModelLedgerReceipt } from './model-ledger.ts';
 import { createServer, type Socket } from 'node:net';
 import { chmod, stat } from 'node:fs/promises';
 import { openModelPermitJournal } from './model-permit-journal.ts';
@@ -16,6 +16,7 @@ export interface ModelPermitAccounting {
   reserve(receipt:ModelLedgerReceipt,claim?:ModelTaskClaim):Promise<void>;
   /** 必须验证已存在的同attempt预约，不允许仅凭完成消息创建授权。 */
   recordReserved(receipt:ModelLedgerReceipt):Promise<void>;
+  unconfirmedRequests?(scope:{owner_id:string;contact_id:string|null}):Promise<string[]>;
 }
 
 /** 私有本机 socket 仅传许可元数据，不传模型输入、凭据或联系人资料。 */
@@ -76,12 +77,22 @@ export async function startModelPermitServer(options: {
           const token = Buffer.from(typeof message.token === 'string' ? message.token : '');
           const expected = Buffer.from(options.token);
           if (token.length !== expected.length || !timingSafeEqual(token, expected)) throw new Error('model_permit_auth_invalid');
+          if (message.op === 'unconfirmed_requests') {
+            if (!options.accounting?.unconfirmedRequests) throw new Error('model_permit_accounting_unavailable');
+            if(message.after!==undefined&&(typeof message.after!=='string'||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.test(message.after)))throw new Error('model_permit_cursor_invalid');
+            requested = true; busy = true;
+            void options.accounting.unconfirmedRequests({owner_id:message.owner_id,contact_id:message.contact_id}).then(
+              ids=>{const ordered=ids.sort().filter(id=>message.after===undefined||id>message.after),page=ordered.slice(0,64);if(!closed)socket.end(JSON.stringify({state:'unconfirmed_requests',request_ids:page,next_cursor:ordered.length>64?page[page.length-1]:null})+'\n');},
+              ()=>{if(!closed)socket.end('{"state":"accounting_rejected"}\n');});
+            continue;
+          }
           if (message.op === 'record') {
             if (!options.accounting) throw new Error('model_permit_accounting_unavailable');
             requested = true; busy = true;
             void options.accounting.recordReserved(message.receipt).then(
               () => { if (!closed) socket.end('{"state":"recorded"}\n'); },
-              () => { if (!closed) socket.end('{"state":"accounting_rejected"}\n'); });
+              error => { if (!closed) socket.end(JSON.stringify({state:'accounting_rejected',
+                ...(error instanceof ModelLedgerError && error.code === 'model_ledger_scope_deleted' ? {reason:'scope_deleted'} : {})})+'\n'); });
             continue;
           }
           if (message.op !== 'acquire' || !['foreground', 'background'].includes(message.kind)) throw new Error('model_permit_protocol_invalid');
@@ -126,6 +137,7 @@ export async function startModelPermitServer(options: {
   return {
     shutdown,
     unknownSettlements: journal.unknown,
+    unconfirmedPermitIds: () => [...new Set([...journal.unknown().map(item=>item.id),...options.arbiter.orphanedPermitIds()])],
     /** 必须先停收并等待所有执行者结算；活跃/孤儿许可不能通过关闭服务抹除。 */
     async close() {
       const state = options.arbiter.snapshot();

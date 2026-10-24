@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields, replace
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, nullcontext, contextmanager
 from datetime import timedelta
 from enum import StrEnum
 from threading import Event, Thread
@@ -87,6 +87,8 @@ class ExtractionTaskRunner(Protocol):
         background_scope_factory: (
             Callable[[], AbstractContextManager] | None
         ) = None,
+        task_claim=None,
+        physical_scope_factory: Callable[[str], AbstractContextManager] | None = None,
     ) -> ExtractionRunStats: ...
 
 
@@ -310,6 +312,8 @@ class PostgresMemoryExtractionRunner:
         background_scope_factory: (
             Callable[[], AbstractContextManager] | None
         ) = None,
+        task_claim=None,
+        physical_scope_factory: Callable[[str], AbstractContextManager] | None = None,
     ) -> ExtractionRunStats:
         from notalone.memory_extraction.cli_support import (
             load_contact_messages,
@@ -341,6 +345,7 @@ class PostgresMemoryExtractionRunner:
             trace_store=self._trace_store,
             batch_concurrency=self._batch_concurrency,
             background_scope_factory=background_scope_factory,
+            task_claim=task_claim, physical_scope_factory=physical_scope_factory,
         )
         if task_id is None:
             selection_receipts: list[dict[str, Any]] = []
@@ -693,22 +698,30 @@ class BackgroundTaskWorker:
 
         try:
             assert self._extraction_runner is not None
-            background_scope_factory = None
-            if self._model_priority is not None:
-                priority = self._model_priority
-                background_scope_factory = lambda: priority.background_scope(
-                    lambda: self._repository.check_step_lease(claim),
-                )
-            guard = (
-                self._model_priority.background_scope(
-                    lambda: self._repository.check_step_lease(claim),
-                ) if self._model_priority is not None else nullcontext()
-            )
+            from notalone.application.model_transport_accounting import physical_model_task, physical_task_claim
+            from notalone.application.model_permit_client import SharedModelPriorityControl
+            from uuid import uuid5, NAMESPACE_URL
+            @contextmanager
+            def background_scope_factory():
+                guard = (self._model_priority.background_scope(lambda: self._repository.check_step_lease(claim))
+                         if self._model_priority is not None else nullcontext())
+                with guard:
+                    yield
+            guard = background_scope_factory() if self._model_priority is not None else nullcontext()
+            if self._model_priority is None:
+                background_scope_factory = None
             run_options: dict[str, Any] = {}
             if background_scope_factory is not None:
                 run_options["background_scope_factory"] = (
                     background_scope_factory
                 )
+            if isinstance(self._model_priority, SharedModelPriorityControl):
+                metadata = physical_task_claim(claim)
+                run_options['task_claim'] = claim
+                run_options['physical_scope_factory'] = lambda batch_key: physical_model_task(
+                    self._model_priority,
+                    request_id=uuid5(NAMESPACE_URL, f'notalone:extraction:{claim.task_id}:{batch_key}'),
+                    owner_id=claim.owner_id, contact_id=claim.contact_id, claim=metadata)
             with guard, _LeaseHeartbeat(
                 self._repository,
                 claim,

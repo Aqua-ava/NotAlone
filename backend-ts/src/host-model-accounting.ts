@@ -88,16 +88,28 @@ async function authority(client:pg.Client,r:ModelLedgerReceipt,c:ModelTaskClaim)
  }
  return reject('model_accounting_purpose_invalid');
 }
-export function createHostModelAccounting(options:{transaction:Transaction;provider:string;model:string}) {
+export function createHostModelAccounting(options:{transaction:Transaction;provider:string;model:string;unconfirmedPermitIds:()=>readonly string[]}) {
+ if(typeof options.unconfirmedPermitIds!=='function')reject('model_accounting_configuration_invalid');
  if(!options.provider.trim()||!options.model.trim()||options.model==='ecnu-max')reject('model_accounting_configuration_invalid');
  const ledger=new PostgresModelLedger({transaction:options.transaction,details:new PostgresModelLedgerDetails()});
+ const unconfirmed=async(client:pg.Client,owner:string,contact:string|null):Promise<string[]>=>{
+  if(!uuid.test(owner)||(contact!==null&&!uuid.test(contact)))reject('model_accounting_scope_invalid');
+  const permits=options.unconfirmedPermitIds();
+  if(!Array.isArray(permits)||permits.some(id=>typeof id!=='string'||!uuid.test(id)))reject('model_accounting_recovery_unavailable');
+  if(!permits.length)return [];
+  return (await client.query('SELECT DISTINCT request_id FROM model_call_receipt WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2 AND permit_id=ANY($3::uuid[])',[owner,contact,permits])).rows.map(row=>row.request_id);
+ };
  return {
+  async unconfirmedRequests(scope:{owner_id:string;contact_id:string|null}):Promise<string[]> {
+   return options.transaction(client=>unconfirmed(client,scope.owner_id,scope.contact_id));
+  },
   async reserve(receipt:ModelLedgerReceipt,claim?:ModelTaskClaim):Promise<void> {
    validateModelLedgerReceipt(receipt);const r=structuredClone(receipt),c=claimValue(claim);
    if(r.provider!==options.provider||r.model!==options.model||r.outcome!=='pending'||r.dispatch!=='authorized_unconfirmed')reject('model_accounting_route_invalid');
    await options.transaction(async client=>{
     if(r.contact_id!==null)await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${r.owner_id}:${r.contact_id}`]);
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${r.owner_id}`]);
+    if((await unconfirmed(client,r.owner_id,r.contact_id)).includes(r.request_id))reject('model_accounting_consumer_unconfirmed');
     const grant=await authority(client,r,c);
     const existing=(await client.query('SELECT outcome FROM model_call_receipt WHERE attempt_id=$1',[r.attempt_id])).rows[0];
     if(grant.learning){

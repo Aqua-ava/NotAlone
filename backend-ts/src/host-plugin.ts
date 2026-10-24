@@ -20,8 +20,9 @@ import { createWechatScopeApi, isWechatScopeRoute, wechatScopeBodyLimit, type We
 import {createForegroundLocationApi,foregroundLocationPath,isForegroundAuthorityMutation} from './foreground-location-api.ts';
 import {NativeForegroundProbe} from './foreground-location-probe.ts';
 import { createSyncIncrementalApi } from './sync-incremental-api.ts';
+import {startHostModelRuntime} from './host-model-runtime.ts';
 export const name = 'notalone-host';
-export const inject = ['appReady','llm','agents','sessions','tools'];
+export const inject = ['appReady','llm','agents','sessions','tools','systemPrompt','skills'];
 
 /** 产品入口；身份和配置来自业务模块，不采用02的合成范围与模型。 */
 export async function apply(ctx: Context) {
@@ -58,6 +59,7 @@ async function start(ctx: Context) {
   let legacy: LegacyBackend | undefined;
   let handoff: ContactHandoff | undefined;
   let memoryHandoff: MemoryManagementHandoff | undefined;
+  let modelRuntime:Awaited<ReturnType<typeof startHostModelRuntime>>;
   const runtimeEnvironment: NodeJS.ProcessEnv = {...process.env,...storage.runtimeEnvironment(),HOME:config.businessHome};
   const incremental = await createSyncIncrementalApi({storage,executable:runtimeEnvironment.NOTALONE_WECHAT_CLI ?? '',environment:runtimeEnvironment,
     publish:async(events,signal)=>{
@@ -95,16 +97,32 @@ async function start(ctx: Context) {
   const preferences=new PreferenceService(storage);
   let closing: Promise<void> | undefined;
   const closeResources = () => closing ??= (async () => {
-    state='stopping';
-    // 停收和取消先于排空；旧同步线程收到scope拒绝后退出，再关闭共享数据库。
-    await incremental.close();
-    await Promise.all([foreground.close(),wechatScope.close(),handoff?.close(),memoryHandoff?.close()]);
-    await legacy?.stop();await storage.close();state='stopped';
+    state='stopping';modelRuntime?.stopAccepting();
+    // 保留增量→范围/资料门禁→模型/Python→数据库顺序；一项失败仍收尾后续资源。
+    const failures:unknown[]=[];
+    for(const release of [()=>incremental.close(),
+      async()=>{
+        const closed=await Promise.allSettled([()=>foreground.close(),()=>wechatScope.close(),
+          ()=>handoff?.close(),()=>memoryHandoff?.close()].map(release=>Promise.resolve().then(release)));
+        const errors=closed.filter(result=>result.status==='rejected').map(result=>result.reason);
+        if(errors.length)throw new AggregateError(errors,'范围与资料资源未完整关闭');
+      },
+      ()=>modelRuntime?modelRuntime.close(async()=>{await legacy?.stop();}):legacy?.stop(),
+      ()=>storage.close()]){
+      try{await release();}catch(error){failures.push(error);}
+    }
+    state='stopped';
+    if(failures.length)throw new AggregateError(failures,'宿主资源未完整关闭');
   })();
   const server=createServer(async(req,res)=>{
     const respond=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(stringifyJson(value));};
     let url: URL;
     try {url=new URL(req.url??'','http://localhost');}catch {respond(400,{error:'invalid_request'});return;}
+    // 私有候选先自行认证；公共token及其他内部token都不能进入这条信道。
+    if((req.url??'').startsWith('/internal/reply')){
+      if(!modelRuntime){respond(401,{error:'unauthorized'});return;}
+      await modelRuntime.handle(req,res);return;
+    }
     const supplied=Buffer.from(req.headers.authorization ?? '');
     const expected=Buffer.from(`Bearer ${token}`),internalExpected=Buffer.from(`Bearer ${contextToken}`);
     const internal=supplied.length===internalExpected.length && timingSafeEqual(supplied,internalExpected);
@@ -132,7 +150,7 @@ async function start(ctx: Context) {
         }:undefined);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,ownership:{...ownership,wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,ownership:{...ownership,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:'python',foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
@@ -266,7 +284,10 @@ async function start(ctx: Context) {
   await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.removeListener('error',reject);resolve();});});
   const address=server.address();if(!address || typeof address==='string')throw new Error('HOST_LISTEN_FAILED');
   try {
+    modelRuntime=await startHostModelRuntime({ctx,storage,environment:runtimeEnvironment,
+      businessHome:config.businessHome,projectDirectory:config.projectDirectory,infoPath:config.infoPath,envFilePath:config.envFilePath});
     legacy=await LegacyBackend.start(config,{...runtimeEnvironment,
+      ...(modelRuntime?.pythonEnvironment(`http://127.0.0.1:${address.port}`)??{}),
       NOTALONE_OWNER_ID:ownerStatus.runtime_owner_configured ? storage.runtimeOwnerId : '',
       NOTALONE_WECHAT_SCOPE_URL:`http://127.0.0.1:${address.port}`,NOTALONE_WECHAT_SCOPE_TOKEN:scopeToken,
       NOTALONE_SYNC_INCREMENTAL_URL:`http://127.0.0.1:${address.port}`,NOTALONE_SYNC_INCREMENTAL_TOKEN:incrementalToken,
@@ -290,7 +311,7 @@ async function start(ctx: Context) {
     } finally {await rm(pendingInfo,{force:true});}
   })().catch(terminate);});
   ctx.effect(()=>async()=>{
-    state='stopping';readyDispose();process.stdin.removeListener('end',terminate);process.stdin.pause();
+    state='stopping';modelRuntime?.stopAccepting();readyDispose();process.stdin.removeListener('end',terminate);process.stdin.pause();
     server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));
     await closeResources();if(published)await rm(config.infoPath,{force:true});
   });

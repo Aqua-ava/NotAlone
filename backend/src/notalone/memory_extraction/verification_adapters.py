@@ -571,8 +571,10 @@ class LangChainSourceVerificationRuntime:
             ),
             "unreported",
         )
+        from notalone.memory_trace.context import trace_ledger_identity
+        ledger_id, called_at = trace_ledger_identity("verification", called_at)
         entry = LedgerEntry(
-            entry_id=uuid4(),
+            entry_id=ledger_id,
             owner_id=window.owner_id,
             contact_id=window.contact_id,
             provider=self._provider,

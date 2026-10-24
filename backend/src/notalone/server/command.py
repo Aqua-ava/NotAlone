@@ -51,6 +51,7 @@ from notalone.server.follow_smoke import (
     PostgresFollowSmokeSnapshotReader,
 )
 from notalone.server.reply_wiring import build_reply_service, close_reply_service
+from notalone.server.model_control import build_model_priority_control
 from notalone.server.sync_host import SyncHost
 
 
@@ -104,7 +105,11 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
     from notalone.server.contact_context_handoff import ContactContextHandoff
     contact_context = ContactContextHandoff()
     events = EventBus()
-    model_priority = ModelPriorityControl(background_limit=batch_concurrency)
+    try:
+        model_priority = build_model_priority_control(background_limit=batch_concurrency)
+    except ValueError:
+        print('共享模型许可配置无效。', file=sys.stderr)
+        return 2
     # 迁移期首用写入已交给 TS；旧业务进程不再提供第二个身份／凭据写入口。
     setup_service = (None if os.environ.get("NOTALONE_TS_HOST") == "1"
                      else _build_setup_service(database_url))
@@ -399,6 +404,12 @@ def _build_task_host(
     from notalone.skills.learning_runtime import LangChainSkillProposalRuntime
 
 
+    from notalone.application.model_permit_client import SharedModelPriorityControl
+    unconfirmed_model_requests = (
+        model_priority.unconfirmed_requests
+        if isinstance(model_priority, SharedModelPriorityControl) else None
+    )
+
     def build_worker() -> BackgroundTaskWorker:
         extraction: ExtractionTaskRunner
         components = None
@@ -440,7 +451,7 @@ def _build_task_host(
             return LangChainSkillProposalRuntime(model=active.model, ledger=active.ledger)
 
         return BackgroundTaskWorker(
-            repository=PostgresBackgroundTaskRepository(database_url),
+            repository=PostgresBackgroundTaskRepository(database_url, unconfirmed_model_requests=unconfirmed_model_requests),
             organization_runner=organization_runner,
             extraction_runner=extraction,
             lease_duration=DEFAULT_WORKER_LEASE_DURATION,
@@ -485,7 +496,7 @@ def _build_task_host(
             lock_connection_builder=build_lock_connection,
             event_publisher=publish_progress,
             model_priority=model_priority,
-            task_repository=PostgresBackgroundTaskRepository(database_url),
+            task_repository=PostgresBackgroundTaskRepository(database_url, unconfirmed_model_requests=unconfirmed_model_requests),
         )
     except Exception as error:
         # 任务宿主装配失败会让导入后的后台提取停在待执行；保留稳定告警，

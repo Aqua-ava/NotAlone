@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from langchain_core.language_models import BaseChatModel
 
+from notalone.application.model_transport_accounting import PhysicalModelAccountingAbort
 from notalone.ledger.models import LedgerEntry, LedgerOutcome
 from notalone.ledger.ports import OutboundLedgerPort
 from notalone.scopes import ContactScope
@@ -57,16 +58,20 @@ class LangChainSkillProposalRuntime:
         payload = learning_input_text(batch.materials,batch.targets)
         if not 1 <= len(batch.materials) <= MAX_LEARNING_MATERIALS or len(payload) > MAX_LEARNING_INPUT_CHARS:
             raise SkillLearningInvalid()
-        message, invoked = None, False
+        message, invoked, physical = None, False, None
         outcome = LedgerOutcome.RUN_FAILED
         try:
             # thinking模式不强制具名工具；下方仍只接受唯一指定提案并完整校验。
             bound_model = self._model.bind_tools([PROPOSAL_SCHEMA])
             called_at, started = datetime.now(timezone.utc), time.perf_counter()
-            invoked = True
-            message = bound_model.invoke([
-                {'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': payload},
-            ])
+            from types import SimpleNamespace
+            from notalone.application.model_transport_accounting import physical_trace_call
+            observation = SimpleNamespace(call_id=uuid4(), called_at=called_at, physical_call=None)
+            with physical_trace_call(observation, self._model) as physical:
+                invoked = True
+                message = bound_model.invoke([
+                    {'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': payload},
+                ])
             calls = getattr(message, 'tool_calls', ())
             if len(calls) != 1 or calls[0].get('name') != 'SkillLearningProposal' or getattr(message, 'invalid_tool_calls', ()):
                 raise SkillLearningInvalid()
@@ -74,21 +79,27 @@ class LangChainSkillProposalRuntime:
             normalize_proposal(scope, batch, proposal)
             outcome = LedgerOutcome.SUCCEEDED
             return proposal
+        except PhysicalModelAccountingAbort:
+            raise SkillLearningRuntimeError() from None
         except SkillLearningInvalid:
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
             raise
         except Exception:
             raise SkillLearningRuntimeError() from None
         finally:
-            if invoked:
+            if invoked and (physical is None or physical.dispatched):
                 usage = getattr(message, 'usage_metadata', None) or {}
                 model_name = getattr(self._model, 'model_name', None) or getattr(self._model, 'model', None) or 'unreported'
-                self._ledger.record(LedgerEntry(
-                    entry_id=uuid4(), owner_id=scope.owner_id, contact_id=scope.contact_id,
+                entry = LedgerEntry(
+                    entry_id=physical.ledger_entry_id if physical else uuid4(), owner_id=scope.owner_id, contact_id=scope.contact_id,
                     provider='deepseek', model_name=model_name,
                     input_tokens=_tokens(usage.get('input_tokens')), output_tokens=_tokens(usage.get('output_tokens')),
                     latency_ms=max(0, int((time.perf_counter() - started) * 1000)), outcome=outcome, called_at=called_at,
-                ))
+                )
+                if physical is not None:
+                    physical.complete(entry)
+                else:
+                    self._ledger.record(entry)
 
 
 def _tokens(value: object) -> int | None:

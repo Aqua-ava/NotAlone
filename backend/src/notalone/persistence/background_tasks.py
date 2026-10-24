@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 from uuid import UUID
@@ -50,12 +52,13 @@ class BackgroundTaskStateError(BackgroundTaskPersistenceError):
 class PostgresBackgroundTaskRepository:
     """创建任务模板并读取不含正文的任务状态。"""
 
-    __slots__ = ("_database_url",)
+    __slots__ = ("_database_url", "_unconfirmed_model_requests")
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, *, unconfirmed_model_requests=None) -> None:
         if not database_url.strip():
             raise ValueError("database_url 不能为空。")
         self._database_url = database_url
+        self._unconfirmed_model_requests = unconfirmed_model_requests
 
     @property
     def database_url(self) -> str:
@@ -594,7 +597,7 @@ class PostgresBackgroundTaskRepository:
         try:
             with psycopg.connect(self._database_url) as connection:
                 self._lock_scope(connection, owner_id, contact_id)
-                self._expire_leases(connection, owner_id, contact_id)
+                self._expire_leases(connection, owner_id, contact_id, unconfirmed_requests=self._unconfirmed_model_requests)
                 active = connection.execute(
                     f"""
                     SELECT 1
@@ -656,6 +659,7 @@ class PostgresBackgroundTaskRepository:
                    OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}) OR ({_layered_task_eligible_sql(connection)}))
                       AND task.status IN ('queued', 'running', 'verifying')
                       AND (%s::uuid IS NULL OR task.id = %s)
+                      AND {_model_attempts_settled_sql(connection, owner_id, contact_id, unconfirmed_requests=self._unconfirmed_model_requests)}
                       AND step.status IN ('pending', 'retryable')
                       AND step.step_name = ANY(%s::text[])
                       AND (
@@ -942,6 +946,9 @@ class PostgresBackgroundTaskRepository:
             with psycopg.connect(self._database_url) as connection:
                 self._lock_scope(connection, claim.owner_id, claim.contact_id)
                 self._assert_valid_claim(connection, claim)
+                if not _claim_model_settled(connection, claim, self._unconfirmed_model_requests):
+                    _fail_unknown_model_claim(connection, claim)
+                    return False
                 updated = connection.execute(
                     """
                     UPDATE public.background_task_step
@@ -972,6 +979,9 @@ class PostgresBackgroundTaskRepository:
             with psycopg.connect(self._database_url) as connection:
                 self._lock_scope(connection, claim.owner_id, claim.contact_id)
                 self._assert_valid_claim(connection, claim)
+                if not _claim_model_settled(connection, claim, self._unconfirmed_model_requests):
+                    _fail_unknown_model_claim(connection, claim)
+                    return BackgroundTaskStepStatus.FAILED
                 next_status = (
                     BackgroundTaskStepStatus.RETRYABLE
                     if retryable and claim.attempt_count < MAX_AUTOMATIC_ATTEMPTS
@@ -1185,17 +1195,26 @@ class PostgresBackgroundTaskRepository:
         connection: psycopg.Connection[Any],
         owner_id: UUID,
         contact_id: UUID,
+        *, unconfirmed_requests=None,
     ) -> None:
+        settled = _model_attempts_settled_sql(connection, owner_id, contact_id, allow_fresh_extraction=False, unconfirmed_requests=unconfirmed_requests)
+        expired=connection.execute("SELECT DISTINCT task.id FROM public.background_task task "
+            "JOIN public.background_task_step step ON step.task_id=task.id WHERE task.owner_id=%s "
+            "AND task.contact_id IS NOT DISTINCT FROM %s AND step.status='running' AND step.lease_expires_at<=now()",
+            (owner_id,contact_id)).fetchall()
+        for (identifier,) in expired:
+            _quarantine_model_targets(connection,owner_id,contact_id,identifier)
         connection.execute(
-            """
+            f"""
             UPDATE public.background_task_step AS step
             SET status = CASE
+                    WHEN NOT ({settled}) THEN 'failed'
                     WHEN step.attempt_count >= %s THEN 'failed'
                     ELSE 'retryable'
                 END,
                 worker_id = NULL,
                 lease_expires_at = NULL,
-                last_error_code = 'lease_expired',
+                last_error_code = CASE WHEN NOT ({settled}) THEN 'model_call_outcome_unknown' ELSE 'lease_expired' END,
                 updated_at = now()
             FROM public.background_task AS task
             WHERE task.id = step.task_id
@@ -1210,7 +1229,7 @@ class PostgresBackgroundTaskRepository:
             """
             UPDATE public.background_task AS task
             SET status = 'failed',
-                last_error_code = 'lease_expired',
+                last_error_code = CASE WHEN EXISTS (SELECT 1 FROM public.background_task_step s WHERE s.task_id=task.id AND s.last_error_code='model_call_outcome_unknown') THEN 'model_call_outcome_unknown' ELSE 'lease_expired' END,
                 finished_at = now(),
                 updated_at = now()
             WHERE task.owner_id = %s
@@ -1221,7 +1240,7 @@ class PostgresBackgroundTaskRepository:
                   FROM public.background_task_step AS step
                   WHERE step.task_id = task.id
                     AND step.status = 'failed'
-                    AND step.last_error_code = 'lease_expired'
+                    AND step.last_error_code IN ('lease_expired','model_call_outcome_unknown')
               )
             """,
             (owner_id, contact_id),
@@ -1406,3 +1425,142 @@ def _layered_task_eligible_sql(connection) -> str:
         ON s.owner_id=j.owner_id AND s.contact_id IS NOT DISTINCT FROM j.contact_id
         WHERE j.task_id=task.id AND j.owner_id=task.owner_id AND j.contact_id IS NOT DISTINCT FROM task.contact_id
         AND s.enabled AND s.settings_generation=j.settings_generation AND j.state='active')"""
+
+
+def _unconfirmed_model_requests(connection,owner_id,contact_id):
+    """合并物理未知与原台账结果ACK未知；只读取无正文身份关联。"""
+    return {row[0] for row in connection.execute(
+        "SELECT DISTINCT r.request_id FROM public.model_call_receipt r "
+        "WHERE r.owner_id=%s AND r.contact_id IS NOT DISTINCT FROM %s AND "
+        "(r.outcome IN ('pending','unknown') OR EXISTS ("
+        "SELECT 1 FROM public.memory_extraction_trace_call c WHERE c.owner_id=r.owner_id "
+        "AND c.contact_id=r.contact_id AND c.ledger_entry_id=r.ledger_entry_id "
+        "AND c.ledger_commit_status='unknown'))",(owner_id,contact_id)).fetchall()}
+
+
+def _model_attempts_settled_sql(connection, owner_id, contact_id, *, allow_fresh_extraction=True, unconfirmed_requests=None) -> str:
+    """scope锁内只读身份标量；学习新批与旧unknown不能混成同一请求。"""
+    from uuid import uuid5, NAMESPACE_URL
+    present = connection.execute("SELECT to_regclass('public.model_call_receipt') IS NOT NULL").fetchone()[0]
+    if not present:
+        if os.environ.get('NOTALONE_MODEL_PERMIT_SOCKET'):
+            raise BackgroundTaskPersistenceError('model_accounting_schema_unavailable')
+        return 'TRUE'
+    requests = _unconfirmed_model_requests(connection,owner_id,contact_id)
+    if unconfirmed_requests is None:
+        if os.environ.get('NOTALONE_MODEL_PERMIT_SOCKET'):
+            raise BackgroundTaskPersistenceError('model_accounting_recovery_unavailable')
+    else:
+        try:
+            trusted = unconfirmed_requests(owner_id, contact_id)
+            if not isinstance(trusted, (tuple, list, set)) or any(not isinstance(item, UUID) for item in trusted):
+                raise ValueError('模型恢复身份无效')
+            requests.update(trusted)
+        except Exception:
+            raise BackgroundTaskPersistenceError('model_accounting_recovery_unavailable') from None
+    if not requests:
+        return 'TRUE'
+    tasks = connection.execute('SELECT id,task_type FROM public.background_task WHERE owner_id=%s '
+        'AND contact_id IS NOT DISTINCT FROM %s', (owner_id,contact_id)).fetchall()
+    blocked = {identifier for identifier,kind in tasks if identifier in requests}
+    for identifier,key in connection.execute(
+        "SELECT t.id,s.last_attempt_key FROM public.background_task t JOIN public.skill_learning_scope s "
+        "ON s.owner_id=t.owner_id AND s.contact_id=t.contact_id WHERE t.owner_id=%s AND t.contact_id=%s "
+        "AND t.task_type='skill_learning'",(owner_id,contact_id)).fetchall():
+        if key and uuid5(NAMESPACE_URL,f'notalone:skill_learning:{identifier}:{key}') in requests:
+            blocked.add(identifier)
+    windows=_unsettled_extraction_windows(connection,owner_id,contact_id,requests)
+    quarantined={}
+    for identifier,ids in windows:
+        quarantined.setdefault(identifier,set()).update(ids)
+    for identifier,ids in quarantined.items():
+        fresh = allow_fresh_extraction and bool(ids) and bool(connection.execute(
+            'SELECT 1 FROM public.memory_processing_target WHERE task_id=%s AND owner_id=%s AND contact_id=%s '
+            'AND completed_at IS NULL AND NOT(message_id=ANY(%s::uuid[])) LIMIT 1',
+            (identifier,owner_id,contact_id,list(ids))).fetchone())
+        if not fresh:
+            blocked.add(identifier)
+    # UUID来自PG原行，规范化后仅用于固定类型SQL常量，无正文或自由字符串插值。
+    return ('task.id <> ALL(ARRAY['+','.join("'"+str(identifier)+"'" for identifier in sorted(blocked))+']::uuid[])') if blocked else 'TRUE'
+
+
+def _claim_model_settled(connection, claim, unconfirmed_requests=None) -> bool:
+    condition=_model_attempts_settled_sql(connection,claim.owner_id,claim.contact_id,allow_fresh_extraction=False,unconfirmed_requests=unconfirmed_requests)
+    return bool(connection.execute(f'SELECT {condition} FROM public.background_task task WHERE task.id=%s',
+        (claim.task_id,)).fetchone()[0])
+
+
+def _fail_unknown_model_claim(connection, claim) -> None:
+    _quarantine_model_targets(connection,claim.owner_id,claim.contact_id,claim.task_id)
+    connection.execute("UPDATE public.background_task_step SET status='failed',worker_id=NULL,lease_expires_at=NULL,"
+        "last_error_code='model_call_outcome_unknown',updated_at=now() WHERE id=%s",(claim.step_id,))
+    connection.execute("UPDATE public.background_task SET status='failed',last_error_code='model_call_outcome_unknown',"
+        "finished_at=now(),updated_at=now() WHERE id=%s",(claim.task_id,))
+
+
+def _unsettled_extraction_windows(connection, owner_id, contact_id, requests):
+    """只读task/批次键/目标UUID投影；不读取窗口正文或模型输入。"""
+    from uuid import uuid5, NAMESPACE_URL
+    rows=connection.execute(
+        "SELECT DISTINCT e.payload#>>'{task_runtime,task_id}',tr.batch_key,e.payload->'target_message_ids' "
+        "FROM public.memory_extraction_trace tr JOIN public.memory_extraction_trace_event e "
+        "ON e.trace_id=tr.trace_id AND e.owner_id=tr.owner_id AND e.contact_id=tr.contact_id "
+        "WHERE tr.owner_id=%s AND tr.contact_id=%s AND e.stage='window'",(owner_id,contact_id)).fetchall()
+    result=[]
+    for raw_task,key,raw_ids in rows:
+        try:
+            task=UUID(raw_task)
+            ids=tuple(UUID(identifier) for identifier in raw_ids) if isinstance(raw_ids,list) else ()
+        except (ValueError,TypeError,AttributeError):
+            continue
+        if key and uuid5(NAMESPACE_URL,f'notalone:extraction:{task}:{key}') in requests:
+            result.append((task,ids))
+    # 原清正文函数保留batch_key与message/input关联；不依赖已删除window或重建正文。
+    erased=connection.execute(
+        "SELECT tr.trace_id,tr.batch_key FROM public.memory_extraction_trace tr "
+        "WHERE tr.owner_id=%s AND tr.contact_id=%s AND NOT EXISTS ("
+        "SELECT 1 FROM public.memory_extraction_trace_event e WHERE e.trace_id=tr.trace_id "
+        "AND e.owner_id=tr.owner_id AND e.contact_id=tr.contact_id AND e.stage='window')",
+        (owner_id,contact_id)).fetchall()
+    if not erased:
+        return result
+    tasks=connection.execute(
+        "SELECT id FROM public.background_task WHERE owner_id=%s AND contact_id=%s "
+        "AND task_type IN ('observation','import')",(owner_id,contact_id)).fetchall()
+    for trace_id,key in erased:
+        if not key:
+            continue
+        for (task,) in tasks:
+            if uuid5(NAMESPACE_URL,f'notalone:extraction:{task}:{key}') not in requests:
+                continue
+            ids=tuple(row[0] for row in connection.execute(
+                "SELECT link.record_id FROM public.memory_extraction_trace_link link "
+                "JOIN public.memory_processing_target target ON target.message_id=link.record_id "
+                "AND target.owner_id=link.owner_id AND target.contact_id=link.contact_id AND target.task_id=%s "
+                "WHERE link.trace_id=%s AND link.owner_id=%s AND link.contact_id=%s "
+                "AND link.record_kind='message' AND link.operation='input' AND link.commit_status='committed'",
+                (task,trace_id,owner_id,contact_id)).fetchall())
+            # 空关联仍保留旧task门禁；不能把任意pending目标当成已证明的新批或补造身份。
+            result.append((task,ids))
+    return result
+
+
+def _quarantine_model_targets(connection,owner_id,contact_id,task_id):
+    present=connection.execute("SELECT to_regclass('public.model_call_receipt') IS NOT NULL").fetchone()[0]
+    if not present:
+        return
+    requests=_unconfirmed_model_requests(connection,owner_id,contact_id)
+    ids=set(identifier for task,targets in _unsettled_extraction_windows(connection,owner_id,contact_id,requests)
+            if task==task_id for identifier in targets)
+    if not ids:
+        return
+    # 原091明确定义unknown，既不假报采纳成功，也不推进原水位或改台账UUID。
+    connection.execute("INSERT INTO public.memory_processing_receipt(message_id,owner_id,contact_id,outcome) "
+        "SELECT x.message_id,x.owner_id,x.contact_id,'unknown' FROM public.memory_processing_target x "
+        "WHERE x.task_id=%s AND x.owner_id=%s AND x.contact_id=%s AND x.completed_at IS NULL "
+        "AND x.message_id=ANY(%s::uuid[]) ON CONFLICT DO NOTHING",(task_id,owner_id,contact_id,list(ids)))
+    connection.execute("UPDATE public.memory_processing_target target SET completed_at=receipt.completed_at,outcome=receipt.outcome "
+        "FROM public.memory_processing_receipt receipt WHERE target.task_id=%s AND target.owner_id=%s AND target.contact_id=%s "
+        "AND target.completed_at IS NULL AND target.message_id=ANY(%s::uuid[]) AND receipt.message_id=target.message_id "
+        "AND receipt.owner_id=target.owner_id AND receipt.contact_id=target.contact_id",
+        (task_id,owner_id,contact_id,list(ids)))

@@ -1093,8 +1093,10 @@ class MemoryAdoption:
     ) -> None:
         if self._ledger is None:
             return
+        from notalone.memory_trace.context import trace_ledger_identity
+        ledger_id, called_at = trace_ledger_identity(purpose, datetime.now(timezone.utc))
         entry = LedgerEntry(
-            entry_id=uuid4(),
+            entry_id=ledger_id,
             owner_id=scope.owner_id,
             contact_id=scope.contact_id,
             provider="deepseek",
@@ -1103,7 +1105,7 @@ class MemoryAdoption:
             output_tokens=output_tokens,
             latency_ms=int((time.perf_counter() - started_ns) * 1000),
             outcome=outcome,
-            called_at=datetime.now(timezone.utc),
+            called_at=called_at,
         )
         started_at = datetime.now(timezone.utc)
         try:

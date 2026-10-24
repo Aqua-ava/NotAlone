@@ -1,8 +1,8 @@
 /** 只保存进程身份、许可身份与结算未知标记，不保存正文或供应商凭据。 */
 import { createServer, connect } from 'node:net';
 import { createHash, randomUUID } from 'node:crypto';
-import { realpath, readFile, unlink, lstat } from 'node:fs/promises';
-import { openSync, writeFileSync, fsyncSync, closeSync, renameSync, rmSync } from 'node:fs';
+import { realpath, readFile, unlink, lstat, open } from 'node:fs/promises';
+import { constants, openSync, writeFileSync, fsyncSync, closeSync, renameSync, rmSync } from 'node:fs';
 import { dirname, basename, join } from 'node:path';
 import { captureProcessIdentity, processIdentityState, type ProcessIdentity } from './process-identity.ts';
 import type { ModelPermitRecord } from './model-permits.ts';
@@ -10,6 +10,43 @@ interface JournalState {
   version: 1; host: ProcessIdentity | null;
   active: ModelPermitRecord[];
   unknown: (ModelPermitRecord & { settlement: 'unknown' })[];
+}
+function validIdentity(value:ProcessIdentity):boolean {
+  return Boolean(value&&Number.isSafeInteger(value.pid)&&value.pid>0&&Number.isSafeInteger(value.parentPid)&&value.parentPid>=0
+    &&typeof value.startedAt==='string'&&/^\w{3} \w{3} \d{1,2} \d{2}:\d{2}:\d{2} \d{4}$/.test(value.startedAt)
+    &&typeof value.executable==='string'&&value.executable.startsWith('/')&&!/[\0\r\n]/.test(value.executable));
+}
+function validateJournal(value:unknown):JournalState {
+  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('model_permit_journal_invalid');
+  const state=value as JournalState;
+  if(state.version!==1||!Array.isArray(state.active)||!Array.isArray(state.unknown)
+    ||state.host!==null&&!validIdentity(state.host))throw new Error('model_permit_journal_invalid');
+  for(const item of [...state.active,...state.unknown]){
+    if(!item||typeof item.id!=='string'||!['foreground','background'].includes(item.kind)||!validIdentity(item.worker))throw new Error('model_permit_journal_invalid');
+  }
+  for(const item of state.unknown)if(item.settlement!=='unknown')throw new Error('model_permit_journal_invalid');
+  return state;
+}
+/** 仅在正常DSH启动寿命互斥内调用；不创建、改写journal或申请模型许可。 */
+export async function assertModelPermitJournalSettled(path:string):Promise<void> {
+  let directory;
+  try{directory=await lstat(dirname(path));}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
+  if(!directory.isDirectory()||(directory.mode&0o077)!==0||process.getuid&&directory.uid!==process.getuid())throw new Error('model_permit_directory_not_private');
+  let file;
+  try{file=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);}
+  catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
+  try{
+    const before=await file.stat({bigint:true}),maximum=1048576;
+    if(!before.isFile()||(before.mode&0o077n)!==0n||process.getuid&&before.uid!==BigInt(process.getuid())
+      ||before.size>BigInt(maximum))throw new Error('model_permit_journal_not_private');
+    const buffer=Buffer.alloc(maximum+1);let length=0;
+    while(length<buffer.length){const read=await file.read(buffer,length,buffer.length-length,length);if(!read.bytesRead)break;length+=read.bytesRead;}
+    const after=await file.stat({bigint:true});
+    if(length>maximum||BigInt(length)!==before.size||after.size!==before.size||after.mtimeNs!==before.mtimeNs||after.ctimeNs!==before.ctimeNs)throw new Error('model_permit_journal_changed');
+    const state=validateJournal(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(buffer.subarray(0,length))));
+    if(state.host&&await processIdentityState(state.host)!=='gone')throw new Error('model_permit_previous_host_alive_or_unknown');
+    if(state.active.length||state.unknown.length)throw new Error('model_permit_fallback_unsettled');
+  }finally{await file.close();}
 }
 function atomicWrite(path: string, value: unknown): void {
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -56,12 +93,9 @@ export async function openModelPermitJournal(socketPath: string, statePath?: str
     let previous: JournalState | undefined;
     try { previous = JSON.parse(await readFile(path, 'utf8')); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-    if (previous) {
-      if (previous.version !== 1 || !Array.isArray(previous.active) || !Array.isArray(previous.unknown)) throw new Error('model_permit_journal_invalid');
+    if (previous !== undefined) {
+      previous=validateJournal(previous);
       if (previous.host && await processIdentityState(previous.host) !== 'gone') throw new Error('model_permit_previous_host_alive_or_unknown');
-      for (const item of [...previous.active, ...previous.unknown]) {
-        if (!item || typeof item.id !== 'string' || !['foreground','background'].includes(item.kind) || !item.worker) throw new Error('model_permit_journal_invalid');
-      }
       for (const item of previous.active) {
         if (await processIdentityState(item.worker) !== 'gone') throw new Error('model_permit_previous_worker_alive_or_unknown');
       }

@@ -24,6 +24,7 @@ from notalone.persistence.background_tasks import BackgroundTaskPersistenceError
 from notalone.reply.interface import GenerateReply, ReplyOutcome
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.tasks.models import ExtractionRuntimeConfig
+from contextvars import ContextVar
 
 
 _RETRY_GUARD_INTERVAL_SECONDS = 1.0
@@ -48,7 +49,7 @@ class ModelPriorityControl:
         self._reply_active = False
         self._background_active = 0
         self._background_limit = background_limit
-        self._background_scope = local()
+        self._background_scope = ContextVar('model_background_scope', default=None)
 
     @property
     def stop_event(self) -> Event:
@@ -73,15 +74,14 @@ class ModelPriorityControl:
     ) -> Iterator[None]:
         """来源与步骤租约的复验仍由持久层负责，不进入模型适配器。"""
 
-        previous = getattr(self._background_scope, "guard", None)
-        self._background_scope.guard = guard
+        token = self._background_scope.set(guard)
         try:
             yield
         finally:
-            self._background_scope.guard = previous
+            self._background_scope.reset(token)
 
     def _check_background_scope(self) -> None:
-        guard = getattr(self._background_scope, "guard", None)
+        guard = self._background_scope.get()
         if guard is not None:
             guard()
 
@@ -206,7 +206,16 @@ class MemoryCallAccounting:
         for entry, trace in pending:
             if trace is not None and self._trace_accounted(trace):
                 continue
-            self._ledger.record(entry)
+            observations = getattr(trace, 'observations', {})
+            call = observations.get(getattr(trace, 'calls', {}).get('extraction'))
+            physical = getattr(call, 'physical_call', None)
+            if physical is not None:
+                trace.reserve_ledger('extraction',entry)
+                trace.persist_ledger('extraction',committed=False)
+                physical.complete(entry)
+                trace.persist_ledger('extraction',committed=True)
+            else:
+                self._ledger.record(entry)
 
     @staticmethod
     def _trace_accounted(trace: Any) -> bool:
@@ -252,6 +261,15 @@ class MemoryCallAccounting:
             self._ledger.record(self._entry(called_at, latency_ms))
 
     def _entry(self, called_at: datetime, latency_ms: int) -> LedgerEntry:
+        trace = current_trace()
+        observations = getattr(trace, 'observations', {})
+        call = observations.get(getattr(trace, 'calls', {}).get('extraction'))
+        physical = getattr(call, 'physical_call', None)
+        if physical is not None:
+            return LedgerEntry(entry_id=physical.ledger_entry_id, owner_id=physical.scope.owner_id,
+                contact_id=physical.scope.contact_id, provider=physical.scope.provider, model_name=physical.scope.model,
+                input_tokens=None, output_tokens=None, latency_ms=latency_ms,
+                outcome=LedgerOutcome.RUN_FAILED, called_at=physical.called_at)
         scope = self._scope
         if scope is None:
             raise RuntimeError("模型调用记账不在提取运行范围内。")
@@ -273,6 +291,8 @@ class ExtractionRunnerPort(Protocol):
         background_scope_factory: (
             Callable[[], AbstractContextManager] | None
         ) = None,
+        task_claim=None,
+        physical_scope_factory: Callable[[str], AbstractContextManager] | None = None,
     ) -> ExtractionRunStats: ...
 
 
@@ -292,11 +312,17 @@ class AccountedExtractionRunner:
         background_scope_factory: (
             Callable[[], AbstractContextManager] | None
         ) = None,
+        task_claim=None,
+        physical_scope_factory: Callable[[str], AbstractContextManager] | None = None,
     ) -> ExtractionRunStats:
         with self._accounting.run_scope(scope):
             options: dict[str, Any] = {}
             if background_scope_factory is not None:
                 options["background_scope_factory"] = background_scope_factory
+            if task_claim is not None:
+                options["task_claim"] = task_claim
+            if physical_scope_factory is not None:
+                options["physical_scope_factory"] = physical_scope_factory
             if task_id is None and extraction_runtime_config is None:
                 return self._runner.run(scope=scope, **options)
             return self._runner.run(

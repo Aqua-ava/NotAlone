@@ -39,6 +39,8 @@ export class ModelPermitArbiter {
     this.backgroundLimit = backgroundLimit;
     if (!Number.isSafeInteger(backgroundLimit) || backgroundLimit < 1) throw new Error('model_permit_limit_invalid');
   }
+  /** 仅返回已经因执行者断开成为孤儿的ID副本，不包括活跃调用。 */
+  orphanedPermitIds(): string[] { return [...this.active].filter(([,value])=>value.orphan).map(([id])=>id); }
   snapshot() {
     const values = [...this.active.values()];
     return {

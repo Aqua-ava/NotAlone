@@ -1,6 +1,7 @@
 """同一绝对期限贯穿排队与实际Adapter；等待超时不冒充SDK中断。"""
 
 import inspect
+from notalone.application.model_transport_accounting import PhysicalModelAccountingAbort
 from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from queue import Empty, Queue
@@ -60,6 +61,9 @@ def bounded_organization_call(call, *, priority, guard, timeout_seconds, per_req
                     value = call(deadline)
                 priority.wait_for_foreground()
             results.put((True, value))
+        except PhysicalModelAccountingAbort:
+            from notalone.application.model_priority import ModelWorkStopped
+            results.put((False, ModelWorkStopped('physical_model_accounting_stopped')))
         except Exception as error:
             results.put((False, error))
         finally:

@@ -186,7 +186,7 @@ class ReplyWiringTest(unittest.TestCase):
                     '_build_import_service':None,'_build_skill_service':None,'_build_ledger_service':None,
                     'remove_backend_info':None,'_serve_until_stopped':None}.items():
                     stack.enter_context(patch.object(command,name,return_value=value))
-                stack.enter_context(patch.object(command,'ModelPriorityControl',return_value=priority))
+                stack.enter_context(patch.object(command,'build_model_priority_control',return_value=priority))
                 stack.enter_context(patch.object(command,'_build_task_host',return_value=None))
                 stack.enter_context(patch.object(organization_runtime,'build_layered_memory_service',return_value=Mock()))
                 stack.enter_context(patch.object(command,'_build_memory_service',side_effect=RuntimeError('synthetic-startup') if stage=='memory' else None,return_value=None))

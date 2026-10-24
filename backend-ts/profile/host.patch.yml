@@ -8,6 +8,8 @@
       config:
         includeHarnessIdentity: false
         includeRuntimeContext: false
+    - id: reply-skill-registry
+      name: '@deepseek-ai/dsh-skill'
     - id: tools
       name: '@deepseek-ai/dsh-tools'
       config:

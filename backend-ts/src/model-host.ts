@@ -4,6 +4,7 @@ import { join, resolve, isAbsolute } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { ModelPermitArbiter } from './model-permits.ts';
 import { startModelPermitServer, type ModelPermitAccounting } from './model-permit-server.ts';
+import { assertModelPermitJournalSettled } from './model-permit-journal.ts';
 export interface ModelHostOptions {
   runtimeEnvironment: Readonly<NodeJS.ProcessEnv>;
   businessHome: string;
@@ -37,21 +38,29 @@ async function privateDirectory(path: string) {
   if (!entry.isDirectory() || (entry.mode & 0o077) !== 0 || process.getuid && entry.uid !== process.getuid()) throw new Error('model_permit_directory_not_private');
   return created;
 }
-export async function startModelHost(options: ModelHostOptions) {
+type ModelHostIdentityOptions = Pick<ModelHostOptions,'runtimeEnvironment'|'businessHome'|'infoPath'|'envFilePath'>;
+/** 模式选择与实际ModelHost共用稳定身份；计算本身不创建目录或socket。 */
+function modelHostPaths(options:ModelHostIdentityOptions) {
   for (const path of [options.businessHome,options.infoPath,options.envFilePath]) if (!isAbsolute(path)||/[\0\r\n]/.test(path)) throw new Error('model_host_configuration_invalid');
-  const concurrency = modelBackgroundConcurrency(options.runtimeEnvironment);
   const managed = options.runtimeEnvironment.NOTALONE_MANAGED_USER_DATA;
   if (managed !== undefined && (!isAbsolute(managed)||/[\0\r\n]/.test(managed))) throw new Error('model_host_configuration_invalid');
   const identity = createHash('sha256').update(JSON.stringify([resolve(options.infoPath),resolve(options.envFilePath)])).digest('hex').slice(0,24);
   const base = managed ?? join(options.businessHome,'.notalone');
   const directory = join(base,'model-permits',identity);
+  const socketDirectory = join('/tmp',`na-model-${process.getuid?.() ?? 'local'}-${identity}`);
+  return {directory,socketDirectory,path:join(socketDirectory,'p.sock'),statePath:join(directory,'state.json')};
+}
+/** 正常launcher的.dsh-lock寿命覆盖此检查至Legacy退出；不取得第二套模型资源。 */
+export async function assertModelHostFallbackSafe(options:ModelHostIdentityOptions):Promise<void> {
+  await assertModelPermitJournalSettled(modelHostPaths(options).statePath);
+}
+export async function startModelHost(options: ModelHostOptions) {
+  const {directory,socketDirectory,path,statePath}=modelHostPaths(options);
+  const concurrency = modelBackgroundConcurrency(options.runtimeEnvironment);
   await mkdir(directory,{recursive:true,mode:0o700});
   await privateDirectory(directory);
   // macOS Unix socket路径有严格长度限制；只有socket放短私有目录，状态留业务目录。
-  const socketDirectory = join('/tmp',`na-model-${process.getuid?.() ?? 'local'}-${identity}`);
   const createdSocketDirectory = await privateDirectory(socketDirectory);
-  const path = join(socketDirectory,'p.sock');
-  const statePath = join(directory,'state.json');
   const token = randomBytes(32).toString('base64url');
   const arbiter = new ModelPermitArbiter(concurrency);
   let server: Awaited<ReturnType<typeof startModelPermitServer>>;
@@ -74,6 +83,7 @@ export async function startModelHost(options: ModelHostOptions) {
       NOTALONE_EXTRACTION_BATCH_CONCURRENCY:String(concurrency),
     },
     unknownSettlements: server.unknownSettlements,
+    unconfirmedPermitIds: server.unconfirmedPermitIds,
     shutdown,
     /** stopNewWork必须停业务接收并通知Python停止新调用，不能先等排队线程退出。 */
     close(stopNewWork: () => Promise<void>): Promise<void> {

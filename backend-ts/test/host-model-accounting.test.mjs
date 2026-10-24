@@ -13,7 +13,7 @@ async function fixture(t){
  const contact=(await c.query("INSERT INTO contact(owner_id,display_name) VALUES($1,'合成') RETURNING id",[owner])).rows[0].id;
  await c.query("INSERT INTO conversation_binding(owner_id,contact_id,channel,account_scope,conversation_locator,status) VALUES($1,$2,'wechat','synthetic','synthetic','active')",[owner,contact]);
  const tx=async work=>{await c.query('BEGIN');try{const result=await work(c);await c.query('COMMIT');return result;}catch(e){await c.query('ROLLBACK');throw e;}};
- const accounting=createHostModelAccounting({transaction:tx,provider:'synthetic',model:'deepseek-flash'});
+ const accounting=createHostModelAccounting({transaction:tx,provider:'synthetic',model:'deepseek-flash',unconfirmedPermitIds:()=>[]});
  const task=async(kind,step,scope=contact)=>{
   const id=(await c.query("INSERT INTO background_task(owner_id,contact_id,task_type,status,current_step,message_count) VALUES($1,$2,$3,'running',$4,0) RETURNING id",[owner,scope,kind,step])).rows[0].id;
   const worker=randomUUID();const sid=(await c.query("INSERT INTO background_task_step(task_id,step_name,step_order,status,worker_id,lease_generation,attempt_count,lease_expires_at) VALUES($1,$2,1,'running',$3,1,1,now()+interval '1 minute') RETURNING id",[id,step,worker])).rows[0].id;
@@ -91,7 +91,7 @@ test('两条真实PG连接竞争原job最后额度，仅一预约成功',async t
  await c.query("INSERT INTO layered_memory_job(task_id,owner_id,contact_id,settings_generation,target_key,contract,target_manifest,dependency_ids,state,run_remaining,model_call_limit) VALUES($1,$2,NULL,1,'synthetic','synthetic','{}','{}','active',1,1)",[claim.task_id,owner]);
  const transaction=async work=>{const connection=new pg.Client({host:'/tmp',database:db});await connection.connect();try{await connection.query('BEGIN');const result=await work(connection);await connection.query('COMMIT');return result;}catch(e){await connection.query('ROLLBACK');throw e;}finally{await connection.end();}};
  await l2(c,owner,null,claim.task_id);
- const a=createHostModelAccounting({transaction,provider:'synthetic',model:'deepseek-flash'}),r=receipt(claim.task_id,null);
+ const a=createHostModelAccounting({transaction,provider:'synthetic',model:'deepseek-flash',unconfirmedPermitIds:()=>[]}),r=receipt(claim.task_id,null);
  const results=await Promise.allSettled([a.reserve(r,claim),a.reserve({...r,attempt_id:randomUUID()},claim)]);
  assert.equal(results.filter(x=>x.status==='fulfilled').length,1);
  assert.match(results.find(x=>x.status==='rejected').reason.code,/budget_exceeded/);

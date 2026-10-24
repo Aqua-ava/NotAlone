@@ -1,0 +1,102 @@
+/** 显式验收入口的统一模型宿主；稳定journal、可信PG授权及唯一私有回复。 */
+import type {Context} from '@deepseek-ai/cordis';
+import {getOrCreateAnonymousUserId} from '@deepseek-ai/dsh-anonymous-user-id';
+import type {IncomingMessage,ServerResponse} from 'node:http';
+import {mkdir,lstat} from 'node:fs/promises';
+import {dirname,join,resolve} from 'node:path';
+import {randomBytes} from 'node:crypto';
+import type {HostStorage} from './host-storage.ts';
+import {resolveHostReplyConfiguration} from './host-reply-config.ts';
+import {createHostReplyRuntime} from './host-reply.ts';
+import {createHostModelAccounting} from './host-model-accounting.ts';
+import {PostgresModelLedger,PostgresModelLedgerDetails} from './model-ledger.ts';
+import {startModelHost,assertModelHostFallbackSafe} from './model-host.ts';
+
+export class HostModelRuntimeError extends Error {
+  readonly code:string;
+  constructor(code:string){super(code);this.code=code;}
+}
+export interface HostModelRuntimeOptions {
+  ctx:Context;storage:HostStorage;environment:Readonly<NodeJS.ProcessEnv>;
+  businessHome:string;projectDirectory:string;infoPath:string;envFilePath:string;
+}
+/** 默认Python只是一项启动决定，不安装提供者或第二套后台仲裁器。 */
+export async function startHostModelRuntime(options:HostModelRuntimeOptions){
+  const environment=options.environment,mode=environment.NOTALONE_REPLY_RUNTIME??'python';
+  if(mode!=='python'&&mode!=='typescript')throw new HostModelRuntimeError('reply_runtime_invalid');
+  if(mode==='python'){
+    if(environment.NOTALONE_REPLY_REMOTE_URL!==undefined||environment.NOTALONE_REPLY_REMOTE_TOKEN!==undefined
+      ||environment.NOTALONE_MODEL_PERMIT_SOCKET!==undefined||environment.NOTALONE_MODEL_PERMIT_TOKEN!==undefined)
+      throw new HostModelRuntimeError('reply_runtime_ownership_conflict');
+    try{
+      await assertModelHostFallbackSafe({runtimeEnvironment:environment,businessHome:options.businessHome,infoPath:options.infoPath,envFilePath:options.envFilePath});
+    }catch{throw new HostModelRuntimeError('reply_runtime_recovery_required');}
+    return undefined;
+  }
+  const configuration=resolveHostReplyConfiguration(environment);
+  if(configuration.status!=='configured')throw new HostModelRuntimeError(configuration.code);
+  if(!options.storage.runtimeOwnerId||!(await options.storage.setupStatus()).runtime_owner_configured)
+    throw new HostModelRuntimeError('reply_owner_unconfigured');
+  const transaction=options.storage.businessTransaction.bind(options.storage);
+  const ledger=new PostgresModelLedger({transaction,details:new PostgresModelLedgerDetails()});
+  // Python010/真实transport使用供应商名deepseek；不拿TS内部路由名替代其台账身份。
+  let currentHost:Awaited<ReturnType<typeof startModelHost>>|undefined;
+  const accounting=createHostModelAccounting({transaction,provider:'deepseek',model:configuration.model.model,
+    unconfirmedPermitIds:()=>{
+      if(!currentHost)throw new HostModelRuntimeError('model_runtime_starting');
+      return currentHost.unconfirmedPermitIds();
+    }});
+  const modelHost=await startModelHost({runtimeEnvironment:environment,businessHome:options.businessHome,
+    infoPath:options.infoPath,envFilePath:options.envFilePath,accounting});
+  currentHost=modelHost;
+  let reply:Awaited<ReturnType<typeof createHostReplyRuntime>>|undefined;
+  try{
+    // journal只有在核实旧进程消失后才给出unknown；提交PG恢复先于任何Python队列启动。
+    const recovered=await ledger.recoverUnknownPermits(modelHost.unknownSettlements().map(item=>item.id));
+    const anonymousHome=join(dirname(modelHost.statePath),'identity');
+    try{await mkdir(anonymousHome,{mode:0o700});}
+    catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
+    const identityDirectory=await lstat(anonymousHome);
+    if(!identityDirectory.isDirectory()||(identityDirectory.mode&0o077)!==0
+      ||process.getuid&&identityDirectory.uid!==process.getuid())throw new HostModelRuntimeError('model_identity_directory_not_private');
+    const anonymousId=getOrCreateAnonymousUserId({env:{DSH_HOME:anonymousHome}});
+    const rawSkills=environment.NOTALONE_SKILLS_DIR??join(options.businessHome,'.notalone','skills');
+    const skillsRoot=resolve(options.projectDirectory,rawSkills.replace(/^~(?=\/|$)/,options.businessHome));
+    const token=randomBytes(32).toString('base64url');
+    reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
+      ledger,token,configuration:{skillsRoot,model:configuration.model,
+        provider:{...configuration.provider,resolveUserId:()=>anonymousId}}});
+    const runtime=reply;
+    let closing:Promise<void>|undefined;
+    const stopAccepting=()=>{runtime.stopAccepting();modelHost.arbiter.stop();};
+    return {
+      statePath:modelHost.statePath,recoveredUnknown:recovered.length,
+      pythonEnvironment(address:string){
+        if(!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}$/.test(address))throw new HostModelRuntimeError('reply_remote_address_invalid');
+        return {...modelHost.pythonEnvironment,NOTALONE_REPLY_RUNTIME:'typescript',
+          NOTALONE_REPLY_REMOTE_URL:address,NOTALONE_REPLY_REMOTE_TOKEN:token};
+      },
+      handle(req:IncomingMessage,res:ServerResponse){return runtime.handle(req,res);},
+      stopAccepting,
+      close(stopPython:()=>Promise<void>):Promise<void>{
+        return closing??=(async()=>{
+          stopAccepting();
+          // 排队者已唤醒；两侧实际SDK退出后才能释放适配器/socket，不凭HTTP断线结算。
+          const stopped=await Promise.allSettled([Promise.resolve().then(stopPython),runtime.close()]);
+          const failures=stopped.filter(result=>result.status==='rejected').map(result=>result.reason);
+          const state=modelHost.arbiter.snapshot();
+          if(failures.length||state.orphaned||state.foregroundActive||state.backgroundActive){
+            await modelHost.shutdown(); // 仅停止控制面，active/unknown仍保留在稳定journal。
+            throw new HostModelRuntimeError('model_runtime_unsettled');
+          }
+          await modelHost.close(async()=>{});
+        })();
+      },
+    };
+  }catch(error){
+    reply?.stopAccepting();modelHost.arbiter.stop();
+    await reply?.close().catch(()=>{});
+    await modelHost.shutdown();
+    throw error;
+  }
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 from collections.abc import Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -14,6 +15,7 @@ from typing import Any, Iterator
 from uuid import uuid4
 
 import httpx
+from notalone.application.model_transport_accounting import PhysicalModelAccountingAbort, physical_trace_call
 
 from notalone.memory_trace.context import (
     CallObservation,
@@ -186,10 +188,27 @@ def build_trace_http_client(
     *, transport: httpx.BaseTransport | None = None
 ) -> httpx.Client:
     """生产 HTTP hooks；测试可显式注入完全本地的合成 HTTP transport。"""
+    if os.environ.get('NOTALONE_MODEL_PERMIT_SOCKET'):
+        from notalone.application.model_transport_accounting import AccountingTransport
+        transport = AccountingTransport(transport or httpx.HTTPTransport(retries=0))
     return httpx.Client(
         transport=transport,
         event_hooks={"request": [_request_hook], "response": [_response_hook]},
     )
+
+
+def build_trace_async_http_client(*, transport: httpx.AsyncBaseTransport | None = None) -> httpx.AsyncClient:
+    """同一逐物理预约边界；异步SDK同样不能绕过显式调用身份。"""
+    if os.environ.get('NOTALONE_MODEL_PERMIT_SOCKET'):
+        from notalone.application.model_transport_accounting import AsyncAccountingTransport
+        transport = AsyncAccountingTransport(transport or httpx.AsyncHTTPTransport(retries=0))
+    async def before(request):
+        await request.aread()
+        _request_hook(request)
+    async def after(response):
+        await response.aread()
+        _response_hook(response)
+    return httpx.AsyncClient(transport=transport, event_hooks={'request': [before], 'response': [after]})
 
 
 def record_model_retry(purpose: str, *, outcome: LedgerOutcome) -> None:
@@ -287,7 +306,11 @@ def invoke_traced_model(
             if on_invoke is not None:
                 on_invoke()
             call.invoked = True
-            message = bound_model.invoke(messages)
+            with physical_trace_call(call, model):
+                message = bound_model.invoke(messages)
+        except PhysicalModelAccountingAbort:
+            from notalone.application.model_priority import ModelWorkStopped
+            raise ModelWorkStopped('physical_model_accounting_stopped') from None
         except _TraceTransportAbort:
             raise trace.failure or TraceWriteError(
                 "provider_transport", trace.trace_id

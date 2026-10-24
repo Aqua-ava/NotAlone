@@ -107,6 +107,7 @@ class CallObservation:
     response_status: str = "unavailable"
     provider_attempts: int = 0
     request_capture_failed: bool = False
+    physical_call: Any | None = None
     ledger_entry: LedgerEntry | None = None
     ledger_commit_status: str = "unknown"
     disposition: str = "consumed"
@@ -198,8 +199,13 @@ class TraceSession:
                 )
             except Exception:
                 pass
-        if self._token is not None:
-            _CURRENT.reset(self._token)
+        try:
+            for call in self.observations.values():
+                if call.physical_call is not None:
+                    call.physical_call.unknown()
+        finally:
+            if self._token is not None:
+                _CURRENT.reset(self._token)
         if cleanup_failure is not None:
             raise cleanup_failure from None
         return False
@@ -215,7 +221,7 @@ class TraceSession:
             call.disposition = "not_adopted"
             finished = call.finished_at or datetime.now(timezone.utc)
             call.ledger_entry = LedgerEntry(
-                entry_id=uuid4(),
+                entry_id=call.physical_call.ledger_entry_id if call.physical_call else uuid4(),
                 owner_id=self.scope.owner_id,
                 contact_id=self.scope.contact_id,
                 provider=self.provider,
@@ -229,7 +235,12 @@ class TraceSession:
                 called_at=call.called_at,
             )
             try:
-                self.ledger.record(call.ledger_entry)
+                if call.physical_call is not None:
+                    # 先保存调用端未知身份；结果RPC失败时原receipt可能已是服务端成功。
+                    self.store.record_call(self.scope,self.trace_id,receipt=call.receipt())
+                    call.physical_call.complete(call.ledger_entry)
+                else:
+                    self.ledger.record(call.ledger_entry)
                 call.ledger_commit_status = "committed"
             except Exception:
                 # 回执未知不能重造另一个 ID 补账；也不掩盖原停止／追踪故障。
@@ -245,6 +256,8 @@ class TraceSession:
 
     @staticmethod
     def _actually_invoked(call: CallObservation | None) -> bool:
+        if call is not None and call.physical_call is not None and not call.physical_call.dispatched:
+            return False
         # 首个供应商请求hook在发送前失败，不能冒充实际外发。
         return call is not None and call.invoked and not (
             call.request_capture_failed and call.provider_attempts == 1
@@ -415,12 +428,28 @@ def record_ledger_entry(
 ) -> None:
     """沿原台账写入一次；提交回执未知时只保存该 ID 的最小关联。"""
     trace = current_trace()
+    call = trace.observations.get(trace.calls.get(purpose)) if trace else None
+    if call is not None and call.physical_call is not None and not call.physical_call.dispatched:
+        return
     if trace is not None:
         trace.reserve_ledger(purpose, entry)
     try:
-        ledger.record(entry)
+        if call is not None and call.physical_call is not None:
+            # 结果提交前持久未知；只有同一次结果ACK收到后才改为committed。
+            trace.persist_ledger(purpose,committed=False)
+            call.physical_call.complete(entry)
+        else:
+            ledger.record(entry)
     except Exception:
         if trace is not None:
             trace.persist_ledger(purpose, committed=False)
         raise
     record_ledger_call(purpose, entry, started_at=started_at)
+
+
+def trace_ledger_identity(purpose: str, called_at: datetime) -> tuple[UUID, datetime]:
+    """返回同一明确purpose观察绑定的预分配身份；不读取最后调用或重造旧记录。"""
+    trace = current_trace()
+    call = trace.observations.get(trace.calls.get(purpose)) if trace else None
+    physical = call.physical_call if call else None
+    return (physical.ledger_entry_id, physical.called_at) if physical else (uuid4(), called_at)

@@ -337,12 +337,26 @@ class LayeredMemoryService:
             check()
             physical = getattr(adapter, 'physical_accounting', False)
             if not physical:
+                from notalone.application.model_permit_client import SharedModelPriorityControl
+                if isinstance(self._priority, SharedModelPriorityControl):
+                    raise ValueError('共享整理只允许真实逐HTTP预算适配器')
                 self._store.reserve_model_call(work)
             tail = (1 if getattr(adapter, 'layer', None) == 'l3' else 7 if self._profile_proposer else 1) if getattr(adapter, 'document_tools', False) and operation == 'propose' else 0
             phase = ('l3' if hasattr(work, 'scenario_version_ids') else 'l2') + ('_proposal' if operation == 'propose' else '_verification')
+            from notalone.application.model_permit_client import SharedModelPriorityControl
+            from notalone.application.model_transport_accounting import PhysicalModelScope, physical_task_claim
+            accounting_scope = None
+            if isinstance(self._priority, SharedModelPriorityControl):
+                if not physical:
+                    raise ValueError('共享整理只允许真实逐HTTP预算适配器')
+                contact_id = getattr(work.scope, 'contact_id', None)
+                accounting_scope = PhysicalModelScope(self._priority, work.claim.task_id, work.scope.owner_id,
+                    contact_id, 'owner_memory' if contact_id is None else 'contact', 'deepseek', adapter.model.model_name,
+                    claim=physical_task_claim(work.claim))
             context = (nullcontext() if self._synthetic and not physical else organization_request_context(
                 check, lambda request, response, route: self._check_response_identity(work.scope.owner_id, snapshot, phase, request, response, route),
-                deadline, self._budget, reserve=(lambda: self._store.reserve_model_call(work, reserved_calls=tail)) if physical else None))
+                deadline, self._budget, reserve=(check if accounting_scope is not None else lambda: self._store.reserve_model_call(work, reserved_calls=tail)) if physical else None,
+                accounting_scope=accounting_scope))
             with context:
                 value = call(deadline)
             check()

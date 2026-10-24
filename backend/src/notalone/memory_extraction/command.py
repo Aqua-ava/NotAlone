@@ -8,6 +8,7 @@ import os
 import sys
 import threading
 import time
+from contextvars import copy_context
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
@@ -588,6 +589,8 @@ def _run_batch_pipeline(
     background_scope_factory: (
         Callable[[], AbstractContextManager] | None
     ) = None,
+    physical_scope_factory: Callable[[str], AbstractContextManager] | None = None,
+    task_claim=None,
 ) -> ExtractionRunStats:
     """批次流水线：A 段按并发度并行，B 段在单写队列中按批序提交。
 
@@ -645,7 +648,7 @@ def _run_batch_pipeline(
                     runtime=timed_runtime,
                     verification_runtime=verification_runtime,
                 )
-                with TraceSession(
+                with (physical_scope_factory(plan.batch_key) if physical_scope_factory is not None else nullcontext()), TraceSession(
                     trace_store,
                     scope,
                     trace_id,
@@ -693,7 +696,7 @@ def _run_batch_pipeline(
     )
     try:
         futures: list[Future] = [
-            executor.submit(run_one, step) for step in steps
+            executor.submit(copy_context().run, run_one, step) for step in steps
         ]
         for future in futures:
             try:
@@ -737,6 +740,8 @@ def run_extraction(
     background_scope_factory: (
         Callable[[], AbstractContextManager] | None
     ) = None,
+    physical_scope_factory: Callable[[str], AbstractContextManager] | None = None,
+    task_claim=None,
 ) -> ExtractionRunStats:
     """按水位分批提取并采纳；输出不可用的批次连续失败后跳过。
 
@@ -748,6 +753,14 @@ def run_extraction(
     task_metadata = _task_runtime_metadata(
         task_id, extraction_runtime_config, verification_runtime,
     )
+    if task_claim is not None:
+        from notalone.application.model_transport_accounting import physical_task_claim
+        if (task_claim.task_id != task_id or task_claim.owner_id != scope.owner_id
+                or task_claim.contact_id != scope.contact_id):
+            raise ValueError('提取批次与原任务范围不符。')
+        task_metadata['task_runtime'].update(physical_task_claim(task_claim))
+        if task_lease_generation is not None and task_lease_generation != task_claim.lease_generation:
+            raise ValueError('提取批次租约版本不符。')
     if task_lease_generation is not None and task_id is not None:
         task_metadata["task_runtime"]["lease_generation"] = task_lease_generation
     if (
@@ -907,6 +920,7 @@ def run_extraction(
             progress=progress,
             batch_concurrency=batch_concurrency,
             background_scope_factory=background_scope_factory,
+            physical_scope_factory=physical_scope_factory,
         )
     for offset in range(0, len(pending_messages), batch_size):
         batch = pending_messages[offset : offset + batch_size]
@@ -937,7 +951,7 @@ def run_extraction(
                 rule_version=str(plan.window_payload["versions"]["command"]),
             ),
         )
-        with TraceSession(
+        with (physical_scope_factory(plan.batch_key) if physical_scope_factory is not None else nullcontext()), TraceSession(
             trace_store,
             scope,
             trace_id,
@@ -1061,8 +1075,10 @@ def _record_extraction_ledger(
 ) -> None:
     if ledger is None:
         return
+    from notalone.memory_trace.context import trace_ledger_identity
+    ledger_id, called_at = trace_ledger_identity("extraction", called_at)
     entry = LedgerEntry(
-        entry_id=uuid4(),
+        entry_id=ledger_id,
         owner_id=scope.owner_id,
         contact_id=scope.contact_id,
         provider=provider,

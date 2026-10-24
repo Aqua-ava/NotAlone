@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 import json
+import os
 import time
 import httpx
 
@@ -20,8 +21,8 @@ def evaluation_request_context(store, owner_id, run_id, case, phase, deadline, b
 
 
 @contextmanager
-def organization_request_context(guard, response_guard, deadline, budget, *, reserve=None):
-    token = _CURRENT_ORGANIZATION.set((guard, response_guard, deadline, budget, reserve))
+def organization_request_context(guard, response_guard, deadline, budget, *, reserve=None, accounting_scope=None):
+    token = _CURRENT_ORGANIZATION.set((guard, response_guard, deadline, budget, reserve, accounting_scope))
     try:
         yield
     finally:
@@ -105,7 +106,7 @@ class OrganizationQualityHTTPTransport(httpx.BaseTransport):
         context = _CURRENT_ORGANIZATION.get()
         if context is None:
             raise PermissionError('模型请求必须属于有界评测或已获实际资格的整理工作。')
-        guard, response_guard, deadline, budget, reserve = context
+        guard, response_guard, deadline, budget, reserve, accounting_scope = context
         deadline.check()
         guard()
         payload = json.loads(request.read())
@@ -114,10 +115,34 @@ class OrganizationQualityHTTPTransport(httpx.BaseTransport):
         request.extensions['timeout'] = {key: deadline.remaining_seconds() for key in ('connect', 'read', 'write', 'pool')}
         from notalone.problem_budget import reserve_problem_attempt
         reserve_problem_attempt(request=request)
-        if reserve is not None:
-            reserve()
-        result = self._inner.handle_request(request)
-        result.read()
+        if os.environ.get('NOTALONE_MODEL_PERMIT_SOCKET') and accounting_scope is None:
+            raise PermissionError('共享整理缺少明确任务身份')
+        if accounting_scope is None:
+            if reserve is not None:
+                reserve()
+            result = self._inner.handle_request(request)
+            result.read()
+        else:
+            from dataclasses import replace
+            from datetime import datetime, timezone
+            from uuid import uuid4
+            from notalone.application.model_transport_accounting import physical_model_call, AccountingTransport
+            from notalone.ledger.models import LedgerEntry, LedgerOutcome
+            physical_scope = replace(accounting_scope, before_dispatch=reserve)
+            with physical_model_call(physical_scope, call_id=uuid4(), called_at=datetime.now(timezone.utc),
+                    ledger_entry_id=uuid4() if physical_scope.contact_id is not None else None) as actual:
+                result = AccountingTransport(self._inner).handle_request(request)
+                result.read()
+                if result.status_code >= 400:
+                    actual.confirm_complete_http_rejection(result)
+                # 不实现第二套供应商解析器；HTTP事实已知，usage与费用仍为未知。
+                if physical_scope.contact_id is None:
+                    actual.complete_owner(succeeded=result.is_success)
+                else:
+                    actual.complete(LedgerEntry(actual.ledger_entry_id, physical_scope.owner_id,
+                        physical_scope.contact_id, physical_scope.provider, physical_scope.model,
+                        None, None, None, LedgerOutcome.SUCCEEDED if result.is_success else LedgerOutcome.RUN_FAILED,
+                        actual.called_at))
         deadline.check()
         guard()
         if result.is_success:
