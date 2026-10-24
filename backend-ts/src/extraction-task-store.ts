@@ -1,6 +1,6 @@
 /** 原后台任务表的确定性持久层；生命周期由宿主 effect 持有，不创建 DSH 私有任务。 */
 import type pg from 'pg';
-import {extractionTargets,extractionCheckpoint,extractionProgress,type ExtractionTargets} from './extraction-task-store-processing.ts';
+import {extractionTargets,extractionCheckpoint,extractionProgress,ownerExtractionProgress,type ExtractionTargets} from './extraction-task-store-processing.ts';
 import {unsettledExtraction,blockedExtraction,quarantineExtraction} from './extraction-task-store-recovery.ts';
 import {recordExtractionObservation,claimExtractionSchedule,enqueueExtractionObservation} from './extraction-task-store-schedule.ts';
 export interface ExtractionScope {ownerId:string;contactId:string;}
@@ -32,6 +32,7 @@ export class ExtractionTaskStore {
  targets(claim:ExtractionClaim):Promise<ExtractionTargets>{return extractionTargets(this,claim);}
  checkpoint(c:pg.ClientBase,claim:ExtractionClaim,ids:readonly string[],outcome:'succeeded'|'skipped'|'unknown'):Promise<void>{return extractionCheckpoint(this,c,claim,ids,outcome);}
  progress(scope:ExtractionScope,taskId?:string){return extractionProgress(this,scope,taskId);}
+ ownerProgress(ownerId:string,taskId?:string){return ownerExtractionProgress(this,ownerId,taskId);}
  recordObservation(c:pg.ClientBase,scope:ExtractionScope,observationId:string,ids:readonly string[]){return recordExtractionObservation(c,scope,observationId,ids);}
  claimScheduled(scope:ExtractionScope){return this.transaction(scope,c=>claimExtractionSchedule(c,scope));}
  enqueueObservation(scope:ExtractionScope,ids:readonly string[]){return enqueueExtractionObservation(this,scope,ids);}
@@ -185,6 +186,31 @@ export class ExtractionTaskStore {
    await c.query("UPDATE background_task SET status='queued',current_step=$2,last_error_code=NULL,finished_at=NULL,retry_count=retry_count+1,updated_at=now() WHERE id=$1",[taskId,next.step_name]);
    return {task_id:taskId,status:'queued'};
   });
+ }
+ /** 只列出可交给提取 Worker 的联系人范围；真正领取仍走 claim 的原子租约。 */
+ async readyScopes(ownerId:string,limit=64,runtimeModes:readonly ('legacy'|'bounded-runtime-v1')[]=['legacy']):Promise<ExtractionScope[]>{
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId)
+   ||!Number.isSafeInteger(limit)||limit<1||limit>256||!runtimeModes.length
+   ||runtimeModes.some(mode=>!['legacy','bounded-runtime-v1'].includes(mode)))throw new ExtractionTaskError('worker_scan_invalid');
+  const rows=(await this.pool.query(`WITH candidates AS (
+    SELECT s.contact_id,0 AS priority,COALESCE(s.due_at,s.last_input_at) AS ready_at
+    FROM memory_extraction_schedule s
+    JOIN conversation_binding b ON b.owner_id=s.owner_id AND b.contact_id=s.contact_id AND b.status='active'
+    LEFT JOIN background_task scheduled_task ON scheduled_task.id=s.task_id
+    WHERE s.owner_id=$1 AND s.due_at IS NOT NULL AND s.due_at<=clock_timestamp()
+     AND (s.pending_count>0 OR s.task_id IS NOT NULL)
+     AND (scheduled_task.id IS NULL OR COALESCE(scheduled_task.extraction_runtime_config->>'mode','legacy')=ANY($3::text[]))
+    UNION ALL
+    SELECT t.contact_id,1 AS priority,COALESCE(t.started_at,t.created_at) AS ready_at
+    FROM background_task t JOIN background_task_step s ON s.task_id=t.id
+    WHERE t.owner_id=$1 AND t.task_type IN ('import','observation')
+     AND t.status IN ('queued','running','verifying') AND ${sourceAllowed}
+     AND s.step_name IN ('parse','normalize','extract_memory') AND s.status IN ('pending','retryable')
+     AND COALESCE(t.extraction_runtime_config->>'mode','legacy')=ANY($3::text[])
+   )
+   SELECT contact_id FROM candidates GROUP BY contact_id
+   ORDER BY min(priority),min(ready_at),contact_id LIMIT $2`,[ownerId,limit,[...new Set(runtimeModes)]])).rows;
+  return rows.map(row=>({ownerId,contactId:row.contact_id}));
  }
  /** 会话锁必须贯穿整个Worker寿命；release只能在在途run全部退出后调用。 */
  async acquireWorker():Promise<{release:()=>Promise<void>}|null>{

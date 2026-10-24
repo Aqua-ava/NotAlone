@@ -5,6 +5,8 @@ import {execFileSync} from 'node:child_process';
 import {homedir} from 'node:os';
 import pg from 'pg';
 import {ExtractionTaskStore} from '../src/extraction-task-store.ts';
+import {ExtractionWorker} from '../src/extraction-worker.ts';
+import {ExtractionProgressApi} from '../src/extraction-progress-http.ts';
 import {modelTaskRequestId} from '../src/host-model-accounting.ts';
 
 // 原迁移建立随机合成库；只在所有自有连接退出后普通 DROP，不终止其他进程。
@@ -182,9 +184,72 @@ test('显式历史模式保留固定规则，版本不匹配时不改变任务�
  const f=await fixture();try{
   const task=await f.store.enqueueImport(f.scope,f.sourceId,0);await f.pool.query("UPDATE background_task_step SET status='succeeded' WHERE task_id=$1 AND step_name IN ('parse','normalize')",[task]);
   await f.pool.query('UPDATE background_task SET extraction_runtime_config=$2 WHERE id=$1',[task,{version:1,mode:'bounded-runtime-v1',rule_set_sha256:'b'.repeat(64)}]);
+  assert.deepEqual(await f.store.readyScopes(f.scope.ownerId),[]);
+  assert.deepEqual(await f.store.readyScopes(f.scope.ownerId,64,['bounded-runtime-v1']),[{ownerId:f.scope.ownerId,contactId:f.scope.contactId}]);
   await assert.rejects(f.store.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000}),{code:'extraction_runtime_rule_unavailable'});
   assert.equal((await f.pool.query("SELECT lease_generation FROM background_task_step WHERE task_id=$1 AND step_name='extract_memory'",[task])).rows[0].lease_generation,'0');
   const claim=await f.store.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000,runtimeRuleSetSha256:'b'.repeat(64)});
   assert.equal(claim.runtimeConfig.mode,'bounded-runtime-v1');
  }finally{await f.close();}
+});
+
+test('owner进度复用联系人任务行，并保持owner与contact范围',async()=>{
+ const f=await fixture();try{
+  const otherContact=randomUUID(),otherSource=randomUUID();
+  await f.pool.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'另一合成联系人')",[otherContact,f.scope.ownerId]);
+  await f.pool.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'wechat_jsonl','synthetic-other.jsonl',$4,1)",[otherSource,f.scope.ownerId,otherContact,'b'.repeat(64)]);
+  const first=await f.store.enqueueImport(f.scope,f.sourceId,2);
+  const second=await f.store.enqueueImport({ownerId:f.scope.ownerId,contactId:otherContact},otherSource,1);
+  const owner=await f.store.ownerProgress(f.scope.ownerId);
+  assert.equal(owner.scope,'owner');assert.equal(owner.contact_id,null);
+  assert.deepEqual(new Set(owner.tasks.map(task=>task.task_id)),new Set([first,second]));
+  assert.equal((await f.store.progress(f.scope,first)).tasks.length,1);
+  assert.equal((await f.store.progress(f.scope,second)).tasks.length,0);
+  await assert.rejects(f.store.ownerProgress(randomUUID()),{code:'owner_not_found'});
+  const api=new ExtractionProgressApi(f.store,f.scope.ownerId);
+  assert.equal((await api.handle('GET','/api/owner/memory-processing')).status,200);
+  assert.equal((await api.handle('GET',`/api/contacts/${otherContact}/memory-processing`)).status,200);
+  assert.equal(await api.handle('POST','/api/owner/memory-processing'),null);
+  assert.equal((await api.handle('GET','/api/contacts/not-a-uuid/memory-processing')).status,400);
+ }finally{await f.close();}
+});
+
+test('完整观察回执进入唯一Worker，全局锁阻止第二只，owner进度读真实处理量',async()=>{
+ const f=await fixture();let firstWorker,secondWorker;try{
+  const binding=randomUUID();await f.pool.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic','synthetic')",[binding,f.scope.ownerId,f.scope.contactId]);
+  const observed=await addObservation(f,binding,1);
+  assert.deepEqual(await f.store.readyScopes(f.scope.ownerId),[{ownerId:f.scope.ownerId,contactId:f.scope.contactId}]);
+  let releaseRun,runStarted;
+  const started=new Promise(resolve=>{runStarted=resolve;});
+  const gate=new Promise(resolve=>{releaseRun=resolve;});
+  const runner={
+   async run(claim,signal){
+    runStarted();await Promise.race([gate,new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}))]);
+    assert.equal(signal.aborted,false);
+    const targets=await f.store.targets(claim);assert.deepEqual(targets.targetIds,[observed.message]);
+    await f.store.fenced(claim,c=>f.store.checkpoint(c,claim,[observed.message],'succeeded'));
+    return {processedCount:1,totalCount:1};
+   },
+  };
+  firstWorker=new ExtractionWorker({store:f.store,ownerId:f.scope.ownerId,runner,idleMs:20,leaseMs:5000,heartbeatMs:1000});
+  secondWorker=new ExtractionWorker({store:f.store,ownerId:f.scope.ownerId,runner,idleMs:20,leaseMs:5000,heartbeatMs:1000});
+  assert.equal(await firstWorker.start(),true);
+  assert.equal(await secondWorker.start(),false);
+  await Promise.race([started,new Promise((_,reject)=>setTimeout(()=>reject(new Error('worker_start_timeout')),1000))]);
+  releaseRun();
+  const deadline=Date.now()+2000;
+  let progress;
+  while(Date.now()<deadline){
+   progress=await f.store.ownerProgress(f.scope.ownerId);
+   if(progress.tasks[0]?.processed_count===1&&progress.tasks[0]?.status==='interrupted')break;
+   await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  assert.equal(progress.tasks[0].processed_count,1);
+  assert.equal(progress.tasks[0].total_count,1);
+  assert.equal(progress.tasks[0].contact_id,f.scope.contactId);
+  assert.equal(await firstWorker.stop(),true);
+  assert.equal(await secondWorker.start(),true);
+ }finally{
+  await secondWorker?.stop();await firstWorker?.stop();await f.close();
+ }
 });

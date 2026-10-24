@@ -62,27 +62,28 @@ export async function extractionCheckpoint(store:ExtractionTaskStore,c:pg.Client
   AND x.message_id=r.message_id AND x.owner_id=r.owner_id AND x.contact_id=r.contact_id AND x.completed_at IS NULL`,[claim.taskId,claim.ownerId,claim.contactId,ids]);
  await c.query('UPDATE memory_processing_plan SET updated_at=now() WHERE task_id=$1',[claim.taskId]);
 }
-export async function extractionProgress(store:ExtractionTaskStore,scope:ExtractionScope,taskId?:string){
+async function extractionProgressFor(store:ExtractionTaskStore,ownerId:string,contactId:string|null,taskId?:string){
  const c=await store.pool.connect();try{
   await c.query('BEGIN READ ONLY');
-  if(!(await c.query('SELECT 1 FROM contact WHERE owner_id=$1 AND id=$2',[scope.ownerId,scope.contactId])).rowCount)throw new ExtractionTaskError('contact_not_found');
+  if(contactId!==null&&!(await c.query('SELECT 1 FROM contact WHERE owner_id=$1 AND id=$2',[ownerId,contactId])).rowCount)throw new ExtractionTaskError('contact_not_found');
+  if(contactId===null&&!(await c.query('SELECT 1 FROM owner WHERE id=$1',[ownerId])).rowCount)throw new ExtractionTaskError('owner_not_found');
   const rows=(await c.query(`SELECT t.*,p.task_id AS planned,p.updated_at AS progress_at,${processingSourceAllowed} AS source_allowed,
    (SELECT count(*)::int FROM memory_processing_target x WHERE x.task_id=t.id) AS total,
    (SELECT count(*)::int FROM memory_processing_target x WHERE x.task_id=t.id AND x.completed_at IS NOT NULL) AS processed,
    (SELECT count(*)::int FROM memory_processing_target x WHERE x.task_id=t.id AND x.outcome='skipped') AS skipped,
    (SELECT count(*)::int FROM memory_processing_target x WHERE x.task_id=t.id AND x.outcome='unknown') AS unknown,
    EXISTS(SELECT 1 FROM background_task_step s WHERE s.task_id=t.id AND s.status='running' AND s.lease_expires_at>clock_timestamp()) AS live
-   FROM background_task t LEFT JOIN memory_processing_plan p ON p.task_id=t.id WHERE t.owner_id=$1 AND t.contact_id=$2
+   FROM background_task t LEFT JOIN memory_processing_plan p ON p.task_id=t.id WHERE t.owner_id=$1 AND ($2::uuid IS NULL OR t.contact_id=$2)
    AND ($3::uuid IS NULL OR t.id=$3) AND t.task_type IN ('import','observation')
-   ORDER BY CASE WHEN t.status IN ('queued','running','verifying') THEN 0 ELSE 1 END,t.updated_at DESC,t.id LIMIT 101`,[scope.ownerId,scope.contactId,taskId??null])).rows;
+   ORDER BY CASE WHEN t.status IN ('queued','running','verifying') THEN 0 ELSE 1 END,t.updated_at DESC,t.id LIMIT 101`,[ownerId,contactId,taskId??null])).rows;
   const pending=(await c.query(`SELECT count(*)::int AS n FROM memory_extraction_receipt r JOIN local_wechat_observation o
    ON o.id=r.observation_id AND o.owner_id=r.owner_id AND o.contact_id=r.contact_id JOIN conversation_binding b
    ON b.id=o.binding_id AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id
-   WHERE r.owner_id=$1 AND r.contact_id=$2 AND r.task_id IS NULL AND b.status='active'
-   AND EXISTS(SELECT 1 FROM message_source_ref ref WHERE ref.message_id=r.message_id AND ref.observation_id=o.id)`,[scope.ownerId,scope.contactId])).rows[0].n;
+   WHERE r.owner_id=$1 AND ($2::uuid IS NULL OR r.contact_id=$2) AND r.task_id IS NULL AND b.status='active'
+   AND EXISTS(SELECT 1 FROM message_source_ref ref WHERE ref.message_id=r.message_id AND ref.observation_id=o.id)`,[ownerId,contactId])).rows[0].n;
   await c.query('COMMIT');
-  return {scope:'contact',contact_id:scope.contactId,pending_count:pending,has_more:rows.length>100,tasks:rows.slice(0,100).map(row=>{
-   const scheduled=store.options.processingState?.(scope,row.id);
+  return {scope:contactId===null?'owner':'contact',contact_id:contactId,pending_count:pending,has_more:rows.length>100,tasks:rows.slice(0,100).map(row=>{
+   const scheduled=store.options.processingState?.({ownerId,contactId:row.contact_id},row.id);
    let status='interrupted',reason=row.last_error_code??'execution_interrupted',action:string|null='resume';
    if(row.status==='succeeded'){status='completed';action=null;reason=row.skipped?'batches_skipped':row.unknown?'processing_outcome_unknown':row.last_error_code;}
    else if(row.status==='cancelled'){status='stopped';action='restart';reason=row.last_error_code??'task_cancelled';}
@@ -95,4 +96,11 @@ export async function extractionProgress(store:ExtractionTaskStore,scope:Extract
     updated_at:(row.progress_at??row.updated_at).toISOString(),reason_code:reason,action};
   })};
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
+}
+export async function extractionProgress(store:ExtractionTaskStore,scope:ExtractionScope,taskId?:string){
+ return extractionProgressFor(store,scope.ownerId,scope.contactId,taskId);
+}
+/** owner 页面与联系人页面共享同一任务行；只按 owner 放宽查询，不重建任务或统计。 */
+export async function ownerExtractionProgress(store:ExtractionTaskStore,ownerId:string,taskId?:string){
+ return extractionProgressFor(store,ownerId,null,taskId);
 }
