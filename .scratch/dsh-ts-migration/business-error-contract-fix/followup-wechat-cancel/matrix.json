@@ -1,0 +1,158 @@
+{
+  "cases": 9,
+  "rows": [
+    {
+      "variant": "before_contract_fix",
+      "mode": "close",
+      "last_insert_blocked": true,
+      "outcome": {
+        "status": "rejected",
+        "error_type": "HostStorageError",
+        "code": "runtime_stopping"
+      },
+      "authorization_rows": {
+        "owner_channel_identity": 0,
+        "wechat_sync_scope": 0,
+        "wechat_history_sync_authorization": 0,
+        "front_sync_state": 0
+      }
+    },
+    {
+      "variant": "before_contract_fix",
+      "mode": "probe_error",
+      "last_insert_blocked": true,
+      "outcome": {
+        "status": "rejected",
+        "error_type": "HostStorageError",
+        "code": "database_unavailable"
+      },
+      "authorization_rows": {
+        "owner_channel_identity": 0,
+        "wechat_sync_scope": 0,
+        "wechat_history_sync_authorization": 0,
+        "front_sync_state": 0
+      }
+    },
+    {
+      "variant": "before_contract_fix",
+      "mode": "http_cancel",
+      "last_insert_blocked": true,
+      "outcome": {
+        "status": "rejected",
+        "error_type": "HostStorageError",
+        "code": "runtime_stopping"
+      },
+      "authorization_rows": {
+        "owner_channel_identity": 0,
+        "wechat_sync_scope": 0,
+        "wechat_history_sync_authorization": 0,
+        "front_sync_state": 0
+      }
+    },
+    {
+      "variant": "current",
+      "mode": "close",
+      "last_insert_blocked": true,
+      "outcome": {
+        "status": "rejected",
+        "error_type": "HostStorageError",
+        "code": "runtime_stopping"
+      },
+      "authorization_rows": {
+        "owner_channel_identity": 0,
+        "wechat_sync_scope": 0,
+        "wechat_history_sync_authorization": 0,
+        "front_sync_state": 0
+      }
+    },
+    {
+      "variant": "current",
+      "mode": "probe_error",
+      "last_insert_blocked": true,
+      "outcome": {
+        "status": "fulfilled",
+        "value": {
+          "state": "tool_not_ready",
+          "account_id": null,
+          "candidate_token": null,
+          "failure_code": "wechat_probe_failed"
+        }
+      },
+      "authorization_rows": {
+        "owner_channel_identity": 0,
+        "wechat_sync_scope": 0,
+        "wechat_history_sync_authorization": 0,
+        "front_sync_state": 0
+      }
+    },
+    {
+      "variant": "current",
+      "mode": "http_cancel",
+      "last_insert_blocked": true,
+      "outcome": {
+        "status": "rejected",
+        "error_type": "HostStorageError",
+        "code": "runtime_stopping"
+      },
+      "authorization_rows": {
+        "owner_channel_identity": 0,
+        "wechat_sync_scope": 0,
+        "wechat_history_sync_authorization": 0,
+        "front_sync_state": 0
+      }
+    },
+    {
+      "variant": "tracking_disabled",
+      "mode": "close",
+      "last_insert_blocked": true,
+      "outcome": {
+        "status": "rejected",
+        "error_type": "HostStorageError",
+        "code": "runtime_stopping"
+      },
+      "authorization_rows": {
+        "owner_channel_identity": 0,
+        "wechat_sync_scope": 0,
+        "wechat_history_sync_authorization": 0,
+        "front_sync_state": 0
+      }
+    },
+    {
+      "variant": "tracking_disabled",
+      "mode": "probe_error",
+      "last_insert_blocked": true,
+      "outcome": {
+        "status": "fulfilled",
+        "value": {
+          "state": "tool_not_ready",
+          "account_id": null,
+          "candidate_token": null,
+          "failure_code": "wechat_probe_failed"
+        }
+      },
+      "authorization_rows": {
+        "owner_channel_identity": 0,
+        "wechat_sync_scope": 0,
+        "wechat_history_sync_authorization": 0,
+        "front_sync_state": 0
+      }
+    },
+    {
+      "variant": "tracking_disabled",
+      "mode": "http_cancel",
+      "last_insert_blocked": true,
+      "outcome": {
+        "status": "rejected",
+        "error_type": "HostStorageError",
+        "code": "runtime_stopping"
+      },
+      "authorization_rows": {
+        "owner_channel_identity": 0,
+        "wechat_sync_scope": 0,
+        "wechat_history_sync_authorization": 0,
+        "front_sync_state": 0
+      }
+    }
+  ],
+  "all_fixture_teardowns_passed": true
+}

@@ -7,6 +7,8 @@ import {rm} from 'node:fs/promises';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {ExplorationEvidence} from '../src/exploration-evidence.ts';
 import {PostgresExplorationStore} from '../src/exploration-store.ts';
+// PostgreSQL文本会省略微秒尾零；独立以Python原格式比较，不经过JS Date或生产编解码函数。
+const pythonTimestamp=value=>execFileSync(homedir()+'/miniconda3/envs/NotAlone/bin/python',['-c','import sys\nfrom datetime import datetime\nprint(datetime.fromisoformat(sys.argv[1]).isoformat())',value],{encoding:'utf8'}).trim();
 async function setup(t){
  const f=await createStorageFixture();t.after(async()=>{const name=f.client.database;await f.client.end();execFileSync(homedir()+'/miniconda3/envs/NotAlone/bin/python',['-c',"import sys,psycopg\nfrom psycopg import sql\nassert sys.argv[1].startswith('notalone_ts_host_') and sys.argv[1].endswith('_test')\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c:c.execute(sql.SQL('DROP DATABASE {}').format(sql.Identifier(sys.argv[1])))",name]);await rm(f.directory,{recursive:true});});
  const scope={owner_id:randomUUID(),contact_id:randomUUID()},binding=randomUUID(),session=randomUUID(),source=randomUUID();
@@ -62,6 +64,7 @@ test('失败A确认新键保留原根及固定NoSkill，完成态重放核原选
 });
 test('记忆最多两条，原零相关度排序仍保留，时间/说话人与指纹同Python',async t=>{
  const x=await setup(t);for(const text of ['清淡口味','周末散步','看科幻电影'])await x.f.client.query("INSERT INTO confirmed_memory(id,owner_id,contact_id,text_content,category,topic,source_ids,adoption_method) VALUES($1,$2,$3,$4,'preference','other',$5,'manual')",[randomUUID(),x.scope.owner_id,x.scope.contact_id,text,[x.messages[0]]]);
+ for(const [i,fraction] of ['784690','000000','000001','123456','100000'].entries())await x.f.client.query('UPDATE message SET occurred_at=$2::timestamptz WHERE id=$1',[x.messages[i+4],`2026-01-01T01:02:0${i+4}.${fraction}Z`]);
  const actual=await x.transaction(c=>x.evidence.capture(c,x.scope,x.content));assert.equal(actual.filter(e=>e.kind==='confirmed_memory').length,2);const root=new URL('../../',import.meta.url).pathname;
  const expected=JSON.parse(execFileSync(homedir()+'/miniconda3/envs/NotAlone/bin/python',['-c',`import sys,json
 from uuid import UUID
@@ -71,7 +74,7 @@ from notalone.reply.exploration_context import ExplorationEvidence
 from notalone.reply.exploration import ExplorationInput
 r=ExplorationEvidence(PostgresRetrieval('host=/tmp dbname='+sys.argv[1]));s=ContactScope(UUID(sys.argv[2]),UUID(sys.argv[3]))
 print(json.dumps([x.storage_payload for x in r.capture(s,ExplorationInput('initiate_conversation',purpose_hint='合成方向',skill_mode='disabled'))],ensure_ascii=False))`,x.f.client.database,x.scope.owner_id,x.scope.contact_id],{env:{...process.env,PYTHONPATH:root+'/backend/src',NOTALONE_DISABLE_DOTENV:'1'},encoding:'utf8'}));assert.deepEqual(actual,expected);await x.transaction(c=>x.evidence.validate(c,x.scope,actual));
- const task=await x.store.begin({scope:x.scope,request:{session_id:x.session,content:x.content,operation_key:randomUUID()},snapshots:actual,skill:x.skill,previous:null});const stored=(await x.f.client.query('SELECT root_created_at::text,dependency_ids FROM reply_exploration e JOIN assistant_session_input i ON i.id=e.input_version_id WHERE e.id=$1',[task.exploration_id])).rows[0];assert.equal(stored.root_created_at.replace(' ','T').replace(/\+08$/, '+08:00'),task.root_created_at);assert.ok(stored.dependency_ids.includes(x.source));
+ const task=await x.store.begin({scope:x.scope,request:{session_id:x.session,content:x.content,operation_key:randomUUID()},snapshots:actual,skill:x.skill,previous:null});const stored=(await x.f.client.query('SELECT root_created_at::text,root_created_at=$2::timestamptz AS same_value,dependency_ids FROM reply_exploration e JOIN assistant_session_input i ON i.id=e.input_version_id WHERE e.id=$1',[task.exploration_id,task.root_created_at])).rows[0];assert.equal(pythonTimestamp(stored.root_created_at),task.root_created_at);assert.equal(stored.same_value,true);assert.ok(stored.dependency_ids.includes(x.source));
 });
 test('自动选择None被固定，失败重试不重选；替换与来源删除拒晚complete',async t=>{
  const x=await setup(t),content={...x.content,skill_mode:'auto'},snapshots=await x.transaction(c=>x.evidence.capture(c,x.scope,content)),request={session_id:x.session,content,operation_key:randomUUID()};const task=await x.store.begin({scope:x.scope,request,snapshots,skill:{catalog:{scope:x.scope,revision:0,entries:[{version_id:randomUUID()}]},entry:null},previous:null});assert.equal(task.skill_selection_complete,false);await assert.rejects(x.store.complete(task,output));const pinned=await x.store.pin_skill(task,null);assert.equal(pinned.skill_selection_complete,true);await assert.rejects(x.store.pin_skill(pinned,randomUUID()));await x.store.fail(pinned);const retry=await x.store.retry(await x.store.read(x.scope,pinned.exploration_id));assert.equal(retry.skill_selection_complete,true);assert.equal(retry.skill_version_id,null);assert.equal(retry.request_key,task.request_key);
@@ -88,4 +91,21 @@ test('澄清应答重放绑定原问题/输入/operation，改回答或问题拒
  const operation=randomUUID(),answer='不约见',request={session_id:x.session,content:{...parent.content,confirmed_intent:parent.selected_intent,answer},operation_key:operation,expected_input_version_id:parent.input_version_id,previous_id:parent.exploration_id,question_id:parent.result.question_id};const child=await x.store.begin({scope:x.scope,request,snapshots,skill:x.skill,previous:parent}),payload={content:{type:'initiate_conversation',purpose:'只问候',purpose_source:'direct_input',suggestion:{task_id:child.exploration_id,input_version:child.input_version_id,suggestion_id:child.selection_id}}};
  await x.f.client.query("INSERT INTO assistant_session_turn(id,session_id,owner_id,contact_id,input_version_id,idempotency_key,conversation_binding_id,input_digest,input_payload,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'completed')",[randomUUID(),x.session,x.scope.owner_id,x.scope.contact_id,randomUUID(),child.request_key,x.binding,'a'.repeat(64),payload]);
  const args={question_id:parent.result.question_id,answer,operation_key:operation};assert.deepEqual((await x.store.replay_answer(x.scope,x.session,parent.exploration_id,parent.input_version_id,args)).input_payload,payload);await assert.rejects(x.store.replay_answer(x.scope,x.session,parent.exploration_id,parent.input_version_id,{...args,answer:'改为约见'}));await assert.rejects(x.store.replay_answer(x.scope,x.session,parent.exploration_id,parent.input_version_id,{...args,question_id:randomUUID()}));
+});
+test('根时间尾零与零微秒按Python格式保留六位精度和时区偏移',async t=>{
+ for(const [zone,offset,microseconds] of [['Asia/Taipei','+08:00',784690],['Asia/Taipei','+08:00',0],['UTC','+00:00',1],['Asia/Kathmandu','+05:45',123456],['Asia/Kathmandu','+05:45',10],['America/Bogota','-05:00',100000]]){
+  await t.test(`${zone} / ${microseconds}微秒`,async t=>{
+   const x=await setup(t);
+   await x.f.client.query("SELECT set_config('TimeZone',$1,false)",[zone]);
+   const snapshots=await x.transaction(c=>x.evidence.capture(c,x.scope,x.content));
+   const task=await x.store.begin({scope:x.scope,request:{session_id:x.session,content:x.content,operation_key:randomUUID()},snapshots,skill:x.skill,previous:null});
+   await x.f.client.query("UPDATE reply_exploration SET root_created_at=date_trunc('minute',clock_timestamp())-interval '1 minute'+$2::integer*interval '1 microsecond' WHERE id=$1",[task.exploration_id,microseconds]);
+   const current=await x.store.read(x.scope,task.exploration_id);
+   const stored=(await x.f.client.query("SELECT root_created_at::text,root_created_at=$2::timestamptz AS same_value,to_char(root_created_at,'US') AS microseconds FROM reply_exploration WHERE id=$1",[task.exploration_id,current.root_created_at])).rows[0];
+   assert.equal(pythonTimestamp(stored.root_created_at),current.root_created_at);
+   assert.equal(stored.same_value,true);assert.equal(stored.microseconds,String(microseconds).padStart(6,'0'));
+   assert.ok(current.root_created_at.endsWith((microseconds?'.'+String(microseconds).padStart(6,'0'):'')+offset));
+   assert.deepEqual(current.snapshots,snapshots);
+  });
+ }
 });

@@ -1,0 +1,85 @@
+diff --git a/backend-ts/test/wechat-setup.test.mjs b/backend-ts/test/wechat-setup.test.mjs
+index 8f0feb1f..ba84ed07 100644
+--- a/backend-ts/test/wechat-setup.test.mjs
++++ b/backend-ts/test/wechat-setup.test.mjs
+@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
+ import { randomUUID } from 'node:crypto';
+ import { WechatSetupService, PostgresWechatSetupStore, WechatSetupConflict, WechatProbeUnavailable } from '../src/wechat-setup.ts';
+ import { WechatSetupProbe, BoundedWechatCliRunner } from '../src/wechat-setup-probe.ts';
+-import { HostStorage } from '../src/host-storage.ts';
++import { HostStorage, HostStorageError } from '../src/host-storage.ts';
++import { createWechatScopeApi } from '../src/wechat-scope-api.ts';
+ import { createStorageFixture } from './host-storage-fixture.mjs';
+ 
+ function fixture(overrides = {}) {
+@@ -135,8 +136,8 @@ test('真实PG最后写入后关闭或HTTP取消，提交前复验回滚全部
+       }})))};
+       const service=new WechatSetupService({ownerId:owner,store:new PostgresWechatSetupStore(delayedStorage),probe:async()=>`wxid_${mode}`,confirmProbe:async a=>a,historySessions:async()=>[]});
+       const ready=await service.detect(); let valid=true;
+-      const pending=service.confirm({candidate_token:ready.candidate_token,mode:'all_private',historyAuthorized:true},()=>{if(!valid)throw new WechatProbeUnavailable('cancelled');});
+-      const rejected=assert.rejects(pending);
++      const pending=service.confirm({candidate_token:ready.candidate_token,mode:'all_private',historyAuthorized:true},()=>{if(!valid)throw new HostStorageError('runtime_stopping');});
++      const rejected=assert.rejects(pending,{name:'HostStorageError',code:'runtime_stopping'});
+       await started;
+       const closed=mode==='close'?service.close():Promise.resolve();
+       if(mode==='cancel')valid=false;
+@@ -149,6 +150,59 @@ test('真实PG最后写入后关闭或HTTP取消，提交前复验回滚全部
+   } finally {await storage.close();await f.close();}
+ });
+ 
++test('生产微信确认API在最后写入后取消或关闭，返回停止并回滚全部授权', async t => {
++  const { writeFile } = await import('node:fs/promises');
++  const { join } = await import('node:path');
++  const f = await createStorageFixture();
++  const storage = await HostStorage.open(f.options);
++  try {
++    const { owner_id: owner } = await storage.initializeOwner('合成取消本人');
++    const executable = join(f.directory, 'synthetic-wechat-cancel-cli');
++    await writeFile(executable, `#!${process.execPath}\nconst status={status:{account:{identity_configured:true,schema2_ready:true},live_read_ok:true,readiness:'ready',mode:{strict_read_only:true},account_debug:{wxid:'synthetic-cancel-account'}}};console.log(JSON.stringify({ok:true,data:process.argv[2]==='status'?status:{sessions:[]}}));\n`, { mode: 0o700 });
++    for (const mode of ['cancel', 'close']) await t.test(mode, async () => {
++      let entered, release;
++      const started = new Promise(resolve => { entered = resolve; });
++      const blocked = new Promise(resolve => { release = resolve; });
++      const delayedStorage = new Proxy(storage, { get(target, key) {
++        if (key === 'businessTransaction') return operation => target.businessTransaction(client => operation(
++          new Proxy(client, { get(connection, property) {
++            if (property === 'query') return async (...args) => {
++              const value = await connection.query(...args);
++              if (String(args[0]).startsWith('INSERT INTO public.front_sync_state')) { entered(); await blocked; }
++              return value;
++            };
++            return Reflect.get(connection, property);
++          } }),
++        ));
++        const value = Reflect.get(target, key, target);
++        return typeof value === 'function' ? value.bind(target) : value;
++      } });
++      const api = await createWechatScopeApi({ storage: delayedStorage, executable, environment: {}, readSyncStatus: async () => ({}) });
++      try {
++        const detected = await api.handle('POST', '/api/setup/wechat/detect', {});
++        assert.equal(detected.status, 200);
++        assert.equal(detected.body.state, 'ready');
++        const controller = new AbortController();
++        const pending = api.handle('POST', '/api/setup/wechat/confirm', {
++          candidate_token: detected.body.candidate_token, confirmed: true, mode: 'all_private', history_authorized: true,
++        }, undefined, controller.signal);
++        await Promise.race([started, pending.then(() => { throw new Error('确认未到达最后写入阻塞点'); })]);
++        const closed = mode === 'close' ? api.close() : Promise.resolve();
++        if (mode === 'cancel') controller.abort();
++        release();
++        const result = await pending;
++        await closed;
++        assert.equal(result.status, 503);
++        assert.deepEqual(result.body, { error: 'runtime_stopping' });
++        assert.equal(await new PostgresWechatSetupStore(storage).read(owner), null);
++        for (const table of ['owner_channel_identity', 'wechat_sync_scope', 'wechat_history_sync_authorization', 'front_sync_state']) {
++          assert.equal((await f.client.query(`SELECT count(*)::int AS n FROM public.${table} WHERE owner_id=$1`, [owner])).rows[0].n, 0);
++        }
++      } finally { release(); await api.close(); }
++    });
++  } finally { await storage.close(); await f.close(); }
++});
++
+ test('显式全部历史读取当前快照后复验账号；selected不读取或提前授权',async()=>{
+   const calls=[];let account='wxid_synthetic';
+   const f=fixture({probe:async()=>account,historySessions:async(a,signal)=>{calls.push(a);account='wxid_other';return [];}});

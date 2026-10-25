@@ -1,0 +1,82 @@
+{
+  "format_version": 1,
+  "base_commit": "dd97457bdd604fbda970c6eb0e5dc406ab1157bd",
+  "head_observed": "dd97457bdd604fbda970c6eb0e5dc406ab1157bd",
+  "code_changes": [
+    {
+      "path": "backend-ts/test/wechat-setup.test.mjs",
+      "before_sha256": "9408220a72758cdc9632d08e771e04d9b3d12c29c3bb4f68db96bef483e499fe",
+      "after_sha256": "e7b3135d7ac5bf6966226d3c5798fa4d57fa564aea25fcdf7f41f70d43ef929c",
+      "insertions": 57,
+      "deletions": 3
+    }
+  ],
+  "unchanged_source_and_core_test_sha256": {
+    "backend-ts/src/host-storage.ts": "a0b61732130987ce1f2a5cbad028b7180c144ed915a9e24ec6ab1965b3968203",
+    "backend-ts/src/wechat-setup.ts": "06d22fa459809c9562e217bb9fd5c62734c774655f67bca57e6fddd1b4dea8f6",
+    "backend-ts/src/wechat-scope-api.ts": "c6e8f893bd9f93a9a52751b83c4adc5b13cbb3049872a0e0593338697ec02958",
+    "backend-ts/test/business-transaction-errors.test.mjs": "c8481e3b6dcbd02d100c0b4b92dee7679ba60602a39abfbc7b3a62f5cea10ccc"
+  },
+  "old_evidence_artifacts_unchanged": true,
+  "old_evidence_artifact_count": 6,
+  "root_full_run_log": "未读取或改写根冻结日志",
+  "result": {
+    "classification": "测试的取消异常类型不符合生产 HTTP 合同，非 query 来源跟踪或时序回归",
+    "matrix_cases_pass": 9,
+    "related_tests_pass": 38,
+    "skip": 0,
+    "full_suite_run": false,
+    "production_changes": false
+  },
+  "artifacts": [
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/followup-wechat-cancel/commands.json",
+      "sha256": "5fd247ca9044c17ef5d276940a742557ea44b18c4a86ee7e0ed98cfe8fa34596",
+      "bytes": 2996
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/followup-wechat-cancel/diagnose.mjs",
+      "sha256": "a0be0999948235ba36ad3426fc006e4226307536c30ace5e51dbd9b0abcf9f5b",
+      "bytes": 4509
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/followup-wechat-cancel/fix.patch",
+      "sha256": "ef3623c3dc250d427b3487d255abc790af5a27e6b579475f7fcf7eb293a2511b",
+      "bytes": 5716
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/followup-wechat-cancel/handoff.md",
+      "sha256": "51b09a4731be38a57b8fe677d7c57315506269e564bd0801c7c06d77a7e73d3f",
+      "bytes": 1550
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/followup-wechat-cancel/matrix.json",
+      "sha256": "84360278e17135bc66357de33ed9274525eb05b5e331868b2f925ed81f313734",
+      "bytes": 4156
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/followup-wechat-cancel/prepare-variants.py",
+      "sha256": "ee14f4d98f423394f23bc828041f63170f54a36bebe3f386a0cc8786b789746d",
+      "bytes": 2151
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/followup-wechat-cancel/report.md",
+      "sha256": "d39cc4eb0214010f2bc24bb21bbba2183f53e6993b83629b09b7b4a07aac9786",
+      "bytes": 3735
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/followup-wechat-cancel/variant-pins.json",
+      "sha256": "e3ca428d147f0696eb6347563a4bd07842eb65cc24f187f24347e0afb94d3ac8",
+      "bytes": 946
+    }
+  ],
+  "git_index_modified_by_this_followup": false,
+  "commit_created_by_this_followup": false,
+  "cleanup": {
+    "all_fixture_teardowns_passed": true,
+    "private_node_modules_link_removed": true,
+    "raw_directory_mode": "0700",
+    "raw_file_mode": "0600"
+  },
+  "data_scope": "仅合成 PG 与合成 CLI，零真实资料、模型、App、微信或外部消息"
+}

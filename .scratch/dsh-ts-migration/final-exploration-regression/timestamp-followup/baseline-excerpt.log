@@ -1,0 +1,21 @@
+test at test/exploration-store.test.mjs:63:1
+✖ 记忆最多两条，原零相关度排序仍保留，时间/说话人与指纹同Python (874.720167ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '2026-10-25T23:51:45.78469+08:00'
+  - '2026-10-25T23:51:45.784690+08:00'
+                              ^
+  
+      at TestContext.<anonymous> (file://<REPO>/backend-ts/test/exploration-store.test.mjs:74:390)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '2026-10-25T23:51:45.78469+08:00',
+    expected: '2026-10-25T23:51:45.784690+08:00',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+

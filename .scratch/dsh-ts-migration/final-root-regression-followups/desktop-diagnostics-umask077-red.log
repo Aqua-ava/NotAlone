@@ -1,0 +1,33 @@
+✖ 诊断默认关闭；显式新文件仅记录固定字段并拒覆盖、symlink和不私有父目录 (2.470709ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 64.23025
+
+✖ failing tests:
+
+test at tests/header-change-diagnostics.test.mjs:122:1
+✖ 诊断默认关闭；显式新文件仅记录固定字段并拒覆盖、symlink和不私有父目录 (2.470709ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + {
+  +   close: [Function: close],
+  +   record: [Function: record]
+  + }
+  - undefined
+  
+      at TestContext.<anonymous> (file://<REPO>/desktop/tests/header-change-diagnostics.test.mjs:138:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [Object],
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

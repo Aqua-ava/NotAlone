@@ -1,0 +1,17 @@
+{
+  "before_contract_fix": {
+    "host_storage_sha256": "0f0395835b6ef630d73cd443311a2dc9eb4b5e18ddc97c2ddaf9e932433ce568",
+    "setup_original_sha256": "06d22fa459809c9562e217bb9fd5c62734c774655f67bca57e6fddd1b4dea8f6",
+    "setup_adapted_sha256": "8f5a8ecfb4ab42acb21c03dcdd820141655d487680f5581a9d405086ad189fae"
+  },
+  "current": {
+    "host_storage_sha256": "a0b61732130987ce1f2a5cbad028b7180c144ed915a9e24ec6ab1965b3968203",
+    "setup_original_sha256": "06d22fa459809c9562e217bb9fd5c62734c774655f67bca57e6fddd1b4dea8f6",
+    "setup_adapted_sha256": "8f5a8ecfb4ab42acb21c03dcdd820141655d487680f5581a9d405086ad189fae"
+  },
+  "tracking_disabled": {
+    "host_storage_sha256": "bfe4880e2be8dccf4a738bdaab97b4ffa27679ff6ee32e17aff19ace49596210",
+    "setup_original_sha256": "06d22fa459809c9562e217bb9fd5c62734c774655f67bca57e6fddd1b4dea8f6",
+    "setup_adapted_sha256": "8f5a8ecfb4ab42acb21c03dcdd820141655d487680f5581a9d405086ad189fae"
+  }
+}

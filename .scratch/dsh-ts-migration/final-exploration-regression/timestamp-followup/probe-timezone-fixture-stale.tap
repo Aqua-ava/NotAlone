@@ -1,0 +1,31 @@
+TAP version 13
+# Subtest: 根时间尾零与零微秒按Python格式保留六位精度和时区偏移
+not ok 1 - 根时间尾零与零微秒按Python格式保留六位精度和时区偏移
+  ---
+  duration_ms: 631.266292
+  type: 'test'
+  location: '<REPO>/backend-ts/test/exploration-store.test.mjs:95:1'
+  failureType: 'testCodeFailure'
+  error: 'exploration_stale'
+  code: 'exploration_stale'
+  stack: |-
+    reject (file://<REPO>/backend-ts/src/exploration-evidence.ts:15:31)
+    ExplorationEvidence.validate (file://<REPO>/backend-ts/src/exploration-evidence.ts:56:182)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async PostgresExplorationStore.validate (file://<REPO>/backend-ts/src/exploration-store.ts:85:29)
+    async PostgresExplorationStore.read_in_transaction (file://<REPO>/backend-ts/src/exploration-store.ts:88:201)
+    async Object.transaction (file://<REPO>/backend-ts/test/exploration-store.test.mjs:18:78)
+    async PostgresExplorationStore.tx (file://<REPO>/backend-ts/src/exploration-store.ts:39:14)
+    async TestContext.<anonymous> (file://<REPO>/backend-ts/test/exploration-store.test.mjs:101:17)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 856.472666

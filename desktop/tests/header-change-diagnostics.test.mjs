@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test, after } from 'node:test';
 import { build } from 'esbuild';
@@ -135,6 +135,7 @@ test('诊断默认关闭；显式新文件仅记录固定字段并拒覆盖、sy
   assert.equal(openHeaderChangeDiagnostics({ NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE: link }), undefined);
   const publicDirectory = path.join(directory, 'not-private');
   await mkdir(publicDirectory, { mode: 0o755 });
+  await chmod(publicDirectory, 0o755);
   assert.equal(openHeaderChangeDiagnostics({ NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE: path.join(publicDirectory, 'events') }), undefined);
   assert.equal(openHeaderChangeDiagnostics({ NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE: 'relative.jsonl' }), undefined);
   const parentLink = path.join(directory, 'parent-link');

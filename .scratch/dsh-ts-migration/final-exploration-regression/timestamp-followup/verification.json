@@ -1,0 +1,109 @@
+{
+  "commands": [
+    {
+      "name": "red-root-timestamp",
+      "cwd": "backend-ts",
+      "command": "node --test --test-name-pattern='根时间尾零与零微秒' test/exploration-store.test.mjs",
+      "exit_code": 1,
+      "note": "固定尾零原断言",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "cancelled": 0,
+      "duration_ms": 733.887625,
+      "raw_sha256": "2b0a82bccb8c58047317f23e4b9a80f5bee1f39144b0d8db0b19c8c785436332",
+      "public_path": "red-root-timestamp.tap",
+      "public_sha256": "53978b451a15c064d07be8862f96296f469eb6358519f8e1980b97e6e99b17ac",
+      "raw_mode": "0o600"
+    },
+    {
+      "name": "probe-timezone-fixture-stale",
+      "cwd": "backend-ts",
+      "command": "node --test --test-name-pattern='根时间尾零与零微秒' test/exploration-store.test.mjs",
+      "exit_code": 1,
+      "note": "跨时区复用旧快照的探针；已用独立夹具修正，不是通过结果",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "cancelled": 0,
+      "duration_ms": 856.472666,
+      "raw_sha256": "a4279eddc7ef8e04f7942963aa9bea4b176bf4ce7f45e9aa9922a4d67cd94dcc",
+      "public_path": "probe-timezone-fixture-stale.tap",
+      "public_sha256": "afe17ba70e71d32e37500e38957b25afe0139f86c36e1960ed205271d077bfbd",
+      "raw_mode": "0o600"
+    },
+    {
+      "name": "green-root-cases",
+      "cwd": "backend-ts",
+      "command": "node --test --test-name-pattern='根时间尾零与零微秒' test/exploration-store.test.mjs",
+      "exit_code": 0,
+      "note": "六个独立时区／微秒夹具",
+      "tests": 7,
+      "pass": 7,
+      "fail": 0,
+      "cancelled": 0,
+      "duration_ms": 3461.12625,
+      "raw_sha256": "38c37ba81aa79ec13e83963d635c72c664afb46ea3f31df50ed9dc535a37bcc4",
+      "public_path": "green-root-cases.tap",
+      "public_sha256": "38c37ba81aa79ec13e83963d635c72c664afb46ea3f31df50ed9dc535a37bcc4",
+      "raw_mode": "0o600"
+    },
+    {
+      "name": "green-memory-fingerprint",
+      "cwd": "backend-ts",
+      "command": "node --test --test-name-pattern='记忆最多两条，原零相关度排序仍保留' test/exploration-store.test.mjs",
+      "exit_code": 0,
+      "note": "原Python capture完整深比较",
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "cancelled": 0,
+      "duration_ms": 862.475541,
+      "raw_sha256": "b3d0c3b43cbba8be9db771575a785776afc425b1a403d43aa4be58c552cb20ac",
+      "public_path": "green-memory-fingerprint.tap",
+      "public_sha256": "b3d0c3b43cbba8be9db771575a785776afc425b1a403d43aa4be58c552cb20ac",
+      "raw_mode": "0o600"
+    },
+    {
+      "name": "green-store-module",
+      "cwd": "backend-ts",
+      "command": "node --test test/exploration-store.test.mjs",
+      "exit_code": 0,
+      "note": "相关存储模块",
+      "tests": 15,
+      "pass": 15,
+      "fail": 0,
+      "cancelled": 0,
+      "duration_ms": 8072.904334,
+      "raw_sha256": "a53b73b71585c6aa696d395b278500db747aeefde3d5ac4f8852768a387308dd",
+      "public_path": "green-store-module.tap",
+      "public_sha256": "a53b73b71585c6aa696d395b278500db747aeefde3d5ac4f8852768a387308dd",
+      "raw_mode": "0o600"
+    }
+  ],
+  "environment_setup": "PATH=\"$HOME/miniconda3/envs/NotAlone/bin:$PATH\"",
+  "node_version": "v22.23.4",
+  "static_checks": [
+    "node --check backend-ts/test/exploration-store.test.mjs：通过",
+    "git diff --check -- backend-ts/test/exploration-store.test.mjs：通过"
+  ],
+  "protected_files_unchanged": 17,
+  "cleanup": {
+    "test_after_hooks_passed": true,
+    "random_test_databases_dropped_without_force": true,
+    "owned_connections_closed": true,
+    "fixture_directories_removed": true,
+    "matching_synthetic_test_processes": 0,
+    "debug_instrumentation": "none"
+  },
+  "scope": {
+    "external_model_calls": 0,
+    "app_started": false,
+    "wechat_operated": false,
+    "real_data_or_config_read": false,
+    "full_suite_run": false,
+    "production_sources_written": false,
+    "index_or_commit_touched": false
+  },
+  "private_directory_mode": "0o700"
+}
