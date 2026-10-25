@@ -1,0 +1,1578 @@
+{
+  "date": "2026-10-24",
+  "runtimeSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+  "metadataSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+  "officialDeclaredCommit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "officialArchiveHasGit": false,
+  "officialCommitProvenance": "主任务提供的固定本机归档；本轮不联网，不声称独立重建tag/commit/发行字节关系。",
+  "officialActualVersion": "0.2.1-rc.2",
+  "installedDistribution": {
+    "path": "backend-ts/node_modules/@deepseek-ai/dsh/package.json",
+    "version": "0.2.1-rc.2",
+    "sha256": "bea4288aa88eb54efe829686553100a75fdf09d11c5e3bf6b329badb9a0368dd"
+  },
+  "verification": "只读静态行号、Git对象和实际字节核对；未运行产品/测试/DB/网络/模型。",
+  "entries": [
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/baseline/behavior-matrix.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "6a612f1e13b4e0e4cf8d64aacd999e3f15918fd3",
+      "sha256": "bac12c80abbb3e373239db9959c42b2a0093ab6c0a18ed404738d51bf6ed8ab0",
+      "bytes": 76391,
+      "lineCount": 277,
+      "referencedLines": [
+        104
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "104": "### 后台任务具名反向清单"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/issues/02-dsh-runtime-validation.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "c10b98251ce8e665528a72af8750fa3e89ca9e6a",
+      "sha256": "b0f608c74e249a24df7c966308fb22aecdd3fcf2a0bfcf51613d56e037637336",
+      "bytes": 6473,
+      "lineCount": 59,
+      "referencedLines": [
+        57
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "57": "- 不合作工具不能保证单次dispose完成，官方宿主约5.2秒强制终止共享进程；在途SIGKILL后没有正文文件或旧Session恢复。这符合已接受共享故障域，但不是优雅清理或持久业务恢复证明。"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/issues/10-memory-extraction-verification.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "4b67135d79dac2fdb9acc105af69c1454a52dcc2",
+      "sha256": "4ae637397d05bf14cf28b3ed89046fa0f091df363845862949c86639b792fccf",
+      "bytes": 4094,
+      "lineCount": 49,
+      "referencedLines": [
+        4
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "4": "State: open"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/issues/13-l2-scenario-organization.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "6e43f9e2a0cd10fa4540783a077a2c981977d7cc",
+      "sha256": "1402fa84ee8bce5c6f70a3a567db64cb0fc4b0bca0e6d21559e9e846c01f153a",
+      "bytes": 3793,
+      "lineCount": 48,
+      "referencedLines": [
+        4
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "4": "State: open"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/issues/14-l3-profile-overview.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "de3cc638213dc635be30ba1b2b4325e675fe7f8e",
+      "sha256": "a784815ff1646954205f2df871a300475049bb0c56005f586e2161aa317c5f24",
+      "bytes": 3798,
+      "lineCount": 48,
+      "referencedLines": [
+        4
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "4": "State: open"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/issues/15-skill-learning-review.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "b6237222feb9a34407fc7db03ebe36f72db4b6a0",
+      "sha256": "4a6121d07ed3ff5efe2eae3ee7674964f496475fc0ca64abd4fcea6d724b2a8c",
+      "bytes": 4391,
+      "lineCount": 51,
+      "referencedLines": [
+        4
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "4": "State: open"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/issues/20-history-gap-recovery.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "5d9388ff79087575b48a9a82ebb8f80be3e38b54",
+      "sha256": "6583f2c348d4278a1e6f4023cdf3f7b6fea1891a59434309b724393ef94dff19",
+      "bytes": 3936,
+      "lineCount": 48,
+      "referencedLines": [
+        4
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "4": "State: open"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/issues/22-background-task-management.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "7ba088ec52f93aaf79f8f3098f22f92ecc91e78f",
+      "sha256": "13cfdf281caf9489292361221fb446afd3911d9f670cfe71380239d6996a1d51",
+      "bytes": 4054,
+      "lineCount": 48,
+      "referencedLines": [
+        3,
+        6
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "3": "Triage: ready-for-agent",
+        "6": "Blocked by: 10, 13, 14, 15, 20"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/runtime-validation/dependencies.json",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "7fccd956aba917ea29daad2cb816721e5e197ffc",
+      "sha256": "0898cee09683e446473dd414331796dabe3f8b8dddbcb181142258c8af7f2f1f",
+      "bytes": 2985,
+      "lineCount": 81,
+      "referencedLines": [
+        2,
+        5,
+        7,
+        8
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "2": "  \"node\": \"24.19.0\",",
+        "5": "  \"dsh\": \"0.2.1-rc.2\",",
+        "7": "  \"lockSha256\": \"69fcd1a15fb734f9c58c2a241939db6fc003b3c10001a33ecb11f6bf6e5841c2\",",
+        "8": "  \"lockPackageCount\": 650,"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/runtime-validation/interface-crosscheck.json",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "baaa7437c5ff349c1b56f7bf6993b42e952730bc",
+      "sha256": "ee1f98d88b64ee2f01dbee27f7a03feee4fee9a86d5d3bd718e3e578d167ccea",
+      "bytes": 1574,
+      "lineCount": 52,
+      "referencedLines": [
+        1
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "1": "["
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": ".scratch/dsh-ts-migration/spec.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "dc060d65bb91c03f2a77cad11da138dbafcb5d3c",
+      "sha256": "c3bfd92f261a018862ec648c86181ed2a66e4f64e3d1237788a35a94f6b0ca90",
+      "bytes": 12992,
+      "lineCount": 112,
+      "referencedLines": [
+        50,
+        62,
+        69,
+        72
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "50": "- 后台经官方 profile 启动；业务代码保持普通 TS 模块，薄插件负责装配和运行事件。共享故障域需要监督、健康状态、明确退出与资源清理，不重新引入常驻 Python／DSH 双运行层作为最终设计。",
+        "62": "- 队列、租约、幂等、提取水位和恢复资格仍为业务状态。后台崩溃不授权盲目重放模型请求、重新发布资料或复活已删内容。",
+        "69": "- 每次物理模型请求都受范围、版本、预算、时限与取消检查；保留前台优先、后台有界并发以及迟到结果丢弃与实际调用记账。官方 retry/token 插件不能自动视为等价。",
+        "72": "- 过渡路由以业务功能为单位明确移交责任；切换前停止接收、收尾或中断在途任务并核验租约。新旧不能同时处理同一任务，不做请求级自动回退。"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": "architecture/adr/007-background-task-steps-and-worker.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "8e5d3a2c73218f2a4a5658571b81c5cd44381c96",
+      "sha256": "8e10caa48c2145a09762855b86a84e3b100476168b33225c6bbb020de8957f5c",
+      "bytes": 4835,
+      "lineCount": 65,
+      "referencedLines": [
+        28
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "28": "```text"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": "architecture/adr/038-import-triggered-memory-work-and-reply-priority.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "a4aab8f37bbaf4a150a7e2c8eca103aac86e8ca8",
+      "sha256": "e00d07a81fd4187ec8c3239f10b0065910db5eac2320155835e27eac8312af00",
+      "bytes": 3196,
+      "lineCount": 19,
+      "referencedLines": [
+        11
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "11": "用户确认联系人并成功提交导入，本身成为该原记忆任务的触发动作。事务提交后，只在当前后端中保留本次任务唤醒并固定任务身份，重复唤醒合并；不自动重做终态、不恢复失败任务、不扫描重启前旧队列。默认 CLI 仍领取最早可执行任务，全局 Worker 锁、联系人租约、来源复验和三次失败预算保留。任务身份只限定调度，提取消息覆盖与水位沿用既有联系人执行器。"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": "architecture/adr/070-automatic-memory-maintenance.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "9862f5b614cf6de9dca079d70df4c622389414d9",
+      "sha256": "3198ac81b80475c89e1deb509708c810940822f0541017005e100a00fa378ecf",
+      "bytes": 3910,
+      "lineCount": 32,
+      "referencedLines": [
+        14
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "14": "- 修订 ADR-036／046 中“默认空表、逐类评测批准后才允许生产自动采纳”的运行策略；现行默认流程使用逐条核验，显式历史协议与评测结果保留原含义。"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": "architecture/adr/102-dsh-typescript-backend-migration.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "e0f76b5bc14976349fac6daab618e059728df0a7",
+      "sha256": "1d0eb2fdb0d4b8b33a38e35fce5f75da0165f5b45c67c06fdcc9a79ba1534997",
+      "bytes": 6321,
+      "lineCount": 45,
+      "referencedLines": [
+        9,
+        20
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "9": "- Electron + React 界面独立运行。TS 业务模块与 DSH 共用后台进程，通过官方 profile 和薄 NotAlone 插件装配；普通业务模块不全部插件化，不另造绕过官方启动方式的 Harness。",
+        "20": "按功能分批切换，过渡期可并存但每项业务只有一个执行和写入责任方。先验证基线和 DSH 运行方式，再迁移完整回复、记忆与 Skill、其余后端，最后验收和退役。权限与删除随每条链路实现，不推迟到收尾。"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": "architecture/current/core-flows.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "430567615c70d3e93cd60efe0a1a951f15301213",
+      "sha256": "9881e14d4fbd42ee2f9562638de544afb96e53ffe9c9015790ea3fc64597ff7f",
+      "bytes": 61604,
+      "lineCount": 402,
+      "referencedLines": [
+        394,
+        398,
+        400
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "394": "失败轮次仅在存在仍有效的新批次或显式恢复时继续；不扫描重启前旧队列。",
+        "398": "记忆页面默认展示处理状态，仍保留“对方／我／待确认”三个入口。进度来自已提交的处理批次及其实际目标范围；处理聊天数与产生记忆数分别展示，缺少可信统计时明确未知，不用步骤权重推算聊天处理百分比或剩余时间。提取与背景整理分别显示状态，来源、各任务及错误原因收在详情里。",
+        "400": "状态读取结合持久任务与执行租约，区分等待、正在处理、已完成、已中断、失败和主动停止。重启后没有执行者的未完成任务不能继续显示正在处理；读取、刷新和打开页面不启动模型。用户明确点击继续后才恢复未完成工作；已取消任务以重新处理入口区分，恢复前复验归属、来源、删除状态及执行租约。恢复不扩大原任务来源范围，不重新开启同步或已停止的背景整理，不绕过人工修正和删除保护。此项保留 ADR-041 的不扫描旧队列约束，具体实现和验证见[记忆处理进度规格"
+      }
+    },
+    {
+      "scope": "metadata-repository",
+      "path": "architecture/current/domain-data.md",
+      "declaredSourceCommit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+      "gitBlobSha1": "8881948d4437fd64e59ed7ae7d005dbe5c4d9186",
+      "sha256": "fd6b090a877c188dccadf19d33c912b44b0e6094faf18a9e6e40dd38fc3eedb3",
+      "bytes": 42987,
+      "lineCount": 288,
+      "referencedLines": [
+        110
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "110": "- 任务不提供 v1 用户取消入口；来源删除时停止相关未完成步骤。活动任务持续保留，终态任务保留 90 天后清理；任务记录只保存元数据和业务引用，不保存聊天正文或模型完整输入输出。"
+      }
+    },
+    {
+      "scope": "official-archive",
+      "path": "docs/architecture.md",
+      "declaredSourceCommit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+      "gitBlobSha1": null,
+      "sha256": "95a7722c7096d665d8adedeb733b8f5ad7740e67cb5c6e9dc91ec05f430cb760",
+      "bytes": 18900,
+      "lineCount": 165,
+      "referencedLines": [
+        17,
+        43
+      ],
+      "worktreeEqualsSource": null,
+      "anchors": {
+        "17": "A **profile** is a named composition stored in the Harness home. It lists the bundles it stacks, holds any out-of-tree plugins it installs, and keeps the user's own `cordis.patch.yml`. `web`, `headless`, `sdk`, `sdk-mini",
+        "43": "Supported Node applications launch through named `dsh` profiles. The shipped profiles are `web`, `headless`, `sdk`, `sdk-minimal`, and `acp`, selected with `dsh --profile <name>` or `dsh <name>`. `plugin` names the manag"
+      }
+    },
+    {
+      "scope": "official-archive",
+      "path": "package.json",
+      "declaredSourceCommit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+      "gitBlobSha1": null,
+      "sha256": "12bb41cd8212021a784b33a20c2b84372189a9505b42081d5e3869e21ff5cffc",
+      "bytes": 18994,
+      "lineCount": 295,
+      "referencedLines": [
+        4
+      ],
+      "worktreeEqualsSource": null,
+      "anchors": {
+        "4": "  \"license\": \"MIT\","
+      }
+    },
+    {
+      "scope": "official-archive",
+      "path": "packages/boot/app-boot/src/profile.ts",
+      "declaredSourceCommit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+      "gitBlobSha1": null,
+      "sha256": "8e3c2fda0334e34b111d4c46f43859b3749b3444ed6a18c80cd06d8709f656ea",
+      "bytes": 37632,
+      "lineCount": 823,
+      "referencedLines": [
+        7
+      ],
+      "worktreeEqualsSource": null,
+      "anchors": {
+        "7": " * `dsh.profile` with its ordered `bundles` list) and a `cordis.patch.yml`"
+      }
+    },
+    {
+      "scope": "official-archive",
+      "path": "packages/core/agent/README.md",
+      "declaredSourceCommit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+      "gitBlobSha1": null,
+      "sha256": "652a3283721fb5b52f0671c43d458b04c039d5bfe7e900894cc0f64229b68641",
+      "bytes": 16666,
+      "lineCount": 188,
+      "referencedLines": [
+        32,
+        35,
+        47
+      ],
+      "worktreeEqualsSource": null,
+      "anchors": {
+        "32": "`ctx.agents.create()` builds a fresh agent and session under one identity; `ctx.agents.resume()` loads a persisted session and rebuilds the agent on it. Both delegate to the registered factory and return an `AgentHandle`",
+        "35": "const handle = await ctx.agents.create({",
+        "47": "The handle's methods route identified user-role messages into the agent's inbox. `followup()` queues an ordinary next-turn prompt and wakes the driver; `steer()` submits next-step input and wakes it; `inject()` adds mode"
+      }
+    },
+    {
+      "scope": "official-archive",
+      "path": "packages/core/agent/src/index.ts",
+      "declaredSourceCommit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+      "gitBlobSha1": null,
+      "sha256": "218b30227cdc55d4c193112495a852507d12070028572ac95e6f9d1f954d1077",
+      "bytes": 31398,
+      "lineCount": 691,
+      "referencedLines": [
+        147,
+        162
+      ],
+      "worktreeEqualsSource": null,
+      "anchors": {
+        "147": " * An owned agent plus its disposer, returned by {@link AgentRegistry.create} /",
+        "162": "  dispose(): Promise<void>"
+      }
+    },
+    {
+      "scope": "official-archive",
+      "path": "packages/core/agent/src/runtime-types.ts",
+      "declaredSourceCommit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+      "gitBlobSha1": null,
+      "sha256": "1ae0003c6968dc4af86e596d3ea08f6e517da0808e08089af2ed1818ab0651fc",
+      "bytes": 19197,
+      "lineCount": 395,
+      "referencedLines": [
+        183,
+        191,
+        202
+      ],
+      "worktreeEqualsSource": null,
+      "anchors": {
+        "183": "    cancel(cause: AgentCancelCause, options?: CancelOptions): void",
+        "191": "    whenIdle(): Promise<void>",
+        "202": "    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/pnpm-lock.yaml",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "8c83eaf464f26e0594990045633ca3dba40a763a",
+      "sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+      "bytes": 630837,
+      "lineCount": 9042,
+      "referencedLines": [
+        1
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "1": "lockfileVersion: '9.0'"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/foreground-location-probe.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "4be258ce4d4f257e7474190d7f5ad95372feb22d",
+      "sha256": "d41c3c71b7b76d363381eeee58bc87f342957e0df648a91905e41b2bad9b9d1d",
+      "bytes": 12791,
+      "lineCount": 179,
+      "referencedLines": [
+        29,
+        35,
+        47,
+        64
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "29": "  async close():Promise<void> {",
+        "35": "  async dispose():Promise<void> {this.disposed=true;await this.close();}",
+        "47": "    const abort=()=>{rejectGuard(failure('probe_failed'));void this.close();};",
+        "64": "    try{const result=await Promise.race([work(),guard]);clearTimeout(this.idleTimer);this.idleTimer=setTimeout(()=>{void this.close();},60_000);this.idleTimer.unref();return result;}"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/host-model-accounting.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "6ce23b79e27a8200e2101683b6a9215d4a82676c",
+      "sha256": "c5ce8be882ae42d2628e400591670cde81c539da509367353bca19ac2e9c8254",
+      "bytes": 13685,
+      "lineCount": 145,
+      "referencedLines": [
+        98,
+        121,
+        140
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "98": " const unconfirmed=async(client:pg.Client,owner:string,contact:string|null):Promise<string[]>=>{",
+        "121": "     const spent=(await client.query('SELECT attempt_id,request_id,task_id,step_name,worker_id FROM model_call_learning_claim WHERE step_id=$1 AND lease_generation=$2',[c.step_id,c.lease_generation])).rows[0];",
+        "140": "    if(grant.learning&&!existing)await client.query(`INSERT INTO model_call_learning_claim(attempt_id,owner_id,contact_id,request_id,task_id,step_id,step_name,worker_id,lease_generation) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/host-model-runtime.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "27eb5eaf47d26d213ce72d5dfb0049f3be114218",
+      "sha256": "a9c1f0657d06f9f0c43783fd974f2c41265c6822e0668c66baed238c8ff5b6db",
+      "bytes": 7104,
+      "lineCount": 110,
+      "referencedLines": [
+        57,
+        89
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "57": "    // journal只有在核实旧进程消失后才给出unknown；提交PG恢复先于任何Python队列启动。",
+        "89": "      close(stopPython:()=>Promise<void>):Promise<void>{"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/host-plugin.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "bd9a0b26c6e02155c7b3d347d876200df1149ca9",
+      "sha256": "8b0cbcc6495cf4946ec6c7f09e61a881161f5e3b094d814e66f428cd4d8f74ae",
+      "bytes": 26230,
+      "lineCount": 340,
+      "referencedLines": [
+        67,
+        104
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "67": "  const incremental = await createSyncIncrementalApi({storage,executable:runtimeEnvironment.NOTALONE_WECHAT_CLI ?? '',environment:runtimeEnvironment,",
+        "104": "    state='stopping';modelRuntime?.stopAccepting();"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/host-reply.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "ea6a954baa71e7f2aa5cad6a83d3412734a87088",
+      "sha256": "29389a0f593825c30549ad07298c27883d4f08f3b28e1947b0a03e1bd912ba6f",
+      "bytes": 3364,
+      "lineCount": 72,
+      "referencedLines": [
+        26,
+        62
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "26": "export async function createHostReplyRuntime(options:HostReplyOptions) {",
+        "62": "    stopAccepting(){stopping.abort();},"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/legacy-backend.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "8b1874f1c302c95e2f5204b6cab92573dd7a1dc2",
+      "sha256": "b26707db30b4da509aa5ec903f1ba6035526a1628d7cd993417657eb6993a093",
+      "bytes": 8737,
+      "lineCount": 125,
+      "referencedLines": [
+        10,
+        111,
+        123
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "10": "export const ownership = Object.freeze({setup:'typescript',credentials:'typescript',schemaUpdates:'python-migration-command',contacts:'python',replies:'python',memory:'python',skills:'python',imports:'python',deletion:'p",
+        "111": "  async stop():Promise<void>{",
+        "123": "export function legacyRoute(url:string):boolean{"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/model-ledger.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "6638c8dbedf4c61fce5e5a0aadeae619642320c3",
+      "sha256": "585334184816d6f3055a4771bbd7b8c6354a7200d12b2c6afff952df1f2b88e1",
+      "bytes": 18293,
+      "lineCount": 204,
+      "referencedLines": [
+        76,
+        124
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "76": "export function legacyLedgerProjection(receipt:ModelLedgerReceipt) {",
+        "124": "        // unknown不能重新获得出站ACK；已结算attempt也不能再授权同一次物理发送。"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/model-permit-journal.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "257193007874060773e6418cf9f0ab365a48ae57",
+      "sha256": "d5e8092dd98e86850fb5b190ccc2439d11435434504b6121a5b7aed69923b045",
+      "bytes": 7575,
+      "lineCount": 121,
+      "referencedLines": [
+        98
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "98": "      if (previous.host && await processIdentityState(previous.host) !== 'gone') throw new Error('model_permit_previous_host_alive_or_unknown');"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/model-permits.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "80cb747fe777112198721217c346b79da7c627a1",
+      "sha256": "34eb380ef7640f91b49682d18745fcd79d30475eabc439459d5a67a4185af8a2",
+      "bytes": 5602,
+      "lineCount": 121,
+      "referencedLines": [
+        6,
+        89
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "6": "  /** 关联该整轮/后台许可与物理attempt台账，不表示一次实际发送。 */",
+        "89": "  private dispatch(): void {"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/sync-incremental-api.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "9517b589f2f589843529f81aa06dfdb99d8688f8",
+      "sha256": "16edbd180be1fc302bee4d48db4cbbad31b8b2b4576882ae6f935886b6f72fe4",
+      "bytes": 7355,
+      "lineCount": 80,
+      "referencedLines": [
+        13,
+        56,
+        78
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "13": "const commands=new Set(['cycle','status','enable','disable','check','priority','pause','retry','stop','resume','follow-status','follow-enable','follow-disable','follow-interrupt']);",
+        "56": "   else if(command==='stop')await engine.invalidateAndDrain('runtime_request');",
+        "78": "  close():Promise<void>{if(!closing){closed=true;stopping.abort();scope?.close();closing=(async()=>{await engine?.close();await Promise.allSettled([...pending]);})();}return closing;},"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/src/sync-incremental-store-write.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "d108030832218f3c486aec766d0761059d8912dc",
+      "sha256": "f519cd38540669483654190fd5268633b74c81fd02c9eb7f976a2850ca1ee686",
+      "bytes": 6864,
+      "lineCount": 63,
+      "referencedLines": [
+        30,
+        45
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "30": "  await schedule(c,owner,contact,observation,created.filter((v):v is string=>v!==null));",
+        "45": "async function schedule(c:pg.Client,owner:string,contact:string,observation:string,ids:string[]){"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/test/host-storage-fixture.mjs",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "2f0596ad3666ad89bdcd642971dc8d29556f1d4c",
+      "sha256": "5fb59388e72866f51629bbf2b5b58ca8f6794702c1e4ba7f77f39a428aea21e1",
+      "bytes": 2584,
+      "lineCount": 31,
+      "referencedLines": [
+        7
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "7": "  const { execFileSync } = await import('node:child_process');"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/test/model-call-learning-claim-migration.test.mjs",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "4c32d1d1527b056503d4e87b96a7244497fd83f6",
+      "sha256": "94479f40b838db47bc8f0910fe5dd5a3f5acb31628395d6385b6ceac7f12456a",
+      "bytes": 15327,
+      "lineCount": 157,
+      "referencedLines": [
+        11
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "11": "test('110升级111保留原数据与unknown收据，学习claim完整约束和级联',async t=>{"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/test/model-mode-recovery.test.mjs",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "6eb382b0bb59c15ef3b427511c1ce3feb37a3f29",
+      "sha256": "ca19d15401f147fa538dbcdd8d5f899c989af975337641bea91b9a398522b098",
+      "bytes": 7003,
+      "lineCount": 58,
+      "referencedLines": [
+        14
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "14": "test('实际ModelHost active journal不能回退Python，原文件字节保留',async t=>{"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/test/model-task-claim.test.mjs",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "297653e0e40bc67d7eca8df24536457a2e085f55",
+      "sha256": "1f234a5ab5afdac89d3dcb3bb2486b1921ffbb3cd715cbbd3d6854177f4ae35b",
+      "bytes": 2723,
+      "lineCount": 28,
+      "referencedLines": [
+        13
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "13": "test('真实Unix预约把原TaskClaim交给宿主策略，迟到结算不要求当前claim',{timeout:10000},async t=>{"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend-ts/test/unconfigured-tasks.test.mjs",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "79202cf808e8f40d69f478b002ce520650d39efc",
+      "sha256": "1d955ceec7ad3d8b86b0703cff8c90fdd30bfb4943a44d5ca694706e9732811a",
+      "bytes": 4989,
+      "lineCount": 40,
+      "referencedLines": [
+        16
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "16": "for(const phase of ['source','taskhost-delete','source-default','controls','automatic','learning','organization'])test(({source:'无模型的共享来源删除完成五步且不恢复同范围无关模型租约','taskhost-delete':'无模型TaskHost仍运行原删除五步而不构造模型','source-default'"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/database/migrations/010_outbound_ledger.sql",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "dd1aede9723bf6046e6b88427cbdea626426c1fb",
+      "sha256": "d2cc7a2f4e28869dde82ec9af8e6a99b20dae0eeac79b6c82660c4b4504e443a",
+      "bytes": 1068,
+      "lineCount": 28,
+      "referencedLines": [
+        1
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "1": "BEGIN;"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/database/migrations/110_model_call_receipt.sql",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "f7f4deae512bf92d5a36b1a8c3541e99792fc7ad",
+      "sha256": "50a26e310a7ef8c38f2f4ee1615d1007748b2e53d481198f736eb856e22e54ed",
+      "bytes": 4079,
+      "lineCount": 53,
+      "referencedLines": [
+        3
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "3": "CREATE TABLE public.model_call_receipt ("
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/database/migrations/111_model_call_learning_claim.sql",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "387d4c9871e71ad7781433b0dd0a5d2f3e11487f",
+      "sha256": "98ecb83f54fa0302e3cbb9c37398041d37e0985013ade6a4b66ad8757e64d079",
+      "bytes": 1421,
+      "lineCount": 27,
+      "referencedLines": [
+        7
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "7": "CREATE TABLE public.model_call_learning_claim ("
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/pyproject.toml",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "bd2ea556ace6efbf4d45a6b1915b531839b7ed4a",
+      "sha256": "2486333fa2ef17126195969779b293cf43b5a729a8d92359960ac084e3c58270",
+      "bytes": 1685,
+      "lineCount": 42,
+      "referencedLines": [
+        34,
+        35
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "34": "notalone-task-cleanup = \"notalone.tasks.command:cleanup_main\"",
+        "35": "notalone-task-worker = \"notalone.tasks.command:worker_main\""
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/application/import_service.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "123f47b9c6389e292bbb719face420f5a6fb3b2b",
+      "sha256": "61a5d619c6c8406cabc1cb4068b9f57f80b4ae77c36f5a2c96af9c5ab81550b5",
+      "bytes": 24845,
+      "lineCount": 603,
+      "referencedLines": [
+        88,
+        151,
+        211,
+        221,
+        329,
+        589
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "88": "    def commit(",
+        "151": "class TaskHost:",
+        "211": "    def require_task_execution(self, *, owner_id, contact_id, task_id) -> None:",
+        "221": "    def start_scheduling(self, *, owner_id: UUID, interval_seconds: float = 2.0) -> None:",
+        "329": "    def stop(self, *, timeout: float = 4.0) -> None:",
+        "589": "    def _record(self, update: TaskProgressUpdate) -> None:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/application/layered_memory_service.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "4044851d7d926ed50ec6894a339df0541cd642a4",
+      "sha256": "29b455c2d1b20894bb5f8d2c6bf03beac2b8fc2fe1ec787d466cb7757dfa5f1e",
+      "bytes": 35802,
+      "lineCount": 563,
+      "referencedLines": [
+        203,
+        245
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "203": "    def command(self, scope, action, expected_generation, expected_work_revision=None):",
+        "245": "    def run_batch(self, claim):"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/application/model_transport_accounting.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "d87bcc5bba9d55f87212cc23c681cf8039f81de7",
+      "sha256": "6189db7cb16491cbdb52e396213cedb23c2117a318ae5ef0eaf0d493b614f040",
+      "bytes": 15998,
+      "lineCount": 335,
+      "referencedLines": [
+        140,
+        155
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "140": "        try:",
+        "155": "            # 保守unknown的ACK只确认清理写入；不能代签先前丢失的结果ACK。"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/application/reply_exploration.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "7e75d75f4f49d9f61bcaace88db90a5daeacc506",
+      "sha256": "9a4c4cbb73ed94899ebccbef19c282058cdd5fae709333d20fae9cac4585c7a8",
+      "bytes": 19889,
+      "lineCount": 330,
+      "referencedLines": [
+        262
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "262": "    def stop(self, *, scope: ContactScope, exploration_id: UUID, input_version_id: UUID) -> None:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/application/skill_learning.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "86468cbca2c4cd2194c8e45024f25f9308d2f118",
+      "sha256": "8ca4e0c588919e1ee5c89e9d98b605ade4ec741a693b61f3b75ca8c37bff6933",
+      "bytes": 6396,
+      "lineCount": 137,
+      "referencedLines": [
+        75,
+        80,
+        85,
+        113
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "75": "    def list(self, scope: ContactScope) -> dict[str, object]:",
+        "80": "    def configure(self, scope: ContactScope, **command) -> dict[str, object]:",
+        "85": "    def resume(self, scope: ContactScope) -> dict[str, object]:",
+        "113": "    def run(self, *, scope: ContactScope, claim) -> int:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/application/source_service.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "a2930a9d3bd5a28b23b60885a968f17b814387f9",
+      "sha256": "3599551464fafcc5b1418dab85c7ea3054b29b60e2bade1ded00f6ea34a846ff",
+      "bytes": 3823,
+      "lineCount": 79,
+      "referencedLines": [
+        34,
+        43,
+        51
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "34": "    def delete(self, owner_id: UUID, contact_id: UUID, source_id: UUID) -> dict[str, object]:",
+        "43": "    def _start(self, owner_id: UUID, contact_id: UUID) -> None:",
+        "51": "    def _drain(self, owner_id: UUID, contact_id: UUID) -> None:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/application/task_service.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "18c3d364f656772c04fd3b0e95d3176d5a891779",
+      "sha256": "7abf6587934e6e2773189858d3378a2e29356918a479d97b57ee5cd9fae1c703",
+      "bytes": 3719,
+      "lineCount": 87,
+      "referencedLines": [
+        27,
+        35
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "27": "    def status(",
+        "35": "    def retry("
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/persistence/background_tasks.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "2b7c19c0b5d42faee69b2a16768ee3e0cb538d01",
+      "sha256": "e94d99e8f95b2d30b2cfa931f1dcb2c2523d8c6fc7149ac5a556df65bd0cbf8b",
+      "bytes": 71991,
+      "lineCount": 1582,
+      "referencedLines": [
+        76,
+        570,
+        640,
+        708,
+        786,
+        822,
+        1041,
+        1081,
+        1266,
+        1421,
+        1446,
+        1457
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "76": "    def create_import_task(",
+        "570": "    def claim_next_step(",
+        "640": "                    return None",
+        "708": "                    SET status = 'running',",
+        "786": "        if total_count is not None:",
+        "822": "                    (claim.task_id,),",
+        "1041": "    def retry_failed_task(",
+        "1081": "                source_allowed = (",
+        "1266": "    def _assert_valid_claim(",
+        "1421": "def _upgrade_task_eligible_sql(connection) -> str:",
+        "1446": "def _unconfirmed_model_requests(connection,owner_id,contact_id):",
+        "1457": "def _model_attempts_settled_sql(connection, owner_id, contact_id, *, allow_fresh_extraction=True, unconfirmed_requests=None) -> str:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/persistence/extraction_schedule.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "9d70f53f409d6d69a66dcbca80df23f98f350f70",
+      "sha256": "e17203bda486feae8d09ba72a0bcc4e434a1f5e036b8d4ca9b1815029f212c79",
+      "bytes": 9384,
+      "lineCount": 144,
+      "referencedLines": [
+        60,
+        90,
+        115,
+        134
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "60": "    repository._lock_scope(connection,owner_id,contact_id)",
+        "90": "    task = repository.create_observation_task(connection,owner_id=owner_id,contact_id=contact_id,message_count=len(rows))",
+        "115": "def recover_due(repository, *, owner_id, limit=32):",
+        "134": "        rows = connection.execute(\"SELECT t.contact_id,t.id FROM public.background_task t \""
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/persistence/layered_coverage.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "4540a25eaae938c4a46d0719a61f26161c11bd69",
+      "sha256": "239cad04cdac3f7df55fa7f76735cb86d0f5a8be005c33fe9ab3ae22bdb7b6d4",
+      "bytes": 15390,
+      "lineCount": 188,
+      "referencedLines": [
+        16,
+        50,
+        62,
+        115
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "16": "def cancel_jobs(connection, scope, *, erase=False):",
+        "50": "def enqueue_coverage(connection, scope, state, manifest, dependencies, contract, budget, *, action, revision, profile_required=False):",
+        "62": "    if action in {'pause','continue'}:",
+        "115": "    connection.execute(\"INSERT INTO public.background_task(id,owner_id,contact_id,task_type,status,current_step,message_count) \""
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/persistence/locks.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "024bcc125768124075e0af261e7517b8e5d53efc",
+      "sha256": "0511e2fac9ac08da04ff109213711f3127631b401192fbf19f4664142972b2ec",
+      "bytes": 1523,
+      "lineCount": 55,
+      "referencedLines": [
+        1
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "1": "\"\"\"PostgreSQL 事务级领域锁。"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/persistence/memory_processing.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "76360a0e8d3af355a24902ec79a6af060ab0766d",
+      "sha256": "91d2731ad571161361c39b33e3a7718929fd06c6604663c9f5a7f8bf7e06e7df",
+      "bytes": 30100,
+      "lineCount": 651,
+      "referencedLines": [
+        351,
+        371,
+        464
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "351": "    def read(",
+        "371": "                SELECT t.*,p.task_id AS planned,p.updated_at AS progress_at,",
+        "464": "    def resume("
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/persistence/postgres_repository.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "fdb0cab323e04805b11d024b23fb71c3b4783c31",
+      "sha256": "123a76b268121cb35f24f46b35f51fd7e714f3884803f3c97448231d1cb6acdc",
+      "bytes": 32681,
+      "lineCount": 855,
+      "referencedLines": [
+        664
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "664": "    @staticmethod"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/persistence/skill_learning.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "9a7a2c260b035a8848bb136d1f291e18785bc271",
+      "sha256": "3b0324f6a2e675041f63de9df0b4692aeec95451cad1e7223c5ceb0f0efaf1d5",
+      "bytes": 28435,
+      "lineCount": 399,
+      "referencedLines": [
+        86,
+        137
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "86": "    def enqueue(self, scope: ContactScope, *, force_retry=False) -> UUID | None:",
+        "137": "    def save(self, scope: ContactScope, claim, batch, proposal) -> int:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/persistence/source_tasks.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "4cc7a0466b3270a7fd90aace81b590db31d26530",
+      "sha256": "a2191017a1526e75748a5459014ff77e17ad2b9b4a8d2a14d71a617c4a2c1425",
+      "bytes": 6814,
+      "lineCount": 120,
+      "referencedLines": [
+        62,
+        96
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "62": "    def request_delete(self, owner_id: UUID, contact_id: UUID, source_id: UUID) -> UUID:",
+        "96": "                from notalone.persistence.memory_upgrade import erase_memory_upgrades"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/scopes.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "a93a2f010f8d0fdd9f902ad450c5a92f9b6ddaa6",
+      "sha256": "e6d9fe7c21039186be421c38669d5a91f6dff30260621dbb756fa38bb01af0b2",
+      "bytes": 1711,
+      "lineCount": 55,
+      "referencedLines": [
+        16
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "16": "    def __post_init__(self) -> None:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/server/app.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "6eb948c03fe638ea27f4f5ad524e86d34e453eae",
+      "sha256": "2a6fc0658e917889ccaf798d0eafc3a17d5a9afcceb91e262f601a38c496b0ce",
+      "bytes": 200255,
+      "lineCount": 4518,
+      "referencedLines": [
+        101,
+        1805,
+        2244,
+        2645,
+        2927,
+        2992
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "101": "    TaskHost,",
+        "1805": "    def _handle_sources(self, method: str, path: str) -> Response:",
+        "2244": "    def _handle_layered_memory(self, *, method: str, path: str, body: bytes) -> Response:",
+        "2645": "    def _handle_memory_processing(self, method: str, path: str, body: bytes) -> Response:",
+        "2927": "        if path in {\"/api/tasks/run\", \"/api/tasks/retry\"}:",
+        "2992": "        if path == \"/api/tasks/status\":"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/server/assistant_preparation_jobs.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "47bec5d3a1153e35adb6cfd3b00731c93b090636",
+      "sha256": "458ea130c8322cb8a3fadfc8a081057193a061a41174f597e4c07e499452826e",
+      "bytes": 6235,
+      "lineCount": 141,
+      "referencedLines": [
+        67,
+        124,
+        136
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "67": "    def start(self, *, owner_id: UUID, path: str, manual_id: UUID | None,",
+        "124": "    def status(self, *, owner_id: UUID, path: str, manual_id: UUID | None,",
+        "136": "    def stop(self) -> None:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/server/command.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "3bc1aa1990d12adb247eab8467a0f3f0d8c7a7c2",
+      "sha256": "3629d4ad2de415f762e401c299fb498e9756cdd71c8c9a08d88ade95cd6b9242",
+      "bytes": 23236,
+      "lineCount": 562,
+      "referencedLines": [
+        427,
+        494,
+        500
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "427": "        if not model_work_available:",
+        "494": "    def publish_progress(update) -> None:",
+        "500": "            BackendEvent.task_progress("
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/server/event_models.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "a4a0f666198b9c382928ca54f15c6ba4ce2ae4d8",
+      "sha256": "6b975220492ef18d38b8d5cae3a6634d9563cb52a926200eef480b8132e1266a",
+      "bytes": 6167,
+      "lineCount": 190,
+      "referencedLines": [
+        160
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "160": "    def task_progress("
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/server/skill_learning.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "01822fab2f59f868ce81a924e2d04d5dd82eaf65",
+      "sha256": "1dcf638da549dc57e02584c810bd4e0145f2f4d8148d35dfd1acd73b822703db",
+      "bytes": 8154,
+      "lineCount": 149,
+      "referencedLines": [
+        105
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "105": "def handle_skill_learning(service, *, owner_id, method, path, body):"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/server/sync_host.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "c6a98b209313c7a0ad775f85c536464b14e27877",
+      "sha256": "dc90370c23de57b0ed37aaed2fb0f284c5356b6afeef263d4b11bf480e1f4697",
+      "bytes": 29802,
+      "lineCount": 741,
+      "referencedLines": [
+        225,
+        311
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "225": "class SyncHost:",
+        "311": "    def stop(self) -> None:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/tasks/command.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "a123ea5c506e5328c414a1e7635ef8eb601b04a3",
+      "sha256": "cd63546fc3d62e034715fa40d0cbb989c5086da2b55b797317c8eb70d5ac034f",
+      "bytes": 15503,
+      "lineCount": 378,
+      "referencedLines": [
+        77,
+        204
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "77": "def run_worker(",
+        "204": "                retry_count += 1"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/tasks/models.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "7799dbbb0b83d553694cf32d9a3ce6f01c526929",
+      "sha256": "dc144962216cb9911cb31c5241956d455dc5b56c4c338c0507d7b37c08bf89de",
+      "bytes": 9513,
+      "lineCount": 258,
+      "referencedLines": [
+        59,
+        114,
+        125,
+        136,
+        144
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "59": "class BackgroundTaskType(StrEnum):",
+        "114": "IMPORT_TASK_STEPS: tuple[",
+        "125": "OBSERVATION_TASK_STEPS: tuple[",
+        "136": "    BackgroundTaskStepName.MARK_DELETED,",
+        "144": "                       (BackgroundTaskStepName.VERIFY_SKILL_DRAFTS, 2))"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/tasks/organization_dispatch.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "06aba0d043c4ef50e708ed216733368a189918eb",
+      "sha256": "e15a5b26de90ade0701f570bd4a06a5d63c231db60fc3e69f099ef08b69d826f",
+      "bytes": 1314,
+      "lineCount": 34,
+      "referencedLines": [
+        14
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "14": "class EmbeddedOrganizationDispatcher:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/src/notalone/tasks/worker.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "f856d9f8f303d35507ba4a3f91728992c2d808bc",
+      "sha256": "b894e652a746eb8c9cf02cb99cb0f68a6e2c2a39dd9a6f17853fb59617c8eca3",
+      "bytes": 38157,
+      "lineCount": 917,
+      "referencedLines": [
+        125,
+        177,
+        517,
+        545,
+        560,
+        578,
+        605,
+        650,
+        700,
+        770,
+        808
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "125": "class _LeaseHeartbeat:",
+        "177": "    def _run(self) -> None:",
+        "517": "        if claim.name is BackgroundTaskStepName.ORGANIZE_MEMORY:",
+        "545": "                if claim.name is BackgroundTaskStepName.DELETE_DERIVED:",
+        "560": "        if claim.name in {",
+        "578": "        if claim.name in (BackgroundTaskStepName.PROPOSE_SKILL, BackgroundTaskStepName.VERIFY_SKILL_DRAFTS):",
+        "605": "        if claim.name is BackgroundTaskStepName.INDEX:",
+        "650": "            try:",
+        "700": "            assert self._extraction_runner is not None",
+        "770": "    def _complete_step(",
+        "808": "    def _stopped_result(self, claim: ClaimedBackgroundTaskStep) -> WorkerRunResult:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/tests/integration/server/test_failed_task_recovery.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "60f485c42b7a1414171f600e48127ba13c338a6f",
+      "sha256": "1c3e7ca0c91194fcbaedc316dab52f815a46e975ca839fb315bb736c258ef90d",
+      "bytes": 25863,
+      "lineCount": 490,
+      "referencedLines": [
+        66,
+        237
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "66": "class TaskRecoveryHttpFixture(unittest.TestCase):",
+        "237": "    def test_http_recovers_original_failed_task_and_skips_successful_steps(self) -> None:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/tests/integration/server/test_layered_memory_management.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "f834e4b46b5f1dfce402ad1acc3c73f266d320d7",
+      "sha256": "a8953f620592f3043d12aa4743b606292c18e07ba855783b797071d872cb242c",
+      "bytes": 72612,
+      "lineCount": 1179,
+      "referencedLines": [
+        473
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "473": "    def test_task_host_restart_resumes_authorized_queued_work_and_keeps_budget_pause(self):"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/tests/integration/server/test_memory_processing_progress.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "2b55639160ba14b2ea85cd66b16deb8f5e9dff82",
+      "sha256": "fc2e890ae493c73b45eb1154593f8f27555db72636c81698bdb61785e56dacda",
+      "bytes": 15110,
+      "lineCount": 325,
+      "referencedLines": [
+        10
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "10": "    def test_progress_read_is_inert_and_resume_survives_host_restart(self):"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/tests/integration/server/test_persistent_extraction_schedule.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "38a74f1631cafdc8ea47bf6a6d77752dabcf2fb9",
+      "sha256": "a141fcbb2bf354a87665e95ddb791a3f6cf5c597c584d682e90b0c2263712e74",
+      "bytes": 4950,
+      "lineCount": 102,
+      "referencedLines": [
+        18
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "18": "    def test_startup_recovers_committed_observation_without_notification(self):"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/tests/integration/server/test_skill_learning.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "103363a0c2c11f0465f41e39fab865198c9ba5c9",
+      "sha256": "e8db0e5912f06c033675ef0342a8c4c781f603786ae36bab19a41f3f8bf57eea",
+      "bytes": 59902,
+      "lineCount": 907,
+      "referencedLines": [
+        291
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "291": "    def test_saved_draft_verification_failure_resumes_without_second_model_or_duplicate_draft(self):"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/tests/integration/tasks/test_observation_task.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "7d74f6b66cc11fc4a8dcab97c14e53af7dae1917",
+      "sha256": "aabc744f77ee3febad70eba8563413ab8416039dd2956d6832c5c31a5239df41",
+      "bytes": 24528,
+      "lineCount": 548,
+      "referencedLines": [
+        240,
+        248,
+        359
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "240": "    def test_revocation_rejects_running_result_and_renewal(self) -> None:",
+        "248": "    def test_expired_claim_cannot_write_after_same_worker_takes_over(self) -> None:",
+        "359": "    def test_previous_round_claim_cannot_complete_new_round_for_same_worker(self) -> None:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "backend/tests/integration/tasks/test_worker.py",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "b6665e31e52b5575ea26e04e19517c330567cbd3",
+      "sha256": "ed3a1a9ed8ed2d699c81caf2761f3ecc92c3a01daf570a51062e40e4c39651bd",
+      "bytes": 23574,
+      "lineCount": 650,
+      "referencedLines": [
+        46,
+        154,
+        276
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "46": "TEST_DATABASE_URL = os.environ.get(",
+        "154": "class BackgroundTaskWorkerTest(unittest.TestCase):",
+        "276": "    def test_active_lease_blocks_second_worker_and_expiry_allows_takeover(self) -> None:"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "desktop/package.json",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "ceaa282aba84440c41afb55c98a87eda04125a25",
+      "sha256": "7fd35a480fb85ee104c972de861fc2fb1b7e95dddd2c780ed2b884ef1e9d27fb",
+      "bytes": 1681,
+      "lineCount": 46,
+      "referencedLines": [
+        14
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "14": "    \"test:polling\": \"node --test tests/skill-learning/*.test.mjs tests/background-task-polling.test.mjs tests/memory-processing/bridge.test.mjs\","
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "desktop/scripts/test-pages.mjs",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "9077c37f3347e0d301b02651cc89fdbbad741e97",
+      "sha256": "cd2f91b66ae783ce34bd0ba5425d087d7cb5be195ef8e60baf1b9273ff1a7b6a",
+      "bytes": 15014,
+      "lineCount": 185,
+      "referencedLines": [
+        33,
+        38
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "33": "    if (key === '--case' && ['memory-processing', 'owner-layered-regressions', 'layered-reply', 'owner-layered-memory', 'layered-memory', 'memory-skill-evolution', 'skill-feedback', 'skill-lifecycle', 'skill-review', 'sk",
+        "38": "    throw new Error('page_test_arguments: 页面范围最多两组且不重复，时限为1至300秒');"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "desktop/src/main/imports/controller.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "8d5a9edfa3445fcaf9c1506866cd8cbb0b831c13",
+      "sha256": "3ef41798df3b354b70e4f230f51ccf20a9acd29dfb2b61e91e51fc70640bac67",
+      "bytes": 21434,
+      "lineCount": 381,
+      "referencedLines": [
+        164,
+        250,
+        255,
+        280
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "164": "      const response = await this.backend.requestJson({ method: 'POST', path: '/api/imports/commit',",
+        "250": "        const recovered = await this.backend.requestJson({ method: 'POST', path: '/api/tasks/retry',",
+        "255": "      const started = await this.backend.requestJson({ method: 'POST', path: '/api/tasks/run',",
+        "280": "        path: `/api/tasks/status?contact_id=${receipt.contactId}&task_id=${receipt.taskId}`, signal: abort.signal });"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "desktop/src/main/memory/owner-layered.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "11ba282fd199c6e8aa67bd63de9cbda13b3b9a03",
+      "sha256": "f1d46cc6c32f15fd2727e95024baaead2be7a348f0991ffb1b5710146941a9f6",
+      "bytes": 14283,
+      "lineCount": 199,
+      "referencedLines": [
+        161,
+        176
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "161": "    const work = request.action === 'pause' || request.action === 'continue';",
+        "176": "      const command = { method: 'POST' as const, path: `/api/memories/owner/layered-memory/${request.action}`, signal: operation.signal,"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "desktop/src/main/memory/processing.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "87fd8ad64d64d5f58909c1b17913da2c5fd06e89",
+      "sha256": "ccb5bea8434abb410cea6a6816913a75db8eb5fa715c31f51e327ebb93b65e1e",
+      "bytes": 8497,
+      "lineCount": 114,
+      "referencedLines": [
+        38,
+        74
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "38": "      || (contactId !== null && entry.contact_id !== contactId) || !['import', 'observation'].includes(entry.task_type as string)",
+        "74": "  cancel(request: MemoryProcessingRequest) { const key = this.key(request); this.reads.get(key)?.abort(); this.reads.delete(key); }"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "desktop/src/main/skill-learning/controller.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "abb6fadf8efa5bcdd17f8c0256c90cd5fc02f87e",
+      "sha256": "3c4c8abf2760e648eac1c9f57b8d079f70d3bad4e175aefcd66ee6b2bc134883",
+      "bytes": 28552,
+      "lineCount": 395,
+      "referencedLines": [
+        111,
+        279
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "111": "  async resume(selection: ContactSelection) { await this.perform(this.assertScope(selection), 'POST', { resume: true }); }",
+        "279": "      const result = await this.backend.requestJson({ method, path: `/api/contacts/${scope.contactId}/skill-learning`, body, signal: pending.signal });"
+      }
+    },
+    {
+      "scope": "runtime-repository",
+      "path": "desktop/src/main/sources/tracking.ts",
+      "declaredSourceCommit": "43ae208f3c4bc38116bfee62ed4665923674e682",
+      "gitBlobSha1": "85a678aec3dda8d484e52795009d4cc524ec0b58",
+      "sha256": "48aeeb75d9e462da7958ce316734ee3ef10fd67bd32126a79e3e46a525c92008",
+      "bytes": 2872,
+      "lineCount": 55,
+      "referencedLines": [
+        21
+      ],
+      "worktreeEqualsSource": true,
+      "anchors": {
+        "21": "        path: `/api/contacts/${contactId}/sources/${sourceId}`, signal: pending.signal });"
+      }
+    }
+  ],
+  "invalidReferences": [],
+  "worktreeDifferences": [],
+  "contractSha256": "dc6e634d05504bb2489e4f97d62d62d8f5a0cf0e2d20a73b56044e7354f1259e",
+  "handoffSha256": "962e078b6f11123627e311ac6a0189f33de10817805ea4460deae0244beaf6b5",
+  "observedHeadAtValidation": "c943f91c7241f0a18c11a5ba0e9eb95fb3d3fd57",
+  "verificationSummary": {
+    "sourceFiles": 84,
+    "lineReferences": 187,
+    "handoffLines": 25,
+    "productOrTestExecution": false
+  }
+}

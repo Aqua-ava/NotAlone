@@ -33,6 +33,7 @@ import {SourceProcessingTraceStore} from './source-processing-trace.ts';
 import {SourceProcessingTraceApi} from './source-processing-trace-http.ts';
 import {HistoryImportApi} from './history-import-api.ts';
 import {PostgresTaskStatusStore,TaskApi} from './task-api.ts';
+import {BusinessTaskApi,PostgresBusinessTaskManager} from './background-task-management.ts';
 import {
  PythonTaskControlGateway,UnavailableTaskControl,
  type TaskControlPort,type TaskScope,
@@ -84,6 +85,7 @@ async function start(ctx: Context) {
     run:(scope:TaskScope,taskId:string)=>activeTaskControl.run(scope,taskId),
     retry:(scope:TaskScope,taskId:string)=>activeTaskControl.retry(scope,taskId),
     wake:(scope:TaskScope,taskId:string)=>activeTaskControl.wake(scope,taskId),
+    stop:(scope:TaskScope,taskId:string)=>activeTaskControl.stop?.(scope,taskId)??Promise.resolve(false),
   };
   const closeTaskControl=()=>{
     const close=(activeTaskControl as TaskControlPort&{close?:()=>Promise<void>}).close;
@@ -109,6 +111,19 @@ async function start(ctx: Context) {
     : undefined;
   const tasks=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new TaskApi({ownerId:storage.runtimeOwnerId,store:new PostgresTaskStatusStore(progressPool),control:taskControl})
+    : undefined;
+  const taskManager=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
+    ? new PostgresBusinessTaskManager(progressPool) : undefined;
+  const businessTasks=taskManager&&storage.runtimeOwnerId
+    ? new BusinessTaskApi({ownerId:storage.runtimeOwnerId,manager:taskManager,
+      onStopped:async request=>{
+        const contactId=request.contactId!==undefined?request.contactId
+          :(await progressPool.query<{contact_id:string|null}>(`SELECT contact_id
+            FROM public.background_task WHERE id=$1 AND owner_id=$2`,
+          [request.taskId,storage.runtimeOwnerId])).rows[0]?.contact_id;
+        if(contactId===undefined)return;
+        await taskControl.stop?.({ownerId:storage.runtimeOwnerId!,contactId},request.taskId).catch(()=>false);
+      }})
     : undefined;
   let legacy: LegacyBackend | undefined;
   let handoff: ContactHandoff | undefined;
@@ -218,7 +233,7 @@ async function start(ctx: Context) {
         }:undefined,replayBody);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus},taskWorker:modelRuntime.extractionWorkerStatus}:{}),ownership:{...ownership,skills:skills.status().owner,skillLearning:modelRuntime?'typescript':'python',imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',tasks:extractionWorkerRuntime,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus},taskWorker:modelRuntime.extractionWorkerStatus}:{}),ownership:{...ownership,skills:skills.status().owner,skillLearning:modelRuntime?'typescript':'python',imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',taskManagement:businessTasks?'typescript':'python',tasks:extractionWorkerRuntime,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
@@ -238,6 +253,14 @@ async function start(ctx: Context) {
         if(url.search){respond(400,{error:'import_request_invalid'});return;}
         const body=req.method==='POST'?await readBody(req):undefined;
         const result=await imports.handle(req.method??'',url.pathname,body);
+        if(!result){respond(404,{error:'not_found'});return;}
+        respond(result.status,result.body);return;
+      }
+      if(url.pathname==='/api/tasks'||url.pathname==='/api/tasks/stop'||url.pathname==='/api/tasks/recover'){
+        if(!businessTasks){respond(503,{error:'task_unavailable'});return;}
+        if(req.method==='POST'&&url.search){respond(400,{error:'task_request_invalid'});return;}
+        const body=req.method==='POST'?await readBody(req):undefined;
+        const result=await businessTasks.handle(req.method??'',url.pathname,url.searchParams,body);
         if(!result){respond(404,{error:'not_found'});return;}
         respond(result.status,result.body);return;
       }

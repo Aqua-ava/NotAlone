@@ -53,6 +53,62 @@ test('未迁移业务保留唯一旧后台执行且随DSH退出',async t=>{
   assert.throws(()=>process.kill(health.data.legacyPid,0));
 });
 
+test('官方DSH profile统一列出、停止并恢复原后台任务',async t=>{
+  const fixture=await createStorageFixture();
+  t.after(async()=>{for(const host of fixture.hosts??[])assert.equal(await host.terminate(),true);await fixture.close();});
+  const owner=randomUUID(),contact=randomUUID(),source=randomUUID();
+  await fixture.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成本人')",[owner]);
+  await fixture.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);
+  await fixture.client.query(`INSERT INTO source_document
+    (id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)
+    VALUES($1,$2,$3,'wechat_jsonl','synthetic-management.jsonl',$4,2)`,[source,owner,contact,'d'.repeat(64)]);
+  const taskId=(await fixture.client.query(`INSERT INTO background_task
+    (owner_id,contact_id,source_document_id,task_type,status,current_step,message_count)
+    VALUES($1,$2,$3,'import','queued','parse',2) RETURNING id`,[owner,contact,source])).rows[0].id;
+  for(const [index,name] of ['parse','normalize','extract_memory','index','verify'].entries()){
+    await fixture.client.query(`INSERT INTO background_task_step
+      (task_id,step_name,step_order,total_count) VALUES($1,$2,$3,2)`,[taskId,name,index+1]);
+  }
+  const ownerTaskId=(await fixture.client.query(`INSERT INTO background_task
+    (owner_id,contact_id,task_type,status,current_step,message_count)
+    VALUES($1,NULL,'layered_memory','queued','organize_memory',3) RETURNING id`,[owner])).rows[0].id;
+  await fixture.client.query(`INSERT INTO background_task_step
+    (task_id,step_name,step_order,total_count) VALUES($1,'organize_memory',1,3)`,[ownerTaskId]);
+  const app=await start(t,fixture,{NOTALONE_OWNER_ID:owner});
+  assert.equal((await app.request('/api/runtime/status')).data.ownership.taskManagement,'typescript');
+  const ownerListed=await app.request('/api/tasks?scope=owner');
+  assert.equal(ownerListed.status,200);
+  assert.deepEqual(ownerListed.data.tasks.map(item=>[item.task_id,item.contact_id,item.scope_kind]),[
+    [ownerTaskId,null,'owner'],
+  ]);
+  const listed=await app.request(`/api/tasks?contact_id=${contact}`);
+  assert.equal(listed.status,200);
+  assert.equal(listed.data.has_more,false);
+  assert.deepEqual(listed.data.tasks.map(item=>[item.task_id,item.task_type,item.status,item.actions]),[
+    [taskId,'import','queued',[{kind:'stop'}]],
+  ]);
+  assert.deepEqual(await app.request('/api/tasks/stop',{scope:'owner',task_id:taskId}),{
+    status:404,data:{error:'task_not_found'},
+  });
+  assert.deepEqual(await app.request('/api/tasks/stop',{scope:'owner',task_id:ownerTaskId}),{
+    status:200,data:{task_id:ownerTaskId,status:'stopped'},
+  });
+  assert.deepEqual(await app.request('/api/tasks/stop',{contact_id:contact,task_id:taskId}),{
+    status:200,data:{task_id:taskId,status:'stopped'},
+  });
+  assert.equal((await fixture.client.query('SELECT status,last_error_code FROM background_task WHERE id=$1',[taskId])).rows[0].status,
+    'cancelled');
+  assert.deepEqual(await app.request('/api/tasks/recover',{contact_id:contact,task_id:taskId,action:'restart'}),{
+    status:200,data:{task_id:taskId,status:'queued'},
+  });
+  const resumed=await app.request(`/api/tasks?contact_id=${contact}`);
+  assert.equal(resumed.data.tasks[0].status,'queued');
+  assert.deepEqual(resumed.data.tasks[0].steps.map(step=>step.status),
+    ['pending','pending','pending','pending','pending']);
+  await app.request('/api/runtime/shutdown',{});
+  assert.equal(await app.host.waitForExit(7000),true);
+});
+
 test('真实DSH宿主公开导入只接受既有联系人，事务提交后如实保留待处理任务',async t=>{
   const fixture=await createStorageFixture();t.after(async()=>{for(const host of fixture.hosts??[])assert.equal(await host.terminate(),true);await fixture.close();});
   const owner=randomUUID(),contact=randomUUID();

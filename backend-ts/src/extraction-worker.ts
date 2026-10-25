@@ -67,6 +67,7 @@ export class ExtractionWorker {
   private wakeResolve:(()=>void)|null=null;
   private wakeTimer:NodeJS.Timeout|null=null;
   private readonly wakes=new Map<string|undefined,Wake>();
+  private activeTask:{scope:ExtractionScope;taskId:string;abort:AbortController}|null=null;
 
   constructor(options:ExtractionWorkerOptions){
     if(!uuid.test(options.ownerId))throw new ExtractionTaskError('worker_scope_invalid');
@@ -116,6 +117,16 @@ export class ExtractionWorker {
     }
     else this.wakes.set(undefined,{...(taskId?{taskId}:{})});
     this.notify();
+    return true;
+  }
+
+  /** 只中止当前声明的原任务；持久取消仍由任务表提交前完成。 */
+  cancel(scope:ExtractionScope,taskId:string):boolean {
+    const active=this.activeTask;
+    if(!active||active.scope.ownerId!==scope.ownerId.toLowerCase()
+      ||active.scope.contactId!==(scope.contactId?.toLowerCase()??null)
+      ||active.taskId!==taskId.toLowerCase())return false;
+    active.abort.abort();
     return true;
   }
 
@@ -215,6 +226,8 @@ export class ExtractionWorker {
     if(!runner)throw new ExtractionTaskError('worker_step_unsupported');
     const stepAbort=new AbortController();
     const signal=AbortSignal.any([globalSignal,stepAbort.signal]);
+    this.activeTask={scope:{ownerId:claim.ownerId,contactId:claim.contactId},
+      taskId:claim.taskId,abort:stepAbort};
     let heartbeatError:unknown;
     const heartbeat=setInterval(()=>{
       if(signal.aborted)return;
@@ -239,6 +252,9 @@ export class ExtractionWorker {
       }
       if(error instanceof ExtractionTaskError&&error.code==='lease_stale')return;
       await this.store.fail(claim,errorCode(error),retryable(error)).catch(()=>{});
-    }finally{clearInterval(heartbeat);}
+    }finally{
+      clearInterval(heartbeat);
+      if(this.activeTask?.abort===stepAbort)this.activeTask=null;
+    }
   }
 }

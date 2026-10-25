@@ -1,7 +1,7 @@
 # 22：管理全部业务后台任务
 
 Triage: ready-for-agent
-State: open
+State: resolved
 Type: task
 Blocked by: 10, 13, 14, 15, 20
 Spec: ../spec.md
@@ -14,11 +14,11 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
-- [ ] 按01具名任务清单接管全部业务任务，界面能看到真实状态、处理量、失败原因、停止和允许的重试／恢复。
-- [ ] 原子领取、租约、幂等、并发及前台优先保持；进程崩溃和租约过期不双领取、不自动宣布业务成功。
-- [ ] 逐一核验已迁移及剩余任务类型的 handler 和唯一执行方，不留隐蔽 Python Worker；不新增模型自治任务板或计划工具。
-- [ ] 停止、删除和撤销后晚结果不可提交，复用已有资料版本与删除规则，恢复不扩大授权。
+- [x] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
+- [x] 按01具名任务清单接管全部业务任务，界面能看到真实状态、处理量、失败原因、停止和允许的重试／恢复。
+- [x] 原子领取、租约、幂等、并发及前台优先保持；进程崩溃和租约过期不双领取、不自动宣布业务成功。
+- [x] 逐一核验已迁移及剩余任务类型的 handler 和唯一执行方，不留隐蔽 Python Worker；不新增模型自治任务板或计划工具。
+- [x] 停止、删除和撤销后晚结果不可提交，复用已有资料版本与删除规则，恢复不扩大授权。
 
 ## 验证
 
@@ -43,6 +43,20 @@ Spec: ../spec.md
 
 2026-10-23：用户已认可任务拆分、依赖和验收入口并要求逐张发布；补充明确要求实施前必须看 DSH，不凭猜测乱改。任务保持 open。
 
+2026-10-25：Ticket 10／13／14／15／20 已 resolved，开始本票实现。只新增统一任务管理候选、把停止能力接到现有唯一 Worker，并更新控制器和界面；未操作实际 App／微信、未使用真实资料、未发送外部消息。来源删除的跨域闭包继续留给 Ticket 17。
+
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+已完成统一业务后台任务管理候选，详见[实施与 DSH 边界证据](../task22-implementation/evidence.md)和[只读合同](../task22-readonly-preparation/contract.md)。
+
+- DSH：固定 `@deepseek-ai/dsh@0.2.1-rc.2`／commit `687f282e8625c6b8d11ff58211a90524be2e4317`。核对官方 profile、Agent create／dispose／cancel／whenIdle／runMaintenance 文档和源码后确认：DSH 不提供业务任务表、原子领取、租约、崩溃恢复或用户任务板；本票不新增直接 DSH API、模型 Task Tool、自治计划或长期 session。任务仍完全由 PostgreSQL 控制，经现有官方 profile 薄插件装配。
+- 后端：新增 [`background-task-management.ts`](../../../backend-ts/src/background-task-management.ts)，提供 owner 隔离的 `/api/tasks`、`/api/tasks/stop`、`/api/tasks/recover`。列表先选最多 101 个任务再展开全部步骤，显示真实步骤计数、稳定性错误码、本人／联系人范围与允许动作；纯读取不 notify、不重排、不启动模型。`total_count=NULL` 保留为未知，不用 0 或 `message_count` 伪造。
+- 停止：任务事务按 contact→owner 锁序取范围锁，取消未成功步骤、清空 `worker_id`／租约、推进 `lease_generation`；统一 Worker 只中止匹配的当前 task，不影响其他联系人或其他任务。旧 claim 的 completion／checkpoint 因租约代次和任务状态失败；外部调用未结算仍保留未知，不宣布成功。
+- 恢复：导入／观察只重排原任务并保留成功步骤、来源、目标与消息身份；`model_call_outcome_unknown`、失效来源／绑定、错误动作和跨 contact／owner 均失败关闭。Skill 走 receipt-aware 领域恢复；L2／L3 走 settings generation、work revision 与累计预算入口；来源删除恢复继续由 Ticket 17 的来源面板发起，通用面板不猜测删除闭包。
+- 执行责任矩阵：TS 任务模式下 `import`、`observation`、`layered_memory`、`skill_learning` 由同一个 `ExtractionWorker` 领取各自固定 Runner；Python 模式由原 TaskHost 独占，两模式互斥。`delete` 目前由 Ticket 17 接管前的原 SourceService／删除 Worker 独占；`memory_upgrade` 按 ADR-070 退役，只显示历史状态；`index`／`verify` 不是独立任务。没有新增隐蔽 Worker。
+- 桌面：新增 [`BackgroundTasksPanel.tsx`](../../../desktop/src/renderer/BackgroundTasksPanel.tsx)、独立控制器／preload／bridge。面板显示类型、状态、实际处理量、步骤、重试次数和失败原因，提供停止及相应恢复入口；联系人视图读取当前联系人任务，“我”视图读取 `contact_id=NULL` 的本人任务，两类范围不混用。控制器严格校验闭集、范围 `scopeRevision` 和连接代次，切换范围、旧连接或迟到读取不能写；本人停止／恢复显式携带 `scope=owner`，不能命中联系人任务。
+- 架构：新增 [ADR-103](../../../architecture/adr/103-unified-background-task-management.md)，局部修订 ADR-015 的“无用户取消入口”；同步现行 core flow 与 domain-data。
+- 数据影响：没有 schema 迁移、正文读写、模型调用、授权扩大、外部发送或生产库写入。测试只用随机合成 PostgreSQL 库、合成任务和合成 HTTP 数据；任务记录仍只含元数据与业务引用。
+- 验证：TS 任务管理／任务存储／控制 27/27；真实 DSH profile host HTTP 11/11；桌面任务控制器、面板、导入／删除轮询及记忆 UI 30/30；后端与桌面 TypeScript 类型检查均 0 错误。来源删除无模型五步 1/1；Python 原失败任务恢复与 Skill 已保存草稿恢复各 1/1。本人／联系人范围互斥、本人动作不能命中联系人任务已由存储、公开 HTTP、桌面控制器及记忆页接线回归覆盖。命令与边界详见证据文件。
+- 清理：合成数据库全部由夹具清理；另发现 3 个无连接的本轮／并发测试残留库，逐一核对无会话后删除，复查 `notalone_ts_host_%_test` 为 none。没有启动 App／微信、打包、push 或 PR。
+- 未覆盖：按分配禁止实际 App／微信验收，根线程仍需核对真实界面、桌面进程重启、旧宿主退出、在途模型调用和删除竞争。L2/L3 Python 集成单例因未设置 `NOTALONE_TEST_DATABASE_URL` 未运行；其 TS Worker／L2 既有回归已通过。TS 模式下删除仍受原全局 Worker 锁与 Ticket 17 未完成影响，切换前必须由 Ticket 17／24 解决并验证，不能把本票任务管理候选当成删除执行已迁移。

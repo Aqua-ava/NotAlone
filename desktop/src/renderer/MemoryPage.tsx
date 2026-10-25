@@ -14,6 +14,7 @@ import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } f
 import { MemoryEvidence } from './MemoryEvidence';
 import type { TraceRecordKind } from '../shared/trace-bridge';
 import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
+import { BackgroundTasksPanel } from './BackgroundTasksPanel';
 
 const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' },
   contact: { phase: 'idle', items: [] }, owner: { phase: 'idle', items: [] },
@@ -347,6 +348,9 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         onClick={() => void memory.refresh()}>刷新记忆</button></div>
     </div>
     <div className="memory-view-content" key={`${scopeKey}:${view}`}>
+    {contact && <BackgroundTasksPanel selection={view === 'owner'
+      ? { scope: 'owner', scopeRevision: session.state.scopeRevision }
+      : { scope: 'contact', contactId: contact.contactId, scopeRevision: session.state.scopeRevision }} />}
     <MemoryProcessingCard request={contact ? { scope: 'contact', contactId: contact.contactId, scopeRevision: session.state.scopeRevision } : undefined}
       contactNames={Object.fromEntries(session.state.contacts.map(contact => [contact.contactId, contact.displayName]))}
       onProgress={contact ? () => window.notalone.memory.refreshProcessingResults({ scope: 'contact', contactId: contact.contactId,

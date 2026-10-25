@@ -126,3 +126,33 @@ test('TS任务控制关闭时排空在途原任务恢复',async()=>{
  await assert.rejects(control.wake(scope,taskId),error=>
   error instanceof TaskControlError&&error.code==='worker_unavailable');
 });
+
+test('任务停止只中止匹配的在途执行，不停止唯一Worker',{timeout:20000},async t=>{
+ const fixture=await createExtractionFixture(),client=fixture.client;
+ const pool=new pg.Pool({host:'/tmp',database:client.database,max:4});
+ const owner=randomUUID(),contact=randomUUID(),source=randomUUID();
+ let worker,runStarted,markStarted;
+ t.after(async()=>{await worker?.stop();await pool.end();await fixture.close();});
+ await client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成本人')",[owner]);
+ await client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);
+ await client.query(`INSERT INTO source_document
+  (id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)
+  VALUES($1,$2,$3,'wechat_jsonl','synthetic-stop.jsonl',$4,1)`,[source,owner,contact,'c'.repeat(64)]);
+ const store=new ExtractionTaskStore(pool),scope={ownerId:owner,contactId:contact};
+ const taskId=await store.enqueueImport(scope,source,1);
+ await client.query("UPDATE background_task_step SET status='succeeded' WHERE task_id=$1 AND step_name IN ('parse','normalize')",[taskId]);
+ runStarted=new Promise(resolve=>{markStarted=resolve;});
+ let aborted=false;
+ worker=new ExtractionWorker({store,ownerId:owner,idleMs:60000,leaseMs:5000,heartbeatMs:1000,
+  runner:{async run(_claim,signal){
+   markStarted();
+   await new Promise((_,reject)=>signal.addEventListener('abort',()=>{aborted=true;reject(signal.reason);},{once:true}));
+   return {processedCount:1,totalCount:1};
+  }}});
+ assert.equal(await worker.start(),true);
+ assert.equal(await worker.wake(scope,taskId),true);
+ await runStarted;
+ assert.equal(await worker.cancel(scope,taskId),true);
+ await waitFor(()=>aborted);
+ assert.equal(worker.status().state,'running','取消单个任务不得关闭共享Worker');
+});

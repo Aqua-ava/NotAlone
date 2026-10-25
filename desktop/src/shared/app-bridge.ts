@@ -18,6 +18,7 @@ import type { MemoryBridge } from './memory-bridge';
 import type { BindingConsentBridge } from './binding-consent-bridge';
 import type { SyncControlBridge } from './sync-control-bridge';
 import type { SkillLearningBridge } from './skill-learning-bridge';
+import type { BackgroundTaskBridge } from './background-task-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
   usage: UsageBridge;
@@ -28,5 +29,6 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   expressionPreferences: ExpressionPreferenceBridge;
   skillLearning: SkillLearningBridge;
   memory: MemoryBridge; traces: TraceBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
+  backgroundTasks: BackgroundTaskBridge;
 };
 import type { TraceBridge } from './trace-bridge';

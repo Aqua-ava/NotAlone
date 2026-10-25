@@ -22,6 +22,15 @@ export async function withMemoryPage(f, signal, run) {
         : method === 'onOwnerLayeredMemoryChanged'
         ? (listener) => { ownerListeners.add(listener); return () => ownerListeners.delete(listener); }
         : (...args) => window.memoryCommand(method, ...args) }),
+        backgroundTasks: {
+          read: async () => {},
+          cancelRead: async () => {},
+          stop: async () => {},
+          recover: async () => {},
+          getState: async () => ({ phase: 'idle', contactId: null, scopeRevision: 0, tasks: [],
+            hasMore: false, error: null, busyTaskId: null, message: null }),
+          onStateChanged: () => () => {},
+        },
         traces: { onStateChanged: () => () => {}, getState: async () => ({ revision: 0, contactId: null, scopeRevision: 0 }) } };
       const root = createRoot(document.getElementById('root'));
       window.showMemory = visible => root.render(visible ? <MemoryPage session={{ state: ${JSON.stringify(f.contacts.getState())}, error: '', selectContact: async () => {} }} navigate={() => {}} /> : null);

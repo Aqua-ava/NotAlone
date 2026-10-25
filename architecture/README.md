@@ -163,6 +163,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 100. [ADR-100：授权私聊首次完整历史同步](adr/100-authorized-private-history-sync.md)
 101. [ADR-101：本机 App 完整首用与资料生命周期](adr/101-local-app-first-use-lifecycle.md)
 102. [ADR-102：以精简 DSH 和 TypeScript 统一后端](adr/102-dsh-typescript-backend-migration.md)
+103. [ADR-103：统一业务后台任务的查看、停止与恢复](adr/103-unified-background-task-management.md)
 
 ## 当前架构决策
 

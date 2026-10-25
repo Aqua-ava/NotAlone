@@ -43,6 +43,7 @@ import { configureDevelopmentProject, loadBackendConfiguration } from './backend
 import { ImportController } from './imports/controller';
 import { installImportBridge } from './imports/bridge';
 import { installElectronImportFileSelection } from './imports/electron-file-selection';
+import { installBackgroundTaskBridge } from './background-tasks/bridge';
 
 app.setName('NotAlone');
 const selectedDataPath = app.commandLine.getSwitchValue('user-data-dir');
@@ -106,6 +107,7 @@ void app.whenReady().then(async () => {
   installImportBridge(commands, imports);
   installElectronImportFileSelection(windows, imports);
   const memory = installMemoryBridge(commands, backend, contacts);
+  installBackgroundTaskBridge(commands, backend, contacts);
   const traces = installTraceBridge(commands, backend, contacts);
   memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
   const beginReadingScopeChange = () => {

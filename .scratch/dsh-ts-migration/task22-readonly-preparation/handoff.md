@@ -1,0 +1,25 @@
+# 22 只读合同交接
+
+- 本角色只完成准备；22 仍 open，10/13/14/15/20 未过，不实施、不签票、不改主目标。
+- 运行源码：43ae208f3c4bc38116bfee62ed4665923674e682；元数据：9ed7770d1a2cd74361d2b2adbeff78962b1e09e8。
+- 官方 DSH：0.2.1-rc.2／687f282e8625c6b8d11ff58211a90524be2e4317；固定归档无 .git，实际字节 SHA256 已记。
+- 交付：contract.md（具名合同／最小纵切／验收命令）、source-manifest.json（相对路径／源码 SHA／行号）。
+- TaskHost 仍 Python：backend/src/notalone/application/import_service.py:151；backend/src/notalone/server/app.py:101 导入。
+- 活跃类型为 import、observation、delete、skill_learning、layered_memory；memory_upgrade 只历史清理，禁止复活。
+- reindex 只存在设计模板；实际是 import／observation 的 INDEX 步骤，不新增独立任务。
+- 旧入口不止 TaskHost：backend/src/notalone/application/source_service.py:43 独立删除 daemon；backend/src/notalone/tasks/organization_dispatch.py:14；backend/src/notalone/tasks/command.py:226 CLI。
+- 旧入口共享 run_worker 全局锁；SourceService 无 TaskHost stop_event，替换 TaskHost 不等于已移交全部执行方。
+- 管理面分散：tasks/status/run/retry；memory-processing 只 import/observation；layered 动作；learning 动作；无已证通用 list/stop。
+- 111 是无正文学习 claim 授权；110 请求 receipt；010 旧 ledger；稳定 journal／consumer ACK unknown 各不等价。
+- 领取／续租／完成须核 scope、source/binding、worker_id、lease_generation、有效期限；未知模型不能因过期租约盲重放。
+- 43ae 无模型路径保留 DELETE 五步，并在模型管理重排前拒绝；不是 TS Worker。
+- 接缝1：backend/src/notalone/application/import_service.py:221 调度器＋backend/src/notalone/persistence/extraction_schedule.py:115 会发现合法旧队列，与 architecture/current/core-flows.md:394/400 显式继续描述有出入。
+- 接缝2：backend/src/notalone/application/skill_learning.py:75 list 会 notify 排队；backend/src/notalone/persistence/memory_processing.py:351 GET 只读。统一列表不能混用。
+- 接缝3（静态推断）：backend/src/notalone/server/command.py:500 用 ContactScope 发布本人 NULL-contact 任务事件，会触发 backend/src/notalone/scopes.py:16；TaskHost._record 吞事件异常。
+- 最小纵切A：无模型来源删除→原 task_id→唯一 TS Worker→五步→持久状态／不可检索→失败原位恢复；仍等前置。
+- 后续纵切：import/observation 提取索引、L2/L3覆盖／预算、Skill草稿／111、宿主四入口停收／租约／unknown移交。
+- 现有可运行入口已按源码核出；部分 backend-ts 测试仍启动 Python，只作原合同，不能签 TS 接管。
+- 02 历史锁650条目／69fcd1a1…；当前消费锁681条目／bfcf83f9…；未安装或重跑当前闭包。
+- 本轮只读文件／Git／哈希及引用核对，无测试、DB、网络、模型、App/微信、安装、签名、打包、提交或 push。
+- 所有写入仅此目录；根独占主树/index/App。日常如需实测先核验复用 npm run dev，禁止打包版。
+- 详细依据全部使用 contract.md 的 R/M/O 相对路径与固定 source SHA；不沿旧报告推断当前端到端已通过。

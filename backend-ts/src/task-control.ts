@@ -3,11 +3,12 @@ import {LegacyControlError} from './legacy-backend.ts';
 import type {ExtractionTaskStore} from './extraction-task-store.ts';
 import type {ExtractionWorker} from './extraction-worker.ts';
 
-export interface TaskScope {ownerId:string;contactId:string}
+export interface TaskScope {ownerId:string;contactId:string|null}
 export interface TaskControlPort {
   run(scope:TaskScope,taskId:string):Promise<'started'|'busy'>;
   retry(scope:TaskScope,taskId:string):Promise<{task_id:string;status:'queued'}>;
   wake(scope:TaskScope,taskId:string):Promise<'started'|'busy'|'queued'>;
+  stop?(scope:TaskScope,taskId:string):Promise<boolean>;
 }
 export interface TaskControlTarget {
   control(endpoint:string,method:string,body?:Record<string,unknown>,timeoutMs?:number,signal?:AbortSignal):
@@ -104,12 +105,12 @@ export class PythonTaskControlGateway {
 /** 本地TaskApi与导入wake共用同一宿主内唯一提取Worker，不再代理Python。 */
 export class ExtractionWorkerTaskControl implements TaskControlPort {
  private readonly store:Pick<ExtractionTaskStore,'resume'>;
- private readonly worker:Pick<ExtractionWorker,'wake'>;
+ private readonly worker:Pick<ExtractionWorker,'wake'|'cancel'>;
  private closed=false;
  private closing:Promise<void>|undefined;
  private readonly inFlight=new Set<Promise<unknown>>();
 
- constructor(options:{store:Pick<ExtractionTaskStore,'resume'>;worker:Pick<ExtractionWorker,'wake'>}){
+ constructor(options:{store:Pick<ExtractionTaskStore,'resume'>;worker:Pick<ExtractionWorker,'wake'|'cancel'>}){
   this.store=options.store;this.worker=options.worker;
  }
 
@@ -143,6 +144,14 @@ export class ExtractionWorkerTaskControl implements TaskControlPort {
   });
  }
 
+ /** 持久任务已取消后尽量中断匹配的在途调用；返回值不代替已提交状态。 */
+ stop(scope:TaskScope,taskId:string):Promise<boolean>{
+  return this.invoke(async()=>{
+   if(this.closed)throw new TaskControlError('worker_unavailable');
+   return this.worker.cancel({ownerId:scope.ownerId,contactId:scope.contactId},taskId);
+  });
+ }
+
  close():Promise<void>{
   if(this.closing)return this.closing;
   this.closed=true;
@@ -167,5 +176,6 @@ export class UnavailableTaskControl implements TaskControlPort {
  async run():Promise<'started'|'busy'>{throw new TaskControlError(this.reason);}
  async retry():Promise<{task_id:string;status:'queued'}>{throw new TaskControlError(this.reason);}
  async wake():Promise<'started'|'busy'|'queued'>{throw new TaskControlError(this.reason);}
+ async stop():Promise<boolean>{throw new TaskControlError(this.reason);}
  close():Promise<void>{return Promise.resolve();}
 }

@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 用户最新要求：没有互相依赖的任务必须创建全新 Codex 会话并行，明确不是 sub-agent；会话间直接通信，主会话统一集成并独占桌面验收。当前01—16、18—20及23已验收；10的生产 Worker 切换由24把关，11的生产 B 段由根集成接线，完整切换与真实模型质量仍由24、25把关；21在当前macOS 27的accurate Vision路径持续超过2500ms，保持claimed并等待健康Mac对照或Apple修复。原规格和验收不降低。
+> 用户最新要求：没有互相依赖的任务必须创建全新 Codex 会话并行，明确不是 sub-agent；会话间直接通信，主会话统一集成并独占桌面验收。当前01—16、18—20、22及23已验收；10的生产 Worker 切换由24把关，11的生产 B 段由根集成接线，22的来源删除执行与完整切换仍由17／24核验，完整切换与真实模型质量仍由24、25把关；21在当前macOS 27的accurate Vision路径持续超过2500ms，保持claimed并等待健康Mac对照或Apple修复。原规格和验收不降低。
 
 ## 逐项任务与阻塞关系
 
@@ -27,7 +27,7 @@
 | [19 持续同步授权私聊增量](issues/19-private-incremental-sync.md) | 18 | ready-for-agent | resolved |
 | [20 同步既有历史并恢复缺口](issues/20-history-gap-recovery.md) | 19、10 | ready-for-agent | resolved |
 | [21 根据前台会话定位联系人](issues/21-foreground-contact-location.md) | 18 | ready-for-agent | claimed |
-| [22 管理全部业务后台任务](issues/22-background-task-management.md) | 10、13、14、15、20 | ready-for-agent | open |
+| [22 管理全部业务后台任务](issues/22-background-task-management.md) | 10、13、14、15、20 | ready-for-agent | resolved |
 | [23 保留用量、配置和诊断界面](issues/23-usage-settings-diagnostics.md) | 03、05 | ready-for-agent | resolved |
 | [24 演练完整切换与兼容回退](issues/24-cutover-rollback.md) | 17、20、21、22、23 | ready-for-agent | open |
 | [25 完成模型与实际桌面验收](issues/25-integrated-acceptance.md) | 24 | ready-for-agent | open |

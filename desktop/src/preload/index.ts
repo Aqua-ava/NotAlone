@@ -19,6 +19,7 @@ import { createMemoryBridge } from './memory';
 import { createBindingConsentBridge } from './binding-consent';
 import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
+import { createBackgroundTaskBridge } from './background-tasks';
 
 const bridge: AppBridge = {
   usage: createUsageBridge(ipcRenderer),
@@ -36,6 +37,7 @@ const bridge: AppBridge = {
   candidateCopy: createCandidateCopyBridge(ipcRenderer),
   sources: createSourceDeletionBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
+  backgroundTasks: createBackgroundTaskBridge(ipcRenderer),
   traces: createTraceBridge(ipcRenderer),
   bindings: createBindingConsentBridge(ipcRenderer),
   foreground: createForegroundBridge(ipcRenderer),

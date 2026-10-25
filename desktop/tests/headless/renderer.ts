@@ -15,6 +15,7 @@ import { createSyncControlBridge } from '../../src/preload/sync-control';
 import { createBackendBridge } from '../../src/preload/backend';
 import { createStartupBridge } from '../../src/preload/startup';
 import { createScreenPermissionBridge } from '../../src/preload/screen-permission';
+import { createBackgroundTaskBridge } from '../../src/preload/background-tasks';
 import type { AppBridge } from '../../src/shared/app-bridge';
 
 // 默认关闭；仅本轮普通页面的公开传输控制观察事件与原Promise，不替换业务处理器。
@@ -51,6 +52,7 @@ const bridge: AppBridge = {
   backend: createBackendBridge(transport), startup: createStartupBridge(transport),
   screenPermission: createScreenPermissionBridge(transport),
   contacts: createContactSessionBridge(transport), memory: createMemoryBridge(transport), replies: createReplyBridge(transport),
+  backgroundTasks: createBackgroundTaskBridge(transport),
   candidateProvenance: createCandidateProvenanceBridge(transport),
   expressionPreferences: createExpressionPreferenceBridge(transport),
   skillLearning: createSkillLearningBridge(transport),

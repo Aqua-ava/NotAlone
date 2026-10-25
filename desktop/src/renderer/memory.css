@@ -146,3 +146,25 @@
 .layered-memory-references { display: grid; gap: 8px; margin-top: 10px; }
 .layered-memory-reference { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #627985; font-size: 12px; }
 .layered-memory-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+.background-tasks-panel {
+  padding: 12px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  background: var(--panel-background);
+}
+.background-tasks-heading, .background-task-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.background-tasks-heading h3, .background-task-title strong { margin: 0; color: var(--panel-heading); }
+.background-tasks-heading p, .background-task-list p { margin: 5px 0; }
+.background-task-list { display: grid; gap: 0; margin-top: 8px; }
+.background-task-list article { padding: 10px 0; border-top: 1px solid #dce1d8; }
+.background-task-list progress { display: block; width: 100%; height: 6px; margin: 7px 0; accent-color: #537c8a; }
+.background-task-list details { margin: 8px 0; }
+.background-task-list summary { color: #426f8a; cursor: pointer; }
+.background-task-list ol { margin: 7px 0 0; padding-left: 22px; color: #627985; font-size: 12px; line-height: 1.8; }
+.background-task-error { color: #99594e; }
