@@ -1,0 +1,21 @@
+✔ 缺根许可及持久问题预算时在业务与供应商端口前拒绝 (0.822916ms)
+✖ 一对双臂全部物理尝试共用一个持久预算，绑定实际请求与单次发送ACK (539.161959ms)
+✔ 已有问题预算跨端口共享且耗尽拒绝，ACK不再扣账 (105.377167ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 677.714541
+
+✖ failing tests:
+
+test at .scratch/dsh-ts-migration/nonreply-formal-model-seam/executor.test.mjs:13:1
+✖ 一对双臂全部物理尝试共用一个持久预算，绑定实际请求与单次发送ACK (539.161959ms)
+  TypeError: executor.executePair is not a function
+      at TestContext.<anonymous> (file://$REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-model-seam/executor.test.mjs:17:33)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7)

@@ -1,0 +1,9 @@
+✔ 内层已绑定问题总账时拒绝双扣，短pin和未获时间资格均拒绝 (561.281125ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 592.97625

@@ -1,0 +1,567 @@
+{
+  "schema_version": "nonreply-model-seam-private-index-v1",
+  "files": [
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "budget-final.json",
+      "sha256": "7c505a612428e67085d0232d1eeff3c0b9d4b61b84a035d394c69819347c7f78"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "contracts-final-v2.log",
+      "sha256": "d1e3ab1349000d8be0a330553fd346ceffe36652ba2360dc94b29c33c0cad480"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "contracts-final.log",
+      "sha256": "c03e94a13d37690f42d2eec2e35111cca6fc9b0df3a84dfc9bcc4239df6f3472"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "fake-wire.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "green-01.log",
+      "sha256": "23f9af7e714f95fd97e88dc1dc767405d10ecc8e22ed403234f918839b50e4d9"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "green-02.log",
+      "sha256": "401f4115eb68ddbcbd9723b2cf4bed23f63469dc52398b02008137fd4488ca6b"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "green-03.log",
+      "sha256": "88858396458f5909a0466ffe78cf4147d6573e43d3acb9be7dd2fce814d38d05"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "green-04.log",
+      "sha256": "75d73d794e25fc5bb3f92f97d0842f89531a475355450dceafe8345ffb75f406"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "guard-fix-single.log",
+      "sha256": "37665a445824a7c5d72b7e42b6f968a41b4241ae7f76e5abdafeeab756bdcc4c"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "guards-01.log",
+      "sha256": "c99ebcc63a31e89cc374b1cb23da629813d1eafd178c3674ee836913f23c8d7c"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "header-single.log",
+      "sha256": "709efda2c27bb41774d344c2bbcd1bf2dd1ff387836ec51d198f3069ed87b206"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "integration-01.log",
+      "sha256": "3d4aaf5c4962bf37a3fbf402aa0fa3c690e88601996b95e9fb7469f75c9d2f5d"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "integration-02.log",
+      "sha256": "18a978dd13df01c1acdc645fc23409ac412e28a3cf0af27d7377ac3566c611f0"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "integration-03.log",
+      "sha256": "9c84b3d138bb9b595b84d0cfacd057e6644882170cf398d7ce971a7627bf13cb"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "neutral-packets/private-binding.json",
+      "sha256": "f2c004e8c7cc6d499d3f844dbec3e207f7bc89385d03f8706fce8b6fe2b6e3e4"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "neutral-packets/reviewer-a/packet.json",
+      "sha256": "5fb6d7ef27b8a4792e83676f732c3901acab8b5ff5aaba8e6c1bf2df96515a94"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "neutral-packets/reviewer-b/packet.json",
+      "sha256": "5fb6d7ef27b8a4792e83676f732c3901acab8b5ff5aaba8e6c1bf2df96515a94"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "plan-cli.log",
+      "sha256": "201970adb5514d995e04037f62cc6973937cfc98a1892ec6afd30aa4b6a50eac"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "preflight-no-ports.log",
+      "sha256": "db6e36580ba0e93b830fdd06a9c23da443a5cfc4b8a237fd32e961f33a6d095d"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/budget-final.json",
+      "sha256": "a42761625e1bbf006db6df8632c0b997bda7a617f223c4d2f211f0406b35a1a1"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/fake-wire.json",
+      "sha256": "f989f8d12a5357f0a857fcb4d418326efee81c061d7729734f3d7831477f5745"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/fixture-new.json",
+      "sha256": "33ad5912319081cdf5c21e46ef5dd42d52565769e2f113ad9347d8e8f3d1b627"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/fixture-old.json",
+      "sha256": "e1757703b785652e882c1c5068e14c6bfbfc0d568d5407683c1cb416e93abb99"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/neutral-packets/private-binding.json",
+      "sha256": "b88dd3b63200c7ac247d65e05e3d9b0b4387e787a57f7051de2caac0e1fdb43d"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/neutral-packets/reviewer-a/packet.json",
+      "sha256": "1bcdc4d62abf0eaaa970e3d716ca1fe14c1306293a9c27454e041bb8ec79a685"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/neutral-packets/reviewer-b/packet.json",
+      "sha256": "1bcdc4d62abf0eaaa970e3d716ca1fe14c1306293a9c27454e041bb8ec79a685"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/old-input.json",
+      "sha256": "098fda66717565f2c75d7262e971dd7ccec1bf7338e119c9006d60e1cdf4adb0"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/old-output.log",
+      "sha256": "24180ec79488f002daa550ecad32cc95c6e68686a42d0a51c7b29e04ef35ba70"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/profile-new.log",
+      "sha256": "bb1a3cf97ce4e0cf674b96e69196efcbd9daaea0b309ae5a15211eeb29ee0712"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/raw-report.json",
+      "sha256": "60cb5f4d7eeb2d00fa6d68a26433eef99ccc582f21cbf49bfd4b8bf763eaa45a"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/requests-new.json",
+      "sha256": "8ab6ffaebdf806bbec4bf1500632e94c4f6ad92395912e3db2f76d318c2922e0"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/requests-old.json",
+      "sha256": "f80e10a5c48ba74af047ea895ecc504c4f808beb5f8f98d17bb331b7abc9766d"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/snapshot-cleanup.json",
+      "sha256": "2586cf6bf457603fe9af9426e82d45aae9fb002dae0c45984f6a4c4eb287492d"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/source-manifest.json",
+      "sha256": "9b5f469fb40607f56613aaa0e59f539af547708f515fdf57dc6b4aff1a580178"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/summary.json",
+      "sha256": "43f4cb829805060aaa0884cbe044ef755e3d61ae705c4d1b4d3718f8deabbac0"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-iasO0r/worker.log",
+      "sha256": "3ab330be3ce509e6c08391ada75a5d7e2753bdfdc775fde580fe181283b662e6"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/broker-error-new-1.json",
+      "sha256": "b0e047f397edb0677c36f7414ce1eb9be3df3216467428390c425e3a8a6169ec"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/broker-error-new-2.json",
+      "sha256": "b0e047f397edb0677c36f7414ce1eb9be3df3216467428390c425e3a8a6169ec"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/broker-error-new-3.json",
+      "sha256": "b0e047f397edb0677c36f7414ce1eb9be3df3216467428390c425e3a8a6169ec"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/broker-error-new-4.json",
+      "sha256": "4487a79a62b9fe8a498e8829e6e0bbbfb619b84d17c1bbe4ee1546856b89b2fc"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/broker-error-old-1.json",
+      "sha256": "b0e047f397edb0677c36f7414ce1eb9be3df3216467428390c425e3a8a6169ec"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/budget-final.json",
+      "sha256": "5372f6039d097967e51c56e518c9a5aec9a16639e4c09e11ecf3d3f6bfc57a3d"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/fake-wire.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/fixture-new.json",
+      "sha256": "8d96d0fd1e1c0ccab1c0e9d17c23b8b50fbe777040f74132abda7709f967e918"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/fixture-old.json",
+      "sha256": "a538366aec2205322abe71b10dc20216306e827a3324007d222166b82a39ba71"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/neutral-packets/private-binding.json",
+      "sha256": "2078b4916ae0375f4fef9fd24a9b653f0ed20b50e6c585db04c6d490d90acfb7"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/neutral-packets/reviewer-a/packet.json",
+      "sha256": "5f3427960bec4cc384a5c9e328c3e88f6ca913d3d2d7039b57b6b8b92d39776d"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/neutral-packets/reviewer-b/packet.json",
+      "sha256": "e49a5d6d56124df2d1e41ebe4550dc9872925cff5eb4a9558fb25cc09d009cfd"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/old-input.json",
+      "sha256": "4c08ebb109a5cd6cf70c38382986fad3c63c224e2dfcebccbdc015d202574886"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/old-output.log",
+      "sha256": "245bee38d739c43949185f61719236432dacb4c7b3da638724a00cb4cfc2db6c"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/profile-new.log",
+      "sha256": "7a6a1907c51a92bb0ce197bbf0b46a8aa802e790a4e366fba0d4d208209d0e76"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/raw-report.json",
+      "sha256": "ec3413806d70bc59abca65ba638e6d55967e2205aeb3b31064eea83d4c3a0fc6"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/requests-old.json",
+      "sha256": "b11a04479f55963056dd6287cc8d265d119be02ba56aa0ade0e1b342f4459f9f"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/snapshot-cleanup.json",
+      "sha256": "bd81340eec69089a75004d280fd6ede7abd86ef4101af724623d33a304e38907"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/source-manifest.json",
+      "sha256": "2f87d68c8cd9b7dc925e355316836cfacb42ff4fe7b4cf9330a54e5d8202cb89"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/summary.json",
+      "sha256": "98cb52fc6ed7efd28b17745f67b56baa6187b4a0d6810e3c9f53f37301a0000f"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "probe-uHDbvv/worker.log",
+      "sha256": "1e38bc9dbb8c07e3bb68b1c74c14bc9d4fde7d9d23434af1043408adec16958c"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "raw-report.json",
+      "sha256": "0586d316f2bdc92030a19a0ff5b4c5610b23b578008afac338feb5c37ca6c300"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "red-01.log",
+      "sha256": "87cf5337e38393bf64d460d9262830d24cc737b8c7d3687c0b1b430027cd78e0"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "red-02.log",
+      "sha256": "3a7447a3cb5f37a888c98933ad42686339bf1b45b7990266589cf34f16176573"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "red-03.log",
+      "sha256": "6e452ace5cf23c5c1e5d5045905f6e73cf1f779a1d72709d8be04ba795a54803"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "related-final.log",
+      "sha256": "08fc80294641b488d0fe4d84cf9bccd68fa1fde5f980f2b05ee4c30ebf884590"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "retry-prod-green-01.log",
+      "sha256": "ec43526b8e66f67c2953e4355d21bf78ac1f0ca740ee2b097031500e12e745ad"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "retry-prod-red-02.log",
+      "sha256": "e2ac4a5e692ebbd9b3d58902f8b14643112a961d64638a33e0b1a3fe44e856b6"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "retry-prod-red-03.log",
+      "sha256": "c86c070f300c29d3b18f3c779918c8e686f5f57fba3b87162d9896c021ddaa60"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "retry-prod-red.log",
+      "sha256": "8c5e31d0382b216a21a22c1f52bbfb4e5cb051ca1d866a99d7e563c07d3a0bea"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "retry-public-batch-final.log",
+      "sha256": "08d3ec904a2ec044ca8d7820966e812fde5e9417185a523c6305531646b79b90"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "retry-public-batch.log",
+      "sha256": "0aba1155e8f29c69594661cadf658e9a7556d44e5a963f91a8d61b258615f5ce"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "snapshot-cleanup.json",
+      "sha256": "212c01179794d369c9cc255c866803b4a744c320e884bd3205d8295a3e4574d6"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "source-manifest.json",
+      "sha256": "c474187858065aaeeea16d2bdec01874fcf9ab4765cd99a3cdb0d5dd02dde940"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "summary.json",
+      "sha256": "11d03ece93c17736ec1539b3ab9b59c9ca2cd758fd5ff68e40263cd5ddeadc6b"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "typecheck-final.log",
+      "sha256": "6dec7831db312a51a625554ff52161c1c806c35e5d8dac8f6eb1f4e5a0fde7a6"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "uncertain-fixtures-sysmetadata.json",
+      "sha256": "2e05cc925253d6237ef915792fbb77fa06809ed434e7e0a9807b6a6ba3baf900"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "unreceipted-fixture-candidates.json",
+      "sha256": "5adf13af95059ed818b035ee169a8c88db284f57f1a1edbfa7b282fbd8e34004"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "worker.log",
+      "sha256": "e97ee47fe2e1249cd4ed938b927b1d3bf5dee5f9bef62d5c17008f4435fc32e4"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "broker-error-new-1.json",
+      "sha256": "fabdc66b0b135348043a7941a61465f6257395025cbd0a59e2afd2135f0a193a"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "broker-error-old-1.json",
+      "sha256": "fabdc66b0b135348043a7941a61465f6257395025cbd0a59e2afd2135f0a193a"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "budget-final.json",
+      "sha256": "aeb3a839501d2b646e9f4254e3f3c8c8f00cab361ab4cb3ac595a05d0201efae"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "fake-wire.json",
+      "sha256": "71abb02697603c037e8e2073f5084cd975644f94e291125d1ec0b095ef171e47"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "fixture-new.json",
+      "sha256": "63e11f18617a7b0a5cb4f2e7b054dd83c336ba69e8686bc5a103574999da1d9b"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "fixture-old.json",
+      "sha256": "184efa0127b79f6c0f35a8d4564f04c657abe67be9c6243abf5910be67e013aa"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "old-input.json",
+      "sha256": "336582b2e75b2a3a6b28984c7eee253acdc1a8f44464fff556ace2b37867e4a9"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "old-output.log",
+      "sha256": "245bee38d739c43949185f61719236432dacb4c7b3da638724a00cb4cfc2db6c"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "profile-new.log",
+      "sha256": "336251fc5e1208e26cd87d65598a53ad880532df7cee1c1a0bd1c8fd92ef1896"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "requests-old.json",
+      "sha256": "19628f52181d1a75a83dacb588893336cff7e66b08a345470bfe3ebb1ecb243e"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-QGNATC",
+      "relative_path": "retry-result.json",
+      "sha256": "64cc0fee18610f8b7e389a56058e3b3cde7748c530702a62869ddb7f000e63bf"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-bf8T5N",
+      "relative_path": "budget-final.json",
+      "sha256": "2e313b350b4815661123eab34059be309fc47ce7deda431c5409cc6b07bf8765"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-bf8T5N",
+      "relative_path": "fake-wire.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-bf8T5N",
+      "relative_path": "fixture-new.json",
+      "sha256": "c7578620f9d6d40496ca2ec78fe1ff5b2a4a337a6a8c781664e957b0bab0d8cb"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-bf8T5N",
+      "relative_path": "fixture-old.json",
+      "sha256": "e3e0973d1f7122bad0775227e2f3ba9b54827a32d373eee37937a77e9969d986"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-bf8T5N",
+      "relative_path": "retry-result.json",
+      "sha256": "822aef537b9f050aa3140c8ea044f06e927b885702dc573c2b26e5536544a3b8"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "broker-error-new-1.json",
+      "sha256": "fabdc66b0b135348043a7941a61465f6257395025cbd0a59e2afd2135f0a193a"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "broker-error-old-1.json",
+      "sha256": "fabdc66b0b135348043a7941a61465f6257395025cbd0a59e2afd2135f0a193a"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "budget-final.json",
+      "sha256": "3ba87222c4169636d5d547d5a3e644e85aae7075ac62703c5c7ed48f023a4026"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "fake-wire.json",
+      "sha256": "71abb02697603c037e8e2073f5084cd975644f94e291125d1ec0b095ef171e47"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "fixture-new.json",
+      "sha256": "19dcb4c931929dc5740ad0d9e9d1fc34b0ef0567b633e60bf0fcc119fce0b4e5"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "fixture-old.json",
+      "sha256": "4f6a92c03e4888f33225b8f8e092c49bc8a4bdc45d61bcce36c73543c2430ec4"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "old-input.json",
+      "sha256": "deff94b6f813eb331197bc9d088dd79fab1821d231e49abc6daeb828d548dd67"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "old-output.log",
+      "sha256": "245bee38d739c43949185f61719236432dacb4c7b3da638724a00cb4cfc2db6c"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "profile-new.log",
+      "sha256": "b6d7349835600357e6b2468ad0ecc704f0c9beba5f79c07e219273b6241929a5"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "requests-old.json",
+      "sha256": "14a98dc39dd7eadd3318754561a8f5b5b101ceea73315c2e0e54585faaba0e96"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-jTbO4F",
+      "relative_path": "retry-result.json",
+      "sha256": "9b473d5b526f4d2688f7201ce0d779d6542cf7ac39289a43255445753185289c"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-x6Cn5g",
+      "relative_path": "budget-final.json",
+      "sha256": "d752ba4a5a5668a0773e5227dde4b91c4b8a4b9109019a9127b4edadf50d9a70"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-x6Cn5g",
+      "relative_path": "fake-wire.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-x6Cn5g",
+      "relative_path": "fixture-new.json",
+      "sha256": "42d9488addb57edbe940ada9dd9e430332f5ae14f83967385a08c090263549a8"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-x6Cn5g",
+      "relative_path": "fixture-old.json",
+      "sha256": "94db55d67b667c449f33afa26b74fee584122f9ee6469bcdfe16cbb36c097c6a"
+    },
+    {
+      "private_root_label": "notalone-seam-retry-test-x6Cn5g",
+      "relative_path": "retry-result.json",
+      "sha256": "d415032318e924090e2562b8cdb3f3a73e48115d61a622c7b4e1add657d85ef7"
+    },
+    {
+      "private_root_label": "notalone-seam-seed-probe-dopI57",
+      "relative_path": "business-open-error-old.log",
+      "sha256": "bc4f8845401c21a241fa62f0c2644c88a8601f09ce2221e7006ee493e25fd4af"
+    },
+    {
+      "private_root_label": "notalone-seam-seed-probe-dopI57",
+      "relative_path": "fixture-old.json",
+      "sha256": "48e28ec5787f251cb574e987d941933376a2066563e6187d73712ee1350f0706"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "attributed-config-notalone-host-pg-WFWGkf.txt",
+      "sha256": "6b420a4c3d55123e59e10b9dbc098f4d5ad022310421b629ae922fdcfd11f4a0"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "attributed-config-notalone-host-pg-X8flDC.txt",
+      "sha256": "d7054074b8b237df3b4f0502ca6ce67ca3ea29df753d4f68cd2cf350dfae0465"
+    },
+    {
+      "private_root_label": "notalone-nonreply-seam-private-9o2jrnj0",
+      "relative_path": "late-attributed-cleanup.json",
+      "sha256": "2457923967e4bf8dc4dce87a9b72c13d36f959a57559f0bd38e6f829d0e05167"
+    }
+  ],
+  "private_permissions": "0700/0600",
+  "contains_only_task_synthetic_evidence": true
+}

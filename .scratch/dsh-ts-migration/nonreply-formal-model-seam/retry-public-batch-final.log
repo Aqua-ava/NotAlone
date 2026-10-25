@@ -1,0 +1,10 @@
+✔ 显式内部策略0在首次失败后不重试 (453.560625ms)
+✔ 省略内部策略保留原默认重试资格 (431.144875ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 974.807

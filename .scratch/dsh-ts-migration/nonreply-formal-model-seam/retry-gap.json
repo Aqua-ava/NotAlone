@@ -1,0 +1,56 @@
+{
+  "schema_version": "nonreply-business-retry-gap-v1",
+  "candidate_commit": "4f89bb976dd4086a02b7ae983fee2760d6e4ff64",
+  "reproduction": "integration-02.log / probe-uHDbvv/raw-report.json",
+  "physical_supplier_http": 0,
+  "reserved_not_refunded": 4,
+  "arrivals": {
+    "old": 1,
+    "new": 4
+  },
+  "new_reservation_ordinals": [
+    2,
+    3,
+    4,
+    null
+  ],
+  "new_arrival_offsets_seconds": [
+    0,
+    30.448,
+    60.949,
+    91.578
+  ],
+  "new_request_sha256s": [
+    "1e2b84585b00ff87e751413ac81da747cf7b657ced64f42ac460aef121d894be"
+  ],
+  "root_cause": "extraction-flow默认5次恢复重试、30000ms退避；502被ExtractionModelError标可重试，BatchService未传公开flow支持的max_retries:0。SDK自身maxRetries为0。",
+  "source_files": {
+    "backend-ts/src/extraction-flow.ts": "277e219b87b08563f61942cb6ac61f99cf833f1d060693fae1a29ad5261421a3",
+    "backend-ts/src/extraction-batch-service.ts": "897fee67684d48a0f7e8baf825b6428e8a2cd07645ea0abf7d5781ceb07cb1a8",
+    "backend-ts/src/extraction-model.ts": "749438baf97e30aeb0571e85390b779dce5a603af1189c46bd2c595c342fe098",
+    "backend-ts/src/host-reply.ts": "3b1a1030884439cd18ee352c5ca701a8792f4d69fab589fac48b4623c3e8b1fe",
+    "backend-ts/src/model-provider.ts": "90ec087500a834b356d58bbb0237b63ec3252f0f9a17f6e2a9ce60372883a156"
+  },
+  "source_lines": {
+    "extraction-flow.ts": "106–137 / 190–216",
+    "extraction-model.ts": "21–29",
+    "extraction-batch-service.ts": "26–34 / 235–250",
+    "host-reply.ts": "65–86"
+  },
+  "public_host_retry_override": false,
+  "formal_no_retry_qualification": "unknown",
+  "seam_mitigation": "供应商header等在reserve前validate；首失败锁住本逻辑运行其后到达，不再预留或发送。内部恢复循环并未因此被关闭。",
+  "proposed_root_change": "只通过受控评测选项将max_retries:0及retry_delay_ms:0从HostReplyOptions/BatchService.Options透传现有runExtractionFlow；保留产品默认。不在本目录修改production。",
+  "original_failure_preserved": true,
+  "production_modified": false,
+  "followup": {
+    "root_authorized_production_seam": "extractionRetryPolicy {maxRetries,retryDelayMs}",
+    "production_manifest": "production-patch-manifest.json",
+    "controlled_working_tree_fault_regression": "passed: 新E1/V0/PG ledger1、will_retry=false；旧E1；同问题synthetic used2，不靠耗尽",
+    "default_behavior": "公开Batch+PG省略策略仍will_retry=true，原Flow源码默认5/30000未改",
+    "root_fixed_commit_required": true,
+    "fixed_4f89_still_has_original_gap": true,
+    "legacy_E_public_control": "DirectExtractionRuntime(max_retries=0)，3c168296 direct_adapter.py:99–110；SDK max_retries=0，旧隔离适配早已显式传0。",
+    "legacy_V": "无独立重试参数；使用同一SDK max_retries=0。当前故障探针只检验E失败，V故障未执行。"
+  }
+}

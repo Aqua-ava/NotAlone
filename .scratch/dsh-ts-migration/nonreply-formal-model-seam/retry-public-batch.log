@@ -1,0 +1,44 @@
+✖ 显式内部策略0在首次失败后不重试 (447.936959ms)
+✖ 省略内部策略保留原默认重试资格 (429.677833ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 969.48125
+
+✖ failing tests:
+
+test at test/nonreply-formal-model-seam-retry.test.mjs:46:1
+✖ 显式内部策略0在首次失败后不重试 (447.936959ms)
+  AssertionError [ERR_ASSERTION]: 必须实际经过恢复事件
+      at observeRecovery (file://$REPO_ROOT/backend-ts/test/nonreply-formal-model-seam-retry.test.mjs:43:34)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://$REPO_ROOT/backend-ts/test/nonreply-formal-model-seam-retry.test.mjs:47:17)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at test/nonreply-formal-model-seam-retry.test.mjs:49:1
+✖ 省略内部策略保留原默认重试资格 (429.677833ms)
+  AssertionError [ERR_ASSERTION]: 必须实际经过恢复事件
+      at observeRecovery (file://$REPO_ROOT/backend-ts/test/nonreply-formal-model-seam-retry.test.mjs:43:34)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://$REPO_ROOT/backend-ts/test/nonreply-formal-model-seam-retry.test.mjs:50:17)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
