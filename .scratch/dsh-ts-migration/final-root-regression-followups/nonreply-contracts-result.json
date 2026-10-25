@@ -1,0 +1,9 @@
+{
+  "tests": 10,
+  "pass": 10,
+  "fail": 0,
+  "raw_sha256": "97bc3a40fec60d79b7d53cafb0ef63382a6a435a3bccc6c4e5a44474070a0545",
+  "real_supplier_calls": 0,
+  "memory_semantic_quality": "deferred_by_user",
+  "source_manifest_sha256": "0bf7525883f324d294758b234608e2190d2f6048ca735f838499039dd0ea4ba5"
+}

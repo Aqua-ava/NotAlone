@@ -1,0 +1,191 @@
+{
+  "schema_version": "full-orchestration-cleanup-v1",
+  "invocations": [
+    {
+      "label": "zero-01",
+      "snapshot": {
+        "owned_archive_removed": true,
+        "before_kib": 23848,
+        "remaining_manifest_only": true,
+        "owned_process_references": 0
+      },
+      "fixtures": [
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        }
+      ],
+      "all_fixtures_dropped": true,
+      "real_supplier_calls": 0
+    },
+    {
+      "label": "empty-02",
+      "snapshot": {
+        "owned_archive_removed": true,
+        "before_kib": 23848,
+        "remaining_manifest_only": true,
+        "owned_process_references": 0
+      },
+      "fixtures": [
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        }
+      ],
+      "all_fixtures_dropped": true,
+      "real_supplier_calls": 0
+    },
+    {
+      "label": "empty-03",
+      "snapshot": {
+        "owned_archive_removed": true,
+        "before_kib": 23848,
+        "remaining_manifest_only": true,
+        "owned_process_references": 0
+      },
+      "fixtures": [
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        }
+      ],
+      "all_fixtures_dropped": true,
+      "real_supplier_calls": 0
+    },
+    {
+      "label": "mixed-04",
+      "snapshot": {
+        "owned_archive_removed": true,
+        "before_kib": 26360,
+        "remaining_manifest_only": true,
+        "owned_process_references": 0
+      },
+      "fixtures": [
+        {
+          "dropped": true,
+          "remaining_connections": null
+        },
+        {
+          "dropped": true,
+          "remaining_connections": null
+        },
+        {
+          "dropped": true,
+          "remaining_connections": null
+        },
+        {
+          "dropped": true,
+          "remaining_connections": null
+        },
+        {
+          "dropped": true,
+          "remaining_connections": null
+        },
+        {
+          "dropped": true,
+          "remaining_connections": null
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": null
+        },
+        {
+          "dropped": true,
+          "remaining_connections": null
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        }
+      ],
+      "all_fixtures_dropped": true,
+      "real_supplier_calls": 0
+    },
+    {
+      "label": "zero-05",
+      "snapshot": {
+        "owned_archive_removed": true,
+        "before_kib": 23856,
+        "remaining_manifest_only": true,
+        "owned_process_references": 0
+      },
+      "fixtures": [
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        },
+        {
+          "dropped": true,
+          "remaining_connections": 0
+        }
+      ],
+      "all_fixtures_dropped": true,
+      "real_supplier_calls": 0
+    }
+  ],
+  "owned_fixture_databases": 28,
+  "owned_databases_remaining": 0,
+  "private_directory_mode": "0700",
+  "private_file_mode": "0600",
+  "private_permission_violations": 0,
+  "source_archives_removed": true,
+  "raw_journals_source_manifests_retained": true,
+  "app_wechat_started": false,
+  "real_supplier_calls": 0
+}

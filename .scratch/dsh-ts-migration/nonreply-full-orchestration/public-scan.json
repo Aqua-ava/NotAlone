@@ -1,0 +1,9 @@
+{
+  "schema_version": "orchestration-directory-public-scan-v1",
+  "scope": "this_directory_only",
+  "checked_files": 28,
+  "issues": [],
+  "dotenv_or_real_private_policy_read": false,
+  "full_repository_history_scan": false,
+  "git_commit_created": false
+}

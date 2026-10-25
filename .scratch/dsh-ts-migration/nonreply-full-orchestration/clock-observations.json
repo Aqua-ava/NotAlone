@@ -1,0 +1,531 @@
+{
+  "schema_version": "full-orchestration-input-clock-observations-v1",
+  "captured_loopback_requests": 34,
+  "calendar_date": "2026-10-25",
+  "scope": "selected_engineering_requests_only",
+  "source_time_is_not_eval_as_of": true,
+  "global_Date_mocked": false,
+  "pg_now_mocked": false,
+  "extraction_and_skill_evaluation_as_of": "not_injected_no_public_content_clock",
+  "l2_l3_probe_clock": "wall_engineering_only",
+  "future_root_observation_cutoff": "root_may_preregister_without_mocking_runtime_clock",
+  "top_p_official_checked_date": "2026-10-25",
+  "top_p_sources": [
+    "https://api-docs.deepseek.com/api/create-chat-completion/",
+    "https://api-docs.deepseek.com/guides/anthropic_api/"
+  ],
+  "only_this_field_equivalent": true,
+  "full_model_protocol_prompt_equivalence_proven": false,
+  "requests": [
+    {
+      "run_id": null,
+      "request_sha256": "7b71bd3afcae232cb81fd1af68d2b9240e88552c732ca01e53f869115c95d837",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": true,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": "omitted",
+      "effective_top_p": 1
+    },
+    {
+      "run_id": null,
+      "request_sha256": "ff0be9ebf8a455b181d881c901c4059777822d5f60d9a775e25d38189ae1a228",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": true,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": "omitted",
+      "effective_top_p": 1
+    },
+    {
+      "run_id": null,
+      "request_sha256": "7b0b1862777ffc7cfb7efb0a5e0e4b205400a684f91e7c42cdbc19906a905e51",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": true,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": null,
+      "request_sha256": "97ea658eba700701c4a624756c563455e0662243e610a3504c5c4817179873cf",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": true,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": null,
+      "request_sha256": "111918fafe4aa064082f901da8aebf9748838c0067adeed6ca11e2123589eed5",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": true,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": "omitted",
+      "effective_top_p": 1
+    },
+    {
+      "run_id": null,
+      "request_sha256": "804653d136b48fe30e74c26f88b8c6dbc6a6306fa67176ad4a1773105fad42ed",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": true,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:old",
+      "request_sha256": "9d30d8a183ddb47f8b702892b2da3c5eaecb09d2e4704205f7155e0e74e5cd54",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:old",
+      "request_sha256": "013462e4fd2eadb701309800dc8a85d37bb6f0ef3946163c2bc9790e2fc3147f",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:old",
+      "request_sha256": "aff3d3474695bfb7478b1a7a4d61690535b1fb21f7a1811cc94f7dc35c2ce0c3",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:old",
+      "request_sha256": "38034eb024f6277c694dc81c6080c7a9b6d23af09d06184ed5169c8a61e5a81f",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:old",
+      "request_sha256": "c6a2493ad2922cd26072b31bc95d3191bfe807a7472a6adf45f4c863de273e61",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:old",
+      "request_sha256": "d91e747daaab845e937bc6c63696b5dfe6c36d4c2be225adba72501e313ec37f",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:new",
+      "request_sha256": "e07406a62d6419f7634fc8a6fc26d0b9d1a21bee5ed45fd0c14c7907f5fe0bbc",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:new",
+      "request_sha256": "3343031bc18e0ef9f0f58459230881da405b61a8ff93b801e54b90d433b88404",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:new",
+      "request_sha256": "86e022cde61721f6d27c14ffc761f3874a42f7aa3f842a5e8e2f896dc273b677",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:new",
+      "request_sha256": "16eeda7860a8eeaaf70a57db8fb8819732b7303aa91629239590e1c834ebeaca",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:new",
+      "request_sha256": "9cadbde8f8eb532bb26a53ccd5943471eb7723a36e5cfbe5448656638ac7de9c",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l2_scenario:l2_scenario-01:1:new",
+      "request_sha256": "085acba1186097bd2bae51d590a0e6e49b107497d3dad9e73f085180cced632c",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:old",
+      "request_sha256": "aabe85e72f1fd6bd750ee8b7e33c970fc732825284e8be17770c314fc483793d",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:old",
+      "request_sha256": "95e081b61c4884eeaddbb7725d9f1a2e558f2fb108f1966f74422e3444f4660e",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:old",
+      "request_sha256": "8d27483e36d402498a9eb0886177def16555f6b3e5b31a7aad712f9ccb5ac7bb",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:old",
+      "request_sha256": "d2c17ba6f1a7e3b6aac90f67a9f1789e175bcb81e7ef7162e629644a19354f74",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:old",
+      "request_sha256": "fbf6a983cf6e804e31574201905e4c6815e6f6d8ebfd573afa357241471ebc3e",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:old",
+      "request_sha256": "0f5045a38200807a998ed85fb094bf47f4c5225c0b17d4da70f8fa2ceb97a098",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 8192,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:new",
+      "request_sha256": "6bad08f5fc6d774171255d22ec4883e56872b1ba2745b241e2a8f668d77c4f0e",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:new",
+      "request_sha256": "5ec369710d8aaf22e48160cf92c3a64bc9846833da85118eb7ce7f6b31cb6625",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:new",
+      "request_sha256": "cf246b65d19a1dc6c29de20808274ee03fe2d6f4ab12b12890bb9e37312c2ece",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:new",
+      "request_sha256": "d154e4f1ba6f219dda19b9d6ec40874732e6620829411ec305e5bd442cc7efb6",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:new",
+      "request_sha256": "0d50804e76d0df001d7ca402a3eabcb4556e1af8ffa93584d0fcf1f8c6075727",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "l3_profile:l3_profile-01:1:new",
+      "request_sha256": "a237b7643b9eaaaa1087b59f991ccc3fb7f0ddb4f832120c40d64f98d4c46627",
+      "runtime_calendar_date_present": true,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": false,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "skill_learning:skill_learning-12:1:old",
+      "request_sha256": "e3f6aedefca292828b902a43768deff87d423c3eb8b0a4a64c46d8a490ebb53b",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": true,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": 1,
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "skill_learning:skill_learning-12:1:new",
+      "request_sha256": "2921d3e7a1d608573dbf50e6211ac2bf7ffd3a73d4be3f3bf32f9fe312a71d13",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": true,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "skill_learning:skill_learning-01:2:new",
+      "request_sha256": "054bd3fb421042e841a8ce2b2029bf8ec1b494ca670f2adc8c34561e231c6fb3",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": true,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": "omitted",
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    },
+    {
+      "run_id": "skill_learning:skill_learning-01:2:old",
+      "request_sha256": "dc189a2b0973619031fbeb868c8fe86f30d14435f7d01aa8af42168ce0691c54",
+      "runtime_calendar_date_present": false,
+      "original_extraction_date_present": false,
+      "material_as_of_date_present": false,
+      "source_observed_date_present": true,
+      "requested_model": "deepseek-flash",
+      "thinking": {
+        "type": "disabled"
+      },
+      "raw_top_p": 1,
+      "raw_max_tokens": 393216,
+      "effective_top_p": 1
+    }
+  ]
+}

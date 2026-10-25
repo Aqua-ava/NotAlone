@@ -1,0 +1,23 @@
+{
+  "source_commit": "ae12d7f1a407fc5852ae9c02d87253ded6828363",
+  "command": "perl -e 'alarm 600; exec @ARGV' -- node scripts/test-safe.mjs",
+  "actual_alarm_command": [
+    "perl",
+    "-e",
+    "alarm 600; exec @ARGV",
+    "--",
+    "node",
+    "scripts/test-safe.mjs"
+  ],
+  "cwd": "desktop",
+  "tests": 1018,
+  "pass": 1017,
+  "fail": 0,
+  "cancelled": 0,
+  "skipped": 1,
+  "skip": "原有失败G收据拒绝测试明确SKIP，未计通过",
+  "duration_ms": 52096.236667,
+  "raw_sha256": "61ad81cb75715e38fb9c33a2308713c266795f5a894e7ccdc29bc8a5e678cecd",
+  "real_model_calls": 0,
+  "protected_user_files_modified_by_root": false
+}
