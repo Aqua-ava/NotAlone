@@ -35,8 +35,11 @@ function scenario(policy,count,{malformed=false,cancelAtLastParse=false,failVeri
         const facet={verdict:'supported',evidence_indices:[0]};
         args={...(modern?{request_fingerprint:payload.request_fingerprint}:{}),results:Array.from({length:count},(_,candidate_index)=>({
           candidate_index,verdict:'supported',issues:[],evidence:[{message_id:message,quote:text}],
-          ...(modern?{claim_check:{version:1,parts:[{candidate_span:{start:0,end:[...text].length},
-            attribution:{...facet,scope_subject:'contact',actor_kind:'contact',resolution:'explicit'},
+          ...(modern?{claim_check:{version:2,field_checks:Object.fromEntries(['category','topic','scene_name','alternatives','interpretation_reason',
+            'valid_at','invalid_at','speech_act','assertion_status','figurative_type','event','conditions'].map(name=>[name,facet])),
+            parts:[{candidate_span:{start:0,end:[...text].length},
+            attribution:{...facet,scope_subject:'contact',actor_kind:'third_party',resolution:'explicit',
+              subject_mentions:[{kind:'literal_subject',evidence_index:0,source_span:{start:0,end:5},candidate_span:{start:0,end:5}}]},
             arguments_and_relation:facet,temporal_and_modality:facet}]}}:{}),
         }))};
       }

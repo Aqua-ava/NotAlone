@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: 现代核验请求包含完整提议；场景、解释及备选含义不能只留在 E
+ok 1 - 现代核验请求包含完整提议；场景、解释及备选含义不能只留在 E
+  ---
+  duration_ms: 2.735
+  type: 'test'
+  ...
+# Subtest: 正文忠实也不能在语义元数据尚未逐项核验时接纳
+ok 2 - 正文忠实也不能在语义元数据尚未逐项核验时接纳
+  ---
+  duration_ms: 1.252708
+  type: 'test'
+  ...
+# Subtest: 每个语义字段的未定或无支持都否决整体；结构配置与忠实未知不判假
+ok 3 - 每个语义字段的未定或无支持都否决整体；结构配置与忠实未知不判假
+  ---
+  duration_ms: 13.3125
+  type: 'test'
+  ...
+# Subtest: 省略语义主体不能靠发言者身份与 explicit 自签通过
+ok 4 - 省略语义主体不能靠发言者身份与 explicit 自签通过
+  ---
+  duration_ms: 0.431709
+  type: 'test'
+  ...
+# Subtest: 实际第一人称和第三方主体有据可接受；任意重合字与发言者标签不能充当指代依据
+ok 5 - 实际第一人称和第三方主体有据可接受；任意重合字与发言者标签不能充当指代依据
+  ---
+  duration_ms: 2.34775
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 106.445916

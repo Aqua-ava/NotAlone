@@ -27,10 +27,23 @@ function scenario(example, overrides = {}) {
 
 function blocks(prepared, example, facetVerdict = 'supported', patch = {}) {
   const facet = verdict => ({verdict, evidence_indices: [0]});
+  const span = (text, quote) => {
+    const start = [...text.slice(0, text.indexOf(quote))].length;
+    return {start, end: start + [...quote].length};
+  };
+  const firstPerson = example.source.includes('我'), shared = example.candidate.startsWith('联系人与');
+  const subject_mentions = [{kind: firstPerson ? 'first_person' : 'literal_subject', evidence_index: 0,
+    source_span: span(example.source, firstPerson ? '我' : '阿青'),
+    candidate_span: firstPerson ? {start: 0, end: 3} : span(example.candidate, '阿青')}];
+  if (shared) subject_mentions.push({kind: 'literal_subject', evidence_index: 0,
+    source_span: span(example.source, '阿青'), candidate_span: span(example.candidate, '阿青')});
+  const field_checks = Object.fromEntries(['category', 'topic', 'scene_name', 'alternatives', 'interpretation_reason',
+    'valid_at', 'invalid_at', 'speech_act', 'assertion_status', 'figurative_type', 'event', 'conditions'].map(name => [name, facet('supported')]));
   const item = {candidate_index: 0, verdict: 'supported', issues: [],
     evidence: [{message_id: message, quote: example.source}],
-    claim_check: {version: 1, parts: [{candidate_span: {start: 0, end: [...example.candidate].length},
-      attribution: {...facet('supported'), scope_subject: 'contact', actor_kind: 'contact', resolution: 'explicit'},
+    claim_check: {version: 2, field_checks, parts: [{candidate_span: {start: 0, end: [...example.candidate].length},
+      attribution: {...facet('supported'), scope_subject: 'contact',
+        actor_kind: shared ? 'shared' : firstPerson ? 'contact' : 'third_party', resolution: 'explicit', subject_mentions},
       arguments_and_relation: facet(facetVerdict), temporal_and_modality: facet(facetVerdict),
     }]}, ...patch};
   return [{type: 'tool-call', name: 'SourceVerificationOutput', arguments: JSON.stringify({

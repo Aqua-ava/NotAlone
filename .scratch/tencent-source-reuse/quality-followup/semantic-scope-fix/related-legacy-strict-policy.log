@@ -1,0 +1,190 @@
+TAP version 13
+# Subtest: nullable-proof-v3转换为DeepSeek strict支持的关键字与对象闭合合同
+ok 1 - nullable-proof-v3转换为DeepSeek strict支持的关键字与对象闭合合同
+  ---
+  duration_ms: 1.808458
+  type: 'test'
+  ...
+# Subtest: 只构造SourceVerificationOutput的Beta Chat Completions strict请求并能解码唯一工具结果
+ok 2 - 只构造SourceVerificationOutput的Beta Chat Completions strict请求并能解码唯一工具结果
+  ---
+  duration_ms: 0.641834
+  type: 'test'
+  ...
+# Subtest: strict工具结果中的supported与proof:null通过现有nullable-proof-v3解析器
+ok 3 - strict工具结果中的supported与proof:null通过现有nullable-proof-v3解析器
+  ---
+  duration_ms: 1.404292
+  type: 'test'
+  ...
+# Subtest: bounded-v1提示、动态schema与Python固定合同一致
+ok 4 - bounded-v1提示、动态schema与Python固定合同一致
+  ---
+  duration_ms: 438.260417
+  type: 'test'
+  ...
+# Subtest: grounded-v2编译条件计划与Python逐字段一致
+ok 5 - grounded-v2编译条件计划与Python逐字段一致
+  ---
+  duration_ms: 42.554875
+  type: 'test'
+  ...
+# Subtest: nullable-proof-v3重新核验真实来源并生成同Python的v4依据摘要
+ok 6 - nullable-proof-v3重新核验真实来源并生成同Python的v4依据摘要
+  ---
+  duration_ms: 2.537625
+  type: 'test'
+  ...
+# Subtest: bounded flow执行GroundedMemoryLabels与单次V且非法提案整项拒绝
+ok 7 - bounded flow执行GroundedMemoryLabels与单次V且非法提案整项拒绝
+  ---
+  duration_ms: 2.573541
+  type: 'test'
+  ...
+# Subtest: proof为空仍生成ALL正文v4依据但不授予语义支持
+ok 8 - proof为空仍生成ALL正文v4依据但不授予语义支持
+  ---
+  duration_ms: 0.532375
+  type: 'test'
+  ...
+# Subtest: 默认legacy-v4来源绑定与Python逐字段一致，保留Unicode/微秒/大整数及float1.0摘要
+ok 9 - 默认legacy-v4来源绑定与Python逐字段一致，保留Unicode/微秒/大整数及float1.0摘要
+  ---
+  duration_ms: 40.983583
+  type: 'test'
+  ...
+# Subtest: 只有同次supported与source_bound同时满足才签原receipt，风险标签不替代来源资格
+ok 10 - 只有同次supported与source_bound同时满足才签原receipt，风险标签不替代来源资格
+  ---
+  duration_ms: 0.847666
+  type: 'test'
+  ...
+# Subtest: 完整窗口含context，来源raw/范围/候选变化与JSON恢复均需重验，不能复用旧bound
+ok 11 - 完整窗口含context，来源raw/范围/候选变化与JSON恢复均需重验，不能复用旧bound
+  ---
+  duration_ms: 33.692375
+  type: 'test'
+  ...
+# Subtest: 事件和条件采纳字段、偏移时间及多种float摘要沿原Python合同，不纳入临时字段
+ok 12 - 事件和条件采纳字段、偏移时间及多种float摘要沿原Python合同，不纳入临时字段
+  ---
+  duration_ms: 166.378209
+  type: 'test'
+  ...
+# Subtest: 缺失来源元数据保持未知，legacy拒绝ALL且不凭supported签造来源
+ok 13 - 缺失来源元数据保持未知，legacy拒绝ALL且不凭supported签造来源
+  ---
+  duration_ms: 162.075583
+  type: 'test'
+  ...
+# Subtest: JSON恢复的伪片段不能取得source_bound，依据运行对象不可被调用方就地篡改
+ok 14 - JSON恢复的伪片段不能取得source_bound，依据运行对象不可被调用方就地篡改
+  ---
+  duration_ms: 0.29375
+  type: 'test'
+  ...
+# Subtest: E坏结构按原业务上限重试，V只请求一次，非支持结果不进入候选
+ok 15 - E坏结构按原业务上限重试，V只请求一次，非支持结果不进入候选
+  ---
+  duration_ms: 5.537375
+  type: 'test'
+  ...
+# Subtest: 追踪故障直接终止本批，不转成模型非法输出或重新调用
+ok 16 - 追踪故障直接终止本批，不转成模型非法输出或重新调用
+  ---
+  duration_ms: 0.445084
+  type: 'test'
+  ...
+# Subtest: E仅重试已结算的短暂HTTP失败，未知/非重试失败不重发且追踪可写JSON
+ok 17 - E仅重试已结算的短暂HTTP失败，未知/非重试失败不重发且追踪可写JSON
+  ---
+  duration_ms: 1.040875
+  type: 'test'
+  ...
+# Subtest: 每个原始候选在解析前获得稳定ID，结构拒绝与核验去向可回到原候选
+ok 18 - 每个原始候选在解析前获得稳定ID，结构拒绝与核验去向可回到原候选
+  ---
+  duration_ms: 1.163875
+  type: 'test'
+  ...
+# Subtest: 显式五键策略和旧null/v1同形校验，不借新字段升级旧任务
+ok 19 - 显式五键策略和旧null/v1同形校验，不借新字段升级旧任务
+  ---
+  duration_ms: 0.70125
+  type: 'test'
+  ...
+# Subtest: 旧v1模式必须是字符串，不能借数组或对象强制转换通过
+ok 20 - 旧v1模式必须是字符串，不能借数组或对象强制转换通过
+  ---
+  duration_ms: 0.111
+  type: 'test'
+  ...
+# Subtest: sourceStamp跟踪实际传递依赖及vendor，冻结后变更保守失败
+ok 21 - sourceStamp跟踪实际传递依赖及vendor，冻结后变更保守失败
+  ---
+  duration_ms: 40.480292
+  type: 'test'
+  ...
+# Subtest: direct服务逐条拒绝非法候选，完整场景保留来源与时间
+ok 22 - direct服务逐条拒绝非法候选，完整场景保留来源与时间
+  ---
+  duration_ms: 2.031708
+  type: 'test'
+  ...
+# Subtest: 只保留日期原话的空事件不伪造发生主张
+ok 23 - 只保留日期原话的空事件不伪造发生主张
+  ---
+  duration_ms: 0.339584
+  type: 'test'
+  ...
+# Subtest: 原ISO微秒参与来源身份和窗口顺序，非法日期不得宽松归一化
+ok 24 - 原ISO微秒参与来源身份和窗口顺序，非法日期不得宽松归一化
+  ---
+  duration_ms: 0.202292
+  type: 'test'
+  ...
+# Subtest: 完整引句不能为未消解所有者签supported，原模型判定仍可审计
+ok 25 - 完整引句不能为未消解所有者签supported，原模型判定仍可审计
+  ---
+  duration_ms: 0.524083
+  type: 'test'
+  ...
+# Subtest: direct E不按消息观察点补有效期，来源未知日历保持未知
+ok 26 - direct E不按消息观察点补有效期，来源未知日历保持未知
+  ---
+  duration_ms: 0.352375
+  type: 'test'
+  ...
+# Subtest: 生产V逐项隔离缺失重复和非法quote，不丢弃相邻有效结果
+ok 27 - 生产V逐项隔离缺失重复和非法quote，不丢弃相邻有效结果
+  ---
+  duration_ms: 0.281625
+  type: 'test'
+  ...
+# Subtest: 事件发生日期只接受活动来源原偏移与独立V位置，过期计划不补完成
+ok 28 - 事件发生日期只接受活动来源原偏移与独立V位置，过期计划不补完成
+  ---
+  duration_ms: 2.818417
+  type: 'test'
+  ...
+# Subtest: 条件必须独立覆盖且核验位置按Unicode码点回指正文
+ok 29 - 条件必须独立覆盖且核验位置按Unicode码点回指正文
+  ---
+  duration_ms: 0.241292
+  type: 'test'
+  ...
+# Subtest: V全覆盖、真实候选来源及target证据缺一则整批失败
+ok 30 - V全覆盖、真实候选来源及target证据缺一则整批失败
+  ---
+  duration_ms: 0.69575
+  type: 'test'
+  ...
+1..30
+# tests 30
+# suites 0
+# pass 30
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 625.6435

@@ -1,0 +1,182 @@
+{
+  "basis_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "working_head": "dbc59a6b78dadbfd10e24d354e46c5ed665da0a4",
+  "status": "工程冻结，待根独立审查；未声明真实质量通过",
+  "schema": {
+    "verification_policy": "complete-claim-v1",
+    "runtime_config_version": 2,
+    "claim_check_version": 2
+  },
+  "policy_identity_at_freeze": {
+    "source_stamp": "dda5416baac07b6eced1f139d508dbfb1aa881fcb5f3d429df663bc8c3245ac8",
+    "rule_version": "d87bff9e16ce41e39a685191cc6fd53bdf7a65ac5c381e6018c4a9b5a09c628b"
+  },
+  "files": [
+    {
+      "path": "backend-ts/src/complete-claim-verification.ts",
+      "base_sha256": "163398da042254e4fc41c7db4f2a775d69f839afaa23e4476260e1ff47ba06a4",
+      "sha256": "34262c026594a63cad3145d1b645bd9a9678855e6e7b17fead1298e84578e578"
+    },
+    {
+      "path": "backend-ts/test/complete-claim-semantic-scope.test.mjs",
+      "base_sha256": null,
+      "sha256": "f729a6b3ed9da0d3add6f9aec2acedc00caa6c9497fd2a4ee5dc63521b3ea3bd"
+    },
+    {
+      "path": "backend-ts/test/complete-claim-verification.test.mjs",
+      "base_sha256": "78163862a059128fd25af03cad3b3b9859541126834d55ba903ef6e1c6324569",
+      "sha256": "91e22b3cb05df7627e20e9dad6c6e5d3adf21a151307a2b14283417b71d02780"
+    },
+    {
+      "path": "backend-ts/test/complete-claim-production.test.mjs",
+      "base_sha256": "13ae906ad306bfc7ca8333821c1e02f325793ac30a51ddd2d6e73467fa7f7823",
+      "sha256": "c8b76448c065c0e8ebadd45c5ad7d46ddc653550ff7a8a36466c05d094b19aa6"
+    },
+    {
+      "path": "backend-ts/test/extraction-flow-failure-contract.test.mjs",
+      "base_sha256": "4b81ff99c4e19dd8d72384b276855327f7bf05ad91cc3cfcbafdfe212341c42e",
+      "sha256": "ae32ca76bc717e97aab3631696495941281a967e958abf685dc5969a6ae3c71a"
+    }
+  ],
+  "validation": {
+    "related_modules": {
+      "files": [
+        "complete-claim-semantic-scope",
+        "complete-claim-verification",
+        "complete-claim-production",
+        "extraction-flow-failure-contract",
+        "extraction-protocol",
+        "extraction-flow",
+        "extraction-evidence",
+        "extraction-bounded-flow",
+        "deepseek-strict-verification",
+        "extraction-policy-version",
+        "extraction-policy-version-task",
+        "extraction-policy-version-migration",
+        "extraction-verification-diagnostics"
+      ],
+      "passed": 56,
+      "failed": 0,
+      "log": "final-related-modules.log"
+    },
+    "typecheck": {
+      "command": "npm --prefix backend-ts run typecheck",
+      "exit_code": 0,
+      "log": "final-tsc.log"
+    },
+    "diff_check": {
+      "command": "git diff --check -- <本清单4个已跟踪文件>",
+      "exit_code": 0
+    }
+  },
+  "real_model_calls": 0,
+  "app_started": false,
+  "index_or_commit_changed": false,
+  "raw_storage": {
+    "location": "repository-external",
+    "directory_mode": "0700",
+    "file_mode": "0600"
+  },
+  "artifacts": [
+    {
+      "path": "contract.md",
+      "sha256": "8fd663d9c545bc5ad834f10882e8ac3d968f0bc6ce57e065c3cbc2ceaa6947b0"
+    },
+    {
+      "path": "evidence-shas.json",
+      "sha256": "32bc82f5b827174513d3b95d2e89f9dbbc1bf63be6ab7041e381b5474637b1df"
+    },
+    {
+      "path": "exact.patch",
+      "sha256": "94aeda61859fa34761453076d7490951105a8c4281e036a705cdd828dbf08c85"
+    },
+    {
+      "path": "final-related-modules.log",
+      "sha256": "d5611a7fa62a450ecbc90e9d098bd6f7fec3a19de6421c166eea295435887614"
+    },
+    {
+      "path": "final-tsc.log",
+      "sha256": "6dec7831db312a51a625554ff52161c1c806c35e5d8dac8f6eb1f4e5a0fde7a6"
+    },
+    {
+      "path": "green-controls.log",
+      "sha256": "3b1867bef7a0553bc91d563a07633bc99484e25460154ba83b0b3c8214dd0ccb"
+    },
+    {
+      "path": "green-fields.log",
+      "sha256": "5a3fd046fbba10893975cadcbc27d81a680cd737a148e4fc92913660fa0f5078"
+    },
+    {
+      "path": "green-payload.log",
+      "sha256": "3be17695f54c29d756f3ff0b231aaa034e6404b49c6ec76a8994828d75f21010"
+    },
+    {
+      "path": "green-reference-completeness.log",
+      "sha256": "b064b8ba261639fefb00454117ae8dafdf10c40996b31a5f1571cc3d44d40589"
+    },
+    {
+      "path": "green-scene-binding.log",
+      "sha256": "90fb27563f0a1a5f50c18c496cb8cafd8e2f3e655ad444199d0b4207b093986b"
+    },
+    {
+      "path": "green-subject.log",
+      "sha256": "f35f86c21baba6d4226f59b68408bfe38f909ddb12c096adb4769e982d17ab35"
+    },
+    {
+      "path": "green-uuid-reference.log",
+      "sha256": "f54543021812a4d55a0e98bad45a024dba7f9c898b8889dac82b9b57312c61dc"
+    },
+    {
+      "path": "handoff.md",
+      "sha256": "5b4f262be284f72e54aeec02d1d8d6775e1e3c3c7578b9b5efd9463eff93651f"
+    },
+    {
+      "path": "modern-production.log",
+      "sha256": "ccf485c1dc37eb2184e7a81453bafe2480a55d0dad716dc75f3df3edc9d4c63b"
+    },
+    {
+      "path": "red-fields.log",
+      "sha256": "799e49a9fde1bf42fb9c57e418f42c844f41581af13e276f6231344268a8f46e"
+    },
+    {
+      "path": "red-payload.log",
+      "sha256": "537f8ea7863e41667ca02a97011febc1c605c667f2998ef6a753d2b666840f53"
+    },
+    {
+      "path": "red-reference-completeness.log",
+      "sha256": "6d2e1293a1a16894d88a466942b908e387ffe13e3f4017c2b33fedde3260799b"
+    },
+    {
+      "path": "red-scene-binding.log",
+      "sha256": "e16afd9ad5881f3cb84941ee5aac503ea5636519c2ede1472ea485e78ec872bf"
+    },
+    {
+      "path": "red-subject.log",
+      "sha256": "103a467bb36b439e6a4a981f063c469258e7bc68ab842a8b085e5cc293ec3840"
+    },
+    {
+      "path": "red-uuid-reference.log",
+      "sha256": "1e0b9236b8baece65d3847be2ba2ac997e3938db45c5bb11cd13ecb4f4cce3ad"
+    },
+    {
+      "path": "related-legacy-strict-policy.log",
+      "sha256": "2475294768d7be905e4701e9bb49593f6bc95873dbe2d5e55152b1201f2362f6"
+    },
+    {
+      "path": "related-modern-unit.log",
+      "sha256": "c3d0794a289cf732e14d36659b6122c509b7fb2624aa46f5b781661f67651e6b"
+    },
+    {
+      "path": "run-evidence.py",
+      "sha256": "39727b28d7fa34dbb2d95777bb1586419461aeca4998da7ef981b96a9e78f6a0"
+    },
+    {
+      "path": "semantic-scope-boundaries.log",
+      "sha256": "4d17463ff49f1b0fa98558ba3847a7f94aa4c1c2a98a544920eb6eb9e383ece7"
+    },
+    {
+      "path": "tsc.log",
+      "sha256": "6dec7831db312a51a625554ff52161c1c806c35e5d8dac8f6eb1f4e5a0fde7a6"
+    }
+  ]
+}

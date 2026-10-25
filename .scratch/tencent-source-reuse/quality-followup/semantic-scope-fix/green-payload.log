@@ -1,0 +1,16 @@
+TAP version 13
+# Subtest: 现代核验请求包含完整提议；场景、解释及备选含义不能只留在 E
+ok 1 - 现代核验请求包含完整提议；场景、解释及备选含义不能只留在 E
+  ---
+  duration_ms: 2.882084
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 121.83

@@ -62,12 +62,19 @@ test('显式新任务经正式A→B保留第三人称和忠实未知日期，负
           assert.equal(name,'SourceVerificationOutput');
           const payload=JSON.parse(input.messages[0].content[0].text),facet={verdict:'supported',evidence_indices:[0]};
           args={request_fingerprint:payload.request_fingerprint,results:examples.map((item,candidate_index)=>{
+            const name=item.source.includes('阿青')&&item.text.includes('阿青')?'阿青'
+              :item.source.includes('小林')&&item.text.includes('小林')?'小林':null;
+            const span=(text,quote)=>{const start=[...text.slice(0,text.indexOf(quote))].length;return {start,end:start+[...quote].length};};
+            const subject_mentions=[{kind:name?'literal_subject':'first_person',evidence_index:0,
+              source_span:span(item.source,name??'我'),candidate_span:name?span(item.text,name):{start:0,end:3}}];
+            const field_checks=Object.fromEntries(['category','topic','scene_name','alternatives','interpretation_reason',
+              'valid_at','invalid_at','speech_act','assertion_status','figurative_type','event','conditions'].map(name=>[name,{...facet}]));
             const part={candidate_span:{start:0,end:[...item.text].length},
-              attribution:{...facet,scope_subject:item.failure==='scope'?'self':'contact',actor_kind:item.actor??'contact',resolution:'explicit'},
+              attribution:{...facet,scope_subject:item.failure==='scope'?'self':'contact',actor_kind:name?'third_party':'contact',resolution:'explicit',subject_mentions},
               arguments_and_relation:{...facet},temporal_and_modality:{...facet}};
             if(['unsupported','uncertain'].includes(item.failure))part.temporal_and_modality.verdict=item.failure;
             if(item.failure==='missing')delete part.arguments_and_relation;
-            return {candidate_index,verdict:'supported',issues:[],evidence:[{message_id:item.id,quote:item.source}],claim_check:{version:1,parts:[part]}};
+            return {candidate_index,verdict:'supported',issues:[],evidence:[{message_id:item.id,quote:item.source}],claim_check:{version:2,field_checks,parts:[part]}};
           })};
         }
         const blocks=[{type:'tool-call',name,arguments:JSON.stringify(args)}];
