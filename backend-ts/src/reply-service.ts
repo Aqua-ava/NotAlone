@@ -30,6 +30,7 @@ import {ModelInputBudgetError,type MessagesBudgetProfile,type MessagesBudgetRece
 import {readReplyBasisChanges} from './reply-source-guards.ts';
 import {createReplyExploredContextValidator} from './reply-exploration-guards.ts';
 import {exploredSkillUse} from './exploration-skill-use.ts';
+import {replyCandidateLimit} from './reply-candidate-admissibility.ts';
 
 export interface ReplyServiceModel {
  provider:string;model:string;maxTokens:number;temperature:number;reasoningEffort:'off'|'low'|'high'|'max';
@@ -125,7 +126,7 @@ export class ReplyGenerationService {
     binding:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort},profile:model.budgetProfile,
     prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation}),
     requireCurrent,validateRegistry:()=>skill.validateRegistry(signal),
-    async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion),temperature:model.temperature},{tools,skillSession:skill,executeOutput:unavailable,signal});},
+    async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion),temperature:model.temperature},{tools,skillSession:skill,candidate_limit:replyCandidateLimit(state.context),executeOutput:unavailable,signal});},
    },signal);
   }finally{probeSkill?.close();skillPort.dispose();}
  }
@@ -183,7 +184,7 @@ export class ReplyGenerationService {
     requireCurrent:client=>preparation.validateCurrent(client,prepared)}):null;
    const tools=[...history?.tools()??[],...preparation.scenarioTools(prepared),...skill.tools()];
    let saved:ReplyStoreResult|undefined;
-   await generateReplyLoop(this.options.ctx,{...verified,request_id:request.request_id,...model,physical_limit:physicalLimit,
+   await generateReplyLoop(this.options.ctx,{...verified,request_id:request.request_id,...model,physical_limit:physicalLimit,candidate_limit:replyCandidateLimit(prepared.context),
     prompt:replyPayloadText({request:input,context:prepared.context,preferences:prepared.preferences.preferences,discussion:prepared.discussion,authenticated:internal.authenticatedContinuation}),
     system_prompt:replySystemPrompt(prepared.context,prepared.discussion)},
    {provider:this.options.provider,budgetProfile:model.budgetProfile,acquire:async()=>({id:round.id,settle}),requireCurrent,skillSession:skill,tools,

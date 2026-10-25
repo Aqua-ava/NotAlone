@@ -13,3 +13,9 @@ test('保留原背景完整段落权限、推断矛盾和讨论提示，不因�
  assert.ok(!actual.includes('{skills_locations}'));assert.ok(!actual.includes('{skills_list}'));
  const plain=replySystemPrompt({},null);assert.ok(!plain.includes('<relationship_background>'));assert.ok(!plain.includes(expected.notice));
 });
+test('结构化未知逐项进入系统禁区，不让单候选模式把未知写进首条',()=>{
+ const context={command:{content:{type:'rewrite_draft',draft_text:'主动问候',user_instruction:JSON.stringify({unknowns:['是否突然想到对方']})}},risk_notes:[]};
+ const prompt=replySystemPrompt(context,null);
+ assert.match(prompt,/本轮明确未知（不得在候选正文中填写成事实、原因、心理、间隔、动作或安排）：是否突然想到对方/);
+ assert.match(prompt,/只返回一条不依赖这些未知的候选/);
+});

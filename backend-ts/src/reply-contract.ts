@@ -74,9 +74,9 @@ export function parseReplyRequest(value:unknown,authenticated?:AuthenticatedCont
     allow_incomplete_history:allow,skill_disabled:disabled,scene:scene as string|null,
     ...('expected_input_version_id'in value?{expected_input_version_id:replyUuid(value.expected_input_version_id)}:{})};
 }
-export function validateReplyCandidates(value:unknown,evidenceIds:ReadonlySet<string>):ReplyCandidateInput[] {
+export function validateReplyCandidates(value:unknown,evidenceIds:ReadonlySet<string>,candidateLimit=3):ReplyCandidateInput[] {
   const rejected=():never=>{throw new ReplyError('reply_candidates_rejected');};
-  if(!record(value)||!Array.isArray(value.candidates)||value.candidates.length<1||value.candidates.length>3)return rejected();
+  if(!record(value)||!Array.isArray(value.candidates)||value.candidates.length<1||value.candidates.length>candidateLimit)return rejected();
   return value.candidates.map(raw=>{
     if(!record(raw)||!nonblank(raw.text)||count(raw.text)>65536||!nonblank(raw.basis)||!Array.isArray(raw.citation_ids)||!raw.citation_ids.length||!Array.isArray(raw.risk_notes)||raw.risk_notes.some(v=>!nonblank(v)))return rejected();
     let citations:string[];

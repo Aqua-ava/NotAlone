@@ -26,7 +26,7 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
  const host=await startReplyServiceHost(t,{name:f.client.database,user:f.client.user,close:async()=>{await storage?.close();await f.close();}},(_req,res,requests,events)=>{
   const evidence=modelEvidence(requests.at(-1).body);const id=evidence[0].evidence_id;
   if(mode==='skill'&&skillStep++===0){const path=JSON.stringify(requests.at(-1).body).match(/\/notalone\/reply-skills\/[^"\\ ]+\/SKILL\.md/)?.[0];assert.ok(path,'从实际Skill目录取得受控路径');useTool(events,'read_file',{file_path:path});sendEvents(res,events);return;}
-  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次原句',citation_ids:[mode==='bad'?randomUUID():id],risk_notes:[]}]});
+  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次原句',citation_ids:[mode==='bad'?randomUUID():id],risk_notes:[]},...(mode==='extra'?[{text:'好久没聊了',basis:'额外风格',citation_ids:[id],risk_notes:[]}]:[])]});
   if(mode==='late'){releaseLate=()=>sendEvents(res,events);observedLate();return;}sendEvents(res,events);
  });
  // 支持夹具在进程终止后删除合成库，再核验网络边界。
@@ -40,6 +40,17 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
   mode='bad';const input=body(),before=host.requests.length;
   await assert.rejects(host.request('/generate',{id:randomUUID(),scope,body:input}),/reply_candidates_rejected/);assert.equal(host.requests.length,before+1);
   const count=(await f.client.query('SELECT count(*)::int AS n FROM reply_candidate c JOIN reply_request r ON r.id=c.reply_request_id WHERE r.idempotency_key=$1',[input.idempotency_key])).rows[0].n;assert.equal(count,0);
+ });
+ await t.test('结构化未知在实际官方请求中收紧为单候选准入',async()=>{
+  mode='extra';const before=host.requests.length;
+  const input={...body(),content:{type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:'轻松问候',include_relationship_context:true,user_instruction:JSON.stringify({unknowns:['联系间隔']})}};
+  await assert.rejects(host.request('/generate',{id:randomUUID(),scope,body:input}),/reply_candidates_rejected/);
+  assert.equal(host.requests.length,before+1);
+  const request=host.requests.at(-1).body,tool=request.tools.find(item=>item.name==='ReplyRuntimeOutput');
+  assert.match(tool.description,/提交1到1条/);
+  assert.match(request.system,/候选数量上限是 1 条/);
+  assert.match(request.system,/本轮明确未知（不得在候选正文中填写成事实、原因、心理、间隔、动作或安排）：联系间隔/);
+  assert.equal((await f.client.query('SELECT count(*)::int AS n FROM reply_candidate c JOIN reply_request r ON r.id=c.reply_request_id WHERE r.idempotency_key=$1',[input.idempotency_key])).rows[0].n,0);
  });
  await t.test('跨scope输入在出站前拒绝',async()=>{
   mode='valid';const before=host.requests.length;
