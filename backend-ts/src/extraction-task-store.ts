@@ -4,6 +4,7 @@ import {extractionTargets,extractionCheckpoint,extractionProgress,ownerExtractio
 import {unsettledExtraction,blockedExtraction,quarantineExtraction} from './extraction-task-store-recovery.ts';
 import {recordExtractionObservation,claimExtractionSchedule,enqueueExtractionObservation} from './extraction-task-store-schedule.ts';
 import {completeL2ScenarioWorkerStep} from './l2-scenario-worker.ts';
+import {assertExtractionPolicyWindow,resolveExtractionPolicy,validateExtractionRuntimeConfig,type ExtractionPolicyVersion,type CompleteClaimRuntimeConfig} from './extraction-policy-version.ts';
 export interface ExtractionScope {ownerId:string;contactId:string|null;}
 export interface ExtractionClaim extends ExtractionScope {
  taskId:string;stepId:string;stepName:string;workerId:string;leaseGeneration:number;
@@ -11,6 +12,8 @@ export interface ExtractionClaim extends ExtractionScope {
  leaseExpiresAt:Date;runtimeConfig:Record<string,unknown>|null;
 }
 export interface ExtractionStoreOptions {
+ policyVersion?:ExtractionPolicyVersion;
+ verificationPolicy?:'complete-claim-v1';
  unconfirmedRequests?:(scope:ExtractionScope)=>Promise<readonly string[]>|readonly string[];
  processingState?:(scope:ExtractionScope,taskId:string)=>'active'|'queued'|null;
 }
@@ -34,22 +37,43 @@ export async function lockExtractionScope(c:pg.ClientBase,scope:ExtractionScope)
 }
 export class ExtractionTaskStore {
  readonly pool:pg.Pool;readonly options:ExtractionStoreOptions;
- constructor(pool:pg.Pool,options:ExtractionStoreOptions={}){this.pool=pool;this.options=options;}
+ constructor(pool:pg.Pool,options:ExtractionStoreOptions={}){
+  if(options.verificationPolicy&&(!options.policyVersion||options.verificationPolicy!=='complete-claim-v1'))throw new ExtractionTaskError('extraction_policy_source_unavailable');
+  this.pool=pool;this.options=options;
+ }
+ async newTaskSnapshot():Promise<CompleteClaimRuntimeConfig|null>{
+  if(!this.options.verificationPolicy)return null;
+  await this.options.policyVersion!.assertCurrent();return this.options.policyVersion!.newTaskConfig();
+ }
+ /** 由既有租约围栏内的 B 消费者读取权威配置；HTTP 的五字段 claim 不提供策略。 */
+ async assertVerificationPolicy(c:pg.ClientBase,claim:ExtractionClaim,runtime:unknown,aRuleVersion:string):Promise<void>{
+  const rows=(await c.query(`SELECT extraction_runtime_config FROM background_task
+   WHERE id=$1 AND owner_id=$2 AND contact_id IS NOT DISTINCT FROM $3::uuid FOR UPDATE`,
+   [claim.taskId,claim.ownerId,claim.contactId])).rows;
+  if(rows.length!==1)throw new ExtractionTaskError('lease_stale');
+  const config=validateExtractionRuntimeConfig(rows[0].extraction_runtime_config);
+  if(config?.version===2){
+   if(!this.options.policyVersion)throw new ExtractionTaskError('extraction_policy_source_unavailable');
+   await this.options.policyVersion.assertCurrent();
+   assertExtractionPolicyWindow(this.options.policyVersion.resolve(config),runtime,aRuleVersion);
+  }else assertExtractionPolicyWindow(resolveExtractionPolicy(config,aRuleVersion),runtime);
+ }
  targets(claim:ExtractionClaim):Promise<ExtractionTargets>{return extractionTargets(this,claim);}
  checkpoint(c:pg.ClientBase,claim:ExtractionClaim,ids:readonly string[],outcome:'succeeded'|'skipped'|'unknown'):Promise<void>{return extractionCheckpoint(this,c,claim,ids,outcome);}
  progress(scope:ExtractionScope,taskId?:string){return extractionProgress(this,scope,taskId);}
  ownerProgress(ownerId:string,taskId?:string){return ownerExtractionProgress(this,ownerId,taskId);}
  recordObservation(c:pg.ClientBase,scope:ExtractionScope,observationId:string,ids:readonly string[]){return recordExtractionObservation(c,scope,observationId,ids);}
- claimScheduled(scope:ExtractionScope){return this.transaction(scope,c=>claimExtractionSchedule(c,scope));}
+ claimScheduled(scope:ExtractionScope){return this.transaction(scope,async c=>claimExtractionSchedule(c,scope,await this.newTaskSnapshot()));}
  enqueueObservation(scope:ExtractionScope,ids:readonly string[]){return enqueueExtractionObservation(this,scope,ids);}
  async transaction<T>(scope:ExtractionScope,work:(c:pg.PoolClient)=>Promise<T>):Promise<T>{
   const c=await this.pool.connect();try{await c.query('BEGIN');await lockExtractionScope(c,scope);const result=await work(c);await c.query('COMMIT');return result;}
   catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
  }
  async enqueueImport(scope:ExtractionScope,sourceId:string,messageCount:number):Promise<string>{
+  const runtimeConfig=await this.newTaskSnapshot();
   return this.transaction(scope,async c=>{
-   const inserted=await c.query(`INSERT INTO background_task(owner_id,contact_id,source_document_id,task_type,status,current_step,message_count)
-    VALUES($1,$2,$3,'import','queued','parse',$4) ON CONFLICT(owner_id,contact_id,source_document_id,task_type) DO NOTHING RETURNING id`,[scope.ownerId,scope.contactId,sourceId,messageCount]);
+   const inserted=await c.query(`INSERT INTO background_task(owner_id,contact_id,source_document_id,task_type,status,current_step,message_count,extraction_runtime_config)
+    VALUES($1,$2,$3,'import','queued','parse',$4,$5::jsonb) ON CONFLICT(owner_id,contact_id,source_document_id,task_type) DO NOTHING RETURNING id`,[scope.ownerId,scope.contactId,sourceId,messageCount,runtimeConfig?JSON.stringify(runtimeConfig):null]);
    const id=inserted.rows[0]?.id??(await c.query("SELECT id FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND source_document_id=$3 AND task_type='import' FOR UPDATE",[scope.ownerId,scope.contactId,sourceId])).rows[0]?.id;
    if(!id)throw new ExtractionTaskError('task_not_found');
    for(const [index,name] of ['parse','normalize','extract_memory','index','verify'].entries())await c.query(`INSERT INTO background_task_step(task_id,step_name,step_order,total_count) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,[id,name,index+1,messageCount]);
@@ -179,10 +203,11 @@ export class ExtractionTaskStore {
    if(!row)return null;
    if(await blockedExtraction(c,unsettled,row.task_id,true))return null;
    if(row.step_name==='extract_memory'&&row.extraction_runtime_config){
-    const config=row.extraction_runtime_config;
-    if(Object.keys(config).sort().join(',')!=='mode,rule_set_sha256,version'||config.version!==1
-     ||!['legacy','bounded-runtime-v1'].includes(config.mode)
-     ||(config.mode==='legacy'?config.rule_set_sha256!==null:!(/^[a-f0-9]{64}$/.test(config.rule_set_sha256))))throw new ExtractionTaskError('extraction_runtime_config_invalid');
+    const config=validateExtractionRuntimeConfig(row.extraction_runtime_config)!;
+    if(config.version===2){
+     if(!this.options.policyVersion)throw new ExtractionTaskError('extraction_policy_source_unavailable');
+     await this.options.policyVersion.assertCurrent();this.options.policyVersion.resolve(config);
+    }
     if(config.mode==='bounded-runtime-v1'&&config.rule_set_sha256!==input.runtimeRuleSetSha256)throw new ExtractionTaskError('extraction_runtime_rule_unavailable');
     const supported=(await c.query(`SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='background_task'::regclass
      AND conname='background_task_extraction_runtime_config_check' AND contype='c' AND convalidated) AS config,

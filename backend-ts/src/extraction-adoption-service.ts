@@ -16,7 +16,7 @@ import type {ModelTaskClaim} from './model-permit-server.ts';
 
 type Row=Record<string,any>;
 type Purpose=NonNullable<ModelUsage['purpose']>;
-type FenceStore=Pick<ExtractionTaskStore,'fenced'>;
+type FenceStore=Pick<ExtractionTaskStore,'fenced'|'assertVerificationPolicy'>;
 export interface FixedLocalEmbedding {model:string;revision:string;embed:EmbedTexts}
 export interface ExtractionAdoptionModelCallInput extends Omit<StructuredAdjudicationCallInput,'request_key'> {
  owner_id:string;
@@ -118,7 +118,7 @@ function parseInput(value:ExtractionAdoptionInput,owner:string):ExtractionAdopti
 }
 function asClaim(input:ExtractionAdoptionInput):ExtractionClaim{
  const c=input.claim;
- // fenced() 只以五个原字段核租约；其余冻结字段不参与权威判断。
+ // 结构适配只传五字段租约；策略另从围栏内的真实任务和窗口核对。
  return {ownerId:input.owner_id,contactId:input.contact_id,taskId:c.task_id,stepId:c.step_id,stepName:c.step_name,
   workerId:c.worker_id,leaseGeneration:c.lease_generation,attemptCount:0,messageCount:0,sourceDocumentId:null,
   taskType:'import',leaseExpiresAt:new Date(0),runtimeConfig:null};
@@ -170,7 +170,7 @@ export class ExtractionAdoptionService {
  constructor(options:Options){
   if(!uuid.test(options.ownerId)||options.embedding?.model!==EMBEDDING_MODEL
    ||options.embedding.revision!==EMBEDDING_REVISION||typeof options.embedding.embed!=='function')failure('adoption_configuration_invalid');
-  if(!options.taskStore||typeof options.taskStore.fenced!=='function'||!options.adjudicationPort
+  if(!options.taskStore||typeof options.taskStore.fenced!=='function'||typeof options.taskStore.assertVerificationPolicy!=='function'||!options.adjudicationPort
    ||typeof options.adjudicationPort.call!=='function')failure('adoption_configuration_invalid');
   this.options=options;
  }
@@ -184,11 +184,11 @@ export class ExtractionAdoptionService {
  }
  private async execute(input:ExtractionAdoptionInput,signal:AbortSignal):Promise<ExtractionAdoptionResult>{
   let prepared:PreparedBatch;
-  try{prepared=await this.options.taskStore.fenced(asClaim(input),client=>this.inspect(client,input,true));}
+  try{prepared=await this.fenced(input,client=>this.inspect(client,input,true));}
   catch(error){throw this.wrap(error,null);}
   if(prepared.cached)return prepared.cached;
   const adoption=new MemoryAdoption({ownerId:this.options.ownerId,
-   transaction:work=>this.options.taskStore.fenced(asClaim(input),client=>work(client as unknown as pg.Client)),
+   transaction:work=>this.fenced(input,client=>work(client as unknown as pg.Client)),
    embed:this.options.embedding.embed,
    adjudication:new DshMemoryAdjudicationRuntime({batchKey:input.batch_key,port:this.boundPort(input)})});
   let stats:AdoptionStats;
@@ -203,7 +203,7 @@ export class ExtractionAdoptionService {
    throw new ExtractionAdoptionError('adoption_candidate_failed',false,stats);
   try{
    signal.throwIfAborted();
-   const receipt=await this.options.taskStore.fenced(asClaim(input),client=>this.finalize(client,input,prepared.b_execution_id,stats,signal));
+   const receipt=await this.fenced(input,client=>this.finalize(client,input,prepared.b_execution_id,stats,signal));
    return {trace_id:input.trace_id,b_execution_id:prepared.b_execution_id,stats:receipt.stats,receipt,watermark:receipt.watermark_after,cached:false};
   }catch(error){
    if(error instanceof ExtractionAdoptionError&&error.partial)throw error;
@@ -243,7 +243,21 @@ export class ExtractionAdoptionService {
   }};
  }
  private async checkFence(input:ExtractionAdoptionInput):Promise<void>{
-  await this.options.taskStore.fenced(asClaim(input),async()=>{});
+  await this.fenced(input,async()=>{});
+ }
+ private async fenced<T>(input:ExtractionAdoptionInput,work:(client:pg.PoolClient)=>Promise<T>):Promise<T>{
+  return this.options.taskStore.fenced(asClaim(input),async client=>{
+   const assertPolicy=async()=>{
+    const windows=(await client.query(`SELECT payload::text AS payload FROM public.memory_extraction_trace_event
+     WHERE trace_id=$1 AND owner_id=$2 AND contact_id=$3 AND stage='window'`,
+     [input.trace_id,input.owner_id,input.contact_id])).rows;
+    if(windows.length!==1)failure('adoption_trace_unavailable');
+    const runtime=parseStoredJSON(windows[0]!.payload).task_runtime??null;
+    if(!sameRuntime(runtime,input.claim))failure('adoption_task_scope_mismatch');
+    await this.options.taskStore.assertVerificationPolicy(client,asClaim(input),runtime,input.a_result.a_rule_version);
+   };
+   await assertPolicy();const result=await work(client);await assertPolicy();return result;
+  });
  }
  private async inspect(client:pg.PoolClient,input:ExtractionAdoptionInput,writeBegin:boolean):Promise<PreparedBatch>{
   const current=(await client.query(`SELECT trace_id,status,batch_key FROM public.memory_extraction_trace

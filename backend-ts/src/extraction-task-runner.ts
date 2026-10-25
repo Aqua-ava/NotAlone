@@ -1,5 +1,6 @@
 /** 原任务级提取编排：Worker只给租约，本模块独占分批、A/B、trace与处理回执。 */
 import {randomUUID} from 'node:crypto';
+import {resolveExtractionPolicy,type ExtractionPolicyVersion} from './extraction-policy-version.ts';
 import type pg from 'pg';
 import {canonicalJSON,digest} from './contact-overview-evidence.ts';
 import {
@@ -36,6 +37,7 @@ export interface ExtractionTaskRunnerOptions {
  contextAfter?:number;
  concurrency?:number;
  ruleVersion?:string;
+ policyVersion?:ExtractionPolicyVersion;
  provider?:string;
  modelName?:string;
 }
@@ -85,7 +87,8 @@ export class ExtractionTaskRunner implements ExtractionWorkerRunner {
   if(claim.stepName!=='extract_memory')throw new ExtractionTaskRunnerError('extraction_task_step_invalid');
   if(claim.contactId===null)throw new ExtractionTaskRunnerError('extraction_task_scope_invalid');
   const contactId=claim.contactId;
-  const runId=randomUUID(),ruleVersion=this.options.ruleVersion??'typescript-extraction-v1';
+  const runId=randomUUID(),ruleVersion=(this.options.policyVersion?.resolve(claim.runtimeConfig)
+   ??resolveExtractionPolicy(claim.runtimeConfig,this.options.ruleVersion??'typescript-extraction-v1')).ruleVersion;
   let processed=0;
   while(true){
    signal.throwIfAborted();
@@ -206,7 +209,9 @@ export class ExtractionTaskRunner implements ExtractionWorkerRunner {
    [traceId,claim.ownerId,claim.contactId,runId,plan.batch_key,previous]);
    const runtime={...claimIdentity(claim),mode:String(claim.runtimeConfig?.mode??'legacy'),
     config_version:claim.runtimeConfig?.version??null,
-    rule_set_sha256:claim.runtimeConfig?.rule_set_sha256??null};
+    rule_set_sha256:claim.runtimeConfig?.rule_set_sha256??null,
+    ...(claim.runtimeConfig?.version===2?{verification_policy:claim.runtimeConfig.verification_policy,
+     source_stamp:claim.runtimeConfig.source_stamp,rule_version:ruleVersion}:{})};
    const firstTarget=plan.window.messages.findIndex(message=>selected.has(message.message_id));
    const lastTarget=plan.window.messages.findLastIndex(message=>selected.has(message.message_id));
    const windowMessages=plan.window.messages.map((message,index)=>({

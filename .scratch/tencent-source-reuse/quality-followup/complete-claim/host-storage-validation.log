@@ -1,0 +1,88 @@
+TAP version 13
+# Subtest: 受控配置保留模型和资料位置，凭据不进入状态响应
+ok 1 - 受控配置保留模型和资料位置，凭据不进入状态响应
+  ---
+  duration_ms: 16.176958
+  type: 'test'
+  ...
+# Subtest: 原账本及116升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人
+ok 2 - 原账本及116升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人
+  ---
+  duration_ms: 591.734875
+  type: 'test'
+  ...
+# Subtest: 凭据原子保存保留其余配置、权限0600，账本漂移后阻止本人及凭据写入
+ok 3 - 凭据原子保存保留其余配置、权限0600，账本漂移后阻止本人及凭据写入
+  ---
+  duration_ms: 588.008542
+  type: 'test'
+  ...
+# Subtest: 并发首启只有一个本人；未知版本和缺失结构均失败关闭
+ok 4 - 并发首启只有一个本人；未知版本和缺失结构均失败关闭
+  ---
+  duration_ms: 559.893084
+  type: 'test'
+  ...
+# Subtest: 035接管基线与后续账本分开校验，未完成迁移只读停写
+ok 5 - 035接管基线与后续账本分开校验，未完成迁移只读停写
+  ---
+  duration_ms: 547.948542
+  type: 'test'
+  ...
+# Subtest: 受控配置符号链接失败关闭，不改写原目标文件
+ok 6 - 受控配置符号链接失败关闭，不改写原目标文件
+  ---
+  duration_ms: 0.958125
+  type: 'test'
+  ...
+# Subtest: 关闭后拒绝新配置写入，关闭中的事务不得迟到提交
+ok 7 - 关闭后拒绝新配置写入，关闭中的事务不得迟到提交
+  ---
+  duration_ms: 509.123125
+  type: 'test'
+  ...
+# Subtest: 明确恢复唯一已有本人保持原ID；多本人拒绝猜选；配置失败可重试
+ok 8 - 明确恢复唯一已有本人保持原ID；多本人拒绝猜选；配置失败可重试
+  ---
+  duration_ms: 552.262084
+  type: 'test'
+  ...
+# Subtest: 受控env的PGHOST优先于进程默认socket，不会误连另一库
+ok 9 - 受控env的PGHOST优先于进程默认socket，不会误连另一库
+  ---
+  duration_ms: 492.7965
+  type: 'test'
+  ...
+# Subtest: keyword与URI共用受控PGDATABASE/USER/PORT默认值，显式字段覆盖默认值
+ok 10 - keyword与URI共用受控PGDATABASE/USER/PORT默认值，显式字段覆盖默认值
+  ---
+  duration_ms: 527.526834
+  type: 'test'
+  ...
+# Subtest: 本机hostaddr保留目标且受控密码经PG协议传入，sslmode不静默降级
+ok 11 - 本机hostaddr保留目标且受控密码经PG协议传入，sslmode不静默降级
+  ---
+  duration_ms: 7.996416
+  type: 'test'
+  ...
+# Subtest: 启动环境覆盖历史已保存凭据或模型时，重开仍待加载且拒绝冲突写入
+ok 12 - 启动环境覆盖历史已保存凭据或模型时，重开仍待加载且拒绝冲突写入
+  ---
+  duration_ms: 536.785125
+  type: 'test'
+  ...
+# Subtest: 禁止dotenv时不读取受控文件，凭据保存不能承诺重启生效
+ok 13 - 禁止dotenv时不读取受控文件，凭据保存不能承诺重启生效
+  ---
+  duration_ms: 0.339292
+  type: 'test'
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5044.103958

@@ -1,0 +1,24 @@
+# complete-claim-v1 合成验证交接
+
+- 状态：工程闭环已实现；默认仍为 legacy，真实模型语义质量尚待独立验收。
+- 复用基础：腾讯源码固定在 `6a4bb55ea54834d8265ce52024d3e3c75db30d38`，4 个适配模块及 MIT 来源检查通过。
+- 新核验入口：`backend-ts/src/complete-claim-verification.ts:103`，统一准备请求、策略指纹、幂等解码及准入；V 仍使用 `SourceVerificationOutput`。
+- 正文按 Unicode 码点连续覆盖，每段分别记录人物归属、对象与关系、时间与认知模态；结构状态、模型判断和程序准入分别保留。
+- 任一 facet 缺失、unsupported、uncertain、unresolved 或范围不符均拒绝进入 B；既有 event/conditions 检查继续同时生效。
+- 来源 receipt 只接受同次 prepared decode 的准入结果，绑定原候选与来源窗口；保留 JSONB 大整数/1.0 摘要及原 v1 来源元数据，不填造 bounded semantic proof。
+- 新任务配置严格为 5 键 v2；SQL 116 与 TS 一致校验。旧 NULL/v1、冲突重入及旧 observation 均保持原策略。
+- `extraction-policy-version.ts` 根据 A/strict 模块的传递源码依赖与 package/lock 原字节生成统一身份；文件缺失、计算式动态导入或运行中源码变更均关闭本次执行。
+- A 缓存要求任务、窗口、输入和策略版本一致；原 unknown 回执门先于缓存。B 在真实租约围栏内读取任务配置，准备、模型前后和写入前后均复验，HTTP claim 保持原 5 字段。
+- 宿主通过内部 `extractionVerificationPolicy` 显式注入新任务策略，缺省保持 legacy。没有新增产品 API、供应商或预算开关。
+- 合成正式链：新任务 → Runner 窗口 → E/V 各一次 → B → 2 条 auto 记忆、来源 receipt、trace、处理回执与水位均通过；亲友第三人称使用 report/reported，忠实未知日期保持 event=null。
+- 4 条失败 facet 候选均在 A 拦截，B 无候选写入；缓存回放不增加 E/V 调用；A 后更换任务 stamp、降级配置或改窗口 stamp 时，直接 B 也拒绝且无写入。
+- 模型响应由合成端口给定，以上结果证明协议及采纳门行为；没有证明真实模型已能正确判断 P3 类语义错误。
+- 初次相关回归 96/98：失败为缓存取消错误优先级、迁移 116 与宿主固定 115 计数。原 RED 保留在 `validation.log`；原件私有保存，公开副本只替换本机路径。
+- 修复后 host-storage 13/13、host-entry + batch 3/3、complete-claim + policy + adoption 16/16、schema-prepare 9/9；typecheck、腾讯源码校验及精确 diff 空白检查通过。
+- Node `schema-prepare.ts` 按实际文件枚举，无固定总数；035 baseline、103 转换和真实数据库均未改动。
+- 离线输出评估：现有 4096 上限；1/4/6 个短引文响应通过 UTF-8 字节保守代理，60 个候选或 8192 码点引文未通过；最大窗口在既有输入预算门提前失败。
+- `offline-budget.json` 的 actual token count 为 null，full legal range proven 为 false；不据此增大输出、放宽 calls/tokens、截断候选或增加 V 次数。
+- 数据处理：仅合成文本、随机 `_test` 库和本机源码；真实模型调用 0，未读取真实资料/凭据/业务库，未修改或延长既有真实调用 ledger。
+- 桌面及 Git：没有运行 App/微信/打包版，没有操作共享 index、commit、push 或 PR；主协调会话负责整合、`npm run dev` 桌面验收及后续真实质量判定。
+- 日志绑定：`log-binding.json` 保存 raw/public SHA 与替换项，原件目录 0700、文件 0600；不把原 RED 改为 GREEN，临时诊断副本已清理。
+- 待办：主协调会话整合精确 manifest 后，另行判断输出可行性和独立真实小样本质量；本交接不表示 Ticket 25/26 已验收。

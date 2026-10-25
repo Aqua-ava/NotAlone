@@ -25,9 +25,11 @@ export interface ExtractedFact {
 }
 export interface SourceVerificationResult {
   candidate_index:number;verdict:'supported'|'uncertain'|'unsupported';issues:string[];
-  evidence:{message_id:string;quote:string}[];verification_mode:'legacy-v4'|'nullable-proof-v3';
+  evidence:{message_id:string;quote:string}[];verification_mode:'legacy-v4'|'nullable-proof-v3'|'complete-claim-v1';
   model_verdict:'supported'|'uncertain'|'unsupported';model_issues:string[];event:MemoryEvent|null;conditions:MemoryConditions|null;
   proof:ProofProposal|null;proof_verification:ProofVerification|null;
+  model_claim_check?:unknown;
+  claim_validation?:{status:'checked'|'invalid'|'unverified';policy_fingerprint:string;reason:string;semantic_support:'supported'|'uncertain'|'unsupported'};
 }
 export class ExtractionProtocolError extends Error {
   readonly failure_kind='invalid_output';

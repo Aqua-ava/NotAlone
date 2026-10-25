@@ -201,7 +201,7 @@ test('批次最终提交失败保留已采纳 partial，且不推进水位，重
   const store=new ExtractionTaskStore(x.pool);
   const input={owner_id:x.owner,contact_id:x.contact,...x.seeded,claim:x.claim,a_result:x.aResult};
   let fences=0;
-  const flakyStore={fenced:async(claim,work)=>{
+  const flakyStore={assertVerificationPolicy:(...args)=>store.assertVerificationPolicy(...args),fenced:async(claim,work)=>{
    fences++;
    if(fences===5)throw new ExtractionTaskError('synthetic_finalize_failed');
    return store.fenced(claim,work);

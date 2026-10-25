@@ -9,6 +9,7 @@ import type {ExtractionWindow,ExtractedFact,SourceVerificationResult} from './ex
 import {boundedExtractionInput,boundedExtractionPrompt,boundedExtractionSchema,bindBoundedFact,compileGroundedLabels,normalizeBoundedWindow,prepareBoundedForAdoption,sourceUnits} from './extraction-bounded.ts';
 import {verificationFailureDiagnostic} from './extraction-verification-diagnostics.ts';
 import {formatExtractionPrompt} from './vendor/tencent-memory/l1-extraction.ts';
+import {prepareSourceVerification,type PreparedVerificationPolicy,type VerificationAdmission} from './complete-claim-verification.ts';
 
 export interface ExtractionInvocation {
  purpose:'extraction'|'verification';system:string;user:string;tool:{name:string;description:string;parameters:Record<string,unknown>};
@@ -22,6 +23,7 @@ export interface ExtractionFlowOutcome {
 }
 export interface ExtractionFlowOptions {
  window:ExtractionWindow;signal:AbortSignal;mode?:'legacy'|'bounded-runtime-v1';max_retries?:number;retry_delay_ms?:number;
+ verificationPolicy?:PreparedVerificationPolicy;
  requireCurrent():Promise<void>;
  /** 外部模型端口；每次调用必须独立许可和记账，同批身份由调用者绑定。 */
  invoke(request:ExtractionInvocation,signal:AbortSignal):Promise<{blocks:readonly unknown[]}>;
@@ -145,21 +147,21 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
    {status:'rejected',disposition:'structure_rejected',not_executed:['verification','adoption','write']}});
   if(fact){facts.push(fact);traceIds.set(fact,candidate.candidate_trace_id);}
  }
- const review=facts.filter(reviewable);
- if(review.length>60)return failure('invalid_output',true,parsedRejections);
- if(!review.length)return {accepted:facts,candidate_trace_ids:facts.map(fact=>traceIds.get(fact)!),rejected_count:parsedRejections,
+ const preparedVerification=prepareSourceVerification({window:options.window,facts,policy:options.verificationPolicy,
+  requireCurrent:options.requireCurrent,record:options.record});
+ const request=preparedVerification.request;
+ if(!request)return {accepted:facts,candidate_trace_ids:facts.map(fact=>traceIds.get(fact)!),rejected_count:parsedRejections,
   extraction_completed:true,failure_kind:null,failure_reason:null,verification:[]};
- await options.record({stage:'verification_input',payload:{window:options.window,facts:review,candidate_trace_ids:review.map(fact=>traceIds.get(fact)!)}});
- const contract=buildSourceVerificationContract(review,'legacy-v4',{require_complete_evidence:true}),request=invocation('verification',contract.prompt,contract.schema,
-  JSON.stringify(buildSourceVerificationPayload(options.window,review)),blocks=>{
-   return parseVerificationReply(blocks,contract,options.window,review,undefined,options.record).then(()=>{});
-  });
- let results:SourceVerificationResult[];
+ await options.record({stage:'verification_input',payload:{window:options.window,
+  facts:preparedVerification.selection.map(index=>facts[index]),candidate_trace_ids:preparedVerification.selection.map(index=>traceIds.get(facts[index]!)),
+  policy_fingerprint:preparedVerification.fingerprint}});
+ let admissions:VerificationAdmission[];
+
  try{
   options.signal.throwIfAborted();await options.requireCurrent();
   const raw=(await options.invoke(request,options.signal)).blocks;
   await options.record({stage:'verification_return',payload:{blocks:raw}});
-  results=await parseVerificationReply(raw,contract,options.window,review,undefined,options.record);
+  admissions=(await preparedVerification.decode(raw)).items;
  }catch(error){
   options.signal.throwIfAborted();
   if(invalid(error))return failure('invalid_output',true,parsedRejections);
@@ -167,24 +169,20 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
   throw error;
  }
  await options.requireCurrent();options.signal.throwIfAborted();
- const checked=new Map(review.map((fact,index)=>[fact,results.find(result=>result.candidate_index===index)!]));
+ const checked=new Map(admissions.map(item=>[facts[item.candidate_index]!,item]));
  const accepted:ExtractedFact[]=[],candidate_trace_ids:string[]=[],verification:ExtractionFlowOutcome['verification']=[];let rejected=parsedRejections;
  for(const fact of facts){
   const candidate_trace_id=traceIds.get(fact)!;
-  let result=checked.get(fact);if(!result){accepted.push(fact);candidate_trace_ids.push(candidate_trace_id);continue;}
-  if(result.verdict==='supported'&&fact.requires_all_sources){
-   const cited=new Set(result.evidence.map(reference=>reference.message_id));
-   if(fact.source_message_ids.some(source=>!cited.has(source)))result={...result,verdict:'unsupported',
-    issues:[...new Set([...result.issues,'insufficient_evidence'])]};
-  }
+  const entry=checked.get(fact),result=entry?.result;
+  if(!result){accepted.push(fact);candidate_trace_ids.push(candidate_trace_id);continue;}
   await options.record({stage:'verification',candidate_trace_id,payload:{status:'validated',result,before:fact,
-   disposition:result.verdict==='unsupported'?'unsupported_rejected':'continue'}});
-  if(result.verdict==='unsupported'){rejected++;continue;}
+   disposition:entry!.admitted?'continue':result.verdict==='uncertain'?'unverified_rejected':'unsupported_rejected'}});
+  if(!entry!.admitted){rejected++;continue;}
   const prepared={...fact,event:result.event,conditions:result.conditions,
    risk_flags:result.verdict==='uncertain'?[...new Set([...fact.risk_flags,...result.issues.map(issue=>`semantic:${issue}`)])]:fact.risk_flags};
   accepted.push(prepared);candidate_trace_ids.push(candidate_trace_id);verification.push({fact:prepared,result});
  }
- await options.record({stage:'verification_contract',payload:{results,rejected_count:rejected}});
+ await options.record({stage:'verification_contract',payload:{results:admissions.flatMap(item=>item.result?[item.result]:[]),rejected_count:rejected}});
  return {accepted,candidate_trace_ids,rejected_count:rejected,extraction_completed:true,failure_kind:null,failure_reason:null,verification};
 }
 

@@ -3,6 +3,7 @@ import {canonicalJSON,digest,parseStoredJSON,sha} from './contact-overview-evide
 import {instantMicros,uuid,when,validateExtractionWindow,type ExtractedFact,type ExtractionWindow,type ExtractionMessage,type SourceVerificationResult,type MemoryEvent} from './extraction-protocol.ts';
 import {boundedMessages,normalizeBoundedWindow,validateBoundedBodySources} from './extraction-bounded.ts';
 import {verifyBoundedProof} from './extraction-bounded-proof.ts';
+import {assertCompleteClaimAdmission} from './complete-claim-verification.ts';
 export interface EvidenceMessage {
  message_id:string;text_sha256:string;text_length:number;sender:string;message_type:string;text_representation:string;
  source_state_sha256:string|null;occurred_at:string|null;source_refs:{ref_id:string;source_id:string}[];
@@ -117,9 +118,15 @@ export function bindDimensionEvidence(evidence:LegacyDimensionEvidence,window:Ex
  }
  return runtime<LegacyDimensionEvidence>(dimensionEvidencePayload(evidence) as Omit<LegacyDimensionEvidence,'source_bound'>,true);
 }
-export function buildDimensionEvidence(window:ExtractionWindow,fact:ExtractedFact,verification:SourceVerificationResult|null=null,options:{verificationMode?:'legacy-v4'}={}):LegacyDimensionEvidence {
+export function buildDimensionEvidence(window:ExtractionWindow,fact:ExtractedFact,verification:SourceVerificationResult|null=null,options:{verificationMode?:'legacy-v4'|'complete-claim-v1'}={}):LegacyDimensionEvidence {
  validateExtractionWindow(window);
- if((options.verificationMode??verification?.verification_mode??'legacy-v4')!=='legacy-v4'||verification&&verification.verification_mode!=='legacy-v4')return fail('evidence_mode_unsupported');
+ const mode=options.verificationMode??verification?.verification_mode??'legacy-v4';
+ if(!['legacy-v4','complete-claim-v1'].includes(mode)||verification&&verification.verification_mode!==mode)return fail('evidence_mode_unsupported');
+ if(mode==='complete-claim-v1'){
+  if(!verification||verification.verdict!=='supported'||verification.claim_validation?.status!=='checked'
+   ||verification.claim_validation.semantic_support!=='supported')return fail('evidence_claim_unverified');
+  assertCompleteClaimAdmission(window,fact,verification);
+ }
  if(fact.source_dependency_mode==='all')return fail('legacy_evidence_cannot_bind_all');
  const messages=metadata(window),alignments:NonNullable<LegacyDimensionEvidence['paraphrase']>=[];
  if(verification?.verdict==='supported')for(const quote of verification.evidence){

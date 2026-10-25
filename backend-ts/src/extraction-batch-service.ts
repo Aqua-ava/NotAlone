@@ -14,6 +14,7 @@ import type {MessagesBudgetBinding,MessagesBudgetProfile} from './model-input-bu
 import type {ContentBlock} from '@deepseek-ai/dsh-llm';
 import type {ExtractionWindow} from './extraction-protocol.ts';
 import {deepSeekStrictVerificationSchema,DEEPSEEK_STRICT_VERIFICATION_TOOL} from './deepseek-strict-verification.ts';
+import {assertExtractionPolicyWindow,validateExtractionRuntimeConfig,resolveExtractionPolicy,type ExtractionRuntimeConfig,type ExtractionPolicyVersion} from './extraction-policy-version.ts';
 
 type Transaction=<T>(work:(client:pg.Client)=>Promise<T>)=>Promise<T>;
 export interface ExtractionBatchInput {owner_id:string;contact_id:string;trace_id:string;batch_key:string;claim:ModelTaskClaim;}
@@ -25,6 +26,7 @@ export interface ExtractionBatchWireOutcome extends Omit<ExtractionFlowOutcome,'
 export class ExtractionBatchError extends Error {readonly code:string;constructor(code:string){super(code);this.code=code;}}
 interface Options {
  ownerId:string;transaction:Transaction;ruleVersion:string;
+ policyVersion?:ExtractionPolicyVersion;
  model:{binding:MessagesBudgetBinding;profile:MessagesBudgetProfile};
  call(input:ExtractionModelInput):Promise<{text:string;blocks:ContentBlock[];receipt?:ModelLedgerReceipt}>;
  unconfirmedRequests(scope:{owner_id:string;contact_id:string}):Promise<string[]>;
@@ -40,7 +42,7 @@ function parseInput(value:ExtractionBatchInput,owner:string):ExtractionBatchInpu
   ||!Number.isSafeInteger(c.lease_generation)||c.lease_generation<1)reject('extraction_batch_invalid');
  return structuredClone(value);
 }
-async function lockedClaim(client:pg.Client,input:ExtractionBatchInput):Promise<'legacy'|'bounded-runtime-v1'>{
+async function lockedClaim(client:pg.Client,input:ExtractionBatchInput):Promise<ExtractionRuntimeConfig>{
  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${input.owner_id}:${input.contact_id}`]);
  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${input.owner_id}`]);
  const c=input.claim;
@@ -50,8 +52,7 @@ async function lockedClaim(client:pg.Client,input:ExtractionBatchInput):Promise<
   AND s.worker_id=$5 AND s.lease_generation=$6 AND s.lease_expires_at>clock_timestamp() AND ${sourceAllowed} FOR UPDATE OF t,s`,
  [c.task_id,c.step_id,input.owner_id,input.contact_id,c.worker_id,c.lease_generation])).rows[0];
  if(!row)reject();
- const mode=row.extraction_runtime_config?.mode??'legacy';if(!['legacy','bounded-runtime-v1'].includes(mode))reject('extraction_runtime_config_invalid');
- return mode;
+ return validateExtractionRuntimeConfig(row.extraction_runtime_config);
 }
 function originalMessage(message:FrozenExtractionSources['messages'][number]){
  return {message_id:message.message_id,text:message.text,sender:message.sender,occurred_at:message.occurred_at,
@@ -109,9 +110,12 @@ export class ExtractionBatchService {
   const unconfirmed=await this.options.unconfirmedRequests(input).catch(()=>reject('extraction_batch_recovery_unavailable'));
   if(!Array.isArray(unconfirmed)||unconfirmed.some(id=>typeof id!=='string'||!uuid.test(id)))reject('extraction_batch_recovery_unavailable');
   if(unconfirmed.includes(requestId))reject('extraction_batch_outcome_unknown');
+  await this.options.policyVersion?.assertCurrent();
   const scope={ownerId:input.owner_id,contactId:input.contact_id};
   const prepared=await this.options.transaction(async client=>{
-   const mode=await lockedClaim(client,input);
+   const runtimeConfig=await lockedClaim(client,input);
+   const policy=this.options.policyVersion?.resolve(runtimeConfig)??resolveExtractionPolicy(runtimeConfig,this.options.ruleVersion);
+   const {mode,ruleVersion}=policy;
    const trace=(await client.query(`SELECT e.payload::text AS payload FROM memory_extraction_trace tr JOIN memory_extraction_trace_event e ON e.trace_id=tr.trace_id
     WHERE tr.trace_id=$1 AND tr.owner_id=$2 AND tr.contact_id=$3 AND tr.batch_key=$4 AND tr.status='running' AND e.stage='window'
     AND e.payload#>>'{task_runtime,task_id}'=$5 AND e.payload#>>'{task_runtime,step_id}'=$6
@@ -119,6 +123,8 @@ export class ExtractionBatchService {
    [input.trace_id,input.owner_id,input.contact_id,input.batch_key,input.claim.task_id,input.claim.step_id,input.claim.worker_id,String(input.claim.lease_generation)])).rows;
    if(trace.length!==1)reject();
    const recorded=parseStoredJSON(trace[0].payload);
+   const runtime=recorded.task_runtime;
+   assertExtractionPolicyWindow(policy,runtime);
    const targets=recorded.target_message_ids as string[],messages=recorded.messages as Record<string,any>[];
    if(!Array.isArray(targets)||!targets.length||targets.length>20||!Array.isArray(messages)||messages.length>60
     ||createHash('sha256').update(targets.join('|')).digest('hex')!==input.batch_key)reject();
@@ -130,7 +136,7 @@ export class ExtractionBatchService {
    const window:ExtractionWindow={owner_id:input.owner_id,contact_id:input.contact_id,messages:frozen.messages.map((message,index)=>({
     ...message,occurred_at:original[index]!.occurred_at,message_type:original[index]!.message_type,
     text_representation:original[index]!.text_representation,message_snapshot:original[index]!.message_snapshot})),target_message_ids:targets};
-   const inputSha=digest({window,rule_version:this.options.ruleVersion,model:this.options.model});
+   const inputSha=digest({window,rule_version:ruleVersion,model:this.options.model,...(runtimeConfig?.version===2?{policy:runtimeConfig}:{})});
    if((await client.query("SELECT 1 FROM model_call_receipt WHERE owner_id=$1 AND contact_id=$2 AND request_id=$3 AND outcome IN ('pending','unknown') LIMIT 1",[input.owner_id,input.contact_id,requestId])).rowCount)reject('extraction_batch_outcome_unknown');
    // 已持久A结果可跨新trace只读恢复；模型回执仍是防重发权威，不因调用方丢失回包重跑模型。
    const executions=(await client.query(`SELECT b.trace_id,b.payload AS begun,r.payload->'outcome' AS outcome,
@@ -184,7 +190,7 @@ export class ExtractionBatchService {
       [execution.trace_id,input.owner_id,input.contact_id,cached!.model_call_ids,requestId])).rows;
      if(known.length!==cached!.model_call_ids.length)reject('extraction_batch_outcome_unknown');
      checked.push({trace_id:execution.trace_id,consumed:execution.consumed,cached,
-      same:execution.begun.input_sha256===inputSha&&execution.begun.rule_version===this.options.ruleVersion,
+      same:execution.begun.input_sha256===inputSha&&execution.begun.rule_version===ruleVersion,
       noWrite:execution.no_write===true||noWriteOutcome(cached)});
     }
     const only=checked[0]!;
@@ -200,15 +206,15 @@ export class ExtractionBatchService {
       await append(client,input,'typescript_a_superseded',{
        prior_trace_id:execution.trace_id,a_execution_id:begun.execution_id,
        a_input_sha256:begun.input_sha256,a_rule_version:begun.rule_version,
-       reason:execution.cached===null?'terminal_trace_without_a_result_or_write':'unconsumed_terminal_without_accepted'},this.options.ruleVersion);
+       reason:execution.cached===null?'terminal_trace_without_a_result_or_write':'unconsumed_terminal_without_accepted'},ruleVersion);
      }
     }
    }
    if(prior){
     if(prior.trace_id!==input.trace_id)await append(client,input,'typescript_a_recovered',{
      a_execution_id:prior.cached.a_execution_id,a_input_sha256:prior.cached.a_input_sha256,
-     a_rule_version:prior.cached.a_rule_version},this.options.ruleVersion);
-   return {frozen,window,inputSha,cached:prior.cached,mode};
+     a_rule_version:prior.cached.a_rule_version},ruleVersion);
+   return {frozen,window,inputSha,cached:prior.cached,mode,policy,ruleVersion};
    }
    if((await client.query("SELECT 1 FROM memory_extraction_trace_event WHERE trace_id=$1 AND stage IN ('typescript_a_begin','typescript_a_recovered') LIMIT 1",[input.trace_id])).rowCount)reject('extraction_batch_already_consumed');
    // 正文清除不等于结果已被业务消费；原最小调用关联仍能阻止同一request重发。
@@ -220,19 +226,28 @@ export class ExtractionBatchService {
      WHERE e.trace_id=tr.trace_id AND e.stage='typescript_a_begin') LIMIT 1`,
     [input.owner_id,input.contact_id,input.batch_key,requestId,this.options.model.binding.provider])).rowCount)reject('extraction_batch_outcome_unknown');
    await append(client,input,'typescript_a_begin',{execution_id:input.trace_id,request_id:requestId,task_id:input.claim.task_id,
-    batch_key:input.batch_key,input_sha256:inputSha,executor:'typescript',rule_version:this.options.ruleVersion},this.options.ruleVersion);
-   return {frozen,window,inputSha,cached:null,mode};
+    batch_key:input.batch_key,input_sha256:inputSha,executor:'typescript',rule_version:ruleVersion},ruleVersion);
+   return {frozen,window,inputSha,cached:null,mode,policy,ruleVersion};
   });
-  if(prepared.cached){signal.throwIfAborted();return prepared.cached;}
-  const requireSources=()=>this.options.transaction(async client=>{await lockedClaim(client,input);await requireCurrent(client,scope,prepared.frozen);});
+  const ruleVersion=prepared.ruleVersion;
+  const requireSources=async()=>{
+   await this.options.policyVersion?.assertCurrent();
+   await this.options.transaction(async client=>{
+    if(canonicalJSON(await lockedClaim(client,input))!==canonicalJSON(prepared.policy.config))reject('extraction_policy_changed');
+    await requireCurrent(client,scope,prepared.frozen);
+   });
+  };
+  if(prepared.cached){signal.throwIfAborted();await requireSources();signal.throwIfAborted();return prepared.cached;}
   const modelCallIds:string[]=[];let currentCall:string|null=null,enteredModel=0;
   const receiptStates=new Map<string,{receipt:ModelLedgerReceipt;committed:boolean}>();
-  const record=async(event:{stage:string;payload:unknown;candidate_trace_id?:string})=>this.options.transaction(async client=>{
-   await lockedClaim(client,input);await requireCurrent(client,scope,prepared.frozen);
-   await append(client,input,event.stage,event.payload,this.options.ruleVersion,currentCall,event.candidate_trace_id??null);
-  });
+  const record=async(event:{stage:string;payload:unknown;candidate_trace_id?:string})=>{
+   await this.options.policyVersion?.assertCurrent();return this.options.transaction(async client=>{
+   if(canonicalJSON(await lockedClaim(client,input))!==canonicalJSON(prepared.policy.config))reject('extraction_policy_changed');
+   await requireCurrent(client,scope,prepared.frozen);
+   await append(client,input,event.stage,event.payload,ruleVersion,currentCall,event.candidate_trace_id??null);
+  });};
   let outcome:ExtractionFlowOutcome;
-  try{outcome=await runExtractionFlow({window:prepared.window,signal,mode:prepared.mode==='bounded-runtime-v1'?'bounded-runtime-v1':undefined,requireCurrent:requireSources,record,
+  try{outcome=await runExtractionFlow({window:prepared.window,signal,mode:prepared.mode==='bounded-runtime-v1'?'bounded-runtime-v1':undefined,verificationPolicy:prepared.policy.verification,requireCurrent:requireSources,record,
    invoke:async(request,callSignal)=>{
     currentCall=randomUUID();const callId=currentCall;
     const strict=request.purpose==='verification'&&request.tool.name===DEEPSEEK_STRICT_VERIFICATION_TOOL;
@@ -275,13 +290,13 @@ export class ExtractionBatchService {
      const original=(await client.query(`SELECT tr.trace_id FROM memory_extraction_trace tr JOIN memory_extraction_trace_event b ON b.trace_id=tr.trace_id
       WHERE tr.trace_id=$1 AND tr.owner_id=$2 AND tr.contact_id=$3 AND b.stage='typescript_a_begin'
       AND b.payload->>'execution_id'=$1::text AND b.payload->>'input_sha256'=$4 AND b.payload->>'rule_version'=$5 FOR UPDATE OF tr`,
-      [input.trace_id,input.owner_id,input.contact_id,prepared.inputSha,this.options.ruleVersion])).rows;
+      [input.trace_id,input.owner_id,input.contact_id,prepared.inputSha,ruleVersion])).rows;
      if(original.length!==1)return;
-     const proof={a_execution_id:input.trace_id,a_input_sha256:prepared.inputSha,a_rule_version:this.options.ruleVersion,
+     const proof={a_execution_id:input.trace_id,a_input_sha256:prepared.inputSha,a_rule_version:ruleVersion,
       proof:enteredModel===0?'before_model_invocation':'known_not_sent_receipts'};
      await client.query(`INSERT INTO memory_extraction_trace_event(event_id,trace_id,owner_id,contact_id,position,stage,payload)
       SELECT $1,$2,$3,$4,COALESCE(max(position),0)+1,'typescript_a_not_sent',$5::jsonb FROM memory_extraction_trace_event WHERE trace_id=$2`,
-      [randomUUID(),input.trace_id,input.owner_id,input.contact_id,canonicalJSON(eventPayload(proof,this.options.ruleVersion))]);
+      [randomUUID(),input.trace_id,input.owner_id,input.contact_id,canonicalJSON(eventPayload(proof,ruleVersion))]);
     });
    }catch{/* 未能持久证明零派发时保留unknown，原始故障继续向调用者传播。 */}
    throw error;
@@ -293,7 +308,7 @@ export class ExtractionBatchService {
   });
   const {verification,...rest}=outcome;
   const result={...rest,accepted,candidate_trace_ids:outcome.candidate_trace_ids,model_accounting_owner:'typescript' as const,model_call_ids:modelCallIds,
-   a_execution_id:input.trace_id,a_input_sha256:prepared.inputSha,a_rule_version:this.options.ruleVersion};
+   a_execution_id:input.trace_id,a_input_sha256:prepared.inputSha,a_rule_version:ruleVersion};
   await record({stage:'typescript_a_result',payload:{outcome:result}});
   return result;
  }

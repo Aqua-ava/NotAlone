@@ -22,8 +22,7 @@ import {ExtractionWorker} from './extraction-worker.ts';
 import {ContactMemoryIndexRunner} from './contact-memory-index.ts';
 import {ExtractionWorkerTaskControl,type TaskControlPort} from './task-control.ts';
 import {createLocalEmbeddingLifecycle} from './local-embedding-lifecycle.ts';
-import {readFile} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
+import {createExtractionPolicyVersion} from './extraction-policy-version.ts';
 import {AssistantDiscussionError,AssistantDiscussionService} from './assistant-discussion-service.ts';
 import {createAssistantDiscussionHttp} from './assistant-discussion-http.ts';
 import {createPureTsPublicApi} from './pure-ts-public-api.ts';
@@ -74,6 +73,7 @@ export interface HostReplyOptions {
   extractionEnabled?:boolean;
   extractionAdoptionEnabled?:boolean;
   extractionConcurrency?:number;
+  extractionVerificationPolicy?:'complete-claim-v1';
   embeddingFactory?:Parameters<typeof createLocalEmbeddingLifecycle>[0];
   discussionSkillsRoot?:string;
   publicRuntime?:boolean;
@@ -289,16 +289,14 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
         });
       }
       if(options.extractionEnabled&&extraction&&owner){
-        const modules=['extraction-flow.ts','extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-arguments.ts','extraction-verification-diagnostics.ts','deepseek-strict-verification.ts','extraction-evidence.ts','extraction-prompts.ts','extraction-bounded.ts','extraction-bounded-proof.ts','contact-overview-bounded-body.ts','contact-overview-bounded-contract.ts','contact-overview-bounded-graph.ts'];
-        const sources=await Promise.all(modules.map(file=>readFile(new URL(file,import.meta.url))));
-        const ruleVersion=createHash('sha256').update(Buffer.concat(sources)).digest('hex');
-        batches=new ExtractionBatchService({ownerId:owner,transaction:extractionTransaction,ruleVersion,
+        const policyVersion=await createExtractionPolicyVersion(),ruleVersion=policyVersion.ruleVersion;
+        batches=new ExtractionBatchService({ownerId:owner,transaction:extractionTransaction,ruleVersion,policyVersion,
           model:{binding:{provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,reasoningEffort:m.reasoningEffort},profile:m.budgetProfile},
           unconfirmedRequests:scope=>extractionUnconfirmedRequests(options.extractionPermit!,scope),
           call});
         if(options.extractionAdoptionEnabled){
           adoptionPool=await options.storage.businessPool();
-          const store=new ExtractionTaskStore(adoptionPool);
+          const store=new ExtractionTaskStore(adoptionPool,{policyVersion,verificationPolicy:options.extractionVerificationPolicy});
           const binding={provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,
             reasoningEffort:m.reasoningEffort},profile=m.budgetProfile;
           adoptionHost=createExtractionAdoptionHost({ownerId:owner,taskStore:store,
@@ -308,7 +306,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
             store,batches,
             adopt:(input,aResult,signal)=>adoptionHost!.run(input,aResult,signal),
             batchSize:10,contextBefore:5,contextAfter:0,
-            concurrency:options.extractionConcurrency??1,ruleVersion,
+            concurrency:options.extractionConcurrency??1,ruleVersion,policyVersion,
             provider:m.provider,modelName:m.model,
           });
           learningWorker=new SkillLearningTaskRunner({store:learningStore!,

@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "kind": "synthetic_offline_budget_feasibility",
+  "source_stamp": "2e36ada0f02a44d6cf709a0cd1255f5ffeb7f5a56491e2549b0de9ce274b1b64",
+  "real_model_calls": 0,
+  "reads_real_samples": false,
+  "binding": {
+    "provider": "notalone-deepseek",
+    "model": "deepseek-flash",
+    "maxTokens": 4096,
+    "temperature": 0,
+    "reasoningEffort": "off"
+  },
+  "profile": {
+    "context_window_tokens": 1048576,
+    "safety_margin_tokens": 65536
+  },
+  "calls_plan": {
+    "extraction": 1,
+    "verification": 1,
+    "additional_semantic_model": 0
+  },
+  "existing_live_ledger": "未读取、重置、延长或消费；本报告不能授予外呼资格",
+  "output_measurement": "UTF-8字节保守代理，与既有输入估算口径一致；没有供应商实际tokenizer，失败表示无法在4096内证明可行，不代表精确token数。",
+  "full_legal_range_proven": false,
+  "default_enabled": false,
+  "cases": [
+    {
+      "name": "one_short",
+      "candidate_count": 1,
+      "source_message_count": 1,
+      "evidence_quote_codepoints": 32,
+      "parts_per_candidate": 1,
+      "strict_schema_compiled": true,
+      "input_budget_passes": true,
+      "input_approximate_tokens": 18222,
+      "input_serialized_bytes": 18222,
+      "output_json_utf8_bytes": 687,
+      "output_conservative_byte_proxy_fits": true,
+      "output_actual_token_count": null
+    },
+    {
+      "name": "four_short",
+      "candidate_count": 4,
+      "source_message_count": 1,
+      "evidence_quote_codepoints": 32,
+      "parts_per_candidate": 1,
+      "strict_schema_compiled": true,
+      "input_budget_passes": true,
+      "input_approximate_tokens": 19488,
+      "input_serialized_bytes": 19488,
+      "output_json_utf8_bytes": 2442,
+      "output_conservative_byte_proxy_fits": true,
+      "output_actual_token_count": null
+    },
+    {
+      "name": "six_short",
+      "candidate_count": 6,
+      "source_message_count": 1,
+      "evidence_quote_codepoints": 32,
+      "parts_per_candidate": 1,
+      "strict_schema_compiled": true,
+      "input_budget_passes": true,
+      "input_approximate_tokens": 20332,
+      "input_serialized_bytes": 20332,
+      "output_json_utf8_bytes": 3612,
+      "output_conservative_byte_proxy_fits": true,
+      "output_actual_token_count": null
+    },
+    {
+      "name": "sixty_short",
+      "candidate_count": 60,
+      "source_message_count": 1,
+      "evidence_quote_codepoints": 32,
+      "parts_per_candidate": 1,
+      "strict_schema_compiled": true,
+      "input_budget_passes": true,
+      "input_approximate_tokens": 43270,
+      "input_serialized_bytes": 43270,
+      "output_json_utf8_bytes": 35252,
+      "output_conservative_byte_proxy_fits": false,
+      "output_actual_token_count": null
+    },
+    {
+      "name": "one_full_quote",
+      "candidate_count": 1,
+      "source_message_count": 1,
+      "evidence_quote_codepoints": 8192,
+      "parts_per_candidate": 1,
+      "strict_schema_compiled": true,
+      "input_budget_passes": true,
+      "input_approximate_tokens": 42704,
+      "input_serialized_bytes": 42704,
+      "output_json_utf8_bytes": 25167,
+      "output_conservative_byte_proxy_fits": false,
+      "output_actual_token_count": null
+    },
+    {
+      "name": "sixty_full_quote",
+      "candidate_count": 60,
+      "source_message_count": 1,
+      "evidence_quote_codepoints": 8192,
+      "parts_per_candidate": 4,
+      "strict_schema_compiled": true,
+      "input_budget_passes": true,
+      "input_approximate_tokens": 67752,
+      "input_serialized_bytes": 67752,
+      "output_json_utf8_bytes": 1560932,
+      "output_conservative_byte_proxy_fits": false,
+      "output_actual_token_count": null
+    },
+    {
+      "name": "max_window_preflight",
+      "candidate_count": 60,
+      "source_message_count": 60,
+      "evidence_quote_codepoints": 8192,
+      "strict_schema_compiled": true,
+      "input_budget_passes": false,
+      "preflight_error": "reply_budget_exceeded",
+      "input_approximate_tokens": 1674657,
+      "input_serialized_bytes": 1674657,
+      "output_actual_token_count": null,
+      "model_not_invoked": true
+    }
+  ],
+  "conclusion": "小型短引文响应通过保守尺寸检查；协议允许的候选数和长引文上界不通过，最大窗口被既有输入门提前拒绝。不得据此扩大4096、calls/tokens门禁、增加V次数或截断；真实试跑另由协调会话独立决定。"
+}
