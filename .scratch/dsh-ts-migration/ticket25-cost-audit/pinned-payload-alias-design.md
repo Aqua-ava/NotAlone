@@ -56,7 +56,7 @@
 4. 不把真实 UUID 或真实↔alias 映射追加到模型输入。模型只需要 alias；真实映射留在端侧当前调用内存。
 5. alias 与真实 UUID 集合都不得跨 owner/contact/request 复用。不同联系人的 `c1` 必须分别解析到各自请求的 evidence，旧请求 alias 在后续请求默认无效。
 6. Skill 版本使用同一请求局部的 `k1..kN` 投影：`skill_selection.version_id`、受控目录、读取回执和 `ReplyRuntimeOutput.used_skill_version_id` 只出站 alias；claim 边界再还原为真实版本 UUID，PG 与 `SkillUse` 继续保存真实值。模型直接返回真实 UUID、未知或未读取的 `kN` 均拒绝。
-7. 系统拥有的 DTO／序列化关联字段采用有界递归；自由正文即使是合法 JSON 也逐字保留，不解析订单号、数字或用户主动输入的标识。仅 `generation_input`／候选讨论正文及 `submission`、`continuation`、`input_payload`、`payload_json` 的系统 envelope 继续解析；深度或节点数超过上限时按不可用拒绝，不能静默回退到原系统身份。
+7. 系统拥有的 DTO／序列化关联字段采用有界递归；自由正文即使是合法 JSON 也逐字保留，不解析订单号、数字或用户主动输入的标识。仅 `discussion_input`、`generation_input`／候选讨论正文及 `submission`、`continuation`、`input_payload`、`payload_json` 的系统 envelope 继续解析；深度或节点数超过上限时按不可用拒绝，不能静默回退到原系统身份。
 
 ### 输出还原
 

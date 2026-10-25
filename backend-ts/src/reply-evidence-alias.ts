@@ -103,7 +103,7 @@ const isSessionField=(key:string)=>key.endsWith('session_id'),isSessionFields=(k
 const isSkillVersionField=(key:string)=>key.endsWith('skill_version_id'),isSkillVersionFields=(key:string)=>key.endsWith('skill_version_ids');
 const MAX_ALIAS_DEPTH=16,MAX_ALIAS_NODES=4096;
 const serializedReferenceFields=new Set(['submission','continuation','input_payload','payload_json']);
-const serializedDiscussionKinds=new Set(['generation_input','candidate_version','candidate_carry']);
+const serializedDiscussionKinds=new Set(['discussion_input','generation_input','candidate_version','candidate_carry']);
 interface AliasVisit {nodes:number}
 const unavailable=():never=>{throw new ReplyError('reply_context_unavailable');};
 export function aliasReplyDiscussionText(text:string,aliases:EvidenceAliases):string {

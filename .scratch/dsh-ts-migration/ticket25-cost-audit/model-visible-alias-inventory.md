@@ -20,4 +20,4 @@
 - revision、时间戳、token、价格、布尔状态和 SHA-256 摘要不是关系身份；摘要不可逆且用于内部一致性绑定，继续保留。
 - provider 的传输层 session/header 不属于应用模型 payload；本清单不宣称消除供应商协议自身携带的传输身份。
 - 对 JSON 字符串的递归投影有深度和节点上限；超限返回 `reply_context_unavailable`，不会回退为原 UUID 文本。
-- 上述递归只适用于系统序列化的 `generation_input`／候选讨论正文及 `submission`、`continuation`、`input_payload`、`payload_json`；业务原文不解析、重排或转换数字。用户主动输入的编号或标识属于原文，不能当作系统身份遮蔽。
+- 上述递归只适用于系统序列化的 `discussion_input`、`generation_input`／候选讨论正文及 `submission`、`continuation`、`input_payload`、`payload_json`；业务原文不解析、重排或转换数字。用户主动输入的编号或标识属于原文，不能当作系统身份遮蔽。
