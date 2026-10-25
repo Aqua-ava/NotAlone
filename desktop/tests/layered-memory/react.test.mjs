@@ -47,9 +47,13 @@ for (const level of ['contact']) test(`${level} 记忆直接查看、修改和�
 });
 
 test('联系人记忆下方按行式展示可核对的主题资料与长期背景', { timeout: 20000 }, async t => {
-  const f = await fixture(async request => ({ generation: 1, data: request.path.includes('/layered-memory') ? profilePayload()
-    : request.path.endsWith('/sources') ? { sources: [] }
-    : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } }));
+  const requests = [];
+  const f = await fixture(async request => {
+    requests.push(request);
+    return { generation: 1, data: request.path.includes('/layered-memory') ? profilePayload()
+      : request.path.endsWith('/sources') ? { sources: [] }
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
+  });
   await withMemoryPage(f, t.signal, async page => {
     const scenarios = page.getByRole('region', { name: '主题资料', exact: true });
     await page.getByRole('heading', { name: '合成读书计划', exact: true }).waitFor();
@@ -58,7 +62,40 @@ test('联系人记忆下方按行式展示可核对的主题资料与长期背�
     const profile = page.getByRole('region', { name: '长期背景', exact: true });
     await profile.getByText('曾有共同读书安排，是否持续尚未核实。', { exact: true }).waitFor();
     await profile.getByText('尚不确定 · 没有新的来源核实持续状态。', { exact: true }).waitFor();
+    await profile.getByText('引用与修正', { exact: true }).first().click();
+    await profile.getByRole('button', { name: '修正这条背景', exact: true }).click();
+    await profile.getByRole('textbox', { name: '长期背景修正说明', exact: true }).fill('合成修正说明。');
+    await profile.getByRole('button', { name: '提交修正', exact: true }).click();
+    await profile.getByRole('textbox', { name: '长期背景修正说明', exact: true }).waitFor({ state: 'detached' });
+    const correction = requests.find(request => request.method === 'POST' && request.path.endsWith('/layered-memory/summary-error'));
+    assert.ok(correction);
+    assert.equal(correction.body.organization_generation, profilePayload().layered_memory.organization_generation);
+    assert.equal(correction.body.target_kind, 'profile');
     assert.equal(await page.getByText('整理管理', { exact: true }).count(), 0);
+  });
+});
+
+test('本人主题背景修正携带当前整理代次', { timeout: 20000 }, async t => {
+  const requests = [];
+  const ownerProfile = profilePayload({ scope_kind: 'owner', contact_id: null });
+  const f = await fixture(async request => {
+    requests.push(request);
+    return { generation: 1, data: request.path.includes('/layered-memory') ? ownerProfile
+      : request.path.endsWith('/sources') ? { sources: [] }
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
+  });
+  await withMemoryPage(f, t.signal, async page => {
+    await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '我', exact: true }).click();
+    const profile = page.getByRole('region', { name: '长期背景', exact: true });
+    await profile.getByText('引用与修正', { exact: true }).first().click();
+    await profile.getByRole('button', { name: '修正这条背景', exact: true }).click();
+    await profile.getByRole('textbox', { name: '长期背景修正说明', exact: true }).fill('合成本人修正说明。');
+    await profile.getByRole('button', { name: '提交修正', exact: true }).click();
+    await profile.getByRole('textbox', { name: '长期背景修正说明', exact: true }).waitFor({ state: 'detached' });
+    const correction = requests.find(request => request.method === 'POST' && request.path.endsWith('/layered-memory/summary-error'));
+    assert.ok(correction);
+    assert.equal(correction.body.organization_generation, ownerProfile.layered_memory.organization_generation);
+    assert.equal(correction.body.target_kind, 'profile');
   });
 });
 

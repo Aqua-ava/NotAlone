@@ -477,8 +477,6 @@ class LayeredMemoryService:
 
     def report_summary_error(self, scope, command):
         self._store.report_summary_error(scope, command)
-        if self._synthetic:
-            self.organize(scope)
         return self.read(scope)
 
     def report_fact_error(self, scope, command):

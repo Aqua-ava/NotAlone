@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { RewriteFixture } from './rewrite-backend-fixture';
 
-type Memory = { memory_id: string; revision: number; text: string; supersedes_memory_id: string | null };
+type Memory = { memory_id: string; revision: number; text: string; status: 'active' | 'invalidated';
+  retirement_reason: string | null; supersedes_memory_id: string | null };
 type Item = { text: string; references: { memory_id: string; revision: number }[] };
 type Scenario = { version_id: string; paragraphs: Item[] };
 type Profile = { version_id: string; entries: Item[] };
@@ -59,7 +60,10 @@ export async function prepareNativeCorrection(fixture: RewriteFixture, scope: 'c
   const action = index < 2 ? 'summary' : 'fact';
   assert.ok(state.scenarios.length >= 2 && state.scenarios.length <= 4, JSON.stringify(state));
   // 第二次反馈选另一独立主题；后续选择新一批画像实际使用的主题，不能依赖展示排序。
-  const selectedMemoryId = index === 1 ? previous?.memory.memory_id : state.profile?.entries[0]?.references[0]?.memory_id;
+  const selectedMemoryId = index === 1 ? previous?.memory.memory_id
+    : state.profile?.entries[0]?.references[0]?.memory_id
+      ?? state.scenarios.flatMap(scenario => scenario.paragraphs)
+        .flatMap(item => item.references)[0]?.memory_id;
   if (index === 1) assert.ok(selectedMemoryId, '必须携带上一项的实际依据身份。');
   const version = kind === 'profile' ? state.profile : state.scenarios.find(scenario => scenario.paragraphs.some(item =>
     item.references.some(reference => index === 1 ? reference.memory_id !== selectedMemoryId : reference.memory_id === selectedMemoryId)));
@@ -85,7 +89,7 @@ export async function checkNativeCorrection(fixture: RewriteFixture, step: Nativ
     assert.equal(state.profile, null, '受影响的长期背景必须撤下。');
     const expectedScenarios = step.kind === 'profile' ? step.before.scenarios
       : step.before.scenarios.filter(item => item.version_id !== step.versionId);
-    assert.deepEqual(state.scenarios, expectedScenarios, '独立主题的原始版本必须保留。');
+    assert.deepEqual(state.scenarios, expectedScenarios, `独立主题的原始版本必须保留。${JSON.stringify(state)}`);
     assert.deepEqual(memories, step.memories, '总结反馈不得修改正确的底层记忆。');
     const feedback = state.feedback.find(item => item.target_kind === step.kind && item.version_id === step.versionId
       && item.item_index === step.itemIndex && item.reason === step.reason);
@@ -105,12 +109,14 @@ export async function checkNativeCorrection(fixture: RewriteFixture, step: Nativ
       && item.references.every(reference => reference.memory_id !== step.memory.memory_id
         && memories.some(memory => memory.memory_id === reference.memory_id && memory.revision === reference.revision))),
     '当前派生正文必须排除旧事实正文及其引用，且全部引用本范围的有效当前版本。');
-    assert.ok(!memories.some(item => item.memory_id === step.memory.memory_id));
+    const retired = memories.find(item => item.memory_id === step.memory.memory_id);
+    assert.equal(retired?.status, 'invalidated', JSON.stringify(memories));
+    assert.equal(retired?.retirement_reason, 'error_correction', JSON.stringify(memories));
     const corrected = memories.find(item => item.supersedes_memory_id === step.memory.memory_id);
     assert.ok(corrected, JSON.stringify(memories));
     assert.equal(corrected.revision, step.memory.revision + 1);
     assert.equal(corrected.text, step.replacement);
-    assert.deepEqual(memories.filter(item => item.memory_id !== corrected.memory_id),
+    assert.deepEqual(memories.filter(item => ![step.memory.memory_id, corrected.memory_id].includes(item.memory_id)),
       step.memories.filter(item => item.memory_id !== step.memory.memory_id));
     const versions = await read<Memory[]>(fixture, `${step.memoriesPath}/${corrected.memory_id}/versions`, 'versions');
     assert.ok(versions.some(item => item.memory_id === step.memory.memory_id));

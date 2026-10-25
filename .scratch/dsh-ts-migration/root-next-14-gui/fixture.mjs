@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -238,7 +239,7 @@ async function setup() {
 
 async function rearm() {
   const current = await state();
-  const pg = (await import('pg')).default;
+  const pg = createRequire(path.join(root, 'backend-ts/package.json'))('pg');
   const client = new pg.Client({host:'/tmp', database:current.database, user:'wye'});
   await client.connect();
   try {
@@ -260,7 +261,7 @@ async function rearm() {
          output_payload,dependency_ids,created_at)
       VALUES($1,$2,NULL,0,$3,$4,$5,$6,$7,'succeeded',1,clock_timestamp()+interval '1 day',$8,$9,'{}','{}',$10,clock_timestamp())
     `, [batchId, current.owner, generation, `synthetic-profile-gui-${generation}`, randomUUID(),
-      current.scenarioBatch, current.task, source.scenario_version_ids, source.input_manifest, source.dependency_ids]);
+      current.scenarioBatch, current.task, source.scenario_version_ids, JSON.stringify(source.input_manifest), source.dependency_ids]);
     await client.query(`
       INSERT INTO public.layered_profile_version
         (id,owner_id,contact_id,batch_id,schema_version,entries,withdrawn,created_at)

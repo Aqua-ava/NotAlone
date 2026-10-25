@@ -189,6 +189,8 @@ def main():
                                        budget=OrganizationBudget(max_memories=max(12, options.get('max_memories', 1)),
                                        max_batch_memories=options.get('max_memories', 1), max_characters=16000, max_model_calls=4))
         backend = HttpBackend(create_app(database_url=url, owner_id=fixture.owner_id,
+            # 夹具只在显式 enable/refresh 时推进，纠错响应必须保留撤下目标后的确定状态。
+            model_work_available=False,
             token="synthetic-layered-page-token", memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(url), owner_memory=PostgresOwnerMemoryStore(url)),
             layered_memory=service, runtime_shutdown=lambda: None,

@@ -14,9 +14,13 @@ export async function withMemoryPage(f, signal, run) {
       import React from 'react'; import { createRoot } from 'react-dom/client';
       import { MemoryPage } from './src/renderer/MemoryPage';
       const listeners = new Set();
+      const ownerListeners = new Set();
       window.deliverMemory = (state) => { for (const listener of listeners) listener(state); };
+      window.deliverOwnerMemory = (state) => { for (const listener of ownerListeners) listener(state); };
       window.notalone = { memory: new Proxy({}, { get: (_, method) => method === 'onStateChanged'
         ? (listener) => { listeners.add(listener); return () => listeners.delete(listener); }
+        : method === 'onOwnerLayeredMemoryChanged'
+        ? (listener) => { ownerListeners.add(listener); return () => ownerListeners.delete(listener); }
         : (...args) => window.memoryCommand(method, ...args) }),
         traces: { onStateChanged: () => () => {}, getState: async () => ({ revision: 0, contactId: null, scopeRevision: 0 }) } };
       const root = createRoot(document.getElementById('root'));
@@ -27,9 +31,12 @@ export async function withMemoryPage(f, signal, run) {
     await page.route('http://127.0.0.1/notalone-memory-test', route => route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }));
     await page.goto('http://127.0.0.1/notalone-memory-test');
     const unsubscribe = f.bridge.onStateChanged((state) => { void page.evaluate((next) => window.deliverMemory(next), state).catch(() => {}); });
+    const unsubscribeOwner = f.bridge.onOwnerLayeredMemoryChanged((state) => {
+      void page.evaluate((next) => window.deliverOwnerMemory(next), state).catch(() => {});
+    });
     try {
       await page.addScriptTag({ content: compiled.outputFiles[0].text });
       await run(page);
-    } finally { unsubscribe(); }
+    } finally { unsubscribe(); unsubscribeOwner(); }
   } finally { signal.removeEventListener('abort', cancel); f.disconnect(); await browser.close(); }
 }

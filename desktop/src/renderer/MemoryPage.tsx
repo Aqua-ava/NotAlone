@@ -371,7 +371,14 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         </ReadingSection>
           <LayeredMemorySections state={state.layeredMemory}
             busy={state.mutation.phase === 'working'}
-            manage={(action, options) => memory.manageLayeredMemory(action, state.layeredMemory.value!.settingsGeneration, options)}
+            manage={(action, options) => {
+              const value = state.layeredMemory.value!;
+              const correction = action === 'summary-error';
+              return memory.manageLayeredMemory(action, value.settingsGeneration, {
+                ...(correction ? { organizationGeneration: value.organizationGeneration } : {}),
+                ...options,
+              });
+            }}
             trace={reference => {
               if (!reference.level) return;
               trace(reference.level === 'owner' ? 'owner_memory' : 'contact_memory', reference.memoryId,

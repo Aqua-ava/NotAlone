@@ -48,9 +48,11 @@ export function OwnerLayeredMemoryPanel() {
     const value = state.value;
     if (!value) throw new Error('本人主题资料尚未读取。');
     setError('');
+    const correction = action === 'summary-error';
     await window.notalone.memory.manageOwnerLayeredMemory({
       action,
       settingsGeneration: value.settingsGeneration,
+      ...(correction ? { organizationGeneration: value.organizationGeneration } : {}),
       ...options,
     });
     setState(await window.notalone.memory.getOwnerLayeredMemoryState());
