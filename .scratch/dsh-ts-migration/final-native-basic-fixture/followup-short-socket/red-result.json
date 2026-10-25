@@ -1,0 +1,31 @@
+{
+  "phase": "red",
+  "fixtureSha256": "6bba8bbf6d782b5f45272c086b0063abe93f08e14b0ed6b12939ccff081e796f",
+  "lease": {
+    "socketPathBytes": 264,
+    "acquired": false,
+    "error": "EINVAL"
+  },
+  "inheritedLongTmpBytes": 188,
+  "fixtureTemporaryDirectoryBytes": 221,
+  "temporaryDirectoryRecorded": false,
+  "temporaryDirectoryPrivate": true,
+  "failure": "ERR_ASSERTION",
+  "cleanup": {
+    "databaseAbsent": true,
+    "directoryAbsent": true,
+    "liveOwnedProcesses": 0,
+    "forcedTermination": false
+  },
+  "oldFrozenArtifactsUnchanged": true,
+  "passed": false,
+  "claims": {
+    "electronStarted": false,
+    "dshStarted": false,
+    "wechatStarted": false,
+    "modelCalled": false,
+    "originalConfigurationRead": false,
+    "gitIndexModified": false,
+    "rootRunningFixtureTouched": false
+  }
+}

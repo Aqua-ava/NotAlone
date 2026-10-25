@@ -1,0 +1,133 @@
+{
+  "fixtureSha256": "bb7ff7b94e347a5e820df03c5c2b9cc701d7a3d920236ff906caf5fdae68c769",
+  "explicitCompatibilityPath": true,
+  "nodeAsPythonRejected": true,
+  "pythonInvocationsByThisTool": 0,
+  "productPythonExecutionValidated": false,
+  "inspection": {
+    "syntheticOnly": true,
+    "migrationCount": 116,
+    "migrationManifestSha256": "e4ba2b9be681122f7f477a42cebd079886aa8ce102d1ca1d2c0d54e92ee29ab8",
+    "counts": {
+      "owners": 1,
+      "contacts": 2,
+      "messages": 3,
+      "sources": 3,
+      "discussion_inputs": 1,
+      "outbound_calls": 0,
+      "sync_enabled": false
+    },
+    "config": {
+      "allRuntimeTypescript": true,
+      "modelKeyEmpty": true,
+      "cliSynthetic": true,
+      "nativeProbeDisabled": true,
+      "isolatedUserData": true,
+      "cleanLaunchEnvironment": true,
+      "privateSourceSnapshot": true,
+      "compatibilityPythonPathConfigured": true,
+      "compatibilityPythonPathOnly": true,
+      "productPythonExecutionValidated": false
+    },
+    "sourceSnapshot": {
+      "files": 704,
+      "manifestSha256": "5e5fbdb982752da1b8b944daaf0f830db552b0ea28a2d6515fddd2f27002c0d4",
+      "emptyCompatibilityDirectories": [
+        "backend/src/notalone"
+      ]
+    },
+    "projections": {
+      "manual": 1,
+      "auto": 1,
+      "pending": 1,
+      "discussionInputs": 1,
+      "importPreviewRecords": 2,
+      "syntheticCliHistoryRecords": 2
+    },
+    "productProcessesStarted": 0,
+    "pythonInvocations": 0,
+    "guiVerified": false
+  },
+  "lease": {
+    "acquiredReleasedReacquired": true,
+    "socketPathBytes": 88
+  },
+  "watchRoots": [
+    {
+      "path": "backend/src/notalone",
+      "extension": ".py",
+      "openedAndClosed": true
+    },
+    {
+      "path": "backend/database/migrations",
+      "extension": ".sql",
+      "openedAndClosed": true
+    },
+    {
+      "path": "backend-ts/src",
+      "extension": ".ts",
+      "openedAndClosed": true
+    }
+  ],
+  "build": {
+    "main": true,
+    "preload": true,
+    "renderer": true,
+    "electronStarted": false,
+    "outputs": [
+      {
+        "kind": "main",
+        "bytes": 961796,
+        "sha256": "50ab660ab4706b9b420b3260d60ca704214a0c0ed9ec353382de4169f389d305"
+      },
+      {
+        "kind": "preload",
+        "bytes": 37442,
+        "sha256": "73c908047965738d9289f45e7927f7e2f7cbf7c8a08ed13e4f1957d0d2151710"
+      },
+      {
+        "kind": "renderer",
+        "name": "assets/index-B2KIklV2.js",
+        "bytes": 521487,
+        "sha256": "c2368a1f2493ad584d7b9dca95e1256b41583bd104700a9a6a84497ca62a8ec0"
+      },
+      {
+        "kind": "renderer",
+        "name": "assets/index-5Imj-uQf.css",
+        "bytes": 62909,
+        "sha256": "ac1c2cfd43f4eda2231018c27f6b6b0f3f48d4bf101a1138fa58e48e37ab6e2f"
+      },
+      {
+        "kind": "renderer",
+        "name": "assets/logo-C5gq3JAE.png",
+        "bytes": 2298427,
+        "sha256": "61342f0cc5ac2f7cb768b83ae3d4a3210d36d48f692d3fe7cffeb1c8c241975c"
+      },
+      {
+        "kind": "renderer",
+        "name": "index.html",
+        "bytes": 620,
+        "sha256": "24a1fa8202509a61a3661821a5bfcaa9a257d07a703c0d117f45511b6e93c40e"
+      }
+    ]
+  },
+  "stagingFiles": 704,
+  "sourceHead": "54aebef5ccad427d680ce243eb852c5bd4d91f1e",
+  "cleanup": {
+    "databaseAbsent": true,
+    "directoryAbsent": true,
+    "liveOwnedProcesses": 0,
+    "forcedTermination": false
+  },
+  "preexistingFrozenArtifactsUnchanged": true,
+  "passed": true,
+  "boundaries": {
+    "electronStarted": false,
+    "dshStarted": false,
+    "wechatStarted": false,
+    "modelCalled": false,
+    "originalUserConfigurationRead": false,
+    "rootRunningFixtureTouched": false,
+    "gitIndexModified": false
+  }
+}

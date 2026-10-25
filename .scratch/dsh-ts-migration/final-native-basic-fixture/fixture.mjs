@@ -1,9 +1,9 @@
 // 导入不创建目录、连接数据库或启动进程。仅显式 prepare / inspect / close 执行工作。
 import {constants} from 'node:fs';
-import {mkdtemp, mkdir, writeFile, readFile, readdir, rm, chmod, open, realpath, stat, cp, symlink} from 'node:fs/promises';
+import {mkdtemp, mkdir, writeFile, readFile, readdir, rm, chmod, open, realpath, stat, access, cp, symlink} from 'node:fs/promises';
 import {randomUUID, createHash} from 'node:crypto';
-import {tmpdir, homedir, userInfo} from 'node:os';
-import {join, dirname, basename, resolve} from 'node:path';
+import {homedir, userInfo} from 'node:os';
+import {join, dirname, basename, resolve, isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {execFileSync} from 'node:child_process';
@@ -32,7 +32,8 @@ async function migrations() {
 async function sourceSnapshot(directory) {
   const target = join(directory, 'project');
   await mkdir(target, {mode: 0o700});
-  const entries = ['desktop/package.json', 'desktop/src', 'desktop/scripts', 'desktop/assets',
+  const entries = ['desktop/package.json', 'desktop/managed-runtime-contract.mjs', 'desktop/managed-runtime-contract.d.mts',
+    'desktop/tsconfig.json', 'desktop/wechat-sources.lock.json', 'desktop/src', 'desktop/scripts', 'desktop/assets',
     'backend-ts/package.json', 'backend-ts/src', 'backend-ts/profile', 'backend/database/migrations'];
   const manifest = [];
   for (const entry of entries) {
@@ -52,9 +53,12 @@ async function sourceSnapshot(directory) {
     }
   }
   await verifyFiles(target);
+  // 26 退役前 dev.mjs 仍无条件监听此兼容根；只建空目录，不复制或执行 Python。
+  await mkdir(join(target, 'backend/src/notalone'), {recursive: true, mode: 0o700});
   for (const project of ['desktop', 'backend-ts']) await symlink(join(root, project, 'node_modules'), join(target, project, 'node_modules'));
   await privateJson(join(directory, 'source-snapshot.json'), manifest.sort((a, b) => a.path.localeCompare(b.path)));
-  return {projectDirectory: target, sourceFileCount: manifest.length, sourceManifestSha256: hash(JSON.stringify(manifest))};
+  return {projectDirectory: target, sourceFileCount: manifest.length, sourceManifestSha256: hash(JSON.stringify(manifest)),
+    emptyCompatibilityDirectories: ['backend/src/notalone']};
 }
 async function load(sessionPath) {
   const directory = await realpath(dirname(sessionPath));
@@ -70,6 +74,8 @@ async function load(sessionPath) {
   } finally {await file.close();}
   if (record.marker !== marker || !databasePattern.test(record.database) || await realpath(record.directory) !== directory
     || await realpath(record.userData) !== join(directory, 'desktop') || !/^[a-f0-9-]{36}$/.test(record.nonce)) throw new Error('fixture_ownership_invalid');
+  if (record.temporaryDirectory !== undefined && (record.temporaryDirectory !== join(record.directory, 'tmp')
+    || await realpath(record.temporaryDirectory) !== join(directory, 'tmp'))) throw new Error('fixture_temporary_directory_invalid');
   return record;
 }
 function alive(pid) {
@@ -102,11 +108,22 @@ export async function prepare(options = {}) {
   let npmCli;
   for (const path of npmCandidates) {try {npmCli = await realpath(path); break;} catch (error) {if (error.code !== 'ENOENT') throw error;}}
   if (!npmCli) throw new Error('fixture_npm_cli_required');
-  const directory = await realpath(await mkdtemp(join(tmpdir(), 'notalone-final-native-')));
+  // 26 前 BackendHost 仍要求此非秘密兼容字段；只核验文件，不执行或假装已退役。
+  const selectedPython = options.pythonExecutable ?? join(userInfo().homedir, 'miniconda3/envs/NotAlone/bin/python');
+  let pythonExecutable;
+  try {
+    if (typeof selectedPython !== 'string' || !isAbsolute(selectedPython)) throw new Error();
+    pythonExecutable = await realpath(selectedPython);
+    if (!/^python(?:\d+(?:\.\d+)*)?$/.test(basename(pythonExecutable)) || !(await stat(pythonExecutable)).isFile()) throw new Error();
+    await access(pythonExecutable, constants.X_OK);
+  } catch {throw new Error('fixture_python_compatibility_path_invalid');}
+  // Darwin 的开发租约 socket 追加固定文件名；不继承可能很长的系统 TMPDIR。
+  const directory = await realpath(await mkdtemp('/tmp/notalone-final-native-'));
   await chmod(directory, 0o700);
   const sessionPath = join(directory, 'session.json');
   const record = {marker, nonce: randomUUID(), database: `notalone_final_native_${randomUUID().replaceAll('-', '')}_test`,
-    directory, userData: join(directory, 'desktop'), envFile: join(directory, 'runtime.env'),
+    directory, temporaryDirectory: join(directory, 'tmp'), userData: join(directory, 'desktop'), envFile: join(directory, 'runtime.env'),
+    compatibility: {pythonExecutable, pathOnly: true},
     createdAt: new Date().toISOString(), ready: false};
   let admin, client, storage, created = false;
   try {
@@ -145,18 +162,18 @@ export async function prepare(options = {}) {
       contacts: record.seeds.contacts.map(({name, externalId}) => ({name, externalId})), incremental: false});
     await writeFile(join(directory, 'cli-commands.jsonl'), '', {mode: 0o600});
     await writeFile(join(directory, 'synthetic-cli'), `#!${process.execPath}\n${await readFile(join(here, 'synthetic-cli.mjs'), 'utf8')}`, {mode: 0o700});
-    await privateJson(join(record.userData, 'backend-launch.json'), {projectDirectory: record.projectDirectory,
+    await privateJson(join(record.userData, 'backend-launch.json'), {projectDirectory: record.projectDirectory, pythonExecutable,
       envFilePath: record.envFile, backendInfoPath: join(directory, 'backend.info'),
       wechatCliPath: settings.NOTALONE_WECHAT_CLI, syncProbePath: settings.NOTALONE_SYNC_PROBE});
     const launchEnvironment = {PATH: `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`,
-      HOME: environment.HOME, TMPDIR: join(directory, 'tmp'), LANG: 'en_US.UTF-8', LC_ALL: 'C', TZ: 'Asia/Taipei',
+      HOME: environment.HOME, TMPDIR: record.temporaryDirectory, LANG: 'en_US.UTF-8', LC_ALL: 'C', TZ: 'Asia/Taipei',
       ...settings, NOTALONE_ENV_FILE: record.envFile, NOTALONE_MANAGED_USER_DATA: directory};
     // .env 中由 initializeOwner 持久化的 UUID 保留；启动环境不另设身份覆盖。
     const launch = `#!/bin/sh\nset -eu\numask 077\ncd ${quote(join(record.projectDirectory, 'desktop'))}\nexec /usr/bin/env -i ${Object.entries(launchEnvironment).map(([key, value]) => quote(`${key}=${value}`)).join(' ')} ${quote(process.execPath)} ${quote(npmCli)} run dev -- --user-data-dir ${quote(record.userData)}\n`;
     await writeFile(join(directory, 'start-dev.sh'), launch, {mode: 0o700});
     record.ready = true;
     await privateJson(sessionPath, record);
-    return {sessionPath, directory, userData: record.userData, startScript: join(directory, 'start-dev.sh'),
+    return {sessionPath, directory, temporaryDirectory: record.temporaryDirectory, userData: record.userData, startScript: join(directory, 'start-dev.sh'),
       projectDirectory: record.projectDirectory, importFiles: record.seeds.contacts.map(({importFile}) => importFile)};
   } catch (error) {
     await storage?.close().catch(() => {}); await client?.end().catch(() => {});
@@ -221,11 +238,15 @@ export async function inspect(sessionPath) {
     const saved = await discussion.readSession({owner_id: record.seeds.owner, contact_id: a.id}, record.seeds.discussion);
     if (saved.inputs.length !== 1) throw new Error('fixture_discussion_invalid');
     const configuration = JSON.parse(await readFile(join(record.userData, 'backend-launch.json'), 'utf8'));
-    if (configuration.pythonExecutable || configuration.envFilePath !== record.envFile
+    if (configuration.pythonExecutable !== record.compatibility?.pythonExecutable || !configuration.pythonExecutable
+      || configuration.envFilePath !== record.envFile
       || configuration.projectDirectory !== join(record.directory, 'project')) throw new Error('fixture_launch_invalid');
     const sourceFiles = JSON.parse(await readFile(join(record.directory, 'source-snapshot.json'), 'utf8'));
     for (const entry of sourceFiles) {
       if (hash(await readFile(join(record.projectDirectory, entry.path))) !== entry.sha256) throw new Error('fixture_source_snapshot_changed');
+    }
+    for (const path of record.emptyCompatibilityDirectories ?? []) {
+      if (path !== 'backend/src/notalone' || (await readdir(join(record.projectDirectory, path))).length) throw new Error('fixture_compatibility_watch_root_invalid');
     }
     const rawCli = execFileSync(join(record.directory, 'synthetic-cli'),
       ['tail', a.externalId, '--history', '--limit', '100', '--strict-read-only'],
@@ -234,8 +255,10 @@ export async function inspect(sessionPath) {
     const cliHistory = parseIncrementalTail(rawCli, a.externalId, {history: true});
     if (cliHistory.events.length !== 2 || cliHistory.has_more) throw new Error('fixture_cli_invalid');
     return {syntheticOnly: true, migrationCount: actual.length, migrationManifestSha256: hash(JSON.stringify(actual)),
-      counts, config: {allRuntimeTypescript: true, modelKeyEmpty: true, cliSynthetic: true, nativeProbeDisabled: true, isolatedUserData: true, cleanLaunchEnvironment: true, privateSourceSnapshot: true},
-      sourceSnapshot: {files: sourceFiles.length, manifestSha256: record.sourceManifestSha256},
+      counts, config: {allRuntimeTypescript: true, modelKeyEmpty: true, cliSynthetic: true, nativeProbeDisabled: true, isolatedUserData: true, cleanLaunchEnvironment: true, privateSourceSnapshot: true,
+        compatibilityPythonPathConfigured: true, compatibilityPythonPathOnly: true, productPythonExecutionValidated: false},
+      sourceSnapshot: {files: sourceFiles.length, manifestSha256: record.sourceManifestSha256,
+        emptyCompatibilityDirectories: record.emptyCompatibilityDirectories ?? []},
       projections: {manual: bMemories.length, auto: aMemories.length, pending: pending.length, discussionInputs: saved.inputs.length, importPreviewRecords: preview.body.record_count, syntheticCliHistoryRecords: cliHistory.events.length},
       productProcessesStarted: 0, pythonInvocations: 0, guiVerified: false};
   } finally {await storage?.close(); await client.end();}

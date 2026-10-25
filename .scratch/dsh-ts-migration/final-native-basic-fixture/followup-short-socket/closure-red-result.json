@@ -1,0 +1,42 @@
+{
+  "phase": "closure-red",
+  "fixtureSha256": "a05d27e8c84a4059aff35b9248dc3027da7b2225fee88249590ccb6acc8823ad",
+  "lease": {
+    "socketPathBytes": 88,
+    "acquired": true,
+    "existingLeaseRecognized": true,
+    "released": true,
+    "reacquiredAndReleased": true
+  },
+  "inheritedLongTmpBytes": 188,
+  "fixtureTemporaryDirectoryBytes": 45,
+  "temporaryDirectoryRecorded": true,
+  "temporaryDirectoryPrivate": true,
+  "build": {
+    "main": false,
+    "preload": false,
+    "renderer": false,
+    "electronStarted": false,
+    "error": "build_main_preload_failed",
+    "errorCount": 1,
+    "missingManagedRuntimeContract": true
+  },
+  "failure": "regression_assertion_failed",
+  "cleanup": {
+    "databaseAbsent": true,
+    "directoryAbsent": true,
+    "liveOwnedProcesses": 0,
+    "forcedTermination": false
+  },
+  "oldFrozenArtifactsUnchanged": true,
+  "passed": false,
+  "claims": {
+    "electronStarted": false,
+    "dshStarted": false,
+    "wechatStarted": false,
+    "modelCalled": false,
+    "originalConfigurationRead": false,
+    "gitIndexModified": false,
+    "rootRunningFixtureTouched": false
+  }
+}

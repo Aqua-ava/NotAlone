@@ -1,0 +1,112 @@
+{
+  "preliminary_source_commit": "e5d8183bff811bc9bdd466a3035deb0b6abf10e3",
+  "preliminary_only": true,
+  "final_source_acceptance": false,
+  "actual_app_command": "npm run dev",
+  "synthetic_only": true,
+  "real_model_calls": 0,
+  "original_profile_touched": false,
+  "runtime_snapshot": {
+    "host_runtime": "typescript",
+    "python_descendants_observed": 0
+  },
+  "memory_and_discussion_ui": {
+    "contact_memory_isolation": true,
+    "pending_candidate_confirmed": true,
+    "edit_cancel_did_not_save": true,
+    "revision_saved": true,
+    "old_revision_explicitly_invalidated": true,
+    "delete_cancel_kept_revision": true,
+    "synthetic_revision_deleted": true,
+    "auto_adoption_revoked": true,
+    "other_contact_manual_memory_preserved": true,
+    "saved_discussion_read": true,
+    "discussion_delete_cancel_preserved": true,
+    "synthetic_discussion_deleted": true,
+    "deleted_discussion_not_restored_on_reread": true
+  },
+  "import": {
+    "preview_contact_switch_invalidated": true,
+    "cancel_messages": 3,
+    "cancel_sources": 3,
+    "initial_added_messages": 2,
+    "duplicate_added_messages": 0,
+    "duplicate_existing_messages": 2,
+    "duplicate_counts_unchanged": true,
+    "after_duplicate": {
+      "messages": 5,
+      "sources": 4,
+      "tasks": 1,
+      "model_calls": 0
+    },
+    "source_delete_initial_result": "unconfirmed",
+    "source_delete_read_only_refresh": "deleted_and_non_retrievable",
+    "source_delete_reissued": false,
+    "after_source_delete_messages": 3,
+    "seed_source_preserved": true
+  },
+  "restart_persistence": {
+    "same_data_restart": true,
+    "sync_enabled": false,
+    "body_commands_before_restart": 58,
+    "body_commands_after_restart": 58,
+    "counts": {
+      "messages": 9,
+      "model_calls": 0
+    },
+    "ui": {
+      "history_complete_contacts": 2,
+      "b_manual_preserved": true,
+      "revoked_auto_not_restored": true,
+      "deleted_revision_not_restored": true,
+      "deleted_discussion_not_restored": true
+    }
+  },
+  "cleanup": {
+    "databaseAbsent": true,
+    "directoryAbsent": true,
+    "liveOwnedProcesses": 0,
+    "forcedTermination": false,
+    "short_tmp_absent": true,
+    "normal_quit": true,
+    "development": 0,
+    "packaged": 0,
+    "orphaned": 0,
+    "original_profile_touched": false,
+    "shared_postgres_stopped": false,
+    "preliminary_source": "e5d8183bff811bc9bdd466a3035deb0b6abf10e3"
+  },
+  "fixed_fixture_tool_smoke": {
+    "fixture_sha256": "bb7ff7b94e347a5e820df03c5c2b9cc701d7a3d920236ff906caf5fdae68c769",
+    "migration_count": 116,
+    "source_snapshot": {
+      "files": 704,
+      "manifestSha256": "5e5fbdb982752da1b8b944daaf0f830db552b0ea28a2d6515fddd2f27002c0d4",
+      "emptyCompatibilityDirectories": [
+        "backend/src/notalone"
+      ]
+    },
+    "socket_path_bytes": 88,
+    "compat_field_present": true,
+    "python_invocations_by_tool": 0,
+    "actual_app_runs": 0,
+    "real_model_calls": 0,
+    "original_profile_touched": false,
+    "cleanup": {
+      "databaseAbsent": true,
+      "directoryAbsent": true,
+      "liveOwnedProcesses": 0,
+      "forcedTermination": false
+    }
+  },
+  "historical_tool_source_superseded": [
+    {
+      "path": ".scratch/dsh-ts-migration/final-native-basic-fixture/fixture.mjs",
+      "historical_sha256": "e2a2dfd5df9162084d64193b316c30c9ad23cf6c6fb1705fafb262fc8936313a",
+      "latest_sha256": "bb7ff7b94e347a5e820df03c5c2b9cc701d7a3d920236ff906caf5fdae68c769"
+    }
+  ],
+  "private_raw_only": true,
+  "ticket25_approved": false,
+  "ticket26_started": false
+}
