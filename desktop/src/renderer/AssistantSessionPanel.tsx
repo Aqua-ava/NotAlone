@@ -89,8 +89,12 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const currentCopyScope = useRef(copyScopeKey); currentCopyScope.current = copyScopeKey;
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
-  const visibleJob = replies.state.generationJobs?.filter((job) => job.contactId === replies.state.contactId
-    && job.sessionId === saved?.sessionId && ['queued', 'generating', 'stopping'].includes(job.phase)).at(-1);
+  const currentContactJobs = replies.state.generationJobs?.filter((job) => job.contactId === replies.state.contactId) ?? [];
+  const activeContactJobs = currentContactJobs.filter((job) => ['queued', 'generating', 'stopping'].includes(job.phase));
+  const displayedJobs = saved?.sessionId
+    ? currentContactJobs.filter((job) => job.sessionId === saved.sessionId)
+    : activeContactJobs.length === 1 ? activeContactJobs : [];
+  const visibleJob = displayedJobs.filter((job) => ['queued', 'generating', 'stopping'].includes(job.phase)).at(-1);
   const stoppedTurn = saved?.phase === 'ready' ? saved.turns.at(-1) : undefined;
   const stoppedNotice = stoppedTurn?.interruptionReason === 'user_cancelled'
     && stoppedTurn.inputVersionId === saved?.currentInputVersionId;
@@ -138,8 +142,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {replies.state.sessionDeletion === 'missing' && <p role="status">当前助手会话已不存在。</p>}
     {stoppedNotice && <p role="status">本次生成已停止，没有保存候选。你可以重新生成，或从历史讨论中重试这次中断的输入。</p>}
     {Boolean(replies.state.generationRecoveryPending) && <p>旧连接有 {replies.state.generationRecoveryPending} 项结果待核对，退出时会通过原连接完成核对。累计未核对任务达到 32 项时暂停接纳，请先完成退出核对。</p>}
-    {replies.state.generationJobs?.filter(job => job.contactId === replies.state.contactId
-      && job.sessionId === saved?.sessionId).map(job => <div key={job.requestKey} className="session-generation-status">
+    {displayedJobs.map(job => <div key={job.requestKey} className="session-generation-status">
       <p role="status">{{
         queued: '已准备，排队等待生成。', generating: '正在生成。', stopping: '正在停止本次生成…',
         cancelled: '本次生成已由你停止。', completed: '生成已完成。', failed: '生成失败，可核对原请求后重试。',
