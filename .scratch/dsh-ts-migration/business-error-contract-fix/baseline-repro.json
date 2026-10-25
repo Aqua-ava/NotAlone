@@ -1,0 +1,19 @@
+{
+  "base_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "baseline_source_sha256": "0f0395835b6ef630d73cd443311a2dc9eb4b5e18ddc97c2ddaf9e932433ce568",
+  "test_sha256": "c8481e3b6dcbd02d100c0b4b92dee7679ba60602a39abfbc7b3a62f5cea10ccc",
+  "harness_sha256": "e8df00060b10a6923a8f05ff74f085d6438e077466523a741e46eeef76023703",
+  "runs": [
+    {
+      "id": "final-red-not-found",
+      "exit_code": 1,
+      "log_sha256": "33ff7551a357f6a9a7dc23661ac06c05598a4acac581a4263e9c4307828aab22"
+    },
+    {
+      "id": "final-red-public-approval",
+      "exit_code": 1,
+      "log_sha256": "4b708ace8d9c2669af1393d718801de02b56b6d3713f61f9879af5bd4bf72b3b"
+    }
+  ],
+  "adaptation": "只改测试 import 的绝对目标；HostStorage 使用基点原字节源码，其余生产业务对象使用当前源码。"
+}

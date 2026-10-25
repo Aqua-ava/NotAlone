@@ -14,6 +14,26 @@ export class HostStorageError extends Error {
   readonly code: string;
   constructor(code: string) { super(code); this.code = code; this.name = 'HostStorageError'; }
 }
+/** 以查询抛错来源区分驱动故障；pg 客户端超时不一定是 DatabaseError，不能匹配 message。 */
+function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
+  const query = client.query;
+  client.query = function(this: pg.Client, ...args: unknown[]): unknown {
+    const callback = args.at(-1);
+    if (typeof callback === 'function') {
+      args[args.length - 1] = function(this: unknown, error: unknown, ...values: unknown[]) {
+        if (error) failures.add(error);
+        return Reflect.apply(callback, this, [error, ...values]);
+      };
+    }
+    try {
+      const result = Reflect.apply(query, this, args);
+      if (result && typeof result.then === 'function') {
+        return result.then(undefined, (error: unknown) => { failures.add(error); throw error; });
+      }
+      return result;
+    } catch (error) { failures.add(error); throw error; }
+  } as pg.Client['query'];
+}
 export interface HostStorageOptions {
   envFilePath: string;
   migrationsDirectory: string;
@@ -167,24 +187,32 @@ export class HostStorage {
     this.assertOpen();
     if (!this.databaseUrl) throw new HostStorageError('database_unconfigured');
     let client: pg.Client | undefined;
+    let businessFailure = false;
+    const queryFailures = new Set<unknown>();
     let finish!: () => void;
     const pending = new Promise<void>(resolve => { finish = resolve; });
     this.pending.add(pending);
     try {
       client = await connectConfigured(await connectionOptions(this.databaseUrl, this.values));
+      if (business) trackQueryFailures(client, queryFailures);
       this.assertOpen();
       await client.query(write ? 'BEGIN' : 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       await client.query("SET LOCAL search_path = pg_catalog, public");
       await client.query("SET LOCAL statement_timeout = '3000ms'");
       await client.query("SET LOCAL lock_timeout = '1000ms'");
       if (write && !business && !(await client.query('SELECT pg_try_advisory_xact_lock(1852798049,1) AS locked')).rows[0].locked) throw new HostStorageError('migration_busy');
-      const result = await operation(client);
+      let result: T;
+      try { result = await operation(client); }
+      catch (error) { businessFailure = business; throw error; }
       this.assertOpen();
       await client.query('COMMIT');
       return result;
     } catch (error) {
-      await client?.query('ROLLBACK').catch(() => {});
+      const rolledBack = await client?.query('ROLLBACK').then(() => true, () => false);
       if (error instanceof HostStorageError) throw error;
+      // 仅把已回滚的业务回调异常交还上层；SQL 和连接／事务故障仍不暴露驱动细节。
+      // 公开 HTTP 继续按各自领域类型筛选错误，未知异常不能直接成为响应正文。
+      if (businessFailure && rolledBack && !queryFailures.has(error) && !(error instanceof pg.DatabaseError)) throw error;
       throw new HostStorageError('database_unavailable');
     } finally { await client?.end().catch(() => {}); this.pending.delete(pending); finish(); }
   }
