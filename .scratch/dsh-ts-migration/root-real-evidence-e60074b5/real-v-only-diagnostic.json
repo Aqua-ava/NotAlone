@@ -1,0 +1,100 @@
+{
+  "candidate_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "source_stamp": "f22df426d48d701ef520cdbd6a1262497545b830cbec1dff9b3be4ee92ea5f50",
+  "diagnostic_kind": "recorded_E_reuse_V_only_no_B",
+  "frozen_window_count": 2,
+  "frozen_proposal_count": 8,
+  "pre_registered_full_proposal_verdicts": {
+    "supported": 2,
+    "unsupported": 2,
+    "undetermined": 4
+  },
+  "V_admitted": {
+    "supported": 2,
+    "unsupported": 0,
+    "undetermined": 2,
+    "total": 4
+  },
+  "pre_registered_acceptance_condition_passed": false,
+  "independent_post_adjudication": "second_independent_review_also_does_not_support_two_admitted_proposals",
+  "full_ticket25_quality_approved": false,
+  "actual_new_E_calls": 0,
+  "actual_new_V_calls": 2,
+  "automatic_retries": 0,
+  "physical_http_statuses": [
+    200,
+    200
+  ],
+  "original_cumulative_used_before": 2,
+  "cumulative_used_after": 4,
+  "same_problem_ledger_preserved": true,
+  "round_state": "closed_unchanged",
+  "usage": {
+    "input_tokens": 11837,
+    "output_tokens": 1903,
+    "cache_read_tokens": 6272,
+    "cache_write_tokens": null
+  },
+  "cost": {
+    "status": "unknown",
+    "amount": null,
+    "qualification": "waived_by_user"
+  },
+  "output_capacity_qualification": "waived_by_user",
+  "actual_output_max_tokens": 393216,
+  "isolated_database_counts": {
+    "outbound": 2,
+    "receipts": 2,
+    "candidates": 0,
+    "confirmed": 0
+  },
+  "production_memory_or_watermark_writes": 0,
+  "production_schema_changed": false,
+  "original_unknown_requests_replayed": 0,
+  "raw_evidence_stored_outside_repository": true,
+  "private_evidence_sha256": {
+    "actual-summary.json": "a581af4b8725732de743590bfa31311be1aa6fe0c480711119ab7388cbadf7b2",
+    "actual-result.json": "263673cdf056eb8ab9e019a90e301fa2d13193aefa959c84db2203926c49bb85",
+    "actual-wire.json": "782bbe32a55c50a2ffbab97b06dac5d10cfc65ecd2895b058e4f0a288f81bf50",
+    "actual-budget.json": "a017610cfd4c3d92683c0ad136ad40100f36a413c7fe65dd8a3b3030f6daa350",
+    "actual-model-host-journal.json": "56838fc3669d596ca236293b30bda9082fdfa24aeb539239f1aa5f798baecb0f",
+    "actual-isolated-database-archive.json": "54a2e3a2125f25cdfc6827bc9b067cf46d6396d8b8cc750c41320899196c488a",
+    "actual-cleanup.json": "44ff57f86ea27747b46e975fdf2e59da3759a474616fa9264e513ff0d22a138f",
+    "preflight-summary.json": "fb587fdb1596c124471ca867290288b618962ae98901c3304a05e7db3fece54e",
+    "actual-authorization.json": "5e4dd714b1e4768e2187aed6796172f9523c515c082940dd76c33bbad04cf303",
+    "root-semantic-comparison.json": "055d553abf42c1d1f43efb1747372d4159e2343553a74a8508a01d8355a08e34",
+    "round-closure.json": "94bb39a23e7856990123abd3eb17bef7a3672ddedcda69149aeab15d4e32dc72",
+    "second-independent-review.json": "ed1055b5a88daa14d50c8827b4c40636ce3459054c7e871e99cf5a642bc01fac",
+    "source-cleanup.json": "0292eed47ef133d2fa4778aab7462466ad2e6cb24853d14e11a5ea170d182e41"
+  },
+  "preflight": {
+    "source_guard_checked_windows": 2,
+    "authentication_rejections": 2,
+    "physical_calls": 0,
+    "outbound_entries": 0,
+    "receipts": 0,
+    "candidate_writes": 0,
+    "cumulative_used_before": 2,
+    "cumulative_used_after": 2
+  },
+  "cleanup": {
+    "owned_isolated_database_dropped": true,
+    "owned_profile_removed": true,
+    "owned_profile_process_exited": true,
+    "owned_frozen_source_removed": true,
+    "reclaimed_frozen_source_file_bytes": 15997755
+  },
+  "limitations": [
+    "两窗口诊断不能替代1152/120/96完整质量、真实App/微信与性能验收。",
+    "初始预审为独立Agent评阅，不是人类资格。",
+    "输出容量同时按新授权变化，不能把效果归因于核验合同单一变量。",
+    "仍有两项预审未定提议被V接受，质量未签收。"
+  ],
+  "second_review_full_proposal_counts": {
+    "supported": 2,
+    "unsupported": 3,
+    "undetermined": 3
+  },
+  "no_improvement_rounds_after": 2,
+  "further_real_diagnostic_calls_started": 0
+}

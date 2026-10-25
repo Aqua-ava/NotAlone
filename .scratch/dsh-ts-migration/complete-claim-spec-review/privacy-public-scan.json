@@ -1,0 +1,6 @@
+{
+  "command": "node scripts/check_public_history.mjs --ref HEAD --working-tree",
+  "exit_code": 0,
+  "review_directory_path_scan": "passed",
+  "other_content_not_retained": true
+}

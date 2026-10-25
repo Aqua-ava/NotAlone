@@ -1,0 +1,47 @@
+{
+  "candidate_sha": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "cwd": "$TMP_ROOT",
+  "path_prefix": "$USER_HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$USER_HOME/miniconda3/envs/NotAlone/bin:$PATH",
+  "env": {
+    "STANDARDS_FINAL_SNAPSHOT": "$TMP_ROOT",
+    "NOTALONE_DISABLE_DOTENV": "1"
+  },
+  "node_commands": [
+    {
+      "argv": [
+        "node",
+        "--test",
+        "--test-concurrency=1",
+        "$REPO_ROOT/.scratch/dsh-ts-migration/complete-claim-standards-review/final-e60074b5/delta-probes.mjs"
+      ],
+      "exit_code": 1,
+      "passed": 4,
+      "failed": 1,
+      "note": "探针按数组位置断言，产品未变；首跑源码原摘要及日志保留。"
+    },
+    {
+      "argv": [
+        "node",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern",
+        "费用豁免",
+        "$REPO_ROOT/.scratch/dsh-ts-migration/complete-claim-standards-review/final-e60074b5/delta-probes.mjs"
+      ],
+      "exit_code": 0,
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-",
+        "$TMP_ROOT"
+      ],
+      "purpose": "创建最终ExtractionPolicyVersion、assertCurrent并拒绝旧bcc stamp",
+      "exit_code": 0
+    }
+  ],
+  "scope": "仅固定增量，未重跑整个旧core、全backend、TSC或实际App/模型。"
+}

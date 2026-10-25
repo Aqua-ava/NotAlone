@@ -1,0 +1,145 @@
+{
+  "base_sha": "d4e7690bd9f57a2fae66b04d348219476c0cb497",
+  "candidate_sha": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "diff_command": "git diff d4e7690bd9f57a2fae66b04d348219476c0cb497 bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "path_count": 34,
+  "component_manifest_sha256": "88b7c4844d766f1ded51fd877ec1dab6e6d374d6983212558a9bac9e2281990f",
+  "paths": [
+    {
+      "path": ".scratch/dsh-ts-migration/complete-claim-root-integration/paths.json",
+      "sha256": "abb58cab1dcf4db0a65ee13c53d88166daf14fba97afc7d79394810908ed5c30"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/complete-claim-root-integration/receipt.json",
+      "sha256": "34f9c687572362e1c8b4ccb7c852c56dbeb6b1a935d09c6f3fd2f4e5422a1af9"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/README.md",
+      "sha256": "c7ae5b78c74151c25cb2d615f42540dd6d304b1de93ea42c3202cf39e360a7b5"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/host-entry-validation.log",
+      "sha256": "6c1779db339e4a43b6e4479d52b9cf71df95dab5e8c74612460bda814eae115d"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/host-storage-validation.log",
+      "sha256": "b1c34536bdb44a7ccad5674527c9cf450cd2c28bd6bac95c11ecee758e416d25"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/log-binding.json",
+      "sha256": "ff60dbef14e55d74ef974b9967655a8bc78caff09a4efa2933a1804f26506ed1"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/manifest.json",
+      "sha256": "88b7c4844d766f1ded51fd877ec1dab6e6d374d6983212558a9bac9e2281990f"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/offline-budget.json",
+      "sha256": "d7580ac80a5e7afb89339e6ef64e3d7cf4900cf7cd435633b8d027b58caa208d"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/offline-budget.mjs",
+      "sha256": "84c91499a335fbd2d560f2f5e8c3fd2b08351ed1966ecb0253142d66d19ced7d"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/policy-final-validation.log",
+      "sha256": "582d1f40d42a13661919d2352506aa884f95d4d9e03045b4d0642af2840a5645"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/schema-prepare-validation.log",
+      "sha256": "99c16e956ab8b12a4464f8349d787196013e62eee08f878260c87c5cbd66eed8"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/complete-claim/validation.log",
+      "sha256": "7f836bbfd19d75ee3f1e7c583a51f500329087544836b490b3d11af3db54622e"
+    },
+    {
+      "path": "backend-ts/src/complete-claim-verification.ts",
+      "sha256": "163398da042254e4fc41c7db4f2a775d69f839afaa23e4476260e1ff47ba06a4"
+    },
+    {
+      "path": "backend-ts/src/extraction-adoption-service.ts",
+      "sha256": "58e4b826ce166941bd85e39ebe1f9d151c3dfe277f99e565842f2ee186a387ad"
+    },
+    {
+      "path": "backend-ts/src/extraction-batch-service.ts",
+      "sha256": "f22bbdf0852a68219579b782e89f3df7d7fbdfe4edd6a22b5a6de33989c68f9e"
+    },
+    {
+      "path": "backend-ts/src/extraction-evidence.ts",
+      "sha256": "bcfa98e5f6efb01e3b930efd31facc0ed9e95b33a2682a9dccaab660b9905c9f"
+    },
+    {
+      "path": "backend-ts/src/extraction-flow.ts",
+      "sha256": "03b531ee5ffb58071c8631fbf0d6e93c3eed6471b60f8349ca14d5455b47817d"
+    },
+    {
+      "path": "backend-ts/src/extraction-policy-version.ts",
+      "sha256": "7ca96bdb058a3b2d6d6ab778e2b2bed47219eab034f1b5d1a687af9a19602667"
+    },
+    {
+      "path": "backend-ts/src/extraction-protocol.ts",
+      "sha256": "c8d16e0cc7693804ca1930e0d127d2504530980783c80fe7610cd164e8dae193"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-runner.ts",
+      "sha256": "e9e420a51bd470ecb08f59035fc86c3fabdce66f3a489b643928f4067f15072a"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store-schedule.ts",
+      "sha256": "e70aab50ba18d7818dbf23e8379d939dc1e42551b1788a9eb06e052edd8df21c"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store.ts",
+      "sha256": "a202698715829dafb8326fc34b97f491ad634b8de96d780822fabc8402767f96"
+    },
+    {
+      "path": "backend-ts/src/host-reply.ts",
+      "sha256": "6ae9bc9c716af105477cf067136867e1d1a484b20a16a9fe76cc9f6bd5784448"
+    },
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "sha256": "0f0395835b6ef630d73cd443311a2dc9eb4b5e18ddc97c2ddaf9e932433ce568"
+    },
+    {
+      "path": "backend-ts/test/complete-claim-production.test.mjs",
+      "sha256": "13ae906ad306bfc7ca8333821c1e02f325793ac30a51ddd2d6e73467fa7f7823"
+    },
+    {
+      "path": "backend-ts/test/complete-claim-verification.test.mjs",
+      "sha256": "78163862a059128fd25af03cad3b3b9859541126834d55ba903ef6e1c6324569"
+    },
+    {
+      "path": "backend-ts/test/extraction-adoption-service.test.mjs",
+      "sha256": "29addf85a0bd100c6ffae2631efd1bbfcf26248730b227367139e121b53e3d8e"
+    },
+    {
+      "path": "backend-ts/test/extraction-policy-version-migration.test.mjs",
+      "sha256": "08b256d9a8052efc9345bb4c6a55a63be6072610ec9a6bc47927383f23fff98e"
+    },
+    {
+      "path": "backend-ts/test/extraction-policy-version-task.test.mjs",
+      "sha256": "7a86dc7ee081ecaea00ea3527c29c222a0af56b22903717a74ed761ea8c67f1c"
+    },
+    {
+      "path": "backend-ts/test/extraction-policy-version.test.mjs",
+      "sha256": "4f43c7cbfb8a21e5332f724cfa98042cef26ff0bd889986327c59fc732c77020"
+    },
+    {
+      "path": "backend-ts/test/fixtures/complete-claim-mechanism.json",
+      "sha256": "f0414058ffb4e6a41cc6a80e8658a7d016a82e1d09e923465f04b5ed5171c8ac"
+    },
+    {
+      "path": "backend-ts/test/host-storage.test.mjs",
+      "sha256": "41d81e43e4a2a45efbde80e999f0d813f75cf739f833f8028d1ecf75999b730b"
+    },
+    {
+      "path": "backend-ts/test/schema-prepare.test.mjs",
+      "sha256": "f8924ec947883ab60fe4118daeb9f937bca4a0d88cdcfd0617058be2112f17b7"
+    },
+    {
+      "path": "backend/database/migrations/116_complete_claim_verification_policy.sql",
+      "sha256": "594bc205e0697357020b8649db72912a40d973fa319a0b571a722dbd989ccf91"
+    }
+  ]
+}

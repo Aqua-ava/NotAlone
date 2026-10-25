@@ -1,0 +1,31 @@
+{
+  "pin": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "pid": 98064,
+  "resources": [
+    {
+      "operation": "CREATE",
+      "database": "notalone_schema_ts_59d64033227d4bc2b0160e832c569b4d_test"
+    },
+    {
+      "operation": "DROP",
+      "database": "notalone_schema_ts_59d64033227d4bc2b0160e832c569b4d_test"
+    },
+    {
+      "operation": "CREATE",
+      "database": "notalone_schema_ts_5d033bd1463b4275bdfd3ad195baa53a_test"
+    },
+    {
+      "operation": "DROP",
+      "database": "notalone_schema_ts_5d033bd1463b4275bdfd3ad195baa53a_test"
+    },
+    {
+      "operation": "CREATE",
+      "database": "notalone_schema_ts_2289da8195fa41e190ac3a5bcdc28eef_test"
+    },
+    {
+      "operation": "DROP",
+      "database": "notalone_schema_ts_2289da8195fa41e190ac3a5bcdc28eef_test"
+    }
+  ],
+  "remaining": []
+}

@@ -1,0 +1,37 @@
+▶ 固定候选的独立完整链与破坏式边界
+  ✔ 新快照经真实 Runner/A/B：shared 正例及事件/条件/缺 facet/uncertain 的零写入 (804.951625ms)
+  ✔ B 在真实写事务中被改策略：整个候选事务回滚，恢复后才写入 (420.713125ms)
+  ✖ 真实 unknown 回执和旧 stamp：原任务失败后换来源建新任务也不能重放同一消息 (97.759333ms)
+✖ 固定候选的独立完整链与破坏式边界 (1954.679125ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2084.168416
+
+✖ failing tests:
+
+test at .scratch/dsh-ts-migration/complete-claim-spec-review/probe.mjs:195:13
+✖ 真实 unknown 回执和旧 stamp：原任务失败后换来源建新任务也不能重放同一消息 (97.759333ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'retryable'
+  - 'failed'
+  
+      at TestContext.<anonymous> (file://$REPO_ROOT/.scratch/dsh-ts-migration/complete-claim-spec-review/probe.mjs:207:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async TestContext.<anonymous> (file://$REPO_ROOT/.scratch/dsh-ts-migration/complete-claim-spec-review/probe.mjs:195:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'retryable',
+    expected: 'failed',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

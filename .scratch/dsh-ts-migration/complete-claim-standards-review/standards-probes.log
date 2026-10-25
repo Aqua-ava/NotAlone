@@ -1,0 +1,14 @@
+{"probe":"prepared_interface","passed":true,"result_order_isolated":true,"stale_redecode_rejected":true,"serialized_receipt_rejected":true,"original_numeric_payload":"{\"id\":900719925474099312345,\"ratio\":1.0}"}
+✔ 乱序两候选、组合码点、返回隔离、失效重解码与非序列化receipt (4.362292ms)
+{"probe":"actual_source_closure","passed":true,"source_stamp":"2e36ada0f02a44d6cf709a0cd1255f5ffeb7f5a56491e2549b0de9ce274b1b64","mutated_paths":["src/extraction-prompts.ts","src/extraction-protocol-contract.ts","src/extraction-bounded.ts","src/extraction-protocol.ts","src/deepseek-strict-verification.ts","src/vendor/tencent-memory/l1-extraction.ts","src/complete-claim-verification.ts","package.json","pnpm-lock.yaml"],"missing_source_rejected":true,"dynamic_source_rejected":true,"restored":true}
+✔ 实际生产传递闭包包含prompt/schema/compiler/validator/vendorL1与package/lock (163.783041ms)
+{"probe":"sql_ts_and_policy","database":"notalone_standards_85d388d6a0164f14b5ebd0fa3d923b7b_test","created":true,"dropped":true,"matrix_rows":25,"full_schema_migration":false,"full_b_lease_or_write_test":false}
+✔ 116最小合成表的SQL/TS五键差分与B权威策略读取 (135.730292ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 364.141917

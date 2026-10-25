@@ -1,0 +1,10 @@
+{
+  "checked_on": "2026-10-25",
+  "source_url": "https://api-docs.deepseek.com/api/list-models/",
+  "source_kind": "官方文档字段定义及公开示例，未执行带认证/models调用",
+  "model": "deepseek-flash",
+  "context_window": 1048576,
+  "max_output_tokens": 393216,
+  "distinction": "context_window计入输入与输出；max_output_tokens约束max_tokens。",
+  "real_model_calls": 0
+}

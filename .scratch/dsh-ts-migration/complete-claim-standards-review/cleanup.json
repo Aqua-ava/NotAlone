@@ -1,0 +1,27 @@
+{
+  "candidate_sha": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "temporary_root_mode": "0700",
+  "removed_snapshot_directories": [
+    "$TMP_ROOT/backend-ts",
+    "$TMP_ROOT/backend",
+    "$TMP_ROOT/base"
+  ],
+  "snapshot_directories_absent": true,
+  "owned_persistent_processes_started": 0,
+  "matching_node_processes_after_run": [],
+  "all_probe_commands_completed": true,
+  "owned_database": "notalone_standards_85d388d6a0164f14b5ebd0fa3d923b7b_test",
+  "database_dropped": true,
+  "database_active_connections_before_drop": 0,
+  "snapshot_bytes_before_cleanup": 11340525,
+  "retained_private_bytes": 5553,
+  "private_retained": [
+    "$TMP_ROOT/session-private.json",
+    "$TMP_ROOT/overflow-private.log",
+    "$TMP_ROOT/standards-probes-private.log"
+  ],
+  "retained_private_modes": "0600",
+  "shared_node_modules_modified": false,
+  "shared_index_written": false,
+  "real_model_calls": 0
+}

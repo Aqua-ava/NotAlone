@@ -1,0 +1,17 @@
+{
+  "candidate_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "files": [
+    {
+      "path": ".scratch/dsh-ts-migration/root-real-evidence-e60074b5/validation.json",
+      "sha256": "25452dd89b9ffa8f7d10b48ebc71e99118c3ed12cbd0b2f5ef5704f4d3bd4b0f"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/root-real-evidence-e60074b5/real-v-only-diagnostic.json",
+      "sha256": "aeb685c2034f72dbe22c90e706d528ae883fe7096b7059d666c492d099ac670b"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/root-real-evidence-e60074b5/handoff.md",
+      "sha256": "b83c7cb4e8b375c8455ce4b2736ca62b283031d4a84b2b22ded40937c32a798c"
+    }
+  ]
+}

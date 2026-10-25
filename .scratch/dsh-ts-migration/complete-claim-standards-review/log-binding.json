@@ -1,0 +1,24 @@
+{
+  "candidate_sha": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "bindings": [
+    {
+      "raw_path": "$TMP_ROOT/overflow-private.log",
+      "raw_mode": "0o600",
+      "raw_sha256": "b2a3439427e7e07eaa5131deed09710f720229b338c245612de61d56cef59cdc",
+      "public_path": "overflow-probe.json",
+      "public_sha256": "b2a3439427e7e07eaa5131deed09710f720229b338c245612de61d56cef59cdc"
+    },
+    {
+      "raw_path": "$TMP_ROOT/standards-probes-private.log",
+      "raw_mode": "0o600",
+      "raw_sha256": "9a3ea819c97da025e51f7a3ce25fff4e39a9922460032cfb8e77fce0157f7e49",
+      "public_path": "standards-probes.log",
+      "public_sha256": "9a3ea819c97da025e51f7a3ce25fff4e39a9922460032cfb8e77fce0157f7e49"
+    }
+  ],
+  "substitutions": [
+    "$TMP_ROOT",
+    "$REPO_ROOT",
+    "$USER_HOME"
+  ]
+}

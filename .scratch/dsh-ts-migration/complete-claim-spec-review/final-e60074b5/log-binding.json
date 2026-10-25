@@ -1,0 +1,24 @@
+{
+  "logs": [
+    {
+      "public": "probe.log",
+      "public_sha256": "9df98dc2e077604e478bcf94160341b0decafdba565d76c39ba3114e0f09440e",
+      "raw_location": "repository_external_0700",
+      "raw_member": "probe.raw.log",
+      "raw_sha256": "9df98dc2e077604e478bcf94160341b0decafdba565d76c39ba3114e0f09440e",
+      "raw_mode": "0o600"
+    },
+    {
+      "public": "focused.log",
+      "public_sha256": "9284ad50fb4faf8ae37f875f8f4e0b786bfe7a28800044ee85c62485cd34d768",
+      "raw_location": "repository_external_0700",
+      "raw_member": "focused.raw.log",
+      "raw_sha256": "9284ad50fb4faf8ae37f875f8f4e0b786bfe7a28800044ee85c62485cd34d768",
+      "raw_mode": "0o600"
+    }
+  ],
+  "exit_codes": {
+    "probe": 0,
+    "focused": 0
+  }
+}

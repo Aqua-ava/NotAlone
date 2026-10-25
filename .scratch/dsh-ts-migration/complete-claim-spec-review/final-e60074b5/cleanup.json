@@ -1,0 +1,18 @@
+{
+  "candidate": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "archive_mode": "0700",
+  "archive_bytes_before": 123072325,
+  "archive_exists_after": false,
+  "live_process_references": 0,
+  "owned_databases": [
+    "notalone_ts_host_548366d47a554dca8a77e54f13a72f95_test",
+    "notalone_ts_host_4d6417dddff848c8a5aca714ee316f97_test"
+  ],
+  "remaining_databases": [],
+  "private_raw_kept_outside_repository": true,
+  "raw_directory_mode": "0700",
+  "raw_file_mode": "0600",
+  "app_runs": 0,
+  "real_model_calls": 0,
+  "production_files_modified": false
+}

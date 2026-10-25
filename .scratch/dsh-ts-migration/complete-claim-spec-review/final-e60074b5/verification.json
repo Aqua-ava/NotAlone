@@ -1,0 +1,61 @@
+{
+  "axis": "Spec",
+  "verdict": "approve",
+  "base": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "final_candidate": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "delta_path_count": 116,
+  "source_before_after_equal": true,
+  "final_policy_identity": {
+    "candidate": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+    "source_stamp": "f22df426d48d701ef520cdbd6a1262497545b830cbec1dff9b3be4ee92ea5f50",
+    "assert_current": "passed",
+    "no_model_calls": true
+  },
+  "source_manifest_sha256": "094d4a787e8bf4a0867e68a557e06d2824f28db127dc0c49dd7701fb8a9f590b",
+  "frozen_materials": [
+    {
+      "path": ".scratch/dsh-ts-migration/ticket25-final-run/primary.json",
+      "sha256": "7579968367de21208170639e073c31b6531a3abcce03ccb27c3ae138750e19e3",
+      "unchanged_from_core": true
+    },
+    {
+      "path": "backend-ts/test/fixtures/reply-comparison-material-manifest.json",
+      "sha256": "84b81a3255bffe8bc69da6f38c0dd79e1ba83510454ef8a9091c947b995b362b",
+      "unchanged_from_core": true
+    },
+    {
+      "path": "backend/tests/fixtures/fidelity/synthetic-v1.json",
+      "sha256": "088df6b1729c5b9445e1648e495e4bde005580eb838216e84d3ba569caebe607",
+      "unchanged_from_core": true
+    }
+  ],
+  "authoritative_scope_sha256": "cb23a4c108170623e4ecd5288b09bec7b3c566c5cda8b1447aca164833a054b9",
+  "current_scope_equals_pin": true,
+  "independent_probes": 4,
+  "focused_cases": 5,
+  "exit_codes": {
+    "probe": 0,
+    "focused": 0
+  },
+  "node_version": "v24.19.0",
+  "commands": [
+    "SPEC_FINAL_STATE=<outside-private-state> NOTALONE_DISABLE_DOTENV=1 perl -e 'alarm 90; exec @ARGV' -- node --test <own>/probe.mjs",
+    "SPEC_FINAL_STATE=<outside-private-state> NOTALONE_DISABLE_DOTENV=1 perl -e 'alarm 90; exec @ARGV' -- node --test --test-name-pattern='实际strict发送入口|^61条|准备阶段协议错误|显式内部策略0|省略内部策略' <own>/focused-regression.mjs"
+  ],
+  "core_identity": {
+    "candidate": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+    "source_manifest_sha256": "88b7c4844d766f1ded51fd877ec1dab6e6d374d6983212558a9bac9e2281990f",
+    "core_report_current_sha256": "f83e99f9af3e5423090cec61493edc1b4d9c4bcc1bb7a8aabb5f3e1a5237fb5c"
+  },
+  "official_capacity_source": {
+    "url": "https://api-docs.deepseek.com/api/list-models/",
+    "checked_on": "2026-10-25",
+    "model": "deepseek-flash",
+    "context_window": 1048576,
+    "max_output_tokens": 393216
+  },
+  "quality_verified": false,
+  "app_wechat_verified": false,
+  "ticket25_26_approved": false,
+  "findings": []
+}

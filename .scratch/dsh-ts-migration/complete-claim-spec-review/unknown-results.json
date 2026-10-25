@@ -1,0 +1,21 @@
+{
+  "pin": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "real_model_calls": 0,
+  "app_runs": 0,
+  "probes": [
+    {
+      "name": "unknown_new_task_same_message",
+      "status": "passed",
+      "calls": 1,
+      "unknown_receipt_preserved": true,
+      "fresh_task_targets": 0,
+      "memories": 0
+    }
+  ],
+  "cleanup": [
+    {
+      "database": "notalone_ts_host_ed9f1abd96074643a3ead7e7762eefa7_test",
+      "absent": true
+    }
+  ]
+}

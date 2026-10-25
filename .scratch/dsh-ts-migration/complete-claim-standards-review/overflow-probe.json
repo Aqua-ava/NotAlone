@@ -1,0 +1,25 @@
+{
+  "probe": "legacy_61_candidate_failure_contract",
+  "reproduced": true,
+  "base_sha": "d4e7690bd9f57a2fae66b04d348219476c0cb497",
+  "candidate_sha": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "results": {
+    "base": {
+      "returned": true,
+      "failure_kind": "invalid_output",
+      "extraction_completed": true,
+      "accepted": 0,
+      "extractionCalls": 1,
+      "verificationCalls": 0
+    },
+    "candidate": {
+      "returned": false,
+      "error_name": "ExtractionProtocolError",
+      "error_message": "complete_claim_policy_invalid",
+      "failure_kind": "invalid_output",
+      "retryable": false,
+      "extractionCalls": 1,
+      "verificationCalls": 0
+    }
+  }
+}

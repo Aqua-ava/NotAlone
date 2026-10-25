@@ -1,0 +1,27 @@
+{
+  "schema_version": "reply-output-cost-final-pair-artifacts-v1",
+  "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "status": "passed_localhost_pair_only",
+  "files": [
+    {
+      "path": ".scratch/dsh-ts-migration/reply-output-cost-update/final-e60074b5/report.md",
+      "sha256": "36b22a9b92586c31fb237f03d95e070dd237608b3761b850b11d5a4ede41640a",
+      "bytes": 3051
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/reply-output-cost-update/final-e60074b5/verification.json",
+      "sha256": "7caf61fea7ff9f25bf64d00f27b4a25ebccf10228b07d71fd9f17d32b8a04fdd",
+      "bytes": 13086
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/reply-output-cost-update/final-e60074b5/verify-pair.mjs",
+      "sha256": "1a9c64941c1a3447342ba270521502b01c3d5c05d449192d8677cbb578ed4434",
+      "bytes": 10124
+    }
+  ],
+  "frozen_core_unchanged": true,
+  "real_model_calls": 0,
+  "actual_app_runs": 0,
+  "fixed_96_collections_executed": 0,
+  "production_switch_approved": false
+}

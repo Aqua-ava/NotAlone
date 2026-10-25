@@ -1,0 +1,13 @@
+{
+  "pin": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "real_model_calls": 0,
+  "app_runs": 0,
+  "probes": [],
+  "cleanup": [
+    {
+      "database": "notalone_ts_host_0b801a6ecc1449969aa96ac2f40a2de4_test",
+      "absent": true
+    }
+  ],
+  "source_stamp": "2e36ada0f02a44d6cf709a0cd1255f5ffeb7f5a56491e2549b0de9ce274b1b64"
+}

@@ -1,0 +1,35 @@
+{
+  "pin": "bcc6701ce67249d18b51625c07f4cad4e401ad04",
+  "real_model_calls": 0,
+  "app_runs": 0,
+  "probes": [
+    {
+      "name": "runner_mixed_facets",
+      "status": "passed",
+      "calls": 2,
+      "accepted": 3,
+      "rejected": 4,
+      "processed": 7,
+      "shared": true,
+      "unknown_date": true,
+      "cache_no_extra_calls": true,
+      "cancel_error_preserved": true
+    },
+    {
+      "name": "b_write_transaction_policy_change",
+      "status": "passed",
+      "injected_at": "memory_candidate insert",
+      "rolled_back_candidates": 0,
+      "rolled_back_memories": 0,
+      "watermark_advanced": false,
+      "claim_keys": 5,
+      "restored_run_succeeded": true
+    }
+  ],
+  "cleanup": [
+    {
+      "database": "notalone_ts_host_1777c6740f8d424abc2763f104ef7599_test",
+      "absent": true
+    }
+  ]
+}
