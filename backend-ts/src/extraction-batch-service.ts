@@ -24,9 +24,12 @@ export interface ExtractionBatchWireOutcome extends Omit<ExtractionFlowOutcome,'
  a_execution_id:string;a_input_sha256:string;a_rule_version:string;
 }
 export class ExtractionBatchError extends Error {readonly code:string;constructor(code:string){super(code);this.code=code;}}
+/** 内部执行策略；省略时沿用 Flow 的既有恢复次数与退避。 */
+export interface ExtractionRetryPolicy {maxRetries:number;retryDelayMs:number;}
 interface Options {
  ownerId:string;transaction:Transaction;ruleVersion:string;
  policyVersion?:ExtractionPolicyVersion;
+ extractionRetryPolicy?:Readonly<ExtractionRetryPolicy>;
  model:{binding:MessagesBudgetBinding;profile:MessagesBudgetProfile};
  call(input:ExtractionModelInput):Promise<{text:string;blocks:ContentBlock[];receipt?:ModelLedgerReceipt}>;
  unconfirmedRequests(scope:{owner_id:string;contact_id:string}):Promise<string[]>;
@@ -96,7 +99,11 @@ export class ExtractionBatchService {
  private readonly options:Options;private readonly active=new Set<string>();
  constructor(options:Options){
   if(!uuid.test(options.ownerId)||!/^[a-f0-9]{64}$/.test(options.ruleVersion))reject('extraction_batch_configuration_invalid');
-  this.options={...options,model:structuredClone(options.model)};
+  const retry=options.extractionRetryPolicy;
+  if(retry!==undefined&&(!Number.isSafeInteger(retry.maxRetries)||retry.maxRetries<0||retry.maxRetries>5
+   ||!Number.isSafeInteger(retry.retryDelayMs)||retry.retryDelayMs<0||retry.retryDelayMs>30000))reject('extraction_batch_configuration_invalid');
+  this.options={...options,model:structuredClone(options.model),
+   ...(retry===undefined?{}:{extractionRetryPolicy:Object.freeze({...retry})})};
  }
  async run(value:ExtractionBatchInput,signal:AbortSignal):Promise<ExtractionBatchWireOutcome>{
   const input=parseInput(value,this.options.ownerId);
@@ -248,6 +255,7 @@ export class ExtractionBatchService {
   });};
   let outcome:ExtractionFlowOutcome;
   try{outcome=await runExtractionFlow({window:prepared.window,signal,mode:prepared.mode==='bounded-runtime-v1'?'bounded-runtime-v1':undefined,verificationPolicy:prepared.policy.verification,requireCurrent:requireSources,record,
+   max_retries:this.options.extractionRetryPolicy?.maxRetries,retry_delay_ms:this.options.extractionRetryPolicy?.retryDelayMs,
    invoke:async(request,callSignal)=>{
     currentCall=randomUUID();const callId=currentCall;
     const strict=request.purpose==='verification'&&request.tool.name===DEEPSEEK_STRICT_VERIFICATION_TOOL;

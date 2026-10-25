@@ -13,7 +13,7 @@ import {ReplyStoreError} from './reply-store.ts';
 import {ExplorationService} from './exploration-service.ts';
 import {createExplorationHttp} from './exploration-http.ts';
 import {createExtractionModelCaller,extractionUnconfirmedRequests,type ExtractionModelInput,type ExtractionPermitEndpoint} from './extraction-model.ts';
-import {ExtractionBatchService,ExtractionBatchError} from './extraction-batch-service.ts';
+import {ExtractionBatchService,ExtractionBatchError,type ExtractionRetryPolicy} from './extraction-batch-service.ts';
 import {createExtractionBatchHttp} from './extraction-batch-http.ts';
 import {createExtractionAdoptionHost,runExtractionWithAdoption} from './extraction-adoption-host.ts';
 import {ExtractionTaskStore} from './extraction-task-store.ts';
@@ -74,6 +74,7 @@ export interface HostReplyOptions {
   extractionAdoptionEnabled?:boolean;
   extractionConcurrency?:number;
   extractionVerificationPolicy?:'complete-claim-v1';
+  extractionRetryPolicy?:Readonly<ExtractionRetryPolicy>;
   embeddingFactory?:Parameters<typeof createLocalEmbeddingLifecycle>[0];
   discussionSkillsRoot?:string;
   publicRuntime?:boolean;
@@ -291,6 +292,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       if(options.extractionEnabled&&extraction&&owner){
         const policyVersion=await createExtractionPolicyVersion(),ruleVersion=policyVersion.ruleVersion;
         batches=new ExtractionBatchService({ownerId:owner,transaction:extractionTransaction,ruleVersion,policyVersion,
+          ...(options.extractionRetryPolicy===undefined?{}:{extractionRetryPolicy:options.extractionRetryPolicy}),
           model:{binding:{provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,reasoningEffort:m.reasoningEffort},profile:m.budgetProfile},
           unconfirmedRequests:scope=>extractionUnconfirmedRequests(options.extractionPermit!,scope),
           call});

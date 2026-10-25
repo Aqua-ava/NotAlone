@@ -147,17 +147,16 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
    {status:'rejected',disposition:'structure_rejected',not_executed:['verification','adoption','write']}});
   if(fact){facts.push(fact);traceIds.set(fact,candidate.candidate_trace_id);}
  }
- const preparedVerification=prepareSourceVerification({window:options.window,facts,policy:options.verificationPolicy,
-  requireCurrent:options.requireCurrent,record:options.record});
- const request=preparedVerification.request;
- if(!request)return {accepted:facts,candidate_trace_ids:facts.map(fact=>traceIds.get(fact)!),rejected_count:parsedRejections,
-  extraction_completed:true,failure_kind:null,failure_reason:null,verification:[]};
- await options.record({stage:'verification_input',payload:{window:options.window,
-  facts:preparedVerification.selection.map(index=>facts[index]),candidate_trace_ids:preparedVerification.selection.map(index=>traceIds.get(facts[index]!)),
-  policy_fingerprint:preparedVerification.fingerprint}});
  let admissions:VerificationAdmission[];
-
  try{
+  const preparedVerification=prepareSourceVerification({window:options.window,facts,policy:options.verificationPolicy,
+   requireCurrent:options.requireCurrent,record:options.record});
+  const request=preparedVerification.request;
+  if(!request)return {accepted:facts,candidate_trace_ids:facts.map(fact=>traceIds.get(fact)!),rejected_count:parsedRejections,
+   extraction_completed:true,failure_kind:null,failure_reason:null,verification:[]};
+  await options.record({stage:'verification_input',payload:{window:options.window,
+   facts:preparedVerification.selection.map(index=>facts[index]),candidate_trace_ids:preparedVerification.selection.map(index=>traceIds.get(facts[index]!)),
+   policy_fingerprint:preparedVerification.fingerprint}});
   options.signal.throwIfAborted();await options.requireCurrent();
   const raw=(await options.invoke(request,options.signal)).blocks;
   await options.record({stage:'verification_return',payload:{blocks:raw}});

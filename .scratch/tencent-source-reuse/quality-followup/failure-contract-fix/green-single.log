@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: 61条合法direct候选在默认/旧NULL/v1/新v2均归一invalid_output，E1/V0
+ok 1 - 61条合法direct候选在默认/旧NULL/v1/新v2均归一invalid_output，E1/V0
+  ---
+  duration_ms: 10.962208
+  type: 'test'
+  ...
+# Subtest: 准备失败保留已解析的结构拒绝计数，不重试E或进入V
+ok 2 - 准备失败保留已解析的结构拒绝计数，不重试E或进入V
+  ---
+  duration_ms: 1.820708
+  type: 'test'
+  ...
+# Subtest: 准备阶段协议错误遇取消仍优先抛AbortError，E1/V0
+ok 3 - 准备阶段协议错误遇取消仍优先抛AbortError，E1/V0
+  ---
+  duration_ms: 2.757458
+  type: 'test'
+  ...
+# Subtest: 60条边界仍一次E一次V并保留有据候选
+ok 4 - 60条边界仍一次E一次V并保留有据候选
+  ---
+  duration_ms: 15.1245
+  type: 'test'
+  ...
+# Subtest: verification_input追踪故障仍原样传播，E1/V0
+ok 5 - verification_input追踪故障仍原样传播，E1/V0
+  ---
+  duration_ms: 0.343875
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 126.813667
