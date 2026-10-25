@@ -102,6 +102,8 @@ const isReferenceField=(key:string)=>key.endsWith('_id')||key.endsWith('_key'),i
 const isSessionField=(key:string)=>key.endsWith('session_id'),isSessionFields=(key:string)=>key.endsWith('session_ids');
 const isSkillVersionField=(key:string)=>key.endsWith('skill_version_id'),isSkillVersionFields=(key:string)=>key.endsWith('skill_version_ids');
 const MAX_ALIAS_DEPTH=16,MAX_ALIAS_NODES=4096;
+const serializedReferenceFields=new Set(['submission','continuation','input_payload','payload_json']);
+const serializedDiscussionKinds=new Set(['generation_input','candidate_version','candidate_carry']);
 interface AliasVisit {nodes:number}
 const unavailable=():never=>{throw new ReplyError('reply_context_unavailable');};
 export function aliasReplyDiscussionText(text:string,aliases:EvidenceAliases):string {
@@ -116,6 +118,8 @@ export function aliasReplyEvidenceReferences(value:unknown,aliases:EvidenceAlias
 function aliasEvidence(value:unknown,aliases:EvidenceAliases,parentKey:string|undefined,depth:number,visit:AliasVisit):unknown {
  if(depth>MAX_ALIAS_DEPTH||++visit.nodes>MAX_ALIAS_NODES)return unavailable();
  if(typeof value==='string'){
+  // 只有系统拥有的序列化 DTO 才能继续解析；自由正文即使是合法 JSON 也逐字保留。
+  if(parentKey!==undefined&&!serializedReferenceFields.has(parentKey))return value;
   let parsed:unknown;
   try {parsed=JSON.parse(value);}catch{return value;}
   if(!parsed||typeof parsed!=='object'&&typeof parsed!=='string')return value;
@@ -141,6 +145,7 @@ function aliasEvidence(value:unknown,aliases:EvidenceAliases,parentKey:string|un
    return [key,aliases.referenceFor(item)];
   if((isReferenceFields(key)||referenceStringFields.has(key))&&Array.isArray(item))
    return [key,item.map(id=>typeof id==='string'?aliases.referenceFor(id):id)];
-  return [key,aliasEvidence(item,aliases,key,depth+1,visit)];
+  const serializedText=key==='text'&&serializedDiscussionKinds.has(String(object.kind));
+  return [key,aliasEvidence(item,aliases,serializedText?undefined:key,depth+1,visit)];
  }));
 }

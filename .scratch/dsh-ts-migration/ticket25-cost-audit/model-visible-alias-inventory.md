@@ -6,7 +6,7 @@
 |---|---|---|
 | 分层联系人／本人背景 | `profile_version_id`、`scenario_id`、`version_id`、`memory_id` 等统一为请求局部 `rN` | system prompt 与 `read_scenario` 共用同一个 alias map |
 | 初始 generation payload | evidence 为 `cN`；结构化附属字段中的请求、候选、消息、会话、版本和资料标识分别投影 | 普通草稿、方向、目的、用户说明正文保持原文 |
-| discussion / continuation | 会话 `sN`，证据 `cN`，其余关联标识 `rN`；JSON 对象和嵌套 JSON 字符串都递归处理 | 普通文本不按 UUID 形状猜测或改写 |
+| discussion / continuation | 会话 `sN`，证据 `cN`，其余关联标识 `rN`；只解析系统拥有的讨论 DTO 与序列化关联字段 | 用户／来源正文即使是 JSON 也逐字保留 |
 | Skill | 目录、选择、读取回执和输出 claim 使用 `kN` | claim 边界还原真实版本 UUID；未知或真实 UUID 输入拒绝 |
 | `conversation_search` / `conversation_query` | 消息 evidence `cN`，session `sN` | 查询只接受当前请求别名；未知或真实参数拒绝 |
 | `read_file` | 虚拟 Skill 路径与 `kN` 回执 | 不提供真实文件路径或 Skill 版本 UUID |
@@ -20,3 +20,4 @@
 - revision、时间戳、token、价格、布尔状态和 SHA-256 摘要不是关系身份；摘要不可逆且用于内部一致性绑定，继续保留。
 - provider 的传输层 session/header 不属于应用模型 payload；本清单不宣称消除供应商协议自身携带的传输身份。
 - 对 JSON 字符串的递归投影有深度和节点上限；超限返回 `reply_context_unavailable`，不会回退为原 UUID 文本。
+- 上述递归只适用于系统序列化的 `generation_input`／候选讨论正文及 `submission`、`continuation`、`input_payload`、`payload_json`；业务原文不解析、重排或转换数字。用户主动输入的编号或标识属于原文，不能当作系统身份遮蔽。

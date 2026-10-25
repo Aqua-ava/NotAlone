@@ -1,0 +1,32 @@
+{
+  "private_directory_alias": "migration-resume-20261025",
+  "synthetic_only": true,
+  "raw_logs_outside_repository": true,
+  "entries": [
+    {
+      "name": "text-fidelity-red.log",
+      "sha256": "03231909f0148dc30b6c23f18293e2cf73beeb3c3a921722bb83c3264af71f3f",
+      "bytes": 1443
+    },
+    {
+      "name": "text-fidelity-green.log",
+      "sha256": "1a4a3716a61667f9d97291b8a88fe45131b4a50cf17dc4f26dd465b46c5cdf11",
+      "bytes": 226
+    },
+    {
+      "name": "alias-module-after-text-fix.log",
+      "sha256": "87dfebd82ba6d4939d7ae3d1aa0cfef97154db843637e7ec8c8df065b47a9b56",
+      "bytes": 3030
+    },
+    {
+      "name": "alias-module-green.log",
+      "sha256": "8609b9c16af2579030d9df2f633cd73171573970e2c02f44adb4d9a28a7345eb",
+      "bytes": 1557
+    },
+    {
+      "name": "independent-probe-green.log",
+      "sha256": "be7fb8d9a452e1f8e6d1b08f2eaa8bd38744e68b2a5deb3248368bea3dd886d9",
+      "bytes": 189
+    }
+  ]
+}

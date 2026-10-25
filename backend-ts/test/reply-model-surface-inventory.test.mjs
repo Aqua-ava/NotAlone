@@ -14,9 +14,10 @@ test('模型可见 system、payload、Tool schema 与 Skill 读取统一只含�
  const owner=randomUUID(),contact=randomUUID(),binding=randomUUID(),message=randomUUID(),candidate=randomUUID();
  const version=randomUUID(),preference=randomUUID(),scenario=randomUUID(),scenarioVersion=randomUUID();
  const profileVersion=randomUUID(),memory=randomUUID(),skillVersion=randomUUID();
+ const businessJSON='{ "order_id": "INV-42", "number": 9007199254740993 }';
  const request=parseReplyRequest({contact_id:contact,idempotency_key:randomUUID(),skill_version_id:skillVersion,
   content:{type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:'新的表达',
-   user_instruction:JSON.stringify({preference_id:preference,memory_id:memory}),context_text:JSON.stringify({scenario_id:scenario}),include_relationship_context:true}});
+   user_instruction:businessJSON,context_text:businessJSON,include_relationship_context:true}});
  const evidence={evidence_id:message,kind:'message',text:'合成消息',status:'active',selection_reason:'合成',
   timing:{source_started_at:null},event:null,conditions:null,evolution:{kind:'supplement',evidence_message_ids:[message]},
   valid_at:null,invalid_at:null,speaker_role:'contact',model_visible:true,source_ids:[memory]};
@@ -24,7 +25,7 @@ test('模型可见 system、payload、Tool schema 与 Skill 读取统一只含�
   layered_context:{payload_json:JSON.stringify({schema_version:3,profile_version_id:profileVersion,directory:[{scenario_id:scenario,version_id:scenarioVersion,title:'主题'}]})},
   owner_layered_context:{payload_json:JSON.stringify({schema_version:3,profile_version_id:profileVersion,profile_entries:[{memory_id:memory}]})}};
  const discussion={scope:{owner_id:owner,contact_id:contact},session_id:binding,request_key:request.idempotency_key,current_input_version_id:version,notice:'合成',snapshot:{},
-  items:[{kind:'generation_input',text:JSON.stringify({content:{user_instruction:JSON.stringify({request_id:request.idempotency_key})},continuation:{submission:JSON.stringify({message_id:message})}}),
+  items:[{kind:'generation_input',text:JSON.stringify({request_id:request.idempotency_key,content:{user_instruction:businessJSON},continuation:{submission:JSON.stringify({message_id:message})}}),
    input_version_id:version,turn_id:version,reply_request_id:request.idempotency_key,candidate_id:candidate,version_id:version,parent_version_id:null,candidate_number:1,version_number:0,
    is_default_display:true,is_explicitly_selected:true,basis_changes:[{kind:'memory_changed',evidence_id:memory}]}]};
  const aliases=createEvidenceAliases();
@@ -47,7 +48,10 @@ test('模型可见 system、payload、Tool schema 与 Skill 读取统一只含�
   assert.match(surfaces,/"evidence_id":"c\d+"/);
   assert.match(surfaces,/"session_id":"s\d+"/);
   assert.equal(aliases.resolveSkill(payload.skill_selection.version_id),skillVersion);
-  assert.equal(aliases.resolveReference(JSON.parse(payload.context_text).scenario_id),scenario);
+  assert.equal(payload.user_instruction,businessJSON);
+  assert.equal(payload.context_text,businessJSON);
+  assert.equal(JSON.parse(payload.assistant_discussion.items[0].text).content.user_instruction,businessJSON);
+  assert.equal(aliases.resolveReference(system.match(/"scenario_id":"(r\d+)"/)[1]),scenario);
   assert.equal(aliases.resolveReference(payload.expression_preferences[0].preference_id),preference);
  }finally{skill.close();}
 });

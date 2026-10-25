@@ -5,7 +5,7 @@ import {ReplyError,type ReplyRequestInput} from './reply-contract.ts';
 import type {BuiltReplyContext} from './reply-context-types.ts';
 import {assistantDiscussionPayload,continuationReferencePayload,type ReplyDiscussionContext} from './reply-discussion-context.ts';
 import {replyCandidateAdmissibility} from './reply-candidate-admissibility.ts';
-import {aliasReplyDiscussionText,aliasReplyEvidenceReferences,type EvidenceAliases} from './reply-evidence-alias.ts';
+import {aliasReplyEvidenceReferences,type EvidenceAliases} from './reply-evidence-alias.ts';
 import type {AuthenticatedContinuation} from './reply-assistant-guards.ts';
 export interface ReplyPayloadInput {
  request:ReplyRequestInput;
@@ -64,8 +64,6 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
   }
  }
  if(c.type!=='rewrite_draft')Object.assign(payload,{understanding_correction:c.understanding_correction??null,user_instruction:c.user_instruction??null,clarification_answer:c.clarification_answer??null});
- for(const field of ['understanding_correction','user_instruction','clarification_answer','context_text'])
-  if(aliases&&typeof payload[field]==='string')payload[field]=aliasReplyDiscussionText(payload[field] as string,aliases);
  payload.skill_selection=request.skill_version_id?{mode:'user',version_id:aliases?.skillFor(request.skill_version_id)??'k1'}:{mode:request.skill_disabled?'disabled':'auto'};
  if(request.allow_incomplete_history)payload.history_coverage_warning='历史覆盖不完整：用户选择基于已同步部分继续，不能据此声称拥有完整语境。';
  Object.assign(payload,{expression_actor:'owner',recipient_role:'contact',message_order:'known_times_ascending_unknown_last_equal_unordered'});

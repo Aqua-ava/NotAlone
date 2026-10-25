@@ -115,7 +115,7 @@ test('普通 generation_input 全量递归投影 message/request/input/turn 关�
  assert.match(input.idempotency_key,/^r\d+$/);assert.match(input.operation_key,/^r\d+$/);assert.match(input.input_version,/^r\d+$/);
  assert.match(input.expected_input_version_id,/^r\d+$/);assert.match(input.previous_id,/^r\d+$/);assert.match(input.origin_session_id,/^s\d+$/);
 });
-test('内嵌 JSON 字符串有界递归投影，重复标识稳定且普通文本原样保留',()=>{
+test('系统拥有的内嵌JSON有界投影，业务JSON及普通文本逐字保留',()=>{
  const aliases=createEvidenceAliases();
  const message='40000000-0000-4000-8000-000000000004',request='50000000-0000-4000-8000-000000000005';
  const version='60000000-0000-4000-8000-000000000006',session='70000000-0000-4000-8000-000000000007';
@@ -123,8 +123,8 @@ test('内嵌 JSON 字符串有界递归投影，重复标识稳定且普通文�
  const deepest=JSON.stringify({message_id:message,message_ids:[message],session_id:session,skill_version_id:skill});
  const nested=JSON.stringify({submission:JSON.stringify({target_message_id:message,continuation:deepest}),request_id:request});
  const doubleEncoded=JSON.stringify(JSON.stringify({session_id:session,message_id:message}));
- const human='请联系我，不要把普通人类文本当作系统标识';
- const value={text:nested,human,scalar:'123',objectText:JSON.stringify({version_id:version}),doubleEncoded};
+ const human='{ "order_id": "INV-42", "number": 9007199254740993 }';
+ const value={kind:'generation_input',text:nested,human,scalar:'123',payload_json:JSON.stringify({version_id:version}),input_payload:doubleEncoded};
  const first=aliasReplyEvidenceReferences(value,aliases),second=aliasReplyEvidenceReferences(first,aliases);
  assert.deepEqual(second,first);
  const wire=JSON.stringify(first);
@@ -133,11 +133,11 @@ test('内嵌 JSON 字符串有界递归投影，重复标识稳定且普通文�
  const outer=JSON.parse(first.text),middle=JSON.parse(outer.submission),inner=JSON.parse(middle.continuation);
  assert.equal(middle.target_message_id,inner.message_id);assert.match(middle.target_message_id,/^r\d+$/);
  assert.equal(inner.message_ids[0],inner.message_id);assert.match(inner.session_id,/^s\d+$/);assert.match(inner.skill_version_id,/^k\d+$/);
- assert.match(JSON.parse(first.objectText).version_id,/^r\d+$/);
- const decoded=JSON.parse(JSON.parse(first.doubleEncoded));assert.match(decoded.session_id,/^s\d+$/);assert.match(decoded.message_id,/^r\d+$/);
+ assert.match(JSON.parse(first.payload_json).version_id,/^r\d+$/);
+ const decoded=JSON.parse(JSON.parse(first.input_payload));assert.match(decoded.session_id,/^s\d+$/);assert.match(decoded.message_id,/^r\d+$/);
  let deep=JSON.stringify({message_id:message});
- for(let index=0;index<20;index++)deep=JSON.stringify({nested:deep});
- assert.throws(()=>aliasReplyEvidenceReferences({deep},createEvidenceAliases()),{code:'reply_context_unavailable'});
+ for(let index=0;index<20;index++)deep=JSON.stringify({continuation:deep});
+ assert.throws(()=>aliasReplyEvidenceReferences({input_payload:deep},createEvidenceAliases()),{code:'reply_context_unavailable'});
 });
 test('静态提示明确 evidence_id 是不得猜测或改写的不透明 alias',()=>{
   assert.match(REPLY_SYSTEM_PROMPT,/evidence_id 是不透明字符串/);
