@@ -18,7 +18,7 @@ async function start(t, fixture, environment = {}) {
     await delay(100);
   }
   assert.ok(connection,'真实DSH后台必须发布认证握手');
-  return {host,connection, async request(path,body,token=connection.token) {const response=await fetch(`http://${connection.address}${path}`,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body&&JSON.stringify(body)});return {status:response.status,data:await response.json()};}};
+  return {host,connection, async request(path,body,token=connection.token,method=body?'POST':'GET') {const response=await fetch(`http://${connection.address}${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body&&JSON.stringify(body)});return {status:response.status,data:await response.json()};}};
 }
 
 test('真实DSH宿主认证健康、空库首用及关闭',async t=>{
@@ -105,6 +105,46 @@ test('官方DSH profile统一列出、停止并恢复原后台任务',async t=>{
   assert.equal(resumed.data.tasks[0].status,'queued');
   assert.deepEqual(resumed.data.tasks[0].steps.map(step=>step.status),
     ['pending','pending','pending','pending','pending']);
+  await app.request('/api/runtime/shutdown',{});
+  assert.equal(await app.host.waitForExit(7000),true);
+});
+
+test('真实DSH认证路由完成来源、讨论、联系人和账户跨域删除',async t=>{
+  const fixture=await createStorageFixture();
+  t.after(async()=>{for(const host of fixture.hosts??[])assert.equal(await host.terminate(),true);await fixture.close();});
+  const owner=randomUUID(),contact=randomUUID(),source=randomUUID(),session=randomUUID(),ledger=randomUUID();
+  await fixture.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成删除本人')",[owner]);
+  await fixture.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成删除联系人')",[contact,owner]);
+  await fixture.client.query(`INSERT INTO source_document
+    (id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)
+    VALUES($1,$2,$3,'wechat_jsonl','synthetic-delete.jsonl',$4,0)`,[source,owner,contact,'8'.repeat(64)]);
+  await fixture.client.query('INSERT INTO assistant_session(id,owner_id,contact_id) VALUES($1,$2,$3)',[session,owner,contact]);
+  await fixture.client.query(`INSERT INTO outbound_ledger_entry(id,owner_id,contact_id,provider,model_name,outcome,called_at)
+    VALUES($1,$2,$3,'synthetic','synthetic-model','succeeded',now())`,[ledger,owner,contact]);
+  const app=await start(t,fixture,{NOTALONE_OWNER_ID:owner});
+  assert.equal((await app.request('/api/runtime/status')).data.ownership.crossDomainDeletion,'typescript');
+  assert.equal((await app.request(`/api/contacts/${contact}`,{},'invalid','DELETE')).status,401);
+
+  const discussion=await app.request(`/api/contacts/${contact}/assistant-sessions/${session}`,{confirmed:true},undefined,'DELETE');
+  assert.equal(discussion.status,200);
+  assert.deepEqual(discussion.data,{session_id:session,state:'deleted'});
+
+  const removedSource=await app.request(`/api/contacts/${contact}/sources/${source}`,undefined,undefined,'DELETE');
+  assert.equal(removedSource.status,202);
+  assert.equal((await app.request(`/api/deletions/${removedSource.data.task_id}`)).data.status,'succeeded');
+  assert.equal((await fixture.client.query('SELECT status FROM source_document WHERE id=$1',[source])).rows[0].status,'deleted');
+  assert.equal((await fixture.client.query('SELECT count(*)::int n FROM outbound_ledger_entry WHERE id=$1',[ledger])).rows[0].n,1);
+
+  const removedContact=await app.request(`/api/contacts/${contact}`,
+    {confirmed:true,confirm_contact_id:contact},undefined,'DELETE');
+  assert.equal(removedContact.status,202);
+  assert.equal((await app.request(`/api/deletions/${removedContact.data.operation_id}`)).data.status,'succeeded');
+  assert.equal((await fixture.client.query('SELECT count(*)::int n FROM outbound_ledger_entry WHERE id=$1',[ledger])).rows[0].n,0);
+
+  const removedAccount=await app.request('/api/account',{confirmed:true,confirm_scope:'account'},undefined,'DELETE');
+  assert.equal(removedAccount.status,202);
+  assert.equal((await app.request(`/api/deletions/${removedAccount.data.operation_id}`)).data.status,'succeeded');
+  assert.equal((await fixture.client.query('SELECT count(*)::int n FROM owner WHERE id=$1',[owner])).rows[0].n,0);
   await app.request('/api/runtime/shutdown',{});
   assert.equal(await app.host.waitForExit(7000),true);
 });

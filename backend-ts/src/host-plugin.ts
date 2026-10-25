@@ -34,6 +34,7 @@ import {SourceProcessingTraceApi} from './source-processing-trace-http.ts';
 import {HistoryImportApi} from './history-import-api.ts';
 import {PostgresTaskStatusStore,TaskApi} from './task-api.ts';
 import {BusinessTaskApi,PostgresBusinessTaskManager} from './background-task-management.ts';
+import {CrossDomainDeletionService,crossDomainDeletionRoute,serveCrossDomainDeletion} from './cross-domain-deletion.ts';
 import {
  PythonTaskControlGateway,UnavailableTaskControl,
  type TaskControlPort,type TaskScope,
@@ -166,7 +167,11 @@ async function start(ctx: Context) {
   const contacts=new ContactContext(storage);
   const memories=new MemoryService(storage);
   const preferences=new PreferenceService(storage);
-  const skills=new SkillHost(storage,resolveSkillsRoot(runtimeEnvironment,config.businessHome,config.projectDirectory));
+  const deletionSkillsRoot=resolveSkillsRoot(runtimeEnvironment,config.businessHome,config.projectDirectory);
+  const skills=new SkillHost(storage,deletionSkillsRoot);
+  const deletions=storage.runtimeOwnerId
+    ?new CrossDomainDeletionService({storage,skillsRoot:deletionSkillsRoot})
+    :undefined;
   let closing: Promise<void> | undefined;
   const closeResources = () => closing ??= (async () => {
     state='stopping';modelRuntime?.stopAccepting();
@@ -233,11 +238,15 @@ async function start(ctx: Context) {
         }:undefined,replayBody);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus},taskWorker:modelRuntime.extractionWorkerStatus}:{}),ownership:{...ownership,skills:skills.status().owner,skillLearning:modelRuntime?'typescript':'python',imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',taskManagement:businessTasks?'typescript':'python',tasks:extractionWorkerRuntime,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus},taskWorker:modelRuntime.extractionWorkerStatus}:{}),ownership:{...ownership,skills:skills.status().owner,skillLearning:modelRuntime?'typescript':'python',imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',taskManagement:businessTasks?'typescript':'python',tasks:extractionWorkerRuntime,crossDomainDeletion:deletions?'typescript':'unavailable',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
       if(state!=='running'){respond(503,{error:'runtime_stopping'});return;}
+      if(crossDomainDeletionRoute(req.method??'',url.pathname)){
+        await serveCrossDomainDeletion(req,res,deletions);
+        return;
+      }
       const layeredMemoryPath=url.pathname.startsWith('/api/memories/owner/layered-memory')
         || /^\/api\/contacts\/[^/]+\/layered-memory(?:\/|$)/.test(url.pathname);
       if(layeredMemoryPath&&modelRuntime){
@@ -457,6 +466,7 @@ async function start(ctx: Context) {
   await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>{server.removeListener('error',reject);resolve();});});
   const address=server.address();if(!address || typeof address==='string')throw new Error('HOST_LISTEN_FAILED');
   try {
+    if(deletions)await deletions.recover();
     modelRuntime=await startHostModelRuntime({ctx,storage,environment:runtimeEnvironment,
       businessHome:config.businessHome,projectDirectory:config.projectDirectory,infoPath:config.infoPath,envFilePath:config.envFilePath,
       ...(traceStore?{sourceTraces:traceStore}:{}),skillLibrary:skills.library,

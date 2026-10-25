@@ -1,7 +1,6 @@
-# Ticket 17 宿主集成候选
+# Ticket 17 宿主集成
 
-`backend-ts/src/host-plugin.ts` 当前含 Ticket 22 未提交改动，本票未修改该共享文件。以下接线应
-由根集成在 Ticket 22 落定后应用；删除模块、迁移、测试和独立 HTTP 验证已在 Ticket 17 路径完成。
+Ticket 22 落定后，删除服务已接入共享 `backend-ts/src/host-plugin.ts`。以下记录实际接线与验证边界。
 
 ## 导入与装配
 
@@ -15,22 +14,22 @@ import {
 } from './cross-domain-deletion.ts';
 ```
 
-在现有 `skills` 构造之后增加：
+现有 `skills` 与删除服务共用同一个受管根：
 
 ```ts
 const deletionSkillsRoot=resolveSkillsRoot(runtimeEnvironment,config.businessHome,config.projectDirectory);
+const skills=new SkillHost(storage,deletionSkillsRoot);
 const deletions=storage.runtimeOwnerId
   ?new CrossDomainDeletionService({storage,skillsRoot:deletionSkillsRoot})
   :undefined;
 ```
 
-现有 `skills` 也使用同一 `deletionSkillsRoot`，避免同一 owner 出现两个受管根。
 删除服务按已持久化的 runtime owner 身份装配，不要求 owner 行此刻仍存在；这样账户主体已删、
 仅受管文件清理失败的账号删除仍可在重启后按原 operation 读取并显式重试。
 
 ## 认证后的路由
 
-在 `state==='running'` 检查之后、L2/L3 与 Legacy 路由之前增加：
+删除路由位于认证检查及 `state==='running'` 检查之后、L2/L3 与 Legacy 路由之前：
 
 ```ts
 if(crossDomainDeletionRoute(req.method??'',url.pathname)){
@@ -44,15 +43,14 @@ if(crossDomainDeletionRoute(req.method??'',url.pathname)){
 
 ## 重启恢复与可见所有权
 
-在 `server.listen` 成功后、模型/Python 启动前调用：
+服务在 `server.listen` 成功后、模型/Python 启动前恢复：
 
 ```ts
 if(deletions)await deletions.recover();
 ```
 
 `recover()` 只接管当前 owner 的排队或已过租约删除，并分批处理全部可接管操作，不扫描其他
-owner。`runtime/status` 的
-`ownership` 增加：
+owner。`runtime/status` 的 `ownership` 包含：
 
 ```ts
 crossDomainDeletion:deletions?'typescript':'unavailable',
@@ -62,9 +60,10 @@ crossDomainDeletion:deletions?'typescript':'unavailable',
 
 - `cd backend-ts && ./node_modules/.bin/tsc --noEmit`
 - `cd backend-ts && node --test test/cross-domain-deletion-http.test.mjs`
+- `cd backend-ts && node --test test/host-http.test.mjs`
 - `cd backend-ts && node --test test/host-model-integration-profile.test.mjs`
 - `cd desktop && node --test tests/assistant-session-deletion-guards.test.mjs tests/background-task-polling.test.mjs`
 
-根集成后还应通过真实宿主认证 HTTP 重跑来源、联系人、账户、讨论四条入口；本候选测试使用
-真实 `_test` PostgreSQL 和相同 `serveCrossDomainDeletion` HTTP 适配器，但没有改动未提交的
-Ticket 22 宿主装配。
+宿主回归使用真实官方 DSH profile、认证信息和 `_test` PostgreSQL，经来源、讨论、联系人和账户
+四条公开 HTTP 入口完成删除并持久回读；错误 token 在业务处理器之前返回 401。该证据仍不等于
+实际 App／微信用户操作或 Ticket 24 的全组合切换／回退验收。
