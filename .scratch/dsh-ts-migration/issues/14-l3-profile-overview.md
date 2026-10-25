@@ -1,6 +1,6 @@
 # 14：更新 L3 画像与关系概览
 
-Triage: ready-for-agent
+Triage: ready-for-human
 State: claimed
 Type: task
 Blocked by: 13
@@ -153,3 +153,14 @@ Spec: ../spec.md
 - 尚不能签收“用户可修正及删除”：当前只验证了入口、空输入禁用和取消，尚未验证任何真实 GUI 提交能落到持久状态。验收至少需要一次实际“提交修正”和一次实际“确认删除长期背景条目”；两者都必须逐字核验 profile withdrew、generation 前进、旧回复快照失效，修正还须产生 active feedback 并保护底层输入，删除须保留底层合法资料。修正和单条删除都会撤回整份当前画像，不能在同一 profile 版本上先后完成，也不能把对话框取消当作完成。
 - “确认撤回长期背景”是独立于逐条删除的后端路径。票面的“查看、修正及删除”可由修正加单条删除满足，整份撤回不是逐字验收项的独立必要条件；但它是已暴露的不可逆用户操作，若不在隔离环境实点，应作为明确残余风险记录，不能宣称三种管理路径都已实机覆盖。
 - 最安全最小矩阵：保持正式 owner 的 generation `4` profile 不变，优先在实际 App 配合隔离测试数据库／用户目录，用两份合成的临时 profile 分别完成“提交修正”和“单条删除”并核对接口／数据库回读；若确需在正式库操作，则使用专用合成联系人或可丢弃范围，逐动作取得用户确认，且每次撤回后另建一份 profile，不能复用同一版本。整份撤回可再使用第三份一次性 profile，或在明确接受残余风险后暂不执行。
+
+### 修正代次缺陷与剩余删除验收
+
+- 隔离 GUI 首轮暴露真实缺陷：联系人页与本人页提交长期背景修正时都没有携带当前 `organization_generation`；桥接门禁按设计拒绝请求，正式库没有写入。缺陷不是修正说明、画像版本或底层记忆内容。
+- 修复提交：`8642010c3b0f8bdf24764533238432dfccecacde`（基于 `ec49dea2`，未 push）。联系人 `MemoryPage` 与 `OwnerLayeredMemoryPanel` 现在只在 `summary-error` 时把当前 `organization_generation` 带入管理命令；设置代次、范围和桥接校验本身未放宽。
+- 合成夹具同步收紧：只有显式 `enable/refresh` 才推进模型工作，纠错响应期间不再由后台自动重建覆盖“目标画像撤下、独立主题保留”的确定状态；Python 合成 `report_summary_error` 不再额外同步触发 organize。旧底层版本的断言按 ADR-080 改为保留并处于 `invalidated/error_correction`，不再错误要求物理消失。
+- 验证：分层记忆桌面全集 `97/97`、零失败；桌面类型检查通过；Python 修改文件 `py_compile` 通过；提交后 `scripts/check_public_history.mjs --ref HEAD --working-tree` 为 `issues 0`。
+- 实际开发运行：`npm run dev` 已恢复六个迁移相关显式 TS 模式，`/api/runtime/status` 显示 replies、memory、skills、tasks、wechatIncremental、wechatHistory、foregroundLocation 均为 `typescript`，reply ready、task worker running。实际 App 以联系人 `ran` 做只读查看，本人长期背景 4 条可见；未发送外部消息。
+- 隔离 GUI 本轮执行了“确认修正”；首轮代次拒绝已修复，联系人／本人两层 UI 都有携带当前 generation 的点击回归。随即准备的第二份纯合成画像中，“删除这条背景”确认被取消，没有执行删除，也没有新增删除后的持久状态元数据。
+- 签收结论：Ticket 14 仍不能标记 `resolved`。代码修复、修正入口和回归已收口，但验收条件“用户可查看、修正及删除”仍缺一次实际确认删除；按钮可见、打开确认或取消都不能替代删除。并且本轮提供的是隔离 GUI 修正动作和持久化回归，未提供正式 `ran` profile 的实际写入证据，正式数据仍保持原 generation `4`。
+- 下一步最小动作：在已有隔离 App／随机测试库中 `rearm` 第二份纯合成画像，取得用户对该一次删除的明确确认后点击“删除这条背景”与“确认删除长期背景条目”；仅核对无正文元数据：profile withdrawn、batch withdrawn、generation 前进、删除 feedback active、两条合成底层记忆仍 active、旧回复快照失效。成功后正常退出隔离 App、运行 fixture cleanup，再恢复默认 `npm run dev`。完成该动作后即可重新评估将本票 `State` 改为 `resolved`；Ticket 21 未改动。
