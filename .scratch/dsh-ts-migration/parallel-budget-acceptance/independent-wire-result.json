@@ -1,0 +1,65 @@
+{
+  "test": "mixed-python-ts-physical-boundary",
+  "passed": true,
+  "steps": [
+    {
+      "label": "python-only-reservation",
+      "reservations": 1,
+      "http_requests": 0
+    },
+    {
+      "label": "pg-rejected",
+      "reservations": 2,
+      "http_requests": 0
+    },
+    {
+      "label": "cancelled-after-reservation",
+      "reservations": 3,
+      "http_requests": 0
+    },
+    {
+      "label": "http-503",
+      "reservations": 4,
+      "http_requests": 1
+    },
+    {
+      "label": "strict-http",
+      "reservations": 5,
+      "http_requests": 2
+    },
+    {
+      "label": "messages-http",
+      "reservations": 6,
+      "http_requests": 3
+    },
+    {
+      "label": "l2-after-restart",
+      "reservations": 7,
+      "http_requests": 4
+    },
+    {
+      "label": "l3-last-reservation",
+      "reservations": 8,
+      "http_requests": 5
+    },
+    {
+      "label": "ninth-denied",
+      "reservations": 8,
+      "http_requests": 5
+    }
+  ],
+  "ledger_contains_payload_or_scope_canaries": false,
+  "receipts": {
+    "n": 6,
+    "permits": 6,
+    "unknown": 0
+  },
+  "physical_requests_by_endpoint": {
+    "messages": 4,
+    "strict": 1
+  },
+  "ninth_http_delta": 0,
+  "unconfirmed_permits": 0,
+  "child_processes": 2,
+  "cleanup": "own children, host, HTTP, synthetic PG and ledger removed"
+}

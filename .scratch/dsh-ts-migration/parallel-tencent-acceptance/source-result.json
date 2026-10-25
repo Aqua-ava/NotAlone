@@ -1,0 +1,17 @@
+{
+  "sha": "a61a21407c9395c462e4e68bfeee4628e7e9b15c",
+  "stage": "source",
+  "command": [
+    "$USER_HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "scripts/check_tencent_memory_source.mjs",
+    "--upstream",
+    "$UPSTREAM_ROOT"
+  ],
+  "exit_code": 0,
+  "summary": "",
+  "log_sha256": "295673ce7e9d6beccf6784631781845aa630923e677d04fa42bca9bc91ee3d9d",
+  "frozen_file_count": 362,
+  "source_drift": [],
+  "real_model_calls": 0,
+  "log_mode": "0o600"
+}

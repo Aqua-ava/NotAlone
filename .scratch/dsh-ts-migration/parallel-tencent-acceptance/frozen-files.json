@@ -1,0 +1,1453 @@
+{
+  "sha": "a61a21407c9395c462e4e68bfeee4628e7e9b15c",
+  "files": [
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-memory-budget-guard/files.json",
+      "sha256": "e1f5136234115e3772a933948c8deb5ef69b6721e9e84d7c115f8ed5fd827907"
+    },
+    {
+      "path": ".scratch/tencent-memory-python/spec.md",
+      "sha256": "5682b6dead9bd6e0ca2da25d3ce6b9cedf6bbc2169921dc1bf01507cb9aac64d"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/freeze.json",
+      "sha256": "edc0ab83e90d6497d5f0fb5fc1c558f201a11402979b8dcf938d5f91da4c2d8a"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/implementation.md",
+      "sha256": "de541152e2fbd7136563e48422187b67fc3b393f01ab638729c49ac1f020874a"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/owned-files.txt",
+      "sha256": "cb0aa0ca987c5415a75fac171a776c282f29069ff6cda31858897cfa00ce1352"
+    },
+    {
+      "path": "architecture/README.md",
+      "sha256": "a49d0d4249b48eea42e36b1a39c7e332e5b1625604b1041014622f49457111d3"
+    },
+    {
+      "path": "architecture/adr/074-tencent-reference-python-memory.md",
+      "sha256": "132e31757426ecf278a020a3e67713e9df8da7323bcbfcc4e04a1b4bd0f4847b"
+    },
+    {
+      "path": "architecture/adr/102-dsh-typescript-backend-migration.md",
+      "sha256": "16999e0b4f18308b328bc4916c2368bfc7cb1e94e513ab08aaf6845064398a70"
+    },
+    {
+      "path": "architecture/adr/104-tencent-source-memory-engine.md",
+      "sha256": "dd08ec466f9d50d39395009288226f8ef9966b44393c3eec40288be2c9da1190"
+    },
+    {
+      "path": "architecture/current/core-flows.md",
+      "sha256": "47f6509cc5ffc80aaffc9227f522a315f32488fa2b7450cd7d21174a37e886d4"
+    },
+    {
+      "path": "architecture/current/domain-data.md",
+      "sha256": "77cdaa58e2eb064e85414ad61bd690763b4cc9f0e90dfd499a3c4b2532b38512"
+    },
+    {
+      "path": "backend-ts/diagnostic-problem-budget.md",
+      "sha256": "d40b471aaf5935e1574aa516891a658cef7997decee773f81ef865439a255c04"
+    },
+    {
+      "path": "backend-ts/package.json",
+      "sha256": "23efe4561bfc415f66ccf220839116f047ca6311a3aead6999dab2fd72450e61"
+    },
+    {
+      "path": "backend-ts/src/assistant-discussion-http.ts",
+      "sha256": "fb67844ea8a7ddb2c7217b934db12e115cb5cfae22838077faa2c9c388191272"
+    },
+    {
+      "path": "backend-ts/src/assistant-discussion-service.ts",
+      "sha256": "9683e99f990275448fe670d1626d3a4dc05728437c2b5c4c71045d5cf0100c5b"
+    },
+    {
+      "path": "backend-ts/src/background-task-management.ts",
+      "sha256": "e94949a4ad83606f2fa3438c98d0959fc52c6d17fda60ba0a9335ddd08e786a3"
+    },
+    {
+      "path": "backend-ts/src/binding-service.ts",
+      "sha256": "ea1d1b265710768afaf0085b35b5c3bfa184559ac18682c80e1ea34acf295868"
+    },
+    {
+      "path": "backend-ts/src/business.ts",
+      "sha256": "2c15701bf962d28881bdb9888a33e82477c4b13ef92712decb4df3666fad14aa"
+    },
+    {
+      "path": "backend-ts/src/contact-context.ts",
+      "sha256": "6e2a90f91f5013a08ec1e08c78f2e5716f2f3776b654e9a22d206c54e8512944"
+    },
+    {
+      "path": "backend-ts/src/contact-handoff.ts",
+      "sha256": "e254ade463a86e242ce1d9b06080b868baf15fc403737084f902911e664bb7be"
+    },
+    {
+      "path": "backend-ts/src/contact-memory-index.ts",
+      "sha256": "71e5a44b947dd39a3adac93957a50e417535d7fd6d2a36f23a279b5a735c7bed"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-bounded-body.ts",
+      "sha256": "5bd272fbe0257a85c3e3687bc134aa061eec31ecfc156e8a28c2c77ca5f9e72e"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-bounded-contract.ts",
+      "sha256": "b5044989f2af46ef15a0c813c7805b6e49ae3671bb41eb12bb44b59ee34dea78"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-bounded-graph.ts",
+      "sha256": "c9dda92f8057315170dcc132db6e9c1250fa0a034a7ef8673cbd85fe2d3afffd"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-dimensions.ts",
+      "sha256": "4ba9cde330fad300c8fda29737025b8f3aba78ae33453055dbb86951f0b1cbb2"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-evidence.ts",
+      "sha256": "199e0124e6daa0a58460ecd2ea3a2bac0a4394958c0fb6a681da1e01e46dea54"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-legacy-grammar.ts",
+      "sha256": "bf2f6213d5d80d17b439778945d4cf41d859f8479badbbbe0d26a1556df41d13"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-legacy-semantic.ts",
+      "sha256": "bbd9974c414a596dd6f9417a35687c118251c3ba58caff30c7b54e0613044a78"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-memory.ts",
+      "sha256": "88d628bd048e9435018c36ddbdfcf6442f7a376df3a967eeaeee1ec378c2e39d"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-metadata.ts",
+      "sha256": "4db01cfc81fbf7dae5ecfdf97d4f577d005026e6ee410d1506e80a1b78ee2ff3"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-semantic.ts",
+      "sha256": "a9e3b3ab8688e1402cf385fcc8840aba89d468ca3da8aa6d7b3de0cdd6120f12"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-time.ts",
+      "sha256": "b3c543d65fbcc48235443279b76ccaa939d20e4fc6809ad1841f77423b3b55f3"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-versions.ts",
+      "sha256": "f67f35d9b52c55c83fd86ec28df2a0ac21c7d2c9df04152e33ad866b9bb69e2a"
+    },
+    {
+      "path": "backend-ts/src/contact-overview.ts",
+      "sha256": "0fabccc6bb958e1b4d222123b82270839791a2c6ba18759e00c520dd93d6e842"
+    },
+    {
+      "path": "backend-ts/src/cross-domain-deletion.ts",
+      "sha256": "9a3fa93294edf6a925ad62f082afe31534991f7585eaf7b70032cb01e1b01ac9"
+    },
+    {
+      "path": "backend-ts/src/deepseek-strict-verification.ts",
+      "sha256": "63d30c86bd65d24073d53548407472846833322e1ba540dbe7b8112b3b590954"
+    },
+    {
+      "path": "backend-ts/src/diagnostic-problem-budget.ts",
+      "sha256": "6bb10e2a4cbc1572970ea2dccc08e94f96c179f95f430a4ab169322ca2e449e8"
+    },
+    {
+      "path": "backend-ts/src/exploration-contract.ts",
+      "sha256": "af5664a184683bc401aae464f3595007f6b221d51889698164659e904151da3d"
+    },
+    {
+      "path": "backend-ts/src/exploration-evidence.ts",
+      "sha256": "5a495f7ef0bf2008eb587e4c07a7573c5053b3b9e873f655b05bdc86dc890830"
+    },
+    {
+      "path": "backend-ts/src/exploration-http.ts",
+      "sha256": "8dacb960b0335e3e506bfb8d15e0379c546af93a008a82d1a24a375d6297611c"
+    },
+    {
+      "path": "backend-ts/src/exploration-runtime.ts",
+      "sha256": "d62423661546e35b6790309efe04d250f7ffccfb43d576054dd085284cf4f0fd"
+    },
+    {
+      "path": "backend-ts/src/exploration-service.ts",
+      "sha256": "3318735f1ca717cca5a68eb3624b3072260453ab8c301d5638021e0c14581e81"
+    },
+    {
+      "path": "backend-ts/src/exploration-skill-sources.ts",
+      "sha256": "435dcb9b89f869216506161832509c4e882b59bdae0ead48508941b8642dec0c"
+    },
+    {
+      "path": "backend-ts/src/exploration-skill-use.ts",
+      "sha256": "ae2f46d9ebc64bbac95c8b2dc04480ef57501b97d0b6b91381cd2e0b8dff39d1"
+    },
+    {
+      "path": "backend-ts/src/exploration-store.ts",
+      "sha256": "a64f248eda62f40bccf0d92870ae61986e2610a1bce9aa59f39eb63768aca625"
+    },
+    {
+      "path": "backend-ts/src/extraction-adoption-host.ts",
+      "sha256": "1f62bf71f5754c8e9bb5755effa511206e924b5b81fc4a0d589e33b2e8406944"
+    },
+    {
+      "path": "backend-ts/src/extraction-adoption-service.ts",
+      "sha256": "40a48a3c3c961316de872e44029722dd73b6e7ab5016f9b3414268272c92b209"
+    },
+    {
+      "path": "backend-ts/src/extraction-arguments.ts",
+      "sha256": "c2ed08916d824f68fe687d6f7ec95cde66e1f373eff5811e0ba61a52675e1312"
+    },
+    {
+      "path": "backend-ts/src/extraction-batch-http.ts",
+      "sha256": "4289d8c1780b175eba4fa443b4c3343ea1ec10b4283212916d4665546bb0ff30"
+    },
+    {
+      "path": "backend-ts/src/extraction-batch-service.ts",
+      "sha256": "897fee67684d48a0f7e8baf825b6428e8a2cd07645ea0abf7d5781ceb07cb1a8"
+    },
+    {
+      "path": "backend-ts/src/extraction-bounded-proof.ts",
+      "sha256": "529846292e0cfbed583721ac34ec52c734cf66d3d0f732bf2f7131c1526680a7"
+    },
+    {
+      "path": "backend-ts/src/extraction-bounded.ts",
+      "sha256": "775be1ac06781b6044309814e8e6563d8e82c00224f30b0ba63d52426b068382"
+    },
+    {
+      "path": "backend-ts/src/extraction-evidence.ts",
+      "sha256": "957960ce9b2d041fd32f963176bdc3d8e9ec92fb7d882fd918d75af67ccc8188"
+    },
+    {
+      "path": "backend-ts/src/extraction-flow.ts",
+      "sha256": "2db1881d8375f1971fc39733dde5eca42a2f6d1fb4f05bc693e03b8abcf4d5db"
+    },
+    {
+      "path": "backend-ts/src/extraction-model.ts",
+      "sha256": "749438baf97e30aeb0571e85390b779dce5a603af1189c46bd2c595c342fe098"
+    },
+    {
+      "path": "backend-ts/src/extraction-pipeline.ts",
+      "sha256": "213b18a694f07f824cc29c8aa5b733e3bdd971f0429549f52f0e9da0677ffb76"
+    },
+    {
+      "path": "backend-ts/src/extraction-progress-http.ts",
+      "sha256": "e1e6aa8b21decc8e50fbb7db717df9bbced20b6abf661de6fb61f8637e1a29dc"
+    },
+    {
+      "path": "backend-ts/src/extraction-prompts.ts",
+      "sha256": "c08582f46a3d05f6254a8247cd1b90f496b087dd20fd354382839636a502d9a6"
+    },
+    {
+      "path": "backend-ts/src/extraction-protocol-calendar.ts",
+      "sha256": "0e6ebcd734c959cf9a1060798f0cc765ec1213c96bdaf23356d66cf61c5b576d"
+    },
+    {
+      "path": "backend-ts/src/extraction-protocol-contract.ts",
+      "sha256": "ae4c3937c5a8e4d1109ac2000405b2d34ff57da13f314324d850c1415adda7c7"
+    },
+    {
+      "path": "backend-ts/src/extraction-protocol.ts",
+      "sha256": "92ce58fb0e70a08273b5f7ab7089be983b9d4c11c698b1f88e06c40d55809730"
+    },
+    {
+      "path": "backend-ts/src/extraction-sources.ts",
+      "sha256": "9326d4826aeef9d0f70515988700ca50984624aed62a7679047720c5f01e4a96"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-runner.ts",
+      "sha256": "ed77e250f3ee796dd737a69d8411a08ce56650f62a44d266bd77b0ec9490f78a"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store-processing.ts",
+      "sha256": "e2cde0df93c09ab0e1ffb128ebb75c44486f2b4605f0b835825bced5305fe192"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store-recovery.ts",
+      "sha256": "0a1118c7cd34a944fb622c1920e395217cfa1f27858dc8c11a26deb903929880"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store-schedule.ts",
+      "sha256": "b6af7e2af095992a801f050d743f795766190caa344a3be4d9905c163122e786"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store.ts",
+      "sha256": "b5d67873dac8833a94ad255bf0191b04b1cde6ff46c242ab20d1ac42c5843092"
+    },
+    {
+      "path": "backend-ts/src/extraction-verification-diagnostics.ts",
+      "sha256": "a372517bc4ef073e9164d7ab36d0e879bc6cf69384238d41af56a02d4027b315"
+    },
+    {
+      "path": "backend-ts/src/extraction-worker.ts",
+      "sha256": "50cd0d44d2acfcec044a584eddb30fe50378a697253f52b1df9d5366a19cdca1"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-api.ts",
+      "sha256": "9bbc79ddf3dd709ffe48b9986c5d3a0028e156adeff96fa165039133f72d2eb0"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-locator.ts",
+      "sha256": "3872a6c8e774803f3eb37c88e3e8e1580753202a02e66a717c0afcbeab38b082"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-name-matching.ts",
+      "sha256": "15e88e93a8c85b76f390d438f134056b80522d03798d0a286294c21c2bd6c1c0"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-probe.ts",
+      "sha256": "0a03c55fd8f86bcabaad276e8e22d3d0e9e786a96e796d9e800b3fe06c124d3f"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-sessions.ts",
+      "sha256": "6050d29d4f098f09b5e79ed948b6d61ab6bb72f217d5f9936a0d2ce7fc481e45"
+    },
+    {
+      "path": "backend-ts/src/history-import-api.ts",
+      "sha256": "38ea40b2096909c5a449127419959840384abd0a1aa2bbc5d493c8893cfa63af"
+    },
+    {
+      "path": "backend-ts/src/history-import-format.ts",
+      "sha256": "2b3405471499415095e279bfb1496763586b48de98caa399ab3a6bdd7747f593"
+    },
+    {
+      "path": "backend-ts/src/history-import-service.ts",
+      "sha256": "6aaeb4171e36401946863103b187a080d1aa345fe0350fffee9eb03cdb1d9853"
+    },
+    {
+      "path": "backend-ts/src/history-runtime.ts",
+      "sha256": "a878f450115ffff49f676ebd2c16a35d898d10f0c769a54cc204472fac59cded"
+    },
+    {
+      "path": "backend-ts/src/host-json.ts",
+      "sha256": "e7449c7c5df9a496ac36ce0ec54d997341577f799d7c0fad4b28cec906f5f48c"
+    },
+    {
+      "path": "backend-ts/src/host-model-accounting.ts",
+      "sha256": "b2ea52b7cda43e20aa12f82bce756ece5a6e8bc76239c41d31c1910a51e74454"
+    },
+    {
+      "path": "backend-ts/src/host-model-runtime.ts",
+      "sha256": "dfc4614fc50429820c9b6383896292bd72fc60f2ec69e7303d7bdc5893bc145b"
+    },
+    {
+      "path": "backend-ts/src/host-plugin.ts",
+      "sha256": "6437dda4d1d293d094d3c8f548b37265ecdbcf709fa19e517f7b9354b5b55713"
+    },
+    {
+      "path": "backend-ts/src/host-reply-config.ts",
+      "sha256": "43e67a404f4abeeef009b5e7c1da5692546d51f5fe12ba6589f45aaac29b8ee8"
+    },
+    {
+      "path": "backend-ts/src/host-reply.ts",
+      "sha256": "66e4708ec4b559b4bc3da18fdee675c1120b41b7217498fcd0cd2a92a4005ab7"
+    },
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "sha256": "235e3df8e9b796b81297f95d6f905f7592b83bef4a63ef23f8a3265701f6bf66"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-host.ts",
+      "sha256": "140e44bdc1ed07c4c019ad6fd236d59e830f2983ba56fe6cc131871a22e97901"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-http.ts",
+      "sha256": "9c74118f1f3039b7ffb952835a3184325b19dc525938e9f7beae9312577f277b"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-model.ts",
+      "sha256": "c387b457ac8d4b3b65433b15e6e85b075a889d4d0eb284db5b91a874efc4c41c"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-service.ts",
+      "sha256": "2f1bdf14cd909e1dcd3b5f4e0debc242a454588a4306fd3b721bf7350287d2cc"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-source-validation.ts",
+      "sha256": "788967dcc19f7aaae1c56b4c159cbe1cd0a0086785c038a68d8b31a272b224f4"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-worker.ts",
+      "sha256": "d100dedd27a0bf03fb4f9c2669e09d98ee78623c7091c9f43e0b178ec2d9f8ff"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-workspace.ts",
+      "sha256": "d1ee82b9989e11af7679662b702d4c61ea2dcd602884c49112a6d85ec895e525"
+    },
+    {
+      "path": "backend-ts/src/l3-profile-service.ts",
+      "sha256": "42a5c36386f6f002bbe18d65bd86a06bfa1a9da6415cd01faf9b60f3b8c81ba3"
+    },
+    {
+      "path": "backend-ts/src/l3-profile-workspace.ts",
+      "sha256": "f9a0771d91bad2efd877cda1e7d5e5a5eff7668ad48d6635ee3864a560e1162f"
+    },
+    {
+      "path": "backend-ts/src/launch.ts",
+      "sha256": "6a476b91594906113a0f62a999b73356e9d3f41b84edad361b8789685f37a503"
+    },
+    {
+      "path": "backend-ts/src/legacy-backend.ts",
+      "sha256": "7add2d7578989794fa0d62a1776fd5332ddb1504121962c22152ded009ba1da2"
+    },
+    {
+      "path": "backend-ts/src/local-embedding-lifecycle.ts",
+      "sha256": "ce9236de03f79d2834905f9c82056d42923395bbcd68e79a8d41f9da795369b0"
+    },
+    {
+      "path": "backend-ts/src/memory-adjudication-dsh.ts",
+      "sha256": "d65bccdd4180dbdd200276c20e436349438f857245cc389f7a8871b2c442ef0e"
+    },
+    {
+      "path": "backend-ts/src/memory-adoption.ts",
+      "sha256": "aa43d96cae6bdc0e3b0cec9328324edce8519c6a050208456f62a9135d50f38b"
+    },
+    {
+      "path": "backend-ts/src/memory-candidate-projection.ts",
+      "sha256": "86c70006a7bde24f102307b48429ca340050e45330ade67ec1e67018771d4f98"
+    },
+    {
+      "path": "backend-ts/src/memory-errors.ts",
+      "sha256": "85074719dfb0dac9bbb4e620eaf36c5c3c548ac9d03999dc35c07d222b1b5b38"
+    },
+    {
+      "path": "backend-ts/src/memory-management-handoff.ts",
+      "sha256": "4a31b3743ebd4f00ed18df399343a60a3fe022e8a1045a2aa9bc6e95cebb7cfa"
+    },
+    {
+      "path": "backend-ts/src/memory-management-json.ts",
+      "sha256": "9caf1259432c1d7b443268af165ce904373a6192f5837eb619fbb2028a448bd1"
+    },
+    {
+      "path": "backend-ts/src/memory-manual.ts",
+      "sha256": "620a38605f4dab0173512e34bfda83ae540a50e5539b931b1d35a8a5f192f2ab"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations-candidate-versions.ts",
+      "sha256": "66bf92bb571978f8beb61f879255c2b9a127b1510384a987281afe7263b4990f"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations-candidate.ts",
+      "sha256": "47aaeed5c908c78cda734e21d608a0cbd807827e92f4ddfb8ca438fefe4be5ff"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations-erasure.ts",
+      "sha256": "52fda8d9cb17e4b5dc0ffc80943c2c66aa34bb1288e3b70cb8573965c6cf4c42"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations-protection.ts",
+      "sha256": "d3dd6b2bd1467d63ce3dd377afc77c2a4c676b076a36a188b51240e098734624"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations.ts",
+      "sha256": "9b4f4a8bd8acb046cf9a44a60ba936d0576fd5c46f18ff9ab8888dff825c5caf"
+    },
+    {
+      "path": "backend-ts/src/memory-owner-projection.ts",
+      "sha256": "733fb81cf84cbb0e645737b032dcfd834358c5f8df629c2cfdbebcf9260e0902"
+    },
+    {
+      "path": "backend-ts/src/memory-read.ts",
+      "sha256": "918c80a9a1cd2e66aaee32246c1483769e31fbf039fdb01e435bd48027f7f3fa"
+    },
+    {
+      "path": "backend-ts/src/memory-service.ts",
+      "sha256": "251c21b2d0b9aec222507295c5cb1dce9262d3c3f4cc9179b4029fffbc51fab3"
+    },
+    {
+      "path": "backend-ts/src/model-host.ts",
+      "sha256": "71de905f4089c8ced201508d5a9c2f885e22ae44db8fca4ab60e1844239a8176"
+    },
+    {
+      "path": "backend-ts/src/model-input-budget.ts",
+      "sha256": "4b43fac9a3205d3cb7a3ad37ec84e454ef9c81d531126e77397dace5948de5af"
+    },
+    {
+      "path": "backend-ts/src/model-ledger.ts",
+      "sha256": "585334184816d6f3055a4771bbd7b8c6354a7200d12b2c6afff952df1f2b88e1"
+    },
+    {
+      "path": "backend-ts/src/model-permit-journal.ts",
+      "sha256": "d5e8092dd98e86850fb5b190ccc2439d11435434504b6121a5b7aed69923b045"
+    },
+    {
+      "path": "backend-ts/src/model-permit-server.ts",
+      "sha256": "0a1a51e51c337c5284016fac7143d39ea252e46c4b08d8fa855df6641c763f57"
+    },
+    {
+      "path": "backend-ts/src/model-permits.ts",
+      "sha256": "34eb380ef7640f91b49682d18745fcd79d30475eabc439459d5a67a4185af8a2"
+    },
+    {
+      "path": "backend-ts/src/model-provider.ts",
+      "sha256": "98e7026309d74442e92d47bab0a63006b2b26364b4840908c9578391b5db9311"
+    },
+    {
+      "path": "backend-ts/src/plugin.ts",
+      "sha256": "f994e91340b004da4363588318c9dac4a5d097e1fac0a55483d43e2b7aafe290"
+    },
+    {
+      "path": "backend-ts/src/preference-erasure.ts",
+      "sha256": "bf3bda84facba887270feea8fcbbee59686963fdc29e74b301b9d3b2a6b9ec4a"
+    },
+    {
+      "path": "backend-ts/src/preference-files.ts",
+      "sha256": "07d7715f1bef1b324538b33d07cfa44a1adc8bc02cb5755466156d56e3f49361"
+    },
+    {
+      "path": "backend-ts/src/preference-service.ts",
+      "sha256": "1e834f6a01dfcd959d8080bdd95996f062b17ead055bc0be24cd7a4b32b928ff"
+    },
+    {
+      "path": "backend-ts/src/process-identity.ts",
+      "sha256": "a05f9306b16bfa4b1ee4b576993ddeb3319717f07e985ac9a6b0cecb5af6386d"
+    },
+    {
+      "path": "backend-ts/src/reply-assistant-erasure-sql.ts",
+      "sha256": "de97989b49280a635a9ef0034a7b5f085407c037867b6129864a075e19f2517b"
+    },
+    {
+      "path": "backend-ts/src/reply-assistant-erasure.ts",
+      "sha256": "1c761d49632c0504c0afc1c93af3a653f1bea8364e3a5b23da9e6adaa99b88f2"
+    },
+    {
+      "path": "backend-ts/src/reply-assistant-factory.ts",
+      "sha256": "9d1837cb21261ca6096f6f3fe3d3eb22efed6263c1a394537f1bfdf91e83441e"
+    },
+    {
+      "path": "backend-ts/src/reply-assistant-guards.ts",
+      "sha256": "253a0690ff7e51412b3da087ebc48864b629b5a7d513a7010189b8d1e45cad61"
+    },
+    {
+      "path": "backend-ts/src/reply-candidate-admissibility.ts",
+      "sha256": "2cb1e5cdc4bbbd59b5709db915abab41fb2ae4138d311eb61732a76c535c921d"
+    },
+    {
+      "path": "backend-ts/src/reply-candidate-prompt.ts",
+      "sha256": "9d2ab1e7d43b367156df7ba774fa17d621d4b1e3af6041f3f510d2065d052e05"
+    },
+    {
+      "path": "backend-ts/src/reply-comparison-sources.ts",
+      "sha256": "b01b571c1324d8c65af66ddb17d689461dee082ef05192e30231d3ef47ecf4ac"
+    },
+    {
+      "path": "backend-ts/src/reply-comparison-statistics.ts",
+      "sha256": "ef01fb4d98ad605dd1bf8334352966536b46d19d206adc140fe7b0e5ca6f38a2"
+    },
+    {
+      "path": "backend-ts/src/reply-comparison.ts",
+      "sha256": "4e82b803f0e0dda170ef79cf063f55232f2498fd5aeeffb28828edcc084609d6"
+    },
+    {
+      "path": "backend-ts/src/reply-context-guards.ts",
+      "sha256": "2f99c729a196c0ae64640d35970753365f45b1be6f425cf96710979229611657"
+    },
+    {
+      "path": "backend-ts/src/reply-context-layered.ts",
+      "sha256": "094538d166916c6470760d1f00ee6fc7999c6766cda17aedda92dea650491e4d"
+    },
+    {
+      "path": "backend-ts/src/reply-context-memory.ts",
+      "sha256": "cee30a48d923ec8215727b2b63166f897b3f23604d8789b58e77e17a7d0d6617"
+    },
+    {
+      "path": "backend-ts/src/reply-context-overview.ts",
+      "sha256": "a09d92a9f5ede39e4d31c593e0f60065f564a2ffc81e3dbac2054e0b0c19f68d"
+    },
+    {
+      "path": "backend-ts/src/reply-context-read.ts",
+      "sha256": "04ab6afd88dbec20484c70b6225074a064de71a004c51c515cb29e4ca34e8bcb"
+    },
+    {
+      "path": "backend-ts/src/reply-context-scenario.ts",
+      "sha256": "2604e322a726ba5683607408582935fd2c28855adef5a9fa8a7cba293c2b1c02"
+    },
+    {
+      "path": "backend-ts/src/reply-context-types.ts",
+      "sha256": "718d81aad3a031b275648a955bbeb8606b293d44924a22d3e561b99945eafc8c"
+    },
+    {
+      "path": "backend-ts/src/reply-context.ts",
+      "sha256": "23548a2e295060d07efd4dbb5cafd485e944451b4393e999f8d423079688710e"
+    },
+    {
+      "path": "backend-ts/src/reply-contract.ts",
+      "sha256": "267e431123d1d533040acfd91e300b4235b918ada9f396ff4bd45908c49021ab"
+    },
+    {
+      "path": "backend-ts/src/reply-discussion-context.ts",
+      "sha256": "d1c3b24282fb3748165c3c0974fd69b93f9b66e823891e2f81630d044a850255"
+    },
+    {
+      "path": "backend-ts/src/reply-evidence-alias.ts",
+      "sha256": "f71f9f56acc67b4be66d4d7ff9f88cf4191f4517e5c3a0399074302f6cd06ca1"
+    },
+    {
+      "path": "backend-ts/src/reply-evidence-payload.ts",
+      "sha256": "f2d358cef13f8d8313d331caf23f6f8eaf8d141141b456b2f684090104adb805"
+    },
+    {
+      "path": "backend-ts/src/reply-exploration-evidence.ts",
+      "sha256": "c5b2daf7a2cd4b0bb7d402d63e2a6c9669cc4af3688df3ac6c113d8fffdca3d2"
+    },
+    {
+      "path": "backend-ts/src/reply-exploration-guards.ts",
+      "sha256": "a5450bd94e56125b91907e2bbb93f386cc566a5c50f89f8a008b7e7923f6786d"
+    },
+    {
+      "path": "backend-ts/src/reply-generation-guards.ts",
+      "sha256": "86b9365863929bc797f97ab7499cd042364a76cdb786529464f761a671ed2adb"
+    },
+    {
+      "path": "backend-ts/src/reply-history.ts",
+      "sha256": "1e1b97630ab7f7660b1e484d42e884342e2901d159d56c3fdf7ffe75350e6801"
+    },
+    {
+      "path": "backend-ts/src/reply-http.ts",
+      "sha256": "b9d423e0d8319d82f7d947b91919e51f833c146321e3de4efd945690ee9a03da"
+    },
+    {
+      "path": "backend-ts/src/reply-loop.ts",
+      "sha256": "537a462cb130bdf60217dbd7a344efb273115570728db8f014d26af3479dc0bd"
+    },
+    {
+      "path": "backend-ts/src/reply-message-window.ts",
+      "sha256": "c036149f7cc3829f8d1d8dcfc52a06ac98a3e52042ce67c3588adc204791e34e"
+    },
+    {
+      "path": "backend-ts/src/reply-payload.ts",
+      "sha256": "96db71469556550afc5e2a7b40489dd2f8984ef14ffb7cdafd5e881a79ce19be"
+    },
+    {
+      "path": "backend-ts/src/reply-preflight-prepared.ts",
+      "sha256": "e1a3399b543a0c341f75446145f76da71703d6ec2910468b6cc1146a95a0f211"
+    },
+    {
+      "path": "backend-ts/src/reply-preflight.ts",
+      "sha256": "4441d05a4a2b8b51e47e299d9bcde8ecd869aa0d34c07ff02b15df58cb013c3c"
+    },
+    {
+      "path": "backend-ts/src/reply-preparation.ts",
+      "sha256": "f119af7aadaf5ba61be847ffc0cf48565fa001ac9ac88da9fcc68c89573cc7db"
+    },
+    {
+      "path": "backend-ts/src/reply-prepared-codec.ts",
+      "sha256": "de23940956fdd9714e40af01708c7212110b29ff0a9f03e8a1aec64b68776c2a"
+    },
+    {
+      "path": "backend-ts/src/reply-prepared-context.ts",
+      "sha256": "f2e6e06f79386d59e084a82f1a8e5aa15115fe6011abcf529a2148ff6036673a"
+    },
+    {
+      "path": "backend-ts/src/reply-prepared-schema.ts",
+      "sha256": "39660f6fe17f71b6f937b1e1d458065569b30744001c21edfe210690be0bdf11"
+    },
+    {
+      "path": "backend-ts/src/reply-prompts.ts",
+      "sha256": "3c16f89ada354b192496c97ca9106143f71b4b8fc21416d23b726c8b59609a7b"
+    },
+    {
+      "path": "backend-ts/src/reply-result.ts",
+      "sha256": "b5804950225df2a67a6674cb758fe35dbf23361915ef9979e24365afcd6f0521"
+    },
+    {
+      "path": "backend-ts/src/reply-scope.ts",
+      "sha256": "c7ead96f1cbdcb64e4e5fe4a0df61431a0cd708d0ce9574328e4ea4865e76476"
+    },
+    {
+      "path": "backend-ts/src/reply-service.ts",
+      "sha256": "59a083a9fed8ceeb686b1bcce4f50d5f0791b5a0d3efe9126017bbd5b9d1d90a"
+    },
+    {
+      "path": "backend-ts/src/reply-skill-guards.ts",
+      "sha256": "6814dc194529a55018c38465bb7189a3971c249028407bafb685408d6a6518c8"
+    },
+    {
+      "path": "backend-ts/src/reply-skill-runtime.ts",
+      "sha256": "da346576c9b0a4d1224dedf35ffdf4222f53d9cfb8cec114ce28c66a50dc8500"
+    },
+    {
+      "path": "backend-ts/src/reply-source-guards-sql.ts",
+      "sha256": "8c891744abf09ecdca0d883ce3b39ae03620c9923fa0dc4419915afc5526ec17"
+    },
+    {
+      "path": "backend-ts/src/reply-source-guards.ts",
+      "sha256": "ac56877a51fa416642fd53b199621fc5cdbb9f068db090f48d3034b16cc791ec"
+    },
+    {
+      "path": "backend-ts/src/reply-store.ts",
+      "sha256": "233c6ecb431c51f87643be96be51d4d9d54f9d5c75b80e6fc5c52cec78ab8f61"
+    },
+    {
+      "path": "backend-ts/src/reply-system-prompt.ts",
+      "sha256": "a81da48da2a5ff0705d141deaf1f673c961c93ba32b92149d10bb3161578a032"
+    },
+    {
+      "path": "backend-ts/src/retrieval-casefold.ts",
+      "sha256": "4d5ee7d94421a4934ba4ea984062467961f4a5d5ee39aa9d76aa4c7af4bb296c"
+    },
+    {
+      "path": "backend-ts/src/retrieval-embedding.ts",
+      "sha256": "61cd5cf7f562be0faccf2340d3f19d7494ee3d1813ebd44a49395e5dfdcee1fb"
+    },
+    {
+      "path": "backend-ts/src/retrieval-hybrid.ts",
+      "sha256": "b83e09bcfa0b9f61898b0140a00276fe386760066e3421c70f205d3ab6838ca1"
+    },
+    {
+      "path": "backend-ts/src/retrieval-lexical.ts",
+      "sha256": "4d08eb4a35e27eba2898a4204d3116e66b19b776fdbff4c9c526d6ea61da12e6"
+    },
+    {
+      "path": "backend-ts/src/retrieval-ranking.ts",
+      "sha256": "0393e98481cf1d157255b44982d2584a328440fa42446a5634cbd90ac811c3bd"
+    },
+    {
+      "path": "backend-ts/src/runtime.ts",
+      "sha256": "ada3ff8466daf3efa51a088f7c8dcc410bad32a108f0c898a8358b8721902bdd"
+    },
+    {
+      "path": "backend-ts/src/service.ts",
+      "sha256": "7add0d6941628304abd07be364e010fdff8d560390b4f6189284601db2bfa88d"
+    },
+    {
+      "path": "backend-ts/src/skill-cleanup.ts",
+      "sha256": "f711af640903b861a8c67bfc06bf1b238de1a17ed49775de9945edeb2ec100b3"
+    },
+    {
+      "path": "backend-ts/src/skill-execution-view.ts",
+      "sha256": "df8cb1f7cf78bf0d964a094d62f87804e092a363090b3b4431d693e7ea428495"
+    },
+    {
+      "path": "backend-ts/src/skill-files.ts",
+      "sha256": "8892df6ea2807cee0d2c6512efa58b0b8cb21b34d41ffd15bdb72812dd20ef6a"
+    },
+    {
+      "path": "backend-ts/src/skill-history-policy-store.ts",
+      "sha256": "cad2e2deda59b41f79545dc79e520394b479ba6192f3aeff218431c0246995d9"
+    },
+    {
+      "path": "backend-ts/src/skill-host.ts",
+      "sha256": "e5b78ae31bc9d6f67dd8e2d26f4c0a8342e8a7b14d67f6a3687cc71182e4e648"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-contract.ts",
+      "sha256": "d4f362d4ceb32c9b331a684c988dc6cd29e41f2e7844bc130543f36368fe7cb7"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-http.ts",
+      "sha256": "8774ad0948586d17f2cf26d76340ede3de0b97bf177724498bae5beddc64d9e9"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-materials.ts",
+      "sha256": "a6e99b122493ab72001ae70c8b57d5e83d9b263297a08556315272c59bbea44f"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-runtime.ts",
+      "sha256": "a4c656a6083def5fc0071040f9b13b755d5408156e4f8b6f587812472a9e4100"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-store.ts",
+      "sha256": "07c3b640e4a24566e216e881187e3d44ff1798152461292b217162dffa016de8"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-worker.ts",
+      "sha256": "eb488cd38c1af81590a971d373d52fbda87c4b557c3df3145de7f8de4a3f8bb3"
+    },
+    {
+      "path": "backend-ts/src/skill-library.ts",
+      "sha256": "3e734f39bf6b60d975a76405ee2eb298a1ff6950907fba1a2237afd4f69a54c9"
+    },
+    {
+      "path": "backend-ts/src/skill-package.ts",
+      "sha256": "527fda629f310f3ffe1e35a54729da7dd62318b47c9e51ef4abf1ccf5976634c"
+    },
+    {
+      "path": "backend-ts/src/skill-port.ts",
+      "sha256": "7896fdbbbc7e362fe92aa91ad3a945e235d9bba96fce426b76727c80080a5860"
+    },
+    {
+      "path": "backend-ts/src/skill-provider.ts",
+      "sha256": "40d76def6867e6527cc3387ea0d2529715ae8d90fb3b90a993c3e59d97a61a32"
+    },
+    {
+      "path": "backend-ts/src/skill-review-service.ts",
+      "sha256": "61150cc020e0eacf98b6a88804f0a24a05dc93107f252d4b6473fb06a7e37e2b"
+    },
+    {
+      "path": "backend-ts/src/skill-review-sources.ts",
+      "sha256": "9f98c94bec4fb8dc054b8733c0d3ea15316472c6d08085865eaea346366526c2"
+    },
+    {
+      "path": "backend-ts/src/skill-review-store.ts",
+      "sha256": "fd6234c8892f6efe4b6f644abefad6174d8114afa1a0c733e17407d9d11c1259"
+    },
+    {
+      "path": "backend-ts/src/skill-runtime.ts",
+      "sha256": "931a017f0e45ab14aaa565d9748e3588871c0f05d98feae9389d70290a24ab5c"
+    },
+    {
+      "path": "backend-ts/src/skill-source-dependencies.ts",
+      "sha256": "c3a4524dc46de0ceba551323151298a37dd4ee9b378afdd0f57320844a07c743"
+    },
+    {
+      "path": "backend-ts/src/skill-source-navigation.ts",
+      "sha256": "6ad0fb6bd11812c6ed4e9b7990e7ef7a53d649447c22bc5b6ff386ff1c7f889f"
+    },
+    {
+      "path": "backend-ts/src/skill-source-owner-lineage.ts",
+      "sha256": "060a2ffc4c267c0035dacb915ae5cee68b1b7aa10b67aa23954704a6ba7bb64f"
+    },
+    {
+      "path": "backend-ts/src/skill-source-proof.ts",
+      "sha256": "6cbf5f81da8cc199ffd249d41881ab2c4b9ec2db54d02c5d251876bf9905a191"
+    },
+    {
+      "path": "backend-ts/src/skills-root.ts",
+      "sha256": "cdb7e5555d0429bc5fcb57a11f0ddaad7f48ef979aed1c645e89bcd677b08ec3"
+    },
+    {
+      "path": "backend-ts/src/source-processing-trace-http.ts",
+      "sha256": "8c65b160eba7c1e0dbfc3f905087b6548a03c3bd7c55f4e7a2d4c3fd99df2362"
+    },
+    {
+      "path": "backend-ts/src/source-processing-trace.ts",
+      "sha256": "48b9c4ded6dd8483c9b6e05b8e6663763f86a13565a04d8a88c54aec0d78ff61"
+    },
+    {
+      "path": "backend-ts/src/sync-auto-read-suppression.ts",
+      "sha256": "73d1c7505c04770953770b79b1ee520b5bec339181ac5f841886b2ec310206be"
+    },
+    {
+      "path": "backend-ts/src/sync-history.ts",
+      "sha256": "f4ca1fe64549a0bbfa0b4a5d76e5af13bffe8918b48e8c8aef2c50fadba0f5d1"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-api.ts",
+      "sha256": "a7f34abc5bd3b27f5c3c0687fd58d5154cc006325e8977c0c91252f241878ee1"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-cli-history.ts",
+      "sha256": "f5ad7cc8ab088083e0f66454117d889e18acc2ef0ee942f5d0ef13034e1a54b0"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-cli-stream.ts",
+      "sha256": "084ba97d053b61791168b6323e7ec83477866d5ef4ef4a6e2a6c98e764926f03"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-cli.ts",
+      "sha256": "c33ad7975633fdeda53ccc70478eb52558fe8042bd1f80c3f9903fd8b80f82ef"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-engine.ts",
+      "sha256": "20b8fa7bc2f7a44e64598f4da4338173b386f34d338e2a9583497fcf27a44bc6"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-normalize.ts",
+      "sha256": "c5e2ecb7715c8b612ec30a56b455b590921e0b46a42f56269bbaff18fe717612"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-recovery.ts",
+      "sha256": "a16f288df57454e6718f491b6a775346f99d7e32ea2b818aba9f10f4249bc62f"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-store-write.ts",
+      "sha256": "c19413254f3e87bc1bb26b8286c72a499b5072db83060a05a7e70f7569afacca"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-store.ts",
+      "sha256": "b554439810e0116dae0e532934b51e4a1598cd1dab56edc3f4dcd85652cec71c"
+    },
+    {
+      "path": "backend-ts/src/sync-scope-history.ts",
+      "sha256": "97f46c6a3a7b4ff8e10f81b72693f7e942c9691eb24de79e631b7ff7df30a96b"
+    },
+    {
+      "path": "backend-ts/src/sync-scope.ts",
+      "sha256": "985eacf581ceec0464b1cce845be87122503a166a56d353614778c5a0bd7c62b"
+    },
+    {
+      "path": "backend-ts/src/task-api.ts",
+      "sha256": "4f42e2df004bb3832c817f81b8f2effaa9f70c14bb4ae771d9d3b1021ce8a5c4"
+    },
+    {
+      "path": "backend-ts/src/task-control.ts",
+      "sha256": "72075c832843bea20945559f88827b5efe4dcfaec8b38b5ab37ca300a7fa7402"
+    },
+    {
+      "path": "backend-ts/src/usage-summary.ts",
+      "sha256": "579c9bbaf4f65212dd1f79d7bf118fe95ac5f532268c89c66c52d800309dfde1"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/LICENSE",
+      "sha256": "bcaf06dea1a63d27aab5633035b620e0127295583456c2a9402565ef63ecb0b0"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/l1-dedup.ts",
+      "sha256": "4a327d6d13f5ab273ab47e2ec0706f32a1863bb3a0ae580d1ba0aecec6a0a71a"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/l1-extraction.ts",
+      "sha256": "07833a337227c2f63c63f9d3c5e3ebe4f60437a3f6288870ba7f9ec4def0329b"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/persona-generation.ts",
+      "sha256": "bdb6e862891954c0c865eee8652d947c3e572b77be8e5059e5f038773b93de2d"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/scene-extraction.ts",
+      "sha256": "1654561e9d3ffca4bf83168c024f57beafec33801cc180ee7857daea0e1c491e"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/upstream.json",
+      "sha256": "480d65649fe27885f2ec4662289859501e7fb9104146755da5e3b1c4f4fb59ac"
+    },
+    {
+      "path": "backend-ts/src/wechat-history-enrollment.ts",
+      "sha256": "f74f120507e520b6c486ff3452a7228602cf777e15ce2b30667d284cbf236a38"
+    },
+    {
+      "path": "backend-ts/src/wechat-http-body.ts",
+      "sha256": "1d89c6d78953df98d087f2922af8f6bb402a66decf3bd62464ca6b0ef88f7826"
+    },
+    {
+      "path": "backend-ts/src/wechat-scope-api.ts",
+      "sha256": "c6e8f893bd9f93a9a52751b83c4adc5b13cbb3049872a0e0593338697ec02958"
+    },
+    {
+      "path": "backend-ts/src/wechat-scope-json.ts",
+      "sha256": "728e88430d3b81fac64b0e9e7567e112b4fd587d9e724d127aadf0b2ba449f3e"
+    },
+    {
+      "path": "backend-ts/src/wechat-sessions.ts",
+      "sha256": "d07db2eff5d5fd068d761591a2944100773099a5a94fcc9c27113c32f7a13bf3"
+    },
+    {
+      "path": "backend-ts/src/wechat-setup-probe.ts",
+      "sha256": "1dc31af40a2cae6d1ed7c7ea924725566ef6119f592b5c41c2ef981959707aff"
+    },
+    {
+      "path": "backend-ts/src/wechat-setup.ts",
+      "sha256": "06d22fa459809c9562e217bb9fd5c62734c774655f67bca57e6fddd1b4dea8f6"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-model-budget.test.mjs",
+      "sha256": "ea5c646c0ef149c44d1f66be98fc9866c95f7b2c3e4cb2de850474612202a61b"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-problem-budget-node-fixture.mjs",
+      "sha256": "eb4bb4e169b87f5f911bf13e1e99ab2f2378486b03d086e8460bfb75f2d799f8"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-problem-budget-python-fixture.py",
+      "sha256": "d34f9ecebc1b911f541df0c5b13ec05f4de1015fa3d9445c8a0552282e548340"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-problem-budget.test.mjs",
+      "sha256": "87136a0a482131f421c3c80cb885c5e5207f3eacc0f00684533cd5b26c884cd7"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-scenario-budget-plugin.ts",
+      "sha256": "713658f186b0d7f4f5e27f5917dd2bfd11af876155d308b367556ec3a5c0acc6"
+    },
+    {
+      "path": "backend-ts/test/extraction-fixture.mjs",
+      "sha256": "f5e1e4c6c3f10c2d4a8225f897146999fa14a3d3fbb17cba47db8ab2a7e26e26"
+    },
+    {
+      "path": "backend-ts/test/extraction-flow.test.mjs",
+      "sha256": "d9c435756f14f58286d78c8948a02e8572d5b6c37034b9760beebf3f54678236"
+    },
+    {
+      "path": "backend-ts/test/host-storage-fixture.mjs",
+      "sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a"
+    },
+    {
+      "path": "backend-ts/test/l2-scenario-workspace.test.mjs",
+      "sha256": "21a6444fd2c02016454633a8dc564118ca64408dcd907db2c1a1a73748eff834"
+    },
+    {
+      "path": "backend-ts/test/l3-profile-workspace.test.mjs",
+      "sha256": "8bbceba8cc4a2bafccc56a35c564e149df0a9c56a23ada96d4408d1d7f91c719"
+    },
+    {
+      "path": "backend-ts/test/memory-adoption.test.mjs",
+      "sha256": "92b8cde2d6245f27ddd3b35dcc0425e3cd174241bdfec522853546cfd2ecd33e"
+    },
+    {
+      "path": "backend-ts/test/tencent-memory-source-integration.test.mjs",
+      "sha256": "15dfd785dc0693ca002a53be6babfce0e2f98ee63c9a47f18e9d8d0589ab4490"
+    },
+    {
+      "path": "backend-ts/tsconfig.json",
+      "sha256": "d50a8590a78979aa709503dba45cbdf944b96247dd1ae68947e2fde72b37c96d"
+    },
+    {
+      "path": "backend/database/migrations/001_initial_ingest.sql",
+      "sha256": "266aa314034ddc6a90835431c6ceaf6a129db8dab413e5ef03ee0e1211981ced"
+    },
+    {
+      "path": "backend/database/migrations/002_reject_overlapping_messages.sql",
+      "sha256": "ab15a9bd53a1cc9f882f926d146dd23c9f6295e16c12e3821ad56fbc67e80ad3"
+    },
+    {
+      "path": "backend/database/migrations/003_separate_contact_identity.sql",
+      "sha256": "667a77caf86520798f1ee7c3f33060e7b516c98206c7c707edc39bf73bfcab84"
+    },
+    {
+      "path": "backend/database/migrations/004_separate_wechat_message_metadata.sql",
+      "sha256": "f8627956db97c23588840b8320f1ad236d4e9d4e10309cd934f6f0beff65ca0e"
+    },
+    {
+      "path": "backend/database/migrations/005_source_deletion_state.sql",
+      "sha256": "78477ac6f7698339a21e6ba988c56b497c9712d91046f8a05447e8d635f39877"
+    },
+    {
+      "path": "backend/database/migrations/006_conversation_binding.sql",
+      "sha256": "ffc713db0b396047c6ba7784b834797e9d76010f4710aa01335d71ba62d1bc80"
+    },
+    {
+      "path": "backend/database/migrations/007_reply_store.sql",
+      "sha256": "d499b548fef5447bbf879cc835a83af1dd002fb2fc2f4762d3788d00923b30f2"
+    },
+    {
+      "path": "backend/database/migrations/008_skill_port.sql",
+      "sha256": "899794e2f597c03abd6c6ae886e6f4fc6cf27779cfbaaf9b78a09392a5be01f9"
+    },
+    {
+      "path": "backend/database/migrations/009_memory_store.sql",
+      "sha256": "9f06a927cd91bf08bc6bc869fcbe10c994699c2f15e0bee37a55607ac88af134"
+    },
+    {
+      "path": "backend/database/migrations/010_outbound_ledger.sql",
+      "sha256": "d2cc7a2f4e28869dde82ec9af8e6a99b20dae0eeac79b6c82660c4b4504e443a"
+    },
+    {
+      "path": "backend/database/migrations/011_owner_memory.sql",
+      "sha256": "b6625e31e7e0c8dde5c1ccc2ee2cd0542bc0c160d7149b4f2538ba047b7e3c2b"
+    },
+    {
+      "path": "backend/database/migrations/012_extraction_topic_watermark.sql",
+      "sha256": "a89b89ff270ad3760930ac022621915eeddc3cc591203b1734ed9a1bd9bf65a6"
+    },
+    {
+      "path": "backend/database/migrations/013_candidate_validity.sql",
+      "sha256": "4efaa08c7827ec1ab732695c2d2e27579e47557c153e79dd62641b496c6dc262"
+    },
+    {
+      "path": "backend/database/migrations/014_import_message_identity.sql",
+      "sha256": "b432b44299e62f7f654e0ae4f81359477b95e3e6914390934a0090e80aad16ba"
+    },
+    {
+      "path": "backend/database/migrations/015_owner_channel_identity.sql",
+      "sha256": "bd80538f71568d4a1136509159be5ec4715d45311fc6268212bd5ff1b29daecb"
+    },
+    {
+      "path": "backend/database/migrations/016_background_task.sql",
+      "sha256": "149848b261c3dc142341916e1055517d505386cc3eee29683a72004054886e9e"
+    },
+    {
+      "path": "backend/database/migrations/017_worker_lease_metadata.sql",
+      "sha256": "7066bcf16638124d08dc1bf8748768a1df7fb5eb69f4e7c46646b4fcb830ee9e"
+    },
+    {
+      "path": "backend/database/migrations/018_contact_memory_index.sql",
+      "sha256": "fc3107c0dc9d790bb0a27d3302ee9aa705e862928488ea91395bf5055496d363"
+    },
+    {
+      "path": "backend/database/migrations/019_binding_cli_match_metadata.sql",
+      "sha256": "0020c3817520bc06bc20dd1e1d5f0ec7c2fa1e6d7859f16fd1abcc41360f7249"
+    },
+    {
+      "path": "backend/database/migrations/020_local_wechat_observation.sql",
+      "sha256": "acfbfbbcc323e1d1e45cc12a05b63bc95a914abda0f84b6d6f9bc87d068ab8bb"
+    },
+    {
+      "path": "backend/database/migrations/021_message_source_ref.sql",
+      "sha256": "31ed56a17f363d29a9f4f29ed107930567dc99fab52e31b40cc9dcef25abc37e"
+    },
+    {
+      "path": "backend/database/migrations/022_front_sync_state.sql",
+      "sha256": "a4457c7bc998b817fef8a0d44c296490a15df007562343477bf495306507edb0"
+    },
+    {
+      "path": "backend/database/migrations/023_skill_library_resources.sql",
+      "sha256": "1c12e16e68952080078ec0f6fc31c4a07c743fe1f5ed157d1ab5ce61101015a8"
+    },
+    {
+      "path": "backend/database/migrations/024_skill_run_record.sql",
+      "sha256": "1299bfb6ab64fd6b78eefecb908e6c526f634a8dabc95fbcb63cf207a10233ac"
+    },
+    {
+      "path": "backend/database/migrations/025_manual_memory_source.sql",
+      "sha256": "4b3e3cd06f8944bb48696075e9d0b0cb39a0bf5adc4c38efed4fc463731490c4"
+    },
+    {
+      "path": "backend/database/migrations/026_cli_background_sync.sql",
+      "sha256": "23d6fdbf1ac8b153c3e5911c2c1743e36606b4b4dc02fe11a7d6c43ce2858934"
+    },
+    {
+      "path": "backend/database/migrations/027_memory_adoption_provenance.sql",
+      "sha256": "50067e0280bd005722f4486374880d38d6922d8087b5f0eb39861cd103a5ef4e"
+    },
+    {
+      "path": "backend/database/migrations/028_reply_context_evidence_metadata.sql",
+      "sha256": "3eb47e59ade749f730459146b94dd52e93f23f07b8c76f41a524a0c15cbb7c88"
+    },
+    {
+      "path": "backend/database/migrations/029_cli_backfill_state.sql",
+      "sha256": "dbf920f0d4dd4ac551c4593c9bdaac1fb8e0c5891695be63312c756d4b853db0"
+    },
+    {
+      "path": "backend/database/migrations/030_cli_observation_reliability_and_progress.sql",
+      "sha256": "918ab49b1ccf9ca8a2fec23f3dddad297726dfda94ec78ae46e463ad4f149bb9"
+    },
+    {
+      "path": "backend/database/migrations/031_cli_backfill_scheduler.sql",
+      "sha256": "187addae01a9c5c8bd0d4a5294f07e76a07d535b63d2d407e7911d9960d37184"
+    },
+    {
+      "path": "backend/database/migrations/032_memory_candidate_subject.sql",
+      "sha256": "c8c7073308c66135abadf59d899055eadb44c0e82b12e19a4871d4b1f99f5964"
+    },
+    {
+      "path": "backend/database/migrations/033_owner_memory_evidence_kind.sql",
+      "sha256": "dced994989341ccba424bddc68889415d6810e4c86be7ed68b46a16b885ee672"
+    },
+    {
+      "path": "backend/database/migrations/034_extraction_failure_recovery.sql",
+      "sha256": "a78d5bde2c9bc07c8681acf6d6f6512b40895b2fdedc3b3ed87f54dbea40381b"
+    },
+    {
+      "path": "backend/database/migrations/035_extraction_watermark_cascade.sql",
+      "sha256": "866aac5fc8e0bbfb3ad61315b3fef290587f760289ed1af95bc4a9867238b974"
+    },
+    {
+      "path": "backend/database/migrations/036_source_deletion_tasks.sql",
+      "sha256": "f7b2bcb052eccc1f050c8deb83174b500f0753f9906bcf84ddbe433afc440ba2"
+    },
+    {
+      "path": "backend/database/migrations/037_pending_candidate_evidence_kind.sql",
+      "sha256": "5f93a0b359a8672ef84d5c6238894b8df7157541854ada6bcdbe0321f9fe1f16"
+    },
+    {
+      "path": "backend/database/migrations/038_memory_candidate_interpretation.sql",
+      "sha256": "89792f844e728adfac5001439d9d5213c7365a2abfe468262f1aa04caab27bc0"
+    },
+    {
+      "path": "backend/database/migrations/039_memory_extraction_trace.sql",
+      "sha256": "1180a3e0746410cd9015d7ae1f00883c42ff6eece34f997ab56f2a82f3b15485"
+    },
+    {
+      "path": "backend/database/migrations/040_source_processing_trace.sql",
+      "sha256": "28aa0d2d31c3f803fa1c1c994d7e5599e029ac2e73559b6006d9b26f4f4612b2"
+    },
+    {
+      "path": "backend/database/migrations/041_source_processing_capture_tombstone.sql",
+      "sha256": "2e35f43c8cbc712cfdd13bc68e62edb6ae0e372d9bf13cd99a0f071b9eae1ae6"
+    },
+    {
+      "path": "backend/database/migrations/042_extraction_trace_call_receipts.sql",
+      "sha256": "237da740428330fc9da965fa4cf980cfa4aaba8b57ab38ebd0c1fc6a9ae63bec"
+    },
+    {
+      "path": "backend/database/migrations/043_extraction_trace_record_operations.sql",
+      "sha256": "9cfc466353d6b8cc154857cabda9e51df559a0a17498caad47efd4e7081fd651"
+    },
+    {
+      "path": "backend/database/migrations/044_owner_memory_versioning.sql",
+      "sha256": "1a457882c62808f13479a4a56e19a98a3c13b74f94a0d6bfb3e4967985debfdf"
+    },
+    {
+      "path": "backend/database/migrations/045_observation_background_task.sql",
+      "sha256": "224fc3d3fe951fc26175b3a40425282c65ee4002afabd72425395a26b424f9e0"
+    },
+    {
+      "path": "backend/database/migrations/046_background_step_lease_generation.sql",
+      "sha256": "6aa70eb684b6173a0f389c43fee6399df44b8a826d877218eed0411e982261f8"
+    },
+    {
+      "path": "backend/database/migrations/047_observation_memory_enqueue_receipt.sql",
+      "sha256": "ff1b655c22eb4ef3168e6b870df5eabbc898777984e5797e9ccdda036087e609"
+    },
+    {
+      "path": "backend/database/migrations/048_assistant_sessions.sql",
+      "sha256": "bfad45fbc4e829692645fb05a1d3dc2d5646d4d8d975ac38e2f0aee7364560ec"
+    },
+    {
+      "path": "backend/database/migrations/049_style_samples.sql",
+      "sha256": "069ef61e3ea408186ed85a235bc879cb2f070a67ce368f749b091e9f2644ca4a"
+    },
+    {
+      "path": "backend/database/migrations/050_reply_purpose_evidence.sql",
+      "sha256": "de1408cf5a1ecbf446a911843d32b32c6b17193dcbcbc24c79ae91286ecc38ec"
+    },
+    {
+      "path": "backend/database/migrations/051_assistant_session_inputs.sql",
+      "sha256": "da5e59f199067db1869e6299d03132bf652cfa35392aeb296bb5ce0ea45d694f"
+    },
+    {
+      "path": "backend/database/migrations/052_reply_exploration.sql",
+      "sha256": "98e4ba97e6d33abbede488f3e44cc300db250b685a71b574bd224d76da42f926"
+    },
+    {
+      "path": "backend/database/migrations/053_assistant_candidate_versions.sql",
+      "sha256": "38fea517ff30b782baf30799defc8da7f48e555635f057c40c2bffdb31cf129d"
+    },
+    {
+      "path": "backend/database/migrations/054_assistant_generation_interruption.sql",
+      "sha256": "473a21d645794d9b9595b0ff0b73f42909db2a9a346d0bfa4f56acb39b4e7802"
+    },
+    {
+      "path": "backend/database/migrations/055_assistant_candidate_carry_input.sql",
+      "sha256": "71d1f2e7ff684235d3701c83c1972626ab1976e18a47f8f1f42af68c0e73315b"
+    },
+    {
+      "path": "backend/database/migrations/056_memory_candidate_dimension_evidence.sql",
+      "sha256": "b3bfa8a7cc7f72181d159ce37f560b72769a2bd300cb40b63c9b88b23ad3d401"
+    },
+    {
+      "path": "backend/database/migrations/057_memory_candidate_semantic_basis.sql",
+      "sha256": "2a65ad790c7a36ac923e12e7867ca58f9fe2db1a988bb1473fe4bbee9fd7e94f"
+    },
+    {
+      "path": "backend/database/migrations/058_assistant_prepared_context.sql",
+      "sha256": "02583541a7ea389e8e11e79d06ee403d0916d8bd7ca626296d1e4d2ea95f7663"
+    },
+    {
+      "path": "backend/database/migrations/059_memory_candidate_author_quote_basis.sql",
+      "sha256": "b469565f317510b4d454cdd1115545788b75a3c18bf0569354b02849413a03a1"
+    },
+    {
+      "path": "backend/database/migrations/060_manual_contact_confirmation.sql",
+      "sha256": "56502637470e394477607068176ae05a544a3ee6e5a3dd5ce9845a0579713e5b"
+    },
+    {
+      "path": "backend/database/migrations/061_memory_correction_protection.sql",
+      "sha256": "458cddaea770cd12e61f60e2bac5469634585834a8dc4b6247c721f34dd9f78e"
+    },
+    {
+      "path": "backend/database/migrations/062_memory_events_and_version_evidence.sql",
+      "sha256": "ed641686c45c7e35b262208f2da3126895f611b6d9d326cb6b221e74a6236b2f"
+    },
+    {
+      "path": "backend/database/migrations/063_relationship_overview_projection.sql",
+      "sha256": "9151d4d0f7a058c1fef1f7af9df640b5d82d4fe8b417fc68f2bad2aa62da46c8"
+    },
+    {
+      "path": "backend/database/migrations/064_owner_memory_revision.sql",
+      "sha256": "a8f0148a94b491d0b19f475dc24ce863bea7e3fca7b5d88113fbb03531d42a04"
+    },
+    {
+      "path": "backend/database/migrations/065_expression_preferences.sql",
+      "sha256": "b88bbbcd32ab32a8e4d61ab40a6d552050d5519ed2092cab7106c0c71cd8afc3"
+    },
+    {
+      "path": "backend/database/migrations/066_skill_learning_drafts.sql",
+      "sha256": "c59bc7779ed497c127b1f4822a051ef72d21de9dfa4d8508224d124b44a7132d"
+    },
+    {
+      "path": "backend/database/migrations/067_memory_upgrade_batches.sql",
+      "sha256": "591f5831dcb65ec2ef03a52b040084876577aa3d87f84edee4e9c944ff21b916"
+    },
+    {
+      "path": "backend/database/migrations/068_skill_review_publication.sql",
+      "sha256": "b6347262bd3c488fb1cdaa0fbdffa9ff1ff1a16a851ab1113ab9d6b748814c9a"
+    },
+    {
+      "path": "backend/database/migrations/069_skill_history_operations.sql",
+      "sha256": "7a2780fddd439393aa749019a25bd2896e409b293f91df994ae27d65bacc2fc6"
+    },
+    {
+      "path": "backend/database/migrations/070_skill_scope_policies.sql",
+      "sha256": "1670f66e4cc08371cbf4ffc97ffc2cceb26bea9da86e14757f86d56fb38f4bc6"
+    },
+    {
+      "path": "backend/database/migrations/071_bounded_runtime_evidence.sql",
+      "sha256": "5fc8e8a0a80fd8863ed34f7a33aa2ab73494aee2e9ddab635f297253a0d6fefb"
+    },
+    {
+      "path": "backend/database/migrations/072_scoped_media_lifecycle.sql",
+      "sha256": "29c1e77a9745613fa1fc6c327d5957704b06a4df04c1c52644725613932b1e22"
+    },
+    {
+      "path": "backend/database/migrations/073_layered_scenario_documents.sql",
+      "sha256": "b7543f3a07ee61dbda089426a90cfff80ed482eacb2b8f3e94c5daab72c011ea"
+    },
+    {
+      "path": "backend/database/migrations/074_layered_memory_coverage.sql",
+      "sha256": "d9d7c54cf6dac6e17a3b3d0c976a6af24007ec3be1e012fdb610eef6187424e5"
+    },
+    {
+      "path": "backend/database/migrations/075_layered_profile_generation.sql",
+      "sha256": "fea7275b63fb434f13b2fb299e6ab71c3bf2933e1ea47313920737e33e0f16c5"
+    },
+    {
+      "path": "backend/database/migrations/076_layered_memory_maintenance.sql",
+      "sha256": "c0026f4645aadad952ef1859b9190a71e03a6d4c31859e797e12a3716139c9e9"
+    },
+    {
+      "path": "backend/database/migrations/077_owner_layered_scope.sql",
+      "sha256": "b338c5933417abd390886c09520dd8fe31509cff58d314e56c19cd123ace9c2b"
+    },
+    {
+      "path": "backend/database/migrations/078_layered_memory_corrections.sql",
+      "sha256": "462506b23dcaab742238480c48d97b6b916aa0f78ea672121ab1c14d6594ade3"
+    },
+    {
+      "path": "backend/database/migrations/079_organization_quality.sql",
+      "sha256": "cb276f0fb6d0041c44298738dc7e4f86a40d23b919663b0f7cf015f6e7214c23"
+    },
+    {
+      "path": "backend/database/migrations/080_memory_merge_parents.sql",
+      "sha256": "60036db7222061ab57491bdb9a410299cc5dd782adc3e54c9e28fa6c2dba5aa5"
+    },
+    {
+      "path": "backend/database/migrations/081_memory_retirement_reason.sql",
+      "sha256": "a0af6040ed5224317658bd021586157b46eec6a4ea7d4d8344c5d71b2e1c07f9"
+    },
+    {
+      "path": "backend/database/migrations/082_memory_full_source_lifecycle.sql",
+      "sha256": "3801db0b830a087ad8cac173089d3b76b5f2e4912642b75e8b5a1188bfa3bd9c"
+    },
+    {
+      "path": "backend/database/migrations/083_default_memory_maintenance.sql",
+      "sha256": "bb20f446e140b67a6de1408c9ba19a744a717d73197498211aee10156b997042"
+    },
+    {
+      "path": "backend/database/migrations/084_memory_retirement_audit.sql",
+      "sha256": "64853f65bdcef9bd81e515eb03f9f8edc71855abd70b49a0a3446c4e2c97b25a"
+    },
+    {
+      "path": "backend/database/migrations/085_retired_layered_fact_receipts.sql",
+      "sha256": "821cb58cae3152cc082305d3683bd169a2c177a085fa62d408cd0908afb60f9c"
+    },
+    {
+      "path": "backend/database/migrations/086_merge_parent_deletion_cleanup.sql",
+      "sha256": "e77ef8a6c702ed36ef9405234e04a4baf5a550054aece32519f90057baa132a2"
+    },
+    {
+      "path": "backend/database/migrations/087_extraction_trace_merge_operation.sql",
+      "sha256": "c475bce126f9da60c1aa700bc96ca2c58a447ce4073209b3904c4df121901335"
+    },
+    {
+      "path": "backend/database/migrations/088_cli_opaque_cursor_order.sql",
+      "sha256": "dc50df9bb583365284c802fa0536e35497267abce519941e31c1eb3bf4e6f2d3"
+    },
+    {
+      "path": "backend/database/migrations/089_style_sample_generation_dependencies.sql",
+      "sha256": "40571f3d42815cb18858e3dea6c458b3b42f6273080f52258cbdff3cb786e4ea"
+    },
+    {
+      "path": "backend/database/migrations/090_memory_processing_progress.sql",
+      "sha256": "54c4175397d5160da3e824f48ead4655bb79bdbc8b15af838743569aac3e3932"
+    },
+    {
+      "path": "backend/database/migrations/091_memory_processing_scope_receipts.sql",
+      "sha256": "16eea125a43d51974d47ae76a2ecd8e0ae06dfea6f8907e933a78b61b985f4c4"
+    },
+    {
+      "path": "backend/database/migrations/092_memory_applicability_conditions.sql",
+      "sha256": "ee5d8981aa135d9840f109565621ffe6a75f04e90a55508bded1bfbc60656bbc"
+    },
+    {
+      "path": "backend/database/migrations/093_memory_event_calendar_precision.sql",
+      "sha256": "ab76ccab75727a2c6b247354907185f39c1fe088835981627447527683b1e6c8"
+    },
+    {
+      "path": "backend/database/migrations/094_memory_evidence_timeline.sql",
+      "sha256": "f69631361ac2dfd2bd319cb76a4db6a29843f0ff2f2482a1d6091165a570f112"
+    },
+    {
+      "path": "backend/database/migrations/095_relation_verification_call_receipts.sql",
+      "sha256": "2c2ace4ac3c35d449ae1328a411c7766dccfd0cd04def8bd7a4f37c12ec9a392"
+    },
+    {
+      "path": "backend/database/migrations/096_retire_style_samples.sql",
+      "sha256": "aecbd5863eaf8954bdbdb42fcff3b0e2d8749e6f8e119c254f7721e27bab47cc"
+    },
+    {
+      "path": "backend/database/migrations/097_persistent_extraction_schedule.sql",
+      "sha256": "701295d231c53fa243e85b594f32291374d6bd4aba23d29b0d52ae1b40a0007b"
+    },
+    {
+      "path": "backend/database/migrations/098_import_statement_overview_invalidation.sql",
+      "sha256": "1c2cccd7cacdf1936f19a59c46374296b3fad067c5050feb900ff1422f2ce94a"
+    },
+    {
+      "path": "backend/database/migrations/099_message_page_indexes.sql",
+      "sha256": "ac4a9a2a71bd40b9fc074c915eb2e3e90ef311ab986258f66f326943227894da"
+    },
+    {
+      "path": "backend/database/migrations/100_all_private_sync_scope.sql",
+      "sha256": "87f4a2d6617d943cf9cd39ef10312c46b1a11efe250d89cc69622982aaa7a53a"
+    },
+    {
+      "path": "backend/database/migrations/101_directory_reply_skills.sql",
+      "sha256": "0c032a12691edf917f56ae845986a01b81d8f7784aefb85a62856a008f6b427b"
+    },
+    {
+      "path": "backend/database/migrations/102_skill_method_manifests.sql",
+      "sha256": "6bbad63a470bd8f870dfe81fa3d1a24f7407c40b9c2b80a6d709a077f2086ebb"
+    },
+    {
+      "path": "backend/database/migrations/103_skill_business_state_only.sql",
+      "sha256": "af9b52f1404eb27ffc3aa15262e03c8f1d750a39c7fb68c8012d9eb4a6cef696"
+    },
+    {
+      "path": "backend/database/migrations/104_cli_history_sync_state.sql",
+      "sha256": "1c0c37ef68097621de81bdfb9a590c673f4bd30e04c34ac5f032605d59eb2580"
+    },
+    {
+      "path": "backend/database/migrations/105_history_sync_authorization.sql",
+      "sha256": "dab3acb82a7b8b78fe8296951122f035a1c6759ca78f7c5a028fdeb53176a8a1"
+    },
+    {
+      "path": "backend/database/migrations/106_extraction_queue_pending_index.sql",
+      "sha256": "9c50f24ad2528732dc893ecc00e7bcaeea93d9af266df192d84063aff171f793"
+    },
+    {
+      "path": "backend/database/migrations/107_history_message_count_comment.sql",
+      "sha256": "484cde6418b77286d1a6dff55dfd9075dde3d30c228e097a17a659c1c8e4415e"
+    },
+    {
+      "path": "backend/database/migrations/108_wechat_binding_history_authorization.sql",
+      "sha256": "8a6c2c41ea4b0df7a448c02827e9b447a53b3a82d04334d450456d0f00402d0a"
+    },
+    {
+      "path": "backend/database/migrations/109_wechat_auto_read_suppression.sql",
+      "sha256": "2582079415b7a41653d598d84f266702a0ec78d39feddb667857dc7c691846e1"
+    },
+    {
+      "path": "backend/database/migrations/110_model_call_receipt.sql",
+      "sha256": "50a26e310a7ef8c38f2f4ee1615d1007748b2e53d481198f736eb856e22e54ed"
+    },
+    {
+      "path": "backend/database/migrations/111_model_call_learning_claim.sql",
+      "sha256": "98ecb83f54fa0302e3cbb9c37398041d37e0985013ade6a4b66ad8757e64d079"
+    },
+    {
+      "path": "backend/database/migrations/112_merge_verification_call_receipts.sql",
+      "sha256": "b8952d044200ef25ca2d2ba78d3f91ae5c2cddb1aea03d24f6ce71a6fbe519d8"
+    },
+    {
+      "path": "backend/database/migrations/113_cross_domain_deletion_operations.sql",
+      "sha256": "018a0660b4cb90f7be77b81515c7b53dd369dc3f7de0ee45b23daae0ad16f141"
+    },
+    {
+      "path": "backend/database/migrations/114_cross_domain_source_identity_and_leases.sql",
+      "sha256": "c09fb4a9303519ed66f3a7792f9f3e0a950b3771d7bb979c2c470922d84adecf"
+    },
+    {
+      "path": "backend/database/migrations/115_user_cancelled_generation.sql",
+      "sha256": "6b893bd75d6cd18b142bfa82ed2ce8b6549c10d2c5cf0fc943bd24548d7c15a5"
+    },
+    {
+      "path": "backend/src/notalone/database_migrations.py",
+      "sha256": "b6011e0ceda8202f76aa09b3370088596982e74e42525084a70f889adaee704f"
+    },
+    {
+      "path": "docs/third-party/tencent-memory-reference.md",
+      "sha256": "09fece1e7da4a77cbf9498cb85482bc8a6585bfe13c9bc346011fc14e5c0e037"
+    },
+    {
+      "path": "scripts/check_tencent_memory_source.mjs",
+      "sha256": "d1891e33d11a5d724c98ef4f8b893f0b672992f31e83944733ecb5f8a564ee84"
+    }
+  ]
+}

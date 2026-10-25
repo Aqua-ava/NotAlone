@@ -1,0 +1,19 @@
+{
+  "tested_candidate": "a61a21407c9395c462e4e68bfeee4628e7e9b15c",
+  "head_at_delivery": "a61a21407c9395c462e4e68bfeee4628e7e9b15c",
+  "source_drift": [],
+  "tests_passed": 18,
+  "handoff_lines": 19,
+  "output_hashes": {
+    "baseline-manifest.json": "5abf7fdf5837d350f549c3b053ef36c6cb1ebe98a3273cd709b1dad222d143bf",
+    "runtime.json": "6f2c4384f187a3095128caaa233c8670711393772b7ee355e1a4770d3db79cde",
+    "report.md": "6d331536b7ff24c976972f2d200cc4038d121de1f76aee5b99a475c9909b6982",
+    "tencent-port.test.mjs": "d0cc931a1978b65bb24677a73723b603e6ba309694d6320fa2b7717f0c482d4e",
+    "independent-wire.test.mjs": "6a6facc17880c19fe355ac3439445790bbf37d54cd267f0b0304234ead7f918a",
+    "independent-wire-result.json": "9de2ea0a7e17f75919a9d66af3b6725ad0c91d9703689f957e7d98c32f497d57",
+    "tested-source-manifest.json": "ba7dbfdbeeb9aacd45e7aa35f51e9e251058563693adb8fa5404a4dfb034c88d",
+    "execution-record.json": "d5bd7578d64dcbf180e512ae3794036dec2f6cee6a7ea836b9853ca295bde9cc",
+    "handoff.md": "347145140365fdd72863219536ca895f3da2540c87bbbb1405d113320f44db58",
+    "preparation-manifest.json": "7599996b36ec3bce7499563a3c6520b59928e55e49112769af3006771a39cf3a"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "sha": "a61a21407c9395c462e4e68bfeee4628e7e9b15c",
+  "stage": "related",
+  "command": [
+    "$USER_HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "--test",
+    "--test-concurrency=1",
+    "--test-name-pattern=正式提取|批量裁决|统一候选池遇到|文档工具只暴露|L3多轮提案压缩|L3文档工具只能读取|L3画像在错误写入后|E仅重试已结算",
+    "backend-ts/test/tencent-memory-source-integration.test.mjs",
+    "backend-ts/test/l2-scenario-workspace.test.mjs",
+    "backend-ts/test/l3-profile-workspace.test.mjs",
+    "backend-ts/test/extraction-flow.test.mjs"
+  ],
+  "exit_code": 0,
+  "summary": "ℹ tests 8\nℹ pass 8\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ duration_ms 231.813",
+  "log_sha256": "1df40a7e91324641a659b8fab284017034046524e149f4acb0b3e53738f35cf3",
+  "frozen_file_count": 362,
+  "source_drift": [],
+  "real_model_calls": 0,
+  "log_mode": "0o600"
+}

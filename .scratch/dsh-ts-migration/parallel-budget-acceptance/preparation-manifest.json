@@ -1,0 +1,22 @@
+{
+  "head": "611292975cbfb614f23f2d4b994700a2eb12620b",
+  "files": {
+    ".scratch/dsh-ts-migration/resumed-memory-budget-guard/files.json": "e1f5136234115e3772a933948c8deb5ef69b6721e9e84d7c115f8ed5fd827907",
+    ".scratch/tencent-source-reuse/freeze.json": "edc0ab83e90d6497d5f0fb5fc1c558f201a11402979b8dcf938d5f91da4c2d8a",
+    ".scratch/tencent-source-reuse/owned-files.txt": "cb0aa0ca987c5415a75fac171a776c282f29069ff6cda31858897cfa00ce1352",
+    "backend-ts/diagnostic-problem-budget.md": "d40b471aaf5935e1574aa516891a658cef7997decee773f81ef865439a255c04",
+    "backend-ts/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": "eba35025ed1eedda89c51f2da46a3a968f7be1d59719f2ceeadfc4518dff37d6",
+    "backend-ts/src/diagnostic-problem-budget.ts": "6bb10e2a4cbc1572970ea2dccc08e94f96c179f95f430a4ab169322ca2e449e8",
+    "backend-ts/src/host-model-accounting.ts": "b2ea52b7cda43e20aa12f82bce756ece5a6e8bc76239c41d31c1910a51e74454",
+    "backend-ts/src/l2-scenario-model.ts": "c387b457ac8d4b3b65433b15e6e85b075a889d4d0eb284db5b91a874efc4c41c",
+    "backend-ts/src/model-provider.ts": "98e7026309d74442e92d47bab0a63006b2b26364b4840908c9578391b5db9311",
+    "backend-ts/test/diagnostic-model-budget.test.mjs": "ea5c646c0ef149c44d1f66be98fc9866c95f7b2c3e4cb2de850474612202a61b",
+    "backend-ts/test/diagnostic-problem-budget-node-fixture.mjs": "eb4bb4e169b87f5f911bf13e1e99ab2f2378486b03d086e8460bfb75f2d799f8",
+    "backend-ts/test/diagnostic-problem-budget-python-fixture.py": "d34f9ecebc1b911f541df0c5b13ec05f4de1015fa3d9445c8a0552282e548340",
+    "backend-ts/test/diagnostic-problem-budget.test.mjs": "87136a0a482131f421c3c80cb885c5e5207f3eacc0f00684533cd5b26c884cd7",
+    "backend-ts/test/diagnostic-scenario-budget-plugin.ts": "713658f186b0d7f4f5e27f5917dd2bfd11af876155d308b367556ec3a5c0acc6",
+    "backend-ts/test/extraction-model-plugin.ts": "089101b0bf9f997a8d6d8006a060f02c4d673a17692131ecc3d88f0a23c9afd4",
+    "backend/src/notalone/experiments/problem_budget.py": "a4fad958bb5148cc79c2bc8d2992edded941620f94422ecb0d456c33884c03b7",
+    "backend/src/notalone/problem_budget.py": "684b7bd9e4311ee95296f34fb030c89622a33f1f72dda0466de206df1a42efa0"
+  }
+}

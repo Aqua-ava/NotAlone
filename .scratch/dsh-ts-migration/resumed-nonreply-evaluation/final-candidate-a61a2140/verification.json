@@ -1,0 +1,72 @@
+{
+  "schema_version": "nonreply-final-candidate-verification-v1",
+  "date": "2026-10-25",
+  "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+  "new_commit": "a61a21407c9395c462e4e68bfeee4628e7e9b15c",
+  "original263_verification_sha256": "9c612f23d9548f83b8fd1f1fb1195dc765a5618703986eec66af2ff7269d3c71",
+  "original263_hashed_files_preserved": 17,
+  "existing_harness_unchanged": {
+    "retrieval.test.mjs": "d5f4658a2976c061541c3849987cb8637378ea9021b9912e6dfebd3bcb38fe0b",
+    "runtime.test.mjs": "3eec2348c0a05081336eac045a4f812b6048494f18a2dfc38176d66692320da9",
+    "runner.mjs": "b10be821448e219d5b1b800514883baeeaa8325d0981580debca0a7bb57f36fa",
+    "offline-adapter.mjs": "86d194184d8243fae35264294e4877fd27ca1e983e9e358b988f8cd4944f1362",
+    "old-arm.py": "144c8980216f743cc0c33f4e3ce87bdb405999e16d229e8d7f9573ab9ce2a73a",
+    "retrieval.mjs": "77ac1ddc4fb70f43e61d21d058375c72d7a910eec4f913472b525554d683b2bf",
+    "material-export.py": "561c4f73e1a6cacfb5c04826f0e0c68844a9d1b08e5da647e4e25e18fff4f5ba",
+    "blind.mjs": "7812e915f749a967b55947a22788d462bbcaf25c9b424adf70b55c14a20ba91c"
+  },
+  "execution": {
+    "root": "read_only_git_archive",
+    "command": "runner.mjs fake --new-commit a61a21407c9395c462e4e68bfeee4628e7e9b15c --case-ids [明确事实,l2_scenario-01,l3_profile-01,skill_learning-01]",
+    "exit_code": 0,
+    "log_sha256": "e599158cc1b1aecc1fd1979bbea568a625164f2f0a0908eacd50cba6ad6f9580"
+  },
+  "material_manifest_sha256": "84b81a3255bffe8bc69da6f38c0dd79e1ba83510454ef8a9091c947b995b362b",
+  "dsh_commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "population": {
+    "planned": 1152,
+    "recorded": 24,
+    "missing": 1128
+  },
+  "nonreply_population": {
+    "planned": 1056,
+    "recorded": 24,
+    "succeeded": 24,
+    "failed": 0,
+    "cancelled": 0,
+    "unknown": 0,
+    "missing": 1032
+  },
+  "fake_http_calls": 51,
+  "real_model_calls": 0,
+  "hard_failures": 0,
+  "execution_failure": null,
+  "overall": "undetermined",
+  "quality_verified": false,
+  "independent_semantic_reviews_completed": 0,
+  "budget_cap_specialized_test_performed": false,
+  "retrieval_or_vector_inference_rerun": false,
+  "retrieval_hash_review": {
+    "unchanged": 45,
+    "checked": 46,
+    "changed_only": [
+      "backend-ts/src/reply-evidence-alias.ts"
+    ],
+    "inbound_edges": "two_type_only_imports",
+    "lockfiles_unchanged": true,
+    "assets_rehashed": false
+  },
+  "cleanup": {
+    "owned_source_stage_kib_before": 19560,
+    "owned_source_stage_kib_after": 0,
+    "owned_source_stage_removed": true,
+    "known_live_references": 0,
+    "unknown_evidence_deleted": false
+  },
+  "source_files": {
+    ".scratch/dsh-ts-migration/resumed-nonreply-evaluation/final-candidate-a61a2140/plan.json": "07be666522231aabf8879dee99c586284f41b4814b9c92512a7727ed89e322e7",
+    ".scratch/dsh-ts-migration/resumed-nonreply-evaluation/final-candidate-a61a2140/report.json": "cdbb48e5e4b90e81d208c57a0cb9f27214eb6d6450f80dd969b19365732fa717",
+    ".scratch/dsh-ts-migration/resumed-nonreply-evaluation/final-candidate-a61a2140/report.md": "39bc24931d4d232fa68c22418f036d5f40532dbe2eb40f6e1bd0b4fe99c6d2fa",
+    ".scratch/dsh-ts-migration/resumed-nonreply-evaluation/final-candidate-a61a2140/retrieval-source-equivalence.json": "b40e37410f012e5d4d14116aa503c4f3888e406488260126d575086a074b45de"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "head": "611292975cbfb614f23f2d4b994700a2eb12620b",
+  "upstream_head": "6a4bb55ea54834d8265ce52024d3e3c75db30d38",
+  "license_matches": true,
+  "modules": [
+    {
+      "path": "l1-extraction.ts",
+      "source_hash_matches": true,
+      "local_hash_matches": true,
+      "identical_lines": 47,
+      "local_lines": 61
+    },
+    {
+      "path": "l1-dedup.ts",
+      "source_hash_matches": true,
+      "local_hash_matches": true,
+      "identical_lines": 107,
+      "local_lines": 130
+    },
+    {
+      "path": "scene-extraction.ts",
+      "source_hash_matches": true,
+      "local_hash_matches": true,
+      "identical_lines": 78,
+      "local_lines": 103
+    },
+    {
+      "path": "persona-generation.ts",
+      "source_hash_matches": true,
+      "local_hash_matches": true,
+      "identical_lines": 79,
+      "local_lines": 104
+    }
+  ],
+  "freeze_file_count": 26,
+  "freeze_mismatch": [],
+  "final_sha_supplied": false
+}

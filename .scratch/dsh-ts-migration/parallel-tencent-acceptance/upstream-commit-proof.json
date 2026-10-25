@@ -1,0 +1,22 @@
+{
+  "commit": "6a4bb55ea54834d8265ce52024d3e3c75db30d38",
+  "license_fixed_commit_matches": true,
+  "modules": [
+    {
+      "module": "l1-extraction.ts",
+      "fixed_commit_source_matches": true
+    },
+    {
+      "module": "l1-dedup.ts",
+      "fixed_commit_source_matches": true
+    },
+    {
+      "module": "scene-extraction.ts",
+      "fixed_commit_source_matches": true
+    },
+    {
+      "module": "persona-generation.ts",
+      "fixed_commit_source_matches": true
+    }
+  ]
+}
