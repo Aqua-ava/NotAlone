@@ -160,7 +160,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
         : generationStatusText[job.phase]}</p>
       {job === visibleJob && job.phase !== 'stopping' && <button
         aria-label="停止本次生成"
-        disabled={busy}
+        disabled={deleting || replies.state.sessionDeletion === 'failed'}
         onClick={() => void replies.stopGeneration(job.sessionId, job.requestKey, job.inputVersionId)}>
         停止本次生成
       </button>}

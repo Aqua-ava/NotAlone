@@ -59,7 +59,9 @@ test('助手会话尚未加载时，当前联系人的唯一运行作业仍可�
     turnId: 'c47f80c6-c6ac-4627-a098-8b53a6678e12',
     inputVersionId: '5ae0cbda-2888-4361-a996-ac75b0a6d77f',
   }, { phase: 'loading', sessionId: null, turns: [], inputs: [], currentInputVersionId: null });
-  assert.match(html, /<button[^>]*aria-label="停止本次生成"[^>]*>停止本次生成<\/button>/);
+  const button = html.match(/<button[^>]*aria-label="停止本次生成"[^>]*>/)?.[0];
+  assert.ok(button);
+  assert.doesNotMatch(button, /disabled/);
 });
 
 test('显示另一助手会话时，当前联系人的唯一后台生成仍可停止', () => {

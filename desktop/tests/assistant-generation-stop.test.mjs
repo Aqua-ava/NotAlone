@@ -175,6 +175,50 @@ test('用户停止按原作业只发送一次 user_cancelled 中断并收敛为�
   assert.doesNotMatch(html, /生成失败，可核对原请求后重试/);
 });
 
+test('准备回执通过状态推送发布当前联系人生成作业，不依赖 renderer 轮询 getState', async () => {
+  const f = await fixture();
+  const observed = [];
+  const unsubscribe = f.bridge.onStateChanged((state) => observed.push(state));
+  try {
+    const contactId = f.sessions.keys().next().value;
+    const scope = await f.select(contactId);
+    const generating = f.bridge.generate({ ...scope, newRequest: true });
+    const state = await eventually(() => Promise.resolve(observed.at(-1)), (value) =>
+      value?.generationJobs?.some((job) => job.contactId === contactId
+        && job.phase === 'generating'), '状态推送未携带运行中的 generationJobs。');
+    const job = state.generationJobs.find((item) => item.contactId === contactId && item.phase === 'generating');
+    assert.equal(job.sessionId, f.sessions.get(contactId).sessionId);
+    await f.replies.beginGenerationClosing();
+    await generating.catch(() => {});
+  } finally {
+    unsubscribe();
+  }
+});
+
+test('生成作业变化通过预载补丁携带 generationJobs，并由订阅合成完整状态', async () => {
+  const f = await fixture();
+  const patches = [], states = [];
+  const stopEvents = f.bridge.onStateUpdated((event) => patches.push(event));
+  const unsubscribe = f.bridge.onStateChanged((state) => states.push(state));
+  try {
+    const contactId = f.sessions.keys().next().value;
+    const scope = await f.select(contactId);
+    const generating = f.bridge.generate({ ...scope, newRequest: true });
+    const patch = await eventually(() => Promise.resolve(patches.find((event) => event.kind === 'patch'
+      && Array.isArray(event.changes.generationJobs) && event.changes.generationJobs.length)),
+    Boolean, '状态补丁未携带 generationJobs。');
+    const state = await eventually(() => Promise.resolve(states.at(-1)), (value) =>
+      value?.generationJobs?.some((job) => job.contactId === contactId
+        && job.phase === 'generating'), '订阅端未合成 generationJobs。');
+    assert.equal(patch.changes.generationJobs[0].requestKey, state.generationJobs.find((job) =>
+      job.contactId === contactId && job.phase === 'generating').requestKey);
+    await f.replies.beginGenerationClosing();
+    await generating.catch(() => {});
+  } finally {
+    stopEvents(); unsubscribe();
+  }
+});
+
 test('联系人切换后旧停止命令不能中断新生成，旧作业身份也不会延伸到新请求', async () => {
   const f = await fixture();
   const contactA = f.sessions.keys().next().value;
@@ -225,6 +269,7 @@ test('隐藏小窗和Esc离开视图不取消生成，真正退出才按原作�
   const f = await fixture();
   const contactId = f.sessions.keys().next().value;
   const scope = await f.select(contactId);
+  const oldSession = f.sessions.get(contactId);
   const { generating, job } = await f.start(scope);
 
   f.replies.notifyHelperLifecycle('hidden');
@@ -261,6 +306,29 @@ test('同联系人新开会话只切换展示，不取消原生成，退出仍�
   await generating.catch(() => {});
   assert.deepEqual(f.interruptReasons(), ['app_quit']);
   assert.equal(oldSession.turns[0].interruptionReason, 'app_quit');
+});
+
+test('显示另一助手会话时，可按原作业停止当前联系人的后台生成且不切换展示', async () => {
+  const f = await fixture();
+  const contactId = f.sessions.keys().next().value;
+  const scope = await f.select(contactId);
+  const oldSession = f.sessions.get(contactId);
+  const { generating, job } = await f.start(scope);
+
+  await f.replies.newSavedSession(scope);
+  const displayed = await f.bridge.getState();
+  assert.notEqual(displayed.savedSession.sessionId, job.sessionId);
+
+  await f.bridge.stopGeneration({ ...scope, sessionId: job.sessionId,
+    requestKey: job.requestKey, inputVersionId: job.inputVersionId });
+  await generating.catch(() => {});
+
+  assert.deepEqual(f.interruptReasons(), ['user_cancelled']);
+  assert.equal(oldSession.turns[0].interruptionReason, 'user_cancelled');
+  const stopped = await f.bridge.getState();
+  assert.equal(stopped.savedSession.sessionId, displayed.savedSession.sessionId,
+    '停止后台作业不能把用户带回原助手会话。');
+  assert.equal(stopped.generationJobs.find((item) => item.requestKey === job.requestKey).phase, 'cancelled');
 });
 
 test('联系人切换只保留各自任务，不取消原生成', async () => {

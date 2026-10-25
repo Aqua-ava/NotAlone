@@ -1605,14 +1605,14 @@ export class ReplySession {
   async stopGeneration(request: AssistantGenerationStop): Promise<void> {
     this.assertScope(request); this.assertSessionSelection();
     const generation = this.backend.getConnectionGeneration();
-    if (generation === undefined || request.sessionId !== this.state.savedSession?.sessionId) {
-      throw new Error('这次生成已经结束或不再属于当前助手会话。');
-    }
+    if (generation === undefined) throw new Error('这次生成已经结束或不再属于当前联系人。');
+    const displayedSessionId = this.state.savedSession?.sessionId;
     await this.generationJobs.cancelUserGeneration({ connectionGeneration: generation,
       contactId: request.contactId, sessionId: request.sessionId, requestKey: request.requestKey },
     request.inputVersionId);
     if (generation !== this.backend.getConnectionGeneration() || request.contactId !== this.state.contactId
-      || request.scopeRevision !== this.state.scopeRevision || request.sessionId !== this.state.savedSession?.sessionId) return;
+      || request.scopeRevision !== this.state.scopeRevision || request.sessionId !== displayedSessionId
+      || request.sessionId !== this.state.savedSession?.sessionId) return;
     this.leaveGenerationView();
     await this.readSavedSession({ contactId: request.contactId, scopeRevision: request.scopeRevision });
     if (generation === this.backend.getConnectionGeneration() && request.contactId === this.state.contactId
