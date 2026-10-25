@@ -272,7 +272,7 @@ test('未知数据库版本不发布业务握手且保留原库和配置',async 
   assert.equal(await host.waitForExit(7000),true);
   await assert.rejects(readFile(join(fixture.directory,'backend.info'),'utf8'));
   assert.equal(await readFile(fixture.envFilePath,'utf8'),before);
-  assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM notalone_schema_migration')).rows[0].n,114);
+  assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM notalone_schema_migration')).rows[0].n,115);
 });
 
 test('非法历史执行方配置失败关闭且不发布业务握手',async t=>{

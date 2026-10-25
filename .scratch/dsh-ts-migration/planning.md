@@ -29,11 +29,11 @@
 | [21 根据前台会话定位联系人](issues/21-foreground-contact-location.md) | 18 | ready-for-agent | resolved |
 | [22 管理全部业务后台任务](issues/22-background-task-management.md) | 10、13、14、15、20 | ready-for-agent | resolved |
 | [23 保留用量、配置和诊断界面](issues/23-usage-settings-diagnostics.md) | 03、05 | ready-for-agent | resolved |
-| [24 演练完整切换与兼容回退](issues/24-cutover-rollback.md) | 17、20、21、22、23 | ready-for-agent | open |
+| [24 演练完整切换与兼容回退](issues/24-cutover-rollback.md) | 17、20、21、22、23 | ready-for-agent | resolved |
 | [25 完成模型与实际桌面验收](issues/25-integrated-acceptance.md) | 24 | ready-for-agent | open |
 | [26 退役 Python 和旧框架](issues/26-retire-python-frameworks.md) | 25 | ready-for-agent | open |
 
-01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。01—23均已取得各自票面验收；17的跨域删除、21的真实前台定位和22的实际任务管理已在 2026-10-25 根 App 签收。迁移修复为 `c7be9cff`，删除回执误报修复为 `69ab20ab`。当前下一张是24，前置17、20、21、22、23均已 resolved。ready-for-agent表示规格足够清楚，不表示前置已完成；实施时逐票使用新上下文，先读规格、当前规则及最新前置结果，认领时改为claimed，通过验收才改为resolved。
+01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。01—23均已取得各自票面验收；17的跨域删除、21的真实前台定位和22的实际任务管理已在 2026-10-25 根 App 签收。迁移修复为 `c7be9cff`，删除回执误报修复为 `69ab20ab`。24已完成随机合成旧库的完整接管、崩溃、兼容回退与不兼容停写验收，当前下一张是25。ready-for-agent表示规格足够清楚，不表示前置已完成；实施时逐票使用新上下文，先读规格、当前规则及最新前置结果，认领时改为claimed，通过验收才改为resolved。
 
 ## 必须先看 DSH，禁止凭猜测修改
 
