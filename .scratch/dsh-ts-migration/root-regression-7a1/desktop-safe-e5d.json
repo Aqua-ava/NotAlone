@@ -1,0 +1,23 @@
+{
+  "source_commit": "e5d8183bff811bc9bdd466a3035deb0b6abf10e3",
+  "input_files": 858,
+  "inputs_verified_unchanged_after_run_before_original_r4_launch": true,
+  "raw_log_sha256": "51745d78c0d47a30d22959c4c328d0d6be9617836f13d97323d131092bfe0733",
+  "metrics": {
+    "tests": "1027",
+    "pass": "1026",
+    "fail": "0",
+    "cancelled": "0",
+    "skipped": "1",
+    "duration_ms": "52076.654625"
+  },
+  "user_three_files_preserved": true,
+  "backend_full_1494_source_inputs_unchanged_by_e5d_stop_delta": true,
+  "stop_independent_review_axes": [
+    "Standards:approve:4",
+    "Spec:approve:4"
+  ],
+  "new_actual_priority_issue_open": true,
+  "ticket25_approved": false,
+  "ticket26_started": false
+}

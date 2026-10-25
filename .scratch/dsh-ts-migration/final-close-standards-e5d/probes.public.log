@@ -1,0 +1,53 @@
+TAP version 13
+# Subtest: 生产控制器与IPC：同键准备重试的停止不能被旧未知登记抢占
+not ok 1 - 生产控制器与IPC：同键准备重试的停止不能被旧未知登记抢占
+  ---
+  duration_ms: 4.386042
+  type: 'test'
+  location: '<repository>/.scratch/dsh-ts-migration/final-close-standards-7a1/same-key-ipc.test.mjs:164:1'
+  failureType: 'testCodeFailure'
+  error: 'React is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    AssistantSessionPanel (<compiled-module>:36356:3)
+    Object.react_stack_bottom_frame (<compiled-module>:20818:18)
+    renderWithHooks (<compiled-module>:17303:24)
+    renderElement (<compiled-module>:17563:25)
+    retryNode (<compiled-module>:18312:43)
+    performWork (<compiled-module>:19111:21)
+    startWork (<compiled-module>:19703:9)
+    renderToStringImpl (<compiled-module>:19789:9)
+    process.env.NODE_ENV.exports.renderToStaticMarkup (<compiled-module>:20843:16)
+    renderState (file://<repository>/.scratch/dsh-ts-migration/final-close-standards-7a1/same-key-ipc.test.mjs:35:38)
+  ...
+# Subtest: 同键准备重试的可见停止不能被旧未知登记抢占
+ok 2 - 同键准备重试的可见停止不能被旧未知登记抢占
+  ---
+  duration_ms: 1.332583
+  type: 'test'
+  ...
+# {"stopError":null,"confirmed":true,"modelCalls":0,"interruptCount":1,"finalPhase":"cancelled"}
+# Subtest: 旧真实回执先到，再停止当前同键准备并退出，等待不成环
+ok 3 - 旧真实回执先到，再停止当前同键准备并退出，等待不成环
+  ---
+  duration_ms: 2.14075
+  type: 'test'
+  ...
+# {"lifecycle":"quit","lateBeforeStop":true,"modelCalls":0,"interruptCount":1,"currentUserCancellation":true,"oldUnknownRetainedUntilReceipt":true,"finalPending":0}
+# Subtest: 用户停止及重载先开始，旧真实回执后到，仍只结算当前用户停止
+ok 4 - 用户停止及重载先开始，旧真实回执后到，仍只结算当前用户停止
+  ---
+  duration_ms: 1.177
+  type: 'test'
+  ...
+# {"lifecycle":"reload","lateBeforeStop":false,"modelCalls":0,"interruptCount":1,"currentUserCancellation":true,"oldUnknownRetainedUntilReceipt":true,"finalPending":0}
+1..4
+# tests 4
+# suites 0
+# pass 3
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 245.449167

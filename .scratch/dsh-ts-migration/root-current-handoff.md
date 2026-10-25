@@ -4,12 +4,12 @@
 - 输出/费用无门槛，保留实测和unknown；回复96、正常功能、App/微信、性能与退役仍需完成。当前对象仅按私有稳定身份，不提交真实身份/正文。
 
 ## 源码与验证
-- 固定生产pin7a1f58a679245c6df84d88dfaafc3ff2c352c290；a70e5581修PG重入、7a1修preparing Stop；公开完成DTO/预算ACK修复保持。
+- 固定生产pine5d8183bff811bc9bdd466a3035deb0b6abf10e3；PG重入/preparing Stop/同key Stop闭环，DTO与预算ACK保持。
 - 根联合Query32+公开发布5=37/37、两端TSC；原API/桌面作业24、独立配置对照3有冻结证据。
-- 7a干净源码有界后端全量1494/1494，0fail/skip/cancel，358.789秒，689输入SHA不变；desktop safe1022pass/0fail/1原skip。
+- 7a后端全量1494/1494、689输入在e5d仍不变；e5d停止18+工作区IPC2通过，desktop safe1026pass/0fail/1原skip，858输入核验。
 - 先前1478/1484的6个source snapshot门禁失败原样保留，源于root启动未提交代码；不放宽门禁，不当产品失败或通过。
 - 桌面安全组最新1017通过/0失败/1原SKIP，52.10秒；尚需新修复后的相关复验。
-- PG重入旧P2已由7a独立对照关闭；7a两独立审查同报新P2：原key重试preparing Stop先选旧unknown，作者在same-key-followup有限修复，旧两RED冻结。
+- PG重入与同key Stop两P2均已关闭；e5d两独立轴各4探针approve，final-close-{standards,spec}-e5d冻结；旧7a两RED保留。
 - 283a及d360公开扫描0；此前新临时tap的home路径已移出/脱敏，失败记录保留。
 
 ## 实际App
@@ -30,6 +30,6 @@
 - 正式回复96未开始；原问题used511/max512、r1过期未结案，必须同账本有据续轮/累计容量，不新问题/清used。ACK已支持有效续期及满额后只读确认。
 - 性能正式未开始；既有sampler纯TS/Node准备可用，20双臂启动各60秒RSS约40分钟；源码固定并停App/并行负载后执行。
 - 26只读清单已冻结26点/32测试迁移引用；25通过才实施。保留SQL迁移，LLDB内嵌CPython第三方依赖单列，不擅删微信组件。
-- 下一步闭合原key重试停止P2并定点独立复核；合成原生夹具只准备，root继续资料/同步App闭环、回复96、性能，25后26及受影响复验。
+- 新实际P2：291范围priority登记因约115KB状态/16KB客户端ACK疑失败，actual-priority-registration-fix有限诊断中；原范围同步31新消息/0模型后已off退出。再最终App/96/正式性能，25后26。
 - 用户要求新可见聊天而非sub-agent，允许迁移聊天互通；root独占真实资料/模型/账本/App/微信/index。
 - 三用户测试和所有未归属scratch不动；只本地精确提交/公开扫描，不打包/packaged/push/远端分支/PR。

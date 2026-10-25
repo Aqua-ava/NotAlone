@@ -1,0 +1,17 @@
+TAP version 13
+# Subtest: 生产控制器与IPC：同键准备重试的停止不能被旧未知登记抢占
+ok 1 - 生产控制器与IPC：同键准备重试的停止不能被旧未知登记抢占
+  ---
+  duration_ms: 6.37575
+  type: 'test'
+  ...
+# {"sameRequestKey":true,"visiblePhase":"preparing","nullInputVersion":true,"stopError":null,"modelPostsBeforeCleanup":0,"interruptsBeforeCleanup":1,"realModelCalls":0}
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 114.856042

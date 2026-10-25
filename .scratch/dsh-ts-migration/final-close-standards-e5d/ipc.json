@@ -1,0 +1,32 @@
+{
+  "base_commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "target_commit": "e5d8183bff811bc9bdd466a3035deb0b6abf10e3",
+  "command": [
+    "node",
+    "--import=<review>/local-only.mjs",
+    "--test-reporter=tap",
+    "--test",
+    ".scratch/dsh-ts-migration/final-close-standards-7a1/same-key-ipc.test.mjs"
+  ],
+  "cwd": "fixed/desktop",
+  "exit_code": 0,
+  "counts": {
+    "tests": 1,
+    "pass": 1,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "duration_seconds": 0.182,
+  "raw_sha256": "ca1a58cd2ca0df3dd3ca0be60fe8bc348ab7531525e6bc3198a9c2ec4c62abd6",
+  "public_sha256": "ca1a58cd2ca0df3dd3ca0be60fe8bc348ab7531525e6bc3198a9c2ec4c62abd6",
+  "raw_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "cases": [
+    {
+      "path": ".scratch/dsh-ts-migration/final-close-standards-7a1/same-key-ipc.test.mjs",
+      "sha256": "e4fe48ab4d94338eeb6fba83017eb7be0dff5d66e6e11939b79fa8a261a1fc27"
+    }
+  ]
+}
