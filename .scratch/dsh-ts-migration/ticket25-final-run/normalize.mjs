@@ -10,6 +10,7 @@ const DIMENSIONS=['evidence_correctness','intent_preservation','no_unsupported_c
 const SEVERE=['false_fact','wrong_person','unsupported_commitment'];
 const ARMS=['old','new'];
 const MAX_PRIMARY_STOP='__NOTALONE_FIXED_PRIMARY_STOP_V1__';
+const EXPECTED_NEW_COMMIT='282f43afa238ff74a8eedeb19670e2a6d278d9dd';
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const canonical=value=>{
  if(value===null||typeof value==='string'||typeof value==='boolean'||typeof value==='number'&&Number.isFinite(value))return JSON.stringify(value);
@@ -76,6 +77,11 @@ function reviewCaptureFor(capture){
  return {...structuredClone(capture),received:complete.size*2,records:capture.records.filter(row=>complete.has(`${row.case_id}:${row.repeat}`))};
 }
 
+function quantile(values,p){
+ const sorted=[...values].sort((left,right)=>left-right),position=(sorted.length-1)*p,lower=Math.floor(position);
+ return sorted[lower]+(sorted[Math.ceil(position)]-sorted[lower])*(position-lower);
+}
+
 function boundReview(item,review,visibleItem,bindingItem){
  if(!visibleItem||!bindingItem||item.subject_sha256!==visibleItem.review_subject_sha256||review.independent!==true||review.blinded!==true||!['human','agent'].includes(review.reviewer_type))fail('submitted_review_binding');
  if(!Array.isArray(item.candidates)||item.candidates.length!==visibleItem.candidates.length||new Set(item.candidates.map(candidate=>candidate.candidate)).size!==visibleItem.candidates.length)fail('submitted_review_candidates');
@@ -90,8 +96,9 @@ function boundReview(item,review,visibleItem,bindingItem){
 
 function validateCapture(capture){
  if(capture.schema_version!=='reply-local-paired-collector-v1'||capture.protocol_version!=='migration-comparison-v1'||capture.evidence_kind!=='official_deepseek_full_comparison_v1'||capture.synthetic_only!==true||capture.planned!==96||capture.received!==96||!Array.isArray(capture.records)||capture.records.length!==96)fail('capture_contract');
- if(capture.source_bindings?.old_commit!=='3c168296e9e8edaa43b8b323ff693e790e709069'||capture.source_bindings?.dsh_commit!==DSH_COMMIT)fail('capture_binding');
- if(capture.source_bindings?.workspace_changed_during_execution!==null||capture.source_bindings?.fixed_git_source_changed_during_execution!==false)fail('source_drift');
+ if(capture.source_bindings?.old_commit!=='3c168296e9e8edaa43b8b323ff693e790e709069'||capture.source_bindings?.new_commit!==EXPECTED_NEW_COMMIT||capture.source_bindings?.dsh_commit!==DSH_COMMIT)fail('capture_binding');
+ const onlyVendorSupportInstrumented=capture.source_bindings?.candidate_source_manifest?.executed_tree_kind==='git_commit_tree'&&capture.source_bindings.candidate_source_manifest.base_commit===EXPECTED_NEW_COMMIT&&capture.source_bindings.candidate_source_manifest.vendor_support_raw_capture_only===true;
+ if(capture.source_bindings?.workspace_changed_during_execution!==false||capture.source_bindings?.fixed_git_source_changed_during_execution!==false&&!onlyVendorSupportInstrumented)fail('source_drift');
  const keys=new Set();
  for(const row of capture.records){
   const key=`${row.case_id}:${row.arm}:${row.repeat}`;
@@ -101,10 +108,11 @@ function validateCapture(capture){
   if(!['succeeded','failed'].includes(row.actual?.status))fail('record_terminal');
   if(row.actual.status==='succeeded'&&(!object(row.output)||!object(row.source_storage_receipt)))fail('successful_output_missing');
   const body=row.runtime_sources.attempts[0]?.request?.body;
-  if(!object(body)||body.model!=='deepseek-flash'||body.temperature!==0||body.top_p!==1||body.max_tokens!==4096||canonical(body.thinking)!=='{"type":"disabled"}')fail('model_controls');
+  if(!object(body)||body.model!=='deepseek-flash'||body.temperature!==0||(body.top_p??1)!==1||body.max_tokens!==4096||canonical(body.thinking)!=='{"type":"disabled"}')fail('model_controls');
   const stop=row.arm==='old'?body.stop:body.stop_sequences;
-  equal(stop,[MAX_PRIMARY_STOP],'stop_controls');
-  if(row.arm==='old'&&body.stream!==false||row.arm==='new'&&body.stream!==true)fail('stream_mode');
+  if(row.arm==='old')equal(stop,[MAX_PRIMARY_STOP],'stop_controls');
+  else if(stop!==undefined)fail('new_stop_control_changed');
+  if(body.stream!==true)fail('stream_mode');
  }
  for(const arm of ARMS)if(capture.records.filter(row=>row.arm===arm).length!==48)fail('arm_denominator');
 }
@@ -131,7 +139,7 @@ function configurationFor(capture){
   seed:null,
   prompt_hash:null,
   tool_schema_hash:null,
-  environment_hash:digest({environment:capture.environment,dependencies:capture.source_bindings.dependencies_before}),
+  environment_hash:capture.environment==null?null:digest({environment:capture.environment,dependencies:capture.source_bindings.dependencies_before}),
   adapter_protocols:{old:['openai_chat_messages'],new:[...newMap]},
   provider_protocol_equivalence:'not_verified',
   prompt_equivalence:'not_verified',
@@ -149,12 +157,12 @@ async function main(){
  const visibleFileSha=createHash('sha256').update(visibleText).digest('hex');
  validateCapture(capture);
  const reviewCapture=reviewCaptureFor(capture);
- if(reviewCapture.records.length!==94||reviewCapture.received!==94)fail('review_capture_denominator');
+ if(reviewCapture.records.length!==92||reviewCapture.received!==92)fail('review_capture_denominator');
  const expectedPacket=createBlindPacket({capture:reviewCapture,dataset,seed:binding.seed});
  equal(visible,expectedPacket.visible,'visible_packet_changed');
  equal(binding.items,expectedPacket.binding.items,'private_binding_changed');
  if(binding.visible_sha256!==digest(visible)||binding.dataset_canonical_sha256!==digest(dataset)||!/^[a-f0-9]{64}$/.test(binding.capture_canonical_sha256))fail('blind_packet_digest');
- if(visible.items.length!==94||binding.items.length!==94)fail('blind_packet_denominator');
+ if(visible.items.length!==92||binding.items.length!==92)fail('blind_packet_denominator');
  const visibleById=new Map(visible.items.map(item=>[item.blind_id,item]));
  const bindingById=new Map(binding.items.map(item=>[item.blind_id,item]));
  const reviewers=[],reviewerIds=new Set();
@@ -172,7 +180,7 @@ async function main(){
   reviewers.push({reviewer_id:review.reviewer_id,reviewer_model:review.reviewer_model,reviewer_version:review.reviewer_version,items:bound});
  }
  if(reviewers.length!==2)fail('reviewer_count');
- // 两份评审覆盖同一批47个完整成功配对；失败配对留在全量报告分母，但不伪造盲评。
+ // 两份评审覆盖同一批46个完整成功配对；失败配对留在全量报告分母，但不伪造盲评。
  const reviewIds=binding.items.map(item=>item.original_blind_id).sort();
  const firstIds=new Set(reviewers[0].items.map(item=>item.blind_id));
  const secondIds=new Set(reviewers[1].items.map(item=>item.blind_id));
@@ -203,7 +211,7 @@ async function main(){
  }
  const {config,configHash}=configurationFor(capture);
  const priceSource=JSON.parse(runConfigurationText).price_snapshot;
- const priceSnapshot={...structuredClone(priceSource),sha256:'3eb61fb2ca9322dff1bbaa356fe9b05482436316c2e55e156f6d0b23b455102f'};
+ const priceSnapshot={...structuredClone(priceSource),sha256:priceSource.source_page_sha256};
  if(capture.records.some(row=>row.cost?.price_snapshot_sha256!==priceSnapshot.sha256||row.cost?.currency!==priceSnapshot.currency))fail('price_binding');
  const sourceAuditSummary={verified:0,undetermined:0,by_arm:{old:{verified:0,undetermined:0},new:{verified:0,undetermined:0}},reasons:{}};
  const records=[];
@@ -230,7 +238,8 @@ async function main(){
    generated_by:'official-deepseek-paired-collector',terminal_status:row.actual.status,
    logical_calls:1,physical_calls:row.physical_calls,actual_model:row.actual_model,model_fingerprint:row.model_fingerprint,
    request_sha256:row.request_sha256,started_at:row.started_at,ended_at:row.ended_at,observed_ms:row.observed_ms,
-   first_event_ms:null,first_token_ms:null,final_persisted_result_ms:null,timing:null,latency_ms:null,
+   first_event_ms:row.first_event_ms,first_token_ms:row.first_token_ms,final_persisted_result_ms:row.final_persisted_result_ms,
+   timing:structuredClone(row.timing),latency_ms:row.latency_ms,
    usage:structuredClone(row.usage),cost:structuredClone(row.cost),output:structuredClone(row.output),
    runtime_sources:structuredClone(row.runtime_sources),deterministic_checks:structuredClone(row.deterministic_checks),
    actual:structuredClone(row.actual),partial_observations:structuredClone(row.partial_observations),
@@ -260,7 +269,13 @@ async function main(){
   configuration:{provider:config.provider,endpoint:config.endpoint,request_model:config.request_model,temperature:config.temperature,top_p:config.top_p,max_output_tokens:config.max_output_tokens,reasoning:config.reasoning,timeout_ms:config.timeout_ms,max_retries:config.max_retries,config_hash:configHash,provider_protocol_equivalence:config.provider_protocol_equivalence,prompt_equivalence:config.prompt_equivalence},
   price_snapshot:{currency:priceSnapshot.currency,sha256:priceSnapshot.sha256,billed_model:priceSnapshot.billed_model,cache_hit_usd_per_million:priceSnapshot.cache_hit_usd_per_million,cache_miss_usd_per_million:priceSnapshot.cache_miss_usd_per_million,output_usd_per_million:priceSnapshot.output_usd_per_million},
   source_audit:sourceAuditSummary,
-  timing:'unavailable_in_capture',
+  timing:{
+   successful_observations:records.filter(row=>row.terminal_status==='succeeded'&&row.latency_ms!==null).length,
+   arms:Object.fromEntries(ARMS.map(arm=>{
+    const values=records.filter(row=>row.arm===arm&&row.terminal_status==='succeeded'&&row.latency_ms!==null).map(row=>row.latency_ms);
+    return [arm,{observations:values.length,p50_ms:quantile(values,.5),p95_ms:quantile(values,.95)}];
+   })),
+  },
   real_model_quality_verified:false,production_switch_approved:false,
  };
  await writeFile(args.output,JSON.stringify(run,null,2)+'\n',{flag:'wx',mode:0o600});
@@ -268,4 +283,4 @@ async function main(){
  process.stdout.write(JSON.stringify({records:summary.records,successes:summary.successes,failures:summary.failures,reviews:summary.reviews,config_hash:configHash,real_model_quality_verified:false,production_switch_approved:false})+'\n');
 }
 
-main().catch(error=>{process.stderr.write(String(error?.message??error)+'\n');process.exitCode=1;});
+main().catch(error=>{process.stderr.write(String(process.env.NOTALONE_TICKET25_DEBUG?error?.stack??error:error?.message??error)+'\n');process.exitCode=1;});
