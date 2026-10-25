@@ -1,0 +1,14 @@
+{
+  "exit_code": 1,
+  "cwd": "desktop",
+  "command": [
+    "node",
+    "node_modules/typescript/bin/tsc",
+    "--noEmit"
+  ],
+  "raw_sha256": "638e0aca0fc2ecf385842e001f8251b1a6b55d74c9bd52e5ab4432f49234ea28",
+  "public_sha256": "638e0aca0fc2ecf385842e001f8251b1a6b55d74c9bd52e5ab4432f49234ea28",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "public_file": "desktop-typecheck.public.log"
+}

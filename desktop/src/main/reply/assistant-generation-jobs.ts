@@ -104,6 +104,9 @@ export class AssistantGenerationJobs {
         receipt = actual;
         if (execution.replacement) this.confirmReplacement(execution.replacement);
         execution.prepared?.(job, actual);
+        // 准备期间的停止意图属于原登记；真实回执中断确认前不得派发模型。
+        const cancellation = this.jobs.get(job)?.userCancellation;
+        if (cancellation) await cancellation;
         await this.acquire(job);
       },
       preparing: () => { if (job) this.prepareStarted(job); },
@@ -162,7 +165,16 @@ export class AssistantGenerationJobs {
     for (const item of this.finished.values()) if (item.connectionGeneration === generation) {
       const { connectionGeneration: _, ...state } = item; states.set(state.requestKey, state);
     }
-    for (const [job, active] of this.jobs) if (job.identity.connectionGeneration === generation && active.receipt) {
+    for (const [job, active] of this.jobs) if (job.identity.connectionGeneration === generation) {
+      if (!active.receipt) {
+        const requestKey = 'requestKey' in job.identity ? job.identity.requestKey : undefined;
+        if (!isUuid(requestKey) || active.stage === 'created') continue;
+        states.set(requestKey, { contactId: job.identity.contactId, sessionId: job.identity.sessionId,
+          requestKey, turnId: null, inputVersionId: null, canRetry: false,
+          phase: active.userCancellationRequested ? 'stopping'
+            : active.transportEnded || job.signal.aborted ? 'unconfirmed' : 'preparing' });
+        continue;
+      }
       const { receipt } = active;
       states.set(receipt.requestKey, { contactId: job.identity.contactId, sessionId: receipt.sessionId,
         requestKey: receipt.requestKey, turnId: receipt.turnId, inputVersionId: receipt.inputVersionId, canRetry: active.canRetry,
@@ -333,7 +345,7 @@ export class AssistantGenerationJobs {
   }
   private prepareStarted(job: OwnedAssistantGeneration): void {
     const active = this.jobs.get(job);
-    if (active?.stage === 'created') active.stage = 'preparing';
+    if (active?.stage === 'created') { active.stage = 'preparing'; this.changed(); }
   }
   private receiveReceipt(job: OwnedAssistantGeneration, receipt: AssistantGenerationReceipt): void {
     const active = this.jobs.get(job);
@@ -372,7 +384,8 @@ export class AssistantGenerationJobs {
   }
   canPublish(job: OwnedAssistantGeneration, view: AssistantGenerationOwner): boolean {
     const active = this.jobs.get(job);
-    return Boolean(this.isActive(job) && active && active.viewRevision === this.viewRevision && sameOwner(job.identity, view));
+    return Boolean(this.isActive(job) && active && !active.userCancellationRequested
+      && active.viewRevision === this.viewRevision && sameOwner(job.identity, view));
   }
   hasPending(owner: AssistantGenerationOwner): boolean {
     return [...this.jobs].some(([job, active]) => this.isActive(job) && !active.transportEnded && sameOwner(job.identity, owner) && active.receipt?.state !== 'completed');
@@ -454,6 +467,8 @@ export class AssistantGenerationJobs {
     if (!active.closingTask) {
       active.controller.abort();
       active.closingTask = Promise.resolve().then(async () => {
+        await this.settleUserCancellation(active);
+        if (active.terminal || active.settledWithoutGeneration) return;
         if (active.stopping) await active.stopping.interrupt({ ...job.identity, ...receipt });
         else await this.closingReceipt?.({ ...job.identity, ...receipt });
       }).then(() => {
@@ -468,27 +483,39 @@ export class AssistantGenerationJobs {
     for (const [job, active] of this.jobs) if (sameOwner(job.identity, identity)
       && ('requestKey' in job.identity ? job.identity.requestKey : active.receipt?.requestKey) === identity.requestKey) active.controller.abort();
   }
-  async cancelUserGeneration(identity: AssistantGenerationIdentity, inputVersionId: string): Promise<boolean> {
+  async cancelUserGeneration(identity: AssistantGenerationIdentity, inputVersionId: string | null): Promise<boolean> {
     if (this.closing || this.changingConnection) throw new Error('应用正在收尾本次生成，请稍后重试。');
-    if (!isUuid(inputVersionId)) throw new Error('本次生成停止身份无效。');
+    if (inputVersionId !== null && !isUuid(inputVersionId)) throw new Error('本次生成停止身份无效。');
     const entry = [...this.jobs].find(([job, active]) => sameOwner(job.identity, identity)
       && 'requestKey' in job.identity && job.identity.requestKey === identity.requestKey
-      && active.receipt?.requestKey === identity.requestKey
-      && active.receipt.inputVersionId === inputVersionId && !active.terminal);
+      && (inputVersionId === null || active.receipt?.requestKey === identity.requestKey
+        && active.receipt.inputVersionId === inputVersionId) && !active.terminal);
     if (!entry) {
       if ([...this.finished.values()].some((item) => sameOwner(item, identity)
-        && item.requestKey === identity.requestKey && item.inputVersionId === inputVersionId)) return false;
+        && item.requestKey === identity.requestKey && (inputVersionId === null || item.inputVersionId === inputVersionId))) return false;
       throw new Error('这次生成已经结束或不再属于当前助手会话。');
     }
     const [job, active] = entry;
     if (active.receipt?.state === 'completed') return false;
     if (active.userCancellation) return active.userCancellation;
-    const receipt = active.receipt;
-    if (!receipt || !active.stopping) throw new Error('本次生成的停止连接尚未确认。');
+    if (!active.stopping) throw new Error('本次生成的停止连接尚未确认。');
     active.userCancellationRequested = true; this.changed();
     active.userCancellation = (async () => {
       let interrupted: AssistantGenerationInterruptionResult;
+      let receipt: AssistantGenerationReceipt;
       try {
+        // null 只表示尚无输入版本；scope + 原请求键始终必须匹配唯一登记。
+        if (!active.receipt) await active.preparationSettled;
+        if (active.settledWithoutGeneration) {
+          active.terminal = true;
+          this.finished.set(identity.requestKey, { ...identity, turnId: null, inputVersionId: null,
+            canRetry: false, phase: 'cancelled' });
+          while (this.finished.size > 32) this.finished.delete(this.finished.keys().next().value!);
+          active.controller.abort(); this.jobs.delete(job); this.drain(); this.changed();
+          return true;
+        }
+        if (!active.receipt) throw new Error('本次准备的停止身份尚未确认。');
+        receipt = active.receipt;
         interrupted = await active.stopping!.interrupt({ ...job.identity as AssistantGenerationIdentity, ...receipt }, 'user_cancelled');
       } catch (error) {
         delete active.userCancellationRequested; active.userCancellation = undefined; this.changed(); throw error;

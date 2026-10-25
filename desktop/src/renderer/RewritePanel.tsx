@@ -106,7 +106,7 @@ export function useReplySession(enabled = true) {
     updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updateInput({ type: 'purpose', update: { ...selection(), purpose } })),
     retryInterruptedGeneration: (sessionId: string, turnId: string, inputVersionId: string) =>
       operate(() => window.notalone.replies.retryInterruptedGeneration({ ...selection(), sessionId, turnId, inputVersionId })),
-    stopGeneration: (sessionId: string, requestKey: string, inputVersionId: string) =>
+    stopGeneration: (sessionId: string, requestKey: string, inputVersionId: string | null) =>
       operate(() => window.notalone.replies.stopGeneration({ ...selection(), sessionId, requestKey, inputVersionId })),
     generateWorkspace: (workspaceAction: 'express' | 'suggest', options: RewriteOptions, allowIncompleteHistory = false) => operate(async () => {
       const scope = selection();

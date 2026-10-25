@@ -11,6 +11,7 @@
     "tests/assistant-continuation-client.test.ts",
     "tests/assistant-generation-execution.test.mjs",
     "tests/assistant-generation-preparation.test.mjs",
+    "tests/assistant-generation-preparation-stop.test.mjs",
     "tests/assistant-generation-stop-ui.test.mjs",
     "tests/assistant-generation-stop.test.mjs",
     "tests/assistant-history-layout.test.mjs",

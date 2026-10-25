@@ -205,7 +205,7 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   }, 'helper');
   commands.handle('reply:stop-generation', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'requestKey', 'inputVersionId']);
-    for (const key of ['sessionId', 'requestKey', 'inputVersionId']) {
+    for (const key of ['sessionId', 'requestKey', ...(value.inputVersionId === null ? [] : ['inputVersionId'])]) {
       if (!isUuid(value[key])) throw new Error('本次生成停止身份不可用。');
       value[key] = (value[key] as string).toLowerCase();
     }

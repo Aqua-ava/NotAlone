@@ -1,0 +1,12 @@
+✔ 工作区表达经输入小窗IPC发布可停止作业；停止拒绝晚候选并保留已完成历史 (3667.609834ms)
+ℹ {"setup_phase":"ready","setup_jobs":["completed"],"calls":["reply:subscribe","reply:get-state","reply:read-saved-session","reply:enter-workspace","reply:get-evidence-state","reply:subscribe","reply:get-state","reply:load-messages","reply:update-options","reply:generate","reply:load-evidence","reply:read-saved-session","reply:read-saved-session","reply:get-state"],"provider_calls":1,"saved_phase":"ready"}
+ℹ {"provider_calls":2,"phase":"waiting","helper_job_phases":["completed","generating"],"authoritative_job_phases":["completed","generating"]}
+ℹ {"stop_call":{"channel":"reply:stop-generation","args":[{"contactId":"a9f6646e-4b8d-4e83-a921-ea774d3e49b9","scopeRevision":2,"sessionId":"a82511e8-df47-495a-9faa-c58d0d6996c8","requestKey":"46422630-5afa-4ce8-a8b8-67837d0493b9","inputVersionId":"46d7edb2-4d2b-43a7-867f-bc07edad8421"}]}}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3752.580916

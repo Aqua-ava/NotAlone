@@ -1,0 +1,14 @@
+{
+  "exit_code": 1,
+  "cwd": "backend-ts",
+  "command": [
+    "node",
+    "--test",
+    "test/workspace-generation-stop-ipc.test.mjs"
+  ],
+  "raw_sha256": "4637d8929c4be6ef5cb58a620cf69aee04c3839595a20413bc3be073d706f89e",
+  "public_sha256": "db77e16b304e5923b3fcc626c6dae5ba4761d0acb8d94e9621dc3684fd4e4878",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "public_file": "red-stop-diagnostic.public.log"
+}

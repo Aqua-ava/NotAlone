@@ -8,11 +8,13 @@ import { ExpressionPreferenceBasis } from './ExpressionPreferenceBasis';
 import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
 
 const generationStatusText: Record<ReplyGenerationJobState['phase'], string> = {
+  preparing: '正在准备本次生成。',
   queued: '已准备，排队等待生成。', generating: '正在生成。', stopping: '正在停止本次生成…',
   cancelled: '本次生成已由你停止。', completed: '生成已完成。',
   failed: '生成失败，可核对原请求后重试。', unconfirmed: '任务结果待核对，请读取已保存讨论。',
 };
 const backgroundGenerationStatusText: Partial<Record<ReplyGenerationJobState['phase'], string>> = {
+  preparing: '正在另一助手会话中准备生成。',
   queued: '已在另一助手会话中后台排队生成。',
   generating: '正在另一助手会话中后台生成，结果会保存在原助手会话。',
   stopping: '正在停止另一助手会话中的后台生成。',
@@ -101,7 +103,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
   const currentContactJobs = replies.state.generationJobs?.filter((job) => job.contactId === replies.state.contactId) ?? [];
-  const activeContactJobs = currentContactJobs.filter((job) => ['queued', 'generating', 'stopping'].includes(job.phase));
+  const activeContactJobs = currentContactJobs.filter((job) => ['preparing', 'queued', 'generating', 'stopping'].includes(job.phase));
   const visibleJob = activeContactJobs.length === 1 ? activeContactJobs[0] : undefined;
   const displayedJobs = visibleJob
     ? [...currentContactJobs.filter((job) => job.sessionId === saved?.sessionId

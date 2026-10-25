@@ -1,0 +1,587 @@
+diff --git a/desktop/src/main/reply/assistant-generation-jobs.ts b/desktop/src/main/reply/assistant-generation-jobs.ts
+index c07fd479..01026be0 100644
+--- a/desktop/src/main/reply/assistant-generation-jobs.ts
++++ b/desktop/src/main/reply/assistant-generation-jobs.ts
+@@ -104,6 +104,9 @@ export class AssistantGenerationJobs {
+         receipt = actual;
+         if (execution.replacement) this.confirmReplacement(execution.replacement);
+         execution.prepared?.(job, actual);
++        // 准备期间的停止意图属于原登记；真实回执中断确认前不得派发模型。
++        const cancellation = this.jobs.get(job)?.userCancellation;
++        if (cancellation) await cancellation;
+         await this.acquire(job);
+       },
+       preparing: () => { if (job) this.prepareStarted(job); },
+@@ -162,7 +165,16 @@ export class AssistantGenerationJobs {
+     for (const item of this.finished.values()) if (item.connectionGeneration === generation) {
+       const { connectionGeneration: _, ...state } = item; states.set(state.requestKey, state);
+     }
+-    for (const [job, active] of this.jobs) if (job.identity.connectionGeneration === generation && active.receipt) {
++    for (const [job, active] of this.jobs) if (job.identity.connectionGeneration === generation) {
++      if (!active.receipt) {
++        const requestKey = 'requestKey' in job.identity ? job.identity.requestKey : undefined;
++        if (!isUuid(requestKey) || active.stage === 'created') continue;
++        states.set(requestKey, { contactId: job.identity.contactId, sessionId: job.identity.sessionId,
++          requestKey, turnId: null, inputVersionId: null, canRetry: false,
++          phase: active.userCancellationRequested ? 'stopping'
++            : active.transportEnded || job.signal.aborted ? 'unconfirmed' : 'preparing' });
++        continue;
++      }
+       const { receipt } = active;
+       states.set(receipt.requestKey, { contactId: job.identity.contactId, sessionId: receipt.sessionId,
+         requestKey: receipt.requestKey, turnId: receipt.turnId, inputVersionId: receipt.inputVersionId, canRetry: active.canRetry,
+@@ -333,7 +345,7 @@ export class AssistantGenerationJobs {
+   }
+   private prepareStarted(job: OwnedAssistantGeneration): void {
+     const active = this.jobs.get(job);
+-    if (active?.stage === 'created') active.stage = 'preparing';
++    if (active?.stage === 'created') { active.stage = 'preparing'; this.changed(); }
+   }
+   private receiveReceipt(job: OwnedAssistantGeneration, receipt: AssistantGenerationReceipt): void {
+     const active = this.jobs.get(job);
+@@ -372,7 +384,8 @@ export class AssistantGenerationJobs {
+   }
+   canPublish(job: OwnedAssistantGeneration, view: AssistantGenerationOwner): boolean {
+     const active = this.jobs.get(job);
+-    return Boolean(this.isActive(job) && active && active.viewRevision === this.viewRevision && sameOwner(job.identity, view));
++    return Boolean(this.isActive(job) && active && !active.userCancellationRequested
++      && active.viewRevision === this.viewRevision && sameOwner(job.identity, view));
+   }
+   hasPending(owner: AssistantGenerationOwner): boolean {
+     return [...this.jobs].some(([job, active]) => this.isActive(job) && !active.transportEnded && sameOwner(job.identity, owner) && active.receipt?.state !== 'completed');
+@@ -454,6 +467,8 @@ export class AssistantGenerationJobs {
+     if (!active.closingTask) {
+       active.controller.abort();
+       active.closingTask = Promise.resolve().then(async () => {
++        await this.settleUserCancellation(active);
++        if (active.terminal || active.settledWithoutGeneration) return;
+         if (active.stopping) await active.stopping.interrupt({ ...job.identity, ...receipt });
+         else await this.closingReceipt?.({ ...job.identity, ...receipt });
+       }).then(() => {
+@@ -468,27 +483,39 @@ export class AssistantGenerationJobs {
+     for (const [job, active] of this.jobs) if (sameOwner(job.identity, identity)
+       && ('requestKey' in job.identity ? job.identity.requestKey : active.receipt?.requestKey) === identity.requestKey) active.controller.abort();
+   }
+-  async cancelUserGeneration(identity: AssistantGenerationIdentity, inputVersionId: string): Promise<boolean> {
++  async cancelUserGeneration(identity: AssistantGenerationIdentity, inputVersionId: string | null): Promise<boolean> {
+     if (this.closing || this.changingConnection) throw new Error('应用正在收尾本次生成，请稍后重试。');
+-    if (!isUuid(inputVersionId)) throw new Error('本次生成停止身份无效。');
++    if (inputVersionId !== null && !isUuid(inputVersionId)) throw new Error('本次生成停止身份无效。');
+     const entry = [...this.jobs].find(([job, active]) => sameOwner(job.identity, identity)
+       && 'requestKey' in job.identity && job.identity.requestKey === identity.requestKey
+-      && active.receipt?.requestKey === identity.requestKey
+-      && active.receipt.inputVersionId === inputVersionId && !active.terminal);
++      && (inputVersionId === null || active.receipt?.requestKey === identity.requestKey
++        && active.receipt.inputVersionId === inputVersionId) && !active.terminal);
+     if (!entry) {
+       if ([...this.finished.values()].some((item) => sameOwner(item, identity)
+-        && item.requestKey === identity.requestKey && item.inputVersionId === inputVersionId)) return false;
++        && item.requestKey === identity.requestKey && (inputVersionId === null || item.inputVersionId === inputVersionId))) return false;
+       throw new Error('这次生成已经结束或不再属于当前助手会话。');
+     }
+     const [job, active] = entry;
+     if (active.receipt?.state === 'completed') return false;
+     if (active.userCancellation) return active.userCancellation;
+-    const receipt = active.receipt;
+-    if (!receipt || !active.stopping) throw new Error('本次生成的停止连接尚未确认。');
++    if (!active.stopping) throw new Error('本次生成的停止连接尚未确认。');
+     active.userCancellationRequested = true; this.changed();
+     active.userCancellation = (async () => {
+       let interrupted: AssistantGenerationInterruptionResult;
++      let receipt: AssistantGenerationReceipt;
+       try {
++        // null 只表示尚无输入版本；scope + 原请求键始终必须匹配唯一登记。
++        if (!active.receipt) await active.preparationSettled;
++        if (active.settledWithoutGeneration) {
++          active.terminal = true;
++          this.finished.set(identity.requestKey, { ...identity, turnId: null, inputVersionId: null,
++            canRetry: false, phase: 'cancelled' });
++          while (this.finished.size > 32) this.finished.delete(this.finished.keys().next().value!);
++          active.controller.abort(); this.jobs.delete(job); this.drain(); this.changed();
++          return true;
++        }
++        if (!active.receipt) throw new Error('本次准备的停止身份尚未确认。');
++        receipt = active.receipt;
+         interrupted = await active.stopping!.interrupt({ ...job.identity as AssistantGenerationIdentity, ...receipt }, 'user_cancelled');
+       } catch (error) {
+         delete active.userCancellationRequested; active.userCancellation = undefined; this.changed(); throw error;
+diff --git a/desktop/src/main/reply/bridge.ts b/desktop/src/main/reply/bridge.ts
+index 75651b1f..97486f64 100644
+--- a/desktop/src/main/reply/bridge.ts
++++ b/desktop/src/main/reply/bridge.ts
+@@ -205,7 +205,7 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
+   }, 'helper');
+   commands.handle('reply:stop-generation', (...args: unknown[]) => {
+     const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'requestKey', 'inputVersionId']);
+-    for (const key of ['sessionId', 'requestKey', 'inputVersionId']) {
++    for (const key of ['sessionId', 'requestKey', ...(value.inputVersionId === null ? [] : ['inputVersionId'])]) {
+       if (!isUuid(value[key])) throw new Error('本次生成停止身份不可用。');
+       value[key] = (value[key] as string).toLowerCase();
+     }
+diff --git a/desktop/src/renderer/AssistantSessionPanel.tsx b/desktop/src/renderer/AssistantSessionPanel.tsx
+index 33bc8476..e7b5e3c8 100644
+--- a/desktop/src/renderer/AssistantSessionPanel.tsx
++++ b/desktop/src/renderer/AssistantSessionPanel.tsx
+@@ -8,11 +8,13 @@ import { ExpressionPreferenceBasis } from './ExpressionPreferenceBasis';
+ import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
+ 
+ const generationStatusText: Record<ReplyGenerationJobState['phase'], string> = {
++  preparing: '正在准备本次生成。',
+   queued: '已准备，排队等待生成。', generating: '正在生成。', stopping: '正在停止本次生成…',
+   cancelled: '本次生成已由你停止。', completed: '生成已完成。',
+   failed: '生成失败，可核对原请求后重试。', unconfirmed: '任务结果待核对，请读取已保存讨论。',
+ };
+ const backgroundGenerationStatusText: Partial<Record<ReplyGenerationJobState['phase'], string>> = {
++  preparing: '正在另一助手会话中准备生成。',
+   queued: '已在另一助手会话中后台排队生成。',
+   generating: '正在另一助手会话中后台生成，结果会保存在原助手会话。',
+   stopping: '正在停止另一助手会话中的后台生成。',
+@@ -101,7 +103,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
+   const deleting = replies.state.sessionDeletion === 'deleting';
+   const catalog = replies.state.sessionCatalog;
+   const currentContactJobs = replies.state.generationJobs?.filter((job) => job.contactId === replies.state.contactId) ?? [];
+-  const activeContactJobs = currentContactJobs.filter((job) => ['queued', 'generating', 'stopping'].includes(job.phase));
++  const activeContactJobs = currentContactJobs.filter((job) => ['preparing', 'queued', 'generating', 'stopping'].includes(job.phase));
+   const visibleJob = activeContactJobs.length === 1 ? activeContactJobs[0] : undefined;
+   const displayedJobs = visibleJob
+     ? [...currentContactJobs.filter((job) => job.sessionId === saved?.sessionId
+diff --git a/desktop/src/renderer/RewritePanel.tsx b/desktop/src/renderer/RewritePanel.tsx
+index 58aa0cd9..e5388379 100644
+--- a/desktop/src/renderer/RewritePanel.tsx
++++ b/desktop/src/renderer/RewritePanel.tsx
+@@ -106,7 +106,7 @@ export function useReplySession(enabled = true) {
+     updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updateInput({ type: 'purpose', update: { ...selection(), purpose } })),
+     retryInterruptedGeneration: (sessionId: string, turnId: string, inputVersionId: string) =>
+       operate(() => window.notalone.replies.retryInterruptedGeneration({ ...selection(), sessionId, turnId, inputVersionId })),
+-    stopGeneration: (sessionId: string, requestKey: string, inputVersionId: string) =>
++    stopGeneration: (sessionId: string, requestKey: string, inputVersionId: string | null) =>
+       operate(() => window.notalone.replies.stopGeneration({ ...selection(), sessionId, requestKey, inputVersionId })),
+     generateWorkspace: (workspaceAction: 'express' | 'suggest', options: RewriteOptions, allowIncompleteHistory = false) => operate(async () => {
+       const scope = selection();
+diff --git a/desktop/src/shared/reply-bridge.ts b/desktop/src/shared/reply-bridge.ts
+index fe4e1b28..6911c8d6 100644
+--- a/desktop/src/shared/reply-bridge.ts
++++ b/desktop/src/shared/reply-bridge.ts
+@@ -25,7 +25,8 @@ export interface RewriteOptionsUpdate extends ContactSelection { options: Rewrit
+ export interface GenerateReply extends ContactSelection { newRequest: boolean; workspaceAction?: WorkspaceAction; allowIncompleteHistory?: boolean; }
+ export interface AssistantInterruptedRetry extends ContactSelection { sessionId: string; turnId: string; inputVersionId: string; }
+ export interface AssistantGenerationStop extends ContactSelection {
+-  sessionId: string; requestKey: string; inputVersionId: string;
++  // 准备阶段尚无输入版本时，用原登记的 scope + 请求键表达停止意图。
++  sessionId: string; requestKey: string; inputVersionId: string | null;
+ }
+ export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
+ export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
+@@ -161,8 +162,9 @@ export type ReplyFailureCode = 'history_sync_pending' | 'history_incomplete_conf
+ export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
+ export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
+ export interface ReplyGenerationJobState {
+-  contactId: string; sessionId: string; requestKey: string; turnId: string; inputVersionId: string;
+-  phase: 'queued' | 'generating' | 'stopping' | 'cancelled' | 'completed' | 'failed' | 'unconfirmed';
++  // 轮次与输入版本只取真实后端回执，准备阶段不预造身份。
++  contactId: string; sessionId: string; requestKey: string; turnId: string | null; inputVersionId: string | null;
++  phase: 'preparing' | 'queued' | 'generating' | 'stopping' | 'cancelled' | 'completed' | 'failed' | 'unconfirmed';
+   canRetry?: boolean;
+ }
+ export interface ReplySessionState {
+diff --git a/desktop/tests/assistant-generation-preparation-stop.test.mjs b/desktop/tests/assistant-generation-preparation-stop.test.mjs
+new file mode 100644
+index 00000000..e22def1c
+--- /dev/null
++++ b/desktop/tests/assistant-generation-preparation-stop.test.mjs
+@@ -0,0 +1,112 @@
++import assert from 'node:assert/strict';
++import { createRequire } from 'node:module';
++import { test } from 'node:test';
++import { build } from 'esbuild';
++
++const output = await build({ stdin: { contents: `
++  export { AssistantGenerationJobs } from './src/main/reply/assistant-generation-jobs';
++`, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'cjs', write: false });
++const loaded = { exports: {} };
++new Function('require', 'module', 'exports', output.outputFiles[0].text)(createRequire(import.meta.url), loaded, loaded.exports);
++const { AssistantGenerationJobs } = loaded.exports;
++const owner = { connectionGeneration: 7, contactId: '38c6e784-93dc-476b-8a2c-2733523a23b9',
++  sessionId: 'ad630563-b558-40ec-bdaa-c34201756c42' };
++const identity = { ...owner, requestKey: '69b51458-cf1d-47d2-a96c-fd465f15c353' };
++const receipt = { sessionId: owner.sessionId, requestKey: identity.requestKey,
++  turnId: '7a750bd7-d1b9-4b96-969c-99e5464d896a', inputVersionId: 'a4afba16-2fa1-45d0-ac42-de8d06045bda', state: 'running' };
++const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
++
++function preparation({ unknown = false, notReserved = false } = {}) {
++  const changed = [], jobs = new AssistantGenerationJobs(() => changed.push(jobs.states(7)));
++  const entered = deferred(), release = deferred(), acknowledgement = deferred(), interrupted = deferred();
++  const interruptions = [], failures = [];
++  let modelCalls = 0;
++  const execution = jobs.execute({ identity, stopping: {
++    async interrupt(actual, reason) {
++      interruptions.push({ actual, reason }); interrupted.resolve();
++      await acknowledgement.promise;
++      return { state: 'failed', interruptionReason: 'user_cancelled' };
++    },
++    recover: async () => { throw new Error('合成未知准备不能证明已领取或未领取'); },
++  }, adapter: { async run(protocol) {
++    protocol.preparing(); entered.resolve(); await release.promise;
++    if (unknown) throw new Error('合成准备响应丢失');
++    if (notReserved) {
++      protocol.notReserved({ contactId: owner.contactId, sessionId: owner.sessionId,
++        requestKey: identity.requestKey, state: 'not_reserved' }, 7);
++      return { value: null, outcome: 'no_generation' };
++    }
++    await protocol.prepared(receipt);
++    protocol.requested(); modelCalls += 1;
++    return { value: null, outcome: 'completed' };
++  } }, consume: () => {}, failed: error => { failures.push(error.message); } });
++  return { jobs, entered: entered.promise, release: () => release.resolve(),
++    acknowledge: () => acknowledgement.resolve(), interrupted: interrupted.promise,
++    execution, changed, interruptions, failures, modelCalls: () => modelCalls };
++}
++
++test('准备状态带原请求键及空回执，停止须等真实回执和中断确认，重复停止仅中断一次', async () => {
++  const f = preparation(); await f.entered;
++  const { connectionGeneration, ...visibleIdentity } = identity;
++  assert.deepEqual(f.jobs.states(7), [{ ...visibleIdentity,
++    turnId: null, inputVersionId: null, canRetry: false, phase: 'preparing' }]);
++  let settled = false;
++  const stopping = f.jobs.cancelUserGeneration(identity, null).then(value => { settled = true; return value; });
++  const duplicate = f.jobs.cancelUserGeneration(identity, null);
++  assert.equal(f.jobs.states(7)[0].phase, 'stopping');
++  assert.equal(f.jobs.pendingReceipts().length, 0);
++  assert.equal(settled, false); assert.equal(f.interruptions.length, 0);
++  f.release(); await f.interrupted;
++  assert.equal(settled, false); assert.equal(f.modelCalls(), 0);
++  assert.deepEqual(f.interruptions, [{ actual: { ...identity, ...receipt }, reason: 'user_cancelled' }]);
++  f.acknowledge();
++  assert.equal(await stopping, true); assert.equal(await duplicate, true); await f.execution;
++  assert.equal(f.modelCalls(), 0); assert.equal(f.interruptions.length, 1);
++  assert.equal(f.jobs.states(7)[0].phase, 'cancelled');
++  assert.equal(f.jobs.states(7)[0].inputVersionId, receipt.inputVersionId);
++  await f.jobs.beginClosing(() => assert.fail('已停止作业不应再次退出中断'));
++});
++
++test('准备停止拒绝错误连接、联系人、会话、请求和伪造输入版本', async () => {
++  const f = preparation(); await f.entered;
++  for (const wrong of [{ ...identity, connectionGeneration: 8 }, { ...identity, contactId: receipt.turnId },
++    { ...identity, sessionId: receipt.turnId }, { ...identity, requestKey: receipt.turnId }]) {
++    await assert.rejects(f.jobs.cancelUserGeneration(wrong, null), /已经结束或不再属于/);
++  }
++  await assert.rejects(f.jobs.cancelUserGeneration(identity, receipt.inputVersionId), /已经结束或不再属于/);
++  assert.equal(f.jobs.states(7)[0].phase, 'preparing');
++  const stopping = f.jobs.cancelUserGeneration(identity, null);
++  f.release(); f.acknowledge(); await stopping; await f.execution;
++  assert.equal(f.interruptions.length, 1); assert.equal(f.modelCalls(), 0);
++});
++
++test('准备响应未知时不能伪装取消成功，原身份仍阻止退出假排空', async () => {
++  const f = preparation({ unknown: true }); await f.entered;
++  const rejected = assert.rejects(f.jobs.cancelUserGeneration(identity, null), /停止身份尚未确认/);
++  f.release(); await f.execution; await rejected;
++  assert.equal(f.jobs.states(7)[0].phase, 'unconfirmed');
++  assert.equal(f.modelCalls(), 0); assert.equal(f.interruptions.length, 0);
++  await assert.rejects(f.jobs.beginClosing(() => assert.fail('未知准备不能伪造回执')), /身份尚未确认/);
++  await assert.rejects(f.jobs.beginClosing(() => assert.fail('未知准备重试仍不能伪造回执')), /合成未知准备/);
++});
++
++test('正式未领取证明可结算准备停止，不虚构输入版本或中断请求', async () => {
++  const f = preparation({ notReserved: true }); await f.entered;
++  const stopping = f.jobs.cancelUserGeneration(identity, null);
++  f.release(); assert.equal(await stopping, true); await f.execution;
++  assert.equal(f.jobs.states(7)[0].phase, 'cancelled');
++  assert.equal(f.jobs.states(7)[0].inputVersionId, null);
++  assert.equal(f.interruptions.length, 0); assert.equal(f.modelCalls(), 0);
++  await f.jobs.beginClosing(() => assert.fail('未领取不应发送中断'));
++});
++
++test('准备停止与退出交错时只结算原user_cancelled，不死锁或重复中断', async () => {
++  const f = preparation(); await f.entered;
++  const stopping = f.jobs.cancelUserGeneration(identity, null);
++  const closing = f.jobs.beginClosing(() => assert.fail('用户停止正在结算时不得重复app_quit'));
++  f.release(); await f.interrupted;
++  assert.equal(f.modelCalls(), 0);
++  f.acknowledge(); await stopping; await f.execution; await closing;
++  assert.equal(f.interruptions.length, 1);
++  assert.deepEqual(f.jobs.pendingReceipts(), []);
++});
+diff --git a/backend-ts/test/workspace-generation-stop-ipc.test.mjs b/backend-ts/test/workspace-generation-stop-ipc.test.mjs
+new file mode 100644
+index 00000000..3466d302
+--- /dev/null
++++ b/backend-ts/test/workspace-generation-stop-ipc.test.mjs
+@@ -0,0 +1,277 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { randomUUID } from 'node:crypto';
++import { createRequire } from 'node:module';
++import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import pg from 'pg';
++import { pureTsFixture } from './pure-ts-runtime-fixture.mjs';
++import { syntheticProvider, actualEvidenceId } from './pure-ts-provider-fixture.mjs';
++import { sendEvents, useTool } from './reply-service-runtime-support.mjs';
++
++const require = createRequire(new URL('../../desktop/package.json', import.meta.url));
++const { build } = require('esbuild');
++
++function deferred() {
++  let resolve;
++  const promise = new Promise(done => { resolve = done; });
++  return { promise, resolve };
++}
++
++// 仅替换 Electron 的进程传输；窗口身份、角色、广播、preload 和工作区动作均用生产代码。
++async function desktopPorts(t) {
++  const directory = await mkdtemp(join(tmpdir(), 'notalone-stop-ipc-'));
++  t.after(() => rm(directory, { recursive: true, force: true }));
++  const output = await build({ stdin: { contents: `
++    export { ContactSession } from './src/main/contacts/session';
++    export { installReplyBridge } from './src/main/reply/bridge';
++    export { electronPageCommands } from './src/main/electron-page-commands';
++    export { AppWindows } from './src/main/windows';
++    export { createReplyBridge } from './src/preload/reply';
++    export { BackendHost } from './src/main/backend/host';
++    export { RuntimeClient } from './src/main/backend/runtime-client';
++    export { useReplySession } from './src/renderer/RewritePanel';
++    export { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
++    export { createElement } from 'react';
++    export { renderToStaticMarkup } from 'react-dom/server';
++    export { handlers } from 'electron';
++  `, resolveDir: new URL('../../desktop/', import.meta.url).pathname },
++  bundle: true, platform: 'node', format: 'esm', write: false, loader: { '.css': 'empty' },
++  banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(new URL('../../desktop/package.json', import.meta.url).pathname)});` },
++  plugins: [{ name: 'electron-transport-only', setup(builder) {
++    builder.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'synthetic' }));
++    builder.onLoad({ filter: /.*/, namespace: 'synthetic' }, () => ({ contents: `
++      export const handlers = new Map();
++      export const ipcMain = { handle: (channel, handler) => handlers.set(channel, handler) };
++      export const app = {};
++      export class BrowserWindow {}
++    ` }));
++  } }] });
++  const file = join(directory, 'production.mjs');
++  await writeFile(file, output.outputFiles[0].text, { mode: 0o600 });
++  return import(file);
++}
++
++function renderer(ports, windows, role) {
++  const listeners = new Map(), notifications = [], calls = [], delivery = {}, inflight = new Set();
++  const url = `notalone://app/index.html#${role}`;
++  const webContents = { getURL: () => url, mainFrame: { url }, send(channel, value) {
++    notifications.push({ channel, value });
++    for (const listener of listeners.get(channel) ?? []) listener(undefined, structuredClone(value));
++    delivery.send?.(channel, structuredClone(value));
++  } };
++  windows.windows.set(role, { window: { webContents, isDestroyed: () => false }, failed: false });
++  const transport = {
++    invoke(channel, ...args) {
++      const call = { channel, args }; calls.push(call);
++      const result = Promise.resolve().then(() => ports.handlers.get(channel)({ sender: webContents,
++        senderFrame: webContents.mainFrame }, ...structuredClone(args))).then(value => structuredClone(value), error => {
++        call.error = error.message;
++        throw error;
++      });
++      inflight.add(result); void result.finally(() => inflight.delete(result)).catch(() => {});
++      return result;
++    },
++    on(channel, listener) {
++      const set = listeners.get(channel) ?? new Set(); set.add(listener); listeners.set(channel, set);
++    },
++    removeListener: (channel, listener) => listeners.get(channel)?.delete(listener),
++  };
++  const bridge = ports.createReplyBridge(transport);
++  const states = [];
++  const unsubscribe = bridge.onStateChanged(state => states.push(state));
++  return { bridge, states, notifications, calls, unsubscribe, delivery, transport, inflight };
++}
++
++async function workspacePage(t, helper, contacts) {
++  const { chromium, expect } = require('@playwright/test');
++  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
++  t.after(() => browser.close());
++  const page = await browser.newPage({ viewport: { width: 520, height: 640 } });
++  page.setDefaultTimeout(5000);
++  const errors = []; page.on('pageerror', error => errors.push(error.message));
++  t.after(() => { if (errors.length) t.diagnostic(JSON.stringify({ renderer_errors: errors })); });
++  await page.route('**/*', route => route.abort());
++  await page.exposeFunction('__invoke', (channel, ...args) => helper.transport.invoke(channel, ...args));
++  await page.exposeFunction('__setDraft', text => {
++    const state = contacts.getState();
++    contacts.setDraft({ contactId: state.selectedContactId, scopeRevision: state.scopeRevision, text });
++    return contacts.getState();
++  });
++  let delivering = Promise.resolve();
++  helper.delivery.send = (channel, value) => {
++    delivering = delivering.then(() => page.evaluate(({ channel, value }) => window.__receive?.(channel, value), { channel, value }));
++  };
++  const source = await build({ stdin: { contents: `
++    import React, { useState } from 'react';
++    import { createRoot } from 'react-dom/client';
++    import { createReplyBridge } from './src/preload/reply';
++    import { useReplySession, ReplyCandidates } from './src/renderer/RewritePanel';
++    import { UnifiedReplyWorkspace } from './src/renderer/UnifiedReplyWorkspace';
++    const listeners = new Map();
++    window.__receive = (channel, value) => { for (const listener of listeners.get(channel) ?? []) listener(undefined, value); };
++    const replies = createReplyBridge({ invoke: window.__invoke,
++      on(channel, listener) { const set = listeners.get(channel) ?? new Set(); set.add(listener); listeners.set(channel, set); },
++      removeListener: (channel, listener) => listeners.get(channel)?.delete(listener) });
++    window.notalone = { replies, expressionPreferences: {
++      getState: async () => ({ revision: 0, scopeRevision: 0, contactId: null, erasureRevision: 0, preferences: [], phase: 'ready' }),
++      onStateChanged: () => () => {}, refresh: async () => {},
++    } };
++    function View() {
++      const replies = useReplySession();
++      const [state, setState] = useState(${JSON.stringify(contacts.getState())});
++      const contacts = { state, setDraft: async text => setState(await window.__setDraft(text)) };
++      window.__replyState = replies.state;
++      return <main className="ime-pane"><UnifiedReplyWorkspace contacts={contacts} replies={replies}/>
++        <ReplyCandidates replies={replies} currentDraft={state.draft}/></main>;
++    }
++    createRoot(document.getElementById('root')).render(<View/>);
++  `, resolveDir: new URL('../../desktop/', import.meta.url).pathname, loader: 'tsx' },
++  bundle: true, platform: 'browser', format: 'iife', write: false, loader: { '.css': 'empty' } });
++  await page.setContent('<div id="root"></div>');
++  for (const file of ['rewrite.css', 'helper-layout.css']) {
++    await page.addStyleTag({ content: await readFile(new URL('../../desktop/src/renderer/' + file, import.meta.url), 'utf8') });
++  }
++  await page.addScriptTag({ content: source.outputFiles[0].text });
++  await expect(page.getByRole('button', { name: '帮我想想', exact: true })).toBeEnabled();
++  return { page, expect, errors, flush: () => delivering };
++}
++
++async function within(promise, label) {
++  let timer;
++  try { return await Promise.race([promise, new Promise((_, reject) => {
++    timer = setTimeout(() => reject(new Error(label)), 10_000);
++  })]); } finally { clearTimeout(timer); }
++}
++
++for (const stage of ['preparation', 'provider']) test(`工作区表达${stage === 'preparation' ? '准备等待' : '供应商等待'}经输入小窗IPC可停止，保留已完成历史`, { timeout: 60_000 }, async t => {
++  const oldMask = process.umask(0o077); t.after(() => process.umask(oldMask));
++  const ports = await desktopPorts(t);
++  const entered = deferred(), release = deferred();
++  t.after(() => release.resolve());
++  const f = await pureTsFixture(t), owner = randomUUID(), contact = randomUUID(), binding = randomUUID();
++  await f.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成本人')", [owner]);
++  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')", [contact, owner]);
++  await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)', [binding, owner, contact]);
++  let held = false;
++  const provider = await syntheticProvider(t, async (body, res) => {
++    const events = [{ type: 'message_start', message: { id: 'synthetic', model: 'deepseek-flash', usage: { input_tokens: 12, output_tokens: 0 } } },
++      {}, {}, {}, { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 9 } }, { type: 'message_stop' }];
++    useTool(events, 'ReplyRuntimeOutput', { used_skill_version_id: null, candidates: [{
++      text: held ? '停止后的晚合成候选' : '先前已完成的合成候选', basis: '本次合成想法',
++      citation_ids: [actualEvidenceId(body)], risk_notes: [],
++    }] });
++    if (held) { entered.resolve(); await release.promise; }
++    sendEvents(res, events);
++  });
++  const app = await f.start({ NOTALONE_OWNER_ID: owner, NOTALONE_DEEPSEEK_API_KEY: 'synthetic-only',
++    NOTALONE_SYNTHETIC_PROVIDER_URL: provider.url });
++  const runtime = new ports.RuntimeClient({ ...app.connection, port: Number(app.connection.address.split(':')[1]) });
++  t.after(() => runtime.cancelPending());
++  // 仅接入本轮已认证握手，不运行配置发现，也不读取用户的环境或资料。
++  const backend = new ports.BackendHost(f.directory);
++  backend.target = runtime; backend.generation = 1; backend.state = { phase: 'connected', revision: 1 };
++  backend.confirmManualInput(contact, 1);
++  const preparationEntered = deferred(), originalRequest = backend.requestJson.bind(backend);
++  let observePreparation = false;
++  backend.requestJson = options => {
++    const pending = originalRequest(options);
++    if (observePreparation && options.asyncPreparation) preparationEntered.resolve();
++    return pending;
++  };
++  const contacts = new ports.ContactSession(async () => ({ generation: 1,
++    contacts: [{ contactId: contact, displayName: '合成联系人', messageCount: 0, sourceCount: 0 }] }));
++  const windows = new ports.AppWindows({});
++  const helper = renderer(ports, windows, 'helper'), manager = renderer(ports, windows, 'manager');
++  const replies = ports.installReplyBridge(ports.electronPageCommands(windows), backend, contacts);
++  t.after(() => { helper.unsubscribe(); manager.unsubscribe(); });
++  contacts.setConnection(1); await contacts.refreshContacts();
++  contacts.selectContact({ contactId: contact, scopeRevision: contacts.getState().scopeRevision });
++  const scope = { contactId: contact, scopeRevision: contacts.getState().scopeRevision };
++  await helper.bridge.readSavedSession(scope);
++  await helper.bridge.enterWorkspace(scope);
++  const ui = await workspacePage(t, helper, contacts), { page, expect } = ui;
++  t.after(async () => {
++    const admin = new pg.Client({ host: '/tmp', database: 'postgres' });
++    await admin.connect();
++    try { assert.equal((await admin.query('SELECT count(*)::int AS n FROM pg_database WHERE datname=$1', [f.client.database])).rows[0].n, 0); }
++    finally { await admin.end(); }
++    assert.equal(app.host.isRunning(), false);
++    await assert.rejects(readFile(join(f.directory, 'runtime.env')), { code: 'ENOENT' });
++    t.diagnostic(JSON.stringify({ cleanup: { stage, owned_database_remaining: false,
++      owned_host_running: false, fixture_removed: true, electron_started: false } }));
++  });
++  const draft = page.getByRole('textbox', { name: '有什么想说的', exact: true });
++  await draft.fill('先前已完成的合成想法');
++  await page.getByRole('button', { name: '帮我表达', exact: true }).click();
++  await expect(page.getByText('正在等待本次生成结果…', { exact: true })).toHaveCount(0);
++  await page.waitForFunction(() => window.__replyState.phase === 'ready');
++  await page.waitForFunction(() => window.__replyState.savedSession?.phase === 'ready'
++    && window.__replyState.savedSession.turns.some(turn => turn.state === 'completed'));
++  const initial = await helper.bridge.getState();
++  t.diagnostic(JSON.stringify({ setup_phase: initial.phase, setup_error: initial.errorCode,
++    setup_jobs: initial.generationJobs?.map(item => item.phase), calls: helper.calls.map(call => call.channel),
++    provider_calls: provider.requests.length, saved_phase: initial.savedSession?.phase }));
++  const oldTurn = initial.savedSession.turns.at(-1);
++  assert.ok(oldTurn, '复现前须先有同联系人的已完成工作区表达');
++  assert.equal(oldTurn.state, 'completed');
++  const oldReply = oldTurn.reply.replyRequestId;
++  await expect(draft).toBeEnabled();
++  await draft.fill('这次希望温和拒绝合成邀请');
++  let locked = false;
++  if (stage === 'preparation') {
++    await f.client.query('BEGIN');
++    await f.client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`owner:${owner}`]);
++    locked = true;
++  }
++  held = true;
++  observePreparation = true;
++  await page.getByRole('button', { name: '帮我表达', exact: true }).click();
++  try {
++    if (stage === 'provider') await within(entered.promise, '工作区表达须进入本机阻塞供应商');
++    else {
++      await within(preparationEntered.promise, '原工作区请求须进入真实准备传输');
++      await page.waitForFunction(() => window.__replyState.phase === 'waiting');
++    }
++    await ui.flush();
++    // 必须取小窗已订阅到的状态；主动 getState 会掩盖通知缺失。
++    const state = helper.states.at(-1);
++    const job = state.generationJobs?.find(item => item.contactId === contact
++      && item.phase === (stage === 'preparation' ? 'preparing' : 'generating'));
++    t.diagnostic(JSON.stringify({ provider_calls: provider.requests.length, phase: state.phase,
++      helper_job_phases: state.generationJobs?.map(item => item.phase),
++      authoritative_job_phases: replies.getState().generationJobs?.map(item => item.phase),
++      tracked_stages: [...replies.generationJobs.jobs.values()].map(item => item.stage) }));
++    assert.ok(job, '等待期间输入小窗订阅状态必须含当前可停止作业，不能仅显示旧 completed');
++    await expect(page.getByRole('button', { name: '停止本次生成', exact: true })).toBeVisible();
++    await expect(page.getByRole('button', { name: '停止本次生成', exact: true })).toBeEnabled();
++    assert.deepEqual(helper.calls.filter(call => ['reply:update-options', 'reply:generate'].includes(call.channel)).slice(-2)
++      .map(call => call.channel), ['reply:update-options', 'reply:generate']);
++    await assert.rejects(manager.bridge.stopGeneration({ ...scope, sessionId: job.sessionId,
++      requestKey: job.requestKey, inputVersionId: job.inputVersionId }), /页面操作不可用/);
++    await page.getByRole('button', { name: '停止本次生成', exact: true }).click();
++    if (locked) {
++      await page.waitForFunction(() => window.__replyState.generationJobs.some(job => job.phase === 'stopping'));
++      await f.client.query('ROLLBACK'); locked = false;
++    }
++    await page.waitForFunction(() => window.__replyState.generationJobs.some(job => job.phase === 'cancelled'));
++    t.diagnostic(JSON.stringify({ stop_error: helper.calls.findLast(call => call.channel === 'reply:stop-generation')?.error ?? null }));
++    assert.equal((await helper.bridge.getState()).generationJobs.find(item => item.requestKey === job.requestKey).phase, 'cancelled');
++    release.resolve();
++    const turns = (await f.client.query('SELECT state,interruption_reason FROM assistant_session_turn ORDER BY created_at,id')).rows;
++    assert.equal(turns.length, 2); assert.equal(turns[0].state, 'completed');
++    assert.deepEqual(turns[1], { state: 'failed', interruption_reason: 'user_cancelled' });
++    const candidates = (await f.client.query('SELECT candidate_text AS text FROM reply_candidate')).rows;
++    assert.deepEqual(candidates, [{ text: '先前已完成的合成候选' }]);
++    await helper.bridge.readSavedSession(scope);
++    assert.equal((await helper.bridge.getState()).savedSession.turns[0].reply.replyRequestId, oldReply);
++    assert.equal(provider.requests.length, stage === 'preparation' ? 1 : 2);
++    assert.equal(manager.notifications.length, 0, '回复中间状态只广播到输入小窗');
++    assert.deepEqual(ui.errors, []);
++  } finally {
++    if (locked) await f.client.query('ROLLBACK');
++    release.resolve();
++    await within(Promise.allSettled([...helper.inflight]), '本轮IPC请求须收尾');
++  }
++});

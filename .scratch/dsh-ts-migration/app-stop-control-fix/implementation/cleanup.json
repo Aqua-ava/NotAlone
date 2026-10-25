@@ -1,0 +1,21 @@
+{
+  "scenarios": [
+    {
+      "stage": "preparation",
+      "owned_database_remaining": false,
+      "owned_host_running": false,
+      "fixture_removed": true,
+      "electron_started": false
+    },
+    {
+      "stage": "provider",
+      "owned_database_remaining": false,
+      "owned_host_running": false,
+      "fixture_removed": true,
+      "electron_started": false
+    }
+  ],
+  "provider_and_headless_browser_close_hooks_passed": true,
+  "actual_app_started": false,
+  "real_model_calls": 0
+}

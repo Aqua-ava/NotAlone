@@ -1,0 +1,14 @@
+{
+  "exit_code": 1,
+  "cwd": "desktop",
+  "command": [
+    "node",
+    "--test",
+    "tests/assistant-generation-preparation-stop.test.mjs"
+  ],
+  "raw_sha256": "96c3c2ca70b1534a59fe88e8a8e4611cad813ad9e242eb6146fbbdd4c3964259",
+  "public_sha256": "71b845125dd4b78b019183e6179a5fc4ac7bc18fff919a171a73738a28ee2b11",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "public_file": "preparation-stop-unit.public.log"
+}

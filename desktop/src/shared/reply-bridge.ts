@@ -25,7 +25,8 @@ export interface RewriteOptionsUpdate extends ContactSelection { options: Rewrit
 export interface GenerateReply extends ContactSelection { newRequest: boolean; workspaceAction?: WorkspaceAction; allowIncompleteHistory?: boolean; }
 export interface AssistantInterruptedRetry extends ContactSelection { sessionId: string; turnId: string; inputVersionId: string; }
 export interface AssistantGenerationStop extends ContactSelection {
-  sessionId: string; requestKey: string; inputVersionId: string;
+  // 准备阶段尚无输入版本时，用原登记的 scope + 请求键表达停止意图。
+  sessionId: string; requestKey: string; inputVersionId: string | null;
 }
 export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
 export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
@@ -161,8 +162,9 @@ export type ReplyFailureCode = 'history_sync_pending' | 'history_incomplete_conf
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplyGenerationJobState {
-  contactId: string; sessionId: string; requestKey: string; turnId: string; inputVersionId: string;
-  phase: 'queued' | 'generating' | 'stopping' | 'cancelled' | 'completed' | 'failed' | 'unconfirmed';
+  // 轮次与输入版本只取真实后端回执，准备阶段不预造身份。
+  contactId: string; sessionId: string; requestKey: string; turnId: string | null; inputVersionId: string | null;
+  phase: 'preparing' | 'queued' | 'generating' | 'stopping' | 'cancelled' | 'completed' | 'failed' | 'unconfirmed';
   canRetry?: boolean;
 }
 export interface ReplySessionState {

@@ -1,0 +1,26 @@
+{
+  "exit_code": 0,
+  "cwd": "backend-ts",
+  "command": [
+    "node",
+    "node_modules/typescript/bin/tsc",
+    "--noEmit"
+  ],
+  "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "chromium": "system-chrome",
+  "public_file": "frozen-backend-types.public.log",
+  "source_before": {
+    "head": "2ad219758c2919597b10122af579d28ecf5b3424",
+    "runtime_source_sha256": "9237d3e3cc72830f2de49d1fc812893b01f002a79ca3c13dcf4c3dfcb02260c8",
+    "runtime_file_count": 637
+  },
+  "source_after": {
+    "head": "2ad219758c2919597b10122af579d28ecf5b3424",
+    "runtime_source_sha256": "9237d3e3cc72830f2de49d1fc812893b01f002a79ca3c13dcf4c3dfcb02260c8",
+    "runtime_file_count": 637
+  },
+  "source_stable_during_run": true
+}

@@ -1,0 +1,22 @@
+{
+  "base_pin": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "current_head": "2ad219758c2919597b10122af579d28ecf5b3424",
+  "head_moved_externally": true,
+  "candidate_base_compatible_with_current_head": true,
+  "protected_file_count": 7,
+  "protected_changed": [],
+  "external_tracked_changes": [
+    "backend-ts/src/host-storage.ts",
+    "backend-ts/test/business-transaction-errors.test.mjs"
+  ],
+  "our_product_files": [
+    "desktop/src/main/reply/assistant-generation-jobs.ts",
+    "desktop/src/main/reply/bridge.ts",
+    "desktop/src/renderer/AssistantSessionPanel.tsx",
+    "desktop/src/renderer/RewritePanel.tsx",
+    "desktop/src/shared/reply-bridge.ts"
+  ],
+  "real_model_calls": 0,
+  "app_started": false,
+  "git_mutation_performed": false
+}

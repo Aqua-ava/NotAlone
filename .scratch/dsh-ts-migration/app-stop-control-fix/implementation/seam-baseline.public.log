@@ -1,0 +1,41 @@
+✖ 工作区表达经输入小窗IPC发布可停止作业；停止拒绝晚候选并保留已完成历史 (2547.067959ms)
+ℹ {"setup_phase":"ready","setup_jobs":["completed"],"calls":["reply:subscribe","reply:get-state","reply:read-saved-session","reply:enter-workspace","reply:get-state","reply:update-options","reply:generate","reply:read-saved-session","reply:get-state"],"provider_calls":1,"saved_phase":"ready"}
+ℹ {"provider_calls":2,"phase":"waiting","helper_job_phases":["completed","generating"],"authoritative_job_phases":["completed","generating"]}
+ℹ {"stop_call":{"channel":"reply:stop-generation","args":[{"contactId":"2745e65d-2d32-41d0-bef5-d2cb9f0ae08c","scopeRevision":2,"sessionId":"579dfc6c-4145-498f-a7a4-7a1b35821090","requestKey":"b3e1f6ff-2e83-42c3-9f22-0392e183cd2a","inputVersionId":"e7395342-056b-404c-9f22-a35112cd5355"}]}}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2629.430708
+
+✖ failing tests:
+
+test at test/workspace-generation-stop-ipc.test.mjs:88:1
+✖ 工作区表达经输入小窗IPC发布可停止作业；停止拒绝晚候选并保留已完成历史 (2547.067959ms)
+  error: column "text" does not exist
+      at <REPO>/backend-ts/node_modules/.pnpm/pg@8.16.3/node_modules/pg/lib/client.js:545:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<REPO>/backend-ts/test/workspace-generation-stop-ipc.test.mjs:170:25)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    length: 103,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '8',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3727',
+    routine: 'errorMissingColumn'
+  }

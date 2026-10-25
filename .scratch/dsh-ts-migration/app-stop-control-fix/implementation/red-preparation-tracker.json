@@ -1,0 +1,15 @@
+{
+  "exit_code": 1,
+  "cwd": "backend-ts",
+  "command": [
+    "node",
+    "--test",
+    "--test-name-pattern=准备等待",
+    "test/workspace-generation-stop-ipc.test.mjs"
+  ],
+  "raw_sha256": "7a1c1e20c17b6e5ac4ca27aa6f8a4a4bb60d7af535f935b8bfab21568e5a90e0",
+  "public_sha256": "6a96ef55bee02be1ba01e1dd2cbcbdb50ca96d3ad738d9a1a916077b0aa8924d",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "public_file": "red-preparation-tracker.public.log"
+}
