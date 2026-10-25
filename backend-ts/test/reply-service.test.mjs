@@ -26,7 +26,8 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
  const host=await startReplyServiceHost(t,{name:f.client.database,user:f.client.user,close:async()=>{await storage?.close();await f.close();}},(_req,res,requests,events)=>{
   const evidence=modelEvidence(requests.at(-1).body);const id=evidence[0].evidence_id;
   if(mode==='skill'&&skillStep++===0){const path=JSON.stringify(requests.at(-1).body).match(/\/notalone\/reply-skills\/[^"\\ ]+\/SKILL\.md/)?.[0];assert.ok(path,'从实际Skill目录取得受控路径');useTool(events,'read_file',{file_path:path});sendEvents(res,events);return;}
-  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次原句',citation_ids:[mode==='bad'?randomUUID():id],risk_notes:[]},...(mode==='extra'?[{text:'好久没聊了',basis:'额外风格',citation_ids:[id],risk_notes:[]}]:[])]});
+  const messages=mode==='join0'?['你以前说过喜欢喝茶，现在还是喜欢茶吗？','还是换口味了，现在喜欢喝什么？']:null;
+  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:messages?.join('')??'明天见',basis:'本次原句',citation_ids:[mode==='bad'?randomUUID():id],risk_notes:[],...(messages?{messages}:{})},...(mode==='extra'?[{text:'好久没聊了',basis:'额外风格',citation_ids:[id],risk_notes:[]}]:[])]});
   if(mode==='late'){releaseLate=()=>sendEvents(res,events);observedLate();return;}sendEvents(res,events);
  });
  // 支持夹具在进程终止后删除合成库，再核验网络边界。
@@ -40,6 +41,15 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
   mode='bad';const input=body(),before=host.requests.length;
   await assert.rejects(host.request('/generate',{id:randomUUID(),scope,body:input}),/reply_candidates_rejected/);assert.equal(host.requests.length,before+1);
   const count=(await f.client.query('SELECT count(*)::int AS n FROM reply_candidate c JOIN reply_request r ON r.id=c.reply_request_id WHERE r.idempotency_key=$1',[input.idempotency_key])).rows[0].n;assert.equal(count,0);
+ });
+ await t.test('多消息仅缺边界空行时按消息原文保存规范正文',async()=>{
+  mode='join0';const input=body(),before=host.requests.length,segments=['你以前说过喜欢喝茶，现在还是喜欢茶吗？','还是换口味了，现在喜欢喝什么？'];
+  const result=await host.request('/generate',{id:randomUUID(),scope,body:input});
+  assert.equal(result.candidates[0].text,segments.join('\n\n'));
+  assert.deepEqual(result.candidates[0].messages.map(message=>message.text),segments);
+  assert.equal(host.requests.length,before+1);
+  const saved=(await f.client.query('SELECT c.candidate_text,c.message_group FROM reply_candidate c JOIN reply_request r ON r.id=c.reply_request_id WHERE r.idempotency_key=$1',[input.idempotency_key])).rows[0];
+  assert.equal(saved.candidate_text,segments.join('\n\n'));assert.deepEqual(saved.message_group.map(message=>message.text),segments);
  });
  await t.test('结构化未知在实际官方请求中收紧为单候选准入',async()=>{
   mode='extra';const before=host.requests.length;

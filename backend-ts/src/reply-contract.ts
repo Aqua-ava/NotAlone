@@ -85,8 +85,9 @@ export function validateReplyCandidates(value:unknown,evidenceIds:ReadonlySet<st
     const messages=raw.messages??[];
     if(!Array.isArray(messages))return rejected();
     const group=messages.length?messages:[raw.text];
-    if(group.length>8||group.some(v=>!nonblank(v)||count(v.trim())>(group.length===1?65536:8192))||group.join('\n\n')!==raw.text)return rejected();
-    return {text:raw.text,basis:raw.basis,citation_ids:citations,risk_notes:raw.risk_notes as string[],messages:messages as string[]};
+    const text=group.join('\n\n');
+    if(group.length>8||count(text)>65536||group.some(v=>!nonblank(v)||count(v.trim())>(group.length===1?65536:8192))||raw.text!==text&&raw.text!==group.join(''))return rejected();
+    return {text,basis:raw.basis,citation_ids:citations,risk_notes:raw.risk_notes as string[],messages:messages as string[]};
   });
 }
 /** 与既有 Python sort_keys/ensure_ascii=False 指纹兼容，不因语言切换重复生成。 */

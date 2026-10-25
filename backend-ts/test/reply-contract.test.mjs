@@ -55,3 +55,11 @@ test('候选只能引用本轮证据且消息组与正文一致',()=>{
   assert.throws(()=>validateReplyCandidates({candidates:[candidate]},new Set()),{code:'reply_candidates_rejected'});
   assert.throws(()=>validateReplyCandidates({candidates:[{...candidate,text:'别的正文'}]},new Set([id])),{code:'reply_candidates_rejected'});
 });
+test('多消息候选仅补齐消息边界空行，不改写任何消息文字',()=>{
+  const candidate={text:'好呀明天见',basis:'按本次目的回应',citation_ids:[id],risk_notes:[],messages:['好呀','明天见']};
+  assert.deepEqual(validateReplyCandidates({candidates:[candidate]},new Set([id])),[{...candidate,text:'好呀\n\n明天见'}]);
+  for(const text of ['好呀\n明天见','好呀，明天见','好呀 \n\n明天见'])assert.throws(
+    ()=>validateReplyCandidates({candidates:[{...candidate,text}]},new Set([id])),
+    {code:'reply_candidates_rejected'},
+  );
+});
