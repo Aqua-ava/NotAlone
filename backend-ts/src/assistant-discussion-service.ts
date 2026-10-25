@@ -695,6 +695,10 @@ export class AssistantDiscussionService {
       const session=await this.sessionRow(client,scope,sessionId,true);
       let currentBinding:string|null=null;
       try{currentBinding=await this.activeBinding(client,scope,true);}catch{}
+      const manualBindings=new Set((await client.query(
+        'SELECT id FROM manual_contact_confirmation WHERE owner_id=$1 AND contact_id=$2 FOR SHARE',
+        [scope.owner_id,scope.contact_id],
+      )).rows.map(row=>row.id));
       const turnRows=(await client.query(`
         SELECT turn.*,
           (request.id IS NULL AND turn.state='failed' AND EXISTS(
@@ -729,7 +733,10 @@ export class AssistantDiscussionService {
             await this.assistant.verifiedDiscussionDependencies(
               client,scopeOf(scope),row.dependency_ids??[],true,
             );
-            if(!currentBinding||row.conversation_binding_id!==currentBinding)throw new Error('binding');
+            // 手动确认 ID 与渠道 binding 共用协议槽但来源不同；历史手动 turn
+            // 在随后建立渠道 binding 后仍须可读，且不得改写原来源身份。
+            if(row.conversation_binding_id!==currentBinding
+              &&!manualBindings.has(row.conversation_binding_id))throw new Error('binding');
           }catch{
             row.state='unavailable';row.input_payload=null;
           }

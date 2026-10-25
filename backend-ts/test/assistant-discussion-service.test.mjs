@@ -43,20 +43,25 @@ async function fixture(t) {
   return {storage, owner, contact, binding, transaction, environment, service};
 }
 
-async function completedGeneration(f, session, text = '合成原候选') {
+async function completedGeneration(f, session, text = '合成原候选', binding = f.binding) {
   const turn = randomUUID();
   const input = randomUUID();
   const requestKey = randomUUID();
   const request = randomUUID();
   const candidate = randomUUID();
   const message = randomUUID();
+  const evidence = randomUUID();
   const group = [{message_id: message, text}];
+  const context = {
+    evidence: [{evidence_id:evidence,kind:'user_draft',text,source_ids:[],selection_reason:'合成输入',status:'active'}],
+    snapshot:{},
+  };
   await f.storage.client.query(
     `INSERT INTO reply_request(
        id,owner_id,contact_id,conversation_binding_id,idempotency_key,
        normalized_input,state,attempt,lease_expires_at,context_snapshot,skill_library_revision
-     ) VALUES($1,$2,$3,$4,$5,'synthetic','completed',1,now(),'{}',0)`,
-    [request, f.owner, f.contact, f.binding, requestKey],
+     ) VALUES($1,$2,$3,$4,$5,'synthetic','completed',1,now(),$6,0)`,
+    [request, f.owner, f.contact, binding, requestKey, JSON.stringify(context)],
   );
   await f.storage.client.query(
     `INSERT INTO assistant_session_turn(
@@ -64,7 +69,7 @@ async function completedGeneration(f, session, text = '合成原候选') {
        conversation_binding_id,input_digest,input_payload,state,reply_request_id
      ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'completed',$10)`,
     [
-      turn, session, f.owner, f.contact, input, requestKey, f.binding,
+      turn, session, f.owner, f.contact, input, requestKey, binding,
       'a'.repeat(64), JSON.stringify({content: {type: 'rewrite_draft'}}), request,
     ],
   );
@@ -72,21 +77,58 @@ async function completedGeneration(f, session, text = '合成原候选') {
     `INSERT INTO assistant_session_input(
        id,session_id,owner_id,contact_id,conversation_binding_id,input_type,turn_id
      ) VALUES($1,$2,$3,$4,$5,'generation',$6)`,
-    [input, session, f.owner, f.contact, f.binding, turn],
+    [input, session, f.owner, f.contact, binding, turn],
+  );
+  await f.storage.client.query(
+    `INSERT INTO reply_context_evidence(
+       reply_request_id,evidence_id,owner_id,contact_id,conversation_binding_id,
+       ordinal,kind,evidence_text,source_ids
+     ) VALUES($1,$2,$3,$4,$5,0,'user_draft',$6,'[]')`,
+    [request, evidence, f.owner, f.contact, binding, text],
   );
   await f.storage.client.query(
     `INSERT INTO reply_candidate(
        id,reply_request_id,owner_id,contact_id,conversation_binding_id,
        ordinal,candidate_text,basis,risk_notes,message_group
      ) VALUES($1,$2,$3,$4,$5,0,$6,'合成依据','[]',$7)`,
-    [candidate, request, f.owner, f.contact, f.binding, text, JSON.stringify(group)],
+    [candidate, request, f.owner, f.contact, binding, text, JSON.stringify(group)],
+  );
+  await f.storage.client.query(
+    'INSERT INTO reply_candidate_citation(reply_request_id,candidate_id,evidence_id,ordinal) VALUES($1,$2,$3,0)',
+    [request, candidate, evidence],
   );
   await f.storage.client.query(
     'UPDATE assistant_session SET current_input_version_id=$2 WHERE id=$1',
     [session, input],
   );
-  return {turn, input, requestKey, request, candidate, message, group};
+  return {turn, input, requestKey, request, candidate, message, evidence, group};
 }
+
+test('渠道绑定建立后仍可读取既有手动确认生成，不把两种来源混用', async (t) => {
+  const f = await fixture(t);
+  const manual = randomUUID();
+  await f.storage.client.query(
+    'INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',
+    [manual, f.owner, f.contact],
+  );
+  const scope = {owner_id:f.owner, contact_id:f.contact};
+  const session = await f.service.defaultSession(scope);
+  const generation = await completedGeneration(f, session, '合成手动候选', manual);
+
+  const reopened = await f.service.readSession(scope, session);
+  const turn = reopened.turns.find(item => item.turn_id === generation.turn);
+  const input = reopened.inputs.find(item => item.input_version_id === generation.input);
+  assert.equal(turn.state, 'completed');
+  assert.equal(turn.reply.candidates[0].text, '合成手动候选');
+  assert.equal(input.state, 'active');
+  assert.equal(input.conversation_binding_id, manual);
+
+  const stored = (await f.storage.client.query(
+    'SELECT conversation_binding_id FROM assistant_session_turn WHERE id=$1',
+    [generation.turn],
+  )).rows[0];
+  assert.equal(stored.conversation_binding_id, manual, '读取不能把手动来源改写成渠道绑定');
+});
 
 test('讨论重开、编辑选择、携入、中断与删除保持显式身份和幂等', async (t) => {
   const f = await fixture(t);
