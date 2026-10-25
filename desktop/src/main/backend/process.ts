@@ -25,11 +25,12 @@ export class OwnedBackendProcess {
     // 路径核验含异步 I/O，最终 spawn 前再次检查退出/连接代际，不在退出后新建读取进程。
     if (!canStart()) throw new BackendFailure('backend_connection_failed');
     if (config.runtime === 'dsh') {
-      const environment = backendEnvironment({ ...config, projectDirectory }, projectDirectory);
+      const environment = backendEnvironment({ ...config, projectDirectory }, config.source === 'managed' ? path.dirname(path.dirname(config.infoPath)) : projectDirectory);
       return launchDsh({ nodeExecutable: process.execPath, projectDirectory,
         envFilePath: config.envFilePath || path.join(projectDirectory, '.env'), infoPath: config.infoPath,
         pythonExecutable, environment, businessHome: environment.HOME || os.homedir() }, canStart);
     }
+    if (!pythonExecutable) throw new BackendFailure('backend_connection_failed');
     // 不用 shell 或 PATH，模块路径固定到所选项目，避免 editable install 指向另一个 checkout。
     const managed = config.source === 'managed';
     const child = spawn(pythonExecutable, [...(managed ? ['-I', '-B'] : []), '-m', 'notalone.server.command', '--host', '127.0.0.1',

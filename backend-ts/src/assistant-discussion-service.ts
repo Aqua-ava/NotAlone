@@ -39,6 +39,7 @@ export interface AssistantDiscussionServiceOptions {
   transaction<T>(work:(client:Client)=>Promise<T>):Promise<T>;
   skillsRoot:string;
   environment?:NodeJS.ProcessEnv;
+  resolveBinding?:(client:Client,scope:AssistantDiscussionScope,allowManual:boolean)=>Promise<string>;
 }
 
 const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -164,6 +165,7 @@ export class AssistantDiscussionService {
     scope:AssistantDiscussionScope,
     allowManual:boolean,
   ):Promise<string>{
+    if(this.options.resolveBinding)return this.options.resolveBinding(client,scope,allowManual);
     const bindings=(await client.query(
       "SELECT id FROM conversation_binding WHERE owner_id=$1 AND contact_id=$2 AND status='active' FOR SHARE",
       [scope.owner_id,scope.contact_id],

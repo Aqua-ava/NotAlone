@@ -35,6 +35,14 @@ import {HistoryImportApi} from './history-import-api.ts';
 import {PostgresTaskStatusStore,TaskApi} from './task-api.ts';
 import {BusinessTaskApi,PostgresBusinessTaskManager} from './background-task-management.ts';
 import {CrossDomainDeletionService,crossDomainDeletionRoute,serveCrossDomainDeletion} from './cross-domain-deletion.ts';
+import {pureTsRuntimeEnvironment} from './pure-ts-runtime.ts';
+import {PureTsEvents} from './pure-ts-events.ts';
+import {PureTsSync} from './pure-ts-sync.ts';
+import {PureTsTaskEvents} from './pure-ts-task-events.ts';
+import {PureTsFollowSmoke} from './pure-ts-follow-smoke.ts';
+import {PureTsMaintenance} from './pure-ts-maintenance.ts';
+import {acquireManagedDatabaseLease} from './managed-database-lifetime.ts';
+import {createLayeredMemoryManagement} from './layered-memory-management.ts';
 import {
  PythonTaskControlGateway,UnavailableTaskControl,
  type TaskControlPort,type TaskScope,
@@ -50,6 +58,10 @@ export async function apply(ctx: Context) {
 async function start(ctx: Context) {
   const config = JSON.parse(await readFile(process.env.NOTALONE_HOST_CONFIG!, 'utf8'));
   if (process.ppid !== config.parentPid) throw new Error('HOST_PARENT_LOST');
+  const releaseDatabaseLease=process.env.NOTALONE_MANAGED_LIFETIME_LOCK
+    ?await acquireManagedDatabaseLease(process.env.NOTALONE_MANAGED_LIFETIME_LOCK):undefined;
+  // 启动失败也只释放本次打开的共享锁；数据库监督器仍按同一文件核验独占退出。
+  process.once('exit',()=>{void releaseDatabaseLease?.();});
   const token = randomBytes(32).toString('base64url');
   const contextToken = randomBytes(32).toString('base64url');
   const scopeToken = randomBytes(32).toString('base64url');
@@ -75,7 +87,11 @@ async function start(ctx: Context) {
   if (compatibility.code !== 'ready') throw new Error('HOST_DATABASE_UNAVAILABLE');
   const ownerStatus=await storage.setupStatus();
   const progressPool=await storage.businessPool();
-  const runtimeEnvironment: NodeJS.ProcessEnv = {...process.env,...storage.runtimeEnvironment(),HOME:config.businessHome};
+  const runtimeEnvironment=pureTsRuntimeEnvironment({...process.env,...storage.runtimeEnvironment(),HOME:config.businessHome});
+  const pureTs=runtimeEnvironment.NOTALONE_HOST_RUNTIME==='typescript';
+  const hostEvents=new PureTsEvents(storage.runtimeOwnerId);
+  const taskEvents=pureTs?new PureTsTaskEvents(progressPool,storage.runtimeOwnerId,hostEvents):undefined;
+  const observationTasks=new ExtractionTaskStore(progressPool);
   const extractionWorkerRuntime=runtimeEnvironment.NOTALONE_EXTRACTION_RUNTIME??'python';
   if(!['python','typescript'].includes(extractionWorkerRuntime))
     throw new Error('EXTRACTION_WORKER_RUNTIME_INVALID');
@@ -130,11 +146,24 @@ async function start(ctx: Context) {
   let handoff: ContactHandoff | undefined;
   let memoryHandoff: MemoryManagementHandoff | undefined;
   let modelRuntime:Awaited<ReturnType<typeof startHostModelRuntime>>;
+  let pureSync:PureTsSync|undefined;
   // 本宿主自身提供唯一认证增量端点；typescript 历史模式不回退到 Python 写者。
   const historyRuntime=resolveHistoryRuntime(runtimeEnvironment,{incrementalRemoteAvailable:true});
   const incremental = await createSyncIncrementalApi({storage,executable:runtimeEnvironment.NOTALONE_WECHAT_CLI ?? '',environment:runtimeEnvironment,
     historyOwner:historyRuntime,
     publish:async(events,signal)=>{
+      if(pureTs){
+        if(state!=='running'||signal.aborted)throw new HostStorageError('runtime_stopping');
+        for(const event of events)hostEvents.publish('message.created',event.contact_id,{message_id:event.message_id},event.occurred_at);
+        const contacts=new Set(events.map(event=>event.contact_id));
+        for(const contact of contacts){
+          const scope={ownerId:storage.runtimeOwnerId!,contactId:contact};
+          const taskId=await observationTasks.enqueueObservation(scope,events.filter(event=>event.contact_id===contact).map(event=>event.message_id));
+          if(taskId)await taskControl.wake(scope,taskId).catch(()=>{});
+        }
+        await taskEvents?.refresh();
+        return;
+      }
       if(!legacy || state!=='running' || signal.aborted)throw new HostStorageError('runtime_stopping');
       // 已提交消息仅传稳定身份；Python只派发事件与唤醒派生，不读取或重复写入正文。
       const payload=events.map(event=>({owner_id:event.owner_id,contact_id:event.contact_id,message_id:event.message_id,occurred_at:event.occurred_at}));
@@ -143,6 +172,18 @@ async function start(ctx: Context) {
   let incrementalRevokeTail:Promise<void>=Promise.resolve();
   const wechatScope = await createWechatScopeApi({storage,executable:runtimeEnvironment.NOTALONE_WECHAT_CLI ?? '',environment:runtimeEnvironment,
     revokeWithDrain:async (body,signal) => {
+      if(pureTs){
+        if(state!=='running'||!pureSync?.accountScope)throw new HostStorageError('runtime_stopping');
+        const revoked=incrementalRevokeTail.then(async()=>{
+          if(signal.aborted||state!=='running')throw new HostStorageError('runtime_stopping');
+          const version=await incremental.invalidateAndDrain('scope_revoke');
+          const result=await wechatScope.handle('POST','/api/runtime/wechat-scope/revoke',{
+            owner_id:storage.runtimeOwnerId,channel:'wechat',account_scope:pureSync!.accountScope,...body,
+          },()=>{if(state!=='running')throw new HostStorageError('runtime_stopping');},signal);
+          if(!signal.aborted&&state==='running')incremental.resume(version);
+          return result;
+        });incrementalRevokeTail=revoked.then(()=>undefined,()=>undefined);return revoked;
+      }
       if(!legacy || state!=='running')throw new HostStorageError('runtime_stopping');
       // 下游取消不能证明Python事务结束；等待完整回执，未知运输失败才停止定位。
       const revoke=incrementalRevokeTail.then(async()=>{
@@ -161,7 +202,12 @@ async function start(ctx: Context) {
       incrementalRevokeTail=revoke.then(()=>undefined,()=>undefined);
       return revoke;
     },
-    readSyncStatus:async () => {if (!legacy || state !== 'running') throw new HostStorageError('runtime_stopping');return await legacy.control('/api/sync/status','GET') as Record<string,unknown>;}});
+    readSyncStatus:async () => {
+      if(pureTs&&pureSync&&state==='running')return pureSync.status();
+      if (!legacy || state !== 'running') throw new HostStorageError('runtime_stopping');return await legacy.control('/api/sync/status','GET') as Record<string,unknown>;
+    }});
+  if(pureTs)pureSync=await PureTsSync.create(storage,incremental,hostEvents);
+  const followSmoke=pureSync?new PureTsFollowSmoke(storage,pureSync):undefined;
   const foreground=await createForegroundLocationApi({storage,executable:runtimeEnvironment.NOTALONE_WECHAT_CLI??'',environment:runtimeEnvironment,
     probe:new NativeForegroundProbe({executable:runtimeEnvironment.NOTALONE_SYNC_PROBE||path.join(config.home,'unconfigured-probe')})});
   const contacts=new ContactContext(storage);
@@ -169,15 +215,19 @@ async function start(ctx: Context) {
   const preferences=new PreferenceService(storage);
   const deletionSkillsRoot=resolveSkillsRoot(runtimeEnvironment,config.businessHome,config.projectDirectory);
   const skills=new SkillHost(storage,deletionSkillsRoot);
+  let layeredManagement:ReturnType<typeof createLayeredMemoryManagement>|undefined;
+  let maintenance:PureTsMaintenance|undefined;
   const deletions=storage.runtimeOwnerId
     ?new CrossDomainDeletionService({storage,skillsRoot:deletionSkillsRoot})
     :undefined;
   let closing: Promise<void> | undefined;
   const closeResources = () => closing ??= (async () => {
     state='stopping';modelRuntime?.stopAccepting();
+    hostEvents.close();
+    followSmoke?.close();
     // 先排空任务控制，再保留增量→范围/资料门禁→模型/Python→数据库顺序。
     const failures:unknown[]=[];
-    for(const release of [closeTaskControl,()=>incremental.close(),
+    for(const release of [()=>maintenance?.close(),()=>pureSync?.close(),()=>taskEvents?.close(),closeTaskControl,()=>incremental.close(),
       async()=>{
         const closed=await Promise.allSettled([()=>foreground.close(),()=>wechatScope.close(),
           ()=>handoff?.close(),()=>memoryHandoff?.close(),()=>skills.close()].map(release=>Promise.resolve().then(release)));
@@ -186,7 +236,7 @@ async function start(ctx: Context) {
       },
       ()=>modelRuntime?modelRuntime.close(async()=>{await legacy?.stop();}):legacy?.stop(),
       ()=>progressPool.end(),
-      ()=>storage.close()]){
+      ()=>storage.close(),()=>releaseDatabaseLease?.()]){
       try{await release();}catch(error){failures.push(error);}
     }
     state='stopped';
@@ -207,6 +257,7 @@ async function start(ctx: Context) {
       if(!await modelRuntime.handle(req,res))respond(404,{error:'not_found'});return;
     }
     if(await skills.privateHttp(req,res))return;
+    if(pureTs&&(req.headers.origin!==undefined||req.rawHeaders.filter((key,index)=>index%2===0&&key.toLowerCase()==='authorization').length!==1)){respond(401,{error:'unauthorized'});return;}
     const supplied=Buffer.from(req.headers.authorization ?? '');
     const expected=Buffer.from(`Bearer ${token}`),internalExpected=Buffer.from(`Bearer ${contextToken}`);
     const internal=supplied.length===internalExpected.length && timingSafeEqual(supplied,internalExpected);
@@ -238,17 +289,68 @@ async function start(ctx: Context) {
         }:undefined,replayBody);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus},taskWorker:modelRuntime.extractionWorkerStatus}:{}),ownership:{...ownership,skills:skills.status().owner,skillLearning:modelRuntime?'typescript':'python',imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',taskManagement:businessTasks?'typescript':'python',tasks:extractionWorkerRuntime,crossDomainDeletion:deletions?'typescript':'unavailable',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',hostRuntime:pureTs?'typescript':'legacy',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus},taskWorker:modelRuntime.extractionWorkerStatus}:{}),ownership:{...ownership,...(pureTs?{schemaUpdates:'typescript-migration-command',contacts:'typescript',deletion:deletions?'typescript':'unavailable',wechat:'typescript'}:{}),skills:skills.status().owner,skillLearning:modelRuntime?'typescript':'python',imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',taskManagement:businessTasks?'typescript':'python',tasks:extractionWorkerRuntime,crossDomainDeletion:deletions?'typescript':'unavailable',...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:pureTs?'typescript':'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
       if(state!=='running'){respond(503,{error:'runtime_stopping'});return;}
+      // 兼容旧DSH已移交范围后的稳定拒绝；当前绑定确认使用cli-bindings/confirm。
+      if(pureTs&&['/api/sync/confirm','/api/sync/confirm-pending'].includes(url.pathname)){respond(503,{error:'wechat_scope_owned_by_typescript'});return;}
+      if(pureTs&&req.method==='POST'&&url.pathname==='/api/sync/disable')await incremental.invalidateAndDrain('disable');
+      if(pureTs&&isForegroundAuthorityMutation(req.method??'',url.pathname)){
+        releaseAuthority=await foreground.beginAuthorityChange();if(res.destroyed)return;
+      }
+      if(pureTs&&req.headers['x-notalone-manual-contact']!==undefined){
+        const contact=req.headers['x-notalone-manual-contact'];
+        const parts=url.pathname.split('/');
+        if(typeof contact!=='string'||!/^\/[a-z]/.test(url.pathname)||!/^\/api\/contacts\/[^/]+\/assistant-session(?:s)?(?:\/|$)/.test(url.pathname)||contact!==parts[3]){respond(400,{error:'manual_scope_invalid'});return;}
+      }
+      if(followSmoke&&url.pathname.startsWith('/api/sync/follow-smoke/')){
+        const controller=new AbortController(),abort=()=>controller.abort();req.once('aborted',abort);res.once('close',abort);
+        try{
+          const result=await followSmoke.handle(req.method??'',url,req.method==='POST'?await readBody(req):undefined,controller.signal);
+          if(result&&!res.destroyed)respond(result.status,result.body);return;
+        }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+      }
+      if(pureTs&&pureSync&&(url.pathname==='/api/sync/status'||/^\/api\/sync\/(?:enable|disable|check|priority|backfill\/(?:pause|retry))$/.test(url.pathname))){
+        const cancelled=new AbortController(),abort=()=>cancelled.abort();req.once('aborted',abort);res.once('close',abort);
+        try{
+          const result=await pureSync.handle(req.method??'',url,req.method==='POST'?await readBody(req):undefined,cancelled.signal);
+          if(result){
+            let value=result.body;
+            if(result.status===200&&pureSync.accountScope)value=await wechatScope.decorateSyncStatus(value as Record<string,unknown>);
+            if(!res.destroyed)respond(result.status,value);return;
+          }
+        }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+      }
       if(crossDomainDeletionRoute(req.method??'',url.pathname)){
         await serveCrossDomainDeletion(req,res,deletions);
+        if(pureTs&&res.statusCode<400){
+          if(/^\/api\/contacts\/[^/]+$/.test(url.pathname))hostEvents.forgetContact(url.pathname.split('/')[3]);
+          if(/^\/api\/(?:owner|owners)(?:\/|$)/.test(url.pathname))hostEvents.clear();
+          await taskEvents?.refresh().catch(()=>{});
+        }
         return;
+      }
+      if(modelRuntime?.qualityApi?.matches(req.method??'',url)){
+        const controller=new AbortController(),abort=()=>controller.abort();req.once('aborted',abort);res.once('close',abort);
+        try{
+          const body=req.method==='POST'?parseJson(new TextDecoder('utf-8',{fatal:true}).decode(await readWechatHttpBody(req,1024*1024))):undefined;
+          const result=await modelRuntime.qualityApi.handle(req.method??'',url,body,controller.signal);
+          if(result&&!res.destroyed)respond(result.status,result.body);return;
+        }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
       }
       const layeredMemoryPath=url.pathname.startsWith('/api/memories/owner/layered-memory')
         || /^\/api\/contacts\/[^/]+\/layered-memory(?:\/|$)/.test(url.pathname);
+      if(layeredManagement?.matches(req.method??'',url)){
+        const controller=new AbortController(),abort=()=>controller.abort();req.once('aborted',abort);res.once('close',abort);
+        try{
+          let body:unknown;
+          if(req.method==='POST')body=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(await readWechatHttpBody(req,64*1024)));
+          const result=await layeredManagement.handle(req.method??'',url,body,controller.signal);
+          if(result&&!res.destroyed)respond(result.status,result.body);return;
+        }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+      }
       if(layeredMemoryPath&&modelRuntime){
         const layered=await modelRuntime.handleLayeredMemory(req,res,url);
         if(layered.handled)return;
@@ -271,6 +373,7 @@ async function start(ctx: Context) {
         const body=req.method==='POST'?await readBody(req):undefined;
         const result=await businessTasks.handle(req.method??'',url.pathname,url.searchParams,body);
         if(!result){respond(404,{error:'not_found'});return;}
+        if(req.method==='POST')await taskEvents?.refresh();
         respond(result.status,result.body);return;
       }
       if(url.pathname==='/api/tasks/status'||url.pathname==='/api/tasks/run'||url.pathname==='/api/tasks/retry'){
@@ -319,14 +422,14 @@ async function start(ctx: Context) {
       // 用户关闭先取消增量，再等待Python串行控制锁，避免已有切片逐个耗尽预算。
       if(req.method==='POST'&&url.pathname==='/api/sync/disable')await incremental.invalidateAndDrain('disable');
       const authorityChange=isForegroundAuthorityMutation(req.method??'',url.pathname);
-      if(authorityChange){releaseAuthority=await foreground.beginAuthorityChange();if(res.destroyed)return;}
+      if(authorityChange&&!releaseAuthority){releaseAuthority=await foreground.beginAuthorityChange();if(res.destroyed)return;}
       if(req.url==='/api/setup/status' && req.method==='GET'){respond(200,await storage.setupStatus());return;}
       if(req.url==='/api/settings/credentials' && req.method==='GET'){respond(200,storage.credentialStatus());return;}
       if(incrementalPath){
         // Python初始化不在构造器同步等待cycle；握手就绪前不提交无法派发的事件。
         // 只读status必须允许作为初始化握手：TS历史模式下Python首轮状态依赖它，
         // 而legacy赋值要等Python完成启动。cycle和事件仍等待可派发事件的后端。
-        if(!legacy&&url.pathname!=='/api/runtime/sync-incremental/status'){respond(503,{error:'runtime_starting'});return;}
+        if(!legacy&&!pureTs&&url.pathname!=='/api/runtime/sync-incremental/status'){respond(503,{error:'runtime_starting'});return;}
         const cancelled=new AbortController();
         const abort=()=>cancelled.abort();req.once('aborted',abort);res.once('close',abort);
         try {
@@ -347,7 +450,9 @@ async function start(ctx: Context) {
         return;
       }
       if(scopePath){respond(404,{error:'not_found'});return;}
-      if(!legacy || !handoff || !memoryHandoff){respond(503,{error:'runtime_starting'});return;}
+      if(!handoff || !memoryHandoff){respond(503,{error:'runtime_starting'});return;}
+      if(pureTs&&url.pathname==='/api/events'&&req.method==='GET'){hostEvents.open(req,res);return;}
+      if(pureTs&&modelRuntime&&await modelRuntime.handlePublic(req,res,url))return;
       if(skillLearningRoute(req.method??'',url.pathname)){
         if(!modelRuntime){respond(503,{error:'skill_learning_unavailable'});return;}
         if(!['GET','POST'].includes(req.method??'')||url.search){respond(400,{error:'skill_learning_request_invalid'});return;}
@@ -428,7 +533,7 @@ async function start(ctx: Context) {
         } finally {lease.finish();}
         return;
       }
-      if(legacyRoute(req.url??'')){proxyLegacy();return;}
+      if(legacy&&legacyRoute(req.url??'')){proxyLegacy();return;}
       if(req.method!=='POST'){respond(404,{error:'not_found'});return;}
       let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>16384)throw new Error('invalid_request');}
       const parsed=parseJson(body);
@@ -476,26 +581,43 @@ async function start(ctx: Context) {
       if(!control)throw new Error('EXTRACTION_WORKER_UNAVAILABLE');
       activeTaskControl=control;
     }
-    legacy=await LegacyBackend.start(config,{...runtimeEnvironment,
+    if(pureTs&&storage.runtimeOwnerId)layeredManagement=createLayeredMemoryManagement({
+      ownerId:storage.runtimeOwnerId,transaction:work=>storage.businessTransaction(work),
+      ...(modelRuntime?.qualityApi?{
+        contract:`scenario-v3:verified_items:document-tools-v1:profile-tools-v1:typescript-management-v1:${modelRuntime.qualityApi.store.contractId}`,
+        budget:modelRuntime.qualityApi.store.contract.budget,
+        qualityInput:(client,scope,versions)=>modelRuntime!.qualityApi!.store.insertInputInTransaction(client,scope,versions),
+      }:{}),
+      modelWorkAvailable:()=>modelRuntime?.replyStatus.state==='ready'&&extractionWorkerRuntime==='typescript',
+      wake:(scope,taskId)=>taskControl.wake({ownerId:scope.owner_id,contactId:scope.contact_id},taskId),
+      cancel:(scope,taskId)=>taskControl.stop?.({ownerId:scope.owner_id,contactId:scope.contact_id},taskId),
+    });
+    if(layeredManagement&&modelRuntime?.replyStatus.state==='ready')maintenance=new PureTsMaintenance(progressPool,signal=>layeredManagement!.runMaintenance(signal));
+    if(!pureTs)legacy=await LegacyBackend.start(config,{...runtimeEnvironment,
       ...(modelRuntime?.pythonEnvironment(`http://127.0.0.1:${address.port}`)??{}),
       NOTALONE_OWNER_ID:ownerStatus.runtime_owner_configured ? storage.runtimeOwnerId : '',
       NOTALONE_WECHAT_SCOPE_URL:`http://127.0.0.1:${address.port}`,NOTALONE_WECHAT_SCOPE_TOKEN:scopeToken,
       NOTALONE_SYNC_INCREMENTAL_URL:`http://127.0.0.1:${address.port}`,NOTALONE_SYNC_INCREMENTAL_TOKEN:incrementalToken,
       NOTALONE_SYNC_INCREMENTAL_TRANSFERRED:'1'},terminate);
-    pythonTaskControl?.bind(legacy);
+    if(legacy)pythonTaskControl?.bind(legacy);
     handoff=new ContactHandoff(storage,legacy);
     memoryHandoff=new MemoryManagementHandoff(storage,legacy);
   } catch(error) {
     server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await closeResources();throw error;
   }
   const readyDispose=ctx.appReady!.onReady(()=>{void(async()=>{
-    await legacy!.control('/api/runtime/contact-context/configure','POST',{address:`127.0.0.1:${address.port}`,token:contextToken});
-    const foregroundStopped=await legacy!.control('/api/runtime/foreground-location/stop','POST',{},5500);
-    if(foregroundStopped.state!=='stopped'||foregroundStopped.active_requests!==0)throw new Error('FOREGROUND_DRAIN_FAILED');
+    if(legacy){
+      await legacy.control('/api/runtime/contact-context/configure','POST',{address:`127.0.0.1:${address.port}`,token:contextToken});
+      const foregroundStopped=await legacy.control('/api/runtime/foreground-location/stop','POST',{},5500);
+      if(foregroundStopped.state!=='stopped'||foregroundStopped.active_requests!==0)throw new Error('FOREGROUND_DRAIN_FAILED');
+    }
     foreground.activate();
     await handoff!.transfer('typescript');
     await memoryHandoff!.transfer('typescript');
-    await skills.transfer(legacy!,address.port);
+    if(legacy)await skills.transfer(legacy,address.port);else await skills.activateStandalone();
+    await pureSync?.start();
+    await maintenance?.start();
+    taskEvents?.start();
     const pendingInfo = `${config.infoPath}.${randomBytes(16).toString('hex')}.pending`;
     try {
       await writeFile(pendingInfo,`address=127.0.0.1:${address.port}\ntoken=${token}\npid=${process.pid}\n`,{mode:0o600,flag:'wx'});

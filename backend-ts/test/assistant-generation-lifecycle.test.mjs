@@ -1,0 +1,144 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {SkillFiles} from '../src/skill-files.ts';
+import {readPackage} from '../src/skill-package.ts';
+import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
+import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-support.mjs';
+
+test('公开准备输入在TS建立锚点，官方runtime生成候选并重开同一讨论',{timeout:60000},async t=>{
+ const fixture=await pureTsFixture(t),owner=randomUUID(),contact=randomUUID(),binding=randomUUID();
+ await fixture.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成用户')",[owner]);
+ await fixture.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);
+ await fixture.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[binding,owner,contact]);
+ let holdNext=false,enter,release;
+ const host=await startReplyServiceHost(t,{name:fixture.client.database,user:fixture.client.user,close:async()=>{}},(_req,res,_requests,events)=>{
+  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次原句',citation_ids:['c1'],risk_notes:[]}]});
+  if(holdNext){holdNext=false;release=()=>sendEvents(res,events);enter();return;}sendEvents(res,events);
+ },{pluginPath:'test/assistant-generation-lifecycle-plugin.ts',environment:{NOTALONE_SYNTHETIC_OWNER:owner,NOTALONE_SYNTHETIC_CONTACT:contact,NOTALONE_SYNTHETIC_BINDING:binding}});
+ const {session_id:session}=await host.request(`/api/contacts/${contact}/assistant-session/default`,{}),path=`/api/contacts/${contact}/assistant-sessions/${session}`;
+ const input={contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:'明天见',include_relationship_context:false},skill_disabled:true};
+ const prepared=await host.request(`${path}/replies/prepare`,input);
+ assert.equal(prepared.session_id,session);assert.equal(prepared.request_key,input.idempotency_key);assert.equal(prepared.state,'running');assert.ok(prepared.input_version_id);
+ assert.equal(host.requests.length,0,'prepare不得执行供应商请求');
+ const turn=await host.request(`${path}/replies`,input);
+ assert.equal(turn.turn_id,prepared.turn_id);assert.equal(turn.input_version_id,prepared.input_version_id);assert.equal(turn.state,'completed');assert.equal(turn.reply.candidates[0].text,'明天见');
+ const again=await host.request(`${path}/replies`,input);assert.deepEqual(again,turn);assert.equal(host.requests.length,1);
+ const reopened=await host.request(path);assert.equal(reopened.turns.length,1);assert.equal(reopened.turns[0].reply.candidates[0].text,'明天见');
+ await t.test('同键异稿冲突；未领取准备给出持久封键证明',async()=>{
+  const send=async(url,body)=>{const response=await fetch(host.url+url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {status:response.status,payload:await response.json()};};
+  const conflict=await send(`${path}/replies/prepare`,{...input,content:{...input.content,draft_text:'后天见'}});
+  assert.equal(conflict.status,409);assert.equal(conflict.payload.error,'assistant_session_input_conflict');assert.equal(conflict.payload.no_generation,undefined);
+  const invalid={...input,idempotency_key:randomUUID(),expected_input_version_id:randomUUID()};
+  const failure=await send(`${path}/replies/prepare`,invalid);
+  assert.equal(failure.status,409);assert.deepEqual(failure.payload.no_generation,{contact_id:contact,session_id:session,request_key:invalid.idempotency_key,state:'not_reserved'});
+  const sealed=await send(`${path}/replies/prepare`,{...invalid,expected_input_version_id:prepared.input_version_id});
+  assert.equal(sealed.status,409);assert.equal(sealed.payload.reason,'request_deleted');assert.equal(host.requests.length,1);
+ });
+ await t.test('显式替换原键、退出中断和具名原输入重试',async()=>{
+  const original={...input,idempotency_key:randomUUID()},old=await host.request(`${path}/replies/prepare`,original);
+  const replacement={...input,idempotency_key:randomUUID(),expected_input_version_id:old.input_version_id};
+  const fresh=await host.request(`${path}/replace/prepare`,{running_request_key:original.idempotency_key,replacement});
+  assert.notEqual(fresh.turn_id,old.turn_id);
+  const stopped=await host.request(`${path}/interrupt`,{request_key:replacement.idempotency_key,input_version_id:fresh.input_version_id,reason:'app_quit'});
+  assert.equal(stopped.interruption_reason,'app_quit');assert.equal(stopped.state,'failed');
+  const retry={original_turn_id:fresh.turn_id,original_input_version_id:fresh.input_version_id,request_key:randomUUID()};
+  const recovered=await host.request(`${path}/retry-interrupted/prepare`,retry);
+  assert.notEqual(recovered.turn_id,fresh.turn_id);assert.notEqual(recovered.input_version_id,fresh.input_version_id);
+  const complete=await host.request(`${path}/retry-interrupted`,retry);
+  assert.equal(complete.state,'completed');assert.equal(complete.input.continuation.recovery.original_turn_id,fresh.turn_id);assert.equal(complete.reply.candidates[0].text,'明天见');
+  const candidate=complete.reply.candidates[0],command={idempotency_key:randomUUID(),expected_input_version_id:complete.input_version_id,instruction:'第一条，简短一点',displayed_group:{session_id:session,candidate_group_id:complete.reply.reply_request_id,candidates:[{number:1,candidate_id:candidate.candidate_id,version_id:candidate.candidate_id}]}};
+  const continuedPreparation=await host.request(`${path}/continue/prepare`,command);
+  const continued=await host.request(`${path}/continue`,command);
+  assert.equal(continued.turn_id,continuedPreparation.turn_id);assert.equal(continued.state,'completed');assert.deepEqual(continued.continuation.effective_requirements,['简短一点']);assert.equal(continued.continuation.candidate_id,candidate.candidate_id);assert.equal(continued.effective_input.draft_text,'明天见');
+  const nextCandidate=continued.reply.candidates[0],clarify={...command,idempotency_key:randomUUID(),expected_input_version_id:continued.input_version_id,instruction:'详细一点',displayed_group:{session_id:session,candidate_group_id:continued.reply.reply_request_id,candidates:[{number:1,candidate_id:nextCandidate.candidate_id,version_id:nextCandidate.candidate_id}]}};
+  const response=await fetch(host.url+`${path}/continue/prepare`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(clarify)}),clarification=await response.json();
+  assert.equal(response.status,409);assert.equal(clarification.error,'assistant_continuation_clarification_required');assert.equal(clarification.clarification.reason,'requirements_conflict');
+ });
+ await t.test('异步准备去重、隔离查询、取消迟到预检和重启原输入',async()=>{
+  await host.request('/arm-preflight',{});
+  const request={...input,idempotency_key:randomUUID()};
+  const asyncPrepare=async(body)=>{const r=await fetch(host.url+`${path}/replies/prepare`,{method:'POST',headers:{'content-type':'application/json',Prefer:'respond-async'},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
+  const pending=await asyncPrepare(request);assert.equal(pending.status,202);assert.equal(pending.body.state,'preparing');
+  await host.request('/wait-preflight',{});
+  const replay=await asyncPrepare(request);assert.deepEqual(replay,pending);
+  const conflict=await asyncPrepare({...request,content:{...request.content,draft_text:'不同草稿'}});assert.equal(conflict.status,409);
+  const statusPath=`${path}/replies/prepare/status/${pending.body.preparation_id}`;
+  const wrong=await fetch(host.url+statusPath.replace(session,randomUUID()));assert.equal(wrong.status,404);
+  const cancelled=await fetch(host.url+statusPath,{method:'DELETE'});assert.equal(cancelled.status,202);
+  await host.request('/release-preflight',{});
+  let terminal;
+  for(let i=0;i<40;i++){const r=await fetch(host.url+statusPath);terminal={status:r.status,body:await r.json()};if(r.status!==202)break;await new Promise(resolve=>setTimeout(resolve,25));}
+  assert.equal(terminal.status,409);assert.deepEqual(terminal.body,{error:'assistant_preparation_cancelled'});
+  const after=await host.request(path),turn=after.turns.find(turn=>turn.request_key===request.idempotency_key);assert.equal(turn.state,'failed');assert.equal(turn.reply,null);
+  await host.request('/recreate-lifecycle',{});
+  const missing=await fetch(host.url+statusPath);assert.equal(missing.status,404,'短期job句柄重启后不冒充持久任务');
+  const recovered=await host.request(`${path}/replies/prepare`,request);assert.equal(recovered.turn_id,turn.turn_id);assert.equal(recovered.input_version_id,turn.input_version_id);
+ });
+ await t.test('格式核验与重启裁定保留原身份，要求显式重新准备',async()=>{
+  const request={...input,idempotency_key:randomUUID()},ready=await host.request(`${path}/replies/prepare`,request);
+  const check={request_key:request.idempotency_key,input_version_id:ready.input_version_id};
+  const compatible=await host.request(`${path}/preparation-format`,check);assert.equal(compatible.format_status,'compatible');
+  await host.request('/recreate-lifecycle',{});
+  const reopened=await host.request(path),interrupted=reopened.turns.find(turn=>turn.turn_id===ready.turn_id);assert.equal(interrupted.interruption_reason,'app_quit');
+  const retry={original_turn_id:ready.turn_id,original_input_version_id:ready.input_version_id,request_key:randomUUID()},fresh=await host.request(`${path}/retry-interrupted/prepare`,retry);
+  await fixture.client.query("UPDATE assistant_session_turn SET prepared_context='{}'::jsonb WHERE id=$1",[fresh.turn_id]);
+  const incompatible=await host.request(`${path}/preparation-format`,{request_key:retry.request_key,input_version_id:fresh.input_version_id});assert.equal(incompatible.format_status,'reprepare_required');assert.equal(incompatible.state,'failed');
+ });
+ await t.test('并发同键只一个有效写者，替换后的迟到候选不能落库',async()=>{
+  const send=async(body,endpoint=`${path}/replies`)=>{const r=await fetch(host.url+endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
+  const request={...input,idempotency_key:randomUUID()},before=host.requests.length;holdNext=true;const entered=new Promise(resolve=>{enter=resolve;});const running=send(request);await entered;
+  const duplicate=await send(request);assert.equal(duplicate.status,409);assert.equal(duplicate.body.error,'assistant_session_in_progress');release();assert.equal((await running).status,200);assert.equal(host.requests.length,before+1);
+  const old={...input,idempotency_key:randomUUID()};holdNext=true;const arrived=new Promise(resolve=>{enter=resolve;});const late=send(old);await arrived;
+  const snapshot=await host.request(path),oldTurn=snapshot.turns.find(turn=>turn.request_key===old.idempotency_key),replacement={...input,idempotency_key:randomUUID(),expected_input_version_id:oldTurn.input_version_id};
+  const prepared=await host.request(`${path}/replace/prepare`,{running_request_key:old.idempotency_key,replacement});release();assert.equal((await late).status,409);
+  const completed=await host.request(`${path}/replace`,{running_request_key:old.idempotency_key,replacement});assert.equal(completed.turn_id,prepared.turn_id);assert.equal(completed.state,'completed');
+  const final=await host.request(path);assert.equal(final.turns.find(turn=>turn.turn_id===oldTurn.turn_id).reply,null);assert.equal(final.turns.find(turn=>turn.turn_id===oldTurn.turn_id).state,'failed');
+ });
+ await t.test('手动来历与桌面绑定并存；覆盖不完整必须显式确认',async()=>{
+  const desktop=randomUUID();await fixture.client.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic','fixture')",[desktop,owner,contact]);
+  await fixture.client.query('INSERT INTO wechat_binding_history_authorization(owner_id,contact_id,binding_id,version,authorized_at) VALUES($1,$2,$3,1,now())',[owner,contact,desktop]);
+  const send=async(body)=>{const r=await fetch(host.url+`${path}/replies/prepare`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
+  const blocked=await send({...input,idempotency_key:randomUUID()});assert.equal(blocked.status,409);assert.equal(blocked.body.reason,'history_sync_pending');
+  await fixture.client.query("INSERT INTO cli_history_sync_state(owner_id,contact_id,binding_id,phase,watermark_at,started_at) VALUES($1,$2,$3,'incomplete',now(),now())",[owner,contact,desktop]);
+  const incomplete=await send({...input,idempotency_key:randomUUID()});assert.equal(incomplete.status,409);assert.equal(incomplete.body.reason,'history_incomplete_confirmation_required');
+  const request={...input,idempotency_key:randomUUID(),allow_incomplete_history:true},prepared=await host.request(`${path}/replies/prepare`,request),result=await host.request(`${path}/replies`,request);assert.equal(result.state,'completed');assert.equal(result.turn_id,prepared.turn_id);
+  assert.equal((await fixture.client.query('SELECT conversation_binding_id FROM assistant_session_turn WHERE id=$1',[prepared.turn_id])).rows[0].conversation_binding_id,binding,'锚点仍须来自本次手动确认');
+  await host.request('/arm-preflight',{});const asyncInput={...request,idempotency_key:randomUUID()},started=await fetch(host.url+`${path}/replies/prepare`,{method:'POST',headers:{'content-type':'application/json',Prefer:'respond-async'},body:JSON.stringify(asyncInput)}),pending=await started.json();assert.equal(started.status,202);
+  await host.request('/wait-preflight',{});await host.request('/release-preflight',{});
+  let terminal;
+  for(let i=0;i<120;i++){const r=await fetch(host.url+`${path}/replies/prepare/status/${pending.preparation_id}`);terminal={status:r.status,body:await r.json()};if(r.status!==202)break;await new Promise(resolve=>setTimeout(resolve,50));}
+  assert.equal(terminal.status,200);assert.equal((await fixture.client.query('SELECT conversation_binding_id FROM assistant_session_turn WHERE id=$1',[terminal.body.turn_id])).rows[0].conversation_binding_id,binding,'202返回后仍以显式手动范围执行');
+  await fixture.client.query('DELETE FROM conversation_binding WHERE id=$1',[desktop]);
+  const revoked={...input,idempotency_key:randomUUID()},before=host.requests.length;await fixture.client.query('DELETE FROM manual_contact_confirmation WHERE id=$1',[binding]);
+  const refusal=await send(revoked);assert.equal(refusal.status,409);assert.equal(refusal.body.reason,'manual_contact_unconfirmed');assert.equal(host.requests.length,before);
+  await fixture.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[binding,owner,contact]);
+ });
+ await t.test('采用新消息保留权威累计要求，来源删除后旧键不能恢复',async()=>{
+  const source=randomUUID(),message=randomUUID();
+  await fixture.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'manual','合成资料',$4,1)",[source,owner,contact,'a'.repeat(64)]);
+  await fixture.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content) VALUES($1,$2,$3,'contact','text','合成的新消息')",[message,owner,contact]);
+  await fixture.client.query("INSERT INTO message_source_ref(id,message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,$4,'source_document',$5,'line:1','{}')",[randomUUID(),message,owner,contact,source]);
+  const workspace={...input,idempotency_key:randomUUID(),content:{type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:'明天见',include_relationship_context:true,user_instruction:'简短一点'}};
+  const current=await host.request(`${path}/replies`,workspace),adoption={...workspace,idempotency_key:randomUUID(),expected_input_version_id:current.input_version_id,adopt_new_message_id:message,content:{...workspace.content,user_instruction:undefined,context_text:'合成的新消息'}};
+  const ready=await host.request(`${path}/replies/prepare`,adoption),adopted=await host.request(`${path}/replies`,adoption);
+  assert.equal(adopted.turn_id,ready.turn_id);assert.deepEqual(adopted.input.continuation.effective_requirements,['简短一点']);assert.equal(adopted.input.continuation.message_adoption.adopt_new_message_id,message);
+  const before=host.requests.length;await fixture.client.query("UPDATE source_document SET status='delete_requested' WHERE id=$1",[source]);
+  const response=await fetch(host.url+`${path}/replies`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(adoption)});assert.equal(response.status,409);assert.equal(host.requests.length,before);
+  const snapshot=await host.request(path);assert.equal(snapshot.turns.find(turn=>turn.turn_id===adopted.turn_id).state,'unavailable');
+ });
+ await t.test('已准备的active Skill停用后，旧键不得生成',async()=>{
+  const packagePath=join(fixture.directory,'synthetic-lifecycle-skill');await mkdir(packagePath);await writeFile(join(packagePath,'SKILL.md'),'---\nname: synthetic-lifecycle-skill\ndescription: 合成表达策略\n---\n\n使用简短表达。\n');
+  const skill=randomUUID(),version=randomUUID(),pkg=readPackage(packagePath),files=new SkillFiles(join(host.home,'skills')),location=files.prepareVersion(owner,skill,version,pkg);
+  files.writeWorking({id:version,skill_id:skill,owner_id:owner,name:pkg.name,...location});
+  await fixture.client.query("INSERT INTO reply_skill(id,owner_id,name,status) VALUES($1,$2,$3,'active')",[skill,owner,pkg.name]);
+  await fixture.client.query("INSERT INTO reply_skill_version(id,skill_id,version_number,content_sha256,source_locator,enabled,is_current,status,content_path,document_sha256,manifest_sha256) VALUES($1,$2,1,$3,'synthetic',true,true,'active',$4,$5,$6)",[version,skill,location.content_sha256,location.content_path,location.document_sha256,location.manifest_sha256]);
+  await fixture.client.query('INSERT INTO skill_library(owner_id,revision) VALUES($1,1) ON CONFLICT(owner_id) DO UPDATE SET revision=skill_library.revision+1',[owner]);
+  const request={...input,idempotency_key:randomUUID(),skill_disabled:false,skill_version_id:version},ready=await host.request(`${path}/replies/prepare`,request),before=host.requests.length;
+  await fixture.client.query('UPDATE reply_skill_version SET enabled=false WHERE id=$1',[version]);await fixture.client.query('UPDATE skill_library SET revision=revision+1 WHERE owner_id=$1',[owner]);
+  const format=await host.request(`${path}/preparation-format`,{request_key:request.idempotency_key,input_version_id:ready.input_version_id});assert.equal(format.format_status,'reprepare_required');
+  const response=await fetch(host.url+`${path}/replies`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(request)});assert.equal(response.status,409);assert.equal(host.requests.length,before);
+ });
+});

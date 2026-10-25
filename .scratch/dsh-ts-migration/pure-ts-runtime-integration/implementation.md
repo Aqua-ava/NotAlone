@@ -1,0 +1,22 @@
+# 纯 TS 产品运行路径实施清单
+- 基点：a61a21407c9395c462e4e68bfeee4628e7e9b15c；根统一集成、暂存和提交。
+- 不启动或操作桌面、不读 .env／真实资料、不调用真实供应商、不打包、不推送。
+- 首片：NOTALONE_HOST_RUNTIME=typescript→官方profile→公开ready/HTTP/SSE/持久讨论/stop；Python不存在、无Conda PATH仍成功。
+- 复用TS业务服务、现有数据库和来源／联系人隔离；保留兼容分支至25通过，26再删除。
+- 自有修改：host-plugin.ts、host-reply.ts、host-model-runtime.ts、skill-host.ts、contact-handoff.ts、memory-management-handoff.ts。
+- 根追加授权：assistant-discussion-service.ts仅加可选binding resolver；缺省旧语义保持。
+- 自有新增：src/pure-ts-*.ts普通运输、事件、同步寿命、来源读取与请求范围适配；test/pure-ts-*合成公开验证。
+- 已归还：desktop backend/process.ts、config.ts与startup/diagnostics.ts、managed-runtime.ts，由桌面独立聊天负责。
+- 外部接入：schema-prepare.ts、managed-database-lifetime.ts由桌面聊天提供；我只接宿主共享锁和Node合成fixture。
+- 外部接入：assistant-generation-*由生命周期聊天提供；我只接公开HTTP/桥接/recover/drain与手动范围。
+- 外部接入：layered-memory-management*由管理聊天提供；我只接handler、同一taskControl和qualityStore。
+- 外部接入：organization-quality-*与quality-model-*由独立聊天提供；我只装配同一provider/许可的实际caller。
+- DSH查证：锁定0.2.1-rc.2／687f282e；记录见dsh-verification.md，不改官方核心。
+- 最终GREEN：正式launcher公开runtime/reply/sync/task-SSE/关闭取消/共享寿命锁/职责冲突拒绝/手动异步隔离及维护、质量共10项。
+- 最终相关组合52/52、0失败0跳过，94.006秒；含既有host/model/handoff/Skill/contact/Discussion42项。
+- 最终TSC与精确范围diff-check通过；未运行全后端或桌面全量。
+- 质量接同一provider／Unix许可／原PG authority与Store，公开六phase实际8次与原合成问题SQLite used一致，重开不重放。
+- 默认自动分层维护由唯一PG监听／计时寿命承接；通知只唤醒原管理器，关闭abort/drain后释放监听。
+- 公开路由见route-matrix.md；source-manifest.json冻结自有28个源码／测试，validation.json记录最终命令与日志哈希。
+- 独立复审、真实App／微信、质量和正式性能交根；未签Ticket25／26，未删除兼容臂。
+- 一次新fixture清理顺序失败已修：额外PG客户端先关闭再drop；精确自有合成库与目录已清理，未触碰真实资料或未知进程。

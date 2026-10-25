@@ -4,7 +4,7 @@ import { access, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { StartupCode, StartupPaths, StartupState } from '../../shared/startup-bridge';
-import { backendEnvironment, configurationPaths, loadBackendConfiguration, saveBackendConfiguration, type BackendConfiguration } from '../backend/config';
+import { backendEnvironment, configurationPaths, isTypescriptHost, loadBackendConfiguration, saveBackendConfiguration, type BackendConfiguration } from '../backend/config';
 import { BackendFailure, readConnection } from '../backend/connection';
 import { ManagedRuntime, ManagedRuntimeFailure } from './managed-runtime';
 import { historicalUpdateComplete } from './historical-update';
@@ -119,7 +119,7 @@ export class StartupDiagnostics {
       throw new BackendFailure('backend_connection_failed');
     }
     let code: StartupCode;
-    if (!config.pythonExecutable || !config.projectDirectory) code = 'launch_unconfigured';
+    if (!config.projectDirectory || !isTypescriptHost(config) && !config.pythonExecutable) code = 'launch_unconfigured';
     else {
       try {
         code = await this.validatePaths(config);
@@ -151,7 +151,7 @@ export class StartupDiagnostics {
   }
 
   private async validatePaths(config: BackendConfiguration): Promise<StartupCode> {
-    if (!await executableExists(config.pythonExecutable)) return 'python_unavailable';
+    if (!isTypescriptHost(config) && !await executableExists(config.pythonExecutable)) return 'python_unavailable';
     try {
       if (!path.isAbsolute(config.projectDirectory!) || !(await stat(config.projectDirectory!)).isDirectory()) return 'project_unavailable';
       await access(config.projectDirectory!, constants.R_OK | constants.X_OK);
@@ -160,6 +160,9 @@ export class StartupDiagnostics {
       const source = path.join(config.projectDirectory!, 'backend/src/notalone');
       if (config.runtime === 'dsh') {
         if (!(await stat(path.join(config.projectDirectory!, 'backend-ts/src/host-storage.ts'))).isFile()) return 'runtime_components_unavailable';
+        if (isTypescriptHost(config)) for (const entry of ['backend-ts/src/launch.ts', 'backend-ts/profile/host.patch.yml', 'backend-ts/src/schema-prepare-cli.ts']) {
+          if (!(await stat(path.join(config.projectDirectory!, entry))).isFile()) return 'runtime_components_unavailable';
+        }
       } else if (!(await stat(path.join(source, 'server/command.py'))).isFile()
         || !(await stat(path.join(source, 'startup_diagnostics.py'))).isFile()) return 'backend_package_missing';
     } catch { return config.runtime === 'dsh' ? 'runtime_components_unavailable' : 'backend_package_missing'; }
@@ -180,11 +183,11 @@ export class StartupDiagnostics {
   }
 
   private async probe(config: BackendConfiguration, canStart: () => boolean, prepareSchema = false): Promise<StartupCode> {
-    const typescript = config.runtime === 'dsh' && !prepareSchema;
+    const typescript = config.runtime === 'dsh' && (!prepareSchema || isTypescriptHost(config));
     if (typescript && Number(process.versions.node.split('.')[0]) < 24) return 'runtime_components_unavailable';
     const executable = typescript ? process.execPath : await realpath(config.pythonExecutable!);
     const project = await realpath(config.projectDirectory!);
-    // 普通 DSH 诊断只读复用03的 TS 兼容性合同；结构写入仍由03既有准备生命周期负责。
+    // 普通诊断只读；纯 TS 准备入口沿同一库复用原迁移与兼容性合同。
     // 独立子进程保留硬超时与退出回收，不装配模型、业务任务或 DSH 遥测。
     const program = `const {HostStorage}=await import(${JSON.stringify(pathToFileURL(path.join(project, 'backend-ts/src/host-storage.ts')).href)});
       let storage; let code='diagnostic_failed';
@@ -193,7 +196,9 @@ export class StartupDiagnostics {
       console.log(JSON.stringify({code}));`;
     if (!canStart() || this.closing) return 'diagnostic_failed';
     return new Promise((resolve) => {
-      const args = typescript ? ['--experimental-strip-types', '--input-type=module', '-e', program]
+      const args = typescript ? prepareSchema
+        ? ['--experimental-strip-types', path.join(project, 'backend-ts/src/schema-prepare-cli.ts'), '--migrations', path.join(project, 'backend/database/migrations'), '--prepare']
+        : ['--experimental-strip-types', '--input-type=module', '-e', program]
         : [...(config.source === 'managed' ? ['-I', '-B'] : []), '-m', prepareSchema ? 'notalone.startup_database' : 'notalone.startup_diagnostics', '--migrations', path.join(project, 'backend/database/migrations')];
       const child = spawn(executable, args, {
         cwd: project, env: { ...backendEnvironment({ ...config, projectDirectory: project }, this.userData),
@@ -222,7 +227,7 @@ export class StartupDiagnostics {
       child.stdout.on('data', (chunk: Buffer) => {
         if (settled || interrupted) return;
         output += chunk.toString('utf8');
-        if (Buffer.byteLength(output) > 4096) stop('diagnostic_failed');
+        if (Buffer.byteLength(output) > (prepareSchema ? 32768 : 4096)) stop('diagnostic_failed');
       });
       child.once('error', () => finish(typescript ? 'runtime_components_unavailable' : 'python_unavailable'));
       child.once('close', () => {

@@ -1,0 +1,84 @@
+{
+  "source_base": "a61a21407c9395c462e4e68bfeee4628e7e9b15c",
+  "integration_head_at_freeze": "e17d4c752c69618e90e43c42488f1cb2c4d1b7a4",
+  "frozen": true,
+  "files": [
+    {
+      "path": ".scratch/dsh-ts-migration/assistant-generation-lifecycle/implementation.md",
+      "sha256": "5eaad7286b96f91f486ea10c565bebdb7d550873d4dcea9c937c8f9f9cfc2511"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/assistant-generation-lifecycle/public-scan.json",
+      "sha256": "0263347727839150a1969634e7f925a918f76d889bbb789cbf1f549cceeaa5f8"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/assistant-generation-lifecycle/validation.md",
+      "sha256": "f0b67ce065729c5b9b683a2a705afc584565f38c8e5f5779332330f4dfd7ea38"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-adoption.ts",
+      "sha256": "3cd02f72f11aeba32250c7a28d8fdef527052b0bddc4f03a62cba86231d95613"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-continuation.ts",
+      "sha256": "94d07ef10fa7fd479dd61e558dc7daf57a0bb65d2d3419dc6adc239a17927752"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-explored.ts",
+      "sha256": "e0665219c9eb4ede03bb1630409735d04ea52d1d6b167288abcbdb723873423a"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-format.ts",
+      "sha256": "06e6c4ab4169c1a182b8d3ed83ea8b5570b605d567840e7da3e551269c3a6ce7"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-interruption.ts",
+      "sha256": "523e5915d61a0e2abfcbabdc8c52a42cace874f87c2eea6cce75c07453fe1489"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-jobs.ts",
+      "sha256": "e5c0b586e7d5ecb89285e1392e39ac56960c30b454b2b4983409e0e201e371b0"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-lifecycle.ts",
+      "sha256": "b58f390ace423c88ca8ffbdb2061db872273576bdaa9adb9fe84ebfdb9304724"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-store.ts",
+      "sha256": "79db68afd5095b1ca0f90d64216e114385150f006a992058c72327a68eb0ec6b"
+    },
+    {
+      "path": "backend-ts/test/assistant-generation-errors.test.mjs",
+      "sha256": "e3f5dd6725b3c2a5e2686de3a6e14809b5f60b39cb454fabdf14f475090e8bb8"
+    },
+    {
+      "path": "backend-ts/test/assistant-generation-explored.test.mjs",
+      "sha256": "df5052162285a1656e19916937f513c41f3bd1c3cbaaa5ec4f9f18c07613016d"
+    },
+    {
+      "path": "backend-ts/test/assistant-generation-lifecycle-plugin.ts",
+      "sha256": "f00fc55b9f6cbce2c821344928d3d0e96ece5ac64ec6ef0418de377eaee8afb1"
+    },
+    {
+      "path": "backend-ts/test/assistant-generation-lifecycle.test.mjs",
+      "sha256": "b894106ee14b4e8e9633d009516c4db1fb0fdc858890b6f945781fa911d2c676"
+    }
+  ],
+  "validation": {
+    "new_tests": 12,
+    "related_tests": 31,
+    "typecheck": "passed",
+    "typecheck_errors": [],
+    "public_scan_findings": 0,
+    "own_synthetic_host_directories_remaining": 0
+  },
+  "raw_log_permissions": {
+    "directory": "700",
+    "files": {
+      "lifecycle-final.log": "600",
+      "related-final.log": "600",
+      "typecheck-final.log": "600",
+      "cleanup-final.json": "600"
+    }
+  }
+}

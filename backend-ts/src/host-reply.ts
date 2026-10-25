@@ -26,6 +26,9 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {AssistantDiscussionError,AssistantDiscussionService} from './assistant-discussion-service.ts';
 import {createAssistantDiscussionHttp} from './assistant-discussion-http.ts';
+import {createPureTsPublicApi} from './pure-ts-public-api.ts';
+import {AssistantGenerationLifecycle} from './assistant-generation-lifecycle.ts';
+import {resolveRequestBinding,withPublicReplyScope,withoutPublicReplyScope} from './pure-ts-reply-scope.ts';
 import {
   createL2ScenarioHost,
   type L2ScenarioHostCandidate,
@@ -37,7 +40,12 @@ import {
   L2ScenarioConflict,
   type L2ScenarioQualityReader,
 } from './l2-scenario-service.ts';
-import {L2ScenarioError,type L2ScenarioBudget} from './l2-scenario-workspace.ts';
+import {L2ScenarioError,DEFAULT_L2_SCENARIO_BUDGET,type L2ScenarioBudget} from './l2-scenario-workspace.ts';
+import {createOrganizationQualityApi} from './organization-quality-api.ts';
+import {createOrganizationQualityContract} from './organization-quality-contract.ts';
+import {createOrganizationQualityRuntime,type OrganizationQualityRuntime} from './organization-quality-runtime.ts';
+import {createQualityModelCaller} from './quality-model-caller.ts';
+import {qualityInputSourceRef} from './organization-quality-store.ts';
 import type {SourceProcessingTraceStore} from './source-processing-trace.ts';
 import {SkillFiles} from './skill-files.ts';
 import {SkillLibrary} from './skill-library.ts';
@@ -68,6 +76,7 @@ export interface HostReplyOptions {
   extractionConcurrency?:number;
   embeddingFactory?:Parameters<typeof createLocalEmbeddingLifecycle>[0];
   discussionSkillsRoot?:string;
+  publicRuntime?:boolean;
   sourceTraces?:Pick<SourceProcessingTraceStore,
     'findMemoryTraceRecordInTransaction'|'validateMemoryTraceRecordInTransaction'>;
   l2Quality?:L2ScenarioQualityReader;
@@ -89,6 +98,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   let extractionWorker:ExtractionWorker|undefined;
   let extractionControl:ExtractionWorkerTaskControl|undefined;
   let l2Scenarios:L2ScenarioHostCandidate|undefined;
+  let qualityRuntime:OrganizationQualityRuntime|undefined;
   let learningPool:pg.Pool|undefined;
   let learningTaskStore:ExtractionTaskStore|undefined;
   let learningStore:SkillLearningStore|undefined;
@@ -132,7 +142,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     try{return await work;}finally{pending.delete(work);}
   }
   const scheduleLearning=(scope:{owner_id:string;contact_id:string})=>
-    execute(new AbortController().signal,async()=>{await learningHttp?.notify(scope);}).catch(()=>{});
+    withoutPublicReplyScope(()=>execute(new AbortController().signal,async()=>{await learningHttp?.notify(scope);})).catch(()=>{});
   const delegated:ReplyHttpService={
     prepare:(scope,body,signal,internal)=>execute(signal,combined=>{
       if(!service)throw new ReplyError('reply_remote_unavailable',503);
@@ -176,12 +186,33 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     }});
   const discussionSkillsRoot=options.discussionSkillsRoot??options.configuration?.skillsRoot;
   if(!discussionSkillsRoot?.trim())throw new Error('discussion_skills_root_required');
-  const discussionHttp=createAssistantDiscussionHttp({ownerId:owner,token:options.token,
-    service:new AssistantDiscussionService({
+  const qualityContract=options.publicRuntime?createOrganizationQualityContract({
+    ...(options.configuration?{provider:'deepseek',request_model:options.configuration.model.model,verifier_provider:'deepseek',verifier_model:options.configuration.model.model}:{}),
+    budget:{...(options.l2Budget??DEFAULT_L2_SCENARIO_BUDGET),max_profile_entries:16},
+  }):undefined;
+  const qualityApi=options.publicRuntime&&owner?createOrganizationQualityApi({
+    ownerId:owner,transaction:work=>options.storage.businessTransaction(work),contract:qualityContract,
+    get runtime(){return qualityRuntime;},
+  }):undefined;
+  const discussionService=new AssistantDiscussionService({
       transaction:discussionTransaction,
       skillsRoot:discussionSkillsRoot,
       environment:options.storage.runtimeEnvironment(),
-    }),
+      ...(options.publicRuntime?{resolveBinding:resolveRequestBinding}:{}),
+    });
+  const generation=options.publicRuntime?new AssistantGenerationLifecycle({
+    transaction:async work=>{
+      let failure:unknown;
+      try{return await options.storage.businessTransaction(async client=>{
+        try{return await work(client);}catch(error){failure=error;throw error;}
+      });}catch(error){throw failure??error;}
+    },skillsRoot:discussionSkillsRoot,environment:options.storage.runtimeEnvironment(),replyService:delegated,resolveBinding:resolveRequestBinding,runInScope:withPublicReplyScope,
+  }):undefined;
+  if(generation&&owner)await generation.recover(owner);
+  const publicApi=createPureTsPublicApi({ownerId:owner,available:options.configuration!==null,discussion:discussionService,reply:delegated,storage:options.storage,skillsRoot:discussionSkillsRoot,generation,
+    exploration:{execute:(scope,session,action,request,signal,internal)=>execute(signal,combined=>exploration!.execute(scope,session,action,request,combined,internal))}});
+  const discussionHttp=createAssistantDiscussionHttp({ownerId:owner,token:options.token,
+    service:discussionService,
     onChanged:scope=>{void scheduleLearning({owner_id:scope.owner_id,contact_id:scope.contact_id});}});
   const learningFiles=new SkillFiles(discussionSkillsRoot);
   let reviewStore:SkillReviewStore|undefined;
@@ -219,6 +250,12 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     if(options.extractionPermit)extraction=createExtractionModelCaller({ctx:options.ctx,provider,permit:options.extractionPermit});
     try{
       const m=options.configuration.model;
+      if(options.publicRuntime&&qualityApi&&options.extractionPermit){
+        const qualityModel=createQualityModelCaller({ctx:options.ctx,provider,permit:options.extractionPermit});
+        qualityRuntime=createOrganizationQualityRuntime({call:input=>qualityModel.call(input),
+          binding:{provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,reasoningEffort:m.reasoningEffort},profile:m.budgetProfile,
+          diagnosticProblemBudgetBound:qualityModel.diagnosticProblemBudgetBound,sourceRef:qualityInputSourceRef});
+      }
       const call=(input:ExtractionModelInput)=>extraction!.call({...input,
         signal:AbortSignal.any([input.signal,AbortSignal.timeout(m.deadline_ms)])});
       if(owner&&extraction&&learningStore)learningRuntime=new SkillLearningRuntime({store:learningStore,call,
@@ -303,6 +340,9 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   let closing:Promise<void>|undefined;
   return {
     configured:Boolean(service),
+    qualityApi:qualityApi?{...qualityApi,
+      handle:(method:string,url:URL,body:unknown,signal:AbortSignal)=>execute(signal,combined=>qualityApi.handle(method,url,body,combined)),
+    }:undefined,
     extractionControl:extractionControl as TaskControlPort|undefined,
     extractionWorkerStatus:extractionWorker?.status()??null,
     callExtraction(input:ExtractionModelInput){return execute(input.signal,signal=>{
@@ -324,10 +364,12 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     handleLayeredMemory(req:IncomingMessage,res:ServerResponse,url:URL){
       return l2Http.handlePublic(req,res,url);
     },
+    handlePublic(req:IncomingMessage,res:ServerResponse,url:URL){return publicApi.handle(req,res,url);},
     stopAccepting(){stopping.abort();},
     close():Promise<void>{
       return closing??=(async()=>{
         stopping.abort();
+        await generation?.drain();
         await extractionControl?.close();
         if(extractionWorker&&!await extractionWorker.stop())throw new Error('extraction_worker_unsettled');
         // 取消只通知业务；服务退出前仍持有真实物理许可，不能以HTTP断连代替结算。

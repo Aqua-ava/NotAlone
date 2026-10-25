@@ -1,0 +1,34 @@
+{
+  "artifacts": [
+    {
+      "path": ".scratch/dsh-ts-migration/organization-quality-migration/checklist.md",
+      "sha256": "a7f370cf21a390ad024213f68af07c5537eb374a68e3950abfac0517f55a1301",
+      "bytes": 2841
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/organization-quality-migration/dependencies.json",
+      "sha256": "72b0bef6c32b63e87b04d5d466fe69056124965ac221d201d00c4606140cabf6",
+      "bytes": 10987
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/organization-quality-migration/files.json",
+      "sha256": "c215a556783cb3fee5f3126e09e5b3ce0d57fd7ea7af1a1ec106f6a34e322dbd",
+      "bytes": 2772
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/organization-quality-migration/report.md",
+      "sha256": "df4973883b6dd4ece4c590a56a76fa605a4561b95b7baa5102778eedf67fc1c9",
+      "bytes": 5996
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/organization-quality-migration/scan.json",
+      "sha256": "4d1c026d58c9558e75b92a8baf36d3b9b59b9223d8c7c5a47e7a0603e704b021",
+      "bytes": 122
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/organization-quality-migration/validation.json",
+      "sha256": "6e33a279e9d99472ba61a9e958dcf1cb6ac0a977d6fcdc619acd27a8368a0643",
+      "bytes": 2287
+    }
+  ]
+}

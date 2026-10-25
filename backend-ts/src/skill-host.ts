@@ -73,6 +73,17 @@ export class SkillHost {
    this.active=true;
   }finally{this.transferring=false;if(!this.active)this.privateSyncReady=false;}
  }
+ /** 官方宿主已独占启动且没有兼容进程时，直接核验原 Skill 文件与业务版本。 */
+ async activateStandalone(){
+  if(this.closed||this.transferring||this.active)throw new SkillLibraryError('skill_unavailable',503);
+  if(!this.owner)return;
+  this.transferring=true;
+  try{
+   await this.library.synchronize(this.owner,()=>{if(this.closed)throw new SkillLibraryError('skill_unavailable',503);});
+   if(this.closed)throw new SkillLibraryError('skill_unavailable',503);
+   this.active=true;
+  }finally{this.transferring=false;}
+ }
  async privateHttp(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const path=new URL(req.url??'','http://localhost').pathname;
   if(!path.startsWith('/api/runtime/skill-management/'))return false;

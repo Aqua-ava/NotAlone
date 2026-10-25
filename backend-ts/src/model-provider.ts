@@ -16,7 +16,9 @@ export interface ModelProviderCall {
   binding: MessagesBudgetBinding; profile: MessagesBudgetProfile;
   requireCurrent(): Promise<void>;
   /** HTTP发送前强制持久化授权。此时发送仍可能被signal阻止，不能记成已发。 */
-  beforeDispatch(value: {attempt_id:string;permit_id:string;budget:MessagesBudgetReceipt;dispatch:'authorized_unconfirmed'}): Promise<void>;
+  beforeDispatch(value: {attempt_id:string;permit_id:string;budget:MessagesBudgetReceipt;dispatch:'authorized_unconfirmed';
+    /** 最终序列化HTTP实体的Unicode字符数；不携带正文。 */
+    request_entity_characters?:number}): Promise<void>;
 }
 export interface ModelProviderObservation {
   attempt_id: string; permit_id: string;
@@ -86,7 +88,8 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       catch(error){if(error instanceof ModelInputBudgetError)current.observation.budget_rejection={code:error.code,receipt:error.receipt};throw error;}
       const checkDiagnosticDispatch=diagnosticBudget?.reserve();
       current.observation.before_dispatch_started=true;
-      await current.call.beforeDispatch({attempt_id:current.call.attempt_id,permit_id:current.call.permit_id,budget,dispatch:'authorized_unconfirmed'});
+      await current.call.beforeDispatch({attempt_id:current.call.attempt_id,permit_id:current.call.permit_id,budget,dispatch:'authorized_unconfirmed',
+        request_entity_characters:[...JSON.stringify(request.body)].length});
       checkDiagnosticDispatch?.();
       current.observation.budget=budget;
       current.observation.dispatch='authorized_unconfirmed';
@@ -103,6 +106,8 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     return registered;
   }
   return {
+    /** 只反映安装时成功绑定；不表示尚有额度，不暴露账本身份或重读env。 */
+    get diagnosticProblemBudgetBound():boolean {return diagnosticBudget!==null;},
     beginCall(call: ModelProviderCall) {
       const registered=register(call);
       return {
@@ -144,7 +149,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
           const checkDiagnosticDispatch=diagnosticBudget?.reserve();
           registered.observation.before_dispatch_started=true;
           await registered.call.beforeDispatch({attempt_id:registered.call.attempt_id,permit_id:registered.call.permit_id,
-            budget,dispatch:'authorized_unconfirmed'});
+            budget,dispatch:'authorized_unconfirmed',request_entity_characters:[...JSON.stringify(request.body)].length});
           checkDiagnosticDispatch?.();
           registered.observation.budget=budget;registered.observation.dispatch='authorized_unconfirmed';
           input.signal.throwIfAborted();

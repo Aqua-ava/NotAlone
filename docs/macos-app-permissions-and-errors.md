@@ -1,5 +1,23 @@
 # macOS App 权限与启动错误记录
 
+## 2026-10-25 纯 TS 开发启动与数据库准备
+
+显式使用 `NOTALONE_HOST_RUNTIME=typescript` 的 DSH 开发路径通过 Node 执行配置核验、只读诊断、首次受管数据库准备和原地结构更新，不执行 Python 解释器；继续使用原数据库与资料位置。旧 runtime 及完整组件库存校验保留至迁移 Ticket 26 退役。权限、签名、TCC 和微信授权流程不变。
+
+启动错误沿用现有显示与恢复操作：
+
+| code | 恢复操作 |
+| --- | --- |
+| `runtime_components_unavailable` | 核对并补齐完整运行组件。 |
+| `baseline_missing` | 核验原库接管方案。 |
+| `migration_history_mismatch` | 核对原 SQL 与迁移账本，保留现场。 |
+| `database_writers_present` | 正常退出使用同一数据库的程序后重新检查。 |
+| `database_update_requires_local` | 核对原本机连接。 |
+| `migration_busy` | 等待另一次结构更新结束后重查。 |
+| `migration_failed` | 核对权限和迁移文件后重试，保留已完成版本。 |
+
+本切片的合成验证为后端相关26项、桌面相关26项及两端类型检查，包含空隔离PG16的115份迁移与原内核寿命锁；实际开发App、最终纯TS性能及独立发布尚未据此签收。详见[启动准备报告](../.scratch/dsh-ts-migration/pure-ts-desktop-startup/report.md)。
+
 ## 2026-10-23 历史同步开发 CLI 的 status 与文件访问核验
 
 票08发现旧配置仍指向1.6.25，票01重建的只读CLI未开放首次连接需要的 `status`。修复补齐固定status模式，移除账号探测中无关的语音解释器调用；合成账号、无文件写入、坏密钥与命令白名单回归通过。实际重建工具能读取配置身份及密钥元数据，但会话库只读探针返回 `Operation not permitted`，旧配置工具在同一账号仍可读；这是当前已核实的系统文件访问差异，不据此推断密钥或WCDB不兼容。

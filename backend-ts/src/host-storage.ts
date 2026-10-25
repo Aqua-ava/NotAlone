@@ -450,7 +450,7 @@ const PG_PARAMETERS: Record<string,string> = {
   connect_timeout:'PGCONNECT_TIMEOUT',application_name:'PGAPPNAME',options:'PGOPTIONS',client_encoding:'PGCLIENTENCODING',
 };
 function invalidConnection(): never { throw new HostStorageError('database_configuration_invalid'); }
-function connectionFields(value: string): Record<string,string> {
+export function connectionFields(value: string): Record<string,string> {
   const fields: Record<string,string> = {};
   if (/^postgres(?:ql)?:\/\//.test(value)) {
     try {
@@ -508,7 +508,7 @@ async function passwordFromFile(fields: Record<string,string>, environment: Reco
   finally { await file?.close(); }
 }
 /** 与libpq一样先取连接串，再取受控PG环境；不把缺省值交给pg读取DSH全局环境。 */
-async function connectionOptions(value: string, environment: Record<string, string | undefined>): Promise<DatabaseConnection> {
+export async function connectionOptions(value: string, environment: Record<string, string | undefined>): Promise<DatabaseConnection> {
   const explicit = connectionFields(value);
   if (['PGSERVICE','PGSERVICEFILE','PGTARGETSESSIONATTRS','PGLOADBALANCEHOSTS','PGSSLPASSWORD',
     'PGSSLCRL','PGSSLCRLDIR','PGSSLNEGOTIATION','PGCHANNELBINDING','PGGSSENCMODE','PGREPLICATION'].some(key => environment[key])) invalidConnection();
@@ -546,7 +546,7 @@ async function connectionOptions(value: string, environment: Record<string, stri
     application_name:fields.application_name || 'notalone_ts_host',options:fields.options || ' ',
     client_encoding:fields.client_encoding || 'UTF8'},allowPlaintextFallback:!socket && sslmode==='prefer',upgradeToTls:!socket && sslmode==='allow' ? tlsOptions : undefined};
 }
-async function connectConfigured(configuration: DatabaseConnection): Promise<pg.Client> {
+export async function connectConfigured(configuration: DatabaseConnection): Promise<pg.Client> {
   const connect = async (options: pg.ClientConfig): Promise<pg.Client> => {
     const client = new pg.Client(options);client.on('error',()=>{});
     try {await client.connect();return client;}

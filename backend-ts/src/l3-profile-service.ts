@@ -1,5 +1,7 @@
 /** L3 长期背景的持久工作、增量跳过、独立核验、原子发布、撤回和纠错。 */
 import type {Client} from 'pg';
+import {filterLayeredMemoryManagementEntries} from './layered-memory-management-source-policy.ts';
+import {managementTargetInputs} from './layered-memory-management-target.ts';
 import {randomUUID} from 'node:crypto';
 import type {MessagesBudgetProfile} from './model-input-budget.ts';
 import type {ContextMetadata} from './reply-context-types.ts';
@@ -424,7 +426,7 @@ export class L3ProfileService {
       throw new L3ProfileServiceConflict('l3_profile_generation_changed');
     }
     const feedback = await feedbackRows(client, work.scope);
-    const current = guarded(await overview(client, work.scope), feedback, BigInt(this.now().getTime()) * 1_000n);
+    const current = managementTargetInputs(job,guarded(await filterLayeredMemoryManagementEntries(client,work.scope,await overview(client, work.scope)), feedback, BigInt(this.now().getTime()) * 1_000n));
     const currentManifest = new Map(current.map(memory => [`${memory.memory_id}:${memory.revision}`, organizationManifest(memory)]));
     if (canonicalScenarioJSON(work.manifest) !== canonicalScenarioJSON(work.memories.map(memory =>
       currentManifest.get(`${memory.memory_id}:${memory.revision}`)))) {
@@ -490,7 +492,7 @@ export class L3ProfileService {
           WHERE task_id=$1 AND state='active'`, [claim.task_id]);
         return 'settled';
       }
-      const allowed = guarded(await overview(client, scope), feedback, BigInt(this.now().getTime()) * 1_000n);
+      const allowed = managementTargetInputs(job,guarded(await filterLayeredMemoryManagementEntries(client,scope,await overview(client, scope)), feedback, BigInt(this.now().getTime()) * 1_000n));
       const allowedManifest = new Map(allowed.map(memory => [`${memory.memory_id}:${memory.revision}`, organizationManifest(memory)]));
       const inputCurrent = (item: Row) => {
         const current = allowedManifest.get(`${item.memory_id}:${item.revision}`);
@@ -1069,7 +1071,7 @@ export class L3ProfileService {
       const entry = profile?.entries?.[command.item_index];
       if (!profile || !entry) throw new L3ProfileServiceConflict('l3_profile_feedback_target_stale');
       const feedback = await feedbackRows(client, scope);
-      const allowed = guarded(await overview(client, scope), feedback, BigInt(this.now().getTime()) * 1_000n);
+      const allowed = guarded(await filterLayeredMemoryManagementEntries(client,scope,await overview(client, scope)), feedback, BigInt(this.now().getTime()) * 1_000n);
       const byVersion = new Map(allowed.map(memory => [`${memory.memory_id}:${memory.revision}`, memory]));
       const protectedMemories = profile.input_manifest.map((item: Row) =>
         byVersion.get(`${item.memory_id}:${item.revision}`));

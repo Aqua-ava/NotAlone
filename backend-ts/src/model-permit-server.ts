@@ -6,6 +6,7 @@ import { captureProcessIdentity } from './process-identity.ts';
 import { dirname } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { ModelPermitArbiter, type ModelPermit } from './model-permits.ts';
+import type {ModelQualityClaim} from './quality-model-authorization.ts';
 
 /** 原任务领取凭证；类型不授予权限，宿主预约策略必须核对真实租约。 */
 export interface ModelTaskClaim {
@@ -14,6 +15,8 @@ export interface ModelTaskClaim {
 export interface ModelPermitAccounting {
   /** 宿主从稳定request策略取得额度，不能信任客户端指定上限。 */
   reserve(receipt:ModelLedgerReceipt,claim?:ModelTaskClaim):Promise<void>;
+  /** 具名质量case租约独立核验，绝不把质量输入伪装为生产任务。 */
+  reserveQuality?(receipt:ModelLedgerReceipt,claim:ModelQualityClaim):Promise<void>;
   /** 必须验证已存在的同attempt预约，不允许仅凭完成消息创建授权。 */
   recordReserved(receipt:ModelLedgerReceipt):Promise<void>;
   unconfirmedRequests?(scope:{owner_id:string;contact_id:string|null}):Promise<string[]>;
@@ -59,6 +62,15 @@ export async function startModelPermitServer(options: {
         try {
           const message = JSON.parse(line);
           if (busy) throw new Error('model_permit_protocol_busy');
+          if (requested && permit && message.op === 'reserve_quality') {
+            if (!options.accounting?.reserveQuality || !attemptId || message.receipt?.permit_id !== permit.id
+              ||message.receipt?.attempt_id!==attemptId) throw new Error('model_permit_accounting_invalid');
+            busy = true;
+            void options.accounting.reserveQuality(message.receipt,message.quality_claim).then(
+              () => { busy = false; if (!closed) socket.write('{"state":"reserved"}\n'); },
+              () => { busy = false; if (!closed) socket.write('{"state":"accounting_rejected"}\n'); });
+            continue;
+          }
           if (requested && permit && message.op === 'reserve') {
             if (!options.accounting || !attemptId || message.receipt?.permit_id !== permit.id) throw new Error('model_permit_accounting_invalid');
             busy = true;

@@ -13,8 +13,11 @@ export class MemoryManagementHandoff {
   private pending=new Set<Promise<void>>();
   private transition:Promise<unknown>|undefined;
   private readonly storage:HostStorage;
-  private readonly legacy:LegacyBackend;
-  constructor(storage:HostStorage,legacy:LegacyBackend){this.storage=storage;this.legacy=legacy;}
+  private readonly legacy:LegacyBackend|undefined;
+  constructor(storage:HostStorage,legacy?:LegacyBackend){
+    this.storage=storage;this.legacy=legacy;
+    if(!legacy){this.owner='typescript';this.accepting=false;}
+  }
   status(){return {owner:this.owner,state:this.accepting?'running':this.transitioning?'transferring':'stopped',active_requests:this.pending.size,revision:this.revision};}
   enter(){
     if(!this.accepting||this.closed)throw new MemoryError('memory_management_transferring',503);
@@ -26,6 +29,7 @@ export class MemoryManagementHandoff {
     },finish:()=>{if(finished)return;finished=true;this.pending.delete(pending);resolve();}};
   }
   async transfer(target:Owner){
+    if(!this.legacy&&target!=='typescript')throw new MemoryError('memory_management_runtime_unavailable',503);
     if(target!=='python'&&target!=='typescript')throw new MemoryError();
     if(this.closed)throw new MemoryError('runtime_stopping',503);
     if(this.transitioning)throw new MemoryError('memory_management_transferring',409);
@@ -34,16 +38,17 @@ export class MemoryManagementHandoff {
     try{return await operation;}finally{this.transitioning=false;this.transition=undefined;}
   }
   private async performTransfer(target:Owner){
-    await this.legacy.control('/api/runtime/memory-management/stop','POST');
+    await this.legacy?.control('/api/runtime/memory-management/stop','POST');
     // 固定总次数的移交探测，不无限轮询；失败保持两侧停收，不逐请求回退。
     const deadline=Date.now()+5000;
-    for(let attempt=0;;attempt++){
+    for(let attempt=0;this.legacy;attempt++){
       const status=await this.legacy.control('/api/runtime/memory-management/status','GET',undefined,500);
       if(status.state==='stopped'&&status.active_requests===0&&this.pending.size===0)break;
       if(this.closed)throw new MemoryError('runtime_stopping',503);
       if(attempt===100||Date.now()>=deadline)throw new MemoryError('memory_management_drain_timeout',503);
       await delay(25);
     }
+    await Promise.all([...this.pending]);
     // HostStorage先核验全部原迁移清单。锁内再核对09依赖的原列；不建表或恢复旧库。
     await this.storage.businessTransaction(async client=>{
       const migration=(await client.query('SELECT pg_try_advisory_xact_lock(1852798049,1) AS locked')).rows[0];
@@ -69,8 +74,8 @@ export class MemoryManagementHandoff {
     });
     if(this.closed)throw new MemoryError('runtime_stopping',503);
     if(target==='python'){
-      const status=await this.legacy.control('/api/runtime/memory-management/start','POST');
-      if(this.closed){await this.legacy.control('/api/runtime/memory-management/stop','POST');throw new MemoryError('runtime_stopping',503);}
+      const status=await this.legacy!.control('/api/runtime/memory-management/start','POST');
+      if(this.closed){await this.legacy!.control('/api/runtime/memory-management/stop','POST');throw new MemoryError('runtime_stopping',503);}
       if(status.state!=='running')throw new MemoryError('memory_management_resume_failed',503);
     }
     if(this.closed)throw new MemoryError('runtime_stopping',503);
@@ -78,9 +83,9 @@ export class MemoryManagementHandoff {
   }
   async close(){
     this.closed=true;this.accepting=false;this.revision++;
-    await this.legacy.control('/api/runtime/memory-management/stop','POST').catch(()=>{});
+    await this.legacy?.control('/api/runtime/memory-management/stop','POST').catch(()=>{});
     // 等在途移交终止，避免close后旧管理端口被迟到start重新打开。
     await Promise.allSettled([...(this.transition?[this.transition]:[]),...this.pending]);
-    await this.legacy.control('/api/runtime/memory-management/stop','POST').catch(()=>{});
+    await this.legacy?.control('/api/runtime/memory-management/stop','POST').catch(()=>{});
   }
 }

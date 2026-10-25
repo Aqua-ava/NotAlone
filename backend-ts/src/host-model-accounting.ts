@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import type pg from 'pg';
 import {PostgresModelLedger,PostgresModelLedgerDetails,validateModelLedgerReceipt,type ModelLedgerReceipt} from './model-ledger.ts';
 import type {ModelTaskClaim} from './model-permit-server.ts';
+import {authorizeQualityModelReservation,validateQualityModelClaim,type ModelQualityClaim} from './quality-model-authorization.ts';
 type Transaction=<T>(work:(client:pg.Client)=>Promise<T>)=>Promise<T>;
 export class HostModelAccountingError extends Error {readonly code:string;constructor(code:string){super(code);this.code=code;}}
 const reject=(code:string):never=>{throw new HostModelAccountingError(code);};
@@ -140,6 +141,19 @@ export function createHostModelAccounting(options:{transaction:Transaction;uncon
  return {
   async unconfirmedRequests(scope:{owner_id:string;contact_id:string|null}):Promise<string[]> {
    return options.transaction(client=>unconfirmed(client,scope.owner_id,scope.contact_id));
+  },
+  async reserveQuality(receipt:ModelLedgerReceipt,claim:ModelQualityClaim):Promise<void> {
+   if(!route)return reject('model_accounting_unconfigured');
+   validateModelLedgerReceipt(receipt);const r=structuredClone(receipt),c=validateQualityModelClaim(claim);
+   if(!providers.has(r.provider)||r.model!==route.model||r.outcome!=='pending'||r.dispatch!=='authorized_unconfirmed')reject('model_accounting_route_invalid');
+   await options.transaction(async client=>{
+    if(r.contact_id!==null)await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${r.owner_id}:${r.contact_id}`]);
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${r.owner_id}`]);
+    if((await unconfirmed(client,r.owner_id,r.contact_id)).includes(r.request_id))reject('model_accounting_consumer_unconfirmed');
+    const limit=await authorizeQualityModelReservation(client,r,c);
+    const bound=new PostgresModelLedger({transaction:async work=>work(client),details:new PostgresModelLedgerDetails()});
+    await bound.reserve(r,limit);
+   });
   },
   async reserve(receipt:ModelLedgerReceipt,claim?:ModelTaskClaim):Promise<void> {
    // 未配置只保留可信恢复/查询/已有结算；不能落新收据或消费预算。

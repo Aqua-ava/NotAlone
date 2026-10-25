@@ -89,6 +89,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
       extractionAdoptionEnabled:extractionMode==='typescript',
       extractionConcurrency:modelBackgroundConcurrency(environment),
       discussionSkillsRoot:configuredSkillsRoot,
+      publicRuntime:environment.NOTALONE_HOST_RUNTIME==='typescript',
       ...(options.sourceTraces?{sourceTraces:options.sourceTraces}:{}),
       ...(options.l2Quality?{l2Quality:options.l2Quality}:{}),
       ...(options.l2Budget?{l2Budget:options.l2Budget}:{}),
@@ -119,6 +120,8 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
           ...(!ownerConfigured?{NOTALONE_OWNER_ID:''}:{})};
       },
       handle(req:IncomingMessage,res:ServerResponse){return runtime.handle(req,res);},
+      qualityApi:runtime.qualityApi,
+      handlePublic(req:IncomingMessage,res:ServerResponse,url:URL){return runtime.handlePublic(req,res,url);},
       handleLayeredMemory(req:IncomingMessage,res:ServerResponse,url:URL){return runtime.handleLayeredMemory(req,res,url);},
       handleSkillLearning(method:string,url:URL,body:unknown,signal:AbortSignal){
         return runtime.handleSkillLearning(method,url,body,signal);

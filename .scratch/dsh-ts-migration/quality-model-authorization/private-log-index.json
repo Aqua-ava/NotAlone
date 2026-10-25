@@ -1,0 +1,264 @@
+{
+  "directory_mode": "0700",
+  "logs": [
+    {
+      "name": "ack.log",
+      "sha256": "a0f3cb752d9e079a9f38119836e211b0d875ba43c02d73958d66f2cee638a7b4",
+      "bytes": 231,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "bound-green.log",
+      "sha256": "e50b646fa897e287f917da277994f5dcb923e656a6c39407cbbd717ab4044101",
+      "bytes": 234,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "bound-red.log",
+      "sha256": "b4273970fd36e18d6688df67d5370a7e61d3ee58f364585956df02e6e2bd6917",
+      "bytes": 1127,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 0",
+        "ℹ fail 1",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "cancel-red.log",
+      "sha256": "20654d5811121c731066092ace8476e6b456695cc7ac3279602fdefdc97d5e43",
+      "bytes": 222,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "diagnostic-strict.log",
+      "sha256": "139ecfeeca255728cecf5dbeeb8e46a169deb4731dca84814114ba35df70ce70",
+      "bytes": 574,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 4",
+        "ℹ pass 4",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "entity-ack-green.log",
+      "sha256": "84a519a0529fe22f82dfc640afe244bfcc02397921f462418fca8f0470c55ce5",
+      "bytes": 370,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 2",
+        "ℹ pass 2",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "entity-red.log",
+      "sha256": "a4a338f0c224488c18d762386d155ae5c42cbec1ccfe84f9c8f035b863632df4",
+      "bytes": 1074,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 0",
+        "ℹ fail 1",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "frozen-diagnostic.log",
+      "sha256": "6de3ec1561f40194cc85f8ddcfe5922fd74a79b63e4fe7a88a34433ef5c727d0",
+      "bytes": 574,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 4",
+        "ℹ pass 4",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "frozen-owner-scope.log",
+      "sha256": "6e1e22601e43f33e513f9dce43f49873609f2e2fa8589fa8632315e7ed0cf042",
+      "bytes": 211,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "frozen-related.log",
+      "sha256": "40b16450006036f5e7204fd013070a9a0f6b52cad7dd4939598fafaf2c8283c9",
+      "bytes": 2866,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 25",
+        "ℹ pass 25",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "minimum-green.log",
+      "sha256": "92e2799074955c9435ca690068f84b3368698dc4f0a55fd36cfed4f8dcce7159",
+      "bytes": 241,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "minimum-red.log",
+      "sha256": "f2e600d7b40c83a43b7aff89f730a7d805adf23066009da08238f1cad4a34749",
+      "bytes": 1772,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 0",
+        "ℹ fail 1",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "module-final.log",
+      "sha256": "4499d9bdb69b7a02c490d134a7b732cf60a68a9f98e0acfa6b421add6cd11237",
+      "bytes": 1859,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 7",
+        "ℹ pass 6",
+        "ℹ fail 1",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "module.log",
+      "sha256": "86a46181293059a996df5cdc3810f33afcc4157ffc460527cb01b9e8cee35993",
+      "bytes": 1017,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 6",
+        "ℹ pass 5",
+        "ℹ fail 0",
+        "ℹ cancelled 1"
+      ]
+    },
+    {
+      "name": "related-final.log",
+      "sha256": "859d03b75ac682a2e5ea7828aa2a5c69a91700106381ae4f74dbc1091c272fcf",
+      "bytes": 2619,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 23",
+        "ℹ pass 23",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "related-green.log",
+      "sha256": "f20c3bda57a273bb8b8b3213c420b64e74290d2fedc9105bd3f51dbd6d5014bd",
+      "bytes": 1361,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 3",
+        "ℹ pass 2",
+        "ℹ fail 1",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "restart-ack-green.log",
+      "sha256": "ebfbef3779985ecf1867ed271a7a2ce062d94b52ba5fb19986e48f0674834c0a",
+      "bytes": 233,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "scope-green.log",
+      "sha256": "d2b9a3493e161aa13f689cca819007600227fd4bac8222fd6f077cf6d6715568",
+      "bytes": 211,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "source-ref-green.log",
+      "sha256": "aa68e04edb7fbf4631bba30d550575d0e6b614360fbe48e0f01e80503a2af3b4",
+      "bytes": 486,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 3",
+        "ℹ pass 3",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "source-ref-red.log",
+      "sha256": "910459da56b109dbd411d4a4598926ced27a16f6bd932f65adca1767e8935664",
+      "bytes": 1104,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 0",
+        "ℹ fail 1",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "strict-metadata.log",
+      "sha256": "ec3ab8ea7c3a77e2bf76a2e6e3249d018902a9a46debf4fb8fec5a98fbf8a9b3",
+      "bytes": 230,
+      "mode": "0600",
+      "summary": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0",
+        "ℹ cancelled 0"
+      ]
+    },
+    {
+      "name": "typecheck.log",
+      "sha256": "6dec7831db312a51a625554ff52161c1c806c35e5d8dac8f6eb1f4e5a0fde7a6",
+      "bytes": 66,
+      "mode": "0600",
+      "summary": []
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "manifest_sha256": "3fcd349ad5be96f876752b49f543ce51d5a56d8c143c381e57b0ddd50243b81e",
+  "source_files_unchanged_after_verification": true,
+  "node": "v24.19.0",
+  "final_commands": [
+    {
+      "cwd": "backend-ts",
+      "command": "node --test --test-concurrency=1 test/layered-memory-management.test.mjs test/l2-scenario-service.test.mjs test/l3-profile-service.test.mjs test/l2-scenario-worker.test.mjs",
+      "exit_code": 0,
+      "tests": 52,
+      "passed": 52,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 27158.414666,
+      "log": {
+        "name": "39-frozen-related.log",
+        "sha256": "cc53291e01dcd249a620d1ca063e606fa60c8d607634d929260e2d6bd305640f"
+      }
+    },
+    {
+      "cwd": "backend-ts",
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "log": {
+        "name": "40-frozen-typecheck.log",
+        "sha256": "6dec7831db312a51a625554ff52161c1c806c35e5d8dac8f6eb1f4e5a0fde7a6"
+      }
+    }
+  ],
+  "natural_red_evidence": [
+    {
+      "name": "01-red.log",
+      "sha256": "9a7d01c15df5ed9d875641bd519fa3985419abdf60d00b8430e1bc306ce2b678"
+    },
+    {
+      "name": "03-continue-red.log",
+      "sha256": "9dd03aa74f79d7487e109ff718757960ed0dbbc973eeaedd1da79b79064f69f9"
+    },
+    {
+      "name": "05-delete-red.log",
+      "sha256": "04976a8ff9f119dfc5ca6903ccdcbc7d23d6d86f2afac7f318a5201d769352a3"
+    },
+    {
+      "name": "08-fact-red.log",
+      "sha256": "89a03064dde287a12a9ce322c6b6f1b99eb20473fd9b4ccc6007d60e7139c9dd"
+    },
+    {
+      "name": "11-pending-red.log",
+      "sha256": "dbb15a3cf7f2f92a9581da026738f78d4d85cecd35f2facd3048063fcf9f57be"
+    },
+    {
+      "name": "17-empty-red.log",
+      "sha256": "5d3a8d7c928f7ab3046c7ff5fc8fb9f12f3de1fcaa092248cf4787e1a8f8de7e"
+    },
+    {
+      "name": "21-terminal-red.log",
+      "sha256": "9886e3c410ecba0ca7fd7b8af0d4313e613e19063006aff1c3f68603adaa8d48"
+    },
+    {
+      "name": "24-multibatch-red.log",
+      "sha256": "e2614f01189496279c0ee12a0d6aec3617cadf8fdd54cd85764d151ed571ab48"
+    },
+    {
+      "name": "29-maintenance-red.log",
+      "sha256": "2fa2716986e6c47a3fd9e2610cc492598207222abf9a287b06eb48c1fc5c1363"
+    },
+    {
+      "name": "31-boundary-red.log",
+      "sha256": "c2fe836d16afa23f4a0fb7f211d1ccb4997506a664d2bf15ffdc70ed356a9722"
+    },
+    {
+      "name": "35-unknown-new-target-red.log",
+      "sha256": "c27dfde84aa97f25fae78809b5fc61e48c169f183f966a94b5992755d6dbb279"
+    }
+  ],
+  "resources": {
+    "management_synthetic_databases_remaining": 0,
+    "test_sessions_finished": true,
+    "private_directory_mode": "0700",
+    "private_log_files_mode": "0600",
+    "product_host_or_desktop_started": false,
+    "real_model_calls": 0,
+    "real_database_or_private_config_read": false,
+    "git_index_or_commit_modified": false
+  },
+  "integration": {
+    "public_host_and_maintenance_adapter_owner": "后台纯TS聊天",
+    "quality_store_and_runtime_owner": "质量管理聊天",
+    "independent_review_and_actual_app_owner": "根聊天",
+    "ticket25_status_unchanged": true,
+    "ticket26_status_unchanged": true
+  },
+  "review": {
+    "standards": "本地预检完成；没有已知仓库硬规则违反",
+    "spec": "本地预检完成；验收边界见 validation.md",
+    "independent_acceptance": "交根安排，不冒充通过"
+  }
+}

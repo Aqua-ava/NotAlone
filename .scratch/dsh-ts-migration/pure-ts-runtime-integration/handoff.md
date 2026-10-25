@@ -1,0 +1,24 @@
+# 纯 TS 产品宿主交接
+
+- 状态：工程切片已冻结；自有28个生产／测试路径逐文件SHA见source-manifest.json。
+- 开关：NOTALONE_HOST_RUNTIME=typescript；默认legacy保留，显式Python／旧remote／permit冲突拒绝。
+- 正式launchDsh／官方profile；纯TS不启动Legacy、Python不存在仍ready，进程树零Python。
+- 同一PG／owner/contact／binding／来源／任务／删除路径，无第二套业务状态或运行时发送工具。
+- 所有公开装配及已知限制见route-matrix.md；内部入口和公开认证未混用。
+- 手动scope经DB核验，ALS请求结束失活；授权异步作业独立scope，后台学习exit原上下文。
+- lifecycle接原真实A锚点、公开准备／生成／探索桥接；recover对旧在途C保守失败，不盲重放。
+- 会话read_part/read_id使用UTF8片段＋实际字节哈希CAS；候选page/through锚定版本，隐藏内部edit_key。
+- 原三类SSE有界提示；任务投影只读，增量commit后唤醒原观察任务，不增加writer。
+- 唯一PG维护LISTEN/计时寿命接原管理器；原默认启用、有效期和暂停失败规则保持。
+- 质量接同一provider／Unix许可／PG authority／原问题账本／Store冻结source_ref及安装时guardBound。
+- 正式产品公开六phase8次provider=run计数=SQLite used；重开报告一致且不重放，不发布产品记忆。
+- 启动持同一受管PG共享寿命锁；关闭stop/cancel/drain后关PG并最后释放，实测通过。
+- 最终52/52、0失败0跳过，94.006秒；TSC、精确diff-check通过，命令/日志SHA见validation.json。
+- 本片10项＋原host/model/handoff/Skill/contact/Discussion42项；未跑全后端或桌面全量。
+- 外部各模块按依赖manifest冻结；本片不拥有desktop/schema/lifetime/generation/management/quality源码。
+- 真实App／微信、真实模型、质量／费用／120资格／1152、正式性能、独立验收交根，25/26未签。
+- follow-smoke最后有效观察仍null；sync confirm旧503保持，桌面使用cli-bindings/confirm。
+- 数据全部合成；无真配置／资料／预算／provider、无App／微信／外部发送，无打包。
+- 自有合成资源teardown完成；原日志仓库外0700/0600，公开仅摘要和哈希。
+- 无共享index／提交／远端操作；根统一集成并创建只含本任务改动的本地提交。
+- 原用户三个测试未碰；只有根明确复现缺陷才解除本片冻结。

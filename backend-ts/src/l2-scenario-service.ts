@@ -6,6 +6,8 @@ import type {ContextMetadata} from './reply-context-types.ts';
 import {readReplyContactOverview, readReplyOwnerOverview} from './reply-context-overview.ts';
 import {deleteSourceReplies} from './preference-erasure.ts';
 import {L3ProfileService} from './l3-profile-service.ts';
+import {filterLayeredMemoryManagementEntries} from './layered-memory-management-source-policy.ts';
+import {managementTargetInputs,selectManagementBatch} from './layered-memory-management-target.ts';
 import {
   L2ScenarioDocumentWorkspace,
   L2ScenarioError,
@@ -423,33 +425,18 @@ export class L2ScenarioService {
         || !['document-tools-v1', 'profile-tools-v1'].some(tag => String(job.contract).split(':').includes(tag))
       ) throw new L2ScenarioConflict('l2_scenario_job_stale');
       if (job.pending_receipt) return null;
-      const succeeded = (await client.query(`SELECT id FROM public.layered_memory_batch
+      const succeeded = (await client.query(`SELECT id,input_manifest FROM public.layered_memory_batch
         WHERE task_id=$1 AND owner_id=$2 AND contact_id IS NOT DISTINCT FROM $3::uuid AND status='succeeded'
-        ORDER BY created_at DESC LIMIT 1`,
-      [claim.task_id, scope.owner_id, contactParameter(scope)])).rows[0];
-      if (succeeded) return null;
+        ORDER BY created_at,id`,
+      [claim.task_id, scope.owner_id, contactParameter(scope)])).rows;
       await client.query(`DELETE FROM public.layered_memory_batch
         WHERE task_id=$1 AND owner_id=$2 AND contact_id IS NOT DISTINCT FROM $3::uuid AND status<>'succeeded'`,
       [claim.task_id, scope.owner_id, contactParameter(scope)]);
       const feedback = await feedbackRows(client, scope);
-      const entries = await overview(client, scope);
+      const entries = await filterLayeredMemoryManagementEntries(client,scope,await overview(client, scope));
       const current = await currentScenarios(client, scope, Number(state.organization_generation));
       const available = currentInputs(entries, protectedMemoryIds(feedback), protectedMessageIds(feedback), this.now().getTime());
-      const byVersion = new Map(available.map(memory => [`${memory.memory_id}:${memory.revision}`, memory]));
-      const selected = available.slice(0, Math.min(this.budget.max_memories, this.budget.max_batch_memories));
-      const selectedVersions = new Set(selected.map(memory => `${memory.memory_id}:${memory.revision}`));
-      for (const document of current) {
-        for (const paragraph of document.paragraphs) {
-          for (const reference of paragraph.references) {
-            const key = `${reference.memory_id}:${reference.revision}`;
-            const memory = byVersion.get(key);
-            if (memory && !selectedVersions.has(key) && selected.length < this.budget.max_memories) {
-              selected.push(memory);
-              selectedVersions.add(key);
-            }
-          }
-        }
-      }
+      const selected=selectManagementBatch(job,available,current,succeeded,this.budget);
       const eligible = selected;
       if (!eligible.length) {
         await client.query(`UPDATE public.layered_memory_state
@@ -537,12 +524,13 @@ export class L2ScenarioService {
     const feedback = await feedbackRows(client, work.scope);
     if (this.validateSources) await this.validateSources(client, work);
     const current = currentInputs(
-      await overview(client, work.scope),
+      await filterLayeredMemoryManagementEntries(client,work.scope,await overview(client, work.scope)),
       protectedMemoryIds(feedback),
       protectedMessageIds(feedback),
       this.now().getTime(),
     );
     const byKey = new Map(current.map(memory => [`${memory.memory_id}:${memory.revision}`, organizationManifest(memory)]));
+    managementTargetInputs(job,current);
     if (
       canonicalScenarioJSON(work.input_manifest)
       !== canonicalScenarioJSON(work.inputs.map(memory => byKey.get(`${memory.memory_id}:${memory.revision}`)))
@@ -898,7 +886,7 @@ export class L2ScenarioService {
         }
       }
       const eligible = currentInputs(
-        entries,
+        await filterLayeredMemoryManagementEntries(client,scope,entries),
         protectedMemoryIds(feedback),
         protectedMessageIds(feedback),
         now,
@@ -1016,7 +1004,7 @@ export class L2ScenarioService {
         || command.memory_id !== undefined
           && !paragraph.references.some(reference => reference.memory_id === command.memory_id)
       ) throw new L2ScenarioConflict('l2_scenario_feedback_target_stale');
-      const entries = (await overview(client, scope))
+      const entries = (await filterLayeredMemoryManagementEntries(client,scope,await overview(client, scope)))
         .map(entry => memoryFrom(entry, this.now().getTime()))
         .filter(Boolean) as L2ScenarioMemory[];
       const byKey = new Map(entries.map(memory => [`${memory.memory_id}:${memory.revision}`, memory]));

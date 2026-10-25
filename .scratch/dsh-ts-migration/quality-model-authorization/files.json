@@ -1,0 +1,14 @@
+{
+  "files": {
+    "backend-ts/src/quality-model-authorization.ts": "bb0035197186c552cacb33e0762aab3e0d4b4d7bfb431521d1ef819acfa97261",
+    "backend-ts/src/quality-model-caller.ts": "56e6770e0e33787f33e71a8da96e7468154b2390896eb8dca57552c6621d3d04",
+    "backend-ts/src/host-model-accounting.ts": "69d1f0e32ca4d2958c92072bf30721e032ec65fa713767aa61fa9e531271512f",
+    "backend-ts/src/model-permit-server.ts": "861bb247c01ac2e477c13f39c29a569345e4ffa4ae66f5f6cca30b430810197a",
+    "backend-ts/src/model-provider.ts": "90ec087500a834b356d58bbb0237b63ec3252f0f9a17f6e2a9ce60372883a156",
+    "backend-ts/test/quality-model-caller.test.mjs": "c10ca27f5d047cb22647002096ba7281a7798a22eb0034ea9708734df5a219eb",
+    "backend-ts/test/quality-model-fixture.mjs": "8c534dde1446f4496ec9906916dd82d57553e179a18bacca5f72f590a728a269",
+    "backend-ts/test/quality-model-plugin.ts": "074394a0d2bf87731d2506d509c3b4d62f03c6ec628ed19fb6f89e5fa8c02afb",
+    "backend-ts/test/quality-model-permit-host.mjs": "e3cb814cb62fa9fdaea32c70ed9d304e1aaa73f8ad6c44996f3ed8c09b23e713",
+    "backend-ts/test/quality-model-metadata-plugin.ts": "5d20236a92df8ca63c58105b3049bef86e2e904ec71e016046e7413fbf938046"
+  }
+}

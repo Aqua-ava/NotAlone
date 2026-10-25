@@ -1,0 +1,11 @@
+{
+  "scope": "本片28源码／测试和本片公开元数据；不读取真实配置，不代替全分支策略审计",
+  "files_scanned": 36,
+  "secret_patterns": [
+    "private_key",
+    "provider_key",
+    "raw_bearer"
+  ],
+  "findings": [],
+  "raw_log_copy_in_repository": false
+}
