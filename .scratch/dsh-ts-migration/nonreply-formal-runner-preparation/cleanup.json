@@ -1,0 +1,142 @@
+{
+  "owned_fixture_receipts": [
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-JJUTuv/fixture-50b4bc9ad793.json",
+      "sha256": "917c9c3f7b35432a1fbf6bb266c835dc71f5083e8b8d2377b59f086a63de6215",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-JJUTuv/fixture-0c971f0020f3.json",
+      "sha256": "1b6804dac13e5ba6a97f304c7a97b146f8d37224d6ac847c81b59243abae16b6",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-JJUTuv/fixture-31094cc2800c.json",
+      "sha256": "1aad10f04903699c4b5646f2dadb955e3589336c0b3f2b2a52eb082bc2673b06",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-JJUTuv/fixture-15c53b0345fb.json",
+      "sha256": "b5e74519740886246119f2bdbd0f4ce2b764e358d8931d16947929382d8d0194",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-JJUTuv/fixture-4965845cc32e.json",
+      "sha256": "8b696735e38a142f6a777c1ae345a6073ea0ec417057151c472651bc403a1f1b",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-JJUTuv/fixture-becdabda4b35.json",
+      "sha256": "e3c8b1d34fa378f3e09fd911214f3f10d8f3d6c352439a40fd8eabbe8edbeb95",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-vldXHZ/fixture-50b4bc9ad793.json",
+      "sha256": "0270da4537da1b571db5b7d15e92ea903c455e9497bdc67ffa7700fa84b1e885",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-vldXHZ/fixture-0c971f0020f3.json",
+      "sha256": "c7286b1eef11a76f1b40e96ad9b6005d3b0924f20934167f3342e22db079d731",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-vldXHZ/fixture-31094cc2800c.json",
+      "sha256": "d17844646d2cbf876c80c906658a4ad23b63e47de097cbaca5b75bb2fd1b8264",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-vldXHZ/fixture-15c53b0345fb.json",
+      "sha256": "4716d1370e1f6355289919b5788a68e3b1a075346a989bc6a11f5c1a5c2736ff",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-vldXHZ/fixture-4965845cc32e.json",
+      "sha256": "95c874e64d4d1f6397f493150c290a4cae4c83ab7050a2d4a24cc1e6a20cd5a0",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-vldXHZ/fixture-becdabda4b35.json",
+      "sha256": "73ffeaa49eade517c83cee14523c3356dc1e658dc71b47c75b2516f546f7ecd4",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-ZDq2v7/fixture-9377b66597cd.json",
+      "sha256": "498d39e698196e692b6035bd4d8c28c2a88545cdde646b6eca7447a68d361073",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-ZDq2v7/fixture-ee5494966bc2.json",
+      "sha256": "225bcb57f70c6945314e26b27879332d0193d23f78e85769131a2afb472a108d",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-QumzT3/fixture-9377b66597cd.json",
+      "sha256": "94455faa6af2f33ecb101f051b7cc8318ba5ca5fa6cfca73f58197b825162734",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-QumzT3/fixture-a0fb9166fde7.json",
+      "sha256": "be16e915ccf9148066852aa05bec8bf0b00cd5139f43abc14410a09d1a219769",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-QumzT3/fixture-4edee10943f1.json",
+      "sha256": "89925383f8b7890df5a9fee271179f450ab759ca6f6e5cd6de8f0f65ca69521a",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-QumzT3/fixture-ee5494966bc2.json",
+      "sha256": "aa6b590d8976a8f7680258dffe4b07c72e7b40c5ef4018a3f681013391544839",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-tm488X/fixture-412c17db325a.json",
+      "sha256": "ed32438b1973e5d2e419fdf30ab8f25b820e83593d99c61406c2161057229a39",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-tm488X/fixture-624955b28269.json",
+      "sha256": "cbd04b9bfd2658f236e7bd5e3c47e629de2932c83c599ef2bfc8917a7a630fd9",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-MV9RMw/fixture-412c17db325a.json",
+      "sha256": "90748829ae94fda0a71669761f6a064e37cca54e8023ea97f6fda01c09e0e375",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-MV9RMw/fixture-624955b28269.json",
+      "sha256": "2641a48e4bac99b880a0156d593f6b8a295812e8370a2679aeb168e8eeb07e19",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-bdsQE6/fixture-412c17db325a.json",
+      "sha256": "6ce9480dfccf84e5ceb4979f1e8475d83aeb8f15599dae69ad7d094079f5a7ff",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-bdsQE6/fixture-624955b28269.json",
+      "sha256": "32caa9deb70f6d23291a88de2d62a6de4e4046e92c43d5b4a298f3d44fe6f8b2",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-ZIsXIK/fixture-31094cc2800c.json",
+      "sha256": "aef6002562d553bc6529dace55e9501364fa9841048b690c149c33cb14ddcab8",
+      "dropped": true
+    },
+    {
+      "receipt_label": "notalone-nonreply-formal-evidence-ZIsXIK/fixture-4965845cc32e.json",
+      "sha256": "a44bcf64fc390d0f95dc3c19db2422bda66fecb2809f7945fa739de913e123f3",
+      "dropped": true
+    }
+  ],
+  "receipts_recorded": 26,
+  "all_recorded_databases_dropped": true,
+  "owned_snapshot_directories_remaining": 0,
+  "final_owned_snapshot_kib_removed": 49912,
+  "unknown_data_deleted": false,
+  "app_operations": 0,
+  "owned_snapshot_process_references_remaining": 0,
+  "cleanup_scope": "仅本轮明确归属的快照、进程、随机_test数据库；私有原证据保留。"
+}

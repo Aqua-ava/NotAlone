@@ -1,0 +1,11 @@
+{
+  "neutral_records": 2,
+  "excluded_records": 0,
+  "ev_complete": 2,
+  "independent_reviews_completed": 0,
+  "semantic_quality_verified": false,
+  "source_report": "extraction-ev-ledger/report.json",
+  "source_report_sha256": "4273d563161988e629a49bef23cbe8b12f6c99cf222334f3e23d03162b1e34b8",
+  "private_journal_sha256": "e925b51bf73beeb01c821b79eb0366b2850737d08e550c725ad2f7e86bad4dbf",
+  "original_failures_preserved": true
+}
