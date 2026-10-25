@@ -1,0 +1,31 @@
+{
+  "name": "target-probe",
+  "snapshot": "target",
+  "argv": [
+    "$NODE",
+    "--import",
+    "local-guard.mjs",
+    "--test",
+    "--test-concurrency=1",
+    "test/spec-query-followup.test.mjs"
+  ],
+  "guard_source_sha256": "018d79ff8d3b06e9d278e31a6481366ee02cad74ab95b0b707e27ff6afdcf380",
+  "runner_source_sha256": "e7aa7c4e619fc3d5f5f56c6405949ed7335397230aa2aca991144e7066c4fe01",
+  "exit_code": 1,
+  "elapsed_seconds": 1.948,
+  "environment": "显式白名单；USER 取有效系统用户，不记录其值；不继承模型或数据库配置",
+  "raw_sha256": "f96becc3b40bd7ecb5d4ce4cf5852faddf63999ff6c6035ed2ccd04824bebed6",
+  "public_sha256": "444ac2ca27c16a800ff41f4d9843cfcc094fccbff46f47a73e2a81ddd7923113",
+  "guard_raw_sha256": "962cfd2b3ec034480cb4ad12bea28a971310723152695113c33ebfd6a4577c33",
+  "summary": [
+    "ℹ tests 3",
+    "ℹ suites 0",
+    "ℹ pass 2",
+    "ℹ fail 1",
+    "ℹ cancelled 0",
+    "ℹ skipped 0",
+    "ℹ todo 0",
+    "ℹ duration_ms 1886.547292"
+  ],
+  "input_test_sha256": "8c0a3afd3f44ca2a6155a71d77523978af42917610245acb92f0cf63095dc0bc"
+}

@@ -1,0 +1,47 @@
+{
+  "axis": "Spec",
+  "verdict": "request_changes",
+  "findings": [
+    {
+      "priority": "P2",
+      "file": "backend-ts/src/host-storage.ts",
+      "line": 61,
+      "title": "配置回调复制丢失pg原生可读取的查询字段",
+      "evidence": "相同继承text/values配置在dd97457b成功，在a102ae51抛database_unavailable。",
+      "scope": "本次新增config callback分支的兼容回归"
+    }
+  ],
+  "existing_query_error_counterexample": "target-probe第1项通过，普通Query prepared错误受控并回滚",
+  "ordinary_business_error_identity": "target-probe第3项通过，包括形似SQLSTATE的普通Error.code",
+  "target_business_module": {
+    "tests": 30,
+    "passed": 30,
+    "failed": 0
+  },
+  "independent_target_probe": {
+    "tests": 3,
+    "passed": 2,
+    "failed": 1
+  },
+  "same_probe_base_config_control": {
+    "tests": 1,
+    "passed": 1,
+    "failed": 0
+  },
+  "expected_target_failure_not_reclassified_as_pass": true,
+  "not_run": [
+    "full_suite",
+    "typecheck",
+    "four_previous_modules",
+    "actual_App",
+    "WeChat",
+    "real_model",
+    "memory_quality"
+  ],
+  "latest_scope": {
+    "memory_quality": "deferred_by_user",
+    "output_and_cost_threshold": "waived_temporarily_by_user",
+    "actual_values_and_unknown": "preserved"
+  },
+  "no_task_status_or_git_mutation": true
+}

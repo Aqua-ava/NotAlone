@@ -1,0 +1,31 @@
+{
+  "name": "target-business-module",
+  "snapshot": "target",
+  "argv": [
+    "$NODE",
+    "--import",
+    "local-guard.mjs",
+    "--test",
+    "--test-concurrency=1",
+    "test/business-transaction-errors.test.mjs"
+  ],
+  "guard_source_sha256": "018d79ff8d3b06e9d278e31a6481366ee02cad74ab95b0b707e27ff6afdcf380",
+  "runner_source_sha256": "e7aa7c4e619fc3d5f5f56c6405949ed7335397230aa2aca991144e7066c4fe01",
+  "exit_code": 0,
+  "elapsed_seconds": 10.635,
+  "environment": "显式白名单；USER 取有效系统用户，不记录其值；不继承模型或数据库配置",
+  "raw_sha256": "f82665bb9718ff938cab988ca5e1b361ad2d0be8bb07a5dbb59927443b1e755b",
+  "public_sha256": "f82665bb9718ff938cab988ca5e1b361ad2d0be8bb07a5dbb59927443b1e755b",
+  "guard_raw_sha256": "dd4001e750186da12b98a89605c63aa19f1b06ca89baa8830b5546204dbf3796",
+  "summary": [
+    "ℹ tests 30",
+    "ℹ suites 0",
+    "ℹ pass 30",
+    "ℹ fail 0",
+    "ℹ cancelled 0",
+    "ℹ skipped 0",
+    "ℹ todo 0",
+    "ℹ duration_ms 10594.574916"
+  ],
+  "input_test_sha256": "c712bc89f082cc553246648dc3d0c6ae0d30a2aa38e7328995c44dc28aa18bca"
+}

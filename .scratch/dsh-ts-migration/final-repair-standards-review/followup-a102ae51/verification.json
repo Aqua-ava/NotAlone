@@ -1,0 +1,105 @@
+{
+  "checks": [
+    {
+      "name": "original-finding",
+      "command": [
+        "node",
+        "<frozen-original-probe>"
+      ],
+      "exit_code": 0,
+      "seconds": 0.724,
+      "script_sha256": "f09d4a8d8dc2a03264b8f161c3c1c1b7e5f920bf53aa4897b81f8e987e3c8b1a",
+      "raw_log": "original-finding.raw.log",
+      "raw_sha256": "1292d53c00387411c28f52acec036a43206fcb781cdf24bd0c30184cf764a520",
+      "public_log": "original-finding.public.log",
+      "public_sha256": "1292d53c00387411c28f52acec036a43206fcb781cdf24bd0c30184cf764a520",
+      "raw_mode": "0o600",
+      "observed": {
+        "results": [
+          {
+            "kind": "promise",
+            "controlled": true,
+            "name": "HostStorageError",
+            "message": "database_unavailable"
+          },
+          {
+            "kind": "positional_callback",
+            "controlled": true,
+            "name": "HostStorageError",
+            "message": "database_unavailable"
+          },
+          {
+            "kind": "config_callback",
+            "controlled": true,
+            "name": "HostStorageError",
+            "message": "database_unavailable"
+          },
+          {
+            "kind": "query_instance",
+            "controlled": true,
+            "name": "HostStorageError",
+            "message": "database_unavailable"
+          }
+        ],
+        "domain_identity_preserved": true
+      }
+    },
+    {
+      "name": "dispatch-boundaries",
+      "command": [
+        "node",
+        "<followup>/dispatch-probe.mjs"
+      ],
+      "exit_code": 0,
+      "seconds": 0.594,
+      "script_sha256": "180a3f9867f0905f41973b886884f1fdbdc1e49487563762d477a3ea64dc65a4",
+      "raw_log": "dispatch-boundaries.raw.log",
+      "raw_sha256": "0ac5093007a00da7d9871475829cc1f34d943f45b2e1dd63f769f0fe9021fcfe",
+      "public_log": "dispatch-boundaries.public.log",
+      "public_sha256": "0ac5093007a00da7d9871475829cc1f34d943f45b2e1dd63f769f0fe9021fcfe",
+      "raw_mode": "0o600",
+      "observed": {
+        "checks": [
+          {
+            "name": "event_parser_precedence",
+            "passed": true,
+            "original_error_identity": true,
+            "rollback": true,
+            "query_identity": true,
+            "prototype_dispatch_restored": true,
+            "tracking_listener_removed": true
+          },
+          {
+            "name": "successful_identity_and_cleanup",
+            "passed": true,
+            "readonly_callback_preserved": true,
+            "callback_this": true,
+            "result_identity": true,
+            "then_not_consumed": true,
+            "own_descriptor_restored": true
+          },
+          {
+            "name": "mapped_domain_identity",
+            "passed": true,
+            "rollback": true,
+            "callback_once": true
+          }
+        ],
+        "passed": 3
+      }
+    }
+  ],
+  "scope": "原 finding 与最小修复边界；未重复完整模块或全量",
+  "all_passed": true,
+  "frozen_comparison": {
+    "before_base": "dd97457bdd604fbda970c6eb0e5dc406ab1157bd",
+    "before_log": "../query-overloads-v2-head.public.log",
+    "before_log_sha256": "04f6a31cd46cdbd56138592d4ed1376a5c1fe4884d5b54bb88d279d54b48dac0",
+    "before_uncontrolled": [
+      "config_callback",
+      "query_instance"
+    ],
+    "after_all_four_controlled": true,
+    "same_frozen_probe_sha256": "f09d4a8d8dc2a03264b8f161c3c1c1b7e5f920bf53aa4897b81f8e987e3c8b1a"
+  }
+}

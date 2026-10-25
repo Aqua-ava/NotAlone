@@ -1,0 +1,37 @@
+{
+  "pg": {
+    "owned_test_database_count": 20,
+    "owned_databases_remaining": 0,
+    "owned_business_connections_remaining": 0
+  },
+  "guard_logs": [
+    {
+      "name": "base-config-control.guard.jsonl",
+      "raw_sha256": "b7ef51a7a67c601af407eec940e22ed60652930b89ae4b19b699074be3cf73e7",
+      "connect_attempts": 3,
+      "blocked_scope_or_nonlocal": 0
+    },
+    {
+      "name": "target-business-module.guard.jsonl",
+      "raw_sha256": "dd4001e750186da12b98a89605c63aa19f1b06ca89baa8830b5546204dbf3796",
+      "connect_attempts": 83,
+      "blocked_scope_or_nonlocal": 0
+    },
+    {
+      "name": "target-probe.guard.jsonl",
+      "raw_sha256": "962cfd2b3ec034480cb4ad12bea28a971310723152695113c33ebfd6a4577c33",
+      "connect_attempts": 8,
+      "blocked_scope_or_nonlocal": 0
+    }
+  ],
+  "raw_sha256": "b56d1fed441592139fc4188311dbfb36aee705eff013f2476027e342c1967350",
+  "public_sha256": "b56d1fed441592139fc4188311dbfb36aee705eff013f2476027e342c1967350",
+  "private_directory_0700": true,
+  "raw_logs_0600": true,
+  "previous_frozen_files_unchanged": 23,
+  "actual_App": 0,
+  "WeChat": 0,
+  "real_model_calls": 0,
+  "real_data_or_private_ledger_access": 0,
+  "production_or_index_or_commit_changed": false
+}

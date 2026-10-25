@@ -1,0 +1,50 @@
+{
+  "axis": "Spec",
+  "base": "dd97457bdd604fbda970c6eb0e5dc406ab1157bd",
+  "target": "a102ae51548039f23a4a148fadb6cbe5a8bb9cc5",
+  "merge_base": "dd97457bdd604fbda970c6eb0e5dc406ab1157bd",
+  "scope": "Query错误来源小修复；不重审既有四模块或完整迁移",
+  "source_sha256": {
+    "base": {
+      "backend-ts/src/host-storage.ts": "a0b61732130987ce1f2a5cbad028b7180c144ed915a9e24ec6ab1965b3968203",
+      "backend-ts/test/business-transaction-errors.test.mjs": "c8481e3b6dcbd02d100c0b4b92dee7679ba60602a39abfbc7b3a62f5cea10ccc",
+      "backend-ts/package.json": "23efe4561bfc415f66ccf220839116f047ca6311a3aead6999dab2fd72450e61",
+      "backend-ts/pnpm-lock.yaml": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798"
+    },
+    "target": {
+      "backend-ts/src/host-storage.ts": "8b3f974caa1afa495b4cae58c8b9e57c74bd1b0c0f3beb98df9300a4497d9e11",
+      "backend-ts/test/business-transaction-errors.test.mjs": "c712bc89f082cc553246648dc3d0c6ae0d30a2aa38e7328995c44dc28aa18bca",
+      "backend-ts/package.json": "23efe4561bfc415f66ccf220839116f047ca6311a3aead6999dab2fd72450e61",
+      "backend-ts/pnpm-lock.yaml": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798"
+    }
+  },
+  "base_archive_sha256": "e24c1646d310b91d984a668bf21c4c3187c097712030b2e35785868fde1c9374",
+  "base_tree": "96bb605f80ca8b9a52764703e4c64f8e09449097",
+  "target_archive_sha256": "dfccf3d9a772d372234cb11910b26a398ee069d43e20d744066dd66694f4ec49",
+  "target_tree": "7b2d559cedcd3b2c4e555e77110dbc48ea310b61",
+  "changed_product_files": [
+    "backend-ts/src/host-storage.ts",
+    "backend-ts/test/business-transaction-errors.test.mjs",
+    "backend-ts/test/exploration-store.test.mjs",
+    "backend-ts/test/wechat-setup.test.mjs"
+  ],
+  "author_manifest": {
+    "path": ".scratch/dsh-ts-migration/business-error-contract-fix/query-instance-followup/manifest.json",
+    "sha256": "d7b8223fcd8875e13c2e4e4b9cda62a5a3eff8556fd84e61e9bb994d0847830f"
+  },
+  "pg_dependency": {
+    "version": "8.16.3",
+    "source_sha256": {
+      "lib/client.js": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4",
+      "lib/query.js": "dea8044d70531cd16e514ecddbe44cdd65b4315a02287958d5ecfd0ebcd70ded",
+      "lib/utils.js": "a109ef3b3a7572e8523b937ae0c100be72d4f36d1d3d4c7032e1ef0abaf92e38"
+    }
+  },
+  "runtime": {
+    "node": "v24.19.0",
+    "python": "Python 3.12.15"
+  },
+  "probe_sha256": "8c0a3afd3f44ca2a6155a71d77523978af42917610245acb92f0cf63095dc0bc",
+  "probe_injection": "只在两个仓库外快照的test/spec-query-followup.test.mjs添加同字节探针；生产源码不变。",
+  "source_diff_sha256": "2c82fcabe9ad86fdf93537dac3cb51f7b1de200e3f9157ebb6f144d1661ec5ce"
+}

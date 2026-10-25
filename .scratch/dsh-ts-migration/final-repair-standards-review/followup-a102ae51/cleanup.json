@@ -1,0 +1,15 @@
+{
+  "synthetic_pg": "Both fixture finally blocks completed; DROP DATABASE and client close succeeded; both programs exited 0",
+  "owned_processes": "All check subprocesses exited; no long-running App/runtime or PG cluster launched",
+  "private_directory_mode": "0o700",
+  "private_locator": {
+    "os_temporary_directory_basename": "notalone-standards-a102-piosi7ua",
+    "state_filename": "state.json"
+  },
+  "raw_modes": {
+    "original-finding.raw.log": "0o600",
+    "dispatch-boundaries.raw.log": "0o600"
+  },
+  "retained": "Private fixed archive and raw logs retained; Python bytecode caches removed",
+  "old_review_files": "All 17 original frozen artifact SHA256 values revalidated unchanged"
+}

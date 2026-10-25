@@ -1,0 +1,11 @@
+{
+  "result": "passed",
+  "matches": [],
+  "checks": [
+    "local_user_path",
+    "conversation_identifier",
+    "credential_assignment"
+  ],
+  "scope": "本followup独占目录；不扫描或读取真实资料",
+  "date": "2026-10-26"
+}

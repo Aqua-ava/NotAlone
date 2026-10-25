@@ -1,0 +1,33 @@
+{
+  "name": "base-config-control",
+  "snapshot": "base",
+  "argv": [
+    "$NODE",
+    "--import",
+    "local-guard.mjs",
+    "--test",
+    "--test-concurrency=1",
+    "--test-name-pattern",
+    "成功配置回调",
+    "test/spec-query-followup.test.mjs"
+  ],
+  "guard_source_sha256": "018d79ff8d3b06e9d278e31a6481366ee02cad74ab95b0b707e27ff6afdcf380",
+  "runner_source_sha256": "e7aa7c4e619fc3d5f5f56c6405949ed7335397230aa2aca991144e7066c4fe01",
+  "exit_code": 0,
+  "elapsed_seconds": 0.832,
+  "environment": "显式白名单；USER 取有效系统用户，不记录其值；不继承模型或数据库配置",
+  "raw_sha256": "1546f2445f592bbc0d143861a185b7546c642eaf30dfd07e4d60bcf4f00d40f1",
+  "public_sha256": "1546f2445f592bbc0d143861a185b7546c642eaf30dfd07e4d60bcf4f00d40f1",
+  "guard_raw_sha256": "b7ef51a7a67c601af407eec940e22ed60652930b89ae4b19b699074be3cf73e7",
+  "summary": [
+    "ℹ tests 1",
+    "ℹ suites 0",
+    "ℹ pass 1",
+    "ℹ fail 0",
+    "ℹ cancelled 0",
+    "ℹ skipped 0",
+    "ℹ todo 0",
+    "ℹ duration_ms 783.599666"
+  ],
+  "input_test_sha256": "8c0a3afd3f44ca2a6155a71d77523978af42917610245acb92f0cf63095dc0bc"
+}

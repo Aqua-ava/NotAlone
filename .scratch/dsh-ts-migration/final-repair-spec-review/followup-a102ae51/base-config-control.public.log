@@ -1,0 +1,9 @@
+✔ 成功配置回调必须保留合法的继承和非枚举查询字段 (718.453792ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 783.599666

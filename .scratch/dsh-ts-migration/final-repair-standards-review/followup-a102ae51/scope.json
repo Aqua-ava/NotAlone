@@ -1,0 +1,25 @@
+{
+  "axis": "Standards followup of original P2 only",
+  "base": "dd97457bdd604fbda970c6eb0e5dc406ab1157bd",
+  "head": "a102ae51548039f23a4a148fadb6cbe5a8bb9cc5",
+  "merge_base": "dd97457bdd604fbda970c6eb0e5dc406ab1157bd",
+  "production_path": "backend-ts/src/host-storage.ts",
+  "source_sha256": "8b3f974caa1afa495b4cae58c8b9e57c74bd1b0c0f3beb98df9300a4497d9e11",
+  "author_manifest_path": ".scratch/dsh-ts-migration/business-error-contract-fix/query-instance-followup/manifest.json",
+  "author_manifest_sha256": "d7b8223fcd8875e13c2e4e4b9cda62a5a3eff8556fd84e61e9bb994d0847830f",
+  "author_adapter_dependency": {
+    "pg_version": "8.16.3",
+    "implementation_details": [
+      "handleError",
+      "_canceledDueToError"
+    ],
+    "documented_public_api": false,
+    "wire_protocol_modified": false,
+    "upgrade_requires_revalidation": true,
+    "details": "report.md"
+  },
+  "author_manifest_head_observed": "b74880c6b2892ddac1f595492e53695a279ccdde",
+  "author_manifest_base_commit": "ae12d7f1a407fc5852ae9c02d87253ded6828363",
+  "baseline_frozen_manifest_sha256": "793e77c409c1d899138b70818ce9244a1490612c724674ab3afb34a1bcd87237",
+  "prior_files_immutable": true
+}

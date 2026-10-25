@@ -1,0 +1,13 @@
+{
+  "run_base_head": "b74880c6b2892ddac1f595492e53695a279ccdde",
+  "tested_production_bytes_later_committed": "a102ae51548039f23a4a148fadb6cbe5a8bb9cc5",
+  "tests": 1484,
+  "pass": 1478,
+  "fail": 6,
+  "skip": 0,
+  "duration_ms": 290377.342875,
+  "raw_sha256": "cd906e5b072d718cc35d4b618beb2676895110ff77a165c15e7faba4d811d41f",
+  "failure": "6个采集器用例被source_snapshot_requires_clean_execution_paths拒绝；root在生产修改提交前启动，保留失败，不能签收全量。",
+  "gate_retained": true,
+  "next": "全部生产修改提交干净后，先补受阻模块，再有界全量。"
+}

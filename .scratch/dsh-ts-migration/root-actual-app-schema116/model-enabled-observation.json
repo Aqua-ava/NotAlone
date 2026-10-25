@@ -1,0 +1,39 @@
+{
+  "source_commit": "a102ae51548039f23a4a148fadb6cbe5a8bb9cc5",
+  "observed_at": "2026-10-25T17:46:45.609Z",
+  "reply_request_completed": true,
+  "assistant_turn_completed": true,
+  "receipt": [
+    {
+      "outcome": "succeeded",
+      "model_name": "deepseek-flash",
+      "provider": "notalone-deepseek",
+      "dispatch": "http_accepted",
+      "input_tokens": 13257,
+      "output_tokens": 255,
+      "cache_read_tokens": 1408,
+      "cache_write_tokens": 0,
+      "cost_amount": null,
+      "currency": null,
+      "cost_status": "unknown"
+    }
+  ],
+  "candidates": 3,
+  "assistant_candidate_versions": 2,
+  "budget": {
+    "used": 1,
+    "max_calls": 8
+  },
+  "ui": {
+    "initial": "generation_failed_and_unconfirmed",
+    "read_saved_discussion": "three_candidates_visible",
+    "recovery_caused_new_model_request": false,
+    "edit": "candidate_one_autosaved_as_version_1",
+    "copy_button_available_after_save": true,
+    "copy_or_external_send_performed": false
+  },
+  "full_app_acceptance": false,
+  "measurement_scope": "1成功模型收据／1诊断预留；不声称独立线级HTTP计数",
+  "normal_quit_verified": true,
+  "private_identity_published": false
+}
