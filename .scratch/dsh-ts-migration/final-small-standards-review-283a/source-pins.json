@@ -1,0 +1,79 @@
+{
+  "base": "a102ae51548039f23a4a148fadb6cbe5a8bb9cc5",
+  "target": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "target_sources_and_direct_tests": [
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "sha256": "88924416e62a366a9c3266f09026e68673872b8c640353b043a2f4a6841713d2",
+      "bytes": 41925,
+      "lines": 691
+    },
+    {
+      "path": "backend-ts/src/pure-ts-public-api.ts",
+      "sha256": "698b368fec73811ce84408973485036d1b8920cd9bcd1a6eed547be21074c833",
+      "bytes": 13975,
+      "lines": 150
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/ticket25-final-run/bridge.py",
+      "sha256": "75b676d556965454b6f974a5f8e03f58bc68b9e660885b72d7230f0e520ced48",
+      "bytes": 6312,
+      "lines": 132
+    },
+    {
+      "path": "backend-ts/test/business-transaction-errors.test.mjs",
+      "sha256": "fb09706001a737ac8e20adcf8469e80678ae3675b148a2304c80c47de1b27c8f",
+      "bytes": 26558,
+      "lines": 468
+    },
+    {
+      "path": "backend-ts/test/assistant-generation-publication.test.mjs",
+      "sha256": "4d24e8e76884b7b25822e0c9171afaf3c0c3bc23a86ebc99c0ef02f2ce83b486",
+      "bytes": 9669,
+      "lines": 127
+    },
+    {
+      "path": "backend-ts/test/pure-ts-reply.test.mjs",
+      "sha256": "4da154af97c367ef1db93221df965c14066a369819931fa10bf84c3fc8e6d1fb",
+      "bytes": 5273,
+      "lines": 40
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/reply-budget-continuation/test_bridge.py",
+      "sha256": "7c4bb830402532b57c9f63d9d9f32245845f39c3fbd8cd75522268dad050cfc5",
+      "bytes": 15490,
+      "lines": 323
+    }
+  ],
+  "baseline_host_storage_sha256": "8b3f974caa1afa495b4cae58c8b9e57c74bd1b0c0f3beb98df9300a4497d9e11",
+  "independent_probe_sha256": "77de7c7643ac28f8310ff3c09dbf4e84d43c9a9828b5cf68409d1caa5692def1",
+  "dependencies": [
+    {
+      "path": "pg@8.16.3/package.json",
+      "sha256": "f7b678a8055c234669e8dd272dd624771e29d9f0e3a3353f15c3005ab1a5fd29"
+    },
+    {
+      "path": "pg@8.16.3/lib/client.js",
+      "sha256": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4"
+    },
+    {
+      "path": "pg@8.16.3/lib/query.js",
+      "sha256": "dea8044d70531cd16e514ecddbe44cdd65b4315a02287958d5ecfd0ebcd70ded"
+    },
+    {
+      "path": "pg@8.16.3/lib/utils.js",
+      "sha256": "a109ef3b3a7572e8523b937ae0c100be72d4f36d1d3d4c7032e1ef0abaf92e38"
+    },
+    {
+      "path": "backend-ts/package.json",
+      "sha256": "23efe4561bfc415f66ccf220839116f047ca6311a3aead6999dab2fd72450e61"
+    },
+    {
+      "path": "backend-ts/pnpm-lock.yaml",
+      "sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798"
+    }
+  ],
+  "node_version": "v24.19.0",
+  "snapshot_source_file_count": 958,
+  "snapshot_source_manifest_raw_sha256": "d349c10ad2afe6d1517861fc5e567b97f9b175deced7c71f5e856ba0942f843a"
+}

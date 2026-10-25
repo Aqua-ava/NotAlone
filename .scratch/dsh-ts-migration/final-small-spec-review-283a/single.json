@@ -1,0 +1,20 @@
+{
+  "step": "single",
+  "exit_code": 0,
+  "seconds": 1.162,
+  "command": [
+    "<node>",
+    "--import",
+    "<review>/local-only.mjs",
+    "--test",
+    "--test-name-pattern",
+    "配置内回调原样保留继承和非枚举字段",
+    "test/business-transaction-errors.test.mjs"
+  ],
+  "cwd": "<snapshot>/backend-ts",
+  "raw_sha256": "4b7f478f71cd70084861d95f3959a65b0a2eeade700cb06f970c702a02841dfc",
+  "public_sha256": "4b7f478f71cd70084861d95f3959a65b0a2eeade700cb06f970c702a02841dfc",
+  "raw_log_location": "outside_repository",
+  "raw_mode": "0600",
+  "private_directory_mode": "0700"
+}

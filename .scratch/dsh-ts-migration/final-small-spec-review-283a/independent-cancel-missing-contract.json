@@ -1,0 +1,20 @@
+{
+  "step": "independent-cancel",
+  "exit_code": 1,
+  "seconds": 0.228,
+  "command": [
+    "<node>",
+    "--import",
+    "<review>/local-only.mjs",
+    "--test",
+    "--test-name-pattern",
+    "在途取消",
+    "<review>/independent.test.mjs"
+  ],
+  "cwd": "<snapshot>/backend-ts",
+  "raw_sha256": "398868e154feffb22156ac9d2e9f228ba26fb6da78e61e5bf9d2b1b6cc61b801",
+  "public_sha256": "919cb3590bb5edf929ffb4529f8f31e4f2044d0d38d62f166e2e524bcb18b95e",
+  "raw_log_location": "outside_repository",
+  "raw_mode": "0600",
+  "private_directory_mode": "0700"
+}

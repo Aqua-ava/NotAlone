@@ -1,0 +1,42 @@
+✘ [ERROR] Could not resolve "../../../managed-runtime-contract.mjs"
+
+    ../desktop/src/main/startup/managed-manifest.ts:5:78:
+      5 │ ...equiredRuntimeFiles } from '../../../managed-runtime-contract.mjs';
+        ╵                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+<user-home>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1752
+  let error = new Error(text);
+              ^
+
+Error: Build failed with 1 error:
+../desktop/src/main/startup/managed-manifest.ts:5:78: ERROR: Could not resolve "../../../managed-runtime-contract.mjs"
+    at failureErrorWithLog (<user-home>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1752:15)
+    at <user-home>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1211:25
+    at <user-home>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1163:52
+    at buildResponseToResult (<user-home>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1209:7)
+    at <user-home>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1236:16
+    at responseCallbacks.<computed> (<user-home>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:886:9)
+    at handleIncomingPacket (<user-home>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:941:12)
+    at Socket.readFromStdout (<user-home>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:864:7)
+    at Socket.emit (node:events:509:28)
+    at addChunk (node:internal/streams/readable:563:12) {
+  errors: [Getter/Setter],
+  warnings: [Getter/Setter]
+}
+
+Node.js v24.19.0
+✖ <user-home>/Documents/learn/NotAlone/.scratch/dsh-ts-migration/final-small-spec-review-283a/independent.test.mjs (162.071584ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 165.520584
+
+✖ failing tests:
+
+test at ../../../../../../../../..<user-home>/Documents/learn/NotAlone/.scratch/dsh-ts-migration/final-small-spec-review-283a/independent.test.mjs:1:1
+✖ <user-home>/Documents/learn/NotAlone/.scratch/dsh-ts-migration/final-small-spec-review-283a/independent.test.mjs (162.071584ms)
+  'test failed'

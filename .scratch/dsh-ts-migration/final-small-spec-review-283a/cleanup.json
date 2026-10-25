@@ -1,0 +1,13 @@
+{
+  "self_owned_fixture_temp_entries": 0,
+  "all_fixture_teardowns_completed": true,
+  "database_drop_verified_by_fixture_teardown": true,
+  "separate_catalog_sweep_performed": false,
+  "snapshot_removed": true,
+  "snapshot_bytes_released": 20104571,
+  "repository_dependency_links_removed_without_touching_targets": true,
+  "raw_logs_retained_outside_repository": 12,
+  "raw_modes": "0600",
+  "private_directory_mode": "0700",
+  "unknown_resources_touched": false
+}

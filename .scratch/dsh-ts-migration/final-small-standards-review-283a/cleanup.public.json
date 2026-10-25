@@ -1,0 +1,13 @@
+{
+  "owned_databases_created": 10,
+  "all_drop_requests_registered": true,
+  "remaining_owned_databases": 0,
+  "remaining_owned_connections": 0,
+  "owned_node_children_started": 5,
+  "owned_node_children_all_exited": true,
+  "private_tmp_entries_remaining": 0,
+  "raw_sha256": "e164dc5ca98ba709acc615e69d57b942fc2deb74b6f0d2ba4d3d42fbcc1e4a82",
+  "private_tmp_entries_before_cleanup": 1,
+  "private_tmp_open_references": 0,
+  "tmp_cleanup_raw_sha256": "660c6620d03903eb0df9688c65a64f7e34e2f0f48c9200f10f0a80fa3d112a36"
+}

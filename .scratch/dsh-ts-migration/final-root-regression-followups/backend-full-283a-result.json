@@ -1,0 +1,19 @@
+{
+  "source_commit": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "tests": 1491,
+  "pass": 1491,
+  "fail": 0,
+  "skip": 0,
+  "cancelled": 0,
+  "duration_ms": 332232.471208,
+  "raw_sha256": "0e5699338101f6e4badac6c0154322417e60f1d7a0f825eee751ff9b8357530f",
+  "input_manifest_sha256": "1e8f8bc6b89f2a70c4a03ee8ac66c033d3d5f22f0f8471091767091f300e0177",
+  "input_files": 688,
+  "execution_paths_clean_at_start": true,
+  "runner_module": {
+    "tests": 6,
+    "pass": 6,
+    "raw_sha256": "24a70bd6178723c80d4f1e41b7f106eea886946e408a5b1103eeefb032f155dd"
+  },
+  "future_changes_require_revalidation": true
+}

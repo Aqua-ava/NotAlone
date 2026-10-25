@@ -1,0 +1,9 @@
+✔ 连接尚未建立时失败仍受控且不会执行业务回调 (827.216ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1032.183792

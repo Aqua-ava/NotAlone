@@ -1,0 +1,35 @@
+TAP version 13
+# Subtest: 公开完成回执lost-response仍保留未确认身份，明确读取原保存结果后恢复
+ok 1 - 公开完成回执lost-response仍保留未确认身份，明确读取原保存结果后恢复
+  ---
+  duration_ms: 2166.712791
+  type: 'test'
+  ...
+# reply_generation_unknown_failure { kind: undefined, code: undefined, reason: undefined }
+# Subtest: 公开完成回执wrong-session仍保留未确认身份，明确读取原保存结果后恢复
+ok 2 - 公开完成回执wrong-session仍保留未确认身份，明确读取原保存结果后恢复
+  ---
+  duration_ms: 2063.297
+  type: 'test'
+  ...
+# Subtest: 生成中切换联系人后晚结果仅属于原会话，切回读取不重新生成
+ok 3 - 生成中切换联系人后晚结果仅属于原会话，切回读取不重新生成
+  ---
+  duration_ms: 2007.073
+  type: 'test'
+  ...
+# Subtest: 公开异步准备的接纳与查询只返回原身份，取消不发布完成候选
+ok 4 - 公开异步准备的接纳与查询只返回原身份，取消不发布完成候选
+  ---
+  duration_ms: 1244.094083
+  type: 'test'
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7604.193833

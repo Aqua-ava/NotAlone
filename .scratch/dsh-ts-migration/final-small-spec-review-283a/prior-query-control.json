@@ -1,0 +1,18 @@
+{
+  "step": "prior-query-control",
+  "exit_code": 0,
+  "seconds": 3.095,
+  "command": [
+    "<node>",
+    "--import",
+    "<review>/local-only.mjs",
+    "--test",
+    "<snapshot>/.scratch/dsh-ts-migration/final-repair-spec-review/followup-a102ae51/query-probe.test.mjs"
+  ],
+  "cwd": "<snapshot>/backend-ts",
+  "raw_sha256": "a51d7fb629fe2162314b905d21f6c4851b35cf146f593590f0b4053aa8b2919a",
+  "public_sha256": "a51d7fb629fe2162314b905d21f6c4851b35cf146f593590f0b4053aa8b2919a",
+  "raw_log_location": "outside_repository",
+  "raw_mode": "0600",
+  "private_directory_mode": "0700"
+}

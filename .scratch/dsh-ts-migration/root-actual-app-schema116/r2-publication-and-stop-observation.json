@@ -1,0 +1,55 @@
+{
+  "source_commit": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "receipts": [
+    {
+      "outcome": "succeeded",
+      "n": 3,
+      "input_tokens": 43176,
+      "output_tokens": 914
+    }
+  ],
+  "requests": [
+    {
+      "state": "completed",
+      "n": 3
+    }
+  ],
+  "budget": {
+    "used": 4,
+    "max_calls": 8,
+    "streak": 1
+  },
+  "ui": {
+    "previous_three_candidates_restored": true,
+    "previous_restore_new_model_calls": 0,
+    "new_tea_candidate_directly_visible": true,
+    "new_candidate_count_observed": 1,
+    "generic_failure_or_unconfirmed": false,
+    "stop_attempts": [
+      {
+        "new_input": "three_tones_two_sentences",
+        "stop_button_observed": false,
+        "status": "waiting_then_completed",
+        "stop_clicked": false
+      },
+      {
+        "new_input": "approximately_300_character_invitation",
+        "stop_button_observed": false,
+        "status": "waiting_then_completed",
+        "history_refresh_disabled": true,
+        "stop_clicked": false
+      }
+    ],
+    "stop_verified": false,
+    "external_message_sent": false,
+    "original_edit_version_and_text_restored": true
+  },
+  "overall_app_accepted": false,
+  "normal_quit_verified": true,
+  "budget_round_outcome": "improved_publication_only",
+  "budget_after_round": {
+    "used": 4,
+    "max_calls": 8,
+    "streak": 0
+  }
+}

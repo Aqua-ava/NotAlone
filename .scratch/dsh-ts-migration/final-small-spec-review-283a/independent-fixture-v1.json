@@ -1,0 +1,18 @@
+{
+  "step": "independent",
+  "exit_code": 1,
+  "seconds": 10.684,
+  "command": [
+    "<node>",
+    "--import",
+    "<review>/local-only.mjs",
+    "--test",
+    "<review>/independent.test.mjs"
+  ],
+  "cwd": "<snapshot>/backend-ts",
+  "raw_sha256": "47efec5b17c5075d8ce65781b90c3eddec013d31c6b20de31e172a3888bc0e2d",
+  "public_sha256": "6dcd8f10aceb6ebba70d47206e8dceeb59ea8a728b9a04c89220f196a7b11394",
+  "raw_log_location": "outside_repository",
+  "raw_mode": "0600",
+  "private_directory_mode": "0700"
+}

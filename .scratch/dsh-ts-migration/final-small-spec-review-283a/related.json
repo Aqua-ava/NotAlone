@@ -1,0 +1,21 @@
+{
+  "step": "related",
+  "exit_code": 0,
+  "seconds": 28.404,
+  "command": [
+    "<node>",
+    "--import",
+    "<review>/local-only.mjs",
+    "--test",
+    "--test-concurrency=1",
+    "test/business-transaction-errors.test.mjs",
+    "test/assistant-generation-publication.test.mjs",
+    "test/pure-ts-reply.test.mjs"
+  ],
+  "cwd": "<snapshot>/backend-ts",
+  "raw_sha256": "ca8d42952ef8d31c3b2ada70210a44955c3373fc9b9e991df70676f3ae32ccfa",
+  "public_sha256": "ca8d42952ef8d31c3b2ada70210a44955c3373fc9b9e991df70676f3ae32ccfa",
+  "raw_log_location": "outside_repository",
+  "raw_mode": "0600",
+  "private_directory_mode": "0700"
+}

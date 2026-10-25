@@ -1,0 +1,20 @@
+test_ack_reports_effective_deadline_without_rewriting_original (__main__.ReplyBudgetContinuationTests.test_ack_reports_effective_deadline_without_rewriting_original) ... ok
+test_authorized_continuation_ack_before_and_after_last_reservation (__main__.ReplyBudgetContinuationTests.test_authorized_continuation_ack_before_and_after_last_reservation) ... ok
+test_conflicting_rounds_and_invalid_streak_fail_closed (__main__.ReplyBudgetContinuationTests.test_conflicting_rounds_and_invalid_streak_fail_closed) ... ok
+test_expired_continuation_is_rejected_at_exact_deadline (__main__.ReplyBudgetContinuationTests.test_expired_continuation_is_rejected_at_exact_deadline) ... ok
+test_finished_missing_and_pre_authorization_rounds_are_rejected (__main__.ReplyBudgetContinuationTests.test_finished_missing_and_pre_authorization_rounds_are_rejected) ... ok
+test_invalid_budget_capacity_and_original_deadline_fail_closed (__main__.ReplyBudgetContinuationTests.test_invalid_budget_capacity_and_original_deadline_fail_closed) ... ok
+test_last_allowed_new_round_ack_succeeds_but_next_round_is_denied (__main__.ReplyBudgetContinuationTests.test_last_allowed_new_round_ack_succeeds_but_next_round_is_denied) ... ok
+test_latest_expiry_does_not_fall_back_to_older_live_grant (__main__.ReplyBudgetContinuationTests.test_latest_expiry_does_not_fall_back_to_older_live_grant) ... ok
+test_latest_live_grant_accepts_new_round_after_older_expiry (__main__.ReplyBudgetContinuationTests.test_latest_live_grant_accepts_new_round_after_older_expiry) ... ok
+test_latest_new_round_allowance_cannot_inherit_previous_three_rounds (__main__.ReplyBudgetContinuationTests.test_latest_new_round_allowance_cannot_inherit_previous_three_rounds) ... ok
+test_legacy_ack_check_reserve_and_full_capacity_behavior_is_unchanged (__main__.ReplyBudgetContinuationTests.test_legacy_ack_check_reserve_and_full_capacity_behavior_is_unchanged) ... ok
+test_legacy_expiry_and_two_unimproved_rounds_still_stop_ack (__main__.ReplyBudgetContinuationTests.test_legacy_expiry_and_two_unimproved_rounds_still_stop_ack) ... ok
+test_malformed_authorization_history_cannot_hide_behind_latest_grant (__main__.ReplyBudgetContinuationTests.test_malformed_authorization_history_cannot_hide_behind_latest_grant) ... ok
+test_malformed_latest_authorization_is_rejected_without_writing (__main__.ReplyBudgetContinuationTests.test_malformed_latest_authorization_is_rejected_without_writing) ... ok
+test_problem_identity_private_path_and_permissions_remain_required (__main__.ReplyBudgetContinuationTests.test_problem_identity_private_path_and_permissions_remain_required) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.100s
+
+OK
