@@ -1,0 +1,175 @@
+{
+  "结果": "定向合同验证通过；待主协调独立复核及真实集成",
+  "scope": {
+    "modified": [
+      ".scratch/dsh-ts-migration/ticket25-final-run/bridge.py"
+    ],
+    "new_directory": ".scratch/dsh-ts-migration/reply-budget-continuation",
+    "source_start_head": "b74880c6b2892ddac1f595492e53695a279ccdde",
+    "observed_head_after_shared_work": "a102ae51548039f23a4a148fadb6cbe5a8bb9cc5",
+    "shared_head_change_by_this_task": false
+  },
+  "source_hashes": {
+    "bridge_before_sha256": "724f24bffecb59f930507aace2c19a33e41dc6ab3947fdc20aba2b4ba12ac6c6",
+    "bridge_after_sha256": "75b676d556965454b6f974a5f8e03f58bc68b9e660885b72d7230f0e520ced48",
+    "final_test_source_sha256": "7c4bb830402532b57c9f63d9d9f32245845f39c3fbd8cd75522268dad050cfc5",
+    "protected_problem_budget_before_sha256": "684b7bd9e4311ee95296f34fb030c89622a33f1f72dda0466de206df1a42efa0",
+    "protected_problem_budget_after_sha256": "684b7bd9e4311ee95296f34fb030c89622a33f1f72dda0466de206df1a42efa0"
+  },
+  "api_schema": {
+    "source": "backend/src/notalone/problem_budget.py:48-117",
+    "continuation_fields": [
+      "id",
+      "reason",
+      "existing_rounds",
+      "max_new_rounds",
+      "authorized_at",
+      "deadline"
+    ],
+    "latest_authority": "snapshot.continuations[-1]，由原 API 按 id 排序",
+    "round_boundary": "现有 SQLite rounds 表及 snapshot 的插入顺序；授权时 existing_rounds 是已存在的轮数",
+    "allowance": "新增轮数 1..max_new_rounds，授权最多三轮；最后合法活动轮允许 ACK",
+    "effective_deadline": "ACK 使用最新授权 deadline；不改写 budget.deadline",
+    "reserve_authority": "原 check_problem_budget／reserve_problem_attempt；未改变实际 reserve 实现"
+  },
+  "runs": [
+    {
+      "phase": "original_red",
+      "command": "python -B .scratch/dsh-ts-migration/reply-budget-continuation/test_bridge.py ReplyBudgetContinuationTests.test_authorized_continuation_ack_before_and_after_last_reservation -v",
+      "exit_code": 1,
+      "expected": "budget_ack_rejected",
+      "raw_log_sha256": "65f62e8e4d6b67cc2a45413a8797af754d8324fbc0b90adfab6d06b310d77f16"
+    },
+    {
+      "phase": "first_green",
+      "command": "python -B .scratch/dsh-ts-migration/reply-budget-continuation/test_bridge.py ReplyBudgetContinuationTests.test_authorized_continuation_ack_before_and_after_last_reservation -v",
+      "exit_code": 0,
+      "tests": 1,
+      "raw_log_sha256": "a44ff95dca991c46b77b92e83e48efaa82b928ef97b108466774c67c166bc883"
+    },
+    {
+      "phase": "deadline_red",
+      "command": "python -B .scratch/dsh-ts-migration/reply-budget-continuation/test_bridge.py ReplyBudgetContinuationTests.test_ack_reports_effective_deadline_without_rewriting_original -v",
+      "exit_code": 1,
+      "expected": "原期限不等于最新授权有效期限",
+      "raw_log_sha256": "dba1d0908b49908ed260bff38f15dfa5aa4a2b0714915904eb80a420ff7440b7"
+    },
+    {
+      "phase": "active_round_red",
+      "command": "python -B .scratch/dsh-ts-migration/reply-budget-continuation/test_bridge.py ReplyBudgetContinuationTests.test_conflicting_rounds_and_invalid_streak_fail_closed -v",
+      "exit_code": 1,
+      "expected": "4 个拒绝反例在修复前被接受",
+      "raw_log_sha256": "ab1b6ec47e1d48d889a9e74b92a3287ba992cf48ffc07834dc9a8b145bce540b"
+    },
+    {
+      "phase": "history_red",
+      "command": "python -B .scratch/dsh-ts-migration/reply-budget-continuation/test_bridge.py ReplyBudgetContinuationTests.test_malformed_authorization_history_cannot_hide_behind_latest_grant -v",
+      "exit_code": 1,
+      "expected": "5 个拒绝反例在修复前被接受",
+      "raw_log_sha256": "7e00ed8506fda951a17d60bdf19388f3ff8d8792dd31e64f2d764bd4ebb869ab"
+    },
+    {
+      "phase": "final_source_baseline_red_replay",
+      "command": "通过 importlib 加载最终测试源码及私有原桥副本，仅运行首个反例",
+      "exit_code": 1,
+      "tests": 1,
+      "expected": "budget_ack_rejected",
+      "raw_log_sha256": "00b38ec7f73feeb86914bbb24f9819410d988a213975a95458bd3027e905bfb0"
+    },
+    {
+      "phase": "final_directed_green",
+      "command": "python -B .scratch/dsh-ts-migration/reply-budget-continuation/test_bridge.py -v",
+      "exit_code": 0,
+      "tests": 15,
+      "raw_log_sha256": "3042ed326c3f8228e44916193e0984d1afaf46461a5c8e82fb99ce2b121ac16f"
+    },
+    {
+      "phase": "public_problem_budget_module_green",
+      "cwd": "backend",
+      "command": "python -B -m unittest tests.unit.experiments.test_problem_budget -v",
+      "exit_code": 0,
+      "tests": 10,
+      "raw_log_sha256": "4accde776725276aaeb58137471ae396da8f47faf394a220b735b910c24b116f"
+    }
+  ],
+  "directed_test_names": [
+    "test_authorized_continuation_ack_before_and_after_last_reservation",
+    "test_ack_reports_effective_deadline_without_rewriting_original",
+    "test_malformed_latest_authorization_is_rejected_without_writing",
+    "test_conflicting_rounds_and_invalid_streak_fail_closed",
+    "test_malformed_authorization_history_cannot_hide_behind_latest_grant",
+    "test_expired_continuation_is_rejected_at_exact_deadline",
+    "test_latest_expiry_does_not_fall_back_to_older_live_grant",
+    "test_latest_live_grant_accepts_new_round_after_older_expiry",
+    "test_last_allowed_new_round_ack_succeeds_but_next_round_is_denied",
+    "test_latest_new_round_allowance_cannot_inherit_previous_three_rounds",
+    "test_finished_missing_and_pre_authorization_rounds_are_rejected",
+    "test_problem_identity_private_path_and_permissions_remain_required",
+    "test_invalid_budget_capacity_and_original_deadline_fail_closed",
+    "test_legacy_ack_check_reserve_and_full_capacity_behavior_is_unchanged",
+    "test_legacy_expiry_and_two_unimproved_rounds_still_stop_ack"
+  ],
+  "verification": {
+    "directed": "15/15",
+    "original_problem_budget_module": "10/10",
+    "diff_check": "pass",
+    "python_ast": "pass",
+    "python_version": "3.12.15",
+    "ack_observations": [
+      "完整 snapshot 不变",
+      "SQLite 文件字节不变",
+      "reserved=false",
+      "used／max_calls／deadline／continuations／rounds 均不修改"
+    ],
+    "boundaries": [
+      "最新有效续期与过期原期限／streak>=2",
+      "used==max 的发送后 ACK 与超额拒绝",
+      "最新过期授权不回退旧授权",
+      "旧授权过期不挡新有效授权",
+      "新增轮次用尽、最新配额优先、旧轮不复活",
+      "已结案与不存在轮次",
+      "畸形授权／历史／活动轮／streak／容量／期限",
+      "身份、路径、权限与所有者",
+      "无续期旧行为"
+    ]
+  },
+  "data_and_cleanup": {
+    "data": "仅自有合成 SQLite；无联系人或聊天",
+    "fixtures_directory_mode": "0700",
+    "fixtures_file_mode": "0600",
+    "fixtures_remaining": 0,
+    "private_evidence_directory_mode": "0700",
+    "private_evidence_file_mode": "0600",
+    "private_evidence_files_retained": 13,
+    "private_evidence_bytes_retained": 41854,
+    "real_ledger_read_or_modified": false,
+    "credential_or_env_file_read": false,
+    "real_external_requests": 0,
+    "app_or_wechat_started": false,
+    "builds_or_packaging": false,
+    "git_mutations": false,
+    "sub_agents": false,
+    "source_cache_written": false
+  },
+  "private_artifact_hashes": {
+    "active-round-red.log": "ab1b6ec47e1d48d889a9e74b92a3287ba992cf48ffc07834dc9a8b145bce540b",
+    "baseline-red-replay.log": "00b38ec7f73feeb86914bbb24f9819410d988a213975a95458bd3027e905bfb0",
+    "bridge-before.py": "724f24bffecb59f930507aace2c19a33e41dc6ab3947fdc20aba2b4ba12ac6c6",
+    "deadline-red.log": "dba1d0908b49908ed260bff38f15dfa5aa4a2b0714915904eb80a420ff7440b7",
+    "directed-final.log": "3042ed326c3f8228e44916193e0984d1afaf46461a5c8e82fb99ce2b121ac16f",
+    "directed-green.log": "d0a69d2bda9d6e807ebef75683c91f2a474f489b0c46f3d6f0784d421a09f973",
+    "first-green.log": "a44ff95dca991c46b77b92e83e48efaa82b928ef97b108466774c67c166bc883",
+    "history-red.log": "7e00ed8506fda951a17d60bdf19388f3ff8d8792dd31e64f2d764bd4ebb869ab",
+    "probe.json": "9ada538ff41f8220c18f0e76f92e60a6271680a857e0e68a8c954c8e3d523c4a",
+    "problem-budget-module.log": "4accde776725276aaeb58137471ae396da8f47faf394a220b735b910c24b116f",
+    "red.log": "65f62e8e4d6b67cc2a45413a8797af754d8324fbc0b90adfab6d06b310d77f16",
+    "state.json": "0b16356da8f11a51380755d90232d790170263dae768f44eab2bceffaede4f6e",
+    "structure-red.log": "89cb7b4deb719b6de70a3673b9f495f08ba224ba6753104cdb11f368cea5fdf9"
+  },
+  "fixture_diagnostic": "structure-red.log 曾含一个 SQLite NOT NULL 拒绝 NaN 的夹具构造错误；已从授权用例移除此不可表示值。budget.deadline 无 NOT NULL，仍覆盖 NaN／NULL 拒绝。该诊断日志不作为最终通过证据。",
+  "limits": [
+    "本任务未执行真实账本或正式96评测；由主协调继续",
+    "check／reserve 响应 deadline 保持原有合同；本次仅 ACK 报告有效续期期限",
+    "没有引入调优或评测框架，没有改变输出或费用门槛"
+  ]
+}
