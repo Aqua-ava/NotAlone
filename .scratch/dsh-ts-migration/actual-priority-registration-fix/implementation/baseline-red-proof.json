@@ -1,0 +1,15 @@
+{
+  "before": {
+    "desktop/src/main/sync/priority.ts": "7f86540aae640d659decb7b551c12d4d7938484fa5d6c27e1a021b09d2f077c4",
+    "backend-ts/src/pure-ts-sync.ts": "37ca58742d727efce951f9b48914875c76454d2c8f99676d158afbb7018fa2b8"
+  },
+  "red_sources": {
+    "desktop/src/main/sync/priority.ts": "d69f5de20898ce66eb32fc098546272b3d987c212defcddc5ef4297a408bd563",
+    "backend-ts/src/pure-ts-sync.ts": "b1f5895f8e223afa55733f140e7d160b1488851eeb87fc5920c584bc7c256016"
+  },
+  "red_exit_code": 1,
+  "restored": {
+    "desktop/src/main/sync/priority.ts": "7f86540aae640d659decb7b551c12d4d7938484fa5d6c27e1a021b09d2f077c4",
+    "backend-ts/src/pure-ts-sync.ts": "37ca58742d727efce951f9b48914875c76454d2c8f99676d158afbb7018fa2b8"
+  }
+}

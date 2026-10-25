@@ -58,9 +58,10 @@ export class SyncPriorityController {
       if (this.cleared && contactId === this.acceptedContactId) return;
       const pending = new AbortController(); this.pending = pending;
       try {
-        const response = await this.backend.requestJson({ method: 'POST', path: '/api/sync/priority',
+        const response = await this.backend.requestJson({ method: 'POST', path: '/api/sync/priority?response=ack',
           body: { contact_id: contactId }, timeoutMs: 2000, maxResponseBytes: 16_384, signal: pending.signal });
         if (!this.current(generation) || response.generation !== generation) return;
+        // 回执仅确认登记；读取成功与历史覆盖继续由独立状态报告提供。
         this.cleared = true; this.acceptedContactId = contactId;
       } catch {
         // 提示登记失败不更改总开关；后续有效范围或状态事件会重新核对最新目标。

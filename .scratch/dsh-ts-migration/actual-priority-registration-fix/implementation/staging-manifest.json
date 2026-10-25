@@ -1,0 +1,48 @@
+{
+  "source_commit": "e5d8183bff811bc9bdd466a3035deb0b6abf10e3",
+  "freeze_head": "54aebef5ccad427d680ce243eb852c5bd4d91f1e",
+  "intent": "root 仅按以下四个源码/已登记测试文件 staging；证据保留为本地集成输入。",
+  "staging_files": [
+    {
+      "path": "desktop/src/main/sync/priority.ts",
+      "before_sha256": "d69f5de20898ce66eb32fc098546272b3d987c212defcddc5ef4297a408bd563",
+      "after_sha256": "7f86540aae640d659decb7b551c12d4d7938484fa5d6c27e1a021b09d2f077c4",
+      "before_git_blob": "7f9d92c8f1e4026c9d62cde7e7df1ab1359f6c52",
+      "after_git_blob": "36d28819eaded342eb0f0109943c1e4f511d01b5"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-sync.ts",
+      "before_sha256": "b1f5895f8e223afa55733f140e7d160b1488851eeb87fc5920c584bc7c256016",
+      "after_sha256": "37ca58742d727efce951f9b48914875c76454d2c8f99676d158afbb7018fa2b8",
+      "before_git_blob": "d9d4de1ea0bf5c5d82cacb37de853228527eff15",
+      "after_git_blob": "0ab05cf98507c48e9071d1751bdbf795976dd6ea"
+    },
+    {
+      "path": "desktop/tests/sync-priority.test.mjs",
+      "before_sha256": "f31587ecc62e8dac52c8cffa814ea39f2ab2eebde4895079b252d6d51885f92d",
+      "after_sha256": "c846793a1ee37767398c1885ef2d2ae10e68ed9e85b056344a27f8be802fc3b5",
+      "before_git_blob": "7aa036ba4f63441dc4bd5121be708157c72be3b7",
+      "after_git_blob": "84488ba9861a471187b2a119adf4d28344a607a7"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-sync.test.mjs",
+      "before_sha256": "dbe7ce97a4223b2ba8ba97d03edb19f0cdec539252d36c01334e8ab096695ce2",
+      "after_sha256": "99b9c5fd8464e5727222d1c0331a09c26fc16e29570976b26b0c1da535ed864b",
+      "before_git_blob": "a16135a7527d18520eceff0bf68ca57069c85615",
+      "after_git_blob": "3b603672314e6de3855ac32d411f8e173f78a210"
+    }
+  ],
+  "evidence_files": [
+    "result.json",
+    "handoff.md",
+    "baseline.json",
+    "baseline-red-proof.json"
+  ],
+  "never_stage": [
+    "private-raw-locator.json",
+    "validation.jsonl",
+    "run-validation.py",
+    "verify-base-red.py"
+  ],
+  "git_index_modified_by_this_task": false
+}

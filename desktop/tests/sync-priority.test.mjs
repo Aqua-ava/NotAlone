@@ -47,7 +47,7 @@ async function fixture(t) {
     if (request.url === '/api/sync/enable' || request.url === '/api/sync/disable') {
       enabled = request.url.endsWith('/enable'); return send(syncReport(enabled));
     }
-    if (request.url === '/api/sync/priority' && request.method === 'POST') {
+    if (new URL(request.url, 'http://localhost').pathname === '/api/sync/priority' && request.method === 'POST') {
       let body = ''; for await (const chunk of request) body += chunk;
       const value = JSON.parse(body);
       requests.push(value); changes.emit('priority');

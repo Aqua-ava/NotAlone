@@ -77,13 +77,16 @@ export class PureTsSync {
   if(url.pathname==='/api/sync/status')return method==='GET'?{status:200,body:await this.status()}:{status:404,body:{error:'not_found'}};
   if(!command)return;
   if(method!=='POST')return {status:404,body:{error:'not_found'}};
-  if(url.search||!body||typeof body!=='object'||Array.isArray(body))return {status:400,body:{error:'sync_request_invalid'}};
+  const acknowledge=command==='priority'&&url.search==='?response=ack';
+  if(url.search&&!acknowledge||!body||typeof body!=='object'||Array.isArray(body))return {status:400,body:{error:'sync_request_invalid'}};
   const value=body as Row;
   if(command==='priority'){
    if(Object.keys(value).join(',')!=='contact_id'||value.contact_id!==null&&(typeof value.contact_id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.contact_id)))return {status:400,body:{error:'sync_priority_request_invalid'}};
   }else if(Object.keys(value).length)return {status:400,body:{error:'sync_request_invalid'}};
   const result=await this.execute(command,command==='priority'?{priority_contact_id:value.contact_id}:{},signal);
   if(result.status!==200)return result;
+  // 桌面只需确认提示已接纳；无参数调用继续返回原完整状态，不把登记当成读取成功。
+  if(acknowledge)return {status:200,body:{accepted:true,contact_id:value.contact_id}};
   if(command==='check'||command==='retry'){const checked=await this.execute('cycle',{},signal);if(checked.status!==200)return checked;}
   await this.publishStatus();return {status:200,body:await this.status()};
  }

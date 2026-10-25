@@ -1,0 +1,171 @@
+{
+  "status": "frozen_for_root_integration",
+  "date": "2026-10-26",
+  "source_commit": "e5d8183bff811bc9bdd466a3035deb0b6abf10e3",
+  "freeze_head": "54aebef5ccad427d680ce243eb852c5bd4d91f1e",
+  "shared_head_note": "共享 HEAD 已由其他工作推进；本任务四份原文件在新 HEAD 中逐字节匹配基线，本任务源码未受影响。",
+  "root_observation_sha256": "f2030e2a8eb5ea681a1f13f004c24f165a94959c6d90f95ee7fd1fe16447ccd9",
+  "root_observation_unchanged": true,
+  "diagnosis": {
+    "actual_status_wire_bytes_from_frozen_root_observation": 115179,
+    "response_limit_bytes_unchanged": 16384,
+    "synthetic_history_coverages": 291,
+    "incomplete_coverages_preserved": 5,
+    "synthetic_http_status_wire_bytes": 105858,
+    "compact_ack_wire_bytes_with_authority_decoration": 228,
+    "red": "服务端已接纳 HTTP 200 clear，客户端 response_too_large，连接代际未变，持续重试 null 且最新选择未登记。",
+    "green": "初始 clear 回执在途切换选择，串行 null→最新联系人，旧选择未提交。",
+    "regression_sha256": "99b9c5fd8464e5727222d1c0331a09c26fc16e29570976b26b0c1da535ed864b"
+  },
+  "compatibility": {
+    "default_post_priority": "原完整状态响应保留",
+    "opt_in": "POST /api/sync/priority?response=ack",
+    "ack": "accepted + contact_id；宿主继续附带既有范围和历史授权元数据",
+    "desktop": "沿用 HTTP 成功接纳语义、代际核验、串行和错误重试；回执不作完整 sync status 使用",
+    "unknown": "独立状态报告保留未读取的 null，不从登记推算成功或历史完整",
+    "limits": "16384 bytes / 2000 ms 未变"
+  },
+  "verification": {
+    "minimum_tests": 1,
+    "desktop_related_tests": 31,
+    "backend_contract_tests": 4,
+    "typechecks": [
+      "desktop",
+      "backend-ts"
+    ],
+    "covers": [
+      "初始 clear 后最新选择",
+      "同连接串行与合并选择",
+      "代际断连/重连",
+      "失败不冒充成功、按最新目标重试",
+      "关闭与释放清除",
+      "大集合完整且不改覆盖",
+      "未知读取指标保持空值"
+    ],
+    "diff_check_exit": 0
+  },
+  "data": {
+    "used": "仅合成 localhost 和自动清理的自有 _test 库",
+    "synthetic_messages_created": 0,
+    "not_accessed": "实际 App/微信、原配置/DB/CLI/聊天/账本、真实模型",
+    "body_read_or_background_dispatch_added": false,
+    "owner_contact_account_scope_exclusion_history_stop_resume": "均未更改",
+    "original_off_and_zero_instances": "保留冻结 root 记录，未主动复验实际资料"
+  },
+  "validation": [
+    {
+      "label": "red-final-baseline",
+      "cwd": "backend-ts",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=大范围历史状态",
+        "test/pure-ts-sync.test.mjs"
+      ],
+      "exit_code": 1,
+      "raw_sha256": "13c1188bc3ffc99aa35d291786a9e2c5c8e91b8dd106e766182857a8a4ebd2fa"
+    },
+    {
+      "label": "green-final-chain",
+      "cwd": "backend-ts",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=大范围历史状态",
+        "test/pure-ts-sync.test.mjs"
+      ],
+      "exit_code": 0,
+      "raw_sha256": "6ddefccca12b39d077b57fe43c784b3a8e12ecb3d99dce2990da397c2b2ffbef"
+    },
+    {
+      "label": "desktop-related",
+      "cwd": "desktop",
+      "command": [
+        "node",
+        "--test",
+        "tests/sync-priority.test.mjs",
+        "tests/sync-priority-status.test.mjs",
+        "tests/sync-status-recovery.test.mjs",
+        "tests/sync-scope.test.mjs"
+      ],
+      "exit_code": 0,
+      "raw_sha256": "b500e583b86e37127c8dfa879807ac0144d22e1a316ecd2cc2fba200cfcff60f"
+    },
+    {
+      "label": "backend-contracts",
+      "cwd": "backend-ts",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=固定账号范围|未初始化运行身份|范围默认仅所选|历史资格必须独立确认",
+        "test/sync-incremental-api.test.mjs",
+        "test/sync-scope.test.mjs"
+      ],
+      "exit_code": 0,
+      "raw_sha256": "76b477751bfd70fc5cf1627bc5ab3bdcdc55bbac65b86ca7e78ca58714e053e8"
+    },
+    {
+      "label": "desktop-typecheck",
+      "cwd": "desktop",
+      "command": [
+        "./node_modules/.bin/tsc",
+        "--noEmit"
+      ],
+      "exit_code": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "backend-ts-typecheck",
+      "cwd": "backend-ts",
+      "command": [
+        "./node_modules/.bin/tsc",
+        "--noEmit"
+      ],
+      "exit_code": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "source_changes": [
+    {
+      "path": "desktop/src/main/sync/priority.ts",
+      "before_sha256": "d69f5de20898ce66eb32fc098546272b3d987c212defcddc5ef4297a408bd563",
+      "after_sha256": "7f86540aae640d659decb7b551c12d4d7938484fa5d6c27e1a021b09d2f077c4",
+      "before_git_blob": "7f9d92c8f1e4026c9d62cde7e7df1ab1359f6c52",
+      "after_git_blob": "36d28819eaded342eb0f0109943c1e4f511d01b5"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-sync.ts",
+      "before_sha256": "b1f5895f8e223afa55733f140e7d160b1488851eeb87fc5920c584bc7c256016",
+      "after_sha256": "37ca58742d727efce951f9b48914875c76454d2c8f99676d158afbb7018fa2b8",
+      "before_git_blob": "d9d4de1ea0bf5c5d82cacb37de853228527eff15",
+      "after_git_blob": "0ab05cf98507c48e9071d1751bdbf795976dd6ea"
+    },
+    {
+      "path": "desktop/tests/sync-priority.test.mjs",
+      "before_sha256": "f31587ecc62e8dac52c8cffa814ea39f2ab2eebde4895079b252d6d51885f92d",
+      "after_sha256": "c846793a1ee37767398c1885ef2d2ae10e68ed9e85b056344a27f8be802fc3b5",
+      "before_git_blob": "7aa036ba4f63441dc4bd5121be708157c72be3b7",
+      "after_git_blob": "84488ba9861a471187b2a119adf4d28344a607a7"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-sync.test.mjs",
+      "before_sha256": "dbe7ce97a4223b2ba8ba97d03edb19f0cdec539252d36c01334e8ab096695ce2",
+      "after_sha256": "99b9c5fd8464e5727222d1c0331a09c26fc16e29570976b26b0c1da535ed864b",
+      "before_git_blob": "a16135a7527d18520eceff0bf68ca57069c85615",
+      "after_git_blob": "3b603672314e6de3855ac32d411f8e173f78a210"
+    }
+  ],
+  "review": {
+    "standards": "按明确禁止委派边界串行自查；仅两份产品源码及两份已登记测试。",
+    "spec": "保留响应上限和默认 API，新增显式 ACK，范围、权限及 unknown 不变；指定顺序与失败守卫已验证。"
+  },
+  "not_run": [
+    "全量",
+    "实际 App/微信",
+    "模型",
+    "打包/packaged",
+    "Git index/add/commit/push/远端/PR",
+    "子 Agent/新 chat"
+  ],
+  "remaining": "root 审阅、集成并创建本地提交；实际验收只能 npm run dev，本轮不声明 App/微信通过。"
+}

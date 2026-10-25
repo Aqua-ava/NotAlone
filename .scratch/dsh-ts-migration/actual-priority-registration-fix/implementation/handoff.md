@@ -1,0 +1,23 @@
+# 优先联系人登记修复交接（冻结）
+- 基线：`e5d8183bff811bc9bdd466a3035deb0b6abf10e3`；冻结 HEAD：`54aebef5ccad427d680ce243eb852c5bd4d91f1e`。
+- 共享 HEAD 已推进，但本任务四份原文件在新 HEAD 中逐字节匹配基线，root-observation SHA 未变。
+- 根因：生产接口已接纳 clear，但完整状态超过 16KB，客户端 `response_too_large`；代际未变，只重试 null。
+- 合成规模：291 条覆盖、5 条 incomplete；真实 HTTP 状态 105858 字节。
+- 修复：桌面显式 `POST /api/sync/priority?response=ack`；接纳回执加既有授权元数据共 228 字节。
+- 兼容：无参数 POST 仍返回完整状态；GET status 未变。16KB/2s、权限、范围、历史和停止/恢复未改。
+- 回执仅确认登记；独立状态的读取成功、历史完整等 unknown/null 保留。
+- RED：最终同一回归在两份原产品源码下 exit 1，连续 null、最新选择未登记；还原与恢复源码 SHA 已核验。
+- GREEN：同一回归 exit 0；初始 clear 在途切换选择，只串行 null→最新联系人；覆盖不变、消息 0。
+- 定点（backend-ts）：`node --test --test-name-pattern=大范围历史状态 test/pure-ts-sync.test.mjs`。
+- 桌面（31/31）：`node --test tests/sync-priority.test.mjs tests/sync-priority-status.test.mjs tests/sync-status-recovery.test.mjs tests/sync-scope.test.mjs`。
+- 后端（4/4）：`node --test --test-name-pattern='固定账号范围|未初始化运行身份|范围默认仅所选|历史资格必须独立确认' test/sync-incremental-api.test.mjs test/sync-scope.test.mjs`。
+- 两端各自 `./node_modules/.bin/tsc --noEmit` 与定点 `git diff --check` 通过。
+- 串行、选择合并、关闭清除、失败重试和真实连接代际断连/重连由桌面相关测试通过。
+- 只用合成 localhost、自有 _test 库并自动清理；未新增正文读取或后台派发。
+- 原资料/配置/DB/CLI/聊天/账本未接触；off/0 实例沿用冻结 root 记录，未主动复验。
+- 精确 staging：`staging-manifest.json` 仅四份源码/已登记测试，含原新 SHA256 与 Git blob SHA。
+- 验证命令、日志 SHA 与事实见 `result.json`；raw 仓库外目录 0700、文件 0600，私有定位文件不 stage。
+- 未运行全量、真实 App/微信、模型或打包；未操作 index/add/commit/push/远端/PR，未开 agent/chat。
+- 未改 Stop 源码和其证据；其他协作改动不纳入 manifest。
+- root 下一步：审阅、集成本地提交，再按需实际验收；只能 `npm run dev`，禁止 packaged。
+- 25 仍 claimed、26 未开始；本修复不替代实际 App/微信和真实记忆验收。
