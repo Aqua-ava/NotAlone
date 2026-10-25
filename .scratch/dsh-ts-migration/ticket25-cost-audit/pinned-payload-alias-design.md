@@ -56,6 +56,7 @@
 4. 不把真实 UUID 或真实↔alias 映射追加到模型输入。模型只需要 alias；真实映射留在端侧当前调用内存。
 5. alias 与真实 UUID 集合都不得跨 owner/contact/request 复用。不同联系人的 `c1` 必须分别解析到各自请求的 evidence，旧请求 alias 在后续请求默认无效。
 6. Skill 版本使用同一请求局部的 `k1..kN` 投影：`skill_selection.version_id`、受控目录、读取回执和 `ReplyRuntimeOutput.used_skill_version_id` 只出站 alias；claim 边界再还原为真实版本 UUID，PG 与 `SkillUse` 继续保存真实值。模型直接返回真实 UUID、未知或未读取的 `kN` 均拒绝。
+7. JSON 对象/数组字符串投影采用有界递归：普通人类文字与非法 JSON 原样保留，合法嵌套 JSON 逐层处理；深度或节点数超过上限时按不可用拒绝，不能静默回退到泄漏原文。
 
 ### 输出还原
 
@@ -122,6 +123,7 @@ pinned 8-call 要把费用比降到 1.10，需要新臂总费用从 `0.001328166
 3. `reply-loop`/`reply-service` 集成测试：假模型实际收到 alias，返回 alias 后 PG、candidate DTO、`context_receipt.evidence_ids` 和来源审计全为真实 UUID；alias 不进入持久化。
 4. History Tool 测试：工具返回真实 evidence 后，模型结果只看到新请求局部 alias；模型用该 alias 返回候选时持久层映射回真实消息 ID，`source_ids` 不进入模型可见文本。
 5. Source audit RED：v2 catalog 只保存真实来源，模型 alias 以独立 `model_alias_mapping` 保存于同一私有 attempt；alias 连续，真实 ID 唯一，mapping 与请求 payload、PG snapshot 和输出一一对应时审计通过。交换或复用 alias、把 alias 写入 catalog、映射到未授权 evidence 时必须失败，`runtime_sources` 仍能证明外发序列与真实来源一一对应。
+6. Collector 通过 `captureReplyRuntimeSourceAttempt` 从实际请求中的 `c1..cN` 与完成后 PG 的真实来源顺序共同生成 v2 catalog 和 mapping；attempt 另绑定 `git HEAD`、argv 摘要以及 request/catalog 摘要。测试必须调用该生产装配函数，不得预置 mapping。
 6. 绿色回归：56f 的 system/tools 单哈希、未知项/候选上限 user prompt、额外候选拒绝、569 的 `messages.join('\n\n')` 逐消息规范化、引用至少一条和所有引用属于本轮 evidence 均保持。
 
 ## 最小实施范围

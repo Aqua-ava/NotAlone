@@ -64,6 +64,8 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
   }
  }
  if(c.type!=='rewrite_draft')Object.assign(payload,{understanding_correction:c.understanding_correction??null,user_instruction:c.user_instruction??null,clarification_answer:c.clarification_answer??null});
+ for(const field of ['understanding_correction','user_instruction','clarification_answer','context_text'])
+  if(aliases&&typeof payload[field]==='string')payload[field]=aliasReplyDiscussionText(payload[field] as string,aliases);
  payload.skill_selection=request.skill_version_id?{mode:'user',version_id:aliases?.skillFor(request.skill_version_id)??'k1'}:{mode:request.skill_disabled?'disabled':'auto'};
  if(request.allow_incomplete_history)payload.history_coverage_warning='历史覆盖不完整：用户选择基于已同步部分继续，不能据此声称拥有完整语境。';
  Object.assign(payload,{expression_actor:'owner',recipient_role:'contact',message_order:'known_times_ascending_unknown_last_equal_unordered'});
@@ -84,7 +86,7 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
  const recentOnly=c.type==='rewrite_draft'&&c.input_kind==='workspace'&&Array.isArray(c.excluded_message_ids)&&c.excluded_message_ids.length>0;
  if(discussion&&!recentOnly){
   const projected=assistantDiscussionPayload(discussion);
-  payload.assistant_discussion=aliases?aliasReplyEvidenceReferences({...projected,items:projected.items.map(item=>({...item,text:aliasReplyDiscussionText(item.text,aliases)}))},aliases):projected;
+  payload.assistant_discussion=aliases?aliasReplyEvidenceReferences(projected,aliases):projected;
  }
  return {...payload,evidence,citation_policy:{allowed_evidence_ids:evidence.map(e=>e.evidence_id),additional_evidence_ids:'successful_history_tool_evidence_only',references_are_not_citations:true},fidelity_contract,risk_notes:[...context.risk_notes]};
 }

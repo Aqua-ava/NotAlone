@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {buildReplyComparisonReport} from '../src/reply-comparison.ts';
+import {auditReplyRuntimeSources,captureReplyRuntimeSourceAttempt,replyComparisonCollectorBinding} from '../src/reply-comparison-sources.ts';
 const canonical=value=>value===null||typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?'['+value.map(canonical).join(',')+']':'{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}';
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:canonical(value)).digest('hex');
 const manifestText=await readFile(new URL('./fixtures/reply-comparison-material-manifest.json',import.meta.url),'utf8');
@@ -62,6 +64,9 @@ function aliasedAuditRun(){
   const catalog=row.runtime_sources.attempts[0].catalog;
   catalog.schema_version='reply-runtime-source-catalog-v2';
   row.runtime_sources.attempts[0].model_alias_mapping=catalog.entries.map((entry,index)=>({model_evidence_id:`c${index+1}`,evidence_id:entry.evidence_id}));
+  const argvSha256='d'.repeat(64),catalogSha256=hash(catalog);
+  row.runtime_sources.attempts[0].source_binding={source_commit:row.commit,argv_sha256:argvSha256,
+   attempt_binding_sha256:hash({source_commit:row.commit,argv_sha256:argvSha256,request_sha256:row.runtime_sources.attempts[0].request.sha256,catalog_sha256:catalogSha256})};
   seal(row);
  }
  return run;
@@ -75,6 +80,39 @@ test('新臂模型目录不含别名，映射独立保存在同一私有attempt�
  assert.equal(hash(row.runtime_sources.attempts[0].catalog),row.runtime_sources.attempts[0].catalog_sha256);
  const report=buildReplyComparisonReport(manifestText,datasetText,run);
  assert.equal(report.records.find(item=>item.arm==='new'&&item.source_audit)?.source_audit.status,'verified');
+});
+function productionCapturedAuditRun(){
+ const run=aliasedAuditRun(),row=run.records.find(item=>item.arm==='new'),attempt=row.runtime_sources.attempts[0],persistence=row.runtime_sources.persistence;
+ const member=JSON.parse(datasetText).cases.find(item=>item.case_id===row.case_id);
+ const collectorBinding=replyComparisonCollectorBinding(new URL('../..',import.meta.url).pathname,['--synthetic-production-capture',`--case=${row.case_id}`]);
+ row.commit=collectorBinding.source_commit;
+ const captured=captureReplyRuntimeSourceAttempt({member,body:structuredClone(attempt.request.body),
+  request:{request_id:persistence.request_id,hash_kind:attempt.request.hash_kind,sha256:attempt.request.sha256,...attempt.request.raw_utf8!==undefined?{raw_utf8:attempt.request.raw_utf8}:{}},
+  scope:structuredClone(row.scope),case_id:row.case_id,repeat:row.repeat,arm:row.arm,attempt_id:attempt.attempt_id,
+  started_at:row.started_at,captured_at:attempt.catalog.captured_at,response_started_at:attempt.response_started_at,
+  persisted_sources:structuredClone(persistence.snapshot),collector_binding:collectorBinding});
+ row.runtime_sources.attempts[0]=captured.attempt;persistence.catalog_sha256=captured.catalog_sha256;seal(row);
+ return {run,row,captured,collectorBinding};
+}
+test('生产采集器从实际请求与PG来源生成v2 catalog和独立mapping并交审计通过',()=>{
+ const {run,row,captured,collectorBinding}=productionCapturedAuditRun();
+ assert.equal(collectorBinding.source_commit,execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim());
+ assert.equal(collectorBinding.argv_sha256,hash(['--synthetic-production-capture',`--case=${row.case_id}`]));
+ assert.deepEqual({source_commit:captured.attempt.source_binding.source_commit,argv_sha256:captured.attempt.source_binding.argv_sha256},collectorBinding);
+ assert.ok(captured.catalog.entries.every(entry=>/^[a-f0-9-]{36}$/.test(entry.evidence_id)&&!('model_evidence_id'in entry)));
+ assert.deepEqual(captured.model_alias_mapping.map(entry=>[entry.model_evidence_id,entry.evidence_id]),captured.catalog.entries.map((entry,index)=>[`c${index+1}`,entry.evidence_id]));
+ const member=JSON.parse(datasetText).cases.find(item=>item.case_id===row.case_id);
+ const sourceAudit=auditReplyRuntimeSources(member,{...row,terminal_status:'succeeded'},row.output,'reporter_fixture');
+ assert.equal(sourceAudit.status,'verified',sourceAudit.reason);
+ const wrongCommit=productionCapturedAuditRun();wrongCommit.row.runtime_sources.attempts[0].source_binding.source_commit='0'.repeat(40);
+ wrongCommit.row.deterministic_checks.runtime_sources_sha256=hash(wrongCommit.row.runtime_sources);
+ assert.throws(()=>auditReplyRuntimeSources(member,{...wrongCommit.row,terminal_status:'succeeded'},wrongCommit.row.output,'reporter_fixture'),/runtime_collector_source_binding/);
+ const wrongArgv=productionCapturedAuditRun();wrongArgv.row.runtime_sources.attempts[0].source_binding.argv_sha256='not-a-digest';
+ wrongArgv.row.deterministic_checks.runtime_sources_sha256=hash(wrongArgv.row.runtime_sources);
+ assert.throws(()=>auditReplyRuntimeSources(member,{...wrongArgv.row,terminal_status:'succeeded'},wrongArgv.row.output,'reporter_fixture'),/runtime_collector_source_binding/);
+ const wrongAttempt=productionCapturedAuditRun();wrongAttempt.row.runtime_sources.attempts[0].source_binding.attempt_binding_sha256='0'.repeat(64);
+ wrongAttempt.row.deterministic_checks.runtime_sources_sha256=hash(wrongAttempt.row.runtime_sources);
+ assert.throws(()=>auditReplyRuntimeSources(member,{...wrongAttempt.row,terminal_status:'succeeded'},wrongAttempt.row.output,'reporter_fixture'),/runtime_collector_source_binding/);
 });
 test('v2来源审计拒绝catalog别名、交换、复用和未授权映射，重签目录也不能放宽',()=>{
  const mutate=(change)=>{

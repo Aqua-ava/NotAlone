@@ -1,5 +1,6 @@
 /** 仅核对显式采集证据的内部一致性；哈希及声明时间不能认证历史采集或远端真实性。 */
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {validateReplyCandidates} from './reply-contract.ts';
 type Row=Record<string,any>;
 export interface ReplyRuntimeSourceAudit {
@@ -47,6 +48,85 @@ function payloadOf(body:Row,excludedFields:string[]):Row {
  visit(body);if(found.length!==1)invalid('unique_payload');return found[0];
 }
 const hashString=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+const commitHash=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);
+export interface ReplyComparisonCollectorBinding {source_commit:string;argv_sha256:string}
+export interface ReplyRuntimeSourceCaptureInput {
+ member:Row;body:Row;request:{request_id:string;hash_kind:'wire_utf8_sha256'|'canonical_json_sha256';sha256:string;raw_utf8?:string};
+ scope:Row;case_id:string;repeat:number;arm:'old'|'new';attempt_id:string;started_at:string;captured_at:string;response_started_at:string;
+ persisted_sources:readonly Row[];collector_binding:ReplyComparisonCollectorBinding;
+}
+/** collector 只把真实 argv 摘要与当前固定源码提交绑定进 attempt；不写本机 argv 原值。 */
+export function replyComparisonCollectorBinding(repositoryRoot:string,argv:readonly string[]=process.argv.slice(2)):ReplyComparisonCollectorBinding {
+ if(typeof repositoryRoot!=='string'||!repositoryRoot||!Array.isArray(argv)||argv.some(value=>typeof value!=='string'))return invalid('collector_arguments');
+ let sourceCommit:string;
+ try{sourceCommit=execFileSync('git',['rev-parse','--verify','HEAD^{commit}'],{cwd:repositoryRoot,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();}
+ catch{return invalid('collector_source_commit');}
+ if(!commitHash(sourceCommit))invalid('collector_source_commit');
+ return {source_commit:sourceCommit,argv_sha256:digest([...argv])};
+}
+function captureProjection(member:Row,body:Row):{payload:Row;input:Row;context:Row;strategy:Row} {
+ const payload=payloadOf(body,Object.keys(member).filter(key=>!INPUT.includes(key)));
+ equal(Object.keys(payload).sort(),['input_mode','draft_text','user_instruction','include_relationship_context','workspace_action','context_text','skill_selection','expression_actor','recipient_role','message_order','evidence','citation_policy','fidelity_contract','risk_notes'].sort(),'payload_fields');
+ const input=Object.fromEntries(INPUT.filter(key=>key in member).map(key=>[key,member[key]]));
+ const context=Object.fromEntries(['available_facts','current_message','recent_context'].filter(key=>key in member).map(key=>[key,member[key]]));
+ const strategy=Object.fromEntries(['unknowns','allowed_changes'].filter(key=>key in member).map(key=>[key,member[key]]));
+ if(payload.input_mode!=='workspace'||payload.workspace_action!=='express'||payload.expression_actor!=='owner'||payload.recipient_role!=='contact'||payload.include_relationship_context!==true)invalid('workspace_projection');
+ equal(payload.skill_selection,{mode:'disabled'},'unexpected_skill');
+ if(payload.draft_text!==member.current_intent||payload.context_text!==canonical(context)||payload.user_instruction!==canonical(strategy))invalid('generation_input_projection');
+ equal({current_intent:payload.draft_text,...JSON.parse(payload.context_text),...JSON.parse(payload.user_instruction)},input,'generation_input_roundtrip');
+ return {payload,input,context,strategy};
+}
+/** 从实际请求与完成后的PG真实来源构造v2 catalog和独立mapping；不接收预置alias映射。 */
+export function captureReplyRuntimeSourceAttempt(input:ReplyRuntimeSourceCaptureInput):{catalog:Row;catalog_sha256:string;model_alias_mapping:Row[];attempt:Row} {
+ if(!object(input)||!object(input.member)||!object(input.body)||!object(input.request)||!object(input.scope)||!Array.isArray(input.persisted_sources))return invalid('capture_shape');
+ const actualScope=scope(input.scope),binding=input.collector_binding;
+ if(!object(binding)||Object.keys(binding).sort().join(',')!=='argv_sha256,source_commit'||!commitHash(binding.source_commit)||!hashString(binding.argv_sha256))invalid('collector_source_binding');
+ if(!uuid(input.request.request_id)||!uuid(input.attempt_id)||typeof input.case_id!=='string'||![1,2,3].includes(input.repeat)||!['old','new'].includes(input.arm))invalid('capture_identity');
+ const request=input.request;
+ if(!['wire_utf8_sha256','canonical_json_sha256'].includes(request.hash_kind)||!hashString(request.sha256))invalid('request_hash_kind');
+ if(request.hash_kind==='wire_utf8_sha256'){
+  if(typeof request.raw_utf8!=='string')invalid('request_wire_missing');
+  let parsed:unknown;try{parsed=JSON.parse(request.raw_utf8);}catch{return invalid('request_wire_json');}
+  equal(parsed,input.body,'request_wire_body');
+  if(digest(request.raw_utf8)!==request.sha256)invalid('request_wire_hash');
+ }else if(digest(input.body)!==request.sha256||request.raw_utf8!==undefined)invalid('request_canonical_hash');
+ const {payload,input:projectedInput,context,strategy}=captureProjection(input.member,input.body);
+ const sources=payload.evidence;
+ if(!Array.isArray(sources)||sources.length!==3||!sources.every(object)
+   ||sources.some((source,index)=>source.evidence_id!==`c${index+1}`)
+   ||new Set(sources.map(source=>source.kind)).size!==3)invalid('payload_sources');
+ if(input.persisted_sources.length!==sources.length)invalid('persisted_source_count');
+ const modelAliasMapping:Row[]=[],entries:Row[]=[];
+ for(const [index,source]of sources.entries()){
+  const stored=input.persisted_sources[index];
+  if(!object(stored)||!uuid(stored.evidence_id)||stored.kind!==source.kind||stored.evidence_text!==source.text
+    ||stored.owner_id!==actualScope.owner_id||stored.contact_id!==actualScope.contact_id
+    ||stored.conversation_binding_id!==actualScope.conversation_binding_id||canonical(stored.source_ids)!=='[]')invalid('persisted_source_identity');
+  if(modelAliasMapping.some(entry=>entry.evidence_id===stored.evidence_id))invalid('persisted_source_duplicate');
+  let fields:string[],role:string,body:string,origin:string;
+  switch(source.kind){
+   case 'user_purpose':fields=[];role='current_user_intent';body='帮我表达';origin='explicit_workspace_action';break;
+   case 'user_draft':fields=['current_intent'];role='current_user_statement';body=input.member.current_intent;origin='frozen_case_manual_input';break;
+   case 'user_current_chat':fields=Object.keys(context);role='user_provided_contact_text';body=canonical(context);origin='frozen_case_manual_input';break;
+   default:return invalid('source_kind');
+  }
+  if(source.factual_role!==role||source.text!==body||source.status!=='user_input')invalid('source_role_or_text');
+  modelAliasMapping.push({model_evidence_id:source.evidence_id,evidence_id:stored.evidence_id});
+  entries.push({...structuredClone(source),evidence_id:stored.evidence_id,text_sha256:digest(body),case_fields:fields,origin,source_ids:[],not_confirmed_memory:true});
+ }
+ if(!(time(input.started_at)<=time(input.captured_at)&&time(input.captured_at)<=time(input.response_started_at)))invalid('capture_response_order');
+ const catalog:Row={schema_version:'reply-runtime-source-catalog-v2',case_id:input.case_id,repeat:input.repeat,arm:input.arm,
+  case_sha256:digest(input.member),input_sha256:digest(projectedInput),request_sha256:request.sha256,request_hash_kind:request.hash_kind,
+  scope:structuredClone(actualScope),request_id:request.request_id,entries,strategy_fields:{payload_field:'user_instruction',fields:strategy,citable:false},
+  covered_input_fields:Object.keys(projectedInput).sort(),oracle_fields_excluded:ORACLE,
+  captured_at:input.captured_at,capture_boundary:'request_received_before_supplier_response',stored_evidence_verified_after_completion:false};
+ const catalogSha256=digest(catalog),attempt={attempt_id:input.attempt_id,attempt_id_kind:'collector_http_observation_not_ledger_id',
+  request:{body:structuredClone(input.body),hash_kind:request.hash_kind,sha256:request.sha256,...request.raw_utf8!==undefined?{raw_utf8:request.raw_utf8}:{}},
+  response_started_at:input.response_started_at,catalog,catalog_sha256:catalogSha256,
+  model_alias_mapping:modelAliasMapping,source_binding:{...structuredClone(binding),
+   attempt_binding_sha256:digest({source_commit:binding.source_commit,argv_sha256:binding.argv_sha256,request_sha256:request.sha256,catalog_sha256:catalogSha256})}};
+ return {catalog,catalog_sha256:catalogSha256,model_alias_mapping:modelAliasMapping,attempt};
+}
 const observations=(attempts:unknown[]):Row[]=>attempts.map(value=>{const attempt=object(value)?value:{},request=object(attempt.request)?attempt.request:{};return {attempt_id:uuid(attempt.attempt_id)?attempt.attempt_id:null,request_sha256:hashString(request.sha256)?request.sha256:null,request_hash_kind:request.hash_kind==='wire_utf8_sha256'||request.hash_kind==='canonical_json_sha256'?request.hash_kind:null,catalog_sha256:hashString(attempt.catalog_sha256)?attempt.catalog_sha256:null,response_started_at:typeof attempt.response_started_at==='string'?attempt.response_started_at:null};});
 const pending=(reason:string,attempts:unknown[]=[]):ReplyRuntimeSourceAudit=>({status:'undetermined',reason,binding_sha256:null,output_scope:'undetermined',allowed_citation_ids:[],attempt_count:attempts.length,request_id:null,attempt_ids:[],attempt_observations:observations(attempts)});
 interface AttemptAudit {attempt:Row;request:Row;payload:Row;catalog:Row;expectedEntries:Row[];ids:string[];captured:number;responded:number;ended:number}
@@ -62,19 +142,15 @@ function auditAttempt(member:Row,row:Row,evidence:Row,attempt:Row,actualScope:Ro
   if(digest(request.raw_utf8)!==request.sha256)invalid('request_wire_hash');
  }else if(digest(request.body)!==request.sha256||request.raw_utf8!==undefined)invalid('request_canonical_hash');
  if(single&&row.request_sha256!==request.sha256)invalid('record_request_hash');
- const payload=payloadOf(request.body,Object.keys(member).filter(key=>!INPUT.includes(key)));
- equal(Object.keys(payload).sort(),['input_mode','draft_text','user_instruction','include_relationship_context','workspace_action','context_text','skill_selection','expression_actor','recipient_role','message_order','evidence','citation_policy','fidelity_contract','risk_notes'].sort(),'payload_fields');
- const input=Object.fromEntries(INPUT.filter(key=>key in member).map(key=>[key,member[key]]));
- const context=Object.fromEntries(['available_facts','current_message','recent_context'].filter(key=>key in member).map(key=>[key,member[key]]));
- const strategy=Object.fromEntries(['unknowns','allowed_changes'].filter(key=>key in member).map(key=>[key,member[key]]));
- if(payload.input_mode!=='workspace'||payload.workspace_action!=='express'||payload.expression_actor!=='owner'||payload.recipient_role!=='contact'||payload.include_relationship_context!==true)invalid('workspace_projection');
- equal(payload.skill_selection,{mode:'disabled'},'unexpected_skill');
- if(payload.draft_text!==member.current_intent||payload.context_text!==canonical(context)||payload.user_instruction!==canonical(strategy))invalid('generation_input_projection');
- equal({current_intent:payload.draft_text,...JSON.parse(payload.context_text),...JSON.parse(payload.user_instruction)},input,'generation_input_roundtrip');
+ const {payload,input,context,strategy}=captureProjection(member,request.body);
  const catalog=attempt.catalog;
  const catalogVersion=object(catalog)?catalog.schema_version:null;
  if(!object(catalog)||!['reply-runtime-source-catalog-v1','reply-runtime-source-catalog-v2'].includes(catalogVersion)||digest(catalog)!==attempt.catalog_sha256)invalid('catalog_hash');
  const aliased=catalogVersion==='reply-runtime-source-catalog-v2';
+ if(aliased&&(!object(attempt.source_binding)||Object.keys(attempt.source_binding).sort().join(',')!=='argv_sha256,attempt_binding_sha256,source_commit'
+   ||!commitHash(attempt.source_binding.source_commit)||attempt.source_binding.source_commit!==row.commit
+   ||!hashString(attempt.source_binding.argv_sha256)||!hashString(attempt.source_binding.attempt_binding_sha256)
+   ||attempt.source_binding.attempt_binding_sha256!==digest({source_commit:attempt.source_binding.source_commit,argv_sha256:attempt.source_binding.argv_sha256,request_sha256:request.sha256,catalog_sha256:attempt.catalog_sha256})))invalid('collector_source_binding');
  for(const key of ['case_id','repeat','arm','case_sha256','input_sha256'])if(catalog[key]!==row[key])invalid('catalog_'+key);
  if(catalog.case_sha256!==digest(member)||catalog.input_sha256!==digest(input)||catalog.request_id!==evidence.request_id||catalog.request_sha256!==request.sha256||catalog.request_hash_kind!==request.hash_kind)invalid('catalog_binding');
  equal(scope(catalog.scope),actualScope,'catalog_scope');
