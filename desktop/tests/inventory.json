@@ -107,6 +107,7 @@
     "tests/skill-learning/review.test.mjs",
     "tests/skill-learning/stable-state.test.mjs",
     "tests/skill-learning/view.test.mjs",
+    "tests/source-deletion-tracking.test.ts",
     "tests/startup-continuity.test.mjs",
     "tests/startup-schema-guard.test.mjs",
     "tests/sync-priority-status.test.mjs",

@@ -22,6 +22,7 @@ export class SourceDeletionTracking {
       if (!this.current(pending, generation) || response.generation !== generation) throw new Error('删除连接已变化。');
       const taskId = deletionReceipt(response.data);
       try { await this.onSourceChanged(contactId); }
+      catch { /* 辅助资料失效失败不能掩盖已持久化的删除请求；终态轮询会再次核验。 */ }
       finally {
         tracking = true;
         void this.verify(contactId, taskId, generation, pending).finally(() => this.pending.delete(pending));
