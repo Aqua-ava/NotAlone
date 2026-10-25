@@ -222,6 +222,66 @@ test('讨论重开、编辑选择、携入、中断与删除保持显式身份�
     )).rows[0].n,
     1,
   );
+  const cancelledTurn = randomUUID();
+  const cancelledInput = randomUUID();
+  const cancelledRequestKey = randomUUID();
+  const cancelledRequest = randomUUID();
+  await f.storage.client.query(
+    `INSERT INTO reply_request(
+       id,owner_id,contact_id,conversation_binding_id,idempotency_key,
+       normalized_input,state,attempt,lease_expires_at
+     ) VALUES($1,$2,$3,$4,$5,'synthetic','running',1,now()+interval '30 seconds')`,
+    [cancelledRequest, f.owner, f.contact, f.binding, cancelledRequestKey],
+  );
+  await f.storage.client.query(
+    `INSERT INTO reply_attempt(
+       reply_request_id,number,state,started_at,lease_expires_at
+     ) VALUES($1,1,'running',now(),now()+interval '30 seconds')`,
+    [cancelledRequest],
+  );
+  await f.storage.client.query(
+    `INSERT INTO assistant_session_turn(
+       id,session_id,owner_id,contact_id,input_version_id,idempotency_key,
+       conversation_binding_id,input_digest,input_payload
+     ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      cancelledTurn, source, f.owner, f.contact, cancelledInput, cancelledRequestKey, f.binding,
+      'c'.repeat(64), JSON.stringify({content: {type: 'rewrite_draft'}}),
+    ],
+  );
+  await f.storage.client.query(
+    `INSERT INTO assistant_session_input(
+       id,session_id,owner_id,contact_id,conversation_binding_id,input_type,turn_id
+     ) VALUES($1,$2,$3,$4,$5,'generation',$6)`,
+    [cancelledInput, source, f.owner, f.contact, f.binding, cancelledTurn],
+  );
+  await f.storage.client.query(
+    'UPDATE assistant_session SET current_input_version_id=$2 WHERE id=$1',
+    [source, cancelledInput],
+  );
+  const userCancelled = await f.service.interrupt(
+    scope,
+    source,
+    cancelledRequestKey,
+    cancelledInput,
+    'user_cancelled',
+  );
+  assert.equal(userCancelled.state, 'failed');
+  assert.equal(userCancelled.interruption_reason, 'user_cancelled');
+  assert.deepEqual(
+    (await f.storage.client.query(
+      'SELECT state,failure_reason FROM reply_attempt WHERE reply_request_id=$1 ORDER BY number',
+      [cancelledRequest],
+    )).rows,
+    [{ state: 'failed', failure_reason: 'user_cancelled' }],
+  );
+  assert.equal(
+    (await f.storage.client.query(
+      "SELECT count(*)::int AS n FROM reply_invalidated_key WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3",
+      [f.owner, f.contact, cancelledRequestKey],
+    )).rows[0].n,
+    1,
+  );
 
   await f.service.deleteSession(scope, source);
   await f.service.deleteSession(scope, source);

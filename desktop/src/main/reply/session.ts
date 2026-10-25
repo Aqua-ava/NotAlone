@@ -2,7 +2,7 @@ import type { ReplyStateUpdate } from '../../shared/reply-bridge';
 import { continuationGeneration, strategyGeneration, ordinaryGeneration, type OrdinaryFailureObservation, type OrdinaryGenerationResult } from './assistant-generation-adapters';
 import { randomUUID } from 'node:crypto';
 import type { ContactSelection, ContactSessionState } from '../../shared/contact-session-bridge';
-import type { AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { AssistantGenerationStop, AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { isUuid } from '../uuid';
@@ -1591,7 +1591,7 @@ export class ReplySession {
     const saved = await readAssistantSession(this.backend, request.contactId, request.sessionId, pending.signal);
     const turn = saved.turns.find((item) => item.turnId === request.turnId && item.inputVersionId === request.inputVersionId);
     if (!current() || saved.generation !== generation || saved.currentInputVersionId !== request.inputVersionId
-      || turn?.state !== 'failed' || !['app_quit', 'configuration_reload'].includes(turn.interruptionReason ?? '') || !turn.input || turn.reply) {
+      || turn?.state !== 'failed' || !['app_quit', 'configuration_reload', 'user_cancelled'].includes(turn.interruptionReason ?? '') || !turn.input || turn.reply) {
       throw new Error('中断生成或来源已失效，请重新读取。');
     }
     const input = await interruptedReplyInput(this.backend, turn, contact, pending.signal, current);
@@ -1600,6 +1600,25 @@ export class ReplySession {
     this.notifyInputChanged();
     await this.generateInput({ contactId: request.contactId, scopeRevision: request.scopeRevision, newRequest: true },
       input, undefined, request.inputVersionId, { turnId: request.turnId, inputVersionId: request.inputVersionId });
+  }
+
+  async stopGeneration(request: AssistantGenerationStop): Promise<void> {
+    this.assertScope(request); this.assertSessionSelection();
+    const generation = this.backend.getConnectionGeneration();
+    if (generation === undefined || request.sessionId !== this.state.savedSession?.sessionId) {
+      throw new Error('这次生成已经结束或不再属于当前助手会话。');
+    }
+    await this.generationJobs.cancelUserGeneration({ connectionGeneration: generation,
+      contactId: request.contactId, sessionId: request.sessionId, requestKey: request.requestKey },
+    request.inputVersionId);
+    if (generation !== this.backend.getConnectionGeneration() || request.contactId !== this.state.contactId
+      || request.scopeRevision !== this.state.scopeRevision || request.sessionId !== this.state.savedSession?.sessionId) return;
+    this.leaveGenerationView();
+    await this.readSavedSession({ contactId: request.contactId, scopeRevision: request.scopeRevision });
+    if (generation === this.backend.getConnectionGeneration() && request.contactId === this.state.contactId
+      && request.scopeRevision === this.state.scopeRevision && request.sessionId === this.state.savedSession?.sessionId) {
+      this.publish({ phase: this.state.result ? 'ready' : 'idle', canRetry: false, errorCode: undefined });
+    }
   }
 
   private async generateInput(selection: GenerateReply, input: ReplyInputSnapshot,

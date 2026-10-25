@@ -1,25 +1,28 @@
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
-import { readAssistantGenerationReceipt, type AssistantGenerationOwner, type AssistantGenerationStopping, type AssistantGenerationIdentity, type AssistantGenerationReceipt, type PendingAssistantGenerationReceipt } from './assistant-generation-jobs';
+import { readAssistantGenerationReceipt, type AssistantGenerationInterruptionReason, type AssistantGenerationInterruptionResult, type AssistantGenerationOwner, type AssistantGenerationStopping, type AssistantGenerationIdentity, type AssistantGenerationReceipt, type PendingAssistantGenerationReceipt } from './assistant-generation-jobs';
 import { readAssistantSession } from './assistant-sessions';
 import { isRecord } from './result-read';
 
-// 只使用已认证连接与实际回执；退出不提交输入正文，也不创建新请求。
-export async function interruptAssistantGeneration(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>, receipt: PendingAssistantGenerationReceipt, interruptionReason: 'app_quit' | 'configuration_reload' = 'app_quit'): Promise<void> {
-  if (backend.getConnectionGeneration() !== receipt.connectionGeneration) throw new Error('退出生成归属尚未确认。');
+// 只使用已认证连接与实际回执；退出或主动停止都不提交输入正文，也不创建新请求。
+export async function interruptAssistantGeneration(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>, receipt: PendingAssistantGenerationReceipt, interruptionReason: AssistantGenerationInterruptionReason = 'app_quit'): Promise<AssistantGenerationInterruptionResult> {
+  if (backend.getConnectionGeneration() !== receipt.connectionGeneration) throw new Error('生成停止归属尚未确认。');
   const path = `/api/contacts/${receipt.contactId}/assistant-sessions/${receipt.sessionId}`;
   try {
     const response = await backend.requestJson({ method: 'POST', path: `${path}/interrupt`,
-      body: { request_key: receipt.requestKey, input_version_id: receipt.inputVersionId, ...(interruptionReason === 'configuration_reload' ? { reason: interruptionReason } : {}) }, maxResponseBytes: 4096 });
+      body: { request_key: receipt.requestKey, input_version_id: receipt.inputVersionId,
+        ...(interruptionReason === 'app_quit' ? {} : { reason: interruptionReason }) }, maxResponseBytes: 4096 });
     const value = response.data;
     if (response.generation !== receipt.connectionGeneration || !isRecord(value)
-      || Object.keys(value).length !== 6 || !Object.hasOwn(value, 'interruption_reason')) throw new Error('退出生成未获确认。');
+      || Object.keys(value).length !== 6 || !Object.hasOwn(value, 'interruption_reason')) throw new Error('生成停止未获确认。');
     const { interruption_reason: reason, ...identity } = value;
     const stopped = readAssistantGenerationReceipt(identity, receipt.sessionId, receipt.requestKey);
     if (stopped.turnId !== receipt.turnId || stopped.inputVersionId !== receipt.inputVersionId
-      || !(stopped.state === 'completed' && reason === null || stopped.state === 'failed' && (reason === 'app_quit' || reason === 'configuration_reload' || reason === null))) {
-      throw new Error('退出生成未获确认。');
+      || !(stopped.state === 'completed' && reason === null || stopped.state === 'failed'
+        && (reason === 'app_quit' || reason === 'configuration_reload' || reason === 'user_cancelled' || reason === null))) {
+      throw new Error('生成停止未获确认。');
     }
+    return Object.freeze({ state: stopped.state, interruptionReason: reason });
   } catch (error) {
     if (!(error instanceof BackendRequestFailure && error.kind === 'response'
       && (error.status === 404 && error.code === 'not_found'
@@ -31,10 +34,10 @@ export async function interruptAssistantGeneration(backend: Pick<BackendHost, 'g
       const turn = saved.turns.find((item) => item.turnId === receipt.turnId && item.requestKey === receipt.requestKey
         && item.inputVersionId === receipt.inputVersionId);
       if (saved.generation === receipt.connectionGeneration && turn && ['redacted', 'unavailable'].includes(turn.state)
-        && turn.input === null && turn.reply === null) return;
+        && turn.input === null && turn.reply === null) return Object.freeze({ state: 'removed', interruptionReason: null });
     } catch (readError) {
       if (readError instanceof BackendRequestFailure && readError.status === 404 && readError.code === 'not_found'
-        && backend.getConnectionGeneration() === receipt.connectionGeneration) return;
+        && backend.getConnectionGeneration() === receipt.connectionGeneration) return Object.freeze({ state: 'removed', interruptionReason: null });
       throw readError;
     }
     throw error;

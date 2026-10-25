@@ -119,7 +119,7 @@ export function createAssistantDiscussionHttp(options:{
         case 'interrupt':
           if(!sessionId||!exact(request,['request_key','input_version_id'],['reason']))invalid();
           identifier(request.request_key);identifier(request.input_version_id);
-          if(request.reason!==undefined&&!['app_quit','configuration_reload'].includes(request.reason))invalid();
+          if(request.reason!==undefined&&!['app_quit','configuration_reload','user_cancelled'].includes(request.reason))invalid();
           result=await options.service.interrupt(
             scope,session(),request.request_key,request.input_version_id,request.reason??'app_quit',
           );break;

@@ -11,6 +11,8 @@
     "tests/assistant-continuation-client.test.ts",
     "tests/assistant-generation-execution.test.mjs",
     "tests/assistant-generation-preparation.test.mjs",
+    "tests/assistant-generation-stop-ui.test.mjs",
+    "tests/assistant-generation-stop.test.mjs",
     "tests/assistant-history-layout.test.mjs",
     "tests/assistant-input-budget-notice.test.mjs",
     "tests/assistant-input-budget-read.test.mjs",

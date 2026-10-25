@@ -1,7 +1,7 @@
 import { isUuid } from '../uuid';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { noArguments, type PageCommands } from '../page-commands';
-import type { AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { AssistantGenerationStop, AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
@@ -202,6 +202,14 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     if (history.length && typeof value.allowIncompleteHistory !== 'boolean') throw new Error('历史覆盖确认无效。');
     if (typeof value.newRequest !== 'boolean' || optional.length && !['express', 'suggest'].includes(value.workspaceAction as string)) throw new Error('本次生成操作不可用。');
     return replies.generate(value as unknown as GenerateReply);
+  }, 'helper');
+  commands.handle('reply:stop-generation', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'requestKey', 'inputVersionId']);
+    for (const key of ['sessionId', 'requestKey', 'inputVersionId']) {
+      if (!isUuid(value[key])) throw new Error('本次生成停止身份不可用。');
+      value[key] = (value[key] as string).toLowerCase();
+    }
+    return replies.stopGeneration(value as unknown as AssistantGenerationStop);
   }, 'helper');
   commands.handle('reply:continue-session', (...args: unknown[]) => replies.continueSession(continuation(args)), 'helper');
   commands.handle('reply:confirm-continuation', (...args: unknown[]) => {

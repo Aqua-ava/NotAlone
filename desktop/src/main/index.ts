@@ -158,7 +158,7 @@ void app.whenReady().then(async () => {
     await syncPriority.dispose();
     await headerChanges.shutdown();
     await replies.beginGenerationClosing(
-      (receipt) => interruptAssistantGeneration(backend, receipt),
+      async (receipt) => { await interruptAssistantGeneration(backend, receipt); },
       (identity) => recoverAssistantGenerationReceipt(backend, identity));
   });
   foreground.startContinuous();

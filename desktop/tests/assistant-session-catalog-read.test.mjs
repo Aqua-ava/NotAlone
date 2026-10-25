@@ -79,7 +79,7 @@ test('generation 输入与轮次一一关联，来源删除状态不能伪装 ac
 });
 
 
-test('只读恢复严格识别nullable中断原因，只有failed可投影app_quit', async () => {
+test('只读恢复严格识别nullable中断原因，只有failed可投影退出或主动停止', async () => {
   const { readAssistantSession } = await adapter('src/main/reply/assistant-sessions.ts');
   const turnId = randomUUID(), inputId = randomUUID(), key = randomUUID();
   const data = { session_id: randomUUID(), current_input_version_id: inputId,
@@ -89,6 +89,9 @@ test('只读恢复严格识别nullable中断原因，只有failed可投影app_qu
       state: 'active', content: null, placeholder: null }] };
   const saved = await readAssistantSession(transport(data), randomUUID(), data.session_id, new AbortController().signal);
   assert.equal(saved.turns[0].interruptionReason, 'app_quit');
+  data.turns[0].interruption_reason = 'user_cancelled';
+  assert.equal((await readAssistantSession(transport(data), randomUUID(), data.session_id,
+    new AbortController().signal)).turns[0].interruptionReason, 'user_cancelled');
   data.turns[0].interruption_reason = null;
   assert.equal((await readAssistantSession(transport(data), randomUUID(), data.session_id,
     new AbortController().signal)).turns[0].interruptionReason, null);

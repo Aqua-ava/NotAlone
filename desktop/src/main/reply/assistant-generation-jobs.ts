@@ -19,7 +19,16 @@ export type AssistantGenerationReceipt = Readonly<{
   state: 'running' | 'completed' | 'failed';
 }>;
 export type AssistantGenerationRecovery = (identity: AssistantGenerationIdentity) => Promise<AssistantGenerationReceipt | null>;
-export type AssistantGenerationStopping = Readonly<{ interrupt: (receipt: PendingAssistantGenerationReceipt, reason?: 'app_quit' | 'configuration_reload') => Promise<void>; recover: AssistantGenerationRecovery }>;
+export type AssistantGenerationInterruptionReason = 'app_quit' | 'configuration_reload' | 'user_cancelled';
+export type AssistantGenerationInterruptionResult = Readonly<{
+  state: 'completed' | 'failed' | 'removed';
+  interruptionReason: AssistantGenerationInterruptionReason | null;
+}>;
+export type AssistantGenerationStopping = Readonly<{
+  interrupt: (receipt: PendingAssistantGenerationReceipt,
+    reason?: AssistantGenerationInterruptionReason) => Promise<AssistantGenerationInterruptionResult>;
+  recover: AssistantGenerationRecovery;
+}>;
 export type AssistantPreparationCommandIdentity = Readonly<{
   taskId: string; inputVersionId: string; action: 'confirm' | 'answer'; suggestionId: string | null; operationKey: string;
 }>;
@@ -28,7 +37,8 @@ export type OwnedAssistantGeneration = Readonly<{ identity: AssistantGenerationI
 export type PendingAssistantGenerationReceipt = AssistantGenerationIdentity & AssistantGenerationReceipt;
 type ActiveJob = { controller: AbortController; viewRevision: number; stage: 'created' | 'preparing' | 'prepared' | 'queued' | 'requesting';
   receipt?: AssistantGenerationReceipt; preparationSettled: Promise<void>; settlePreparation: () => void;
-  preparationCommand?: AssistantPreparationCommandIdentity; transportEnded?: boolean; failedResponseReceived?: true; failedLeaseSettled?: true; canRetry?: boolean; terminal?: boolean; settledWithoutGeneration?: true; closingTask?: Promise<void>; stopping?: AssistantGenerationStopping };
+  preparationCommand?: AssistantPreparationCommandIdentity; transportEnded?: boolean; failedResponseReceived?: true; failedLeaseSettled?: true; canRetry?: boolean; terminal?: boolean; settledWithoutGeneration?: true; closingTask?: Promise<void>; stopping?: AssistantGenerationStopping;
+  userCancellationRequested?: true; userCancellation?: Promise<boolean> };
 
 const sameOwner = (left: AssistantGenerationOwner, right: AssistantGenerationOwner) =>
   left.connectionGeneration === right.connectionGeneration && left.contactId === right.contactId && left.sessionId === right.sessionId;
@@ -156,7 +166,7 @@ export class AssistantGenerationJobs {
       const { receipt } = active;
       states.set(receipt.requestKey, { contactId: job.identity.contactId, sessionId: receipt.sessionId,
         requestKey: receipt.requestKey, turnId: receipt.turnId, inputVersionId: receipt.inputVersionId, canRetry: active.canRetry,
-        phase: receipt.state === 'completed' ? 'completed' : active.failedResponseReceived ? 'failed'
+        phase: receipt.state === 'completed' ? 'completed' : active.userCancellationRequested ? 'stopping' : active.failedResponseReceived ? 'failed'
           : active.transportEnded || job.signal.aborted ? 'unconfirmed'
           : active.stage === 'requesting' ? 'generating' : 'queued' });
     }
@@ -389,6 +399,7 @@ export class AssistantGenerationJobs {
     // 原认证目标仍在时结算接纳的身份；没有回执必须实际读回，不能把失败当未领取。
     this.connectionChange = Promise.all(jobs.map(async ([job, active]) => {
       await active.preparationSettled;
+      await this.settleUserCancellation(active);
       if (active.terminal || active.settledWithoutGeneration) return;
       const stopping = active.stopping;
       if (!stopping) throw new Error('原生成连接尚未确认，不能重载配置。');
@@ -420,6 +431,7 @@ export class AssistantGenerationJobs {
         try { await active.closingTask; return; } catch { active.closingTask = undefined; }
       }
       await active.preparationSettled;
+      await this.settleUserCancellation(active);
       if (active.terminal || active.settledWithoutGeneration) return;
       const recovery = active.stopping?.recover ?? this.closingRecovery;
       if (!active.receipt && retrying && recovery && 'requestKey' in job.identity) {
@@ -431,12 +443,20 @@ export class AssistantGenerationJobs {
       await this.deliverClosingReceipt(job, active);
     })).then(() => {});
   }
+  private async settleUserCancellation(active: ActiveJob): Promise<void> {
+    const cancellation = active.userCancellation;
+    if (!cancellation) return;
+    try { await cancellation; } catch { /* 用户停止未确认时仍由退出或重载路径结算。 */ }
+  }
   private deliverClosingReceipt(job: OwnedAssistantPreparation, active: ActiveJob): Promise<void> | undefined {
     const receipt = active.receipt;
     if (!receipt) return undefined;
     if (!active.closingTask) {
       active.controller.abort();
-      active.closingTask = Promise.resolve().then(() => (active.stopping?.interrupt ?? this.closingReceipt)?.({ ...job.identity, ...receipt })).then(() => {
+      active.closingTask = Promise.resolve().then(async () => {
+        if (active.stopping) await active.stopping.interrupt({ ...job.identity, ...receipt });
+        else await this.closingReceipt?.({ ...job.identity, ...receipt });
+      }).then(() => {
         active.terminal = true; this.jobs.delete(job);
       });
       // 准备回调不会等待此 promise；排空调用负责向宿主报告失败。
@@ -447,6 +467,54 @@ export class AssistantGenerationJobs {
   cancelRequest(identity: AssistantGenerationIdentity): void {
     for (const [job, active] of this.jobs) if (sameOwner(job.identity, identity)
       && ('requestKey' in job.identity ? job.identity.requestKey : active.receipt?.requestKey) === identity.requestKey) active.controller.abort();
+  }
+  async cancelUserGeneration(identity: AssistantGenerationIdentity, inputVersionId: string): Promise<boolean> {
+    if (this.closing || this.changingConnection) throw new Error('应用正在收尾本次生成，请稍后重试。');
+    if (!isUuid(inputVersionId)) throw new Error('本次生成停止身份无效。');
+    const entry = [...this.jobs].find(([job, active]) => sameOwner(job.identity, identity)
+      && 'requestKey' in job.identity && job.identity.requestKey === identity.requestKey
+      && active.receipt?.requestKey === identity.requestKey
+      && active.receipt.inputVersionId === inputVersionId && !active.terminal);
+    if (!entry) {
+      if ([...this.finished.values()].some((item) => sameOwner(item, identity)
+        && item.requestKey === identity.requestKey && item.inputVersionId === inputVersionId)) return false;
+      throw new Error('这次生成已经结束或不再属于当前助手会话。');
+    }
+    const [job, active] = entry;
+    if (active.receipt?.state === 'completed') return false;
+    if (active.userCancellation) return active.userCancellation;
+    const receipt = active.receipt;
+    if (!receipt || !active.stopping) throw new Error('本次生成的停止连接尚未确认。');
+    active.userCancellationRequested = true; this.changed();
+    active.userCancellation = (async () => {
+      let interrupted: AssistantGenerationInterruptionResult;
+      try {
+        interrupted = await active.stopping!.interrupt({ ...job.identity as AssistantGenerationIdentity, ...receipt }, 'user_cancelled');
+      } catch (error) {
+        delete active.userCancellationRequested; active.userCancellation = undefined; this.changed(); throw error;
+      }
+      if (interrupted.state === 'completed') {
+        active.receipt = Object.freeze({ ...receipt, state: 'completed' });
+        delete active.userCancellationRequested; active.userCancellation = undefined; this.changed(); return false;
+      }
+      if (interrupted.state === 'failed' && interrupted.interruptionReason !== 'user_cancelled') {
+        delete active.userCancellationRequested; active.userCancellation = undefined; this.changed();
+        throw new Error('用户停止生成尚未获得权威确认。');
+      }
+      // 中断确认是用户停止的权威终态；先拒绝本地传输，迟到结果不能再发布。
+      active.receipt = Object.freeze({ ...receipt, state: 'failed' });
+      active.failedLeaseSettled = true; active.canRetry = false; active.terminal = true;
+      this.finished.set(receipt.requestKey, { connectionGeneration: job.identity.connectionGeneration,
+        contactId: job.identity.contactId, sessionId: receipt.sessionId, requestKey: receipt.requestKey,
+        turnId: receipt.turnId, inputVersionId: receipt.inputVersionId, canRetry: false, phase: 'cancelled' });
+      while (this.finished.size > 32) this.finished.delete(this.finished.keys().next().value!);
+      active.controller.abort();
+      this.jobs.delete(job); this.executing.delete(job as OwnedAssistantGeneration);
+      this.waiting.delete(job as OwnedAssistantGeneration);
+      this.drain(); this.changed();
+      return true;
+    })();
+    return active.userCancellation;
   }
   private confirmReplacement(identity: AssistantGenerationIdentity): void {
     // 新替换的严格实际回执证明原租约已失效；仅取消transport不提供这项证明。

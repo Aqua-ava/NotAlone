@@ -81,5 +81,15 @@ test('讨论内部入口严格认证且重开/删除只返回已保存业务状�
   });
   assert.equal(missing.status, 404);
   assert.equal(missing.body.error, 'not_found');
+  const cancellation = await request({
+    owner_id: owner, contact_id: contact, session_id: randomUUID(), action: 'interrupt',
+    request: {request_key: randomUUID(), input_version_id: randomUUID(), reason: 'user_cancelled'},
+  });
+  assert.equal(cancellation.status, 404, 'user_cancelled 必须通过动作字段校验并到达业务服务。');
+  const invalidCancellation = await request({
+    owner_id: owner, contact_id: contact, session_id: randomUUID(), action: 'interrupt',
+    request: {request_key: randomUUID(), input_version_id: randomUUID(), reason: 'unknown'},
+  });
+  assert.equal(invalidCancellation.status, 400);
   assert.deepEqual(changed, [{owner_id: owner, contact_id: contact}]);
 });

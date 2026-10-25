@@ -1,5 +1,5 @@
 import type { PageTransport } from './transport';
-import type { GenerateReply, ReplyBridge, ReplyCandidateEdit, ReplyCandidateSelection, ReplySessionState, ReplyStateUpdate, ReplyInputCommand, RewriteOptionsUpdate } from '../shared/reply-bridge';
+import type { AssistantGenerationStop, GenerateReply, ReplyBridge, ReplyCandidateEdit, ReplyCandidateSelection, ReplySessionState, ReplyStateUpdate, ReplyInputCommand, RewriteOptionsUpdate } from '../shared/reply-bridge';
 import type { ReplyEvidenceState } from '../shared/reply-evidence';
 
 export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
@@ -87,6 +87,7 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     updatePurpose: (...args: unknown[]) => ipcRenderer.invoke('reply:update-purpose', ...args),
     retryInterruptedGeneration: (...args: unknown[]) => ipcRenderer.invoke('reply:retry-interrupted-generation', ...args),
     generate: (selection: GenerateReply) => ipcRenderer.invoke('reply:generate', selection),
+    stopGeneration: (command: AssistantGenerationStop) => ipcRenderer.invoke('reply:stop-generation', command),
     continueSession: (...args: unknown[]) => ipcRenderer.invoke('reply:continue-session', ...args),
     confirmContinuation: (...args: unknown[]) => ipcRenderer.invoke('reply:confirm-continuation', ...args),
     retryContinuation: (...args: unknown[]) => ipcRenderer.invoke('reply:retry-continuation', ...args),

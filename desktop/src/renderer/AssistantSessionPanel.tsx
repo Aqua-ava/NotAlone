@@ -30,7 +30,9 @@ function SavedTurn({ turn, index, retry, busy, showPreferences }: {
         {turn.reply.usedSkill.scope && ` · 范围：${turn.reply.usedSkill.scope.kind === 'scene' ? `精确场景「${turn.reply.usedSkill.scope.scene}」` : turn.reply.usedSkill.scope.kind === 'contact' ? '当前联系人' : '本人通用'}`}
         {!!turn.reply.usedSkill.executionView?.policyRevision && ` · 当时已排除本范围停用方法，允许${turn.reply.usedSkill.executionView.methodIds.length}种做法`}</p>}
       {turn.state === 'running' && <p>本轮生成尚未完成。</p>}
-      {turn.state === 'failed' && <p>{turn.interruptionReason === 'configuration_reload' ? '上次生成因设置重载中断。' : turn.interruptionReason === 'app_quit' ? '上次生成中断。' : '本轮生成未成功保存。'}</p>}
+      {turn.state === 'failed' && <p>{turn.interruptionReason === 'user_cancelled' ? '上次生成已由你停止。'
+        : turn.interruptionReason === 'configuration_reload' ? '上次生成因设置重载中断。'
+        : turn.interruptionReason === 'app_quit' ? '上次生成中断。' : '本轮生成未成功保存。'}</p>}
       {turn.interruptionReason !== null && retry && !turn.requiresReprepare && <button disabled={busy} onClick={retry}>重试上次中断生成</button>}
       {turn.requiresReprepare && <p>这次准备格式已变化，已保存的输入会保留；请明确重新准备。</p>}
       {turn.reply?.inputBudget && <AssistantInputBudgetNotice budget={turn.reply.inputBudget} historical />}
@@ -87,6 +89,11 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const currentCopyScope = useRef(copyScopeKey); currentCopyScope.current = copyScopeKey;
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
+  const visibleJob = replies.state.generationJobs?.filter((job) => job.contactId === replies.state.contactId
+    && job.sessionId === saved?.sessionId && ['queued', 'generating', 'stopping'].includes(job.phase)).at(-1);
+  const stoppedTurn = saved?.phase === 'ready' ? saved.turns.at(-1) : undefined;
+  const stoppedNotice = stoppedTurn?.interruptionReason === 'user_cancelled'
+    && stoppedTurn.inputVersionId === saved?.currentInputVersionId;
   const busy = deleting || catalog?.phase === 'loading' || saved?.phase === 'loading'
     || replies.state.exploration.phase === 'waiting'
     || replies.state.sessionDeletion === 'failed' || replies.state.sourceAvailability === 'checking';
@@ -129,12 +136,22 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {replies.state.sessionDeletion === 'deleted' && <p role="status">当前助手会话已删除。</p>}
     {replies.state.sessionDeletion === 'failed' && <UpdateBackupCleanupRecovery />}
     {replies.state.sessionDeletion === 'missing' && <p role="status">当前助手会话已不存在。</p>}
+    {stoppedNotice && <p role="status">本次生成已停止，没有保存候选。你可以重新生成，或从历史讨论中重试这次中断的输入。</p>}
     {Boolean(replies.state.generationRecoveryPending) && <p>旧连接有 {replies.state.generationRecoveryPending} 项结果待核对，退出时会通过原连接完成核对。累计未核对任务达到 32 项时暂停接纳，请先完成退出核对。</p>}
     {replies.state.generationJobs?.filter(job => job.contactId === replies.state.contactId
-      && job.sessionId === saved?.sessionId).map(job => <p role="status" key={job.requestKey}>
-      {{ queued: '已准备，排队等待生成。', generating: '正在生成。', completed: '生成已完成。',
-        failed: '生成失败，可核对原请求后重试。', unconfirmed: '任务结果待核对，请读取已保存讨论。' }[job.phase]}
-    </p>)}
+      && job.sessionId === saved?.sessionId).map(job => <div key={job.requestKey} className="session-generation-status">
+      <p role="status">{{
+        queued: '已准备，排队等待生成。', generating: '正在生成。', stopping: '正在停止本次生成…',
+        cancelled: '本次生成已由你停止。', completed: '生成已完成。', failed: '生成失败，可核对原请求后重试。',
+        unconfirmed: '任务结果待核对，请读取已保存讨论。',
+      }[job.phase]}</p>
+      {job === visibleJob && job.phase !== 'stopping' && <button
+        aria-label="停止本次生成"
+        disabled={busy}
+        onClick={() => void replies.stopGeneration(job.sessionId, job.requestKey, job.inputVersionId)}>
+        停止本次生成
+      </button>}
+    </div>)}
     {saved?.phase === 'loading' && <p role="status">正在读取已保存讨论…</p>}
     {saved?.phase === 'failed' && <p role="alert">已保存讨论暂不可用，请重试读取。</p>}
     {copyError && <p role="alert">复制来源暂不可确认，请重新读取讨论后核对。</p>}

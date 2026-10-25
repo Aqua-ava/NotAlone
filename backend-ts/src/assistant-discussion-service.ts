@@ -810,10 +810,10 @@ export class AssistantDiscussionService {
     sessionId:string,
     requestKey:string,
     inputVersionId:string,
-    reason:'app_quit'|'configuration_reload'='app_quit',
+    reason:'app_quit'|'configuration_reload'|'user_cancelled'='app_quit',
   ):Promise<Row>{
     if(![sessionId,requestKey,inputVersionId].every(exactUuid)
-      ||!['app_quit','configuration_reload'].includes(reason))reject('invalid');
+      ||!['app_quit','configuration_reload','user_cancelled'].includes(reason))reject('invalid');
     return this.transaction(scope,async client=>{
       await this.sessionRow(client,scope,sessionId,true);
       const turn=(await client.query(`

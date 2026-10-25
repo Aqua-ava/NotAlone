@@ -13,7 +13,7 @@ export interface SavedAssistantTurn {
   reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[];
     expressionPreferenceIds?: string[]; expressionPreferences?: ExpressionPreferenceReceipt[]; usedSkill?: ReplyUsedSkill | null; inputBudget?: AssistantInputBudget; basisChanges?: ReplyBasisChange[] } | null;
   placeholder: string | null;
-  interruptionReason: 'app_quit' | 'configuration_reload' | null;
+  interruptionReason: 'app_quit' | 'configuration_reload' | 'user_cancelled' | null;
   basisChanges?: ReplyBasisChange[];
   generationActive?: boolean;
   requiresReprepare?: boolean;

@@ -24,6 +24,9 @@ export interface RewriteOptions {
 export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
 export interface GenerateReply extends ContactSelection { newRequest: boolean; workspaceAction?: WorkspaceAction; allowIncompleteHistory?: boolean; }
 export interface AssistantInterruptedRetry extends ContactSelection { sessionId: string; turnId: string; inputVersionId: string; }
+export interface AssistantGenerationStop extends ContactSelection {
+  sessionId: string; requestKey: string; inputVersionId: string;
+}
 export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
 export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
 export interface AssistantCandidateCarry extends AssistantSessionSelection {
@@ -159,7 +162,7 @@ export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplyGenerationJobState {
   contactId: string; sessionId: string; requestKey: string; turnId: string; inputVersionId: string;
-  phase: 'queued' | 'generating' | 'completed' | 'failed' | 'unconfirmed';
+  phase: 'queued' | 'generating' | 'stopping' | 'cancelled' | 'completed' | 'failed' | 'unconfirmed';
   canRetry?: boolean;
 }
 export interface ReplySessionState {
@@ -254,6 +257,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   selectDirection(selection: ReplyDirectionChoice): Promise<ReplySessionState>;
   updatePurpose(update: ReplyPurposeUpdate): Promise<ReplySessionState>;
   generate(selection: GenerateReply): Promise<void>;
+  stopGeneration(command: AssistantGenerationStop): Promise<void>;
   continueSession(command: ReplyContinuation): Promise<void>;
   confirmContinuation(command: ReplyContinuationConfirmation): Promise<void>;
   retryContinuation(selection: AssistantSessionSelection): Promise<void>;
