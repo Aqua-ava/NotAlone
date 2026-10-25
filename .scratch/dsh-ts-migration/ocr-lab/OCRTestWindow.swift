@@ -379,12 +379,14 @@ private final class CaptureLabAppDelegate: NSObject, NSApplicationDelegate {
             let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
             let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
             let status = process.terminationStatus
+            let reason = process.terminationReason
             DispatchQueue.main.async {
                 guard let self, self.runGeneration == generation else { return }
                 self.finishCapture(
                     stdout: stdoutData,
                     stderr: stderrData,
-                    terminationStatus: status
+                    terminationStatus: status,
+                    terminationReason: reason
                 )
             }
         }
@@ -414,7 +416,8 @@ private final class CaptureLabAppDelegate: NSObject, NSApplicationDelegate {
     private func finishCapture(
         stdout: Data,
         stderr: Data,
-        terminationStatus: Int32
+        terminationStatus: Int32,
+        terminationReason: Process.TerminationReason
     ) {
         elapsedTimer?.invalidate()
         elapsedTimer = nil
@@ -457,6 +460,8 @@ private final class CaptureLabAppDelegate: NSObject, NSApplicationDelegate {
         guard let result = parseJSONLine(stdout) else {
             let terminal = didTimeout
                 ? "本次在 30 秒上限处终止，没有收到最终 JSON。"
+                : terminationReason == .uncaughtSignal
+                ? "探针被系统以信号 \(terminationStatus)（SIG\(signalName(terminationStatus))) 终止，没有收到最终 JSON。"
                 : "探针退出码 \(terminationStatus)，没有收到最终 JSON。"
             showError(
                 headline: didTimeout ? "OCR 超过 30 秒未返回" : "探针未返回有效结果",
@@ -580,6 +585,17 @@ private final class CaptureLabAppDelegate: NSObject, NSApplicationDelegate {
         return value as? Double
     }
 
+    private func signalName(_ signal: Int32) -> String {
+        switch signal {
+        case SIGTERM: return "TERM"
+        case SIGKILL: return "KILL"
+        case SIGABRT: return "ABRT"
+        case SIGSEGV: return "SEGV"
+        case SIGBUS: return "BUS"
+        default: return String(signal)
+        }
+    }
+
     private func stageLabel(_ stage: String) -> String {
         switch stage {
         case "context": return "\(stage)（前台/窗口检查）"
@@ -624,7 +640,155 @@ private final class CaptureLabAppDelegate: NSObject, NSApplicationDelegate {
 }
 
 private let application = NSApplication.shared
+application.setActivationPolicy(.accessory)
+if CommandLine.arguments.contains("--capture-once") {
+    runCaptureOnce()
+}
 private let delegate = CaptureLabAppDelegate()
 application.delegate = delegate
-application.setActivationPolicy(.accessory)
 application.run()
+
+private func runCaptureOnce() -> Never {
+    guard let wechat = NSRunningApplication
+        .runningApplications(withBundleIdentifier: wechatBundleIdentifier)
+        .first(where: { !$0.isTerminated }) else {
+        emitDiagnostic(["ok": false, "error": "wechat_not_running"])
+        exit(0)
+    }
+
+    _ = wechat.activate(options: [.activateAllWindows])
+    let activationDeadline = Date().addingTimeInterval(0.5)
+    while NSWorkspace.shared.frontmostApplication?.bundleIdentifier != wechatBundleIdentifier,
+          Date() < activationDeadline {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    }
+    guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            == wechatBundleIdentifier else {
+        emitDiagnostic(["ok": false, "error": "wechat_not_front"])
+        exit(0)
+    }
+
+    let probePath = ProcessInfo.processInfo.environment["NOTALONE_SYNC_PROBE"]
+        ?? defaultProbePath
+    guard FileManager.default.isExecutableFile(atPath: probePath) else {
+        emitDiagnostic(["ok": false, "error": "probe_missing"])
+        exit(0)
+    }
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: probePath)
+    process.arguments = ["--session", "--json", "--single-frame"]
+    process.currentDirectoryURL = URL(fileURLWithPath: projectDirectory)
+    var environment = ProcessInfo.processInfo.environment
+    environment["NOTALONE_OBSERVATION_MEASUREMENTS"] = "1"
+    process.environment = environment
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+    let started = ProcessInfo.processInfo.systemUptime
+    let timeout = DispatchWorkItem {
+        if process.isRunning {
+            Darwin.kill(process.processIdentifier, SIGKILL)
+        }
+    }
+    DispatchQueue.global(qos: .userInitiated).asyncAfter(
+        deadline: .now() + captureTimeout,
+        execute: timeout
+    )
+
+    do {
+        try process.run()
+        process.waitUntilExit()
+    } catch {
+        timeout.cancel()
+        emitDiagnostic(["ok": false, "error": "probe_launch_failed"])
+        exit(0)
+    }
+    timeout.cancel()
+
+    let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
+    let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
+    let elapsed = (ProcessInfo.processInfo.systemUptime - started) * 1_000
+    let events = diagnosticEvents(stderrData)
+    let times = Dictionary(uniqueKeysWithValues: events.map {
+        ($0.event, $0.timestamp)
+    })
+
+    var diagnostic: [String: Any] = [
+        "ok": true,
+        "process_elapsed_ms": elapsed,
+        "termination_reason": process.terminationReason == .uncaughtSignal
+            ? "uncaught_signal"
+            : "exit",
+        "termination_status": process.terminationStatus,
+        "completed_stages": events.map(\.event),
+    ]
+    if let capture = diagnosticDuration(
+        times["captureRequested"],
+        times["frameReceived"]
+    ) {
+        diagnostic["capture_ms"] = capture
+    }
+    if let ocr = diagnosticDuration(
+        times["headerOcrStarted"],
+        times["headerOcrCompleted"]
+    ) {
+        diagnostic["ocr_ms"] = ocr
+    }
+    if let total = diagnosticDuration(times["started"], times["finished"]) {
+        diagnostic["probe_total_ms"] = total
+    }
+    if let result = diagnosticResult(stdoutData) {
+        diagnostic["result"] = result
+    } else {
+        diagnostic["result"] = NSNull()
+    }
+    emitDiagnostic(diagnostic)
+    exit(0)
+}
+
+private func diagnosticEvents(_ data: Data) -> [(event: String, timestamp: Double)] {
+    guard let text = String(data: data, encoding: .utf8) else { return [] }
+    return text.split(whereSeparator: \.isNewline).compactMap { line in
+        let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+        guard parts.count == 3,
+              parts[0] == "notalone-observation-v1",
+              let timestamp = Double(parts[2]) else { return nil }
+        return (String(parts[1]), timestamp)
+    }
+}
+
+private func diagnosticDuration(_ start: Double?, _ end: Double?) -> Double? {
+    guard let start, let end, end >= start else { return nil }
+    return (end - start) * 1_000
+}
+
+private func diagnosticResult(_ data: Data) -> [String: Any]? {
+    guard let text = String(data: data, encoding: .utf8) else { return nil }
+    for line in text.split(whereSeparator: \.isNewline).reversed() {
+        guard let lineData = String(line).data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: lineData),
+              let result = object as? [String: Any] else { continue }
+        let quality = result["quality"] as? [String: Any] ?? [:]
+        return [
+            "ok": result["ok"] ?? NSNull(),
+            "wechat_in_front": result["wechat_in_front"] ?? NSNull(),
+            "stage": result["stage"] ?? NSNull(),
+            "error": result["error"] ?? NSNull(),
+            "capture_version": result["capture_version"] ?? NSNull(),
+            "display_name_confidence": quality["display_name_confidence"] ?? NSNull(),
+            "name_complete": quality["name_complete"] ?? NSNull(),
+        ]
+    }
+    return nil
+}
+
+private func emitDiagnostic(_ object: [String: Any]) {
+    guard let data = try? JSONSerialization.data(
+        withJSONObject: object,
+        options: [.sortedKeys]
+    ), let line = String(data: data, encoding: .utf8) else { return }
+    print(line)
+}

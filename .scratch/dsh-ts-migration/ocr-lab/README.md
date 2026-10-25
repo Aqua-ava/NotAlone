@@ -22,4 +22,12 @@ xcrun swiftc -O -swift-version 5 \
 
 探针默认位于 `native/macos/build/cli/notalone-sync-probe`，可用环境变量 `NOTALONE_SYNC_PROBE` 指定其他同契约可执行文件。单次调用最多等待 30 秒；超过 2500ms 时界面会立即标记，以便观察是否继续卡在 `headerOcrStarted`。
 
+需要仅保留脱敏计时证据时，可从仓库根目录运行：
+
+```bash
+/tmp/notalone-ocr-lab/OCRTestWindow --capture-once
+```
+
+该模式会自动把微信切回前台，输出截图、OCR、探针总耗时、已完成阶段、最终 JSON 的安全字段，以及探针是正常退出还是被信号终止；不输出联系人名称。交互窗口也区分退出码与信号，避免把 `SIGTERM` 误说成普通状态码。
+
 该工具复用现有原生探针的隐私边界：截图只在探针进程内存中处理，名称只显示在当前本地窗口，不写普通日志。
