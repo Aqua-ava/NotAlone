@@ -1,0 +1,45 @@
+{
+  "base": "ff45f2ec296c4cead326d2ab6f3cf7770c9396ab",
+  "candidate": "4f89bb976dd4086a02b7ae983fee2760d6e4ff64",
+  "default_builder_unchanged": true,
+  "implicit_default_mode_unchanged": true,
+  "explicit_option_is_legacy_only": true,
+  "compared_contracts": [
+    {
+      "mode": "legacy-v4",
+      "requires_all_sources": false,
+      "extended": false,
+      "sha256": "1de69a33b3bb3674f7fac3857fd68dc53f0ddd0b451d7b79d7bf3633dbff4e48"
+    },
+    {
+      "mode": "legacy-v4",
+      "requires_all_sources": true,
+      "extended": false,
+      "sha256": "3434f973f38bf61e9f835287ab9400e4a72b97f421309ef07bc9f70e62dbf8f8"
+    },
+    {
+      "mode": "legacy-v4",
+      "requires_all_sources": true,
+      "extended": true,
+      "sha256": "c12074dafff254a363948a02af898b06d880926b4fc92756867ee40f6569207d"
+    },
+    {
+      "mode": "nullable-proof-v3",
+      "requires_all_sources": false,
+      "extended": false,
+      "sha256": "95494fcc5b84a7ef3c1d370f19b67bc16fcb68c8879caf0453d67e1388182a9c"
+    },
+    {
+      "mode": "nullable-proof-v3",
+      "requires_all_sources": true,
+      "extended": false,
+      "sha256": "a78d7c62cabfaab6230af4b18a16ca5cc0c56f8ead516b25d190370979e08c87"
+    },
+    {
+      "mode": "nullable-proof-v3",
+      "requires_all_sources": true,
+      "extended": true,
+      "sha256": "9a2246cbcc5359482d52eba8ee568fc9c37164498f87f53aecd066100d17f2bf"
+    }
+  ]
+}

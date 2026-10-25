@@ -1,0 +1,320 @@
+{
+  "format_version": 1,
+  "purpose": "当前纯TS采样适配与历史证据供根统一集成；本轮只做一个短自检，未启动正式采样",
+  "manifest_path": ".scratch/dsh-ts-migration/resumed-host-performance/integration-manifest.json",
+  "manifest_self_hash": "清单不递归包含自身SHA；其SHA在最终回复提供",
+  "payload_file_count": 34,
+  "paths_are_repository_relative": true,
+  "historical_probe": {
+    "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+    "new_commit": "8221a6191e2c55e431ce49ffec0f476a7aa79351",
+    "new_arm_composition": [
+      "node",
+      "python"
+    ],
+    "sampler_tests_passed": 5,
+    "startups": {
+      "old": 1,
+      "new": 1
+    },
+    "rss_samples_per_startup": 2,
+    "http_requests": 18,
+    "http_warmups": 6,
+    "http_scored_observations": 12,
+    "physical_model_requests": 0,
+    "formal_started": false,
+    "protocol_qualified": false,
+    "original_performance_gates": "undetermined",
+    "limitations": [
+      "这些是旧混合新臂观察，不是新增纯TS实现验收。",
+      "原5/5只证明当时采样器、实际混合宿主短探针与统计回归；本轮没有复跑。",
+      "只读就绪报告保留其检查时点，不认证后续实现或当前生产就绪。",
+      "public-scan.json与cleanup.json是历史摘要，不是对后续根集成的新扫描或全局资源承诺。"
+    ]
+  },
+  "excluded_materials": [
+    "仓库外私有原始日志、原始run/plan与临时配置",
+    "数据库、PG dump与冻结源码副本",
+    "临时profile、缓存、__pycache__与符号链接"
+  ],
+  "log_policy": "仅列本目录已脱敏RED/GREEN文本；任何仓库外raw日志均不在集成目标中。",
+  "integration_scope": "精确目标为本清单文件加files数组中的34个相对路径；历史混合臂证据保留原属性，不代表纯TS验证。",
+  "this_round": {
+    "sampler_behavior_changed": "仅接通完整TS职责、隔离旧归档依赖、Node合成库准备及冻结绑定；RSS/资格/数值门槛不变",
+    "tests_or_probes_run": "更新后的一个公开HTTP/宿主短用例，1/1通过；没有扩跑或正式长采样",
+    "product_app_or_ticket_changed": false,
+    "private_raw_log_copied": false,
+    "git_stage_or_commit": false
+  },
+  "files": [
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/.gitignore",
+      "sha256": "32dae3052f331ee34d628ef535709b301259a45df7c7522c4d35dcf49873f00b",
+      "bytes": 13,
+      "git_mode": "100644",
+      "category": "采样器与合成测试源码"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/cleanup.json",
+      "sha256": "d59b8fe0f9a2f98d65ec2a7eb72bf366cf057e0e7fba29a1b192f124155d73c7",
+      "bytes": 380,
+      "git_mode": "100644",
+      "category": "历史清理或公开检查摘要"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/final-ts-readiness-handoff.md",
+      "sha256": "bde3953f075a193387f325ad86286894830d0db81c94f1cdfb7210dedc814f4c",
+      "bytes": 2308,
+      "git_mode": "100644",
+      "category": "只读就绪与顺序准备"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/final-ts-readiness.md",
+      "sha256": "0e108161800a1c2c7c96823048f6c81d2e46cc2208f88e7b49362e520ef953a5",
+      "bytes": 11625,
+      "git_mode": "100644",
+      "category": "只读就绪与顺序准备"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/green-01.log",
+      "sha256": "73d85cc6f857e63397b9b31d5b2c5badea669aa64c2d985e8cf89a89f032c840",
+      "bytes": 243,
+      "git_mode": "100644",
+      "category": "早期RED/GREEN脱敏校准记录，非私有原始日志"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/green-02.log",
+      "sha256": "1c41ceae7e346b1c4eab085df870aac3eb3f31af5cc8b2a4391de03937dc3d39",
+      "bytes": 408,
+      "git_mode": "100644",
+      "category": "早期RED/GREEN脱敏校准记录，非私有原始日志"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/green-04.log",
+      "sha256": "9f97f2f1d5c1b0ff2fcf8a4c580d0472e6c12cc7512fdff272b5c779524047a4",
+      "bytes": 564,
+      "git_mode": "100644",
+      "category": "早期RED/GREEN脱敏校准记录，非私有原始日志"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/green-05.log",
+      "sha256": "1ec1858737d4ca03eba5f09317a3da79f9583157b67c8b2bdc50deea0cb8a36d",
+      "bytes": 724,
+      "git_mode": "100644",
+      "category": "早期RED/GREEN脱敏校准记录，非私有原始日志"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/green-final.log",
+      "sha256": "a42d3eb448d45606c8941531f2e067ece47c3771b0547be8590190567f7410a4",
+      "bytes": 842,
+      "git_mode": "100644",
+      "category": "原5/5通过的脱敏文本证据"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/host_fixture.py",
+      "sha256": "d9b025b6d4922260c34ca6522deaed798d07f72f6672a5f82074e9fd2c694f46",
+      "bytes": 13596,
+      "git_mode": "100644",
+      "category": "本次纯TS适配源码／既有单例更新"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/host_perf.py",
+      "sha256": "785ae8812718d98ed042da85c03106e9f37ccbbf30ed4f7323dcfeb4a3f65f37",
+      "bytes": 27058,
+      "git_mode": "100755",
+      "category": "本次纯TS适配源码／既有单例更新"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/host_statistics.py",
+      "sha256": "a7db06c547fa7b48622cfa4dca9a8ea43d126f148efa8429520825b5d0849ed9",
+      "bytes": 12840,
+      "git_mode": "100644",
+      "category": "采样器与合成测试源码"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/legacy_runtime.py",
+      "sha256": "595c1573766e422f2545555052dc4e37467bcabcbeef2b9f740ec0057cfd688e",
+      "bytes": 4795,
+      "git_mode": "100644",
+      "category": "本次纯TS适配源码／既有单例更新"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/new-host.mjs",
+      "sha256": "ab82e32dfd9e0a1295e65b441ff3e69925f10399e5674c7acd016218d8de36d1",
+      "bytes": 1799,
+      "git_mode": "100644",
+      "category": "本次纯TS适配源码／既有单例更新"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/perf-preload.mjs",
+      "sha256": "c22b4e18cbaedf76e1044bd4fbb289635b746c6719550b8eedfdeedec678ba08",
+      "bytes": 4476,
+      "git_mode": "100644",
+      "category": "采样器与合成测试源码"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/probe-report.json",
+      "sha256": "dfcfd388a94510bf922d7d2e3d184b0f3171d05ea5b2792e172461da73f1de3a",
+      "bytes": 38533,
+      "git_mode": "100644",
+      "category": "旧混合新臂的历史短探针证据与说明"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/public-scan.json",
+      "sha256": "ceae34235cb1a0a57f51ed38282036afbc913be0737905bcc582db765e57bdeb",
+      "bytes": 245,
+      "git_mode": "100644",
+      "category": "历史清理或公开检查摘要"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/pure-ts-adapter-report.md",
+      "sha256": "d3a6cad10aff7eca2ab3fc5c07e01b05d1faa568f7bce76329d0af7bd9a7aef3",
+      "bytes": 5765,
+      "git_mode": "100644",
+      "category": "纯TS适配的新增源码或短自检证据"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/pure-ts-cleanup.json",
+      "sha256": "5a619b9744f28fea71510312d20ea0e8c9d4ddc444c2d1c52963bfd468e3bb28",
+      "bytes": 424,
+      "git_mode": "100644",
+      "category": "纯TS适配的新增源码或短自检证据"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/pure-ts-green.log",
+      "sha256": "ccc3fc7e5c07ad8b5e31b48bcc70a755352c8a1236f1595b3f9023c664ed4cab",
+      "bytes": 235,
+      "git_mode": "100644",
+      "category": "纯TS适配的新增源码或短自检证据"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/pure-ts-probe-report.json",
+      "sha256": "3a8f8dcf99852512425be669da798a879deabb0eb184ed3f6810b767bfdb82a2",
+      "bytes": 41829,
+      "git_mode": "100644",
+      "category": "纯TS适配的新增源码或短自检证据"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/pure-ts-red.log",
+      "sha256": "44dfcd4a544157523139a4c23d33e831bd1b4190189adf2f1bed361fd720cf69",
+      "bytes": 858,
+      "git_mode": "100644",
+      "category": "纯TS适配的新增源码或短自检证据"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/pure-ts-validation.json",
+      "sha256": "d281a10e5fc3050f5b20c026b345912a3288156fb2c56395daccbbb1aa63919d",
+      "bytes": 5665,
+      "git_mode": "100644",
+      "category": "纯TS适配的新增源码或短自检证据"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/red-01.log",
+      "sha256": "03ffcadfc5079f07ab5646baa5eda7c6336680ac77e1789394f9d5bd65f5894a",
+      "bytes": 1002,
+      "git_mode": "100644",
+      "category": "早期RED/GREEN脱敏校准记录，非私有原始日志"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/red-02.log",
+      "sha256": "e14370463fc3d859827290cbc6c3d92dbf6b11c863a8ac27857e6b0a3fbf8261",
+      "bytes": 1144,
+      "git_mode": "100644",
+      "category": "早期RED/GREEN脱敏校准记录，非私有原始日志"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/red-03.log",
+      "sha256": "345f752c4073de2b61a97b1ef4c60196b4ee257022f0cc4fc0f9096a47368ce2",
+      "bytes": 907,
+      "git_mode": "100644",
+      "category": "早期RED/GREEN脱敏校准记录，非私有原始日志"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/red-04.log",
+      "sha256": "c770e9b4e6fdbc9fe1de8a2059838a6e4ef4bd9e095ddb31b8af94c60ba6d04b",
+      "bytes": 1035,
+      "git_mode": "100644",
+      "category": "早期RED/GREEN脱敏校准记录，非私有原始日志"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/red-05.log",
+      "sha256": "b1b307678e21f1cb0894ee0f12adc943b2c03d5ef22cb3f01285ef4836397860",
+      "bytes": 963,
+      "git_mode": "100644",
+      "category": "早期RED/GREEN脱敏校准记录，非私有原始日志"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/report.md",
+      "sha256": "fe575c30062d9e8788b99fdc3bd51a802c649f7b049fd45125ed32a6c99b63b2",
+      "bytes": 7788,
+      "git_mode": "100644",
+      "category": "旧混合新臂的历史短探针证据与说明"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/sitecustomize.py",
+      "sha256": "6557d2244b525212f3edcb8a2aa10ba7a454d0d87d2e5567b599eb840a1b6577",
+      "bytes": 3827,
+      "git_mode": "100644",
+      "category": "采样器与合成测试源码"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/synthetic_host.py",
+      "sha256": "f7640fd8e32e768c8fce2b9df9f85810df0d81a91dc23e4e920d4333d9b7f784",
+      "bytes": 1173,
+      "git_mode": "100644",
+      "category": "采样器与合成测试源码"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/test_actual_hosts.py",
+      "sha256": "1a37189be6f1d067bdadc509fa99767dda74142d06132c5fad96c70c41135641",
+      "bytes": 3431,
+      "git_mode": "100644",
+      "category": "本次纯TS适配源码／既有单例更新"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/test_host_perf.py",
+      "sha256": "831c700cc4d618eabe14060f00977263ed3048fca74a99f0af524a8653fbfb8d",
+      "bytes": 7205,
+      "git_mode": "100644",
+      "category": "采样器与合成测试源码"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/resumed-host-performance/validation.json",
+      "sha256": "bdd43f46cc0d9a498cb4ba7fafebda9345c33a56af296d25e23c652a7214262f",
+      "bytes": 1665,
+      "git_mode": "100644",
+      "category": "旧混合新臂的历史短探针证据与说明"
+    }
+  ],
+  "previous_manifest_sha256": "0f841b87f6792fdd89a718b2b8cee5de2cb81e5c2a05df7971ccb0ae67ca0e14",
+  "current_adapter_validation": {
+    "status": "pure_ts_sampler_adapter_short_probe_passed",
+    "new_commit": "4f89bb976dd4086a02b7ae983fee2760d6e4ff64",
+    "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+    "tests_run_this_update": 1,
+    "new_tree_python_source_included": false,
+    "new_launcher_python_executable_argument": false,
+    "runtime_environments": {
+      "old": {},
+      "new": {
+        "NOTALONE_HOST_RUNTIME": "typescript",
+        "NOTALONE_REPLY_RUNTIME": "typescript",
+        "NOTALONE_EXTRACTION_RUNTIME": "typescript",
+        "NOTALONE_HISTORY_RUNTIME": "typescript"
+      }
+    },
+    "backend_executables": {
+      "old": [
+        "python"
+      ],
+      "new": [
+        "node"
+      ]
+    },
+    "http_requests": 18,
+    "physical_model_requests": 0,
+    "new_arm_python_observed": false,
+    "original_performance_gates": "undetermined",
+    "qualification_guard_sha256": "a7db06c547fa7b48622cfa4dca9a8ea43d126f148efa8429520825b5d0849ed9"
+  }
+}

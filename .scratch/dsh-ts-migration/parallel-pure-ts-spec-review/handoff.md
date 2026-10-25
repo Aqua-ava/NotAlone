@@ -1,0 +1,20 @@
+# Spec 最终冻结交接
+- 结论：approve 本次固定变更的 Spec 轴；新增 P1/P2 = 0。
+- 最终候选：4f89bb976dd4086a02b7ae983fee2760d6e4ff64。
+- 原基点：e17d4c752c69618e90e43c42488f1cb2c4d1b7a4；核心候选：ff45f2ec296c4cead326d2ab6f3cf7770c9396ab。
+- ff45 核心报告/交接/清单原样归档为 ff45-core-*，此前11例不冒充4f89重跑。
+- 只追加git show小delta：两份生产文件13增3删，六块装配/HTTP/事件/桌面无变更。
+- 两份隔离源快照各260文件；base的新测试夹具明确来自4f89。
+- 两个新增回归在4f89均过，ff45为1过1预期失败（首例先在提示断言失败）。
+- 独立无提示断言差分：遗漏声明问句的主张由接受1变0，明确单源/完整双源均保持1。
+- 单源含义错误合成反例在两版仍接受，不把来源覆盖修复写成语义质量通过。
+- 六组默认builder prompt/schema与隐式默认mode不变；显式新选项限legacy-v4。
+- 原source_dependency_mode每项均为any；原Python/parser/HTTP DTO未改。
+- 新规则哈希不解除旧unknown；原回执和目标隔离仅静态核对，没有真实恢复验收。
+- 根报告的真实E/V离线回放未读/未复跑；不将P2提议拒绝当作真实质量签收。
+- 本追加无真实调用、配置/数据/问题账本、App/微信、PG/SQLite或Git index操作。
+- 两份源快照SHA前后不变，自有副本清理见delta-verification.json。
+- report.md最终绑定4f89；delta-review.md有最小差分；delta-commands.md可复验。
+- artifact-manifest.json给最终全部文件逐项SHA，自身SHA随最终消息给出。
+- 未读Standards；未委派、生产修改、暂存/提交、push/PR或打包；用户3文件未写。
+- 真实质量旧失败、1152/120、实际App/微信、最终性能仍未签收；25/26不获批准。

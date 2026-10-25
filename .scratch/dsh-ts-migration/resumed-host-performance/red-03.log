@@ -1,0 +1,16 @@
+test_old_new_startup_and_public_http (test_actual_hosts.ActualHostProbe.test_old_new_startup_and_public_http) ... FAIL
+
+======================================================================
+FAIL: test_old_new_startup_and_public_http (test_actual_hosts.ActualHostProbe.test_old_new_startup_and_public_http)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "REPOSITORY/.scratch/dsh-ts-migration/resumed-host-performance/test_actual_hosts.py", line 18, in test_old_new_startup_and_public_http
+    self.assertEqual(prepared.returncode,0,prepared.stderr[-2000:])
+AssertionError: 2 != 0 : usage: host_perf.py [-h] {self-test,report} ...
+host_perf.py: error: argument action: invalid choice: 'prepare' (choose from self-test, report)
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.034s
+
+FAILED (failures=1)

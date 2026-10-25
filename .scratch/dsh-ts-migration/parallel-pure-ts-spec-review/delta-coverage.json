@@ -1,0 +1,83 @@
+{
+  "base": "ff45f2ec296c4cead326d2ab6f3cf7770c9396ab",
+  "candidate": "4f89bb976dd4086a02b7ae983fee2760d6e4ff64",
+  "physical_requests": 0,
+  "synthetic_only": true,
+  "semantic_quality_not_approved": true,
+  "cases": [
+    {
+      "name": "declared-question-omitted",
+      "before_accepted": 1,
+      "after_accepted": 0,
+      "source_dependency_mode_unchanged": true,
+      "before_trace": {
+        "verdict": "supported",
+        "issues": [],
+        "disposition": "continue",
+        "model_verdict": "supported"
+      },
+      "after_trace": {
+        "verdict": "unsupported",
+        "issues": [
+          "insufficient_evidence"
+        ],
+        "disposition": "unsupported_rejected",
+        "model_verdict": "supported"
+      }
+    },
+    {
+      "name": "explicit-single-source",
+      "before_accepted": 1,
+      "after_accepted": 1,
+      "source_dependency_mode_unchanged": true,
+      "before_trace": {
+        "verdict": "supported",
+        "issues": [],
+        "disposition": "continue",
+        "model_verdict": "supported"
+      },
+      "after_trace": {
+        "verdict": "supported",
+        "issues": [],
+        "disposition": "continue",
+        "model_verdict": "supported"
+      }
+    },
+    {
+      "name": "complete-question-answer",
+      "before_accepted": 1,
+      "after_accepted": 1,
+      "source_dependency_mode_unchanged": true,
+      "before_trace": {
+        "verdict": "supported",
+        "issues": [],
+        "disposition": "continue",
+        "model_verdict": "supported"
+      },
+      "after_trace": {
+        "verdict": "supported",
+        "issues": [],
+        "disposition": "continue",
+        "model_verdict": "supported"
+      }
+    },
+    {
+      "name": "single-source-semantic-error-still-not-fixed",
+      "before_accepted": 1,
+      "after_accepted": 1,
+      "source_dependency_mode_unchanged": true,
+      "before_trace": {
+        "verdict": "supported",
+        "issues": [],
+        "disposition": "continue",
+        "model_verdict": "supported"
+      },
+      "after_trace": {
+        "verdict": "supported",
+        "issues": [],
+        "disposition": "continue",
+        "model_verdict": "supported"
+      }
+    }
+  ]
+}

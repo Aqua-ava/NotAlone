@@ -1,0 +1,154 @@
+{
+  "candidate": "ff45f2ec296c4cead326d2ab6f3cf7770c9396ab",
+  "node": "v24.19.0",
+  "path_prefix": "<NODE_BIN>:<NOTALONE_ENV_BIN>:$PATH",
+  "results": [
+    {
+      "log": "schema-fixed-selected.log",
+      "cwd": "<SNAPSHOT>/backend-ts",
+      "command": "perl -e 'alarm 120; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 --test-name-pattern='^(无 Python|诊断CLI|102旧库|114原库|未登记|035审计|SQL试图|103旧Skill)' test/schema-prepare.test.mjs",
+      "metrics": {
+        "tests": 8,
+        "pass": 8,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 2992.306667
+      },
+      "exit_code": 0,
+      "sha256": "a6f98cfd0ec19c67dbc85b424da05946c13ced358a08b729aa7d4909a71041bc"
+    },
+    {
+      "log": "lifetime.log",
+      "cwd": "<SNAPSHOT>/backend-ts",
+      "command": "perl -e 'alarm 120; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 --test-name-pattern='^(?!隔离旧Python)' test/managed-database-lifetime.test.mjs test/managed-postgres.test.mjs",
+      "metrics": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 681.053625
+      },
+      "exit_code": 0,
+      "sha256": "c76415bb0c33acab992a4728d00094f0cdcccbf3d85cdf96f23c913286bde897"
+    },
+    {
+      "log": "quality-selected.log",
+      "cwd": "<SNAPSHOT>/backend-ts",
+      "command": "perl -e 'alarm 180; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 --test-name-pattern='^(质量case独立|质量冻结source_ref|最终HTTP实体|有效质量预约ACK|transport未知|质量PG预约后取消|质量case错误)' test/quality-model-caller.test.mjs",
+      "metrics": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 5579.659417
+      },
+      "exit_code": 0,
+      "sha256": "ff12c77f816a2522690afa0d47863c265951ddd142972c67169c046b5a67d29a"
+    },
+    {
+      "log": "public-lifetime.log",
+      "cwd": "<SNAPSHOT>/backend-ts",
+      "command": "perl -e 'alarm 90; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 test/pure-ts-lifetime.test.mjs test/pure-ts-shutdown.test.mjs",
+      "metrics": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 2756.834834
+      },
+      "exit_code": 0,
+      "sha256": "e789c4e13e784e3fa4a75f3ac311ad3787ae99f815bb790bdda9666303edd3d2"
+    },
+    {
+      "log": "desktop-startup.log",
+      "cwd": "<SNAPSHOT>/desktop",
+      "command": "perl -e 'alarm 90; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 tests/pure-ts-startup.test.mjs",
+      "metrics": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 613.072709
+      },
+      "exit_code": 0,
+      "sha256": "109ce00bb604995a035722451cad0a6ee52b6912a1dd5767a8a341dee436fd7f"
+    },
+    {
+      "log": "quality-guard.log",
+      "cwd": "<SNAPSHOT>/backend-ts",
+      "command": "perl -e 'alarm 120; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 --test-name-pattern='^(累计问题预算bound|六phase|质量PG预约后租约)' test/quality-model-caller.test.mjs",
+      "metrics": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 2446.378625
+      },
+      "exit_code": 0,
+      "sha256": "859ca72d79b92f451c6f97ab8979ababb3a299582c52ac237d427495af1ff087"
+    },
+    {
+      "log": "management-selected.log",
+      "cwd": "<SNAPSHOT>/backend-ts",
+      "command": "perl -e 'alarm 120; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 --test-name-pattern='^(结果未知|并发同代|本人L3撤回|入队后新增|重叠manual)' test/layered-memory-management.test.mjs test/pure-ts-binding-scope.test.mjs",
+      "metrics": {
+        "tests": 5,
+        "pass": 5,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 2356.049375
+      },
+      "exit_code": 0,
+      "sha256": "2ecc7bac75fdd7b5a5a148cbfe1af7e9b9d0988376ab515d50d2f90d957cbbed"
+    },
+    {
+      "log": "generation-lifecycle.log",
+      "cwd": "<SNAPSHOT>/backend-ts",
+      "command": "perl -e 'alarm 90; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 test/assistant-generation-lifecycle.test.mjs",
+      "metrics": {
+        "tests": 9,
+        "pass": 9,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 30624.445917
+      },
+      "exit_code": 0,
+      "sha256": "c92c3381fdf61755b845d01abdf3d0af58886654e71ea587ccbf3259626f6cb0"
+    },
+    {
+      "log": "quality-revocation.log",
+      "cwd": "<SNAPSHOT>/backend-ts",
+      "command": "perl -e 'alarm 60; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 --test-name-pattern='^PG预约后租约失效' test/quality-model-caller.test.mjs",
+      "metrics": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 1414.895
+      },
+      "exit_code": 0,
+      "sha256": "fa6ee942f7e35257fe046fd617857e636fdc6caa6d7dfdbada1a06fad645c72d"
+    }
+  ],
+  "aggregate_total_not_claimed": true,
+  "preliminary_excluded": [
+    {
+      "log": "schema.log",
+      "reason": "初次负向名称筛选仍匹配文件祖先，额外运行Python schema比较器；最终改为显式正向筛选，未将该比较器纳入固定源码验证结论。",
+      "sha256": "ea25b80a133ac50c8689d412d2701dc39991a5e6b6f69fd5c0d45c62fda4590d"
+    }
+  ],
+  "actual_app_run": false,
+  "real_provider_called": false,
+  "real_business_data_read": false,
+  "production_source_edited": false
+}

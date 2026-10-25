@@ -1,0 +1,15 @@
+test_short_pair_keeps_tree_samples_order_and_cleanup (test_host_perf.SamplerContract.test_short_pair_keeps_tree_samples_order_and_cleanup) ... FAIL
+
+======================================================================
+FAIL: test_short_pair_keeps_tree_samples_order_and_cleanup (test_host_perf.SamplerContract.test_short_pair_keeps_tree_samples_order_and_cleanup)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "REPOSITORY/.scratch/dsh-ts-migration/resumed-host-performance/test_host_perf.py", line 21, in test_short_pair_keeps_tree_samples_order_and_cleanup
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 2 != 0 : LOCAL_HOME/miniconda3/envs/NotAlone/bin/python: can't open file 'REPOSITORY/.scratch/dsh-ts-migration/resumed-host-performance/host_perf.py': [Errno 2] No such file or directory
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.009s
+
+FAILED (failures=1)

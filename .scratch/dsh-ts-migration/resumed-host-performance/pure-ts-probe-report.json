@@ -1,0 +1,1170 @@
+{
+  "protocol_version": "host-performance-v1",
+  "protocol_qualified": false,
+  "overall": "undetermined",
+  "population": {
+    "old": {
+      "planned": 1,
+      "observed": 1,
+      "succeeded": 1,
+      "failed": 0,
+      "cancelled": 0,
+      "missing": 0,
+      "failed_ids": []
+    },
+    "new": {
+      "planned": 1,
+      "observed": 1,
+      "succeeded": 1,
+      "failed": 0,
+      "cancelled": 0,
+      "missing": 0,
+      "failed_ids": []
+    }
+  },
+  "bootstrap": {
+    "seed": 102,
+    "resamples": 10000,
+    "algorithm": "mulberry32-v1/percentile-linear-r7",
+    "startup_rss_unit": "paired-startup",
+    "http_unit": "paired-case-cluster"
+  },
+  "metrics": {
+    "startup_ms": {
+      "unit": "paired-startup",
+      "p50": {
+        "old": 8660.014541,
+        "new": 559.855708,
+        "ratio": 0.06464835657601005,
+        "ci95": null,
+        "paired_mean_difference": null,
+        "all_success_mean_difference": -8100.158833,
+        "paired_mean_difference_ci95": null,
+        "threshold": 1.2,
+        "gate": "undetermined",
+        "old_success_observations": 1,
+        "new_success_observations": 1,
+        "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+      },
+      "p95": {
+        "old": 8660.014541,
+        "new": 559.855708,
+        "ratio": 0.06464835657601005,
+        "ci95": null,
+        "paired_mean_difference": null,
+        "all_success_mean_difference": -8100.158833,
+        "paired_mean_difference_ci95": null,
+        "threshold": 1.2,
+        "gate": "undetermined",
+        "old_success_observations": 1,
+        "new_success_observations": 1,
+        "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+      }
+    },
+    "rss_median_kib": {
+      "unit": "paired-startup",
+      "p50": {
+        "old": 216144.0,
+        "new": 192304.0,
+        "ratio": 0.8897031608557258,
+        "ci95": null,
+        "paired_mean_difference": null,
+        "all_success_mean_difference": -23840.0,
+        "paired_mean_difference_ci95": null,
+        "threshold": 1.2,
+        "gate": "undetermined",
+        "old_success_observations": 1,
+        "new_success_observations": 1,
+        "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+      },
+      "p95": {
+        "old": 216144.0,
+        "new": 192304.0,
+        "ratio": 0.8897031608557258,
+        "ci95": null,
+        "paired_mean_difference": null,
+        "all_success_mean_difference": -23840.0,
+        "paired_mean_difference_ci95": null,
+        "threshold": 1.2,
+        "gate": "undetermined",
+        "old_success_observations": 1,
+        "new_success_observations": 1,
+        "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+      }
+    },
+    "http_server_response_ms": {
+      "unit": "paired-case-cluster",
+      "p50": {
+        "old": 5.0305420000000005,
+        "new": 19.723604515194893,
+        "ratio": 3.9207712638508716,
+        "ci95": null,
+        "paired_mean_difference": null,
+        "all_success_mean_difference": 13.427139004686037,
+        "paired_mean_difference_ci95": null,
+        "threshold": 1.15,
+        "gate": "undetermined",
+        "old_success_observations": 6,
+        "new_success_observations": 6,
+        "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+      },
+      "p95": {
+        "old": 7.5253749999999995,
+        "new": 23.043708741664886,
+        "ratio": 3.0621342779150393,
+        "ci95": null,
+        "paired_mean_difference": null,
+        "all_success_mean_difference": 13.427139004686037,
+        "paired_mean_difference_ci95": null,
+        "threshold": 1.25,
+        "gate": "undetermined",
+        "old_success_observations": 6,
+        "new_success_observations": 6,
+        "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+      }
+    },
+    "http_client_response_ms": {
+      "unit": "paired-case-cluster",
+      "p50": {
+        "old": 5.481146,
+        "new": 20.190167,
+        "ratio": 3.683566721265954,
+        "ci95": null,
+        "paired_mean_difference": null,
+        "all_success_mean_difference": 13.478125000000002,
+        "paired_mean_difference_ci95": null,
+        "threshold": 1.15,
+        "gate": "undetermined",
+        "old_success_observations": 6,
+        "new_success_observations": 6,
+        "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+      },
+      "p95": {
+        "old": 7.88496925,
+        "new": 23.4727395,
+        "ratio": 2.9768967710305274,
+        "ci95": null,
+        "paired_mean_difference": null,
+        "all_success_mean_difference": 13.478125000000002,
+        "paired_mean_difference_ci95": null,
+        "threshold": 1.25,
+        "gate": "undetermined",
+        "old_success_observations": 6,
+        "new_success_observations": 6,
+        "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+      }
+    }
+  },
+  "http": {
+    "contacts": {
+      "planned_per_arm": 30,
+      "population": {
+        "old": {
+          "planned": 30,
+          "observed": 2,
+          "missing": 28,
+          "failed_ids": [],
+          "warmups_observed": 1,
+          "failed": 0
+        },
+        "new": {
+          "planned": 30,
+          "observed": 2,
+          "missing": 28,
+          "failed_ids": [],
+          "warmups_observed": 1,
+          "failed": 0
+        }
+      },
+      "metrics": {
+        "server_response_ms": {
+          "unit": "paired-http-repeat",
+          "p50": {
+            "old": 7.253,
+            "new": 20.847271502017975,
+            "ratio": 2.8742963604050704,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 13.594271502017975,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.15,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          },
+          "p95": {
+            "old": 7.743275,
+            "new": 21.73742774128914,
+            "ratio": 2.807265367856513,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 13.594271502017975,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.25,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          }
+        },
+        "client_response_ms": {
+          "unit": "paired-http-repeat",
+          "p50": {
+            "old": 7.6119795,
+            "new": 21.2950625,
+            "ratio": 2.797572234659854,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 13.683083,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.15,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          },
+          "p95": {
+            "old": 8.10336105,
+            "new": 22.169543450000003,
+            "ratio": 2.735845448969598,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 13.683083,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.25,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          }
+        }
+      },
+      "queue_ms": {
+        "value": null,
+        "unknown_reason": "确定性 HTTP 未经业务队列；无独立排队 marker，不填 0。"
+      },
+      "failure_observations": []
+    },
+    "sources": {
+      "planned_per_arm": 30,
+      "population": {
+        "old": {
+          "planned": 30,
+          "observed": 2,
+          "missing": 28,
+          "failed_ids": [],
+          "warmups_observed": 1,
+          "failed": 0
+        },
+        "new": {
+          "planned": 30,
+          "observed": 2,
+          "missing": 28,
+          "failed_ids": [],
+          "warmups_observed": 1,
+          "failed": 0
+        }
+      },
+      "metrics": {
+        "server_response_ms": {
+          "unit": "paired-http-repeat",
+          "p50": {
+            "old": 3.3415625,
+            "new": 13.541666507720947,
+            "ratio": 4.052495354410084,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 10.200104007720947,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.15,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          },
+          "p95": {
+            "old": 3.43428095,
+            "new": 13.882841643691062,
+            "ratio": 4.042430379404767,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 10.200104007720947,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.25,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          }
+        },
+        "client_response_ms": {
+          "unit": "paired-http-repeat",
+          "p50": {
+            "old": 3.6787080000000003,
+            "new": 13.9453125,
+            "ratio": 3.790817999145352,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 10.2666045,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.15,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          },
+          "p95": {
+            "old": 3.7874955000000003,
+            "new": 14.27150625,
+            "ratio": 3.768058932347246,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 10.2666045,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.25,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          }
+        }
+      },
+      "queue_ms": {
+        "value": null,
+        "unknown_reason": "确定性 HTTP 未经业务队列；无独立排队 marker，不填 0。"
+      },
+      "failure_observations": []
+    },
+    "session-default": {
+      "planned_per_arm": 30,
+      "population": {
+        "old": {
+          "planned": 30,
+          "observed": 2,
+          "missing": 28,
+          "failed_ids": [],
+          "warmups_observed": 1,
+          "failed": 0
+        },
+        "new": {
+          "planned": 30,
+          "observed": 2,
+          "missing": 28,
+          "failed_ids": [],
+          "warmups_observed": 1,
+          "failed": 0
+        }
+      },
+      "metrics": {
+        "server_response_ms": {
+          "unit": "paired-http-repeat",
+          "p50": {
+            "old": 5.0305420000000005,
+            "new": 21.51758350431919,
+            "ratio": 4.2773886997304045,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 16.48704150431919,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.15,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          },
+          "p95": {
+            "old": 5.5788292,
+            "new": 23.25330864340067,
+            "ratio": 4.168134174711903,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 16.48704150431919,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.25,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          }
+        },
+        "client_response_ms": {
+          "unit": "paired-http-repeat",
+          "p50": {
+            "old": 5.481146,
+            "new": 21.9658335,
+            "ratio": 4.007525707215243,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 16.4846875,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.15,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          },
+          "p95": {
+            "old": 6.049627399999999,
+            "new": 23.683858349999998,
+            "ratio": 3.914928438402669,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 16.4846875,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.25,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          }
+        },
+        "persistence_complete_ms": {
+          "unit": "paired-http-repeat",
+          "p50": {
+            "old": 4.9719375,
+            "new": 20.4974375,
+            "ratio": 4.122625736948624,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 15.525500000000001,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.15,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          },
+          "p95": {
+            "old": 5.50648125,
+            "new": 22.22579435,
+            "ratio": 4.036297108974992,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 15.525500000000001,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.25,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          }
+        },
+        "durability_observed_ms": {
+          "unit": "paired-http-repeat",
+          "p50": {
+            "old": 9.933021,
+            "new": 43.070479000000006,
+            "ratio": 4.336090601238033,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 33.13745800000001,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.15,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          },
+          "p95": {
+            "old": 10.8633402,
+            "new": 45.008347300000004,
+            "ratio": 4.143140734927919,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 33.13745800000001,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.25,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          }
+        },
+        "transaction_ms": {
+          "unit": "paired-http-repeat",
+          "p50": {
+            "old": 2.0189785000000002,
+            "new": 15.612395495176315,
+            "ratio": 7.732819094000413,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 13.593416995176316,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.15,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          },
+          "p95": {
+            "old": 2.2504472499999997,
+            "new": 17.225739550590514,
+            "ratio": 7.65436272749362,
+            "ci95": null,
+            "paired_mean_difference": null,
+            "all_success_mean_difference": 13.593416995176316,
+            "paired_mean_difference_ci95": null,
+            "threshold": 1.25,
+            "gate": "undetermined",
+            "old_success_observations": 2,
+            "new_success_observations": 2,
+            "unknown_reason": "缺失、失败、不完整配对或零基线；保留全部成功观察。"
+          }
+        }
+      },
+      "queue_ms": {
+        "value": null,
+        "unknown_reason": "确定性 HTTP 未经业务队列；无独立排队 marker，不填 0。"
+      },
+      "failure_observations": []
+    }
+  },
+  "unknown_reason": [
+    "当前为短探针／采样器夹具，不满足 20×60 秒及每例 30 次的原协议。"
+  ],
+  "physical_model_requests": 0,
+  "electron": {
+    "status": "not_sampled",
+    "reason": "离线宿主采样，不启动或操作 Electron。"
+  },
+  "os_cold_cache_claimed": false,
+  "evidence": {
+    "binding": {
+      "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "new_commit": "4f89bb976dd4086a02b7ae983fee2760d6e4ff64",
+      "dsh_commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+      "dsh_version": "0.2.1-rc.2",
+      "installed_dsh_versions": {
+        "dsh": "0.2.1-rc.2",
+        "dsh-llm": "0.2.1-rc.2",
+        "dsh-agent": "0.2.1-rc.2",
+        "dsh-scope": "0.2.1-rc.2",
+        "dsh-session": "0.2.1-rc.2",
+        "dsh-tools": "0.2.1-rc.2",
+        "dsh-skill": "0.2.1-rc.2"
+      },
+      "old_source": {
+        "sha256": "fc351a917afd50126930cb757a7f392117023eeb91bfcbf9ac50d0b95e46a54d",
+        "file_count": 570
+      },
+      "old_runtime": {
+        "isolated": true,
+        "system_site_packages": false,
+        "requirements_sha256": "d58ebdb127ee2453e80151ec8c471c8cc7b17bd766fa8acaeb4a2ba84a21ff9b",
+        "wheel_catalog_sha256": "9bbb30052ac62833f07862337e58ab8b13d81b9856dc9155e1ea1d6c2e3a9a0a",
+        "wheel_count": 62,
+        "packages": {
+          "annotated-types": "0.8.0",
+          "anthropic": "0.125.0",
+          "anyio": "4.15.1",
+          "bracex": "3.1",
+          "certifi": "2026.7.22",
+          "cffi": "2.1.1",
+          "charset-normalizer": "3.5.2",
+          "cryptography": "50.0.2",
+          "deepagents": "0.7.6",
+          "distro": "1.9.0",
+          "docstring-parser": "0.18.0",
+          "filetype": "1.2.0",
+          "google-auth": "2.62.0",
+          "google-genai": "2.31.0",
+          "h11": "0.16.0",
+          "httpcore": "1.0.9",
+          "httpcore2": "2.13.1",
+          "httpx": "0.28.1",
+          "httpx2": "2.13.1",
+          "idna": "3.20",
+          "jiter": "0.17.0",
+          "jsonpatch": "1.35",
+          "jsonpointer": "3.2.1",
+          "langchain": "1.3.15",
+          "langchain-anthropic": "1.5.6",
+          "langchain-core": "1.5.5",
+          "langchain-deepseek": "1.1.0",
+          "langchain-google-genai": "4.3.4",
+          "langchain-openai": "1.5.1",
+          "langchain-protocol": "0.0.19",
+          "langgraph": "1.2.11",
+          "langgraph-checkpoint": "4.3.0",
+          "langgraph-prebuilt": "1.1.1",
+          "langgraph-sdk": "0.4.7",
+          "langsmith": "0.14.11",
+          "openai": "3.31.0",
+          "orjson": "3.13.0",
+          "ormsgpack": "1.13.0",
+          "packaging": "26.3",
+          "psycopg": "3.3.6",
+          "psycopg-binary": "3.3.6",
+          "pyasn1": "0.6.4",
+          "pyasn1-modules": "0.4.2",
+          "pycparser": "3.11",
+          "pydantic": "2.14.1",
+          "pydantic-core": "2.50.1",
+          "pyyaml": "6.0.3",
+          "regex": "2026.9.29",
+          "requests": "2.34.2",
+          "requests-toolbelt": "1.0.0",
+          "sniffio": "1.3.1",
+          "tenacity": "9.1.4",
+          "tiktoken": "0.14.0",
+          "truststore": "0.10.5",
+          "typing-extensions": "4.16.0",
+          "typing-inspection": "0.4.4",
+          "urllib3": "2.8.0",
+          "uuid-utils": "0.17.1",
+          "wcmatch": "11.1",
+          "websockets": "16.1.1",
+          "xxhash": "4.0.1",
+          "zstandard": "0.25.0"
+        },
+        "bootstrap_python_sha256": "ea6f9840e9e1f4660544594a526fe0fd8deaa6a9034854d7e41fdca336532806",
+        "dependency_source": "archived-production-requirements-and-wheel-hashes",
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069"
+      },
+      "old_dependencies": {
+        "sha256": "b8a8d8fe08e733d4df3a268a12aa0a181aaf75d6ee30ae95700c9e8f91d03e68",
+        "file_count": 6686
+      },
+      "new_source": {
+        "sha256": "d194117d627c5c6f892d03aa1d73fdce5c5a91af89ca39e0ff4658719c00067d",
+        "file_count": 376
+      },
+      "dependencies": {
+        "sha256": "03b3a2663a1f7dc6067197f52abadcf9fd93cd9ec4d9539703d4af82b624a79d",
+        "file_count": 30150
+      },
+      "snapshot_sha256": "7b25f77a34629d82955bee7a1b78d0990c2f454e9012fcaa3927b293a1b602f8",
+      "schema": [
+        [
+          "001_initial_ingest.sql",
+          "266aa314034ddc6a90835431c6ceaf6a129db8dab413e5ef03ee0e1211981ced"
+        ],
+        [
+          "002_reject_overlapping_messages.sql",
+          "ab15a9bd53a1cc9f882f926d146dd23c9f6295e16c12e3821ad56fbc67e80ad3"
+        ],
+        [
+          "003_separate_contact_identity.sql",
+          "667a77caf86520798f1ee7c3f33060e7b516c98206c7c707edc39bf73bfcab84"
+        ],
+        [
+          "004_separate_wechat_message_metadata.sql",
+          "f8627956db97c23588840b8320f1ad236d4e9d4e10309cd934f6f0beff65ca0e"
+        ],
+        [
+          "005_source_deletion_state.sql",
+          "78477ac6f7698339a21e6ba988c56b497c9712d91046f8a05447e8d635f39877"
+        ],
+        [
+          "006_conversation_binding.sql",
+          "ffc713db0b396047c6ba7784b834797e9d76010f4710aa01335d71ba62d1bc80"
+        ],
+        [
+          "007_reply_store.sql",
+          "d499b548fef5447bbf879cc835a83af1dd002fb2fc2f4762d3788d00923b30f2"
+        ],
+        [
+          "008_skill_port.sql",
+          "899794e2f597c03abd6c6ae886e6f4fc6cf27779cfbaaf9b78a09392a5be01f9"
+        ],
+        [
+          "009_memory_store.sql",
+          "9f06a927cd91bf08bc6bc869fcbe10c994699c2f15e0bee37a55607ac88af134"
+        ],
+        [
+          "010_outbound_ledger.sql",
+          "d2cc7a2f4e28869dde82ec9af8e6a99b20dae0eeac79b6c82660c4b4504e443a"
+        ],
+        [
+          "011_owner_memory.sql",
+          "b6625e31e7e0c8dde5c1ccc2ee2cd0542bc0c160d7149b4f2538ba047b7e3c2b"
+        ],
+        [
+          "012_extraction_topic_watermark.sql",
+          "a89b89ff270ad3760930ac022621915eeddc3cc591203b1734ed9a1bd9bf65a6"
+        ],
+        [
+          "013_candidate_validity.sql",
+          "4efaa08c7827ec1ab732695c2d2e27579e47557c153e79dd62641b496c6dc262"
+        ],
+        [
+          "014_import_message_identity.sql",
+          "b432b44299e62f7f654e0ae4f81359477b95e3e6914390934a0090e80aad16ba"
+        ],
+        [
+          "015_owner_channel_identity.sql",
+          "bd80538f71568d4a1136509159be5ec4715d45311fc6268212bd5ff1b29daecb"
+        ],
+        [
+          "016_background_task.sql",
+          "149848b261c3dc142341916e1055517d505386cc3eee29683a72004054886e9e"
+        ],
+        [
+          "017_worker_lease_metadata.sql",
+          "7066bcf16638124d08dc1bf8748768a1df7fb5eb69f4e7c46646b4fcb830ee9e"
+        ],
+        [
+          "018_contact_memory_index.sql",
+          "fc3107c0dc9d790bb0a27d3302ee9aa705e862928488ea91395bf5055496d363"
+        ],
+        [
+          "019_binding_cli_match_metadata.sql",
+          "0020c3817520bc06bc20dd1e1d5f0ec7c2fa1e6d7859f16fd1abcc41360f7249"
+        ],
+        [
+          "020_local_wechat_observation.sql",
+          "acfbfbbcc323e1d1e45cc12a05b63bc95a914abda0f84b6d6f9bc87d068ab8bb"
+        ],
+        [
+          "021_message_source_ref.sql",
+          "31ed56a17f363d29a9f4f29ed107930567dc99fab52e31b40cc9dcef25abc37e"
+        ],
+        [
+          "022_front_sync_state.sql",
+          "a4457c7bc998b817fef8a0d44c296490a15df007562343477bf495306507edb0"
+        ],
+        [
+          "023_skill_library_resources.sql",
+          "1c12e16e68952080078ec0f6fc31c4a07c743fe1f5ed157d1ab5ce61101015a8"
+        ],
+        [
+          "024_skill_run_record.sql",
+          "1299bfb6ab64fd6b78eefecb908e6c526f634a8dabc95fbcb63cf207a10233ac"
+        ],
+        [
+          "025_manual_memory_source.sql",
+          "4b3e3cd06f8944bb48696075e9d0b0cb39a0bf5adc4c38efed4fc463731490c4"
+        ],
+        [
+          "026_cli_background_sync.sql",
+          "23d6fdbf1ac8b153c3e5911c2c1743e36606b4b4dc02fe11a7d6c43ce2858934"
+        ],
+        [
+          "027_memory_adoption_provenance.sql",
+          "50067e0280bd005722f4486374880d38d6922d8087b5f0eb39861cd103a5ef4e"
+        ],
+        [
+          "028_reply_context_evidence_metadata.sql",
+          "3eb47e59ade749f730459146b94dd52e93f23f07b8c76f41a524a0c15cbb7c88"
+        ],
+        [
+          "029_cli_backfill_state.sql",
+          "dbf920f0d4dd4ac551c4593c9bdaac1fb8e0c5891695be63312c756d4b853db0"
+        ],
+        [
+          "030_cli_observation_reliability_and_progress.sql",
+          "918ab49b1ccf9ca8a2fec23f3dddad297726dfda94ec78ae46e463ad4f149bb9"
+        ],
+        [
+          "031_cli_backfill_scheduler.sql",
+          "187addae01a9c5c8bd0d4a5294f07e76a07d535b63d2d407e7911d9960d37184"
+        ],
+        [
+          "032_memory_candidate_subject.sql",
+          "c8c7073308c66135abadf59d899055eadb44c0e82b12e19a4871d4b1f99f5964"
+        ],
+        [
+          "033_owner_memory_evidence_kind.sql",
+          "dced994989341ccba424bddc68889415d6810e4c86be7ed68b46a16b885ee672"
+        ],
+        [
+          "034_extraction_failure_recovery.sql",
+          "a78d5bde2c9bc07c8681acf6d6f6512b40895b2fdedc3b3ed87f54dbea40381b"
+        ],
+        [
+          "035_extraction_watermark_cascade.sql",
+          "866aac5fc8e0bbfb3ad61315b3fef290587f760289ed1af95bc4a9867238b974"
+        ],
+        [
+          "036_source_deletion_tasks.sql",
+          "f7b2bcb052eccc1f050c8deb83174b500f0753f9906bcf84ddbe433afc440ba2"
+        ],
+        [
+          "037_pending_candidate_evidence_kind.sql",
+          "5f93a0b359a8672ef84d5c6238894b8df7157541854ada6bcdbe0321f9fe1f16"
+        ],
+        [
+          "038_memory_candidate_interpretation.sql",
+          "89792f844e728adfac5001439d9d5213c7365a2abfe468262f1aa04caab27bc0"
+        ],
+        [
+          "039_memory_extraction_trace.sql",
+          "1180a3e0746410cd9015d7ae1f00883c42ff6eece34f997ab56f2a82f3b15485"
+        ],
+        [
+          "040_source_processing_trace.sql",
+          "28aa0d2d31c3f803fa1c1c994d7e5599e029ac2e73559b6006d9b26f4f4612b2"
+        ],
+        [
+          "041_source_processing_capture_tombstone.sql",
+          "2e35f43c8cbc712cfdd13bc68e62edb6ae0e372d9bf13cd99a0f071b9eae1ae6"
+        ],
+        [
+          "042_extraction_trace_call_receipts.sql",
+          "237da740428330fc9da965fa4cf980cfa4aaba8b57ab38ebd0c1fc6a9ae63bec"
+        ],
+        [
+          "043_extraction_trace_record_operations.sql",
+          "9cfc466353d6b8cc154857cabda9e51df559a0a17498caad47efd4e7081fd651"
+        ],
+        [
+          "044_owner_memory_versioning.sql",
+          "1a457882c62808f13479a4a56e19a98a3c13b74f94a0d6bfb3e4967985debfdf"
+        ],
+        [
+          "045_observation_background_task.sql",
+          "224fc3d3fe951fc26175b3a40425282c65ee4002afabd72425395a26b424f9e0"
+        ],
+        [
+          "046_background_step_lease_generation.sql",
+          "6aa70eb684b6173a0f389c43fee6399df44b8a826d877218eed0411e982261f8"
+        ],
+        [
+          "047_observation_memory_enqueue_receipt.sql",
+          "ff1b655c22eb4ef3168e6b870df5eabbc898777984e5797e9ccdda036087e609"
+        ],
+        [
+          "048_assistant_sessions.sql",
+          "bfad45fbc4e829692645fb05a1d3dc2d5646d4d8d975ac38e2f0aee7364560ec"
+        ],
+        [
+          "049_style_samples.sql",
+          "069ef61e3ea408186ed85a235bc879cb2f070a67ce368f749b091e9f2644ca4a"
+        ],
+        [
+          "050_reply_purpose_evidence.sql",
+          "de1408cf5a1ecbf446a911843d32b32c6b17193dcbcbc24c79ae91286ecc38ec"
+        ],
+        [
+          "051_assistant_session_inputs.sql",
+          "da5e59f199067db1869e6299d03132bf652cfa35392aeb296bb5ce0ea45d694f"
+        ],
+        [
+          "052_reply_exploration.sql",
+          "98e4ba97e6d33abbede488f3e44cc300db250b685a71b574bd224d76da42f926"
+        ],
+        [
+          "053_assistant_candidate_versions.sql",
+          "38fea517ff30b782baf30799defc8da7f48e555635f057c40c2bffdb31cf129d"
+        ],
+        [
+          "054_assistant_generation_interruption.sql",
+          "473a21d645794d9b9595b0ff0b73f42909db2a9a346d0bfa4f56acb39b4e7802"
+        ],
+        [
+          "055_assistant_candidate_carry_input.sql",
+          "71d1f2e7ff684235d3701c83c1972626ab1976e18a47f8f1f42af68c0e73315b"
+        ],
+        [
+          "056_memory_candidate_dimension_evidence.sql",
+          "b3bfa8a7cc7f72181d159ce37f560b72769a2bd300cb40b63c9b88b23ad3d401"
+        ],
+        [
+          "057_memory_candidate_semantic_basis.sql",
+          "2a65ad790c7a36ac923e12e7867ca58f9fe2db1a988bb1473fe4bbee9fd7e94f"
+        ],
+        [
+          "058_assistant_prepared_context.sql",
+          "02583541a7ea389e8e11e79d06ee403d0916d8bd7ca626296d1e4d2ea95f7663"
+        ],
+        [
+          "059_memory_candidate_author_quote_basis.sql",
+          "b469565f317510b4d454cdd1115545788b75a3c18bf0569354b02849413a03a1"
+        ],
+        [
+          "060_manual_contact_confirmation.sql",
+          "56502637470e394477607068176ae05a544a3ee6e5a3dd5ce9845a0579713e5b"
+        ],
+        [
+          "061_memory_correction_protection.sql",
+          "458cddaea770cd12e61f60e2bac5469634585834a8dc4b6247c721f34dd9f78e"
+        ],
+        [
+          "062_memory_events_and_version_evidence.sql",
+          "ed641686c45c7e35b262208f2da3126895f611b6d9d326cb6b221e74a6236b2f"
+        ],
+        [
+          "063_relationship_overview_projection.sql",
+          "9151d4d0f7a058c1fef1f7af9df640b5d82d4fe8b417fc68f2bad2aa62da46c8"
+        ],
+        [
+          "064_owner_memory_revision.sql",
+          "a8f0148a94b491d0b19f475dc24ce863bea7e3fca7b5d88113fbb03531d42a04"
+        ],
+        [
+          "065_expression_preferences.sql",
+          "b88bbbcd32ab32a8e4d61ab40a6d552050d5519ed2092cab7106c0c71cd8afc3"
+        ],
+        [
+          "066_skill_learning_drafts.sql",
+          "c59bc7779ed497c127b1f4822a051ef72d21de9dfa4d8508224d124b44a7132d"
+        ],
+        [
+          "067_memory_upgrade_batches.sql",
+          "591f5831dcb65ec2ef03a52b040084876577aa3d87f84edee4e9c944ff21b916"
+        ],
+        [
+          "068_skill_review_publication.sql",
+          "b6347262bd3c488fb1cdaa0fbdffa9ff1ff1a16a851ab1113ab9d6b748814c9a"
+        ],
+        [
+          "069_skill_history_operations.sql",
+          "7a2780fddd439393aa749019a25bd2896e409b293f91df994ae27d65bacc2fc6"
+        ],
+        [
+          "070_skill_scope_policies.sql",
+          "1670f66e4cc08371cbf4ffc97ffc2cceb26bea9da86e14757f86d56fb38f4bc6"
+        ],
+        [
+          "071_bounded_runtime_evidence.sql",
+          "5fc8e8a0a80fd8863ed34f7a33aa2ab73494aee2e9ddab635f297253a0d6fefb"
+        ],
+        [
+          "072_scoped_media_lifecycle.sql",
+          "29c1e77a9745613fa1fc6c327d5957704b06a4df04c1c52644725613932b1e22"
+        ],
+        [
+          "073_layered_scenario_documents.sql",
+          "b7543f3a07ee61dbda089426a90cfff80ed482eacb2b8f3e94c5daab72c011ea"
+        ],
+        [
+          "074_layered_memory_coverage.sql",
+          "d9d7c54cf6dac6e17a3b3d0c976a6af24007ec3be1e012fdb610eef6187424e5"
+        ],
+        [
+          "075_layered_profile_generation.sql",
+          "fea7275b63fb434f13b2fb299e6ab71c3bf2933e1ea47313920737e33e0f16c5"
+        ],
+        [
+          "076_layered_memory_maintenance.sql",
+          "c0026f4645aadad952ef1859b9190a71e03a6d4c31859e797e12a3716139c9e9"
+        ],
+        [
+          "077_owner_layered_scope.sql",
+          "b338c5933417abd390886c09520dd8fe31509cff58d314e56c19cd123ace9c2b"
+        ],
+        [
+          "078_layered_memory_corrections.sql",
+          "462506b23dcaab742238480c48d97b6b916aa0f78ea672121ab1c14d6594ade3"
+        ],
+        [
+          "079_organization_quality.sql",
+          "cb276f0fb6d0041c44298738dc7e4f86a40d23b919663b0f7cf015f6e7214c23"
+        ],
+        [
+          "080_memory_merge_parents.sql",
+          "60036db7222061ab57491bdb9a410299cc5dd782adc3e54c9e28fa6c2dba5aa5"
+        ],
+        [
+          "081_memory_retirement_reason.sql",
+          "a0af6040ed5224317658bd021586157b46eec6a4ea7d4d8344c5d71b2e1c07f9"
+        ],
+        [
+          "082_memory_full_source_lifecycle.sql",
+          "3801db0b830a087ad8cac173089d3b76b5f2e4912642b75e8b5a1188bfa3bd9c"
+        ],
+        [
+          "083_default_memory_maintenance.sql",
+          "bb20f446e140b67a6de1408c9ba19a744a717d73197498211aee10156b997042"
+        ],
+        [
+          "084_memory_retirement_audit.sql",
+          "64853f65bdcef9bd81e515eb03f9f8edc71855abd70b49a0a3446c4e2c97b25a"
+        ],
+        [
+          "085_retired_layered_fact_receipts.sql",
+          "821cb58cae3152cc082305d3683bd169a2c177a085fa62d408cd0908afb60f9c"
+        ],
+        [
+          "086_merge_parent_deletion_cleanup.sql",
+          "e77ef8a6c702ed36ef9405234e04a4baf5a550054aece32519f90057baa132a2"
+        ],
+        [
+          "087_extraction_trace_merge_operation.sql",
+          "c475bce126f9da60c1aa700bc96ca2c58a447ce4073209b3904c4df121901335"
+        ],
+        [
+          "088_cli_opaque_cursor_order.sql",
+          "dc50df9bb583365284c802fa0536e35497267abce519941e31c1eb3bf4e6f2d3"
+        ],
+        [
+          "089_style_sample_generation_dependencies.sql",
+          "40571f3d42815cb18858e3dea6c458b3b42f6273080f52258cbdff3cb786e4ea"
+        ],
+        [
+          "090_memory_processing_progress.sql",
+          "54c4175397d5160da3e824f48ead4655bb79bdbc8b15af838743569aac3e3932"
+        ],
+        [
+          "091_memory_processing_scope_receipts.sql",
+          "16eea125a43d51974d47ae76a2ecd8e0ae06dfea6f8907e933a78b61b985f4c4"
+        ],
+        [
+          "092_memory_applicability_conditions.sql",
+          "ee5d8981aa135d9840f109565621ffe6a75f04e90a55508bded1bfbc60656bbc"
+        ],
+        [
+          "093_memory_event_calendar_precision.sql",
+          "ab76ccab75727a2c6b247354907185f39c1fe088835981627447527683b1e6c8"
+        ],
+        [
+          "094_memory_evidence_timeline.sql",
+          "f69631361ac2dfd2bd319cb76a4db6a29843f0ff2f2482a1d6091165a570f112"
+        ],
+        [
+          "095_relation_verification_call_receipts.sql",
+          "2c2ace4ac3c35d449ae1328a411c7766dccfd0cd04def8bd7a4f37c12ec9a392"
+        ],
+        [
+          "096_retire_style_samples.sql",
+          "aecbd5863eaf8954bdbdb42fcff3b0e2d8749e6f8e119c254f7721e27bab47cc"
+        ],
+        [
+          "097_persistent_extraction_schedule.sql",
+          "701295d231c53fa243e85b594f32291374d6bd4aba23d29b0d52ae1b40a0007b"
+        ],
+        [
+          "098_import_statement_overview_invalidation.sql",
+          "1c2cccd7cacdf1936f19a59c46374296b3fad067c5050feb900ff1422f2ce94a"
+        ],
+        [
+          "099_message_page_indexes.sql",
+          "ac4a9a2a71bd40b9fc074c915eb2e3e90ef311ab986258f66f326943227894da"
+        ],
+        [
+          "100_all_private_sync_scope.sql",
+          "87f4a2d6617d943cf9cd39ef10312c46b1a11efe250d89cc69622982aaa7a53a"
+        ],
+        [
+          "101_directory_reply_skills.sql",
+          "0c032a12691edf917f56ae845986a01b81d8f7784aefb85a62856a008f6b427b"
+        ],
+        [
+          "102_skill_method_manifests.sql",
+          "6bbad63a470bd8f870dfe81fa3d1a24f7407c40b9c2b80a6d709a077f2086ebb"
+        ],
+        [
+          "103_skill_business_state_only.sql",
+          "af9b52f1404eb27ffc3aa15262e03c8f1d750a39c7fb68c8012d9eb4a6cef696"
+        ],
+        [
+          "104_cli_history_sync_state.sql",
+          "1c0c37ef68097621de81bdfb9a590c673f4bd30e04c34ac5f032605d59eb2580"
+        ],
+        [
+          "105_history_sync_authorization.sql",
+          "dab3acb82a7b8b78fe8296951122f035a1c6759ca78f7c5a028fdeb53176a8a1"
+        ],
+        [
+          "106_extraction_queue_pending_index.sql",
+          "9c50f24ad2528732dc893ecc00e7bcaeea93d9af266df192d84063aff171f793"
+        ],
+        [
+          "107_history_message_count_comment.sql",
+          "484cde6418b77286d1a6dff55dfd9075dde3d30c228e097a17a659c1c8e4415e"
+        ],
+        [
+          "108_wechat_binding_history_authorization.sql",
+          "8a6c2c41ea4b0df7a448c02827e9b447a53b3a82d04334d450456d0f00402d0a"
+        ],
+        [
+          "109_wechat_auto_read_suppression.sql",
+          "2582079415b7a41653d598d84f266702a0ec78d39feddb667857dc7c691846e1"
+        ],
+        [
+          "110_model_call_receipt.sql",
+          "50a26e310a7ef8c38f2f4ee1615d1007748b2e53d481198f736eb856e22e54ed"
+        ],
+        [
+          "111_model_call_learning_claim.sql",
+          "98ecb83f54fa0302e3cbb9c37398041d37e0985013ade6a4b66ad8757e64d079"
+        ],
+        [
+          "112_merge_verification_call_receipts.sql",
+          "b8952d044200ef25ca2d2ba78d3f91ae5c2cddb1aea03d24f6ce71a6fbe519d8"
+        ],
+        [
+          "113_cross_domain_deletion_operations.sql",
+          "018a0660b4cb90f7be77b81515c7b53dd369dc3f7de0ee45b23daae0ad16f141"
+        ],
+        [
+          "114_cross_domain_source_identity_and_leases.sql",
+          "c09fb4a9303519ed66f3a7792f9f3e0a950b3771d7bb979c2c470922d84adecf"
+        ],
+        [
+          "115_user_cancelled_generation.sql",
+          "6b893bd75d6cd18b142bfa82ed2ce8b6549c10d2c5cf0fc943bd24548d7c15a5"
+        ]
+      ],
+      "material": {
+        "owners": 2,
+        "contacts_per_owner": 4,
+        "sources": 0,
+        "messages": 0,
+        "model_work": 0
+      },
+      "cache": {
+        "mode": "isolated-empty-home",
+        "model_requests": 0,
+        "embedding_work": 0,
+        "weight_files": [],
+        "weights_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "workload_sha256": "7416b59cd304f4457a79c99c185655dd663ff69da2e2a6aa88d80d3a7945533a",
+      "runtime_environments": {
+        "old": {},
+        "new": {
+          "NOTALONE_HOST_RUNTIME": "typescript",
+          "NOTALONE_REPLY_RUNTIME": "typescript",
+          "NOTALONE_EXTRACTION_RUNTIME": "typescript",
+          "NOTALONE_HISTORY_RUNTIME": "typescript"
+        }
+      },
+      "runtime_environments_sha256": "a0ed09f3b704460c52b756a750a27170afc65aa669438da6720bb33030b02df3",
+      "configuration_sha256": "76a31e1d531f58ff92a0c4ce687951d4e57554337620d3c30d0f803a45b889c2",
+      "node_executable_sha256": "060b970693b04c9b5664c68014c6ece7c30ec7968d55c8764776d8a07e154056",
+      "python_executable_sha256": "ea6f9840e9e1f4660544594a526fe0fd8deaa6a9034854d7e41fdca336532806",
+      "profile_sha256": "5c95caec7c4a40b5bb36151ac213b1c9823e7368b1136cbbefcf806fcfe1bc9f",
+      "lock_sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+      "python_distributions_sha256": "4a8da749bb010e56452d1d4d6414a35a05b76008c194f2b80feb30f3f5fdebc8",
+      "tools": {
+        "sha256": "1c542a795e110d30cd0524abdc5b50feeaefcb1ca414993a91b1b4556750ad8f",
+        "file_count": 10
+      },
+      "new_source_matches_commit": true
+    },
+    "binding_before": {
+      "old_source": true,
+      "old_dependencies": true,
+      "new_source": true,
+      "dependencies": true,
+      "snapshot": true,
+      "tools": true,
+      "workload": true,
+      "runtime_environments": true,
+      "node_executable": true,
+      "python_executable": true
+    },
+    "binding_after": {
+      "old_source": true,
+      "old_dependencies": true,
+      "new_source": true,
+      "dependencies": true,
+      "snapshot": true,
+      "tools": true,
+      "workload": true,
+      "runtime_environments": true,
+      "node_executable": true,
+      "python_executable": true
+    },
+    "run_canonical_sha256": "4c46e5def44008bec23fa51dc9971349cb72fe55c62d2754404491d10d74c0ca"
+  },
+  "observational_only_metrics": [
+    "client_response_ms",
+    "durability_observed_ms",
+    "transaction_ms",
+    "queue_ms"
+  ],
+  "new_arm_python_observed": false
+}

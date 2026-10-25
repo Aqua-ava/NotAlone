@@ -1,0 +1,31 @@
+{
+  "base": "e17d4c752c69618e90e43c42488f1cb2c4d1b7a4",
+  "core_candidate": "ff45f2ec296c4cead326d2ab6f3cf7770c9396ab",
+  "candidate": "4f89bb976dd4086a02b7ae983fee2760d6e4ff64",
+  "decision": "approve",
+  "p1_findings": 0,
+  "p2_findings": 0,
+  "previous_changed_files_unchanged": 129,
+  "previous_code_and_test_files_unchanged": 85,
+  "core_probe_groups": 9,
+  "core_probes_rerun_on_new_candidate": false,
+  "delta_regression_tests_passed": 2,
+  "delta_default_contract_comparisons": 4,
+  "core_archive_manifest": {
+    "path": "ff45-archive/artifact-sha256.json",
+    "sha256": "dd752d1a7ba5765e0b9c60697e3798df98e8159369b2717a4939b442d319a2a3"
+  },
+  "evidence": {
+    "report.md": "9d8d97225449b8329758e7c3b5037b0a200ed6daf6555f049f9fe4bbbff5c7ed",
+    "handoff.md": "369041bec08e6b4db01e550eea0d20698f5a8d79c5b18307ddecfd4cd5759492",
+    "delta-audit.json": "ee9fdb6442eb82d6c0062d17220b8a1f7ec968c0586a4145c724d37122a173b4",
+    "delta-validation.json": "bb5b26292224227342343566adc99ab17167c0f989742c6726740a42a89bb8c1",
+    "delta-cleanup.json": "1fee107495995ffc11e74d8da834a374931cb977d87b15d964ef6e7803937efd",
+    "delta-contract-probe.mjs": "846f198f8d4e0ef53ddeb7bc7577717e115f9b6ea530bf9c538ce0e4473846f3"
+  },
+  "actual_app_or_real_provider_run": false,
+  "overall_product_switch_approved": false,
+  "ticket25_26_approved": false,
+  "single_source_semantic_error_resolved": false,
+  "source_dependency_mode_changed": false
+}

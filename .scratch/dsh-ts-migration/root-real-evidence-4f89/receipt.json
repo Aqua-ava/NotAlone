@@ -1,0 +1,97 @@
+{
+  "candidate_diagnostic": "a61a21407c9395c462e4e68bfeee4628e7e9b15c",
+  "coverage_fix_and_app_candidate": "4f89bb976dd4086a02b7ae983fee2760d6e4ff64",
+  "real_diagnostic": {
+    "receipt_count": 2,
+    "receipt_outcomes": {
+      "succeeded": 2
+    },
+    "actual_http_observed_receipts": 2,
+    "a_accepted_count": 4,
+    "a_rejected_count": 1,
+    "input_tokens": 9293,
+    "output_tokens": 1501,
+    "cost_statuses": [
+      "unknown"
+    ],
+    "production_writes": false,
+    "old_unknown_replayed": false
+  },
+  "independent_review": {
+    "method": "对最小真实来源和原提议独立评阅，自动核验和接受集合向评阅方隐藏；评阅者为Agent",
+    "accepted_verdicts": {
+      "supported": 2,
+      "unsupported": 1,
+      "undetermined": 1
+    },
+    "outcome": "regressed",
+    "b_adoption_executed": false
+  },
+  "fixed_budget": {
+    "max_physical_calls": 8,
+    "used": 2,
+    "round": "r1",
+    "round_outcome": "regressed",
+    "deadline_expired": true,
+    "reset_or_extended": false
+  },
+  "offline_replay": {
+    "recorded_response_invocations": 2,
+    "new_physical_model_calls": 0,
+    "E_V_source_user_payloads_equal": true,
+    "budget_used_before": 2,
+    "budget_used_after": 2,
+    "accepted_before": 4,
+    "accepted_after": 3,
+    "previously_ambiguous_P2_rejected": true,
+    "positive_P1_P4_preserved": true,
+    "unsupported_P3_still_accepted": true,
+    "semantic_quality_passed": false
+  },
+  "actual_app": {
+    "launch": "npm run dev",
+    "same_original_user_data": true,
+    "saved_configuration_unchanged": true,
+    "host_runtime": "typescript",
+    "host_python_children": 0,
+    "model_key_explicitly_empty_in_actual_host": true,
+    "existing_expired_problem_budget_bound": true,
+    "ui": {
+      "manager_connected": true,
+      "verified_contact_selected": true,
+      "processed_messages": 20,
+      "total_messages": 3345,
+      "old_unknown_recovery_warning_present": true,
+      "sync_switch_off": true,
+      "scope_all_private_retained": true,
+      "assistant_requires_contact_confirmation_after_reopen": true,
+      "model_environment_override_notice_present": true,
+      "normal_quit_confirmed": true
+    },
+    "model_receipt_rows_since_launch_all_owners": 0,
+    "normal_quit_and_owned_launcher_host_gone": true,
+    "wechat_messages_sent": 0,
+    "visual_frames_saved_or_uploaded": 0,
+    "full_functional_acceptance": false
+  },
+  "cleanup": {
+    "private_snapshot_reclaimed_bytes": 15616633,
+    "private_reports_source_packet_budget_database_archive_preserved": true,
+    "isolated_diagnostic_database_and_owned_model_processes_removed": true
+  },
+  "private_evidence_sha256": {
+    "actual-summary.json": "be6a81848e2550b33443c2788be3012478ce76967ba7314ae13561228d233ce3",
+    "actual-receipts.json": "efe9504f204b2d54dd67dff1d995970cc1a82598771c43b2e44b45be783f52b5",
+    "r1-review-summary.json": "49501aff746e9e623008f4caa1f7fb4cfb52d48c56ceb124eef78f9935827c7c",
+    "coverage-offline-replay-summary.json": "7d138078d3c25c6fe8ec22a208e33609c42c71080f15bc84216e0a4c43bed4f0",
+    "cleanup.json": "f2de865da1802b9927ccca0a3bfdcedb2f72f32240aeeb8ca1e82b2c11aa1803",
+    "staging-cleanup.json": "715e89e00bb23f7a00d425b808555d41ec663422d4817c6b3dc302b7a17929e5",
+    "launch-proof.json": "659e14030444618746259cfd344427948235279a3aab667ba16ebca9cb3ca9b2",
+    "runtime-proof.json": "5892a08f990fd450330d951d0e031eb39c1af5a597cfbc75d45b695656717433",
+    "result.json": "e1b21edf788f5787e2c4bd4666ebef5c314a641da48cb095f91faa6b826ef6f9",
+    "database-after.json": "3016a1d7cb4ca3678c59be2c23ca6d0a0cc0327683f0fc236a790c7e843a7d4a"
+  },
+  "quality_passed": false,
+  "ticket25_approved": false,
+  "ticket26_approved": false
+}

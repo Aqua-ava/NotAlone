@@ -1,0 +1,27 @@
+{
+  "candidate": "4f89bb976dd4086a02b7ae983fee2760d6e4ff64",
+  "regression": {
+    "cwd": "<DELTA_SNAPSHOT>/backend-ts",
+    "command": "perl -e 'alarm 60; exec @ARGV' -- node --experimental-strip-types --no-warnings --test --test-concurrency=1 test/extraction-verification-quality-regression.test.mjs",
+    "tests": 2,
+    "pass": 2,
+    "fail": 0,
+    "skipped": 0,
+    "exit_code": 0,
+    "log_sha256": "85ae2906968edb21631cf1258338ded2c33d6da82ab5902f2516bdb6780a314a"
+  },
+  "default_contract": {
+    "command": "node --experimental-strip-types --no-warnings <REPORT_DIR>/delta-contract-probe.mjs <DELTA_SNAPSHOT>",
+    "exit_code": 0,
+    "result": {
+      "default_contract_comparisons": 4,
+      "inputs_unchanged": true,
+      "explicit_mode_restriction": true
+    },
+    "log_sha256": "277d1e04fc3dd9bc4310a73c40b5bbdbe46e6dda32c3f3519e686f8317ae49fb"
+  },
+  "real_calls": 0,
+  "real_data_or_config_accessed": false,
+  "full_suites_rerun": false,
+  "initial_archive_command_corrected": "归档清单误用不存在的package-lock.json，未启动测试；改用Git跟踪的pnpm-lock.yaml并复用本轮自建空目录，非源码失败。"
+}

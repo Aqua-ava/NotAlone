@@ -1,0 +1,18 @@
+{
+  "base": "e17d4c752c69618e90e43c42488f1cb2c4d1b7a4",
+  "candidate": "ff45f2ec296c4cead326d2ab6f3cf7770c9396ab",
+  "snapshot_files": 1554,
+  "snapshot_manifest_sha256": "d23cb2fa7eb7a5a6c571834e4ae4352f577daccbfe6b36ce83f0f26ae30444e2",
+  "diff_counts": {
+    ".scratch": 41,
+    "backend-ts": 81,
+    "desktop": 6,
+    "docs": 1
+  },
+  "dependency_symlink_target_hashes": {
+    "backend-ts/node_modules": "3e00e3f071e944a8363773f73435ee2c58eaa33fbb99d549eb2844a51dbcc1c5",
+    "desktop/node_modules": "4e29ae2035775772a504f381d2ee24cd4489256561637d6c41ea919559c1cf44"
+  },
+  "snapshot_initial_files": 1549,
+  "verified_after_probes": true
+}

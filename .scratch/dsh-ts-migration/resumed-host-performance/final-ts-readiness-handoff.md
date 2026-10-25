@@ -1,0 +1,24 @@
+# 最终 TS 新臂只读准备交接
+- 检查提交：`a61a21407c9395c462e4e68bfeee4628e7e9b15c`；详情见 `final-ts-readiness.md`。
+- 未改生产文件、原 sampler／report、票状态或依赖；只写本文件与详情。
+- 当前没有现成完整纯 TS 配置：`host-plugin.ts:479` 无条件启动 Legacy。
+- `legacy-backend.ts:29–41` 缺解释器直接失败；不是可用的禁 Python 开关。
+- ready 必须先调用 Legacy 配置／停止／交接，见 `host-plugin.ts:491–503`。
+- TS 回复／提取／历史开关有效，但不控制 Legacy 进程是否启动。
+- 公开剩余 HTTP／SSE、同步撤销与增量事件仍依赖 Python。
+- 桌面 DSH 分支启动前仍核验 Python 与旧 command.py，见 `backend/process.ts:24`、`backend/config.ts:145–153`。
+- 普通 DSH 只读诊断已用 Node；首次 schema prepare／受管首启仍用 Python。
+- 25→26 没有显式图环；“25先签最终纯TS”与“所有脱钩留26”组合会互卡。
+- 原性能协议59–65没有 Python 存在即失败的额外数值门；sampler只是不认证其为最终TS。
+- 推荐根明确把“不删源码的 TS 运行装配”前置到24／25，26保留删除与退役后复验。
+- 不能移掉整行 notalone-host 或只跑私有 TS 端点冒充产品闭环。
+- 已交付 sampler 的新臂白名单没有三个 RUNTIME；既有5/5只证明当前短探针。
+- 不要仅在外层 shell export 三项后推定它们已进入新臂。
+- 旧臂真实 Python 与外部 Python／psycopg评测工具允许隔离保留，不计新后台RSS。
+- 新发现前置：host_fixture.py:66/73–74从新树Python创建合成快照；26删源后须解耦。
+- 可复用已验证合成dump或固定评测迁移器；当前CLI尚无 --snapshot，不能伪称已有。
+- 后续仅新增所补边界探针：零模型、公开ready／持久读回、无legacyPid、后台树无Python、清理归零。
+- 之后才由根串行长采样；不重跑已完成5/5、不提前删26、不改变门槛。
+- 本轮仅静态读查与来源／行号校验；无新PG、模型、App／微信或长采样。
+- 固定DSH依据：0.2.1-rc.2／687f282…，官方profile.ts:1–22与本仓launch.ts:146–162。
+- 详情包含精确来源、最小前置项和源码哈希；需根协调顺序及实现归属。

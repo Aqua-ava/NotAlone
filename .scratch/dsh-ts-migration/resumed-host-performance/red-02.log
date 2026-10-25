@@ -1,0 +1,17 @@
+test_report_preserves_failed_denominator_and_seeded_intervals (test_host_perf.SamplerContract.test_report_preserves_failed_denominator_and_seeded_intervals) ... FAIL
+test_short_pair_keeps_tree_samples_order_and_cleanup (test_host_perf.SamplerContract.test_short_pair_keeps_tree_samples_order_and_cleanup) ... ok
+
+======================================================================
+FAIL: test_report_preserves_failed_denominator_and_seeded_intervals (test_host_perf.SamplerContract.test_report_preserves_failed_denominator_and_seeded_intervals)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "REPOSITORY/.scratch/dsh-ts-migration/resumed-host-performance/test_host_perf.py", line 58, in test_report_preserves_failed_denominator_and_seeded_intervals
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 2 != 0 : usage: host_perf.py [-h] {self-test} ...
+host_perf.py: error: argument action: invalid choice: 'report' (choose from self-test)
+
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.795s
+
+FAILED (failures=1)
