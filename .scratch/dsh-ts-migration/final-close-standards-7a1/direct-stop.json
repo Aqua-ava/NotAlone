@@ -1,0 +1,30 @@
+{
+  "label": "direct-stop",
+  "base_commit": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "target_commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "cwd": "desktop",
+  "command": [
+    "node",
+    "--import=local-only.mjs",
+    "--test-reporter=tap",
+    "--test",
+    "tests/assistant-generation-preparation-stop.test.mjs",
+    "tests/assistant-generation-stop.test.mjs"
+  ],
+  "exit_code": 0,
+  "duration_seconds": 0.4,
+  "counts": {
+    "tests": 14,
+    "pass": 14,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "raw_sha256": "c93ed6357fc6d727798189aba4cffbb1a59dcf87d6fddcd002bfcd4c1d9bc6dd",
+  "public_sha256": "c93ed6357fc6d727798189aba4cffbb1a59dcf87d6fddcd002bfcd4c1d9bc6dd",
+  "created_database_count": 0,
+  "drop_requested_count": 0,
+  "raw_directory_mode": "0o700",
+  "raw_file_mode": "0o600"
+}

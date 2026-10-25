@@ -1,0 +1,27 @@
+{
+  "name": "query-baseline",
+  "commit": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "exit_code": 1,
+  "duration_seconds": 1.993,
+  "counts": {
+    "tests": 4,
+    "pass": 3,
+    "fail": 1,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "command": [
+    "node",
+    "--import",
+    "local-only.mjs",
+    "--test",
+    "--test-concurrency=1",
+    "<review>/independent-query.test.mjs"
+  ],
+  "raw_sha256": "b13d979af13ba3a69b866b2a83e54fc47f6d1218b632db90f9ef9e61b5a8fdd5",
+  "public_sha256": "666eef35e1175d98ded6f4e8c4c637a290b8230557bae4a04e4d6cc0f03f6dbc",
+  "raw_mode": "0o600",
+  "synthetic_only": true,
+  "environment_inherited": false,
+  "network_scope": "localhost_and_owned_local_postgresql"
+}

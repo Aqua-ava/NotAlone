@@ -1,0 +1,35 @@
+{
+  "name": "workspace-frozen",
+  "commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "exit_code": 0,
+  "duration_seconds": 7.858,
+  "counts": {
+    "tests": 2,
+    "pass": 2,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "command": [
+    "node",
+    "--import",
+    "local-only.mjs",
+    "--test",
+    "--test-concurrency=1",
+    "test/workspace-generation-stop-ipc.test.mjs"
+  ],
+  "raw_sha256": "bc91fe8344f951db0d69acb4ee9dab2d456b3a68f3e2519ade8bbe0bb125530f",
+  "public_sha256": "bc91fe8344f951db0d69acb4ee9dab2d456b3a68f3e2519ade8bbe0bb125530f",
+  "raw_mode": "0o600",
+  "synthetic_only": true,
+  "runner_sha256": "6d731c151a78662e6b96d168a94dd176f5b81b1c6a2913f8a2e580000ddde598",
+  "guard_sha256": "c7a6042dbd8a70e4be50ca66d8f9a426f152f6bface19b658a8dd1c245e1eee7",
+  "test_sources": [
+    {
+      "path": "<private>/snapshot/backend-ts/test/workspace-generation-stop-ipc.test.mjs",
+      "sha256": "c24f835e65d4823512baa20501d99cc80d8b17417dfceea2a517b7e6bd197050"
+    }
+  ],
+  "environment_inherited": false,
+  "network_scope": "localhost_and_owned_local_postgresql"
+}

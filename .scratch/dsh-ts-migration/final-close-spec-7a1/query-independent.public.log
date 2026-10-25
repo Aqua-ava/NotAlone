@@ -1,0 +1,12 @@
+✔ 独立PG：config超时回滚、驱动错误受控且原回调只通知一次 (468.468417ms)
+✔ 独立PG：native_query超时回滚、驱动错误受控且原回调只通知一次 (422.397583ms)
+✔ 独立PG：queued超时回滚、驱动错误受控且原回调只通知一次 (429.727584ms)
+✔ 独立PG：同名业务错误仍原样传播，不能按消息误归类驱动错误 (360.162167ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1781.056167

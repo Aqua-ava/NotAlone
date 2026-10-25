@@ -1,0 +1,10 @@
+{
+  "base_commit": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "target_commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "comparison": "git diff 283a609f5f48503657bef571c0ea9539d4ee7b76...7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "axis": "Standards",
+  "raw_location": "outside_repository",
+  "raw_directory_mode": "0700",
+  "raw_file_mode": "0600",
+  "scope": "six_product_files_and_direct_tests_only"
+}

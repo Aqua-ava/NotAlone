@@ -1,0 +1,27 @@
+{
+  "name": "query-single",
+  "commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "exit_code": 1,
+  "duration_seconds": 0.185,
+  "counts": {
+    "tests": 1,
+    "pass": 0,
+    "fail": 1,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "command": [
+    "node",
+    "--import",
+    "local-only.mjs",
+    "--test",
+    "--test-name-pattern=config超时",
+    "<review>/independent-query.test.mjs"
+  ],
+  "raw_sha256": "d0bc1afcda60e3ee6a592851daf6d95fbd0d0a6dbe1d726dd02aea240e25a76e",
+  "public_sha256": "c9a9d4d73885a17f12d99a39cc20891a0fe19759507804aedae145f4b4cf2c3e",
+  "raw_mode": "0o600",
+  "synthetic_only": true,
+  "environment_inherited": false,
+  "network_scope": "localhost_and_owned_local_postgresql"
+}

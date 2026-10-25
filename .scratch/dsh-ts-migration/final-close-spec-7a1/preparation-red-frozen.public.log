@@ -1,0 +1,11 @@
+✖ 独立：准备通知主动公开原请求且轮次和输入版本仍为null (2.220833ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 71.582708
+✖ failing tests:
+✖ 独立：准备通知主动公开原请求且轮次和输入版本仍为null (2.220833ms)

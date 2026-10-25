@@ -1,0 +1,34 @@
+{
+  "name": "lifecycle-frozen",
+  "commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "exit_code": 0,
+  "duration_seconds": 0.13,
+  "counts": {
+    "tests": 8,
+    "pass": 8,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "command": [
+    "node",
+    "--import",
+    "local-only.mjs",
+    "--test",
+    "<review>/independent-lifecycle.test.mjs"
+  ],
+  "raw_sha256": "a5ba4bfec7e02f4f39874504c9343f0e42a6b82b000a30c33b7e886bb2044f78",
+  "public_sha256": "a5ba4bfec7e02f4f39874504c9343f0e42a6b82b000a30c33b7e886bb2044f78",
+  "raw_mode": "0o600",
+  "synthetic_only": true,
+  "runner_sha256": "6d731c151a78662e6b96d168a94dd176f5b81b1c6a2913f8a2e580000ddde598",
+  "guard_sha256": "c7a6042dbd8a70e4be50ca66d8f9a426f152f6bface19b658a8dd1c245e1eee7",
+  "test_sources": [
+    {
+      "path": "<review>/independent-lifecycle.test.mjs",
+      "sha256": "51c12c9019e9357ea7b0ea7d873695e263d963e7ae7506f130243a5b1fbe37f4"
+    }
+  ],
+  "environment_inherited": false,
+  "network_scope": "localhost_and_owned_local_postgresql"
+}

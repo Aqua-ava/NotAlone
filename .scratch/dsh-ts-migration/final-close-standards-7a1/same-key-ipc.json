@@ -1,0 +1,29 @@
+{
+  "label": "same-key-ipc",
+  "base_commit": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "target_commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "cwd": "desktop",
+  "command": [
+    "node",
+    "--import=local-only.mjs",
+    "--test-reporter=tap",
+    "--test",
+    "<review>/same-key-ipc.test.mjs"
+  ],
+  "exit_code": 1,
+  "duration_seconds": 0.129,
+  "counts": {
+    "tests": 1,
+    "pass": 0,
+    "fail": 1,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "raw_sha256": "ce6e2b6690caaef04f21d09c894801644e01ab3e6700c08c00c455698ef0d12c",
+  "public_sha256": "e6525e4b718cdf184016e1ea958881de5ed5d07b780eccf32a934ca39f2222d5",
+  "created_database_count": 0,
+  "drop_requested_count": 0,
+  "raw_directory_mode": "0o700",
+  "raw_file_mode": "0o600"
+}

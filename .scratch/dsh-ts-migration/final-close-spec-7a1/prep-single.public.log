@@ -1,0 +1,9 @@
+✔ 准备状态带原请求键及空回执，停止须等真实回执和中断确认，重复停止仅中断一次 (1.611583ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 85.597917

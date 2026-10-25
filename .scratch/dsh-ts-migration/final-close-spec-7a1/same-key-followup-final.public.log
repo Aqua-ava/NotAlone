@@ -1,0 +1,12 @@
+✖ 同key未知准备重试时，停止应登记到当前可见准备并在真实回执后中断 (2.214792ms)
+ℹ {"stop":{"error":"本次准备的停止身份尚未确认。"},"model_dispatches_after_stop":1,"interrupt_count":0,"final_phase":"completed"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 68.013666
+✖ failing tests:
+✖ 同key未知准备重试时，停止应登记到当前可见准备并在真实回执后中断 (2.214792ms)

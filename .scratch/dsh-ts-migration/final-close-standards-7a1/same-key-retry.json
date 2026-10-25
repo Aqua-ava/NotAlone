@@ -1,0 +1,29 @@
+{
+  "label": "same-key-retry",
+  "base_commit": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "target_commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "cwd": "desktop",
+  "command": [
+    "node",
+    "--import=local-only.mjs",
+    "--test-reporter=tap",
+    "--test",
+    "<review>/same-key-retry.test.mjs"
+  ],
+  "exit_code": 1,
+  "duration_seconds": 0.129,
+  "counts": {
+    "tests": 1,
+    "pass": 0,
+    "fail": 1,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "raw_sha256": "13795217b1b5531931c17184ade3c352923ba52d4974bcd490f61d5eee52fb9b",
+  "public_sha256": "a8c9185016f3c9c50dea5e260a13bd993c489e7bbd3798d735852af518aba6c6",
+  "created_database_count": 0,
+  "drop_requested_count": 0,
+  "raw_directory_mode": "0o700",
+  "raw_file_mode": "0o600"
+}

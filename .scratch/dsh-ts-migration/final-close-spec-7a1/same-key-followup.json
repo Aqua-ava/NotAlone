@@ -1,0 +1,34 @@
+{
+  "name": "same-key-followup",
+  "commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "exit_code": 1,
+  "duration_seconds": 0.129,
+  "counts": {
+    "tests": 1,
+    "pass": 0,
+    "fail": 1,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "command": [
+    "node",
+    "--import",
+    "local-only.mjs",
+    "--test",
+    "<review>/same-key-unknown-stop.test.mjs"
+  ],
+  "raw_sha256": "b6706e6cedcf0ddf608f79d9f3e99d42af5729413fdc554d03754793e7daf77e",
+  "public_sha256": "99fed91d004c2aa6759ec82ef22374175a84a24e667267bbf26bbd9c0ccba27e",
+  "raw_mode": "0o600",
+  "synthetic_only": true,
+  "runner_sha256": "6d731c151a78662e6b96d168a94dd176f5b81b1c6a2913f8a2e580000ddde598",
+  "guard_sha256": "c7a6042dbd8a70e4be50ca66d8f9a426f152f6bface19b658a8dd1c245e1eee7",
+  "test_sources": [
+    {
+      "path": "<review>/same-key-unknown-stop.test.mjs",
+      "sha256": "9adde3e067318a0102949c13eb8fe7532ec795f06a5408938d390eb94f84d405"
+    }
+  ],
+  "environment_inherited": false,
+  "network_scope": "localhost_and_owned_local_postgresql"
+}

@@ -1,0 +1,29 @@
+{
+  "label": "independent-stop",
+  "base_commit": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "target_commit": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+  "cwd": "desktop",
+  "command": [
+    "node",
+    "--import=local-only.mjs",
+    "--test-reporter=tap",
+    "--test",
+    "<review>/independent-stop.test.mjs"
+  ],
+  "exit_code": 0,
+  "duration_seconds": 0.182,
+  "counts": {
+    "tests": 4,
+    "pass": 4,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "raw_sha256": "9c480cc09ebb0af5794207b78fd95cca29d6c34addf6a8277f4f156c012c28e9",
+  "public_sha256": "9c480cc09ebb0af5794207b78fd95cca29d6c34addf6a8277f4f156c012c28e9",
+  "created_database_count": 0,
+  "drop_requested_count": 0,
+  "raw_directory_mode": "0o700",
+  "raw_file_mode": "0o600"
+}

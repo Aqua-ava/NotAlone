@@ -1,0 +1,35 @@
+{
+  "name": "query-red-frozen",
+  "commit": "283a609f5f48503657bef571c0ea9539d4ee7b76",
+  "exit_code": 1,
+  "duration_seconds": 1.564,
+  "counts": {
+    "tests": 4,
+    "pass": 3,
+    "fail": 1,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "command": [
+    "node",
+    "--import",
+    "local-only.mjs",
+    "--test",
+    "--test-concurrency=1",
+    "<review>/independent-query.test.mjs"
+  ],
+  "raw_sha256": "8bc0400da23777803e3746ca62751a3d53fbb4ba4f9c46ccafb28536f1e34611",
+  "public_sha256": "51d1247cc4ddb622a15d353ffb8d52ddfad50c3700be02210c2cb8a1a64a3266",
+  "raw_mode": "0o600",
+  "synthetic_only": true,
+  "runner_sha256": "6d731c151a78662e6b96d168a94dd176f5b81b1c6a2913f8a2e580000ddde598",
+  "guard_sha256": "c7a6042dbd8a70e4be50ca66d8f9a426f152f6bface19b658a8dd1c245e1eee7",
+  "test_sources": [
+    {
+      "path": "<review>/independent-query.test.mjs",
+      "sha256": "95834e807e7f976f64d502b21e0473f7ef528ae753a0046d5fab500e97d11349"
+    }
+  ],
+  "environment_inherited": false,
+  "network_scope": "localhost_and_owned_local_postgresql"
+}
