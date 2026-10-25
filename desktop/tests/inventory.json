@@ -207,7 +207,9 @@
     "tests/reply-supplement-http.test.mjs",
     "tests/single-frame-foreground-http.test.mjs",
     "tests/trace-fixture-ownership.test.mjs",
-    "tests/workspace-message-opt-in-http.test.mjs"
+    "tests/workspace-message-opt-in-http.test.mjs",
+    "tests/pure-ts-managed-runtime.test.mjs",
+    "tests/pure-ts-startup.test.mjs"
   ],
   "native": [
     "tests/header-change-native-acceptance.spec.ts",
