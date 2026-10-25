@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "head": "2fa30b91",
+  "mode": "npm run dev",
+  "computerUse": true,
+  "coverageGate": {
+    "historyCoverage": "incomplete",
+    "warning": "历史覆盖不完整：只会使用已同步部分，可能缺少重要语境。",
+    "beforeAcknowledgement": {
+      "confirmContactButtonVisible": true,
+      "expressButtonDisabled": true,
+      "suggestButtonDisabled": true
+    },
+    "afterAcknowledgement": {
+      "checkbox": "基于已同步部分继续",
+      "expressButtonDisabled": false,
+      "suggestButtonDisabled": false,
+      "generationClicked": false,
+      "modelCallDelta": 0
+    }
+  },
+  "syncState": {
+    "enabled": false,
+    "backgroundPhase": "disabled",
+    "foregroundPhase": "sync_disabled",
+    "scope": "all_private",
+    "historyAuthorization": "accepted",
+    "confirmedBindingCount": 291,
+    "incompleteCoverageCount": 5,
+    "syncProbeProcessCount": 0
+  },
+  "usagePanel": {
+    "phase": "ready",
+    "totalCalls": 1876,
+    "authorizedUnconfirmedCalls": 2,
+    "notSentAttempts": 2,
+    "totalAttempts": 1880,
+    "unknownUsageCalls": 810,
+    "knownInputTokens": 6456914,
+    "knownOutputTokens": 2893293,
+    "unknownCostCalls": 1876,
+    "aggregatedCostRows": 0,
+    "unknownDisplayedAsZero": false,
+    "sourceKinds": [
+      "deepseek",
+      "notalone-deepseek"
+    ]
+  },
+  "wechatMessagesSent": 0,
+  "visualFramesPersistedOrUploaded": 0
+}
