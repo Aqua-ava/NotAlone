@@ -128,7 +128,7 @@ export class ReplyGenerationService {
     binding:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort},profile:model.budgetProfile,
     prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation,aliases}),
     requireCurrent,validateRegistry:()=>skill.validateRegistry(signal),
-    async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion),temperature:model.temperature},{tools,skillSession:skill,executeOutput:unavailable,signal});},
+    async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion,aliases),temperature:model.temperature},{tools,skillSession:skill,executeOutput:unavailable,signal});},
    },signal);
   }finally{probeSkill?.close();skillPort.dispose();}
  }
@@ -185,11 +185,11 @@ export class ReplyGenerationService {
     excluded_message_ids:input.content.excluded_message_ids as string[]??[],allowed_message_ids:prepared.context.history_message_ids,
     prior_budget:prepared.context.retrieval?.source_messages??prepared.historyBudget,
     requireCurrent:client=>preparation.validateCurrent(client,prepared),aliases}):null;
-   const tools=[...history?.tools()??[],...preparation.scenarioTools(prepared),...skill.tools()];
+   const tools=[...history?.tools()??[],...preparation.scenarioTools(prepared,aliases),...skill.tools()];
    let saved:ReplyStoreResult|undefined;
    await generateReplyLoop(this.options.ctx,{...verified,request_id:request.request_id,...model,physical_limit:physicalLimit,candidate_limit:replyCandidateLimit(prepared.context),
     prompt:replyPayloadText({request:input,context:prepared.context,preferences:prepared.preferences.preferences,discussion:prepared.discussion,authenticated:internal.authenticatedContinuation,aliases}),
-    system_prompt:replySystemPrompt(prepared.context,prepared.discussion)},
+    system_prompt:replySystemPrompt(prepared.context,prepared.discussion,aliases)},
    {provider:this.options.provider,budgetProfile:model.budgetProfile,acquire:async()=>({id:round.id,settle}),requireCurrent,skillSession:skill,tools,aliases,
     evidenceIds:()=>new Set([...prepared.context.evidence.filter(e=>e.model_visible).map(e=>e.evidence_id),...history?.evidence.map(e=>e.evidence_id)??[]]),
     reserve:async(receipt,budget,limit)=>{await this.options.ledger.reserve({...receipt,input_budget:modelLedgerInputBudget(budget)},limit);},

@@ -5,6 +5,7 @@ import {canonicalJSON} from './contact-overview-evidence.ts';
 import {pythonISO} from './contact-overview-time.ts';
 import {validateLayeredSnapshot,payloadJSON,type LayeredMaterial} from './reply-context-layered.ts';
 import {ReplyContextError,type ContextMetadata,type BuiltReplyContext} from './reply-context-types.ts';
+import type {EvidenceAliases} from './reply-evidence-alias.ts';
 const fail=():never=>{throw new ReplyContextError('正文工具回执与冻结范围或累计额度不一致。');};
 const fields=(value:ContextMetadata,keys:string[])=>canonicalJSON(Object.keys(value).sort())===canonicalJSON([...keys].sort());
 type ScenarioContext=Pick<BuiltReplyContext,'layered_context'|'owner_layered_context'>;
@@ -56,14 +57,15 @@ export async function readScenarioParagraph(client:Client,material:LayeredMateri
  return {scenario_id:row.value.scenario_id,version_id:row.value.id,title:row.value.title,hint:row.value.hint,system_generated:true,updated_at:pythonISO(row.updated_at),paragraphs:row.value.paragraphs.slice(index,index+1),paragraph_range:[index,index+1],organization_generation:material.snapshot.organization_generation};
 }
 export class ReplyScenarioAccess {
- private readonly material:LayeredMaterial;private readonly saved:ContextMetadata[]=[];private pending:Promise<unknown>=Promise.resolve();
- constructor(material:LayeredMaterial){if(scenarioCallLimit(material)===null)throw new ReplyContextError('缺少正文工具预算。');this.material=structuredClone(material);}
+ private readonly material:LayeredMaterial;private readonly aliases:EvidenceAliases|undefined;private readonly saved:ContextMetadata[]=[];private pending:Promise<unknown>=Promise.resolve();
+ constructor(material:LayeredMaterial,aliases?:EvidenceAliases){if(scenarioCallLimit(material)===null)throw new ReplyContextError('缺少正文工具预算。');this.material=structuredClone(material);this.aliases=aliases;}
  get receipts():ContextMetadata[]{return structuredClone(this.saved);}
  read(client:Client,args:Record<string,unknown>):Promise<ContextMetadata>{const operation=this.pending.then(()=>this.perform(client,args));this.pending=operation.catch(()=>{});return operation;}
  private async perform(client:Client,args:Record<string,unknown>):Promise<ContextMetadata>{
   const payload=JSON.parse(this.material.payload_json),limits=payload.scenario_read_budget,previous=this.saved.at(-1)?.budget;
   let calls=previous?.used_calls??0,paragraphs=previous?.used_paragraphs??0,characters=previous?.used_characters??0,id:string|null=null;
-  try{id=replyUuid(args.scenario_id);}catch{}
+  const requested=typeof args.scenario_id==='string'&&this.aliases?this.aliases.resolveReference(args.scenario_id):args.scenario_id;
+  try{id=replyUuid(requested);}catch{}
   const index=args.paragraph_index,span=Number.isInteger(index)?[index as number,(index as number)+1]:null;
   const finish=(status:string,reason:string,document?:ContextMetadata)=>{const receipt={schema_version:1,status,reason,scenario_id:id,paragraph_range:span,budget:{...limits,used_calls:calls,used_paragraphs:paragraphs,used_characters:characters},...(document?{document}:{})};requireScenarioReceipts(this.material,[...this.saved,receipt]);this.saved.push(receipt);return structuredClone(receipt);};
   if(calls>=limits.call_limit)return finish('budget_exceeded','正文工具调用额度已用尽。');calls++;

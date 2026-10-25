@@ -209,7 +209,7 @@ export class SkillReviewService {
     const result=await generateReplyLoop(this.options.ctx,{owner_id:context.scope.owner_id,contact_id:context.scope.contact_id,
       request_id:sideRequest.idempotency_key,...model,physical_limit:model.physical_limit,deadline_ms:model.deadline_ms,
       prompt:replyPayloadText({request:sideRequest,context,preferences:preferences.preferences,discussion:null,aliases}),
-      system_prompt:replySystemPrompt(context,null)},
+      system_prompt:replySystemPrompt(context,null,aliases)},
     {provider:this.options.provider,budgetProfile:model.budgetProfile,
       acquire:async signal=>{const permit=await this.options.arbiter.acquire('foreground',signal);
         return {id:permit.id,settle:async()=>permit.settle()};},

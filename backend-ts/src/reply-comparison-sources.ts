@@ -1,6 +1,8 @@
 /** 仅核对显式采集证据的内部一致性；哈希及声明时间不能认证历史采集或远端真实性。 */
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {validateReplyCandidates} from './reply-contract.ts';
 type Row=Record<string,any>;
 export interface ReplyRuntimeSourceAudit {
@@ -49,20 +51,27 @@ function payloadOf(body:Row,excludedFields:string[]):Row {
 }
 const hashString=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const commitHash=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);
-export interface ReplyComparisonCollectorBinding {source_commit:string;argv_sha256:string}
+export interface ReplyComparisonCollectorBinding {source_commit:string;source_tree_sha256:string;workspace_clean:boolean;argv_sha256:string}
 export interface ReplyRuntimeSourceCaptureInput {
  member:Row;body:Row;request:{request_id:string;hash_kind:'wire_utf8_sha256'|'canonical_json_sha256';sha256:string;raw_utf8?:string};
  scope:Row;case_id:string;repeat:number;arm:'old'|'new';attempt_id:string;started_at:string;captured_at:string;response_started_at:string;
  persisted_sources:readonly Row[];collector_binding:ReplyComparisonCollectorBinding;
 }
-/** collector 只把真实 argv 摘要与当前固定源码提交绑定进 attempt；不写本机 argv 原值。 */
-export function replyComparisonCollectorBinding(repositoryRoot:string,argv:readonly string[]=process.argv.slice(2)):ReplyComparisonCollectorBinding {
+const SOURCE_PATHS=['backend-ts/src','backend-ts/profile','backend-ts/package.json','backend-ts/pnpm-lock.yaml'];
+/** collector 只把实际源码树、工作树状态、argv摘要与提交绑定进 attempt；不写本机路径原值。 */
+export function replyComparisonCollectorBinding(repositoryRoot:string,argv:readonly string[]=process.argv.slice(2),sourcePaths:readonly string[]=SOURCE_PATHS):ReplyComparisonCollectorBinding {
  if(typeof repositoryRoot!=='string'||!repositoryRoot||!Array.isArray(argv)||argv.some(value=>typeof value!=='string'))return invalid('collector_arguments');
- let sourceCommit:string;
- try{sourceCommit=execFileSync('git',['rev-parse','--verify','HEAD^{commit}'],{cwd:repositoryRoot,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();}
+ if(!Array.isArray(sourcePaths)||!sourcePaths.length||sourcePaths.some(value=>typeof value!=='string'||!value||value.startsWith('/')||value.split('/').includes('..')))invalid('collector_source_paths');
+ let sourceCommit:string,files:string[],status:string;
+ try{
+  sourceCommit=execFileSync('git',['rev-parse','--verify','HEAD^{commit}'],{cwd:repositoryRoot,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();
+  files=execFileSync('git',['ls-files','-z','--',...sourcePaths],{cwd:repositoryRoot,encoding:'utf8',stdio:['ignore','pipe','ignore']}).split('\0').filter(Boolean).sort();
+  status=execFileSync('git',['status','--porcelain','--untracked-files=no','--',...sourcePaths],{cwd:repositoryRoot,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();
+ }
  catch{return invalid('collector_source_commit');}
- if(!commitHash(sourceCommit))invalid('collector_source_commit');
- return {source_commit:sourceCommit,argv_sha256:digest([...argv])};
+ if(!commitHash(sourceCommit)||!files.length)invalid('collector_source_commit');
+ const sourceTree=files.map(path=>[path,createHash('sha256').update(readFileSync(join(repositoryRoot,path))).digest('hex')]);
+ return {source_commit:sourceCommit,source_tree_sha256:digest(sourceTree),workspace_clean:status.length===0,argv_sha256:digest([...argv])};
 }
 function captureProjection(member:Row,body:Row):{payload:Row;input:Row;context:Row;strategy:Row} {
  const payload=payloadOf(body,Object.keys(member).filter(key=>!INPUT.includes(key)));
@@ -80,7 +89,8 @@ function captureProjection(member:Row,body:Row):{payload:Row;input:Row;context:R
 export function captureReplyRuntimeSourceAttempt(input:ReplyRuntimeSourceCaptureInput):{catalog:Row;catalog_sha256:string;model_alias_mapping:Row[];attempt:Row} {
  if(!object(input)||!object(input.member)||!object(input.body)||!object(input.request)||!object(input.scope)||!Array.isArray(input.persisted_sources))return invalid('capture_shape');
  const actualScope=scope(input.scope),binding=input.collector_binding;
- if(!object(binding)||Object.keys(binding).sort().join(',')!=='argv_sha256,source_commit'||!commitHash(binding.source_commit)||!hashString(binding.argv_sha256))invalid('collector_source_binding');
+ if(!object(binding)||Object.keys(binding).sort().join(',')!=='argv_sha256,source_commit,source_tree_sha256,workspace_clean'
+   ||!commitHash(binding.source_commit)||!hashString(binding.source_tree_sha256)||typeof binding.workspace_clean!=='boolean'||!hashString(binding.argv_sha256))invalid('collector_source_binding');
  if(!uuid(input.request.request_id)||!uuid(input.attempt_id)||typeof input.case_id!=='string'||![1,2,3].includes(input.repeat)||!['old','new'].includes(input.arm))invalid('capture_identity');
  const request=input.request;
  if(!['wire_utf8_sha256','canonical_json_sha256'].includes(request.hash_kind)||!hashString(request.sha256))invalid('request_hash_kind');
@@ -124,7 +134,8 @@ export function captureReplyRuntimeSourceAttempt(input:ReplyRuntimeSourceCapture
   request:{body:structuredClone(input.body),hash_kind:request.hash_kind,sha256:request.sha256,...request.raw_utf8!==undefined?{raw_utf8:request.raw_utf8}:{}},
   response_started_at:input.response_started_at,catalog,catalog_sha256:catalogSha256,
   model_alias_mapping:modelAliasMapping,source_binding:{...structuredClone(binding),
-   attempt_binding_sha256:digest({source_commit:binding.source_commit,argv_sha256:binding.argv_sha256,request_sha256:request.sha256,catalog_sha256:catalogSha256})}};
+   attempt_binding_sha256:digest({source_commit:binding.source_commit,source_tree_sha256:binding.source_tree_sha256,workspace_clean:binding.workspace_clean,
+    argv_sha256:binding.argv_sha256,request_sha256:request.sha256,catalog_sha256:catalogSha256})}};
  return {catalog,catalog_sha256:catalogSha256,model_alias_mapping:modelAliasMapping,attempt};
 }
 const observations=(attempts:unknown[]):Row[]=>attempts.map(value=>{const attempt=object(value)?value:{},request=object(attempt.request)?attempt.request:{};return {attempt_id:uuid(attempt.attempt_id)?attempt.attempt_id:null,request_sha256:hashString(request.sha256)?request.sha256:null,request_hash_kind:request.hash_kind==='wire_utf8_sha256'||request.hash_kind==='canonical_json_sha256'?request.hash_kind:null,catalog_sha256:hashString(attempt.catalog_sha256)?attempt.catalog_sha256:null,response_started_at:typeof attempt.response_started_at==='string'?attempt.response_started_at:null};});
@@ -147,10 +158,12 @@ function auditAttempt(member:Row,row:Row,evidence:Row,attempt:Row,actualScope:Ro
  const catalogVersion=object(catalog)?catalog.schema_version:null;
  if(!object(catalog)||!['reply-runtime-source-catalog-v1','reply-runtime-source-catalog-v2'].includes(catalogVersion)||digest(catalog)!==attempt.catalog_sha256)invalid('catalog_hash');
  const aliased=catalogVersion==='reply-runtime-source-catalog-v2';
- if(aliased&&(!object(attempt.source_binding)||Object.keys(attempt.source_binding).sort().join(',')!=='argv_sha256,attempt_binding_sha256,source_commit'
+ if(aliased&&(!object(attempt.source_binding)||Object.keys(attempt.source_binding).sort().join(',')!=='argv_sha256,attempt_binding_sha256,source_commit,source_tree_sha256,workspace_clean'
    ||!commitHash(attempt.source_binding.source_commit)||attempt.source_binding.source_commit!==row.commit
+   ||!hashString(attempt.source_binding.source_tree_sha256)||typeof attempt.source_binding.workspace_clean!=='boolean'
    ||!hashString(attempt.source_binding.argv_sha256)||!hashString(attempt.source_binding.attempt_binding_sha256)
-   ||attempt.source_binding.attempt_binding_sha256!==digest({source_commit:attempt.source_binding.source_commit,argv_sha256:attempt.source_binding.argv_sha256,request_sha256:request.sha256,catalog_sha256:attempt.catalog_sha256})))invalid('collector_source_binding');
+   ||attempt.source_binding.attempt_binding_sha256!==digest({source_commit:attempt.source_binding.source_commit,source_tree_sha256:attempt.source_binding.source_tree_sha256,
+    workspace_clean:attempt.source_binding.workspace_clean,argv_sha256:attempt.source_binding.argv_sha256,request_sha256:request.sha256,catalog_sha256:attempt.catalog_sha256})))invalid('collector_source_binding');
  for(const key of ['case_id','repeat','arm','case_sha256','input_sha256'])if(catalog[key]!==row[key])invalid('catalog_'+key);
  if(catalog.case_sha256!==digest(member)||catalog.input_sha256!==digest(input)||catalog.request_id!==evidence.request_id||catalog.request_sha256!==request.sha256||catalog.request_hash_kind!==request.hash_kind)invalid('catalog_binding');
  equal(scope(catalog.scope),actualScope,'catalog_scope');

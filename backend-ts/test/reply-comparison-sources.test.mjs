@@ -64,9 +64,9 @@ function aliasedAuditRun(){
   const catalog=row.runtime_sources.attempts[0].catalog;
   catalog.schema_version='reply-runtime-source-catalog-v2';
   row.runtime_sources.attempts[0].model_alias_mapping=catalog.entries.map((entry,index)=>({model_evidence_id:`c${index+1}`,evidence_id:entry.evidence_id}));
-  const argvSha256='d'.repeat(64),catalogSha256=hash(catalog);
-  row.runtime_sources.attempts[0].source_binding={source_commit:row.commit,argv_sha256:argvSha256,
-   attempt_binding_sha256:hash({source_commit:row.commit,argv_sha256:argvSha256,request_sha256:row.runtime_sources.attempts[0].request.sha256,catalog_sha256:catalogSha256})};
+  const argvSha256='d'.repeat(64),sourceTreeSha256='e'.repeat(64),catalogSha256=hash(catalog);
+  row.runtime_sources.attempts[0].source_binding={source_commit:row.commit,source_tree_sha256:sourceTreeSha256,workspace_clean:true,argv_sha256:argvSha256,
+   attempt_binding_sha256:hash({source_commit:row.commit,source_tree_sha256:sourceTreeSha256,workspace_clean:true,argv_sha256:argvSha256,request_sha256:row.runtime_sources.attempts[0].request.sha256,catalog_sha256:catalogSha256})};
   seal(row);
  }
  return run;
@@ -98,7 +98,9 @@ test('生产采集器从实际请求与PG来源生成v2 catalog和独立mapping�
  const {run,row,captured,collectorBinding}=productionCapturedAuditRun();
  assert.equal(collectorBinding.source_commit,execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim());
  assert.equal(collectorBinding.argv_sha256,hash(['--synthetic-production-capture',`--case=${row.case_id}`]));
- assert.deepEqual({source_commit:captured.attempt.source_binding.source_commit,argv_sha256:captured.attempt.source_binding.argv_sha256},collectorBinding);
+ assert.match(collectorBinding.source_tree_sha256,/^[a-f0-9]{64}$/);assert.equal(typeof collectorBinding.workspace_clean,'boolean');
+ assert.deepEqual({source_commit:captured.attempt.source_binding.source_commit,source_tree_sha256:captured.attempt.source_binding.source_tree_sha256,
+  workspace_clean:captured.attempt.source_binding.workspace_clean,argv_sha256:captured.attempt.source_binding.argv_sha256},collectorBinding);
  assert.ok(captured.catalog.entries.every(entry=>/^[a-f0-9-]{36}$/.test(entry.evidence_id)&&!('model_evidence_id'in entry)));
  assert.deepEqual(captured.model_alias_mapping.map(entry=>[entry.model_evidence_id,entry.evidence_id]),captured.catalog.entries.map((entry,index)=>[`c${index+1}`,entry.evidence_id]));
  const member=JSON.parse(datasetText).cases.find(item=>item.case_id===row.case_id);

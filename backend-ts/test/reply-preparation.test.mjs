@@ -10,6 +10,8 @@ import {SkillFiles} from '../src/skill-files.ts';
 import {createReplySkillGuards} from '../src/reply-skill-guards.ts';
 import {normalizeReplyInput} from '../src/reply-contract.ts';
 import {requireReplyScope} from '../src/reply-scope.ts';
+import {createEvidenceAliases} from '../src/reply-evidence-alias.ts';
+import {replySystemPrompt} from '../src/reply-system-prompt.ts';
 async function setup(t,history=false,withDiscussion=false){
  const f=await createStorageFixture();t.after(()=>f.close());const owner=randomUUID(),contact=randomUUID(),binding=randomUUID();
  await f.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成人')",[owner]);await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[binding,owner,contact]);
@@ -50,12 +52,17 @@ test('实际scenario Tool绑定冻结目录、同事务资格并将回执写入�
  await x.f.client.query("INSERT INTO layered_memory_batch(id,owner_id,contact_id,settings_generation,work_key,status,input_manifest,input_payload,dependency_ids,created_at) VALUES($1,$2,NULL,1,'synthetic','succeeded',$3,'{}',$4,now())",[batch,x.owner,JSON.stringify(manifest),[x.owner,memory]]);
  await x.f.client.query("INSERT INTO scenario_document_version(id,owner_id,contact_id,scenario_id,batch_id,organization_generation,schema_version,title,hint,paragraphs,created_at) VALUES($1,$2,NULL,$3,$4,1,1,'饮食','合成提示',$5,now())",[version,x.owner,scenario,batch,JSON.stringify([{text:'偏好清淡',references:[{memory_id:memory,revision:1}]}])]);
  await x.f.client.query("INSERT INTO layered_memory_generation(owner_id,contact_id,organization_generation,schema_version,scenario_version_ids,dependency_ids) VALUES($1,NULL,1,2,$2,$3)",[x.owner,[version],[x.owner,memory]]);
- const p=await x.transaction(client=>x.service.prepare(client,{request:x.request,command:x.command,skillRevision:'0'}));await x.store.prepareContext(x.request,p.storeContext);
- const tools=x.service.scenarioTools(p);assert.equal(tools.length,1);assert.equal(tools[0].name,'read_scenario');
- const first=JSON.parse(await tools[0].execute({scenario_id:scenario,paragraph_index:0},{signal:new AbortController().signal}));assert.equal(first.status,'succeeded');assert.equal(first.document.paragraphs[0].text,'偏好清淡');
+ const p=await x.transaction(client=>x.service.prepare(client,{request:x.request,command:x.command,skillRevision:'0'}));
+ await x.store.prepareContext(x.request,p.storeContext);
+ const aliases=createEvidenceAliases(),system=replySystemPrompt(p.context,null,aliases),scenarioAlias=aliases.referenceFor(scenario);
+ assert.ok(![x.owner,x.contact,scenario,version,memory].some(id=>system.includes(id)));
+ const tools=x.service.scenarioTools(p,aliases);assert.equal(tools.length,1);assert.equal(tools[0].name,'read_scenario');
+ const execute=value=>tools[0].execute({scenario_id:value,paragraph_index:0},{signal:new AbortController().signal});
+ const first=JSON.parse(await execute(scenarioAlias));assert.equal(first.status,'succeeded');assert.equal(first.document.paragraphs[0].text,'偏好清淡');
+ assert.ok(![scenario,version,memory].some(id=>JSON.stringify(first).includes(id)));
  assert.equal(p.storeContext.snapshot.owner_layered_scenario_reads.length,1);assert.equal(p.storeContext.snapshot.tool_calls.at(-1).tool_name,'read_scenario');assert.ok(p.storeContext.snapshot.navigation_dependency_ids.includes(version));
  await x.transaction(client=>x.service.validateCurrent(client,p));
- await x.f.client.query("UPDATE layered_memory_state SET enabled=false WHERE owner_id=$1 AND contact_id IS NULL",[x.owner]);await assert.rejects(tools[0].execute({scenario_id:scenario,paragraph_index:0},{signal:new AbortController().signal}),/整理资料已变化/);
+ await x.f.client.query("UPDATE layered_memory_state SET enabled=false WHERE owner_id=$1 AND contact_id IS NULL",[x.owner]);await assert.rejects(execute(scenarioAlias),/整理资料已变化/);
 });
 test('实际history完成后追加证据与累计预算，重复结算拒绝',async t=>{
  const {ReplyHistory}=await import('../src/reply-history.ts');const x=await setup(t,true),source=randomUUID(),message=randomUUID();

@@ -77,7 +77,8 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
  const evidence=ordered.map(e=>projectReplyEvidence(e,continuation?.candidate_id===e.evidence_id?continuation.basis_changes:[],aliases));
  const fidelity_contract=replyFidelityContract(payload);
  if(preferences.length){
-  payload.expression_preferences=preferences.map(e=>({preference_id:e.preference_id,revision:e.revision,text:e.text,scope:{contact_id:e.scope.contact_id,reply_mode:e.scope.reply_mode},factual_role:'expression_preference',priority:'below_current_intent'}));
+  payload.expression_preferences=preferences.map(e=>({preference_id:aliases?.referenceFor(e.preference_id)??'r1',revision:e.revision,text:e.text,
+   scope:{contact_id:e.scope.contact_id?aliases?.referenceFor(e.scope.contact_id)??'r1':null,reply_mode:e.scope.reply_mode},factual_role:'expression_preference',priority:'below_current_intent'}));
   fidelity_contract.priority.splice(2,0,'long_term_expression_preference');
  }
  if(discussion&&(discussion.scope.owner_id!==context.scope.owner_id||discussion.scope.contact_id!==context.scope.contact_id||discussion.request_key!==request.idempotency_key))return unavailable();

@@ -4,6 +4,7 @@ export interface EvidenceAliases {
   aliasFor(evidenceId:string):string;
   resolve(alias:string):string|undefined;
   referenceFor(realId:string):string;
+  resolveReference(alias:string):string|undefined;
   sessionFor(realId:string):string;
   resolveSession(alias:string):string|undefined;
   skillFor(versionId:string):string;
@@ -48,6 +49,8 @@ class RequestEvidenceAliases implements EvidenceAliases {
    this.realByReferenceAlias.set(alias,realId);
    return alias;
   }
+
+  resolveReference(alias:string){return this.realByReferenceAlias.get(alias);}
 
   sessionFor(realId:string):string {
    if(this.realBySessionAlias.has(realId))return realId;

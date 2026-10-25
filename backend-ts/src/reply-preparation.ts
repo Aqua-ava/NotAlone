@@ -15,6 +15,7 @@ import type {PostgresReplyDiscussionContext,ReplyDiscussionContext} from './repl
 import {selectApplicablePreferences,validatePreferenceSnapshot} from './preference-service.ts';
 import {ReplyScenarioAccess,replyScenarioReadPolicy} from './reply-context-scenario.ts';
 import type {ReplyHistory} from './reply-history.ts';
+import {aliasReplyEvidenceReferences,createEvidenceAliases,type EvidenceAliases} from './reply-evidence-alias.ts';
 export interface PreparationController {
  assistant:Pick<ReplyAssistantGuards,'readContinuationBasis'>;
  discussion:Pick<PostgresReplyDiscussionContext,'read'|'validateCurrent'|'readPreparation'|'validatePreparation'|'preparationDependencies'>;
@@ -89,15 +90,17 @@ export class ReplyPreparation {
   if(!isLegacyEmptyPreferences(prepared.preferences))await validatePreferenceSnapshot(client,prepared.request.owner_id,prepared.request.contact_id,prepared.command.content.type,prepared.preferences);
   const revision=String((await client.query('SELECT revision FROM public.skill_library WHERE owner_id=$1',[prepared.request.owner_id])).rows[0]?.revision??0);if(revision!==prepared.skillRevision)throw new ReplyContextError('Skill目录修订已变化。');
  }
- scenarioTools(prepared:PreparedReply):ToolDefinition[]{
+ scenarioTools(prepared:PreparedReply,aliases?:EvidenceAliases):ToolDefinition[]{
+  const effectiveAliases=aliases??createEvidenceAliases();
   let accesses=this.accesses.get(prepared);
-  if(!accesses){accesses={};for(const {side,material} of replyScenarioReadPolicy(prepared.context).reads)accesses[side]=new ReplyScenarioAccess(material);this.accesses.set(prepared,accesses);}
+  if(!accesses){accesses={};for(const {side,material} of replyScenarioReadPolicy(prepared.context).reads)accesses[side]=new ReplyScenarioAccess(material,aliases);this.accesses.set(prepared,accesses);}
   const sides=Object.entries(accesses) as ['contact'|'owner',ReplyScenarioAccess][];if(!sides.length)return [];
   return [createReplyScenarioReadTool(async(args,execution)=>{
    execution.signal.throwIfAborted();
-   const selected=sides.find(([side])=>{const material=side==='contact'?prepared.context.layered_context:prepared.context.owner_layered_context;return JSON.parse(material!.payload_json).directory.some((entry:ContextMetadata)=>entry.scenario_id===args.scenario_id);})??sides[0];
+   const scenarioId=typeof args.scenario_id==='string'&&aliases?aliases.resolveReference(args.scenario_id):args.scenario_id;
+   const selected=sides.find(([side])=>{const material=side==='contact'?prepared.context.layered_context:prepared.context.owner_layered_context;return JSON.parse(material!.payload_json).directory.some((entry:ContextMetadata)=>entry.scenario_id===scenarioId);})??sides[0];
    const receipt=await this.options.transaction(async client=>{await this.validateCurrent(client,prepared);execution.signal.throwIfAborted();const value=await selected[1].read(client,args);execution.signal.throwIfAborted();return value;});
-   this.updateScenarioReceipts(prepared);return JSON.stringify(receipt);
+   this.updateScenarioReceipts(prepared);return JSON.stringify(aliasReplyEvidenceReferences(receipt,effectiveAliases));
   })];
  }
  updateScenarioReceipts(prepared:PreparedReply):ReplyStoreContext{
