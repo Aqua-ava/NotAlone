@@ -7,6 +7,7 @@ from uuid import UUID
 
 from psycopg.rows import dict_row
 
+from notalone.application.assistant_generation_lifecycle import INTERRUPTION_REASONS
 from notalone.application.assistant_session_service import (
     AssistantSessionNotFound, AssistantSessionPersistenceError, AssistantSessionRejected,
 )
@@ -28,7 +29,7 @@ def invalidate_running_generation(
     调用方负责把此操作和新输入领取放在同一事务中。
     """
 
-    if (invalidation_reason not in ("generation_replaced", "app_quit", "configuration_reload")
+    if (invalidation_reason != "generation_replaced" and invalidation_reason not in INTERRUPTION_REASONS
             or not isinstance(scope, ContactScope)
             or any(not isinstance(value, UUID) for value in (
                 session_id, turn_id, expected_input_version_id,
@@ -48,7 +49,7 @@ def invalidate_running_generation(
         if turn["input_version_id"] != expected_input_version_id:
             raise AssistantSessionRejected("input_version_stale")
         interruption_binding_id = None
-        if invalidation_reason in ("app_quit", "configuration_reload"):
+        if invalidation_reason in INTERRUPTION_REASONS:
             from notalone.persistence.assistant_generation_lifecycle import require_interruption_input
             interruption_binding_id = require_interruption_input(
                 connection, scope, session_id, turn_id, turn["idempotency_key"], expected_input_version_id,
@@ -59,7 +60,7 @@ def invalidate_running_generation(
             (scope.owner_id, scope.contact_id, turn["idempotency_key"]),
         ).fetchone()
         if request is not None:
-            if invalidation_reason in ("app_quit", "configuration_reload") and request["conversation_binding_id"] != interruption_binding_id:
+            if invalidation_reason in INTERRUPTION_REASONS and request["conversation_binding_id"] != interruption_binding_id:
                 raise AssistantSessionRejected("binding_changed")
             try:
                 require_reply_sources_current(cursor, owner_id=scope.owner_id, request_id=request["id"])

@@ -8,6 +8,7 @@ from uuid import UUID
 
 from notalone.application.assistant_continuation import AssistantContinuationReservation
 from notalone.application.assistant_continuation_identity import AssistantContinuationReplyRequest
+from notalone.application.assistant_generation_lifecycle import INTERRUPTION_REASONS
 from notalone.application.assistant_interrupted_recovery import RecoverInterruptedAssistantGeneration
 from notalone.application.assistant_session_service import (
     AssistantSessionConflict, AssistantSessionNotFound, AssistantSessionRejected,
@@ -33,7 +34,7 @@ def reserve_interrupted_generation_in_transaction(
     ).fetchone()
     if original is None:
         raise AssistantSessionNotFound("原中断输入不存在。")
-    if original["state"] != "failed" or original["interruption_reason"] not in ("app_quit", "configuration_reload"):
+    if original["state"] != "failed" or original["interruption_reason"] not in INTERRUPTION_REASONS:
         raise AssistantSessionRejected("generation_not_interrupted")
     if command.request_key == original["idempotency_key"]:
         raise AssistantSessionRejected("generation_interrupted")

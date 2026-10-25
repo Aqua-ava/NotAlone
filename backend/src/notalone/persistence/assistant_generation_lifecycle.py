@@ -8,7 +8,7 @@ from uuid import UUID
 
 from psycopg.rows import dict_row
 
-from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
+from notalone.application.assistant_generation_lifecycle import INTERRUPTION_REASONS, AssistantGenerationReceipt
 from notalone.application.assistant_session_service import (
     AssistantSessionNotFound, AssistantSessionPersistenceError, AssistantSessionRejected, AssistantTurn,
 )
@@ -72,7 +72,7 @@ def interrupt_generation_in_transaction(
     此模块既不创建候选，也不复制一套完成或 C attempt 写入逻辑。
     """
 
-    if (reason not in ("app_quit", "configuration_reload") or not isinstance(scope, ContactScope)
+    if (reason not in INTERRUPTION_REASONS or not isinstance(scope, ContactScope)
             or any(not isinstance(value, UUID) for value in (session_id, request_key, input_version_id))):
         raise AssistantSessionRejected("invalid_generation_interruption")
     lock_owner_scope(connection, owner_id=scope.owner_id)
@@ -112,7 +112,7 @@ def interrupt_generation_in_transaction(
                     or completed.reply.reply_request_id != request["id"]):
                 raise AssistantSessionPersistenceError("已保存回复未可靠恢复到原助手讨论。")
             return AssistantGenerationReceipt(session_id, turn["id"], request_key, input_version_id, "completed")
-        if turn["interruption_reason"] in ("app_quit", "configuration_reload"):
+        if turn["interruption_reason"] in INTERRUPTION_REASONS:
             invalidated = cursor.execute(
                 "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id = %s "
                 "AND contact_id = %s AND idempotency_key = %s",
@@ -142,7 +142,8 @@ def interrupt_generation_in_transaction(
                 "WHERE attempt.reply_request_id = %s AND attempt.number = %s "
                 "AND attempt.state IN ('failed', 'expired') "
                 "AND attempt.failure_reason IS DISTINCT FROM 'app_quit' "
-                "AND attempt.failure_reason IS DISTINCT FROM 'configuration_reload' AND NOT EXISTS ("
+                "AND attempt.failure_reason IS DISTINCT FROM 'configuration_reload' "
+                "AND attempt.failure_reason IS DISTINCT FROM 'user_cancelled' AND NOT EXISTS ("
                 "SELECT 1 FROM public.reply_attempt AS running "
                 "WHERE running.reply_request_id = attempt.reply_request_id AND running.state = 'running')",
                 (request["id"], request["attempt"]),

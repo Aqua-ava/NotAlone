@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from notalone.application.assistant_generation_lifecycle import (
-    AssistantGenerationLifecyclePort, AssistantGenerationReceipt,
+    INTERRUPTION_REASONS, AssistantGenerationLifecyclePort, AssistantGenerationReceipt,
 )
 from notalone.application.assistant_session_service import (
     AssistantSessionConflict, AssistantSessionError, AssistantSessionNotFound,
@@ -44,7 +44,7 @@ def parse_interruption_request(body: bytes, *, allow_reason: bool = True) -> tup
     if not allow_reason and "reason" in payload:
         raise ReplyRequestInvalid()
     reason = payload.get("reason", "app_quit")
-    if reason not in ("app_quit", "configuration_reload"):
+    if reason not in INTERRUPTION_REASONS:
         raise ReplyRequestInvalid()
     return _uuid(payload["request_key"]), _uuid(payload["input_version_id"]), reason
 

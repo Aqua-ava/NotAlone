@@ -121,6 +121,57 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         self.assertEqual(self.model.seen_calls, [])
         self.assertEqual(reopened.request("/api/ledger/summary")[1]["total_calls"], 0)
 
+    def test_user_cancelled_is_an_explicit_terminal_without_candidates(self) -> None:
+        path = self._session_path()
+        prepared = self._prepare(path, self._body("合成用户主动停止草稿"))
+        interruption = {**self._interruption_body(prepared), "reason": "user_cancelled"}
+
+        status, stopped = self.backend.request(path + "/interrupt", interruption)
+
+        self.assertEqual(status, 200, stopped)
+        self.assertEqual(stopped, {**prepared, "state": "failed",
+                                   "interruption_reason": "user_cancelled"})
+        saved = self._backend().request(path)[1]
+        self.assertEqual(saved["turns"][0]["interruption_reason"], "user_cancelled")
+        self.assertEqual(saved["turns"][0]["input"]["content"]["draft_text"],
+                         "合成用户主动停止草稿")
+        self.assertIsNone(saved["turns"][0]["reply"])
+        self.assertEqual(self.backend.request(path + "/interrupt", interruption),
+                         (200, stopped))
+        self.assertEqual(self.model.seen_calls, [])
+
+    def test_user_cancelled_blocks_an_actual_running_result_before_save(self) -> None:
+        self.model = LatePreparedModel()
+        self.backend = self._backend()
+        path = self._session_path()
+        body = self._body("合成运行中主动停止草稿")
+        prepared = self._prepare(path, body)
+        interruption = {**self._interruption_body(prepared), "reason": "user_cancelled"}
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            running = pool.submit(self.backend.request, path + "/replies", body, timeout=20)
+            try:
+                self.assertTrue(self.model.response_entered.wait(5), "原生成必须真实进入可控模型。")
+                status, stopped = self.backend.request(path + "/interrupt", interruption)
+                self.assertEqual(status, 200, stopped)
+                self.assertEqual(stopped, {**prepared, "state": "failed",
+                                           "interruption_reason": "user_cancelled"})
+            finally:
+                self.model.release_first_response.set()
+            late_status, late = running.result(timeout=10)
+        self.assertNotEqual(late_status, 200, late)
+        saved = self._backend().request(path)[1]
+        self.assertEqual(saved["turns"][0]["interruption_reason"], "user_cancelled")
+        self.assertIsNone(saved["turns"][0]["reply"])
+        with psycopg.connect(DATABASE_URL) as connection:
+            self.assertEqual(connection.execute(
+                "SELECT request.state, attempt.state, attempt.failure_reason, "
+                "(SELECT count(*) FROM public.reply_candidate WHERE reply_request_id=request.id) "
+                "FROM public.reply_request AS request JOIN public.reply_attempt AS attempt "
+                "ON attempt.reply_request_id=request.id AND attempt.number=request.attempt "
+                "WHERE request.owner_id=%s AND request.contact_id=%s AND request.idempotency_key=%s",
+                (self.owner_id, self.contact_id, UUID(prepared["request_key"])),
+            ).fetchone(), ("failed", "failed", "user_cancelled", 0))
+
     def test_reliable_failed_generation_is_terminal_without_app_quit_reclassification(self) -> None:
         path = self._session_path()
         body = self._body()
@@ -446,6 +497,7 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         interruption_body = self._interruption_body(prepared)
         before = self.backend.request(path)
         for body in ({}, {**interruption_body, "draft_text": "合成禁止退出正文"},
+                     {**interruption_body, "reason": "synthetic_unknown"},
                      {**interruption_body, "request_key": "invalid"},
                      {**interruption_body, "input_version_id": None}):
             with self.subTest(body=sorted(body)):

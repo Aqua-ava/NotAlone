@@ -9,6 +9,9 @@ from uuid import UUID
 from notalone.application.reply_service import ReplyServiceRequest
 
 
+INTERRUPTION_REASONS = frozenset(("app_quit", "configuration_reload", "user_cancelled"))
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class AssistantGenerationReceipt:
     session_id: UUID
