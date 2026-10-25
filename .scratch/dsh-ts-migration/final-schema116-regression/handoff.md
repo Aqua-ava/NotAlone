@@ -1,0 +1,26 @@
+# schema 116 最终回归交接
+
+- 基点：`e60074b5946b8d1c990fcb75ba13bd58f789b2fb`。
+- 已冻结 5 个授权测试文件；精确变更见 `tests.patch`（31 行新增、29 行删除）。
+- 当前夹具尾版固定为 116；旧库基线保持 108、109、110、113。
+- 缺尾版 116 返回 `migration_pending`；已有 116 时缺 115 返回 `migration_history_mismatch`。
+- 下一未知版本统一为 `117_unknown.sql`；未知文件、未知账本继续拒绝。
+- checksum、字段缺失、receipt/claim 关键约束、隔离及删除级联检查保留并实际通过。
+- TS 合同依据：`backend-ts/src/host-storage.ts:11,199,230-235`；连续 116 文件、逐条顺序/SHA 和必要 schema。
+- 真实 SQL：`backend/database/migrations/116_complete_claim_verification_policy.sql:3`，只扩展新任务显式 v2，旧 NULL/v1 保留。
+- 数据保留：3 条升级测试逐表比对升级前后内容；109 保留业务 UUID/未知 token，110 保留 unknown 收据与空费用。
+- 113 接管测试核对同库 ID/正文，兼容回退保留新增与编辑、删除和撤销决定；不兼容时停写且无握手。
+- 已逐条复现 5 个原红例，再逐条修复为绿；每次 raw/public SHA 见对应 JSON。
+- 接管包装错误的 `database_unconfigured` 探针单独保留为 `cutover-environment-probe`，不作目标红例。
+- 相关模块：5 个授权文件加既有 `extraction-policy-version-migration.test.mjs`，50/50、0 失败/跳过，约 48.2 秒。
+- 后者实际验证 116 的旧 NULL/v1 与合法 v2，以及 SQL/TS 拒绝 9 种非法配置。
+- 复验命令（仓库根）：`/usr/bin/python3 .scratch/dsh-ts-migration/final-schema116-regression/run-tests.py related`。
+- 最小命令：同脚本 `green auto-read|receipt|learning-claim|cutover|host-http`；5 条红例命令见对应 `*-red.json`。
+- Node 固定 `v24.19.0`；Python 使用 NotAlone Conda；包装不继承凭据或业务变量，只用合成夹具临时配置。
+- `git diff --check` 通过；116 份生产迁移及 3 个人类桌面测试共 119 份 SHA 未变化。
+- 清理：本轮无新增合成库/目录残留；目录 120→120，合成库 8→4 的并发减少未归因本任务，未操作既存资源。
+- 原始失败日志 SHA 未变化；私有原始日志目录 0700、文件 0600，公开副本已脱敏，见 `cleanup.json` 与 `manifest.json`。
+- 无直接 DSH API 改动；仍走既有官方 profile/宿主，未改运行时、预算或质量门禁。
+- 本任务未读项目真实 `.env`、真实业务库或资料，未调用外部模型，未启动 App/微信、打包、全量、委派。
+- 真库 116 按任务输入仍未应用；本任务未核验或执行真实迁移。
+- 未操作 index/commit、push/PR；由主协调核对冻结 SHA、集成并创建本地提交，后续全量/真实桌面仍由其负责。

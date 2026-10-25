@@ -1,0 +1,12 @@
+{
+  "label": "host-http-green",
+  "command": "<PRIVATE_HOME>/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node --test --test-concurrency=1 --test-name-pattern=未知数据库版本 test/host-http.test.mjs",
+  "working_directory": "backend-ts",
+  "node_version": "v24.19.0",
+  "exit_code": 0,
+  "elapsed_seconds": 0.914,
+  "raw_sha256": "e11f425914be449e7fb35c01930d58e146e40f668802908d5e24a9f644b52d55",
+  "public_sha256": "e11f425914be449e7fb35c01930d58e146e40f668802908d5e24a9f644b52d55",
+  "public_log": "host-http-green.public.log",
+  "environment": "只继承系统基础变量，不继承凭据或业务环境变量；仅使用夹具自建临时配置，Python迁移显式禁用dotenv"
+}

@@ -1,0 +1,19 @@
+▶ 110升级116保留原数据与unknown收据，学习claim完整约束和级联
+  ✔ 缺失学习slot约束 model_call_learning_claim_attempt_id_owner_id_contact_id_r_fkey (23.996292ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_lease_generation_check (21.336416ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_pkey (21.394625ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_step_id_lease_generation_key (21.152667ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_step_id_task_id_fkey (26.361583ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_step_name_check (24.488334ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_task_id_owner_id_contact_id_fkey (22.848083ms)
+  ✔ 缺失原表候选键 model_call_receipt_claim_scope_key (20.221917ms)
+  ✔ 缺失原表候选键 background_task_step_claim_task_key (12.675667ms)
+✔ 110升级116保留原数据与unknown收据，学习claim完整约束和级联 (1070.019ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1129.27625
