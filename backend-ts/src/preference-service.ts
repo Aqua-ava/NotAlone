@@ -181,6 +181,12 @@ export async function eraseSourcePreferences(client:pg.Client,owner:string,remov
  const ids=(await client.query("SELECT id FROM public.expression_preference WHERE owner_id=$1 AND status='active' AND source_ids&&$2::uuid[]",[owner,removedIds])).rows.map(r=>r.id);
  await erasePreferences(client,owner,ids,ports);
 }
+/** 联系人物理删除前擦除本范围偏好，并将无正文墓碑转为 owner 级防重身份。 */
+export async function eraseContactPreferences(client:pg.Client,owner:string,contact:string,ports?:Partial<ErasurePorts>):Promise<void>{
+ const ids=(await client.query("SELECT id FROM public.expression_preference WHERE owner_id=$1 AND contact_id=$2 AND status='active' FOR UPDATE",[owner,contact])).rows.map(r=>r.id);
+ await erasePreferences(client,owner,ids,ports);
+ await client.query('UPDATE public.expression_preference SET contact_id=NULL,updated_at=now() WHERE owner_id=$1 AND contact_id=$2',[owner,contact]);
+}
 async function erasePreferences(client:pg.Client,owner:string,ids:string[],ports?:Partial<ErasurePorts>):Promise<void>{
  if(!ids.length)return;
  await eraseSkillLearning(client,owner,ids,ports);await deleteSourceReplies(client,owner,ids,null,false,ports);

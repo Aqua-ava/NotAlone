@@ -194,7 +194,7 @@ export class HostStorage {
     let migrations: {name: string; checksum: string}[];
     try {
       const names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
-      if (names.length !== 112 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
+      if (names.length !== 113 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
       migrations = await Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') })));
     } catch { return 'migration_files_invalid'; }
     const metadata = await client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
@@ -226,8 +226,8 @@ export class HostStorage {
       offset = 35;
     }
     const completed = (await client.query('SELECT name,checksum FROM public.notalone_schema_migration ORDER BY name')).rows;
-    if (completed.length + offset > 112 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
-    if (completed.length + offset !== 112) return 'migration_pending';
+    if (completed.length + offset > 113 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
+    if (completed.length + offset !== 113) return 'migration_pending';
     if (REQUIRED_TABLES.some(table => !tables.has(table)) || Object.entries(REQUIRED_COLUMNS).some(([table,columns]) => Object.entries(columns).some(([column,kind]) => tables.get(table)?.get(column) !== kind))) return 'schema_incomplete';
     if (!(await receiptSchemaReady(client)) || !(await learningClaimSchemaReady(client))) return 'schema_incomplete';
     return 'ready';
@@ -303,6 +303,7 @@ const REQUIRED_TABLES = [
   "contact_memory_index",
   "contact_memory_state",
   "conversation_binding",
+  "cross_domain_deletion_operation",
   "front_sync_state",
   "import_confirmation",
   "local_wechat_observation",

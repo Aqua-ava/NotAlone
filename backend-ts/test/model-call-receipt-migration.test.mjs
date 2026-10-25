@@ -8,7 +8,7 @@ import {execFileSync} from 'node:child_process';
 import pg from 'pg';
 import {HostStorage} from '../src/host-storage.ts';
 
-test('109升级当前112保留业务UUID及未知用量，receipt隔离和关键约束损坏关闭门禁',async t=>{
+test('109升级当前113保留业务UUID及未知用量，receipt隔离和关键约束损坏关闭门禁',async t=>{
   const root=new URL('../../',import.meta.url).pathname;
   const directory=await mkdtemp(join(tmpdir(),'notalone-receipt-upgrade-'));
   const {mkdir}=await import('node:fs/promises');
@@ -18,7 +18,7 @@ test('109升级当前112保留业务UUID及未知用量，receipt隔离和关键
     if(!/^\d{3}_.*\.sql$/.test(file))continue;
     const version=Number(file.slice(0,3));
     if(version<=109)await copyFile(join(root,'backend/database/migrations',file),join(baseline,file));
-    if(version<=112)await copyFile(join(root,'backend/database/migrations',file),join(current,file));
+    if(version<=113)await copyFile(join(root,'backend/database/migrations',file),join(current,file));
   }
   const name=`notalone_receipt_upgrade_${randomUUID().replaceAll('-','')}_test`;
   const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();
@@ -60,8 +60,9 @@ test('109升级当前112保留业务UUID及未知用量，receipt隔离和关键
   assert.equal(originalLedger.input_tokens,null);assert.equal(originalLedger.output_tokens,null);
   assert.equal((await client.query('SELECT id FROM assistant_session WHERE id=$1',[session])).rows[0].id,session);
   const ledger=(await client.query('SELECT name,checksum FROM notalone_schema_migration ORDER BY name')).rows;
-  assert.equal(ledger.length,112);
-  for(const [entry,code] of [[ledger[109],'migration_history_mismatch'],[ledger[110],'migration_history_mismatch'],[ledger[111],'migration_pending']]){
+  assert.equal(ledger.length,113);
+  for(const [entry,code] of [[ledger[109],'migration_history_mismatch'],[ledger[110],'migration_history_mismatch'],
+    [ledger[111],'migration_history_mismatch'],[ledger[112],'migration_pending']]){
     await client.query('DELETE FROM notalone_schema_migration WHERE name=$1',[entry.name]);
     assert.deepEqual(await storage.compatibility(),{code});
     await assert.rejects(storage.businessReadTransaction(async()=>{}),{code});
@@ -70,11 +71,11 @@ test('109升级当前112保留业务UUID及未知用量，receipt隔离和关键
   await client.query("UPDATE notalone_schema_migration SET checksum='wrong' WHERE name=$1",[ledger[109].name]);
   assert.deepEqual(await storage.compatibility(),{code:'migration_history_mismatch'});
   await client.query('UPDATE notalone_schema_migration SET checksum=$2 WHERE name=$1',[ledger[109].name,ledger[109].checksum]);
-  await writeFile(join(current,'113_unknown.sql'),'SELECT 1;\n');
-  assert.deepEqual(await storage.compatibility(),{code:'migration_files_invalid'});await rm(join(current,'113_unknown.sql'));
-  await client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('113_unknown.sql',$1)",['a'.repeat(64)]);
+  await writeFile(join(current,'114_unknown.sql'),'SELECT 1;\n');
+  assert.deepEqual(await storage.compatibility(),{code:'migration_files_invalid'});await rm(join(current,'114_unknown.sql'));
+  await client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('114_unknown.sql',$1)",['a'.repeat(64)]);
   assert.deepEqual(await storage.compatibility(),{code:'migration_history_mismatch'});
-  await client.query("DELETE FROM notalone_schema_migration WHERE name='113_unknown.sql'");
+  await client.query("DELETE FROM notalone_schema_migration WHERE name='114_unknown.sql'");
   await client.query('ALTER TABLE model_call_receipt RENAME COLUMN scope_kind TO missing_scope');
   assert.deepEqual(await storage.compatibility(),{code:'schema_incomplete'});
   await client.query('ALTER TABLE model_call_receipt RENAME COLUMN missing_scope TO scope_kind');

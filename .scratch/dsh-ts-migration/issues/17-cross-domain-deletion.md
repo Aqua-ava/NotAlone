@@ -1,7 +1,7 @@
 # 17：接管资料整体删除与管理入口
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 08, 12, 14, 15, 16
 Spec: ../spec.md
@@ -46,4 +46,26 @@ Spec: ../spec.md
 
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+2026-10-25：完成隔离业务候选。新增迁移 113，持久记录来源、联系人、账户和讨论删除的范围、
+幂等键、阶段、失败原因与租约；来源离开 `active` 后，数据库触发器拒绝迟到的消息来源引用。
+`CrossDomainDeletionService` 经公开 HTTP 适配器提供四类删除、结果重读、失败显式重试和重启恢复，
+清理消息引用、无引用消息、记忆及 L2／L3 依赖、trace、处理副本、回复／讨论、偏好、学习与 Skill
+文件、媒体、受管备份和任务；联系人闭包包含候选版本、选择记录、联系人身份及跨范围依赖。
+文件或媒体清理失败保留 failed 状态和原 operation 供显式重试，成功操作清除业务身份。
+
+DSH 锁定 `0.2.1-rc.2`（`687f282e8625c6b8d11ff58211a90524be2e4317`）；官方 `dispose()`、
+Cordis disposer 与 `cancel()` 只管理框架生命周期，不拥有业务删除，故由普通 TS 模块、PostgreSQL
+事务和租约负责。来源依据、链接与适配边界见
+[`task17-implementation/dsh-evidence.md`](../task17-implementation/dsh-evidence.md)。
+
+验证使用合成身份、真实 `_test` PostgreSQL 和 HTTP：TypeScript `tsc --noEmit` 通过；跨域删除
+14/14；宿主与迁移门禁 24/24；迁移回归 49/49；讨论、Skill、记忆、任务及固定 DSH profile
+31/31；桌面讨论删除守卫与任务轮询 13/13。另验证候选版本／联系人身份跨范围失效、全部重试队列
+恢复、租约代际隔离、迟到引用拒绝、媒体与文件失败可见、同 operation 恢复及租约接管。仅处理合成数据；未读取
+或删除真实资料，未启动实际 App／微信，未调用模型或发送外部消息，未 push、打包或创建 PR。
+
+本 Answer 不等同整票签收：`backend-ts/src/host-plugin.ts` 含 Ticket 22 并行改动，本票未覆盖；
+认证后的宿主路由、服务装配、启动恢复和 ownership 接线按
+[`task17-implementation/integration-request.md`](../task17-implementation/integration-request.md)
+留给根集成。联系人／账户管理入口、逐观察列表、真实宿主组合及实际 App 删除验收仍未执行，
+因此六项验收保持未勾选，`State: claimed`。
