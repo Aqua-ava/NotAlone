@@ -48,9 +48,20 @@ if len(sys.argv) > 2 and sys.argv[1] == 'tail' and '--follow' not in sys.argv:
     with contextlib.redirect_stdout(output):
         run()
     events = [json.loads(line) for line in output.getvalue().splitlines() if line.strip()]
+    history = '--history' in sys.argv
+    if history:
+        events = [{
+            'type': 'message',
+            'cursor': 'local_id:1',
+            'message': {
+                'id': {'local_id': 1, 'talker': sys.argv[2]},
+                'kind': 'image',
+                'create_time': 1700000001,
+            },
+        }]
     print(json.dumps({'ok': True, 'data': {'events': events,
         'freshness': {'message_source': 'live_message_db'},
-        'query': {'chat': sys.argv[2], 'has_more': False}}}))
+        'query': {'chat': sys.argv[2], 'has_more': False, 'history': history}}}))
 else:
     run()
 `;

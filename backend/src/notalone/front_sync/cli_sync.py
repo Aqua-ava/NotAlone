@@ -519,6 +519,10 @@ class CliBackgroundSync:
                 batch_message_count=0,
             )
 
+        # 流可能在两轮之间自然退出。先撤销已关闭流并进入本轮有限轮询，
+        # 不能拖到本轮结算后才降级，否则手动检查会漏掉这一轮尾部读取。
+        if self._stream is not None and self._stream.closed:
+            self._stream_failed("cli_follow_failed")
         if self._stream_retry_at is not None and self._clock() >= self._stream_retry_at:
             self._stream_supported = True
             self._stream_retry_at = None
@@ -610,13 +614,25 @@ class CliBackgroundSync:
 
         self._ensure_history_tasks(bindings)
 
+        started_stream = False
         if self._stream is None and self._stream_supported:
             self._start_global_stream()
+            started_stream = self._stream is not None
         if self._stream is not None:
             self._consume_global_events(
                 by_locator,
                 priority_locator=priority_locator,
+                first_timeout=0.25 if started_stream else 0.01,
             )
+            if self._stream is not None and self._stream.closed:
+                self._stream_failed("cli_follow_failed")
+            if self._stream is None:
+                # 全局流可能在读取时才发现已退出。当前 cycle 立即补一轮
+                # 有界轮询，避免手动检查或后台心跳空转等待下一次调度。
+                self._enqueue_round_robin(
+                    bindings,
+                    priority_contact_id=priority_contact_id,
+                )
             self._enqueue_initial_or_safety_sweep(
                 bindings,
                 priority_contact_id=priority_contact_id,
@@ -1218,6 +1234,7 @@ class CliBackgroundSync:
         by_locator: dict[str, object],
         *,
         priority_locator: str | None,
+        first_timeout: float,
     ) -> None:
         stream = self._stream
         if stream is None:
@@ -1227,8 +1244,8 @@ class CliBackgroundSync:
         # 被误当成刚到达的实时事件。流已有水位后才把事件标为 live。
         live_events = self._global_cursor is not None
         try:
-            for _ in range(_MAX_EVENTS_PER_CYCLE):
-                event = stream.read(timeout=0.01)
+            for index in range(_MAX_EVENTS_PER_CYCLE):
+                event = stream.read(timeout=first_timeout if index == 0 else 0.01)
                 if event is None:
                     break
                 self._global_cursor = event.cursor

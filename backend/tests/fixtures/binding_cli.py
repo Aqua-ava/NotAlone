@@ -26,6 +26,20 @@ elif command == "sessions":
                 raise SystemExit(1)
             time.sleep(0.02)
     print(json.dumps({"ok": True, "data": {"sessions": state["sessions"]}}))
+elif command == "resolve-chat":
+    state = json.loads((directory / "cli-state.json").read_text())
+    query = arguments[1]
+    type_filter = arguments[arguments.index("--type-filter") + 1] if "--type-filter" in arguments else None
+    candidates = []
+    for session in state["sessions"]:
+        if type_filter not in (None, "all") and session["chat_type"] != type_filter:
+            continue
+        if query not in (session["username"], session["display_name"]):
+            continue
+        candidate = dict(session)
+        candidate["match"] = "username_exact" if query == session["username"] else "display_name_exact"
+        candidates.append(candidate)
+    print(json.dumps({"ok": True, "data": {"query": query, "candidates": candidates}}, ensure_ascii=False))
 elif command == "tail" and "--follow" in arguments:
     # 合成边界明确不支持全局流，实际引擎走原有有界轮询。
     raise SystemExit(1)

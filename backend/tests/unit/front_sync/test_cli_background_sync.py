@@ -1686,6 +1686,35 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.assertEqual(result.status.stream_mode, "bounded_polling")
         self.assertEqual(result.status.failure_code, "cli_follow_unsupported")
 
+    def test_global_stream_process_exit_falls_back_before_cycle_finishes(self) -> None:
+        class ImmediateExitProcess:
+            def readline(self) -> str:
+                return ""
+
+            def poll(self) -> int:
+                return 1
+
+            def terminate(self) -> None:
+                return None
+
+            def wait(self, timeout: float | None = None) -> int:
+                del timeout
+                return 1
+
+        self.cli.session_events_follow = lambda **kwargs: SessionEventStream(
+            ImmediateExitProcess()
+        )
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(
+            [call["talker"] for call in self.cli.tail_calls],
+            ["wxid_a", "wxid_b"],
+        )
+        self.assertEqual(result.status.stream_mode, "bounded_polling")
+        self.assertFalse(result.status.stream_active)
+        self.assertEqual(result.status.failure_code, "cli_follow_failed")
+
     def test_global_stream_interruption_reconnects_after_backoff(self) -> None:
         self.sync.cycle(enabled=True)
         old_stream = self.cli.stream
