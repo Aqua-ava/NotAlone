@@ -1,0 +1,25 @@
+{
+  "desktop/tests/fixtures/expression-preference-backend.py": {
+    "unchanged_from_initial": true,
+    "sha256": "81c03746ff8325d77e83c9d9af92dfef6d94706f8be70f5400592e8bc1fc5060"
+  },
+  "desktop/tests/fixtures/expression-preferences-page.py": {
+    "unchanged_from_initial": true,
+    "sha256": "5801bb2f8837e0e44c914256dfdf0beac161444205c4488447bdb08f3c9b1233"
+  },
+  "desktop/tests/memory-correction/retirement-react.test.mjs": {
+    "unchanged_from_initial": true,
+    "sha256": "7ef577ca1ce00b5b604edff435e3fdf6a37754ed64acb28e794e2fc08829e4b9"
+  },
+  "backend-ts/test/model-organization-ack.test.mjs": {
+    "unchanged_from_initial": true,
+    "sha256": "6b88c5cd33c20607854408378a5f499f3b699998d3c51d8e372e85a6f76d30b7"
+  },
+  "backend-ts/test/host-launch.test.mjs": {
+    "unchanged_from_initial": true,
+    "sha256": "bde29b657664ed8e36b8b3bd7775f7c3c6a6a17009075a9dcb3abad2eb9d8962"
+  },
+  "backend-ts/test/host-storage-fixture.mjs": {
+    "unchanged_from_git_base": true
+  }
+}

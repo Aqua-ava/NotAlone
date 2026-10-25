@@ -1,0 +1,10 @@
+{
+  "base": "dbc59a6b78dadbfd10e24d354e46c5ed665da0a4",
+  "source_sha256": "a05f9306b16bfa4b1ee4b576993ddeb3319717f07e985ac9a6b0cecb5af6386d",
+  "previous_manifest_sha256": "de34c24966a0a8087ab41f17a7d81102b524c8c5cf0d6b7b37624fd7b832e0a4",
+  "authorized_files": [
+    "backend-ts/src/process-identity.ts",
+    "backend-ts/test/process-identity-zombie.test.mjs"
+  ],
+  "source_scope": "recognize validated zombie ps row before live executable absolute-path validation; keep other rejection boundaries"
+}

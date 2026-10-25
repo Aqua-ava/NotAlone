@@ -1,0 +1,20 @@
+# 最终夹具回归交接
+- 基点 e60074b5946b8d1c990fcb75ba13bd58f789b2fb；未动 index/commit，四个测试文件待 root 集成。
+- 提交清单：commit-files.txt；内容 SHA／证据冻结：manifest.json 与 manifest.sha256。
+- 模型 ACK：隔离宿主直接加载正式源码依赖图，删除手抄复制列表；最小红→绿，原模块 12/12。
+- 53 份本地传递依赖超集已核对，缺失 0；node_modules 使用项目锁定版本。
+- reconnect：排空只计 client backend；不放宽 0 连接断言，不吞失败或第二条真实残留。
+- 新真 PG vacuum 回归：0 客户端绿；1／2 残留准确失败；正常 DROP 0 连接、集群／目录均回收。
+- 最终三个模块 26/26，0 fail，28.806 秒；未跑全量。
+- 命令：cd backend-ts && node --test --test-concurrency=3 test/model-organization-ack.test.mjs test/sync-incremental-reconnect.test.mjs test/host-launch.test.mjs
+- Node 24.19.0；实际通过 env -i 仅传 HOME/USER/运行时 PATH，未读项目 .env。
+- 重要未结：生产 process-identity.ts:14 把合法 Z <defunct> 错判 unknown；原 host 的 waitForExit false 可由此机制产生。
+- 已有稳定红例：node .scratch/dsh-ts-migration/final-host-fixture-regression/zombie-identity-probe.mjs
+- 详见 production-change-request.md；精确源码建议 proposed-process-identity.patch 仅存 scratch，尚未应用。
+- 原 host 与 reconnect 单例各并发重复 12/12 绿；不宣称已唯一归因历史样本。
+- root 修复／授权上述生产文件后，重跑 zombie 红例和宿主／相关生命周期模块。
+- 原全量日志只读且 SHA 不变；raw/public SHA：evidence-index.json；公开日志：evidence/。
+- 新 raw 日志端侧保留，目录0700／文件0600；24个空压力目录已删，详见 cleanups.json。
+- 三个人类 desktop 改动、共享存储夹具、原 host/model 测试初始 SHA 保持。
+- 仅合成 PG／loopback；无真实资料、模型、App／微信、打包、push／PR 或委派。
+- 393216 默认及 source/auth/cancel/unknown/质量边界未改；Ticket25 不标完成。

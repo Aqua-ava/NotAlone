@@ -1,0 +1,30 @@
+✖ 排空统计排除真实autovacuum，仍精确拒绝一条及两条残留客户端连接 (2184.783333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2244.690916
+
+✖ failing tests:
+
+test at test/sync-incremental-reconnect.test.mjs:100:1
+✖ 排空统计排除真实autovacuum，仍精确拒绝一条及两条残留客户端连接 (2184.783333ms)
+  AssertionError [ERR_ASSERTION]: 宿主必须先关闭本测试库的所有业务连接
+  
+  1 !== 0
+  
+      at assertReconnectBusinessConnectionsClosed (file://<REPO>/backend-ts/test/sync-incremental-reconnect-fixture.mjs:25:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<REPO>/backend-ts/test/sync-incremental-reconnect.test.mjs:128:3)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

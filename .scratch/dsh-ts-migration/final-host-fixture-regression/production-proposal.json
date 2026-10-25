@@ -1,0 +1,15 @@
+{
+  "status": "proposal_only_not_applied",
+  "source": "backend-ts/src/process-identity.ts",
+  "before_sha256": "a05f9306b16bfa4b1ee4b576993ddeb3319717f07e985ac9a6b0cecb5af6386d",
+  "proposed_sha256": "394e004cb115f6d96deaa9510847a86b3394f55c592d8f67ebdc4e34cab4b778",
+  "red_probe": "zombie-identity-probe.mjs",
+  "red_result": {
+    "actual": "unknown",
+    "expected": "gone",
+    "zombie_comm": "<defunct>",
+    "owned_parent_exited": true,
+    "owned_child_reaped": true
+  },
+  "awaiting": "root authorization or root-owned integration"
+}

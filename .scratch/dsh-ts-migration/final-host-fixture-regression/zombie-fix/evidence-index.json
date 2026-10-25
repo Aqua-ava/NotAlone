@@ -1,0 +1,42 @@
+{
+  "baseline-controls.log": {
+    "raw_sha256": "84007e2e99ee42bc511793cc54a24e27e24a3183d02a2c226be5f5f908671b9e",
+    "public_sha256": "84007e2e99ee42bc511793cc54a24e27e24a3183d02a2c226be5f5f908671b9e",
+    "public_path": "evidence/baseline-controls.log"
+  },
+  "green-host-sigkill.log": {
+    "raw_sha256": "725f0c9f3fdc9d075eeeea400ee4fda8205f23d914c1895e49cdd00875398c27",
+    "public_sha256": "725f0c9f3fdc9d075eeeea400ee4fda8205f23d914c1895e49cdd00875398c27",
+    "public_path": "evidence/green-host-sigkill.log"
+  },
+  "green-identity-module.log": {
+    "raw_sha256": "6b1aa17770280a3d047da7176895f09f5d940109437eff5fedd51179ccd8f5d3",
+    "public_sha256": "6b1aa17770280a3d047da7176895f09f5d940109437eff5fedd51179ccd8f5d3",
+    "public_path": "evidence/green-identity-module.log"
+  },
+  "green-original-probe.log": {
+    "raw_sha256": "e6e4af0f26520bc9e685b77f78325a092e6688c12a9fbebff67dfabe9a3b3248",
+    "public_sha256": "e6e4af0f26520bc9e685b77f78325a092e6688c12a9fbebff67dfabe9a3b3248",
+    "public_path": "evidence/green-original-probe.log"
+  },
+  "green-real-zombie.log": {
+    "raw_sha256": "aaefa450ef53beaeba35212677f283530151cee0eaa36d8f88437a10475c09ea",
+    "public_sha256": "aaefa450ef53beaeba35212677f283530151cee0eaa36d8f88437a10475c09ea",
+    "public_path": "evidence/green-real-zombie.log"
+  },
+  "red-real-zombie.log": {
+    "raw_sha256": "c711181dc3e60739ab4f7b0b321bc11161e6fa8eddafbebc9fc05960ea1f5520",
+    "public_sha256": "620a3b0103a9b829f1b7b6e7f8b0dbc47c85184ed7a6f6f1ebd36297106a90d5",
+    "public_path": "evidence/red-real-zombie.log"
+  },
+  "related-lifecycle.log": {
+    "raw_sha256": "3030f87c92fe0021d745f662162a366718ac81895a0d21a89618e8fa0bb9251d",
+    "public_sha256": "3030f87c92fe0021d745f662162a366718ac81895a0d21a89618e8fa0bb9251d",
+    "public_path": "evidence/related-lifecycle.log"
+  },
+  "typecheck.log": {
+    "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "public_path": "evidence/typecheck.log"
+  }
+}

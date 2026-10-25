@@ -11,8 +11,11 @@ async function inspect(pid: number): Promise<(ProcessIdentity & { zombie: boolea
       encoding:'utf8',timeout:2000,maxBuffer:8192,env:{LC_ALL:'C',PATH:'/usr/bin:/bin'},
     });
     const match = /^\s*(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(\S+)\s+(.+?)\s*$/.exec(stdout);
-    if (!match || Number(match[1]) !== pid || !match[5].startsWith('/')) throw new Error('process_identity_unknown');
-    return {pid,parentPid:Number(match[2]),startedAt:match[3].replace(/\s+/g,' '),executable:match[5],zombie:match[4].includes('Z')};
+    if (!match || Number(match[1]) !== pid) throw new Error('process_identity_unknown');
+    // macOS 僵尸的 comm 为 <defunct>；先核对完整行与 PID，再保留存活进程的绝对路径门禁。
+    const zombie = match[4].includes('Z');
+    if (!zombie && !match[5].startsWith('/')) throw new Error('process_identity_unknown');
+    return {pid,parentPid:Number(match[2]),startedAt:match[3].replace(/\s+/g,' '),executable:match[5],zombie};
   } catch (error) {
     try { process.kill(pid,0); } catch (failure) { if ((failure as NodeJS.ErrnoException).code === 'ESRCH') return undefined; }
     throw new Error('process_identity_unknown');

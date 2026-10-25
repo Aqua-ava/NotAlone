@@ -1,0 +1,95 @@
+{
+  "environment": {
+    "node": "24.19.0 bundled runtime",
+    "python": "Conda NotAlone",
+    "test_env_allowlist": [
+      "HOME",
+      "USER",
+      "PATH"
+    ]
+  },
+  "red_real_zombie": {
+    "cwd": "backend-ts",
+    "argv": [
+      "node",
+      "--test",
+      "--test-name-pattern=^真实未reap",
+      "test/process-identity-zombie.test.mjs"
+    ],
+    "exit_code": 1,
+    "actual": "unknown",
+    "expected": "gone"
+  },
+  "baseline_controls": {
+    "argv": [
+      "node",
+      "--test",
+      "--test-name-pattern=^(存活身份|不合法identity|ps系统边界)",
+      "test/process-identity-zombie.test.mjs"
+    ],
+    "exit_code": 0,
+    "pass": 3
+  },
+  "green_real_zombie": {
+    "argv": [
+      "node",
+      "--test",
+      "--test-name-pattern=^真实未reap",
+      "test/process-identity-zombie.test.mjs"
+    ],
+    "exit_code": 0,
+    "pass": 1
+  },
+  "identity_module": {
+    "argv": [
+      "node",
+      "--test",
+      "test/process-identity-zombie.test.mjs"
+    ],
+    "exit_code": 0,
+    "pass": 4
+  },
+  "host_sigkill": {
+    "argv": [
+      "node",
+      "--test",
+      "--test-name-pattern=^真实DSH被SIGKILL",
+      "test/host-launch.test.mjs"
+    ],
+    "exit_code": 0,
+    "pass": 1,
+    "duration_ms": 5021.07825
+  },
+  "related_lifecycle": {
+    "argv": [
+      "node",
+      "--test",
+      "--test-concurrency=4",
+      "test/process-identity-zombie.test.mjs",
+      "test/host-launch.test.mjs",
+      "test/model-permits.test.mjs",
+      "test/model-mode-recovery.test.mjs"
+    ],
+    "exit_code": 0,
+    "tests": 50,
+    "pass": 50,
+    "fail": 0,
+    "duration_ms": 8004.525292
+  },
+  "typecheck": {
+    "argv": [
+      "node_modules/.bin/tsc",
+      "--noEmit"
+    ],
+    "exit_code": 0
+  },
+  "original_probe_green": {
+    "cwd": "repo",
+    "argv": [
+      "node",
+      ".scratch/dsh-ts-migration/final-host-fixture-regression/zombie-identity-probe.mjs"
+    ],
+    "exit_code": 0
+  },
+  "full_backend_suite_run": false
+}

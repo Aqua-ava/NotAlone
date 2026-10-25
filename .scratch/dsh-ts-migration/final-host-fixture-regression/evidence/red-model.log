@@ -1,0 +1,39 @@
+✖ L2 contact HTTP200 lost：结果与许可恢复边界 (574.039625ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 613.899125
+
+✖ failing tests:
+
+test at test/model-organization-ack.test.mjs:18:45
+✖ L2 contact HTTP200 lost：结果与许可恢复边界 (574.039625ms)
+  Error: synthetic_host_start_failed 1: node:internal/modules/esm/resolve:271
+      throw new ERR_MODULE_NOT_FOUND(
+            ^
+  
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find module '<TMP>/notalone-organization-ack-jqqXVV/host-fixture-accounting/quality-model-authorization.ts' imported from <TMP>/notalone-organization-ack-jqqXVV/host-fixture-accounting/host-model-accounting.ts
+      at finalizeResolution (node:internal/modules/esm/resolve:271:11)
+      at moduleResolve (node:internal/modules/esm/resolve:865:10)
+      at defaultResolve (node:internal/modules/esm/resolve:992:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+      at #resolve (node:internal/modules/esm/loader:683:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33)
+      at ModuleJob.link (node:internal/modules/esm/module_job:253:17) {
+    code: 'ERR_MODULE_NOT_FOUND',
+    url: 'file://<TMP>/notalone-organization-ack-jqqXVV/host-fixture-accounting/quality-model-authorization.ts'
+  }
+  
+  Node.js v24.19.0
+  
+      at ChildProcess.<anonymous> (file://<REPO>/backend-ts/test/model-organization-ack.test.mjs:32:269)
+      at Object.onceWrapper (node:events:631:26)
+      at ChildProcess.emit (node:events:509:28)
+      at ChildProcess._handle.onexit (node:internal/child_process:295:12)

@@ -1,0 +1,18 @@
+# Zombie 修复追加交接
+- 基点 dbc59a6b78dadbfd10e24d354e46c5ed665da0a4；本轮获授权的生产／新测试均已完成。
+- 仅两文件：backend-ts/src/process-identity.ts、backend-ts/test/process-identity-zombie.test.mjs。
+- 源码先验证完整 ps 行／PID，再识别 zombie；非 zombie 的绝对路径门禁保持。
+- 真实未reap Z <defunct> 红例 unknown!==gone → 同例绿；capture 仍拒绝 zombie。
+- 存活／拒绝对照在修复前 3/3 通过；修复后新模块 4/4。
+- 控制覆盖：存活相对路径、非法 identity、错PID、未解析ps行均unknown；启动时间／实例失配gone。
+- 原始 zombie 探针复跑绿，新日志另存；旧红例未覆盖。
+- host-launch 的真实 SIGKILL 定点 1/1 通过（5.021秒），原等待／断言未改。
+- 四个相关生命周期模块 50/50，0 fail（8.005秒）；typecheck通过。
+- 相关模块：process-identity-zombie、host-launch、model-permits、model-mode-recovery。
+- 原因边界：原全量host失败缺当时ps状态，仍不能唯一归因到本缺陷。
+- 旧四测试文件、旧manifest及全部旧artifact保持原字节；旧26/26仅作历史证据。
+- 本次集成：changes.patch、commit-files.txt、manifest.json；不重复应用旧建议补丁。
+- raw/public SHA：evidence-index.json；端侧raw目录0700／文件0600。
+- 合成子进程均由自有父进程reap，父进程正常退出；相关测试清理hooks全部通过。
+- 0真实资料／外部模型／App／微信；未动index/commit/远端，未跑backend全量，未委派。
+- root完成集成提交与最终全量回归；不据本次50/50关闭Ticket25。

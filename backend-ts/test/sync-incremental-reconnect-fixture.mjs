@@ -20,6 +20,11 @@ export async function pathExists(path){
 export function processAlive(pid){
   try{process.kill(pid,0);return true;}catch(error){if(error.code==='ESRCH')return false;throw error;}
 }
+export async function assertReconnectBusinessConnectionsClosed(client){
+  // autovacuum 等 PG 内部 worker 不属于宿主业务连接；真实残留客户端仍逐条计入。
+  const active=(await client.query("SELECT count(*)::int n FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND backend_type='client backend'")).rows[0].n;
+  assert.equal(active,0,'宿主必须先关闭本测试库的所有业务连接');
+}
 export async function createReconnectFixture(t){
   const f=await createStorageFixture();
   let host,connection,closed;
@@ -44,8 +49,7 @@ export async function createReconnectFixture(t){
           assert.equal(stopped,true,'仅回收本夹具拥有的宿主');
         }
         // 正常排空断言先记录失败；后续紧急清理不能把该断言变绿。
-        const active=(await f.client.query('SELECT count(*)::int n FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()')).rows[0].n;
-        assert.equal(active,0,'宿主必须先关闭本测试库的所有业务连接');
+        await assertReconnectBusinessConnectionsClosed(f.client);
       }catch(error){failures.push(error);}
       finally{
         if(stopped){

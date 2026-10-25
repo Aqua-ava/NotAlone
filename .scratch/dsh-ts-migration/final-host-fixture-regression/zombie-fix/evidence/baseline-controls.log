@@ -1,0 +1,11 @@
+✔ 存活身份保持same，旧启动时间和不同可执行实例均为gone且不影响原进程 (12.763041ms)
+✔ 不合法identity与非绝对executable继续返回unknown (2.091375ms)
+✔ ps系统边界的存活相对路径、错PID和未解析zombie继续拒绝为unknown (3.082333ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 67.509917

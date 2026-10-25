@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import {setTimeout as delay} from 'node:timers/promises';
-import {createReconnectFixture,waitForReconnectProbe,pathExists,processAlive} from './sync-incremental-reconnect-fixture.mjs';
+import {createReconnectFixture,waitForReconnectProbe,pathExists,processAlive,assertReconnectBusinessConnectionsClosed} from './sync-incremental-reconnect-fixture.mjs';
 
 test('官方profile：全局流code7后自然退避重连，metadata cursor接续且重复消息不重建', {timeout:90000},async t=>{
   const f=await createReconnectFixture(t);
@@ -95,4 +95,48 @@ test('官方profile：排空断言失败仍回收本轮测试库和目录，失�
     assert.ok(extraErrors.every(error=>error.code==='57P01'||(error.code===undefined&&error.message==='Connection terminated unexpectedly')),JSON.stringify(extraErrors));
     t.diagnostic(JSON.stringify({expected_active_assertion:1,original_failure_preserved:true,cached_failure_preserved:true,owned_host_stopped:true,database_and_fixture_removed:true}));
   }finally{await extra.end();await f.client.end();}
+});
+
+test('排空统计排除真实autovacuum，仍精确拒绝一条及两条残留客户端连接', {timeout:60000},async t=>{
+  const {spawn}=await import('node:child_process');
+  const {once}=await import('node:events');
+  const {homedir}=await import('node:os');
+  const {join}=await import('node:path');
+  const child=spawn(process.env.NOTALONE_TEST_PYTHON||join(homedir(),'miniconda3/envs/NotAlone/bin/python'),
+    [new URL('./sync-incremental-reconnect-vacuum-fixture.py',import.meta.url).pathname],
+    {env:{PATH:'/usr/bin:/bin',HOME:homedir(),PYTHONDONTWRITEBYTECODE:'1',NOTALONE_DISABLE_DOTENV:'1',...(process.env.NOTALONE_TEST_PG_BIN?{NOTALONE_TEST_PG_BIN:process.env.NOTALONE_TEST_PG_BIN}:{})},stdio:['pipe','pipe','pipe']});
+  const exited=once(child,'exit');let output='',stderr='',closed;
+  child.stdout.setEncoding('utf8');child.stdout.on('data',value=>output+=value);
+  child.stderr.setEncoding('utf8');child.stderr.on('data',value=>stderr+=value);
+  const clients=[];
+  const close=()=>closed??=(async()=>{
+    const failures=(await Promise.allSettled(clients.map(client=>client.end()))).filter(result=>result.status==='rejected').map(result=>result.reason);
+    try{
+      child.stdin.end();
+      assert.equal((await exited)[0],0,stderr);
+      const cleanup=JSON.parse(output.trim().split('\n').at(-1));
+      assert.deepEqual(cleanup,{normal_drop_client_connections:0,database_dropped:true,owned_cluster_stopped:true,owned_directory_removed:true});
+    }catch(error){failures.push(error);}
+    if(failures.length===1)throw failures[0];
+    if(failures.length>1)throw new AggregateError(failures,'隔离vacuum夹具资源未完整关闭');
+  })();
+  t.after(close);
+  const ready=await waitForReconnectProbe(()=>{
+    if(child.exitCode!==null)throw new Error(`合成vacuum夹具提前退出：${stderr}`);
+    return output.includes('\n')&&JSON.parse(output.split('\n')[0]);
+  },'隔离PG的真实autovacuum就绪',20000);
+  const connect=async()=>{const client=new pg.Client({host:ready.socket,database:ready.database});clients.push(client);await client.connect();return client;};
+  const observer=await connect();
+  const workers=(await observer.query("SELECT backend_type FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()")).rows;
+  assert.ok(workers.some(row=>row.backend_type==='autovacuum worker'));
+  await assertReconnectBusinessConnectionsClosed(observer);
+  for(let expected=1;expected<=2;expected++){
+    await connect();
+    await assert.rejects(assertReconnectBusinessConnectionsClosed(observer),error=>{
+      assert.equal(error.code,'ERR_ASSERTION');assert.equal(error.actual,expected);assert.equal(error.expected,0);
+      assert.match(error.message,/宿主必须先关闭本测试库的所有业务连接/);return true;
+    });
+  }
+  await close();assert.equal(await pathExists(ready.directory),false);
+  t.diagnostic(JSON.stringify({real_autovacuum_excluded:true,one_client_rejected:1,two_clients_rejected:2,normal_drop_client_connections:0,database_and_cluster_removed:true}));
 });

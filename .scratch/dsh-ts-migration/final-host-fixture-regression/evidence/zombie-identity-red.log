@@ -1,0 +1,21 @@
+{"ps":"73044 73043 Sun Oct 25 22:32:45 2026     Z    <defunct>","observed":"unknown","expected":"gone"}
+{"owned_parent_exited":true,"owned_child_reaped":true}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: 已核验实例的 zombie 不能被解释为身份未知
+
+'unknown' !== 'gone'
+
+    at file://<REPO>/.scratch/dsh-ts-migration/final-host-fixture-regression/zombie-identity-probe.mjs:37:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'unknown',
+  expected: 'gone',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.19.0
