@@ -9,6 +9,7 @@ import {once} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
 import {launchDsh} from '../src/launch.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
+import {payloadJson} from './exploration-public-support.mjs';
 import {sendEvents,useTool} from './reply-service-runtime-support.mjs';
 export {sendEvents,useTool};
 const root=new URL('../../',import.meta.url).pathname;
@@ -27,7 +28,7 @@ export async function realHost(t,{onRequest,beforeClose}={}){
  const requests=[],provider=createServer(async(req,res)=>{
   try{
    let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);requests.push({path:req.url,headers:req.headers,body});
-   const payload=JSON.parse(body.messages[0].content[0].text),id=payload.evidence[0].evidence_id;
+   const payload=payloadJson(body.messages[0].content[0].text),id=payload.evidence[0].evidence_id;
    const events=[{type:'message_start',message:{id:'synthetic',model:'deepseek-flash',usage:{input_tokens:12,output_tokens:0}}},{},{},{},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:9}},{type:'message_stop'}];
    if(onRequest&&await onRequest({body,payload,requests,events,req,res,id}))return;
    if(body.tools.some(tool=>tool.name==='ReplyRuntimeOutput'))useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'最近还好吗？',basis:'只按用户明确选择了解近况',citation_ids:[id],risk_notes:[]}]});

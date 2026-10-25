@@ -7,6 +7,7 @@ import {homedir} from 'node:os';
 import {rm} from 'node:fs/promises';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {startExplorationRuntimeHost,useTool,sendEvents} from './exploration-runtime-support.mjs';
+import {payloadJson} from './exploration-public-support.mjs';
 test('公开探索→原A准备→真实C候选；建议未确认、停止、新开、同键不重发及跨联系人拒绝',{timeout:60000},async t=>{
  const f=await createStorageFixture();
  t.after(async()=>{await f.client.end();execFileSync(homedir()+'/miniconda3/envs/NotAlone/bin/python',['-c',"import sys,psycopg\nfrom psycopg import sql\nassert sys.argv[1].startswith('notalone_ts_host_') and sys.argv[1].endswith('_test')\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c:c.execute(sql.SQL('DROP DATABASE {}').format(sql.Identifier(sys.argv[1])))",f.client.database]);await rm(f.directory,{recursive:true});});
@@ -18,7 +19,7 @@ test('公开探索→原A准备→真实C候选；建议未确认、停止、新
  await f.client.query("INSERT INTO message_source_ref(id,message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload)VALUES($1,$2,$3,$4,'source_document',$5,'line:1','{}')",[randomUUID(),message,owner,contact,source]);
  let invalidOutput=false;
  const host=await startExplorationRuntimeHost(t,(req,res,requests,events)=>{
-  const payload=JSON.parse(requests.at(-1).body.messages[0].content[0].text);const id=payload.evidence[0].evidence_id;if(invalidOutput){useTool(events,'ExplorationOutput',{broken:true});sendEvents(res,events);return;}
+  const payload=payloadJson(requests.at(-1).body.messages[0].content[0].text);const id=payload.evidence[0].evidence_id;if(invalidOutput){useTool(events,'ExplorationOutput',{broken:true});sendEvents(res,events);return;}
   if(requests.at(-1).body.tools.some(x=>x.name==='ReplyRuntimeOutput')){useTool(events,'ReplyRuntimeOutput',{candidates:[{text:'最近还好吗？',basis:'依据本次已选意愿和当前原话',citation_ids:[id],risk_notes:[]}],used_skill_version_id:null});sendEvents(res,events);return;}
   assert.deepEqual(requests.at(-1).body.tools.map(x=>x.name),['ExplorationOutput']);assert.equal(payload.scene,'initiate_conversation');assert.equal(payload.evidence[0].fingerprint,undefined);
   useTool(events,'ExplorationOutput',{understanding:'合成近况询问',ambiguities:[],citation_ids:[id],options:[{intent:'了解近况',label:'关心',reason:'近期原话',citation_ids:[id],recommended:true,pause:false},{intent:'稍后联系',label:'稍后',reason:'由用户决定',citation_ids:[],recommended:false,pause:false}],question:null,current_step:'选择本次意愿',tradeoffs:[]});sendEvents(res,events);

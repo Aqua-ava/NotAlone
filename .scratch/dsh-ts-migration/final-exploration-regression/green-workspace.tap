@@ -1,0 +1,16 @@
+TAP version 13
+# Subtest: 工作区空想法直接候选与有想法表达沿原桌面适配器；50条含长正文逐字保留
+ok 1 - 工作区空想法直接候选与有想法表达沿原桌面适配器；50条含长正文逐字保留
+  ---
+  duration_ms: 4120.698667
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4259.721708

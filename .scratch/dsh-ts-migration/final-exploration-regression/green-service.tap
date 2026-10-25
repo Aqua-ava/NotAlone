@@ -1,0 +1,16 @@
+TAP version 13
+# Subtest: 公开探索→原A准备→真实C候选；建议未确认、停止、新开、同键不重发及跨联系人拒绝
+ok 1 - 公开探索→原A准备→真实C候选；建议未确认、停止、新开、同键不重发及跨联系人拒绝
+  ---
+  duration_ms: 6697.441292
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6812.38075
