@@ -150,7 +150,7 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
  if(!review.length)return {accepted:facts,candidate_trace_ids:facts.map(fact=>traceIds.get(fact)!),rejected_count:parsedRejections,
   extraction_completed:true,failure_kind:null,failure_reason:null,verification:[]};
  await options.record({stage:'verification_input',payload:{window:options.window,facts:review,candidate_trace_ids:review.map(fact=>traceIds.get(fact)!)}});
- const contract=buildSourceVerificationContract(review),request=invocation('verification',contract.prompt,contract.schema,
+ const contract=buildSourceVerificationContract(review,'legacy-v4',{require_complete_evidence:true}),request=invocation('verification',contract.prompt,contract.schema,
   JSON.stringify(buildSourceVerificationPayload(options.window,review)),blocks=>{
    return parseVerificationReply(blocks,contract,options.window,review,undefined,options.record).then(()=>{});
   });
@@ -171,7 +171,12 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
  const accepted:ExtractedFact[]=[],candidate_trace_ids:string[]=[],verification:ExtractionFlowOutcome['verification']=[];let rejected=parsedRejections;
  for(const fact of facts){
   const candidate_trace_id=traceIds.get(fact)!;
-  const result=checked.get(fact);if(!result){accepted.push(fact);candidate_trace_ids.push(candidate_trace_id);continue;}
+  let result=checked.get(fact);if(!result){accepted.push(fact);candidate_trace_ids.push(candidate_trace_id);continue;}
+  if(result.verdict==='supported'&&fact.requires_all_sources){
+   const cited=new Set(result.evidence.map(reference=>reference.message_id));
+   if(fact.source_message_ids.some(source=>!cited.has(source)))result={...result,verdict:'unsupported',
+    issues:[...new Set([...result.issues,'insufficient_evidence'])]};
+  }
   await options.record({stage:'verification',candidate_trace_id,payload:{status:'validated',result,before:fact,
    disposition:result.verdict==='unsupported'?'unsupported_rejected':'continue'}});
   if(result.verdict==='unsupported'){rejected++;continue;}

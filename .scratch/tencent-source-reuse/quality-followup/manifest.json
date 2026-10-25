@@ -1,0 +1,42 @@
+{
+  "base_commit": "ff45f2ec296c4cead326d2ab6f3cf7770c9396ab",
+  "scope": "direct-complete-source-coverage",
+  "status": "frozen_engineering_passed_semantic_quality_not_passed",
+  "real_model_calls": 0,
+  "tests": {
+    "relevant_passed": 83,
+    "failed": 0,
+    "skipped": 0,
+    "typecheck": "passed"
+  },
+  "unresolved": [
+    "single-source semantic false-positive"
+  ],
+  "files": [
+    {
+      "path": "backend-ts/src/extraction-flow.ts",
+      "sha256": "277e219b87b08563f61942cb6ac61f99cf833f1d060693fae1a29ad5261421a3"
+    },
+    {
+      "path": "backend-ts/src/extraction-protocol-contract.ts",
+      "sha256": "1c9c6de3b45e018b6f9e05979f25bafa3a1ac1363873354419e08d5a380fb55e"
+    },
+    {
+      "path": "backend-ts/test/extraction-verification-quality-regression.test.mjs",
+      "sha256": "f420506c46d9ebbe897d63c284e8b05e9f981a59ddabc789c4b803fff05ab2e5"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/diagnosis.md",
+      "sha256": "63c3ad4e22c2b8e92a03adbf19dda6e6145af311f78914dba30b5a50263fd40b"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/validation.md",
+      "sha256": "dcbb98df1a911d38ee2f19063fbf72e8a9227418d61c20a9c829d8c4ebcf1e53"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/paths.txt",
+      "sha256": "db738e4c641624efcf4bb20acf73070524039134fd31ee752dff0847c11f429d"
+    }
+  ],
+  "excluded_self": ".scratch/tencent-source-reuse/quality-followup/manifest.json"
+}

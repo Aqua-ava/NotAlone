@@ -8,13 +8,18 @@ const ADDITIONS = ["\n直接提取时间核验：只用各消息source_calendar_
 const position={type:'object',additionalProperties:false,properties:{message_id:{type:'string',format:'uuid'},char_start:{type:'integer',minimum:0},char_end:{type:'integer',minimum:1}},required:['message_id','char_start','char_end']};
 const quote={type:'object',additionalProperties:false,properties:{message_id:{type:'string',format:'uuid'},quote:{type:'string',minLength:1,maxLength:8192}},required:['message_id','quote']};
 const verdict={type:'string',enum:['supported','uncertain','unsupported']};
-export function buildSourceVerificationContract(facts:ExtractedFact[],mode:'legacy-v4'|'nullable-proof-v3'='legacy-v4'):{prompt:string;schema:Record<string,any>} {
+export function buildSourceVerificationContract(facts:ExtractedFact[],mode:'legacy-v4'|'nullable-proof-v3'='legacy-v4',options:{require_complete_evidence?:boolean}={}):{prompt:string;schema:Record<string,any>} {
   requireValid(['legacy-v4','nullable-proof-v3'].includes(mode)&&facts.length<=60);
+  requireValid(!options.require_complete_evidence||mode==='legacy-v4');
   const base=SOURCE_VERIFICATION_CONTRACTS[mode];let prompt:string=base.prompt;
   const schema=structuredClone(base.schema) as Record<string,any>,properties=schema.properties.results.items.properties;
   if(facts.some(f=>f.requires_all_sources)){for(const [before,after] of REPLACEMENTS)prompt=prompt.replace(before,after);prompt+=ADDITIONS[0];}
   if(facts.some(f=>f.conditions!==null)){properties.condition_verification={type:['array','null'],maxItems:8,items:{type:'object',additionalProperties:false,properties:{index:{type:'integer',minimum:0},verdict,evidence:{type:'array',maxItems:8,items:position}},required:['index','verdict','evidence']}};prompt+=ADDITIONS[1];}
   if(facts.some(f=>f.event!==null)){properties.event_verification={type:['object','null'],additionalProperties:false,properties:{stage_verdict:verdict,occurrence_verdict:verdict,stage_evidence:{type:'array',maxItems:8,items:quote},occurrence_evidence:{type:'array',maxItems:8,items:quote}},required:['stage_verdict','occurrence_verdict','stage_evidence','occurrence_evidence']};prompt+=ADDITIONS[2];}
+  if(options.require_complete_evidence){
+    prompt+='\n本次 direct 核验必须完整覆盖候选声明的来源：supported 时，candidate.source_message_ids 中每条消息都须在 evidence 中有非空逐字引文，且仍至少包含一条 target。不能只引用回答而遗漏候选声明依赖的相连问句或其他来源；重复同一消息的引文不能补足遗漏。无法核对完整依据时不得签 supported，标 insufficient_evidence；不得替候选补来源或编造引文。完整覆盖只是必要条件，仍逐项核对主体、正文和限定。';
+    properties.evidence.description='supported 时逐条覆盖该候选 source_message_ids 的真实逐字引文；重复引用不能补足遗漏，完整覆盖不代替语义核验。';
+  }
   return {prompt,schema};
 }
 function eventPayload(event:MemoryEvent):Record<string,unknown> {
