@@ -30,21 +30,20 @@ export interface ReplyLoopPorts {
   tools:readonly ToolDefinition[];
 }
 const allowed=new Set(['conversation_search','conversation_query','read_file','list_files','read_scenario']);
-export function createReplyOutputTool(execute:(args:Record<string,unknown>,execution:ToolRunContext)=>Promise<string>,candidateLimit:1|2|3=3):ToolDefinition{
- return defineTool({name:'ReplyRuntimeOutput',description:`提交1到${candidateLimit}条有依据的候选，之后结束本轮。存在明确未知或上下文风险时只提交一条；不得用额外候选补写未知事实、原因、心理、联系间隔或内部考虑。`,
+export function createReplyOutputTool(execute:(args:Record<string,unknown>,execution:ToolRunContext)=>Promise<string>):ToolDefinition{
+ return defineTool({name:'ReplyRuntimeOutput',description:'提交有依据的候选，之后结束本轮。本轮候选上限见用户消息中的运行约束；存在明确未知或上下文风险时只提交一条；不得用额外候选补写未知事实、原因、心理、联系间隔或内部考虑。',
   parameters:{used_skill_version_id:{oneOf:[{type:'string'},{type:'null'}],required:true},candidates:{type:'array',required:true,items:{type:'object',additionalProperties:false,properties:{text:{type:'string',required:true},basis:{type:'string',required:true},citation_ids:{type:'array',required:true,items:{type:'string'}},risk_notes:{type:'array',required:true,items:{type:'string'}},messages:{type:'array',items:{type:'string'},default:[]}}}}},
   output:{schema:{type:'string'},render:(_args,result)=>[{type:'text',text:result}]},execute});
 }
 /** 正式生成与无HTTP预检共用真实system/工具schema，避免复制模板后计量漏项。 */
-export async function registerReplyAgentSetup(scope:Context,input:Pick<ReplyLoopInput,'system_prompt'|'temperature'>,options:{tools:readonly ToolDefinition[];skillSession:ReplySkillSession|null;signal?:AbortSignal;candidate_limit?:1|2|3;executeOutput:(args:Record<string,unknown>,execution:ToolRunContext)=>Promise<string>}):Promise<(()=>void)|undefined>{
+export async function registerReplyAgentSetup(scope:Context,input:Pick<ReplyLoopInput,'system_prompt'|'temperature'>,options:{tools:readonly ToolDefinition[];skillSession:ReplySkillSession|null;signal?:AbortSignal;executeOutput:(args:Record<string,unknown>,execution:ToolRunContext)=>Promise<string>}):Promise<(()=>void)|undefined>{
  if(options.tools.some(tool=>!allowed.has(tool.name))||new Set(options.tools.map(tool=>tool.name)).size!==options.tools.length)throw new ReplyError('reply_tools_invalid',502);
  const dispose=options.skillSession?.mount(scope);
  let selectedContent:string;try{selectedContent=await options.skillSession?.preloadSelected(options.signal)??'';}catch(error){dispose?.();throw error;}
- const candidateLimit=options.candidate_limit??3;
- scope.systemPrompt.section({name:'notalone-reply',order:0,complete:true,interpolate:false,text:input.system_prompt+`\n\n本轮 ReplyRuntimeOutput 的候选数量上限是 ${candidateLimit} 条。`+(options.skillSession?'\n\n本轮受控Skill目录：\n'+options.skillSession.catalogText():'')+(selectedContent?'\n\n'+selectedContent:'')});
+ scope.systemPrompt.section({name:'notalone-reply',order:0,complete:true,interpolate:false,text:input.system_prompt+(options.skillSession?'\n\n本轮受控Skill目录：\n'+options.skillSession.catalogText():'')+(selectedContent?'\n\n'+selectedContent:'')});
  scope.on('agent/request',async(_position,next)=>({...await next(),temperature:input.temperature}));
  for(const tool of options.tools)scope.tools.register(tool);
- scope.tools.register(createReplyOutputTool(options.executeOutput,candidateLimit));
+ scope.tools.register(createReplyOutputTool(options.executeOutput));
  return dispose;
 }
 export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:ReplyLoopPorts,outerSignal:AbortSignal):Promise<{candidates:ReplyCandidateInput[];budgets:MessagesBudgetReceipt[]}> {
@@ -122,7 +121,7 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
         if(exec.name==='ReplyRuntimeOutput'&&result.isError)failure=new ReplyError('reply_candidates_rejected');
         return undefined;
       });
-      disposeSkill=await registerReplyAgentSetup(scope,input,{signal,tools:ports.tools,skillSession:ports.skillSession,candidate_limit:candidateLimit,
+      disposeSkill=await registerReplyAgentSetup(scope,input,{signal,tools:ports.tools,skillSession:ports.skillSession,
         async executeOutput(args,exec){
           try {signal.throwIfAborted();await ports.requireCurrent();if(candidates||Object.keys(args).sort().join(',')!=='candidates,used_skill_version_id')throw new ReplyError('reply_candidates_rejected');const validated=validateReplyCandidates(args,ports.evidenceIds(),candidateLimit);const claim=args.used_skill_version_id===null?null:replyUuid(args.used_skill_version_id);if(ports.skillSession)await ports.skillSession.captureClaim(claim,signal);else if(claim!==null)throw new ReplyError('reply_candidates_rejected');signal.throwIfAborted();candidates=validated;exec.concludeTurn();return '候选已完成结构和引用校验。';}
           catch(error){failure=error;throw error;}

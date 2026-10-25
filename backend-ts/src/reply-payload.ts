@@ -4,6 +4,7 @@ import {stringifyJson} from './host-json.ts';
 import {ReplyError,type ReplyRequestInput} from './reply-contract.ts';
 import type {BuiltReplyContext} from './reply-context-types.ts';
 import {assistantDiscussionPayload,continuationReferencePayload,type ReplyDiscussionContext} from './reply-discussion-context.ts';
+import {replyCandidateAdmissibility} from './reply-candidate-admissibility.ts';
 import type {AuthenticatedContinuation} from './reply-assistant-guards.ts';
 export interface ReplyPayloadInput {
  request:ReplyRequestInput;
@@ -83,4 +84,8 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
  if(discussion&&!recentOnly)payload.assistant_discussion=assistantDiscussionPayload(discussion);
  return {...payload,evidence,citation_policy:{allowed_evidence_ids:evidence.map(e=>e.evidence_id),additional_evidence_ids:'successful_history_tool_evidence_only',references_are_not_citations:true},fidelity_contract,risk_notes:[...context.risk_notes]};
 }
-export function replyPayloadText(input:ReplyPayloadInput):string{return stringifyJson(buildReplyPayload(input));}
+export function replyPayloadText(input:ReplyPayloadInput):string{
+ const {limit,unknowns}=replyCandidateAdmissibility(input.context);
+ const unknown=limit===1?`\n本轮明确未知（不得在候选正文中填写成事实、原因、心理、间隔、动作或安排）：${unknowns.join('；')}。只返回一条不依赖这些未知的候选。`:'';
+ return stringifyJson(buildReplyPayload(input))+`\n\n本轮候选数量上限是 ${limit} 条。${unknown}`;
+}

@@ -17,6 +17,16 @@ test('五种输入保真合同与原Python逐项一致，建议动作不制造�
  assert.deepEqual(values.map(v=>v.fidelity_contract),expected);
  assert.equal(values[2].fidelity_contract.current_intent,null);
 });
+test('逐例候选上限与未知禁区进入用户消息并保持每项明确',()=>{
+ const first=input({type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:'主动问候',user_instruction:JSON.stringify({unknowns:['是否突然想到对方']})});
+ const second=input({type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:'确认近况',user_instruction:JSON.stringify({unknowns:['联系间隔']})});
+ const firstText=replyPayloadText(first),secondText=replyPayloadText(second);
+ assert.notEqual(firstText,secondText);
+ assert.match(firstText,/本轮候选数量上限是 1 条/);
+ assert.match(firstText,/不得在候选正文中填写成事实、原因、心理、间隔、动作或安排）：是否突然想到对方/);
+ assert.match(firstText,/只返回一条不依赖这些未知的候选/);
+ assert.match(secondText,/联系间隔/);assert.doesNotMatch(secondText,/是否突然想到对方/);
+});
 test('只传模型可见资料，保留未确认标记并按微秒排序，不泄露内部来源字段',()=>{
  const row=(n,time,kind='message')=>({evidence_id:String(n),kind,text:'合成资料',status:kind==='pending_candidate'?'pending':'active',selection_reason:'未确认候选、仅供参考',timing:{source_started_at:time},event:null,conditions:null,evolution:null,valid_at:null,invalid_at:null,speaker_role:'contact',model_visible:true,source_ids:['不得出站'],freshness_sha256:'不得出站'});
  const x=input({type:'initiate_conversation',purpose:'问候'},[row(1,null),row(2,'2026-01-01T00:00:00.000002+00:00'),row(3,null,'pending_candidate'),row(4,'2026-01-01T00:00:00.000001+00:00'),{...row(5,null),model_visible:false}]);

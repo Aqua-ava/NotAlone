@@ -57,9 +57,13 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
   await assert.rejects(host.request('/generate',{id:randomUUID(),scope,body:input}),/reply_candidates_rejected/);
   assert.equal(host.requests.length,before+1);
   const request=host.requests.at(-1).body,tool=request.tools.find(item=>item.name==='ReplyRuntimeOutput');
-  assert.match(tool.description,/提交1到1条/);
-  assert.match(request.system,/候选数量上限是 1 条/);
-  assert.match(request.system,/本轮明确未知（不得在候选正文中填写成事实、原因、心理、间隔、动作或安排）：联系间隔/);
+  const prompt=request.messages.at(-1).content.filter(block=>block.type==='text').map(block=>block.text).join('');
+  assert.match(tool.description,/候选上限见用户消息/);
+  assert.equal(request.system,host.requests[before-1].body.system);
+  assert.deepEqual(tool,host.requests[before-1].body.tools.find(item=>item.name==='ReplyRuntimeOutput'));
+  assert.doesNotMatch(request.system,/本轮明确未知|候选数量上限/);
+  assert.match(prompt,/本轮候选数量上限是 1 条/);
+  assert.match(prompt,/不得在候选正文中填写成事实、原因、心理、间隔、动作或安排）：联系间隔/);
   assert.equal((await f.client.query('SELECT count(*)::int AS n FROM reply_candidate c JOIN reply_request r ON r.id=c.reply_request_id WHERE r.idempotency_key=$1',[input.idempotency_key])).rows[0].n,0);
  });
  await t.test('跨scope输入在出站前拒绝',async()=>{

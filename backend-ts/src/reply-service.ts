@@ -126,7 +126,7 @@ export class ReplyGenerationService {
     binding:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort},profile:model.budgetProfile,
     prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation}),
     requireCurrent,validateRegistry:()=>skill.validateRegistry(signal),
-    async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion),temperature:model.temperature},{tools,skillSession:skill,candidate_limit:replyCandidateLimit(state.context),executeOutput:unavailable,signal});},
+    async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion),temperature:model.temperature},{tools,skillSession:skill,executeOutput:unavailable,signal});},
    },signal);
   }finally{probeSkill?.close();skillPort.dispose();}
  }
