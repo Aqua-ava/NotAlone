@@ -1,0 +1,31 @@
+--- base/host-storage.ts
++++ diagnostic/overlap-storage.ts
+@@ -252,16 +252,21 @@
+     if (code !== 'ready') throw new HostStorageError(code);
+   }
+   private async inspect(client: pg.Client): Promise<string> {
+-    let migrations: {name: string; checksum: string}[];
++    let names: string[];
+     try {
+-      const names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
++      names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
+       if (names.length !== EXPECTED_MIGRATION_COUNT || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
+-      migrations = await Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') })));
+     } catch { return 'migration_files_invalid'; }
+-    const metadata = await client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
+-      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+-      JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid
+-      WHERE n.nspname='public' AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped`);
++    const [files, catalog] = await Promise.allSettled([
++      Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') }))),
++      client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
++        FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
++        JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid
++        WHERE n.nspname='public' AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped`),
++    ]);
++    if (files.status === 'rejected') return 'migration_files_invalid';
++    if (catalog.status === 'rejected') throw catalog.reason;
++    const migrations = files.value, metadata = catalog.value;
+     const tables = new Map<string, Map<string,string>>();
+     for (const row of metadata.rows) {
+       if (!tables.has(row.relname)) tables.set(row.relname, new Map());

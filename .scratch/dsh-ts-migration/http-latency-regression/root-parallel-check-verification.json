@@ -1,0 +1,40 @@
+{
+  "base_commit": "cd8ee8b9c14eea90c2c4973159b46e168290bb96",
+  "source_sha256": {
+    "backend-ts/src/host-storage.ts": "ca7663b4c8af53f8f30d8fc5fb3378d3af179c5528233d47fbd972dd5999d387",
+    "backend-ts/test/host-storage.test.mjs": "4015603ed51e891c501a1754c25abffa72a6397410ccb70ea48dd14a0fc00cdf"
+  },
+  "author_staging_manifest_sha256": "fe5103630861f9b958ea2966c79b225251c8a77e5591a1753f08af924f291da5",
+  "root_runs": {
+    "integrity_minimum": {
+      "sha256": "aaa0f00120ef0068e39449250decf5ce9fbc99b4a1bb8902473dbac1797853ec",
+      "tests": "1",
+      "pass": "1",
+      "fail": "0",
+      "cancelled": "0",
+      "skipped": "0",
+      "duration_ms": "684.921042"
+    },
+    "related": {
+      "sha256": "b732ff9a9500cd6b51e280ed20b9225bee86b9af892293d2840e8c19e452b2db",
+      "tests": "47",
+      "pass": "47",
+      "fail": "0",
+      "cancelled": "0",
+      "skipped": "0",
+      "duration_ms": "10332.882541"
+    }
+  },
+  "typecheck_exit_code": 0,
+  "performance_after_diagnostic_p50_ratios": [
+    3.61,
+    5.73,
+    3.71
+  ],
+  "performance_gate_passed": false,
+  "formal_performance_run": false,
+  "ticket25_approved": false,
+  "ticket26_started": false,
+  "real_model_calls": 0,
+  "actual_app_runs": 0
+}

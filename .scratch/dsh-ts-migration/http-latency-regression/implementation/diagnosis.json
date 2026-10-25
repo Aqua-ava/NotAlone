@@ -1,0 +1,90 @@
+{
+  "hypotheses": [
+    "SQL文件全量读取、哈希与catalog依次等待导致独立开销串行叠加",
+    "每次连接和关闭累计开销",
+    "多个SET往返",
+    "catalog传输/映射成本"
+  ],
+  "trace_stage_summaries": {
+    "connect": {
+      "n": 40,
+      "p50_scored_ms": 0.941541500000028
+    },
+    "sql BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY": {
+      "n": 40,
+      "p50_scored_ms": 0.044770500000026914
+    },
+    "sql SET LOCAL search_path = pg_catalog, public": {
+      "n": 40,
+      "p50_scored_ms": 0.025500000000022283
+    },
+    "sql SET LOCAL statement_timeout = '3000ms'": {
+      "n": 40,
+      "p50_scored_ms": 0.018916999999987638
+    },
+    "sql SET LOCAL lock_timeout = '1000ms'": {
+      "n": 40,
+      "p50_scored_ms": 0.01558349999999109
+    },
+    "files": {
+      "n": 40,
+      "p50_scored_ms": 1.762457999999981
+    },
+    "sql SELECT c.relname,a.attname,pg_catalog.format_type(a.att": {
+      "n": 40,
+      "p50_scored_ms": 1.196728500000006
+    },
+    "sql SELECT c.relkind FROM pg_class c JOIN pg_namespace n ON": {
+      "n": 40,
+      "p50_scored_ms": 0.06541649999996935
+    },
+    "sql SELECT name,checksum FROM public.notalone_schema_migrat": {
+      "n": 40,
+      "p50_scored_ms": 0.18652100000002747
+    },
+    "sql SELECT attname,attnotnull FROM pg_catalog.pg_attribute\n": {
+      "n": 80,
+      "p50_scored_ms": 0.11368750000002592
+    },
+    "sql SELECT c.contype,c.convalidated,c.condeferrable,c.conde": {
+      "n": 120,
+      "p50_scored_ms": 0.15708300000000008
+    },
+    "sql SELECT 1 AS n": {
+      "n": 40,
+      "p50_scored_ms": 0.02295800000001691
+    },
+    "sql COMMIT": {
+      "n": 40,
+      "p50_scored_ms": 0.01824999999996635
+    },
+    "end": {
+      "n": 40,
+      "p50_scored_ms": 0.7099790000000326
+    },
+    "inspect": {
+      "n": 40,
+      "p50_scored_ms": 4.485916499999973
+    },
+    "requireReady": {
+      "n": 40,
+      "p50_scored_ms": 4.486542000000043
+    }
+  },
+  "diagnostic_variants": {
+    "host-storage.ts": {
+      "sha256": "0f7e54384b3d4b682c490fd3b900c58c5928e70d0fe904dffd461aab0dd902de"
+    },
+    "overlap-storage.ts": {
+      "sha256": "82172f0caa4c2a46aee5adaf1ee245bc47d4bfbd2a9850a2303fdd2377816e35"
+    }
+  },
+  "red_loop": 6.931833499999982,
+  "initial_green_loop": 4.791083500000013,
+  "final_loop": 5.0259585000000015,
+  "final_micro_threshold_passed": false,
+  "micro_threshold_ms": 5,
+  "micro_threshold_is_formal_gate": false,
+  "no_retry_or_sample_selection": true,
+  "throwaway_source_and_module_symlink_removed": true
+}

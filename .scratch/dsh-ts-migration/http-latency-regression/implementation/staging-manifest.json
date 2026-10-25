@@ -1,0 +1,345 @@
+{
+  "root_exclusive_index": true,
+  "index_add_commit_performed": false,
+  "task_base_commit": "54aebef5ccad427d680ce243eb852c5bd4d91f1e",
+  "product": [
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "base_sha256": "7f63954a3cc1ab9450316b4e8021df9f4a8e6422354dbaf817e3c788c5d09259",
+      "current_sha256": "ca7663b4c8af53f8f30d8fc5fb3378d3af179c5528233d47fbd972dd5999d387"
+    },
+    {
+      "path": "backend-ts/test/host-storage.test.mjs",
+      "base_sha256": "41d81e43e4a2a45efbde80e999f0d813f75cf739f833f8028d1ecf75999b730b",
+      "current_sha256": "4015603ed51e891c501a1754c25abffa72a6397410ccb70ea48dd14a0fc00cdf"
+    }
+  ],
+  "evidence": [
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/catalog.json",
+      "sha256": "f2d5eece9a323e175f79054328b70de4a8733673c9b2ce5661b63f2508569c4e",
+      "bytes": 21398
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/diagnosis.json",
+      "sha256": "ff5cea503c96375169bf0dbd887d89e6e0034992deb42f8a062e91d84ca6ae2f",
+      "bytes": 2554
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/file-reads-with-callback.json",
+      "sha256": "529ca19b453dca47054698bb0edd4ddc40bf4aa16d4de6213be1794e4a2087ee",
+      "bytes": 1072835
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/file-reads.json",
+      "sha256": "d612d0bf32b6a469b0f4f1dc7544e64675733c77170fd25ce5184fd8021e8829",
+      "bytes": 715150
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/freeze-evidence.py",
+      "sha256": "6462cb63e30b8a80e00bc0184a61e9838bf3cca343520b1388c5080dc0dbd5a1",
+      "bytes": 4645
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/freeze-first.log",
+      "sha256": "ff5cc2b8f8453ba68d9055a571429911e920fd7c4d368adee777522289ea4478",
+      "bytes": 147
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/handoff.md",
+      "sha256": "35c913c1d3cc229ac287071573db6cf284e1ce8961d6e7831a2a2d8e163918dc",
+      "bytes": 2986
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/host-storage.ts.diagnostic.patch",
+      "sha256": "dbecef54ce226f71d576cbb0538a95366799088368b8f74f81901d6c9977e0e9",
+      "bytes": 3149
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-after-new-host.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-after-new-host.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-after-new-trace.jsonl",
+      "sha256": "005480c593179cb202d97a7dc6223d0ad5a7835bc5be4a943790ecc0805068d5",
+      "bytes": 28193
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-after-old-host.stderr.log",
+      "sha256": "fd6b6f595c869a5157ffd7833eea1682eb7a5775be5df599e2a27096646c57df",
+      "bytes": 75
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-after-old-host.stdout.log",
+      "sha256": "8989c8d657dd78820b121af638fbe82c3f099c130fb401bcc9b3c70265a5de4f",
+      "bytes": 74
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-after-old-trace.jsonl",
+      "sha256": "59d16177fd2275e6237448ca636a07d2a78ed5916fbd85bd2d7e617ed906806f",
+      "bytes": 29088
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-before-new-host.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-before-new-host.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-before-new-trace.jsonl",
+      "sha256": "393d1ffbdbe37249b1340b8f0a35fc389d30f590c6d10c33852e8317113a1007",
+      "bytes": 28319
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-before-old-host.stderr.log",
+      "sha256": "fd6b6f595c869a5157ffd7833eea1682eb7a5775be5df599e2a27096646c57df",
+      "bytes": 75
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-before-old-host.stdout.log",
+      "sha256": "7d3d5c3032d13571e700924d259967dd94ea9a458532e5ac25722379d90fa7a7",
+      "bytes": 74
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-before-old-trace.jsonl",
+      "sha256": "61877355f49040c566415d7735651dc0636b6f1ec1843c2701bf5f3c0b77a49b",
+      "bytes": 29231
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-diagnostic-statistics.json",
+      "sha256": "68e0f91abcce1d2e49f28b16272e28877d64e92e63280d22c3531ccb048c4edc",
+      "bytes": 9441
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-instrumentation/new-host.mjs",
+      "sha256": "ab82e32dfd9e0a1295e65b441ff3e69925f10399e5674c7acd016218d8de36d1",
+      "bytes": 1799
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-instrumentation/perf-preload.mjs",
+      "sha256": "c17c4cec884387b1423edf585e10e4f2307f0b5182f8ef66d27149ad5e886064",
+      "bytes": 3279
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-instrumentation/sitecustomize.py",
+      "sha256": "f79751d2708ab7e60e26eb6c3ec02e166e36bdcb67cbaad6fa17fee5a1030216",
+      "bytes": 2941
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-recheck-capture.json",
+      "sha256": "706aebe04351b160765b6b2355e3b407f56016a9ce4e98255bcb39e96b529d5a",
+      "bytes": 392514
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-recheck-summary.json",
+      "sha256": "0c531ab43cc98b95bf4194f425ab2a100eaf1de4449cacc44fd7b3a548b71a6f",
+      "bytes": 2771
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-recheck.json",
+      "sha256": "bf7a9a85088c4c768417202a817199d675dc03865337f50231a5a4b67a9e965f",
+      "bytes": 392801
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-recheck.log",
+      "sha256": "5077944d4c6ef832aa41220af69ebd87b3bde9731c928bcd66d2aacfea9ee51f",
+      "bytes": 1789
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-recheck.py",
+      "sha256": "eb8803892a49582aa5802a25068322ce100ba0ea2845890acbd31f68e3c5a49f",
+      "bytes": 13004
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/http-statistics.log",
+      "sha256": "090c13cd709a34327febee94ddaadbe910440fce104d45162d980f0a47d008c9",
+      "bytes": 1588
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/manifest.json",
+      "sha256": "bfc352beda75e750b2058b74c3388eac9a298ce462b8720948784b4d192ec5a2",
+      "bytes": 2640
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/measure-catalog.mjs",
+      "sha256": "6a42bee5704edf81833693d930535d0a60f911db00a262b7ed827dfa3828ea00",
+      "bytes": 2094
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/measure-file-callback.mjs",
+      "sha256": "38cea81fa3f9bc1f371b3b1bf8210c7fe5c16aedcfaeb6a75b7ad9dc348b3dc9",
+      "bytes": 1677
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/measure-file-reads.mjs",
+      "sha256": "0b0a97d46ccc377de22fe817cb2483bfd583367f4f4afffb4bb03b5d1fac93a3",
+      "bytes": 1440
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/metadata-correction.json",
+      "sha256": "29429a9d1f55fff19411bc9634d3ec56088ba6af347ffac98b5d6fdb8151e8a8",
+      "bytes": 704
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/overlap-loop.mjs",
+      "sha256": "28ba1ddf44ee74ccfa2f74c870f93979785499db071d2d045b8066de0b1b2f61",
+      "bytes": 2216
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/overlap-storage.ts.diagnostic.patch",
+      "sha256": "34a96a6a47d9a2ef0fd04ac2d4c74c6984b7fb0e1de185917bd43b7490fa1faa",
+      "bytes": 2303
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/prepare-overlap.py",
+      "sha256": "6d51abbd2becda886ec4e48c3c6bf3c387c301a083c644497a46feb8518de13f",
+      "bytes": 1832
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/prepare-trace.py",
+      "sha256": "74d4ac5666b1640ce6a2e238ce5759dbe61d50745ad62465c8ae52984962dca1",
+      "bytes": 2247
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/product-bindings.json",
+      "sha256": "5196a3dfe9574eaf0ef995a7bf74eec0cf26e816a9842736b0f421529703cf16",
+      "bytes": 698
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/product.patch",
+      "sha256": "a301bf6a10b9840b61e67e26438b171cfd3c89c0dca5352b7438fcb893a19752",
+      "bytes": 4759
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/related.log",
+      "sha256": "2961a265b8494e3dfc2e8292347c4b49df269a042751163e6a124d0d19f1717e",
+      "bytes": 6826
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/report.md",
+      "sha256": "7d7410e3c3523593b7d21e3786cca49a27692e2248310c0454bff7566c6b551b",
+      "bytes": 7615
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/safety-before.log",
+      "sha256": "ead8ca135de8f55d2f74e275b7fa73ac60b95c0bf7025f226e94e8fbd972d093",
+      "bytes": 231
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/safety-final.log",
+      "sha256": "668ed97601a1041930580348da5b938714b1ae1b2ddeee2e4422f05b5f25445a",
+      "bytes": 230
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/settings-probe.mjs",
+      "sha256": "9326e7e1a35d2e08dd5184fdb9f1dc707310f5e1f0b5cacae73a5b728409682b",
+      "bytes": 1001
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/settings-probe.py",
+      "sha256": "4877ec3847a560478ff07352b815e84f48c2ceb460f1fe83c1531cd5cbf5c7ce",
+      "bytes": 1873
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/settings.json",
+      "sha256": "2d60cd37d4d84cb99a61df861ee49c303d909635b1040041b6d2850791197a9e",
+      "bytes": 1061
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/settings.log",
+      "sha256": "d982a502464d05bc9d1955a47f8c83ccbcc8bad18092fc756523a236a366a8b5",
+      "bytes": 937
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-final.log",
+      "sha256": "51e957e076c0607f93313916dee66cda79d4e8f0b32dd31e4fd601723213f42a",
+      "bytes": 85
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-green-initial.json",
+      "sha256": "113976b8f7fabbf09c10a8ec146b5aa86ea46a9007b0fb20849feb70a07b174b",
+      "bytes": 5112
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-green.log",
+      "sha256": "08a6f7c7e9bdb5a7faa37ad53f61cc043ba0baf1e251ddebb90ce009ad89a0e9",
+      "bytes": 85
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-loop.json",
+      "sha256": "79c1dbdb2dc07518c20881280801b8c6e107842644d33810067045f6aa9f2368",
+      "bytes": 5112
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-loop.log",
+      "sha256": "3cf33cabefd64e23c4499aab26d65bdcba3ed102152956589aab6816d077787a",
+      "bytes": 84
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-loop.mjs",
+      "sha256": "a8151bd344acca3091f39204ab8ba8ca0ec4281b2db883944c38a97d524b3254",
+      "bytes": 2262
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-overlap.json",
+      "sha256": "a3681d6c1182200f8626335bcc5cf60ad0bee09ac1ce4cbbacdcfd889a41e30e",
+      "bytes": 5115
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-overlap.log",
+      "sha256": "bc7b4d387f38b20521c2f3dfe8c9eba880c2d6b669eb5b56ceb8116d2975371c",
+      "bytes": 85
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-red.json",
+      "sha256": "fe3ebdcf3c27a2ce64bb9436fa22392a17874859758dafc729408f72c7e2de7a",
+      "bytes": 5110
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-trace.json",
+      "sha256": "d61345c335b627c5a4b35e92d2aa4ab9024d4df7ca5325f8d084caf9673d6eac",
+      "bytes": 99529
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/storage-trace.log",
+      "sha256": "8cfbcaaea658e97c7402826b5781b834950ce7bee7730dd8e330a43681cbbb5a",
+      "bytes": 84
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/summarize-http.py",
+      "sha256": "a8ff0890666af3c5f44e53fb2c70f81b8c0fd8fdfb2d0ce2183fd4d5e0780aa9",
+      "bytes": 1762
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/trace-loop.mjs",
+      "sha256": "6b2794c21b9096639b94067eac01ac191e66102a62da97e67a91aa680ee6bad3",
+      "bytes": 2269
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/typecheck-direct.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/typecheck-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/http-latency-regression/implementation/typecheck.log",
+      "sha256": "4d8dc1155209ebd5bc1fc74c1c333077a07039b8d7ab96a5ade47a00ae773adf",
+      "bytes": 30
+    }
+  ],
+  "rule": "仅列本任务候选文件；由root选择并提交，不包含root-preflight-summary或其他作者文件。"
+}

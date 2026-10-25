@@ -1,0 +1,75 @@
+diff --git a/backend-ts/src/host-storage.ts b/backend-ts/src/host-storage.ts
+index 7c2e3dd3..74c6d676 100644
+--- a/backend-ts/src/host-storage.ts
++++ b/backend-ts/src/host-storage.ts
+@@ -252,16 +252,23 @@ export class HostStorage {
+     if (code !== 'ready') throw new HostStorageError(code);
+   }
+   private async inspect(client: pg.Client): Promise<string> {
+-    let migrations: {name: string; checksum: string}[];
++    let names: string[];
+     try {
+-      const names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
++      names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
+       if (names.length !== EXPECTED_MIGRATION_COUNT || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
+-      migrations = await Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') })));
+     } catch { return 'migration_files_invalid'; }
+-    const metadata = await client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
+-      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+-      JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid
+-      WHERE n.nspname='public' AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped`);
++    // 文件字节与当前事务的 catalog 独立读取，不复用上次成功结果。
++    // allSettled 保留文件错误的原优先级，也让并行查询在回滚和关闭前排空。
++    const [files, catalog] = await Promise.allSettled([
++      Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') }))),
++      client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
++        FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
++        JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid
++        WHERE n.nspname='public' AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped`),
++    ]);
++    if (files.status === 'rejected') return 'migration_files_invalid';
++    if (catalog.status === 'rejected') throw catalog.reason;
++    const migrations = files.value, metadata = catalog.value;
+     const tables = new Map<string, Map<string,string>>();
+     for (const row of metadata.rows) {
+       if (!tables.has(row.relname)) tables.set(row.relname, new Map());
+diff --git a/backend-ts/test/host-storage.test.mjs b/backend-ts/test/host-storage.test.mjs
+index 35681e79..ed85fc21 100644
+--- a/backend-ts/test/host-storage.test.mjs
++++ b/backend-ts/test/host-storage.test.mjs
+@@ -286,3 +286,35 @@ test('禁止dotenv时不读取受控文件，凭据保存不能承诺重启生
+     } finally { await storage.close(); }
+   } finally { await rm(directory, { recursive: true, force: true }); }
+ });
++
++
++test('每次业务读取重新核验全部SQL字节，文件故障与同元数据篡改均失败关闭', async () => {
++  const { cp, chmod, readdir, utimes, mkdir } = await import('node:fs/promises');
++  const fixture = await createStorageFixture();
++  const copied = join(fixture.directory, 'migrations');
++  let storage;
++  try {
++    await chmod(fixture.envFilePath, 0o600);
++    await cp(fixture.migrationsDirectory, copied, { recursive: true });
++    await chmod(copied, 0o700);
++    const names = (await readdir(copied)).filter(name => name.endsWith('.sql')).sort();
++    for (const name of names) await chmod(join(copied, name), 0o600);
++    storage = await HostStorage.open({ ...fixture.options, migrationsDirectory: copied });
++    const read = () => storage.businessReadTransaction(async client => (await client.query('SELECT 1 AS value')).rows[0].value);
++    assert.equal(await read(), 1);
++    const last = join(copied, names.at(-1)), original = await readFile(last), metadata = await stat(last);
++    const changed = Buffer.from(original);
++    changed[changed.length - 1] ^= 1;
++    await writeFile(last, changed);
++    await utimes(last, metadata.atime, metadata.mtime);
++    await assert.rejects(read(), { code: 'migration_history_mismatch' });
++    await writeFile(last, original);
++    assert.equal(await read(), 1);
++    await rm(last);
++    await mkdir(last, { mode: 0o700 });
++    await assert.rejects(read(), { code: 'migration_files_invalid' });
++    await rm(last, { recursive: true });
++    await writeFile(last, original, { mode: 0o600 });
++    assert.equal(await read(), 1);
++  } finally { await storage?.close(); await fixture.close(); }
++});

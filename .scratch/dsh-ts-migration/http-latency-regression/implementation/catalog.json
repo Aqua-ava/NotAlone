@@ -1,0 +1,975 @@
+{
+  "summaries": {
+    "object": {
+      "p50_ms": 0.48985450000000696
+    },
+    "array": {
+      "p50_ms": 0.48872950000000515
+    },
+    "aggregate": {
+      "p50_ms": 0.5509789999999555
+    }
+  },
+  "rows": [
+    {
+      "index": -10,
+      "mode": "object",
+      "milliseconds": 2.8218749999999773,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -10,
+      "mode": "array",
+      "milliseconds": 1.1191249999999968,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -10,
+      "mode": "aggregate",
+      "milliseconds": 1.4107079999999996,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -9,
+      "mode": "object",
+      "milliseconds": 0.9325000000000045,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -9,
+      "mode": "array",
+      "milliseconds": 0.8305000000000291,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -9,
+      "mode": "aggregate",
+      "milliseconds": 0.758624999999995,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -8,
+      "mode": "object",
+      "milliseconds": 0.9940829999999892,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -8,
+      "mode": "array",
+      "milliseconds": 0.7608339999999885,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -8,
+      "mode": "aggregate",
+      "milliseconds": 0.7667500000000018,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -7,
+      "mode": "object",
+      "milliseconds": 0.820541999999989,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -7,
+      "mode": "array",
+      "milliseconds": 0.5838329999999701,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -7,
+      "mode": "aggregate",
+      "milliseconds": 0.6814160000000129,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -6,
+      "mode": "object",
+      "milliseconds": 0.6474579999999719,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -6,
+      "mode": "array",
+      "milliseconds": 0.6597499999999741,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -6,
+      "mode": "aggregate",
+      "milliseconds": 0.6924589999999853,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -5,
+      "mode": "object",
+      "milliseconds": 0.7480830000000083,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -5,
+      "mode": "array",
+      "milliseconds": 0.5826250000000073,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -5,
+      "mode": "aggregate",
+      "milliseconds": 0.6762499999999818,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -4,
+      "mode": "object",
+      "milliseconds": 0.5629579999999805,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -4,
+      "mode": "array",
+      "milliseconds": 1.3537079999999833,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -4,
+      "mode": "aggregate",
+      "milliseconds": 0.9084159999999883,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -3,
+      "mode": "object",
+      "milliseconds": 0.5562499999999773,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -3,
+      "mode": "array",
+      "milliseconds": 0.551166999999964,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -3,
+      "mode": "aggregate",
+      "milliseconds": 0.6645419999999831,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -2,
+      "mode": "object",
+      "milliseconds": 0.603416999999979,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -2,
+      "mode": "array",
+      "milliseconds": 0.5135419999999726,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -2,
+      "mode": "aggregate",
+      "milliseconds": 0.8120840000000271,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -1,
+      "mode": "object",
+      "milliseconds": 0.6332919999999831,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -1,
+      "mode": "array",
+      "milliseconds": 0.591666000000032,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": -1,
+      "mode": "aggregate",
+      "milliseconds": 0.6187919999999849,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 0,
+      "mode": "object",
+      "milliseconds": 0.519958000000031,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 0,
+      "mode": "array",
+      "milliseconds": 0.5374170000000049,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 0,
+      "mode": "aggregate",
+      "milliseconds": 0.5569169999999986,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 1,
+      "mode": "object",
+      "milliseconds": 0.5714169999999967,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 1,
+      "mode": "array",
+      "milliseconds": 0.515041999999994,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 1,
+      "mode": "aggregate",
+      "milliseconds": 0.5566249999999968,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 2,
+      "mode": "object",
+      "milliseconds": 0.5045420000000149,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 2,
+      "mode": "array",
+      "milliseconds": 0.47220900000002075,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 2,
+      "mode": "aggregate",
+      "milliseconds": 0.5595840000000294,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 3,
+      "mode": "object",
+      "milliseconds": 0.5073330000000169,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 3,
+      "mode": "array",
+      "milliseconds": 0.48866700000002083,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 3,
+      "mode": "aggregate",
+      "milliseconds": 0.5319160000000238,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 4,
+      "mode": "object",
+      "milliseconds": 0.5558750000000146,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 4,
+      "mode": "array",
+      "milliseconds": 0.48724999999996044,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 4,
+      "mode": "aggregate",
+      "milliseconds": 0.5776250000000118,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 5,
+      "mode": "object",
+      "milliseconds": 0.4768750000000068,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 5,
+      "mode": "array",
+      "milliseconds": 0.48879199999998946,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 5,
+      "mode": "aggregate",
+      "milliseconds": 0.5821249999999623,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 6,
+      "mode": "object",
+      "milliseconds": 0.4706250000000409,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 6,
+      "mode": "array",
+      "milliseconds": 0.48179199999998445,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 6,
+      "mode": "aggregate",
+      "milliseconds": 0.5597080000000005,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 7,
+      "mode": "object",
+      "milliseconds": 0.5000840000000153,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 7,
+      "mode": "array",
+      "milliseconds": 0.8174579999999878,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 7,
+      "mode": "aggregate",
+      "milliseconds": 0.5472919999999704,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 8,
+      "mode": "object",
+      "milliseconds": 0.45158399999996846,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 8,
+      "mode": "array",
+      "milliseconds": 0.47962499999999864,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 8,
+      "mode": "aggregate",
+      "milliseconds": 0.5785419999999704,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 9,
+      "mode": "object",
+      "milliseconds": 0.47962499999999864,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 9,
+      "mode": "array",
+      "milliseconds": 0.5772919999999999,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 9,
+      "mode": "aggregate",
+      "milliseconds": 0.5926670000000058,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 10,
+      "mode": "object",
+      "milliseconds": 0.5073749999999677,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 10,
+      "mode": "array",
+      "milliseconds": 0.5767079999999964,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 10,
+      "mode": "aggregate",
+      "milliseconds": 0.5423330000000419,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 11,
+      "mode": "object",
+      "milliseconds": 0.4642499999999927,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 11,
+      "mode": "array",
+      "milliseconds": 0.48349999999999227,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 11,
+      "mode": "aggregate",
+      "milliseconds": 0.5433329999999614,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 12,
+      "mode": "object",
+      "milliseconds": 0.6423750000000155,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 12,
+      "mode": "array",
+      "milliseconds": 0.4908750000000168,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 12,
+      "mode": "aggregate",
+      "milliseconds": 0.5519999999999641,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 13,
+      "mode": "object",
+      "milliseconds": 0.47516699999994216,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 13,
+      "mode": "array",
+      "milliseconds": 0.5868340000000671,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 13,
+      "mode": "aggregate",
+      "milliseconds": 0.5273329999999987,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 14,
+      "mode": "object",
+      "milliseconds": 0.4546659999999747,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 14,
+      "mode": "array",
+      "milliseconds": 0.5070419999999558,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 14,
+      "mode": "aggregate",
+      "milliseconds": 0.5259589999999434,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 15,
+      "mode": "object",
+      "milliseconds": 0.5583749999999554,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 15,
+      "mode": "array",
+      "milliseconds": 0.4804579999999987,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 15,
+      "mode": "aggregate",
+      "milliseconds": 0.5396250000000009,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 16,
+      "mode": "object",
+      "milliseconds": 0.4588749999999209,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 16,
+      "mode": "array",
+      "milliseconds": 0.6169170000000577,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 16,
+      "mode": "aggregate",
+      "milliseconds": 0.5362910000000056,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 17,
+      "mode": "object",
+      "milliseconds": 0.5351660000000038,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 17,
+      "mode": "array",
+      "milliseconds": 0.4845420000000331,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 17,
+      "mode": "aggregate",
+      "milliseconds": 0.5499579999999469,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 18,
+      "mode": "object",
+      "milliseconds": 0.5397500000000264,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 18,
+      "mode": "array",
+      "milliseconds": 0.5462909999999965,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 18,
+      "mode": "aggregate",
+      "milliseconds": 0.5897909999999911,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 19,
+      "mode": "object",
+      "milliseconds": 0.5439169999999649,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 19,
+      "mode": "array",
+      "milliseconds": 0.6486249999999245,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 19,
+      "mode": "aggregate",
+      "milliseconds": 0.5605419999999413,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 20,
+      "mode": "object",
+      "milliseconds": 0.5020000000000664,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 20,
+      "mode": "array",
+      "milliseconds": 0.5583749999999554,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 20,
+      "mode": "aggregate",
+      "milliseconds": 0.5993330000000014,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 21,
+      "mode": "object",
+      "milliseconds": 0.4755840000000262,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 21,
+      "mode": "array",
+      "milliseconds": 0.47583300000007966,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 21,
+      "mode": "aggregate",
+      "milliseconds": 0.5552079999999933,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 22,
+      "mode": "object",
+      "milliseconds": 0.46537499999999454,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 22,
+      "mode": "array",
+      "milliseconds": 0.8207499999999754,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 22,
+      "mode": "aggregate",
+      "milliseconds": 0.7350000000000136,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 23,
+      "mode": "object",
+      "milliseconds": 0.45612499999992906,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 23,
+      "mode": "array",
+      "milliseconds": 0.49512500000003,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 23,
+      "mode": "aggregate",
+      "milliseconds": 0.5358329999999114,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 24,
+      "mode": "object",
+      "milliseconds": 0.44420800000000327,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 24,
+      "mode": "array",
+      "milliseconds": 0.46612500000003365,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 24,
+      "mode": "aggregate",
+      "milliseconds": 0.539957999999956,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 25,
+      "mode": "object",
+      "milliseconds": 0.4766669999999067,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 25,
+      "mode": "array",
+      "milliseconds": 0.47212500000000546,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 25,
+      "mode": "aggregate",
+      "milliseconds": 0.5550409999999601,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 26,
+      "mode": "object",
+      "milliseconds": 0.5776250000000118,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 26,
+      "mode": "array",
+      "milliseconds": 0.44937500000003183,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 26,
+      "mode": "aggregate",
+      "milliseconds": 0.5323750000000018,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 27,
+      "mode": "object",
+      "milliseconds": 0.4532090000000153,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 27,
+      "mode": "array",
+      "milliseconds": 0.4629170000000613,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 27,
+      "mode": "aggregate",
+      "milliseconds": 0.5325000000000273,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 28,
+      "mode": "object",
+      "milliseconds": 0.4595000000000482,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 28,
+      "mode": "array",
+      "milliseconds": 0.4438750000000482,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 28,
+      "mode": "aggregate",
+      "milliseconds": 0.5332910000000766,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 29,
+      "mode": "object",
+      "milliseconds": 0.6691670000000158,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 29,
+      "mode": "array",
+      "milliseconds": 0.4702079999999569,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    },
+    {
+      "index": 29,
+      "mode": "aggregate",
+      "milliseconds": 0.5259589999999434,
+      "table_count": 108,
+      "column_count": 1120,
+      "identical": true
+    }
+  ]
+}

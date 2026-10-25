@@ -286,3 +286,35 @@ test('禁止dotenv时不读取受控文件，凭据保存不能承诺重启生�
     } finally { await storage.close(); }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+
+test('每次业务读取重新核验全部SQL字节，文件故障与同元数据篡改均失败关闭', async () => {
+  const { cp, chmod, readdir, utimes, mkdir } = await import('node:fs/promises');
+  const fixture = await createStorageFixture();
+  const copied = join(fixture.directory, 'migrations');
+  let storage;
+  try {
+    await chmod(fixture.envFilePath, 0o600);
+    await cp(fixture.migrationsDirectory, copied, { recursive: true });
+    await chmod(copied, 0o700);
+    const names = (await readdir(copied)).filter(name => name.endsWith('.sql')).sort();
+    for (const name of names) await chmod(join(copied, name), 0o600);
+    storage = await HostStorage.open({ ...fixture.options, migrationsDirectory: copied });
+    const read = () => storage.businessReadTransaction(async client => (await client.query('SELECT 1 AS value')).rows[0].value);
+    assert.equal(await read(), 1);
+    const last = join(copied, names.at(-1)), original = await readFile(last), metadata = await stat(last);
+    const changed = Buffer.from(original);
+    changed[changed.length - 1] ^= 1;
+    await writeFile(last, changed);
+    await utimes(last, metadata.atime, metadata.mtime);
+    await assert.rejects(read(), { code: 'migration_history_mismatch' });
+    await writeFile(last, original);
+    assert.equal(await read(), 1);
+    await rm(last);
+    await mkdir(last, { mode: 0o700 });
+    await assert.rejects(read(), { code: 'migration_files_invalid' });
+    await rm(last, { recursive: true });
+    await writeFile(last, original, { mode: 0o600 });
+    assert.equal(await read(), 1);
+  } finally { await storage?.close(); await fixture.close(); }
+});

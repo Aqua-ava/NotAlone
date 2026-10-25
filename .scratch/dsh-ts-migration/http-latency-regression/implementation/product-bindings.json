@@ -1,0 +1,20 @@
+{
+  "backend-ts/src/host-storage.ts": {
+    "base_sha256": "7f63954a3cc1ab9450316b4e8021df9f4a8e6422354dbaf817e3c788c5d09259",
+    "current_sha256": "ca7663b4c8af53f8f30d8fc5fb3378d3af179c5528233d47fbd972dd5999d387"
+  },
+  "query_observer": {
+    "unchanged": true
+  },
+  "transaction_lifecycle": {
+    "unchanged": true
+  },
+  "connection_configuration": {
+    "unchanged": true
+  },
+  "backend-ts/test/host-storage.test.mjs": {
+    "base_sha256": "41d81e43e4a2a45efbde80e999f0d813f75cf739f833f8028d1ecf75999b730b",
+    "current_sha256": "4015603ed51e891c501a1754c25abffa72a6397410ccb70ea48dd14a0fc00cdf"
+  },
+  "patch_sha256": "a301bf6a10b9840b61e67e26438b171cfd3c89c0dca5352b7438fcb893a19752"
+}

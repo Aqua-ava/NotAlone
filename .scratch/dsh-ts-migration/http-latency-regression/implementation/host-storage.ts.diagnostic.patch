@@ -1,0 +1,46 @@
+--- base/host-storage.ts
++++ diagnostic/host-storage.ts
+@@ -1,3 +1,4 @@
++const perfRows = globalThis[Symbol.for('notalone.storage.trace')] = [];
+ /** 桌面首用的普通业务模块；不依赖 DSH session、profile home 或模型接口。 */
+ import { constants } from 'node:fs';
+ import { open, readdir, readFile, mkdir, rename, unlink } from 'node:fs/promises';
+@@ -224,7 +225,15 @@
+     const pending = new Promise<void>(resolve => { finish = resolve; });
+     this.pending.add(pending);
+     try {
++      const connectStart = performance.now();
+       client = await connectConfigured(await connectionOptions(this.databaseUrl, this.values));
++      perfRows.push({stage:'connect',milliseconds:performance.now()-connectStart});
++      const originalQuery = client.query;
++      client.query = function(...args) {
++        const start = performance.now();
++        const result = Reflect.apply(originalQuery,this,args);
++        return result.then(value => {perfRows.push({stage:'sql',label:String(args[0]).slice(0,55),milliseconds:performance.now()-start}); return value;});
++      };
+       if (business) trackQueryFailures(client, queryFailures);
+       this.assertOpen();
+       await client.query(write ? 'BEGIN' : 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+@@ -245,19 +254,21 @@
+       // 公开 HTTP 继续按各自领域类型筛选错误，未知异常不能直接成为响应正文。
+       if (businessFailure && rolledBack && !queryFailures.has(error) && !(error instanceof pg.DatabaseError)) throw error;
+       throw new HostStorageError('database_unavailable');
+-    } finally { await client?.end().catch(() => {}); this.pending.delete(pending); finish(); }
++    } finally { const endStart=performance.now(); await client?.end().catch(() => {}); perfRows.push({stage:'end',milliseconds:performance.now()-endStart}); this.pending.delete(pending); finish(); }
+   }
+   private async requireReady(client: pg.Client): Promise<void> {
+     const code = await this.inspect(client);
+     if (code !== 'ready') throw new HostStorageError(code);
+   }
+   private async inspect(client: pg.Client): Promise<string> {
++    const filesStart = performance.now();
+     let migrations: {name: string; checksum: string}[];
+     try {
+       const names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
+       if (names.length !== EXPECTED_MIGRATION_COUNT || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
+       migrations = await Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') })));
+     } catch { return 'migration_files_invalid'; }
++    perfRows.push({stage:'files',milliseconds:performance.now()-filesStart});
+     const metadata = await client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
+       FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+       JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid

@@ -1,0 +1,254 @@
+{
+  "diagnostic_only": true,
+  "source_sha256": "7f63954a3cc1ab9450316b4e8021df9f4a8e6422354dbaf817e3c788c5d09259",
+  "warmups": 10,
+  "scored": 30,
+  "concurrency": 1,
+  "samples": [
+    {
+      "index": -10,
+      "warmup": true,
+      "milliseconds": 11.780957999999998,
+      "succeeded": true
+    },
+    {
+      "index": -9,
+      "warmup": true,
+      "milliseconds": 9.658458999999993,
+      "succeeded": true
+    },
+    {
+      "index": -8,
+      "warmup": true,
+      "milliseconds": 6.61141699999996,
+      "succeeded": true
+    },
+    {
+      "index": -7,
+      "warmup": true,
+      "milliseconds": 7.586625000000026,
+      "succeeded": true
+    },
+    {
+      "index": -6,
+      "warmup": true,
+      "milliseconds": 6.555375000000026,
+      "succeeded": true
+    },
+    {
+      "index": -5,
+      "warmup": true,
+      "milliseconds": 6.420749999999998,
+      "succeeded": true
+    },
+    {
+      "index": -4,
+      "warmup": true,
+      "milliseconds": 6.698166000000015,
+      "succeeded": true
+    },
+    {
+      "index": -3,
+      "warmup": true,
+      "milliseconds": 6.61525000000006,
+      "succeeded": true
+    },
+    {
+      "index": -2,
+      "warmup": true,
+      "milliseconds": 7.054333000000042,
+      "succeeded": true
+    },
+    {
+      "index": -1,
+      "warmup": true,
+      "milliseconds": 6.2651670000000195,
+      "succeeded": true
+    },
+    {
+      "index": 0,
+      "warmup": false,
+      "milliseconds": 6.708334000000036,
+      "succeeded": true
+    },
+    {
+      "index": 1,
+      "warmup": false,
+      "milliseconds": 8.11733300000003,
+      "succeeded": true
+    },
+    {
+      "index": 2,
+      "warmup": false,
+      "milliseconds": 6.370750000000044,
+      "succeeded": true
+    },
+    {
+      "index": 3,
+      "warmup": false,
+      "milliseconds": 6.238582999999949,
+      "succeeded": true
+    },
+    {
+      "index": 4,
+      "warmup": false,
+      "milliseconds": 6.099916000000007,
+      "succeeded": true
+    },
+    {
+      "index": 5,
+      "warmup": false,
+      "milliseconds": 7.303625000000011,
+      "succeeded": true
+    },
+    {
+      "index": 6,
+      "warmup": false,
+      "milliseconds": 6.538665999999921,
+      "succeeded": true
+    },
+    {
+      "index": 7,
+      "warmup": false,
+      "milliseconds": 6.968124999999986,
+      "succeeded": true
+    },
+    {
+      "index": 8,
+      "warmup": false,
+      "milliseconds": 6.514832999999953,
+      "succeeded": true
+    },
+    {
+      "index": 9,
+      "warmup": false,
+      "milliseconds": 5.9387910000000375,
+      "succeeded": true
+    },
+    {
+      "index": 10,
+      "warmup": false,
+      "milliseconds": 7.036666999999966,
+      "succeeded": true
+    },
+    {
+      "index": 11,
+      "warmup": false,
+      "milliseconds": 6.691249999999968,
+      "succeeded": true
+    },
+    {
+      "index": 12,
+      "warmup": false,
+      "milliseconds": 6.3910829999999805,
+      "succeeded": true
+    },
+    {
+      "index": 13,
+      "warmup": false,
+      "milliseconds": 7.608083000000079,
+      "succeeded": true
+    },
+    {
+      "index": 14,
+      "warmup": false,
+      "milliseconds": 6.785541999999964,
+      "succeeded": true
+    },
+    {
+      "index": 15,
+      "warmup": false,
+      "milliseconds": 7.089207999999985,
+      "succeeded": true
+    },
+    {
+      "index": 16,
+      "warmup": false,
+      "milliseconds": 8.446583000000032,
+      "succeeded": true
+    },
+    {
+      "index": 17,
+      "warmup": false,
+      "milliseconds": 7.008791999999971,
+      "succeeded": true
+    },
+    {
+      "index": 18,
+      "warmup": false,
+      "milliseconds": 6.713499999999954,
+      "succeeded": true
+    },
+    {
+      "index": 19,
+      "warmup": false,
+      "milliseconds": 6.367624999999975,
+      "succeeded": true
+    },
+    {
+      "index": 20,
+      "warmup": false,
+      "milliseconds": 6.907125000000065,
+      "succeeded": true
+    },
+    {
+      "index": 21,
+      "warmup": false,
+      "milliseconds": 6.562125000000037,
+      "succeeded": true
+    },
+    {
+      "index": 22,
+      "warmup": false,
+      "milliseconds": 6.920499999999947,
+      "succeeded": true
+    },
+    {
+      "index": 23,
+      "warmup": false,
+      "milliseconds": 7.345749999999953,
+      "succeeded": true
+    },
+    {
+      "index": 24,
+      "warmup": false,
+      "milliseconds": 6.943167000000017,
+      "succeeded": true
+    },
+    {
+      "index": 25,
+      "warmup": false,
+      "milliseconds": 7.1404999999999745,
+      "succeeded": true
+    },
+    {
+      "index": 26,
+      "warmup": false,
+      "milliseconds": 7.063750000000027,
+      "succeeded": true
+    },
+    {
+      "index": 27,
+      "warmup": false,
+      "milliseconds": 7.139083000000028,
+      "succeeded": true
+    },
+    {
+      "index": 28,
+      "warmup": false,
+      "milliseconds": 7.43204199999991,
+      "succeeded": true
+    },
+    {
+      "index": 29,
+      "warmup": false,
+      "milliseconds": 7.165958000000046,
+      "succeeded": true
+    }
+  ],
+  "stages": [],
+  "p50_ms": 6.931833499999982,
+  "symptom_reproduced": true,
+  "diagnostic_target_ms": 5,
+  "own_resources_cleaned": true
+}
