@@ -62,6 +62,18 @@ test('助手会话尚未加载时，当前联系人的唯一运行作业仍可�
   assert.match(html, /<button[^>]*aria-label="停止本次生成"[^>]*>停止本次生成<\/button>/);
 });
 
+test('显示另一助手会话时，当前联系人的唯一后台生成仍可停止', () => {
+  const html = render({
+    sessionId: 'cb1c9305-a01c-48f0-a3b1-87707fd23983',
+    requestKey: 'e1110650-207a-4887-877c-f128b98d18a5',
+    turnId: '157d7997-92a5-4a94-87fa-a8ed7f560b85',
+    inputVersionId: 'f90344f0-3ef2-4374-8adc-143c6254146e',
+  }, { phase: 'ready', sessionId: '39b0eaa0-50d2-4a83-bb58-d125517a9e71',
+    turns: [], inputs: [], currentInputVersionId: null });
+  assert.match(html, /正在另一助手会话中后台生成，结果会保存在原助手会话。/);
+  assert.match(html, /<button[^>]*aria-label="停止本次生成"[^>]*>停止本次生成<\/button>/);
+});
+
 test('会话未加载时只允许当前联系人的唯一活动作业，其他联系人和歧义作业保持隔离', () => {
   const loading = { phase: 'loading', sessionId: null, turns: [], inputs: [], currentInputVersionId: null };
   const job = (overrides) => ({
@@ -78,4 +90,11 @@ test('会话未加载时只允许当前联系人的唯一活动作业，其他�
     inputVersionId: 'f90344f0-3ef2-4374-8adc-143c6254146e',
   })], loading);
   assert.doesNotMatch(ambiguous, /aria-label="停止本次生成"/);
+  const ambiguousWithSavedSession = renderJobs([job({}), job({
+    sessionId: 'cb1c9305-a01c-48f0-a3b1-87707fd23983',
+    requestKey: 'e1110650-207a-4887-877c-f128b98d18a5',
+    inputVersionId: 'f90344f0-3ef2-4374-8adc-143c6254146e',
+  })], { phase: 'ready', sessionId: '39b0eaa0-50d2-4a83-bb58-d125517a9e71',
+    turns: [], inputs: [], currentInputVersionId: null });
+  assert.doesNotMatch(ambiguousWithSavedSession, /aria-label="停止本次生成"/);
 });
