@@ -72,8 +72,14 @@ Spec: ../spec.md
 - `git diff --check`：通过。公开历史扫描：`issues 0`。
 - Spec 审查发现的三项阻断已修复：授权失效返回既有 409 语义；同版本回滚不递增库修订且不更新时间；v4 分层证明即使材料选择为空也执行来源快照复验。修复后的聚焦回归如上通过。
 
+### 根集成只读验收
+
+- 使用 `npm run dev` 复用实际开发 App，显式开启五个迁移 TS runtime 开关；`/api/runtime/status` 返回 `ownership.skillLearning=typescript`、`ownership.skills=typescript`，task worker 为 running。
+- 选择验收联系人 `ran` 并点击“Skill”，实际 App 正确显示“已有 Skill”／“待审核”两个页签；已有页显示当前没有有效发布版本，待审核页显示 0 项且没有建议。
+- 本次 App 验收仅只读：没有开启经验整理，没有学习／模型调用，没有批准、发布、回滚或停用，没有外部消息或真实资料写入。发布写入、L2／L3 审核与失效链仍由上方的 1222/1222 及 37/37 合成 HTTP／PG／控制器证据覆盖，不冒充 `ran` 的真实写入。
+
 ### 清理与未覆盖
 
 - 清理 85 个 `notalone_ts_host_*_test` 与 15 个 `notalone_b15_*_test` 合成 PostgreSQL 残留库，均确认无连接且名称符合固定测试前缀；未触碰正式库或非测试库。
-- 自动化验证只覆盖合成 HTTP、事件、任务租约、共享官方 DSH profile 与持久状态。实际 App／微信界面操作、真实资料删除路径和共享宿主最终切换验收尚未在本票执行，留给根线程；不得据此宣称真实渠道集成已验收。
-- `SourceVerificationOutput` 的 DeepSeek strict 适配属于提取模型传输，不在本票 Skill 学习／审核／发布范围内；本票未扩改该适配器或相应测试。
+- 自动化验证覆盖合成 HTTP、事件、任务租约、共享官方 DSH profile 与持久状态；实际 App 已完成上述只读入口验收。真实微信写入操作、真实资料写入／删除路径和共享宿主最终切换验收仍未执行；不得据此宣称真实渠道写入集成已验收。
+- `SourceVerificationOutput` 的 DeepSeek strict 适配属于提取模型传输，不在本票 Skill 学习／审核／发布范围内，已转交独立用户可见会话；本票未扩改该适配器或相应测试。
