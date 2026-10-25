@@ -13,6 +13,9 @@ import {SkillFiles} from '../src/skill-files.ts';
 function modelEvidence(body){
  const found=[];const visit=value=>{if(Array.isArray(value)){for(const item of value)visit(item);}else if(value&&typeof value==='object'){if(Array.isArray(value.evidence))found.push(...value.evidence);for(const [key,item]of Object.entries(value))if(key!=='evidence')visit(item);}else if(typeof value==='string'){try{visit(JSON.parse(value));}catch{const start=value.indexOf('{'),end=value.lastIndexOf('}');if(start>=0&&end>start){try{visit(JSON.parse(value.slice(start,end+1)));}catch{}}}}};visit(body);assert.ok(found.length,'官方模型输入必须包含可见 evidence');return found;
 }
+function modelReplyPayload(body){
+ const found=[];const visit=value=>{if(Array.isArray(value)){for(const item of value)visit(item);}else if(value&&typeof value==='object'){if(Array.isArray(value.evidence)&&value.skill_selection)found.push(value);for(const item of Object.values(value))visit(item);}else if(typeof value==='string'){try{visit(JSON.parse(value));}catch{const start=value.indexOf('{'),end=value.lastIndexOf('}');if(start>=0&&end>start){try{visit(JSON.parse(value.slice(start,end+1)));}catch{}}}}};visit(body);assert.ok(found.length,'官方模型输入必须包含完整回复 payload');return found.at(-1);
+}
 function historyEvidence(body){
  const found=[];const visit=value=>{if(Array.isArray(value)){for(const item of value)visit(item);}else if(value&&typeof value==='object'){if(value.evidence_type==='raw_message_evidence'&&Array.isArray(value.messages))found.push(value);for(const item of Object.values(value))visit(item);}else if(typeof value==='string'){try{visit(JSON.parse(value));}catch{const start=value.indexOf('{'),end=value.lastIndexOf('}');if(start>=0&&end>start){try{visit(JSON.parse(value.slice(start,end+1)));}catch{}}}}};visit(body);return found.at(-1);
 }
@@ -25,7 +28,7 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
  await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[binding,owner,contact]);
  const scope={owner_id:owner,contact_id:contact,conversation_binding_id:binding,confirmation:'manual'};
  const body=()=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',input_kind:'draft',draft_text:'明天见',include_relationship_context:false},skill_disabled:true});
- let mode='valid',observedLate,releaseLate,storage,skillStep=0,historyStep=0,historyAlias,historySession,historyId,historySource;
+ let mode='valid',observedLate,releaseLate,storage,skillStep=0,skillVersion,historyStep=0,historyAlias,historySession,historyId,historySource;
  const host=await startReplyServiceHost(t,{name:f.client.database,user:f.client.user,close:async()=>{await storage?.close();await f.close();}},(_req,res,requests,events)=>{
   if(mode==='history'){
    if(historyStep===0){historyStep=1;useTool(events,'conversation_search',{query:'历史暗号'});sendEvents(res,events);return;}
@@ -42,7 +45,9 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
   const evidence=modelEvidence(requests.at(-1).body);const id=evidence[0].evidence_id;
   if(mode==='skill'&&skillStep++===0){const path=JSON.stringify(requests.at(-1).body).match(/\/notalone\/reply-skills\/[^"\\ ]+\/SKILL\.md/)?.[0];assert.ok(path,'从实际Skill目录取得受控路径');useTool(events,'read_file',{file_path:path});sendEvents(res,events);return;}
   const messages=mode==='join0'?['你以前说过喜欢喝茶，现在还是喜欢茶吗？','还是换口味了，现在喜欢喝什么？']:null;
-  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:messages?.join('')??'明天见',basis:'本次原句',citation_ids:[mode==='bad'?randomUUID():id],risk_notes:[],...(messages?{messages}:{})},...(mode==='extra'?[{text:'好久没聊了',basis:'额外风格',citation_ids:[id],risk_notes:[]}]:[])]});
+  const replyPayload=modelReplyPayload(requests.at(-1).body),skillAlias=mode==='skill'?replyPayload.skill_selection.version_id:null;
+  if(mode==='skill'){assert.match(skillAlias,/^k\d+$/);assert.doesNotMatch(JSON.stringify(requests.at(-1).body),new RegExp(skillVersion));}
+  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:skillAlias,candidates:[{text:messages?.join('')??'明天见',basis:'本次原句',citation_ids:[mode==='bad'?randomUUID():id],risk_notes:[],...(messages?{messages}:{})},...(mode==='extra'?[{text:'好久没聊了',basis:'额外风格',citation_ids:[id],risk_notes:[]}]:[])]});
   if(mode==='late'){releaseLate=()=>sendEvents(res,events);observedLate();return;}sendEvents(res,events);
  });
  await host.request('/configure-model',{physical_limit:4});
@@ -129,7 +134,7 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
   const path=join(f.directory,'synthetic-service-skill');await mkdir(path);await writeFile(join(path,'SKILL.md'),'---\nname: synthetic-service-skill\ndescription: 合成表达策略\n---\n\n保留原句明确意愿，使用简短表达。\n');
   const library=new SkillLibrary(storage,new SkillFiles(join(host.home,'skills')));await library.handle('POST',new URL('http://local/api/skills/import'),{package_path:path});
   const entry=(await f.client.query('SELECT v.id FROM reply_skill_version v JOIN reply_skill s ON s.id=v.skill_id WHERE s.owner_id=$1 ORDER BY v.created_at DESC LIMIT 1',[owner])).rows[0];assert.ok(entry);
-  mode='skill';const before=host.requests.length,input={...body(),skill_disabled:false,skill_version_id:entry.id},result=await host.request('/generate',{id:randomUUID(),scope,body:input});
+  skillVersion=entry.id;mode='skill';const before=host.requests.length,input={...body(),skill_disabled:false,skill_version_id:entry.id},result=await host.request('/generate',{id:randomUUID(),scope,body:input});
   assert.equal(host.requests.length,before+2);assert.equal(result.used_skill.version_id,entry.id);assert.equal(result.used_skill.load_state,'loaded');assert.equal(result.used_skill.selection_method,'user');assert.equal(result.used_skill.version_number,1);assert.match(result.used_skill.execution_view.sha256,/^[a-f0-9]{64}$/);
   const saved=(await f.client.query('SELECT skill_version_id FROM reply_request WHERE id=$1',[result.reply_request_id])).rows[0];assert.equal(saved.skill_version_id,entry.id);
  });

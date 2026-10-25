@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {fixture} from './exploration-public-support.mjs';
+import {fixture,payloadJson} from './exploration-public-support.mjs';
 import {useTool,sendEvents} from './exploration-runtime-support.mjs';
 
 test('公开auto探索真实导入Skill版本，分别一次选择和探索并返回真实引用',{timeout:60000},async t=>{
@@ -63,14 +63,14 @@ test('auto明确NoSkill经公开确认与原A到C仍固定不用目录中的策�
  const prepared=await x.send('prepare-confirm',command);assert.equal(prepared.status,200,JSON.stringify(prepared.body));assert.equal(prepared.body.kind,'prepared');assert.equal(x.host.requests.length,2);
  const generated=await x.send('confirm',command);assert.equal(generated.status,200,JSON.stringify(generated.body));assert.equal(generated.body.kind,'generated');assert.match(JSON.stringify(generated.body),/最近还好吗/);assert.equal(x.host.requests.length,3);
  assert.deepEqual(x.host.requests.map(r=>r.body.tools.filter(t=>t.name==='ExplorationSkillSelection').length),[1,0,0]);
- const cPayload=JSON.parse(x.host.requests[2].body.messages[0].content[0].text);assert.doesNotMatch(JSON.stringify(cPayload),/EXPLORATION_STATIC_BODY|EXPLORATION_RESOURCE_FORBIDDEN/);
+ const cPayload=payloadJson(x.host.requests[2].body.messages[0].content[0].text);assert.doesNotMatch(JSON.stringify(cPayload),/EXPLORATION_STATIC_BODY|EXPLORATION_RESOURCE_FORBIDDEN/);
  const request=(await x.f.client.query('SELECT reply_request_id FROM assistant_session_turn WHERE owner_id=$1 AND session_id=$2 AND state=\'completed\'',[x.owner,x.session])).rows[0].reply_request_id;
  assert.equal((await x.f.client.query('SELECT count(*)::int AS n FROM reply_candidate WHERE reply_request_id=$1',[request])).rows[0].n,1);
  assert.deepEqual((await x.send('confirm',command)).body,generated.body);assert.equal(x.host.requests.length,3);
 });
 for(const {mode,legacy} of [{mode:'auto'},{mode:'user'},{mode:'auto',legacy:true}])test(`${legacy?'兼容缺少选择完成标记的':''}${mode}探索实际版本沿原A到C固定使用，候选依据保留选择来历`,{timeout:60000},async t=>{
  const x=await fixture(t,{onRequest:async({requests,events,res,payload,version})=>{
-  if(requests.at(-1).body.tools.some(v=>v.name==='ReplyRuntimeOutput')){assert.match(JSON.stringify(requests.at(-1).body),/EXPLORATION_STATIC_BODY/);useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:version,candidates:[{text:'最近还好吗？',basis:'当前原话及本次自动匹配的方法',citation_ids:[payload.evidence[0].evidence_id],risk_notes:[]}]});sendEvents(res,events);return true;}return false;
+  if(requests.at(-1).body.tools.some(v=>v.name==='ReplyRuntimeOutput')){assert.match(JSON.stringify(requests.at(-1).body),/EXPLORATION_STATIC_BODY/);const alias=payload.skill_selection.version_id;assert.match(alias,/^k\d+$/);assert.doesNotMatch(JSON.stringify(requests.at(-1).body),new RegExp(version));useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:alias,candidates:[{text:'最近还好吗？',basis:'当前原话及本次自动匹配的方法',citation_ids:[payload.evidence[0].evidence_id],risk_notes:[]}]});sendEvents(res,events);return true;}return false;
  }});
  const first=await x.send('open',{operation_key:randomUUID(),content:{type:'purpose_exploration',purpose_hint:'了解近况',skill_mode:mode,...(mode==='user'?{skill_version_id:x.version}:{})}});assert.equal(first.status,200,JSON.stringify(first.body));assert.equal(first.body.used_skill.selection_method,mode);
  if(legacy)await x.f.client.query("UPDATE reply_exploration SET input_payload=input_payload-'skill_selection_complete' WHERE id=$1",[first.body.exploration_id]);

@@ -11,10 +11,10 @@ function fixture(){
  const port={catalog:async()=>({revision:'1',entries}),validate:async()=>{if(!valid)throw Error('revoked');},loadVersion:async()=>({content,contentHash:hash(content)}),resource:async()=>({content:Buffer.from('辅助材料')})};
  return {port,entries,revoke(){valid=false;}};
 }
-test('冻结目录的分页读取带版本回执，资源只在同一版本正文之后读取',async()=>{
+test('冻结目录的分页读取只带请求内版本 alias，资源只在同一版本正文之后读取',async()=>{
  const f=fixture(),run=await SkillRuntime.open(f.port,scope);
  const page=await run.readFile('/notalone/reply-skills/alpha/SKILL.md',1,1);
- assert.match(page,/alpha-v1/); assert.match(page,/第二行/);assert.doesNotMatch(page,/第一行|第三行/);
+ assert.match(page,/"used_skill_version_id":"k1"/);assert.doesNotMatch(page,/alpha-v1/);assert.match(page,/第二行/);assert.doesNotMatch(page,/第一行|第三行/);
  assert.equal(await run.readFile('/notalone/reply-skills/alpha/references/help.txt'),'辅助材料');
  assert.equal(run.usedVersionId,'alpha-v1');
  await assert.rejects(run.readFile('/notalone/reply-skills/beta/SKILL.md'),/second_skill/);
@@ -52,10 +52,10 @@ test('不可变执行正文变化与读取期间资格变化都不返回新内�
  await assert.rejects(other.readFile('/notalone/reply-skills/alpha/SKILL.md'),/revoked/);
 });
 
-test('正文每页与空页保留同一回执，资源保持旧合同整份读取',async()=>{
+test('正文每页与空页保留同一 alias 回执，资源保持旧合同整份读取',async()=>{
  const f=fixture();f.port.resource=async()=>({content:Buffer.from('辅助一\n辅助二\n辅助三')});
  const run=await SkillRuntime.open(f.port,scope);
- for(const offset of [0,1,99])assert.match(await run.readFile('/notalone/reply-skills/alpha/SKILL.md',offset,1),/used_skill_version_id.*alpha-v1/);
+ for(const offset of [0,1,99])assert.match(await run.readFile('/notalone/reply-skills/alpha/SKILL.md',offset,1),/used_skill_version_id":"k1"/);
  assert.equal(await run.readFile('/notalone/reply-skills/alpha/references/help.txt',1,1),'辅助一\n辅助二\n辅助三');
 });
 test('外部取消中断目录、正文及资源等待，迟到结果不能重新开放读取',async()=>{

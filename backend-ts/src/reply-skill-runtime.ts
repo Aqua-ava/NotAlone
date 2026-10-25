@@ -7,6 +7,7 @@ import {SkillRuntime,SKILL_VIRTUAL_ROOT,type SkillReadPort,type SkillScope} from
 import {registerSkillRuntime} from './skill-provider.ts';
 import type {SkillUse} from './skill-port.ts';
 import {ReplyError,type ReplyRequestInput} from './reply-contract.ts';
+import {createEvidenceAliases,type EvidenceAliases} from './reply-evidence-alias.ts';
 export interface SelectedSkillFailure {readonly version_id:string;readonly load_state:'resource_failed'}
 const failures=new WeakMap<object,{runtime:SkillRuntime;port:SkillReadPort}>();
 export function isSelectedSkillFailure(value:SelectedSkillFailure|null,port:unknown,scope:{ownerId:string;contactId:string},revision:string):boolean {if(!value)return false;const actual=failures.get(value);return !!actual&&actual.port===port&&!actual.runtime.signal.aborted&&actual.runtime.loadState==='resource_failed'&&actual.runtime.usedVersionId===value.version_id&&actual.runtime.scope.ownerId===scope.ownerId&&actual.runtime.scope.contactId===scope.contactId&&actual.runtime.catalog.revision===revision;}
@@ -14,21 +15,23 @@ export function selectedSkillFailureEntry(value:SelectedSkillFailure|null,port:u
 type Selection=Pick<ReplyRequestInput,'skill_version_id'|'skill_disabled'>;
 export class ReplySkillSession {
  readonly runtime:SkillRuntime;
+ readonly aliases:EvidenceAliases;
  private readonly selection:Selection;
  private captured:SkillUse|null=null;
  private readonly port:SkillReadPort;
  private mounted=false;
  private registry:SkillRegistry|null=null;
  private scopeKey:ScopeKey|undefined;
- private constructor(runtime:SkillRuntime,selection:Selection,port:SkillReadPort){this.runtime=runtime;this.selection={...selection};this.port=port;}
- static async open(port:SkillReadPort,scope:SkillScope,selection:Selection,signal?:AbortSignal):Promise<ReplySkillSession>{
+ private constructor(runtime:SkillRuntime,selection:Selection,port:SkillReadPort,aliases:EvidenceAliases){this.runtime=runtime;this.selection={...selection};this.port=port;this.aliases=aliases;}
+ static async open(port:SkillReadPort,scope:SkillScope,selection:Selection,signal?:AbortSignal,sharedAliases?:EvidenceAliases):Promise<ReplySkillSession>{
+  const aliases=sharedAliases??createEvidenceAliases();
   const filtered:SkillReadPort={
    catalog:async(s,signal)=>{const catalog=await port.catalog(s,signal);return {...catalog,entries:selection.skill_disabled?[]:selection.skill_version_id?catalog.entries.filter(e=>e.versionId===selection.skill_version_id):catalog.entries};},
    loadVersion:(...args)=>port.loadVersion(...args),resource:(...args)=>port.resource(...args),validate:(...args)=>port.validate(...args),
    ...port.captureUse?{captureUse:(...args:Parameters<NonNullable<SkillReadPort['captureUse']>>)=>port.captureUse!(...args)}:{},
    dispose:()=>port.dispose?.(),
   };
-  return new ReplySkillSession(await SkillRuntime.open(filtered,scope,signal),selection,port);
+  return new ReplySkillSession(await SkillRuntime.open(filtered,scope,signal,versionId=>aliases.skillFor(versionId)),selection,port,aliases);
  }
  async preloadSelected(signal?:AbortSignal):Promise<string>{
   if(!this.selection.skill_version_id||this.selection.skill_disabled)return '';
@@ -45,7 +48,7 @@ export class ReplySkillSession {
  }
  get use():SkillUse|null{return structuredClone(this.captured);}
  get revision():string{return this.runtime.catalog.revision;}
- catalogText():string{return JSON.stringify({skills:this.runtime.catalog.entries.map(e=>({name:e.name,description:e.description,version_id:e.versionId,path:`${SKILL_VIRTUAL_ROOT}/${e.name}/SKILL.md`}))});}
+ catalogText():string{return JSON.stringify({skills:this.runtime.catalog.entries.map(e=>({name:e.name,description:e.description,version_id:this.aliases.skillFor(e.versionId),path:`${SKILL_VIRTUAL_ROOT}/${e.name}/SKILL.md`}))});}
  mount(scope:Context):()=>void {
   const registry=scope.get('skills');
   if(this.mounted||!registry)throw new ReplyError('reply_skill_runtime_unavailable',502);
@@ -76,11 +79,12 @@ export class ReplySkillSession {
    },
   })];
  }
- async captureClaim(versionId:string|null,signal?:AbortSignal):Promise<void>{
+ async captureClaim(versionAlias:string|null,signal?:AbortSignal):Promise<void>{
   await this.runtime.validate(signal);
   const actual=this.runtime.usedVersionId;
   // 旧兼容协议允许模型漏写null，由本轮真实读取回执恢复，不能从目录推断。
-  if(versionId!==null&&versionId!==actual)throw new ReplyError('reply_candidates_rejected');
+  const claimed=versionAlias===null?null:this.aliases.resolveSkill(versionAlias);
+  if(versionAlias!==null&&claimed===null||claimed!==null&&claimed!==actual)throw new ReplyError('reply_candidates_rejected');
   this.captured=await this.runtime.captureUse(this.selection.skill_version_id?{
    selection_method:'user',selection_reason:'用户明确选择该版本，且本轮实际读取。',
   }:{selection_method:'auto',selection_reason:'系统按当前联系人目录推荐，模型在本次回复中实际读取。'},signal);

@@ -15,7 +15,6 @@ import type {SkillEntry,SkillReadPort,SkillScope} from './skill-runtime.ts';
 import {generateReplyLoop} from './reply-loop.ts';
 import {replyPayloadText} from './reply-payload.ts';
 import {replySystemPrompt} from './reply-system-prompt.ts';
-import {createEvidenceAliases} from './reply-evidence-alias.ts';
 import {selectApplicablePreferences,type PreferenceSnapshot} from './preference-service.ts';
 import {skillDigest} from './skill-execution-view.ts';
 import {
@@ -205,7 +204,7 @@ export class SkillReviewService {
     requireCurrent:()=>Promise<void>):Promise<{candidates:readonly {text:string;basis:string;risk_notes:string[]}[];use:SkillUse|null}> {
     const model=this.options.model;
     const sideRequest={...request,idempotency_key:randomUUID()};
-    const aliases=createEvidenceAliases();
+    const aliases=session.aliases;
     let use:SkillUse|null=null;
     const result=await generateReplyLoop(this.options.ctx,{owner_id:context.scope.owner_id,contact_id:context.scope.contact_id,
       request_id:sideRequest.idempotency_key,...model,physical_limit:model.physical_limit,deadline_ms:model.deadline_ms,

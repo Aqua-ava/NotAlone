@@ -115,9 +115,9 @@ export class ReplyGenerationService {
   const {skillPort}=replyResources(this.options,transaction,scope,input,internal);
   let probeSkill:ReplySkillSession|undefined;
   try{
-   const skill=probeSkill=await ReplySkillSession.open(skillPort,{ownerId:scope.owner_id,contactId:scope.contact_id,scene:input.scene??''},input,signal);
-   if(skill.revision!==state.skillRevision)throw new ReplyError('reply_context_invalidated',409);
    const aliases=createEvidenceAliases();
+   const skill=probeSkill=await ReplySkillSession.open(skillPort,{ownerId:scope.owner_id,contactId:scope.contact_id,scene:input.scene??''},input,signal,aliases);
+   if(skill.revision!==state.skillRevision)throw new ReplyError('reply_context_invalidated',409);
    const history=allowsHistory(input)&&!recentOnly(input)?new ReplyHistory({transaction,scope,binding_id:scope.conversation_binding_id,
     initial_evidence_ids:state.context.evidence.map(e=>e.evidence_id),navigation_message_ids:state.context.evidence.flatMap(e=>e.navigation?.source_message_ids??[]),
     excluded_message_ids:input.content.excluded_message_ids as string[]??[],allowed_message_ids:state.context.history_message_ids,
@@ -172,14 +172,14 @@ export class ReplyGenerationService {
    if(started.state==='in_progress')throw new ReplyError('reply_in_progress',409);
    owned=started.request;
    const request=owned;
-   skill=await ReplySkillSession.open(skillPort,{ownerId:verified.owner_id,contactId:verified.contact_id,scene:input.scene??''},input,signal);
+   const aliases=createEvidenceAliases();
+   skill=await ReplySkillSession.open(skillPort,{ownerId:verified.owner_id,contactId:verified.contact_id,scene:input.scene??''},input,signal,aliases);
    const preparation=new ReplyPreparation({transaction,controller,explored,requireCurrent:async client=>{await store.requireCurrentInTransaction(client,request);await requireReplyScope(client,verified,input);}});
    const prepared:PreparedReply=await transaction(client=>preparation.prepare(client,{request,command:input,skillRevision:skill!.revision,history_message_ids:internal.history_message_ids}));
    const requireCurrent=async()=>{signal.throwIfAborted();await transaction(client=>preparation.validateCurrent(client,prepared));await skill!.runtime.validate(signal);signal.throwIfAborted();};
    const fitted=await fitPreparedReplyBudget(prepared,{frozen:prepared.frozen,signal},selected=>this.measurePrepared(verified,input,internal,selected,transaction,requireCurrent,signal));
    prepared.context=fitted.state.context;const physicalLimit=replyPhysicalLimit(prepared.context,model.physical_limit);preparation.finalize(prepared);
    await store.prepareContext(request,prepared.storeContext);
-   const aliases=createEvidenceAliases();
    const history=allowsHistory(input)&&!recentOnly(input)?new ReplyHistory({transaction,scope:verified,binding_id:verified.conversation_binding_id,
     initial_evidence_ids:prepared.context.evidence.map(e=>e.evidence_id),navigation_message_ids:prepared.context.evidence.flatMap(e=>e.navigation?.source_message_ids??[]),
     excluded_message_ids:input.content.excluded_message_ids as string[]??[],allowed_message_ids:prepared.context.history_message_ids,

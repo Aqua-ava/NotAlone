@@ -4,6 +4,7 @@ import {buildReplyPayload,replyPayloadText} from '../src/reply-payload.ts';
 import {parseReplyRequest,validateReplyCandidates} from '../src/reply-contract.ts';
 import {createEvidenceAliases,restoreReplyEvidenceAliases} from '../src/reply-evidence-alias.ts';
 import {REPLY_SYSTEM_PROMPT} from '../src/reply-prompts.ts';
+import {replySystemPrompt} from '../src/reply-system-prompt.ts';
 
 const contact='30000000-0000-4000-8000-000000000001';
 const realIds=[
@@ -97,7 +98,27 @@ test('状态标识按请求隔离，旧会话 alias 不能在新请求反向解�
   assert.equal(second.resolveSession('s1'),undefined);
   assert.equal(second.resolve(first.referenceFor('50000000-0000-4000-8000-000000000001')),undefined);
 });
+test('普通 generation_input 全量递归投影 message/request/input/turn 关联标识',()=>{
+ const owner='10000000-0000-4000-8000-000000000001',contact='20000000-0000-4000-8000-000000000002';
+ const message='40000000-0000-4000-8000-000000000004',version='50000000-0000-4000-8000-000000000005';
+ const requestKey='60000000-0000-4000-8000-000000000006',binding='70000000-0000-4000-8000-000000000007';
+ const request=parseReplyRequest({contact_id:contact,idempotency_key:requestKey,content:{type:'rewrite_draft',draft_text:'新的表达',include_relationship_context:false}});
+ const context={scope:{owner_id:owner,contact_id:contact},command:request,conversation_binding_id:binding,current_text:'新的表达',risk_notes:[],evidence:[]};
+ const discussion={scope:{owner_id:owner,contact_id:contact},session_id:binding,request_key:requestKey,current_input_version_id:version,notice:'合成',snapshot:{},items:[{
+  kind:'generation_input',text:JSON.stringify({content:{type:'reply_to_message',target_message_id:message,excluded_message_ids:[message]},idempotency_key:requestKey,operation_key:requestKey,origin_session_id:binding,input_version:version,expected_input_version_id:version,previous_id:version}),
+  input_version_id:version,turn_id:version,reply_request_id:requestKey,candidate_id:null,version_id:null,parent_version_id:null,candidate_number:null,version_number:null,
+  is_default_display:false,is_explicitly_selected:false,basis_changes:[]}]};
+ const payload=buildReplyPayload({request,context,discussion,aliases:createEvidenceAliases()}),wire=JSON.stringify(payload);
+ for(const id of [message,requestKey,version,binding])assert.ok(!wire.includes(id),id);
+ const input=JSON.parse(payload.assistant_discussion.items[0].text);
+ assert.match(input.content.target_message_id,/^r\d+$/);assert.match(input.content.excluded_message_ids[0],/^r\d+$/);
+ assert.match(input.idempotency_key,/^r\d+$/);assert.match(input.operation_key,/^r\d+$/);assert.match(input.input_version,/^r\d+$/);
+ assert.match(input.expected_input_version_id,/^r\d+$/);assert.match(input.previous_id,/^r\d+$/);assert.match(input.origin_session_id,/^s\d+$/);
+});
 test('静态提示明确 evidence_id 是不得猜测或改写的不透明 alias',()=>{
   assert.match(REPLY_SYSTEM_PROMPT,/evidence_id 是不透明字符串/);
   assert.match(REPLY_SYSTEM_PROMPT,/不得猜测或改写 alias/);
+  const prompt=replySystemPrompt({scope:{owner_id:contact,contact_id:contact},evidence:[]},null);
+  assert.match(prompt,/不透明版本 alias（以 k 开头）/);
+  assert.doesNotMatch(prompt,/版本 UUID 回执/);
 });

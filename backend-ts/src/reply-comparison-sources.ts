@@ -88,9 +88,14 @@ function auditAttempt(member:Row,row:Row,evidence:Row,attempt:Row,actualScope:Ro
  if(!Array.isArray(sources)||sources.length!==3||!sources.every(object)||new Set(sources.map(source=>source.evidence_id)).size!==3||new Set(sources.map(source=>source.kind)).size!==3)invalid('payload_sources');
  const modelIds=sources.map(source=>source.evidence_id);
  if(aliased?modelIds.some((id,index)=>id!==`c${index+1}`):modelIds.some(id=>!uuid(id)))invalid('source_identity_or_status');
+ const mapping=aliased?attempt.model_alias_mapping:null;
+ if(aliased&&(!Array.isArray(mapping)||mapping.length!==sources.length
+   ||mapping.some((entry,index)=>!object(entry)||Object.keys(entry).sort().join(',')!=='evidence_id,model_evidence_id'
+     ||entry.model_evidence_id!==`c${index+1}`||!uuid(entry.evidence_id))
+   ||new Set(mapping.map(entry=>entry.evidence_id)).size!==mapping.length))invalid('model_alias_mapping');
  const expectedEntries:Row[]=sources.map((source,index)=>{
-  const mapped=aliased?catalog.entries?.[index]:null;
-  if(aliased&&(!object(mapped)||!uuid(mapped.evidence_id)||mapped.model_evidence_id!==source.evidence_id)||!aliased&&source.status!=='user_input'||aliased&&source.status!=='user_input')invalid('source_identity_or_status');
+  const mapped=aliased?catalog.entries?.[index]:null,mappingEntry=aliased?mapping[index]:null;
+  if(aliased&&(!object(mapped)||!uuid(mapped.evidence_id)||'model_evidence_id'in mapped||mappingEntry.evidence_id!==mapped.evidence_id)||!aliased&&source.status!=='user_input'||aliased&&source.status!=='user_input')invalid('source_identity_or_status');
   let fields:string[],role:string,body:string,origin:string;
   switch(source.kind){
    case 'user_purpose':fields=[];role='current_user_intent';body='帮我表达';origin='explicit_workspace_action';break;
@@ -99,7 +104,7 @@ function auditAttempt(member:Row,row:Row,evidence:Row,attempt:Row,actualScope:Ro
    default:return invalid('source_kind');
   }
   if(source.factual_role!==role||source.text!==body)invalid('source_role_or_text');
-  return {...source,...aliased?{evidence_id:mapped!.evidence_id,model_evidence_id:source.evidence_id}:{},text_sha256:digest(body),case_fields:fields,origin,source_ids:[],not_confirmed_memory:true};
+  return {...source,...aliased?{evidence_id:mapped!.evidence_id}:{},text_sha256:digest(body),case_fields:fields,origin,source_ids:[],not_confirmed_memory:true};
  });
  if(aliased&&new Set(expectedEntries.map(entry=>entry.evidence_id)).size!==expectedEntries.length)invalid('source_identity_or_status');
  equal(catalog.entries,expectedEntries,'catalog_entries');

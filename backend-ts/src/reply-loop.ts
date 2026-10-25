@@ -4,7 +4,7 @@ import {createUserMessage,ReasoningEffortId,LlmError,type StreamChunk,type Token
 import {SessionId} from '@deepseek-ai/dsh-session';
 import {defineTool,type ToolDefinition,type ToolRunContext} from '@deepseek-ai/dsh-tools';
 import {randomUUID} from 'node:crypto';
-import {ReplyError,replyUuid,validateReplyCandidates,type ReplyCandidateInput} from './reply-contract.ts';
+import {ReplyError,validateReplyCandidates,type ReplyCandidateInput} from './reply-contract.ts';
 import type {installModelProvider} from './model-provider.ts';
 import {ModelInputBudgetError,type MessagesBudgetProfile,type MessagesBudgetReceipt} from './model-input-budget.ts';
 import type {ModelLedgerReceipt} from './model-ledger.ts';
@@ -125,7 +125,7 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
       });
       disposeSkill=await registerReplyAgentSetup(scope,input,{signal,tools:ports.tools,skillSession:ports.skillSession,
         async executeOutput(args,exec){
-          try {signal.throwIfAborted();await ports.requireCurrent();if(candidates||Object.keys(args).sort().join(',')!=='candidates,used_skill_version_id')throw new ReplyError('reply_candidates_rejected');const validated=validateReplyCandidates(restoreReplyEvidenceAliases(args,ports.aliases),ports.evidenceIds(),candidateLimit);const claim=args.used_skill_version_id===null?null:replyUuid(args.used_skill_version_id);if(ports.skillSession)await ports.skillSession.captureClaim(claim,signal);else if(claim!==null)throw new ReplyError('reply_candidates_rejected');signal.throwIfAborted();candidates=validated;exec.concludeTurn();return '候选已完成结构和引用校验。';}
+          try {signal.throwIfAborted();await ports.requireCurrent();if(candidates||Object.keys(args).sort().join(',')!=='candidates,used_skill_version_id')throw new ReplyError('reply_candidates_rejected');const validated=validateReplyCandidates(restoreReplyEvidenceAliases(args,ports.aliases),ports.evidenceIds(),candidateLimit);const claim=args.used_skill_version_id;if(!(claim===null||typeof claim==='string'))throw new ReplyError('reply_candidates_rejected');if(ports.skillSession)await ports.skillSession.captureClaim(claim,signal);else if(claim!==null)throw new ReplyError('reply_candidates_rejected');signal.throwIfAborted();candidates=validated;exec.concludeTurn();return '候选已完成结构和引用校验。';}
           catch(error){failure=error;throw error;}
         }});
     }});

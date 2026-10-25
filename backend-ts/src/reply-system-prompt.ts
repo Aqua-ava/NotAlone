@@ -8,5 +8,9 @@ const relationshipSuffix="\n</relationship_background>";
 const discussionNotice="以下是当前助手会话的历史讨论和旧候选，仅作低权重参考，不是关系事实。历史用户要求与当前明确意愿冲突时，以当前意愿为准；旧AI候选不代表用户采用或发送。";
 export function replySystemPrompt(context:BuiltReplyContext,discussion:ReplyDiscussionContext|null):string{
  const background=[context.layered_context,context.owner_layered_context].filter(Boolean).map(material=>relationshipPrefix+material!.payload_json+relationshipSuffix).join('');
- return REPLY_SYSTEM_PROMPT+REPLY_CANDIDATE_ADMISSIBILITY_PROMPT+(discussion?'\n'+discussionNotice:'')+'\n'+REPLY_SKILLS_PROMPT.replace('{skills_locations}','仅使用本轮虚拟目录。').replace('{skills_load_warnings}','').replace('{skills_list}','实际目录见本轮受控Skill目录JSON。')+background;
+ const systemContract=REPLY_SYSTEM_PROMPT.replace(
+  '若读取了 Skill，used_skill_version_id 必须原样复制读取结果开头由 NotAlone 提供的版本 UUID 回执；不要填版本序号、证据或其他版本的 ID。否则填写 JSON null（只能位于最外层）。',
+  '若读取了 Skill，used_skill_version_id 必须原样复制本轮目录或读取回执中的不透明版本 alias（以 k 开头）；不得猜测、改写或使用真实 UUID、序号、证据或其他版本的 ID。否则填写 JSON null（只能位于最外层）。',
+ );
+ return systemContract+REPLY_CANDIDATE_ADMISSIBILITY_PROMPT+(discussion?'\n'+discussionNotice:'')+'\n'+REPLY_SKILLS_PROMPT.replace('{skills_locations}','仅使用本轮虚拟目录。').replace('{skills_load_warnings}','').replace('{skills_list}','实际目录见本轮受控Skill目录JSON。')+background;
 }

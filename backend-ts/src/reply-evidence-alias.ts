@@ -5,6 +5,8 @@ export interface EvidenceAliases {
   referenceFor(realId:string):string;
   sessionFor(realId:string):string;
   resolveSession(alias:string):string|undefined;
+  skillFor(versionId:string):string;
+  resolveSkill(alias:string):string|undefined;
   entries():readonly {alias:string;evidence_id:string}[];
 }
 
@@ -15,6 +17,8 @@ class RequestEvidenceAliases implements EvidenceAliases {
   private readonly referenceByReal=new Map<string,string>();
   private readonly realBySessionAlias=new Map<string,string>();
   private readonly sessionByReal=new Map<string,string>();
+  private readonly realBySkillAlias=new Map<string,string>();
+  private readonly skillByReal=new Map<string,string>();
 
   constructor(evidenceIds:readonly string[]){
     for(const evidenceId of evidenceIds)this.aliasFor(evidenceId);
@@ -53,6 +57,17 @@ class RequestEvidenceAliases implements EvidenceAliases {
 
   resolveSession(alias:string){return this.realBySessionAlias.get(alias);}
 
+  skillFor(versionId:string):string {
+   const existing=this.skillByReal.get(versionId);
+   if(existing)return existing;
+   const alias=`k${this.skillByReal.size+1}`;
+   this.skillByReal.set(versionId,alias);
+   this.realBySkillAlias.set(alias,versionId);
+   return alias;
+  }
+
+  resolveSkill(alias:string){return this.realBySkillAlias.get(alias);}
+
   entries(){return [...this.aliasByReal].map(([evidence_id,alias])=>({alias,evidence_id}));}
 }
 
@@ -73,33 +88,39 @@ export function restoreReplyEvidenceAliases(value:unknown,aliases:EvidenceAliase
   })};
 }
 
-const referenceIdFields=new Set(['candidate_id','version_id','parent_version_id','message_id','request_key','input_version_id','current_input_version_id','turn_id','current_turn_id','reply_request_id','memory_id','candidate_version_id','skill_version_id']);
-const referenceIdArrayFields=new Set(['candidate_ids','version_ids','message_ids','turn_ids','reply_request_ids']);
+const referenceStringFields=new Set(['input_version','input_versions']);
+const evidenceIdArrayFields=new Set(['evidence_ids','allowed_evidence_ids','evidence_message_ids']);
+const isReferenceField=(key:string)=>key.endsWith('_id')||key.endsWith('_key'),isReferenceFields=(key:string)=>key.endsWith('_ids')||key.endsWith('_keys');
+const isSessionField=(key:string)=>key.endsWith('session_id'),isSessionFields=(key:string)=>key.endsWith('session_ids');
+const isSkillVersionField=(key:string)=>key.endsWith('skill_version_id'),isSkillVersionFields=(key:string)=>key.endsWith('skill_version_ids');
 export function aliasReplyDiscussionText(text:string,aliases:EvidenceAliases):string {
   try {
    const parsed=JSON.parse(text);
-   if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&Array.isArray((parsed as Record<string,unknown>).messages))
-    return JSON.stringify(aliasReplyEvidenceReferences(parsed,aliases));
+   if(parsed&&typeof parsed==='object')return JSON.stringify(aliasReplyEvidenceReferences(parsed,aliases));
   }catch{}
   return text;
 }
-export function aliasReplyEvidenceReferences(value:unknown,aliases:EvidenceAliases):unknown {
-  if(Array.isArray(value))return value.map(item=>aliasReplyEvidenceReferences(item,aliases));
+export function aliasReplyEvidenceReferences(value:unknown,aliases:EvidenceAliases,parentKey?:string):unknown {
+  if(Array.isArray(value))return value.map(item=>aliasReplyEvidenceReferences(item,aliases,parentKey));
   if(!value||typeof value!=='object')return value;
-  return Object.fromEntries(Object.entries(value as Record<string,unknown>).map(([key,item])=>[
-    key,
-    key==='evidence_id'&&typeof item==='string'
-      ?aliases.aliasFor(item)
-      :key==='allowed_evidence_ids'&&Array.isArray(item)
-        ?item.map(id=>typeof id==='string'?aliases.aliasFor(id):id)
-        :key==='evidence_message_ids'&&Array.isArray(item)
-          ?item.map(id=>typeof id==='string'?aliases.aliasFor(id):id)
-          :key==='session_id'&&typeof item==='string'
-            ?aliases.sessionFor(item)
-            :referenceIdFields.has(key)&&typeof item==='string'
-              ?aliases.referenceFor(item)
-              :referenceIdArrayFields.has(key)&&Array.isArray(item)
-                ?item.map(id=>typeof id==='string'?aliases.referenceFor(id):id)
-          :aliasReplyEvidenceReferences(item,aliases),
-  ]));
+  const object=value as Record<string,unknown>;
+  const skillSelection=parentKey==='skill_selection'||typeof object.skill_id==='string';
+  return Object.fromEntries(Object.entries(object).map(([key,item])=>{
+   if(key==='evidence_id'&&typeof item==='string')return [key,aliases.aliasFor(item)];
+   if(evidenceIdArrayFields.has(key)&&Array.isArray(item))
+    return [key,item.map(id=>typeof id==='string'?aliases.aliasFor(id):id)];
+   if(isSessionField(key)&&typeof item==='string')return [key,aliases.sessionFor(item)];
+   if(isSessionFields(key)&&Array.isArray(item))
+    return [key,item.map(id=>typeof id==='string'?aliases.sessionFor(id):id)];
+   if(isSkillVersionField(key)&&typeof item==='string')return [key,aliases.skillFor(item)];
+   if(isSkillVersionFields(key)&&Array.isArray(item))
+    return [key,item.map(id=>typeof id==='string'?aliases.skillFor(id):id)];
+   if(key==='version_id'&&typeof item==='string'&&skillSelection)return [key,aliases.skillFor(item)];
+   // 普通 generation input 的关联字段持续扩展，按标识形状统一投影以避免新增键静默泄漏。
+   if((isReferenceField(key)||referenceStringFields.has(key))&&typeof item==='string')
+    return [key,aliases.referenceFor(item)];
+   if((isReferenceFields(key)||referenceStringFields.has(key))&&Array.isArray(item))
+    return [key,item.map(id=>typeof id==='string'?aliases.referenceFor(id):id)];
+   return [key,aliasReplyEvidenceReferences(item,aliases,key)];
+  }));
 }

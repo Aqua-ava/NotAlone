@@ -11,6 +11,11 @@ import {SkillFiles} from '../src/skill-files.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {startExplorationRuntimeHost,useTool,sendEvents} from './exploration-runtime-support.mjs';
 
+export function payloadJson(text){
+ const boundary=text.indexOf('\n\n本轮候选数量上限');
+ return JSON.parse(boundary<0?text:text.slice(0,boundary));
+}
+
 export async function fixture(t,{importSkill=true,onRequest}={}){
  const f=await createStorageFixture();let storage,host,child,exited,output='',closed=false;
  async function close(){
@@ -43,7 +48,7 @@ export async function fixture(t,{importSkill=true,onRequest}={}){
  }
  if(importSkill){const added=await addSkill();imported=added.entry;version=added.id;}
  host=await startExplorationRuntimeHost(t,async(req,res,requests,events)=>{
-  const last=requests.at(-1),payload=JSON.parse(last.body.messages[0].content[0].text);const id=payload.evidence[0].evidence_id;
+  const last=requests.at(-1),payload=payloadJson(last.body.messages[0].content[0].text);const id=payload.evidence[0].evidence_id;
   if(onRequest&&await onRequest({req,res,requests,events,payload,f,library,imported,version,addSkill}))return;
   if(last.body.tools.some(tool=>tool.name==='ExplorationSkillSelection')){assert.equal(payload.skills.length,1);assert.equal(payload.skills[0].version_id,version);useTool(events,'ExplorationSkillSelection',{version_id:version});}
   else{

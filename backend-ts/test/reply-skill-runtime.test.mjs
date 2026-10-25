@@ -20,7 +20,11 @@ test('用户版本选择过滤官方scope目录；只有实际加载的版本可
   assert.deepEqual((await ctx.skills.snapshot()).skills,[]);
   const content=await session.tools()[0].execute({file_path:'/notalone/reply-skills/alpha/SKILL.md',offset:0,limit:1000},{signal:new AbortController().signal});
   assert.match(content,/合成批准策略正文/);
-  await session.captureClaim(null);assert.equal(session.use.version_id,f.entries[0].versionId);assert.equal(session.use.selection_method,'user');
+  const catalog=session.catalogText(),receipt=await session.runtime.readFile('/notalone/reply-skills/alpha/SKILL.md');
+  assert.doesNotMatch(catalog,new RegExp(f.entries[0].versionId));assert.match(catalog,/"version_id":"k1"/);
+  assert.match(receipt,/"used_skill_version_id":"k1"/);assert.doesNotMatch(receipt,new RegExp(f.entries[0].versionId));
+  await assert.rejects(session.captureClaim(f.entries[0].versionId),{code:'reply_candidates_rejected'});
+  await session.captureClaim('k1');assert.equal(session.use.version_id,f.entries[0].versionId);assert.equal(session.use.selection_method,'user');
   await assert.rejects(session.captureClaim(f.entries[1].versionId),{code:'reply_candidates_rejected'});
  }finally{dispose();await layer.dispose();await ctx.fiber.dispose();}
  assert.equal(session.runtime.signal.aborted,true);

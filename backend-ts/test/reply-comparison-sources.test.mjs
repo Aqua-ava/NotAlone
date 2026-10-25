@@ -61,42 +61,45 @@ function aliasedAuditRun(){
   });
   const catalog=row.runtime_sources.attempts[0].catalog;
   catalog.schema_version='reply-runtime-source-catalog-v2';
-  catalog.entries=catalog.entries.map((entry,index)=>({...entry,model_evidence_id:`c${index+1}`}));
+  row.runtime_sources.attempts[0].model_alias_mapping=catalog.entries.map((entry,index)=>({model_evidence_id:`c${index+1}`,evidence_id:entry.evidence_id}));
   seal(row);
  }
  return run;
 }
-test('新臂模型目录使用请求内别名，真实来源只在catalog、PG与输出中',()=>{
+test('新臂模型目录不含别名，映射独立保存在同一私有attempt中',()=>{
  const run=aliasedAuditRun(),row=run.records.find(item=>item.arm==='new');
- assert.deepEqual(row.runtime_sources.attempts[0].catalog.entries.map(entry=>entry.model_evidence_id),['c1','c2','c3']);
- assert.ok(row.runtime_sources.attempts[0].catalog.entries.every(entry=>/^[a-f0-9-]{36}$/.test(entry.evidence_id)));
+ assert.ok(row.runtime_sources.attempts[0].catalog.entries.every(entry=>!('model_evidence_id'in entry)));
+ assert.deepEqual(row.runtime_sources.attempts[0].model_alias_mapping.map(entry=>entry.model_evidence_id),['c1','c2','c3']);
+ assert.deepEqual(row.runtime_sources.attempts[0].catalog.entries.map(entry=>entry.evidence_id),row.runtime_sources.attempts[0].model_alias_mapping.map(entry=>entry.evidence_id));
+ assert.ok(row.runtime_sources.attempts[0].model_alias_mapping.every(entry=>/^[a-f0-9-]{36}$/.test(entry.evidence_id)));
  assert.equal(hash(row.runtime_sources.attempts[0].catalog),row.runtime_sources.attempts[0].catalog_sha256);
  const report=buildReplyComparisonReport(manifestText,datasetText,run);
  assert.equal(report.records.find(item=>item.arm==='new'&&item.source_audit)?.source_audit.status,'verified');
 });
-test('v2来源审计拒绝交换、复用和未授权 alias，重签目录也不能放宽',()=>{
+test('v2来源审计拒绝catalog别名、交换、复用和未授权映射，重签目录也不能放宽',()=>{
  const mutate=(change)=>{
   const run=aliasedAuditRun(),row=run.records.find(item=>item.arm==='new');
-  rewritePayload(row,payload=>change(payload,row.runtime_sources.attempts[0].catalog));
+  rewritePayload(row,payload=>change(payload,row.runtime_sources.attempts[0]));
   seal(row);
   assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/reply_comparison_invalid:runtime_/);
  };
- mutate((payload,catalog)=>{
+ mutate((payload,attempt)=>{attempt.catalog.entries[0].model_evidence_id='c1';});
+ mutate((payload,attempt)=>{
   [payload.evidence[0].evidence_id,payload.evidence[1].evidence_id]=[payload.evidence[1].evidence_id,payload.evidence[0].evidence_id];
   payload.citation_policy.allowed_evidence_ids=payload.evidence.map(source=>source.evidence_id);
-  [catalog.entries[0].model_evidence_id,catalog.entries[1].model_evidence_id]=[catalog.entries[1].model_evidence_id,catalog.entries[0].model_evidence_id];
+  [attempt.model_alias_mapping[0].model_evidence_id,attempt.model_alias_mapping[1].model_evidence_id]=[attempt.model_alias_mapping[1].model_evidence_id,attempt.model_alias_mapping[0].model_evidence_id];
  });
- mutate((payload,catalog)=>{
+ mutate((payload,attempt)=>{
   payload.evidence[1].evidence_id=payload.evidence[0].evidence_id;
   payload.citation_policy.allowed_evidence_ids=payload.evidence.map(source=>source.evidence_id);
-  catalog.entries[1].model_evidence_id=payload.evidence[1].evidence_id;
+  attempt.model_alias_mapping[1].model_evidence_id=payload.evidence[1].evidence_id;
  });
- mutate((payload,catalog)=>{
+ mutate((payload,attempt)=>{
   payload.evidence[0].evidence_id='c9';
   payload.citation_policy.allowed_evidence_ids=payload.evidence.map(source=>source.evidence_id);
-  catalog.entries[0].model_evidence_id='c9';
+  attempt.model_alias_mapping[0].model_evidence_id='c9';
  });
- mutate((_payload,catalog)=>{catalog.entries[0].evidence_id='f0000000-0000-4000-8000-000000000001';});
+ mutate((_payload,attempt)=>{attempt.model_alias_mapping[0].evidence_id='f0000000-0000-4000-8000-000000000001';});
 });
 function attachReviews(row,bindSources=true){
  const subject={blind_id:row.blind_id,case_sha256:row.case_sha256,input_sha256:row.input_sha256,output:row.output,...bindSources?{runtime_sources_sha256:hash(row.runtime_sources),request_sha256:row.request_sha256}:{}};

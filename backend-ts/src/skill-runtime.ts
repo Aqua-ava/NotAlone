@@ -33,21 +33,24 @@ export class SkillRuntime {
  private resourceFailed=false;
  private executionHash:string|null=null;
  private readonly port:SkillReadPort;
+ private readonly modelVersionId:(versionId:string)=>string;
  readonly scope:SkillScope;
  readonly catalog:SkillCatalog;
- private constructor(port:SkillReadPort,scope:SkillScope,catalog:SkillCatalog,signal?:AbortSignal){
-  this.port=port;this.scope=Object.freeze({...scope});
+ private constructor(port:SkillReadPort,scope:SkillScope,catalog:SkillCatalog,modelVersionId:(versionId:string)=>string,signal?:AbortSignal){
+  this.port=port;this.scope=Object.freeze({...scope});this.modelVersionId=modelVersionId;
   this.catalog=Object.freeze({revision:catalog.revision,entries:Object.freeze(catalog.entries.map(e=>Object.freeze({...e,resourcePaths:Object.freeze([...e.resourcePaths])})))});
   if(signal){if(signal.aborted)this.cancel();else signal.addEventListener('abort',()=>this.cancel(),{once:true,signal:this.controller.signal});}
  }
- static async open(port:SkillReadPort,scope:SkillScope,signal?:AbortSignal){
+ static async open(port:SkillReadPort,scope:SkillScope,signal?:AbortSignal,modelVersionId?:(versionId:string)=>string){
   signal?.throwIfAborted();const frozenScope=Object.freeze({...scope});
   let catalog:SkillCatalog;
   try{catalog=await abortable(port.catalog(frozenScope,signal),signal);signal?.throwIfAborted();}
   catch(error){port.dispose?.();throw error;}
   const names=new Set<string>();
   for(const e of catalog.entries){if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(e.name)||names.has(e.name)){port.dispose?.();throw new SkillRuntimeError('skill_catalog_invalid');}names.add(e.name);}
-  const run=new SkillRuntime(port,frozenScope,catalog,signal);await run.validate();return run;
+  const aliases=new Map<string,string>();
+  const render=modelVersionId??((versionId:string)=>{let alias=aliases.get(versionId);if(!alias){alias=`k${aliases.size+1}`;aliases.set(versionId,alias);}return alias;});
+  const run=new SkillRuntime(port,frozenScope,catalog,render,signal);await run.validate();return run;
  }
  get signal(){return this.controller.signal;}
  get loadedResourcePaths():readonly string[]{return Object.freeze([...this.resources]);}
@@ -89,7 +92,7 @@ export class SkillRuntime {
     this.executionHash=hash;
     await this.validate(signal);this.loaded=true;
     const lines=value.content.split(/\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/);if(lines.at(-1)==='')lines.pop();
-    return '[NotAlone Skill 读取回执]\n'+JSON.stringify({used_skill_version_id:entry.versionId})+'\n\n'+lines.slice(offset,offset+limit).join('\n');
+    return '[NotAlone Skill 读取回执]\n'+JSON.stringify({used_skill_version_id:this.modelVersionId(entry.versionId)})+'\n\n'+lines.slice(offset,offset+limit).join('\n');
    }
    const value=await abortable(this.port.resource(this.scope,entry,this.catalog.revision,relative,this.combined(signal)),this.combined(signal));
    let text:string;try{text=new TextDecoder('utf-8',{fatal:true}).decode(value.content);}catch{throw new SkillFileError();}
