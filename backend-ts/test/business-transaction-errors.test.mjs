@@ -5,6 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import pg from 'pg';
 import { HostStorage, HostStorageError } from '../src/host-storage.ts';
 import { SkillLearningNotFound, normalizeProposal } from '../src/skill-learning-contract.ts';
 import { SkillFiles } from '../src/skill-files.ts';
@@ -81,6 +82,127 @@ test('pg 回调查询保留成功返回，客户端超时和同步查询错误�
   })), { name: 'HostStorageError', code: 'database_unavailable' });
   await assert.rejects(storage.businessTransaction(async client => { client.query(null); }),
     { name: 'HostStorageError', code: 'database_unavailable' });
+});
+
+test('pg 查询重载的普通驱动错误均受控且回滚写入', async t => {
+  const { storage } = await storageFixture(t);
+  for (const kind of ['promise', 'positional_callback', 'config_callback', 'query_callback', 'query_positional_callback', 'query_event']) await t.test(kind, async () => {
+    let actual;
+    await assert.rejects(storage.businessTransaction(async client => {
+      await client.query('INSERT INTO owner(id,display_name) VALUES($1,$2)', [randomUUID(), '重载失败时必须回滚']);
+      await client.query({ name: 'synthetic_overload', text: 'SELECT 1 AS value' });
+      const config = { name: 'synthetic_overload', text: 'SELECT 2 AS value' };
+      if (kind === 'promise') return client.query(config);
+      return new Promise((resolve, reject) => {
+        const callback = (error, result) => error ? reject(error) : resolve(result);
+        if (kind === 'positional_callback') return client.query(config, callback);
+        if (kind === 'config_callback') return client.query({ ...config, callback });
+        const query = kind === 'query_callback' ? new pg.Query(config, callback) : new pg.Query(config);
+        if (kind === 'query_event') query.once('error', reject);
+        assert.equal(kind === 'query_positional_callback' ? client.query(query, callback) : client.query(query), query);
+        assert.equal(query.callback, kind === 'query_event' ? undefined : callback);
+      });
+    }), error => { actual = error; return true; });
+    assert.equal((await storage.setupStatus()).owner_configured, false);
+    assert.ok(actual instanceof HostStorageError);
+    assert.equal(actual.code, 'database_unavailable');
+    assert.equal(actual.message, 'database_unavailable');
+  });
+});
+
+test('pg 成功重载保留 Query、回调 this、配置回调和结果对象身份', async t => {
+  const { storage } = await storageFixture(t);
+  for (const kind of ['positional_callback', 'config_callback', 'query_callback', 'query_callback_with_then', 'query_positional_callback', 'query_event']) await t.test(kind, async () => {
+    let query, callbackResult, endResult;
+    const result = await storage.businessTransaction(client => new Promise((resolve, reject) => {
+      function callback(error, value) {
+        if (error) return reject(error);
+        try {
+          assert.ok(this instanceof pg.Query);
+          assert.equal(this.callback, callback);
+          if (query) assert.equal(this, query);
+          callbackResult = value;
+          resolve(value);
+        } catch (error) { reject(error); }
+      }
+      const config = { text: 'SELECT 7 AS value' };
+      if (kind === 'positional_callback') { assert.equal(client.query(config, callback), undefined); return; }
+      if (kind === 'config_callback') {
+        config.callback = callback;
+        Object.freeze(config);
+        assert.equal(client.query(config), undefined);
+        assert.equal(config.callback, callback);
+        return;
+      }
+      query = ['query_callback', 'query_callback_with_then'].includes(kind) ? new pg.Query(config, callback) : new pg.Query(config);
+      if (kind === 'query_callback_with_then') query.then = () => { assert.fail('不得把 Query 实例消费为 Promise'); };
+      if (kind === 'query_event') query.once('error', reject);
+      query.once('end', value => { endResult = value; if (kind === 'query_event') resolve(value); });
+      assert.equal(kind === 'query_positional_callback' ? client.query(query, callback) : client.query(query), query);
+      assert.equal(query.callback, kind === 'query_event' ? undefined : callback);
+    }));
+    assert.deepEqual(result.rows, [{ value: 7 }]);
+    if (kind !== 'query_event') assert.equal(result, callbackResult);
+    if (query) {
+      assert.equal(result, endResult);
+    }
+  });
+});
+
+test('Query 原回调保持只读身份，行解析错误优先于随后的数据库错误且仍受控', async t => {
+  const { storage } = await storageFixture(t);
+  const parserError = new Error('synthetic-private-parser-failure');
+  let query;
+  await assert.rejects(storage.businessTransaction(async client => {
+    await client.query('INSERT INTO owner(id,display_name) VALUES($1,$2)', [randomUUID(), '解析错误必须回滚']);
+    return new Promise((resolve, reject) => {
+      function callback(error, value) {
+        try {
+          assert.equal(this, query);
+          assert.equal(query.callback, callback);
+          assert.equal(error, parserError);
+          error ? reject(error) : resolve(value);
+        } catch (error) { reject(error); }
+      }
+      query = new pg.Query({ text: "SELECT 'synthetic'::text AS value; SELECT 1/0", types: {
+        getTypeParser(oid, format) {
+          return oid === 25 ? () => { throw parserError; } : pg.types.getTypeParser(oid, format);
+        },
+      } }, callback);
+      Object.defineProperty(query, 'callback', { value: callback, writable: false, configurable: false });
+      assert.equal(client.query(query), query);
+      assert.equal(query.callback, callback);
+    });
+  }), { name: 'HostStorageError', code: 'database_unavailable' });
+  assert.equal((await storage.setupStatus()).owner_configured, false);
+});
+
+test('Query 内回调超时仍受控，调用方转换的业务错误保持原对象', async t => {
+  const { storage } = await storageFixture(t);
+  const domainError = new SkillLearningNotFound();
+  for (const mode of ['client_timeout', 'business_mapping']) await t.test(mode, async () => {
+    let calls = 0, actual;
+    await assert.rejects(storage.businessTransaction(async client => {
+      await client.query('INSERT INTO owner(id,display_name) VALUES($1,$2)', [randomUUID(), '回调失败时必须回滚']);
+      if (mode === 'business_mapping') await client.query({ name: 'synthetic_mapping', text: 'SELECT 1' });
+      return new Promise((resolve, reject) => {
+        const config = mode === 'client_timeout' ? { text: 'SELECT pg_sleep(0.05)' }
+          : { name: 'synthetic_mapping', text: 'SELECT 2' };
+        const query = new pg.Query(config, (error, result) => {
+          calls++;
+          if (error) reject(mode === 'business_mapping' ? domainError : error);
+          else resolve(result);
+        });
+        // pg.Client 接收 Query 对象上的超时选项，Query 构造器不会复制它。
+        if (mode === 'client_timeout') query.query_timeout = 1;
+        assert.equal(client.query(query), query);
+      });
+    }), error => { actual = error; return true; });
+    assert.equal(calls, 1);
+    assert.equal((await storage.setupStatus()).owner_configured, false);
+    if (mode === 'business_mapping') assert.equal(actual, domainError);
+    else assert.ok(actual instanceof HostStorageError && actual.code === 'database_unavailable');
+  });
 });
 
 test('只读事务保留业务错误，真实 PostgreSQL 拒绝写入仍受控', async t => {
