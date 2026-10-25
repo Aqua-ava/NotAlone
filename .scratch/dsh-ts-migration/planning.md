@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 用户最新要求：没有互相依赖的任务必须创建全新 Codex 会话并行，明确不是 sub-agent；会话间直接通信，主会话统一集成并独占桌面验收。当前01—16、18—20、22及23已验收；10的生产 Worker 切换由24把关，11的生产 B 段由根集成接线，22的来源删除执行与完整切换仍由17／24核验，完整切换与真实模型质量仍由24、25把关；21在当前macOS 27的accurate Vision路径持续超过2500ms，保持claimed并等待健康Mac对照或Apple修复。原规格和验收不降低。
+> 用户最新要求：没有互相依赖的任务必须创建全新、用户可见的 Codex 会话并行，明确不是 sub-agent；会话间直接通信，主会话统一集成并独占桌面验收。当前验收联系人为 `cloudy`，此前 `ran` 证据保留但不再使用。01—23中除07／08的后续组合外均已完成各自票面验收，17／21／22已有真实 App 签收；24现已解除前置阻塞，负责完整切换、崩溃与兼容回退，25负责真实模型和桌面质量，26最后退役 Python／旧框架。原规格和验收不降低。
 
 ## 逐项任务与阻塞关系
 
@@ -22,18 +22,18 @@
 | [14 更新 L3 画像与关系概览](issues/14-l3-profile-overview.md) | 13 | ready-for-agent | resolved |
 | [15 学习、审核和发布 Skill 草稿](issues/15-skill-learning-review.md) | 06、10、13、14 | ready-for-agent | resolved |
 | [16 导入单联系人历史](issues/16-contact-history-import.md) | 04、10 | ready-for-agent | resolved |
-| [17 接管资料整体删除与管理入口](issues/17-cross-domain-deletion.md) | 08、12、14、15、16 | ready-for-agent | claimed |
+| [17 接管资料整体删除与管理入口](issues/17-cross-domain-deletion.md) | 08、12、14、15、16 | ready-for-agent | resolved |
 | [18 管理微信账号与同步授权](issues/18-wechat-scope-binding.md) | 03、04 | ready-for-agent | resolved |
 | [19 持续同步授权私聊增量](issues/19-private-incremental-sync.md) | 18 | ready-for-agent | resolved |
 | [20 同步既有历史并恢复缺口](issues/20-history-gap-recovery.md) | 19、10 | ready-for-agent | resolved |
-| [21 根据前台会话定位联系人](issues/21-foreground-contact-location.md) | 18 | ready-for-agent | claimed |
+| [21 根据前台会话定位联系人](issues/21-foreground-contact-location.md) | 18 | ready-for-agent | resolved |
 | [22 管理全部业务后台任务](issues/22-background-task-management.md) | 10、13、14、15、20 | ready-for-agent | resolved |
 | [23 保留用量、配置和诊断界面](issues/23-usage-settings-diagnostics.md) | 03、05 | ready-for-agent | resolved |
 | [24 演练完整切换与兼容回退](issues/24-cutover-rollback.md) | 17、20、21、22、23 | ready-for-agent | open |
 | [25 完成模型与实际桌面验收](issues/25-integrated-acceptance.md) | 24 | ready-for-agent | open |
 | [26 退役 Python 和旧框架](issues/26-retire-python-frameworks.md) | 25 | ready-for-agent | open |
 
-01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。03已在`9f39d6c2`验收，04已在`f4acc05d`/`2dd9ad4a`验收；05、06、09、19、21已派发独立目标会话；18已在`b4276969`/`9a5f6cf0`验收。19的自动删除抑制窄前置见[任务](auto-read-deletion/issues/01-durable-guard.md)，109/Python保护已在`7f4a1729`提交，TS消费998ec226与窄前置d2698519已验收；19整票已在`9ed7770d`完成验收；05已在`b0a68175`关闭，10已由根签收`d00a01a2`并见[root-next-10/root-acceptance.md](root-next-10/root-acceptance.md)，23已在`3e044a0`完成原五条及实际App验收，根签收见task23-root-acceptance/；07、08已关闭，16已由根签收`13223bd4`。ready-for-agent表示规格足够清楚，不表示前置已完成。实施时逐票使用新上下文，先读规格、当前规则及最新前置结果；认领时改为claimed，通过验收才改为resolved。
+01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。01—23均已取得各自票面验收；17的跨域删除、21的真实前台定位和22的实际任务管理已在 2026-10-25 根 App 签收。迁移修复为 `c7be9cff`，删除回执误报修复为 `69ab20ab`。当前下一张是24，前置17、20、21、22、23均已 resolved。ready-for-agent表示规格足够清楚，不表示前置已完成；实施时逐票使用新上下文，先读规格、当前规则及最新前置结果，认领时改为claimed，通过验收才改为resolved。
 
 ## 必须先看 DSH，禁止凭猜测修改
 
