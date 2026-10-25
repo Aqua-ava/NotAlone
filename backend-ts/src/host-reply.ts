@@ -252,7 +252,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
         });
       }
       if(options.extractionEnabled&&extraction&&owner){
-        const modules=['extraction-flow.ts','extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-arguments.ts','extraction-verification-diagnostics.ts','extraction-evidence.ts','extraction-prompts.ts','extraction-bounded.ts','extraction-bounded-proof.ts','contact-overview-bounded-body.ts','contact-overview-bounded-contract.ts','contact-overview-bounded-graph.ts'];
+        const modules=['extraction-flow.ts','extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-arguments.ts','extraction-verification-diagnostics.ts','deepseek-strict-verification.ts','extraction-evidence.ts','extraction-prompts.ts','extraction-bounded.ts','extraction-bounded-proof.ts','contact-overview-bounded-body.ts','contact-overview-bounded-contract.ts','contact-overview-bounded-graph.ts'];
         const sources=await Promise.all(modules.map(file=>readFile(new URL(file,import.meta.url))));
         const ruleVersion=createHash('sha256').update(Buffer.concat(sources)).digest('hex');
         batches=new ExtractionBatchService({ownerId:owner,transaction:extractionTransaction,ruleVersion,

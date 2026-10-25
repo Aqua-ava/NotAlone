@@ -9,6 +9,7 @@ import type {installModelProvider} from './model-provider.ts';
 import {modelLedgerInputBudget, validateModelLedgerReceipt, type ModelLedgerReceipt, type ModelLedgerCost, type ModelLedgerUsage} from './model-ledger.ts';
 import type {MessagesBudgetBinding, MessagesBudgetProfile} from './model-input-budget.ts';
 import type {ModelTaskClaim} from './model-permit-server.ts';
+import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from './deepseek-strict-verification.ts';
 export interface ExtractionPermitEndpoint {path:string;token:string}
 type State={state:string;reason?:string;permit_id?:string;request_ids?:string[];next_cursor?:string|null};
 export interface ExtractionProviderFailure {name:'LlmError'|'LlmFailure';code:string;status?:number;}
@@ -87,10 +88,22 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
     for(const id of [input.request_id,input.attempt_id,input.owner_id,input.contact_id,...(input.ledger_entry_id?[input.ledger_entry_id]:[])])if(!uuid.test(id))throw new ExtractionModelError('extraction_model_identity_invalid');
     input.signal.throwIfAborted();await input.requireCurrent();
     if((await extractionUnconfirmedRequests(options.permit,input)).includes(input.request_id))throw new ExtractionModelError('extraction_model_recovery_unknown');
+    const selectedTools=input.tools??[],verificationTools=selectedTools.filter(tool=>tool.name===DEEPSEEK_STRICT_VERIFICATION_TOOL);
+    if(verificationTools.length>0&&(selectedTools.length!==1||verificationTools.length!==1))
+      throw new ExtractionModelError('extraction_model_tool_invalid');
+    const strictVerification=verificationTools.length===1?verificationTools[0]:null;
+    const strictUser=strictVerification?(()=>{
+      if(input.messages.length!==1||input.messages[0]?.role!=='user'||!Array.isArray(input.messages[0].content))
+        throw new ExtractionModelError('extraction_model_tool_invalid');
+      const text=input.messages[0].content.filter(block=>block.type==='text').map(block=>block.text).join('');
+      if(!text||input.messages[0].content.some(block=>block.type!=='text'))throw new ExtractionModelError('extraction_model_tool_invalid');
+      return text;
+    })():null;
     const config={...input.binding,reasoningEffort:ReasoningEffortId(input.binding.reasoningEffort),stop:input.binding.stop?[...input.binding.stop]:undefined};
-    const prepared=await options.ctx.llm.prepareCall(config,input.signal);
+    const prepared=strictVerification?null:await options.ctx.llm.prepareCall(config,input.signal);
     const connection=connect(options.permit,input.signal);let receipt:ModelLedgerReceipt|null=null;
-    let uncertain=false, reserved=false, call:ReturnType<typeof options.provider.beginCall>|undefined;
+    let uncertain=false,reserved=false,call:ReturnType<typeof options.provider.beginCall>|undefined;
+    let strictCall:ReturnType<typeof options.provider.beginStrictVerificationCall>|undefined;
     const started=Date.now();const blocks:ContentBlock[]=[];let text='',usage:ModelLedgerUsage|null=null,success=false,failure=false,validationRejected=false;
     let providerFailure:ExtractionProviderFailure|null=null;
     try {
@@ -100,23 +113,33 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       const sessionId=SessionId(randomUUID());
       // 预约只保存110物理身份；确认HTTP后的终态才由既有账本事务建立010外键。
       const base:ModelLedgerReceipt={attempt_id:input.attempt_id,permit_id:granted.permit_id,request_id:input.request_id,owner_id:input.owner_id,contact_id:input.contact_id,scope_kind:'contact',provider:input.binding.provider,model:input.binding.model,called_at:new Date(started).toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}};
-      call=options.provider.beginCall({sessionId,attempt_id:input.attempt_id,permit_id:granted.permit_id,binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,beforeDispatch:async value=>{
+      const registration={sessionId,attempt_id:input.attempt_id,permit_id:granted.permit_id,binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,beforeDispatch:async(value:{attempt_id:string;permit_id:string;budget:Parameters<typeof modelLedgerInputBudget>[0];dispatch:'authorized_unconfirmed'})=>{
         receipt={...base,input_budget:modelLedgerInputBudget(value.budget)};
         uncertain=true;const state=await connection.exchange({op:'reserve',receipt,claim:input.claim});
         if(state.state!=='reserved'){uncertain=false;throw new ExtractionModelError('extraction_model_reservation_rejected');}
         uncertain=false;reserved=true;
         input.signal.throwIfAborted();await input.requireCurrent();input.signal.throwIfAborted();
-      }});
+      }};
+      call=strictVerification?undefined:options.provider.beginCall(registration);
+      strictCall=strictVerification?options.provider.beginStrictVerificationCall(registration):undefined;
       try {
-        for await(const chunk of prepared.stream({...prepared.config,sessionId,messages:input.messages,system:input.system,tools:input.tools,signal:input.signal})) {
-          if(chunk.type==='block-end')blocks.push(structuredClone(chunk.block));
-          if(chunk.type==='text-delta')text+=chunk.text;
-          if(chunk.type==='usage')usage={input_tokens:chunk.usage.inputTokens+(chunk.usage.cacheReadTokens??0)+(chunk.usage.cacheWriteTokens??0),output_tokens:chunk.usage.outputTokens,cache_read_tokens:chunk.usage.cacheReadTokens??null,cache_write_tokens:chunk.usage.cacheWriteTokens??null};
-          if(chunk.type==='finish'){
-            success=['stop','tool-calls'].includes(chunk.reason.kind);failure=!success;
-            if(chunk.reason.kind==='error'||chunk.reason.kind==='aborted')providerFailure=providerFailureSnapshot(chunk.reason.failure,'LlmFailure');
+        if(strictCall&&strictVerification&&strictUser!==null){
+          const result=await strictCall.send({system:input.system??'',user:strictUser,
+            tool:{name:DEEPSEEK_STRICT_VERIFICATION_TOOL,description:strictVerification.description,parameters:strictVerification.parameters},signal:input.signal});
+          blocks.push(...structuredClone(result.blocks) as ContentBlock[]);
+          text=result.blocks.filter(block=>block.type==='text').map(block=>block.text).join('');
+          usage=result.usage;success=result.success;failure=!success;
+        }else if(prepared){
+          for await(const chunk of prepared.stream({...prepared.config,sessionId,messages:input.messages,system:input.system,tools:input.tools,signal:input.signal})) {
+            if(chunk.type==='block-end')blocks.push(structuredClone(chunk.block));
+            if(chunk.type==='text-delta')text+=chunk.text;
+            if(chunk.type==='usage')usage={input_tokens:chunk.usage.inputTokens+(chunk.usage.cacheReadTokens??0)+(chunk.usage.cacheWriteTokens??0),output_tokens:chunk.usage.outputTokens,cache_read_tokens:chunk.usage.cacheReadTokens??null,cache_write_tokens:chunk.usage.cacheWriteTokens??null};
+            if(chunk.type==='finish'){
+              success=['stop','tool-calls'].includes(chunk.reason.kind);failure=!success;
+              if(chunk.reason.kind==='error'||chunk.reason.kind==='aborted')providerFailure=providerFailureSnapshot(chunk.reason.failure,'LlmFailure');
+            }
           }
-        }
+        }else throw new ExtractionModelError('extraction_model_call_failed');
       } catch(error) {
         failure=true;
         // 官方adapter在非2xx时不会accept；LlmError的结构化status仍证明已观察HTTP响应。
@@ -133,7 +156,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       }
       const reservedReceipt=receipt as ModelLedgerReceipt|null;
       if(reserved&&reservedReceipt) {
-        const observation=call.observation();
+        const observation=(strictCall??call)!.observation();
         const responseObserved=observation.dispatch==='http_accepted'||providerFailure?.status!==undefined;
         receipt={...reservedReceipt,...(responseObserved&&input.ledger_entry_id?{ledger_entry_id:input.ledger_entry_id}:{}),latency_ms:Date.now()-started,
           dispatch:responseObserved?'response_observed':observation.dispatch==='not_authorized'?'not_sent':'authorized_unconfirmed',
@@ -155,7 +178,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       if(outputError!==undefined)throw outputError;
       if(validationRejected)throw new ExtractionModelError('extraction_model_validation_failed',receipt);
       if(!success||!receipt){
-        const rejection=call.observation().budget_rejection;
+        const rejection=(strictCall??call)?.observation().budget_rejection;
         throw new ExtractionModelError(input.signal.aborted?'extraction_model_cancelled':rejection?.code==='reply_budget_exceeded'?'extraction_model_budget_exceeded':rejection?'extraction_model_budget_unavailable':'extraction_model_call_failed',receipt,providerFailure);
       }
       input.signal.throwIfAborted();await input.requireCurrent();
@@ -163,6 +186,6 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
     } catch(error) {
       if(error instanceof ExtractionModelError&&!error.receipt&&receipt)throw new ExtractionModelError(error.code,receipt,error.provider_failure);
       throw error;
-    } finally {call?.close();connection.close();}
+    } finally {call?.close();strictCall?.close();connection.close();}
   }};
 }

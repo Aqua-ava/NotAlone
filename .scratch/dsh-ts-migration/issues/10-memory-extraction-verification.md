@@ -50,3 +50,30 @@ Spec: ../spec.md
 `d00a01a2`；extraction 52/52、tsc 0、公开扫描 0。当前 Python `TaskHost` 仍是唯一
 生产领取者，TS Worker 未启用。B 段采纳/trace 留票 11/12，生产切换与排空留票 24，
 实际 App/微信和真实模型质量留票 25；本票不把后续能力伪装为已验收。
+
+## 2026-10-25 Comments：DeepSeek strict 生产接入
+
+本轮只补票 10 的来源核验传输，不修改票 15。锁定依赖仍为 DSH `0.2.1-rc.2`、commit
+`687f282e8625c6b8d11ff58211a90524be2e4317`。官方 [DeepSeek strict Mode（Beta）](https://api-docs.deepseek.com/guides/tool_calls#strict-mode-beta)
+要求 `/beta/chat/completions`、function `strict:true`、唯一指定工具，并限制 `minLength`／
+`maxLength`／`minItems`／`maxItems` 及 `oneOf`；锁定 [DSH README:83](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/llm/llm-deepseek/README.md#L83)
+只走 `/anthropic` Messages，[:206](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/llm/llm-deepseek/README.md#L206)
+明确不映射 `tool_choice`，[serialize.ts:160](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/llm/llm-deepseek/src/serialize.ts#L160)
+也未写 `strict`。因此仅在业务代码为 `SourceVerificationOutput` 增加专用 Beta strict 传输，
+不修改 DSH 核心，也不扩展到普通回复、提取、Skill 或其他供应商。
+
+实现仍由 `createExtractionModelCaller` 唯一执行：先取得现有 ModelPermit，再测量最终 strict
+请求正文、预约同一模型台账、发送、结算并复验来源。strict 仅匹配唯一
+`SourceVerificationOutput`；混合工具、非 strict 回退和非预期 endpoint／响应均失败关闭。
+nullable union 等价转为 `anyOf`，`oneOf` 仅在互斥规则分支转 `anyOf`，删除服务端不支持的
+长度／数量约束但继续由现有 parser 严验；工具结果继续进入原 `readExtractionToolArguments`
+与逐项来源、引文解析。trace 的 `model_request` 记录
+`deepseek-strict-chat-completions-beta` 与转换后的 `wire_schema`，不新增正文持久化或外发能力。
+strict 模块同时纳入 A 段 `ruleVersion`，避免复用旧规则产生的冻结执行。
+
+验证只使用随机 `*_test` PostgreSQL、合成身份与本地回环 provider：strict wire／nullable-v3
+解析 3/3；提取相关模块 27/27；E/V 模型、预算、取消、HTTP 503、验证拒绝及 ACK 恢复 2/2；
+生产 A 入口 1/1；三类 B 唯一提交 1/1；实际 host-plugin 装配 1/1；本任务相关源码定向 strict
+TypeScript 检查 exit 0。既有两轮合成真实 API 诊断仍只证明 deepseek-flash 的 strict 格式可行，
+不代表质量或 `ran` 验收。本轮未调用真实模型、embedding、App、微信或外部消息，未处理 `ran`，
+未 push、打包或创建 PR。生产切换及真实 `ran` 的 A/V、B、index、verify 闭环仍由票 24／25 把关。

@@ -32,9 +32,14 @@ test('官方profile→私有HTTP→原Python B：A未知恢复不重发、保留
  const accounting=createHostModelAccounting({transaction,provider:'deepseek',typescriptProvider:'synthetic-route',model:'synthetic-model',unconfirmedPermitIds:()=>host?.unconfirmedPermitIds()??[]});
  host=await startModelHost({runtimeEnvironment:{NOTALONE_MANAGED_USER_DATA:directory},businessHome:directory,infoPath:join(directory,'info'),envFilePath:join(directory,'env'),accounting:{...accounting,reserve:async(...args)=>{try{return await accounting.reserve(...args);}catch(error){accountingFailures.push(error.code??error.message);throw error;}}}});
  provider=createServer(async(req,res)=>{
-  let raw='';for await(const part of req)raw+=part;requests++;const input=JSON.parse(raw),name=input.tools[0].name;purposes.push(name);
+  let raw='';for await(const part of req)raw+=part;requests++;const input=JSON.parse(raw);
+  const strict=req.url==='/beta/chat/completions',name=input.tools[0]?.function?.name??input.tools[0]?.name;purposes.push(name);
   const args=name==='DirectMemoryExtractionOutput'?{scenes:[{scene_name:'饮食偏好',memories:[{text,category:'preference',subject:'contact',topic:'other',source_message_ids:[message],confidence:0.9,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],interpretation_reason:'原话明确表达偏好'}]}]}:
    {results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:message,quote:text}]}]};
+  if(strict){res.setHeader('content-type','application/json');res.end(JSON.stringify({id:'synthetic-strict',object:'chat.completion',
+   choices:[{index:0,finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[
+    {id:'synthetic-strict-call',type:'function',function:{name,arguments:JSON.stringify(args)}}]}}],
+   usage:{prompt_tokens:5,completion_tokens:2,prompt_cache_hit_tokens:1,prompt_cache_miss_tokens:4}}));return;}
   const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name,input:{}}},{type:'content_block_delta',index:0,delta:{type:'input_json_delta',partial_json:JSON.stringify(args)}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:2}},{type:'message_stop'}];
   res.setHeader('content-type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
  });provider.listen(0,'127.0.0.1');await once(provider,'listening');
@@ -51,7 +56,7 @@ import {ExtractionBatchService} from ${JSON.stringify(join(src,'extraction-batch
 import {createExtractionBatchHttp} from ${JSON.stringify(join(src,'extraction-batch-http.ts'))};
 export const name='extraction-production-synthetic';export const inject=['llm','appReady'];
 export function apply(ctx){
- const provider=installModelProvider(ctx,{provider:'synthetic-route',connection:resolveAdapterOptions({baseURL:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
+ const provider=installModelProvider(ctx,{provider:'synthetic-route',strictVerificationEndpoint:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL.replace(/\\/anthropic$/,'')+'/beta/chat/completions',connection:resolveAdapterOptions({baseURL:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
  const permit={path:process.env.NOTALONE_MODEL_PERMIT_SOCKET,token:process.env.NOTALONE_MODEL_PERMIT_TOKEN};
  const caller=createExtractionModelCaller({ctx,provider,permit}),pool=new pg.Pool({host:'/tmp',database:process.env.NOTALONE_SYNTHETIC_DSN.match(/dbname=([^ ]+)/)[1],user:process.env.NOTALONE_SYNTHETIC_PG_USER,max:4});
  const transaction=async work=>{const c=await pool.connect();try{await c.query('BEGIN');const result=await work(c);await c.query('COMMIT');return result;}catch(error){await c.query('ROLLBACK');throw error;}finally{c.release();}};
@@ -65,13 +70,17 @@ export function apply(ctx){
 }
 `);
  await writeFile(join(profile,'cordis.patch.yml'),`- insert:\n    - name: '@deepseek-ai/dsh-llm'\n    - name: ${JSON.stringify(plugin)}\n`);
- const rule=createHash('sha256');for(const file of ['extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-flow.ts','extraction-evidence.ts','extraction-arguments.ts','extraction-verification-diagnostics.ts','extraction-prompts.ts'])rule.update(await readFile(join(src,file)));
+ const rule=createHash('sha256');for(const file of ['extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-flow.ts','extraction-evidence.ts','extraction-arguments.ts','extraction-verification-diagnostics.ts','deepseek-strict-verification.ts','extraction-prompts.ts'])rule.update(await readFile(join(src,file)));
  child=spawn(process.execPath,[resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','notalone'],{cwd:directory,env:{PATH:process.env.PATH,HOME:directory,DSH_HOME:directory,DSH_TELEMETRY_DISABLED:'1',...host.pythonEnvironment,NOTALONE_SYNTHETIC_DSN:dsn,NOTALONE_SYNTHETIC_PG_USER:c.connectionParameters.user,NOTALONE_SYNTHETIC_OWNER:owner,NOTALONE_SYNTHETIC_RULE:rule.digest('hex'),NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}/anthropic`},stdio:['ignore','pipe','pipe']});childExit=once(child,'exit');let log='';child.stderr.on('data',chunk=>log+=chunk);
  const url=await new Promise((done,reject)=>{const timer=setTimeout(()=>reject(new Error(log.slice(-1200))),10000);child.stdout.on('data',chunk=>{log+=chunk;const match=log.match(/EXTRACTION_PRODUCTION_READY (http:\/\/127\.0\.0\.1:\d+)/);if(match){clearTimeout(timer);done(match[1]);}});child.once('exit',()=>{clearTimeout(timer);reject(new Error(log.slice(-1200)));});});
  const runPython=async mode=>{try{return JSON.parse((await execute(`${homedir()}/miniconda3/envs/NotAlone/bin/python`,[resolve('../backend/tests/support/extraction_production_a.py'),mode,dsn,owner,contact,source,JSON.stringify(claim),url],{env:{...process.env,...host.pythonEnvironment,NOTALONE_DISABLE_DOTENV:'1',PYTHONPATH:resolve('../backend/src')},timeout:20000,maxBuffer:1024*1024})).stdout);}catch(error){throw new Error((error.stderr??'').slice(-1600)+'\n'+log.split('\n').filter(line=>/^(MODEL_FAILURE|A_FAILURE)/.test(line)).join('\n')+'\nrequests='+requests);}};
  const lost=await runPython('lost');assert.equal(lost.extracted,1,log.split('\n').filter(line=>/^(MODEL_FAILURE|A_FAILURE)/.test(line)).join('\n')+'\naccounting='+accountingFailures);assert.equal(lost.watermark,null);assert.equal(requests,2);
  const first=await runPython('run');assert.equal(first.stats.processed_messages,1);assert.equal(first.stats.extracted,1);assert.equal(first.stats.adopted,1);assert.equal(first.watermark,message);assert.equal(requests,2,'A回包未消费后的新trace必须复用同一A执行');
  assert.deepEqual(purposes,['DirectMemoryExtractionOutput','SourceVerificationOutput']);
+ assert.deepEqual((await c.query(`SELECT payload->>'transport' transport,jsonb_typeof(payload->'wire_schema') wire_schema
+  FROM memory_extraction_trace_event WHERE owner_id=$1 AND contact_id=$2
+  AND stage='model_request' AND payload->>'purpose'='verification'`,[owner,contact])).rows,
+  [{transport:'deepseek-strict-chat-completions-beta',wire_schema:'object'}]);
  assert.equal((await c.query('SELECT count(*)::int n FROM model_call_receipt')).rows[0].n,2);
  assert.deepEqual((await c.query('SELECT DISTINCT provider FROM model_call_receipt')).rows.map(row=>row.provider),['synthetic-route']);
  assert.equal((await c.query('SELECT count(*)::int n FROM outbound_ledger_entry')).rows[0].n,2,'原Python E不能重复记账');

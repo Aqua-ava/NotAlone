@@ -13,6 +13,7 @@ import type {ModelTaskClaim} from './model-permit-server.ts';
 import type {MessagesBudgetBinding,MessagesBudgetProfile} from './model-input-budget.ts';
 import type {ContentBlock} from '@deepseek-ai/dsh-llm';
 import type {ExtractionWindow} from './extraction-protocol.ts';
+import {deepSeekStrictVerificationSchema,DEEPSEEK_STRICT_VERIFICATION_TOOL} from './deepseek-strict-verification.ts';
 
 type Transaction=<T>(work:(client:pg.Client)=>Promise<T>)=>Promise<T>;
 export interface ExtractionBatchInput {owner_id:string;contact_id:string;trace_id:string;batch_key:string;claim:ModelTaskClaim;}
@@ -234,7 +235,11 @@ export class ExtractionBatchService {
   try{outcome=await runExtractionFlow({window:prepared.window,signal,mode:prepared.mode==='bounded-runtime-v1'?'bounded-runtime-v1':undefined,requireCurrent:requireSources,record,
    invoke:async(request,callSignal)=>{
     currentCall=randomUUID();const callId=currentCall;
-    await record({stage:'model_request',payload:{purpose:request.purpose,messages:[{role:'system',content:request.system},{role:'user',content:request.user}],schema:request.tool.parameters,capture_layer:'application_request'}});
+    const strict=request.purpose==='verification'&&request.tool.name===DEEPSEEK_STRICT_VERIFICATION_TOOL;
+    await record({stage:'model_request',payload:{purpose:request.purpose,messages:[{role:'system',content:request.system},{role:'user',content:request.user}],
+      schema:request.tool.parameters,capture_layer:'application_request',
+      transport:strict?'deepseek-strict-chat-completions-beta':'deepseek-messages',
+      ...(strict?{wire_schema:deepSeekStrictVerificationSchema(request.tool.parameters)}:{})}});
     const recordReceipt=async(receipt:ModelLedgerReceipt,committed:boolean)=>{
      await this.options.transaction(async client=>{
       // 来源已删时只保存既有trace的无正文真实调用关联；整体删除不重建任何记录。

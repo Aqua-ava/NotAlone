@@ -97,7 +97,8 @@ print(json.dumps({'trace_id':str(trace),'batch_key':plan.batch_key}))`;
  const requests=[];
  provider=createServer(async(req,res)=>{
   let raw='';for await(const part of req)raw+=part;
-  const body=JSON.parse(raw),name=body.tools[0].name;requests.push(name);
+  const body=JSON.parse(raw),strict=req.url==='/beta/chat/completions',
+   name=body.tools[0]?.function?.name??body.tools[0]?.name;requests.push(name);
   const evidence=[{message_id:parentMessages[0],quote:parentTexts[0]},
    {message_id:parentMessages[1],quote:parentTexts[1]},{message_id:target,quote:targetText}];
   let args;
@@ -114,6 +115,10 @@ print(json.dumps({'trace_id':str(trace),'batch_key':plan.batch_key}))`;
    evidence,claim_changed:false,condition_changed:false}]};
   else if(name==='MergedMemoryVerificationOutput')args={supported:true,text:targetText,evidence};
   else throw new Error(`unexpected_tool:${name}`);
+  if(strict){res.setHeader('content-type','application/json');res.end(JSON.stringify({id:'synthetic-strict',object:'chat.completion',
+   choices:[{index:0,finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[
+    {id:'synthetic-strict-call',type:'function',function:{name,arguments:JSON.stringify(args)}}]}}],
+   usage:{prompt_tokens:8,completion_tokens:3,prompt_cache_hit_tokens:2,prompt_cache_miss_tokens:6}}));return;}
   const events=[
    {type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:8,output_tokens:0}}},
    {type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name,input:{}}},
@@ -140,7 +145,7 @@ import {createExtractionAdoptionHost} from ${JSON.stringify(join(src,'extraction
 import {createExtractionBatchHttp} from ${JSON.stringify(join(src,'extraction-batch-http.ts'))};
 export const name='extraction-adoption-synthetic';export const inject=['llm','appReady'];
 export function apply(ctx){
- const provider=installModelProvider(ctx,{provider:'synthetic-route',connection:resolveAdapterOptions({
+ const provider=installModelProvider(ctx,{provider:'synthetic-route',strictVerificationEndpoint:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL.replace(/\\/anthropic$/,'')+'/beta/chat/completions',connection:resolveAdapterOptions({
   baseURL:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL,thinking:'disabled',maxTokens:512,
   retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
  const permit={path:process.env.NOTALONE_MODEL_PERMIT_SOCKET,token:process.env.NOTALONE_MODEL_PERMIT_TOKEN};

@@ -35,9 +35,15 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A+B入口、fi
  const owner=randomUUID(),contact=randomUUID(),source=randomUUID(),message=randomUUID(),task=randomUUID(),step=randomUUID(),worker=randomUUID();
  const text='我喜欢绿茶。',seen=[];let child,exited,output='',connection,legacyPid,stopped=false;
  const provider=createServer(async(req,res)=>{
-  let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw),name=body.tools[0].name;seen.push({path:req.url,headers:req.headers,body});
+  let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);
+  const strict=req.url==='/beta/chat/completions',name=body.tools[0]?.function?.name??body.tools[0]?.name;
+  seen.push({path:req.url,headers:req.headers,body});
   const args=name==='DirectMemoryExtractionOutput'?(raw.includes(text)?{scenes:[{scene_name:'饮食偏好',memories:[{text,category:'preference',subject:'contact',topic:'other',source_message_ids:[message],confidence:0.9,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],interpretation_reason:'原话明确表达偏好'}]}]}:{scenes:[]}):
    {results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:message,quote:text}]}]};
+  if(strict){res.setHeader('content-type','application/json');res.end(JSON.stringify({id:'synthetic-strict',object:'chat.completion',
+   choices:[{index:0,finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[
+    {id:'synthetic-strict-call',type:'function',function:{name,arguments:JSON.stringify(args)}}]}}],
+   usage:{prompt_tokens:5,completion_tokens:2,prompt_cache_hit_tokens:1,prompt_cache_miss_tokens:4}}));return;}
   const events=[{type:'message_start',message:{id:randomUUID(),model:'deepseek-flash',usage:{input_tokens:3,output_tokens:0}}},{},{},{},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:2}},{type:'message_stop'}];
   useTool(events,name,args,randomUUID());sendEvents(res,events);
  });
@@ -88,8 +94,13 @@ test('实际host-plugin→host-model-runtime→host-reply：私有A+B入口、fi
  assert.equal(bridge.NOTALONE_EXTRACTION_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_B_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_TASK_WORKER_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_REPLY_RUNTIME,'typescript');assert.equal(bridge.NOTALONE_EXTRACTION_REMOTE_URL,base);assert.ok(bridge.NOTALONE_EXTRACTION_REMOTE_TOKEN!==connection.token);
  const runPython=async mode=>{try{return JSON.parse((await execute(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),[resolve('../backend/tests/support/extraction_host_entry.py'),mode,dsn,owner,contact,source,JSON.stringify(claim),base],{cwd:project,env:{PATH:process.env.PATH,USER:process.env.USER,HOME:db.directory,PYTHONPATH:join(project,'backend/src'),PYTHONDONTWRITEBYTECODE:'1',NOTALONE_DISABLE_DOTENV:'1',...bridge},timeout:25000,maxBuffer:1048576})).stdout);}catch(error){throw Error((error.stderr??'').slice(-1800)+'\n'+safeOutput().slice(-1800));}};
  const result=await runPython('run');assert.equal(result.stats.processed_messages,1);assert.equal(result.stats.adopted,1);assert.equal(result.watermark,message);assert.equal(seen.length,2,'A与V各执行一次，B零模型调用仍由TS finalize');
- assert.deepEqual(seen.map(row=>row.body.tools[0].name),['DirectMemoryExtractionOutput','SourceVerificationOutput']);
- assert.ok(seen.every(row=>row.path==='/anthropic/v1/messages'&&row.headers['x-api-key']==='synthetic-only'&&row.headers['x-deepseek-harness-user-id']));
+ assert.deepEqual(seen.map(row=>row.body.tools[0]?.function?.name??row.body.tools[0]?.name),['DirectMemoryExtractionOutput','SourceVerificationOutput']);
+ assert.deepEqual(seen.map(row=>row.path),['/anthropic/v1/messages','/beta/chat/completions']);
+ assert.equal(seen[0].headers['x-api-key'],'synthetic-only');
+ assert.equal(seen[1].headers.authorization,'Bearer synthetic-only');
+ assert.ok(seen.every(row=>row.headers['x-deepseek-harness-user-id']));
+ assert.equal(seen[1].body.stream,false);
+ assert.equal(seen[1].body.tools[0].function.strict,true);
  assert.equal((await c.query('SELECT count(*)::int n FROM outbound_ledger_entry')).rows[0].n,2);
  assert.deepEqual((await c.query('SELECT DISTINCT provider FROM model_call_receipt')).rows.map(row=>row.provider),['notalone-deepseek']);
  assert.equal((await c.query('SELECT count(*)::int n FROM model_call_receipt r JOIN outbound_ledger_entry l ON l.id=r.ledger_entry_id WHERE r.provider=l.provider AND r.outcome=\'succeeded\'')).rows[0].n,2);

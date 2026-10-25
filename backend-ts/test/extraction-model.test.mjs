@@ -15,6 +15,7 @@ for(const failurePoint of ['record_ack','trace_receipt'])test(`官方profile/原
  const db=await createExtractionFixture(),c=db.client;
  const directory=await mkdtemp(join(tmpdir(),'na-extraction-model-'));
  let host,child,exit,provider,dropAck=false,requests=0,firstHttpAccounting;
+ const paths=[],strictBodies=[];
  t.after(async()=>{if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');if(exit)await exit;await host?.shutdown();if(provider){provider.closeAllConnections();await new Promise(r=>provider.close(r));}await db.close();await rm(directory,{recursive:true,force:true});});
  const owner=(await c.query("INSERT INTO owner(display_name)VALUES('合成') RETURNING id")).rows[0].id;
  const contact=(await c.query("INSERT INTO contact(owner_id,display_name)VALUES($1,'合成') RETURNING id",[owner])).rows[0].id;
@@ -28,10 +29,21 @@ for(const failurePoint of ['record_ack','trace_receipt'])test(`官方profile/原
  const transaction=async work=>{await c.query('BEGIN');try{const v=await work(c);await c.query('COMMIT');return v;}catch(e){await c.query('ROLLBACK');throw e;}};
  const accounting=createHostModelAccounting({transaction,provider:'synthetic',typescriptProvider:'synthetic-route',model:'synthetic-model',unconfirmedPermitIds:()=>host?.unconfirmedPermitIds()??[]});
  host=await startModelHost({runtimeEnvironment:{NOTALONE_MANAGED_USER_DATA:directory},businessHome:directory,infoPath:join(directory,'info'),envFilePath:join(directory,'env'),accounting:{...accounting,recordReserved:async r=>{await accounting.recordReserved(r);if(dropAck)throw new Error('synthetic_ack_lost');}}});
- provider=createServer(async(req,res)=>{let raw='';for await(const p of req)raw+=p;requests++;const failureStatus=raw.match(/FAIL_(\d{3})/);
+ provider=createServer(async(req,res)=>{let raw='';for await(const p of req)raw+=p;requests++;paths.push(req.url);const input=JSON.parse(raw),strict=req.url==='/beta/chat/completions';
+  if(strict)strictBodies.push(input);const failureStatus=raw.match(/FAIL_(\d{3})/),strictFailureStatus=raw.match(/STRICT_FAIL_(\d{3})/);
   if(requests===1)firstHttpAccounting={ledgerRows:(await c.query('SELECT count(*)::int n FROM outbound_ledger_entry')).rows[0].n,
    receipt:(await c.query('SELECT ledger_entry_id,outcome,dispatch FROM model_call_receipt')).rows[0]};
+  const status=strict?strictFailureStatus:null;
+  if(status){res.writeHead(Number(status[1]));res.end(JSON.stringify({error:{message:'sensitive_synthetic_upstream_detail'}}));return;}
   if(failureStatus){res.writeHead(Number(failureStatus[1]));res.end(JSON.stringify({error:{message:'sensitive_synthetic_upstream_detail'}}));return;}
+  if(strict){
+   const name=input.tools?.[0]?.function?.name;
+   const args=name==='SourceVerificationOutput'?{results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[],proof:null}]}:{supported:true};
+   res.setHeader('content-type','application/json');res.end(JSON.stringify({id:'synthetic-strict',object:'chat.completion',
+    choices:[{index:0,finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[
+     {id:'synthetic-strict-call',type:'function',function:{name,arguments:JSON.stringify(args)}}]}}],
+    usage:{prompt_tokens:5,completion_tokens:2,prompt_cache_hit_tokens:1,prompt_cache_miss_tokens:4}}));return;
+  }
   const events=[{type:'message_start',message:{id:'synthetic',model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'text',text:''}},{type:'content_block_delta',index:0,delta:{type:'text_delta',text:'合成候选'}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:2}},{type:'message_stop'}];
   if(JSON.parse(raw).tools){events[1]={type:'content_block_start',index:0,content_block:{type:'tool_use',id:'synthetic-tool',name:'SourceVerificationOutput',input:{}}};events[2]={type:'content_block_delta',index:0,delta:{type:'input_json_delta',partial_json:JSON.stringify({supported:true})}};events[4].delta.stop_reason='tool_use';}
   res.setHeader('content-type','text/event-stream');res.end(events.map(e=>`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''));
@@ -46,14 +58,31 @@ for(const failurePoint of ['record_ack','trace_receipt'])test(`官方profile/原
  assert.equal((await c.query('SELECT ledger_entry_id FROM model_call_receipt WHERE attempt_id=$1',[e.receipt.attempt_id])).rows[0].ledger_entry_id,ledgerId);
  assert.deepEqual((await c.query('SELECT id,outcome FROM outbound_ledger_entry')).rows,[{id:ledgerId,outcome:'succeeded'}]);
  assert.deepEqual(firstHttpAccounting,{ledgerRows:0,receipt:{ledger_entry_id:null,outcome:'pending',dispatch:'authorized_unconfirmed'}},'真实HTTP返回前不得预建010成功行');
- const v=await call({tools:[{name:'SourceVerificationOutput',description:'合成核验',parameters:{type:'object',properties:{supported:{type:'boolean'}},required:['supported']}}]});assert.equal(v.blocks[0].type,'tool-call');assert.equal(v.blocks[0].name,'SourceVerificationOutput');assert.deepEqual(JSON.parse(v.blocks[0].arguments),{supported:true});assert.equal(v.receipt.request_id,e.receipt.request_id);assert.notEqual(v.receipt.attempt_id,e.receipt.attempt_id);assert.equal(requests,2);
+ const v=await call({system:'合成核验提示',tools:[{name:'SourceVerificationOutput',description:'合成核验',parameters:{type:'object',additionalProperties:false,properties:{supported:{type:'boolean'}},required:['supported']}}]});
+ assert.equal(v.blocks?.[0]?.type,'tool-call',JSON.stringify(v));assert.equal(v.blocks[0].name,'SourceVerificationOutput');
+ assert.deepEqual(JSON.parse(v.blocks[0].arguments),{results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[],proof:null}]});
+ assert.equal(v.receipt.request_id,e.receipt.request_id);assert.notEqual(v.receipt.attempt_id,e.receipt.attempt_id);assert.equal(requests,2);
+ assert.deepEqual(paths.slice(-2),['/anthropic/v1/messages','/beta/chat/completions']);
+ assert.equal(strictBodies.length,1);
+ assert.equal(strictBodies[0].stream,false);
+ assert.equal(strictBodies[0].tools[0].function.strict,true);
+ assert.deepEqual(strictBodies[0].tool_choice,{type:'function',function:{name:'SourceVerificationOutput'}});
+ assert.equal(v.receipt.input_budget.measurement_id,'deepseek-strict-chat-json-utf8-bytes-v1/beta-20261025');
+ const strictBudget=await call({system:'合成核验提示',tools:[{name:'SourceVerificationOutput',description:'合成核验',
+  parameters:{type:'object',additionalProperties:false,properties:{supported:{type:'boolean'}},required:['supported']}}],oversized:true});
+ assert.equal(strictBudget.error,'extraction_model_budget_exceeded');assert.equal(requests,2,'strict预算超限不得出站');
  const wrong=await call({wrongLedger:true});assert.equal(wrong.error,'extraction_model_call_failed');assert.equal(requests,2,'错误账本身份不得出站');
  const denied=await call({claim:{...claim,lease_generation:2}});assert.equal(denied.error,'extraction_model_call_failed');assert.equal(requests,2);
  const budget=await call({oversized:true});assert.equal(budget.error,'extraction_model_budget_exceeded');assert.equal(requests,2);
- const cancel=await call({cancelBeforeDispatch:true});assert.equal(cancel.error,'extraction_model_cancelled');assert.equal(cancel.receipt.outcome,'cancelled');assert.equal(cancel.receipt.dispatch,'not_sent');assert.equal(requests,2);
+ const verificationTool={name:'SourceVerificationOutput',description:'合成核验',parameters:{type:'object',additionalProperties:false,properties:{supported:{type:'boolean'}},required:['supported']}};
+ const cancel=await call({system:'合成核验提示',tools:[verificationTool],cancelBeforeDispatch:true});
+ assert.equal(cancel.error,'extraction_model_cancelled');assert.equal(cancel.receipt.outcome,'cancelled');assert.equal(cancel.receipt.dispatch,'not_sent');assert.equal(requests,2);
  const revoked=await call({revokeBeforeDispatch:true});assert.equal(revoked.error,'extraction_model_call_failed');assert.equal(revoked.receipt.outcome,'cancelled');assert.equal(requests,2);
  const late=await call({lateInvalid:true});assert.equal(late.error,'extraction_model_source_stale');assert.equal(requests,3);assert.equal((await c.query("SELECT count(*)::int n FROM model_call_receipt WHERE outcome='succeeded'")).rows[0].n,3);
- const invalid=await call({validationReject:true});assert.equal(invalid.error,'extraction_model_validation_failed');assert.equal(invalid.receipt.outcome,'failed');assert.equal(invalid.receipt.legacy_outcome,'rejected_by_validation');assert.equal(invalid.receipt.usage.input_tokens,3);assert.equal(invalid.callbacks,1);assert.equal(requests,4);assert.equal((await c.query('SELECT outcome FROM outbound_ledger_entry WHERE id=$1',[invalid.receipt.attempt_id])).rows[0].outcome,'rejected_by_validation');
+ const invalid=await call({system:'合成核验提示',tools:[verificationTool],validationReject:true});
+ assert.equal(invalid.error,'extraction_model_validation_failed');assert.equal(invalid.receipt.outcome,'failed');assert.equal(invalid.receipt.legacy_outcome,'rejected_by_validation');
+ assert.equal(invalid.receipt.usage.input_tokens,5);assert.equal(invalid.callbacks,1);assert.equal(requests,4);assert.equal(paths.at(-1),'/beta/chat/completions');
+ assert.equal((await c.query('SELECT outcome FROM outbound_ledger_entry WHERE id=$1',[invalid.receipt.attempt_id])).rows[0].outcome,'rejected_by_validation');
  const failureKey='c'.repeat(64),failureTrace=randomUUID();
  await c.query('INSERT INTO memory_extraction_trace(trace_id,owner_id,contact_id,run_id,batch_key)VALUES($1,$2,$3,$4,$5)',[failureTrace,owner,contact,randomUUID(),failureKey]);
  await c.query("INSERT INTO memory_extraction_trace_event(event_id,trace_id,owner_id,contact_id,position,stage,payload)VALUES($1,$2,$3,$4,1,'window',$5)",[randomUUID(),failureTrace,owner,contact,{task_runtime:claim}]);
@@ -65,17 +94,28 @@ for(const failurePoint of ['record_ack','trace_receipt'])test(`官方profile/原
   assert.equal(result.receipt.outcome,'failed');assert.equal(result.receipt.dispatch,'response_observed');assert.equal(result.retryable,retryable);assert.deepEqual(result.provider_failure,{name:'LlmFailure',code,status});
  }
  assert.equal(requests,8,'各次调用只发一个真实HTTP，重试由E业务层决定');
+ const strictFailureKey='d'.repeat(64),strictFailureTrace=randomUUID();
+ await c.query('INSERT INTO memory_extraction_trace(trace_id,owner_id,contact_id,run_id,batch_key)VALUES($1,$2,$3,$4,$5)',[strictFailureTrace,owner,contact,randomUUID(),strictFailureKey]);
+ await c.query("INSERT INTO memory_extraction_trace_event(event_id,trace_id,owner_id,contact_id,position,stage,payload)VALUES($1,$2,$3,$4,1,'window',$5)",[randomUUID(),strictFailureTrace,owner,contact,{task_runtime:claim}]);
+ const strictFailureRequest=modelTaskRequestId('extraction',task,strictFailureKey),strictFailure=await call({system:'合成核验提示',tools:[{name:'SourceVerificationOutput',description:'合成核验',
+  parameters:{type:'object',additionalProperties:false,properties:{supported:{type:'boolean'}},required:['supported']}}],
+  strictProviderStatus:503,request_id:strictFailureRequest,ledger_entry_id:randomUUID()});
+ assert.equal(strictFailure.error,'extraction_model_call_failed',JSON.stringify(strictFailure));assert.equal(strictFailure.receipt.outcome,'failed',JSON.stringify(strictFailure));
+ assert.equal(strictFailure.receipt.dispatch,'response_observed');assert.equal(strictFailure.retryable,true);
+ assert.deepEqual(strictFailure.provider_failure,{name:'LlmError',code:'SERVER',status:503});
+ assert.equal(paths.at(-1),'/beta/chat/completions');
+ assert.equal(requests,9,'strict失败不得回退到Messages普通请求');
  if(failurePoint==='trace_receipt'){
   const attempt=randomUUID(),ledger=randomUUID();
   const callback=await call({attempt_id:attempt,ledger_entry_id:ledger,receiptCallbackFailure:true});
-  assert.equal(callback.error,'synthetic_receipt_callback_failed');assert.equal(callback.callbacks,1);assert.equal(callback.retryable,false);assert.equal(requests,9);
+  assert.equal(callback.error,'synthetic_receipt_callback_failed');assert.equal(callback.callbacks,1);assert.equal(callback.retryable,false);assert.equal(requests,10);
   assert.deepEqual((await c.query('SELECT ledger_entry_id,outcome,dispatch FROM model_call_receipt WHERE attempt_id=$1',[attempt])).rows[0],{ledger_entry_id:ledger,outcome:'succeeded',dispatch:'response_observed'},'最小关联失败时PG真实终态保持已知');
   const unknown=await call({op:'unconfirmed'});assert.equal(unknown.ids.includes(base.request_id),true,'关联回调失败不能提前settle journal');
-  const blocked=await call({});assert.equal(blocked.error,'extraction_model_recovery_unknown');assert.equal(requests,9,'PG terminal已ACK也不能重发业务未确认的同批模型');
+  const blocked=await call({});assert.equal(blocked.error,'extraction_model_recovery_unknown');assert.equal(requests,10,'PG terminal已ACK也不能重发业务未确认的同批模型');
   return;
  }
- dropAck=true;const ack=await call({});assert.equal(ack.error,'extraction_model_ack_unknown');assert.equal(ack.receipt.outcome,'succeeded');assert.equal(ack.retryable,false);assert.equal(requests,9);
+ dropAck=true;const ack=await call({});assert.equal(ack.error,'extraction_model_ack_unknown');assert.equal(ack.receipt.outcome,'succeeded');assert.equal(ack.retryable,false);assert.equal(requests,10);
  dropAck=false;await call({op:'record',receipt:ack.receipt});const unknown=await call({op:'unconfirmed'});assert.deepEqual(unknown.ids,[base.request_id],JSON.stringify(unknown));
- const blocked=await call({});assert.equal(blocked.error,'extraction_model_recovery_unknown');assert.equal(blocked.retryable,false);assert.equal(requests,9,'PG known不得清除journal孤儿并重放');
- assert.equal((await c.query('SELECT count(*)::int n FROM model_call_receipt')).rows[0].n,11);
+ const blocked=await call({});assert.equal(blocked.error,'extraction_model_recovery_unknown');assert.equal(blocked.retryable,false);assert.equal(requests,10,'PG known不得清除journal孤儿并重放');
+ assert.equal((await c.query('SELECT count(*)::int n FROM model_call_receipt')).rows[0].n,12);
 });
