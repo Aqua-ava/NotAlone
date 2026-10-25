@@ -1,0 +1,35 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "../.scratch/dsh-ts-migration/final-close-standards-7a1/independent-stop.test.mjs",
+    "../.scratch/dsh-ts-migration/final-close-standards-7a1/same-key-retry.test.mjs",
+    "../.scratch/dsh-ts-migration/final-close-standards-7a1/same-key-ipc.test.mjs"
+  ],
+  "cwd": "desktop",
+  "exit_code": 0,
+  "raw_sha256": "646f35ac3ac740ad7ba3724c30417fbd96fa67ea91e365be8232e224e009c8c1",
+  "public_sha256": "646f35ac3ac740ad7ba3724c30417fbd96fa67ea91e365be8232e224e009c8c1",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "source_before": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "0722b752a9d2682f9e1b317942a8daeebd4ac625c133689ce45c66b5ad94adff",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "2b63b9bfd2bcfb63788640d874c7a3c80cfac2635cf980560a83853ee4f2fe20",
+      "desktop/tests/assistant-generation-stop.test.mjs": "ebc4d240750e2fc8d2f706f2431fcb156a4e6ab55a989679513344c6f818e15a"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_after": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "0722b752a9d2682f9e1b317942a8daeebd4ac625c133689ce45c66b5ad94adff",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "2b63b9bfd2bcfb63788640d874c7a3c80cfac2635cf980560a83853ee4f2fe20",
+      "desktop/tests/assistant-generation-stop.test.mjs": "ebc4d240750e2fc8d2f706f2431fcb156a4e6ab55a989679513344c6f818e15a"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "public_file": "independent-boundaries.public.log",
+  "source_stable": true
+}

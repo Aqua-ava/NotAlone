@@ -1,0 +1,12 @@
+✔ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执先于停止） (1.062666ms)
+ℹ {"stopError":null,"confirmed":true,"modelCalls":0,"interruptions":[{"label":"retry","reason":"user_cancelled"}]}
+✔ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执后于停止） (0.156542ms)
+ℹ {"stopError":null,"confirmed":true,"modelCalls":0,"interruptions":[{"label":"retry","reason":"user_cancelled"}]}
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 39.831708

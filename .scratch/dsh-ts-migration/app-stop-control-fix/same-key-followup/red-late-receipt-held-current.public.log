@@ -1,0 +1,48 @@
+✖ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执先于停止） (1.732083ms)
+ℹ {"stopError":"用户停止生成尚未获得权威确认。","confirmed":false,"interruptsBeforeCurrentReceipt":1,"modelCalls":0,"interruptions":[{"label":"original","reason":"app_quit"},{"label":"retry","reason":"user_cancelled"},{"label":"retry","reason":"app_quit"}]}
+✖ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执后于停止） (0.73125ms)
+ℹ {"stopError":"用户停止生成尚未获得权威确认。","confirmed":false,"interruptsBeforeCurrentReceipt":1,"modelCalls":0,"interruptions":[{"label":"original","reason":"app_quit"},{"label":"retry","reason":"user_cancelled"},{"label":"retry","reason":"app_quit"}]}
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42.366458
+
+✖ failing tests:
+
+test at tests/assistant-generation-preparation-stop.test.mjs:161:45
+✖ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执先于停止） (1.732083ms)
+  AssertionError [ERR_ASSERTION]: 退出须等待同键当前用户停止，不能抢先中断旧回执
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://<REPO>/desktop/tests/assistant-generation-preparation-stop.test.mjs:175:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/assistant-generation-preparation-stop.test.mjs:161:45
+✖ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执后于停止） (0.73125ms)
+  AssertionError [ERR_ASSERTION]: 退出须等待同键当前用户停止，不能抢先中断旧回执
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://<REPO>/desktop/tests/assistant-generation-preparation-stop.test.mjs:175:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

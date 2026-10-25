@@ -1,0 +1,12 @@
+✔ 生产控制器与IPC：同键准备重试的停止不能被旧未知登记抢占 (10.407167ms)
+ℹ {"sameRequestKey":true,"visiblePhase":"preparing","nullInputVersion":true,"stopError":null,"modelPostsBeforeCleanup":0,"interruptsBeforeCleanup":1,"realModelCalls":0}
+✔ 同键准备重试的可见停止不能被旧未知登记抢占 (2.182041ms)
+ℹ {"stopError":null,"confirmed":true,"modelCalls":0,"interruptCount":1,"finalPhase":"cancelled"}
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 171.109792

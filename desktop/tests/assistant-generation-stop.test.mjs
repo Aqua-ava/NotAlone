@@ -31,7 +31,7 @@ const renderState = (state) => ports.renderToStaticMarkup(ports.createElement(po
   replies: { state, stopGeneration: () => Promise.resolve() },
 }));
 
-async function fixture() {
+async function fixture({ beforePrepare } = {}) {
   const contactA = randomUUID(), contactB = randomUUID(), binding = randomUUID();
   const sessions = new Map([[contactA, { sessionId: randomUUID(), turns: [], currentInputVersionId: null }],
     [contactB, { sessionId: randomUUID(), turns: [], currentInputVersionId: null }]]);
@@ -63,6 +63,7 @@ async function fixture() {
         return { generation: responseGeneration, data: { session_id: created.sessionId } };
       }
       if (request.path.endsWith('/replies/prepare')) {
+        if (beforePrepare) await beforePrepare(request);
         const turn = {
           turnId: randomUUID(), requestKey: request.body.idempotency_key,
           inputVersionId: randomUUID(), state: 'running', interruptionReason: null,
@@ -355,4 +356,52 @@ test('联系人切换只保留各自任务，不取消原生成', async () => {
   assert.deepEqual(f.interruptReasons(), ['app_quit', 'app_quit']);
   assert.equal(f.sessions.get(contactA).turns[0].interruptionReason, 'app_quit');
   assert.equal(f.sessions.get(contactB).turns[0].interruptionReason, 'app_quit');
+});
+
+test('工作区同键准备重试的可见停止必须作用于当前在途登记，不能命中旧未知项', async t => {
+  let attempts = 0, entered, release;
+  const preparing = new Promise(resolve => { entered = resolve; });
+  const prepared = new Promise(resolve => { release = resolve; });
+  const f = await fixture({ beforePrepare: async () => {
+    attempts += 1;
+    if (attempts === 1) throw new ports.BackendRequestFailure('connection');
+    if (attempts === 2) { entered(); await prepared; }
+  } });
+  const scope = await f.select(f.sessions.keys().next().value);
+  await f.bridge.generate({ ...scope, newRequest: true, workspaceAction: 'express' });
+  const failed = await f.bridge.getState();
+  assert.equal(failed.phase, 'failed'); assert.equal(failed.canRetry, true);
+  assert.equal(failed.generationJobs[0].phase, 'unconfirmed');
+  const first = f.requests.find(item => item.path.endsWith('/replies/prepare'));
+  assert.equal(first.body.content.input_kind, 'workspace');
+  assert.equal(first.body.content.workspace_action, 'express');
+  const retrying = f.bridge.generate({ ...scope, newRequest: false });
+  await preparing;
+  const visible = await f.bridge.getState(), job = visible.generationJobs.find(item => item.phase === 'preparing');
+  assert.ok(job); assert.equal(job.requestKey, first.body.idempotency_key);
+  assert.equal(job.inputVersionId, null);
+  assert.match(renderState(visible), /aria-label="停止本次生成"/);
+  let stopError = null;
+  const stopped = f.bridge.stopGeneration({ ...scope, sessionId: job.sessionId, requestKey: job.requestKey,
+    inputVersionId: null }).catch(error => { stopError = error.message; });
+  release(); await stopped;
+  await eventually(() => f.bridge.getState(), state => state.generationJobs.some(item =>
+    ['generating', 'cancelled'].includes(item.phase)), '同键重试没有到达生成或取消终态');
+  const modelPosts = f.requests.filter(item => item.path.endsWith('/replies')).length;
+  const interruptions = f.interruptCount();
+  if (modelPosts) {
+    const actual = (await f.bridge.getState()).generationJobs.find(item => item.phase === 'generating');
+    await f.bridge.stopGeneration({ ...scope, sessionId: actual.sessionId,
+      requestKey: actual.requestKey, inputVersionId: actual.inputVersionId });
+  }
+  await retrying;
+  t.diagnostic(JSON.stringify({ stopError, modelPostsBeforeCleanup: modelPosts,
+    interruptsBeforeCleanup: interruptions, realModelCalls: 0 }));
+  assert.equal(stopError, null); assert.equal(modelPosts, 0); assert.equal(interruptions, 1);
+  const state = await f.bridge.getState();
+  assert.equal(state.generationJobs[0].phase, 'cancelled');
+  assert.equal(state.savedSession.turns.length, 1);
+  assert.equal(state.savedSession.turns[0].interruptionReason, 'user_cancelled');
+  await f.replies.beginGenerationClosing();
+  assert.equal(f.interruptCount(), 1);
 });

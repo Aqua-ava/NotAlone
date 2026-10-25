@@ -1,0 +1,32 @@
+✖ 同键准备重试的可见停止不能被旧未知登记抢占 (1.784209ms)
+ℹ {"stopError":"本次准备的停止身份尚未确认。","confirmed":false,"modelCalls":1,"interruptCount":0,"finalPhase":"completed"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 80.184333
+
+✖ failing tests:
+
+test at ../.scratch/dsh-ts-migration/final-close-standards-7a1/same-key-retry.test.mjs:17:1
+✖ 同键准备重试的可见停止不能被旧未知登记抢占 (1.784209ms)
+  AssertionError [ERR_ASSERTION]: 当前准备作业的停止不能落到旧的结束传输登记
+  + actual - expected
+  
+  + '本次准备的停止身份尚未确认。'
+  - null
+  
+      at TestContext.<anonymous> (file://<REPO>/.scratch/dsh-ts-migration/final-close-standards-7a1/same-key-retry.test.mjs:50:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '本次准备的停止身份尚未确认。',
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

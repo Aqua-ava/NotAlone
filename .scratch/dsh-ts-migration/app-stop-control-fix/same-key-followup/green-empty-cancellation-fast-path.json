@@ -1,0 +1,34 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "--test-name-pattern=已接纳准备的退出须等待实际回执",
+    "tests/assistant-generation-preparation.test.mjs"
+  ],
+  "cwd": "desktop",
+  "exit_code": 0,
+  "raw_sha256": "63646dd6174bdc921c3976fd823067e9962a4e94f53b9e13b660e32a63dcde7b",
+  "public_sha256": "63646dd6174bdc921c3976fd823067e9962a4e94f53b9e13b660e32a63dcde7b",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "source_before": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "0722b752a9d2682f9e1b317942a8daeebd4ac625c133689ce45c66b5ad94adff",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "2b63b9bfd2bcfb63788640d874c7a3c80cfac2635cf980560a83853ee4f2fe20",
+      "desktop/tests/assistant-generation-stop.test.mjs": "ebc4d240750e2fc8d2f706f2431fcb156a4e6ab55a989679513344c6f818e15a"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_after": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "0722b752a9d2682f9e1b317942a8daeebd4ac625c133689ce45c66b5ad94adff",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "2b63b9bfd2bcfb63788640d874c7a3c80cfac2635cf980560a83853ee4f2fe20",
+      "desktop/tests/assistant-generation-stop.test.mjs": "ebc4d240750e2fc8d2f706f2431fcb156a4e6ab55a989679513344c6f818e15a"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "public_file": "green-empty-cancellation-fast-path.public.log",
+  "source_stable": true
+}

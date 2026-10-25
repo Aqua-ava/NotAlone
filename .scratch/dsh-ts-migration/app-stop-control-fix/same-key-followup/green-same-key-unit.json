@@ -1,0 +1,34 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "--test-name-pattern=同键",
+    "tests/assistant-generation-preparation-stop.test.mjs"
+  ],
+  "cwd": "desktop",
+  "exit_code": 0,
+  "raw_sha256": "88412371dff04e13896ea4ceafa4a245ac5385faf914041c6e0388e7c1169c72",
+  "public_sha256": "88412371dff04e13896ea4ceafa4a245ac5385faf914041c6e0388e7c1169c72",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "source_before": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "23f1b3e724431c177c611477583492238989de8c7a11c876f690248d02d11daf",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "2b63b9bfd2bcfb63788640d874c7a3c80cfac2635cf980560a83853ee4f2fe20",
+      "desktop/tests/assistant-generation-stop.test.mjs": "9fb83085e6deb4361d4e87d49fc0daf399e2e7d28c749c1cbbdbf2a1023b51c4"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_after": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "23f1b3e724431c177c611477583492238989de8c7a11c876f690248d02d11daf",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "2b63b9bfd2bcfb63788640d874c7a3c80cfac2635cf980560a83853ee4f2fe20",
+      "desktop/tests/assistant-generation-stop.test.mjs": "9fb83085e6deb4361d4e87d49fc0daf399e2e7d28c749c1cbbdbf2a1023b51c4"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "public_file": "green-same-key-unit.public.log",
+  "source_stable": true
+}

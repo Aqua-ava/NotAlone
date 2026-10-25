@@ -412,7 +412,7 @@ export class AssistantGenerationJobs {
     // 原认证目标仍在时结算接纳的身份；没有回执必须实际读回，不能把失败当未领取。
     this.connectionChange = Promise.all(jobs.map(async ([job, active]) => {
       await active.preparationSettled;
-      await this.settleUserCancellation(active);
+      await this.settleUserCancellation(job, active);
       if (active.terminal || active.settledWithoutGeneration) return;
       const stopping = active.stopping;
       if (!stopping) throw new Error('原生成连接尚未确认，不能重载配置。');
@@ -444,7 +444,7 @@ export class AssistantGenerationJobs {
         try { await active.closingTask; return; } catch { active.closingTask = undefined; }
       }
       await active.preparationSettled;
-      await this.settleUserCancellation(active);
+      await this.settleUserCancellation(job, active);
       if (active.terminal || active.settledWithoutGeneration) return;
       const recovery = active.stopping?.recover ?? this.closingRecovery;
       if (!active.receipt && retrying && recovery && 'requestKey' in job.identity) {
@@ -456,10 +456,21 @@ export class AssistantGenerationJobs {
       await this.deliverClosingReceipt(job, active);
     })).then(() => {});
   }
-  private async settleUserCancellation(active: ActiveJob): Promise<void> {
-    const cancellation = active.userCancellation;
-    if (!cancellation) return;
-    try { await cancellation; } catch { /* 用户停止未确认时仍由退出或重载路径结算。 */ }
+  private async settleUserCancellation(job: OwnedAssistantPreparation, active: ActiveJob): Promise<void> {
+    const cancellations = new Set<Promise<boolean>>();
+    if (active.userCancellation) cancellations.add(active.userCancellation);
+    const requestKey = 'requestKey' in job.identity ? job.identity.requestKey : active.receipt?.requestKey;
+    // 同键旧未知项先等待当前登记的用户停止；只有实际回执才能收口旧身份。
+    if (isUuid(requestKey)) for (const [current, pending] of this.jobs) {
+      if (pending.userCancellation && sameOwner(current.identity, job.identity)
+        && ('requestKey' in current.identity ? current.identity.requestKey : pending.receipt?.requestKey) === requestKey) {
+        cancellations.add(pending.userCancellation);
+      }
+    }
+    if (!cancellations.size) return;
+    await Promise.all([...cancellations].map(async cancellation => {
+      try { await cancellation; } catch { /* 用户停止未确认时仍由退出或重载路径结算。 */ }
+    }));
   }
   private deliverClosingReceipt(job: OwnedAssistantPreparation, active: ActiveJob): Promise<void> | undefined {
     const receipt = active.receipt;
@@ -467,7 +478,7 @@ export class AssistantGenerationJobs {
     if (!active.closingTask) {
       active.controller.abort();
       active.closingTask = Promise.resolve().then(async () => {
-        await this.settleUserCancellation(active);
+        await this.settleUserCancellation(job, active);
         if (active.terminal || active.settledWithoutGeneration) return;
         if (active.stopping) await active.stopping.interrupt({ ...job.identity, ...receipt });
         else await this.closingReceipt?.({ ...job.identity, ...receipt });
@@ -486,7 +497,8 @@ export class AssistantGenerationJobs {
   async cancelUserGeneration(identity: AssistantGenerationIdentity, inputVersionId: string | null): Promise<boolean> {
     if (this.closing || this.changingConnection) throw new Error('应用正在收尾本次生成，请稍后重试。');
     if (inputVersionId !== null && !isUuid(inputVersionId)) throw new Error('本次生成停止身份无效。');
-    const entry = [...this.jobs].find(([job, active]) => sameOwner(job.identity, identity)
+    // 同键重试覆盖旧未知项的可见状态；停止也必须选择最后登记的匹配作业。
+    const entry = [...this.jobs].reverse().find(([job, active]) => sameOwner(job.identity, identity)
       && 'requestKey' in job.identity && job.identity.requestKey === identity.requestKey
       && (inputVersionId === null || active.receipt?.requestKey === identity.requestKey
         && active.receipt.inputVersionId === inputVersionId) && !active.terminal);

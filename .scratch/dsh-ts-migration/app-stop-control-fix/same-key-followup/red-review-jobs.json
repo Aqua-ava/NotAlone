@@ -1,0 +1,33 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "../.scratch/dsh-ts-migration/final-close-standards-7a1/same-key-retry.test.mjs"
+  ],
+  "cwd": "desktop",
+  "exit_code": 1,
+  "raw_sha256": "b14bd29b64ad934f482184caa41a8dbfb4bc12e8dd377b954b438ceb49da8c55",
+  "public_sha256": "a84e099db5aa7e013b04e51a8b23f2020e961daa6ce19a4a653528cddc9564e6",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "source_before": {
+    "head": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "7d42a005ca313a8ae4683aeb19236b395bbf4322a8ad648e35a87e6e657eb230",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "eb48db64636b80d53000eeb7147eef155b309b41e5d406dac1eabd5783b8624d",
+      "desktop/tests/assistant-generation-stop.test.mjs": "69bb4c07f4e39edff5daa94f2b40e6d712a91c7e889aa004b2d064bcf01caac2"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_after": {
+    "head": "7a1f58a679245c6df84d88dfaafc3ff2c352c290",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "7d42a005ca313a8ae4683aeb19236b395bbf4322a8ad648e35a87e6e657eb230",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "eb48db64636b80d53000eeb7147eef155b309b41e5d406dac1eabd5783b8624d",
+      "desktop/tests/assistant-generation-stop.test.mjs": "69bb4c07f4e39edff5daa94f2b40e6d712a91c7e889aa004b2d064bcf01caac2"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "public_file": "red-review-jobs.public.log",
+  "source_stable": true
+}

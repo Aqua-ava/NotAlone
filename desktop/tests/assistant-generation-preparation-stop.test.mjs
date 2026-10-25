@@ -110,3 +110,70 @@ test('准备停止与退出交错时只结算原user_cancelled，不死锁或重
   assert.equal(f.interruptions.length, 1);
   assert.deepEqual(f.jobs.pendingReceipts(), []);
 });
+
+async function sameKeyRetry() {
+  const jobs = new AssistantGenerationJobs(), interruptions = [];
+  const entered = deferred(), release = deferred(), acknowledgement = deferred(), interrupted = deferred();
+  let originalProtocol, reason = null, modelCalls = 0;
+  const stopping = label => ({ recover: async () => { throw new Error('同键未知准备不能猜测未领取'); },
+    async interrupt(actual, requestedReason) {
+      assert.deepEqual(actual, { ...identity, ...receipt });
+      interruptions.push({ label, reason: requestedReason ?? 'app_quit' }); interrupted.resolve();
+      await acknowledgement.promise;
+      reason ??= requestedReason ?? 'app_quit';
+      return { state: 'failed', interruptionReason: reason };
+    } });
+  await jobs.execute({ identity, stopping: stopping('original'), adapter: { async run(protocol) {
+    originalProtocol = protocol; protocol.preparing(); throw new Error('合成首次准备响应丢失');
+  } }, consume: () => assert.fail('未知准备不能消费结果'), failed: () => {} });
+  assert.equal(jobs.states(7)[0].phase, 'unconfirmed');
+  const execution = jobs.execute({ identity, stopping: stopping('retry'), adapter: { async run(protocol) {
+    protocol.preparing(); entered.resolve(); await release.promise;
+    await protocol.prepared(receipt); protocol.requested(); modelCalls += 1;
+    return { value: null, outcome: 'completed' };
+  } }, consume: () => {}, failed: () => {} });
+  await entered.promise;
+  return { jobs, originalProtocol, execution, interruptions, interrupted: interrupted.promise,
+    release: () => release.resolve(), acknowledge: () => acknowledgement.resolve(), modelCalls: () => modelCalls };
+}
+
+test('同键重试准备的停止选择可见在途登记，旧未知仅在真实回执到达后收口', async t => {
+  const f = await sameKeyRetry();
+  assert.equal(f.jobs.states(7).length, 1); assert.equal(f.jobs.states(7)[0].phase, 'preparing');
+  let stopError = null;
+  const stopping = f.jobs.cancelUserGeneration(identity, null).catch(error => { stopError = error.message; return false; });
+  await Promise.resolve(); await Promise.resolve();
+  const phaseBeforeReceipt = f.jobs.states(7)[0].phase;
+  // 经原执行的实际协议回调接收迟到回执，证明旧未知仍被保留且严格核对身份。
+  assert.doesNotThrow(() => f.originalProtocol.observe({ kind: 'receipt', receipt }));
+  f.release(); f.acknowledge();
+  const confirmed = await stopping; await f.execution;
+  t.diagnostic(JSON.stringify({ stopError, confirmed, phaseBeforeReceipt,
+    modelCalls: f.modelCalls(), interruptionLabels: f.interruptions.map(item => item.label) }));
+  assert.equal(stopError, null); assert.equal(confirmed, true);
+  assert.equal(phaseBeforeReceipt, 'stopping'); assert.equal(f.modelCalls(), 0);
+  assert.deepEqual(f.interruptions, [{ label: 'retry', reason: 'user_cancelled' }]);
+  assert.equal(f.jobs.states(7)[0].phase, 'cancelled');
+  assert.throws(() => f.originalProtocol.observe({ kind: 'receipt', receipt }), /回执归属无效/);
+  await f.jobs.beginClosing(() => assert.fail('真实同键回执收口后不得重复退出中断'));
+});
+
+for (const lateBeforeStop of [true, false]) test(`同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执${lateBeforeStop ? '先于' : '后于'}停止）`, async t => {
+  const f = await sameKeyRetry();
+  if (lateBeforeStop) f.originalProtocol.observe({ kind: 'receipt', receipt });
+  let stopError = null;
+  const stopping = f.jobs.cancelUserGeneration(identity, null).catch(error => { stopError = error.message; return false; });
+  const closing = f.jobs.beginClosing(() => assert.fail('实际停止连接不得走替代回调'));
+  if (!lateBeforeStop) f.originalProtocol.observe({ kind: 'receipt', receipt });
+  // 让实际退出回执任务运行到其等待点，不能靠立即返回新准备掩盖旧回执抢先中断。
+  await new Promise(resolve => setImmediate(resolve));
+  const interruptsBeforeCurrentReceipt = f.interruptions.length;
+  f.release(); await f.interrupted; f.acknowledge();
+  const confirmed = await stopping; await f.execution; await closing;
+  t.diagnostic(JSON.stringify({ stopError, confirmed, interruptsBeforeCurrentReceipt,
+    modelCalls: f.modelCalls(), interruptions: f.interruptions }));
+  assert.equal(interruptsBeforeCurrentReceipt, 0, '退出须等待同键当前用户停止，不能抢先中断旧回执');
+  assert.equal(stopError, null); assert.equal(confirmed, true); assert.equal(f.modelCalls(), 0);
+  assert.deepEqual(f.interruptions, [{ label: 'retry', reason: 'user_cancelled' }]);
+  assert.deepEqual(f.jobs.pendingReceipts(), []);
+});

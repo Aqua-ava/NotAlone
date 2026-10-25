@@ -1,0 +1,34 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "--test-name-pattern=工作区同键",
+    "tests/assistant-generation-stop.test.mjs"
+  ],
+  "cwd": "desktop",
+  "exit_code": 1,
+  "raw_sha256": "5cfd2d747d0f210c0b63f8e9c03f063125b2a8ad991e01c33052488a7c00cf07",
+  "public_sha256": "d0746a7acac5f2721b26c3497d95c754b85a82af3198b5ed5e4924ce45bdf87b",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "source_before": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "7d42a005ca313a8ae4683aeb19236b395bbf4322a8ad648e35a87e6e657eb230",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "6519851b07d370f381fb465bc40c2c1ccb9c0ae5c5d130ce2ea3777e8a2b7e1b",
+      "desktop/tests/assistant-generation-stop.test.mjs": "9fb83085e6deb4361d4e87d49fc0daf399e2e7d28c749c1cbbdbf2a1023b51c4"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_after": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "7d42a005ca313a8ae4683aeb19236b395bbf4322a8ad648e35a87e6e657eb230",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "6519851b07d370f381fb465bc40c2c1ccb9c0ae5c5d130ce2ea3777e8a2b7e1b",
+      "desktop/tests/assistant-generation-stop.test.mjs": "9fb83085e6deb4361d4e87d49fc0daf399e2e7d28c749c1cbbdbf2a1023b51c4"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "public_file": "red-promoted-ipc.public.log",
+  "source_stable": true
+}

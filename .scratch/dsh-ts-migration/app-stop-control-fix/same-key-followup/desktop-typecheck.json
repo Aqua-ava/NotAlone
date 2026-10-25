@@ -1,0 +1,33 @@
+{
+  "command": [
+    "node",
+    "node_modules/typescript/bin/tsc",
+    "--noEmit"
+  ],
+  "cwd": "desktop",
+  "exit_code": 0,
+  "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "private_directory_mode": "0o700",
+  "raw_file_mode": "0o600",
+  "source_before": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "23f1b3e724431c177c611477583492238989de8c7a11c876f690248d02d11daf",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "2b63b9bfd2bcfb63788640d874c7a3c80cfac2635cf980560a83853ee4f2fe20",
+      "desktop/tests/assistant-generation-stop.test.mjs": "ebc4d240750e2fc8d2f706f2431fcb156a4e6ab55a989679513344c6f818e15a"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_after": {
+    "head": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+    "source_sha256": {
+      "desktop/src/main/reply/assistant-generation-jobs.ts": "23f1b3e724431c177c611477583492238989de8c7a11c876f690248d02d11daf",
+      "desktop/tests/assistant-generation-preparation-stop.test.mjs": "2b63b9bfd2bcfb63788640d874c7a3c80cfac2635cf980560a83853ee4f2fe20",
+      "desktop/tests/assistant-generation-stop.test.mjs": "ebc4d240750e2fc8d2f706f2431fcb156a4e6ab55a989679513344c6f818e15a"
+    },
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "public_file": "desktop-typecheck.public.log",
+  "source_stable": true
+}

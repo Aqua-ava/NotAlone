@@ -1,0 +1,16 @@
+✔ 准备停止与设置重载共用原中断，确认之前不派发模型 (1.827209ms)
+✔ 中断响应未知不能成功取消，也不能越过准备屏障派发模型 (0.237917ms)
+✔ 迟到的错请求回执不会成为停止身份，原请求保持未知 (0.127791ms)
+✔ IPC 只放行显式 null 或 UUID，字段闭合并保留 helper 角色 (0.922666ms)
+✔ 生产控制器与IPC：同键准备重试的停止不能被旧未知登记抢占 (7.637042ms)
+ℹ {"sameRequestKey":true,"visiblePhase":"preparing","nullInputVersion":true,"stopError":null,"modelPostsBeforeCleanup":0,"interruptsBeforeCleanup":1,"realModelCalls":0}
+✔ 同键准备重试的可见停止不能被旧未知登记抢占 (0.973875ms)
+ℹ {"stopError":null,"confirmed":true,"modelCalls":0,"interruptCount":1,"finalPhase":"cancelled"}
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 185.076042

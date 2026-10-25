@@ -1,0 +1,94 @@
+✖ 同键重试准备的停止选择可见在途登记，旧未知仅在真实回执到达后收口 (1.153125ms)
+ℹ {"stopError":"本次准备的停止身份尚未确认。","confirmed":false,"phaseBeforeReceipt":"preparing","modelCalls":1,"interruptionLabels":[]}
+✖ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执先于停止） (0.972291ms)
+ℹ {"stopError":null,"confirmed":true,"modelCalls":0,"interruptions":[{"label":"original","reason":"user_cancelled"},{"label":"retry","reason":"app_quit"}]}
+✖ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执后于停止） (0.2245ms)
+ℹ {"stopError":null,"confirmed":true,"modelCalls":0,"interruptions":[{"label":"original","reason":"user_cancelled"},{"label":"retry","reason":"app_quit"}]}
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42.374416
+
+✖ failing tests:
+
+test at tests/assistant-generation-preparation-stop.test.mjs:140:1
+✖ 同键重试准备的停止选择可见在途登记，旧未知仅在真实回执到达后收口 (1.153125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '本次准备的停止身份尚未确认。'
+  - null
+  
+      at TestContext.<anonymous> (file://<REPO>/desktop/tests/assistant-generation-preparation-stop.test.mjs:153:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '本次准备的停止身份尚未确认。',
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/assistant-generation-preparation-stop.test.mjs:161:45
+✖ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执先于停止） (0.972291ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      {
+  +     label: 'original',
+  -     label: 'retry',
+        reason: 'user_cancelled'
+      },
+  +   {
+  +     label: 'retry',
+  +     reason: 'app_quit'
+  +   }
+    ]
+  
+      at TestContext.<anonymous> (file://<REPO>/desktop/tests/assistant-generation-preparation-stop.test.mjs:172:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ { label: 'original', reason: 'user_cancelled' }, { label: 'retry', reason: 'app_quit' } ],
+    expected: [ { label: 'retry', reason: 'user_cancelled' } ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/assistant-generation-preparation-stop.test.mjs:161:45
+✖ 同键旧未知真实晚回执与准备停止及退出交错不派发（晚回执后于停止） (0.2245ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      {
+  +     label: 'original',
+  -     label: 'retry',
+        reason: 'user_cancelled'
+      },
+  +   {
+  +     label: 'retry',
+  +     reason: 'app_quit'
+  +   }
+    ]
+  
+      at TestContext.<anonymous> (file://<REPO>/desktop/tests/assistant-generation-preparation-stop.test.mjs:172:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ { label: 'original', reason: 'user_cancelled' }, { label: 'retry', reason: 'app_quit' } ],
+    expected: [ { label: 'retry', reason: 'user_cancelled' } ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

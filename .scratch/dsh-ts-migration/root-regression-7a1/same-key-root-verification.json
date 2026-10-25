@@ -1,0 +1,35 @@
+{
+  "base_commit": "a449fd873a456f8773bdf582b076b0eb473a7f51",
+  "author_manifest_sha256": "ea04875f5f417c33ce2d106cd06711e9b967f89e084c094c3c26e44a0463172b",
+  "source_sha256": {
+    "desktop/src/main/reply/assistant-generation-jobs.ts": "0722b752a9d2682f9e1b317942a8daeebd4ac625c133689ce45c66b5ad94adff",
+    "desktop/tests/assistant-generation-preparation-stop.test.mjs": "2b63b9bfd2bcfb63788640d874c7a3c80cfac2635cf980560a83853ee4f2fe20",
+    "desktop/tests/assistant-generation-stop.test.mjs": "ebc4d240750e2fc8d2f706f2431fcb156a4e6ab55a989679513344c6f818e15a"
+  },
+  "root_runs": {
+    "stopping_minimum": {
+      "sha256": "158f7a0432de344abdfd123b2c447a4ac40676851dae4106a3dab79c7a465685",
+      "tests": "18",
+      "pass": "18",
+      "fail": "0",
+      "cancelled": "0",
+      "skipped": "0",
+      "duration_ms": "289.419917"
+    },
+    "workspace_ipc": {
+      "sha256": "c018c1373462239eec0ac40bf80313d81627c4a57018d39dbae331f185090f99",
+      "tests": "2",
+      "pass": "2",
+      "fail": "0",
+      "cancelled": "0",
+      "skipped": "0",
+      "duration_ms": "7423.816833"
+    }
+  },
+  "desktop_typecheck_exit_code": 0,
+  "backend_689_inputs_unchanged": true,
+  "protected_user_files_unchanged": true,
+  "real_model_calls": 0,
+  "actual_app_runs": 0,
+  "independent_finding_closure_pending": true
+}

@@ -1,0 +1,5 @@
+{
+  "scope": "只检查本轮三份候选源码与新 follow-up 证据",
+  "files_checked": 44,
+  "findings": []
+}
