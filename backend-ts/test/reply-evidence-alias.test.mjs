@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {replyPayloadText} from '../src/reply-payload.ts';
+import {buildReplyPayload,replyPayloadText} from '../src/reply-payload.ts';
 import {parseReplyRequest,validateReplyCandidates} from '../src/reply-contract.ts';
 import {createEvidenceAliases,restoreReplyEvidenceAliases} from '../src/reply-evidence-alias.ts';
+import {REPLY_SYSTEM_PROMPT} from '../src/reply-prompts.ts';
 
 const contact='30000000-0000-4000-8000-000000000001';
 const realIds=[
@@ -46,4 +47,57 @@ test('模型引用别名按重复与顺序精确还原为真实证据并在准�
     ()=>validateReplyCandidates(restoreReplyEvidenceAliases({candidates:[{...raw.candidates[0],citation_ids}]},aliases),new Set(realIds)),
     {code:'reply_candidates_rejected'},
   );
+});
+test('从空映射开始先固定顶层 c1..cN，再处理嵌套来源引用',()=>{
+  const owner='10000000-0000-4000-8000-000000000001';
+  const contact='20000000-0000-4000-8000-000000000001';
+  const nested=['40000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000002'];
+  const request=parseReplyRequest({contact_id:contact,idempotency_key:contact,content:{type:'initiate_conversation',purpose:'问候'}});
+  const row=(evidence_id,kind,evolution=null)=>({evidence_id,kind,text:'合成资料',status:'active',selection_reason:'合成',
+    timing:{source_started_at:null},event:null,conditions:null,evolution,valid_at:null,invalid_at:null,speaker_role:'unknown',model_visible:true,source_ids:[]});
+  const context={scope:{owner_id:owner,contact_id:contact},command:request,current_text:'问候',risk_notes:[],evidence:[
+    row('30000000-0000-4000-8000-000000000001','confirmed_memory',{kind:'supplement',evidence_message_ids:nested}),
+    row('30000000-0000-4000-8000-000000000002','owner_memory'),
+  ]};
+  const payload=buildReplyPayload({request,context,aliases:createEvidenceAliases()});
+  assert.deepEqual(payload.evidence.map(item=>item.evidence_id),['c1','c2']);
+  assert.deepEqual(payload.evidence[0].evolution.evidence_message_ids,['c3','c4']);
+  assert.deepEqual(payload.citation_policy.allowed_evidence_ids,['c1','c2']);
+});
+test('续写和讨论的全部模型可见标识使用请求局部别名且不泄漏真实 UUID',()=>{
+  const owner='10000000-0000-4000-8000-000000000001';
+  const contact='20000000-0000-4000-8000-000000000001';
+  const binding='40000000-0000-4000-8000-000000000001';
+  const candidate='30000000-0000-4000-8000-000000000001';
+  const message='50000000-0000-4000-8000-000000000001';
+  const version='60000000-0000-4000-8000-000000000001';
+  const request=parseReplyRequest({contact_id:contact,idempotency_key:contact,continued_from_candidate_id:candidate,
+    content:{type:'rewrite_draft',draft_text:'新的表达'}});
+  const evidence={evidence_id:candidate,kind:'continued_candidate',text:'旧候选',status:'candidate',selection_reason:'合成',
+    timing:{source_started_at:null},event:null,conditions:null,evolution:null,valid_at:null,invalid_at:null,speaker_role:'unknown',model_visible:true,source_ids:[]};
+  const context={scope:{owner_id:owner,contact_id:contact},command:request,conversation_binding_id:binding,current_text:'新的表达',risk_notes:[],evidence:[evidence],
+    continuation_basis:{candidate_id:candidate,scope:{owner_id:owner,contact_id:contact},conversation_binding_id:binding,text:'旧候选',basis_revision_sha256:'a'.repeat(64),basis_changes:[]}};
+  const discussion={scope:{owner_id:owner,contact_id:contact},session_id:binding,request_key:contact,current_input_version_id:version,notice:'合成',snapshot:{},
+    items:[{kind:'candidate_version',text:JSON.stringify({messages:[{message_id:message,text:'旧候选'}]}),input_version_id:version,turn_id:version,
+      reply_request_id:binding,candidate_id:candidate,version_id:version,parent_version_id:null,candidate_number:1,version_number:0,
+      is_default_display:true,is_explicitly_selected:true,basis_changes:[]}]};
+  const authenticated={continuation:{},continuation_reference:{candidate_id:candidate,version_id:version,messages:[{message_id:message,text:'旧候选'}]}};
+  const aliases=createEvidenceAliases(),payload=buildReplyPayload({request,context,discussion,authenticated,aliases}),wire=JSON.stringify(payload);
+  assert.deepEqual([binding,candidate,message,version].filter(id=>wire.includes(id)),[]);
+  assert.equal(payload.assistant_discussion.session_id,'s1');
+  assert.match(payload.assistant_discussion.items[0].text,/"message_id":"r\d+"/);
+  assert.equal(payload.continuation_reference.candidate_id,'c1');
+  assert.match(payload.continuation_reference.messages[0].message_id,/^r\d+$/);
+  assert.equal(new Set(aliases.entries().map(item=>item.evidence_id)).size,1);
+});
+test('状态标识按请求隔离，旧会话 alias 不能在新请求反向解析',()=>{
+  const session='40000000-0000-4000-8000-000000000001',first=createEvidenceAliases(),second=createEvidenceAliases();
+  assert.equal(first.sessionFor(session),'s1');
+  assert.equal(first.resolveSession('s1'),session);
+  assert.equal(second.resolveSession('s1'),undefined);
+  assert.equal(second.resolve(first.referenceFor('50000000-0000-4000-8000-000000000001')),undefined);
+});
+test('静态提示明确 evidence_id 是不得猜测或改写的不透明 alias',()=>{
+  assert.match(REPLY_SYSTEM_PROMPT,/evidence_id 是不透明字符串/);
+  assert.match(REPLY_SYSTEM_PROMPT,/不得猜测或改写 alias/);
 });

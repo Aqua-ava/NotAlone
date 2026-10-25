@@ -74,6 +74,30 @@ test('新臂模型目录使用请求内别名，真实来源只在catalog、PG�
  const report=buildReplyComparisonReport(manifestText,datasetText,run);
  assert.equal(report.records.find(item=>item.arm==='new'&&item.source_audit)?.source_audit.status,'verified');
 });
+test('v2来源审计拒绝交换、复用和未授权 alias，重签目录也不能放宽',()=>{
+ const mutate=(change)=>{
+  const run=aliasedAuditRun(),row=run.records.find(item=>item.arm==='new');
+  rewritePayload(row,payload=>change(payload,row.runtime_sources.attempts[0].catalog));
+  seal(row);
+  assert.throws(()=>buildReplyComparisonReport(manifestText,datasetText,run),/reply_comparison_invalid:runtime_/);
+ };
+ mutate((payload,catalog)=>{
+  [payload.evidence[0].evidence_id,payload.evidence[1].evidence_id]=[payload.evidence[1].evidence_id,payload.evidence[0].evidence_id];
+  payload.citation_policy.allowed_evidence_ids=payload.evidence.map(source=>source.evidence_id);
+  [catalog.entries[0].model_evidence_id,catalog.entries[1].model_evidence_id]=[catalog.entries[1].model_evidence_id,catalog.entries[0].model_evidence_id];
+ });
+ mutate((payload,catalog)=>{
+  payload.evidence[1].evidence_id=payload.evidence[0].evidence_id;
+  payload.citation_policy.allowed_evidence_ids=payload.evidence.map(source=>source.evidence_id);
+  catalog.entries[1].model_evidence_id=payload.evidence[1].evidence_id;
+ });
+ mutate((payload,catalog)=>{
+  payload.evidence[0].evidence_id='c9';
+  payload.citation_policy.allowed_evidence_ids=payload.evidence.map(source=>source.evidence_id);
+  catalog.entries[0].model_evidence_id='c9';
+ });
+ mutate((_payload,catalog)=>{catalog.entries[0].evidence_id='f0000000-0000-4000-8000-000000000001';});
+});
 function attachReviews(row,bindSources=true){
  const subject={blind_id:row.blind_id,case_sha256:row.case_sha256,input_sha256:row.input_sha256,output:row.output,...bindSources?{runtime_sources_sha256:hash(row.runtime_sources),request_sha256:row.request_sha256}:{}};
  row.reviews=['auditor-one','auditor-two'].map((id,index)=>({review_id:row.blind_id+index,reviewer_id:id,reviewer_type:'human',reviewer_version:'synthetic-v1',independent:true,blinded:true,blind_id:row.blind_id,subject_sha256:hash(subject),candidates:row.output.candidates.map(candidate=>({candidate_id:candidate.candidate_id,basis:'仅合成审计器规则用例',scores:{evidence_correctness:2,intent_preservation:2,no_unsupported_content:2,relationship_fit:2,chinese_usability:2},severe_errors:{false_fact:0,wrong_person:0,unsupported_commitment:0}}))}));

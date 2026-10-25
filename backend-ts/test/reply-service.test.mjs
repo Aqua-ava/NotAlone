@@ -13,6 +13,9 @@ import {SkillFiles} from '../src/skill-files.ts';
 function modelEvidence(body){
  const found=[];const visit=value=>{if(Array.isArray(value)){for(const item of value)visit(item);}else if(value&&typeof value==='object'){if(Array.isArray(value.evidence))found.push(...value.evidence);for(const [key,item]of Object.entries(value))if(key!=='evidence')visit(item);}else if(typeof value==='string'){try{visit(JSON.parse(value));}catch{const start=value.indexOf('{'),end=value.lastIndexOf('}');if(start>=0&&end>start){try{visit(JSON.parse(value.slice(start,end+1)));}catch{}}}}};visit(body);assert.ok(found.length,'官方模型输入必须包含可见 evidence');return found;
 }
+function historyEvidence(body){
+ const found=[];const visit=value=>{if(Array.isArray(value)){for(const item of value)visit(item);}else if(value&&typeof value==='object'){if(value.evidence_type==='raw_message_evidence'&&Array.isArray(value.messages))found.push(value);for(const item of Object.values(value))visit(item);}else if(typeof value==='string'){try{visit(JSON.parse(value));}catch{const start=value.indexOf('{'),end=value.lastIndexOf('}');if(start>=0&&end>start){try{visit(JSON.parse(value.slice(start,end+1)));}catch{}}}}};visit(body);return found.at(-1);
+}
 test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{timeout:60000},async t=>{
  const f=await createStorageFixture();
  assert.equal((await f.client.query("SELECT to_regclass('public.model_call_receipt') IS NOT NULL AS migrated")).rows[0].migrated,true,'正式migrator必须建立110模型回执表');
@@ -22,14 +25,27 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
  await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[binding,owner,contact]);
  const scope={owner_id:owner,contact_id:contact,conversation_binding_id:binding,confirmation:'manual'};
  const body=()=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',input_kind:'draft',draft_text:'明天见',include_relationship_context:false},skill_disabled:true});
- let mode='valid',observedLate,releaseLate,storage,skillStep=0;
+ let mode='valid',observedLate,releaseLate,storage,skillStep=0,historyStep=0,historyAlias,historySession,historyId,historySource;
  const host=await startReplyServiceHost(t,{name:f.client.database,user:f.client.user,close:async()=>{await storage?.close();await f.close();}},(_req,res,requests,events)=>{
+  if(mode==='history'){
+   if(historyStep===0){historyStep=1;useTool(events,'conversation_search',{query:'历史暗号'});sendEvents(res,events);return;}
+   if(historyStep===1){
+    const result=historyEvidence(requests.at(-1).body),row=result.messages.find(message=>message.text==='历史暗号');
+    assert.ok(row);assert.match(row.evidence_id,/^c\d+$/);assert.match(row.session_id,/^s\d+$/);
+    historyAlias=row.evidence_id;historySession=row.session_id;historyStep=2;
+    useTool(events,'conversation_query',{session_id:historySession,anchor_message_id:historyAlias,before:0,after:0});sendEvents(res,events);return;
+   }
+   const result=historyEvidence(requests.at(-1).body),row=result.messages.find(message=>message.text==='历史暗号');
+   assert.equal(row.evidence_id,historyAlias);assert.equal(row.session_id,historySession);historyStep=3;
+   useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'历史暗号',basis:'历史只读检索结果',citation_ids:[historyAlias],risk_notes:[]}]});sendEvents(res,events);return;
+  }
   const evidence=modelEvidence(requests.at(-1).body);const id=evidence[0].evidence_id;
   if(mode==='skill'&&skillStep++===0){const path=JSON.stringify(requests.at(-1).body).match(/\/notalone\/reply-skills\/[^"\\ ]+\/SKILL\.md/)?.[0];assert.ok(path,'从实际Skill目录取得受控路径');useTool(events,'read_file',{file_path:path});sendEvents(res,events);return;}
   const messages=mode==='join0'?['你以前说过喜欢喝茶，现在还是喜欢茶吗？','还是换口味了，现在喜欢喝什么？']:null;
   useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:messages?.join('')??'明天见',basis:'本次原句',citation_ids:[mode==='bad'?randomUUID():id],risk_notes:[],...(messages?{messages}:{})},...(mode==='extra'?[{text:'好久没聊了',basis:'额外风格',citation_ids:[id],risk_notes:[]}]:[])]});
   if(mode==='late'){releaseLate=()=>sendEvents(res,events);observedLate();return;}sendEvents(res,events);
  });
+ await host.request('/configure-model',{physical_limit:4});
  // 支持夹具在进程终止后删除合成库，再核验网络边界。
  await t.test('手动确认生成保存并幂等重放，不新增物理调用',async()=>{
   const input=body(),first=await host.request('/generate',{id:randomUUID(),scope,body:input});
@@ -81,6 +97,25 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
   await host.request('/generate',{id:randomUUID(),scope,body:input});
   const names=host.requests.at(-1).body.tools.map(tool=>tool.name);
   assert.deepEqual(names,['ReplyRuntimeOutput']);
+ });
+ await t.test('动态历史 Tool evidence 经 alias 查询并持久化为真实 UUID',async()=>{
+  historySource=randomUUID();
+  await f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)VALUES($1,$2,$3,'manual','合成历史资料',$4,51)",[historySource,owner,contact,historySource.replaceAll('-','').repeat(2)]);
+  for(let index=0;index<=50;index++){
+   const id=randomUUID(),text=index===0?'历史暗号':`近期合成消息${index}`;
+   await f.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at)VALUES($1,$2,$3,'contact','text',$4,$5)",[id,owner,contact,text,`2026-01-01T00:${String(index).padStart(2,'0')}:00Z`]);
+   await f.client.query("INSERT INTO message_source_ref(id,message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload)VALUES($1,$2,$3,$4,'source_document',$5,$6,'{}')",[randomUUID(),id,owner,contact,historySource,`line:${index+1}`]);
+   if(index===0)historyId=id;
+  }
+  mode='history';historyStep=0;historyAlias=undefined;historySession=undefined;
+  const before=host.requests.length,input={...body(),content:{type:'rewrite_draft',input_kind:'draft',draft_text:'问问近况',include_relationship_context:true}};
+  const result=await host.request('/generate',{id:randomUUID(),scope,body:input});
+  assert.equal(historyStep,3);assert.equal(host.requests.length,before+3);
+  assert.ok(result.context_receipt.evidence_ids.includes(historyId));
+  const wire=JSON.stringify(host.requests.slice(before).map(request=>request.body));
+  assert.ok(!wire.includes(historyId)&&!wire.includes(historySource));
+  const saved=(await f.client.query('SELECT citation.evidence_id FROM reply_candidate_citation citation JOIN reply_candidate candidate ON candidate.id=citation.candidate_id WHERE candidate.reply_request_id=$1 ORDER BY citation.ordinal',[result.reply_request_id])).rows.map(row=>row.evidence_id);
+  assert.deepEqual(saved,[historyId]);
  });
  await t.test('取消已出站调用，迟到SSE不能保存候选且许可释放',async()=>{
   mode='late';const input=body(),id=randomUUID(),observed=new Promise(resolve=>{observedLate=resolve;});

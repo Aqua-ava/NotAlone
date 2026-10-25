@@ -24,11 +24,18 @@ export class ReplyHistory {
   private readonly provided:Set<string>;
   private used=0;
   private reserved=0;
-  constructor(options:HistoryOptions){this.options=options;this.known=new Set([...options.initial_evidence_ids,...options.navigation_message_ids??[]]);this.provided=new Set(options.initial_evidence_ids);this.used=options.prior_budget?.used_tokens??0;}
+  constructor(options:HistoryOptions){
+   const scope={owner_id:options.scope.owner_id,contact_id:options.scope.contact_id};
+   this.options={...options,scope};
+   this.known=new Set([...options.initial_evidence_ids,...options.navigation_message_ids??[]]);
+   this.provided=new Set(options.initial_evidence_ids);
+   this.used=options.prior_budget?.used_tokens??0;
+  }
   get token_count(){return this.used;}
+  private sessionAlias(){return this.options.aliases?.sessionFor(this.options.binding_id)??this.options.binding_id;}
   tools():ToolDefinition[]{return [
     defineTool({name:'conversation_search',description:'搜索当前已验证联系人相关历史消息，不读取全量历史。',parameters:{query:{type:'string',required:true},top_k:{type:'integer'},occurred_after:{oneOf:[{type:'string'},{type:'null'}]},occurred_before:{oneOf:[{type:'string'},{type:'null'}]},timeout_ms:{type:'integer'}},output:{schema:{type:'string'},render:(_a,v)=>[{type:'text',text:v}]},execute:async(args,exec)=>this.search(args,exec.signal)}),
-    defineTool({name:'conversation_query',description:'仅用can_query_context=true的真实session_id读取命中附近消息，不得用source_ids替代。',parameters:{session_id:{type:'string',required:true},anchor_message_id:{oneOf:[{type:'string'},{type:'null'}]},before:{type:'integer'},after:{type:'integer'},timeout_ms:{type:'integer'}},output:{schema:{type:'string'},render:(_a,v)=>[{type:'text',text:v}]},execute:async(args,exec)=>this.query(args,exec.signal)})];}
+    defineTool({name:'conversation_query',description:'仅用成功 Tool 结果给出的 session_id 别名读取命中附近消息，不得猜测或改用真实会话 ID。',parameters:{session_id:{type:'string',required:true},anchor_message_id:{oneOf:[{type:'string'},{type:'null'}]},before:{type:'integer'},after:{type:'integer'},timeout_ms:{type:'integer'}},output:{schema:{type:'string'},render:(_a,v)=>[{type:'text',text:v}]},execute:async(args,exec)=>this.query(args,exec.signal)})];}
   private status(status:Exclude<HistoryTrace['status'],'succeeded'>,reason:string){return JSON.stringify({status,evidence_type:'raw_message_evidence',executable:false,not_found_is_not_evidence:true,reason,messages:[],guidance:guidance[status]});}
   private async run(name:string,timeout:number,signal:AbortSignal|undefined,read:(client:pg.Client)=>Promise<ReplyContextEvidence[]>):Promise<string>{
     const start=performance.now();
@@ -56,7 +63,7 @@ export class ReplyHistory {
       this.used+=tokens;finish('succeeded',result.map(r=>r.evidence_id));
       return JSON.stringify({status:'ok',evidence_type:'raw_message_evidence',executable:false,not_found_is_not_evidence:true,message_order:'known_times_ascending_unknown_last_equal_unordered',messages:result.map(r=>{
        const evidenceId=this.options.aliases?.aliasFor(r.evidence_id)??r.evidence_id;
-       return {evidence_id:evidenceId,message_id:evidenceId,role:r.speaker_role,speaker_role:r.speaker_role,factual_role:'source_message_statement',occurred_at:r.timing.source_started_at,session_id:null,can_query_context:false,status:r.status,text:r.text,timing:r.timing};
+       return {evidence_id:evidenceId,message_id:evidenceId,role:r.speaker_role,speaker_role:r.speaker_role,factual_role:'source_message_statement',occurred_at:r.timing.source_started_at,session_id:this.options.aliases?this.sessionAlias():null,can_query_context:this.options.aliases!==undefined,status:r.status,text:r.text,timing:r.timing};
       })});
     }catch(error){signal?.throwIfAborted();finish('failed');return this.status('failed',name==='conversation_search'?'history_search_failed':'history_query_failed');}
   }
@@ -76,7 +83,8 @@ export class ReplyHistory {
   }
   async query(args:{session_id:string;anchor_message_id?:string|null;before?:number;after?:number;timeout_ms?:number},signal?:AbortSignal):Promise<string>{
     return this.run('conversation_query',args.timeout_ms??500,signal,async client=>{
-      if(replyUuid(args.session_id)!==this.options.binding_id)throw new Error('history_session_invalid');
+      const session=this.options.aliases?this.options.aliases.resolveSession(args.session_id):replyUuid(args.session_id);
+      if(session!==this.options.binding_id)throw new Error('history_session_invalid');
       const requested=args.anchor_message_id??null;
       const anchor=requested?(this.options.aliases?this.options.aliases.resolve(requested):replyUuid(requested)):null;
       if(requested&&anchor==null)throw new Error('history_query_invalid');

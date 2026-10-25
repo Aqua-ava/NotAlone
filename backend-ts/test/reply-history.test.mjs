@@ -37,10 +37,16 @@ test('历史结果与查询锚点只使用请求内别名，真实消息和来�
   const searched=JSON.parse(await history.search({query:'第二条'}));
   assert.equal(searched.messages[0].evidence_id,'c2');
   assert.equal(searched.messages[0].message_id,'c2');
+  assert.equal(searched.messages[0].session_id,'s1');
+  assert.equal(searched.messages[0].can_query_context,true);
   assert.ok(!JSON.stringify(searched).includes(b.id));
   assert.ok(!JSON.stringify(searched).includes(b.source));
+  assert.ok(!JSON.stringify(searched).includes(binding));
   assert.equal('source_ids'in searched.messages[0],false);
-  const queried=JSON.parse(await history.query({session_id:binding,anchor_message_id:'c1',before:0,after:2}));
+  assert.equal(JSON.parse(await history.query({session_id:binding,anchor_message_id:'c1'})).status,'failed');
+  const queried=JSON.parse(await history.query({session_id:'s1',anchor_message_id:'c1',before:0,after:2}));
   assert.deepEqual(queried.messages.map(message=>message.message_id),['c1','c2']);
-  assert.equal(JSON.parse(await history.query({session_id:binding,anchor_message_id:a.id})).status,'failed');
+  assert.deepEqual(queried.messages.map(message=>message.session_id),['s1','s1']);
+  assert.ok(queried.messages.every(message=>message.can_query_context));
+  assert.equal(createEvidenceAliases().resolveSession('s1'),undefined);
 });

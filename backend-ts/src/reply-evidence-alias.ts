@@ -2,12 +2,19 @@
 export interface EvidenceAliases {
   aliasFor(evidenceId:string):string;
   resolve(alias:string):string|undefined;
+  referenceFor(realId:string):string;
+  sessionFor(realId:string):string;
+  resolveSession(alias:string):string|undefined;
   entries():readonly {alias:string;evidence_id:string}[];
 }
 
 class RequestEvidenceAliases implements EvidenceAliases {
   private readonly realByAlias=new Map<string,string>();
   private readonly aliasByReal=new Map<string,string>();
+  private readonly realByReferenceAlias=new Map<string,string>();
+  private readonly referenceByReal=new Map<string,string>();
+  private readonly realBySessionAlias=new Map<string,string>();
+  private readonly sessionByReal=new Map<string,string>();
 
   constructor(evidenceIds:readonly string[]){
     for(const evidenceId of evidenceIds)this.aliasFor(evidenceId);
@@ -23,6 +30,28 @@ class RequestEvidenceAliases implements EvidenceAliases {
   }
 
   resolve(alias:string){return this.realByAlias.get(alias);}
+
+  referenceFor(realId:string):string {
+   const evidence=this.aliasByReal.get(realId);
+   if(evidence)return evidence;
+   const existing=this.referenceByReal.get(realId);
+   if(existing)return existing;
+   const alias=`r${this.referenceByReal.size+1}`;
+   this.referenceByReal.set(realId,alias);
+   this.realByReferenceAlias.set(alias,realId);
+   return alias;
+  }
+
+  sessionFor(realId:string):string {
+   const existing=this.sessionByReal.get(realId);
+   if(existing)return existing;
+   const alias=`s${this.sessionByReal.size+1}`;
+   this.sessionByReal.set(realId,alias);
+   this.realBySessionAlias.set(alias,realId);
+   return alias;
+  }
+
+  resolveSession(alias:string){return this.realBySessionAlias.get(alias);}
 
   entries(){return [...this.aliasByReal].map(([evidence_id,alias])=>({alias,evidence_id}));}
 }
@@ -44,6 +73,16 @@ export function restoreReplyEvidenceAliases(value:unknown,aliases:EvidenceAliase
   })};
 }
 
+const referenceIdFields=new Set(['candidate_id','version_id','parent_version_id','message_id','request_key','input_version_id','current_input_version_id','turn_id','current_turn_id','reply_request_id','memory_id','candidate_version_id','skill_version_id']);
+const referenceIdArrayFields=new Set(['candidate_ids','version_ids','message_ids','turn_ids','reply_request_ids']);
+export function aliasReplyDiscussionText(text:string,aliases:EvidenceAliases):string {
+  try {
+   const parsed=JSON.parse(text);
+   if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&Array.isArray((parsed as Record<string,unknown>).messages))
+    return JSON.stringify(aliasReplyEvidenceReferences(parsed,aliases));
+  }catch{}
+  return text;
+}
 export function aliasReplyEvidenceReferences(value:unknown,aliases:EvidenceAliases):unknown {
   if(Array.isArray(value))return value.map(item=>aliasReplyEvidenceReferences(item,aliases));
   if(!value||typeof value!=='object')return value;
@@ -55,6 +94,12 @@ export function aliasReplyEvidenceReferences(value:unknown,aliases:EvidenceAlias
         ?item.map(id=>typeof id==='string'?aliases.aliasFor(id):id)
         :key==='evidence_message_ids'&&Array.isArray(item)
           ?item.map(id=>typeof id==='string'?aliases.aliasFor(id):id)
+          :key==='session_id'&&typeof item==='string'
+            ?aliases.sessionFor(item)
+            :referenceIdFields.has(key)&&typeof item==='string'
+              ?aliases.referenceFor(item)
+              :referenceIdArrayFields.has(key)&&Array.isArray(item)
+                ?item.map(id=>typeof id==='string'?aliases.referenceFor(id):id)
           :aliasReplyEvidenceReferences(item,aliases),
   ]));
 }

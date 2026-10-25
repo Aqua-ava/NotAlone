@@ -5,7 +5,7 @@ import {ReplyError,type ReplyRequestInput} from './reply-contract.ts';
 import type {BuiltReplyContext} from './reply-context-types.ts';
 import {assistantDiscussionPayload,continuationReferencePayload,type ReplyDiscussionContext} from './reply-discussion-context.ts';
 import {replyCandidateAdmissibility} from './reply-candidate-admissibility.ts';
-import {aliasReplyEvidenceReferences,type EvidenceAliases} from './reply-evidence-alias.ts';
+import {aliasReplyDiscussionText,aliasReplyEvidenceReferences,type EvidenceAliases} from './reply-evidence-alias.ts';
 import type {AuthenticatedContinuation} from './reply-assistant-guards.ts';
 export interface ReplyPayloadInput {
  request:ReplyRequestInput;
@@ -70,10 +70,9 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
  const visible=context.evidence.filter(e=>e.model_visible);
  const messages=visible.filter(e=>e.kind==='message').map(e=>({e,time:sourceTime(e.timing.source_started_at)})).sort((a,b)=>a.time===b.time?0:a.time===null?1:b.time===null?-1:a.time<b.time?-1:1);
  let index=0;
- const evidence=visible.map(original=>{
-  const e=original.kind==='message'?messages[index++].e:original;
-  return projectReplyEvidence(e,continuation?.candidate_id===e.evidence_id?continuation.basis_changes:[],aliases);
- });
+ const ordered=visible.map(original=>original.kind==='message'?messages[index++].e:original);
+ if(aliases)for(const e of ordered)aliases.aliasFor(e.evidence_id);
+ const evidence=ordered.map(e=>projectReplyEvidence(e,continuation?.candidate_id===e.evidence_id?continuation.basis_changes:[],aliases));
  const fidelity_contract=replyFidelityContract(payload);
  if(preferences.length){
   payload.expression_preferences=preferences.map(e=>({preference_id:e.preference_id,revision:e.revision,text:e.text,scope:{contact_id:e.scope.contact_id,reply_mode:e.scope.reply_mode},factual_role:'expression_preference',priority:'below_current_intent'}));
@@ -85,7 +84,7 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
  const recentOnly=c.type==='rewrite_draft'&&c.input_kind==='workspace'&&Array.isArray(c.excluded_message_ids)&&c.excluded_message_ids.length>0;
  if(discussion&&!recentOnly){
   const projected=assistantDiscussionPayload(discussion);
-  payload.assistant_discussion=aliases?aliasReplyEvidenceReferences(projected,aliases):projected;
+  payload.assistant_discussion=aliases?aliasReplyEvidenceReferences({...projected,items:projected.items.map(item=>({...item,text:aliasReplyDiscussionText(item.text,aliases)}))},aliases):projected;
  }
  return {...payload,evidence,citation_policy:{allowed_evidence_ids:evidence.map(e=>e.evidence_id),additional_evidence_ids:'successful_history_tool_evidence_only',references_are_not_citations:true},fidelity_contract,risk_notes:[...context.risk_notes]};
 }
