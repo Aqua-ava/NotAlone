@@ -10,7 +10,7 @@ const DIMENSIONS=['evidence_correctness','intent_preservation','no_unsupported_c
 const SEVERE=['false_fact','wrong_person','unsupported_commitment'];
 const ARMS=['old','new'];
 const MAX_PRIMARY_STOP='__NOTALONE_FIXED_PRIMARY_STOP_V1__';
-const EXPECTED_NEW_COMMIT='282f43afa238ff74a8eedeb19670e2a6d278d9dd';
+const EXPECTED_NEW_COMMIT='5696cd91976c9690cdd80dee49f5ff290f306161';
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const canonical=value=>{
  if(value===null||typeof value==='string'||typeof value==='boolean'||typeof value==='number'&&Number.isFinite(value))return JSON.stringify(value);
@@ -80,6 +80,14 @@ function reviewCaptureFor(capture){
 function quantile(values,p){
  const sorted=[...values].sort((left,right)=>left-right),position=(sorted.length-1)*p,lower=Math.floor(position);
  return sorted[lower]+(sorted[Math.ceil(position)]-sorted[lower])*(position-lower);
+}
+
+function normalizeCaptureTimestamps(capture){
+ for(const row of capture.records)for(const field of ['started_at','ended_at']){
+  const value=row[field];
+  if(typeof value==='string'&&/^.+\.\d{4,}Z$/.test(value))row[field]=new Date(value).toISOString();
+ }
+ return capture;
 }
 
 function boundReview(item,review,visibleItem,bindingItem){
@@ -153,16 +161,16 @@ async function main(){
  const [captureText,datasetText,visibleText,bindingText,runConfigurationText]=await Promise.all([
   readFile(args.capture,'utf8'),readFile(args.dataset,'utf8'),readFile(args.visible,'utf8'),readFile(args.binding,'utf8'),readFile(args.config,'utf8'),
  ]);
- const capture=JSON.parse(captureText),dataset=JSON.parse(datasetText),visible=JSON.parse(visibleText),binding=JSON.parse(bindingText);
+ const capture=normalizeCaptureTimestamps(JSON.parse(captureText)),dataset=JSON.parse(datasetText),visible=JSON.parse(visibleText),binding=JSON.parse(bindingText);
  const visibleFileSha=createHash('sha256').update(visibleText).digest('hex');
  validateCapture(capture);
  const reviewCapture=reviewCaptureFor(capture);
- if(reviewCapture.records.length!==92||reviewCapture.received!==92)fail('review_capture_denominator');
+ if(reviewCapture.records.length!==96||reviewCapture.received!==96)fail('review_capture_denominator');
  const expectedPacket=createBlindPacket({capture:reviewCapture,dataset,seed:binding.seed});
  equal(visible,expectedPacket.visible,'visible_packet_changed');
  equal(binding.items,expectedPacket.binding.items,'private_binding_changed');
  if(binding.visible_sha256!==digest(visible)||binding.dataset_canonical_sha256!==digest(dataset)||!/^[a-f0-9]{64}$/.test(binding.capture_canonical_sha256))fail('blind_packet_digest');
- if(visible.items.length!==92||binding.items.length!==92)fail('blind_packet_denominator');
+ if(visible.items.length!==96||binding.items.length!==96)fail('blind_packet_denominator');
  const visibleById=new Map(visible.items.map(item=>[item.blind_id,item]));
  const bindingById=new Map(binding.items.map(item=>[item.blind_id,item]));
  const reviewers=[],reviewerIds=new Set();
@@ -180,7 +188,7 @@ async function main(){
   reviewers.push({reviewer_id:review.reviewer_id,reviewer_model:review.reviewer_model,reviewer_version:review.reviewer_version,items:bound});
  }
  if(reviewers.length!==2)fail('reviewer_count');
- // 两份评审覆盖同一批46个完整成功配对；失败配对留在全量报告分母，但不伪造盲评。
+ // 两份评审覆盖同一批48个完整成功配对；失败配对留在全量报告分母，但不伪造盲评。
  const reviewIds=binding.items.map(item=>item.original_blind_id).sort();
  const firstIds=new Set(reviewers[0].items.map(item=>item.blind_id));
  const secondIds=new Set(reviewers[1].items.map(item=>item.blind_id));
