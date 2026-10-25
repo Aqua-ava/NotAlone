@@ -1,0 +1,13 @@
+# Standards 提交绑定交接
+- Code approve，仅绑定 1e90d9edde3a5c3ac0de08c018149dd79bbebdfc。
+- 总体不批准；25 claimed/not approved；26 open。
+- input-v1 manifest3513144b，六文件逐字节/SHA一致。
+- 运行必要闭包859/859与检查点一致；原依赖pg五文件未变。
+- 原27份公开审查证据与提交内容一致，全部旧静态/运行/位置更正绑定完整。
+- 本次只读，无测试重跑、PG/App/模型/宿主负载。
+- 原7/7单例含于31/31相关；存储13/13，沿用此前独立执行。
+- manifest.json记录commit/tree、六源SHA/blob、闭包及依赖。
+- verification.json记录核验结论，report.md说明批准范围。
+- 未读另一轴；未改src/test/index/Git。
+- 后续任何源码delta须独立复核，本approve不放行最终目标。
+- 本目录新增可提交白名单见final-public-manifest.json；原白名单不改写。

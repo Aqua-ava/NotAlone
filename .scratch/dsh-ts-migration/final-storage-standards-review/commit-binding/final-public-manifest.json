@@ -1,0 +1,38 @@
+{
+  "schema_version": "提交绑定新增证据可提交清单-v1",
+  "approved_code_commit": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "stage_scope": "仅commit-binding目录新增六份公开文件；原27份证据清单保持不变",
+  "stage_files": [
+    "handoff.md",
+    "manifest.json",
+    "report.md",
+    "verification.json",
+    "final-public-manifest.json",
+    "SHA256SUMS"
+  ],
+  "content_files": [
+    {
+      "path": "handoff.md",
+      "sha256": "573d3412841685d56c3ab7deef4cbfbec142135f5086c9bba69c829e1e7177bb",
+      "bytes": 903
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "9b47c45c9ecd7a1a8e90c797fc760e5e655fca000eea66af901b2335c093fbf4",
+      "bytes": 10898
+    },
+    {
+      "path": "report.md",
+      "sha256": "cf77e321bb3e346747a51dbdf55f33fc55d89e01c8d6d4565027ef5f849b78f1",
+      "bytes": 1858
+    },
+    {
+      "path": "verification.json",
+      "sha256": "b26e0ca795f8e5a5cd71c7fdd0d8c0b327e71ce25c521688705f8aa29a52e416",
+      "bytes": 600
+    }
+  ],
+  "manifest_and_checksum_self_reference_excluded": true,
+  "private_raw_included": false,
+  "public_patterns": "四类公开静态模式通过"
+}
