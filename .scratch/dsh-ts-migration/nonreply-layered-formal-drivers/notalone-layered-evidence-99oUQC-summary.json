@@ -1,0 +1,1560 @@
+{
+  "schema_version": "layered-formal-driver-engineering-v1",
+  "candidate_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+  "source_snapshot_sha256": "5fe2dddc4ce9d3f84b1131ae1eb3744ee46a2b1c791b99bbb115bed5dcf1a92a",
+  "formal_quality": false,
+  "independent_semantic_reviews": 0,
+  "real_vendor_calls": 0,
+  "physical_loopback_http": 12,
+  "problem_budget": {
+    "problemId": "<synthetic-redacted>",
+    "deadline": 1792939246330,
+    "maxReservations": 1000,
+    "used": 12,
+    "remaining": 988
+  },
+  "records": [
+    {
+      "mode": "success",
+      "run_id": "l3_profile:l3_profile-01:1:old",
+      "case_id": "l3_profile-01",
+      "case_sha256": "9a1f9c75301794f9596af39c245ea4ea20bd38a6c9c205e7313a2cf4adc4ccf1",
+      "arm": "old",
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "domain": "l3_profile",
+      "repeat": 1,
+      "scope": {
+        "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+        "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+      },
+      "attempts": [
+        {
+          "attempt_id": "30b8fc95-beff-418a-bc49-37b859b47a8e",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "22e8f09b38b6068c6cab77f398234b777005e42347e83f1fe8ab6986ace70604",
+          "started_at": "2026-10-25T14:25:49.470Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "9097e0c89e0c8d6a24d1d13369f22c5b494bc0bac3db3a26105bd3247ff8a22b",
+          "schema_sha256": "bdd98c43b83a90f0197d484783075daee51ed493b41ce0a0a0a9be9c6c1246ba",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "5dd4d616-665e-48af-b622-b5ffe01f74ff",
+            "ordinal": 1,
+            "binding_sha256": "c799630de93472922822ce3c35f06a9a8cc9fc4fd287d635e65263442a47eac5",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:49.752Z",
+          "response_sha256": "d4dd8364b094d001fbf35e5865d59303eb85ce54b1d0dcd73ec097cfefcbd3d6",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": true
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:49.820Z"
+        },
+        {
+          "attempt_id": "127a06ad-fa04-4584-b14a-cc59e8b0348a",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "d290d5aeaa205024b839be1d923f6041bbaa43b02a436dc891bf9b50e82c3fdd",
+          "started_at": "2026-10-25T14:25:49.940Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "6ef6e972e5adf6699c9a2a72daf32707297bfbb71d9df3631b888bf3b70b9011",
+          "schema_sha256": "bdd98c43b83a90f0197d484783075daee51ed493b41ce0a0a0a9be9c6c1246ba",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "60ab3577-6212-4b7f-8ea4-8b150d2a145f",
+            "ordinal": 2,
+            "binding_sha256": "995ff4689dfd84934e30a56620f369a34cf163f68e0764dbe64337b30511caa0",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:50.199Z",
+          "response_sha256": "51d8c855cf886a5b97e6cf3e8c617cc2f45c3dca873f9a9b27486f521ada76a1",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": true
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:50.266Z"
+        },
+        {
+          "attempt_id": "8f22fabc-d0f1-4967-9e0a-ec488a714927",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "1a2fadafef96ffe0a152518eb14a3250e5c8b0e15f4f78e110e97d3a5d1e4829",
+          "started_at": "2026-10-25T14:25:50.412Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "924ffb6f7fcdfde70f7b9dab3ba2dcbf45b7414733b2ca47a236f938be9888b1",
+          "schema_sha256": "376bde7986cc2f8fd182f04e745c607933760bea7c306ea6e8e992b7f70be25a",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "a44d293f-08ff-4608-8a48-47f0b06a2336",
+            "ordinal": 3,
+            "binding_sha256": "75f87e87a0b9cef6706d556ea01b9e31d6fef0e770c75d4989d2d416d4122754",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:50.681Z",
+          "response_sha256": "6dc28abe873015a562856dfa6c505164d0811a721dd3d9b394c78493523f8732",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": true
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:50.750Z"
+        },
+        {
+          "attempt_id": "05c38bcb-bd30-40dd-a237-01d6fe1e4109",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "13714f7bdb5c74d032ee684921026093ea0d2d09d3045bbeeca2744efadb1557",
+          "started_at": "2026-10-25T14:25:50.920Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "380ecb8392706d4c9fa0862a30772d5265be6fa5ae338e5c2ca943b9035d0cdb",
+          "schema_sha256": "76ce1bd592e21408662e99e070ae5cc17812d92e380c98ff8908cf0217229b01",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "090e196c-a83e-4f8b-899a-8302b0abf44d",
+            "ordinal": 4,
+            "binding_sha256": "e5bb40e1219d7d4d0a1a753368a5eb3ec39b04b951532f1236c509be333f3510",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:51.189Z",
+          "response_sha256": "bf6f47a6438099280b4321789dba720e9de70e248500d83251e08f7ea1a3fc96",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": true
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:51.259Z"
+        },
+        {
+          "attempt_id": "fd599c42-c2ff-4da6-a9b6-66a595ce4e0e",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "eb6550f0ea82c33bbe690175630802d2cbb0311b1485de6d50b995df055ab69a",
+          "started_at": "2026-10-25T14:25:51.344Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "531d24daae4759ac8e96207b2abcc22c679f0246f930062ba67e40c79c7233a0",
+          "schema_sha256": "76ce1bd592e21408662e99e070ae5cc17812d92e380c98ff8908cf0217229b01",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "91010087-1fff-447c-89ed-64e2e6902a3a",
+            "ordinal": 5,
+            "binding_sha256": "64aa71753b93cfaf44671626f6ef397b4137758ee3d3f6e2fd9b70c245b12bbe",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:51.610Z",
+          "response_sha256": "51d8c855cf886a5b97e6cf3e8c617cc2f45c3dca873f9a9b27486f521ada76a1",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": true
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:51.681Z"
+        },
+        {
+          "attempt_id": "d45fd733-d98b-4f46-b091-7b3ed4fc00b8",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "2528022aba1c53ac6e771fa37a4d05966a3f2b411e788251d09110300faf62ce",
+          "started_at": "2026-10-25T14:25:51.826Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "50023d8b13a634712cff01768b7b31746479d229483fb64980d4579fba7dfab3",
+          "schema_sha256": "376bde7986cc2f8fd182f04e745c607933760bea7c306ea6e8e992b7f70be25a",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "31b7f19a-b247-4ca0-9c76-1ba8ebe047b0",
+            "ordinal": 6,
+            "binding_sha256": "2f501afab094278f74a7c5e907c6a641b6351e7cb63dcf0f42a6edbb1e62c2e0",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:52.093Z",
+          "response_sha256": "3fc808c10852f3e9b81855f1a340632a9f53b4ac30720d499e2e8f3ebeb69579",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": true
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:52.166Z"
+        }
+      ],
+      "terminal_status": "succeeded",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+        "runtime": "isolated_python",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "520e39c045c64ba30e96be782ef49f07507ae51e946582b668693a39ade1f1c7",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "pinned_shared_priority_bridge_only",
+          "actual_profile": true
+        },
+        "public_entry": "LayeredMemoryService.organize + PostgresBackgroundTaskRepository.claim_next_step + LayeredMemoryService.run_batch",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:25:47.920Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "processed_count": 2,
+        "state": [
+          {
+            "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+            "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1",
+            "settings_generation": 1,
+            "organization_generation": 2,
+            "enabled": true,
+            "status": "ready",
+            "covered_count": 2,
+            "error_code": null,
+            "last_action": null,
+            "updated_at": "2026-10-25 22:25:52.276019+08:00",
+            "dirty_revision": 2,
+            "consumed_revision": 0,
+            "next_due_at": null,
+            "next_boundary_at": null,
+            "maintenance_allowed": true,
+            "scope_kind": "contact",
+            "scope_key": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1",
+            "correction_revision": 0,
+            "scenario_mappings": [],
+            "mapping_cursor": null,
+            "mapping_next_cursor": null,
+            "profile": {
+              "version_id": "6588742e-6fba-460a-b070-b8ae0a277985",
+              "system_generated": true,
+              "updated_at": "2026-10-25T22:25:52.270963+08:00",
+              "entries": [
+                {
+                  "kind": "preference",
+                  "text": "联系人明确说：我一直不喜欢香菜",
+                  "basis": "仅合成来源的机械回显，未做语义评分。",
+                  "section": "long_term_preferences",
+                  "references": [
+                    {
+                      "event": null,
+                      "timing": {
+                        "recorded_at": "2026-10-25T22:25:47.682258+08:00",
+                        "current_status": "current_unverified",
+                        "source_ended_at": null,
+                        "source_started_at": null,
+                        "source_time_complete": false,
+                        "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                      },
+                      "revision": 1,
+                      "valid_at": null,
+                      "evolution": null,
+                      "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+                      "conditions": null,
+                      "invalid_at": null,
+                      "provenance_kind": "manual_entry"
+                    }
+                  ],
+                  "uncertainty": "当前状态未另行核实。",
+                  "temporal_status": "uncertain"
+                }
+              ]
+            },
+            "feedback": [],
+            "protected_count": 0,
+            "pending_fact_count": 0
+          },
+          [
+            {
+              "memory": {
+                "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+                "scope": {
+                  "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+                  "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+                },
+                "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+                "category": "common_fact",
+                "source_ids": [
+                  "2d2eda4b-ec98-5923-ad03-1259d787b4c8"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:25:47.682258+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "2d2eda4b-ec98-5923-ad03-1259d787b4c8",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "2d2eda4b-ec98-5923-ad03-1259d787b4c8"
+              ]
+            },
+            {
+              "memory": {
+                "memory_id": "a80e464b-e6bb-57b3-a9fb-9fcd559312b5",
+                "scope": {
+                  "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+                  "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+                },
+                "text": "另一条联系人自述：我长期不吃香菜。",
+                "category": "common_fact",
+                "source_ids": [
+                  "18bdcd71-1a79-5e79-ae6d-c7a008617629"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:25:47.683925+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "a80e464b-e6bb-57b3-a9fb-9fcd559312b5",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "18bdcd71-1a79-5e79-ae6d-c7a008617629",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "18bdcd71-1a79-5e79-ae6d-c7a008617629"
+              ]
+            }
+          ],
+          [
+            {
+              "scenario_id": "98e9569f-4389-54df-9bfe-48f446718d02",
+              "version_id": "e613045a-b8f3-4fbf-b564-def391d7e598",
+              "title": "合成资料",
+              "hint": "逐字回显本次冻结来源",
+              "system_generated": true,
+              "updated_at": "2026-10-25T14:25:50.855597+00:00",
+              "paragraphs": [
+                {
+                  "kind": "fact",
+                  "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+                  "basis": "仅回显本次来源",
+                  "section": "basic_information",
+                  "references": [
+                    {
+                      "event": null,
+                      "timing": {
+                        "recorded_at": "2026-10-25T22:25:47.682258+08:00",
+                        "current_status": "current_unverified",
+                        "source_ended_at": null,
+                        "source_started_at": null,
+                        "source_time_complete": false,
+                        "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                      },
+                      "revision": 1,
+                      "valid_at": null,
+                      "evolution": null,
+                      "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+                      "conditions": null,
+                      "invalid_at": null,
+                      "provenance_kind": "manual_entry"
+                    }
+                  ],
+                  "uncertainty": ""
+                }
+              ]
+            }
+          ],
+          {
+            "task_id": "73809e04-7caf-47a8-af7a-e4253b6bb1ba",
+            "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+            "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1",
+            "settings_generation": 1,
+            "target_key": "7992bdcb146acb4bdeff0e86449758c04934bed1e6c200329f6257ae63843f5f",
+            "contract": "scenario-v3:deadline-v1:coverage-v1:correction-v1:verified_items:personal-background-v1:l2-1500:l3-2000:document-tools-v1:physical-budget-v1:scenario-context-v1:profile-tools-v1:c07d99e6f7def1b86b55a617713962f4d99b753d25386d22e738f874e5df402f",
+            "target_manifest": [
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+                "source_ids": [
+                  "2d2eda4b-ec98-5923-ad03-1259d787b4c8"
+                ],
+                "source_refs": [],
+                "record_sha256": "ef0c4c6b610481b7f84a7b2081e0121da56f68340a283749d87a5a0e365c11b0",
+                "timing_sha256": "0c97793aaa900696917a3e53accfae50673181e7994f681fe870006b385bc6fe",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "05671e18cb7c305f5ad3828626c3b2a0e71575322b8f70d31c4e4db55f7c15e5",
+                "organization_timing_sha256": "0c97793aaa900696917a3e53accfae50673181e7994f681fe870006b385bc6fe",
+                "version_evidence_source_current": false
+              },
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "a80e464b-e6bb-57b3-a9fb-9fcd559312b5",
+                "source_ids": [
+                  "18bdcd71-1a79-5e79-ae6d-c7a008617629"
+                ],
+                "source_refs": [],
+                "record_sha256": "93cae2379ab32c7bd0e5e863faa716c66e78f7797e11522180a99a69a80c84bc",
+                "timing_sha256": "81aeaac0774f33fa8bd00b8a9d8f91c79da3ce245ddc7e361666dc6ae63a2533",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "09e506cca02051dfb8d24a2f2021a4da19facd5bb4479082dabf809dabfe2c46",
+                "organization_timing_sha256": "81aeaac0774f33fa8bd00b8a9d8f91c79da3ce245ddc7e361666dc6ae63a2533",
+                "version_evidence_source_current": false
+              }
+            ],
+            "dependency_ids": [
+              "18bdcd71-1a79-5e79-ae6d-c7a008617629",
+              "2d2eda4b-ec98-5923-ad03-1259d787b4c8",
+              "a80e464b-e6bb-57b3-a9fb-9fcd559312b5",
+              "b8738249-3d13-56c4-a32e-0695a697a688"
+            ],
+            "state": "active",
+            "revision": 1,
+            "last_action": "start",
+            "batch_number": 1,
+            "run_remaining": 1,
+            "pending_receipt": true,
+            "model_calls_used": 6,
+            "model_call_limit": 16,
+            "created_at": "2026-10-25 22:25:48.536663+08:00",
+            "receipt_batch_id": "e8537357-038c-48f6-81c3-3c53b571ec34",
+            "receipt_lease_generation": 1,
+            "profile_required": true,
+            "profile_status": "succeeded",
+            "target_dirty_revision": 2,
+            "scope_kind": "contact",
+            "scope_key": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+          }
+        ]
+      },
+      "audit": {
+        "persisted_physical_count": 6,
+        "pg_job_physical_count": 6,
+        "outbound_ledger_count": 0,
+        "model_call_receipts": 0,
+        "legacy_outbound_ledger_gap": true,
+        "source_snapshot_sha256": "64af18e8280887d7896a737ca54b5bb74e629f7a9768881be7d404e3e08a02f5"
+      },
+      "business_output": {
+        "scenarios": [
+          {
+            "id": "e613045a-b8f3-4fbf-b564-def391d7e598",
+            "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+            "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1",
+            "scenario_id": "98e9569f-4389-54df-9bfe-48f446718d02",
+            "batch_id": "e8537357-038c-48f6-81c3-3c53b571ec34",
+            "organization_generation": "1",
+            "schema_version": 1,
+            "title": "合成资料",
+            "hint": "逐字回显本次冻结来源",
+            "paragraphs": [
+              {
+                "kind": "fact",
+                "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+                "basis": "仅回显本次来源",
+                "section": "basic_information",
+                "references": [
+                  {
+                    "event": null,
+                    "timing": {
+                      "recorded_at": "2026-10-25T22:25:47.682258+08:00",
+                      "current_status": "current_unverified",
+                      "source_ended_at": null,
+                      "source_started_at": null,
+                      "source_time_complete": false,
+                      "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                    },
+                    "revision": 1,
+                    "valid_at": null,
+                    "evolution": null,
+                    "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+                    "conditions": null,
+                    "invalid_at": null,
+                    "provenance_kind": "manual_entry"
+                  }
+                ],
+                "uncertainty": ""
+              }
+            ],
+            "created_at": "2026-10-25T14:25:50.855Z",
+            "scope_kind": "contact",
+            "scope_key": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "6588742e-6fba-460a-b070-b8ae0a277985",
+            "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+            "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1",
+            "batch_id": "59f8a59f-74a8-4911-b5ba-a8ba88a8a9d5",
+            "schema_version": 2,
+            "entries": [
+              {
+                "kind": "preference",
+                "text": "联系人明确说：我一直不喜欢香菜",
+                "basis": "仅合成来源的机械回显，未做语义评分。",
+                "section": "long_term_preferences",
+                "references": [
+                  {
+                    "event": null,
+                    "timing": {
+                      "recorded_at": "2026-10-25T22:25:47.682258+08:00",
+                      "current_status": "current_unverified",
+                      "source_ended_at": null,
+                      "source_started_at": null,
+                      "source_time_complete": false,
+                      "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                    },
+                    "revision": 1,
+                    "valid_at": null,
+                    "evolution": null,
+                    "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+                    "conditions": null,
+                    "invalid_at": null,
+                    "provenance_kind": "manual_entry"
+                  }
+                ],
+                "uncertainty": "当前状态未另行核实。",
+                "temporal_status": "uncertain"
+              }
+            ],
+            "withdrawn": false,
+            "created_at": "2026-10-25T14:25:52.270Z",
+            "scope_kind": "contact",
+            "scope_key": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+          }
+        ],
+        "sources": [
+          {
+            "source_id": "l3_profile-01-s1",
+            "owner_id": "synthetic-owner-l3_profile-01",
+            "contact_id": "synthetic-contact-l3_profile-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+            "storage_id": "2d2eda4b-ec98-5923-ad03-1259d787b4c8",
+            "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+            "scoped": true
+          },
+          {
+            "source_id": "l3_profile-01-s2",
+            "owner_id": "synthetic-owner-l3_profile-01",
+            "contact_id": "synthetic-contact-l3_profile-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "另一条联系人自述：我长期不吃香菜。",
+            "storage_id": "18bdcd71-1a79-5e79-ae6d-c7a008617629",
+            "memory_id": "a80e464b-e6bb-57b3-a9fb-9fcd559312b5",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:25:48.685Z",
+            "monotonic_ms": 3314.389334
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:49.470Z",
+            "monotonic_ms": 4098.491417
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:49.820Z",
+            "monotonic_ms": 4449.327917
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:49.940Z",
+            "monotonic_ms": 4568.881792
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:50.266Z",
+            "monotonic_ms": 4894.87025
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:50.412Z",
+            "monotonic_ms": 5040.873209
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:50.750Z",
+            "monotonic_ms": 5378.610625
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:50.920Z",
+            "monotonic_ms": 5548.811917
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:51.259Z",
+            "monotonic_ms": 5887.811459
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:51.344Z",
+            "monotonic_ms": 5973.263667
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:51.681Z",
+            "monotonic_ms": 6309.56325
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:51.826Z",
+            "monotonic_ms": 6455.327
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:52.166Z",
+            "monotonic_ms": 6795.03125
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:25:52.353Z",
+            "monotonic_ms": 6981.542542
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:25:52.353Z",
+          "monotonic_ms": 6981.542542
+        }
+      },
+      "durable_accounting_matches": true,
+      "elapsed_ms": 5337.603084
+    },
+    {
+      "mode": "success",
+      "run_id": "l3_profile:l3_profile-01:1:new",
+      "case_id": "l3_profile-01",
+      "case_sha256": "9a1f9c75301794f9596af39c245ea4ea20bd38a6c9c205e7313a2cf4adc4ccf1",
+      "arm": "new",
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "domain": "l3_profile",
+      "repeat": 1,
+      "scope": {
+        "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+        "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+      },
+      "attempts": [
+        {
+          "attempt_id": "c4da2442-8f37-4ddd-805e-c4530705726a",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "98ea40e028a7aae457faec3847d0b2ffcbf90fe89d409b12c2fbf57b9d91e13c",
+          "started_at": "2026-10-25T14:25:53.402Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "8ba39d631ebcafc38850cbf987949c824c924c3db4eeb9ef4de9cc0d37846210",
+          "schema_sha256": "e3ff4902bbf1c49ebb158dee0d08d825e10399b3c002b6299ce2a458bce4444e",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "9db75820-64ba-44ec-8dd6-bba9613210b9",
+            "ordinal": 7,
+            "binding_sha256": "a5aae02004018465db6044bbe9a231d46040036ac76ea5fab593503eacee8a5b",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:53.687Z",
+          "response_sha256": "61b5125f5a7139786d390b8281f0aafe9ee76d944134a24157784611e9741801",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": false
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:53.757Z"
+        },
+        {
+          "attempt_id": "ebb0b552-da6c-4249-9db6-390478bd5070",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "5cb655fa7d99dc73d45f8f3193e2f9c1184ebf2cc71f71694b4bba8d25ac66c9",
+          "started_at": "2026-10-25T14:25:53.907Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "0a343fc6b3f449d03f06da6818814cae8a85c569bcc0ce73cc3e76a5223c2137",
+          "schema_sha256": "e3ff4902bbf1c49ebb158dee0d08d825e10399b3c002b6299ce2a458bce4444e",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "2b76407e-07bb-4085-94aa-6655cf308f24",
+            "ordinal": 8,
+            "binding_sha256": "166872b4c75aab14813187cf4c3b06b90df13a45b3cee2be26452388508b6b71",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:54.181Z",
+          "response_sha256": "84264a8af81036d1919f62f3371b731e49c5b0f72064fb14a477622fec77276b",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": false
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:54.252Z"
+        },
+        {
+          "attempt_id": "eb8aaf21-8b83-4b24-b398-c84b3e17c5fe",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "6f0d46dfcf98ce98595609f8eac1c35d4ebc1fb92980381c75d73dc67ddf2e75",
+          "started_at": "2026-10-25T14:25:54.398Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "4d2534d02158f2f279e32b256fdd60fc28c300538623bd399163aabf016574d7",
+          "schema_sha256": "d9302b31af639986fd949f34bb732736ab22056bbade37a114240c768ca2c4b3",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "37481f53-4892-4072-bf98-d75345502557",
+            "ordinal": 9,
+            "binding_sha256": "24fae0c0ee2fe42bfcdf5e93f5db1896e8281160a24b1a790ce002d9fa13b1e1",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:54.669Z",
+          "response_sha256": "ca464767c6d96df1b26d5bac2ce193d48149c5a49464933bbecf944d08f9eabb",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": false
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:54.739Z"
+        },
+        {
+          "attempt_id": "9605eb18-5dff-488e-9412-9333f9b94174",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "a145ec199801d624a16a2359f284aa12eedbdfe605e2a6f506d00f1e9d5470f3",
+          "started_at": "2026-10-25T14:25:54.934Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "be5ed83709c4d0fa91d9f3d0459eff9a6f768601eae1b35904a48d1e6c8672bd",
+          "schema_sha256": "706bc27f967d0e49e5893be209a774bb1134e3fc74850b389787afda66477bb8",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "c7ee14ff-a95e-4730-be73-aae3d2a6afd1",
+            "ordinal": 10,
+            "binding_sha256": "3de23800637cf138493a62ee498a2ac5ca84bf5b1b65dccf03c7e68b3020c8dc",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:55.207Z",
+          "response_sha256": "79aa8e41f9af3f86beccf2398d176b43435f5fcbc0b0675a75298f56e14de815",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": false
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:55.279Z"
+        },
+        {
+          "attempt_id": "cc084e14-00b5-4b70-b0f5-9db2500fe01f",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "ee73c32ed1ca54dd5508c35b70e01a4520da090ab7495c8600ef0334add379ec",
+          "started_at": "2026-10-25T14:25:55.419Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "619414002b9745ba24c65522b80be5b178f84c57b2d8067c31112b7da7fec832",
+          "schema_sha256": "706bc27f967d0e49e5893be209a774bb1134e3fc74850b389787afda66477bb8",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "5a9738dc-5c73-4501-b580-fef3f287298e",
+            "ordinal": 11,
+            "binding_sha256": "55c201d292a4d124b9a2a87294625e0b574829253fabecb4d2b61ab5499f14d0",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:55.694Z",
+          "response_sha256": "6c4b21a59c836062d6789704c3fac7b38f73a1c848d505288b596145e0cd7d63",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": false
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:55.767Z"
+        },
+        {
+          "attempt_id": "45daad91-39da-408a-a211-95ce72870ec1",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "3148604c784ec51d77755da6681868516bc1f770493caa9a59805fec77464a36",
+          "started_at": "2026-10-25T14:25:55.928Z",
+          "status": "complete",
+          "sent": true,
+          "prompt_sha256": "4dda45d30d62cf44107408864cefb3cbddaf802f78e0eb901ecad87bec10903e",
+          "schema_sha256": "4ae64d3a33ba86b3b2033918fe6325b21f84b6ebf2efbeb93ec1084ef480091d",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "912fea4d-aef9-4aae-b4d5-a55d3cb921de",
+            "ordinal": 12,
+            "binding_sha256": "7667cc60d6a9c58d09f7e70d2ec4c301c028c9130e9f7479813c4c4cb8c34aca",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939246330,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:25:56.204Z",
+          "response_sha256": "4b7ead67e579393d392a0c636dc77e0ee8259c1594588bf829edd816710eb83e",
+          "response_model": "deepseek-flash",
+          "response_fingerprint": "unknown",
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 9,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": false
+          },
+          "cost": null,
+          "finished_at": "2026-10-25T14:25:56.275Z"
+        }
+      ],
+      "terminal_status": "succeeded",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+        "runtime": "typescript",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "7b9295305152f31d4315f1a90ebfad68861fbc768f2d9bb6054338cb901f5330",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "production_createHostModelAccounting",
+          "actual_profile": true
+        },
+        "public_entry": "createLayeredMemoryManagement.refresh + ExtractionTaskStore.claim + createL2ScenarioHttp.handlePrivate",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:25:53.122Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "http_status": 200,
+        "body": {
+          "state": {
+            "schema_version": 2,
+            "scope_kind": "contact",
+            "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1",
+            "settings_generation": 1,
+            "enabled": true,
+            "runtime_policy": "verified_items",
+            "quality_status": "unknown",
+            "quality": {
+              "organization": {
+                "status": "unknown",
+                "reasons": [
+                  "quality_store_unconfigured"
+                ],
+                "contract_id": null,
+                "report_id": null
+              },
+              "reply": {
+                "status": "unknown",
+                "reasons": [
+                  "quality_store_unconfigured"
+                ],
+                "contract_id": null,
+                "report_id": null
+              },
+              "automatic_use_allowed": false,
+              "synthetic": false
+            },
+            "status": "ready",
+            "work_id": "ec2f3a71-3477-47c0-95ef-18655747bd77",
+            "work_revision": 1,
+            "current_batch": 1,
+            "model_calls_used": 6,
+            "model_call_limit": 16,
+            "eligible_count": 2,
+            "covered_count": 2,
+            "remaining_count": 0,
+            "mapping_cursor": null,
+            "mapping_next_cursor": null,
+            "maintenance_pending": true,
+            "scenario_mappings": [],
+            "organization_generation": 2,
+            "updated_at": "2026-10-25T14:25:56.372Z",
+            "error_code": null,
+            "purpose": "整理当前联系人已采纳资料的主题背景。",
+            "budget": {
+              "max_memories": 120,
+              "max_batch_memories": 20,
+              "max_scenarios": 15,
+              "max_paragraphs": 40,
+              "max_characters": 128000,
+              "max_model_calls": 16,
+              "max_profile_entries": 16,
+              "model_calls_used": 6,
+              "model_calls_remaining": 10
+            },
+            "scenarios": [
+              {
+                "scenario_id": "98e9569f-4389-54df-9bfe-48f446718d02",
+                "version_id": "f76a5308-b5e3-5abe-82aa-45d6278d34cd",
+                "title": "合成资料",
+                "hint": "逐字回显本次冻结来源",
+                "system_generated": true,
+                "updated_at": "2026-10-25T14:25:54.831Z",
+                "paragraphs": [
+                  {
+                    "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。\n<!-- PERSONAL {\"kind\":\"fact\",\"section\":\"basic_information\",\"basis\":\"仅回显本次来源\",\"uncertainty\":\"\"} -->",
+                    "references": [
+                      {
+                        "event": null,
+                        "level": "contact",
+                        "timing": {
+                          "recorded_at": "2026-10-25T22:25:52.899146+08:00",
+                          "current_status": "current_unverified",
+                          "source_ended_at": null,
+                          "source_started_at": null,
+                          "source_time_complete": false,
+                          "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                        },
+                        "revision": 1,
+                        "valid_at": null,
+                        "evolution": null,
+                        "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+                        "conditions": null,
+                        "invalid_at": null,
+                        "provenance_kind": "manual_entry"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "profile": {
+              "version_id": "0ef3ebd2-6690-5194-a28d-f33c81a878bf",
+              "system_generated": true,
+              "updated_at": "2026-10-25T14:25:56.372Z",
+              "entries": [
+                {
+                  "kind": "preference",
+                  "text": "另一条联系人自述：我长期不吃香菜",
+                  "basis": "仅合成来源的机械回显，未做语义评分。",
+                  "section": "long_term_preferences",
+                  "references": [
+                    {
+                      "event": null,
+                      "level": "contact",
+                      "timing": {
+                        "recorded_at": "2026-10-25T22:25:52.900866+08:00",
+                        "current_status": "current_unverified",
+                        "source_ended_at": null,
+                        "source_started_at": null,
+                        "source_time_complete": false,
+                        "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                      },
+                      "revision": 1,
+                      "valid_at": null,
+                      "evolution": null,
+                      "memory_id": "a80e464b-e6bb-57b3-a9fb-9fcd559312b5",
+                      "conditions": null,
+                      "invalid_at": null,
+                      "provenance_kind": "manual_entry"
+                    }
+                  ],
+                  "uncertainty": "当前状态未另行核实。",
+                  "temporal_status": "uncertain"
+                }
+              ]
+            },
+            "correction_revision": 0,
+            "protected_count": 0,
+            "pending_fact_count": 0,
+            "feedback": [],
+            "correction_target": null
+          },
+          "status": "completed",
+          "processed_count": 2
+        }
+      },
+      "audit": {
+        "persisted_physical_count": 6,
+        "pg_job_physical_count": 6,
+        "outbound_ledger_count": 6,
+        "model_call_receipts": 6,
+        "legacy_outbound_ledger_gap": false,
+        "source_snapshot_sha256": "64af18e8280887d7896a737ca54b5bb74e629f7a9768881be7d404e3e08a02f5"
+      },
+      "business_output": {
+        "scenarios": [
+          {
+            "id": "f76a5308-b5e3-5abe-82aa-45d6278d34cd",
+            "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+            "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1",
+            "scenario_id": "98e9569f-4389-54df-9bfe-48f446718d02",
+            "batch_id": "baa047bf-cde2-532c-ab80-b433a8f98667",
+            "organization_generation": "1",
+            "schema_version": 1,
+            "title": "合成资料",
+            "hint": "逐字回显本次冻结来源",
+            "paragraphs": [
+              {
+                "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。\n<!-- PERSONAL {\"kind\":\"fact\",\"section\":\"basic_information\",\"basis\":\"仅回显本次来源\",\"uncertainty\":\"\"} -->",
+                "references": [
+                  {
+                    "event": null,
+                    "level": "contact",
+                    "timing": {
+                      "recorded_at": "2026-10-25T22:25:52.899146+08:00",
+                      "current_status": "current_unverified",
+                      "source_ended_at": null,
+                      "source_started_at": null,
+                      "source_time_complete": false,
+                      "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                    },
+                    "revision": 1,
+                    "valid_at": null,
+                    "evolution": null,
+                    "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+                    "conditions": null,
+                    "invalid_at": null,
+                    "provenance_kind": "manual_entry"
+                  }
+                ]
+              }
+            ],
+            "created_at": "2026-10-25T14:25:54.831Z",
+            "scope_kind": "contact",
+            "scope_key": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "0ef3ebd2-6690-5194-a28d-f33c81a878bf",
+            "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+            "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1",
+            "batch_id": "77eb3624-8b13-4a4c-a078-ca41e78139bb",
+            "schema_version": 2,
+            "entries": [
+              {
+                "kind": "preference",
+                "text": "另一条联系人自述：我长期不吃香菜",
+                "basis": "仅合成来源的机械回显，未做语义评分。",
+                "section": "long_term_preferences",
+                "references": [
+                  {
+                    "event": null,
+                    "level": "contact",
+                    "timing": {
+                      "recorded_at": "2026-10-25T22:25:52.900866+08:00",
+                      "current_status": "current_unverified",
+                      "source_ended_at": null,
+                      "source_started_at": null,
+                      "source_time_complete": false,
+                      "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                    },
+                    "revision": 1,
+                    "valid_at": null,
+                    "evolution": null,
+                    "memory_id": "a80e464b-e6bb-57b3-a9fb-9fcd559312b5",
+                    "conditions": null,
+                    "invalid_at": null,
+                    "provenance_kind": "manual_entry"
+                  }
+                ],
+                "uncertainty": "当前状态未另行核实。",
+                "temporal_status": "uncertain"
+              }
+            ],
+            "withdrawn": false,
+            "created_at": "2026-10-25T14:25:56.372Z",
+            "scope_kind": "contact",
+            "scope_key": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+          }
+        ],
+        "sources": [
+          {
+            "source_id": "l3_profile-01-s1",
+            "owner_id": "synthetic-owner-l3_profile-01",
+            "contact_id": "synthetic-contact-l3_profile-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+            "storage_id": "2d2eda4b-ec98-5923-ad03-1259d787b4c8",
+            "memory_id": "b8738249-3d13-56c4-a32e-0695a697a688",
+            "scoped": true
+          },
+          {
+            "source_id": "l3_profile-01-s2",
+            "owner_id": "synthetic-owner-l3_profile-01",
+            "contact_id": "synthetic-contact-l3_profile-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "另一条联系人自述：我长期不吃香菜。",
+            "storage_id": "18bdcd71-1a79-5e79-ae6d-c7a008617629",
+            "memory_id": "a80e464b-e6bb-57b3-a9fb-9fcd559312b5",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:25:53.295Z",
+            "monotonic_ms": 7924.37275
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:53.402Z",
+            "monotonic_ms": 8030.709042
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:53.757Z",
+            "monotonic_ms": 8385.776375
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:53.907Z",
+            "monotonic_ms": 8536.236875
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:54.252Z",
+            "monotonic_ms": 8880.456417
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:54.398Z",
+            "monotonic_ms": 9026.526167
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:54.739Z",
+            "monotonic_ms": 9367.953334
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:54.934Z",
+            "monotonic_ms": 9562.573625
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:55.279Z",
+            "monotonic_ms": 9907.667875
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:55.419Z",
+            "monotonic_ms": 10047.732125
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:55.767Z",
+            "monotonic_ms": 10396.282375
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:25:55.928Z",
+            "monotonic_ms": 10556.9195
+          },
+          {
+            "phase": "broker_response_received",
+            "at": "2026-10-25T14:25:56.275Z",
+            "monotonic_ms": 10904.198334
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:25:56.399Z",
+            "monotonic_ms": 11028.0735
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:25:56.399Z",
+          "monotonic_ms": 11028.0735
+        }
+      },
+      "durable_accounting_matches": true,
+      "elapsed_ms": 4036.0992909999995
+    }
+  ],
+  "persistent_journal": {},
+  "observed_engineering_runs": 2,
+  "unique_planned_run_ids": 2,
+  "formal_quality_runs": 0,
+  "nonreply_planned": 1056,
+  "unified_planned": 1152,
+  "unified_formal_not_run": 1152,
+  "source_observation_times": [
+    "2026-10-20T09:00:00+08:00"
+  ],
+  "requested_as_of": "2026-10-23T12:00:00+08:00",
+  "effective_clock": "actual_wall_engineering_only",
+  "frozen_semantic_oracle_used_by_supplier": false,
+  "raw_directory_label": "notalone-layered-evidence-99oUQC",
+  "expected_probes": "l3-success",
+  "receipts": [
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+        "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+        "contact_id": "70fe9f3a-24ad-50aa-aa0c-dd9dd29a01f1"
+      }
+    }
+  ]
+}

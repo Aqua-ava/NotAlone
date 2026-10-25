@@ -1,0 +1,16 @@
+{
+  "schema_version": "persistent-broker-profile-probe-v1",
+  "status": "failed",
+  "failure": "snapshot_or_probe_setup_failed",
+  "worker_exit_code": null,
+  "summary": null,
+  "cleanup": {
+    "owned_snapshot_process_references": 0,
+    "owned_source_archive_removed": true
+  },
+  "real_supplier_calls": 0,
+  "formal_quality_qualified": false,
+  "human_120_time_qualified": false,
+  "ticket25_approved": false,
+  "private_evidence_label": "na-broker-evidence-VQiBGD"
+}

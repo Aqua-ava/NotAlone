@@ -1,0 +1,9 @@
+{
+  "snapshot": {
+    "owned_source_snapshot_removed": true,
+    "owned_process_references": 0,
+    "before_kib": 25120,
+    "after_kib": 0
+  },
+  "all_fixtures_dropped": true
+}

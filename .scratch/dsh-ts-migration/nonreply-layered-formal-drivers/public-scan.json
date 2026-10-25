@@ -1,0 +1,9 @@
+{
+  "schema_version": "layered-public-scan-v1",
+  "scope": "only_owned_directory_no_global_private_reads",
+  "private_path_or_secret_hits": [],
+  "raw_public_bindings_verified": 16,
+  "e600_and_red_named_artifacts_unchanged": true,
+  "mode_violations": 0,
+  "git_index_touched": false
+}

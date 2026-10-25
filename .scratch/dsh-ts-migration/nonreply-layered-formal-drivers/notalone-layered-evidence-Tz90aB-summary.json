@@ -1,0 +1,1212 @@
+{
+  "schema_version": "layered-formal-driver-engineering-v1",
+  "candidate_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+  "source_snapshot_sha256": "5fe2dddc4ce9d3f84b1131ae1eb3744ee46a2b1c791b99bbb115bed5dcf1a92a",
+  "formal_quality": false,
+  "independent_semantic_reviews": 0,
+  "real_vendor_calls": 0,
+  "physical_loopback_http": 4,
+  "problem_budget": {
+    "problemId": "<synthetic-redacted>",
+    "deadline": 1792939315527,
+    "maxReservations": 1000,
+    "used": 4,
+    "remaining": 996
+  },
+  "records": [
+    {
+      "mode": "http_failure",
+      "run_id": "l2_scenario:l2_scenario-01:2:new",
+      "case_id": "l2_scenario-01",
+      "case_sha256": "ef1b9039a8d50fad939ef04eb4e6e6369c2927959b16e20bd0db2f17d0e2c5a1",
+      "arm": "new",
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "domain": "l2_scenario",
+      "repeat": 2,
+      "scope": {
+        "owner_id": "008cb23b-5a50-5263-a491-c77aca8acc77",
+        "contact_id": "674b3902-79f0-5f84-acc9-54c8ae625ca9"
+      },
+      "attempts": [
+        {
+          "attempt_id": "b202c462-c1b7-4172-bf90-60a1160feb02",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "9dd261035bba771b7ac44806b36ad20bf8274968844894242cbeecb3075ed236",
+          "started_at": "2026-10-25T14:26:57.205Z",
+          "status": "unknown",
+          "sent": true,
+          "prompt_sha256": "70204891fb4d754021d54a98d295a9f70ecc889f4c5317285758e8539a657eeb",
+          "schema_sha256": "e3ff4902bbf1c49ebb158dee0d08d825e10399b3c002b6299ce2a458bce4444e",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "e6cda35d-8868-438a-8821-e9c3db15b4ac",
+            "ordinal": 1,
+            "binding_sha256": "9db713544b739c9f13962c5004728a963a7ebcdd7b6942f8b36ed5a5584cea81",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939315527,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:26:57.479Z",
+          "response_sha256": "68e40a214c988f5ef89172e156dcca5e8ea85c16e85df7cf2c038cd114620a6d",
+          "response_model": "unknown",
+          "response_fingerprint": "unknown",
+          "usage": null,
+          "cost": null,
+          "error_code": "supplier_response_not_complete",
+          "finished_at": "2026-10-25T14:26:57.551Z"
+        }
+      ],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+        "runtime": "typescript",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "9d4044e8184ec9d73b4fdcbf5517cc5d63e532ed67768b185beb9c3577004ce9",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "production_createHostModelAccounting",
+          "actual_profile": true
+        },
+        "public_entry": "createLayeredMemoryManagement.refresh + ExtractionTaskStore.claim + createL2ScenarioHttp.handlePrivate",
+        "named_driver": "l2_scenario",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:26:56.917Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "http_status": 503,
+        "body": {
+          "error": "layered_memory_unavailable"
+        }
+      },
+      "audit": {
+        "persisted_physical_count": 1,
+        "pg_job_physical_count": 1,
+        "outbound_ledger_count": 1,
+        "model_call_receipts": 1,
+        "legacy_outbound_ledger_gap": false,
+        "source_snapshot_sha256": "722177298feffcf5a60698116e6a8257633e4b71daebf39a3000a182dbe67d1b"
+      },
+      "business_output": {
+        "scenarios": [],
+        "profiles": [],
+        "sources": [
+          {
+            "source_id": "l2_scenario-01-s1",
+            "owner_id": "synthetic-owner-l2_scenario-01",
+            "contact_id": "synthetic-contact-l2_scenario-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：本周六下午三点在合成公园北门见面。",
+            "storage_id": "2f52d959-cb29-5782-a66b-6c7d9d8e7f6b",
+            "memory_id": "15ea483c-609b-59ac-a00c-23766dfe9577",
+            "scoped": true
+          },
+          {
+            "source_id": "l2_scenario-01-s2",
+            "owner_id": "synthetic-owner-l2_scenario-01",
+            "contact_id": "synthetic-contact-l2_scenario-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "用户回复：收到，周六下午三点，合成公园北门。",
+            "storage_id": "12d31f07-83f8-5962-a0f4-0307ddca746d",
+            "memory_id": "0dea4fa1-eafe-5753-a38a-97003b606255",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:26:57.086Z",
+            "monotonic_ms": 2415.774166
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:26:57.205Z",
+            "monotonic_ms": 2534.258166
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:26:57.614Z",
+            "monotonic_ms": 2943.773875
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:26:57.614Z",
+          "monotonic_ms": 2943.773875
+        }
+      },
+      "business_error": "layered_memory_unavailable",
+      "durable_accounting_matches": true,
+      "elapsed_ms": 1548.442917
+    },
+    {
+      "mode": "http_failure",
+      "run_id": "l2_scenario:l2_scenario-01:2:old",
+      "case_id": "l2_scenario-01",
+      "case_sha256": "ef1b9039a8d50fad939ef04eb4e6e6369c2927959b16e20bd0db2f17d0e2c5a1",
+      "arm": "old",
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "domain": "l2_scenario",
+      "repeat": 2,
+      "scope": {
+        "owner_id": "008cb23b-5a50-5263-a491-c77aca8acc77",
+        "contact_id": "674b3902-79f0-5f84-acc9-54c8ae625ca9"
+      },
+      "attempts": [
+        {
+          "attempt_id": "6e41dd76-7a7e-4a15-8bc7-bc6db7be56a0",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "aeaa5d1bc2d65b063f47569b80ade4a696405a82b601e2e1d1b6fb9b88f29994",
+          "started_at": "2026-10-25T14:26:59.713Z",
+          "status": "unknown",
+          "sent": true,
+          "prompt_sha256": "1277833f713756e5359e4e099e5db635f8b701587d1f8aa34b5062d0b48cd824",
+          "schema_sha256": "bdd98c43b83a90f0197d484783075daee51ed493b41ce0a0a0a9be9c6c1246ba",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "fb5cd5bb-7818-43d4-a081-6e939fc6e96f",
+            "ordinal": 2,
+            "binding_sha256": "d382b1ac18d67dbcdccfe3bbd9ea621e9bda396c257ba24640f2b382a0bcbbf3",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939315527,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:26:59.996Z",
+          "response_sha256": "68e40a214c988f5ef89172e156dcca5e8ea85c16e85df7cf2c038cd114620a6d",
+          "response_model": "unknown",
+          "response_fingerprint": "unknown",
+          "usage": null,
+          "cost": null,
+          "error_code": "supplier_response_not_complete",
+          "finished_at": "2026-10-25T14:27:00.070Z"
+        }
+      ],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+        "runtime": "isolated_python",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "73068b176fcf1dac36bf858a0f58747275e562a2caf54c488a295fcef53c50b8",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "pinned_shared_priority_bridge_only",
+          "actual_profile": true
+        },
+        "public_entry": "LayeredMemoryService.organize + PostgresBackgroundTaskRepository.claim_next_step + LayeredMemoryService.run_batch",
+        "named_driver": "l2_scenario",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:26:58.384Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "processed_count": 0,
+        "state": [
+          {
+            "owner_id": "008cb23b-5a50-5263-a491-c77aca8acc77",
+            "contact_id": "674b3902-79f0-5f84-acc9-54c8ae625ca9",
+            "settings_generation": 1,
+            "organization_generation": 0,
+            "enabled": true,
+            "status": "failed",
+            "covered_count": 0,
+            "error_code": "model_call_failed",
+            "last_action": null,
+            "updated_at": null,
+            "dirty_revision": 2,
+            "consumed_revision": 0,
+            "next_due_at": null,
+            "next_boundary_at": null,
+            "maintenance_allowed": false,
+            "scope_kind": "contact",
+            "scope_key": "674b3902-79f0-5f84-acc9-54c8ae625ca9",
+            "correction_revision": 0,
+            "scenario_mappings": [],
+            "mapping_cursor": null,
+            "mapping_next_cursor": null,
+            "profile": null,
+            "feedback": [],
+            "protected_count": 0,
+            "pending_fact_count": 0
+          },
+          [
+            {
+              "memory": {
+                "memory_id": "15ea483c-609b-59ac-a00c-23766dfe9577",
+                "scope": {
+                  "owner_id": "008cb23b-5a50-5263-a491-c77aca8acc77",
+                  "contact_id": "674b3902-79f0-5f84-acc9-54c8ae625ca9"
+                },
+                "text": "联系人明确说：本周六下午三点在合成公园北门见面。",
+                "category": "common_fact",
+                "source_ids": [
+                  "2f52d959-cb29-5782-a66b-6c7d9d8e7f6b"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:26:58.167720+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "15ea483c-609b-59ac-a00c-23766dfe9577",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "2f52d959-cb29-5782-a66b-6c7d9d8e7f6b",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "2f52d959-cb29-5782-a66b-6c7d9d8e7f6b"
+              ]
+            },
+            {
+              "memory": {
+                "memory_id": "0dea4fa1-eafe-5753-a38a-97003b606255",
+                "scope": {
+                  "owner_id": "008cb23b-5a50-5263-a491-c77aca8acc77",
+                  "contact_id": "674b3902-79f0-5f84-acc9-54c8ae625ca9"
+                },
+                "text": "用户回复：收到，周六下午三点，合成公园北门。",
+                "category": "common_fact",
+                "source_ids": [
+                  "12d31f07-83f8-5962-a0f4-0307ddca746d"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:26:58.169361+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "0dea4fa1-eafe-5753-a38a-97003b606255",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "12d31f07-83f8-5962-a0f4-0307ddca746d",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "12d31f07-83f8-5962-a0f4-0307ddca746d"
+              ]
+            }
+          ],
+          [],
+          {
+            "task_id": "31b9c041-5734-4322-9a11-081d271ad2a4",
+            "owner_id": "008cb23b-5a50-5263-a491-c77aca8acc77",
+            "contact_id": "674b3902-79f0-5f84-acc9-54c8ae625ca9",
+            "settings_generation": 1,
+            "target_key": "e481dcafc9ef615862040ce685ae0bfffba9ede2b9cee1faaa571c340874290a",
+            "contract": "scenario-v3:deadline-v1:coverage-v1:correction-v1:verified_items:personal-background-v1:l2-1500:l3-2000:document-tools-v1:physical-budget-v1:scenario-context-v1:profile-tools-v1:c07d99e6f7def1b86b55a617713962f4d99b753d25386d22e738f874e5df402f",
+            "target_manifest": [
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "15ea483c-609b-59ac-a00c-23766dfe9577",
+                "source_ids": [
+                  "2f52d959-cb29-5782-a66b-6c7d9d8e7f6b"
+                ],
+                "source_refs": [],
+                "record_sha256": "2a559addc0c5905cd563c8a70c88aef2a35a1a443d2f6db42d41892c4db37e06",
+                "timing_sha256": "5e1b2722d59571c3a498c833c5355577eda77849a89a7a726cc1d7a82939c179",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "dab73407f6b3d7490f199643e16a00e654b1d55594d2e74b23ca2f4d1060f60a",
+                "organization_timing_sha256": "5e1b2722d59571c3a498c833c5355577eda77849a89a7a726cc1d7a82939c179",
+                "version_evidence_source_current": false
+              },
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "0dea4fa1-eafe-5753-a38a-97003b606255",
+                "source_ids": [
+                  "12d31f07-83f8-5962-a0f4-0307ddca746d"
+                ],
+                "source_refs": [],
+                "record_sha256": "039090da320ac2309811b34fa7050a98b6b8aaaaf5fc11d6a6fb81ccec3f4da5",
+                "timing_sha256": "33e5d7b3f2366d7edc6b78660d7b3ec87efcdc2fed2bca18da092f51eb54451a",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "ac477566e4baa972208b836dba8d36221adbc0705bba1d1c5208629a2568899d",
+                "organization_timing_sha256": "33e5d7b3f2366d7edc6b78660d7b3ec87efcdc2fed2bca18da092f51eb54451a",
+                "version_evidence_source_current": false
+              }
+            ],
+            "dependency_ids": [
+              "0dea4fa1-eafe-5753-a38a-97003b606255",
+              "12d31f07-83f8-5962-a0f4-0307ddca746d",
+              "15ea483c-609b-59ac-a00c-23766dfe9577",
+              "2f52d959-cb29-5782-a66b-6c7d9d8e7f6b"
+            ],
+            "state": "active",
+            "revision": 1,
+            "last_action": "start",
+            "batch_number": 0,
+            "run_remaining": 1,
+            "pending_receipt": false,
+            "model_calls_used": 1,
+            "model_call_limit": 16,
+            "created_at": "2026-10-25 22:26:58.938768+08:00",
+            "receipt_batch_id": null,
+            "receipt_lease_generation": null,
+            "profile_required": true,
+            "profile_status": "pending",
+            "target_dirty_revision": 2,
+            "scope_kind": "contact",
+            "scope_key": "674b3902-79f0-5f84-acc9-54c8ae625ca9"
+          }
+        ]
+      },
+      "audit": {
+        "persisted_physical_count": 1,
+        "pg_job_physical_count": 1,
+        "outbound_ledger_count": 0,
+        "model_call_receipts": 0,
+        "legacy_outbound_ledger_gap": true,
+        "source_snapshot_sha256": "722177298feffcf5a60698116e6a8257633e4b71daebf39a3000a182dbe67d1b"
+      },
+      "business_output": {
+        "scenarios": [],
+        "profiles": [],
+        "sources": [
+          {
+            "source_id": "l2_scenario-01-s1",
+            "owner_id": "synthetic-owner-l2_scenario-01",
+            "contact_id": "synthetic-contact-l2_scenario-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：本周六下午三点在合成公园北门见面。",
+            "storage_id": "2f52d959-cb29-5782-a66b-6c7d9d8e7f6b",
+            "memory_id": "15ea483c-609b-59ac-a00c-23766dfe9577",
+            "scoped": true
+          },
+          {
+            "source_id": "l2_scenario-01-s2",
+            "owner_id": "synthetic-owner-l2_scenario-01",
+            "contact_id": "synthetic-contact-l2_scenario-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "用户回复：收到，周六下午三点，合成公园北门。",
+            "storage_id": "12d31f07-83f8-5962-a0f4-0307ddca746d",
+            "memory_id": "0dea4fa1-eafe-5753-a38a-97003b606255",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:26:59.064Z",
+            "monotonic_ms": 4393.663958
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:26:59.713Z",
+            "monotonic_ms": 5042.615375
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:27:00.230Z",
+            "monotonic_ms": 5559.387666
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:27:00.230Z",
+          "monotonic_ms": 5559.387666
+        }
+      },
+      "durable_accounting_matches": true,
+      "elapsed_ms": 2612.5731669999996
+    },
+    {
+      "mode": "http_failure",
+      "run_id": "l3_profile:l3_profile-01:2:old",
+      "case_id": "l3_profile-01",
+      "case_sha256": "9a1f9c75301794f9596af39c245ea4ea20bd38a6c9c205e7313a2cf4adc4ccf1",
+      "arm": "old",
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "domain": "l3_profile",
+      "repeat": 2,
+      "scope": {
+        "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+        "contact_id": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0"
+      },
+      "attempts": [
+        {
+          "attempt_id": "d08f10a5-48db-4adc-a52c-a1a33dbb5e9d",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "35026440b0a5621de302088ffc317d6fb27858eb66f8c523e031320811f96ae6",
+          "started_at": "2026-10-25T14:27:02.401Z",
+          "status": "unknown",
+          "sent": true,
+          "prompt_sha256": "10d6b3f14da5f710c26038e87c183ed78e8be3dac73169c79fbab2e53707fd85",
+          "schema_sha256": "bdd98c43b83a90f0197d484783075daee51ed493b41ce0a0a0a9be9c6c1246ba",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "81403822-08b8-45bd-9233-a64da4122724",
+            "ordinal": 3,
+            "binding_sha256": "23a7ca80d6f46fb29f8fbcbb2ed5df9c16b48459a3048431f4cee76aba45da1b",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939315527,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:27:02.677Z",
+          "response_sha256": "68e40a214c988f5ef89172e156dcca5e8ea85c16e85df7cf2c038cd114620a6d",
+          "response_model": "unknown",
+          "response_fingerprint": "unknown",
+          "usage": null,
+          "cost": null,
+          "error_code": "supplier_response_not_complete",
+          "finished_at": "2026-10-25T14:27:02.747Z"
+        }
+      ],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+        "runtime": "isolated_python",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "23007b7d73a297cbac15ecf31c9b8cadc0778b6a1b3bb7e122a25700c0c122b8",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "pinned_shared_priority_bridge_only",
+          "actual_profile": true
+        },
+        "public_entry": "LayeredMemoryService.organize + PostgresBackgroundTaskRepository.claim_next_step + LayeredMemoryService.run_batch",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:27:01.077Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "processed_count": 0,
+        "state": [
+          {
+            "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+            "contact_id": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0",
+            "settings_generation": 1,
+            "organization_generation": 0,
+            "enabled": true,
+            "status": "failed",
+            "covered_count": 0,
+            "error_code": "model_call_failed",
+            "last_action": null,
+            "updated_at": null,
+            "dirty_revision": 2,
+            "consumed_revision": 0,
+            "next_due_at": null,
+            "next_boundary_at": null,
+            "maintenance_allowed": false,
+            "scope_kind": "contact",
+            "scope_key": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0",
+            "correction_revision": 0,
+            "scenario_mappings": [],
+            "mapping_cursor": null,
+            "mapping_next_cursor": null,
+            "profile": null,
+            "feedback": [],
+            "protected_count": 0,
+            "pending_fact_count": 0
+          },
+          [
+            {
+              "memory": {
+                "memory_id": "7f81c821-4e45-5d95-a707-5d7b3110b895",
+                "scope": {
+                  "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+                  "contact_id": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0"
+                },
+                "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+                "category": "common_fact",
+                "source_ids": [
+                  "1d11de39-8d2b-5f81-a033-f4a94603753f"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:27:00.857604+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "7f81c821-4e45-5d95-a707-5d7b3110b895",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "1d11de39-8d2b-5f81-a033-f4a94603753f",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "1d11de39-8d2b-5f81-a033-f4a94603753f"
+              ]
+            },
+            {
+              "memory": {
+                "memory_id": "99626a18-62e7-5777-ab49-f30aafc0f25a",
+                "scope": {
+                  "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+                  "contact_id": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0"
+                },
+                "text": "另一条联系人自述：我长期不吃香菜。",
+                "category": "common_fact",
+                "source_ids": [
+                  "eed8f2b6-f24b-523d-a216-562ea325b46b"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:27:00.859250+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "99626a18-62e7-5777-ab49-f30aafc0f25a",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "eed8f2b6-f24b-523d-a216-562ea325b46b",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "eed8f2b6-f24b-523d-a216-562ea325b46b"
+              ]
+            }
+          ],
+          [],
+          {
+            "task_id": "58bf4b1d-7fa0-4850-a06d-edd383d8ff3b",
+            "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+            "contact_id": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0",
+            "settings_generation": 1,
+            "target_key": "3b4c46c41552b62dc8b62221c11795d047d518db68182c67791c060095e06509",
+            "contract": "scenario-v3:deadline-v1:coverage-v1:correction-v1:verified_items:personal-background-v1:l2-1500:l3-2000:document-tools-v1:physical-budget-v1:scenario-context-v1:profile-tools-v1:c07d99e6f7def1b86b55a617713962f4d99b753d25386d22e738f874e5df402f",
+            "target_manifest": [
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "7f81c821-4e45-5d95-a707-5d7b3110b895",
+                "source_ids": [
+                  "1d11de39-8d2b-5f81-a033-f4a94603753f"
+                ],
+                "source_refs": [],
+                "record_sha256": "09e579b1a75a4481b5fe4d2f7c7bda3629171816d057e2bc312c654ca7750ed3",
+                "timing_sha256": "0f56e1fa5330d02cae21936ff433aaff17d3f534fa4fe72530c59f3abd705ff6",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "fd800405c005371a354ceeb77156111f763c95c0a0e38fb4f6d6b85e811dbe8c",
+                "organization_timing_sha256": "0f56e1fa5330d02cae21936ff433aaff17d3f534fa4fe72530c59f3abd705ff6",
+                "version_evidence_source_current": false
+              },
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "99626a18-62e7-5777-ab49-f30aafc0f25a",
+                "source_ids": [
+                  "eed8f2b6-f24b-523d-a216-562ea325b46b"
+                ],
+                "source_refs": [],
+                "record_sha256": "f05f75da01a23a8ff66f952eca668b229a1157d3e4fc8f428e7d50f857b13ec4",
+                "timing_sha256": "543bf77aa705d2c888ca6319454cbf5da941532abfdd35bd2bf74166b79f052a",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "94189ba561832898b656a6791b0644fa739b45ce09bdbbfc416bf66e1cf83f65",
+                "organization_timing_sha256": "543bf77aa705d2c888ca6319454cbf5da941532abfdd35bd2bf74166b79f052a",
+                "version_evidence_source_current": false
+              }
+            ],
+            "dependency_ids": [
+              "1d11de39-8d2b-5f81-a033-f4a94603753f",
+              "7f81c821-4e45-5d95-a707-5d7b3110b895",
+              "99626a18-62e7-5777-ab49-f30aafc0f25a",
+              "eed8f2b6-f24b-523d-a216-562ea325b46b"
+            ],
+            "state": "active",
+            "revision": 1,
+            "last_action": "start",
+            "batch_number": 0,
+            "run_remaining": 1,
+            "pending_receipt": false,
+            "model_calls_used": 1,
+            "model_call_limit": 16,
+            "created_at": "2026-10-25 22:27:01.631791+08:00",
+            "receipt_batch_id": null,
+            "receipt_lease_generation": null,
+            "profile_required": true,
+            "profile_status": "pending",
+            "target_dirty_revision": 2,
+            "scope_kind": "contact",
+            "scope_key": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0"
+          }
+        ]
+      },
+      "audit": {
+        "persisted_physical_count": 1,
+        "pg_job_physical_count": 1,
+        "outbound_ledger_count": 0,
+        "model_call_receipts": 0,
+        "legacy_outbound_ledger_gap": true,
+        "source_snapshot_sha256": "6a3ec5b1caec3be6d74106277222e9085bbb81d396c31707f3e4fa6f4067ecfa"
+      },
+      "business_output": {
+        "scenarios": [],
+        "profiles": [],
+        "sources": [
+          {
+            "source_id": "l3_profile-01-s1",
+            "owner_id": "synthetic-owner-l3_profile-01",
+            "contact_id": "synthetic-contact-l3_profile-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+            "storage_id": "1d11de39-8d2b-5f81-a033-f4a94603753f",
+            "memory_id": "7f81c821-4e45-5d95-a707-5d7b3110b895",
+            "scoped": true
+          },
+          {
+            "source_id": "l3_profile-01-s2",
+            "owner_id": "synthetic-owner-l3_profile-01",
+            "contact_id": "synthetic-contact-l3_profile-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "另一条联系人自述：我长期不吃香菜。",
+            "storage_id": "eed8f2b6-f24b-523d-a216-562ea325b46b",
+            "memory_id": "99626a18-62e7-5777-ab49-f30aafc0f25a",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:27:01.750Z",
+            "monotonic_ms": 7079.157208
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:27:02.401Z",
+            "monotonic_ms": 7730.560208
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:27:02.899Z",
+            "monotonic_ms": 8227.865291
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:27:02.899Z",
+          "monotonic_ms": 8227.865291
+        }
+      },
+      "durable_accounting_matches": true,
+      "elapsed_ms": 2572.0801250000004
+    },
+    {
+      "mode": "http_failure",
+      "run_id": "l3_profile:l3_profile-01:2:new",
+      "case_id": "l3_profile-01",
+      "case_sha256": "9a1f9c75301794f9596af39c245ea4ea20bd38a6c9c205e7313a2cf4adc4ccf1",
+      "arm": "new",
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "domain": "l3_profile",
+      "repeat": 2,
+      "scope": {
+        "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+        "contact_id": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0"
+      },
+      "attempts": [
+        {
+          "attempt_id": "9c18d30e-3e13-4590-a1b5-5de64a9a029a",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "0f9834b4b4b22bd4df579f3124139e96f0656f5115facc7d727392dab1068ec6",
+          "started_at": "2026-10-25T14:27:03.905Z",
+          "status": "unknown",
+          "sent": true,
+          "prompt_sha256": "5d89599a51d2109156ebff4343cec29c4839c4b28a17ce53addd317a141a5bc7",
+          "schema_sha256": "e3ff4902bbf1c49ebb158dee0d08d825e10399b3c002b6299ce2a458bce4444e",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "reservation": {
+            "reservation_id": "aabded9a-91f5-44d9-84d9-9594cd9e1b3e",
+            "ordinal": 4,
+            "binding_sha256": "81c96711394e942506b8ec8f26d17d485d1cbef8ac04c1a0700e4f68b039360d",
+            "problemId": "<synthetic-redacted>",
+            "deadline": 1792939315527,
+            "reservation_owner": "outer_broker"
+          },
+          "send_authorized": true,
+          "send_authorized_at": "2026-10-25T14:27:04.191Z",
+          "response_sha256": "68e40a214c988f5ef89172e156dcca5e8ea85c16e85df7cf2c038cd114620a6d",
+          "response_model": "unknown",
+          "response_fingerprint": "unknown",
+          "usage": null,
+          "cost": null,
+          "error_code": "supplier_response_not_complete",
+          "finished_at": "2026-10-25T14:27:04.261Z"
+        }
+      ],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+        "runtime": "typescript",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "9aeca92403c52b14833e82b0ff356ce27dea6c9100fcc280463186302997a5fd",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "production_createHostModelAccounting",
+          "actual_profile": true
+        },
+        "public_entry": "createLayeredMemoryManagement.refresh + ExtractionTaskStore.claim + createL2ScenarioHttp.handlePrivate",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:27:03.660Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "http_status": 503,
+        "body": {
+          "error": "layered_memory_unavailable"
+        }
+      },
+      "audit": {
+        "persisted_physical_count": 1,
+        "pg_job_physical_count": 1,
+        "outbound_ledger_count": 1,
+        "model_call_receipts": 1,
+        "legacy_outbound_ledger_gap": false,
+        "source_snapshot_sha256": "6a3ec5b1caec3be6d74106277222e9085bbb81d396c31707f3e4fa6f4067ecfa"
+      },
+      "business_output": {
+        "scenarios": [],
+        "profiles": [],
+        "sources": [
+          {
+            "source_id": "l3_profile-01-s1",
+            "owner_id": "synthetic-owner-l3_profile-01",
+            "contact_id": "synthetic-contact-l3_profile-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+            "storage_id": "1d11de39-8d2b-5f81-a033-f4a94603753f",
+            "memory_id": "7f81c821-4e45-5d95-a707-5d7b3110b895",
+            "scoped": true
+          },
+          {
+            "source_id": "l3_profile-01-s2",
+            "owner_id": "synthetic-owner-l3_profile-01",
+            "contact_id": "synthetic-contact-l3_profile-01",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "另一条联系人自述：我长期不吃香菜。",
+            "storage_id": "eed8f2b6-f24b-523d-a216-562ea325b46b",
+            "memory_id": "99626a18-62e7-5777-ab49-f30aafc0f25a",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:27:03.793Z",
+            "monotonic_ms": 9122.359458
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:27:03.905Z",
+            "monotonic_ms": 9234.660875
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:27:04.322Z",
+            "monotonic_ms": 9650.961
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:27:04.322Z",
+          "monotonic_ms": 9650.961
+        }
+      },
+      "business_error": "layered_memory_unavailable",
+      "durable_accounting_matches": true,
+      "elapsed_ms": 1425.3543750000008
+    }
+  ],
+  "persistent_journal": {},
+  "observed_engineering_runs": 4,
+  "unique_planned_run_ids": 4,
+  "formal_quality_runs": 0,
+  "nonreply_planned": 1056,
+  "unified_planned": 1152,
+  "unified_formal_not_run": 1152,
+  "source_observation_times": [
+    "2026-10-20T09:00:00+08:00"
+  ],
+  "requested_as_of": "2026-10-23T12:00:00+08:00",
+  "effective_clock": "actual_wall_engineering_only",
+  "frozen_semantic_oracle_used_by_supplier": false,
+  "raw_directory_label": "notalone-layered-evidence-Tz90aB",
+  "expected_probes": "failures",
+  "receipts": [
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "008cb23b-5a50-5263-a491-c77aca8acc77",
+        "contact_id": "674b3902-79f0-5f84-acc9-54c8ae625ca9"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "008cb23b-5a50-5263-a491-c77aca8acc77",
+        "contact_id": "674b3902-79f0-5f84-acc9-54c8ae625ca9"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+        "contact_id": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "b6e382a2-ccb0-5247-a7a5-2cd8d43c7f5f",
+        "contact_id": "2d1796e6-fe0e-5dd5-aab3-90d1183a4ba0"
+      }
+    }
+  ]
+}

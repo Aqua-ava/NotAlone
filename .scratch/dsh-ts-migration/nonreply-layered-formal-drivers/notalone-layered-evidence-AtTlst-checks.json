@@ -1,0 +1,62 @@
+[
+  {
+    "run_id": "l2_scenario:l2_scenario-01:3:old",
+    "mode": "permission",
+    "passed": true
+  },
+  {
+    "run_id": "l2_scenario:l2_scenario-01:3:new",
+    "mode": "permission",
+    "passed": true
+  },
+  {
+    "run_id": "l2_scenario:l2_scenario-01:3:old",
+    "mode": "source",
+    "passed": true
+  },
+  {
+    "run_id": "l2_scenario:l2_scenario-01:3:new",
+    "mode": "source",
+    "passed": true
+  },
+  {
+    "run_id": "l2_scenario:l2_scenario-01:3:old",
+    "mode": "lease",
+    "passed": true
+  },
+  {
+    "run_id": "l2_scenario:l2_scenario-01:3:new",
+    "mode": "lease",
+    "passed": true
+  },
+  {
+    "run_id": "l3_profile:l3_profile-01:3:old",
+    "mode": "permission",
+    "passed": true
+  },
+  {
+    "run_id": "l3_profile:l3_profile-01:3:new",
+    "mode": "permission",
+    "passed": true
+  },
+  {
+    "run_id": "l3_profile:l3_profile-01:3:old",
+    "mode": "source",
+    "passed": true
+  },
+  {
+    "run_id": "l3_profile:l3_profile-01:3:new",
+    "mode": "source",
+    "passed": true
+  },
+  {
+    "run_id": "l3_profile:l3_profile-01:3:old",
+    "mode": "lease",
+    "passed": true
+  },
+  {
+    "run_id": "l3_profile:l3_profile-01:3:new",
+    "mode": "lease",
+    "passed": true
+  }
+]

@@ -1,0 +1,71 @@
+{
+  "public_file": "profile-probe-1792938071207.json",
+  "public_sha256": "753a04595e543857733eb685db5f6cb62f8ac582b809b7b931c63b70305e5dda",
+  "raw": [
+    {
+      "file": "raw/http503/budget/synthetic-budget.sqlite",
+      "raw_sha256": "ffacab7ba3e391466c155081df5dfbbd5ce96cc77d5246c4b36cd70da01735a3"
+    },
+    {
+      "file": "raw/http503/fixture-open-error-new.log",
+      "raw_sha256": "d9f3f2bdbf797e31246556704c2f5eaeee913d100efe5ffc7d95bca0667b6116"
+    },
+    {
+      "file": "raw/http503/fixture-open-error-old.log",
+      "raw_sha256": "d9f3f2bdbf797e31246556704c2f5eaeee913d100efe5ffc7d95bca0667b6116"
+    },
+    {
+      "file": "raw/http503/journal/attempts.sqlite",
+      "raw_sha256": "6362d64a9036b5f0cce0beff72fe57d942bb83558836ca89968ee3eeda69d039"
+    },
+    {
+      "file": "raw/http503/journal-events.json",
+      "raw_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "file": "raw/http503/report.json",
+      "raw_sha256": "dc285ad67fcab326bb9e99b6e41cc43389bc3ab62030dfc61679ea896bfe2255"
+    },
+    {
+      "file": "raw/http503/wire.json",
+      "raw_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "file": "raw/profile-probe.json",
+      "raw_sha256": "9a90bf1f098fc003c66117c588dc3d9d871763514901a5ba2488fe307b43291f"
+    },
+    {
+      "file": "raw/success/budget/synthetic-budget.sqlite",
+      "raw_sha256": "3e9bdcc3cbd51385266fa790e4b23e770e2406d7ef77738d7989e62876880e9b"
+    },
+    {
+      "file": "raw/success/fixture-open-error-new.log",
+      "raw_sha256": "d9f3f2bdbf797e31246556704c2f5eaeee913d100efe5ffc7d95bca0667b6116"
+    },
+    {
+      "file": "raw/success/fixture-open-error-old.log",
+      "raw_sha256": "d9f3f2bdbf797e31246556704c2f5eaeee913d100efe5ffc7d95bca0667b6116"
+    },
+    {
+      "file": "raw/success/journal/attempts.sqlite",
+      "raw_sha256": "6362d64a9036b5f0cce0beff72fe57d942bb83558836ca89968ee3eeda69d039"
+    },
+    {
+      "file": "raw/success/journal-events.json",
+      "raw_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "file": "raw/success/report.json",
+      "raw_sha256": "5fb3df957c09270ccdd9329ef2d7370547f16480ae8b0285efb2bf3ff639a4b2"
+    },
+    {
+      "file": "raw/success/wire.json",
+      "raw_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "file": "worker.log",
+      "raw_sha256": "0648d7ee1db04df34b3b253d7444c1caef7ff84df14d3126acf4a8da9bbe0d2f"
+    }
+  ],
+  "private_directory_mode": 448
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "run_id": "l2_scenario:l2_scenario-11:1:new",
+    "mode": "cancel",
+    "passed": false
+  },
+  {
+    "run_id": "l2_scenario:l2_scenario-11:1:old",
+    "mode": "cancel",
+    "passed": false
+  },
+  {
+    "run_id": "l3_profile:l3_profile-11:1:old",
+    "mode": "cancel",
+    "passed": false
+  },
+  {
+    "run_id": "l3_profile:l3_profile-11:1:new",
+    "mode": "cancel",
+    "passed": false
+  }
+]

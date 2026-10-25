@@ -1,0 +1,22 @@
+[
+  {
+    "run_id": "l2_scenario:l2_scenario-01:2:new",
+    "mode": "http_failure",
+    "passed": true
+  },
+  {
+    "run_id": "l2_scenario:l2_scenario-01:2:old",
+    "mode": "http_failure",
+    "passed": true
+  },
+  {
+    "run_id": "l3_profile:l3_profile-01:2:old",
+    "mode": "http_failure",
+    "passed": true
+  },
+  {
+    "run_id": "l3_profile:l3_profile-01:2:new",
+    "mode": "http_failure",
+    "passed": true
+  }
+]

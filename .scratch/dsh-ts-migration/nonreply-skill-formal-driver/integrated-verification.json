@@ -1,0 +1,10 @@
+{
+  "command": "node .scratch/dsh-ts-migration/nonreply-skill-formal-driver/probe.mjs --synthetic-only",
+  "exit_code": 1,
+  "raw_directory_label": "na-skill-verification-moItml",
+  "raw_stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "raw_stderr_sha256": "f5c5aec56787f6077108cd8662f7ccd931bbbdef77872291314dceec30b8beb1",
+  "public_log_sha256": "da004be9a842e428037c57744a86b628a8fcd239b367e35b217f83fdd9e85e6a",
+  "public_summary": null,
+  "public_summary_sha256": null
+}

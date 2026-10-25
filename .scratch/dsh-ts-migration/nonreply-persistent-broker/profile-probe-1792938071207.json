@@ -1,0 +1,198 @@
+{
+  "schema_version": "persistent-broker-profile-probe-v1",
+  "status": "failed",
+  "failure": "official_profile_probe_failed",
+  "worker_exit_code": 1,
+  "summary": {
+    "candidate_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+    "sdk": {
+      "@deepseek-ai/dsh": {
+        "version": "0.2.1-rc.2",
+        "entry_sha256": "80112efe368efb1a39720c7ada0af00442e5131fb2744edaaff8a3e8bb499e6f"
+      },
+      "@deepseek-ai/dsh-llm": {
+        "version": "0.2.1-rc.2",
+        "entry_sha256": "d18d8ae4c8d961e628708c1e4698e09716a0ebb80e55a672e0bde1029bec1155"
+      },
+      "@deepseek-ai/dsh-llm-deepseek": {
+        "version": "0.2.1-rc.2",
+        "entry_sha256": "eba35025ed1eedda89c51f2da46a3a968f7be1d59719f2ceeadfc4518dff37d6"
+      }
+    },
+    "scenarios": [
+      {
+        "scenario": "success",
+        "population": {
+          "nonreply_planned": 1056,
+          "unified_planned": 1152,
+          "observed": 2,
+          "not_run": 1054,
+          "reply_not_run_by_this_executor": 96
+        },
+        "overall": "undetermined",
+        "formal_quality_runs": 0,
+        "records": [
+          {
+            "arm": "old",
+            "terminal_status": "failed",
+            "error_code": "executor_contract_failed",
+            "attempts": [],
+            "persisted_count": null,
+            "model_call_receipts": null,
+            "durable_accounting_matches": false,
+            "formal_profile": null,
+            "model_host": null,
+            "inner_problem_budget_bound": null,
+            "facts": null,
+            "five_phase_evidence": {
+              "complete": false,
+              "unknown_reason": "failed_business_no_final_markers"
+            }
+          },
+          {
+            "arm": "new",
+            "terminal_status": "failed",
+            "error_code": "executor_contract_failed",
+            "attempts": [],
+            "persisted_count": null,
+            "model_call_receipts": null,
+            "durable_accounting_matches": false,
+            "formal_profile": null,
+            "model_host": null,
+            "inner_problem_budget_bound": null,
+            "facts": null,
+            "five_phase_evidence": {
+              "complete": false,
+              "unknown_reason": "failed_business_no_final_markers"
+            }
+          }
+        ],
+        "http": 0,
+        "broker": {
+          "schema_version": "persistent-nonreply-broker-v1",
+          "transport": "loopback_synthetic",
+          "initial_used": 0,
+          "current_used": 0,
+          "new_reservations": 0,
+          "attempts": 0,
+          "journal_reserved": 0,
+          "physical_attempts": 0,
+          "physical_unknown": 0,
+          "states": {
+            "ready": 0,
+            "reserved": 0,
+            "dispatching": 0,
+            "responded": 0,
+            "failed": 0,
+            "unknown": 0
+          },
+          "automatic_retries": 0,
+          "output_capacity_gate": false,
+          "cost_gate": false,
+          "five_phase_evidence": {
+            "complete": false,
+            "unknown_reason": "business_start_prepare_and_final_persistence_not_observed_by_transport"
+          },
+          "journal_chain": {
+            "events": 0,
+            "tail_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "journal": [],
+        "pg_cleaned": false,
+        "real_supplier_calls": 0
+      },
+      {
+        "scenario": "http503",
+        "population": {
+          "nonreply_planned": 1056,
+          "unified_planned": 1152,
+          "observed": 2,
+          "not_run": 1054,
+          "reply_not_run_by_this_executor": 96
+        },
+        "overall": "undetermined",
+        "formal_quality_runs": 0,
+        "records": [
+          {
+            "arm": "old",
+            "terminal_status": "failed",
+            "error_code": "executor_contract_failed",
+            "attempts": [],
+            "persisted_count": null,
+            "model_call_receipts": null,
+            "durable_accounting_matches": false,
+            "formal_profile": null,
+            "model_host": null,
+            "inner_problem_budget_bound": null,
+            "facts": null,
+            "five_phase_evidence": {
+              "complete": false,
+              "unknown_reason": "failed_business_no_final_markers"
+            }
+          },
+          {
+            "arm": "new",
+            "terminal_status": "failed",
+            "error_code": "executor_contract_failed",
+            "attempts": [],
+            "persisted_count": null,
+            "model_call_receipts": null,
+            "durable_accounting_matches": false,
+            "formal_profile": null,
+            "model_host": null,
+            "inner_problem_budget_bound": null,
+            "facts": null,
+            "five_phase_evidence": {
+              "complete": false,
+              "unknown_reason": "failed_business_no_final_markers"
+            }
+          }
+        ],
+        "http": 0,
+        "broker": {
+          "schema_version": "persistent-nonreply-broker-v1",
+          "transport": "loopback_synthetic",
+          "initial_used": 0,
+          "current_used": 0,
+          "new_reservations": 0,
+          "attempts": 0,
+          "journal_reserved": 0,
+          "physical_attempts": 0,
+          "physical_unknown": 0,
+          "states": {
+            "ready": 0,
+            "reserved": 0,
+            "dispatching": 0,
+            "responded": 0,
+            "failed": 0,
+            "unknown": 0
+          },
+          "automatic_retries": 0,
+          "output_capacity_gate": false,
+          "cost_gate": false,
+          "five_phase_evidence": {
+            "complete": false,
+            "unknown_reason": "business_start_prepare_and_final_persistence_not_observed_by_transport"
+          },
+          "journal_chain": {
+            "events": 0,
+            "tail_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "journal": [],
+        "pg_cleaned": false,
+        "real_supplier_calls": 0
+      }
+    ]
+  },
+  "cleanup": {
+    "owned_snapshot_process_references": 0,
+    "owned_source_archive_removed": true
+  },
+  "real_supplier_calls": 0,
+  "formal_quality_qualified": false,
+  "human_120_time_qualified": false,
+  "ticket25_approved": false,
+  "private_evidence_label": "na-broker-evidence-jv7tJO"
+}

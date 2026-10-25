@@ -1,0 +1,549 @@
+{
+  "schema_version": "skill-formal-driver-engineering-v1",
+  "candidate_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+  "source_snapshot_sha256": "40437e0857293c6a9582ab7fbed1335e49ce239709e4ff94aeb968186bd68f22",
+  "plan_sha256": "2e5c74e0950a125033b6de6f4b16d69e59f9b861eedceea19cfd50555623e692",
+  "material_manifest_sha256": "84b81a3255bffe8bc69da6f38c0dd79e1ba83510454ef8a9091c947b995b362b",
+  "source_manifest_sha256": "15f583ceeb648211f20c240548b944150444d7479d7f7544e1d6ee3e693d78ac",
+  "population": {
+    "nonreply_planned": 1056,
+    "unified_planned": 1152,
+    "observed": 2,
+    "not_run": 1054,
+    "reply_not_run_by_this_executor": 96
+  },
+  "scenarios": [
+    "correction"
+  ],
+  "records": [
+    {
+      "case_id": "skill_learning-12",
+      "arm": "old",
+      "scenario": "correction",
+      "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "terminal_status": "succeeded",
+      "business_terminal_status": "succeeded",
+      "error_code": null,
+      "actual_http": 1,
+      "http_statuses": [
+        200
+      ],
+      "pg_ledger_count": 1,
+      "pg_ledger_outcomes": [
+        "succeeded"
+      ],
+      "pg_usage": [
+        {
+          "input_tokens": 24,
+          "output_tokens": 17
+        }
+      ],
+      "model_call_receipts": [],
+      "model_host_journal_sha256": null,
+      "draft_count": 1,
+      "draft_states": [
+        "pending"
+      ],
+      "draft_revisions": [
+        1
+      ],
+      "existing_v1_unchanged": true,
+      "correction_source_bound": true,
+      "published_count": 0,
+      "cancel_persisted": false,
+      "automatic_retries": 0,
+      "task_states": [
+        {
+          "status": "succeeded",
+          "retry_count": 0,
+          "last_error_code": null
+        }
+      ],
+      "task_steps": [
+        {
+          "step_name": "propose_skill",
+          "status": "succeeded",
+          "attempt_count": 1
+        },
+        {
+          "step_name": "verify_skill_drafts",
+          "status": "succeeded",
+          "attempt_count": 1
+        }
+      ],
+      "source_binding_sha256": "1d394eda097bf53e28e266bb10157ed9ee3cf113c43105ee86d3570819934547",
+      "source_versions": [
+        {
+          "source_id": "skill_learning-12-s1",
+          "version": 1,
+          "observed_at": "2026-10-20T09:00:00+08:00"
+        },
+        {
+          "source_id": "skill_learning-12-s2",
+          "version": 1,
+          "observed_at": "2026-10-20T09:00:00+08:00"
+        },
+        {
+          "source_id": "skill_learning-12-s4",
+          "version": 1,
+          "observed_at": "2026-10-21T09:00:00+08:00"
+        }
+      ],
+      "five_phase_evidence": {
+        "schema_version": "skill-observed-latency-v1",
+        "clock": "process_monotonic_relative",
+        "complete": true,
+        "phases": {
+          "queue": {
+            "started_ms": 0,
+            "ended_ms": 59.61812500027008
+          },
+          "retrieval": {
+            "started_ms": 59.61812500027008,
+            "ended_ms": 299.71320801996626
+          },
+          "network_model": {
+            "started_ms": 299.71320801996626,
+            "ended_ms": 716.8594170070719
+          },
+          "validation": {
+            "started_ms": 716.8594170070719,
+            "ended_ms": 728.1586670142133
+          },
+          "persistence": {
+            "started_ms": 728.1586670142133,
+            "ended_ms": 776.1265830195043
+          }
+        },
+        "first_event_ms": 716.3334579963703,
+        "first_token_ms": 716.3334579963703,
+        "final_persisted_result_ms": 776.1265830195043,
+        "observed_ms": 802.3442080011591,
+        "overhead": {
+          "started_ms": 776.1265830195043,
+          "ended_ms": 802.3442080011591
+        },
+        "unknown_reason": null,
+        "definitions": {
+          "queue": "业务接纳至持久claim取得；包括授权准备，不是纯调度等待",
+          "retrieval": "claim后原材料重取、模型准备与许可，至真实SDK开始",
+          "network_model": "原SDK调用/stream开始至结束；不等于供应商单独延迟",
+          "validation": "SDK结束至原Store.save调用",
+          "persistence": "原Store.save进入至真实事务返回"
+        }
+      },
+      "execution": {
+        "runtime": "isolated_python",
+        "profile_sha256": "64d54e1b4b8db1d40615bd32fd29324e247613b1c1bbfde9c00b48310922e2e4",
+        "profile_template_sha256": null,
+        "model_host": "frozen_python_public_entry_no_ModelHost",
+        "public_entry": "PostgresSkillLearningStore.capture → LangChainSkillProposalRuntime.propose → PostgresSkillLearningStore.save",
+        "inner_problem_budget_bound": false,
+        "normal_new_entry_python_processes": null,
+        "background_worker_started": false,
+        "controls": {
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "top_p": 1,
+          "reasoningEffort": "off"
+        },
+        "clock": {
+          "frozen_as_of": "2026-10-23T04:00:00.000Z",
+          "applied_as_of": false,
+          "public_learning_clock": "absent",
+          "global_Date_mocked": false,
+          "pg_now_mocked": false
+        }
+      },
+      "physical_attempts": [
+        {
+          "route": "chat",
+          "status": "complete",
+          "sent": true,
+          "reservation_ordinal": 1,
+          "request_sha256": "5c3b13b2f04fcebe752762856669efe0296c311c89eaaa3a1801598680e9d830",
+          "prompt_sha256": "6d717feb6bf2f0be09000bd2a70046c7f89c727d79813812da6938a5aa3f4c67",
+          "schema_sha256": "24a50dd193d2087c7c9ca889d8e7769d6fac61dd28429ee67f853149d09e1ade",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": 1,
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "response_sha256": "6b1f33e47303400c294bdf0f123ba07b42f9f65856aa39df82ce3e7cd54be616",
+          "usage": {
+            "input_tokens": 24,
+            "output_tokens": 17,
+            "cache_read_tokens": null,
+            "cache_write_tokens": null,
+            "input_tokens_complete": true
+          },
+          "cost": null,
+          "error_code": null
+        }
+      ],
+      "broker_attempts": 1
+    },
+    {
+      "case_id": "skill_learning-12",
+      "arm": "new",
+      "scenario": "correction",
+      "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "terminal_status": "succeeded",
+      "business_terminal_status": "succeeded",
+      "error_code": null,
+      "actual_http": 1,
+      "http_statuses": [
+        200
+      ],
+      "pg_ledger_count": 1,
+      "pg_ledger_outcomes": [
+        "succeeded"
+      ],
+      "pg_usage": [
+        {
+          "input_tokens": 24,
+          "output_tokens": 17
+        }
+      ],
+      "model_call_receipts": [
+        {
+          "outcome": "succeeded",
+          "dispatch": "response_observed",
+          "input_tokens": 24,
+          "output_tokens": 17,
+          "cost_status": "unknown"
+        }
+      ],
+      "model_host_journal_sha256": "1bb051af63a876e934120fb232e434097f32c3257581768061c593fe8b2a42a9",
+      "draft_count": 1,
+      "draft_states": [
+        "pending"
+      ],
+      "draft_revisions": [
+        1
+      ],
+      "existing_v1_unchanged": true,
+      "correction_source_bound": true,
+      "published_count": 0,
+      "cancel_persisted": false,
+      "automatic_retries": 0,
+      "task_states": [
+        {
+          "status": "succeeded",
+          "retry_count": 0,
+          "last_error_code": null
+        }
+      ],
+      "task_steps": [
+        {
+          "step_name": "propose_skill",
+          "status": "succeeded",
+          "attempt_count": 1
+        },
+        {
+          "step_name": "verify_skill_drafts",
+          "status": "succeeded",
+          "attempt_count": 1
+        }
+      ],
+      "source_binding_sha256": "f40d99230fda7627f5949ee7c0df503befb7da15fdfb51680d7c2b0c10bb29b9",
+      "source_versions": [
+        {
+          "source_id": "skill_learning-12-s1",
+          "version": 1,
+          "observed_at": "2026-10-20T09:00:00+08:00"
+        },
+        {
+          "source_id": "skill_learning-12-s2",
+          "version": 1,
+          "observed_at": "2026-10-20T09:00:00+08:00"
+        },
+        {
+          "source_id": "skill_learning-12-s4",
+          "version": 1,
+          "observed_at": "2026-10-21T09:00:00+08:00"
+        }
+      ],
+      "five_phase_evidence": {
+        "schema_version": "skill-observed-latency-v1",
+        "clock": "process_monotonic_relative",
+        "complete": true,
+        "phases": {
+          "queue": {
+            "started_ms": 0,
+            "ended_ms": 136.54775
+          },
+          "retrieval": {
+            "started_ms": 136.54775,
+            "ended_ms": 281.901417
+          },
+          "network_model": {
+            "started_ms": 281.901417,
+            "ended_ms": 681.3308750000001
+          },
+          "validation": {
+            "started_ms": 681.3308750000001,
+            "ended_ms": 762.7210420000001
+          },
+          "persistence": {
+            "started_ms": 762.7210420000001,
+            "ended_ms": 816.35625
+          }
+        },
+        "first_event_ms": 680.1635000000001,
+        "first_token_ms": 680.186042,
+        "final_persisted_result_ms": 816.35625,
+        "observed_ms": 839.7914170000001,
+        "overhead": {
+          "started_ms": 816.35625,
+          "ended_ms": 839.7914170000001
+        },
+        "unknown_reason": null,
+        "definitions": {
+          "queue": "业务接纳至持久claim取得；包括授权准备，不是纯调度等待",
+          "retrieval": "claim后原材料重取、模型准备与许可，至真实SDK开始",
+          "network_model": "原SDK调用/stream开始至结束；不等于供应商单独延迟",
+          "validation": "SDK结束至原Store.save调用",
+          "persistence": "原Store.save进入至真实事务返回"
+        }
+      },
+      "execution": {
+        "runtime": "typescript",
+        "profile_sha256": "591d758996fbad2f56b157d65580f78649d3bfdc61fc27b64d4431be37419ce8",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": "startModelHost",
+        "public_entry": "SkillLearningTaskRunner.run → SkillLearningRuntime.propose → createHostReplyRuntime.callExtraction",
+        "inner_problem_budget_bound": false,
+        "normal_new_entry_python_processes": 0,
+        "background_worker_started": false,
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "clock": {
+          "frozen_as_of": "2026-10-23T04:00:00.000Z",
+          "applied_as_of": false,
+          "public_learning_clock": "absent",
+          "global_Date_mocked": false,
+          "pg_now_mocked": false
+        }
+      },
+      "physical_attempts": [
+        {
+          "route": "messages",
+          "status": "complete",
+          "sent": true,
+          "reservation_ordinal": 2,
+          "request_sha256": "f194a7ede4a64557c85b45d0ad717dcd15eae90c60f4023987e94614e6ada8e1",
+          "prompt_sha256": "f3d6f6eff39bf09ba4c1d5132f6a3f7b37f52bf5a103a52f252f232b878ff8b2",
+          "schema_sha256": "53dbf365fff860327ec34339c48b142ea456ce6bcce62ce8c1e57bc55b76b4c9",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "response_sha256": "d9a8bc16e1adfd082aeb3c12ae9bd26565709845ae9a210794202d884d9a53e5",
+          "usage": {
+            "input_tokens": 24,
+            "output_tokens": 17,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "input_tokens_complete": true
+          },
+          "cost": null,
+          "error_code": null
+        }
+      ],
+      "broker_attempts": 1
+    }
+  ],
+  "actual_http": 2,
+  "budget": {
+    "used": 2,
+    "limit": 1000,
+    "remaining": 998
+  },
+  "broker": {
+    "schema_version": "persistent-nonreply-broker-v1",
+    "transport": "loopback_synthetic",
+    "initial_used": 0,
+    "current_used": 2,
+    "new_reservations": 2,
+    "attempts": 2,
+    "journal_reserved": 2,
+    "physical_attempts": 2,
+    "physical_unknown": 0,
+    "states": {
+      "ready": 0,
+      "reserved": 0,
+      "dispatching": 0,
+      "responded": 2,
+      "failed": 0,
+      "unknown": 0
+    },
+    "automatic_retries": 0,
+    "output_capacity_gate": false,
+    "cost_gate": false,
+    "five_phase_evidence": {
+      "complete": false,
+      "unknown_reason": "business_start_prepare_and_final_persistence_not_observed_by_transport"
+    },
+    "journal_chain": {
+      "events": 12,
+      "tail_sha256": "67233d49356c594cde8905d4949dbc83d480cb8b1504b0288e833ce3eb4eece2"
+    }
+  },
+  "time_qualification": {
+    "schema_version": "nonreply-time-qualification-v1",
+    "candidate_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+    "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+    "extraction": {
+      "cases": 140,
+      "material_has_as_of": false,
+      "original_builder": {
+        "path": "backend/src/notalone/memory_extraction/evaluation.py",
+        "sha256": "c4bbea8c249caadab0b1faedc656df04cde30a8e807ae8aca92054f1413bc830",
+        "lines": "82–101"
+      },
+      "message_time": {
+        "anchor": "2026-09-15T00:00:00.000Z",
+        "increment": "每条消息按序号增加一分钟",
+        "status": "matches_frozen_original_builder"
+      },
+      "event_time": {
+        "source": "仅沿原文及原oracle，不由消息时刻或系统now补造"
+      },
+      "evaluation_as_of": "unknown",
+      "qualification": "not_approved_pending_root_experimental_context_and_independent_semantics"
+    },
+    "l2_l3": {
+      "as_of_values": [
+        "2026-10-23T12:00:00+08:00"
+      ],
+      "public_seam": "createL2ScenarioHost({now}) / 旧PostgresLayeredMemoryStore(clock)",
+      "source_and_event_times_distinct": true,
+      "integrated_driver_in_this_directory": "not_implemented"
+    },
+    "skill": {
+      "source_observation_times": "保留冻结observed_at",
+      "public_evaluation_clock": "absent",
+      "qualification": "not_approved_no_independent_public_clock_boundary",
+      "candidate_sources": {
+        "backend-ts/src/skill-learning-store.ts": "07c3b640e4a24566e216e881187e3d44ff1798152461292b217162dffa016de8",
+        "backend-ts/src/skill-learning-runtime.ts": "a4c656a6083def5fc0071040f9b13b755d5408156e4f8b6f587812472a9e4100",
+        "backend-ts/src/host-reply.ts": "d4697ca7decf75171c1309e09be712109c390c07071a7d991537d6a02daaa3cf"
+      },
+      "proposed_root_decision": "明确将as_of限定为实验观察截点并由独立审阅确认；若要求实际统一学习时钟，根另决定只作用于内容捕获的clock参数，不改租约/额度/PG now"
+    },
+    "operational_clock": {
+      "budget_deadline": "实际壁钟毫秒",
+      "leases": "实际PG时间及租约代次",
+      "global_Date_mocked": false,
+      "pg_now_mocked": false
+    },
+    "formal_time_qualified": false,
+    "oracle_modified": false
+  },
+  "fixtures": [
+    {
+      "dropped": true,
+      "database_absent": true,
+      "remaining_connections": 0,
+      "migrations": 116,
+      "python_processes": 0
+    },
+    {
+      "dropped": true,
+      "database_absent": true,
+      "remaining_connections": 0,
+      "migrations": 116,
+      "python_processes": 0
+    }
+  ],
+  "real_supplier_calls": 0,
+  "formal_quality_runs": 0,
+  "independent_reviews": 0,
+  "output_capacity_gate": false,
+  "cost_gate": false,
+  "cost": null,
+  "cost_unknown_reason": "loopback_synthetic_no_billing_or_price_snapshot",
+  "cleanup": {
+    "complete": true,
+    "snapshot": {
+      "source_snapshot_removed": true,
+      "before_kib": 44628,
+      "after_kib": 0,
+      "process_references": 0
+    }
+  },
+  "tickets_25_26_approved": false,
+  "dependencies": {
+    "node": "v24.19.0",
+    "packages": {
+      "dsh": {
+        "version": "0.2.1-rc.2",
+        "package_sha256": "bea4288aa88eb54efe829686553100a75fdf09d11c5e3bf6b329badb9a0368dd",
+        "entry_sha256": "80112efe368efb1a39720c7ada0af00442e5131fb2744edaaff8a3e8bb499e6f"
+      },
+      "cordis": {
+        "version": "4.0.5",
+        "package_sha256": "b73831b926b16cbd684aa1b277461e7800a2b35e2dd351ad3c2c8c0db158589d",
+        "entry_sha256": "6a9394c0877ff45218818c6e815edd038f8057e1a1deb390a8d43ec81c57691e"
+      },
+      "dsh-llm": {
+        "version": "0.2.1-rc.2",
+        "package_sha256": "409d065250b680487ed411f9e8bb91d621b0850d6db7b743fc549a096c4569aa",
+        "entry_sha256": "d18d8ae4c8d961e628708c1e4698e09716a0ebb80e55a672e0bde1029bec1155"
+      },
+      "dsh-llm-deepseek": {
+        "version": "0.2.1-rc.2",
+        "package_sha256": "96b1b628317603b3d287683bf8abec84a17c407d5e69e2177c48bebb4a750fb4",
+        "entry_sha256": "eba35025ed1eedda89c51f2da46a3a968f7be1d59719f2ceeadfc4518dff37d6"
+      },
+      "dsh-llm-deepseek-api-key": {
+        "version": "0.2.1-rc.2",
+        "package_sha256": "a0053c574dc313eac94ea6f316ced3b33feb0bf07bcb51119df3c5126cd77ac6",
+        "entry_sha256": "8bac0be0fea0170233330708ecdd1418e5ba6ee8d80f6e814e48ab0e2fcb4d74"
+      },
+      "dsh-skill": {
+        "version": "0.2.1-rc.2",
+        "package_sha256": "a59e0d4e41861735a94777036489f8f43659a262f55c5936b49a2d0aeb591b2d",
+        "entry_sha256": "4b88621be4e7ff09b05c175fc6dcb67e77a22e5c5570e3aa603338b2937ea791"
+      }
+    }
+  },
+  "dependencies_unchanged": true,
+  "preintegration_source_difference": {
+    "baseline": "9b20e99c771d87986579f4343c68bb743afe2bc4",
+    "candidate": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+    "paths": [
+      "backend-ts/src/reply-comparison.ts"
+    ],
+    "skill_chain_unchanged": true
+  },
+  "raw_evidence_directory_label": "na-skill-formal-private-xPcBbF"
+}

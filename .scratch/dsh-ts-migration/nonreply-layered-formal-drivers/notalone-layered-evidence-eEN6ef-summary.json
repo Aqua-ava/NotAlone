@@ -1,0 +1,1871 @@
+{
+  "schema_version": "layered-formal-driver-engineering-v1",
+  "candidate_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+  "source_snapshot_sha256": "3c67c4a64e6a4921faa4521a8987e611ee1e9113a34ef64f21b1110fb309f3b9",
+  "formal_quality": false,
+  "independent_semantic_reviews": 0,
+  "real_vendor_calls": 0,
+  "physical_loopback_http": 0,
+  "problem_budget": {
+    "problemId": "<synthetic-redacted>",
+    "deadline": 1792940296477,
+    "maxReservations": 1000,
+    "used": 0,
+    "remaining": 1000
+  },
+  "records": [
+    {
+      "mode": "permission",
+      "run_id": "l2_scenario:l2_scenario-01:3:old",
+      "case_id": "l2_scenario-01",
+      "case_sha256": "ef1b9039a8d50fad939ef04eb4e6e6369c2927959b16e20bd0db2f17d0e2c5a1",
+      "arm": "old",
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "domain": "l2_scenario",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:4105455cfbc01a982b4c58bc52bf9ed34e8d681536111476e578471ef6cb6bca",
+        "contact_id": "sha256:91387455033b908d5e2a93f92dbc238270ac6b2df16124322dcb805f9bb30e71"
+      },
+      "attempts": [
+        {
+          "attempt_id": "31c5f50e-5c43-4757-8761-b1138156e86c",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "85154a3ce7aeb77cba47dc629c470ce0eaddc05e922cb254502ce145e8d26799",
+          "started_at": "2026-10-25T14:43:19.381Z",
+          "status": "failed",
+          "sent": false,
+          "prompt_sha256": "9497fea8ea779fa536b196c0e40af73d4e798cdbcbadac5c16d5d47d1733fd8e",
+          "schema_sha256": "bdd98c43b83a90f0197d484783075daee51ed493b41ce0a0a0a9be9c6c1246ba",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "error_code": "root_permission_denied",
+          "finished_at": "2026-10-25T14:43:19.469Z"
+        }
+      ],
+      "terminal_status": "unknown",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+        "runtime": "isolated_python",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "250fafbc825cc0633f2270dcd03b19dfaf56ed60b96d0315bca94264f7714596",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "pinned_shared_priority_bridge_only",
+          "actual_profile": true
+        },
+        "public_entry": "LayeredMemoryService.organize + PostgresBackgroundTaskRepository.claim_next_step + LayeredMemoryService.run_batch",
+        "named_driver": "l2_scenario",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:17.961Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "processed_count": 0,
+        "state": [
+          {
+            "owner_id": "sha256:4105455cfbc01a982b4c58bc52bf9ed34e8d681536111476e578471ef6cb6bca",
+            "contact_id": "sha256:91387455033b908d5e2a93f92dbc238270ac6b2df16124322dcb805f9bb30e71",
+            "settings_generation": 1,
+            "organization_generation": 0,
+            "enabled": true,
+            "status": "failed",
+            "covered_count": 0,
+            "error_code": "model_call_failed",
+            "last_action": null,
+            "updated_at": null,
+            "dirty_revision": 2,
+            "consumed_revision": 0,
+            "next_due_at": null,
+            "next_boundary_at": null,
+            "maintenance_allowed": false,
+            "scope_kind": "contact",
+            "scope_key": "60404640-49ee-556c-aac2-6f66b7279b73",
+            "correction_revision": 0,
+            "scenario_mappings": [],
+            "mapping_cursor": null,
+            "mapping_next_cursor": null,
+            "profile": null,
+            "feedback": [],
+            "protected_count": 0,
+            "pending_fact_count": 0
+          },
+          [
+            {
+              "memory": {
+                "memory_id": "be312d6f-4264-5cdf-a3d6-f72bbc77a5a8",
+                "scope": {
+                  "owner_id": "sha256:4105455cfbc01a982b4c58bc52bf9ed34e8d681536111476e578471ef6cb6bca",
+                  "contact_id": "sha256:91387455033b908d5e2a93f92dbc238270ac6b2df16124322dcb805f9bb30e71"
+                },
+                "text": "联系人明确说：本周六下午三点在合成公园北门见面。",
+                "category": "common_fact",
+                "source_ids": [
+                  "27c84e11-e59e-5a73-ae82-634e3232b12e"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:43:17.737919+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "be312d6f-4264-5cdf-a3d6-f72bbc77a5a8",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "27c84e11-e59e-5a73-ae82-634e3232b12e",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "27c84e11-e59e-5a73-ae82-634e3232b12e"
+              ]
+            },
+            {
+              "memory": {
+                "memory_id": "66ad5b6e-7f52-5dc6-ab33-2eaa83c9bdc6",
+                "scope": {
+                  "owner_id": "sha256:4105455cfbc01a982b4c58bc52bf9ed34e8d681536111476e578471ef6cb6bca",
+                  "contact_id": "sha256:91387455033b908d5e2a93f92dbc238270ac6b2df16124322dcb805f9bb30e71"
+                },
+                "text": "用户回复：收到，周六下午三点，合成公园北门。",
+                "category": "common_fact",
+                "source_ids": [
+                  "0e87d8a6-4925-54eb-aa93-143558ec8c44"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:43:17.739707+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "66ad5b6e-7f52-5dc6-ab33-2eaa83c9bdc6",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "0e87d8a6-4925-54eb-aa93-143558ec8c44",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "0e87d8a6-4925-54eb-aa93-143558ec8c44"
+              ]
+            }
+          ],
+          [],
+          {
+            "task_id": "182e940b-959b-4f45-b941-6dba0269fd7a",
+            "owner_id": "sha256:4105455cfbc01a982b4c58bc52bf9ed34e8d681536111476e578471ef6cb6bca",
+            "contact_id": "sha256:91387455033b908d5e2a93f92dbc238270ac6b2df16124322dcb805f9bb30e71",
+            "settings_generation": 1,
+            "target_key": "9cfca0c7307e90ca2ec4a7efea382439bc48490fea9ea62a71d87e4b6ab652a6",
+            "contract": "scenario-v3:deadline-v1:coverage-v1:correction-v1:verified_items:personal-background-v1:l2-1500:l3-2000:document-tools-v1:physical-budget-v1:scenario-context-v1:profile-tools-v1:c07d99e6f7def1b86b55a617713962f4d99b753d25386d22e738f874e5df402f",
+            "target_manifest": [
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "be312d6f-4264-5cdf-a3d6-f72bbc77a5a8",
+                "source_ids": [
+                  "27c84e11-e59e-5a73-ae82-634e3232b12e"
+                ],
+                "source_refs": [],
+                "record_sha256": "eff07fa5197af4f9ffe17ff230a46071273c3dabe06ee83d9067c05dc8cd427b",
+                "timing_sha256": "68647a396f19c1bee573d04d3d27801a44bdf1d4029cdcc3443a2c07f958b4d3",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "2433ea91df638bed066a3eb4de5f57177658422c237f0767fa296e3a03714a8c",
+                "organization_timing_sha256": "68647a396f19c1bee573d04d3d27801a44bdf1d4029cdcc3443a2c07f958b4d3",
+                "version_evidence_source_current": false
+              },
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "66ad5b6e-7f52-5dc6-ab33-2eaa83c9bdc6",
+                "source_ids": [
+                  "0e87d8a6-4925-54eb-aa93-143558ec8c44"
+                ],
+                "source_refs": [],
+                "record_sha256": "57f71ac906e0c99f917505acbcc7bc5961668b2ab57e0a9757b311df886e0f8d",
+                "timing_sha256": "ad9e890f0df0a5a5b73e3e6b5e2611b4680eaf5673e7fec89c705343c24a4115",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "d4654d00fdc0c814f96c5ec70413e5b785a908450ba39a5b7bf0ce141b974ad9",
+                "organization_timing_sha256": "ad9e890f0df0a5a5b73e3e6b5e2611b4680eaf5673e7fec89c705343c24a4115",
+                "version_evidence_source_current": false
+              }
+            ],
+            "dependency_ids": [
+              "0e87d8a6-4925-54eb-aa93-143558ec8c44",
+              "27c84e11-e59e-5a73-ae82-634e3232b12e",
+              "66ad5b6e-7f52-5dc6-ab33-2eaa83c9bdc6",
+              "be312d6f-4264-5cdf-a3d6-f72bbc77a5a8"
+            ],
+            "state": "active",
+            "revision": 1,
+            "last_action": "start",
+            "batch_number": 0,
+            "run_remaining": 1,
+            "pending_receipt": false,
+            "model_calls_used": 1,
+            "model_call_limit": 16,
+            "created_at": "2026-10-25 22:43:18.577097+08:00",
+            "receipt_batch_id": null,
+            "receipt_lease_generation": null,
+            "profile_required": true,
+            "profile_status": "pending",
+            "target_dirty_revision": 2,
+            "scope_kind": "contact",
+            "scope_key": "60404640-49ee-556c-aac2-6f66b7279b73"
+          }
+        ]
+      },
+      "audit": {
+        "persisted_physical_count": 1,
+        "pg_job_call_reservations": 1,
+        "outbound_ledger_count": 0,
+        "model_call_receipts": 0,
+        "persistent_cancel_committed": false,
+        "legacy_outbound_ledger_gap": true,
+        "source_snapshot_sha256": "a455481954972a321d94c55ac53f163d40d2746c3b6a09c8269bb97ef5fdfc69"
+      },
+      "business_output": {
+        "scenarios": [],
+        "profiles": [],
+        "sources": [
+          {
+            "source_id": "l2_scenario-01-s1",
+            "owner_id": "sha256:18e354f13f3b8aac4727351d8a837f64ae5979451492a0935c488dbb2ae4cbec",
+            "contact_id": "sha256:68606b3e15e0a9d25606ea9ba47d028a86f5a5b8f4f3a9b50d2532c6f8aceb1b",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：本周六下午三点在合成公园北门见面。",
+            "storage_id": "27c84e11-e59e-5a73-ae82-634e3232b12e",
+            "memory_id": "be312d6f-4264-5cdf-a3d6-f72bbc77a5a8",
+            "scoped": true
+          },
+          {
+            "source_id": "l2_scenario-01-s2",
+            "owner_id": "sha256:18e354f13f3b8aac4727351d8a837f64ae5979451492a0935c488dbb2ae4cbec",
+            "contact_id": "sha256:68606b3e15e0a9d25606ea9ba47d028a86f5a5b8f4f3a9b50d2532c6f8aceb1b",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "用户回复：收到，周六下午三点，合成公园北门。",
+            "storage_id": "0e87d8a6-4925-54eb-aa93-143558ec8c44",
+            "memory_id": "66ad5b6e-7f52-5dc6-ab33-2eaa83c9bdc6",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:43:18.688Z",
+            "monotonic_ms": 3128.618958
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:43:19.381Z",
+            "monotonic_ms": 3821.05575
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:43:19.624Z",
+            "monotonic_ms": 4063.738875
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:43:19.624Z",
+          "monotonic_ms": 4063.738875
+        }
+      },
+      "durable_accounting_matches": false,
+      "error_code": "durable_physical_accounting_mismatch",
+      "elapsed_ms": 2574.553167,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": [
+        {
+          "attempt_id": "31c5f50e-5c43-4757-8761-b1138156e86c",
+          "state": "ready",
+          "physical_attempted": false
+        }
+      ]
+    },
+    {
+      "mode": "permission",
+      "run_id": "l2_scenario:l2_scenario-01:3:new",
+      "case_id": "l2_scenario-01",
+      "case_sha256": "ef1b9039a8d50fad939ef04eb4e6e6369c2927959b16e20bd0db2f17d0e2c5a1",
+      "arm": "new",
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "domain": "l2_scenario",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:4105455cfbc01a982b4c58bc52bf9ed34e8d681536111476e578471ef6cb6bca",
+        "contact_id": "sha256:91387455033b908d5e2a93f92dbc238270ac6b2df16124322dcb805f9bb30e71"
+      },
+      "attempts": [
+        {
+          "attempt_id": "6a892bb9-5092-4525-9723-0cf48252aa93",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "48c6e37fdc4ea4c9246fd6947bf4cca7dea316f4fed6e827fff58301fe184f13",
+          "started_at": "2026-10-25T14:43:20.652Z",
+          "status": "failed",
+          "sent": false,
+          "prompt_sha256": "6a87a63b9941ea4bf9dbdd2ba27da3df5743ff11152b3c5f1431997d4b58f668",
+          "schema_sha256": "e3ff4902bbf1c49ebb158dee0d08d825e10399b3c002b6299ce2a458bce4444e",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "error_code": "root_permission_denied",
+          "finished_at": "2026-10-25T14:43:20.742Z"
+        }
+      ],
+      "terminal_status": "unknown",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+        "runtime": "typescript",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "cd5970b35ee73b62ad4bee542aaa98330d34f7b7bdfcd8afa179de61ab4851eb",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "production_createHostModelAccounting",
+          "actual_profile": true
+        },
+        "public_entry": "createLayeredMemoryManagement.refresh + ExtractionTaskStore.claim + createL2ScenarioHttp.handlePrivate",
+        "named_driver": "l2_scenario",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:20.400Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "http_status": 503,
+        "body": {
+          "error": "layered_memory_unavailable"
+        }
+      },
+      "audit": {
+        "persisted_physical_count": 1,
+        "pg_job_call_reservations": 1,
+        "outbound_ledger_count": 1,
+        "model_call_receipts": 1,
+        "persistent_cancel_committed": false,
+        "legacy_outbound_ledger_gap": false,
+        "source_snapshot_sha256": "a455481954972a321d94c55ac53f163d40d2746c3b6a09c8269bb97ef5fdfc69"
+      },
+      "business_output": {
+        "scenarios": [],
+        "profiles": [],
+        "sources": [
+          {
+            "source_id": "l2_scenario-01-s1",
+            "owner_id": "sha256:18e354f13f3b8aac4727351d8a837f64ae5979451492a0935c488dbb2ae4cbec",
+            "contact_id": "sha256:68606b3e15e0a9d25606ea9ba47d028a86f5a5b8f4f3a9b50d2532c6f8aceb1b",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：本周六下午三点在合成公园北门见面。",
+            "storage_id": "27c84e11-e59e-5a73-ae82-634e3232b12e",
+            "memory_id": "be312d6f-4264-5cdf-a3d6-f72bbc77a5a8",
+            "scoped": true
+          },
+          {
+            "source_id": "l2_scenario-01-s2",
+            "owner_id": "sha256:18e354f13f3b8aac4727351d8a837f64ae5979451492a0935c488dbb2ae4cbec",
+            "contact_id": "sha256:68606b3e15e0a9d25606ea9ba47d028a86f5a5b8f4f3a9b50d2532c6f8aceb1b",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "用户回复：收到，周六下午三点，合成公园北门。",
+            "storage_id": "0e87d8a6-4925-54eb-aa93-143558ec8c44",
+            "memory_id": "66ad5b6e-7f52-5dc6-ab33-2eaa83c9bdc6",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:43:20.533Z",
+            "monotonic_ms": 4972.845
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:43:20.652Z",
+            "monotonic_ms": 5092.175625
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:43:20.781Z",
+            "monotonic_ms": 5220.842792
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:43:20.781Z",
+          "monotonic_ms": 5220.842792
+        }
+      },
+      "business_error": "layered_memory_unavailable",
+      "durable_accounting_matches": false,
+      "error_code": "durable_physical_accounting_mismatch",
+      "elapsed_ms": 1108.9559999999992,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": [
+        {
+          "attempt_id": "6a892bb9-5092-4525-9723-0cf48252aa93",
+          "state": "ready",
+          "physical_attempted": false
+        }
+      ]
+    },
+    {
+      "mode": "source",
+      "run_id": "l2_scenario:l2_scenario-03:3:old",
+      "case_id": "l2_scenario-03",
+      "case_sha256": "4c8bc0df32416fe2e68aa8cc786e09973535fc55dfab9e743ef919bb16518d7f",
+      "arm": "old",
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "domain": "l2_scenario",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:d67cef52e1eb15fa751f40e4728a85f15f3099c7b1312409ad0483a7c7a95519",
+        "contact_id": "sha256:8fb2afe962607732a4d3fc3fd962490dde43e15ebd1490ba66e72af4d40e54f9"
+      },
+      "attempts": [],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+        "runtime": "isolated_python",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "a0cb4945466bf49d4c0d576af6edc350ac7c5f351b2550d633752193c9a2e68a",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "pinned_shared_priority_bridge_only",
+          "actual_profile": true
+        },
+        "public_entry": "LayeredMemoryService.organize + PostgresBackgroundTaskRepository.claim_next_step + LayeredMemoryService.run_batch",
+        "named_driver": "l2_scenario",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:21.603Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "error_code": "server_sources_changed",
+      "elapsed_ms": 1541.2175829999996,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": []
+    },
+    {
+      "mode": "source",
+      "run_id": "l2_scenario:l2_scenario-03:3:new",
+      "case_id": "l2_scenario-03",
+      "case_sha256": "4c8bc0df32416fe2e68aa8cc786e09973535fc55dfab9e743ef919bb16518d7f",
+      "arm": "new",
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "domain": "l2_scenario",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:d67cef52e1eb15fa751f40e4728a85f15f3099c7b1312409ad0483a7c7a95519",
+        "contact_id": "sha256:8fb2afe962607732a4d3fc3fd962490dde43e15ebd1490ba66e72af4d40e54f9"
+      },
+      "attempts": [],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+        "runtime": "typescript",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "99834839654fe46e106ce9032ba96e5f051e7b65c942eeb8b8ba6fce69ca70aa",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "production_createHostModelAccounting",
+          "actual_profile": true
+        },
+        "public_entry": "createLayeredMemoryManagement.refresh + ExtractionTaskStore.claim + createL2ScenarioHttp.handlePrivate",
+        "named_driver": "l2_scenario",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:23.165Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "error_code": "server_sources_changed",
+      "elapsed_ms": 878.4673749999993,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": []
+    },
+    {
+      "mode": "lease",
+      "run_id": "l2_scenario:l2_scenario-05:3:new",
+      "case_id": "l2_scenario-05",
+      "case_sha256": "5c089156c66d30e16279a4e903583ae1136541462b2107485ec24854ed2fdfde",
+      "arm": "new",
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "domain": "l2_scenario",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:07e03d01401ad28c1d0657e6cc3a6addb9ae3b5b5c4adc7fc20aabfdd90e3e25",
+        "contact_id": "sha256:76a80491b7ecac4d367b89f6d8bc04682bec17249f5db98ead18b5243e9bfeb2"
+      },
+      "attempts": [],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+        "runtime": "typescript",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "1d85119e7e5619b712e53d819277fbed88986acd0819687c8852d0e70f5ad15c",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "production_createHostModelAccounting",
+          "actual_profile": true
+        },
+        "public_entry": "createLayeredMemoryManagement.refresh + ExtractionTaskStore.claim + createL2ScenarioHttp.handlePrivate",
+        "named_driver": "l2_scenario",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:24.125Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "error_code": "server_lease_changed",
+      "elapsed_ms": 847.0083329999998,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": []
+    },
+    {
+      "mode": "lease",
+      "run_id": "l2_scenario:l2_scenario-05:3:old",
+      "case_id": "l2_scenario-05",
+      "case_sha256": "5c089156c66d30e16279a4e903583ae1136541462b2107485ec24854ed2fdfde",
+      "arm": "old",
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "domain": "l2_scenario",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:07e03d01401ad28c1d0657e6cc3a6addb9ae3b5b5c4adc7fc20aabfdd90e3e25",
+        "contact_id": "sha256:76a80491b7ecac4d367b89f6d8bc04682bec17249f5db98ead18b5243e9bfeb2"
+      },
+      "attempts": [],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+        "runtime": "isolated_python",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "fbcd8785e6cd7c1e1ff672e4b9013252094bca61f00cd6ebca018478b5dc3f41",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "pinned_shared_priority_bridge_only",
+          "actual_profile": true
+        },
+        "public_entry": "LayeredMemoryService.organize + PostgresBackgroundTaskRepository.claim_next_step + LayeredMemoryService.run_batch",
+        "named_driver": "l2_scenario",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:24.970Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "error_code": "server_lease_changed",
+      "elapsed_ms": 1427.6147920000003,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": []
+    },
+    {
+      "mode": "permission",
+      "run_id": "l3_profile:l3_profile-01:3:old",
+      "case_id": "l3_profile-01",
+      "case_sha256": "9a1f9c75301794f9596af39c245ea4ea20bd38a6c9c205e7313a2cf4adc4ccf1",
+      "arm": "old",
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "domain": "l3_profile",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:943ac1aab6f25d5108a784c744a662a3a4d4937939edfd2372b4b62fd2b9334e",
+        "contact_id": "sha256:d7d1f1a3ce7ceff15f3d00b788c64c5d80e4ed4eacab3158ce1fe1efb82ead6b"
+      },
+      "attempts": [
+        {
+          "attempt_id": "ac787f7d-2ed7-4ec4-bfc7-0b20c5933307",
+          "route": "chat",
+          "path": "/v1/chat/completions",
+          "request_sha256": "9c9c0c7c94a94a1aaaaa61e9963be537a10d57b967432f3d696f56ccddf5f373",
+          "started_at": "2026-10-25T14:43:27.827Z",
+          "status": "failed",
+          "sent": false,
+          "prompt_sha256": "41fcfd41f0b1949f6fd0480008c5c522dca8efc94dc26db92d27abd9043b343b",
+          "schema_sha256": "bdd98c43b83a90f0197d484783075daee51ed493b41ce0a0a0a9be9c6c1246ba",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 8192,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "error_code": "root_permission_denied",
+          "finished_at": "2026-10-25T14:43:27.896Z"
+        }
+      ],
+      "terminal_status": "unknown",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+        "runtime": "isolated_python",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "335e94752fb5f1cf69f86cfc85c99c76e195f99bf2177b9e8395e465a53fd17d",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "pinned_shared_priority_bridge_only",
+          "actual_profile": true
+        },
+        "public_entry": "LayeredMemoryService.organize + PostgresBackgroundTaskRepository.claim_next_step + LayeredMemoryService.run_batch",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:26.496Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "processed_count": 0,
+        "state": [
+          {
+            "owner_id": "sha256:943ac1aab6f25d5108a784c744a662a3a4d4937939edfd2372b4b62fd2b9334e",
+            "contact_id": "sha256:d7d1f1a3ce7ceff15f3d00b788c64c5d80e4ed4eacab3158ce1fe1efb82ead6b",
+            "settings_generation": 1,
+            "organization_generation": 0,
+            "enabled": true,
+            "status": "failed",
+            "covered_count": 0,
+            "error_code": "model_call_failed",
+            "last_action": null,
+            "updated_at": null,
+            "dirty_revision": 2,
+            "consumed_revision": 0,
+            "next_due_at": null,
+            "next_boundary_at": null,
+            "maintenance_allowed": false,
+            "scope_kind": "contact",
+            "scope_key": "5626a51b-4ebe-55df-a000-bab0114efaf7",
+            "correction_revision": 0,
+            "scenario_mappings": [],
+            "mapping_cursor": null,
+            "mapping_next_cursor": null,
+            "profile": null,
+            "feedback": [],
+            "protected_count": 0,
+            "pending_fact_count": 0
+          },
+          [
+            {
+              "memory": {
+                "memory_id": "ee7c5093-d013-5503-a2b0-c0f6225729b6",
+                "scope": {
+                  "owner_id": "sha256:943ac1aab6f25d5108a784c744a662a3a4d4937939edfd2372b4b62fd2b9334e",
+                  "contact_id": "sha256:d7d1f1a3ce7ceff15f3d00b788c64c5d80e4ed4eacab3158ce1fe1efb82ead6b"
+                },
+                "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+                "category": "common_fact",
+                "source_ids": [
+                  "d9e1e3c9-cc48-5980-a7fc-cc2d48f84694"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:43:26.278097+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "ee7c5093-d013-5503-a2b0-c0f6225729b6",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "d9e1e3c9-cc48-5980-a7fc-cc2d48f84694",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "d9e1e3c9-cc48-5980-a7fc-cc2d48f84694"
+              ]
+            },
+            {
+              "memory": {
+                "memory_id": "5a88a292-5b91-5fb8-aa9d-7382ac044772",
+                "scope": {
+                  "owner_id": "sha256:943ac1aab6f25d5108a784c744a662a3a4d4937939edfd2372b4b62fd2b9334e",
+                  "contact_id": "sha256:d7d1f1a3ce7ceff15f3d00b788c64c5d80e4ed4eacab3158ce1fe1efb82ead6b"
+                },
+                "text": "另一条联系人自述：我长期不吃香菜。",
+                "category": "common_fact",
+                "source_ids": [
+                  "03394566-c317-56d5-a1ab-3f3230145640"
+                ],
+                "source_candidate_id": null,
+                "adoption_method": "manual",
+                "topic": "other",
+                "status": "active",
+                "valid_at": null,
+                "invalid_at": null,
+                "revision": 1,
+                "confidence": 1,
+                "risk_flags": [],
+                "supersedes_memory_id": null,
+                "timing": {
+                  "recorded_at": "2026-10-25 22:43:26.279689+08:00",
+                  "source_started_at": null,
+                  "source_ended_at": null,
+                  "source_time_complete": false,
+                  "current_status": "current_unverified",
+                  "current_status_reason": "无法从资料判定这项共同事实是否稳定持续；当前未核实，保存时间不证明现在仍成立。"
+                },
+                "event": null,
+                "conditions": null,
+                "evolution": null,
+                "version_evidence": null,
+                "can_revert_auto_update": false,
+                "retirement_reason": "unknown",
+                "retired_at": null,
+                "source_dependency_mode": "any",
+                "requires_all_sources": false
+              },
+              "current_leaf": {
+                "memory_id": "5a88a292-5b91-5fb8-aa9d-7382ac044772",
+                "revision": 1
+              },
+              "provenance_kind": "manual_entry",
+              "references": [
+                {
+                  "source_id": "03394566-c317-56d5-a1ab-3f3230145640",
+                  "source_kind": "manual",
+                  "message_id": null,
+                  "source_ref_id": null,
+                  "locator": null,
+                  "contact_id": null
+                }
+              ],
+              "dependency_ids": [
+                "03394566-c317-56d5-a1ab-3f3230145640"
+              ]
+            }
+          ],
+          [],
+          {
+            "task_id": "edf6e61d-b721-41af-9ea2-fb4b2f3547c6",
+            "owner_id": "sha256:943ac1aab6f25d5108a784c744a662a3a4d4937939edfd2372b4b62fd2b9334e",
+            "contact_id": "sha256:d7d1f1a3ce7ceff15f3d00b788c64c5d80e4ed4eacab3158ce1fe1efb82ead6b",
+            "settings_generation": 1,
+            "target_key": "0db19f66d0e45292f2fea13d73035528e916b66d1a7fbb0041918f066a8f1d83",
+            "contract": "scenario-v3:deadline-v1:coverage-v1:correction-v1:verified_items:personal-background-v1:l2-1500:l3-2000:document-tools-v1:physical-budget-v1:scenario-context-v1:profile-tools-v1:c07d99e6f7def1b86b55a617713962f4d99b753d25386d22e738f874e5df402f",
+            "target_manifest": [
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "ee7c5093-d013-5503-a2b0-c0f6225729b6",
+                "source_ids": [
+                  "d9e1e3c9-cc48-5980-a7fc-cc2d48f84694"
+                ],
+                "source_refs": [],
+                "record_sha256": "236aa07d4892d901ffc21d01f4f8530249b7472873f81c3f6e4b25c05b373980",
+                "timing_sha256": "87879a2eed5d7d304c3d2c39760c26a184f33c01dab78a2962d50e229b1e34e0",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "0061c590ab82f52e7f56db7da889dff99166e80496b684065a82b884d2645afc",
+                "organization_timing_sha256": "87879a2eed5d7d304c3d2c39760c26a184f33c01dab78a2962d50e229b1e34e0",
+                "version_evidence_source_current": false
+              },
+              {
+                "status": "active",
+                "revision": 1,
+                "memory_id": "5a88a292-5b91-5fb8-aa9d-7382ac044772",
+                "source_ids": [
+                  "03394566-c317-56d5-a1ab-3f3230145640"
+                ],
+                "source_refs": [],
+                "record_sha256": "9c43739e13628b38320fca07116a76691a1ba9d7c847f6ebda89cb562e8357bd",
+                "timing_sha256": "89c8870756f6b96c3cfbd339535c5e6723e731b3279879ff379cd9a2ad6a748a",
+                "original_known": false,
+                "context_records": [],
+                "current_event_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "version_evidence_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "source_generation_sha256": "a740f074c0be6749e6b5872245189ae91e233fef89f0161ecd8fadef03744bbd",
+                "organization_timing_sha256": "89c8870756f6b96c3cfbd339535c5e6723e731b3279879ff379cd9a2ad6a748a",
+                "version_evidence_source_current": false
+              }
+            ],
+            "dependency_ids": [
+              "03394566-c317-56d5-a1ab-3f3230145640",
+              "5a88a292-5b91-5fb8-aa9d-7382ac044772",
+              "d9e1e3c9-cc48-5980-a7fc-cc2d48f84694",
+              "ee7c5093-d013-5503-a2b0-c0f6225729b6"
+            ],
+            "state": "active",
+            "revision": 1,
+            "last_action": "start",
+            "batch_number": 0,
+            "run_remaining": 1,
+            "pending_receipt": false,
+            "model_calls_used": 1,
+            "model_call_limit": 16,
+            "created_at": "2026-10-25 22:43:27.053538+08:00",
+            "receipt_batch_id": null,
+            "receipt_lease_generation": null,
+            "profile_required": true,
+            "profile_status": "pending",
+            "target_dirty_revision": 2,
+            "scope_kind": "contact",
+            "scope_key": "5626a51b-4ebe-55df-a000-bab0114efaf7"
+          }
+        ]
+      },
+      "audit": {
+        "persisted_physical_count": 1,
+        "pg_job_call_reservations": 1,
+        "outbound_ledger_count": 0,
+        "model_call_receipts": 0,
+        "persistent_cancel_committed": false,
+        "legacy_outbound_ledger_gap": true,
+        "source_snapshot_sha256": "6f7972f38dabcca82063a8ce8c404d569b401d0cdeb732e2557fe9d30ee14a34"
+      },
+      "business_output": {
+        "scenarios": [],
+        "profiles": [],
+        "sources": [
+          {
+            "source_id": "l3_profile-01-s1",
+            "owner_id": "sha256:23f1970d8306ab3e452b7152004c2eef104010dcd8587cd88eabdf94f5151e63",
+            "contact_id": "sha256:5a10dba71e73cd9711431f96e24633a97ae1147c2ebfe63d1714210217f52906",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+            "storage_id": "d9e1e3c9-cc48-5980-a7fc-cc2d48f84694",
+            "memory_id": "ee7c5093-d013-5503-a2b0-c0f6225729b6",
+            "scoped": true
+          },
+          {
+            "source_id": "l3_profile-01-s2",
+            "owner_id": "sha256:23f1970d8306ab3e452b7152004c2eef104010dcd8587cd88eabdf94f5151e63",
+            "contact_id": "sha256:5a10dba71e73cd9711431f96e24633a97ae1147c2ebfe63d1714210217f52906",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "另一条联系人自述：我长期不吃香菜。",
+            "storage_id": "03394566-c317-56d5-a1ab-3f3230145640",
+            "memory_id": "5a88a292-5b91-5fb8-aa9d-7382ac044772",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:43:27.171Z",
+            "monotonic_ms": 11610.737
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:43:27.827Z",
+            "monotonic_ms": 12266.772667
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:43:28.045Z",
+            "monotonic_ms": 12485.250417
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:43:28.045Z",
+          "monotonic_ms": 12485.250417
+        }
+      },
+      "durable_accounting_matches": false,
+      "error_code": "durable_physical_accounting_mismatch",
+      "elapsed_ms": 2314.831250000001,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": [
+        {
+          "attempt_id": "ac787f7d-2ed7-4ec4-bfc7-0b20c5933307",
+          "state": "ready",
+          "physical_attempted": false
+        }
+      ]
+    },
+    {
+      "mode": "permission",
+      "run_id": "l3_profile:l3_profile-01:3:new",
+      "case_id": "l3_profile-01",
+      "case_sha256": "9a1f9c75301794f9596af39c245ea4ea20bd38a6c9c205e7313a2cf4adc4ccf1",
+      "arm": "new",
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "domain": "l3_profile",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:943ac1aab6f25d5108a784c744a662a3a4d4937939edfd2372b4b62fd2b9334e",
+        "contact_id": "sha256:d7d1f1a3ce7ceff15f3d00b788c64c5d80e4ed4eacab3158ce1fe1efb82ead6b"
+      },
+      "attempts": [
+        {
+          "attempt_id": "4260a0f9-285b-431f-838c-37380920933a",
+          "route": "messages",
+          "path": "/anthropic/v1/messages",
+          "request_sha256": "2a1c506cc964f5b616caf7f01d1f9e37f12d08a1253c0fd1365b1e7df77a9598",
+          "started_at": "2026-10-25T14:43:29.046Z",
+          "status": "failed",
+          "sent": false,
+          "prompt_sha256": "a5066b5abe4693129af13b7232d1bb954a9996288a6757b3e68e4813ca9fd7fa",
+          "schema_sha256": "e3ff4902bbf1c49ebb158dee0d08d825e10399b3c002b6299ce2a458bce4444e",
+          "controls": {
+            "model": "deepseek-flash",
+            "max_tokens": 393216,
+            "temperature": 0,
+            "top_p": "omitted",
+            "thinking": {
+              "type": "disabled"
+            },
+            "stop": null,
+            "retry": 0
+          },
+          "error_code": "root_permission_denied",
+          "finished_at": "2026-10-25T14:43:29.125Z"
+        }
+      ],
+      "terminal_status": "unknown",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+        "runtime": "typescript",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "f7c18bd5f5e57a899b659c252f579bff7d0c854eba8899e2ac132609dbcaf55e",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "production_createHostModelAccounting",
+          "actual_profile": true
+        },
+        "public_entry": "createLayeredMemoryManagement.refresh + ExtractionTaskStore.claim + createL2ScenarioHttp.handlePrivate",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:28.806Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "output": {
+        "http_status": 503,
+        "body": {
+          "error": "layered_memory_unavailable"
+        }
+      },
+      "audit": {
+        "persisted_physical_count": 1,
+        "pg_job_call_reservations": 1,
+        "outbound_ledger_count": 1,
+        "model_call_receipts": 1,
+        "persistent_cancel_committed": false,
+        "legacy_outbound_ledger_gap": false,
+        "source_snapshot_sha256": "6f7972f38dabcca82063a8ce8c404d569b401d0cdeb732e2557fe9d30ee14a34"
+      },
+      "business_output": {
+        "scenarios": [],
+        "profiles": [],
+        "sources": [
+          {
+            "source_id": "l3_profile-01-s1",
+            "owner_id": "sha256:23f1970d8306ab3e452b7152004c2eef104010dcd8587cd88eabdf94f5151e63",
+            "contact_id": "sha256:5a10dba71e73cd9711431f96e24633a97ae1147c2ebfe63d1714210217f52906",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "联系人明确说：我一直不喜欢香菜，点菜请不要加。",
+            "storage_id": "d9e1e3c9-cc48-5980-a7fc-cc2d48f84694",
+            "memory_id": "ee7c5093-d013-5503-a2b0-c0f6225729b6",
+            "scoped": true
+          },
+          {
+            "source_id": "l3_profile-01-s2",
+            "owner_id": "sha256:23f1970d8306ab3e452b7152004c2eef104010dcd8587cd88eabdf94f5151e63",
+            "contact_id": "sha256:5a10dba71e73cd9711431f96e24633a97ae1147c2ebfe63d1714210217f52906",
+            "subject": "contact",
+            "version": 1,
+            "state": "active",
+            "observed_at": "2026-10-20T09:00:00+08:00",
+            "text": "另一条联系人自述：我长期不吃香菜。",
+            "storage_id": "03394566-c317-56d5-a1ab-3f3230145640",
+            "memory_id": "5a88a292-5b91-5fb8-aa9d-7382ac044772",
+            "scoped": true
+          }
+        ]
+      },
+      "five_phase_evidence": {
+        "complete": false,
+        "unknown_reason": "legacy_public_ingestion_and_first_token_boundaries_absent",
+        "observed": [
+          {
+            "phase": "business_run_entered",
+            "at": "2026-10-25T14:43:28.933Z",
+            "monotonic_ms": 13372.610167
+          },
+          {
+            "phase": "broker_dispatch_entered",
+            "at": "2026-10-25T14:43:29.046Z",
+            "monotonic_ms": 13485.490583
+          },
+          {
+            "phase": "durable_result_observed",
+            "at": "2026-10-25T14:43:29.171Z",
+            "monotonic_ms": 13611.105583
+          }
+        ],
+        "first_token": "unknown",
+        "final_persistence": {
+          "phase": "durable_result_observed",
+          "at": "2026-10-25T14:43:29.171Z",
+          "monotonic_ms": 13611.105583
+        }
+      },
+      "business_error": "layered_memory_unavailable",
+      "durable_accounting_matches": false,
+      "error_code": "durable_physical_accounting_mismatch",
+      "elapsed_ms": 1114.674916,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": [
+        {
+          "attempt_id": "4260a0f9-285b-431f-838c-37380920933a",
+          "state": "ready",
+          "physical_attempted": false
+        }
+      ]
+    },
+    {
+      "mode": "source",
+      "run_id": "l3_profile:l3_profile-03:3:old",
+      "case_id": "l3_profile-03",
+      "case_sha256": "57b657e2bedfe1e2db82d0dbab3d2afe6bfdb5f11c7d83d6f29fb2cc08699797",
+      "arm": "old",
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "domain": "l3_profile",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:78d42f61da05c14aca9b5571417f927831edbcd04a9110c3f6c5376b81e3b70a",
+        "contact_id": "sha256:743d46fa792658c521a64925db06206d41431640bee35d699856fb3cb8774047"
+      },
+      "attempts": [],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+        "runtime": "isolated_python",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "808529f19f65a45c67bb6c909f0ffe4d9ba65129c2528a66d8a1c88b6c483f48",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "pinned_shared_priority_bridge_only",
+          "actual_profile": true
+        },
+        "public_entry": "LayeredMemoryService.organize + PostgresBackgroundTaskRepository.claim_next_step + LayeredMemoryService.run_batch",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:29.985Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "error_code": "server_sources_changed",
+      "elapsed_ms": 1563.0581250000014,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": []
+    },
+    {
+      "mode": "source",
+      "run_id": "l3_profile:l3_profile-03:3:new",
+      "case_id": "l3_profile-03",
+      "case_sha256": "57b657e2bedfe1e2db82d0dbab3d2afe6bfdb5f11c7d83d6f29fb2cc08699797",
+      "arm": "new",
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "domain": "l3_profile",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:78d42f61da05c14aca9b5571417f927831edbcd04a9110c3f6c5376b81e3b70a",
+        "contact_id": "sha256:743d46fa792658c521a64925db06206d41431640bee35d699856fb3cb8774047"
+      },
+      "attempts": [],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+        "runtime": "typescript",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "2eafc4b63b6cde3f8b2f5f8604cc13b16baceb079df351da6a22ce651764a0e4",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "production_createHostModelAccounting",
+          "actual_profile": true
+        },
+        "public_entry": "createLayeredMemoryManagement.refresh + ExtractionTaskStore.claim + createL2ScenarioHttp.handlePrivate",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:31.599Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "error_code": "server_sources_changed",
+      "elapsed_ms": 892.907541999999,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": []
+    },
+    {
+      "mode": "lease",
+      "run_id": "l3_profile:l3_profile-05:3:new",
+      "case_id": "l3_profile-05",
+      "case_sha256": "01156d845b2e24d419c7cd5ed3990abea911842e74128c3d7e9bcaae596a6294",
+      "arm": "new",
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "domain": "l3_profile",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:b72cc443f23d69b651df9a6def2a943d8d9f2e646b4cfed00565895184d856e5",
+        "contact_id": "sha256:7ce850293e9bf9017d43db8cc41ce1dab3012723e1e254c7654021a547ff3461"
+      },
+      "attempts": [],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+        "runtime": "typescript",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "9eb069db7dad9b18e44ad7cc3cac417e67b36319a0d36c8cb661bb8af66f3075",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "production_createHostModelAccounting",
+          "actual_profile": true
+        },
+        "public_entry": "createLayeredMemoryManagement.refresh + ExtractionTaskStore.claim + createL2ScenarioHttp.handlePrivate",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:32.568Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "error_code": "server_lease_changed",
+      "elapsed_ms": 876.2296249999999,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": []
+    },
+    {
+      "mode": "lease",
+      "run_id": "l3_profile:l3_profile-05:3:old",
+      "case_id": "l3_profile-05",
+      "case_sha256": "01156d845b2e24d419c7cd5ed3990abea911842e74128c3d7e9bcaae596a6294",
+      "arm": "old",
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "domain": "l3_profile",
+      "repeat": 3,
+      "scope": {
+        "owner_id": "sha256:b72cc443f23d69b651df9a6def2a943d8d9f2e646b4cfed00565895184d856e5",
+        "contact_id": "sha256:7ce850293e9bf9017d43db8cc41ce1dab3012723e1e254c7654021a547ff3461"
+      },
+      "attempts": [],
+      "terminal_status": "failed",
+      "response_model": "unknown",
+      "response_fingerprint": "unknown",
+      "formal_quality": false,
+      "execution": {
+        "source_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+        "runtime": "isolated_python",
+        "inner_problem_budget_bound": false,
+        "profile_sha256": "642d80899bfc24b98dd7edb1f23a881ddc905814ffd5eb1dee4e44b69dc1b85d",
+        "profile_template_sha256": "99483799fe64f1728b15a533d4188342ef3c3dd0394b1c59ad3b2b244be6275f",
+        "model_host": {
+          "entry": "startModelHost",
+          "ownership": "pinned_shared_priority_bridge_only",
+          "actual_profile": true
+        },
+        "public_entry": "LayeredMemoryService.organize + PostgresBackgroundTaskRepository.claim_next_step + LayeredMemoryService.run_batch",
+        "named_driver": "l3_profile",
+        "controls": {
+          "provider": "notalone-deepseek",
+          "model": "deepseek-flash",
+          "maxTokens": 393216,
+          "temperature": 0,
+          "reasoningEffort": "off",
+          "physical_limit": 24,
+          "deadline_ms": 20000,
+          "warning_ratio": 0.8,
+          "budgetProfile": {
+            "context_window_tokens": 1048576,
+            "safety_margin_tokens": 65536
+          }
+        },
+        "retries": {
+          "sdk": 0,
+          "business": 0,
+          "exhaustion_used_to_simulate_zero": false
+        },
+        "frozen_events": {
+          "count": 0,
+          "cancel_policy": "persist_after_first_physical_response_before_sdk_delivery"
+        },
+        "evaluation_clock": {
+          "mode": "wall",
+          "requested_content_as_of": "2026-10-23T04:00:00.000Z",
+          "effective_content_as_of": "2026-10-25T14:43:33.448Z",
+          "source": "actual_wall_clock_engineering_only",
+          "leases": "PG clock_timestamp()",
+          "formal_qualified": false,
+          "recorded_times": "actual_pg_defaults",
+          "event_time": "unknown_unless_literal",
+          "operational_clock": "actual_wall_and_pg_clock_timestamp"
+        }
+      },
+      "error_code": "server_lease_changed",
+      "elapsed_ms": 1442.8274999999994,
+      "reported_terminal_status": "failed",
+      "broker_attempt_states": []
+    }
+  ],
+  "cost_status": "unknown_no_vendor_bill",
+  "usage_source": "loopback_supplier_declared_fixture",
+  "persistent_journal": {
+    "schema_version": "persistent-nonreply-broker-v1",
+    "transport": "loopback_synthetic",
+    "initial_used": 0,
+    "current_used": 0,
+    "new_reservations": 0,
+    "attempts": 4,
+    "journal_reserved": 0,
+    "physical_attempts": 0,
+    "physical_unknown": 0,
+    "states": {
+      "ready": 4,
+      "reserved": 0,
+      "dispatching": 0,
+      "responded": 0,
+      "failed": 0,
+      "unknown": 0
+    },
+    "automatic_retries": 0,
+    "output_capacity_gate": false,
+    "cost_gate": false,
+    "five_phase_evidence": {
+      "complete": false,
+      "unknown_reason": "business_start_prepare_and_final_persistence_not_observed_by_transport"
+    },
+    "journal_chain": {
+      "events": 4,
+      "tail_sha256": "51f7e2bd20587da3ba90bad4c27c79b6203fbd7effbb61c64730e0cc2fa73c22"
+    }
+  },
+  "observed_engineering_runs": 12,
+  "unique_planned_run_ids": 12,
+  "formal_quality_runs": 0,
+  "nonreply_planned": 1056,
+  "unified_planned": 1152,
+  "unified_formal_not_run": 1152,
+  "source_observation_times": [
+    "2026-10-20T09:00:00+08:00"
+  ],
+  "requested_as_of": "2026-10-23T12:00:00+08:00",
+  "effective_clock": "actual_wall_engineering_only",
+  "frozen_semantic_oracle_used_by_supplier": false,
+  "raw_directory_label": "notalone-layered-evidence-eEN6ef",
+  "expected_probes": "guards",
+  "receipts": [
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:4105455cfbc01a982b4c58bc52bf9ed34e8d681536111476e578471ef6cb6bca",
+        "contact_id": "sha256:91387455033b908d5e2a93f92dbc238270ac6b2df16124322dcb805f9bb30e71"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:4105455cfbc01a982b4c58bc52bf9ed34e8d681536111476e578471ef6cb6bca",
+        "contact_id": "sha256:91387455033b908d5e2a93f92dbc238270ac6b2df16124322dcb805f9bb30e71"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:d67cef52e1eb15fa751f40e4728a85f15f3099c7b1312409ad0483a7c7a95519",
+        "contact_id": "sha256:8fb2afe962607732a4d3fc3fd962490dde43e15ebd1490ba66e72af4d40e54f9"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:d67cef52e1eb15fa751f40e4728a85f15f3099c7b1312409ad0483a7c7a95519",
+        "contact_id": "sha256:8fb2afe962607732a4d3fc3fd962490dde43e15ebd1490ba66e72af4d40e54f9"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:07e03d01401ad28c1d0657e6cc3a6addb9ae3b5b5c4adc7fc20aabfdd90e3e25",
+        "contact_id": "sha256:76a80491b7ecac4d367b89f6d8bc04682bec17249f5db98ead18b5243e9bfeb2"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:07e03d01401ad28c1d0657e6cc3a6addb9ae3b5b5c4adc7fc20aabfdd90e3e25",
+        "contact_id": "sha256:76a80491b7ecac4d367b89f6d8bc04682bec17249f5db98ead18b5243e9bfeb2"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:943ac1aab6f25d5108a784c744a662a3a4d4937939edfd2372b4b62fd2b9334e",
+        "contact_id": "sha256:d7d1f1a3ce7ceff15f3d00b788c64c5d80e4ed4eacab3158ce1fe1efb82ead6b"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:943ac1aab6f25d5108a784c744a662a3a4d4937939edfd2372b4b62fd2b9334e",
+        "contact_id": "sha256:d7d1f1a3ce7ceff15f3d00b788c64c5d80e4ed4eacab3158ce1fe1efb82ead6b"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:78d42f61da05c14aca9b5571417f927831edbcd04a9110c3f6c5376b81e3b70a",
+        "contact_id": "sha256:743d46fa792658c521a64925db06206d41431640bee35d699856fb3cb8774047"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:78d42f61da05c14aca9b5571417f927831edbcd04a9110c3f6c5376b81e3b70a",
+        "contact_id": "sha256:743d46fa792658c521a64925db06206d41431640bee35d699856fb3cb8774047"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:b72cc443f23d69b651df9a6def2a943d8d9f2e646b4cfed00565895184d856e5",
+        "contact_id": "sha256:7ce850293e9bf9017d43db8cc41ce1dab3012723e1e254c7654021a547ff3461"
+      }
+    },
+    {
+      "database": "<synthetic-redacted>",
+      "dropped": true,
+      "scope": {
+        "owner_id": "sha256:b72cc443f23d69b651df9a6def2a943d8d9f2e646b4cfed00565895184d856e5",
+        "contact_id": "sha256:7ce850293e9bf9017d43db8cc41ce1dab3012723e1e254c7654021a547ff3461"
+      }
+    }
+  ]
+}

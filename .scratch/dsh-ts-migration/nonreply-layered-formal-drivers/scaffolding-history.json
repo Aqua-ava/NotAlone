@@ -1,0 +1,18 @@
+{
+  "schema_version": "layered-driver-scaffolding-history-v1",
+  "tdd_red": "drivers.test.mjs failed MODULE_NOT_FOUND before business driver implementation",
+  "tdd_green": "three public boundary tests passed after implementation",
+  "typecheck_red": [
+    "module type resolution missing for cordis/cmdline",
+    "fixed own type module and explicit lockfile types path"
+  ],
+  "typecheck_green": "own profile-plugin.ts typecheck passed",
+  "bootstrap_failures": [
+    "system python tarfile.filter unsupported; corrected to repository NotAlone Python",
+    "node absent from default shell PATH; used bundled actual Node 24.19.0",
+    "zsh status read-only after first business probe; raw business run and receipts were preserved"
+  ],
+  "raw_for_scaffolding": "tool transcript except explicit private wrapper logs; no vendor calls",
+  "physical_attempts_authority": "probe-history.json and private durable budget/journal; no failures removed",
+  "early_guards_note": "earlier shared run IDs produced conservative cross-observation unknown on reconciliation; final guards use distinct planned case IDs; old records retained"
+}

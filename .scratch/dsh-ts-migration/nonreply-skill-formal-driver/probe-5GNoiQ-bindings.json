@@ -1,0 +1,70 @@
+{
+  "schema_version": "skill-evidence-binding-v1",
+  "raw_directory_label": "na-skill-formal-private-5GNoiQ",
+  "raw_files": [
+    {
+      "name": "attempt-journal/attempts.sqlite",
+      "mode": 384,
+      "sha256": "d6db93bc2bf7dc95146dd647b1f73a3611f7626829a1ffef4d9670ae82934a9f"
+    },
+    {
+      "name": "broker-journal-raw.json",
+      "mode": 384,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "name": "final-fixtures.json",
+      "mode": 384,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "name": "public-summary.json",
+      "mode": 384,
+      "sha256": "6d23d0c9d7c9a00f3b1bb86e2549b64874e26ff8dfd48307301d466885be7c49"
+    },
+    {
+      "name": "raw-report.json",
+      "mode": 384,
+      "sha256": "6c4749d43795748579d0788bdf9c48218adcb61034b5914315281a33cb92c5c2"
+    },
+    {
+      "name": "raw-time-qualification.json",
+      "mode": 384,
+      "sha256": "ab607d0a12a009590ac6240e644cc7ccbaa31ce6d50e8a851b3cf9fd6238ddf5"
+    },
+    {
+      "name": "snapshot-cleanup.json",
+      "mode": 384,
+      "sha256": "7bbe76300f29bf42337014a7481f3db4314a994275a45591fa722b749c982d3b"
+    },
+    {
+      "name": "source-manifest.json",
+      "mode": 384,
+      "sha256": "049e6cd0b0aa0e77e20a6cb180ed46a490ca5b82e245bba2236267629fea7dd6"
+    },
+    {
+      "name": "summary.json",
+      "mode": 384,
+      "sha256": "9b3aea550ef39747def8c224a65389751fa7085f9a73426d491c7a723e677aa4"
+    },
+    {
+      "name": "supplier-wire.json",
+      "mode": 384,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "name": "synthetic-problem/synthetic-budget.sqlite",
+      "mode": 384,
+      "sha256": "9084e5a00e1ea802b22260f97f0c9ee2b1fe6cf693d954143d1b77a4764832cf"
+    },
+    {
+      "name": "worker.log",
+      "mode": 384,
+      "sha256": "bee38d17db6b5d339e23341b1acb86f60a2a288d444c82e8b7648087769160d2"
+    }
+  ],
+  "public_summary": "probe-5GNoiQ-summary.json",
+  "public_sha256": "6d23d0c9d7c9a00f3b1bb86e2549b64874e26ff8dfd48307301d466885be7c49",
+  "source_pin": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "old_pin": "3c168296e9e8edaa43b8b323ff693e790e709069"
+}

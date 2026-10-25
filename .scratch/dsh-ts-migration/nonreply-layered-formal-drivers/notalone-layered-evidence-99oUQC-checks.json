@@ -1,0 +1,12 @@
+[
+  {
+    "run_id": "l3_profile:l3_profile-01:1:old",
+    "mode": "success",
+    "passed": true
+  },
+  {
+    "run_id": "l3_profile:l3_profile-01:1:new",
+    "mode": "success",
+    "passed": true
+  }
+]

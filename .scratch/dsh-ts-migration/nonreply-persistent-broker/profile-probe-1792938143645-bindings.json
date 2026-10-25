@@ -1,0 +1,123 @@
+{
+  "public_file": "profile-probe-1792938143645.json",
+  "public_sha256": "9398c401d1bfb4bfb7bbe306c3cadbd0f033048c54d809439379a2a34f220b72",
+  "raw": [
+    {
+      "file": "raw/http503/broker-error-new-1.json",
+      "raw_sha256": "eec45a6cc405e153ca2ff81b7aef56e6a1d6f8eb71ae9ad8a8611d9ce690f142"
+    },
+    {
+      "file": "raw/http503/broker-error-old-1.json",
+      "raw_sha256": "94dc63ab5786d87f8555ad1416ec45b0e15d713f30fcef03deb90e8b494fa84b"
+    },
+    {
+      "file": "raw/http503/budget/synthetic-budget.sqlite",
+      "raw_sha256": "e8882634b4f51c6335fa2b03594cf019cc79b5813a62b986a13a65f0dc293040"
+    },
+    {
+      "file": "raw/http503/fixture-new.json",
+      "raw_sha256": "efd4e974943381f48a23671c738080893f3f0fa488e46a91a580591acb063725"
+    },
+    {
+      "file": "raw/http503/fixture-old.json",
+      "raw_sha256": "2997a0b8b137cb6d426f9f3c5c4e58f44d2d9829f5c68ebb5a1e7e1b6dc200a7"
+    },
+    {
+      "file": "raw/http503/journal/attempts.sqlite",
+      "raw_sha256": "b67dbd72ec710d5cb9f300b88768dc8b38242ecfeebd50a652e17682db841e97"
+    },
+    {
+      "file": "raw/http503/journal-events.json",
+      "raw_sha256": "0bdc6f85438b01e0f6f6722fa6ca735536fe1631714cfe930f078700a5f3f02e"
+    },
+    {
+      "file": "raw/http503/old-input.json",
+      "raw_sha256": "bfaa458d010e16f73ab73e5cf800e0f7ead2e8f1c43c7c2bca16a3a1adf706a1"
+    },
+    {
+      "file": "raw/http503/old-output.log",
+      "raw_sha256": "245bee38d739c43949185f61719236432dacb4c7b3da638724a00cb4cfc2db6c"
+    },
+    {
+      "file": "raw/http503/profile-new.log",
+      "raw_sha256": "923de4c37182e18af37103614f8af7052f54292b6ff01c0e563b7a670ce83ed5"
+    },
+    {
+      "file": "raw/http503/report.json",
+      "raw_sha256": "8523f7b843fb8ff7a4574681c963a37ea91146ff827b6494281d9a213ba81b33"
+    },
+    {
+      "file": "raw/http503/requests-old.json",
+      "raw_sha256": "7808177ca42a2abe3cc0db0b5fd84651b3cc5bf2d73ac9aae7ecc82f74b09c01"
+    },
+    {
+      "file": "raw/http503/wire.json",
+      "raw_sha256": "ccf0e4e1fc7e94df1b8457a2a23baf6187080753ac42acda941065e67c92dc4d"
+    },
+    {
+      "file": "raw/profile-probe.json",
+      "raw_sha256": "0f0e957158627588b167b7eafa71d5ab625a2b9727efdd620031880c2f1f2604"
+    },
+    {
+      "file": "raw/success/broker-error-old-1.json",
+      "raw_sha256": "94dc63ab5786d87f8555ad1416ec45b0e15d713f30fcef03deb90e8b494fa84b"
+    },
+    {
+      "file": "raw/success/budget/synthetic-budget.sqlite",
+      "raw_sha256": "0ce8a6c0b6326e30d38613a66cbfff9a4014a57d90985fa824130d0e0ca1fbc7"
+    },
+    {
+      "file": "raw/success/fixture-new.json",
+      "raw_sha256": "024a1c322867e287a52062011e3b2e91d220674e5249d962b9bec575e00783b7"
+    },
+    {
+      "file": "raw/success/fixture-old.json",
+      "raw_sha256": "2e88eb288b11b3d8d3083ab3d5efd1958dd863d4273f33bfbc1fd9391ccea5b0"
+    },
+    {
+      "file": "raw/success/journal/attempts.sqlite",
+      "raw_sha256": "78bf138e12c352a6e27a0ab73c144ab4f9b538dcd7ac99dc3ce579bda550b0d3"
+    },
+    {
+      "file": "raw/success/journal-events.json",
+      "raw_sha256": "f1035496022ee37b9207554f5e5f82557d7f5ccde141febfc3ca73890d6ce3dd"
+    },
+    {
+      "file": "raw/success/model-host-final-journal.json",
+      "raw_sha256": "b3e0fc0716f9a308be3a9161c7fcc72d854ea4710da5e7eb402347d7a10e6ca3"
+    },
+    {
+      "file": "raw/success/old-input.json",
+      "raw_sha256": "b443a6b9074f65032369cf967df7d320bb04d97d87a28d2d0510319d7ba6caa4"
+    },
+    {
+      "file": "raw/success/old-output.log",
+      "raw_sha256": "245bee38d739c43949185f61719236432dacb4c7b3da638724a00cb4cfc2db6c"
+    },
+    {
+      "file": "raw/success/profile-new.log",
+      "raw_sha256": "673b5d7a5a1483dafae5546f0158fde77b940ab4ded067ef53a2ae21c5f4a346"
+    },
+    {
+      "file": "raw/success/report.json",
+      "raw_sha256": "be4de954a3e9ea4c815fd57dd738d75bf5502ea07ea5bc03ddd7d816fab8ec78"
+    },
+    {
+      "file": "raw/success/requests-new.json",
+      "raw_sha256": "185291f6bc5f0e81117bc404b853e586734b41285d7dc21bb68b72960ed56ad3"
+    },
+    {
+      "file": "raw/success/requests-old.json",
+      "raw_sha256": "87990815662f28c6b1c9d3efd12123890a59368807869248e400cfc98273433b"
+    },
+    {
+      "file": "raw/success/wire.json",
+      "raw_sha256": "207a17e924a40a34c4f35332db773dcef9c603853ff7f0551069825506d30bbf"
+    },
+    {
+      "file": "worker.log",
+      "raw_sha256": "429715798d213d71652b974c68f3bb77927a37cf0bc5898f2ab999908f63b631"
+    }
+  ],
+  "private_directory_mode": 448
+}

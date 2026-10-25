@@ -1,0 +1,141 @@
+{
+  "schema_version": "skill-public-clock-source-v1",
+  "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+  "candidate_commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "sources": [
+    {
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "path": "backend/src/notalone/persistence/skill_learning.py",
+      "sha256": "3b0324f6a2e675041f63de9df0b4692aeec95451cad1e7223c5ceb0f0efaf1d5",
+      "boundaries": [
+        {
+          "line": 125,
+          "signature": "def capture(self, scope: ContactScope):"
+        },
+        {
+          "line": 180,
+          "signature": "def validate(self, scope: ContactScope, claim, batch) -> None:"
+        },
+        {
+          "line": 137,
+          "signature": "def save(self, scope: ContactScope, claim, batch, proposal) -> int:"
+        }
+      ]
+    },
+    {
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "path": "backend/src/notalone/persistence/skill_learning_materials.py",
+      "sha256": "cf3e25014f6cdd661bcdf77d5eac80fc3cf2ffe16f37f0c9b16269de47533e90",
+      "boundaries": [
+        {
+          "line": 266,
+          "signature": "def select_learning_batch(connection, scope, *, material_ids=None) -> LearningBatch:"
+        },
+        {
+          "line": 232,
+          "signature": "AND message.occurred_at<=turn.created_at+interval '24 hours'"
+        }
+      ]
+    },
+    {
+      "commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+      "path": "backend/src/notalone/skills/learning_runtime.py",
+      "sha256": "8cb688344a9ae75d61a7366bb8acb85f7dcae53a21f84fed1eaa3fa512db8679",
+      "boundaries": [
+        {
+          "line": 56,
+          "signature": "def propose(self, *, scope: ContactScope, batch: LearningBatch) -> dict[str, Any]:"
+        },
+        {
+          "line": 65,
+          "signature": "called_at, started = datetime.now(timezone.utc), time.perf_counter()"
+        }
+      ]
+    },
+    {
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "path": "backend-ts/src/skill-learning-store.ts",
+      "sha256": "07c3b640e4a24566e216e881187e3d44ff1798152461292b217162dffa016de8",
+      "boundaries": [
+        {
+          "line": 18,
+          "signature": "export interface SkillLearningStoreOptions {"
+        },
+        {
+          "line": 161,
+          "signature": "async capture(scope:SkillLearningScope):Promise<SkillLearningBatch>{"
+        },
+        {
+          "line": 170,
+          "signature": "async validate(scope:SkillLearningScope,claim:ExtractionClaim,batch:SkillLearningBatch):Promise<void>{"
+        },
+        {
+          "line": 178,
+          "signature": "async save(scope:SkillLearningScope,claim:ExtractionClaim,batch:SkillLearningBatch,proposal:unknown):Promise<number>{"
+        }
+      ]
+    },
+    {
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "path": "backend-ts/src/skill-learning-materials.ts",
+      "sha256": "a6e99b122493ab72001ae70c8b57d5e83d9b263297a08556315272c59bbea44f",
+      "boundaries": [
+        {
+          "line": 187,
+          "signature": "export async function selectLearningBatch("
+        },
+        {
+          "line": 146,
+          "signature": "AND message.occurred_at>=turn.created_at AND message.occurred_at<=turn.created_at+interval '24 hours'"
+        }
+      ]
+    },
+    {
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "path": "backend-ts/src/skill-learning-runtime.ts",
+      "sha256": "a4c656a6083def5fc0071040f9b13b755d5408156e4f8b6f587812472a9e4100",
+      "boundaries": [
+        {
+          "line": 48,
+          "signature": "export interface SkillLearningRuntimeOptions {"
+        },
+        {
+          "line": 57,
+          "signature": "async propose(scope:SkillLearningScope,claim:ExtractionClaim,batch:SkillLearningBatch,signal:AbortSignal):Promise<unknown>{"
+        }
+      ]
+    },
+    {
+      "commit": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+      "path": "backend-ts/src/host-reply.ts",
+      "sha256": "d4697ca7decf75171c1309e09be712109c390c07071a7d991537d6a02daaa3cf",
+      "boundaries": [
+        {
+          "line": 224,
+          "signature": "learningStore=new SkillLearningStore({transaction:work=>options.storage.businessTransaction(work),"
+        },
+        {
+          "line": 262,
+          "signature": "if(owner&&extraction&&learningStore)learningRuntime=new SkillLearningRuntime({store:learningStore,call,"
+        }
+      ]
+    }
+  ],
+  "frozen_input_sha256": "c44898018e23352f5eebd5a203bbd90e2f9a66100832aaf8a1ad97d888f3137a",
+  "frozen_as_of_values": [
+    "2026-10-23T12:00:00+08:00"
+  ],
+  "frozen_observed_at_values": [
+    "2026-10-20T09:00:00+08:00",
+    "2026-10-21T09:00:00+08:00"
+  ],
+  "evaluation_as_of_applied": false,
+  "public_learning_clock_parameter": "absent_in_both_public_capture_and_propose_signatures",
+  "source_time_policy": "消息和assistant_session_input沿冻结observed_at保存；不改原文或oracle。",
+  "actual_time_policy": "PG租约/确认/草稿created_at和SDK调用时间使用实际系统及PG时钟；成功报告另有actual_wall_started_at/actual_pg_observed_at/draft_persisted_at。",
+  "source_relative_followup_window": "24小时规则比较message.occurred_at与turn.created_at，不是实验as_of。",
+  "global_Date_mocked": false,
+  "pg_now_mocked": false,
+  "formal_time_qualified": false,
+  "unknown_reason": "冻结input.as_of没有可注入的公开学习clock；本驱动仅记录观察截点，不能证明两臂在统一学习时钟下正式等价。"
+}

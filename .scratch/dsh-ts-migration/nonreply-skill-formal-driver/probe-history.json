@@ -1,0 +1,324 @@
+{
+  "schema_version": "skill-local-engineering-history-v1",
+  "scope": "仅本任务独立loopback工程夹具；不是既有真实问题账本或正式质量分母。",
+  "runs": [
+    {
+      "file": "initial-integrated-failure-summary.json",
+      "sha256": "ef3af3cf397457d93ef3ee099c64171effe5a618be19b852ca685edcda9e3bfb",
+      "observed_records": 8,
+      "actual_http": 8,
+      "outer_used": 8,
+      "states": [
+        "succeeded",
+        "succeeded",
+        "failed",
+        "failed",
+        "failed",
+        "cancelled",
+        "unknown",
+        "unknown"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 4,
+        "failed": 2,
+        "unknown": 2
+      },
+      "cleanup_original": false,
+      "post_failure_cleanup": {
+        "reason": "one_initial_immediate_PG_backend_teardown_check_raced",
+        "matched_frozen_case": "skill_learning-11",
+        "fixture_ordinal": 5,
+        "source_scope_verified": true,
+        "source_hashes_verified": true,
+        "task_cancelled": true,
+        "connections_before": 0,
+        "database_absent": true,
+        "owned_directory_removed": true,
+        "before_kib": 16,
+        "after_kib": 0,
+        "process_references": 0
+      },
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-5GNoiQ-summary.json",
+      "sha256": "6d23d0c9d7c9a00f3b1bb86e2549b64874e26ff8dfd48307301d466885be7c49",
+      "observed_records": 2,
+      "actual_http": 0,
+      "outer_used": 0,
+      "states": [
+        "failed",
+        "failed"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 0,
+        "failed": 0,
+        "unknown": 0
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-AffBO4-summary.json",
+      "sha256": "825e98e2c484834b2c2833c2c2e9957709e80edd0b239987abfca39eefa61dad",
+      "observed_records": 2,
+      "actual_http": 2,
+      "outer_used": 2,
+      "states": [
+        "unknown",
+        "unknown"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 0,
+        "failed": 0,
+        "unknown": 2
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-MpW05K-summary.json",
+      "sha256": "1565997538b3fcebc5a2704c5732f2317a67b2a9b709b3a1d0b9b2ab290d5b57",
+      "observed_records": 2,
+      "actual_http": 2,
+      "outer_used": 2,
+      "states": [
+        "cancelled",
+        "cancelled"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 2,
+        "failed": 0,
+        "unknown": 0
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-R3My68-summary.json",
+      "sha256": "84b52c6d81c6daf64495fbe492119a4f462ac2ced6633283b675063c9804f2d3",
+      "observed_records": 2,
+      "actual_http": 1,
+      "outer_used": 1,
+      "states": [
+        "failed",
+        "succeeded"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 1,
+        "failed": 0,
+        "unknown": 0
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-STafNF-summary.json",
+      "sha256": "46d1bb2944f2aa8fe5c175fa5e7ff8391c69a73c0e0a80e526158416869a9d92",
+      "observed_records": 2,
+      "actual_http": 2,
+      "outer_used": 2,
+      "states": [
+        "failed",
+        "failed"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 0,
+        "failed": 0,
+        "unknown": 2
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-cM60vI-summary.json",
+      "sha256": "37a8a1c852057be6c0733cec3be3b5712a5dc45bdde21a2020de67925838eb10",
+      "observed_records": 2,
+      "actual_http": 2,
+      "outer_used": 2,
+      "states": [
+        "succeeded",
+        "failed"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 2,
+        "failed": 0,
+        "unknown": 0
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-fIYfDN-summary.json",
+      "sha256": "074a6bc63e5a3a6bc1e4f5446881b21315903216c7d7188f0cf931cb8bbc4d8c",
+      "observed_records": 2,
+      "actual_http": 2,
+      "outer_used": 2,
+      "states": [
+        "cancelled",
+        "cancelled"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 2,
+        "failed": 0,
+        "unknown": 0
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-icpm6h-summary.json",
+      "sha256": "25900238318b5c5cb974f50b931d78dc5bb504e041e44df30ad65c54709edd89",
+      "observed_records": 2,
+      "actual_http": 2,
+      "outer_used": 2,
+      "states": [
+        "failed",
+        "failed"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 0,
+        "failed": 2,
+        "unknown": 0
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-mltosA-summary.json",
+      "sha256": "63b4a8f23d175bccac9031d7b02a56e7be8da95e7e47b83708f2d4385475135c",
+      "observed_records": 8,
+      "actual_http": 8,
+      "outer_used": 8,
+      "states": [
+        "succeeded",
+        "succeeded",
+        "failed",
+        "failed",
+        "cancelled",
+        "cancelled",
+        "unknown",
+        "unknown"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 4,
+        "failed": 2,
+        "unknown": 2
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-qfeBpT-summary.json",
+      "sha256": "2c520fde0b408c47f46cf71c58ebdf9e58589fbe6fd3f6fef30b196183963601",
+      "observed_records": 2,
+      "actual_http": 2,
+      "outer_used": 2,
+      "states": [
+        "succeeded",
+        "succeeded"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 2,
+        "failed": 0,
+        "unknown": 0
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-wRfxog-summary.json",
+      "sha256": "d247e72cc209d585dec347d37bbef41d88a9697b9147071c9bc6414bcb458b62",
+      "observed_records": 2,
+      "actual_http": 2,
+      "outer_used": 2,
+      "states": [
+        "failed",
+        "failed"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 0,
+        "failed": 2,
+        "unknown": 0
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    },
+    {
+      "file": "probe-xPcBbF-summary.json",
+      "sha256": "065300f872b71acbcfe9e8c76a04a729f6ee3fe675a70527cdcdca5644e6c037",
+      "observed_records": 2,
+      "actual_http": 2,
+      "outer_used": 2,
+      "states": [
+        "succeeded",
+        "succeeded"
+      ],
+      "journal_states": {
+        "ready": 0,
+        "reserved": 0,
+        "dispatching": 0,
+        "responded": 2,
+        "failed": 0,
+        "unknown": 0
+      },
+      "cleanup_original": true,
+      "post_failure_cleanup": null,
+      "formal_quality_runs": 0
+    }
+  ],
+  "total_physical_http": 35,
+  "total_recorded_outer_reservations": 35,
+  "real_supplier_calls": 0,
+  "formal_quality_runs": 0,
+  "independent_reviews": 0,
+  "failures_and_unknown_preserved": true,
+  "logical_runs_repeated_for_engineering": true
+}
