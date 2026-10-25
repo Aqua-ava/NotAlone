@@ -57,7 +57,9 @@ function sourcesFor(row,audit,binding){
 /** 显式私密种子控制每对A/B、跨对顺序及不含臂名称的ID；种子不得交给评审者。 */
 export function createBlindPacket({capture,dataset,seed}){
  if(typeof seed!=='string'||!/^[a-f0-9]{64}$/.test(seed))fail('private_seed_required');
- if(capture.schema_version!=='reply-local-paired-collector-v1'||capture.protocol_version!=='migration-comparison-v1'||capture.evidence_kind!=='localhost_fake_provider_actual_business_pipelines'||capture.synthetic_only!==true||capture.real_model_quality_verified!==false||capture.production_switch_approved!==false||!Array.isArray(capture.records)||capture.records.length===0||!Array.isArray(dataset.cases))fail('synthetic_capture_required');
+ const kind=capture?.evidence_kind;
+ if(capture.schema_version!=='reply-local-paired-collector-v1'||capture.protocol_version!=='migration-comparison-v1'||!['localhost_fake_provider_actual_business_pipelines','official_deepseek_full_comparison_v1'].includes(kind)||capture.synthetic_only!==true||capture.real_model_quality_verified!==false||capture.production_switch_approved!==false||!Array.isArray(capture.records)||capture.records.length===0||!Array.isArray(dataset.cases))fail('synthetic_capture_required');
+ const vendor=kind==='official_deepseek_full_comparison_v1';
  const rawIdentities=protectedIdentities(capture.records);
  const secret=value=>createHmac('sha256',Buffer.from(seed,'hex')).update(canonical(value)).digest('hex');
  const members=new Map(dataset.cases.map(member=>[member.case_id,member]));
@@ -105,9 +107,9 @@ export function createBlindPacket({capture,dataset,seed}){
  });
  for(const arms of pairs.values())if(arms.length!==2||new Set(arms).size!==2)fail('complete_pair_required');
  prepared.sort((a,b)=>a.sort.localeCompare(b.sort));
- const visible={schema_version:'reply-blind-packet-v1',protocol_version:'migration-comparison-v1',synthetic_only:true,fake_supplier_response:true,real_model_quality_verified:false,production_switch_approved:false,
+ const visible={schema_version:'reply-blind-packet-v1',protocol_version:'migration-comparison-v1',synthetic_only:true,fake_supplier_response:!vendor,...vendor?{evidence_origin:'official_deepseek_full_comparison'}:{},real_model_quality_verified:false,production_switch_approved:false,
   instructions:{language:'中文',independence:'两位独立审阅者分别评全部候选；不要查看运行记录或绑定清单。分歧交第三位复核。',reviewer_identity:'记录实际 reviewer_type、reviewer_model、reviewer_version，Agent 不记成人工。',binding:'每条评审必须绑定 blind_id、review_subject_sha256 和候选别名。未知写 null 并解释。',coverage:'本包仅呈现显式提供的完整成功对，不包含全量分母或资格判定。失败或不成对输入整体拒绝，不能用本包替代完整报告。',scores:{dimensions:DIMENSIONS.map(([key,label])=>({key,label})),scale:{0:'不可用或错误',1:'需要实质改写',2:'可小改使用'},group_pass:'全部候选前三维均为2，后两维均无0且逐维组内均分至少1.5；严重假事、错人、无依据承诺新增数为0。'},source_caution:'本次意图和一次性策略不能冒充关系事实；来源引用有效不代表内容语义已核验。',qualification:'这是合成本机替身的呈现练习，不认证真实模型质量、历史采集真实性或切换资格。'},items:prepared.map(row=>row.visible)};
- const binding={schema_version:'reply-blind-binding-v1',reviewer_visible:false,seed,synthetic_only:true,fake_supplier_response:true,capture_canonical_sha256:digest(capture),dataset_canonical_sha256:digest(dataset),visible_sha256:digest(visible),internal_consistency_only:true,real_model_quality_verified:false,production_switch_approved:false,items:prepared.map(row=>row.binding)};
+ const binding={schema_version:'reply-blind-binding-v1',reviewer_visible:false,seed,synthetic_only:true,fake_supplier_response:!vendor,...vendor?{evidence_origin:'official_deepseek_full_comparison'}:{},capture_canonical_sha256:digest(capture),dataset_canonical_sha256:digest(dataset),visible_sha256:digest(visible),internal_consistency_only:true,real_model_quality_verified:false,production_switch_approved:false,items:prepared.map(row=>row.binding)};
  return {visible,binding};
 }
 /** 交付或回收评审前重建全部绑定；删字段、换正文或换原始DTO均明确拒绝。 */

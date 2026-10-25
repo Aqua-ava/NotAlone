@@ -1,7 +1,7 @@
 # 25：完成模型与实际桌面验收
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 24
 Spec: ../spec.md
@@ -46,4 +46,15 @@ Spec: ../spec.md
 
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+2026-10-25：已完成可执行的同模型对照、盲评、确定性矩阵和自动验证，但质量与失败率门禁未通过，Ticket 保持 `claimed`，不能标为 resolved。
+
+- **DSH 查证**：锁定 `0.2.1-rc.2`／commit `687f282e8625c6b8d11ff58211a90524be2e4317`／tag `dsh-v0.2.1-rc.2`。核对官方 architecture、Agent cancel、LLM `prepareCall`、DeepSeek Messages adapter 及 scope/session/tools README；使用官方 profile、Agent、LLM 与 adapter 公开机制，业务来源、预算、持久和联系人范围仍由 NotAlone 控制。依据与适配见 [01 基线](../baseline/behavior-matrix.md#L15)、[确定性矩阵](../ticket25-final-run/deterministic-evidence.md)。
+- **同模型材料**：固定 `deepseek-flash`、temperature 0、top_p 1、thinking disabled、输出上限 4096、无重试、相同合成16例×3重复×双臂。旧臂 `3c168296`，新臂 `9ed7770d`；manifest `84b81a32…`、dataset `088df6b1…`、DSH profile `7dbc0689…`、依赖快照前后相等。实际 Node `v24.22.1`。
+- **96条真实调用**：96条逻辑运行/96次供应商调用、无自动重试；95成功、1失败。失败为 `style-conflict:new:1`，HTTP 200 后完整结果未成立并返回 `reply_candidates_rejected`，失败及费用均保留，不删分母、不退款、不重跑单一输臂。
+- **盲评**：两名独立 Agent 各评94条完整成功项，48项初评分歧全部交第三名独立 Agent 裁决。评审只能读取脱敏可见包，不接触 capture、binding 或私有随机种子；记录模型/版本与逐候选依据。
+- **质量结论**：旧/新各24/48组通过，调用48/48、token 289090/288812、费用 USD 0.01257021/0.012363666 的调用、token、费用项未退化；但新臂失败率 1/48 > 旧臂0，裁决后新臂相对同组新增5个假事风险（`prototype-gap:1`、`prototype-thought:2`、`paired-decline:2`、`group:3`、`missing:2`），`overall=failed`。不可把汇总通过率相同写成质量无退化。
+- **延迟未定**：旧采集没有完整无重叠五阶段、首事件、首token及最终持久结果公共时间线，p50/p95保持 `undetermined`；供应商写出时间不能冒充这些点。response fingerprint亦不可得，模型等价只到同请求配置。
+- **确定性/评测入口**：整理03–23公开入口、测试和原票历史证据，并列出 TS 迁移、隔离历史与退役项，见 [确定性证据](../ticket25-final-run/deterministic-evidence.md)。回复盲包入口扩展为如实区分本机假供应商与官方 DeepSeek 冻结采集，仍不认证质量或切换。
+- **验证**：回复盲包28/28、回复比较/来源/多 attempt 135/135、双端 typecheck通过；后端有界全量1258/1258、0失败0跳过（约258秒）；桌面安全组1011/1012、0失败、1个明确环境门禁跳过（约52秒）。首次桌面清单缺登记、重复 Playwright 实例和缺少 Conda PATH 的失败保留，修复调用环境后再跑得上述结果。
+- **数据与清理**：仅公开合成材料与独立合成 PG/目录；无外部消息、真实联系人或凭据进入仓库，未 push/PR/打包。原始采集、review wrapper、盲绑定及正式报告只在私有诊断目录，权限0700/0600；run summary `9a88e2c5…`、report `ce633218…`，复跑逐字节一致。
+- **未闭合**：根会话的实际 App/微信证据被本机 DBX 占用同一测试库且有未保存查询挡住，需用户选择保存/关闭 DBX 或明确允许丢弃未保存查询；主动停止的桌面真实验收、真实微信范围、非回复域的完整同模型质量/费用矩阵仍缺。质量失败和延迟未知本身已足以阻止签收。

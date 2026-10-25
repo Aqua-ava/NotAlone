@@ -46,6 +46,22 @@ test('实际两臂完整采集可交付风险、分段及引用原文，且别�
  assert.equal(visible.real_model_quality_verified,false);
  assert.equal(visible.production_switch_approved,false);
 });
+test('官方DeepSeek冻结采集保留真实来源标记，但不认证质量或切换',()=>{
+ const vendor=structuredClone(capture);vendor.evidence_kind='official_deepseek_full_comparison_v1';
+ const {visible,binding}=createBlindPacket({capture:vendor,dataset,seed});
+ assert.equal(visible.fake_supplier_response,false);
+ assert.equal(visible.evidence_origin,'official_deepseek_full_comparison');
+ assert.equal(visible.real_model_quality_verified,false);
+ assert.equal(visible.production_switch_approved,false);
+ assert.equal(binding.fake_supplier_response,false);
+ assert.equal(binding.evidence_origin,'official_deepseek_full_comparison');
+ assert.equal(binding.internal_consistency_only,true);
+ assert.equal(verifyBlindPacket({visible,binding,capture:vendor,dataset}).status,'verified_internal_consistency_only');
+});
+test('未声明的采集来源不能被当作供应商证据',()=>{
+ const unknown=structuredClone(capture);unknown.evidence_kind='unverified_vendor_claim';
+ assert.throws(()=>createBlindPacket({capture:unknown,dataset,seed}),/synthetic_capture_required/);
+});
 test('同组重复候选ID不能经中性别名掩盖',()=>{
  const bad=editOutput(capture,output=>output.candidates.push(structuredClone(output.candidates[0])));
  assert.throws(()=>createBlindPacket({capture:bad,dataset,seed}),/duplicate_candidate_identity/);
