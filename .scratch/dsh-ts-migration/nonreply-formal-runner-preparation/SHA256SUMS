@@ -31,7 +31,7 @@ a618af2e439880750ffcf43249dc2e85a1bda670c30067255017775427672996  $REPO_ROOT/.sc
 95a5032ba4a2b1fb388e9b4a70c65020226eb5eb90c4d279c34ad9ab2a14233c  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/deletion-public-entry/probe-summary.json
 a53eb677fa51706b1c31dd8c522dbb310b4812abd31eb09dbdecd2955712a4ea  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/deletion-public-entry/report.json
 d9366dabc53204366afb274229e8c3d4d713631e80ce4586bfa0e63241844524  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/evidence-contract.test.mjs
-c812b6aff17bbfacad0148c10411006ecdd2a7e426d72e6bb8990bd3e56e2cc4  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/execution-contract.md
+91d94837917b8198cbbb8feb9e2d882683f9f4b98178379f2d903ae70e6488be  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/execution-contract.md
 288e41f5253e5233dbae1d871e476d7b01bbb3442e7f6aa7e333e03f6effbeb2  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/extraction-ev/plan.json
 ca2c2fc4e794a2b864b6df1b0ec380f674ced939ba63efe00433b45e080b60f2  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/extraction-ev/probe-summary.json
 c63cd46cf0c97138e4036d8e66b7ba3ca76e1bc326b297c78870faaf22181caa  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/extraction-ev/report.json
@@ -52,7 +52,7 @@ b86654daf7679baf13467d3f17bace968a1e046dec9f33251d7a7b9cffea5d71  $REPO_ROOT/.sc
 1b1b8a4db8d45956984d0152e6178164dfe76f631b802227bdc64e2cf851fc55  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/formal-profile-plugin.ts
 d4d42cf7d2f8477ea5ba5fce7fbcd8b9ae65485db30253b7f41ca959b860c782  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/guard-green.log
 e02e988eaa573a1a3b1349229395fec308c5b6be4513403e58e7536514389b46  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/guard-red.log
-97c209788f781a1b00061a60e0b2fe2a0d6e88ca7819cbb5940434c1b0a9d9f1  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/handoff.md
+b673d913128ff1629d08c05e538cfdfeefe45489839067df57c4c017c00c0426  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/handoff.md
 0287fdab4b6be1a56ed9f1e482194cd95de5d1660f5809aabb545740edc0eeef  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/material-adapter.mjs
 72eaf6b7f1bba51cf2781fef38af13af9a14850be54e686f096cf853ac92562a  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/material-adapter.test.mjs
 f052f5becf0fd767e2efb43637ba1f1e5ddaf9ebf4d9b88c4dcf5496c24ff96f  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/material-green.log
@@ -65,6 +65,7 @@ ccf13210017a377d14916c70ed987e1dc9f9f49cb3579890a9a8ebd32446e57a  $REPO_ROOT/.sc
 19eab7918fc98b5392024da8bb93d0d8f54edaa1dbab7aea42a98c2a62098e03  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/offline-adapter.mjs
 f1fdf5c83572d884613106b349f524248deadb522311851aa2a7fadc555f1e17  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/old-arm.py
 98f92d34484f6dc1271b5d42fdcae10471c71b800d3b97d5c9a3c996538ddda0  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/old-event.py
+20993579fede72457bfbfbbf1c32f3b1392c171f575e8d44375ad3068c4874e4  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/output-cost-scope-update.md
 288e41f5253e5233dbae1d871e476d7b01bbb3442e7f6aa7e333e03f6effbeb2  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/prepared-plan/plan.json
 b86dce1ca0b344f495817c6e100cfa0cad087da853ffe1322d41e0e42fbd9d8b  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/prepared-plan/report.json
 7a906dc8740671bde3f66b21ada29cb228c94452b4542e6d09fa22dfab23a03d  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/private-evidence-reference.json
@@ -75,8 +76,9 @@ a3b292837eed9278e25b291fddf24833b6f09db43d39ed87a9a41e006af62d68  $REPO_ROOT/.sc
 76deda9a001654c3d608580d8605b6117d50b76f60bd9af4b75684ebcbdded90  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/projection-final-receipt.json
 a83a41e14aac1f48269142946317c2085fc91c64446920e5c5ee0cf28d6da3f4  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/projection-packets.mjs
 c7036f7ce87109504fa86b253d446f933c44bfd643d5ec2cd0235797247ec56f  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/public-metadata.mjs
-e4916c88dca38aa8059b5800309a12d21e1f4c66741ae0d0586253818c7daa5c  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/report.md
+f3083c2737f674457a01ebbb092a8ef8c0fb3f615b2d950cb96e72b392a08a30  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/report.md
 dfa76851ea950f308bce6a3e097c90b5a9e263c41b465d94231884758ab50e98  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/retrieval-source-equivalence.json
+f85c05b26172aa04dd1f5c3b5f23fb3177aeb45c22dc5150e66d326b42486e05  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/scope-redaction-receipt.json
 264537a613a5c02fad7380c03d38a37c59da6188a73dcc1eead15d918d159bfc  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/send-guard.mjs
 a9c62a9b609842665c2ff601dc0e1c4b7e2d170dff6e919fa3a2bfeccbe23b8f  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/send-guard.test.mjs
 288e41f5253e5233dbae1d871e476d7b01bbb3442e7f6aa7e333e03f6effbeb2  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/skill-cancel-role/plan.json
@@ -98,5 +100,5 @@ ce26f19b440dbdf3457fa44d27422ee3101c2f3a36ee82293f176e1ec62d4e97  $REPO_ROOT/.sc
 e02a2b9db9cd3608679fe6cb403472748d148194603a5ebc32de318f89470cb1  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/trace-packets.mjs
 d5bab29b7d94f04fd99c14e0eab4bffa84a0275c8f9be66853717b6593f7ba44  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/trace-red.log
 b0e2089d890bd7422ef29c017555470e1f2b164b3e4f953b44019aa716f2ebc7  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/unit-final.log
-dd1759543a8a38383b492425e4a9970303474643599acad597239720c0f29aaa  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/verification.json
-a36012aabd276c6af8fa32c1eb17123ad06ea9c9b1cff3f93ed83d4093be321a  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/artifact-manifest.json
+023aba9c9000a28b00ca027e5cc5085c893647cd9782d07f1c41bb579ee03229  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/verification.json
+bcb3eb14783a9b6e3103e7f37ae0a80c02601cde07af844cf6d04e30f7b1f4fd  $REPO_ROOT/.scratch/dsh-ts-migration/nonreply-formal-runner-preparation/artifact-manifest.json

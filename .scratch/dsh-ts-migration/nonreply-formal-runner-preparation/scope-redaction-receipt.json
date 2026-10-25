@@ -1,0 +1,15 @@
+{
+  "schema_version": "nonreply-policy-source-redaction-v1",
+  "source": "2026-10-25用户明确要求，主协调已核验",
+  "private_original_directory_label": "notalone-nonreply-scope-scrub-alzr1ngy",
+  "original_files_sha256": {
+    "output-cost-scope-update.md": "1bdec100192387fb6fea4ce14b3b7e5a0a887bdfb78f6ec217327decb39c5fee",
+    "verification.json": "389df5ca0b73cda342e8c817ce636d9925b5f2c443ac7867f0ed4f3476760dd7"
+  },
+  "private_directory_mode": "0700",
+  "private_file_mode": "0600",
+  "frozen_probe_bodies_changed": false,
+  "historical_facts_changed": false,
+  "probe_reruns": 0,
+  "real_model_calls_added": 0
+}

@@ -1,5 +1,6 @@
 # 25：完成模型与实际桌面验收
 
+> 2026-10-25 最新用户决定：本轮输出容量与费用不设人为门槛，固定4096及费用预算/1.10比值不再阻塞执行或验收；实际用量与历史结果保留，其他验收继续。详见[范围更新](../acceptance-scope-update.md)。
 Triage: ready-for-agent
 State: claimed
 Type: task

@@ -10,22 +10,22 @@ const configured = (environment = {}, options = {}) => {
   return result;
 };
 
-test('旧生产默认值全部显式覆盖DSH默认值，认证仅保存在回调中', async () => {
+test('宿主显式配置覆盖DSH默认值，输出采用供应商上限，认证仅保存在回调中', async () => {
   const result = configured();
   const {model, provider} = result;
   assert.deepEqual(model, {provider: 'notalone-deepseek', model: 'deepseek-flash',
-    maxTokens: 4096, temperature: 0, reasoningEffort: 'off', physical_limit: 24,
+    maxTokens: 393216, temperature: 0, reasoningEffort: 'off', physical_limit: 24,
     deadline_ms: 20000, warning_ratio: 0.8,
     budgetProfile: {context_window_tokens: 1048576, safety_margin_tokens: 65536}});
   assert.equal(provider.connection.baseURL, 'https://api.deepseek.com/anthropic');
   assert.deepEqual(provider.connection.defaults, {thinking: 'disabled', reasoningEffort: 'off'});
-  assert.equal(provider.connection.maxTokens, 4096);
+  assert.equal(provider.connection.maxTokens, 393216);
   assert.equal(provider.connection.defaultContextWindow, 1048576);
   assert.equal(provider.connection.streamIdleTimeoutMs, 60000);
   assert.equal(provider.connection.retryPolicy.mode, 'normal');
   assert.equal(provider.connection.retryPolicy.maxRetries, 0);
   assert.deepEqual(provider.connection.models, [{id: 'deepseek-flash', contextWindow: 1048576,
-    maxTokens: 4096, inputModalities: ['text']}]);
+    maxTokens: 393216, inputModalities: ['text']}]);
   assert.deepEqual(await provider.resolveAuth(provider.connection), {headers: {'x-api-key': syntheticKey}});
   assert.ok(!JSON.stringify(result).includes(syntheticKey));
   await assert.rejects(provider.resolveAuth({...provider.connection, baseURL: 'https://untrusted.invalid'}),
@@ -113,8 +113,9 @@ test('公开官方adapter实际生成的路由、凭据、输出和思考字段�
       {status: 200, headers: {'content-type': 'text/event-stream'}});
   };
   t.after(() => {globalThis.fetch = previousFetch;});
-  for (const effort of [null, 'high']) {
-    const configuration = configured({}, {replyThinkingEffort: effort});
+  const cases=[{effort:null,maxTokens:393216},{effort:'high',maxTokens:393216},{effort:null,maxTokens:65536}];
+  for (const {effort,maxTokens} of cases) {
+    const configuration = configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens)}, {replyThinkingEffort: effort});
     const {provider, model} = configuration;
     const adapter = new DeepSeekAdapter({options: () => provider.connection,
       resolveAuth: provider.resolveAuth, resolveUserId: () => 'synthetic-config-anonymous',
@@ -125,12 +126,12 @@ test('公开官方adapter实际生成的路由、凭据、输出和思考字段�
       messages: [{role: 'user', content: [{type: 'text', text: '合成配置验收'}]}]})) chunks.push(chunk);
     assert.ok(chunks.some(chunk => chunk.type === 'finish'));
   }
-  assert.equal(requests.length, 2);
-  for (const request of requests) {
+  assert.equal(requests.length, 3);
+  for (const [index,request] of requests.entries()) {
     assert.equal(request.url, 'https://api.deepseek.com/anthropic/v1/messages');
     assert.equal(request.headers.get('x-api-key'), syntheticKey);
     assert.equal(request.body.model, 'deepseek-flash');
-    assert.equal(request.body.max_tokens, 4096);
+    assert.equal(request.body.max_tokens, cases[index].maxTokens);
     assert.equal(request.body.temperature, 0);
     assert.equal(request.body.stream, true);
     assert.equal(request.body.messages[0].content[0].text, '合成配置验收');

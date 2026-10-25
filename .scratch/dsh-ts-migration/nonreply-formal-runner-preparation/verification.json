@@ -81,7 +81,7 @@
   "formal_120_qualification": "not_run",
   "reply_96": "not_run",
   "tickets_25_26_approved": false,
-  "fee_policy": "waived_temporarily_by_user_not_call_authorization",
+  "fee_policy": "no_cost_budget_or_ratio_gate_usage_and_cost_records_preserved",
   "real_transport_enabled": false,
   "remaining": [
     "root_budget_and_true_send_guard_binding",
@@ -94,7 +94,23 @@
   ],
   "probe_history_sha256": "119ba81897642cf81249092b8780574fb131db84ca19c414f6959dd908aaeb04",
   "cleanup_sha256": "1161699cb18add5a7ee1df093d5459e2b4fac5cbce10c27ea098f2c3c6547483",
-  "final_report_sha256": "e4916c88dca38aa8059b5800309a12d21e1f4c66741ae0d0586253818c7daa5c",
+  "final_report_sha256": "f3083c2737f674457a01ebbb092a8ef8c0fb3f615b2d950cb96e72b392a08a30",
   "public_machine_identity_literals": 0,
-  "remaining_owned_source_snapshots": 0
+  "remaining_owned_source_snapshots": 0,
+  "previous_fee_policy": "waived_temporarily_by_user_not_call_authorization",
+  "output_policy": "no_fixed_4096_or_output_capacity_gate_configure_as_needed",
+  "acceptance_policy_update": {
+    "date": "2026-10-25",
+    "output_capacity_gate": false,
+    "fixed_4096_output_gate": false,
+    "cost_budget_gate": false,
+    "cost_ratio_1_10_gate": false,
+    "actual_cost_and_usage_records_required": true,
+    "historical_reports_preserved": true,
+    "probe_reruns_for_notification": 0,
+    "real_model_calls_added": 0,
+    "physical_attempt_authorization_and_quality_requirements_unchanged": true,
+    "policy_file": "output-cost-scope-update.md",
+    "source": "2026-10-25用户明确要求，主协调已核验"
+  }
 }

@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "kind": "output_configuration_increment",
+  "supersedes_output_limit_only": 4096,
+  "default_max_output_tokens": 393216,
+  "configuration_key": "NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS",
+  "source_stamp_observed": "2e36ada0f02a44d6cf709a0cd1255f5ffeb7f5a56491e2549b0de9ce274b1b64",
+  "official_source": "https://api-docs.deepseek.com/api/list-models/",
+  "verified_at": "2026-10-25",
+  "real_model_calls": 0,
+  "original_31_file_manifest_unchanged": true,
+  "input_guard_and_ledger_unchanged": true,
+  "validation": {
+    "red": {
+      "passed": 0,
+      "failed": 2,
+      "log": "red.log"
+    },
+    "final": {
+      "passed": 14,
+      "failed": 0,
+      "log": "green-final.log"
+    },
+    "typecheck_exit_code": 0,
+    "small_window_guard_passes": 4
+  },
+  "files": [
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/output-capacity-update/README.md",
+      "sha256": "a39c676ab1bbcbb6199b4758d9659f11874176431417ff440566f6916959cc2a"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/output-capacity-update/green-final.log",
+      "sha256": "1392343a80df6b5358e969454c89b0afe5a74819e48d4f9faf69ea1a928c0e99"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/output-capacity-update/green.log",
+      "sha256": "d9228a260224727887d803e5828f6d5095ca4d3e4983c2a14281f0ceaf5f1d23"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/output-capacity-update/log-binding.json",
+      "sha256": "9de1cbd84864afb417c67c6c47fdc59e35af8430404ef935bc5fd576f210186c"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/output-capacity-update/probe.json",
+      "sha256": "7d99421c4f11ffaafc3b229fbe3946fd2c5abf70c9b71a08cd78316f798a8020"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/output-capacity-update/probe.mjs",
+      "sha256": "2242d9b871311a08f81abe1000ac1890f4ce53e7e92f84a9d7db4d83526799cd"
+    },
+    {
+      "path": ".scratch/tencent-source-reuse/quality-followup/output-capacity-update/red.log",
+      "sha256": "a6669ae42a319ffdbbe4bab7020b4eb4cda2e0d899ee3131dac7e077b0dcebf6"
+    },
+    {
+      "path": "backend-ts/src/host-reply-config.ts",
+      "sha256": "c7c1b76402813868f194289307600def4c7d51f8bb9ea29df4c27d97dbe4bad1"
+    },
+    {
+      "path": "backend-ts/test/host-reply-config.test.mjs",
+      "sha256": "37520f57d97738f8cd5485eb6068b31b078b56e0804fdcae0c37e95709ef1d0c"
+    },
+    {
+      "path": "backend-ts/test/model-output-configuration.test.mjs",
+      "sha256": "aa54539864014cb72dfed732085aa0d6da8e4adb7b8be11c74dbdb9aaf3ed750"
+    }
+  ]
+}

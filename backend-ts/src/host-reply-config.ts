@@ -42,7 +42,9 @@ export type HostReplyConfiguration = {
 const DEFAULT_MODEL = 'deepseek-flash';
 const LEGACY_OFFICIAL_ROOT = 'https://api.deepseek.com';
 const ECNU_BASE_URL = 'https://chat.ecnu.edu.cn/open/api/v1';
-const OUTPUT_RESERVE_TOKENS = 4096;
+// 官方模型目录的输出硬上限，与 context_window 分开核对（2026-10-25）。
+// https://api-docs.deepseek.com/api/list-models/
+const MODEL_MAX_OUTPUT_TOKENS = 393216;
 const CONTEXT_WINDOW_TOKENS = 1048576;
 const SAFETY_MARGIN_TOKENS = 65536;
 const PROVIDER = 'notalone-deepseek';
@@ -77,16 +79,25 @@ export function resolveHostReplyConfiguration(
     return unavailable('input_budget_unavailable');
   }
 
+  const rawOutputTokens = environment.NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS;
+  if (rawOutputTokens !== undefined && (typeof rawOutputTokens !== 'string' || !/^[1-9][0-9]*$/.test(rawOutputTokens))) {
+    return unavailable('reply_model_configuration_invalid');
+  }
+  const outputTokens = rawOutputTokens === undefined ? MODEL_MAX_OUTPUT_TOKENS : Number(rawOutputTokens);
+  if (!Number.isSafeInteger(outputTokens) || outputTokens < 1 || outputTokens > MODEL_MAX_OUTPUT_TOKENS) {
+    return unavailable('reply_model_configuration_invalid');
+  }
+
   const reasoningEffort = effort ?? 'off';
   const connection = resolveAdapterOptions({
     // root/v1是旧Chat Completions入口；原生DSH接收官方Messages入口，不能直接拼旧URL。
     baseURL: PUBLIC_BASE_URL,
     thinking: reasoningEffort === 'off' ? 'disabled' : 'enabled',
     reasoningEffort,
-    maxTokens: OUTPUT_RESERVE_TOKENS,
+    maxTokens: outputTokens,
     defaultContextWindow: CONTEXT_WINDOW_TOKENS,
     models: [{id: DEFAULT_MODEL, contextWindow: CONTEXT_WINDOW_TOKENS,
-      maxTokens: OUTPUT_RESERVE_TOKENS, inputModalities: ['text']}],
+      maxTokens: outputTokens, inputModalities: ['text']}],
     // 旧SDK单次超时为60秒；回复服务的20秒总截止必须另外传入每次调用的signal。
     streamIdleTimeoutMs: 60000,
     retryPolicy: {mode: 'normal', maxRetries: 0},
@@ -102,7 +113,7 @@ export function resolveHostReplyConfiguration(
       },
     },
     model: {
-      provider: PROVIDER, model: DEFAULT_MODEL, maxTokens: OUTPUT_RESERVE_TOKENS,
+      provider: PROVIDER, model: DEFAULT_MODEL, maxTokens: outputTokens,
       temperature: 0, reasoningEffort,
       // 两层场景预算各至多8；业务层仍须按请求执行min(24, 8 + 实际call_limit)。
       physical_limit: 24, deadline_ms: 20000, warning_ratio: 0.8,

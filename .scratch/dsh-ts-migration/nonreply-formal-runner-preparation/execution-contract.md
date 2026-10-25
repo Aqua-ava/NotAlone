@@ -2,6 +2,8 @@
 
 本目录只支持 `dry-run` 和 `fake`。`real` 及任何 real/key/credential 开关直接拒绝。模块不读取真实密钥、项目 `.env`、真实库或既有问题账本，也不创建真实预算。`syntheticBudget` 是有时限的内存测试替身，不是正式 ProblemBudget。
 
+按用户最新[输出与费用决定](output-cost-scope-update.md)，正式执行不以固定4096、输出容量、费用余额或1.10费用比准入、停止或验收；输出按实际需要配置，费用/用量仍完整记录。本目录既有4096仅保留为已完成假provider夹具配置，不能继承为正式上限；已冻结探针不重跑。
+
 ## 根注入接口
 
 `createOfflineAdapter({plan, directory, budget, permission})` 在创建 PG 或启动 profile 之前要求两个端口。`createSendGuard` 额外要求：
@@ -11,7 +13,7 @@
 - `permission.assertAllowed(input)`：根的授权与范围复验，预留前和发送前都必须明确返回 `true`。
 - `input` 绑定 owner/contact、旧/新臂、完整源码 pin、候选 pin、run ID、case SHA、请求 SHA 与取消信号。失败、取消和已预留但未发的尝试均保留，接口不退款。
 
-真实执行器仍须把根持久问题账本和真实供应商发送边界连上；本目录没有可开启的真实传输。这里的发送端口只演示 loopback 传输，并在 adapter 建立之前拒绝缺预算或许可的调用。供应商计费、旧 Python 外层持久预算桥及完整生产宿主真实发送许可均须由根另行完成，不能用本地替身证明它们已具备。
+真实执行器仍须把根持久问题账本和真实供应商发送边界连上；本目录没有可开启的真实传输。这里的发送端口只演示 loopback 传输，并在 adapter 建立之前拒绝缺物理尝试记录端口或许可的调用；不要求费用余额或输出容量额度。真实计费记录、旧 Python 外层物理尝试记录桥及完整生产宿主真实发送许可均须由根另行完成，不能用本地替身证明它们已具备。
 
 Node 进程和 DSH profile 用 `network-guard.mjs` 在 Socket 连接前拒绝外部地址；旧 Python 子进程原有 socket 限制只允许 localhost 与本机 PG。guard 的实现不进入产品代码。DSH 仍经固定官方 profile 启动，薄评测插件只装配既有公开业务服务，不增加模型 Tool。
 
