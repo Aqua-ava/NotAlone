@@ -109,14 +109,15 @@ function completeTiming(raw,{request_sha256,status,persisted}){
  };
 }
 
-export async function collectLocal({vendorForward,full=false,pairStart=0,pairEnd=null,caseId='paired-decline',repeat=1,marker='原业务响应采集',riskNotes=['合成验收：仅按本次意图表达，不补充未提供事实。'],onReady,onRecord,problemBudget,onSupplierArrival,sourceCommit,localOnly=false,localFaults={}}={}){
- if(localOnly&&(vendorForward!==undefined||problemBudget!==undefined))throw Error('local_provider_boundary_invalid');
+export async function collectLocal({vendorForward,vendorForwardFactory,executionPolicy,full=false,pairStart=0,pairEnd=null,caseId='paired-decline',repeat=1,marker='原业务响应采集',riskNotes=['合成验收：仅按本次意图表达，不补充未提供事实。'],onReady,onRecord,problemBudget,onSupplierArrival,sourceCommit,localOnly=false,localFaults={}}={}){
+ if(executionPolicy!==undefined)assert.match(sourceCommit??'',/^[a-f0-9]{40}$/,'explicit_source_commit_required');
+ if(localOnly&&(vendorForward!==undefined||vendorForwardFactory!==undefined||problemBudget!==undefined))throw Error('local_provider_boundary_invalid');
  if(localOnly)vendorForward=createLocalForwarder(localFaults);
- if(typeof vendorForward!=='function')throw Error('vendor_forward_required');
+ if(typeof vendorForward!=='function'&&typeof vendorForwardFactory!=='function'||vendorForward!==undefined&&vendorForwardFactory!==undefined)throw Error('vendor_forward_required');
  if(process.env.NOTALONE_DEEPSEEK_API_KEY!==undefined)throw Error('credential_not_removed_before_spawn');
  const budgetConfiguration=localOnly?null:freezeProblemBudgetConfiguration(problemBudget,{python:PYTHON,moduleRoot:join(ROOT,'backend/src'),repositoryRoot:ROOT});
  const dependenciesBefore=await captureDependencies(ROOT,PYTHON);
- const evaluationSource=await captureEvaluationRuntime({collectorRoot:HERE,moduleRoot:budgetConfiguration?.moduleRoot??join(ROOT,'backend/src')});
+ const evaluationSource=await captureEvaluationRuntime({collectorRoot:HERE,moduleRoot:budgetConfiguration?.moduleRoot??join(ROOT,'backend/src'),executionPolicy});
  process.chdir(join(ROOT,'backend-ts'));
  const materials=await frozenMaterials(),sourceBefore=await captureSource(ROOT,sourceCommit),temporary=await mkdtemp(join(tmpdir(),'notalone-reply-paired-'));
  const originalSourceFiles={...sourceBefore.manifest.files};
@@ -126,6 +127,7 @@ export async function collectLocal({vendorForward,full=false,pairStart=0,pairEnd
  sourceBefore.manifest.files={...sourceBefore.manifest.files,[supportPath]:sha(sourceBefore.bytes.get(supportPath))};
  sourceBefore.manifest.vendor_support_raw_capture_only=true;
  sourceBefore.manifest.matches_commit_tree=false;sourceBefore.manifest.modified_or_deleted_paths=[supportPath];
+ sourceBefore.manifest.observation_adaptations=[{path:supportPath,before_sha256:originalSourceFiles[supportPath],after_sha256:sourceBefore.manifest.files[supportPath],kind:'wire_utf8_observation_only'}];
  const candidateRoot=join(temporary,'fixed-candidate'),evaluationRoot=join(temporary,'fixed-evaluation'),fixedBudget=localOnly?null:fixedBudgetConfiguration(budgetConfiguration,evaluationRoot);
  const cleanups=[],t={after(fn){cleanups.push(fn);}};
  let python,provider,fixture,host,fixtureClosed=false;
@@ -156,6 +158,7 @@ export async function collectLocal({vendorForward,full=false,pairStart=0,pairEnd
   await mkdir(join(temporary,'catalogs'));
   await freezeSource(sourceBefore,candidateRoot);
   await freezeEvaluationRuntime(evaluationSource,evaluationRoot);
+  if(vendorForwardFactory){vendorForward=await vendorForwardFactory({collectorRoot:join(evaluationRoot,'collector')});assert.equal(typeof vendorForward,'function','vendor_forward_factory_result');}
   await symlink(join(ROOT,'backend-ts/node_modules'),join(candidateRoot,'backend-ts/node_modules'),'dir');
   const {createStorageFixture}=await import(pathToFileURL(join(candidateRoot,'backend-ts/test/host-storage-fixture.mjs')));
   const {startReplyServiceHost,sendEvents,useTool}=await import(pathToFileURL(join(candidateRoot,'backend-ts/test/reply-service-runtime-support.mjs')));
@@ -167,10 +170,15 @@ export async function collectLocal({vendorForward,full=false,pairStart=0,pairEnd
   execFileSync('tar',['-xf',tar,'-C',temporary]);await rm(tar);
   const frozenSource=join(temporary,'backend/src');
   const legacyBudgetFiles=Object.fromEntries(await Promise.all(['__init__.py','problem_budget.py'].map(async name=>['notalone/'+name,sha(await readFile(join(frozenSource,'notalone',name)))])));
-  // 用现有经验证的合成宿主；仅把任务临时插件的输出上限调到旧版4096。
+  // 用现有经验证的合成宿主；本轮显式策略只改生成插件的输出与对应容量。
   assert.equal(sha(await readFile(join(frozenSource,'notalone/problem_budget.py'))),evaluationSource.files['budget-modules/notalone/problem_budget.py'],'problem_budget_runtime_version_mismatch');
   let pluginSource=observePlugin(sourceBefore.bytes.get('backend-ts/test/reply-service-runtime-plugin.ts').toString('utf8'))
-   .replaceAll("'../src/","'"+join(candidateRoot,'backend-ts/src/')).replaceAll('maxTokens:256','maxTokens:4096');
+   .replaceAll("'../src/","'"+join(candidateRoot,'backend-ts/src/'));
+  const pluginBeforeControls=sha(pluginSource),policy=evaluationSource.execution_policy;
+  assert.equal(pluginSource.split('maxTokens:256').length,3,'output_control_plugin_seam_changed');
+  pluginSource=pluginSource.replaceAll('maxTokens:256','maxTokens:'+(policy?.controls.max_output_tokens??4096));
+  if(policy){assert.equal(pluginSource.split('context_window_tokens:65536,safety_margin_tokens:128').length,2,'capacity_control_plugin_seam_changed');pluginSource=pluginSource.replace('context_window_tokens:65536,safety_margin_tokens:128','context_window_tokens:'+policy.capacity.context_window_tokens+',safety_margin_tokens:'+policy.capacity.safety_margin_tokens);}
+  const pluginControlAdaptation={path:'generated/collector-plugin.ts',before_sha256:pluginBeforeControls,after_sha256:sha(pluginSource),kind:'explicit_output_and_capacity_controls'};
   const serviceProvider='ctx,transaction,provider,arbiter';assert.equal(pluginSource.split(serviceProvider).length,2,'预算接缝源码已变化');
   if(!localOnly)pluginSource="import {withProblemBudgetProvider} from "+JSON.stringify(join(evaluationRoot,'collector/bridge.mjs'))+";\n"+pluginSource.replace(serviceProvider,'ctx,transaction,provider:withProblemBudgetProvider(provider,'+JSON.stringify(fixedBudget)+'),arbiter');
   const pluginPath=join(temporary,'collector-plugin.ts');await writeFile(pluginPath,pluginSource);
@@ -198,7 +206,7 @@ export async function collectLocal({vendorForward,full=false,pairStart=0,pairEnd
   const oldFiles=execFileSync('git',['ls-tree','-r','--name-only',BASE,'--','backend/src','backend/pyproject.toml'],{cwd:ROOT,encoding:'utf8'}).trim().split('\n').sort();
   const legacySourceFiles=Object.fromEntries(oldFiles.map(name=>[name,sha(execFileSync('git',['show',BASE+':'+name],{cwd:ROOT,maxBuffer:8*1024*1024}))]));
   for(const [name,hash]of Object.entries(legacySourceFiles))assert.equal(sha(await readFile(join(temporary,name))),hash,'legacy_source_before_execution');
-  const legacyProfile={schema_version:'reply-legacy-execution-profile-v1',source_commit:BASE,source_files_sha256:digest(legacySourceFiles),runner_sha256:evaluationSource.files['collector/old-arm.py'],primary_sha256:evaluationSource.files['collector/primary.json'],collector_adaptations:['streaming_configuration_retains_original_SDK_binding','observed_context_uses_frozen_synthetic_source_ids'],controls:JSON.parse(await readFile(join(HERE,'primary.json'),'utf8')).controls,streaming_transport:'loopback_httpx_original_SDK_no_retry',context_id_source:'frozen_synthetic_primary_input_before_execution'};
+  const legacyProfile={schema_version:'reply-legacy-execution-profile-v1',source_commit:BASE,source_files_sha256:digest(legacySourceFiles),runner_sha256:evaluationSource.files['collector/old-arm.py'],primary_sha256:evaluationSource.files['collector/primary.json'],collector_adaptations:['streaming_configuration_retains_original_SDK_binding','observed_context_uses_frozen_synthetic_source_ids',...policy?['explicit_execution_policy_output_control']:[]],controls:JSON.parse(evaluationSource.bytes.get('collector/primary.json')).controls,streaming_transport:'loopback_httpx_original_SDK_no_retry',context_id_source:'frozen_synthetic_primary_input_before_execution'};
   const oldBinding={source_commit:BASE,source_tree_sha256:digest(legacySourceFiles),workspace_clean:true,argv_sha256:digest([BASE,evaluationSource.files['collector/old-arm.py']])};
   const plan=createReplyComparisonPlan(materials.manifestText,materials.datasetText),selected=full?plan.slice(pairStart,pairEnd??plan.length):plan.filter(pair=>pair.case_id===caseId&&pair.repeat===repeat),records=[];
   assert.ok(selected.length,'未找到冻结case');
@@ -270,10 +278,11 @@ export async function collectLocal({vendorForward,full=false,pairStart=0,pairEnd
   assert.equal(workspaceChanged,false,'execution_source_changed_during_capture');
   const dependenciesAfter=await captureDependencies(ROOT,PYTHON);assert.deepEqual(dependenciesAfter,dependenciesBefore,'runtime_dependency_version_or_entry_changed');
   return {schema_version:'reply-local-paired-collector-v1',protocol_version:'migration-comparison-v1',source_capture_version:'production_v2_actual_wire_pg',evidence_kind:localOnly?'localhost_fake_provider_actual_business_pipelines':'official_deepseek_full_comparison_v1',synthetic_only:true,real_model_quality_verified:false,production_switch_approved:false,
+   ...policy?{execution_policy:policy,execution_policy_sha256:evaluationSource.execution_policy_sha256}:{},
    projection_version:'public-dto-three-channel-v2',planned:96,received:records.length,source_bindings:{dependencies_before:dependenciesBefore,dependencies_after:dependenciesAfter,dependency_snapshot_equal:true,old_commit:BASE,new_commit:sourceBefore.manifest.base_commit,
     manifest_sha256:sha(materials.manifestText),dataset_sha256:sha(materials.datasetText),dsh_commit:'687f282e8625c6b8d11ff58211a90524be2e4317',
     executed_profile:{raw_utf8:profile.toString('utf8')},old_profile:legacyProfile,old_profile_sha256:digest(legacyProfile),legacy_source_files:legacySourceFiles,collector_binding:collectorBinding,lock_sha256:sourceBefore.manifest.files['backend-ts/pnpm-lock.yaml'],python_lock_sha256:null,profile_sha256:sha(profile),collector_plugin_sha256:sha(pluginSource),new_source_files:sourceBefore.manifest.files,new_source_sha256:digest(sourceBefore.manifest.files),candidate_source_manifest:sourceBefore.manifest,candidate_execution:'fixed_source_copy_verified_before_and_after',workspace_commit_after:execFileSync('git',['rev-parse','HEAD'],{cwd:ROOT,encoding:'utf8'}).trim(),workspace_changed_during_execution:workspaceChanged,fixed_git_source_changed_during_execution:false,
-    collector_source_files:Object.fromEntries(Object.entries(evaluationSource.files).filter(([name])=>name.startsWith('collector/')).map(([name,hash])=>[name.slice(10),hash])),evaluation_runtime_files:evaluationSource.files,legacy_budget_runtime_files:legacyBudgetFiles,evaluation_runtime_sha256:digest(evaluationSource.files),evaluation_runtime_execution:'fixed_old_script_bridge_and_problem_budget_package_verified_before_and_after',controller_execution:'loaded_ESM_entry_snapshot_and_frozen_support_fixture_migrations_and_product_source'},
+    collector_source_files:Object.fromEntries(Object.entries(evaluationSource.files).filter(([name])=>name.startsWith('collector/')).map(([name,hash])=>[name.slice(10),hash])),evaluation_runtime_files:evaluationSource.files,evaluation_runtime_original_files:evaluationSource.original_files,evaluation_control_adaptations:[...evaluationSource.control_adaptations,pluginControlAdaptation],legacy_budget_runtime_files:legacyBudgetFiles,evaluation_runtime_sha256:digest(evaluationSource.files),evaluation_runtime_execution:'fixed_old_script_bridge_and_problem_budget_package_verified_before_and_after',controller_execution:'loaded_ESM_entry_snapshot_and_frozen_support_fixture_migrations_and_product_source'},
    environment:{os:platform(),arch:arch(),cpu:cpus()[0]?.model,memory_bytes:totalmem(),node:process.version,power_mode:null},
    arms_configuration_equal:false,configuration_unknown_reasons:['供应商协议分别为原OpenAI Chat与官方DSH Anthropic适配，工具schema/提示词需要另行做语义等价核验','实际usage缺失保留null；本机fake与真实采集明确区分，质量资格另行评审'],
    problem_budget:localOnly?{external_execution_enabled:false,ledger_created:false}:{problem_id:budgetConfiguration.budget.problem_id,round:budgetConfiguration.budget.round,ledger_path_redacted:true,external_execution_enabled:true,dispatch_boundary:'one_existing_problem_budget_reservation_before_each_physical_attempt'},

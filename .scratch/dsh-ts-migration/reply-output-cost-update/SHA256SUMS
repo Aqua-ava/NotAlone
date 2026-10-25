@@ -1,0 +1,14 @@
+c2d2fa9bb118a44fc1b66e435ac0cdccc04970e0d1b5b30d6ea8844a6d3ecf9c  .scratch/dsh-ts-migration/ticket25-final-run/runner.mjs
+95bb96363292bf61171c1617bb524d122d47e1286f682df14a3b220470071d6b  .scratch/dsh-ts-migration/ticket25-final-run/run-full.mjs
+0ee01a7cc7cdd89530468f2d6502c4848447982aae8132e8f892e4f83dd26112  .scratch/dsh-ts-migration/ticket25-final-run/execution-snapshot.mjs
+634c6305cf4d172780264f89d79b0f605ed393e7c5d9934c85df57481a449558  .scratch/dsh-ts-migration/ticket25-final-run/normalize.mjs
+5ff2fa10a52b8be547bbac3939cfb3ad3e06195dfba870e63b2509b8993b0f44  backend-ts/src/reply-comparison.ts
+123f5d6be9df09b0fbcfafe13f360baaeced73b807c1586970001006af86ed3a  .scratch/dsh-ts-migration/reply-output-cost-update/execution-policy.json
+17da5a9a75b29a40e770d70fe8313965a99157c823c4b11c9d6da45327ae4a4f  .scratch/dsh-ts-migration/reply-output-cost-update/handoff.md
+ca8925ddef020ce416f314ae641e25b6840f6ab81a93c34d13d23c24fd038a98  .scratch/dsh-ts-migration/reply-output-cost-update/output-cost.test.mjs
+ba4d8383fee0d10bfd2356464d4476635fff5756f422b580fdea8ced1d865f68  .scratch/dsh-ts-migration/reply-output-cost-update/prepare-archive.mjs
+c4f0abe64095dd97df687d54618658ff53a57f709e13cfbd18164d3b543ae3c3  .scratch/dsh-ts-migration/reply-output-cost-update/report-current.mjs
+33554b5c99b4c01c4015ebc9ead2782ca4cac95d667ea130d25f6eda0190a6f6  .scratch/dsh-ts-migration/reply-output-cost-update/report.md
+cb23a4c108170623e4ecd5288b09bec7b3c566c5cda8b1447aca164833a054b9  .scratch/dsh-ts-migration/reply-output-cost-update/scope-snapshot.md
+47fb4ef5f8998c156106f7c4b3cdea0e8837c004d8e541b43180b47de02bed56  .scratch/dsh-ts-migration/reply-output-cost-update/verification.json
+63b882e228fcba638b77a14b22a84da2148a16d8f985f71b76bebe62c6bb3054  .scratch/dsh-ts-migration/reply-output-cost-update/artifact-manifest.json

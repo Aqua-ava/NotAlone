@@ -5,6 +5,7 @@ import {resolve} from 'node:path';
 import {verifyCapturedSources} from './capture-contract.mjs';
 import {auditReplyRuntimeSources} from '../../../backend-ts/src/reply-comparison-sources.ts';
 import {createBlindPacket} from '../../../backend-ts/experiments/reply-blind-packet.mjs';
+import {freezeExecutionPolicy,verifyExecutionPolicyBinding} from './execution-snapshot.mjs';
 
 const DSH_COMMIT='687f282e8625c6b8d11ff58211a90524be2e4317';
 const DIMENSIONS=['evidence_correctness','intent_preservation','no_unsupported_content','relationship_fit','chinese_usability'];
@@ -29,13 +30,13 @@ function options(args){
   const flag=args[index],value=args[index+1];
   if(!flag?.startsWith('--')||value===undefined)fail('arguments');
   const key=flag.slice(2);
-  if(!['capture','dataset','visible','binding','config','review','adjudication','output','summary-output','mode','source-commit'].includes(key))fail('argument_'+key);
+  if(!['capture','dataset','visible','binding','config','review','adjudication','output','summary-output','mode','source-commit','execution-policy'].includes(key))fail('argument_'+key);
   if(key==='review')values.review.push(value);
   else{if(seen.has(key))fail('duplicate_argument_'+key);seen.add(key);values[key]=value;}
  }
  for(const key of ['capture','dataset','visible','binding','config','output','summary-output'])if(!values[key])fail('missing_'+key);
  if(values.review.length!==2)fail('two_independent_reviews_required');
- const inputs=[values.capture,values.dataset,values.visible,values.binding,values.config,...values.review,...values.adjudication?[values.adjudication]:[]].filter(Boolean).map(value=>resolve(value));
+ const inputs=[values.capture,values.dataset,values.visible,values.binding,values.config,values['execution-policy'],...values.review,...values.adjudication?[values.adjudication]:[]].filter(Boolean).map(value=>resolve(value));
  for(const output of [values.output,values['summary-output']].map(value=>resolve(value)))if(inputs.includes(output))fail('output_overwrites_input');
  values.mode??='model-run';
  if(!['model-run','local-only'].includes(values.mode))fail('mode');
@@ -106,7 +107,8 @@ function boundReview(item,review,visibleItem,bindingItem){
  return {...structuredClone(review),...structuredClone(item),blind_id:bindingItem.original_blind_id,subject_sha256:bindingItem.reporter_subject_sha256,candidates};
 }
 
-function validateCapture(capture,args){
+function validateCapture(capture,args,executionPolicy){
+ verifyExecutionPolicyBinding(capture,executionPolicy);
  const expectedCommit=args['source-commit']??EXPECTED_NEW_COMMIT;
  const expectedKind=args.mode==='local-only'?'localhost_fake_provider_actual_business_pipelines':'official_deepseek_full_comparison_v1';
  if(capture.schema_version!=='reply-local-paired-collector-v1'||capture.protocol_version!=='migration-comparison-v1'||capture.evidence_kind!==expectedKind||capture.synthetic_only!==true||capture.planned!==96||capture.received!==96||!Array.isArray(capture.records)||capture.records.length!==96)fail('capture_contract');
@@ -123,7 +125,7 @@ function validateCapture(capture,args){
   if(row.actual.status==='succeeded'&&(!object(row.output)||!object(row.source_storage_receipt)))fail('successful_output_missing');
   const body=row.runtime_sources.attempts[0]?.request?.body;
   if(row.actual.status!=='succeeded'&&row.physical_calls===0)continue;
-  if(!object(body)||body.model!=='deepseek-flash'||body.temperature!==0||(body.top_p??1)!==1||body.max_tokens!==4096||canonical(body.thinking)!=='{"type":"disabled"}')fail('model_controls');
+  if(!object(body)||body.model!=='deepseek-flash'||body.temperature!==0||(body.top_p??1)!==1||body.max_tokens!==(executionPolicy?.controls.max_output_tokens??4096)||canonical(body.thinking)!=='{"type":"disabled"}')fail('model_controls');
   const stop=row.arm==='old'?body.stop:body.stop_sequences;
   if(row.arm==='old')equal(stop,[MAX_PRIMARY_STOP],'stop_controls');
   else if(stop!==undefined)fail('new_stop_control_changed');
@@ -132,7 +134,7 @@ function validateCapture(capture,args){
  for(const arm of ARMS)if(capture.records.filter(row=>row.arm===arm).length!==48)fail('arm_denominator');
 }
 
-function configurationFor(capture,modelSurfaces){
+function configurationFor(capture,modelSurfaces,executionPolicy){
  const old=createHash('sha256');
  const newMap=new Set();
  for(const row of capture.records){
@@ -148,7 +150,8 @@ function configurationFor(capture,modelSurfaces){
   reasoning:'disabled',
   temperature:0,
   top_p:1,
-  max_output_tokens:4096,
+  max_output_tokens:executionPolicy?.controls.max_output_tokens??4096,
+  ...executionPolicy?{execution_policy_sha256:capture.execution_policy_sha256}:{},
   timeout_ms:10000,
   max_retries:0,
   stop:[MAX_PRIMARY_STOP],
@@ -171,7 +174,8 @@ async function main(){
  ]);
  const capture=normalizeCaptureTimestamps(JSON.parse(captureText)),dataset=JSON.parse(datasetText),visible=JSON.parse(visibleText),binding=JSON.parse(bindingText);
  const visibleFileSha=createHash('sha256').update(visibleText).digest('hex');
- validateCapture(capture,args);
+ const executionPolicy=args['execution-policy']?freezeExecutionPolicy(JSON.parse(await readFile(args['execution-policy'],'utf8')),await readFile(new URL('./primary.json',import.meta.url))):undefined;
+ validateCapture(capture,args,executionPolicy);
  const modelSurfaces=capture.source_capture_version==='production_v2_actual_wire_pg'?verifyCapturedSources(capture,dataset):null;
  if((args.mode==='local-only'||args['source-commit'])&&!modelSurfaces)fail('production_v2_capture_required');
  const reviewCapture=reviewCaptureFor(capture);
@@ -228,10 +232,11 @@ async function main(){
   }
   equal([...adjudicated].sort(),disagreements,'adjudication_coverage');
  }
- const {config,configHash}=configurationFor(capture,modelSurfaces);
+ const {config,configHash}=configurationFor(capture,modelSurfaces,executionPolicy);
  const priceSource=JSON.parse(runConfigurationText).price_snapshot;
- const priceSnapshot={...structuredClone(priceSource),sha256:priceSource.source_page_sha256};
- if(capture.records.some(row=>row.cost!==null&&(row.cost?.price_snapshot_sha256!==priceSnapshot.sha256||row.cost?.currency!==priceSnapshot.currency)))fail('price_binding');
+ const priceSnapshot=priceSource?{...structuredClone(priceSource),sha256:priceSource.source_page_sha256}:null;
+ if(!priceSnapshot&&!executionPolicy)fail('price_snapshot_required');
+ if(capture.records.some(row=>row.cost!==null&&(!priceSnapshot||row.cost?.price_snapshot_sha256!==priceSnapshot.sha256||row.cost?.currency!==priceSnapshot.currency)))fail('price_binding');
  const sourceAuditSummary={verified:0,undetermined:0,by_arm:{old:{verified:0,undetermined:0},new:{verified:0,undetermined:0}},reasons:{}};
  const records=[];
  for(const row of capture.records){
@@ -270,6 +275,7 @@ async function main(){
   schema_version:'reply-migration-run-v1',protocol_version:'migration-comparison-v1',evidence_kind:args.mode==='local-only'?'reporter_fixture':'model_run',synthetic_review_fixture:args.mode==='local-only',synthetic_only:true,
   manifest_sha256:capture.source_bindings.manifest_sha256,dataset_sha256:digest(datasetText),
   configuration:config,config_hash:configHash,model_surface_bindings:modelSurfaces,
+  ...executionPolicy?{execution_policy:executionPolicy,execution_policy_sha256:capture.execution_policy_sha256}:{},
   bindings:{
    old:{commit:capture.source_bindings.old_commit,lock_hash:capture.source_bindings.lock_sha256,profile_hash:modelSurfaces?.profile_hashes.old??null},
    new:{commit:capture.source_bindings.new_commit,lock_hash:capture.source_bindings.lock_sha256,profile_hash:capture.source_bindings.profile_sha256,dsh_commit:capture.source_bindings.dsh_commit},
@@ -286,7 +292,8 @@ async function main(){
    const row=byOriginal.get(id);return `${row.case_id}:${row.arm}:${row.repeat}`;
   }),adjudicated:adjudicated.size},
   configuration:{provider:config.provider,endpoint:config.endpoint,request_model:config.request_model,temperature:config.temperature,top_p:config.top_p,max_output_tokens:config.max_output_tokens,reasoning:config.reasoning,timeout_ms:config.timeout_ms,max_retries:config.max_retries,config_hash:configHash,provider_protocol_equivalence:config.provider_protocol_equivalence,prompt_equivalence:config.prompt_equivalence},
-  price_snapshot:{currency:priceSnapshot.currency,sha256:priceSnapshot.sha256,billed_model:priceSnapshot.billed_model,cache_hit_usd_per_million:priceSnapshot.cache_hit_usd_per_million,cache_miss_usd_per_million:priceSnapshot.cache_miss_usd_per_million,output_usd_per_million:priceSnapshot.output_usd_per_million},
+  price_snapshot:priceSnapshot?{currency:priceSnapshot.currency,sha256:priceSnapshot.sha256,billed_model:priceSnapshot.billed_model,cache_hit_usd_per_million:priceSnapshot.cache_hit_usd_per_million,cache_miss_usd_per_million:priceSnapshot.cache_miss_usd_per_million,output_usd_per_million:priceSnapshot.output_usd_per_million}:null,
+  ...executionPolicy?{cost_status:executionPolicy.cost_status,output_status:executionPolicy.output_status,execution_policy_sha256:capture.execution_policy_sha256}:{},
   source_audit:sourceAuditSummary,
   timing:{
    successful_observations:records.filter(row=>row.terminal_status==='succeeded'&&row.latency_ms!==null).length,

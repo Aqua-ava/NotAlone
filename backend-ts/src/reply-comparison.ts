@@ -47,6 +47,9 @@ export function createReplyComparisonPlan(manifestText:string,datasetText:string
 }
 interface Audited {record:Row|null;id:string;case_id:string;arm:'old'|'new';repeat:number;status:string;pass:number;usability:number|null;severe:Row|null;reviews:Row[];output_sha256:string|null;source_audit?:ReplyRuntimeSourceAudit}
 interface Issue {record_id:string|null;reason:string;blocking?:boolean}
+export interface ReplyComparisonReportOptions {
+ costWaiver?:{status:'waived_by_user';scope_ref:string;scope_sha256:string};
+}
 /** 只投影合同列出的标量元数据；其余对象仍留在显式输入证据中。 */
 function metadataFields(value:unknown,fields:readonly string[]):Row|null {
  if(!object(value))return null;
@@ -197,7 +200,10 @@ function auditLatency(row:Row,id:string,unknown:(id:string,reason:string,blockin
  * 唯一报告接缝：原始输入不改写，输出不复制正文。前3维所有候选均须为2才满足事实/意图；
  * 关系与中文分别无0且组均分>=1.5。未知值保持null，分母始终每臂48。
  */
-export function buildReplyComparisonReport(manifestText:string,datasetText:string,value:unknown){
+export function buildReplyComparisonReport(manifestText:string,datasetText:string,value:unknown,options:ReplyComparisonReportOptions={}){
+ if(!object(options)||Object.keys(options).some(key=>key!=='costWaiver'))invalid('report_options');
+ const costWaiver=options.costWaiver;
+ if(costWaiver!==undefined&&(!object(costWaiver)||Object.keys(costWaiver).sort().join(',')!=='scope_ref,scope_sha256,status'||costWaiver.status!=='waived_by_user'||!known(costWaiver.scope_ref)||!hashString(costWaiver.scope_sha256)))invalid('cost_waiver');
  const {manifest,cases}=frozen(manifestText,datasetText);
  if(!object(value))return invalid('run');const run=value;
  if(run.schema_version!=='reply-migration-run-v1'||run.protocol_version!=='migration-comparison-v1'||run.synthetic_only!==true||!['model_run','reporter_fixture'].includes(run.evidence_kind)||run.manifest_sha256!==MANIFEST_SHA||run.dataset_sha256!==digest(datasetText)||!Array.isArray(run.records))invalid('run_binding');
@@ -214,7 +220,7 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
  for(const arm of ARMS){const binding=run.bindings[arm];if(!object(binding)||typeof binding.commit!=='string'||!/^[a-f0-9]{40}$/.test(binding.commit))invalid('commit_binding');for(const key of ['lock_hash','profile_hash'])checkHash(binding[key],null,arm+'_'+key+'_unknown');}
  if(run.bindings.old.commit!==manifest.baseline_commit||run.bindings.new.dsh_commit!==DSH_COMMIT)invalid('baseline_or_dsh_commit');
  if(run.price_snapshot!==null&&(!object(run.price_snapshot)||!known(run.price_snapshot.currency)||!hashString(run.price_snapshot.sha256)))invalid('price_snapshot');
- if(run.price_snapshot===null)unknown(null,'price_snapshot_unknown');
+ if(run.price_snapshot===null)unknown(null,'price_snapshot_unknown',costWaiver===undefined);
  const byId=new Map<string,Row>(),blindIds=new Set<string>(),deferredRequestHashes=new Set<string>(),orders=new Map(createReplyComparisonPlan(manifestText,datasetText).map(p=>[p.case_id+':'+p.repeat,p.order]));
  const members=new Map(cases.map(c=>[c.case_id,c]));
  for(const row of run.records){
@@ -318,7 +324,7 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
   const persistedResultKnown=runtime?item.source_audit?.status==='verified':row.deterministic_checks.status==='passed'&&object(row.output)&&row.deterministic_checks.output_sha256===digest(row.output);
   const measuredLatency=auditLatency(row,item.id,unknown,persistedResultKnown,item.source_audit);latencyAudits.set(item.id,measuredLatency);
   const metric={physical_calls:row.physical_calls,total_tokens:total,cost:row.cost?.amount??null,latency_ms:measuredLatency.latency_ms};measurements.set(item.id,metric);
-  for(const k of telemetryFields)if(metric[k]===null)unknown(item.id,k+'_unknown');
+  for(const k of telemetryFields)if(metric[k]===null)unknown(item.id,k+'_unknown',k!=='cost'||costWaiver===undefined);
  }
  const actualModels=new Set(audited.flatMap(r=>r.record&&known(r.record.actual_model)?[r.record.actual_model]:[])),fingerprints=new Set(audited.flatMap(r=>r.record&&known(r.record.model_fingerprint)?[r.record.model_fingerprint]:[]));
  if(actualModels.size>1||fingerprints.size>1)unknown(null,'response_model_or_fingerprint_drift_requires_split');
@@ -346,8 +352,10 @@ export function buildReplyComparisonReport(manifestText:string,datasetText:strin
  };
  const metrics={physical_calls:metricGate('physical_calls',1.05,'total_ratio'),total_tokens:metricGate('total_tokens',1.10,'total_ratio'),cost:metricGate('cost',1.10,'total_ratio'),latency_p50:metricGate('latency_ms',1.15,'p50_ratio'),latency_p95:metricGate('latency_ms',1.25,'p95_ratio')};
  const latencyDiagnostics=Object.fromEntries(DIAGNOSTICS.map(name=>[name,Object.fromEntries(ARMS.map(arm=>{const rows=audited.filter(row=>row.arm===arm),count=(status:string)=>rows.filter(row=>(latencyAudits.get(row.id)?.diagnostics[name]?.observability??'missing')===status).length;return [arm,{denominator:48,observed:count('observed'),unobservable:count('unobservable'),missing:count('missing')}];}))]));
- const overall=combineStatus([semanticStatus,failureRate.status,...Object.values(metrics).map(m=>m.status),failures.some(f=>f.blocking!==false)?'failed':unknowns.some(u=>u.blocking!==false)?'undetermined':'passed']);
+ // 用户本轮豁免仅影响费用资格；原测量、历史阈值结论及其他失败仍保留。
+ const overall=combineStatus([semanticStatus,failureRate.status,...Object.entries(metrics).filter(([key])=>key!=='cost'||costWaiver===undefined).map(([,metric])=>metric.status),failures.some(f=>f.blocking!==false)?'failed':unknowns.some(u=>u.blocking!==false)?'undetermined':'passed']);
  return {schema_version:'reply-migration-report-v1',protocol_version:run.protocol_version,domain:'reply',evidence_kind:run.evidence_kind,
+  ...costWaiver?{cost_status:'waived_by_user' as const,cost_qualification:{...costWaiver,threshold_applied:false}}:{},
   audit_scope:'offline_supplied_evidence_only',production_switch_approved:false,real_model_quality_verified:false,
   model_equivalence:{conclusion:unknowns.some(u=>['actual_model_unknown','model_fingerprint_unknown','response_model_or_fingerprint_drift_requires_split'].includes(u.reason))?'same_request_configuration_only':'same_observed_response_version',underlying_model_equivalence_verified:false},
   bindings:{manifest_sha256:MANIFEST_SHA,dataset_sha256:run.dataset_sha256,config_hash:run.config_hash,price_snapshot:metadataFields(run.price_snapshot,['currency','sha256']),arms:{old:metadataFields(run.bindings.old,['commit','lock_hash','profile_hash']),new:metadataFields(run.bindings.new,['commit','lock_hash','profile_hash','dsh_commit'])}},
