@@ -1,0 +1,25 @@
+{
+  "schema_version": "independent-priority-interface-probe-v1",
+  "arm": "base",
+  "state": "passed",
+  "total": 1,
+  "failed": 0,
+  "results": [
+    {
+      "name": "精确小ACK只表示登记且不投影读取成功",
+      "state": "passed",
+      "elapsed_ms": 0.19445899999999483,
+      "ack_bytes": 69,
+      "history_rows": 337
+    }
+  ],
+  "scope": {
+    "synthetic_loopback_http": true,
+    "database": false,
+    "real_app": false,
+    "wechat": false,
+    "model_calls": 0,
+    "product_host_starts": 0,
+    "scope_store": "explicit_test_double_not_database_proof"
+  }
+}

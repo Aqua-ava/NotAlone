@@ -1,0 +1,45 @@
+▶ 110升级116保留原数据与unknown收据，学习claim完整约束和级联
+  ✔ 缺失学习slot约束 model_call_learning_claim_attempt_id_owner_id_contact_id_r_fkey (13.758125ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_lease_generation_check (11.543292ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_pkey (12.54575ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_step_id_lease_generation_key (12.720625ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_step_id_task_id_fkey (12.014083ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_step_name_check (11.968875ms)
+  ✔ 缺失学习slot约束 model_call_learning_claim_task_id_owner_id_contact_id_fkey (12.628625ms)
+  ✔ 缺失原表候选键 model_call_receipt_claim_scope_key (8.983708ms)
+  ✔ 缺失原表候选键 background_task_step_claim_task_key (7.908375ms)
+✔ 110升级116保留原数据与unknown收据，学习claim完整约束和级联 (883.687917ms)
+▶ 109升级当前116保留业务UUID及未知用量，receipt隔离和关键约束损坏关闭门禁
+  ✔ 缺少约束 model_call_receipt_cache_read_tokens_check (12.930042ms)
+  ✔ 缺少约束 model_call_receipt_cache_write_tokens_check (12.14825ms)
+  ✔ 缺少约束 model_call_receipt_check (11.450458ms)
+  ✔ 缺少约束 model_call_receipt_check1 (13.554416ms)
+  ✔ 缺少约束 model_call_receipt_check2 (11.744375ms)
+  ✔ 缺少约束 model_call_receipt_check3 (10.94825ms)
+  ✔ 缺少约束 model_call_receipt_check4 (12.2395ms)
+  ✔ 缺少约束 model_call_receipt_check5 (11.345833ms)
+  ✔ 缺少约束 model_call_receipt_cost_amount_check (11.053458ms)
+  ✔ 缺少约束 model_call_receipt_cost_status_check (11.655125ms)
+  ✔ 缺少约束 model_call_receipt_dispatch_check (11.670042ms)
+  ✔ 缺少约束 model_call_receipt_input_budget_check (11.854042ms)
+  ✔ 缺少约束 model_call_receipt_input_tokens_check (11.019667ms)
+  ✔ 缺少约束 model_call_receipt_latency_ms_check (11.089ms)
+  ✔ 缺少约束 model_call_receipt_ledger_entry_id_fkey (12.512167ms)
+  ✔ 缺少约束 model_call_receipt_ledger_entry_id_key (11.401125ms)
+  ✔ 缺少约束 model_call_receipt_model_name_check (12.055959ms)
+  ✔ 缺少约束 model_call_receipt_outcome_check (11.857958ms)
+  ✔ 缺少约束 model_call_receipt_output_tokens_check (10.821958ms)
+  ✔ 缺少约束 model_call_receipt_owner_id_contact_id_fkey (11.280167ms)
+  ✔ 缺少约束 model_call_receipt_owner_id_fkey (11.653375ms)
+  ✔ 缺少约束 model_call_receipt_pkey (11.479833ms)
+  ✔ 缺少约束 model_call_receipt_provider_check (11.62425ms)
+  ✔ 缺少约束 model_call_receipt_scope_kind_check (12.0195ms)
+✔ 109升级当前116保留业务UUID及未知用量，receipt隔离和关键约束损坏关闭门禁 (1027.927584ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2035.475125

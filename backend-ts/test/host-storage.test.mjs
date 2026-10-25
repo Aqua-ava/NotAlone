@@ -318,3 +318,244 @@ test('每次业务读取重新核验全部SQL字节，文件故障与同元数�
     assert.equal(await read(), 1);
   } finally { await storage?.close(); await fixture.close(); }
 });
+
+test('暖读后SQL文件的替换、链接和恢复均按当前真实文件重新核验', async () => {
+  const { cp, chmod, readdir, rename, symlink, utimes } = await import('node:fs/promises');
+  const fixture = await createStorageFixture();
+  const copied = join(fixture.directory, 'migration-identity');
+  let storage;
+  try {
+    await cp(fixture.migrationsDirectory, copied, { recursive: true });
+    await chmod(copied, 0o700);
+    const names = (await readdir(copied)).filter(name => name.endsWith('.sql')).sort();
+    for (const name of names) await chmod(join(copied, name), 0o600);
+    storage = await HostStorage.open({ ...fixture.options, migrationsDirectory: copied });
+    const read = () => storage.businessReadTransaction(async client => (await client.query('SELECT 1 AS value')).rows[0].value);
+    assert.equal(await read(), 1);
+    const target = join(copied, names.at(-1)), saved = target + '.saved';
+    const original = await readFile(target), metadata = await stat(target);
+    await writeFile(saved, original, { mode: 0o600 });
+    await utimes(saved, metadata.atime, metadata.mtime);
+    await rename(saved, target);
+    assert.equal(await read(), 1);
+    await rename(target, saved);
+    await symlink(saved, target);
+    await assert.rejects(read(), { code: 'migration_files_invalid' });
+    await rm(target);
+    await rename(saved, target);
+    assert.equal(await read(), 1);
+  } finally { await storage?.close(); await fixture.close(); }
+});
+
+test('连续本机业务事务复用清理后的连接，旧事务查询不能进入下一事务', async () => {
+  const { randomUUID } = await import('node:crypto');
+  const fixture = await createStorageFixture();
+  const storage = await HostStorage.open(fixture.options);
+  let oldClient, oldQuery;
+  try {
+    const first = await storage.businessTransaction(async client => {
+      oldClient = client;
+      oldQuery = client.query.bind(client);
+      await client.query('CREATE TEMP TABLE synthetic_lease_only(value integer)');
+      await client.query("SET application_name='synthetic_lease_changed'");
+      return (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    });
+    await oldClient.end();
+    const second = await storage.businessTransaction(async client => {
+      await assert.rejects(oldQuery('INSERT INTO public.owner(id,display_name) VALUES($1,$2)', [randomUUID(), '不得越过事务的合成写入']));
+      const state = (await client.query("SELECT pg_backend_pid() AS pid,to_regclass('pg_temp.synthetic_lease_only') AS temporary,current_setting('application_name') AS application,(SELECT count(*)::int FROM public.owner) AS owners")).rows[0];
+      assert.equal(state.temporary, null);
+      assert.notEqual(state.application, 'synthetic_lease_changed');
+      assert.equal(state.owners, 0);
+      return state.pid;
+    });
+    assert.equal(second, first);
+  } finally { await storage.close(); await fixture.close(); }
+});
+
+test('并发业务事务各占连接，归还只留一个空闲连接且关闭排空', async () => {
+  const { randomUUID } = await import('node:crypto');
+  const fixture = await createStorageFixture();
+  const storage = await HostStorage.open(fixture.options);
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const ready = new Promise(resolve => { entered = resolve; });
+  const owner = randomUUID();
+  try {
+    const first = storage.businessTransaction(async client => {
+      await client.query('INSERT INTO public.owner(id,display_name) VALUES($1,$2)', [owner, '并发隔离合成本人']);
+      const pid = (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      entered(); await gate; return pid;
+    });
+    await ready;
+    const second = await storage.businessReadTransaction(async client => {
+      const result = (await client.query('SELECT pg_backend_pid() AS pid,(SELECT count(*)::int FROM public.owner WHERE id=$1) AS owners', [owner])).rows[0];
+      assert.equal(result.owners, 0);
+      return result.pid;
+    });
+    release();
+    assert.notEqual(await first, second);
+    assert.equal((await fixture.client.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=current_database() AND application_name='notalone_ts_host'")).rows[0].n, 1);
+    assert.equal(await storage.businessReadTransaction(async client => (await client.query('SELECT count(*)::int AS n FROM public.owner WHERE id=$1', [owner])).rows[0].n), 1);
+    await storage.close();
+    assert.equal((await fixture.client.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=current_database() AND application_name='notalone_ts_host'")).rows[0].n, 0);
+  } finally { release(); await storage.close(); await fixture.close(); }
+});
+
+test('租约撤销后的原生Query保留回调身份和返回，复用后的业务错误不被旧观察器污染', async () => {
+  const pg = (await import('pg')).default;
+  const fixture = await createStorageFixture();
+  const storage = await HostStorage.open(fixture.options);
+  let oldClient;
+  try {
+    await storage.businessTransaction(async client => { oldClient = client; await client.query('SELECT 1'); });
+    await storage.businessTransaction(async client => {
+      await new Promise((resolve, reject) => {
+        function callback(error) {
+          try { assert.ok(error); assert.equal(this, query); assert.equal(this.callback, callback); resolve(); }
+          catch (failure) { reject(failure); }
+        }
+        const query = new pg.Query('SELECT 1', callback);
+        Object.defineProperty(query, 'callback', { value: callback, writable: false });
+        query.then = () => assert.fail('迟到Query也不得当作thenable消费');
+        assert.equal(oldClient.query(query), query);
+      });
+      assert.equal((await client.query('SELECT 2 AS value')).rows[0].value, 2);
+    });
+    const failure = new Error('合成业务错误');
+    await assert.rejects(storage.businessTransaction(async client => { await client.query('SELECT 3'); throw failure; }), error => error === failure);
+    await assert.rejects(storage.businessTransaction(async client => { await client.query('SELECT 1/0'); }), { code: 'database_unavailable' });
+    assert.equal(await storage.businessReadTransaction(async client => (await client.query('SELECT 4 AS value')).rows[0].value), 4);
+  } finally { await storage.close(); await fixture.close(); }
+});
+
+test('空闲连接被终止后受控失败并另建连接，不重放业务回调', async () => {
+  const fixture = await createStorageFixture();
+  const storage = await HostStorage.open(fixture.options);
+  let calls = 0;
+  try {
+    const original = await storage.businessReadTransaction(async client => (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+    await fixture.client.query('SELECT pg_terminate_backend($1)', [original]);
+    await new Promise(resolve => setImmediate(resolve));
+    let current;
+    try { current = await storage.businessReadTransaction(async client => { calls++; return (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid; }); }
+    catch (error) { assert.equal(error.code, 'database_unavailable'); assert.equal(calls, 0); }
+    if (current === undefined) current = await storage.businessReadTransaction(async client => { calls++; return (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid; });
+    assert.notEqual(current, original);
+    assert.equal(calls, 1);
+  } finally { await storage.close(); await fixture.close(); }
+});
+
+test('Client链式监听返回当前租约，保存的链和查询不能越过事务或传递监听器', async () => {
+  const { randomUUID } = await import('node:crypto');
+  const fixture = await createStorageFixture();
+  const storage = await HostStorage.open(fixture.options);
+  let chain, query, notices = 0, ends = 0;
+  const notice = () => { notices++; };
+  try {
+    const first = await storage.businessTransaction(async client => {
+      chain = client.on('notice', notice).once('end', () => { ends++; });
+      assert.ok(chain === client, '链式返回必须保持当前租约身份');
+      query = chain.query.bind(chain);
+      await client.query("DO $$ BEGIN RAISE NOTICE 'synthetic_lease_notice'; END $$");
+      return (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+    });
+    assert.equal(notices, 1);
+    assert.equal(ends, 1);
+    await storage.businessTransaction(async client => {
+      await assert.rejects(query('INSERT INTO public.owner(id,display_name) VALUES($1,$2)', [randomUUID(), '链式迟到查询不得写入']));
+      await assert.rejects(chain.query('SELECT 1'));
+      await client.query("DO $$ BEGIN RAISE NOTICE 'synthetic_next_lease'; END $$");
+      assert.equal(notices, 1);
+      assert.notEqual((await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid, first);
+      assert.equal((await client.query('SELECT count(*)::int AS n FROM public.owner')).rows[0].n, 0);
+    });
+    assert.equal(ends, 1);
+  } finally { await storage.close(); await fixture.close(); }
+});
+
+test('仅持有空闲业务连接的子进程也必须完成关闭排空', async () => {
+  const { execFile } = await import('node:child_process');
+  const fixture = await createStorageFixture();
+  try {
+    const source = `import {HostStorage} from ${JSON.stringify(new URL('../src/host-storage.ts', import.meta.url).href)};
+const storage=await HostStorage.open({envFilePath:'',migrationsDirectory:${JSON.stringify(fixture.migrationsDirectory)},environment:{NOTALONE_DISABLE_DOTENV:'1',NOTALONE_DATABASE_URL:${JSON.stringify(`host=/tmp dbname=${fixture.client.database}`)}}});
+await storage.businessReadTransaction(async client=>client.query('SELECT 1'));
+await storage.close();console.log('closed');`;
+    const result = await new Promise(resolve => execFile(process.execPath, ['--input-type=module', '--eval', source],
+      { env: { PATH: '/usr/bin:/bin' }, timeout: 5000 }, (error, stdout) => resolve({ code: error?.code ?? 0, stdout })));
+    assert.equal(result.code, 0, '只有空闲连接的进程也必须完成close');
+    assert.equal(result.stdout.trim(), 'closed');
+  } finally { await fixture.close(); }
+});
+
+test('catalog限定验证投影仍保留未知对象、账本视图与零列必需表的原判定', async () => {
+  const fixture = await createStorageFixture();
+  const storage = await HostStorage.open(fixture.options);
+  const read = () => storage.businessReadTransaction(async client => (await client.query('SELECT 1 AS value')).rows[0].value);
+  try {
+    await fixture.client.query('CREATE TABLE public.synthetic_unknown_empty(); CREATE VIEW public.synthetic_unknown_view AS SELECT 1 AS value; CREATE SEQUENCE public.synthetic_unknown_sequence');
+    assert.equal(await read(), 1);
+    await fixture.client.query('ALTER TABLE public.notalone_schema_migration RENAME TO synthetic_saved_ledger; CREATE VIEW public.notalone_schema_migration AS SELECT name,checksum FROM public.synthetic_saved_ledger');
+    await assert.rejects(read(), { code: 'baseline_missing' });
+    await fixture.client.query('DROP VIEW public.notalone_schema_migration; ALTER TABLE public.synthetic_saved_ledger RENAME TO notalone_schema_migration');
+    assert.equal(await read(), 1);
+    await fixture.client.query('DROP TABLE public.channel_identity CASCADE; CREATE TABLE public.channel_identity()');
+    await assert.rejects(read(), { code: 'schema_incomplete' });
+  } finally { await storage.close(); await fixture.close(); }
+});
+
+test('复用连接逐次绑定当前passfile凭据，修改、权限变宽与删除均淘汰旧认证', async () => {
+  const { chmod } = await import('node:fs/promises');
+  const fixture = await createStorageFixture();
+  const passfile = join(fixture.directory, 'synthetic.pgpass');
+  let storage;
+  const previousGlobal = process.env.PGPASSWORD;
+  try {
+    const line = password => `localhost:5432:${fixture.client.database}:${fixture.client.user}:${password}\n`;
+    await writeFile(passfile, line('synthetic-provider-one'), { mode: 0o600 });
+    process.env.PGPASSWORD = 'synthetic-global-must-not-fallback';
+    storage = await HostStorage.open({ ...fixture.options, environment: { PGPASSFILE: passfile, PGPASSWORD: '' } });
+    const pid = () => storage.businessReadTransaction(async client => (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+    const original = await pid();
+    await writeFile(passfile, line('synthetic-provider-two'));
+    const changed = await pid();
+    assert.ok(changed !== original, '当前凭据内容改变必须淘汰旧连接');
+    await chmod(passfile, 0o644);
+    const broad = await pid();
+    assert.ok(broad !== changed, 'passfile权限变宽后必须按原规则忽略凭据并淘汰旧连接');
+    await chmod(passfile, 0o600);
+    const restored = await pid();
+    assert.ok(restored !== broad, '恢复有效凭据后重新认证');
+    await rm(passfile);
+    const deleted = await pid();
+    assert.ok(deleted !== restored, '删除passfile后不得继续复用旧认证');
+    process.env.PGPASSWORD = 'synthetic-global-changed-again';
+    assert.equal(await pid(), deleted, '受控provider为空时不读取全局PGPASSWORD');
+  } finally {
+    if (previousGlobal === undefined) delete process.env.PGPASSWORD; else process.env.PGPASSWORD = previousGlobal;
+    await storage?.close(); await fixture.close();
+  }
+});
+
+test('暖读后的数据库列与约束仍逐事务新鲜核验，额外列及后台约束保持原规则', async () => {
+  const fixture = await createStorageFixture();
+  const storage = await HostStorage.open(fixture.options);
+  const read = () => storage.businessReadTransaction(async client => (await client.query('SELECT 1 AS value')).rows[0].value);
+  try {
+    assert.equal(await read(), 1);
+    await fixture.client.query('ALTER TABLE public.model_call_receipt ADD COLUMN synthetic_extra text');
+    assert.equal(await read(), 1);
+    await fixture.client.query('ALTER TABLE public.model_call_receipt ALTER COLUMN synthetic_extra SET NOT NULL');
+    await assert.rejects(read(), { code: 'schema_incomplete' });
+    await fixture.client.query('ALTER TABLE public.model_call_receipt DROP COLUMN synthetic_extra');
+    assert.equal(await read(), 1);
+    const definition = (await fixture.client.query("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='public.model_call_receipt'::regclass AND conname='model_call_receipt_cache_read_tokens_check'")).rows[0].definition;
+    await fixture.client.query('ALTER TABLE public.model_call_receipt DROP CONSTRAINT model_call_receipt_cache_read_tokens_check');
+    await assert.rejects(read(), { code: 'schema_incomplete' });
+    await fixture.client.query(`ALTER TABLE public.model_call_receipt ADD CONSTRAINT model_call_receipt_cache_read_tokens_check ${definition}`);
+    assert.equal(await read(), 1);
+    await fixture.client.query('ALTER TABLE public.background_task_step ADD CONSTRAINT synthetic_ignored CHECK(true) NOT VALID');
+    assert.equal(await read(), 1);
+  } finally { await storage.close(); await fixture.close(); }
+});

@@ -1,0 +1,53 @@
+TAP version 13
+# Subtest: pg 成功重载保留 Query、回调 this、配置回调和结果对象身份
+    # Subtest: positional_callback
+    ok 1 - positional_callback
+      ---
+      duration_ms: 10.490084
+      type: 'test'
+      ...
+    # Subtest: config_callback
+    ok 2 - config_callback
+      ---
+      duration_ms: 5.420291
+      type: 'test'
+      ...
+    # Subtest: query_callback
+    ok 3 - query_callback
+      ---
+      duration_ms: 4.612125
+      type: 'test'
+      ...
+    # Subtest: query_callback_with_then
+    ok 4 - query_callback_with_then
+      ---
+      duration_ms: 6.03
+      type: 'test'
+      ...
+    # Subtest: query_positional_callback
+    ok 5 - query_positional_callback
+      ---
+      duration_ms: 5.78175
+      type: 'test'
+      ...
+    # Subtest: query_event
+    ok 6 - query_event
+      ---
+      duration_ms: 5.74
+      type: 'test'
+      ...
+    1..6
+ok 1 - pg 成功重载保留 Query、回调 this、配置回调和结果对象身份
+  ---
+  duration_ms: 997.692959
+  type: 'test'
+  ...
+1..1
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1099.744333

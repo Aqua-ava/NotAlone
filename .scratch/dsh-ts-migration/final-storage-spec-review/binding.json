@@ -1,0 +1,304 @@
+{
+  "schema_version": "independent-static-spec-review-v1",
+  "input_manifest": ".scratch/dsh-ts-migration/final-storage-review-input-v1/manifest.json",
+  "manifest_sha256": "3513144b9dd7e53825a52c262a3df7ce631616928e0d93ff8b267b81c5c86deb",
+  "delta_patch_sha256": "d687ba0ab1ffe9f392f5829bdcb5a2420a664b23249fee7bf8c84c03bb7f185c",
+  "base_commit": "e5d8183bff811bc9bdd466a3035deb0b6abf10e3",
+  "head_at_capture": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+  "includes_uncommitted_source": true,
+  "files": [
+    {
+      "path": "backend-ts/src/pure-ts-sync.ts",
+      "snapshot": "source/backend-ts/src/pure-ts-sync.ts",
+      "sha256": "37ca58742d727efce951f9b48914875c76454d2c8f99676d158afbb7018fa2b8",
+      "bytes": 7640,
+      "base_sha256": "b1f5895f8e223afa55733f140e7d160b1488851eeb87fc5920c584bc7c256016",
+      "patch_reconstructs_snapshot": true,
+      "verified_sha256": "37ca58742d727efce951f9b48914875c76454d2c8f99676d158afbb7018fa2b8"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-sync.test.mjs",
+      "snapshot": "source/backend-ts/test/pure-ts-sync.test.mjs",
+      "sha256": "99b9c5fd8464e5727222d1c0331a09c26fc16e29570976b26b0c1da535ed864b",
+      "bytes": 14630,
+      "base_sha256": "dbe7ce97a4223b2ba8ba97d03edb19f0cdec539252d36c01334e8ab096695ce2",
+      "patch_reconstructs_snapshot": true,
+      "verified_sha256": "99b9c5fd8464e5727222d1c0331a09c26fc16e29570976b26b0c1da535ed864b"
+    },
+    {
+      "path": "desktop/src/main/sync/priority.ts",
+      "snapshot": "source/desktop/src/main/sync/priority.ts",
+      "sha256": "7f86540aae640d659decb7b551c12d4d7938484fa5d6c27e1a021b09d2f077c4",
+      "bytes": 4175,
+      "base_sha256": "d69f5de20898ce66eb32fc098546272b3d987c212defcddc5ef4297a408bd563",
+      "patch_reconstructs_snapshot": true,
+      "verified_sha256": "7f86540aae640d659decb7b551c12d4d7938484fa5d6c27e1a021b09d2f077c4"
+    },
+    {
+      "path": "desktop/tests/sync-priority.test.mjs",
+      "snapshot": "source/desktop/tests/sync-priority.test.mjs",
+      "sha256": "c846793a1ee37767398c1885ef2d2ae10e68ed9e85b056344a27f8be802fc3b5",
+      "bytes": 11818,
+      "base_sha256": "f31587ecc62e8dac52c8cffa814ea39f2ab2eebde4895079b252d6d51885f92d",
+      "patch_reconstructs_snapshot": true,
+      "verified_sha256": "c846793a1ee37767398c1885ef2d2ae10e68ed9e85b056344a27f8be802fc3b5"
+    },
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "snapshot": "source/backend-ts/src/host-storage.ts",
+      "sha256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+      "bytes": 54783,
+      "base_sha256": "7f63954a3cc1ab9450316b4e8021df9f4a8e6422354dbaf817e3c788c5d09259",
+      "patch_reconstructs_snapshot": true,
+      "verified_sha256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25"
+    },
+    {
+      "path": "backend-ts/test/host-storage.test.mjs",
+      "snapshot": "source/backend-ts/test/host-storage.test.mjs",
+      "sha256": "a941afb0b24e6570a78467e27051487f23e212fa51b7a0511eee828ca4970468",
+      "bytes": 37660,
+      "base_sha256": "41d81e43e4a2a45efbde80e999f0d813f75cf739f833f8028d1ecf75999b730b",
+      "patch_reconstructs_snapshot": true,
+      "verified_sha256": "a941afb0b24e6570a78467e27051487f23e212fa51b7a0511eee828ca4970468"
+    }
+  ],
+  "git_dependencies": [
+    {
+      "path": "backend-ts/pnpm-lock.yaml",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+      "snapshot": "dependency/backend-ts/pnpm-lock.yaml"
+    },
+    {
+      "path": "backend-ts/package.json",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "23efe4561bfc415f66ccf220839116f047ca6311a3aead6999dab2fd72450e61",
+      "snapshot": "dependency/backend-ts/package.json"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-api.ts",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "a7f34abc5bd3b27f5c3c0687fd58d5154cc006325e8977c0c91252f241878ee1",
+      "snapshot": "dependency/backend-ts/src/sync-incremental-api.ts"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-engine.ts",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "20b8fa7bc2f7a44e64598f4da4338173b386f34d338e2a9583497fcf27a44bc6",
+      "snapshot": "dependency/backend-ts/src/sync-incremental-engine.ts"
+    },
+    {
+      "path": "backend-ts/src/host-plugin.ts",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "226982751ea037f2e31bcd9efb9909fe6bbe63c8140dcf7094ff0ad2ea22441d",
+      "snapshot": "dependency/backend-ts/src/host-plugin.ts"
+    },
+    {
+      "path": "backend-ts/src/wechat-scope-api.ts",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "c6e8f893bd9f93a9a52751b83c4adc5b13cbb3049872a0e0593338697ec02958",
+      "snapshot": "dependency/backend-ts/src/wechat-scope-api.ts"
+    },
+    {
+      "path": "backend-ts/test/business-transaction-errors.test.mjs",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "8edeee1266b72b1340e5337f727ee452916d586c260b6fdbf2984342f2799ab5",
+      "snapshot": "dependency/backend-ts/test/business-transaction-errors.test.mjs"
+    },
+    {
+      "path": "backend-ts/test/host-storage-fixture.mjs",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a",
+      "snapshot": "dependency/backend-ts/test/host-storage-fixture.mjs"
+    },
+    {
+      "path": "desktop/src/main/backend/host.ts",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "96391ea0a9c584e73fd1a026c06d19bd4d75adf42febb6c6277f9ea00290623e",
+      "snapshot": "dependency/desktop/src/main/backend/host.ts"
+    },
+    {
+      "path": "desktop/src/main/sync/controller.ts",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "38f82f01fc755a352ee19f149289624ad773f9f5a7f0e5018a52b336228d4c93",
+      "snapshot": "dependency/desktop/src/main/sync/controller.ts"
+    },
+    {
+      "path": "desktop/src/main/contacts/session.ts",
+      "commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+      "sha256": "5ddc9305bbe873350def46839e4a23852df6bed9cc33be7ef254e04c16fb977b",
+      "snapshot": "dependency/desktop/src/main/contacts/session.ts"
+    }
+  ],
+  "installed_pg_sources": [
+    {
+      "path": "backend-ts/node_modules/pg/package.json",
+      "sha256": "f7b678a8055c234669e8dd272dd624771e29d9f0e3a3353f15c3005ab1a5fd29",
+      "snapshot": "dependency/backend-ts/node_modules/pg/package.json",
+      "source": "read_only_installed_source",
+      "independent_runtime_test": false
+    },
+    {
+      "path": "backend-ts/node_modules/pg/lib/client.js",
+      "sha256": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4",
+      "snapshot": "dependency/backend-ts/node_modules/pg/lib/client.js",
+      "source": "read_only_installed_source",
+      "independent_runtime_test": false
+    },
+    {
+      "path": "backend-ts/node_modules/pg/lib/query.js",
+      "sha256": "dea8044d70531cd16e514ecddbe44cdd65b4315a02287958d5ecfd0ebcd70ded",
+      "snapshot": "dependency/backend-ts/node_modules/pg/lib/query.js",
+      "source": "read_only_installed_source",
+      "independent_runtime_test": false
+    },
+    {
+      "path": "backend-ts/node_modules/pg/lib/connection-parameters.js",
+      "sha256": "db77bac013bfb5faae661d3056f3fbc49f5bae60334f60b149de0c271a9d9725",
+      "snapshot": "dependency/backend-ts/node_modules/pg/lib/connection-parameters.js",
+      "source": "read_only_installed_source",
+      "independent_runtime_test": false
+    }
+  ],
+  "requirements": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "7095e1a67b67fcaf115ad6f6554c698384961ab0b49da3625ce4a663676a6bd8",
+      "snapshot": "requirements/AGENTS.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "CONTEXT.md",
+      "sha256": "b1e4096fef6ded7b40812dbce82054aa2d319fa31bbb60061331cc7ac0686fa8",
+      "snapshot": "requirements/CONTEXT.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "docs/agents/workflow.md",
+      "sha256": "634636a93c9d105744013535b21a7e6f613f3ad8100cbbf23ad1c599645a6a8e",
+      "snapshot": "requirements/docs/agents/workflow.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "docs/agents/engineering.md",
+      "sha256": "d20d6f95bb31e25190a12e6384b80d21db9763b9dfe56f96892f40792a165d13",
+      "snapshot": "requirements/docs/agents/engineering.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "docs/agents/domain.md",
+      "sha256": "3a11c0131b777915833a6ebe65614bba39ae0481df1eec8b6507905c1f24be26",
+      "snapshot": "requirements/docs/agents/domain.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "docs/agents/issue-tracker.md",
+      "sha256": "9b2a56b84f85db6b54e413d285114f36ba86d6a9e35c9c510623aad836f87fa4",
+      "snapshot": "requirements/docs/agents/issue-tracker.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "docs/agents/triage-labels.md",
+      "sha256": "e2ecbab2475e2c845d99614b546f581524d46dc7bd08cfa7f10f1c9676383982",
+      "snapshot": "requirements/docs/agents/triage-labels.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "architecture/README.md",
+      "sha256": "a49d0d4249b48eea42e36b1a39c7e332e5b1625604b1041014622f49457111d3",
+      "snapshot": "requirements/architecture/README.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "architecture/adr/102-dsh-typescript-backend-migration.md",
+      "sha256": "16999e0b4f18308b328bc4916c2368bfc7cb1e94e513ab08aaf6845064398a70",
+      "snapshot": "requirements/architecture/adr/102-dsh-typescript-backend-migration.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "architecture/adr/066-in-place-schema-updates-and-database-reuse.md",
+      "sha256": "22b41ee600c4d2c77be4534693d2fba8e11b515ea8832fe526404943cbf66fbd",
+      "snapshot": "requirements/architecture/adr/066-in-place-schema-updates-and-database-reuse.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "architecture/current/domain-data.md",
+      "sha256": "77cdaa58e2eb064e85414ad61bd690763b4cc9f0e90dfd499a3c4b2532b38512",
+      "snapshot": "requirements/architecture/current/domain-data.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "architecture/current/core-flows.md",
+      "sha256": "47f6509cc5ffc80aaffc9227f522a315f32488fa2b7450cd7d21174a37e886d4",
+      "snapshot": "requirements/architecture/current/core-flows.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": "architecture/current/privacy-deletion.md",
+      "sha256": "8afb76adcbb6c88b44923d971ef7d4021bbb07c9dac2c32b2cc10e1ae751fa0c",
+      "snapshot": "requirements/architecture/current/privacy-deletion.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/spec.md",
+      "sha256": "2ecc363da354e87b45ba285bc821fc2fdf5d1fb304b255d971b2628cfa830062",
+      "snapshot": "requirements/.scratch/dsh-ts-migration/spec.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/issues/01-behavior-data-baseline.md",
+      "sha256": "6480fc3517fe59a61a3e6dfb4f7bc1a82f09eb8df9768de3eb900c9d2d7516c7",
+      "snapshot": "requirements/.scratch/dsh-ts-migration/issues/01-behavior-data-baseline.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/issues/21-foreground-contact-location.md",
+      "sha256": "968e60db084b4a82f7d7fcb5628336354c426ea15051945210dcca64c4d8e68e",
+      "snapshot": "requirements/.scratch/dsh-ts-migration/issues/21-foreground-contact-location.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/issues/24-cutover-rollback.md",
+      "sha256": "22302691af26f0ee3aa304404fe92fa2bdff1aee18f9b5acbec91aad947703bf",
+      "snapshot": "requirements/.scratch/dsh-ts-migration/issues/24-cutover-rollback.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/issues/25-integrated-acceptance.md",
+      "sha256": "c2d8a411af7f2a3add8373b06b379325f961e06ed1a12e00700e4a65683f2c5a",
+      "snapshot": "requirements/.scratch/dsh-ts-migration/issues/25-integrated-acceptance.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/baseline/evaluation-protocol.md",
+      "sha256": "8dc1d748049faf26a461b151d597e50e4a80aa5790e0c44494f003a55a48810e",
+      "snapshot": "requirements/.scratch/dsh-ts-migration/baseline/evaluation-protocol.md",
+      "source": "current_document_at_review",
+      "read_scope": "relevant_sections"
+    }
+  ],
+  "static_review_only": true,
+  "independent_tests_run": false,
+  "code_conclusion": "undetermined",
+  "actionable_findings": 0,
+  "overall_gate": "not_approved",
+  "reason": "WIP输入不是最终提交；独立运行未安排，静态未见可登记规格偏离；后续须绑定最终提交复核。"
+}

@@ -1,0 +1,18 @@
+{
+  "input_manifest_sha256": "3513144b9dd7e53825a52c262a3df7ce631616928e0d93ff8b267b81c5c86deb",
+  "head_at_capture": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+  "final_commit": null,
+  "runs": [],
+  "cleanup": {
+    "owned_database_count_after": 0,
+    "owned_activity_count_after": 0,
+    "owned_process_count_after": 0,
+    "temporary_stage_exists_after": false,
+    "remaining_owned_databases_before_cleanup": 0,
+    "owned_database_created_count": 0,
+    "owned_temporary_directory_count_after": 0
+  },
+  "elapsed_seconds": 0.209,
+  "overall_gate": "not_approved",
+  "tests_are_independent_execution": true
+}

@@ -1,0 +1,8 @@
+{
+  "owned_database_count_after": 0,
+  "owned_activity_count_after": 0,
+  "owned_database_names_observed": 32,
+  "owned_process_count_after": 0,
+  "owned_temporary_directory_count_after": 0,
+  "readonly_metadata_audit": true
+}

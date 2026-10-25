@@ -1,0 +1,5188 @@
+{
+  "base_commit": "e5d8183bff811bc9bdd466a3035deb0b6abf10e3",
+  "head_at_capture": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+  "input_manifest_sha256": "3513144b9dd7e53825a52c262a3df7ce631616928e0d93ff8b267b81c5c86deb",
+  "snapshot_files": [
+    {
+      "path": "backend-ts/package.json",
+      "sha256": "23efe4561bfc415f66ccf220839116f047ca6311a3aead6999dab2fd72450e61",
+      "bytes": 1108,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/pnpm-lock.yaml",
+      "sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+      "bytes": 630837,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-discussion-http.ts",
+      "sha256": "fb67844ea8a7ddb2c7217b934db12e115cb5cfae22838077faa2c9c388191272",
+      "bytes": 9435,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-discussion-service.ts",
+      "sha256": "5689f7fe89bc066eaa9f36b83c952cfd1ee70a48f6afc3ad68d40c8b9467c630",
+      "bytes": 49828,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-adoption.ts",
+      "sha256": "3cd02f72f11aeba32250c7a28d8fdef527052b0bddc4f03a62cba86231d95613",
+      "bytes": 5258,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-continuation.ts",
+      "sha256": "94d07ef10fa7fd479dd61e558dc7daf57a0bb65d2d3419dc6adc239a17927752",
+      "bytes": 13673,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-explored.ts",
+      "sha256": "e0665219c9eb4ede03bb1630409735d04ea52d1d6b167288abcbdb723873423a",
+      "bytes": 10132,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-format.ts",
+      "sha256": "06e6c4ab4169c1a182b8d3ed83ea8b5570b605d567840e7da3e551269c3a6ce7",
+      "bytes": 5427,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-interruption.ts",
+      "sha256": "523e5915d61a0e2abfcbabdc8c52a42cace874f87c2eea6cce75c07453fe1489",
+      "bytes": 4695,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-jobs.ts",
+      "sha256": "e5c0b586e7d5ecb89285e1392e39ac56960c30b454b2b4983409e0e201e371b0",
+      "bytes": 3849,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-lifecycle.ts",
+      "sha256": "b58f390ace423c88ca8ffbdb2061db872273576bdaa9adb9fe84ebfdb9304724",
+      "bytes": 17755,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/assistant-generation-store.ts",
+      "sha256": "79db68afd5095b1ca0f90d64216e114385150f006a992058c72327a68eb0ec6b",
+      "bytes": 24798,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/background-task-management.ts",
+      "sha256": "e94949a4ad83606f2fa3438c98d0959fc52c6d17fda60ba0a9335ddd08e786a3",
+      "bytes": 25378,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/binding-service.ts",
+      "sha256": "ea1d1b265710768afaf0085b35b5c3bfa184559ac18682c80e1ea34acf295868",
+      "bytes": 11433,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/business.ts",
+      "sha256": "2c15701bf962d28881bdb9888a33e82477c4b13ef92712decb4df3666fad14aa",
+      "bytes": 1249,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/complete-claim-verification.ts",
+      "sha256": "34262c026594a63cad3145d1b645bd9a9678855e6e7b17fead1298e84578e578",
+      "bytes": 21790,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-context.ts",
+      "sha256": "6e2a90f91f5013a08ec1e08c78f2e5716f2f3776b654e9a22d206c54e8512944",
+      "bytes": 9998,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-handoff.ts",
+      "sha256": "aa5c2e2deda3ccd616c2e0db7b9bd55eb96540ce2db12de9939e9479c6717bdb",
+      "bytes": 3981,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-memory-index.ts",
+      "sha256": "71e5a44b947dd39a3adac93957a50e417535d7fd6d2a36f23a279b5a735c7bed",
+      "bytes": 13201,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-bounded-body.ts",
+      "sha256": "5bd272fbe0257a85c3e3687bc134aa061eec31ecfc156e8a28c2c77ca5f9e72e",
+      "bytes": 7654,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-bounded-contract.ts",
+      "sha256": "b5044989f2af46ef15a0c813c7805b6e49ae3671bb41eb12bb44b59ee34dea78",
+      "bytes": 2388,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-bounded-graph.ts",
+      "sha256": "c9dda92f8057315170dcc132db6e9c1250fa0a034a7ef8673cbd85fe2d3afffd",
+      "bytes": 17332,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-dimensions.ts",
+      "sha256": "4ba9cde330fad300c8fda29737025b8f3aba78ae33453055dbb86951f0b1cbb2",
+      "bytes": 11177,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-evidence.ts",
+      "sha256": "199e0124e6daa0a58460ecd2ea3a2bac0a4394958c0fb6a681da1e01e46dea54",
+      "bytes": 16424,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-legacy-grammar.ts",
+      "sha256": "bf2f6213d5d80d17b439778945d4cf41d859f8479badbbbe0d26a1556df41d13",
+      "bytes": 3430,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-legacy-semantic.ts",
+      "sha256": "bbd9974c414a596dd6f9417a35687c118251c3ba58caff30c7b54e0613044a78",
+      "bytes": 15792,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-memory.ts",
+      "sha256": "88d628bd048e9435018c36ddbdfcf6442f7a376df3a967eeaeee1ec378c2e39d",
+      "bytes": 5308,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-metadata.ts",
+      "sha256": "4db01cfc81fbf7dae5ecfdf97d4f577d005026e6ee410d1506e80a1b78ee2ff3",
+      "bytes": 5257,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-semantic.ts",
+      "sha256": "a9e3b3ab8688e1402cf385fcc8840aba89d468ca3da8aa6d7b3de0cdd6120f12",
+      "bytes": 3012,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-time.ts",
+      "sha256": "b3c543d65fbcc48235443279b76ccaa939d20e4fc6809ad1841f77423b3b55f3",
+      "bytes": 10037,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview-versions.ts",
+      "sha256": "f67f35d9b52c55c83fd86ec28df2a0ac21c7d2c9df04152e33ad866b9bb69e2a",
+      "bytes": 8167,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/contact-overview.ts",
+      "sha256": "0fabccc6bb958e1b4d222123b82270839791a2c6ba18759e00c520dd93d6e842",
+      "bytes": 5592,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/cross-domain-deletion.ts",
+      "sha256": "9a3fa93294edf6a925ad62f082afe31534991f7585eaf7b70032cb01e1b01ac9",
+      "bytes": 55430,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/deepseek-strict-verification.ts",
+      "sha256": "63d30c86bd65d24073d53548407472846833322e1ba540dbe7b8112b3b590954",
+      "bytes": 7815,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/diagnostic-problem-budget.ts",
+      "sha256": "6bb10e2a4cbc1572970ea2dccc08e94f96c179f95f430a4ab169322ca2e449e8",
+      "bytes": 4557,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/exploration-contract.ts",
+      "sha256": "af5664a184683bc401aae464f3595007f6b221d51889698164659e904151da3d",
+      "bytes": 4397,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/exploration-evidence.ts",
+      "sha256": "5a495f7ef0bf2008eb587e4c07a7573c5053b3b9e873f655b05bdc86dc890830",
+      "bytes": 10438,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/exploration-http.ts",
+      "sha256": "8dacb960b0335e3e506bfb8d15e0379c546af93a008a82d1a24a375d6297611c",
+      "bytes": 8684,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/exploration-runtime.ts",
+      "sha256": "d62423661546e35b6790309efe04d250f7ffccfb43d576054dd085284cf4f0fd",
+      "bytes": 20677,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/exploration-service.ts",
+      "sha256": "3318735f1ca717cca5a68eb3624b3072260453ab8c301d5638021e0c14581e81",
+      "bytes": 17654,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/exploration-skill-sources.ts",
+      "sha256": "435dcb9b89f869216506161832509c4e882b59bdae0ead48508941b8642dec0c",
+      "bytes": 1917,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/exploration-skill-use.ts",
+      "sha256": "ae2f46d9ebc64bbac95c8b2dc04480ef57501b97d0b6b91381cd2e0b8dff39d1",
+      "bytes": 1736,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/exploration-store.ts",
+      "sha256": "a64f248eda62f40bccf0d92870ae61986e2610a1bce9aa59f39eb63768aca625",
+      "bytes": 28289,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-adoption-host.ts",
+      "sha256": "1f62bf71f5754c8e9bb5755effa511206e924b5b81fc4a0d589e33b2e8406944",
+      "bytes": 5949,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-adoption-service.ts",
+      "sha256": "58e4b826ce166941bd85e39ebe1f9d151c3dfe277f99e565842f2ee186a387ad",
+      "bytes": 28957,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-arguments.ts",
+      "sha256": "c2ed08916d824f68fe687d6f7ec95cde66e1f373eff5811e0ba61a52675e1312",
+      "bytes": 5894,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-batch-http.ts",
+      "sha256": "4289d8c1780b175eba4fa443b4c3343ea1ec10b4283212916d4665546bb0ff30",
+      "bytes": 2817,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-batch-service.ts",
+      "sha256": "60366b7f8786d4c84ed57617e902eb3e5f2c3ae8faaf6cdf2ae1e9d7f85212b7",
+      "bytes": 27318,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-bounded-proof.ts",
+      "sha256": "529846292e0cfbed583721ac34ec52c734cf66d3d0f732bf2f7131c1526680a7",
+      "bytes": 14180,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-bounded.ts",
+      "sha256": "775be1ac06781b6044309814e8e6563d8e82c00224f30b0ba63d52426b068382",
+      "bytes": 49910,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-evidence.ts",
+      "sha256": "bcfa98e5f6efb01e3b930efd31facc0ed9e95b33a2682a9dccaab660b9905c9f",
+      "bytes": 15351,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-flow.ts",
+      "sha256": "9e48c38a8ebae60d6f4265fcaf8a981aab4a5750df88aefd0b51531dfda7eaa9",
+      "bytes": 20127,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-model.ts",
+      "sha256": "749438baf97e30aeb0571e85390b779dce5a603af1189c46bd2c595c342fe098",
+      "bytes": 16311,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-pipeline.ts",
+      "sha256": "213b18a694f07f824cc29c8aa5b733e3bdd971f0429549f52f0e9da0677ffb76",
+      "bytes": 7409,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-policy-version.ts",
+      "sha256": "7ca96bdb058a3b2d6d6ab778e2b2bed47219eab034f1b5d1a687af9a19602667",
+      "bytes": 7303,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-progress-http.ts",
+      "sha256": "e1e6aa8b21decc8e50fbb7db717df9bbced20b6abf661de6fb61f8637e1a29dc",
+      "bytes": 4330,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-prompts.ts",
+      "sha256": "c08582f46a3d05f6254a8247cd1b90f496b087dd20fd354382839636a502d9a6",
+      "bytes": 102304,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-protocol-calendar.ts",
+      "sha256": "0e6ebcd734c959cf9a1060798f0cc765ec1213c96bdaf23356d66cf61c5b576d",
+      "bytes": 12019,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-protocol-contract.ts",
+      "sha256": "1c9c6de3b45e018b6f9e05979f25bafa3a1ac1363873354419e08d5a380fb55e",
+      "bytes": 8408,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-protocol.ts",
+      "sha256": "c8d16e0cc7693804ca1930e0d127d2504530980783c80fe7610cd164e8dae193",
+      "bytes": 24740,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-sources.ts",
+      "sha256": "9326d4826aeef9d0f70515988700ca50984624aed62a7679047720c5f01e4a96",
+      "bytes": 8558,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-runner.ts",
+      "sha256": "e9e420a51bd470ecb08f59035fc86c3fabdce66f3a489b643928f4067f15072a",
+      "bytes": 14138,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store-processing.ts",
+      "sha256": "e2cde0df93c09ab0e1ffb128ebb75c44486f2b4605f0b835825bced5305fe192",
+      "bytes": 10099,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store-recovery.ts",
+      "sha256": "0a1118c7cd34a944fb622c1920e395217cfa1f27858dc8c11a26deb903929880",
+      "bytes": 9789,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store-schedule.ts",
+      "sha256": "e70aab50ba18d7818dbf23e8379d939dc1e42551b1788a9eb06e052edd8df21c",
+      "bytes": 10285,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-task-store.ts",
+      "sha256": "a202698715829dafb8326fc34b97f491ad634b8de96d780822fabc8402767f96",
+      "bytes": 37091,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-verification-diagnostics.ts",
+      "sha256": "a372517bc4ef073e9164d7ab36d0e879bc6cf69384238d41af56a02d4027b315",
+      "bytes": 5778,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/extraction-worker.ts",
+      "sha256": "50cd0d44d2acfcec044a584eddb30fe50378a697253f52b1df9d5366a19cdca1",
+      "bytes": 11309,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-api.ts",
+      "sha256": "9bbc79ddf3dd709ffe48b9986c5d3a0028e156adeff96fa165039133f72d2eb0",
+      "bytes": 8001,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-locator.ts",
+      "sha256": "3872a6c8e774803f3eb37c88e3e8e1580753202a02e66a717c0afcbeab38b082",
+      "bytes": 11381,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-name-matching.ts",
+      "sha256": "15e88e93a8c85b76f390d438f134056b80522d03798d0a286294c21c2bd6c1c0",
+      "bytes": 21212,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-probe.ts",
+      "sha256": "0a03c55fd8f86bcabaad276e8e22d3d0e9e786a96e796d9e800b3fe06c124d3f",
+      "bytes": 14903,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/foreground-location-sessions.ts",
+      "sha256": "6050d29d4f098f09b5e79ed948b6d61ab6bb72f217d5f9936a0d2ce7fc481e45",
+      "bytes": 2040,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/history-import-api.ts",
+      "sha256": "38ea40b2096909c5a449127419959840384abd0a1aa2bbc5d493c8893cfa63af",
+      "bytes": 3229,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/history-import-format.ts",
+      "sha256": "2b3405471499415095e279bfb1496763586b48de98caa399ab3a6bdd7747f593",
+      "bytes": 10247,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/history-import-service.ts",
+      "sha256": "6aaeb4171e36401946863103b187a080d1aa345fe0350fffee9eb03cdb1d9853",
+      "bytes": 15639,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/history-runtime.ts",
+      "sha256": "a878f450115ffff49f676ebd2c16a35d898d10f0c769a54cc204472fac59cded",
+      "bytes": 2938,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/host-json.ts",
+      "sha256": "e7449c7c5df9a496ac36ce0ec54d997341577f799d7c0fad4b28cec906f5f48c",
+      "bytes": 871,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/host-model-accounting.ts",
+      "sha256": "69d1f0e32ca4d2958c92072bf30721e032ec65fa713767aa61fa9e531271512f",
+      "bytes": 17593,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/host-model-runtime.ts",
+      "sha256": "3fcb8dab94a69d440ec1444480505dc99a3c96b01f0b2389c8da8f6a91e891ff",
+      "bytes": 10288,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/host-plugin.ts",
+      "sha256": "226982751ea037f2e31bcd9efb9909fe6bbe63c8140dcf7094ff0ad2ea22441d",
+      "bytes": 46322,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/host-reply-config.ts",
+      "sha256": "c7c1b76402813868f194289307600def4c7d51f8bb9ea29df4c27d97dbe4bad1",
+      "bytes": 5746,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/host-reply.ts",
+      "sha256": "d4697ca7decf75171c1309e09be712109c390c07071a7d991537d6a02daaa3cf",
+      "bytes": 23172,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "sha256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+      "bytes": 54783,
+      "origin": "frozen_six_files"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-host.ts",
+      "sha256": "140e44bdc1ed07c4c019ad6fd236d59e830f2983ba56fe6cc131871a22e97901",
+      "bytes": 2949,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-http.ts",
+      "sha256": "9c74118f1f3039b7ffb952835a3184325b19dc525938e9f7beae9312577f277b",
+      "bytes": 13193,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-model.ts",
+      "sha256": "c387b457ac8d4b3b65433b15e6e85b075a889d4d0eb284db5b91a874efc4c41c",
+      "bytes": 12809,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-service.ts",
+      "sha256": "3f2b07510a1913b03b379bb38c2b577677211830fc33c64fbf9411b573a1b307",
+      "bytes": 55635,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-source-validation.ts",
+      "sha256": "788967dcc19f7aaae1c56b4c159cbe1cd0a0086785c038a68d8b31a272b224f4",
+      "bytes": 4699,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-worker.ts",
+      "sha256": "d100dedd27a0bf03fb4f9c2669e09d98ee78623c7091c9f43e0b178ec2d9f8ff",
+      "bytes": 11515,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/l2-scenario-workspace.ts",
+      "sha256": "d1ee82b9989e11af7679662b702d4c61ea2dcd602884c49112a6d85ec895e525",
+      "bytes": 34358,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/l3-profile-service.ts",
+      "sha256": "095171b84656a2916593551ad1162e037e6a2ffb19f1287f7d2572177c414789",
+      "bytes": 56929,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/l3-profile-workspace.ts",
+      "sha256": "f9a0771d91bad2efd877cda1e7d5e5a5eff7668ad48d6635ee3864a560e1162f",
+      "bytes": 50064,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/launch.ts",
+      "sha256": "6a476b91594906113a0f62a999b73356e9d3f41b84edad361b8789685f37a503",
+      "bytes": 11865,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/layered-memory-management-facts.ts",
+      "sha256": "237ff9dc657b0475b3ad8e1dc9b92b23dda3e51d64b1ce28a5037ede3c25799c",
+      "bytes": 6708,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/layered-memory-management-source-policy.ts",
+      "sha256": "0588d0ff253d2e43496b669b66ddb7ae82b724eebb1c0fe6619edc2c86444a91",
+      "bytes": 2434,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/layered-memory-management-store.ts",
+      "sha256": "71609dc95fe4a4b26a5ea5218b52f2c5a5b929401a64f3bf22c3025142eb2b3e",
+      "bytes": 19880,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/layered-memory-management-target.ts",
+      "sha256": "a3b3d54960d9e2ee6d842b6b89055ade19e99c6577fb440868d9d86bdc1b9aaf",
+      "bytes": 2981,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/layered-memory-management.ts",
+      "sha256": "80ac4dda59c54939a9490f0cb132d20f6d305f2746900c02ea77d177f94d2d70",
+      "bytes": 17204,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/legacy-backend.ts",
+      "sha256": "7add2d7578989794fa0d62a1776fd5332ddb1504121962c22152ded009ba1da2",
+      "bytes": 9289,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/local-embedding-lifecycle.ts",
+      "sha256": "ce9236de03f79d2834905f9c82056d42923395bbcd68e79a8d41f9da795369b0",
+      "bytes": 1748,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/managed-database-lifetime.ts",
+      "sha256": "0d9bf60e16dc1d0c7371daebfd0acecf7fd0a0b1064a6449779ea7488b1fb891",
+      "bytes": 1708,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/managed-postgres.ts",
+      "sha256": "090224d61ba3e7509094c64d206e06757ff6951154df39f5b3e439e4fac2f851",
+      "bytes": 3796,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-adjudication-dsh.ts",
+      "sha256": "d65bccdd4180dbdd200276c20e436349438f857245cc389f7a8871b2c442ef0e",
+      "bytes": 18116,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-adoption.ts",
+      "sha256": "aa43d96cae6bdc0e3b0cec9328324edce8519c6a050208456f62a9135d50f38b",
+      "bytes": 59744,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-candidate-projection.ts",
+      "sha256": "86c70006a7bde24f102307b48429ca340050e45330ade67ec1e67018771d4f98",
+      "bytes": 8300,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-errors.ts",
+      "sha256": "85074719dfb0dac9bbb4e620eaf36c5c3c548ac9d03999dc35c07d222b1b5b38",
+      "bytes": 322,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-management-handoff.ts",
+      "sha256": "0e057ad8fa38255dee63d0e9ce7545fe3731b4e364ff46f589dd823efbba5bcb",
+      "bytes": 6391,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-management-json.ts",
+      "sha256": "9caf1259432c1d7b443268af165ce904373a6192f5837eb619fbb2028a448bd1",
+      "bytes": 691,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-manual.ts",
+      "sha256": "620a38605f4dab0173512e34bfda83ae540a50e5539b931b1d35a8a5f192f2ab",
+      "bytes": 2674,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations-candidate-versions.ts",
+      "sha256": "66bf92bb571978f8beb61f879255c2b9a127b1510384a987281afe7263b4990f",
+      "bytes": 4113,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations-candidate.ts",
+      "sha256": "47aaeed5c908c78cda734e21d608a0cbd807827e92f4ddfb8ca438fefe4be5ff",
+      "bytes": 10960,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations-erasure.ts",
+      "sha256": "52fda8d9cb17e4b5dc0ffc80943c2c66aa34bb1288e3b70cb8573965c6cf4c42",
+      "bytes": 13559,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations-protection.ts",
+      "sha256": "d3dd6b2bd1467d63ce3dd377afc77c2a4c676b076a36a188b51240e098734624",
+      "bytes": 23502,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-mutations.ts",
+      "sha256": "9b4f4a8bd8acb046cf9a44a60ba936d0576fd5c46f18ff9ab8888dff825c5caf",
+      "bytes": 11688,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-owner-projection.ts",
+      "sha256": "733fb81cf84cbb0e645737b032dcfd834358c5f8df629c2cfdbebcf9260e0902",
+      "bytes": 3003,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-read.ts",
+      "sha256": "918c80a9a1cd2e66aaee32246c1483769e31fbf039fdb01e435bd48027f7f3fa",
+      "bytes": 7300,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/memory-service.ts",
+      "sha256": "251c21b2d0b9aec222507295c5cb1dce9262d3c3f4cc9179b4029fffbc51fab3",
+      "bytes": 5661,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/model-host.ts",
+      "sha256": "71de905f4089c8ced201508d5a9c2f885e22ae44db8fca4ab60e1844239a8176",
+      "bytes": 5707,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/model-input-budget.ts",
+      "sha256": "4b43fac9a3205d3cb7a3ad37ec84e454ef9c81d531126e77397dace5948de5af",
+      "bytes": 7700,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/model-ledger.ts",
+      "sha256": "585334184816d6f3055a4771bbd7b8c6354a7200d12b2c6afff952df1f2b88e1",
+      "bytes": 18293,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/model-permit-journal.ts",
+      "sha256": "d5e8092dd98e86850fb5b190ccc2439d11435434504b6121a5b7aed69923b045",
+      "bytes": 7575,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/model-permit-server.ts",
+      "sha256": "861bb247c01ac2e477c13f39c29a569345e4ffa4ae66f5f6cca30b430810197a",
+      "bytes": 9133,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/model-permits.ts",
+      "sha256": "34eb380ef7640f91b49682d18745fcd79d30475eabc439459d5a67a4185af8a2",
+      "bytes": 5602,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/model-provider.ts",
+      "sha256": "90ec087500a834b356d58bbb0237b63ec3252f0f9a17f6e2a9ce60372883a156",
+      "bytes": 11306,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/organization-quality-api.ts",
+      "sha256": "7f639b14fc7c41d6b2c3028d5b8ec4793d314afa3423f771c0c09d87b6fa80d3",
+      "bytes": 3044,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/organization-quality-contract.ts",
+      "sha256": "84c2d1ac01e442229e16d67edc783ac66c4d2fbcb211894e040bc4d0c5a34d72",
+      "bytes": 4618,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/organization-quality-report.ts",
+      "sha256": "35573d2b40fdc6de72d74a99335b8f4b2cb8416b6c033f9d2d8a6447c9cbf72f",
+      "bytes": 8593,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/organization-quality-review.ts",
+      "sha256": "320538a47304679a38923f1318fb9afc8ac8f4ae8680c4fb273b7cfaea502c01",
+      "bytes": 5435,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/organization-quality-runtime.ts",
+      "sha256": "a74a940eb21ee8aa7f5e7c3c358e1248c4e2e41211629c75cf900040b6a37a80",
+      "bytes": 16281,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/organization-quality-service.ts",
+      "sha256": "8341096ca1040ae418afe0388b0c69b8ca42cc038d788b761b2edb8f8e91e6ef",
+      "bytes": 1877,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/organization-quality-snapshot.ts",
+      "sha256": "94ff59e5806a746e787a1ca8ec65efa3c446b4379edb12b8346afae38eb8bbba",
+      "bytes": 9417,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/organization-quality-store.ts",
+      "sha256": "91eee05c665355fba338240c161f4d55e866175e7f3d3c45072d20ef96eef104",
+      "bytes": 23612,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/plugin.ts",
+      "sha256": "f994e91340b004da4363588318c9dac4a5d097e1fac0a55483d43e2b7aafe290",
+      "bytes": 2041,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/preference-erasure.ts",
+      "sha256": "bf3bda84facba887270feea8fcbbee59686963fdc29e74b301b9d3b2a6b9ec4a",
+      "bytes": 4184,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/preference-files.ts",
+      "sha256": "07d7715f1bef1b324538b33d07cfa44a1adc8bc02cb5755466156d56e3f49361",
+      "bytes": 7443,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/preference-service.ts",
+      "sha256": "1e834f6a01dfcd959d8080bdd95996f062b17ead055bc0be24cd7a4b32b928ff",
+      "bytes": 20473,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/process-identity.ts",
+      "sha256": "28458157a39eeb2e79a269b7035b7fae2d0a9c0008131309794fcde2de4e3636",
+      "bytes": 2792,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-events.ts",
+      "sha256": "b95acb70c8d925302f1bec7e8c82b34db297048d0e99ebe6a95d0f6dee3cb1d0",
+      "bytes": 2568,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-follow-smoke.ts",
+      "sha256": "379f41015efeaaf1699fa345be2be5bde22447a1752efb96f78ed05371c188ad",
+      "bytes": 4940,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-maintenance.ts",
+      "sha256": "f1c40a1bb31e6757f6fba19293d5ba686cadcfdd76cb1b651f9f3a528612d3bf",
+      "bytes": 2892,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-public-api.ts",
+      "sha256": "698b368fec73811ce84408973485036d1b8920cd9bcd1a6eed547be21074c833",
+      "bytes": 13975,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-public-pages.ts",
+      "sha256": "1c66d6c93a3bee210bcaa950a57520d4a053b9a196ee270e320a19858be829e2",
+      "bytes": 3466,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-reply-evidence.ts",
+      "sha256": "0aa5b6bbc7d7dae5d436f9fff7309bcaca97b8c6333b3c16bf3a80add4bcf951",
+      "bytes": 6334,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-reply-scope.ts",
+      "sha256": "233fa03ffeecae85006a2e69841ff6aa01d61d2cfc6d5b4b27eb76b32ea24fa1",
+      "bytes": 3413,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-runtime.ts",
+      "sha256": "39bf5d6bc18636dce3ecfa8df58cef9d0330b9d6550b10ed7db12585d774709e",
+      "bytes": 946,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-sync.ts",
+      "sha256": "37ca58742d727efce951f9b48914875c76454d2c8f99676d158afbb7018fa2b8",
+      "bytes": 7640,
+      "origin": "frozen_six_files"
+    },
+    {
+      "path": "backend-ts/src/pure-ts-task-events.ts",
+      "sha256": "2274b056edaa7b612bfc6ca7858ab2d33c5a43f22e9f04120ea7c71d47e9bcd8",
+      "bytes": 2354,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/quality-model-authorization.ts",
+      "sha256": "bb0035197186c552cacb33e0762aab3e0d4b4d7bfb431521d1ef819acfa97261",
+      "bytes": 5423,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/quality-model-caller.ts",
+      "sha256": "56e6770e0e33787f33e71a8da96e7468154b2390896eb8dca57552c6621d3d04",
+      "bytes": 11387,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-assistant-erasure-sql.ts",
+      "sha256": "de97989b49280a635a9ef0034a7b5f085407c037867b6129864a075e19f2517b",
+      "bytes": 11429,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-assistant-erasure.ts",
+      "sha256": "1c761d49632c0504c0afc1c93af3a653f1bea8364e3a5b23da9e6adaa99b88f2",
+      "bytes": 20118,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-assistant-factory.ts",
+      "sha256": "9d1837cb21261ca6096f6f3fe3d3eb22efed6263c1a394537f1bfdf91e83441e",
+      "bytes": 1333,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-assistant-guards.ts",
+      "sha256": "253a0690ff7e51412b3da087ebc48864b629b5a7d513a7010189b8d1e45cad61",
+      "bytes": 24412,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-candidate-admissibility.ts",
+      "sha256": "2cb1e5cdc4bbbd59b5709db915abab41fb2ae4138d311eb61732a76c535c921d",
+      "bytes": 1285,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-candidate-prompt.ts",
+      "sha256": "9d2ab1e7d43b367156df7ba774fa17d621d4b1e3af6041f3f510d2065d052e05",
+      "bytes": 691,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-comparison-sources.ts",
+      "sha256": "b01b571c1324d8c65af66ddb17d689461dee082ef05192e30231d3ef47ecf4ac",
+      "bytes": 40757,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-comparison-statistics.ts",
+      "sha256": "ef01fb4d98ad605dd1bf8334352966536b46d19d206adc140fe7b0e5ca6f38a2",
+      "bytes": 3054,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-comparison.ts",
+      "sha256": "5ff2fa10a52b8be547bbac3939cfb3ad3e06195dfba870e63b2509b8993b0f44",
+      "bytes": 45739,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-context-guards.ts",
+      "sha256": "2f99c729a196c0ae64640d35970753365f45b1be6f425cf96710979229611657",
+      "bytes": 2040,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-context-layered.ts",
+      "sha256": "094538d166916c6470760d1f00ee6fc7999c6766cda17aedda92dea650491e4d",
+      "bytes": 9490,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-context-memory.ts",
+      "sha256": "cee30a48d923ec8215727b2b63166f897b3f23604d8789b58e77e17a7d0d6617",
+      "bytes": 12539,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-context-overview.ts",
+      "sha256": "a09d92a9f5ede39e4d31c593e0f60065f564a2ffc81e3dbac2054e0b0c19f68d",
+      "bytes": 5985,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-context-read.ts",
+      "sha256": "04ab6afd88dbec20484c70b6225074a064de71a004c51c515cb29e4ca34e8bcb",
+      "bytes": 3103,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-context-scenario.ts",
+      "sha256": "2604e322a726ba5683607408582935fd2c28855adef5a9fa8a7cba293c2b1c02",
+      "bytes": 9526,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-context-types.ts",
+      "sha256": "718d81aad3a031b275648a955bbeb8606b293d44924a22d3e561b99945eafc8c",
+      "bytes": 3016,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-context.ts",
+      "sha256": "23548a2e295060d07efd4dbb5cafd485e944451b4393e999f8d423079688710e",
+      "bytes": 23263,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-contract.ts",
+      "sha256": "267e431123d1d533040acfd91e300b4235b918ada9f396ff4bd45908c49021ab",
+      "bytes": 9659,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-discussion-context.ts",
+      "sha256": "d1c3b24282fb3748165c3c0974fd69b93f9b66e823891e2f81630d044a850255",
+      "bytes": 17408,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-evidence-alias.ts",
+      "sha256": "f71f9f56acc67b4be66d4d7ff9f88cf4191f4517e5c3a0399074302f6cd06ca1",
+      "bytes": 7749,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-evidence-payload.ts",
+      "sha256": "f2d358cef13f8d8313d331caf23f6f8eaf8d141141b456b2f684090104adb805",
+      "bytes": 1492,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-exploration-evidence.ts",
+      "sha256": "c5b2daf7a2cd4b0bb7d402d63e2a6c9669cc4af3688df3ac6c113d8fffdca3d2",
+      "bytes": 7034,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-exploration-guards.ts",
+      "sha256": "a5450bd94e56125b91907e2bbb93f386cc566a5c50f89f8a008b7e7923f6786d",
+      "bytes": 12141,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-generation-guards.ts",
+      "sha256": "86b9365863929bc797f97ab7499cd042364a76cdb786529464f761a671ed2adb",
+      "bytes": 15631,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-history.ts",
+      "sha256": "1e1b97630ab7f7660b1e484d42e884342e2901d159d56c3fdf7ffe75350e6801",
+      "bytes": 11379,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-http.ts",
+      "sha256": "b9d423e0d8319d82f7d947b91919e51f833c146321e3de4efd945690ee9a03da",
+      "bytes": 9513,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-loop.ts",
+      "sha256": "537a462cb130bdf60217dbd7a344efb273115570728db8f014d26af3479dc0bd",
+      "bytes": 12812,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-message-window.ts",
+      "sha256": "c036149f7cc3829f8d1d8dcfc52a06ac98a3e52042ce67c3588adc204791e34e",
+      "bytes": 1802,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-payload.ts",
+      "sha256": "96db71469556550afc5e2a7b40489dd2f8984ef14ffb7cdafd5e881a79ce19be",
+      "bytes": 8631,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-preflight-prepared.ts",
+      "sha256": "e1a3399b543a0c341f75446145f76da71703d6ec2910468b6cc1146a95a0f211",
+      "bytes": 7636,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-preflight.ts",
+      "sha256": "4441d05a4a2b8b51e47e299d9bcde8ecd869aa0d34c07ff02b15df58cb013c3c",
+      "bytes": 5057,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-preparation.ts",
+      "sha256": "f119af7aadaf5ba61be847ffc0cf48565fa001ac9ac88da9fcc68c89573cc7db",
+      "bytes": 14727,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-prepared-codec.ts",
+      "sha256": "de23940956fdd9714e40af01708c7212110b29ff0a9f03e8a1aec64b68776c2a",
+      "bytes": 11298,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-prepared-context.ts",
+      "sha256": "f2e6e06f79386d59e084a82f1a8e5aa15115fe6011abcf529a2148ff6036673a",
+      "bytes": 11194,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-prepared-schema.ts",
+      "sha256": "39660f6fe17f71b6f937b1e1d458065569b30744001c21edfe210690be0bdf11",
+      "bytes": 9419,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-prompts.ts",
+      "sha256": "3c16f89ada354b192496c97ca9106143f71b4b8fc21416d23b726c8b59609a7b",
+      "bytes": 17073,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-result.ts",
+      "sha256": "b5804950225df2a67a6674cb758fe35dbf23361915ef9979e24365afcd6f0521",
+      "bytes": 3354,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-scope.ts",
+      "sha256": "c7ead96f1cbdcb64e4e5fe4a0df61431a0cd708d0ce9574328e4ea4865e76476",
+      "bytes": 2808,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-service.ts",
+      "sha256": "59a083a9fed8ceeb686b1bcce4f50d5f0791b5a0d3efe9126017bbd5b9d1d90a",
+      "bytes": 18943,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-skill-guards.ts",
+      "sha256": "6814dc194529a55018c38465bb7189a3971c249028407bafb685408d6a6518c8",
+      "bytes": 7174,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-skill-runtime.ts",
+      "sha256": "da346576c9b0a4d1224dedf35ffdf4222f53d9cfb8cec114ce28c66a50dc8500",
+      "bytes": 7678,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-source-guards-sql.ts",
+      "sha256": "8c891744abf09ecdca0d883ce3b39ae03620c9923fa0dc4419915afc5526ec17",
+      "bytes": 15434,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-source-guards.ts",
+      "sha256": "ac56877a51fa416642fd53b199621fc5cdbb9f068db090f48d3034b16cc791ec",
+      "bytes": 10375,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-store.ts",
+      "sha256": "233c6ecb431c51f87643be96be51d4d9d54f9d5c75b80e6fc5c52cec78ab8f61",
+      "bytes": 19965,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/reply-system-prompt.ts",
+      "sha256": "a81da48da2a5ff0705d141deaf1f673c961c93ba32b92149d10bb3161578a032",
+      "bytes": 3127,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/retrieval-casefold.ts",
+      "sha256": "4d5ee7d94421a4934ba4ea984062467961f4a5d5ee39aa9d76aa4c7af4bb296c",
+      "bytes": 31848,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/retrieval-embedding.ts",
+      "sha256": "61cd5cf7f562be0faccf2340d3f19d7494ee3d1813ebd44a49395e5dfdcee1fb",
+      "bytes": 3235,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/retrieval-hybrid.ts",
+      "sha256": "b83e09bcfa0b9f61898b0140a00276fe386760066e3421c70f205d3ab6838ca1",
+      "bytes": 2893,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/retrieval-lexical.ts",
+      "sha256": "4d08eb4a35e27eba2898a4204d3116e66b19b776fdbff4c9c526d6ea61da12e6",
+      "bytes": 2202,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/retrieval-ranking.ts",
+      "sha256": "0393e98481cf1d157255b44982d2584a328440fa42446a5634cbd90ac811c3bd",
+      "bytes": 2570,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/runtime.ts",
+      "sha256": "ada3ff8466daf3efa51a088f7c8dcc410bad32a108f0c898a8358b8721902bdd",
+      "bytes": 3079,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/schema-prepare-cli.ts",
+      "sha256": "4382e70d29ee8bff71318626dcce69881bf1136c8a9866b72be2d8c607ed5229",
+      "bytes": 1672,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/schema-prepare.ts",
+      "sha256": "e61102c305f16dfb71d35bf073562d2c2aaf4ff93b0a0be46f1a6dea79f20403",
+      "bytes": 6616,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/schema-skill-upgrade.ts",
+      "sha256": "3109b0eb9c7396f1c7b0f95c78836f0ddb0762a4df1d6e748aa309df550b44f3",
+      "bytes": 7455,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/service.ts",
+      "sha256": "7add0d6941628304abd07be364e010fdff8d560390b4f6189284601db2bfa88d",
+      "bytes": 2120,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-cleanup.ts",
+      "sha256": "f711af640903b861a8c67bfc06bf1b238de1a17ed49775de9945edeb2ec100b3",
+      "bytes": 10037,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-execution-view.ts",
+      "sha256": "df8cb1f7cf78bf0d964a094d62f87804e092a363090b3b4431d693e7ea428495",
+      "bytes": 4696,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-files.ts",
+      "sha256": "8892df6ea2807cee0d2c6512efa58b0b8cb21b34d41ffd15bdb72812dd20ef6a",
+      "bytes": 18836,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-history-policy-store.ts",
+      "sha256": "cad2e2deda59b41f79545dc79e520394b479ba6192f3aeff218431c0246995d9",
+      "bytes": 15764,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-host.ts",
+      "sha256": "5efd2f09879ec3be0f64adce212dbf2768e7f128efcf569359eeda38a8aac597",
+      "bytes": 7818,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-contract.ts",
+      "sha256": "d4f362d4ceb32c9b331a684c988dc6cd29e41f2e7844bc130543f36368fe7cb7",
+      "bytes": 13771,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-http.ts",
+      "sha256": "8774ad0948586d17f2cf26d76340ede3de0b97bf177724498bae5beddc64d9e9",
+      "bytes": 8777,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-materials.ts",
+      "sha256": "a6e99b122493ab72001ae70c8b57d5e83d9b263297a08556315272c59bbea44f",
+      "bytes": 19355,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-runtime.ts",
+      "sha256": "a4c656a6083def5fc0071040f9b13b755d5408156e4f8b6f587812472a9e4100",
+      "bytes": 5925,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-store.ts",
+      "sha256": "07c3b640e4a24566e216e881187e3d44ff1798152461292b217162dffa016de8",
+      "bytes": 23835,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-learning-worker.ts",
+      "sha256": "eb488cd38c1af81590a971d373d52fbda87c4b557c3df3145de7f8de4a3f8bb3",
+      "bytes": 1845,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-library.ts",
+      "sha256": "3e734f39bf6b60d975a76405ee2eb298a1ff6950907fba1a2237afd4f69a54c9",
+      "bytes": 23572,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-package.ts",
+      "sha256": "527fda629f310f3ffe1e35a54729da7dd62318b47c9e51ef4abf1ccf5976634c",
+      "bytes": 13867,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-port.ts",
+      "sha256": "7896fdbbbc7e362fe92aa91ad3a945e235d9bba96fce426b76727c80080a5860",
+      "bytes": 14703,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-provider.ts",
+      "sha256": "40d76def6867e6527cc3387ea0d2529715ae8d90fb3b90a993c3e59d97a61a32",
+      "bytes": 2027,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-review-service.ts",
+      "sha256": "61150cc020e0eacf98b6a88804f0a24a05dc93107f252d4b6473fb06a7e37e2b",
+      "bytes": 17097,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-review-sources.ts",
+      "sha256": "9f98c94bec4fb8dc054b8733c0d3ea15316472c6d08085865eaea346366526c2",
+      "bytes": 4305,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-review-store.ts",
+      "sha256": "fd6234c8892f6efe4b6f644abefad6174d8114afa1a0c733e17407d9d11c1259",
+      "bytes": 32369,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-runtime.ts",
+      "sha256": "931a017f0e45ab14aaa565d9748e3588871c0f05d98feae9389d70290a24ab5c",
+      "bytes": 8110,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-source-dependencies.ts",
+      "sha256": "c3a4524dc46de0ceba551323151298a37dd4ee9b378afdd0f57320844a07c743",
+      "bytes": 10164,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-source-navigation.ts",
+      "sha256": "6ad0fb6bd11812c6ed4e9b7990e7ef7a53d649447c22bc5b6ff386ff1c7f889f",
+      "bytes": 3554,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-source-owner-lineage.ts",
+      "sha256": "060a2ffc4c267c0035dacb915ae5cee68b1b7aa10b67aa23954704a6ba7bb64f",
+      "bytes": 8580,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skill-source-proof.ts",
+      "sha256": "6cbf5f81da8cc199ffd249d41881ab2c4b9ec2db54d02c5d251876bf9905a191",
+      "bytes": 10014,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/skills-root.ts",
+      "sha256": "cdb7e5555d0429bc5fcb57a11f0ddaad7f48ef979aed1c645e89bcd677b08ec3",
+      "bytes": 417,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/source-processing-trace-http.ts",
+      "sha256": "8c65b160eba7c1e0dbfc3f905087b6548a03c3bd7c55f4e7a2d4c3fd99df2362",
+      "bytes": 5676,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/source-processing-trace.ts",
+      "sha256": "48b9c4ded6dd8483c9b6e05b8e6663763f86a13565a04d8a88c54aec0d78ff61",
+      "bytes": 47357,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-auto-read-suppression.ts",
+      "sha256": "73d1c7505c04770953770b79b1ee520b5bec339181ac5f841886b2ec310206be",
+      "bytes": 2950,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-history.ts",
+      "sha256": "f4ca1fe64549a0bbfa0b4a5d76e5af13bffe8918b48e8c8aef2c50fadba0f5d1",
+      "bytes": 6456,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-api.ts",
+      "sha256": "a7f34abc5bd3b27f5c3c0687fd58d5154cc006325e8977c0c91252f241878ee1",
+      "bytes": 8069,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-cli-history.ts",
+      "sha256": "f5ad7cc8ab088083e0f66454117d889e18acc2ef0ee942f5d0ef13034e1a54b0",
+      "bytes": 2616,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-cli-stream.ts",
+      "sha256": "084ba97d053b61791168b6323e7ec83477866d5ef4ef4a6e2a6c98e764926f03",
+      "bytes": 4333,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-cli.ts",
+      "sha256": "c33ad7975633fdeda53ccc70478eb52558fe8042bd1f80c3f9903fd8b80f82ef",
+      "bytes": 9374,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-engine.ts",
+      "sha256": "20b8fa7bc2f7a44e64598f4da4338173b386f34d338e2a9583497fcf27a44bc6",
+      "bytes": 23955,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-normalize.ts",
+      "sha256": "c5e2ecb7715c8b612ec30a56b455b590921e0b46a42f56269bbaff18fe717612",
+      "bytes": 15101,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-recovery.ts",
+      "sha256": "a16f288df57454e6718f491b6a775346f99d7e32ea2b818aba9f10f4249bc62f",
+      "bytes": 7953,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-store-write.ts",
+      "sha256": "c19413254f3e87bc1bb26b8286c72a499b5072db83060a05a7e70f7569afacca",
+      "bytes": 4846,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-incremental-store.ts",
+      "sha256": "b554439810e0116dae0e532934b51e4a1598cd1dab56edc3f4dcd85652cec71c",
+      "bytes": 25230,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-scope-history.ts",
+      "sha256": "97f46c6a3a7b4ff8e10f81b72693f7e942c9691eb24de79e631b7ff7df30a96b",
+      "bytes": 1983,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/sync-scope.ts",
+      "sha256": "985eacf581ceec0464b1cce845be87122503a166a56d353614778c5a0bd7c62b",
+      "bytes": 11054,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/task-api.ts",
+      "sha256": "4f42e2df004bb3832c817f81b8f2effaa9f70c14bb4ae771d9d3b1021ce8a5c4",
+      "bytes": 7890,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/task-control.ts",
+      "sha256": "72075c832843bea20945559f88827b5efe4dcfaec8b38b5ab37ca300a7fa7402",
+      "bytes": 7625,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/usage-summary.ts",
+      "sha256": "579c9bbaf4f65212dd1f79d7bf118fe95ac5f532268c89c66c52d800309dfde1",
+      "bytes": 3802,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/LICENSE",
+      "sha256": "bcaf06dea1a63d27aab5633035b620e0127295583456c2a9402565ef63ecb0b0",
+      "bytes": 1315,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/l1-dedup.ts",
+      "sha256": "4a327d6d13f5ab273ab47e2ec0706f32a1863bb3a0ae580d1ba0aecec6a0a71a",
+      "bytes": 6010,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/l1-extraction.ts",
+      "sha256": "07833a337227c2f63c63f9d3c5e3ebe4f60437a3f6288870ba7f9ec4def0329b",
+      "bytes": 3299,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/persona-generation.ts",
+      "sha256": "bdb6e862891954c0c865eee8652d947c3e572b77be8e5059e5f038773b93de2d",
+      "bytes": 4854,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/scene-extraction.ts",
+      "sha256": "1654561e9d3ffca4bf83168c024f57beafec33801cc180ee7857daea0e1c491e",
+      "bytes": 5506,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/vendor/tencent-memory/upstream.json",
+      "sha256": "480d65649fe27885f2ec4662289859501e7fb9104146755da5e3b1c4f4fb59ac",
+      "bytes": 2439,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/wechat-history-enrollment.ts",
+      "sha256": "f74f120507e520b6c486ff3452a7228602cf777e15ce2b30667d284cbf236a38",
+      "bytes": 3595,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/wechat-http-body.ts",
+      "sha256": "1d89c6d78953df98d087f2922af8f6bb402a66decf3bd62464ca6b0ef88f7826",
+      "bytes": 2168,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/wechat-scope-api.ts",
+      "sha256": "c6e8f893bd9f93a9a52751b83c4adc5b13cbb3049872a0e0593338697ec02958",
+      "bytes": 12693,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/wechat-scope-json.ts",
+      "sha256": "728e88430d3b81fac64b0e9e7567e112b4fd587d9e724d127aadf0b2ba449f3e",
+      "bytes": 1080,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/wechat-sessions.ts",
+      "sha256": "d07db2eff5d5fd068d761591a2944100773099a5a94fcc9c27113c32f7a13bf3",
+      "bytes": 4000,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/wechat-setup-probe.ts",
+      "sha256": "1dc31af40a2cae6d1ed7c7ea924725566ef6119f592b5c41c2ef981959707aff",
+      "bytes": 5235,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/src/wechat-setup.ts",
+      "sha256": "06d22fa459809c9562e217bb9fd5c62734c774655f67bca57e6fddd1b4dea8f6",
+      "bytes": 9795,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/test/business-transaction-errors.test.mjs",
+      "sha256": "8edeee1266b72b1340e5337f727ee452916d586c260b6fdbf2984342f2799ab5",
+      "bytes": 27798,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/test/host-storage-fixture.mjs",
+      "sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a",
+      "bytes": 2571,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend-ts/test/host-storage.test.mjs",
+      "sha256": "a941afb0b24e6570a78467e27051487f23e212fa51b7a0511eee828ca4970468",
+      "bytes": 37660,
+      "origin": "frozen_six_files"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-sync.test.mjs",
+      "sha256": "99b9c5fd8464e5727222d1c0331a09c26fc16e29570976b26b0c1da535ed864b",
+      "bytes": 14630,
+      "origin": "frozen_six_files"
+    },
+    {
+      "path": "backend/database/migrations/001_initial_ingest.sql",
+      "sha256": "266aa314034ddc6a90835431c6ceaf6a129db8dab413e5ef03ee0e1211981ced",
+      "bytes": 6703,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/002_reject_overlapping_messages.sql",
+      "sha256": "ab15a9bd53a1cc9f882f926d146dd23c9f6295e16c12e3821ad56fbc67e80ad3",
+      "bytes": 337,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/003_separate_contact_identity.sql",
+      "sha256": "667a77caf86520798f1ee7c3f33060e7b516c98206c7c707edc39bf73bfcab84",
+      "bytes": 4687,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/004_separate_wechat_message_metadata.sql",
+      "sha256": "f8627956db97c23588840b8320f1ad236d4e9d4e10309cd934f6f0beff65ca0e",
+      "bytes": 3058,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/005_source_deletion_state.sql",
+      "sha256": "78477ac6f7698339a21e6ba988c56b497c9712d91046f8a05447e8d635f39877",
+      "bytes": 1423,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/006_conversation_binding.sql",
+      "sha256": "ffc713db0b396047c6ba7784b834797e9d76010f4710aa01335d71ba62d1bc80",
+      "bytes": 2677,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/007_reply_store.sql",
+      "sha256": "d499b548fef5447bbf879cc835a83af1dd002fb2fc2f4762d3788d00923b30f2",
+      "bytes": 7112,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/008_skill_port.sql",
+      "sha256": "899794e2f597c03abd6c6ae886e6f4fc6cf27779cfbaaf9b78a09392a5be01f9",
+      "bytes": 4202,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/009_memory_store.sql",
+      "sha256": "9f06a927cd91bf08bc6bc869fcbe10c994699c2f15e0bee37a55607ac88af134",
+      "bytes": 4119,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/010_outbound_ledger.sql",
+      "sha256": "d2cc7a2f4e28869dde82ec9af8e6a99b20dae0eeac79b6c82660c4b4504e443a",
+      "bytes": 1068,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/011_owner_memory.sql",
+      "sha256": "b6625e31e7e0c8dde5c1ccc2ee2cd0542bc0c160d7149b4f2538ba047b7e3c2b",
+      "bytes": 1429,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/012_extraction_topic_watermark.sql",
+      "sha256": "a89b89ff270ad3760930ac022621915eeddc3cc591203b1734ed9a1bd9bf65a6",
+      "bytes": 993,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/013_candidate_validity.sql",
+      "sha256": "4efaa08c7827ec1ab732695c2d2e27579e47557c153e79dd62641b496c6dc262",
+      "bytes": 193,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/014_import_message_identity.sql",
+      "sha256": "b432b44299e62f7f654e0ae4f81359477b95e3e6914390934a0090e80aad16ba",
+      "bytes": 1421,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/015_owner_channel_identity.sql",
+      "sha256": "bd80538f71568d4a1136509159be5ec4715d45311fc6268212bd5ff1b29daecb",
+      "bytes": 1345,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/016_background_task.sql",
+      "sha256": "149848b261c3dc142341916e1055517d505386cc3eee29683a72004054886e9e",
+      "bytes": 4160,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/017_worker_lease_metadata.sql",
+      "sha256": "7066bcf16638124d08dc1bf8748768a1df7fb5eb69f4e7c46646b4fcb830ee9e",
+      "bytes": 1225,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/018_contact_memory_index.sql",
+      "sha256": "fc3107c0dc9d790bb0a27d3302ee9aa705e862928488ea91395bf5055496d363",
+      "bytes": 2173,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/019_binding_cli_match_metadata.sql",
+      "sha256": "0020c3817520bc06bc20dd1e1d5f0ec7c2fa1e6d7859f16fd1abcc41360f7249",
+      "bytes": 2158,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/020_local_wechat_observation.sql",
+      "sha256": "acfbfbbcc323e1d1e45cc12a05b63bc95a914abda0f84b6d6f9bc87d068ab8bb",
+      "bytes": 4845,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/021_message_source_ref.sql",
+      "sha256": "31ed56a17f363d29a9f4f29ed107930567dc99fab52e31b40cc9dcef25abc37e",
+      "bytes": 6786,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/022_front_sync_state.sql",
+      "sha256": "a4457c7bc998b817fef8a0d44c296490a15df007562343477bf495306507edb0",
+      "bytes": 1463,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/023_skill_library_resources.sql",
+      "sha256": "1c12e16e68952080078ec0f6fc31c4a07c743fe1f5ed157d1ab5ce61101015a8",
+      "bytes": 3004,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/024_skill_run_record.sql",
+      "sha256": "1299bfb6ab64fd6b78eefecb908e6c526f634a8dabc95fbcb63cf207a10233ac",
+      "bytes": 2778,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/025_manual_memory_source.sql",
+      "sha256": "4b3e3cd06f8944bb48696075e9d0b0cb39a0bf5adc4c38efed4fc463731490c4",
+      "bytes": 682,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/026_cli_background_sync.sql",
+      "sha256": "23d6fdbf1ac8b153c3e5911c2c1743e36606b4b4dc02fe11a7d6c43ce2858934",
+      "bytes": 1961,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/027_memory_adoption_provenance.sql",
+      "sha256": "50067e0280bd005722f4486374880d38d6922d8087b5f0eb39861cd103a5ef4e",
+      "bytes": 4401,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/028_reply_context_evidence_metadata.sql",
+      "sha256": "3eb47e59ade749f730459146b94dd52e93f23f07b8c76f41a524a0c15cbb7c88",
+      "bytes": 1452,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/029_cli_backfill_state.sql",
+      "sha256": "dbf920f0d4dd4ac551c4593c9bdaac1fb8e0c5891695be63312c756d4b853db0",
+      "bytes": 2995,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/030_cli_observation_reliability_and_progress.sql",
+      "sha256": "918ab49b1ccf9ca8a2fec23f3dddad297726dfda94ec78ae46e463ad4f149bb9",
+      "bytes": 2681,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/031_cli_backfill_scheduler.sql",
+      "sha256": "187addae01a9c5c8bd0d4a5294f07e76a07d535b63d2d407e7911d9960d37184",
+      "bytes": 920,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/032_memory_candidate_subject.sql",
+      "sha256": "c8c7073308c66135abadf59d899055eadb44c0e82b12e19a4871d4b1f99f5964",
+      "bytes": 1636,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/033_owner_memory_evidence_kind.sql",
+      "sha256": "dced994989341ccba424bddc68889415d6810e4c86be7ed68b46a16b885ee672",
+      "bytes": 457,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/034_extraction_failure_recovery.sql",
+      "sha256": "a78d5bde2c9bc07c8681acf6d6f6512b40895b2fdedc3b3ed87f54dbea40381b",
+      "bytes": 1376,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/035_extraction_watermark_cascade.sql",
+      "sha256": "866aac5fc8e0bbfb3ad61315b3fef290587f760289ed1af95bc4a9867238b974",
+      "bytes": 1206,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/036_source_deletion_tasks.sql",
+      "sha256": "f7b2bcb052eccc1f050c8deb83174b500f0753f9906bcf84ddbe433afc440ba2",
+      "bytes": 1046,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/037_pending_candidate_evidence_kind.sql",
+      "sha256": "5f93a0b359a8672ef84d5c6238894b8df7157541854ada6bcdbe0321f9fe1f16",
+      "bytes": 1041,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/038_memory_candidate_interpretation.sql",
+      "sha256": "89792f844e728adfac5001439d9d5213c7365a2abfe468262f1aa04caab27bc0",
+      "bytes": 641,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/039_memory_extraction_trace.sql",
+      "sha256": "1180a3e0746410cd9015d7ae1f00883c42ff6eece34f997ab56f2a82f3b15485",
+      "bytes": 3312,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/040_source_processing_trace.sql",
+      "sha256": "28aa0d2d31c3f803fa1c1c994d7e5599e029ac2e73559b6006d9b26f4f4612b2",
+      "bytes": 1523,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/041_source_processing_capture_tombstone.sql",
+      "sha256": "2e35f43c8cbc712cfdd13bc68e62edb6ae0e372d9bf13cd99a0f071b9eae1ae6",
+      "bytes": 651,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/042_extraction_trace_call_receipts.sql",
+      "sha256": "237da740428330fc9da965fa4cf980cfa4aaba8b57ab38ebd0c1fc6a9ae63bec",
+      "bytes": 1632,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/043_extraction_trace_record_operations.sql",
+      "sha256": "9cfc466353d6b8cc154857cabda9e51df559a0a17498caad47efd4e7081fd651",
+      "bytes": 742,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/044_owner_memory_versioning.sql",
+      "sha256": "1a457882c62808f13479a4a56e19a98a3c13b74f94a0d6bfb3e4967985debfdf",
+      "bytes": 1182,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/045_observation_background_task.sql",
+      "sha256": "224fc3d3fe951fc26175b3a40425282c65ee4002afabd72425395a26b424f9e0",
+      "bytes": 1336,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/046_background_step_lease_generation.sql",
+      "sha256": "6aa70eb684b6173a0f389c43fee6399df44b8a826d877218eed0411e982261f8",
+      "bytes": 428,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/047_observation_memory_enqueue_receipt.sql",
+      "sha256": "ff1b655c22eb4ef3168e6b870df5eabbc898777984e5797e9ccdda036087e609",
+      "bytes": 400,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/048_assistant_sessions.sql",
+      "sha256": "bfad45fbc4e829692645fb05a1d3dc2d5646d4d8d975ac38e2f0aee7364560ec",
+      "bytes": 2649,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/049_style_samples.sql",
+      "sha256": "069ef61e3ea408186ed85a235bc879cb2f070a67ce368f749b091e9f2644ca4a",
+      "bytes": 3634,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/050_reply_purpose_evidence.sql",
+      "sha256": "de1408cf5a1ecbf446a911843d32b32c6b17193dcbcbc24c79ae91286ecc38ec",
+      "bytes": 491,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/051_assistant_session_inputs.sql",
+      "sha256": "da5e59f199067db1869e6299d03132bf652cfa35392aeb296bb5ce0ea45d694f",
+      "bytes": 3572,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/052_reply_exploration.sql",
+      "sha256": "98e4ba97e6d33abbede488f3e44cc300db250b685a71b574bd224d76da42f926",
+      "bytes": 9642,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/053_assistant_candidate_versions.sql",
+      "sha256": "38fea517ff30b782baf30799defc8da7f48e555635f057c40c2bffdb31cf129d",
+      "bytes": 7593,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/054_assistant_generation_interruption.sql",
+      "sha256": "473a21d645794d9b9595b0ff0b73f42909db2a9a346d0bfa4f56acb39b4e7802",
+      "bytes": 490,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/055_assistant_candidate_carry_input.sql",
+      "sha256": "71d1f2e7ff684235d3701c83c1972626ab1976e18a47f8f1f42af68c0e73315b",
+      "bytes": 450,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/056_memory_candidate_dimension_evidence.sql",
+      "sha256": "b3bfa8a7cc7f72181d159ce37f560b72769a2bd300cb40b63c9b88b23ad3d401",
+      "bytes": 2343,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/057_memory_candidate_semantic_basis.sql",
+      "sha256": "2a65ad790c7a36ac923e12e7867ca58f9fe2db1a988bb1473fe4bbee9fd7e94f",
+      "bytes": 23049,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/058_assistant_prepared_context.sql",
+      "sha256": "02583541a7ea389e8e11e79d06ee403d0916d8bd7ca626296d1e4d2ea95f7663",
+      "bytes": 628,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/059_memory_candidate_author_quote_basis.sql",
+      "sha256": "b469565f317510b4d454cdd1115545788b75a3c18bf0569354b02849413a03a1",
+      "bytes": 11877,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/060_manual_contact_confirmation.sql",
+      "sha256": "56502637470e394477607068176ae05a544a3ee6e5a3dd5ce9845a0579713e5b",
+      "bytes": 1773,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/061_memory_correction_protection.sql",
+      "sha256": "458cddaea770cd12e61f60e2bac5469634585834a8dc4b6247c721f34dd9f78e",
+      "bytes": 2782,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/062_memory_events_and_version_evidence.sql",
+      "sha256": "ed641686c45c7e35b262208f2da3126895f611b6d9d326cb6b221e74a6236b2f",
+      "bytes": 7954,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/063_relationship_overview_projection.sql",
+      "sha256": "9151d4d0f7a058c1fef1f7af9df640b5d82d4fe8b417fc68f2bad2aa62da46c8",
+      "bytes": 9803,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/064_owner_memory_revision.sql",
+      "sha256": "a8f0148a94b491d0b19f475dc24ce863bea7e3fca7b5d88113fbb03531d42a04",
+      "bytes": 2204,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/065_expression_preferences.sql",
+      "sha256": "b88bbbcd32ab32a8e4d61ab40a6d552050d5519ed2092cab7106c0c71cd8afc3",
+      "bytes": 9326,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/066_skill_learning_drafts.sql",
+      "sha256": "c59bc7779ed497c127b1f4822a051ef72d21de9dfa4d8508224d124b44a7132d",
+      "bytes": 12265,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/067_memory_upgrade_batches.sql",
+      "sha256": "591f5831dcb65ec2ef03a52b040084876577aa3d87f84edee4e9c944ff21b916",
+      "bytes": 11479,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/068_skill_review_publication.sql",
+      "sha256": "b6347262bd3c488fb1cdaa0fbdffa9ff1ff1a16a851ab1113ab9d6b748814c9a",
+      "bytes": 10661,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/069_skill_history_operations.sql",
+      "sha256": "7a2780fddd439393aa749019a25bd2896e409b293f91df994ae27d65bacc2fc6",
+      "bytes": 1094,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/070_skill_scope_policies.sql",
+      "sha256": "1670f66e4cc08371cbf4ffc97ffc2cceb26bea9da86e14757f86d56fb38f4bc6",
+      "bytes": 1643,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/071_bounded_runtime_evidence.sql",
+      "sha256": "5fc8e8a0a80fd8863ed34f7a33aa2ab73494aee2e9ddab635f297253a0d6fefb",
+      "bytes": 36159,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/072_scoped_media_lifecycle.sql",
+      "sha256": "29c1e77a9745613fa1fc6c327d5957704b06a4df04c1c52644725613932b1e22",
+      "bytes": 1484,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/073_layered_scenario_documents.sql",
+      "sha256": "b7543f3a07ee61dbda089426a90cfff80ed482eacb2b8f3e94c5daab72c011ea",
+      "bytes": 6118,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/074_layered_memory_coverage.sql",
+      "sha256": "d9d7c54cf6dac6e17a3b3d0c976a6af24007ec3be1e012fdb610eef6187424e5",
+      "bytes": 8365,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/075_layered_profile_generation.sql",
+      "sha256": "fea7275b63fb434f13b2fb299e6ab71c3bf2933e1ea47313920737e33e0f16c5",
+      "bytes": 6664,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/076_layered_memory_maintenance.sql",
+      "sha256": "c0026f4645aadad952ef1859b9190a71e03a6d4c31859e797e12a3716139c9e9",
+      "bytes": 4966,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/077_owner_layered_scope.sql",
+      "sha256": "b338c5933417abd390886c09520dd8fe31509cff58d314e56c19cd123ace9c2b",
+      "bytes": 9083,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/078_layered_memory_corrections.sql",
+      "sha256": "462506b23dcaab742238480c48d97b6b916aa0f78ea672121ab1c14d6594ade3",
+      "bytes": 11120,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/079_organization_quality.sql",
+      "sha256": "cb276f0fb6d0041c44298738dc7e4f86a40d23b919663b0f7cf015f6e7214c23",
+      "bytes": 16368,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/080_memory_merge_parents.sql",
+      "sha256": "60036db7222061ab57491bdb9a410299cc5dd782adc3e54c9e28fa6c2dba5aa5",
+      "bytes": 754,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/081_memory_retirement_reason.sql",
+      "sha256": "a0af6040ed5224317658bd021586157b46eec6a4ea7d4d8344c5d71b2e1c07f9",
+      "bytes": 937,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/082_memory_full_source_lifecycle.sql",
+      "sha256": "3801db0b830a087ad8cac173089d3b76b5f2e4912642b75e8b5a1188bfa3bd9c",
+      "bytes": 916,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/083_default_memory_maintenance.sql",
+      "sha256": "bb20f446e140b67a6de1408c9ba19a744a717d73197498211aee10156b997042",
+      "bytes": 2918,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/084_memory_retirement_audit.sql",
+      "sha256": "64853f65bdcef9bd81e515eb03f9f8edc71855abd70b49a0a3446c4e2c97b25a",
+      "bytes": 2203,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/085_retired_layered_fact_receipts.sql",
+      "sha256": "821cb58cae3152cc082305d3683bd169a2c177a085fa62d408cd0908afb60f9c",
+      "bytes": 2285,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/086_merge_parent_deletion_cleanup.sql",
+      "sha256": "e77ef8a6c702ed36ef9405234e04a4baf5a550054aece32519f90057baa132a2",
+      "bytes": 686,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/087_extraction_trace_merge_operation.sql",
+      "sha256": "c475bce126f9da60c1aa700bc96ca2c58a447ce4073209b3904c4df121901335",
+      "bytes": 585,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/088_cli_opaque_cursor_order.sql",
+      "sha256": "dc50df9bb583365284c802fa0536e35497267abce519941e31c1eb3bf4e6f2d3",
+      "bytes": 2636,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/089_style_sample_generation_dependencies.sql",
+      "sha256": "40571f3d42815cb18858e3dea6c458b3b42f6273080f52258cbdff3cb786e4ea",
+      "bytes": 1892,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/090_memory_processing_progress.sql",
+      "sha256": "54c4175397d5160da3e824f48ead4655bb79bdbc8b15af838743569aac3e3932",
+      "bytes": 1475,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/091_memory_processing_scope_receipts.sql",
+      "sha256": "16eea125a43d51974d47ae76a2ecd8e0ae06dfea6f8907e933a78b61b985f4c4",
+      "bytes": 3265,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/092_memory_applicability_conditions.sql",
+      "sha256": "ee5d8981aa135d9840f109565621ffe6a75f04e90a55508bded1bfbc60656bbc",
+      "bytes": 1135,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/093_memory_event_calendar_precision.sql",
+      "sha256": "ab76ccab75727a2c6b247354907185f39c1fe088835981627447527683b1e6c8",
+      "bytes": 3687,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/094_memory_evidence_timeline.sql",
+      "sha256": "f69631361ac2dfd2bd319cb76a4db6a29843f0ff2f2482a1d6091165a570f112",
+      "bytes": 1085,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/095_relation_verification_call_receipts.sql",
+      "sha256": "2c2ace4ac3c35d449ae1328a411c7766dccfd0cd04def8bd7a4f37c12ec9a392",
+      "bytes": 406,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/096_retire_style_samples.sql",
+      "sha256": "aecbd5863eaf8954bdbdb42fcff3b0e2d8749e6f8e119c254f7721e27bab47cc",
+      "bytes": 9749,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/097_persistent_extraction_schedule.sql",
+      "sha256": "701295d231c53fa243e85b594f32291374d6bd4aba23d29b0d52ae1b40a0007b",
+      "bytes": 1294,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/098_import_statement_overview_invalidation.sql",
+      "sha256": "1c2cccd7cacdf1936f19a59c46374296b3fad067c5050feb900ff1422f2ce94a",
+      "bytes": 2511,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/099_message_page_indexes.sql",
+      "sha256": "ac4a9a2a71bd40b9fc074c915eb2e3e90ef311ab986258f66f326943227894da",
+      "bytes": 487,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/100_all_private_sync_scope.sql",
+      "sha256": "87f4a2d6617d943cf9cd39ef10312c46b1a11efe250d89cc69622982aaa7a53a",
+      "bytes": 2317,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/101_directory_reply_skills.sql",
+      "sha256": "0c032a12691edf917f56ae845986a01b81d8f7784aefb85a62856a008f6b427b",
+      "bytes": 2451,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/102_skill_method_manifests.sql",
+      "sha256": "6bbad63a470bd8f870dfe81fa3d1a24f7407c40b9c2b80a6d709a077f2086ebb",
+      "bytes": 874,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/103_skill_business_state_only.sql",
+      "sha256": "af9b52f1404eb27ffc3aa15262e03c8f1d750a39c7fb68c8012d9eb4a6cef696",
+      "bytes": 2114,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/104_cli_history_sync_state.sql",
+      "sha256": "1c0c37ef68097621de81bdfb9a590c673f4bd30e04c34ac5f032605d59eb2580",
+      "bytes": 3145,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/105_history_sync_authorization.sql",
+      "sha256": "dab3acb82a7b8b78fe8296951122f035a1c6759ca78f7c5a028fdeb53176a8a1",
+      "bytes": 1275,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/106_extraction_queue_pending_index.sql",
+      "sha256": "9c50f24ad2528732dc893ecc00e7bcaeea93d9af266df192d84063aff171f793",
+      "bytes": 531,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/107_history_message_count_comment.sql",
+      "sha256": "484cde6418b77286d1a6dff55dfd9075dde3d30c228e097a17a659c1c8e4415e",
+      "bytes": 300,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/108_wechat_binding_history_authorization.sql",
+      "sha256": "8a6c2c41ea4b0df7a448c02827e9b447a53b3a82d04334d450456d0f00402d0a",
+      "bytes": 1637,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/109_wechat_auto_read_suppression.sql",
+      "sha256": "2582079415b7a41653d598d84f266702a0ec78d39feddb667857dc7c691846e1",
+      "bytes": 954,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/110_model_call_receipt.sql",
+      "sha256": "50a26e310a7ef8c38f2f4ee1615d1007748b2e53d481198f736eb856e22e54ed",
+      "bytes": 4079,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/111_model_call_learning_claim.sql",
+      "sha256": "98ecb83f54fa0302e3cbb9c37398041d37e0985013ade6a4b66ad8757e64d079",
+      "bytes": 1421,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/112_merge_verification_call_receipts.sql",
+      "sha256": "b8952d044200ef25ca2d2ba78d3f91ae5c2cddb1aea03d24f6ce71a6fbe519d8",
+      "bytes": 509,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/113_cross_domain_deletion_operations.sql",
+      "sha256": "018a0660b4cb90f7be77b81515c7b53dd369dc3f7de0ee45b23daae0ad16f141",
+      "bytes": 3062,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/114_cross_domain_source_identity_and_leases.sql",
+      "sha256": "c09fb4a9303519ed66f3a7792f9f3e0a950b3771d7bb979c2c470922d84adecf",
+      "bytes": 3657,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/115_user_cancelled_generation.sql",
+      "sha256": "6b893bd75d6cd18b142bfa82ed2ce8b6549c10d2c5cf0fc943bd24548d7c15a5",
+      "bytes": 607,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/database/migrations/116_complete_claim_verification_policy.sql",
+      "sha256": "594bc205e0697357020b8649db72912a40d973fa319a0b571a722dbd989ccf91",
+      "bytes": 1701,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/__init__.py",
+      "sha256": "17556826c7117142032d0b10bbea7da07c15c210fc16b5e11b9f956f281c483c",
+      "bytes": 31,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/__init__.py",
+      "sha256": "53946d2318400391083bcbe4d94dab05e14e50d797dae11adc9a70f933e3cbc2",
+      "bytes": 237,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_candidate_carry.py",
+      "sha256": "ba18d96dd60acb5d95167b297708b7939b50227ac82fa4b0cc7a80f5717748b3",
+      "bytes": 3992,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_continuation.py",
+      "sha256": "8a60c70ed38594025ad88a76d25f6db6d694dec1593f295ee53a734c4afeeeee",
+      "bytes": 14765,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_continuation_identity.py",
+      "sha256": "68ed1447f8345db14d92c3ef2c5ec3f457549c908832eecde2bbf3c6d62c3bd3",
+      "bytes": 3751,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_discussion_remote.py",
+      "sha256": "53a45303d7b7cba1048f056a34391009f6e49d510720f21d3c17e39a3049b3bd",
+      "bytes": 20838,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_generation_lifecycle.py",
+      "sha256": "54381cffbbe6cfc61eb1b7f219f1feb961ffd25968345fc4bd2725f80f50f029",
+      "bytes": 1381,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_interrupted_recovery.py",
+      "sha256": "c1d189d5094f98984cc3aae8a6f1001217dbc2ff67ad7177dfe7916c59786692",
+      "bytes": 1187,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_message_adoption.py",
+      "sha256": "3077ef03a6b69db5a9885bf225d63ec9f801d63aaf0dffa33b5d0945990d011d",
+      "bytes": 3756,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_preparation_control.py",
+      "sha256": "00a8be6fc6eaf895af939da3fc150bea85aae092f33f52ab0f5ea29c31ee41e3",
+      "bytes": 2151,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_preparation_rejection.py",
+      "sha256": "31dfc097bdc38444aa4cbfa580115c6954394d7c9e2a9ed19493cda985c95ab8",
+      "bytes": 723,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/assistant_session_service.py",
+      "sha256": "8cbd8bbe646c2fa3da6b50c0360d7518621c20df06cea96697d5d3665a76b5af",
+      "bytes": 17361,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/candidate_reply_flow.py",
+      "sha256": "4745878d25c67c703e98f159b3fd160486c1028b965f38f302f03514688fb6c9",
+      "bytes": 3793,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/contact_directory.py",
+      "sha256": "84ded1522cffd2dc94180af4f7e2107c46f64cd706187925faf67c63fe77e88f",
+      "bytes": 2438,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/exploration_remote.py",
+      "sha256": "f490222325410f7d06ad5de9ff2be522def49be161145dbb77bb5ff137646487",
+      "bytes": 12875,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/explored_reply_generation.py",
+      "sha256": "16c41f0a648bda05f1beb12b2d72496990466bc12b0f8c9780a255f24a59d6ff",
+      "bytes": 4410,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/expression_preference_context.py",
+      "sha256": "d8d6de23ee067987fb06ea7b701e271e293e7c409e514171582661ba712975d0",
+      "bytes": 3276,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/expression_preference_service.py",
+      "sha256": "6ade0e81bab0ba6cf1341cd34c06daca199d70ecc5c7ef64b5060db6e995cb42",
+      "bytes": 2751,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/extraction_remote.py",
+      "sha256": "c9360108f11b29322c8180bd2452d8e491184ce70af4ea55c13e7a4a84657b40",
+      "bytes": 28909,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/import_service.py",
+      "sha256": "c3dcca66dec2ecbfd6f61068c6acc9a95aeff4aaf6bab1bf24fc4da8c0ef3c4a",
+      "bytes": 25138,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/layered_memory_service.py",
+      "sha256": "28b983c84e975af16a61a47bf8d5b898f724a4671b380240178adfaa91c83995",
+      "bytes": 36392,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/manual_input_scope.py",
+      "sha256": "f90d8baa847ecc9eeb05d899b087a7bee4939ca9fcda55dea678a700d7d6dc80",
+      "bytes": 250,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/memory_projection.py",
+      "sha256": "75bfb238b2d9affed73cce52a1defe16c2291786312d5d2233b0eb9a54be9453",
+      "bytes": 2741,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/memory_service.py",
+      "sha256": "bef7ea2f0798568f0354d05a00f4f3f74df1ee834bacf170d6db0c4f156bb296",
+      "bytes": 12230,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/memory_upgrade.py",
+      "sha256": "466c2a6fbe0708de8b381b6896717acc65cfe8039046325a17a63d919837b546",
+      "bytes": 12415,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/memory_upgrade_preview.py",
+      "sha256": "5d86f8c42c7b7e6bdfff328e2ffa3f7239d1096fca06f568d5766ab567bbeb37",
+      "bytes": 6943,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/memory_upgrade_runtime.py",
+      "sha256": "de6c90a2962523c4822d1f5cf2bd3141327b22c48a5c347453073ad1e33ee192",
+      "bytes": 1924,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/memory_upgrade_trace.py",
+      "sha256": "d152d585f6a7ff426ac9be5eae53ef6f633460d0b3cde10b52cd9ca45c0e1761",
+      "bytes": 4662,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/message_stream.py",
+      "sha256": "5e5ea37b3a55107994e069f8bbb1d21c6bdef9730d1c04c18b6f83b838c97502",
+      "bytes": 4764,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/model_call_accounting.py",
+      "sha256": "6aaaa5ba9c97b7f22134a10c2df0443a180c9ec6acf60d48e3a7743a5269d988",
+      "bytes": 4906,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/model_permit_client.py",
+      "sha256": "ec5e7945517daa13957e6f911a09683149b043e38046127b62dc82e69339ae47",
+      "bytes": 10931,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/model_priority.py",
+      "sha256": "af3381e5d164c70ac9fc3ca95f7890bf5c0087e3d7972dd35385f82bb214e274",
+      "bytes": 19586,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/model_transport_accounting.py",
+      "sha256": "e98d32eb154f0deabddc07638bd8ec9d3441c209e8b428a10026e2d1f5ce210b",
+      "bytes": 16538,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/organization_call.py",
+      "sha256": "3c4091097fe0663c2a688885dc5002e7eea277d193a0601364a5b54107902603",
+      "bytes": 3365,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/organization_evaluation.py",
+      "sha256": "6884b932990a4e455dacb591fbb62321868846c3a8b17753011b4285c0049ee9",
+      "bytes": 9840,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/organization_quality_suite.py",
+      "sha256": "e4863d11cb4ef8fbf661081076e1cbbb0a1bba162ac2fd973725878f65c19074",
+      "bytes": 13619,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/organization_runtime.py",
+      "sha256": "6d5cfa186f66eadec89b9c935e166f3edc36fc4e65f5b14b3174676fe7aa2bed",
+      "bytes": 6306,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/relationship_overview_service.py",
+      "sha256": "30b9b8eed710b241932df275e943249409fb04fde9efd165a8ace57d7a748575",
+      "bytes": 613,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/reply_evidence.py",
+      "sha256": "fc587bb695d8e9cc7d8c2abe0c45a5abec75cb4b0c0ad9f6826a2af8077092a1",
+      "bytes": 3654,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/reply_exploration.py",
+      "sha256": "9a4c4cbb73ed94899ebccbef19c282058cdd5fae709333d20fae9cac4585c7a8",
+      "bytes": 19889,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/reply_qualification.py",
+      "sha256": "2a0a26310aa992cc20f7c54ce9799caed10fa35ee83a1f994d2156960268b1d6",
+      "bytes": 6564,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/reply_remote.py",
+      "sha256": "743910ec90ae6ab0df979335f211220d2bc6b48788debae7a1b90fded70c54bf",
+      "bytes": 21398,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/reply_request.py",
+      "sha256": "19d7ae06c3f9cb4eb98cfd67c7b3dc4a5ec4beac67b52bfbe59ad13f872baa56",
+      "bytes": 6775,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/reply_service.py",
+      "sha256": "33536652f6a98e68000ce670975063e0477bf30163a1912447aee5baaec20f1d",
+      "bytes": 11230,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/setup_service.py",
+      "sha256": "afa85d5c61d12533b92199ed2cd7771bd7d963057dc9b542aa074bf04e852335",
+      "bytes": 5232,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/skill_learning.py",
+      "sha256": "8ca4e0c588919e1ee5c89e9d98b605ade4ec741a693b61f3b75ca8c37bff6933",
+      "bytes": 6396,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/skill_review.py",
+      "sha256": "9894f9ff4fda1b53b04da6934737a41f036f4f45dea656654384bb19c0a2a7d6",
+      "bytes": 7977,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/skill_service.py",
+      "sha256": "494ebff4b5c5ab3e93756dab5e002e2d8b07e71bb65a07359f9d8144c3e23fa7",
+      "bytes": 9098,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/source_service.py",
+      "sha256": "3599551464fafcc5b1418dab85c7ea3054b29b60e2bade1ded00f6ea34a846ff",
+      "bytes": 3823,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/task_service.py",
+      "sha256": "7abf6587934e6e2773189858d3378a2e29356918a479d97b57ee5cd9fae1c703",
+      "bytes": 3719,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/trace_service.py",
+      "sha256": "db576ad07390d705fce4e4ebbe24dc156587fecdb96fd9b5743a764e551d9121",
+      "bytes": 2993,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/application/wechat_setup.py",
+      "sha256": "c6dee4d91b11c04bc6ceb0448ec15e1b32fe94f5a46627489eb5a8807e112167",
+      "bytes": 5166,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/conversation/__init__.py",
+      "sha256": "043ef042c43f8c1df0efaac82cedb35ea703df261cbe499701358a5967542ac5",
+      "bytes": 1177,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/conversation/adapters.py",
+      "sha256": "16f09aabf534505b4c6d4ec6c26610aa49724c2a57026004e5c27d1f0a6486aa",
+      "bytes": 2767,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/conversation/matcher.py",
+      "sha256": "39ba1f046877caa092a017f680459a0148567cd641b10b7d751ad3b60474b9c7",
+      "bytes": 12698,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/conversation/models.py",
+      "sha256": "26623c841d2340fe4d05adcce34fa1f2cdbaf25c452f386d8166e71f506e7b8b",
+      "bytes": 6131,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/conversation/ports.py",
+      "sha256": "31869a18149bb0bf7666a17893092eecab61507e270aff0fbdcbee43617376e0",
+      "bytes": 400,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/database_adoption.py",
+      "sha256": "94a97b44c5bde6921ab30b777e4906b32a2a44fc2f74bb781bba296ddb092da9",
+      "bytes": 18488,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/database_audit.py",
+      "sha256": "5d45f1c4e2b86cc0e084ace7363d360b257ceb80e48948faa6ac3e64174061de",
+      "bytes": 12086,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/database_baseline.py",
+      "sha256": "88a2c1d5ace852f727aa3fb2c974f40826ce8baa21faf8daa52dcc431efc4861",
+      "bytes": 5507,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/database_migrations.py",
+      "sha256": "b6011e0ceda8202f76aa09b3370088596982e74e42525084a70f889adaee704f",
+      "bytes": 7484,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/__init__.py",
+      "sha256": "20d61715d2341c9a9e5bf6d77aa62df0a8a012e729a9ba4a5814019276e46ea1",
+      "bytes": 434,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/context_directions_probe.py",
+      "sha256": "8e44a21e5880f65a0319aa649c4a9a534fd7d4cb46adf84055a87e0c5ce124d4",
+      "bytes": 6383,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/conversation_paths_demo.html",
+      "sha256": "9e989f9200fdccdcc3c07a3dfdd8682f2a48b36165b8ad589b1a9fc7fb7d2cf6",
+      "bytes": 14839,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/conversation_paths_prototype.py",
+      "sha256": "2de4e427e3fc97891c484455ba8ab0a067d30f20514a3f4b17ce351e2478bea6",
+      "bytes": 15766,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_adapter.py",
+      "sha256": "31c677342247a58d7512a99c81e3fbe7846cd41026e4d81642cc6a13c37862c1",
+      "bytes": 8671,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_baseline.py",
+      "sha256": "4e1c4ee9b3c59eac9f38b3e33a5f31d33fdc8468e1924a4c3d5946706b3f3fdd",
+      "bytes": 15508,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_calibration.py",
+      "sha256": "d6a048d7de759dcbf9b611f5a3a0f8f31af510205c49954707be9ced03ea3486",
+      "bytes": 12683,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_client.py",
+      "sha256": "f51362e7627bc806bac114e17229ca78a1e8eaf0a4e2ba1d4a5ca5adad4d2423",
+      "bytes": 9876,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_comparison.py",
+      "sha256": "03fed6ee6b162d1bc9b8ab9490c4ccab541584de1c8960bfbcfa12ef39c0c10e",
+      "bytes": 25015,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_comparison_io.py",
+      "sha256": "77ba2e3c1faad19ded4032222d7e2c51b4ec6646bc0fa3f93ba892fe22b62803",
+      "bytes": 5654,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_dataset.py",
+      "sha256": "752a5d2764f4a258663d9d9a0a0a2a1d05fc8ffbe70574aba9b67321229028e1",
+      "bytes": 53429,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_lifecycle.py",
+      "sha256": "886ae0c27f1a3c0d0a935327bb62d80df1f193a00d009691b7f8e3b3c10a2401",
+      "bytes": 28303,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_lifecycle_db.py",
+      "sha256": "9637122b379eeca4020575bfee413c326a7e6a6de09944b10743303d61d2031a",
+      "bytes": 5132,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_metrics.py",
+      "sha256": "5b7ef63969b1749c5c2e22ed5cf20e069292fa9b987652b996a5451831d4b83e",
+      "bytes": 3928,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_runtime.py",
+      "sha256": "d5fcc856b17b0c8738a79c05b36b7e47db62797a6071d8ce8f397b625e4dda55",
+      "bytes": 8460,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/hindsight_smoke.py",
+      "sha256": "dda32776798ea717ceb13155a2dcfbc990c7e0519be9f3938f4fef21d14aa31f",
+      "bytes": 6605,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/organization_quality.py",
+      "sha256": "2a5d49d2a6c0d67c4e3614011d594fe088fc31a8ad432af640563f38c5d8cdb5",
+      "bytes": 9767,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/organization_quality_construct.py",
+      "sha256": "149be86750fb64384d844dc97d445b8a56fbf528792e21d098d7b046419bef04",
+      "bytes": 37711,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/organization_quality_source.py",
+      "sha256": "50673f28b1e273411958da19259f68263e37115d0331af76cb0332555bc013a5",
+      "bytes": 7531,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/organization_quality_suite.py",
+      "sha256": "ffb79981287669aac8368cb6b18905dfdcd0d437280181bb44e4e8e26e7e26b0",
+      "bytes": 3361,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/pgvector_adapter.py",
+      "sha256": "9e23baf420ad972d091fbf767cfa72c4dca31c4de34f3a73a3a67d55e64bfc59",
+      "bytes": 9705,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/problem_budget.py",
+      "sha256": "a4fad958bb5148cc79c2bc8d2992edded941620f94422ecb0d456c33884c03b7",
+      "bytes": 617,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/experiments/reply_comparison.py",
+      "sha256": "08678ce0066666a720392c0da773e988ac65a9e18a0a318a98af4b2980509292",
+      "bytes": 26839,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/__init__.py",
+      "sha256": "fa051fcc1e708c3aa289658c0d7a2da1fbdc56e5ffb5444bfb3f6a0a10711475",
+      "bytes": 1782,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/cli_binding.py",
+      "sha256": "a952fc5f3d793c8426fb921196c70622bad5b968c5564fe70b327050f03b908d",
+      "bytes": 9817,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/cli_sync.py",
+      "sha256": "b61d8ae049900de0b8479d88ad25edba9bbaa9634f12858c90d1a40573f600b3",
+      "bytes": 115768,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/command.py",
+      "sha256": "48b526e219abbe049956491b145003826c2b1987f4b81794eb85cda62ead1be4",
+      "bytes": 8124,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/emoji_presentation_data.py",
+      "sha256": "3569889aeb23d932aa80a5cad2413822f246923d39d4445605af2df0904e81d8",
+      "bytes": 4250,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/event_publisher.py",
+      "sha256": "0b5e61e24429c53e87fafe218d9bdafed5dc735068fbc440a652c1ff19a62cdc",
+      "bytes": 1155,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/factory.py",
+      "sha256": "068512076d5b501373b7f7d659e5000a31fa986e25bec637c9d27b162335df11",
+      "bytes": 7169,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/foreground_locator.py",
+      "sha256": "74aa680c4f31370ccbdee99947004bd714f9f64f968a7d6ccb80ad7da382503a",
+      "bytes": 26380,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/foreground_observation.py",
+      "sha256": "b777e7111d43fac6774418c1bd140526637079221677be8f273c429600d081cd",
+      "bytes": 2930,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/full_sync_engine.py",
+      "sha256": "0076c6350fadcc690585cb3c30c823530806f162f3002753684e8f6472030f08",
+      "bytes": 27377,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/incremental_events.py",
+      "sha256": "032caa0636def89a27c653be3b13cece23e5063fb4a9520834542c3bcbf95880",
+      "bytes": 5115,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/incremental_remote.py",
+      "sha256": "57e1d207c6e9de4f3213c71841cc5f93aae58899e1562a29c7bf0cf8467d8993",
+      "bytes": 20015,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/name_matching.py",
+      "sha256": "4b4eb21c7323a5cf7b3fb8f619158374c4566dfa8709093bbf95f613c8246f82",
+      "bytes": 9823,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/observation_budget.py",
+      "sha256": "f5858a648965ca20c0728954566058d32c46fdf71536c52fa7cd365958d99e7b",
+      "bytes": 244,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/probe_adapter.py",
+      "sha256": "42e181b069e3c1189d3ef15a4c80ccb1108e915316a072e61ad8e8d5b8da8eae",
+      "bytes": 16327,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/session_worker.py",
+      "sha256": "75228d5e96f0d01ff530c866ef67e6907fff0723102d5080530b63667c8facd0",
+      "bytes": 9145,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/sync_engine.py",
+      "sha256": "1e54c4ed02873d6ee8ff865afb78e07f10e892a3bdcb15f78527e9ada3926581",
+      "bytes": 20626,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/tail_lifecycle.py",
+      "sha256": "7b13899aecfa0d1c67bee1254f85e0159b5b29647c71302e6369b4e03cf4d1cd",
+      "bytes": 32301,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/front_sync/wechat_scope_remote.py",
+      "sha256": "b81de8bcf062e4bf468c056a78572ebf213d0baff9d3b90c37907c21e75a3e05",
+      "bytes": 8182,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ingest/__init__.py",
+      "sha256": "485011e1ecabc9ab230877f7cb699eb7b2f3d612c468ee02a3f22e560ea0df89",
+      "bytes": 229,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ingest/errors.py",
+      "sha256": "3abb03fdc6c650dcb1c2b9aa2a3c3293c67a99fe0353be928588d192b1af293d",
+      "bytes": 1603,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ingest/import_command.py",
+      "sha256": "651e5a8d8141f3e955df62cfda332903904535ad161f2c4ea18a91b25a7e790e",
+      "bytes": 8375,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ingest/jsonl_reader.py",
+      "sha256": "0c1485152cdc7ebb35b2de7806b86f4606a50894dc78a5aa67069ba690cf16e3",
+      "bytes": 7552,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ingest/models.py",
+      "sha256": "dc2dc217ec17b6ad2c4cf95ac8de34b5bdeae36e0f9a84b76601d2f7bb3241af",
+      "bytes": 4855,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ingest/normalizer.py",
+      "sha256": "30366c8cad21487702f504e2440f5f60b15a0e87405242dba6c9f2438d4546e7",
+      "bytes": 5705,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ingest/preview.py",
+      "sha256": "1f697a82ee2fe2cfb336871135c4afaf98be828d38fb31577df5016b3b6ddc48",
+      "bytes": 5112,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ingest/validator.py",
+      "sha256": "065910f86dc8acee8fc6c632ebe847478c17f6e8e64b1218a89a4b4a519b52b5",
+      "bytes": 17729,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ledger/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ledger/models.py",
+      "sha256": "d3497dc22ec938260bb55424d7f0c85d0a9953e0dd2bdf5fab9803d2d029ef6c",
+      "bytes": 1850,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/ledger/ports.py",
+      "sha256": "3c0e92ce8f05788cf4096808327d75021dfcbdeaa8b2121df33324cefea1e52b",
+      "bytes": 880,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/managed_postgres.py",
+      "sha256": "45eb9f88c96e1c3ab2fa6079f5b1ba896aa19e7dae83b4beba9891fc1b45b8fb",
+      "bytes": 2761,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/managed_update_backups.py",
+      "sha256": "3e98a6a4203f7bc1013d3f1d3035833925057c37ca42479d1709ca9a27d5c4df",
+      "bytes": 6831,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/media/__init__.py",
+      "sha256": "9e696a1f41052cf8c8e2beb98fc98b6d6bee3bb4d6edb1d389e524b4542a2ce4",
+      "bytes": 64,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/media/cache.py",
+      "sha256": "7ef44a836d82032da0b64671ce2a6a7beef5b384e18a8ff7ce9d6fa78f3bde9f",
+      "bytes": 4271,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/media/models.py",
+      "sha256": "46c9179977a1d463aa41b1ca4eceae2a703bed09a45a6d51c73bb8117d9f24af",
+      "bytes": 3847,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/__init__.py",
+      "sha256": "01aa7333115ac8ee5de7b52ad32909a973bc8a784b00dd0b0acecb0c076d3331",
+      "bytes": 761,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/adapters.py",
+      "sha256": "d00549f5d7fefc01c9be188a8845a001759a34bab7d7eca14f05b4f869fbefff",
+      "bytes": 19381,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/bounded_evidence.py",
+      "sha256": "a690c26296dae8927ca4e342d97f56e52b18d06cb84ba5a58e42b1df5bcfba72",
+      "bytes": 21870,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/candidates.py",
+      "sha256": "50454269088c5527f2b6bebcf02bf4ab3dc80833a7e058b84ed812775159e76a",
+      "bytes": 2447,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/conditions.py",
+      "sha256": "8010662c0fd89664af25077e2640cc0922b2f488f70a5c95a4ac041cf4a39d09",
+      "bytes": 3422,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/correction.py",
+      "sha256": "5b5680031c496c9d54d1a1b09e06b327169b78a5895ae1afb714773d34ea412b",
+      "bytes": 1264,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/current_status.py",
+      "sha256": "b1a3632af04e8f073b9c2c80e5773e616203da463d1d70d9f33f83672e424fb5",
+      "bytes": 8798,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/dimension_evidence.py",
+      "sha256": "c041c523c2994987d1822fb47b826bfed9792b13566e03a6810bb17f1debdafb",
+      "bytes": 40615,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/events.py",
+      "sha256": "6fa3e83c62fc4851dfbd42e6e761bc22e29da0cf913869e50d0ae8b920794357",
+      "bytes": 10669,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/evidence_binding.py",
+      "sha256": "cb4ffac0f38e6e45c44409ca6cb3a5d602cd7ca7c0f96e6e06ccef1e88374ecb",
+      "bytes": 11174,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/evolution.py",
+      "sha256": "90776e6f895feb7a2259c6f195eebb6204f016e511375d22623a51a8f1d163d6",
+      "bytes": 4086,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/layered.py",
+      "sha256": "5715e024257c8fa9e77d7f261e8f75358d9cdeaae53f7331f5f7433a8bfdc895",
+      "bytes": 5442,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/layered_correction_validation.py",
+      "sha256": "2d95e810be844ae871e8bede3559340f09789b267b79d068a5ca28340737ad52",
+      "bytes": 2404,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/models.py",
+      "sha256": "89027f729187c22c7d4a2dd6b5c3073e94a7f30b5b1ae405a2e8231d4150195e",
+      "bytes": 16311,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_deadline.py",
+      "sha256": "6dd05a7fabbc32dcb84f7090fba1e9755171db20da3d9386fef733729e2f7c6a",
+      "bytes": 2045,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_isolation.py",
+      "sha256": "a899267273a492935231a6e9153d852d15889a361cc1a8f708e56c87ae8105db",
+      "bytes": 1850,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_quality.py",
+      "sha256": "2254803d871e714f262a4323a5bccb7e0ffbe46bd9c7be048b6c6f1428bb6568",
+      "bytes": 18436,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_quality_report.py",
+      "sha256": "5100494ec93886546bcbbf4a535d1c38fa73512b3a89dc7adc4796d90bf04cb4",
+      "bytes": 11706,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_quality_review.py",
+      "sha256": "e872b89cde3878dd45b2ac52d3ad222df43217cba88a7f5c4ae79fed0026c17b",
+      "bytes": 5724,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_quality_suite.py",
+      "sha256": "ef29f889c14eb15082c8ad2417f9d6b25dbe938492b4295e738be01b99a16c09",
+      "bytes": 10281,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_quality_suite_budget.py",
+      "sha256": "9efdd68737f7986b8a6d55879fbef2dd532249bdb714defb3aa55e7054861a09",
+      "bytes": 12835,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_quality_transport.py",
+      "sha256": "46aad464a1e8f2880be3eaf7220a746fb14d2e36326dc17964e8ce0f2d14f567",
+      "bytes": 7964,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_sdk.py",
+      "sha256": "7943b786c26d1cf49b009725a7fb0cdc9b7322800196989fc6801d2f69abae9c",
+      "bytes": 22312,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/organization_verification.py",
+      "sha256": "ea605e3d50fc8522771ed146005be02c55a41a22ddb5cba45ca9e5f1c817634f",
+      "bytes": 12405,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/overview.py",
+      "sha256": "99795e00c74ad7e7c818c493e4082850e49b76551877fd6f9a44629861532807",
+      "bytes": 2047,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/owner_organization_input.py",
+      "sha256": "9e5872303d80858dde31d2184a6d63726f432b4a2b29513686d628dcc2359db4",
+      "bytes": 2894,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/personal_background.py",
+      "sha256": "10ace106d3ca16e09e8de8903160dd61bc264b046063566e7a5efdc30e9167b3",
+      "bytes": 1801,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/personal_organization.py",
+      "sha256": "df8ca0125ff99f7d738862108b78322254e880b18d6504946405659fb6d8fe84",
+      "bytes": 18798,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/ports.py",
+      "sha256": "5464282a6afd31517b637db5f1ff0961fb157d4b4ed93ad92c2c4a9c1f811f8b",
+      "bytes": 6606,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/pragmatics.py",
+      "sha256": "a6d7b9235c689b6ac787b2cb1b23f7a21922a9654bdc6fc716350780ef040daf",
+      "bytes": 2274,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/profile_validation.py",
+      "sha256": "7128fd8ec82e4a49b25cdffa1c5562cc2ec7b71be8c84eede873c8413ba04e95",
+      "bytes": 2114,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/profile_workspace.py",
+      "sha256": "0a31f9f53029882e2a83952ff6e0603f42803a2cb392daa974e8fd927e04812d",
+      "bytes": 12162,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/retirement.py",
+      "sha256": "dacd370d6fa332d12e9009db558ba2141749379fbf4c3fb2e19d5aa13d057d22",
+      "bytes": 861,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/scenario_publication.py",
+      "sha256": "0e21f50521b23f47e1328fb6bd148cc8075f8885eae9fbe846d552423a4c8fe7",
+      "bytes": 3404,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/scenario_validation.py",
+      "sha256": "18119fa91b4ff8db1508f695912bfb98e87f064436cb4ef69963ba8590dc52c6",
+      "bytes": 4548,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/scene_workspace.py",
+      "sha256": "d4fc4c1d3de3766cfa2d18c6a3a602ab452526fb9c77c755a86cbaf7bd6c327f",
+      "bytes": 13766,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/timing.py",
+      "sha256": "64b99ae5504485e55615ca2060a720f9340bb4d41abf715cea5bbf2670ec7f58",
+      "bytes": 5093,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/upgrade.py",
+      "sha256": "942d4682b068dfd13b1f44cce05c2c1e5d6f0ed0ede8b13b8aba4042a35911fc",
+      "bytes": 1564,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/upgrade_algorithm.py",
+      "sha256": "668f25755a6611e233cd11a8380faae4d1930fecb9c13f93419565e8c65c3755",
+      "bytes": 6361,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/upgrade_snapshot.py",
+      "sha256": "e24f30a7375804e1d90f53b746b9e003259a086bb0e691e3afed85dc7b125b02",
+      "bytes": 7149,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/version_evidence.py",
+      "sha256": "6175e2e784ec60ded1845e24904603e0ecd777700a6d60b2a3902e981bb15489",
+      "bytes": 5831,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory/versions.py",
+      "sha256": "5a7893a879458afe8b7ad7ac98a2e48c847680fcce041a05ef345d5577df18d9",
+      "bytes": 4377,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/__init__.py",
+      "sha256": "9e120dd52d57b712a4a1ab39914ce6be38b1a8db60529890cf11900d39e1b6e9",
+      "bytes": 1128,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/_e2_semantics.py",
+      "sha256": "1ddc28157dd840558027805531819ad26864e919a133dc26f6187059bb727032",
+      "bytes": 18263,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/adapters.py",
+      "sha256": "020f89f6d556bb427f717358ebd404dfd26bdc5c2dbb1ce9e31a008fe5174fff",
+      "bytes": 30158,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/adjudication.py",
+      "sha256": "bdc5d25067570fc3512ee4b93962dec27ec70fc2d94235beabb9fa1aceccbb0a",
+      "bytes": 2611,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/adjudication_adapters.py",
+      "sha256": "cebb7e18e52d59af112d682007ac3574eab2250e859243945de26c61835f014b",
+      "bytes": 15464,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/adoption.py",
+      "sha256": "335d55685f92562d82995bdcd7c39ae3c76c2295e1635522415d230abf84657f",
+      "bytes": 80189,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/batch_adjudication.py",
+      "sha256": "1eb68363f5141d40859eba219f0feffdb0b7e6f91833a58f6004bf165c5f800c",
+      "bytes": 6212,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/bounded_graph.py",
+      "sha256": "d6d74917f1af55f1a840fb1ceaadf6eec6107accf78abd8cf6e4fce0e6114a20",
+      "bytes": 15765,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/bounded_proof.py",
+      "sha256": "fbd6d47210aa56d2bb3435fc34798a7f3c5f1eb5be157e87caa94c9faa40d862",
+      "bytes": 28551,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/__init__.py",
+      "sha256": "208b7f1d45706a914d332bd580d412c57ef7a8d77a92708a79d2c887344a7221",
+      "bytes": 4625,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/media.py",
+      "sha256": "b8143cb0a15657cdb508aa673de3f28f6fb874bbb5dd746a3e3337f6a6d47a7f",
+      "bytes": 4357,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/paraphrase.py",
+      "sha256": "b7b5cd1370491be2a005b4fa49b8b87bb2093b57617cba6dc13902d7a58133dc",
+      "bytes": 5942,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/reference.py",
+      "sha256": "1ea49516267a9b35016a4d1b0872f893f34df098c02a7dab453351d83ada4072",
+      "bytes": 4835,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/reported.py",
+      "sha256": "ea0ba406e6551ca6667061cd81f3e6f194f65c6986bfb50ed42e78c6d22038a4",
+      "bytes": 4052,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/subject.py",
+      "sha256": "09156269bc4e96459ca8de4b8500f38154ac9cce52824ba8088eea172071a2b3",
+      "bytes": 5758,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/time.py",
+      "sha256": "8d4c1437e28c4160014ad0a4b55a4d7665dd2f5a04bbd094d385d3bfb8f8ed8e",
+      "bytes": 6041,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/truth_intent.py",
+      "sha256": "b27393025feea79f66bf89bfecd03a712f19e66e4689bff433ac58f43a953445",
+      "bytes": 5289,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cases/types.py",
+      "sha256": "849ec5837881de1f130b6a399453d83b34761af17a8019d6ac02ec78d69684e2",
+      "bytes": 1987,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/cli_support.py",
+      "sha256": "0152e67879b68223e8c3604cfc8b3f3f3a444d7ab03d7d49cbfe976f9b86ba34",
+      "bytes": 8808,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/command.py",
+      "sha256": "8d1b0f517ccde5edb26ff81e02d780e7dcf9f853c7a3905acc18b9a91e481ca9",
+      "bytes": 56304,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/dimensions.py",
+      "sha256": "eef1f946405f4d791b5f57d66d6c68546b709d326811ea135af3788da0806915",
+      "bytes": 17081,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/direct_adapter.py",
+      "sha256": "7998044b098dfae66e1448a89d2ce2f189022d3acd321758819b731b3935816f",
+      "bytes": 14405,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/direction_fidelity.py",
+      "sha256": "f8661ed624c5b6a6b3b4f6c1c86f86bffb9b6297aa861f4161fb47fe928354b1",
+      "bytes": 5410,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/errors.py",
+      "sha256": "fc8b17193d69b2858f9ebc3fd3b0e4a982e152c771070541d451dd4fbf43c5a0",
+      "bytes": 772,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation.py",
+      "sha256": "c4bbea8c249caadab0b1faedc656df04cde30a8e807ae8aca92054f1413bc830",
+      "bytes": 26829,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_ambiguity2_deadline.py",
+      "sha256": "12286d61c9d7c501ddc50bbf4a58a0f57d2a5f880a8eed5555f3f1b85e68cf86",
+      "bytes": 684,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_bounded_cases.py",
+      "sha256": "7349014a653a9f1e047f52ab748370fe7c1c57b3263f64de5c7b03145ca6d01c",
+      "bytes": 6005,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_bounded_sources.py",
+      "sha256": "11c3d8b565898f5fcefea26f483529da4fa38e5a9bff2ac44170a1fa67b861ee",
+      "bytes": 38260,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_cases.py",
+      "sha256": "e0ddbede2caa2d196a3aa33f98f59d78db099163e67758d0ed21397e14ce8327",
+      "bytes": 5516,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_ecnu.py",
+      "sha256": "0e00f2708da642661ba0a91762db275a016e56a0abb849c61c593e12c5209201",
+      "bytes": 65198,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_extraction.py",
+      "sha256": "2e9b5fb1d6b2807428408e8040803d1288d63131db38acf7b61e32888d764795",
+      "bytes": 3069,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_formal_task.py",
+      "sha256": "dbb00b052da6f2196e9597d8ca9d1b203e7d18a5b51b4e5f8ebb3d92c43f9515",
+      "bytes": 7621,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_full140_v4_deadline.py",
+      "sha256": "7e91299e2439d82bb3b5573df42873bedddb20c5376643b66cde8ed041c0d48d",
+      "bytes": 697,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_http_budget.py",
+      "sha256": "d9b458e58356e9a17ec5e33b6d2b3ac5b2f21bc12c2c94d95b88f1de9eef2159",
+      "bytes": 21196,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_main16_deadline.py",
+      "sha256": "b39c900ff91cd77b2fbe74d38b7e568d2f47aad7556716e5acc1fb8e1efc74bd",
+      "bytes": 685,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_offline.py",
+      "sha256": "dbeb24fca1697fdd6cbeecb129fabed5bdc9ea79683c37ccfde346151902e9a0",
+      "bytes": 56746,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_owned_deadline.py",
+      "sha256": "6d68e686ac94d84e90849b3bfe5f1a1c48f1624c51bc987b6e02c82760bf6f84",
+      "bytes": 7022,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_owned_process.py",
+      "sha256": "ab7e0fc7c054b1eeb6f3a2aef110d548fc2b3a4c857362a35fe0dcef2e8b2057",
+      "bytes": 28046,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_phased_audit.py",
+      "sha256": "aed8446b8bfcf29d018206d94bc1a182b842b6c9cdb1eb7beeb722fdaf0cf91e",
+      "bytes": 33628,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_provider_contract.py",
+      "sha256": "db010560d868d9765be6c4c4963679d360dd639dc4e6635ccb40a41f0400473f",
+      "bytes": 35143,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_records.py",
+      "sha256": "47c9c15b96293679c04d24b80ebf8db296a3b9cc26e38b1715d7bcac2d6bf329",
+      "bytes": 56571,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_reference.py",
+      "sha256": "ad968e19cbca1d1db9f8fa959cf9e44b017e57e822690abfca487d40b79f3f5b",
+      "bytes": 29739,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_reference21_v4_deadline.py",
+      "sha256": "1a092e402fcf719cfeb8b8f27829d3dea77e5d49375ac6c9b3aeb468dc7c5079",
+      "bytes": 707,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_reference_field_diagnostic.py",
+      "sha256": "1eed024ef7d05b181868ead52e281a4505dc00d887ea7f7601ec37744565231a",
+      "bytes": 12055,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_remaining8_deadline.py",
+      "sha256": "144e53dca58b44ffa7d56cd419e97fa8bcdce649562614e2ef932e80b5cf4307",
+      "bytes": 706,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evaluation_review.py",
+      "sha256": "f5b29a5315a8f2a5e077b502d210df7850ea983d489fe962d1232458f9a9d0ed",
+      "bytes": 30714,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/event_calendar.py",
+      "sha256": "b23d9a22843dbec2abdfe5b344972b65a73cf3b22dea1f4f45307fccf2acc43b",
+      "bytes": 12319,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/event_quote_positions.py",
+      "sha256": "d33464e227d693408a6ece75acf575b382844b60989879fa6a09cc2d0b0fd5b5",
+      "bytes": 2248,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/evidence.py",
+      "sha256": "53463458243513ec567a6d49eed90c38fef8f189762c2e9db8e464def0b5f8ea",
+      "bytes": 6508,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/fidelity_cases.py",
+      "sha256": "9389c6739c6fd814fe4f1f5cf84002bc7542f0747e87cbbe69362f22417293b6",
+      "bytes": 15644,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/fidelity_holdout_cases.py",
+      "sha256": "391b5a8ab24626f476715943bf60ee4ea509e1f5b3309609cfa52964c43ed05a",
+      "bytes": 12778,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/flow.py",
+      "sha256": "008b1619745c9e0583f59e6408b08d67144f8be5e0668b586d641559e47df3e6",
+      "bytes": 22238,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/grounded.py",
+      "sha256": "1f23908156b592d82a0f5dbffd99391e397da22d77d7b70bbebc9b6a3931d641",
+      "bytes": 37953,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/grounded_adapter.py",
+      "sha256": "5392f8dd059c8e02239e9c064a78486163e47143c967215d94d21e67bb6e7317",
+      "bytes": 41688,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/json_recovery.py",
+      "sha256": "848397491a2a608a8e239b0010cca1140517a5e06011d3f65b66bd092db5711f",
+      "bytes": 2371,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/merge.py",
+      "sha256": "b24e15a8a4daa47f34eaffaca4565dda78103369493e84bf22c855f981fa8261",
+      "bytes": 4046,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/models.py",
+      "sha256": "0ccb8c48f8d9a62d7b97bde5b571c438d62669f09fa6d0cc59fd508f5fe01843",
+      "bytes": 9325,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/negative_reference.py",
+      "sha256": "7cb53a3e3086e907a50aee1564cedbe0b9ba7c6d924a5e978ceb6fa16d530535",
+      "bytes": 4843,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/pragmatics.py",
+      "sha256": "275f2b5d9ff9027c5c4dbf3fdb83d82436a28ce0c84f9e6a670ef9c3fac3e778",
+      "bytes": 3711,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/prototype_statement_time.html",
+      "sha256": "76911911e0547616ad3c7beb7ad5c7bebd361083fed281dbbc1e685e638aeb8e",
+      "bytes": 35407,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/recall.py",
+      "sha256": "a07c34c17b60c2f67a5d6ea45f8f1940bd423633c6a42f833fa0bb1cbb2c00ef",
+      "bytes": 5196,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/recovery.py",
+      "sha256": "d06540156d5a0a095b2d8cc0a5f0c7f23255b06eba077ff5f771b5d83596fec4",
+      "bytes": 2699,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/relations.py",
+      "sha256": "6f7f0a50e4702a9e4a820684c0c957de690cff29228b412ca93e3ad76acd021d",
+      "bytes": 4062,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/replica_adapters.py",
+      "sha256": "025f2aa593f1f9361102142d8fd09c163e3b31757ec306f3de211d6e81c75de9",
+      "bytes": 15600,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/replica_cases.py",
+      "sha256": "b2a862949c89a512dffac39043ba7740d6aea3b1c32c7aec15f595a0c95a5796",
+      "bytes": 20094,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/replica_experiment.py",
+      "sha256": "829e9a348519b9ff377c03de714b34fd6202c7a264a24953e81b9a4707c7c7ea",
+      "bytes": 11271,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/replica_scoring.py",
+      "sha256": "f82383f415beb8b808faf683736b6ceee3c70ecc32e9dac448c49735f08c9ba8",
+      "bytes": 5594,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/runtime.py",
+      "sha256": "91fa35aabc912c4275afbc966e25db348ee0adc942d7df434c1bcea00ce93e03",
+      "bytes": 567,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/semantic_evaluation_cases.py",
+      "sha256": "d3224647dcdae69fc76b7e6cd33a83be38360b192278ab9081609e598201fda3",
+      "bytes": 19174,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/source_proof.py",
+      "sha256": "a1be40d2271319578a214e49bcac14a534b28939cd63fd62bcb5778b1150c2ef",
+      "bytes": 47527,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/timeline.py",
+      "sha256": "831ff7fe41a19dd5e048b47b299e1639ce49f46efb1b8d042440016817f46c4d",
+      "bytes": 3681,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/verification.py",
+      "sha256": "dd58742b82a56533d8ad3272155e06a11f41cbab25228b58322a7cfe724dc269",
+      "bytes": 18668,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/verification_adapters.py",
+      "sha256": "94209c50cf465caa2c752f589b8e55c18784f91ca4fac92c28bb1080c2948f95",
+      "bytes": 47172,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_extraction/verification_isolation.py",
+      "sha256": "6799136f761ec453cf1d2648b6273926e3de59cabe3add34e90defb330572a44",
+      "bytes": 1636,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/__init__.py",
+      "sha256": "9067ad83f5a120d261de201db290fe440e4d7811563b64806ebc8eb6d33e332d",
+      "bytes": 342,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/adapters.py",
+      "sha256": "4f214236d93c7f27707a03a9800e251b19a9c4ebb58308998e9ed23258c10429",
+      "bytes": 7234,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/command.py",
+      "sha256": "189c969cbc9956cc910b45cab741af86eac6321d3ed7637a4184878f269356e1",
+      "bytes": 3837,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/context.py",
+      "sha256": "f4fb6d20f1dac0f21e5a9f3c3865ed69bb037016a14f06cbd661b52f64d70beb",
+      "bytes": 19976,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/ports.py",
+      "sha256": "4e33749d6684863f82172effc0d13d78e24b309a5266aa3396a5d59f1a763560",
+      "bytes": 2577,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/status.py",
+      "sha256": "a910fa5a7857d78d38e7b99329bd4b753bf9a65375204f8afd9e67cfadd4ccf0",
+      "bytes": 481,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/transport.py",
+      "sha256": "83cdc0ef1241e3eba799c35679218882b1ce3b15a3d454f408cd8f9e138c50e4",
+      "bytes": 12901,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/memory_trace/views.py",
+      "sha256": "f12def4ccc7ddd39d502579c96f4936d829166a12693710a83df7f481c38d29f",
+      "bytes": 1793,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/parent_lifetime.py",
+      "sha256": "eb8d9628c826f40f6099a0852f31947b3add6b2084a3a32760381cac1d5dedb2",
+      "bytes": 3917,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/__init__.py",
+      "sha256": "cb3d0631566e4ceafaabfb58217b4704d882f08acaee1abe6c89a5cd638cb2d3",
+      "bytes": 4042,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_candidate_carry.py",
+      "sha256": "e5230969e7ce7ee136fc49afdc3560f122f235ae253be6f6b9bbc42f9a26fd60",
+      "bytes": 16097,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_candidate_versions.py",
+      "sha256": "1a2b11fdd089b8e5c786e6f2a6bc753a79258c42fef37bd963b9d5540d636a89",
+      "bytes": 25437,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_captured_input_lineage.py",
+      "sha256": "6e03e3a0a2b4599e78a56551f6feeb876a9bba86aa9451f1789726e16c5e9d8b",
+      "bytes": 9267,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_continuation.py",
+      "sha256": "827aea7a24ea72745926ecaf99e4637d7593af01c7f06c2892db93a09f8ae11c",
+      "bytes": 19379,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_discussion_context.py",
+      "sha256": "f345c46b3616ce63005cf77f2f63aa6e84e7ff4a9cdfc1321bfb9f52ad48394c",
+      "bytes": 22862,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_discussion_reply_context.py",
+      "sha256": "d7f013c70b4771a640fd38eaeed934ead4eb3c1b489b55a16e042b6d22f8151f",
+      "bytes": 4761,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_generation_lifecycle.py",
+      "sha256": "b9d25641d05b896722642f3a0b4d35cba3c01a04bed6c3828486656d06c76de7",
+      "bytes": 9835,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_generation_replacement.py",
+      "sha256": "35edd1c4c7a64d52976a8e4c05598af4b5f1a4af718523c3fc7575e0f1b040c9",
+      "bytes": 6624,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_input_lineage.py",
+      "sha256": "7daf4b7be62d3c346ee3de70645ba2acb6d5e60a7325ce6ca9c15322c69515e2",
+      "bytes": 7760,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_interrupted_recovery.py",
+      "sha256": "5bcf9cfec1b2ce570b9125661f0681d657e890f4bc370aec89409417cb653d32",
+      "bytes": 8853,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_message_adoption.py",
+      "sha256": "ecd60bae9af2ab1ee35c81d9aceaf97f5f9ccafcecdb02af0c301929fff2e489",
+      "bytes": 6378,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_preparation_rejection.py",
+      "sha256": "129e7401b58a433b70cba3841c0845a4630c0173bd81cc26a76d4c0778151195",
+      "bytes": 2968,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_prepared_context.py",
+      "sha256": "513d9622e9e21af20506ef952a699efdba244fda8e95f4debbf5dd30fc992d08",
+      "bytes": 11031,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_prepared_format.py",
+      "sha256": "3e52acb4bdd9eadd3e763e299f5309a6ca3a1041a765c4efb61f9c17512a44c7",
+      "bytes": 5584,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_reply_identity.py",
+      "sha256": "2e9e5906ac56a80d172c6ea55f134896d5be3b5ac780b9cd2cff5561b1ae7c35",
+      "bytes": 1990,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_session_catalog.py",
+      "sha256": "977c8d99157e4e93cc7aed4b41451bb0fd6a86bab8d19f9b0c3f319ccf0595de",
+      "bytes": 4571,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_session_deletion.py",
+      "sha256": "d8e524aef89a285fc712abe9b49f654592b6a72f16335edae0b9ef906059a8a5",
+      "bytes": 8951,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_session_inputs.py",
+      "sha256": "ce208656731811dab21f820dd69e7eef4ccb89509e7a621f17720f65b3549508",
+      "bytes": 25283,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/assistant_session_store.py",
+      "sha256": "02fc89c918abee37526d12b541cddd1318153aed3822923a95eb551171916c01",
+      "bytes": 66812,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/auto_read_suppression.py",
+      "sha256": "f26cc8150e309164310947bc230a6a6afb69923592aff1b18d86b9074bdbc05e",
+      "bytes": 4221,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/backfill_state.py",
+      "sha256": "a75f1f2ffc42a1c42f3823aad7cfa368714b1ea109018f37a804bede8e650854",
+      "bytes": 23878,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/background_tasks.py",
+      "sha256": "4676e16a321a99183c5e5c730419cd32a954f32c2aac87ee12045208aeb3fd20",
+      "bytes": 75804,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/contact_deletion.py",
+      "sha256": "49e9f46f63dcdf5c1a474acbb016515c27f4c37e9022300aaf97f2aee05d1724",
+      "bytes": 8305,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/contact_directory.py",
+      "sha256": "88795f737238794e033ced33fb5cd9ee09a30da937d339d79bac4add59923e20",
+      "bytes": 4579,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/contact_memory_index.py",
+      "sha256": "aa632265601f2317d8a97b2479b6a3922a395c20da089f22617a7fb45cf155e0",
+      "bytes": 28799,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/conversation_repository.py",
+      "sha256": "181b1eacd8e2bed43fb366b49c9b840dfdfb9783dbc3baf20f5652e9b8b50ec4",
+      "bytes": 31214,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/correction_evidence.py",
+      "sha256": "34d6c3c7f33d2d7cf423e8d72dd593e84c9815b4db165cb06d828828fe156a83",
+      "bytes": 13208,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/dimension_evidence.py",
+      "sha256": "d2db91042658ce72c7d775d13c36da9b3a61bdbc5d019024a78460c494123d9b",
+      "bytes": 9648,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/explored_generation.py",
+      "sha256": "019929b5300c4828f3542dcf4950a102aaf9cf4022af76ddbe94e0f60e713e97",
+      "bytes": 9958,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/explored_reply_context.py",
+      "sha256": "010afb0ec0e96485574b0434a67e69088550de388e600b69fcdb3936df676c7e",
+      "bytes": 3683,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/expression_preferences.py",
+      "sha256": "1fed054f1a35662e0b9de2f08b5a85535b47a35e220da7afa3e607ff88a7f776",
+      "bytes": 24780,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/extraction_schedule.py",
+      "sha256": "e17203bda486feae8d09ba72a0bcc4e434a1f5e036b8d4ca9b1815029f212c79",
+      "bytes": 9384,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/extraction_trace.py",
+      "sha256": "5e9b8a00484d9da1bbed59276927686d6b41cc763f74ec681a6e57bf8f089484",
+      "bytes": 55183,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/front_sync_state.py",
+      "sha256": "5212e3b444275ad88a8b56b72e52d987b4bb464af32c96802bf6a3f205c491b7",
+      "bytes": 7441,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/history_authorization.py",
+      "sha256": "06aa6b34e80fa55c56c36c49fb9bbd877ea8c07fe6002f768367d7dff68b4b71",
+      "bytes": 8357,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/history_sync_state.py",
+      "sha256": "833ae7aabdf60cb1a1276a0a4caeb8eeeb516a561aee95f119cbe228e940f820",
+      "bytes": 23438,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/layered_change_feed.py",
+      "sha256": "2415f8514cf9ffdae7ba004af0de8c48aa0f50f01af56b6523adf856353e7190",
+      "bytes": 1754,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/layered_corrections.py",
+      "sha256": "7f5064d33955803dede2dec9da470293e800da10c106050e32d73387e7bd8244",
+      "bytes": 15793,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/layered_coverage.py",
+      "sha256": "239cad04cdac3f7df55fa7f76735cb86d0f5a8be005c33fe9ab3ae22bdb7b6d4",
+      "bytes": 15390,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/layered_memory.py",
+      "sha256": "776e94e00c7836e10dba89bc7722043ae64cc0262594fd4571dcc5ba12e056be",
+      "bytes": 61698,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/layered_profile.py",
+      "sha256": "b8f91cfa4ca34ca0f7d1c13de769413fd8631d5de397792823005568285f65e6",
+      "bytes": 20803,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/locks.py",
+      "sha256": "0511e2fac9ac08da04ff109213711f3127631b401192fbf19f4664142972b2ec",
+      "bytes": 1523,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/media_store.py",
+      "sha256": "247869fea75fcb846e80b5f3702e0e7bc5e228052cd75595e6bf11fa81311166",
+      "bytes": 21431,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_conditions.py",
+      "sha256": "b98806ff38d37dfc90c7088a08ee253de4f1cc581a2e5ea8aec787f5a308ec21",
+      "bytes": 5864,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_confirm.py",
+      "sha256": "fc81d635e3ed01c94f0c6ebe1a2c288e4523457626dc96235687898095a8000d",
+      "bytes": 11994,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_context_read.py",
+      "sha256": "b3272b2ab34332ea51fc043630cb25e36ca0e00b13fd594f09a837708e877c14",
+      "bytes": 2386,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_correction.py",
+      "sha256": "517157e3d18a082688495caea4007db3c0069e75af62735764afcfb0cf852fdb",
+      "bytes": 54175,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_events.py",
+      "sha256": "812ca4b09c873d0b9a838cf79b5be1e5ca4851f1f862d531b45ce7e235296c8a",
+      "bytes": 10359,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_evolution.py",
+      "sha256": "9a24c374f02d3c6313126de772e8b0552a08538ef2d88a3e81b5fc1a1427c3ac",
+      "bytes": 8594,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_merge.py",
+      "sha256": "bb00feea09afe49759295085cc9bce19dd9308e918e949ab9dff36e36d7e60c6",
+      "bytes": 6253,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_overview.py",
+      "sha256": "117f03c8b411f6d0e1602a1d2e1a95a794991b6c85234a7eb1db2d6cb7b899e8",
+      "bytes": 25976,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_overview_reads.py",
+      "sha256": "c4ccc9c78a78b35a8181ab887e51b7b8966065848eae3e85a4c61307b5f17ad7",
+      "bytes": 3785,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_processing.py",
+      "sha256": "91d2731ad571161361c39b33e3a7718929fd06c6604663c9f5a7f8bf7e06e7df",
+      "bytes": 30100,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_processing_lease.py",
+      "sha256": "1b757396f74070a3b1be045eb977a58c3a1d403af7af4c556a2d089b2b9972a1",
+      "bytes": 2420,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_store.py",
+      "sha256": "36fb12b079a6e3ddbe52f54b52badb7e2bb8e129017820392ce1f6943a21fb64",
+      "bytes": 87006,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_timing.py",
+      "sha256": "ce84dd6041592e0bbb7016bff6e6e518838f19387196f8109bea960b35aa623f",
+      "bytes": 3990,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_upgrade.py",
+      "sha256": "3ef31073c91ddea358d4251693f37fe640b6148f2c43cb9dbf83902686e6b054",
+      "bytes": 34569,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_upgrade_apply.py",
+      "sha256": "84f00562ab226f0937b1e731cac9ac0b63c668105ce97ff97b23186985687f9b",
+      "bytes": 11517,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_upgrade_generation.py",
+      "sha256": "1a8dd86f129bc1d77eeff563790bd3b1ecbfb09439b57591baf55ad13b8a0de9",
+      "bytes": 7868,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_upgrade_traces.py",
+      "sha256": "3c5f780e9dbad2ec2d522ecb9c37d1c27e15646f247e9f961d84a6693d9be7db",
+      "bytes": 2643,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/memory_versions.py",
+      "sha256": "b9b4454d623d31ef44ff171abc84b8b207569b746b5859e8d106184d901c91ae",
+      "bytes": 20098,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/message_cleanup.py",
+      "sha256": "e40ca8f46b7b9b591379ef23f802b20576ad04fb7ed908cf4f203ef69e4a6878",
+      "bytes": 8820,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/message_sources.py",
+      "sha256": "c43ea3194133a132a2963091e3c97768041f27eaf5a54cad072e1c0de28e0955",
+      "bytes": 3899,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/message_stream.py",
+      "sha256": "02a66bd4951c631c4ab45e6f903e860477aeb6842de717ed1c39664e2070a68b",
+      "bytes": 9025,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/observation_store.py",
+      "sha256": "e861f82e787781b50a9ec9f61358e3d45d7361885d6ccb01b60920b54486315d",
+      "bytes": 68883,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/organization_quality.py",
+      "sha256": "04b15d9f6df8153e01e3ff219419d81c14650500299e278ee9eabfabd9560428",
+      "bytes": 35716,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/outbound_ledger.py",
+      "sha256": "965963f544725b7edc2f79c1631e0027166cec4b6e9f9cfefdb742a47711b039",
+      "bytes": 6055,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/owner_memory_store.py",
+      "sha256": "c3eff03bfb9e076b92481bea037fcbdd3b9958b538b6f1bb8ab71f79027a136e",
+      "bytes": 52446,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/postgres_repository.py",
+      "sha256": "123a76b268121cb35f24f46b35f51fd7e714f3884803f3c97448231d1cb6acdc",
+      "bytes": 32681,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_basis_changes.py",
+      "sha256": "407d5ec679b826e4f1c4a4426719f02da1c7d5638ef6ec3562a8ea78d2a31215",
+      "bytes": 17750,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_cleanup.py",
+      "sha256": "7e0609b687e9222611c5ffd8105355ebfc036846136c57c2127a21e47fd5773f",
+      "bytes": 7556,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_continuation_basis.py",
+      "sha256": "ebcc3f965239a728a15419dfceff924e95d508b5eb0b7e7e4786aa6a3767b7a0",
+      "bytes": 4777,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_discussion_dependencies.py",
+      "sha256": "eafed4eceb84576aff44a518dce6cce0c1716a6c34430886c1ffe88135073dc0",
+      "bytes": 10661,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_exploration.py",
+      "sha256": "606232cc0d10bb75f854fd1e8c9dd54f6cc73715049405082361e40a48ad5f50",
+      "bytes": 38614,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_history_coverage.py",
+      "sha256": "db6a97c3835bdfe55b53e219299333d803bc491085fd3b92bcb88a44b6aade0c",
+      "bytes": 2163,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_layered_cleanup.py",
+      "sha256": "920924a6c59ef4e098d8e52b3120b8e5066127ba8c684806e2db00ebaa8064db",
+      "bytes": 1602,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_overview_navigation.py",
+      "sha256": "0a4661909374f14bf3c11164b149160a7e73493a4f1c2666a1941f7cba4353f0",
+      "bytes": 6624,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_sources.py",
+      "sha256": "180adc653aba2bb2a958191ce80a35cef91d2e5ab9ab35018cef18cc6d95000f",
+      "bytes": 16169,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/reply_store.py",
+      "sha256": "d75a23f4d87064b7cb07d3ebda156a30eb0ce9e9a0be8b8200ff57d093463caa",
+      "bytes": 75236,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/retrieval.py",
+      "sha256": "2563370f085e9d539b9bfb9bfc14aa60ef849ccb666137082db84ae25f5a3ed3",
+      "bytes": 32216,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/schema_capabilities.py",
+      "sha256": "e8d8c82cb66f11c5bcf2bca63e6a4eccd1156a3e315508cfaa8b5afad7c2d29f",
+      "bytes": 2290,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/setup_owner_directory.py",
+      "sha256": "a3a945f86cf3a3808caf2330fd8487f31fbb5d1ee45e913d5af768922af2f2ee",
+      "bytes": 5657,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_directory.py",
+      "sha256": "fbae0f4fcdb46b75d826095de15ff3ea1b26a675d9c52f6dcc513bbc4dc785bc",
+      "bytes": 13806,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_execution_view.py",
+      "sha256": "796bb871e5919d671b8f2558255783f3b5a75b026ef51e311605506c9c275b3f",
+      "bytes": 15638,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_file_cleanup.py",
+      "sha256": "9a0d9c933e5d971798e0c56ae11e4ef334de352e4c20c27fd22f7a10b1ae16f7",
+      "bytes": 2307,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_files.py",
+      "sha256": "2a82f066fce20a037af56042e6f35f34af80d9a5ed2b4f45f62159fe7d93000b",
+      "bytes": 24294,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_history.py",
+      "sha256": "69b21a74809ac97260b4a5ccd175d8eaa0117af2a196d9208174b62392d919e0",
+      "bytes": 8064,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_learning.py",
+      "sha256": "3b0324f6a2e675041f63de9df0b4692aeec95451cad1e7223c5ceb0f0efaf1d5",
+      "bytes": 28435,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_learning_generation.py",
+      "sha256": "50389fce830c16ba810a974cf8d4b118b3000faf00f61e3ba6e585777820b34d",
+      "bytes": 3318,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_learning_materials.py",
+      "sha256": "cf3e25014f6cdd661bcdf77d5eac80fc3cf2ffe16f37f0c9b16269de47533e90",
+      "bytes": 24743,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_library.py",
+      "sha256": "6ccdcb9e08e2d62ba1e179bfa2804b5cc6626494b2e245b0011d3ec77bbba1a5",
+      "bytes": 48334,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_management_handoff.py",
+      "sha256": "1db2dabd5509e92085db978505fbb7ef0288c25222462831b2700449c3b6bf14",
+      "bytes": 3229,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_management_remote.py",
+      "sha256": "dbd34a3ee9515d913ceba9a1c902fa5a829d7116477579ad384022d4ba7f6c47",
+      "bytes": 5779,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_manifest.py",
+      "sha256": "0ee5633a5f8a73eba7d40ca306a922329ba37f55eee520cd97fb0489b4857957",
+      "bytes": 5793,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_methods.py",
+      "sha256": "e967e41fcee68fa21bb538bf423e847c06055a3fb116724783e12933680c4f00",
+      "bytes": 7087,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_policies.py",
+      "sha256": "3be6cc463e1cff926a4602320d0be4e7bfc3a8b7d74893e4ef631c015077aba6",
+      "bytes": 10094,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_port.py",
+      "sha256": "866376011717e95e043cb25a9e31faf6007edecf6482538e7077bcdbea715cba",
+      "bytes": 13412,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_review.py",
+      "sha256": "5af94e0b2a3229175bc632ed49ec7662a35072209e9ffac86099968093c746ac",
+      "bytes": 26697,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_review_navigation.py",
+      "sha256": "c7c117297a06bc4b4de929e955ad97b01eb1536b55a2f87d44d33e8df5af453d",
+      "bytes": 6265,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_schema_upgrade.py",
+      "sha256": "424962b42956b402dab2728c41d9122ba2922a172b10efb5b6d1221be02e7c7d",
+      "bytes": 10271,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/skill_version_lineage.py",
+      "sha256": "8905250265ab52bfeaa9453e7bae69e881403f76b566c3a29ca61c08481ac0be",
+      "bytes": 4635,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/source_deletion.py",
+      "sha256": "b3ad00993dbc4d8b7a3c92a4953c97bf7a9f72d9055ff94ffbafe5b3b175aeb8",
+      "bytes": 19457,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/source_dependency.py",
+      "sha256": "1edad3182974db41f9d841bc9d3e684f53ec23813ac3d122350badfb46f118f8",
+      "bytes": 3076,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/source_memory_erasure.py",
+      "sha256": "89b2399fb975a967c16ec0e8656ffe9ccf16c4dcfae250e8ab360b994fadc1eb",
+      "bytes": 5709,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/source_processing.py",
+      "sha256": "a548d516524ed47c28d605688617877ec3f70a830d0455eda0a1b8f54cc0f68f",
+      "bytes": 14061,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/source_tasks.py",
+      "sha256": "a2191017a1526e75748a5459014ff77e17ad2b9b4a8d2a14d71a617c4a2c1425",
+      "bytes": 6814,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/sync_scope.py",
+      "sha256": "0c96c9d9c487978c3fbc8fc7faeff851d438bfb4424e390f3399260badc869f3",
+      "bytes": 5959,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/watermark_store.py",
+      "sha256": "554a4f04dcfe54a9e733387f8e8cbd04b3172a36298954b443254128b591b401",
+      "bytes": 11080,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/persistence/wechat_setup.py",
+      "sha256": "6f5c33f1344cefadd12ab851c91bea1b09342e86ad0e33b8da4f2fe582a98484",
+      "bytes": 3757,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/problem_budget.py",
+      "sha256": "684b7bd9e4311ee95296f34fb030c89622a33f1f72dda0466de206df1a42efa0",
+      "bytes": 9311,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/__init__.py",
+      "sha256": "79cf9fc4ddadf8f8ef39334f84c6a63df25d2ac53192fe1f316c46ff33c38d15",
+      "bytes": 2234,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/__init__.py",
+      "sha256": "5539433e78ccfb2a84dab7183ea6b1ad10ab4ea6fb495d9b3e39c1d669862118",
+      "bytes": 171,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/async_runner.py",
+      "sha256": "3a71953a86ff4ec14b842d1f4d29b5516dc18f5743d0ece0cb662329c74ac3e9",
+      "bytes": 1453,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/chat_json_input_budget.py",
+      "sha256": "43a5414a1bd76322f149f849ed6ce6bbf740a79105c51b2e6d3be343c51e7268",
+      "bytes": 5789,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/constraint_review.py",
+      "sha256": "1ded9264d08605bd362d17d69941a2d445b803ab05b34c6863c3e80e50f80eb1",
+      "bytes": 18502,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/constraint_review_contract.py",
+      "sha256": "d469facdc10f89b5058bd23abde349da252a9678d6209ff42b495384295ea8ec",
+      "bytes": 18326,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/deepseek_input_budget.py",
+      "sha256": "7301be159ec80efb8b9252c6dfe5cd0686c7f76f7a6ae3d63206705de07be1dd",
+      "bytes": 1675,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/deepseek_provider.py",
+      "sha256": "26a757ba76cc86a270c53099730c567120ab78c4a4403ee40685d971a71f7a34",
+      "bytes": 7943,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/ecnu_input_budget.py",
+      "sha256": "f9682cfd48cf80457c7d9c3b22477fafec2d44c99326d286fe027bc1623fafa0",
+      "bytes": 1286,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/exploration_runtime.py",
+      "sha256": "a15cdb4ea04244f63520692967d5e6973d5c40efe590483bfb12b744f232f7ac",
+      "bytes": 12599,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/in_memory_store.py",
+      "sha256": "82d72baf9469ee4fccd66895511920bd74c468261dd37c2a32653dc5668cde99",
+      "bytes": 138,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/input_budget_middleware.py",
+      "sha256": "e147c6f7638a7d6ef97c6682742d11ca836621d42ab87c23e7e9391da2b93c34",
+      "bytes": 16437,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/langchain_runtime.py",
+      "sha256": "458c73ff3ab0fd5768927f730cf0b601416d3cf61046e060fe148ea260dfafee",
+      "bytes": 61909,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/model_call_ledger.py",
+      "sha256": "a1a70561881423a333f058d284b5c5090b4b3bf195100913882c5d448e342964",
+      "bytes": 2884,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/provider_errors.py",
+      "sha256": "f21cadd491489af9027051869afdfa62df720da4cd6ff65f9dc1b0e0e1af06ea",
+      "bytes": 390,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/reply_comparison_capture.py",
+      "sha256": "c50f4a3caf738a54b3e9b34ff4afae9911916be6f9d9de02fcde8cd38777e24a",
+      "bytes": 12903,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/rewrite_literal_changes.py",
+      "sha256": "a49b0566dd50255bcff0d858424a4b11b21fe3ecc1ab229fe8c8f294e55309a6",
+      "bytes": 1294,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/skill_preview.py",
+      "sha256": "32368e764ce4d2cdb75991e6ea1e57f24a95b827056cc7b0e2bb1cd192dc65c6",
+      "bytes": 4949,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/thinking_deepseek.py",
+      "sha256": "326c5224105cb56ed0840ab62ced112fa027ea6799eaf78fc82dde9577d2d7a8",
+      "bytes": 1029,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/adapters/thinking_output.py",
+      "sha256": "99f77739ffcf644b4d21c52004b81649aa1df1b93bbc03fdd72f78630e4cc8f5",
+      "bytes": 2501,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/assistant_continuation_reference.py",
+      "sha256": "4ac2d2d96c0bf4ba4b7524e4b435b87ee356b956dbcb09784e333e94c546c723",
+      "bytes": 3246,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/assistant_discussion.py",
+      "sha256": "947af4fa18a03e37df0d94404812c61ce4796042b3a9baf7e724e23062925aee",
+      "bytes": 10534,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/assistant_discussion_payload.py",
+      "sha256": "4b462a5fb9cda339314a3b352463a798773170b8ba9c7cc2c4310433c638bf51",
+      "bytes": 1899,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/comparison_contract.py",
+      "sha256": "b0bc40f00e840f2377fdb3478e9db1488367be1eaa7a769b59fde59f20325599",
+      "bytes": 9930,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/context.py",
+      "sha256": "62277b61e8a8a0f7a1e21cda31b169810faddd1ed6990bd9967a6d626987771d",
+      "bytes": 77056,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/context_validation.py",
+      "sha256": "115e78364dca0ae67c0bfe197aeca1c65087c90e63b090b06ef4067f54450529",
+      "bytes": 17251,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/errors.py",
+      "sha256": "268ed1bb52563d93fe2bbe1c88ff99e6ba4356c0359f8922c77f9d5a442483a5",
+      "bytes": 2294,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/exploration.py",
+      "sha256": "eb64402ea1a2c2c67014d24a2dac32eac3be7eea9fbecf8bd97772104cfe0b4e",
+      "bytes": 7081,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/exploration_context.py",
+      "sha256": "c66a29f3c4d41cccfe59b8beb43fdec8a0a051b166c516b4c5a67d93edf27246",
+      "bytes": 12226,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/exploration_skill.py",
+      "sha256": "56de8d0ca1a506723eea2f06dd1503b7ffe7077304429358ddd1ca014eb51003",
+      "bytes": 2411,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/exploration_task.py",
+      "sha256": "2a500a49a2f89fc1c067fd0f8fd1d95ebda7d5502aed18139866c5564eb03440",
+      "bytes": 5834,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/expression_preference_models.py",
+      "sha256": "8ae4e84db2549c8d59e21298d5baa20b4d7ae65baf7091ca492a3dd89b4cf216",
+      "bytes": 5201,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/expression_preferences.py",
+      "sha256": "106c6fbee5de083eb8d7aef425238daaa62910de245524f75061bc32f1b89db8",
+      "bytes": 4639,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/fidelity.py",
+      "sha256": "c22985ded2fb1aec0cb9992d8d08dafe861632d12813154887486e51381b1aa1",
+      "bytes": 7534,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/fidelity_evaluation.py",
+      "sha256": "c3fdfa1b9b34d29a0f0e265cbc3206a6520833c1d8193f3dae5034c91a986b47",
+      "bytes": 12146,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/generator.py",
+      "sha256": "871c0ca5a25886834b1183d43775d7c8fcf50210185a41e10e1c1bb85a79a15f",
+      "bytes": 22797,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/input_budget.py",
+      "sha256": "d845dc6b0c602a26c6c674433dd2b6e17d336d2c5194875390c0be5b9a804e8d",
+      "bytes": 13137,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/input_budget_receipt.py",
+      "sha256": "e526a3d43565731e70eeee4ad3a5db6fd70cc7f8be684bb2991044ec5a79faa2",
+      "bytes": 3587,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/interface.py",
+      "sha256": "5544a5d82c943531d02aec44df4c409e8543aa78bc737a46f43b99e8c805f25e",
+      "bytes": 14679,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/layered_context.py",
+      "sha256": "f53f321207e942d2d4569fdd3e442f5d7851a8c2bd157cbf8e156a68c6cf8d55",
+      "bytes": 6661,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/prepared_context_codec.py",
+      "sha256": "44098f9366a2a4f118cd598ce573cae1d9d5f734fa32a733663d78a0c461ec88",
+      "bytes": 9036,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/quality.py",
+      "sha256": "e7f6ca4caa36bcd2e69ff65c67a7045c3f7c5c988ba4dcf0c155ab2aeac620a3",
+      "bytes": 21202,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/retrieval_receipt.py",
+      "sha256": "8d0ba9b0bbd652b19a1ff86fc852f9d97bb2b77d6f4a6bb7a9f06bdd6ce833e8",
+      "bytes": 14317,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/risk.py",
+      "sha256": "04a9cf0efd2ebc329b85d850e3afc7ba315734538edf5ebff312b0417bc0f591",
+      "bytes": 1245,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/runtime.py",
+      "sha256": "0313ac9890632635b59ecc2e2de5c97a64124413ab1b5dadfcbdae52f744abef",
+      "bytes": 2684,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/scenario_tools.py",
+      "sha256": "2174f7afaa715db23d0e8714d6ff883e6fed26f6323c8f30111e408740a8ee63",
+      "bytes": 9647,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/store.py",
+      "sha256": "8e82199d285f4b839c3c23b86ab917b5ff9f541900736b056eed18b263dec39f",
+      "bytes": 23421,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/reply/tools.py",
+      "sha256": "a12560f35ee9da854dba1cd2865c5020dca7ae5e3f05a432188634166e2d5e90",
+      "bytes": 17955,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/__init__.py",
+      "sha256": "48e6bf77f27a1d6968c19e5736ca305a33fc6bd9feb629cd6a54d63d7888399a",
+      "bytes": 1989,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/adapters.py",
+      "sha256": "f0d8484b4a5c3cb7a9840dadbaf317e56de6632b57b6e3ac2b3e6b72b9482c71",
+      "bytes": 14633,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/errors.py",
+      "sha256": "bbcd2c09f6ef87f538f48a040c42d0bda7f58f64c3b1d90d2c5be84c79b0d4db",
+      "bytes": 264,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/evaluation.py",
+      "sha256": "bd823cbd54890a1966fcd29f6c2f0fad845f4d31bf666ed640e9d0afff1a79f4",
+      "bytes": 32420,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/feature_flags.py",
+      "sha256": "dce7f9f864fdd3700b6b97987ba1546f888a46ed334bc19ae1534a53f0713db0",
+      "bytes": 2164,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/lexical.py",
+      "sha256": "93ec53f0a40db5200ba673898d9461015c21a6879ca0bcaa55ebfe4d9105b233",
+      "bytes": 4364,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/models.py",
+      "sha256": "c3708ecd3ceb294243cf54a97730d85990dcb87c073bb672cd33655962623ac0",
+      "bytes": 13210,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/pending.py",
+      "sha256": "db09f0e17aae1916e69dae61f5b5ca23ef89f900e0032e90523f4fce4bb89508",
+      "bytes": 2892,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/ports.py",
+      "sha256": "a7e36dba41a8bfca20e13b76a2a6a18f0b01b1a1e18ea917fb91ca92a65534a4",
+      "bytes": 3228,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/ranking.py",
+      "sha256": "aeb4e28b4f8d7a0315f51c9298b0d368e4b55f96b2eef746bba50a4b13474665",
+      "bytes": 8642,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/recall_cases.py",
+      "sha256": "310f6102e8d0f0c1a0d971fc22436b6fa346ae1cfb462aa932f5e8bfe52b1c03",
+      "bytes": 24226,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/retrieval/recall_evaluation.py",
+      "sha256": "a730fdefe803eca5cfcd19cb2b9bbc208fd1c8c3eae706dca55b994c723760eb",
+      "bytes": 9516,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/runtime_config.py",
+      "sha256": "92bc57543ef9b806dece68395aa01dcff6994dab80e5cb90e864ee34d62e3fc7",
+      "bytes": 4725,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/scopes.py",
+      "sha256": "e6d9fe7c21039186be421c38669d5a91f6dff30260621dbb756fa38bb01af0b2",
+      "bytes": 1711,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/__init__.py",
+      "sha256": "47f8c3c98c2f44e0e51afc314b39a7addb96092514beb6584588baeb02cf1088",
+      "bytes": 350,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/app.py",
+      "sha256": "80c43929bbf2bd9c44881236dc82e87a0f66294e5927350e55eb826fba55cf38",
+      "bytes": 204484,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/assistant_candidate_carry.py",
+      "sha256": "76fa0c15f44311d589000457f54033821bc5fdf0de3c358b0d432451673c1510",
+      "bytes": 988,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/assistant_candidate_versions.py",
+      "sha256": "4d488ad3f09590abf6b7f650d4d6ca260e5002f241bbc7c2b150ccfe3719be73",
+      "bytes": 8309,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/assistant_continuation.py",
+      "sha256": "f6b09821505feb91942b99c48c7e5d4ab038a583cc59d65b10eb0eb940479d48",
+      "bytes": 5498,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/assistant_generation_lifecycle.py",
+      "sha256": "d8c9a9faf31253672d0f49c3a7afa37a3d5d647ced8e2ff1a91e3c189572c63b",
+      "bytes": 4538,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/assistant_interrupted_recovery.py",
+      "sha256": "d490124ab0f8e21ad17cfdba9da763ea45521eb2bea5d232693f218443dbe2d7",
+      "bytes": 4684,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/assistant_preparation_jobs.py",
+      "sha256": "458ea130c8322cb8a3fadfc8a081057193a061a41174f597e4c07e499452826e",
+      "bytes": 6235,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/assistant_preparation_rejection.py",
+      "sha256": "d805a6c7985bad98a9df9f0bc6e63f7abeeee3a6bab348d4a1b971ae28ee33e6",
+      "bytes": 1159,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/assistant_session_read.py",
+      "sha256": "9ca3d0ac5c17eacfe1aa9fb92c3626fbc880fd5b9b34a937534eda734dba1e23",
+      "bytes": 2732,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/command.py",
+      "sha256": "f6563ab48437063ddf6e8d172d3e84f7294462c0702711f3fb4705d930f72cf6",
+      "bytes": 26551,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/connection_info.py",
+      "sha256": "fca600967999037e505d5063f242b1038efac63a13f7d33f74d7c890b49aa5ca",
+      "bytes": 3465,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/contact_context_handoff.py",
+      "sha256": "bb760bfd20f74986102810be0405038bc8776a6987ef74dc358522c8d1ee8b17",
+      "bytes": 3387,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/contact_overview_proxy.py",
+      "sha256": "a25706a41e57fe358ca38b817e6c505bae7828bcc765a18e3aeba4e352f71370",
+      "bytes": 4933,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/event_bus.py",
+      "sha256": "2afddcd2bdbb8bcf49ce14bfe05c5fac167d3b41d46e2152f0644d95d8b3caed",
+      "bytes": 5869,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/event_models.py",
+      "sha256": "6b975220492ef18d38b8d5cae3a6634d9563cb52a926200eef480b8132e1266a",
+      "bytes": 6167,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/event_publisher.py",
+      "sha256": "eae905fdbd453a1b1daa863bb96b6a7926ce1db576b647d0f77f6c17a4f63972",
+      "bytes": 2316,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/expression_preferences.py",
+      "sha256": "6f87a7aedf39817a5a716e5635a941a4121a77c69ce96407b522413d02bc8a3b",
+      "bytes": 5742,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/follow_smoke.py",
+      "sha256": "1593efc7f869930487540497168a82484d9dc11288fc1a044c9a70af86dd4ae9",
+      "bytes": 11437,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/http_limits.py",
+      "sha256": "e53bef6b91fc722bd92143e71f08c479f70948dbe5693c1d36df4844142b2386",
+      "bytes": 4725,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/memory_management_handoff.py",
+      "sha256": "8f4b1db504fbe86d9e50bcfc8c92af55f2fc15872de0f1a099780f0daefe9dda",
+      "bytes": 2248,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/memory_overview.py",
+      "sha256": "716ade7bfcae673018246da420edf96046e7deb273118a6641c18abd13f71ce9",
+      "bytes": 2053,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/model_control.py",
+      "sha256": "b1b4bd8b413275f29c810ba544bd69676393772ed50cb8cf7f71138c435b9be1",
+      "bytes": 2866,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/organization_quality.py",
+      "sha256": "7fe2ba4e2999a61c893988f0d5947f405eed208ef869985f75a29175b2ef47a1",
+      "bytes": 2891,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/reply_exploration.py",
+      "sha256": "03eb25ba0a3d838bc47bd06ab976b730facec9467ce3244fab3b73156adc7d48",
+      "bytes": 9836,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/reply_wiring.py",
+      "sha256": "5c86b1cf5f7cdd350d23b7c29092a47b4cffe65b7d4e6f824a9576f9c7425add",
+      "bytes": 22056,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/skill_learning.py",
+      "sha256": "1dcf638da549dc57e02584c810bd4e0145f2f4d8148d35dfd1acd73b822703db",
+      "bytes": 8154,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/skill_management_control.py",
+      "sha256": "3bdccd283b08cc0ce308303cca4e8f3c8413254ae9aba47c5567513f0b4e1738",
+      "bytes": 2008,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/sse.py",
+      "sha256": "2017bca4507580092e9c073efdfaa92ef62ae35a5a6b6e04e4055969bcd4c4aa",
+      "bytes": 2230,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/sync_host.py",
+      "sha256": "dc90370c23de57b0ed37aaed2fb0f284c5356b6afeef263d4b11bf480e1f4697",
+      "bytes": 29802,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/server/testing.py",
+      "sha256": "2bc4ffa26aa6bc97b1194e07c58de4b0b86881a6b1ed7b662274e58758ddadb9",
+      "bytes": 2155,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/__init__.py",
+      "sha256": "8772ffab6108f0a30277f5bea078eb7c996684f2af43da252d6e2185e774c8d0",
+      "bytes": 1280,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/draft_proposal.py",
+      "sha256": "35615aed337873de11492dfe7e3b82fe9e3bbef40007361e3c7bcd0c1b44ab30",
+      "bytes": 5768,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/draft_view.py",
+      "sha256": "76903fab8d34af24337c447b76bc966b709ce8d4b72299dcd3db69fac6af5ebb",
+      "bytes": 2136,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/learning.py",
+      "sha256": "9295a9181ff83288a4d9dc608329c55d17bd09f87ad3a5769fe091d2e2cde334",
+      "bytes": 2222,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/learning_runtime.py",
+      "sha256": "7aee38958c82e07a1fb5d20a15b207574c6e8da05279c215437fc0a7822fe3e0",
+      "bytes": 6410,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/models.py",
+      "sha256": "b05243df01f5fbc10c64fb1e10cf9a5e76b5f0235fd0a70586ccd5f52d69ccb3",
+      "bytes": 24579,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/package.py",
+      "sha256": "916f2175f99d5c1d970076940939edd173ab5d7f7100776e79e335f661d8e99d",
+      "bytes": 20809,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/package_reader.py",
+      "sha256": "9b910eff17f808394c8b863d0b860addf4af05efce83761231552e0a517d43bc",
+      "bytes": 10945,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/ports.py",
+      "sha256": "de7d9cf13f8b877eb202809f7c375b0dd736d5dae1a73a06658308cd85c0f377",
+      "bytes": 2751,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/skills/review.py",
+      "sha256": "1b5393eb7c0022d1e27a68551b9d29f863edfb9fc720f727661b52e4ef11b50c",
+      "bytes": 2765,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/source_processing/__init__.py",
+      "sha256": "3d0b912e9f4c700e512f7c8514f95953c3e3c5875a06deca7d2fb7d479244942",
+      "bytes": 61,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/source_processing/models.py",
+      "sha256": "3e96a78cf25d18fb557eaeea3fcfc8931d999f83ddb43ea7cf2a81a467066187",
+      "bytes": 1972,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/source_processing/rule_capture.py",
+      "sha256": "31cd860e208a7b6abbef86695a8484bc3dd9f6fc46a02c9380b9db833747c71d",
+      "bytes": 761,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/startup_database.py",
+      "sha256": "d852ca4d6cfa3e1e14da9929b4fbf37442ff6834b1f9569086223a1ed1599121",
+      "bytes": 3521,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/startup_diagnostics.py",
+      "sha256": "77906cbb5bf584877c0add21d748e5d6d536db29dbc5fb8cfda00b413bc1899c",
+      "bytes": 8339,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/tasks/__init__.py",
+      "sha256": "9d9abf009170976e14622a5e004686f6602a692d539723a3356865c7985ce4a7",
+      "bytes": 525,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/tasks/command.py",
+      "sha256": "cd63546fc3d62e034715fa40d0cbb989c5086da2b55b797317c8eb70d5ac034f",
+      "bytes": 15503,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/tasks/extraction_runtime.py",
+      "sha256": "9f880fae56ad520ae28a844ac742564bef188e86185662befec5e64722f1721e",
+      "bytes": 3555,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/tasks/models.py",
+      "sha256": "dc144962216cb9911cb31c5241956d455dc5b56c4c338c0507d7b37c08bf89de",
+      "bytes": 9513,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/tasks/organization_dispatch.py",
+      "sha256": "e15a5b26de90ade0701f570bd4a06a5d63c231db60fc3e69f099ef08b69d826f",
+      "bytes": 1314,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/tasks/worker.py",
+      "sha256": "b894e652a746eb8c9cf02cb99cb0f68a6e2c2a39dd9a6f17853fb59617c8eca3",
+      "bytes": 38157,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/wechat_cli/__init__.py",
+      "sha256": "fda21fa00ab88e641d62d6975ed6d050c1a49906bed484d8364b59e7d006db9e",
+      "bytes": 716,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/wechat_cli/adapter.py",
+      "sha256": "d6820cbc9313efb7696322a2a53a4f313640fa1f45b9f9c45fedf85dd0ce4d02",
+      "bytes": 41327,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/wechat_cli/errors.py",
+      "sha256": "7148fa6b1da3303f0df74e34b7aedbd93a8ebf8723cfaffb164021451df6dcb1",
+      "bytes": 661,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/wechat_cli/local_availability.py",
+      "sha256": "df08090f67f207ae58734a759da356378ec54229189a739af75d4e776159eec5",
+      "bytes": 3946,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/wechat_cli/models.py",
+      "sha256": "8f7aa14fee241cded2049247f2d5617b36afa5a2db08bc9c4aff80b258fa070d",
+      "bytes": 3402,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/wechat_cli/normalizer.py",
+      "sha256": "aafa71c511109ec3dfbb5a101e0045f42e3b327764b5b4b1b21d50370ae9ef62",
+      "bytes": 9092,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/wechat_media/__init__.py",
+      "sha256": "a4f6502a47d11b3b2463311ca0f09dd975cdc681f08c70fb27e3e9bb8946bb65",
+      "bytes": 73,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "backend/src/notalone/wechat_media/locator.py",
+      "sha256": "3b784a89db684531396a026b123f723ed1f2a7fe4fd49c107a5cb55200d0157f",
+      "bytes": 1244,
+      "origin": "captured_commit"
+    },
+    {
+      "path": "desktop/src/main/sync/priority.ts",
+      "sha256": "7f86540aae640d659decb7b551c12d4d7938484fa5d6c27e1a021b09d2f077c4",
+      "bytes": 4175,
+      "origin": "frozen_six_files"
+    },
+    {
+      "path": "desktop/tests/sync-priority.test.mjs",
+      "sha256": "c846793a1ee37767398c1885ef2d2ae10e68ed9e85b056344a27f8be802fc3b5",
+      "bytes": 11818,
+      "origin": "frozen_six_files"
+    }
+  ],
+  "installed_dependency_bindings": [
+    {
+      "logical_path": "pg/package.json",
+      "sha256": "f7b678a8055c234669e8dd272dd624771e29d9f0e3a3353f15c3005ab1a5fd29"
+    },
+    {
+      "logical_path": "pg/lib/client.js",
+      "sha256": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4"
+    },
+    {
+      "logical_path": "pg/lib/query.js",
+      "sha256": "dea8044d70531cd16e514ecddbe44cdd65b4315a02287958d5ecfd0ebcd70ded"
+    },
+    {
+      "logical_path": "pg-pool/package.json",
+      "sha256": "0a9924def9e06f791b09a44eaefb227f323a39199887f6ce17b44cb5a9193134"
+    },
+    {
+      "logical_path": "pg-pool/index.js",
+      "sha256": "6f304776edaabde2954cbf8c4366fa6d9512bfba0e408e78cc56b3c46c69d058"
+    }
+  ],
+  "versions": {
+    "node": "v24.19.0",
+    "python": "Python 3.12.15"
+  },
+  "environment": "allowlist，synthetic HOME/TMPDIR，禁用 dotenv，未继承实际业务配置"
+}

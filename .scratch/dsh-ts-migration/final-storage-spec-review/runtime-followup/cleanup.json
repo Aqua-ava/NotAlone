@@ -1,0 +1,57 @@
+{
+  "probe_processes_remaining": [],
+  "esbuild_service_processes_observed": [],
+  "database_creations": 0,
+  "database_sessions_opened": 0,
+  "product_hosts_started": 0,
+  "temporary_directories_remaining": 0,
+  "raw_evidence_retained_separately": true,
+  "original_static_v1_artifacts_unchanged": true,
+  "raw_relocation": [
+    {
+      "attempt": 1,
+      "files": [
+        {
+          "file": "attempt-1/base-red.raw.log",
+          "sha256": "1bcaa901a2317a2d570a69b381a2e998fcc14566d1a8edb868f3ec820b6c7e98"
+        },
+        {
+          "file": "attempt-1/candidate.raw.log",
+          "sha256": "49dfd2f9867733ea2d7fca3c38a6ca63d512aa80ae5634a59874e6c9bf53352d"
+        }
+      ],
+      "temporary_directory_removed": true
+    },
+    {
+      "attempt": 2,
+      "files": [
+        {
+          "file": "attempt-2/base-red.raw.log",
+          "sha256": "7ca4d3dd4f650346482f34ee456855332b8f6a25dd5d7b9cd1005ef31af45548"
+        },
+        {
+          "file": "attempt-2/candidate.raw.log",
+          "sha256": "628c64fff9a7e12086e8a6d1e990a4c773853393152844e434e220d3bbc00423"
+        }
+      ],
+      "temporary_directory_removed": true
+    },
+    {
+      "attempt": 3,
+      "files": [
+        {
+          "file": "attempt-3/base-red.raw.log",
+          "sha256": "83de06a3ac5bbcdc755ae8c91f4b61b908ee5fa22bb5341b0edfc723f2c7c195"
+        },
+        {
+          "file": "attempt-3/candidate.raw.log",
+          "sha256": "2d9dee9ea54f78082917e4e1754c9d3ec019a5ed73a6a73c622240b2456d3f2c"
+        }
+      ],
+      "temporary_directory_removed": true
+    }
+  ],
+  "raw_evidence_external": true,
+  "external_directory_basename": "spec-storage-ack-runtime-raw-20261026",
+  "raw_location_correction": "raw-location-correction.json"
+}

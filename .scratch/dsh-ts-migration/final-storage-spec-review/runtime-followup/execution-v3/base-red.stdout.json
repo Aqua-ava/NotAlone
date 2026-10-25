@@ -1,0 +1,24 @@
+{
+  "schema_version": "independent-priority-interface-probe-v1",
+  "arm": "base",
+  "state": "failed",
+  "total": 1,
+  "failed": 1,
+  "results": [
+    {
+      "name": "精确小ACK只表示登记且不投影读取成功",
+      "state": "failed",
+      "elapsed_ms": 0.4644999999999939,
+      "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n    body: {\n+     error: 'sync_request_invalid'\n-     accepted: true,\n-     contact_id: '10000000-0000-4000-8000-000000000001'\n    },\n+   status: 400\n-   status: 200\n  }\n"
+    }
+  ],
+  "scope": {
+    "synthetic_loopback_http": true,
+    "database": false,
+    "real_app": false,
+    "wechat": false,
+    "model_calls": 0,
+    "product_host_starts": 0,
+    "scope_store": "explicit_test_double_not_database_proof"
+  }
+}

@@ -1,0 +1,31 @@
+TAP version 13
+# Subtest: pg 成功重载保留 Query、回调 this、配置回调和结果对象身份
+not ok 1 - pg 成功重载保留 Query、回调 this、配置回调和结果对象身份
+  ---
+  duration_ms: 955.904208
+  type: 'test'
+  location: '/private<私有运行快照>/backend-ts/test/business-transaction-errors.test.mjs:113:1'
+  failureType: 'testCodeFailure'
+  error: 'no PostgreSQL user name specified in startup packet'
+  code: '28000'
+  name: 'error'
+  stack: |-
+    parseErrorMessage (<私有路径>)
+    Parser.handlePacket (<私有路径>)
+    Parser.parse (<私有路径>)
+    Socket.<anonymous> (<私有路径>)
+    Socket.emit (node:events:509:28)
+    addChunk (node:internal/streams/readable:563:12)
+    readableAddChunkPushByteMode (node:internal/streams/readable:514:3)
+    Readable.push (node:internal/streams/readable:394:5)
+    Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1067.122167

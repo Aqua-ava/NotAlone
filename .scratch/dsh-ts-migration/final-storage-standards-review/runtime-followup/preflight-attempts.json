@@ -1,0 +1,21 @@
+[
+  {
+    "attempt": "01",
+    "stage": "快照解包，未启动测试",
+    "type": "TypeError",
+    "message": "extractall() got an unexpected keyword argument filter",
+    "disposition": "新尝试中改用先校验成员的兼容解包；原错误和脚本保留",
+    "raw_sha256": "18df326c0cfd8aafe784aaa940c9c5364389a5dad012772e8bc99f216ad3ada7",
+    "owned_resources_after": 0
+  },
+  {
+    "attempt": "02",
+    "stage": "合成fixture启动连接，尚未进入HostStorage断言",
+    "type": "PostgreSQL 28000",
+    "message": "no PostgreSQL user name specified in startup packet",
+    "disposition": "新尝试为夹具显式设置当前OS的PG用户；未读实际配置；原始失败保留",
+    "raw_sha256": "a2242ae59997b189ddfa4d198149491e748a0f40d735ae0a7a44110a2a1c361a",
+    "public_sha256": "6bbe51d9d851cf443ad19d11cc723df141ed7952ef2d92a8d8650a8e8fbd6242",
+    "owned_resources_after": 0
+  }
+]

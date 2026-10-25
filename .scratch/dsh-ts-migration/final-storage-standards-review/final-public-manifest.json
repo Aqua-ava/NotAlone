@@ -1,0 +1,194 @@
+{
+  "schema_version": "可提交公开证据清单-v1",
+  "scope": "仅本任务审查目录内列出的公开文件",
+  "stage_files": [
+    "handoff.md",
+    "inputs.json",
+    "raw-location-correction.json",
+    "raw-location-correction.md",
+    "report.md",
+    "runtime-followup/SHA256SUMS",
+    "runtime-followup/attempt-02/run-validation.py",
+    "runtime-followup/attempt-02/runtime-input-binding.json",
+    "runtime-followup/attempt-02/runtime-result.json",
+    "runtime-followup/attempt-02/single-native-query-contract.public.log",
+    "runtime-followup/attempt-03/related-native-error-read-transaction.public.log",
+    "runtime-followup/attempt-03/related-storage-lease-schema.public.log",
+    "runtime-followup/attempt-03/run-validation.py",
+    "runtime-followup/attempt-03/runtime-input-binding.json",
+    "runtime-followup/attempt-03/runtime-result.json",
+    "runtime-followup/attempt-03/single-native-query-contract.public.log",
+    "runtime-followup/cleanup-audit.json",
+    "runtime-followup/code-conclusion.json",
+    "runtime-followup/handoff.md",
+    "runtime-followup/preflight-attempts.json",
+    "runtime-followup/public-scan.json",
+    "runtime-followup/report.md",
+    "runtime-followup/run-validation.py",
+    "runtime-followup/runtime-result.json",
+    "static-checks.json",
+    "final-public-manifest.json",
+    "final-public-SHA256SUMS"
+  ],
+  "content_files": [
+    {
+      "path": "handoff.md",
+      "sha256": "d40bf7246025a86d2e1dca3540aea87e5c00ae9cff7efd87f42a8e811a1e8c54",
+      "bytes": 1588,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "inputs.json",
+      "sha256": "05b684ed409b051ded62723733cd97fcdc9ee2d2f47ec28f1477b7d885541c04",
+      "bytes": 6774,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "raw-location-correction.json",
+      "sha256": "4aa09e3d160e68570d94a328e7b2850bee57c351fe1d4fa676438ae8877cbe17",
+      "bytes": 4965,
+      "origin": "raw_location_correction"
+    },
+    {
+      "path": "raw-location-correction.md",
+      "sha256": "d162f3f09a5aa780e20400b773b16794696945e38dde4e8a17a70557774568bc",
+      "bytes": 1269,
+      "origin": "raw_location_correction"
+    },
+    {
+      "path": "report.md",
+      "sha256": "3b1b04fa79171ec52820e58dec4478ebcfec4b516f27a83255879d8a9b696c1f",
+      "bytes": 3396,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/SHA256SUMS",
+      "sha256": "707ec658af763b70310bed2528d23d3740b73f9f9022ebebc3b134400a9f3bc4",
+      "bytes": 3160,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-02/run-validation.py",
+      "sha256": "20b59bfe7bdc0d1c72febabcc8a89d6373bede6fd95a3213be5c36f402da1748",
+      "bytes": 11589,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-02/runtime-input-binding.json",
+      "sha256": "1a20c450c0e888c05d3831589588aa4904954155ff9f003d008779547eee25ed",
+      "bytes": 189312,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-02/runtime-result.json",
+      "sha256": "da9dba4e3f32bbf5ac83ed36adfdc99e1dada779a8177b98db217c95086826b2",
+      "bytes": 1210,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-02/single-native-query-contract.public.log",
+      "sha256": "6bbe51d9d851cf443ad19d11cc723df141ed7952ef2d92a8d8650a8e8fbd6242",
+      "bytes": 1031,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-03/related-native-error-read-transaction.public.log",
+      "sha256": "674b032474c628b557c811112b15b9e83a2419115da4cef0da07fbe17ed951c1",
+      "bytes": 5613,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-03/related-storage-lease-schema.public.log",
+      "sha256": "80ebcde383a048e3354e4e8d30e17f55aa285c9ef06bd628350d0b45dcade9a6",
+      "bytes": 3366,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-03/run-validation.py",
+      "sha256": "0ad70fe3c1fdc96560a75cc5fbea6881c180e221027911a9f841ce5e587bb321",
+      "bytes": 11708,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-03/runtime-input-binding.json",
+      "sha256": "1a20c450c0e888c05d3831589588aa4904954155ff9f003d008779547eee25ed",
+      "bytes": 189312,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-03/runtime-result.json",
+      "sha256": "661d73ec1ab5e9d9770dad6d51479533e15e11d7f47ac027a22d5cad14a873ee",
+      "bytes": 2427,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/attempt-03/single-native-query-contract.public.log",
+      "sha256": "5d8b9378e544798c9d1cfa356b0033c469725f3881449f6077f1b9d252de92e9",
+      "bytes": 1134,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/cleanup-audit.json",
+      "sha256": "1e28e218b9b203e36be8f0f2bf95f7613c57d76454c9f9a93836d8e29aa86e53",
+      "bytes": 227,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/code-conclusion.json",
+      "sha256": "3410c185ed7401685a9a1b5a087fd10469b5e52a3481382eda4e9251f662611a",
+      "bytes": 3055,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/handoff.md",
+      "sha256": "248d4a52be6aace0eab4c236aff054581ada2a8297d74e2e58fd6f431e6084f8",
+      "bytes": 1380,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/preflight-attempts.json",
+      "sha256": "77247aa498b13cea5cfaff53789453b34adc616fa1cf5eaaad09273339cd7a5f",
+      "bytes": 919,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/public-scan.json",
+      "sha256": "f5db397dc0bca64f5fdc25d497e99215ee2333611c999573d92497b53c935fda",
+      "bytes": 120,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/report.md",
+      "sha256": "1f20a515ec022bb0c797f35e2454d5a6c2ff0258fcbb0279a9ca1ae27da7537d",
+      "bytes": 3264,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/run-validation.py",
+      "sha256": "4771f6abd09fdef7a126b3cc2d25f9f6fd8616f71e59b83a174e804f7bae4064",
+      "bytes": 11551,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "runtime-followup/runtime-result.json",
+      "sha256": "49668fb4ce4ca08db5cd55316fabd3ac084e374c3bdb82ef44b710b32589f7aa",
+      "bytes": 616,
+      "origin": "original_frozen"
+    },
+    {
+      "path": "static-checks.json",
+      "sha256": "700bfa6f197845c9c63ad4b42ea02729268eeaeedfeab42bbb32e0b7669d2e30",
+      "bytes": 537,
+      "origin": "original_frozen"
+    }
+  ],
+  "manifest_self_excluded_from_content_hashes": true,
+  "manifest_integrity": "final-public-SHA256SUMS包含本manifest摘要；checksum文件自身不自引用",
+  "private_raw_files_included": false,
+  "raw_alias_file": "raw-location-correction.json",
+  "original_frozen_files_retained": 23,
+  "legacy_checksum_entries_verified_via_alias": 31,
+  "all_original_static_and_runtime_bindings_intact": true,
+  "public_pattern_check": "与仓库公开扫描器同四类静态模式检查通过；未读取其私有策略或实际凭据",
+  "runtime_load_executed": false
+}

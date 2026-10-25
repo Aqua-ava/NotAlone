@@ -1,6 +1,6 @@
 /** 桌面首用的普通业务模块；不依赖 DSH session、profile home 或模型接口。 */
-import { constants } from 'node:fs';
-import { open, readdir, readFile, mkdir, rename, unlink } from 'node:fs/promises';
+import { constants, lstatSync, readdirSync, realpathSync, openSync, fstatSync, readFileSync, closeSync, type BigIntStats } from 'node:fs';
+import { open, readFile, mkdir, rename, unlink } from 'node:fs/promises';
 import { join, dirname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -15,11 +15,12 @@ export class HostStorageError extends Error {
   constructor(code: string) { super(code); this.code = code; this.name = 'HostStorageError'; }
 }
 /** 以查询抛错来源区分驱动故障；pg 客户端超时不一定是 DatabaseError，不能匹配 message。 */
-function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
+function trackQueryFailures(client: pg.Client, failures: Set<unknown>): () => void {
   type Callback = (this: unknown, error: unknown, ...values: unknown[]) => unknown;
   type QueryDispatch = pg.Query & { handleError: Callback; _canceledDueToError?: unknown };
   type QueryClient = pg.Client & { queryQueue: pg.Query[]; _pulseQueryQueue: (...args: unknown[]) => unknown };
   const observed = new WeakMap<pg.Query, () => void>();
+  const cleanups = new Set<() => void>();
   const captureQuery = (query: QueryDispatch): (() => void) => {
     const existing = observed.get(query);
     if (existing) return existing;
@@ -29,6 +30,7 @@ function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
     if (typeof handleError !== 'function') throw new HostStorageError('database_unavailable');
     const descriptor = Object.getOwnPropertyDescriptor(query, 'handleError');
     const cleanup = () => {
+      cleanups.delete(cleanup);
       if (observed.get(query) === cleanup) observed.delete(query);
       if (query.handleError === tracked) {
         if (descriptor) Object.defineProperty(query, 'handleError', descriptor);
@@ -43,18 +45,22 @@ function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
     };
     query.handleError = tracked;
     observed.set(query, cleanup);
+    cleanups.add(cleanup);
     query.once('end', cleanup);
     return cleanup;
   };
   const current = client as QueryClient, pulse = current._pulseQueryQueue;
+  const pulseDescriptor = Object.getOwnPropertyDescriptor(current, '_pulseQueryQueue');
   if (typeof pulse !== 'function') throw new HostStorageError('database_unavailable');
-  current._pulseQueryQueue = function(this: QueryClient, ...args: unknown[]): unknown {
+  const trackedPulse = function(this: QueryClient, ...args: unknown[]): unknown {
     // 每次入队和分发都先观察原生 Query；submit/toPostgres 重入前已覆盖，排队超时也不遗漏。
     for (const pending of this.queryQueue) if (pending instanceof pg.Query) captureQuery(pending as QueryDispatch);
     return Reflect.apply(pulse, this, args);
   };
+  current._pulseQueryQueue = trackedPulse;
   const query = client.query;
-  client.query = function(this: pg.Client, ...args: unknown[]): unknown {
+  const queryDescriptor = Object.getOwnPropertyDescriptor(client, 'query');
+  const trackedQuery = function(this: pg.Client, ...args: unknown[]): unknown {
     try {
       const result = Reflect.apply(query, this, args);
       if (result instanceof pg.Query) return result;
@@ -64,6 +70,65 @@ function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
       return result;
     } catch (error) { failures.add(error); throw error; }
   } as pg.Client['query'];
+  client.query = trackedQuery;
+  return () => {
+    for (const cleanup of [...cleanups]) cleanup();
+    if (client.query === trackedQuery) {
+      if (queryDescriptor) Object.defineProperty(client, 'query', queryDescriptor);
+      else Reflect.deleteProperty(client, 'query');
+    }
+    if (current._pulseQueryQueue === trackedPulse) {
+      if (pulseDescriptor) Object.defineProperty(current, '_pulseQueryQueue', pulseDescriptor);
+      else Reflect.deleteProperty(current, '_pulseQueryQueue');
+    }
+  };
+}
+/** 每次回调只见自己的租约；撤销后委托原生已关闭Client，保留pg各查询重载的返回语义。 */
+function businessLease(client: pg.Client): { client: pg.Client; revoke(): void; reusable(): boolean; cleanupListeners(): void } {
+  const retired = new pg.Client({ host: '/tmp', database: 'notalone_retired', user: 'notalone_retired',
+    password: '', port: 5432, ssl: false, options: ' ', application_name: 'notalone_retired', client_encoding: 'UTF8' });
+  void retired.end(); // 不连接数据库，只使用原生pg的关闭后查询分发。
+  let active = true, reusable = true;
+  const methods = new Map<PropertyKey, (...args: unknown[]) => unknown>();
+  const listeners: [string | symbol, (...args: unknown[]) => void][] = [];
+  const proxy = new Proxy(retired, {
+    get(_target, property) {
+      const target = active ? client : retired, value = Reflect.get(target, property, target);
+      if (property === 'constructor') return value;
+      if (typeof value !== 'function') {
+        if (active && value && typeof value === 'object') reusable = false;
+        return value;
+      }
+      if (!methods.has(property)) methods.set(property, (...args) => {
+        const target = active ? client : retired;
+        // 原生Query、命名配置、监听器及显式Client变更按旧生命周期关闭，避免携带驱动状态。
+        if (active && (property !== 'query' || typeof args[0] !== 'string')) reusable = false;
+        if (active && ['on', 'once', 'addListener', 'prependListener', 'prependOnceListener'].includes(String(property))
+          && (typeof args[0] === 'string' || typeof args[0] === 'symbol') && typeof args[1] === 'function') {
+          listeners.push([args[0], args[1] as (...args: unknown[]) => void]);
+        }
+        const result = Reflect.apply(Reflect.get(target, property, target), target, args);
+        return result === client ? proxy : result;
+      });
+      return methods.get(property);
+    },
+    set(_target, property, value) { reusable = false; return Reflect.set(active ? client : retired, property, value); },
+    defineProperty(_target, property, descriptor) { reusable = false; return Reflect.defineProperty(active ? client : retired, property, descriptor); },
+    deleteProperty(_target, property) { reusable = false; return Reflect.deleteProperty(active ? client : retired, property); },
+  });
+  return { client: proxy, revoke() { active = false; }, reusable: () => reusable,
+    cleanupListeners() { for (const [event, listener] of listeners) client.removeListener(event, listener); listeners.length = 0; } };
+}
+interface OwnedBusinessConnection {
+  // 锁定pg 8.16.3所带的pg-pool使用同一对owned-client方法；类型包未声明，能力不符时失败关闭。
+  client: pg.Client & { ref(): void; unref(): void };
+  key: string;
+  created: number;
+  unavailable: boolean;
+  lost: () => void;
+  end: () => Promise<void>;
+  timer?: NodeJS.Timeout;
+  closing?: Promise<void>;
 }
 export interface HostStorageOptions {
   envFilePath: string;
@@ -91,10 +156,17 @@ async function readConfiguration(path: string): Promise<string> {
   } finally { await file?.close(); }
 }
 const MODEL_CONFIGURATION_KEYS = ['NOTALONE_DEEPSEEK_API_KEY', 'NOTALONE_DEEPSEEK_MODEL', 'NOTALONE_DEEPSEEK_BASE_URL'] as const;
+function fileIdentity(path: string, metadata: BigIntStats): string {
+  return [path, metadata.dev, metadata.ino, metadata.size, metadata.ctimeNs, metadata.mtimeNs,
+    metadata.mode, metadata.uid, metadata.gid].join(':');
+}
 export class HostStorage {
   private closed = false;
   private configurationPending = false;
   private pending = new Set<Promise<void>>();
+  private migrationSummaries = new Map<string, { identity: string; checksum: string }>();
+  private idleBusinessConnection?: OwnedBusinessConnection;
+  private connectionClosings = new Set<Promise<void>>();
   private assertOpen(): void { if (this.closed) throw new HostStorageError('runtime_stopping'); }
   private readonly options: HostStorageOptions;
   private readonly values: Record<string, string | undefined>;
@@ -214,18 +286,83 @@ export class HostStorage {
     const configuration = await connectionOptions(this.databaseUrl, this.values);
     return new pg.Pool(configuration.options);
   }
+  private endBusinessConnection(connection: OwnedBusinessConnection): Promise<void> {
+    if (this.idleBusinessConnection === connection) this.idleBusinessConnection = undefined;
+    clearTimeout(connection.timer);
+    connection.client.removeListener('error', connection.lost);
+    connection.client.removeListener('end', connection.lost);
+    if (!connection.closing) {
+      // 空闲socket已unref；关闭屏障必须重新持有它，等待PG真正断开后才能完成。
+      connection.client.ref();
+      const closing = Promise.resolve().then(connection.end).catch(() => {}).finally(() => this.connectionClosings.delete(closing));
+      connection.closing = closing;
+      this.connectionClosings.add(closing);
+    }
+    return connection.closing;
+  }
+  private async acquireBusinessConnection(configuration: DatabaseConnection): Promise<OwnedBusinessConnection> {
+    // 每次调用受控provider；不以函数或文件路径代替当前认证值，也不让pg回退全局PGPASSWORD。
+    const provider = configuration.options.password;
+    const password = typeof provider === 'function' ? await provider() : provider ?? '';
+    const bound = { ...configuration, options: { ...configuration.options, password: async () => password } };
+    const key = createHash('sha256').update(JSON.stringify({ options: { ...configuration.options, password },
+      url: this.databaseUrl, password: this.values.PGPASSWORD, passfile: this.values.PGPASSFILE, home: this.values.HOME })).digest('hex');
+    const idle = this.idleBusinessConnection;
+    if (idle) {
+      this.idleBusinessConnection = undefined;
+      clearTimeout(idle.timer);
+      if (idle.key === key && !idle.unavailable && performance.now() - idle.created < 5000) { idle.client.ref(); return idle; }
+      await this.endBusinessConnection(idle);
+    }
+    const client = await connectConfigured(bound) as OwnedBusinessConnection['client'];
+    if (typeof client.ref !== 'function' || typeof client.unref !== 'function') {
+      await client.end().catch(() => {}); throw new HostStorageError('database_unavailable');
+    }
+    const connection: OwnedBusinessConnection = { client, key, created: performance.now(), unavailable: false,
+      lost: () => {}, end: client.end.bind(client) };
+    connection.lost = () => {
+      connection.unavailable = true;
+      if (this.idleBusinessConnection === connection) void this.endBusinessConnection(connection);
+    };
+    client.on('error', connection.lost);
+    client.once('end', connection.lost);
+    return connection;
+  }
+  private async releaseBusinessConnection(connection: OwnedBusinessConnection, reusable: boolean): Promise<void> {
+    if (reusable && !this.closed && !connection.unavailable && !this.idleBusinessConnection && performance.now() - connection.created < 5000) {
+      try {
+        await connection.client.query('DISCARD ALL');
+        if (!this.closed && !connection.unavailable && !this.idleBusinessConnection) {
+          this.idleBusinessConnection = connection;
+          connection.client.unref();
+          connection.timer = setTimeout(() => { void this.endBusinessConnection(connection); }, Math.min(1000, 5000 - (performance.now() - connection.created)));
+          connection.timer.unref();
+          return;
+        }
+      } catch { connection.unavailable = true; }
+    }
+    await this.endBusinessConnection(connection);
+  }
   private async withClient<T>(write: boolean, operation: (client: pg.Client) => Promise<T>, business = false): Promise<T> {
     this.assertOpen();
     if (!this.databaseUrl) throw new HostStorageError('database_unconfigured');
     let client: pg.Client | undefined;
+    let connection: OwnedBusinessConnection | undefined, lease: ReturnType<typeof businessLease> | undefined;
+    let stopObserving: (() => void) | undefined, committed = false;
     let businessFailure = false;
     const queryFailures = new Set<unknown>();
     let finish!: () => void;
     const pending = new Promise<void>(resolve => { finish = resolve; });
     this.pending.add(pending);
     try {
-      client = await connectConfigured(await connectionOptions(this.databaseUrl, this.values));
-      if (business) trackQueryFailures(client, queryFailures);
+      const configuration = await connectionOptions(this.databaseUrl, this.values);
+      // 仅复用本机Unix socket；TCP、TLS、hostaddr及降级仍逐次经过原连接流程。
+      if (business && String(configuration.options.host).startsWith('/') && !configuration.options.ssl) {
+        connection = await this.acquireBusinessConnection(configuration);
+        client = connection.client;
+        lease = businessLease(client);
+      } else client = await connectConfigured(configuration);
+      if (business) stopObserving = trackQueryFailures(client, queryFailures);
       this.assertOpen();
       await client.query(write ? 'BEGIN' : 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       await client.query("SET LOCAL search_path = pg_catalog, public");
@@ -233,10 +370,12 @@ export class HostStorage {
       await client.query("SET LOCAL lock_timeout = '1000ms'");
       if (write && !business && !(await client.query('SELECT pg_try_advisory_xact_lock(1852798049,1) AS locked')).rows[0].locked) throw new HostStorageError('migration_busy');
       let result: T;
-      try { result = await operation(client); }
+      try { result = await operation(lease?.client ?? client); }
       catch (error) { businessFailure = business; throw error; }
+      finally { lease?.revoke(); }
       this.assertOpen();
       await client.query('COMMIT');
+      committed = true;
       return result;
     } catch (error) {
       const rolledBack = await client?.query('ROLLBACK').then(() => true, () => false);
@@ -245,34 +384,81 @@ export class HostStorage {
       // 公开 HTTP 继续按各自领域类型筛选错误，未知异常不能直接成为响应正文。
       if (businessFailure && rolledBack && !queryFailures.has(error) && !(error instanceof pg.DatabaseError)) throw error;
       throw new HostStorageError('database_unavailable');
-    } finally { await client?.end().catch(() => {}); this.pending.delete(pending); finish(); }
+    } finally {
+      lease?.revoke();
+      stopObserving?.();
+      try {
+        if (connection) await this.releaseBusinessConnection(connection, committed && !queryFailures.size && Boolean(lease?.reusable()));
+        else await client?.end().catch(() => {});
+      } finally { lease?.cleanupListeners(); this.pending.delete(pending); finish(); }
+    }
   }
   private async requireReady(client: pg.Client): Promise<void> {
     const code = await this.inspect(client);
     if (code !== 'ready') throw new HostStorageError(code);
   }
+  /** 只复用当前真实文件身份仍相同的内容摘要；目录、每个路径和高精度时间逐次重验。 */
+  private migrationFiles(): { name: string; checksum: string }[] {
+    const directory = realpathSync(this.options.migrationsDirectory);
+    const directoryIdentity = fileIdentity(directory, lstatSync(directory, { bigint: true }));
+    const names = readdirSync(directory).filter(name => name.endsWith('.sql')).sort();
+    if (names.length !== EXPECTED_MIGRATION_COUNT || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) throw new HostStorageError('migration_files_invalid');
+    const next = new Map<string, { identity: string; checksum: string }>();
+    const migrations = names.map(name => {
+      const path = join(directory, name), metadata = lstatSync(path, { bigint: true });
+      if (!metadata.isFile()) throw new HostStorageError('migration_files_invalid');
+      const identity = fileIdentity(path, metadata), previous = this.migrationSummaries.get(name);
+      let checksum = previous?.identity === identity ? previous.checksum : undefined;
+      if (!checksum) {
+        const file = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+        try {
+          if (fileIdentity(path, fstatSync(file, { bigint: true })) !== identity) throw new HostStorageError('migration_files_invalid');
+          checksum = createHash('sha256').update(readFileSync(file)).digest('hex');
+          if (fileIdentity(path, fstatSync(file, { bigint: true })) !== identity) throw new HostStorageError('migration_files_invalid');
+          if (fileIdentity(path, lstatSync(path, { bigint: true })) !== identity) throw new HostStorageError('migration_files_invalid');
+        } finally { closeSync(file); }
+      }
+      next.set(name, { identity, checksum });
+      return { name, checksum };
+    });
+    // 防止本轮读取期间目录被替换；不依赖 watcher 或可恢复的 mtime。
+    if (realpathSync(this.options.migrationsDirectory) !== directory || fileIdentity(directory, lstatSync(directory, { bigint: true })) !== directoryIdentity) throw new HostStorageError('migration_files_invalid');
+    this.migrationSummaries = next;
+    return migrations;
+  }
   private async inspect(client: pg.Client): Promise<string> {
-    let names: string[];
-    try {
-      names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
-      if (names.length !== EXPECTED_MIGRATION_COUNT || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
-    } catch { return 'migration_files_invalid'; }
-    // 文件字节与当前事务的 catalog 独立读取，不复用上次成功结果。
-    // allSettled 保留文件错误的原优先级，也让并行查询在回滚和关闭前排空。
-    const [files, catalog] = await Promise.allSettled([
-      Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') }))),
-      client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
-        FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-        JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid
-        WHERE n.nspname='public' AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped`),
-    ]);
-    if (files.status === 'rejected') return 'migration_files_invalid';
-    if (catalog.status === 'rejected') throw catalog.reason;
-    const migrations = files.value, metadata = catalog.value;
+    // 仍取当前真实catalog；只传回原判定实际使用的字段，必需表的非零可见列条件不变。
+    const metadataPending = client.query(`WITH catalog_rows AS (
+        SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
+        FROM unnest($1::text[],$2::text[]) AS required(relname,attname)
+        JOIN pg_catalog.pg_class c ON c.relname=required.relname
+        JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+        LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid AND a.attname=required.attname AND a.attnum>0 AND NOT a.attisdropped
+        WHERE n.nspname='public' AND c.relkind IN ('r','p') AND EXISTS(
+          SELECT 1 FROM pg_catalog.pg_attribute visible WHERE visible.attrelid=c.oid AND visible.attnum>0 AND NOT visible.attisdropped)
+      ), checked_tables AS (
+        SELECT c.oid,c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND c.relkind IN ('r','p')
+          AND c.relname IN ('model_call_receipt','model_call_learning_claim','background_task_step')
+      ) SELECT
+        COALESCE((SELECT jsonb_agg(to_jsonb(r)) FROM catalog_rows r),'[]'::jsonb) AS catalog,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('table',t.relname,'attname',a.attname,'attnotnull',a.attnotnull))
+          FROM checked_tables t JOIN pg_catalog.pg_attribute a ON a.attrelid=t.oid
+          WHERE t.relname IN ('model_call_receipt','model_call_learning_claim') AND a.attnum>0 AND NOT a.attisdropped),'[]'::jsonb) AS columns,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('table',t.relname,'contype',c.contype,
+          'convalidated',c.convalidated,'condeferrable',c.condeferrable,'condeferred',c.condeferred,
+          'definition',pg_catalog.pg_get_constraintdef(c.oid),'indisvalid',i.indisvalid,'indisready',i.indisready))
+          FROM checked_tables t JOIN pg_catalog.pg_constraint c ON c.conrelid=t.oid
+          LEFT JOIN pg_catalog.pg_index i ON i.indexrelid=c.conindid),'[]'::jsonb) AS constraints`,
+      [CATALOG_SELECTORS.map(item => item.table), CATALOG_SELECTORS.map(item => item.column)]);
+    let migrations: { name: string; checksum: string }[];
+    try { migrations = this.migrationFiles(); }
+    catch { this.migrationSummaries.clear(); await metadataPending.catch(() => {}); return 'migration_files_invalid'; }
+    const snapshot = (await metadataPending).rows[0] as SchemaInspection;
     const tables = new Map<string, Map<string,string>>();
-    for (const row of metadata.rows) {
+    for (const row of snapshot.catalog) {
       if (!tables.has(row.relname)) tables.set(row.relname, new Map());
-      tables.get(row.relname)!.set(row.attname, row.kind);
+      if (row.attname !== null) tables.get(row.relname)!.set(row.attname, row.kind);
     }
     const ledger = tables.get('notalone_schema_migration');
     if (!ledger) {
@@ -297,7 +483,7 @@ export class HostStorage {
     if (completed.length + offset > EXPECTED_MIGRATION_COUNT || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
     if (completed.length + offset !== EXPECTED_MIGRATION_COUNT) return 'migration_pending';
     if (REQUIRED_TABLES.some(table => !tables.has(table)) || Object.entries(REQUIRED_COLUMNS).some(([table,columns]) => Object.entries(columns).some(([column,kind]) => tables.get(table)?.get(column) !== kind))) return 'schema_incomplete';
-    if (!(await receiptSchemaReady(client)) || !(await learningClaimSchemaReady(client))) return 'schema_incomplete';
+    if (!receiptSchemaReady(snapshot) || !learningClaimSchemaReady(snapshot)) return 'schema_incomplete';
     return 'ready';
   }
   private async persist(values: Record<string, string>): Promise<void> {
@@ -321,7 +507,12 @@ export class HostStorage {
     finally { if (temporary) await unlink(temporary).catch(() => {}); }
   }
 
-  async close(): Promise<void> { this.closed = true; await Promise.allSettled([...this.pending]); }
+  async close(): Promise<void> {
+    this.closed = true; this.migrationSummaries.clear();
+    if (this.idleBusinessConnection) await this.endBusinessConnection(this.idleBusinessConnection);
+    await Promise.allSettled([...this.pending]);
+    await Promise.allSettled([...this.connectionClosings]);
+  }
 }
 
 const BASELINE_CHECKSUMS = [
@@ -509,6 +700,13 @@ const REQUIRED_COLUMNS: Record<string, Record<string,string>> = {
   }
 };
 
+const CATALOG_SELECTORS = Object.entries({
+  ...Object.fromEntries(REQUIRED_TABLES.map(table => [table, [] as string[]])),
+  ...Object.fromEntries(Object.entries(REQUIRED_COLUMNS).map(([table, columns]) => [table, Object.keys(columns)])),
+  notalone_schema_migration: ['name', 'checksum'],
+  notalone_schema_baseline: ['format_version', 'through_version', 'manifest', 'backup_sha256', 'restore_verified_at'],
+}).flatMap(([table, columns]) => (columns.length ? columns : [null]).map(column => ({ table, column })));
+
 interface DatabaseConnection { options: pg.ClientConfig; allowPlaintextFallback: boolean; upgradeToTls?: () => Promise<boolean | ConnectionOptions> }
 const PG_PARAMETERS: Record<string,string> = {
   host:'PGHOST',hostaddr:'PGHOSTADDR',port:'PGPORT',dbname:'PGDATABASE',user:'PGUSER',password:'PGPASSWORD',
@@ -631,32 +829,33 @@ export async function connectConfigured(configuration: DatabaseConnection): Prom
 }
 
 /** 110窄表的PG16约束契约；来自冻结迁移，防止同列同类型但删除/未知用量约束缺失。 */
-async function receiptSchemaReady(client: pg.Client): Promise<boolean> {
-  return constrainedModelTableReady(client,'model_call_receipt',RECEIPT_CONSTRAINTS,RECEIPT_NOT_NULL);
+interface SchemaInspection {
+  catalog: pg.QueryResult['rows'];
+  columns: pg.QueryResult['rows'];
+  constraints: pg.QueryResult['rows'];
+}
+function receiptSchemaReady(snapshot: SchemaInspection): boolean {
+  return constrainedModelTableReady(snapshot,'model_call_receipt',RECEIPT_CONSTRAINTS,RECEIPT_NOT_NULL);
 }
 /** 只核对110/111模型元数据表及112调用用途约束；不扩展为通用schema迁移器。 */
-async function constrainedModelTableReady(client: pg.Client,
+function constrainedModelTableReady(snapshot: SchemaInspection,
     table:'model_call_receipt'|'model_call_learning_claim'|'background_task_step',
-    expected:readonly string[],notNull?:ReadonlySet<string>):Promise<boolean> {
+    expected:readonly string[],notNull?:ReadonlySet<string>):boolean {
   if(notNull){
-    const columns=(await client.query(`SELECT attname,attnotnull FROM pg_catalog.pg_attribute
-      WHERE attrelid=$1::regclass AND attnum>0 AND NOT attisdropped`,[`public.${table}`])).rows;
+    const columns=snapshot.columns.filter(row=>row.table===table);
     if(columns.some(row=>row.attnotnull!==notNull.has(row.attname)))return false;
   }
-  const constraints=(await client.query(`SELECT c.contype,c.convalidated,c.condeferrable,c.condeferred,
-      pg_catalog.pg_get_constraintdef(c.oid) AS definition,i.indisvalid,i.indisready
-    FROM pg_catalog.pg_constraint c LEFT JOIN pg_catalog.pg_index i ON i.indexrelid=c.conindid
-    WHERE c.conrelid=$1::regclass`,[`public.${table}`])).rows;
+  const constraints=snapshot.constraints.filter(row=>row.table===table);
   const selected=table==='background_task_step'?constraints.filter(row=>expected.includes(`${row.contype}:${row.definition}`)):constraints;
   if(selected.some(row=>!row.convalidated||row.condeferrable||row.condeferred||
     (['p','u'].includes(row.contype)&&(!row.indisvalid||!row.indisready))))return false;
   const actual=selected.map(row=>`${row.contype}:${row.definition}`).sort();
   return actual.length===expected.length&&actual.every((item,index)=>item===expected[index]);
 }
-async function learningClaimSchemaReady(client: pg.Client):Promise<boolean> {
-  return await constrainedModelTableReady(client,'model_call_learning_claim',LEARNING_CLAIM_CONSTRAINTS,
+function learningClaimSchemaReady(snapshot: SchemaInspection):boolean {
+  return constrainedModelTableReady(snapshot,'model_call_learning_claim',LEARNING_CLAIM_CONSTRAINTS,
     new Set(['attempt_id','owner_id','contact_id','request_id','task_id','step_id','step_name','worker_id','lease_generation']))
-    && await constrainedModelTableReady(client,'background_task_step',['u:UNIQUE (id, task_id)']);
+    && constrainedModelTableReady(snapshot,'background_task_step',['u:UNIQUE (id, task_id)']);
 }
 const LEARNING_CLAIM_CONSTRAINTS=[
   "c:CHECK ((lease_generation > 0))",

@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-26",
+  "scope": "独立有限合成SQL诊断＋静态/已有证据分析；无生产修复、无新HTTP",
+  "diagnostic_only": true,
+  "formal_performance_qualified": false,
+  "task25_passed": false,
+  "task26_started": false,
+  "memory_semantics": "deferred",
+  "output_cost_exemption_does_not_exempt_http": true,
+  "old_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+  "new_business_base_commit": "3a550efb6f59342b487b212c65b5819fa7b1425c",
+  "old_archived_source_sha256": {
+    "backend/src/notalone/persistence/source_tasks.py": "4aa65d44397818c19903a96c8b4bdaa42eb8ce1925401edcdbe7f0dfa8b58eb3",
+    "backend/src/notalone/persistence/contact_directory.py": "88795f737238794e033ced33fb5cd9ee09a30da937d339d79bac4add59923e20",
+    "backend/src/notalone/persistence/message_sources.py": "c43ea3194133a132a2963091e3c97768041f27eaf5a54cad072e1c0de28e0955",
+    "backend/src/notalone/persistence/assistant_session_store.py": "02fc89c918abee37526d12b541cddd1318153aed3822923a95eb551171916c01",
+    "backend/src/notalone/server/app.py": "01a1bf1a94b00e9a0c862ed7ac1454fab65117417fba74ff7d799d803817be67"
+  },
+  "measured_new_business_source_sha256": {
+    "backend-ts/src/contact-context.ts": "6e2a90f91f5013a08ec1e08c78f2e5716f2f3776b654e9a22d206c54e8512944",
+    "backend-ts/src/pure-ts-public-api.ts": "698b368fec73811ce84408973485036d1b8920cd9bcd1a6eed547be21074c833",
+    "backend-ts/src/pure-ts-reply-scope.ts": "233fa03ffeecae85006a2e69841ff6aa01d61d2cfc6d5b4b27eb76b32ea24fa1",
+    "backend-ts/src/assistant-discussion-service.ts": "5689f7fe89bc066eaa9f36b83c952cfd1ee70a48f6afc3ad68d40c8b9467c630",
+    "backend-ts/src/host-plugin.ts": "226982751ea037f2e31bcd9efb9909fe6bbe63c8140dcf7094ff0ad2ea22441d",
+    "backend-ts/src/host-json.ts": "e7449c7c5df9a496ac36ce0ec54d997341577f799d7c0fad4b28cec906f5f48c"
+  },
+  "static_read_source_sha256": {
+    "backend-ts/src/contact-context.ts": "6e2a90f91f5013a08ec1e08c78f2e5716f2f3776b654e9a22d206c54e8512944",
+    "backend-ts/src/contact-handoff.ts": "aa5c2e2deda3ccd616c2e0db7b9bd55eb96540ce2db12de9939e9479c6717bdb",
+    "backend-ts/src/pure-ts-public-api.ts": "698b368fec73811ce84408973485036d1b8920cd9bcd1a6eed547be21074c833",
+    "backend-ts/src/pure-ts-reply-scope.ts": "233fa03ffeecae85006a2e69841ff6aa01d61d2cfc6d5b4b27eb76b32ea24fa1",
+    "backend-ts/src/assistant-discussion-service.ts": "5689f7fe89bc066eaa9f36b83c952cfd1ee70a48f6afc3ad68d40c8b9467c630",
+    "backend-ts/src/host-plugin.ts": "226982751ea037f2e31bcd9efb9909fe6bbe63c8140dcf7094ff0ad2ea22441d",
+    "backend-ts/src/host-reply.ts": "d4697ca7decf75171c1309e09be712109c390c07071a7d991537d6a02daaa3cf",
+    "backend-ts/src/host-json.ts": "e7449c7c5df9a496ac36ce0ec54d997341577f799d7c0fad4b28cec906f5f48c",
+    "backend-ts/src/host-storage.ts": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+    "backend-ts/src/launch.ts": "6a476b91594906113a0f62a999b73356e9d3f41b84edad361b8789685f37a503",
+    "backend-ts/profile/host.patch.yml": "5c95caec7c4a40b5bb36151ac213b1c9823e7368b1136cbbefcf806fcfe1bc9f",
+    "backend-ts/src/reply-source-guards.ts": "ac56877a51fa416642fd53b199621fc5cdbb9f068db090f48d3034b16cc791ec",
+    "backend-ts/test/contact-context.test.mjs": "b7432968e668492215de88577e9a7a7e174305ea94cc5f53c0b03fb6790f2b2d",
+    "backend-ts/test/pure-ts-binding-scope.test.mjs": "5178a9e57250972a8001e030e93bb97082b76f4799ab42bf697c2b097b19caae",
+    "backend-ts/node_modules/pg/lib/client.js": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4",
+    "backend-ts/node_modules/pg/lib/query.js": "dea8044d70531cd16e514ecddbe44cdd65b4315a02287958d5ecfd0ebcd70ded",
+    "backend-ts/node_modules/pg/lib/result.js": "2e9dfbbb89c84cfdb1977a1503f2ddd265ed2f943f8dc3957dc0db193ee81488",
+    "backend-ts/node_modules/pg/lib/type-overrides.js": "47cb7f7bc6a6e1b1d4dc7c92bacacb436f12e99242b77da8391fd5b71991d2a5",
+    "installed-pg-dependency/pg-types/lib/textParsers.js": "bd811a530000508b6b90c1db462078e122f0404769d73f57ad41fe90aca159bd",
+    "installed-pg-dependency/pg-protocol/dist/parser.js": "6f841aabda7240df44e1b08bbe8e202502ead969576c1ecc17311af48f57f2ef"
+  },
+  "host_storage_version_warning": "当前WIP仅静态读取，不在有限SQL流程中执行；不能用当前hash替代production03被测hash",
+  "host_storage_production03_sha256": "2e1ca599f207db3460623f2884d760b79be87d4922a159dd4f669aa81bb26c26",
+  "host_storage_current_read_sha256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+  "dump_sha256": "a3c36e29fcaf40aaf2d4d074af0ec75652c53683f34294fb36aba376fa8a9723",
+  "pg_restore_sha256": "7e9f8c433b7887db4b4ea486b9e7dcd8233a4ce14995c240045c5232005d3095",
+  "measurement": {
+    "process_count": 1,
+    "elapsed_seconds": 0.3524623330158647,
+    "sample_count": 120,
+    "warmup_sample_count": 30,
+    "scored_sample_count": 90,
+    "case_counts": {
+      "contacts/old": 40,
+      "contacts/new": 40,
+      "sources/new": 40
+    },
+    "plan_count": 5,
+    "source_unchanged": true,
+    "sql_transaction_order_preserved": true,
+    "adapter_limitation": "psycopg；两臂共用，含往返和解码，不代表 Node pg 解码",
+    "overlap": "root与主作者明确暂停；本库前后额外active=0；系统/跨库噪声未知"
+  },
+  "cleanup": {
+    "database_absent": true,
+    "database_sessions_after": 0,
+    "connection_closed": true,
+    "diagnostic_process_absent": true
+  },
+  "existing_evidence_input_sha256": {
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-production-03.json": "bc0d5f9d22d4f04a1d1574ad759cd407e0e3a38606ff8e213839fa1268a97aa7",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-production-03-summary.json": "10ef228c62e2bdd7cfe9f75fa56bb2e12213ccf81baa95c289c99a02ffa5b657",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/sql-profile-after-new-trace.jsonl": "1cac80046a70b0aea9ef4bce91231b1e1d5dc95f93acc0552b3be5f560973679",
+    ".scratch/dsh-ts-migration/http-business-latency-independent/sql-measurement.json": "9b8be8de318d35845524373f2860c730c9979f97806a0ed8d2989302e25c1a63"
+  },
+  "artifacts_sha256": {
+    "analyze-existing.py": "ca7e4ef02c9a3bf5fd0e03faea99290e69f2cd598f8651d36359c24dda34921e",
+    "evidence-summary.json": "fe34adb60a67b21c2c36003b926977db370f8e7180b7f143cc096534ff830dd3",
+    "handoff.md": "243bca1263f5414ad769742b3441f050952ecb5d92fda86a7a1845125bb202f8",
+    "measure-sql.py": "35d125b3b3d42a07fd318bb70c107993f2cec1567d7dc3dd13ba0e7862b8942c",
+    "measured-sql.json": "dfa847c2f803dc53f449fa67f17bc56894085b7e8aaebf5ab7e8bcec28481697",
+    "measurement-plan.md": "8b169bede80bd40033e00e955fa1074835ab61845ee7dee3556bd7ebabbc1168",
+    "report.md": "695b8849371bcafa736ad4efb89dda30540fbb881829bf2b00f5ed1781c1016a",
+    "sql-measurement.json": "9b8be8de318d35845524373f2860c730c9979f97806a0ed8d2989302e25c1a63"
+  },
+  "private_artifacts_excluded": [
+    "private/measurement.log",
+    "private/process.json"
+  ],
+  "tests_run": [],
+  "http_runs": 0,
+  "physical_model_requests": 0,
+  "git_writes": 0,
+  "production_test_edits": 0,
+  "handoff_lines": 28
+}

@@ -1,0 +1,48 @@
+{
+  "schema_version": "static-source-location-alias-v1",
+  "reason": "公开预扫描排除node_modules路径；仅移动静态第三方源码证据，不改源码字节或原冻结checksum。",
+  "original_static_checksums_sha256": "6bc1c6a0f2bf444f2705f61d47aa59f949a3cf2b3b84c8a15640255d01cc6965",
+  "original_static_binding_sha256": "afed19ea75ea4063224f737ba45860e4263dc9aca7d582e49c44e404bee319f8",
+  "original_static_entry_count": 43,
+  "alias_count": 4,
+  "runtime_final_manifest_sha256_unchanged": "51054a471e1b9b169f54c44ffc87486f5c07d9e4d10cdb42105cdcfa3b56f48c",
+  "mappings": [
+    {
+      "original_path": "dependency/backend-ts/node_modules/pg/lib/client.js",
+      "original_sha256": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4",
+      "public_path": "dependency/pg-8.16.3/lib/client.js",
+      "public_sha256": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4",
+      "bytes": 18759,
+      "original_location_retained": false,
+      "content_unchanged": true
+    },
+    {
+      "original_path": "dependency/backend-ts/node_modules/pg/lib/connection-parameters.js",
+      "original_sha256": "db77bac013bfb5faae661d3056f3fbc49f5bae60334f60b149de0c271a9d9725",
+      "public_path": "dependency/pg-8.16.3/lib/connection-parameters.js",
+      "public_sha256": "db77bac013bfb5faae661d3056f3fbc49f5bae60334f60b149de0c271a9d9725",
+      "bytes": 5248,
+      "original_location_retained": false,
+      "content_unchanged": true
+    },
+    {
+      "original_path": "dependency/backend-ts/node_modules/pg/lib/query.js",
+      "original_sha256": "dea8044d70531cd16e514ecddbe44cdd65b4315a02287958d5ecfd0ebcd70ded",
+      "public_path": "dependency/pg-8.16.3/lib/query.js",
+      "public_sha256": "dea8044d70531cd16e514ecddbe44cdd65b4315a02287958d5ecfd0ebcd70ded",
+      "bytes": 7314,
+      "original_location_retained": false,
+      "content_unchanged": true
+    },
+    {
+      "original_path": "dependency/backend-ts/node_modules/pg/package.json",
+      "original_sha256": "f7b678a8055c234669e8dd272dd624771e29d9f0e3a3353f15c3005ab1a5fd29",
+      "public_path": "dependency/pg-8.16.3/package.json",
+      "public_sha256": "f7b678a8055c234669e8dd272dd624771e29d9f0e3a3353f15c3005ab1a5fd29",
+      "bytes": 1667,
+      "original_location_retained": false,
+      "content_unchanged": true
+    }
+  ],
+  "note": "本输入实际第四份为connection-parameters.js，没有result.js；按真实四份原冻结条目移动，未新增或替换依赖。"
+}
