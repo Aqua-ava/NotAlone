@@ -34,6 +34,12 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
  await t.test('手动确认生成保存并幂等重放，不新增物理调用',async()=>{
   const input=body(),first=await host.request('/generate',{id:randomUUID(),scope,body:input});
   assert.equal(first.candidates.length,1);assert.equal(first.candidates[0].text,'明天见');assert.ok(first.context_receipt.evidence_ids.length);
+  const wireEvidence=modelEvidence(host.requests.at(-1).body);
+  assert.deepEqual(wireEvidence.map(item=>item.evidence_id),wireEvidence.map((_item,index)=>`c${index+1}`));
+  assert.ok(first.context_receipt.evidence_ids.every(id=>/^[a-f0-9-]{36}$/.test(id)));
+  assert.ok(first.context_receipt.evidence_ids.every(id=>!JSON.stringify(host.requests.at(-1).body).includes(id)));
+  const savedEvidence=(await f.client.query('SELECT citation.evidence_id FROM reply_candidate_citation citation JOIN reply_candidate candidate ON candidate.id=citation.candidate_id JOIN reply_request request ON request.id=candidate.reply_request_id WHERE request.idempotency_key=$1 ORDER BY citation.ordinal',[input.idempotency_key])).rows.map(row=>row.evidence_id);
+  assert.deepEqual(savedEvidence,first.context_receipt.evidence_ids);
   const again=await host.request('/generate',{id:randomUUID(),scope,body:input});assert.deepEqual(again,first);assert.equal(host.requests.length,1);
   const rows=(await f.client.query('SELECT dispatch,outcome,input_tokens FROM model_call_receipt')).rows;assert.equal(rows.length,1);assert.equal(rows[0].outcome,'succeeded');assert.ok(rows[0].input_tokens>0);
  });

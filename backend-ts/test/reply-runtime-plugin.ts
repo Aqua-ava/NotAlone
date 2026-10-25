@@ -3,6 +3,7 @@ import type {} from '@deepseek-ai/dsh-cmdline';
 import type {Context} from '@deepseek-ai/cordis';
 import {createServer} from 'node:http';
 import {generateReplyLoop} from '../src/reply-loop.ts';
+import {createEvidenceAliases} from '../src/reply-evidence-alias.ts';
 import {installModelProvider} from '../src/model-provider.ts';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import type {ModelLedgerReceipt} from '../src/model-ledger.ts';
@@ -41,7 +42,7 @@ export function apply(ctx:Context) {
           },{ownerId:'10000000-0000-4000-8000-000000000001',contactId:'20000000-0000-4000-8000-000000000001',scene:''},{skill_version_id:entry.versionId,skill_disabled:false});
           tools.push(...skillSession.tools() as typeof tools);
         }
-        const result=await generateReplyLoop(ctx,{owner_id:'10000000-0000-4000-8000-000000000001',contact_id:'20000000-0000-4000-8000-000000000001',request_id:'30000000-0000-4000-8000-000000000001',provider:'notalone-reply-guarded',model:'deepseek-flash',maxTokens:256,temperature:0,reasoningEffort:'off',system_prompt:'仅验证合成回复协议，不执行外部动作。',prompt:'请通过ReplyRuntimeOutput返回合成候选。',physical_limit:body.physical_limit??2,deadline_ms:body.deadline_ms??2000},{...ports,provider,budgetProfile:{context_window_tokens:body.exceeded?300:65536,safety_margin_tokens:128},reserve:async receipt=>{reservations.push(receipt);},record:async receipt=>{records.push(receipt);},skillSession,persist:async()=>{await ports.requireCurrent();if(skillSession){check.open_at_commit=!skillSession.runtime.signal.aborted;check.use=skillSession.use;}},evidenceIds:()=>new Set(['40000000-0000-4000-8000-000000000001']),tools},new AbortController().signal);
+        const result=await generateReplyLoop(ctx,{owner_id:'10000000-0000-4000-8000-000000000001',contact_id:'20000000-0000-4000-8000-000000000001',request_id:'30000000-0000-4000-8000-000000000001',provider:'notalone-reply-guarded',model:'deepseek-flash',maxTokens:256,temperature:0,reasoningEffort:'off',system_prompt:'仅验证合成回复协议，不执行外部动作。',prompt:'请通过ReplyRuntimeOutput返回合成候选。',physical_limit:body.physical_limit??2,deadline_ms:body.deadline_ms??2000},{...ports,provider,budgetProfile:{context_window_tokens:body.exceeded?300:65536,safety_margin_tokens:128},reserve:async receipt=>{reservations.push(receipt);},record:async receipt=>{records.push(receipt);},skillSession,persist:async()=>{await ports.requireCurrent();if(skillSession){check.open_at_commit=!skillSession.runtime.signal.aborted;check.use=skillSession.use;}},evidenceIds:()=>new Set(['40000000-0000-4000-8000-000000000001']),aliases:createEvidenceAliases(['40000000-0000-4000-8000-000000000001']),tools},new AbortController().signal);
         if(skillSession){check.closed_after=skillSession.runtime.signal.aborted;skillChecks.push(check);}
         res.end(JSON.stringify(result));return;
       }

@@ -4,6 +4,7 @@ import {defineTool,type ToolDefinition} from '@deepseek-ai/dsh-tools';
 import {readContextMessages} from './reply-context-read.ts';
 import {validMessageSource} from './contact-context.ts';
 import {replyUuid} from './reply-contract.ts';
+import type {EvidenceAliases} from './reply-evidence-alias.ts';
 import type {ContextScope,ReplyContextEvidence} from './reply-context-types.ts';
 export interface HistoryTrace {tool_name:string;status:'succeeded'|'empty'|'failed'|'timeout'|'budget_exceeded';evidence_ids:string[];latency_ms:number}
 export interface HistoryOptions {
@@ -12,6 +13,7 @@ export interface HistoryOptions {
   excluded_message_ids?:string[];allowed_message_ids?:string[]|null;
   prior_budget?:{used_calls:number;used_count:number;used_tokens:number};
   requireCurrent(client:pg.Client):Promise<void>;
+  aliases?:EvidenceAliases;
 }
 const guidance={"empty":"未命中不代表消息不存在，也不是继续搜索的理由。不要重复相同或相近的查询；如确需更多语境，最多再换一个明显不同的查询词，然后必须停止调用任何工具，立即基于当前消息、表达方向和已有证据返回结构化候选。","budget_exceeded":"历史检索调用预算已用尽。禁止再调用任何历史工具；立即基于当前消息、表达方向和已有证据返回结构化候选。","failed":"历史工具本次调用失败。不要依赖该结果，也不要反复重试；基于已有证据直接返回结构化候选。","timeout":"历史工具本次调用超时。不要等待或重试；基于已有证据直接返回结构化候选。"};
 export class ReplyHistory {
@@ -52,7 +54,10 @@ export class ReplyHistory {
         this.known.add(row.evidence_id);if(!this.provided.has(row.evidence_id)){this.evidence.push({...row,selection_reason:name==='conversation_search'?'本轮相关性搜索返回的联系人历史消息。':'本轮时间顺序查询返回的联系人历史消息。'});this.provided.add(row.evidence_id);}
       }
       this.used+=tokens;finish('succeeded',result.map(r=>r.evidence_id));
-      return JSON.stringify({status:'ok',evidence_type:'raw_message_evidence',executable:false,not_found_is_not_evidence:true,message_order:'known_times_ascending_unknown_last_equal_unordered',messages:result.map(r=>({evidence_id:r.evidence_id,message_id:r.evidence_id,role:r.speaker_role,speaker_role:r.speaker_role,factual_role:'source_message_statement',occurred_at:r.timing.source_started_at,session_id:null,can_query_context:false,source_ids:r.source_ids,status:r.status,text:r.text,timing:r.timing}))});
+      return JSON.stringify({status:'ok',evidence_type:'raw_message_evidence',executable:false,not_found_is_not_evidence:true,message_order:'known_times_ascending_unknown_last_equal_unordered',messages:result.map(r=>{
+       const evidenceId=this.options.aliases?.aliasFor(r.evidence_id)??r.evidence_id;
+       return {evidence_id:evidenceId,message_id:evidenceId,role:r.speaker_role,speaker_role:r.speaker_role,factual_role:'source_message_statement',occurred_at:r.timing.source_started_at,session_id:null,can_query_context:false,status:r.status,text:r.text,timing:r.timing};
+      })});
     }catch(error){signal?.throwIfAborted();finish('failed');return this.status('failed',name==='conversation_search'?'history_search_failed':'history_query_failed');}
   }
   async search(args:{query:string;top_k?:number;occurred_after?:string|null;occurred_before?:string|null;timeout_ms?:number},signal?:AbortSignal):Promise<string>{
@@ -72,7 +77,10 @@ export class ReplyHistory {
   async query(args:{session_id:string;anchor_message_id?:string|null;before?:number;after?:number;timeout_ms?:number},signal?:AbortSignal):Promise<string>{
     return this.run('conversation_query',args.timeout_ms??500,signal,async client=>{
       if(replyUuid(args.session_id)!==this.options.binding_id)throw new Error('history_session_invalid');
-      const before=args.before??3,after=args.after??3,anchor=args.anchor_message_id?replyUuid(args.anchor_message_id):null;
+      const requested=args.anchor_message_id??null;
+      const anchor=requested?(this.options.aliases?this.options.aliases.resolve(requested):replyUuid(requested)):null;
+      if(requested&&anchor==null)throw new Error('history_query_invalid');
+      const before=args.before??3,after=args.after??3;
       if(!Number.isInteger(before)||before<0||before>10||!Number.isInteger(after)||after<0||after>10||anchor&&!this.known.has(anchor))throw new Error('history_query_invalid');
       const scope=this.options.scope,limit=Math.min(20,before+after+1);
       if(!anchor)return (await readContextMessages(client,scope,{ids:this.options.allowed_message_ids,limit})).reverse();

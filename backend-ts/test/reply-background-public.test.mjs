@@ -43,11 +43,13 @@ test('B5-01真实主宿主公开session背景与来源失效晚结果',{timeout:
  const evidenceFrom=body=>{const rows=[];const visit=v=>{if(Array.isArray(v))v.forEach(visit);else if(v&&typeof v==='object'){if(Array.isArray(v.evidence))rows.push(...v.evidence);for(const[k,x]of Object.entries(v))if(k!=='evidence')visit(x);}else if(typeof v==='string'){try{visit(JSON.parse(v));}catch{const a=v.indexOf('{'),b=v.lastIndexOf('}');if(a>=0&&b>a)try{visit(JSON.parse(v.slice(a,b+1)));}catch{}}}};visit(body);return rows;};
  const provider=createServer(async(req,res)=>{try{
   let raw='';for await(const p of req)raw+=p;const body=JSON.parse(raw),evidence=evidenceFrom(body);seen.push({path:req.url,body,headers:req.headers,at:Date.now(),mode});
-  assert.ok(evidence.some(e=>e.evidence_id===message&&e.text===allowedText),'真实wire应有同联系人近期消息');
-  assert.ok(evidence.some(e=>e.evidence_id===memory&&e.text===allowedText),'真实wire应有同联系人关系资料');
+  const wireMessage=evidence.find(e=>e.kind==='message'&&e.text===allowedText),wireMemory=evidence.find(e=>e.kind==='confirmed_memory'&&e.text===allowedText);
+  assert.ok(wireMessage&&wireMemory,'真实wire应有同联系人近期消息与关系资料');
+  assert.match(wireMessage.evidence_id,/^c[1-9]\d*$/);assert.match(wireMemory.evidence_id,/^c[1-9]\d*$/);
   const wire=JSON.stringify(body);assert.ok(!wire.includes(sentinelContact)&&!wire.includes(sentinelOwner));assert.ok(!wire.includes(other)&&!wire.includes(foreign)&&!wire.includes(foreignOwner));
+  assert.ok(!wire.includes(message)&&!wire.includes(memory));
   const events=[{type:'message_start',message:{id:'synthetic-b5',model:'deepseek-flash',usage:{input_tokens:12,output_tokens:0}}},{},{},{},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:9}},{type:'message_stop'}];
-  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:replyText,basis:'同联系人来源中的清淡饮食与周六散步。',citation_ids:[message,memory],risk_notes:[]}]});
+  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:replyText,basis:'同联系人来源中的清淡饮食与周六散步。',citation_ids:[wireMessage.evidence_id,wireMemory.evidence_id],risk_notes:[]}]});
   if(mode==='late'){let pending=true;const release=()=>{if(!pending)return;pending=false;if(releaseLate===release)releaseLate=undefined;if(res.writableEnded||res.destroyed)return;sendEvents(res,events);};releaseLate=release;lateObserved?.();return;}sendEvents(res,events);
  }catch(error){output+='\nPROVIDER_ASSERT '+error.stack;res.writeHead(500,{'content-type':'application/json'});res.end(JSON.stringify({error:'synthetic_provider_assert'}));}});
  t.after(async()=>{

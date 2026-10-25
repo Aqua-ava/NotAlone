@@ -5,6 +5,7 @@ import {ReplyError,type ReplyRequestInput} from './reply-contract.ts';
 import type {BuiltReplyContext} from './reply-context-types.ts';
 import {assistantDiscussionPayload,continuationReferencePayload,type ReplyDiscussionContext} from './reply-discussion-context.ts';
 import {replyCandidateAdmissibility} from './reply-candidate-admissibility.ts';
+import {aliasReplyEvidenceReferences,type EvidenceAliases} from './reply-evidence-alias.ts';
 import type {AuthenticatedContinuation} from './reply-assistant-guards.ts';
 export interface ReplyPayloadInput {
  request:ReplyRequestInput;
@@ -13,6 +14,7 @@ export interface ReplyPayloadInput {
  discussion?:ReplyDiscussionContext|null;
  /** 只能来自08可信接缝，公开解析器拒绝这些字段。 */
  authenticated?:AuthenticatedContinuation;
+ aliases?:EvidenceAliases;
 }
 
 const unavailable=():never=>{throw new ReplyError('reply_context_unavailable');};
@@ -42,7 +44,7 @@ export function replyFidelityContract(payload:Record<string,unknown>){
  multiple_confirmations:'include_latest_sourced_value_for_each_known_item_not_just_one',
  recipient_text:'exclude_internal_selection_and_composition_instructions'}};
 }
-export function buildReplyPayload({request,context,preferences=[],discussion=null,authenticated}:ReplyPayloadInput){
+export function buildReplyPayload({request,context,preferences=[],discussion=null,authenticated,aliases}:ReplyPayloadInput){
  const c=request.content;
  if(request.contact_id!==context.scope.contact_id)return unavailable();
  const continuation=context.continuation_basis;
@@ -70,7 +72,7 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
  let index=0;
  const evidence=visible.map(original=>{
   const e=original.kind==='message'?messages[index++].e:original;
-  return projectReplyEvidence(e,continuation?.candidate_id===e.evidence_id?continuation.basis_changes:[]);
+  return projectReplyEvidence(e,continuation?.candidate_id===e.evidence_id?continuation.basis_changes:[],aliases);
  });
  const fidelity_contract=replyFidelityContract(payload);
  if(preferences.length){
@@ -79,9 +81,12 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
  }
  if(discussion&&(discussion.scope.owner_id!==context.scope.owner_id||discussion.scope.contact_id!==context.scope.contact_id||discussion.request_key!==request.idempotency_key))return unavailable();
  const reference=continuationReferencePayload(discussion,context.scope,request.continued_from_candidate_id,{type:c.type,...typeof c.draft_text==='string'?{draft_text:c.draft_text}:{}},authenticated);
- if(reference)payload.continuation_reference=reference;
+ if(reference)payload.continuation_reference=aliases?aliasReplyEvidenceReferences(reference,aliases):reference;
  const recentOnly=c.type==='rewrite_draft'&&c.input_kind==='workspace'&&Array.isArray(c.excluded_message_ids)&&c.excluded_message_ids.length>0;
- if(discussion&&!recentOnly)payload.assistant_discussion=assistantDiscussionPayload(discussion);
+ if(discussion&&!recentOnly){
+  const projected=assistantDiscussionPayload(discussion);
+  payload.assistant_discussion=aliases?aliasReplyEvidenceReferences(projected,aliases):projected;
+ }
  return {...payload,evidence,citation_policy:{allowed_evidence_ids:evidence.map(e=>e.evidence_id),additional_evidence_ids:'successful_history_tool_evidence_only',references_are_not_citations:true},fidelity_contract,risk_notes:[...context.risk_notes]};
 }
 export function replyPayloadText(input:ReplyPayloadInput):string{

@@ -9,6 +9,7 @@ import type {installModelProvider} from './model-provider.ts';
 import {ModelInputBudgetError,type MessagesBudgetProfile,type MessagesBudgetReceipt} from './model-input-budget.ts';
 import type {ModelLedgerReceipt} from './model-ledger.ts';
 import type {ReplySkillSession} from './reply-skill-runtime.ts';
+import {restoreReplyEvidenceAliases,type EvidenceAliases} from './reply-evidence-alias.ts';
 export interface ReplyLoopInput {
   owner_id:string;contact_id:string;request_id:string;
   provider:string;model:string;maxTokens:number;temperature:number;reasoningEffort:'off'|'low'|'high'|'max';
@@ -27,6 +28,7 @@ export interface ReplyLoopPorts {
   persist(candidates:readonly ReplyCandidateInput[],budgets:readonly MessagesBudgetReceipt[],signal:AbortSignal):Promise<void>;
   /** 闭包绑定已确认范围，只包含当前读取时仍有效的证据。 */
   evidenceIds():ReadonlySet<string>;
+  aliases:EvidenceAliases;
   tools:readonly ToolDefinition[];
 }
 const allowed=new Set(['conversation_search','conversation_query','read_file','list_files','read_scenario']);
@@ -123,7 +125,7 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
       });
       disposeSkill=await registerReplyAgentSetup(scope,input,{signal,tools:ports.tools,skillSession:ports.skillSession,
         async executeOutput(args,exec){
-          try {signal.throwIfAborted();await ports.requireCurrent();if(candidates||Object.keys(args).sort().join(',')!=='candidates,used_skill_version_id')throw new ReplyError('reply_candidates_rejected');const validated=validateReplyCandidates(args,ports.evidenceIds(),candidateLimit);const claim=args.used_skill_version_id===null?null:replyUuid(args.used_skill_version_id);if(ports.skillSession)await ports.skillSession.captureClaim(claim,signal);else if(claim!==null)throw new ReplyError('reply_candidates_rejected');signal.throwIfAborted();candidates=validated;exec.concludeTurn();return '候选已完成结构和引用校验。';}
+          try {signal.throwIfAborted();await ports.requireCurrent();if(candidates||Object.keys(args).sort().join(',')!=='candidates,used_skill_version_id')throw new ReplyError('reply_candidates_rejected');const validated=validateReplyCandidates(restoreReplyEvidenceAliases(args,ports.aliases),ports.evidenceIds(),candidateLimit);const claim=args.used_skill_version_id===null?null:replyUuid(args.used_skill_version_id);if(ports.skillSession)await ports.skillSession.captureClaim(claim,signal);else if(claim!==null)throw new ReplyError('reply_candidates_rejected');signal.throwIfAborted();candidates=validated;exec.concludeTurn();return '候选已完成结构和引用校验。';}
           catch(error){failure=error;throw error;}
         }});
     }});

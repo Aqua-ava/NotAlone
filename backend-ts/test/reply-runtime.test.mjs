@@ -4,7 +4,7 @@ import {startReplyRuntimeHost,sendEvents,useTool} from './reply-runtime-support.
 test('官方provider物理请求保留未知费用、独立缓存token并释放许可',{timeout:30000},async t=>{
   const host=await startReplyRuntimeHost(t,(_req,res,_requests,events)=>{
     events[0].message.usage.cache_read_input_tokens=7;
-    useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['40000000-0000-4000-8000-000000000001'],risk_notes:[]}]});
+    useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['c1'],risk_notes:[]}]});
     sendEvents(res,events);
   });
   await host.request('/loop',{});
@@ -17,7 +17,7 @@ test('官方provider物理请求保留未知费用、独立缓存token并释放�
 });
 test('官方Agent完整序列化预算先预留，超预算不出站、不生成台账尝试',{timeout:30000},async t=>{
   const host=await startReplyRuntimeHost(t,(_req,res,_requests,events)=>{
-    useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['40000000-0000-4000-8000-000000000001'],risk_notes:[]}]});sendEvents(res,events);
+    useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['c1'],risk_notes:[]}]});sendEvents(res,events);
   });
   await assert.rejects(host.request('/loop',{exceeded:true}));
   assert.equal(host.requests.length,0);
@@ -36,7 +36,7 @@ test('官方Agent完整序列化预算先预留，超预算不出站、不生成
 });
 test('官方Agent输出工具成功即结束，不追加语义复核调用',{timeout:30000},async t=>{
   const host=await startReplyRuntimeHost(t,(_req,res,_requests,events)=>{
-    useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['40000000-0000-4000-8000-000000000001'],risk_notes:[]}]});
+    useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['c1'],risk_notes:[]}]});
     sendEvents(res,events);
   });
   const result=await host.request('/loop',{});
@@ -111,7 +111,7 @@ test('官方Adapter连接中断保留发送未知，不猜测HTTP响应或重放
 test('同轮工具前后各物理请求使用独立attempt、共享整轮permit，调用上限阻止下一次HTTP',{timeout:30000},async t=>{
  const host=await startReplyRuntimeHost(t,(_req,res,requests,events)=>{
   if(requests.length%2===1)useTool(events,'conversation_search',{query:'合成'});
-  else useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['40000000-0000-4000-8000-000000000001'],risk_notes:[]}]});
+  else useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['c1'],risk_notes:[]}]});
   sendEvents(res,events);
  });
  await host.request('/loop',{withTool:true});
@@ -131,7 +131,7 @@ test('工具后资格撤销阻止下次物理请求并保留已发生调用回�
 test('官方Agent scope按实际Skill读取生成回执，持久提交先于scope清理',{timeout:30000},async t=>{
  const host=await startReplyRuntimeHost(t,(_req,res,requests,events)=>{
   if(requests.length===1)useTool(events,'read_file',{file_path:'/notalone/reply-skills/synthetic/SKILL.md'});
-  else useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'当前目的',citation_ids:['40000000-0000-4000-8000-000000000001'],risk_notes:[]}]});
+  else useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'当前目的',citation_ids:['c1'],risk_notes:[]}]});
   sendEvents(res,events);
  });
  await host.request('/loop',{withSkill:true});

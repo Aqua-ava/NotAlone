@@ -72,7 +72,9 @@ function auditAttempt(member:Row,row:Row,evidence:Row,attempt:Row,actualScope:Ro
  if(payload.draft_text!==member.current_intent||payload.context_text!==canonical(context)||payload.user_instruction!==canonical(strategy))invalid('generation_input_projection');
  equal({current_intent:payload.draft_text,...JSON.parse(payload.context_text),...JSON.parse(payload.user_instruction)},input,'generation_input_roundtrip');
  const catalog=attempt.catalog;
- if(!object(catalog)||catalog.schema_version!=='reply-runtime-source-catalog-v1'||digest(catalog)!==attempt.catalog_sha256)invalid('catalog_hash');
+ const catalogVersion=object(catalog)?catalog.schema_version:null;
+ if(!object(catalog)||!['reply-runtime-source-catalog-v1','reply-runtime-source-catalog-v2'].includes(catalogVersion)||digest(catalog)!==attempt.catalog_sha256)invalid('catalog_hash');
+ const aliased=catalogVersion==='reply-runtime-source-catalog-v2';
  for(const key of ['case_id','repeat','arm','case_sha256','input_sha256'])if(catalog[key]!==row[key])invalid('catalog_'+key);
  if(catalog.case_sha256!==digest(member)||catalog.input_sha256!==digest(input)||catalog.request_id!==evidence.request_id||catalog.request_sha256!==request.sha256||catalog.request_hash_kind!==request.hash_kind)invalid('catalog_binding');
  equal(scope(catalog.scope),actualScope,'catalog_scope');
@@ -84,8 +86,11 @@ function auditAttempt(member:Row,row:Row,evidence:Row,attempt:Row,actualScope:Ro
  equal(catalog.strategy_fields,{payload_field:'user_instruction',fields:strategy,citable:false},'strategy_projection');
  const sources=payload.evidence;
  if(!Array.isArray(sources)||sources.length!==3||!sources.every(object)||new Set(sources.map(source=>source.evidence_id)).size!==3||new Set(sources.map(source=>source.kind)).size!==3)invalid('payload_sources');
- const expectedEntries:Row[]=sources.map(source=>{
-  if(!uuid(source.evidence_id)||source.status!=='user_input')invalid('source_identity_or_status');
+ const modelIds=sources.map(source=>source.evidence_id);
+ if(aliased?modelIds.some((id,index)=>id!==`c${index+1}`):modelIds.some(id=>!uuid(id)))invalid('source_identity_or_status');
+ const expectedEntries:Row[]=sources.map((source,index)=>{
+  const mapped=aliased?catalog.entries?.[index]:null;
+  if(aliased&&(!object(mapped)||!uuid(mapped.evidence_id)||mapped.model_evidence_id!==source.evidence_id)||!aliased&&source.status!=='user_input'||aliased&&source.status!=='user_input')invalid('source_identity_or_status');
   let fields:string[],role:string,body:string,origin:string;
   switch(source.kind){
    case 'user_purpose':fields=[];role='current_user_intent';body='帮我表达';origin='explicit_workspace_action';break;
@@ -94,11 +99,12 @@ function auditAttempt(member:Row,row:Row,evidence:Row,attempt:Row,actualScope:Ro
    default:return invalid('source_kind');
   }
   if(source.factual_role!==role||source.text!==body)invalid('source_role_or_text');
-  return {...source,text_sha256:digest(body),case_fields:fields,origin,source_ids:[],not_confirmed_memory:true};
+  return {...source,...aliased?{evidence_id:mapped!.evidence_id,model_evidence_id:source.evidence_id}:{},text_sha256:digest(body),case_fields:fields,origin,source_ids:[],not_confirmed_memory:true};
  });
+ if(aliased&&new Set(expectedEntries.map(entry=>entry.evidence_id)).size!==expectedEntries.length)invalid('source_identity_or_status');
  equal(catalog.entries,expectedEntries,'catalog_entries');
- const ids=sources.map(source=>source.evidence_id);
- equal(payload.citation_policy,{allowed_evidence_ids:ids,additional_evidence_ids:'successful_history_tool_evidence_only',references_are_not_citations:true},'payload_citation_policy');
+ const ids=expectedEntries.map(source=>source.evidence_id);
+ equal(payload.citation_policy,{allowed_evidence_ids:modelIds,additional_evidence_ids:'successful_history_tool_evidence_only',references_are_not_citations:true},'payload_citation_policy');
  return {attempt,request,payload,catalog,expectedEntries,ids,captured,responded,ended};
 }
 /** 最终结果只核验一次；多次恒定来源以原首catalog为PG锚。 */

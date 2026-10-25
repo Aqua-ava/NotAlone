@@ -31,6 +31,7 @@ import {readReplyBasisChanges} from './reply-source-guards.ts';
 import {createReplyExploredContextValidator} from './reply-exploration-guards.ts';
 import {exploredSkillUse} from './exploration-skill-use.ts';
 import {replyCandidateLimit} from './reply-candidate-admissibility.ts';
+import {createEvidenceAliases} from './reply-evidence-alias.ts';
 
 export interface ReplyServiceModel {
  provider:string;model:string;maxTokens:number;temperature:number;reasoningEffort:'off'|'low'|'high'|'max';
@@ -116,15 +117,16 @@ export class ReplyGenerationService {
   try{
    const skill=probeSkill=await ReplySkillSession.open(skillPort,{ownerId:scope.owner_id,contactId:scope.contact_id,scene:input.scene??''},input,signal);
    if(skill.revision!==state.skillRevision)throw new ReplyError('reply_context_invalidated',409);
+   const aliases=createEvidenceAliases();
    const history=allowsHistory(input)&&!recentOnly(input)?new ReplyHistory({transaction,scope,binding_id:scope.conversation_binding_id,
     initial_evidence_ids:state.context.evidence.map(e=>e.evidence_id),navigation_message_ids:state.context.evidence.flatMap(e=>e.navigation?.source_message_ids??[]),
     excluded_message_ids:input.content.excluded_message_ids as string[]??[],allowed_message_ids:state.context.history_message_ids,
-    prior_budget:state.context.retrieval?.source_messages??state.historyBudget,requireCurrent:async()=>requireCurrent()}):null;
+    prior_budget:state.context.retrieval?.source_messages??state.historyBudget,requireCurrent:async()=>requireCurrent(),aliases}):null;
    const unavailable=async():Promise<never>=>{throw new ReplyError('reply_preflight_tool_execution_invalid',502);};
    const tools=[...history?.tools()??[],...(replyScenarioReadPolicy(state.context).reads.length?[createReplyScenarioReadTool(unavailable)]:[]),...skill.tools()];
    return await preflightReplyAgent(this.options.ctx,{
     binding:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort},profile:model.budgetProfile,
-    prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation}),
+    prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation,aliases}),
     requireCurrent,validateRegistry:()=>skill.validateRegistry(signal),
     async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion),temperature:model.temperature},{tools,skillSession:skill,executeOutput:unavailable,signal});},
    },signal);
@@ -177,17 +179,18 @@ export class ReplyGenerationService {
    const fitted=await fitPreparedReplyBudget(prepared,{frozen:prepared.frozen,signal},selected=>this.measurePrepared(verified,input,internal,selected,transaction,requireCurrent,signal));
    prepared.context=fitted.state.context;const physicalLimit=replyPhysicalLimit(prepared.context,model.physical_limit);preparation.finalize(prepared);
    await store.prepareContext(request,prepared.storeContext);
+   const aliases=createEvidenceAliases();
    const history=allowsHistory(input)&&!recentOnly(input)?new ReplyHistory({transaction,scope:verified,binding_id:verified.conversation_binding_id,
     initial_evidence_ids:prepared.context.evidence.map(e=>e.evidence_id),navigation_message_ids:prepared.context.evidence.flatMap(e=>e.navigation?.source_message_ids??[]),
     excluded_message_ids:input.content.excluded_message_ids as string[]??[],allowed_message_ids:prepared.context.history_message_ids,
     prior_budget:prepared.context.retrieval?.source_messages??prepared.historyBudget,
-    requireCurrent:client=>preparation.validateCurrent(client,prepared)}):null;
+    requireCurrent:client=>preparation.validateCurrent(client,prepared),aliases}):null;
    const tools=[...history?.tools()??[],...preparation.scenarioTools(prepared),...skill.tools()];
    let saved:ReplyStoreResult|undefined;
    await generateReplyLoop(this.options.ctx,{...verified,request_id:request.request_id,...model,physical_limit:physicalLimit,candidate_limit:replyCandidateLimit(prepared.context),
-    prompt:replyPayloadText({request:input,context:prepared.context,preferences:prepared.preferences.preferences,discussion:prepared.discussion,authenticated:internal.authenticatedContinuation}),
+    prompt:replyPayloadText({request:input,context:prepared.context,preferences:prepared.preferences.preferences,discussion:prepared.discussion,authenticated:internal.authenticatedContinuation,aliases}),
     system_prompt:replySystemPrompt(prepared.context,prepared.discussion)},
-   {provider:this.options.provider,budgetProfile:model.budgetProfile,acquire:async()=>({id:round.id,settle}),requireCurrent,skillSession:skill,tools,
+   {provider:this.options.provider,budgetProfile:model.budgetProfile,acquire:async()=>({id:round.id,settle}),requireCurrent,skillSession:skill,tools,aliases,
     evidenceIds:()=>new Set([...prepared.context.evidence.filter(e=>e.model_visible).map(e=>e.evidence_id),...history?.evidence.map(e=>e.evidence_id)??[]]),
     reserve:async(receipt,budget,limit)=>{await this.options.ledger.reserve({...receipt,input_budget:modelLedgerInputBudget(budget)},limit);},
     record:receipt=>this.options.ledger.record(receipt),

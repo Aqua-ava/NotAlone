@@ -52,6 +52,28 @@ test('严格目录由实际请求三路六字段与同scope PG声明导出引用
  assert.deepEqual(report.records.filter(r=>r.status==='succeeded').map(r=>r.source_audit.status),['verified','verified']);
  assert.equal(report.overall.status,'undetermined');assert.equal(report.audit_scope,'offline_supplied_evidence_only');assert.deepEqual(run,before);
 });
+function aliasedAuditRun(){
+ const run=syntheticAuditRun();
+ for(const row of run.records.filter(item=>item.arm==='new')){
+  rewritePayload(row,payload=>{
+   payload.evidence.forEach((source,index)=>{source.evidence_id=`c${index+1}`;});
+   payload.citation_policy.allowed_evidence_ids=payload.evidence.map(source=>source.evidence_id);
+  });
+  const catalog=row.runtime_sources.attempts[0].catalog;
+  catalog.schema_version='reply-runtime-source-catalog-v2';
+  catalog.entries=catalog.entries.map((entry,index)=>({...entry,model_evidence_id:`c${index+1}`}));
+  seal(row);
+ }
+ return run;
+}
+test('新臂模型目录使用请求内别名，真实来源只在catalog、PG与输出中',()=>{
+ const run=aliasedAuditRun(),row=run.records.find(item=>item.arm==='new');
+ assert.deepEqual(row.runtime_sources.attempts[0].catalog.entries.map(entry=>entry.model_evidence_id),['c1','c2','c3']);
+ assert.ok(row.runtime_sources.attempts[0].catalog.entries.every(entry=>/^[a-f0-9-]{36}$/.test(entry.evidence_id)));
+ assert.equal(hash(row.runtime_sources.attempts[0].catalog),row.runtime_sources.attempts[0].catalog_sha256);
+ const report=buildReplyComparisonReport(manifestText,datasetText,run);
+ assert.equal(report.records.find(item=>item.arm==='new'&&item.source_audit)?.source_audit.status,'verified');
+});
 function attachReviews(row,bindSources=true){
  const subject={blind_id:row.blind_id,case_sha256:row.case_sha256,input_sha256:row.input_sha256,output:row.output,...bindSources?{runtime_sources_sha256:hash(row.runtime_sources),request_sha256:row.request_sha256}:{}};
  row.reviews=['auditor-one','auditor-two'].map((id,index)=>({review_id:row.blind_id+index,reviewer_id:id,reviewer_type:'human',reviewer_version:'synthetic-v1',independent:true,blinded:true,blind_id:row.blind_id,subject_sha256:hash(subject),candidates:row.output.candidates.map(candidate=>({candidate_id:candidate.candidate_id,basis:'仅合成审计器规则用例',scores:{evidence_correctness:2,intent_preservation:2,no_unsupported_content:2,relationship_fit:2,chinese_usability:2},severe_errors:{false_fact:0,wrong_person:0,unsupported_commitment:0}}))}));

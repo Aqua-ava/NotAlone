@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {ReplyHistory} from '../src/reply-history.ts';
+import {createEvidenceAliases} from '../src/reply-evidence-alias.ts';
 async function setup(t){
   const f=await createStorageFixture();t.after(()=>f.close());
   const owner=randomUUID(),contact=randomUUID(),other=randomUUID(),binding=randomUUID();
@@ -29,4 +30,17 @@ test('查询只读本轮锚点、排除项不加入证据，三次后无继续�
   assert.equal(JSON.parse(await history.query({session_id:binding,anchor_message_id:b.id})).status,'failed');
   assert.equal(JSON.parse(await history.search({query:'第一'})).status,'budget_exceeded');
   assert.equal(history.evidence.length,0);
+});
+test('历史结果与查询锚点只使用请求内别名，真实消息和来源ID不出站',async t=>{
+  const {contact,binding,seed,options}=await setup(t),a=await seed(contact,'第一条','2026-01-01T00:00:00Z'),b=await seed(contact,'第二条','2026-01-02T00:00:00Z');
+  const aliases=createEvidenceAliases([a.id]),history=new ReplyHistory({...options,initial_evidence_ids:[a.id],aliases});
+  const searched=JSON.parse(await history.search({query:'第二条'}));
+  assert.equal(searched.messages[0].evidence_id,'c2');
+  assert.equal(searched.messages[0].message_id,'c2');
+  assert.ok(!JSON.stringify(searched).includes(b.id));
+  assert.ok(!JSON.stringify(searched).includes(b.source));
+  assert.equal('source_ids'in searched.messages[0],false);
+  const queried=JSON.parse(await history.query({session_id:binding,anchor_message_id:'c1',before:0,after:2}));
+  assert.deepEqual(queried.messages.map(message=>message.message_id),['c1','c2']);
+  assert.equal(JSON.parse(await history.query({session_id:binding,anchor_message_id:a.id})).status,'failed');
 });
