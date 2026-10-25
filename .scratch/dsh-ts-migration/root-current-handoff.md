@@ -1,8 +1,8 @@
 # 根迁移持续目标
 
-用户要求的目标正文修正无法由当前目标工具改写，以下为持久执行约束：无依赖任务必须创建全新、用户可见的 Codex 会话，不是 sub-agent；会话直接通信，主会话统一集成并独占 App／微信验收。当前验收联系人使用 `cloudy`；此前 `ran` 的证据保留但不再使用。不得发送未明确指定的外部消息。用户已授权全部可用额度并确认后续可安全推进的步骤，禁止 push、打包或创建 PR。`get_goal` 仍返回旧 `ran` 正文和 `blocked` 状态，不得谎称目标正文已更新。
+本会话持续目标为 active；当前目标工具不能改写既有正文。最新执行范围先读[验收范围更新](acceptance-scope-update.md)：用户已暂豁免费用门槛，停止费用专属优化／重跑；记忆真实验收改用本轮指定且唯一核验的联系人，身份映射仅保存在仓库外私有资料。无依赖任务使用全新可见 Codex 会话，不是 sub-agent；会话互通，根统一集成并独占桌面。仍不 push、不打包、不创建 PR、不发送外部聊天消息。
 
-当前代码 HEAD 为 `030d3e1c9b2d3bf1841cd4d34f84e2ffc909da75`。用户已要求所有现有会话收尾，后续由新 agent 接管；不得继续等待旧会话或扩大验收。
+最后产品源码锚为 `030d3e1c9b2d3bf1841cd4d34f84e2ffc909da75`；接手续验提交 `70518615`。旧会话已收尾，不再等待；当前已按用户约定新建可见会话做双轴审查、v2 runner、非回复矩阵及宿主性能准备，均禁止自行调用真实模型或操作桌面。
 
 - Ticket 01—24 均 `resolved`；Ticket 25 为 `claimed`，Ticket 26 为 `open`。
 - `282f43af` 收紧未知/风险项候选并修正 SSE 终态；`d59ffd0a` 修复跨助手会话停止投影；`cca335e4` 补齐 Python 兼容中断路由的 `user_cancelled`。
@@ -20,15 +20,15 @@
 - 实际 App 停止验收已通过：按钮可见，补丁 `queued→generating→stopping→cancelled`，turn `88e65711-0d21-4cd6-934b-2e3de6909937` 为 `failed/user_cancelled`，候选 0，界面明确显示未保存候选。
 - DBX 已无损保存 `notalone_restart_connectivity_20261025.sql` 后关闭；未丢弃未保存查询。
 
-开发 App 当前仍由 `npm run dev` 运行，保留五项 TS 开关与 `NOTALONE_DEV_CDP=1`，使用原资料目录；
-CDP 仅作脱敏事件观察。全程未发送微信消息，未保存或上传视觉帧。
+接手 `npm run dev:status` 及 Computer Use 清单证实开发 App 已 stopped；桌面验收时按原资料目录与 TS 运行责任重新启动，不运行打包版。
+接手最小 2/2、最终回复全集 456/456、后端 typecheck 通过；新真实模型调用 0。独立实测发现业务 JSON 正文被 alias 改写，待根修复；费用豁免不解除语义与来源门禁。
 
 下一步：
 
-1. 从 `030d3e1c` 继续：先交第五位全新可见审查并重跑最终回复全量；`b3966784` 是 Ticket 25 交接。
-2. 明确 `approve` 后建立足额新预算，跑固定 96 次、无重试、全分母、完整五阶段与新双盲/第三裁决；
-   费用、质量、失败率、调用、token、延迟任一未通过均保持 `claimed / not approved`。
-3. 最终代码变更后重新核验 App 生成、停止、联系人和同步范围闭环；Ticket 25 通过后才可推进 Ticket 26。
+1. 修复独立审查复现的业务 JSON 原文回归，完成实际 v2 采集接线及最终独立复审；`b3966784` 是上轮交接。
+2. 优先以本轮用户指定联系人完成记忆真实覆盖，补齐冻结非回复矩阵和宿主性能；模型验证仍需足额有界预算、全分母、来源与独立语义审阅。
+   费用仅记用户暂豁免，不为其单独重跑；质量、失败率、调用、token、延迟和其他未豁免门禁保持。
+3. 最终代码后实际复验 App／微信范围闭环；Ticket 25 的未豁免条件通过后才推进 Ticket 26。
 4. 收尾时正常退出开发 App，清理合成来源、测试库和自有进程，保留证据；不 push、不打包、不创建 PR。
 
 绝不暂存：`desktop/tests/fixtures/expression-preference-backend.py`、`desktop/tests/fixtures/expression-preferences-page.py`、`desktop/tests/memory-correction/retirement-react.test.mjs`。
