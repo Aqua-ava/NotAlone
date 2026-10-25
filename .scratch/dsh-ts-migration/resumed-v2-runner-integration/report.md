@@ -40,4 +40,4 @@ node --test backend-ts/test/reply-comparison-runner-integration.test.mjs
 - 待根独立复审与统一提交；真实质量、双盲／第三裁决、正式时延与App／微信／记忆验收由根统一调度，本切片不认证这些资格。
 - 单attempt来源完整通过；非窄合同的多attempt仍按生产审计拒绝或未定，不绕过门禁。未把哈希内部一致性宣称为远端真实性。
 
-根整合有一后处理: runner EOF whitespace only; semantic code unchanged.
+根整合仅移除 runner 末尾一个多余空行；语义代码未变，文件摘要已同步。
