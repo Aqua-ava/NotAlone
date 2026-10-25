@@ -7,8 +7,6 @@ CREATE TABLE public.cross_domain_deletion_operation (
         CHECK (subject_sha256 ~ '^[0-9a-f]{64}$'),
     scope_kind text NOT NULL
         CHECK (scope_kind IN ('source', 'contact', 'account', 'discussion')),
-    source_kind text
-        CHECK (source_kind IN ('source_document', 'local_wechat_observation')),
     owner_id uuid,
     contact_id uuid,
     target_id uuid,
@@ -18,22 +16,16 @@ CREATE TABLE public.cross_domain_deletion_operation (
         CHECK (phase IN ('invalidate', 'erase', 'file_cleanup', 'verify', 'complete')),
     error_code text,
     lease_expires_at timestamptz,
-    lease_generation bigint NOT NULL DEFAULT 0 CHECK (lease_generation >= 0),
     confirmed_at timestamptz NOT NULL DEFAULT now(),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     finished_at timestamptz,
     CHECK (
-        (scope_kind = 'source' AND source_kind IS NOT NULL
-            AND owner_id IS NOT NULL AND contact_id IS NOT NULL AND target_id IS NOT NULL)
-        OR (scope_kind = 'discussion' AND source_kind IS NULL
-            AND owner_id IS NOT NULL AND contact_id IS NOT NULL AND target_id IS NOT NULL)
-        OR (scope_kind = 'contact' AND source_kind IS NULL
-            AND owner_id IS NOT NULL AND contact_id IS NOT NULL AND target_id = contact_id)
-        OR (scope_kind = 'account' AND source_kind IS NULL
-            AND owner_id IS NOT NULL AND contact_id IS NULL AND target_id = owner_id)
-        OR (status = 'succeeded' AND source_kind IS NULL
-            AND owner_id IS NULL AND contact_id IS NULL AND target_id IS NULL)
+        (scope_kind = 'source' AND owner_id IS NOT NULL AND contact_id IS NOT NULL AND target_id IS NOT NULL)
+        OR (scope_kind = 'discussion' AND owner_id IS NOT NULL AND contact_id IS NOT NULL AND target_id IS NOT NULL)
+        OR (scope_kind = 'contact' AND owner_id IS NOT NULL AND contact_id IS NOT NULL AND target_id = contact_id)
+        OR (scope_kind = 'account' AND owner_id IS NOT NULL AND contact_id IS NULL AND target_id = owner_id)
+        OR (status = 'succeeded' AND owner_id IS NULL AND contact_id IS NULL AND target_id IS NULL)
     ),
     CHECK (status <> 'succeeded' OR (phase = 'complete' AND error_code IS NULL AND finished_at IS NOT NULL)),
     CHECK (status <> 'failed' OR (error_code IS NOT NULL AND finished_at IS NOT NULL))
@@ -54,46 +46,13 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    IF NEW.source_document_id IS NOT NULL AND (
-        EXISTS (
-            SELECT 1
-              FROM public.cross_domain_deletion_operation operation
-             WHERE operation.scope_kind = 'source'
-               AND operation.source_kind = 'source_document'
-               AND operation.owner_id = NEW.owner_id
-               AND operation.contact_id = NEW.contact_id
-               AND operation.target_id = NEW.source_document_id
-               AND operation.status IN ('queued', 'running', 'failed')
-        )
-        OR NOT EXISTS (
+    IF NEW.source_document_id IS NOT NULL AND NOT EXISTS (
         SELECT 1
           FROM public.source_document source
          WHERE source.id = NEW.source_document_id
            AND source.owner_id = NEW.owner_id
            AND source.contact_id = NEW.contact_id
            AND source.status = 'active'
-        )
-    ) THEN
-        RAISE EXCEPTION 'source_not_active';
-    END IF;
-    IF NEW.observation_id IS NOT NULL AND (
-        EXISTS (
-            SELECT 1
-              FROM public.cross_domain_deletion_operation operation
-             WHERE operation.scope_kind = 'source'
-               AND operation.source_kind = 'local_wechat_observation'
-               AND operation.owner_id = NEW.owner_id
-               AND operation.contact_id = NEW.contact_id
-               AND operation.target_id = NEW.observation_id
-               AND operation.status IN ('queued', 'running', 'failed')
-        )
-        OR NOT EXISTS (
-        SELECT 1
-          FROM public.local_wechat_observation observation
-         WHERE observation.id = NEW.observation_id
-           AND observation.owner_id = NEW.owner_id
-           AND observation.contact_id = NEW.contact_id
-        )
     ) THEN
         RAISE EXCEPTION 'source_not_active';
     END IF;
@@ -102,7 +61,7 @@ END
 $$;
 
 CREATE TRIGGER message_source_ref_active_source
-BEFORE INSERT OR UPDATE OF source_document_id, observation_id, owner_id, contact_id
+BEFORE INSERT OR UPDATE OF source_document_id, owner_id, contact_id
 ON public.message_source_ref
 FOR EACH ROW EXECUTE FUNCTION public.notalone_reject_inactive_source_ref();
 
