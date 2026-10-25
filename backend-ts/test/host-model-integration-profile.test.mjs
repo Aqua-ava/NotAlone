@@ -95,13 +95,13 @@ test('统一宿主真实恢复PG、官方匿名身份/私有鉴权、共享Pytho
  const claim={task_id:task,step_id:step,step_name:'propose_skill',worker_id:worker,lease_generation:1};
  const c=channel(bridge.environment.NOTALONE_MODEL_PERMIT_SOCKET),attempt=randomUUID();
  const granted=await c.call({op:'acquire',kind:'background',token:bridge.environment.NOTALONE_MODEL_PERMIT_TOKEN,attempt_id:attempt,worker:await captureProcessIdentity(process.pid,process.ppid,process.execPath)});assert.equal(granted.state,'granted');
- const receipt={attempt_id:attempt,permit_id:granted.permit_id,request_id:modelTaskRequestId('skill_learning',task,'synthetic-batch'),owner_id:owner,contact_id:contact,provider:'deepseek',model:'deepseek-flash',called_at:new Date().toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}};
- assert.equal((await c.call({op:'reserve',receipt:{...receipt,provider:'notalone-deepseek'},claim})).state,'accounting_rejected');
+ const receipt={attempt_id:attempt,permit_id:granted.permit_id,request_id:modelTaskRequestId('skill_learning',task,'synthetic-batch'),owner_id:owner,contact_id:contact,provider:'notalone-deepseek',model:'deepseek-flash',called_at:new Date().toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}};
+ assert.equal((await c.call({op:'reserve',receipt:{...receipt,provider:'synthetic-other'},claim})).state,'accounting_rejected');
  assert.equal((await c.call({op:'reserve',receipt,claim})).state,'reserved');
  const record=channel(bridge.environment.NOTALONE_MODEL_PERMIT_SOCKET);
  assert.equal((await record.call({op:'record',token:bridge.environment.NOTALONE_MODEL_PERMIT_TOKEN,receipt:{...receipt,outcome:'failed',dispatch:'not_sent'}})).state,'recorded');record.socket.destroy();
  assert.equal((await c.call({op:'settled'})).state,'settled');c.socket.destroy();
- assert.equal((await f.client.query('SELECT provider FROM model_call_receipt WHERE attempt_id=$1',[attempt])).rows[0].provider,'deepseek');
+ assert.equal((await f.client.query('SELECT provider FROM model_call_receipt WHERE attempt_id=$1',[attempt])).rows[0].provider,'notalone-deepseek');
  const scope={owner_id:owner,contact_id:contact,conversation_binding_id:binding};
  const request=()=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',input_kind:'draft',draft_text:'明天见',include_relationship_context:false},skill_disabled:true});
  async function generate(body,token=bridge.environment.NOTALONE_REPLY_REMOTE_TOKEN){const response=await fetch(url+'/internal/reply/generate',{method:'POST',headers:{Authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({verified_scope:scope,request:body,internal:{}})});return {status:response.status,body:await response.json()};}

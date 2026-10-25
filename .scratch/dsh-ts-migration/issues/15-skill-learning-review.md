@@ -1,7 +1,7 @@
 # 15：学习、审核和发布 Skill 草稿
 
 Triage: ready-for-agent
-State: open
+State: resolved
 Type: task
 Blocked by: 06, 10, 13, 14
 Spec: ../spec.md
@@ -14,12 +14,12 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
-- [ ] 限定授权素材和目标 Skill，单次有界模型提案可返回不变、复用、新建／更新／合并草稿；不能直接发布。
-- [ ] 用户查看草稿、对照预览、审核、发布／撤回及反馈操作保持，范围建议未经审核不能扩大为全局策略。
-- [ ] 审核预览复用生产回复上下文，正确读取合格 L2 场景目录和 L3 画像并复验来源／失效；此依赖不意味着学习主动触发整理。
-- [ ] 素材、目标版本和批准状态变化时拒绝旧预览发布，保留版本谱系、受控文件写入和来源删除清理。
-- [ ] 学习任务、预算、实际调用台账、停止与恢复和晚结果规则保持；策略正文不夹带私人事实或原话。
+- [x] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
+- [x] 限定授权素材和目标 Skill，单次有界模型提案可返回不变、复用、新建／更新／合并草稿；不能直接发布。
+- [x] 用户查看草稿、对照预览、审核、发布／撤回及反馈操作保持，范围建议未经审核不能扩大为全局策略。
+- [x] 审核预览复用生产回复上下文，正确读取合格 L2 场景目录和 L3 画像并复验来源／失效；此依赖不意味着学习主动触发整理。
+- [x] 素材、目标版本和批准状态变化时拒绝旧预览发布，保留版本谱系、受控文件写入和来源删除清理。
+- [x] 学习任务、预算、实际调用台账、停止与恢复和晚结果规则保持；策略正文不夹带私人事实或原话。
 
 依赖补齐依据：发布前核对确认审核预览复用生产回复上下文，会读取当前 L2 目录与 L3 画像。按已批准拆分中的条件增加13／14；这不是要求学习主动运行整理任务。
 
@@ -48,4 +48,32 @@ Spec: ../spec.md
 
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+票内 TS 业务纵切、草稿审核、原子发布和共享宿主接线已完成。实际 App／微信与最终切换验收仍由根线程在集成环境完成，本票不把合成宿主证据冒充渠道验收。
+
+### DSH 依据
+
+- 锁定 `@deepseek-ai/dsh* 0.2.1-rc.2`，tag `dsh-v0.2.1-rc.2`，commit `687f282e8625c6b8d11ff58211a90524be2e4317`。核对官方 [Tool 教程](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/user/develop/basic/tool.zh.md#L13)、[执行流水线](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/tool-execution-pipeline.zh.md#L8)、`packages/core/tools/src/index.ts#L1071`／`#L1105`／`#L1144`、`packages/llm/llm/README.md#L34`／`#L63`／`#L93`、`packages/llm/llm/src/index.ts#L945`、`packages/skill/skill/src/index.ts#L380` 和 `packages/core/scope/src/index.ts#L137`。
+- 核对锁定安装哈希：`dsh/package.json` `bea4288a…68dd`、`dsh-skill/package.json` `a59e0d4e…1b2d`、`dsh-skill/lib/index.js` `4b88621b…a791`、`dsh-llm/lib/index.js` `d18d8ae4…1155`。
+- 学习模型调用使用官方 `prepareCall`／单次 stream，经现有受控 provider、ModelPermit、预算和 PostgreSQL 台账；模型只可返回一个结构化 `SkillLearningProposal`，没有发布、文件、SQL 或发送 Tool。审核与发布由普通 TS 业务模块和 PostgreSQL 事务负责，未改 DSH 核心。
+
+### 实现与数据边界
+
+- 新增 [学习合同](../../../backend-ts/src/skill-learning-contract.ts)、[材料选择](../../../backend-ts/src/skill-learning-materials.ts)、[权威存储](../../../backend-ts/src/skill-learning-store.ts)、[模型运行时](../../../backend-ts/src/skill-learning-runtime.ts)和[唯一 Worker](../../../backend-ts/src/skill-learning-worker.ts)。材料每批最多 8 份、24,000 个 Unicode 码点，纠正优先；提案支持 `no_change/reuse/create/update/merge`，目标、方法替换和范围必须经过结构校验与用户审核。
+- [审核服务](../../../backend-ts/src/skill-review-service.ts)复用生产 `PostgresReplyContext` 读取当前 L2／L3，[审核存储](../../../backend-ts/src/skill-review-store.ts)在单事务内复核绑定、来源、分层快照、记忆／偏好／库修订和目标版本后写入不可变版本、方法清单、来源证明及发布范围。v4 证明失败关闭空分层材料，旧预览在任一依赖变化后不能批准。
+- [历史与范围政策](../../../backend-ts/src/skill-history-policy-store.ts)支持版本查看、回滚、方法／范围停用和撤销；同版本回滚保持幂等，仅在真正切换版本时更新当前版本、工作副本和库修订。删除继续复用既有 Skill 清理路径，来源删除会清空草稿私人依据、审核输入和结果，并使已发布版本不可读及清理文件。
+- 学习任务沿用原全局 Worker 锁、联系人任务租约、心跳、取消、显式恢复和晚结果栅栏。任务结束后继续处理后续合格材料；停止或关闭时排空在途任务，旧租约和取消后的结果不能保存。
+- 仅使用随机 `_test` PostgreSQL、合成联系人和合成模型响应；未读写正式聊天、关系资料、微信或凭据，未发送外部消息，未执行打包、push、远端分支或 PR。
+
+### 验证
+
+- `tsc --noEmit`：0 错误。
+- 最终代码串行全量分两段：`485/485` 与 `737/737`，合计 `1222/1222`，零失败、零取消、零跳过；两段分别耗时约 399 秒和 431 秒。
+- 修复 Spec 审查三项问题后的最终聚焦回归：`37/37`。覆盖错误码 409 语义、同版本回滚不递增修订、空 L2／L3 冻结材料拒绝、来源／目标／修订失效、预算与取消、晚结果、HTTP 错误映射和真实合成 DSH 宿主。
+- `git diff --check`：通过。公开历史扫描：`issues 0`。
+- Spec 审查发现的三项阻断已修复：授权失效返回既有 409 语义；同版本回滚不递增库修订且不更新时间；v4 分层证明即使材料选择为空也执行来源快照复验。修复后的聚焦回归如上通过。
+
+### 清理与未覆盖
+
+- 清理 85 个 `notalone_ts_host_*_test` 与 15 个 `notalone_b15_*_test` 合成 PostgreSQL 残留库，均确认无连接且名称符合固定测试前缀；未触碰正式库或非测试库。
+- 自动化验证只覆盖合成 HTTP、事件、任务租约、共享官方 DSH profile 与持久状态。实际 App／微信界面操作、真实资料删除路径和共享宿主最终切换验收尚未在本票执行，留给根线程；不得据此宣称真实渠道集成已验收。
+- `SourceVerificationOutput` 的 DeepSeek strict 适配属于提取模型传输，不在本票 Skill 学习／审核／发布范围内；本票未扩改该适配器或相应测试。

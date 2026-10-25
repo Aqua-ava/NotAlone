@@ -39,6 +39,16 @@ import {
 } from './l2-scenario-service.ts';
 import {L2ScenarioError,type L2ScenarioBudget} from './l2-scenario-workspace.ts';
 import type {SourceProcessingTraceStore} from './source-processing-trace.ts';
+import {SkillFiles} from './skill-files.ts';
+import {SkillLibrary} from './skill-library.ts';
+import {SkillLearningStore} from './skill-learning-store.ts';
+import {SkillLearningRuntime} from './skill-learning-runtime.ts';
+import {SkillLearningTaskRunner} from './skill-learning-worker.ts';
+import {SkillReviewStore} from './skill-review-store.ts';
+import {SkillReviewService} from './skill-review-service.ts';
+import {SkillHistoryPolicyStore} from './skill-history-policy-store.ts';
+import {SkillLearningHttp} from './skill-learning-http.ts';
+import type {SkillDiscussionValidator} from './skill-source-proof.ts';
 
 export interface HostReplyConfiguration {
   provider:ModelProviderConfiguration;
@@ -62,6 +72,8 @@ export interface HostReplyOptions {
     'findMemoryTraceRecordInTransaction'|'validateMemoryTraceRecordInTransaction'>;
   l2Quality?:L2ScenarioQualityReader;
   l2Budget?:L2ScenarioBudget;
+  skillLibrary?:SkillLibrary;
+  requireDiscussionDependencies?:SkillDiscussionValidator;
 }
 
 export async function createHostReplyRuntime(options:HostReplyOptions) {
@@ -77,6 +89,12 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   let extractionWorker:ExtractionWorker|undefined;
   let extractionControl:ExtractionWorkerTaskControl|undefined;
   let l2Scenarios:L2ScenarioHostCandidate|undefined;
+  let learningPool:pg.Pool|undefined;
+  let learningTaskStore:ExtractionTaskStore|undefined;
+  let learningStore:SkillLearningStore|undefined;
+  let learningRuntime:SkillLearningRuntime|undefined;
+  let learningHttp:SkillLearningHttp|undefined;
+  let learningWorker:SkillLearningTaskRunner|undefined;
   async function extractionTransaction<T>(work:(client:pg.Client)=>Promise<T>):Promise<T>{
     let businessFailure:ExtractionBatchError|undefined;
     try{return await options.storage.businessTransaction(async client=>{
@@ -113,6 +131,8 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     pending.add(work);
     try{return await work;}finally{pending.delete(work);}
   }
+  const scheduleLearning=(scope:{owner_id:string;contact_id:string})=>
+    execute(new AbortController().signal,async()=>{await learningHttp?.notify(scope);}).catch(()=>{});
   const delegated:ReplyHttpService={
     prepare:(scope,body,signal,internal)=>execute(signal,combined=>{
       if(!service)throw new ReplyError('reply_remote_unavailable',503);
@@ -120,7 +140,10 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     }),
     generate:(scope,body,signal,internal)=>execute(signal,combined=>{
       if(!service)throw new ReplyError('reply_remote_unavailable',503);
-      return service.generate(scope,body,combined,internal);
+      return service.generate(scope,body,combined,internal).then(async result=>{
+        await scheduleLearning({owner_id:scope.owner_id,contact_id:scope.contact_id});
+        return result;
+      });
     }),
   };
   const owner=options.storage.runtimeOwnerId;
@@ -158,7 +181,27 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       transaction:discussionTransaction,
       skillsRoot:discussionSkillsRoot,
       environment:options.storage.runtimeEnvironment(),
-    })});
+    }),
+    onChanged:scope=>{void scheduleLearning({owner_id:scope.owner_id,contact_id:scope.contact_id});}});
+  const learningFiles=new SkillFiles(discussionSkillsRoot);
+  let reviewStore:SkillReviewStore|undefined;
+  let historyPolicy:SkillHistoryPolicyStore|undefined;
+  if(owner&&options.configuration){
+    learningPool=await options.storage.businessPool();
+    learningTaskStore=new ExtractionTaskStore(learningPool);
+    learningStore=new SkillLearningStore({transaction:work=>options.storage.businessTransaction(work),
+      files:learningFiles,taskStore:learningTaskStore,
+      ...(options.requireDiscussionDependencies?{requireDiscussionDependencies:options.requireDiscussionDependencies}:{})});
+    const skillLibrary=options.skillLibrary??new SkillLibrary(options.storage,learningFiles,{
+      ...(options.requireDiscussionDependencies?{requireDiscussionDependencies:options.requireDiscussionDependencies}:{})});
+    reviewStore=new SkillReviewStore({transaction:work=>options.storage.businessTransaction(work),learning:learningStore,
+      files:learningFiles,library:skillLibrary,
+      ...(options.requireDiscussionDependencies?{requireDiscussionDependencies:options.requireDiscussionDependencies}:{})});
+    historyPolicy=new SkillHistoryPolicyStore({transaction:work=>options.storage.businessTransaction(work),
+      files:learningFiles,library:skillLibrary,
+      ...(options.requireDiscussionDependencies?{requireDiscussionDependencies:options.requireDiscussionDependencies}:{})});
+  }
+  let reviewService:SkillReviewService|undefined;
   const http=createReplyHttp({ownerId:owner,token:options.token,available:options.configuration!==null,
     read:work=>options.storage.businessReadTransaction(work),service:delegated});
   const explorationHttp=createExplorationHttp({ownerId:owner,token:options.token,available:options.configuration!==null,service:{execute:(scope,session,action,request,signal,internal)=>execute(signal,combined=>exploration!.execute(scope,session,action,request,combined,internal))}});
@@ -175,10 +218,19 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     provider=installModelProvider(options.ctx,options.configuration.provider);
     if(options.extractionPermit)extraction=createExtractionModelCaller({ctx:options.ctx,provider,permit:options.extractionPermit});
     try{
+      const m=options.configuration.model;
+      const call=(input:ExtractionModelInput)=>extraction!.call({...input,
+        signal:AbortSignal.any([input.signal,AbortSignal.timeout(m.deadline_ms)])});
+      if(owner&&extraction&&learningStore)learningRuntime=new SkillLearningRuntime({store:learningStore,call,
+        binding:{provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,reasoningEffort:m.reasoningEffort},
+        profile:m.budgetProfile});
       service=new ReplyGenerationService({ctx:options.ctx,
         transaction:work=>options.storage.businessTransaction(work),
         arbiter:options.arbiter,ledger:options.ledger,provider,
         skillsRoot:options.configuration.skillsRoot,model:options.configuration.model});
+      if(reviewStore)reviewService=new SkillReviewService({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),
+        review:reviewStore,filesRoot:options.configuration.skillsRoot,provider,arbiter:options.arbiter,ledger:options.ledger,
+        model:options.configuration.model});
       exploration=new ExplorationService({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),arbiter:options.arbiter,ledger:options.ledger,provider,skillsRoot:options.configuration.skillsRoot,model:options.configuration.model});
       if(owner&&options.extractionPermit&&options.sourceTraces){
         l2Scenarios=createL2ScenarioHost({
@@ -202,8 +254,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       if(options.extractionEnabled&&extraction&&owner){
         const modules=['extraction-flow.ts','extraction-protocol.ts','extraction-protocol-calendar.ts','extraction-protocol-contract.ts','extraction-arguments.ts','extraction-verification-diagnostics.ts','extraction-evidence.ts','extraction-prompts.ts','extraction-bounded.ts','extraction-bounded-proof.ts','contact-overview-bounded-body.ts','contact-overview-bounded-contract.ts','contact-overview-bounded-graph.ts'];
         const sources=await Promise.all(modules.map(file=>readFile(new URL(file,import.meta.url))));
-        const ruleVersion=createHash('sha256').update(Buffer.concat(sources)).digest('hex'),m=options.configuration.model;
-        const call=(input:ExtractionModelInput)=>extraction!.call({...input,signal:AbortSignal.any([input.signal,AbortSignal.timeout(m.deadline_ms)])});
+        const ruleVersion=createHash('sha256').update(Buffer.concat(sources)).digest('hex');
         batches=new ExtractionBatchService({ownerId:owner,transaction:extractionTransaction,ruleVersion,
           model:{binding:{provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,reasoningEffort:m.reasoningEffort},profile:m.budgetProfile},
           unconfirmedRequests:scope=>extractionUnconfirmedRequests(options.extractionPermit!,scope),
@@ -223,9 +274,12 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
             concurrency:options.extractionConcurrency??1,ruleVersion,
             provider:m.provider,modelName:m.model,
           });
+          learningWorker=new SkillLearningTaskRunner({store:learningStore!,
+            ...(learningRuntime?{runtime:learningRuntime}:{})});
           extractionWorker=new ExtractionWorker({store,ownerId:owner,runner,
             indexRunner:new ContactMemoryIndexRunner({store}),
-            ...(l2Scenarios?{organizationRunner:createL2ScenarioWorkerRunner(l2Scenarios)}:{})});
+            ...(l2Scenarios?{organizationRunner:createL2ScenarioWorkerRunner(l2Scenarios)}:{}),
+            learningRunner:learningWorker});
           if(!await extractionWorker.start())throw new Error('extraction_worker_already_running');
           extractionControl=new ExtractionWorkerTaskControl({store,worker:extractionWorker});
         }
@@ -233,9 +287,18 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     }catch(error){
       await adoptionHost?.close().catch(()=>{});
       await adoptionPool?.end().catch(()=>{});
+      await learningPool?.end().catch(()=>{});
       await provider.dispose();
       throw error;
     }
+  }
+  if(owner&&learningStore&&reviewStore&&historyPolicy){
+    learningHttp=new SkillLearningHttp({ownerId:owner,learning:learningStore,review:reviewStore,
+      ...(reviewService?{reviewService}:{}),historyPolicy,canSchedule:Boolean(learningRuntime&&extractionWorker),
+      wake:async(scope,taskId)=>{
+        if(!extractionWorker?.wake({ownerId:scope.owner_id,contactId:scope.contact_id},taskId))
+          throw new Error('skill_learning_worker_unavailable');
+      }});
   }
   let closing:Promise<void>|undefined;
   return {
@@ -246,6 +309,11 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       if(!extraction)throw new ReplyError('reply_remote_unavailable',503);
       return extraction.call({...input,signal});
     });},
+    handleSkillLearning(method:string,url:URL,body:unknown,signal:AbortSignal){
+      return execute(signal,combined=>learningHttp
+        ? learningHttp.handle(method,url,body,combined)
+        : Promise.resolve({status:503,body:{error:'skill_learning_unavailable'}}));
+    },
     async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
       return await l2Http.handlePrivate(req,res)
         || await extractionHttp.handle(req,res)
@@ -266,6 +334,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
         await Promise.allSettled([...pending]);
         await adoptionHost?.close();
         await adoptionPool?.end();
+        await learningPool?.end();
         extractionWorker=undefined;extractionControl=undefined;
         await provider?.dispose();
       })();

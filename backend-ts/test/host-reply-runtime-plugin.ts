@@ -7,6 +7,8 @@ import {join} from 'node:path';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {HostStorage} from '../src/host-storage.ts';
 import {createHostReplyRuntime} from '../src/host-reply.ts';
+import {SkillFiles} from '../src/skill-files.ts';
+import {SkillLibrary} from '../src/skill-library.ts';
 import {ModelPermitArbiter} from '../src/model-permits.ts';
 import {PostgresModelLedger,PostgresModelLedgerDetails} from '../src/model-ledger.ts';
 import {stringifyJson} from '../src/host-json.ts';
@@ -14,6 +16,7 @@ import {randomBytes} from 'node:crypto';
 import {createHostModelAccounting} from '../src/host-model-accounting.ts';
 import {startModelPermitServer} from '../src/model-permit-server.ts';
 import {SourceProcessingTraceStore} from '../src/source-processing-trace.ts';
+import {skillLearningRoute} from '../src/skill-learning-http.ts';
 export const name='notalone-host-reply-test';
 export const inject=['llm','agents','tools','sessions','systemPrompt','skills','appReady'];
 export async function apply(ctx:Context){
@@ -23,6 +26,11 @@ export async function apply(ctx:Context){
   await mkdir(skillsRoot,{mode:0o700});
   await writeFile(envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${database}\nNOTALONE_OWNER_ID=${owner}\n`,{mode:0o600});
   const storage=await HostStorage.open({envFilePath,migrationsDirectory:new URL('../../backend/database/migrations',import.meta.url).pathname,environment:{HOME:home}});
+  let skillLibrary:SkillLibrary|undefined;
+  if(process.env.NOTALONE_SYNTHETIC_SKILL_PACKAGE){
+    skillLibrary=new SkillLibrary(storage,new SkillFiles(skillsRoot));
+    await skillLibrary.importPackage(owner,process.env.NOTALONE_SYNTHETIC_SKILL_PACKAGE);
+  }
   const arbiter=new ModelPermitArbiter();
   const ledger=new PostgresModelLedger({transaction:work=>storage.businessTransaction(work),details:new PostgresModelLedgerDetails()});
   const l2Enabled=process.env.NOTALONE_SYNTHETIC_L2==='1';
@@ -36,13 +44,15 @@ export async function apply(ctx:Context){
   if(l2Enabled){
     const accounting=createHostModelAccounting({
       transaction:work=>storage.businessTransaction(work),
-      provider:'notalone-host-reply-test',
+      provider:'deepseek',
+      typescriptProvider:'notalone-host-reply-test',
       model:'deepseek-flash',
       unconfirmedPermitIds:()=>permitServer?.unconfirmedPermitIds()??[],
     });
     permitServer=await startModelPermitServer({path:join(home,'l2-permit.sock'),token:l2Token,arbiter,accounting});
   }
   const runtime=await createHostReplyRuntime({ctx,storage,arbiter,ledger,token:process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN!,
+    ...(skillLibrary?{skillLibrary}:{}),
     ...(extractionEnabled?{extractionEnabled:true,extractionAdoptionEnabled:true}:{}),
     ...(traceStore?{sourceTraces:traceStore}:{}),
     ...(permitServer?{extractionPermit:{path:join(home,'l2-permit.sock'),token:l2Token}}:{}),
@@ -51,6 +61,26 @@ export async function apply(ctx:Context){
     model:{provider:'notalone-host-reply-test',model:'deepseek-flash',maxTokens:256,temperature:0,reasoningEffort:'off',physical_limit:2,deadline_ms:10000,warning_ratio:0.8,budgetProfile:{context_window_tokens:65536,safety_margin_tokens:128}}}});
   const server=createServer(async(req,res)=>{
     const url=new URL(req.url??'','http://localhost');
+    if(skillLearningRoute(req.method??'',url.pathname)){
+      if(req.headers.authorization!==`Bearer ${process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN}`){
+        res.writeHead(401,{'content-type':'application/json'});res.end('{"error":"unauthorized"}');return;
+      }
+      let body:unknown,raw='';for await(const part of req){raw+=part;if(Buffer.byteLength(raw)>256*1024){res.writeHead(413);res.end('{}');return;}}
+      if(req.method==='POST'){try{body=JSON.parse(raw);}catch{res.writeHead(400,{'content-type':'application/json'});res.end('{"error":"skill_learning_request_invalid"}');return;}}
+      const controller=new AbortController(),abort=()=>controller.abort();
+      req.once('aborted',abort);res.once('close',abort);
+      try{
+        const result=await runtime.handleSkillLearning(req.method??'',url,body,controller.signal);
+        if(!res.destroyed){res.writeHead(result.status,{'content-type':'application/json'});res.end(stringifyJson(result.body));}
+      }catch(error){
+        if(!res.destroyed){
+          const value=error as {status?:unknown;code?:unknown};
+          res.writeHead(typeof value.status==='number'?value.status:503,{'content-type':'application/json'});
+          res.end(stringifyJson({error:typeof value.code==='string'?value.code:'skill_learning_unavailable'}));
+        }
+      }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+      return;
+    }
     if(url.pathname.startsWith('/api/memories/owner/layered-memory')||/^\/api\/contacts\/[^/]+\/layered-memory/.test(url.pathname)){
       if(req.headers.authorization!==`Bearer ${process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN}`){
         res.writeHead(401,{'content-type':'application/json'});res.end('{"error":"unauthorized"}');return;

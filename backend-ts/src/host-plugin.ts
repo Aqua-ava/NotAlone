@@ -1,5 +1,6 @@
 import {SkillHost} from './skill-host.ts';
 import {SkillLibraryError,skillLibraryRoute} from './skill-library.ts';
+import {skillLearningRoute} from './skill-learning-http.ts';
 import {resolveSkillsRoot} from './skills-root.ts';
 import type {} from '@deepseek-ai/dsh-cmdline';
 import type { Context } from '@deepseek-ai/cordis';
@@ -217,7 +218,7 @@ async function start(ctx: Context) {
         }:undefined,replayBody);
     };
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus},taskWorker:modelRuntime.extractionWorkerStatus}:{}),ownership:{...ownership,skills:skills.status().owner,imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',tasks:extractionWorkerRuntime,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy?.pid,...(modelRuntime?{reply:{runtime:'typescript',...modelRuntime.replyStatus},taskWorker:modelRuntime.extractionWorkerStatus}:{}),ownership:{...ownership,skills:skills.status().owner,skillLearning:modelRuntime?'typescript':'python',imports:imports?'typescript':'python',taskApi:tasks?'typescript':'python',tasks:extractionWorkerRuntime,...(modelRuntime?{replies:'typescript'}:{}),wechatBodySync:'split',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',contactContext:handoff?.status().owner ?? 'python',memory:memoryHandoff?.status().owner ?? 'python',expressionPreferences:memoryHandoff?.status().owner ?? 'python'}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
         await closeResources();res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
@@ -315,6 +316,23 @@ async function start(ctx: Context) {
       }
       if(scopePath){respond(404,{error:'not_found'});return;}
       if(!legacy || !handoff || !memoryHandoff){respond(503,{error:'runtime_starting'});return;}
+      if(skillLearningRoute(req.method??'',url.pathname)){
+        if(!modelRuntime){respond(503,{error:'skill_learning_unavailable'});return;}
+        if(!['GET','POST'].includes(req.method??'')||url.search){respond(400,{error:'skill_learning_request_invalid'});return;}
+        const cancelled=new AbortController(),abort=()=>cancelled.abort();
+        req.once('aborted',abort);res.once('close',abort);
+        try{
+          let body:unknown;
+          if(req.method==='POST'){
+            const bytes=await readWechatHttpBody(req,256*1024);
+            try{body=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(bytes));}
+            catch{if(!res.destroyed)respond(400,{error:'skill_learning_request_invalid'});return;}
+          }
+          const result=await modelRuntime.handleSkillLearning(req.method!,url,body,cancelled.signal);
+          if(!res.destroyed)respond(result.status,result.body);
+        }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+        return;
+      }
       if(url.pathname==='/api/runtime/contact-context/status' && req.method==='GET'){respond(200,handoff.status());return;}
       if(url.pathname.startsWith('/api/runtime/contact-context/')){
         if(url.pathname!=='/api/runtime/contact-context/handoff' || req.method!=='POST'){respond(404,{error:'not_found'});return;}
@@ -418,7 +436,8 @@ async function start(ctx: Context) {
   try {
     modelRuntime=await startHostModelRuntime({ctx,storage,environment:runtimeEnvironment,
       businessHome:config.businessHome,projectDirectory:config.projectDirectory,infoPath:config.infoPath,envFilePath:config.envFilePath,
-      ...(traceStore?{sourceTraces:traceStore}:{})});
+      ...(traceStore?{sourceTraces:traceStore}:{}),skillLibrary:skills.library,
+      requireDiscussionDependencies:skills.requireDiscussionDependencies});
     if(extractionWorkerRuntime==='typescript'){
       const control=modelRuntime?.extractionControl;
       if(!control)throw new Error('EXTRACTION_WORKER_UNAVAILABLE');

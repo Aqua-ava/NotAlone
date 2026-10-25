@@ -54,7 +54,7 @@ const EXPAND=`
                 ) AS edge WHERE edge.id IS NOT NULL
             ) SELECT id FROM material_provenance
         `;
-export async function requireSkillDependencies(client:Client,owner:string,contact:string,dependencies:string[],visit:Visit){
+export async function expandSkillProvenance(client:Client,owner:string,contact:string,dependencies:string[],visit:Visit):Promise<Set<string>>{
  const refs=new Set(dependencies),checked=new Set<string>();
  while(true){
   for(const row of (await client.query(EXPAND,[owner,contact,[...refs]])).rows)refs.add(row.id);
@@ -68,6 +68,10 @@ export async function requireSkillDependencies(client:Client,owner:string,contac
    for(const id of related)refs.add(id);checked.add(row.id);
   }
  }
+ return refs;
+}
+export async function requireSkillDependencies(client:Client,owner:string,contact:string,dependencies:string[],visit:Visit){
+ const refs=await expandSkillProvenance(client,owner,contact,dependencies,visit);
  const expanded=[...refs];
  const {inherited}=await captureParentPublications(client,owner,contact,expanded,visit);
  const known=new Set<string>(inherited);

@@ -21,6 +21,7 @@ export interface ExtractionWorkerOptions {
   runner:ExtractionWorkerRunner;
   indexRunner?:ExtractionWorkerRunner;
   organizationRunner?:ExtractionWorkerRunner;
+  learningRunner?:ExtractionWorkerRunner;
   workerId?:string;
   leaseMs?:number;
   heartbeatMs?:number;
@@ -52,6 +53,7 @@ export class ExtractionWorker {
   private readonly runner:ExtractionWorkerRunner;
   private readonly indexRunner:ExtractionWorkerRunner|undefined;
   private readonly organizationRunner:ExtractionWorkerRunner|undefined;
+  private readonly learningRunner:ExtractionWorkerRunner|undefined;
   private readonly workerId:string;
   private readonly leaseMs:number;
   private readonly heartbeatMs:number;
@@ -76,6 +78,7 @@ export class ExtractionWorker {
     this.store=options.store;this.ownerId=options.ownerId.toLowerCase();this.runner=options.runner;
     this.indexRunner=options.indexRunner;
     this.organizationRunner=options.organizationRunner;
+    this.learningRunner=options.learningRunner;
   }
 
   status():{state:WorkerState;worker_id:string}{
@@ -165,7 +168,7 @@ export class ExtractionWorker {
     const hintedScopes=hinted.flatMap(([,value])=>value.scope?[value.scope]:[]);
     let scopes=await this.store.readyScopes(
       this.ownerId,64,['legacy','bounded-runtime-v1'],this.organizationRunner!==undefined,
-      this.indexRunner!==undefined,
+      this.indexRunner!==undefined,this.learningRunner!==undefined,
     );
     if(hintedScopes.length){
       const ordered=[...hintedScopes,...scopes];
@@ -181,7 +184,8 @@ export class ExtractionWorker {
         const taskId=scopedHints.get(scope.contactId)??taskHint;
         const supportedSteps=['parse','normalize','extract_memory',
           ...(this.indexRunner?['index','verify']:[]),
-          ...(this.organizationRunner?['organize_memory']:[])];
+          ...(this.organizationRunner?['organize_memory']:[]),
+          ...(this.learningRunner?['propose_skill','verify_skill_drafts']:[])];
         claim=await this.store.claim(scope,{
           ...(taskId?{taskId}:{}),workerId:this.workerId,leaseMs:this.leaseMs,
           supportedSteps,
@@ -204,6 +208,7 @@ export class ExtractionWorker {
       return;
     }
     const runner=claim.stepName==='organize_memory'?this.organizationRunner
+      :claim.stepName==='propose_skill'||claim.stepName==='verify_skill_drafts'?this.learningRunner
       :claim.stepName==='extract_memory'?this.runner
       :claim.stepName==='index'||claim.stepName==='verify'?this.indexRunner
       :undefined;

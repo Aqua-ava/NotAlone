@@ -16,6 +16,8 @@ import type {SourceProcessingTraceStore} from './source-processing-trace.ts';
 import type {L2ScenarioQualityReader} from './l2-scenario-service.ts';
 import type {L2ScenarioBudget} from './l2-scenario-workspace.ts';
 import {UnavailableTaskControl,type TaskControlPort} from './task-control.ts';
+import type {SkillLibrary} from './skill-library.ts';
+import type {SkillDiscussionValidator} from './skill-source-proof.ts';
 
 export class HostModelRuntimeError extends Error {
   readonly code:string;
@@ -28,6 +30,8 @@ export interface HostModelRuntimeOptions {
     'findMemoryTraceRecordInTransaction'|'validateMemoryTraceRecordInTransaction'>;
   l2Quality?:L2ScenarioQualityReader;
   l2Budget?:L2ScenarioBudget;
+  skillLibrary?:SkillLibrary;
+  requireDiscussionDependencies?:SkillDiscussionValidator;
 }
 /** 默认Python只是一项启动决定，不安装提供者或第二套后台仲裁器。 */
 export async function startHostModelRuntime(options:HostModelRuntimeOptions){
@@ -88,6 +92,8 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
       ...(options.sourceTraces?{sourceTraces:options.sourceTraces}:{}),
       ...(options.l2Quality?{l2Quality:options.l2Quality}:{}),
       ...(options.l2Budget?{l2Budget:options.l2Budget}:{}),
+      ...(options.skillLibrary?{skillLibrary:options.skillLibrary}:{}),
+      ...(options.requireDiscussionDependencies?{requireDiscussionDependencies:options.requireDiscussionDependencies}:{}),
       extractionPermit:{path:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_SOCKET,token:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_TOKEN}});
     const runtime=reply;
     if(extractionMode==='typescript'&&!unavailable&&!runtime.extractionControl)
@@ -114,6 +120,9 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
       },
       handle(req:IncomingMessage,res:ServerResponse){return runtime.handle(req,res);},
       handleLayeredMemory(req:IncomingMessage,res:ServerResponse,url:URL){return runtime.handleLayeredMemory(req,res,url);},
+      handleSkillLearning(method:string,url:URL,body:unknown,signal:AbortSignal){
+        return runtime.handleSkillLearning(method,url,body,signal);
+      },
       callExtraction:runtime.callExtraction,
       extractionControl,
       extractionWorkerStatus:runtime.extractionWorkerStatus,

@@ -52,6 +52,7 @@ function failure(error:unknown):{status:number;body:Row}{
 
 export function createAssistantDiscussionHttp(options:{
   ownerId?:string;token:string;service:AssistantDiscussionService;
+  onChanged?:(scope:AssistantDiscussionScope)=>void;
 }){
   if(options.token.length<32||options.ownerId!==undefined&&!identifier(options.ownerId))throw new Error('discussion_http_config_invalid');
   const expected=Buffer.from(`Bearer ${options.token}`);
@@ -152,6 +153,8 @@ export function createAssistantDiscussionHttp(options:{
         default:invalid();
       }
       controller.signal.throwIfAborted();
+      if(options.onChanged&&['input','edit_candidate','select_candidate','carry','delete'].includes(value.action))
+        options.onChanged(scope);
       respond(200,{owner_id:scope.owner_id,contact_id:scope.contact_id,result});
     }catch(error){
       if(!controller.signal.aborted){const mapped=failure(error);respond(mapped.status,mapped.body);}

@@ -20,7 +20,7 @@
 | [12 查看完整来源和处理追踪](issues/12-source-processing-trace.md) | 11 | ready-for-agent | resolved |
 | [13 整理 L2 场景](issues/13-l2-scenario-organization.md) | 11 | ready-for-agent | resolved |
 | [14 更新 L3 画像与关系概览](issues/14-l3-profile-overview.md) | 13 | ready-for-agent | resolved |
-| [15 学习、审核和发布 Skill 草稿](issues/15-skill-learning-review.md) | 06、10、13、14 | ready-for-agent | open |
+| [15 学习、审核和发布 Skill 草稿](issues/15-skill-learning-review.md) | 06、10、13、14 | ready-for-agent | resolved |
 | [16 导入单联系人历史](issues/16-contact-history-import.md) | 04、10 | ready-for-agent | resolved |
 | [17 接管资料整体删除与管理入口](issues/17-cross-domain-deletion.md) | 08、12、14、15、16 | ready-for-agent | open |
 | [18 管理微信账号与同步授权](issues/18-wechat-scope-binding.md) | 03、04 | ready-for-agent | resolved |

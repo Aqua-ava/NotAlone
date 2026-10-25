@@ -34,7 +34,9 @@ test('讨论内部入口严格认证且重开/删除只返回已保存业务状�
     },
     skillsRoot: `${f.directory}/skills`,
   });
-  const endpoint = createAssistantDiscussionHttp({ownerId: owner, token, service});
+  const changed = [];
+  const endpoint = createAssistantDiscussionHttp({ownerId: owner, token, service,
+    onChanged: scope => changed.push(scope)});
   const server = createServer((req, res) => endpoint.handle(req, res));
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -79,4 +81,5 @@ test('讨论内部入口严格认证且重开/删除只返回已保存业务状�
   });
   assert.equal(missing.status, 404);
   assert.equal(missing.body.error, 'not_found');
+  assert.deepEqual(changed, [{owner_id: owner, contact_id: contact}]);
 });

@@ -22,6 +22,7 @@ export class SkillHost {
  private transferring=false;
  private pending=new Set<Promise<void>>();
  readonly library:SkillLibrary;
+ readonly requireDiscussionDependencies:(client:Parameters<typeof deleteSourceReplies>[0],owner:string,contact:string,request:string)=>Promise<readonly string[]>;
  constructor(storage:HostStorage,root:string){
   this.owner=storage.runtimeOwnerId?.toLowerCase();
   const files=new SkillFiles(root);
@@ -37,6 +38,7 @@ export class SkillHost {
    const ids=await assistant.requireReplyDiscussionById(client,{owner_id:owner,contact_id:contact},request);
    if(ids===null)throw new ReplyStoreError('reply_context_invalidated');return ids;
   };
+  this.requireDiscussionDependencies=requireDiscussionDependencies;
   this.library=new SkillLibrary(storage,files,{requireDiscussionDependencies,
    eraseManagedBackups:async client=>{
     try{await eraseManagedUpdateBackups(client,storage.runtimeEnvironment());}

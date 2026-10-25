@@ -146,8 +146,9 @@ export function createHostModelAccounting(options:{transaction:Transaction;uncon
    if(!route)return reject('model_accounting_unconfigured');
    validateModelLedgerReceipt(receipt);const r=structuredClone(receipt),c=claimValue(claim);
    if(!providers.has(r.provider)||r.model!==route.model||r.outcome!=='pending'||r.dispatch!=='authorized_unconfirmed')reject('model_accounting_route_invalid');
-   // 本票只迁移提取；不能顺带把未移交的 Python 学习或整理调用改成 TS 路由身份。
-   if(r.provider!==route.provider&&!['extract_memory','organize_memory'].includes(c.step_name))reject('model_accounting_route_invalid');
+   // 已移交 TS 的模型步骤可携带内部路由身份；未迁移的 Python 调用仍必须使用原台账身份。
+   if(r.provider!==route.provider
+     &&!['extract_memory','organize_memory','propose_skill'].includes(c.step_name))reject('model_accounting_route_invalid');
    await options.transaction(async client=>{
     if(r.contact_id!==null)await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${r.owner_id}:${r.contact_id}`]);
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${r.owner_id}`]);

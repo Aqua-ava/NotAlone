@@ -1,11 +1,21 @@
 /** 发布来源只读核验；既有证明保留原格式，不用当前资料补写旧证明。 */
+import {DatabaseError} from 'pg';
 import type {Client} from 'pg';
-import {captureSnapshot,validateFrozen,canonicalJSON,parseStoredJSON,activeRef} from './contact-overview-evidence.ts';
+import {captureSnapshot,validateFrozen,canonicalJSON,parseStoredJSON} from './contact-overview-evidence.ts';
 import {SkillPortError,skillDigest} from './skill-execution-view.ts';
 import type {SkillRow} from './skill-execution-view.ts';
 import {requireSkillDependencies} from './skill-source-dependencies.ts';
 import {captureSkillNavigation} from './skill-source-navigation.ts';
+import {
+  CONTACT_LAYERED_BUDGET,OWNER_LAYERED_BUDGET,requireLayeredMaterial,selectLayeredMaterial,
+  validateLayeredSnapshot,
+} from './reply-context-layered.ts';
 function same(a:unknown,b:unknown){return canonicalJSON(a)===canonicalJSON(b);}
+export function isSkillPersistenceError(error:unknown):boolean{
+ const code=error&&typeof error==='object'&&'code' in error?String(error.code):'';
+ return error instanceof DatabaseError||/^[0-9A-Z]{5}$/.test(code)
+  ||['ECONNREFUSED','ECONNRESET','ETIMEDOUT','EPIPE'].includes(code);
+}
 function ids(value:unknown):string[]{if(!Array.isArray(value)||value.some(v=>typeof v!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v)))throw new SkillPortError();return value;}
 export async function captureSkillGeneration(client:Client,owner:string,contact:string,dependencies:string[]){
  const values=ids(dependencies),params=[owner,contact,values];
@@ -55,6 +65,27 @@ export async function captureParentPublications(client:Client,owner:string,conta
 export async function requireReviewSources(client:Client,owner:string,contact:string,dependencies:string[],frozen:SkillRow,visit:Visit={checking:new Set(),validated:new Set()}):Promise<void>{
  try{
   ids(dependencies);if(!frozen||typeof frozen!=='object')throw new SkillPortError();
+  if(frozen.version===4){
+   if(!Array.isArray(frozen.layered)||frozen.layered.length<1||frozen.layered.length>2
+    ||!Array.isArray(frozen.base_dependencies))throw new SkillPortError();
+   const layeredDependencies=new Set<string>(),seen=new Set<string>();
+   for(const item of frozen.layered){
+    const scope=item?.scope,snapshot=item?.snapshot;
+    if(!scope||scope.owner_id!==owner||scope.contact_id!==null&&scope.contact_id!==contact
+     ||!snapshot||!Array.isArray(snapshot.dependency_ids)
+     ||!same(scope,snapshot.scope)||seen.has(scope.contact_id??'owner'))throw new SkillPortError();
+    seen.add(scope.contact_id??'owner');
+    const budget=scope.contact_id===null?OWNER_LAYERED_BUDGET:CONTACT_LAYERED_BUDGET;
+    const material=selectLayeredMaterial(snapshot,budget);
+    if(!material||!await validateLayeredSnapshot(client,snapshot))throw new SkillPortError();
+    await requireLayeredMaterial(client,scope,material,budget);
+    for(const id of ids(snapshot.dependency_ids))layeredDependencies.add(id);
+   }
+   await requireReviewSources(client,owner,contact,ids(frozen.base_dependencies),frozen.base,visit);
+   const expected=[...new Set([...ids(frozen.base_dependencies),...layeredDependencies])].sort();
+   if(!same(expected,[...new Set(dependencies)].sort()))throw new SkillPortError();
+   return;
+  }
   if(frozen.version===3){
    if(!Array.isArray(frozen.parents))throw new SkillPortError();
    const {proofs,inherited}=await captureParentPublications(client,owner,contact,frozen.parents.map((p:SkillRow)=>p.version_id),visit);
@@ -68,7 +99,10 @@ export async function requireReviewSources(client:Client,owner:string,contact:st
    await generation(client,owner,contact,frozen.ordinary);await requireSkillDependencies(client,owner,contact,ids(frozen.ordinary.dependencies),visit);return;
   }
   await generation(client,owner,contact,frozen);await requireSkillDependencies(client,owner,contact,dependencies,visit);
- }catch(error){if(error instanceof SkillPortError)throw error;throw new SkillPortError();}
+ }catch(error){
+  if(error instanceof SkillPortError||isSkillPersistenceError(error))throw error;
+  throw new SkillPortError();
+ }
 }
 function navigationIds(proof:SkillRow[]):string[]{return proof.flatMap(p=>[p.identity.memory_id,...ids(p.identity.dependency_ids)]);}
 /** 管理历史与回滚只核对来源及既有范围；不要求当前版本或当前启用。 */
