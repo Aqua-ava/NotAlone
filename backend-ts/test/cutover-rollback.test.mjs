@@ -28,7 +28,7 @@ function admin(script,name){
   execFileSync(python,['-c',script,name],{env,timeout:20000,stdio:'pipe'});
 }
 
-/** 旧库只由随机 _test 数据库和合成行组成；113升级114前后均保留同一库和ID。 */
+/** 旧库只由随机 _test 数据库和合成行组成；113升级115前后均保留同一库和ID。 */
 async function oldFixture(t){
   const directory=await mkdtemp(join(tmpdir(),'notalone-t24-cutover-'));
   const database=`notalone_t24_cutover_${randomUUID().replaceAll('-','')}_test`;
@@ -161,7 +161,7 @@ test('随机113旧库完成TS/DSH接管、崩溃租约收尾、兼容回退与�
     (SELECT count(*)::int FROM contact WHERE id=$1) contact,
     (SELECT count(*)::int FROM message WHERE id=$2 AND text_content=$3) sentinel,
     (SELECT count(*)::int FROM notalone_schema_migration) ledger`,[fixture.ids.contact,fixture.ids.message,sentinel])).rows[0],
-  {owners:1,contact:1,sentinel:1,ledger:114});
+  {owners:1,contact:1,sentinel:1,ledger:115});
   assert.deepEqual((await fixture.client.query(`SELECT source_kind,lease_generation
     FROM cross_domain_deletion_operation LIMIT 0`)).rows,[]);
 
@@ -305,7 +305,7 @@ test('随机113旧库完成TS/DSH接管、崩溃租约收尾、兼容回退与�
   await shutdown(app);
 
   // 未知账本版本必须在启动前停写，既不发布握手也不创建新业务行。
-  await fixture.client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('115_unknown.sql',$1)",['b'.repeat(64)]);
+  await fixture.client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('116_unknown.sql',$1)",['b'.repeat(64)]);
   const envBefore=await readFile(fixture.envFilePath,'utf8');
   const badInfoPath=join(fixture.directory,`backend-${++hostSequence}.info`);
   const bad=await launchDsh({nodeExecutable:process.execPath,projectDirectory:resolve('..'),envFilePath:fixture.envFilePath,

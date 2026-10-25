@@ -135,6 +135,36 @@ test('受管未确认作业重载配置仍经捕获的原停止句柄并携带 c
   assert.equal(interruptions[0].actual.requestKey, requestKey);
   assert.deepEqual(jobs.pendingReceipts(), []);
 });
+test('用户停止确认在途时退出等待同一取消，不并发改写为 app_quit', async () => {
+  const jobs = new AssistantGenerationJobs(), interruptions = [];
+  let releaseUserCancel;
+  const userCancel = new Promise((resolve) => { releaseUserCancel = resolve; });
+  const backend = { getConnectionGeneration: () => 7, requestJson: async (request) => {
+    if (request.path.endsWith('/prepare')) return { generation: 7, data: receipt };
+    return new Promise((resolve, reject) => request.signal?.addEventListener('abort',
+      () => reject(new BackendRequestFailure('cancelled')), { once: true }));
+  } };
+  let execution;
+  const running = jobs.execute({ identity: { ...owner, requestKey },
+    stopping: { recover: () => assert.fail('已有回执不应恢复'),
+      interrupt: async (_actual, reason) => {
+        interruptions.push(reason ?? 'app_quit');
+        if (reason === 'user_cancelled') return userCancel;
+        return { state: 'failed', interruptionReason: 'app_quit' };
+      } },
+    adapter: ordinaryGeneration(backend, owner, attempt),
+    registered: (registered) => { execution = registered; },
+    consume: () => assert.fail('用户停止后不能消费候选') }).catch(() => {});
+  while (!execution || jobs.states(7)[0]?.phase !== 'generating') await new Promise((resolve) => setTimeout(resolve, 1));
+  const cancelling = jobs.cancelUserGeneration({ ...owner, requestKey }, command.expectedInputVersionId);
+  const closing = jobs.beginClosing(() => assert.fail('用户取消结算后不能再走退出中断'));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(interruptions, ['user_cancelled'], '退出不能与用户停止并发发送第二个原因');
+  releaseUserCancel({ state: 'failed', interruptionReason: 'user_cancelled' });
+  assert.equal(await cancelling, true);
+  await Promise.all([closing, running]);
+  assert.equal(jobs.states(7)[0].phase, 'cancelled');
+});
 test('跨连接保留32个未知准备后拒绝第33个，不能丢弃未知身份腾容量', async () => {
   const jobs = new AssistantGenerationJobs(); let requests = 0;
   for (let generation = 0; generation < 33; generation++) {
