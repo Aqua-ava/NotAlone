@@ -1,0 +1,167 @@
+{
+  "base": "e60074b5946b8d1c990fcb75ba13bd58f789b2fb",
+  "node_version": "v24.19.0",
+  "python_environment": "NotAlone（既有测试夹具）",
+  "checks": [
+    {
+      "id": "red",
+      "command": "node --test --test-name-pattern=过去内容时钟 test/l3-operational-clock.test.mjs",
+      "cwd": "backend-ts",
+      "exit_code": 1,
+      "pass": 0,
+      "fail": 1,
+      "raw_log_sha256": "5bbe61022a6f1fde971669492c696ce66c95f2bf8b408df89d858c9dde50288d",
+      "redacted_output_sha256": "c0c543fb33deb7a2ad5e1eaca5950e30acdcd3f382afcde20eb29def74092a8e"
+    },
+    {
+      "id": "red-confirm",
+      "command": "node --test --test-name-pattern=过去内容时钟 backend-ts/test/l3-operational-clock.test.mjs",
+      "cwd": ".",
+      "exit_code": 1,
+      "pass": 0,
+      "fail": 1,
+      "raw_log_sha256": "dbb42ed3eca9df8675166e02cb3bda2909df2592da6d4aad5c6e15f2e237bc6b",
+      "redacted_output_sha256": "7db4d2c721836aea64e19c1a2840ed9abf49c669c742ea26a97a21044c056583"
+    },
+    {
+      "id": "green-reservation",
+      "command": "node --test --test-name-pattern=过去内容时钟 backend-ts/test/l3-operational-clock.test.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "pass": 1,
+      "fail": 0,
+      "raw_log_sha256": "bfc663bc33f79e9775818baaf6ac8b8fc017fdd8c98d8814654fd8233a1000f1",
+      "redacted_output_sha256": "bfc663bc33f79e9775818baaf6ac8b8fc017fdd8c98d8814654fd8233a1000f1"
+    },
+    {
+      "id": "red-expiry",
+      "command": "node --test --test-name-pattern=真实时间已过期 backend-ts/test/l3-operational-clock.test.mjs",
+      "cwd": ".",
+      "exit_code": 1,
+      "pass": 0,
+      "fail": 1,
+      "raw_log_sha256": "00613acb77903d860b28876165d776de2bc02ad7c989c8250894fc46e1aae8a6",
+      "redacted_output_sha256": "a0b7b7f04391f5d30c961442e2c3a0eb0ff5d6edc47f127ed277f89f9a21015b"
+    },
+    {
+      "id": "green-expiry",
+      "command": "node --test --test-name-pattern=真实时间已过期 backend-ts/test/l3-operational-clock.test.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "pass": 1,
+      "fail": 0,
+      "raw_log_sha256": "310fc0989c4ddd2b84d3a437b231e0b3bfb598e8e3c2fd469d43bea35eb9ef77",
+      "redacted_output_sha256": "310fc0989c4ddd2b84d3a437b231e0b3bfb598e8e3c2fd469d43bea35eb9ef77"
+    },
+    {
+      "id": "red-renewal",
+      "command": "node --test --test-name-pattern=冻结内容时钟不阻止 backend-ts/test/l3-operational-clock.test.mjs",
+      "cwd": ".",
+      "exit_code": 1,
+      "pass": 0,
+      "fail": 1,
+      "raw_log_sha256": "0e980c16d51c301dc57f91c811e4f652c5561cb16eee0c2ab71479b1031d0312",
+      "redacted_output_sha256": "9eb0ce9820abe63b126e32552a70d43f09e4253981862b195ded2ca73d3d2246"
+    },
+    {
+      "id": "green-renewal",
+      "command": "node --test --test-name-pattern=冻结内容时钟不阻止 backend-ts/test/l3-operational-clock.test.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "pass": 1,
+      "fail": 0,
+      "raw_log_sha256": "e6ba900c44cbc793cf2f0979475d3009f42ff6be56b412b100868454882c73d3",
+      "redacted_output_sha256": "e6ba900c44cbc793cf2f0979475d3009f42ff6be56b412b100868454882c73d3"
+    },
+    {
+      "id": "green-controls",
+      "command": "node --test backend-ts/test/l3-operational-clock.test.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "pass": 12,
+      "fail": 0,
+      "raw_log_sha256": "c97312a289e3fcf0e6d1a0c0e1e165cdd4b67a149a584d781a697f891a59e23e",
+      "redacted_output_sha256": "c97312a289e3fcf0e6d1a0c0e1e165cdd4b67a149a584d781a697f891a59e23e"
+    },
+    {
+      "id": "modules",
+      "command": "node --test --test-concurrency=2 test/l3-operational-clock.test.mjs test/l3-profile-service.test.mjs test/l3-profile-workspace.test.mjs test/host-model-accounting.test.mjs test/model-host.test.mjs test/host-model-runtime.test.mjs test/l2-scenario-worker.test.mjs test/extraction-worker-control.test.mjs",
+      "cwd": "backend-ts",
+      "exit_code": 0,
+      "pass": 71,
+      "fail": 0,
+      "raw_log_sha256": "bc8002a631c0a90e5afb79829a6423fc7fe1d22c104f66bfaf59db33ce8c6f04",
+      "redacted_output_sha256": "bc8002a631c0a90e5afb79829a6423fc7fe1d22c104f66bfaf59db33ce8c6f04"
+    },
+    {
+      "id": "typecheck",
+      "command": "node node_modules/typescript/bin/tsc --noEmit",
+      "cwd": "backend-ts",
+      "exit_code": 0,
+      "pass": null,
+      "fail": null,
+      "raw_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "redacted_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "cleanup",
+      "command": "本机PG目录仅查询本任务notalone_l3_clock_*_test库的剩余数量",
+      "cwd": "backend-ts",
+      "exit_code": 0,
+      "pass": null,
+      "fail": null,
+      "raw_log_sha256": "ed0f0726a33c751489babb0bdf4ae77ba6f9b4abb63d6dfbe4532bab597f9689",
+      "redacted_output_sha256": "ed0f0726a33c751489babb0bdf4ae77ba6f9b4abb63d6dfbe4532bab597f9689"
+    }
+  ],
+  "original_red_signal": {
+    "error": "model_accounting_work_ambiguous",
+    "operational_lease_current": false,
+    "content_clock_lease_current": true,
+    "running_l2": 0
+  },
+  "green_signal": {
+    "operational_lease_current": true,
+    "content_clock_lease_current": true,
+    "running_l2": 0
+  },
+  "cleanup": {
+    "owned_synthetic_databases_remaining": 0,
+    "persistent_services_started": 0,
+    "private_directory_mode": "0700",
+    "all_private_file_modes": "0600",
+    "private_retained_bytes": 70778,
+    "private_directory_label": "notalone-l3-operational-clock-fr4az9tr"
+  },
+  "review": {
+    "kind": "串行自查，未独立委派",
+    "standards_findings": 0,
+    "spec_findings": 0,
+    "sources": [
+      "AGENTS.md",
+      "docs/agents/workflow.md",
+      "docs/agents/engineering.md",
+      "docs/agents/domain.md",
+      ".scratch/dsh-ts-migration/issues/25-integrated-acceptance.md",
+      ".scratch/dsh-ts-migration/spec.md",
+      "architecture/adr/007-background-task-steps-and-worker.md",
+      "architecture/adr/081-source-grounded-memory-time-and-conditions.md",
+      "architecture/adr/102-dsh-typescript-backend-migration.md",
+      "architecture/adr/104-tencent-source-memory-engine.md"
+    ]
+  },
+  "boundaries": {
+    "real_data_read": false,
+    "root_dotenv_read": false,
+    "external_messages": 0,
+    "real_provider_calls": 0,
+    "app_started": false,
+    "package_run": false,
+    "git_index_or_commit_written": false,
+    "full_suite_run": false
+  },
+  "limits": [
+    "本次为独立合成回归，不认证实际App、微信、真实模型或Ticket25整体完成。",
+    "Git提交和提交后历史公开扫描由主协调执行。"
+  ]
+}

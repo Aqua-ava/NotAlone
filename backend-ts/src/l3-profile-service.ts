@@ -92,6 +92,7 @@ export interface L3ProfileServiceOptions {
   binding: ScenarioDocumentCall['binding'];
   profile: MessagesBudgetProfile;
   budget?: L2ScenarioBudget;
+  /** 资料观察与发布的内容时间；冻结材料时不影响工作租约。 */
   now?: () => Date;
   lease_seconds?: number;
   validateSources?: (client: Client, work: {scope: L3ProfileScope; inputs: L2ScenarioMemory[]}) => Promise<void>;
@@ -345,6 +346,7 @@ export class L3ProfileService {
   private readonly binding: ScenarioDocumentCall['binding'];
   private readonly profile: MessagesBudgetProfile;
   private readonly now: () => Date;
+  private readonly operationalNow = (): Date => new Date();
   private readonly leaseSeconds: number;
   private readonly validateSources: L3ProfileServiceOptions['validateSources'];
 
@@ -413,7 +415,7 @@ export class L3ProfileService {
       WHERE id=$1 AND task_id=$2 AND owner_id=$3 AND contact_id IS NOT DISTINCT FROM $4::uuid
         AND status='running' AND work_token=$5 AND lease_expires_at>$6 FOR UPDATE`,
     [work.profile_batch_id, work.claim.task_id, work.scope.owner_id, contactParameter(work.scope),
-      work.work_token, this.now()])).rows[0];
+      work.work_token, this.operationalNow()])).rows[0];
     if (!batch) throw new L3ProfileServiceConflict('l3_profile_batch_stale');
     if (
       Number(batch.settings_generation) !== work.settings_generation
@@ -661,12 +663,13 @@ export class L3ProfileService {
         WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid AND work_key=$3 FOR UPDATE`,
       [scope.owner_id, contactParameter(scope), workKey])).rows[0];
       const now = this.now();
+      const operationalNow = this.operationalNow();
       if (previous && ['succeeded','withdrawn'].includes(previous.status)) {
         await client.query(`UPDATE public.layered_memory_job SET profile_status='succeeded'
           WHERE task_id=$1 AND state='active'`, [claim.task_id]);
         return 'settled';
       }
-      if (previous && previous.status === 'running' && new Date(previous.lease_expires_at) > now) return null;
+      if (previous && previous.status === 'running' && new Date(previous.lease_expires_at) > operationalNow) return null;
       if (previous && Number(previous.attempt_count) >= 2) {
         await client.query(`UPDATE public.layered_profile_batch SET status='failed',error_code='profile_retry_exhausted'
           WHERE id=$1`, [previous.id]);
@@ -681,7 +684,7 @@ export class L3ProfileService {
         .slice().sort((left,right) => Number(right.batch_generation) - Number(left.batch_generation))[0]!.batch_id;
       const profileBatchId = previous?.id ?? randomUUID();
       const workToken = randomUUID();
-      const leaseExpires = new Date(now.getTime() + this.leaseSeconds * 1_000);
+      const leaseExpires = new Date(operationalNow.getTime() + this.leaseSeconds * 1_000);
       if (previous) {
         await client.query(`UPDATE public.layered_profile_batch
           SET work_token=$2,status='running',attempt_count=attempt_count+1,lease_expires_at=$3,
