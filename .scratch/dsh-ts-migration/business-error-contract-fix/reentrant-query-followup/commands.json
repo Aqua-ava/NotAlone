@@ -1,0 +1,150 @@
+{
+  "node_version": "v24.19.0",
+  "node24_is_redacted_alias": true,
+  "bounded_wrapper": "perl -e alarm_SECONDS_exec_ARGV -- NODE_ARGV",
+  "executions": [
+    {
+      "id": "independent-red",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        "<PRIVATE_ADAPTED_PROBE>"
+      ],
+      "exit_code": 1,
+      "expected_red": true,
+      "raw_log_sha256": "8072d50704b947e9ee8197329b728b27e06a446006b24b95d7c2debb5497e4ef",
+      "raw_log_bytes": 1673,
+      "cwd_redacted": "<REPO>/backend-ts",
+      "environment_redacted": {
+        "NOTALONE_REVIEW_FIXED_ROOT": "<REPO>"
+      },
+      "time_limit_seconds": 60,
+      "tests": 3,
+      "pass": 2,
+      "fail": 1,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 1070.968125,
+      "diagnostic": {
+        "receivedName": "Error",
+        "receivedCode": null,
+        "originalDriverErrorEscaped": true
+      }
+    },
+    {
+      "id": "contract-red",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=toPostgres 重入排队后原活动查询超时仍受控并回滚全部写入",
+        "backend-ts/test/business-transaction-errors.test.mjs"
+      ],
+      "exit_code": 1,
+      "expected_red": true,
+      "raw_log_sha256": "9b015a48c7b9a2ba00f07f96e8df02a85f863fc690c77131151c0344cd670640",
+      "raw_log_bytes": 1072,
+      "time_limit_seconds": 60,
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 799.657792
+    },
+    {
+      "id": "contract-green",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=toPostgres 重入排队后原活动查询超时仍受控并回滚全部写入",
+        "backend-ts/test/business-transaction-errors.test.mjs"
+      ],
+      "exit_code": 0,
+      "expected_red": false,
+      "raw_log_sha256": "da5fabb71fc0f5440e217eb65d94a9124a8d2f6c7a0a2bd0ce4c1b4445098eac",
+      "raw_log_bytes": 346,
+      "time_limit_seconds": 60,
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 775.470875
+    },
+    {
+      "id": "module-final",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        "backend-ts/test/business-transaction-errors.test.mjs"
+      ],
+      "exit_code": 0,
+      "expected_red": false,
+      "raw_log_sha256": "d7c0bbea4378672b1e6b325bd913455e7c9f8f6ad1245fc5207021b523390628",
+      "raw_log_bytes": 6093,
+      "time_limit_seconds": 120,
+      "tests": 33,
+      "pass": 33,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 10772.659416
+    },
+    {
+      "id": "typecheck",
+      "argv_redacted": [
+        "node24",
+        "backend-ts/node_modules/typescript/bin/tsc",
+        "--noEmit",
+        "--project",
+        "backend-ts/tsconfig.json"
+      ],
+      "exit_code": 0,
+      "expected_red": false,
+      "raw_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_log_bytes": 0
+    },
+    {
+      "id": "independent-green",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        "<PRIVATE_ADAPTED_PROBE>"
+      ],
+      "exit_code": 0,
+      "expected_red": false,
+      "raw_log_sha256": "8d1a45ad9376d8b4af6c788391ce7127a542a160c5dd24cd944da78a9fdd1b04",
+      "raw_log_bytes": 870,
+      "cwd_redacted": "<REPO>/backend-ts",
+      "environment_redacted": {
+        "NOTALONE_REVIEW_FIXED_ROOT": "<REPO>"
+      },
+      "time_limit_seconds": 60,
+      "tests": 3,
+      "pass": 3,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 1210.695625,
+      "diagnostic": {
+        "receivedName": "HostStorageError",
+        "receivedCode": "database_unavailable",
+        "originalDriverErrorEscaped": false
+      }
+    }
+  ],
+  "checks": {
+    "patch_reverse_check": 0,
+    "whitespace_check": 0
+  }
+}

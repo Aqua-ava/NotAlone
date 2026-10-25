@@ -206,6 +206,32 @@ test('排队的配置回调超时先通知原函数一次且驱动错误仍受�
   assert.equal((await storage.setupStatus()).owner_configured, false);
 });
 
+test('toPostgres 重入排队后原活动查询超时仍受控并回滚全部写入', async t => {
+  const { storage } = await storageFixture(t);
+  let actual, nativeFailure, callbacks = 0, nestedCallbacks = 0;
+  await assert.rejects(storage.businessTransaction(async client => {
+    await client.query('INSERT INTO owner(id,display_name) VALUES($1,$2)', [randomUUID(), '重入超时必须回滚']);
+    return new Promise((resolve, reject) => {
+      const value = { toPostgres() {
+        client.query('SELECT 1 AS nested', error => { assert.ifError(error); nestedCallbacks++; });
+        return 'synthetic-only';
+      } };
+      client.query({ text: 'SELECT pg_sleep(0.05), $1::text AS value', values: [value], query_timeout: 1,
+        callback(error, result) {
+          callbacks++;
+          if (error) { nativeFailure = error; reject(error); } else resolve(result);
+        },
+      });
+    });
+  }), error => { actual = error; return true; });
+  assert.equal(callbacks, 1);
+  assert.equal(nestedCallbacks, 1);
+  assert.equal((await storage.setupStatus()).owner_configured, false);
+  assert.ok(actual instanceof HostStorageError);
+  assert.equal(actual.code, 'database_unavailable');
+  assert.notEqual(actual, nativeFailure);
+});
+
 test('Query 原回调保持只读身份，行解析错误优先于随后的数据库错误且仍受控', async t => {
   const { storage } = await storageFixture(t);
   const parserError = new Error('synthetic-private-parser-failure');

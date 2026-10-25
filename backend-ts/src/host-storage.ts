@@ -18,14 +18,18 @@ export class HostStorageError extends Error {
 function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
   type Callback = (this: unknown, error: unknown, ...values: unknown[]) => unknown;
   type QueryDispatch = pg.Query & { handleError: Callback; _canceledDueToError?: unknown };
-  type QueryClient = pg.Client & { activeQuery?: pg.Query | null; queryQueue: pg.Query[] };
+  type QueryClient = pg.Client & { queryQueue: pg.Query[]; _pulseQueryQueue: (...args: unknown[]) => unknown };
+  const observed = new WeakMap<pg.Query, () => void>();
   const captureQuery = (query: QueryDispatch): (() => void) => {
+    const existing = observed.get(query);
+    if (existing) return existing;
     // 锁定 pg 8.16.3 的分发入口：既不替换 Query/内部回调，也不改动连接或报文协议。
     // handleError 会优先分发已保存的行解析错误，记录它实际交给调用方的原对象。
     const handleError = query.handleError;
     if (typeof handleError !== 'function') throw new HostStorageError('database_unavailable');
     const descriptor = Object.getOwnPropertyDescriptor(query, 'handleError');
     const cleanup = () => {
+      if (observed.get(query) === cleanup) observed.delete(query);
       if (query.handleError === tracked) {
         if (descriptor) Object.defineProperty(query, 'handleError', descriptor);
         else Reflect.deleteProperty(query, 'handleError');
@@ -38,30 +42,27 @@ function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
       return Reflect.apply(handleError, this, [error, ...values]);
     };
     query.handleError = tracked;
+    observed.set(query, cleanup);
     query.once('end', cleanup);
     return cleanup;
   };
+  const current = client as QueryClient, pulse = current._pulseQueryQueue;
+  if (typeof pulse !== 'function') throw new HostStorageError('database_unavailable');
+  current._pulseQueryQueue = function(this: QueryClient, ...args: unknown[]): unknown {
+    // 每次入队和分发都先观察原生 Query；submit/toPostgres 重入前已覆盖，排队超时也不遗漏。
+    for (const pending of this.queryQueue) if (pending instanceof pg.Query) captureQuery(pending as QueryDispatch);
+    return Reflect.apply(pulse, this, args);
+  };
   const query = client.query;
   client.query = function(this: pg.Client, ...args: unknown[]): unknown {
-    let cleanupQuery: (() => void) | undefined;
     try {
-      const current = this as QueryClient;
-      const activeBefore = current.activeQuery, queuedBefore = current.queryQueue.at(-1);
-      const config = args[0];
-      if (config instanceof pg.Query) cleanupQuery = captureQuery(config as QueryDispatch);
       const result = Reflect.apply(query, this, args);
-      if (config instanceof pg.Query) return result;
+      if (result instanceof pg.Query) return result;
       if (result && typeof result.then === 'function') {
         return result.then(undefined, (error: unknown) => { failures.add(error); throw error; });
       }
-      if (result === undefined) {
-        // pg 8.16.3 回调形式返回 undefined；只读原生新建 Query 的引用，不复制配置或包装回调。
-        const queuedAfter = current.queryQueue.at(-1);
-        const created = queuedAfter !== queuedBefore ? queuedAfter : current.activeQuery !== activeBefore ? current.activeQuery : undefined;
-        if (created instanceof pg.Query) cleanupQuery = captureQuery(created as QueryDispatch);
-      }
       return result;
-    } catch (error) { cleanupQuery?.(); failures.add(error); throw error; }
+    } catch (error) { failures.add(error); throw error; }
   } as pg.Client['query'];
 }
 export interface HostStorageOptions {
