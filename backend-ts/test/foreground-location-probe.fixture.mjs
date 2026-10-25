@@ -2,6 +2,7 @@ import readline from 'node:readline';
 const mode=process.argv[2];
 const emit=value=>process.stdout.write(JSON.stringify(value)+'\n');
 if(mode==='ready-delay') await new Promise(resolve=>setTimeout(resolve,500));
+if(mode==='warm-delay') await new Promise(resolve=>setTimeout(resolve,80));
 emit({version:1,event:'ready'});
 let ordinal=0;
 for await(const line of readline.createInterface({input:process.stdin})) {

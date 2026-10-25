@@ -37,6 +37,8 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
   const message = state.unsupportedConversation ? '群聊暂不支持，前台联系人匹配与新生成已暂停'
     : state.reason === 'sync_disabled' ? '同步总开关已关闭，前台识别暂停'
     : state.reason === 'wechat_not_in_front' ? '等待微信切到前台，请打开要聊天的私聊窗口'
+    : state.reason === 'probe_warming' ? '微信 OCR 引擎正在准备，完成后自动重新识别'
+    : state.reason === 'probe_warmup_timeout' ? '微信 OCR 引擎准备超时，正在等待下一次重试'
     : state.reason === 'unmatched_requires_selection' ? '当前会话未匹配到已确认绑定，请在上方选择联系人'
     : paused ? '前台定位已暂停' : state.phase === 'observing' ? '正在定位前台会话'
     : state.phase === 'confirmed' ? '已识别采集时的微信会话'

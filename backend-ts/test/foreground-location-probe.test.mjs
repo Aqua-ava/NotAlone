@@ -1,17 +1,58 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
-import {NativeForegroundProbe} from '../src/foreground-location-probe.ts';
+import {NativeForegroundProbe,safeForegroundProbeCode} from '../src/foreground-location-probe.ts';
 const fixture=fileURLToPath(new URL('./foreground-location-probe.fixture.mjs',import.meta.url));
 const probe=mode=>new NativeForegroundProbe({executable:process.execPath,args:[fixture,mode??'normal']});
+test('预热状态是稳定的领域可投影原因', () => {
+  assert.equal(safeForegroundProbeCode('probe_warming'), 'probe_warming');
+  assert.equal(safeForegroundProbeCode('probe_warmup_timeout'), 'probe_warmup_timeout');
+});
+test('start waits for warm readiness and first observation reuses that worker', async () => {
+  const p = probe('warm-delay');
+  try {
+    assert.equal(await p.start(), undefined);
+    const first = await p.observe({timeoutMs:1000});
+    const second = await p.observe({timeoutMs:1000});
+    assert.match(first.display_name, /^合成\d+-1$/);
+    assert.equal(second.display_name, first.display_name.replace(/-1$/, '-2'));
+  } finally {
+    await p.dispose();
+  }
+});
+test('observation during warmup fails without killing the worker', async () => {
+  const p = probe('warm-delay');
+  try {
+    const warming = p.start();
+    await assert.rejects(p.observe({timeoutMs:20}), {code:'probe_warming'});
+    await warming;
+    const observation = await p.observe({timeoutMs:1000});
+    assert.match(observation.display_name, /^合成\d+-1$/);
+  } finally {
+    await p.dispose();
+  }
+});
+test('warmup timeout kills the wedged worker and a later start recovers', async () => {
+  const p = probe('warm-delay');
+  try {
+    await assert.rejects(p.start({timeoutMs:20}), {code:'probe_warmup_timeout'});
+    await p.start({timeoutMs:1000});
+    assert.equal((await p.observe({timeoutMs:1000})).wechat_in_front, true);
+  } finally {
+    await p.dispose();
+  }
+});
 test('原生进程复用但每轮重新观察，关闭后允许明确重启',async()=>{
  const p=probe();try {const first=await p.observe({timeoutMs:1000});const second=await p.observe({timeoutMs:1000});assert.match(first.display_name,/^合成\d+-1$/);assert.equal(second.display_name,first.display_name.replace(/-1$/,'-2'));await p.close();const third=await p.observe({timeoutMs:1000});assert.notEqual(third.display_name,first.display_name);assert.match(third.display_name,/-1$/);}finally{await p.dispose();}
 });
 for(const mode of ['old-id','duplicate','oversized','multi','utf8','bad-header','float-version','invalid-date','bool-confidence','extra-quality','bad-fallback']) test(`协议拒绝 ${mode} 且不回显内容`,async()=>{
  const p=probe(mode);try{await assert.rejects(p.observe({timeoutMs:1000}),error=>error.code==='probe_output_invalid'&&!error.message.includes('秘密'));}finally{await p.dispose();}
 });
-test('ready及观察耗时均受单轮预算限制，超时后可重试',async()=>{
- for(const mode of ['ready-delay','hang']){const p=probe(mode);try{await assert.rejects(p.observe({timeoutMs:60}),{code:'probe_timeout'});await assert.rejects(p.observe({timeoutMs:60}),{code:'probe_timeout'});}finally{await p.dispose();}}
+test('自动预热超预算时保留进程，完成后下一次观察成功',async()=>{
+ const p=probe('ready-delay');try{await assert.rejects(p.observe({timeoutMs:60}),{code:'probe_warming'});const result=await p.observe({timeoutMs:1000});assert.match(result.display_name,/^合成\d+-1$/);}finally{await p.dispose();}
+});
+test('真实观察挂起仍按本轮超时并回收',async()=>{
+ const p=probe('hang');try{await assert.rejects(p.observe({timeoutMs:60}),{code:'probe_timeout'});await assert.rejects(p.observe({timeoutMs:60}),{code:'probe_timeout'});}finally{await p.dispose();}
 });
 test('取消中断在途观察，close可重启，dispose永久停机',async()=>{
  const p=probe('hang');const abort=new AbortController();const result=p.observe({signal:abort.signal,timeoutMs:1000});setTimeout(()=>abort.abort(),50);await assert.rejects(result,{code:'probe_failed'});await p.close();assert.equal((await p.observe({timeoutMs:1000})).wechat_in_front,true);await p.dispose();await assert.rejects(p.observe(),{code:'probe_failed'});
@@ -46,7 +87,7 @@ test('原生进程使用受控环境，不继承宿主秘密变量',async()=>{
  const before=process.env.NOTALONE_PROBE_TEST_SECRET;process.env.NOTALONE_PROBE_TEST_SECRET='合成秘密不可继承';const p=probe('environment');
  try{assert.equal((await p.observe()).display_name,'环境已隔离');}finally{await p.dispose();if(before===undefined)delete process.env.NOTALONE_PROBE_TEST_SECRET;else process.env.NOTALONE_PROBE_TEST_SECRET=before;}
 });
-test('六十秒无请求自动回收，下一次明确观察才重启',async context=>{
+test('空闲无请求时保持同一常驻 Worker',async context=>{
  context.mock.timers.enable({apis:['setTimeout']});const p=probe();
- try{const first=await p.observe();context.mock.timers.tick(60_000);const second=await p.observe();assert.notEqual(first.display_name,second.display_name);assert.match(second.display_name,/-1$/);}finally{await p.dispose();context.mock.timers.reset();}
+ try{await p.start();const first=await p.observe();context.mock.timers.tick(120_000);const second=await p.observe();assert.equal(second.display_name,first.display_name.replace(/-1$/,'-2'));}finally{await p.dispose();context.mock.timers.reset();}
 });

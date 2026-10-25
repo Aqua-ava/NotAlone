@@ -7,6 +7,31 @@ import {HostStorage} from '../src/host-storage.ts';
 import {createForegroundLocationApi} from '../src/foreground-location-api.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 
+test('创建前台定位 API 时后台启动一次合成图预热', async () => {
+  let starts = 0;
+  const probe = {
+    start: async () => { starts += 1; },
+    observe: async () => ({wechat_in_front: false}),
+    close: async () => {},
+    dispose: async () => {},
+  };
+  const api = await createForegroundLocationApi({
+    storage: {runtimeOwnerId: undefined},
+    probe,
+    executable: '/synthetic/not-used',
+  });
+  try {
+    await Promise.resolve();
+    assert.equal(starts, 1);
+    api.activate();
+    api.activate();
+    await Promise.resolve();
+    assert.equal(starts, 1);
+  } finally {
+    await api.close();
+  }
+});
+
 test('原PG身份及开关控制定位公开合同，暂停后拒收且不写入',async t=>{
  const f=await createStorageFixture();let storage,api;
  t.after(async()=>{await api?.close();await storage?.close();await f.close();});

@@ -5,7 +5,8 @@ import { initialForegroundState, type ForegroundState, type ForegroundConfirmati
 import { foregroundObservation } from './observation';
 import type { SyncControlState } from '../../shared/sync-control-bridge';
 import type { ForegroundChangeSource, HeaderChangePermit } from './native-change-source';
-import { isAwaitingForegroundSelection, isKnownForegroundReason, isTransientForegroundContextChange, isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
+import { isAwaitingForegroundSelection, isKnownForegroundReason, isTransientForegroundContextChange,
+  isTransientForegroundStartup, isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
@@ -280,7 +281,8 @@ export class ForegroundController {
         || (this.state.unsupportedConversation && !privateVerified);
       // 未绑定只撤销当轮资格；后续完整绑定可独立恢复，不清除低分或歧义等既有人工门。
       if ((observation.phase === 'manual-required' && observation.reason !== 'unmatched_requires_selection') || (observation.phase === 'unavailable'
-        && !isTransientForegroundContextChange(observation.reason))) {
+        && !isTransientForegroundContextChange(observation.reason)
+        && !isTransientForegroundStartup(observation.reason))) {
         this.qualityOnlyManualGate = observation.reason === 'quality_unverified'
           && (!this.manualRequired || this.qualityOnlyManualGate);
         this.manualRequired = true;

@@ -23,6 +23,8 @@ export function projectVisualAcceptance({ foreground: state, selectedContactId, 
     headline = '助手获焦，定位暂停';
     classification = 'other';
   } else if (state.reason === 'foreground_application_unavailable') headline = '系统前台状态未知';
+  else if (state.reason === 'probe_warming') headline = '微信 OCR 引擎准备中';
+  else if (state.reason === 'probe_warmup_timeout') headline = '微信 OCR 引擎准备超时';
   else if (state.reason === 'probe_timeout' || state.reason === 'observation_timeout') headline = '正式观察超时';
   else if (state.phase === 'unavailable') headline = '正式观察暂不可用';
   else if (fresh && state.wechatInFront === true) {

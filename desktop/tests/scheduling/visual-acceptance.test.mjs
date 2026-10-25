@@ -55,6 +55,14 @@ test('名称识别失败显示固定环节和原因，不把失败投影的false
   assert.equal(project({ ...confirmed, phase: 'unavailable', reason: 'PRIVATE_RAW_ERROR' }).failure, null);
 });
 
+test('OCR 模型预热期间显示明确的本机准备状态', () => {
+  const view = project({ ...confirmed, phase: 'unavailable', reason: 'probe_warming',
+    probeAvailable: false, wechatInFront: false, confirmation: 'required', confirmedContactId: null });
+  assert.deepEqual(view.failure, { code: 'probe_warming', layer: '本机 OCR', message: '识别模型正在预热' });
+  assert.match(view.headline, /OCR.*准备/);
+  assert.equal(view.matched, false);
+});
+
 test('持续预览无需步骤推进，协调状态变化后仍可结束，旧轮次和关闭状态无效', () => {
   const current = { runId: 'current-run', stage: 'finish', state: 'waiting-trigger' };
   const finish = { runId: 'current-run', stage: null, type: 'finish' };

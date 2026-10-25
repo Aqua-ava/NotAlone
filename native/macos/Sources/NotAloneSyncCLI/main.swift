@@ -18,7 +18,7 @@ private struct ProbeHelp {
       --preview-session    显式本机可视化预览，由用户点击观察；图帧与文字不保存，8分钟退出。
       --preview-session-name 自动显示当前微信会话名称；仅本机内存处理，20分钟退出。
       --preview-foreground 前台状态悬浮验收，仅查询元数据、不截图或OCR，8分钟退出。
-      --session-worker --json  宿主专用：按 stdin 请求单轮观察，空闲60秒退出，不自主采集。
+      --session-worker --json  宿主专用：启动时仅用合成图预热 OCR，ready后按 stdin 请求观察并常驻至宿主关闭。
       --header-change-source --json  宿主专用：最多60秒，只发顶部局部变化/暂停事件，不OCR或保存帧。
       --foreground-status --json  开发诊断：只输出前台分类及前置检查，不创建窗口或采集图像。
       --screen-capture-permission --json  仅静默检查屏幕录制权限，不读取窗口或采集图像。

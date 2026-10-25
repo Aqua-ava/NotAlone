@@ -58,6 +58,22 @@ test('窗口上下文变化错误撤销本轮身份且保留固定错误码',asy
   const f=fixture({probe:{observe:async()=>{throw Object.assign(new Error('不公开原始内容'),{code:'automatic_capture_context_changed'});},close:async()=>{},dispose:async()=>{}}});
   const result=await f.locator.observe({enabled:true});assert.equal(result.reason,'automatic_capture_context_changed');assert.equal(result.contact_id,null);assert.equal(result.recognized_name,null);await f.locator.close();
 });
+test('预热期间返回明确状态且不回收同一常驻Worker',async()=>{
+  const f=fixture();
+  let closes=0,observations=0;
+  const probe={
+    async observe(){observations++;if(observations===1)throw Object.assign(new Error(),{code:'probe_warming'});return f.observation;},
+    async close(){closes++;},
+    async dispose(){},
+  };
+  const locator=new ForegroundLocator({ownerId:owner,accountScope:'fixture-account',probe,sessions:async()=>f.rows,bindings:async()=>f.bindings});
+  const warming=await locator.observe({enabled:true});
+  assert.equal(warming.phase,'unavailable');assert.equal(warming.reason,'probe_warming');assert.equal(warming.contact_id,null);
+  assert.equal(closes,0);
+  const ready=await locator.observe({enabled:true});
+  assert.equal(ready.phase,'confirmed');assert.equal(ready.contact_id,contact);assert.equal(closes,0);
+  await locator.close();
+});
 test('旧v2协议只允许旧完整名严格匹配，不引入v3名单编辑放宽',async()=>{
   const f=fixture();f.observation.capture_version='automatic-window-v2';f.observation.display_name='合成甲有';f.observation.selected_row_name='合成甲有';
   f.observation.quality={layout_verified:true,display_name_confidence:0.99,selected_row_name_confidence:0.99};

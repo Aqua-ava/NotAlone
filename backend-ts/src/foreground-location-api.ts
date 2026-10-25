@@ -10,9 +10,16 @@ interface Scope {owner:string;account:string;enabled:boolean}
 export async function createForegroundLocationApi(options:{storage:HostStorage;probe:ForegroundProbe;executable:string;environment?:NodeJS.ProcessEnv;runner?:WechatCliRunner}) {
   const sessions=new ForegroundSessions(options);
   let activated=false,closed=false,revision=0,mutations=0,observing=false;
+  let warmup:Promise<void>|undefined;
   let locator:ForegroundLocator|undefined,locatorScope:Scope|undefined;
   const pending=new Set<Promise<ForegroundLocationResponse>>();
   const accepting=()=>activated&&!closed&&mutations===0;
+  const startWarmup=()=>{
+    if(!options.probe.start||warmup)return;
+    warmup=Promise.resolve().then(()=>options.probe.start!()).catch(()=>{warmup=undefined;});
+  };
+  // 只准备本机合成图 OCR；在数据库和其余宿主初始化并行时完成模型冷启动。
+  startWarmup();
   const scope=async():Promise<Scope>=>{
     const owner=options.storage.runtimeOwnerId?.toLowerCase();
     if(!owner)throw new ForegroundLocationError('foreground_scope_unavailable');
@@ -40,7 +47,7 @@ export async function createForegroundLocationApi(options:{storage:HostStorage;p
   };
   return {
     /** 仅在旧实现已停收排空后由宿主调用；无逐请求自动回退。 */
-    activate(){if(closed)throw new ForegroundLocationError('runtime_stopped');activated=true;revision++;},
+    activate(){if(closed)throw new ForegroundLocationError('runtime_stopped');activated=true;revision++;startWarmup();},
     async suspend(){activated=false;await drain();},
     async invalidate(){activated=false;await drain();},
     /** 并发变更全部结束才恢复接收；移交/退出不会被finally重开。 */

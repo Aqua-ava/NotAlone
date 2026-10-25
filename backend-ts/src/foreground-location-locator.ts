@@ -10,6 +10,7 @@ export interface ForegroundProbeObservation {
   text_fallback?: {version:string;text:string;confidence:number;text_complete:boolean;mask_verified:boolean} | null;
 }
 export interface ForegroundProbe {
+  start?(options?:{timeoutMs?:number}):Promise<void>;
   observe(options:{signal?:AbortSignal;timeoutMs:number}):Promise<ForegroundProbeObservation>;
   close():Promise<void>;
   dispose():Promise<void>;
@@ -86,7 +87,13 @@ export class ForegroundLocator {
       check();
       if(!enabled){await this.options.probe.close();check();return result('paused','sync_disabled');}
       try {observation=await this.options.probe.observe({signal,timeoutMs:Math.min(2500,deadline-performance.now())});}
-      catch(error) {check();await this.options.probe.close();const code=(error as {code?:string}).code??'';return result('unavailable',safeForegroundProbeCode(code));}
+      catch(error) {
+        check();
+        const code=(error as {code?:string}).code??'';
+        // 预热中的拒绝是正常启动状态；保留 Worker 才能让下一轮复用已编译的模型。
+        if(code!=='probe_warming')await this.options.probe.close();
+        return result('unavailable',safeForegroundProbeCode(code));
+      }
       check();
       if(!observation.wechat_in_front)return result('paused','wechat_not_in_front');
       const captured=Date.parse(observation.captured_at??'');

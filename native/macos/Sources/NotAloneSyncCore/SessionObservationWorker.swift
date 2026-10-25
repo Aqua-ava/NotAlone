@@ -1,6 +1,8 @@
 import Foundation
 import Darwin
 import CoreFoundation
+import CoreGraphics
+import CoreText
 
 // 只复用进程及系统 OCR 初始化状态；没有定时采集、旧帧、名称或身份缓存。
 @MainActor
@@ -12,7 +14,8 @@ public enum SessionObservationWorker {
         await run(read: { await SessionWorkerPipe.readLine(descriptor: STDIN_FILENO, timeout: 60) },
                   write: { try await SessionWorkerPipe.write($0, descriptor: STDOUT_FILENO) },
                   observe: AutomaticSessionCapture.observe,
-                  reportError: { code in FileHandle.standardError.write(Data((code + "\n").utf8)) })
+                  reportError: { code in FileHandle.standardError.write(Data((code + "\n").utf8)) },
+                  warm: { try SessionWorkerWarmup.run() })
     }
 
     public nonisolated static func accepts(arguments: [String]) throws -> Bool {
@@ -26,13 +29,22 @@ public enum SessionObservationWorker {
     static func run(read: @MainActor () async -> SessionWorkerInput,
                     write: @MainActor (Data) async throws -> Void,
                     observe: @MainActor () async -> [String: Any],
-                    reportError: @MainActor (String) -> Void = { _ in }) async -> Bool {
+                    reportError: @MainActor (String) -> Void = { _ in },
+                    warm: @MainActor () async throws -> Void = {}) async -> Bool {
+        do {
+            try await warm()
+        } catch {
+            reportError(SessionWorkerFailure.warmup.rawValue)
+            return false
+        }
         do {
             try await write(encoded(["version": 1, "event": "ready"]))
             while true {
                 switch await read() {
-                case .end, .idle:
+                case .end:
                     return true
+                case .idle:
+                    continue
                 case .failure(let failure):
                     throw failure
                 case .line(let data):
@@ -107,6 +119,68 @@ public enum SessionObservationWorker {
     }
 }
 
+enum SessionWorkerWarmup {
+    static func run(
+        recognize: (CGImage) throws -> HeaderOcrResult = LocalOcr.recognizeHeader
+    ) throws {
+        let measurement = ProcessInfo.processInfo.environment[
+            "NOTALONE_SESSION_WORKER_MEASUREMENTS"
+        ] == "1"
+        if measurement {
+            emit("started")
+        }
+        var succeeded = false
+        defer {
+            if measurement {
+                emit(succeeded ? "completed" : "failed")
+            }
+        }
+        _ = try recognize(try syntheticHeader())
+        succeeded = true
+    }
+
+    private static func syntheticHeader() throws -> CGImage {
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil,
+                width: 800,
+                height: 72,
+                bitsPerComponent: 8,
+                bytesPerRow: 3_200,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                    | CGBitmapInfo.byteOrder32Big.rawValue
+              ) else {
+            throw SessionWorkerFailure.warmup
+        }
+        context.scaleBy(x: 2, y: 2)
+        context.setFillColor(CGColor(gray: 0.96, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 400, height: 36))
+        let font = CTFontCreateWithName("PingFangSC-Medium" as CFString, 14, nil)
+        let title = NSAttributedString(
+            string: "合成A1",
+            attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String):
+                    CGColor(gray: 0.12, alpha: 1),
+            ]
+        )
+        context.textPosition = CGPoint(x: 10, y: 11)
+        CTLineDraw(CTLineCreateWithAttributedString(title), context)
+        guard let image = context.makeImage() else {
+            throw SessionWorkerFailure.warmup
+        }
+        return image
+    }
+
+    private static func emit(_ event: String) {
+        let uptime = ProcessInfo.processInfo.systemUptime
+        FileHandle.standardError.write(Data(
+            "session-worker-warmup-v1 \(event) \(uptime)\n".utf8
+        ))
+    }
+}
+
 enum SessionWorkerInput: Sendable {
     case line(Data), end, idle, failure(SessionWorkerFailure)
 }
@@ -115,6 +189,7 @@ enum SessionWorkerFailure: String, Error, Sendable {
     case request = "session_worker_invalid_request"
     case response = "session_worker_invalid_response"
     case io = "session_worker_io_failed"
+    case warmup = "session_worker_warmup_failed"
 }
 
 // poll 只阻塞专用等待工作，不占用主 actor；NSWorkspace 等前台状态可在等待期间刷新。

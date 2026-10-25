@@ -8,7 +8,8 @@ from pathlib import Path
 
 REASONS = frozenset({
     "confirmed_active_binding", "sync_disabled", "wechat_not_in_front",
-    "probe_timeout", "observation_timeout", "foreground_observation_busy",
+    "probe_warming", "probe_warmup_timeout", "probe_timeout",
+    "observation_timeout", "foreground_observation_busy",
     "foreground_observation_unavailable", "runtime_stopped", "probe_failed",
     "calibration_windows_ambiguous", "automatic_capture_context_changed",
     "automatic_capture_window_metadata_changed", "automatic_capture_dimensions_changed",

@@ -165,6 +165,21 @@ test('真正离开助手也保留技术失败退避与手动模式门禁', async
  assert.equal(f.scheduled.size, 0, '手动输入仍不观察');
 });
 
+test('OCR预热只暂缓本轮，不留下人工确认门', async t => {
+ for (const reason of ['probe_warming', 'probe_warmup_timeout']) {
+  const f = fixture(t);
+  f.setObservation(async () => observationResponse('unavailable', reason));
+  await f.foreground.observeBeforeShow();
+  assert.equal(f.foreground.getState().reason, reason);
+  assert.equal(f.foreground.getState().confirmedContactId, null);
+  f.setObservation(async () => observationResponse('confirmed', 'confirmed_active_binding', id));
+  await f.foreground.observeBeforeShow();
+  assert.equal(f.foreground.getState().phase, 'confirmed');
+  assert.equal(f.foreground.getState().confirmedContactId, id);
+  assert.equal(f.foreground.getGenerationBlock(), null);
+ }
+});
+
 
 test('离开助手的立即复查等待旧传输结算，不与旧观察并发', async t => {
  const f = fixture(t); f.foreground.startContinuous();

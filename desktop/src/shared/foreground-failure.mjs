@@ -7,6 +7,12 @@ export function isTransientForegroundContextChange(code) {
   return transientContextChanges.has(code);
 }
 
+// 模型预热是宿主启动状态，不证明本轮联系人匹配失败，也不应留下人工确认门。
+const transientStartupReasons = new Set(['probe_warming', 'probe_warmup_timeout']);
+export function isTransientForegroundStartup(code) {
+  return transientStartupReasons.has(code);
+}
+
 export function isUnsupportedForegroundConversation(code) {
   return code === 'group_chat_unsupported' || code === 'group_chat_suspected';
 }
@@ -55,6 +61,8 @@ const reasons = Object.freeze({
   sync_gate_unavailable: ['前台检查', '同步总开关状态暂时不可确认'],
   minimal_region_unavailable: ['窗口采集', '最小名称区域采集不可用'],
   probe_not_found: ['探针启动', '正式探针不可用'],
+  probe_warming: ['本机 OCR', '识别模型正在预热'],
+  probe_warmup_timeout: ['本机 OCR', '识别模型预热超时'],
   probe_timeout: ['探针执行', '正式探针执行超时'],
   probe_output_invalid: ['探针结果', '正式探针返回格式未通过'],
   probe_failed: ['探针执行', '正式探针失败，尚无分项原因'],

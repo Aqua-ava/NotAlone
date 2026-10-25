@@ -9,16 +9,16 @@ export class ForegroundProbeError extends Error {
   constructor(code:string) {super(code);this.name='ForegroundProbeError';this.code=code;}
 }
 const failure=(code='probe_output_invalid')=>new ForegroundProbeError(code);
-type Worker={child:ChildProcessWithoutNullStreams;closed:Promise<void>;dead:boolean;error?:Error;pending?:{resolve:(value:unknown)=>void;reject:(error:Error)=>void};buffer:Buffer};
-/** 一个在途请求；原生进程只因明确观察启动，不缓存帧或名称。 */
+type Worker={child:ChildProcessWithoutNullStreams;closed:Promise<void>;dead:boolean;ready:boolean;error?:Error;pending?:{resolve:(value:unknown)=>void;reject:(error:Error)=>void};buffer:Buffer};
+/** 常驻请求驱动 Worker；启动时只做合成图 OCR 预热，不缓存帧或名称。 */
 export class NativeForegroundProbe {
   private worker?:Worker;
-  private idleTimer?:ReturnType<typeof setTimeout>;
   private generation=0;
   private disposed=false;
   private permissionBlocked=false;
   private tail:Promise<void>=Promise.resolve();
   private closing:Promise<void>=Promise.resolve();
+  private preparation?:Promise<void>;
   private readonly executable:string;
   private readonly args:readonly string[];
   constructor(options:{executable:string;args?:readonly string[]}) {
@@ -26,8 +26,48 @@ export class NativeForegroundProbe {
     this.executable=options.executable;this.args=options.args??[];
   }
   resetPermissionGate():void {this.permissionBlocked=false;}
+  /** 启动常驻 Worker 并等待合成图预热完成；不截图、不读取微信内容。 */
+  async start({timeoutMs=60_000}:{timeoutMs?:number}={}):Promise<void> {
+    if(!Number.isFinite(timeoutMs)||timeoutMs<=0||timeoutMs>120_000)throw new TypeError('Worker 预热预算无效。');
+    if(this.disposed)throw failure('probe_failed');
+    if(this.worker&&!this.worker.dead&&this.worker.ready)return;
+    if(this.preparation)return this.preparation;
+    const generation=this.generation;
+    let worker:Worker|undefined;
+    const preparing=(async()=>{
+      await this.closing;
+      if(this.disposed||generation!==this.generation)throw failure('probe_failed');
+      worker=this.worker;
+      if(!worker||worker.dead){worker=this.spawn();this.worker=worker;}
+      let timer:ReturnType<typeof setTimeout>|undefined;
+      const timeout=new Promise<never>((_,reject)=>{
+        timer=setTimeout(()=>reject(failure('probe_warmup_timeout')),timeoutMs);
+      });
+      let ready:unknown;
+      try {ready=await Promise.race([this.read(worker),timeout]);}
+      finally {clearTimeout(timer);}
+      if(!exact(ready,['version','event'])||ready.version!==1||ready.event!=='ready')throw failure();
+      if(this.disposed||generation!==this.generation||worker.dead)throw failure('probe_failed');
+      worker.ready=true;
+    })().catch(async error=>{
+      if(worker&&this.worker===worker)this.worker=undefined;
+      if(worker&&!worker.dead){
+        const failure=error instanceof ForegroundProbeError?error:new ForegroundProbeError('probe_failed');
+        worker.dead=true;worker.pending?.reject(failure);worker.pending=undefined;worker.child.kill('SIGKILL');
+        this.closing=Promise.all([this.closing,worker.closed]).then(()=>{});
+      }
+      throw error instanceof ForegroundProbeError?error:failure('probe_failed');
+    });
+    let tracked!:Promise<void>;
+    tracked=preparing.finally(()=>{
+      if(this.preparation===tracked)this.preparation=undefined;
+    });
+    this.preparation=tracked;
+    return tracked;
+  }
   async close():Promise<void> {
-    ++this.generation;clearTimeout(this.idleTimer);this.idleTimer=undefined;
+    ++this.generation;
+    this.preparation=undefined;
     const worker=this.worker;this.worker=undefined;
     if(worker){worker.dead=true;worker.pending?.reject(failure('probe_failed'));worker.pending=undefined;worker.child.kill('SIGKILL');this.closing=Promise.all([this.closing,worker.closed]).then(()=>{});}
     await this.closing;
@@ -37,49 +77,59 @@ export class NativeForegroundProbe {
     if(!Number.isFinite(timeoutMs)||timeoutMs<=0||timeoutMs>2500)throw new TypeError('新观察的探针预算超出有界范围。');
     if(this.disposed)throw failure('probe_failed');
     if(this.permissionBlocked)throw failure('screen_capture_permission_missing');
-    clearTimeout(this.idleTimer);this.idleTimer=undefined;
     const generation=this.generation;const deadline=performance.now()+timeoutMs;
     const prior=this.tail;let release!:()=>void;
     this.tail=new Promise<void>(resolve=>{release=resolve;});
     let timer:ReturnType<typeof setTimeout>|undefined;
+    let requestSent=false;
     let rejectGuard!:(error:Error)=>void;
     const guard=new Promise<never>((_,reject)=>{rejectGuard=reject;});
     const abort=()=>{rejectGuard(failure('probe_failed'));void this.close();};
     signal?.addEventListener('abort',abort,{once:true});
-    timer=setTimeout(()=>{rejectGuard(failure('probe_timeout'));void this.close();},timeoutMs);
+    timer=setTimeout(()=>{
+      const warming=!requestSent&&Boolean(this.preparation)&&!this.worker?.ready;
+      rejectGuard(failure(warming?'probe_warming':'probe_timeout'));
+      if(!warming)void this.close();
+    },timeoutMs);
     const current=()=>{if(this.disposed||generation!==this.generation||signal?.aborted)throw failure('probe_failed');if(performance.now()>=deadline)throw failure('probe_timeout');};
     const work=async()=>{
-      await prior;current();clearTimeout(this.idleTimer);this.idleTimer=undefined;await this.closing;current();
+      await prior;current();await this.closing;current();
       let worker=this.worker;
       if(worker?.dead){if(worker.error)throw worker.error;await worker.closed;current();}
-      if(!worker||worker.dead){worker=this.start();this.worker=worker;const ready=await this.read(worker);if(!exact(ready,['version','event'])||ready.version!==1||ready.event!=='ready')throw failure();}
+      if(!worker||worker.dead||!worker.ready){await this.start();current();worker=this.worker;}
+      if(!worker||worker.dead||!worker.ready)throw failure('probe_warming');
       current();const request_id=randomUUID();
       const response=this.read(worker);
+      requestSent=true;
       worker.child.stdin.write(JSON.stringify({version:1,request_id,operation:'observe'})+'\n',error=>{if(error)worker!.pending?.reject(failure('probe_failed'));});
       const value=await response;current();
       if(!exact(value,['version','request_id','result'])||value.version!==1||value.request_id!==request_id||!object(value.result))throw failure();
       return parseObservation(value.result);
     };
     if(signal?.aborted)abort();
-    try{const result=await Promise.race([work(),guard]);clearTimeout(this.idleTimer);this.idleTimer=setTimeout(()=>{void this.close();},60_000);this.idleTimer.unref();return result;}
-    catch(error){if(error instanceof ForegroundProbeError && error.code==='screen_capture_permission_missing')this.permissionBlocked=true;await this.close();throw error instanceof ForegroundProbeError?error:failure('probe_failed');}
+    try{return await Promise.race([work(),guard]);}
+    catch(error){
+      if(error instanceof ForegroundProbeError&&error.code==='probe_warming')throw error;
+      if(error instanceof ForegroundProbeError && error.code==='screen_capture_permission_missing')this.permissionBlocked=true;
+      await this.close();throw error instanceof ForegroundProbeError?error:failure('probe_failed');
+    }
     finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);release();}
   }
   private read(worker:Worker):Promise<unknown> {
     if(worker.dead)return Promise.reject(failure('probe_failed'));
     return new Promise((resolve,reject)=>{worker.pending={resolve,reject};});
   }
-  private start():Worker {
+  private spawn():Worker {
     const child=spawn(this.executable,[...this.args,'--session-worker','--json'],{stdio:['pipe','pipe','pipe'],windowsHide:true,env:{PATH:'/usr/bin:/bin',LANG:'C',LC_ALL:'C'}});
     let closed!:()=>void;
-    const worker:Worker={child,dead:false,buffer:Buffer.alloc(0),closed:new Promise(resolve=>{closed=resolve;})};
+    const worker:Worker={child,dead:false,ready:false,buffer:Buffer.alloc(0),closed:new Promise(resolve=>{closed=resolve;})};
     const reject=(error:Error)=>{worker.dead=true;worker.error=error;worker.pending?.reject(error);worker.pending=undefined;child.kill('SIGKILL');};
     child.stderr.resume();
     child.stdout.on('error',()=>reject(failure('probe_failed')));
     child.stderr.on('error',()=>reject(failure('probe_failed')));
     child.stdin.on('error',()=>reject(failure('probe_failed')));
     child.on('error',(error:NodeJS.ErrnoException)=>reject(failure(error.code==='ENOENT'?'probe_not_found':'probe_failed')));
-    child.on('close',()=>{worker.dead=true;worker.pending?.reject(failure('probe_failed'));worker.pending=undefined;closed();});
+    child.on('close',()=>{worker.dead=true;worker.ready=false;worker.pending?.reject(failure('probe_failed'));worker.pending=undefined;closed();});
     child.stdout.on('data',(chunk:Buffer)=>{
       if(worker.dead)return;
       if(!worker.pending){reject(failure());return;}
@@ -97,7 +147,7 @@ export class NativeForegroundProbe {
 function object(value:unknown):value is Record<string,any>{return value!==null&&typeof value==='object'&&!Array.isArray(value);}
 function exact(value:unknown,keys:string[]):value is Record<string,any>{return object(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));}
 const probeErrors = new Set([
-  'probe_not_found','probe_timeout','probe_output_invalid','probe_failed','screen_capture_permission_missing',
+  'probe_not_found','probe_timeout','probe_warming','probe_warmup_timeout','probe_output_invalid','probe_failed','screen_capture_permission_missing',
   'foreground_application_unavailable','calibration_wechat_instances_ambiguous','calibration_wechat_version_unsupported',
   'calibration_window_not_visible','calibration_windows_ambiguous','calibration_window_geometry_invalid','calibration_context_unavailable',
   'automatic_capture_context_changed','automatic_capture_window_metadata_changed','automatic_capture_scale_invalid','automatic_capture_dimensions_changed',

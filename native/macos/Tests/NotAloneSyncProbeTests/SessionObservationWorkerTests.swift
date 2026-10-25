@@ -4,6 +4,87 @@ import XCTest
 
 final class SessionObservationWorkerTests: XCTestCase {
     @MainActor
+    func testWarmupCompletesBeforeReadyAndObservation() async {
+        var steps: [String] = []
+        let success = await SessionObservationWorker.run(
+            read: { .line(self.request("d4bba738-9f99-4578-9f6d-b16bd6f3367a")) },
+            write: { data in
+                let value = try self.object(data)
+                if value["event"] as? String == "ready" {
+                    XCTAssertEqual(steps, ["warm"])
+                    steps.append("ready")
+                }
+            },
+            observe: {
+                XCTAssertEqual(steps, ["warm", "ready"])
+                steps.append("observe")
+                return ["ok": true]
+            },
+            warm: {
+                XCTAssertTrue(steps.isEmpty, "预热前不得发出 ready 或采集")
+                steps.append("warm")
+            }
+        )
+        XCTAssertTrue(success)
+        XCTAssertEqual(steps, ["warm", "ready", "observe"])
+    }
+
+    @MainActor
+    func testWarmupFailureStopsBeforeReadyWithStableCode() async {
+        var writes = 0
+        var errors: [String] = []
+        struct SyntheticWarmupFailure: Error {}
+        let success = await SessionObservationWorker.run(
+            read: {
+                XCTFail("预热失败后不得读取观察请求")
+                return .end
+            },
+            write: { _ in writes += 1 },
+            observe: {
+                XCTFail("预热失败后不得观察")
+                return [:]
+            },
+            reportError: { errors.append($0) },
+            warm: { throw SyntheticWarmupFailure() }
+        )
+        XCTAssertFalse(success)
+        XCTAssertEqual(writes, 0)
+        XCTAssertEqual(errors, ["session_worker_warmup_failed"])
+    }
+
+    @MainActor
+    func testWorkerStaysResidentAcrossAnIdleRead() async {
+        var reads = 0
+        var observations = 0
+        let success = await SessionObservationWorker.run(
+            read: {
+                reads += 1
+                switch reads {
+                case 1: return .idle
+                case 2: return .line(self.request("d4bba738-9f99-4578-9f6d-b16bd6f3367a"))
+                default: return .end
+                }
+            },
+            write: { _ in },
+            observe: {
+                observations += 1
+                return ["ok": true]
+            }
+        )
+        XCTAssertTrue(success)
+        XCTAssertEqual(observations, 1)
+    }
+
+    func testWarmupUsesOneInMemorySyntheticHeader() throws {
+        var dimensions: [String] = []
+        try SessionWorkerWarmup.run { image in
+            dimensions.append("\(image.width)x\(image.height)")
+            return HeaderOcrResult(fragments: [])
+        }
+        XCTAssertEqual(dimensions, ["800x72"])
+    }
+
+    @MainActor
     func testReadyDoesNotObserveAndEachRequestProducesAFreshResult() async throws {
         let ids = ["d4bba738-9f99-4578-9f6d-b16bd6f3367a", "8ec1e8ac-3383-4452-8420-5c32d0daf967"]
         var incoming = ids.map { SessionWorkerInput.line(request($0)) } + [.end]

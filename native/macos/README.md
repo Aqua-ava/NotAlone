@@ -4,6 +4,8 @@
 
 按 ADR-049 的窗口边界、ADR-050 的单帧语义和 ADR-052 的顶部名称修订，正式 `--session --json --single-frame` 仅在微信前台取得当前唯一窗口的一帧，在本机内存分析布局，再只识别顶部名称。该入口与名称预览共用采集及OCR。兼容 `--minimal-region` 参数，正式路径不读取人工 profile、不 OCR 正文或左侧会话行，不保存或上传画面，不操作微信。
 
+宿主使用的 `--session-worker --json` 在启动时先生成一张 `800×72` 的纯合成名称图并执行本机 Vision 预热，不请求屏幕录制、不截微信窗口；完成后才发送唯一 ready 行，并常驻至宿主关闭或故障回收。宿主设置 `NOTALONE_SESSION_WORKER_MEASUREMENTS=1` 时，stderr 只输出 `session-worker-warmup-v1 started|completed|failed` 和单调时间，不输出合成文字或图片。真实观察若在预热中到达，上层返回 `probe_warming` 并保留进程，不能把模型编译时间当成本轮 2500ms OCR 结果。
+
 成功协议为 `automatic-header-v3`，包含图像取得时的 UTC `captured_at`、`display_name` 及 `quality` 中的 `layout_verified`、`display_name_confidence`、`name_complete`，不提供或伪造左侧名称。原始低分／截断文字可传递，正式后端仅在完整且置信度至少0.90时核验唯一私聊与已有确认绑定；旧单帧v2仍兼容，预览协议不能提供正式资格。识别后不再截第二帧，仍核对前台、窗口与几何，未知布局失败关闭。结果只描述采集时点，同窗切换可能由下一轮发现，不保证返回时仍在同一会话。
 
 单次入口的实现及合成证据见[任务01](../../.scratch/foreground-contact-follow/issues/01-single-frame-locator.md)。连续跟随由任务04实施，真实 App、权限归属及耗时由任务06验收；此 README 和合成测试不证明实机集成已通过。
