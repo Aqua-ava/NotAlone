@@ -1,7 +1,7 @@
 # 14：更新 L3 画像与关系概览
 
-Triage: ready-for-human
-State: claimed
+Triage: ready-for-agent
+State: resolved
 Type: task
 Blocked by: 13
 Spec: ../spec.md
@@ -17,7 +17,7 @@ Spec: ../spec.md
 - [x] 完成本票下方 DSH 查证要求，记录版本、官方文档／源码／示例依据与适配理由；无直接接口时记录边界核对结论，未查证不得宣称完成。
 - [x] 从合格记忆与有变化场景增量更新 L3 画像及关系概览，无需更新时按原规则跳过。
 - [x] 本人和联系人范围隔离，保留来源、版本、不确定性、时间资格和合法推断，不把行为建议写成关系事实。
-- [ ] 用户可查看、修正及删除；来源失效、人工修改或输入变化时，旧摘要、缓存及晚结果不能覆盖当前状态。
+- [x] 用户可查看、修正及删除；来源失效、人工修改或输入变化时，旧摘要、缓存及晚结果不能覆盖当前状态。
 - [x] 回复和 Skill 审核读取的 L2 目录／L3 条目与实际发布 generation 一致，预算、取消和任务恢复保持。
 
 ## 验证
@@ -150,7 +150,7 @@ Spec: ../spec.md
 - 发布：profile batch `8d7f8594-55d6-43e7-a02e-e9642c2650f1` succeeded，`proposal_trace` 2 轮、`verification_trace` 1 次 succeeded；profile version `ee86bbfd-b003-5df7-9eba-981506dd0795` 含 4 条且未撤回，发布于 `2026-10-25 07:00:21+08`。state organization generation `4`、status paused、error_code null；generation `4` 同时指向第 3 代 scenario `e462dc7b-feeb-550e-a6ce-b010032c79bd` 和上述 profile，L2／L3 同代装配一致。
 - 真实 App：`ran → 记忆 → 我` 显示 4 条长期背景，更新时间 `2026-10-24 23:00:21 UTC`，与发布时刻一致；每条可展开“引用与修正”，首条显示两条来源版本、修正和删除按钮，“撤回长期背景”可见。打开修正表单且说明为空时“提交修正”禁用，取消后无数据变化。
 - 已可签收：真实模型完成 L2→L3 发布，App 可查看四条例项、来源和版本时间，发布 generation 与 L2 目录一致；上述 DSH、scope、失败隔离、来源／修正防复活、回复与 Skill 同代读取等条件已有根回归或合成 PostgreSQL 证据。
-- 尚不能签收“用户可修正及删除”：当前只验证了入口、空输入禁用和取消，尚未验证任何真实 GUI 提交能落到持久状态。验收至少需要一次实际“提交修正”和一次实际“确认删除长期背景条目”；两者都必须逐字核验 profile withdrew、generation 前进、旧回复快照失效，修正还须产生 active feedback 并保护底层输入，删除须保留底层合法资料。修正和单条删除都会撤回整份当前画像，不能在同一 profile 版本上先后完成，也不能把对话框取消当作完成。
+- 该时点尚不能签收“用户可修正及删除”：当时只验证了入口、空输入禁用和取消，尚未验证任何真实 GUI 提交能落到持久状态。后续已在隔离 App 完成修正与删除并核对持久元数据，见“隔离 GUI 修正与删除签收”。
 - “确认撤回长期背景”是独立于逐条删除的后端路径。票面的“查看、修正及删除”可由修正加单条删除满足，整份撤回不是逐字验收项的独立必要条件；但它是已暴露的不可逆用户操作，若不在隔离环境实点，应作为明确残余风险记录，不能宣称三种管理路径都已实机覆盖。
 - 最安全最小矩阵：保持正式 owner 的 generation `4` profile 不变，优先在实际 App 配合隔离测试数据库／用户目录，用两份合成的临时 profile 分别完成“提交修正”和“单条删除”并核对接口／数据库回读；若确需在正式库操作，则使用专用合成联系人或可丢弃范围，逐动作取得用户确认，且每次撤回后另建一份 profile，不能复用同一版本。整份撤回可再使用第三份一次性 profile，或在明确接受残余风险后暂不执行。
 
@@ -162,5 +162,12 @@ Spec: ../spec.md
 - 验证：分层记忆桌面全集 `97/97`、零失败；桌面类型检查通过；Python 修改文件 `py_compile` 通过；提交后 `scripts/check_public_history.mjs --ref HEAD --working-tree` 为 `issues 0`。
 - 实际开发运行：`npm run dev` 已恢复六个迁移相关显式 TS 模式，`/api/runtime/status` 显示 replies、memory、skills、tasks、wechatIncremental、wechatHistory、foregroundLocation 均为 `typescript`，reply ready、task worker running。实际 App 以联系人 `ran` 做只读查看，本人长期背景 4 条可见；未发送外部消息。
 - 隔离 GUI 本轮执行了“确认修正”；首轮代次拒绝已修复，联系人／本人两层 UI 都有携带当前 generation 的点击回归。随即准备的第二份纯合成画像中，“删除这条背景”确认被取消，没有执行删除，也没有新增删除后的持久状态元数据。
-- 签收结论：Ticket 14 仍不能标记 `resolved`。代码修复、修正入口和回归已收口，但验收条件“用户可查看、修正及删除”仍缺一次实际确认删除；按钮可见、打开确认或取消都不能替代删除。并且本轮提供的是隔离 GUI 修正动作和持久化回归，未提供正式 `ran` profile 的实际写入证据，正式数据仍保持原 generation `4`。
-- 下一步最小动作：在已有隔离 App／随机测试库中 `rearm` 第二份纯合成画像，取得用户对该一次删除的明确确认后点击“删除这条背景”与“确认删除长期背景条目”；仅核对无正文元数据：profile withdrawn、batch withdrawn、generation 前进、删除 feedback active、两条合成底层记忆仍 active、旧回复快照失效。成功后正常退出隔离 App、运行 fixture cleanup，再恢复默认 `npm run dev`。完成该动作后即可重新评估将本票 `State` 改为 `resolved`；Ticket 21 未改动。
+- 该时点签收结论：Ticket 14 当时仍缺一次实际确认删除，尚不能标记 `resolved`。后续已在隔离 App／随机 PostgreSQL 完成该动作并清理现场，见下节。
+
+### 隔离 GUI 修正与删除签收
+
+- 修正：此前已在隔离 App 对纯合成画像实际提交修正并核对持久元数据，确认联系人／本人两层 UI 都携带当前 `organization_generation`；代次门禁未放宽。
+- 删除：使用全新随机 `_test` PostgreSQL 与隔离 `userData`，通过 `npm run dev` 打开实际 App，选择纯合成联系人，执行“记忆 → 我 → 删除这条背景 → 确认删除这条背景”。App 显示“本人资料操作已完成并核对”，长期背景区块变为“还没有整理好的本人背景”，L2 主题仍显示。
+- 删除后无正文持久回读：当前 generation 从 `1` 推进到 `3`；目标 profile `withdrawn=true`；profile batch `status=withdrawn`；feedback 为 `profile/item 0/active` 共 `1` 条；两条 owner memory 均 active；generation `2` 保留 `1` 个场景且 profile 为空；`reply_request=0`、`model_call_receipt=0`。
+- 隔离清理：正常退出 App 后 fixture cleanup 成功，随机 `_test` 数据库和临时目录均不存在，默认 `npm run dev` 已恢复。两次 GUI 动作均使用合成资料，无外部模型调用、无外部消息、无正式 `ran` 数据修改。
+- 最终结论：查看、实际修正、实际单条删除、撤下旧画像及保留独立 L2 主题均已通过真实 App 与持久回读验证；全代次读取、失败关闭、来源／删除、scope 和恢复相关回归保持通过。Ticket 14 全部验收条件完成，`State` 改为 `resolved`，`Triage` 按本仓库 resolved 票惯例保持 `ready-for-agent`；Ticket 21 未改动。
