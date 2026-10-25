@@ -1,0 +1,54 @@
+{
+  "frozen_at": "2026-10-25T09:03:15.200Z",
+  "owned": [
+    {
+      "path": "backend-ts/src/diagnostic-problem-budget.ts",
+      "sha256": "6bb10e2a4cbc1572970ea2dccc08e94f96c179f95f430a4ab169322ca2e449e8"
+    },
+    {
+      "path": "backend-ts/src/model-provider.ts",
+      "sha256": "98e7026309d74442e92d47bab0a63006b2b26364b4840908c9578391b5db9311"
+    },
+    {
+      "path": "backend-ts/diagnostic-problem-budget.md",
+      "sha256": "d40b471aaf5935e1574aa516891a658cef7997decee773f81ef865439a255c04"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-model-budget.test.mjs",
+      "sha256": "ea5c646c0ef149c44d1f66be98fc9866c95f7b2c3e4cb2de850474612202a61b"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-problem-budget.test.mjs",
+      "sha256": "87136a0a482131f421c3c80cb885c5e5207f3eacc0f00684533cd5b26c884cd7"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-problem-budget-node-fixture.mjs",
+      "sha256": "eb4bb4e169b87f5f911bf13e1e99ab2f2378486b03d086e8460bfb75f2d799f8"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-problem-budget-python-fixture.py",
+      "sha256": "d34f9ecebc1b911f541df0c5b13ec05f4de1015fa3d9445c8a0552282e548340"
+    },
+    {
+      "path": "backend-ts/test/diagnostic-scenario-budget-plugin.ts",
+      "sha256": "713658f186b0d7f4f5e27f5917dd2bfd11af876155d308b367556ec3a5c0acc6"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "backend-ts/src/l2-scenario-model.ts",
+      "sha256": "c387b457ac8d4b3b65433b15e6e85b075a889d4d0eb284db5b91a874efc4c41c"
+    }
+  ],
+  "dependency_owner": "Tencent 源码移植协作会话",
+  "git_mutations": "none",
+  "real_model_calls_in_this_slice": "none",
+  "historical_problem_call_count": "unknown",
+  "validation": {
+    "tests_passed": 32,
+    "tests_failed": 0,
+    "typecheck": "passed",
+    "diff_check": "passed",
+    "test_timeout_seconds": 120
+  }
+}

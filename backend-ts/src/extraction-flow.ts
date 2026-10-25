@@ -8,6 +8,7 @@ import {buildSourceVerificationContract,buildSourceVerificationPayload,sourceCal
 import type {ExtractionWindow,ExtractedFact,SourceVerificationResult} from './extraction-protocol.ts';
 import {boundedExtractionInput,boundedExtractionPrompt,boundedExtractionSchema,bindBoundedFact,compileGroundedLabels,normalizeBoundedWindow,prepareBoundedForAdoption,sourceUnits} from './extraction-bounded.ts';
 import {verificationFailureDiagnostic} from './extraction-verification-diagnostics.ts';
+import {formatExtractionPrompt} from './vendor/tencent-memory/l1-extraction.ts';
 
 export interface ExtractionInvocation {
  purpose:'extraction'|'verification';system:string;user:string;tool:{name:string;description:string;parameters:Record<string,unknown>};
@@ -39,6 +40,17 @@ export function extractionWindowText(window:ExtractionWindow):string {
  const targets=new Set(window.target_message_ids??window.messages.map(message=>message.message_id));
  return window.messages.map((message,index)=>`${index+1}. [${targets.has(message.message_id)?'target':'context'}] [message_id=${message.message_id}] occurred_at=${pythonISO(message.occurred_at)} sender=${message.sender}: ${message.text}`
   +`\n[calendar message_id=${message.message_id}] source_calendar_at=${sourceCalendarPayload(message)} text_length=${Array.from(message.text).length}`).join('\n');
+}
+function tencentExtractionInput(window:ExtractionWindow):string {
+ const targets=new Set(window.target_message_ids??window.messages.map(message=>message.message_id));
+ const messages=window.messages.map(message=>({id:message.message_id,role:message.sender,
+  timestamp:pythonISO(message.occurred_at),content:message.text}));
+ const prompt=formatExtractionPrompt({newMessages:messages.filter(message=>targets.has(message.id)),
+  backgroundMessages:messages.filter(message=>!targets.has(message.id))});
+ // 发送时间不等于来源当地日历；另列原协议锚点，不能从 formatter 的时间显示推断。
+ const calendar=window.messages.map(message=>({message_id:message.message_id,
+  source_calendar_at:sourceCalendarPayload(message),text_length:Array.from(message.text).length}));
+ return prompt+'\n\n【来源日历与正文位置】\n'+JSON.stringify(calendar);
 }
 const directFields=Object.keys(DIRECT_EXTRACTION_SCHEMA.properties.scenes.items.properties.memories.items.properties);
 const verificationFields=['results','candidate_index','verdict','issues','evidence','proof','event_verification','condition_verification','stage_evidence','occurrence_evidence','message_id','quote'] as const;
@@ -93,7 +105,7 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
  if(!Number.isSafeInteger(retries)||retries<0||retries>5||!Number.isSafeInteger(retryDelay)||retryDelay<0||retryDelay>30000)throw new ExtractionProtocolError();
  if(options.mode!==undefined&&options.mode!=='legacy')throw new ExtractionProtocolError();
  validateExtractionWindow(options.window);options.signal.throwIfAborted();await options.requireCurrent();
- const user=extractionWindowText(options.window);let candidates:ReturnType<typeof rawCandidates>=[];
+ const user=tencentExtractionInput(options.window);let candidates:ReturnType<typeof rawCandidates>=[];
  for(let attempt=0;attempt<=retries;attempt++){
   let error:unknown,raw:readonly unknown[]|undefined;
   try{

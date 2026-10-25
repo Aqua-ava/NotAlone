@@ -1,6 +1,7 @@
 /** 普通调用沿用官方DeepSeekAdapter；来源核验另用同供应商的专用strict Beta传输。 */
 import type { Context } from '@deepseek-ai/cordis';
 import {LlmError} from '@deepseek-ai/dsh-llm';
+import {bindDiagnosticProblemBudget} from './diagnostic-problem-budget.ts';
 import { DeepSeekAdapter, PUBLIC_BASE_URL, type DeepSeekConnectionOptions, type DeepSeekAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek';
 import {
   measureSerializedMessages,measureSerializedStrictChatCompletion,ModelInputBudgetError,
@@ -20,6 +21,8 @@ export interface ModelProviderCall {
 export interface ModelProviderObservation {
   attempt_id: string; permit_id: string;
   dispatch: 'not_authorized'|'authorized_unconfirmed'|'http_accepted';
+  /** 显式 false 才能证明尚未进入原预约回调；旧观测缺省时仍按未知处理。 */
+  before_dispatch_started?: boolean;
   budget: MessagesBudgetReceipt | null;
   budget_rejection:{code:ModelInputBudgetError['code'];receipt:MessagesBudgetReceipt|null}|null;
 }
@@ -55,6 +58,7 @@ function httpFailure(status:number):LlmError{
 }
 export function installModelProvider(ctx: Context, configuration: ModelProviderConfiguration) {
   if(!configuration.provider.trim()||configuration.connection.retryPolicy.mode!=='normal'||configuration.connection.retryPolicy.maxRetries!==0)throw new Error('model_provider_retry_policy_invalid');
+  const diagnosticBudget=bindDiagnosticProblemBudget();
   const connection=freeze(structuredClone(configuration.connection));
   const strictEndpoint=configuration.strictVerificationEndpoint
     ??(connection.baseURL===PUBLIC_BASE_URL?DEEPSEEK_STRICT_VERIFICATION_ENDPOINT:undefined);
@@ -80,7 +84,10 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       let budget:MessagesBudgetReceipt;
       try{budget=measureSerializedMessages(request.body,current.call.binding,current.call.profile);}
       catch(error){if(error instanceof ModelInputBudgetError)current.observation.budget_rejection={code:error.code,receipt:error.receipt};throw error;}
+      const checkDiagnosticDispatch=diagnosticBudget?.reserve();
+      current.observation.before_dispatch_started=true;
       await current.call.beforeDispatch({attempt_id:current.call.attempt_id,permit_id:current.call.permit_id,budget,dispatch:'authorized_unconfirmed'});
+      checkDiagnosticDispatch?.();
       current.observation.budget=budget;
       current.observation.dispatch='authorized_unconfirmed';
       request.signal.throwIfAborted();
@@ -91,7 +98,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
   function register(call:ModelProviderCall){
     if(!call.sessionId||!call.attempt_id||!call.permit_id||call.binding.provider!==configuration.provider||calls.has(call.sessionId))throw new Error('model_provider_call_conflict');
     const registered={call:{...call,binding:freeze(structuredClone(call.binding)),profile:freeze(structuredClone(call.profile))},
-      observation:{attempt_id:call.attempt_id,permit_id:call.permit_id,dispatch:'not_authorized' as ModelProviderObservation['dispatch'],budget:null as MessagesBudgetReceipt|null,budget_rejection:null as ModelProviderObservation['budget_rejection']},prepared:false};
+      observation:{attempt_id:call.attempt_id,permit_id:call.permit_id,dispatch:'not_authorized' as ModelProviderObservation['dispatch'],before_dispatch_started:false,budget:null as MessagesBudgetReceipt|null,budget_rejection:null as ModelProviderObservation['budget_rejection']},prepared:false};
     calls.set(call.sessionId,registered);
     return registered;
   }
@@ -99,7 +106,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     beginCall(call: ModelProviderCall) {
       const registered=register(call);
       return {
-        observation:()=>structuredClone(registered.observation),
+        observation:():ModelProviderObservation=>structuredClone(registered.observation),
         /** 在实际官方stream退出后释放session，取消等待者不能提前解绑在途调用。 */
         close() { if(calls.get(call.sessionId)===registered)calls.delete(call.sessionId); },
       };
@@ -107,7 +114,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     beginStrictVerificationCall(call:ModelProviderCall){
       const registered=register(call);
       return {
-        observation:()=>structuredClone(registered.observation),
+        observation:():ModelProviderObservation=>structuredClone(registered.observation),
         async send(input:StrictVerificationSendInput):Promise<DeepSeekStrictVerificationResponse>{
           if(registered.prepared)throw new LlmError('DeepSeek strict call was already prepared.','INVALID_REQUEST');
           registered.prepared=true;
@@ -134,8 +141,11 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
             if(name.toLowerCase()==='x-api-key')headers.authorization=`Bearer ${value}`;
             else headers[name]=value;
           }
+          const checkDiagnosticDispatch=diagnosticBudget?.reserve();
+          registered.observation.before_dispatch_started=true;
           await registered.call.beforeDispatch({attempt_id:registered.call.attempt_id,permit_id:registered.call.permit_id,
             budget,dispatch:'authorized_unconfirmed'});
+          checkDiagnosticDispatch?.();
           registered.observation.budget=budget;registered.observation.dispatch='authorized_unconfirmed';
           input.signal.throwIfAborted();
           let response:Response;

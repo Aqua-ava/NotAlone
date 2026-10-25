@@ -1,4 +1,6 @@
 # 参考腾讯源码自行实现自动记忆
+
+> 后续修订（2026-10-25）：[ADR-104](../../architecture/adr/104-tencent-source-memory-engine.md)按用户最新决定改为以腾讯 TypeScript 源码直接复用为主；下文“只读来源、自行 Python 实现”属于历史范围。来源、身份、隔离和删除规则继续有效。
 Triage: ready-for-agent
 State: resolved
 

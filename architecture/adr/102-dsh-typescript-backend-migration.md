@@ -1,5 +1,7 @@
 # ADR-102：以精简 DSH 和 TypeScript 统一后端
 
+> 后续修订（2026-10-25）：[ADR-104](104-tencent-source-memory-engine.md)将记忆算法和提示构建改为优先直接复用腾讯 TypeScript 源码，不再仅按行为自行实现；本决定的正式 DSH 入口、业务库和数据保护职责保持。
+
 > 状态：已采纳（2026-10-23）；用户已确认 Q1–Q18 及完整方案。本轮仅收敛文档，当前产品仍运行 Python 与 LangChain，迁移及等价验收未完成。
 
 为减少通用 AI 执行机制的长期维护，决定将 Python 后端职责逐步迁到 TypeScript，以精简 DeepSeek Harness（DSH）替换 LangChain、LangGraph 和 Deep Agents。接受迁移成本、共享后台故障域及暂不优化安装体积的取舍；不预设框架替换改善模型质量。

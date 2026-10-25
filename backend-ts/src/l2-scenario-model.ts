@@ -266,7 +266,8 @@ export function createL2ScenarioModel(options: {
           } finally {
             call?.close();
           }
-        } else if (permitHeld && reservationRejected) {
+        // 只有明确尚未进入持久预约回调时，才可按未发送收尾；缺失标记或 ACK 丢失仍保留未知。
+        } else if (permitHeld && (reservationRejected || call?.observation().before_dispatch_started === false)) {
           call?.close();
           try {
             const state = await connection.exchange({op: 'settled'});

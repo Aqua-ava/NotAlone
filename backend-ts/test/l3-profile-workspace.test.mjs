@@ -239,6 +239,10 @@ test('L3多轮提案压缩已执行工具历史，不以旧写入参数耗尽下
   const workspace = new L3ProfileWorkspace(null, [scenario], [memory], constrained);
   let calls = 0, compacted;
   const port = {async call(input) {
+    assert.match(input.system, /Incremental Evolution Protocol/);
+    const workflowInput = JSON.parse(input.messages[0].content[0].text);
+    assert.match(workflowInput.workflow, /变化场景/);
+    assert.equal(workflowInput.scenarios[0].version_id, scenario.version_id);
     calls++;
     if (calls < 5) {
       return {

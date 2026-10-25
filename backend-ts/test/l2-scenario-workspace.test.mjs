@@ -102,6 +102,10 @@ test('文档工具只暴露read/write/edit，且模型只能依赖内存暂存�
     async call(input) {
       calls++;
       assert.deepEqual(input.tools.map(tool => tool.name), ['read', 'write', 'edit']);
+      assert.match(input.system, /默认策略是 UPDATE/);
+      const payload = JSON.parse(input.messages[0].content[0].text);
+      assert.match(payload.workflow, /New Memories List/);
+      assert.equal(payload.memories[0].memory_id, fact.memory_id);
       assert.match(input.system,/不得把表情、沉默、未回复或单次行为解释为情绪、态度、意图或关系信号/);
       assert.match(input.system,/旧主题中无法由来源逐字支持的解释必须删除，不因为曾发布而保留/);
       await input.requireCurrent();
