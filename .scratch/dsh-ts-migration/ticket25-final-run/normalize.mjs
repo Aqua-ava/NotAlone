@@ -2,6 +2,7 @@
 import {createHash} from 'node:crypto';
 import {readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {verifyCapturedSources} from './capture-contract.mjs';
 import {auditReplyRuntimeSources} from '../../../backend-ts/src/reply-comparison-sources.ts';
 import {createBlindPacket} from '../../../backend-ts/experiments/reply-blind-packet.mjs';
 
@@ -28,7 +29,7 @@ function options(args){
   const flag=args[index],value=args[index+1];
   if(!flag?.startsWith('--')||value===undefined)fail('arguments');
   const key=flag.slice(2);
-  if(!['capture','dataset','visible','binding','config','review','adjudication','output','summary-output'].includes(key))fail('argument_'+key);
+  if(!['capture','dataset','visible','binding','config','review','adjudication','output','summary-output','mode','source-commit'].includes(key))fail('argument_'+key);
   if(key==='review')values.review.push(value);
   else{if(seen.has(key))fail('duplicate_argument_'+key);seen.add(key);values[key]=value;}
  }
@@ -36,6 +37,9 @@ function options(args){
  if(values.review.length!==2)fail('two_independent_reviews_required');
  const inputs=[values.capture,values.dataset,values.visible,values.binding,values.config,...values.review,...values.adjudication?[values.adjudication]:[]].filter(Boolean).map(value=>resolve(value));
  for(const output of [values.output,values['summary-output']].map(value=>resolve(value)))if(inputs.includes(output))fail('output_overwrites_input');
+ values.mode??='model-run';
+ if(!['model-run','local-only'].includes(values.mode))fail('mode');
+ if(values['source-commit']!==undefined&&!/^[a-f0-9]{40}$/.test(values['source-commit']))fail('source_commit');
  return values;
 }
 
@@ -102,10 +106,12 @@ function boundReview(item,review,visibleItem,bindingItem){
  return {...structuredClone(review),...structuredClone(item),blind_id:bindingItem.original_blind_id,subject_sha256:bindingItem.reporter_subject_sha256,candidates};
 }
 
-function validateCapture(capture){
- if(capture.schema_version!=='reply-local-paired-collector-v1'||capture.protocol_version!=='migration-comparison-v1'||capture.evidence_kind!=='official_deepseek_full_comparison_v1'||capture.synthetic_only!==true||capture.planned!==96||capture.received!==96||!Array.isArray(capture.records)||capture.records.length!==96)fail('capture_contract');
- if(capture.source_bindings?.old_commit!=='3c168296e9e8edaa43b8b323ff693e790e709069'||capture.source_bindings?.new_commit!==EXPECTED_NEW_COMMIT||capture.source_bindings?.dsh_commit!==DSH_COMMIT)fail('capture_binding');
- const onlyVendorSupportInstrumented=capture.source_bindings?.candidate_source_manifest?.executed_tree_kind==='git_commit_tree'&&capture.source_bindings.candidate_source_manifest.base_commit===EXPECTED_NEW_COMMIT&&capture.source_bindings.candidate_source_manifest.vendor_support_raw_capture_only===true;
+function validateCapture(capture,args){
+ const expectedCommit=args['source-commit']??EXPECTED_NEW_COMMIT;
+ const expectedKind=args.mode==='local-only'?'localhost_fake_provider_actual_business_pipelines':'official_deepseek_full_comparison_v1';
+ if(capture.schema_version!=='reply-local-paired-collector-v1'||capture.protocol_version!=='migration-comparison-v1'||capture.evidence_kind!==expectedKind||capture.synthetic_only!==true||capture.planned!==96||capture.received!==96||!Array.isArray(capture.records)||capture.records.length!==96)fail('capture_contract');
+ if(capture.source_bindings?.old_commit!=='3c168296e9e8edaa43b8b323ff693e790e709069'||capture.source_bindings?.new_commit!==expectedCommit||capture.source_bindings?.dsh_commit!==DSH_COMMIT)fail('capture_binding');
+ const onlyVendorSupportInstrumented=capture.source_bindings?.candidate_source_manifest?.executed_tree_kind==='git_commit_tree'&&capture.source_bindings.candidate_source_manifest.base_commit===expectedCommit&&capture.source_bindings.candidate_source_manifest.vendor_support_raw_capture_only===true;
  if(capture.source_bindings?.workspace_changed_during_execution!==false||capture.source_bindings?.fixed_git_source_changed_during_execution!==false&&!onlyVendorSupportInstrumented)fail('source_drift');
  const keys=new Set();
  for(const row of capture.records){
@@ -113,9 +119,10 @@ function validateCapture(capture){
   if(keys.has(key)||!ARMS.includes(row.arm))fail('record_identity');
   keys.add(key);
   if(row.logical_calls!==1||!Array.isArray(row.runtime_sources?.attempts)||row.runtime_sources.attempts.length!==row.physical_calls)fail('record_calls');
-  if(!['succeeded','failed'].includes(row.actual?.status))fail('record_terminal');
+  if(!['succeeded','failed','cancelled'].includes(row.actual?.status))fail('record_terminal');
   if(row.actual.status==='succeeded'&&(!object(row.output)||!object(row.source_storage_receipt)))fail('successful_output_missing');
   const body=row.runtime_sources.attempts[0]?.request?.body;
+  if(row.actual.status!=='succeeded'&&row.physical_calls===0)continue;
   if(!object(body)||body.model!=='deepseek-flash'||body.temperature!==0||(body.top_p??1)!==1||body.max_tokens!==4096||canonical(body.thinking)!=='{"type":"disabled"}')fail('model_controls');
   const stop=row.arm==='old'?body.stop:body.stop_sequences;
   if(row.arm==='old')equal(stop,[MAX_PRIMARY_STOP],'stop_controls');
@@ -125,11 +132,12 @@ function validateCapture(capture){
  for(const arm of ARMS)if(capture.records.filter(row=>row.arm===arm).length!==48)fail('arm_denominator');
 }
 
-function configurationFor(capture){
+function configurationFor(capture,modelSurfaces){
  const old=createHash('sha256');
  const newMap=new Set();
  for(const row of capture.records){
-  const body=row.runtime_sources.attempts[0].request.body;
+  const body=row.runtime_sources.attempts[0]?.request?.body;
+  if(!body)continue;
   if(row.arm==='old')old.update(canonical(Object.keys(body).sort()));
   else newMap.add(canonical(Object.keys(body).sort()));
  }
@@ -145,8 +153,8 @@ function configurationFor(capture){
   max_retries:0,
   stop:[MAX_PRIMARY_STOP],
   seed:null,
-  prompt_hash:null,
-  tool_schema_hash:null,
+  prompt_hash:modelSurfaces?.prompt_hash??null,
+  tool_schema_hash:modelSurfaces?.tool_schema_hash??null,
   environment_hash:capture.environment==null?null:digest({environment:capture.environment,dependencies:capture.source_bindings.dependencies_before}),
   adapter_protocols:{old:['openai_chat_messages'],new:[...newMap]},
   provider_protocol_equivalence:'not_verified',
@@ -163,14 +171,17 @@ async function main(){
  ]);
  const capture=normalizeCaptureTimestamps(JSON.parse(captureText)),dataset=JSON.parse(datasetText),visible=JSON.parse(visibleText),binding=JSON.parse(bindingText);
  const visibleFileSha=createHash('sha256').update(visibleText).digest('hex');
- validateCapture(capture);
+ validateCapture(capture,args);
+ const modelSurfaces=capture.source_capture_version==='production_v2_actual_wire_pg'?verifyCapturedSources(capture,dataset):null;
+ if((args.mode==='local-only'||args['source-commit'])&&!modelSurfaces)fail('production_v2_capture_required');
  const reviewCapture=reviewCaptureFor(capture);
- if(reviewCapture.records.length!==96||reviewCapture.received!==96)fail('review_capture_denominator');
+ if(reviewCapture.records.length%2!==0)fail('review_capture_denominator');
  const expectedPacket=createBlindPacket({capture:reviewCapture,dataset,seed:binding.seed});
  equal(visible,expectedPacket.visible,'visible_packet_changed');
  equal(binding.items,expectedPacket.binding.items,'private_binding_changed');
+ if(modelSurfaces&&binding.capture_canonical_sha256!==digest(reviewCapture))fail('blind_capture_digest');
  if(binding.visible_sha256!==digest(visible)||binding.dataset_canonical_sha256!==digest(dataset)||!/^[a-f0-9]{64}$/.test(binding.capture_canonical_sha256))fail('blind_packet_digest');
- if(visible.items.length!==96||binding.items.length!==96)fail('blind_packet_denominator');
+ if(visible.items.length!==reviewCapture.records.length||binding.items.length!==reviewCapture.records.length)fail('blind_packet_denominator');
  const visibleById=new Map(visible.items.map(item=>[item.blind_id,item]));
  const bindingById=new Map(binding.items.map(item=>[item.blind_id,item]));
  const reviewers=[],reviewerIds=new Set();
@@ -217,10 +228,10 @@ async function main(){
   }
   equal([...adjudicated].sort(),disagreements,'adjudication_coverage');
  }
- const {config,configHash}=configurationFor(capture);
+ const {config,configHash}=configurationFor(capture,modelSurfaces);
  const priceSource=JSON.parse(runConfigurationText).price_snapshot;
  const priceSnapshot={...structuredClone(priceSource),sha256:priceSource.source_page_sha256};
- if(capture.records.some(row=>row.cost?.price_snapshot_sha256!==priceSnapshot.sha256||row.cost?.currency!==priceSnapshot.currency))fail('price_binding');
+ if(capture.records.some(row=>row.cost!==null&&(row.cost?.price_snapshot_sha256!==priceSnapshot.sha256||row.cost?.currency!==priceSnapshot.currency)))fail('price_binding');
  const sourceAuditSummary={verified:0,undetermined:0,by_arm:{old:{verified:0,undetermined:0},new:{verified:0,undetermined:0}},reasons:{}};
  const records=[];
  for(const row of capture.records){
@@ -256,17 +267,17 @@ async function main(){
   });
  }
  const run={
-  schema_version:'reply-migration-run-v1',protocol_version:'migration-comparison-v1',evidence_kind:'model_run',synthetic_only:true,
+  schema_version:'reply-migration-run-v1',protocol_version:'migration-comparison-v1',evidence_kind:args.mode==='local-only'?'reporter_fixture':'model_run',synthetic_review_fixture:args.mode==='local-only',synthetic_only:true,
   manifest_sha256:capture.source_bindings.manifest_sha256,dataset_sha256:digest(datasetText),
-  configuration:config,config_hash:configHash,
+  configuration:config,config_hash:configHash,model_surface_bindings:modelSurfaces,
   bindings:{
-   old:{commit:capture.source_bindings.old_commit,lock_hash:capture.source_bindings.lock_sha256,profile_hash:null},
+   old:{commit:capture.source_bindings.old_commit,lock_hash:capture.source_bindings.lock_sha256,profile_hash:modelSurfaces?.profile_hashes.old??null},
    new:{commit:capture.source_bindings.new_commit,lock_hash:capture.source_bindings.lock_sha256,profile_hash:capture.source_bindings.profile_sha256,dsh_commit:capture.source_bindings.dsh_commit},
   },
   price_snapshot:priceSnapshot,records,
  };
  const summary={
-  schema_version:'ticket25-normalized-run-summary-v1',
+  schema_version:'ticket25-normalized-run-summary-v1',evidence_kind:args.mode==='local-only'?'reporter_fixture':'model_run',model_surface_bindings:modelSurfaces,
   capture_sha256:digest(capture),dataset_sha256:digest(datasetText),visible_sha256:digest(visible),
   reviewers:reviewers.map(reviewer=>({reviewer_id:reviewer.reviewer_id,reviewer_model:reviewer.reviewer_model,reviewer_version:reviewer.reviewer_version,items:reviewer.items.length})),
   records:records.length,successes:records.filter(row=>row.terminal_status==='succeeded').length,
@@ -288,7 +299,7 @@ async function main(){
  };
  await writeFile(args.output,JSON.stringify(run,null,2)+'\n',{flag:'wx',mode:0o600});
  await writeFile(args['summary-output'],JSON.stringify(summary,null,2)+'\n',{flag:'wx',mode:0o600});
- process.stdout.write(JSON.stringify({records:summary.records,successes:summary.successes,failures:summary.failures,reviews:summary.reviews,config_hash:configHash,real_model_quality_verified:false,production_switch_approved:false})+'\n');
+ process.stdout.write(JSON.stringify({evidence_kind:run.evidence_kind,records:summary.records,successes:summary.successes,failures:summary.failures,reviews:summary.reviews,config_hash:configHash,real_model_quality_verified:false,production_switch_approved:false})+'\n');
 }
 
 main().catch(error=>{process.stderr.write(String(process.env.NOTALONE_TICKET25_DEBUG?error?.stack??error:error?.message??error)+'\n');process.exitCode=1;});
