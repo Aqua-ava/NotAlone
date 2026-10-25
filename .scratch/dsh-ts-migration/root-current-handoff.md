@@ -2,7 +2,7 @@
 
 用户要求的目标正文修正无法由当前目标工具改写，以下为持久执行约束：无依赖任务必须创建全新、用户可见的 Codex 会话，不是 sub-agent；会话直接通信，主会话统一集成并独占 App／微信验收。当前验收联系人使用 `cloudy`；此前 `ran` 的证据保留但不再使用。不得发送未明确指定的外部消息。用户已授权全部可用额度并确认后续可安全推进的步骤，禁止 push、打包或创建 PR。`get_goal` 仍返回旧 `ran` 正文和 `blocked` 状态，不得谎称目标正文已更新。
 
-当前代码 HEAD 为 `cf88db24730939bbd2f9d3eef5349f8a24d795b4`。用户已要求所有现有会话收尾，后续由新 agent 接管；不得继续等待旧会话或扩大验收。
+当前代码 HEAD 为 `030d3e1c9b2d3bf1841cd4d34f84e2ffc909da75`。用户已要求所有现有会话收尾，后续由新 agent 接管；不得继续等待旧会话或扩大验收。
 
 - Ticket 01—24 均 `resolved`；Ticket 25 为 `claimed`，Ticket 26 为 `open`。
 - `282f43af` 收紧未知/风险项候选并修正 SSE 终态；`d59ffd0a` 修复跨助手会话停止投影；`cca335e4` 补齐 Python 兼容中断路由的 `user_cancelled`。
@@ -15,9 +15,8 @@
 - `98ec114f`→`5c34f869`→`fb64f0ee`→`cf88db24` 逐步补齐请求局部 evidence/history/
   discussion/Skill alias、嵌套 JSON 与 v2 catalog/mapping 生产采集。`cf88db24` 的回复
   454/454、Skill 93/93、比较/来源/盲包 258/258、三轮 RED 11/11 和类型检查通过。
-- 第四位可见独立审查对 `cf88db24` 判 `changes requested`：分层资料 system prompt 与正式
-  `read_scenario` 仍泄漏真实 profile/scenario/version/memory UUID；v2 采集器仍依赖测试传入
-  PG snapshot。当前工作树针对这两项有未提交修复，尚未完成验证、提交或第五次独立审查。
+- `030d3e1c` 已补分层资料 system/read_scenario alias 与实际 DSH+PG 来源采集；定向回归
+  58/58、TypeScript、`git diff --check`、公开扫描通过。仍需第五位可见审查并在最终切片后全量回归。
 - 实际 App 停止验收已通过：按钮可见，补丁 `queued→generating→stopping→cancelled`，turn `88e65711-0d21-4cd6-934b-2e3de6909937` 为 `failed/user_cancelled`，候选 0，界面明确显示未保存候选。
 - DBX 已无损保存 `notalone_restart_connectivity_20261025.sql` 后关闭；未丢弃未保存查询。
 
@@ -26,8 +25,7 @@ CDP 仅作脱敏事件观察。全程未发送微信消息，未保存或上传�
 
 下一步：
 
-1. 先审查当前未提交改动，确认 system/read_scenario alias 与生产采集器真实从完成后的 PG 取数；
-   跑最小相关测试后再创建只含该切片的本地提交，并交第五位全新可见审查。
+1. 从 `030d3e1c` 继续：先交第五位全新可见审查并重跑最终回复全量；`b3966784` 是 Ticket 25 交接。
 2. 明确 `approve` 后建立足额新预算，跑固定 96 次、无重试、全分母、完整五阶段与新双盲/第三裁决；
    费用、质量、失败率、调用、token、延迟任一未通过均保持 `claimed / not approved`。
 3. 最终代码变更后重新核验 App 生成、停止、联系人和同步范围闭环；Ticket 25 通过后才可推进 Ticket 26。
