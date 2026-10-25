@@ -1,0 +1,35 @@
+TAP version 13
+# reply_generation_unknown_failure { kind: undefined, code: undefined, reason: undefined }
+# Subtest: 纯 TS 公开异步生成完成后原生控制器直接发布，保存恢复不新增模型调用
+not ok 1 - 纯 TS 公开异步生成完成后原生控制器直接发布，保存恢复不新增模型调用
+  ---
+  duration_ms: 1909.820792
+  type: 'test'
+  location: '/Users/<REDACTED>/Documents/learn/NotAlone/.scratch/dsh-ts-migration/app-generation-publication-fix/agent/red-minimal.test.mjs:18:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    后端完成并保存候选后，本次生成必须直接发布
+    
+    'failed' !== 'ready'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'ready'
+  actual: 'failed'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/<REDACTED>/Documents/learn/NotAlone/.scratch/dsh-ts-migration/app-generation-publication-fix/agent/red-minimal.test.mjs:61:9)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# {"phase":"failed","errorCode":"generation_failed","jobPhases":["unconfirmed"],"stored":[{"state":"completed"}],"candidates":1,"modelCalls":1,"recoveredCandidates":1,"trace":[{"method":"POST","path":"/api/contacts/4d2af552-524e-48ce-916b-3b1cd46dea58/assistant-session/default","status":200,"keys":["session_id"]},{"method":"GET","path":"/api/contacts/4d2af552-524e-48ce-916b-3b1cd46dea58/assistant-sessions/9a46c0f7-bad6-469f-ace1-5b573fd10adc","status":200,"keys":["session_id","current_input_version_id","turns","inputs"]},{"method":"GET","path":"/api/contacts/4d2af552-524e-48ce-916b-3b1cd46dea58/assistant-sessions/9a46c0f7-bad6-469f-ace1-5b573fd10adc/selections","status":200,"keys":["selection"]},{"method":"POST","path":"/api/contacts/4d2af552-524e-48ce-916b-3b1cd46dea58/assistant-sessions/9a46c0f7-bad6-469f-ace1-5b573fd10adc/replies/prepare","status":200,"keys":["session_id","turn_id","request_key","input_version_id","state"]},{"method":"POST","path":"/api/contacts/4d2af552-524e-48ce-916b-3b1cd46dea58/assistant-sessions/9a46c0f7-bad6-469f-ace1-5b573fd10adc/replies","status":200,"keys":["turn_id","input_version_id","request_key","state","input","interruption_reason","generation_active","reply","basis_changes","placeholder"],"replyKeys":["reply_request_id","candidates","context_receipt","used_skill","input_budget"]},{"method":"GET","path":"/api/contacts/4d2af552-524e-48ce-916b-3b1cd46dea58/assistant-sessions/9a46c0f7-bad6-469f-ace1-5b573fd10adc","status":200,"keys":["session_id","current_input_version_id","turns","inputs"]},{"method":"GET","path":"/api/contacts/4d2af552-524e-48ce-916b-3b1cd46dea58/assistant-sessions/9a46c0f7-bad6-469f-ace1-5b573fd10adc/selections","status":200,"keys":["selection"]},{"method":"GET","path":"/api/contacts/4d2af552-524e-48ce-916b-3b1cd46dea58/assistant-sessions/9a46c0f7-bad6-469f-ace1-5b573fd10adc/candidates/3d70cb77-1be9-4a4f-a2ea-8e2963f082bb/versions?page=0","status":200,"keys":["session_id","turn_id","candidate_id","candidate_group_id","candidate_number","default_display_version_id","versions","page_number","version_count","next_page"]},{"method":"GET","path":"/api/contacts/4d2af552-524e-48ce-916b-3b1cd46dea58/assistant-sessions/9a46c0f7-bad6-469f-ace1-5b573fd10adc/selections","status":200,"keys":["selection"]}]}
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2013.900584

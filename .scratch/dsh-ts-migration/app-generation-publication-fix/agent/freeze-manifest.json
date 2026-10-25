@@ -1,0 +1,48 @@
+{
+  "initial_pin": "a102ae51548039f23a4a148fadb6cbe5a8bb9cc5",
+  "freeze_head": "d360cec17773e7cfa372f91c96fd60e6bb6c5015",
+  "code_files": {
+    "backend-ts/src/pure-ts-public-api.ts": "698b368fec73811ce84408973485036d1b8920cd9bcd1a6eed547be21074c833",
+    "backend-ts/test/pure-ts-reply.test.mjs": "4da154af97c367ef1db93221df965c14066a369819931fa10bf84c3fc8e6d1fb",
+    "backend-ts/test/assistant-generation-publication.test.mjs": "4d24e8e76884b7b25822e0c9171afaf3c0c3bc23a86ebc99c0ef02f2ce83b486"
+  },
+  "root_observation_sha256": "135e4ca382a4750298074c7f236b4f98c5c452428e325bc4d53848a3859d1246",
+  "unchanged_boundary_files": {
+    "backend-ts/src/assistant-generation-lifecycle.ts": "b58f390ace423c88ca8ffbdb2061db872273576bdaa9adb9fe84ebfdb9304724",
+    "desktop/src/main/reply/assistant-generation-jobs.ts": "9cf2784a6f6d91b53d6e4156a0b88bf0e347ed3a61ec41bcbac7d66ce15da4fc",
+    "desktop/src/main/reply/assistant-session-projection.ts": "525be6dba32f5b8a9eba18a0ef57b2ea7a66a38094eaaaea08bee7a6459c1805",
+    "desktop/src/main/reply/assistant-generation-adapters.ts": "b8d620fb2f95f0599badf3e335c6f715de0868de764cb49d93df2e05338e79c5",
+    "desktop/src/main/backend/json-client.ts": "066ac5d91f9e6b261d409e43cea65b43dacf05a9807ea1d97b4dd00c2179854a",
+    "desktop/src/renderer/AssistantSessionPanel.tsx": "0239ad2d2eb68e08ee5f7075b2c7cee3585e7dd01f0f64f69199212e14d9e119"
+  },
+  "source_patch_sha256": "4b40414ce207826ea0209afd45ef870c33ccd84ed77358a01af526a6d591e6c7",
+  "evidence_map_sha256": "621f072cf6f5a8031f24bb3f065f59609711ef59f8c3175c180cf389d1de0644",
+  "results": {
+    "original_loop": {
+      "exit_code": 0,
+      "log": "original-loop-green.tap"
+    },
+    "regression": {
+      "passed": 5,
+      "failed": 0,
+      "log": "green-publication-module.tap"
+    },
+    "backend_related": {
+      "passed": 13,
+      "failed": 0,
+      "log": "backend-related.log"
+    },
+    "desktop_related": {
+      "passed": 11,
+      "failed": 0,
+      "log": "desktop-generation-execution.log"
+    },
+    "backend_typecheck": 0,
+    "desktop_typecheck": 0,
+    "scoped_diff_check": 0
+  },
+  "real_model_calls": 0,
+  "app_started": false,
+  "git_mutations": false,
+  "handoff_lines": 28
+}

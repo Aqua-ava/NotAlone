@@ -1,0 +1,42 @@
+TAP version 13
+# Subtest: 纯 TS 公开异步生成完成后原生控制器直接发布，保存恢复不新增模型调用
+not ok 1 - 纯 TS 公开异步生成完成后原生控制器直接发布，保存恢复不新增模型调用
+  ---
+  duration_ms: 1124.458
+  type: 'test'
+  location: '/Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/assistant-generation-publication.test.mjs:18:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + []
+    - [
+    -   {
+    -     state: 'completed'
+    -   }
+    - ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0:
+      state: 'completed'
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/assistant-generation-publication.test.mjs:52:9)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# {"phase":"failed","errorCode":"rejected","jobPhases":[],"stored":[],"candidates":0,"modelCalls":0,"trace":[{"method":"POST","path":"/api/contacts/bb4dc3e5-c140-4152-b276-08a140cf4e63/assistant-session/default","status":200,"keys":["session_id"]},{"method":"GET","path":"/api/contacts/bb4dc3e5-c140-4152-b276-08a140cf4e63/assistant-sessions/b89cf403-9fb3-4f8d-914c-550a67240d00","status":200,"keys":["session_id","current_input_version_id","turns","inputs"]},{"method":"GET","path":"/api/contacts/bb4dc3e5-c140-4152-b276-08a140cf4e63/assistant-sessions/b89cf403-9fb3-4f8d-914c-550a67240d00/selections","status":200,"keys":["selection"]}]}
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1304.835708

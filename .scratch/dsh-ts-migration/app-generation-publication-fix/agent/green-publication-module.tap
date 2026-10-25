@@ -1,0 +1,42 @@
+TAP version 13
+# Subtest: 纯 TS 公开异步生成完成后原生控制器直接发布，保存恢复不新增模型调用
+ok 1 - 纯 TS 公开异步生成完成后原生控制器直接发布，保存恢复不新增模型调用
+  ---
+  duration_ms: 1904.11
+  type: 'test'
+  ...
+# {"phase":"ready","jobPhases":["completed"],"stored":[{"state":"completed"}],"candidates":3,"modelCalls":1,"recoveredCandidates":3}
+# Subtest: 公开完成回执lost-response仍保留未确认身份，明确读取原保存结果后恢复
+ok 2 - 公开完成回执lost-response仍保留未确认身份，明确读取原保存结果后恢复
+  ---
+  duration_ms: 2506.984792
+  type: 'test'
+  ...
+# reply_generation_unknown_failure { kind: undefined, code: undefined, reason: undefined }
+# Subtest: 公开完成回执wrong-session仍保留未确认身份，明确读取原保存结果后恢复
+ok 3 - 公开完成回执wrong-session仍保留未确认身份，明确读取原保存结果后恢复
+  ---
+  duration_ms: 1961.3695
+  type: 'test'
+  ...
+# Subtest: 生成中切换联系人后晚结果仅属于原会话，切回读取不重新生成
+ok 4 - 生成中切换联系人后晚结果仅属于原会话，切回读取不重新生成
+  ---
+  duration_ms: 2182.052084
+  type: 'test'
+  ...
+# Subtest: 公开异步准备的接纳与查询只返回原身份，取消不发布完成候选
+ok 5 - 公开异步准备的接纳与查询只返回原身份，取消不发布完成候选
+  ---
+  duration_ms: 1441.896083
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10098.763125

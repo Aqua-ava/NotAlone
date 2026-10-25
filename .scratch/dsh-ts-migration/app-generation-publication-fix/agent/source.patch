@@ -1,0 +1,196 @@
+diff --git a/backend-ts/src/pure-ts-public-api.ts b/backend-ts/src/pure-ts-public-api.ts
+index 15700a9c..3626efa8 100644
+--- a/backend-ts/src/pure-ts-public-api.ts
++++ b/backend-ts/src/pure-ts-public-api.ts
+@@ -17,6 +17,16 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ function exact(value:unknown,keys:string[],optional:string[]=[]):value is Row{
+  return Boolean(value&&typeof value==='object'&&!Array.isArray(value)&&keys.every(key=>Object.hasOwn(value,key))&&Object.keys(value).every(key=>keys.includes(key)||optional.includes(key)));
+ }
++// 会话读取保留嵌套轮次；生成完成响应沿用桌面要求的候选与归属字段，不能直接返回内部轮次。
++function completedGenerationPayload(value:unknown,sessionId:string,restoreInput=false):unknown{
++ if(!value||typeof value!=='object'||Array.isArray(value))return value;
++ const turn=value as Row;
++ if(turn.state!=='completed'||!turn.reply||typeof turn.reply!=='object'||Array.isArray(turn.reply))return value;
++ return {...turn.reply,session_id:sessionId.toLowerCase(),turn_id:turn.turn_id,input_version_id:turn.input_version_id,state:turn.state,
++  ...(turn.basis_changes===undefined?{}:{basis_changes:turn.basis_changes}),
++  ...(turn.continuation===undefined?{}:{continuation:turn.continuation,effective_input:turn.effective_input,effective_scene:turn.effective_scene}),
++  ...(restoreInput?{restored_input:turn.input}:{})};
++}
+ export function createPureTsPublicApi(options:{ownerId?:string;available:boolean;discussion:AssistantDiscussionService;reply:ReplyHttpService;storage:HostStorage;skillsRoot:string;exploration:ExplorationHttpService;generation?:AssistantGenerationLifecycle}){
+  return {async handle(req:IncomingMessage,res:ServerResponse,url:URL):Promise<boolean>{
+   const path=url.pathname;
+@@ -50,7 +60,10 @@ export function createPureTsPublicApi(options:{ownerId?:string;available:boolean
+     if(!options.available&&req.method==='POST'&&!/\/(?:interrupt|preparation-format)$/.test(path)&&!path.includes('/status/')){respond(503,{error:'reply_unavailable'});return true;}
+     const verified=await resolvePublicReplyScope(options.storage,scope.contact_id,req.headers['x-notalone-manual-contact']===contact);
+     const result=await withPublicReplyScope(verified,()=>options.generation!.handle({method:req.method??'',path:req.url??path,body,scope:verified,signal:controller.signal,respondAsync:req.headers.prefer==='respond-async'}));
+-    if(result){respond(result.status,result.payload);return true;}
++    if(result){
++     const completed=result.status===200&&parts.length===6&&['replies','replace','retry-interrupted','continue'].includes(parts[5]);
++     respond(result.status,completed?completedGenerationPayload(result.payload,parts[4],parts[5]==='retry-interrupted'):result.payload);return true;
++    }
+    }
+    const dispatch=async()=>{
+    const session=parts[4];let result:unknown;
+@@ -94,7 +107,10 @@ export function createPureTsPublicApi(options:{ownerId?:string;available:boolean
+      if(options.generation&&parts.length===8&&['confirm','answer','prepare-confirm','prepare-answer'].includes(parts[7])){
+       const verified=await resolvePublicReplyScope(options.storage,scope.contact_id,req.headers['x-notalone-manual-contact']===contact);
+       const generated=await withPublicReplyScope(verified,()=>options.generation!.handleExploration({method:req.method??'',path:req.url??path,body,scope:verified,signal:controller.signal},options.exploration));
+-      if(generated){respond(generated.status,generated.payload);return true;}
++      if(generated){
++       const payload=generated.payload as Row;
++       respond(generated.status,generated.status===200&&payload?.kind==='generated'?{...payload,turn:completedGenerationPayload(payload.turn,session)}:payload);return true;
++      }
+      }
+      let action:string,request:Row;
+      if(parts.length===6&&req.method==='POST'){action='open';request=body as Row;}
+diff --git a/backend-ts/test/pure-ts-reply.test.mjs b/backend-ts/test/pure-ts-reply.test.mjs
+index 0243e748..a17cbd1b 100644
+--- a/backend-ts/test/pure-ts-reply.test.mjs
++++ b/backend-ts/test/pure-ts-reply.test.mjs
+@@ -24,12 +24,12 @@ test('纯 TS 公开回复调用本机供应商并持久重放，撤销绑定后
+  const sessionPath=`/api/contacts/${contact}/assistant-sessions/${session.data.session_id}`;
+  const command={...body,idempotency_key:randomUUID()};
+  const prepared=await app.request(`${sessionPath}/replies/prepare`,command);assert.equal(prepared.status,200,JSON.stringify(prepared));assert.equal(requests.length,1,'准备不能调用供应商');
+- const generated=await app.request(`${sessionPath}/replies`,command);assert.equal(generated.status,200,JSON.stringify(generated));assert.equal(generated.data.reply.candidates[0].text,'明天见');
++ const generated=await app.request(`${sessionPath}/replies`,command);assert.equal(generated.status,200,JSON.stringify(generated));assert.equal(generated.data.session_id,session.data.session_id);assert.equal(generated.data.candidates[0].text,'明天见');
+  assert.equal(requests.length,2);
+  const reopened=await app.request(sessionPath);assert.equal(reopened.status,200);assert.equal(reopened.data.turns[0].state,'completed');
+  const fragment=await app.request(`${sessionPath}?read_part=0`);assert.equal(fragment.status,200);assert.deepEqual(JSON.parse(fragment.data.payload_fragment),reopened.data);
+  assert.equal((await app.request(`${sessionPath}?read_part=0&read_id=${'0'.repeat(64)}`)).status,409);
+- const candidate=generated.data.reply.candidates[0];
++ const candidate=generated.data.candidates[0];
+  const versions=await app.request(`${sessionPath}/candidates/${candidate.candidate_id}/versions?page=0`);assert.equal(versions.status,200);assert.equal(versions.data.version_count,1);assert.equal(versions.data.versions.length,1);assert.equal(versions.data.selected_version_id,undefined);
+  const edited=await app.request(`${sessionPath}/candidates/${candidate.candidate_id}/versions?receipt=1`,{edit_key:randomUUID(),parent_version_id:candidate.candidate_id,messages:[{message_id:candidate.messages[0].message_id,text:'稍后见'}]});assert.equal(edited.status,200,JSON.stringify(edited));
+  const page=await app.request(`${sessionPath}/candidates/${candidate.candidate_id}/versions?page=1&through=${edited.data.version_id}`);assert.equal(page.status,200);assert.equal(page.data.versions[0].text,'稍后见');assert.equal(page.data.versions[0].edit_key,undefined);
+diff --git a/backend-ts/test/assistant-generation-publication.test.mjs b/backend-ts/test/assistant-generation-publication.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/backend-ts/test/assistant-generation-publication.test.mjs
+@@ -0,0 +1,127 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {randomUUID} from 'node:crypto';
++import {createRequire} from 'node:module';
++import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
++import {syntheticProvider,actualEvidenceId} from './pure-ts-provider-fixture.mjs';
++import {sendEvents,useTool} from './reply-service-runtime-support.mjs';
++
++const require=createRequire(new URL('../../desktop/package.json',import.meta.url));
++const {build}=require('esbuild');
++const bundled=await build({stdin:{contents:`
++ export {ContactSession} from './src/main/contacts/session';
++ export {ReplySession} from './src/main/reply/session';
++ export {JsonClient,BackendRequestFailure} from './src/main/backend/json-client';
++ `,resolveDir:new URL('../../desktop/',import.meta.url).pathname},bundle:true,platform:'node',format:'esm',write:false});
++const desktop=await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text+'\n//# sourceURL=assistant-publication-controller.mjs\n').toString('base64')}`);
++
++function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
++
++// 只启动自有合成 PG、正式 TS 宿主与回环供应商；原生控制器不启动 Electron。
++async function publicationFixture(t,{holdModel=false}={}){
++ const previousMask=process.umask(0o077);t.after(()=>process.umask(previousMask));
++ const entered=deferred(),release=deferred();t.after(()=>release.resolve());
++ const f=await pureTsFixture(t),owner=randomUUID(),contact=randomUUID(),binding=randomUUID(),otherContact=holdModel?randomUUID():null;
++ await f.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成本人')",[owner]);
++ await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);
++ await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[binding,owner,contact]);
++ if(otherContact){
++  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'另一合成联系人')",[otherContact,owner]);
++  await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[randomUUID(),owner,otherContact]);
++ }
++ const provider=await syntheticProvider(t,async(body,res)=>{
++  const events=[{type:'message_start',message:{id:'synthetic',model:'deepseek-flash',usage:{input_tokens:12,output_tokens:0}}},{},{},{},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:9}},{type:'message_stop'}];
++  useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[1,2,3].map(n=>({text:`合成候选${n}`,basis:'本次合成草稿',citation_ids:[actualEvidenceId(body)],risk_notes:[]}))});
++  entered.resolve();if(holdModel)await release.promise;
++  sendEvents(res,events);
++ });
++ const app=await f.start({NOTALONE_OWNER_ID:owner,NOTALONE_DEEPSEEK_API_KEY:'synthetic-only',NOTALONE_SYNTHETIC_PROVIDER_URL:provider.url});
++ const port=Number(app.connection.address.split(':')[1]);
++ const client=new desktop.JsonClient({...app.connection,port});
++ t.after(()=>client.cancelPending());
++ const trace=[],delivery={};
++ const backend={getConnectionGeneration:()=>1,onStateChanged:()=>()=>{},subscribeMessages:()=>{},
++  requestJson:async options=>{
++   let response;
++   try{response=await client.perform({...options,manualContactId:options.path.split('/')[3]});}catch(error){trace.push({method:options.method,path:options.path,kind:error.kind,status:error.status,code:error.code});throw error;}
++   trace.push({method:options.method,path:options.path,status:response.status,asyncPreparation:options.asyncPreparation===true,keys:Object.keys(response.data??{})});
++   await delivery.after?.(options,response);
++   return {generation:1,data:response.data};
++  }};
++ const contacts=new desktop.ContactSession(async()=>({generation:1,contacts:[contact,otherContact].filter(Boolean).map(contactId=>({contactId,displayName:'合成联系人',messageCount:0,sourceCount:0}))}));
++ const replies=new desktop.ReplySession(contacts,backend);
++ contacts.setConnection(1);await contacts.refreshContacts();
++ const connect=async(contactId=contact)=>{
++  contacts.selectContact({contactId,scopeRevision:contacts.getState().scopeRevision});
++  const scope={contactId,scopeRevision:contacts.getState().scopeRevision};await replies.readSavedSession(scope);return scope;
++ };
++ const scope=await connect();
++ contacts.setDraft({...scope,text:'合成草稿'});
++ return {f,app,provider,owner,contact,otherContact,scope,client,backend,contacts,replies,connect,trace,delivery,entered:entered.promise,release:()=>release.resolve()};
++}
++
++test('纯 TS 公开异步生成完成后原生控制器直接发布，保存恢复不新增模型调用',{timeout:30000},async t=>{
++ const x=await publicationFixture(t);
++ await x.replies.generate({...x.scope,newRequest:true});
++ const state=x.replies.getState();
++ const stored=(await x.f.client.query('SELECT state FROM assistant_session_turn')).rows;
++ const candidates=(await x.f.client.query('SELECT count(*)::int AS n FROM reply_candidate')).rows[0].n;
++ await x.replies.readSavedSession(x.scope);const restored=x.replies.getState();
++ t.diagnostic(JSON.stringify({phase:state.phase,errorCode:state.errorCode,jobPhases:state.generationJobs?.map(job=>job.phase),stored,candidates,modelCalls:x.provider.requests.length,recoveredCandidates:restored.result?.candidates.length}));
++ assert.deepEqual(stored,[{state:'completed'}]);
++ assert.equal(candidates,3);
++ assert.equal(x.provider.requests.length,1);
++ assert.equal(restored.result?.candidates.length,3);
++ assert.equal(restored.savedSession?.turns.at(-1)?.state,'completed');
++ assert.equal(x.provider.requests.length,1,'读取已保存讨论不得重新生成');
++ assert.equal(state.phase,'ready','后端完成并保存候选后，本次生成必须直接发布');
++ assert.equal(state.result?.candidates.length,3);
++ assert.equal(state.generationJobs?.at(-1)?.phase,'completed');
++ assert.ok(x.trace.some(item=>item.path.endsWith('/prepare')&&item.asyncPreparation));
++ assert.deepEqual(restored.result?.candidates.map(item=>item.candidateId),state.result?.candidates.map(item=>item.candidateId));
++});
++
++for(const fault of ['lost-response','wrong-session'])test(`公开完成回执${fault}仍保留未确认身份，明确读取原保存结果后恢复`,{timeout:30000},async t=>{
++ const x=await publicationFixture(t);
++ x.delivery.after=(options,response)=>{
++  if(!options.path.endsWith('/replies'))return;
++  if(fault==='lost-response')throw new desktop.BackendRequestFailure('connection');
++  response.data={...response.data,session_id:randomUUID()};
++ };
++ await x.replies.generate({...x.scope,newRequest:true});
++ const uncertain=x.replies.getState();
++ assert.equal(uncertain.phase,'failed');assert.equal(uncertain.result,null);
++ assert.equal(uncertain.generationJobs.at(-1).phase,'unconfirmed');
++ assert.equal((await x.f.client.query('SELECT state FROM assistant_session_turn')).rows[0].state,'completed');
++ await x.replies.readSavedSession(x.scope);
++ assert.equal(x.replies.getState().result?.candidates.length,3);
++ assert.equal(x.replies.getState().generationJobs.at(-1).phase,'completed');
++ assert.equal(x.provider.requests.length,1);
++});
++
++test('生成中切换联系人后晚结果仅属于原会话，切回读取不重新生成',{timeout:30000},async t=>{
++ const x=await publicationFixture(t,{holdModel:true});
++ const running=x.replies.generate({...x.scope,newRequest:true});
++ try{
++  await x.entered;await x.connect(x.otherContact);x.release();await running;
++  const other=x.replies.getState();assert.equal(other.contactId,x.otherContact);assert.equal(other.result,null);
++  await x.connect();const restored=x.replies.getState();
++  assert.equal(restored.contactId,x.contact);assert.equal(restored.result?.candidates.length,3);
++  assert.equal(restored.generationJobs.at(-1).phase,'completed');assert.equal(x.provider.requests.length,1);
++ }finally{x.release();await running;}
++});
++
++test('公开异步准备的接纳与查询只返回原身份，取消不发布完成候选',{timeout:30000},async t=>{
++ const x=await publicationFixture(t),session=x.replies.getState().savedSession.sessionId;
++ const path=`/api/contacts/${x.contact}/assistant-sessions/${session}`;
++ const body={contact_id:x.contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:'合成草稿',include_relationship_context:false},skill_disabled:true};
++ const accepted=await x.app.request(`${path}/replies/prepare`,body,'POST',x.app.connection.token,{Prefer:'respond-async','X-NotAlone-Manual-Contact':x.contact});
++ assert.equal(accepted.status,202);assert.deepEqual(Object.keys(accepted.data).sort(),['preparation_id','state']);assert.equal(accepted.data.state,'preparing');
++ const prepared=await x.client.perform({method:'POST',path:`${path}/replies/prepare`,body,asyncPreparation:true,manualContactId:x.contact});
++ const queried=await x.client.perform({method:'GET',path:`${path}/replies/prepare/status/${accepted.data.preparation_id}`,manualContactId:x.contact});
++ assert.equal(queried.status,200);assert.deepEqual(queried,prepared);
++ assert.deepEqual(Object.keys(queried.data).sort(),['input_version_id','request_key','session_id','state','turn_id']);
++ const interrupted=await x.app.request(`${path}/interrupt`,{request_key:body.idempotency_key,input_version_id:prepared.data.input_version_id,reason:'user_cancelled'},'POST',x.app.connection.token,{'X-NotAlone-Manual-Contact':x.contact});
++ assert.equal(interrupted.status,200);assert.equal(interrupted.data.state,'failed');assert.equal(interrupted.data.interruption_reason,'user_cancelled');
++ assert.equal(x.provider.requests.length,0);
++});

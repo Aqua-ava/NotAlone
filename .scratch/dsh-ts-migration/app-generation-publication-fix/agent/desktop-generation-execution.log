@@ -1,0 +1,76 @@
+TAP version 13
+# Subtest: 受管继续准备澄清在消费窗口保持可发布，消费失败仍结算明确未生成身份
+ok 1 - 受管继续准备澄清在消费窗口保持可发布，消费失败仍结算明确未生成身份
+  ---
+  duration_ms: 1.410917
+  type: 'test'
+  ...
+# Subtest: 受管方向准备明确暂停后不派发执行，也不保留未知准备退出身份
+ok 2 - 受管方向准备明确暂停后不派发执行，也不保留未知准备退出身份
+  ---
+  duration_ms: 0.24875
+  type: 'test'
+  ...
+# Subtest: 受管普通生成完成后展示抛错仍完成，且不复读失败或留下退出身份
+ok 3 - 受管普通生成完成后展示抛错仍完成，且不复读失败或留下退出身份
+  ---
+  duration_ms: 0.54425
+  type: 'test'
+  ...
+# Subtest: 失败租约证据 true 仅明确 false 结算身份
+ok 4 - 失败租约证据 true 仅明确 false 结算身份
+  ---
+  duration_ms: 0.568083
+  type: 'test'
+  ...
+# Subtest: 失败租约证据 undefined 仅明确 false 结算身份
+ok 5 - 失败租约证据 undefined 仅明确 false 结算身份
+  ---
+  duration_ms: 0.156417
+  type: 'test'
+  ...
+# Subtest: 失败租约证据 false 仅明确 false 结算身份
+ok 6 - 失败租约证据 false 仅明确 false 结算身份
+  ---
+  duration_ms: 0.154458
+  type: 'test'
+  ...
+# Subtest: 网络结束释放本地执行许可但保留原未确认身份，下一请求能执行
+ok 7 - 网络结束释放本地执行许可但保留原未确认身份，下一请求能执行
+  ---
+  duration_ms: 0.345
+  type: 'test'
+  ...
+# Subtest: 受管未确认作业重载配置仍经捕获的原停止句柄并携带 configuration_reload
+ok 8 - 受管未确认作业重载配置仍经捕获的原停止句柄并携带 configuration_reload
+  ---
+  duration_ms: 1.092584
+  type: 'test'
+  ...
+# Subtest: 用户停止确认在途时退出等待同一取消，不并发改写为 app_quit
+ok 9 - 用户停止确认在途时退出等待同一取消，不并发改写为 app_quit
+  ---
+  duration_ms: 14.283792
+  type: 'test'
+  ...
+# Subtest: 跨连接保留32个未知准备后拒绝第33个，不能丢弃未知身份腾容量
+ok 10 - 跨连接保留32个未知准备后拒绝第33个，不能丢弃未知身份腾容量
+  ---
+  duration_ms: 0.911208
+  type: 'test'
+  ...
+# Subtest: 实际生成完成后消费仍悬挂时释放本地许可，保留原展示窗口并允许下一生成
+ok 11 - 实际生成完成后消费仍悬挂时释放本地许可，保留原展示窗口并允许下一生成
+  ---
+  duration_ms: 0.215292
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 170.145542

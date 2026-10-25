@@ -24,12 +24,12 @@ test('纯 TS 公开回复调用本机供应商并持久重放，撤销绑定后�
  const sessionPath=`/api/contacts/${contact}/assistant-sessions/${session.data.session_id}`;
  const command={...body,idempotency_key:randomUUID()};
  const prepared=await app.request(`${sessionPath}/replies/prepare`,command);assert.equal(prepared.status,200,JSON.stringify(prepared));assert.equal(requests.length,1,'准备不能调用供应商');
- const generated=await app.request(`${sessionPath}/replies`,command);assert.equal(generated.status,200,JSON.stringify(generated));assert.equal(generated.data.reply.candidates[0].text,'明天见');
+ const generated=await app.request(`${sessionPath}/replies`,command);assert.equal(generated.status,200,JSON.stringify(generated));assert.equal(generated.data.session_id,session.data.session_id);assert.equal(generated.data.candidates[0].text,'明天见');
  assert.equal(requests.length,2);
  const reopened=await app.request(sessionPath);assert.equal(reopened.status,200);assert.equal(reopened.data.turns[0].state,'completed');
  const fragment=await app.request(`${sessionPath}?read_part=0`);assert.equal(fragment.status,200);assert.deepEqual(JSON.parse(fragment.data.payload_fragment),reopened.data);
  assert.equal((await app.request(`${sessionPath}?read_part=0&read_id=${'0'.repeat(64)}`)).status,409);
- const candidate=generated.data.reply.candidates[0];
+ const candidate=generated.data.candidates[0];
  const versions=await app.request(`${sessionPath}/candidates/${candidate.candidate_id}/versions?page=0`);assert.equal(versions.status,200);assert.equal(versions.data.version_count,1);assert.equal(versions.data.versions.length,1);assert.equal(versions.data.selected_version_id,undefined);
  const edited=await app.request(`${sessionPath}/candidates/${candidate.candidate_id}/versions?receipt=1`,{edit_key:randomUUID(),parent_version_id:candidate.candidate_id,messages:[{message_id:candidate.messages[0].message_id,text:'稍后见'}]});assert.equal(edited.status,200,JSON.stringify(edited));
  const page=await app.request(`${sessionPath}/candidates/${candidate.candidate_id}/versions?page=1&through=${edited.data.version_id}`);assert.equal(page.status,200);assert.equal(page.data.versions[0].text,'稍后见');assert.equal(page.data.versions[0].edit_key,undefined);

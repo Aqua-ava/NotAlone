@@ -1,0 +1,58 @@
+TAP version 13
+# ✘ [ERROR] Could not resolve "file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/src/main/contacts/session"
+#     <stdin>:2:30:
+#       2 │ ...sion} from 'file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-t...
+#         ╵               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#   You can mark the path "file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/src/main/contacts/session" as external to exclude it from the bundle, which will remove this error and leave the unresolved path in the bundle.
+# ✘ [ERROR] Could not resolve "file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/src/main/reply/session"
+#     <stdin>:3:28:
+#       3 │ ...sion} from 'file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-t...
+#         ╵               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#   You can mark the path "file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/src/main/reply/session" as external to exclude it from the bundle, which will remove this error and leave the unresolved path in the bundle.
+# ✘ [ERROR] Could not resolve "file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/src/main/backend/json-client"
+#     <stdin>:4:26:
+#       4 │ ...ient} from 'file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-t...
+#         ╵               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#   You can mark the path "file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/src/main/backend/json-client" as external to exclude it from the bundle, which will remove this error and leave the unresolved path in the bundle.
+# /Users/<REDACTED>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1752
+#   let error = new Error(text);
+#               ^
+# Error: Build failed with 3 errors:
+# <stdin>:2:30: ERROR: Could not resolve "file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/src/main/contacts/session"
+# <stdin>:3:28: ERROR: Could not resolve "file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/src/main/reply/session"
+# <stdin>:4:26: ERROR: Could not resolve "file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/src/main/backend/json-client"
+#     at failureErrorWithLog (/Users/<REDACTED>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1752:15)
+#     at /Users/<REDACTED>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1211:25
+#     at /Users/<REDACTED>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1163:52
+#     at buildResponseToResult (/Users/<REDACTED>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1209:7)
+#     at /Users/<REDACTED>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:1236:16
+#     at responseCallbacks.<computed> (/Users/<REDACTED>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:886:9)
+#     at handleIncomingPacket (/Users/<REDACTED>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:941:12)
+#     at Socket.readFromStdout (/Users/<REDACTED>/Documents/learn/NotAlone/desktop/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js:864:7)
+#     at Socket.emit (node:events:509:28)
+#     at addChunk (node:internal/streams/readable:563:12) {
+#   errors: [Getter/Setter],
+#   warnings: [Getter/Setter]
+# }
+# Node.js v24.19.0
+# Subtest: ../.scratch/dsh-ts-migration/app-generation-publication-fix/agent/red-minimal.test.mjs
+not ok 1 - ../.scratch/dsh-ts-migration/app-generation-publication-fix/agent/red-minimal.test.mjs
+  ---
+  duration_ms: 104.232416
+  type: 'test'
+  location: '/Users/<REDACTED>/Documents/learn/NotAlone/.scratch/dsh-ts-migration/app-generation-publication-fix/agent/red-minimal.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 107.028667

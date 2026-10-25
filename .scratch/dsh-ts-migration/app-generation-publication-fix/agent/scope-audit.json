@@ -1,0 +1,14 @@
+{
+  "files_checked": 32,
+  "static_public_rules": 4,
+  "findings": [],
+  "private_env_read": false,
+  "root_observation_unchanged": true,
+  "handoff_lines": 28,
+  "fixture_cleanup_hooks": "passed",
+  "full_repository_public_scan": "root负责",
+  "all_public_artifacts_mode": "0600",
+  "public_and_private_directory_mode": "0700",
+  "raw_public_digest_pairs_verified": 27,
+  "frozen_code_digests_verified": true
+}

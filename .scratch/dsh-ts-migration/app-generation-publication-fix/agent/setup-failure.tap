@@ -1,0 +1,36 @@
+✖ 纯 TS 公开异步生成完成后原生控制器直接发布，保存恢复不新增模型调用 (1114.473583ms)
+ℹ {"phase":"failed","errorCode":"rejected","jobPhases":[],"stored":[],"candidates":0,"modelCalls":0,"trace":[{"method":"POST","path":"/api/contacts/7a8163e7-1b72-4051-b8d0-5fbc78d32b5b/assistant-session/default","status":200,"keys":["session_id"]},{"method":"GET","path":"/api/contacts/7a8163e7-1b72-4051-b8d0-5fbc78d32b5b/assistant-sessions/0a9ab7a5-1fbf-40cb-94df-5cf2f061ce27","status":200,"keys":["session_id","current_input_version_id","turns","inputs"]},{"method":"GET","path":"/api/contacts/7a8163e7-1b72-4051-b8d0-5fbc78d32b5b/assistant-sessions/0a9ab7a5-1fbf-40cb-94df-5cf2f061ce27/selections","status":200,"keys":["selection"]},{"method":"POST","path":"/api/contacts/7a8163e7-1b72-4051-b8d0-5fbc78d32b5b/assistant-sessions/0a9ab7a5-1fbf-40cb-94df-5cf2f061ce27/replies/prepare","kind":"response","status":409,"code":"reply_rejected"}]}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1294.0035
+
+✖ failing tests:
+
+test at test/assistant-generation-publication.test.mjs:18:1
+✖ 纯 TS 公开异步生成完成后原生控制器直接发布，保存恢复不新增模型调用 (1114.473583ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   {
+  -     state: 'completed'
+  -   }
+  - ]
+  
+      at TestContext.<anonymous> (file:///Users/<REDACTED>/Documents/learn/NotAlone/backend-ts/test/assistant-generation-publication.test.mjs:53:9)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ { state: 'completed' } ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

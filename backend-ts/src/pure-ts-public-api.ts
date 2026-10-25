@@ -17,6 +17,16 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function exact(value:unknown,keys:string[],optional:string[]=[]):value is Row{
  return Boolean(value&&typeof value==='object'&&!Array.isArray(value)&&keys.every(key=>Object.hasOwn(value,key))&&Object.keys(value).every(key=>keys.includes(key)||optional.includes(key)));
 }
+// 会话读取保留嵌套轮次；生成完成响应沿用桌面要求的候选与归属字段，不能直接返回内部轮次。
+function completedGenerationPayload(value:unknown,sessionId:string,restoreInput=false):unknown{
+ if(!value||typeof value!=='object'||Array.isArray(value))return value;
+ const turn=value as Row;
+ if(turn.state!=='completed'||!turn.reply||typeof turn.reply!=='object'||Array.isArray(turn.reply))return value;
+ return {...turn.reply,session_id:sessionId.toLowerCase(),turn_id:turn.turn_id,input_version_id:turn.input_version_id,state:turn.state,
+  ...(turn.basis_changes===undefined?{}:{basis_changes:turn.basis_changes}),
+  ...(turn.continuation===undefined?{}:{continuation:turn.continuation,effective_input:turn.effective_input,effective_scene:turn.effective_scene}),
+  ...(restoreInput?{restored_input:turn.input}:{})};
+}
 export function createPureTsPublicApi(options:{ownerId?:string;available:boolean;discussion:AssistantDiscussionService;reply:ReplyHttpService;storage:HostStorage;skillsRoot:string;exploration:ExplorationHttpService;generation?:AssistantGenerationLifecycle}){
  return {async handle(req:IncomingMessage,res:ServerResponse,url:URL):Promise<boolean>{
   const path=url.pathname;
@@ -50,7 +60,10 @@ export function createPureTsPublicApi(options:{ownerId?:string;available:boolean
     if(!options.available&&req.method==='POST'&&!/\/(?:interrupt|preparation-format)$/.test(path)&&!path.includes('/status/')){respond(503,{error:'reply_unavailable'});return true;}
     const verified=await resolvePublicReplyScope(options.storage,scope.contact_id,req.headers['x-notalone-manual-contact']===contact);
     const result=await withPublicReplyScope(verified,()=>options.generation!.handle({method:req.method??'',path:req.url??path,body,scope:verified,signal:controller.signal,respondAsync:req.headers.prefer==='respond-async'}));
-    if(result){respond(result.status,result.payload);return true;}
+    if(result){
+     const completed=result.status===200&&parts.length===6&&['replies','replace','retry-interrupted','continue'].includes(parts[5]);
+     respond(result.status,completed?completedGenerationPayload(result.payload,parts[4],parts[5]==='retry-interrupted'):result.payload);return true;
+    }
    }
    const dispatch=async()=>{
    const session=parts[4];let result:unknown;
@@ -94,7 +107,10 @@ export function createPureTsPublicApi(options:{ownerId?:string;available:boolean
      if(options.generation&&parts.length===8&&['confirm','answer','prepare-confirm','prepare-answer'].includes(parts[7])){
       const verified=await resolvePublicReplyScope(options.storage,scope.contact_id,req.headers['x-notalone-manual-contact']===contact);
       const generated=await withPublicReplyScope(verified,()=>options.generation!.handleExploration({method:req.method??'',path:req.url??path,body,scope:verified,signal:controller.signal},options.exploration));
-      if(generated){respond(generated.status,generated.payload);return true;}
+      if(generated){
+       const payload=generated.payload as Row;
+       respond(generated.status,generated.status===200&&payload?.kind==='generated'?{...payload,turn:completedGenerationPayload(payload.turn,session)}:payload);return true;
+      }
      }
      let action:string,request:Row;
      if(parts.length===6&&req.method==='POST'){action='open';request=body as Row;}
