@@ -56,3 +56,9 @@ Spec: ../spec.md
 当前仍缺真实原生名称的正向观察及完整新鲜身份链。已验证合成匹配／协议、当前真实失败与用户体验反馈分别记录，不宣称集成可用。测试库、私有范围文件、用户目录和自有进程均已清理，保留受保护的源码工作树及其他任务使用的共享 PG。
 
 2026-10-25 追加诊断（已并入主树 `f9381923`）：同一固定合成图在 accurate revision 3 下，中英、仅简中、自动语言及 32BGRA CVPixelBuffer 路径均约 2505–2510ms；fast 仅 36ms 且零结果，VisionKit 可快速返回但无产品要求的置信度。系统资源报告确认等待伴随 ANECompilerService 长时间编译，而不是单纯 XPC 死锁；当前开发签名二进制没有 macOS 27 Background Inference entitlement，临时 ad-hoc 声明会被系统终止，不能在现有开发签名路径据以修复。完整探针、负载门和权限证据见[补充审计](../root-next-21/ane-compiler-addendum.md)。accurate、0.90、2500ms 门槛均未降低，票继续保持 claimed，等待健康 Mac 对照或系统修复。
+
+2026-10-25 OCR 冷启动修复（隔离分支 `codex/ocr-worker-prewarm`，基线 `2ac11e3de68083c5f0e92f863fd88601193f73f2`，代码提交 `380ddc87`）：`--session-worker --json` 现在在发送 ready 前，只用一张 `800×72` 内存合成名称图调用正式 `LocalOcr.recognizeHeader` 预热 Vision；不请求屏幕录制、不截微信窗口、不输出合成文字。预热失败不发 ready 并输出稳定错误码。ready 后 Worker 常驻至宿主关闭、取消或故障回收，TypeScript 宿主移除了空闲六十秒回收，并在创建前台定位 API 时幂等启动预热。预热中的真实观察返回 `probe_warming` 且保留同一 Worker；独立预热超时回收后可重建。领域定位与桌面控制器不因预热遗留下人工确认门，单纯预热完成即可继续自动核验既有绑定。
+
+合成及生命周期证据：原生构建通过；诊断入口测试 `5/5`，其中冷启动 Worker 约 `34.3s` 后 ready，stderr 无截图、帧接收或顶部 OCR 事件，也无合成文字；随后的 Worker 约 `183ms` 就绪，空闲 `61s` 后仍存活并于 stdin 关闭后正常退出，无自有进程残留。前台领域相关测试 `57/57`、桌面预热状态测试 `14/14`、可视验收 `9/9`、TypeScript 类型检查通过；backend-ts 全量 `1205/1205`。补充 XCTest 覆盖预热顺序、预热失败不发 ready、idle 常驻及单张合成图，但本机只有 Command Line Tools，`swift test` 因找不到 `XCTest` 无法启动，未把该环境限制记为通过。`single-frame-foreground-http` 的两个后台同步夹具失败已在上述基线原样复现，不由本修复引入。
+
+本提交没有读取或保存真实截图，没有操作微信或发送消息，也未修改 2500ms、0.90、名称完整性或逐项来源合同。尚未完成真实微信正向验收；根会话集成后仍需在正式开发 App 中置前已有绑定私聊，确认首次真实截图后的顶部 OCR 在 2500ms 内返回完整名称、置信度至少 0.90，并完成窗口、前台和绑定门禁。因此以下真实验收项保持未勾选，Ticket 21 继续保持 claimed。
