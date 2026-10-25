@@ -1,0 +1,48 @@
+{
+  "source_commit": "030d3e1c9b2d3bf1841cd4d34f84e2ffc909da75",
+  "observed_head": "0f78d61644363958157ba8a17181565becc3ede1",
+  "minimum": {
+    "command": "node --test --test-concurrency=1 test/reply-model-surface-inventory.test.mjs test/reply-comparison-capture-runtime.test.mjs",
+    "result": {
+      "tests": 2,
+      "pass": 2,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  },
+  "reply_suite": {
+    "command": "perl -e 'alarm 600; exec @ARGV' -- node --test --test-concurrency=4 test/reply*.test.mjs",
+    "result": {
+      "tests": 456,
+      "pass": 456,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  },
+  "backend_typecheck": {
+    "command": "npm run typecheck",
+    "exit_code": 0
+  },
+  "runtime": "Node v24.22.1",
+  "desktop_state": {
+    "command": "npm run dev:status",
+    "mode": "stopped",
+    "pids": []
+  },
+  "computer_use_inventory": {
+    "notalone_development_app_running": false,
+    "wechat_running": true,
+    "dbx_running": false,
+    "no_window_content_read": true
+  },
+  "actual_model_requests": 0,
+  "external_messages_sent": 0,
+  "ticket25_approved": false,
+  "ticket26_started": false,
+  "notes": [
+    "仅确定性测试与官网文档核验，不认证真实模型质量或完整迁移。",
+    "最终独立审查、实际96采集、非回复模型矩阵、宿主性能和最终桌面验收仍待完成。"
+  ]
+}
