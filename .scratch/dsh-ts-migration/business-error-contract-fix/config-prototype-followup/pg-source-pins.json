@@ -1,0 +1,31 @@
+{
+  "pg_version": "8.16.3",
+  "installed_sources": [
+    {
+      "path": "backend-ts/node_modules/pg/lib/client.js",
+      "sha256": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4",
+      "bytes": 18759
+    },
+    {
+      "path": "backend-ts/node_modules/pg/lib/query.js",
+      "sha256": "dea8044d70531cd16e514ecddbe44cdd65b4315a02287958d5ecfd0ebcd70ded",
+      "bytes": 7314
+    },
+    {
+      "path": "backend-ts/node_modules/pg/lib/utils.js",
+      "sha256": "a109ef3b3a7572e8523b937ae0c100be72d4f36d1d3d4c7032e1ef0abaf92e38",
+      "bytes": 5642
+    },
+    {
+      "path": "backend-ts/node_modules/@types/pg/index.d.ts",
+      "sha256": "fe62b82c98a4d5bca3f8de616b606d20211b18c14e881bb6856807d9ab58131b",
+      "bytes": 10522
+    }
+  ],
+  "frozen_spec_evidence_sha256": {
+    "report.md": "ba46192045fd155ccddec6d2238dfe2cbfc4b28b6a833d12655e784aff935e7c",
+    "query-probe.test.mjs": "8c0a3afd3f44ca2a6155a71d77523978af42917610245acb92f0cf63095dc0bc",
+    "manifest.json": "5be6d31c8f813749d51bf35589367ae63d28ef72b0b8b41dd5b148ef49da54c5",
+    "SHA256SUMS": "98c103c911c848eb365f8bb46bddd799bdacdab96a63acd05f95f722cb47d91e"
+  }
+}

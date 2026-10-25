@@ -17,15 +17,8 @@ export class HostStorageError extends Error {
 /** 以查询抛错来源区分驱动故障；pg 客户端超时不一定是 DatabaseError，不能匹配 message。 */
 function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
   type Callback = (this: unknown, error: unknown, ...values: unknown[]) => unknown;
-  type QueryDispatch = pg.Query & { callback?: Callback; handleError: Callback; _canceledDueToError?: unknown };
-  const captureCallback = (callback: Callback): Callback => {
-    const tracked: Callback = function(error, ...values) {
-      if (error) failures.add(error);
-      if (this instanceof pg.Query && (this as QueryDispatch).callback === tracked) (this as QueryDispatch).callback = callback;
-      return Reflect.apply(callback, this, [error, ...values]);
-    };
-    return tracked;
-  };
+  type QueryDispatch = pg.Query & { handleError: Callback; _canceledDueToError?: unknown };
+  type QueryClient = pg.Client & { activeQuery?: pg.Query | null; queryQueue: pg.Query[] };
   const captureQuery = (query: QueryDispatch): (() => void) => {
     // 锁定 pg 8.16.3 的分发入口：既不替换 Query/内部回调，也不改动连接或报文协议。
     // handleError 会优先分发已保存的行解析错误，记录它实际交给调用方的原对象。
@@ -52,19 +45,20 @@ function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
   client.query = function(this: pg.Client, ...args: unknown[]): unknown {
     let cleanupQuery: (() => void) | undefined;
     try {
+      const current = this as QueryClient;
+      const activeBefore = current.activeQuery, queuedBefore = current.queryQueue.at(-1);
       const config = args[0];
       if (config instanceof pg.Query) cleanupQuery = captureQuery(config as QueryDispatch);
-      else {
-        const callback = args.at(-1);
-        if (typeof callback === 'function') args[args.length - 1] = captureCallback(callback as Callback);
-        if (config && typeof config === 'object' && typeof (config as { callback?: unknown }).callback === 'function') {
-          args[0] = { ...config, callback: captureCallback((config as { callback: Callback }).callback) };
-        }
-      }
       const result = Reflect.apply(query, this, args);
       if (config instanceof pg.Query) return result;
       if (result && typeof result.then === 'function') {
         return result.then(undefined, (error: unknown) => { failures.add(error); throw error; });
+      }
+      if (result === undefined) {
+        // pg 8.16.3 回调形式返回 undefined；只读原生新建 Query 的引用，不复制配置或包装回调。
+        const queuedAfter = current.queryQueue.at(-1);
+        const created = queuedAfter !== queuedBefore ? queuedAfter : current.activeQuery !== activeBefore ? current.activeQuery : undefined;
+        if (created instanceof pg.Query) cleanupQuery = captureQuery(created as QueryDispatch);
       }
       return result;
     } catch (error) { cleanupQuery?.(); failures.add(error); throw error; }

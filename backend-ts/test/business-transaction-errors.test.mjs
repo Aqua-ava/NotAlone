@@ -149,6 +149,63 @@ test('pg 成功重载保留 Query、回调 this、配置回调和结果对象身
   });
 });
 
+test('配置内回调原样保留继承和非枚举字段及原生返回身份', async t => {
+  const { storage } = await storageFixture(t);
+  const inherited = Object.create({ text: 'SELECT $1::integer AS value', values: [17] });
+  const hidden = {};
+  Object.defineProperties(hidden, {
+    text: { value: 'SELECT $1::integer AS value' }, values: { value: [17] },
+  });
+  const configs = [inherited, hidden], callbacks = [], callbackResults = [];
+  const results = await storage.businessTransaction(client => Promise.all(configs.map((config, index) => new Promise((resolve, reject) => {
+    function callback(error, result) {
+      if (error) return reject(error);
+      try {
+        assert.ok(this instanceof pg.Query);
+        assert.equal(this.callback, callback);
+        callbackResults[index] = result;
+        resolve(result);
+      } catch (error) { reject(error); }
+    }
+    callbacks[index] = callback;
+    config.callback = callback;
+    assert.equal(client.query(config), undefined);
+    assert.equal(config.callback, callback);
+  }))));
+  assert.deepEqual(results.map(result => result.rows), [[{ value: 17 }], [{ value: 17 }]]);
+  results.forEach((result, index) => assert.equal(result, callbackResults[index]));
+  configs.forEach((config, index) => assert.equal(config.callback, callbacks[index]));
+  assert.equal(Object.hasOwn(inherited, 'text'), false);
+  assert.equal(Object.getOwnPropertyDescriptor(hidden, 'text').enumerable, false);
+});
+
+test('排队的配置回调超时先通知原函数一次且驱动错误仍受控', async t => {
+  const { storage } = await storageFixture(t);
+  let calls = 0, callbackThis, callbackArguments;
+  const config = Object.create({ text: 'SELECT 17 AS value', query_timeout: 1 });
+  function callback(error, result) {
+    calls++;
+    callbackThis = this;
+    callbackArguments = arguments.length;
+    error ? rejectTimeout(error) : resolveTimeout(result);
+  }
+  let resolveTimeout, rejectTimeout;
+  config.callback = callback;
+  await assert.rejects(storage.businessTransaction(async client => {
+    await client.query('INSERT INTO owner(id,display_name) VALUES($1,$2)', [randomUUID(), '回调超时必须回滚']);
+    const active = client.query('SELECT pg_sleep(0.05)');
+    const timeout = new Promise((resolve, reject) => { resolveTimeout = resolve; rejectTimeout = reject; });
+    assert.equal(client.query(config), undefined);
+    assert.equal(config.callback, callback);
+    return Promise.all([active, timeout]);
+  }), { name: 'HostStorageError', code: 'database_unavailable' });
+  assert.equal(calls, 1);
+  assert.equal(callbackThis, undefined);
+  assert.equal(callbackArguments, 1);
+  assert.equal(config.callback, callback);
+  assert.equal((await storage.setupStatus()).owner_configured, false);
+});
+
 test('Query 原回调保持只读身份，行解析错误优先于随后的数据库错误且仍受控', async t => {
   const { storage } = await storageFixture(t);
   const parserError = new Error('synthetic-private-parser-failure');

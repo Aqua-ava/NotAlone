@@ -1,0 +1,107 @@
+{
+  "format_version": 1,
+  "base_commit": "56a08f126364170ab829dcc105d83bda88b7c86b",
+  "finding_target_commit": "a102ae51548039f23a4a148fadb6cbe5a8bb9cc5",
+  "head_observed": "d360cec17773e7cfa372f91c96fd60e6bb6c5015",
+  "status": "implemented_frozen_pending_incremental_review",
+  "code_changes": [
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "before_sha256": "8b3f974caa1afa495b4cae58c8b9e57c74bd1b0c0f3beb98df9300a4497d9e11",
+      "after_sha256": "88924416e62a366a9c3266f09026e68673872b8c640353b043a2f4a6841713d2",
+      "insertions": 10,
+      "deletions": 16
+    },
+    {
+      "path": "backend-ts/test/business-transaction-errors.test.mjs",
+      "before_sha256": "c712bc89f082cc553246648dc3d0c6ae0d30a2aa38e7328995c44dc28aa18bca",
+      "after_sha256": "fb09706001a737ac8e20adcf8469e80678ae3675b148a2304c80c47de1b27c8f",
+      "insertions": 57,
+      "deletions": 0
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/config-prototype-followup/commands.json",
+      "sha256": "e4f7d0501a572b38752cbd6a445b9caeaa92c1ab0f165e48dcd69b2f5b61bfc0",
+      "bytes": 3972
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/config-prototype-followup/fix.patch",
+      "sha256": "40db8eaef0308c76696aebf8febccfd97c153e22b6e1a9a1e92c2481a91b8375",
+      "bytes": 6738
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/config-prototype-followup/handoff.md",
+      "sha256": "39d326f6ee1b16bab16b2d24b2bf2968ff7f34f7032277f1689154b219127d37",
+      "bytes": 1431
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/config-prototype-followup/pg-source-pins.json",
+      "sha256": "d62e67ffbf146494eb80631ae802b0033fd026fcaa7bf0d5bb8e1b9995f363c5",
+      "bytes": 1157
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/config-prototype-followup/report.md",
+      "sha256": "af2c042e833887c897f205fdbbd40d8219c9e53cdfac94d77c23047f880505e3",
+      "bytes": 3612
+    }
+  ],
+  "frozen_evidence": [
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix",
+      "artifacts": 6,
+      "unchanged": true
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/followup-wechat-cancel",
+      "artifacts": 8,
+      "unchanged": true
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/business-error-contract-fix/query-instance-followup",
+      "artifacts": 6,
+      "unchanged": true
+    }
+  ],
+  "wechat_test_unchanged_sha256": "e7b3135d7ac5bf6966226d3c5798fa4d57fa564aea25fcdf7f41f70d43ef929c",
+  "validation": {
+    "business_module_tests": 32,
+    "original_tests_preserved": 30,
+    "pass": 32,
+    "skip": 0,
+    "independent_probe_pass": 3,
+    "typecheck_exit": 0,
+    "full_suite_run_by_this_task": false
+  },
+  "adapter_dependency": {
+    "pg_version": "8.16.3",
+    "readonly_client_fields": [
+      "activeQuery",
+      "queryQueue"
+    ],
+    "existing_query_observer_fields": [
+      "handleError",
+      "_canceledDueToError"
+    ],
+    "documented_public_api": false,
+    "caller_config_or_callback_rewritten": false,
+    "wire_protocol_modified": false,
+    "details": "report.md"
+  },
+  "raw_evidence": {
+    "location": "outside_repository",
+    "directory_mode": "0700",
+    "file_mode": "0600",
+    "hashes": "commands.json"
+  },
+  "cleanup": {
+    "all_fixture_teardowns_passed": true
+  },
+  "data_scope": "synthetic_only",
+  "real_data_access": 0,
+  "real_model_calls": 0,
+  "real_app_runs": 0,
+  "git_index_modified_by_this_task": false,
+  "commit_created_by_this_task": false
+}

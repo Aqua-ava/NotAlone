@@ -1,0 +1,139 @@
+{
+  "node_version": "v24.19.0",
+  "node24_is_redacted_alias": true,
+  "bounded_wrapper": "perl -e alarm_SECONDS_exec_ARGV -- NODE_ARGV",
+  "executions": [
+    {
+      "id": "independent-red",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=成功配置回调必须保留合法的继承和非枚举查询字段",
+        ".scratch/dsh-ts-migration/final-repair-spec-review/followup-a102ae51/query-probe.test.mjs"
+      ],
+      "exit_code": 1,
+      "expected_red": true,
+      "raw_log_sha256": "747ab2e074b6016b072a20f5823b1972afc72aed8937ef07ccac2e164e04d4a1",
+      "raw_log_bytes": 1117,
+      "time_limit_seconds": 60,
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 624.469917,
+      "environment_redacted": {
+        "REVIEW_SNAPSHOT": "<REPO>"
+      }
+    },
+    {
+      "id": "contract-red",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=配置内回调原样保留继承和非枚举字段及原生返回身份",
+        "backend-ts/test/business-transaction-errors.test.mjs"
+      ],
+      "exit_code": 1,
+      "expected_red": true,
+      "raw_log_sha256": "854c62101a095ffb07847fa721b400ed3f3300c3401e4266da090333184a6aa7",
+      "raw_log_bytes": 1051,
+      "time_limit_seconds": 60,
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 655.539959
+    },
+    {
+      "id": "contract-green",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=配置内回调原样保留继承和非枚举字段及原生返回身份",
+        "backend-ts/test/business-transaction-errors.test.mjs"
+      ],
+      "exit_code": 0,
+      "expected_red": false,
+      "raw_log_sha256": "6e8e002fe5fdfa77f0fd7a9d2cd3e39735779b091edc0b6098cd78a6369c7e57",
+      "raw_log_bytes": 336,
+      "time_limit_seconds": 60,
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 611.828958
+    },
+    {
+      "id": "module-final",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        "backend-ts/test/business-transaction-errors.test.mjs"
+      ],
+      "exit_code": 0,
+      "expected_red": false,
+      "raw_log_sha256": "c405aeb1f91f40f01300b18f79b32dba3c9347e89a51371c0bf697a17fcd06b6",
+      "raw_log_bytes": 5865,
+      "time_limit_seconds": 120,
+      "tests": 32,
+      "pass": 32,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 10132.472417
+    },
+    {
+      "id": "typecheck",
+      "argv_redacted": [
+        "node24",
+        "backend-ts/node_modules/typescript/bin/tsc",
+        "--noEmit",
+        "--project",
+        "backend-ts/tsconfig.json"
+      ],
+      "exit_code": 0,
+      "expected_red": false,
+      "raw_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_log_bytes": 0
+    },
+    {
+      "id": "independent-green",
+      "argv_redacted": [
+        "node24",
+        "--no-warnings",
+        "--test",
+        "--test-reporter=tap",
+        ".scratch/dsh-ts-migration/final-repair-spec-review/followup-a102ae51/query-probe.test.mjs"
+      ],
+      "exit_code": 0,
+      "expected_red": false,
+      "raw_log_sha256": "4c14032e063a99939cb43e4ad15feb02931b1bdeccd066a4e525b6bcc97a3f2a",
+      "raw_log_bytes": 739,
+      "time_limit_seconds": 60,
+      "tests": 3,
+      "pass": 3,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "duration_ms": 1956.567584,
+      "environment_redacted": {
+        "REVIEW_SNAPSHOT": "<REPO>"
+      }
+    }
+  ],
+  "checks": {
+    "patch_reverse_check": 0,
+    "whitespace_check": 0
+  }
+}

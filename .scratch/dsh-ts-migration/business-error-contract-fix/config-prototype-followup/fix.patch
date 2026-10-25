@@ -1,0 +1,119 @@
+diff --git a/backend-ts/src/host-storage.ts b/backend-ts/src/host-storage.ts
+index 99138a4f..31ed3835 100644
+--- a/backend-ts/src/host-storage.ts
++++ b/backend-ts/src/host-storage.ts
+@@ -17,15 +17,8 @@ export class HostStorageError extends Error {
+ /** 以查询抛错来源区分驱动故障；pg 客户端超时不一定是 DatabaseError，不能匹配 message。 */
+ function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
+   type Callback = (this: unknown, error: unknown, ...values: unknown[]) => unknown;
+-  type QueryDispatch = pg.Query & { callback?: Callback; handleError: Callback; _canceledDueToError?: unknown };
+-  const captureCallback = (callback: Callback): Callback => {
+-    const tracked: Callback = function(error, ...values) {
+-      if (error) failures.add(error);
+-      if (this instanceof pg.Query && (this as QueryDispatch).callback === tracked) (this as QueryDispatch).callback = callback;
+-      return Reflect.apply(callback, this, [error, ...values]);
+-    };
+-    return tracked;
+-  };
++  type QueryDispatch = pg.Query & { handleError: Callback; _canceledDueToError?: unknown };
++  type QueryClient = pg.Client & { activeQuery?: pg.Query | null; queryQueue: pg.Query[] };
+   const captureQuery = (query: QueryDispatch): (() => void) => {
+     // 锁定 pg 8.16.3 的分发入口：既不替换 Query/内部回调，也不改动连接或报文协议。
+     // handleError 会优先分发已保存的行解析错误，记录它实际交给调用方的原对象。
+@@ -52,20 +45,21 @@ function trackQueryFailures(client: pg.Client, failures: Set<unknown>): void {
+   client.query = function(this: pg.Client, ...args: unknown[]): unknown {
+     let cleanupQuery: (() => void) | undefined;
+     try {
++      const current = this as QueryClient;
++      const activeBefore = current.activeQuery, queuedBefore = current.queryQueue.at(-1);
+       const config = args[0];
+       if (config instanceof pg.Query) cleanupQuery = captureQuery(config as QueryDispatch);
+-      else {
+-        const callback = args.at(-1);
+-        if (typeof callback === 'function') args[args.length - 1] = captureCallback(callback as Callback);
+-        if (config && typeof config === 'object' && typeof (config as { callback?: unknown }).callback === 'function') {
+-          args[0] = { ...config, callback: captureCallback((config as { callback: Callback }).callback) };
+-        }
+-      }
+       const result = Reflect.apply(query, this, args);
+       if (config instanceof pg.Query) return result;
+       if (result && typeof result.then === 'function') {
+         return result.then(undefined, (error: unknown) => { failures.add(error); throw error; });
+       }
++      if (result === undefined) {
++        // pg 8.16.3 回调形式返回 undefined；只读原生新建 Query 的引用，不复制配置或包装回调。
++        const queuedAfter = current.queryQueue.at(-1);
++        const created = queuedAfter !== queuedBefore ? queuedAfter : current.activeQuery !== activeBefore ? current.activeQuery : undefined;
++        if (created instanceof pg.Query) cleanupQuery = captureQuery(created as QueryDispatch);
++      }
+       return result;
+     } catch (error) { cleanupQuery?.(); failures.add(error); throw error; }
+   } as pg.Client['query'];
+diff --git a/backend-ts/test/business-transaction-errors.test.mjs b/backend-ts/test/business-transaction-errors.test.mjs
+index 7a8d8d98..123d350e 100644
+--- a/backend-ts/test/business-transaction-errors.test.mjs
++++ b/backend-ts/test/business-transaction-errors.test.mjs
+@@ -149,6 +149,63 @@ test('pg 成功重载保留 Query、回调 this、配置回调和结果对象身
+   });
+ });
+ 
++test('配置内回调原样保留继承和非枚举字段及原生返回身份', async t => {
++  const { storage } = await storageFixture(t);
++  const inherited = Object.create({ text: 'SELECT $1::integer AS value', values: [17] });
++  const hidden = {};
++  Object.defineProperties(hidden, {
++    text: { value: 'SELECT $1::integer AS value' }, values: { value: [17] },
++  });
++  const configs = [inherited, hidden], callbacks = [], callbackResults = [];
++  const results = await storage.businessTransaction(client => Promise.all(configs.map((config, index) => new Promise((resolve, reject) => {
++    function callback(error, result) {
++      if (error) return reject(error);
++      try {
++        assert.ok(this instanceof pg.Query);
++        assert.equal(this.callback, callback);
++        callbackResults[index] = result;
++        resolve(result);
++      } catch (error) { reject(error); }
++    }
++    callbacks[index] = callback;
++    config.callback = callback;
++    assert.equal(client.query(config), undefined);
++    assert.equal(config.callback, callback);
++  }))));
++  assert.deepEqual(results.map(result => result.rows), [[{ value: 17 }], [{ value: 17 }]]);
++  results.forEach((result, index) => assert.equal(result, callbackResults[index]));
++  configs.forEach((config, index) => assert.equal(config.callback, callbacks[index]));
++  assert.equal(Object.hasOwn(inherited, 'text'), false);
++  assert.equal(Object.getOwnPropertyDescriptor(hidden, 'text').enumerable, false);
++});
++
++test('排队的配置回调超时先通知原函数一次且驱动错误仍受控', async t => {
++  const { storage } = await storageFixture(t);
++  let calls = 0, callbackThis, callbackArguments;
++  const config = Object.create({ text: 'SELECT 17 AS value', query_timeout: 1 });
++  function callback(error, result) {
++    calls++;
++    callbackThis = this;
++    callbackArguments = arguments.length;
++    error ? rejectTimeout(error) : resolveTimeout(result);
++  }
++  let resolveTimeout, rejectTimeout;
++  config.callback = callback;
++  await assert.rejects(storage.businessTransaction(async client => {
++    await client.query('INSERT INTO owner(id,display_name) VALUES($1,$2)', [randomUUID(), '回调超时必须回滚']);
++    const active = client.query('SELECT pg_sleep(0.05)');
++    const timeout = new Promise((resolve, reject) => { resolveTimeout = resolve; rejectTimeout = reject; });
++    assert.equal(client.query(config), undefined);
++    assert.equal(config.callback, callback);
++    return Promise.all([active, timeout]);
++  }), { name: 'HostStorageError', code: 'database_unavailable' });
++  assert.equal(calls, 1);
++  assert.equal(callbackThis, undefined);
++  assert.equal(callbackArguments, 1);
++  assert.equal(config.callback, callback);
++  assert.equal((await storage.setupStatus()).owner_configured, false);
++});
++
+ test('Query 原回调保持只读身份，行解析错误优先于随后的数据库错误且仍受控', async t => {
+   const { storage } = await storageFixture(t);
+   const parserError = new Error('synthetic-private-parser-failure');
