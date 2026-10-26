@@ -8,7 +8,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {collectLocal} from './runner.mjs';
 import {problemBudgetBridge} from './bridge.mjs';
 import {freezeExecutionPolicy} from './execution-snapshot.mjs';
-const ROOT=fileURLToPath(new URL('../../../',import.meta.url));
+const ROOT=resolve(fileURLToPath(new URL('../../../',import.meta.url)));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function runFixed96({sourceCommit,output,configPath,executionPolicyPath,localOnly=false}){
  assert.match(sourceCommit,/^[a-f0-9]{40}$/,'完整源码commit必填');
