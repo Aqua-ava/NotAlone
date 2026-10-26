@@ -79,9 +79,7 @@ export function ContactPicker({ session, disabled = false, onSelect = session.se
       aria-activedescendant={expanded && active ? `${listId}-${active.contactId}` : undefined}
       data-contact-id={selectedContactId ?? ''} disabled={unavailable}
       placeholder="选择联系人" value={expanded ? query : selected?.displayName ?? ''} autoComplete="off"
-      onFocus={expand} onPointerDown={event => {
-        if (!expanded) { event.preventDefault(); input.current?.focus(); expand(); }
-      }}
+      onFocus={expand} onClick={expand}
       onChange={event => { setQuery(event.target.value); setEdited(true); setActiveId(null); setOpen(true); }}
       onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
       onKeyDown={searchKey} />

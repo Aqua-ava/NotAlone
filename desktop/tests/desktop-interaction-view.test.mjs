@@ -12,6 +12,46 @@ async function mount(page, contents) {
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
 }
 
+test('联系人鼠标聚焦保留原生默认行为，重新展开后仍能键入和退格', async t => {
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await mount(page, `
+    import React from 'react'; import { createRoot } from 'react-dom/client';
+    import { ContactPicker } from './src/renderer/ContactPicker';
+    const session = { state: { directoryPhase: 'ready', selectedContactId: 'synthetic-a', scopeRevision: 1,
+      contacts: [{ contactId: 'synthetic-a', displayName: 'Synthetic Alpha' },
+        { contactId: 'synthetic-b', displayName: 'Synthetic Beta' }] }, selectContact: async () => {} };
+    createRoot(document.getElementById('root')).render(<><ContactPicker session={session}/><button>外部按钮</button></>);
+    // DOM focus 不能证明原生窗口已接收键盘；同时锁定鼠标默认聚焦路径未被取消。
+    document.addEventListener('pointerdown', event => {
+      if (event.target.matches('input')) window.pointerDefaultPrevented = event.defaultPrevented;
+    });
+  `);
+  const picker = page.getByRole('combobox', { name: '本次联系人', exact: true });
+  for (const closeWith of ['Escape', 'outside']) {
+    await picker.click();
+    assert.equal(await page.evaluate(() => window.pointerDefaultPrevented), false, '输入框不能取消原生鼠标聚焦');
+    await expect(picker).toBeFocused();
+    await page.keyboard.press('Backspace');
+    await expect(picker).toHaveValue('');
+    await page.keyboard.type('Beta');
+    await expect(picker).toHaveValue('Beta');
+    await expect(page.getByRole('option')).toHaveCount(1);
+    await page.keyboard.press('Backspace');
+    await expect(picker).toHaveValue('Bet');
+    await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-a');
+    if (closeWith === 'Escape') await page.keyboard.press('Escape');
+    else await page.getByRole('button', { name: '外部按钮', exact: true }).click();
+    await expect(picker).toHaveValue('Synthetic Alpha');
+    await expect(picker).toHaveAttribute('aria-expanded', 'false');
+  }
+  await picker.click();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Backspace');
+  await expect(picker).toHaveValue('Synthetic Alph');
+});
+
 test('顶部联系人原位输入并全选当前名称，搜索只筛选且确认才切换', async t => {
   const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
   t.after(() => browser.close());
