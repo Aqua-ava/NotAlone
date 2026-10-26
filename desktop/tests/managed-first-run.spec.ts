@@ -42,7 +42,7 @@ test('App 主进程意外退出后受管后台先停读、资料服务退场，�
   finally { await writeFile(test.info().outputPath('startup-phases.json'), JSON.stringify(await manager.evaluate(() => (window as typeof window & { managedTrace?: object[] }).managedTrace)), { mode: 0o600 }); }
   await manager.getByLabel('本人展示名称', { exact: true }).fill('合成崩溃恢复使用者');
   await manager.getByRole('button', { name: '初始化本人', exact: true }).click();
-  try { await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 30_000 }); }
+  try { await expect.poll(() => manager.evaluate(async () => { const state = await window.notalone.setup.getState(); return state.phase === 'ready' && state.ownerReady; }), { timeout: 30_000 }).toBe(true); }
   finally { await writeFile(test.info().outputPath('startup-phases.json'), JSON.stringify(await manager.evaluate(() => (window as typeof window & { managedTrace?: object[] }).managedTrace)), { mode: 0o600 }); }
   const databasePid = Number((await readFile(path.join(userData, 'managed/postgres/postmaster.pid'), 'utf8')).split('\n')[0]);
   const backendPid = Number(/^pid=(\d+)$/m.exec(await readFile(path.join(userData, 'managed/backend.info'), 'utf8'))?.[1]);
@@ -64,7 +64,7 @@ test('App 主进程意外退出后受管后台先停读、资料服务退场，�
     reopenedProcess = reopened.process();
     const reopenedManager = await reopened.firstWindow();
     await expect(reopenedManager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(reopenedManager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached();
+    await expect.poll(() => reopenedManager.evaluate(async () => { const state = await window.notalone.setup.getState(); return state.phase === 'ready' && state.ownerReady; })).toBe(true);
     await expect(reopenedManager.getByRole('heading', { name: '还没有联系人', exact: true })).toBeVisible();
     await selectMenu(reopened, 'NotAlone', '退出 NotAlone');
     await expect.poll(() => reopenedProcess?.exitCode, { timeout: 15_000 }).toBe(0);
@@ -90,7 +90,7 @@ test('独立新安装由公开首启操作准备本机服务，确认本人后�
   await expect(setup.getByText('本人身份尚未初始化', { exact: true })).toBeVisible();
   await setup.getByLabel('本人展示名称', { exact: true }).fill('合成首启使用者');
   await setup.getByRole('button', { name: '初始化本人', exact: true }).click();
-  await expect(setup.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 30_000 });
+  await expect.poll(() => manager.evaluate(async () => { const state = await window.notalone.setup.getState(); return state.phase === 'ready' && state.ownerReady; }), { timeout: 30_000 }).toBe(true);
   // 仅验证密钥保存语义，不调用外部模型或冒充真实模型验收。
   await setup.getByLabel('DeepSeek API Key', { exact: true }).fill('synthetic-first-run-not-a-real-key');
   await setup.getByRole('button', { name: '保存 DeepSeek 密钥', exact: true }).click();
@@ -112,7 +112,7 @@ test('独立新安装由公开首启操作准备本机服务，确认本人后�
   try {
     const reopenedManager = await reopened.firstWindow();
     await expect(reopenedManager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(reopenedManager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached();
+    await expect.poll(() => reopenedManager.evaluate(async () => { const state = await window.notalone.setup.getState(); return state.phase === 'ready' && state.ownerReady; })).toBe(true);
     await expect(reopenedManager.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible();
     await expect(reopenedManager.getByRole('heading', { name: '还没有联系人', exact: true })).toBeVisible();
     await expect(reopenedManager.getByRole('button', { name: '开始本机设置', exact: true })).toHaveCount(0);

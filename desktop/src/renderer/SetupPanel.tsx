@@ -84,14 +84,5 @@ export function SetupPanel() {
     {(error || state.errorCode === 'initialize-failed' || state.errorCode === 'credentials-failed') && <p role="alert">{error || (state.errorCode === 'credentials-failed'
       ? 'DeepSeek 密钥未能保存，请重新输入后重试。' : '本人初始化未完成，请重试。')}</p>}
     <FirstFrameError message={readError} retry={() => { setReadError(''); setReadAttempt((value) => value + 1); }} />
-    <details className="setup-privacy">
-      <summary>数据存储与隐私</summary>
-      {state.phase === 'ready' && state.ownerReady && <p>本次运行的本人身份已就绪</p>}
-      {state.phase === 'ready' && state.officialDefaults === true && <p>模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。</p>}
-      <p>本人身份、联系人资料、导入历史与已提交的候选会长期保存在本机 PostgreSQL。未提交的临时草稿不跨重启保存。</p>
-      <p>DeepSeek 密钥写入本机受控配置文件，权限设为仅本人可读写。当前配置文件与业务资料未提供静态加密；请自行保护本机和备份。</p>
-      <p>生成候选或提取关系资料时，DeepSeek 只接收当次范围内的必要文字：草稿或待回复消息，以及需要的少量同联系人历史、相关关系资料和本人资料。配置密钥本身不会发起模型调用。</p>
-      <p>应用内删除不代表 DeepSeek 的外部副本已删除；供应商的留存与删除规则需单独核对。候选由你修改并亲自发送。</p>
-    </details>
   </section>;
 }

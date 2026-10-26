@@ -43,7 +43,7 @@ test('空目录首启不提供独立创建入口，预置联系人仍可手动�
   if (process.env.NOTALONE_TEST_MANUAL_MODEL_FIXTURE === '1') expect(JSON.parse(await readFile(path.join(userData, 'synthetic-model-audit.json'), 'utf8')).network_guard).toBe(true);
   await manager.getByLabel('本人展示名称', { exact: true }).fill('合成手动使用者');
   await manager.getByRole('button', { name: '初始化本人', exact: true }).click();
-  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 30_000 });
+  await expect.poll(() => manager.evaluate(async () => { const state = await window.notalone.setup.getState(); return state.phase === 'ready' && state.ownerReady; }), { timeout: 30_000 }).toBe(true);
   await expect(manager.getByRole('heading', { name: '还没有联系人', exact: true })).toBeVisible();
   await expect(manager.getByRole('button', { name: '创建联系人', exact: true })).toHaveCount(0);
   await expect(manager.getByLabel('联系人展示名称', { exact: true })).toHaveCount(0);
@@ -72,7 +72,7 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   if (process.env.NOTALONE_TEST_MANUAL_MODEL_FIXTURE === '1') expect(JSON.parse(await readFile(path.join(userData, 'synthetic-model-audit.json'), 'utf8')).network_guard).toBe(true);
   await manager.getByLabel('本人展示名称', { exact: true }).fill('合成手动使用者');
   await manager.getByRole('button', { name: '初始化本人', exact: true }).click();
-  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 30_000 });
+  await expect.poll(() => manager.evaluate(async () => { const state = await window.notalone.setup.getState(); return state.phase === 'ready' && state.ownerReady; }), { timeout: 30_000 }).toBe(true);
   const opening = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
   const helper = await opening;
@@ -195,9 +195,9 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
     await expect(next.getByRole('button', { name: '保存官方模型与新密钥', exact: true })).toBeDisabled();
     await next.getByLabel('我确认改用上述官方接收方，并为它重新输入密钥', { exact: true }).check();
     await next.getByRole('button', { name: '保存官方模型与新密钥', exact: true }).click();
-    await expect(next.getByText('模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。', { exact: true })).toBeAttached({ timeout: 30_000 });
-    await next.locator('summary', { hasText: '数据存储与隐私' }).click();
-    await expect(next.getByText('模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => next.evaluate(async () => { const state = await window.notalone.setup.getState(); return state.phase === 'ready' && state.officialDefaults === true; }), { timeout: 30_000 }).toBe(true);
+    await expect(next.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible();
+    await expect(next.getByRole('button', { name: '改用官方 DeepSeek 默认配置', exact: true })).toHaveCount(0);
     await expect(next.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
     await selectContact(next.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await next.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
