@@ -23,7 +23,14 @@ test('授权撤销等待事务时客户端断连，排空后恢复且不能返�
  let current;const drainDeadline=Date.now()+10000;
  while(Date.now()<drainDeadline){current=await f.app.request('/api/sync/foreground/observe',{});if(current.status!==409)break;}
  assert.equal(current.status,200);assert.equal(current.data.contact_id,null);
+ const bindings=(await f.app.request('/api/sync/cli-bindings')).data;
+ assert.equal(bindings.bindings.some(row=>row.binding_id===f.binding),false);
+ assert.equal(bindings.revoked_bindings.some(row=>row.binding_id===f.binding),true);
  assert.equal((await f.client.query('SELECT status FROM conversation_binding WHERE id=$1',[f.binding])).rows[0].status,'revoked');
+ const checked=await f.app.request('/api/sync/check',{});
+ assert.equal(checked.status,200);assert.equal(checked.data.cli_sync_phase,'waiting_bindings');
+ assert.equal(checked.data.cli_bound_count,0);
+ assert.equal((await f.app.request('/api/sync/cli-bindings/revoke',{contact_id:f.contact,binding_id:f.binding})).status,200);
  }finally{await f.client.query('ROLLBACK');}
 });
 

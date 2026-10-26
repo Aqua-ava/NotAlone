@@ -155,10 +155,11 @@ async function start(ctx: Context) {
         const revoked=incrementalRevokeTail.then(async()=>{
           if(signal.aborted||state!=='running')throw new HostStorageError('runtime_stopping');
           const version=await incremental.invalidateAndDrain('scope_revoke');
+          // 已开始的撤销属于用户授权决定，不随HTTP断连回滚；仍由宿主停机与范围服务关闭取消。
           const result=await wechatScope.handle('POST','/api/runtime/wechat-scope/revoke',{
             owner_id:storage.runtimeOwnerId,channel:'wechat',account_scope:pureSync!.accountScope,...body,
-          },()=>{if(state!=='running')throw new HostStorageError('runtime_stopping');},signal);
-          if(!signal.aborted&&state==='running')incremental.resume(version);
+          },()=>{if(state!=='running')throw new HostStorageError('runtime_stopping');});
+          if(state==='running')incremental.resume(version);
           return result;
         });incrementalRevokeTail=revoked.then(()=>undefined,()=>undefined);return revoked;
     },
