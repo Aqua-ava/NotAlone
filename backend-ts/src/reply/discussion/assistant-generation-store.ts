@@ -1,3 +1,4 @@
+import {recordAssistantUserActivity} from '../discussion/assistant-user-activity.ts';
 /** generation 的唯一事务写者；沿用原 A 输入、失效键与回复来源守卫。 */
 import {createHash} from 'node:crypto';
 import type {Client} from 'pg';
@@ -132,7 +133,7 @@ export class AssistantGenerationStore {
   if(options.runningKey)await this.replaceRunning(client,scope,sessionId,options.runningKey);
   const row=(await client.query('INSERT INTO assistant_session_turn(session_id,owner_id,contact_id,idempotency_key,conversation_binding_id,input_digest,input_payload,dependency_ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',[sessionId,scope.owner_id,scope.contact_id,input.idempotency_key,scope.conversation_binding_id,digest,JSON.stringify(generationPayload(input,options.auth)),captured])).rows[0];
   await client.query("INSERT INTO assistant_session_input(id,session_id,owner_id,contact_id,conversation_binding_id,input_type,turn_id) VALUES($1,$2,$3,$4,$5,'generation',$6)",[row.input_version_id,sessionId,scope.owner_id,scope.contact_id,scope.conversation_binding_id,row.id]);
-  await client.query('UPDATE assistant_session SET current_input_version_id=$1,updated_at=now() WHERE owner_id=$2 AND contact_id=$3 AND id=$4',[row.input_version_id,scope.owner_id,scope.contact_id,sessionId]);return row;
+  await client.query('UPDATE assistant_session SET current_input_version_id=$1,updated_at=now() WHERE owner_id=$2 AND contact_id=$3 AND id=$4',[row.input_version_id,scope.owner_id,scope.contact_id,sessionId]);await recordAssistantUserActivity(client,scope,sessionId);return row;
  }
  async replaceRunning(client:Client,scope:VerifiedReplyScope,sessionId:string,key:string):Promise<void>{
   const old=await this.existing(client,scope,key);if(!old||old.session_id!==sessionId)throw new AssistantGenerationError('not_found',undefined,404);

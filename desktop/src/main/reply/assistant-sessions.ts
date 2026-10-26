@@ -7,6 +7,7 @@ import { isUuid } from '../uuid';
 import { isRecord, readReplyResult } from './result-read';
 import { readReplyBasisChanges } from './basis-changes-read';
 import { readReplyScene } from './scene';
+import { listAssistantSessions } from './assistant-session-catalog';
 
 const READ_PART_BYTES = 256 * 1024;
 const invalidRead = () => new Error('已保存讨论暂不可用。');
@@ -80,7 +81,7 @@ function discussion(value: unknown, type: SavedAssistantDiscussion['type']): Sav
   throw new Error('已保存讨论格式无效。');
 }
 
-export async function defaultAssistantSession(backend: BackendHost, contactId: string, signal: AbortSignal) {
+async function pendingAssistantDeletion(backend: BackendHost, contactId: string, signal: AbortSignal) {
   const generation = backend.getConnectionGeneration();
   const pending = await backend.requestJson({ method: 'GET', path: `/api/deletions?contact_id=${contactId}&scope_kind=discussion`, signal });
   if (generation === undefined || pending.generation !== generation || backend.getConnectionGeneration() !== generation
@@ -93,6 +94,19 @@ export async function defaultAssistantSession(backend: BackendHost, contactId: s
   const deletion = pending.data.operations[0];
   if (deletion) return { sessionId: deletion.target_id.toLowerCase(), generation,
     deletionOperationId: deletion.operation_id as string };
+  return undefined;
+}
+
+export async function currentAssistantSession(backend: BackendHost, contactId: string, signal: AbortSignal) {
+  const deletion = await pendingAssistantDeletion(backend, contactId, signal);
+  if (deletion) return { ...deletion, catalog: undefined };
+  const catalog = await listAssistantSessions(backend, contactId, signal);
+  return { sessionId: catalog.currentSessionId, generation: catalog.generation, deletionOperationId: undefined, catalog };
+}
+
+export async function defaultAssistantSession(backend: BackendHost, contactId: string, signal: AbortSignal) {
+  const deletion = await pendingAssistantDeletion(backend, contactId, signal);
+  if (deletion) return deletion;
   const response = await backend.requestJson({ method: 'POST',
     path: `/api/contacts/${contactId}/assistant-session/default`, body: {}, signal });
   if (!isRecord(response.data) || !isUuid(response.data.session_id)) throw new Error('助手会话暂不可用。');

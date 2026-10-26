@@ -185,19 +185,20 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {catalog?.phase === 'ready' && <ul className="session-catalog" aria-label="助手会话目录">
       {!catalog.items.length && <li>这位联系人还没有助手会话。</li>}
       {catalog.items.map((item, index) => <li className="session-catalog-item" key={item.sessionId}>
-        <button aria-label={`查看会话 ${item.sessionId}`} disabled={busy} onClick={() => void replies.selectSavedSession(item.sessionId)}>查看讨论 {index + 1}</button>
+        <button aria-label={`查看会话 ${item.sessionId}`} disabled={busy} onClick={() => void replies.viewSavedSession(item.sessionId)}>查看讨论 {index + 1}</button>
         {item.isCurrent && <span> 当前会话</span>}
+        {!item.isCurrent && <button disabled={busy} onClick={() => void replies.resumeSavedSession(item.sessionId)}>继续此会话</button>}
         {item.sessionId === saved?.sessionId && <span> 正在查看</span>}
         <details className="session-metadata"><summary>讨论详情</summary><p>会话编号：{item.sessionId}</p></details>
       </li>)}
     </ul>}
-        <div className="session-actions" role="group" aria-label="当前讨论操作">
+        <div className="session-actions" role="group" aria-label="正在查看的讨论操作">
     <button disabled={!replies.state.contactId || saved?.phase === 'loading' || deleting || catalog?.phase === 'loading' || catalog?.selectionPending} onClick={() => void replies.readSavedSession()}>
       {saved?.phase === 'failed' ? '重试读取已保存讨论' : '查看已保存讨论'}
     </button>
     <button disabled={!saved?.sessionId || saved.phase === 'loading' || deleting || catalog?.phase === 'loading' || catalog?.selectionPending}
       onClick={() => setConfirmation({ contactId: replies.state.contactId!, scopeRevision: replies.state.scopeRevision,
-        sessionId: saved!.sessionId!, confirmed: true })}>删除当前助手会话</button>
+        sessionId: saved!.sessionId!, confirmed: true })}>删除正在查看的会话</button>
         </div>
     {saved?.phase === 'ready' && <section className="session-history" aria-label="已保存的讨论" onCopy={noteHistoricalCopy}>
       {!saved.inputs.length && <p>当前会话还没有讨论。</p>}

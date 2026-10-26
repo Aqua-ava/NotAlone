@@ -55,6 +55,8 @@ async function fixture({ beforePrepare } = {}) {
       const pathSessionId = /\/assistant-sessions\/([0-9a-f-]+)(?:\/|$)/.exec(request.path)?.[1];
       const session = pathSessionId ? sessionsById.get(pathSessionId) : sessions.get(contactId);
       if (request.path.startsWith('/api/deletions?')) return { generation: responseGeneration, data: { operations: [] } };
+      if (request.path.endsWith('/assistant-sessions') && request.method === 'GET') return { generation: responseGeneration,
+        data: { sessions: [{ session_id: session.sessionId, is_current: true }], current_session_id: session.sessionId } };
       if (request.path.endsWith('/assistant-session/default')) {
         return { generation: responseGeneration, data: { session_id: session.sessionId } };
       }
@@ -308,6 +310,25 @@ test('同联系人新开会话只切换展示，不取消原生成，退出仍�
   await generating.catch(() => {});
   assert.deepEqual(f.interruptReasons(), ['app_quit']);
   assert.equal(oldSession.turns[0].interruptionReason, 'app_quit');
+});
+
+test('生成中回看历史不迁移原作业，离开视图及连接换代不覆盖回看段', async () => {
+  const f = await fixture(), contactId = f.sessions.keys().next().value;
+  const scope = await f.select(contactId), historical = f.sessions.get(contactId).sessionId;
+  await f.bridge.newSavedSession(scope);
+  await f.select(contactId);
+  const { generating, job } = await f.start(scope);
+  await f.bridge.viewSavedSession({ ...scope, sessionId: historical });
+  const viewed = await f.bridge.getState();
+  assert.equal(viewed.savedSession.sessionId, historical);
+  assert.equal(viewed.sessionCatalog.currentSessionId, job.sessionId);
+  assert.equal(viewed.generationJobs.find(item => item.requestKey === job.requestKey).sessionId, job.sessionId);
+  assert.equal(f.interruptCount(), 0);
+  await f.changeConnection();
+  await generating.catch(() => {});
+  const changed = await f.bridge.getState();
+  assert.equal(changed.result, null, '旧连接结果不能写入新投影');
+  await f.replies.beginGenerationClosing();
 });
 
 test('显示另一助手会话时，可按原作业停止当前联系人的后台生成且不切换展示', async () => {

@@ -2,6 +2,15 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 import type {Client} from 'pg';
 const operation=new AsyncLocalStorage<string>();
+/** 删除未完成时历史仍可读，恢复与生成均须等待清理凭证。 */
+export async function assistantRuntimeDeletionPending(client:Client,scope:{owner_id:string;contact_id:string},session:string|null):Promise<boolean>{
+ const blocked=await client.query(`SELECT 1 FROM cross_domain_deletion_operation operation
+  WHERE operation.owner_id=$1 AND operation.status<>'succeeded' AND (
+   operation.scope_kind IN ('source','account') OR operation.scope_kind='contact' AND operation.contact_id=$2
+   OR operation.scope_kind='discussion' AND operation.contact_id=$2 AND operation.target_id=$3)
+  UNION ALL SELECT 1 FROM assistant_runtime_deletion_target WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 LIMIT 1`,[scope.owner_id,scope.contact_id,session]);
+ return Boolean(blocked.rowCount);
+}
 export function withAssistantRuntimeErasure<T>(id:string,work:()=>Promise<T>):Promise<T>{return operation.run(id,work);}
 export async function captureAssistantRuntimeScope(client:Client,id:string,owner:string,contact:string|null=null,session:string|null=null):Promise<void>{
  await client.query(`INSERT INTO assistant_runtime_deletion_target(operation_id,owner_id,contact_id,session_id)

@@ -11,12 +11,15 @@ export async function listAssistantSessions(backend: BackendHost, contactId: str
     || (value.current_session_id !== null && !isUuid(value.current_session_id))) throw new Error('助手会话目录暂不可用。');
   const known = new Set<string>();
   const items: AssistantSessionCatalog['items'] = value.sessions.map((item: unknown) => {
-    if (!isRecord(item) || Object.keys(item).length !== 2 || !isUuid(item.session_id)
+    if (!isRecord(item) || ![2, 3].includes(Object.keys(item).length) || !isUuid(item.session_id)
+      || Object.keys(item).some(key => !['session_id', 'is_current', 'last_user_activity_at'].includes(key))
+      || item.last_user_activity_at !== undefined && item.last_user_activity_at !== null
+        && (typeof item.last_user_activity_at !== 'string' || !Number.isFinite(Date.parse(item.last_user_activity_at)))
       || typeof item.is_current !== 'boolean') throw new Error('助手会话目录格式无效。');
     const sessionId = item.session_id.toLowerCase();
     if (known.has(sessionId)) throw new Error('助手会话目录格式无效。');
     known.add(sessionId);
-    return { sessionId, isCurrent: item.is_current };
+    return { sessionId, isCurrent: item.is_current, ...(item.last_user_activity_at === undefined ? {} : { lastUserActivityAt: item.last_user_activity_at as string | null }) };
   });
   const currentSessionId = typeof value.current_session_id === 'string' ? value.current_session_id.toLowerCase() : null;
   const current = items.filter((item) => item.isCurrent);
@@ -35,7 +38,7 @@ export async function newAssistantSession(backend: BackendHost, contactId: strin
 
 export async function selectAssistantSession(backend: BackendHost, contactId: string, sessionId: string, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'POST',
-    path: `/api/contacts/${contactId}/assistant-sessions/${sessionId}/select`, body: {}, signal });
+    path: `/api/contacts/${contactId}/assistant-sessions/${sessionId}/resume`, body: {}, signal });
   if (!isRecord(response.data) || Object.keys(response.data).length !== 1 || response.data.session_id !== sessionId) {
     throw new Error('选择助手会话尚未确认。');
   }

@@ -101,6 +101,7 @@ export function createAssistantDiscussionHttp(options:{
         case 'list':
           if(!exact(request,[]))invalid();
           result=await options.service.listSessions(scope);break;
+        case 'resume':
         case 'select':
           if(!sessionId||!exact(request,[]))invalid();
           result={session_id:await options.service.selectSession(scope,session())};break;

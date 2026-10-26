@@ -29,6 +29,80 @@ async function fixture(t){
  return {f,owner,contact,binding,token,businessHome,start,request,maxActive:()=>maxActive,setCandidateText:text=>{candidateText=text;},holdNext:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};return {entered,release};},input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true})};
 }
 
+test('目录与历史浏览保持当前和真实活动，明确继续原段才刷新活动且零模型',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ assert.deepEqual(await f.request(host,base),{sessions:[],current_session_id:null});
+ const {session_id:old}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),oldPath=`${base}/${old}`;
+ assert.equal((await f.request(host,base)).sessions[0].last_user_activity_at,null,'未知活动不从创建或通用更新时间伪造');
+ await f.request(host,`${oldPath}/replies`,f.input('合成旧讨论'));
+ const {session_id:current}=await f.request(host,base,{});
+ const before=await f.request(host,base),activity=before.sessions.find(item=>item.session_id===old).last_user_activity_at;
+ assert.match(activity,/^\d{4}-\d{2}-\d{2}T/,'活动单独投影，不使用通用更新时间');
+ await f.f.client.query('UPDATE assistant_session SET updated_at=clock_timestamp() WHERE id=$1',[old]);
+ await f.request(host,oldPath);
+ const after=await f.request(host,base);
+ assert.deepEqual(after,before,'回看不切当前或刷新活动');
+ const requests=host.requests.length;
+ assert.deepEqual(await f.request(host,`${oldPath}/resume`,{}),{session_id:old});
+ const resumed=await f.request(host,base);
+ assert.equal(resumed.current_session_id,old);
+ assert.ok(resumed.sessions.find(item=>item.session_id===old).last_user_activity_at>activity);
+ assert.equal(resumed.sessions.find(item=>item.session_id===current).last_user_activity_at,before.sessions.find(item=>item.session_id===current).last_user_activity_at);
+ assert.equal(host.requests.length,requests,'明确继续本身不得调用模型');
+});
+
+test('历史候选编辑保留版本，只刷新被编辑段；新段模型不自动带旧讨论',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:old}=await f.request(host,base,{}),oldPath=`${base}/${old}`;
+ const first=await f.request(host,`${oldPath}/replies`,f.input('合成旧要求：只在旧段使用'));
+ const candidate=first.candidates[0].candidate_id,versionsPath=`${oldPath}/candidates/${candidate}/versions`;
+ const versions=await f.request(host,versionsPath),original=versions.versions[0];
+ const {session_id:current}=await f.request(host,base,{}),before=await f.request(host,base);
+ assert.deepEqual(await f.request(host,versionsPath),versions);
+ assert.deepEqual(await f.request(host,base),before,'候选版本浏览不续期');
+ const edit={edit_key:randomUUID(),parent_version_id:original.version_id,messages:original.messages.map(message=>({...message,text:'合成历史编辑'}))};
+ const edited=await f.request(host,versionsPath,edit),after=await f.request(host,base);
+ assert.equal(edited.versions.length,2);assert.equal(edited.versions[0].text,original.text);
+ assert.equal(edited.versions[1].parent_version_id,original.version_id);
+ assert.equal(edited.selected_version_id,null,'编辑与复制不证明已发送或选用');
+ assert.equal(after.current_session_id,current);
+ assert.ok(after.sessions.find(item=>item.session_id===old).last_user_activity_at>before.sessions.find(item=>item.session_id===old).last_user_activity_at);
+ assert.equal(after.sessions.find(item=>item.session_id===current).last_user_activity_at,before.sessions.find(item=>item.session_id===current).last_user_activity_at);
+ await f.request(host,`${base}/${current}/replies`,f.input('合成新段独立输入'));
+ assert.doesNotMatch(JSON.stringify(host.requests.at(-1).body),/合成旧要求：只在旧段使用|合成历史编辑/);
+ const selected=await f.request(host,`${oldPath}/selections`,{candidate_id:candidate,version_id:edited.versions[1].version_id,selection_key:randomUUID()});
+ const carried=await f.request(host,`${oldPath}/new-with-candidate`,{expected_selection_id:selected.selection_id,candidate_id:candidate,version_id:edited.versions[1].version_id});
+ await f.request(host,`${base}/${carried.session_id}/replies`,{...f.input('合成明确携入版本'),expected_input_version_id:carried.input_version_id});
+ assert.match(JSON.stringify(host.requests.at(-1).body),/合成历史编辑/,'用户明确携入的保存版本才进入新段');
+ assert.doesNotMatch(JSON.stringify(host.requests.at(-1).body),/合成旧要求：只在旧段使用/);
+});
+
+test('明确继续在改当前与活动前拒绝错误联系人、绑定变化及失效来源',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:old}=await f.request(host,base,{}),path=`${base}/${old}`;
+ await f.request(host,`${path}/replies`,f.input('合成资格原句'));
+ const {session_id:current}=await f.request(host,base,{}),before=await f.request(host,base),requests=host.requests.length;
+ const resume=async(p=path,contact=f.contact,manual=true)=>{
+  const response=await fetch(host.url+`${p}/resume`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json',...(manual?{'x-notalone-manual-contact':contact}:{})},body:'{}'});
+  return {status:response.status,body:await response.json()};
+ };
+ const other=randomUUID();await f.f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成其他联系人')",[other,f.owner]);
+ await f.f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[randomUUID(),f.owner,other]);
+ assert.equal((await resume(path.replace(f.contact,other),other)).status,404);
+ const binding=randomUUID();await f.f.client.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic','changed')",[binding,f.owner,f.contact]);
+ assert.equal((await resume(path,f.contact,false)).status,409);
+ await f.f.client.query('DELETE FROM conversation_binding WHERE id=$1',[binding]);
+ await f.f.client.query('UPDATE assistant_session_turn SET dependency_ids=$1 WHERE session_id=$2',[[randomUUID()],old]);
+ assert.equal((await resume()).status,409);
+ await f.f.client.query("UPDATE assistant_session_turn SET dependency_ids='{}' WHERE session_id=$1",[old]);
+ await f.f.client.query("INSERT INTO cross_domain_deletion_operation(id,subject_sha256,scope_kind,source_kind,owner_id,contact_id,target_id) VALUES($1,$2,'source','source_document',$3,$4,$5)",[randomUUID(),'f'.repeat(64),f.owner,f.contact,randomUUID()]);
+ assert.equal((await resume()).status,409,'来源删除未完成时仍阻恢复');
+ assert.match(JSON.stringify(await f.request(host,path)),/合成资格原句/,'未完成删除不阻断只读历史');
+ assert.deepEqual(await f.request(host,base),before,'资格失败不应修改任何活动或当前指针');
+ assert.equal((await f.request(host,base)).current_session_id,current);
+ assert.equal(host.requests.length,requests);
+});
+
 test('连续两轮及真实宿主重启恢复同一讨论和官方历史，不重复复制整段讨论',{timeout:60000},async t=>{
  const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
  const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),path=`${base}/${session}`;

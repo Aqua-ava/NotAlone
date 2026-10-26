@@ -1,4 +1,5 @@
-import {captureAssistantRuntimeDependencies} from '../runtime/assistant-runtime-erasure.ts';
+import {captureAssistantRuntimeDependencies,assistantRuntimeDeletionPending} from '../runtime/assistant-runtime-erasure.ts';
+import {recordAssistantUserActivity} from './assistant-user-activity.ts';
 /**
  * 助手讨论的 TypeScript 业务责任方。
  *
@@ -346,28 +347,41 @@ export class AssistantDiscussionService {
         [scope.owner_id,scope.contact_id],
       );
       return (await client.query(
-        'INSERT INTO assistant_session(owner_id,contact_id,is_default) VALUES($1,$2,TRUE) RETURNING id',
+        'INSERT INTO assistant_session(owner_id,contact_id,is_default,last_user_activity_at) VALUES($1,$2,TRUE,clock_timestamp()) RETURNING id',
         [scope.owner_id,scope.contact_id],
       )).rows[0].id;
     });
   }
 
-  async listSessions(scope:AssistantDiscussionScope):Promise<{sessions:{session_id:string;is_current:boolean}[];current_session_id:string|null}>{
+  async listSessions(scope:AssistantDiscussionScope):Promise<{sessions:{session_id:string;is_current:boolean;last_user_activity_at:string|null}[];current_session_id:string|null}>{
     return this.transaction(scope,async client=>{
       await this.contact(client,scope);
       const sessions=(await client.query(
-        'SELECT id,is_default FROM assistant_session WHERE owner_id=$1 AND contact_id=$2 ORDER BY id',
+        'SELECT id,is_default,last_user_activity_at FROM assistant_session WHERE owner_id=$1 AND contact_id=$2 ORDER BY id',
         [scope.owner_id,scope.contact_id],
-      )).rows.map(row=>({session_id:row.id,is_current:row.is_default}));
+      )).rows.map(row=>({session_id:row.id,is_current:row.is_default,last_user_activity_at:row.last_user_activity_at===null?null:iso(row.last_user_activity_at)}));
       return {sessions,current_session_id:sessions.find(row=>row.is_current)?.session_id??null};
-    });
+    },true);
   }
 
   async selectSession(scope:AssistantDiscussionScope,sessionId:string):Promise<string>{
     return this.transaction(scope,async client=>{
       await this.contact(client,scope);
-      await this.activeBinding(client,scope,true);
+      const binding=await this.activeBinding(client,scope,true);
       await this.sessionRow(client,scope,sessionId,true);
+      if(await assistantRuntimeDeletionPending(client,scope,sessionId))reject('conflict','deletion_pending');
+      for(const row of await inputRows(client,scope.owner_id,scope.contact_id,sessionId)){
+        if(row.conversation_binding_id!==binding)reject('conflict','binding_changed');
+        if(row.state!=='active')reject('conflict','source_unavailable');
+        if(row.input_type==='candidate_carry')await this.carryContent(client,scope,row);
+        const dependencies=[...new Set<string>([...(row.dependency_ids??[]),...(row.turn_dependencies??[])])];
+        await this.assistant.verifiedDiscussionDependencies(client,scope,dependencies,false);
+        await this.ports.requireGenerationMemoryDependencies(client,scope,dependencies);
+        if(row.reply_request_id){
+          await this.ports.requireReplySourcesCurrent(client,scope,row.reply_request_id,true);
+          await this.ports.requireSavedSkillPolicy(client,scope,row.reply_request_id);
+        }
+      }
       await client.query(
         'UPDATE assistant_session SET is_default=FALSE WHERE owner_id=$1 AND contact_id=$2 AND is_default AND id<>$3',
         [scope.owner_id,scope.contact_id,sessionId],
@@ -376,6 +390,7 @@ export class AssistantDiscussionService {
         'UPDATE assistant_session SET is_default=TRUE WHERE owner_id=$1 AND contact_id=$2 AND id=$3',
         [scope.owner_id,scope.contact_id,sessionId],
       );
+      await recordAssistantUserActivity(client,scope,sessionId);
       return sessionId;
     });
   }
@@ -425,6 +440,7 @@ export class AssistantDiscussionService {
         'UPDATE assistant_session SET current_input_version_id=$4,updated_at=now() WHERE owner_id=$1 AND contact_id=$2 AND id=$3',
         [scope.owner_id,scope.contact_id,sessionId,input.id],
       );
+      await recordAssistantUserActivity(client,scope,sessionId);
       return input.id;
     });
   }
@@ -518,6 +534,7 @@ export class AssistantDiscussionService {
     [scope.owner_id,scope.contact_id,sessionId,candidate.turn_id,candidateId,next,
       command.parent_version_id,command.edit_key,JSON.stringify(command.messages),command.requirements,
     ])).rows[0];
+    await recordAssistantUserActivity(client,scope,sessionId);
     return {candidate,receipt:{
       session_id:sessionId,candidate_id:candidateId,version_id:row.id,
       version_number:Number(row.version_number),edit_key:command.edit_key,
@@ -644,7 +661,7 @@ export class AssistantDiscussionService {
         [scope.owner_id,scope.contact_id],
       );
       const created=(await client.query(
-        'INSERT INTO assistant_session(owner_id,contact_id,is_default) VALUES($1,$2,TRUE) RETURNING id',
+        'INSERT INTO assistant_session(owner_id,contact_id,is_default,last_user_activity_at) VALUES($1,$2,TRUE,clock_timestamp()) RETURNING id',
         [scope.owner_id,scope.contact_id],
       )).rows[0].id;
       const input=(await client.query(`

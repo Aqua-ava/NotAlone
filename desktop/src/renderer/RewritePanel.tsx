@@ -86,6 +86,8 @@ export function useReplySession(enabled = true) {
       return window.notalone.replies.newSavedSessionWithCandidate({ ...scope, ...request,
         expectedSelectionId: choice.selection.selectionId });
     }),
+    viewSavedSession: (sessionId: string) => operate(() => window.notalone.replies.viewSavedSession({ ...selection(), sessionId })),
+    resumeSavedSession: (sessionId: string) => operate(() => window.notalone.replies.resumeSavedSession({ ...selection(), sessionId })),
     selectSavedSession: (sessionId: string) => operate(() => window.notalone.replies.selectSavedSession({ ...selection(), sessionId })),
     deleteSavedSession: (command: AssistantSessionDeletion) => operate(() => window.notalone.replies.deleteSavedSession(command)),
     reconnectMessages: () => operate(() => window.notalone.replies.reconnectMessages(selection())),

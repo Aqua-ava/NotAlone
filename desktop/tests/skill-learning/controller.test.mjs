@@ -221,6 +221,8 @@ async function deletionFixture() {
     }
     if (request.path === `/api/deletions/${taskId}`) return { generation, data: { operation_id: taskId, scope_kind: 'discussion', status: 'succeeded' } };
     if (request.path.startsWith('/api/deletions?')) return { generation, data: { operations: [] } };
+    if (request.path.endsWith('/assistant-sessions') && request.method === 'GET') return { generation, data: {
+      sessions: [{ session_id: sessionId, is_current: true }], current_session_id: sessionId } };
     if (request.path.endsWith('/assistant-session/default')) return { generation, data: { session_id: sessionId } };
     if (request.path.includes('/assistant-sessions/')) {
       if (records.verificationBarrier) {

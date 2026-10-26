@@ -166,6 +166,13 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     }
     return replies.newSavedSessionWithCandidate(value as unknown as import('../../shared/reply-bridge').AssistantCandidateCarry);
   }, 'helper');
+  for (const [channel, action] of [['reply:view-saved-session', 'viewSavedSession'], ['reply:resume-saved-session', 'resumeSavedSession']] as const) {
+    commands.handle(channel, (...args: unknown[]) => {
+      const value = fields(args, ['contactId', 'scopeRevision', 'sessionId']);
+      if (!isUuid(value.sessionId)) throw new Error('助手会话不可用。');
+      return replies[action]({ ...value, sessionId: value.sessionId.toLowerCase() } as unknown as AssistantSessionSelection);
+    }, 'helper');
+  }
   commands.handle('reply:select-saved-session', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'sessionId']);
     if (!isUuid(value.sessionId)) throw new Error('助手会话不可用。');

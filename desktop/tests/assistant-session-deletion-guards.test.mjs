@@ -30,6 +30,8 @@ async function fixture({ pendingDeletion = false } = {}) {
         return { generation: 7, data: { session_id: sessionId, state: 'deleted', operation_id: operationId } };
       }
       if (request.path === `/api/deletions/${operationId}`) { controls.operationEntered?.(); if (controls.operationBarrier) await controls.operationBarrier; return { generation: 7, data: { operation_id: operationId, scope_kind: 'discussion', status: controls.operationStatus } }; }
+      if (request.path.endsWith('/assistant-sessions') && request.method === 'GET') return { generation: 7, data: {
+        sessions: [{ session_id: controls.sessionId, is_current: true }], current_session_id: controls.sessionId } };
       if (request.path.endsWith('/assistant-session/default')) {
         return { generation: 7, data: { session_id: controls.sessionId } };
       }

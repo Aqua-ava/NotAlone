@@ -52,7 +52,7 @@ export interface SavedAssistantInput {
 }
 export interface AssistantSessionCatalog {
   phase: 'idle' | 'loading' | 'ready' | 'failed';
-  items: { sessionId: string; isCurrent: boolean }[];
+  items: { sessionId: string; isCurrent: boolean; lastUserActivityAt?: string | null }[];
   currentSessionId: string | null;
   selectionPending?: boolean;
 }

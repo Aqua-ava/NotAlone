@@ -241,6 +241,8 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   listSavedSessions(selection: ContactSelection): Promise<void>;
   newSavedSession(selection: ContactSelection): Promise<void>;
   newSavedSessionWithCandidate(selection: AssistantCandidateCarry): Promise<void>;
+  viewSavedSession(selection: AssistantSessionSelection): Promise<void>;
+  resumeSavedSession(selection: AssistantSessionSelection): Promise<void>;
   selectSavedSession(selection: AssistantSessionSelection): Promise<void>;
   deleteSavedSession(selection: AssistantSessionDeletion): Promise<void>;
   selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
