@@ -140,7 +140,7 @@ def main() -> None:
             guard_modules(ROOT, expected=expected, evidence_path=evidence_path, phase='complete')
             proof = json.loads(evidence_path.read_text())
             proof.update(migration_proof, database_name=fixture.database_name, child_pid=os.getpid(),
-                         model_calls=len(fixture.reply_model.seen_calls), started_calls=fixture.reply_model.started_calls,
+                         model_calls=len(getattr(getattr(fixture, "reply_model", None), "seen_calls", [])), started_calls=getattr(getattr(fixture, "reply_model", None), "started_calls", 0),
                          observations=observations, model_call_limit=4, external_model_calls=0,
                          before_import_ownership=json.loads((ownership_path.parent / "import-database-ownership.json").read_text()),
                          core_ownership=json.loads(ownership_path.read_text()),

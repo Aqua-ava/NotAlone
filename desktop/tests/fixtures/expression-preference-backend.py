@@ -49,7 +49,7 @@ def main():
             guard_modules(ROOT, expected=expected, evidence_path=evidence_path, phase='complete')
             final_proof = json.loads(evidence_path.read_text())
             final_proof.update(migration_proof, child_pid=os.getpid(),
-                               model_calls=len(fixture.reply_model.seen_calls))
+                               model_calls=len(getattr(getattr(fixture, "reply_model", None), "seen_calls", [])))
             evidence_path.write_text(json.dumps(final_proof, ensure_ascii=False, indent=2))
         finally:
             cleanup_fixture(fixture)
