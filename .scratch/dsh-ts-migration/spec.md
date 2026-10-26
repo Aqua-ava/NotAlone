@@ -1,5 +1,7 @@
 # 精简 DSH 与 TypeScript 后端迁移
 
+> 2026-10-26 最新验收修订：三路本地 HTTP 已观测到的毫秒级退化记为 `non_blocking_by_user`，不再阻塞剩余验收；仅限 `contacts`、`sources`、`session-default`，其他硬门槛不变。见[本地 HTTP 非阻塞决定](local-http-latency-scope-update.md)与[验收范围更新](acceptance-scope-update.md)。
+
 > 2026-10-25 最新用户决定：本轮输出容量与费用不设人为门槛，固定4096及费用预算/1.10比值不再阻塞执行或验收；实际用量与历史结果保留，其他验收继续。详见[范围更新](acceptance-scope-update.md)。
 Triage: ready-for-agent
 State: open
@@ -99,6 +101,8 @@ State: open
 | 退役 | 清点生产入口、Worker、诊断、脚本和锁文件，不再启动或导入 Python 后端／旧框架；评测脚本迁移或明确隔离退役，不掩盖产品运行依赖 |
 
 基线阶段必须在迁移结果产生前固定质量判定标准、样本与性能费用退化阈值，避免事后放宽。确定性合同必须全部通过；不能从当前对话推导未测量的数值承诺。未通过或无法解释的明显退化阻止对应切换；若修复需改变用户已确认范围，返回决策。
+
+用户于2026-10-26明确批准的例外仅为[三路本地 HTTP 已知毫秒级退化](local-http-latency-scope-update.md)，记 `non_blocking_by_user` 并继续其他验收；冻结协议及历史失败／未定不变，不冒充原门槛通过。启动／RSS、模型端到端、实际 App／微信及其他未豁免硬要求继续执行。
 
 沿用现有回复有界循环、输入预算、场景与历史工具、来源核验、任务幂等及公开 HTTP／PostgreSQL 集成测试的行为合同；替换 LangChain fake model 等框架替身。测试从单用例到相关模块，按工程规则再做有界全量，不使用私人聊天夹具。
 
