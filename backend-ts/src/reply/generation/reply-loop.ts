@@ -4,7 +4,7 @@ import {createUserMessage,ReasoningEffortId,LlmError,type StreamChunk,type Token
 import {SessionId} from '@deepseek-ai/dsh-session';
 import {defineTool,type ToolDefinition,type ToolRunContext} from '@deepseek-ai/dsh-tools';
 import {randomUUID} from 'node:crypto';
-import {ReplyError,validateReplyCandidates,type ReplyCandidateInput} from './reply-contract.ts';
+import {ReplyError,ReplyOutputError,validateReplyCandidates,type ReplyCandidateInput} from './reply-contract.ts';
 import {REPLY_EXECUTION_DEADLINE_MS} from './reply-execution-budget.ts';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
 import {ModelInputBudgetError,type MessagesBudgetProfile,type MessagesBudgetReceipt} from '../../platform/models/model-input-budget.ts';
@@ -60,6 +60,7 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
   const signal=AbortSignal.any([outerSignal,controller.signal,...ports.skillSession?[ports.skillSession.runtime.signal]:[]]);
   const sessionId=SessionId(randomUUID()),budgets:MessagesBudgetReceipt[]=[],candidateLimit=input.candidate_limit??3;
   let candidates:ReplyCandidateInput[]|null=null,calls=0,failure:unknown=null;
+  let lastFinish:string|undefined,completionCallLimit=0;
   let handle:Awaited<ReturnType<Context['agents']['create']>>|undefined;
   let disposeSkill:(()=>void)|undefined;
   const intercept=ctx.on('llm/stream',async function*(options,next):AsyncGenerator<StreamChunk> {
@@ -75,7 +76,7 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
       if(candidates||++calls>input.physical_limit)throw new ReplyError('reply_budget_exceeded',502);
       if(options.provider!==input.provider||options.model!==input.model||options.maxTokens!==input.maxTokens||options.temperature!==input.temperature||options.reasoningEffort!==input.reasoningEffort)throw new ReplyError('reply_model_configuration_changed',502);
       call=ports.provider.beginCall({sessionId,attempt_id:receipt.attempt_id,permit_id:permit.id,
-        binding:{provider:input.provider,model:input.model,maxTokens:input.maxTokens,temperature:input.temperature,reasoningEffort:input.reasoningEffort,stop:options.stop},
+        binding:{provider:input.provider,model:input.model,maxTokens:input.maxTokens,temperature:input.temperature,reasoningEffort:input.reasoningEffort,stop:options.stop,toolChoice:completionCallLimit?{name:'ReplyRuntimeOutput'}:'any'},
         profile:ports.budgetProfile,requireCurrent:ports.requireCurrent,
         beforeDispatch:async value=>{
           signal.throwIfAborted();
@@ -85,6 +86,7 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
       for await(const chunk of next()) {
         if(chunk.type==='usage')usage=chunk.usage;
         if(chunk.type==='finish') {
+          lastFinish=chunk.reason.kind;
           // 官方Adapter的非2xx不会触发accept；仅其可靠HTTP状态能证明响应已观测。
           if((chunk.reason.kind==='error'||chunk.reason.kind==='aborted')&&Number.isInteger(chunk.reason.failure.status)&&chunk.reason.failure.status!>=100&&chunk.reason.failure.status!<=599)receipt.dispatch='response_observed';
           if((chunk.reason.kind==='error'||chunk.reason.kind==='aborted')&&chunk.reason.failure.code==='CONTEXT_WINDOW_EXCEEDED')throw new ReplyError('provider_context_limit',409);
@@ -116,18 +118,20 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
       scope.on('agent/error',event=>{failure??=event.error;});
       scope.on('agent/pre-step',async (_position,next)=>{
         if(candidates||failure)return {kind:'reject'};
+        if(completionCallLimit&&calls>=completionCallLimit){failure=new ReplyOutputError('output_missing');return {kind:'reject'};}
         if(calls>=input.physical_limit){failure=new ReplyError('reply_budget_exceeded',502);return {kind:'reject'};}
         signal.throwIfAborted();await ports.requireCurrent();return next();
       });
-      scope.tools.guard(exec=>signal.aborted||candidates!==null?'reply_inactive':!allowed.has(exec.name)&&exec.name!=='ReplyRuntimeOutput'?'reply_tool_forbidden':undefined);
+      scope.tools.guard(exec=>signal.aborted||candidates!==null?'reply_inactive':completionCallLimit&&exec.name!=='ReplyRuntimeOutput'?'reply_output_required':!allowed.has(exec.name)&&exec.name!=='ReplyRuntimeOutput'?'reply_tool_forbidden':undefined);
       scope.on('tools/result',(exec,result)=>{
-        if(exec.name==='ReplyRuntimeOutput'&&result.isError)failure=new ReplyError('reply_candidates_rejected');
+        if(completionCallLimit&&exec.name!=='ReplyRuntimeOutput')failure??=new ReplyOutputError('output_missing');
+        if(exec.name==='ReplyRuntimeOutput'&&result.isError)failure??=new ReplyOutputError('output_schema_invalid');
         return undefined;
       });
       disposeSkill=await registerReplyAgentSetup(scope,input,{signal,tools:ports.tools,skillSession:ports.skillSession,
         async executeOutput(args,exec){
           try {signal.throwIfAborted();await ports.requireCurrent();if(candidates||Object.keys(args).sort().join(',')!=='candidates,used_skill_version_id')throw new ReplyError('reply_candidates_rejected');const validated=validateReplyCandidates(restoreReplyEvidenceAliases(args,ports.aliases),ports.evidenceIds(),candidateLimit);const claim=args.used_skill_version_id;if(!(claim===null||typeof claim==='string'))throw new ReplyError('reply_candidates_rejected');if(ports.skillSession)await ports.skillSession.captureClaim(claim,signal);else if(claim!==null)throw new ReplyError('reply_candidates_rejected');signal.throwIfAborted();candidates=validated;exec.concludeTurn();return '候选已完成结构和引用校验。';}
-          catch(error){failure=error;throw error;}
+          catch(error){failure=error instanceof ReplyError&&error.code==='reply_candidates_rejected'?new ReplyOutputError('output_candidates_invalid'):error;throw failure;}
         }});
     }});
     await ports.skillSession?.validateRegistry(signal);
@@ -135,7 +139,14 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
     handle.agent.followup(createUserMessage({source:{kind:'user'},content:[{type:'text',text:input.prompt}]}));
     await handle.agent.whenIdle();
     signal.throwIfAborted();if(failure)throw failure;
-    if(!candidates||calls===0)throw new ReplyError('reply_candidates_rejected');
+    // 供应商可能忽略any并正常返回普通文本；只补一次指定工具提交，不放宽候选校验或总预算。
+    if(!candidates&&lastFinish==='stop'&&calls>0&&calls<input.physical_limit){
+      await ports.requireCurrent();signal.throwIfAborted();completionCallLimit=calls+1;
+      handle.agent.followup(createUserMessage({source:{kind:'user'},content:[{type:'text',text:'本轮尚未提交候选。请现在调用 ReplyRuntimeOutput 提交符合本轮要求的候选，保留依据与引用；不要再检索或只返回普通文本。'}]}));
+      await handle.agent.whenIdle();
+      signal.throwIfAborted();if(failure)throw failure;
+    }
+    if(!candidates||calls===0)throw new ReplyOutputError('output_missing');
     await ports.requireCurrent();
     await ports.persist(candidates,budgets,signal);
     return {candidates,budgets};

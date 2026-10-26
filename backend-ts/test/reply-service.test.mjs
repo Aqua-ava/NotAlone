@@ -68,6 +68,8 @@ test('已认证scope接缝：官方runtime与真实PG完整回复生命周期',{
   mode='bad';const input=body(),before=host.requests.length;
   await assert.rejects(host.request('/generate',{id:randomUUID(),scope,body:input}),/reply_candidates_rejected/);assert.equal(host.requests.length,before+1);
   const count=(await f.client.query('SELECT count(*)::int AS n FROM reply_candidate c JOIN reply_request r ON r.id=c.reply_request_id WHERE r.idempotency_key=$1',[input.idempotency_key])).rows[0].n;assert.equal(count,0);
+  const failure=(await f.client.query('SELECT a.failure_reason FROM reply_attempt a JOIN reply_request r ON r.id=a.reply_request_id WHERE r.idempotency_key=$1',[input.idempotency_key])).rows[0];
+  assert.equal(failure.failure_reason,'reply_output_candidates_invalid');
  });
  await t.test('多消息仅缺边界空行时按消息原文保存规范正文',async()=>{
   mode='join0';const input=body(),before=host.requests.length,segments=['你以前说过喜欢喝茶，现在还是喜欢茶吗？','还是换口味了，现在喜欢喝什么？'];

@@ -6,6 +6,13 @@ export class ReplyError extends Error {
   readonly status: number;
   constructor(code: string, status=409) { super(code); this.code=code; this.status=status; }
 }
+/** 只保留可枚举的失败阶段，不记录模型原文或供应商错误正文。 */
+export class ReplyOutputError extends ReplyError {
+  readonly reason:'output_missing'|'output_schema_invalid'|'output_candidates_invalid';
+  constructor(reason:ReplyOutputError['reason']) {
+    super('reply_candidates_rejected');this.reason=reason;
+  }
+}
 export type ReplyContent = Record<string, unknown> & {type:'reply_to_message'|'rewrite_draft'|'initiate_conversation'};
 export interface ReplyRequestInput {
   contact_id:string; idempotency_key:string; content:ReplyContent;

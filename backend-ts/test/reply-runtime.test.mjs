@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {startReplyRuntimeHost,sendEvents,useTool} from './reply-runtime-support.mjs';
 test('官方provider物理请求保留未知费用、独立缓存token并释放许可',{timeout:30000},async t=>{
   const host=await startReplyRuntimeHost(t,(_req,res,_requests,events)=>{
@@ -114,7 +115,11 @@ test('同轮工具前后各物理请求使用独立attempt、共享整轮permit�
   else useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['c1'],risk_notes:[]}]});
   sendEvents(res,events);
  });
- await host.request('/loop',{withTool:true});
+ const result=await host.request('/loop',{withTool:true});
+ for(const [index,request] of host.requests.entries()){
+  assert.deepEqual(request.body.tool_choice,{type:'any'});
+  assert.equal(result.budgets[index].request_sha256,createHash('sha256').update(JSON.stringify(request.body)).digest('hex'));
+ }
  const state=await host.request('/health');
  assert.equal(host.requests.length,2);assert.equal(state.reservations.length,2);assert.equal(state.records.length,2);
  assert.equal(state.records[0].permit_id,state.records[1].permit_id);
@@ -139,4 +144,56 @@ test('官方Agent scope按实际Skill读取生成回执，持久提交先于scop
  const check=state.skillChecks[0];assert.equal(check.open_at_commit,true);assert.equal(check.closed_after,true);
  assert.equal(check.use.version_id,'60000000-0000-4000-8000-000000000001');assert.equal(check.use.selection_method,'user');
  assert.equal(state.permits,0);
+});
+
+test('回复请求要求工具输出，避免普通文本结束后没有候选',{timeout:30000},async t=>{
+  const host=await startReplyRuntimeHost(t,(_req,res,requests,events)=>{
+    if(requests.at(-1).body.tool_choice?.type==='any'){
+      useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['c1'],risk_notes:[]}]});
+    }
+    sendEvents(res,events);
+  });
+  const result=await host.request('/loop',{});
+  assert.equal(result.candidates[0].text,'明天见');
+  assert.deepEqual(host.requests[0].body.tool_choice,{type:'any'});
+  assert.equal(result.budgets[0].serialized_bytes,Buffer.byteLength(JSON.stringify(host.requests[0].body)));
+  assert.equal(host.requests.length,1);
+});
+
+for(const scenario of ['missing','schema','evidence'])test(`候选失败保留不含正文的具体原因：${scenario}`,{timeout:30000},async t=>{
+ const host=await startReplyRuntimeHost(t,(_req,res,_requests,events)=>{
+  if(scenario==='schema')useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'缺少依据'}]});
+  if(scenario==='evidence')useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'合成依据',citation_ids:['99999999-0000-4000-8000-000000000001'],risk_notes:[]}]});
+  sendEvents(res,events);
+ });
+ const reason={missing:'output_missing',schema:'output_schema_invalid',evidence:'output_candidates_invalid'}[scenario];
+ await assert.rejects(host.request('/loop',{}),error=>{
+  assert.deepEqual(JSON.parse(error.message),{error:'reply_candidates_rejected',reason});return true;
+ });
+ assert.equal(host.requests.length,scenario==='missing'?2:1);
+ assert.equal((await host.request('/health')).permits,0);
+});
+
+test('供应商忽略any返回普通文本时只补一次指定输出工具且沿用调用预算',{timeout:30000},async t=>{
+ const host=await startReplyRuntimeHost(t,(_req,res,requests,events)=>{
+  if(requests.at(-1).body.tool_choice?.type==='tool')useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次目的',citation_ids:['c1'],risk_notes:[]}]});
+  sendEvents(res,events);
+ });
+ const result=await host.request('/loop',{});
+ assert.equal(result.candidates[0].text,'明天见');assert.equal(host.requests.length,2);
+ assert.deepEqual(host.requests[1].body.tool_choice,{type:'tool',name:'ReplyRuntimeOutput'});
+ for(const [index,request] of host.requests.entries())assert.equal(result.budgets[index].request_sha256,createHash('sha256').update(JSON.stringify(request.body)).digest('hex'));
+ await assert.rejects(host.request('/loop',{physical_limit:1}),/reply_candidates_rejected/);
+ assert.equal(host.requests.length,3);
+});
+
+
+test('补提交阶段禁止继续检索且不追加第三次调用',{timeout:30000},async t=>{
+ const host=await startReplyRuntimeHost(t,(_req,res,requests,events)=>{
+  if(requests.length===2)useTool(events,'conversation_search',{query:'合成'});
+  sendEvents(res,events);
+ });
+ await assert.rejects(host.request('/loop',{withTool:true,physical_limit:4}),error=>JSON.parse(error.message).reason==='output_missing');
+ assert.equal(host.requests.length,2);
+ const state=await host.request('/health');assert.equal(state.toolExecutions,0);assert.equal(state.permits,0);
 });

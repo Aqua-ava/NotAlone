@@ -18,10 +18,10 @@ export function apply(ctx:Context) {
   const provider=installModelProvider(ctx,{provider:'notalone-reply-guarded',
     connection:resolveAdapterOptions({baseURL:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL!,thinking:'disabled',maxTokens:256,retryPolicy:{mode:'normal',maxRetries:0}}),
     resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous' as never});
-  let permits=0;
+  let permits=0,toolExecutions=0;
   const server=createServer(async(req,res)=>{
     res.setHeader('content-type','application/json');
-    if(req.url==='/health') {res.end(JSON.stringify({records,reservations,skillChecks,permits}));return;}
+    if(req.url==='/health') {res.end(JSON.stringify({records,reservations,skillChecks,permits,toolExecutions}));return;}
     try {
       let raw='';for await(const part of req)raw+=part;
       const body=JSON.parse(raw);
@@ -31,7 +31,7 @@ export function apply(ctx:Context) {
         acquire:async()=>{permits++;return {id:randomUUID(),settle:async()=>{permits--;}};},
       };
       if(req.url==='/loop') {
-        const tools=body.withTool?[defineTool({name:'conversation_search',description:'合成工具协议测试',parameters:{query:{type:'string',required:true}},output:{schema:{type:'string'},render:(_a,result)=>[{type:'text',text:result}]},async execute(){if(body.revokeAfterTool)current=false;return '合成工具协议结果，不是生产检索';}})]:[];
+        const tools=body.withTool?[defineTool({name:'conversation_search',description:'合成工具协议测试',parameters:{query:{type:'string',required:true}},output:{schema:{type:'string'},render:(_a,result)=>[{type:'text',text:result}]},async execute(){toolExecutions++;if(body.revokeAfterTool)current=false;return '合成工具协议结果，不是生产检索';}})]:[];
         let skillSession:ReplySkillSession|null=null;
         const check={open_at_commit:false,closed_after:false,use:null as unknown};
         if(body.withSkill){
@@ -47,7 +47,7 @@ export function apply(ctx:Context) {
         res.end(JSON.stringify(result));return;
       }
       res.statusCode=404;res.end(JSON.stringify({error:'not_found'}));
-    } catch(error) {res.statusCode=422;res.end(JSON.stringify({error:error instanceof Error?error.message:'failed'}));}
+    } catch(error) {res.statusCode=422;res.end(JSON.stringify({error:error instanceof Error?error.message:'failed',...error instanceof Error&&'reason'in error?{reason:error.reason}:{}}));}
   });
   const ready=ctx.appReady!.onReady(()=>{server.listen(0,'127.0.0.1',()=>{const a=server.address();if(a&&typeof a!=='string')process.stdout.write(`VALIDATION_READY http://127.0.0.1:${a.port}\n`);});});
   ctx.effect(()=>async()=>{ready();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await provider.dispose();});

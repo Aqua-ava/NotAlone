@@ -4,7 +4,7 @@ import {LlmError} from '@deepseek-ai/dsh-llm';
 import {bindDiagnosticProblemBudget} from '../../diagnostics/diagnostic-problem-budget.ts';
 import { DeepSeekAdapter, PUBLIC_BASE_URL, type DeepSeekConnectionOptions, type DeepSeekAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek';
 import {
-  measureSerializedMessages,measureSerializedStrictChatCompletion,ModelInputBudgetError,
+  prepareBoundMessagesRequest,measureSerializedMessages,measureSerializedStrictChatCompletion,ModelInputBudgetError,
   type MessagesBudgetBinding,type MessagesBudgetProfile,type MessagesBudgetReceipt,
 } from './model-input-budget.ts';
 import {
@@ -84,17 +84,18 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       await current.call.requireCurrent();
       request.signal.throwIfAborted();
       let budget:MessagesBudgetReceipt;
-      try{budget=measureSerializedMessages(request.body,current.call.binding,current.call.profile);}
+      const prepared=prepareBoundMessagesRequest(request.body,current.call.binding);
+      try{budget=measureSerializedMessages(prepared.body,current.call.binding,current.call.profile);}
       catch(error){if(error instanceof ModelInputBudgetError)current.observation.budget_rejection={code:error.code,receipt:error.receipt};throw error;}
       const checkDiagnosticDispatch=diagnosticBudget?.reserve();
       current.observation.before_dispatch_started=true;
       await current.call.beforeDispatch({attempt_id:current.call.attempt_id,permit_id:current.call.permit_id,budget,dispatch:'authorized_unconfirmed',
-        request_entity_characters:[...JSON.stringify(request.body)].length});
+        request_entity_characters:[...JSON.stringify(prepared.body)].length});
       checkDiagnosticDispatch?.();
       current.observation.budget=budget;
       current.observation.dispatch='authorized_unconfirmed';
       request.signal.throwIfAborted();
-      return {fields:{},accept:async()=>{current.observation.dispatch='http_accepted';}};
+      return {fields:prepared.fields,accept:async()=>{current.observation.dispatch='http_accepted';}};
     },
   });
   const dispose=ctx.llm.registerAdapter([configuration.provider],adapter);

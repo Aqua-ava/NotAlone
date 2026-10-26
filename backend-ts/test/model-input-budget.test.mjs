@@ -59,3 +59,18 @@ test('锁定官方adapter最终序列化守卫：允许请求字节一致、超�
  await assert.rejects(collect({...options,messages:[{role:'user',content:[{type:'text',text:'超预算'.repeat(10000)}]}]}));
  assert.equal(payloads.length,1,'第二次预算拒绝必须没有HTTP');
 });
+
+
+test('工具选择必须与授权绑定一致并纳入完整请求预算',()=>{
+ const request={...body(),tool_choice:{type:'any'}},required={...binding,toolChoice:'any'};
+ const receipt=measureSerializedMessages(request,required,profile);
+ assert.equal(receipt.serialized_bytes,Buffer.byteLength(JSON.stringify(request)));
+ assert.throws(()=>measureSerializedMessages(body(),required,profile),/unavailable/);
+ assert.throws(()=>measureSerializedMessages(request,binding,profile),/unavailable/);
+ assert.throws(()=>measureSerializedMessages({...request,tool_choice:{type:'auto'}},required,profile),/unavailable/);
+ assert.throws(()=>measureSerializedMessages({...request,tools:[]},required,profile),/unavailable/);
+ const named={...request,tool_choice:{type:'tool',name:'lookup'}};
+ assert.equal(measureSerializedMessages(named,{...binding,toolChoice:{name:'lookup'}},profile).serialized_bytes,Buffer.byteLength(JSON.stringify(named)));
+ assert.throws(()=>measureSerializedMessages(named,{...binding,toolChoice:{name:'missing'}},profile),/unavailable/);
+ assert.throws(()=>measureSerializedMessages({...named,tools:[]},{...binding,toolChoice:{name:'lookup'}},profile),/unavailable/);
+});

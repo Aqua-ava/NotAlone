@@ -3,7 +3,7 @@ import type {Context} from '@deepseek-ai/cordis';
 import type {Client} from 'pg';
 import {randomUUID} from 'node:crypto';
 import {isAbsolute} from 'node:path';
-import {ReplyError,normalizeReplyInput,parseReplyRequest,type ReplyCandidateInput,type ReplyRequestInput} from './reply-contract.ts';
+import {ReplyError,ReplyOutputError,normalizeReplyInput,parseReplyRequest,type ReplyCandidateInput,type ReplyRequestInput} from './reply-contract.ts';
 import {requireReplyScope,type VerifiedReplyScope} from './reply-scope.ts';
 import {PostgresReplyStore,ReplyStoreError,type ReplyStoreRequest,type ReplyStoreResult} from './reply-store.ts';
 import {createReplyGenerationGuards,type ReplyGenerationGuardOptions} from './reply-generation-guards.ts';
@@ -126,7 +126,7 @@ export class ReplyGenerationService {
    const unavailable=async():Promise<never>=>{throw new ReplyError('reply_preflight_tool_execution_invalid',502);};
    const tools=[...history?.tools()??[],...(replyScenarioReadPolicy(state.context).reads.length?[createReplyScenarioReadTool(unavailable)]:[]),...skill.tools()];
    return await preflightReplyAgent(this.options.ctx,{
-    binding:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort},profile:model.budgetProfile,
+    binding:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort,toolChoice:'any'},profile:model.budgetProfile,
     prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation,aliases}),
     requireCurrent,validateRegistry:()=>skill.validateRegistry(signal),
     async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion,aliases),temperature:model.temperature},{tools,skillSession:skill,executeOutput:unavailable,signal});},
@@ -206,7 +206,7 @@ export class ReplyGenerationService {
    return await resultPayload(saved);
   }catch(error){
    let rejected=failure(error,signal,model);
-   if(owned&&activeStore)try{await activeStore.fail(owned,rejected.code);}catch{rejected=new ReplyError('reply_persistence_unavailable',503);}
+   if(owned&&activeStore)try{await activeStore.fail(owned,rejected instanceof ReplyOutputError?`reply_${rejected.reason}`:rejected.code);}catch{rejected=new ReplyError('reply_persistence_unavailable',503);}
    throw rejected;
   }finally{skill?.close();activeSkillPort?.dispose();await settle();}
  }

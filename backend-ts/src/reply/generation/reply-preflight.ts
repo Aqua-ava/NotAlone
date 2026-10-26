@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {DeepSeekAdapter,resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {createUserMessage,ReasoningEffortId,type StreamChunk} from '@deepseek-ai/dsh-llm';
 import {SessionId} from '@deepseek-ai/dsh-session';
-import {measureSerializedMessages,type MessagesBudgetBinding,type MessagesBudgetProfile,type MessagesBudgetReceipt} from '../../platform/models/model-input-budget.ts';
+import {prepareBoundMessagesRequest,measureSerializedMessages,type MessagesBudgetBinding,type MessagesBudgetProfile,type MessagesBudgetReceipt} from '../../platform/models/model-input-budget.ts';
 import {ReplyError} from './reply-contract.ts';
 type Setup=NonNullable<Parameters<Context['agents']['create']>[0]['setup']>;
 export interface ReplyPreflightInput {
@@ -27,7 +27,7 @@ export async function preflightReplyAgent(ctx:Context,input:ReplyPreflightInput,
    prepareExtensions:async request=>{
      signal.throwIfAborted();if(request.sessionId!==sessionId||++calls!==1)throw new ReplyError('reply_preflight_invalid',502);
      await input.requireCurrent();signal.throwIfAborted();
-     try{receipt=measureSerializedMessages(request.body,input.binding,input.profile);}catch(error){failure=error;throw error;}
+     try{receipt=measureSerializedMessages(prepareBoundMessagesRequest(request.body,input.binding).body,input.binding,input.profile);}catch(error){failure=error;throw error;}
      // 绝不返回extension或accept：此处成功也必须停止，不能到达HTTP发送。
      throw blocked;
    },

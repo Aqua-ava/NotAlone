@@ -6,6 +6,8 @@ export const STRICT_CHAT_MEASUREMENT_ID = 'deepseek-strict-chat-json-utf8-bytes-
 export interface MessagesBudgetBinding {
   provider: string; model: string; maxTokens: number;
   temperature?: number; reasoningEffort: 'off'|'low'|'high'|'max'; stop?: readonly string[];
+  /** 回复必须调用工具提交结果；其他模型调用保持缺省行为。 */
+  toolChoice?: 'any'|{name:string};
 }
 export interface MessagesBudgetProfile {
   context_window_tokens: number; safety_margin_tokens: number;
@@ -42,19 +44,36 @@ function requireTextBlocks(blocks: unknown): void {
     if (block.type==='tool_result') requireTextBlocks(block.content);
   }
 }
+function messagesToolChoice(binding:MessagesBudgetBinding):{type:'any'}|{type:'tool';name:string}|undefined {
+  const choice=binding.toolChoice;
+  if(choice===undefined)return undefined;
+  if(choice==='any')return {type:'any'};
+  if(!object(choice)||Object.keys(choice).join(',')!=='name'||typeof choice.name!=='string'||!choice.name.trim())unavailable();
+  return {type:'tool',name:choice.name};
+}
+/** 正式发送与零HTTP预检共用同一扩展，预算覆盖最终实体。 */
+export function prepareBoundMessagesRequest(body:unknown,binding:MessagesBudgetBinding) {
+  if(!object(body)||Object.hasOwn(body,'tool_choice'))unavailable();
+  const choice=messagesToolChoice(binding);
+  const fields:Record<string,{type:'any'}|{type:'tool';name:string}>=choice?{tool_choice:choice}:{};
+  return {body:{...body,...fields},fields};
+}
 /**
- * body必须直接来自官方DeepSeekAdapter.prepareExtensions的request.body。
+ * body为官方Adapter序列化实体与本次受控tool_choice扩展合并后的最终请求。
  * 该函数应直接作为adapter hook的前置守卫；不能通过会吞异常的extension registry安装。
- * 返回后只允许空扩展字段，最终内容不能被其他插件追加或改写。
+ * 返回后仅允许应用同一受控扩展，最终内容不能被其他插件追加或改写。
  */
 export function measureSerializedMessages(body: unknown, binding: MessagesBudgetBinding, profile: MessagesBudgetProfile): MessagesBudgetReceipt {
   const positive = (v:unknown) => Number.isSafeInteger(v)&&Number(v)>0;
   if(!binding.provider?.trim()||!binding.model?.trim()||!positive(binding.maxTokens)||!positive(profile.context_window_tokens)||!positive(profile.safety_margin_tokens)||!['off','low','high','max'].includes(binding.reasoningEffort))unavailable();
   if(!object(body))unavailable();
   jsonCompatible(body);
-  const fields=new Set(['model','stream','messages','max_tokens','thinking','output_config','system','temperature','stop_sequences','tools']);
+  const fields=new Set(['model','stream','messages','max_tokens','thinking','output_config','system','temperature','stop_sequences','tools','tool_choice']);
   if(Object.keys(body).some(key=>!fields.has(key))||body.model!==binding.model||body.stream!==true||body.max_tokens!==binding.maxTokens||body.temperature!==binding.temperature||!isDeepStrictEqual(body.stop_sequences,binding.stop))unavailable();
   if(!isDeepStrictEqual(body.thinking,{type:binding.reasoningEffort==='off'?'disabled':'enabled'})||!isDeepStrictEqual(body.output_config,binding.reasoningEffort==='off'?undefined:{effort:binding.reasoningEffort}))unavailable();
+  const toolChoice=messagesToolChoice(binding);
+  if(!isDeepStrictEqual(body.tool_choice,toolChoice))unavailable();
+  if(toolChoice&&(!Array.isArray(body.tools)||body.tools.length===0||toolChoice.type==='tool'&&!body.tools.some(tool=>object(tool)&&tool.name===toolChoice.name)))unavailable();
   if(!Array.isArray(body.messages)||!body.messages.length||body.system!==undefined&&typeof body.system!=='string'||body.tools!==undefined&&!Array.isArray(body.tools))unavailable();
   for(const message of body.messages) {
     if(!object(message)||!['user','assistant','system'].includes(String(message.role)))unavailable();

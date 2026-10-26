@@ -39,7 +39,7 @@ function envelope(value:unknown,owner:string){
  return value;
 }
 const knownErrors=new Set(['reply_request_invalid','reply_input_invalidated','reply_input_conflict','reply_in_progress','reply_continuation_invalid','expression_preferences_changed','reply_candidates_rejected','reply_review_invalid','reply_timeout','reply_budget_exceeded','reply_budget_unavailable','reply_generation_failed','reply_context_invalidated','reply_context_unavailable','reply_not_found','reply_rejected','input_budget_exceeded','input_budget_unavailable','exploration_stale','exploration_expired','reply_cancelled','runtime_stopping','provider_context_limit','reply_persistence_unavailable']);
-const knownReasons=new Set(['scope_mismatch','no_active_binding','manual_contact_unconfirmed','invalid_verification','history_sync_pending','history_incomplete_confirmation_required']);
+const knownReasons=new Set(['output_missing','output_schema_invalid','output_candidates_invalid','scope_mismatch','no_active_binding','manual_contact_unconfirmed','invalid_verification','history_sync_pending','history_incomplete_confirmation_required']);
 /** 不回传任意Error字段/堆栈；输入预算必须是既有公开纯元数据。 */
 function errorBody(error:unknown):{status:number;body:Record<string,unknown>}{
  if(error instanceof WechatHttpBodyError)return {status:error.status,body:{error:error.code}};
