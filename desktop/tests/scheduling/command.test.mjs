@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -65,7 +66,7 @@ test('同一用户的两份独立命令副本与不同 TMPDIR 互斥，正常收
 });
 
 test('独立 Playwright worker 中的原始 Electron API 也不能绕过门禁', () => {
-  const result = spawnSync(process.execPath, [path.join(desktop, 'node_modules/playwright/cli.js'), 'test',
+  const result = spawnSync(process.execPath, [createRequire(import.meta.url).resolve('@playwright/test/cli'), 'test',
     '--config', 'tests/scheduling/playwright.config.ts'], { cwd: desktop, encoding: 'utf8', timeout: 8000,
     env: { ...process.env, NOTALONE_APP_TEST_TOKEN: '', NOTALONE_APP_TEST_LEASE: '' } });
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -165,7 +166,7 @@ test('无写端 FIFO 租约记录不会阻塞状态命令，仍拒绝继续验�
 });
 
 test('直接 Playwright 主配置在 fixture 之前拒绝，未运行真实 App', () => {
-  const result = spawnSync(process.execPath, [path.join(desktop, 'node_modules/playwright/cli.js'), 'test', 'tests/windows.spec.ts'],
+  const result = spawnSync(process.execPath, [createRequire(import.meta.url).resolve('@playwright/test/cli'), 'test', 'tests/windows.spec.ts'],
     { cwd: desktop, encoding: 'utf8', timeout: 8000,
       env: { ...process.env, NOTALONE_TEST_APP_EXECUTABLE: process.execPath, NOTALONE_APP_TEST_TOKEN: '', NOTALONE_APP_TEST_LEASE: '' } });
   assert.notEqual(result.status, 0);
@@ -173,7 +174,7 @@ test('直接 Playwright 主配置在 fixture 之前拒绝，未运行真实 App'
 });
 
 test('App 全量发现排除所有调度安全组，列表结果不代表 App 运行', () => {
-  const result = spawnSync(process.execPath, [path.join(desktop, 'node_modules/playwright/cli.js'), 'test', '--list'],
+  const result = spawnSync(process.execPath, [createRequire(import.meta.url).resolve('@playwright/test/cli'), 'test', '--list'],
     { cwd: desktop, encoding: 'utf8', timeout: 8000, env: { ...process.env, NOTALONE_APP_TEST_FILES: '' } });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /windows.spec.ts/);
@@ -181,7 +182,7 @@ test('App 全量发现排除所有调度安全组，列表结果不代表 App �
 });
 
 test('显式文件范围只发现该组，不能因为 CLI 正则匹配扩成全量', () => {
-  const result = spawnSync(process.execPath, [path.join(desktop, 'node_modules/playwright/cli.js'), 'test', '--list'],
+  const result = spawnSync(process.execPath, [createRequire(import.meta.url).resolve('@playwright/test/cli'), 'test', '--list'],
     { cwd: desktop, encoding: 'utf8', timeout: 8000,
       env: { ...process.env, NOTALONE_APP_TEST_FILES: JSON.stringify(['tests/windows.spec.ts']) } });
   assert.equal(result.status, 0, result.stdout + result.stderr);

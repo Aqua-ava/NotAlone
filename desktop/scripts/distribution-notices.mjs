@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
+import { parse } from 'yaml';
 
 const defaultLock = JSON.parse(await readFile(new URL('./distribution-notices.lock.json', import.meta.url), 'utf8'));
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -53,14 +55,38 @@ async function verifyNotices(directory, records, receipt) {
   if (!(await regularBytes(directory, 'sources.json')).equals(expected)) throw new Error('distribution_notice_receipt_changed');
 }
 
+function frontendDependencyPath(packageLock, name) {
+  const importer = packageLock.importers?.desktop;
+  if (String(packageLock.lockfileVersion) !== '9.0' || !importer) throw new Error('distribution_package_changed');
+  const queue = Object.entries({ ...importer.dependencies, ...importer.devDependencies }).map(([dependency, value]) => [{ name: dependency, version: value.version }]);
+  const visited = new Set();
+  for (let index = 0; index < queue.length; index++) {
+    const chain = queue[index]; const selected = chain.at(-1); const key = `${selected.name}@${selected.version}`;
+    if (visited.has(key)) continue;
+    visited.add(key);
+    if (selected.name === name) return chain;
+    const snapshot = packageLock.snapshots?.[key];
+    for (const [dependency, version] of Object.entries({ ...snapshot?.dependencies, ...snapshot?.optionalDependencies })) {
+      queue.push([...chain, { name: dependency, version }]);
+    }
+  }
+  throw new Error('distribution_package_changed');
+}
 export async function prepareFrontendNotices({ projectDirectory, outputDirectory, lock = defaultLock }) {
-  const packageLock = JSON.parse(await regularBytes(projectDirectory, 'package-lock.json', 2 * 1024 * 1024));
+  const packageLock = parse((await regularBytes(path.dirname(projectDirectory), 'pnpm-lock.yaml', 4 * 1024 * 1024)).toString('utf8'));
   const originals = [];
   for (const record of lock.frontend) {
-    const installed = path.join(projectDirectory, 'node_modules', relativePath(record.name));
+    const chain = frontendDependencyPath(packageLock, record.name);
+    const pinned = packageLock.packages?.[`${record.name}@${record.version}`];
+    if (chain.at(-1).version?.split('(')[0] !== record.version || pinned?.resolution?.tarball !== record.resolved || pinned?.resolution?.integrity !== record.integrity) throw new Error('distribution_package_changed');
+    // 从实际依赖方解析，兼容 pnpm 中仅链接在 react-dom 下面的 scheduler。
+    let packageFile = path.join(projectDirectory, 'package.json');
+    try {
+      for (const dependency of chain) packageFile = createRequire(packageFile).resolve(relativePath(dependency.name) + '/package.json');
+    } catch { throw new Error('distribution_notice_unavailable'); }
+    const installed = path.dirname(packageFile);
     const metadata = JSON.parse(await regularBytes(installed, 'package.json', 1024 * 1024));
-    const pinned = packageLock.packages?.['node_modules/' + record.name];
-    if (metadata.name !== record.name || metadata.version !== record.version || pinned?.version !== record.version || pinned?.resolved !== record.resolved || pinned?.integrity !== record.integrity) throw new Error('distribution_package_changed');
+    if (metadata.name !== record.name || metadata.version !== record.version) throw new Error('distribution_package_changed');
     if (!record.member.startsWith('package/')) throw new Error('distribution_notice_path');
     const bytes = await regularBytes(installed, record.member.slice('package/'.length)); checkNotice(bytes, record);
     originals.push([record.output, bytes]);

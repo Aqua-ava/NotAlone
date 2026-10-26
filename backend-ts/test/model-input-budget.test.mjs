@@ -32,15 +32,10 @@ test('真实配置漂移、隐藏字段、未知内容、无余量均在发送�
 });
 
 test('锁定官方adapter最终序列化守卫：允许请求字节一致、超预算零HTTP', async t=>{
- const {readdir}=await import('node:fs/promises');
- const {resolve}=await import('node:path');
- const {pathToFileURL}=await import('node:url');
  const {createServer}=await import('node:http');
  const {once}=await import('node:events');
  const {createHash}=await import('node:crypto');
- const packageDirectory=(await readdir('node_modules/.pnpm')).find(name=>name.startsWith('@deepseek-ai+dsh-llm-deepseek@0.2.1-rc.2_'));
- assert.ok(packageDirectory,'必须使用已锁定的官方制品');
- const {DeepSeekAdapter,resolveAdapterOptions}=await import(pathToFileURL(resolve('node_modules/.pnpm',packageDirectory,'node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js')).href);
+ const {DeepSeekAdapter,resolveAdapterOptions}=await import('@deepseek-ai/dsh-llm-deepseek');
  const payloads=[];
  const server=createServer(async(req,res)=>{
   let raw='';for await(const part of req)raw+=part;payloads.push(raw);

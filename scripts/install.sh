@@ -32,7 +32,7 @@ log "检查基础依赖…"
 command -v brew >/dev/null 2>&1 || fail "未找到 Homebrew，请先安装：https://brew.sh"
 command -v node >/dev/null 2>&1 || fail "请先安装 Node.js 24 或更新版本。"
 node -e 'if(Number(process.versions.node.split(".")[0])<24)process.exit(1)' || fail "Node.js 版本须至少24。"
-command -v npm >/dev/null 2>&1 || fail "请先安装随Node分发的npm。"
+command -v pnpm >/dev/null 2>&1 || fail "请先安装 pnpm 11.25.0：npm install --global pnpm@11.25.0。"
 psql_bin="$(command -v psql || true)"
 if [[ -z "${psql_bin}" ]]; then
     log "未找到 psql；尝试安装 PostgreSQL 16…"
@@ -56,8 +56,7 @@ command -v codesign >/dev/null 2>&1 || fail "未找到 codesign（Xcode Command 
 # 1. 锁定的 Node 依赖
 # ------------------------------------------------------------------
 log "安装 TypeScript 后台与桌面依赖…"
-npx --yes pnpm@11.25.0 --dir "${repo_root}/backend-ts" install --frozen-lockfile || fail "后台 Node 依赖安装失败。"
-npm --prefix "${repo_root}/desktop" ci || fail "桌面 Node 依赖安装失败。"
+pnpm install --frozen-lockfile || fail "workspace Node 依赖安装失败。"
 
 # ------------------------------------------------------------------
 # 2. PostgreSQL 本地服务与数据库

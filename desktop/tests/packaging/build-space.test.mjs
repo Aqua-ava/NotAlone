@@ -93,8 +93,8 @@ test('真实打包和探针准备入口在空间不足时不留下输出或临�
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
 
-test('公开 npm 打包入口由发布门禁优先拒绝，连前置编译产物也不创建', async () => {
-  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-build-space-npm-'));
+test('公开 pnpm 打包入口由发布门禁优先拒绝，连前置编译产物也不创建', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-build-space-pnpm-'));
   try {
     const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
     await writeFile(path.join(owned, 'package.json'), JSON.stringify({ scripts: manifest.scripts }));
@@ -102,14 +102,19 @@ test('公开 npm 打包入口由发布门禁优先拒绝，连前置编译产物
     for (const name of ['main', 'preload', 'renderer']) await mkdir(path.join(owned, 'src', name), { recursive: true });
     for (const name of ['main', 'preload']) await writeFile(path.join(owned, 'src', name, 'index.ts'), 'export const synthetic = true;');
     await writeFile(path.join(owned, 'src/renderer/index.html'), '<html><title>synthetic</title></html>');
+    // pnpm run 会核验安装状态；先准备空依赖夹具，再检查门禁不产生构建文件。
+    const installed = spawnSync('pnpm', ['install', '--offline', '--ignore-scripts'], { cwd: owned, encoding: 'utf8', timeout: 15_000 });
+    assert.ifError(installed.error);
+    assert.equal(installed.status, 0, installed.stderr);
+    const before = (await readdir(owned)).sort();
     const preload = `import fs from 'node:fs/promises'; fs.statfs = async () => ({ bavail: 1024n, bsize: 4096n });`;
-    const result = spawnSync('npm', ['run', 'package'], { cwd: owned, encoding: 'utf8', timeout: 15_000,
+    const result = spawnSync('pnpm', ['run', 'package'], { cwd: owned, encoding: 'utf8', timeout: 15_000,
       env: { ...process.env, NODE_OPTIONS: `--import=data:text/javascript,${encodeURIComponent(preload)}` },
     });
     assert.ifError(result.error);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /打包入口已锁定/);
-    assert.deepEqual((await readdir(owned)).sort(), ['package.json', 'scripts', 'src']);
+    assert.deepEqual((await readdir(owned)).sort(), before);
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
 

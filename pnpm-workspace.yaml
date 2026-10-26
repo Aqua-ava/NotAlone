@@ -1,0 +1,21 @@
+packages:
+  - backend-ts
+  - desktop
+
+# 保留可核验的下载来源；后端部署从共享锁生成独立依赖闭包。
+lockfileIncludeTarballUrl: true
+injectWorkspacePackages: true
+# 安装必须显式执行，运行开发、测试或 CI 脚本时不隐式改锁或扩大安装范围。
+verifyDepsBeforeRun: false
+
+# 仅允许当前依赖需要的安装脚本，其他脚本显式拒绝。
+allowBuilds:
+  electron: true
+  esbuild: true
+  onnxruntime-node: true
+  '@deepseek-ai/dsh-subprocess-local': true
+  koffi: true
+  node-pty: true
+  '@google/genai': false
+  protobufjs: false
+  node-addon-require-builtin: false

@@ -9,8 +9,8 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "start": "npm run dev",
-    "test": "npm run typecheck && node scripts/test-safe.mjs",
+    "start": "pnpm run dev",
+    "test": "pnpm run typecheck && node scripts/test-safe.mjs",
     "test:polling": "node --test tests/skill-learning/*.test.mjs tests/background-task-polling.test.mjs tests/memory-processing/bridge.test.mjs",
     "test:app": "node scripts/test-app.mjs",
     "test:app:status": "node scripts/test-app.mjs --status",
@@ -41,6 +41,7 @@
     "electron": "44.7.0",
     "esbuild": "0.28.2",
     "typescript": "7.0.2",
-    "vite": "8.3.3"
+    "vite": "8.3.3",
+    "yaml": "2.9.1"
   }
 }

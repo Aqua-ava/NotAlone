@@ -82,7 +82,7 @@ function dependencies(source:string):string[]{
 export async function createExtractionPolicyVersion(options:{rootDirectory?:string;entrypoints?:readonly string[]}={}):Promise<ExtractionPolicyVersion>{
  const root=resolve(options.rootDirectory??resolve(dirname(fileURLToPath(import.meta.url)),'../..'));
  const entries=options.entrypoints??['memory/extraction/extraction-batch-service.ts','memory/extraction/deepseek-strict-verification.ts','memory/extraction/extraction-policy-version.ts'];
- const metadata=[resolve(root,'../package.json'),resolve(root,'../pnpm-lock.yaml')];
+ const metadata=[resolve(root,'../package.json'),resolve(root,'../../pnpm-lock.yaml')];
  async function capture():Promise<string>{
   const visited=new Set<string>(),files:{path:string;sha256:string}[]=[];
   async function visit(path:string):Promise<void>{

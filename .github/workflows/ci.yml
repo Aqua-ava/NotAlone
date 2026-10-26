@@ -14,33 +14,31 @@ jobs:
   desktop:
     name: 桌面类型与测试登记
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: desktop
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: node scripts/test-inventory.mjs
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm --filter ./desktop install --frozen-lockfile
+      - run: pnpm --dir desktop run typecheck
+      - run: node desktop/scripts/test-inventory.mjs
 
   backend:
     name: TypeScript 后端检查
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend-ts
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npx --yes pnpm@11.25.0 install --frozen-lockfile
-      - run: npx --yes pnpm@11.25.0 typecheck
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm --filter ./backend-ts install --frozen-lockfile
+      - run: pnpm --dir backend-ts run typecheck
 
   public-history:
     name: 公开历史检查

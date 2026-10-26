@@ -27,3 +27,6 @@ __pycache__/
 
 # 本机模型许可运行状态
 /model-permits/
+
+# pnpm workspace 安装产物
+node_modules/

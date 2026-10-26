@@ -132,14 +132,13 @@ Psycopg专属wheel、重建和替换工具随Python后端退役。旧验证记�
 
 任务18于2026-10-10 17:06–17:16（UTC+8）由主Agent直接操作当前微信与隔离App，公开坐标表单成功保存五处pending几何，但唯一布局校验未形成profile，实际1场失败，原因尚未定位。自有进程/目录及精确租约已核验收尾，未自动重启。现已补0600固定阶段/错误码结果和对应公开断言，原始画面不保存；新诊断未再实机验证，真实最小采集、成功自动定位和权限归属继续待验。后端两名质量解析及旧匹配入口的统一资格门禁在新建隔离库38/38通过，不能代替现场green。
 
-完整本机 App 需要 macOS 15 或更新版本、Node.js ≥ 22.12，以及构建图标/本机签名所需的 Xcode Command Line Tools。依赖版本固定在 `package-lock.json`。
+完整本机 App 需要 macOS 15 或更新版本、Node.js ≥ 24，以及构建图标/本机签名所需的 Xcode Command Line Tools。前后端依赖统一由根目录 pnpm workspace 管理，版本固定在根 `pnpm-lock.yaml`。
 
 ```bash
+pnpm install --frozen-lockfile # 在仓库根目录安装两端依赖及 Electron 运行时
 cd desktop
-npm ci
-npx install-electron     # 首次显式准备锁定版本的 Electron 运行时
-npm run typecheck
-npm test                # 类型检查、安全调度、自研探针及外置路径配置，真实 App 不运行
+pnpm run typecheck
+pnpm test                # 类型检查、安全调度、自研探针及外置路径配置，真实 App 不运行
 npm run test:polling     # 后台刷新稳定性回归，含无头 Chrome 页面；不启动 Electron
 npm run dev             # 日常开发
 npm start               # 与 npm run dev 相同
@@ -214,7 +213,7 @@ npm run package -- --output-directory /已有父目录/新的输出目录 --elec
 
 两项路径必须为绝对路径且不重复。显式输出目录必须不存在，先独占创建，失败时只按目录身份清理本次自有目标；已有目录保留并拒绝，不允许覆盖。离线目录须含 `electron-v版本-darwin-架构.zip` 普通文件，版本来自锁定配置、架构来自本机；缺档或摘要不同均在 Packager 执行前拒绝，不回退下载。`distribution-notices.lock.json` 固定官方 44.7.0 SHASUMS 的 macOS arm64／x64 归档摘要；本轮实际构建覆盖 arm64。在线默认路径沿用已安装 `@electron/get` 5.1.0 的 SHASUMS 下载及 SHA256 校验（缓存命中也复核），没有启用跳过校验选项。Packager 临时树留在本轮 staging 下，随本轮清理。未给这些选项时保留原 `out/` 构建方式。SDK 的 [electronZipDir](https://electron.github.io/packager/main/interfaces/Options.html#electronZipDir)、[out/tmpdir](https://electron.github.io/packager/main/interfaces/Options.html#out)已与安装 20.3.0 源码核对。
 
-2026-10-17 补齐前端分发通知：构建先核对安装包名称／版本、package-lock 的版本／URL／完整性字段及原文 SHA256，再将 react 19.3.0、react-dom 19.3.0、scheduler 0.28.0 的三份 `LICENSE` 和 vite 8.3.3 完整 `LICENSE.md` 原样保存到 `dist/licenses/frontend/`，附固定来源收据。这四份原文已从官方 npm 归档按锁内 SHA512 核验，并与安装副本逐字节相同；没有只保存 MIT 名称或自行生成版权文字。打包进一步保留到 `Contents/Resources/licenses/frontend/`。Electron 官方 ZIP 原有 `LICENSE`（1096 字节）和 `LICENSES.chromium.html`（20115518 字节）也在签名前保留到 `Contents/Resources/licenses/electron/`，复制后与签名后复查原文摘要和文件集合，拖动单个 App 仍保留。两组共六份原文、两份来源收据，不扩大为全部 node_modules 通知闭包或法律认证。
+2026-10-17 补齐前端分发通知，2026-10-26 随 workspace 迁移适配统一锁：构建先核对安装包名称／版本、根 pnpm-lock 的 importer／依赖图、下载 URL／完整性字段及原文 SHA256，再将 react 19.3.0、react-dom 19.3.0、scheduler 0.28.0 的三份 `LICENSE` 和 vite 8.3.3 完整 `LICENSE.md` 原样保存到 `dist/licenses/frontend/`，附固定来源收据。这四份原文已从官方 npm 归档按锁内 SHA512 核验，并与安装副本逐字节相同；没有只保存 MIT 名称或自行生成版权文字。打包进一步保留到 `Contents/Resources/licenses/frontend/`。Electron 官方 ZIP 原有 `LICENSE`（1096 字节）和 `LICENSES.chromium.html`（20115518 字节）也在签名前保留到 `Contents/Resources/licenses/electron/`，复制后与签名后复查原文摘要和文件集合，拖动单个 App 仍保留。两组共六份原文、两份来源收据，不扩大为全部 node_modules 通知闭包或法律认证。
 
 同日实际验证：同名重包 ZIP 因容器 SHA256 不同而被拒绝；独立对照记录确认其 583 个 member 的路径、原始内容和权限均与官方 ZIP 相同，拒绝不表示其中代码被修改。官方 arm64 ZIP 构建的静态 App 严格签名通过，六份通知保留；含自研探针的 `test:package` 1／1 通过，缺档／改字节／锁不匹配的轻量回归进入默认安全组。本轮没有启动 App、GUI、微信或访问用户资料。
 

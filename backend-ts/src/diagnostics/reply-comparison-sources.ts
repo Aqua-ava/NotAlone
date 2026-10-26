@@ -57,7 +57,7 @@ export interface ReplyRuntimeSourceCaptureInput {
  scope:Row;case_id:string;repeat:number;arm:'old'|'new';attempt_id:string;started_at:string;captured_at:string;response_started_at:string;
  persisted_sources:readonly Row[];collector_binding:ReplyComparisonCollectorBinding;
 }
-const SOURCE_PATHS=['backend-ts/src','backend-ts/profile','backend-ts/package.json','backend-ts/pnpm-lock.yaml'];
+const SOURCE_PATHS=['backend-ts/src','backend-ts/profile','backend-ts/package.json','pnpm-lock.yaml'];
 /** collector 只把实际源码树、工作树状态、argv摘要与提交绑定进 attempt；不写本机路径原值。 */
 export function replyComparisonCollectorBinding(repositoryRoot:string,argv:readonly string[]=process.argv.slice(2),sourcePaths:readonly string[]=SOURCE_PATHS):ReplyComparisonCollectorBinding {
  if(typeof repositoryRoot!=='string'||!repositoryRoot||!Array.isArray(argv)||argv.some(value=>typeof value!=='string'))return invalid('collector_arguments');

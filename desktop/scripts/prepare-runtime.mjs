@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashFile, inspectManagedRuntime, runtimeInventory } from './managed-runtime.mjs';
+import { prepareBackendRuntime } from './prepare-backend-runtime.mjs';
 import { prepareRuntimeAttribution } from './runtime-attribution.mjs';
 import { buildPostgresRuntime } from './build-postgres.mjs';
 import { requireBuildSpace } from './build-space.mjs';
@@ -54,14 +55,8 @@ if (options['--check-directory']) {
     const archive = await download(locked.postgres);
     const root = path.join(staging, 'notalone-runtime'); await mkdir(root);
     await buildPostgresRuntime({ archive, directory: path.join(root, 'postgres'), workDirectory: path.join(staging, 'postgres-build') });
-    const project = path.join(root, 'project'), backend = path.join(project, 'backend-ts');
-    await mkdir(backend, { recursive: true });
-    for (const name of ['src', 'profile', 'package.json', 'pnpm-lock.yaml', 'node_modules']) {
-      // 只复制已安装的锁定Node项目；不读取原资料、环境文件或Python实现。
-      await cp(path.join(repository, 'backend-ts', name), path.join(backend, name), { recursive: true, dereference: true,
-        filter: source => !/(?:^|\/)(?:\.cache|__pycache__|\.env(?:\.[^/]*)?)(?:\/|$)/.test(source) });
-    }
-    await cp(path.join(repository, 'backend-ts/database'), path.join(project, 'backend-ts/database'), { recursive: true });
+    const project = path.join(root, 'project');
+    const backend = await prepareBackendRuntime({ repository, project, workDirectory: staging });
     const licenses = path.join(root, 'licenses'); await mkdir(licenses);
     await prepareRuntimeAttribution({ lock: attribution, download, directory: path.join(licenses, 'attribution') });
     await cp(path.join(scripts, 'runtime/THIRD-PARTY-SOURCES.md'), path.join(licenses, 'README.md'));
@@ -69,7 +64,8 @@ if (options['--check-directory']) {
     const nodeVersion = (await run(process.execPath, ['--version'])).stdout.trim();
     const native = await auditNative(root, (file, args) => run(file, args));
     await writeFile(path.join(licenses, 'native-audit.json'), JSON.stringify(native, null, 2) + '\n');
-    await writeFile(path.join(licenses, 'node-dependencies.json'), JSON.stringify({ nodeVersion, lockSha256: await hashFile(path.join(backend, 'pnpm-lock.yaml')),
+    await writeFile(path.join(licenses, 'node-dependencies.json'), JSON.stringify({ nodeVersion, lockSha256: await hashFile(path.join(project, 'pnpm-lock.yaml')),
+      deployedLockSha256: await hashFile(path.join(backend, 'pnpm-lock.yaml')),
       runtime: 'Electron内置Node，ELECTRON_RUN_AS_NODE=1', notices: 'project/backend-ts/node_modules中保留各包原始许可' }, null, 2) + '\n');
     const manifest = { formatVersion: 1, architecture: 'arm64', components: [locked.postgres,
       { name: 'notalone-typescript', version: '0.0.0', source: 'repository:backend-ts', sha256: await hashFile(path.join(backend, 'package.json')) }],

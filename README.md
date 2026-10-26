@@ -66,9 +66,8 @@
 在仓库根目录运行：
 
 ```bash
+npm install --global pnpm@11.25.0
 zsh scripts/install.sh
-cd desktop
-npm ci
 npm run dev
 ```
 
@@ -101,13 +100,16 @@ zsh scripts/install.sh
 
 ### 3. 准备并启动桌面端
 
+前后端统一由根目录 pnpm workspace 管理，版本锁定在根 `pnpm-lock.yaml`；`backend-ts/` 和 `desktop/` 各自声明依赖。请在仓库根目录安装，不使用 `npm install` 或 `npm ci` 安装项目依赖。运行脚本不会自动安装或修改锁文件；`npm run dev` 只是运行开发脚本，沿用现有桌面开发入口。
+
+根目录可运行 `pnpm typecheck`、`pnpm test:backend`、`pnpm test:desktop`；`pnpm test` 串行执行两端测试。新增依赖用 `pnpm --filter ./backend-ts add <包名>` 或 `pnpm --filter ./desktop add <包名>`。
+
 ```bash
-cd desktop
-npm ci
+pnpm install --frozen-lockfile
 npm run dev
 ```
 
-日常使用 `npm run dev`：React/CSS 保存后热更新，main、preload、共享代码与 TypeScript 后台变化后安全重启。`npm start` 等同于开发模式；仅构建用 `npm run build`。打包与运行打包版仅限用户明确发起的发布任务，`npm run package` 当前受发布门禁限制，详见[日常开发热更新](desktop/README.md#日常开发热更新)。默认包只含前端；可用 `--with-probe` 附带 NotAlone 自研探针，微信 CLI / WCDB 始终由用户在本机另行准备。
+日常使用 `npm run dev`：React/CSS 保存后热更新，main、preload、共享代码与 TypeScript 后台变化后安全重启。`npm start` 等同于开发模式；仅构建用 `npm run build`。打包与运行打包版仅限用户明确发起的发布任务，`pnpm --dir desktop run package` 当前受发布门禁限制，详见[日常开发热更新](desktop/README.md#日常开发热更新)。默认包只含前端；可用 `--with-probe` 附带 NotAlone 自研探针，微信 CLI / WCDB 始终由用户在本机另行准备。
 
 ### 4. 首次连接与使用
 

@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { lstat } from 'node:fs/promises';
@@ -106,7 +107,7 @@ async function run(options) {
       exitCode ||= await execute([path.join(desktop, 'scripts/build.mjs')]);
       if (!exitCode) {
         interactiveAttempted = true;
-        const args = [path.join(desktop, 'node_modules/playwright/cli.js'), 'test', ...(options.files ?? []),
+        const args = [createRequire(import.meta.url).resolve('@playwright/test/cli'), 'test', ...(options.files ?? []),
           '--workers=1', '--retries=0', '--repeat-each=1', '--max-failures=1'];
         if (options.grep) args.push('--grep', options.grep);
         if (options.output) args.push('--output', options.output);

@@ -77,6 +77,7 @@
     "tests/memory-processing/bridge.test.mjs",
     "tests/memory-ui-wiring.test.mjs",
     "tests/packaging/arguments.test.mjs",
+    "tests/packaging/backend-workspace-runtime.test.mjs",
     "tests/packaging/distribution-notices.test.mjs",
     "tests/packaging/finder-isolation.test.mjs",
     "tests/packaging/managed-runtime.test.mjs",

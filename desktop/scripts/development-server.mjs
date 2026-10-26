@@ -19,7 +19,9 @@ export async function createDevelopmentServer(projectDirectory) {
   const nonce = randomBytes(24).toString('hex');
   const renderer = path.join(projectDirectory, 'src/renderer');
   const cache = path.join(projectDirectory, '.dev/vite');
-  const allowed = [renderer, path.join(projectDirectory, 'src/shared'), path.join(projectDirectory, 'node_modules'), cache];
+  const allowed = [renderer, path.join(projectDirectory, 'src/shared'), path.join(projectDirectory, 'node_modules'),
+    // workspace 虚拟存储仅含安装依赖；不向 Vite 开放仓库根目录。
+    path.resolve(projectDirectory, '../node_modules'), cache];
   const allowedPaths = [...allowed.map(directory => path.resolve(directory)),
     ...await Promise.all(allowed.map(directory => realpath(directory).catch(() => path.resolve(directory))))];
   const allowedFile = filename => allowedPaths.some(directory => {

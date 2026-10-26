@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { build } from 'esbuild';
@@ -127,6 +127,10 @@ test('开发命令提供受认证的本机 Vite，限制文件范围并为热更
     assert.equal((await fetch(running.origin + '/index.html', { ...options, method: 'POST' })).status, 403);
     assert.equal((await fetch(running.origin + '/@fs' + path.resolve('src/shared/contact-session-bridge.ts'), options)).status, 200);
     assert.equal((await fetch(running.origin + '/@fs' + path.resolve('node_modules/react/package.json'), options)).status, 200);
+    // workspace 的实际依赖在根虚拟存储中，不能因此开放后端源码。
+    const reactPackage = await realpath(path.resolve('node_modules/react/package.json'));
+    assert.equal((await fetch(running.origin + '/@fs' + reactPackage, options)).status, 200);
+    assert.equal((await fetch(running.origin + '/@fs' + path.resolve('../backend-ts/src/host-plugin.ts'), options)).status, 403);
     const client = await (await fetch(running.origin + '/@vite/client', options)).text();
     assert.ok(client.includes(new URL(running.origin).port));
     const source = await (await fetch(running.origin + '/ContactsPage.tsx', options)).text();

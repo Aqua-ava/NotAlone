@@ -42,7 +42,7 @@ test('直接打包与打包验收入口在创建输出前拒绝，不接受环�
 
 test('常用启动入口都走开发模式，打包不在门禁前预先构建', async () => {
   const { scripts } = JSON.parse(await readFile('package.json', 'utf8'));
-  assert.equal(scripts.start, 'npm run dev');
+  assert.equal(scripts.start, 'pnpm run dev');
   assert.equal(scripts.package, 'node scripts/package.mjs');
   assert.equal(scripts['test:package'], 'node scripts/release-check.mjs');
 });

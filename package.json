@@ -1,0 +1,19 @@
+{
+  "name": "notalone",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --dir desktop run dev",
+    "start": "pnpm run dev",
+    "dev:status": "pnpm --dir desktop run dev:status",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm --workspace-concurrency=1 --no-bail -r run test",
+    "test:backend": "pnpm --dir backend-ts test",
+    "test:desktop": "pnpm --dir desktop test",
+    "build": "pnpm --dir desktop run build"
+  }
+}
