@@ -379,6 +379,19 @@ test('正常运行续用只检查资格摘要，不再为长旧候选构造整�
  t.diagnostic('真实PG结果字节 '+JSON.stringify({ready_result_bytes:qualificationReads.reduce((n,q)=>n+q.result_bytes,0),ready_old_candidate_bytes:qualificationReads.reduce((n,q)=>n+q.marker_bytes,0),generation_guard_old_candidate_bytes:allReads.reduce((n,q)=>n+q.marker_bytes,0)}));
 });
 
+test('真实租约尚占用时读取历史不得在事务返回释放后漏过业务提交复验',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:session}=await f.request(host,base,{}),command=f.input('合成租约释放竞态已提交输入');
+ await f.request(host,`${base}/${session}/replies`,command);assert.equal(host.requests.length,1);
+ const observed=await f.request(host,'/validation/runtime-history-release-race',{request_key:command.idempotency_key});
+ t.diagnostic('真实Lease事务竞态 '+JSON.stringify(observed));
+ assert.equal(observed.releasedAtBoundary,true,'真实Lease在历史事务返回屏障处释放并使业务提交失效');
+ assert.equal(observed.rejected,true,'当时占用的ready记录不能等释放后绕过本次committed复验');
+ assert.equal(observed.code,'reply_in_progress');assert.equal(observed.historyReturned,false);
+ assert.equal(observed.state,'ready','正常busy拒绝不隔离已保存运行记录');assert.equal(observed.historyAvailableAfter,false);
+ assert.equal(host.requests.length,1,'读取与释放竞态不得追加模型HTTP');
+});
+
 test('公开连续准备减少数据库往返，零HTTP预检仍保留完整官方历史',{timeout:60000},async t=>{
  const f=await fixture(t),sqlLog=join(f.businessHome,'prepare-cost.jsonl');
  const host=await f.start({NOTALONE_SYNTHETIC_SQL_RESULT_LOG:sqlLog,NOTALONE_SYNTHETIC_SQL_MARKER:'合成准备往返预算'}),base=`/api/contacts/${f.contact}/assistant-sessions`;

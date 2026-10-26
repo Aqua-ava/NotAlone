@@ -264,7 +264,9 @@ export class AssistantRuntime {
   const row=await this.options.transaction(async client=>{
    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${scope.owner_id}`]);
    const current=await this.lookup(client,scope,requestKey,configuration);
-   if(current&&!this.active.has(this.key(scope,current.session_id))&&current.state==='ready'&&(current.committed_request_id||current.origin!=='generated')&&current.qualification){
+   // 本事务已见到占用就固定拒绝，不能因返回时租约刚释放而跳过提交资格。
+   if(current&&this.active.has(this.key(scope,current.session_id)))throw new ReplyError('reply_in_progress',409);
+   if(current&&current.state==='ready'&&(current.committed_request_id||current.origin!=='generated')&&current.qualification){
     committedRow=current;await this.requireCommittedRow(client,scope,current);
    }
    return current;
