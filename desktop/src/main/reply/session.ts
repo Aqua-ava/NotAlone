@@ -1708,8 +1708,8 @@ export class ReplySession {
         this.publish({ phase: 'ready', inputBudgetNotice, result: { ...this.state.result, basisChanges } });
         confirmMessageNotice(result); return;
       }
-      this.publish({ phase: 'ready', savedSession: accepted.retainedDisplay ? accepted.snapshot
-        : { phase: 'idle', sessionId: result.assistantSessionId, turns: [], inputs: [], currentInputVersionId: null },
+      // 完成核验已取得可信完整快照；保留它，避免页面再次全量读取并抢占本轮候选版本加载。
+      this.publish({ phase: 'ready', savedSession: accepted.snapshot,
       inputBudgetNotice,
       ...(result.assistantSessionId !== this.state.savedSession?.sessionId ? { sessionDeletion: undefined } : {}),
       result: { replyRequestId: result.replyRequestId, assistantSessionId: result.assistantSessionId,
@@ -1720,7 +1720,7 @@ export class ReplySession {
         usedSkill: result.usedSkill,
         inputBudget: result.inputBudget,
         candidates: result.candidates.map((original) => ({ original, editedText: original.text })) },
-      selectedCandidateId: result.candidates[0].candidateId }, accepted.retainedDisplay ? 'authoritative' : 'local');
+      selectedCandidateId: result.candidates[0].candidateId }, 'authoritative');
       await this.restoreCandidateVersions(selection, result.assistantSessionId,
         result.candidates.map((candidate) => candidate.candidateId));
       confirmMessageNotice(result);

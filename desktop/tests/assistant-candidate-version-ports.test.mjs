@@ -151,6 +151,27 @@ function unavailableTurn(records, index = 0, state = 'redacted') {
     ? { ...input, state, content: null, placeholder } : input);
 }
 
+test('普通新生成保留已核验完整快照并只读取本轮候选版本', async () => {
+  const f = await fixture();
+  const fresh = appendCandidate(f, { text: '本轮完成后立即可编辑的合成候选。' });
+  f.records.generatedTurnIndex = 1;
+  f.contacts.setDraft({ ...f.scope, text: '本轮合成表达。' });
+  const before = f.calls.length;
+  await f.bridge.generate({ ...f.scope, newRequest: true });
+  const state = await f.bridge.getState();
+  assert.equal(state.savedSession.phase, 'ready', '完成核验取得的完整快照不能再次降为idle');
+  assert(state.savedSession.turns.some(turn => turn.turnId === fresh.turnId && turn.state === 'completed'));
+  assert.equal(state.result.candidates[0].original.candidateId, fresh.candidateId);
+  for (const { original } of state.result.candidates) {
+    const view = state.candidateVersions.items.find(item => item.candidateId === original.candidateId);
+    assert.equal(view?.phase, 'ready');
+    assert(view.history.versions.some(version => version.versionId === view.displayVersionId));
+  }
+  assert.equal(f.calls.slice(before).filter(request => request.method === 'GET'
+    && request.path.endsWith(`/candidates/${f.candidateId}/versions`)).length, 0,
+  '本轮完成不能等待旧历史候选版本重读');
+});
+
 function candidateOperation(f, operation) {
   const identity = { ...f.scope, sessionId: f.sessionId, candidateId: f.candidateId };
   return operation === 'read' ? f.bridge.readCandidateVersions(identity)
@@ -380,7 +401,7 @@ test('候选404清同turn所有候选版本，保留独立turn及其版本和讨
     independent.candidateId);
 });
 
-test('生成清空当前turn投影后完整来源复验仍清历史版本缓存，消失turn不能复活且有效turn保留', async () => {
+test('生成保留已核验投影后来源复验仍清历史版本缓存，消失turn不能复活且有效turn保留', async () => {
   for (const authority of ['redacted', 'unavailable', 'missing']) {
     const f = await fixture(), historical = appendCandidate(f, { text: '生成前加载的历史合成正文。' });
     const independent = appendCandidate(f, { text: '权威仍有效的独立历史合成正文。' });
@@ -394,7 +415,10 @@ test('生成清空当前turn投影后完整来源复验仍清历史版本缓存�
     await f.bridge.generate({ ...f.scope, newRequest: true });
     const generated = await f.bridge.getState();
     assert.equal(generated.savedSession.sessionId, f.sessionId);
-    assert.deepEqual(generated.savedSession.turns, []);
+    assert.equal(generated.savedSession.phase, 'ready');
+    assert.equal(generated.savedSession.turns.length, 3);
+    assert(generated.savedSession.turns.some(turn => turn.turnId === historical.turnId));
+    assert(generated.savedSession.turns.some(turn => turn.turnId === independent.turnId));
     assert.equal(generated.candidateVersions.items.length, 3);
     assert.equal(fullReads(), beforeReads + 1);
     const beforeValidationReads = fullReads();
