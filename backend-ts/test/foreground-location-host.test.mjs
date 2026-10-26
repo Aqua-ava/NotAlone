@@ -71,6 +71,6 @@ test('正式桌面控制器经官方宿主HTTP消费身份与歧义门，不自�
  await f.setSessions([{username:'fixture-a',display_name:'合成甲友',chat_type:'private'},{username:'other',display_name:'合成甲友',chat_type:'private'}]);
  await foreground.observeBeforeShow();assert.equal(foreground.getState().reason,'ambiguous_requires_selection');assert.notEqual(foreground.getGenerationBlock(),null);
  await f.setSessions([{username:'fixture-a',display_name:'合成甲友',chat_type:'private'}]);await foreground.observeBeforeShow();
- assert.equal(foreground.getState().reason,'manual_confirmation_required');assert.notEqual(foreground.getGenerationBlock(),null);
+ assert.equal(foreground.getState().reason,'confirmed_active_binding');assert.equal(foreground.getState().confirmedContactId,f.contact);assert.equal(foreground.getGenerationBlock(),null);
  assert.equal((await f.client.query('SELECT count(*)::int AS n FROM reply_request')).rows[0].n,0);
 });
