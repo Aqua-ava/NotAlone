@@ -1,7 +1,0 @@
-backend-ts/src/extraction-flow.ts
-backend-ts/src/extraction-protocol-contract.ts
-backend-ts/test/extraction-verification-quality-regression.test.mjs
-.scratch/tencent-source-reuse/quality-followup/diagnosis.md
-.scratch/tencent-source-reuse/quality-followup/validation.md
-.scratch/tencent-source-reuse/quality-followup/paths.txt
-.scratch/tencent-source-reuse/quality-followup/manifest.json
