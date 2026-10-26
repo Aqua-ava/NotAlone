@@ -20,6 +20,12 @@ function outcomeTone(outcome: string) {
 }
 export function UsageSummaryView({ summary }: { summary: UsageSummary }) {
   const partialUsage = summary.totalInputTokens === null || summary.totalOutputTokens === null;
+  // 仅合并展示名称；原始台账和最近记录保留各调用路径的供应商标识。
+  const providerCounts = new Map<string, number>();
+  for (const [provider, count] of Object.entries(summary.providerCounts)) {
+    const name = provider === 'deepseek' || provider === 'notalone-deepseek' ? 'DeepSeek' : provider;
+    providerCounts.set(name, (providerCounts.get(name) ?? 0) + count);
+  }
   return <div className="usage-summary">
     <dl className="usage-stats">
       <div className="usage-stat usage-stat-primary"><dt>已确认调用</dt><dd>{tokens(summary.totalCalls)}<small>次</small></dd><p>已确认请求发出，包含成功与失败</p></div>
@@ -48,10 +54,10 @@ export function UsageSummaryView({ summary }: { summary: UsageSummary }) {
     </div>
 
     <section className="usage-breakdown" aria-label="供应商与结果（已确认调用）">
-      <div><h3>供应商分布</h3><ul className="usage-provider-list">{Object.entries(summary.providerCounts).map(([provider, count]) => <li key={provider}>
+      <div><h3>供应商分布</h3><ul className="usage-provider-list">{Array.from(providerCounts, ([provider, count]) => <li key={provider}>
         <div><span>{provider}</span><strong>{tokens(count)}<small> 次</small></strong></div>
         <div className="usage-provider-track" aria-hidden="true"><span style={{ width: `${summary.totalCalls > 0 ? Math.min(100, count / summary.totalCalls * 100) : 0}%` }} /></div>
-      </li>)}</ul>{Object.keys(summary.providerCounts).length === 0 && <p className="usage-caption">暂无已确认调用。</p>}</div>
+      </li>)}</ul>{providerCounts.size === 0 && <p className="usage-caption">暂无已确认调用。</p>}</div>
       <div><h3>调用结果</h3><ul className="usage-outcomes">{Object.entries(summary.outcomeCounts).map(([outcome, count]) =>
         <li key={outcome}><span className={`usage-badge usage-badge-${outcomeTone(outcome)}`}>{outcomeLabels[outcome as UsageOutcome] ?? '其他结果'}</span><strong>{tokens(count)}</strong></li>)}</ul>
         {Object.keys(summary.outcomeCounts).length === 0 && <p className="usage-caption">暂无调用结果。</p>}</div>
