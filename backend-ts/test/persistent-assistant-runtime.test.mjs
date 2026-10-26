@@ -20,7 +20,7 @@ async function fixture(t){
  const start=(environment={})=>startReplyServiceHost(t,{name:f.client.database,user:f.client.user,replyOwner:owner,replyToken:token,close:async()=>{}},(_req,res,requests,events)=>{
    active++;maxActive=Math.max(maxActive,active);res.once('finish',()=>{active--;});
    const body=requests.at(-1).body,last=body.messages.at(-1),raw=JSON.stringify(last),citation=[...raw.matchAll(/(?:evidence_id\\?"\s*:\s*\\?")(c\d+)/g)].at(-1)?.[1]??'c1';
-   useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:candidateText,basis:'本轮明确原句',citation_ids:[citation],risk_notes:[]}]});if(gate){const current=gate;gate=null;current.enter();current.wait.then(()=>sendEvents(res,events));return;}sendEvents(res,events);
+   if(body.tools.some(tool=>tool.name==='ExplorationOutput'))useTool(events,'ExplorationOutput',{understanding:'合成近期联系',ambiguities:[],citation_ids:[],options:[{intent:'了解近况',label:'关心',reason:'由用户决定',citation_ids:[],recommended:false,pause:false},{intent:'稍后联系',label:'稍后',reason:'由用户决定',citation_ids:[],recommended:false,pause:false}],question:null,current_step:'选择本次意愿',tradeoffs:[]});else useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:candidateText,basis:'本轮明确原句',citation_ids:[citation],risk_notes:[]}]});if(gate){const current=gate;gate=null;current.enter();current.wait.then(()=>sendEvents(res,events));return;}sendEvents(res,events);
  },{pluginPath:'test/host-reply-runtime-plugin.ts',environment:{NOTALONE_SYNTHETIC_PERSISTENT:'1',NOTALONE_SYNTHETIC_BUSINESS_HOME:businessHome,...environment}});
  const request=async(host,path,body,method=body===undefined?'GET':'POST')=>{
   const response=await fetch(host.url+path,{method,headers:{Authorization:`Bearer ${token}`,'content-type':'application/json','x-notalone-manual-contact':contact},...(body===undefined?{}:{body:JSON.stringify(body)})});
@@ -34,6 +34,7 @@ test('目录与历史浏览保持当前和真实活动，明确继续原段才�
  assert.deepEqual(await f.request(host,base),{sessions:[],current_session_id:null});
  const {session_id:old}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),oldPath=`${base}/${old}`;
  assert.equal((await f.request(host,base)).sessions[0].last_user_activity_at,null,'未知活动不从创建或通用更新时间伪造');
+ await f.request(host,`${oldPath}/resume`,{});
  await f.request(host,`${oldPath}/replies`,f.input('合成旧讨论'));
  const {session_id:current}=await f.request(host,base,{});
  const before=await f.request(host,base),activity=before.sessions.find(item=>item.session_id===old).last_user_activity_at;
@@ -105,7 +106,7 @@ test('明确继续在改当前与活动前拒绝错误联系人、绑定变化�
 
 test('连续两轮及真实宿主重启恢复同一讨论和官方历史，不重复复制整段讨论',{timeout:60000},async t=>{
  const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
- const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),path=`${base}/${session}`;
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`${base}/${session}`;
  const first=await f.request(host,`${path}/replies`,f.input('合成首轮：周五一起散步'));
  assert.equal(first.session_id,session);assert.equal(host.requests.length,1);
  const secondInput=f.input('合成第二轮：改为周六');
@@ -134,7 +135,7 @@ test('连续两轮及真实宿主重启恢复同一讨论和官方历史，不�
 
 
 test('公开同键并发只写一轮，其他联系人不能读取或恢复其运行历史',{timeout:60000},async t=>{
- const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
  const command=f.input('合成并发原句'),gate=f.holdNext(),running=f.request(host,`${path}/replies`,command);await gate.entered;
  const response=await fetch(host.url+`${path}/replies`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(command)});
  assert.equal(response.status,409);assert.equal(host.requests.length,1);gate.release();const completed=await running;
@@ -145,7 +146,7 @@ test('公开同键并发只写一轮，其他联系人不能读取或恢复其�
 });
 
 test('运行配置不符时零出站，业务候选仍可查看',{timeout:60000},async t=>{
- const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
  await f.request(host,`${path}/replies`,f.input('合成配置原句'));await host.stop();
  const changed=await f.start({NOTALONE_SYNTHETIC_REPLY_TEMPERATURE:'0.1'});
  const history=await f.request(changed,path);assert.match(JSON.stringify(history),/合成保存候选/);
@@ -154,7 +155,7 @@ test('运行配置不符时零出站，业务候选仍可查看',{timeout:60000}
 });
 
 test('模型日志已写而业务保存失败，未提交候选不会成为历史或下一轮运行上下文',{timeout:60000},async t=>{
- const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
  await f.f.client.query("CREATE FUNCTION synthetic_reject_candidate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic commit refusal'; END $$; CREATE TRIGGER synthetic_reject_candidate BEFORE INSERT ON reply_candidate FOR EACH ROW EXECUTE FUNCTION synthetic_reject_candidate()");
  f.setCandidateText('合成未提交幽灵候选');const response=await fetch(host.url+`${path}/replies`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(f.input('合成未提交输入'))});
  assert.equal(response.status,502);assert.equal(host.requests.length,1);
@@ -167,7 +168,7 @@ test('模型日志已写而业务保存失败，未提交候选不会成为历�
 
 
 test('归属标记被替换时不能恢复他人存档，已保存业务历史仍可读',{timeout:60000},async t=>{
- const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
  await f.request(host,`${path}/replies`,f.input('合成归属原句'));await host.stop();
  await writeFile(join(f.businessHome,'assistant-runtime',f.owner,f.contact,session,'ownership.json'),JSON.stringify({version:1,owner_id:randomUUID(),contact_id:f.contact,session_id:session}));
  const restarted=await f.start();assert.match(JSON.stringify(await f.request(restarted,path)),/合成保存候选/);
@@ -176,7 +177,7 @@ test('归属标记被替换时不能恢复他人存档，已保存业务历史�
 });
 
 test('恢复的真实模型历史计入零HTTP预检与出站硬上限，历史仍可回看',{timeout:60000},async t=>{
- const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
  let rejected=false;const text='合成文字'.repeat(250);
  for(let i=0;i<5;i++){
   const input=f.input(text),before=host.requests.length;
@@ -192,7 +193,7 @@ test('恢复的真实模型历史计入零HTTP预检与出站硬上限，历史�
 
 
 test('同一运行不同键重叠请求保持单写者，模型等待期间不持有业务事务',{timeout:60000},async t=>{
- const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
  const gate=f.holdNext(),first=f.request(host,`${path}/replies`,f.input('合成首个重叠请求'));await gate.entered;
  const idle=(await f.f.client.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=current_database() AND state='idle in transaction' AND pid<>pg_backend_pid()")).rows[0].n;assert.equal(idle,0,'模型在途不持有长业务事务');
  let handedOff;const sent=new Promise(resolve=>{handedOff=resolve;});
@@ -200,4 +201,131 @@ test('同一运行不同键重叠请求保持单写者，模型等待期间不�
  await sent;gate.release();const completed=await first,other=await second;assert.equal(completed.state,'completed');assert.ok([200,409].includes(other.status),JSON.stringify(other));assert.equal(f.maxActive(),1);
  assert.match(JSON.stringify(await f.request(host,path)),/合成保存候选/);
  const before=host.requests.length;await f.request(host,`${path}/replies`,f.input('单写结束后仍可继续'));assert.equal(host.requests.length,before+1);assert.equal(f.maxActive(),1);
+});
+
+test('空闲严格超过十二小时才原子新开，准备与旧URL同键重放固定同一真实归属',{timeout:60000},async t=>{
+ const f=await fixture(t),clock=join(f.businessHome,'domain-clock');
+ await writeFile(clock,'2030-01-01T23:00:00.000000Z');
+ const host=await f.start({NOTALONE_SYNTHETIC_ASSISTANT_CLOCK:clock}),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:old}=await f.request(host,base,{}),path=`${base}/${old}`;
+ await f.request(host,`${path}/replies`,f.input('合成跨午夜的原段'));
+ await writeFile(clock,'2030-01-02T11:00:00.000000Z');
+ const boundary=f.input('合成正好十二小时');
+ const same=await f.request(host,`${path}/replies/prepare`,boundary);
+ assert.equal(same.session_id,old,'正好十二小时仍续用');
+ await f.request(host,`${path}/replies`,boundary);
+ await writeFile(clock,'2030-01-02T23:00:00.000001Z');
+ const before=await f.request(host,base),count=host.requests.length;
+ assert.equal(before.sessions.length,1,'只读不触发分段');
+ const input=f.input('合成空闲后独立要求');
+ const started=await fetch(host.url+path+'/replies/prepare',{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact,Prefer:'respond-async'},body:JSON.stringify(input)});
+ assert.equal(started.status,202);const job=await started.json();let prepared;
+ for(let i=0;i<100;i++){
+  const response=await fetch(host.url+path+'/replies/prepare/status/'+job.preparation_id,{headers:{Authorization:`Bearer ${f.token}`,'x-notalone-manual-contact':f.contact}});
+  const body=await response.json();if(response.status===202)continue;assert.equal(response.status,200,JSON.stringify(body));prepared=body;break;
+ }
+ assert.ok(prepared,'有界等待应取得真实异步准备回执');
+ assert.notEqual(prepared.session_id,old,'超过十二小时应在新任务受理前分段');
+ assert.equal(prepared.previous_session_id,old);
+ assert.equal(host.requests.length,count,'准备不调用供应商');
+ const catalog=await f.request(host,base);
+ assert.equal(catalog.current_session_id,prepared.session_id);assert.equal(catalog.sessions.length,2);
+ const completed=await f.request(host,`${path}/replies`,input);
+ assert.equal(completed.session_id,prepared.session_id);
+ assert.equal(completed.turn_id,prepared.turn_id);
+ assert.deepEqual(await f.request(host,`${path}/replies`,input),completed);
+ assert.equal(host.requests.length,count+1);
+ assert.equal((await f.request(host,base)).sessions.length,2);
+ assert.doesNotMatch(JSON.stringify(host.requests.at(-1).body),/合成跨午夜的原段|合成正好十二小时|合成保存候选/);
+ const actual=await f.request(host,`${base}/${prepared.session_id}`);
+ assert.ok(actual.turns.some(turn=>turn.turn_id===completed.turn_id));
+ assert.ok(!(await f.request(host,path)).turns.some(turn=>turn.turn_id===completed.turn_id));
+});
+
+test('旧活动未知时默认新段，明确继续则保留旧身份；被动读取与完成不续期',{timeout:60000},async t=>{
+ const f=await fixture(t),clock=join(f.businessHome,'domain-clock');await writeFile(clock,'2030-02-01T00:00:00Z');
+ const host=await f.start({NOTALONE_SYNTHETIC_ASSISTANT_CLOCK:clock}),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:legacy}=await f.request(host,`/api/contacts/${f.contact}/assistant-session/default`,{}),path=`${base}/${legacy}`;
+ assert.equal((await f.request(host,base)).sessions[0].last_user_activity_at,null);
+ const initial=await f.request(host,`${path}/replies`,f.input('合成未知活动默认新开'));
+ assert.notEqual(initial.session_id,legacy);
+ await f.request(host,`${path}/resume`,{});
+ const command=f.input('合成明确继续旧身份'),gate=f.holdNext(),running=f.request(host,`${path}/replies`,command);await gate.entered;
+ const before=await f.request(host,base);
+ await writeFile(clock,'2030-02-01T13:00:00Z');
+ await f.f.client.query('UPDATE assistant_session SET updated_at=clock_timestamp() WHERE id=$1',[legacy]);
+ await f.request(host,path);await f.request(host,base);
+ assert.deepEqual(await f.request(host,base),before,'只读与通用后台更新不续期或分段');
+ const freshInput=f.input('合成旧任务仍在途的新段'),prepared=await f.request(host,`${path}/replies/prepare`,freshInput);
+ assert.notEqual(prepared.session_id,legacy);
+ gate.release();const oldResult=await running;
+ assert.equal(oldResult.session_id,legacy,'旧任务不能迁往新段');
+ assert.equal((await f.request(host,base)).current_session_id,prepared.session_id,'旧完成不夺回current');
+ assert.equal((await f.request(host,base)).sessions.find(item=>item.session_id===legacy).last_user_activity_at,before.sessions.find(item=>item.session_id===legacy).last_user_activity_at);
+ await f.request(host,`${path}/replies`,freshInput);
+ assert.equal((await f.request(host,path)).turns.at(-1).request_key,command.idempotency_key);
+ assert.equal(host.requests.length,3);
+});
+
+test('空闲后并发不同键不双开或覆盖已受理输入，同键重放不续期',{timeout:60000},async t=>{
+ const f=await fixture(t),clock=join(f.businessHome,'domain-clock');await writeFile(clock,'2030-03-01T00:00:00Z');
+ const host=await f.start({NOTALONE_SYNTHETIC_ASSISTANT_CLOCK:clock}),base=`/api/contacts/${f.contact}/assistant-sessions`,{session_id:old}=await f.request(host,base,{}),path=`${base}/${old}`;
+ await writeFile(clock,'2030-03-01T13:00:00Z');
+ const a=f.input('合成并发第一键'),b=f.input('合成并发第二键');
+ const send=async body=>{const response=await fetch(host.url+`${path}/replies/prepare`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(body)});return {status:response.status,body:await response.json(),input:body};};
+ const responses=await Promise.all([send(a),send(b)]),accepted=responses.filter(r=>r.status===200);
+ assert.equal(accepted.length,1,'并发点击只能受理一个新任务');
+ assert.equal(responses.find(r=>r.status!==200).body.error,'assistant_session_in_progress');
+ assert.equal((await f.request(host,base)).sessions.length,2);assert.equal(host.requests.length,0);
+ const chosen=accepted[0],before=await f.request(host,base);
+ await writeFile(clock,'2030-03-01T14:00:00Z');
+ assert.deepEqual(await f.request(host,`${path}/replies/prepare`,chosen.input),chosen.body);
+ assert.deepEqual(await f.request(host,base),before,'同键重放不冒充新的主动操作');
+ const completed=await f.request(host,`${path}/replies`,chosen.input);
+ assert.equal(completed.session_id,chosen.body.session_id);assert.equal(host.requests.length,1);
+});
+
+test('用户明确补充探索才刷新被操作段，自动探索与模型完成不续期',{timeout:60000},async t=>{
+ const f=await fixture(t),clock=join(f.businessHome,'domain-clock');await writeFile(clock,'2030-04-01T00:00:00Z');
+ const host=await f.start({NOTALONE_SYNTHETIC_ASSISTANT_CLOCK:clock}),base=`/api/contacts/${f.contact}/assistant-sessions`,{session_id:session}=await f.request(host,base,{}),path=`${base}/${session}`;
+ const source=randomUUID(),message=randomUUID();
+ await f.f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'manual','合成资料',$4,1)",[source,f.owner,f.contact,'b'.repeat(64)]);
+ await f.f.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content) VALUES($1,$2,$3,'contact','text','合成近况消息')",[message,f.owner,f.contact]);
+ await f.f.client.query("INSERT INTO message_source_ref(id,message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,$4,'source_document',$5,'line:1','{}')",[randomUUID(),message,f.owner,f.contact,source]);
+ await writeFile(clock,'2030-04-01T01:00:00Z');
+ const content={type:'purpose_exploration',purpose_hint:'了解近况',skill_mode:'disabled'},first=await f.request(host,`${path}/explorations`,{operation_key:randomUUID(),content});
+ const active=await f.request(host,base);
+ assert.equal(active.sessions.find(item=>item.session_id===session).last_user_activity_at,'2030-04-01T01:00:00.000Z');
+ await writeFile(clock,'2030-04-01T02:00:00Z');
+ const second=await f.request(host,`${path}/explorations`,{operation_key:randomUUID(),content,previous_id:first.exploration_id,expected_input_version_id:first.input_version_id,automatic:true});
+ assert.deepEqual(await f.request(host,base),active,'automatic不冒充主动补充');
+ await writeFile(clock,'2030-04-01T03:00:00Z');
+ await f.request(host,`${path}/explorations`,{operation_key:randomUUID(),content:{...content,requirements:'简短一点'},previous_id:second.exploration_id,expected_input_version_id:second.input_version_id});
+ assert.equal((await f.request(host,base)).sessions[0].last_user_activity_at,'2030-04-01T03:00:00.000Z');
+});
+
+test('空闲后的明确补充要求生成新段，同键继续命令仍可重放原受理',{timeout:60000},async t=>{
+ const f=await fixture(t),clock=join(f.businessHome,'domain-clock');await writeFile(clock,'2030-05-01T00:00:00Z');
+ const host=await f.start({NOTALONE_SYNTHETIC_ASSISTANT_CLOCK:clock}),base=`/api/contacts/${f.contact}/assistant-sessions`,{session_id:old}=await f.request(host,base,{}),path=`${base}/${old}`;
+ f.setCandidateText('合成未选择的旧候选标记');await f.request(host,`${path}/replies`,f.input('合成不应复制的旧轮')) ;
+ f.setCandidateText('合成精确选择的旧候选标记');
+ const first=await f.request(host,`${path}/replies`,f.input('合成明确继续候选的原输入')),candidate=first.candidates[0];
+ const command={idempotency_key:randomUUID(),expected_input_version_id:first.input_version_id,instruction:'第一条，简短一点',displayed_group:{session_id:old,candidate_group_id:first.reply_request_id,candidates:[{number:1,candidate_id:candidate.candidate_id,version_id:candidate.candidate_id}]}};
+ await writeFile(clock,'2030-05-01T13:00:00Z');
+ const prepared=await f.request(host,`${path}/continue/prepare`,command);
+ assert.notEqual(prepared.session_id,old);
+ f.setCandidateText('合成本轮新候选');
+ const completed=await f.request(host,`${path}/continue`,command);
+ assert.equal(completed.session_id,prepared.session_id);assert.equal(completed.turn_id,prepared.turn_id);
+ assert.deepEqual(completed.continuation.effective_requirements,['简短一点']);
+ assert.deepEqual(await f.request(host,`${path}/continue`,command),completed);
+ assert.equal(host.requests.length,3);
+ assert.match(JSON.stringify(host.requests.at(-1).body),/合成精确选择的旧候选标记/);
+ assert.doesNotMatch(JSON.stringify(host.requests.at(-1).body),/合成未选择的旧候选标记|合成不应复制的旧轮/);
+ const count=host.requests.length;
+ const forged=await fetch(host.url+`${path}/replies/prepare`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify({...f.input('合成不可伪造引用'),rollover_reference:true})});
+ assert.equal(forged.status,400);
+ await f.request(host,path,{confirmed:true},'DELETE');
+ const rejected=await fetch(host.url+`${base}/${prepared.session_id}/continue`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(command)});
+ assert.ok([404,409].includes(rejected.status));assert.equal(host.requests.length,count,'旧候选删除后零出站');
 });

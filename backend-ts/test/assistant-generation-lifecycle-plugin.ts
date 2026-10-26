@@ -45,6 +45,7 @@ export function apply(ctx:Context){
   const explore=url.pathname.match(/^\/api\/contacts\/([^/]+)\/assistant-sessions\/([^/]+)\/explorations$/);
   if(explore&&explore[1]===scope.contact_id){res.end(stringifyJson(await exploration.execute({owner_id:scope.owner_id,contact_id:scope.contact_id},explore[2],'open',body,new AbortController().signal,{manual_input:true})));return;}
   if(url.pathname===`/api/contacts/${scope.contact_id}/assistant-session/default`){res.end(stringifyJson({session_id:await discussion.defaultSession(scope)}));return;}
+  if(url.pathname===`/api/contacts/${scope.contact_id}/assistant-sessions`&&req.method==='POST'){res.end(stringifyJson({session_id:await discussion.createSession(scope)}));return;}
   const match=url.pathname.match(/^\/api\/contacts\/([^/]+)\/assistant-sessions\/([^/]+)$/);
   if(match&&match[1]===scope.contact_id){res.end(stringifyJson(await discussion.readSession(scope,match[2])));return;}
   res.statusCode=404;res.end('{"error":"not_found"}');

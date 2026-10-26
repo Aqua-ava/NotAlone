@@ -138,6 +138,9 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       .catch(() => { if (currentCopyScope.current === copyScopeKey) setCopyError(true); });
   }
   return <section className="assistant-session-panel" aria-label="助手会话">
+    {replies.state.idleRollover?.sessionId === saved?.sessionId && replies.state.contactId && <p role="status">已开启新讨论
+      <button disabled={busy} onClick={() => void replies.resumeSavedSession(replies.state.idleRollover!.previousSessionId)}>继续上一段</button>
+    </p>}
     {catalog?.phase === 'loading' && <p role="status">正在核对助手会话…</p>}
     {catalog?.selectionPending && catalog.phase !== 'loading' && <p role="alert">助手会话操作尚未确认，请刷新列表后明确选择会话。</p>}
     {catalog?.phase === 'failed' && !catalog.selectionPending && <p role="alert">助手会话列表暂不可用，请刷新重试。</p>}

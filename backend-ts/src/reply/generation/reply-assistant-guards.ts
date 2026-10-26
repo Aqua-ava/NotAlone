@@ -10,6 +10,8 @@ type Row=Record<string,any>;
 export interface AssistantScope {owner_id:string;contact_id:string}
 /** 只能由已认证内部08应用接缝提供，公开生成解析器必须拒绝这些字段。 */
 export interface AuthenticatedContinuation {
+  /** 仅受理事务确认分段后，由生命周期传递精确旧候选引用。 */
+  rollover_reference?:boolean;
   continuation: Record<string,unknown>;
   continuation_reference: {candidate_id:string;version_id:string;messages:{message_id:string;text:string}[]} | null;
 }

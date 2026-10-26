@@ -19,7 +19,7 @@ export class ExplorationService {
  private readonly store:PostgresExplorationStore;private readonly runtime:ReturnType<typeof createExplorationRuntime>;
  constructor(options:ReplyServiceOptions,manualInput=false){
   this.options=options;this.runtime=createExplorationRuntime({...options,model:{...options.model,physical_limit:2,deadline_ms:8000}});
-  this.store=new PostgresExplorationStore({transaction:options.transaction,evidence:this.evidence,skills_root:options.skillsRoot,guards:{active_binding:async(client,scope)=>{
+  this.store=new PostgresExplorationStore({transaction:options.transaction,assistantClock:options.assistantClock,evidence:this.evidence,skills_root:options.skillsRoot,guards:{active_binding:async(client,scope)=>{
    if(!(await client.query('SELECT 1 FROM contact WHERE owner_id=$1 AND id=$2',[scope.owner_id,scope.contact_id])).rowCount)throw new ExplorationStale();
    const rows=(await client.query(manualInput?'SELECT id FROM manual_contact_confirmation WHERE owner_id=$1 AND contact_id=$2 FOR SHARE':"SELECT id FROM conversation_binding WHERE owner_id=$1 AND contact_id=$2 AND status='active' FOR SHARE",[scope.owner_id,scope.contact_id])).rows;
    if(rows.length!==1)throw new ExplorationStale();return rows[0].id;

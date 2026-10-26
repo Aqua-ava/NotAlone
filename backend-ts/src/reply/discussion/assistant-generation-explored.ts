@@ -18,7 +18,7 @@ const scopeOf=(scope:VerifiedReplyScope)=>({owner_id:scope.owner_id,contact_id:s
 const stale=():never=>{throw new ExplorationStale();};
 const trim=(v:unknown)=>typeof v==='string'?v.trim():v==null?'':stale();
 export function generationExplorationStore(store:AssistantGenerationStore,scope:VerifiedReplyScope){
- return new PostgresExplorationStore({transaction:work=>store.transaction(scope,work),evidence:new ExplorationEvidence(),skills_root:store.options.skillsRoot,guards:{
+ return new PostgresExplorationStore({transaction:work=>store.transaction(scope,work),evidence:new ExplorationEvidence(),assistantClock:store.options.assistantClock,skills_root:store.options.skillsRoot,guards:{
   active_binding:async(client,s)=>{if(s.owner_id!==scope.owner_id||s.contact_id!==scope.contact_id)stale();const rows=(await client.query(scope.confirmation==='manual'?'SELECT id FROM manual_contact_confirmation WHERE owner_id=$1 AND contact_id=$2 AND id=$3 FOR SHARE':"SELECT id FROM conversation_binding WHERE owner_id=$1 AND contact_id=$2 AND id=$3 AND status='active' FOR SHARE",[scope.owner_id,scope.contact_id,scope.conversation_binding_id])).rows;if(rows.length!==1)stale();return scope.conversation_binding_id;},
   require_current_input:async(client,_s,session,input)=>{await store.current(client,scope,session,input);},
   require_skill:async(client,s,revision,id,scene)=>{

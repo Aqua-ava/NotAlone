@@ -3,7 +3,7 @@ import type {Client} from 'pg';
 import {record,replyUuid,parseReplyRequest} from '../generation/reply-contract.ts';
 import {canonical} from '../generation/reply-assistant-erasure.ts';
 import type {VerifiedReplyScope} from '../generation/reply-scope.ts';
-import {AssistantGenerationStore,AssistantGenerationError,generationReject,generationRequest,type GenerationRow} from './assistant-generation-store.ts';
+import {AssistantGenerationStore,AssistantGenerationError,generationReject,generationRequest,matchesGenerationSession,type GenerationRow} from './assistant-generation-store.ts';
 export class AssistantContinuationClarification extends Error {
  readonly reason:string;readonly requirements:string[];readonly previous:string[];
  constructor(reason:string,requirements:string[]=[],previous:string[]=[]){super('assistant_continuation_clarification_required');this.reason=reason;this.requirements=requirements;this.previous=previous;}
@@ -62,8 +62,8 @@ export async function reserveAssistantContinuation(store:AssistantGenerationStor
  const existing=await store.existing(client,scope,command.idempotency_key);
  if(existing){
   if(existing.state==='redacted'||!existing.input_payload)generationReject('source_deleted');
-  if(existing.session_id!==session||canonical(existing.input_payload?.continuation?.submission??null)!==canonical(command))throw new AssistantGenerationError('assistant_session_input_conflict');
-  const auth=await store.auth(client,scope,session,existing.input_payload),input={...generationRequest(scope,command.idempotency_key,existing.input_payload,auth),expected_input_version_id:command.expected_input_version_id};
+  if(!matchesGenerationSession(existing,session)||canonical(existing.input_payload?.continuation?.submission??null)!==canonical(command))throw new AssistantGenerationError('assistant_session_input_conflict');
+  const auth=await store.auth(client,scope,existing.requested_session_id??session,existing.input_payload),input={...generationRequest(scope,command.idempotency_key,existing.input_payload,auth),expected_input_version_id:command.expected_input_version_id};
   const row=await store.reserve(client,scope,session,input,{auth});return {row,input,auth};
  }
  const deps=await store.current(client,scope,session,command.expected_input_version_id);

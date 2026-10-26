@@ -13,6 +13,7 @@ export type AssistantGenerationOwner = Readonly<{
 export type AssistantGenerationIdentity = AssistantGenerationOwner & Readonly<{ requestKey: string }>;
 export type AssistantGenerationReceipt = Readonly<{
   sessionId: string;
+  previousSessionId?: string;
   turnId: string;
   inputVersionId: string;
   requestKey: string;
@@ -59,10 +60,13 @@ const sameCommand = (left: AssistantPreparationCommandIdentity, right: Assistant
 
 export function readAssistantGenerationReceipt(value: unknown, sessionId: string, requestKey: string): AssistantGenerationReceipt {
   const fields = ['session_id', 'turn_id', 'request_key', 'input_version_id', 'state'];
-  if (!isRecord(value) || Object.keys(value).length !== fields.length || !Object.keys(value).every((key) => fields.includes(key))
-    || value.session_id !== sessionId || value.request_key !== requestKey || !isUuid(value.turn_id) || !isUuid(value.input_version_id)
+  const moved = isRecord(value) && value.session_id !== sessionId;
+  const allowed = [...fields, 'previous_session_id'];
+  if (!isRecord(value) || !fields.every(key => Object.hasOwn(value, key)) || !Object.keys(value).every((key) => allowed.includes(key))
+    || !isUuid(value.session_id) || moved && value.previous_session_id !== sessionId
+    || value.previous_session_id !== undefined && (!isUuid(value.previous_session_id) || value.previous_session_id === value.session_id) || value.request_key !== requestKey || !isUuid(value.turn_id) || !isUuid(value.input_version_id)
     || !['running', 'completed', 'failed'].includes(value.state as string)) throw new Error('本次生成回执归属无效。');
-  return Object.freeze({ sessionId, requestKey, turnId: value.turn_id.toLowerCase(),
+  return Object.freeze({ sessionId: value.session_id.toLowerCase(), ...(value.previous_session_id === undefined ? {} : { previousSessionId: String(value.previous_session_id).toLowerCase() }), requestKey, turnId: value.turn_id.toLowerCase(),
     inputVersionId: value.input_version_id.toLowerCase(), state: value.state as AssistantGenerationReceipt['state'] });
 }
 
@@ -99,6 +103,14 @@ export class AssistantGenerationJobs {
       get signal() { return owned.signal; }, get job() { return job; }, get receipt() { return receipt; },
       get active() { return jobs.isActive(owned); },
       prepared: async (actual) => {
+        if (job && actual.sessionId !== job.identity.sessionId) {
+          const active = this.jobs.get(job);
+          if (!active || active.receipt || active.stage !== 'preparing' || actual.previousSessionId !== job.identity.sessionId
+            || actual.requestKey !== job.identity.requestKey) throw new Error('本次分段回执归属无效。');
+          const accepted = Object.freeze({ identity: Object.freeze({ ...job.identity, sessionId: actual.sessionId }), signal: job.signal });
+          this.jobs.delete(job); this.jobs.set(accepted, active); job = accepted; owned = accepted;
+          execution.registered?.(job);
+        }
         if (job) this.receiveReceipt(job, actual);
         else { job = this.receivePrepared(owned, actual); owned = job; execution.registered?.(job); }
         receipt = actual;

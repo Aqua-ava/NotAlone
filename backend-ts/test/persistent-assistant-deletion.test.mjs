@@ -15,7 +15,7 @@ async function fixture(t){
  const requests=[],releaseGates=new Set();
  await f.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成删除用户')",[owner]);
  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成删除联系人')",[contact,owner]);
- await f.client.query('INSERT INTO assistant_session(id,owner_id,contact_id,is_default) VALUES($1,$2,$3,true)',[session,owner,contact]);
+ await f.client.query('INSERT INTO assistant_session(id,owner_id,contact_id,is_default,last_user_activity_at) VALUES($1,$2,$3,true,clock_timestamp())',[session,owner,contact]);
  await writeFile(f.envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${f.client.database}\nNOTALONE_OWNER_ID=${owner}\nNOTALONE_DEEPSEEK_API_KEY=synthetic-only\nNOTALONE_SKILLS_DIR=${f.directory}/skills\nNOTALONE_MANAGED_USER_DATA=${f.directory}\n`,{mode:0o600});
  const readTrigger=join(f.directory,'hold-runtime-read'),closeTrigger=join(f.directory,'fail-commit-close'),closeObserved=join(f.directory,'commit-close-failed'),readPreload=join(f.directory,'read-barrier.mjs');
  await writeFile(readPreload,`import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';

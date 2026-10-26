@@ -1,5 +1,5 @@
 import {captureAssistantRuntimeDependencies,assistantRuntimeDeletionPending} from '../runtime/assistant-runtime-erasure.ts';
-import {recordAssistantUserActivity} from './assistant-user-activity.ts';
+import {recordAssistantUserActivity,type AssistantClock} from './assistant-user-activity.ts';
 /**
  * 助手讨论的 TypeScript 业务责任方。
  *
@@ -40,6 +40,7 @@ export interface AssistantDiscussionInput {
 export interface AssistantDiscussionServiceOptions {
   transaction<T>(work:(client:Client)=>Promise<T>):Promise<T>;
   skillsRoot:string;
+  assistantClock?:AssistantClock;
   eraseRuntime?:(client:Client,scope:AssistantDiscussionScope,sessionId:string)=>Promise<void>;
   environment?:NodeJS.ProcessEnv;
   resolveBinding?:(client:Client,scope:AssistantDiscussionScope,allowManual:boolean)=>Promise<string>;
@@ -347,8 +348,8 @@ export class AssistantDiscussionService {
         [scope.owner_id,scope.contact_id],
       );
       return (await client.query(
-        'INSERT INTO assistant_session(owner_id,contact_id,is_default,last_user_activity_at) VALUES($1,$2,TRUE,clock_timestamp()) RETURNING id',
-        [scope.owner_id,scope.contact_id],
+        'INSERT INTO assistant_session(owner_id,contact_id,is_default,last_user_activity_at) VALUES($1,$2,TRUE,COALESCE($3::timestamptz,clock_timestamp())) RETURNING id',
+        [scope.owner_id,scope.contact_id,await this.options.assistantClock?.()??null],
       )).rows[0].id;
     });
   }
@@ -390,7 +391,7 @@ export class AssistantDiscussionService {
         'UPDATE assistant_session SET is_default=TRUE WHERE owner_id=$1 AND contact_id=$2 AND id=$3',
         [scope.owner_id,scope.contact_id,sessionId],
       );
-      await recordAssistantUserActivity(client,scope,sessionId);
+      await recordAssistantUserActivity(client,scope,sessionId,this.options.assistantClock);
       return sessionId;
     });
   }
@@ -440,7 +441,7 @@ export class AssistantDiscussionService {
         'UPDATE assistant_session SET current_input_version_id=$4,updated_at=now() WHERE owner_id=$1 AND contact_id=$2 AND id=$3',
         [scope.owner_id,scope.contact_id,sessionId,input.id],
       );
-      await recordAssistantUserActivity(client,scope,sessionId);
+      await recordAssistantUserActivity(client,scope,sessionId,this.options.assistantClock);
       return input.id;
     });
   }
@@ -534,7 +535,7 @@ export class AssistantDiscussionService {
     [scope.owner_id,scope.contact_id,sessionId,candidate.turn_id,candidateId,next,
       command.parent_version_id,command.edit_key,JSON.stringify(command.messages),command.requirements,
     ])).rows[0];
-    await recordAssistantUserActivity(client,scope,sessionId);
+    await recordAssistantUserActivity(client,scope,sessionId,this.options.assistantClock);
     return {candidate,receipt:{
       session_id:sessionId,candidate_id:candidateId,version_id:row.id,
       version_number:Number(row.version_number),edit_key:command.edit_key,
@@ -661,8 +662,8 @@ export class AssistantDiscussionService {
         [scope.owner_id,scope.contact_id],
       );
       const created=(await client.query(
-        'INSERT INTO assistant_session(owner_id,contact_id,is_default,last_user_activity_at) VALUES($1,$2,TRUE,clock_timestamp()) RETURNING id',
-        [scope.owner_id,scope.contact_id],
+        'INSERT INTO assistant_session(owner_id,contact_id,is_default,last_user_activity_at) VALUES($1,$2,TRUE,COALESCE($3::timestamptz,clock_timestamp())) RETURNING id',
+        [scope.owner_id,scope.contact_id,await this.options.assistantClock?.()??null],
       )).rows[0].id;
       const input=(await client.query(`
         INSERT INTO assistant_session_input(

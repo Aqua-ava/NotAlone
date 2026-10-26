@@ -48,6 +48,7 @@ export interface ReplyServiceOptions {
  ledger:Pick<PostgresModelLedger,'reserve'|'record'>;
  skillsRoot:string;
  model:ReplyServiceModel;
+ assistantClock?:import('../discussion/assistant-user-activity.ts').AssistantClock;
 }
 export interface ReplyInternalContext {
  authenticatedContinuation?:AuthenticatedContinuation;

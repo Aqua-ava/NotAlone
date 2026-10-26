@@ -14,7 +14,7 @@ async function verifyReceivedFailure(backend: BackendHost, owner: AssistantGener
     || protocol.signal.aborted || owner.connectionGeneration !== backend.getConnectionGeneration()) return;
   const receipt = protocol.receipt;
   try {
-    const saved = await readAssistantSession(backend, owner.contactId, owner.sessionId, protocol.signal);
+    const saved = await readAssistantSession(backend, owner.contactId, receipt.sessionId, protocol.signal);
     const failed = saved.turns.find((turn) => turn.turnId === receipt.turnId
       && turn.inputVersionId === receipt.inputVersionId && turn.requestKey === receipt.requestKey && turn.state === 'failed');
     if (saved.generation === owner.connectionGeneration && saved.generation === backend.getConnectionGeneration()

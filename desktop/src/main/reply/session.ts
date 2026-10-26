@@ -316,6 +316,24 @@ export class ReplySession {
     await this.runContinuation(update, attempt.command,
       contacts.contacts.find((contact) => contact.contactId === update.contactId)!.displayName, attempt.generation);
   }
+  private showIdleRollover(receipt: AssistantGenerationReceipt, sessionId: string, selection: ContactSelection,
+    operation: number, generation: number | undefined, pending: AbortController): boolean {
+    if (receipt.previousSessionId && receipt.sessionId !== sessionId
+      && operation === this.operation && generation === this.backend.getConnectionGeneration()
+      && !pending.signal.aborted && !this.state.sessionCatalog?.selectionPending
+      && selection.contactId === this.state.contactId && selection.scopeRevision === this.state.scopeRevision
+      && (this.state.savedSession?.sessionId ?? sessionId) === sessionId) {
+      this.savedRead?.abort(); this.savedRead = undefined;
+      this.candidateVersions.setScope(null);
+      const items = (this.state.sessionCatalog?.items ?? []).map(item => ({ ...item, isCurrent: item.sessionId === receipt.sessionId }));
+      if (!items.some(item => item.sessionId === receipt.sessionId)) items.push({ sessionId: receipt.sessionId, isCurrent: true });
+      this.publish({ savedSession: { phase: 'idle', sessionId: receipt.sessionId, turns: [], inputs: [], currentInputVersionId: receipt.inputVersionId },
+        sessionCatalog: { phase: 'ready', items, currentSessionId: receipt.sessionId },
+        idleRollover: { sessionId: receipt.sessionId, previousSessionId: receipt.previousSessionId },
+        result: null, selectedCandidateId: null, candidateDrafts: [], sessionDeletion: undefined }, 'authoritative');
+    }
+    return this.state.savedSession?.sessionId === receipt.sessionId;
+  }
   private async runContinuation(update: AssistantSessionSelection, command: AssistantContinuationCommand,
     contactDisplayName: string, generation: number): Promise<void> {
     this.invalidateExploration(); this.notifyInputChanged(); this.cancelPending(); this.lastAttempt = undefined;
@@ -323,15 +341,16 @@ export class ReplySession {
     const pending = new AbortController(); this.pending = pending;
     const operation = this.operation;
     let job: OwnedAssistantGeneration | undefined;
+    let acceptedSessionId = update.sessionId;
     const current = () => !pending.signal.aborted && operation === this.operation
       && generation === this.backend.getConnectionGeneration() && update.contactId === this.state.contactId
-      && update.scopeRevision === this.state.scopeRevision && update.sessionId === this.state.savedSession?.sessionId
+      && update.scopeRevision === this.state.scopeRevision && acceptedSessionId === this.state.savedSession?.sessionId
       && !this.state.sessionCatalog?.selectionPending && !this.candidateSourceCheck
       && (!job || this.generationJobs.canPublish(job, { connectionGeneration: generation,
-        contactId: update.contactId, sessionId: update.sessionId }));
+        contactId: update.contactId, sessionId: acceptedSessionId }));
     const identity = { sessionId: update.sessionId, expectedInputVersionId: command.expectedInputVersionId };
     this.publish({ phase: 'waiting', canRetry: false, errorCode: undefined,
-      continuation: { ...identity, phase: 'waiting', canRetry: false } });
+      continuation: { ...identity, sessionId: acceptedSessionId, phase: 'waiting', canRetry: false } });
     try {
       const owner = { connectionGeneration: generation, contactId: update.contactId, sessionId: update.sessionId };
       await this.generationJobs.execute({ identity: { ...owner, requestKey: command.requestKey }, controller: pending,
@@ -341,6 +360,9 @@ export class ReplySession {
           job = registered;
           this.retainRetry(command.requestKey, update.contactId, update.sessionId, () => this.runContinuation(
             { contactId: update.contactId, scopeRevision: this.state.scopeRevision, sessionId: update.sessionId }, command, contactDisplayName, generation));
+        },
+        prepared: (_registered, receipt) => {
+          if (this.showIdleRollover(receipt, update.sessionId, update, operation, generation, pending)) acceptedSessionId = receipt.sessionId;
         },
         finished: (finished, settled, couldPublish) => this.generationFinished(finished, settled, couldPublish),
         consume: async (result) => {
@@ -352,8 +374,8 @@ export class ReplySession {
             return;
           }
           this.cancelSavedRead();
-          const verification = this.sessionProjection.beginVerification(this.projectionScope(update.sessionId));
-          const saved = await readAssistantSession(this.backend, update.contactId, update.sessionId, pending.signal);
+          const verification = this.sessionProjection.beginVerification(this.projectionScope(acceptedSessionId));
+          const saved = await readAssistantSession(this.backend, update.contactId, acceptedSessionId, pending.signal);
           if (!current() || saved.generation !== generation) return;
           const accepted = this.sessionProjection.acceptCompletion(verification, saved,
             { requestKey: command.requestKey, inputVersionId: result.inputVersionId, replyRequestId: result.replyRequestId });
@@ -377,7 +399,7 @@ export class ReplySession {
             requirements: result.effectiveRequirements.join('；'),
             ...(input.mode === 'reply_to_message' ? { direction: input.direction }
               : input.mode === 'initiate_conversation' ? { purpose: input.purpose } : {}),
-            continuation: { ...identity, phase: 'completed', canRetry: false, effectiveRequirements: result.effectiveRequirements },
+            continuation: { ...identity, sessionId: acceptedSessionId, phase: 'completed', canRetry: false, effectiveRequirements: result.effectiveRequirements },
             result: { replyRequestId: result.replyRequestId, assistantSessionId: result.assistantSessionId,
               inputVersionId: result.inputVersionId, input, contextEvidenceIds: result.contextEvidenceIds,
               expressionPreferenceIds: result.expressionPreferenceIds,
@@ -387,7 +409,7 @@ export class ReplySession {
                 candidateGroupId: command.displayedGroup.candidateGroupId },
               candidates: result.candidates.map((original) => ({ original, editedText: original.text })) },
             selectedCandidateId: null }, 'authoritative');
-          await this.restoreCandidateVersions(update, update.sessionId, result.candidates.map((candidate) => candidate.candidateId));
+          await this.restoreCandidateVersions(update, acceptedSessionId, result.candidates.map((candidate) => candidate.candidateId));
         },
         failed: async (error) => {
           const failure = error instanceof BackendRequestFailure ? error : undefined;
@@ -729,7 +751,7 @@ export class ReplySession {
       this.publish({ savedSession: { phase: 'ready', sessionId: saved.sessionId, turns: saved.turns,
         inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId },
         sessionCatalog: { phase: 'loading', items, currentSessionId, selectionPending: true },
-        sessionDeletion: undefined, confirmedSessionDeletion: undefined,
+        sessionDeletion: undefined, confirmedSessionDeletion: undefined, idleRollover: undefined,
         options: defaults(), workspaceMigrationNotice: undefined, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
         mode: 'rewrite_draft', scene: '', targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '',
         skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], contentRestoreNotice: undefined, candidateDrafts: [],
@@ -1861,9 +1883,12 @@ export class ReplySession {
           replaceable && selection.newRequest ? replaceable.requestKey : undefined, current),
         replacement: replaceable && selection.newRequest ? replaceable : undefined,
         registered: (registered) => { job = registered; },
-        prepared: (_registered, receipt) => { budgetReceipt = receipt; },
-        beforeFailure: () => { failureVerification = this.sessionProjection.beginVerification(this.projectionScope(sessionId)); },
-        consume: (result) => consume(sessionId, result), failed,
+        prepared: (_registered, receipt) => {
+          budgetReceipt = receipt;
+          this.showIdleRollover(receipt, sessionId, selection, operation, generation, pending);
+        },
+        beforeFailure: () => { failureVerification = this.sessionProjection.beginVerification(this.projectionScope(budgetReceipt?.sessionId ?? sessionId)); },
+        consume: (result) => consume(result.assistantSessionId, result), failed,
         finished: (finished, settled, couldPublish) => this.generationFinished(finished, settled, couldPublish),
       });
     } catch (error) { await failed(error);
