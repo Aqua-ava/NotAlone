@@ -1,9 +1,0 @@
-{
-  "schema_version": "standards-review-output-v1",
-  "files_sha256": {
-    "review.md": "ae3a8e476f12d72bf83f1bda95b5b4909113858e79ff11e36b562d94607087e9",
-    "handoff.md": "df374e21bfcdd13eaf71dd839d3817676e97b851209cc888b2e87303d05e2bc6",
-    "integrity.json": "4c54319abded04e869ac0f518ccd1f90d6383d77349e6d809c624521b19b0525",
-    "reviewed-files-sha256.json": "7b9639889814bb1b3e619543b8100f6d301026522c4f68f85f5f7d0d83384f3b"
-  }
-}

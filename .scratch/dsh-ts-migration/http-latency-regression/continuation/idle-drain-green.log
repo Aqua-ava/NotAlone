@@ -1,9 +1,0 @@
-✔ 仅持有空闲业务连接的子进程也必须完成关闭排空 (558.104125ms)
-ℹ tests 1
-ℹ suites 0
-ℹ pass 1
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 619.192042

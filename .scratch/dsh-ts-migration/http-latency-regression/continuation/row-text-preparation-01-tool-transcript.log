@@ -1,9 +1,0 @@
-Traceback (most recent call last):
-  File "<stdin>", line 51, in <module>
-  File "<user-home>/miniconda3/envs/NotAlone/lib/python3.12/ast.py", line 52, in parse
-    return compile(source, filename, mode, flags,
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<unknown>", line 178
-    if content.count('await scopeRevision(')!=3 or content.count('await client.query('SELECT pg_advisory_xact_lock(')!=2:raise RuntimeError('scope_fence_changed')
-                                                                                                                                                                ^
-SyntaxError: unterminated string literal (detected at line 178)

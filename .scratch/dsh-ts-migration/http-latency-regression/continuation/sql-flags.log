@@ -1,9 +1,0 @@
-file://<repo>/.scratch/dsh-ts-migration/http-latency-regression/continuation/measure-sql-flags.mjs:10
-const literal=name=>vm.runInNewContext(source.match(new RegExp('const '+name+' = (\\[[\\s\\S]*?\\n\\]);'))[1]);
-                                                                                                          ^
-
-TypeError: Cannot read properties of null (reading '1')
-    at literal (file://<repo>/.scratch/dsh-ts-migration/http-latency-regression/continuation/measure-sql-flags.mjs:10:107)
-    at file://<repo>/.scratch/dsh-ts-migration/http-latency-regression/continuation/measure-sql-flags.mjs:11:52
-
-Node.js v24.19.0

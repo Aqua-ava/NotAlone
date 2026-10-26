@@ -1,9 +1,0 @@
-✔ header预校验失败在reserve前拒绝，冻结材料漂移也拒绝 (1253.718958ms)
-ℹ tests 1
-ℹ suites 0
-ℹ pass 1
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 1286.566416

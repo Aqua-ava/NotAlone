@@ -1,9 +1,0 @@
-{
-  "private_evidence_label": "na-persistent-broker-raw-prvugu91",
-  "raw_file": "red-journal.log",
-  "raw_sha256": "3e6d7da1bb889cfa36981fe1b591eb67479b50c1c7aa826faa3c23f0c9cfe445",
-  "public_file": "red-journal.log",
-  "public_sha256": "623341c49dcb211ea1dd3d76ae5427ad65aa43927369540186f914a183c44b95",
-  "exit_code": 1,
-  "reason": "journal_module_not_implemented_at_first_run"
-}

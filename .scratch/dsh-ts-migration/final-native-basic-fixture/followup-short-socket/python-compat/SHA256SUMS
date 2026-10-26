@@ -1,9 +1,0 @@
-bb7ff7b94e347a5e820df03c5c2b9cc701d7a3d920236ff906caf5fdae68c769  ../../fixture.mjs
-7dacfbaf4ba7449b552b3456c7592a7c65fbb943344c258861cef81049f58fb1  ../../seed.mjs
-757972806bef4ad0e75a73e93e2f1b3f59bb3bf716ee7a5d5f9956556dbc2c1b  ../../synthetic-cli.mjs
-310dfd6a3e6708a8320caf44ac3da06c22fdac0e6d1414df9ef37a456f7c1a32  ../build-snapshot.mjs
-e3a55a7cd4178719d53f8ccc318f298ae60a0a56f531773c1c76cc0c797ceef8  handoff.md
-3de932609eb64e535bc56ea004edbd9688b4041fe0410be4c88dbfed2cd6fa47  staging-source.sha256
-b0b92b9f9b1dae40283d35ea9138aeb0af0043fef04ce5fb2146f0db96dee78f  verification.json
-78caf69ef479316604bc8efb80affc21c125b40e22b1e8c1c6ecba2d9fb29249  verify.mjs
-421f91f456c60f54f185dafe2a1a171b0169eebf1dd4cc0d02cf0f1dde19c6e2  manifest.json

@@ -1,8 +1,0 @@
-{
-  "exit_code": 0,
-  "command": "NODE24 --test --test-name-pattern=重开检测到历史文件被环境覆盖 tests/setup-configuration.test.mjs",
-  "cwd": "desktop",
-  "raw_sha256": "dae47d5379c8ee8ce4af6e0b241197a88352dafc7a34c3322027d2cbc8d37009",
-  "public_sha256": "dae47d5379c8ee8ce4af6e0b241197a88352dafc7a34c3322027d2cbc8d37009",
-  "model_pg_app_wechat_activity": 0
-}

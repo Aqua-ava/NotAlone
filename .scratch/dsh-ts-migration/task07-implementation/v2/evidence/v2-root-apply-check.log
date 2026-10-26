@@ -1,1 +1,0 @@
-{"base": "3e044a046f66dedf65120e664c2d9b1ee04ae112", "target": "5e93c89b3dfc2be034425c0499d3c9303440e3ab", "root_head": "1a1f13670ee8cbb54d1ed5057745df041574c41b", "root_base_ancestor": true, "git_apply_check_exit": 0, "stderr": "<stdin>:1125: new blank line at EOF.\n+\nwarning: 1 line adds whitespace errors.\n"}

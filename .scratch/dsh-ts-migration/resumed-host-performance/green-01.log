@@ -1,6 +1,0 @@
-test_short_pair_keeps_tree_samples_order_and_cleanup (test_host_perf.SamplerContract.test_short_pair_keeps_tree_samples_order_and_cleanup) ... ok
-
-----------------------------------------------------------------------
-Ran 1 test in 0.739s
-
-OK

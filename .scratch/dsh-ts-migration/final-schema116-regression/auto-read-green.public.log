@@ -1,9 +1,0 @@
-✔ 108升级当前116保留既有数据，严格拒绝迁移缺口、未知版本和抑制表字段缺失 (755.828125ms)
-ℹ tests 1
-ℹ suites 0
-ℹ pass 1
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 811.584584

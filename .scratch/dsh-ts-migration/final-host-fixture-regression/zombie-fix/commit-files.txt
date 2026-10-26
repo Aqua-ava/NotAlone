@@ -1,2 +1,0 @@
-backend-ts/src/process-identity.ts
-backend-ts/test/process-identity-zombie.test.mjs

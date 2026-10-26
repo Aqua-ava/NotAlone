@@ -1,9 +1,0 @@
-{
-  "neutral_records": 2,
-  "excluded_records": 0,
-  "ev_complete": 2,
-  "independent_reviews_completed": 0,
-  "semantic_quality_verified": false,
-  "source_report": "extraction-ev/report.json",
-  "source_hard_failure_preserved": true
-}

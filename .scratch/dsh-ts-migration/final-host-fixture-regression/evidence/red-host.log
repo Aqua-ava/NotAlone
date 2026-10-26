@@ -1,9 +1,0 @@
-✔ 真实DSH被SIGKILL后等待旧Python退出才允许监督重启 (4485.857375ms)
-ℹ tests 1
-ℹ suites 0
-ℹ pass 1
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 4538.914375

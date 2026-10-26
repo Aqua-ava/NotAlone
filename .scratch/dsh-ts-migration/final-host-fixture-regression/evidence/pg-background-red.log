@@ -1,7 +1,0 @@
-{"original_count": 2, "business_count": 1, "backends": ["autovacuum worker", "client backend"]}
-{"owned_cluster_stopped": true, "owned_connections_closed": true, "owned_directory_removed": true}
-Traceback (most recent call last):
-  File "<REPO>/.scratch/dsh-ts-migration/final-host-fixture-regression/pg-background-probe.py", line 48, in <module>
-    assert original == 1, "原夹具把 autovacuum worker 计为第二条业务连接"
-           ^^^^^^^^^^^^^
-AssertionError: 原夹具把 autovacuum worker 计为第二条业务连接

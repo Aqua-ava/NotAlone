@@ -1,9 +1,0 @@
-{
-  "errors": [
-    {
-      "operation": "failure manifest generation",
-      "error": "relative Path.relative_to absolute repo mismatch",
-      "effect": "仅元数据冻结失败；未发新PG/HTTP；现统一resolve修正。"
-    }
-  ]
-}

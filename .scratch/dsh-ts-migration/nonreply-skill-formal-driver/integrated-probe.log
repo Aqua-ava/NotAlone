@@ -1,9 +1,0 @@
-file://<repository>.scratch/dsh-ts-migration/nonreply-skill-formal-driver/probe.mjs:41
-    catch(error){await writeFile(join(directory,'worker-failure.log'),String(error.stdout??'')+String(error.stderr??'')+String(error.stack??error),{mode:0o600});throw Error('synthetic_skill_worker_failed_private_log_preserved:'+directory.split('/').at(-1));}
-                                                                                                                                                                       ^
-
-Error: synthetic_skill_worker_failed_private_log_preserved:na-skill-formal-private-PPQO1c
-    at runSyntheticProbe (file://<repository>.scratch/dsh-ts-migration/nonreply-skill-formal-driver/probe.mjs:41:168)
-    at async file://<repository>.scratch/dsh-ts-migration/nonreply-skill-formal-driver/probe.mjs:81:16
-
-Node.js v24.19.0

@@ -1,6 +1,0 @@
-test_state_gone_but_fixture_present_is_not_directory_cleanup (__main__.FixtureDirectoryProofTest) ... ok
-
-----------------------------------------------------------------------
-Ran 1 test in 0.001s
-
-OK

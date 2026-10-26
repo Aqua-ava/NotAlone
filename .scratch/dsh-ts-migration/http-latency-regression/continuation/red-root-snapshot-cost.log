@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "<repo>/.scratch/dsh-ts-migration/http-latency-regression/continuation/root-snapshot-cost.py", line 17, in <module>
-    result=subprocess.run([plan['node'],str(base/'root-snapshot-cost.mjs')],env=env,capture_output=True,text=True,timeout=15,check=True)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<user-home>/miniconda3/envs/NotAlone/lib/python3.12/subprocess.py", line 571, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['<user-home>/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node', '<repo>/.scratch/dsh-ts-migration/http-latency-regression/continuation/root-snapshot-cost.mjs']' returned non-zero exit status 13.

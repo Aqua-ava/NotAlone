@@ -1,8 +1,0 @@
-{
-  "reason": "input_budget_unavailable",
-  "cause": "synthetic fixture custom base outside existing model budget contract",
-  "productionChanged": false,
-  "before": "unavailable",
-  "after": "configured",
-  "actualModelCalls": 0
-}

@@ -1,5 +1,0 @@
-{
-  "command": "node scripts/check_public_history.mjs --ref HEAD --working-tree",
-  "exit_code": 0,
-  "own_files_path_scan": "passed"
-}

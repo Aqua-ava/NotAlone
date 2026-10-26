@@ -1,8 +1,0 @@
-{
-  "backend-ts/src/host-storage.ts": "16e78874aa1c0152d2732fe28f0d5bddc4a9d9c7f928fe3c5bfa303b63707575",
-  "backend-ts/test/host-storage.test.mjs": "d3befe07b7e1a0d94f8b5878b643accb020dc576565214c1295b6d69f9f13bb3",
-  "backend-ts/test/host-read-transaction.test.mjs": "d689647e5f032b9445f98f8a5e5e1340e41eec7b87d94c98ea8318efbdf8cfec",
-  "desktop/tests/memory-correction/dsh-app-session.mjs": "6775b36c3ed4e2609027138e685ffad02c17c15fbec360de209ea473246dcae1",
-  "desktop/tests/fixtures/expression-preference-backend.py": "935caab94032a8d44cf92eb5394100ecfe71876c42e6626396c7b6b71c5a6c22",
-  "desktop/tests/fixtures/expression-preferences-page.py": "d2ab188ea6f329f975a55b7ee1c9335aff06f66ca1a74454d6ca1d985db9a155"
-}

@@ -1,7 +1,0 @@
-{
-  "scope": "本次独占新源码、测试与组件报告；不读取真实配置或私人词典",
-  "code_files": 12,
-  "report_files": 2,
-  "findings": [],
-  "full_history_scan": "根统一集成后执行"
-}

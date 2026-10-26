@@ -1,9 +1,0 @@
-✔ Client链式监听返回当前租约，保存的链和查询不能越过事务或传递监听器 (522.14325ms)
-ℹ tests 1
-ℹ suites 0
-ℹ pass 1
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 591.908125

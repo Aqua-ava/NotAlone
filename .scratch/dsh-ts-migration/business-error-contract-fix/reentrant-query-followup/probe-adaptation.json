@@ -1,6 +1,0 @@
-{
-  "probe_original_sha256": "77de7c7643ac28f8310ff3c09dbf4e84d43c9a9828b5cf68409d1caa5692def1",
-  "adapted_probe_sha256": "d35a89ce07693fb8fdc6e0afc497629fdd387a02cf7eb39ea7be72c1e2ba4767",
-  "baseline_source_sha256": "8b3f974caa1afa495b4cae58c8b9e57c74bd1b0c0f3beb98df9300a4497d9e11",
-  "adaptation": "baseline_import_only"
-}

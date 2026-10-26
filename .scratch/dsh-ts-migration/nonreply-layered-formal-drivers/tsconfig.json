@@ -1,8 +1,0 @@
-{
-  "extends": "../../../backend-ts/tsconfig.json",
-  "compilerOptions": {
-    "typeRoots": ["../../../backend-ts/node_modules/@types"],
-    "paths": {"@deepseek-ai/*": ["../../../backend-ts/node_modules/@deepseek-ai/*/lib/types/index.d.ts"]}
-  },
-  "include": ["profile-plugin.ts"]
-}

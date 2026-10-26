@@ -1,6 +1,0 @@
-test_generate_uses_original_a_port_and_ts_finish_without_b_write (tests.unit.application.test_exploration_remote.RemoteExplorationTests.test_generate_uses_original_a_port_and_ts_finish_without_b_write) ... ok
-
-----------------------------------------------------------------------
-Ran 1 test in 0.000s
-
-OK

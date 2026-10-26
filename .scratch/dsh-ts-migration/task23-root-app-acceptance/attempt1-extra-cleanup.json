@@ -1,7 +1,0 @@
-{
-  "initial_attempt_stdin_closed_before_ui": true,
-  "actual_app_acceptance_claimed": false,
-  "own_database_and_temp_cleanup_proved_separately": true,
-  "extra_released_journals_removed": 1,
-  "no_active_or_unknown_permits": true
-}

@@ -1,8 +1,0 @@
-{
-  "path": ".scratch/dsh-ts-migration/task07-implementation/closeout-handoff.md",
-  "change": "以角色说明替换内部会话标识；冻结v2与正式源不变",
-  "before_raw_alias": "PRIVATE_RAW/task07-root-runtime/task07-closeout-handoff-before-redaction.raw.md",
-  "before_sha256": "d5b7580d78c7fa7812979e6a367759a0339e21953d995c4fc1d799a94ff383b7",
-  "after_sha256": "c164bd7e1e99b7d63199297bdf3649f2c1b468f63e02bdef64725445711d9894",
-  "scanner_red": "source-precommit-publicscan-red.json"
-}

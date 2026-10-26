@@ -1,9 +1,0 @@
-✔ 换组拒绝重复方向；同一失败操作可有界重试且不刷新原根时效或重选Skill (4537.835917ms)
-ℹ tests 1
-ℹ suites 0
-ℹ pass 1
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 4639.187417
