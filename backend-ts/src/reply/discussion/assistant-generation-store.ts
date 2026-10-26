@@ -1,4 +1,4 @@
-import {recordAssistantUserActivity} from '../discussion/assistant-user-activity.ts';
+import {assistantNow,recordAssistantUserActivity,type AssistantClock} from '../discussion/assistant-user-activity.ts';
 /** generation 的唯一事务写者；沿用原 A 输入、失效键与回复来源守卫。 */
 import {createHash} from 'node:crypto';
 import type {Client} from 'pg';
@@ -15,15 +15,15 @@ import {interruptAssistantGeneration} from './assistant-generation-interruption.
 import {ExplorationError} from '../exploration/exploration-contract.ts';
 
 export type GenerationRow=Record<string,any>;
-export interface AssistantGenerationReceipt {session_id:string;turn_id:string;request_key:string;input_version_id:string;state:string;interruption_reason?:string|null}
-export interface AssistantGenerationStoreOptions {transaction<T>(work:(client:Client)=>Promise<T>):Promise<T>;skillsRoot:string;resolveBinding?:ReplyAssistantPorts['requireActiveBinding']}
+export interface AssistantGenerationReceipt {session_id:string;turn_id:string;request_key:string;input_version_id:string;state:string;previous_session_id?:string;interruption_reason?:string|null}
+export interface AssistantGenerationStoreOptions {transaction<T>(work:(client:Client)=>Promise<T>):Promise<T>;skillsRoot:string;assistantClock?:AssistantClock;resolveBinding?:ReplyAssistantPorts['requireActiveBinding']}
 export class AssistantGenerationError extends ReplyError {
  readonly reason?:string;
  no_generation?:{contact_id:string;session_id:string;request_key:string;state:'not_reserved'};
  constructor(code='assistant_session_rejected',reason?:string,status=409){super(code,status);this.reason=reason;}
 }
 export const generationReject=(reason:string):never=>{throw new AssistantGenerationError('assistant_session_rejected',reason);};
-export const generationReceipt=(row:GenerationRow):AssistantGenerationReceipt=>({session_id:row.session_id,turn_id:row.id,request_key:row.idempotency_key,input_version_id:row.input_version_id,state:row.state});
+export const generationReceipt=(row:GenerationRow):AssistantGenerationReceipt=>({session_id:row.session_id,turn_id:row.id,request_key:row.idempotency_key,input_version_id:row.input_version_id,state:row.state,...(row.requested_session_id&&row.requested_session_id!==row.session_id?{previous_session_id:row.requested_session_id}:{})});
 export function generationPayload(input:ReplyRequestInput,auth?:AuthenticatedContinuation):GenerationRow {
  const normalized=JSON.parse(normalizeReplyInput({...input,suggestion:null}));
  const {mode,continued_from_candidate_id,skill,scene,allow_incomplete_history,history_coverage_warning,...content}=normalized;
@@ -102,13 +102,13 @@ export class AssistantGenerationStore {
   if(result instanceof AssistantGenerationError)throw result;return result;
  }
  async reserve(client:Client,scope:VerifiedReplyScope,sessionId:string,input:ReplyRequestInput,options:{auth?:AuthenticatedContinuation;dependencies?:string[];runningKey?:string}={}):Promise<GenerationRow>{
-  const session=await this.session(client,scope,sessionId);await requireReplyScope(client,scope,input);
+  let session=await this.session(client,scope,sessionId);const requestedSessionId=sessionId;await requireReplyScope(client,scope,input);
   const normalized=normalizeReplyInput(input),identity=options.auth?canonical({reply:normalized,continuation:options.auth.continuation}):normalized;
   const digest=createHash('sha256').update(scope.conversation_binding_id+':'+identity).digest('hex');
   const existing=await this.existing(client,scope,input.idempotency_key);
   if(existing){
    if(existing.state==='redacted'||!existing.input_payload)generationReject('source_deleted');
-   if(existing.session_id!==sessionId||existing.input_digest!==digest)throw new AssistantGenerationError('assistant_session_input_conflict');
+   if(existing.session_id!==sessionId&&existing.requested_session_id!==sessionId||existing.input_digest!==digest)throw new AssistantGenerationError('assistant_session_input_conflict');
    if(existing.interruption_reason!==null)generationReject('generation_interrupted');
   }
   if((await client.query('SELECT 1 FROM reply_invalidated_key WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3',[scope.owner_id,scope.contact_id,input.idempotency_key])).rowCount)generationReject('request_deleted');
@@ -121,19 +121,33 @@ export class AssistantGenerationStore {
    return existing;
   }
   if((await client.query('SELECT 1 FROM reply_request WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3',[scope.owner_id,scope.contact_id,input.idempotency_key])).rowCount)throw new AssistantGenerationError('assistant_session_input_conflict');
-  // 新键不能夺走已受理轮的当前输入；显式替换继续走原来的撤销合同。
-  if(!options.runningKey&&(await client.query(`SELECT 1 FROM assistant_session_turn turn JOIN reply_request request ON request.owner_id=turn.owner_id AND request.contact_id=turn.contact_id AND request.idempotency_key=turn.idempotency_key WHERE turn.owner_id=$1 AND turn.contact_id=$2 AND turn.session_id=$3 AND request.state='running' AND request.lease_expires_at>clock_timestamp()`,[scope.owner_id,scope.contact_id,sessionId])).rowCount)throw new AssistantGenerationError('assistant_session_in_progress');
+  // 空闲只在新任务受理时裁定；同键重放已经在上方返回原决定。
   if(input.expected_input_version_id!==undefined&&session.current_input_version_id!==input.expected_input_version_id)generationReject('input_version_stale');
+  const admissionTime=await assistantNow(client,this.options.assistantClock);
+  if(!options.runningKey){
+   const current=(await client.query('SELECT * FROM assistant_session WHERE owner_id=$1 AND contact_id=$2 AND is_default FOR UPDATE',[scope.owner_id,scope.contact_id])).rows[0];
+   if(current&&current.id!==sessionId&&current.idle_previous_session_id===sessionId){session=current;sessionId=current.id;}
+   const expired=session.is_default&&(await client.query("SELECT last_user_activity_at IS NULL OR $1::timestamptz > last_user_activity_at + interval '12 hours' AS expired FROM assistant_session WHERE id=$2",[admissionTime,sessionId])).rows[0].expired;
+   if(expired){
+    if(input.expected_input_version_id!==undefined&&session.current_input_version_id!==input.expected_input_version_id)generationReject('input_version_stale');
+    await client.query('UPDATE assistant_session SET is_default=FALSE WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[scope.owner_id,scope.contact_id,sessionId]);
+    session=(await client.query('INSERT INTO assistant_session(owner_id,contact_id,is_default,idle_previous_session_id) VALUES($1,$2,TRUE,$3) RETURNING *',[scope.owner_id,scope.contact_id,sessionId])).rows[0];sessionId=session.id;
+   }
+  }
+  const moved=sessionId!==requestedSessionId;
+  // 新键不能夺走已受理轮的当前输入；显式替换继续走原来的撤销合同。
+  if(!options.runningKey&&(await client.query(`SELECT 1 FROM assistant_session_turn turn LEFT JOIN reply_request request ON request.owner_id=turn.owner_id AND request.contact_id=turn.contact_id AND request.idempotency_key=turn.idempotency_key WHERE turn.owner_id=$1 AND turn.contact_id=$2 AND turn.session_id=$3 AND (request.state='running' AND request.lease_expires_at>clock_timestamp() OR request.id IS NULL AND turn.state='running')`,[scope.owner_id,scope.contact_id,sessionId])).rowCount)throw new AssistantGenerationError('assistant_session_in_progress');
+  if(!moved&&input.expected_input_version_id!==undefined&&session.current_input_version_id!==input.expected_input_version_id)generationReject('input_version_stale');
   const deps=new Set(options.dependencies??[]);
-  if(input.expected_input_version_id)for(const id of await this.current(client,scope,sessionId,input.expected_input_version_id))deps.add(id);
+  if(!moved&&input.expected_input_version_id)for(const id of await this.current(client,scope,sessionId,input.expected_input_version_id))deps.add(id);
   if(input.content.type==='reply_to_message')deps.add(input.content.target_message_id as string);
   if(input.continued_from_candidate_id){await this.guards.assistant.readContinuationBasis(client,scope,scope.conversation_binding_id,input.continued_from_candidate_id);const candidate=(await client.query('SELECT reply_request_id FROM reply_candidate WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[scope.owner_id,scope.contact_id,input.continued_from_candidate_id])).rows[0];for(const id of await generationDependencies(client,scope.owner_id,scope.contact_id,{turn_dependencies:[],reply_request_id:candidate.reply_request_id}))deps.add(id);}
   const captured=await this.guards.assistant.verifiedDiscussionDependencies(client,scope,unique(deps),true);await this.guards.ports.requireGenerationMemoryDependencies(client,scope,captured);
-  for(const id of await prepareExploredGeneration(this,client,scope,sessionId,input,options.auth))if(!captured.includes(id))captured.push(id);
+  for(const id of await prepareExploredGeneration(this,client,scope,requestedSessionId,input,options.auth))if(!captured.includes(id))captured.push(id);
   if(options.runningKey)await this.replaceRunning(client,scope,sessionId,options.runningKey);
-  const row=(await client.query('INSERT INTO assistant_session_turn(session_id,owner_id,contact_id,idempotency_key,conversation_binding_id,input_digest,input_payload,dependency_ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',[sessionId,scope.owner_id,scope.contact_id,input.idempotency_key,scope.conversation_binding_id,digest,JSON.stringify(generationPayload(input,options.auth)),captured])).rows[0];
+  const row=(await client.query('INSERT INTO assistant_session_turn(session_id,owner_id,contact_id,idempotency_key,conversation_binding_id,input_digest,input_payload,dependency_ids,requested_session_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[sessionId,scope.owner_id,scope.contact_id,input.idempotency_key,scope.conversation_binding_id,digest,JSON.stringify(generationPayload(input,options.auth)),captured,moved?requestedSessionId:null])).rows[0];
   await client.query("INSERT INTO assistant_session_input(id,session_id,owner_id,contact_id,conversation_binding_id,input_type,turn_id) VALUES($1,$2,$3,$4,$5,'generation',$6)",[row.input_version_id,sessionId,scope.owner_id,scope.contact_id,scope.conversation_binding_id,row.id]);
-  await client.query('UPDATE assistant_session SET current_input_version_id=$1,updated_at=now() WHERE owner_id=$2 AND contact_id=$3 AND id=$4',[row.input_version_id,scope.owner_id,scope.contact_id,sessionId]);await recordAssistantUserActivity(client,scope,sessionId);return row;
+  await client.query('UPDATE assistant_session SET current_input_version_id=$1,updated_at=now() WHERE owner_id=$2 AND contact_id=$3 AND id=$4',[row.input_version_id,scope.owner_id,scope.contact_id,sessionId]);await recordAssistantUserActivity(client,scope,sessionId,async()=>admissionTime);return row;
  }
  async replaceRunning(client:Client,scope:VerifiedReplyScope,sessionId:string,key:string):Promise<void>{
   const old=await this.existing(client,scope,key);if(!old||old.session_id!==sessionId)throw new AssistantGenerationError('not_found',undefined,404);
@@ -172,7 +186,7 @@ export class AssistantGenerationStore {
   if(terminal.state!=='failed'||terminal.interruption_reason!==original.interruption_reason)generationReject('generation_not_interrupted');
   const origin={original_turn_id:original.id,original_input_version_id:original.input_version_id},existing=await this.existing(client,scope,command.request_key);
   let payload:GenerationRow,deps:string[]=[];
-  if(existing){if(existing.session_id!==sessionId||canonical(existing.input_payload?.continuation?.recovery??null)!==canonical(origin))throw new AssistantGenerationError('assistant_session_input_conflict');payload=existing.input_payload;}
+  if(existing){if(existing.session_id!==sessionId&&existing.requested_session_id!==sessionId||canonical(existing.input_payload?.continuation?.recovery??null)!==canonical(origin))throw new AssistantGenerationError('assistant_session_input_conflict');payload=existing.input_payload;}
   else{
    deps=await this.current(client,scope,sessionId,original.input_version_id);payload=structuredClone(original.input_payload);
    const content=payload.content,source=content.type==='reply_to_message'||content.input_kind==='current_chat'?'direction':content.type==='initiate_conversation'?'purpose':'draft_text';

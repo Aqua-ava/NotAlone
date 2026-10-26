@@ -138,7 +138,7 @@ export async function continueAssistantSession(backend: BackendHost, contactId: 
   const value = response.data;
   const executionClarification = clarified(value, response.generation);
   if (executionClarification) return executionClarification;
-  if (!isRecord(value) || value.session_id !== sessionId.toLowerCase() || value.state !== 'completed'
+  if (!isRecord(value) || value.session_id !== receipt.sessionId || value.state !== 'completed'
     || value.input_version_id !== receipt.inputVersionId || value.turn_id !== receipt.turnId
     || response.generation !== generation || backend.getConnectionGeneration() !== generation
     || !isUuid(value.input_version_id) || !isRecord(value.continuation) || !isRecord(value.effective_input)) {
@@ -160,7 +160,7 @@ export async function continueAssistantSession(backend: BackendHost, contactId: 
     }
   }
   return { phase: 'completed' as const, ...readReplyResult(value), generation: response.generation,
-    assistantSessionId: sessionId.toLowerCase(), inputVersionId: value.input_version_id.toLowerCase(),
+    assistantSessionId: receipt.sessionId, inputVersionId: value.input_version_id.toLowerCase(),
     resolvedCandidateId: candidateId as string | null, resolvedVersionId: versionId as string | null,
     effectiveRequirements: [...continuation.effective_requirements] as string[], effectiveInput: value.effective_input,
     effectiveScene: readReplyScene(value.effective_scene) };

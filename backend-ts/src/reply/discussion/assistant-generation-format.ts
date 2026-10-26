@@ -7,7 +7,8 @@ import {validatePreferenceSnapshot} from '../../preferences/preference-service.t
 import {AssistantGenerationStore,AssistantGenerationError,generationRequest,generationReject,generationReceipt,type GenerationRow} from './assistant-generation-store.ts';
 export async function requireGenerationInput(store:AssistantGenerationStore,client:Client,scope:VerifiedReplyScope,session:string,key:string,inputVersion?:string):Promise<GenerationRow>{
  await store.session(client,scope,session);const row=await store.existing(client,scope,key);
- if(!row||row.session_id!==session)throw new AssistantGenerationError('not_found',undefined,404);
+ if(!row||row.session_id!==session&&row.requested_session_id!==session)throw new AssistantGenerationError('not_found',undefined,404);
+ session=row.session_id;
  if(inputVersion&&row.input_version_id!==inputVersion)generationReject('input_version_stale');
  const input=(await client.query("SELECT * FROM assistant_session_input WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND id=$4 AND turn_id=$5 AND input_type='generation'",[scope.owner_id,scope.contact_id,session,row.input_version_id,row.id])).rows[0];
  if(!input)generationReject('input_version_stale');if(row.state==='redacted'||input.state==='redacted'||row.input_payload===null)generationReject('source_deleted');
@@ -20,7 +21,7 @@ export async function checkGenerationFormat(store:AssistantGenerationStore,clien
  if(row.prepared_context===null)return {...generationReceipt(row),format_status:'compatible'};
  let incompatible=false;
  try{
-  const auth=await store.auth(client,scope,session,row.input_payload),input=generationRequest(scope,key,row.input_payload,auth),raw=(await client.query('SELECT prepared_context::text AS value FROM assistant_session_turn WHERE id=$1',[row.id])).rows[0].value;
+  const auth=await store.auth(client,scope,row.requested_session_id??row.session_id,row.input_payload),input=generationRequest(scope,key,row.input_payload,auth),raw=(await client.query('SELECT prepared_context::text AS value FROM assistant_session_turn WHERE id=$1',[row.id])).rows[0].value;
   const context=decodePreparedContext(parseJson(raw),input,{owner_id:scope.owner_id,contact_id:scope.contact_id},row.conversation_binding_id);
   const revision=String((await client.query('SELECT revision FROM skill_library WHERE owner_id=$1',[scope.owner_id])).rows[0]?.revision??0);
   if(String(context.skill_library_revision)!==revision)incompatible=true;

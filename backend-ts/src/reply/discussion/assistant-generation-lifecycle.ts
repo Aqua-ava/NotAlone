@@ -56,14 +56,15 @@ export class AssistantGenerationLifecycle {
   return this.execute(scope,sessionId,reserved,signal,false);
  }
  private async execute(scope:VerifiedReplyScope,sessionId:string,reserved:{row:GenerationRow;input:ReplyRequestInput;auth?:AuthenticatedContinuation},signal:AbortSignal,prepare:boolean){
-  const {row,input,auth}=reserved;
+  const {row,input}=reserved;sessionId=row.session_id;
+  const auth=reserved.auth&&row.requested_session_id&&row.requested_session_id!==row.session_id?{...reserved.auth,rollover_reference:true}:reserved.auth;
   const key=`${scope.owner_id}:${scope.contact_id}:${input.idempotency_key}`;
   if(!prepare){if(this.generating.has(key))throw new ReplyError('reply_in_progress',409);this.generating.add(key);}
   try{
    if(!prepare){const active=await this.store.transaction(scope,async client=>(await client.query("SELECT 1 FROM reply_request WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3 AND state='running' AND lease_expires_at>clock_timestamp()",[scope.owner_id,scope.contact_id,input.idempotency_key])).rowCount,signal);if(active)throw new ReplyError('reply_in_progress',409);}
    const result=await this.options.replyService[prepare?'prepare':'generate'](scope,input,signal,auth?{authenticatedContinuation:auth}:{});signal.throwIfAborted();
    if(prepare)return generationReceipt(row);
-   await this.store.complete(scope,sessionId,row,result,signal);const session=await this.discussion.readSession(scope,sessionId);return session.turns.find((turn:GenerationRow)=>turn.turn_id===row.id);
+   await this.store.complete(scope,sessionId,row,result,signal);const session=await this.discussion.readSession(scope,sessionId);return {...session.turns.find((turn:GenerationRow)=>turn.turn_id===row.id),session_id:sessionId};
   }catch(error){if((error as {code?:string}).code!=='reply_in_progress')await this.store.fail(scope,row);throw error;}finally{if(!prepare)this.generating.delete(key);}
  }
  async replace(scope:VerifiedReplyScope,session:string,body:unknown,signal:AbortSignal,prepare=false){

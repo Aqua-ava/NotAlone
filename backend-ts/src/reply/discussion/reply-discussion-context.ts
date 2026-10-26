@@ -156,7 +156,12 @@ export function assistantDiscussionPayload(discussion:ReplyDiscussionContext):As
 export function continuationReferencePayload(discussion:ReplyDiscussionContext|null,scope:AssistantScope,continuedCandidateId:string|null,content:{type:string;draft_text?:string},authenticated?:AuthenticatedContinuation):ContinuationReferencePayload|null {
  const ref=authenticated?.continuation_reference;if(!ref)return null;
  if(!discussion||!same(discussion.scope,scope)||ref.candidate_id!==continuedCandidateId)reject();
- const selected=discussion!.items.filter(i=>i.kind==='candidate_version'&&i.candidate_id===ref.candidate_id&&i.version_id===ref.version_id);if(selected.length!==1)reject();
+ const selected=discussion!.items.filter(i=>i.kind==='candidate_version'&&i.candidate_id===ref.candidate_id&&i.version_id===ref.version_id);
+ if(selected.length===0&&authenticated?.rollover_reference===true){
+  const group=messages(ref.messages),is_current_draft=content.type==='rewrite_draft'&&content.draft_text===group.map(m=>m.text).join('\n\n');
+  return {candidate_id:ref.candidate_id,version_id:ref.version_id,is_current_draft,...(is_current_draft?{}:{messages:group}),factual_role:'previous_assistant_candidate',weight:'low',notice:'这是用户本次明确选择的旧候选版本，只参考说法；本次明确意愿优先，不代表已发送或关系事实。'};
+ }
+ if(selected.length!==1)reject();
  let captured:Row;try{captured=JSON.parse(selected[0]!.text);}catch{reject();}
  const group=messages(ref.messages);if(!same(captured!.messages,group))reject();
  const is_current_draft=content.type==='rewrite_draft'&&content.draft_text===group.map(m=>m.text).join('\n\n');

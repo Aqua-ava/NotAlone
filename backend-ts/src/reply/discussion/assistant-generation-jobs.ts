@@ -5,7 +5,7 @@ import type {VerifiedReplyScope} from '../generation/reply-scope.ts';
 import type {AssistantGenerationResponse} from './assistant-generation-lifecycle.ts';
 interface PreparationJob {id:string;scope:string;key:string;fingerprint:string;controller:AbortController;promise:Promise<void>;result:AssistantGenerationResponse|null;finished:number|null}
 const pending=(job:PreparationJob):AssistantGenerationResponse=>({status:202,payload:{preparation_id:job.id,state:'preparing'}});
-const allowed=new Set(['session_id','turn_id','request_key','input_version_id','state','error','reason','no_generation','input_budget','message']);
+const allowed=new Set(['session_id','previous_session_id','turn_id','request_key','input_version_id','state','error','reason','no_generation','input_budget','message']);
 export class AssistantGenerationJobs {
  private readonly jobs=new Map<string,PreparationJob>();
  private stopped=false;

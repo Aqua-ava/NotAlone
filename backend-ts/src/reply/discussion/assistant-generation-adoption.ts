@@ -24,8 +24,8 @@ export async function reserveAssistantAdoption(store:AssistantGenerationStore,cl
  if(existing){
   if(existing.state==='redacted'||!existing.input_payload)generationReject('source_deleted');
   metadata=existing.input_payload.continuation;
-  if(existing.session_id!==session||!metadata||canonical(metadata.message_adoption)!==canonical(submission))throw new AssistantGenerationError('assistant_session_input_conflict');
-  const auth=await store.auth(client,scope,session,existing.input_payload);content=generationRequest(scope,declared.idempotency_key,existing.input_payload,auth).content;
+  if(existing.session_id!==session&&existing.requested_session_id!==session||!metadata||canonical(metadata.message_adoption)!==canonical(submission))throw new AssistantGenerationError('assistant_session_input_conflict');
+  const auth=await store.auth(client,scope,existing.requested_session_id??session,existing.input_payload);content=generationRequest(scope,declared.idempotency_key,existing.input_payload,auth).content;
  }else{
   deps=await store.current(client,scope,session,declared.expected_input_version_id!);
   const current=(await client.query('SELECT input_payload FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND input_version_id=$4',[scope.owner_id,scope.contact_id,session,declared.expected_input_version_id])).rows[0];

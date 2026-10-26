@@ -82,6 +82,7 @@ export interface HostReplyOptions {
   /** 完整启用前仅由隔离合成装配显式提供。 */
   persistentAssistantHome?:string;
   assistantRuntime?:AssistantRuntime;
+  assistantClock?:import('../reply/discussion/assistant-user-activity.ts').AssistantClock;
   sourceTraces?:Pick<SourceProcessingTraceStore,
     'findMemoryTraceRecordInTransaction'|'validateMemoryTraceRecordInTransaction'>;
   l2Quality?:L2ScenarioQualityReader;
@@ -202,7 +203,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   const assistantRuntime=options.assistantRuntime??(options.persistentAssistantHome?new AssistantRuntime({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),home:options.persistentAssistantHome}):undefined);
   const discussionService=new AssistantDiscussionService({
       eraseRuntime:assistantRuntime?(client,scope,session)=>assistantRuntime.erase(client,scope,session):undefined,
-      transaction:discussionTransaction,
+      transaction:discussionTransaction,assistantClock:options.assistantClock,
       skillsRoot:discussionSkillsRoot,
       environment:options.storage.runtimeEnvironment(),
       ...(options.publicRuntime?{resolveBinding:resolveRequestBinding}:{}),
@@ -213,7 +214,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       try{return await options.storage.businessTransaction(async client=>{
         try{return await work(client);}catch(error){failure=error;throw error;}
       });}catch(error){throw failure??error;}
-    },skillsRoot:discussionSkillsRoot,environment:options.storage.runtimeEnvironment(),replyService:delegated,resolveBinding:resolveRequestBinding,runInScope:withPublicReplyScope,
+    },assistantClock:options.assistantClock,skillsRoot:discussionSkillsRoot,environment:options.storage.runtimeEnvironment(),replyService:delegated,resolveBinding:resolveRequestBinding,runInScope:withPublicReplyScope,
   }):undefined;
   if(generation&&owner)await generation.recover(owner);
   const publicApi=createPureTsPublicApi({ownerId:owner,available:options.configuration!==null,discussion:discussionService,reply:delegated,storage:options.storage,skillsRoot:discussionSkillsRoot,generation,
@@ -276,7 +277,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       if(reviewStore)reviewService=new SkillReviewService({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),
         review:reviewStore,filesRoot:options.configuration.skillsRoot,provider,arbiter:options.arbiter,ledger:options.ledger,
         model:options.configuration.model});
-      exploration=new ExplorationService({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),arbiter:options.arbiter,ledger:options.ledger,provider,skillsRoot:options.configuration.skillsRoot,model:options.configuration.model});
+      exploration=new ExplorationService({ctx:options.ctx,assistantClock:options.assistantClock,transaction:work=>options.storage.businessTransaction(work),arbiter:options.arbiter,ledger:options.ledger,provider,skillsRoot:options.configuration.skillsRoot,model:options.configuration.model});
       if(owner&&options.extractionPermit&&options.sourceTraces){
         l2Scenarios=createL2ScenarioHost({
           ctx:options.ctx,

@@ -80,7 +80,7 @@ export async function generateReply(backend: BackendHost, input: ReplyInputSnaps
   if (prepared.generation !== generation || backend.getConnectionGeneration() !== generation) throw new Error('本次生成连接已变化。');
   const receipt = readAssistantGenerationReceipt(prepared.data, selected, requestKey);
   await onPrepared?.(receipt);
-  return completePreparedReply(backend, input.contactId, body, selected, receipt, signal, onRequested);
+  return completePreparedReply(backend, input.contactId, body, receipt.sessionId, receipt, signal, onRequested);
 }
 
 export async function replaceReply(backend: BackendHost, input: ReplyInputSnapshot, newRequestKey: string,
@@ -99,7 +99,7 @@ export async function replaceReply(backend: BackendHost, input: ReplyInputSnapsh
   if (prepared.generation !== generation || backend.getConnectionGeneration() !== generation) throw new Error('本次生成连接已变化。');
   const receipt = readAssistantGenerationReceipt(prepared.data, sessionId, newRequestKey);
   await onPrepared?.(receipt);
-  return completePreparedReply(backend, input.contactId, body, sessionId, receipt, signal, onRequested);
+  return completePreparedReply(backend, input.contactId, body, receipt.sessionId, receipt, signal, onRequested);
 }
 
 export interface InterruptedReplyOrigin { readonly turnId: string; readonly inputVersionId: string; }
@@ -125,7 +125,7 @@ export async function retryInterruptedReply(backend: BackendHost, contactId: str
   const executing = backend.requestJson({ method: 'POST', path, body, signal, timeoutMs: ASSISTANT_GENERATION_TIMEOUT_MS });
   onRequested?.();
   const response = await executing;
-  const result = readPreparedReply(response, sessionId, receipt);
+  const result = readPreparedReply(response, receipt.sessionId, receipt);
   const value = response.data;
   const restored = isRecord(value) ? value.restored_input : undefined;
   const continuation = isRecord(restored) ? restored.continuation : undefined;

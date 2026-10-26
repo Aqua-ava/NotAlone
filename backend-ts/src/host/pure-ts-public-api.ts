@@ -22,7 +22,7 @@ function completedGenerationPayload(value:unknown,sessionId:string,restoreInput=
  if(!value||typeof value!=='object'||Array.isArray(value))return value;
  const turn=value as Row;
  if(turn.state!=='completed'||!turn.reply||typeof turn.reply!=='object'||Array.isArray(turn.reply))return value;
- return {...turn.reply,session_id:sessionId.toLowerCase(),turn_id:turn.turn_id,input_version_id:turn.input_version_id,state:turn.state,
+ return {...turn.reply,session_id:(turn.session_id??sessionId).toLowerCase(),turn_id:turn.turn_id,input_version_id:turn.input_version_id,state:turn.state,
   ...(turn.basis_changes===undefined?{}:{basis_changes:turn.basis_changes}),
   ...(turn.continuation===undefined?{}:{continuation:turn.continuation,effective_input:turn.effective_input,effective_scene:turn.effective_scene}),
   ...(restoreInput?{restored_input:turn.input}:{})};

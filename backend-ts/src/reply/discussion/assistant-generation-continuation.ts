@@ -62,8 +62,8 @@ export async function reserveAssistantContinuation(store:AssistantGenerationStor
  const existing=await store.existing(client,scope,command.idempotency_key);
  if(existing){
   if(existing.state==='redacted'||!existing.input_payload)generationReject('source_deleted');
-  if(existing.session_id!==session||canonical(existing.input_payload?.continuation?.submission??null)!==canonical(command))throw new AssistantGenerationError('assistant_session_input_conflict');
-  const auth=await store.auth(client,scope,session,existing.input_payload),input={...generationRequest(scope,command.idempotency_key,existing.input_payload,auth),expected_input_version_id:command.expected_input_version_id};
+  if(existing.session_id!==session&&existing.requested_session_id!==session||canonical(existing.input_payload?.continuation?.submission??null)!==canonical(command))throw new AssistantGenerationError('assistant_session_input_conflict');
+  const auth=await store.auth(client,scope,existing.requested_session_id??session,existing.input_payload),input={...generationRequest(scope,command.idempotency_key,existing.input_payload,auth),expected_input_version_id:command.expected_input_version_id};
   const row=await store.reserve(client,scope,session,input,{auth});return {row,input,auth};
  }
  const deps=await store.current(client,scope,session,command.expected_input_version_id);

@@ -18,7 +18,7 @@ test('公开准备输入在TS建立锚点，官方runtime生成候选并重开�
   useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:'明天见',basis:'本次原句',citation_ids:['c1'],risk_notes:[]}]});
   if(holdNext){holdNext=false;release=()=>sendEvents(res,events);enter();return;}sendEvents(res,events);
  },{pluginPath:'test/assistant-generation-lifecycle-plugin.ts',environment:{NOTALONE_SYNTHETIC_OWNER:owner,NOTALONE_SYNTHETIC_CONTACT:contact,NOTALONE_SYNTHETIC_BINDING:binding}});
- const {session_id:session}=await host.request(`/api/contacts/${contact}/assistant-session/default`,{}),path=`/api/contacts/${contact}/assistant-sessions/${session}`;
+ const {session_id:session}=await host.request(`/api/contacts/${contact}/assistant-sessions`,{}),path=`/api/contacts/${contact}/assistant-sessions/${session}`;
  const input={contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:'明天见',include_relationship_context:false},skill_disabled:true};
  const prepared=await host.request(`${path}/replies/prepare`,input);
  assert.equal(prepared.session_id,session);assert.equal(prepared.request_key,input.idempotency_key);assert.equal(prepared.state,'running');assert.ok(prepared.input_version_id);
@@ -111,6 +111,7 @@ test('公开准备输入在TS建立锚点，官方runtime生成候选并重开�
   let terminal;
   for(let i=0;i<120;i++){const r=await fetch(host.url+`${path}/replies/prepare/status/${pending.preparation_id}`);terminal={status:r.status,body:await r.json()};if(r.status!==202)break;await new Promise(resolve=>setTimeout(resolve,50));}
   assert.equal(terminal.status,200);assert.equal((await fixture.client.query('SELECT conversation_binding_id FROM assistant_session_turn WHERE id=$1',[terminal.body.turn_id])).rows[0].conversation_binding_id,binding,'202返回后仍以显式手动范围执行');
+  await host.request(`${path}/interrupt`,{request_key:asyncInput.idempotency_key,input_version_id:terminal.body.input_version_id});
   await fixture.client.query('DELETE FROM conversation_binding WHERE id=$1',[desktop]);
   const revoked={...input,idempotency_key:randomUUID()},before=host.requests.length;await fixture.client.query('DELETE FROM manual_contact_confirmation WHERE id=$1',[binding]);
   const refusal=await send(revoked);assert.equal(refusal.status,409);assert.equal(refusal.body.reason,'manual_contact_unconfirmed');assert.equal(host.requests.length,before);

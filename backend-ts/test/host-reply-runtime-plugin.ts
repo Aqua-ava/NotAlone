@@ -2,7 +2,7 @@
 import type {} from '@deepseek-ai/dsh-cmdline';
 import type {Context} from '@deepseek-ai/cordis';
 import {createServer} from 'node:http';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {HostStorage} from '../src/platform/database/host-storage.ts';
@@ -52,6 +52,7 @@ export async function apply(ctx:Context){
     permitServer=await startModelPermitServer({path:join(home,'l2-permit.sock'),token:l2Token,arbiter,accounting});
   }
   const runtime=await createHostReplyRuntime({ctx,storage,arbiter,ledger,token:process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN!,
+    ...(process.env.NOTALONE_SYNTHETIC_ASSISTANT_CLOCK?{assistantClock:()=>readFile(process.env.NOTALONE_SYNTHETIC_ASSISTANT_CLOCK!,'utf8')}:{ }),
     ...(skillLibrary?{skillLibrary}:{}),
     ...(process.env.NOTALONE_SYNTHETIC_PERSISTENT==='1'?{publicRuntime:true,persistentAssistantHome:home}:{}),
     ...(extractionEnabled?{extractionEnabled:true,extractionAdoptionEnabled:true}:{}),
