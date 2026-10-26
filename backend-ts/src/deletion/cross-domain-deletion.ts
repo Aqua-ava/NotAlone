@@ -213,6 +213,7 @@ export class CrossDomainDeletionService {
     const claimed=await this.claim(operation.id);
     if(!claimed)return;
     try{
+      await this.runtime?.drain(claimed.id);
       await this.discussions.deleteSession({owner_id:claimed.owner_id,contact_id:claimed.contact_id},claimed.target_id);
       await this.cleanupRuntime(claimed);
       await this.cleanupFiles(claimed.owner_id);
@@ -231,6 +232,7 @@ export class CrossDomainDeletionService {
     const claimed=await this.claim(operation.id);
     if(!claimed)return;
     try{
+      await this.runtime?.drain(claimed.id);
       await this.storage.businessTransaction(async client=>{
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${claimed.owner_id}:${claimed.contact_id}`]);
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${claimed.owner_id}`]);
@@ -351,6 +353,7 @@ export class CrossDomainDeletionService {
     const claimed=await this.claim(operation.id);
     if(!claimed)return;
     try{
+      await this.runtime?.drain(claimed.id);
       await this.storage.businessTransaction(async client=>{
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${claimed.owner_id}:${claimed.contact_id}`]);
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${claimed.owner_id}`]);
@@ -426,6 +429,7 @@ export class CrossDomainDeletionService {
     const claimed=await this.claim(operation.id);
     if(!claimed)return;
     try{
+      await this.runtime?.drain(claimed.id);
       await this.storage.businessTransaction(async client=>{
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${claimed.owner_id}`]);
         await this.assertLease(client,claimed);

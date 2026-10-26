@@ -17,9 +17,10 @@ async function fixture(t){
  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成删除联系人')",[contact,owner]);
  await f.client.query('INSERT INTO assistant_session(id,owner_id,contact_id,is_default) VALUES($1,$2,$3,true)',[session,owner,contact]);
  await writeFile(f.envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${f.client.database}\nNOTALONE_OWNER_ID=${owner}\nNOTALONE_DEEPSEEK_API_KEY=synthetic-only\nNOTALONE_SKILLS_DIR=${f.directory}/skills\nNOTALONE_MANAGED_USER_DATA=${f.directory}\n`,{mode:0o600});
- const readTrigger=join(f.directory,'hold-runtime-read'),readPreload=join(f.directory,'read-barrier.mjs');
+ const readTrigger=join(f.directory,'hold-runtime-read'),closeTrigger=join(f.directory,'fail-commit-close'),closeObserved=join(f.directory,'commit-close-failed'),readPreload=join(f.directory,'read-barrier.mjs');
  await writeFile(readPreload,`import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
- const original=fs.promises.readFile;
+ const original=fs.promises.readFile,originalOpen=fs.promises.open,locks=new Map(),held=[];
+ fs.promises.open=async function(path,...args){const handle=await originalOpen.call(this,path,...args);if(String(path).includes('/assistant-runtime/')&&String(path).endsWith('/session.lock')){const count=(locks.get(String(path))??0)+1;locks.set(String(path),count);if(count===2&&fs.existsSync(${JSON.stringify(closeTrigger)})){fs.unlinkSync(${JSON.stringify(closeTrigger)});held.push(handle);handle.close=async()=>{fs.writeFileSync(${JSON.stringify(closeObserved)},'synthetic commit close failure');throw Object.assign(new Error('synthetic commit close failure'),{code:'EIO'});};}}return handle;};
  fs.promises.readFile=async function(path,...args){if(String(path).includes('/assistant-runtime/')&&String(path).endsWith('.jsonl')&&fs.existsSync(${JSON.stringify(readTrigger)})){fs.unlinkSync(${JSON.stringify(readTrigger)});await fetch(process.env.NOTALONE_SYNTHETIC_PROVIDER_URL+'/runtime-read');}return original.call(this,path,...args);};syncBuiltinESMExports();`,{mode:0o600});
  const provider=createServer(async(req,res)=>{
   if(req.url==='/runtime-read'){const held=readGate;readGate=undefined;held.enter();await held.wait;res.end('released');return;}
@@ -44,7 +45,7 @@ async function fixture(t){
  };
  const directory=join(f.directory,'assistant-runtime',owner,contact,session);
  const seed=async()=>{const runtime=randomUUID();await mkdir(join(directory,runtime,'forks'),{mode:0o700,recursive:true});for(const path of [join(f.directory,'assistant-runtime'),join(f.directory,'assistant-runtime',owner),join(f.directory,'assistant-runtime',owner,contact),directory])await chmod(path,0o700);await writeFile(join(directory,'ownership.json'),JSON.stringify({version:1,owner_id:owner,contact_id:contact,session_id:session}),{mode:0o600});await writeFile(join(directory,runtime,'forks','synthetic.jsonl'),'合成运行正文');await f.client.query("INSERT INTO assistant_runtime_session(owner_id,contact_id,session_id,runtime_session_id,configuration_sha256,state) VALUES($1,$2,$3,$4,$5,'dirty')",[owner,contact,session,runtime,'a'.repeat(64)]);};
- return {...f,owner,contact,session,directory,requests,start,stop,seed,holdRead:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);readGate={enter,wait};releaseGates.add(release);await writeFile(readTrigger,'synthetic');return {entered,release};},path:`/api/contacts/${contact}/assistant-sessions/${session}`,input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true}),hold:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};releaseGates.add(release);return {entered,release};}};
+ return {...f,owner,contact,session,directory,requests,start,stop,seed,failCommitClose:async()=>{await writeFile(closeTrigger,'synthetic');},closeObserved,holdRead:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);readGate={enter,wait};releaseGates.add(release);await writeFile(readTrigger,'synthetic');return {entered,release};},path:`/api/contacts/${contact}/assistant-sessions/${session}`,input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true}),hold:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};releaseGates.add(release);return {entered,release};}};
 }
 test('生产公开会话删除清除归属运行分叉并在同目录重启后保持删除',{timeout:45000},async t=>{
  const f=await fixture(t);await f.seed();let request=await f.start();
@@ -146,4 +147,50 @@ test('来源闭包清理显式携入的跨会话存档，保留无关业务讨�
  assert.ok((await stat(f.directory)).isDirectory());assert.match(JSON.stringify((await request(f.path)).body),/合成无关讨论应长期保留/);
  assert.doesNotMatch(JSON.stringify((await request(sourcePath)).body),/合成仅来源会话可用正文|合成已保存候选/);assert.doesNotMatch(JSON.stringify((await request(childPath)).body),/合成携入后继续要求|合成已保存候选/);
  await f.stop();const restarted=await f.start();assert.match(JSON.stringify((await restarted(f.path)).body),/合成无关讨论应长期保留/);assert.equal(f.requests.length,3);
+});
+
+test('来源删除在备份核验失败前持久封禁恢复出站，重启保留并明确重试收敛',{timeout:45000},async t=>{
+ const f=await fixture(t),source=randomUUID(),message=randomUUID();let request=await f.start();
+ await f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'wechat_jsonl','synthetic.jsonl',$4,1)",[source,f.owner,f.contact,'d'.repeat(64)]);
+ await f.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) VALUES($1,$2,$3,'contact','text','合成备份失败前必须阻断的来源正文',now())",[message,f.owner,f.contact]);
+ await f.client.query("INSERT INTO message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,'source_document',$4,'synthetic','{}')",[message,f.owner,f.contact,source]);
+ const initial=await request(f.path+'/replies',{contact_id:f.contact,idempotency_key:randomUUID(),content:{type:'reply_to_message',target_message_id:message,direction:'说明收到'},skill_disabled:true});assert.equal(initial.status,200,JSON.stringify(initial));
+ const independent=(await request(`/api/contacts/${f.contact}/assistant-sessions`,{})).body.session_id,independentPath=`/api/contacts/${f.contact}/assistant-sessions/${independent}`;
+ assert.equal((await request(independentPath+'/replies',f.input('合成无关讨论及档案保持'))).status,200);
+ const home=f.directory.split('/assistant-runtime/')[0],unknown=join(home,'updates','unverified');await mkdir(unknown,{mode:0o700,recursive:true});await chmod(join(home,'updates'),0o700);await writeFile(join(unknown,'keep.txt'),'合成未知恢复目录');
+ const accepted=await request(`/api/contacts/${f.contact}/sources/${source}`,undefined,'DELETE'),operation=accepted.body.task_id;
+ assert.equal((await request('/api/deletions/'+operation)).body.status,'failed');const before=f.requests.length;
+ const blocked=await request(f.path+'/replies',f.input('清理未完成不得恢复旧来源'));assert.notEqual(blocked.status,200);assert.equal(blocked.body.error,'reply_deletion_pending');assert.equal(f.requests.length,before,'失败后不能再次把旧历史外发');
+ await f.stop();request=await f.start();assert.notEqual((await request(f.path+'/replies',f.input('重启仍不可外发'))).status,200);assert.equal(f.requests.length,before);
+ assert.equal(await readFile(join(unknown,'keep.txt'),'utf8'),'合成未知恢复目录');assert.match(JSON.stringify((await request(independentPath)).body),/合成无关讨论及档案保持/);const independentDirectory=join(home,'assistant-runtime',f.owner,f.contact,independent);assert.ok((await stat(independentDirectory)).isDirectory());
+ await rm(unknown,{recursive:true});await request('/api/deletions/'+operation+'/retry',{confirmed:true});assert.equal((await request('/api/deletions/'+operation)).body.status,'succeeded');await assert.rejects(stat(f.directory),{code:'ENOENT'});assert.ok((await stat(independentDirectory)).isDirectory());
+ assert.equal((await request(independentPath+'/replies',f.input('清理后无关讨论可以继续'))).status,200);assert.equal(f.requests.length,before+1);assert.doesNotMatch(JSON.stringify(f.requests.at(-1)),/合成备份失败前必须阻断的来源正文/);
+});
+
+test('兼容公开生成无turn时联系人删除仍取消并等待真实供应商轮',{timeout:45000},async t=>{
+ const f=await fixture(t);await f.client.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic-delete','friend-delete')",[randomUUID(),f.owner,f.contact]);
+ const request=await f.start(),gate=f.hold();let settled=false;
+ const running=request('/api/reply/generate',f.input('合成无turn在途正文')).then(value=>{settled=true;return value;});await gate.entered;
+ try{const accepted=await request(`/api/contacts/${f.contact}`,{confirmed:true,confirm_contact_id:f.contact},'DELETE');assert.equal((await request('/api/deletions/'+accepted.body.operation_id)).body.status,'succeeded');assert.equal(settled,true,'删除成功前须取消并等已授权的临时轮释放');assert.notEqual((await running).status,200);}finally{gate.release();await running;}
+});
+
+test('提交写句柄真实关闭失败保留占用，当前删除不得成功且真实重启可收敛',{timeout:45000},async t=>{
+ const f=await fixture(t);let request=await f.start();await f.failCommitClose();
+ const generated=await request(f.path+'/replies',f.input('合成提交句柄关闭失败'));assert.notEqual(generated.status,200);assert.equal(await readFile(f.closeObserved,'utf8'),'synthetic commit close failure','必须命中官方提交屏障自有锁句柄');
+ const accepted=await request(f.path,{confirmed:true},'DELETE');assert.equal(accepted.status,202,'未确认释放的写者不能被算成清盘完成');const operation=accepted.body.operation_id;assert.equal((await request('/api/deletions/'+operation)).body.status,'failed');assert.ok((await stat(f.directory)).isDirectory());
+ await f.stop();request=await f.start();assert.equal((await request('/api/deletions/'+operation)).body.status,'failed');await request('/api/deletions/'+operation+'/retry',{confirmed:true});assert.equal((await request('/api/deletions/'+operation)).body.status,'succeeded');await assert.rejects(stat(f.directory),{code:'ENOENT'});assert.equal(f.requests.length,1);
+});
+
+for(const kind of ['source','account'])test(`兼容无turn临时轮按${kind}删除范围取消并结算`,{timeout:45000},async t=>{
+ const f=await fixture(t),source=randomUUID();await f.client.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic-scope','friend-scope')",[randomUUID(),f.owner,f.contact]);
+ if(kind==='source')await f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'wechat_jsonl','synthetic.jsonl',$4,0)",[source,f.owner,f.contact,'a'.repeat(64)]);
+ const request=await f.start(),gate=f.hold();let settled=false;const running=request('/api/reply/generate',f.input('合成范围临时轮')).then(value=>{settled=true;return value;});await gate.entered;
+ try{const accepted=kind==='source'?await request(`/api/contacts/${f.contact}/sources/${source}`,undefined,'DELETE'):await request('/api/account',{confirmed:true,confirm_scope:'account'},'DELETE');
+ const operation=accepted.body.operation_id??accepted.body.task_id;assert.equal((await request('/api/deletions/'+operation)).body.status,'succeeded');assert.equal(settled,true);assert.notEqual((await running).status,200);assert.equal(f.requests.length,1);}finally{gate.release();await running;}
+});
+
+test('讨论级删除不取消同联系人无关联的兼容临时轮',{timeout:45000},async t=>{
+ const f=await fixture(t);await f.client.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic-independent','friend-independent')",[randomUUID(),f.owner,f.contact]);
+ const request=await f.start(),gate=f.hold();let settled=false;const running=request('/api/reply/generate',f.input('合成独立临时轮')).then(value=>{settled=true;return value;});await gate.entered;
+ try{const deleted=await request(f.path,{confirmed:true},'DELETE');assert.equal(deleted.status,200,JSON.stringify(deleted));assert.equal(settled,false,'无关联临时轮不属于该讨论删除范围');gate.release();assert.equal((await running).status,200);assert.equal(f.requests.length,1);}finally{gate.release();await running;}
 });

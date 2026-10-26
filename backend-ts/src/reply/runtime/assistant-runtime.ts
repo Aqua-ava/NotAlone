@@ -92,13 +92,19 @@ export class AssistantRuntime {
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${scope.owner_id}`]);
     const row=(await client.query('SELECT session_id FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3',[scope.owner_id,scope.contact_id,requestKey])).rows[0];
     operation.session=row?.session_id??null;
-    if(operation.session)await this.requireAllowed(client,scope,operation.session);
+    await this.requireAllowed(client,scope,operation.session);
    });
    const combined=AbortSignal.any([signal,controller.signal]);combined.throwIfAborted();return await work(combined);
   }finally{this.operations.delete(operation);finish();}
  }
- private async requireAllowed(client:Client,scope:Scope,session:string):Promise<void>{
-  if((await client.query('SELECT 1 FROM assistant_runtime_deletion_target WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 LIMIT 1',[scope.owner_id,scope.contact_id,session])).rowCount)return unavailable();
+ private async requireAllowed(client:Client,scope:Scope,session:string|null):Promise<void>{
+  // 来源的owner memory/carry闭包可跨联系人；完成前先保守封禁本人生成，不删除无关档案。
+  const blocked=await client.query(`SELECT 1 FROM cross_domain_deletion_operation operation
+   WHERE operation.owner_id=$1 AND operation.status<>'succeeded' AND (
+    operation.scope_kind IN ('source','account') OR operation.scope_kind='contact' AND operation.contact_id=$2
+    OR operation.scope_kind='discussion' AND operation.contact_id=$2 AND operation.target_id=$3)
+   UNION ALL SELECT 1 FROM assistant_runtime_deletion_target WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 LIMIT 1`,[scope.owner_id,scope.contact_id,session]);
+  if(blocked.rowCount)throw new ReplyError('reply_deletion_pending',409);
  }
  private async lookup(client:Client,scope:VerifiedReplyScope,requestKey:string,configuration:string):Promise<RuntimeRow|null>{
   const anchor=(await client.query(`SELECT turn.session_id FROM assistant_session_turn turn JOIN assistant_session session ON session.id=turn.session_id AND session.owner_id=turn.owner_id AND session.contact_id=turn.contact_id WHERE turn.owner_id=$1 AND turn.contact_id=$2 AND turn.idempotency_key=$3 AND turn.conversation_binding_id=$4 AND turn.input_payload IS NOT NULL AND turn.state<>'redacted'`,[scope.owner_id,scope.contact_id,requestKey,scope.conversation_binding_id])).rows[0];
@@ -167,7 +173,7 @@ export class AssistantRuntime {
     commit:async(expectedEventCount)=>{
      if(!Number.isSafeInteger(expectedEventCount)||expectedEventCount<1)return unavailable();
      const handle=await world!.persistence.open(SessionId(row!.runtime_session_id),'write');let eventCount:number;
-     try{await handle.flush();eventCount=(await handle.read(0)).events.length;if(eventCount<expectedEventCount)return unavailable();}finally{await handle.close();}
+     try{await handle.flush();eventCount=(await handle.read(0)).events.length;if(eventCount<expectedEventCount)return unavailable();}finally{try{await handle.close();}catch(error){writerFailed=true;throw error;}}
      await this.options.transaction(async client=>{
      await this.requireCommittedInTransaction(client,scope,row!.session_id,requestId);
      const changed=await client.query("UPDATE assistant_runtime_session SET state='ready',committed_request_id=$4,committed_event_count=$6 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$5 AND state='dirty'",[scope.owner_id,scope.contact_id,row!.session_id,requestId,row!.runtime_session_id,eventCount]);if(changed.rowCount!==1)return unavailable();
@@ -176,12 +182,25 @@ export class AssistantRuntime {
    };
   }catch(error){try{await world?.close();}finally{this.active.delete(key);}throw error;}
  }
- /** 目标不随业务级联丢失；清盘完成后才允许删除操作验证成功。 */
- async cleanup(operationId:string):Promise<void>{
-  const targets=await this.options.transaction(async client=>(await client.query('SELECT * FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operationId])).rows);
-  const writers=[...this.operations].filter(active=>targets.some(target=>target.owner_id===active.scope.owner_id&&target.contact_id===active.scope.contact_id&&target.session_id===active.session));
+ /** 在任何可失败清理之前，按持久操作范围取消并排空；临时轮不依赖会话映射。 */
+ async drain(operationId:string):Promise<void>{
+  const {operation,targets}=await this.options.transaction(async client=>({
+   operation:(await client.query('SELECT * FROM cross_domain_deletion_operation WHERE id=$1',[operationId])).rows[0],
+   targets:(await client.query('SELECT * FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operationId])).rows,
+  }));
+  if(!operation?.owner_id)return;
+  const writers=[...this.operations].filter(active=>active.scope.owner_id===operation.owner_id&&(
+   ['source','account'].includes(operation.scope_kind)
+   ||operation.scope_kind==='contact'&&operation.contact_id===active.scope.contact_id
+   ||operation.scope_kind==='discussion'&&operation.contact_id===active.scope.contact_id&&operation.target_id===active.session
+   ||targets.some(target=>target.contact_id===active.scope.contact_id&&target.session_id===active.session)));
   for(const writer of writers)writer.controller.abort('scope_deleted');
   await Promise.all(writers.map(writer=>writer.done));
+ }
+ /** 目标不随业务级联丢失；清盘完成后才允许删除操作验证成功。 */
+ async cleanup(operationId:string):Promise<void>{
+  await this.drain(operationId);
+  const targets=await this.options.transaction(async client=>(await client.query('SELECT * FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operationId])).rows);
   for(const target of targets){
    await this.options.transaction(client=>this.erase(client,target,target.session_id));
    await this.options.transaction(async client=>{await client.query('UPDATE assistant_runtime_deletion_target SET cleaned=true WHERE operation_id=$1 AND owner_id=$2 AND contact_id=$3 AND session_id=$4',[operationId,target.owner_id,target.contact_id,target.session_id]);});

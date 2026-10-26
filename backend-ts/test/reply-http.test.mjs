@@ -89,7 +89,7 @@ test('实际HTTP断开触发传入service的AbortSignal，不额外调用或重�
 
 test('业务错误code和scope reason稳定透传；未知拒绝原因不捏造',async t=>{
  const x=await setup(t);await x.f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id)VALUES($1,$2,$3)',[x.binding,x.owner,x.contact]);
- for(const code of ['reply_context_invalidated','reply_context_unavailable','exploration_stale','exploration_expired','reply_cancelled','runtime_stopping','provider_context_limit','reply_budget_exceeded','reply_budget_unavailable','reply_persistence_unavailable']){
+ for(const code of ['reply_deletion_pending','reply_context_invalidated','reply_context_unavailable','exploration_stale','exploration_expired','reply_cancelled','runtime_stopping','provider_context_limit','reply_budget_exceeded','reply_budget_unavailable','reply_persistence_unavailable']){
   x.service.generate=async()=>{throw new ReplyError(code,409);};assert.deepEqual((await x.send()).body,{error:code});
  }
  for(const reason of ['scope_mismatch','no_active_binding','manual_contact_unconfirmed','invalid_verification','history_sync_pending','history_incomplete_confirmation_required']){
