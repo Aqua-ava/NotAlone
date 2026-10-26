@@ -1,0 +1,410 @@
+{
+  "schema_version": "共享夹具收尾冻结补丁最终只读复核-v1",
+  "axis": "Standards",
+  "code_conclusion": "approve",
+  "approval_scope": "仅review-input绑定的一文件七行测试夹具补丁；未给出本补丁最终commit，不冒充已提交绑定",
+  "input_manifest": {
+    "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/review-input.json",
+    "sha256": "9d800e450226fddbc4f621294505bb8d3b92981b60899dc5c872c3c6fce4c91d"
+  },
+  "baseline_commit": "b8ba6c6a1d2b428a9d749f2fe860fd2ac56c9597",
+  "production_checkpoint": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "source_file": {
+    "path": "backend-ts/test/host-storage-fixture.mjs",
+    "before_sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a",
+    "after_sha256": "ba09c57384e8d6b5632831db15257960258928e37c1f93db24d05c7ba0d89b82"
+  },
+  "source_bytes": 3097,
+  "patch": {
+    "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/fixture.patch",
+    "sha256": "a700bb39e3a5cc3c90e55402d89c7d19fe7eca53989472864f93130a76b70c10",
+    "added": 7,
+    "removed": 0,
+    "matches_prior_independent_static_review": true
+  },
+  "evidence_files": [
+    {
+      "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/review-input.json",
+      "bytes": 764,
+      "sha256": "9d800e450226fddbc4f621294505bb8d3b92981b60899dc5c872c3c6fce4c91d"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/fixture.patch",
+      "bytes": 1359,
+      "sha256": "a700bb39e3a5cc3c90e55402d89c7d19fe7eca53989472864f93130a76b70c10"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/validation.json",
+      "bytes": 2013,
+      "sha256": "4891fc1921799f420a427cf0bbcf002bf1428dd998148433408a9d2e9f49b224"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/raw-public-bindings.json",
+      "bytes": 2397,
+      "sha256": "8502a8940406155eeb56ed5891fbc9f4c942608c411ac35c64fecb9798036987"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/backend-full-1e90-root-r6.public.log",
+      "bytes": 13448,
+      "sha256": "dff2c0ab57410a4cea6fae95f26a77c1a5a6d5a291e43e891ace58dcce60f318"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-single-r1.public.log",
+      "bytes": 1689,
+      "sha256": "c5235e859d5f1a5d2c964534a8a13ca740cb32372b8590fff3ef6d786730b662"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-single-r2.public.log",
+      "bytes": 336,
+      "sha256": "39b21d8f6f855ca5f23b9b81545c5ae0a7638da1362597bb10065c50e72bf4c5"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-module-r1.public.log",
+      "bytes": 3199,
+      "sha256": "a6255740bea4219babd897210e5e44b25fbb2a4e260063020f3206258f3ea689"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-fixture-related-r1.public.log",
+      "bytes": 11845,
+      "sha256": "8db7b09668696f20e85b2bee5d9fb4c7901724f51de835332cdebb5085d5bc1e"
+    }
+  ],
+  "public_log_bindings": [
+    {
+      "private_relative_log": "backend-full-1e90-root-r6.log",
+      "private_sha256": "dff2c0ab57410a4cea6fae95f26a77c1a5a6d5a291e43e891ace58dcce60f318",
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/backend-full-1e90-root-r6.public.log",
+      "public_sha256": "dff2c0ab57410a4cea6fae95f26a77c1a5a6d5a291e43e891ace58dcce60f318",
+      "redactions": [
+        "local_paths",
+        "synthetic_owned_database_locator"
+      ],
+      "original_unchanged": true,
+      "public_sha256_verified": true,
+      "raw_reopened_this_followup": false,
+      "tap_metrics": {}
+    },
+    {
+      "private_relative_log": "root-deletion-single-r1.log",
+      "private_sha256": "49b9bb455af196b1ca40796c7aa5ba55c269cdb5c1e048c2dc09dd30eb9d1303",
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-single-r1.public.log",
+      "public_sha256": "c5235e859d5f1a5d2c964534a8a13ca740cb32372b8590fff3ef6d786730b662",
+      "redactions": [
+        "local_paths",
+        "synthetic_owned_database_locator"
+      ],
+      "original_unchanged": true,
+      "public_sha256_verified": true,
+      "raw_reopened_this_followup": false,
+      "tap_metrics": {}
+    },
+    {
+      "private_relative_log": "root-deletion-single-r2.log",
+      "private_sha256": "39b21d8f6f855ca5f23b9b81545c5ae0a7638da1362597bb10065c50e72bf4c5",
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-single-r2.public.log",
+      "public_sha256": "39b21d8f6f855ca5f23b9b81545c5ae0a7638da1362597bb10065c50e72bf4c5",
+      "redactions": [
+        "local_paths",
+        "synthetic_owned_database_locator"
+      ],
+      "original_unchanged": true,
+      "public_sha256_verified": true,
+      "raw_reopened_this_followup": false,
+      "tap_metrics": {
+        "tests": 1,
+        "suites": 0,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "private_relative_log": "root-deletion-module-r1.log",
+      "private_sha256": "a6255740bea4219babd897210e5e44b25fbb2a4e260063020f3206258f3ea689",
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-module-r1.public.log",
+      "public_sha256": "a6255740bea4219babd897210e5e44b25fbb2a4e260063020f3206258f3ea689",
+      "redactions": [
+        "local_paths",
+        "synthetic_owned_database_locator"
+      ],
+      "original_unchanged": true,
+      "public_sha256_verified": true,
+      "raw_reopened_this_followup": false,
+      "tap_metrics": {
+        "tests": 14,
+        "suites": 0,
+        "pass": 14,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "private_relative_log": "root-fixture-related-r1.log",
+      "private_sha256": "8db7b09668696f20e85b2bee5d9fb4c7901724f51de835332cdebb5085d5bc1e",
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-fixture-related-r1.public.log",
+      "public_sha256": "8db7b09668696f20e85b2bee5d9fb4c7901724f51de835332cdebb5085d5bc1e",
+      "redactions": [
+        "local_paths",
+        "synthetic_owned_database_locator"
+      ],
+      "original_unchanged": true,
+      "public_sha256_verified": true,
+      "raw_reopened_this_followup": false,
+      "tap_metrics": {
+        "tests": 57,
+        "suites": 0,
+        "pass": 57,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    }
+  ],
+  "raw_binding_verification_scope": "独立核验五份公开文件SHA；原件SHA按根dual清单记录，未重新访问原件",
+  "complete_related_module_top_level_test_titles_matched": 43,
+  "validation_json_sha256": "4891fc1921799f420a427cf0bbcf002bf1428dd998148433408a9d2e9f49b224",
+  "findings": [],
+  "original_six_files": [
+    {
+      "path": "backend-ts/src/pure-ts-sync.ts",
+      "sha256": "37ca58742d727efce951f9b48914875c76454d2c8f99676d158afbb7018fa2b8",
+      "unchanged": true
+    },
+    {
+      "path": "backend-ts/test/pure-ts-sync.test.mjs",
+      "sha256": "99b9c5fd8464e5727222d1c0331a09c26fc16e29570976b26b0c1da535ed864b",
+      "unchanged": true
+    },
+    {
+      "path": "desktop/src/main/sync/priority.ts",
+      "sha256": "7f86540aae640d659decb7b551c12d4d7938484fa5d6c27e1a021b09d2f077c4",
+      "unchanged": true
+    },
+    {
+      "path": "desktop/tests/sync-priority.test.mjs",
+      "sha256": "c846793a1ee37767398c1885ef2d2ae10e68ed9e85b056344a27f8be802fc3b5",
+      "unchanged": true
+    },
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "sha256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+      "unchanged": true
+    },
+    {
+      "path": "backend-ts/test/host-storage.test.mjs",
+      "sha256": "a941afb0b24e6570a78467e27051487f23e212fa51b7a0511eee828ca4970468",
+      "unchanged": true
+    }
+  ],
+  "prior_six_file_approve": "保持1e90原六文件与原运行范围",
+  "original_failure_status": {
+    "full_600s_exit": -14,
+    "full_denominator": "unknown_timeout",
+    "selected_single_exit": -14,
+    "selected_single_failure": "hookFailed/ObjectInUse"
+  },
+  "after_log_results": {
+    "selected_single": "1/1",
+    "deletion_http_module": "14/14",
+    "full_storage_and_business_errors": "57/57",
+    "skipped": 0,
+    "source": "根提供的冻结公开日志，本轮未独立运行"
+  },
+  "cleanup": "根validation记录自有资源0、成功TMP为空移除，非本轮独立测量",
+  "old_evidence_unchanged": [
+    {
+      "path": "report.md",
+      "sha256": "3b1b04fa79171ec52820e58dec4478ebcfec4b516f27a83255879d8a9b696c1f"
+    },
+    {
+      "path": "final-public-SHA256SUMS",
+      "sha256": "3130596e2b1acb2ce53c1800266b33ef297bb0658449154b8fd30b559dc3e3c9"
+    },
+    {
+      "path": "final-public-manifest.json",
+      "sha256": "7f8be8f83335ba7a31cb0ba790f7f126183ef9ed9236f952c259f6a3215c2f2e"
+    },
+    {
+      "path": "inputs.json",
+      "sha256": "05b684ed409b051ded62723733cd97fcdc9ee2d2f47ec28f1477b7d885541c04"
+    },
+    {
+      "path": "static-checks.json",
+      "sha256": "700bfa6f197845c9c63ad4b42ea02729268eeaeedfeab42bbb32e0b7669d2e30"
+    },
+    {
+      "path": "raw-location-correction.json",
+      "sha256": "4aa09e3d160e68570d94a328e7b2850bee57c351fe1d4fa676438ae8877cbe17"
+    },
+    {
+      "path": "handoff.md",
+      "sha256": "d40bf7246025a86d2e1dca3540aea87e5c00ae9cff7efd87f42a8e811a1e8c54"
+    },
+    {
+      "path": "raw-location-correction.md",
+      "sha256": "d162f3f09a5aa780e20400b773b16794696945e38dde4e8a17a70557774568bc"
+    },
+    {
+      "path": "runtime-followup/report.md",
+      "sha256": "1f20a515ec022bb0c797f35e2454d5a6c2ff0258fcbb0279a9ca1ae27da7537d"
+    },
+    {
+      "path": "runtime-followup/code-conclusion.json",
+      "sha256": "3410c185ed7401685a9a1b5a087fd10469b5e52a3481382eda4e9251f662611a"
+    },
+    {
+      "path": "runtime-followup/runtime-result.json",
+      "sha256": "49668fb4ce4ca08db5cd55316fabd3ac084e374c3bdb82ef44b710b32589f7aa"
+    },
+    {
+      "path": "runtime-followup/cleanup-audit.json",
+      "sha256": "1e28e218b9b203e36be8f0f2bf95f7613c57d76454c9f9a93836d8e29aa86e53"
+    },
+    {
+      "path": "runtime-followup/preflight-attempts.json",
+      "sha256": "77247aa498b13cea5cfaff53789453b34adc616fa1cf5eaaad09273339cd7a5f"
+    },
+    {
+      "path": "runtime-followup/run-validation.py",
+      "sha256": "4771f6abd09fdef7a126b3cc2d25f9f6fd8616f71e59b83a174e804f7bae4064"
+    },
+    {
+      "path": "runtime-followup/public-scan.json",
+      "sha256": "f5db397dc0bca64f5fdc25d497e99215ee2333611c999573d92497b53c935fda"
+    },
+    {
+      "path": "runtime-followup/SHA256SUMS",
+      "sha256": "707ec658af763b70310bed2528d23d3740b73f9f9022ebebc3b134400a9f3bc4"
+    },
+    {
+      "path": "runtime-followup/handoff.md",
+      "sha256": "248d4a52be6aace0eab4c236aff054581ada2a8297d74e2e58fd6f431e6084f8"
+    },
+    {
+      "path": "runtime-followup/attempt-02/runtime-input-binding.json",
+      "sha256": "1a20c450c0e888c05d3831589588aa4904954155ff9f003d008779547eee25ed"
+    },
+    {
+      "path": "runtime-followup/attempt-02/single-native-query-contract.public.log",
+      "sha256": "6bbe51d9d851cf443ad19d11cc723df141ed7952ef2d92a8d8650a8e8fbd6242"
+    },
+    {
+      "path": "runtime-followup/attempt-02/runtime-result.json",
+      "sha256": "da9dba4e3f32bbf5ac83ed36adfdc99e1dada779a8177b98db217c95086826b2"
+    },
+    {
+      "path": "runtime-followup/attempt-02/run-validation.py",
+      "sha256": "20b59bfe7bdc0d1c72febabcc8a89d6373bede6fd95a3213be5c36f402da1748"
+    },
+    {
+      "path": "runtime-followup/attempt-03/related-native-error-read-transaction.public.log",
+      "sha256": "674b032474c628b557c811112b15b9e83a2419115da4cef0da07fbe17ed951c1"
+    },
+    {
+      "path": "runtime-followup/attempt-03/runtime-input-binding.json",
+      "sha256": "1a20c450c0e888c05d3831589588aa4904954155ff9f003d008779547eee25ed"
+    },
+    {
+      "path": "runtime-followup/attempt-03/single-native-query-contract.public.log",
+      "sha256": "5d8b9378e544798c9d1cfa356b0033c469725f3881449f6077f1b9d252de92e9"
+    },
+    {
+      "path": "runtime-followup/attempt-03/related-storage-lease-schema.public.log",
+      "sha256": "80ebcde383a048e3354e4e8d30e17f55aa285c9ef06bd628350d0b45dcade9a6"
+    },
+    {
+      "path": "runtime-followup/attempt-03/runtime-result.json",
+      "sha256": "661d73ec1ab5e9d9770dad6d51479533e15e11d7f47ac027a22d5cad14a873ee"
+    },
+    {
+      "path": "runtime-followup/attempt-03/run-validation.py",
+      "sha256": "0ad70fe3c1fdc96560a75cc5fbea6881c180e221027911a9f841ce5e587bb321"
+    },
+    {
+      "path": "full-suite-cleanup-followup/report.md",
+      "sha256": "f8b15bba191bb169b256eb5ebbfe64628bd5bc1db238e9714ff5137a0c6c7c16"
+    },
+    {
+      "path": "full-suite-cleanup-followup/final-public-manifest.json",
+      "sha256": "ed07f4225a69fa5fe9ae87096bd2ebabe72adc60b9ce98e45abb003ca3687f25"
+    },
+    {
+      "path": "full-suite-cleanup-followup/findings.json",
+      "sha256": "f8f2eaec2fd92730e1835707647c58988f10a067f9ca9d833b2bc1679a4e4031"
+    },
+    {
+      "path": "full-suite-cleanup-followup/inputs.json",
+      "sha256": "67e67187a266e51145f4d6514865577da4ea08600ae1b587b07740d4b3220900"
+    },
+    {
+      "path": "full-suite-cleanup-followup/SHA256SUMS",
+      "sha256": "56d99d6df7e1d01105eb0a58d523bb2b359c874151b7b50d7447924267e9fd73"
+    },
+    {
+      "path": "full-suite-cleanup-followup/handoff.md",
+      "sha256": "8345f414dac1d3a0c4546f4b33a5b628a5b08dad093ca848225975546339c5ce"
+    },
+    {
+      "path": "full-suite-cleanup-followup/fixture-close-patch-review-v1/report.md",
+      "sha256": "922804946b9f3ec4d502f05a4bcddbb37b6c995562f1407db631392c50baa95f"
+    },
+    {
+      "path": "full-suite-cleanup-followup/fixture-close-patch-review-v1/final-public-manifest.json",
+      "sha256": "68954d46cf1fbfec3a16cfacca45fd5430c0ddb645be738597641fad965e2029"
+    },
+    {
+      "path": "full-suite-cleanup-followup/fixture-close-patch-review-v1/manifest.json",
+      "sha256": "67849b48abe3e3042fc25ff3e8e60929b4436fe0527cb84944af01fcac129d92"
+    },
+    {
+      "path": "full-suite-cleanup-followup/fixture-close-patch-review-v1/host-storage-fixture.snapshot.mjs",
+      "sha256": "ba09c57384e8d6b5632831db15257960258928e37c1f93db24d05c7ba0d89b82"
+    },
+    {
+      "path": "full-suite-cleanup-followup/fixture-close-patch-review-v1/delta.patch",
+      "sha256": "a700bb39e3a5cc3c90e55402d89c7d19fe7eca53989472864f93130a76b70c10"
+    },
+    {
+      "path": "full-suite-cleanup-followup/fixture-close-patch-review-v1/SHA256SUMS",
+      "sha256": "39d3a7d4e6aa1febd07405ef3ebf0cc2d6f61215473089d358c636113dd864fd"
+    },
+    {
+      "path": "full-suite-cleanup-followup/fixture-close-patch-review-v1/handoff.md",
+      "sha256": "7913dbdf4eaa29542756ff1095ff33d24ce30da3b2f52b82f4523d9ceb783cf5"
+    },
+    {
+      "path": "commit-binding/report.md",
+      "sha256": "cf77e321bb3e346747a51dbdf55f33fc55d89e01c8d6d4565027ef5f849b78f1"
+    },
+    {
+      "path": "commit-binding/final-public-manifest.json",
+      "sha256": "ad483d9ac31844a72a28f2a1202178ddc493d7373b5006b5da6b77e38b05bb2a"
+    },
+    {
+      "path": "commit-binding/manifest.json",
+      "sha256": "9b47c45c9ecd7a1a8e90c797fc760e5e655fca000eea66af901b2335c093fbf4"
+    },
+    {
+      "path": "commit-binding/verification.json",
+      "sha256": "b26e0ca795f8e5a5cd71c7fdd0d8c0b327e71ce25c521688705f8aa29a52e416"
+    },
+    {
+      "path": "commit-binding/SHA256SUMS",
+      "sha256": "0902821ad414a2b148095c7fda52900aaa03e9bc94f9effb63c20a018acf78c7"
+    },
+    {
+      "path": "commit-binding/handoff.md",
+      "sha256": "573d3412841685d56c3ab7deef4cbfbec142135f5086c9bba69c829e1e7177bb"
+    }
+  ],
+  "overall_gate": "25 claimed/not approved；26 open；性能及修后全量未签收",
+  "runtime_executed": false,
+  "model_requests": 0,
+  "private_raw_copied": false,
+  "source_test_index_git_modified": false
+}

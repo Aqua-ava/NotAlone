@@ -1,0 +1,355 @@
+TAP version 13
+# Subtest: 业务 NotFound 原样传播并回滚本次全部写入
+ok 1 - 业务 NotFound 原样传播并回滚本次全部写入
+  ---
+  duration_ms: 503.837542
+  type: 'test'
+  ...
+# Subtest: 真实 PostgreSQL 查询失败保持受控数据库错误并回滚写入
+ok 2 - 真实 PostgreSQL 查询失败保持受控数据库错误并回滚写入
+  ---
+  duration_ms: 539.3205
+  type: 'test'
+  ...
+# Subtest: pg 客户端查询超时的普通 Error 仍保持受控数据库错误
+ok 3 - pg 客户端查询超时的普通 Error 仍保持受控数据库错误
+  ---
+  duration_ms: 556.009125
+  type: 'test'
+  ...
+# Subtest: pg 回调查询保留成功返回，客户端超时和同步查询错误仍受控
+ok 4 - pg 回调查询保留成功返回，客户端超时和同步查询错误仍受控
+  ---
+  duration_ms: 562.830667
+  type: 'test'
+  ...
+# Subtest: pg 查询重载的普通驱动错误均受控且回滚写入
+    # Subtest: promise
+    ok 1 - promise
+      ---
+      duration_ms: 12.218459
+      type: 'test'
+      ...
+    # Subtest: positional_callback
+    ok 2 - positional_callback
+      ---
+      duration_ms: 9.07825
+      type: 'test'
+      ...
+    # Subtest: config_callback
+    ok 3 - config_callback
+      ---
+      duration_ms: 8.578917
+      type: 'test'
+      ...
+    # Subtest: query_callback
+    ok 4 - query_callback
+      ---
+      duration_ms: 9.1115
+      type: 'test'
+      ...
+    # Subtest: query_positional_callback
+    ok 5 - query_positional_callback
+      ---
+      duration_ms: 9.183875
+      type: 'test'
+      ...
+    # Subtest: query_event
+    ok 6 - query_event
+      ---
+      duration_ms: 8.948708
+      type: 'test'
+      ...
+    1..6
+ok 5 - pg 查询重载的普通驱动错误均受控且回滚写入
+  ---
+  duration_ms: 542.744875
+  type: 'test'
+  ...
+# Subtest: pg 成功重载保留 Query、回调 this、配置回调和结果对象身份
+    # Subtest: positional_callback
+    ok 1 - positional_callback
+      ---
+      duration_ms: 6.404375
+      type: 'test'
+      ...
+    # Subtest: config_callback
+    ok 2 - config_callback
+      ---
+      duration_ms: 4.615833
+      type: 'test'
+      ...
+    # Subtest: query_callback
+    ok 3 - query_callback
+      ---
+      duration_ms: 4.395416
+      type: 'test'
+      ...
+    # Subtest: query_callback_with_then
+    ok 4 - query_callback_with_then
+      ---
+      duration_ms: 4.858458
+      type: 'test'
+      ...
+    # Subtest: query_positional_callback
+    ok 5 - query_positional_callback
+      ---
+      duration_ms: 4.516542
+      type: 'test'
+      ...
+    # Subtest: query_event
+    ok 6 - query_event
+      ---
+      duration_ms: 4.116792
+      type: 'test'
+      ...
+    1..6
+ok 6 - pg 成功重载保留 Query、回调 this、配置回调和结果对象身份
+  ---
+  duration_ms: 511.967625
+  type: 'test'
+  ...
+# Subtest: 配置内回调原样保留继承和非枚举字段及原生返回身份
+ok 7 - 配置内回调原样保留继承和非枚举字段及原生返回身份
+  ---
+  duration_ms: 488.521041
+  type: 'test'
+  ...
+# Subtest: 排队的配置回调超时先通知原函数一次且驱动错误仍受控
+ok 8 - 排队的配置回调超时先通知原函数一次且驱动错误仍受控
+  ---
+  duration_ms: 531.055542
+  type: 'test'
+  ...
+# Subtest: toPostgres 重入排队后原活动查询超时仍受控并回滚全部写入
+ok 9 - toPostgres 重入排队后原活动查询超时仍受控并回滚全部写入
+  ---
+  duration_ms: 545.399041
+  type: 'test'
+  ...
+# Subtest: Query 原回调保持只读身份，行解析错误优先于随后的数据库错误且仍受控
+ok 10 - Query 原回调保持只读身份，行解析错误优先于随后的数据库错误且仍受控
+  ---
+  duration_ms: 517.884625
+  type: 'test'
+  ...
+# Subtest: Query 内回调超时仍受控，调用方转换的业务错误保持原对象
+    # Subtest: client_timeout
+    ok 1 - client_timeout
+      ---
+      duration_ms: 62.301417
+      type: 'test'
+      ...
+    # Subtest: business_mapping
+    ok 2 - business_mapping
+      ---
+      duration_ms: 9.1265
+      type: 'test'
+      ...
+    1..2
+ok 11 - Query 内回调超时仍受控，调用方转换的业务错误保持原对象
+  ---
+  duration_ms: 559.578291
+  type: 'test'
+  ...
+# Subtest: 只读事务保留业务错误，真实 PostgreSQL 拒绝写入仍受控
+ok 12 - 只读事务保留业务错误，真实 PostgreSQL 拒绝写入仍受控
+  ---
+  duration_ms: 490.656042
+  type: 'test'
+  ...
+# Subtest: 提交阶段的真实 PostgreSQL 约束错误不能返回成功或重放业务
+ok 13 - 提交阶段的真实 PostgreSQL 约束错误不能返回成功或重放业务
+  ---
+  duration_ms: 481.990041
+  type: 'test'
+  ...
+# Subtest: 事务连接被真实 PostgreSQL 终止后保持受控错误并释放连接
+ok 14 - 事务连接被真实 PostgreSQL 终止后保持受控错误并释放连接
+  ---
+  duration_ms: 480.598584
+  type: 'test'
+  ...
+# Subtest: 连接尚未建立时失败仍受控且不会执行业务回调
+ok 15 - 连接尚未建立时失败仍受控且不会执行业务回调
+  ---
+  duration_ms: 477.045125
+  type: 'test'
+  ...
+# Subtest: 取消原因原样传播且已开始的业务写入回滚
+ok 16 - 取消原因原样传播且已开始的业务写入回滚
+  ---
+  duration_ms: 474.925708
+  type: 'test'
+  ...
+# Subtest: 关闭排空在途业务并拒绝迟到提交和新事务
+ok 17 - 关闭排空在途业务并拒绝迟到提交和新事务
+  ---
+  duration_ms: 505.409625
+  type: 'test'
+  ...
+# Subtest: 业务拒绝后 unknown 回执保持原样，迟到 pending 不解除禁止重放
+ok 18 - 业务拒绝后 unknown 回执保持原样，迟到 pending 不解除禁止重放
+  ---
+  duration_ms: 527.109167
+  type: 'test'
+  ...
+# Subtest: 公开 Skill 审批缺失对照返回 404，待审修订与已启用 v1 均不变
+ok 19 - 公开 Skill 审批缺失对照返回 404，待审修订与已启用 v1 均不变
+  ---
+  duration_ms: 584.19
+  type: 'test'
+  ...
+# Subtest: 受控配置保留模型和资料位置，凭据不进入状态响应
+ok 20 - 受控配置保留模型和资料位置，凭据不进入状态响应
+  ---
+  duration_ms: 3.44425
+  type: 'test'
+  ...
+# Subtest: 原账本及116升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人
+ok 21 - 原账本及116升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人
+  ---
+  duration_ms: 580.711541
+  type: 'test'
+  ...
+# Subtest: 凭据原子保存保留其余配置、权限0600，账本漂移后阻止本人及凭据写入
+ok 22 - 凭据原子保存保留其余配置、权限0600，账本漂移后阻止本人及凭据写入
+  ---
+  duration_ms: 549.186917
+  type: 'test'
+  ...
+# Subtest: 并发首启只有一个本人；未知版本和缺失结构均失败关闭
+ok 23 - 并发首启只有一个本人；未知版本和缺失结构均失败关闭
+  ---
+  duration_ms: 500.18825
+  type: 'test'
+  ...
+# Subtest: 035接管基线与后续账本分开校验，未完成迁移只读停写
+ok 24 - 035接管基线与后续账本分开校验，未完成迁移只读停写
+  ---
+  duration_ms: 604.620125
+  type: 'test'
+  ...
+# Subtest: 受控配置符号链接失败关闭，不改写原目标文件
+ok 25 - 受控配置符号链接失败关闭，不改写原目标文件
+  ---
+  duration_ms: 0.874375
+  type: 'test'
+  ...
+# Subtest: 关闭后拒绝新配置写入，关闭中的事务不得迟到提交
+ok 26 - 关闭后拒绝新配置写入，关闭中的事务不得迟到提交
+  ---
+  duration_ms: 498.6185
+  type: 'test'
+  ...
+# Subtest: 明确恢复唯一已有本人保持原ID；多本人拒绝猜选；配置失败可重试
+ok 27 - 明确恢复唯一已有本人保持原ID；多本人拒绝猜选；配置失败可重试
+  ---
+  duration_ms: 512.589
+  type: 'test'
+  ...
+# Subtest: 受控env的PGHOST优先于进程默认socket，不会误连另一库
+ok 28 - 受控env的PGHOST优先于进程默认socket，不会误连另一库
+  ---
+  duration_ms: 489.738792
+  type: 'test'
+  ...
+# Subtest: keyword与URI共用受控PGDATABASE/USER/PORT默认值，显式字段覆盖默认值
+ok 29 - keyword与URI共用受控PGDATABASE/USER/PORT默认值，显式字段覆盖默认值
+  ---
+  duration_ms: 533.925666
+  type: 'test'
+  ...
+# Subtest: 本机hostaddr保留目标且受控密码经PG协议传入，sslmode不静默降级
+ok 30 - 本机hostaddr保留目标且受控密码经PG协议传入，sslmode不静默降级
+  ---
+  duration_ms: 8.461667
+  type: 'test'
+  ...
+# Subtest: 启动环境覆盖历史已保存凭据或模型时，重开仍待加载且拒绝冲突写入
+ok 31 - 启动环境覆盖历史已保存凭据或模型时，重开仍待加载且拒绝冲突写入
+  ---
+  duration_ms: 535.489542
+  type: 'test'
+  ...
+# Subtest: 禁止dotenv时不读取受控文件，凭据保存不能承诺重启生效
+ok 32 - 禁止dotenv时不读取受控文件，凭据保存不能承诺重启生效
+  ---
+  duration_ms: 0.320375
+  type: 'test'
+  ...
+# Subtest: 每次业务读取重新核验全部SQL字节，文件故障与同元数据篡改均失败关闭
+ok 33 - 每次业务读取重新核验全部SQL字节，文件故障与同元数据篡改均失败关闭
+  ---
+  duration_ms: 562.15725
+  type: 'test'
+  ...
+# Subtest: 暖读后SQL文件的替换、链接和恢复均按当前真实文件重新核验
+ok 34 - 暖读后SQL文件的替换、链接和恢复均按当前真实文件重新核验
+  ---
+  duration_ms: 514.75
+  type: 'test'
+  ...
+# Subtest: 连续本机业务事务复用清理后的连接，旧事务查询不能进入下一事务
+ok 35 - 连续本机业务事务复用清理后的连接，旧事务查询不能进入下一事务
+  ---
+  duration_ms: 488.099833
+  type: 'test'
+  ...
+# Subtest: 并发业务事务各占连接，归还只留一个空闲连接且关闭排空
+ok 36 - 并发业务事务各占连接，归还只留一个空闲连接且关闭排空
+  ---
+  duration_ms: 482.864209
+  type: 'test'
+  ...
+# Subtest: 租约撤销后的原生Query保留回调身份和返回，复用后的业务错误不被旧观察器污染
+ok 37 - 租约撤销后的原生Query保留回调身份和返回，复用后的业务错误不被旧观察器污染
+  ---
+  duration_ms: 480.034209
+  type: 'test'
+  ...
+# Subtest: 空闲连接被终止后受控失败并另建连接，不重放业务回调
+ok 38 - 空闲连接被终止后受控失败并另建连接，不重放业务回调
+  ---
+  duration_ms: 478.78
+  type: 'test'
+  ...
+# Subtest: Client链式监听返回当前租约，保存的链和查询不能越过事务或传递监听器
+ok 39 - Client链式监听返回当前租约，保存的链和查询不能越过事务或传递监听器
+  ---
+  duration_ms: 473.811291
+  type: 'test'
+  ...
+# Subtest: 仅持有空闲业务连接的子进程也必须完成关闭排空
+ok 40 - 仅持有空闲业务连接的子进程也必须完成关闭排空
+  ---
+  duration_ms: 550.556542
+  type: 'test'
+  ...
+# Subtest: catalog限定验证投影仍保留未知对象、账本视图与零列必需表的原判定
+ok 41 - catalog限定验证投影仍保留未知对象、账本视图与零列必需表的原判定
+  ---
+  duration_ms: 482.236708
+  type: 'test'
+  ...
+# Subtest: 复用连接逐次绑定当前passfile凭据，修改、权限变宽与删除均淘汰旧认证
+ok 42 - 复用连接逐次绑定当前passfile凭据，修改、权限变宽与删除均淘汰旧认证
+  ---
+  duration_ms: 540.97
+  type: 'test'
+  ...
+# Subtest: 暖读后的数据库列与约束仍逐事务新鲜核验，额外列及后台约束保持原规则
+ok 43 - 暖读后的数据库列与约束仍逐事务新鲜核验，额外列及后台约束保持原规则
+  ---
+  duration_ms: 459.617667
+  type: 'test'
+  ...
+1..43
+# tests 57
+# suites 0
+# pass 57
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10389.754209

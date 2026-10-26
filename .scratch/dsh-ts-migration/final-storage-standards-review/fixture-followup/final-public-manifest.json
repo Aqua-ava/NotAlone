@@ -1,0 +1,39 @@
+{
+  "schema_version": "最终冻结夹具审查公开清单-v1",
+  "scope": "本目录新增公开审查证据，旧清单不重写",
+  "stage_files": [
+    "binding.json",
+    "handoff.md",
+    "report.md",
+    "verification.json",
+    "final-public-manifest.json",
+    "SHA256SUMS"
+  ],
+  "files": [
+    {
+      "path": "binding.json",
+      "sha256": "5dbc53935da4f0135a42ddfbe97fc9f6340952dcfbe316edd691c0f32e022297",
+      "bytes": 16062
+    },
+    {
+      "path": "handoff.md",
+      "sha256": "f149f368c4248d7c75af11eaba10e14542899825cf850213377da8e56f47c16b",
+      "bytes": 1134
+    },
+    {
+      "path": "report.md",
+      "sha256": "7bc36da1bdcfd0ab940221f186691555d578d17fc558056c5003d6d2a9091489",
+      "bytes": 2658
+    },
+    {
+      "path": "verification.json",
+      "sha256": "aa4ebe64561146dc0d25d4b5d921e250dc52bdadfa494f92aa6947e7df7eda00",
+      "bytes": 803
+    }
+  ],
+  "private_raw_included": false,
+  "runtime_executed": false,
+  "code_conclusion": "approve",
+  "input_sha256": "9d800e450226fddbc4f621294505bb8d3b92981b60899dc5c872c3c6fce4c91d",
+  "public_patterns": "通过"
+}

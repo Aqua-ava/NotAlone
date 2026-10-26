@@ -1,0 +1,16 @@
+{
+  "kind": "fixture_teardown_delta_review",
+  "baseline_commit": "b8ba6c6a1d2b428a9d749f2fe860fd2ac56c9597",
+  "production_checkpoint": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "files": [
+    {
+      "path": "backend-ts/test/host-storage-fixture.mjs",
+      "before_sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a",
+      "after_sha256": "ba09c57384e8d6b5632831db15257960258928e37c1f93db24d05c7ba0d89b82"
+    }
+  ],
+  "source_delta": ".scratch/dsh-ts-migration/fixture-connection-teardown/fixture.patch",
+  "validation": ".scratch/dsh-ts-migration/fixture-connection-teardown/validation.json",
+  "production_delta": false,
+  "raw_public_bindings": ".scratch/dsh-ts-migration/fixture-connection-teardown/raw-public-bindings.json"
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "private_relative_log": "backend-full-1e90-root-r6.log",
+    "private_sha256": "dff2c0ab57410a4cea6fae95f26a77c1a5a6d5a291e43e891ace58dcce60f318",
+    "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/backend-full-1e90-root-r6.public.log",
+    "public_sha256": "dff2c0ab57410a4cea6fae95f26a77c1a5a6d5a291e43e891ace58dcce60f318",
+    "redactions": [
+      "local_paths",
+      "synthetic_owned_database_locator"
+    ],
+    "original_unchanged": true
+  },
+  {
+    "private_relative_log": "root-deletion-single-r1.log",
+    "private_sha256": "49b9bb455af196b1ca40796c7aa5ba55c269cdb5c1e048c2dc09dd30eb9d1303",
+    "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-single-r1.public.log",
+    "public_sha256": "c5235e859d5f1a5d2c964534a8a13ca740cb32372b8590fff3ef6d786730b662",
+    "redactions": [
+      "local_paths",
+      "synthetic_owned_database_locator"
+    ],
+    "original_unchanged": true
+  },
+  {
+    "private_relative_log": "root-deletion-single-r2.log",
+    "private_sha256": "39b21d8f6f855ca5f23b9b81545c5ae0a7638da1362597bb10065c50e72bf4c5",
+    "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-single-r2.public.log",
+    "public_sha256": "39b21d8f6f855ca5f23b9b81545c5ae0a7638da1362597bb10065c50e72bf4c5",
+    "redactions": [
+      "local_paths",
+      "synthetic_owned_database_locator"
+    ],
+    "original_unchanged": true
+  },
+  {
+    "private_relative_log": "root-deletion-module-r1.log",
+    "private_sha256": "a6255740bea4219babd897210e5e44b25fbb2a4e260063020f3206258f3ea689",
+    "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-module-r1.public.log",
+    "public_sha256": "a6255740bea4219babd897210e5e44b25fbb2a4e260063020f3206258f3ea689",
+    "redactions": [
+      "local_paths",
+      "synthetic_owned_database_locator"
+    ],
+    "original_unchanged": true
+  },
+  {
+    "private_relative_log": "root-fixture-related-r1.log",
+    "private_sha256": "8db7b09668696f20e85b2bee5d9fb4c7901724f51de835332cdebb5085d5bc1e",
+    "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-fixture-related-r1.public.log",
+    "public_sha256": "8db7b09668696f20e85b2bee5d9fb4c7901724f51de835332cdebb5085d5bc1e",
+    "redactions": [
+      "local_paths",
+      "synthetic_owned_database_locator"
+    ],
+    "original_unchanged": true
+  }
+]

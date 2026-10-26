@@ -23,6 +23,13 @@ export async function createStorageFixture() {
   return { directory, envFilePath, migrationsDirectory, client,
     options: { envFilePath, migrationsDirectory, environment: {} },
     async close() {
+      // 收尾不依赖各测试的 after 注册顺序；同步删库前先排空本夹具的连接。
+      const current = await client.query('SELECT current_database() AS name');
+      if (!/^notalone_ts_host_[a-f0-9]{32}_test$/.test(name) || current.rows[0]?.name !== name) {
+        throw new Error('合成 PG 清理范围不匹配');
+      }
+      await client.query(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+        WHERE datname=$1 AND pid<>pg_backend_pid() AND backend_type='client backend'`, [name]);
       await client.end();
       execFileSync(python, ['-c', "import sys,psycopg\nfrom psycopg import sql\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c:\n c.execute(sql.SQL('DROP DATABASE {}').format(sql.Identifier(sys.argv[1])))", name], { env: environment, timeout: 15000, stdio: 'pipe' });
       await rm(directory, { recursive: true, force: true });

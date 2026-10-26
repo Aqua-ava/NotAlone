@@ -1,0 +1,138 @@
+{
+  "schema_version": "independent-spec-fixture-followup-v1",
+  "review_axis": "Spec",
+  "code_conclusion": "approve",
+  "actionable_findings": 0,
+  "approved_delta_path": "backend-ts/test/host-storage-fixture.mjs",
+  "approved_after_sha256": "ba09c57384e8d6b5632831db15257960258928e37c1f93db24d05c7ba0d89b82",
+  "before_sha256": "121c074e43c0235b7ee434ab9478a96b3ec71b55bfb9dc0e40aca85d8273ae8a",
+  "baseline_commit": "b8ba6c6a1d2b428a9d749f2fe860fd2ac56c9597",
+  "production_checkpoint": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "input_manifest_sha256": "9d800e450226fddbc4f621294505bb8d3b92981b60899dc5c872c3c6fce4c91d",
+  "patch_sha256": "a700bb39e3a5cc3c90e55402d89c7d19fe7eca53989472864f93130a76b70c10",
+  "added_lines": 7,
+  "removed_lines": 0,
+  "patch_reconstruction_matches_after": true,
+  "source_double_read_matches": true,
+  "production_six_unchanged": [
+    {
+      "path": "backend-ts/src/pure-ts-sync.ts",
+      "sha256": "37ca58742d727efce951f9b48914875c76454d2c8f99676d158afbb7018fa2b8",
+      "matches_checkpoint_and_v1": true
+    },
+    {
+      "path": "backend-ts/test/pure-ts-sync.test.mjs",
+      "sha256": "99b9c5fd8464e5727222d1c0331a09c26fc16e29570976b26b0c1da535ed864b",
+      "matches_checkpoint_and_v1": true
+    },
+    {
+      "path": "desktop/src/main/sync/priority.ts",
+      "sha256": "7f86540aae640d659decb7b551c12d4d7938484fa5d6c27e1a021b09d2f077c4",
+      "matches_checkpoint_and_v1": true
+    },
+    {
+      "path": "desktop/tests/sync-priority.test.mjs",
+      "sha256": "c846793a1ee37767398c1885ef2d2ae10e68ed9e85b056344a27f8be802fc3b5",
+      "matches_checkpoint_and_v1": true
+    },
+    {
+      "path": "backend-ts/src/host-storage.ts",
+      "sha256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+      "matches_checkpoint_and_v1": true
+    },
+    {
+      "path": "backend-ts/test/host-storage.test.mjs",
+      "sha256": "a941afb0b24e6570a78467e27051487f23e212fa51b7a0511eee828ca4970468",
+      "matches_checkpoint_and_v1": true
+    }
+  ],
+  "public_log_bindings": [
+    {
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/backend-full-1e90-root-r6.public.log",
+      "public_sha256": "dff2c0ab57410a4cea6fae95f26a77c1a5a6d5a291e43e891ace58dcce60f318",
+      "declared_private_relative_log": "backend-full-1e90-root-r6.log",
+      "declared_private_sha256": "dff2c0ab57410a4cea6fae95f26a77c1a5a6d5a291e43e891ace58dcce60f318",
+      "private_raw_independently_read": false,
+      "original_unchanged_as_reported": true
+    },
+    {
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-single-r1.public.log",
+      "public_sha256": "c5235e859d5f1a5d2c964534a8a13ca740cb32372b8590fff3ef6d786730b662",
+      "declared_private_relative_log": "root-deletion-single-r1.log",
+      "declared_private_sha256": "49b9bb455af196b1ca40796c7aa5ba55c269cdb5c1e048c2dc09dd30eb9d1303",
+      "private_raw_independently_read": false,
+      "original_unchanged_as_reported": true
+    },
+    {
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-single-r2.public.log",
+      "public_sha256": "39b21d8f6f855ca5f23b9b81545c5ae0a7638da1362597bb10065c50e72bf4c5",
+      "declared_private_relative_log": "root-deletion-single-r2.log",
+      "declared_private_sha256": "39b21d8f6f855ca5f23b9b81545c5ae0a7638da1362597bb10065c50e72bf4c5",
+      "private_raw_independently_read": false,
+      "original_unchanged_as_reported": true
+    },
+    {
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-deletion-module-r1.public.log",
+      "public_sha256": "a6255740bea4219babd897210e5e44b25fbb2a4e260063020f3206258f3ea689",
+      "declared_private_relative_log": "root-deletion-module-r1.log",
+      "declared_private_sha256": "a6255740bea4219babd897210e5e44b25fbb2a4e260063020f3206258f3ea689",
+      "private_raw_independently_read": false,
+      "original_unchanged_as_reported": true
+    },
+    {
+      "public_path": ".scratch/dsh-ts-migration/fixture-connection-teardown/root-fixture-related-r1.public.log",
+      "public_sha256": "8db7b09668696f20e85b2bee5d9fb4c7901724f51de835332cdebb5085d5bc1e",
+      "declared_private_relative_log": "root-fixture-related-r1.log",
+      "declared_private_sha256": "8db7b09668696f20e85b2bee5d9fb4c7901724f51de835332cdebb5085d5bc1e",
+      "private_raw_independently_read": false,
+      "original_unchanged_as_reported": true
+    }
+  ],
+  "validation_sha256": "4891fc1921799f420a427cf0bbcf002bf1428dd998148433408a9d2e9f49b224",
+  "raw_public_bindings_sha256": "8502a8940406155eeb56ed5891fbc9f4c942608c411ac35c64fecb9798036987",
+  "root_reported_after": {
+    "selected_single": {
+      "pass": 1,
+      "fail": 0,
+      "skip": 0,
+      "exit_code": 0
+    },
+    "deletion_http_module": {
+      "pass": 14,
+      "fail": 0,
+      "skip": 0,
+      "exit_code": 0
+    },
+    "storage_and_business_errors": {
+      "pass": 57,
+      "fail": 0,
+      "skip": 0,
+      "exit_code": 0
+    },
+    "full_suite": "not_yet_run_after_fix_waiting_final_source"
+  },
+  "root_reported_before": {
+    "full_exit_code": -14,
+    "full_time_limit_seconds": 600,
+    "reported_deletion_failures": 14,
+    "full_denominator_completion": "unknown_timeout",
+    "single_exit_code": -14,
+    "single_failure_type": "hookFailed",
+    "single_failure": "DROP DATABASE ObjectInUse during synchronous fixture teardown",
+    "business_assertion_failure_reported": false
+  },
+  "root_reported_cleanup": {
+    "owned_failed_run_databases_removed": 53,
+    "owned_failed_run_fixture_directories_removed": 53,
+    "remaining_owned_databases": 0,
+    "remaining_owned_fixture_directories": 0,
+    "baseline_unattributed_database_count_preserved": 4,
+    "prior_unattributed_directories_targeted": false,
+    "shared_postgresql_stopped": false,
+    "successful_runs_private_tmp_empty_and_removed": true
+  },
+  "independent_tests_run": 0,
+  "runtime_or_models_started": false,
+  "overall_gate": "not_approved",
+  "scope_limit": "仅批准冻结fixture收尾补丁SHA；保留1e90生产六文件原approve范围，不签性能/25/26，修后全量仍未执行。"
+}
