@@ -1,10 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHash, randomBytes } from 'node:crypto';
-import { fork, spawn } from 'node:child_process';
-import { access, mkdir, readFile, realpath, stat } from 'node:fs/promises';
-import { constants } from 'node:fs';
-import { build, stop as stopBuild } from 'esbuild';
+import { randomBytes } from 'node:crypto';
+import { fork } from 'node:child_process';
 import { acquireLease, leaseStatus, ownedGroupGone } from './app-test-lease.mjs';
 import { withoutExternalTracing } from './test-environment.mjs';
 
@@ -39,81 +36,8 @@ function parse(args) {
   }
   return { names, timeout };
 }
-function pageFixtureEnvironment(options, environment) {
-  const result = {};
-  for (const [name, key] of [['memory-skill-evolution', 'NOTALONE_EVOLUTION_EVIDENCE_DIR'], ['skill-feedback', 'NOTALONE_LEARNING_EVIDENCE_DIR'], ['skill-lifecycle', 'NOTALONE_LEARNING_EVIDENCE_DIR'], ['skill-learning', 'NOTALONE_LEARNING_EVIDENCE_DIR'], ['skill-review', 'NOTALONE_LEARNING_EVIDENCE_DIR'], ['expression-preferences', 'NOTALONE_PREFERENCE_EVIDENCE_DIR'],
-    ['overview-reply-retrieval', 'NOTALONE_REPLY_OVERVIEW_TEST_EVIDENCE_DIR'],
-    ['owner-layered-regressions', 'NOTALONE_LAYERED_TEST_EVIDENCE_DIR'],
-    ['owner-layered-memory', 'NOTALONE_LAYERED_TEST_EVIDENCE_DIR'],
-    ['layered-reply', 'NOTALONE_LAYERED_TEST_EVIDENCE_DIR'],
-    ['layered-memory', 'NOTALONE_LAYERED_TEST_EVIDENCE_DIR']]) {
-    if (!options.names?.includes(name)) continue;
-    const directory = environment[key];
-    const project = path.resolve(desktop, '..');
-    if (!directory || !path.isAbsolute(directory) || path.resolve(directory) === project
-      || path.resolve(directory).startsWith(`${project}${path.sep}`)) {
-      throw new Error('page_test_environment: 概览页面须显式使用仓库外的验收证据目录');
-    }
-    result[key] = directory;
-  }
-  if (options.names?.includes('reply-strategy-group-boundaries')) {
-    const key = 'NOTALONE_GROUP_BOUNDARIES_SCENE', scene = environment[key];
-    if (scene !== undefined) {
-      if (!['suggest', 'express'].includes(scene)) throw new Error('page_test_environment: 长历史场景只允许 suggest 或 express');
-      result[key] = scene;
-    }
-  }
-  if (options.names?.includes('layered-reply')) {
-    for (const key of ['NOTALONE_LAYERED_OWNER_CONTEXT', 'NOTALONE_LAYERED_SCENARIO_READS']) {
-      if (environment[key] === '1') result[key] = '1';
-    }
-  }
-  return result;
-}
 async function run(options) {
   if (options.mode !== 'probe' && options.mode !== 'status') throw new Error('page_test_historical: 旧Python页面夹具仅通过 backend-ts 的 npm run test:historical -- desktop-pages <原参数> 在固定23a旧树和独立venv执行；当前Node页面与控制器覆盖按测试登记运行。');
-  const fixtureEnvironment = pageFixtureEnvironment(options, process.env);
-  for (const key of Object.keys(fixtureEnvironment).filter(key => key.endsWith('_EVIDENCE_DIR'))) {
-    const directory = await realpath(fixtureEnvironment[key]);
-    pageFixtureEnvironment(options, { ...fixtureEnvironment, [key]: directory });
-    const evidence = await stat(directory);
-    if (!evidence.isDirectory() || (evidence.mode & 0o777) !== 0o700) {
-      throw new Error('page_test_environment: 页面验收证据目录须使用700权限');
-    }
-    fixtureEnvironment[key] = directory;
-  }
-  if (options.names?.includes('memory-skill-evolution')) {
-    const guardKeys = ['NOTALONE_EVOLUTION_GUARD_ADAPTER_PATH', 'NOTALONE_EVOLUTION_GUARD_ADAPTER_SHA256',
-      'NOTALONE_EVOLUTION_GUARD_DATABASE_GUARD_PATH', 'NOTALONE_EVOLUTION_GUARD_DATABASE_GUARD_SHA256'];
-    if (!guardKeys.every(key => process.env[key])) throw new Error('page_test_environment: 组合页面须固定本轮完整资源守卫');
-    for (const key of guardKeys) fixtureEnvironment[key] = process.env[key];
-    const { memorySkillEvolutionModules } = await import('../tests/fixtures/memory-skill-evolution-modules.mjs');
-    fixtureEnvironment.NOTALONE_EVOLUTION_EXPECTED_MODULES = JSON.stringify(await memorySkillEvolutionModules(path.resolve(desktop, '..')));
-  }
-  if (options.names?.some(name => ['skill-learning', 'skill-review', 'skill-lifecycle', 'skill-feedback'].includes(name))) {
-    const feedback = options.names.includes('skill-feedback');
-    const lifecycle = options.names.includes('skill-lifecycle');
-    const reviewing = feedback || lifecycle || options.names.includes('skill-review');
-    if (feedback) fixtureEnvironment.NOTALONE_SKILL_FEEDBACK_PAGE = '1';
-    if (lifecycle) fixtureEnvironment.NOTALONE_SKILL_LIFECYCLE_PAGE = '1';
-    if (reviewing) fixtureEnvironment.NOTALONE_SKILL_REVIEW_PAGE = '1';
-    const guardKeys = ['NOTALONE_LEARNING_GUARD_ADAPTER_PATH', 'NOTALONE_LEARNING_GUARD_ADAPTER_SHA256',
-      'NOTALONE_LEARNING_GUARD_DATABASE_GUARD_PATH', 'NOTALONE_LEARNING_GUARD_DATABASE_GUARD_SHA256'];
-    if (guardKeys.some(key => process.env[key])) {
-      if (!guardKeys.every(key => process.env[key])) throw new Error('page_test_environment: 审核守卫须完整固定路径与摘要');
-      for (const key of guardKeys) fixtureEnvironment[key] = process.env[key];
-    }
-    const { skillLearningModules } = await import('../tests/fixtures/skill-learning-modules.mjs');
-    fixtureEnvironment.NOTALONE_LEARNING_EXPECTED_MODULES = JSON.stringify(await skillLearningModules(
-      path.resolve(desktop, '..'), 'desktop/tests/fixtures/skill-learning-page.py', { reviewing, lifecycle, feedback }));
-  }
-  if (options.names?.includes('expression-preferences')) {
-    const { expressionPreferenceModules } = await import('../tests/fixtures/expression-preference-modules.mjs');
-    fixtureEnvironment.NOTALONE_PREFERENCE_EXPECTED_MODULES = JSON.stringify(await expressionPreferenceModules(
-      path.resolve(desktop, '..'), 'desktop/tests/fixtures/expression-preferences-page.py'));
-  }
-  if (options.mode !== 'probe') await access('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', constants.X_OK)
-    .catch(() => { throw new Error('page_test_browser_unavailable: 本机Chrome不可用；不会下载浏览器'); });
   const until = Date.now() + options.timeout * 1000;
   const lease = await acquireLease({ mode: 'headless', id: options.id, until, desktop, coordinator: 'page-checks' });
   let child; let code = 0; let confirmed = false; let forceTimer; let runtimeAttempted = false;
@@ -132,17 +56,12 @@ async function run(options) {
   const interrupt = () => stop(130); const terminate = () => stop(143);
   process.on('SIGINT', interrupt); process.on('SIGTERM', terminate);
   const deadline = setTimeout(() => stop(124), options.timeout * 1000);
-  const executeBuild = (command = process.execPath, args = ['scripts/build.mjs']) => new Promise((resolve) => {
-    child = spawn(command, args, { cwd: desktop, detached: true, stdio: 'inherit', env: withoutExternalTracing(process.env) });
-    children.push(child);
-    child.once('error', () => resolve(2)); child.once('close', (status) => resolve(status ?? 2));
-  });
-  const executeRunner = (probe) => new Promise((resolve) => {
+  const executeRunner = () => new Promise((resolve) => {
     runtimeAttempted = true;
     const environment = withoutExternalTracing(Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('NOTALONE_') && !key.startsWith('DEEPSEEK_'))));
-    child = fork(path.join(desktop, probe ? 'tests/headless/probe-child.mjs' : 'artifacts/headless-runtime/run.mjs'),
-      probe ? [String(options.hold), String(options.uncertain)] : [], { cwd: desktop, detached: true, stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
-        env: { ...environment, ...fixtureEnvironment, NOTALONE_DISABLE_DOTENV: '1', NOTALONE_PAGE_RUN_NONCE: nonce, NOTALONE_PAGE_CASES: JSON.stringify(options.names) } });
+    child = fork(path.join(desktop, 'tests/headless/probe-child.mjs'),
+      [String(options.hold), String(options.uncertain)], { cwd: desktop, detached: true, stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+        env: { ...environment, NOTALONE_DISABLE_DOTENV: '1', NOTALONE_PAGE_RUN_NONCE: nonce } });
     children.push(child);
     child.on('message', (message) => {
       if (message?.nonce !== nonce) return;
@@ -152,21 +71,10 @@ async function run(options) {
     child.once('error', () => resolve(2)); child.once('close', (status) => resolve(status ?? 2));
   });
   try {
-    if (options.mode === 'probe') { const status = await executeRunner(true); code ||= status; return code; }
-    process.stdout.write('验证范围：单个无头Chrome、生产页面与隔离HTTP/PG；Electron 未运行，原生验收未完成。\n');
-    const buildStatus = await executeBuild(); code ||= buildStatus;
-    if (!code && Date.now() < until) {
-      await mkdir(path.join(desktop, 'artifacts/headless-runtime'), { recursive: true });
-      const helperStatus = await executeBuild('/usr/bin/xcrun', ['swiftc', 'tests/headless/quiet-observation.swift', '-o', 'artifacts/headless-runtime/quiet-observation']); code ||= helperStatus;
-      await build({ entryPoints: [path.join(desktop, 'tests/headless/renderer.ts')], outfile: path.join(desktop, 'artifacts/headless-runtime/renderer.js'), bundle: true, platform: 'browser', format: 'iife' });
-      await build({ entryPoints: [path.join(desktop, 'tests/headless/run.ts')], outfile: path.join(desktop, 'artifacts/headless-runtime/run.mjs'), bundle: true, platform: 'node', format: 'esm', packages: 'external' });
-      if (Date.now() >= until || code) { code ||= 124; confirmed = true; }
-      else { const status = await executeRunner(false); code ||= status; }
-    } else confirmed = true;
+    const status = await executeRunner(); code ||= status;
     return code;
   } finally {
     clearTimeout(deadline); clearTimeout(forceTimer); process.off('SIGINT', interrupt); process.off('SIGTERM', terminate);
-    stopBuild();
     if ((confirmed || !runtimeAttempted) && children.every(ownedGroupGone)) await lease.release();
     else { process.stderr.write('page_test_cleanup_unconfirmed: 保留本轮租约，禁止下一轮；不杀未知进程。\n'); process.exitCode = 2; }
   }

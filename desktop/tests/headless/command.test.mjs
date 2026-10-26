@@ -20,12 +20,12 @@ for (const args of [[], ['--case', 'all', '--timeout-seconds', '2'], ['--case', 
     assert.equal(result.status, 2); assert.match(result.stderr, /page_test_arguments/);
   });
 }
-test('新消息明确采用可作为独立限定页面组，缺少环境时不会启动浏览器', () => {
+test('已退役页面组在启动浏览器前引导到固定历史树', () => {
   const result = spawnSync(process.execPath, [command, '--case', 'assistant-message-opt-in', '--timeout-seconds', '30'], {
     encoding: 'utf8', env: { ...process.env, CONDA_DEFAULT_ENV: '', CONDA_PREFIX: '' },
   });
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /page_test_environment/);
+  assert.match(result.stderr, /page_test_historical/);
   assert.doesNotMatch(result.stderr, /page_test_arguments/);
 });
 function start(args, file = command, extraEnvironment = {}) {

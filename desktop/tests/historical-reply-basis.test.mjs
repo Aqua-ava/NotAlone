@@ -193,13 +193,13 @@ test('预算拒绝的503和未知404复读只报告读取故障，不抹去合�
   }
 });
 
-test('已登记的历史依据页面入口先执行环境门禁，未激活Conda时不启动页面', () => {
+test('历史依据页面入口拒绝当前树运行并引导到固定历史树', () => {
   const environment = { ...process.env };
   delete environment.CONDA_DEFAULT_ENV; delete environment.CONDA_PREFIX;
   const result = spawnSync(process.execPath, ['scripts/test-pages.mjs', '--case', 'historical-reply-basis', '--timeout-seconds', '1'],
     { env: environment, encoding: 'utf8', timeout: 5000 });
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /page_test_environment/);
+  assert.match(result.stderr, /page_test_historical/);
   assert(!result.stderr.includes('page_test_arguments'));
 });
 

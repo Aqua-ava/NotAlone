@@ -1,7 +1,7 @@
 {
   "version": 1,
   "sourceCommit": "23a767330e4af8a024629a00c8740344be564259",
-  "policy": "历史文件保留，不删除、不跳过；显式命令在固定 Git 旧树和独立 venv 运行。currentCoverage 为现行入口指针，不表示逐项等价或本轮已执行。",
+  "policy": "历史测试与专用执行器已从当前工作树删除，来源保留在固定 Git 旧树；显式命令在该旧树和独立 venv 运行。currentCoverage 为现行入口指针，不表示逐项等价或本轮已执行。",
   "entries": [
     {
       "path": "backend-ts/test/contact-context.test.mjs",
@@ -328,18 +328,6 @@
       ]
     },
     {
-      "path": "backend-ts/test/foreground-location-name-matching.test.mjs",
-      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
-      "legacyDependencies": [
-        "backend-ts/test/foreground-location-name-matching.test.mjs"
-      ],
-      "currentCoverage": [
-        "backend-ts/test/pure-ts-sync.test.mjs",
-        "backend-ts/test/pure-ts-binding-scope.test.mjs",
-        "backend-ts/test/sync-history.test.mjs"
-      ]
-    },
-    {
       "path": "backend-ts/test/foreground-location-proxy.test.mjs",
       "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
       "legacyDependencies": [
@@ -400,33 +388,10 @@
       ]
     },
     {
-      "path": "backend-ts/test/host-model-unconfigured-skill.test.mjs",
-      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
-      "legacyDependencies": [
-        "backend-ts/test/host-model-unconfigured-fixture.mjs"
-      ],
-      "currentCoverage": [
-        "backend-ts/test/model-host.test.mjs",
-        "backend-ts/test/model-ledger.test.mjs",
-        "backend-ts/test/usage-summary-http.test.mjs"
-      ]
-    },
-    {
       "path": "backend-ts/test/main-host-reply-chain.test.mjs",
       "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
       "legacyDependencies": [
         "backend-ts/test/main-host-reply-chain.test.mjs"
-      ],
-      "currentCoverage": [
-        "backend-ts/test/pure-ts-reply.test.mjs",
-        "backend-ts/test/skill-library.test.mjs"
-      ]
-    },
-    {
-      "path": "backend-ts/test/managed-database-lifetime.test.mjs",
-      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
-      "legacyDependencies": [
-        "backend-ts/test/managed-database-lifetime.test.mjs"
       ],
       "currentCoverage": [
         "backend-ts/test/pure-ts-reply.test.mjs",
@@ -452,20 +417,6 @@
       "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
       "legacyDependencies": [
         "backend-ts/test/memory-mutations.test.mjs"
-      ],
-      "currentCoverage": [
-        "backend-ts/test/pure-ts-maintenance.test.mjs",
-        "backend-ts/test/memory-management-handoff.test.mjs",
-        "backend-ts/test/memory-management.test.mjs",
-        "backend-ts/test/preference-management.test.mjs",
-        "backend-ts/test/memory-mutations-candidate.test.mjs"
-      ]
-    },
-    {
-      "path": "backend-ts/test/memory-processing-resume-host.test.mjs",
-      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
-      "legacyDependencies": [
-        "backend-ts/test/memory-processing-resume-host.test.mjs"
       ],
       "currentCoverage": [
         "backend-ts/test/pure-ts-maintenance.test.mjs",
@@ -1963,6 +1914,424 @@
         "backend-ts/test/pure-ts-sync.test.mjs",
         "backend-ts/test/sync-incremental-engine.test.mjs"
       ]
+    },
+    {
+      "path": "backend-ts/test/reply-fixture-cleanup.test.mjs",
+      "reason": "仅验证已退役 Python 双实现验收夹具的源码和清理钩子，随其归档。",
+      "legacyDependencies": [
+        "backend-ts/test/reply-arbitration-handover.test.mjs",
+        "backend-ts/test/reply-background-public.test.mjs"
+      ],
+      "currentCoverage": []
+    },
+    {
+      "path": "backend-ts/test/reply-background-cleanup.test.mjs",
+      "reason": "仅验证已退役 Python 双实现验收夹具的源码和清理钩子，随其归档。",
+      "legacyDependencies": [
+        "backend-ts/test/reply-arbitration-handover.test.mjs",
+        "backend-ts/test/reply-background-public.test.mjs"
+      ],
+      "currentCoverage": []
+    },
+    {
+      "path": "backend-ts/test/reply-background-sequence.test.mjs",
+      "reason": "仅验证已退役 Python 双实现验收夹具的源码和清理钩子，随其归档。",
+      "legacyDependencies": [
+        "backend-ts/test/reply-arbitration-handover.test.mjs",
+        "backend-ts/test/reply-background-public.test.mjs"
+      ],
+      "currentCoverage": []
+    },
+    {
+      "path": "backend-ts/test/reply-comparison-runner-integration.test.mjs",
+      "reason": "通过冻结双臂 runner 执行旧 Python 业务与采集来源，不能进入当前默认 Node 测试。",
+      "legacyDependencies": [
+        ".scratch/dsh-ts-migration/ticket25-final-run/runner.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/reply-comparison.test.mjs",
+        "backend-ts/test/reply-blind-packet.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-generation-ownership-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/assistant-generation-ownership-http.test.mjs",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "desktop/tests/assistant-generation-execution.test.mjs",
+        "desktop/tests/assistant-session-deletion-guards.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/assistant-lifecycle-fixture-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/assistant-lifecycle-fixture-http.test.mjs",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "desktop/tests/assistant-session-catalog.test.mjs",
+        "desktop/tests/assistant-session-deletion-guards.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/authentic-expression-accumulated-message-opt-in-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/authentic-expression-accumulated-message-opt-in-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/workspace-message-adoption-client.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/authentic-expression-message-opt-in-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/authentic-expression-message-opt-in-http.test.mjs",
+        "desktop/tests/fixtures/reply-message-opt-in-public.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/workspace-message-adoption-client.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/contact-relationship-overview-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/contact-relationship-overview-fixture.ts",
+        "desktop/tests/contact-relationship-overview-http.test.mjs",
+        "desktop/tests/headless/backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/memory-management.test.mjs",
+        "desktop/tests/memory-evidence.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/continuous-contact-follow-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/continuous-contact-follow-http.test.mjs",
+        "desktop/tests/foreground-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "desktop/tests/foreground-confirmation-binding.test.mjs",
+        "backend-ts/test/foreground-location-host.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/emoji-foreground-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/emoji-foreground-http.test.mjs",
+        "desktop/tests/foreground-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/foreground-location-name-matching.test.mjs",
+        "desktop/tests/foreground-confirmation-binding.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/expression-preferences/module-manifest.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/expression-preferences/module-manifest.test.mjs",
+        "desktop/tests/fixtures/expression-preference-modules.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/expression-preferences/controller.test.mjs",
+        "desktop/tests/expression-preferences/react.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/expression-preferences/page-gate.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/expression-preferences/page-gate.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/headless/command.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/foreground-change-source-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/foreground-backend-fixture.ts",
+        "desktop/tests/foreground-change-source-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/foreground-confirmation-binding.test.mjs",
+        "backend-ts/test/foreground-location-host.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/foreground-observation-budget-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/foreground-backend-fixture.ts",
+        "desktop/tests/foreground-observation-budget-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/foreground-latency.test.mjs",
+        "backend-ts/test/foreground-location-host.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/group-foreground-pause-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/foreground-backend-fixture.ts",
+        "desktop/tests/group-foreground-pause-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/foreground-confirmation-binding.test.mjs",
+        "backend-ts/test/foreground-location-locator.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/historical-reply-basis-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/historical-reply-basis-http.mjs",
+        "desktop/tests/historical-reply-basis-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/historical-reply-basis.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/layered-memory/correction-native-preflight.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/layered-correction-native-flow.ts",
+        "desktop/tests/layered-memory-fixture.ts",
+        "desktop/tests/layered-memory/correction-native-preflight.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/layered-memory/corrections.test.mjs",
+        "desktop/tests/headless/command.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/layered-memory/fixture-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/layered-correction-native-flow.ts",
+        "desktop/tests/layered-memory-fixture.ts",
+        "desktop/tests/layered-memory/fixture-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/layered-memory/controller.test.mjs",
+        "backend-ts/test/pure-ts-maintenance.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/memory-event-updates-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/memory-event-updates-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/memory-event-updates.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/memory-skill-evolution/page-gate.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/memory-skill-evolution/page-gate.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/headless/command.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/name-matching-foreground-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/foreground-backend-fixture.ts",
+        "desktop/tests/name-matching-foreground-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/foreground-location-name-matching.test.mjs",
+        "desktop/tests/foreground-confirmation-binding.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/observation-measurements-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/observation-measurements-fixture.ts",
+        "desktop/tests/observation-measurements-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/overview-reply-retrieval-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/headless/backend-fixture.ts",
+        "desktop/tests/overview-reply-retrieval-fixture.ts",
+        "desktop/tests/overview-reply-retrieval-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/overview-reply-retrieval.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/overview-reply-retrieval-scheduling.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/overview-reply-retrieval-scheduling.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/headless/command.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/owner-facts-overview-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/headless/backend-fixture.ts",
+        "desktop/tests/owner-facts-overview-fixture.ts",
+        "desktop/tests/owner-facts-overview-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/memory-management.test.mjs",
+        "desktop/tests/layered-memory/owner.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/reply-failed-generation-followup-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/reply-message-opt-in-public.mjs",
+        "desktop/tests/reply-failed-generation-followup-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/workspace-message-adoption-client.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/reply-message-opt-in-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/reply-message-opt-in-public.mjs",
+        "desktop/tests/reply-message-opt-in-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/workspace-message-adoption-client.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/reply-strategy-clarification-confirm-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/headless/backend-fixture.ts",
+        "desktop/tests/reply-strategy-clarification-confirm-http.test.mjs",
+        "desktop/tests/rewrite-backend-fixture.ts",
+        "desktop/tests/rewrite-http-proxy.ts"
+      ],
+      "currentCoverage": [
+        "desktop/tests/assistant-generation-preparation.test.mjs",
+        "desktop/tests/workspace-submission.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/reply-strategy-skill-switch-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/headless/backend-fixture.ts",
+        "desktop/tests/reply-strategy-skill-switch-http.test.mjs",
+        "desktop/tests/rewrite-backend-fixture.ts",
+        "desktop/tests/rewrite-http-proxy.ts"
+      ],
+      "currentCoverage": [
+        "desktop/tests/workspace-skill-choice.test.mjs",
+        "desktop/tests/assistant-generation-execution.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/rewrite-fixture-cleanup.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/rewrite-backend-fixture.ts",
+        "desktop/tests/rewrite-fixture-cleanup.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/headless/command.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/single-frame-foreground-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/foreground-backend-fixture.ts",
+        "desktop/tests/single-frame-foreground-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/foreground-confirmation-binding.test.mjs",
+        "backend-ts/test/foreground-location-host.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/skill-learning/page-gate.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/skill-learning/page-gate.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/headless/command.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "desktop/tests/workspace-message-opt-in-http.test.mjs",
+      "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/reply-message-opt-in-public.mjs",
+        "desktop/tests/workspace-message-opt-in-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/workspace-message-adoption-client.test.mjs"
+      ],
+      "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
     }
   ],
   "archivedCases": [
@@ -2068,11 +2437,120 @@
         "backend-ts/test/task-api.test.mjs",
         "backend-ts/test/extraction-worker-control.test.mjs"
       ]
+    },
+    {
+      "path": "backend-ts/test/foreground-location-name-matching.test.mjs",
+      "name": "冻结 Python 原实现对照：合成名称、尾部、Unicode 与边界",
+      "currentCoverage": [
+        "backend-ts/test/foreground-location-name-matching.test.mjs"
+      ],
+      "boundary": "当前 Node 入口读取固定旧实现生成的 1152 条合成 JSON 预期，不执行 Python。"
+    },
+    {
+      "path": "backend-ts/test/host-model-unconfigured-skill.test.mjs",
+      "name": "官方profile中TS未配置回复与TS Skill管理同时工作，管理不消费模型收据",
+      "currentCoverage": [
+        "backend-ts/test/host-model-unconfigured-skill.test.mjs"
+      ],
+      "boundary": "当前共享夹具已迁为纯 Node，默认入口保留完整生产控制面覆盖。"
+    },
+    {
+      "path": "backend-ts/test/memory-processing-resume-host.test.mjs",
+      "name": "真实host-plugin将导入与观察resume交给同一TS Worker且不创建任务",
+      "currentCoverage": [
+        "backend-ts/test/memory-processing-resume-host.test.mjs"
+      ],
+      "boundary": "当前恢复路径全为 Node，移除已忽略的旧 Python 配置后默认执行。"
+    },
+    {
+      "path": "backend-ts/test/managed-database-lifetime.test.mjs",
+      "name": "隔离旧Python flock比较器与TS共享锁使用同一内核互斥，不进入产品子进程",
+      "currentCoverage": [
+        "backend-ts/test/managed-database-lifetime.test.mjs"
+      ],
+      "boundary": "只归档 Python flock 互操作比较器；当前 Node 锁互斥和权限边界继续默认执行。"
+    },
+    {
+      "path": "backend-ts/test/host-model-runtime.test.mjs",
+      "name": "默认Python及无模型不安装模型宿主、读资料或改配置",
+      "currentCoverage": [
+        "backend-ts/test/host-model-unconfigured.test.mjs"
+      ],
+      "boundary": "仅旧 Python 默认执行方或移交行为已退役；当前 Node 业务和配置门禁继续执行。"
+    },
+    {
+      "path": "backend-ts/test/memory-preferences-host.test.mjs",
+      "name": "官方管理移交先停收并排空，在途取消回滚且两个责任方不双写",
+      "currentCoverage": [
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/python-retirement-host.test.mjs",
+        "backend-ts/test/memory-preferences-host.test.mjs"
+      ],
+      "boundary": "仅旧 Python 默认执行方或移交行为已退役；当前 Node 业务和配置门禁继续执行。"
+    },
+    {
+      "path": "backend-ts/test/memory-preferences-host.test.mjs",
+      "name": "管理移交原表列核验失败保持停收，不回退旧管理写入",
+      "currentCoverage": [
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/python-retirement-host.test.mjs",
+        "backend-ts/test/memory-preferences-host.test.mjs"
+      ],
+      "boundary": "仅旧 Python 默认执行方或移交行为已退役；当前 Node 业务和配置门禁继续执行。"
+    },
+    {
+      "path": "backend-ts/test/model-mode-recovery.test.mjs",
+      "name": "实际ModelHost active journal不能回退Python，原文件字节保留",
+      "currentCoverage": [
+        "backend-ts/test/model-mode-recovery.test.mjs",
+        "backend-ts/test/host-model-unconfigured.test.mjs",
+        "backend-ts/test/python-retirement-host.test.mjs"
+      ],
+      "boundary": "文件内旧默认 Python 执行方和回退门禁用例全部从固定 Git 树恢复；当前 Node journal parser 三个损坏文件用例仍默认执行。"
+    },
+    {
+      "path": "backend-ts/test/memory-preferences-host.test.mjs",
+      "name": "管理纠错后的真实旧分层读回不依赖缺失或过期概览缓存",
+      "currentCoverage": [
+        "backend-ts/test/memory-preferences-host.test.mjs"
+      ],
+      "boundary": "旧 Python 禁止投影写入断言保留在历史树；当前 Node 仍验证纠错有效资料，并核验缺失和过期投影正确重建。"
+    },
+    {
+      "path": "backend-ts/test/foreground-location-host.test.mjs",
+      "name": "旧删除内部撤销真实HTTP会取消在途TS探针，撤销后无旧身份",
+      "currentCoverage": [
+        "backend-ts/test/foreground-location-host.test.mjs",
+        "backend-ts/test/python-retirement-host.test.mjs"
+      ],
+      "boundary": "旧 legacy.info 与 Python 内部撤销接口已退役；当前 Node 定位与授权撤销 HTTP 业务用例保留。"
+    },
+    {
+      "path": "desktop/tests/overview-reply-retrieval.test.mjs",
+      "name": "真实HTTP保存的主题正文依据穿过生产解析与React，历史协议仍按匹配版本展示",
+      "currentCoverage": [
+        "desktop/tests/overview-reply-retrieval.test.mjs"
+      ],
+      "boundary": "仅将 Python HTTP 夹具或旧页面启动器用例留在固定 Git 历史入口；文件内当前 Node 合同继续执行，相邻入口测试不代表旧验收等价。"
+    },
+    {
+      "path": "desktop/tests/memory-event-updates.test.mjs",
+      "name": "记忆页面组通过两层有限启动守卫，已删除的版本历史页面不再登记",
+      "currentCoverage": [
+        "desktop/tests/headless/command.test.mjs"
+      ],
+      "boundary": "仅将 Python HTTP 夹具或旧页面启动器用例留在固定 Git 历史入口；文件内当前 Node 合同继续执行，相邻入口测试不代表旧验收等价。"
+    },
+    {
+      "path": "desktop/tests/memory-correction/controller.test.mjs",
+      "name": "纠错页面范围通过两层启动前校验并已登记分发",
+      "currentCoverage": [
+        "desktop/tests/headless/command.test.mjs"
+      ],
+      "boundary": "仅将 Python HTTP 夹具或旧页面启动器用例留在固定 Git 历史入口；文件内当前 Node 合同继续执行，相邻入口测试不代表旧验收等价。"
     }
   ],
   "protectedAssets": [
-    "desktop/tests/fixtures/expression-preference-backend.py",
-    "desktop/tests/fixtures/expression-preferences-page.py",
     "desktop/tests/memory-correction/retirement-react.test.mjs"
   ],
   "protectedAssetCoverage": [
@@ -2085,7 +2563,7 @@
         "desktop/tests/expression-preferences/reprepare.test.mjs",
         "desktop/tests/memory-correction/retirement-react.test.mjs"
       ],
-      "status": "历史Python资产不执行；现行Node业务和React入口单独记录结果"
+      "status": "历史 Python 资产已从工作树删除；固定 Git 旧树保留来源，现行 Node 业务和 React 入口单独记录结果"
     },
     {
       "path": "desktop/tests/fixtures/expression-preferences-page.py",
@@ -2096,8 +2574,8 @@
         "desktop/tests/expression-preferences/reprepare.test.mjs",
         "desktop/tests/memory-correction/retirement-react.test.mjs"
       ],
-      "status": "历史Python资产不执行；现行Node业务和React入口单独记录结果"
+      "status": "历史 Python 资产已从工作树删除；固定 Git 旧树保留来源，现行 Node 业务和 React 入口单独记录结果"
     }
   ],
-  "protectedAssetsPolicy": "当前用户未提交资产保持原位不改；固定旧树历史运行不包含这些未提交修改，不冒称其已运行。"
+  "protectedAssetsPolicy": "保留现行 React 回归；历史 Python 资产按用户授权清理。用户本轮已有未提交资料不纳入清理。"
 }

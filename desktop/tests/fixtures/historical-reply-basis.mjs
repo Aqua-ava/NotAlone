@@ -11,8 +11,6 @@ const compiled = await build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
   export { readContactDirectory } from './src/main/contacts/directory';
   export { readConnection } from './src/main/backend/connection';
-  export { withRewriteFixture } from './tests/rewrite-backend-fixture';
-  export { withLayeredReplyFixture } from './tests/layered-reply-fixture';
   export { installReplyBridge } from './src/main/reply/bridge';
   export { coordinateOwnerContextChanges } from './src/main/reply/owner-context-changes';
   export { installMemoryBridge } from './src/main/memory/bridge';

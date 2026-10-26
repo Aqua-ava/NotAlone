@@ -1,60 +1,9 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { historicalReplyFixture, ports } from './fixtures/historical-reply-basis.mjs';
 import { payload as layeredPayload, profilePayload, ids as layeredIds } from './layered-memory/support.mjs';
-
-test('真实HTTP保存的主题正文依据穿过生产解析与React，历史协议仍按匹配版本展示', { timeout: 90_000 }, async () => {
-  const previous = process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR;
-  const directory = await mkdtemp(path.join(tmpdir(), 'notalone-layered-parser-contract-'));
-  process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR = directory;
-  try {
-    await ports.withLayeredReplyFixture(async (fixture) => {
-      const prepared = await fixture.command('prepared');
-      const actual = await fixture.command('saved_scenario_evidence');
-      await writeFile(path.join(directory, 'actual-saved-evidence.json'), JSON.stringify(actual), { mode: 0o600 });
-      // 完整GET结果先原样进入生产解析器，不改任何请求身份或正文。
-      const parsed = await ports.readReplyEvidence({ requestJson: async () => ({ data: actual, generation: 1 }) },
-        prepared.contact_id, actual.reply_request_id, new AbortController().signal);
-      assert.equal(parsed.layeredContext.schemaVersion, 3);
-      assert.equal(parsed.layeredScenarioReads[0].document.versionId, prepared.scenario_version_id);
-      assert.deepEqual(parsed.layeredScenarioReads[0].document.paragraphRange, [0, 1]);
-      const f = await generatedFixture((f) => {
-        Object.assign(f.records.evidence, actual, { reply_request_id: f.requestId });
-        f.records.saved.turns[0].reply.candidates[0].citation_ids = actual.evidence.filter((item) => item.cited).map((item) => item.evidence_id);
-      });
-      await f.bridge.loadEvidence(f.selection);
-      const state = await f.bridge.getEvidenceState();
-      assert.equal(state.phase, 'ready', JSON.stringify(state));
-      assert.equal(state.layeredContext.schemaVersion, 3);
-      assert.equal(state.layeredContext.readPolicy, 'synthetic-scoped-layered-v3');
-      assert.equal(state.layeredContext.profileVersionId, prepared.profile_version_id);
-      assert.deepEqual(state.layeredScenarioReads.map((item) => item.status), ['succeeded', 'duplicate']);
-      assert.equal(state.layeredScenarioReads[0].document.versionId, prepared.scenario_version_id);
-      assert.deepEqual(state.layeredScenarioReads[0].document.paragraphRange, [0, 1]);
-      const html = await renderEvidence(f);
-      assert.ok(html.includes(prepared.scenario_text));
-      assert.ok(html.includes(prepared.scenario_version_id));
-      assert.ok(html.includes('重复读取'));
-      if (prepared.owner_profile_version_id) {
-        assert.equal(parsed.ownerLayeredContext.scopeKind, 'owner');
-        assert.equal(state.ownerLayeredContext.profileVersionId, prepared.owner_profile_version_id);
-        assert.deepEqual(state.ownerLayeredScenarioReads.map((item) => item.status), ['succeeded', 'duplicate']);
-        assert.equal(state.ownerLayeredScenarioReads[0].document.versionId, prepared.owner_scenario.version_id);
-        assert.ok(html.includes(prepared.owner_scenario.paragraphs[0].text));
-        assert.ok(html.includes(prepared.owner_profile_version_id));
-      }
-      assert.equal((await fixture.command('runtime_proof')).external_model_calls, 0);
-    });
-    process.stdout.write(`saved_evidence_contract: ${directory}\n`);
-  } finally {
-    if (previous === undefined) delete process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR;
-    else process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR = previous;
-  }
-});
 
 function retrieval(ids, overrides = {}) {
   return { version: 1, retriever_version: 'lexical-v1', status: 'succeeded',
@@ -686,7 +635,7 @@ test('本人两处事实管理与分层撤回均沿生产桥复验隐藏依赖�
       timing: { recorded_at: null, source_started_at: null, source_ended_at: null, source_time_complete: false } };
     let changed = false;
     f.backend.requestJson = async request => {
-      if (request.path.startsWith('/api/memories/owner')) {
+      if (request.path.startsWith('/api/memories/owner') || request.path.startsWith(`/api/contacts/${f.scope.contactId}/owner-memories`)) {
         if (request.method === 'POST') {
           assert.equal((await f.bridge.getState()).result, null);
           assert.equal((await f.bridge.getEvidenceState()).ownerLayeredContext, undefined);
@@ -695,7 +644,7 @@ test('本人两处事实管理与分层撤回均沿生产桥复验隐藏依赖�
           Object.assign(f.records.saved.inputs[0], { state: 'redacted', content: null, placeholder: '相关本人资料已删除' });
           f.records.failure = r => r.path.endsWith('/evidence') ? new ports.BackendRequestFailure('response', 404) : undefined;
         }
-        return { generation: f.records.generation, data: request.path === '/api/memories/owner'
+        return { generation: f.records.generation, data: request.path === '/api/memories/owner' || request.path === `/api/contacts/${f.scope.contactId}/owner-memories`
           ? { memories: changed ? [] : [fact] }
           : (changed ? layeredPayload : profilePayload)({ scope_kind: 'owner', contact_id: null }) };
       }

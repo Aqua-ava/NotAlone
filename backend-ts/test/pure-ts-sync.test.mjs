@@ -91,8 +91,9 @@ test('大范围历史状态不阻断初始清除后的最新优先联系人登�
  const server=createServer(async(req,res)=>{
   const send=(status,body)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(body));};
   if(req.headers.authorization!=='Bearer synthetic_priority_token')return send(401,{error:'unauthorized'});
-  if(req.url==='/api/runtime/status')return send(200,{state:'running'});
-  if(req.url==='/api/runtime/shutdown')return send(200,{state:'stopped'});
+  if(req.url==='/api/runtime/status')return send(200,{state:'running',runtime:'dsh',hostRuntime:'typescript',
+   ownership:Object.fromEntries(['contacts','deletion','wechat','skills','skillLearning','imports','taskApi','taskManagement','tasks','crossDomainDeletion','wechatBodySync','wechatIncremental','wechatHistory','foregroundLocation','contactContext','memory','expressionPreferences'].map(key=>[key,'typescript']))});
+  if(req.url==='/api/runtime/shutdown')return send(200,{state:'stopped',runtime:'dsh'});
   if(req.url==='/api/setup/status')return send(200,{runtime_owner_configured:true});
   if(req.url==='/api/contacts')return send(200,{contacts:(await f.client.query('SELECT id AS contact_id,display_name FROM contact WHERE owner_id=$1 ORDER BY id',[owner])).rows.map(row=>({...row,data_status:{message_count:0,source_count:0}}))});
   let text='';for await(const chunk of req)text+=chunk;

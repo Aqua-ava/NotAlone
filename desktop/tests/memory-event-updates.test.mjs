@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { readFile } from 'node:fs/promises';
-import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
 import { build } from 'esbuild';
 
@@ -257,24 +255,6 @@ test('旧版本应用或撤销遇到冲突或来源删除后清空旧视图，�
     await assert.rejects(act());
     assert.equal(posts, 1, '冲突后不得复用旧版本发起第二次请求');
   }
-});
-
-test('记忆页面组通过两层有限启动守卫，已删除的版本历史页面不再登记', async () => {
-  const source = await readFile('scripts/test-pages.mjs', 'utf8');
-  const parser = source.slice(source.indexOf('function parse(args)'), source.indexOf('async function run(options)'));
-  for (const name of ['memory-current-status', 'memory-correction-protection']) {
-    const parsed = runInNewContext(`${parser}; parse(args)`, { args: ['--case', name, '--timeout-seconds', '180'] });
-    assert.equal(JSON.stringify(parsed), JSON.stringify({ names: [name], timeout: 180 }));
-  }
-  assert.throws(() => runInNewContext(`${parser}; parse(args)`, {
-    args: ['--case', 'memory-event-updates', '--timeout-seconds', '180'],
-  }), /page_test_arguments/);
-  const runner = await readFile('tests/headless/run.ts', 'utf8');
-  const guard = runner.slice(runner.indexOf('if (!Array.isArray(cases)'), runner.indexOf('let browser:'));
-  assert.doesNotThrow(() => runInNewContext(guard, { cases: ['memory-current-status'] }));
-  assert.throws(() => runInNewContext(guard, { cases: ['memory-event-updates'] }), /page_test_arguments/);
-  assert.throws(() => runInNewContext(guard, { cases: ['unknown-page'] }), /page_test_arguments/);
-  assert.doesNotMatch(runner, /memoryEventUpdates/);
 });
 
 test('旧空事件保持未知，阶段和部分发生时段的来源核验各自独立', async () => {

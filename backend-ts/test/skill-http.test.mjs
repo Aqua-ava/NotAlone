@@ -16,7 +16,7 @@ test('官方profile公开Skill管理由TS唯一承接并保持HTTP契约',async 
  const status=await app.request('/api/runtime/status');assert.equal(status.status,200);assert.equal(status.data.runtime,'dsh');
  assert.equal(status.data.ownership.skills,'typescript','不可借旧Python路由通过TS迁移验收');
  assert.equal((await app.request('/api/skills/health')).data.state,'ok');
- assert.equal((await app.request('/api/runtime/skill-management/synchronize',{owner_id:owner})).status,401);
+ assert.equal((await app.request('/api/runtime/skill-management/synchronize',{owner_id:owner})).status,404);
  const imported=await app.request('/api/skills/import',{package_path:path});assert.equal(imported.status,200);assert.equal(imported.data.version_number,1);
  const duplicate=await app.request('/api/skills/import',{package_path:path});assert.deepEqual(duplicate,{status:409,data:{error:'skill_import_rejected',reason:'package_invalid'}});
  const id=imported.data.skill_id;

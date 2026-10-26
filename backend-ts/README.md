@@ -9,7 +9,7 @@ npm run typecheck
 npm test
 ```
 
-默认测试仅执行当前 Node 业务与生命周期覆盖；迁移阶段双实现 oracle、Python页面或旧组件验证在 `test/historical-inventory.json` 显式登记，完整旧树仍固定于 Git，不代表当前测试通过。
+默认测试仅执行当前 Node 业务与生命周期覆盖；迁移阶段双实现 oracle、Python页面或旧组件验证在 `test/historical-inventory.json` 显式登记，历史测试及其专用 Python/JS 执行器已从当前工作树删除，完整旧树固定于 Git，历史运行不代表当前测试通过。正常测试拒绝重新引入已登记的历史文件。名称匹配对照使用固定旧实现生成的合成 JSON 预期，不需要 Python。
 
 ```bash
 npm run test:historical -- --list

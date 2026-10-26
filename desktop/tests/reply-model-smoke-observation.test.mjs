@@ -9,17 +9,8 @@ async function observationPorts(run) {
   const directory = await mkdtemp(path.join(tmpdir(), 'notalone-smoke-observation-'));
   try {
     const output = path.join(directory, 'acceptance.mjs');
-    await build({ entryPoints: ['tests/reply-model-smoke-app-acceptance.spec.ts'], outfile: output,
-      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', plugins: [{ name: '仅登记，不运行App或后端', setup(builder) {
-        builder.onResolve({ filter: /^(\.\/reply-model-smoke-fixture|\.\/app-fixture|\.\/app-test-gate|\.\/foreground-confirmation-actions|@playwright\/test)$/ },
-          ({ path: request }) => ({ path: request, namespace: 'registration' }));
-        builder.onLoad({ filter: /.*/, namespace: 'registration' }, ({ path: request }) => ({ contents:
-          request === './reply-model-smoke-fixture' ? `export const test = Object.assign(() => {}, { skip() {}, use() {} });`
-            : request === './app-fixture' ? `export function selectMenu() { throw Error('禁止启动App'); }`
-              : request === './app-test-gate' ? `export function verifyAppTestLease() { throw Error('禁止领取租约'); }`
-                : request === './foreground-confirmation-actions' ? `export function confirmHelperContact() { throw Error('禁止操作App'); }`
-                  : `export function expect() { throw Error('禁止执行App断言'); }`, loader: 'js' }));
-      } }] });
+    await build({ entryPoints: ['tests/reply-model-smoke-observation.ts'], outfile: output,
+      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
     await run(await import(output), directory);
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

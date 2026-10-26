@@ -20,7 +20,7 @@ test('官方profile中TS未配置回复与TS Skill管理同时工作，管理不
  assert.deepEqual(status.data.reply,{runtime:'typescript',state:'unconfigured',reason:'reply_model_unconfigured'});
  assert.equal((await app.request('/api/setup/status')).status,200);
  assert.equal((await app.request('/api/skills/health')).data.state,'ok');
- assert.equal((await app.request('/api/runtime/skill-management/synchronize',{owner_id:owner})).status,401);
+ assert.equal((await app.request('/api/runtime/skill-management/synchronize',{owner_id:owner})).status,404);
  assert.equal((await app.request('/internal/reply/prepare',{})).status,401);
  assert.deepEqual(await app.request('/api/reply/generate',{}),{status:503,data:{error:'reply_unavailable'}});
  const imported=await app.request('/api/skills/import',{package_path:packageRoot});assert.equal(imported.status,200);

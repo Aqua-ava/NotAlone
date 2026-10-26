@@ -5,7 +5,6 @@ import {randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import {createServer} from 'node:http';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
-import {homedir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createStorageFixture} from './host-storage-fixture.mjs';
@@ -99,8 +98,7 @@ test('真实host-plugin将导入与观察resume交给同一TS Worker且不创建
   (await readFile('profile/host.patch.yml','utf8')).replace('PLUGIN_PATH',JSON.stringify(resolve('src/host-plugin.ts'))));
  await writeFile(join(home,'host.json'),JSON.stringify({
   nodeExecutable:process.execPath,projectDirectory:project,envFilePath:fixture.envFilePath,infoPath:info,
-  businessHome:fixture.directory,pythonExecutable:process.env.NOTALONE_TEST_PYTHON||
-   join(homedir(),'miniconda3/envs/NotAlone/bin/python'),home,parentPid:process.pid,lockNonce:randomUUID(),
+  businessHome:fixture.directory,home,parentPid:process.pid,lockNonce:randomUUID(),
  }));
  child=spawn(process.execPath,[
   '--import',new URL('./main-host-reply-chain-preload.mjs',import.meta.url).pathname,

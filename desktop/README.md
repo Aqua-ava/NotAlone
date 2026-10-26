@@ -222,7 +222,7 @@ npm run package -- --output-directory /已有父目录/新的输出目录 --elec
 
 ## 历史页面与专项验收记录
 
-以下页面／Python及旧组件命令记录固定旧实现的历史状态。当前源码使用Node默认测试；需复现时在 `backend-ts` 运行 `npm run test:historical -- --list`，只通过显式独立历史环境执行，不从HEAD加载旧Python实现。
+以下页面／Python及旧组件命令记录固定旧实现的历史状态；所提到的旧 Python 测试与专用夹具已经从当前树删除，路径只在固定历史树中存在。当前源码使用Node默认测试；需复现时在 `backend-ts` 运行 `npm run test:historical -- --list`，只通过显式独立历史环境执行，不从HEAD加载旧Python实现。
 
 ### 轻量无头页面验证
 
@@ -418,11 +418,10 @@ NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Conten
 
 Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录清理，两租约absent；复验默认目录身份、主包strict／4helper strict与SHA／9材料集合／ASAR／ZIP保持。首场默认目录基线缺对应路径，未认证该场默认身份前后不变，后场重新录基线且不读正文。没有后端、业务库、微信／官方helper／OCR、模型、权限／TCC或退场后的NotAlone CUA操作。当前同包非OCR完整场景累计22个，见[焦点最终摘要](../.scratch/unfinished-work/mac-focus-final-20261012.json)；准备与旧失败不覆盖，完整20票及来源／渠道／OCR条件保持，新功能冻结。
 
-主进程读取当前 userData 中的 `backend-launch.json`。启动检查与连接自动执行；正常设置页不显示机器环境卡片，连接状态只在顶部展示。启动失败提供简明原因、重试与“查看诊断”入口。故障排查默认折叠，明确展开后才读取路径。在“设置 → 高级 → 故障排查”可查看、修正和保存下列非秘密绝对路径。Python 和项目目录必须同时提供；没有可核验的项目环境时阻止启动和复用，显示恢复说明：
+主进程读取当前 userData 中的 `backend-launch.json`。启动检查与连接自动执行；正常设置页不显示机器环境卡片，连接状态只在顶部展示。启动失败提供简明原因、重试与“查看诊断”入口。故障排查默认折叠，明确展开后才读取路径。在“设置 → 高级 → 故障排查”可查看、修正和保存下列非秘密绝对路径。外置模式需要可核验的项目目录和已安装的 TypeScript／DSH 依赖；源码开发模式使用已确认的当前项目路径。旧 `pythonExecutable` 字段兼容忽略，不再参与启动或诊断：
 
 ```json
 {
-  "pythonExecutable": "/绝对路径/Conda环境/bin/python",
   "projectDirectory": "/绝对路径/NotAlone",
   "envFilePath": "/绝对路径/受控配置.env",
   "backendInfoPath": "/绝对路径/backend.info",
@@ -433,7 +432,7 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 
 未保存时，`envFilePath` 默认使用所选项目根目录 `.env`，`backendInfoPath` 默认使用 `~/.notalone/backend.info`；受控运行可用 `NOTALONE_ENV_FILE` / `NOTALONE_BACKEND_INFO` 提供初始值。已保存路径优先于这些初始环境变量。CLI/探针可留空，显示对应渠道不可用；诊断只检查可执行文件，不运行 helper，缺 helper 不阻塞独立的后端配置能力。保存文件只含路径，不含配置内容、模型密钥或握手 token。
 
-诊断固定调用已核验的绝对解释器及 `-m notalone.startup_diagnostics --migrations ...`，诊断就绪后才允许 `-m notalone.server.command`；两者从所选项目的 `backend/src` 加载代码，不依赖 Finder 的 PATH、工作目录或其他 checkout 的 editable install。只读入口使用有界连接和 READ ONLY 事务，仅核对必要 schema 元数据、审计基线与迁移账本，不读取联系人/聊天正文、不迁移或接管业务库、不创建参考库。只读结果为 `migration_pending` 时，另一个受控步骤按[原库结构补齐](#数据库沿用与结构补齐)执行缺少版本并复验；诊断本身保持只读。缺基线、文件或账本漂移、必要结构缺失继续阻止连接，不用新空库绕过。机器就绪与本人身份/模型首启分开显示。
+诊断通过 Electron 内置 Node 的独立子进程加载所选项目的 `backend-ts/src/host-storage.ts`，读取 `backend/database/migrations` 并检查数据库兼容性；就绪后通过 `launchDsh` 启动唯一的 TypeScript／DSH 后台。两者不依赖 Python／Conda 或 Finder 的 PATH。只读入口使用有界连接和 READ ONLY 事务，仅核对必要 schema 元数据、审计基线与迁移账本，不读取联系人/聊天正文、不迁移或接管业务库、不创建参考库。只读结果为 `migration_pending` 时，另一个受控步骤按[原库结构补齐](#数据库沿用与结构补齐)执行缺少版本并复验；诊断本身保持只读。缺基线、文件或账本漂移、必要结构缺失继续阻止连接，不用新空库绕过。机器就绪与本人身份/模型首启分开显示。
 
 主进程确认没有持有运行时或未完成的启动任务时，才允许直接保存。连接查询失败产生的“尚未连接”仍可能持有原服务；此时先点击“停止服务以修改路径”，通过原已验证目标认证确认停读并等待服务退场，才恢复路径编辑。失败保留旧目标、原路径和停读恢复入口，不能保存新路径或另起后端。保存与新连接串行，落盘前再次核验资格；保存不会自动连接。点击“重新检查并连接”重新经过只读门禁，重复重试不会启动多个后端。
 
@@ -458,7 +457,7 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 
 渲染层开启 context isolation、进程沙箱、关闭 Node 集成；正常界面只从受控 `notalone://app/` 资源加载，设置 CSP、拒绝导航/新窗口/网页权限。主进程校验桥接的窗口、主框架、精确资源来源、参数个数和类型。入口资源失败时使用无脚本的安全中文说明页，来源校验拒绝它调用桥接；可从原生菜单重试。临时界面会话使用内存分区；默认应用配置目录是 `~/Library/Application Support/NotAloneDesktop`，与历史 App 分开；`desktop-settings.json` 只保存 `helperShortcut`，不保存草稿、候选、置顶状态或业务资料。
 
-联系人、导入、数据库、记忆、检索及候选生成由 [Python 后端](../backend/README.md)提供。平台原生截图、OCR 与会话定位由 [Mac 原生探针](../native/macos/README.md)提供，Windows 平台适配尚未实现。
+联系人、导入、数据库、记忆、检索及候选生成由 [TypeScript／DSH 后台](../backend-ts/README.md)提供。平台原生截图、OCR 与会话定位由 [Mac 原生探针](../native/macos/README.md)提供，Windows 平台适配尚未实现。
 
 新 UI 继续遵守[产品边界](../CONTEXT.md)：用户确认联系人与读取范围、查看并编辑候选、亲自发送；后端接入后桌面退出必须停止本次后台读取。原 Swift 主界面已按 [ADR-039](../architecture/adr/039-retire-swift-main-interface.md) 退役，新宿主边界见 [ADR-040](../architecture/adr/040-electron-dual-window-host.md)。
 

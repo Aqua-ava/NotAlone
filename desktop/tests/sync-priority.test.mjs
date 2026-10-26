@@ -17,6 +17,7 @@ const bundled = await build({ stdin: { contents: `
 const ports = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
 const a = '10000000-0000-4000-8000-000000000001';
 const b = '10000000-0000-4000-8000-000000000002';
+const runningStatus = {"state":"running","runtime":"dsh","hostRuntime":"typescript","ownership":{"contacts":"typescript","deletion":"typescript","wechat":"typescript","skills":"typescript","skillLearning":"typescript","imports":"typescript","taskApi":"typescript","taskManagement":"typescript","tasks":"typescript","crossDomainDeletion":"typescript","wechatBodySync":"typescript","wechatIncremental":"typescript","wechatHistory":"typescript","foregroundLocation":"typescript","contactContext":"typescript","memory":"typescript","expressionPreferences":"typescript"}};
 
 function syncReport(enabled) {
   return { sync_mode: 'cli_background', sync_enabled: enabled, cli_available: true, probe_available: false,
@@ -37,9 +38,9 @@ async function fixture(t) {
     if (request.headers.authorization !== 'Bearer synthetic_priority_token') { response.writeHead(401); response.end(); return; }
     if (request.url === '/api/runtime/status') {
       if (!control.runtimeAvailable) { response.writeHead(503); response.end(); return; }
-      return send({ state: 'running' });
+      return send(runningStatus);
     }
-    if (request.url === '/api/runtime/shutdown') return send({ state: 'stopped' });
+    if (request.url === '/api/runtime/shutdown') return send({ state: 'stopped', runtime: 'dsh' });
     if (request.url === '/api/setup/status') return send({ runtime_owner_configured: true });
     if (request.url === '/api/contacts') return send({ contacts: [a, b].map((contact_id, index) => ({ contact_id,
       display_name: `合成联系人${index + 1}`, data_status: { message_count: 0, source_count: 0 } })) });

@@ -5,7 +5,7 @@ import {appendFile} from 'node:fs/promises';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {start} from './contact-context-support.mjs';
 
-// 使用真实官方profile；切换前明确失败，不能把Python响应冒充TS验收。
+// 使用真实官方 profile 验证当前 Node 管理入口。旧 Python 移交用例从固定 Git 历史入口恢复。
 async function fixture(t) {
   const f=await createStorageFixture();
   t.after(async()=>{for(const host of f.hosts??[])await host.terminate();await f.close();});
@@ -70,50 +70,7 @@ test('官方HTTP偏好大修订数字往返、CAS冲突、删除重试及旧键�
   assert.deepEqual((await f.call('GET','/api/expression-preferences')).data,{preferences:[]});
 });
 
-test('官方管理移交先停收并排空，在途取消回滚且两个责任方不双写',async t=>{
-  const f=await fixture(t),{setTimeout:delay}=await import('node:timers/promises');
-  const control='/api/runtime/memory-management',lock=`owner:${f.owner}`;
-  async function until(check,message) {
-    for(let i=0;i<100;i++){if(await check())return;await delay(25);}
-    throw new Error(message);
-  }
-  await f.client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]);
-  let pending,transfer;
-  try {
-    pending=f.call('POST','/api/memories/manual-owner',{text:'移交前取消合成资料',category:'preference'});
-    await until(async()=> (await f.call('GET',`${control}/status`)).data.active_requests===1,'管理请求未进入租约');
-    transfer=f.call('POST',`${control}/handoff`,{target:'python'});
-    await until(async()=> (await f.call('GET',`${control}/status`)).data.state==='transferring','移交未先停收');
-    assert.equal((await f.call('GET','/api/memories/owner')).status,503);
-  } finally {
-    await f.client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lock]);
-  }
-  assert.ok([409,503].includes((await pending).status),'旧租约不能提交或返回成功');
-  assert.equal((await transfer).status,200);
-  const python=await f.call('GET',`${control}/status`);
-  assert.equal(python.data.owner,'python');assert.equal(python.data.active_requests,0);
-  assert.deepEqual((await f.call('GET','/api/memories/owner')).data,{memories:[]});
-  assert.equal((await f.call('POST',`${control}/handoff`,{target:'typescript'})).status,200);
-  assert.equal((await f.call('POST','/api/memories/manual-owner',{text:'移交后合成资料',category:'preference'})).status,200);
-  assert.equal((await f.client.query('SELECT count(*)::int n FROM owner_memory WHERE owner_id=$1',[f.owner])).rows[0].n,1);
-});
-
-test('管理移交原表列核验失败保持停收，不回退旧管理写入',async t=>{
-  const f=await fixture(t),control='/api/runtime/memory-management';
-  await f.client.query('ALTER TABLE expression_preference RENAME COLUMN revision TO synthetic_missing_revision');
-  try {
-    assert.equal((await f.call('POST',`${control}/handoff`,{target:'python'})).status,503);
-    assert.equal((await f.call('GET',`${control}/status`)).data.state,'stopped');
-    assert.equal((await f.call('POST','/api/memories/manual-owner',{text:'不应保存',category:'preference'})).status,503);
-    assert.equal((await f.call('GET','/api/expression-preferences')).status,503);
-    assert.equal((await f.client.query('SELECT count(*)::int n FROM owner_memory WHERE owner_id=$1',[f.owner])).rows[0].n,0);
-  } finally {
-    await f.client.query('ALTER TABLE expression_preference RENAME COLUMN synthetic_missing_revision TO revision');
-  }
-  assert.equal((await f.call('POST',`${control}/handoff`,{target:'typescript'})).status,200);
-});
-
-test('管理纠错后的真实旧分层读回不依赖缺失或过期概览缓存',async t=>{
+test('管理纠错后的 Node 分层读回重建缺失或过期概览缓存',async t=>{
   const f=await fixture(t),base=`/api/contacts/${f.contact}`;
   for(const mode of ['absent','stale']) {
     const first=await f.call('POST','/api/memories/manual-contact',{contact_id:f.contact,text:'合成分层读回偏好',category:'preference'});
@@ -127,7 +84,9 @@ test('管理纠错后的真实旧分层读回不依赖缺失或过期概览缓�
     const layered=await f.call('GET',`${base}/layered-memory`);
     assert.equal(layered.status,200,JSON.stringify(layered.data));
     assert.equal(layered.data.layered_memory.eligible_count,mode==='absent'?1:2);
-    const saved=(await f.client.query('SELECT projection_revision FROM relationship_overview_projection WHERE owner_id=$1 AND contact_id=$2',[f.owner,f.contact])).rows;
-    assert.deepEqual(saved,mode==='absent'?[]:[{projection_revision:prior.projection_revision}],'旧进程不得恢复概览投影写入');
+    const saved=(await f.client.query('SELECT projection_revision,memory_ids FROM relationship_overview_projection WHERE owner_id=$1 AND contact_id=$2',[f.owner,f.contact])).rows;
+    assert.equal(saved.length,1,'当前 Node 读回须重建缺失或过期投影');
+    assert.notEqual(saved[0].projection_revision,prior.projection_revision,'纠错后的投影修订不能沿用旧缓存');
+    assert.ok(saved[0].memory_ids.includes(corrected.data.memory.memory_id),'投影必须包含纠错后的有效记忆');
   }
 });

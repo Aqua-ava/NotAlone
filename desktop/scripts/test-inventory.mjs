@@ -43,9 +43,7 @@ export async function loadTestInventory(desktopDirectory) {
   return validateTestInventory(desktopDirectory, inventory);
 }
 
-// 只登记、不执行：`tests/` 下的 Python unittest 资产（fixtures 证据与手工 HTTP
-// 检查脚本）目前不被常规 runner 认领。显式暴露数量，避免把「文件名没被发现」
-// 误当成「已被覆盖」；执行入口仍由 runner 分类决定。
+// 只检查文件名，不执行 Python。旧后台夹具已从当前树删除，历史复现使用固定 Git 树。
 export async function describePythonAssets(desktopDirectory) {
   const files = [];
   async function scan(relative) {
@@ -64,5 +62,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const { counts } = await loadTestInventory(desktop);
   const python = await describePythonAssets(desktop);
   console.log(`测试分类登记通过：${JSON.stringify(counts)}；只检查文件名，未执行测试。`);
-  console.log(`Python 资产 ${python.count} 个仅作历史资产登记，固定23a旧树+独立venv显式执行（正常runner不执行）。`);
+  console.log(`当前树 Python 测试资产 ${python.count} 个；旧测试仅在固定历史树与独立 venv 中执行。`);
 }

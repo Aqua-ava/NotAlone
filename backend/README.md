@@ -1,6 +1,10 @@
-# 数据库与历史材料
+# 数据库与合成夹具
 
-生产后端已迁移到 [backend-ts](../backend-ts/README.md)。本目录保留 `database/` 中的原116份 SQL、数据库操作说明，以及仍有价值的合成夹具与历史测试资产；旧 `src/notalone`、Python包安装入口及 LangChain／LangGraph／Deep Agents 运行依赖已退役。
+生产后端已迁移到 [backend-ts](../backend-ts/README.md)。本目录只保留数据库与合成夹具；旧 Python 后台、测试、基准脚本及本地编译缓存已清理，历史实现通过固定 Git 树追溯。
+
+- `database/`：原116份 SQL 与数据库操作说明，当前 Node 安装和结构准备仍使用，不能随历史后台删除。
+- `tests/fixtures/`：导入及回复评测的 JSON／JSONL 合成材料。仍保留原路径和原始字节，兼容现行测试与冻结评测清单中的来源路径、摘要，不表示 Python 测试仍在执行。
+- `tests/integration/server/fixtures/`：历史批量更新的合成重放材料，作为证据保留，不是可运行的 Python 测试入口。
 
 正常开发运行 `cd ../desktop && npm run dev`，无需 Python 或 Conda；原 `.env`、PostgreSQL 和资料位置不变。结构补齐由 Node `backend-ts/src/schema-prepare-cli.ts` 执行，未知结构继续停写，不创建替代空库。
 

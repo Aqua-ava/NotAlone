@@ -7,9 +7,9 @@ const directory=dirname(fileURLToPath(import.meta.url)),root=resolve(directory,'
 const manifest=JSON.parse(await readFile(resolve(directory,'historical-inventory.json'),'utf8'));
 const historical=new Set(manifest.entries.filter(row=>row.path.startsWith('backend-ts/')).map(row=>row.path));
 const discovered=(await readdir(directory)).filter(name=>name.endsWith('.test.mjs')).sort();
-for(const path of historical)if(!discovered.includes(path.split('/').at(-1)))throw new Error(`历史测试登记失效：${path}`);
+for(const path of historical)if(discovered.includes(path.split('/').at(-1)))throw new Error(`已归档历史测试不得恢复到当前工作树：${path}；请使用 npm run test:historical`);
 const files=discovered.filter(name=>!historical.has(`backend-ts/test/${name}`));
-// 防止新增测试直接恢复已退役执行器；历史登记必须显式进行，不能按环境跳过。
+// 防止新增测试恢复已退役执行器；历史源码只能在固定 Git 旧树中显式运行。
 for(const file of files){
  const source=await readFile(resolve(directory,file),'utf8');
  if(/from notalone\b|import notalone\b|miniconda3\/envs\/NotAlone\/bin\/python|legacy-backend\.ts|PythonTaskControlGateway/.test(source))

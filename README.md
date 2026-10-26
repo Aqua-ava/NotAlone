@@ -196,7 +196,7 @@ node scripts/install_git_hooks.mjs
 cd backend-ts
 npm run typecheck
 npm test
-# 显式检查仍保留的旧实现比较资产；不会默认启动历史Python
+# 显式查看固定 Git 树中的旧实现比较登记；不会默认启动历史Python
 npm run test:historical -- --list
 ```
 
@@ -216,6 +216,6 @@ node backend-ts/src/schema-prepare-cli.ts --migrations backend/database/migratio
 node backend-ts/src/schema-prepare-cli.ts --prepare --migrations backend/database/migrations
 ```
 
-历史 Python 对照保存在固定 Git 提交与显式独立测试环境；登记及命令见 `backend-ts/test/historical-inventory.json`、`npm run test:historical -- --list`。历史结果不表示当前源码通过，正常测试不依赖 Conda 或 Python 后端。
+历史 Python 后台及测试已从当前工作树清理，对照仍保存在固定 Git 提交与显式独立测试环境；登记及命令见 `backend-ts/test/historical-inventory.json`、`npm run test:historical -- --list`。`backend/database/` 的 SQL 和 `backend/tests/` 下的合成 JSON／JSONL 夹具继续保留原路径与字节。历史结果不表示当前源码通过，正常测试不依赖 Conda 或 Python 后端。
 
 迁移本轮的固定采集为96/96成功、96次物理调用、0重试；用户明确跳过回复盲评和启动／内存对照，未评／未测不写为通过。详见[范围及实测记录](.scratch/dsh-ts-migration/final-acceptance-closeout/capture-summary.json)。当前源码开发验证与旧安装包、发布验收分别记录。

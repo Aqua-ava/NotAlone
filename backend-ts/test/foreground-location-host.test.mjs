@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {writeFile,readFile} from 'node:fs/promises';
-import {watch} from 'node:fs';
+import {writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {createForegroundFixture} from './foreground-location-fixture.mjs';
 
@@ -67,22 +66,4 @@ test('正式桌面控制器经官方宿主HTTP消费身份与歧义门，不自�
  await f.setSessions([{username:'fixture-a',display_name:'合成甲友',chat_type:'private'}]);await foreground.observeBeforeShow();
  assert.equal(foreground.getState().reason,'manual_confirmation_required');assert.notEqual(foreground.getGenerationBlock(),null);
  assert.equal((await f.client.query('SELECT count(*)::int AS n FROM reply_request')).rows[0].n,0);
-});
-
-
-test('旧删除内部撤销真实HTTP会取消在途TS探针，撤销后无旧身份',async t=>{
- const f=await createForegroundFixture(t);
- await f.setProbe({name:'合成甲友',confidence:0.99,hang:true});
- let observer,timer;
- const began=new Promise((resolve,reject)=>{observer=watch(f.directory,(_event,name)=>{if(String(name)==='probe-started'){clearTimeout(timer);observer.close();resolve();}});timer=setTimeout(()=>{observer.close();reject(new Error('合成探针未启动'));},5000);});
- t.after(()=>{clearTimeout(timer);observer.close();});
- const pending=f.app.request('/api/sync/foreground/observe',{});await began;
- // 仅读取本测试自建宿主的认证回执，不访问任何真实用户凭据。
- const lock=JSON.parse(await readFile(join(f.directory,'backend.info.dsh-lock'),'utf8'));assert.equal(lock.parentPid,process.pid);
- const fields=Object.fromEntries((await readFile(join(lock.home,'legacy.info'),'utf8')).trim().split('\n').map(line=>{const at=line.indexOf('=');return [line.slice(0,at),line.slice(at+1)];}));
- const revoke=await fetch(`http://${fields.address}/api/runtime/wechat-scope/revoke`,{method:'POST',headers:{Authorization:`Bearer ${fields.token}`,'Content-Type':'application/json'},body:JSON.stringify({contact_id:f.contact,binding_id:f.binding})});
- assert.equal(revoke.status,200);const revoked=await revoke.json();assert.equal(revoked.status,200);assert.equal(revoked.body.status,'revoked');
- const rejected=await pending;assert.equal(rejected.status,409);assert.equal(rejected.data.error,'runtime_stopped');
- await f.setProbe({name:'合成甲友',confidence:0.99});
- const current=await f.app.request('/api/sync/foreground/observe',{});assert.equal(current.data.contact_id,null);assert.equal(current.data.reason,'unmatched_requires_selection');
 });

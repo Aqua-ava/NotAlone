@@ -169,6 +169,6 @@ test('日常开发入口解释热更新与重启，不把帮助命令变为桌�
   const result = spawnSync(process.execPath, ['scripts/dev.mjs', '--help'], { encoding: 'utf8', timeout: 10_000 });
   assert.equal(result.status, 0);
   assert.match(result.stdout, /热更新/);
-  assert.match(result.stdout, /Python/);
+  assert.match(result.stdout, /DSH\/TypeScript/);
   assert.match(result.stdout, /--user-data-dir/);
 });

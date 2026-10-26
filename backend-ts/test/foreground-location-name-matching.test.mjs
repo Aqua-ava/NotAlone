@@ -34,19 +34,15 @@ test('质量、类型和全名单元数据失败关闭；取消向调用方传�
   let calls = 0;
   assert.throws(() => matchSessionNames('合成',.5,privateNames(...Array.from({length:1000},(_,i)=>`对象${i}`)), {checkCurrent(){if (++calls === 3) throw Error('合成取消');}}), /合成取消/);
 });
-test('冻结 Python 原实现对照：合成名称、尾部、Unicode 与边界', async () => {
-  const {spawnSync} = await import('node:child_process');
-  const {homedir} = await import('node:os');
+test('冻结旧实现预期：合成名称、尾部、Unicode 与边界', async () => {
+  const {readFile} = await import('node:fs/promises');
+  const {names, expected} = JSON.parse(await readFile(new URL('./fixtures/foreground-name-matching-frozen.json', import.meta.url), 'utf8'));
   const cases = [];
-  const names = ['合成甲','合成乙','合成','ßQ','ssX','™AB','TMAC','ﬃQ','ffiX','𠀀𠀁','𠀀𠀂','①②','12','\u001cA\u0085B','AB','A\ufeffB','\ua7f1A','sA','abcdefghij','abcdefghxy','合成👩‍💻','合成🇨🇳','\u{1c89}\u{1c8a}',''];
   for (let i=0;i<names.length;i++) for(let j=0;j<names.length;j++) {
     cases.push([names[i],.5,privateNames(names[j]),{}]);
     cases.push([names[i],1,[...privateNames(names[j]),{displayName:names[(j+3)%names.length],chatType:j%3?'private':'group'}],{tailText:names[(i+5)%names.length],tailConfidence:1}]);
   }
-  const script = `import json,sys,types,subprocess\nfrom dataclasses import asdict\nsource=subprocess.check_output(['git','show','3c168296e9e8edaa43b8b323ff693e790e709069:backend/src/notalone/front_sync/name_matching.py'],text=True)\nm=types.ModuleType('frozen_name_matching');sys.modules[m.__name__]=m;exec(source,m.__dict__)\nout=[]\nfor raw,confidence,candidates,options in json.load(sys.stdin):\n r=asdict(m.match_session_names(raw,confidence,[m.SessionNameCandidate(c['displayName'],c['chatType']) for c in candidates],**{('tail_text' if k=='tailText' else 'tail_confidence'):v for k,v in options.items()}))\n out.append({'kind':r['kind'],'candidateIndex':r['candidate_index'],'method':r['method'],'plausibleIndices':r['plausible_indices']})\nprint(json.dumps(out))`;
-  const run=spawnSync(process.env.NOTALONE_TEST_PYTHON ?? `${homedir()}/miniconda3/envs/NotAlone/bin/python`,['-c',script],{cwd:new URL('../..',import.meta.url),input:JSON.stringify(cases),encoding:'utf8',maxBuffer:4*1024*1024});
-  assert.equal(run.status,0,run.stderr);
-  const expected=JSON.parse(run.stdout);
+  assert.equal(expected.length, cases.length);
   for(let i=0;i<cases.length;i++) assert.deepEqual(matchSessionNames(...cases[i]),expected[i],JSON.stringify(cases[i]));
 });
 test('五千长共同前缀名单在有界预算内保留歧义', () => {

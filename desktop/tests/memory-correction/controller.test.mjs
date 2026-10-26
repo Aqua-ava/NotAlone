@@ -1,8 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { readFile } from 'node:fs/promises';
-import { runInNewContext } from 'node:vm';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -170,21 +168,6 @@ test('修正取消迟到待确认读取并刷新人工决定对照', async () =>
   assert.deepEqual(controller.getState().pending.items, []);
   assert.equal(controller.getState().contact.items[0].text, '人工纠正。');
 }));
-
-test('纠错页面范围通过两层启动前校验并已登记分发', async () => {
-  const source = await readFile('scripts/test-pages.mjs', 'utf8');
-  const parser = source.slice(source.indexOf('function parse(args)'), source.indexOf('async function run(options)'));
-  const parsed = runInNewContext(`${parser}; parse(args)`, {
-    args: ['--case', 'memory-correction-protection', '--timeout-seconds', '180'],
-  });
-  assert.equal(JSON.stringify(parsed), JSON.stringify({ names: ['memory-correction-protection'], timeout: 180 }));
-  const runner = await readFile('tests/headless/run.ts', 'utf8');
-  const guard = runner.slice(runner.indexOf('if (!Array.isArray(cases)'), runner.indexOf('let browser:'));
-  assert.doesNotThrow(() => runInNewContext(guard, { cases: ['memory-correction-protection'] }));
-  assert.throws(() => runInNewContext(guard, { cases: ['unknown-page'] }), /page_test_arguments/);
-  assert.match(runner, /import \{ memoryCorrectionProtection \} from '\.\/memory-correction';/);
-  assert.match(runner, /name === 'memory-correction-protection' \? memoryCorrectionProtection/);
-});
 
 test('修正响应未知期间的新刷新不能回填旧候选对照', async () => withController(async (MemoryReadingController) => {
   for (const level of ['contact', 'owner']) {
