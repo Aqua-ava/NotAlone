@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {seedMigrationBaseline,prepareTestSchema} from './schema-fixture.mjs';
 import pg from 'pg';
-import {HostStorage} from '../src/host-storage.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
 
 test('108升级当前116保留既有数据，严格拒绝迁移缺口、未知版本和抑制表字段缺失',async t=>{
   const root=new URL('../../',import.meta.url).pathname;

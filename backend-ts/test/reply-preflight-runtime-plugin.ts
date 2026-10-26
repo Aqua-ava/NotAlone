@@ -3,8 +3,8 @@ import type {} from '@deepseek-ai/dsh-cmdline';
 import type {Context} from '@deepseek-ai/cordis';
 import {createServer} from 'node:http';
 import {defineTool} from '@deepseek-ai/dsh-tools';
-import {preflightReplyAgent,fitPreparedReplyBudget} from '../src/reply-preflight.ts';
-import {registerReplyAgentSetup} from '../src/reply-loop.ts';
+import {preflightReplyAgent,fitPreparedReplyBudget} from '../src/reply/generation/reply-preflight.ts';
+import {registerReplyAgentSetup} from '../src/reply/generation/reply-loop.ts';
 export const name='notalone-reply-preflight-test';
 export const inject=['llm','agents','tools','sessions','systemPrompt','skills','appReady'];
 export function apply(ctx:Context){

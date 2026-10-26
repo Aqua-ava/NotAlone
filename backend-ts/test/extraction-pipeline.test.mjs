@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {planExtractionBatches,runExtractionPipeline} from '../src/extraction-pipeline.ts';
+import {planExtractionBatches,runExtractionPipeline} from '../src/memory/extraction/extraction-pipeline.ts';
 
 const scope={owner_id:'owner',contact_id:'contact'};
 const messages=Array.from({length:8},(_,i)=>({...scope,message_id:`message-${i}`,occurred_at:i===7?null:`2026-10-24T00:00:0${i}Z`,text:`合成${i}`}));

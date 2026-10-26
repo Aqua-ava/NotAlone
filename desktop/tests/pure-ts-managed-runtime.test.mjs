@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {managedLayout,requiredRuntimeFiles} from '../managed-runtime-contract.mjs';
-import {HostStorage} from '../../backend-ts/src/host-storage.ts';
+import {HostStorage} from '../../backend-ts/src/platform/database/host-storage.ts';
 const pgBin=process.env.NOTALONE_TEST_PG_BIN;
 if(!pgBin)throw new Error('请显式提供隔离验证所用的PostgreSQL16命令目录');
 test('全新受管库经TS监督和原迁移首次准备，PATH无Conda且组件没有Python',async t=>{
@@ -20,7 +20,7 @@ test('全新受管库经TS监督和原迁移首次准备，PATH无Conda且组件
  }
  const schema=await build({entryPoints:['../backend-ts/src/schema-prepare-cli.ts'],bundle:true,platform:'node',format:'esm',write:false,banner:{js:"import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);"}});
  await add('project/backend-ts/src/schema-prepare-cli.ts',schema.outputFiles[0].contents);
- for(const module of ['managed-postgres.ts','managed-database-lifetime.ts'])await add(`project/backend-ts/src/${module}`,await readFile(path.resolve('../backend-ts/src',module)));
+ for(const module of ['managed-postgres.ts','platform/database/managed-database-lifetime.ts'])await add(`project/backend-ts/src/${module}`,await readFile(path.resolve('../backend-ts/src',module)));
  await add('project/backend-ts/src/launch.ts','// 合成构件入口。\n');await add('project/backend-ts/profile/host.patch.yml','[]\n');
  const {readdir}=await import('node:fs/promises');
  for(const name of await readdir('../backend-ts/database/migrations'))if(name.endsWith('.sql'))await add(`project/backend-ts/database/migrations/${name}`,await readFile(path.join('../backend-ts/database/migrations',name)));

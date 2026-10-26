@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createStorageFixture } from './host-storage-fixture.mjs';
-import { HostStorage } from '../src/host-storage.ts';
-import { SkillLibrary } from '../src/skill-library.ts';
-import { SkillFiles } from '../src/skill-files.ts';
+import { HostStorage } from '../src/platform/database/host-storage.ts';
+import { SkillLibrary } from '../src/skills/skill-library.ts';
+import { SkillFiles } from '../src/skills/skill-files.ts';
 
 test('管理入口导入合成包并保留原 owner 和版本身份', async t => {
   const f=await createStorageFixture(); t.after(()=>f.close());

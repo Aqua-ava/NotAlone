@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HostStorage } from '../src/host-storage.ts';
+import { HostStorage } from '../src/platform/database/host-storage.ts';
 
 const migrationsDirectory = new URL('../database/migrations/', import.meta.url).pathname;
 test('受控配置保留模型和资料位置，凭据不进入状态响应', async () => {
@@ -478,7 +478,7 @@ test('仅持有空闲业务连接的子进程也必须完成关闭排空', async
   const { execFile } = await import('node:child_process');
   const fixture = await createStorageFixture();
   try {
-    const source = `import {HostStorage} from ${JSON.stringify(new URL('../src/host-storage.ts', import.meta.url).href)};
+    const source = `import {HostStorage} from ${JSON.stringify(new URL('../src/platform/database/host-storage.ts', import.meta.url).href)};
 const storage=await HostStorage.open({envFilePath:'',migrationsDirectory:${JSON.stringify(fixture.migrationsDirectory)},environment:{NOTALONE_DISABLE_DOTENV:'1',NOTALONE_DATABASE_URL:${JSON.stringify(`host=/tmp dbname=${fixture.client.database}`)}}});
 await storage.businessReadTransaction(async client=>client.query('SELECT 1'));
 await storage.close();console.log('closed');`;

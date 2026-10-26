@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DeepSeekAdapter, PUBLIC_BASE_URL} from '@deepseek-ai/dsh-llm-deepseek';
-import {resolveHostReplyConfiguration} from '../src/host-reply-config.ts';
+import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 
 const syntheticKey = 'synthetic-host-config-key';
 const configured = (environment = {}, options = {}) => {

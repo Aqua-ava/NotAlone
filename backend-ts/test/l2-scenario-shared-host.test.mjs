@@ -5,9 +5,9 @@ import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {sendEvents,useTool} from './support.mjs';
 import {startReplyServiceHost} from './reply-service-runtime-support.mjs';
-import {readReplyContactOverview} from '../src/reply-context-overview.ts';
-import {captureSnapshot} from '../src/contact-overview-evidence.ts';
-import {completeL2ScenarioWorkerStep} from '../src/l2-scenario-worker.ts';
+import {readReplyContactOverview} from '../src/reply/context/reply-context-overview.ts';
+import {captureSnapshot} from '../src/memory/overview/contact-overview-evidence.ts';
+import {completeL2ScenarioWorkerStep} from '../src/memory/layered/l2-scenario-worker.ts';
 
 test('共享官方profile：一次L2装配经手录来源发布、读取、summary-error和关闭排空',{timeout:60000},async t=>{
   const f=await createStorageFixture();

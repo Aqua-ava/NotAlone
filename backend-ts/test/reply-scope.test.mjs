@@ -2,8 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {requireReplyScope} from '../src/reply-scope.ts';
-import {parseReplyRequest} from '../src/reply-contract.ts';
+import {requireReplyScope} from '../src/reply/generation/reply-scope.ts';
+import {parseReplyRequest} from '../src/reply/generation/reply-contract.ts';
 test('手动确认必须映射同一原UUID，跨联系人和撤销均拒绝',async t=>{
   const f=await createStorageFixture();t.after(()=>f.close());const owner=randomUUID(),contact=randomUUID(),manual=randomUUID();
   await f.client.query('INSERT INTO owner(id,display_name) VALUES($1,$2)',[owner,'合成本人']);

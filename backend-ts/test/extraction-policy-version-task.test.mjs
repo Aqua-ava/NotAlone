@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {createExtractionFixture} from './extraction-fixture.mjs';
-import {ExtractionTaskStore} from '../src/extraction-task-store.ts';
-import {createExtractionPolicyVersion} from '../src/extraction-policy-version.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
+import {createExtractionPolicyVersion} from '../src/memory/extraction/extraction-policy-version.ts';
 
 test('真实新任务显式冻结v2，旧NULL冲突重入不升级，未知及源版本不匹配不领取',async()=>{
   const fixture=await createExtractionFixture(),c=fixture.client;

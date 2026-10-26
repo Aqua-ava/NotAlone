@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFile, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
-import { HostStorage } from '../src/host-storage.ts';
-import { createWechatScopeApi, isWechatScopeRoute, wechatScopeBodyLimit } from '../src/wechat-scope-api.ts';
+import { HostStorage } from '../src/platform/database/host-storage.ts';
+import { createWechatScopeApi, isWechatScopeRoute, wechatScopeBodyLimit } from '../src/sync/wechat-scope-api.ts';
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
 async function fixture(t, {connected = true, owner = true, slow = false} = {}) {

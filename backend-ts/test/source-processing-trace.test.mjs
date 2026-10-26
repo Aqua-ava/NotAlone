@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import pg from 'pg';
-import {SourceProcessingTraceStore} from '../src/source-processing-trace.ts';
-import {SourceProcessingTraceApi} from '../src/source-processing-trace-http.ts';
-import {eraseSourceTraces} from '../src/memory-mutations-erasure.ts';
-import {createL2ScenarioSourceValidator} from '../src/l2-scenario-source-validation.ts';
+import {SourceProcessingTraceStore} from '../src/diagnostics/source-processing-trace.ts';
+import {SourceProcessingTraceApi} from '../src/diagnostics/source-processing-trace-http.ts';
+import {eraseSourceTraces} from '../src/memory/management/memory-mutations-erasure.ts';
+import {createL2ScenarioSourceValidator} from '../src/memory/layered/l2-scenario-source-validation.ts';
 
 const syntheticText='合成联系人喜欢周三散步';
 const syntheticSecret='合成敏感正文不得进入诊断';

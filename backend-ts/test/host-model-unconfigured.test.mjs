@@ -5,9 +5,9 @@ import {mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {join,dirname,basename} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {HostStorage} from '../src/host-storage.ts';
-import {startHostModelRuntime} from '../src/host-model-runtime.ts';
-import {createHostModelAccounting} from '../src/host-model-accounting.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {startHostModelRuntime} from '../src/host/host-model-runtime.ts';
+import {createHostModelAccounting} from '../src/host/host-model-accounting.ts';
 import {createUnconfiguredFixture} from './host-model-unconfigured-fixture.mjs';
 
 test('显式TS无key可启动真实共享控制面，未配置原因明确且零新收据',{timeout:60000},async t=>{
@@ -57,7 +57,7 @@ test('TS无key仍原样恢复unknown，保留knownPG与可信owner/contact/NULL�
  await writeFile(f.envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${f.database}\nNOTALONE_OWNER_ID=${owner}\nNOTALONE_REPLY_RUNTIME=typescript\nNOTALONE_EXTRACTION_BATCH_CONCURRENCY=4\n`);
  const identity={runtimeEnvironment:{NOTALONE_EXTRACTION_BATCH_CONCURRENCY:'4'},businessHome:business,infoPath:join(f.directory,'backend.info'),envFilePath:f.envFilePath};
  const seed=JSON.parse(execFileSync(process.execPath,['--input-type=module','-e',
-  "import {startModelHost} from './src/model-host.ts';import {captureProcessIdentity} from './src/process-identity.ts';const h=await startModelHost(JSON.parse(process.argv[1]));const worker=await captureProcessIdentity(process.pid,process.ppid,process.execPath);const ids=[];for(let i=0;i<4;i++)ids.push((await h.arbiter.acquire('background',undefined,worker)).id);console.log(JSON.stringify({ids,statePath:h.statePath}));process.exit(0);",
+  "import {startModelHost} from './src/platform/models/model-host.ts';import {captureProcessIdentity} from './src/platform/process/process-identity.ts';const h=await startModelHost(JSON.parse(process.argv[1]));const worker=await captureProcessIdentity(process.pid,process.ppid,process.execPath);const ids=[];for(let i=0;i<4;i++)ids.push((await h.arbiter.acquire('background',undefined,worker)).id);console.log(JSON.stringify({ids,statePath:h.statePath}));process.exit(0);",
   JSON.stringify(identity)],{encoding:'utf8',timeout:10000}));
  socketDirectory=join('/tmp',`na-model-${process.getuid?.()??'local'}-${basename(dirname(seed.statePath))}`);
  const receipts=[{owner,contact,outcome:'pending'},{owner,contact,outcome:'failed'},

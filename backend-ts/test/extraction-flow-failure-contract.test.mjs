@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runExtractionFlow} from '../src/extraction-flow.ts';
-import {resolveExtractionPolicy} from '../src/extraction-policy-version.ts';
+import {runExtractionFlow} from '../src/memory/extraction/extraction-flow.ts';
+import {resolveExtractionPolicy} from '../src/memory/extraction/extraction-policy-version.ts';
 
 const message='33333333-3333-4333-8333-333333333333',text='合成联系人喜欢绿茶。';
 const window={owner_id:'11111111-1111-4111-8111-111111111111',contact_id:'22222222-2222-4222-8222-222222222222',

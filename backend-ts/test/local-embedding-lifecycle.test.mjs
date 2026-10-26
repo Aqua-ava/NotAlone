@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createLocalEmbeddingLifecycle} from '../src/local-embedding-lifecycle.ts';
+import {createLocalEmbeddingLifecycle} from '../src/platform/models/local-embedding-lifecycle.ts';
 
 test('本机embedding惰性打开、并发复用，关闭先排空在途推理且不再重开',async()=>{
  let opens=0,closes=0,embeddingStarted;

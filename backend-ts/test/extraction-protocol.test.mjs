@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseDirectExtraction, parseSourceVerification, validateSourceVerification, ExtractionProtocolError} from '../src/extraction-protocol.ts';
+import {parseDirectExtraction, parseSourceVerification, validateSourceVerification, ExtractionProtocolError} from '../src/memory/extraction/extraction-protocol.ts';
 
 const id='11111111-1111-4111-8111-111111111111', other='22222222-2222-4222-8222-222222222222';
 const window={owner_id:id,contact_id:other,messages:[{message_id:id,text:'有事爱直接打电话',sender:'contact',occurred_at:'2024-02-01T00:00:00Z',text_representation:'text'}],target_message_ids:[id]};

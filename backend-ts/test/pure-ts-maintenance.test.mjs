@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
-import {PureTsMaintenance} from '../src/pure-ts-maintenance.ts';
+import {PureTsMaintenance} from '../src/host/pure-ts-maintenance.ts';
 import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
 test('分层维护PG通知只唤醒同一调度器，关闭取消在途并释放监听连接',{timeout:10000},async t=>{
  const f=await pureTsFixture(t),pool=new pg.Pool({host:'/tmp',database:f.client.database});

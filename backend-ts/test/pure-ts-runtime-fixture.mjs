@@ -5,7 +5,7 @@ import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {launchDsh} from '../src/launch.ts';
-import {prepareDatabaseSchema} from '../src/schema-prepare.ts';
+import {prepareDatabaseSchema} from '../src/platform/database/schema-prepare.ts';
 export async function pureTsFixture(t){
  const directory=await mkdtemp(join(tmpdir(),'notalone-pure-ts-'));
  const name=`notalone_pure_ts_${randomUUID().replaceAll('-','')}_test`;

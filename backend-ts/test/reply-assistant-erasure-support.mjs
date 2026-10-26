@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {createAssistantErasure} from '../src/reply-assistant-erasure.ts';
+import {createAssistantErasure} from '../src/reply/generation/reply-assistant-erasure.ts';
 export async function setup(t) {
  const f=await createStorageFixture();t.after(()=>f.close());const owner=randomUUID(),contact=randomUUID(),binding=randomUUID(),session=randomUUID();
  await f.client.query("INSERT INTO owner(id,display_name)VALUES($1,'合成本人')",[owner]);

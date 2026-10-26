@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SkillFiles, matchesSkillPackage, packageManifest } from '../src/skill-files.ts';
-import { readPackage } from '../src/skill-package.ts';
+import { SkillFiles, matchesSkillPackage, packageManifest } from '../src/skills/skill-files.ts';
+import { readPackage } from '../src/skills/skill-package.ts';
 const owner='00000000-0000-4000-8000-000000000001', skill='00000000-0000-4000-8000-000000000002', id='00000000-0000-4000-8000-000000000003';
 const document='---\nname: gentle-reply\ndescription: "用于回应感受"\n---\n\n先回应感受。\n';
 function fixture(t) { const dir=mkdtempSync(join(tmpdir(),'notalone-skill-files-')); t.after(()=>rmSync(dir,{recursive:true,force:true})); const input=join(dir,'input','gentle-reply'); mkdirSync(input,{recursive:true});writeFileSync(join(input,'SKILL.md'),document);return {dir,input,files:new SkillFiles(join(dir,'store'))}; }

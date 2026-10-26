@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-support.mjs';
-import {parseReplyRequest,normalizeReplyInput} from '../src/reply-contract.ts';
+import {parseReplyRequest,normalizeReplyInput} from '../src/reply/generation/reply-contract.ts';
 
 function generationPayload(body){
  for(const message of body.messages??[]){

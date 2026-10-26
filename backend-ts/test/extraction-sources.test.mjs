@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {freezeExtractionSources,loadExtractionSourceMessages,loadExtractionSources,requireCurrent} from '../src/extraction-sources.ts';
-import {canonicalJSON} from '../src/contact-overview-evidence.ts';
+import {freezeExtractionSources,loadExtractionSourceMessages,loadExtractionSources,requireCurrent} from '../src/memory/extraction/extraction-sources.ts';
+import {canonicalJSON} from '../src/memory/overview/contact-overview-evidence.ts';
 
 async function fixture(){
  const storageFixture=await createStorageFixture(),c=storageFixture.client;

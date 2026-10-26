@@ -3,7 +3,7 @@ import {spawn,type ChildProcess} from 'node:child_process';
 import {lstat,rm,realpath,type FileHandle} from 'node:fs/promises';
 import {isAbsolute} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {openManagedLifetimeFile,ManagedLifetimeError} from './managed-database-lifetime.ts';
+import {openManagedLifetimeFile,ManagedLifetimeError} from './platform/database/managed-database-lifetime.ts';
 const delay=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 function running(child:ChildProcess):boolean{return child.exitCode===null&&child.signalCode===null;}
 async function main():Promise<number>{

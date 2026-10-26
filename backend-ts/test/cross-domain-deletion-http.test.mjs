@@ -6,9 +6,9 @@ import {existsSync} from 'node:fs';
 import {mkdir,symlink,unlink,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {HostStorage} from '../src/host-storage.ts';
-import {ContactContext} from '../src/contact-context.ts';
-import {CrossDomainDeletionService,crossDomainDeletionRoute,serveCrossDomainDeletion} from '../src/cross-domain-deletion.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {ContactContext} from '../src/contacts/contact-context.ts';
+import {CrossDomainDeletionService,crossDomainDeletionRoute,serveCrossDomainDeletion} from '../src/deletion/cross-domain-deletion.ts';
 
 async function fixture(t) {
   const f=await createStorageFixture();

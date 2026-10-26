@@ -1,7 +1,7 @@
 import type {} from '@deepseek-ai/dsh-cmdline';
 import { createServer } from 'node:http';
 import type { Context } from '@deepseek-ai/cordis';
-import { ValidationService } from './service.ts';
+import { ValidationService } from './host/service.ts';
 
 export const name = 'notalone-validation';
 export const inject = ['llm', 'agents', 'sessions', 'tools', 'appReady'];

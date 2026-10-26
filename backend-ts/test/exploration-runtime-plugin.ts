@@ -5,10 +5,10 @@ import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
-import {createExplorationRuntime,type ExplorationRuntimeContext} from '../src/exploration-runtime.ts';
-import {installModelProvider} from '../src/model-provider.ts';
-import {startModelHost} from '../src/model-host.ts';
-import type {ModelLedgerReceipt} from '../src/model-ledger.ts';
+import {createExplorationRuntime,type ExplorationRuntimeContext} from '../src/reply/exploration/exploration-runtime.ts';
+import {installModelProvider} from '../src/platform/models/model-provider.ts';
+import {startModelHost} from '../src/platform/models/model-host.ts';
+import type {ModelLedgerReceipt} from '../src/platform/models/model-ledger.ts';
 export const name='notalone-exploration-runtime-test';
 export const inject=['llm','agents','tools','sessions','systemPrompt','appReady'];
 export async function apply(ctx:Context){

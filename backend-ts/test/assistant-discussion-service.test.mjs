@@ -7,9 +7,9 @@ import {createStorageFixture} from './host-storage-fixture.mjs';
 import {
   AssistantDiscussionService,
   AssistantDiscussionError,
-} from '../src/assistant-discussion-service.ts';
-import {PostgresReplyStore} from '../src/reply-store.ts';
-import {deleteSourceReplies} from '../src/preference-erasure.ts';
+} from '../src/reply/discussion/assistant-discussion-service.ts';
+import {PostgresReplyStore} from '../src/reply/generation/reply-store.ts';
+import {deleteSourceReplies} from '../src/preferences/preference-erasure.ts';
 
 async function fixture(t) {
   const storage = await createStorageFixture();

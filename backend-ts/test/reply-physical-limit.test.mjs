@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {replyPhysicalLimit,replyScenarioReadPolicy,ReplyScenarioAccess} from '../src/reply-context-scenario.ts';
+import {replyPhysicalLimit,replyScenarioReadPolicy,ReplyScenarioAccess} from '../src/reply/context/reply-context-scenario.ts';
 
 const material=budget=>({snapshot:{},payload_json:JSON.stringify({directory:[],scenario_read_budget:budget})});
 const withCalls=calls=>material({call_limit:calls,paragraph_limit:8,character_limit:4000});

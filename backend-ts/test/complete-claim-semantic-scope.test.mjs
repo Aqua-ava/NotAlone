@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseDirectExtraction} from '../src/extraction-protocol.ts';
-import {prepareSourceVerification} from '../src/complete-claim-verification.ts';
-import {attachVerifiedSourceReceipt} from '../src/extraction-evidence.ts';
-import {deepSeekStrictVerificationSchema} from '../src/deepseek-strict-verification.ts';
-import {resolveExtractionPolicy} from '../src/extraction-policy-version.ts';
+import {parseDirectExtraction} from '../src/memory/extraction/extraction-protocol.ts';
+import {prepareSourceVerification} from '../src/memory/extraction/complete-claim-verification.ts';
+import {attachVerifiedSourceReceipt} from '../src/memory/extraction/extraction-evidence.ts';
+import {deepSeekStrictVerificationSchema} from '../src/memory/extraction/deepseek-strict-verification.ts';
+import {resolveExtractionPolicy} from '../src/memory/extraction/extraction-policy-version.ts';
 
 const owner = '11111111-1111-4111-8111-111111111111';
 const contact = '22222222-2222-4222-8222-222222222222';

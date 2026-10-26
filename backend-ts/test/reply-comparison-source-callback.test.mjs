@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {auditReplyRuntimeSources} from '../src/reply-comparison-sources.ts';
+import {auditReplyRuntimeSources} from '../src/diagnostics/reply-comparison-sources.ts';
 const bytes=await readFile(new URL('./fixtures/reply-comparison-multi-attempt-v4.json',import.meta.url));
 assert.equal(createHash('sha256').update(bytes).digest('hex'),'7ccaff5445d3ba12db5bd7483e6732ab88a5e54153ebba688260a8cdd4c334b6');
 const records=JSON.parse(bytes).records,dataset=JSON.parse(await readFile(new URL('./fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'));

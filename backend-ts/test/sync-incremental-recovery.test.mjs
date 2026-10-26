@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {HostStorage} from '../src/host-storage.ts';
-import {SyncScopeService} from '../src/sync-scope.ts';
-import {SyncIncrementalStore} from '../src/sync-incremental-store.ts';
-import {SyncIncrementalRecovery} from '../src/sync-incremental-recovery.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {SyncScopeService} from '../src/sync/sync-scope.ts';
+import {SyncIncrementalStore} from '../src/sync/sync-incremental-store.ts';
+import {SyncIncrementalRecovery} from '../src/sync/sync-incremental-recovery.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 
 test('恢复保留进行中计数，完成后显式新检查重置，关闭拒绝继续',async t=>{

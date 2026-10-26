@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
-import {createHostReplyRuntime} from '../src/host-reply.ts';
+import {createHostReplyRuntime} from '../src/host/host-reply.ts';
 
 test('无owner或无模型的私有候选入口认证后稳定unavailable，公开token不可调用',{timeout:10000},async t=>{
  for(const owner of [undefined,'11111111-1111-4111-8111-111111111111']){

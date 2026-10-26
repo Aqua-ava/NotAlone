@@ -4,8 +4,8 @@ import {randomUUID,createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-support.mjs';
-import {normalizeReplyInput} from '../src/reply-contract.ts';
-import {decodePreparedContext} from '../src/reply-prepared-codec.ts';
+import {normalizeReplyInput} from '../src/reply/generation/reply-contract.ts';
+import {decodePreparedContext} from '../src/reply/generation/reply-prepared-codec.ts';
 function evidenceFrom(body){const result=[];const visit=v=>{if(Array.isArray(v))v.forEach(visit);else if(v&&typeof v==='object'){if(Array.isArray(v.evidence))result.push(...v.evidence);for(const [k,x]of Object.entries(v))if(k!=='evidence')visit(x);}else if(typeof v==='string'){try{visit(JSON.parse(v));}catch{const a=v.indexOf('{'),b=v.lastIndexOf('}');if(a>=0&&b>a)try{visit(JSON.parse(v.slice(a,b+1)));}catch{}}}};visit(body);assert.ok(result.length);return result;}
 test('官方service真实A准备冻结后生成，无C预检、恢复与失效拒绝',{timeout:60000},async t=>{
  const f=await createStorageFixture();assert.equal((await f.client.query("SELECT to_regclass('public.model_call_receipt') IS NOT NULL AS migrated")).rows[0].migrated,true,'正式migrator必须建立110模型回执表');

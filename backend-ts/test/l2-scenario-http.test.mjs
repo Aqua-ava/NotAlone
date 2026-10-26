@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
-import {createL2ScenarioHttp} from '../src/l2-scenario-http.ts';
-import {L3ProfileServiceConflict} from '../src/l3-profile-service.ts';
+import {createL2ScenarioHttp} from '../src/memory/layered/l2-scenario-http.ts';
+import {L3ProfileServiceConflict} from '../src/memory/layered/l3-profile-service.ts';
 
 test('L2/L3公开HTTP把画像纠错和撤回交给画像入口并映射失效版本', async t => {
   const owner = randomUUID(), contact = randomUUID(), token = 'h'.repeat(48);

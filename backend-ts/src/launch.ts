@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { constants } from 'node:fs';
-import { processIdentityState, type ProcessIdentity } from './process-identity.ts';
+import { processIdentityState, type ProcessIdentity } from './platform/process/process-identity.ts';
 
 export interface LaunchConfiguration {
   nodeExecutable: string; projectDirectory: string; envFilePath: string; infoPath: string;

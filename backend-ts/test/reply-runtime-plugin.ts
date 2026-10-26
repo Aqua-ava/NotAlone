@@ -2,14 +2,14 @@
 import type {} from '@deepseek-ai/dsh-cmdline';
 import type {Context} from '@deepseek-ai/cordis';
 import {createServer} from 'node:http';
-import {generateReplyLoop} from '../src/reply-loop.ts';
-import {createEvidenceAliases} from '../src/reply-evidence-alias.ts';
-import {installModelProvider} from '../src/model-provider.ts';
+import {generateReplyLoop} from '../src/reply/generation/reply-loop.ts';
+import {createEvidenceAliases} from '../src/reply/generation/reply-evidence-alias.ts';
+import {installModelProvider} from '../src/platform/models/model-provider.ts';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
-import type {ModelLedgerReceipt} from '../src/model-ledger.ts';
+import type {ModelLedgerReceipt} from '../src/platform/models/model-ledger.ts';
 import {randomUUID,createHash} from 'node:crypto';
 import {defineTool} from '@deepseek-ai/dsh-tools';
-import {ReplySkillSession} from '../src/reply-skill-runtime.ts';
+import {ReplySkillSession} from '../src/reply/generation/reply-skill-runtime.ts';
 export const name='notalone-reply-runtime-test';
 export const inject=['llm','agents','tools','sessions','systemPrompt','skills','appReady'];
 export function apply(ctx:Context) {

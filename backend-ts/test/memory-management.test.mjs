@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { HostStorage } from '../src/host-storage.ts';
-import { MemoryService } from '../src/memory-service.ts';
+import { HostStorage } from '../src/platform/database/host-storage.ts';
+import { MemoryService } from '../src/memory/management/memory-service.ts';
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
 test('管理入口只展示所选联系人有效来源资料，保留原UUID与auto并允许空目录', async () => {
@@ -77,7 +77,7 @@ test('本人时间按owner消息来源投影，联系人时间不会借另一个
   assert.equal(result.memories[0].timing.source_started_at,'2026-10-01T01:02:03.123456+00:00');
   assert.equal(result.memories[0].timing.source_time_complete,true);
   assert.deepEqual(await service.handle('GET',new URL(`http://localhost/api/contacts/${b}/owner-memories`)),{memories:[]});
-  const {projectTiming}=await import('../src/contact-overview-time.ts');
+  const {projectTiming}=await import('../src/memory/overview/contact-overview-time.ts');
   const timing=await projectTiming(f.client,{owner_id:owner,contact_id:b,source_ids:[message],created_at:null,category:'preference',text_content:'喜欢阅读'});
   assert.equal(timing.source_started_at,null);assert.equal(timing.source_time_complete,false);
  }finally{await storage?.close();await f.close();}
@@ -108,7 +108,7 @@ test('管理写入提交前取消会回滚，旧scope不能留下已取消的新
  try{
   storage=await HostStorage.open(f.options);await storage.initializeOwner('合成本人');
   const service=new MemoryService(storage);let checks=0;
-  const {MemoryError}=await import('../src/memory-errors.ts');
+  const {MemoryError}=await import('../src/memory/management/memory-errors.ts');
   await assert.rejects(service.handle('POST',new URL('http://localhost/api/memories/manual-owner'),{text:'本次取消',category:'preference'},()=>{if(++checks===2)throw new MemoryError('memory_version_changed',409);}),{status:409});
   assert.deepEqual(await service.handle('GET',new URL('http://localhost/api/memories/owner')),{memories:[]});
  }finally{await storage?.close();await f.close();}

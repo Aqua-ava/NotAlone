@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdtemp,writeFile,chmod,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createForegroundLocationApi,isForegroundAuthorityMutation} from '../src/foreground-location-api.ts';
+import {createForegroundLocationApi,isForegroundAuthorityMutation} from '../src/foreground/foreground-location-api.ts';
 
 test('只将实际授权变更内部POST纳入门禁，状态/历史/发现保持独立',()=>{
  assert.equal(isForegroundAuthorityMutation('POST','/api/runtime/wechat-scope/revoke'),true);

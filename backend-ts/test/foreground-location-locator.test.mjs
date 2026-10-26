@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {ForegroundLocator} from '../src/foreground-location-locator.ts';
+import {ForegroundLocator} from '../src/foreground/foreground-location-locator.ts';
 
 const owner=randomUUID(), contact=randomUUID(), binding=randomUUID();
 function fixture(overrides={}) {

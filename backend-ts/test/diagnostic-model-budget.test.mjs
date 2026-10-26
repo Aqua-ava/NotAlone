@@ -10,8 +10,8 @@ import {chmod,mkdir,mkdtemp,readFile,readdir,rm,writeFile} from 'node:fs/promise
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import pg from 'pg';
-import {startModelHost} from '../src/model-host.ts';
-import {createHostModelAccounting,modelTaskRequestId} from '../src/host-model-accounting.ts';
+import {startModelHost} from '../src/platform/models/model-host.ts';
+import {createHostModelAccounting,modelTaskRequestId} from '../src/host/host-model-accounting.ts';
 
 // 与既有 Python 总账保持同一 SQLite 合同；原始请求只存在本机假 provider 内存。
 async function legacyBudget(path,{limit=8,deadline=Date.now()/1000+1800}={}) {

@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
-import {createEvidenceAliases} from '../src/reply-evidence-alias.ts';
-import {buildReplyPayload} from '../src/reply-payload.ts';
-import {parseReplyRequest} from '../src/reply-contract.ts';
-import {replySystemPrompt} from '../src/reply-system-prompt.ts';
-import {ReplyHistory} from '../src/reply-history.ts';
-import {ReplySkillSession} from '../src/reply-skill-runtime.ts';
-import {createReplyScenarioReadTool} from '../src/reply-preparation.ts';
-import {createReplyOutputTool} from '../src/reply-loop.ts';
+import {createEvidenceAliases} from '../src/reply/generation/reply-evidence-alias.ts';
+import {buildReplyPayload} from '../src/reply/generation/reply-payload.ts';
+import {parseReplyRequest} from '../src/reply/generation/reply-contract.ts';
+import {replySystemPrompt} from '../src/reply/generation/reply-system-prompt.ts';
+import {ReplyHistory} from '../src/reply/generation/reply-history.ts';
+import {ReplySkillSession} from '../src/reply/generation/reply-skill-runtime.ts';
+import {createReplyScenarioReadTool} from '../src/reply/generation/reply-preparation.ts';
+import {createReplyOutputTool} from '../src/reply/generation/reply-loop.ts';
 
 test('模型可见 system、payload、Tool schema 与 Skill 读取统一只含请求局部 alias',async()=>{
  const owner=randomUUID(),contact=randomUUID(),binding=randomUUID(),message=randomUUID(),candidate=randomUUID();

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
-import { prepareDatabaseSchema } from '../src/schema-prepare.ts';
+import { prepareDatabaseSchema } from '../src/platform/database/schema-prepare.ts';
 
 // 仅用于构造历史版本的空合成库；完整升级走产品 prepareDatabaseSchema。
 export async function seedMigrationBaseline(database, migrationsDirectory) {

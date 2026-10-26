@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {Context} from '@deepseek-ai/cordis';
 import {createScope} from '@deepseek-ai/dsh-scope';
 import SkillRegistry from '@deepseek-ai/dsh-skill';
-import {SkillRuntime} from '../src/skill-runtime.ts';
-import {registerSkillRuntime} from '../src/skill-provider.ts';
+import {SkillRuntime} from '../src/skills/skill-runtime.ts';
+import {registerSkillRuntime} from '../src/skills/skill-provider.ts';
 test('官方registry使用受控provider，撤销与dispose使读取失败且不暴露物理路径',async()=>{
  const entries=['alpha','beta'].map(name=>({skillId:name,versionId:name+'-v1',name,description:'合成',contentHash:'frozen',resourcePaths:[]}));
  const port={catalog:async()=>({revision:'1',entries}),validate:async()=>{},loadVersion:async()=>({content:'合成正文',contentHash:'frozen'}),resource:async()=>{throw Error('unused');}};

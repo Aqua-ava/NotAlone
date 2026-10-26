@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
-import {resolveHostReplyConfiguration} from '../src/host-reply-config.ts';
-import {measureSerializedStrictChatCompletion} from '../src/model-input-budget.ts';
-import {modelLedgerInputBudget} from '../src/model-ledger.ts';
-import {buildDeepSeekStrictVerificationRequest} from '../src/deepseek-strict-verification.ts';
-import {installModelProvider} from '../src/model-provider.ts';
+import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
+import {measureSerializedStrictChatCompletion} from '../src/platform/models/model-input-budget.ts';
+import {modelLedgerInputBudget} from '../src/platform/models/model-ledger.ts';
+import {buildDeepSeekStrictVerificationRequest} from '../src/memory/extraction/deepseek-strict-verification.ts';
+import {installModelProvider} from '../src/platform/models/model-provider.ts';
 
 const configured=(extra={})=>resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-output-configuration-key',...extra});
 

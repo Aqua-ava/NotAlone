@@ -4,7 +4,7 @@ import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
 import {SessionId} from '@deepseek-ai/dsh-session';
-import {installModelProvider} from '../src/model-provider.ts';
+import {installModelProvider} from '../src/platform/models/model-provider.ts';
 export const name='model-provider-synthetic-validation';
 export const inject=['llm','appReady'];
 export function apply(ctx:Context) {

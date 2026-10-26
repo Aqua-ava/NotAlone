@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {HostStorage} from '../src/host-storage.ts';
-import {PreferenceService} from '../src/preference-service.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {PreferenceService} from '../src/preferences/preference-service.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 export async function fixture(t){
  const f=await createStorageFixture(); const owner=randomUUID(),contact=randomUUID(),other=randomUUID();
@@ -66,7 +66,7 @@ test('消息偏好保存来源集，禁止跨联系人搬移且来源失效立�
  await assert.rejects(f.call('POST',`?contact_id=${f.contact}`,{...body,operation_key:randomUUID()}),e=>e.status===409);
 });
 test('prepare快照遵循范围优先与码点预算，修改使旧快照失效',async t=>{
- const {selectApplicablePreferences,validatePreferenceSnapshot,lockPreferenceOwner}=await import('../src/preference-service.ts');
+ const {selectApplicablePreferences,validatePreferenceSnapshot,lockPreferenceOwner}=await import('../src/preferences/preference-service.ts');
  const f=await fixture(t);for(let i=0;i<5;i++)await f.call('POST','',save('🙂'.repeat(512)));
  const specific=save('联系人优先');specific.scope={contact_id:f.contact,reply_mode:'rewrite_draft'};await f.call('POST',`?contact_id=${f.contact}`,specific);
  const snapshot=await f.storage.businessTransaction(async c=>{await lockPreferenceOwner(c,f.owner);return selectApplicablePreferences(c,f.owner,f.contact,'rewrite_draft');});
@@ -77,7 +77,7 @@ test('prepare快照遵循范围优先与码点预算，修改使旧快照失效'
 });
 test('删除偏好递归撤销已发布Skill并重试失败文件擦除',async t=>{
  const {mkdir,writeFile,rm,symlink,readFile,access}=await import('node:fs/promises');const {join}=await import('node:path');
- const {SkillLibrary}=await import('../src/skill-library.ts');const {SkillFiles}=await import('../src/skill-files.ts');
+ const {SkillLibrary}=await import('../src/skills/skill-library.ts');const {SkillFiles}=await import('../src/skills/skill-files.ts');
  const f=await fixture(t),item=(await f.call('POST','',save())).preference;
  const path=join(f.directory,'synthetic-skill');await mkdir(path);await writeFile(join(path,'SKILL.md'),'---\nname: synthetic-skill\ndescription: "合成"\n---\n\n仅合成策略');
  const files=new SkillFiles(join(f.directory,'skills')),library=new SkillLibrary(f.storage,files);
@@ -95,7 +95,7 @@ test('删除偏好递归撤销已发布Skill并重试失败文件擦除',async t
  await assert.rejects(access(join(f.directory,'skills','.versions',f.owner,imported.skill_id,version)));
 });
 test('实际使用回执复验与偏好删除同事务撤回复键',async t=>{
- const {selectApplicablePreferences,captureReplyPreferences,requireCapturedReplyPreferences,lockPreferenceOwner}=await import('../src/preference-service.ts');
+ const {selectApplicablePreferences,captureReplyPreferences,requireCapturedReplyPreferences,lockPreferenceOwner}=await import('../src/preferences/preference-service.ts');
  const f=await fixture(t),item=(await f.call('POST','',save())).preference,request=randomUUID(),key=randomUUID();
  await f.client.query("INSERT INTO reply_request(id,owner_id,contact_id,conversation_binding_id,idempotency_key,normalized_input,state,attempt,lease_expires_at) VALUES($1,$2,$3,$4,$5,'合成输入','running',1,now()+interval '1 minute')",[request,f.owner,f.contact,randomUUID(),key]);
  const snapshot=await f.storage.businessTransaction(async c=>{await lockPreferenceOwner(c,f.owner);const s=await selectApplicablePreferences(c,f.owner,f.contact,'rewrite_draft');await captureReplyPreferences(c,f.owner,f.contact,request,'rewrite_draft',s);await requireCapturedReplyPreferences(c,f.owner,f.contact,request,'rewrite_draft',s);return s;});
@@ -126,7 +126,7 @@ test('Python空白规范与大修订无损保留，不丢失原UUID或静默舍�
  const edit={operation_key:randomUUID(),expected_revision:9007199254740993n,text:'大修订修改',scope:{contact_id:null,reply_mode:null},confirm_long_term:true};
  const updated=await f.call('PATCH',`/${item.preference_id}`,edit);assert.equal(updated.preference.revision,9007199254740994n);assert.deepEqual(await f.call('PATCH',`/${item.preference_id}`,edit),updated);
  await f.client.query('UPDATE expression_preference_state SET revision=9007199254740993 WHERE owner_id=$1',[f.owner]);
- const {selectApplicablePreferences,validatePreferenceSnapshot,lockPreferenceOwner}=await import('../src/preference-service.ts');
+ const {selectApplicablePreferences,validatePreferenceSnapshot,lockPreferenceOwner}=await import('../src/preferences/preference-service.ts');
  await f.storage.businessTransaction(async c=>{await lockPreferenceOwner(c,f.owner);const snapshot=await selectApplicablePreferences(c,f.owner,f.contact,'rewrite_draft');assert.equal(snapshot.revision,9007199254740993n);await validatePreferenceSnapshot(c,f.owner,f.contact,'rewrite_draft',snapshot);});
  const removed={operation_key:randomUUID(),expected_revision:9007199254740994n};assert.deepEqual(await f.call('DELETE',`/${item.preference_id}`,removed),{state:'deleted'});assert.deepEqual(await f.call('DELETE',`/${item.preference_id}`,removed),{state:'deleted'});
  assert.equal((await f.client.query('SELECT revision FROM expression_preference WHERE id=$1',[item.preference_id])).rows[0].revision,'9007199254740995');

@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {writeFile,readFile} from 'node:fs/promises';
 import {watch} from 'node:fs';
 import {join} from 'node:path';
-import {HostStorage} from '../src/host-storage.ts';
-import {SyncScopeService} from '../src/sync-scope.ts';
-import {WechatSessions} from '../src/wechat-sessions.ts';
-import {SyncIncrementalCli} from '../src/sync-incremental-cli.ts';
-import {SyncIncrementalStore} from '../src/sync-incremental-store.ts';
-import {SyncIncrementalRecovery} from '../src/sync-incremental-recovery.ts';
-import {SyncIncrementalEngine} from '../src/sync-incremental-engine.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {SyncScopeService} from '../src/sync/sync-scope.ts';
+import {WechatSessions} from '../src/sync/wechat-sessions.ts';
+import {SyncIncrementalCli} from '../src/sync/sync-incremental-cli.ts';
+import {SyncIncrementalStore} from '../src/sync/sync-incremental-store.ts';
+import {SyncIncrementalRecovery} from '../src/sync/sync-incremental-recovery.ts';
+import {SyncIncrementalEngine} from '../src/sync/sync-incremental-engine.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 
 async function fixture(t,{publish}={}){

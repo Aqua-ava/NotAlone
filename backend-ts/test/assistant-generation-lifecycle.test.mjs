@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import {SkillFiles} from '../src/skill-files.ts';
-import {readPackage} from '../src/skill-package.ts';
+import {SkillFiles} from '../src/skills/skill-files.ts';
+import {readPackage} from '../src/skills/skill-package.ts';
 import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
 import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-support.mjs';
 

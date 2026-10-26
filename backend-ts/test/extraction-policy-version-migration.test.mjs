@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createExtractionFixture} from './extraction-fixture.mjs';
-import {validateExtractionRuntimeConfig} from '../src/extraction-policy-version.ts';
+import {validateExtractionRuntimeConfig} from '../src/memory/extraction/extraction-policy-version.ts';
 
 test('116真实随机_test迁移兼容旧快照，SQL与TS同时拒绝非法v2',async()=>{
   const fixture=await createExtractionFixture(),c=fixture.client;

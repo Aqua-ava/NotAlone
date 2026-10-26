@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import pg from 'pg';
-import {ExtractionTaskStore} from '../src/extraction-task-store.ts';
-import {ExtractionWorker} from '../src/extraction-worker.ts';
-import {ExtractionProgressApi} from '../src/extraction-progress-http.ts';
-import {modelTaskRequestId} from '../src/host-model-accounting.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
+import {ExtractionWorker} from '../src/memory/extraction/extraction-worker.ts';
+import {ExtractionProgressApi} from '../src/memory/extraction/extraction-progress-http.ts';
+import {modelTaskRequestId} from '../src/host/host-model-accounting.ts';
 
 // 原迁移建立随机合成库；只在所有自有连接退出后普通 DROP，不终止其他进程。
 async function fixture() {

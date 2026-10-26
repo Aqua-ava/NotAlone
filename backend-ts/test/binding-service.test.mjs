@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { authorizedHistoryBindings, grantBindingHistory } from '../src/sync-scope-history.ts';
-import { BindingService } from '../src/binding-service.ts';
-import { HostStorage } from '../src/host-storage.ts';
+import { authorizedHistoryBindings, grantBindingHistory } from '../src/sync/sync-scope-history.ts';
+import { BindingService } from '../src/contacts/binding-service.ts';
+import { HostStorage } from '../src/platform/database/host-storage.ts';
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
 async function fixture(t) {

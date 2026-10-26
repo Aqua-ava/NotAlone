@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HostStorage } from '../src/host-storage.ts';
+import { HostStorage } from '../src/platform/database/host-storage.ts';
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
 test('业务只读事务固定快照、拒绝写入且保留原结构资格门禁', async () => {

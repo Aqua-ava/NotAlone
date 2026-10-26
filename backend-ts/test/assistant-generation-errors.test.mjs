@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {AssistantGenerationLifecycle} from '../src/assistant-generation-lifecycle.ts';
+import {AssistantGenerationLifecycle} from '../src/reply/discussion/assistant-generation-lifecycle.ts';
 test('公开助手无效声明使用原HTTP错误合同，并在数据库和模型之前拒绝',async()=>{
  const forbidden=async()=>{throw Error('无效声明触达了副作用边界');};
  const lifecycle=new AssistantGenerationLifecycle({transaction:forbidden,skillsRoot:'synthetic-unused',replyService:{prepare:forbidden,generate:forbidden}});

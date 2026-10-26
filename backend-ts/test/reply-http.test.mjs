@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {createServer,request} from 'node:http';
 import {randomUUID} from 'node:crypto';
 import {once} from 'node:events';
-import {createReplyHttp} from '../src/reply-http.ts';
-import {ReplyError} from '../src/reply-contract.ts';
-import {parseJson} from '../src/host-json.ts';
+import {createReplyHttp} from '../src/reply/generation/reply-http.ts';
+import {ReplyError} from '../src/reply/generation/reply-contract.ts';
+import {parseJson} from '../src/host/host-json.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 async function setup(t){
  const f=await createStorageFixture(),owner=randomUUID(),contact=randomUUID(),binding=randomUUID(),token='synthetic-private-token-'.repeat(3);

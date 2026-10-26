@@ -4,7 +4,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {Context} from '@deepseek-ai/cordis';
 import {createScope} from '@deepseek-ai/dsh-scope';
 import SkillRegistry from '@deepseek-ai/dsh-skill';
-import {ReplySkillSession} from '../src/reply-skill-runtime.ts';
+import {ReplySkillSession} from '../src/reply/generation/reply-skill-runtime.ts';
 function fixture(){
  const body='合成批准策略正文',hash=createHash('sha256').update(body).digest('hex'),ownerId=randomUUID(),contactId=randomUUID();
  const entries=['alpha','beta'].map(name=>({skillId:randomUUID(),versionId:randomUUID(),name,description:'合成描述',contentHash:hash,resourcePaths:[]}));

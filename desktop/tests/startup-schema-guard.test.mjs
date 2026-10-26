@@ -16,11 +16,11 @@ async function fixture(name) {
   const projectDirectory = path.join(userData, 'project');
   const infoPath = path.join(userData, 'backend.info');
   const marker = path.join(userData, 'schema-was-updated');
-  await mkdir(path.join(projectDirectory, 'backend-ts/src'), { recursive: true });
+  await mkdir(path.join(projectDirectory, 'backend-ts/src/platform/database'), { recursive: true });
   await mkdir(path.join(projectDirectory, 'backend-ts/profile'), { recursive: true });
   await writeFile(path.join(projectDirectory, 'backend-ts/src/launch.ts'), '// 合成启动入口\n');
   await writeFile(path.join(projectDirectory, 'backend-ts/profile/host.patch.yml'), '[]\n');
-  await writeFile(path.join(projectDirectory, 'backend-ts/src/host-storage.ts'), `
+  await writeFile(path.join(projectDirectory, 'backend-ts/src/platform/database/host-storage.ts'), `
     import {existsSync} from 'node:fs';
     export class HostStorage {static async open(){return new HostStorage()}
       async compatibility(){return {code:existsSync(${JSON.stringify(marker)})?'ready':'migration_pending'}} async close(){} }
@@ -82,7 +82,7 @@ test('DSH普通诊断复用TS存储兼容性，Python诊断模块缺失仍可核
   const current = await fixture('typescript-diagnostic');
   const { copyFile, symlink } = await import('node:fs/promises');
   await mkdir(path.join(current.config.projectDirectory, 'backend-ts/src'), { recursive: true });
-  await copyFile(path.resolve('../backend-ts/src/host-storage.ts'), path.join(current.config.projectDirectory, 'backend-ts/src/host-storage.ts'));
+  await copyFile(path.resolve('../backend-ts/src/platform/database/host-storage.ts'), path.join(current.config.projectDirectory, 'backend-ts/src/platform/database/host-storage.ts'));
   await symlink(path.resolve('../backend-ts/node_modules'), path.join(current.config.projectDirectory, 'backend-ts/node_modules'), 'dir');
   const previousUrl = process.env.NOTALONE_DATABASE_URL;
   process.env.NOTALONE_DATABASE_URL = '';
@@ -99,7 +99,7 @@ test('DSH普通诊断复用TS存储兼容性，Python诊断模块缺失仍可核
 test('DSH的TS执行组件不可用时固定报错，不静默回退Python普通诊断', async () => {
   const current = await fixture('typescript-component-failed');
   await mkdir(path.join(current.config.projectDirectory, 'backend-ts/src'), { recursive: true });
-  await writeFile(path.join(current.config.projectDirectory, 'backend-ts/src/host-storage.ts'), 'invalid typescript source synthetic secret');
+  await writeFile(path.join(current.config.projectDirectory, 'backend-ts/src/platform/database/host-storage.ts'), 'invalid typescript source synthetic secret');
   await assert.rejects(current.diagnostics.ensureReady({ ...current.config, runtime: 'dsh' }, () => true));
   assert.equal(current.diagnostics.getState().code, 'runtime_components_unavailable');
   assert.equal(await readFile(current.marker, 'utf8').catch(() => ''), '');
@@ -117,7 +117,7 @@ test('取消DSH普通诊断回收本次TS子进程，不遗留后台读取', asy
   const started = path.join(current.userData, 'ts-started');
   const stopped = path.join(current.userData, 'ts-stopped');
   await mkdir(path.join(current.config.projectDirectory, 'backend-ts/src'), { recursive: true });
-  await writeFile(path.join(current.config.projectDirectory, 'backend-ts/src/host-storage.ts'), `
+  await writeFile(path.join(current.config.projectDirectory, 'backend-ts/src/platform/database/host-storage.ts'), `
     import {writeFileSync} from 'node:fs';
     export class HostStorage { static async open() {return new HostStorage()}
       async compatibility(){

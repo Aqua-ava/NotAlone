@@ -6,8 +6,8 @@ import {createStorageFixture} from './host-storage-fixture.mjs';
 import {
   BusinessTaskApi,
   PostgresBusinessTaskManager,
-} from '../src/background-task-management.ts';
-import {ExtractionTaskStore} from '../src/extraction-task-store.ts';
+} from '../src/tasks/background-task-management.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
 
 async function fixture(t) {
   const storage=await createStorageFixture();

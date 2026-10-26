@@ -26,7 +26,7 @@ async function seedThrough(options,through){
 }
 test('无 Python 和 Conda 的首次 schema 准备执行原116份迁移，重开只读就绪且不重放',async t=>{
  const options=await fixture(t);
- const {prepareDatabaseSchema}=await import('../src/schema-prepare.ts');
+ const {prepareDatabaseSchema}=await import('../src/platform/database/schema-prepare.ts');
  const result=await prepareDatabaseSchema(options);
  assert.equal(result.code,'ready');assert.equal(result.applied.length,116);
  assert.equal(result.applied[0],'001_initial_ingest.sql');
@@ -58,9 +58,9 @@ test('102旧库的Skill正文和资源先完整核验落盘，原身份与历史
  await client.query("INSERT INTO public.reply_skill_publication(version_id,owner_id,origin_contact_id,draft_id,logical_skill_id,scope_kind) VALUES($1,$2,$3,$4,$5,'owner')",[version,owner,contact,draft,logical]);
  await client.query("INSERT INTO public.reply_skill_method(version_id,method_id,logical_skill_id,ordinal,title,instruction,mapping_state) VALUES($1,$2,$3,0,'先回应感受','先确认对方表达的感受，再组织回复。','new')",[version,method,logical]);
  await client.end();
- const {prepareDatabaseSchema}=await import('../src/schema-prepare.ts');
+ const {prepareDatabaseSchema}=await import('../src/platform/database/schema-prepare.ts');
  const result=await prepareDatabaseSchema(options);assert.equal(result.code,'ready');assert.equal(result.applied.length,14);
- const {HostStorage}=await import('../src/host-storage.ts'),{SkillLibrary}=await import('../src/skill-library.ts'),{SkillFiles}=await import('../src/skill-files.ts');
+ const {HostStorage}=await import('../src/platform/database/host-storage.ts'),{SkillLibrary}=await import('../src/skills/skill-library.ts'),{SkillFiles}=await import('../src/skills/skill-files.ts');
  const storage=await HostStorage.open({envFilePath:'',migrationsDirectory,environment:{...options.environment,NOTALONE_DISABLE_DOTENV:'1',NOTALONE_DATABASE_URL:options.databaseUrl,NOTALONE_OWNER_ID:owner}});t.after(()=>storage.close());
  const library=new SkillLibrary(storage,new SkillFiles(options.environment.NOTALONE_SKILLS_DIR));
  const inspected=new pg.Client({host:'/tmp',database:options.databaseUrl.split('dbname=')[1]});await inspected.connect();
@@ -77,18 +77,18 @@ test('102旧库的Skill正文和资源先完整核验落盘，原身份与历史
 test('114原库更新拒绝其它连接与迁移锁，释放后保留原本人身份补齐115/116',async t=>{
  const options=await fixture(t),client=await seedThrough(options,114),owner=randomUUID();
  await client.query("INSERT INTO public.owner(id,display_name) VALUES($1,'保留的合成本人')",[owner]);
- const {prepareDatabaseSchema}=await import('../src/schema-prepare.ts');
+ const {prepareDatabaseSchema}=await import('../src/platform/database/schema-prepare.ts');
  assert.deepEqual(await prepareDatabaseSchema(options),{code:'database_writers_present',applied:[]});
  await client.query('SELECT pg_advisory_lock(1852798049,1)');
  assert.deepEqual(await prepareDatabaseSchema(options),{code:'migration_busy',applied:[]});
  await client.query('SELECT pg_advisory_unlock(1852798049,1)');await client.end();
  const result=await prepareDatabaseSchema(options);assert.equal(result.code,'ready');assert.equal(result.applied.length,2);
  assert.match(result.applied[0],/^115_/);assert.match(result.applied[1],/^116_complete_claim_verification_policy/);
- const {HostStorage}=await import('../src/host-storage.ts'),storage=await HostStorage.open({envFilePath:'',migrationsDirectory,environment:{...options.environment,NOTALONE_DATABASE_URL:options.databaseUrl,NOTALONE_DISABLE_DOTENV:'1',NOTALONE_OWNER_ID:owner}});
+ const {HostStorage}=await import('../src/platform/database/host-storage.ts'),storage=await HostStorage.open({envFilePath:'',migrationsDirectory,environment:{...options.environment,NOTALONE_DATABASE_URL:options.databaseUrl,NOTALONE_DISABLE_DOTENV:'1',NOTALONE_OWNER_ID:owner}});
  try{assert.equal((await storage.setupStatus()).runtime_owner_configured,true);}finally{await storage.close();}
 });
 test('未登记旧结构、未知迁移与改变历史checksum均停写，拒绝PGOPTIONS隐式目标',async t=>{
- const options=await fixture(t),{prepareDatabaseSchema}=await import('../src/schema-prepare.ts');
+ const options=await fixture(t),{prepareDatabaseSchema}=await import('../src/platform/database/schema-prepare.ts');
  assert.deepEqual(await prepareDatabaseSchema({...options,environment:{...options.environment,PGOPTIONS:'-c application_name=synthetic'}}),{code:'database_update_requires_local',applied:[]});
  const client=new pg.Client({host:'/tmp',database:options.databaseUrl.split('dbname=')[1]});await client.connect();
  await client.query('CREATE TABLE public.synthetic_existing(id int)');await client.end();
@@ -101,7 +101,7 @@ test('未登记旧结构、未知迁移与改变历史checksum均停写，拒绝
  assert.deepEqual(await prepareDatabaseSchema(other),{code:'migration_history_mismatch',applied:[]});
 });
 test('035审计基线只登记036后的真实执行，损坏凭证停止后可按原库更新',async t=>{
- const options=await fixture(t),client=await seedThrough(options,35),{prepareDatabaseSchema}=await import('../src/schema-prepare.ts');
+ const options=await fixture(t),client=await seedThrough(options,35),{prepareDatabaseSchema}=await import('../src/platform/database/schema-prepare.ts');
  const manifest=(await client.query('SELECT name,checksum FROM public.notalone_schema_migration ORDER BY name')).rows;
  await client.query('CREATE TABLE public.notalone_schema_baseline(format_version integer,through_version integer,manifest jsonb,backup_sha256 text,restore_verified_at timestamptz)');
  await client.query('INSERT INTO public.notalone_schema_baseline VALUES(1,35,$1,$2,now())',[JSON.stringify(manifest),'a'.repeat(64)]);
@@ -116,7 +116,7 @@ test('SQL试图中途COMMIT时当前版本及账本一起回滚，修复后继�
  for(const name of (await readdir(migrationsDirectory)).filter(name=>name.endsWith('.sql')))await copyFile(join(migrationsDirectory,name),join(directory,name));
  const last=(await readdir(directory)).find(name=>name.startsWith('115_'));
  await writeFile(join(directory,last),'BEGIN;\nCREATE TABLE public.must_rollback(id int); COMMIT; CREATE TABLE public.must_not_survive(id int);\nCOMMIT;\n');
- const {prepareDatabaseSchema}=await import('../src/schema-prepare.ts');
+ const {prepareDatabaseSchema}=await import('../src/platform/database/schema-prepare.ts');
  assert.deepEqual(await prepareDatabaseSchema({...options,migrationsDirectory:directory}),{code:'migration_failed',applied:[]});
  const inspected=new pg.Client({host:'/tmp',database:options.databaseUrl.split('dbname=')[1]});await inspected.connect();
  assert.deepEqual((await inspected.query("SELECT to_regclass('public.must_rollback') AS first,to_regclass('public.must_not_survive') AS second,(SELECT count(*)::int FROM public.notalone_schema_migration) AS count")).rows[0],{first:null,second:null,count:114});await inspected.end();
@@ -127,7 +127,7 @@ test('103旧Skill字节不符合原checksum时事务回滚，旧正文与102账�
  await client.query("INSERT INTO public.owner(id,display_name) VALUES($1,'合成旧库')",[owner]);
  await client.query("INSERT INTO public.reply_skill(id,owner_id,name,description) VALUES($1,$2,'damaged-reply','适合合成场景')",[skill,owner]);
  await client.query("INSERT INTO public.reply_skill_version(id,skill_id,version_number,name,description,content,content_sha256) VALUES($1,$2,1,'damaged-reply','适合合成场景','必须保留的旧字节',$3)",[version,skill,'0'.repeat(64)]);await client.end();
- const {prepareDatabaseSchema}=await import('../src/schema-prepare.ts');assert.deepEqual(await prepareDatabaseSchema(options),{code:'migration_failed',applied:[]});
+ const {prepareDatabaseSchema}=await import('../src/platform/database/schema-prepare.ts');assert.deepEqual(await prepareDatabaseSchema(options),{code:'migration_failed',applied:[]});
  const inspected=new pg.Client({host:'/tmp',database:options.databaseUrl.split('dbname=')[1]});await inspected.connect();
  try{
   assert.equal((await inspected.query('SELECT content FROM public.reply_skill_version WHERE id=$1',[version])).rows[0].content,'必须保留的旧字节');

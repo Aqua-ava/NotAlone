@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { createLocalEmbedding, embeddingSnapshot, EMBEDDING_REVISION } from '../backend-ts/src/retrieval-embedding.ts';
+import { createLocalEmbedding, embeddingSnapshot, EMBEDDING_REVISION } from '../backend-ts/src/retrieval/retrieval-embedding.ts';
 const repository='Qdrant/bge-small-zh-v1.5', args=process.argv.slice(2);
 let cache=process.env.NOTALONE_MEMORY_EMBEDDING_CACHE??join(homedir(),'.cache/notalone/memory-embedding'), offline=false;
 for(let i=0;i<args.length;i++){

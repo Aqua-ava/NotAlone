@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {HostStorage} from '../src/host-storage.ts';
-import {MemoryManagementHandoff} from '../src/memory-management-handoff.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {MemoryManagementHandoff} from '../src/memory/management/memory-management-handoff.ts';
 
 test('移交端口合成PG：排空管理租约、核验原结构、显式恢复及结构失败关闭',async()=>{
  const f=await createStorageFixture();const storage=await HostStorage.open(f.options);
@@ -24,7 +24,7 @@ test('移交端口合成PG：排空管理租约、核验原结构、显式恢复
  }finally{await gate.close();await storage.close();await f.close();}
 });
 
-import {parseMemoryManagementJSON} from '../src/memory-management-json.ts';
+import {parseMemoryManagementJSON} from '../src/memory/management/memory-management-json.ts';
 test('管理JSON边界：大整数无损且修订拒绝浮点词法，不误拒忽略字段',()=>{
  assert.equal(parseMemoryManagementJSON('{"expected_revision":9007199254740993}',true).expected_revision,9007199254740993n);
  for(const revision of['1.0','1e0','1E+0'])assert.throws(()=>parseMemoryManagementJSON(`{"expected_revision":${revision}}`,true));

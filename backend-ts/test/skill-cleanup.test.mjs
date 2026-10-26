@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {mkdir,writeFile,access} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {HostStorage} from '../src/host-storage.ts';
-import {SkillLibrary} from '../src/skill-library.ts';
-import {SkillFiles} from '../src/skill-files.ts';
-import {queueSkillFileCleanup,cleanupSkillFiles} from '../src/skill-cleanup.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {SkillLibrary} from '../src/skills/skill-library.ts';
+import {SkillFiles} from '../src/skills/skill-files.ts';
+import {queueSkillFileCleanup,cleanupSkillFiles} from '../src/skills/skill-cleanup.ts';
 test('文件清理先入队且回滚不删文件，提交后按owner擦除并幂等重试',async t=>{
  const f=await createStorageFixture();t.after(()=>f.close());const storage=await HostStorage.open(f.options);t.after(()=>storage.close());await storage.initializeOwner('合成');
  const files=new SkillFiles(join(f.directory,'skills')),library=new SkillLibrary(storage,files),path=join(f.directory,'clean-skill');await mkdir(path);await writeFile(join(path,'SKILL.md'),'---\nname: clean-skill\ndescription: "合成"\n---\n\n合成正文');
@@ -19,7 +19,7 @@ test('文件清理先入队且回滚不删文件，提交后按owner擦除并幂
  assert.equal(await cleanupSkillFiles(f.client,owner,files),3);await assert.rejects(access(working));assert.equal(await cleanupSkillFiles(f.client,owner,files),0);
 });
 test('删除依赖清空合成草稿与审核正文，其他owner保留且重复删除幂等',async t=>{
- const {randomUUID}=await import('node:crypto');const {eraseSkillLearning}=await import('../src/skill-cleanup.ts');
+ const {randomUUID}=await import('node:crypto');const {eraseSkillLearning}=await import('../src/skills/skill-cleanup.ts');
  const f=await createStorageFixture();t.after(()=>f.close());const removed=randomUUID(),owners=[];
  for(let i=0;i<2;i++){
   const owner=randomUUID(),contact=randomUUID(),draft=randomUUID(),comparison=randomUUID();owners.push({owner,draft,comparison});
@@ -43,7 +43,7 @@ test('文件擦除失败保留队列供重试，不误报完成',async t=>{
  const seen=[];assert.equal(await cleanupSkillFiles(f.client,owner,{remove(value){seen.push(value);}}),1);assert.deepEqual(seen,[path]);
 });
 test('审核发布撤销必须同事务清理使用回复，缺少依赖则回滚，版本文件在提交后擦除',async t=>{
- const {randomUUID}=await import('node:crypto');const {eraseSkillLearning}=await import('../src/skill-cleanup.ts');
+ const {randomUUID}=await import('node:crypto');const {eraseSkillLearning}=await import('../src/skills/skill-cleanup.ts');
  const f=await createStorageFixture();t.after(()=>f.close());const storage=await HostStorage.open(f.options);t.after(()=>storage.close());await storage.initializeOwner('合成');
  const files=new SkillFiles(join(f.directory,'skills')),library=new SkillLibrary(storage,files),path=join(f.directory,'published-skill');await mkdir(path);await writeFile(join(path,'SKILL.md'),'---\nname: published-skill\ndescription: "合成"\n---\n\n合成正文');
  const item=await library.handle('POST',new URL('http://local/api/skills/import'),{package_path:path});
@@ -66,7 +66,7 @@ test('审核发布撤销必须同事务清理使用回复，缺少依赖则回�
 });
 
 test('同事务回复删除端口可递归撤销另一联系人的派生发布，且重复撤销不复活',async t=>{
- const {randomUUID}=await import('node:crypto');const {eraseSkillLearning}=await import('../src/skill-cleanup.ts');
+ const {randomUUID}=await import('node:crypto');const {eraseSkillLearning}=await import('../src/skills/skill-cleanup.ts');
  const f=await createStorageFixture();t.after(()=>f.close());const storage=await HostStorage.open(f.options);t.after(()=>storage.close());await storage.initializeOwner('合成');
  const files=new SkillFiles(join(f.directory,'skills')),library=new SkillLibrary(storage,files),owner=storage.runtimeOwnerId,source=randomUUID(),rows=[];
  for(const name of ['parent-skill','derived-skill']){
@@ -91,7 +91,7 @@ test('同事务回复删除端口可递归撤销另一联系人的派生发布�
 });
 
 test('失败发布的隐藏快照按owner回收，合法历史及有待办的暂存保留，回滚不擦文件',async t=>{
- const {randomUUID}=await import('node:crypto');const {readPackage}=await import('../src/skill-package.ts');const {cleanupUnreferencedSkillSnapshots}=await import('../src/skill-cleanup.ts');
+ const {randomUUID}=await import('node:crypto');const {readPackage}=await import('../src/skills/skill-package.ts');const {cleanupUnreferencedSkillSnapshots}=await import('../src/skills/skill-cleanup.ts');
  const f=await createStorageFixture();t.after(()=>f.close());const storage=await HostStorage.open(f.options);t.after(()=>storage.close());await storage.initializeOwner('合成');
  const root=join(f.directory,'skills'),files=new SkillFiles(root),library=new SkillLibrary(storage,files),path=join(f.directory,'retained-skill');await mkdir(path);await writeFile(join(path,'SKILL.md'),'---\nname: retained-skill\ndescription: "合成"\n---\n\n合成正文');
  const item=await library.handle('POST',new URL('http://local/api/skills/import'),{package_path:path}),owner=storage.runtimeOwnerId,pkg=readPackage(path);
@@ -115,7 +115,7 @@ test('失败发布的隐藏快照按owner回收，合法历史及有待办的暂
 });
 
 test('来源删除擦除学习批次摘要并取消未完成步骤，已成功步骤和其他owner不动',async t=>{
- const {randomUUID}=await import('node:crypto');const {eraseSkillLearning}=await import('../src/skill-cleanup.ts');const f=await createStorageFixture();t.after(()=>f.close());const removed=randomUUID(),rows=[];
+ const {randomUUID}=await import('node:crypto');const {eraseSkillLearning}=await import('../src/skills/skill-cleanup.ts');const f=await createStorageFixture();t.after(()=>f.close());const removed=randomUUID(),rows=[];
  for(let i=0;i<2;i++){
   const owner=randomUUID(),contact=randomUUID(),task=randomUUID(),batch=randomUUID();rows.push({owner,contact,task,batch});
   await f.client.query('INSERT INTO owner(id,display_name) VALUES($1,$2)',[owner,'合成']);await f.client.query('INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,$3)',[contact,owner,'合成']);

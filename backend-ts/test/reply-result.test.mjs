@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {replyGeneratedPayload} from '../src/reply-result.ts';
+import {replyGeneratedPayload} from '../src/reply/generation/reply-result.ts';
 test('稳定回复DTO只含候选/引用和生成回执，保留Skill执行范围与读取失败',()=>{
  const contact=randomUUID(),evidence=randomUUID(),id=randomUUID(),preference=randomUUID();
  const result={reply_request_id:id,candidates:[{candidate_id:id,text:'合成',basis:'本次目的',citation_ids:[evidence,evidence],risk_notes:[],messages:[{message_id:id,text:'合成'}]}],skill_library_revision:1,

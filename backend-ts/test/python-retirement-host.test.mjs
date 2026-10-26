@@ -8,8 +8,8 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {launchDsh} from '../src/launch.ts';
 import {sendEvents,useTool} from './reply-service-runtime-support.mjs';
-import {pureTsRuntimeEnvironment} from '../src/pure-ts-runtime.ts';
-import {resolveHistoryRuntime} from '../src/history-runtime.ts';
+import {pureTsRuntimeEnvironment} from '../src/host/pure-ts-runtime.ts';
+import {resolveHistoryRuntime} from '../src/imports/history-runtime.ts';
 import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
 
 test('不设置运行时开关也只有 TypeScript 执行责任方',()=>{

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { matchSessionNames, canonicalSessionName } from '../src/foreground-location-name-matching.ts';
+import { matchSessionNames, canonicalSessionName } from '../src/foreground/foreground-location-name-matching.ts';
 const privateNames = (...names) => names.map(displayName => ({displayName, chatType:'private'}));
 test('完整名称低分命中优先于编辑近邻，重复记录不授予身份', () => {
   assert.deepEqual(matchSessionNames('合成甲', .5, privateNames('合成甲','合成乙')), {kind:'unique',candidateIndex:0,method:'exact',plausibleIndices:[0]});

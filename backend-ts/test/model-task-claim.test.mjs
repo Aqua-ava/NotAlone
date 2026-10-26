@@ -7,8 +7,8 @@ import {randomUUID} from 'node:crypto';
 import {connect} from 'node:net';
 import {once} from 'node:events';
 import {createInterface} from 'node:readline';
-import {ModelPermitArbiter} from '../src/model-permits.ts';
-import {startModelPermitServer} from '../src/model-permit-server.ts';
+import {ModelPermitArbiter} from '../src/platform/models/model-permits.ts';
+import {startModelPermitServer} from '../src/platform/models/model-permit-server.ts';
 
 test('真实Unix预约把原TaskClaim交给宿主策略，迟到结算不要求当前claim',{timeout:10000},async t=>{
  const directory=await mkdtemp(join(tmpdir(),'na-model-claim-')),path=join(directory,'p.sock'),token='synthetic-claim-token-'.repeat(3),reserved=[],recorded=[];

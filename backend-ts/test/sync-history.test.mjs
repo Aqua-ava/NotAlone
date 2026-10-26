@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import {readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {HostStorage} from '../src/host-storage.ts';
-import {SyncScopeService} from '../src/sync-scope.ts';
-import {grantBindingHistory} from '../src/sync-scope-history.ts';
-import {createSyncIncrementalApi} from '../src/sync-incremental-api.ts';
-import {SyncIncrementalStore} from '../src/sync-incremental-store.ts';
-import {requireReplyScope} from '../src/reply-scope.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {SyncScopeService} from '../src/sync/sync-scope.ts';
+import {grantBindingHistory} from '../src/sync/sync-scope-history.ts';
+import {createSyncIncrementalApi} from '../src/sync/sync-incremental-api.ts';
+import {SyncIncrementalStore} from '../src/sync/sync-incremental-store.ts';
+import {requireReplyScope} from '../src/reply/generation/reply-scope.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 
 const prefix='/api/runtime/sync-incremental/';

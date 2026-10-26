@@ -9,8 +9,8 @@ import {homedir} from 'node:os';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {HostStorage} from '../src/host-storage.ts';
-import {SkillHost} from '../src/skill-host.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {SkillHost} from '../src/skills/skill-host.ts';
 async function fixture(t){const f=await createStorageFixture();t.after(()=>f.close());const storage=await HostStorage.open(f.options);t.after(()=>storage.close());const {owner_id:owner}=await storage.initializeOwner('合成用户');const root=join(f.directory,'skills'),host=new SkillHost(storage,root);t.after(()=>host.close());return {f,storage,owner,root,host};}
 async function activate(host){await host.activateStandalone();}
 // 旧Python同步桥的原断言固定在23a历史命令；当前管理租约/来源/删除测试继续默认执行。
@@ -22,7 +22,7 @@ test('关闭排空既有管理租约，晚发布断言失效',async t=>{
 });
 
 test('管理C守卫复用真实讨论快照与来源，同事务拒异owner/篡改/删除',async t=>{
- const {setup}=await import('./reply-assistant-erasure-support.mjs');const {fingerprint}=await import('../src/reply-assistant-erasure.ts');
+ const {setup}=await import('./reply-assistant-erasure-support.mjs');const {fingerprint}=await import('../src/reply/generation/reply-assistant-erasure.ts');
  const x=await setup(t),source=randomUUID(),discussion=randomUUID(),g=await x.generation();
  await x.f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)VALUES($1,$2,$3,'wechat_jsonl','synthetic.jsonl',$4,1)",[source,x.owner,x.contact,'d'.repeat(64)]);
  const content={type:'purpose_exploration',text:'合成讨论'};

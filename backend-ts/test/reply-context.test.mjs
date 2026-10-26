@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {PostgresReplyContext, modelVisibleEvidence} from '../src/reply-context.ts';
+import {PostgresReplyContext, modelVisibleEvidence} from '../src/reply/context/reply-context.ts';
 async function setup(t){const f=await createStorageFixture();t.after(()=>f.close());const owner=randomUUID(),contact=randomUUID();await f.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成用户')",[owner]);await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);return {f,owner,contact};}
 function input(owner,contact,content){return {owner_id:owner,contact_id:contact,reply_request_id:randomUUID(),request:{contact_id:contact,content,continued_from_candidate_id:null}};}
 test('无历史草稿只构造本次输入，隐形证据不可出站',async t=>{
@@ -71,7 +71,7 @@ test('本人ALL来源不能把owner身份当手录豁免',async t=>{
  await f.client.query("INSERT INTO owner_memory(id,owner_id,text_content,category,topic,source_ids,adoption_method,source_dependency_mode) VALUES($1,$2,'清淡饮食','preference','other',$3,'manual','all')",[memory,owner,[owner]]);
  const service=new PostgresReplyContext(f.client,{overview:false}),args=input(owner,contact,{type:'rewrite_draft',input_kind:'draft',draft_text:'清淡饮食',include_relationship_context:true});
  assert.equal((await service.build(args)).evidence.some(e=>e.evidence_id===memory),false);
- const {ownerMemorySourceDependencies}=await import('../src/reply-context-memory.ts');
+ const {ownerMemorySourceDependencies}=await import('../src/reply/context/reply-context-memory.ts');
  const row=(await f.client.query('SELECT to_jsonb(m) AS value FROM owner_memory m WHERE id=$1',[memory])).rows[0].value;
  await assert.rejects(ownerMemorySourceDependencies(f.client,owner,row),/reply_context/);
 });

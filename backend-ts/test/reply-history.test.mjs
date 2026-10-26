@@ -2,8 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {ReplyHistory} from '../src/reply-history.ts';
-import {createEvidenceAliases} from '../src/reply-evidence-alias.ts';
+import {ReplyHistory} from '../src/reply/generation/reply-history.ts';
+import {createEvidenceAliases} from '../src/reply/generation/reply-evidence-alias.ts';
 async function setup(t){
   const f=await createStorageFixture();t.after(()=>f.close());
   const owner=randomUUID(),contact=randomUUID(),other=randomUUID(),binding=randomUUID();

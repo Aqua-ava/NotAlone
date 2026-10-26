@@ -2,16 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {ReplyPreparation} from '../src/reply-preparation.ts';
-import {createReplyGenerationGuards} from '../src/reply-generation-guards.ts';
-import {PostgresReplyStore} from '../src/reply-store.ts';
-import {PostgresSkillPort} from '../src/skill-port.ts';
-import {SkillFiles} from '../src/skill-files.ts';
-import {createReplySkillGuards} from '../src/reply-skill-guards.ts';
-import {normalizeReplyInput} from '../src/reply-contract.ts';
-import {requireReplyScope} from '../src/reply-scope.ts';
-import {createEvidenceAliases} from '../src/reply-evidence-alias.ts';
-import {replySystemPrompt} from '../src/reply-system-prompt.ts';
+import {ReplyPreparation} from '../src/reply/generation/reply-preparation.ts';
+import {createReplyGenerationGuards} from '../src/reply/generation/reply-generation-guards.ts';
+import {PostgresReplyStore} from '../src/reply/generation/reply-store.ts';
+import {PostgresSkillPort} from '../src/skills/skill-port.ts';
+import {SkillFiles} from '../src/skills/skill-files.ts';
+import {createReplySkillGuards} from '../src/reply/generation/reply-skill-guards.ts';
+import {normalizeReplyInput} from '../src/reply/generation/reply-contract.ts';
+import {requireReplyScope} from '../src/reply/generation/reply-scope.ts';
+import {createEvidenceAliases} from '../src/reply/generation/reply-evidence-alias.ts';
+import {replySystemPrompt} from '../src/reply/generation/reply-system-prompt.ts';
 async function setup(t,history=false,withDiscussion=false){
  const f=await createStorageFixture();t.after(()=>f.close());const owner=randomUUID(),contact=randomUUID(),binding=randomUUID();
  await f.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成人')",[owner]);await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[binding,owner,contact]);
@@ -45,7 +45,7 @@ test('prepare默认双概览且目录修订不一致不能降级继续',async t=
 });
 test('实际scenario Tool绑定冻结目录、同事务资格并将回执写入最终快照',async t=>{
  const x=await setup(t,true),memory=randomUUID(),batch=randomUUID(),version=randomUUID(),scenario=randomUUID();
- const {readReplyOwnerOverview}=await import('../src/reply-context-overview.ts'),{digest}=await import('../src/contact-overview-evidence.ts');
+ const {readReplyOwnerOverview}=await import('../src/reply/context/reply-context-overview.ts'),{digest}=await import('../src/memory/overview/contact-overview-evidence.ts');
  await x.f.client.query("INSERT INTO owner_memory(id,owner_id,text_content,category,topic,source_ids,adoption_method) VALUES($1,$2,'清淡饮食','preference','other',$3,'manual')",[memory,x.owner,[x.owner]]);
  const entry=(await readReplyOwnerOverview(x.f.client,x.owner,true)).entries[0],manifest=[{...entry.dependency_manifest,organization_timing_sha256:digest(entry.memory.timing)}];
  await x.f.client.query("UPDATE layered_memory_state SET enabled=true,status='ready',settings_generation=1,organization_generation=1 WHERE owner_id=$1 AND contact_id IS NULL",[x.owner]);
@@ -65,7 +65,7 @@ test('实际scenario Tool绑定冻结目录、同事务资格并将回执写入�
  await x.f.client.query("UPDATE layered_memory_state SET enabled=false WHERE owner_id=$1 AND contact_id IS NULL",[x.owner]);await assert.rejects(execute(scenarioAlias),/整理资料已变化/);
 });
 test('实际history完成后追加证据与累计预算，重复结算拒绝',async t=>{
- const {ReplyHistory}=await import('../src/reply-history.ts');const x=await setup(t,true),source=randomUUID(),message=randomUUID();
+ const {ReplyHistory}=await import('../src/reply/generation/reply-history.ts');const x=await setup(t,true),source=randomUUID(),message=randomUUID();
  await x.f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'manual','合成资料',$4,1)",[source,x.owner,x.contact,source.replaceAll('-','').repeat(2)]);
  await x.f.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) VALUES($1,$2,$3,'contact','text','合成历史','2026-01-01T01:02:03.123456Z')",[message,x.owner,x.contact]);
  await x.f.client.query("INSERT INTO message_source_ref(id,message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,$4,'source_document',$5,'line:1','{}')",[randomUUID(),message,x.owner,x.contact,source]);

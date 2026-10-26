@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {seedMigrationBaseline,prepareTestSchema} from './schema-fixture.mjs';
 import pg from 'pg';
-import {HostStorage} from '../src/host-storage.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
 
 test('109升级当前116保留业务UUID及未知用量，receipt隔离和关键约束损坏关闭门禁',async t=>{
   const root=new URL('../../',import.meta.url).pathname;

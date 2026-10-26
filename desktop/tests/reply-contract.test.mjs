@@ -117,7 +117,7 @@ test('回复文本上限按码点计数且边界正确', async () => {
 });
 
 test('后端前台失败原因都有共享说明，不靠界面默认分支静默兜底', async () => {
-  const files = ['../backend-ts/src/foreground-location-locator.ts'];
+  const files = ['../backend-ts/src/foreground/foreground-location-locator.ts'];
   const produced = new Set();
   for (const file of files) {
     const source = await readFile(file, 'utf8');

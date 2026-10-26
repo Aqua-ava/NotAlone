@@ -11,7 +11,7 @@ const packet=createBlindPacket({capture,dataset,seed:randomBytes(32).toString('h
 const verification=verifyBlindPacket({...packet,capture,dataset});
 const hash=text=>createHash('sha256').update(text).digest('hex');
 const root=resolve(outputPath);
-const codeFiles=['reply-blind-packet.mjs','build-reply-blind-packet.mjs','../src/reply-comparison-sources.ts','../src/reply-contract.ts'];
+const codeFiles=['reply-blind-packet.mjs','build-reply-blind-packet.mjs','../src/diagnostics/reply-comparison-sources.ts','../src/reply/generation/reply-contract.ts'];
 const codeHashes=Object.fromEntries(await Promise.all(codeFiles.map(async path=>[path,hash(await readFile(new URL(path,import.meta.url)))])));
 // 新目录的独占创建拒绝覆盖；生成失败只清理本入口刚创建的目录。
 await mkdir(root,{mode:0o700});

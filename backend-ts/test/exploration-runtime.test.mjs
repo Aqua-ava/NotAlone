@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {validateExplorationOutput} from '../src/exploration-runtime.ts';
+import {validateExplorationOutput} from '../src/reply/exploration/exploration-runtime.ts';
 const context={owner_id:'10000000-0000-4000-8000-000000000001',contact_id:'20000000-0000-4000-8000-000000000001',request_id:'30000000-0000-4000-8000-000000000001',input:{scene:'initiate_conversation'},evidence:[{evidence_id:'source-a'}],skill:null};
 const output=()=>({understanding:'对方提出邀约，用户尚未确认意愿',ambiguities:[],citation_ids:['source-a'],options:[{intent:' 接受 ',label:'接受',reason:'愿意参与时适用',citation_ids:['source-a'],recommended:true,pause:false},{intent:'保留',label:'保留',reason:'暂未决定时适用',citation_ids:[],recommended:false,pause:true}],question:null,current_step:'先明确意愿',tradeoffs:[]});
 test('探索保留未确认意愿并校验当前来源、不同方向与换组',()=>{

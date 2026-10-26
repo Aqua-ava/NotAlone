@@ -1,8 +1,8 @@
 /** 独立且有界的诊断／准备入口；无模型、任务或隐式子进程。 */
 import {pathToFileURL} from 'node:url';
 import {realpath} from 'node:fs/promises';
-import {HostStorage,HostStorageError} from './host-storage.ts';
-import {prepareDatabaseSchema,type SchemaPrepareResult} from './schema-prepare.ts';
+import {HostStorage,HostStorageError} from './platform/database/host-storage.ts';
+import {prepareDatabaseSchema,type SchemaPrepareResult} from './platform/database/schema-prepare.ts';
 export async function runSchemaDiagnostic(envFilePath:string,migrationsDirectory:string,environment:NodeJS.ProcessEnv,prepare=false):Promise<{code:string}|SchemaPrepareResult>{
  let storage:HostStorage|undefined;
  try{

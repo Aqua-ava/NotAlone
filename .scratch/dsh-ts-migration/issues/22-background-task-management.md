@@ -50,7 +50,7 @@ Spec: ../spec.md
 已完成统一业务后台任务管理候选，详见[实施与 DSH 边界证据](../task22-implementation/evidence.md)和[只读合同](../task22-readonly-preparation/contract.md)。
 
 - DSH：固定 `@deepseek-ai/dsh@0.2.1-rc.2`／commit `687f282e8625c6b8d11ff58211a90524be2e4317`。核对官方 profile、Agent create／dispose／cancel／whenIdle／runMaintenance 文档和源码后确认：DSH 不提供业务任务表、原子领取、租约、崩溃恢复或用户任务板；本票不新增直接 DSH API、模型 Task Tool、自治计划或长期 session。任务仍完全由 PostgreSQL 控制，经现有官方 profile 薄插件装配。
-- 后端：新增 [`background-task-management.ts`](../../../backend-ts/src/background-task-management.ts)，提供 owner 隔离的 `/api/tasks`、`/api/tasks/stop`、`/api/tasks/recover`。列表先选最多 101 个任务再展开全部步骤，显示真实步骤计数、稳定性错误码、本人／联系人范围与允许动作；纯读取不 notify、不重排、不启动模型。`total_count=NULL` 保留为未知，不用 0 或 `message_count` 伪造。
+- 后端：新增 [`background-task-management.ts`](../../../backend-ts/src/tasks/background-task-management.ts)，提供 owner 隔离的 `/api/tasks`、`/api/tasks/stop`、`/api/tasks/recover`。列表先选最多 101 个任务再展开全部步骤，显示真实步骤计数、稳定性错误码、本人／联系人范围与允许动作；纯读取不 notify、不重排、不启动模型。`total_count=NULL` 保留为未知，不用 0 或 `message_count` 伪造。
 - 停止：任务事务按 contact→owner 锁序取范围锁，取消未成功步骤、清空 `worker_id`／租约、推进 `lease_generation`；统一 Worker 只中止匹配的当前 task，不影响其他联系人或其他任务。旧 claim 的 completion／checkpoint 因租约代次和任务状态失败；外部调用未结算仍保留未知，不宣布成功。
 - 恢复：导入／观察只重排原任务并保留成功步骤、来源、目标与消息身份；`model_call_outcome_unknown`、失效来源／绑定、错误动作和跨 contact／owner 均失败关闭。Skill 走 receipt-aware 领域恢复；L2／L3 走 settings generation、work revision 与累计预算入口；来源删除恢复继续由 Ticket 17 的来源面板发起，通用面板不猜测删除闭包。
 - 执行责任矩阵：TS 任务模式下 `import`、`observation`、`layered_memory`、`skill_learning` 由同一个 `ExtractionWorker` 领取各自固定 Runner；Python 模式由原 TaskHost 独占，两模式互斥。`delete` 目前由 Ticket 17 接管前的原 SourceService／删除 Worker 独占；`memory_upgrade` 按 ADR-070 退役，只显示历史状态；`index`／`verify` 不是独立任务。没有新增隐蔽 Worker。

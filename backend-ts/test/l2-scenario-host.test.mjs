@@ -10,9 +10,9 @@ import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {sendEvents,useTool} from './support.mjs';
-import {ModelPermitArbiter} from '../src/model-permits.ts';
-import {startModelPermitServer} from '../src/model-permit-server.ts';
-import {createHostModelAccounting} from '../src/host-model-accounting.ts';
+import {ModelPermitArbiter} from '../src/platform/models/model-permits.ts';
+import {startModelPermitServer} from '../src/platform/models/model-permit-server.ts';
+import {createHostModelAccounting} from '../src/host/host-model-accounting.ts';
 
 const budget={max_memories:20,max_batch_memories:20,max_scenarios:15,max_paragraphs:40,max_characters:128_000,max_model_calls:8};
 

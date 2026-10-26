@@ -1,6 +1,6 @@
 /** 只处理显式提供的合成采集；哈希只能证明内部一致性，不能认证历史采集。 */
 import {createHash,createHmac} from 'node:crypto';
-import {auditReplyRuntimeSources,replyRuntimeSourceSubjectBinding} from '../src/reply-comparison-sources.ts';
+import {auditReplyRuntimeSources,replyRuntimeSourceSubjectBinding} from '../src/diagnostics/reply-comparison-sources.ts';
 const INPUT=['current_intent','available_facts','unknowns','allowed_changes','current_message','recent_context'];
 const SOURCE_FIELDS=['evidence_id','kind','factual_role','text','status','selection_reason','timing','event','conditions','evolution','valid_at','invalid_at','text_sha256','case_fields','origin','source_ids','not_confirmed_memory'];
 const TIME_FIELDS=['recorded_at','source_started_at','source_ended_at','source_time_complete','current_status','current_status_reason'];

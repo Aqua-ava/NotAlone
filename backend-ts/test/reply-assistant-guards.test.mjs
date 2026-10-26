@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {setup} from './reply-assistant-erasure-support.mjs';
-import {ReplyAssistantGuards} from '../src/reply-assistant-guards.ts';
-import {canonical,fingerprint} from '../src/reply-assistant-erasure.ts';
+import {ReplyAssistantGuards} from '../src/reply/generation/reply-assistant-guards.ts';
+import {canonical,fingerprint} from '../src/reply/generation/reply-assistant-erasure.ts';
 function ports(x){return {requireReplySourcesCurrent:async()=>[],requireDependencies:async()=>{},requireCurrentReplyMemory:async()=>{},requireGenerationMemoryDependencies:async()=>{},historicalBasisRevision:async()=> 'b'.repeat(64),readReplyBasisChanges:async()=>[],requireSavedSkillPolicy:async()=>{},requireActiveBinding:async()=>x.binding,navigationDependencyIds:()=>[],registeredNavigationDependencies:async()=>[]};}
 async function request(x,g){const r=(await x.f.client.query('SELECT * FROM reply_request WHERE id=$1',[g.request])).rows[0];return {...r,request_id:r.id};}
 async function identity(x,g,normalized='synthetic',auth){const input=auth?canonical({reply:normalized,continuation:auth.continuation}):normalized;await x.f.client.query('UPDATE assistant_session_turn SET input_digest=$2 WHERE id=$1',[g.turn,createHash('sha256').update(x.binding+':'+input).digest('hex')]);}

@@ -18,7 +18,7 @@ test('独立运行时检查拒绝缺少清单的目录，不能把准备失败�
 test('打包检查逐项拒绝被替换、偷偷加入或链接包外的运行时文件', async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-runtime-integrity-'));
   const directory = path.join(owned, 'notalone-runtime'); await mkdir(directory);
-  const paths = ['project/backend-ts/src/launch.ts', 'project/backend-ts/src/managed-postgres.ts', 'project/backend-ts/src/managed-database-lifetime.ts', 'project/backend-ts/src/schema-prepare-cli.ts', 'project/backend-ts/profile/host.patch.yml',
+  const paths = ['project/backend-ts/src/launch.ts', 'project/backend-ts/src/managed-postgres.ts', 'project/backend-ts/src/platform/database/managed-database-lifetime.ts', 'project/backend-ts/src/schema-prepare-cli.ts', 'project/backend-ts/profile/host.patch.yml',
     ...['initdb','postgres','pg_isready','psql','pg_dump','pg_restore'].map((name) => `postgres/bin/${name}`)];
   try {
     for (const file of paths) { await mkdir(path.dirname(path.join(directory,file)), {recursive:true}); await writeFile(path.join(directory,file),'synthetic', { mode: file.startsWith('postgres/') ? 0o700 : 0o600 }); }
@@ -55,7 +55,7 @@ test('构建和App载入检查来源与运行组件，不要求数据库备份�
   await writeFile(path.join(owned, 'loader.mjs'), built.outputFiles[0].text);
   const { verifyManagedComponents } = await import(path.join(owned, 'loader.mjs'));
   const { runtimeInventory, inspectManagedRuntime } = await import('../../scripts/managed-runtime.mjs');
-  const paths = ['project/backend-ts/src/launch.ts', 'project/backend-ts/src/managed-postgres.ts', 'project/backend-ts/src/managed-database-lifetime.ts', 'project/backend-ts/src/schema-prepare-cli.ts', 'project/backend-ts/profile/host.patch.yml',
+  const paths = ['project/backend-ts/src/launch.ts', 'project/backend-ts/src/managed-postgres.ts', 'project/backend-ts/src/platform/database/managed-database-lifetime.ts', 'project/backend-ts/src/schema-prepare-cli.ts', 'project/backend-ts/profile/host.patch.yml',
     ...['initdb','postgres','pg_isready','psql','pg_dump','pg_restore'].map(name => `postgres/bin/${name}`)];
   try {
     for (const file of paths) { await mkdir(path.dirname(path.join(directory, file)), { recursive: true }); await writeFile(path.join(directory, file), 'synthetic', { mode: file.startsWith('postgres/') ? 0o700 : 0o600 }); }

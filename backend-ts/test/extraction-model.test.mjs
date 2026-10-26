@@ -8,8 +8,8 @@ import {join,resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {createExtractionFixture} from './extraction-fixture.mjs';
-import {startModelHost} from '../src/model-host.ts';
-import {createHostModelAccounting,modelTaskRequestId} from '../src/host-model-accounting.ts';
+import {startModelHost} from '../src/platform/models/model-host.ts';
+import {createHostModelAccounting,modelTaskRequestId} from '../src/host/host-model-accounting.ts';
 
 for(const failurePoint of ['record_ack','trace_receipt'])test(`官方profile/原adapter/真实ModelHost与PG：E/V单次attempt、预算、五字段claim、晚结果与${failurePoint}未知`,{timeout:30000},async t=>{
  const db=await createExtractionFixture(),c=db.client;

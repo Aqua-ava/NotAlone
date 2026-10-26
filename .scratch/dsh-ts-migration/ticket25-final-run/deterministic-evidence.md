@@ -46,7 +46,7 @@
 必须保留的新 TS 入口：
 
 - 盲包与来源绑定：[reply-blind-packet.mjs](../../../backend-ts/experiments/reply-blind-packet.mjs)、[build-reply-blind-packet.mjs](../../../backend-ts/experiments/build-reply-blind-packet.mjs)、[reply-blind-packet.test.mjs](../../../backend-ts/test/reply-blind-packet.test.mjs)。
-- 统一报告器：[reply-comparison.ts](../../../backend-ts/src/reply-comparison.ts)、[reply-comparison-sources.ts](../../../backend-ts/src/reply-comparison-sources.ts) 及三个比较测试文件。
+- 统一报告器：[reply-comparison.ts](../../../backend-ts/src/diagnostics/reply-comparison.ts)、[reply-comparison-sources.ts](../../../backend-ts/src/diagnostics/reply-comparison-sources.ts) 及三个比较测试文件。
 - 冻结召回兼容：[retrieval-frozen-validation.mjs](../../../backend-ts/test/retrieval-frozen-validation.mjs)、[retrieval-python-parity.test.mjs](../../../backend-ts/test/retrieval-python-parity.test.mjs)；只作确定性 parity，不冒充模型表现。
 - 确定性域测试：上表 TS 测试作为迁移后入口，不能由“插件能被调用”代替。
 

@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildReplyPayload,replyPayloadText} from '../src/reply-payload.ts';
-import {parseReplyRequest,validateReplyCandidates} from '../src/reply-contract.ts';
-import {aliasReplyEvidenceReferences,createEvidenceAliases,restoreReplyEvidenceAliases} from '../src/reply-evidence-alias.ts';
-import {REPLY_SYSTEM_PROMPT} from '../src/reply-prompts.ts';
-import {replySystemPrompt} from '../src/reply-system-prompt.ts';
+import {buildReplyPayload,replyPayloadText} from '../src/reply/generation/reply-payload.ts';
+import {parseReplyRequest,validateReplyCandidates} from '../src/reply/generation/reply-contract.ts';
+import {aliasReplyEvidenceReferences,createEvidenceAliases,restoreReplyEvidenceAliases} from '../src/reply/generation/reply-evidence-alias.ts';
+import {REPLY_SYSTEM_PROMPT} from '../src/reply/generation/reply-prompts.ts';
+import {replySystemPrompt} from '../src/reply/generation/reply-system-prompt.ts';
 
 const contact='30000000-0000-4000-8000-000000000001';
 const realIds=[

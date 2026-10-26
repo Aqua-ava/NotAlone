@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {managementFixture,completeManagementTask} from './layered-memory-management-fixture.mjs';
-import {L2ScenarioService} from '../src/l2-scenario-service.ts';
-import {DEFAULT_L2_SCENARIO_BUDGET} from '../src/l2-scenario-workspace.ts';
+import {L2ScenarioService} from '../src/memory/layered/l2-scenario-service.ts';
+import {DEFAULT_L2_SCENARIO_BUDGET} from '../src/memory/layered/l2-scenario-workspace.ts';
 
 test('公开开启生成唯一合法覆盖任务，暂停使原租约晚写失效', async t => {
   const f=await managementFixture(t);
@@ -121,8 +121,8 @@ test('事实待修的原叶不再交给模型，修正后的新合法叶仍可�
     worker_id:claim.workerId,lease_generation:claim.leaseGeneration});
   assert.deepEqual(prepared.inputs.map(input=>input.memory_id),[otherMemory]);
   // 用户修正属于真实 L1 版本动作；不伪造整理成功或沿用旧来源证明。
-  const {mutateMemory}=await import('../src/memory-mutations.ts');
-  const {lockManagementScope}=await import('../src/layered-memory-management-store.ts');
+  const {mutateMemory}=await import('../src/memory/management/memory-mutations.ts');
+  const {lockManagementScope}=await import('../src/memory/layered/layered-memory-management-store.ts');
   const corrected=await f.transaction(async client=>{
     await lockManagementScope(client,f.scope);
     return mutateMemory(client,f.ownerId,{level:'contact',contactId:f.contactId},'correct',f.memoryId,

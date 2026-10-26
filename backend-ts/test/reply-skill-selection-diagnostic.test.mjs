@@ -1,6 +1,6 @@
 // 合成官方runtime回归：显选真实预载与资源失败降级。
 import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID}from'node:crypto';import{readFile,mkdir,writeFile,appendFile}from'node:fs/promises';import{join}from'node:path';
-import{createStorageFixture}from'./host-storage-fixture.mjs';import{startReplyServiceHost,sendEvents,useTool}from'./reply-service-runtime-support.mjs';import{HostStorage}from'../src/host-storage.ts';import{SkillLibrary}from'../src/skill-library.ts';import{SkillFiles}from'../src/skill-files.ts';
+import{createStorageFixture}from'./host-storage-fixture.mjs';import{startReplyServiceHost,sendEvents,useTool}from'./reply-service-runtime-support.mjs';import{HostStorage}from'../src/platform/database/host-storage.ts';import{SkillLibrary}from'../src/skills/skill-library.ts';import{SkillFiles}from'../src/skills/skill-files.ts';
 function evidence(body){let found;const visit=v=>{if(Array.isArray(v))v.forEach(visit);else if(v&&typeof v==='object'){if(v.evidence?.length)found=v.evidence;Object.values(v).forEach(visit);}else if(typeof v==='string'){try{visit(JSON.parse(v));}catch{const a=v.indexOf('{'),b=v.lastIndexOf('}');if(a>=0&&b>a)try{visit(JSON.parse(v.slice(a,b+1)));}catch{}}}};visit(body);assert.ok(found);return found;}
 test('显选预载真实正文与使用回执，资源失败兼容null',{timeout:30000},async t=>{
  const f=await createStorageFixture();assert.equal((await f.client.query("SELECT to_regclass('public.model_call_receipt') IS NOT NULL AS migrated")).rows[0].migrated,true,'正式migrator必须建立110模型回执表');

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {createL2ScenarioWorkerRunner} from '../src/l2-scenario-worker.ts';
+import {createL2ScenarioWorkerRunner} from '../src/memory/layered/l2-scenario-worker.ts';
 
 function claim(overrides={}){
   return {

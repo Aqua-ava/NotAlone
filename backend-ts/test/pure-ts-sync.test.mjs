@@ -5,11 +5,11 @@ import {writeFile,readFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {createServer} from 'node:http';
 import {createRequire} from 'node:module';
-import {HostStorage} from '../src/host-storage.ts';
-import {createSyncIncrementalApi} from '../src/sync-incremental-api.ts';
-import {PureTsSync} from '../src/pure-ts-sync.ts';
-import {PureTsEvents} from '../src/pure-ts-events.ts';
-import {createWechatScopeApi} from '../src/wechat-scope-api.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {createSyncIncrementalApi} from '../src/sync/sync-incremental-api.ts';
+import {PureTsSync} from '../src/host/pure-ts-sync.ts';
+import {PureTsEvents} from '../src/host/pure-ts-events.ts';
+import {createWechatScopeApi} from '../src/sync/wechat-scope-api.ts';
 import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
 test('纯 TS 公开同步在授权范围写入，发布原协议事件，关闭与撤销后停读',{timeout:30000},async t=>{
  const f=await pureTsFixture(t),owner=randomUUID(),contact=randomUUID(),binding=randomUUID();

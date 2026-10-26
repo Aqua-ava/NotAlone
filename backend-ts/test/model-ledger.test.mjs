@@ -3,8 +3,8 @@ import pg from 'pg';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import {PostgresModelLedger,PostgresModelLedgerDetails,legacyLedgerProjection,validateModelLedgerReceipt,modelLedgerInputBudget} from '../src/model-ledger.ts';
-import {MESSAGES_MEASUREMENT_ID} from '../src/model-input-budget.ts';
+import {PostgresModelLedger,PostgresModelLedgerDetails,legacyLedgerProjection,validateModelLedgerReceipt,modelLedgerInputBudget} from '../src/platform/models/model-ledger.ts';
+import {MESSAGES_MEASUREMENT_ID} from '../src/platform/models/model-input-budget.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 const receipt=()=>({attempt_id:randomUUID(),permit_id:randomUUID(),request_id:randomUUID(),owner_id:randomUUID(),contact_id:randomUUID(),provider:'synthetic-official',model:'synthetic-model',called_at:'2026-10-24T00:00:00.000Z',latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}});
 test('恢复unknown后拒绝重发授权，迟到pending不能解除未知门禁；真实迟到结算仍可细化', {timeout:60000},async t=>{

@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
-import { prepareDatabaseSchema } from '../src/schema-prepare.ts';
+import { prepareDatabaseSchema } from '../src/platform/database/schema-prepare.ts';
 
 const migrationsDirectory = new URL('../database/migrations/', import.meta.url).pathname;
 const ownedDatabase = /^notalone_ts_host_[a-f0-9]{32}_test$/;

@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {PostgresTaskStatusStore,TaskApi} from '../src/task-api.ts';
-import {UnavailableTaskControl} from '../src/task-control.ts';
+import {PostgresTaskStatusStore,TaskApi} from '../src/tasks/task-api.ts';
+import {UnavailableTaskControl} from '../src/tasks/task-control.ts';
 
 const scope=()=>({ownerId:randomUUID(),contactId:randomUUID()});
 const query=(contactId,taskId)=>new URLSearchParams({contact_id:contactId,task_id:taskId});

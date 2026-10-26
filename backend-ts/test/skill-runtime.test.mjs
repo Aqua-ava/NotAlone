@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {SkillRuntime} from '../src/skill-runtime.ts';
+import {SkillRuntime} from '../src/skills/skill-runtime.ts';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const scope={ownerId:'owner',contactId:'contact',scene:'reply'};
 function fixture(){
@@ -76,7 +76,7 @@ test('外部取消中断目录、正文及资源等待，迟到结果不能重�
 });
 
 test('资源坏字节仅在资格仍有效时允许原无Skill回退，撤销和未知错误终止',async()=>{
- const {SkillFileError}=await import('../src/skill-files.ts');
+ const {SkillFileError}=await import('../src/skills/skill-files.ts');
  for(const kind of ['utf8','file','revoked','unknown']){
   const f=fixture(),run=await SkillRuntime.open(f.port,scope);await run.readFile('/notalone/reply-skills/alpha/SKILL.md');
   f.port.resource=async()=>{if(kind==='revoked')f.revoke();if(kind==='unknown')throw Error('unknown');if(kind!=='utf8')throw new SkillFileError();return {content:Uint8Array.from([0xff])};};

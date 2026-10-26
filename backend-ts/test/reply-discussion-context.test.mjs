@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {setup} from './reply-assistant-erasure-support.mjs';
-import {ReplyAssistantGuards} from '../src/reply-assistant-guards.ts';
-import * as source from '../src/reply-source-guards.ts';
-import {PostgresReplyDiscussionContext,assistantDiscussionPayload,continuationReferencePayload} from '../src/reply-discussion-context.ts';
-import {fingerprint} from '../src/reply-assistant-erasure.ts';
+import {ReplyAssistantGuards} from '../src/reply/generation/reply-assistant-guards.ts';
+import * as source from '../src/reply/generation/reply-source-guards.ts';
+import {PostgresReplyDiscussionContext,assistantDiscussionPayload,continuationReferencePayload} from '../src/reply/discussion/reply-discussion-context.ts';
+import {fingerprint} from '../src/reply/generation/reply-assistant-erasure.ts';
 function service(x){let guards;const ports={...source,requireReplySourcesCurrent:(c,s,r,h)=>source.requireReplySourcesCurrent(c,s,r,h,(c,s,r)=>guards.requireReplyDiscussionById(c,s,r)),requireCurrentReplyMemory:async()=>{},requireSavedSkillPolicy:async()=>{},requireActiveBinding:async()=>x.binding,navigationDependencyIds:()=>[]};guards=new ReplyAssistantGuards(ports);return new PostgresReplyDiscussionContext({guards,ports});}
 async function request(x,g){const r=(await x.f.client.query('SELECT * FROM reply_request WHERE id=$1',[g.request])).rows[0];return {...r,request_id:r.id};}
 test('实际PG完整历史保留旧用户输入，当前输入不重复进入历史',async t=>{

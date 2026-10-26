@@ -1,5 +1,7 @@
 # TypeScript 与 DSH 后台
 
+源码按业务分组，入口与目录职责见[后台源码索引](src/README.md)。
+
 生产后台由官方 DSH `0.2.1-rc.2` profile 启动，薄插件装配普通 TypeScript 业务模块。联系人、导入、消息、记忆、检索、候选、Skill、同步、后台任务及删除各有唯一写入责任；正常路径没有 Python旁车、旧框架或逐请求回退。DSH固定源码依据为 `687f282e8625c6b8d11ff58211a90524be2e4317`；安装锁见 `package.json`、`pnpm-lock.yaml`。
 
 开发环境为 Node.js ≥24。日常从 `../desktop` 先运行 `npm run dev:status`，复用当前项目实例；没有实例才 `npm run dev`。它沿用原 `.env`、PostgreSQL、owner/contact/channel身份和资料目录，无需 runtime选择标记、Python路径或Conda。旧 `pythonExecutable` 配置被兼容忽略。

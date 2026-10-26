@@ -4,8 +4,8 @@ import {createHash,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {sendEvents,startReplyServiceHost,useTool} from './reply-service-runtime-support.mjs';
-import {canonicalJSON} from '../src/contact-overview-evidence.ts';
-import {auditReplyRuntimeSources,captureReplyRuntimeSourceAttempt,replyComparisonCollectorBinding} from '../src/reply-comparison-sources.ts';
+import {canonicalJSON} from '../src/memory/overview/contact-overview-evidence.ts';
+import {auditReplyRuntimeSources,captureReplyRuntimeSourceAttempt,replyComparisonCollectorBinding} from '../src/diagnostics/reply-comparison-sources.ts';
 
 const INPUT=['current_intent','available_facts','unknowns','allowed_changes','current_message','recent_context'];
 const canonical=value=>value===null||typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?`[${value.map(canonical).join(',')}]`:`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;

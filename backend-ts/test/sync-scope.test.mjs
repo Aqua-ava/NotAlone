@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HostStorage } from '../src/host-storage.ts';
-import { SyncScopeService } from '../src/sync-scope.ts';
-import { SyncIncrementalStore } from '../src/sync-incremental-store.ts';
-import { SyncHistory } from '../src/sync-history.ts';
+import { HostStorage } from '../src/platform/database/host-storage.ts';
+import { SyncScopeService } from '../src/sync/sync-scope.ts';
+import { SyncIncrementalStore } from '../src/sync/sync-incremental-store.ts';
+import { SyncHistory } from '../src/sync/sync-history.ts';
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
 test('范围默认仅所选，确认全部不改变总开关且重复确认保留起点', async t => {

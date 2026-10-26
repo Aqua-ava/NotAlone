@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bm25Scores, hybridCandidates } from '../src/retrieval-hybrid.ts';
+import { bm25Scores, hybridCandidates } from '../src/retrieval/retrieval-hybrid.ts';
 test('语义零和负分保留，故障不词法兜底，DF随池重算',async()=>{
  const pool=[{memory_id:'b',text:'咖啡'},{memory_id:'a',text:'雨天'}];
  assert.deepEqual((await hybridCandidates(['茶'],pool,async()=>[[1,0],[-1,0],[0,0]]))[0].map(r=>r.memory_id),['a','b']);

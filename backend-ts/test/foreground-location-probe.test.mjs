@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
-import {NativeForegroundProbe,safeForegroundProbeCode} from '../src/foreground-location-probe.ts';
+import {NativeForegroundProbe,safeForegroundProbeCode} from '../src/foreground/foreground-location-probe.ts';
 const fixture=fileURLToPath(new URL('./foreground-location-probe.fixture.mjs',import.meta.url));
 const probe=mode=>new NativeForegroundProbe({executable:process.execPath,args:[fixture,mode??'normal']});
 test('预热状态是稳定的领域可投影原因', () => {

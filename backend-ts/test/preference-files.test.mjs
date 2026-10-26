@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,writeFile,readFile,rm,symlink,chmod,access} from 'node:fs/
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
-import {eraseManagedUpdateBackups} from '../src/preference-files.ts';
+import {eraseManagedUpdateBackups} from '../src/preferences/preference-files.ts';
 // 数据库身份端口为确定性合成值；这些测试只证明文件边界，不代表PG集成。
 async function setup(t){
  const root=await mkdtemp(join(tmpdir(),'notalone-preference-files-'));t.after(()=>rm(root,{recursive:true,force:true}));

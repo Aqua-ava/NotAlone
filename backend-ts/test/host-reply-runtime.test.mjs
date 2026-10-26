@@ -6,8 +6,8 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-support.mjs';
-import {finishBatch,normalizeProposal,skillUuid5} from '../src/skill-learning-contract.ts';
-import {wholeStrategyId} from '../src/skill-execution-view.ts';
+import {finishBatch,normalizeProposal,skillUuid5} from '../src/skills/skill-learning-contract.ts';
+import {wholeStrategyId} from '../src/skills/skill-execution-view.ts';
 
 function evidenceId(body){
   let result;

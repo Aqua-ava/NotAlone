@@ -6,16 +6,16 @@ import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import pg from 'pg';
-import { HostStorage, HostStorageError } from '../src/host-storage.ts';
-import { SkillLearningNotFound, normalizeProposal } from '../src/skill-learning-contract.ts';
-import { SkillFiles } from '../src/skill-files.ts';
-import { SkillLibrary } from '../src/skill-library.ts';
-import { ExtractionTaskStore } from '../src/extraction-task-store.ts';
-import { SkillLearningStore } from '../src/skill-learning-store.ts';
-import { SkillReviewStore } from '../src/skill-review-store.ts';
-import { SkillHistoryPolicyStore } from '../src/skill-history-policy-store.ts';
-import { SkillLearningHttp } from '../src/skill-learning-http.ts';
-import { ModelLedgerError, PostgresModelLedger, PostgresModelLedgerDetails } from '../src/model-ledger.ts';
+import { HostStorage, HostStorageError } from '../src/platform/database/host-storage.ts';
+import { SkillLearningNotFound, normalizeProposal } from '../src/skills/skill-learning-contract.ts';
+import { SkillFiles } from '../src/skills/skill-files.ts';
+import { SkillLibrary } from '../src/skills/skill-library.ts';
+import { ExtractionTaskStore } from '../src/memory/extraction/extraction-task-store.ts';
+import { SkillLearningStore } from '../src/skills/skill-learning-store.ts';
+import { SkillReviewStore } from '../src/skills/skill-review-store.ts';
+import { SkillHistoryPolicyStore } from '../src/skills/skill-history-policy-store.ts';
+import { SkillLearningHttp } from '../src/skills/skill-learning-http.ts';
+import { ModelLedgerError, PostgresModelLedger, PostgresModelLedgerDetails } from '../src/platform/models/model-ledger.ts';
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
 async function storageFixture(t) {

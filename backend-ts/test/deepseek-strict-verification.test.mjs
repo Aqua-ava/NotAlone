@@ -4,10 +4,10 @@ import {
   buildDeepSeekStrictVerificationRequest,
   decodeDeepSeekStrictVerificationResponse,
   deepSeekStrictVerificationSchema,
-} from '../src/deepseek-strict-verification.ts';
-import {buildSourceVerificationContract} from '../src/extraction-protocol-contract.ts';
-import {parseSourceVerification} from '../src/extraction-protocol.ts';
-import {readExtractionToolArguments} from '../src/extraction-arguments.ts';
+} from '../src/memory/extraction/deepseek-strict-verification.ts';
+import {buildSourceVerificationContract} from '../src/memory/extraction/extraction-protocol-contract.ts';
+import {parseSourceVerification} from '../src/memory/extraction/extraction-protocol.ts';
+import {readExtractionToolArguments} from '../src/memory/extraction/extraction-arguments.ts';
 
 const messageId='33333333-3333-4333-8333-333333333333';
 const fact={text:'联系人有事爱直接打电话',category:'preference',subject:'contact',topic:'other',

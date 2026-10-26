@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
 import {syntheticProvider} from './pure-ts-provider-fixture.mjs';
 import {sendEvents,useTool} from './reply-service-runtime-support.mjs';
-import {renderProfile} from '../src/l3-profile-workspace.ts';
+import {renderProfile} from '../src/memory/layered/l3-profile-workspace.ts';
 import {DatabaseSync} from 'node:sqlite';
 import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';

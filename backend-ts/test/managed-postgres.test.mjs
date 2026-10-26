@@ -7,7 +7,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {createServer} from 'node:net';
 import {once} from 'node:events';
 import pg from 'pg';
-import {acquireManagedDatabaseLease} from '../src/managed-database-lifetime.ts';
+import {acquireManagedDatabaseLease} from '../src/platform/database/managed-database-lifetime.ts';
 const pgBin=process.env.NOTALONE_TEST_PG_BIN??join(homedir(),'miniconda3/envs/NotAlone/bin');
 const environment={PATH:'/usr/bin:/bin',LANG:'en_US.UTF-8',LC_ALL:'C'};
 const bounded=(promise,ms)=>new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('合成资料服务未在时限内响应')),ms);promise.then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});});

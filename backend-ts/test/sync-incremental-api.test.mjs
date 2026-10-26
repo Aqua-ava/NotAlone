@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {writeFile,readFile} from 'node:fs/promises';
 import {watch} from 'node:fs';
 import {join} from 'node:path';
-import {HostStorage} from '../src/host-storage.ts';
-import {SyncScopeService} from '../src/sync-scope.ts';
-import {createSyncIncrementalApi,isSyncIncrementalRoute} from '../src/sync-incremental-api.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {SyncScopeService} from '../src/sync/sync-scope.ts';
+import {createSyncIncrementalApi,isSyncIncrementalRoute} from '../src/sync/sync-incremental-api.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 const prefix='/api/runtime/sync-incremental/';
 async function fixture(t,{connected=true,owner=true}={}){

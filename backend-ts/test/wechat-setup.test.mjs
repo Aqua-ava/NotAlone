@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { WechatSetupService, PostgresWechatSetupStore, WechatSetupConflict, WechatProbeUnavailable } from '../src/wechat-setup.ts';
-import { WechatSetupProbe, BoundedWechatCliRunner } from '../src/wechat-setup-probe.ts';
-import { HostStorage, HostStorageError } from '../src/host-storage.ts';
-import { createWechatScopeApi } from '../src/wechat-scope-api.ts';
+import { WechatSetupService, PostgresWechatSetupStore, WechatSetupConflict, WechatProbeUnavailable } from '../src/sync/wechat-setup.ts';
+import { WechatSetupProbe, BoundedWechatCliRunner } from '../src/sync/wechat-setup-probe.ts';
+import { HostStorage, HostStorageError } from '../src/platform/database/host-storage.ts';
+import { createWechatScopeApi } from '../src/sync/wechat-scope-api.ts';
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
 function fixture(overrides = {}) {

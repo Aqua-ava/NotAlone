@@ -6,7 +6,7 @@ import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {buildReplyComparisonReport,createReplyComparisonPlan} from '../src/reply-comparison.ts';
+import {buildReplyComparisonReport,createReplyComparisonPlan} from '../src/diagnostics/reply-comparison.ts';
 
 const manifestText=await readFile(new URL('./fixtures/reply-comparison-material-manifest.json',import.meta.url),'utf8');
 const datasetText=await readFile(new URL('./fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8');
@@ -124,7 +124,7 @@ test('本地CLI在禁止网络的子进程生成报告，缺失退出2，坏摘�
  const guard=join(directory,'deny-network.mjs');await writeFile(guard,"import http from 'node:http';import https from 'node:https';import net from 'node:net';import dns from 'node:dns';import {syncBuiltinESMExports} from 'node:module';const deny=()=>{throw Error('离线报告器禁止网络');};globalThis.fetch=deny;http.request=deny;http.get=deny;https.request=deny;https.get=deny;net.connect=deny;net.createConnection=deny;net.Socket.prototype.connect=deny;dns.lookup=deny;syncBuiltinESMExports();\n");
  const paths={manifest:join(directory,'manifest.json'),dataset:join(directory,'dataset.json'),run:join(directory,'run.json')};
  await writeFile(paths.manifest,manifestText);await writeFile(paths.dataset,datasetText);const original=JSON.stringify(fixture());await writeFile(paths.run,original);
- const invoke=output=>spawnSync(process.execPath,['--import',guard,fileURLToPath(new URL('../src/reply-comparison.ts',import.meta.url)),'--manifest',paths.manifest,'--dataset',paths.dataset,'--run',paths.run,'--output',output],{encoding:'utf8',timeout:10000});
+ const invoke=output=>spawnSync(process.execPath,['--import',guard,fileURLToPath(new URL('../src/diagnostics/reply-comparison.ts',import.meta.url)),'--manifest',paths.manifest,'--dataset',paths.dataset,'--run',paths.run,'--output',output],{encoding:'utf8',timeout:10000});
  const output=join(directory,'report.json'),ok=invoke(output);assert.equal(ok.status,0,ok.stderr);const report=JSON.parse(await readFile(output,'utf8'));assert.equal(report.overall.status,'passed');assert.equal(report.real_model_quality_verified,false);assert.equal(report.population.planned,96);assert.equal(await readFile(paths.run,'utf8'),original);
  const incomplete=fixture();incomplete.records=[];await writeFile(paths.run,JSON.stringify(incomplete));const pending=invoke(join(directory,'incomplete.json'));assert.equal(pending.status,2,pending.stderr);assert.equal(JSON.parse(await readFile(join(directory,'incomplete.json'),'utf8')).population.missing,96);
  const bad=fixture();bad.records[0].input_sha256='bad';await writeFile(paths.run,JSON.stringify(bad));assert.equal(invoke(join(directory,'bad.json')).status,1);

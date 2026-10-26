@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {seedMigrationBaseline,prepareTestSchema} from './schema-fixture.mjs';
 import pg from 'pg';
-import {HostStorage} from '../src/host-storage.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
 
 test('110升级116保留原数据与unknown收据，学习claim完整约束和级联',async t=>{
   const root=new URL('../../',import.meta.url).pathname;

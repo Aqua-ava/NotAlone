@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { measureSerializedMessages, MESSAGES_MEASUREMENT_ID } from '../src/model-input-budget.ts';
+import { measureSerializedMessages, MESSAGES_MEASUREMENT_ID } from '../src/platform/models/model-input-budget.ts';
 const binding={provider:'deepseek-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off'};
 const profile={context_window_tokens:8192,safety_margin_tokens:512};
 const body=()=>({model:binding.model,stream:true,max_tokens:512,temperature:0,thinking:{type:'disabled'},system:'仅用证据回答。',messages:[{role:'user',content:[{type:'text',text:'合成中文𠀀'}]}],tools:[{name:'lookup',description:'查阅合成来源',input_schema:{type:'object',properties:{query:{type:'string'}}}}]});

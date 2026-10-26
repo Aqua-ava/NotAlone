@@ -58,9 +58,9 @@ Spec: ../spec.md
 
 ### 实现与数据边界
 
-- 新增 [学习合同](../../../backend-ts/src/skill-learning-contract.ts)、[材料选择](../../../backend-ts/src/skill-learning-materials.ts)、[权威存储](../../../backend-ts/src/skill-learning-store.ts)、[模型运行时](../../../backend-ts/src/skill-learning-runtime.ts)和[唯一 Worker](../../../backend-ts/src/skill-learning-worker.ts)。材料每批最多 8 份、24,000 个 Unicode 码点，纠正优先；提案支持 `no_change/reuse/create/update/merge`，目标、方法替换和范围必须经过结构校验与用户审核。
-- [审核服务](../../../backend-ts/src/skill-review-service.ts)复用生产 `PostgresReplyContext` 读取当前 L2／L3，[审核存储](../../../backend-ts/src/skill-review-store.ts)在单事务内复核绑定、来源、分层快照、记忆／偏好／库修订和目标版本后写入不可变版本、方法清单、来源证明及发布范围。v4 证明失败关闭空分层材料，旧预览在任一依赖变化后不能批准。
-- [历史与范围政策](../../../backend-ts/src/skill-history-policy-store.ts)支持版本查看、回滚、方法／范围停用和撤销；同版本回滚保持幂等，仅在真正切换版本时更新当前版本、工作副本和库修订。删除继续复用既有 Skill 清理路径，来源删除会清空草稿私人依据、审核输入和结果，并使已发布版本不可读及清理文件。
+- 新增 [学习合同](../../../backend-ts/src/skills/skill-learning-contract.ts)、[材料选择](../../../backend-ts/src/skills/skill-learning-materials.ts)、[权威存储](../../../backend-ts/src/skills/skill-learning-store.ts)、[模型运行时](../../../backend-ts/src/skills/skill-learning-runtime.ts)和[唯一 Worker](../../../backend-ts/src/skills/skill-learning-worker.ts)。材料每批最多 8 份、24,000 个 Unicode 码点，纠正优先；提案支持 `no_change/reuse/create/update/merge`，目标、方法替换和范围必须经过结构校验与用户审核。
+- [审核服务](../../../backend-ts/src/skills/skill-review-service.ts)复用生产 `PostgresReplyContext` 读取当前 L2／L3，[审核存储](../../../backend-ts/src/skills/skill-review-store.ts)在单事务内复核绑定、来源、分层快照、记忆／偏好／库修订和目标版本后写入不可变版本、方法清单、来源证明及发布范围。v4 证明失败关闭空分层材料，旧预览在任一依赖变化后不能批准。
+- [历史与范围政策](../../../backend-ts/src/skills/skill-history-policy-store.ts)支持版本查看、回滚、方法／范围停用和撤销；同版本回滚保持幂等，仅在真正切换版本时更新当前版本、工作副本和库修订。删除继续复用既有 Skill 清理路径，来源删除会清空草稿私人依据、审核输入和结果，并使已发布版本不可读及清理文件。
 - 学习任务沿用原全局 Worker 锁、联系人任务租约、心跳、取消、显式恢复和晚结果栅栏。任务结束后继续处理后续合格材料；停止或关闭时排空在途任务，旧租约和取消后的结果不能保存。
 - 仅使用随机 `_test` PostgreSQL、合成联系人和合成模型响应；未读写正式聊天、关系资料、微信或凭据，未发送外部消息，未执行打包、push、远端分支或 PR。
 

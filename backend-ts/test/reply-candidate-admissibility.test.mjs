@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {validateReplyCandidates} from '../src/reply-contract.ts';
-import {replyCandidateAdmissibility,replyCandidateLimit} from '../src/reply-candidate-admissibility.ts';
+import {validateReplyCandidates} from '../src/reply/generation/reply-contract.ts';
+import {replyCandidateAdmissibility,replyCandidateLimit} from '../src/reply/generation/reply-candidate-admissibility.ts';
 
 const evidence=randomUUID();
 const candidate=(text)=>({text,basis:'本次合成意图',citation_ids:[evidence],risk_notes:[]});

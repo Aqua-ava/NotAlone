@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {startModelHost,modelBackgroundConcurrency} from '../src/model-host.ts';
+import {startModelHost,modelBackgroundConcurrency} from '../src/platform/models/model-host.ts';
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
 async function options(t) {
  const home=await mkdtemp(join(tmpdir(),'na-model-host-'));

@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {PostgresReplyContext} from '../src/reply-context.ts';
-import {readContextMessages} from '../src/reply-context-read.ts';
-import {buildReplyPayload} from '../src/reply-payload.ts';
-import {parseReplyRequest,normalizeReplyInput} from '../src/reply-contract.ts';
-import {decodePreparedContext,encodePreparedContext} from '../src/reply-prepared-codec.ts';
+import {PostgresReplyContext} from '../src/reply/context/reply-context.ts';
+import {readContextMessages} from '../src/reply/context/reply-context-read.ts';
+import {buildReplyPayload} from '../src/reply/generation/reply-payload.ts';
+import {parseReplyRequest,normalizeReplyInput} from '../src/reply/generation/reply-contract.ts';
+import {decodePreparedContext,encodePreparedContext} from '../src/reply/generation/reply-prepared-codec.ts';
 import {startReplyServiceHost} from './reply-service-runtime-support.mjs';
 async function fixture(t){
  const f=await createStorageFixture();let external=false;t.after(async()=>{if(!external)await f.close();});

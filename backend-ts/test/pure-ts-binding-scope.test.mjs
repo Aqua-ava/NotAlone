@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import pg from 'pg';
-import {HostStorage} from '../src/host-storage.ts';
-import {resolvePublicReplyScope,withPublicReplyScope,resolveRequestBinding,withoutPublicReplyScope} from '../src/pure-ts-reply-scope.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {resolvePublicReplyScope,withPublicReplyScope,resolveRequestBinding,withoutPublicReplyScope} from '../src/host/pure-ts-reply-scope.ts';
 import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
 test('重叠manual/desktop请求不串同scope或跨scope身份，结束与后台调用回默认',{timeout:10000},async t=>{
  const f=await pureTsFixture(t),owner=randomUUID(),contacts=[randomUUID(),randomUUID()],desktop=[randomUUID(),randomUUID()],manual=[randomUUID(),randomUUID()];

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SyncIncrementalCli } from '../src/sync-incremental-cli.ts';
+import { SyncIncrementalCli } from '../src/sync/sync-incremental-cli.ts';
 async function fixture(t, source, options={}) {
   const dir=await mkdtemp(join(tmpdir(),'notalone-sync-cli-'));
   const executable=join(dir,'cli');

@@ -4,8 +4,8 @@ import {once} from 'node:events';
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {AssistantDiscussionService} from '../src/assistant-discussion-service.ts';
-import {createAssistantDiscussionHttp} from '../src/assistant-discussion-http.ts';
+import {AssistantDiscussionService} from '../src/reply/discussion/assistant-discussion-service.ts';
+import {createAssistantDiscussionHttp} from '../src/reply/discussion/assistant-discussion-http.ts';
 
 test('讨论内部入口严格认证且重开/删除只返回已保存业务状态', async (t) => {
   const f = await createStorageFixture();

@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import {HostStorage} from '../src/host-storage.ts';
-import {createForegroundLocationApi} from '../src/foreground-location-api.ts';
+import {HostStorage} from '../src/platform/database/host-storage.ts';
+import {createForegroundLocationApi} from '../src/foreground/foreground-location-api.ts';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 
 test('创建前台定位 API 时后台启动一次合成图预热', async () => {

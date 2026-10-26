@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { WechatSessions } from '../src/wechat-sessions.ts';
+import { WechatSessions } from '../src/sync/wechat-sessions.ts';
 
 // 子进程只访问本测试创建的合成目录，不继承真实配置或聊天资料。
 async function fixture(t, rows = [], mode = '') {

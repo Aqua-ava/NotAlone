@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {organizationQualityFixture,inputAnnotations} from './organization-quality-fixture.mjs';
-import {createOrganizationQualityRuntime} from '../src/organization-quality-runtime.ts';
-import {qualityInputSourceRef} from '../src/organization-quality-store.ts';
+import {createOrganizationQualityRuntime} from '../src/diagnostics/organization-quality-runtime.ts';
+import {qualityInputSourceRef} from '../src/diagnostics/organization-quality-store.ts';
 
 test('公开执行的模型边界失败持久终结，不把未发送计成成功或重开后重试',async t=>{
   let calls=0;

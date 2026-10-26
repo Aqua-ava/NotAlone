@@ -2,15 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {PostgresReplyStore} from '../src/reply-store.ts';
-import {PostgresReplyContext} from '../src/reply-context.ts';
-import {normalizeReplyInput} from '../src/reply-contract.ts';
-import {PostgresSkillPort} from '../src/skill-port.ts';
-import {SkillFiles} from '../src/skill-files.ts';
-import {createReplySkillGuards} from '../src/reply-skill-guards.ts';
-import {selectApplicablePreferences} from '../src/preference-service.ts';
-import {deleteSourceReplies} from '../src/preference-erasure.ts';
-import {createReplyGenerationGuards} from '../src/reply-generation-guards.ts';
+import {PostgresReplyStore} from '../src/reply/generation/reply-store.ts';
+import {PostgresReplyContext} from '../src/reply/context/reply-context.ts';
+import {normalizeReplyInput} from '../src/reply/generation/reply-contract.ts';
+import {PostgresSkillPort} from '../src/skills/skill-port.ts';
+import {SkillFiles} from '../src/skills/skill-files.ts';
+import {createReplySkillGuards} from '../src/reply/generation/reply-skill-guards.ts';
+import {selectApplicablePreferences} from '../src/preferences/preference-service.ts';
+import {deleteSourceReplies} from '../src/preferences/preference-erasure.ts';
+import {createReplyGenerationGuards} from '../src/reply/generation/reply-generation-guards.ts';
 async function setup(t){const f=await createStorageFixture();t.after(()=>f.close());const owner=randomUUID(),contact=randomUUID(),binding=randomUUID();await f.client.query("INSERT INTO owner(id,display_name)VALUES($1,'合成本人')",[owner]);await f.client.query("INSERT INTO contact(id,owner_id,display_name)VALUES($1,$2,'合成联系人')",[contact,owner]);await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id)VALUES($1,$2,$3)',[binding,owner,contact]);const transaction=async fn=>{await f.client.query('BEGIN');try{const result=await fn(f.client);await f.client.query('COMMIT');return result;}catch(e){await f.client.query('ROLLBACK');throw e;}};const skillPort=new PostgresSkillPort({read:transaction},`${f.directory}/skills`),savedSkill=createReplySkillGuards({files:new SkillFiles(`${f.directory}/skills`)});return {f,owner,contact,binding,transaction,skillPort,savedSkill};}
 function run(x,overrides={},guardOptions={}){const input={contact_id:x.contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',input_kind:'draft',draft_text:'明天见',include_relationship_context:false},continued_from_candidate_id:null,skill_version_id:null,suggestion:null,allow_incomplete_history:false,skill_disabled:true,scene:null,...overrides},scope={owner_id:x.owner,contact_id:x.contact,conversation_binding_id:x.binding,confirmation:'manual'},factory=createReplyGenerationGuards({scope,input,skillPort:x.skillPort,savedSkill:x.savedSkill,...guardOptions});const store=new PostgresReplyStore({transaction:x.transaction,guards:factory.guards});return {input,scope,factory,store,start:()=>store.start({...scope,idempotency_key:input.idempotency_key,normalized_input:normalizeReplyInput(input),continued_from_candidate_id:input.continued_from_candidate_id})};}
 async function prepare(x,r){const started=await r.start(),request=started.request;const prepared=await x.transaction(async client=>{const contextOptions={overview:false,readContinuationBasis:(c,s,b,id)=>r.factory.assistant.readContinuationBasis(c,s,b,id)},context=await new PostgresReplyContext(client,contextOptions).build({...r.scope,reply_request_id:request.request_id,request:r.input}),discussion=await r.factory.discussion.read(client,request),preferences=await selectApplicablePreferences(client,x.owner,x.contact,r.input.content.type);r.factory.bindPrepared({context,discussion,preferences,skillRevision:'0',contextOptions});return {context,discussion,preferences};});const ctx={evidence:prepared.context.evidence,snapshot:{scope:prepared.context.scope,evidence:prepared.context.evidence,expression_preferences:prepared.preferences.preferences.map(p=>({preference_id:p.preference_id,text:p.text,revision:p.revision,scope:p.scope})),...(prepared.discussion?{assistant_discussion_snapshot:prepared.discussion.snapshot}:{}),...(prepared.context.continuation_basis?{continuation_basis:{candidate_id:prepared.context.continuation_basis.candidate_id,basis_revision_sha256:prepared.context.continuation_basis.basis_revision_sha256,basis_changes:prepared.context.continuation_basis.basis_changes}}:{})},skill_library_revision:0};await r.store.prepareContext(request,ctx);return {request,ctx,prepared};}

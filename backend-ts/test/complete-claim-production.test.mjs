@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {createExtractionFixture} from './extraction-fixture.mjs';
-import {ExtractionAdoptionService} from '../src/extraction-adoption-service.ts';
-import {ExtractionBatchService} from '../src/extraction-batch-service.ts';
-import {ExtractionTaskStore} from '../src/extraction-task-store.ts';
-import {ExtractionTaskRunner} from '../src/extraction-task-runner.ts';
-import {createExtractionPolicyVersion} from '../src/extraction-policy-version.ts';
-import {modelTaskRequestId} from '../src/host-model-accounting.ts';
-import {EMBEDDING_MODEL,EMBEDDING_REVISION} from '../src/retrieval-embedding.ts';
+import {ExtractionAdoptionService} from '../src/memory/extraction/extraction-adoption-service.ts';
+import {ExtractionBatchService} from '../src/memory/extraction/extraction-batch-service.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
+import {ExtractionTaskRunner} from '../src/memory/extraction/extraction-task-runner.ts';
+import {createExtractionPolicyVersion} from '../src/memory/extraction/extraction-policy-version.ts';
+import {modelTaskRequestId} from '../src/host/host-model-accounting.ts';
+import {EMBEDDING_MODEL,EMBEDDING_REVISION} from '../src/retrieval/retrieval-embedding.ts';
 
 test('显式新任务经正式A→B保留第三人称和忠实未知日期，负向facet不写入且缓存不绕版本/unknown',
  {timeout:30000},async()=>{

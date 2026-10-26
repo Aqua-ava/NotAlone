@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {randomUUID} from 'node:crypto';
-import {createExplorationHttp} from '../src/exploration-http.ts';
+import {createExplorationHttp} from '../src/reply/exploration/exploration-http.ts';
 
 test('探索私有HTTP先认证、固定owner、严格动作输入且不泄漏异常正文',async t=>{
  const owner=randomUUID(),contact=randomUUID(),session=randomUUID(),token='synthetic-exploration-private-token-'.repeat(2),calls=[];

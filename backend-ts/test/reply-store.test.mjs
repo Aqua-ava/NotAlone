@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { PostgresReplyStore } from '../src/reply-store.ts';
+import { PostgresReplyStore } from '../src/reply/generation/reply-store.ts';
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
 async function setup(t) {

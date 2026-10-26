@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-support.mjs';
-import {normalizeReplyInput,parseReplyRequest} from '../src/reply-contract.ts';
-import {decodePreparedContext} from '../src/reply-prepared-codec.ts';
-import {readReplyOwnerOverview} from '../src/reply-context-overview.ts';
-import {digest} from '../src/contact-overview-evidence.ts';
+import {normalizeReplyInput,parseReplyRequest} from '../src/reply/generation/reply-contract.ts';
+import {decodePreparedContext} from '../src/reply/generation/reply-prepared-codec.ts';
+import {readReplyOwnerOverview} from '../src/reply/context/reply-context-overview.ts';
+import {digest} from '../src/memory/overview/contact-overview-evidence.ts';
 
 async function fixture(t){
  const f=await createStorageFixture();

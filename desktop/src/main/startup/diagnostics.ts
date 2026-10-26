@@ -156,7 +156,7 @@ export class StartupDiagnostics {
       await access(config.projectDirectory!, constants.R_OK | constants.X_OK);
     } catch { return 'project_unavailable'; }
     try {
-      for (const entry of ['backend-ts/src/host-storage.ts', 'backend-ts/src/launch.ts', 'backend-ts/profile/host.patch.yml', 'backend-ts/src/schema-prepare-cli.ts']) {
+      for (const entry of ['backend-ts/src/platform/database/host-storage.ts', 'backend-ts/src/launch.ts', 'backend-ts/profile/host.patch.yml', 'backend-ts/src/schema-prepare-cli.ts']) {
         if (!(await stat(path.join(config.projectDirectory!, entry))).isFile()) return 'runtime_components_unavailable';
       }
     } catch { return 'runtime_components_unavailable'; }
@@ -182,7 +182,7 @@ export class StartupDiagnostics {
     const project = await realpath(config.projectDirectory!);
     // 普通诊断只读；纯 TS 准备入口沿同一库复用原迁移与兼容性合同。
     // 独立子进程保留硬超时与退出回收，不装配模型、业务任务或 DSH 遥测。
-    const program = `const {HostStorage}=await import(${JSON.stringify(pathToFileURL(path.join(project, 'backend-ts/src/host-storage.ts')).href)});
+    const program = `const {HostStorage}=await import(${JSON.stringify(pathToFileURL(path.join(project, 'backend-ts/src/platform/database/host-storage.ts')).href)});
       let storage; let code='diagnostic_failed';
       try { storage=await HostStorage.open({envFilePath:process.env.NOTALONE_ENV_FILE,migrationsDirectory:${JSON.stringify(path.join(project, 'backend-ts/database/migrations'))},environment:process.env});
         code=(await storage.compatibility()).code; } catch {} finally { await storage?.close(); }
