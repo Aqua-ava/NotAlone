@@ -112,9 +112,12 @@ export class AssistantRuntime {
    throw new ReplyError('reply_runtime_unavailable',503);
   }
  }
- private async requireCommitted(scope:Scope,row:RuntimeRow){
-  const valid=await this.options.transaction(async client=>(await client.query("SELECT 1 FROM reply_request request JOIN assistant_session_turn turn ON turn.owner_id=request.owner_id AND turn.contact_id=request.contact_id AND turn.idempotency_key=request.idempotency_key WHERE request.id=$1 AND request.owner_id=$2 AND request.contact_id=$3 AND request.state='completed' AND turn.session_id=$4 AND turn.input_payload IS NOT NULL AND turn.state<>'redacted'",[row.committed_request_id,scope.owner_id,scope.contact_id,row.session_id])).rowCount===1);
+ private async requireCommittedInTransaction(client:Client,scope:Scope,session:string,requestId:string|null):Promise<void>{
+  const valid=(await client.query("SELECT 1 FROM reply_request request JOIN assistant_session_turn turn ON turn.owner_id=request.owner_id AND turn.contact_id=request.contact_id AND turn.idempotency_key=request.idempotency_key WHERE request.id=$1 AND request.owner_id=$2 AND request.contact_id=$3 AND request.state='completed' AND turn.session_id=$4 AND turn.input_payload IS NOT NULL AND turn.state<>'redacted'",[requestId,scope.owner_id,scope.contact_id,session])).rowCount===1;
   if(!valid)return unavailable();
+ }
+ private async requireCommitted(scope:Scope,row:RuntimeRow):Promise<void>{
+  await this.options.transaction(client=>this.requireCommittedInTransaction(client,scope,row.session_id,row.committed_request_id));
  }
  async acquire(scope:VerifiedReplyScope,requestKey:string,requestId:string,configuration:string):Promise<AssistantRuntimeLease|null>{
   let row=await this.options.transaction(client=>this.lookup(client,scope,requestKey,configuration));if(!row)return null;
@@ -142,7 +145,7 @@ export class AssistantRuntime {
      const handle=await world!.persistence.open(SessionId(row!.runtime_session_id),'write');let eventCount:number;
      try{await handle.flush();eventCount=(await handle.read(0)).events.length;if(eventCount<expectedEventCount)return unavailable();}finally{await handle.close();}
      await this.options.transaction(async client=>{
-     const saved=(await client.query("SELECT 1 FROM reply_request request JOIN assistant_session_turn turn ON turn.owner_id=request.owner_id AND turn.contact_id=request.contact_id AND turn.idempotency_key=request.idempotency_key WHERE request.id=$1 AND request.owner_id=$2 AND request.contact_id=$3 AND request.state='completed' AND turn.session_id=$4 AND turn.input_payload IS NOT NULL AND turn.state<>'redacted'",[requestId,scope.owner_id,scope.contact_id,row!.session_id])).rowCount===1;if(!saved)return unavailable();
+     await this.requireCommittedInTransaction(client,scope,row!.session_id,requestId);
      const changed=await client.query("UPDATE assistant_runtime_session SET state='ready',committed_request_id=$4,committed_event_count=$6 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$5 AND state='dirty'",[scope.owner_id,scope.contact_id,row!.session_id,requestId,row!.runtime_session_id,eventCount]);if(changed.rowCount!==1)return unavailable();
     });},
     release:async()=>{if(released)return;released=true;try{await world!.close();}finally{this.active.delete(key);}},
