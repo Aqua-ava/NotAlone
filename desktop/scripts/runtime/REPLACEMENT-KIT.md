@@ -1,3 +1,5 @@
+> 2026-10-26：Python后端与Psycopg依赖已退役。以下是旧产物历史记录；相关脚本仅在固定Git旧树中复现，不是当前运行或发布命令。
+
 # 开源组件修改工具包
 
 这是可选的开发工具，不影响普通用户双击 App。接收者无需 NotAlone 仓库、npm 模块、dist、共享缓存或 Conda。需要 macOS 15+ arm64、Node.js 22.12+ 和 Xcode Command Line Tools（clang、make、SDK、codesign）；修改工具本身的源码可直接阅读。离线开发 Python 与三个固定构建 wheel 在 `inputs/`，完整原始通知及索引在 `notices/`，来源和 SHA256 在 `scripts/runtime/*lock.json`，工具包字节清单为 `kit-inventory.json`。构建子进程仅使用本包独立 PBS 和系统工具。

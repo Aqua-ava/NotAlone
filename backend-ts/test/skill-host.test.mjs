@@ -12,25 +12,11 @@ import {createStorageFixture} from './host-storage-fixture.mjs';
 import {HostStorage} from '../src/host-storage.ts';
 import {SkillHost} from '../src/skill-host.ts';
 async function fixture(t){const f=await createStorageFixture();t.after(()=>f.close());const storage=await HostStorage.open(f.options);t.after(()=>storage.close());const {owner_id:owner}=await storage.initializeOwner('合成用户');const root=join(f.directory,'skills'),host=new SkillHost(storage,root);t.after(()=>host.close());return {f,storage,owner,root,host};}
-async function activate(host,port=1){let configuration;const calls=[];await host.transfer({control:async(path,method,body)=>{calls.push(path);if(path.endsWith('/activate')){configuration=body;return {state:'remote',active_requests:0};}return {state:'stopped',active_requests:0};}},port);return {configuration,calls};}
-test('私有同步认证owner/精确响应并由原Python Remote实际同步目录',async t=>{
- const x=await fixture(t);const server=createServer((req,res)=>{void x.host.privateHttp(req,res).then(done=>{if(!done){res.writeHead(404);res.end();}});});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
- const port=server.address().port,{configuration,calls}=await activate(x.host,port);assert.deepEqual(calls,['/api/runtime/skill-management/stop','/api/runtime/skill-management/status','/api/runtime/skill-management/activate']);
- const endpoint=`http://127.0.0.1:${port}/api/runtime/skill-management/synchronize`;
- const request=(token,owner=x.owner)=>fetch(endpoint,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({owner_id:owner})});
- assert.equal((await request('public-token')).status,401);assert.equal((await request(configuration.token,randomUUID())).status,400);
- const packageRoot=join(x.root,x.owner,'gentle-reply');await mkdir(packageRoot,{recursive:true});await writeFile(join(packageRoot,'SKILL.md'),'---\nname: gentle-reply\ndescription: "合成目录"\n---\n\n先核实。\n');
- const script="import sys,json;from uuid import UUID;from notalone.persistence.skill_management_remote import RemoteSkillManagement;c=json.load(sys.stdin);r=RemoteSkillManagement(port=c['port'],internal_token=c['token'],owner_id=UUID(c['owner_id']));print(r.synchronize());r.close()";
- const child=spawn(process.env.NOTALONE_TEST_PYTHON??join(homedir(),'miniconda3/envs/NotAlone/bin/python'),['-c',script],{env:{PATH:'/usr/bin:/bin',PYTHONPATH:resolve('../backend/src'),PYTHONDONTWRITEBYTECODE:'1'},stdio:['pipe','pipe','pipe']});let output='',errors='';child.stdout.on('data',d=>output+=d);child.stderr.on('data',d=>errors+=d);const exit=once(child,'exit');child.stdin.end(JSON.stringify(configuration));assert.equal((await exit)[0],0,errors);assert.ok(Number(output)>0);
- assert.equal((await x.f.client.query('SELECT name FROM reply_skill WHERE owner_id=$1',[x.owner])).rows[0].name,'gentle-reply');
- const response=await request(configuration.token),body=await response.text();assert.equal(response.status,200);assert.equal(response.headers.get('transfer-encoding'),null);assert.equal(Number(response.headers.get('content-length')),Buffer.byteLength(body));
- await x.host.close();assert.equal((await request(configuration.token)).status,503);
-});
-test('未排空或activate失败保持不可用，无请求fallback',async t=>{
- const x=await fixture(t);let activated=false;
- await assert.rejects(x.host.transfer({control:async(path)=>{if(path.endsWith('/stop'))return {state:'python',active_requests:0};activated=true;return {};}},1),{code:'skill_handoff_failed'});assert.equal(activated,false);assert.throws(()=>x.host.enter(),{code:'skill_unavailable'});
- await assert.rejects(x.host.transfer({control:async(path)=>{if(path.endsWith('/activate'))throw Error('synthetic_ack_lost');return {state:'stopped',active_requests:0};}},1));assert.throws(()=>x.host.enter(),{code:'skill_unavailable'});
-});
+async function activate(host){await host.activateStandalone();}
+// 旧Python同步桥的原断言固定在23a历史命令；当前管理租约/来源/删除测试继续默认执行。
+
+// 旧Python同步桥的原断言固定在23a历史命令；当前管理租约/来源/删除测试继续默认执行。
+
 test('关闭排空既有管理租约，晚发布断言失效',async t=>{
  const x=await fixture(t);await activate(x.host);const lease=x.host.enter();let done=false;const closing=x.host.close().then(()=>done=true);await Promise.resolve();assert.equal(done,false);assert.throws(lease.assertCurrent,{code:'skill_unavailable'});assert.throws(()=>x.host.enter(),{code:'skill_unavailable'});lease.finish();await closing;assert.equal(done,true);
 });
@@ -84,14 +70,4 @@ test('托管备份归属异常阻止Skill删除并保持409与原版本',async t
  assert.equal((await f.client.query('SELECT status FROM reply_skill WHERE id=$1',[imported.skill_id])).rows[0].status,'active');
  assert.equal((await f.client.query('SELECT count(*)::int n FROM reply_skill_file_cleanup')).rows[0].n,0);
 });
-test('activate已安装远端但控制ACK未返回时，固定owner私有同步已就绪而公开仍停收',async t=>{
- const x=await fixture(t),server=createServer((req,res)=>{void x.host.privateHttp(req,res);});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
- await x.host.transfer({control:async(path,method,body)=>{
-  if(!path.endsWith('/activate'))return {state:'stopped',active_requests:0};
-  assert.throws(()=>x.host.enter(),{code:'skill_unavailable'});
-  const script="import sys,json;from uuid import UUID;from notalone.persistence.skill_management_remote import RemoteSkillManagement;c=json.load(sys.stdin);r=RemoteSkillManagement(port=c['port'],internal_token=c['token'],owner_id=UUID(c['owner_id']));print(r.synchronize());r.close()";
-  const child=spawn(process.env.NOTALONE_TEST_PYTHON??join(homedir(),'miniconda3/envs/NotAlone/bin/python'),['-c',script],{env:{PATH:'/usr/bin:/bin',PYTHONPATH:resolve('../backend/src'),PYTHONDONTWRITEBYTECODE:'1'},stdio:['pipe','pipe','pipe']});let errors='';child.stderr.on('data',d=>errors+=d);const exit=once(child,'exit');child.stdin.end(JSON.stringify(body));assert.equal((await exit)[0],0,errors);
-  assert.throws(()=>x.host.enter(),{code:'skill_unavailable'});return {state:'remote',active_requests:0};
- }},server.address().port);
- const lease=x.host.enter();lease.finish();assert.equal(x.host.status().owner,'typescript');
-});
+// 旧Python同步桥的原断言固定在23a历史命令；当前管理租约/来源/删除测试继续默认执行。

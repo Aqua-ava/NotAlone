@@ -17,7 +17,7 @@ import { superviseDevelopmentApp } from './development-app.mjs';
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === '--help') {
-  console.log('npm run dev [-- --user-data-dir /绝对路径]\nReact/CSS 热更新；main、preload、共享代码与 DSH/TypeScript、Python 后台源码保存后安全重启。\n沿用本机配置与数据库，缺少的表结构在原库补齐。终端输入 r 回车重启；Ctrl+C 或 App 菜单退出。');
+  console.log('npm run dev [-- --user-data-dir /绝对路径]\nReact/CSS 热更新；main、preload、共享代码与 DSH/TypeScript 后台源码保存后安全重启。\n沿用本机配置与数据库，缺少的表结构在原库补齐。终端输入 r 回车重启；Ctrl+C 或 App 菜单退出。');
 } else {
   if (args.length && (args.length !== 2 || args[0] !== '--user-data-dir' || !path.isAbsolute(args[1]) || /[\0\r\n]/.test(args[1]))) {
     throw new Error('使用 npm run dev -- --help 查看启动方式');
@@ -81,9 +81,9 @@ async function develop() {
       [appDirectory, '--notalone-dev', ...developmentDebugArguments(process.env.NOTALONE_DEV_CDP, args[1]), ...(background ? ['--notalone-dev-background'] : []), ...(args.length ? [`--user-data-dir=${args[1]}`] : [])], { cwd: project, env: environment, detached: true,
         stdio: ['ignore', 'inherit', 'inherit', 'ipc'] }));
     await builder.watch();
-    for (const [directory, extension] of [['../backend/src/notalone', '.py'], ['../backend/database/migrations', '.sql'], ['../backend-ts/src', '.ts']]) {
+    for (const [directory, extension] of [['../backend/database/migrations', '.sql'], ['../backend-ts/src', '.ts']]) {
       watchers.push(watch(path.resolve(project, directory), { recursive: true }, (_event, filename) => {
-        if (filename?.endsWith(extension) && !filename.split(path.sep).includes('__pycache__')) restart();
+        if (filename?.endsWith(extension)) restart();
       }));
     }
     if (process.stdin.isTTY) {

@@ -69,7 +69,7 @@ test('只有显式源码开发启动可接受回环地址，正式包不能由�
   });
 });
 
-test('开发模式固定当前仓库源码，同时沿用既有解释器和资料配置', async () => {
+test('开发模式固定当前仓库源码，忽略旧解释器并沿用资料配置', async () => {
   await resourceBoundary(async ({ configuration, directory }) => {
     await writeFile(path.join(directory, 'backend-launch.json'), JSON.stringify({
       pythonExecutable: '/synthetic/python', projectDirectory: '/synthetic/old-checkout',
@@ -79,7 +79,7 @@ test('开发模式固定当前仓库源码，同时沿用既有解释器和资�
     const selected = await configuration.loadBackendConfiguration(directory);
     assert.equal(selected.projectDirectory, '/synthetic/current-checkout');
     assert.equal(selected.runtime, 'dsh', '源码开发入口固定使用 DSH，不由磁盘配置退回旧后台');
-    assert.equal(selected.pythonExecutable, '/synthetic/python');
+    assert.equal(selected.pythonExecutable, undefined);
     assert.equal(selected.envFilePath, '/synthetic/private/runtime.env');
     const saved = JSON.parse(await readFile(path.join(directory, 'backend-launch.json'), 'utf8'));
     assert.equal(saved.projectDirectory, '/synthetic/old-checkout', '开发覆盖仅在内存，不改写原本配置');

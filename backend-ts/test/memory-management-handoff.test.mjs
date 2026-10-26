@@ -6,27 +6,21 @@ import {MemoryManagementHandoff} from '../src/memory-management-handoff.ts';
 
 test('移交端口合成PG：排空管理租约、核验原结构、显式恢复及结构失败关闭',async()=>{
  const f=await createStorageFixture();const storage=await HostStorage.open(f.options);
- let pythonAccepting=true,stops=0,starts=0;
- const legacy={async control(path,method){
-  assert.ok(path.startsWith('/api/runtime/memory-management/'));
-  if(path.endsWith('/stop')){assert.equal(method,'POST');pythonAccepting=false;stops++;}
-  if(path.endsWith('/start')){assert.equal(method,'POST');pythonAccepting=true;starts++;}
-  return{state:pythonAccepting?'running':'stopped',active_requests:0};
- }};
- const gate=new MemoryManagementHandoff(storage,legacy);
+ const gate=new MemoryManagementHandoff(storage);
+ await gate.activate();
  try{
- const lease=gate.enter();const transfer=gate.transfer('typescript');
+ const lease=gate.enter();const transfer=gate.activate();
  assert.equal(gate.status().state,'transferring');assert.equal(gate.status().active_requests,1);
  assert.throws(()=>gate.enter(),{status:503});assert.throws(()=>lease.assertCurrent(),{status:409});
  lease.finish();lease.finish();
- assert.equal((await transfer).owner,'typescript');assert.equal(pythonAccepting,false);
- assert.equal((await gate.transfer('python')).owner,'python');assert.equal(starts,1);
+ assert.equal((await transfer).owner,'typescript');
+ assert.equal(gate.status().owner,'typescript');
  await f.client.query('ALTER TABLE public.expression_preference RENAME COLUMN revision TO unavailable_revision');
- await assert.rejects(gate.transfer('typescript'));
- assert.equal(gate.status().state,'stopped');assert.equal(pythonAccepting,false);
+ await assert.rejects(gate.activate());
+ assert.equal(gate.status().state,'stopped');
  assert.throws(()=>gate.enter(),{status:503});
  await f.client.query('ALTER TABLE public.expression_preference RENAME COLUMN unavailable_revision TO revision');
- assert.equal((await gate.transfer('typescript')).owner,'typescript');assert.ok(stops>=4);
+ assert.equal((await gate.activate()).owner,'typescript');
  }finally{await gate.close();await storage.close();await f.close();}
 });
 

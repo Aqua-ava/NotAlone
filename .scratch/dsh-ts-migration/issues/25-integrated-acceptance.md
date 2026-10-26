@@ -6,7 +6,7 @@
 
 > 2026-10-25 最新用户决定：本轮输出容量与费用不设人为门槛，固定4096及费用预算/1.10比值不再阻塞执行或验收；实际用量与历史结果保留，其他验收继续。详见[范围更新](../acceptance-scope-update.md)。
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Type: task
 Blocked by: 24
 Spec: ../spec.md
@@ -53,6 +53,8 @@ Spec: ../spec.md
 
 ## Answer
 
+2026-10-26最终结案：按用户明确修订范围 `resolved`。96/96实际采集成功，96物理调用、0重试；启动／RSS与盲评按用户决定跳过（未测／未评），沿用有效回归与实际App记录；[最终收口](../final-acceptance-closeout/capture-summary.json)及本文末节保留范围、真实失败与恢复。下列各轮历史记录保持原结论。
+
 2026-10-25：已完成可执行的同模型对照、盲评、确定性矩阵和自动验证，但质量与失败率门禁未通过，Ticket 保持 `claimed`，不能标为 resolved。
 
 - **DSH 查证**：锁定 `0.2.1-rc.2`／commit `687f282e8625c6b8d11ff58211a90524be2e4317`／tag `dsh-v0.2.1-rc.2`。核对官方 architecture、Agent cancel、LLM `prepareCall`、DeepSeek Messages adapter 及 scope/session/tools README；使用官方 profile、Agent、LLM 与 adapter 公开机制，业务来源、预算、持久和联系人范围仍由 NotAlone 控制。依据与适配见 [01 基线](../baseline/behavior-matrix.md#L15)、[确定性矩阵](../ticket25-final-run/deterministic-evidence.md)。
@@ -84,3 +86,10 @@ Spec: ../spec.md
 ### 最新用户范围：前台 OCR 自动识别暂缓（2026-10-26）
 
 当前已知未通过的前台 OCR 自动识别记 `deferred_by_user`，不作为当前验收或后续退役前置，不记为 `passed`；保留原实测与失败／未定。已明确选择且资格有效的联系人可沿用手动路径继续其他验收，但不新增微信读取／发送权限，不豁免身份隔离、隐私、来源、删除／取消及持久化。冻结基线、HTTP 非阻塞及其他既有范围决定不变，本票仍 `claimed / not approved`；详见[前台 OCR 暂缓决定](../foreground-ocr-scope-update.md)。
+
+
+## 最终收口（2026-10-26，按用户修订范围）
+
+固定最终采集已96/96成功、96次物理调用、0重试，调用、tokens、p50及p95沿预注册算法与原门槛通过；生产代码自1e90未变，最终入口23a76733仅修预算根路径。依赖与源码前后稳定，自有采集数据库、profile和旧臂进程正常清理。沿用已有有效源码审查、最终回归及12项定向闭环、联系人／同步／覆盖／记忆基本流程／讨论／删除／取消／退出证据，不重复未受影响检查。实际目标联系人一次生成成功、两组候选已保存并在显式重读后可编辑／复制；初次读取失败及恢复如实保留。
+
+用户明确取消启动／RSS对照与回复盲评，均为 `skipped_by_user`（未测／未评），绝非测量或质量通过；其他既有豁免与暂缓维持，历史失败不改写。[范围决定](../acceptance-scope-update.md)与[最终摘要](../final-acceptance-closeout/capture-summary.json)说明本次收口。25现按该明确范围resolved，允许26实施；不宣称全面质量或性能优于旧版。

@@ -4,7 +4,7 @@ import { chmod, lstat, mkdir, open, readdir, realpath, rename, rm, writeFile } f
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import path from 'node:path';
-import { backendEnvironment, isTypescriptHost, loadBackendConfiguration, type BackendConfiguration } from '../backend/config';
+import { backendEnvironment, loadBackendConfiguration, type BackendConfiguration } from '../backend/config';
 import type { StartupCode, StartupState } from '../../shared/startup-bridge';
 import { verifyManagedComponents, type ManagedComponents } from './managed-manifest';
 
@@ -65,10 +65,9 @@ export class ManagedRuntime {
     const generation = this.generation;
     const canStart = () => generation === this.generation && allowed();
     const components = await this.verified(canStart);
-    const typescript = isTypescriptHost(config);
-    if (typescript && (process.platform !== 'darwin' || Number(process.versions.node.split('.')[0]) < 24
+    if (process.platform !== 'darwin' || Number(process.versions.node.split('.')[0]) < 24
       || !await exists(path.join(components.project, 'backend-ts/src/managed-postgres.ts'))
-      || !await exists(path.join(components.project, 'backend-ts/src/schema-prepare-cli.ts')))) throw new ManagedRuntimeFailure('runtime_components_unavailable');
+      || !await exists(path.join(components.project, 'backend-ts/src/schema-prepare-cli.ts'))) throw new ManagedRuntimeFailure('runtime_components_unavailable');
     const state = await this.readState();
     const importMarker = path.join(this.userData, 'managed/import-pending.json');
     if (await exists(importMarker)
@@ -109,14 +108,13 @@ export class ManagedRuntime {
       const port = await unusedPort();
       if (!canStart()) throw new ManagedRuntimeFailure('runtime_cancelled');
       this.databaseLifetimeLock = path.join(this.userData, 'managed', `.postgres-lifetime-${randomUUID()}`);
-      const supervisor = typescript ? { executable: process.execPath,
-        args: ['--experimental-strip-types', path.join(components.project, 'backend-ts/src/managed-postgres.ts')] }
-        : { executable: components.python, args: ['-I', '-B', '-m', 'notalone.managed_postgres'] };
+      const supervisor = { executable: process.execPath,
+        args: ['--experimental-strip-types', path.join(components.project, 'backend-ts/src/managed-postgres.ts')] };
       const database = spawn(supervisor.executable, [...supervisor.args,
         '--postgres', path.join(components.postgres, 'postgres'), '--data-directory', cluster, '--port', String(port),
         '--parent-pid', String(process.pid), '--lifetime-lock', this.databaseLifetimeLock],
       { cwd: path.join(this.userData, 'managed'), env: { ...environment,
-        ...(typescript ? { ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: undefined, NODE_NO_WARNINGS: '1' } : {}) }, stdio: ['pipe', 'pipe', 'ignore'] });
+        ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: undefined, NODE_NO_WARNINGS: '1' }, stdio: ['pipe', 'pipe', 'ignore'] });
       this.database = database;
       const postgresPid = await new Promise<number>((resolve, reject) => {
         let output = '';
@@ -164,11 +162,9 @@ export class ManagedRuntime {
         pgEnvironment, canStart, 'database_prepare_failed', 10_000, true);
       if (found.trim() !== '1') await this.run(path.join(components.postgres, 'psql'), ['-X', '--no-password', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', 'CREATE DATABASE notalone'],
         pgEnvironment, canStart, 'database_prepare_failed', 10_000);
-      await this.run(typescript ? process.execPath : components.python, typescript
-        ? ['--experimental-strip-types', path.join(components.project, 'backend-ts/src/schema-prepare-cli.ts'), '--migrations', path.join(components.project, 'backend/database/migrations'), '--prepare']
-        : ['-I', '-B', '-m', 'notalone.startup_database', '--migrations', path.join(components.project, 'backend/database/migrations')],
+      await this.run(process.execPath, ['--experimental-strip-types', path.join(components.project, 'backend-ts/src/schema-prepare-cli.ts'), '--migrations', path.join(components.project, 'backend/database/migrations'), '--prepare'],
         { ...childEnvironment, NOTALONE_DATABASE_URL: databaseUrl,
-          ...(typescript ? { ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: undefined, NODE_NO_WARNINGS: '1' } : {}) }, canStart, 'database_prepare_failed', 60_000);
+          ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: undefined, NODE_NO_WARNINGS: '1' }, canStart, 'database_prepare_failed', 60_000);
       if (!canStart()) throw new ManagedRuntimeFailure('runtime_cancelled');
       await this.writeState({ ...state, bootstrapComplete: true });
     }

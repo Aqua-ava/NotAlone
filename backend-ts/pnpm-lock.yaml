@@ -63,9 +63,6 @@ importers:
       '@types/pg':
         specifier: 8.15.5
         version: 8.15.5
-      '@typescript/typescript-darwin-arm64':
-        specifier: 7.0.2
-        version: 7.0.2
       typescript:
         specifier: 7.0.2
         version: 7.0.2

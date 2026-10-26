@@ -49,7 +49,7 @@ export async function inspectManagedRuntime(directory) {
   if (!Array.isArray(manifest.files) || JSON.stringify(actual) !== JSON.stringify(manifest.files)) throw new Error('runtime_inventory_mismatch');
   for (const required of requiredRuntimeFiles) {
     if (!actual.some((file) => file.path === required)) throw new Error('runtime_component_missing');
-    if (!required.endsWith('.py') && !actual.some((file) => file.path === required && file.executable)) throw new Error('runtime_component_not_executable');
+    if (required.startsWith('postgres/bin/') && !actual.some((file) => file.path === required && file.executable)) throw new Error('runtime_component_not_executable');
   }
   return manifest;
 }

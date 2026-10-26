@@ -171,7 +171,7 @@ try {
     const signingMode = await requireSigningMode(app, signingIdentity, run);
     console.log(`本机 App 已构建并通过${signingMode === 'ad-hoc' ? '本地 ad-hoc' : '显式证书'}签名校验：${app}`);
     console.log('实际权限身份延续与正式分发／公证状态仍须单独验证。');
-    if (preparedManaged) console.log('包内提供受管Python、后台与PostgreSQL；首启与搬动可用性须另行实测。');
+    if (preparedManaged) console.log('包内提供TypeScript后台与受管PostgreSQL；首启与搬动可用性须另行实测。');
     else console.log('当前包使用外置后台运行环境。');
     console.log('微信工具与授权接入尚未通过独立交付验收。');
     if (preparedProbe) console.log('仓库探针/核心库静态构建与随包复核通过；未运行探针，不证明定位或权限验收。');

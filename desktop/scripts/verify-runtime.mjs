@@ -16,10 +16,11 @@ const results = { scope:'isolated-runtime-tools', relocated:false, isolatedImpor
   cleanMachine:false, app:false, wechat:false };
 try {
   await cp(runtime, relocated, {recursive:true,verbatimSymlinks:true}); await inspectManagedRuntime(relocated); results.relocated=true;
-  const environment = {PATH:'/usr/bin:/bin',HOME:report,TMPDIR:report,LANG:'en_US.UTF-8',PYTHONDONTWRITEBYTECODE:'1'};
-  const python=path.join(relocated,'python/bin/python3.12'), pg=path.join(relocated,'postgres/bin');
+  const environment = {PATH:'/usr/bin:/bin',HOME:report,TMPDIR:report,LANG:'en_US.UTF-8'};
+  const node=process.execPath, pg=path.join(relocated,'postgres/bin');
+  const diagnostic=path.join(relocated,'project/backend-ts/src/schema-prepare-cli.ts');
   const execute = async (file,values,extra={}) => run(file,values,{env:{...environment,...extra},cwd:report,timeout:60_000,maxBuffer:2*1024*1024});
-  await execute(python,['-I','-B','-c','import notalone.server.command,deepagents,psycopg,yaml; print("portable_import")']); results.isolatedImport=true;
+  await execute(node,[diagnostic,'--migrations',path.join(relocated,'project/backend/database/migrations')]).catch(error=>{ if(!error.stdout?.includes('database_unconfigured'))throw error; }); results.isolatedImport=true;
   const password=randomBytes(24).toString('hex'), pwfile=path.join(report,'pg-password');
   await writeFile(pwfile,password,{mode:0o600}); database=path.join(report,'database');
   await execute(path.join(pg,'initdb'),['-D',database,'-U','notalone','--pwfile',pwfile,'--auth-local=scram-sha-256','--auth-host=scram-sha-256','--locale=C','--encoding=UTF8']);
@@ -35,11 +36,11 @@ try {
   await pgRun('createdb',['runtime_source']);
   const migration=path.join(relocated,'project/backend/database/migrations');
   const dbUrl=(name)=>`postgresql://notalone:${password}@127.0.0.1:${port}/${name}`;
-  const migrate=JSON.parse((await execute(python,['-I','-B','-m','notalone.database_migrations','--migrations',migration],{NOTALONE_DATABASE_URL:dbUrl('runtime_source')})).stdout);
+  const migrate=JSON.parse((await execute(node,[diagnostic,'--migrations',migration,'--prepare'],{NOTALONE_DATABASE_URL:dbUrl('runtime_source')})).stdout);
   const expectedMigrations=(await readdir(migration,{withFileTypes:true})).filter(entry=>entry.isFile()&&entry.name.endsWith('.sql')).map(entry=>entry.name).sort();
-  if(!expectedMigrations.length||migrate.status!=='succeeded'||!Array.isArray(migrate.applied)||JSON.stringify(migrate.applied)!==JSON.stringify(expectedMigrations))throw new Error('runtime_migrations_incomplete');
+  if(!expectedMigrations.length||migrate.code!=='ready'||!Array.isArray(migrate.applied)||JSON.stringify(migrate.applied)!==JSON.stringify(expectedMigrations))throw new Error('runtime_migrations_incomplete');
   results.migrationCount=expectedMigrations.length;
-  const diagnose=async(name)=>JSON.parse((await execute(python,['-I','-B','-m','notalone.startup_diagnostics','--migrations',migration],{NOTALONE_DATABASE_URL:dbUrl(name)})).stdout).code;
+  const diagnose=async(name)=>JSON.parse((await execute(node,[diagnostic,'--migrations',migration],{NOTALONE_DATABASE_URL:dbUrl(name)})).stdout).code;
   if(await diagnose('runtime_source')!=='ready')throw new Error('runtime_migrations_not_ready'); results.migrations=true;
   await pgRun('psql',['-d','runtime_source','-v','ON_ERROR_STOP=1','-c',"CREATE TABLE public.runtime_portability_probe(value text); INSERT INTO public.runtime_portability_probe VALUES ('synthetic_runtime_2026');"]);
   const backup=path.join(report,'synthetic-backup.dump'); await pgRun('pg_dump',['-Fc','-d','runtime_source','-f',backup]);

@@ -117,13 +117,13 @@ test('回复文本上限按码点计数且边界正确', async () => {
 });
 
 test('后端前台失败原因都有共享说明，不靠界面默认分支静默兜底', async () => {
-  const files = ['../backend/src/notalone/front_sync/foreground_locator.py',
-    '../backend/src/notalone/front_sync/full_sync_engine.py'];
+  const files = ['../backend-ts/src/foreground-location-locator.ts'];
   const produced = new Set();
   for (const file of files) {
     const source = await readFile(file, 'utf8');
-    for (const match of source.matchAll(/reason="([a-z_]+)"/g)) produced.add(match[1]);
+    for (const match of source.matchAll(/(?:result|failure)\('[a-z-]+','([a-z_]+)'/g)) produced.add(match[1]);
   }
+  assert.ok(produced.size>=10, '必须实际枚举TS前台原因，不能空集通过');
   // 成功或用独立状态表达的固定码不要求失败说明。
   const nonFailure = new Set(['confirmed_active_binding', 'group_chat_suspected', 'group_chat_unsupported']);
   for (const code of produced) {

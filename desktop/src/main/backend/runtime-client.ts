@@ -4,6 +4,9 @@ import { createConnection } from 'node:net';
 import { openMessageStream, type MessageStreamCallbacks } from './message-stream';
 
 type RuntimeState = 'running' | 'stopping' | 'stopped';
+export class RetiredBackendRuntime extends BackendFailure {
+  constructor() { super('backend_connection_failed'); }
+}
 
 // 方法和路径由主进程固定，既不跟随重定向，也不接收渲染层 URL。
 export class RuntimeClient {
@@ -46,7 +49,20 @@ export class RuntimeClient {
       if (this.expectedRuntime && (value as { runtime?: unknown })?.runtime !== this.expectedRuntime) throw new Error();
       const state = (value as { state?: unknown })?.state;
       if (state !== 'running' && state !== 'stopping' && state !== 'stopped') throw new Error();
+      if (endpoint === '/api/runtime/status' && this.expectedRuntime === 'dsh') {
+        const status = value as { hostRuntime?: unknown; legacyPid?: unknown; ownership?: unknown };
+        const ownership = status?.ownership;
+        if (status?.hostRuntime !== 'typescript' || status.legacyPid !== undefined || !ownership || typeof ownership !== 'object' || Array.isArray(ownership)) throw new RetiredBackendRuntime();
+        const owners = ownership as Record<string, unknown>;
+        if (['contacts', 'deletion', 'wechat', 'skills', 'skillLearning', 'imports', 'taskApi', 'taskManagement', 'tasks',
+          'crossDomainDeletion', 'wechatBodySync', 'wechatIncremental', 'wechatHistory', 'foregroundLocation', 'contactContext', 'memory', 'expressionPreferences']
+          .some(key => owners[key] !== 'typescript' && owners[key] !== 'unavailable')
+          || Object.values(owners).some(owner => typeof owner !== 'string' || !['typescript', 'typescript-migration-command', 'unavailable'].includes(owner))) throw new RetiredBackendRuntime();
+      }
       return state;
-    } catch { throw new BackendFailure('backend_connection_failed'); }
+    } catch (error) {
+      if (error instanceof RetiredBackendRuntime) throw error;
+      throw new BackendFailure('backend_connection_failed');
+    }
   }
 }

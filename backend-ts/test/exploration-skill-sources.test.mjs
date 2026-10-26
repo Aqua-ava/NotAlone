@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdir,writeFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {homedir} from 'node:os';
-import {execFileSync} from 'node:child_process';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {HostStorage} from '../src/host-storage.ts';
 import {SkillFiles} from '../src/skill-files.ts';
@@ -15,7 +13,7 @@ import {createExplorationSkillSourceValidator} from '../src/exploration-skill-so
 import {fingerprint} from '../src/reply-assistant-erasure.ts';
 test('探索目录保留带真实讨论来源的已发布Skill，按历史绑定复验且来源删除失效',async t=>{
  const f=await createStorageFixture();let storage;
- t.after(async()=>{await storage?.close();const name=f.client.database;await f.client.end();execFileSync(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),['-c',"import sys,psycopg\nfrom psycopg import sql\nassert sys.argv[1].startswith('notalone_ts_host_') and sys.argv[1].endswith('_test')\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c:c.execute(sql.SQL('DROP DATABASE {}').format(sql.Identifier(sys.argv[1])))",name]);await rm(f.directory,{recursive:true});});
+ t.after(async()=>{await storage?.close();await f.close();});
  storage=await HostStorage.open(f.options);await storage.initializeOwner('合成本人');const owner=storage.runtimeOwnerId,contact=randomUUID(),binding=randomUUID(),currentBinding=randomUUID(),session=randomUUID(),request=randomUUID(),turn=randomUUID(),input=randomUUID(),key=randomUUID(),discussion=randomUUID(),source=randomUUID();
  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id) VALUES($1,$2,$3)',[binding,owner,contact]);await f.client.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic','current-different')",[currentBinding,owner,contact]);
  await f.client.query('INSERT INTO assistant_session(id,owner_id,contact_id) VALUES($1,$2,$3)',[session,owner,contact]);await f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'manual','合成来源',$4,1)",[source,owner,contact,'a'.repeat(64)]);

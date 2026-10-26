@@ -5,6 +5,7 @@ import {SessionId} from '@deepseek-ai/dsh-session';
 import {defineTool,type ToolDefinition,type ToolRunContext} from '@deepseek-ai/dsh-tools';
 import {randomUUID} from 'node:crypto';
 import {ReplyError,validateReplyCandidates,type ReplyCandidateInput} from './reply-contract.ts';
+import {REPLY_EXECUTION_DEADLINE_MS} from './reply-execution-budget.ts';
 import type {installModelProvider} from './model-provider.ts';
 import {ModelInputBudgetError,type MessagesBudgetProfile,type MessagesBudgetReceipt} from './model-input-budget.ts';
 import type {ModelLedgerReceipt} from './model-ledger.ts';
@@ -49,7 +50,7 @@ export async function registerReplyAgentSetup(scope:Context,input:Pick<ReplyLoop
  return dispose;
 }
 export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:ReplyLoopPorts,outerSignal:AbortSignal):Promise<{candidates:ReplyCandidateInput[];budgets:MessagesBudgetReceipt[]}> {
-  if(!Number.isSafeInteger(input.physical_limit)||input.physical_limit<1||!Number.isSafeInteger(input.deadline_ms)||input.deadline_ms<1||input.deadline_ms>20000)throw new ReplyError('reply_budget_unavailable',502);
+  if(!Number.isSafeInteger(input.physical_limit)||input.physical_limit<1||!Number.isSafeInteger(input.deadline_ms)||input.deadline_ms<1||input.deadline_ms>REPLY_EXECUTION_DEADLINE_MS)throw new ReplyError('reply_budget_unavailable',502);
   if(ports.tools.some(t=>!allowed.has(t.name))||new Set(ports.tools.map(t=>t.name)).size!==ports.tools.length)throw new ReplyError('reply_tools_invalid',502);
   outerSignal.throwIfAborted();
   // 等待前台不消耗生成期限；整个循环只领取一次全局前台许可。

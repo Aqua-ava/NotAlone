@@ -95,7 +95,7 @@ test('真实官方profile在父宿主退出后结束并清理临时home', async 
   const fixture = await createStorageFixture();
   const config = {nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:fixture.envFilePath,
     infoPath:join(fixture.directory,'backend.info'),businessHome:fixture.directory,
-    pythonExecutable:process.env.NOTALONE_TEST_PYTHON || join(homedir(),'miniconda3/envs/NotAlone/bin/python'),environment:{NOTALONE_MANAGED_USER_DATA:fixture.directory}};
+    environment:{NOTALONE_MANAGED_USER_DATA:fixture.directory}};
   const script = `import {launchDsh} from ${JSON.stringify(new URL('../src/launch.ts',import.meta.url).href)}; const host=await launchDsh(JSON.parse(process.argv[1]),()=>true); process.send({pid:host.pid});`;
   const parent = spawn(process.execPath,['--input-type=module','-e',script,JSON.stringify(config)],{stdio:['ignore','ignore','ignore','ipc']});
   let pid;
@@ -118,22 +118,22 @@ test('真实官方profile在父宿主退出后结束并清理临时home', async 
   }
 });
 
-test('真实DSH被SIGKILL后等待旧Python退出才允许监督重启', async () => {
+test('真实DSH被SIGKILL后清理自有目录才允许监督重启', async () => {
   const { homedir } = await import('node:os');
   const { createStorageFixture } = await import('./host-storage-fixture.mjs');
   const fixture=await createStorageFixture();
   const config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:fixture.envFilePath,
     infoPath:join(fixture.directory,'backend.info'),businessHome:fixture.directory,
-    pythonExecutable:process.env.NOTALONE_TEST_PYTHON || join(homedir(),'miniconda3/envs/NotAlone/bin/python'),environment:{NOTALONE_MANAGED_USER_DATA:fixture.directory}};
+    environment:{NOTALONE_MANAGED_USER_DATA:fixture.directory}};
   let host;
   try {
     host=await launchDsh(config,()=>true);
     await waitUntil(async()=>{try{await access(config.infoPath);return true;}catch{return false;}});
     const metadata=JSON.parse(await readFile(`${config.infoPath}.dsh-lock`,'utf8'));
-    const legacy=JSON.parse(await readFile(join(metadata.home,'legacy.pid'),'utf8'));
+    await assert.rejects(access(join(metadata.home,'legacy.pid')));
     process.kill(host.pid,'SIGKILL');
     assert.equal(await host.waitForExit(20000),true);
-    assert.throws(()=>process.kill(legacy.pid,0));
+    await assert.rejects(access(metadata.home));
     await assert.rejects(access(config.infoPath));
     host=await launchDsh(config,()=>true);
     await waitUntil(async()=>{try{await access(config.infoPath);return true;}catch{return false;}});

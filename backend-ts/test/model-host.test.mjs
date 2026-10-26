@@ -41,9 +41,8 @@ test('后续装配失败shutdown释放零调用新资源，保留稳定恢复记
 
 test('Unicode数字、下划线和Python空白与旧int解析合成对照',()=>{
  const values=['３','٠٣','+०_३','0_3','𝟘𝟛','\u0085٣\u0085','\u001c3\u001f','\ufeff3','3__0','3_','²','-٣','３.０'];
- const {execFileSync}=process.getBuiltinModule('node:child_process');
- const {homedir}=process.getBuiltinModule('node:os');
- const expected=JSON.parse(execFileSync(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),['-c',"import json,sys\nr=[]\nfor s in json.loads(sys.argv[1]):\n try:\n  v=int(s.strip());r.append(v if 1<=v<=4 else None)\n except ValueError:r.append(None)\nprint(json.dumps(r))",JSON.stringify(values)],{encoding:'utf8'}));
+ // 固定23a旧Python int/strip的合成预期；旧执行器另由历史命令复验。
+ const expected=[3,3,3,3,3,3,3,null,null,null,null,null,null];
  const actual=values.map(value=>{try{return modelBackgroundConcurrency({NOTALONE_EXTRACTION_BATCH_CONCURRENCY:value});}catch{return null;}});
  assert.deepEqual(actual,expected);
 });

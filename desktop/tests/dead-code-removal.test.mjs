@@ -59,9 +59,10 @@ test('构建与测试入口不引用已删除的未接线代码', async () => {
   }
 });
 
-test('固定三候选复核协议常量不再与动态构建重复定义', async () => {
-  const contract = await readFile('../backend/src/notalone/reply/adapters/constraint_review_contract.py', 'utf8');
-  assert.doesNotMatch(contract, /^REVIEW_TOOL = build_review_tool\(3\)$/m);
-  // 动态构建入口保留：协议仍按本次候选数量生成。
-  assert.match(contract, /def build_review_tool\(candidate_count: int\)/);
+test('候选数量按本次未知风险收紧，不残留旧Python固定复核协议', async () => {
+  const {replyCandidateAdmissibility} = await import('../../backend-ts/src/reply-candidate-admissibility.ts');
+  assert.deepEqual(replyCandidateAdmissibility({}), {limit:3,unknowns:[]});
+  assert.deepEqual(replyCandidateAdmissibility({risk_notes:['缺少确认依据']}), {limit:1,unknowns:['缺少确认依据']});
+  assert.deepEqual(replyCandidateAdmissibility({command:{content:{user_instruction:'{"unknowns":["未确认时间"]}'}}}),
+    {limit:1,unknowns:['未确认时间']});
 });

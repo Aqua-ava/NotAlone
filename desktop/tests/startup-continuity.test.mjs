@@ -74,12 +74,12 @@ test('高级故障排查默认折叠，明确展开后才展示诊断与路径�
 
 test('启动失败显示简明原因、重试与诊断入口，未确认可重试时保持禁用', () => {
   const props = {
-    state: { mode: 'external', phase: 'blocked', code: 'python_unavailable', revision: 1, helperWarnings: [] },
+    state: { mode: 'external', phase: 'blocked', code: 'runtime_components_unavailable', revision: 1, helperWarnings: [] },
     backend: { phase: 'disconnected', canRetryConnection: true },
     onConfigure() {},
   };
   const html = renderToStaticMarkup(React.createElement(StartupReadiness, props));
-  assert.match(html, /Python 可执行文件不可用/);
+  assert.match(html, /App 运行组件缺失或校验未通过/);
   assert.match(html, />重试连接<\/button>/);
   assert.match(html, />查看诊断<\/button>/);
   assert.doesNotMatch(html, /Conda|绝对路径|本机启动路径/);

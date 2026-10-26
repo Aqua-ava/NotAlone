@@ -1,3 +1,5 @@
+> 2026-10-26当前入口：正常数据库诊断与明确结构补齐改用 `node backend-ts/src/schema-prepare-cli.ts --migrations backend/database/migrations`（补齐另加`--prepare`，从仓库根目录执行）。原116份SQL和未知结构停写规则保持。下方旧Python命令为历史恢复记录，仅在固定Git旧树及显式历史环境复现；不能从当前HEAD执行已退役模块。
+
 # 数据库迁移
 
 NotAlone 使用 PostgreSQL 作为权威业务库。安装脚本统一调用逐版本迁移命令，不允许只在图形客户端中手工修改正式表结构。

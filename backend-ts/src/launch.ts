@@ -9,7 +9,7 @@ import { processIdentityState, type ProcessIdentity } from './process-identity.t
 
 export interface LaunchConfiguration {
   nodeExecutable: string; projectDirectory: string; envFilePath: string; infoPath: string;
-  businessHome: string; pythonExecutable?: string; environment?: NodeJS.ProcessEnv;
+  businessHome: string; environment?: NodeJS.ProcessEnv;
 }
 export interface OwnedDshProcess {
   readonly pid: number;
@@ -82,7 +82,8 @@ async function stopPid(identity: ProcessIdentity): Promise<boolean> {
   }
   return await processIdentityState(identity) === 'gone';
 }
-async function legacyStopped(home: string, childPid: number | undefined, nonce: string): Promise<void> {
+/** 仅回收退役前遗留且可核验归属的进程，不提供旧执行器的启动或回退路径。 */
+async function retiredProcessStopped(home: string, childPid: number | undefined, nonce: string): Promise<void> {
   let value;
   try { value = JSON.parse(await readFile(path.join(home, 'legacy.pid'), 'utf8')); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw new Error('backend_cleanup_failed'); }
@@ -111,7 +112,7 @@ export async function launchDsh(config: LaunchConfiguration, canStart: () => boo
         try {
           const metadata = JSON.parse(await readFile(path.join(previous.home, 'host.json'), 'utf8'));
           if (metadata.lockNonce !== previous.nonce || metadata.parentPid !== previous.parentPid) throw new Error('backend_cleanup_failed');
-          await legacyStopped(previous.home, previous.childPid, previous.nonce);
+          await retiredProcessStopped(previous.home, previous.childPid, previous.nonce);
           await rm(previous.home, { recursive: true, force: true });
         } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
       }
@@ -124,7 +125,7 @@ export async function launchDsh(config: LaunchConfiguration, canStart: () => boo
   let child: ChildProcess | undefined;
   let releasePromise: Promise<void> | undefined;
   const release = (): Promise<void> => releasePromise ??= (async () => {
-    if (home) await legacyStopped(home, child?.pid, nonce);
+    if (home) await retiredProcessStopped(home, child?.pid, nonce);
     await guarded(lockPath, async () => {
       const record = JSON.parse(await readFile(lockPath, 'utf8'));
       if (record.nonce !== nonce) throw new Error('backend_cleanup_failed');

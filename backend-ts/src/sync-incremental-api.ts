@@ -16,10 +16,11 @@ export function isSyncIncrementalRoute(path:string):boolean{return path.startsWi
 export function syncIncrementalBodyLimit(_path?:string):number{return 16*1024;}
 export interface SyncIncrementalResponse {status:number;body:unknown}
 export interface IncrementalMessageCreated {owner_id:string;contact_id:string;message_id:string;occurred_at:string}
-interface Options {storage:HostStorage;executable:string;environment?:NodeJS.ProcessEnv;publish:(events:readonly IncrementalMessageCreated[],signal:AbortSignal)=>Promise<void>;historyOwner?:'python'|'typescript';historyPageLimit?:number}
+interface Options {storage:HostStorage;executable:string;environment?:NodeJS.ProcessEnv;publish:(events:readonly IncrementalMessageCreated[],signal:AbortSignal)=>Promise<void>;historyOwner?:'typescript';historyPageLimit?:number}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const response=(body:unknown,status=200):SyncIncrementalResponse=>({status,body});
 export async function createSyncIncrementalApi(options:Options){
+ if(options.historyOwner!==undefined&&options.historyOwner!=='typescript')throw new Error('history_runtime_invalid');
  const owner=options.storage.runtimeOwnerId;let account:string|null=null;
  try{account=owner?await new PostgresWechatSetupStore(options.storage).read(owner):null;}catch(error){if(!(error instanceof WechatSetupConflict))throw error;}
  const stopping=new AbortController();let closed=false;let closing:Promise<void>|undefined;
@@ -29,7 +30,7 @@ export async function createSyncIncrementalApi(options:Options){
  const cli=scope?new SyncIncrementalCli(options):undefined;
  const store=scope?new SyncIncrementalStore({storage:options.storage,ownerId:owner!,accountScope:account!}):undefined;
  const recovery=store?new SyncIncrementalRecovery({store,storage:options.storage,ownerId:owner!}):undefined;
- const history=store&&options.historyOwner==='typescript'?new SyncHistory({store,cli:cli!,accountScope:account!,pageLimit:options.historyPageLimit}):undefined;
+ const history=store?new SyncHistory({store,cli:cli!,accountScope:account!,pageLimit:options.historyPageLimit}):undefined;
  const engine=store?new SyncIncrementalEngine({ownerId:owner!,accountScope:account!,store,scope:scope!,sessions:sessions!,cli:cli!,recovery:recovery!,history,publish:options.publish}):undefined;
  async function runtimeStatus(check:()=>void=()=>{}):Promise<Record<string,unknown>>{
   if(!engine||!store)throw new HostStorageError('sync_unavailable');

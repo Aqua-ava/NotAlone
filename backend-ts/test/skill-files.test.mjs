@@ -23,12 +23,7 @@ test('只读旧103字节并核验独立资源与方法正文',async t=>{
 
 test('工作副本只在显式写入后可发现，清理覆盖版本根与工作包',t=>{const {files,input}=fixture(t);const pkg=readPackage(input),receipt=files.prepareVersion(owner,skill,id,pkg),row={owner_id:owner,skill_id:skill,id,name:pkg.name,...receipt};assert.deepEqual(files.discover(owner),[]);files.writeWorking(row);assert.equal(files.discover(owner)[0].name,pkg.name);files.remove(`${owner}/${pkg.name}`);assert.deepEqual(files.discover(owner),[]);files.remove(`.versions/${owner}/${skill}`);assert.throws(()=>files.readContent(row));files.remove(`.versions/${owner}/${skill}`);assert.throws(()=>files.remove(owner));assert.throws(()=>files.remove(`.versions/${owner}/../${skill}`));});
 
-test('Python 103序列化清单、正文和方法文件保持字节等价',async t=>{
- const {spawnSync}=await import('node:child_process');const {homedir}=await import('node:os');const {files,input,dir}=fixture(t);mkdirSync(join(input,'references'));writeFileSync(join(input,'references','例子.md'),'合成案例。\n');
- const python=spawnSync(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),['-c',`import json, hashlib, sys\nfrom notalone.skills import LocalSkillPackageReader, SkillPackageValidator\nfrom notalone.persistence.skill_files import serialize_skill_document\nfrom notalone.persistence.skill_manifest import package_manifest\np=SkillPackageValidator().validate(LocalSkillPackageReader().read(sys.argv[1]))\nd=serialize_skill_document(p.name,p.description,p.content)\nm=json.dumps(package_manifest(p),ensure_ascii=False,sort_keys=True,separators=(',',':')).encode('utf-8')\nprint(json.dumps({'document':d.decode(),'manifest':m.decode(),'document_sha256':hashlib.sha256(d).hexdigest(),'manifest_sha256':hashlib.sha256(m).hexdigest(),'content_sha256':p.content_sha256,'package_sha256':p.package_sha256},ensure_ascii=False))`,input],{env:{...process.env,PYTHONPATH:resolveBackend()},encoding:'utf8'});
- assert.equal(python.status,0,python.stderr);const old=JSON.parse(python.stdout),pkg=readPackage(input),receipt=files.prepareVersion(owner,skill,id,pkg);assert.equal(pkg.package_sha256,old.package_sha256);for(const field of ['document_sha256','manifest_sha256','content_sha256'])assert.equal(receipt[field],old[field]);assert.equal(readFileSync(join(dir,'store',receipt.content_path),'utf8'),old.document);assert.equal(readFileSync(join(dir,'store',`.versions/${owner}/${skill}/${id}/manifest.json`),'utf8'),old.manifest);
- function resolveBackend(){return new URL('../../backend/src/',import.meta.url).pathname;}
-});
+// 旧103序列化逐字节对照在固定23a历史命令保留。
 
 test('拒绝包、资源、版本祖先和清理路径中的链接，外部文件不变',async t=>{
  const {symlinkSync}=await import('node:fs');const {files,input,dir}=fixture(t);const outside=join(dir,'outside');mkdirSync(outside);writeFileSync(join(outside,'keep.txt'),'保留');
@@ -47,13 +42,7 @@ test('包清洗拒绝脚本、外部URL、私人导出、重复YAML键和超预�
 
 test('导出当前核验版本到指定目录，拒绝链接且不泄漏方法或清单',async t=>{const {files,input,dir}=fixture(t);const pkg=readPackage(input),receipt=files.prepareVersion(owner,skill,id,pkg),row={owner_id:owner,skill_id:skill,id,name:pkg.name,...receipt};const destination=join(dir,'exports','gentle-reply');files.exportPackage(row,destination);assert.equal(readPackage(destination).content,pkg.content);files.exportPackage(row,destination);const {symlinkSync}=await import('node:fs');rmSync(join(destination,'SKILL.md'));const other=join(dir,'other');writeFileSync(other,'保留');symlinkSync(other,join(destination,'SKILL.md'));assert.throws(()=>files.exportPackage(row,destination));assert.equal(readFileSync(other,'utf8'),'保留');});
 
-test('YAML1.1名称描述语义与旧解析一致，包含别名、合并、日期和tag',async t=>{
- const {input}=fixture(t),{spawnSync}=await import('node:child_process'),{homedir}=await import('node:os');
- const headers=['name: gentle-reply\ndescription: yes','name: gentle-reply\ndescription: 2026-10-23','name: gentle-reply\ndescription: !!str yes','name: gentle-reply\ndescription: &d 用于回应\nextra: *d','name: gentle-reply\nextra: &d 用于回应\ndescription: *d','defaults: &d {name: gentle-reply, description: 用于回应}\n<<: *d','name: gentle-reply\ndescription: !unknown 用于回应','name: gentle-reply\ndescription: |\n  用于回应\n  第二行'];
- const documents=headers.map(h=>'---\n'+h+'\n---\n\n先回应感受。\n');
- const python=spawnSync(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),['-c',`import json,sys\nfrom notalone.skills.package import SkillPackageValidator\nout=[]\nfor doc in json.load(sys.stdin):\n try:\n  n,d,c=SkillPackageValidator._parse_skill_document(doc.encode(),package_name='gentle-reply');out.append({'name':n,'description':d,'content':c})\n except ValueError:out.append(None)\nprint(json.dumps(out,ensure_ascii=False))`],{env:{...process.env,PYTHONPATH:new URL('../../backend/src/',import.meta.url).pathname},input:JSON.stringify(documents),encoding:'utf8'});assert.equal(python.status,0,python.stderr);const expected=JSON.parse(python.stdout);
- for(let i=0;i<documents.length;i++){writeFileSync(join(input,'SKILL.md'),documents[i]);if(expected[i]===null)assert.throws(()=>readPackage(input),headers[i]);else{const p=readPackage(input);assert.deepEqual({name:p.name,description:p.description,content:p.content},expected[i],headers[i]);}}
-});
+// 旧Python对照保留在 historical-inventory.json 指向的固定23a原测试。
 
 test('发现忽略隐藏和普通文件，独立报告链接且排除项不重新纳入',async t=>{const {files,input,dir}=fixture(t);const pkg=readPackage(input),receipt=files.prepareVersion(owner,skill,id,pkg);files.writeWorking({owner_id:owner,skill_id:skill,id,name:pkg.name,...receipt});const root=join(dir,'store',owner);mkdirSync(join(root,'.ignored'));writeFileSync(join(root,'note.txt'),'说明');const {symlinkSync}=await import('node:fs');symlinkSync(input,join(root,'unsafe'));const scan=files.scan(owner);assert.equal(scan.packages.length,1);assert.deepEqual(scan.failedNames,['unsafe']);assert.equal(scan.rootFailed,false);assert.deepEqual(files.scan(owner,['unsafe','gentle-reply']).packages,[]);});
 
@@ -61,37 +50,7 @@ test('资源数量与合计预算在读取时受限',t=>{const {input}=fixture(t
 
 test('方法索引及正文采用原Python紧凑键顺序，拒绝身份重排或超集',t=>{const {files,input,dir}=fixture(t);const pkg=readPackage(input),receipt=files.prepareVersion(owner,skill,id,pkg),row={owner_id:owner,skill_id:skill,id,name:pkg.name,...receipt};const method='00000000-0000-4000-8000-000000000004';Object.assign(row,files.prepareMethods(owner,skill,id,[{method_id:method,title:'感受',instruction:'先回应感受。'}]));assert.equal(readFileSync(join(dir,'store',`.versions/${owner}/${skill}/${id}/methods/${method}.json`),'utf8'),' {"method_id":"00000000-0000-4000-8000-000000000004","title":"感受","instruction":"先回应感受。"}'.trim());assert.throws(()=>files.readMethods(row,[owner]));assert.throws(()=>files.readMethods(row,[method],[owner]));assert.throws(()=>files.prepareMethods(owner,skill,id,[{method_id:method,title:'变化',instruction:'先回应感受。'}]));assert.equal(files.readMethods(row,[method])[0].title,'感受');});
 
-test('Python真实生成的103快照保留非BMP路径顺序、原UUID和方法字节',async t=>{
- const {spawnSync}=await import('node:child_process'),{homedir}=await import('node:os');const {files,input,dir}=fixture(t);
- mkdirSync(join(input,'references'));for(const name of ['\ue000','😀'])writeFileSync(join(input,'references',name+'.txt'),'合成资源。');
- const python=spawnSync(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),['-c',`
-import json,hashlib,sys,pathlib
-from notalone.skills import LocalSkillPackageReader,SkillPackageValidator
-from notalone.persistence.skill_files import serialize_skill_document
-from notalone.persistence.skill_manifest import package_manifest
-from notalone.persistence.skill_methods import _normalized
-p=SkillPackageValidator().validate(LocalSkillPackageReader().read(sys.argv[1]))
-base=pathlib.Path(sys.argv[2]); base.mkdir(parents=True)
-d=serialize_skill_document(p.name,p.description,p.content)
-m=json.dumps(package_manifest(p),ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
-(base/p.name).mkdir();(base/p.name/'SKILL.md').write_bytes(d);(base/'manifest.json').write_bytes(m)
-for r in p.resources:
- target=base/p.name/r.relative_path;target.parent.mkdir(exist_ok=True);target.write_bytes(r.content)
-methods=_normalized([{'method_id':'00000000-0000-4000-8000-000000000004','title':'感受😀','instruction':'先回应感受。'}])
-entries=[];(base/'methods').mkdir()
-for method in methods:
- body=json.dumps(method,ensure_ascii=False,separators=(',',':')).encode();relative='methods/'+method['method_id']+'.json'
- (base/relative).write_bytes(body);entries.append({'method_id':method['method_id'],'relative_path':relative,'content_sha256':hashlib.sha256(body).hexdigest()})
-index=json.dumps(entries,ensure_ascii=False,separators=(',',':')).encode();(base/'methods.json').write_bytes(index)
-print(json.dumps({'document_sha256':hashlib.sha256(d).hexdigest(),'content_sha256':p.content_sha256,'manifest_sha256':hashlib.sha256(m).hexdigest(),'package_sha256':p.package_sha256,'method_manifest_sha256':hashlib.sha256(index).hexdigest()}))
-`,input,join(dir,'store',`.versions/${owner}/${skill}/${id}`)],{env:{...process.env,PYTHONPATH:new URL('../../backend/src/',import.meta.url).pathname},encoding:'utf8'});
- assert.equal(python.status,0,python.stderr);const old=JSON.parse(python.stdout),pkg=readPackage(input);
- assert.equal(pkg.package_sha256,old.package_sha256);
- const base=`.versions/${owner}/${skill}/${id}`,row={owner_id:owner,skill_id:skill,id,name:pkg.name,...old,content_path:base+'/gentle-reply/SKILL.md',method_manifest_path:base+'/methods.json'};
- const receipt=files.prepareVersion(owner,skill,id,pkg);assert.equal(receipt.manifest_sha256,old.manifest_sha256);
- const before=readFileSync(join(dir,'store',base,'methods.json'));assert.equal(files.readMethods(row,['00000000-0000-4000-8000-000000000004'])[0].title,'感受😀');
- assert.equal(files.readResource(row,'references/😀.txt').toString(),'合成资源。');assert.deepEqual(readFileSync(join(dir,'store',base,'methods.json')),before);
-});
+// 旧Python对照保留在 historical-inventory.json 指向的固定23a原测试。
 
 test('沿用Python splitlines的CR及Unicode分行，500行不能经Unicode分隔符绕过',async t=>{
  const {input}=fixture(t);

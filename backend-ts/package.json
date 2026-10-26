@@ -25,11 +25,14 @@
   "devDependencies": {
     "@types/node": "26.6.4",
     "@types/pg": "8.15.5",
-    "@typescript/typescript-darwin-arm64": "7.0.2",
     "typescript": "7.0.2"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=4 test/*.test.mjs",
-    "typecheck": "tsc --noEmit"
+    "test": "node test/run-current.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:historical": "node test/run-historical.mjs"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

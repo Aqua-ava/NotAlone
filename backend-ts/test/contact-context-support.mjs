@@ -9,7 +9,7 @@ import { createStorageFixture } from './host-storage-fixture.mjs';
 
 export async function start(t, fixture, environment = {}, projectDirectory = resolve('..')) {
   const infoPath = join(fixture.directory, 'backend.info');
-  const host = await launchDsh({nodeExecutable:process.execPath,projectDirectory,envFilePath:fixture.envFilePath,infoPath,businessHome:fixture.directory,pythonExecutable:process.env.NOTALONE_TEST_PYTHON || join(homedir(),'miniconda3/envs/NotAlone/bin/python'),environment:{NOTALONE_MANAGED_USER_DATA:fixture.directory,...environment}},()=>true);
+  const host = await launchDsh({nodeExecutable:process.execPath,projectDirectory,envFilePath:fixture.envFilePath,infoPath,businessHome:fixture.directory,environment:{NOTALONE_MANAGED_USER_DATA:fixture.directory,...environment}},()=>true);
   (fixture.hosts ??= []).push(host);
   let connection;
   for (let i=0;i<150 && host.isRunning();i++) {

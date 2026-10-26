@@ -15,10 +15,12 @@ async function subject(name, delay, managed = true) {
   const root = path.join(resources, 'notalone-runtime'), marker = path.join(userData, 'owned-pid');
   await mkdir(path.join(userData, 'managed'), { recursive: true });
   await writeFile(path.join(userData, 'managed/state.json'), '{}');
-  await mkdir(path.join(root, 'project/backend/src/notalone/server'), { recursive: true });
-  await writeFile(path.join(root, 'project/backend/src/notalone/server/command.py'), '# 合成受管后台\n');
-  await mkdir(path.join(root, 'python/bin'), { recursive: true });
-  await writeFile(path.join(root, 'python/bin/python3.12'), `#!${process.execPath}\n
+  await mkdir(path.join(root, 'project/backend-ts/src'), { recursive: true });
+  await mkdir(path.join(root, 'project/backend-ts/profile'), { recursive: true });
+  await writeFile(path.join(root, 'project/backend-ts/src/launch.ts'), '// 合成入口\n');
+  await writeFile(path.join(root, 'project/backend-ts/profile/host.patch.yml'), '[]\n');
+  await mkdir(path.join(root, 'project/backend-ts/node_modules/@deepseek-ai/dsh/lib'), { recursive: true });
+  await writeFile(path.join(root, 'project/backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js'), `#!${process.execPath}\n
 const fs=require('node:fs'),http=require('node:http');
 const info=process.env.NOTALONE_BACKEND_INFO;
 fs.writeFileSync(${JSON.stringify(marker)},String(process.pid));
@@ -27,7 +29,7 @@ const timer=setTimeout(()=>{
  server=http.createServer((req,res)=>{
   if(req.headers.authorization!=='Bearer synthetic_token'){res.writeHead(401);res.end('{}');return;}
   const stopped=req.method==='POST'&&req.url==='/api/runtime/shutdown';
-  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({state:stopped?'stopped':'running'}));
+  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(stopped?{state:'stopped',runtime:'dsh'}:{"state":"running","runtime":"dsh","hostRuntime":"typescript","ownership":{"contacts":"typescript","deletion":"typescript","wechat":"typescript","skills":"typescript","skillLearning":"typescript","imports":"typescript","taskApi":"typescript","taskManagement":"typescript","tasks":"typescript","crossDomainDeletion":"typescript","wechatBodySync":"typescript","wechatIncremental":"typescript","wechatHistory":"typescript","foregroundLocation":"typescript","contactContext":"typescript","memory":"typescript","expressionPreferences":"typescript"}}));
   if(stopped){fs.rmSync(info,{force:true});server.close(()=>process.exit(0));}
  });
  server.listen(0,'127.0.0.1',()=>fs.writeFileSync(info,'address=127.0.0.1:'+server.address().port+'\\ntoken=synthetic_token\\npid='+process.pid+'\\n',{mode:0o600}));
@@ -36,7 +38,7 @@ process.on('SIGTERM',()=>{clearTimeout(timer);fs.rmSync(info,{force:true});if(se
 setInterval(()=>{},1000);
 `, { mode: 0o700 });
   if (!managed) await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({
-    pythonExecutable: path.join(root, 'python/bin/python3.12'), projectDirectory: path.join(root, 'project'),
+    projectDirectory: path.join(root, 'project'),
     backendInfoPath: path.join(userData, 'managed/backend.info') }));
   return { host: new BackendHost(userData, undefined, resources), marker };
 }

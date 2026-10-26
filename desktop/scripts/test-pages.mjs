@@ -71,7 +71,7 @@ function pageFixtureEnvironment(options, environment) {
   return result;
 }
 async function run(options) {
-  if (options.mode !== 'probe' && (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX)) throw new Error('page_test_environment: 请先激活 Conda NotAlone');
+  if (options.mode !== 'probe' && options.mode !== 'status') throw new Error('page_test_historical: 旧Python页面夹具仅通过 backend-ts 的 npm run test:historical -- desktop-pages <原参数> 在固定23a旧树和独立venv执行；当前Node页面与控制器覆盖按测试登记运行。');
   const fixtureEnvironment = pageFixtureEnvironment(options, process.env);
   for (const key of Object.keys(fixtureEnvironment).filter(key => key.endsWith('_EVIDENCE_DIR'))) {
     const directory = await realpath(fixtureEnvironment[key]);

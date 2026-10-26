@@ -2,14 +2,14 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const groups = ['safe-node', 'headless', 'isolated-http-pg', 'native', 'app'];
+const groups = ['safe-node', 'headless', 'isolated-http-pg', 'native', 'app', 'historical'];
 const testName = /\.(?:test\.mjs|test\.ts|spec\.ts)$/;
 const pythonAsset = /\.py$/;
 
 // 只枚举文件名，不导入测试；有副作用的测试不能在分类检查中执行。
 export async function validateTestInventory(desktopDirectory, inventory) {
   if (!inventory || Object.keys(inventory).length !== groups.length
-    || Object.keys(inventory).some(group => !groups.includes(group))) throw new Error('测试分类必须完整且仅使用约定的五类');
+    || Object.keys(inventory).some(group => !groups.includes(group))) throw new Error('测试分类必须完整且仅使用约定的六类');
   const found = new Set();
   async function scan(relative) {
     for (const entry of await readdir(path.join(desktopDirectory, relative), { withFileTypes: true })) {
@@ -44,7 +44,7 @@ export async function loadTestInventory(desktopDirectory) {
 }
 
 // 只登记、不执行：`tests/` 下的 Python unittest 资产（fixtures 证据与手工 HTTP
-// 检查脚本）目前不被五类 runner 认领。显式暴露数量，避免把「文件名没被发现」
+// 检查脚本）目前不被常规 runner 认领。显式暴露数量，避免把「文件名没被发现」
 // 误当成「已被覆盖」；执行入口仍由 runner 分类决定。
 export async function describePythonAssets(desktopDirectory) {
   const files = [];
@@ -64,5 +64,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const { counts } = await loadTestInventory(desktop);
   const python = await describePythonAssets(desktop);
   console.log(`测试分类登记通过：${JSON.stringify(counts)}；只检查文件名，未执行测试。`);
-  console.log(`Python 资产 ${python.count} 个不在 runner 分类内（只登记，不执行）。`);
+  console.log(`Python 资产 ${python.count} 个仅作历史资产登记，固定23a旧树+独立venv显式执行（正常runner不执行）。`);
 }

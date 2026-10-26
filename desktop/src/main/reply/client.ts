@@ -8,6 +8,7 @@ import { defaultAssistantSession } from './assistant-sessions';
 import { isRecord, readReplyResult } from './result-read';
 import { readAssistantGenerationReceipt, type AssistantGenerationReceipt } from './assistant-generation-jobs';
 import { sceneSnapshot } from './scene';
+import { ASSISTANT_GENERATION_TIMEOUT_MS } from './generation-transport';
 
 export type ReplyRequestOptions = Readonly<{ adoptNewMessageId?: string; expectedInputVersionId?: string }>;
 
@@ -121,7 +122,7 @@ export async function retryInterruptedReply(backend: BackendHost, contactId: str
   const receipt = readAssistantGenerationReceipt(prepared.data, sessionId, requestKey);
   await onPrepared?.(receipt);
   if (signal.aborted) throw new BackendRequestFailure('cancelled');
-  const executing = backend.requestJson({ method: 'POST', path, body, signal, timeoutMs: 25_000 });
+  const executing = backend.requestJson({ method: 'POST', path, body, signal, timeoutMs: ASSISTANT_GENERATION_TIMEOUT_MS });
   onRequested?.();
   const response = await executing;
   const result = readPreparedReply(response, sessionId, receipt);
@@ -139,7 +140,7 @@ async function completePreparedReply(backend: BackendHost, contactId: string, bo
   selected: string, receipt: AssistantGenerationReceipt, signal: AbortSignal, onRequested?: () => void) {
   if (signal.aborted) throw new BackendRequestFailure('cancelled');
   const requested = backend.requestJson({
-    method: 'POST', path: `/api/contacts/${contactId}/assistant-sessions/${selected}/replies`, timeoutMs: 25_000, signal,
+    method: 'POST', path: `/api/contacts/${contactId}/assistant-sessions/${selected}/replies`, timeoutMs: ASSISTANT_GENERATION_TIMEOUT_MS, signal,
     body,
   });
   onRequested?.();

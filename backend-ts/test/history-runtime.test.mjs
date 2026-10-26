@@ -11,11 +11,10 @@ const coverage={
   completed_at:null,updated_at:'2026-10-25T00:02:00.000Z',
 };
 
-test('历史执行方默认python，显式typescript必须有远端，非法值失败关闭',()=>{
-  assert.equal(resolveHistoryRuntime({}, {incrementalRemoteAvailable:true}),'python');
-  assert.equal(resolveHistoryRuntime({NOTALONE_HISTORY_RUNTIME:'python'}, {incrementalRemoteAvailable:false}),'python');
+test('历史执行方默认唯一typescript，缺少远端或旧选择均失败关闭',()=>{
+  assert.equal(resolveHistoryRuntime({}, {incrementalRemoteAvailable:true}),'typescript');
   assert.equal(resolveHistoryRuntime({NOTALONE_HISTORY_RUNTIME:'typescript'}, {incrementalRemoteAvailable:true}),'typescript');
-  for(const value of ['', 'typo', 'TypeScript']){
+  for(const value of ['', 'python', 'typo', 'TypeScript']){
     assert.throws(()=>resolveHistoryRuntime({NOTALONE_HISTORY_RUNTIME:value}, {incrementalRemoteAvailable:true}),/history_runtime_invalid/);
   }
   assert.throws(()=>resolveHistoryRuntime({NOTALONE_HISTORY_RUNTIME:'typescript'}, {incrementalRemoteAvailable:false}),/history_runtime_incremental_required/);

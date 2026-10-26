@@ -1,17 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {execFileSync} from 'node:child_process';
-import {homedir} from 'node:os';
-import pg from 'pg';
+import {createStorageFixture} from './host-storage-fixture.mjs';
 import {freezeExtractionSources,loadExtractionSourceMessages,loadExtractionSources,requireCurrent} from '../src/extraction-sources.ts';
 import {canonicalJSON} from '../src/contact-overview-evidence.ts';
 
 async function fixture(){
- const name=`notalone_task10_sources_${randomUUID().replaceAll('-','')}_test`,root=new URL('../../',import.meta.url).pathname;
- const python=`${homedir()}/miniconda3/envs/NotAlone/bin/python`,env={...process.env,NOTALONE_DISABLE_DOTENV:'1',PYTHONPATH:`${root}/backend/src`};
- execFileSync(python,['-c',`import sys,psycopg\nfrom pathlib import Path\nfrom psycopg import sql\nfrom notalone.database_migrations import migrate\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c: c.execute(sql.SQL('CREATE DATABASE {} TEMPLATE template0').format(sql.Identifier(sys.argv[1])))\nmigrate('host=/tmp dbname='+sys.argv[1],Path(sys.argv[2]))`,name,`${root}/backend/database/migrations`],{env,stdio:'pipe'});
- const c=new pg.Client({host:'/tmp',database:name});await c.connect();
+ const storageFixture=await createStorageFixture(),c=storageFixture.client;
  const scope={ownerId:randomUUID(),contactId:randomUUID()},source=randomUUID(),batch=randomUUID(),ids=[randomUUID(),randomUUID()],refs=[randomUUID(),randomUUID()];
  await c.query("INSERT INTO owner(id,display_name)VALUES($1,'合成')",[scope.ownerId]);await c.query("INSERT INTO contact(id,owner_id,display_name)VALUES($1,$2,'合成')",[scope.contactId,scope.ownerId]);
  await c.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)VALUES($1,$2,$3,'wechat_jsonl','synthetic.jsonl',$4,2)",[source,scope.ownerId,scope.contactId,'a'.repeat(64)]);
@@ -21,7 +16,7 @@ async function fixture(){
   await c.query("INSERT INTO message_source_ref(id,message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload)VALUES($1,$2,$3,$4,'source_document',$5,$6,$7::jsonb)",[refs[i],ids[i],scope.ownerId,scope.contactId,source,`line:${i+1}`,'{"time_iso":"2026-10-24T08:00:00+08:00","big":9007199254740993}']);
   await c.query("INSERT INTO source_processing_record(record_id,batch_id,owner_id,contact_id,position,message_id,source_ref_id,outcome,payload)VALUES($1,$2,$3,$4,$5,$6,$7,'normalized','{\"capture_layer\":\"normalized\"}')",[randomUUID(),batch,scope.ownerId,scope.contactId,i,ids[i],refs[i]]);
  }
- return {c,scope,source,batch,ids,refs,async close(){await c.end();execFileSync(python,['-c',"import sys,psycopg\nfrom psycopg import sql\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c: c.execute(sql.SQL('DROP DATABASE {}').format(sql.Identifier(sys.argv[1])))",name],{env,stdio:'pipe'});}};
+ return {c,scope,source,batch,ids,refs,close:()=>storageFixture.close()};
 }
 test('真实PG：有界target/context冻结、微秒/大整数保真；辅助来源变更撤销提交且不补新证据',async()=>{
  const f=await fixture();try{

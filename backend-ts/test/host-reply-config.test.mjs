@@ -15,7 +15,7 @@ test('宿主显式配置覆盖DSH默认值，输出采用供应商上限，认�
   const {model, provider} = result;
   assert.deepEqual(model, {provider: 'notalone-deepseek', model: 'deepseek-flash',
     maxTokens: 393216, temperature: 0, reasoningEffort: 'off', physical_limit: 24,
-    deadline_ms: 20000, warning_ratio: 0.8,
+    deadline_ms:90_000, warning_ratio: 0.8,
     budgetProfile: {context_window_tokens: 1048576, safety_margin_tokens: 65536}});
   assert.equal(provider.connection.baseURL, 'https://api.deepseek.com/anthropic');
   assert.deepEqual(provider.connection.defaults, {thinking: 'disabled', reasoningEffort: 'off'});

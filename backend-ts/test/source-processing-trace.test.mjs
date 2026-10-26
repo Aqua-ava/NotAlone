@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
-import {execFileSync} from 'node:child_process';
-import {homedir} from 'node:os';
+import {createStorageFixture} from './host-storage-fixture.mjs';
 import pg from 'pg';
 import {SourceProcessingTraceStore} from '../src/source-processing-trace.ts';
 import {SourceProcessingTraceApi} from '../src/source-processing-trace-http.ts';
@@ -13,10 +12,7 @@ const syntheticText='合成联系人喜欢周三散步';
 const syntheticSecret='合成敏感正文不得进入诊断';
 
 async function fixture(){
- const name=`notalone_task12_trace_${randomUUID().replaceAll('-','')}_test`;
- const python=`${homedir()}/miniconda3/envs/NotAlone/bin/python`,root=new URL('../../',import.meta.url).pathname;
- const env={...process.env,NOTALONE_DISABLE_DOTENV:'1',PYTHONPATH:`${root}/backend/src`};
- execFileSync(python,['-c',`import sys,psycopg\nfrom pathlib import Path\nfrom psycopg import sql\nfrom notalone.database_migrations import migrate\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c: c.execute(sql.SQL('CREATE DATABASE {} TEMPLATE template0').format(sql.Identifier(sys.argv[1])))\nmigrate('host=/tmp dbname='+sys.argv[1],Path(sys.argv[2]))`,name,`${root}/backend/database/migrations`],{env,stdio:'pipe'});
+ const storageFixture=await createStorageFixture(),name=storageFixture.client.database;
  const pool=new pg.Pool({host:'/tmp',database:name,max:5});
  const owner=randomUUID(),contact=randomUUID(),otherContact=randomUUID(),source=randomUUID(),otherSource=randomUUID();
  await pool.query("INSERT INTO owner(id,display_name)VALUES($1,'合成 owner')",[owner]);
@@ -24,10 +20,8 @@ async function fixture(){
  await pool.query(`INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)
   VALUES($1,$2,$3,'wechat_jsonl','synthetic-primary.jsonl',$4,1),($5,$2,$6,'wechat_jsonl','synthetic-other.jsonl',$7,0)`,
  [source,owner,contact,'a'.repeat(64),otherSource,otherContact,'b'.repeat(64)]);
- return {pool,name,python,env,owner,contact,otherContact,source,otherSource,store:new SourceProcessingTraceStore(pool),
-  async close(){await pool.end();execFileSync(python,['-c',`import sys,psycopg\nfrom psycopg import sql
-assert sys.argv[1].startswith('notalone_task12_trace_') and sys.argv[1].endswith('_test')
-with psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c: c.execute(sql.SQL('DROP DATABASE {}').format(sql.Identifier(sys.argv[1])))`,name],{env,stdio:'pipe'});}};
+ return {pool,name,owner,contact,otherContact,source,otherSource,store:new SourceProcessingTraceStore(pool),
+  async close(){await pool.end();await storageFixture.close();}};
 }
 
 async function primaryTrace(f,taskStatus='succeeded'){

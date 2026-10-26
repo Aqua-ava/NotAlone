@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {execFileSync} from 'node:child_process';
-import {homedir} from 'node:os';
+import {createStorageFixture} from './host-storage-fixture.mjs';
 import pg from 'pg';
 import {ExtractionTaskStore} from '../src/extraction-task-store.ts';
 import {ExtractionWorker} from '../src/extraction-worker.ts';
@@ -11,17 +10,13 @@ import {modelTaskRequestId} from '../src/host-model-accounting.ts';
 
 // 原迁移建立随机合成库；只在所有自有连接退出后普通 DROP，不终止其他进程。
 async function fixture() {
- const name=`notalone_task10_store_${randomUUID().replaceAll('-','')}_test`;
- const python=`${homedir()}/miniconda3/envs/NotAlone/bin/python`;
- const root=new URL('../../',import.meta.url).pathname;
- const env={...process.env,NOTALONE_DISABLE_DOTENV:'1',PYTHONPATH:`${root}/backend/src`};
- execFileSync(python,['-c',`import sys,psycopg\nfrom pathlib import Path\nfrom psycopg import sql\nfrom notalone.database_migrations import migrate\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c: c.execute(sql.SQL('CREATE DATABASE {} TEMPLATE template0').format(sql.Identifier(sys.argv[1])))\nmigrate('host=/tmp dbname='+sys.argv[1],Path(sys.argv[2]))`,name,`${root}/backend/database/migrations`],{env,stdio:'pipe'});
+ const storageFixture=await createStorageFixture(),name=storageFixture.client.database;
  const pool=new pg.Pool({host:'/tmp',database:name,max:5});
  const scope={ownerId:randomUUID(),contactId:randomUUID()};const sourceId=randomUUID();
  await pool.query("INSERT INTO owner(id,display_name) VALUES($1,'合成本人')",[scope.ownerId]);
  await pool.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[scope.contactId,scope.ownerId]);
  await pool.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'wechat_jsonl','synthetic.jsonl',$4,2)",[sourceId,scope.ownerId,scope.contactId,'a'.repeat(64)]);
- return {pool,scope,sourceId,store:new ExtractionTaskStore(pool),async close(){await pool.end();execFileSync(python,['-c',"import sys,psycopg\nfrom psycopg import sql\nwith psycopg.connect('host=/tmp dbname=postgres',autocommit=True) as c: c.execute(sql.SQL('DROP DATABASE {}').format(sql.Identifier(sys.argv[1])))",name],{env,stdio:'pipe'});}};
+ return {pool,scope,sourceId,store:new ExtractionTaskStore(pool),async close(){await pool.end();await storageFixture.close();}};
 }
 async function addObservation(f,binding,sequence){
  const observation=randomUUID(),message=randomUUID();

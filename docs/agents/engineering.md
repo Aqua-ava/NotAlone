@@ -5,7 +5,6 @@
 ## 代码与模块
 
 - 调研笔记保留在 `research/`；实际能力按根 `AGENTS.md` 的运行证据规则核验。
-- Python 使用四空格和 PEP 8 命名：模块、函数和变量使用 `snake_case`，类使用 `PascalCase`，常量使用 `UPPER_SNAKE_CASE`。优先小型、带类型标注的函数；副作用放在明确的适配层。
 - 按职责分离导入与规范化、联系人数据、记忆与检索、回复生成、后台任务、工具适配器及展示层。文件 I/O、模型调用、持久化和 UI 决策不得混在同一模块。
 
 ## 第三方 API 查证
@@ -14,10 +13,10 @@
 
 ## 环境
 
-- Python 产品代码使用 Conda 环境 `NotAlone`（Python 3.12）。**不要执行 `conda activate`**，改用 PATH 前缀 `PATH="$HOME/miniconda3/envs/NotAlone/bin:$PATH"`，或直接用绝对路径 `"$HOME/miniconda3/envs/NotAlone/bin/python"`、`"$HOME/miniconda3/envs/NotAlone/bin/python" -m pip`。`conda activate` 每次多花 0.5–1.8 秒，日常开发一天调用几百次就是几十分钟纯开销。
-- Python 工程位于 `backend/`，包含 `src/notalone/`、`tests/`、`database/` 与 `pyproject.toml`；从仓库根目录安装用 `python -m pip install -e ./backend`。根 `.env` 保持原位置，运行入口见 [后端说明](../../backend/README.md)。
+- 正常开发与测试使用 Node.js ≥24，后台位于 `backend-ts/`。保留原 `.env`、PostgreSQL 和资料位置；旧配置 `pythonExecutable` 兼容忽略，正常路径不执行Python或Conda。
+- 旧实现测试仅通过 `backend-ts` 的 `test:historical`、固定Git树和显式独立venv执行；先用 `npm run test:historical -- --list` 核对登记，历史结果与当前默认Node测试分开报告。
 - `desktop/` 是 Electron + React/TypeScript 桌面端；当前已接入受控后端、联系人、历史导入预览、会话读取授权、草稿改写与只读关系资料。完整业务闭环与最新版 App 验收尚未完成；验证按下方“桌面验收”执行，不沿用历史 App 的业务或权限验收。
-- **桌面开发只用热更新**：先执行 `cd desktop && npm run dev:status`，已有当前项目开发实例就复用，没有才后台启动 `npm run dev`；`npm start` 也走同一入口。React/CSS 热更新，main、preload、共享代码和 Python 变化由开发监督器经认证退出后串行重启。启动后必须再查 `dev:status`，核对实际 `--notalone-dev` 宿主及其监督器仍存活；服务就绪另查应用界面。发现打包版时通过应用菜单正常退出，不强杀、不继续启动第二份。
+- **桌面开发只用热更新**：先执行 `cd desktop && npm run dev:status`，已有当前项目开发实例就复用，没有才后台启动 `npm run dev`；`npm start` 也走同一入口。React/CSS 热更新，main、preload、共享代码和 TypeScript 后台变化由开发监督器经认证退出后串行重启。启动后必须再查 `dev:status`，核对实际 `--notalone-dev` 宿主及其监督器仍存活；服务就绪另查应用界面。发现打包版时通过应用菜单正常退出，不强杀、不继续启动第二份。
 - **发布例外只由用户发起**：当前打包和打包验收入口由 `desktop/scripts/release-policy.mjs` 默认拒绝。权限、签名、原生探针、测试或交付验收等任务名称均不自动授权打包；开发能力缺失应修复开发路径或报告具体限制。只有用户明确要求制作发布包或运行打包版时，才在该发布任务中调整门禁。Agent 不得自行修改门禁、换命令直接调用打包库、运行旧包或用确认口令代替用户授权。此约束传给所有子 Agent，恢复长任务时重新执行开发状态检查。工具执行层未隔离写权限，因此这不是不可绕过的安全沙箱。详细使用见[桌面开发模式](../../desktop/README.md#日常开发热更新)。
 - **必须由 Agent 启动常驻进程时一律丢后台**：`cd desktop && nohup npm run dev > /tmp/notalone-dev.log 2>&1 & disown`，再用一条有界等待确认就绪 `for i in $(seq 1 60); do grep -q '开发模式：React/CSS 保存即更新' /tmp/notalone-dev.log && exit 0; sleep 1; done; exit 1`。开发端口由 `scripts/development-server.mjs` 随机分配，**不要传 `--host`/`--port`**；`scripts/dev.mjs` 只接受 `--user-data-dir`，其他参数直接报错退出。**严禁在前台运行** `npm run dev`、`ssh -N`、`node dist/standalone/server.js`、`tunnel.py` 这类常驻进程；ssh 隧道用 `ssh -f -N ...` 一次建好，不进入 Agent 调用链。
 - `native/macos/` 是 ScreenCaptureKit 与 Vision 的原生 Swift 探针，只验证前台同步能力，不承载领域、存储或回复生成逻辑。
@@ -25,12 +24,12 @@
 
 ## 测试与验证
 
-- 除非仓库记录了替代方案，Python 测试使用 `unittest`。测试夹具只能使用合成或匿名化数据。
-- 从仓库根目录运行完整 Python 测试用 `python -m unittest discover -s backend/tests -t backend -v`；按 `tests.unit...` / `tests.integration...` 指定模块时在 `backend/` 执行。原生测试入口为 `swift test --package-path native/macos`。
+- Node测试使用 `node --test`；夹具只用合成或匿名化数据。
+- 默认后台验证在 `backend-ts/` 运行，桌面验证在 `desktop/` 运行；原生入口为 `swift test --package-path native/macos`。
 - **验证阶梯**（由便宜到贵，上一层通过再做下一层）：
-  1. 单用例：`cd backend && PATH="$HOME/miniconda3/envs/NotAlone/bin:$PATH" python -m unittest tests.unit.test_模块.类.方法 -v`，秒级；
-  2. 相关模块：`cd backend && PATH="$HOME/miniconda3/envs/NotAlone/bin:$PATH" python -m unittest discover -s tests/unit -t . -v`，十秒级；
-  3. 全量：`PATH="$HOME/miniconda3/envs/NotAlone/bin:$PATH" python -m unittest discover -s backend/tests -t backend`，分钟级。
+  1. 单用例：`cd backend-ts && node --test --test-name-pattern="名称" test/FILE.test.mjs`；
+  2. 相关模块：`cd backend-ts && node --test test/FILE.test.mjs`；
+  3. 全量：仅在影响范围需要时运行 `npm test`，保留既有时间上限，不重复未受影响的有效结果。
   同一失败先回到第 1 层复现，不重复重跑第 3 层。全量给时间上限：macOS 没有 `timeout`，用 `perl -e 'alarm 600; exec @ARGV' -- <命令>` 包一层。
 - **原生与桌面**：`swift test --package-path native/macos --filter <测试名>` 先跑单例；桌面先 `cd desktop && npm run typecheck`，需要时再 `npm test`。
 - **输出裁剪**：测试、构建、校验命令统一 `2>&1 | tail -60`；`git diff` 先 `--stat` 再按文件 `-- <path>`；校验产物用 `jq` 取字段。单次回传超过约 200 行即视为未裁剪。

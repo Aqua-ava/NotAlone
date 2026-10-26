@@ -5,7 +5,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { validateTestInventory, describePythonAssets } from '../scripts/test-inventory.mjs';
 
-const inventory = () => ({ 'safe-node': [], headless: [], 'isolated-http-pg': [], native: [], app: [] });
+const inventory = () => ({ 'safe-node': [], headless: [], 'isolated-http-pg': [], native: [], app: [], historical: [] });
 
 async function withTree(use) {
   const directory = await mkdtemp(path.join(tmpdir(), 'notalone-test-inventory-'));
@@ -29,7 +29,7 @@ test('登记覆盖全部前置条件，默认仅返回明确的 safe-node 文件
   }
   const result = await validateTestInventory(directory, groups);
   assert.deepEqual(result.safeNode, ['tests/safe.test.mjs']);
-  assert.deepEqual(result.counts, { 'safe-node': 1, headless: 1, 'isolated-http-pg': 1, native: 1, app: 1 });
+  assert.deepEqual(result.counts, { 'safe-node': 1, headless: 1, 'isolated-http-pg': 1, native: 1, app: 1, historical: 0 });
 }));
 
 test('重复登记、已删除文件和未知分类均失败关闭', async () => withTree(async directory => {
@@ -42,14 +42,14 @@ test('重复登记、已删除文件和未知分类均失败关闭', async () =>
   await assert.rejects(validateTestInventory(directory, { ...inventory(), unknown: [] }), /分类/);
 }));
 
-test('Python 资产只登记不执行，且不影响五类测试登记', async () => withTree(async directory => {
+test('Python 资产只登记不执行，且不影响六类测试登记', async () => withTree(async directory => {
   const groups = inventory();
   await writeFile(path.join(directory, 'tests/safe.test.mjs'), '');
   groups['safe-node'].push('tests/safe.test.mjs');
   await mkdir(path.join(directory, 'tests/fixtures'));
   await writeFile(path.join(directory, 'tests/fixtures/evidence.py'), "raise SystemExit('不得执行');");
   const result = await validateTestInventory(directory, groups);
-  assert.deepEqual(result.counts, { 'safe-node': 1, headless: 0, 'isolated-http-pg': 0, native: 0, app: 0 });
+  assert.deepEqual(result.counts, { 'safe-node': 1, headless: 0, 'isolated-http-pg': 0, native: 0, app: 0, historical: 0 });
   const python = await describePythonAssets(directory);
   assert.equal(python.count, 1);
   assert.deepEqual(python.files, ['tests/fixtures/evidence.py']);

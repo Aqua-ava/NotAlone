@@ -1,4 +1,4 @@
-/** 显式验收入口的统一模型宿主；稳定journal、可信PG授权及唯一私有回复。 */
+/** 统一 TS 模型宿主；稳定journal、可信PG授权及唯一私有回复。 */
 import type {Context} from '@deepseek-ai/cordis';
 import {getOrCreateAnonymousUserId} from '@deepseek-ai/dsh-anonymous-user-id';
 import type {IncomingMessage,ServerResponse} from 'node:http';
@@ -11,7 +11,7 @@ import {resolveHostReplyConfiguration} from './host-reply-config.ts';
 import {createHostReplyRuntime} from './host-reply.ts';
 import {createHostModelAccounting} from './host-model-accounting.ts';
 import {PostgresModelLedger,PostgresModelLedgerDetails} from './model-ledger.ts';
-import {startModelHost,assertModelHostFallbackSafe,modelBackgroundConcurrency} from './model-host.ts';
+import {startModelHost,modelBackgroundConcurrency} from './model-host.ts';
 import type {SourceProcessingTraceStore} from './source-processing-trace.ts';
 import type {L2ScenarioQualityReader} from './l2-scenario-service.ts';
 import type {L2ScenarioBudget} from './l2-scenario-workspace.ts';
@@ -33,21 +33,16 @@ export interface HostModelRuntimeOptions {
   skillLibrary?:SkillLibrary;
   requireDiscussionDependencies?:SkillDiscussionValidator;
 }
-/** 默认Python只是一项启动决定，不安装提供者或第二套后台仲裁器。 */
+/** 回复与提取只在同一 TS 宿主执行；退役选择器在初始化资源前拒绝。 */
 export async function startHostModelRuntime(options:HostModelRuntimeOptions){
-  const environment=options.environment,mode=environment.NOTALONE_REPLY_RUNTIME??'python';
-  const extractionMode=environment.NOTALONE_EXTRACTION_RUNTIME??'python';
-  if(!['python','typescript'].includes(extractionMode)||extractionMode==='typescript'&&mode!=='typescript')throw new HostModelRuntimeError('extraction_runtime_ownership_invalid');
-  if(mode!=='python'&&mode!=='typescript')throw new HostModelRuntimeError('reply_runtime_invalid');
-  if(mode==='python'){
-    if(environment.NOTALONE_REPLY_REMOTE_URL!==undefined||environment.NOTALONE_REPLY_REMOTE_TOKEN!==undefined
-      ||environment.NOTALONE_MODEL_PERMIT_SOCKET!==undefined||environment.NOTALONE_MODEL_PERMIT_TOKEN!==undefined)
-      throw new HostModelRuntimeError('reply_runtime_ownership_conflict');
-    try{
-      await assertModelHostFallbackSafe({runtimeEnvironment:environment,businessHome:options.businessHome,infoPath:options.infoPath,envFilePath:options.envFilePath});
-    }catch{throw new HostModelRuntimeError('reply_runtime_recovery_required');}
-    return undefined;
-  }
+  const environment=options.environment;
+  const mode=environment.NOTALONE_REPLY_RUNTIME??'typescript';
+  const extractionMode=environment.NOTALONE_EXTRACTION_RUNTIME??'typescript';
+  if(mode!=='typescript')throw new HostModelRuntimeError('reply_runtime_invalid');
+  if(extractionMode!=='typescript')throw new HostModelRuntimeError('extraction_runtime_ownership_invalid');
+  if(['NOTALONE_REPLY_REMOTE_URL','NOTALONE_REPLY_REMOTE_TOKEN','NOTALONE_EXTRACTION_REMOTE_URL',
+    'NOTALONE_EXTRACTION_REMOTE_TOKEN','NOTALONE_MODEL_PERMIT_SOCKET','NOTALONE_MODEL_PERMIT_TOKEN']
+    .some(key=>environment[key]!==undefined))throw new HostModelRuntimeError('reply_runtime_ownership_conflict');
   const configuration=resolveHostReplyConfiguration(environment);
   if(configuration.status!=='configured'&&configuration.code!=='reply_model_unconfigured')throw new HostModelRuntimeError(configuration.code);
   const ownerConfigured=Boolean(options.storage.runtimeOwnerId&&(await options.storage.setupStatus()).runtime_owner_configured);
@@ -69,7 +64,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
   let reply:Awaited<ReturnType<typeof createHostReplyRuntime>>|undefined;
   try{
     const configuredSkillsRoot=resolveSkillsRoot(environment,options.businessHome,options.projectDirectory);
-    // journal只有在核实旧进程消失后才给出unknown；提交PG恢复先于任何Python队列启动。
+    // journal只有在核实旧进程消失后才给出unknown；提交 PG 恢复先于任务队列启动。
     const recovered=await ledger.recoverUnknownPermits(modelHost.unknownSettlements().map(item=>item.id));
     const token=randomBytes(32).toString('base64url');
     let activeConfiguration:Parameters<typeof createHostReplyRuntime>[0]['configuration']=null;
@@ -85,40 +80,26 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
         provider:{...configuration.provider,resolveUserId:()=>anonymousId}};
     }
     reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
-      ledger,token,configuration:activeConfiguration,extractionEnabled:extractionMode==='typescript',
-      extractionAdoptionEnabled:extractionMode==='typescript',
+      ledger,token,configuration:activeConfiguration,extractionEnabled:true,
+      extractionAdoptionEnabled:true,
       extractionConcurrency:modelBackgroundConcurrency(environment),
       discussionSkillsRoot:configuredSkillsRoot,
-      publicRuntime:environment.NOTALONE_HOST_RUNTIME==='typescript',
+      publicRuntime:true,
       ...(options.sourceTraces?{sourceTraces:options.sourceTraces}:{}),
       ...(options.l2Quality?{l2Quality:options.l2Quality}:{}),
       ...(options.l2Budget?{l2Budget:options.l2Budget}:{}),
       ...(options.skillLibrary?{skillLibrary:options.skillLibrary}:{}),
       ...(options.requireDiscussionDependencies?{requireDiscussionDependencies:options.requireDiscussionDependencies}:{}),
-      extractionPermit:{path:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_SOCKET,token:modelHost.pythonEnvironment.NOTALONE_MODEL_PERMIT_TOKEN}});
+      extractionPermit:modelHost.permit});
     const runtime=reply;
-    if(extractionMode==='typescript'&&!unavailable&&!runtime.extractionControl)
+    if(!unavailable&&!runtime.extractionControl)
       throw new HostModelRuntimeError('extraction_worker_unavailable');
-    const extractionControl:TaskControlPort|undefined=extractionMode==='typescript'
-      ? runtime.extractionControl??new UnavailableTaskControl(unavailable
-        ?'model_configuration_unavailable':'worker_unavailable')
-      : undefined;
+    const extractionControl:TaskControlPort=runtime.extractionControl??new UnavailableTaskControl(unavailable
+      ?'model_configuration_unavailable':'worker_unavailable');
     let closing:Promise<void>|undefined;
     const stopAccepting=()=>{runtime.stopAccepting();modelHost.arbiter.stop();};
     return {
       statePath:modelHost.statePath,recoveredUnknown:recovered.length,replyStatus,
-      pythonEnvironment(address:string){
-        if(!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}$/.test(address))throw new HostModelRuntimeError('reply_remote_address_invalid');
-        return {...modelHost.pythonEnvironment,NOTALONE_REPLY_RUNTIME:'typescript',
-          NOTALONE_REPLY_REMOTE_URL:address,NOTALONE_REPLY_REMOTE_TOKEN:token,
-          ...(extractionMode==='typescript'?{NOTALONE_EXTRACTION_RUNTIME:'typescript',
-            NOTALONE_EXTRACTION_B_RUNTIME:'typescript',
-            NOTALONE_TASK_WORKER_RUNTIME:'typescript',
-            NOTALONE_EXTRACTION_REMOTE_URL:address,NOTALONE_EXTRACTION_REMOTE_TOKEN:token}:{}),
-          // 仅宿主到本次Legacy的允许列表协议；配置保存后整体重启，不热切换。
-          NOTALONE_MODEL_UNCONFIGURED_REASON:unavailable??'',
-          ...(!ownerConfigured?{NOTALONE_OWNER_ID:''}:{})};
-      },
       handle(req:IncomingMessage,res:ServerResponse){return runtime.handle(req,res);},
       qualityApi:runtime.qualityApi,
       handlePublic(req:IncomingMessage,res:ServerResponse,url:URL){return runtime.handlePublic(req,res,url);},
@@ -130,11 +111,11 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
       extractionControl,
       extractionWorkerStatus:runtime.extractionWorkerStatus,
       stopAccepting,
-      close(stopPython:()=>Promise<void>):Promise<void>{
+      close():Promise<void>{
         return closing??=(async()=>{
           stopAccepting();
-          // 排队者已唤醒；两侧实际SDK退出后才能释放适配器/socket，不凭HTTP断线结算。
-          const stopped=await Promise.allSettled([Promise.resolve().then(stopPython),runtime.close()]);
+          // 排队者已唤醒；实际 SDK 退出后才能释放适配器/socket，不凭HTTP断线结算。
+          const stopped=await Promise.allSettled([runtime.close()]);
           const failures=stopped.filter(result=>result.status==='rejected').map(result=>result.reason);
           const state=modelHost.arbiter.snapshot();
           if(failures.length||state.orphaned||state.foregroundActive||state.backgroundActive){

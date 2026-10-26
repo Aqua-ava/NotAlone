@@ -1,0 +1,14 @@
+# Ticket 26 生成运输等待修复
+- 目标：按用户最新范围先放开阻断生成的客户端25秒期限，保持取消、关停、断连、迟到保护与不重放；无预算重设计或新任务框架。
+- 已修改：desktop/src/main/reply/client.ts（普通/替换共用执行、退出后恢复执行）；assistant-continuation.ts（仅执行）；exploration-client.ts（仅generate=true执行）。
+- 新增：desktop/src/main/reply/generation-transport.ts，候选生成复用JsonClient既有120秒单请求上限。
+- 新增：desktop/tests/reply-generation-transport.test.mjs，唯一新增回归文件；真实generateReply→JsonClient→loopback HTTP，虚拟化长运输时钟，不改生产代码或网络协议来复现。
+- 根因机制已证实：prepare回执有效、用户signal=false，生成前10秒＋模型5秒成功＋成功后11秒保存，在生产25秒运输计时器先destroy后返回connection，候选无法交付。
+- RED命令：从desktop运行绝对Node --test tests/reply-generation-transport.test.mjs；改生产前exit1，断言“无用户取消却运输失败：connection”。
+- GREEN同命令：5/5，包含26秒完成交付、主动取消、cancelPending关停、断连、最终到期；后四者不接受迟到候选，每种情况只派发一次生成。
+- 使用绝对Node：node（本机已核验Node24，绝对路径保留在端侧执行记录）。
+- git diff --check（上述5文件）通过；未跑TSC/全量/实际App/真实模型/性能/质量/独立审查，无Git index或提交操作。
+- 普通API与prepare等待不变；后端模型20秒、30秒业务租约、来源/权限/删除及最终保存事务未改；没有忽略res.close或补存被取消结果。
+- 现有异步机制仅用于prepare且结果白名单不含候选，不将其扩为新生成执行框架。
+- 合成完成响应不能证明真实数据库已保存；交root仅补一次实际生成保存并统一TSC。原r10失败/使用10保持，不自动重放。
+- 未读取聊天正文、env、key或原库；未操作App、微信、真实模型、配置、预算或三个保护文件。

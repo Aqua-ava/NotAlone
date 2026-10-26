@@ -5,6 +5,7 @@ import { defaultAssistantSession } from './assistant-sessions';
 import { isRecord, readReplyResult } from './result-read';
 import { readAssistantGenerationReceipt, type AssistantGenerationReceipt } from './assistant-generation-jobs';
 import { readReplyScene } from './scene';
+import { ASSISTANT_GENERATION_TIMEOUT_MS } from './generation-transport';
 
 export interface ExplorationRequest {
   contactId: string; sessionId: string; operationKey: string; expectedInputVersionId: string | null;
@@ -127,7 +128,8 @@ export async function prepareExplorationAction(backend: BackendHost, input: Expl
 export async function actOnExploration(backend: BackendHost, input: ExplorationAction, signal: AbortSignal,
   receipt?: AssistantGenerationReceipt) {
   const response = await backend.requestJson({ method: 'POST',
-    path: `/api/contacts/${input.contactId}/assistant-sessions/${input.sessionId}/explorations/${input.taskId}/${input.action}`, timeoutMs: 25_000, signal,
+    path: `/api/contacts/${input.contactId}/assistant-sessions/${input.sessionId}/explorations/${input.taskId}/${input.action}`,
+    timeoutMs: input.generate ? ASSISTANT_GENERATION_TIMEOUT_MS : 25_000, signal,
     body: actionBody(input) });
   if (receipt && (!isRecord(response.data) || response.data.kind !== 'generated' || !isRecord(response.data.turn)
     || response.data.turn.turn_id !== receipt.turnId || response.data.turn.input_version_id !== receipt.inputVersionId

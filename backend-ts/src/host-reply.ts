@@ -257,8 +257,9 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
           binding:{provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,reasoningEffort:m.reasoningEffort},profile:m.budgetProfile,
           diagnosticProblemBudgetBound:qualityModel.diagnosticProblemBudgetBound,sourceRef:qualityInputSourceRef});
       }
+      // 前台等待预算调整不扩大后台提取与Skill学习的单次模型期限。
       const call=(input:ExtractionModelInput)=>extraction!.call({...input,
-        signal:AbortSignal.any([input.signal,AbortSignal.timeout(m.deadline_ms)])});
+        signal:AbortSignal.any([input.signal,AbortSignal.timeout(Math.min(m.deadline_ms,20_000))])});
       if(owner&&extraction&&learningStore)learningRuntime=new SkillLearningRuntime({store:learningStore,call,
         binding:{provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,reasoningEffort:m.reasoningEffort},
         profile:m.budgetProfile});

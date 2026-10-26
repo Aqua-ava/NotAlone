@@ -4,8 +4,7 @@ import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {PostgresTaskStatusStore,TaskApi} from '../src/task-api.ts';
-import {LegacyControlError} from '../src/legacy-backend.ts';
-import {PythonTaskControlGateway,TaskControlError} from '../src/task-control.ts';
+import {UnavailableTaskControl} from '../src/task-control.ts';
 
 const scope=()=>({ownerId:randomUUID(),contactId:randomUUID()});
 const query=(contactId,taskId)=>new URLSearchParams({contact_id:contactId,task_id:taskId});
@@ -27,7 +26,7 @@ async function seed(fixture,ids){
   }
 }
 
-test('任务适配复用原PG身份并严格经过Python控制门禁',async t=>{
+test('任务适配复用原PG身份并严格经过唯一TS控制门禁',async t=>{
   const fixture=await createStorageFixture();
   const name=(await fixture.client.query('SELECT current_database() AS name')).rows[0].name;
   const pool=new pg.Pool({host:'/tmp',database:name,max:2});
@@ -87,7 +86,7 @@ test('任务适配复用原PG身份并严格经过Python控制门禁',async t=>{
   await fixture.client.query("UPDATE background_task SET status='failed',current_step='extract_memory' WHERE id=$1",[ids.taskId]);
   await fixture.client.query("UPDATE background_task_step SET status='failed' WHERE task_id=$1 AND step_name='extract_memory'",[ids.taskId]);
   const failed=(await fixture.client.query("SELECT status,current_step,retry_count FROM background_task WHERE id=$1",[ids.taskId])).rows[0];
-  const unavailableControl=new PythonTaskControlGateway();
+  const unavailableControl=new UnavailableTaskControl();
   const unavailableApi=new TaskApi({ownerId:ids.ownerId,store:new PostgresTaskStatusStore(pool),control:unavailableControl});
   assert.deepEqual(await unavailableApi.handle('POST','/api/tasks/retry',new URLSearchParams(),{
     contact_id:ids.contactId,task_id:ids.taskId,
@@ -103,38 +102,4 @@ test('任务适配复用原PG身份并严格经过Python控制门禁',async t=>{
   assert.equal(calls.length,2,'失效来源不得调用Worker，也不得重新排队');
 });
 
-test('固定任务gateway保留远端门禁错误并在关闭时排空在途控制',async()=>{
-  const ids=scope();
-  const requests=[];
-  const taskId=randomUUID();
-  let release;
-  const waiting=new Promise(resolve=>{release=resolve;});
-  const gateway=new PythonTaskControlGateway();
-  gateway.bind({control(endpoint,method,body){
-    requests.push({endpoint,method,body});
-    if(endpoint==='/api/tasks/run')return waiting;
-    if(endpoint==='/api/tasks/retry')return Promise.reject(new LegacyControlError(503,'model_configuration_unavailable'));
-    return Promise.resolve({status:'queued'});
-  }});
-
-  const running=gateway.run(ids,taskId);
-  await Promise.resolve();
-  let closed=false;
-  const closing=gateway.close().then(()=>{closed=true;});
-  await Promise.resolve();
-  assert.equal(closed,false,'关闭必须等待已登记的本机控制回执');
-  release({status:'started'});
-  assert.equal(await running,'started');
-  await closing;
-  await assert.rejects(gateway.run(ids,randomUUID()),error=>
-    error instanceof TaskControlError&&error.code==='worker_unavailable');
-  assert.equal(requests.length,1);
-  assert.deepEqual(requests[0],{endpoint:'/api/tasks/run',method:'POST',
-    body:{contact_id:ids.contactId,task_id:taskId}});
-
-  const second=new PythonTaskControlGateway();
-  second.bind({control(){return Promise.reject(new LegacyControlError(503,'model_configuration_unavailable'));}});
-  await assert.rejects(second.run(ids,randomUUID()),error=>
-    error instanceof TaskControlError&&error.code==='model_configuration_unavailable'
-    &&error.status===503);
-});
+// 旧Python gateway远端桥断言固定在23a历史命令；任务状态与Worker门禁仍在本文件默认执行。

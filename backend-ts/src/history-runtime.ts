@@ -1,14 +1,14 @@
 /** 历史执行方是启动期唯一配置；不支持请求级切换或因传输缺失回退到另一写者。 */
-export type HistoryRuntime = 'python' | 'typescript';
+export type HistoryRuntime = 'typescript';
 
 export function resolveHistoryRuntime(
   environment: NodeJS.ProcessEnv,
   options: {incrementalRemoteAvailable: boolean},
 ): HistoryRuntime {
   const raw = environment.NOTALONE_HISTORY_RUNTIME;
-  const runtime = raw === undefined ? 'python' : raw;
-  if (runtime !== 'python' && runtime !== 'typescript') throw new Error('history_runtime_invalid');
-  if (runtime === 'typescript' && !options.incrementalRemoteAvailable)
+  const runtime = raw === undefined ? 'typescript' : raw;
+  if (runtime !== 'typescript') throw new Error('history_runtime_invalid');
+  if (!options.incrementalRemoteAvailable)
     throw new Error('history_runtime_incremental_required');
   return runtime;
 }

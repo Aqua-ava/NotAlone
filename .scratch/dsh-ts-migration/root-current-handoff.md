@@ -1,36 +1,19 @@
-# 根迁移持续目标
-- 目标active；01—24历史resolved，25 claimed/not approved，26 open。工具旧objective不覆盖后续人类决定。
-- 最新scope见acceptance-scope-update.md：记忆初步跑通即可，质量1056/120/两争议deferred_by_user，不改为passed，不再追加争议调用/盲评。
-- 输出/费用无门槛，保留实测和unknown；回复96、正常功能、App/微信、性能与退役仍需完成。当前对象仅按私有稳定身份，不提交真实身份/正文。
-
-## 源码与验证
-- 固定生产pin639eb2ce40169ff4d644670418644c0a28d35a0e；cd8修大范围priority小ACK，639e并行完整检查局部优化，性能尚未过。
-- 根联合Query32+公开发布5=37/37、两端TSC；原API/桌面作业24、独立配置对照3有冻结证据。
-- 7a后端全量1494/1494、689输入在e5d仍不变；e5d停止18+工作区IPC2通过，desktop safe1026pass/0fail/1原skip，858输入核验。
-- 先前1478/1484的6个source snapshot门禁失败原样保留，源于root启动未提交代码；不放宽门禁，不当产品失败或通过。
-- 桌面安全组最新1017通过/0失败/1原SKIP，52.10秒；尚需新修复后的相关复验。
-- PG重入与同key Stop两P2均已关闭；e5d两独立轴各4探针approve，final-close-{standards,spec}-e5d冻结；旧7a两RED保留。
-- 283a及d360公开扫描0；此前新临时tap的home路径已移出/脱敏，失败记录保留。
-
-## 实际App
-- 原userData/npm run dev，独立Node24/npm10.9.9，PATH无Conda，8项进程树0Python；两次真实运行均正常CmdQ退出，现开发/打包/孤儿实例0。
-- dev:status默认忽略自定义userData，必须developmentProcesses(project,userData)核验复用，不能据默认stopped重复启动。
-- 原库Node115→116，旧425task逐行SHA/NULL配置、原业务计数/.env/启动配置保持；回滚只准备未执行。
-- 原目标3345消息/20页、微信绑定、全私聊范围及sync off保留；启动前可执行后台/定时提取/允许维护到期均0。
-- r1有1成功模型收据、PG保存3候选，初始UI失败；读取保存讨论0新模型恢复3候选，候选1编辑保存v1。旧unknown未继续/重放。
-- 283a重启后原3候选及编辑v1自动恢复，0新增模型；新茶候选直接可见1条，不再有失败/unconfirmed。
-- r2有3成功收据/3 completed请求，input43176/output914；两次新草稿停止探测在等待期没有可见Stop，均正常完成，不能称停止通过。
-- 同一App账本累计used4/max8，r1 unknown、r2仅发布改善为improved/streak0；整体App仍未签收。全部合法新增讨论/候选/编辑保留，未复制或外发。
-- 7a实际正常preparing Stop已过：UI已停止/无候选，PG user_cancelled、0新模型/请求/候选；联系人切换隐藏/切回恢复，R3 improved且used4未变。正常退出三类实例0。
-- 真实微信AX仅窗口菜单，CmdF仍无可验证搜索控件，已Escape，未输入/截图/上传帧或发消息；不能声称已切到目标或自动前台定位通过。
-
-## 范围与后续
-- 原记忆r1 E/V2 regressed；r2仅V2 used4/unchanged，两争议和旧unknown保留，质量延期不等于通过。
-- 非回复工程合同根10/10，16loopback run/34HTTP/重开0重发已冻结；未执行完整记忆语义分母deferred，不扩框架。
-- 正式回复96未开始；原问题used511/max512、r1过期未结案，必须同账本有据续轮/累计容量，不新问题/清used。ACK已支持有效续期及满额后只读确认。
-- 性能正式未开始；既有sampler纯TS/Node准备可用，20双臂启动各60秒RSS约40分钟；源码固定并停App/并行负载后执行。
-- 26只读清单已冻结26点/32测试迁移引用；25通过才实施。保留SQL迁移，LLDB内嵌CPython第三方依赖单列，不擅删微信组件。
-- priority已cd8修复且root33/TSC过；639e root47/TSC过但HTTP仍3.61/5.73/3.71倍，continuation继续。E5D合成App资料/导入/讨论/同步/重启预验完成且清理，最终源再验/96/正式性能后25→26。
-- 用户要求新可见聊天而非sub-agent，允许迁移聊天互通；root独占真实资料/模型/账本/App/微信/index。
-- 三用户测试和所有未归属scratch不动；只本地精确提交/公开扫描，不打包/packaged/push/远端分支/PR。
-- E5D合成预验：记忆审核/修正/撤销/删除及联系人隔离、讨论删除、导入取消/去重/来源删除均实测；两历史完整、9消息/0模型，重启off/正文计数58不增，删除不恢复；db/目录/自有进程清理0。仅preliminary，最新工具704源/88字节socket smoke过。
+# DSH／TypeScript迁移最终交接
+- 25、26按用户明确修订范围resolved；迁移主线已完成，未发布。
+- 固定96条：96/96成功、96次物理调用、0重试；完整原记录私有保留。
+- 调用/tokens/延迟沿预注册算法通过，实际质量未评；费用/输出由用户豁免。
+- 用户取消盲评与启动/RSS对照：skipped_by_user，未评/未测，不能称通过。
+- 已知三路毫秒级HTTP退化non_blocking_by_user；OCR和记忆语义质量deferred_by_user。
+- 正常默认npm run dev只用TypeScript/DSH，不需要runtime标记、Python路径或Conda。
+- 原env、启动配置、PG/资料位置、身份与116SQL保留；旧Python字段兼容忽略。
+- 旧Python生产实现、LangChain/LangGraph/Deep Agents、旁车及回退入口退役。
+- 最终实际同联系人/同讨论生成33.633秒完成，两组候选保存，显式重读后可编辑复制，正常退出0进程。
+- 原先25秒运输/20秒循环/30秒租约失败保留；前台90/120/120秒有界对齐，后台20秒与取消/来源/迟到保护保留。
+- 启动生命周期只观测自有进程，460次未见Python；无RSS/启动性能采样。
+- 只做受影响最小回归与TSC，未重跑已有效全量或新增审查。
+- 历史Python测试保留固定23a树+显式独立venv；未执行、不算当前通过。
+- 微信原生工具LLDB内嵌CPython独立保留；不宣称全产品无CPython。
+- 用户原3处测试修改与未归属证据保留；未发送外部消息、打包、push或建PR。
+- 证据：final-acceptance-closeout/capture-summary.json、ticket26-retirement-result/verification.json。
+- 精确最小命令/边界：ticket26-host-handoff.md、ticket26-desktop-handoff.md、ticket26-fixtures-handoff.md、ticket26-generation-transport-handoff.md。
+- 最终本地提交与公开扫描由root收尾；以后新问题作为新任务，不恢复本轮已取消评测。

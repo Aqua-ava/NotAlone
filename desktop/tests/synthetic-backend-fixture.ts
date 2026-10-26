@@ -26,11 +26,11 @@ interface SyntheticBackendOptions<Data, Backend> {
 export async function withSyntheticBackendFixture<Data extends { database_name: string }, Backend extends SyntheticBackend>(
   options: SyntheticBackendOptions<Data, Backend>, use: (fixture: Backend) => Promise<void>,
 ): Promise<void> {
-  if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX) {
-    throw new Error('合成后端验收须先激活 Conda NotAlone。');
+  if (!process.env.NOTALONE_HISTORICAL_TEST_ROOT || !process.env.NOTALONE_HISTORICAL_PYTHON) {
+    throw new Error('旧Python合成后端仅通过固定23a历史命令与独立venv执行，正常Node测试不依赖该fixture。');
   }
   const directory = await mkdtemp(path.join(tmpdir(), options.directoryPrefix));
-  const pythonExecutable = path.join(process.env.CONDA_PREFIX, 'bin/python');
+  const pythonExecutable = process.env.NOTALONE_HISTORICAL_PYTHON;
   const env = isolatedAppEnvironment(directory, {
     PYTHONPATH: path.join(project, 'backend/src'), NOTALONE_DEEPSEEK_API_KEY: '',
     NOTALONE_TEST_DATABASE_URL: '',

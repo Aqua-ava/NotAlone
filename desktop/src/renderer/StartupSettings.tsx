@@ -161,7 +161,7 @@ function StartupPathSettings({ state, backend }: { state: StartupState; backend:
 }
 
 const pathFields: Array<[keyof StartupPaths, string]> = [
-  ['pythonExecutable', 'Python 可执行文件'], ['projectDirectory', '项目目录'],
+  ['projectDirectory', '项目目录'],
   ['envFilePath', '本机配置文件'], ['backendInfoPath', '后端握手文件'],
   ['wechatCliPath', '微信 CLI（可稍后配置）'], ['syncProbePath', '前台定位探针（可稍后配置）'],
 ];
@@ -175,12 +175,12 @@ const startupMessages: Record<StartupCode, [string, string]> = {
   database_start_failed: ['本机资料服务未能启动。', '请稍后重试；已有资料会保留。仍失败时关闭 App 后重新打开。'],
   database_already_running: ['已有资料服务尚未退出。', '请先正常退出旧版 NotAlone，再重新打开；不要删除资料或锁文件。'],
   ready: ['机器环境已就绪。', '机器检查通过后，继续核对本人身份和模型配置。'],
-  launch_unconfigured: ['尚未配置本机启动路径。', '填写已安装的 NotAlone Python 与项目目录，然后保存并重试。'],
+  launch_unconfigured: ['尚未配置本机启动路径。', '填写已安装的 NotAlone 项目目录，然后保存并重试。'],
   configuration_invalid: ['本机启动路径配置无效。', '重新填写非秘密绝对路径并保存；已有业务资料不会被改动。'],
-  python_unavailable: ['Python 可执行文件不可用。', '核对 NotAlone Conda 环境中的绝对 Python 路径，无需在终端激活后启动 App。'],
-  python_version_unsupported: ['Python 版本不兼容。', '请使用项目要求的 Python 3.12 环境，然后重新检查。'],
+  python_unavailable: ['旧版运行组件不可用。', '请更新完整运行组件后重新检查；现版本无需配置 Python。'],
+  python_version_unsupported: ['旧版运行组件不兼容。', '请更新完整运行组件后重新检查。'],
   backend_package_missing: ['后端包或必要依赖缺失。', '核对所选项目源码和 NotAlone 环境中的依赖，安装后重新检查。'],
-  project_unavailable: ['项目目录不可用。', '选择包含 backend 的 NotAlone 项目绝对目录。'],
+  project_unavailable: ['项目目录不可用。', '选择包含 backend-ts 的 NotAlone 项目绝对目录。'],
   env_path_unavailable: ['本机配置文件路径不可用。', '核对配置文件及其目录；本页不读取或回显配置内容。'],
   info_path_unavailable: ['后端握手文件路径不可用。', '核对握手文件及其目录，然后重试。'],
   database_unconfigured: ['数据库尚未配置。', '在选定的本机配置文件中配置 NOTALONE_DATABASE_URL，然后重新检查。'],

@@ -141,12 +141,7 @@ test('运行时构建和副本公开入口在输出或缓存不足时不创建�
     const at = (name) => path.join(owned, name);
     const commands = [
       ['prepare-runtime.mjs', ['--source-cache', at('cache'), '--output-directory', at('output')], ['output', 'cache']],
-      ['install-runtime-copy.mjs', ['--app-directory', at('Original.app'), '--runtime-directory', at('runtime'),
-        '--output-app', at('Output.app'), '--receipt', at('receipts/receipt.json')], ['Output.app', 'receipts']],
-      ['rebuild-psycopg-runtime.mjs', ['--source-archive', at('source.tar.gz'), '--runtime-directory', at('runtime'),
-        '--output-directory', at('output'), '--work-directory', at('work'), '--source-cache', at('cache')], ['output', 'work']],
-      ['prepare-replacement-kit.mjs', ['--source-cache', at('cache'), '--licenses-directory', at('licenses'),
-        '--output-directory', at('output')], ['output']],
+      // Python替换构建入口的原空间断言在固定23a历史命令保留。
       ['prepare-wechat.mjs', ['--source-cache', at('cache'), '--output-directory', at('output'), '--allow-download'], ['output', 'cache']],
     ];
     for (const [script, args, targets] of commands) for (const target of targets) {

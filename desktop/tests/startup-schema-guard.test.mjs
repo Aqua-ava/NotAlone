@@ -14,21 +14,23 @@ after(() => rm(directory, { recursive: true, force: true }));
 async function fixture(name) {
   const userData = path.join(directory, name);
   const projectDirectory = path.join(userData, 'project');
-  const pythonExecutable = path.join(userData, 'synthetic-python');
   const infoPath = path.join(userData, 'backend.info');
   const marker = path.join(userData, 'schema-was-updated');
-  await mkdir(path.join(projectDirectory, 'backend/src/notalone/server'), { recursive: true });
-  await writeFile(path.join(projectDirectory, 'backend/src/notalone/server/command.py'), '# 合成后台入口\n');
-  await writeFile(path.join(projectDirectory, 'backend/src/notalone/startup_diagnostics.py'), '# 合成只读诊断\n');
-  await writeFile(pythonExecutable, `#!${process.execPath}
-const fs=require('node:fs');
-const changed=${JSON.stringify(marker)};
-const updating=process.argv.includes('notalone.startup_database');
-if(updating) fs.writeFileSync(changed,'updated');
-console.log(JSON.stringify({code:updating||fs.existsSync(changed)?'ready':'migration_pending'}));
-`, { mode: 0o700 });
-  await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({ pythonExecutable, projectDirectory, backendInfoPath: infoPath }));
-  return { userData, marker, infoPath, config: { source: 'external', pythonExecutable, projectDirectory, infoPath }, diagnostics: new StartupDiagnostics(userData) };
+  await mkdir(path.join(projectDirectory, 'backend-ts/src'), { recursive: true });
+  await mkdir(path.join(projectDirectory, 'backend-ts/profile'), { recursive: true });
+  await writeFile(path.join(projectDirectory, 'backend-ts/src/launch.ts'), '// 合成启动入口\n');
+  await writeFile(path.join(projectDirectory, 'backend-ts/profile/host.patch.yml'), '[]\n');
+  await writeFile(path.join(projectDirectory, 'backend-ts/src/host-storage.ts'), `
+    import {existsSync} from 'node:fs';
+    export class HostStorage {static async open(){return new HostStorage()}
+      async compatibility(){return {code:existsSync(${JSON.stringify(marker)})?'ready':'migration_pending'}} async close(){} }
+  `);
+  await writeFile(path.join(projectDirectory, 'backend-ts/src/schema-prepare-cli.ts'), `
+    import {writeFileSync} from 'node:fs';
+    writeFileSync(${JSON.stringify(marker)},'updated');console.log('{"code":"ready"}');
+  `);
+  await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({ projectDirectory, backendInfoPath: infoPath }));
+  return { userData, marker, infoPath, config: { runtime: 'dsh', source: 'external', projectDirectory, infoPath }, diagnostics: new StartupDiagnostics(userData) };
 }
 
 test('等待模型或轮询间隙的旧后台仍存活时，不以数据库暂时无连接为依据更新结构', async () => {
@@ -82,7 +84,6 @@ test('DSH普通诊断复用TS存储兼容性，Python诊断模块缺失仍可核
   await mkdir(path.join(current.config.projectDirectory, 'backend-ts/src'), { recursive: true });
   await copyFile(path.resolve('../backend-ts/src/host-storage.ts'), path.join(current.config.projectDirectory, 'backend-ts/src/host-storage.ts'));
   await symlink(path.resolve('../backend-ts/node_modules'), path.join(current.config.projectDirectory, 'backend-ts/node_modules'), 'dir');
-  await rm(path.join(current.config.projectDirectory, 'backend/src/notalone/startup_diagnostics.py'));
   const previousUrl = process.env.NOTALONE_DATABASE_URL;
   process.env.NOTALONE_DATABASE_URL = '';
   try {
@@ -104,24 +105,11 @@ test('DSH的TS执行组件不可用时固定报错，不静默回退Python普通
   assert.equal(await readFile(current.marker, 'utf8').catch(() => ''), '');
 });
 
-test('DSH待更新只把结构写入交给既有03生命周期，完成后仍用TS复验', async () => {
+test('默认DSH待更新经Node准备结构后仍用TS只读复验', async () => {
   const current = await fixture('typescript-schema-prepare');
-  const ordinaryPythonProbe = path.join(current.userData, 'ordinary-python-probe');
-  await mkdir(path.join(current.config.projectDirectory, 'backend-ts/src'), { recursive: true });
-  await writeFile(path.join(current.config.projectDirectory, 'backend-ts/src/host-storage.ts'), `
-    import {existsSync} from 'node:fs';
-    export class HostStorage { static async open() {return new HostStorage()}
-      async compatibility(){return {code:existsSync(${JSON.stringify(current.marker)})?'ready':'migration_pending'}} async close(){} }
-  `);
-  await writeFile(current.config.pythonExecutable, `#!${process.execPath}
-const fs=require('node:fs');
-if(process.argv.includes('notalone.startup_database')) {fs.writeFileSync(${JSON.stringify(current.marker)},'updated');console.log('{"code":"ready"}');}
-else {fs.writeFileSync(${JSON.stringify(ordinaryPythonProbe)},'unexpected');console.log('{"code":"diagnostic_failed"}');}
-`, { mode: 0o700 });
   await current.diagnostics.ensureReady({ ...current.config, runtime: 'dsh' }, () => true);
   assert.equal(current.diagnostics.getState().code, 'ready');
   assert.equal(await readFile(current.marker, 'utf8'), 'updated');
-  assert.equal(await readFile(ordinaryPythonProbe, 'utf8').catch(() => ''), '');
 });
 
 test('取消DSH普通诊断回收本次TS子进程，不遗留后台读取', async () => {

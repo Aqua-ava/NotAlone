@@ -105,5 +105,5 @@ export const test = appTest.extend<{ backend: BackendFixture }>({
   appEnvironment: async ({ backend }, use) => {
     await use({ NOTALONE_BACKEND_INFO: backend.infoPath, NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env'), NOTALONE_DATABASE_URL: backend.database_url });
   },
-  launchConfiguration: async ({}, use) => { await use({ pythonExecutable, projectDirectory }); },
+  launchConfiguration: async ({}, use) => { await use({ projectDirectory }); },
 });

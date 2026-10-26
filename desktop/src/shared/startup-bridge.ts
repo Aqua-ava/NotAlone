@@ -9,7 +9,6 @@ export type StartupCode = 'ready' | 'launch_unconfigured' | 'configuration_inval
 
 // 只传递非秘密绝对路径与固定状态，配置文件内容和握手凭据不进入界面。
 export interface StartupPaths {
-  pythonExecutable: string;
   projectDirectory: string;
   envFilePath: string;
   backendInfoPath: string;

@@ -1,3 +1,5 @@
+> 2026-10-26：Python后端与Psycopg依赖已退役。以下是旧产物历史记录；相关脚本仅在固定Git旧树中复现，不是当前运行或发布命令。
+
 # psycopg 3.3.6 修改源码与副本替换
 
 接收者从随包 [replacement-kit/README.md](replacement-kit/README.md) 开始：整个工具包复制到 App 外，即可离线修改、编译并安装到原 App 的新副本，不需要私有仓库、dist、npm 模块、共享缓存或 Conda。它是可选开发工具，普通用户双击 App 无需 Node／clang。

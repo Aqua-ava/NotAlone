@@ -1,10 +1,9 @@
-/** 宿主拥有的一套TS/Python模型许可；稳定状态不随临时DSH profile销毁。 */
+/** 宿主唯一的 TS 模型许可；稳定状态不随临时DSH profile销毁。 */
 import { mkdir, lstat, rmdir } from 'node:fs/promises';
 import { join, resolve, isAbsolute } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { ModelPermitArbiter } from './model-permits.ts';
 import { startModelPermitServer, type ModelPermitAccounting } from './model-permit-server.ts';
-import { assertModelPermitJournalSettled } from './model-permit-journal.ts';
 export interface ModelHostOptions {
   runtimeEnvironment: Readonly<NodeJS.ProcessEnv>;
   businessHome: string;
@@ -50,10 +49,6 @@ function modelHostPaths(options:ModelHostIdentityOptions) {
   const socketDirectory = join('/tmp',`na-model-${process.getuid?.() ?? 'local'}-${identity}`);
   return {directory,socketDirectory,path:join(socketDirectory,'p.sock'),statePath:join(directory,'state.json')};
 }
-/** 正常launcher的.dsh-lock寿命覆盖此检查至Legacy退出；不取得第二套模型资源。 */
-export async function assertModelHostFallbackSafe(options:ModelHostIdentityOptions):Promise<void> {
-  await assertModelPermitJournalSettled(modelHostPaths(options).statePath);
-}
 export async function startModelHost(options: ModelHostOptions) {
   const {directory,socketDirectory,path,statePath}=modelHostPaths(options);
   const concurrency = modelBackgroundConcurrency(options.runtimeEnvironment);
@@ -77,18 +72,14 @@ export async function startModelHost(options: ModelHostOptions) {
   return {
     arbiter,
     statePath,
-    pythonEnvironment: {
-      NOTALONE_MODEL_PERMIT_SOCKET:path,
-      NOTALONE_MODEL_PERMIT_TOKEN:token,
-      NOTALONE_EXTRACTION_BATCH_CONCURRENCY:String(concurrency),
-    },
+    permit:{path,token},
     unknownSettlements: server.unknownSettlements,
     unconfirmedPermitIds: server.unconfirmedPermitIds,
     shutdown,
-    /** stopNewWork必须停业务接收并通知Python停止新调用，不能先等排队线程退出。 */
+    /** stopNewWork 必须先停业务接收，不能先等排队请求退出。 */
     close(stopNewWork: () => Promise<void>): Promise<void> {
       return closing ??= (async()=>{
-        // 先拒绝所有待领许可，让Python排队线程能退出，再等真实在途结算。
+        // 先拒绝所有待领许可，让排队请求能退出，再等真实在途结算。
         arbiter.stop();
         try {
           await stopNewWork();

@@ -1,0 +1,105 @@
+{
+  "schema_version": "ticket25-final-capture-closeout-v1",
+  "source_commit": "23a767330e4af8a024629a00c8740344be564259",
+  "production_source_commit": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "capture_sha256": "08b98f7c874b48fd3752ed9ce12ee62eeea4b9472c57e0efa24df921050879fc",
+  "planned": 96,
+  "received": 96,
+  "successes": 96,
+  "physical_calls": 96,
+  "automatic_retries": 0,
+  "bootstrap": {
+    "seed": 102,
+    "resamples": 10000,
+    "unit": "case",
+    "clusters": 16,
+    "algorithm": "mulberry32-v1/paired-case-percentile-linear-r7"
+  },
+  "metrics": {
+    "physical_calls": {
+      "status": "passed",
+      "limit": 1.05,
+      "baseline": 48,
+      "candidate": 48,
+      "estimate": 1,
+      "ci95": [
+        1,
+        1
+      ]
+    },
+    "total_tokens": {
+      "status": "passed",
+      "limit": 1.1,
+      "baseline": 289196,
+      "candidate": 258389,
+      "estimate": 0.8934736303406686,
+      "ci95": [
+        0.891078684083125,
+        0.8958896771222695
+      ]
+    },
+    "latency_p50": {
+      "status": "passed",
+      "limit": 1.15,
+      "baseline": 2584.9593125,
+      "candidate": 1873.6690629999985,
+      "estimate": 0.7248350308415148,
+      "ci95": [
+        0.6557879410435579,
+        0.7840008906191731
+      ]
+    },
+    "latency_p95": {
+      "status": "passed",
+      "limit": 1.25,
+      "baseline": 3047.52141895,
+      "candidate": 2202.9324455999913,
+      "estimate": 0.72286036511566,
+      "ci95": [
+        0.6742434022079699,
+        1.049344374559524
+      ]
+    }
+  },
+  "failure_rate": {
+    "old": 0,
+    "new": 0,
+    "denominator_per_arm": 48
+  },
+  "five_stage_timelines": 96,
+  "deterministic_checks": {
+    "passed": 96,
+    "denominator": 96
+  },
+  "dependencies_equal": true,
+  "source_stable": true,
+  "cleanup": {
+    "own_database_dropped": true,
+    "own_profile_removed": true,
+    "own_python_exited": true
+  },
+  "quality": {
+    "status": "skipped_by_user",
+    "passed": null,
+    "grading_cancelled": true,
+    "full_evaluation_completed": false,
+    "partial_records_preserved": true
+  },
+  "startup_rss": {
+    "status": "skipped_by_user",
+    "measured": false,
+    "passed": null,
+    "formal_collection_started": false
+  },
+  "cost_status": "waived_by_user",
+  "output_status": "waived_by_user",
+  "known_http_regressions": "non_blocking_by_user",
+  "foreground_ocr": "deferred_by_user",
+  "memory_semantic_quality": "deferred_by_user",
+  "configuration_unknown_reasons_preserved": [
+    "供应商协议分别为原OpenAI Chat与官方DSH Anthropic适配，工具schema/提示词需要另行做语义等价核验",
+    "实际usage缺失保留null；本机fake与真实采集明确区分，质量资格另行评审"
+  ],
+  "user_scope_source": "private:final-acceptance-user-scope",
+  "acceptance": "closed_under_explicit_user_scope_without_quality_or_startup_rss_pass_claim"
+}

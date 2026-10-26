@@ -1,6 +1,6 @@
 # 现行核心流程
 
-> 2026-10-23 后端迁移决定：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)采纳精简 DSH 与 TypeScript 后端，最终替换 Python、LangChain／LangGraph／DeepAgents。当前代码仍使用原后端，迁移尚未实现或验收；以下目标不代表已运行。Electron 独立，TS 业务与 DSH 共用官方 profile 启动的后台进程，由薄插件装配普通业务模块；PostgreSQL、现有功能与数据保留。ADR-006／009／010 的框架选择由 ADR-102 替代，其范围、来源、预算、删除和人工发送约束保持。
+> 2026-10-23 后端迁移决定：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)采纳精简 DSH 与 TypeScript 后端，最终替换 Python、LangChain／LangGraph／DeepAgents。当前代码已切换TypeScript／DSH，旧Python后端与框架执行分支退役；本轮开发验证范围及用户跳过项见迁移25／26记录。Electron 独立，TS 业务与 DSH 共用官方 profile 启动的后台进程，由薄插件装配普通业务模块；PostgreSQL、现有功能与数据保留。ADR-006／009／010 的框架选择由 ADR-102 替代，其范围、来源、预算、删除和人工发送约束保持。
 
 > 首用交互与生命周期补充：[ADR-101](../adr/101-local-app-first-use-lifecycle.md)默认仅所选会话，保留明确选择全部私聊的分支；下文 ADR-095 全部范围原子提交仅用于该选择。列表访问先取得必要同意并丢弃夹带摘要，工具准备不授权正文读取。重装沿用留存资料，彻底删除需明确范围与二次确认；异常诊断脱敏且不自动上传。完整首用及独立交付仍待[新规格](../../.scratch/local-app-first-use/spec.md)验收。
 
@@ -8,7 +8,7 @@
 
 > 状态：已采纳的流程边界；已有 Electron UI 与 HTTP 接线，分项实现及验收范围须分别核验，下文尚未接入的设计目标另作标注。
 
-> 后续目标：记忆时效、纠错、可追溯概览、自动 Skill 草稿/审核和明确范围反馈按[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)及[正式规格](../../.scratch/memory-skill-evolution/spec.md)扩展；联系人／本人概览、回复检索、Skill 草稿审核和反馈已有主线接线，工程签收与剩余验证见[任务索引](../../.scratch/memory-skill-evolution/planning.md)，实际 App／微信和真实模型质量另验。DSH 已按 ADR-102 采纳为迁移目标，当前代码仍使用原回复运行时；质量放行、授权和人工发送边界保持。
+> 后续目标：记忆时效、纠错、可追溯概览、自动 Skill 草稿/审核和明确范围反馈按[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)及[正式规格](../../.scratch/memory-skill-evolution/spec.md)扩展；联系人／本人概览、回复检索、Skill 草稿审核和反馈已有主线接线，工程签收与剩余验证见[任务索引](../../.scratch/memory-skill-evolution/planning.md)，实际 App／微信和真实模型质量另验。DSH 已按 ADR-102 采纳为迁移目标，当前代码使用TypeScript／DSH回复运行时；质量放行、授权和人工发送边界保持。
 
 > 前台跟随约束：按[ADR-050](../adr/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；行为合同见[正式规格](../../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录。下方描述流程约束，不替代代码、测试及实机证据。
 
@@ -153,7 +153,7 @@ CLI 可以在用户切回已绑定联系人时补读本地数据库中的历史�
   -> 按用户点击的帮我表达／帮我想想固定本次动作，后者允许空想法
   -> 结合用户输入、补充聊天、近期对话、相关记忆及可用 Skill 精简目录；建议不冒充确认方向
   -> 仅在明确生成操作下固定本次联系人、助手会话、输入版本及有界上下文并接受候选任务
-  -> 有界 Agent 循环按需调用受控 Tool（当前 LangChain create_agent，目标 DSH），不创建模型 Todo 或步骤进度（ADR-091）
+  -> 有界 Agent 循环按需调用受控 Tool（当前TypeScript／DSH），不创建模型 Todo 或步骤进度（ADR-091）
   -> 按需调用已接入的受控 Skill 与联系人检索 Tool（ADR-090）；当前不接入时间、日历或网络搜索工具（ADR-092）
   -> 根据 Tool 结果继续查询，不使用 Todo 表达多步骤进度
   -> 在五轨上下文内返回 1-3 条带依据引用的 reply_candidate，或返回澄清需求
@@ -166,7 +166,7 @@ CLI 可以在用户切回已绑定联系人时补读本地数据库中的历史�
 
 按 [ADR-068](../adr/068-direct-reply-candidates-with-user-selection.md)，候选生成后不追加模型语义复核；结构、范围、来源与引用检查继续由程序执行，候选的最终表达由用户选择和修改。来源引用有效不等于语义已核验。记忆入库、L2/L3 整理核验及离线质量资格独立保持。
 
-回复运行时保持确定性外壳 `validate_scope -> assess_request_risk -> assemble_initial_context -> bounded Agent Tool loop -> validate_agent_output -> persist_trace -> return_result`。当前实现使用 LangChain `create_agent` 和底层 LangGraph；按 ADR-102，内部循环目标改由精简 DSH 承担，领域接口不暴露框架类型。TS 业务代码负责范围、事务、预算、来源校验及确定性调度，原本单次模型调用不扩展为开放式循环。框架迁移不削减 ADR-006／009 的业务约束，也不授权新的工具或自动发送。迁移与验收尚未完成；历史草案见 `../drafts/agent-runtime.md`。
+回复运行时保持确定性外壳 `validate_scope -> assess_request_risk -> assemble_initial_context -> bounded Agent Tool loop -> validate_agent_output -> persist_trace -> return_result`。当前实现按 ADR-102 使用精简DSH承担内部循环，旧LangChain／LangGraph已退役，领域接口不暴露框架类型。TS 业务代码负责范围、事务、预算、来源校验及确定性调度，原本单次模型调用不扩展为开放式循环。框架迁移不削减 ADR-006／009 的业务约束，也不授权新的工具或自动发送。实际范围以25／26记录为准；历史草案见 `../drafts/agent-runtime.md`。
 
 每次生成由调用方提供联系人范围内的幂等 `request_key`。同键同输入的已完成请求直接返回原候选；同键不同输入明确报冲突；有效租约内正在执行时返回“处理中”；失败或租约过期后可以复用同一请求身份重试，不得产生第二份请求或重复候选。
 
@@ -226,7 +226,7 @@ v1 的检索应可解释：先用联系人过滤，再用时间、关键词、�
 
 按 [ADR-042](../adr/042-assistant-session-context-boundary.md)，持续助手会话的产品讨论与单次 Agent 运行消息分开。第一版助手讨论不自动摘要或静默截断：接近预算提示，达到上限保留查看并要求显式新开；仅用户选中的候选可携入新会话。讨论、候选与修改痕迹属于可删除的产品记录，不能由 checkpoint 或摘要代替。该功能已按[规格](../../.scratch/assistant-session-context/spec.md)接入数据库版助手会话服务与 HTTP 入口，并提供桌面历史会话列表、选择恢复及生成操作，见[后端装配](../../backend/src/notalone/server/app.py)和[桌面会话控制器](../../desktop/src/main/reply/session.ts)；此实现状态不表示全部规格用例或真实 App 验收完成。
 
-按 ADR-102，DSH 会话仅作临时执行状态，不另存长期聊天日志；持续讨论从 NotAlone 业务记录恢复并重新组装上下文。崩溃后重新发起符合业务规则的执行，后台任务由业务任务记录恢复，不能用旧 DSH 状态恢复已删除资料。此目标尚未迁移验收。
+按 ADR-102，DSH 会话仅作临时执行状态，不另存长期聊天日志；持续讨论从 NotAlone 业务记录恢复并重新组装上下文。崩溃后重新发起符合业务规则的执行，后台任务由业务任务记录恢复，不能用旧 DSH 状态恢复已删除资料。当前恢复责任由TypeScript业务与PostgreSQL承担，不依赖旧框架断点。
 
 按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)，单次运行也不增加模型任务计划或自动过程摘要；受控查询循环和逐轮输入预算检查保持，不压缩运行消息或助手讨论以绕过上限。既有检索材料仍按独立预算选取。来源或联系人删除必须使所有相关派生内容、摘要和 checkpoint 失效，恢复前重新核验范围、授权及删除状态。具体模型计量、提醒阈值和输出预留在实现时验证，不按固定时间重开助手会话。
 
@@ -301,11 +301,11 @@ schema 修订；旧修订沿原生成终态核对后要求用户重新准备，�
 
 ### 3.7 回复 Skill 的渐进式加载
 
-Skill 保持 progressive disclosure。当前待替换的实现为：LangChain `create_agent` 组合 Deep Agents `SkillsMiddleware`，middleware 只从当前 owner/contact 的受控 discovery backend 发现已启用版本，并通过 NotAlone 定制提示词把 `name + description` 等精简目录放入模型上下文。模型需要完整策略时调用受控只读 `read_file(file_path, offset=0, limit=1000)`；该读取能力只接受目录中已列出的 `SKILL.md` 或允许的 Skill 辅助资源相对路径，经 `SkillPort` 校验范围、状态、不可变版本和目录修订后返回内容，不是通用文件系统读取。定制提示词不展示 `allowed-tools`，不允许脚本执行，也不允许外部 URL 下载。
+Skill 保持 progressive disclosure。旧LangChain／Deep Agents适配器已退役；当前DSH受控Skill适配 只从当前 owner/contact 的受控 discovery backend 发现已启用版本，并通过 NotAlone 定制提示词把 `name + description` 等精简目录放入模型上下文。模型需要完整策略时调用本轮声明的受控只读Skill读取工具；该读取能力只接受目录中已列出的 `SKILL.md` 或允许的 Skill 辅助资源相对路径，经 `SkillPort` 校验范围、状态、不可变版本和目录修订后返回内容，不是通用文件系统读取。定制提示词不展示 `allowed-tools`，不允许脚本执行，也不允许外部 URL 下载。
 
 用户显式选择 Skill 时，应用层通过同一个 `SkillPort` 校验并预加载，不要求模型再次调用 `read_file`。按 [ADR-074](../adr/074-automatic-conversation-skill-loading.md)，正常回复入口自动判断并按需加载；可以不加载 Skill，UI 仅展示当前结果实际使用的名称和版本或通用流程，不提供手选控件。旧显式版本 API 保留管理、历史兼容与内部固定版本用途。每次最多使用一个不可变版本；Skill 及其辅助资源只提供经校验的策略文本或静态素材，其内容不能注册 Tool、MCP、Shell、文件写入、子 Agent 或外部资源访问。
 
-Skill 库管理不属于 Agent Loop。按 [ADR-096](../adr/096-directory-backed-reply-skills.md)，用户可明确导入或把本地包放入本人管理目录；管理刷新和每轮运行前自动发现新增和修改，正文及资源保存为目录文件，数据库仅管理必要业务状态；安装、更新、启用和停用先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。同一 owner 的 Skill 名称唯一，库使用 owner 级 `skill_library_revision`；任一 Skill 导入、更新、启用、禁用或删除时都递增该 revision，并使该 owner 所有联系人范围的旧目录失效。Skill 目录缓存仍绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果、辅助资源结果和包含旧 Skill 正文的摘要，或使用新的运行状态。上述 `SkillsMiddleware` 是当前待替换的适配器；按 ADR-102，目标通过 DSH 官方 Skill 基础能力和自有受控适配保留相同契约，不默认扫描任意目录，不启用通用文件工具、Shell、Subagent 或自治后台任务。
+Skill 库管理不属于 Agent Loop。按 [ADR-096](../adr/096-directory-backed-reply-skills.md)，用户可明确导入或把本地包放入本人管理目录；管理刷新和每轮运行前自动发现新增和修改，正文及资源保存为目录文件，数据库仅管理必要业务状态；安装、更新、启用和停用先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。同一 owner 的 Skill 名称唯一，库使用 owner 级 `skill_library_revision`；任一 Skill 导入、更新、启用、禁用或删除时都递增该 revision，并使该 owner 所有联系人范围的旧目录失效。Skill 目录缓存仍绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果、辅助资源结果和包含旧 Skill 正文的摘要，或使用新的运行状态。按 ADR-102，当前通过 DSH 官方 Skill 基础能力和自有受控适配保留相同契约，不默认扫描任意目录，不启用通用文件工具、Shell、Subagent 或自治后台任务。
 
 消息检索和确认记忆检索 Tool 的模型参数只包含查询意图、limit 和允许的时间范围；已验证的 `owner_id + contact_id` 通过 runtime context 注入并传给 `RetrievalPort`，不能由模型提供或修改。返回携带引用标识、采纳状态、有效期、排序分数与检索器版本，用于复现与审计“本次为何返回这些结果”。
 
@@ -381,8 +381,8 @@ API 创建 background_task 与固定 background_task_step
   -> 确定性验证通过后标记 succeeded
 ```
 
-- 不先引入 Airflow、Temporal 或独立消息队列；当前 Python Worker 是待替换实现。ADR-102 目标由 TS 业务代码管理任务，PostgreSQL 继续承担权威任务状态与领取协调，恢复不依赖 DSH 会话断点。
-- 导入、级联删除和重建索引可拆为步骤；一次候选回复保持有界运行（当前 `create_agent`，目标 DSH），观察消息按 ADR-041 合并为联系人级记忆任务，不为每条消息创建步骤清单。
+- 不先引入 Airflow、Temporal 或独立消息队列；当前由TS业务代码管理Worker和任务，旧Python执行分支已退役；ADR-102规定TS业务代码管理任务，PostgreSQL 继续承担权威任务状态与领取协调，恢复不依赖 DSH 会话断点。
+- 导入、级联删除和重建索引可拆为步骤；一次候选回复保持有界运行（当前TypeScript／DSH），观察消息按 ADR-041 合并为联系人级记忆任务，不为每条消息创建步骤清单。
 - `background_task_step` 是持久化工作记录，不是 Agent prompt 或模型 Todo；步骤及依赖由代码模板确定。
 - AI 只返回某个语义步骤的结构化结果。Worker 和确定性校验器拥有状态迁移权，AI 不得领取任务、修改状态或宣布成功。
 - 同一联系人任务串行、不同联系人可并行；暂时错误最多自动重试 3 次，成功步骤不重做，Worker 租约过期后可接管。任务元数据终态保留 90 天，不记录聊天正文或模型完整输入输出。

@@ -27,7 +27,7 @@ test('认证用量合并新旧物理台账，保留取消/未知和本人调用�
  await receipt({dispatch:'response_observed',outcome:'succeeded',tokens:7,scope:'owner_memory'});
  await receipt({dispatch:'not_sent',outcome:'cancelled'});
  const info=join(f.directory,'backend.info');
- host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:resolve('..'),envFilePath:f.envFilePath,infoPath:info,businessHome:f.directory,pythonExecutable:join(homedir(),'miniconda3/envs/NotAlone/bin/python'),environment:{NOTALONE_MANAGED_USER_DATA:f.directory}},()=>true);
+ host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:resolve('..'),envFilePath:f.envFilePath,infoPath:info,businessHome:f.directory,environment:{NOTALONE_MANAGED_USER_DATA:f.directory}},()=>true);
  let c;for(let i=0;i<150&&host.isRunning();i++){try{c=Object.fromEntries((await readFile(info,'utf8')).trim().split('\n').map(x=>x.split('=')));break;}catch{}await delay(100);}
  assert.ok(c,'官方profile宿主必须就绪');
  const get=async(path,token=c.token,method='GET')=>{const r=await fetch(`http://${c.address}${path}`,{method,headers:{Authorization:`Bearer ${token}`}});return {status:r.status,data:await r.json()};};

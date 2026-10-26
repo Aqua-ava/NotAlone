@@ -57,8 +57,6 @@ export interface L2ScenarioHttpOptions {
 
 export interface L2ScenarioHttpResult {
   handled:boolean;
-  /** 已读取但应由旧执行方处理的请求体；未发生回放时不携带。 */
-  replayBody?:Buffer;
 }
 
 function object(value:unknown):value is Record<string,any>{

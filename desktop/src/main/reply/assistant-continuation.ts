@@ -5,6 +5,7 @@ import { isRecord, readReplyResult } from './result-read';
 import { readAssistantGenerationReceipt, type AssistantGenerationReceipt } from './assistant-generation-jobs';
 import type { AssistantNoGenerationProof } from '../../shared/assistant-no-generation';
 import { readReplyScene } from './scene';
+import { ASSISTANT_GENERATION_TIMEOUT_MS } from './generation-transport';
 import { ASSISTANT_CONTINUATION_RESPONSE_LIMIT, readAssistantContinuationClarification,
   type RequirementChange, type RequirementClarificationOption } from '../../shared/assistant-continuation-clarification';
 export { readAssistantContinuationClarification } from '../../shared/assistant-continuation-clarification';
@@ -92,6 +93,7 @@ export async function continueAssistantSession(backend: BackendHost, contactId: 
   const generation = backend.getConnectionGeneration();
   const perform = async (path: string) => {
     try { return await backend.requestJson({ ...request, path,
+      timeoutMs: path === request.path ? ASSISTANT_GENERATION_TIMEOUT_MS : request.timeoutMs,
       ...(path === request.path + '/prepare' ? { acceptAssistantNoGenerationProof: true as const } : {}) }); }
     catch (error) {
       if (error instanceof BackendRequestFailure && error.status === 409

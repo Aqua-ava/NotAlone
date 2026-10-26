@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readdir,symlink,rm} from 'node:fs/promises';
-import {tmpdir,homedir} from 'node:os';
+import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {execFileSync} from 'node:child_process';
+import {seedMigrationBaseline,prepareTestSchema} from './schema-fixture.mjs';
 import pg from 'pg';
 
 // 只创建本用例随机_test库；从真实107迁移集升级，不修改历史SQL或业务库。
@@ -13,15 +13,17 @@ test('107升级108只快照已明确同意且有效绑定，重放不扩大到�
   const migrations=join(root,'backend/database/migrations');
   const directory=await mkdtemp(join(tmpdir(),'notalone-wechat-migration-'));
   const name=`notalone_wechat_migration_${randomUUID().replaceAll('-','')}_test`;
-  const python=join(homedir(),'miniconda3/envs/NotAlone/bin/python');
-  const env={...process.env,NOTALONE_DISABLE_DOTENV:'1',PYTHONPATH:join(root,'backend/src')};
   const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();
   let client;
   t.after(async()=>{await client?.end();await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);await admin.end();await rm(directory,{recursive:true,force:true});});
   await admin.query(`CREATE DATABASE "${name}" TEMPLATE template0`);
   for(const file of await readdir(migrations)) if(/^\d{3}_.*\.sql$/.test(file)&&Number(file.slice(0,3))<=107) await symlink(join(migrations,file),join(directory,file));
-  const migrate=dir=>execFileSync(python,['-c','import sys\nfrom pathlib import Path\nfrom notalone.database_migrations import migrate\nmigrate(sys.argv[1],Path(sys.argv[2]))',`host=/tmp dbname=${name}`,dir],{env,timeout:60000,stdio:'pipe'});
-  migrate(directory);
+  const migrate=async dir=>{
+    if(dir===directory)return seedMigrationBaseline(name,dir);
+    await client.end();await prepareTestSchema(name,dir,directory);
+    client=new pg.Client({host:'/tmp',database:name});await client.connect();
+  };
+  await migrate(directory);
   client=new pg.Client({host:'/tmp',database:name});await client.connect();
   const owner=(await client.query("INSERT INTO owner(display_name) VALUES('合成升级本人') RETURNING id")).rows[0].id;
   await client.query("INSERT INTO owner_channel_identity(owner_id,channel,external_id,observed_name) VALUES($1,'wechat','synthetic-account','合成账号')",[owner]);
@@ -36,11 +38,11 @@ test('107升级108只快照已明确同意且有效绑定，重放不扩大到�
   const unaccepted=await add('without-grant');
   await client.query("UPDATE conversation_binding SET account_scope='unaccepted-account' WHERE id=$1",[unaccepted.binding]);
   const before=(await client.query('SELECT * FROM wechat_history_sync_authorization WHERE owner_id=$1',[owner])).rows;
-  migrate(migrations);
+  await migrate(migrations);
   assert.deepEqual((await client.query('SELECT binding_id FROM wechat_binding_history_authorization')).rows.map(r=>r.binding_id),[active.binding]);
   assert.deepEqual((await client.query('SELECT * FROM wechat_history_sync_authorization WHERE owner_id=$1',[owner])).rows,before);
   assert.equal((await client.query('SELECT count(*)::int AS n FROM conversation_binding WHERE id=ANY($1::uuid[])',[[active.binding,revoked.binding,excluded.binding,unaccepted.binding]])).rows[0].n,4);
-  const newer=await add('new-after-upgrade');migrate(migrations);
+  const newer=await add('new-after-upgrade');await migrate(migrations);
   assert.equal((await client.query('SELECT count(*)::int AS n FROM wechat_binding_history_authorization WHERE binding_id=$1',[newer.binding])).rows[0].n,0);
   assert.equal((await client.query("SELECT count(*)::int AS n FROM notalone_schema_migration WHERE name='108_wechat_binding_history_authorization.sql'")).rows[0].n,1);
   await client.query('DELETE FROM contact WHERE id=$1',[active.contact]);

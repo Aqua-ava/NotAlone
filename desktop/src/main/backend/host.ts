@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 import type { BackendState } from '../../shared/backend-bridge';
 import { BackendFailure, readConnection } from './connection';
-import { RuntimeClient } from './runtime-client';
+import { RetiredBackendRuntime, RuntimeClient } from './runtime-client';
 import { loadBackendConfiguration, type BackendConfiguration } from './config';
 import { OwnedBackendProcess, type OwnedProcess } from './process';
 import { BackendRequestFailure, type JsonRequest } from './json-client';
@@ -226,7 +226,15 @@ export class BackendHost {
       // 原自建进程仍存活时不移交另一实例；退出仍须回收本 App 已持有的运行时。
       if (this.ownedChild?.isRunning() && connection.pid !== this.ownedChild.pid) throw new BackendFailure('backend_handshake_invalid');
       const client = new RuntimeClient(connection, config.runtime);
-      if (await client.status() !== 'running') throw new BackendFailure('backend_connection_failed');
+      try {
+        if (await client.status() !== 'running') throw new BackendFailure('backend_connection_failed');
+      } catch (error) {
+        // 已认证的旧 DSH 仅保留停读目标，不开放业务或启动第二位写者。
+        if (error instanceof RetiredBackendRuntime && (!this.target || canStart())) {
+          this.target?.cancelPending(); this.target = client;
+        }
+        throw error;
+      }
       // 正常明确重连可验证新握手；退出一旦开始，认证中的新目标也不能替换原目标。
       if (!canStart()) return;
       this.target?.cancelPending();
@@ -236,7 +244,7 @@ export class BackendHost {
     }
     // 丢失握手不能成为另起读取进程的依据；保留原目标供明确退出使用。
     if (this.target) throw new BackendFailure('backend_connection_failed');
-    if (!config.pythonExecutable || !config.projectDirectory) throw new BackendFailure('backend_launch_unconfigured');
+    if (!config.projectDirectory) throw new BackendFailure('backend_launch_unconfigured');
     if (this.ownedChild) throw new BackendFailure('backend_connection_failed');
     this.ownedChild = await OwnedBackendProcess.launch(config, canStart);
     // spawn 已完成的子进程仍须取得认证目标并收尾；取消检查只阻止新的 spawn。

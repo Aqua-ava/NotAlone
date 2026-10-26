@@ -164,8 +164,9 @@ saveRaceTest('保存路径与连接重试并发时，旧路径不得启动后端
   await prepareDatabase('restore-drift', startupDatabase.database);
   const result = await manager.evaluate(async () => {
     const paths = await window.notalone.startup.getPaths();
+    const legacyPaths = { ...paths, pythonExecutable: '/synthetic/new-unavailable-python' };
     const operations = await Promise.allSettled([
-      window.notalone.startup.savePaths({ ...paths, pythonExecutable: '/synthetic/new-unavailable-python' }),
+      window.notalone.startup.savePaths(legacyPaths),
       window.notalone.backend.retryConnection(),
     ]);
     return operations.map((operation) => operation.status);

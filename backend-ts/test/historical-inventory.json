@@ -1,0 +1,2103 @@
+{
+  "version": 1,
+  "sourceCommit": "23a767330e4af8a024629a00c8740344be564259",
+  "policy": "历史文件保留，不删除、不跳过；显式命令在固定 Git 旧树和独立 venv 运行。currentCoverage 为现行入口指针，不表示逐项等价或本轮已执行。",
+  "entries": [
+    {
+      "path": "backend-ts/test/contact-context.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/contact-context.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/contact-overview-dimensions.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/contact-overview-dimensions.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/contact-overview-memory.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/contact-overview-memory.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/contact-overview-proxy.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/contact-overview-proxy.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/contact-overview.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/contact-overview.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/cutover-rollback.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/cutover-rollback.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/diagnostic-problem-budget.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/diagnostic-problem-budget.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/exploration-cleanup-service.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/exploration-public-support.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/exploration-discussion-service.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/exploration-public-support.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/exploration-real-host.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/exploration-public-support.mjs",
+        "backend-ts/test/exploration-real-host-support.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/exploration-service.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/exploration-public-support.mjs",
+        "backend-ts/test/exploration-service.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/exploration-skill-service.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/exploration-public-support.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/exploration-store.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/exploration-store.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/exploration-workspace-service.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/exploration-public-support.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-a-recovery.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-a-recovery.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-adoption-host.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-adoption-host.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-adoption-service.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-adoption-service.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-batch-recovery.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-batch-recovery.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-batch-service.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-batch-service.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-bounded-flow.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-bounded-flow.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-evidence.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-evidence.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-host-entry.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-host-entry.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-production-a.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-production-a.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-protocol-contract.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-protocol-contract.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/extraction-protocol-oracle.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/extraction-protocol-oracle.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/foreground-location-frozen.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/foreground-location-frozen.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/foreground-location-name-matching.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/foreground-location-name-matching.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/foreground-location-proxy.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/foreground-location-proxy.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/history-import-api.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/history-import-api.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/host-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/host-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/host-model-integration-profile.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/host-model-integration-profile.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/host-model-unconfigured-legacy.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/host-model-unconfigured-fixture.mjs",
+        "backend-ts/test/host-model-unconfigured-legacy.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/host-model-unconfigured-skill.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/host-model-unconfigured-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/main-host-reply-chain.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/main-host-reply-chain.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/managed-database-lifetime.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/managed-database-lifetime.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/memory-candidate-projection.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/memory-candidate-projection.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/memory-mutations.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/memory-mutations.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/memory-processing-resume-host.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/memory-processing-resume-host.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/model-accounting.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/model-accounting.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/model-organization-ack.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/model-organization-ack.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/model-organization-physical.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/model-organization-physical.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/model-permits.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/model-permits.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/model-recovery-metadata.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/model-recovery-metadata.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/organization-quality-model.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/quality-model-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/process-identity-zombie.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/process-identity-zombie.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/host-launch.test.mjs",
+        "backend-ts/test/pure-ts-runtime.test.mjs",
+        "backend-ts/test/pure-ts-lifetime.test.mjs",
+        "backend-ts/test/pure-ts-shutdown.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/quality-model-caller.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/quality-model-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-arbitration-handover.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-arbitration-handover.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-assistant-erasure.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-assistant-erasure.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-background-public.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-background-public.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-context-layered.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-context-layered.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-contract.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-contract.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-exploration-guards.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-exploration-guards.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-payload.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-payload.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-prepared-codec.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-prepared-codec.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-prepared-context.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-prepared-context.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-remote-runtime.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-remote-runtime.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/host-launch.test.mjs",
+        "backend-ts/test/pure-ts-runtime.test.mjs",
+        "backend-ts/test/pure-ts-lifetime.test.mjs",
+        "backend-ts/test/pure-ts-shutdown.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-service-exploration.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-service-exploration.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-skill-guards.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-skill-guards.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-source-guards.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-source-guards.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/reply-system-prompt.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/reply-system-prompt.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/retrieval-casefold.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/retrieval-casefold.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/retrieval-lexical.test.mjs",
+        "backend-ts/test/retrieval-hybrid.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/retrieval-embedding.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/retrieval-embedding.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/retrieval-lexical.test.mjs",
+        "backend-ts/test/retrieval-hybrid.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/retrieval-python-parity.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/retrieval-python-parity.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/retrieval-lexical.test.mjs",
+        "backend-ts/test/retrieval-hybrid.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/skill-port.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/skill-port.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/sync-incremental-new-only-boundary.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/sync-incremental-new-only-boundary.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/sync-incremental-normalize.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/sync-incremental-normalize.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/sync-incremental-parent-loss.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/sync-incremental-parent-loss.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/sync-incremental-reconnect.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/sync-incremental-reconnect-fixture.mjs",
+        "backend-ts/test/sync-incremental-reconnect.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/sync-incremental-store.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/sync-incremental-store.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/sync-incremental-suppression.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/sync-incremental-suppression.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/unconfigured-tasks.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "backend-ts/test/unconfigured-tasks.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-candidate-carry-public-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-generation-quit-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-input-budget-approximate-public.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-input-budget-public.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-interrupted-authoritative-retry-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-native-lifecycle.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-provider-context-public.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-session-projection-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/backend-cancellation.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/backend-cancellation.spec.ts",
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/backend-fifo.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/backend-launch.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/backend-launch.spec.ts",
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/host-launch.test.mjs",
+        "backend-ts/test/pure-ts-runtime.test.mjs",
+        "backend-ts/test/pure-ts-lifetime.test.mjs",
+        "backend-ts/test/pure-ts-shutdown.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/backend-recovery.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/backend-recovery.spec.ts",
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/backend-restart.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/backend-security.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/backend-stale.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/backend.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/binding-consent.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/binding-stale.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/candidate-copy.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/contact-connection.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/contact-content-restore-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/contact-generation-jobs-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/contact-readiness.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/contact-restart.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/contact-selection.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/contact-session.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/contact-stale.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/continuous-contact-follow-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/continuous-generation-combination-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/direction-source-deletion-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/draft-rewrite.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/explicit-generation-context-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/expression-preferences/bridge.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/expression-preferences/http-support.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/expression-preferences/http-controller.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/expression-preferences/http-support.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/expression-preferences/reply-session.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/expression-preferences/http-support.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/expression-preferences/reprepare-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/expression-preferences/http-support.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/external-manual-confirmation-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/external-manual-confirmation-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/final-app-cua.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/finder-native-permission-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/finder-native-permission-acceptance.spec.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/finder-native-permission.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/finder-native-permission.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/finder-package-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/fixture-database-ownership.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixture-database-ownership.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/foreground-window-recovery-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/header-change-diagnostic-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/import-preview.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/import-submit-stale.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/import-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/import-submit.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/import-backend-fixture.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/layered-correction-native.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/layered-reply-native.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/manual-connection-change-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/manual-connection-change-http.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/memory-reading.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/memory-stale.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-maintenance.test.mjs",
+        "backend-ts/test/memory-management-handoff.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/native-desktop-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/import-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/native-foreground-integration.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/native-import-only-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/import-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/owner-layered-trace-native.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/synthetic-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/packaging/build-space.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/packaging/build-space.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/packaging/psycopg-rebuild.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/packaging/psycopg-rebuild.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/packaging/runtime-attribution.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/packaging/runtime-attribution.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/host-launch.test.mjs",
+        "backend-ts/test/pure-ts-runtime.test.mjs",
+        "backend-ts/test/pure-ts-lifetime.test.mjs",
+        "backend-ts/test/pure-ts-shutdown.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/prepared-format-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/real-foreground-locator-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/real-sync-quit-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/real-sync-quit-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/real-sync-quit-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/real-sync-reenable-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/real-sync-quit-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/real-sync-visual-independence-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/real-sync-quit-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/real-sync-visual-independence.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/real-sync-visual-independence.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/reply-continuation-codepoint-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/reply-continuation-effective-intent-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/reply-continuation-preparation-proof-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/reply-continuation-public-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/reply-continuation-stopping-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/reply-model-smoke-app-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/reply-model-smoke-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/model-host.test.mjs",
+        "backend-ts/test/model-ledger.test.mjs",
+        "backend-ts/test/usage-summary-http.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/reply-strategy-preparation-proof-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/reply-strategy-preparation-retry-ack-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/reply-supplement-http.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/fixtures/assistant-budget-public.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/rewrite-failure.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/rewrite-idempotency.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/rewrite-restart.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/rewrite-scope.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/rewrite-security.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/rewrite-stale.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/database-ownership.ts",
+        "desktop/tests/rewrite-backend-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/setup-concurrency.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/setup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/setup-recovery.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/setup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/setup-stale.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/setup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/setup.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/setup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-reply.test.mjs",
+        "backend-ts/test/skill-library.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/startup-cancellation.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/host-launch.test.mjs",
+        "backend-ts/test/pure-ts-runtime.test.mjs",
+        "backend-ts/test/pure-ts-lifetime.test.mjs",
+        "backend-ts/test/pure-ts-shutdown.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/startup-diagnostics.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/host-launch.test.mjs",
+        "backend-ts/test/pure-ts-runtime.test.mjs",
+        "backend-ts/test/pure-ts-lifetime.test.mjs",
+        "backend-ts/test/pure-ts-shutdown.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/startup-path-recovery.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/host-launch.test.mjs",
+        "backend-ts/test/pure-ts-runtime.test.mjs",
+        "backend-ts/test/pure-ts-lifetime.test.mjs",
+        "backend-ts/test/pure-ts-shutdown.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/startup-setup.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/setup-fixture.ts",
+        "desktop/tests/startup-fixture.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/host-launch.test.mjs",
+        "backend-ts/test/pure-ts-runtime.test.mjs",
+        "backend-ts/test/pure-ts-lifetime.test.mjs",
+        "backend-ts/test/pure-ts-shutdown.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/sync-native-acceptance.spec.ts",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/binding-backend-fixture.ts",
+        "desktop/tests/database-ownership.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/pure-ts-binding-scope.test.mjs",
+        "backend-ts/test/sync-history.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/trace-fixture-ownership.test.mjs",
+      "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
+      "legacyDependencies": [
+        "desktop/tests/trace-fixture-ownership.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/extraction-task-store.test.mjs",
+        "backend-ts/test/extraction-sources.test.mjs",
+        "backend-ts/test/source-processing-trace.test.mjs",
+        "backend-ts/test/pure-ts-task-events.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/packaging/replacement-kit.test.mjs",
+      "reason": "Psycopg专属构建／运行时替换已退役，完整原断言由固定旧树保留",
+      "legacyDependencies": [
+        "desktop/scripts/rebuild-psycopg-runtime.mjs",
+        "desktop/scripts/prepare-replacement-kit.mjs"
+      ],
+      "currentCoverage": [
+        "desktop/tests/packaging/managed-runtime.test.mjs",
+        "desktop/tests/pure-ts-managed-runtime.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/sync-incremental-host.test.mjs",
+      "reason": "迁移阶段复制旧backend/src与Python同步桥；固定23a整树保留原断言",
+      "legacyDependencies": [
+        "backend/src",
+        "backend-ts/test/sync-incremental-host.test.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-sync.test.mjs",
+        "backend-ts/test/sync-incremental-engine.test.mjs"
+      ]
+    }
+  ],
+  "archivedCases": [
+    {
+      "path": "backend-ts/test/schema-prepare.test.mjs",
+      "name": "隔离Python迁移比较器与TS首次准备得到相同的完整公开schema合同",
+      "currentCoverage": [
+        "backend-ts/test/schema-prepare.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/assistant-candidate-carry-contract.test.mjs",
+      "name": "桌面读取生产后端新携入协议及旧空依赖归一化结果",
+      "currentCoverage": [
+        "desktop/tests/assistant-candidate-carry-contract.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/skill-files.test.mjs",
+      "name": "YAML1.1名称描述语义与旧解析一致，包含别名、合并、日期和tag",
+      "currentCoverage": [
+        "backend-ts/test/skill-files.test.mjs",
+        "backend-ts/test/schema-prepare.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/skill-files.test.mjs",
+      "name": "Python真实生成的103快照保留非BMP路径顺序、原UUID和方法字节",
+      "currentCoverage": [
+        "backend-ts/test/skill-files.test.mjs",
+        "backend-ts/test/schema-prepare.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/memory-management.test.mjs",
+      "name": "手录与纠错后的联系人/本人管理DTO逐字段保持旧Python语义",
+      "currentCoverage": [
+        "backend-ts/test/memory-management.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/skill-files.test.mjs",
+      "name": "Python 103序列化清单、正文和方法文件保持字节等价",
+      "currentCoverage": [
+        "backend-ts/test/skill-files.test.mjs",
+        "backend-ts/test/schema-prepare.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/packaging/runtime-attribution.test.mjs",
+      "name": "固定通知库存覆盖每个随包 wheel，拒绝仅提供许可名称或留空的闭包",
+      "currentCoverage": [
+        "desktop/tests/packaging/runtime-attribution.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/packaging/runtime-attribution.test.mjs",
+      "name": "静态客户端库来源对应实际wheel中的OpenSSL与libyaml版本，并保留其他组件的旧版来源",
+      "currentCoverage": [
+        "desktop/tests/packaging/runtime-attribution.test.mjs"
+      ]
+    },
+    {
+      "path": "desktop/tests/packaging/build-space.test.mjs",
+      "name": "运行时构建和副本公开入口在输出或缓存不足时不创建目录或下载",
+      "currentCoverage": [
+        "desktop/tests/packaging/build-space.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/host-model-unconfigured.test.mjs",
+      "name": "TS无key仍原样恢复unknown，保留knownPG与可信owner/contact/NULL查询",
+      "currentCoverage": [
+        "backend-ts/test/host-model-unconfigured.test.mjs"
+      ],
+      "boundary": "旧Python IPC环境出口断言仅历史；同scope PG accounting查询与unknown恢复断言继续默认Node运行"
+    },
+    {
+      "path": "backend-ts/test/skill-host.test.mjs",
+      "name": "私有同步认证owner/精确响应并由原Python Remote实际同步目录",
+      "currentCoverage": [
+        "backend-ts/test/skill-host.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/skill-host.test.mjs",
+      "name": "未排空或activate失败保持不可用，无请求fallback",
+      "currentCoverage": [
+        "backend-ts/test/skill-host.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/skill-host.test.mjs",
+      "name": "activate已安装远端但控制ACK未返回时，固定owner私有同步已就绪而公开仍停收",
+      "currentCoverage": [
+        "backend-ts/test/skill-host.test.mjs"
+      ]
+    },
+    {
+      "path": "backend-ts/test/task-api.test.mjs",
+      "name": "固定任务gateway保留远端门禁错误并在关闭时排空在途控制",
+      "currentCoverage": [
+        "backend-ts/test/task-api.test.mjs",
+        "backend-ts/test/extraction-worker-control.test.mjs"
+      ]
+    }
+  ],
+  "protectedAssets": [
+    "desktop/tests/fixtures/expression-preference-backend.py",
+    "desktop/tests/fixtures/expression-preferences-page.py",
+    "desktop/tests/memory-correction/retirement-react.test.mjs"
+  ],
+  "protectedAssetCoverage": [
+    {
+      "path": "desktop/tests/fixtures/expression-preference-backend.py",
+      "currentCoverage": [
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs",
+        "desktop/tests/expression-preferences/reprepare.test.mjs",
+        "desktop/tests/memory-correction/retirement-react.test.mjs"
+      ],
+      "status": "历史Python资产不执行；现行Node业务和React入口单独记录结果"
+    },
+    {
+      "path": "desktop/tests/fixtures/expression-preferences-page.py",
+      "currentCoverage": [
+        "backend-ts/test/preference-management.test.mjs",
+        "backend-ts/test/memory-management.test.mjs",
+        "backend-ts/test/memory-mutations-candidate.test.mjs",
+        "desktop/tests/expression-preferences/reprepare.test.mjs",
+        "desktop/tests/memory-correction/retirement-react.test.mjs"
+      ],
+      "status": "历史Python资产不执行；现行Node业务和React入口单独记录结果"
+    }
+  ],
+  "protectedAssetsPolicy": "当前用户未提交资产保持原位不改；固定旧树历史运行不包含这些未提交修改，不冒称其已运行。"
+}

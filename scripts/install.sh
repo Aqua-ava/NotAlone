@@ -1,7 +1,7 @@
 #!/bin/zsh
 # NotAlone 机器级安装脚本（ADR-021）。
 #
-# 只负责机器级事务：安装 Python 依赖、创建本地数据库、按顺序应用全部
+# 只负责机器级事务：安装 Node 依赖、创建本地数据库、按顺序应用全部
 # 迁移、构建 Mac 原生探针。旧 Swift 主界面已退役，新 UI 后续单独设计；
 # 用户级配置沿用现有 CLI 与受控配置路径，本脚本不读写密钥。
 #
@@ -12,7 +12,6 @@
 set -eu
 
 repo_root="$(cd "$(dirname "${0:A}")/.." && pwd)"
-env_name="NotAlone"
 database_name="notalone_dev"
 database_url="postgresql:///${database_name}"
 
@@ -26,14 +25,14 @@ fail() {
 cd "${repo_root}"
 
 # ------------------------------------------------------------------
-# 0. 依赖检查（macOS / brew / conda / psql / swift）
+# 0. 依赖检查（macOS / Node / brew / psql / swift）
 # ------------------------------------------------------------------
 log "检查基础依赖…"
 [[ "$(uname -s)" == "Darwin" ]] || fail "本仓库只在 macOS 上运行（探针需要屏幕录制权限与前台观察）。"
 command -v brew >/dev/null 2>&1 || fail "未找到 Homebrew，请先安装：https://brew.sh"
-if ! command -v conda >/dev/null 2>&1; then
-    fail "未找到 conda。请先安装 Miniconda（https://docs.conda.io/en/latest/miniconda.html）。"
-fi
+command -v node >/dev/null 2>&1 || fail "请先安装 Node.js 24 或更新版本。"
+node -e 'if(Number(process.versions.node.split(".")[0])<24)process.exit(1)' || fail "Node.js 版本须至少24。"
+command -v npm >/dev/null 2>&1 || fail "请先安装随Node分发的npm。"
 psql_bin="$(command -v psql || true)"
 if [[ -z "${psql_bin}" ]]; then
     log "未找到 psql；尝试安装 PostgreSQL 16…"
@@ -54,24 +53,11 @@ command -v swiftc >/dev/null 2>&1 || fail "未找到 swiftc，请先安装 Xcode
 command -v codesign >/dev/null 2>&1 || fail "未找到 codesign（Xcode Command Line Tools 的一部分）。"
 
 # ------------------------------------------------------------------
-# 1. conda 环境与 Python 依赖
+# 1. 锁定的 Node 依赖
 # ------------------------------------------------------------------
-# 环境可能以自定义路径（conda create -p）注册，只按第一列匹配会漏检，
-# 导致重复 create 报 prefix already exists 且重跑永远失败。
-if conda env list | grep -E "^[[:space:]]*[^ ]*/${env_name}[[:space:]]" >/dev/null 2>&1 \
-    || conda env list | awk '{print $1}' | grep -qx "${env_name}"; then
-    log "conda 环境 ${env_name} 已存在，跳过创建。"
-else
-    log "创建 conda 环境 ${env_name}（Python 3.12）…"
-    conda create -y -n "${env_name}" "python=3.12" || fail "conda 环境创建失败。"
-fi
-
-eval "$(conda shell.zsh hook)"
-conda activate "${env_name}"
-log "安装 Python 依赖（pip install -e ./backend）…"
-python -m pip install -e "${repo_root}/backend" || fail "Python 依赖安装失败；请检查 backend/pyproject.toml 与网络。"
-command -v notalone-server >/dev/null 2>&1 \
-    || fail "未找到 notalone-server 命令；安装 backend 项目后应在环境 ${env_name} 中出现。"
+log "安装 TypeScript 后台与桌面依赖…"
+npx --yes pnpm@11.25.0 --dir "${repo_root}/backend-ts" install --frozen-lockfile || fail "后台 Node 依赖安装失败。"
+npm --prefix "${repo_root}/desktop" ci || fail "桌面 Node 依赖安装失败。"
 
 # ------------------------------------------------------------------
 # 2. PostgreSQL 本地服务与数据库
@@ -115,7 +101,7 @@ fi
 # ------------------------------------------------------------------
 log "检查版本记录并应用待执行迁移…"
 NOTALONE_DATABASE_URL="${database_url}" \
-    python -m notalone.database_migrations --migrations "${repo_root}/backend/database/migrations" \
+    node "${repo_root}/backend-ts/src/schema-prepare-cli.ts" --prepare --migrations "${repo_root}/backend/database/migrations" \
     || fail "迁移未完成；请按错误提示与 backend/database/README.md 处理，不要重放历史 SQL。"
 
 # ------------------------------------------------------------------
@@ -148,7 +134,7 @@ zsh native/macos/scripts/build_cli.sh || fail "探针构建失败。"
 print
 print "──────────────────────────────────────────────────────────"
 print "[install] 完成。"
-print "[install] Python 后台、数据库与 Mac 原生探针已准备。"
-print "[install] 旧 Swift 主界面已退役，新 UI 尚未实现；当前 CLI 使用与首次初始化见 README。"
+print "[install] TypeScript 后台、数据库与 Mac 原生探针已准备。"
+print "[install] 开发桌面入口：cd desktop && npm run dev；首次初始化见 README。"
 print "[install] 已知前置：需要微信桌面版、自装 wechat-cli、探针屏幕录制权限（见 README）。"
 print "──────────────────────────────────────────────────────────"

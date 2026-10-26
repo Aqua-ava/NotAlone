@@ -95,7 +95,7 @@ async function fixture(t,{budget=true,afterReserve}={}) {
   const home=join(directory,label),profile=join(home,'profiles','notalone');await mkdir(profile,{recursive:true});
   await writeFile(join(profile,'package.json'),JSON.stringify({private:true,dsh:{profile:{bundles:[]}}}));
   await writeFile(join(profile,'cordis.patch.yml'),`- insert:\n    - name: '@deepseek-ai/dsh-llm'\n    - name: ${JSON.stringify(resolve(scenario?'test/diagnostic-scenario-budget-plugin.ts':'test/extraction-model-plugin.ts'))}\n`);
-  let permitPath=host.pythonEnvironment.NOTALONE_MODEL_PERMIT_SOCKET;
+  let permitPath=host.permit.path;
   if(corruptReserveAck) {
    const sockets=new Set(),path=join(directory,'ack.sock'),targetPermitPath=permitPath;
    const proxy=createSocketServer(local=>{
@@ -108,7 +108,7 @@ async function fixture(t,{budget=true,afterReserve}={}) {
    proxies.push(async()=>{for(const socket of sockets)socket.destroy();await new Promise(r=>proxy.close(r));});
    permitPath=path;
   }
-  const child=spawn(process.execPath,[resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','notalone'],{cwd:home,env:{PATH:process.env.PATH,HOME:home,DSH_HOME:home,DSH_TELEMETRY_DISABLED:'1',...host.pythonEnvironment,NOTALONE_MODEL_PERMIT_SOCKET:permitPath,...(budget?{NOTALONE_PROBLEM_BUDGET:ledger,NOTALONE_PROBLEM_ROUND:round}:{}),NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}/anthropic`},stdio:['ignore','pipe','pipe']});
+  const child=spawn(process.execPath,[resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','notalone'],{cwd:home,env:{PATH:process.env.PATH,HOME:home,DSH_HOME:home,DSH_TELEMETRY_DISABLED:'1',NOTALONE_MODEL_PERMIT_SOCKET:host.permit.path,NOTALONE_MODEL_PERMIT_TOKEN:host.permit.token,NOTALONE_MODEL_PERMIT_SOCKET:permitPath,...(budget?{NOTALONE_PROBLEM_BUDGET:ledger,NOTALONE_PROBLEM_ROUND:round}:{}),NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}/anthropic`},stdio:['ignore','pipe','pipe']});
   const exited=once(child,'exit');let log='';child.stderr.on('data',v=>log+=v);
   const running={stop:async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');await exited;}};children.push(running);
   const url=await new Promise((done,reject)=>{

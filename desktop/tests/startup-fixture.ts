@@ -8,7 +8,8 @@ import { test as appTest } from './app-fixture';
 
 const execute = promisify(execFile);
 export const projectDirectory = path.resolve('..');
-export const pythonExecutable = path.join(process.env.CONDA_PREFIX ?? '/unconfigured', 'bin/python');
+// 仅保留历史fixture签名；当前开发入口不接受Python配置。
+export const pythonExecutable = process.env.NOTALONE_HISTORICAL_PYTHON ?? '/historical-only/python';
 
 export async function openStartupDiagnostics(page: Page): Promise<void> {
   await page.getByRole('button', { name: '设置', exact: true }).click();
@@ -20,7 +21,7 @@ export async function openStartupDiagnostics(page: Page): Promise<void> {
 
 export async function prepareDatabase(action: 'create' | 'migrate' | 'drop' | 'untracked' | 'drift' | 'restore-drift' | 'incomplete'
   | 'owner-incomplete' | 'restore-owner-timestamp', database?: string): Promise<{ database: string; database_url: string }> {
-  if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone') throw new Error('验收须先激活 NotAlone Conda。');
+  if (!process.env.NOTALONE_HISTORICAL_TEST_ROOT || !process.env.NOTALONE_HISTORICAL_PYTHON) throw new Error('旧启动fixture仅允许固定23a历史命令与独立venv；请运行 backend-ts 的 npm run test:historical -- desktop-app <原参数>。');
   const { stdout } = await execute(pythonExecutable, [path.resolve('tests/fixtures/startup-database.py'), action,
     '--project', projectDirectory, ...(database ? ['--database', database] : [])], {
     env: { ...process.env, PYTHONPATH: path.join(projectDirectory, 'backend/src'), NOTALONE_DISABLE_DOTENV: '1' },
@@ -45,5 +46,5 @@ export const test = appTest.extend<{ databaseState: 'empty' | 'ready' | 'untrack
     await use({ NOTALONE_DATABASE_URL: startupDatabase.database_url,
       PATH: '/usr/bin:/bin', CONDA_PREFIX: '', CONDA_DEFAULT_ENV: '', PYTHONPATH: '/synthetic/unavailable' });
   },
-  launchConfiguration: async ({}, use) => { await use({ pythonExecutable, projectDirectory }); },
+  launchConfiguration: async ({}, use) => { await use({ projectDirectory }); },
 });

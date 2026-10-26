@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readdir,copyFile,writeFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir,homedir} from 'node:os';
+import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
-import {execFileSync} from 'node:child_process';
+import {seedMigrationBaseline,prepareTestSchema} from './schema-fixture.mjs';
 import pg from 'pg';
 import {HostStorage} from '../src/host-storage.ts';
 
@@ -25,10 +25,14 @@ test('109升级当前116保留业务UUID及未知用量，receipt隔离和关键
   let client,storage;
   t.after(async()=>{await storage?.close();await client?.end();await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);await admin.end();await rm(directory,{recursive:true,force:true});});
   await admin.query(`CREATE DATABASE "${name}" TEMPLATE template0`);
-  const migrate=path=>execFileSync(join(homedir(),'miniconda3/envs/NotAlone/bin/python'),['-c',
-    'import sys\nfrom pathlib import Path\nfrom notalone.database_migrations import migrate\nmigrate(sys.argv[1],Path(sys.argv[2]))',`host=/tmp dbname=${name}`,path],
-    {env:{...process.env,NOTALONE_DISABLE_DOTENV:'1',PYTHONPATH:join(root,'backend/src')},timeout:60000,stdio:'pipe'});
-  migrate(baseline);
+  const migrate=async path=>{
+    if(path===baseline) return seedMigrationBaseline(name,path);
+    await storage?.close();await client?.end();
+    await prepareTestSchema(name,path,directory);
+    client=new pg.Client({host:'/tmp',database:name});await client.connect();
+    if(storage)storage=await HostStorage.open({envFilePath:join(directory,'.env'),migrationsDirectory:current,environment:{}});
+  };
+  await migrate(baseline);
   client=new pg.Client({host:'/tmp',database:name});await client.connect();
   const owner=(await client.query("INSERT INTO owner(display_name) VALUES('合成升级本人') RETURNING id")).rows[0].id;
   const contact=(await client.query("INSERT INTO contact(owner_id,display_name) VALUES($1,'合成原联系人') RETURNING id",[owner])).rows[0].id;
@@ -52,7 +56,7 @@ test('109升级当前116保留业务UUID及未知用量，receipt隔离和关键
   await writeFile(envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${name}\n`);
   storage=await HostStorage.open({envFilePath,migrationsDirectory:current,environment:{}});
   assert.deepEqual(await storage.compatibility(),{code:'migration_pending'});
-  migrate(current);
+  await migrate(current);
   assert.deepEqual(await storage.compatibility(),{code:'ready'});
   assert.deepEqual(await snapshot(),before,'所有既有业务表内容保持不变');
   assert.equal((await client.query('SELECT count(*)::int AS n FROM model_call_receipt')).rows[0].n,0);

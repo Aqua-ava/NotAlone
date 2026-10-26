@@ -5,7 +5,7 @@ import path from 'node:path';
 import { managedLayout, minimumRuntimeComponents, requiredRuntimeFiles } from '../../../managed-runtime-contract.mjs';
 
 export { managedLayout };
-export type ManagedComponents = { root: string; python: string; project: string; postgres: string };
+export type ManagedComponents = { root: string; project: string; postgres: string };
 
 // 清单证明包内字节完整性；发行者身份仍由整个 App 的签名另行核验。
 export async function verifyManagedComponents(resourcesDirectory: string | undefined, canContinue: () => boolean): Promise<ManagedComponents> {
@@ -61,10 +61,9 @@ export async function verifyManagedComponents(resourcesDirectory: string | undef
   }
   for (const required of requiredRuntimeFiles) {
     if (!names.has(required)) throw new Error('runtime_components_unavailable');
-    if (required.endsWith('.py')) continue;
-    await access(path.join(root, required), constants.X_OK);
+    if (required.startsWith(`${managedLayout.postgres}/`)) await access(path.join(root, required), constants.X_OK);
   }
-  // 未登记的 .pth、共享库或模块也可能被解释器载入，因此核验完整文件库存。
+  // 未登记的共享库或模块也可能被载入，因此核验完整文件库存。
   const visit = async (directory: string): Promise<void> => {
     check();
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -75,7 +74,7 @@ export async function verifyManagedComponents(resourcesDirectory: string | undef
     }
   };
   await visit(root);
-  return { root, python: path.join(root, managedLayout.python), project: path.join(root, managedLayout.project), postgres: path.join(root, managedLayout.postgres) };
+  return { root, project: path.join(root, managedLayout.project), postgres: path.join(root, managedLayout.postgres) };
 }
 
 function validRelativePath(value: string): boolean {

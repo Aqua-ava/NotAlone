@@ -19,6 +19,7 @@ import {ReplySkillSession} from './reply-skill-runtime.ts';
 import {ReplyHistory} from './reply-history.ts';
 import {allowsHistory,recentOnly,ReplyContextError} from './reply-context.ts';
 import {generateReplyLoop,registerReplyAgentSetup} from './reply-loop.ts';
+import {REPLY_EXECUTION_DEADLINE_MS,replyExecutionLeaseMs} from './reply-execution-budget.ts';
 import {replyPayloadText} from './reply-payload.ts';
 import {replyPhysicalLimit,replyScenarioReadPolicy} from './reply-context-scenario.ts';
 import {replyGeneratedPayload} from './reply-result.ts';
@@ -104,7 +105,7 @@ export class ReplyGenerationService {
  constructor(options:ReplyServiceOptions){
   const m=options.model;
   if(!isAbsolute(options.skillsRoot)||!m.provider?.trim()||!m.model?.trim()||!Number.isSafeInteger(m.maxTokens)||m.maxTokens<1||!Number.isSafeInteger(m.physical_limit)||m.physical_limit<1
-    ||!Number.isSafeInteger(m.deadline_ms)||m.deadline_ms<1||m.deadline_ms>20000||!Number.isFinite(m.temperature)||m.temperature<0||m.temperature>2||!Number.isFinite(m.warning_ratio)||m.warning_ratio<=0||m.warning_ratio>=1
+    ||!Number.isSafeInteger(m.deadline_ms)||m.deadline_ms<1||m.deadline_ms>REPLY_EXECUTION_DEADLINE_MS||!Number.isFinite(m.temperature)||m.temperature<0||m.temperature>2||!Number.isFinite(m.warning_ratio)||m.warning_ratio<=0||m.warning_ratio>=1
     ||!Number.isSafeInteger(m.budgetProfile.context_window_tokens)||!Number.isSafeInteger(m.budgetProfile.safety_margin_tokens)||m.budgetProfile.safety_margin_tokens<1||m.budgetProfile.context_window_tokens<=m.maxTokens+m.budgetProfile.safety_margin_tokens
     ||!['off','low','high','max'].includes(m.reasoningEffort))throw new ReplyError('reply_model_configuration_invalid',503);
   this.options={...options,model:structuredClone(m)};
@@ -165,7 +166,7 @@ export class ReplyGenerationService {
   const settle=async()=>{if(!settled){settled=true;round.settle();}};
   try{
   const {controller,skillPort,savedSkill,explored}=replyResources(this.options,transaction,verified,input,internal,()=>skill?.selectedSkillFailure()??null);activeSkillPort=skillPort;
-  const store=activeStore=new PostgresReplyStore({transaction,guards:controller.guards});
+  const store=activeStore=new PostgresReplyStore({transaction,guards:controller.guards,leaseMs:replyExecutionLeaseMs(model.deadline_ms)});
   const resultPayload=async(result:ReplyStoreResult)=>replyGeneratedPayload(result,verified.contact_id,await transaction(client=>readReplyBasisChanges(client,verified,result.reply_request_id,savedSkill.savedSkillPolicyChange)));
    const started=await store.start({...verified,idempotency_key:input.idempotency_key,normalized_input:normalizeReplyInput(input),continued_from_candidate_id:input.continued_from_candidate_id});
    if(started.state==='replayed')return await resultPayload(started.result!);

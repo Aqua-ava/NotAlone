@@ -4,7 +4,7 @@ import pg from 'pg';
 import {randomUUID,createHash} from 'node:crypto';
 import {mkdtemp,rm,readdir,readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
-import {tmpdir,homedir} from 'node:os';
+import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const migrationsDirectory=new URL('../../backend/database/migrations',import.meta.url).pathname;
 async function fixture(t){
@@ -73,16 +73,7 @@ test('102旧库的Skill正文和资源先完整核验落盘，原身份与历史
  assert.equal(listed.skills[0].skill_id,skill);assert.equal(listed.skills[0].current_version_id,version);
  assert.deepEqual(await prepareDatabaseSchema(options),{code:'ready',applied:[]});
 });
-test('隔离Python迁移比较器与TS首次准备得到相同的完整公开schema合同',async t=>{
- const current=await fixture(t),legacy=await fixture(t),{prepareDatabaseSchema}=await import('../src/schema-prepare.ts');
- assert.equal((await prepareDatabaseSchema(current)).code,'ready');
- const python=process.env.NOTALONE_TEST_PYTHON??join(homedir(),'miniconda3/envs/NotAlone/bin/python');
- const comparator=spawnSync(python,['-I','-B','-c',"import sys\nfrom pathlib import Path\nsys.path.insert(0,sys.argv[1])\nfrom notalone.database_migrations import migrate\nmigrate(sys.argv[2],Path(sys.argv[3]))",new URL('../../backend/src',import.meta.url).pathname,legacy.databaseUrl,migrationsDirectory],{env:{PATH:'/usr/bin:/bin',HOME:legacy.environment.HOME,NOTALONE_DISABLE_DOTENV:'1',NOTALONE_SKILLS_DIR:legacy.environment.NOTALONE_SKILLS_DIR},encoding:'utf8',timeout:15000});
- assert.equal(comparator.status,0,'比较器仅访问独立合成旧库');
- const catalog=`SELECT 'column' AS kind,c.relname AS object,a.attname AS name,format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text||':'||COALESCE(pg_get_expr(d.adbin,d.adrelid),'') AS definition FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum WHERE n.nspname='public' AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped UNION ALL SELECT 'constraint',c.relname,k.conname,pg_get_constraintdef(k.oid)||':'||k.convalidated::text FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' UNION ALL SELECT 'index',c.relname,c.relname,pg_get_indexdef(c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='i' UNION ALL SELECT 'function',p.proname,p.proname,pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' ORDER BY 1,2,3,4`;
- async function schema(options){const client=new pg.Client({host:'/tmp',database:options.databaseUrl.split('dbname=')[1]});await client.connect();try{return (await client.query(catalog)).rows;}finally{await client.end();}}
- assert.deepEqual(await schema(current),await schema(legacy));
-});
+// 完整旧Python公开schema比较器保留在固定23a历史命令，正常测试不导入HEAD旧树。
 test('114原库更新拒绝其它连接与迁移锁，释放后保留原本人身份补齐115/116',async t=>{
  const options=await fixture(t),client=await seedThrough(options,114),owner=randomUUID();
  await client.query("INSERT INTO public.owner(id,display_name) VALUES($1,'保留的合成本人')",[owner]);

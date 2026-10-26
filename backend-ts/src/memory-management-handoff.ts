@@ -1,23 +1,16 @@
-/** 只移交公开记忆／偏好管理；提取及自动采纳后台仍属于各自生产任务。 */
-import {setTimeout as delay} from 'node:timers/promises';
+/** 公开记忆／偏好的 TS 请求门禁；提取及自动采纳仍属于各自生产任务。 */
 import type {HostStorage} from './host-storage.ts';
-import type {LegacyBackend} from './legacy-backend.ts';
 import {MemoryError} from './memory-errors.ts';
-type Owner='python'|'typescript';
 export class MemoryManagementHandoff {
-  private owner:Owner='python';
-  private accepting=true;
+  private readonly owner='typescript';
+  private accepting=false;
   private transitioning=false;
   private closed=false;
   private revision=0;
   private pending=new Set<Promise<void>>();
   private transition:Promise<unknown>|undefined;
   private readonly storage:HostStorage;
-  private readonly legacy:LegacyBackend|undefined;
-  constructor(storage:HostStorage,legacy?:LegacyBackend){
-    this.storage=storage;this.legacy=legacy;
-    if(!legacy){this.owner='typescript';this.accepting=false;}
-  }
+  constructor(storage:HostStorage){this.storage=storage;}
   status(){return {owner:this.owner,state:this.accepting?'running':this.transitioning?'transferring':'stopped',active_requests:this.pending.size,revision:this.revision};}
   enter(){
     if(!this.accepting||this.closed)throw new MemoryError('memory_management_transferring',503);
@@ -28,26 +21,14 @@ export class MemoryManagementHandoff {
       if(this.closed||!this.accepting||revision!==this.revision)throw new MemoryError('memory_management_changed',409);
     },finish:()=>{if(finished)return;finished=true;this.pending.delete(pending);resolve();}};
   }
-  async transfer(target:Owner){
-    if(!this.legacy&&target!=='typescript')throw new MemoryError('memory_management_runtime_unavailable',503);
-    if(target!=='python'&&target!=='typescript')throw new MemoryError();
+  async activate(){
     if(this.closed)throw new MemoryError('runtime_stopping',503);
     if(this.transitioning)throw new MemoryError('memory_management_transferring',409);
     this.transitioning=true;this.accepting=false;this.revision++;
-    const operation=this.performTransfer(target);this.transition=operation;
+    const operation=this.performActivation();this.transition=operation;
     try{return await operation;}finally{this.transitioning=false;this.transition=undefined;}
   }
-  private async performTransfer(target:Owner){
-    await this.legacy?.control('/api/runtime/memory-management/stop','POST');
-    // 固定总次数的移交探测，不无限轮询；失败保持两侧停收，不逐请求回退。
-    const deadline=Date.now()+5000;
-    for(let attempt=0;this.legacy;attempt++){
-      const status=await this.legacy.control('/api/runtime/memory-management/status','GET',undefined,500);
-      if(status.state==='stopped'&&status.active_requests===0&&this.pending.size===0)break;
-      if(this.closed)throw new MemoryError('runtime_stopping',503);
-      if(attempt===100||Date.now()>=deadline)throw new MemoryError('memory_management_drain_timeout',503);
-      await delay(25);
-    }
+  private async performActivation(){
     await Promise.all([...this.pending]);
     // HostStorage先核验全部原迁移清单。锁内再核对09依赖的原列；不建表或恢复旧库。
     await this.storage.businessTransaction(async client=>{
@@ -73,19 +54,11 @@ export class MemoryManagementHandoff {
       for(const[table,columns]of Object.entries(required))for(const[column,type]of Object.entries(columns))if(!rows.some(row=>row.relname===table&&row.attname===column&&row.kind===type))throw new MemoryError('memory_management_schema_changed',503);
     });
     if(this.closed)throw new MemoryError('runtime_stopping',503);
-    if(target==='python'){
-      const status=await this.legacy!.control('/api/runtime/memory-management/start','POST');
-      if(this.closed){await this.legacy!.control('/api/runtime/memory-management/stop','POST');throw new MemoryError('runtime_stopping',503);}
-      if(status.state!=='running')throw new MemoryError('memory_management_resume_failed',503);
-    }
-    if(this.closed)throw new MemoryError('runtime_stopping',503);
-    this.owner=target;this.accepting=true;return this.status();
+    this.accepting=true;return this.status();
   }
   async close(){
     this.closed=true;this.accepting=false;this.revision++;
-    await this.legacy?.control('/api/runtime/memory-management/stop','POST').catch(()=>{});
-    // 等在途移交终止，避免close后旧管理端口被迟到start重新打开。
+    // 等在途激活终止，避免关闭后迟到核验重新打开管理门禁。
     await Promise.allSettled([...(this.transition?[this.transition]:[]),...this.pending]);
-    await this.legacy?.control('/api/runtime/memory-management/stop','POST').catch(()=>{});
   }
 }

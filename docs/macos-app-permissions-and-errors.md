@@ -1,5 +1,9 @@
 # macOS App 权限与启动错误记录
 
+## 2026-10-26 默认 TypeScript 后台与旧栈退役
+
+正常开发入口统一由Electron内置Node经官方DSH profile启动TypeScript业务，不再需要runtime标记、Python／Conda或Python路径。旧配置字段兼容忽略，原env、握手、PG cluster、state、userData与资料不移动。诊断、结构补齐及受管PG监督均为Node；旧DSH壳不能作为业务连接复用，但已认证连接仍可正常停读和退出。启动取消、迟到结果和关停保护保留。此变更没有打包或运行打包版，也不改变签名、TCC、录屏或微信授权；原生微信工具自身LLDB／内嵌CPython单列保留。下方旧Python／Psycopg记载保持历史结论。
+
 ## 2026-10-25 纯 TS 开发启动与数据库准备
 
 显式使用 `NOTALONE_HOST_RUNTIME=typescript` 的 DSH 开发路径通过 Node 执行配置核验、只读诊断、首次受管数据库准备和原地结构更新，不执行 Python 解释器；继续使用原数据库与资料位置。旧 runtime 及完整组件库存校验保留至迁移 Ticket 26 退役。权限、签名、TCC 和微信授权流程不变。

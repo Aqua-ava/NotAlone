@@ -1,5 +1,6 @@
 /** 只解析宿主注入的模型环境；认证、提供者生命周期和业务许可仍由宿主装配。 */
 import {normalizeApiKey} from '@deepseek-ai/dsh-llm';
+import {REPLY_EXECUTION_DEADLINE_MS} from './reply-execution-budget.ts';
 import {PUBLIC_BASE_URL, resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import type {DeepSeekAdapterOptions, DeepSeekConnectionOptions} from '@deepseek-ai/dsh-llm-deepseek';
 
@@ -98,7 +99,7 @@ export function resolveHostReplyConfiguration(
     defaultContextWindow: CONTEXT_WINDOW_TOKENS,
     models: [{id: DEFAULT_MODEL, contextWindow: CONTEXT_WINDOW_TOKENS,
       maxTokens: outputTokens, inputModalities: ['text']}],
-    // 旧SDK单次超时为60秒；回复服务的20秒总截止必须另外传入每次调用的signal。
+    // 单次流空闲仍为60秒；前台循环另由业务signal约束全部步骤与保存。
     streamIdleTimeoutMs: 60000,
     retryPolicy: {mode: 'normal', maxRetries: 0},
   });
@@ -116,7 +117,7 @@ export function resolveHostReplyConfiguration(
       provider: PROVIDER, model: DEFAULT_MODEL, maxTokens: outputTokens,
       temperature: 0, reasoningEffort,
       // 两层场景预算各至多8；业务层仍须按请求执行min(24, 8 + 实际call_limit)。
-      physical_limit: 24, deadline_ms: 20000, warning_ratio: 0.8,
+      physical_limit: 24, deadline_ms: REPLY_EXECUTION_DEADLINE_MS, warning_ratio: 0.8,
       budgetProfile: {context_window_tokens: CONTEXT_WINDOW_TOKENS,
         safety_margin_tokens: SAFETY_MARGIN_TOKENS},
     },

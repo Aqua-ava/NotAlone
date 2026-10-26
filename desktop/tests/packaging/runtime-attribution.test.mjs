@@ -85,29 +85,9 @@ test('运行时构建从固定源归档提取真实通知，保留对应源并�
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
 
-test('固定通知库存覆盖每个随包 wheel，拒绝仅提供许可名称或留空的闭包', async () => {
-  const read = async (name) => JSON.parse(await readFile(new URL(`../../scripts/runtime/${name}`, import.meta.url), 'utf8'));
-  const lock = await read('attribution-sources.lock.json');
-  const wheels = await read('python-wheels.lock.json');
-  for (const wheel of wheels) {
-    assert.ok(lock.sources.some((source) => source.filename === wheel.filename && source.sha256 === wheel.sha256));
-    assert.ok(lock.notices.some((notice) => notice.archive === wheel.filename), wheel.name);
-  }
-  for (const name of ['psycopg-c', 'psycopg-upstream', 'postgresql', 'python-build-standalone']) assert.ok(lock.sources.some((source) => source.name === name && source.retain));
-  for (const suffix of ['COPYING.GPLv3', 'COPYING.LGPLv2.1']) assert.ok(lock.notices.some((notice) => notice.member.endsWith(suffix)), suffix);
-});
+// Python wheel许可闭包原断言由固定23a历史命令保留，不代表TS包许可已验收。
 
-test('静态客户端库来源对应实际wheel中的OpenSSL与libyaml版本，并保留其他组件的旧版来源', async () => {
-  const lock = JSON.parse(await readFile(new URL('../../scripts/runtime/attribution-sources.lock.json', import.meta.url), 'utf8'));
-  for (const expected of [
-    { filename: 'source-openssl-4.0.3.tar.gz', version: '4.0.3', sha256: '325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9', scope: 'cryptography' },
-    { filename: 'source-libyaml-0.2.5.tar.gz', version: '0.2.5', sha256: 'c642ae9b75fee120b2d96c712538bd2cf283228d2337df2cf2988e3c02678ef4', scope: 'pyyaml' },
-  ]) {
-    assert.ok(lock.sources.some((source) => source.filename === expected.filename && source.version === expected.version && source.sha256 === expected.sha256 && source.scope === expected.scope && source.retain), expected.filename);
-    assert.ok(lock.notices.some((notice) => notice.archive === expected.filename), expected.filename);
-  }
-  assert.ok(lock.sources.some((source) => source.filename === 'source-openssl-3.5.8.tar.gz' && source.scope === 'pbs' && source.retain));
-});
+// Python wheel许可闭包原断言由固定23a历史命令保留，不代表TS包许可已验收。
 
 test('固定wheel的SBOM原字节与SDist锁共同约束crate来源，拒绝仅凭许可表达式补全', async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-sbom-'));
