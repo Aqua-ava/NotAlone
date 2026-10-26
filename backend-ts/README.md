@@ -1,40 +1,43 @@
-# TypeScript 与 DSH 后台
+# TypeScript 本机后台
 
-源码按业务分组，入口与目录职责见[后台源码索引](src/README.md)。
+这里保存 NotAlone 的本机业务后台：管理联系人、导入聊天资料、提取和检索记忆、生成候选回复、同步消息，以及协调后台任务与删除。
 
-生产后台由官方 DSH `0.2.1-rc.2` profile 启动，薄插件装配普通 TypeScript 业务模块。联系人、导入、消息、记忆、检索、候选、Skill、同步、后台任务及删除各有唯一写入责任；正常路径没有 Python旁车、旧框架或逐请求回退。DSH固定源码依据为 `687f282e8625c6b8d11ff58211a90524be2e4317`；依赖声明见 `package.json`，统一安装锁见根目录 `../pnpm-lock.yaml`。在仓库根目录执行 `pnpm install --frozen-lockfile`，后台单独验证可用 `pnpm --dir backend-ts test`。
+后台使用 TypeScript，由官方 DSH `0.2.1-rc.2` profile 启动，薄插件装配普通业务模块；各项业务有唯一写入责任。正常路径不运行 Python 或 Conda。DSH 固定源码提交为 `687f282e8625c6b8d11ff58211a90524be2e4317`；依赖声明见 `package.json`，安装锁见根目录 `pnpm-lock.yaml`。
 
-开发环境为 Node.js ≥24。日常从 `../desktop` 先运行 `npm run dev:status`，复用当前项目实例；没有实例才 `npm run dev`。它沿用原 `.env`、PostgreSQL、owner/contact/channel身份和资料目录，无需 runtime选择标记、Python路径或Conda。旧 `pythonExecutable` 配置被兼容忽略。
+## 目录导航
+
+| 位置 | 内容 |
+| --- | --- |
+| [`src/`](src/README.md) | 正式业务源码，按联系人、导入、记忆、检索、回复、同步等职责分组。 |
+| [`database/`](database/README.md) | 创建和升级数据库结构的 SQL 脚本及操作说明；实际业务资料保存在 PostgreSQL 中。 |
+| `profile/` | DSH 插件装配与运行配置。 |
+| `test/` | 当前测试、合成夹具及历史测试登记。 |
+| [`experiments/`](experiments/README.md) | 回复候选离线盲评包工具。 |
+| [`diagnostic-problem-budget.md`](diagnostic-problem-budget.md) | 问题诊断期间的模型调用累计预算。 |
+| `node_modules/` | 包管理器安装的第三方依赖。 |
+
+## 开发与验证
+
+使用 Node.js ≥24。在仓库根目录执行 `pnpm install --frozen-lockfile` 安装锁定依赖。
+
+日常运行从 `desktop/` 执行 `npm run dev:status`，复用已有开发实例；没有当前项目实例时才执行 `npm run dev`。开发沿用原 `.env`、数据库、身份和资料位置。旧 `pythonExecutable` 配置兼容忽略。
+
+后台验证在本目录执行：
 
 ```bash
 npm run typecheck
 npm test
 ```
 
-默认测试仅执行当前 Node 业务与生命周期覆盖；迁移阶段双实现 oracle、Python页面或旧组件验证在 `test/historical-inventory.json` 显式登记，历史测试及其专用 Python/JS 执行器已从当前工作树删除，完整旧树固定于 Git，历史运行不代表当前测试通过。正常测试拒绝重新引入已登记的历史文件。名称匹配对照使用固定旧实现生成的合成 JSON 预期，不需要 Python。
+默认入口运行当前 Node 业务与生命周期测试。旧 Python 实现及测试仅在固定 Git 树中显式恢复，使用方式见[历史测试说明](test/HISTORICAL.md)；历史结果不能计作当前版本通过。
 
-```bash
-npm run test:historical -- --list
-# 只有显式历史环境才运行单个已登记文件；独立venv必须由调用者指定
-NOTALONE_HISTORICAL_PYTHON=/absolute/venv/bin/python npm run test:historical -- backend FILE.test.mjs
-```
+数据库检查、结构补齐和失败处理统一见[数据库说明](database/README.md)。正常启动不会自动下载向量模型；显式准备使用仓库根目录的 `node scripts/prepare_memory_embedding.mjs`，`--offline` 验证已有固定缓存。
 
-Node结构入口从仓库根目录运行：
+## 数据与验收边界
 
-```bash
-node backend-ts/src/schema-prepare-cli.ts --migrations backend-ts/database/migrations
-node backend-ts/src/schema-prepare-cli.ts --prepare --migrations backend-ts/database/migrations
-```
+- 回复绑定已确认联系人，最终消息由用户手动发送；外部聊天发送不属于后台 Tool。
+- DSH 临时执行状态不作为长期关系资料；来源、权限、预算、事务和调度由业务模块控制。
+- 关闭同步或退出时停读，取消和迟到结果不得写入已失效范围。
+- 数据库脚本和合成夹具移入本目录不代表移动或升级了业务数据库，也不改变 `.env` 或用户资料位置。冻结评测中的旧 `backend/...` 路径保留为历史来源标识。
 
-原116份SQL、账本摘要、未知结构停写、旧NULL/v1政策、来源和删除决定保持。正常运行不会自动下载向量模型；显式准备使用 `node scripts/prepare_memory_embedding.mjs`，`--offline` 验证原固定缓存。
-
-回复始终绑定已确认联系人。临时DSH执行状态不成为长期关系资料；来源、权限、预算、事务和调度由业务模块控制。外部聊天发送不属于Tool，最终消息由用户手动发送。关闭同步或退出时停读，取消和迟到结果不得写入已失效范围。
-
-本轮迁移采集96/96成功、96物理调用、0重试；回复盲评及启动/RSS重复对照按用户要求跳过，不能称为质量或性能验收通过。开发实际App、合成HTTP/PG、模型和发行验收分别记录，未执行打包。
-
-## 数据库与合成测试材料
-
-- `database/` 保存数据库迁移 SQL 与[迁移恢复说明](database/README.md)，供当前安装、开发启动和运行时结构检查使用。
-- `test/fixtures/` 保存导入和回复评测的 JSON／JSONL 合成材料；`test/fixtures/historical-server/` 保存历史批量更新重放材料。
-- 原根目录 `backend/` 已移除。迁移只改变仓库文件位置，SQL 和合成数据原始字节保持不变，不移动或升级业务数据库、`.env` 或用户资料。
-- 冻结评测清单及固定 Git 树中的 `backend/...` 是历史来源标识，保留原路径和摘要；当前文件读取统一使用新位置。
+已有迁移采集记录为 96/96 成功、96 次物理调用、0 重试；回复盲评及启动／RSS 对照已跳过，不能称为质量或性能验收通过。实际 App、合成 HTTP／PG、模型和发行验收分别记录，不以单项成功替代完整集成验收；上述采集未执行打包。

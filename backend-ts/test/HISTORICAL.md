@@ -1,20 +1,32 @@
-# 历史 Python 测试
+# 历史实现与测试
 
-当前入口 `npm test` 使用 Node 24，保留普通 TS 业务测试。`historical-inventory.json` 逐项登记迁移阶段的 Python oracle、旧双执行器／旁车、旧页面与 Playwright 夹具；原测试保留，不按环境扩大 skip，不把未运行的历史资产计为通过。`currentCoverage` 指向现行业务入口，不声称每条旧断言逐项等价；本轮实际结果见退役交接。
+当前 `npm test` 使用 Node.js ≥24，运行现行 TypeScript 业务测试。旧 Python oracle、双执行器／旁车及旧页面夹具由 `historical-inventory.json` 登记，源码保存在固定 Git 提交中，已从当前工作树移除。
 
-历史比较固定在 Git 提交 `23a767330e4af8a024629a00c8740344be564259`。显式入口会导出该整树，复用相同锁定版本的 Node 模块，并只使用指定的独立 venv Python；不会从 HEAD 导入 `backend/src`，不需要 Conda。为了兼容旧测试中的固定路径与环境检查，临时 HOME 内的旧目录名指向该 venv，`CONDA_*` 只作为历史测试兼容字段，不激活或使用 Conda。
+## 查看测试范围
 
-先在仓库外导出固定树，按其中 `backend/uv.lock` 准备 Python 3.12 的独立 venv。不要安装 HEAD 的旧生产包，也不要将本机现有 Conda 解释器传给历史入口。历史源和 venv 的准备独立进行，不由正常测试隐式安装。
+在 `backend-ts/` 执行以下命令，只列出登记，不运行测试：
 
-```sh
-cd backend-ts
+```bash
 npm test -- --list
 npm run test:historical -- --list
+```
+
+清单中的 `currentCoverage` 和 `protectedAssetCoverage` 指向当前承接入口，不表示旧断言已逐项等价覆盖；未运行的历史测试不能计作当前版本通过。
+
+## 显式恢复历史验证
+
+历史入口固定使用提交 `23a767330e4af8a024629a00c8740344be564259`，导出完整旧树并复用锁定版本的 Node 依赖，不从当前源码导入旧 Python 实现。
+
+先在仓库外导出该固定树，按其中 `backend/uv.lock` 准备 Python 3.12 的独立 venv；历史环境由调用者明确提供，不由正常测试隐式安装。入口不接受 Conda 或系统 Python。临时 HOME 中的旧目录名及 `CONDA_*` 仅用于历史测试兼容。
+
+每次选择单个已登记文件或明确的页面范围，例如：
+
+```bash
 NOTALONE_HISTORICAL_PYTHON=/绝对路径/独立venv/bin/python npm run test:historical -- backend schema-prepare.test.mjs --test-name-pattern=隔离Python迁移比较器
 NOTALONE_HISTORICAL_PYTHON=/绝对路径/独立venv/bin/python npm run test:historical -- desktop-node tests/packaging/psycopg-rebuild.test.mjs
 NOTALONE_HISTORICAL_PYTHON=/绝对路径/独立venv/bin/python npm run test:historical -- desktop-pages --case memory-reading --timeout-seconds 60
 ```
 
-每次必须指定单个登记文件或明确的页面／App 范围，截止时间最长 600 秒。`desktop-app` 沿用旧 `scripts/test-app.mjs` 的原参数和租约门禁；该历史能力不是发布或打包授权。本轮未运行此固定旧树／独立 venv 历史命令，也未运行浏览器或 App。早期最小验证曾触发旧建库夹具及一个103序列化 Python oracle；这些合成执行记录保留，不计为最终 Node 入口验证。失败会保留本轮临时树，原夹具仍负责精确数据库和进程清理；不可清理未知测试库。
+单次截止时间最长 600 秒。失败时保留本轮精确临时目录，原夹具负责清理自己创建的数据库和进程；不能清理未知测试库或据此修改现有用户资产。固定旧树也不包含当前未提交的修改。
 
-三个用户资产保持原位且不修改。固定 Git 旧树不包含这些文件当前未提交的用户修改；历史运行结果不能冒充当前用户资产已运行。受保护表达偏好夹具的 Node 业务承接见 `protectedAssetCoverage`，包括偏好范围、幂等、CAS、删除、来源失效以及公开记忆管理入口。原 SQL 116 份和固定合成材料由主协调保留。
+历史 App 入口沿用旧参数和租约门禁，不构成发布或打包授权；日常桌面开发与验收仍只使用 `npm run dev`。历史执行结果与当前业务、实际 App、模型质量及发行验收分别记录。
