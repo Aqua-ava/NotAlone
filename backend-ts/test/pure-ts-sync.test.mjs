@@ -18,7 +18,7 @@ test('纯 TS 公开同步在授权范围写入，发布原协议事件，关闭�
  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成联系人')",[contact,owner]);
  await f.client.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic-account','friend-a')",[binding,owner,contact]);
  await f.client.query('INSERT INTO front_sync_state(owner_id,enabled) VALUES($1,false)',[owner]);
- const executable=join(f.directory,'synthetic-cli'),log=join(f.directory,'commands.jsonl');await writeFile(log,'');
+ const executable=join(f.directory,'synthetic-cli'),log=join(f.directory,'commands.jsonl'),release=join(f.directory,'allow-incremental');await writeFile(log,'');
  await writeFile(executable,`#!${process.execPath}
 import fs from 'node:fs';
 const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(a)+'\\n');const emit=data=>console.log(JSON.stringify({ok:true,data}));
@@ -27,20 +27,24 @@ else if(a[0]==='status')emit({status:{account:{identity_configured:true,schema2_
 else if(a[0]==='sessions')emit({sessions:[{username:'friend-a',display_name:'合成联系人',chat_type:'private'}]});
 else if(a[0]==='resolve-chat')emit({candidates:[{username:a[1],display_name:'合成联系人',chat_type:'private'}]});
 else if(a.includes('--mode'))setInterval(()=>{},1000);
-else if(a[0]==='tail'){const events=a.includes('--cursor')?[]:[{type:'message',cursor:'opaque-11',message:{id:{local_id:11,talker:a[1]},kind:'text',text:'合成消息',is_from_me:false,create_time:Math.floor(Date.now()/1000)}}];emit({events,cursor:events.length?'opaque-11':null,freshness:{message_source:'live_message_db'},query:{chat:a[1],has_more:false}});}
+else if(a[0]==='tail'){if(!fs.existsSync(${JSON.stringify(release)}))process.exit(1);const events=a.includes('--cursor')?[]:[{type:'message',cursor:'opaque-11',message:{id:{local_id:11,talker:a[1]},kind:'text',text:'合成消息',is_from_me:false,create_time:Math.floor(Date.now()/1000)}}];emit({events,cursor:events.length?'opaque-11':null,freshness:{message_source:'live_message_db'},query:{chat:a[1],has_more:false}});}
 else process.exit(2);`,{mode:0o700});
  const app=await f.start({NOTALONE_OWNER_ID:owner,NOTALONE_WECHAT_CLI:executable});
  const initial=await app.request('/api/sync/status');assert.equal(initial.status,200);assert.equal(initial.data.sync_enabled,false);
  const diagnostic=await app.request('/api/sync/follow-smoke/status');assert.equal(diagnostic.status,200);assert.equal(diagnostic.data.contacts[0].message_count,0);
  assert.deepEqual(await app.request('/api/sync/follow-smoke/start',{}),{status:409,data:{error:'follow_smoke_rejected',reason:'sync_disabled'}});
  assert.equal(await readFile(log,'utf8'),'');
- const cancel=new AbortController();
- const stream=await fetch(`http://${app.connection.address}/api/events`,{headers:{Authorization:`Bearer ${app.connection.token}`},signal:cancel.signal});
+ const cancel=new AbortController();t.after(()=>cancel.abort());
+ const stream=await fetch(`http://${app.connection.address}/api/events`,{headers:{Authorization:`Bearer ${app.connection.token}`},signal:AbortSignal.any([cancel.signal,AbortSignal.timeout(15000)])});
  const reader=stream.body.getReader();await reader.read();
- assert.equal((await app.request('/api/sync/enable',{})).status,200);
- const messages=await app.request(`/api/contacts/${contact}/messages`);assert.equal(messages.status,200);assert.equal(messages.data.messages.length,1);
- let text='';for(let i=0;i<8&&!text.includes('message.created');i++){text+=new TextDecoder().decode((await reader.read()).value);}
+ const enabled=await app.request('/api/sync/enable',{});assert.equal(enabled.status,200);
+ t.diagnostic('受控首次enable回执 '+JSON.stringify({phase:enabled.data.cli_sync_phase,failure:enabled.data.cli_failure_code}));
+ assert.equal(enabled.data.cli_sync_phase,'degraded');assert.ok(enabled.data.cli_failure_code);
+ assert.equal((await app.request(`/api/contacts/${contact}/messages`)).data.messages.length,0,'enable成功只表示已开启，首轮失败尚未提交消息');
+ await writeFile(release,'允许后续正常增量');
+ let text='';const decoder=new TextDecoder();while(!text.includes('event: message.created\n')){const chunk=await reader.read();assert.equal(chunk.done,false,'提交事件前连接不得结束');text+=decoder.decode(chunk.value,{stream:true});}
  assert.match(text,/event: message.created/);assert.match(text,/"type":"message.created"/);assert.equal(text.includes('合成消息'),false);
+ const messages=await app.request(`/api/contacts/${contact}/messages`);assert.equal(messages.status,200);assert.equal(messages.data.messages.length,1);
  assert.equal((await app.request('/api/sync/disable',{})).data.sync_enabled,false);
  const stopped=await readFile(log,'utf8');await app.request('/api/sync/check',{});assert.equal(await readFile(log,'utf8'),stopped);
  assert.equal((await app.request('/api/sync/cli-bindings/revoke',{contact_id:contact,binding_id:binding})).status,200);

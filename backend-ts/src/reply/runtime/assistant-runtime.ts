@@ -177,12 +177,15 @@ export class AssistantRuntime {
   try{
    const {row,plan}=await this.options.transaction(async client=>{
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${scope.owner_id}`]);await this.requireAllowed(client,scope,session);
-    return {row:(await client.query('SELECT * FROM assistant_runtime_session WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3',[scope.owner_id,scope.contact_id,session])).rows[0] as RuntimeRow|undefined,plan:await readPlan(client)};
+    const row=(await client.query('SELECT * FROM assistant_runtime_session WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3',[scope.owner_id,scope.contact_id,session])).rows[0] as RuntimeRow|undefined,plan=await readPlan(client);
+    if(plan.session_id!==session||plan.scope.owner_id!==scope.owner_id||plan.scope.contact_id!==scope.contact_id)return unavailable();
+    if(row?.state==='blocked')return unavailable();
+    // 同一owner锁内完成相邻资格读取；两者之间没有SDK、磁盘操作或业务写入。
+    if(row?.state==='ready')await this.requireCommittedRow(client,scope,row);
+    if(options.generation&&!row)await this.requireGenerationReady(client,scope,session,options.requestKey);
+    return {row,plan};
    });
-   if(plan.session_id!==session||plan.scope.owner_id!==scope.owner_id||plan.scope.contact_id!==scope.contact_id)return unavailable();
-   if(row?.state==='blocked')return unavailable();
-   if(row?.state==='ready')await this.requireCommitted(scope,row);
-   if(options.generation&&!row){await this.options.transaction(client=>this.requireGenerationReady(client,scope,session,options.requestKey));return {changed:false};}
+   if(options.generation&&!row)return {changed:false};
    if(row?.qualification&&(row.qualification.binding_id!==plan.binding_id||row.qualification.scope?.owner_id!==scope.owner_id||row.qualification.scope?.contact_id!==scope.contact_id))return unavailable();
    const storage=row?await this.inspect(scope,row,combined,()=>{writerFailed=true;},row.configuration_sha256===configuration&&isDeepStrictEqual(inspectedQualification(row.qualification),plan.qualification)):{usable:false,retire:false};
    if(storage.usable&&row?.state==='ready'&&row.configuration_sha256===configuration&&isDeepStrictEqual(inspectedQualification(row.qualification),plan.qualification))return materialization(row);
@@ -257,13 +260,22 @@ export class AssistantRuntime {
   return row.state==='ready'||row.state==='dirty'&&active?.resume===true&&active.requestKey===requestKey;
  }
  async history(scope:VerifiedReplyScope,requestKey:string,configuration:string,signal?:AbortSignal):Promise<AssistantRuntimeHistory|null>{
-  const row=await this.options.transaction(client=>this.lookup(client,scope,requestKey,configuration));
+  let committedRow:RuntimeRow|null=null;
+  const row=await this.options.transaction(async client=>{
+   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${scope.owner_id}`]);
+   const current=await this.lookup(client,scope,requestKey,configuration);
+   // 本事务已见到占用就固定拒绝，不能因返回时租约刚释放而跳过提交资格。
+   if(current&&this.active.has(this.key(scope,current.session_id)))throw new ReplyError('reply_in_progress',409);
+   if(current&&current.state==='ready'&&(current.committed_request_id||current.origin!=='generated')&&current.qualification){
+    committedRow=current;await this.requireCommittedRow(client,scope,current);
+   }
+   return current;
+  }).catch(error=>{if(!committedRow)throw error;return this.historyFailure(scope,committedRow,error,signal);});
   if(!row)return null;
   if(this.active.has(this.key(scope,row.session_id)))throw new ReplyError('reply_in_progress',409);
   if(row.state!=='ready'||!row.committed_request_id&&row.origin==='generated')return null;
   if(!row.qualification)return unavailable();
   try{
-   await this.requireCommitted(scope,row);
    const directory=await this.directory(scope,row.session_id,false);if(!directory)return unavailable();
    const world=await this.world(await this.runtimeDirectory(directory,row.runtime_session_id));
    try{
@@ -271,18 +283,24 @@ export class AssistantRuntime {
     try{const history=await handle.read(0,undefined,{signal});if(history.events.length!==row.committed_event_count||!row.committed_event_sha256||eventDigest(history.events)!==row.committed_event_sha256)throw new RuntimeStorageDiverged();return {sessionId:SessionId(row.runtime_session_id),events:history.events,qualification_sha256:fingerprint(row.qualification),...(row.committed_request_id===null?{businessReference:await this.readReference(directory,row)}:{})};}finally{await handle.close();}
    }finally{await world.close();}
   }catch(error){
-   if(signal?.aborted)throw error;
-   await this.options.transaction(client=>this.quarantine(client,scope,row.session_id,repairable(error)));
-   if(error instanceof ReplyError)throw error;
-   throw new ReplyError('reply_runtime_unavailable',503);
+   return this.historyFailure(scope,row,error,signal);
   }
+ }
+ private async historyFailure(scope:Scope,row:RuntimeRow,error:unknown,signal?:AbortSignal):Promise<never>{
+  if(signal?.aborted)throw error;
+  await this.options.transaction(client=>this.quarantine(client,scope,row.session_id,repairable(error)));
+  if(error instanceof ReplyError)throw error;
+  throw new ReplyError('reply_runtime_unavailable',503);
  }
  private async requireCommittedInTransaction(client:Client,scope:Scope,session:string,requestId:string|null):Promise<void>{
   const valid=(await client.query("SELECT 1 FROM reply_request request JOIN assistant_session_turn turn ON turn.owner_id=request.owner_id AND turn.contact_id=request.contact_id AND turn.idempotency_key=request.idempotency_key WHERE request.id=$1 AND request.owner_id=$2 AND request.contact_id=$3 AND request.state='completed' AND turn.session_id=$4 AND turn.input_payload IS NOT NULL AND turn.state<>'redacted'",[requestId,scope.owner_id,scope.contact_id,session])).rowCount===1;
   if(!valid)return unavailable();
  }
  private async requireCommitted(scope:Scope,row:RuntimeRow):Promise<void>{
-  await this.options.transaction(async client=>{await this.requireAllowed(client,scope,row.session_id);if(row.origin!=='generated'&&row.qualification!==null&&row.committed_request_id===null)return;await this.requireCommittedInTransaction(client,scope,row.session_id,row.committed_request_id);});
+  await this.options.transaction(client=>this.requireCommittedRow(client,scope,row));
+ }
+ private async requireCommittedRow(client:Client,scope:Scope,row:RuntimeRow):Promise<void>{
+  await this.requireAllowed(client,scope,row.session_id);if(row.origin!=='generated'&&row.qualification!==null&&row.committed_request_id===null)return;await this.requireCommittedInTransaction(client,scope,row.session_id,row.committed_request_id);
  }
  async acquire(scope:VerifiedReplyScope,requestKey:string,requestId:string,configuration:string,expected?:AssistantRuntimeHistory|null):Promise<AssistantRuntimeLease|null>{
   let row=await this.options.transaction(client=>this.lookup(client,scope,requestKey,configuration));if(!row)return null;

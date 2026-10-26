@@ -19,6 +19,7 @@ import {SourceProcessingTraceStore} from '../src/diagnostics/source-processing-t
 import {skillLearningRoute} from '../src/skills/skill-learning-http.ts';
 import pg from 'pg';
 import {appendFileSync} from 'node:fs';
+import {runtimeHistoryReleaseRace} from './runtime-history-race-support.ts';
 export const name='notalone-host-reply-test';
 export const inject=['llm','agents','tools','sessions','systemPrompt','skills','appReady'];
 export async function apply(ctx:Context){
@@ -78,6 +79,12 @@ export async function apply(ctx:Context){
     model:{provider:'notalone-host-reply-test',model:'deepseek-flash',maxTokens:256,temperature:Number(process.env.NOTALONE_SYNTHETIC_REPLY_TEMPERATURE??'0'),reasoningEffort:'off',physical_limit:2,deadline_ms:10000,warning_ratio:0.8,budgetProfile:{context_window_tokens:65536,safety_margin_tokens:128}}}});
   const server=createServer(async(req,res)=>{
     const url=new URL(req.url??'','http://localhost');
+    if(url.pathname==='/validation/runtime-history-release-race'&&req.method==='POST'){
+      if(req.headers.authorization!==`Bearer ${process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN}`){res.writeHead(401).end('{}');return;}
+      let raw='';for await(const part of req)raw+=part;
+      try{const result=await runtimeHistoryReleaseRace(ctx,storage,home,skillsRoot,owner,JSON.parse(raw).request_key);res.writeHead(200,{'content-type':'application/json'}).end(stringifyJson(result));}
+      catch(error){res.writeHead(503,{'content-type':'application/json'}).end(stringifyJson({error:(error as Error).message}));}return;
+    }
     if(/^\/api\/skills\/[^/]+\/(enable|disable)$/.test(url.pathname)&&req.method==='POST'){
       if(req.headers.authorization!==`Bearer ${process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN}`){res.writeHead(401).end('{}');return;}
       for await(const _part of req){};
