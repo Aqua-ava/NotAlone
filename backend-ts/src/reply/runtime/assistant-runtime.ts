@@ -89,7 +89,7 @@ export class AssistantRuntime {
   }
  }
  /** 官方write-open先取得跨进程锁再解码；锁冲突和未知close失败不进入重建。 */
- private async inspect(scope:Scope,row:RuntimeRow,signal:AbortSignal,retainWriterFailure:()=>void):Promise<{usable:boolean;retire:boolean}>{
+ private async inspect(scope:Scope,row:RuntimeRow,signal:AbortSignal,retainWriterFailure:()=>void,checkReference:boolean):Promise<{usable:boolean;retire:boolean}>{
   let world:Awaited<ReturnType<AssistantRuntime['world']>>|undefined,writerFailed=false;
   try{
    const directory=await this.directory(scope,row.session_id,false);if(!directory)return {usable:false,retire:false};
@@ -98,12 +98,20 @@ export class AssistantRuntime {
    try{
     const events=(await handle.read(0,undefined,{signal})).events;
     if(row.state!=='ready'||events.length!==row.committed_event_count||!row.committed_event_sha256||eventDigest(events)!==row.committed_event_sha256)return {usable:false,retire:true};
-    if(row.committed_request_id===null)await this.readReference(directory,row);
+    if(checkReference&&row.committed_request_id===null)await this.readReference(directory,row);
     return {usable:true,retire:true};
    }finally{try{await handle.close();}catch(error){writerFailed=true;retainWriterFailure();throw error;}}
   }catch(error){
+   // 官方open会聚合解码失败与锁释放失败；没有返回handle也不能假定释放成功。
+   if(error instanceof AggregateError)retainWriterFailure();
    if(signal.aborted||writerFailed||!repairable(error))throw error;
-   // 缺档不能证明旧锁无人持有，保留其目录；新实例使用不同路径，删除链仍覆盖整个讨论。
+   if(error instanceof SessionPersistenceNotFoundError&&world){
+    // 缺档不等于无人写入；用官方create/flush在同一路径取得真实锁，再允许替换。
+    const session=world.ctx.sessions.create(SessionId(row.runtime_session_id)),handle=await world.persistence.create(session.header,{signal});
+    try{await handle.flush();}finally{try{await handle.close();}catch(closeError){retainWriterFailure();throw closeError;}}
+    return {usable:false,retire:true};
+   }
+   // 目录已缺失时不删除未知旧路径；新实例使用不同路径，删除链仍覆盖整个讨论。
    return {usable:false,retire:error instanceof SessionPersistenceCorruptionError||error instanceof RuntimeStorageDiverged};
   }finally{try{await world?.close();}catch(error){retainWriterFailure();throw error;}}
  }
@@ -176,7 +184,7 @@ export class AssistantRuntime {
    if(row?.state==='ready')await this.requireCommitted(scope,row);
    if(options.generation&&!row){await this.options.transaction(client=>this.requireGenerationReady(client,scope,session,options.requestKey));return {changed:false};}
    if(row?.qualification&&(row.qualification.binding_id!==plan.binding_id||row.qualification.scope?.owner_id!==scope.owner_id||row.qualification.scope?.contact_id!==scope.contact_id))return unavailable();
-   const storage=row?await this.inspect(scope,row,combined,()=>{writerFailed=true;}):{usable:false,retire:false};
+   const storage=row?await this.inspect(scope,row,combined,()=>{writerFailed=true;},row.configuration_sha256===configuration&&isDeepStrictEqual(inspectedQualification(row.qualification),plan.qualification)):{usable:false,retire:false};
    if(storage.usable&&row?.state==='ready'&&row.configuration_sha256===configuration&&isDeepStrictEqual(inspectedQualification(row.qualification),plan.qualification))return materialization(row);
    // 只新增合法背景或新完成业务轮时保留真实SDK历史；材料变化或范围收窄必须换底层实例。
    const contains=(previous:Record<string,string>,current:Record<string,string>)=>Object.entries(previous).every(([key,value])=>current[key]===value);

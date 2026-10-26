@@ -23,9 +23,16 @@ export async function interruptAssistantGeneration(store:AssistantGenerationStor
   if(!interruptionReasons.includes(row.interruption_reason)||row.state!=='failed'||!invalidated||request&&(request.state!=='failed'||!latest||latest.state!=='failed'||latest.failure_reason!==row.interruption_reason||attempts.some(a=>a.state==='running')))throw new AssistantGenerationError('assistant_session_save_failed',undefined,503);
   return receipt(row);
  }
+ // 宿主已排空的取消仍属于原任务中断；服务先结算的取消不能让正常退出退化成普通失败。
+ if(request?.state==='failed'&&latest?.state==='failed'&&latest.failure_reason==='reply_cancelled'&&!attempts.some(a=>a.state==='running')&&['running','failed'].includes(row.state)){
+  await client.query('INSERT INTO reply_invalidated_key(owner_id,contact_id,idempotency_key) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[scope.owner_id,scope.contact_id,key]);
+  await client.query('UPDATE reply_attempt SET failure_reason=$3 WHERE reply_request_id=$1 AND number=$2',[request.id,request.attempt,reason]);
+  await client.query("UPDATE assistant_session_turn SET state='failed',interruption_reason=$2,updated_at=now() WHERE id=$1",[row.id,reason]);return receipt({...row,state:'failed',interruption_reason:reason});
+ }
  if(row.state==='failed'&&!request){await client.query('INSERT INTO reply_invalidated_key(owner_id,contact_id,idempotency_key) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[scope.owner_id,scope.contact_id,key]);return receipt(row);}
- if(row.state==='failed'&&request?.state==='failed'){
-  if(!latest||!['failed','expired'].includes(latest.state)||interruptionReasons.includes(latest.failure_reason)||attempts.some(a=>a.state==='running'))throw new AssistantGenerationError('assistant_session_save_failed',undefined,503);return receipt(row);
+ if(['running','failed'].includes(row.state)&&request?.state==='failed'){
+  if(!latest||!['failed','expired'].includes(latest.state)||interruptionReasons.includes(latest.failure_reason)||attempts.some(a=>a.state==='running'))throw new AssistantGenerationError('assistant_session_save_failed',undefined,503);
+  await client.query("UPDATE assistant_session_turn SET state='failed',updated_at=now() WHERE id=$1 AND state='running'",[row.id]);return receipt({...row,state:'failed'});
  }
  if(invalidated)generationReject('request_deleted');
  if(!['running','failed'].includes(row.state)||request&&request.state!=='running')generationReject('generation_not_running');
