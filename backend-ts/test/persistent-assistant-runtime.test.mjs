@@ -8,6 +8,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
+import {performance} from 'node:perf_hooks';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-support.mjs';
 
@@ -381,10 +382,10 @@ test('正常运行续用只检查资格摘要，不再为长旧候选构造整�
 test('公开连续准备减少数据库往返，零HTTP预检仍保留完整官方历史',{timeout:60000},async t=>{
  const f=await fixture(t),sqlLog=join(f.businessHome,'prepare-cost.jsonl');
  const host=await f.start({NOTALONE_SYNTHETIC_SQL_RESULT_LOG:sqlLog,NOTALONE_SYNTHETIC_SQL_MARKER:'合成准备往返预算'}),base=`/api/contacts/${f.contact}/assistant-sessions`;
- const {session_id:session}=await f.request(host,base,{}),path=`${base}/${session}`,cost=[],results=[];
+ const {session_id:session}=await f.request(host,base,{}),path=`${base}/${session}`,cost=[],wall=[],results=[];
  for(const text of ['合成首轮准备：周五见','合成第二轮准备：改为周六见']){
   const input=f.input(text),httpBefore=host.requests.length;
-  await writeFile(sqlLog,'');await f.request(host,`${path}/replies/prepare`,input);
+  await writeFile(sqlLog,'');const start=performance.now();await f.request(host,`${path}/replies/prepare`,input);wall.push(performance.now()-start);
   cost.push((await readFile(sqlLog,'utf8')).trim().split('\n').filter(Boolean).length);
   assert.equal(host.requests.length,httpBefore,'公开准备始终零模型HTTP');
   const result=await f.request(host,`${path}/replies`,input);
@@ -395,9 +396,9 @@ test('公开连续准备减少数据库往返，零HTTP预检仍保留完整官�
  assert.match(JSON.stringify(host.requests[1].body.messages),/合成首轮准备：周五见/);
  assert.match(JSON.stringify(host.requests[1].body.messages.at(-1)),/合成第二轮准备：改为周六见/);
  assert.ok(host.requests[1].body.messages.some(m=>m.role==='assistant'&&JSON.stringify(m).includes('合成保存候选')));
- t.diagnostic('公开prepare物理查询预算 '+JSON.stringify(cost));
- if(process.env.NOTALONE_SYNTHETIC_PREPARE_EVIDENCE)await writeFile(process.env.NOTALONE_SYNTHETIC_PREPARE_EVIDENCE,JSON.stringify({cost,bodies:host.requests.map(request=>request.body),results}),{mode:0o600});
- assert.ok(cost[0]<462&&cost[1]<740&&cost[0]+cost[1]<=1066,`两轮总准备往返不得超过原临时版1066，连续第二轮须低于740，且各轮低于原持久版462/1119，实际${cost}`);
+ t.diagnostic('完整公开prepare HTTP墙钟与物理查询 '+JSON.stringify({cost,wall_ms:wall}));
+ if(process.env.NOTALONE_SYNTHETIC_PREPARE_EVIDENCE)await writeFile(process.env.NOTALONE_SYNTHETIC_PREPARE_EVIDENCE,JSON.stringify({cost,wall_ms:wall,bodies:host.requests.map(request=>request.body),results}),{mode:0o600});
+ assert.ok(cost[0]<=326&&cost[1]<740&&cost[0]+cost[1]<1000,`完整公开准备各轮须不高于原临时版326/740，两轮总往返须低于1000，实际${cost}；用户等待仍须另验完整公开HTTP墙钟`);
 });
 
 test('旧资格格式在同一业务段零HTTP重建，伴随正文凭据独立且篡改后拒绝出站',{timeout:60000},async t=>{
