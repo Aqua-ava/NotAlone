@@ -15,16 +15,17 @@ import type {ReplyRequestInput} from '../generation/reply-contract.ts';
 import {ReplyStoreError} from '../generation/reply-store.ts';
 export interface AssistantRuntimePlan {
  scope:AssistantScope;session_id:string;binding_id:string;
- qualification:{version:1;scope:AssistantScope;contract:string;policy:AssistantRuntimePolicy;binding_id:string;records:Record<string,string>;inventory:Record<string,string>;payload_sha256:string};
- payload:unknown;
+ qualification:{version:2;scope:AssistantScope;contract:string;policy:AssistantRuntimePolicy;binding_id:string;records:Record<string,string>;inventory:Record<string,string>};
+ payload?:unknown;
 }
 export interface AssistantRuntimePolicy {relationship:boolean;recent_only:boolean;excluded_message_ids:string[];history_message_ids:string[]|null;skill_disabled:boolean;scene:string|null;skill_version_id:string|null}
 export function assistantRuntimePolicy(input:ReplyRequestInput,historyIds?:string[]|null):AssistantRuntimePolicy{return {relationship:allowsHistory(input),recent_only:recentOnly(input),excluded_message_ids:[...input.content.excluded_message_ids as string[]??[]].sort(),history_message_ids:historyIds?[...historyIds].sort():null,skill_disabled:input.skill_disabled,scene:input.scene,skill_version_id:input.skill_version_id};}
-export type AssistantRuntimePlanReader=(client:Client)=>Promise<AssistantRuntimePlan>;
+/** 默认只检查资格；build仅由首次建档或确认需要替换的运行管理器请求。 */
+export type AssistantRuntimePlanReader=(client:Client,build?:true)=>Promise<AssistantRuntimePlan>;
 export class AssistantRuntimeProjection {
  private readonly files:SkillFiles;
  constructor(skillsRoot:string){this.files=new SkillFiles(skillsRoot);}
- async read(client:Client,scope:AssistantScope,sessionId:string,binding:string,excludeRequestKey?:string,requestedPolicy?:AssistantRuntimePolicy):Promise<AssistantRuntimePlan>{
+ async read(client:Client,scope:AssistantScope,sessionId:string,binding:string,excludeRequestKey?:string,requestedPolicy?:AssistantRuntimePolicy,build?:true):Promise<AssistantRuntimePlan>{
   const stored=(await client.query('SELECT qualification FROM assistant_runtime_session WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3',[scope.owner_id,scope.contact_id,sessionId])).rows[0]?.qualification;
   const policy:AssistantRuntimePolicy=requestedPolicy??stored?.policy??{relationship:true,recent_only:false,excluded_message_ids:[],history_message_ids:null,skill_disabled:false,scene:null,skill_version_id:null};
   const savedSkill=createReplySkillGuards({files:this.files,requireDiscussionDependencies:async(c,owner,contact,id)=>{const ids=await assistant.requireReplyDiscussionById(c,{owner_id:owner,contact_id:contact},id);if(ids===null)throw new ReplyStoreError('reply_context_invalidated');return ids;}});
@@ -48,10 +49,10 @@ export class AssistantRuntimeProjection {
     if(!current||current.text_content!==p.text||String(current.revision)!==String(p.revision)||current.contact_id!==(p.scope?.contact_id??null)||current.reply_mode!==(p.scope?.reply_mode??null))throw new ReplyStoreError('reply_context_invalidated');
    }
    if(snapshot.layered_context||snapshot.owner_layered_context){
-    const turn=(await c.query('SELECT idempotency_key,prepared_context FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[s.owner_id,s.contact_id,row.turn_id])).rows[0];
+    const turn=(await c.query('SELECT idempotency_key,prepared_context,input_payload FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[s.owner_id,s.contact_id,row.turn_id])).rows[0];
     if(!turn?.prepared_context)throw new ReplyStoreError('reply_context_invalidated');
     try{
-     const command={...row.input_payload,contact_id:s.contact_id,idempotency_key:turn.idempotency_key,continued_from_candidate_id:row.input_payload.continued_from_candidate_id??null} as ReplyRequestInput;
+     const command={...turn.input_payload,contact_id:s.contact_id,idempotency_key:turn.idempotency_key,continued_from_candidate_id:turn.input_payload.continued_from_candidate_id??null} as ReplyRequestInput;
      const prepared=decodePreparedContext(turn.prepared_context,command,s,row.conversation_binding_id,row.reply_request_id);
      await requireLayeredMaterial(c,s,prepared.layered_context,CONTACT_LAYERED_BUDGET);
      await requireLayeredMaterial(c,{owner_id:s.owner_id,contact_id:null},prepared.owner_layered_context,OWNER_LAYERED_BUDGET);
@@ -66,11 +67,14 @@ export class AssistantRuntimeProjection {
    const current=await readContextMessages(c,s,{ids:messages.map((e:Record<string,any>)=>e.evidence_id),limit:Math.max(1,messages.length)});
    for(const old of messages){const actual=current.find(e=>e.evidence_id===old.evidence_id);if(!actual||['text','speaker_role','source_ids','timing','freshness_sha256'].some(field=>old[field]!==undefined&&fingerprint(old[field])!==fingerprint(actual[field as keyof typeof actual])))throw new ReplyStoreError('reply_context_invalidated');}
   }});
-  const projection=await discussion.readSession(client,scope,sessionId,binding,excludeRequestKey);
-  const records=Object.fromEntries(projection.items.map(i=>[`${i.kind}:${i.input_version_id}:${i.version_id??''}`,fingerprint(i)]));
+  const records=await discussion.inspectSession(client,scope,sessionId,binding,excludeRequestKey);
   const inventory=await this.inventory(client,scope);
+  const identity={owner_id:scope.owner_id,contact_id:scope.contact_id};
+  const plan:AssistantRuntimePlan={scope:identity,session_id:sessionId,binding_id:binding,qualification:{version:2,scope:identity,contract:'notalone-reply:fidelity-v3:bounded-tools-v1:business-reference-v2',policy,binding_id:binding,records,inventory}};
+  if(!build)return plan;
+  const projection=await discussion.readSession(client,scope,sessionId,binding,excludeRequestKey);
   const payload={session_id:sessionId,origin:'business_records',factual_role:'assistant_discussion_reference',weight:'low',notice:DISCUSSION_NOTICE,items:projection.items.map(i=>({...i,role:i.kind==='candidate_version'||i.kind==='candidate_carry'?'assistant_candidate':'user',is_sent:false}))};
-  return {scope:{...scope},session_id:sessionId,binding_id:binding,qualification:{version:1,scope:{...scope},contract:'notalone-reply:fidelity-v3:bounded-tools-v1:business-reference-v1',policy,binding_id:binding,records,inventory,payload_sha256:fingerprint(payload)},payload};
+  return {...plan,payload};
  }
  private async inventory(client:Client,scope:AssistantScope):Promise<Record<string,string>>{
   // 覆盖提示、未引用的背景、工具可读层与目录；只落无正文指纹，不靠最终候选引用缩小资格。
