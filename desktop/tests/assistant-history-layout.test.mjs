@@ -40,7 +40,7 @@ test('历史管理与每条旧记录默认折叠，保留可访问操作和原�
   assert.match(html, /aria-label="查看会话 synthetic-session"[^>]*>查看讨论 1<\/button>/);
   assert.match(html, /class="session-metadata"><summary>讨论详情<\/summary>/);
   assert.match(html, /aria-label="助手会话操作"/);
-  assert.match(html, /aria-label="当前讨论操作"/);
+  assert.match(html, /aria-label="正在查看的讨论操作"/);
 });
 
 test('删除失败和读取失败提示保留在折叠历史之外，用户无需展开即可发现', () => {
