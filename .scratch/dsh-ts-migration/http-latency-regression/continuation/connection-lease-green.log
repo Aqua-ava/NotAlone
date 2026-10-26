@@ -1,0 +1,9 @@
+✔ 连续本机业务事务复用清理后的连接，旧事务查询不能进入下一事务 (519.046333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 580.543625

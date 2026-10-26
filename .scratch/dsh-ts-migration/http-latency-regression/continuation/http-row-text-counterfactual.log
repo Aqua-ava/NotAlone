@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "<repo>/.scratch/dsh-ts-migration/http-latency-regression/continuation/http-row-text-counterfactual.py", line 199, in <module>
+    if completed.returncode!=0:raise RuntimeError('row_text_safety_failed')
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: row_text_safety_failed

@@ -1,0 +1,417 @@
+{
+  "diagnostic_only": true,
+  "gate_eligible": false,
+  "full_files_and_db_rechecked": true,
+  "source_sha256": "c0eaed8308ab9e51c2a54143cc4960b02b2c0569c6cd7befefade4e5d7f52729",
+  "summaries": {
+    "baseline": {
+      "p50_ms": 3.4488959999999906
+    },
+    "reuse-only": {
+      "p50_ms": 1.3605624999999577
+    }
+  },
+  "rows": [
+    {
+      "index": -10,
+      "mode": "baseline",
+      "milliseconds": 10.694875000000025
+    },
+    {
+      "index": -10,
+      "mode": "reuse-only",
+      "milliseconds": 4.941833000000031
+    },
+    {
+      "index": -9,
+      "mode": "baseline",
+      "milliseconds": 5.5306659999999965
+    },
+    {
+      "index": -9,
+      "mode": "reuse-only",
+      "milliseconds": 2.189375000000041
+    },
+    {
+      "index": -8,
+      "mode": "baseline",
+      "milliseconds": 4.5423339999999826
+    },
+    {
+      "index": -8,
+      "mode": "reuse-only",
+      "milliseconds": 2.021915999999976
+    },
+    {
+      "index": -7,
+      "mode": "baseline",
+      "milliseconds": 4.734208000000024
+    },
+    {
+      "index": -7,
+      "mode": "reuse-only",
+      "milliseconds": 2.3878749999999513
+    },
+    {
+      "index": -6,
+      "mode": "baseline",
+      "milliseconds": 4.357041000000038
+    },
+    {
+      "index": -6,
+      "mode": "reuse-only",
+      "milliseconds": 1.6356670000000122
+    },
+    {
+      "index": -5,
+      "mode": "baseline",
+      "milliseconds": 3.8444579999999746
+    },
+    {
+      "index": -5,
+      "mode": "reuse-only",
+      "milliseconds": 1.567542000000003
+    },
+    {
+      "index": -4,
+      "mode": "baseline",
+      "milliseconds": 5.048415999999975
+    },
+    {
+      "index": -4,
+      "mode": "reuse-only",
+      "milliseconds": 1.557333999999969
+    },
+    {
+      "index": -3,
+      "mode": "baseline",
+      "milliseconds": 3.8297919999999976
+    },
+    {
+      "index": -3,
+      "mode": "reuse-only",
+      "milliseconds": 1.4899580000000014
+    },
+    {
+      "index": -2,
+      "mode": "baseline",
+      "milliseconds": 3.707833999999991
+    },
+    {
+      "index": -2,
+      "mode": "reuse-only",
+      "milliseconds": 1.456707999999992
+    },
+    {
+      "index": -1,
+      "mode": "baseline",
+      "milliseconds": 4.629291000000023
+    },
+    {
+      "index": -1,
+      "mode": "reuse-only",
+      "milliseconds": 1.3634999999999877
+    },
+    {
+      "index": 0,
+      "mode": "baseline",
+      "milliseconds": 3.531791999999996
+    },
+    {
+      "index": 0,
+      "mode": "reuse-only",
+      "milliseconds": 2.018374999999992
+    },
+    {
+      "index": 1,
+      "mode": "baseline",
+      "milliseconds": 3.6255840000000035
+    },
+    {
+      "index": 1,
+      "mode": "reuse-only",
+      "milliseconds": 1.262583999999947
+    },
+    {
+      "index": 2,
+      "mode": "baseline",
+      "milliseconds": 4.168915999999967
+    },
+    {
+      "index": 2,
+      "mode": "reuse-only",
+      "milliseconds": 1.3663749999999482
+    },
+    {
+      "index": 3,
+      "mode": "baseline",
+      "milliseconds": 3.3292920000000095
+    },
+    {
+      "index": 3,
+      "mode": "reuse-only",
+      "milliseconds": 1.6246669999999312
+    },
+    {
+      "index": 4,
+      "mode": "baseline",
+      "milliseconds": 3.1634169999999813
+    },
+    {
+      "index": 4,
+      "mode": "reuse-only",
+      "milliseconds": 1.3504580000000033
+    },
+    {
+      "index": 5,
+      "mode": "baseline",
+      "milliseconds": 3.2361250000000155
+    },
+    {
+      "index": 5,
+      "mode": "reuse-only",
+      "milliseconds": 1.3550000000000182
+    },
+    {
+      "index": 6,
+      "mode": "baseline",
+      "milliseconds": 4.050208999999995
+    },
+    {
+      "index": 6,
+      "mode": "reuse-only",
+      "milliseconds": 1.2195420000000468
+    },
+    {
+      "index": 7,
+      "mode": "baseline",
+      "milliseconds": 3.4630829999999833
+    },
+    {
+      "index": 7,
+      "mode": "reuse-only",
+      "milliseconds": 1.2339170000000195
+    },
+    {
+      "index": 8,
+      "mode": "baseline",
+      "milliseconds": 3.3034169999999676
+    },
+    {
+      "index": 8,
+      "mode": "reuse-only",
+      "milliseconds": 2.6357080000000224
+    },
+    {
+      "index": 9,
+      "mode": "baseline",
+      "milliseconds": 4.547957999999994
+    },
+    {
+      "index": 9,
+      "mode": "reuse-only",
+      "milliseconds": 1.447084000000018
+    },
+    {
+      "index": 10,
+      "mode": "baseline",
+      "milliseconds": 3.425666999999976
+    },
+    {
+      "index": 10,
+      "mode": "reuse-only",
+      "milliseconds": 1.1808750000000146
+    },
+    {
+      "index": 11,
+      "mode": "baseline",
+      "milliseconds": 3.236874999999941
+    },
+    {
+      "index": 11,
+      "mode": "reuse-only",
+      "milliseconds": 1.265374999999949
+    },
+    {
+      "index": 12,
+      "mode": "baseline",
+      "milliseconds": 3.398625000000038
+    },
+    {
+      "index": 12,
+      "mode": "reuse-only",
+      "milliseconds": 1.5137079999999514
+    },
+    {
+      "index": 13,
+      "mode": "baseline",
+      "milliseconds": 3.291832999999997
+    },
+    {
+      "index": 13,
+      "mode": "reuse-only",
+      "milliseconds": 1.3678750000000264
+    },
+    {
+      "index": 14,
+      "mode": "baseline",
+      "milliseconds": 3.076915999999983
+    },
+    {
+      "index": 14,
+      "mode": "reuse-only",
+      "milliseconds": 1.7527079999999842
+    },
+    {
+      "index": 15,
+      "mode": "baseline",
+      "milliseconds": 3.5289579999999887
+    },
+    {
+      "index": 15,
+      "mode": "reuse-only",
+      "milliseconds": 1.5180420000000368
+    },
+    {
+      "index": 16,
+      "mode": "baseline",
+      "milliseconds": 3.751708000000008
+    },
+    {
+      "index": 16,
+      "mode": "reuse-only",
+      "milliseconds": 1.508457999999905
+    },
+    {
+      "index": 17,
+      "mode": "baseline",
+      "milliseconds": 3.503667000000064
+    },
+    {
+      "index": 17,
+      "mode": "reuse-only",
+      "milliseconds": 1.2257500000000618
+    },
+    {
+      "index": 18,
+      "mode": "baseline",
+      "milliseconds": 3.343334000000027
+    },
+    {
+      "index": 18,
+      "mode": "reuse-only",
+      "milliseconds": 1.3447499999999764
+    },
+    {
+      "index": 19,
+      "mode": "baseline",
+      "milliseconds": 3.5352080000000115
+    },
+    {
+      "index": 19,
+      "mode": "reuse-only",
+      "milliseconds": 2.108583000000067
+    },
+    {
+      "index": 20,
+      "mode": "baseline",
+      "milliseconds": 3.6923329999999623
+    },
+    {
+      "index": 20,
+      "mode": "reuse-only",
+      "milliseconds": 1.1962089999999534
+    },
+    {
+      "index": 21,
+      "mode": "baseline",
+      "milliseconds": 3.1242920000000822
+    },
+    {
+      "index": 21,
+      "mode": "reuse-only",
+      "milliseconds": 1.188792000000035
+    },
+    {
+      "index": 22,
+      "mode": "baseline",
+      "milliseconds": 3.640083000000004
+    },
+    {
+      "index": 22,
+      "mode": "reuse-only",
+      "milliseconds": 1.3661249999998972
+    },
+    {
+      "index": 23,
+      "mode": "baseline",
+      "milliseconds": 3.5132500000000846
+    },
+    {
+      "index": 23,
+      "mode": "reuse-only",
+      "milliseconds": 1.1995410000000675
+    },
+    {
+      "index": 24,
+      "mode": "baseline",
+      "milliseconds": 3.199457999999936
+    },
+    {
+      "index": 24,
+      "mode": "reuse-only",
+      "milliseconds": 1.707540999999992
+    },
+    {
+      "index": 25,
+      "mode": "baseline",
+      "milliseconds": 3.4389169999999467
+    },
+    {
+      "index": 25,
+      "mode": "reuse-only",
+      "milliseconds": 1.3712080000000242
+    },
+    {
+      "index": 26,
+      "mode": "baseline",
+      "milliseconds": 3.249333999999976
+    },
+    {
+      "index": 26,
+      "mode": "reuse-only",
+      "milliseconds": 1.1750829999999723
+    },
+    {
+      "index": 27,
+      "mode": "baseline",
+      "milliseconds": 3.4588750000000346
+    },
+    {
+      "index": 27,
+      "mode": "reuse-only",
+      "milliseconds": 1.2177089999998998
+    },
+    {
+      "index": 28,
+      "mode": "baseline",
+      "milliseconds": 3.081457999999998
+    },
+    {
+      "index": 28,
+      "mode": "reuse-only",
+      "milliseconds": 1.2272910000000365
+    },
+    {
+      "index": 29,
+      "mode": "baseline",
+      "milliseconds": 3.7168340000000626
+    },
+    {
+      "index": 29,
+      "mode": "reuse-only",
+      "milliseconds": 3.33558400000004
+    }
+  ],
+  "own_resources_cleaned": true
+}

@@ -1,0 +1,25 @@
+--- a/backend-ts/src/contact-context.ts
++++ b/backend-ts/src/contact-context.ts
+@@ -66,7 +66,8 @@
+   }
+ }
+ async function scopeRevision(client: pg.Client,owner: string,contact: string): Promise<string> {
+-  const result=await client.query(`SELECT c.xmin::text AS revision,
++  const result=await client.query(`SELECT pg_catalog.row_to_json(scope_state)::text AS scope_state FROM (
++SELECT c.xmin::text AS revision,
+     (SELECT coalesce(jsonb_agg(jsonb_build_array(b.id,b.xmin::text) ORDER BY b.id),'[]') FROM public.conversation_binding b WHERE b.owner_id=c.owner_id AND b.contact_id=c.id) AS bindings,
+     (SELECT coalesce(jsonb_agg(x.xmin::text ORDER BY x.id),'[]') FROM public.owner_channel_identity x WHERE x.owner_id=c.owner_id) AS accounts,
+     (SELECT x.xmin::text FROM public.front_sync_state x WHERE x.owner_id=c.owner_id) AS sync_switch,
+@@ -74,9 +75,10 @@
+     (SELECT coalesce(jsonb_agg(x.xmin::text ORDER BY x.channel,x.account_scope),'[]') FROM public.wechat_history_sync_authorization x WHERE x.owner_id=c.owner_id) AS history_grants,
+     (SELECT coalesce(jsonb_agg(x.xmin::text ORDER BY x.channel,x.account_scope,x.locator_hash),'[]') FROM public.wechat_sync_exclusion x WHERE x.owner_id=c.owner_id) AS exclusions,
+     (SELECT coalesce(jsonb_agg(x.xmin::text ORDER BY x.id),'[]') FROM public.source_document x WHERE x.owner_id=c.owner_id AND x.contact_id=c.id) AS sources
+-    FROM public.contact c WHERE c.owner_id=$1 AND c.id=$2`,[owner,contact]);
++    FROM public.contact c WHERE c.owner_id=$1 AND c.id=$2
++    ) AS scope_state`,[owner,contact]);
+   if(!result.rowCount)throw new ContactContextError('contact_not_found',404);
+-  return JSON.stringify(result.rows[0]);
++  return result.rows[0].scope_state;
+ }
+ async function readMessages(client: pg.Client,owner: string,contact: string,url: URL): Promise<unknown> {
+   const limitText=url.searchParams.get('limit')??'50', before=url.searchParams.get('before');

@@ -1,0 +1,18 @@
+{
+  "diagnostic_only": true,
+  "own_database_name_sha256": "dbb84f785f807c9b0a00807a8d2d8e57d85ec8b575c6aecc7c1f6eebead0caf0",
+  "old_connection_defaults": {
+    "transaction_isolation": "read committed",
+    "transaction_read_only": "off",
+    "search_path": "\"$user\", public",
+    "statement_timeout": "0",
+    "lock_timeout": "0"
+  },
+  "new_transaction_settings": {
+    "businessReadTransaction": 1.3201665000000062,
+    "businessTransaction": 1.3091459999999984
+  },
+  "own_sessions_after_node_closed": 0,
+  "own_database_absent_after_drop": true,
+  "old_probe_scope": "与旧contacts直接psycopg.connect相同设置；其他旧路由的显式事务设置按原源码保留，不冒充已逐连接测量。"
+}

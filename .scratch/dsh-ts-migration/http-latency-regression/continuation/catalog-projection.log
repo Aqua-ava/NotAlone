@@ -1,0 +1,1 @@
+{"summary":{"full":{"p50_ms":0.4464995000000158,"rows":1120},"projected":{"p50_ms":0.458061999999984,"rows":103}},"mutations":[{"name":"unknown_table","equivalent":true},{"name":"required_column_renamed","equivalent":true},{"name":"required_table_empty","equivalent":true},{"name":"unknown_ledger_view","equivalent":true}]}

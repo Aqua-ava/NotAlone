@@ -1,0 +1,226 @@
+{
+  "diagnostic_only": true,
+  "candidate_decision": "不进入产品：本轮未观察到净收益",
+  "source_head": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "production_contact_context_unchanged": true,
+  "http_cases": {
+    "contacts": {
+      "baseline": {
+        "n": {
+          "old": 30,
+          "new": 30
+        },
+        "p50_ms": {
+          "old": 1.7412085,
+          "new": 3.65677048265934
+        },
+        "p95_ms": {
+          "old": 2.4618248499999997,
+          "new": 4.227212360501289
+        },
+        "p50_ratio": 2.100133604137207,
+        "p95_ratio": 1.7171052443074044
+      },
+      "text": {
+        "n": {
+          "old": 30,
+          "new": 30
+        },
+        "p50_ms": {
+          "old": 1.8258125,
+          "new": 4.128728985786438
+        },
+        "p95_ms": {
+          "old": 2.1744518999999993,
+          "new": 4.676428933441638
+        },
+        "p50_ratio": 2.261310504658303,
+        "p95_ratio": 2.1506242255538695
+      },
+      "text_over_baseline_new_p50": 1.1290642946734444,
+      "normalized_old_anchor_p50": 1.076746022349998
+    },
+    "sources": {
+      "baseline": {
+        "n": {
+          "old": 30,
+          "new": 30
+        },
+        "p50_ms": {
+          "old": 1.199563,
+          "new": 4.538999989628792
+        },
+        "p95_ms": {
+          "old": 1.3690787999999998,
+          "new": 5.646381400525568
+        },
+        "p50_ratio": 3.783877953578755,
+        "p95_ratio": 4.124219439031244
+      },
+      "text": {
+        "n": {
+          "old": 30,
+          "new": 30
+        },
+        "p50_ms": {
+          "old": 1.216271,
+          "new": 4.833520993590355
+        },
+        "p95_ms": {
+          "old": 1.46772295,
+          "new": 5.580927444994449
+        },
+        "p50_ratio": 3.9740493636618437,
+        "p95_ratio": 3.802439312538139
+      },
+      "text_over_baseline_new_p50": 1.064886760219105,
+      "normalized_old_anchor_p50": 1.0502583361345539
+    },
+    "session-default": {
+      "baseline": {
+        "n": {
+          "old": 30,
+          "new": 30
+        },
+        "p50_ms": {
+          "old": 2.9845625,
+          "new": 2.7309795171022415
+        },
+        "p95_ms": {
+          "old": 3.4743480999999994,
+          "new": 5.213448101282119
+        },
+        "p50_ratio": 0.9150351239427024,
+        "p95_ratio": 1.5005543345763541
+      },
+      "text": {
+        "n": {
+          "old": 30,
+          "new": 30
+        },
+        "p50_ms": {
+          "old": 2.6536455,
+          "new": 2.8448545038700104
+        },
+        "p95_ms": {
+          "old": 3.1828189,
+          "new": 3.5421786516904823
+        },
+        "p50_ratio": 1.0720552175752225,
+        "p95_ratio": 1.1129061259786042
+      },
+      "text_over_baseline_new_p50": 1.0416974884119958,
+      "normalized_old_anchor_p50": 1.1716000725261257
+    }
+  },
+  "micro_cases": {
+    "scope_sql_three_reads": {
+      "n": {
+        "original": 30,
+        "text": 30
+      },
+      "p50_ms": {
+        "original": 0.3293959999999885,
+        "text": 0.3738545000000073
+      },
+      "text_over_original_p50": 1.134969762838712
+    },
+    "contact_context_sources": {
+      "n": {
+        "original": 30,
+        "text": 30
+      },
+      "p50_ms": {
+        "original": 1.6822709999999859,
+        "text": 1.6965419999999938
+      },
+      "text_over_original_p50": 1.0084831754218007
+    }
+  },
+  "sampling": {
+    "warmups_per_arm_case": 10,
+    "scored_per_arm_case": 30,
+    "http_sample_rows": 480,
+    "http_sample_succeeded": 480,
+    "readiness_and_session_readback_requests_excluded_from_sample_denominator": true,
+    "micro_rows": 160,
+    "micro_interleaved_only_diagnostic": true
+  },
+  "safety": {
+    "passed": 11,
+    "cases": [
+      {
+        "id": "空集合及NULL结构相等",
+        "passed": true
+      },
+      {
+        "id": "未知及跨owner联系人仍404",
+        "passed": true
+      },
+      {
+        "id": "非空绑定及更新参与版本串",
+        "passed": true
+      },
+      {
+        "id": "original:无binding授权关闭再开启拒绝在途读取",
+        "passed": true
+      },
+      {
+        "id": "original:删除联系人使在途确认404且不恢复资料",
+        "passed": true
+      },
+      {
+        "id": "original:最后assertCurrent拒绝使确认回滚",
+        "passed": true
+      },
+      {
+        "id": "text:无binding授权关闭再开启拒绝在途读取",
+        "passed": true
+      },
+      {
+        "id": "text:删除联系人使在途确认404且不恢复资料",
+        "passed": true
+      },
+      {
+        "id": "text:最后assertCurrent拒绝使确认回滚",
+        "passed": true
+      },
+      {
+        "id": "original:写入后授权变化的409回滚",
+        "passed": true
+      },
+      {
+        "id": "text:写入后授权变化的409回滚",
+        "passed": true
+      }
+    ],
+    "full_matrix_or_actual_handoff_cancellation_not_executed": true
+  },
+  "cleanup": {
+    "owned_databases_remaining": 0,
+    "owned_sessions_remaining": 0,
+    "owned_database_count": 5,
+    "owned_work_directory_removed": true,
+    "owned_processes_cleaned": true
+  },
+  "all_bindings_verified": true,
+  "physical_model_requests": 0,
+  "formal_protocol_not_executed": true,
+  "formal_performance_qualified": false,
+  "main_tree_expansion_requested": false,
+  "window_returned_to_root": true,
+  "artifact_sha256": {
+    "http-row-text-counterfactual.py": "3d62d97976eaf77ee8995c38fbe802d595abcd0ea7f63a90d0f0153384577077",
+    "http-row-text-counterfactual-02.py": "a6d3c9ec38d93b210a3b1d7b1e6163562b30ddac95608531b0135d3b7995dce0",
+    "row-text-probe-01.mjs": "18c76223742f8d967234298a04b7f20394bf113fc40cd1af7909724598e2e30a",
+    "row-text-probe.mjs": "613d5c9a1a1e65094e5cedc99453a51de0c380af3c0a200f8bb1606382184bbb",
+    "row-text-attempt01-preparation-failure.json": "c77ba36c94abbff63687d4008e9348e6d3f1006abd7f21415daf7da6461dc5d0",
+    "http-row-text-counterfactual.json": "d98ca90aeadc42f9030213b5688c1a8a664f22b14f513ce8a15f5895fd03d1f5",
+    "http-row-text-counterfactual-02.json": "d788e1720db3b19fc43659b24dce82f6d87ec41a5c38b73e13e3ac141ecc43bf",
+    "http-row-text-counterfactual-02-summary.json": "c2d3fd49afe3e7ce6bc8eeda677be22997dc56f97e87dd049ceed7cf1c81f76b",
+    "row-text-safety.json": "c9d8165d314f3057f7ed5625c8e188bca323c1b9beeddebd41b8f69c6b2dbc9f",
+    "row-text-safety-02.json": "6cc2255a7bf48e0c2a1377017bcb59596ccbf9af8b7fe0a6c0c601ce3c608eb9",
+    "contact-context-revision-text.candidate.patch": "44be9733487bdf1f7d558ac05d1a959a50bb4ee72851b69fb2c21ba81d38c5c9",
+    "row-text-candidate-bindings.json": "7c5561e963fddaba0145f69ee63bbad07727794df3a4a5db0ffca5e9ec704ac3"
+  }
+}

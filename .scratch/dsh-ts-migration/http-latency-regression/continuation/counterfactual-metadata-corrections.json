@@ -1,0 +1,52 @@
+{
+  "original_artifact": "http-framework-counterfactual.json",
+  "original_sha256": "696746538a7a29d69080b0611cd9e864d39134ff85db6378a32a39802cdfc4aa",
+  "original_untouched": true,
+  "reason": "继承的host.sample_count=120为3case遗留字段；该诊断仅2case，以完整rows为准。",
+  "actual_total_rows": 320,
+  "actual_total_successes": 320,
+  "actual_total_failures": 0,
+  "hosts": [
+    {
+      "phase": "framework",
+      "arm": "old",
+      "reported_host_sample_count": 120,
+      "actual_request_rows": 80,
+      "actual_successes": 80,
+      "actual_failures": 0,
+      "scored": 60,
+      "warmups": 20
+    },
+    {
+      "phase": "framework",
+      "arm": "new",
+      "reported_host_sample_count": 120,
+      "actual_request_rows": 80,
+      "actual_successes": 80,
+      "actual_failures": 0,
+      "scored": 60,
+      "warmups": 20
+    },
+    {
+      "phase": "minimal",
+      "arm": "old",
+      "reported_host_sample_count": 120,
+      "actual_request_rows": 80,
+      "actual_successes": 80,
+      "actual_failures": 0,
+      "scored": 60,
+      "warmups": 20
+    },
+    {
+      "phase": "minimal",
+      "arm": "new",
+      "reported_host_sample_count": 120,
+      "actual_request_rows": 80,
+      "actual_successes": 80,
+      "actual_failures": 0,
+      "scored": 60,
+      "warmups": 20
+    }
+  ],
+  "ready_or_tick_causality": "仅记录了ready边界；没有实际appReady/tick时间事件，不能归因具体后台。"
+}

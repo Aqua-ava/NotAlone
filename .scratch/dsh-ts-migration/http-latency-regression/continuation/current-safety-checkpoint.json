@@ -1,0 +1,64 @@
+{
+  "status": "本诊断阶段公开证据已冻结；产品源码已1e90提交，无本任务未提交产品修改；性能未通过",
+  "current_head": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "files": {
+    "backend-ts/src/host-storage.ts": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+    "backend-ts/test/host-storage.test.mjs": "a941afb0b24e6570a78467e27051487f23e212fa51b7a0511eee828ca4970468"
+  },
+  "current_wip_not_measured": false,
+  "latest_http_artifact": "http-row-text-counterfactual-02.json",
+  "latest_http_measured_source_sha256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+  "latest_http_ratios": {
+    "contacts": 2.100133604137207,
+    "sources": 3.783877953578755,
+    "session-default": 0.9150351239427024
+  },
+  "password_binding": {
+    "red_artifact": "password-binding-red.log",
+    "red_raw_sha256": "bbdb17a2ffcfa060e7c7ee47623d0ad47f002a3ceb110687f9686ffc5969c72b",
+    "patch_written": true,
+    "green": "passed_in_final_95",
+    "typecheck": "passed",
+    "typecheck_exit_code": 0
+  },
+  "last_verified_safety_modules": {
+    "after_password_fix": {
+      "tests": 95,
+      "passed": 95,
+      "failures": 0,
+      "skips": 0,
+      "log": "safety-password-final.log"
+    },
+    "latest_password_fix_included": true
+  },
+  "benchmarks_paused": true,
+  "privacy_findings": [],
+  "git_mutations": [],
+  "new_raw_public_bindings": [
+    {
+      "public_path": ".scratch/dsh-ts-migration/http-latency-regression/continuation/safety-password-final.log",
+      "private_artifact": "http-latency-continuation-raw-d5bf3bf837244c7ebbbbbcc912572823/safety-password-final.log",
+      "raw_sha256": "48e77fa2f00d9e95b54aa7e19c004f69d1e08df2ba58564e7701e1d10f17328c",
+      "public_sha256": "48e77fa2f00d9e95b54aa7e19c004f69d1e08df2ba58564e7701e1d10f17328c",
+      "raw_bytes": 8155,
+      "public_bytes": 8155
+    },
+    {
+      "public_path": ".scratch/dsh-ts-migration/http-latency-regression/continuation/typecheck-password-binding.log",
+      "private_artifact": "http-latency-continuation-raw-d5bf3bf837244c7ebbbbbcc912572823/typecheck-password-binding.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_bytes": 0,
+      "public_bytes": 0
+    }
+  ],
+  "validation_not_rerun_for_this_metadata_update": true,
+  "latest_current_source_baseline_artifact": "http-row-text-counterfactual-02.json",
+  "latest_current_source_baseline_phase": "baseline",
+  "latest_private_candidate": "row-text-analysis.json",
+  "performance_approved": false,
+  "latest_http_phase": "baseline",
+  "task_uncommitted_product_changes": [],
+  "frozen_stage_handoff": "final-handoff.md",
+  "further_local_work": "none; root实际App优先，新会话继续完整宿主边界"
+}

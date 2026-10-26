@@ -1,0 +1,411 @@
+{
+  "diagnostic_only": true,
+  "summary": {
+    "businessReadTransaction": 1.3201665000000062,
+    "businessTransaction": 1.3091459999999984
+  },
+  "rows": [
+    {
+      "i": -10,
+      "method": "businessReadTransaction",
+      "milliseconds": 11.080207999999999
+    },
+    {
+      "i": -10,
+      "method": "businessTransaction",
+      "milliseconds": 3.2896669999999943
+    },
+    {
+      "i": -9,
+      "method": "businessReadTransaction",
+      "milliseconds": 2.486457999999999
+    },
+    {
+      "i": -9,
+      "method": "businessTransaction",
+      "milliseconds": 1.7687079999999966
+    },
+    {
+      "i": -8,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.6291669999999954
+    },
+    {
+      "i": -8,
+      "method": "businessTransaction",
+      "milliseconds": 1.9379580000000018
+    },
+    {
+      "i": -7,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.486457999999999
+    },
+    {
+      "i": -7,
+      "method": "businessTransaction",
+      "milliseconds": 1.879209000000003
+    },
+    {
+      "i": -6,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.8612500000000054
+    },
+    {
+      "i": -6,
+      "method": "businessTransaction",
+      "milliseconds": 1.5032920000000018
+    },
+    {
+      "i": -5,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.5976250000000078
+    },
+    {
+      "i": -5,
+      "method": "businessTransaction",
+      "milliseconds": 1.4521660000000054
+    },
+    {
+      "i": -4,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.7852500000000049
+    },
+    {
+      "i": -4,
+      "method": "businessTransaction",
+      "milliseconds": 1.3278329999999983
+    },
+    {
+      "i": -3,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.3786249999999995
+    },
+    {
+      "i": -3,
+      "method": "businessTransaction",
+      "milliseconds": 1.6917080000000055
+    },
+    {
+      "i": -2,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.6420420000000036
+    },
+    {
+      "i": -2,
+      "method": "businessTransaction",
+      "milliseconds": 1.3803330000000074
+    },
+    {
+      "i": -1,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.7963749999999976
+    },
+    {
+      "i": -1,
+      "method": "businessTransaction",
+      "milliseconds": 1.6200000000000045
+    },
+    {
+      "i": 0,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.4929580000000016
+    },
+    {
+      "i": 0,
+      "method": "businessTransaction",
+      "milliseconds": 1.647207999999992
+    },
+    {
+      "i": 1,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.329375000000013
+    },
+    {
+      "i": 1,
+      "method": "businessTransaction",
+      "milliseconds": 1.5387079999999997
+    },
+    {
+      "i": 2,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.2672919999999976
+    },
+    {
+      "i": 2,
+      "method": "businessTransaction",
+      "milliseconds": 1.394999999999996
+    },
+    {
+      "i": 3,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.7984160000000031
+    },
+    {
+      "i": 3,
+      "method": "businessTransaction",
+      "milliseconds": 1.341583
+    },
+    {
+      "i": 4,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.6891250000000042
+    },
+    {
+      "i": 4,
+      "method": "businessTransaction",
+      "milliseconds": 1.5010419999999982
+    },
+    {
+      "i": 5,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.3323329999999913
+    },
+    {
+      "i": 5,
+      "method": "businessTransaction",
+      "milliseconds": 1.2793330000000083
+    },
+    {
+      "i": 6,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.2274170000000026
+    },
+    {
+      "i": 6,
+      "method": "businessTransaction",
+      "milliseconds": 1.8925419999999917
+    },
+    {
+      "i": 7,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.6402499999999947
+    },
+    {
+      "i": 7,
+      "method": "businessTransaction",
+      "milliseconds": 1.274917000000002
+    },
+    {
+      "i": 8,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.485709
+    },
+    {
+      "i": 8,
+      "method": "businessTransaction",
+      "milliseconds": 1.2058329999999984
+    },
+    {
+      "i": 9,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.2717080000000038
+    },
+    {
+      "i": 9,
+      "method": "businessTransaction",
+      "milliseconds": 1.2611670000000004
+    },
+    {
+      "i": 10,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.2265420000000091
+    },
+    {
+      "i": 10,
+      "method": "businessTransaction",
+      "milliseconds": 1.4393750000000125
+    },
+    {
+      "i": 11,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.6446669999999983
+    },
+    {
+      "i": 11,
+      "method": "businessTransaction",
+      "milliseconds": 1.4526659999999936
+    },
+    {
+      "i": 12,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.707958000000005
+    },
+    {
+      "i": 12,
+      "method": "businessTransaction",
+      "milliseconds": 1.480125000000001
+    },
+    {
+      "i": 13,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.3901249999999976
+    },
+    {
+      "i": 13,
+      "method": "businessTransaction",
+      "milliseconds": 1.3507919999999984
+    },
+    {
+      "i": 14,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.2580410000000057
+    },
+    {
+      "i": 14,
+      "method": "businessTransaction",
+      "milliseconds": 1.2533329999999978
+    },
+    {
+      "i": 15,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.2615420000000057
+    },
+    {
+      "i": 15,
+      "method": "businessTransaction",
+      "milliseconds": 1.2969170000000076
+    },
+    {
+      "i": 16,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.3626249999999942
+    },
+    {
+      "i": 16,
+      "method": "businessTransaction",
+      "milliseconds": 2.9652499999999833
+    },
+    {
+      "i": 17,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.8679170000000056
+    },
+    {
+      "i": 17,
+      "method": "businessTransaction",
+      "milliseconds": 1.2765410000000088
+    },
+    {
+      "i": 18,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.418959000000001
+    },
+    {
+      "i": 18,
+      "method": "businessTransaction",
+      "milliseconds": 1.3137499999999989
+    },
+    {
+      "i": 19,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.2646249999999952
+    },
+    {
+      "i": 19,
+      "method": "businessTransaction",
+      "milliseconds": 1.2348750000000166
+    },
+    {
+      "i": 20,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.1822500000000105
+    },
+    {
+      "i": 20,
+      "method": "businessTransaction",
+      "milliseconds": 1.2212920000000054
+    },
+    {
+      "i": 21,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.1870000000000118
+    },
+    {
+      "i": 21,
+      "method": "businessTransaction",
+      "milliseconds": 1.807875000000024
+    },
+    {
+      "i": 22,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.4869999999999948
+    },
+    {
+      "i": 22,
+      "method": "businessTransaction",
+      "milliseconds": 1.2838339999999846
+    },
+    {
+      "i": 23,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.1756670000000042
+    },
+    {
+      "i": 23,
+      "method": "businessTransaction",
+      "milliseconds": 1.1823329999999999
+    },
+    {
+      "i": 24,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.1893330000000049
+    },
+    {
+      "i": 24,
+      "method": "businessTransaction",
+      "milliseconds": 1.1793749999999932
+    },
+    {
+      "i": 25,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.2029589999999928
+    },
+    {
+      "i": 25,
+      "method": "businessTransaction",
+      "milliseconds": 1.20554199999998
+    },
+    {
+      "i": 26,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.1696250000000248
+    },
+    {
+      "i": 26,
+      "method": "businessTransaction",
+      "milliseconds": 3.578791999999993
+    },
+    {
+      "i": 27,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.40704199999999
+    },
+    {
+      "i": 27,
+      "method": "businessTransaction",
+      "milliseconds": 1.3045419999999979
+    },
+    {
+      "i": 28,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.3109579999999994
+    },
+    {
+      "i": 28,
+      "method": "businessTransaction",
+      "milliseconds": 1.4178339999999992
+    },
+    {
+      "i": 29,
+      "method": "businessReadTransaction",
+      "milliseconds": 1.2122909999999933
+    },
+    {
+      "i": 29,
+      "method": "businessTransaction",
+      "milliseconds": 1.1822500000000105
+    }
+  ],
+  "source_sha256": "66eee1f1ec7ef51e9aa5b1c6a48b44cc37b6c8f7ead0cd5a87ddac21f5863ef6",
+  "own_resources_cleaned": true
+}

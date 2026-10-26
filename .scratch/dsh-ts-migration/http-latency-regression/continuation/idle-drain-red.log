@@ -1,0 +1,29 @@
+✖ 仅持有空闲业务连接的子进程也必须完成关闭排空 (567.363833ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 630.082959
+
+✖ failing tests:
+
+test at backend-ts/test/host-storage.test.mjs:477:1
+✖ 仅持有空闲业务连接的子进程也必须完成关闭排空 (567.363833ms)
+  AssertionError [ERR_ASSERTION]: 只有空闲连接的进程也必须完成close
+  
+  13 !== 0
+  
+      at TestContext.<anonymous> (file://<repo>/backend-ts/test/host-storage.test.mjs:487:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 13,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

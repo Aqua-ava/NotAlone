@@ -1,0 +1,254 @@
+{
+  "diagnostic_only": true,
+  "source_sha256": "64a60d2c58883d774a8ed0bac4e890274f9f09666800456ae86b3f14fe4f68e6",
+  "warmups": 10,
+  "scored": 30,
+  "concurrency": 1,
+  "samples": [
+    {
+      "index": -10,
+      "warmup": true,
+      "milliseconds": 10.911333000000013,
+      "succeeded": true
+    },
+    {
+      "index": -9,
+      "warmup": true,
+      "milliseconds": 4.679750000000013,
+      "succeeded": true
+    },
+    {
+      "index": -8,
+      "warmup": true,
+      "milliseconds": 2.251125000000002,
+      "succeeded": true
+    },
+    {
+      "index": -7,
+      "warmup": true,
+      "milliseconds": 2.175207999999998,
+      "succeeded": true
+    },
+    {
+      "index": -6,
+      "warmup": true,
+      "milliseconds": 1.8196250000000305,
+      "succeeded": true
+    },
+    {
+      "index": -5,
+      "warmup": true,
+      "milliseconds": 1.9503330000000005,
+      "succeeded": true
+    },
+    {
+      "index": -4,
+      "warmup": true,
+      "milliseconds": 1.7400840000000244,
+      "succeeded": true
+    },
+    {
+      "index": -3,
+      "warmup": true,
+      "milliseconds": 2.574374999999975,
+      "succeeded": true
+    },
+    {
+      "index": -2,
+      "warmup": true,
+      "milliseconds": 2.1367500000000064,
+      "succeeded": true
+    },
+    {
+      "index": -1,
+      "warmup": true,
+      "milliseconds": 1.6797500000000127,
+      "succeeded": true
+    },
+    {
+      "index": 0,
+      "warmup": false,
+      "milliseconds": 1.8297910000000002,
+      "succeeded": true
+    },
+    {
+      "index": 1,
+      "warmup": false,
+      "milliseconds": 1.61262499999998,
+      "succeeded": true
+    },
+    {
+      "index": 2,
+      "warmup": false,
+      "milliseconds": 1.819166999999993,
+      "succeeded": true
+    },
+    {
+      "index": 3,
+      "warmup": false,
+      "milliseconds": 1.429625000000044,
+      "succeeded": true
+    },
+    {
+      "index": 4,
+      "warmup": false,
+      "milliseconds": 1.4732079999999996,
+      "succeeded": true
+    },
+    {
+      "index": 5,
+      "warmup": false,
+      "milliseconds": 1.779291999999998,
+      "succeeded": true
+    },
+    {
+      "index": 6,
+      "warmup": false,
+      "milliseconds": 1.9850419999999644,
+      "succeeded": true
+    },
+    {
+      "index": 7,
+      "warmup": false,
+      "milliseconds": 1.5914589999999862,
+      "succeeded": true
+    },
+    {
+      "index": 8,
+      "warmup": false,
+      "milliseconds": 2.042415999999946,
+      "succeeded": true
+    },
+    {
+      "index": 9,
+      "warmup": false,
+      "milliseconds": 1.4117499999999836,
+      "succeeded": true
+    },
+    {
+      "index": 10,
+      "warmup": false,
+      "milliseconds": 1.5538329999999974,
+      "succeeded": true
+    },
+    {
+      "index": 11,
+      "warmup": false,
+      "milliseconds": 1.72950000000003,
+      "succeeded": true
+    },
+    {
+      "index": 12,
+      "warmup": false,
+      "milliseconds": 1.3480420000000208,
+      "succeeded": true
+    },
+    {
+      "index": 13,
+      "warmup": false,
+      "milliseconds": 1.7485419999999863,
+      "succeeded": true
+    },
+    {
+      "index": 14,
+      "warmup": false,
+      "milliseconds": 1.3315830000000233,
+      "succeeded": true
+    },
+    {
+      "index": 15,
+      "warmup": false,
+      "milliseconds": 1.3017500000000268,
+      "succeeded": true
+    },
+    {
+      "index": 16,
+      "warmup": false,
+      "milliseconds": 1.2921670000000063,
+      "succeeded": true
+    },
+    {
+      "index": 17,
+      "warmup": false,
+      "milliseconds": 1.7628750000000082,
+      "succeeded": true
+    },
+    {
+      "index": 18,
+      "warmup": false,
+      "milliseconds": 1.7262499999999932,
+      "succeeded": true
+    },
+    {
+      "index": 19,
+      "warmup": false,
+      "milliseconds": 1.5139169999999922,
+      "succeeded": true
+    },
+    {
+      "index": 20,
+      "warmup": false,
+      "milliseconds": 1.220292000000029,
+      "succeeded": true
+    },
+    {
+      "index": 21,
+      "warmup": false,
+      "milliseconds": 1.192542000000003,
+      "succeeded": true
+    },
+    {
+      "index": 22,
+      "warmup": false,
+      "milliseconds": 1.1816249999999968,
+      "succeeded": true
+    },
+    {
+      "index": 23,
+      "warmup": false,
+      "milliseconds": 2.0302919999999745,
+      "succeeded": true
+    },
+    {
+      "index": 24,
+      "warmup": false,
+      "milliseconds": 1.609041999999988,
+      "succeeded": true
+    },
+    {
+      "index": 25,
+      "warmup": false,
+      "milliseconds": 1.3011250000000132,
+      "succeeded": true
+    },
+    {
+      "index": 26,
+      "warmup": false,
+      "milliseconds": 1.5699160000000347,
+      "succeeded": true
+    },
+    {
+      "index": 27,
+      "warmup": false,
+      "milliseconds": 1.2946249999999964,
+      "succeeded": true
+    },
+    {
+      "index": 28,
+      "warmup": false,
+      "milliseconds": 1.3104590000000371,
+      "succeeded": true
+    },
+    {
+      "index": 29,
+      "warmup": false,
+      "milliseconds": 1.2689159999999902,
+      "succeeded": true
+    }
+  ],
+  "stages": [],
+  "p50_ms": 1.5338749999999948,
+  "symptom_reproduced": false,
+  "diagnostic_target_ms": 5,
+  "own_resources_cleaned": true
+}

@@ -1,0 +1,619 @@
+{
+  "diagnostic_only": true,
+  "source_sha256": "2e1ca599f207db3460623f2884d760b79be87d4922a159dd4f669aa81bb26c26",
+  "summary": {
+    "full": {
+      "p50_ms": 0.9896250000000464
+    },
+    "flags": {
+      "p50_ms": 0.9888545000000022
+    }
+  },
+  "cases": [
+    {
+      "name": "baseline",
+      "equivalent": true,
+      "expected": {
+        "model_call_receipt": true,
+        "model_call_learning_claim": true,
+        "background_task_step": true
+      },
+      "actual": {
+        "model_call_receipt": true,
+        "background_task_step": true,
+        "model_call_learning_claim": true
+      }
+    },
+    {
+      "name": "nullable_extra",
+      "equivalent": true,
+      "expected": {
+        "model_call_receipt": true,
+        "model_call_learning_claim": true,
+        "background_task_step": true
+      },
+      "actual": {
+        "model_call_receipt": true,
+        "background_task_step": true,
+        "model_call_learning_claim": true
+      }
+    },
+    {
+      "name": "notnull_extra",
+      "equivalent": true,
+      "expected": {
+        "model_call_receipt": false,
+        "model_call_learning_claim": true,
+        "background_task_step": true
+      },
+      "actual": {
+        "model_call_receipt": false,
+        "background_task_step": true,
+        "model_call_learning_claim": true
+      }
+    },
+    {
+      "name": "required_notnull_removed",
+      "equivalent": true,
+      "expected": {
+        "model_call_receipt": false,
+        "model_call_learning_claim": true,
+        "background_task_step": true
+      },
+      "actual": {
+        "model_call_receipt": false,
+        "background_task_step": true,
+        "model_call_learning_claim": true
+      }
+    },
+    {
+      "name": "required_check_removed",
+      "equivalent": true,
+      "expected": {
+        "model_call_receipt": false,
+        "model_call_learning_claim": true,
+        "background_task_step": true
+      },
+      "actual": {
+        "model_call_receipt": false,
+        "background_task_step": true,
+        "model_call_learning_claim": true
+      }
+    },
+    {
+      "name": "unknown_receipt_check",
+      "equivalent": true,
+      "expected": {
+        "model_call_receipt": false,
+        "model_call_learning_claim": true,
+        "background_task_step": true
+      },
+      "actual": {
+        "model_call_receipt": false,
+        "background_task_step": true,
+        "model_call_learning_claim": true
+      }
+    },
+    {
+      "name": "duplicate_receipt_check",
+      "equivalent": true,
+      "expected": {
+        "model_call_receipt": false,
+        "model_call_learning_claim": true,
+        "background_task_step": true
+      },
+      "actual": {
+        "model_call_receipt": false,
+        "background_task_step": true,
+        "model_call_learning_claim": true
+      }
+    },
+    {
+      "name": "ignored_background_check",
+      "equivalent": true,
+      "expected": {
+        "model_call_receipt": true,
+        "model_call_learning_claim": true,
+        "background_task_step": true
+      },
+      "actual": {
+        "model_call_receipt": true,
+        "background_task_step": true,
+        "model_call_learning_claim": true
+      }
+    },
+    {
+      "name": "claim_check_removed",
+      "equivalent": true,
+      "expected": {
+        "model_call_receipt": true,
+        "model_call_learning_claim": false,
+        "background_task_step": true
+      },
+      "actual": {
+        "model_call_receipt": true,
+        "background_task_step": true,
+        "model_call_learning_claim": false
+      }
+    }
+  ],
+  "rows": [
+    {
+      "index": -10,
+      "mode": "full",
+      "milliseconds": 0.9438330000000406
+    },
+    {
+      "index": -10,
+      "mode": "flags",
+      "milliseconds": 1.075917000000004
+    },
+    {
+      "index": -9,
+      "mode": "full",
+      "milliseconds": 0.922916999999984
+    },
+    {
+      "index": -9,
+      "mode": "flags",
+      "milliseconds": 0.8968750000000227
+    },
+    {
+      "index": -8,
+      "mode": "full",
+      "milliseconds": 0.8962500000000091
+    },
+    {
+      "index": -8,
+      "mode": "flags",
+      "milliseconds": 1.1898749999999154
+    },
+    {
+      "index": -7,
+      "mode": "full",
+      "milliseconds": 1.1195000000000164
+    },
+    {
+      "index": -7,
+      "mode": "flags",
+      "milliseconds": 0.952666000000022
+    },
+    {
+      "index": -6,
+      "mode": "full",
+      "milliseconds": 0.9509590000000117
+    },
+    {
+      "index": -6,
+      "mode": "flags",
+      "milliseconds": 0.9578330000000506
+    },
+    {
+      "index": -5,
+      "mode": "full",
+      "milliseconds": 0.9475830000000087
+    },
+    {
+      "index": -5,
+      "mode": "flags",
+      "milliseconds": 0.9261249999999563
+    },
+    {
+      "index": -4,
+      "mode": "full",
+      "milliseconds": 1.050292000000013
+    },
+    {
+      "index": -4,
+      "mode": "flags",
+      "milliseconds": 0.9072499999999764
+    },
+    {
+      "index": -3,
+      "mode": "full",
+      "milliseconds": 0.9385829999999942
+    },
+    {
+      "index": -3,
+      "mode": "flags",
+      "milliseconds": 0.9870829999999842
+    },
+    {
+      "index": -2,
+      "mode": "full",
+      "milliseconds": 0.9508330000001024
+    },
+    {
+      "index": -2,
+      "mode": "flags",
+      "milliseconds": 0.9535419999999704
+    },
+    {
+      "index": -1,
+      "mode": "full",
+      "milliseconds": 0.952707999999916
+    },
+    {
+      "index": -1,
+      "mode": "flags",
+      "milliseconds": 1.10287500000004
+    },
+    {
+      "index": 0,
+      "mode": "full",
+      "milliseconds": 0.9475410000000011
+    },
+    {
+      "index": 0,
+      "mode": "flags",
+      "milliseconds": 0.9209580000000415
+    },
+    {
+      "index": 1,
+      "mode": "full",
+      "milliseconds": 0.9336249999998927
+    },
+    {
+      "index": 1,
+      "mode": "flags",
+      "milliseconds": 1.089125000000081
+    },
+    {
+      "index": 2,
+      "mode": "full",
+      "milliseconds": 0.9355410000000575
+    },
+    {
+      "index": 2,
+      "mode": "flags",
+      "milliseconds": 1.0725419999999986
+    },
+    {
+      "index": 3,
+      "mode": "full",
+      "milliseconds": 0.9852500000000646
+    },
+    {
+      "index": 3,
+      "mode": "flags",
+      "milliseconds": 0.9507499999999709
+    },
+    {
+      "index": 4,
+      "mode": "full",
+      "milliseconds": 0.9356660000000829
+    },
+    {
+      "index": 4,
+      "mode": "flags",
+      "milliseconds": 1.0444579999999632
+    },
+    {
+      "index": 5,
+      "mode": "full",
+      "milliseconds": 1.2911250000000791
+    },
+    {
+      "index": 5,
+      "mode": "flags",
+      "milliseconds": 1.0345829999999978
+    },
+    {
+      "index": 6,
+      "mode": "full",
+      "milliseconds": 1.0227919999999813
+    },
+    {
+      "index": 6,
+      "mode": "flags",
+      "milliseconds": 1.0302909999999201
+    },
+    {
+      "index": 7,
+      "mode": "full",
+      "milliseconds": 0.9940000000000282
+    },
+    {
+      "index": 7,
+      "mode": "flags",
+      "milliseconds": 0.983791999999994
+    },
+    {
+      "index": 8,
+      "mode": "full",
+      "milliseconds": 0.9956250000000182
+    },
+    {
+      "index": 8,
+      "mode": "flags",
+      "milliseconds": 0.96612499999992
+    },
+    {
+      "index": 9,
+      "mode": "full",
+      "milliseconds": 0.977333999999928
+    },
+    {
+      "index": 9,
+      "mode": "flags",
+      "milliseconds": 1.0777080000000296
+    },
+    {
+      "index": 10,
+      "mode": "full",
+      "milliseconds": 0.9961660000000165
+    },
+    {
+      "index": 10,
+      "mode": "flags",
+      "milliseconds": 1.014791999999943
+    },
+    {
+      "index": 11,
+      "mode": "full",
+      "milliseconds": 1.0739999999999554
+    },
+    {
+      "index": 11,
+      "mode": "flags",
+      "milliseconds": 1.1009169999999813
+    },
+    {
+      "index": 12,
+      "mode": "full",
+      "milliseconds": 1.0513750000000073
+    },
+    {
+      "index": 12,
+      "mode": "flags",
+      "milliseconds": 0.9939170000000104
+    },
+    {
+      "index": 13,
+      "mode": "full",
+      "milliseconds": 1.0365829999999505
+    },
+    {
+      "index": 13,
+      "mode": "flags",
+      "milliseconds": 1.695875000000001
+    },
+    {
+      "index": 14,
+      "mode": "full",
+      "milliseconds": 0.9820419999999785
+    },
+    {
+      "index": 14,
+      "mode": "flags",
+      "milliseconds": 0.9460000000000264
+    },
+    {
+      "index": 15,
+      "mode": "full",
+      "milliseconds": 0.9407909999999902
+    },
+    {
+      "index": 15,
+      "mode": "flags",
+      "milliseconds": 0.943958000000066
+    },
+    {
+      "index": 16,
+      "mode": "full",
+      "milliseconds": 0.9355420000000549
+    },
+    {
+      "index": 16,
+      "mode": "flags",
+      "milliseconds": 0.9221669999999449
+    },
+    {
+      "index": 17,
+      "mode": "full",
+      "milliseconds": 0.932666999999924
+    },
+    {
+      "index": 17,
+      "mode": "flags",
+      "milliseconds": 1.0455839999999625
+    },
+    {
+      "index": 18,
+      "mode": "full",
+      "milliseconds": 1.0560839999999416
+    },
+    {
+      "index": 18,
+      "mode": "flags",
+      "milliseconds": 1.0299999999999727
+    },
+    {
+      "index": 19,
+      "mode": "full",
+      "milliseconds": 1.0973749999999427
+    },
+    {
+      "index": 19,
+      "mode": "flags",
+      "milliseconds": 1.023333999999977
+    },
+    {
+      "index": 20,
+      "mode": "full",
+      "milliseconds": 1.0767909999999574
+    },
+    {
+      "index": 20,
+      "mode": "flags",
+      "milliseconds": 1.1617090000000871
+    },
+    {
+      "index": 21,
+      "mode": "full",
+      "milliseconds": 1.0125829999999496
+    },
+    {
+      "index": 21,
+      "mode": "flags",
+      "milliseconds": 0.953708000000006
+    },
+    {
+      "index": 22,
+      "mode": "full",
+      "milliseconds": 0.9533329999999296
+    },
+    {
+      "index": 22,
+      "mode": "flags",
+      "milliseconds": 0.9215420000000449
+    },
+    {
+      "index": 23,
+      "mode": "full",
+      "milliseconds": 0.9322090000000571
+    },
+    {
+      "index": 23,
+      "mode": "flags",
+      "milliseconds": 0.9086250000000291
+    },
+    {
+      "index": 24,
+      "mode": "full",
+      "milliseconds": 0.928833999999938
+    },
+    {
+      "index": 24,
+      "mode": "flags",
+      "milliseconds": 0.9110420000000659
+    },
+    {
+      "index": 25,
+      "mode": "full",
+      "milliseconds": 0.9271250000000464
+    },
+    {
+      "index": 25,
+      "mode": "flags",
+      "milliseconds": 0.9008749999999281
+    },
+    {
+      "index": 26,
+      "mode": "full",
+      "milliseconds": 1.1337499999999636
+    },
+    {
+      "index": 26,
+      "mode": "flags",
+      "milliseconds": 0.9146670000000086
+    },
+    {
+      "index": 27,
+      "mode": "full",
+      "milliseconds": 0.9333750000000691
+    },
+    {
+      "index": 27,
+      "mode": "flags",
+      "milliseconds": 0.9195419999999785
+    },
+    {
+      "index": 28,
+      "mode": "full",
+      "milliseconds": 1.0514590000000226
+    },
+    {
+      "index": 28,
+      "mode": "flags",
+      "milliseconds": 0.9261249999999563
+    },
+    {
+      "index": 29,
+      "mode": "full",
+      "milliseconds": 1.0736249999999927
+    },
+    {
+      "index": 29,
+      "mode": "flags",
+      "milliseconds": 1.1724159999999983
+    }
+  ],
+  "rules": {
+    "model_call_receipt": {
+      "constraints": [
+        "c:CHECK ((((cost_status = 'unknown'::text) AND (cost_amount IS NULL) AND (currency IS NULL) AND (pricing_version IS NULL)) OR ((cost_status = ANY (ARRAY['estimated'::text, 'known'::text])) AND (cost_amount IS NOT NULL) AND (currency IS NOT NULL) AND (pricing_version IS NOT NULL) AND (length(btrim(currency)) > 0) AND (length(btrim(pricing_version)) > 0))))",
+        "c:CHECK ((((scope_kind = 'contact'::text) AND (contact_id IS NOT NULL)) OR ((scope_kind = 'owner_memory'::text) AND (contact_id IS NULL) AND (ledger_entry_id IS NULL))))",
+        "c:CHECK (((COALESCE(cache_read_tokens, 0) + COALESCE(cache_write_tokens, 0)) <= input_tokens))",
+        "c:CHECK (((input_budget IS NULL) OR (((jsonb_typeof(input_budget) = 'object'::text) AND (input_budget ?& ARRAY['measurement_id'::text, 'measurement_kind'::text, 'input_tokens'::text, 'max_output_tokens'::text, 'context_window_tokens'::text, 'safety_margin_tokens'::text, 'request_sha256'::text, 'serialized_bytes'::text]) AND ((input_budget - ARRAY['measurement_id'::text, 'measurement_kind'::text, 'input_tokens'::text, 'max_output_tokens'::text, 'context_window_tokens'::text, 'safety_margin_tokens'::text, 'request_sha256'::text, 'serialized_bytes'::text]) = '{}'::jsonb) AND (jsonb_typeof((input_budget -> 'measurement_id'::text)) = 'string'::text) AND ((input_budget ->> 'measurement_id'::text) ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$'::text) AND ((input_budget ->> 'measurement_kind'::text) = 'approximate'::text) AND ((input_budget ->> 'request_sha256'::text) ~ '^[a-f0-9]{64}$'::text) AND (jsonb_typeof((input_budget -> 'input_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'input_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'max_output_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'max_output_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'context_window_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'context_window_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'safety_margin_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'safety_margin_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'serialized_bytes'::text)) = 'number'::text) AND ((input_budget ->> 'serialized_bytes'::text) ~ '^[1-9][0-9]*$'::text)) IS TRUE)))",
+        "c:CHECK (((input_tokens IS NOT NULL) OR ((cache_read_tokens IS NULL) AND (cache_write_tokens IS NULL))))",
+        "c:CHECK (((input_tokens IS NULL) = (output_tokens IS NULL)))",
+        "c:CHECK (((outcome <> 'succeeded'::text) OR (dispatch = ANY (ARRAY['response_observed'::text, 'http_accepted'::text]))))",
+        "c:CHECK ((cache_read_tokens >= 0))",
+        "c:CHECK ((cache_write_tokens >= 0))",
+        "c:CHECK ((cost_amount >= (0)::numeric))",
+        "c:CHECK ((cost_status = ANY (ARRAY['unknown'::text, 'estimated'::text, 'known'::text])))",
+        "c:CHECK ((dispatch = ANY (ARRAY['authorized_unconfirmed'::text, 'response_observed'::text, 'http_accepted'::text, 'not_sent'::text])))",
+        "c:CHECK ((input_tokens >= 0))",
+        "c:CHECK ((latency_ms >= 0))",
+        "c:CHECK ((length(btrim(model_name)) > 0))",
+        "c:CHECK ((length(btrim(provider)) > 0))",
+        "c:CHECK ((outcome = ANY (ARRAY['pending'::text, 'succeeded'::text, 'failed'::text, 'cancelled'::text, 'unknown'::text])))",
+        "c:CHECK ((output_tokens >= 0))",
+        "c:CHECK ((scope_kind = ANY (ARRAY['contact'::text, 'owner_memory'::text])))",
+        "f:FOREIGN KEY (ledger_entry_id) REFERENCES outbound_ledger_entry(id) ON DELETE CASCADE",
+        "f:FOREIGN KEY (owner_id) REFERENCES owner(id) ON DELETE CASCADE",
+        "f:FOREIGN KEY (owner_id, contact_id) REFERENCES contact(owner_id, id) ON DELETE CASCADE",
+        "p:PRIMARY KEY (attempt_id)",
+        "u:UNIQUE (attempt_id, owner_id, contact_id, request_id)",
+        "u:UNIQUE (ledger_entry_id)"
+      ],
+      "not_null": [
+        "attempt_id",
+        "owner_id",
+        "scope_kind",
+        "request_id",
+        "permit_id",
+        "provider",
+        "model_name",
+        "called_at",
+        "dispatch",
+        "outcome",
+        "cost_status",
+        "created_at",
+        "updated_at"
+      ],
+      "filter": false
+    },
+    "model_call_learning_claim": {
+      "constraints": [
+        "c:CHECK ((lease_generation > 0))",
+        "c:CHECK ((step_name = 'propose_skill'::text))",
+        "f:FOREIGN KEY (attempt_id, owner_id, contact_id, request_id) REFERENCES model_call_receipt(attempt_id, owner_id, contact_id, request_id) ON DELETE CASCADE",
+        "f:FOREIGN KEY (step_id, task_id) REFERENCES background_task_step(id, task_id) ON DELETE CASCADE",
+        "f:FOREIGN KEY (task_id, owner_id, contact_id) REFERENCES background_task(id, owner_id, contact_id) ON DELETE CASCADE",
+        "p:PRIMARY KEY (attempt_id)",
+        "u:UNIQUE (step_id, lease_generation)"
+      ],
+      "not_null": [
+        "attempt_id",
+        "owner_id",
+        "contact_id",
+        "request_id",
+        "task_id",
+        "step_id",
+        "step_name",
+        "worker_id",
+        "lease_generation"
+      ],
+      "filter": false
+    },
+    "background_task_step": {
+      "constraints": [
+        "u:UNIQUE (id, task_id)"
+      ],
+      "filter": true
+    }
+  },
+  "flags_sql": "WITH catalog_rows AS (\n        SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind\n        FROM unnest($1::text[],$2::text[]) AS required(relname,attname)\n        JOIN pg_catalog.pg_class c ON c.relname=required.relname\n        JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace\n        LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid AND a.attname=required.attname AND a.attnum>0 AND NOT a.attisdropped\n        WHERE n.nspname='public' AND c.relkind IN ('r','p') AND EXISTS(\n          SELECT 1 FROM pg_catalog.pg_attribute visible WHERE visible.attrelid=c.oid AND visible.attnum>0 AND NOT visible.attisdropped)\n      ), checked_tables AS (\n        SELECT c.oid,c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace\n        WHERE n.nspname='public' AND c.relkind IN ('r','p')\n          AND c.relname IN ('model_call_receipt','model_call_learning_claim','background_task_step')\n      ), expected AS (SELECT key AS table_name,value AS rules FROM jsonb_each($3::jsonb)), actual_columns AS (\n SELECT t.relname AS table_name,a.attname,a.attnotnull FROM checked_tables t JOIN pg_catalog.pg_attribute a ON a.attrelid=t.oid WHERE a.attnum>0 AND NOT a.attisdropped\n), actual_constraints AS (\n SELECT t.relname AS table_name,c.contype::text||':'||pg_catalog.pg_get_constraintdef(c.oid) AS descriptor,\n (COALESCE(c.convalidated,false) AND NOT COALESCE(c.condeferrable,true) AND NOT COALESCE(c.condeferred,true) AND\n (c.contype NOT IN ('p','u') OR COALESCE(i.indisvalid,false) AND COALESCE(i.indisready,false))) AS valid\n FROM checked_tables t JOIN pg_catalog.pg_constraint c ON c.conrelid=t.oid LEFT JOIN pg_catalog.pg_index i ON i.indexrelid=c.conindid\n), selected AS (\n SELECT a.* FROM actual_constraints a JOIN expected e ON e.table_name=a.table_name\n WHERE NOT (e.rules->>'filter')::boolean OR (e.rules->'constraints') ? a.descriptor\n) SELECT COALESCE((SELECT jsonb_agg(to_jsonb(r)) FROM catalog_rows r),'[]'::jsonb) AS catalog,\n (SELECT jsonb_object_agg(e.table_name,\n (NOT (e.rules ? 'not_null') OR NOT EXISTS(SELECT 1 FROM actual_columns a WHERE a.table_name=e.table_name AND a.attnotnull IS DISTINCT FROM ((e.rules->'not_null') ? a.attname))) AND\n COALESCE((SELECT bool_and(s.valid) FROM selected s WHERE s.table_name=e.table_name),true) AND\n COALESCE((SELECT array_agg(s.descriptor COLLATE \"C\" ORDER BY s.descriptor COLLATE \"C\") FROM selected s WHERE s.table_name=e.table_name),ARRAY[]::text[]) = ARRAY(SELECT jsonb_array_elements_text(e.rules->'constraints')) COLLATE \"C\") FROM expected e) AS ready_flags"
+}

@@ -1,0 +1,84 @@
+{
+  "schema_version": "actual-app-priority-r5-v1",
+  "production_source_commit": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "runtime_checkout_head": "7997f61b36ebae3dcb2c128637ade34bb0fb162c",
+  "scope": "原资料开发App；仅复验291范围下当前已确认目标的优先登记与关闭/退出",
+  "original_user_data_reused": true,
+  "npm_run_dev_only": true,
+  "path_contains_conda": false,
+  "model_key_explicitly_empty": true,
+  "budget_round_is_closed_guard_only_no_generation_authorization": true,
+  "ui_target_selected_from_unique_complete_name_result": true,
+  "known_target_binding_count": 1,
+  "legacy_full_status_bytes": {
+    "on": 115266,
+    "off": 115179
+  },
+  "actual_priority": {
+    "matches_confirmed_target": true,
+    "success_after_this_launch": true,
+    "duration_ms": 78,
+    "failure_code": null,
+    "actual_ack_wire_bytes": "not_captured",
+    "registration_result_is_not_full_history_acceptance": true
+  },
+  "restored": {
+    "master_switch": false,
+    "scope_identity_and_grant_unchanged": true,
+    "bound_contacts": 291,
+    "exclusions_unchanged": true,
+    "stream_active": false,
+    "priority_contact_id": null,
+    "original_config_files_unchanged": true
+  },
+  "data_changes": {
+    "contact": 0,
+    "conversation_binding": 0,
+    "message": 0,
+    "local_wechat_observation": 0,
+    "model_call_receipt": 0
+  },
+  "target_message_delta": 0,
+  "new_model_receipts": 0,
+  "actual_app_budget_used": 4,
+  "budget_max": 8,
+  "external_messages_sent": 0,
+  "visual_frames_saved_or_uploaded": false,
+  "normal_quit": true,
+  "forced_termination": false,
+  "private_evidence": [
+    {
+      "basename": "launch-model-disabled-r5.json",
+      "sha256": "5251654041ef143379c9c3c6291da762b69e91fd14330dd76cf99aaaf6602521"
+    },
+    {
+      "basename": "development-ready-r5.private.json",
+      "sha256": "e3e3651234d1cb0782cc539d877bc1c9b38e1fef3a52adc80538b87dbb55732c"
+    },
+    {
+      "basename": "sync-before-r5.private.json",
+      "sha256": "3abc9269a3b27cd36908d4502e4b39c79e3b86c16cf541226285f8124b1e79a3"
+    },
+    {
+      "basename": "target-priority-on-r5.private.json",
+      "sha256": "b711c4f7e784f8fef4937829a6baff69d38855c8caa431162b317ba77d143d10"
+    },
+    {
+      "basename": "target-priority-off-r5.private.json",
+      "sha256": "a67c0ad1c3852e8a70b60bcf72c2d71676fafcf201ef277f33123606d94c7124"
+    },
+    {
+      "basename": "sync-after-off-r5.private.json",
+      "sha256": "d4e46a6bee53ba453a2dd0d07cf52e62caba610945b06ca73369cc5266b0f098"
+    },
+    {
+      "basename": "normal-quit-after-r5.private.json",
+      "sha256": "03e4065cefb161b78f25dfb5519beeb152c2ac97530c4f19d722650cb95b92a8"
+    }
+  ],
+  "limitations": [
+    "此记录关闭既有大状态下优先登记失败的实际App缺口，不替代最终全功能验收。",
+    "当前性能源仍可能改变，后续最终版本需受影响复验；前台微信目标OCR本轮未测。",
+    "完整历史覆盖、正式回复96与40启动/RSS协议仍未由本记录证明；25未批准，26保持open。"
+  ]
+}

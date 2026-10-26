@@ -1,0 +1,14 @@
+{
+  "status": "仅静态候选，未运行、未授权主树此文件修改",
+  "path": "backend-ts/src/contact-context.ts",
+  "base_sha256": "6e2a90f91f5013a08ec1e08c78f2e5716f2f3776b654e9a22d206c54e8512944",
+  "candidate_sha256": "531e11a6db87ecd00f41f12db80376fea18be98cb5bdc2e3945d99d9efab8f48",
+  "patch_sha256": "44be9733487bdf1f7d558ac05d1a959a50bb4ee72851b69fb2c21ba81d38c5c9",
+  "same_scope_sql_fields_and_predicates": true,
+  "same_3_read_calls": true,
+  "same_2_lock_calls": true,
+  "same_read_committed_transaction": true,
+  "public_dto_changes": false,
+  "opaque_version_only": true,
+  "measurements": "pending root returns exclusive window"
+}

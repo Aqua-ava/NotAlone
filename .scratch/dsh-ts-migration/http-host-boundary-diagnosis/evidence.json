@@ -1,0 +1,172 @@
+{
+  "date": "2026-10-26",
+  "mode": "static_only",
+  "diagnostic_only": true,
+  "formal_performance_qualified": false,
+  "task25_passed": false,
+  "task26_passed": false,
+  "new_measurement_processes": 0,
+  "source_head": "7997f61b36ebae3dcb2c128637ade34bb0fb162c",
+  "production_base_commit": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "old_base_ref": "3c168296",
+  "input_sha256": {
+    ".scratch/dsh-ts-migration/http-latency-regression/implementation/report.md": "7d7410e3c3523593b7d21e3786cca49a27692e2248310c0454bff7566c6b551b",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-production-03.json": "bc0d5f9d22d4f04a1d1574ad759cd407e0e3a38606ff8e213839fa1268a97aa7",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-framework-counterfactual.json": "696746538a7a29d69080b0611cd9e864d39134ff85db6378a32a39802cdfc4aa",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-framework-counterfactual-summary.json": "8d3500786b00ec39f9a94be14f5ca783867ff8afdadc2bf5b3b51022368eee37",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-startup-idle-counterfactual-summary.json": "dc251a6bdace9394ecff98d8cbc597f060ec6bd4543819eb494da11480a874d0",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-row-text-counterfactual-02.json": "d788e1720db3b19fc43659b24dce82f6d87ec41a5c38b73e13e3ac141ecc43bf",
+    ".scratch/dsh-ts-migration/http-business-latency-independent/report.md": "695b8849371bcafa736ad4efb89dda30540fbb881829bf2b00f5ed1781c1016a",
+    ".scratch/dsh-ts-migration/http-business-latency-independent/framework-followup.md": "b7a46e4ed6030d2ed38b7fcff7728eb7582d3b7717e2de4ce45a85ce86804430",
+    ".scratch/dsh-ts-migration/http-business-latency-independent/framework-followup-evidence.json": "02668350948ad4de69bbb87ee9c1bff103ead15a27b932e614c5e7aeae5393fb",
+    ".scratch/dsh-ts-migration/http-business-latency-independent/route-context-hypothesis.md": "16d71ebe4b3c7933a89e2a4b7ec3719007b6ca2e852f234e3badaed2a2476499",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-production-instrumentation/perf-preload.mjs": "c17c4cec884387b1423edf585e10e4f2307f0b5182f8ef66d27149ad5e886064",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-production-instrumentation/new-host.mjs": "ab82e32dfd9e0a1295e65b441ff3e69925f10399e5674c7acd016218d8de36d1",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/minimal-contact-host.mjs": "c0bcc49f8e0fbcc86b7173b8f759d7e173abc25b50f75e3c4c4cd89efa5f0d7d",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/http-framework-counterfactual.py": "d82417b76e18664738923827253a7d2f1922f2262c4e13b3578ab924e370bc49",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/final-handoff.md": "079c8ae3027ece63c249b8d9763ed9ed794ecf1cd9cc27a3ad5b9628be507027",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/artifact-index.md": "6db0b6942e8f2a32b0441fe7fcb6f06d583ea0953c132331a35cbd7eeb9ed32d",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/final-public-manifest.json": "1d5ac9a027516142955b0c203c63f2b7bfbf7c832eb2660e031212274018f325",
+    ".scratch/dsh-ts-migration/http-latency-regression/continuation/row-text-attempt01-preparation-failure.json": "c77ba36c94abbff63687d4008e9348e6d3f1006abd7f21415daf7da6461dc5d0"
+  },
+  "current_source_sha256": {
+    "backend-ts/src/host-plugin.ts": "226982751ea037f2e31bcd9efb9909fe6bbe63c8140dcf7094ff0ad2ea22441d",
+    "backend-ts/src/contact-context.ts": "6e2a90f91f5013a08ec1e08c78f2e5716f2f3776b654e9a22d206c54e8512944",
+    "backend-ts/src/contact-handoff.ts": "aa5c2e2deda3ccd616c2e0db7b9bd55eb96540ce2db12de9939e9479c6717bdb",
+    "backend-ts/src/host-storage.ts": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+    "backend-ts/src/host-reply.ts": "d4697ca7decf75171c1309e09be712109c390c07071a7d991537d6a02daaa3cf",
+    "backend-ts/src/skill-host.ts": "5efd2f09879ec3be0f64adce212dbf2768e7f128efcf569359eeda38a8aac597",
+    "backend-ts/src/pure-ts-public-api.ts": "698b368fec73811ce84408973485036d1b8920cd9bcd1a6eed547be21074c833",
+    "backend-ts/src/host-json.ts": "e7449c7c5df9a496ac36ce0ec54d997341577f799d7c0fad4b28cec906f5f48c",
+    "backend-ts/src/launch.ts": "6a476b91594906113a0f62a999b73356e9d3f41b84edad361b8789685f37a503",
+    "backend-ts/src/pure-ts-task-events.ts": "2274b056edaa7b612bfc6ca7858ab2d33c5a43f22e9f04120ea7c71d47e9bcd8",
+    "backend-ts/src/assistant-discussion-service.ts": "5689f7fe89bc066eaa9f36b83c952cfd1ee70a48f6afc3ad68d40c8b9467c630",
+    "backend-ts/profile/host.patch.yml": "5c95caec7c4a40b5bb36151ac213b1c9823e7368b1136cbbefcf806fcfe1bc9f",
+    "backend-ts/package.json": "23efe4561bfc415f66ccf220839116f047ca6311a3aead6999dab2fd72450e61",
+    "backend-ts/pnpm-lock.yaml": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798"
+  },
+  "installed_source_read_sha256": {
+    "backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js": "80112efe368efb1a39720c7ada0af00442e5131fb2744edaaff8a3e8bb499e6f",
+    "backend-ts/node_modules/@deepseek-ai/dsh/../dsh-app-boot/lib/index.js": "5135179ac810e4f626f32ec3bdc3293dc7d2028e8aa92e5e0c006f1a33b78e76",
+    "backend-ts/node_modules/@deepseek-ai/dsh/../dsh-app-boot/../cordis-plugin-loader/lib/index.js": "638b9ad360e01236120772323f80a65570c4f3f42f4cfc6243330241025b6d72",
+    "backend-ts/node_modules/@deepseek-ai/dsh-agent/lib/index.js": "7b59cf82c2784c25bdce4e3e24e5e5303b02b9f1003efacf50255492d17baf8b",
+    "backend-ts/node_modules/pg/lib/client.js": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4",
+    "backend-ts/node_modules/pg/lib/result.js": "2e9dfbbb89c84cfdb1977a1503f2ddd265ed2f943f8dc3957dc0db193ee81488"
+  },
+  "inherited_frozen_input_binding": {
+    "snapshot_sha256": "a3c36e29fcaf40aaf2d4d074af0ec75652c53683f34294fb36aba376fa8a9723",
+    "workload_sha256": "7416b59cd304f4457a79c99c185655dd663ff69da2e2a6aa88d80d3a7945533a",
+    "dependencies_sha256": "03b3a2663a1f7dc6067197f52abadcf9fd93cd9ec4d9539703d4af82b624a79d",
+    "old_dependencies_sha256": "894b11e7009c1fc93dbb9a769986f3436a78564b5a986a0593fb01cbd8cfbf23",
+    "runtime_environments": {
+      "old": {},
+      "new": {
+        "NOTALONE_HOST_RUNTIME": "typescript",
+        "NOTALONE_REPLY_RUNTIME": "typescript",
+        "NOTALONE_EXTRACTION_RUNTIME": "typescript",
+        "NOTALONE_HISTORY_RUNTIME": "typescript"
+      }
+    }
+  },
+  "binding_verification_scope": "继承公开证据的绑定；本轮未重核私有dump/二进制/整套依赖，未执行代码。已装载文件和JIT状态仍未知。",
+  "existing_rows": {
+    "framework": {
+      "rows": 320,
+      "succeeded": 320,
+      "metadata_correction": "hosts.sample_count为120；实际每宿主80行，原件不改"
+    },
+    "row_text_02": {
+      "rows": 480,
+      "succeeded": 480
+    }
+  },
+  "inherited_failures": [
+    "H1固定空闲2秒未支持修复",
+    "H2 row-text未支持净收益，正确性通过不等于性能通过",
+    "H2准备01语法/适配器PG user缺失错误，无效用例不能冒充产品失败；保留原记录"
+  ],
+  "static_read_errors": [
+    {
+      "operation": "初次搜索嵌套AGENTS",
+      "result": "rg无匹配，exit1；未发现额外AGENTS"
+    },
+    {
+      "operation": "查app-boot通配路径",
+      "result": "zsh无匹配；已改用dsh依赖相对解析路径"
+    },
+    {
+      "operation": "两个猜测的连接模块文件名",
+      "result": "postgres-connection.ts/database-connection.ts不存在；实际connectionOptions在host-storage.ts:775"
+    }
+  ],
+  "unknowns": [
+    "完整HTTP退化根因",
+    "同请求前置/业务/释放/输出耗时",
+    "新增观察器扰动及同期漂移",
+    "实际ready/TaskEvents/GC重叠",
+    "实际loaded scripts及编译/JIT/反优化",
+    "PG执行/解码与await续点各自耗时",
+    "正式全量/96回复/40startup×60sRSS/最终App",
+    "前作者交接指出早期已清理临时宿主原输出只剩脱敏副本/rawSHA，不能称全时期原件齐全"
+  ],
+  "proposed_measurement": {
+    "status": "未执行，待root明确实验窗口",
+    "max_wall_seconds": 180,
+    "work_seconds": 150,
+    "cleanup_seconds": 30,
+    "host_order": [
+      "old-anchor-A",
+      "full-new-baseline-B",
+      "full-new-observed-C",
+      "old-anchor-D"
+    ],
+    "concurrency": 1,
+    "warmups_per_case": 10,
+    "scored_per_case_per_host": 30,
+    "cases": [
+      "contacts",
+      "sources",
+      "manual-header-session-default"
+    ],
+    "sample_count": 480,
+    "new_minimal_host": false,
+    "cpu_profiler_first_flow": false,
+    "product_source_changes": false,
+    "observer_source_patch_prepared": false
+  },
+  "data_impact": {
+    "private_data_read": false,
+    "private_raw_logs_read": false,
+    "raw_written": false,
+    "product_files_modified": false,
+    "git_writes": false,
+    "dependencies_installed": false,
+    "external_messages": false,
+    "app_wechat_operations": false
+  },
+  "validation": "仅本目录静态格式/路径/哈希检查，非项目测试或性能验证",
+  "production_files_equal_to_base": true,
+  "source_hashes_unchanged_since_static_read": {
+    "backend-ts/src/host-plugin.ts": true,
+    "backend-ts/src/contact-context.ts": true,
+    "backend-ts/src/contact-handoff.ts": true,
+    "backend-ts/src/host-storage.ts": true,
+    "backend-ts/src/host-reply.ts": true,
+    "backend-ts/src/skill-host.ts": true,
+    "backend-ts/src/pure-ts-public-api.ts": true,
+    "backend-ts/src/host-json.ts": true,
+    "backend-ts/src/launch.ts": true,
+    "backend-ts/src/pure-ts-task-events.ts": true,
+    "backend-ts/src/assistant-discussion-service.ts": true,
+    "backend-ts/profile/host.patch.yml": true,
+    "backend-ts/package.json": true,
+    "backend-ts/pnpm-lock.yaml": true
+  },
+  "prior_freeze": {
+    "manifest_sha256": "1d5ac9a027516142955b0c203c63f2b7bfbf7c832eb2660e031212274018f325",
+    "expected_manifest_sha256": "1d5ac9a027516142955b0c203c63f2b7bfbf7c832eb2660e031212274018f325",
+    "payload_count": 227,
+    "stage_path_count": 229,
+    "verification_scope": "本轮只核manifest自身SHA与清单数量，未复核全部229项payload"
+  }
+}

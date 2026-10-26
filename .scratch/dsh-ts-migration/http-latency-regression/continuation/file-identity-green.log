@@ -1,0 +1,10 @@
+✔ 每次业务读取重新核验全部SQL字节，文件故障与同元数据篡改均失败关闭 (563.179833ms)
+✔ 暖读后SQL文件的替换、链接和恢复均按当前真实文件重新核验 (540.9775ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1165.658917
