@@ -1943,17 +1943,6 @@
       "currentCoverage": []
     },
     {
-      "path": "backend-ts/test/reply-comparison-runner-integration.test.mjs",
-      "reason": "通过冻结双臂 runner 执行旧 Python 业务与采集来源，不能进入当前默认 Node 测试。",
-      "legacyDependencies": [
-        ".scratch/dsh-ts-migration/ticket25-final-run/runner.mjs"
-      ],
-      "currentCoverage": [
-        "backend-ts/test/reply-comparison.test.mjs",
-        "backend-ts/test/reply-blind-packet.test.mjs"
-      ]
-    },
-    {
       "path": "desktop/tests/assistant-generation-ownership-http.test.mjs",
       "reason": "依赖已退役 Python 桌面夹具、旧页面执行器或其专用清理合同；固定 Git 历史运行，不证明当前 Node 端到端通过。",
       "legacyDependencies": [

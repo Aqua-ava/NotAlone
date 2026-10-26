@@ -24,7 +24,7 @@
 | 前台会话定位与探针适配 | [foreground/](foreground/) |
 | 通用后台任务控制 | [tasks/](tasks/) |
 | 跨业务删除协调 | [deletion/](deletion/) |
-| 追踪、质量诊断、离线对照与用量 | [diagnostics/](diagnostics/) |
+| 追踪、质量诊断与用量 | [diagnostics/](diagnostics/) |
 | 数据库、模型调用与进程支持 | [platform/](platform/) |
 | 第三方源码 | [vendor/](vendor/) |
 

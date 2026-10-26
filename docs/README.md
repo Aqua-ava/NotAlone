@@ -11,7 +11,7 @@
 | 理解领域词汇或核对设计约束 | [领域语言](../CONTEXT.md)、[架构索引](../architecture/README.md) |
 | 核对第三方源码复用 | [腾讯记忆源码复用说明](third-party/tencent-memory-reference.md) |
 | 查外部资料与技术比较 | [调研目录](../research/) |
-| 查可复现实验实现 | [独立实验](../experiments/)、[后端实验](../backend-ts/experiments/) |
+| 查可复现实验实现 | [独立实验](../experiments/) |
 
 ## 文档归属
 

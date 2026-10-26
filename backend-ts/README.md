@@ -12,7 +12,6 @@
 | [`database/`](database/README.md) | 创建和升级数据库结构的 SQL 脚本及操作说明；实际业务资料保存在 PostgreSQL 中。 |
 | `profile/` | DSH 插件装配与运行配置。 |
 | `test/` | 当前测试、合成夹具及历史测试登记。 |
-| [`experiments/`](experiments/README.md) | 回复候选离线盲评包工具。 |
 | [`diagnostic-problem-budget.md`](diagnostic-problem-budget.md) | 问题诊断期间的模型调用累计预算。 |
 | `node_modules/` | 包管理器安装的第三方依赖。 |
 

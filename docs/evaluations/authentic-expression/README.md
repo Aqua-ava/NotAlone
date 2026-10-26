@@ -7,7 +7,6 @@
 以下材料包含历史 Python 实现与合成验证结果；它们不代表当前 TypeScript 后台或真实表达质量已通过验收。
 
 - [真实表达统一接口的验证记录](authentic-expression-integration.md)
-- [真实表达离线保真报告](authentic-expression-offline-evaluation.md)
 
 ## 原始证据
 
