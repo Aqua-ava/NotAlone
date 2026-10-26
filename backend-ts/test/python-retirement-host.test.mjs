@@ -4,13 +4,15 @@ import {randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
-import {readFile,writeFile} from 'node:fs/promises';
+import {readFile,writeFile,mkdtemp,copyFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {launchDsh} from '../src/launch.ts';
 import {sendEvents,useTool} from './reply-service-runtime-support.mjs';
 import {pureTsRuntimeEnvironment} from '../src/host/pure-ts-runtime.ts';
 import {resolveHistoryRuntime} from '../src/imports/history-runtime.ts';
 import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
+import {waitForHostReady} from './host-readiness-support.mjs';
 
 test('不设置运行时开关也只有 TypeScript 执行责任方',()=>{
  const environment=pureTsRuntimeEnvironment({NOTALONE_OWNER_ID:'synthetic-owner'});
@@ -41,7 +43,7 @@ test('模型成功后超过旧租约的合法保存可完成，真实取消仍�
  });
  provider.listen(0,'127.0.0.1');await once(provider,'listening');
  f.cleanup(async()=>{provider.closeAllConnections();await new Promise(r=>provider.close(r));});
- const preload=join(f.directory,'generation-clock.mjs'),wrapper=join(f.directory,'node-wrapper');
+ const preload=join(f.directory,'generation-clock.mjs'),wrapper=join(f.directory,'node-wrapper'),stderrPath=join(f.directory,'generation.stderr');
  // 仅在本轮合成进程的首个模型流成功后推进业务时钟35秒，不等待或放宽生产资格检查。
  await writeFile(preload,`import ${JSON.stringify(new URL('./main-host-reply-chain-preload.mjs',import.meta.url).href)};
  const RealDate=Date;let offset=0,shifted=false;
@@ -54,16 +56,20 @@ test('模型成功后超过旧租约的合法保存可完成，真实取消仍�
   return new Response(new ReadableStream({async pull(controller){const part=await reader.read();if(part.done){if(!shifted){shifted=true;offset=35000;}controller.close();}else controller.enqueue(part.value);},cancel(reason){return reader.cancel(reason);}}),{status:response.status,headers:response.headers});
  };`,{mode:0o600});
  const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
- await writeFile(wrapper,`#!/bin/sh\nexec ${quote(process.execPath)} --import ${quote(preload)} "$@"\n`,{mode:0o700});
+ await writeFile(stderrPath,'',{mode:0o600});
+ await writeFile(wrapper,`#!/bin/sh\nexec ${quote(process.execPath)} --import ${quote(preload)} "$@" 2>> ${quote(stderrPath)}\n`,{mode:0o700});
  const infoPath=join(f.directory,'generation.info');
  const host=await launchDsh({nodeExecutable:wrapper,projectDirectory:resolve('..'),envFilePath:join(f.directory,'runtime.env'),infoPath,businessHome:f.directory,
   environment:{NOTALONE_MANAGED_USER_DATA:f.directory,NOTALONE_OWNER_ID:owner,NOTALONE_DEEPSEEK_API_KEY:'synthetic-only',
    NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}`}},()=>true);
  f.cleanup(async()=>{assert.equal(await host.terminate(),true);});
  let connection;
- for(let i=0;i<100&&host.isRunning();i++){
-  try{connection=Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>line.split('=')));break;}catch{}
-  await new Promise(r=>setTimeout(r,25));
+ try{connection=await waitForHostReady(host,infoPath,{stderrPath});}
+ catch(error){
+  // 失败证据独立于fixture寿命，避免after清理后只剩无法回查的stderr路径。
+  const diagnostic=await mkdtemp(join(tmpdir(),'notalone-startup-diagnostic-')),saved=join(diagnostic,'stderr.log');
+  await copyFile(stderrPath,saved);await writeFile(join(diagnostic,'readiness.json'),JSON.stringify({code:error.code,running:error.running,elapsed_ms:error.elapsed_ms,pid:host.pid,stderrPath:saved}),{mode:0o600});
+  error.stderrPath=saved;throw error;
  }
  assert.ok(connection,'合成官方宿主必须发布认证握手');
  const request=async(path,body,signal)=>{
