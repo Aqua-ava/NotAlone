@@ -75,7 +75,6 @@ export class ReplyPreparedContexts {
   decodePreparedContext(this.encode(state),this.options.command,scope(identity),identity.conversation_binding_id);
   await new PostgresReplyContext(client,this.contextOptions).validateCurrent(state.context);
   if(this.options.command.suggestion){if(!this.options.explored)throw new ReplyContextError('探索复验端口不可用。');await this.options.explored(client,state.context);}
-  await this.options.discussion.validatePreparation(client,identity,state.discussion);
   if(!isLegacyEmptyPreferences(state.preferences))await validatePreferenceSnapshot(client,identity.owner_id,identity.contact_id,this.options.command.content.type,state.preferences);
   else if(state.preferences.preferences.length)throw new PreparedContextFormatError();
   if(String((await client.query('SELECT revision FROM skill_library WHERE owner_id=$1',[identity.owner_id])).rows[0]?.revision??0)!==state.skillRevision)throw new ReplyContextError('准备Skill修订已变化。');
@@ -83,6 +82,7 @@ export class ReplyPreparedContexts {
   for(const e of state.context.evidence){const refs=await evidenceSources(client,identity.owner_id,e,false,{historical:e.timing.current_status==='historical',text:e.text});dependencies.push(...refs);if(['message','confirmed_memory','owner_memory','pending_candidate'].includes(e.kind))dependencies.push(e.evidence_id);}
   for(const p of state.preferences.preferences)dependencies.push(p.preference_id,...p.source_ids,...p.origin.id?[p.origin.id]:[]);
   if(!state.discussion)throw new ReplyContextError('准备讨论身份缺失。');
+  // 同阶段依赖读取会完整复验讨论；此前无写入，不再重复执行一遍相同校验。
   dependencies.push(...await this.options.discussion.preparationDependencies(client,identity,state.discussion));
   if(state.context.continuation_basis){const previous=(await client.query('SELECT reply_request_id FROM reply_candidate WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[identity.owner_id,identity.contact_id,state.context.continuation_basis.candidate_id])).rows[0];if(!previous)throw new ReplyContextError();dependencies.push(...await generationDependencies(client,identity.owner_id,identity.contact_id,{turn_dependencies:[],reply_request_id:previous.reply_request_id}));}
   state.dependency_ids=unique([...dependencies,...replyGenerationNavigationDependencies(state.context)]);

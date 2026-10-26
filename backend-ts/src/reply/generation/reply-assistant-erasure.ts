@@ -128,7 +128,12 @@ export async function evidenceSources(client:pg.Client,owner:string,e:Row,strict
 export async function generationDependencies(client:pg.Client,owner:string,contact:string,row:Row):Promise<string[]> {
   const dependencies=new Set<string>(ids(row.turn_dependencies??[]));
   if(row.reply_request_id===null)return sorted(dependencies);
-  const rows=(await client.query(sql.replyDependencies,[owner,contact,row.reply_request_id,owner,contact,owner,contact])).rows;
+  // 祖先材料与原始来源在同一只读语句批取；无证据行时仍读取当前请求的原始来源。
+  const batch=(await client.query(`WITH dependency_rows AS (${sql.replyDependencies})
+    SELECT coalesce((SELECT jsonb_agg(to_jsonb(dependency)) FROM dependency_rows dependency),'[]'::jsonb) AS dependencies,
+    ARRAY(SELECT source_id FROM reply_original_source_use WHERE owner_id=$1 AND reply_request_id IN
+      (SELECT request_id FROM dependency_rows UNION SELECT $3::uuid)) AS source_ids`,[owner,contact,row.reply_request_id,owner,contact,owner,contact])).rows[0];
+  const rows:Row[]=batch.dependencies;
   const used=new Set<string>();
   const snapshots=new Map<string,Row>();
   function actual(value:unknown):void {if(Array.isArray(value)){for(const v of value)actual(v);}else if(object(value))for(const [k,v] of Object.entries(value)){if(k==='evolution')continue;if(['memory_id','evidence_id'].includes(k)&&typeof v==='string'&&idPattern.test(v))used.add(v);actual(v);}}
@@ -144,8 +149,7 @@ export async function generationDependencies(client:pg.Client,owner:string,conta
     for(const d of ids(item.dependency_ids??[]))dependencies.add(d);
     for(const e of item.evidence) {for(const d of await evidenceSources(client,owner,e))dependencies.add(d);if(!['user_draft','user_current_chat','user_purpose','continued_candidate'].includes(e.kind))dependencies.add(id(e.evidence_id));}
   }
-  const requests=sorted([...snapshots.keys(),row.reply_request_id]);
-  for(const r of (await client.query('SELECT source_id FROM reply_original_source_use WHERE owner_id=$1 AND reply_request_id=ANY($2::uuid[])',[owner,requests])).rows)dependencies.add(r.source_id);
+  for(const source of batch.source_ids)dependencies.add(source);
   return sorted(dependencies);
 }
 async function candidateHash(client:pg.Client,owner:string,contact:string,row:Row,identity:Row):Promise<string> {

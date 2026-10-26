@@ -12,6 +12,7 @@ import {allowsHistory} from '../context/reply-context.ts';
 import {decodePreparedContext,PreparedContextFormatError} from './reply-prepared-codec.ts';
 export interface AssistantPreparationReceipt {session_id:string;turn_id:string;request_key:string;input_version_id:string;state:string;interruption_reason:string|null}
 export interface AssistantPreparedPort<State> {
+ /** 构建及恢复必须在传入事务内完整复验后返回；调用方无写入地直接使用该状态。 */
  build(client:Client,identity:ReplyPreparationIdentity,historyIds:string[]):Promise<State>;
  restore(client:Client,identity:ReplyPreparationIdentity,encoded:unknown):Promise<State>;
  validate(client:Client,identity:ReplyPreparationIdentity,state:State):Promise<void>;
@@ -53,7 +54,7 @@ export async function prepareAssistantReply<State,Budget>(options:AssistantPrefl
      if(row.current_input_version_id!==row.input_version_id)reject();await requireReplyScope(client,scope,input);
      const ids=allowsHistory(input)?(await client.query(`SELECT message.id FROM message WHERE message.owner_id=$1 AND message.contact_id=$2 AND ${activeMessage} ORDER BY message.occurred_at DESC NULLS LAST,message.id DESC LIMIT 500`,[scope.owner_id,scope.contact_id])).rows.map(r=>r.id):[];
      const state=row.encoded===null?await options.prepared.build(client,identity,ids):await options.prepared.restore(client,identity,row.encoded);
-     await options.prepared.validate(client,identity,state);signal.throwIfAborted();return {row,state};
+     signal.throwIfAborted();return {row,state};
    });
    if(first.state===null)return {receipt:receipt(first.row),state:null,budget:null,replayed:true};
    // decode可规范化旧时间表示；冻结限制比较解码后同一材料，绝不改写原始JSON。
