@@ -36,14 +36,6 @@ export function UsageSummaryView({ summary }: { summary: UsageSummary }) {
           <div><dt>输入{summary.totalInputTokens === null ? ' · 已知部分' : ' · 总量'}</dt><dd>{tokens(summary.totalInputTokens ?? summary.knownInputTokens)}</dd></div>
           <div><dt>输出{summary.totalOutputTokens === null ? ' · 已知部分' : ' · 总量'}</dt><dd>{tokens(summary.totalOutputTokens ?? summary.knownOutputTokens)}</dd></div>
         </dl>
-        <p className="usage-note">{summary.unknownUsageCalls > 0 ? `还有 ${tokens(summary.unknownUsageCalls)} 次调用用量未知，已知部分不代表完整总量。` : '已确认调用的用量均已记录。'}</p>
-        <details className="usage-method"><summary>查看完整统计口径</summary>
-          <dl className="usage-detail-grid">
-            <div><dt>输入 / 输出 token 总量</dt><dd>{tokens(summary.totalInputTokens)} / {tokens(summary.totalOutputTokens)}</dd></div>
-            <div><dt>已知部分输入 / 输出 token</dt><dd>{tokens(summary.knownInputTokens)} / {tokens(summary.knownOutputTokens)}</dd></div>
-          </dl>
-          <p>供应商缓存 token 是调用用量的一部分。业务缓存未调用模型时，不新增模型费用。</p>
-        </details>
       </section>
       <section className="usage-card" aria-label="已确认调用费用">
         <div className="usage-section-heading"><h3>已确认调用费用</h3><span className="usage-badge">{summary.costTotals.length === 0 ? '暂无费用数据' : '分组汇总'}</span></div>
@@ -52,8 +44,6 @@ export function UsageSummaryView({ summary }: { summary: UsageSummary }) {
             <div><strong>{cost.currency} {cost.amount}</strong><span className="usage-badge">{cost.status === 'known' ? '已知' : '估算'}</span></div>
             <p>价格版本 {cost.pricingVersion} · {tokens(cost.calls)} 次调用</p>
           </li>)}</ul>}
-        <p className="usage-note">{tokens(summary.unknownCostCalls)} 次已确认调用费用未知</p>
-        <details className="usage-method"><summary>费用如何统计</summary><p>按币种、价格版本和已知／估算状态分别列出；不合并不同口径，不计入授权未确认记录。未知用量和费用保留为未知。</p></details>
       </section>
     </div>
 

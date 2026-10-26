@@ -27,10 +27,6 @@
 .usage-token-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 22px 0 18px; }
 .usage-token-pair dt { font-size: 11px; color: #626e75; }
 .usage-token-pair dd { margin-top: 8px; font-size: 21px; font-weight: 600; overflow-wrap: anywhere; }
-.usage-note { margin-top: 8px; color: #626e75; font-size: 11px; line-height: 1.7; }
-.usage-method { margin-top: 14px; border-top: 1px solid #e6e6dd; padding-top: 12px; }
-.usage-method summary { cursor: pointer; color: #52728a; font-size: 11px; }
-.usage-method p { margin-top: 10px; color: #626e75; font-size: 11px; line-height: 1.8; }
 .usage-panel summary:focus-visible { outline: 2px solid #5391b4; outline-offset: 4px; border-radius: 4px; }
 .usage-cost-empty { padding: 20px 0 14px; }
 .usage-cost-empty strong { font-size: 22px; font-weight: 550; }
@@ -62,7 +58,6 @@
 .usage-record[open] .usage-record-chevron { transform: rotate(180deg); }
 .usage-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 16px 12px; background: #f3f4ed; border-radius: 8px; }
 .usage-record > .usage-detail-grid { margin-bottom: 14px; }
-.usage-method > .usage-detail-grid { grid-template-columns: 1fr; margin-top: 10px; }
 .usage-detail-grid dt { color: #707980; font-size: 11px; }
 .usage-detail-grid dd { margin-top: 5px; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .usage-empty { padding: 28px 12px; text-align: center; color: var(--muted); font-size: 12px; }
