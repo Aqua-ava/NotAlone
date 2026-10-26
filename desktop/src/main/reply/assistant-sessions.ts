@@ -81,6 +81,18 @@ function discussion(value: unknown, type: SavedAssistantDiscussion['type']): Sav
 }
 
 export async function defaultAssistantSession(backend: BackendHost, contactId: string, signal: AbortSignal) {
+  const generation = backend.getConnectionGeneration();
+  const pending = await backend.requestJson({ method: 'GET', path: `/api/deletions?contact_id=${contactId}&scope_kind=discussion`, signal });
+  if (generation === undefined || pending.generation !== generation || backend.getConnectionGeneration() !== generation
+    || !isRecord(pending.data) || !Array.isArray(pending.data.operations)) throw new Error('助手会话删除状态暂不可用。');
+  for (const operation of pending.data.operations) {
+    if (!isRecord(operation) || operation.scope_kind !== 'discussion' || operation.contact_id !== contactId
+      || !isUuid(operation.target_id) || !isUuid(operation.operation_id)
+      || !['queued', 'running', 'verifying', 'failed'].includes(operation.status as string)) throw new Error('助手会话删除状态无效。');
+  }
+  const deletion = pending.data.operations[0];
+  if (deletion) return { sessionId: deletion.target_id.toLowerCase(), generation,
+    deletionOperationId: deletion.operation_id as string };
   const response = await backend.requestJson({ method: 'POST',
     path: `/api/contacts/${contactId}/assistant-session/default`, body: {}, signal });
   if (!isRecord(response.data) || !isUuid(response.data.session_id)) throw new Error('助手会话暂不可用。');
@@ -177,21 +189,22 @@ export async function deleteAssistantSession(backend: BackendHost, contactId: st
   const path = `/api/contacts/${contactId}/assistant-sessions/${sessionId}`;
   const generation = backend.getConnectionGeneration();
   if (generation === undefined) throw new Error('助手会话删除尚未确认。');
-  let acknowledged = false;
-  try {
-    const response = await backend.requestJson({ method: 'DELETE', path, body: { confirmed: true }, signal });
-    acknowledged = response.generation === generation && isRecord(response.data)
-      && response.data.session_id === sessionId && response.data.state === 'deleted';
-  } catch (error) {
-    if (signal.aborted || (error instanceof BackendRequestFailure && error.kind === 'cancelled')) throw error;
-    // 丢包或已不存在时仍核对同一已知会话；不能借新默认会话宣称删除完成。
+  const response = await backend.requestJson({ method: 'DELETE', path, body: { confirmed: true }, signal });
+  const receipt = response.data;
+  if (response.generation !== generation || !isRecord(receipt) || !isUuid(receipt.operation_id)) {
+    throw new Error('助手会话删除尚未取得可核验的操作凭证。');
+  }
+  const operation = await backend.requestJson({ method: 'GET', path: `/api/deletions/${receipt.operation_id}`, signal });
+  if (backend.getConnectionGeneration() !== generation || operation.generation !== generation
+    || !isRecord(operation.data) || operation.data.operation_id !== receipt.operation_id
+    || operation.data.scope_kind !== 'discussion' || operation.data.status !== 'succeeded') {
+    throw new Error('助手会话清理尚未完成，请重试删除。');
   }
   try {
     await backend.requestJson({ method: 'GET', path, signal });
   } catch (error) {
-    if (error instanceof BackendRequestFailure && error.status === 404 && error.code === 'not_found') {
-      return { phase: acknowledged ? 'deleted' : 'missing', generation };
-    }
+    if (backend.getConnectionGeneration() === generation && error instanceof BackendRequestFailure
+      && error.status === 404 && error.code === 'not_found') return { phase: 'deleted', generation };
     throw error;
   }
   throw new Error('助手会话仍可读取，删除尚未完成。');

@@ -1,3 +1,4 @@
+import {AssistantRuntime} from './reply/runtime/assistant-runtime.ts';
 import {SkillHost} from './skills/skill-host.ts';
 import {SkillLibraryError,skillLibraryRoute} from './skills/skill-library.ts';
 import {skillLearningRoute} from './skills/skill-learning-http.ts';
@@ -178,8 +179,9 @@ async function start(ctx: Context) {
   const skills=new SkillHost(storage,deletionSkillsRoot);
   let layeredManagement:ReturnType<typeof createLayeredMemoryManagement>|undefined;
   let maintenance:PureTsMaintenance|undefined;
+  const assistantRuntime=new AssistantRuntime({ctx,transaction:work=>storage.businessTransaction(work),home:config.businessHome,persistent:config.persistentAssistantHome===config.businessHome});
   const deletions=storage.runtimeOwnerId
-    ?new CrossDomainDeletionService({storage,skillsRoot:deletionSkillsRoot})
+    ?new CrossDomainDeletionService({storage,skillsRoot:deletionSkillsRoot,assistantRuntime})
     :undefined;
   let closing: Promise<void> | undefined;
   const closeResources = () => closing ??= (async () => {
@@ -502,7 +504,7 @@ async function start(ctx: Context) {
   const address=server.address();if(!address || typeof address==='string')throw new Error('HOST_LISTEN_FAILED');
   try {
     if(deletions)await deletions.recover();
-    modelRuntime=await startHostModelRuntime({ctx,storage,environment:runtimeEnvironment,
+    modelRuntime=await startHostModelRuntime({ctx,storage,assistantRuntime,environment:runtimeEnvironment,
       businessHome:config.businessHome,projectDirectory:config.projectDirectory,infoPath:config.infoPath,envFilePath:config.envFilePath,
       ...(traceStore?{sourceTraces:traceStore}:{}),skillLibrary:skills.library,
       requireDiscussionDependencies:skills.requireDiscussionDependencies});

@@ -1,3 +1,4 @@
+import {captureAssistantRuntimeDependencies} from '../runtime/assistant-runtime-erasure.ts';
 /**
  * 助手讨论的 TypeScript 业务责任方。
  *
@@ -959,6 +960,7 @@ export class AssistantDiscussionService {
          WHERE owner_id=$1 AND contact_id=$2
            AND (session_id=$3 OR turn_id=ANY($4::uuid[]))`,
       [scope.owner_id,scope.contact_id,sessionId,turnIds])).rows.map(row=>row.id);
+      await captureAssistantRuntimeDependencies(client,scope.owner_id,turnIds,ids,inputs);
       await eraseSkillLearning(
         client,scope.owner_id,[sessionId,...ids,...candidates,...turnIds,...inputs],
         (connection,input)=>deleteSourceReplies(

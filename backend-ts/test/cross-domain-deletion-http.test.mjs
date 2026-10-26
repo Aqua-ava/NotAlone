@@ -1,3 +1,4 @@
+import {AssistantRuntime} from '../src/reply/runtime/assistant-runtime.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -22,7 +23,8 @@ async function fixture(t) {
     VALUES($1,$2,$3,'wechat_jsonl','synthetic.jsonl',$4,0)`,[source,owner,contact,'a'.repeat(64)]);
   const runtime=await HostStorage.open({...f.options,environment:{NOTALONE_OWNER_ID:owner}});
   t.after(()=>runtime.close());
-  const deletions=new CrossDomainDeletionService({storage:runtime,skillsRoot:join(f.directory,'skills')});
+  const assistantRuntime=new AssistantRuntime({ctx:{},transaction:work=>runtime.businessTransaction(work),home:f.directory,persistent:false});
+  const deletions=new CrossDomainDeletionService({storage:runtime,assistantRuntime,skillsRoot:join(f.directory,'skills')});
   const contacts=new ContactContext(runtime);
   const server=createServer(async(req,res)=>{
     const url=new URL(req.url??'','http://localhost');
@@ -38,7 +40,7 @@ async function fixture(t) {
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(()=>new Promise(resolve=>server.close(resolve)));
-  return {f,owner,contact,source,deletions,origin:`http://127.0.0.1:${server.address().port}`};
+  return {f,owner,contact,source,deletions,assistantRuntime,origin:`http://127.0.0.1:${server.address().port}`};
 }
 
 test('来源删除通过公开HTTP返回可重读原任务且最终不可检索',async t=>{
@@ -338,7 +340,7 @@ test('讨论删除要求确认，成功后同范围会话不可读且来源保�
   assert.equal((await fetch(path,{method:'DELETE',headers:{'Content-Type':'application/json'},body:'{}'})).status,400);
   const response=await fetch(path,{method:'DELETE',headers:{'Content-Type':'application/json'},body:'{"confirmed":true}'});
   assert.equal(response.status,200);
-  assert.deepEqual(await response.json(),{session_id:session,state:'deleted'});
+  const receipt=await response.json();assert.equal(receipt.session_id,session);assert.equal(receipt.state,'deleted');assert.match(receipt.operation_id,/^[0-9a-f-]{36}$/);
   const rows=await x.f.client.query(`SELECT
     (SELECT count(*)::int FROM assistant_session WHERE id=$1) AS discussions,
     (SELECT count(*)::int FROM source_document WHERE id=$2 AND status='active') AS sources`,
@@ -357,7 +359,7 @@ test('讨论数据库已删但文件失败时，同一操作重试仍会清理�
   await x.f.client.query('INSERT INTO reply_skill_file_cleanup(relative_path) VALUES($1)',[`.versions/${x.owner}/${skill}/${version}`]);
   const path=`${x.origin}/api/contacts/${x.contact}/assistant-sessions/${session}`;
   const first=await fetch(path,{method:'DELETE',headers:{'Content-Type':'application/json'},body:'{"confirmed":true}'});
-  assert.equal(first.status,503);
+  assert.equal(first.status,202);
   assert.equal((await x.f.client.query('SELECT count(*)::int n FROM assistant_session WHERE id=$1',[session])).rows[0].n,0);
   assert.equal((await x.f.client.query(`SELECT status FROM cross_domain_deletion_operation
     WHERE scope_kind='discussion' AND contact_id=$1 AND target_id=$2`,[x.contact,session])).rows[0].status,'failed');
@@ -430,7 +432,7 @@ test('过期租约由新服务实例接管且旧结果不能回填',async t=>{
   await x.f.client.query("UPDATE source_document SET status='delete_requested',deletion_operation_id=$2 WHERE id=$1",[x.source,operation]);
   const restartStorage=await HostStorage.open({...x.f.options,environment:{NOTALONE_OWNER_ID:x.owner}});
   t.after(()=>restartStorage.close());
-  const restarted=new CrossDomainDeletionService({storage:restartStorage,
+  const restarted=new CrossDomainDeletionService({storage:restartStorage,assistantRuntime:x.assistantRuntime,
     skillsRoot:join(x.f.directory,'skills')});
   assert.equal(await restarted.recover(),1);
   const result=await (await fetch(`${x.origin}/api/deletions/${operation}`)).json();

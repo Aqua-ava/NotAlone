@@ -25,6 +25,7 @@ async function fixture(t) {
     subscribeMessages: observer => observer.connected(),
     requestJson: async request => {
       requests.push(request);
+      if (request.path.startsWith('/api/deletions?')) return { generation: 7, data: { operations: [] } };
       const id = request.path.split('/')[3];
       await control.barrier?.(request);
       if (control.respond) { const data = control.respond(request); if (data) return { generation: 7, data }; }

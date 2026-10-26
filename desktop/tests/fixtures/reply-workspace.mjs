@@ -25,6 +25,7 @@ export async function replyWorkspaceFixture() {
     requestJson: async request => {
       records.calls.push(request);
       const generation = records.generation;
+      if (request.path.startsWith('/api/deletions?')) return { generation, data: { operations: [] } };
       if (request.path.endsWith('/assistant-session/default')) return { generation, data: { session_id: sessionId } };
       if (request.path.endsWith('/assistant-sessions')) return { generation, data: { sessions: [{ session_id: sessionId, is_current: true }], current_session_id: sessionId } };
       if (request.path.endsWith('/selections')) return { generation, data: { selection: null } };

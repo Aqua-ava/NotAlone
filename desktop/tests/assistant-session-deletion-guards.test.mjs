@@ -11,23 +11,25 @@ const portsPromise = build({ stdin: { contents: `
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false })
   .then((output) => import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`));
 
-async function fixture() {
+async function fixture({ pendingDeletion = false } = {}) {
   const ports = await portsPromise;
-  const contactId = randomUUID(), sessionId = randomUUID();
-  const controls = { deleteFailure: true, missing: false, sessionId, deleteBarrier: null };
+  const contactId = randomUUID(), sessionId = randomUUID(), operationId = randomUUID();
+  const controls = { deleteFailure: true, missing: false, sessionId, deleteBarrier: null, operationStatus: 'succeeded', generation: 7, pendingDeletion };
   const calls = [], handlers = new Map();
   const backend = {
-    getConnectionGeneration: () => 7,
+    getConnectionGeneration: () => controls.generation,
     onStateChanged: () => () => {},
     subscribeMessages: (observer) => observer.connected(),
     requestJson: async (request) => {
       calls.push(request);
+      if (request.path.startsWith('/api/deletions?')) return { generation: 7, data: { operations: controls.pendingDeletion ? [{ operation_id: operationId, scope_kind: 'discussion', contact_id: contactId, target_id: sessionId, status: 'failed' }] : [] } };
       if (request.method === 'DELETE') {
         if (controls.deleteBarrier) await controls.deleteBarrier;
         if (controls.deleteFailure) throw new ports.BackendRequestFailure('response', 503, 'unavailable');
         controls.missing = true;
-        return { generation: 7, data: { session_id: sessionId, state: 'deleted' } };
+        return { generation: 7, data: { session_id: sessionId, state: 'deleted', operation_id: operationId } };
       }
+      if (request.path === `/api/deletions/${operationId}`) { controls.operationEntered?.(); if (controls.operationBarrier) await controls.operationBarrier; return { generation: 7, data: { operation_id: operationId, scope_kind: 'discussion', status: controls.operationStatus } }; }
       if (request.path.endsWith('/assistant-session/default')) {
         return { generation: 7, data: { session_id: controls.sessionId } };
       }
@@ -125,4 +127,45 @@ test('删除工作区讨论后保留空白输入入口，不自动重建会话�
   assert.equal(state.result, null);
   assert.equal(f.calls.filter(request => request.path.endsWith('/assistant-session/default')).length, readsBefore);
   assert.equal(f.generationCalls().length, 0);
+});
+
+test('无成功删除回执的404不能把磁盘清理失败投影为删除完成', async () => {
+  const f = await fixture();
+  f.controls.missing = true;
+  await f.remove();
+  assert.equal((await f.bridge.getState()).sessionDeletion, 'failed');
+});
+
+test('业务已404但公开operation失败时保留失败，用户明确重试完成后才标记删除', async () => {
+  const f = await fixture();
+  f.controls.deleteFailure = false; f.controls.operationStatus = 'failed';
+  await f.remove();
+  assert.equal((await f.bridge.getState()).sessionDeletion, 'failed');
+  assert.equal((await f.bridge.getState()).confirmedSessionDeletion, undefined);
+  f.controls.operationStatus = 'succeeded';
+  await f.remove();
+  assert.equal((await f.bridge.getState()).sessionDeletion, 'deleted');
+});
+
+test('全新Main和preload先恢复持久失败删除占位，不创建默认讨论，明确重试才完成', async () => {
+  const f = await fixture({ pendingDeletion: true });
+  const state = await f.bridge.getState();
+  assert.equal(state.sessionDeletion, 'failed'); assert.equal(state.savedSession.sessionId, f.sessionId);
+  assert.equal(f.calls.some(request => request.path.endsWith('/assistant-session/default')), false);
+  f.controls.deleteFailure = false;
+  await f.remove();
+  assert.equal((await f.bridge.getState()).sessionDeletion, 'deleted');
+});
+
+test('公开operation成功迟到跨连接世代时不能确认删除或回填当前视图', async () => {
+  const f = await fixture();
+  let release, enter;
+  f.controls.deleteFailure = false;
+  f.controls.operationBarrier = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { enter = resolve; }); f.controls.operationEntered = enter;
+  const removing = f.remove(); await entered;
+  f.controls.generation = 8;
+  release(); await removing;
+  const state = await f.bridge.getState();
+  assert.equal(state.confirmedSessionDeletion, undefined); assert.notEqual(state.sessionDeletion, 'deleted');
 });

@@ -157,6 +157,6 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
   } finally {
     clearTimeout(timer);signal.removeEventListener('abort',cancel);
     // 保留interceptor直到实际流与agent全部收尾；不得先释放全局许可。
-    try {await handle?.dispose();}finally {try{disposeSkill?.();ports.skillSession?.close();}finally{intercept();await permit.settle();}}
+    try {await handle?.dispose();}catch(error){ports.runtime?.retainWriterFailure();throw error;}finally {try{disposeSkill?.();ports.skillSession?.close();}finally{intercept();await permit.settle();}}
   }
 }

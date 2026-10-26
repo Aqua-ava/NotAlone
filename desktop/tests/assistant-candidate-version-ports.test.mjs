@@ -78,6 +78,7 @@ async function fixture() {
         records.saved.current_input_version_id = generatedTurn.input_version_id;
       }
       const evidenceRequestId = request.path.match(/\/replies\/([^/]+)\/evidence$/)?.[1];
+      if (request.path.startsWith('/api/deletions?')) return { generation: records.generation ?? 7, data: { operations: [] } };
       const data = request.path.endsWith('/assistant-session/default') ? { session_id: records.saved.session_id }
         : request.path.endsWith('/select') ? { session_id: request.path.split('/').at(-2) }
         : request.path.endsWith('/replies/prepare') ? { session_id: records.saved.session_id, turn_id: generatedTurn.turn_id,
