@@ -71,7 +71,7 @@ test('缺失和损坏存档在原讨论按有效业务记录一次重建，恢�
   if(damage==='missing_directory'){
    await rm(runtimeRoot,{recursive:true});
   }
-  if(damage==='corrupt')await writeFile(log,(await readFile(log,'utf8'))+'{broken\n');
+  if(damage==='corrupt')await writeFile(log,'{broken\n'+(await readFile(log,'utf8')).split('\n').slice(1).join('\n'));
   if(damage==='event_count')await f.f.client.query('UPDATE assistant_runtime_session SET committed_event_count=committed_event_count+1 WHERE session_id=$1',[session]);
   if(damage==='torn_tail')await writeFile(log,(await readFile(log,'utf8'))+'{"uncommitted_ghost":"合成撕裂尾');
   if(damage==='dirty')await f.f.client.query("UPDATE assistant_runtime_session SET state='dirty' WHERE session_id=$1",[session]);
@@ -97,7 +97,7 @@ test('业务已保存而运行提交失败仍显示可靠候选，SIGKILL后同�
  // 模拟旧版本在DB保存后留下的失败投影；再次启动必须按同一DB完成凭据裁定。
  await f.f.client.query("UPDATE assistant_session_turn SET state='failed' WHERE id=$1",[turn.turn_id]);
  const restarted=await f.start();assert.deepEqual(await f.request(restarted,path),saved);assert.equal(restarted.requests.length,0);
- const replay=await f.request(restarted,`${path}/replies`,command);assert.equal(replay.turn_id,turn.turn_id);assert.equal(replay.reply.candidates[0].candidate_id,turn.reply.candidates[0].candidate_id);assert.equal(restarted.requests.length,0);
+ const replay=await f.request(restarted,`${path}/replies`,command);assert.equal(replay.turn_id,turn.turn_id);assert.equal(replay.candidates[0].candidate_id,turn.reply.candidates[0].candidate_id);assert.equal(restarted.requests.length,0);
  await f.request(restarted,`${path}/resume`,{});assert.equal(restarted.requests.length,0);
 });
 
@@ -205,6 +205,54 @@ test('连续两轮及真实宿主重启恢复同一讨论和官方历史，不�
  assert.equal((await readdir(join(f.businessHome,'assistant-runtime'),{recursive:true})).filter(path=>path.endsWith('.jsonl')).length,0,'公开删除清除基础存档');
 });
 
+
+test('正常运行续用只检查资格摘要，不再为长旧候选构造整段业务参考',{timeout:60000},async t=>{
+ const f=await fixture(t),marker='合成旧候选数据量观察_04R',old=marker+'。旧候选不可当作当前要求。'.repeat(120),sqlLog=join(f.businessHome,'sql-results.jsonl');
+ const host=await f.start({NOTALONE_SYNTHETIC_SQL_RESULT_LOG:sqlLog,NOTALONE_SYNTHETIC_SQL_MARKER:marker}),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:session}=await f.request(host,base,{}),path=`${base}/${session}`;
+ f.setCandidateText(old);await f.request(host,`${path}/replies`,f.input('合成首轮当前输入'));
+ const before=(await f.f.client.query('SELECT runtime_session_id,committed_event_count FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0];
+ await writeFile(sqlLog,'');assert.equal((await f.request(host,`${path}/resume`,{})).session_id,session);assert.equal(host.requests.length,1);
+ const qualificationReads=(await readFile(sqlLog,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);
+ assert.ok(qualificationReads.some(q=>q.rows>0),'观测实际PG返回结果，不以私有装配函数调用次数证明');
+ assert.equal(qualificationReads.reduce((n,q)=>n+q.marker_bytes,0),0,'正常ready资格检查不把旧候选正文从PG搬回应用组装参考');
+ f.setCandidateText('合成新轮候选');await f.request(host,`${path}/replies`,f.input('合成第二轮当前输入'));
+ const after=(await f.f.client.query('SELECT runtime_session_id,committed_event_count,qualification FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0];
+ assert.equal(after.runtime_session_id,before.runtime_session_id);assert.ok(after.committed_event_count>before.committed_event_count);
+ assert.ok(host.requests[1].body.messages.some(m=>m.role==='assistant'&&JSON.stringify(m).includes(marker)),'第二轮保留官方SDK的真实历史');
+ assert.doesNotMatch(JSON.stringify(host.requests[1].body.messages.at(-1)),/合成旧候选数据量观察_04R|assistant_discussion/);
+ assert.equal(after.qualification.payload_sha256,undefined,'从未构建业务伴随正文的native运行不持有虚构正文凭据');
+ const allReads=(await readFile(sqlLog,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);
+ t.diagnostic('真实PG结果字节 '+JSON.stringify({ready_result_bytes:qualificationReads.reduce((n,q)=>n+q.result_bytes,0),ready_old_candidate_bytes:qualificationReads.reduce((n,q)=>n+q.marker_bytes,0),generation_guard_old_candidate_bytes:allReads.reduce((n,q)=>n+q.marker_bytes,0)}));
+});
+
+test('旧资格格式在同一业务段零HTTP重建，伴随正文凭据独立且篡改后拒绝出站',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:session}=await f.request(host,base,{}),path=`${base}/${session}`;
+ await f.request(host,`${path}/replies`,f.input('合成旧资格格式输入'));
+ const before=(await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0];
+ await f.f.client.query(`UPDATE assistant_runtime_session SET qualification=jsonb_set(jsonb_set(qualification,'{version}','1'),'{contract}','"notalone-reply:fidelity-v3:bounded-tools-v1:business-reference-v1"') WHERE session_id=$1`,[session]);
+ assert.equal((await f.request(host,`${path}/resume`,{})).session_id,session);assert.equal(host.requests.length,1,'升级资格不产生新模型轮次');
+ const built=(await f.f.client.query('SELECT runtime_session_id,qualification,origin,committed_request_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0];
+ assert.notEqual(built.runtime_session_id,before.runtime_session_id);assert.equal(built.origin,'business_rebuild');assert.equal(built.committed_request_id,null);assert.equal(built.qualification.version,2);assert.match(built.qualification.payload_sha256,/^[a-f0-9]{64}$/);
+ await host.stop();const restarted=await f.start(),reference=join(f.businessHome,'assistant-runtime',f.owner,f.contact,session,built.runtime_session_id,'business-reference.json');
+ const payload=JSON.parse(await readFile(reference,'utf8'));assert.match(JSON.stringify(payload),/合成旧资格格式输入|合成保存候选/);
+ payload.items[0].text='合成篡改伴随正文';await writeFile(reference,JSON.stringify(payload));
+ const response=await fetch(restarted.url+`${path}/replies`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(f.input('合成篡改后新输入'))});
+ assert.ok([409,503].includes(response.status),JSON.stringify({status:response.status,body:await response.json()}));assert.equal(restarted.requests.length,0,'独立资格相同不等于伴随正文仍合格');
+ assert.match(JSON.stringify(await f.request(restarted,path)),/合成保存候选/,'拒绝恢复不改真实业务候选');
+});
+
+test('明确改变本轮范围时按合格业务记录重建，不读取被篡改的旧伴随正文',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:session}=await f.request(host,base,{}),path=`${base}/${session}`;await f.request(host,`${path}/resume`,{});
+ const previous=(await f.f.client.query('SELECT runtime_session_id,qualification FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0];assert.equal(previous.qualification.policy.relationship,true);
+ const reference=join(f.businessHome,'assistant-runtime',f.owner,f.contact,session,previous.runtime_session_id,'business-reference.json'),payload=JSON.parse(await readFile(reference,'utf8'));
+ payload.notice='合成旧伴随篡改标记_04P';await writeFile(reference,JSON.stringify(payload));
+ const result=await f.request(host,`${path}/replies`,f.input('合成本轮明确不使用关系资料'));
+ assert.equal(result.session_id,session);assert.equal(host.requests.length,1);assert.doesNotMatch(JSON.stringify(host.requests[0].body),/合成旧伴随篡改标记_04P/);
+ const current=(await f.f.client.query('SELECT runtime_session_id,qualification FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0];assert.notEqual(current.runtime_session_id,previous.runtime_session_id);assert.equal(current.qualification.policy.relationship,false);
+});
 
 test('公开同键并发只写一轮，其他联系人不能读取或恢复其运行历史',{timeout:60000},async t=>{
  const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
@@ -421,9 +469,11 @@ test('旧业务讨论仅首次明确继续零HTTP建档，真实重启后保留�
   assert.deepEqual(await f.request(host,path),before,'拒绝前不写新turn或覆盖旧输入');assert.deepEqual(await f.request(host,base),beforeCatalog,'拒绝不刷新活动或切当前');
  }
  const resumed=await f.request(host,`${path}/resume`,{});assert.equal(resumed.session_id,session);assert.equal(host.requests.length,0);
+ const bootstrap=(await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0];
  assert.equal((await exists()).length,1,'明确继续按真实业务记录建立官方可恢复档案');
  assert.deepEqual(await f.request(host,path),before,'建档不改旧业务记录');assert.deepEqual(await f.request(host,versionsPath),edited);
  await host.stop();const restarted=await f.start();await f.request(restarted,`${path}/resume`,{});assert.equal(restarted.requests.length,0);
+ assert.equal((await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0].runtime_session_id,bootstrap.runtime_session_id,'相同资格跨重启继续时直接复用已建档实例');
  await f.request(restarted,`${path}/replies`,gatedInput);
  const body=JSON.stringify(restarted.requests[0].body);assert.match(body,/合成旧记录一次性要求/);assert.match(body,/合成旧记录编辑版本/);assert.match(body,/合成保存候选/);assert.match(body,/assistant_discussion_reference/);assert.match(body,/is_sent/);
  await f.request(restarted,`${path}/replies`,f.input('合成随后继续'));

@@ -23,7 +23,11 @@ import {assistantRuntimeDeletionPending} from './assistant-runtime-erasure.ts';
 
 type Transaction=<T>(work:(client:Client)=>Promise<T>)=>Promise<T>;
 type Scope=Pick<VerifiedReplyScope,'owner_id'|'contact_id'>;
-type RuntimeRow={origin:'generated'|'business_bootstrap'|'business_rebuild';qualification:AssistantRuntimePlan['qualification']|null;committed_event_sha256:string|null;session_id:string;runtime_session_id:string;configuration_sha256:string;state:'ready'|'dirty'|'blocked';committed_request_id:string|null;committed_event_count:number};
+type StoredQualification=Omit<AssistantRuntimePlan['qualification'],'version'>&{version:1|2;payload_sha256?:string};
+type RuntimeRow={origin:'generated'|'business_bootstrap'|'business_rebuild';qualification:StoredQualification|null;committed_event_sha256:string|null;session_id:string;runtime_session_id:string;configuration_sha256:string;state:'ready'|'dirty'|'blocked';committed_request_id:string|null;committed_event_count:number};
+// 正文凭据只证明已构建的伴随文件；每阶段的新鲜资格不能靠重造全文来重算它。
+function inspectedQualification(value:StoredQualification|null){if(!value)return null;const {payload_sha256,...qualification}=value;return qualification;}
+function retainReferenceProof(qualification:AssistantRuntimePlan['qualification'],previous:StoredQualification|null):StoredQualification{return {...qualification,...(previous?.payload_sha256?{payload_sha256:previous.payload_sha256}:{})};}
 export interface AssistantRuntimeMaterialization {
  changed:boolean;
  runtime?:{session_id:string;runtime_session_id:string;origin:RuntimeRow['origin'];state:RuntimeRow['state'];event_count:number;committed_request_id:string|null;qualification_sha256:string|null};
@@ -173,14 +177,18 @@ export class AssistantRuntime {
    if(options.generation&&!row){await this.options.transaction(client=>this.requireGenerationReady(client,scope,session,options.requestKey));return {changed:false};}
    if(row?.qualification&&(row.qualification.binding_id!==plan.binding_id||row.qualification.scope?.owner_id!==scope.owner_id||row.qualification.scope?.contact_id!==scope.contact_id))return unavailable();
    const storage=row?await this.inspect(scope,row,combined,()=>{writerFailed=true;}):{usable:false,retire:false};
-   if(storage.usable&&row?.state==='ready'&&row.configuration_sha256===configuration&&isDeepStrictEqual(row.qualification,plan.qualification))return materialization(row);
+   if(storage.usable&&row?.state==='ready'&&row.configuration_sha256===configuration&&isDeepStrictEqual(inspectedQualification(row.qualification),plan.qualification))return materialization(row);
    // 只新增合法背景或新完成业务轮时保留真实SDK历史；材料变化或范围收窄必须换底层实例。
    const contains=(previous:Record<string,string>,current:Record<string,string>)=>Object.entries(previous).every(([key,value])=>current[key]===value);
    if(storage.usable&&row?.state==='ready'&&row.origin==='generated'&&row.qualification&&row.configuration_sha256===configuration
     &&row.qualification.version===plan.qualification.version&&row.qualification.contract===plan.qualification.contract&&isDeepStrictEqual(row.qualification.policy,plan.qualification.policy)&&contains(row.qualification.records,plan.qualification.records)&&contains(row.qualification.inventory,plan.qualification.inventory)){
-    await this.options.transaction(async client=>{await this.requireAllowed(client,scope,session);if(!isDeepStrictEqual((await readPlan(client)).qualification,plan.qualification))return unavailable();await client.query("UPDATE assistant_runtime_session SET qualification=$5 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$4 AND state='ready'",[scope.owner_id,scope.contact_id,session,row.runtime_session_id,JSON.stringify(plan.qualification)]);});
-    return materialization({...row,qualification:plan.qualification},!isDeepStrictEqual(row.qualification.inventory,plan.qualification.inventory));
+    const qualification=retainReferenceProof(plan.qualification,row.qualification);
+    await this.options.transaction(async client=>{await this.requireAllowed(client,scope,session);if(!isDeepStrictEqual((await readPlan(client)).qualification,plan.qualification))return unavailable();await client.query("UPDATE assistant_runtime_session SET qualification=$5 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$4 AND state='ready'",[scope.owner_id,scope.contact_id,session,row.runtime_session_id,JSON.stringify(qualification)]);});
+    return materialization({...row,qualification},!isDeepStrictEqual(row.qualification.inventory,plan.qualification.inventory));
    }
+   const built=await this.options.transaction(async client=>{await this.requireAllowed(client,scope,session);return readPlan(client,true);});
+   if(!isDeepStrictEqual(built.qualification,plan.qualification)||built.payload===undefined)return unavailable();
+   const qualification={...plan.qualification,payload_sha256:fingerprint(built.payload)};
    combined.throwIfAborted();
    const directory=(await this.directory(scope,session,true))!,runtimeId=randomUUID();
    const origin=row?'business_rebuild':'business_bootstrap';
@@ -198,28 +206,27 @@ export class AssistantRuntime {
    let count:number,eventSha:string;
    try{
     // 参考正文是业务投影伴随文件，不伪造SDK用户消息或执行轮；首次生成才携入一次。
-    await writeFile(join(root,'business-reference.json'),JSON.stringify(plan.payload),{mode:0o600,flag:'wx'});
+    await writeFile(join(root,'business-reference.json'),JSON.stringify(built.payload),{mode:0o600,flag:'wx'});
     await world.ctx.sessions.flush(sdkSession);await writer.flush();const events=(await writer.read()).events;count=events.length;eventSha=eventDigest(events);
    }finally{try{await writer.close();}catch(error){writerFailed=true;throw error;}}
    combined.throwIfAborted();
    await this.options.transaction(async client=>{
     await this.requireAllowed(client,scope,session);
     if(!isDeepStrictEqual((await readPlan(client)).qualification,plan.qualification))return unavailable();
-    const result=await client.query(`UPDATE assistant_runtime_session SET state='ready',qualification=$5,committed_event_count=$6,committed_event_sha256=$7 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$4 AND state='dirty'`,[scope.owner_id,scope.contact_id,session,runtimeId,JSON.stringify(plan.qualification),count,eventSha]);if(result.rowCount!==1)return unavailable();
+    const result=await client.query(`UPDATE assistant_runtime_session SET state='ready',qualification=$5,committed_event_count=$6,committed_event_sha256=$7 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$4 AND state='dirty'`,[scope.owner_id,scope.contact_id,session,runtimeId,JSON.stringify(qualification),count,eventSha]);if(result.rowCount!==1)return unavailable();
    });
-   return materialization({session_id:session,runtime_session_id:runtimeId,origin,state:'ready',committed_request_id:null,committed_event_count:count,committed_event_sha256:eventSha,configuration_sha256:configuration,qualification:plan.qualification},!!row||Object.keys(plan.qualification.records).length>0);
+   return materialization({session_id:session,runtime_session_id:runtimeId,origin,state:'ready',committed_request_id:null,committed_event_count:count,committed_event_sha256:eventSha,configuration_sha256:configuration,qualification},!!row||Object.keys(plan.qualification.records).length>0);
   }finally{try{await world?.close();}catch(error){writerFailed=true;throw error;}finally{if(!writerFailed)this.active.delete(key);this.operations.delete(operation);finish();}}
  }
  private async readReference(directory:string,row:RuntimeRow):Promise<unknown>{
   const path=join(directory,row.runtime_session_id,'business-reference.json'),status=await lstat(path);
   if(!status.isFile()||status.isSymbolicLink()||(status.mode&0o077)!==0||status.uid!==process.getuid?.()||await realpath(path)!==path)return unavailable();
-  let payload;try{payload=JSON.parse(await readFile(path,'utf8'));}catch(error){if(error instanceof SyntaxError)throw new RuntimeStorageDiverged();throw error;}
-  if(!row.qualification||fingerprint(payload)!==row.qualification.payload_sha256)throw new RuntimeStorageDiverged();return payload;
+  const payload=JSON.parse(await readFile(path,'utf8'));if(!row.qualification||fingerprint(payload)!==row.qualification.payload_sha256)return unavailable();return payload;
  }
  /** 当前出站或提交事务重新核验完整旧历史资格，成功结果不跨阶段缓存。 */
  async validate(client:Client,scope:VerifiedReplyScope,requestKey:string,configuration:string,readPlan:AssistantRuntimePlanReader):Promise<void>{
   const row=await this.lookup(client,scope,requestKey,configuration);if(!row||!row.qualification)return;
-  const plan=await readPlan(client);if(!isDeepStrictEqual(row.qualification,plan.qualification))throw new ReplyError('reply_context_invalidated',409);
+  const plan=await readPlan(client);if(!isDeepStrictEqual(inspectedQualification(row.qualification),plan.qualification))throw new ReplyError('reply_context_invalidated',409);
  }
  private async requireAllowed(client:Client,scope:Scope,session:string|null):Promise<void>{
   // 来源的owner memory/carry闭包可跨联系人；完成前先保守封禁本人生成，不删除无关档案。
@@ -300,7 +307,7 @@ export class AssistantRuntime {
      await this.options.transaction(async client=>{
      await this.requireAllowed(client,scope,row!.session_id);await this.requireCommittedInTransaction(client,scope,row!.session_id,requestId);
      const plan=await readPlan(client);
-     const changed=await client.query("UPDATE assistant_runtime_session SET state='ready',origin='generated',committed_request_id=$4,committed_event_count=$6,qualification=$7,committed_event_sha256=$8 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$5 AND state='dirty'",[scope.owner_id,scope.contact_id,row!.session_id,requestId,row!.runtime_session_id,eventCount,JSON.stringify(plan.qualification),eventSha]);if(changed.rowCount!==1)return unavailable();
+     const changed=await client.query("UPDATE assistant_runtime_session SET state='ready',origin='generated',committed_request_id=$4,committed_event_count=$6,qualification=$7,committed_event_sha256=$8 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$5 AND state='dirty'",[scope.owner_id,scope.contact_id,row!.session_id,requestId,row!.runtime_session_id,eventCount,JSON.stringify(retainReferenceProof(plan.qualification,row!.qualification)),eventSha]);if(changed.rowCount!==1)return unavailable();
     });},
     release:async()=>{if(released)return;released=true;try{await world!.close();}catch(error){writerFailed=true;throw error;}finally{if(!writerFailed)this.active.delete(key);}},
    };

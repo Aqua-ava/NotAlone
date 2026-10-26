@@ -58,10 +58,10 @@ export interface ReplyInternalContext {
 }
 function runtimePlanReader(options:ReplyServiceOptions,scope:VerifiedReplyScope,input:ReplyRequestInput,internal:ReplyInternalContext){
  const projection=new AssistantRuntimeProjection(options.skillsRoot),policy=assistantRuntimePolicy(input,internal.history_message_ids);
- return async(client:Client)=>{
+ return async(client:Client,build?:true)=>{
   const row=(await client.query('SELECT session_id FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3 AND conversation_binding_id=$4',[scope.owner_id,scope.contact_id,input.idempotency_key,scope.conversation_binding_id])).rows[0];
   if(!row)throw new ReplyError('reply_context_unavailable',409);
-  return projection.read(client,scope,row.session_id,scope.conversation_binding_id,input.idempotency_key,policy);
+  return projection.read(client,scope,row.session_id,scope.conversation_binding_id,input.idempotency_key,policy,build);
  };
 }
 type ReplyBudgetState=Pick<PreparedReply,'context'|'discussion'|'preferences'|'skillRevision'|'historyBudget'>;
