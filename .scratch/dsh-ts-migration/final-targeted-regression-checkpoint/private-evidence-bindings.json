@@ -1,0 +1,58 @@
+[
+  {
+    "private_relative_locator": "final-code-backend-r1-receipt.json",
+    "sha256": "ea08e37f253f15dab3b059f4f14c744c0678dfcaa6d2d5e2632e5d41574c8a83"
+  },
+  {
+    "private_relative_locator": "final-code-backend-r1-typecheck.log",
+    "sha256": "6dec7831db312a51a625554ff52161c1c806c35e5d8dac8f6eb1f4e5a0fde7a6"
+  },
+  {
+    "private_relative_locator": "final-code-backend-r1-full.log",
+    "sha256": "73e51288942375e47861e1a523d1b0ad914717699bc41ec1cc5d9e0e6279943b"
+  },
+  {
+    "private_relative_locator": "final-code-desktop-r1-receipt.json",
+    "sha256": "65fdc595bb3c302bf387082e6d02ebfcdc975fdaa7e6923d62c02ea53f4da8ac"
+  },
+  {
+    "private_relative_locator": "final-code-desktop-r1-typecheck.log",
+    "sha256": "e58d43d443e3cec180b1b91fab7d948aa855acb6129d8f10c95e23eeadfdac43"
+  },
+  {
+    "private_relative_locator": "final-code-desktop-r1-full.log",
+    "sha256": "6f37f961f5a9748d7354ee3d6d8adfca8707fa0624c2cb5020b9715bc9fdee2e"
+  },
+  {
+    "private_relative_locator": "final-focused-skill-r1-receipt.json",
+    "sha256": "74e9f888ffc006fb275dafdb0ec2d9c39351da8425b8243e8a70c9ed133d5c1d"
+  },
+  {
+    "private_relative_locator": "final-focused-skill-r1-single.log",
+    "sha256": "c361108b0361f01b3d401ecafb72786c51d39bd650e9469910751e4b90bfdd27"
+  },
+  {
+    "private_relative_locator": "final-focused-skill-r1-module.log",
+    "sha256": "25fc4d5d59782139cd419746296a7eef015aa1838d73388e2a3eb1d02b19daeb"
+  },
+  {
+    "private_relative_locator": "final-focused-collector-r1-receipt.json",
+    "sha256": "625e78f87a1798fd19fa1f9544a4e68c18fd9759d1fa853cf2eb27f6faf54206"
+  },
+  {
+    "private_relative_locator": "final-focused-collector-r1-single.log",
+    "sha256": "91cfe4811afcccb2e060f57e5f650403f18f0aa26a6a38a10c474a0910d4aaf6"
+  },
+  {
+    "private_relative_locator": "final-focused-collector-r1-module.log",
+    "sha256": "75135f7ed7c78a12bb2bb24305cc7ce2e654fa2f701f86d1c252a0b7e9f44145"
+  },
+  {
+    "private_relative_locator": "final-code-backend-r1-owned-db-cleanup.json",
+    "sha256": "51066874319b763837de716e43e3b5d9066f66b7ac03a25a5053691af2928534"
+  },
+  {
+    "private_relative_locator": "final-code-r1-artifact-cleanup.json",
+    "sha256": "faa9a1209b4b2561d3c6dbeb1999ad03040db9279db6da33692c5391b28d7bec"
+  }
+]

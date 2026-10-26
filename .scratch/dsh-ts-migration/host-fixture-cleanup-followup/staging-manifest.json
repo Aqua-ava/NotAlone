@@ -1,0 +1,61 @@
+{
+  "baseHead": "e7bc77db13711ed190217f23049d0332d1db0021",
+  "productionHostStorageSHA256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+  "sharedFixtureSHA256": "ba09c57384e8d6b5632831db15257960258928e37c1f93db24d05c7ba0d89b82",
+  "files": [
+    {
+      "path": "backend-ts/test/reply-fixture-cleanup.mjs",
+      "sha256": "74415e1b0fd3a62de3f641c80efb7389c657e32a3bfb1aa147557d47904db740",
+      "kind": "source"
+    },
+    {
+      "path": "backend-ts/test/sync-incremental-reconnect-fixture.mjs",
+      "sha256": "1ab88b1127b3efbc53b6b346a41ed8aecc1564ff8ea1213d2abcfa4cda8cb742",
+      "kind": "source"
+    },
+    {
+      "path": "backend-ts/test/reply-fixture-cleanup.test.mjs",
+      "sha256": "451ef978dabf9dd3d951aea0a64df11c5273f01815bcc8cadbe1324d02f35119",
+      "kind": "source"
+    },
+    {
+      "path": "backend-ts/test/reply-background-cleanup.test.mjs",
+      "sha256": "7260a169b8ae0ab8ee6626f0a6104042c60386ac8eee0963eee01e99e8c127e2",
+      "kind": "source"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/verification.json",
+      "sha256": "a3241e2e43da09430b2055f35b6b06bb1b4778435a82bdd4d7af5906c7dd4b63",
+      "kind": "evidence"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/report.md",
+      "sha256": "c7d488153aa0b88231531cae5fa4007ddd4f8b93a93d85717e6f08a9223f00e4",
+      "kind": "evidence"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/handoff.md",
+      "sha256": "9b292c1a4d50267617ed5c25f22c30e846902a6b374b7699e1aadaf608df3474",
+      "kind": "evidence"
+    },
+    {
+      "path": ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/source.patch",
+      "sha256": "aa198452ca9cfa3a2ddfd2c612b94ab43047d71305a8a151f798c1d3ae32d0b2",
+      "kind": "evidence"
+    }
+  ],
+  "stagingPaths": [
+    "backend-ts/test/reply-fixture-cleanup.mjs",
+    "backend-ts/test/sync-incremental-reconnect-fixture.mjs",
+    "backend-ts/test/reply-fixture-cleanup.test.mjs",
+    "backend-ts/test/reply-background-cleanup.test.mjs",
+    ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/verification.json",
+    ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/report.md",
+    ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/handoff.md",
+    ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/source.patch",
+    ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/staging-manifest.json",
+    ".scratch/dsh-ts-migration/host-fixture-cleanup-followup/SHA256SUMS"
+  ],
+  "indexModifiedByThisTask": false,
+  "commitCreatedByThisTask": false
+}

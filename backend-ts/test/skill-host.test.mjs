@@ -65,8 +65,8 @@ test('真实删除事务在close后晚返回必须回滚，原版本/文件仍�
  // 在真实owner锁取得后暂停同一client，模拟删除过程中关闭；不改资格或伪造提交。
  x.storage.businessTransaction=operation=>transaction(async client=>{
   const query=client.query.bind(client);let once=false;
-  client.query=async(...args)=>{const result=await query(...args);if(!once&&String(args[0]).includes('pg_advisory_xact_lock')){once=true;arrived();await gate;}return result;};
-  try{return await operation(client);}finally{client.query=query;}
+  const observe=async(...args)=>{const result=await query(...args);if(!once&&String(args[0]).includes('pg_advisory_xact_lock')){once=true;arrived();await gate;}return result;};
+  return operation(new Proxy(client,{get(target,property,receiver){return property==='query'?observe:Reflect.get(target,property,receiver);}}));
  });
  const lease=x.host.enter();const deleting=x.host.library.delete(x.owner,imported.skill_id,lease.assertCurrent).finally(lease.finish);
  await entered;const closed=x.host.close();release();await assert.rejects(deleting,{code:'skill_unavailable'});await closed;

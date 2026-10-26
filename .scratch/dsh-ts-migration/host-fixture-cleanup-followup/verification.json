@@ -1,0 +1,462 @@
+{
+  "baseHead": "e7bc77db13711ed190217f23049d0332d1db0021",
+  "scope": "仅原5项宿主夹具清理失败及其配套清理单测",
+  "productionHostStorageSHA256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+  "sharedHostStorageFixtureSHA256": "ba09c57384e8d6b5632831db15257960258928e37c1f93db24d05c7ba0d89b82",
+  "sourceSHA256": {
+    "backend-ts/test/reply-fixture-cleanup.mjs": "74415e1b0fd3a62de3f641c80efb7389c657e32a3bfb1aa147557d47904db740",
+    "backend-ts/test/sync-incremental-reconnect-fixture.mjs": "1ab88b1127b3efbc53b6b346a41ed8aecc1564ff8ea1213d2abcfa4cda8cb742",
+    "backend-ts/test/reply-fixture-cleanup.test.mjs": "451ef978dabf9dd3d951aea0a64df11c5273f01815bcc8cadbe1324d02f35119",
+    "backend-ts/test/reply-background-cleanup.test.mjs": "7260a169b8ae0ab8ee6626f0a6104042c60386ac8eee0963eee01e99e8c127e2"
+  },
+  "keyEnvironmentFieldsAbsent": [
+    "NOTALONE_DEEPSEEK_API_KEY",
+    "DEEPSEEK_API_KEY"
+  ],
+  "environment": "自有0700短TMP/HOME，允许工具白名单；仅合成库、localhost假模型，不读取原配置",
+  "validOriginalRed": {
+    "tests": 5,
+    "pass": 0,
+    "fail": 5
+  },
+  "validOriginalGreen": {
+    "tests": 5,
+    "pass": 5,
+    "fail": 0
+  },
+  "newFailurePropagationSingles": {
+    "tests": 2,
+    "pass": 2,
+    "fail": 0
+  },
+  "finalRelated": {
+    "tests": 31,
+    "pass": 31,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "seconds": 43.695,
+    "sourcePinsStable": true
+  },
+  "historicalRelatedFailure": {
+    "tests": 23,
+    "pass": 17,
+    "fail": 6,
+    "reason": "旧mock写死先end后dispose；明确扩范围后更新为活client契约，最终已全部转绿，原日志保留"
+  },
+  "excludedDiagnosticRuns": [
+    {
+      "label": "red-b502",
+      "reason": "初始白名单遗漏PG所需USER，属于环境准备误差；自有库和目录已回收，不计有效RED"
+    },
+    {
+      "label": "red-reconnect",
+      "reason": "名称pattern无匹配，仅文件级空运行；不计通过或失败分母"
+    }
+  ],
+  "runs": [
+    {
+      "label": "red-b502-clean",
+      "phase": "RED",
+      "exit": 1,
+      "seconds": 2.509,
+      "counts": {
+        "tests": 1,
+        "pass": 0,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=B5-02",
+        "test/reply-arbitration-handover.test.mjs"
+      ],
+      "logSHA256": "64105994eb89c4184c5475792963d84163ccbf55269a32f607d110afe5b08c78",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "red-b503",
+      "phase": "RED",
+      "exit": 1,
+      "seconds": 8.74,
+      "counts": {
+        "tests": 1,
+        "pass": 0,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=B5-03",
+        "test/reply-arbitration-handover.test.mjs"
+      ],
+      "logSHA256": "98a8928a5c193e216c08830ed19d48aced9c48e13b3267f72ad697fca87f8af0",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "red-b501",
+      "phase": "RED",
+      "exit": 1,
+      "seconds": 4.041,
+      "counts": {
+        "tests": 1,
+        "pass": 0,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=B5-01",
+        "test/reply-background-public.test.mjs"
+      ],
+      "logSHA256": "5b0cd18b35c6943dba8ee8fdca95cbd9391b98f7b776888ef57536ee3725f7dc",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "red-reconnect-stream",
+      "phase": "RED",
+      "exit": 1,
+      "seconds": 22.992,
+      "counts": {
+        "tests": 1,
+        "pass": 0,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=全局流code7",
+        "test/sync-incremental-reconnect.test.mjs"
+      ],
+      "logSHA256": "9a765e250cc9133583e136c4927413e6958865b388de1f4c29600ceab7daa1c7",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "red-reconnect-drain",
+      "phase": "RED",
+      "exit": 1,
+      "seconds": 3.019,
+      "counts": {
+        "tests": 1,
+        "pass": 0,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=排空断言失败仍回收",
+        "test/sync-incremental-reconnect.test.mjs"
+      ],
+      "logSHA256": "bf32c8c233e94cd68447eef77a9f0b0c837ba938c66aa49e5f2423142f9fca1a",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "green-b502",
+      "phase": "GREEN",
+      "exit": 0,
+      "seconds": 2.716,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=B5-02",
+        "test/reply-arbitration-handover.test.mjs"
+      ],
+      "logSHA256": "a0569b8a83f6a020437666289c9cca76afd4d2abf7e8eb5274be2ec663fe3e55",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "green-b503",
+      "phase": "GREEN",
+      "exit": 0,
+      "seconds": 8.691,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=B5-03",
+        "test/reply-arbitration-handover.test.mjs"
+      ],
+      "logSHA256": "280d9b869c14615d541601549deaf07df4be0f570d600e4ba62972fedf666c73",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "green-b501",
+      "phase": "GREEN",
+      "exit": 0,
+      "seconds": 4.516,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=B5-01",
+        "test/reply-background-public.test.mjs"
+      ],
+      "logSHA256": "81280d76907416ddba3cb3071264b9b18dbce8ba84b7911c4402b84d152649d0",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "green-reconnect-stream",
+      "phase": "GREEN",
+      "exit": 0,
+      "seconds": 24.17,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=全局流code7",
+        "test/sync-incremental-reconnect.test.mjs"
+      ],
+      "logSHA256": "6092207b7059ba6cfb45a6d643da39adc5492dfe95bc08092704df63441d5a68",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "green-reconnect-drain",
+      "phase": "GREEN",
+      "exit": 0,
+      "seconds": 3.956,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=排空断言失败仍回收",
+        "test/sync-incremental-reconnect.test.mjs"
+      ],
+      "logSHA256": "9db7d5c467ed5f8ae728131627a1b9c04f94ca29d8ae816acaaebde7d98c0f1c",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "green-dispose-failure",
+      "phase": "related_history",
+      "exit": 0,
+      "seconds": 0.234,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=fixture关闭失败仍兜底",
+        "test/reply-fixture-cleanup.test.mjs"
+      ],
+      "logSHA256": "6edd8b5e84713e0f904b4b87f23156742d3230d7b4630ef2119eef2f5126b4de",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "green-client-late-failure",
+      "phase": "related_history",
+      "exit": 0,
+      "seconds": 0.077,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=fixture已回收后client",
+        "test/reply-fixture-cleanup.test.mjs"
+      ],
+      "logSHA256": "b7670146697f4e0a0707125d280e72e11515924da6b8c27f12d818010e0ac5fd",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "module-cleanup-current",
+      "phase": "related_history",
+      "exit": 1,
+      "seconds": 0.187,
+      "counts": {
+        "tests": 23,
+        "pass": 17,
+        "fail": 6,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=.",
+        "test/reply-fixture-cleanup.test.mjs",
+        "test/reply-background-cleanup.test.mjs"
+      ],
+      "logSHA256": "77ca2cb28a4322d6366f8c865dd14d7b7c5c1fb4d4c2fa132c64145756f6ba82",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "module-direct-green",
+      "phase": "related_history",
+      "exit": 0,
+      "seconds": 44.32,
+      "counts": {
+        "tests": 6,
+        "pass": 6,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=.",
+        "test/reply-arbitration-handover.test.mjs",
+        "test/reply-background-public.test.mjs",
+        "test/sync-incremental-reconnect.test.mjs"
+      ],
+      "logSHA256": "de9f48dd59a32b96665fdb97c436a16bc0893f491451f1c406eb389c40685bff",
+      "sourcePinsStable": null
+    },
+    {
+      "label": "module-related-green",
+      "phase": "related_history",
+      "exit": 0,
+      "seconds": 43.695,
+      "counts": {
+        "tests": 31,
+        "pass": 31,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "command": [
+        "$NODE",
+        "--import",
+        "$PRIVATE_TRACE",
+        "--test",
+        "--test-concurrency=1",
+        "--test-name-pattern=.",
+        "test/reply-fixture-cleanup.test.mjs",
+        "test/reply-background-cleanup.test.mjs",
+        "test/reply-arbitration-handover.test.mjs",
+        "test/reply-background-public.test.mjs",
+        "test/sync-incremental-reconnect.test.mjs"
+      ],
+      "logSHA256": "c80057e6b39dafa5434bd4e38fe05d252c87cd38ea1e306fabee27757a68b8f7",
+      "sourcePinsStable": true
+    }
+  ],
+  "cleanup": {
+    "ownedSharedPostgresDatabaseNamesRecorded": 21,
+    "recordedOwnedPids": 95,
+    "ownedRemainingDatabases": 0,
+    "ownedRemainingClients": 0,
+    "ownedRemainingRecordedProcesses": 0,
+    "ownedShortTempRootsRemoved": true,
+    "ownedShortTempRootCount": 2,
+    "isolatedVacuumRunsConfirmedCleaned": 2,
+    "unknownResourcesTouched": 0,
+    "preexistingUnknownResources": "未枚举、未删除，保留现场"
+  },
+  "remainingFailures": [],
+  "unknown": [
+    "未运行backend full，不能由31例推断全量通过",
+    "root独占collector环境与skill-host测试收尾，不属于本任务",
+    "未运行真实App、Electron、微信、真实模型；不签收任务25/26"
+  ],
+  "dataImpact": "仅本轮合成数据库/临时目录；本任务未修改生产代码、原用户数据、配置、预算或密钥",
+  "git": "本任务未修改index、创建提交或执行远端操作"
+}

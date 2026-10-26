@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "production_checkpoint": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "production_source_unchanged": true,
+  "backend_typecheck": {
+    "exit_code": 0
+  },
+  "desktop_typecheck": {
+    "exit_code": 0
+  },
+  "desktop_full": {
+    "tests": 1027,
+    "pass": 1026,
+    "fail": 0,
+    "skip": 1,
+    "skip_status": "preexisting_unchanged"
+  },
+  "backend_full_original": {
+    "tests": 1506,
+    "pass": 1494,
+    "fail": 12,
+    "skip": 0,
+    "status": "failed_original_preserved",
+    "seconds": 295.845
+  },
+  "targeted_closure": {
+    "collector": {
+      "original_failures": 6,
+      "reason": "test runner supplied empty credential field where collector requires absence",
+      "production_or_collector_code_changed": false,
+      "single_pass": 1,
+      "module_pass": 6,
+      "fail": 0,
+      "skip": 0
+    },
+    "skill": {
+      "original_failures": 1,
+      "reason": "test observer reassigned a controlled client query method; replaced with a nonmutating observation proxy",
+      "production_changed": false,
+      "single_pass": 1,
+      "module_pass": 7,
+      "fail": 0,
+      "skip": 0,
+      "original_assertions_preserved": true
+    },
+    "host_fixture_cleanup": {
+      "original_failures": 5,
+      "source": "../host-fixture-cleanup-followup/verification.json",
+      "single_pass": 5,
+      "related_pass": 31,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "all_original_twelve_failures_resolved_by_targeted_runs": true,
+  "full_suite_repeated_after_test_only_fixes": false,
+  "basis": "Reuse unchanged production source, two existing typechecks, desktop full, and unaffected backend cases per user speed instruction; only original failures and directly affected modules were rerun.",
+  "raw_original_status_rewritten": false,
+  "cleanup": {
+    "remaining_owned_failed_full_databases": 0,
+    "prior_unattributed_databases_preserved": 4,
+    "failed_full_raw_artifacts_preserved_privately": true,
+    "desktop_temp_removed": true,
+    "focused_tmp_roots_removed": true
+  },
+  "actual_app_or_wechat_opened_by_these_tests": false,
+  "external_messages_sent": 0,
+  "ticket25_approved": false,
+  "ticket26_started": false,
+  "physical_real_model_requests": 0,
+  "loopback_mock_model_calls_recorded_separately": true
+}

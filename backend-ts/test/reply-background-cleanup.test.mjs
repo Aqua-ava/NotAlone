@@ -11,7 +11,7 @@ function fixture({providerError,clientError,shutdownError,spawned=true,legacyKno
  const calls=[];let after,proof;const providerOriginal=providerError;
  const child=spawned?{pid:100,exitCode:childState==='normal'?0:null,signalCode:childState==='forced'?'SIGKILL':null,kill:signal=>calls.push('signal:'+signal)}:undefined;
  let hostExit;const exited=hung?new Promise(()=>{}):Promise.resolve([childState==='forced'?null:0,childState==='forced'?'SIGKILL':null]);
- const f={directory:'synthetic-fixture',client:{database:'synthetic_test',query:async()=>{if(queryError)throw queryError;return{rows:[{n:0}]};},end:async()=>{calls.push('client');if(clientError)throw clientError;}},close:async()=>calls.push('dispose')};
+ const f={directory:'synthetic-fixture',client:{database:'synthetic_test',query:async()=>{if(queryError)throw queryError;return{rows:[{n:0}]};},end:async()=>{calls.push('client');if(clientError)throw clientError;}},close:async()=>{assert.ok(!calls.includes('client'),'fixture.close核验时自己的client必须仍可查询');calls.push('dispose');}};
  const sandbox={t:{after:fn=>after=fn},cleanupB5BackgroundFixture,cleanupStageTimeoutMs:15,control:control?{listening:false,closeAllConnections:()=>calls.push('control')}:undefined,child,exited,legacyPid:legacyKnown&&spawned?200:undefined,releaseLate:()=>calls.push('release'),provider:{listening:false,closeAllConnections(){calls.push('provider');if(providerOriginal)throw providerOriginal;}},f,request:async()=>{calls.push('shutdown');if(shutdownError)throw shutdownError;return{data:{state:'stopped'}};},writeArtifact:async(name,value)=>{if(name==='cleanup.json')proof=value;calls.push(name==='cleanup.json'?'proof':'evidence');if(name==='execution-private.json'&&evidenceError)throw evidenceError;},process:{kill(){const e=Error('gone');e.code='ESRCH';throw e;}},seen:[],requests:[],checkpoints:[],output:'',setTimeout:()=>({}),clearTimeout:()=>{}};
  vm.runInNewContext(hook,sandbox);return{calls,after:()=>after(),proof:()=>proof,child};
 }
@@ -38,7 +38,7 @@ test('B5-01 Legacy身份未确认时保留现场',async()=>{
  const f=fixture({legacyKnown:false});await assert.rejects(f.after());assert.ok(!f.calls.includes('dispose'));assert.equal(f.proof().fixtureRetained,true);
 });
 for(const interactive of [false,true])test(`B5-01${interactive?'交互':'非交互'}：正常host与Legacy退出确认后才删除自有现场`,async()=>{
- const f=fixture({control:interactive});await f.after();assert.ok(f.calls.indexOf('client')<f.calls.indexOf('dispose'));assert.ok(f.calls.includes('provider'));if(interactive)assert.ok(f.calls.includes('control'));
+ const f=fixture({control:interactive});await f.after();assert.ok(f.calls.indexOf('dispose')<f.calls.indexOf('client'));assert.ok(f.calls.includes('provider'));if(interactive)assert.ok(f.calls.includes('control'));
  assert.equal(f.proof().state,'cleaned');assert.equal(f.proof().fixtureRetained,false);
 });
 test('B5-01 host从未spawn可释放自有fixture',async()=>{

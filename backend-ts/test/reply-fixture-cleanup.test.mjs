@@ -51,9 +51,9 @@ for(const [index,hook] of hooks.entries())for(const spawned of [false,true])test
  vm.runInNewContext(hook,{t:{after:fn=>after=fn},host,hosts:host?[host]:[],workers:[],releaseB1:undefined,bridge:undefined,legacyPids:new Set(),legacyUnconfirmed:false,
   cleanupReplyFixture,stop:stopOwnedChild,
   provider:{listening:false,closeAllConnections:()=>calls.push('provider')},
-  f:{directory:'synthetic-directory',client:{database:'synthetic_test',end:async()=>calls.push('client')},close:async()=>{assert.ok(calls.includes('client'));calls.push('dispose');}},
+  f:{directory:'synthetic-directory',client:{database:'synthetic_test',end:async()=>calls.push('client')},close:async()=>{assert.ok(!calls.includes('client'),'fixture.close核验时自己的client必须仍可查询');calls.push('dispose');}},
   save:async(_name,value)=>{proof=value;calls.push('proof');},gone:()=>true,absent:async()=>true,assert});
- await after();assert.deepEqual(calls,['provider','client','dispose','proof']);
+ await after();assert.deepEqual(calls,['provider','dispose','client','proof']);
  assert.equal(proof.state,'cleaned');assert.equal(proof.fixtureRetained,false);
 });
 test('强退即使取得退出回执也必须保留失败',async()=>{
@@ -70,4 +70,29 @@ test('provider与client各自失败仍写unconfirmed，保留原始stop异常',a
    assert.deepEqual(error.errors,[original,provider,client]);assert.equal(error.cause,original);return true;
   });
  assert.deepEqual(f.calls,['provider','client','proof']);assert.equal(f.proof().fixtureRetained,true);
+});
+
+
+test('fixture关闭失败仍兜底释放client并保留原异常',async()=>{
+ const f=operations(),original=Error('synthetic-fixture-close');
+ await assert.rejects(cleanupReplyFixture({...f.options,
+  disposeFixture:async()=>{f.calls.push('dispose');throw original;},
+  confirmOwnedProcesses:()=>[{state:'gone'}]}),error=>{
+   assert.equal(error.cause,original);assert.deepEqual(error.errors,[original]);return true;
+  });
+ assert.deepEqual(f.calls,['provider','dispose','client','proof']);
+ assert.equal(f.proof().state,'unconfirmed');assert.equal(f.proof().clientClosed,true);
+ assert.equal(f.proof().fixtureDisposed,false);
+});
+
+test('fixture已回收后client兜底失败不能记为cleaned',async()=>{
+ const f=operations(),original=Error('synthetic-client-after-disposal');
+ await assert.rejects(cleanupReplyFixture({...f.options,
+  closeClient:async()=>{f.calls.push('client');throw original;},
+  confirmOwnedProcesses:()=>[{state:'gone'}]}),error=>{
+   assert.equal(error.cause,original);assert.deepEqual(error.errors,[original]);return true;
+  });
+ assert.deepEqual(f.calls,['provider','dispose','client','proof']);
+ assert.equal(f.proof().state,'unconfirmed');assert.equal(f.proof().clientClosed,false);
+ assert.equal(f.proof().fixtureDisposed,true);assert.equal(f.proof().fixtureRetained,false);
 });

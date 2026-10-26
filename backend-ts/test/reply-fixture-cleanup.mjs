@@ -49,30 +49,31 @@ export async function cleanupReplyFixture(options) {
         }
     };
     const stop = options.stopChild ?? stopOwnedChild;
-    let provider, client;
-    try {
-        await attempt('释放供应商屏障', () => options.releasePending?.());
-        for (const worker of options.workers ?? []) await attempt('停止自有worker', () => stop(worker));
-        for (const host of options.hosts ?? []) await attempt('停止自有host', () => stop(host));
-    } finally {
-        try {
-            provider = await attempt('关闭自有provider', options.closeProvider);
-        } finally {
-            client = await attempt('关闭自己的PG client', options.closeClient);
-        }
-    }
-    const confirmation = await attempt('确认自有进程退出', options.confirmOwnedProcesses);
-    const processes = confirmation.value ?? [{state: 'unconfirmed'}];
-    const confirmed = confirmation.ok && processes.every(process => process.state === 'gone');
-    if (!confirmed) failures.push({stage: '确认自有进程退出', error: new Error('自有进程退出未确认，保留现场')});
+    let provider, client, processes, confirmed;
     let disposalAttempted = false, disposed = false;
-    // stop失败也保留现场；不能因为稍后pid消失就吞掉原始失败并DROP库。
-    if (failures.length === 0 && confirmed && provider.ok && client.ok) {
-        disposalAttempted = true;
-        disposed = (await attempt('删除自有库与临时目录', options.disposeFixture)).ok;
+    try {
+        try {
+            await attempt('释放供应商屏障', () => options.releasePending?.());
+            for (const worker of options.workers ?? []) await attempt('停止自有worker', () => stop(worker));
+            for (const host of options.hosts ?? []) await attempt('停止自有host', () => stop(host));
+        } finally {
+            provider = await attempt('关闭自有provider', options.closeProvider);
+        }
+        const confirmation = await attempt('确认自有进程退出', options.confirmOwnedProcesses);
+        processes = confirmation.value ?? [{state: 'unconfirmed'}];
+        confirmed = confirmation.ok && processes.every(process => process.state === 'gone');
+        if (!confirmed) failures.push({stage: '确认自有进程退出', error: new Error('自有进程退出未确认，保留现场')});
+        // fixture.close需要自己的活连接核验库名，内部关闭连接后才DROP；失败仍保留原异常。
+        if (failures.length === 0 && confirmed && provider.ok) {
+            disposalAttempted = true;
+            disposed = (await attempt('删除自有库与临时目录', options.disposeFixture)).ok;
+        }
+    } finally {
+        // 停止、核验或删除失败也必须释放自己的连接；成功时重复end是幂等兜底。
+        client = await attempt('关闭自己的PG client', options.closeClient);
     }
     const proof = {
-        state: disposed ? 'cleaned' : 'unconfirmed', processes,
+        state: disposed && failures.length === 0 ? 'cleaned' : 'unconfirmed', processes,
         providerClosed: provider.ok, clientClosed: client.ok,
         fixtureRetained: !disposalAttempted, fixtureDisposed: disposed,
         failureStages: failures.map(failure => failure.stage),
