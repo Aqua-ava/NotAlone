@@ -7,6 +7,7 @@ import {ReplyStoreError} from '../generation/reply-store.ts';
 import {canonical,fingerprint,legacyJson,inputRows,generationDependencies,carryEdges,capturedEdges,snapshot} from '../generation/reply-assistant-erasure.ts';
 import {anchor as anchorSQL} from '../generation/reply-assistant-erasure-sql.ts';
 import {withReplyValidationScope} from '../generation/reply-source-guards.ts';
+import {discussionInspectionRows,discussionVersionDigests} from './reply-discussion-digests.ts';
 type Row=Record<string,any>;
 type Change=Record<string,unknown>;
 export type ReplyPreparationIdentity=Pick<ReplyStoreRequest,'owner_id'|'contact_id'|'conversation_binding_id'|'idempotency_key'>;
@@ -74,7 +75,7 @@ export class PostgresReplyDiscussionContext {
    if(!same(current!.items.map(identity),discussion.items.map(identity)))reject();
  }
  private async generation(client:pg.Client,scope:AssistantScope,row:Row):Promise<string[]> {
-   if(row.state!=='active'||!['running','failed','completed'].includes(row.turn_state)||row.input_payload===null)reject();
+   if(row.state!=='active'||!['running','failed','completed'].includes(row.turn_state)||(row.input_payload_present===undefined?row.input_payload===null:!row.input_payload_present))reject();
    await this.ports.requireDependencies(client,scope,row.turn_dependencies??[],true);
    if(row.reply_request_id){await this.ports.requireSavedSkillPolicy(client,scope,row.reply_request_id);await this.ports.requireReplySourcesCurrent(client,scope,row.reply_request_id,true);}
    else if(row.turn_state==='completed')reject();
@@ -106,17 +107,41 @@ export class PostgresReplyDiscussionContext {
  }
  /** 会话级有效业务投影不依赖新生成锚点；恢复引用绝不伪造请求或候选。 */
  async readSession(client:pg.Client,scope:AssistantScope,sessionId:string,binding:string,excludeRequestKey?:string):Promise<{items:DiscussionItem[];records:Row[];basis:Set<string>}> {
+  return this.session(client,scope,sessionId,binding,excludeRequestKey,(rows,excluded)=>this.assemble(client,scope,rows,excluded,false));
+ }
+ /** 同一资格守卫只产出有效记录摘要；明确携入的版本仍按原来源复验。 */
+ async inspectSession(client:pg.Client,scope:AssistantScope,sessionId:string,binding:string,excludeRequestKey?:string):Promise<Record<string,string>> {
+  return this.session(client,scope,sessionId,binding,excludeRequestKey,async(rows,excluded)=>{
+   const records:Record<string,string>={};
+   for(const row of rows){
+    if(row.id===excluded)continue;
+    try{
+     if(row.input_type!=='generation'){
+      if(row.state!=='active'||!row.content_present)continue;
+      if(row.input_type==='candidate_carry')await this.carry(client,scope,row);
+      else await this.guards.verifiedDiscussionDependencies(client,scope,row.dependency_ids,false);
+      records['discussion_input:'+row.id]=row.record_digest;continue;
+     }
+     const deps=await this.generation(client,scope,row);
+     records['generation_input:'+row.id]=fingerprint([row.record_digest,deps]);
+     if(row.turn_state==='completed'&&row.request_state==='completed')for(const version of await discussionVersionDigests(client,scope,row))records[`candidate_version:${row.id}:${version.id}`]=version.digest;
+    }catch(error){if(eligibilityError(error))continue;throw error;}
+   }
+   return records;
+  },true);
+ }
+ private async session<T>(client:pg.Client,scope:AssistantScope,sessionId:string,binding:string,excludeRequestKey:string|undefined,inspect:(rows:Row[],excluded:string|null)=>Promise<T>,metadataOnly=false):Promise<T>{
   return withReplyValidationScope(client,scope,async()=>{
    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${scope.owner_id}`]);
    if(!(await client.query('SELECT 1 FROM assistant_session WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[scope.owner_id,scope.contact_id,sessionId])).rowCount)reject();
    if(await this.ports.requireActiveBinding(client,scope)!==binding)reject();
-   const rows=await inputRows(client,scope.owner_id,scope.contact_id,sessionId);
+   const rows=metadataOnly?await discussionInspectionRows(client,scope,sessionId):await inputRows(client,scope.owner_id,scope.contact_id,sessionId);
    // 身份变化与材料失效不同：旧绑定不能按空历史吞掉。
    if(rows.some(row=>row.conversation_binding_id!==binding))reject();
    const dependencies=unique(rows.filter(row=>row.state==='active').flatMap(row=>[...row.dependency_ids??[],...row.turn_dependencies??[]]));
    if(dependencies.length){const known=(await client.query(`SELECT id FROM source_document WHERE owner_id=$1 AND id=ANY($3::uuid[]) UNION SELECT id FROM local_wechat_observation WHERE owner_id=$1 AND id=ANY($3::uuid[]) UNION SELECT id FROM message WHERE owner_id=$1 AND contact_id=$2 AND id=ANY($3::uuid[]) UNION SELECT id FROM message_source_ref WHERE owner_id=$1 AND contact_id=$2 AND id=ANY($3::uuid[]) UNION SELECT id FROM confirmed_memory WHERE owner_id=$1 AND contact_id=$2 AND id=ANY($3::uuid[]) UNION SELECT id FROM memory_candidate WHERE owner_id=$1 AND contact_id=$2 AND id=ANY($3::uuid[]) UNION SELECT id FROM owner_memory WHERE owner_id=$1 AND id=ANY($3::uuid[]) UNION SELECT id FROM expression_preference WHERE owner_id=$1 AND (contact_id IS NULL OR contact_id=$2) AND id=ANY($3::uuid[]) UNION SELECT id FROM scenario_document_version WHERE owner_id=$1 AND (contact_id IS NULL OR contact_id=$2) AND id=ANY($3::uuid[]) UNION SELECT id FROM layered_profile_version WHERE owner_id=$1 AND (contact_id IS NULL OR contact_id=$2) AND id=ANY($3::uuid[]) UNION SELECT batch_id AS id FROM source_processing_batch WHERE owner_id=$1 AND batch_id=ANY($3::uuid[])`,[scope.owner_id,scope.contact_id,dependencies])).rows;if(known.length!==dependencies.length)reject();}
    const excluded=excludeRequestKey?(await client.query('SELECT input_version_id FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND idempotency_key=$4',[scope.owner_id,scope.contact_id,sessionId,excludeRequestKey])).rows[0]?.input_version_id:null;
-   return this.assemble(client,scope,rows,excluded??null,false);
+   return inspect(rows,excluded??null);
   });
  }
  private async assemble(client:pg.Client,scope:AssistantScope,rows:Row[],excludedInput:string|null,metadataOnly:boolean,selected?:Row){

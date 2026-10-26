@@ -17,11 +17,26 @@ import {createHostModelAccounting} from '../src/host/host-model-accounting.ts';
 import {startModelPermitServer} from '../src/platform/models/model-permit-server.ts';
 import {SourceProcessingTraceStore} from '../src/diagnostics/source-processing-trace.ts';
 import {skillLearningRoute} from '../src/skills/skill-learning-http.ts';
+import pg from 'pg';
+import {appendFileSync} from 'node:fs';
 export const name='notalone-host-reply-test';
 export const inject=['llm','agents','tools','sessions','systemPrompt','skills','appReady'];
 export async function apply(ctx:Context){
   const database=process.env.NOTALONE_SYNTHETIC_DATABASE!,owner=process.env.NOTALONE_SYNTHETIC_REPLY_OWNER!;
   if(!/^notalone_ts_host_[a-f0-9]+_test$/.test(database)||!owner)throw Error('仅允许随机合成库及指定合成本人');
+  // 观测真实PG返回的数据量；不替换查询、结果或生产守卫，不记录合成正文。
+  const sqlLog=process.env.NOTALONE_SYNTHETIC_SQL_RESULT_LOG,marker=process.env.NOTALONE_SYNTHETIC_SQL_MARKER;
+  if(sqlLog&&marker){
+    const query=pg.Client.prototype.query;
+    pg.Client.prototype.query=function(...args:any[]){
+      const result=(query as any).apply(this,args);
+      if(!result?.then)return result;
+      return result.then((value:any)=>{
+        const rows=value.rows??[],raw=JSON.stringify(rows),bytes=rows.reduce((n:number,row:any)=>n+Object.values(row).filter(v=>JSON.stringify(v)?.includes(marker)).reduce((m:number,v)=>m+Buffer.byteLength(JSON.stringify(v)),0),0);
+        appendFileSync(sqlLog,JSON.stringify({sql:typeof args[0]==='string'?args[0]:args[0]?.text,rows:rows.length,result_bytes:Buffer.byteLength(raw),marker_bytes:bytes})+'\n',{mode:0o600});return value;
+      }).catch((error:any)=>{process.stderr.write('SQL_RESULT_ERROR '+error.message+'\n');throw error;});
+    } as typeof query;
+  }
   const home=process.env.NOTALONE_SYNTHETIC_BUSINESS_HOME??process.env.HOME!,envFilePath=join(home,'synthetic.env'),skillsRoot=join(home,'skills');
   await mkdir(skillsRoot,{mode:0o700,recursive:true});
   await writeFile(envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${database}\nNOTALONE_OWNER_ID=${owner}\n`,{mode:0o600});

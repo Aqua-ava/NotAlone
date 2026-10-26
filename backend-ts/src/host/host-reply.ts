@@ -204,7 +204,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   const assistantRuntime=options.assistantRuntime??(options.persistentAssistantHome?new AssistantRuntime({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),home:options.persistentAssistantHome}):undefined);
   const runtimeProjection=new AssistantRuntimeProjection(discussionSkillsRoot);
   const discussionService=new AssistantDiscussionService({
-      materializeRuntime:assistantRuntime?.persistent&&options.configuration?(scope,session,binding,signal)=>execute(signal,combined=>assistantRuntime.materialize(scope,session,assistantRuntimeConfiguration({version:1,model:options.configuration!.model,binding}),client=>runtimeProjection.read(client,scope,session,binding),combined)):undefined,
+      materializeRuntime:assistantRuntime?.persistent&&options.configuration?(scope,session,binding,signal)=>execute(signal,combined=>assistantRuntime.materialize(scope,session,assistantRuntimeConfiguration({version:1,model:options.configuration!.model,binding}),(client,build)=>runtimeProjection.read(client,scope,session,binding,undefined,undefined,build),combined)):undefined,
       eraseRuntime:assistantRuntime?(client,scope,session)=>assistantRuntime.erase(client,scope,session):undefined,
       transaction:discussionTransaction,assistantClock:options.assistantClock,
       skillsRoot:discussionSkillsRoot,
