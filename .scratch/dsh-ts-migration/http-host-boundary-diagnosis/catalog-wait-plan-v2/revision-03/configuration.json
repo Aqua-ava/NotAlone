@@ -1,0 +1,19 @@
+{
+  "status": "authorized_single_run_after_self_checks",
+  "production_base_commit": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "transaction_method": "businessTransaction",
+  "expected_isolation": "read committed",
+  "expected_read_only": "off",
+  "transaction_differs_from_observed_get_source": false,
+  "units": 40,
+  "warmups": 10,
+  "scored": 30,
+  "work_seconds": 150,
+  "cleanup_seconds": 30,
+  "max_wall_seconds": 180,
+  "target_catalog_executions": 80,
+  "setup_control_queries_separate": true,
+  "ready_dataRow_observation": false,
+  "global_pg_patch": false,
+  "additional_sql_variant": false
+}

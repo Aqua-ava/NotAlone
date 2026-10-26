@@ -1,0 +1,16 @@
+{
+  "previous_prepared_manifest_sha256": "779a1acd26d27797352f5d39960cf18a093e39f7c8020cf572e45dd6c747faf1",
+  "previous_failure_manifest_sha256": "fce8e7d2e6983b38bf3c3cac600dc4338e2196f8dc7516da54f812ab4355a0e3",
+  "previous_failure_kept": {
+    "succeeded": 0,
+    "failed": 1,
+    "not_attempted": 39
+  },
+  "previous_missing_explain_still_unknown": true,
+  "correction_scope": [
+    "保存command/rowCount/rows先于断言",
+    "以rows/QUERY PLAN结构校验",
+    "全新私有/公开输入输出名"
+  ],
+  "source_sql_transaction_params_unchanged": true
+}

@@ -1,0 +1,28 @@
+--- a/backend-ts/src/host-storage.ts
++++ b/backend-ts/src/host-storage.ts
+@@ -1,3 +1,4 @@
++const __catalogPoint = (label: string, value?: unknown) => (globalThis as any)[Symbol.for('notalone.catalogProbe.v2')]?.point(label, value);
+ /** 桌面首用的普通业务模块；不依赖 DSH session、profile home 或模型接口。 */
+ import { constants, lstatSync, readdirSync, realpathSync, openSync, fstatSync, readFileSync, closeSync, type BigIntStats } from 'node:fs';
+ import { open, readFile, mkdir, rename, unlink } from 'node:fs/promises';
+@@ -428,7 +429,7 @@
+   }
+   private async inspect(client: pg.Client): Promise<string> {
+     // 仍取当前真实catalog；只传回原判定实际使用的字段，必需表的非零可见列条件不变。
+-    const metadataPending = client.query(`WITH catalog_rows AS (
++    __catalogPoint('catalog.dispatch', (client as any).processID);const metadataPending = client.query(`WITH catalog_rows AS (
+         SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
+         FROM unnest($1::text[],$2::text[]) AS required(relname,attname)
+         JOIN pg_catalog.pg_class c ON c.relname=required.relname
+@@ -452,9 +453,9 @@
+           LEFT JOIN pg_catalog.pg_index i ON i.indexrelid=c.conindid),'[]'::jsonb) AS constraints`,
+       [CATALOG_SELECTORS.map(item => item.table), CATALOG_SELECTORS.map(item => item.column)]);
+     let migrations: { name: string; checksum: string }[];
+-    try { migrations = this.migrationFiles(); }
++    try { __catalogPoint('files.before');migrations = this.migrationFiles();__catalogPoint('files.after'); }
+     catch { this.migrationSummaries.clear(); await metadataPending.catch(() => {}); return 'migration_files_invalid'; }
+-    const snapshot = (await metadataPending).rows[0] as SchemaInspection;
++    __catalogPoint('catalog.await');const snapshot = (await metadataPending).rows[0] as SchemaInspection;__catalogPoint('catalog.resume', snapshot);
+     const tables = new Map<string, Map<string,string>>();
+     for (const row of snapshot.catalog) {
+       if (!tables.has(row.relname)) tables.set(row.relname, new Map());

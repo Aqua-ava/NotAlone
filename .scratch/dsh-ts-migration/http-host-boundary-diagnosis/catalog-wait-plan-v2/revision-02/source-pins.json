@@ -1,0 +1,75 @@
+{
+  "mode": "prepared_single_run_authorized_after_self_checks",
+  "head_at_preparation": "b8ba6c6a1d2b428a9d749f2fe860fd2ac56c9597",
+  "production_base_commit": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "source_read_sha256": {
+    "backend-ts/src/host-storage.ts": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+    "backend-ts/src/contact-context.ts": "6e2a90f91f5013a08ec1e08c78f2e5716f2f3776b654e9a22d206c54e8512944",
+    "backend-ts/package.json": "23efe4561bfc415f66ccf220839116f047ca6311a3aead6999dab2fd72450e61",
+    "backend-ts/pnpm-lock.yaml": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+    "backend-ts/node_modules/pg/lib/client.js": "7e6ba79fe6bc1db15ec66ce67cd0f96b6b27c300ccec45911dc15f5121f709f4",
+    "backend-ts/node_modules/pg/lib/query.js": "dea8044d70531cd16e514ecddbe44cdd65b4315a02287958d5ecfd0ebcd70ded",
+    "backend-ts/node_modules/pg/lib/result.js": "2e9dfbbb89c84cfdb1977a1503f2ddd265ed2f943f8dc3957dc0db193ee81488",
+    "backend-ts/node_modules/pg/lib/connection.js": "2069c662af9de8a708105f304a0e674a9766478da8250b416f5f3ee9ae0f4d99"
+  },
+  "source_query_location": "backend-ts/src/host-storage.ts:431–453",
+  "source_await_location": "backend-ts/src/host-storage.ts:457",
+  "source_parameter_expression_location": "backend-ts/src/host-storage.ts:703–709",
+  "exact_sql_file_sha256": "8a15efb91f36745a9d06eeef6e4b503d68092c95c3a1da581b33a28eb8617670",
+  "params_json_file_sha256": "208b91e58ebee14cd9d4cffc002b8a6b095876cad7d05f98d26debf0406034c2",
+  "params_canonical_json_sha256": "4764e2a758a6a2d3da08476c89c4dce7759f91ff80546d044407729df0078b93",
+  "selector_count": 108,
+  "null_column_count": 24,
+  "required_tables_count": 38,
+  "same_params_as_prior_projection_evidence": true,
+  "fixed_input_sha256": {
+    "plan_sha256": "fd31bb5b19890853fe9d5ae5ad29dca21731ef40bb790bc9ae9a9a285778add4",
+    "node_executable_sha256": "060b970693b04c9b5664c68014c6ece7c30ec7968d55c8764776d8a07e154056",
+    "python_executable_sha256": "ea6f9840e9e1f4660544594a526fe0fd8deaa6a9034854d7e41fdca336532806",
+    "control_pg_restore_sha256": "7e9f8c433b7887db4b4ea486b9e7dcd8233a4ce14995c240045c5232005d3095",
+    "fixed_snapshot_sha256": "a3c36e29fcaf40aaf2d4d074af0ec75652c53683f34294fb36aba376fa8a9723",
+    "fixed_workload_sha256": "7416b59cd304f4457a79c99c185655dd663ff69da2e2a6aa88d80d3a7945533a",
+    "frozen_dependency_sha256": {
+      "dependencies": "03b3a2663a1f7dc6067197f52abadcf9fd93cd9ec4d9539703d4af82b624a79d",
+      "old_dependencies": "894b11e7009c1fc93dbb9a769986f3436a78564b5a986a0593fb01cbd8cfbf23"
+    }
+  },
+  "actual_node_version_from_first_flow": "v24.19.0",
+  "server_version_unknown_until_authorized_setup": true,
+  "first_flow_manifest_sha256": "52f3894bd5b9467a0ec2884897aed90998b9ef695d2d7a66d7e59653678a5734",
+  "no_new_pg_http_or_sampling": true,
+  "runtime_probe_or_patch_implemented": true,
+  "static_read_errors": [
+    "最初检索catalog-projection.mjs不存在；实际旧脚本为measure-catalog-projection.mjs，已定位且未执行。"
+  ],
+  "same_plan_mechanism_hypothesis": {
+    "input_type": "$1/$2::text[] -> required.relname/attname text",
+    "catalog_declared_type": "pg_class.relname / pg_attribute.attname name (官方18规范，实际server未查)",
+    "collect": [
+      "Index Name",
+      "Index Cond",
+      "Filter",
+      "Join Filter",
+      "Hash Cond",
+      "Merge Cond",
+      "Node Type",
+      "Actual Rows",
+      "Actual Loops",
+      "Rows Removed by Filter",
+      "Buffers"
+    ],
+    "no_sql_variant_or_extra_experiment": true,
+    "causal_conclusion": "unknown_until_observed; cast/index shape alone insufficient"
+  },
+  "static_metadata_errors": [
+    {
+      "stage": "manifest_generation",
+      "error": "relative Path.relative_to absolute repo mismatch",
+      "effect": "仅元数据生成未完成，无PG/HTTP/采样；已统一resolve后生成。",
+      "raw_stderr": "最初工具直接返回，仅保存错误信号，不伪称有进程stderr原件。"
+    }
+  ],
+  "runtime_probe_executed": false,
+  "transaction_method": "businessTransaction",
+  "transaction_differs_from_observed_get_source": false
+}

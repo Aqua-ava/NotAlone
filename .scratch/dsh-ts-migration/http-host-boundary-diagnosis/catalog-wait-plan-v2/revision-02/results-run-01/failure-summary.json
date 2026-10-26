@@ -1,0 +1,50 @@
+{
+  "status": "failed_in_first_warmup_no_retry",
+  "planned_units": 40,
+  "planned_target_catalog_executions": 80,
+  "succeeded_units": 0,
+  "failed_units": 1,
+  "not_attempted_units": 39,
+  "scored_observations": 0,
+  "actual_raw_catalog_returned": 1,
+  "actual_explain_returned": 1,
+  "unattempted_target_queries": 78,
+  "error": {
+    "name": "Error",
+    "message": "unexpected_explain_shape"
+  },
+  "actual_settings": {
+    "server_version_num": "160015",
+    "isolation": "read committed",
+    "read_only": "off",
+    "search_path": "pg_catalog, public",
+    "statement_timeout": "3s",
+    "lock_timeout": "1s"
+  },
+  "warmup_only_client_ms": {
+    "raw_dispatch_resume": 3.69929102063179,
+    "raw_residual_await": 0.41520801186561584,
+    "files": 2.972000002861023,
+    "explain_client_await": 1.7775000035762787
+  },
+  "raw_envelope_array_lengths": {
+    "catalog": 103,
+    "columns": 33,
+    "constraints": 44
+  },
+  "unknowns": [
+    "EXPLAIN结果对象未在校验前保存，无法恢复计划、runtime rowCount、rows形态、Planning/Execution或索引/cast事实",
+    "仅一个失败暖机，无30计分，不解释首轮HTTP或认定产品失败"
+  ],
+  "cleanup": {
+    "probe_exited": true,
+    "owned_sessions_before_drop": 0,
+    "owned_databases_remaining": 0,
+    "owned_sessions_remaining": 0,
+    "owned_source_dirs_remaining": 0,
+    "owned_runtime_dirs_remaining": 0
+  },
+  "binding_before_after": true,
+  "source_unchanged": true,
+  "no_retry_or_second_flow": true
+}

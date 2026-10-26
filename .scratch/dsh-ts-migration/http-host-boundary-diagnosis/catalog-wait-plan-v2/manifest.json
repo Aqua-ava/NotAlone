@@ -1,0 +1,32 @@
+{
+  "status": "static_plan_frozen_waiting_root_authorization",
+  "production_base_commit": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+  "stage_paths": [
+    ".scratch/dsh-ts-migration/http-host-boundary-diagnosis/catalog-wait-plan-v2/catalog.sql",
+    ".scratch/dsh-ts-migration/http-host-boundary-diagnosis/catalog-wait-plan-v2/explain.sql",
+    ".scratch/dsh-ts-migration/http-host-boundary-diagnosis/catalog-wait-plan-v2/handoff.md",
+    ".scratch/dsh-ts-migration/http-host-boundary-diagnosis/catalog-wait-plan-v2/params.json",
+    ".scratch/dsh-ts-migration/http-host-boundary-diagnosis/catalog-wait-plan-v2/plan.md",
+    ".scratch/dsh-ts-migration/http-host-boundary-diagnosis/catalog-wait-plan-v2/source-pins.json",
+    ".scratch/dsh-ts-migration/http-host-boundary-diagnosis/catalog-wait-plan-v2/verification.json",
+    ".scratch/dsh-ts-migration/http-host-boundary-diagnosis/catalog-wait-plan-v2/manifest.json",
+    ".scratch/dsh-ts-migration/http-host-boundary-diagnosis/catalog-wait-plan-v2/SHA256SUMS"
+  ],
+  "files": {
+    "catalog.sql": "8a15efb91f36745a9d06eeef6e4b503d68092c95c3a1da581b33a28eb8617670",
+    "explain.sql": "d1827a11d755c8f51d099132433743a9f9e8678feb77b1163c6d2ede4e0075aa",
+    "handoff.md": "9da19f26d212908bd2965c959876dc5ad5b2d163cfc366ecf363b1897863d206",
+    "params.json": "208b91e58ebee14cd9d4cffc002b8a6b095876cad7d05f98d26debf0406034c2",
+    "plan.md": "3e09a126fd8adfb820ab6615e115528964b7841c10bc98c6b33631a778d94fc2",
+    "source-pins.json": "e94ae77df63e7f44596a272aadb4289952cd9e76f48c13fe8cd7f2c66a59758b",
+    "verification.json": "30f2eb4cf8162943831b6896400d003d3a53630f631245cea0aff57fdbffcee8"
+  },
+  "new_pg_http_sampling": 0,
+  "runtime_probe_implemented": false,
+  "target_units_if_authorized": 40,
+  "target_catalog_executions_if_authorized": 80,
+  "setup_and_control_queries_separate": true,
+  "root_owns_index_commit": true,
+  "git_writes": false,
+  "performance_approved": false
+}

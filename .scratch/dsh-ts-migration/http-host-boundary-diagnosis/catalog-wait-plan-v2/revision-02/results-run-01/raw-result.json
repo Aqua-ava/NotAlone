@@ -1,0 +1,1587 @@
+{
+  "diagnostic_only": true,
+  "formal_performance_qualified": false,
+  "configuration": {
+    "status": "authorized_single_run_after_self_checks",
+    "production_base_commit": "1e90d9edde3a5c3ac0de08c018149dd79bbebdfc",
+    "transaction_method": "businessTransaction",
+    "expected_isolation": "read committed",
+    "expected_read_only": "off",
+    "transaction_differs_from_observed_get_source": false,
+    "units": 40,
+    "warmups": 10,
+    "scored": 30,
+    "work_seconds": 150,
+    "cleanup_seconds": 30,
+    "max_wall_seconds": 180,
+    "target_catalog_executions": 80,
+    "setup_control_queries_separate": true,
+    "ready_dataRow_observation": false,
+    "global_pg_patch": false,
+    "additional_sql_variant": false
+  },
+  "input_binding": {
+    "plan_sha256": "fd31bb5b19890853fe9d5ae5ad29dca21731ef40bb790bc9ae9a9a285778add4",
+    "node_executable_sha256": "060b970693b04c9b5664c68014c6ece7c30ec7968d55c8764776d8a07e154056",
+    "python_executable_sha256": "ea6f9840e9e1f4660544594a526fe0fd8deaa6a9034854d7e41fdca336532806",
+    "control_pg_restore_sha256": "7e9f8c433b7887db4b4ea486b9e7dcd8233a4ce14995c240045c5232005d3095",
+    "fixed_snapshot_sha256": "a3c36e29fcaf40aaf2d4d074af0ec75652c53683f34294fb36aba376fa8a9723",
+    "fixed_workload_sha256": "7416b59cd304f4457a79c99c185655dd663ff69da2e2a6aa88d80d3a7945533a",
+    "frozen_dependency_sha256": {
+      "dependencies": "03b3a2663a1f7dc6067197f52abadcf9fd93cd9ec4d9539703d4af82b624a79d",
+      "old_dependencies": "894b11e7009c1fc93dbb9a769986f3436a78564b5a986a0593fb01cbd8cfbf23"
+    }
+  },
+  "new_global_pg_patch": false,
+  "ready_dataRow_observation": false,
+  "failures": [
+    "probe_failed_all_original_rows_retained"
+  ],
+  "cleanup": {
+    "probe_exited": true,
+    "owned_sessions_before_drop": 0,
+    "owned_databases_remaining": 0,
+    "owned_sessions_remaining": 0,
+    "owned_source_dirs_remaining": 0,
+    "owned_runtime_dirs_remaining": 0
+  },
+  "raw_public_bindings": [
+    {
+      "raw_locator": "catalog-wait-v2-revision-02-run-01/restore.stdout.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "restore.stdout.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "catalog-wait-v2-revision-02-run-01/restore.stderr.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "restore.stderr.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "catalog-wait-v2-revision-02-run-01/probe.stdout.log",
+      "raw_sha256": "0b6ee2d791d2b95af0b5c464788f7ef83877ae59d44c67145350caf22b763ec0",
+      "public_file": "probe.stdout.log",
+      "public_sha256": "0b6ee2d791d2b95af0b5c464788f7ef83877ae59d44c67145350caf22b763ec0"
+    },
+    {
+      "raw_locator": "catalog-wait-v2-revision-02-run-01/probe.stderr.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "probe.stderr.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "catalog-wait-v2-revision-02-run-01/probe/probe-result.json",
+      "raw_sha256": "98e26a5c5696d8bcfea31049a2f373076fe8c93610a18ff937f3b119e5d0c265",
+      "public_file": "probe-result.json",
+      "public_sha256": "98e26a5c5696d8bcfea31049a2f373076fe8c93610a18ff937f3b119e5d0c265"
+    }
+  ],
+  "binding_before": {
+    "plan": true,
+    "snapshot": true,
+    "node": true,
+    "python": true,
+    "pg_restore": true,
+    "probe_tools": true,
+    "source_pins": true,
+    "fixture_tools": true,
+    "dependencies": true,
+    "old_dependencies": true
+  },
+  "private_source_sha256_before": "18913686568dd78aa7835cb3c269cf3bd6f0ba09ef946060be4964b950f5c2f8",
+  "probe_exit_code": 2,
+  "probe": {
+    "diagnostic_only": true,
+    "formal_performance_qualified": false,
+    "transaction_method": "businessTransaction",
+    "transaction_differs_from_get": false,
+    "rows": [
+      {
+        "index": -10,
+        "warmup": true,
+        "status": "failed",
+        "points": [
+          {
+            "label": "catalog.dispatch",
+            "time_ms": 203369834.542875
+          },
+          {
+            "label": "files.before",
+            "time_ms": 203369834.85375
+          },
+          {
+            "label": "files.after",
+            "time_ms": 203369837.82575
+          },
+          {
+            "label": "catalog.await",
+            "time_ms": 203369837.826958
+          },
+          {
+            "label": "catalog.resume",
+            "time_ms": 203369838.242166
+          }
+        ],
+        "started_ms": 203369830.724083,
+        "raw_connection": "connection-1",
+        "raw_envelope": {
+          "catalog": [
+            {
+              "kind": "uuid",
+              "attname": "id",
+              "relname": "background_task"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "background_task"
+            },
+            {
+              "kind": "text",
+              "attname": "task_type",
+              "relname": "background_task"
+            },
+            {
+              "kind": "text",
+              "attname": "status",
+              "relname": "background_task"
+            },
+            {
+              "kind": "uuid",
+              "attname": "task_id",
+              "relname": "background_task_step"
+            },
+            {
+              "kind": "text",
+              "attname": "status",
+              "relname": "background_task_step"
+            },
+            {
+              "kind": "uuid",
+              "attname": "worker_id",
+              "relname": "background_task_step"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "channel_identity"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "cli_backfill_state"
+            },
+            {
+              "kind": "uuid",
+              "attname": "id",
+              "relname": "confirmed_memory"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "confirmed_memory"
+            },
+            {
+              "kind": "uuid",
+              "attname": "contact_id",
+              "relname": "confirmed_memory"
+            },
+            {
+              "kind": "uuid",
+              "attname": "id",
+              "relname": "contact"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "contact"
+            },
+            {
+              "kind": "text",
+              "attname": "display_name",
+              "relname": "contact"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "contact_memory_index"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "contact_memory_state"
+            },
+            {
+              "kind": "uuid",
+              "attname": "id",
+              "relname": "conversation_binding"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "conversation_binding"
+            },
+            {
+              "kind": "uuid",
+              "attname": "contact_id",
+              "relname": "conversation_binding"
+            },
+            {
+              "kind": "text",
+              "attname": "status",
+              "relname": "conversation_binding"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "cross_domain_deletion_operation"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "front_sync_state"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "import_confirmation"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "local_wechat_observation"
+            },
+            {
+              "kind": "uuid",
+              "attname": "id",
+              "relname": "manual_contact_confirmation"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "manual_contact_confirmation"
+            },
+            {
+              "kind": "uuid",
+              "attname": "contact_id",
+              "relname": "manual_contact_confirmation"
+            },
+            {
+              "kind": "timestamp with time zone",
+              "attname": "confirmed_at",
+              "relname": "manual_contact_confirmation"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "memory_candidate"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "memory_extraction_watermark"
+            },
+            {
+              "kind": "uuid",
+              "attname": "id",
+              "relname": "message"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "message"
+            },
+            {
+              "kind": "uuid",
+              "attname": "contact_id",
+              "relname": "message"
+            },
+            {
+              "kind": "text",
+              "attname": "text_content",
+              "relname": "message"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "message_source_ref"
+            },
+            {
+              "kind": "uuid",
+              "attname": "attempt_id",
+              "relname": "model_call_learning_claim"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "model_call_learning_claim"
+            },
+            {
+              "kind": "uuid",
+              "attname": "contact_id",
+              "relname": "model_call_learning_claim"
+            },
+            {
+              "kind": "uuid",
+              "attname": "request_id",
+              "relname": "model_call_learning_claim"
+            },
+            {
+              "kind": "uuid",
+              "attname": "task_id",
+              "relname": "model_call_learning_claim"
+            },
+            {
+              "kind": "uuid",
+              "attname": "step_id",
+              "relname": "model_call_learning_claim"
+            },
+            {
+              "kind": "uuid",
+              "attname": "worker_id",
+              "relname": "model_call_learning_claim"
+            },
+            {
+              "kind": "text",
+              "attname": "step_name",
+              "relname": "model_call_learning_claim"
+            },
+            {
+              "kind": "bigint",
+              "attname": "lease_generation",
+              "relname": "model_call_learning_claim"
+            },
+            {
+              "kind": "uuid",
+              "attname": "attempt_id",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "uuid",
+              "attname": "contact_id",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "text",
+              "attname": "scope_kind",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "uuid",
+              "attname": "request_id",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "uuid",
+              "attname": "permit_id",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "uuid",
+              "attname": "ledger_entry_id",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "text",
+              "attname": "provider",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "text",
+              "attname": "model_name",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "timestamp with time zone",
+              "attname": "called_at",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "jsonb",
+              "attname": "input_budget",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "integer",
+              "attname": "latency_ms",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "text",
+              "attname": "dispatch",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "text",
+              "attname": "outcome",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "integer",
+              "attname": "input_tokens",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "integer",
+              "attname": "output_tokens",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "integer",
+              "attname": "cache_read_tokens",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "integer",
+              "attname": "cache_write_tokens",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "text",
+              "attname": "cost_status",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "numeric",
+              "attname": "cost_amount",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "text",
+              "attname": "currency",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "text",
+              "attname": "pricing_version",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "timestamp with time zone",
+              "attname": "created_at",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": "timestamp with time zone",
+              "attname": "updated_at",
+              "relname": "model_call_receipt"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "outbound_ledger_entry"
+            },
+            {
+              "kind": "uuid",
+              "attname": "id",
+              "relname": "owner"
+            },
+            {
+              "kind": "text",
+              "attname": "display_name",
+              "relname": "owner"
+            },
+            {
+              "kind": "timestamp with time zone",
+              "attname": "created_at",
+              "relname": "owner"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "owner_channel_identity"
+            },
+            {
+              "kind": "uuid",
+              "attname": "id",
+              "relname": "owner_memory"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "owner_memory"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "reply_attempt"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "reply_candidate"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "reply_candidate_citation"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "reply_context_evidence"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "reply_request"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "reply_skill"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "reply_skill_version"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "skill_library"
+            },
+            {
+              "kind": "uuid",
+              "attname": "id",
+              "relname": "source_document"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "source_document"
+            },
+            {
+              "kind": "uuid",
+              "attname": "contact_id",
+              "relname": "source_document"
+            },
+            {
+              "kind": "text",
+              "attname": "status",
+              "relname": "source_document"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "wechat_auto_read_suppression"
+            },
+            {
+              "kind": "uuid",
+              "attname": "contact_id",
+              "relname": "wechat_auto_read_suppression"
+            },
+            {
+              "kind": "bigint",
+              "attname": "external_local_id",
+              "relname": "wechat_auto_read_suppression"
+            },
+            {
+              "kind": "bigint",
+              "attname": "identity_create_time",
+              "relname": "wechat_auto_read_suppression"
+            },
+            {
+              "kind": "timestamp with time zone",
+              "attname": "deleted_at",
+              "relname": "wechat_auto_read_suppression"
+            },
+            {
+              "kind": "uuid",
+              "attname": "owner_id",
+              "relname": "wechat_binding_history_authorization"
+            },
+            {
+              "kind": "uuid",
+              "attname": "contact_id",
+              "relname": "wechat_binding_history_authorization"
+            },
+            {
+              "kind": "uuid",
+              "attname": "binding_id",
+              "relname": "wechat_binding_history_authorization"
+            },
+            {
+              "kind": "integer",
+              "attname": "version",
+              "relname": "wechat_binding_history_authorization"
+            },
+            {
+              "kind": "timestamp with time zone",
+              "attname": "authorized_at",
+              "relname": "wechat_binding_history_authorization"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "wechat_message_metadata"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "wechat_observation_baseline"
+            },
+            {
+              "kind": null,
+              "attname": null,
+              "relname": "wechat_observation_cursor"
+            },
+            {
+              "kind": "text",
+              "attname": "name",
+              "relname": "notalone_schema_migration"
+            },
+            {
+              "kind": "text",
+              "attname": "checksum",
+              "relname": "notalone_schema_migration"
+            }
+          ],
+          "columns": [
+            {
+              "table": "model_call_learning_claim",
+              "attname": "attempt_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_learning_claim",
+              "attname": "owner_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_learning_claim",
+              "attname": "contact_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_learning_claim",
+              "attname": "request_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_learning_claim",
+              "attname": "task_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_learning_claim",
+              "attname": "step_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_learning_claim",
+              "attname": "step_name",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_learning_claim",
+              "attname": "worker_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_learning_claim",
+              "attname": "lease_generation",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "attempt_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "owner_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "contact_id",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "scope_kind",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "request_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "permit_id",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "ledger_entry_id",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "provider",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "model_name",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "called_at",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "input_budget",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "latency_ms",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "dispatch",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "outcome",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "input_tokens",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "output_tokens",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "cache_read_tokens",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "cache_write_tokens",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "cost_status",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "cost_amount",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "currency",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "pricing_version",
+              "attnotnull": false
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "created_at",
+              "attnotnull": true
+            },
+            {
+              "table": "model_call_receipt",
+              "attname": "updated_at",
+              "attnotnull": true
+            }
+          ],
+          "constraints": [
+            {
+              "table": "background_task_step",
+              "contype": "c",
+              "definition": "CHECK ((attempt_count >= 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "c",
+              "definition": "CHECK ((lease_generation >= 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "c",
+              "definition": "CHECK ((processed_count >= 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "c",
+              "definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'succeeded'::text, 'retryable'::text, 'failed'::text, 'cancelled'::text])))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "c",
+              "definition": "CHECK ((step_name = ANY (ARRAY['parse'::text, 'normalize'::text, 'extract_memory'::text, 'index'::text, 'verify'::text, 'mark_deleted'::text, 'delete_derived'::text, 'delete_index'::text, 'clear_cache'::text, 'verify_not_retrievable'::text, 'propose_skill'::text, 'verify_skill_drafts'::text, 'preview_upgrade'::text, 'verify_upgrade_preview'::text, 'apply_upgrade'::text, 'verify_upgrade_apply'::text, 'organize_memory'::text])))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "c",
+              "definition": "CHECK (((step_order >= 1) AND (step_order <= 5)))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "c",
+              "definition": "CHECK (((total_count IS NULL) OR (total_count >= 0)))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "u",
+              "definition": "UNIQUE (id, task_id)",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "p",
+              "definition": "PRIMARY KEY (id)",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "u",
+              "definition": "UNIQUE (task_id, step_name)",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "u",
+              "definition": "UNIQUE (task_id, step_order)",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "background_task_step",
+              "contype": "f",
+              "definition": "FOREIGN KEY (task_id) REFERENCES background_task(id) ON DELETE CASCADE",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_learning_claim",
+              "contype": "c",
+              "definition": "CHECK ((step_name = 'propose_skill'::text))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_learning_claim",
+              "contype": "c",
+              "definition": "CHECK ((lease_generation > 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_learning_claim",
+              "contype": "p",
+              "definition": "PRIMARY KEY (attempt_id)",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_learning_claim",
+              "contype": "u",
+              "definition": "UNIQUE (step_id, lease_generation)",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_learning_claim",
+              "contype": "f",
+              "definition": "FOREIGN KEY (attempt_id, owner_id, contact_id, request_id) REFERENCES model_call_receipt(attempt_id, owner_id, contact_id, request_id) ON DELETE CASCADE",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_learning_claim",
+              "contype": "f",
+              "definition": "FOREIGN KEY (step_id, task_id) REFERENCES background_task_step(id, task_id) ON DELETE CASCADE",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_learning_claim",
+              "contype": "f",
+              "definition": "FOREIGN KEY (task_id, owner_id, contact_id) REFERENCES background_task(id, owner_id, contact_id) ON DELETE CASCADE",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((cache_read_tokens >= 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((cache_write_tokens >= 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((((scope_kind = 'contact'::text) AND (contact_id IS NOT NULL)) OR ((scope_kind = 'owner_memory'::text) AND (contact_id IS NULL) AND (ledger_entry_id IS NULL))))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK (((input_tokens IS NULL) = (output_tokens IS NULL)))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK (((input_tokens IS NOT NULL) OR ((cache_read_tokens IS NULL) AND (cache_write_tokens IS NULL))))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK (((COALESCE(cache_read_tokens, 0) + COALESCE(cache_write_tokens, 0)) <= input_tokens))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((((cost_status = 'unknown'::text) AND (cost_amount IS NULL) AND (currency IS NULL) AND (pricing_version IS NULL)) OR ((cost_status = ANY (ARRAY['estimated'::text, 'known'::text])) AND (cost_amount IS NOT NULL) AND (currency IS NOT NULL) AND (pricing_version IS NOT NULL) AND (length(btrim(currency)) > 0) AND (length(btrim(pricing_version)) > 0))))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK (((outcome <> 'succeeded'::text) OR (dispatch = ANY (ARRAY['response_observed'::text, 'http_accepted'::text]))))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((cost_amount >= (0)::numeric))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((cost_status = ANY (ARRAY['unknown'::text, 'estimated'::text, 'known'::text])))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((dispatch = ANY (ARRAY['authorized_unconfirmed'::text, 'response_observed'::text, 'http_accepted'::text, 'not_sent'::text])))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK (((input_budget IS NULL) OR (((jsonb_typeof(input_budget) = 'object'::text) AND (input_budget ?& ARRAY['measurement_id'::text, 'measurement_kind'::text, 'input_tokens'::text, 'max_output_tokens'::text, 'context_window_tokens'::text, 'safety_margin_tokens'::text, 'request_sha256'::text, 'serialized_bytes'::text]) AND ((input_budget - ARRAY['measurement_id'::text, 'measurement_kind'::text, 'input_tokens'::text, 'max_output_tokens'::text, 'context_window_tokens'::text, 'safety_margin_tokens'::text, 'request_sha256'::text, 'serialized_bytes'::text]) = '{}'::jsonb) AND (jsonb_typeof((input_budget -> 'measurement_id'::text)) = 'string'::text) AND ((input_budget ->> 'measurement_id'::text) ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$'::text) AND ((input_budget ->> 'measurement_kind'::text) = 'approximate'::text) AND ((input_budget ->> 'request_sha256'::text) ~ '^[a-f0-9]{64}$'::text) AND (jsonb_typeof((input_budget -> 'input_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'input_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'max_output_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'max_output_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'context_window_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'context_window_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'safety_margin_tokens'::text)) = 'number'::text) AND ((input_budget ->> 'safety_margin_tokens'::text) ~ '^[1-9][0-9]*$'::text) AND (jsonb_typeof((input_budget -> 'serialized_bytes'::text)) = 'number'::text) AND ((input_budget ->> 'serialized_bytes'::text) ~ '^[1-9][0-9]*$'::text)) IS TRUE)))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((input_tokens >= 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((latency_ms >= 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((length(btrim(model_name)) > 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((outcome = ANY (ARRAY['pending'::text, 'succeeded'::text, 'failed'::text, 'cancelled'::text, 'unknown'::text])))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((output_tokens >= 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((length(btrim(provider)) > 0))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "c",
+              "definition": "CHECK ((scope_kind = ANY (ARRAY['contact'::text, 'owner_memory'::text])))",
+              "indisready": null,
+              "indisvalid": null,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "u",
+              "definition": "UNIQUE (attempt_id, owner_id, contact_id, request_id)",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "u",
+              "definition": "UNIQUE (ledger_entry_id)",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "p",
+              "definition": "PRIMARY KEY (attempt_id)",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "f",
+              "definition": "FOREIGN KEY (ledger_entry_id) REFERENCES outbound_ledger_entry(id) ON DELETE CASCADE",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "f",
+              "definition": "FOREIGN KEY (owner_id, contact_id) REFERENCES contact(owner_id, id) ON DELETE CASCADE",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            },
+            {
+              "table": "model_call_receipt",
+              "contype": "f",
+              "definition": "FOREIGN KEY (owner_id) REFERENCES owner(id) ON DELETE CASCADE",
+              "indisready": true,
+              "indisvalid": true,
+              "condeferred": false,
+              "convalidated": true,
+              "condeferrable": false
+            }
+          ]
+        },
+        "explain_connection": "connection-1",
+        "explain_started_ms": 203369838.951833,
+        "explain_finished_ms": 203369840.729333,
+        "error": {
+          "name": "Error",
+          "message": "unexpected_explain_shape"
+        }
+      },
+      {
+        "index": -9,
+        "warmup": true,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": -8,
+        "warmup": true,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": -7,
+        "warmup": true,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": -6,
+        "warmup": true,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": -5,
+        "warmup": true,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": -4,
+        "warmup": true,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": -3,
+        "warmup": true,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": -2,
+        "warmup": true,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": -1,
+        "warmup": true,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 0,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 1,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 2,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 3,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 4,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 5,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 6,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 7,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 8,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 9,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 10,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 11,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 12,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 13,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 14,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 15,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 16,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 17,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 18,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 19,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 20,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 21,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 22,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 23,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 24,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 25,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 26,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 27,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 28,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      },
+      {
+        "index": 29,
+        "warmup": false,
+        "status": "not_attempted",
+        "points": [],
+        "unknown_reason": "stopped_before_unit"
+      }
+    ],
+    "setup_catalog_starts": 0,
+    "setup_catalog_finishes": 0,
+    "physical_target_catalog_starts": 1,
+    "physical_target_catalog_finishes": 1,
+    "physical_explain_starts": 1,
+    "physical_explain_finishes": 1,
+    "failures": [
+      {
+        "name": "Error",
+        "message": "unexpected_explain_shape"
+      }
+    ],
+    "cleanup": {
+      "storage_closed": true
+    },
+    "observer_limits": {
+      "point_overflow": false
+    },
+    "unknowns": [
+      "独立HostStorage与完整DSH/HTTP环境不同",
+      "EXPLAIN不含parse/rewrite及正常输出传输",
+      "raw固定在EXPLAIN之前的顺序/缓存偏差",
+      "无ready/dataRow/GC观察"
+    ],
+    "actual_transaction_settings": {
+      "server_version_num": "160015",
+      "isolation": "read committed",
+      "read_only": "off",
+      "search_path": "pg_catalog, public",
+      "statement_timeout": "3s",
+      "lock_timeout": "1s"
+    },
+    "setup_control_queries": 1,
+    "connection_alias_count": 1
+  },
+  "private_source_unchanged": true,
+  "binding_after": {
+    "plan": true,
+    "snapshot": true,
+    "node": true,
+    "python": true,
+    "pg_restore": true,
+    "probe_tools": true,
+    "source_pins": true,
+    "fixture_tools": true,
+    "dependencies": true,
+    "old_dependencies": true
+  },
+  "wall_seconds": 7.391397125000367
+}

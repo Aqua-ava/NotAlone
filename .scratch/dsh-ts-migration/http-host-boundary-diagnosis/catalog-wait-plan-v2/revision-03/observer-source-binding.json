@@ -1,0 +1,20 @@
+{
+  "original_sha256": "0c96568ae4d608beda97af03bbaba696f07148627ecae153b1692dc52ee94f25",
+  "private_instrumented_sha256": "18913686568dd78aa7835cb3c269cf3bd6f0ba09ef946060be4964b950f5c2f8",
+  "helper_prefix": "const __catalogPoint = (label: string, value?: unknown) => (globalThis as any)[Symbol.for('notalone.catalogProbe.v2')]?.point(label, value);\n",
+  "replacements": [
+    {
+      "before": "const metadataPending = client.query(`WITH catalog_rows AS (",
+      "after": "__catalogPoint('catalog.dispatch', (client as any).processID);const metadataPending = client.query(`WITH catalog_rows AS ("
+    },
+    {
+      "before": "try { migrations = this.migrationFiles(); }",
+      "after": "try { __catalogPoint('files.before');migrations = this.migrationFiles();__catalogPoint('files.after'); }"
+    },
+    {
+      "before": "const snapshot = (await metadataPending).rows[0] as SchemaInspection;",
+      "after": "__catalogPoint('catalog.await');const snapshot = (await metadataPending).rows[0] as SchemaInspection;__catalogPoint('catalog.resume', snapshot);"
+    }
+  ],
+  "pg_interfaces_modified": false
+}

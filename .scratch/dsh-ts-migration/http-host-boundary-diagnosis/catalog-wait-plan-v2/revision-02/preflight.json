@@ -1,0 +1,32 @@
+{
+  "grammar_only_returncode": 0,
+  "python_ast_parses": true,
+  "no_product_module_loaded": true,
+  "new_pg_http_sampling": 0,
+  "configuration_method": "businessTransaction",
+  "actual_get_source_still_ordinary_businessTransaction": true,
+  "selector_lengths": [
+    108,
+    108
+  ],
+  "exact_sql_hash": true,
+  "source_pins_match": true,
+  "only_one_source_patch": "host-storage.ts",
+  "global_pg_patch": false,
+  "ready_dataRow_observation": false,
+  "private_runtime_source_copy_created": false,
+  "logs": [
+    {
+      "raw_locator": "catalog-wait-v2-revision-02-preparation/grammar.stdout.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "grammar.stdout.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "catalog-wait-v2-revision-02-preparation/grammar.stderr.log",
+      "raw_sha256": "3f9cff262c17133fb7dad77c52d80ec73ad7908a023b87ec2b71af466f03782a",
+      "public_file": "grammar.stderr.log",
+      "public_sha256": "3f9cff262c17133fb7dad77c52d80ec73ad7908a023b87ec2b71af466f03782a"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "driver_exited": true,
+  "owned_databases_remaining": 0,
+  "owned_sessions_remaining": 0,
+  "owned_source_dirs_remaining": 0,
+  "owned_runtime_dirs_remaining": 0,
+  "private_explain_capture_files": 40,
+  "capture_files_all_0600": true,
+  "private_mode_violations": [],
+  "binding_before": true,
+  "binding_after": true,
+  "private_source_unchanged": true
+}
