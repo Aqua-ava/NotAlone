@@ -1,0 +1,1 @@
+{"terminal_counts": {"succeeded": 480, "failed": 0, "not_attempted": 0}, "wall_seconds": 16.848254249984166, "cleanup": {"owned_databases_remaining": 0, "owned_sessions_remaining": 0, "owned_processes_cleaned": true, "owned_source_directories_remaining": 0, "owned_runtime_directories_remaining": 0}, "failures": []}

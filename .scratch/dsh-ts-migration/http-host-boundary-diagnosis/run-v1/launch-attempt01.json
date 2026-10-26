@@ -1,0 +1,10 @@
+{
+  "stage": "launcher_preflight",
+  "attempt": 1,
+  "error": "AttributeError: str has no read_bytes",
+  "driver_started": false,
+  "http_samples": 0,
+  "postgres_connections_created": 0,
+  "retention": "工具直接返回的错误信号；没有原始stderr文件，不冒充原件。",
+  "fix": "新冻结launcher的sha统一Path转换；原driver/observer/来源冻结未改。"
+}

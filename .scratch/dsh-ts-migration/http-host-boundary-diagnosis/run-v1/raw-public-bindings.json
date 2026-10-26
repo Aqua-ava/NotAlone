@@ -1,0 +1,202 @@
+{
+  "bindings": [
+    {
+      "raw_locator": "run-v1/hosts/A-old-anchor/host.stdout.log",
+      "raw_sha256": "9225fb55c7ed7f34472a2dbdd49b7e7ad12f7e5d0a6e14852dc77e9b2158c377",
+      "public_file": "A-old-anchor-host.stdout.log",
+      "public_sha256": "9225fb55c7ed7f34472a2dbdd49b7e7ad12f7e5d0a6e14852dc77e9b2158c377"
+    },
+    {
+      "raw_locator": "run-v1/hosts/A-old-anchor/host.stderr.log",
+      "raw_sha256": "fd6b6f595c869a5157ffd7833eea1682eb7a5775be5df599e2a27096646c57df",
+      "public_file": "A-old-anchor-host.stderr.log",
+      "public_sha256": "fd6b6f595c869a5157ffd7833eea1682eb7a5775be5df599e2a27096646c57df"
+    },
+    {
+      "raw_locator": "run-v1/hosts/A-old-anchor/trace.jsonl",
+      "raw_sha256": "3a7d4786255e87ee3a6bdf453bb07c091eba9b66b016e2e330deac311daf105d",
+      "public_file": "A-old-anchor-trace.jsonl",
+      "public_sha256": "3a7d4786255e87ee3a6bdf453bb07c091eba9b66b016e2e330deac311daf105d"
+    },
+    {
+      "raw_locator": "run-v1/hosts/B-full-baseline/host.stdout.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "B-full-baseline-host.stdout.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/hosts/B-full-baseline/host.stderr.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "B-full-baseline-host.stderr.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/hosts/B-full-baseline/trace.jsonl",
+      "raw_sha256": "4e43cb48929cf69e9a34c3111a1baf93c8cca8e362f7ca8cfbec7445e3c11737",
+      "public_file": "B-full-baseline-trace.jsonl",
+      "public_sha256": "4e43cb48929cf69e9a34c3111a1baf93c8cca8e362f7ca8cfbec7445e3c11737"
+    },
+    {
+      "raw_locator": "run-v1/hosts/B-full-baseline/backend-exit.json",
+      "raw_sha256": "1aff36f796932c34d424461078ea28c3b7feef0b4538624958a98e8dc7e4bca4",
+      "public_file": "B-full-baseline-backend-exit.json",
+      "public_sha256": "1aff36f796932c34d424461078ea28c3b7feef0b4538624958a98e8dc7e4bca4"
+    },
+    {
+      "raw_locator": "run-v1/hosts/C-full-observer/host.stdout.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "C-full-observer-host.stdout.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/hosts/C-full-observer/host.stderr.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "C-full-observer-host.stderr.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/hosts/C-full-observer/trace.jsonl",
+      "raw_sha256": "af4cf9f2c90546a90baa41b0b8250ea661beb1568bb8b649c3b42ecfd1ce0625",
+      "public_file": "C-full-observer-trace.jsonl",
+      "public_sha256": "af4cf9f2c90546a90baa41b0b8250ea661beb1568bb8b649c3b42ecfd1ce0625"
+    },
+    {
+      "raw_locator": "run-v1/hosts/C-full-observer/stages.json",
+      "raw_sha256": "9d9f3edc02ff89eb0f71b4690c643eee73355a1107165609b7bcf372eea4e9df",
+      "public_file": "C-full-observer-stages.json",
+      "public_sha256": "9d9f3edc02ff89eb0f71b4690c643eee73355a1107165609b7bcf372eea4e9df"
+    },
+    {
+      "raw_locator": "run-v1/hosts/C-full-observer/backend-exit.json",
+      "raw_sha256": "1aff36f796932c34d424461078ea28c3b7feef0b4538624958a98e8dc7e4bca4",
+      "public_file": "C-full-observer-backend-exit.json",
+      "public_sha256": "1aff36f796932c34d424461078ea28c3b7feef0b4538624958a98e8dc7e4bca4"
+    },
+    {
+      "raw_locator": "run-v1/hosts/D-old-anchor/host.stdout.log",
+      "raw_sha256": "935dc8c7399fd44a885e91dd5fea399e00edfc50afcf40db0424fbab8baec7f0",
+      "public_file": "D-old-anchor-host.stdout.log",
+      "public_sha256": "935dc8c7399fd44a885e91dd5fea399e00edfc50afcf40db0424fbab8baec7f0"
+    },
+    {
+      "raw_locator": "run-v1/hosts/D-old-anchor/host.stderr.log",
+      "raw_sha256": "fd6b6f595c869a5157ffd7833eea1682eb7a5775be5df599e2a27096646c57df",
+      "public_file": "D-old-anchor-host.stderr.log",
+      "public_sha256": "fd6b6f595c869a5157ffd7833eea1682eb7a5775be5df599e2a27096646c57df"
+    },
+    {
+      "raw_locator": "run-v1/hosts/D-old-anchor/trace.jsonl",
+      "raw_sha256": "207d3650bcfd6fd34aec38226dee89dbdc9903d15b04b65ca3c0b793cd5c0ab2",
+      "public_file": "D-old-anchor-trace.jsonl",
+      "public_sha256": "207d3650bcfd6fd34aec38226dee89dbdc9903d15b04b65ca3c0b793cd5c0ab2"
+    },
+    {
+      "raw_locator": "run-v1/driver.stdout.log",
+      "raw_sha256": "5212085060cdef039285375968259d8262ca0f6e7192beee372537e9b61b9020",
+      "public_file": "run-driver.stdout.log",
+      "public_sha256": "5212085060cdef039285375968259d8262ca0f6e7192beee372537e9b61b9020"
+    },
+    {
+      "raw_locator": "run-v1/driver.stderr.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "run-driver.stderr.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/launcher.stdout.log",
+      "raw_sha256": "e5944b780f91174e8c24fff8e43429c7f0d0d1d1e313aa69b3b3e8a0eca62a98",
+      "public_file": "run-launcher.stdout.log",
+      "public_sha256": "e5944b780f91174e8c24fff8e43429c7f0d0d1d1e313aa69b3b3e8a0eca62a98"
+    },
+    {
+      "raw_locator": "run-v1/launcher.stderr.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "run-launcher.stderr.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/driver-launch.json",
+      "raw_sha256": "684537626fd44b09ae5fd306947316aff05e77f7fbbd95cb24c8b98153bbaa53",
+      "public_file": "run-driver-launch.json",
+      "public_sha256": "684537626fd44b09ae5fd306947316aff05e77f7fbbd95cb24c8b98153bbaa53"
+    },
+    {
+      "raw_locator": "run-v1/independent-cleanup.json",
+      "raw_sha256": "1b8bea4eeef242f972566d43ae8c43b5be55a3624794ea43ca8a6914a37855a6",
+      "public_file": "run-independent-cleanup.json",
+      "public_sha256": "1b8bea4eeef242f972566d43ae8c43b5be55a3624794ea43ca8a6914a37855a6"
+    },
+    {
+      "raw_locator": "run-v1/offline-analysis.stdout.log",
+      "raw_sha256": "a810cf5a51ec8d34efdfbd141edf1ad92fe1b297f0160344fbfa1df29974d1ef",
+      "public_file": "run-offline-analysis.stdout.log",
+      "public_sha256": "a810cf5a51ec8d34efdfbd141edf1ad92fe1b297f0160344fbfa1df29974d1ef"
+    },
+    {
+      "raw_locator": "run-v1/offline-analysis.stderr.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "run-offline-analysis.stderr.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/preparation-attempt02.stdout.log",
+      "raw_sha256": "da154693d0372a455fd5884045d5cbd7e8ede6e8f9ded68aca9e45db58df67c0",
+      "public_file": "preparation-preparation-attempt02.stdout.log",
+      "public_sha256": "da154693d0372a455fd5884045d5cbd7e8ede6e8f9ded68aca9e45db58df67c0"
+    },
+    {
+      "raw_locator": "run-v1/preparation-attempt02.stderr.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "preparation-preparation-attempt02.stderr.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/grammar-check.stdout.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "preparation-grammar-check.stdout.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/grammar-check.stderr.log",
+      "raw_sha256": "1c6e217146abfd1f3acaf44f2e7656ee5c87d58fed910c5d196819b464c01a48",
+      "public_file": "preparation-grammar-check.stderr.log",
+      "public_sha256": "a0f6e6be2514b155992caa20dd8b5d482f9902a0a3a8ff34b722a387964fa813"
+    },
+    {
+      "raw_locator": "run-v1/grammar-check02.stdout.log",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_file": "preparation-grammar-check02.stdout.log",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "raw_locator": "run-v1/grammar-check02.stderr.log",
+      "raw_sha256": "53e10e6a4b62cc17767c2644a8af91a7703287deabfb8601a661d9980fe0a9e8",
+      "public_file": "preparation-grammar-check02.stderr.log",
+      "public_sha256": "53e10e6a4b62cc17767c2644a8af91a7703287deabfb8601a661d9980fe0a9e8"
+    },
+    {
+      "raw_locator": "run-v1/result.json",
+      "raw_sha256": "9befd72b65e907cf64b0414c8ef590bcddbbcf4a22c5685858db7052a9c0b236",
+      "public_file": "result.json",
+      "public_sha256": "9befd72b65e907cf64b0414c8ef590bcddbbcf4a22c5685858db7052a9c0b236"
+    }
+  ],
+  "preparation_raw_gaps": [
+    "准备文本替换断言失败和启动器SHA类型错误最初仅工具返回，没有直接stderr原件；对应错误信号JSON不冒充stderr。"
+  ],
+  "permissions": {
+    "offline_analysis_log_mode_corrections": [
+      {
+        "locator": "run-v1/offline-analysis.stdout.log",
+        "initial_mode": "0o644",
+        "corrected_mode": "0o600"
+      },
+      {
+        "locator": "run-v1/offline-analysis.stderr.log",
+        "initial_mode": "0o644",
+        "corrected_mode": "0o600"
+      }
+    ],
+    "explanation": "若shell重定向继承默认umask产生0644，父目录从始至终0700；现已修正0600并明确记录，实际driver/宿主raw初始即0600。"
+  }
+}

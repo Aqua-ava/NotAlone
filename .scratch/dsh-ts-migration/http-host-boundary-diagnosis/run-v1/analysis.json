@@ -1,0 +1,2475 @@
+{
+  "diagnostic_only": true,
+  "formal_performance_qualified": false,
+  "input_sha256": {
+    "result.json": "9befd72b65e907cf64b0414c8ef590bcddbbcf4a22c5685858db7052a9c0b236",
+    "C-full-observer-stages.json": "9d9f3edc02ff89eb0f71b4690c643eee73355a1107165609b7bcf372eea4e9df",
+    "source-preparation.json": "c00b0ec1c6d83b2b362d8356f1dfb27130fae6b1a5f47208436b3423b12be027"
+  },
+  "cases": {
+    "contacts": {
+      "server_response_ms": {
+        "A-old-anchor": {
+          "n": 30,
+          "p50": 1.7361870000000001,
+          "p95": 2.0325727999999996,
+          "min": 1.429333,
+          "max": 2.072542
+        },
+        "B-full-baseline": {
+          "n": 30,
+          "p50": 3.8632499873638153,
+          "p95": 5.0113127842545495,
+          "min": 3.3448339998722076,
+          "max": 6.255999982357025
+        },
+        "C-full-observer": {
+          "n": 30,
+          "p50": 3.9322915077209473,
+          "p95": 4.435762500762939,
+          "min": 3.3798750042915344,
+          "max": 4.627625018358231
+        },
+        "D-old-anchor": {
+          "n": 30,
+          "p50": 1.8879375,
+          "p95": 2.1959874999999998,
+          "min": 1.401667,
+          "max": 2.372375
+        }
+      },
+      "old_anchor_D_over_A": {
+        "p50": 1.087404467375922,
+        "p95": 1.0803979567177127
+      },
+      "observer_C_over_B": {
+        "p50": 1.017871357168953,
+        "p95": 0.885149798412109
+      },
+      "baseline_B_over_old": {
+        "A-old-anchor": {
+          "p50": 2.225134727632343,
+          "p95": 2.4655022365026977
+        },
+        "D-old-anchor": {
+          "p50": 2.0462806567292695,
+          "p95": 2.28203156177098
+        }
+      },
+      "spans_ms": {
+        "ingress_to_context": {
+          "n": 30,
+          "p50": 0.03208351135253906,
+          "p95": 0.049741002917289695,
+          "min": 0.022417008876800537,
+          "max": 0.058667004108428955
+        },
+        "private_false_await": {
+          "n": 30,
+          "p50": 0.007958009839057922,
+          "p95": 0.011635312438011167,
+          "min": 0.006083011627197266,
+          "max": 0.015832990407943726
+        },
+        "auth": {
+          "n": 30,
+          "p50": 0.004041999578475952,
+          "p95": 0.006460595130920407,
+          "min": 0.002959012985229492,
+          "max": 0.010207980871200562
+        },
+        "public_false_await": {
+          "n": 30,
+          "p50": 0.0017499923706054688,
+          "p95": 0.0033750101923942567,
+          "min": 0.001166999340057373,
+          "max": 0.004166007041931152
+        },
+        "handoff": {
+          "n": 30,
+          "p50": 0.0006670057773590088,
+          "p95": 0.001008316874504089,
+          "min": 0.0005420148372650146,
+          "max": 0.0012919902801513672
+        },
+        "context": {
+          "n": 30,
+          "p50": 3.869146004319191,
+          "p95": 4.352484880387783,
+          "min": 3.3091669976711273,
+          "max": 4.553833991289139
+        },
+        "after_context": {
+          "n": 30,
+          "p50": 0.040145501494407654,
+          "p95": 0.07407935112714767,
+          "min": 0.028124988079071045,
+          "max": 0.084166020154953
+        },
+        "response_json": {
+          "n": 30,
+          "p50": 0.004041492938995361,
+          "p95": 0.012814545631408691,
+          "min": 0.0028339922428131104,
+          "max": 0.014833003282546997
+        },
+        "response_end_to_finish": {
+          "n": 30,
+          "p50": 0.010833501815795898,
+          "p95": 0.024650004506111142,
+          "min": 0.007790982723236084,
+          "max": 0.026582986116409302
+        }
+      },
+      "per_request_share": {
+        "ingress_to_context": {
+          "n": 30,
+          "p50": 0.00809998337257231,
+          "p95": 0.01228499632259391,
+          "min": 0.005712795337768427,
+          "max": 0.014634584163809198
+        },
+        "private_false_await": {
+          "n": 30,
+          "p50": 0.0020320650910433816,
+          "p95": 0.0028829322910007803,
+          "min": 0.0015175042226183279,
+          "max": 0.003949566442179131
+        },
+        "auth": {
+          "n": 30,
+          "p50": 0.0010415786635422654,
+          "p95": 0.0016626116755063926,
+          "min": 0.0007540807821113701,
+          "max": 0.0024681055348994
+        },
+        "public_false_await": {
+          "n": 30,
+          "p50": 0.0004288081656916618,
+          "p95": 0.0008283929946551698,
+          "min": 0.00028725257653508366,
+          "max": 0.0010392175569333994
+        },
+        "handoff": {
+          "n": 30,
+          "p50": 0.0001812106278766945,
+          "p95": 0.0002519130070140314,
+          "min": 0.00012984410153583454,
+          "max": 0.00031237993112567266
+        },
+        "context": {
+          "n": 30,
+          "p50": 0.980661157577134,
+          "p95": 0.9863212486641594,
+          "min": 0.968122067605805,
+          "max": 0.9871197764983791
+        },
+        "after_context": {
+          "n": 30,
+          "p50": 0.010761858421085735,
+          "p95": 0.01763456485015146,
+          "min": 0.007167428163852409,
+          "max": 0.02107421741919889
+        },
+        "response_json": {
+          "n": 30,
+          "p50": 0.0010022009635199795,
+          "p95": 0.003371697639031402,
+          "min": 0.0007132414154684784,
+          "max": 0.0036210814276201545
+        },
+        "response_end_to_finish": {
+          "n": 30,
+          "p50": 0.002850891662427349,
+          "p95": 0.006100428723758502,
+          "min": 0.0019854696058045143,
+          "max": 0.006205114892501
+        }
+      },
+      "transactions": {
+        "1": {
+          "storage": {
+            "n": 30,
+            "p50": 3.8667085021734238,
+            "p95": 4.35046614408493,
+            "min": 3.3049169778823853,
+            "max": 4.55179101228714
+          },
+          "configuration": {
+            "n": 30,
+            "p50": 0.011749997735023499,
+            "p95": 0.02173779308795927,
+            "min": 0.008540987968444824,
+            "max": 0.032875001430511475
+          },
+          "acquire_lease": {
+            "n": 30,
+            "p50": 0.060791999101638794,
+            "p95": 0.11129373162984847,
+            "min": 0.04683297872543335,
+            "max": 0.8812080025672913
+          },
+          "begin_and_set": {
+            "n": 30,
+            "p50": 0.14164601266384125,
+            "p95": 0.20556876063346863,
+            "min": 0.10958302021026611,
+            "max": 0.22574999928474426
+          },
+          "operation": {
+            "n": 30,
+            "p50": 3.5045630037784576,
+            "p95": 4.020026604831218,
+            "min": 3.0330419838428497,
+            "max": 4.2248750030994415
+          },
+          "fresh_inspect": {
+            "n": 30,
+            "p50": 3.020104005932808,
+            "p95": 3.4861334010958664,
+            "min": 2.638833999633789,
+            "max": 3.650833010673523
+          },
+          "fresh_files": {
+            "n": 30,
+            "p50": 0.4780835062265396,
+            "p95": 0.542302207648754,
+            "min": 0.37445899844169617,
+            "max": 0.6047919988632202
+          },
+          "catalog_dispatch_to_result": {
+            "n": 30,
+            "p50": 2.682228997349739,
+            "p95": 3.1195248410105703,
+            "min": 2.338499993085861,
+            "max": 3.3054580092430115
+          },
+          "catalog_residual_await": {
+            "n": 30,
+            "p50": 2.1217289865016937,
+            "p95": 2.6378685861825937,
+            "min": 1.787333995103836,
+            "max": 2.8495410084724426
+          },
+          "after_catalog_checks": {
+            "n": 30,
+            "p50": 0.3304160088300705,
+            "p95": 0.39434984922409055,
+            "min": 0.27879202365875244,
+            "max": 0.4152500033378601
+          },
+          "business_after_inspect": {
+            "n": 30,
+            "p50": 0.462582990527153,
+            "p95": 0.5945437371730804,
+            "min": 0.3879159986972809,
+            "max": 0.6689999997615814
+          },
+          "commit": {
+            "n": 30,
+            "p50": 0.05006198585033417,
+            "p95": 0.06572339981794358,
+            "min": 0.04416698217391968,
+            "max": 0.06770801544189453
+          },
+          "release": {
+            "n": 30,
+            "p50": 0.04387500882148743,
+            "p95": 0.056314238905906665,
+            "min": 0.03200000524520874,
+            "max": 0.058999985456466675
+          }
+        }
+      },
+      "boundaries": {
+        "acquire.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "acquire.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "auth.done": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "catalog.await": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "catalog.dispatch": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "catalog.result": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "commit.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "commit.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "config.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "config.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "contact.query.01.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "contact.query.01.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "context.call": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "context.enter": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "context.return": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "files.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "files.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "finish": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handler.enter": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handoff.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handoff.asserted": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handoff.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handoff.finished": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "ingress": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "inspect.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "inspect.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "json.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "json.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "operation.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "operation.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "private.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "private.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "public.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "public.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "release.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "respond.begin": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "response.end.return": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.enter": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.exit": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.08.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.08.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.09.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.09.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.10.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.10.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.11.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.11.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.13.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.13.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.15.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.15.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.17.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.17.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        }
+      },
+      "per_request_transaction_share": {
+        "storage": {
+          "n": 30,
+          "p50": 0.9799593067424126,
+          "p95": 0.9859447438250821,
+          "min": 0.96719709945093,
+          "max": 0.9867589208038294
+        },
+        "configuration": {
+          "n": 30,
+          "p50": 0.002920648951944421,
+          "p95": 0.0061457444417829295,
+          "min": 0.0021497263318622953,
+          "max": 0.008200725137267483
+        },
+        "acquire_lease": {
+          "n": 30,
+          "p50": 0.01593938022618681,
+          "p95": 0.028315752207141436,
+          "min": 0.01100550679860363,
+          "max": 0.2021119279127206
+        },
+        "begin_and_set": {
+          "n": 30,
+          "p50": 0.036239517327371976,
+          "p95": 0.052030782953062446,
+          "min": 0.027926355848646157,
+          "max": 0.05511083049897926
+        },
+        "operation": {
+          "n": 30,
+          "p50": 0.8942824216457399,
+          "p95": 0.9162736020448714,
+          "min": 0.7132357780736699,
+          "max": 0.9194594742756401
+        },
+        "fresh_inspect": {
+          "n": 30,
+          "p50": 0.7758021394653166,
+          "p95": 0.7893969325985928,
+          "min": 0.6241591720717952,
+          "max": 0.7938600384614449
+        },
+        "fresh_files": {
+          "n": 30,
+          "p50": 0.12501925911834877,
+          "p95": 0.14778154455292272,
+          "min": 0.09119148359384775,
+          "max": 0.151706793627139
+        },
+        "catalog_dispatch_to_result": {
+          "n": 30,
+          "p50": 0.6858158514672092,
+          "p95": 0.7090306395736641,
+          "min": 0.5504107822943555,
+          "max": 0.7142882139607128
+        },
+        "catalog_residual_await": {
+          "n": 30,
+          "p50": 0.5423428046530668,
+          "p95": 0.5992836342475305,
+          "min": 0.42198004539016754,
+          "max": 0.6157674827083096
+        },
+        "after_catalog_checks": {
+          "n": 30,
+          "p50": 0.08494053933008057,
+          "p95": 0.0990078233135721,
+          "min": 0.07121655675920158,
+          "max": 0.1007640009030137
+        },
+        "business_after_inspect": {
+          "n": 30,
+          "p50": 0.11780216651239646,
+          "p95": 0.1486791444718265,
+          "min": 0.08897155965047973,
+          "max": 0.1748391097128914
+        },
+        "commit": {
+          "n": 30,
+          "p50": 0.01304443936583775,
+          "p95": 0.016107880287855533,
+          "min": 0.01120086619409933,
+          "max": 0.018877039869992854
+        },
+        "release": {
+          "n": 30,
+          "p50": 0.011034339297349333,
+          "p95": 0.013947296345499651,
+          "min": 0.008320148985282199,
+          "max": 0.014561156384611983
+        }
+      },
+      "process_cpu_ms": {
+        "n": 30,
+        "p50": 1.319,
+        "p95": 2.6749999999999994,
+        "min": 0.99,
+        "max": 4.58
+      },
+      "event_loop_utilization": {
+        "n": 30,
+        "p50": 0.33487701548814386,
+        "p95": 0.35869109880300426,
+        "min": 0.23314463657495232,
+        "max": 0.4884437205486207
+      },
+      "monotonic_point_failures": 0,
+      "finish_to_http_max_abs_delta_ms": 0.0,
+      "response_hash_counts": {
+        "A-old-anchor": {
+          "562d0250ba30f7483ad1c0127f9eb0d2edb4a4b7a1caf7dcf48a6fdfb1021a4d": 40
+        },
+        "B-full-baseline": {
+          "562d0250ba30f7483ad1c0127f9eb0d2edb4a4b7a1caf7dcf48a6fdfb1021a4d": 40
+        },
+        "C-full-observer": {
+          "562d0250ba30f7483ad1c0127f9eb0d2edb4a4b7a1caf7dcf48a6fdfb1021a4d": 40
+        },
+        "D-old-anchor": {
+          "562d0250ba30f7483ad1c0127f9eb0d2edb4a4b7a1caf7dcf48a6fdfb1021a4d": 40
+        }
+      },
+      "exclusive_top_partition_max_abs_delta_ms": 0.0,
+      "client_response_ms": {
+        "A-old-anchor": {
+          "n": 30,
+          "p50": 1.9853334999999999,
+          "p95": 2.26349185
+        },
+        "B-full-baseline": {
+          "n": 30,
+          "p50": 4.05,
+          "p95": 5.257724999999998
+        },
+        "C-full-observer": {
+          "n": 30,
+          "p50": 4.131520999999999,
+          "p95": 4.6189522
+        },
+        "D-old-anchor": {
+          "n": 30,
+          "p50": 2.1287085,
+          "p95": 2.4735125
+        }
+      },
+      "client_observer_C_over_B": {
+        "p50": 1.0201286419753086,
+        "p95": 0.8785077576328167
+      },
+      "client_minus_server_ms": {
+        "A-old-anchor": {
+          "n": 30,
+          "p50": 0.21927000000000008,
+          "p95": 0.2685669999999999
+        },
+        "B-full-baseline": {
+          "n": 30,
+          "p50": 0.18666650953674302,
+          "p95": 0.30870684032354334
+        },
+        "C-full-observer": {
+          "n": 30,
+          "p50": 0.1947294856309889,
+          "p95": 0.25855069658632307
+        },
+        "D-old-anchor": {
+          "n": 30,
+          "p50": 0.23522900000000002,
+          "p95": 0.31789214999999993
+        }
+      }
+    },
+    "sources": {
+      "server_response_ms": {
+        "A-old-anchor": {
+          "n": 30,
+          "p50": 1.193479,
+          "p95": 1.5877331499999996,
+          "min": 1.126833,
+          "max": 1.944
+        },
+        "B-full-baseline": {
+          "n": 30,
+          "p50": 4.043936997652054,
+          "p95": 5.25011043548584,
+          "min": 3.5241250097751617,
+          "max": 9.926084011793137
+        },
+        "C-full-observer": {
+          "n": 30,
+          "p50": 3.959062486886978,
+          "p95": 5.366893614828583,
+          "min": 3.5782909989356995,
+          "max": 6.984667003154755
+        },
+        "D-old-anchor": {
+          "n": 30,
+          "p50": 1.1911665,
+          "p95": 1.5014043499999998,
+          "min": 1.133209,
+          "max": 1.704375
+        }
+      },
+      "old_anchor_D_over_A": {
+        "p50": 0.9980623873566272,
+        "p95": 0.9456276390021838
+      },
+      "observer_C_over_B": {
+        "p50": 0.9790119107161277,
+        "p95": 1.0222439472041194
+      },
+      "baseline_B_over_old": {
+        "A-old-anchor": {
+          "p50": 3.3883604132557457,
+          "p95": 3.3066705418891336
+        },
+        "D-old-anchor": {
+          "p50": 3.3949384889954963,
+          "p95": 3.496799803121551
+        }
+      },
+      "spans_ms": {
+        "ingress_to_context": {
+          "n": 30,
+          "p50": 0.024561986327171326,
+          "p95": 0.04147878438234328,
+          "min": 0.018541991710662842,
+          "max": 0.05450001358985901
+        },
+        "private_false_await": {
+          "n": 30,
+          "p50": 0.005979001522064209,
+          "p95": 0.01001903712749481,
+          "min": 0.00437501072883606,
+          "max": 0.01454201340675354
+        },
+        "auth": {
+          "n": 30,
+          "p50": 0.002978995442390442,
+          "p95": 0.0048021942377090435,
+          "min": 0.002333015203475952,
+          "max": 0.005874991416931152
+        },
+        "public_false_await": {
+          "n": 30,
+          "p50": 0.0019170045852661133,
+          "p95": 0.0035606101155281045,
+          "min": 0.001207977533340454,
+          "max": 0.0062499940395355225
+        },
+        "handoff": {
+          "n": 30,
+          "p50": 0.0005205124616622925,
+          "p95": 0.0009212002158164975,
+          "min": 0.00041601061820983887,
+          "max": 0.001042008399963379
+        },
+        "context": {
+          "n": 30,
+          "p50": 3.905354008078575,
+          "p95": 5.303459903597829,
+          "min": 3.5170419812202454,
+          "max": 6.901708006858826
+        },
+        "after_context": {
+          "n": 30,
+          "p50": 0.026354506611824036,
+          "p95": 0.044619059562683104,
+          "min": 0.01920798420906067,
+          "max": 0.04833400249481201
+        },
+        "response_json": {
+          "n": 30,
+          "p50": 0.0010000020265579224,
+          "p95": 0.0017536506056785581,
+          "min": 0.0006249845027923584,
+          "max": 0.002374976873397827
+        },
+        "response_end_to_finish": {
+          "n": 30,
+          "p50": 0.007874995470046997,
+          "p95": 0.01371091455221176,
+          "min": 0.005915999412536621,
+          "max": 0.014582991600036621
+        }
+      },
+      "per_request_share": {
+        "ingress_to_context": {
+          "n": 30,
+          "p50": 0.006016708468956897,
+          "p95": 0.010408153620537777,
+          "min": 0.004601958238540395,
+          "max": 0.013069679274896046
+        },
+        "private_false_await": {
+          "n": 30,
+          "p50": 0.0014745869881329179,
+          "p95": 0.0025638913467136786,
+          "min": 0.001041423987198222,
+          "max": 0.0037709433945962126
+        },
+        "auth": {
+          "n": 30,
+          "p50": 0.0007355621212855894,
+          "p95": 0.0011129978036965007,
+          "min": 0.0005597040639744795,
+          "max": 0.0015234657992198788
+        },
+        "public_false_await": {
+          "n": 30,
+          "p50": 0.00046553663438906353,
+          "p95": 0.0008230029657984549,
+          "min": 0.0002931774114394932,
+          "max": 0.001498814627487372
+        },
+        "handoff": {
+          "n": 30,
+          "p50": 0.00012778147286001695,
+          "p95": 0.000231845805040999,
+          "min": 9.707601384906728e-05,
+          "max": 0.00025878432152397375
+        },
+        "context": {
+          "n": 30,
+          "p50": 0.9870469295637435,
+          "p95": 0.9901720186922015,
+          "min": 0.9770076929798631,
+          "max": 0.9906182529344731
+        },
+        "after_context": {
+          "n": 30,
+          "p50": 0.006434479101749733,
+          "p95": 0.010174156121321297,
+          "min": 0.004779788826986419,
+          "max": 0.011604289658413654
+        },
+        "response_json": {
+          "n": 30,
+          "p50": 0.00025459476392493874,
+          "p95": 0.00044481956615004866,
+          "min": 0.00016655336494980177,
+          "max": 0.0006158640555852492
+        },
+        "response_end_to_finish": {
+          "n": 30,
+          "p50": 0.00192169632693348,
+          "p95": 0.003264535933594339,
+          "min": 0.0014745476371698617,
+          "max": 0.003781569601776819
+        }
+      },
+      "transactions": {
+        "1": {
+          "storage": {
+            "n": 30,
+            "p50": 3.9038539975881577,
+            "p95": 5.301531262695786,
+            "min": 3.515709012746811,
+            "max": 6.8984160125255585
+          },
+          "configuration": {
+            "n": 30,
+            "p50": 0.009062498807907104,
+            "p95": 0.016043440997600553,
+            "min": 0.006542026996612549,
+            "max": 0.02433300018310547
+          },
+          "acquire_lease": {
+            "n": 30,
+            "p50": 0.049708008766174316,
+            "p95": 0.09606859982013698,
+            "min": 0.039083003997802734,
+            "max": 0.10908398032188416
+          },
+          "begin_and_set": {
+            "n": 30,
+            "p50": 0.09547899663448334,
+            "p95": 0.13275176137685774,
+            "min": 0.0830409824848175,
+            "max": 0.9507080018520355
+          },
+          "operation": {
+            "n": 30,
+            "p50": 3.614916980266571,
+            "p95": 4.99621456712484,
+            "min": 3.2996250092983246,
+            "max": 6.55545899271965
+          },
+          "fresh_inspect": {
+            "n": 30,
+            "p50": 2.4639795124530792,
+            "p95": 2.858773396909237,
+            "min": 2.2528330087661743,
+            "max": 2.9689579904079437
+          },
+          "fresh_files": {
+            "n": 30,
+            "p50": 0.36887499690055847,
+            "p95": 0.5286734029650688,
+            "min": 0.320250004529953,
+            "max": 0.5610840022563934
+          },
+          "catalog_dispatch_to_result": {
+            "n": 30,
+            "p50": 2.23233300447464,
+            "p95": 2.6076271966099736,
+            "min": 2.013374984264374,
+            "max": 2.675499975681305
+          },
+          "catalog_residual_await": {
+            "n": 30,
+            "p50": 1.8229375034570694,
+            "p95": 2.1658645585179324,
+            "min": 1.5470829904079437,
+            "max": 2.306874990463257
+          },
+          "after_catalog_checks": {
+            "n": 30,
+            "p50": 0.24141649901866913,
+            "p95": 0.3068831369280815,
+            "min": 0.2161249816417694,
+            "max": 0.3863750100135803
+          },
+          "business_after_inspect": {
+            "n": 30,
+            "p50": 1.134270504117012,
+            "p95": 2.210493898391719,
+            "min": 1.0238329768180847,
+            "max": 3.7039999961853027
+          },
+          "commit": {
+            "n": 30,
+            "p50": 0.04193800687789917,
+            "p95": 0.05543504357337951,
+            "min": 0.034415990114212036,
+            "max": 0.09287500381469727
+          },
+          "release": {
+            "n": 30,
+            "p50": 0.03293749690055847,
+            "p95": 0.04570161998271942,
+            "min": 0.02325001358985901,
+            "max": 0.0494999885559082
+          }
+        }
+      },
+      "boundaries": {
+        "acquire.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "acquire.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "auth.done": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "catalog.await": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "catalog.dispatch": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "catalog.result": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "commit.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "commit.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "config.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "config.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "contact.query.02.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "contact.query.02.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "contact.query.03.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "contact.query.03.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "contact.query.04.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "contact.query.04.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "contact.query.06.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 120,
+          "scored_occurrences": 90
+        },
+        "contact.query.06.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 120,
+          "scored_occurrences": 90
+        },
+        "context.call": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "context.enter": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "context.return": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "files.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "files.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "finish": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handler.enter": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handoff.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handoff.asserted": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handoff.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handoff.finished": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "ingress": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "inspect.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "inspect.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "json.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "json.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "operation.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "operation.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "private.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "private.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "public.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "public.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "release.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "respond.begin": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "response.end.return": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.enter": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.exit": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.08.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.08.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.09.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.09.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.10.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.10.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.11.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.11.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.13.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.13.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.15.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.15.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.17.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.query.17.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        }
+      },
+      "per_request_transaction_share": {
+        "storage": {
+          "n": 30,
+          "p50": 0.9865196792680297,
+          "p95": 0.9897797867538035,
+          "min": 0.9763591543032163,
+          "max": 0.9903340290087982
+        },
+        "configuration": {
+          "n": 30,
+          "p50": 0.0022569452350609553,
+          "p95": 0.00408919815151205,
+          "min": 0.001714513092700026,
+          "max": 0.0058353106218004885
+        },
+        "acquire_lease": {
+          "n": 30,
+          "p50": 0.012258488087869324,
+          "p95": 0.022181781826938897,
+          "min": 0.008573423320546412,
+          "max": 0.02828697124292535
+        },
+        "begin_and_set": {
+          "n": 30,
+          "p50": 0.02432266213152607,
+          "p95": 0.03175761664277539,
+          "min": 0.016453489269935798,
+          "max": 0.20271141033814455
+        },
+        "operation": {
+          "n": 30,
+          "p50": 0.9288633818041785,
+          "p95": 0.9385059215907275,
+          "min": 0.7605967856020222,
+          "max": 0.9425044130540912
+        },
+        "fresh_inspect": {
+          "n": 30,
+          "p50": 0.6373541165815053,
+          "p95": 0.6501129110516419,
+          "min": 0.40817393322887985,
+          "max": 0.6759726795498787
+        },
+        "fresh_files": {
+          "n": 30,
+          "p50": 0.09099132562387924,
+          "p95": 0.12650998136526698,
+          "min": 0.05824852878230593,
+          "max": 0.14882043698576242
+        },
+        "catalog_dispatch_to_result": {
+          "n": 30,
+          "p50": 0.5706862572437044,
+          "p95": 0.5909306230858594,
+          "min": 0.36962520852059877,
+          "max": 0.6202149087000026
+        },
+        "catalog_residual_await": {
+          "n": 30,
+          "p50": 0.46393356260448293,
+          "p95": 0.5021708770703913,
+          "min": 0.29790854866676486,
+          "max": 0.5233075522045867
+        },
+        "after_catalog_checks": {
+          "n": 30,
+          "p50": 0.06285889191190615,
+          "p95": 0.07102780670751621,
+          "min": 0.03849503530226717,
+          "max": 0.07215806084196152
+        },
+        "business_after_inspect": {
+          "n": 30,
+          "p50": 0.28971674731440034,
+          "p95": 0.42100247452316303,
+          "min": 0.2376353870784755,
+          "max": 0.5303044503785681
+        },
+        "commit": {
+          "n": 30,
+          "p50": 0.01043190913213739,
+          "p95": 0.013397402353024505,
+          "min": 0.007867752678743414,
+          "max": 0.024083761468372742
+        },
+        "release": {
+          "n": 30,
+          "p50": 0.007983056785733317,
+          "p95": 0.011051705302449257,
+          "min": 0.0053366155841919425,
+          "max": 0.013104623201844637
+        }
+      },
+      "process_cpu_ms": {
+        "n": 30,
+        "p50": 1.0975000000000001,
+        "p95": 3.568049999999999,
+        "min": 0.753,
+        "max": 4.321
+      },
+      "event_loop_utilization": {
+        "n": 30,
+        "p50": 0.2766605986395671,
+        "p95": 0.3797249690118949,
+        "min": 0.21783912853139473,
+        "max": 0.594359390052675
+      },
+      "monotonic_point_failures": 0,
+      "finish_to_http_max_abs_delta_ms": 0.0,
+      "response_hash_counts": {
+        "A-old-anchor": {
+          "73608e3346e331760ac29f17144976922e84678fed8a2eb7cc66f6ef0e89a33c": 40
+        },
+        "B-full-baseline": {
+          "73608e3346e331760ac29f17144976922e84678fed8a2eb7cc66f6ef0e89a33c": 40
+        },
+        "C-full-observer": {
+          "73608e3346e331760ac29f17144976922e84678fed8a2eb7cc66f6ef0e89a33c": 40
+        },
+        "D-old-anchor": {
+          "73608e3346e331760ac29f17144976922e84678fed8a2eb7cc66f6ef0e89a33c": 40
+        }
+      },
+      "exclusive_top_partition_max_abs_delta_ms": 0.0,
+      "client_response_ms": {
+        "A-old-anchor": {
+          "n": 30,
+          "p50": 1.415896,
+          "p95": 1.8329669999999993
+        },
+        "B-full-baseline": {
+          "n": 30,
+          "p50": 4.2120835,
+          "p95": 5.63453995
+        },
+        "C-full-observer": {
+          "n": 30,
+          "p50": 4.1274169999999994,
+          "p95": 5.536931249999996
+        },
+        "D-old-anchor": {
+          "n": 30,
+          "p50": 1.4026455,
+          "p95": 1.71521525
+        }
+      },
+      "client_observer_C_over_B": {
+        "p50": 0.9798991401761146,
+        "p95": 0.9826767223471361
+      },
+      "client_minus_server_ms": {
+        "A-old-anchor": {
+          "n": 30,
+          "p50": 0.21456249999999988,
+          "p95": 0.28303139999999993
+        },
+        "B-full-baseline": {
+          "n": 30,
+          "p50": 0.18375001412200942,
+          "p95": 0.38442951451416013
+        },
+        "C-full-observer": {
+          "n": 30,
+          "p50": 0.15620850384235396,
+          "p95": 0.21874970111188868
+        },
+        "D-old-anchor": {
+          "n": 30,
+          "p50": 0.2051250000000001,
+          "p95": 0.2329207999999999
+        }
+      }
+    },
+    "session-default": {
+      "server_response_ms": {
+        "A-old-anchor": {
+          "n": 30,
+          "p50": 2.2528544999999998,
+          "p95": 2.8034626499999993,
+          "min": 2.086459,
+          "max": 3.42525
+        },
+        "B-full-baseline": {
+          "n": 30,
+          "p50": 2.5947494953870773,
+          "p95": 3.5201937571167936,
+          "min": 2.4102499783039093,
+          "max": 3.8233329951763153
+        },
+        "C-full-observer": {
+          "n": 30,
+          "p50": 2.565853998064995,
+          "p95": 3.3264750093221656,
+          "min": 2.460999995470047,
+          "max": 3.8950420022010803
+        },
+        "D-old-anchor": {
+          "n": 30,
+          "p50": 2.237083,
+          "p95": 2.6518890999999996,
+          "min": 2.108583,
+          "max": 2.697708
+        }
+      },
+      "old_anchor_D_over_A": {
+        "p50": 0.9929993259662354,
+        "p95": 0.9459334512624951
+      },
+      "observer_C_over_B": {
+        "p50": 0.9888638585830914,
+        "p95": 0.9449692939762233
+      },
+      "baseline_B_over_old": {
+        "A-old-anchor": {
+          "p50": 1.1517607974181545,
+          "p95": 1.2556592316708035
+        },
+        "D-old-anchor": {
+          "p50": 1.1598807444279347,
+          "p95": 1.3274287213280502
+        }
+      },
+      "spans_ms": {
+        "private_false_await": {
+          "n": 30,
+          "p50": 0.0024584978818893433,
+          "p95": 0.005315093696117401,
+          "min": 0.0020419955253601074,
+          "max": 0.008166015148162842
+        },
+        "auth": {
+          "n": 30,
+          "p50": 0.0022500157356262207,
+          "p95": 0.004502290487289423,
+          "min": 0.0018750131130218506,
+          "max": 0.009499996900558472
+        },
+        "body_read": {
+          "n": 30,
+          "p50": 0.016125008463859558,
+          "p95": 0.03302499055862425,
+          "min": 0.012250006198883057,
+          "max": 0.03887501358985901
+        },
+        "body_parse": {
+          "n": 30,
+          "p50": 0.0034580081701278687,
+          "p95": 0.006110191345214844,
+          "min": 0.002499997615814209,
+          "max": 0.008457988500595093
+        },
+        "scope_and_session": {
+          "n": 30,
+          "p50": 2.5066664963960648,
+          "p95": 3.24388780593872,
+          "min": 2.412292003631592,
+          "max": 3.784416973590851
+        },
+        "manual_scope_to_session": {
+          "n": 30,
+          "p50": 1.1836459934711456,
+          "p95": 1.5945853397250165,
+          "min": 1.1278750002384186,
+          "max": 2.3330419957637787
+        },
+        "default_session": {
+          "n": 30,
+          "p50": 1.3207290023565292,
+          "p95": 1.728967006504535,
+          "min": 1.2476249933242798,
+          "max": 1.8853329718112946
+        },
+        "response_json": {
+          "n": 30,
+          "p50": 0.0008749961853027344,
+          "p95": 0.0013145580887794492,
+          "min": 0.0007079839706420898,
+          "max": 0.0025829970836639404
+        },
+        "response_end_to_finish": {
+          "n": 30,
+          "p50": 0.005791991949081421,
+          "p95": 0.01243559271097183,
+          "min": 0.004999995231628418,
+          "max": 0.014749974012374878
+        }
+      },
+      "per_request_share": {
+        "private_false_await": {
+          "n": 30,
+          "p50": 0.0009658175281066303,
+          "p95": 0.00198571590350309,
+          "min": 0.0007296481398099458,
+          "max": 0.002096515299077197
+        },
+        "auth": {
+          "n": 30,
+          "p50": 0.0008598580557496061,
+          "p95": 0.0012991391857189512,
+          "min": 0.0006898579477810938,
+          "max": 0.0036999765616808795
+        },
+        "body_read": {
+          "n": 30,
+          "p50": 0.006237801076736337,
+          "p95": 0.010930924792869352,
+          "min": 0.004800003026845881,
+          "max": 0.014199621469411306
+        },
+        "body_parse": {
+          "n": 30,
+          "p50": 0.0013738557593608609,
+          "p95": 0.0021422447269104153,
+          "min": 0.000955031020553247,
+          "max": 0.002976592806167259
+        },
+        "scope_and_session": {
+          "n": 30,
+          "p50": 0.9760192083967277,
+          "p95": 0.98057550345548,
+          "min": 0.963370402569643,
+          "max": 0.981023025741155
+        },
+        "manual_scope_to_session": {
+          "n": 30,
+          "p50": 0.4638403177325814,
+          "p95": 0.5096983460980948,
+          "min": 0.38286516658331743,
+          "max": 0.5989773651851203
+        },
+        "default_session": {
+          "n": 30,
+          "p50": 0.5097779911009173,
+          "p95": 0.5623415942057092,
+          "min": 0.37219315840627376,
+          "max": 0.5944844012406035
+        },
+        "response_json": {
+          "n": 30,
+          "p50": 0.0003396340743233231,
+          "p95": 0.0004696662057677278,
+          "min": 0.0002567333355665068,
+          "max": 0.0008222831982195094
+        },
+        "response_end_to_finish": {
+          "n": 30,
+          "p50": 0.002251235687215144,
+          "p95": 0.003803430777469637,
+          "min": 0.001957620376250148,
+          "max": 0.005571020826725681
+        }
+      },
+      "transactions": {
+        "1": {
+          "storage": {
+            "n": 30,
+            "p50": 1.1806249916553497,
+            "p95": 1.5878688916563979,
+            "min": 1.1248329877853394,
+            "max": 2.325332999229431
+          },
+          "configuration": {
+            "n": 30,
+            "p50": 0.00568699836730957,
+            "p95": 0.01236004382371902,
+            "min": 0.004790991544723511,
+            "max": 0.018666982650756836
+          },
+          "acquire_lease": {
+            "n": 30,
+            "p50": 0.03739599883556366,
+            "p95": 0.047950017452239986,
+            "min": 0.030374974012374878,
+            "max": 0.09066599607467651
+          },
+          "begin_and_set": {
+            "n": 30,
+            "p50": 0.05329199135303497,
+            "p95": 0.0717457830905914,
+            "min": 0.046750009059906006,
+            "max": 0.12333399057388306
+          },
+          "operation": {
+            "n": 30,
+            "p50": 1.0566879957914352,
+            "p95": 1.4337706550955764,
+            "min": 1.0039580166339874,
+            "max": 2.0236250162124634
+          },
+          "fresh_inspect": {
+            "n": 30,
+            "p50": 1.0239170044660568,
+            "p95": 1.3900981023907655,
+            "min": 0.9731249809265137,
+            "max": 1.9532920122146606
+          },
+          "fresh_files": {
+            "n": 30,
+            "p50": 0.3073965013027191,
+            "p95": 0.38353505134582516,
+            "min": 0.2802079916000366,
+            "max": 0.5542080104351044
+          },
+          "catalog_dispatch_to_result": {
+            "n": 30,
+            "p50": 0.8940625041723251,
+            "p95": 1.2043354421854016,
+            "min": 0.8531250059604645,
+            "max": 1.7006660103797913
+          },
+          "catalog_residual_await": {
+            "n": 30,
+            "p50": 0.56614550948143,
+            "p95": 0.8644338428974148,
+            "min": 0.5152089893817902,
+            "max": 1.1007499992847443
+          },
+          "after_catalog_checks": {
+            "n": 30,
+            "p50": 0.13085401058197021,
+            "p95": 0.20560219138860686,
+            "min": 0.11612498760223389,
+            "max": 0.25233399868011475
+          },
+          "business_after_inspect": {
+            "n": 30,
+            "p50": 0.0303335040807724,
+            "p95": 0.0454456523060798,
+            "min": 0.02804100513458252,
+            "max": 0.06975001096725464
+          },
+          "commit": {
+            "n": 30,
+            "p50": 0.01279151439666748,
+            "p95": 0.025935311615467038,
+            "min": 0.011958003044128418,
+            "max": 0.04358398914337158
+          },
+          "release": {
+            "n": 30,
+            "p50": 0.013749510049819946,
+            "p95": 0.02020846158266066,
+            "min": 0.01237499713897705,
+            "max": 0.03604099154472351
+          }
+        },
+        "2": {
+          "storage": {
+            "n": 30,
+            "p50": 1.3189374953508377,
+            "p95": 1.7239604547619813,
+            "min": 1.2460000216960907,
+            "max": 1.8832909762859344
+          },
+          "configuration": {
+            "n": 30,
+            "p50": 0.006082996726036072,
+            "p95": 0.011818595230579364,
+            "min": 0.004999995231628418,
+            "max": 0.01958400011062622
+          },
+          "acquire_lease": {
+            "n": 30,
+            "p50": 0.029208511114120483,
+            "p95": 0.05415640473365778,
+            "min": 0.024459004402160645,
+            "max": 0.11550000309944153
+          },
+          "begin_and_set": {
+            "n": 30,
+            "p50": 0.04677098989486694,
+            "p95": 0.07605420798063267,
+            "min": 0.041999995708465576,
+            "max": 0.09712499380111694
+          },
+          "operation": {
+            "n": 30,
+            "p50": 1.1631875038146973,
+            "p95": 1.4903039529919617,
+            "min": 1.0940420031547546,
+            "max": 1.7171669900417328
+          },
+          "fresh_inspect": {
+            "n": 30,
+            "p50": 1.0319169908761978,
+            "p95": 1.1779293432831761,
+            "min": 0.969292014837265,
+            "max": 1.4255839884281158
+          },
+          "fresh_files": {
+            "n": 30,
+            "p50": 0.29170849919319153,
+            "p95": 0.37991859316825866,
+            "min": 0.2754170000553131,
+            "max": 0.4809580147266388
+          },
+          "catalog_dispatch_to_result": {
+            "n": 30,
+            "p50": 0.9018335044384003,
+            "p95": 1.0209081679582594,
+            "min": 0.8489579856395721,
+            "max": 1.225041002035141
+          },
+          "catalog_residual_await": {
+            "n": 30,
+            "p50": 0.5736875087022781,
+            "p95": 0.6952709600329398,
+            "min": 0.5150839984416962,
+            "max": 0.7385829985141754
+          },
+          "after_catalog_checks": {
+            "n": 30,
+            "p50": 0.1287499964237213,
+            "p95": 0.17151699811220164,
+            "min": 0.11116600036621094,
+            "max": 0.20033398270606995
+          },
+          "business_after_inspect": {
+            "n": 30,
+            "p50": 0.13370899856090546,
+            "p95": 0.17545350193977355,
+            "min": 0.12333300709724426,
+            "max": 0.6457499861717224
+          },
+          "commit": {
+            "n": 30,
+            "p50": 0.047520995140075684,
+            "p95": 0.06417919993400574,
+            "min": 0.037584006786346436,
+            "max": 0.18120801448822021
+          },
+          "release": {
+            "n": 30,
+            "p50": 0.014103993773460388,
+            "p95": 0.02357515543699263,
+            "min": 0.012541979551315308,
+            "max": 0.02754199504852295
+          }
+        }
+      },
+      "boundaries": {
+        "acquire.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "acquire.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "auth.done": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "body.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "body.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "body.parsed": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "catalog.await": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "catalog.dispatch": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "catalog.result": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "commit.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "commit.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "config.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "config.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "files.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "files.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "finish": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "handler.enter": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "ingress": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "inspect.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "inspect.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "json.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "json.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "operation.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "operation.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "private.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "private.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "public.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "public.handled": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "release.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "respond.begin": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "response.end.return": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "scope.dispatch.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "scope.dispatch.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "session.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "session.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 40,
+          "scored_occurrences": 30
+        },
+        "storage.enter": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.exit": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.08.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.08.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.09.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.09.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.10.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.10.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.11.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.11.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.13.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.13.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.15.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.15.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.17.after": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        },
+        "storage.query.17.before": {
+          "all_requests": 40,
+          "scored_requests": 30,
+          "all_occurrences": 80,
+          "scored_occurrences": 60
+        }
+      },
+      "per_request_transaction_share": {
+        "storage": {
+          "n": 30,
+          "p50": 0.9732456185719003,
+          "p95": 0.9781694427234122,
+          "min": 0.9599391132735663,
+          "max": 0.9787427979938697
+        },
+        "configuration": {
+          "n": 30,
+          "p50": 0.004801858767692295,
+          "p95": 0.007473907484265446,
+          "min": 0.003833188243973534,
+          "max": 0.008322623868861035
+        },
+        "acquire_lease": {
+          "n": 30,
+          "p50": 0.026434489277057188,
+          "p95": 0.03566077317623614,
+          "min": 0.021727019757595,
+          "max": 0.045269635860950265
+        },
+        "begin_and_set": {
+          "n": 30,
+          "p50": 0.03907930189921775,
+          "p95": 0.04554567018259541,
+          "min": 0.03125615786623388,
+          "max": 0.05020581083099463
+        },
+        "operation": {
+          "n": 30,
+          "p50": 0.8681417889334984,
+          "p95": 0.8753596708471352,
+          "min": 0.8162013156959729,
+          "max": 0.8847635455014353
+        },
+        "fresh_inspect": {
+          "n": 30,
+          "p50": 0.8014220893868038,
+          "p95": 0.8146086566017461,
+          "min": 0.671041742966767,
+          "max": 0.8169270464183405
+        },
+        "fresh_files": {
+          "n": 30,
+          "p50": 0.2322369038695276,
+          "p95": 0.25438185509932587,
+          "min": 0.1991651561228315,
+          "max": 0.27944856949021346
+        },
+        "catalog_dispatch_to_result": {
+          "n": 30,
+          "p50": 0.69870894242269,
+          "p95": 0.7152184559282172,
+          "min": 0.5813724319128234,
+          "max": 0.7269805511529556
+        },
+        "catalog_residual_await": {
+          "n": 30,
+          "p50": 0.45013133967379604,
+          "p95": 0.4757173617344409,
+          "min": 0.34686594403969856,
+          "max": 0.4921924936443302
+        },
+        "after_catalog_checks": {
+          "n": 30,
+          "p50": 0.1016840794297318,
+          "p95": 0.1143472121455439,
+          "min": 0.0895510649865933,
+          "max": 0.11676624445262912
+        },
+        "business_after_inspect": {
+          "n": 30,
+          "p50": 0.06324587825857829,
+          "p95": 0.07231935227202024,
+          "min": 0.05669592353463025,
+          "max": 0.21357738502190982
+        },
+        "commit": {
+          "n": 30,
+          "p50": 0.02365117117116057,
+          "p95": 0.027756271289689168,
+          "min": 0.019838124494134607,
+          "max": 0.07485828337818146
+        },
+        "release": {
+          "n": 30,
+          "p50": 0.010909677619892557,
+          "p95": 0.014077083182083729,
+          "min": 0.009104571294480193,
+          "max": 0.017892931564444166
+        }
+      },
+      "process_cpu_ms": {
+        "n": 30,
+        "p50": 1.266,
+        "p95": 2.634549999999996,
+        "min": 1.15,
+        "max": 3.386
+      },
+      "event_loop_utilization": {
+        "n": 30,
+        "p50": 0.5394981593712228,
+        "p95": 0.6085546025560172,
+        "min": 0.5117391340202201,
+        "max": 0.7714236065854907
+      },
+      "monotonic_point_failures": 0,
+      "finish_to_http_max_abs_delta_ms": 0.0,
+      "response_hash_counts": {
+        "A-old-anchor": {
+          "d8570ec1a863869370c9e44f356840ade2046af7ad477988bfd23fa7c8dd4103": 40
+        },
+        "B-full-baseline": {
+          "b5da28dd838a878a687b56fb370b10d756d7ff74000a9955d7cdecfbece04916": 40
+        },
+        "C-full-observer": {
+          "a9c324c37ba1026502fad0a837c9784e6004f41e0b42b66691a90e528fb16831": 40
+        },
+        "D-old-anchor": {
+          "8cf8864ccec6735de153d63f57ce48c2deae7bf3dc8ff22dd348dc8572e9d823": 40
+        }
+      },
+      "exclusive_top_partition_max_abs_delta_ms": 0.0,
+      "client_response_ms": {
+        "A-old-anchor": {
+          "n": 30,
+          "p50": 2.4785,
+          "p95": 3.105356249999999
+        },
+        "B-full-baseline": {
+          "n": 30,
+          "p50": 2.7974585000000003,
+          "p95": 3.7565956499999995
+        },
+        "C-full-observer": {
+          "n": 30,
+          "p50": 2.769375,
+          "p95": 3.5633537999999993
+        },
+        "D-old-anchor": {
+          "n": 30,
+          "p50": 2.4769164999999997,
+          "p95": 2.8870723999999997
+        }
+      },
+      "client_observer_C_over_B": {
+        "p50": 0.9899610664465621,
+        "p95": 0.9485593159327648
+      },
+      "client_minus_server_ms": {
+        "A-old-anchor": {
+          "n": 30,
+          "p50": 0.23129149999999998,
+          "p95": 0.28325814999999954
+        },
+        "B-full-baseline": {
+          "n": 30,
+          "p50": 0.19916650777626055,
+          "p95": 0.2514928946766853
+        },
+        "C-full-observer": {
+          "n": 30,
+          "p50": 0.20243750500679014,
+          "p95": 0.257315985907364
+        },
+        "D-old-anchor": {
+          "n": 30,
+          "p50": 0.23543749999999997,
+          "p95": 0.2585270500000001
+        }
+      }
+    }
+  },
+  "boundary_sample_counts": {},
+  "unknowns": [
+    "PG query await含执行/解码/续点；未分离",
+    "GC/JIT/实际loaded scripts未观测"
+  ],
+  "new_measurement_processes": 0,
+  "note": "p50/p95不相加；占比先逐请求算，再汇总；嵌套catalog/files不重复计入inspect。",
+  "actual_events": {
+    "ready_events": [
+      {
+        "time_ms": 200755367.68275,
+        "label": "task.refresh.before"
+      },
+      {
+        "time_ms": 200755367.855041,
+        "label": "host.ready",
+        "value": "unconfigured"
+      },
+      {
+        "time_ms": 200755367.857083,
+        "label": "host.taskEvents",
+        "value": true
+      },
+      {
+        "time_ms": 200755367.857875,
+        "label": "host.maintenance",
+        "value": false
+      },
+      {
+        "time_ms": 200755372.439875,
+        "label": "task.refresh.after"
+      }
+    ],
+    "task_refresh_duration_ms": 4.757125020027161,
+    "task_refresh_overlaps_marked_samples": 0,
+    "task_refresh_end_to_first_marked_ingress_ms": 37.02804100513458,
+    "marked_ingress_to_last_finish_ms": 641.4987089931965
+  },
+  "all_marker_samples": 120,
+  "limits": {
+    "sample_overflow": false,
+    "event_overflow": false,
+    "point_overflow": false
+  },
+  "durability_verified_count": 160,
+  "total_successes": 480
+}

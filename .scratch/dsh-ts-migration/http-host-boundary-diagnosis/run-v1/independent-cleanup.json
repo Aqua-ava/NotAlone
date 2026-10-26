@@ -1,0 +1,25 @@
+{
+  "driver_exited": true,
+  "all_480_succeeded": true,
+  "driver_reported_cleanup": {
+    "owned_databases_remaining": 0,
+    "owned_sessions_remaining": 0,
+    "owned_processes_cleaned": true,
+    "owned_source_directories_remaining": 0,
+    "owned_runtime_directories_remaining": 0
+  },
+  "independent_matching_fixture_databases": 0,
+  "independent_matching_fixture_sessions": 0,
+  "private_source_and_runtime_dirs_remaining": 0,
+  "observer_request_count": 120,
+  "observer_finished_count": 120,
+  "observer_limits": {
+    "sample_overflow": false,
+    "event_overflow": false,
+    "point_overflow": false
+  },
+  "binding_before": true,
+  "binding_after": true,
+  "source_unchanged_after": true,
+  "raw_private_mode_violations": []
+}

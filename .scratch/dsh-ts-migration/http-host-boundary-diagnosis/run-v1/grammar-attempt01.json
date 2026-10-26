@@ -1,0 +1,32 @@
+{
+  "checks": [
+    {
+      "file": "prepare.py",
+      "grammar_only": true,
+      "returncode": 0
+    },
+    {
+      "file": "run.py",
+      "grammar_only": true,
+      "returncode": 0
+    },
+    {
+      "file": "new-host.mjs",
+      "grammar_only": true,
+      "returncode": 0
+    },
+    {
+      "file": "observer-preload.mjs",
+      "grammar_only": true,
+      "returncode": 0
+    },
+    {
+      "file": "host-plugin.ts",
+      "grammar_only": true,
+      "returncode": 1
+    }
+  ],
+  "interpretation": "node --check直接检查.ts未擦除TS，报类型标注语法错误；这是语法检查工具模式不适用，不能宣称产品/候选语法失败。",
+  "node_version_observed": "v24.19.0",
+  "new_http_or_pg_processes": 0
+}

@@ -1,0 +1,58 @@
+{
+  "all_480_successful": true,
+  "all_160_original_readbacks_verified": true,
+  "same_request_stage_partition_max_error_ms": 0.0,
+  "major_boundary_missing": {
+    "contacts": [],
+    "sources": [],
+    "session-default": []
+  },
+  "original_static_payloads_unchanged": true,
+  "original_static_manifest_sha256": "7f1807dc450250922b8153c99de5623845a039a5191d096e074768748c30e388",
+  "original_static_checksums_sha256": "fc4be1737dfd4b21620aec5596c48164d7686bd45134cc2de860a3aa162ed0a6",
+  "prepared_payloads_unchanged": true,
+  "all_raw_public_bindings_verified": true,
+  "raw_public_binding_count": 30,
+  "model_records_per_host": [
+    {
+      "model_call_receipt": 0,
+      "outbound_ledger_entry": 0
+    },
+    {
+      "model_call_receipt": 0,
+      "outbound_ledger_entry": 0
+    },
+    {
+      "model_call_receipt": 0,
+      "outbound_ledger_entry": 0
+    },
+    {
+      "model_call_receipt": 0,
+      "outbound_ledger_entry": 0
+    }
+  ],
+  "network_denied_attempts": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "source_dependencies_before_after_bound": true,
+  "private_mode_corrections": [
+    {
+      "locator": "run-v1/offline-analysis.stdout.log",
+      "initial_mode": "0o644",
+      "corrected_mode": "0o600"
+    },
+    {
+      "locator": "run-v1/offline-analysis.stderr.log",
+      "initial_mode": "0o644",
+      "corrected_mode": "0o600"
+    }
+  ],
+  "final_private_mode_violations": [],
+  "public_identity_or_credentials_hits": [],
+  "product_worktree_diff_empty": true,
+  "handoff_lines": 32,
+  "no_git_writes": true
+}
