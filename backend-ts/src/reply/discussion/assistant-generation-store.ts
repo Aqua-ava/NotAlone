@@ -15,6 +15,10 @@ import {interruptAssistantGeneration} from './assistant-generation-interruption.
 import {ExplorationError} from '../exploration/exploration-contract.ts';
 
 export type GenerationRow=Record<string,any>;
+/** 匹配真实受理会话或原请求别名；范围、输入与来源资格仍由各入口核验。 */
+export function matchesGenerationSession(row:GenerationRow,sessionId:string):boolean{
+ return row.session_id===sessionId||row.requested_session_id===sessionId;
+}
 export interface AssistantGenerationReceipt {session_id:string;turn_id:string;request_key:string;input_version_id:string;state:string;previous_session_id?:string;interruption_reason?:string|null}
 export interface AssistantGenerationStoreOptions {transaction<T>(work:(client:Client)=>Promise<T>):Promise<T>;skillsRoot:string;assistantClock?:AssistantClock;resolveBinding?:ReplyAssistantPorts['requireActiveBinding']}
 export class AssistantGenerationError extends ReplyError {
@@ -108,7 +112,7 @@ export class AssistantGenerationStore {
   const existing=await this.existing(client,scope,input.idempotency_key);
   if(existing){
    if(existing.state==='redacted'||!existing.input_payload)generationReject('source_deleted');
-   if(existing.session_id!==sessionId&&existing.requested_session_id!==sessionId||existing.input_digest!==digest)throw new AssistantGenerationError('assistant_session_input_conflict');
+   if(!matchesGenerationSession(existing,sessionId)||existing.input_digest!==digest)throw new AssistantGenerationError('assistant_session_input_conflict');
    if(existing.interruption_reason!==null)generationReject('generation_interrupted');
   }
   if((await client.query('SELECT 1 FROM reply_invalidated_key WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3',[scope.owner_id,scope.contact_id,input.idempotency_key])).rowCount)generationReject('request_deleted');
@@ -127,7 +131,7 @@ export class AssistantGenerationStore {
   if(!options.runningKey){
    const current=(await client.query('SELECT * FROM assistant_session WHERE owner_id=$1 AND contact_id=$2 AND is_default FOR UPDATE',[scope.owner_id,scope.contact_id])).rows[0];
    if(current&&current.id!==sessionId&&current.idle_previous_session_id===sessionId){session=current;sessionId=current.id;}
-   const expired=session.is_default&&(await client.query("SELECT last_user_activity_at IS NULL OR $1::timestamptz > last_user_activity_at + interval '12 hours' AS expired FROM assistant_session WHERE id=$2",[admissionTime,sessionId])).rows[0].expired;
+   const expired=session.is_default&&(await client.query("SELECT last_user_activity_at IS NULL OR $4::timestamptz > last_user_activity_at + interval '12 hours' AS expired FROM assistant_session WHERE owner_id=$1 AND contact_id=$2 AND id=$3",[scope.owner_id,scope.contact_id,sessionId,admissionTime])).rows[0].expired;
    if(expired){
     if(input.expected_input_version_id!==undefined&&session.current_input_version_id!==input.expected_input_version_id)generationReject('input_version_stale');
     await client.query('UPDATE assistant_session SET is_default=FALSE WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[scope.owner_id,scope.contact_id,sessionId]);
@@ -186,7 +190,7 @@ export class AssistantGenerationStore {
   if(terminal.state!=='failed'||terminal.interruption_reason!==original.interruption_reason)generationReject('generation_not_interrupted');
   const origin={original_turn_id:original.id,original_input_version_id:original.input_version_id},existing=await this.existing(client,scope,command.request_key);
   let payload:GenerationRow,deps:string[]=[];
-  if(existing){if(existing.session_id!==sessionId&&existing.requested_session_id!==sessionId||canonical(existing.input_payload?.continuation?.recovery??null)!==canonical(origin))throw new AssistantGenerationError('assistant_session_input_conflict');payload=existing.input_payload;}
+  if(existing){if(!matchesGenerationSession(existing,sessionId)||canonical(existing.input_payload?.continuation?.recovery??null)!==canonical(origin))throw new AssistantGenerationError('assistant_session_input_conflict');payload=existing.input_payload;}
   else{
    deps=await this.current(client,scope,sessionId,original.input_version_id);payload=structuredClone(original.input_payload);
    const content=payload.content,source=content.type==='reply_to_message'||content.input_kind==='current_chat'?'direction':content.type==='initiate_conversation'?'purpose':'draft_text';

@@ -3,7 +3,7 @@ import type {Client} from 'pg';
 import {parseReplyRequest,replyUuid,record,type ReplyRequestInput} from '../generation/reply-contract.ts';
 import type {VerifiedReplyScope} from '../generation/reply-scope.ts';
 import {canonical} from '../generation/reply-assistant-erasure.ts';
-import {AssistantGenerationStore,AssistantGenerationError,generationReject,generationRequest,type GenerationRow} from './assistant-generation-store.ts';
+import {AssistantGenerationStore,AssistantGenerationError,generationReject,generationRequest,matchesGenerationSession,type GenerationRow} from './assistant-generation-store.ts';
 export interface AssistantAdoptionInput {input:ReplyRequestInput;submission:GenerationRow;message:string}
 const invalid=():never=>{throw new AssistantGenerationError('assistant_session_request_invalid',undefined,400);};
 export function parseAssistantGeneration(value:unknown):{input:ReplyRequestInput;adoption?:AssistantAdoptionInput}{
@@ -24,7 +24,7 @@ export async function reserveAssistantAdoption(store:AssistantGenerationStore,cl
  if(existing){
   if(existing.state==='redacted'||!existing.input_payload)generationReject('source_deleted');
   metadata=existing.input_payload.continuation;
-  if(existing.session_id!==session&&existing.requested_session_id!==session||!metadata||canonical(metadata.message_adoption)!==canonical(submission))throw new AssistantGenerationError('assistant_session_input_conflict');
+  if(!matchesGenerationSession(existing,session)||!metadata||canonical(metadata.message_adoption)!==canonical(submission))throw new AssistantGenerationError('assistant_session_input_conflict');
   const auth=await store.auth(client,scope,existing.requested_session_id??session,existing.input_payload);content=generationRequest(scope,declared.idempotency_key,existing.input_payload,auth).content;
  }else{
   deps=await store.current(client,scope,session,declared.expected_input_version_id!);

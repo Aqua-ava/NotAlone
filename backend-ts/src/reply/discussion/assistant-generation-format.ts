@@ -4,10 +4,10 @@ import type {VerifiedReplyScope} from '../generation/reply-scope.ts';
 import {decodePreparedContext} from '../generation/reply-prepared-codec.ts';
 import {parseJson} from '../../host/host-json.ts';
 import {validatePreferenceSnapshot} from '../../preferences/preference-service.ts';
-import {AssistantGenerationStore,AssistantGenerationError,generationRequest,generationReject,generationReceipt,type GenerationRow} from './assistant-generation-store.ts';
+import {AssistantGenerationStore,AssistantGenerationError,generationRequest,matchesGenerationSession,generationReject,generationReceipt,type GenerationRow} from './assistant-generation-store.ts';
 export async function requireGenerationInput(store:AssistantGenerationStore,client:Client,scope:VerifiedReplyScope,session:string,key:string,inputVersion?:string):Promise<GenerationRow>{
  await store.session(client,scope,session);const row=await store.existing(client,scope,key);
- if(!row||row.session_id!==session&&row.requested_session_id!==session)throw new AssistantGenerationError('not_found',undefined,404);
+ if(!row||!matchesGenerationSession(row,session))throw new AssistantGenerationError('not_found',undefined,404);
  session=row.session_id;
  if(inputVersion&&row.input_version_id!==inputVersion)generationReject('input_version_stale');
  const input=(await client.query("SELECT * FROM assistant_session_input WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND id=$4 AND turn_id=$5 AND input_type='generation'",[scope.owner_id,scope.contact_id,session,row.input_version_id,row.id])).rows[0];
