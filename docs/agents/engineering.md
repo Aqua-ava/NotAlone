@@ -11,6 +11,8 @@
 
 实现或修改可能随版本变化的第三方库 API（如 LangGraph/LangChain）前，先用 Context7 查询当前官方文档和示例，再与项目锁定或实际安装的版本核对兼容性；Context7 不可用或未覆盖时，改查官方一手文档。文档只证明接口约定，实际可用性仍需代码和测试验证。
 
+涉及 DSH 时执行 [DSH 源码查证流程](dsh-development.md)，同时核对锁定版本的实现、类型和本项目插件接线；最新文档或历史调研笔记不能单独作为接口依据。
+
 ## 环境
 
 - 正常开发与测试使用 Node.js ≥24，后台位于 `backend-ts/`。保留原 `.env`、PostgreSQL 和资料位置；旧配置 `pythonExecutable` 兼容忽略，正常路径不执行Python或Conda。
