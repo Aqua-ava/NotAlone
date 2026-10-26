@@ -1650,7 +1650,7 @@ export class ReplySession {
   }
 
   async stopGeneration(request: AssistantGenerationStop): Promise<void> {
-    this.assertScope(request); this.assertSessionSelection();
+    this.assertScope(request); this.assertSessionSelection(true);
     const generation = this.backend.getConnectionGeneration();
     if (generation === undefined) throw new Error('这次生成已经结束或不再属于当前联系人。');
     const displayedSessionId = this.state.savedSession?.sessionId;
@@ -2225,12 +2225,12 @@ export class ReplySession {
       throw new Error('请先明确继续此会话，或返回当前会话后生成。');
     }
   }
-  private assertSessionSelection(): void {
+  private assertSessionSelection(allowFailedDeletionStop = false): void {
     if (this.pendingExpressionPreferenceDeletions > 0 || this.pendingOwnerContextChanges > 0 || this.retainedSourceValidation?.checking) {
       throw new Error('请等待删除后的来源核验完成。');
     }
     if (this.pendingContent) throw new Error('请等待联系人内容恢复完成，失败时请重新读取讨论。');
-    if (this.state.sessionDeletion === 'deleting' || this.state.sessionDeletion === 'failed') {
+    if (this.state.sessionDeletion === 'deleting' || this.state.sessionDeletion === 'failed' && !allowFailedDeletionStop) {
       throw new Error('请先核对当前助手会话的删除结果。');
     }
     if (this.candidateSourceCheck) throw new Error('请等待相关来源核验完成。');

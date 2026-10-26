@@ -12,7 +12,7 @@ import {deleteSourceReplies} from '../preferences/preference-erasure.ts';
 import {eraseMemoryDependencies} from '../memory/records/mutations/erasure.ts';
 import {eraseSourceTraces} from '../memory/records/mutations/erasure.ts';
 import {eraseContactPreferences,eraseSourcePreferences} from '../preferences/preference-service.ts';
-import {AssistantDiscussionError,AssistantDiscussionService} from '../reply/discussion/assistant-discussion-service.ts';
+import {AssistantDiscussionError,AssistantDiscussionService,requireAssistantSessionAliasSettled} from '../reply/discussion/assistant-discussion-service.ts';
 import {eraseManagedUpdateBackups} from '../preferences/preference-files.ts';
 import {queueUnreferencedPreferenceFiles} from '../preferences/preference-files.ts';
 import {SkillFiles} from '../skills/skill-files.ts';
@@ -187,6 +187,7 @@ export class CrossDomainDeletionService {
     const operation=await this.storage.businessTransaction(async client=>{
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${owner}:${contact}`]);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${owner}`]);
+      try{await requireAssistantSessionAliasSettled(client,{owner_id:owner,contact_id:contact},session);}catch(error){if(error instanceof AssistantDiscussionError)throw new CrossDomainDeletionError('assistant_session_in_progress',409);throw error;}
       const existing=(await client.query('SELECT * FROM public.cross_domain_deletion_operation WHERE subject_sha256=$1 FOR UPDATE',[subject])).rows[0];
       if(existing)return existing;
       if(!(await client.query('SELECT 1 FROM public.contact WHERE owner_id=$1 AND id=$2 FOR UPDATE',[owner,contact])).rowCount)

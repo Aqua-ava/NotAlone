@@ -84,6 +84,12 @@ export class AssistantDiscussionError extends Error {
   }
 }
 
+/** 分段回执可能尚未送达；保留原请求地址，直到实际新段任务有可裁定终态。 */
+export async function requireAssistantSessionAliasSettled(client:Client,scope:AssistantDiscussionScope,sessionId:string):Promise<void>{
+  const pending=(await client.query("SELECT 1 FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND requested_session_id=$3 AND session_id<>$3 AND state='running' LIMIT 1",[scope.owner_id,scope.contact_id,sessionId])).rowCount;
+  if(pending)throw new AssistantDiscussionError('in_progress','generation_receipt_pending');
+}
+
 function normalizeDiscussionInput(value:AssistantDiscussionInput):Row{
   if(!value||typeof value!=='object'||Array.isArray(value))reject('invalid');
   const type=value.type;
@@ -932,6 +938,7 @@ export class AssistantDiscussionService {
         [scope.owner_id,scope.contact_id,sessionId],
       )).rows[0];
       if(!session)return {session_id:sessionId,state:'deleted' as const};
+      await requireAssistantSessionAliasSettled(client,scope,sessionId);
       await this.options.eraseRuntime?.(client,scope,sessionId);
       await eraseManagedUpdateBackups(client,this.options.environment??{});
       await client.query(`

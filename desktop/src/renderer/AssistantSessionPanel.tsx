@@ -11,7 +11,7 @@ const generationStatusText: Record<ReplyGenerationJobState['phase'], string> = {
   preparing: '正在准备本次生成。',
   queued: '已准备，排队等待生成。', generating: '正在生成。', stopping: '正在停止本次生成…',
   cancelled: '本次生成已由你停止。', completed: '生成已完成。',
-  failed: '生成失败，可核对原请求后重试。', unconfirmed: '任务结果待核对，请读取已保存讨论。',
+  failed: '生成失败，可核对原请求后重试。', unconfirmed: '任务结果待核对，可以先核对并停止本次生成。',
 };
 const backgroundGenerationStatusText: Partial<Record<ReplyGenerationJobState['phase'], string>> = {
   preparing: '正在另一助手会话中准备生成。',
@@ -103,7 +103,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
   const currentContactJobs = replies.state.generationJobs?.filter((job) => job.contactId === replies.state.contactId) ?? [];
-  const activeContactJobs = currentContactJobs.filter((job) => ['preparing', 'queued', 'generating', 'stopping'].includes(job.phase));
+  const activeContactJobs = currentContactJobs.filter((job) => ['preparing', 'queued', 'generating', 'stopping', 'unconfirmed'].includes(job.phase));
   const visibleJob = activeContactJobs.length === 1 ? activeContactJobs[0] : undefined;
   const displayedJobs = visibleJob
     ? [...currentContactJobs.filter((job) => job.sessionId === saved?.sessionId
@@ -164,9 +164,9 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       <p role="status">{job === visibleJob && saved?.sessionId && job.sessionId !== saved.sessionId
         ? backgroundGenerationStatusText[job.phase] ?? generationStatusText[job.phase]
         : generationStatusText[job.phase]}</p>
-      {job === visibleJob && job.phase !== 'stopping' && <button
+      {(job === visibleJob || job.phase === 'unconfirmed') && job.phase !== 'stopping' && <button
         aria-label="停止本次生成"
-        disabled={deleting || replies.state.sessionDeletion === 'failed'}
+        disabled={deleting}
         onClick={() => void replies.stopGeneration(job.sessionId, job.requestKey, job.inputVersionId)}>
         停止本次生成
       </button>}

@@ -14,7 +14,7 @@ export async function interruptAssistantGeneration(backend: Pick<BackendHost, 'g
         ...(interruptionReason === 'app_quit' ? {} : { reason: interruptionReason }) }, maxResponseBytes: 4096 });
     const value = response.data;
     if (response.generation !== receipt.connectionGeneration || !isRecord(value)
-      || Object.keys(value).length !== 6 || !Object.hasOwn(value, 'interruption_reason')) throw new Error('生成停止未获确认。');
+      || ![6, 7].includes(Object.keys(value).length) || !Object.hasOwn(value, 'interruption_reason')) throw new Error('生成停止未获确认。');
     const { interruption_reason: reason, ...identity } = value;
     const stopped = readAssistantGenerationReceipt(identity, receipt.sessionId, receipt.requestKey);
     if (stopped.turnId !== receipt.turnId || stopped.inputVersionId !== receipt.inputVersionId
