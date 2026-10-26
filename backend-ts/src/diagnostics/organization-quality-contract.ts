@@ -49,8 +49,7 @@ function sourceIdentity(names:string[]):string {
 }
 export function createOrganizationQualityContract(overrides:Partial<OrganizationQualityContract>={}):OrganizationQualityContract {
   const organization=['../memory/layered/l2-scenario-workspace.ts','../memory/layered/l3-profile-workspace.ts','../memory/layered/l2-scenario-service.ts','../memory/layered/l3-profile-service.ts',
-    '../memory/layered/layered-memory-management-source-policy.ts','../memory/layered/layered-memory-management-target.ts',
-    '../vendor/tencent-memory/scene-extraction.ts','../vendor/tencent-memory/persona-generation.ts'];
+    '../memory/layered/layered-memory-management-source-policy.ts','../memory/layered/layered-memory-management-target.ts'];
   const rules=sourceIdentity(organization);
   const contract:OrganizationQualityContract={provider:'unconfigured',request_model:'unconfigured',
     verifier_provider:'unconfigured',verifier_model:'unconfigured',rules_version:rules,prompt_version:rules,

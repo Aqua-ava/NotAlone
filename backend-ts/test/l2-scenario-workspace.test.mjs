@@ -102,12 +102,18 @@ test('文档工具只暴露read/write/edit，且模型只能依赖内存暂存�
     async call(input) {
       calls++;
       assert.deepEqual(input.tools.map(tool => tool.name), ['read', 'write', 'edit']);
-      assert.match(input.system, /默认策略是 UPDATE/);
+      assert.match(input.system, /优先补充已有主题/);
       const payload = JSON.parse(input.messages[0].content[0].text);
-      assert.match(payload.workflow, /New Memories List/);
+      assert.deepEqual(Object.keys(payload).sort(), ['budget', 'documents', 'layer', 'memories']);
       assert.equal(payload.memories[0].memory_id, fact.memory_id);
-      assert.match(input.system,/不得把表情、沉默、未回复或单次行为解释为情绪、态度、意图或关系信号/);
-      assert.match(input.system,/旧主题中无法由来源逐字支持的解释必须删除，不因为曾发布而保留/);
+      assert.match(input.system, /表情、沉默、未回复和单次行为本身不能证明/);
+      assert.match(input.system, /缺少底层支持的旧解释应移除/);
+      assert.match(input.system, /修改或合并旧主题前必须先 read/);
+      assert.match(input.system, /<!-- META JSON -->/);
+      assert.match(input.system, /<!-- SOURCES JSON -->/);
+      assert.match(input.system, /replaces 填被完整替换的已读旧文档 version_id/);
+      assert.match(input.system, /\[DELETED\].*本次必须有完整替代文档/);
+      assert.match(input.system, new RegExp(`最多${budget.max_scenarios}个主题、${budget.max_paragraphs}段`));
       await input.requireCurrent();
       if (calls === 1) {
         return {blocks: [{type: 'tool-call', id: 'call-1', name: 'write',

@@ -26,6 +26,5 @@
 | 跨业务删除协调 | [deletion/](deletion/) |
 | 追踪、质量诊断与用量 | [diagnostics/](diagnostics/) |
 | 数据库、模型调用与进程支持 | [platform/](platform/) |
-| 第三方源码 | [vendor/](vendor/) |
 
 业务专属的 HTTP、存储和 worker 文件跟随对应业务。源码身份计算仍以实际文件字节及依赖为依据，目录和引用调整会产生新的源码版本摘要。

@@ -8,7 +8,7 @@ const contact = '22222222-2222-4222-8222-222222222222';
 const background = '33333333-3333-4333-8333-333333333333';
 const target = '44444444-4444-4444-8444-444444444444';
 
-test('正式提取区分腾讯流程的背景与新消息，保留真实说话人和未知时间', async () => {
+test('正式提取区分背景与目标消息，保留真实说话人和未知时间', async () => {
   const outcome = await runExtractionFlow({
     window: {
       owner_id: owner, contact_id: contact, target_message_ids: [target],
@@ -20,17 +20,15 @@ test('正式提取区分腾讯流程的背景与新消息，保留真实说话�
     signal: new AbortController().signal,
     requireCurrent: async () => {}, record: async () => {},
     invoke: async request => {
-      assert.match(request.user, /【背景对话】/);
-      assert.match(request.user, /【待提取的新消息】/);
-      const [context, fresh] = request.user.split('【待提取的新消息】');
-      assert.ok(context.includes(background));
-      assert.ok(context.includes('[self]'));
-      assert.ok(context.includes('unknown'));
-      assert.ok(fresh.includes(target));
-      assert.ok(fresh.includes('[contact]'));
-      assert.ok(fresh.includes('2026-10-01T01:02:03.123456+08:00'));
-      assert.ok(fresh.includes('合成回答：我周末喜欢散步。'));
-      assert.equal(request.user.includes('[assistant]'), false);
+      const input = JSON.parse(request.user);
+      assert.deepEqual(input.target_message_ids, [target]);
+      assert.deepEqual(input.messages.map(message => message.message_id), [background, target]);
+      assert.deepEqual(input.messages.map(message => message.sender), ['self', 'contact']);
+      assert.equal(input.messages[0].occurred_at, null);
+      assert.equal(input.messages[0].source_calendar_at, 'unknown');
+      assert.equal(input.messages[1].occurred_at, '2026-10-01T01:02:03.123456+08:00');
+      assert.equal(input.messages[1].text, '合成回答：我周末喜欢散步。');
+      assert.equal(input.messages[1].text_length, 13);
       assert.equal(request.tool.name, 'DirectMemoryExtractionOutput');
       return {blocks: [{type: 'tool-call', name: request.tool.name, arguments: '{"scenes":[]}'}]};
     },
@@ -39,7 +37,7 @@ test('正式提取区分腾讯流程的背景与新消息，保留真实说话�
   assert.deepEqual(outcome.accepted, []);
 });
 
-test('批量裁决共用腾讯统一候选池，保留每条新记忆的关联和来源', async () => {
+test('批量裁决共用同联系人旧资料，保留每条新记忆的关联和来源', async () => {
   const memoryId = '55555555-5555-4555-8555-555555555555';
   const prior = {memory_id: memoryId, revision: 1, text: '合成旧记忆：周末散步。', category: 'preference',
     topic: 'other', subject: 'contact', adoption_method: 'auto', source_message_ids: [background],
@@ -52,10 +50,15 @@ test('批量裁决共用腾讯统一候选池，保留每条新记忆的关联�
       source_dependency_mode: 'all', _scene_name: '合成周末'},
     candidate_source_texts: [{message_id: target, text: '合成新来源：周末会散步。', occurred_at: null}], similar: [prior],
   }));
-  const runtime = new DshMemoryAdjudicationRuntime({batchKey: 'synthetic-tencent', port: {async call(request) {
-    assert.match(request.user, /统一候选记忆池（共 1 条已有记忆）/);
-    assert.match(request.user, /第 1 条新记忆/);
-    assert.match(request.user, /第 2 条新记忆/);
+  const runtime = new DshMemoryAdjudicationRuntime({batchKey: 'synthetic-adjudication', port: {async call(request) {
+    const input = JSON.parse(request.user);
+    assert.equal(input.existing_memories.length, 1);
+    assert.equal(input.existing_memories[0].text, '合成旧记忆：周末散步。');
+    assert.equal(input.existing_memories[0].revision, 1);
+    assert.deepEqual(input.new_memories.map(item => item.candidate.text), ['合成新记忆0', '合成新记忆1']);
+    assert.deepEqual(input.new_memories.map(item => item.related_memory_ids), [[memoryId], [memoryId]]);
+    assert.deepEqual(input.new_memories.map(item => item.candidate_index), [0, 1]);
+    assert.deepEqual(input.new_memories.map(item => item.candidate.scene_name), ['合成周末', '合成周末']);
     assert.ok(request.user.includes('合成来源：我周末散步。'));
     assert.equal(request.user.split(`"message_id":"${background}"`).length - 1, 1,
       '同一旧版本的原始来源只发送一次，不能按新候选重复复制');

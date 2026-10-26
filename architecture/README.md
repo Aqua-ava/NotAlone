@@ -1,6 +1,6 @@
 # NotAlone 架构文档
 
-> 2026-10-25 记忆实现方向：[ADR-104](adr/104-tencent-source-memory-engine.md)采纳以腾讯 TypeScript 源码复用为主，替换重复实现；角色与协议适配见该 ADR。工程切片与真实模型／桌面验收分别核验，不由采用上游推断质量通过。
+> 2026-10-26 记忆实现方向：[ADR-104](adr/104-tencent-source-memory-engine.md)中的生成与提示构建直接归入本地记忆模块，统一使用业务协议。合成检查与真实模型、桌面质量分别核验。
 
 > 2026-10-26 后端状态：[ADR-102](adr/102-dsh-typescript-backend-migration.md)的当前产品入口已切换为 DSH 与 TypeScript，Python 后台与历史测试退出当前工作树；原 PostgreSQL、资料、SQL 迁移及仍使用的合成夹具保留。历史对照通过固定 Git 树恢复，入口见[后台说明](../backend-ts/README.md)。这不代表全部等价或发行验收通过，实际证据与未测项见[执行交接](../.scratch/dsh-ts-migration/execution.md)。
 
@@ -166,7 +166,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 101. [ADR-101：本机 App 完整首用与资料生命周期](adr/101-local-app-first-use-lifecycle.md)
 102. [ADR-102：以精简 DSH 和 TypeScript 统一后端](adr/102-dsh-typescript-backend-migration.md)
 103. [ADR-103：统一业务后台任务的查看、停止与恢复](adr/103-unified-background-task-management.md)
-104. [ADR-104：记忆核心以腾讯 TypeScript 源码复用为主](adr/104-tencent-source-memory-engine.md)
+104. [ADR-104：记忆生成逻辑按领域模块维护](adr/104-tencent-source-memory-engine.md)
 
 ## 当前架构决策
 
