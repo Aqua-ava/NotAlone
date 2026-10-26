@@ -1,5 +1,7 @@
 # NotAlone 架构文档
 
+> 2026-10-26 助手会话决定：[ADR-106](adr/106-persistent-assistant-conversations.md)已采纳每位联系人独立的持久会话、空闲 12 小时分段和旧会话明确继续；数据库作为可见业务历史主记录，DSH 文件保存可恢复执行记录。新策略、持久化与删除链待实现，局部修订 ADR-042／102，不改变已有来源与输入预算边界。
+
 > 2026-10-26 记忆实现方向：[ADR-104](adr/104-tencent-source-memory-engine.md)中的生成与提示构建直接归入本地记忆模块，统一使用业务协议。合成检查与真实模型、桌面质量分别核验。
 
 > 2026-10-26 后端状态：[ADR-102](adr/102-dsh-typescript-backend-migration.md)的当前产品入口已切换为 DSH 与 TypeScript，Python 后台与历史测试退出当前工作树；原 PostgreSQL、资料、SQL 迁移及仍使用的合成夹具保留。历史对照通过固定 Git 树恢复，入口见[后台说明](../backend-ts/README.md)。这不代表全部等价或发行验收通过，实际证据与未测项见[执行交接](../.scratch/dsh-ts-migration/execution.md)。

@@ -1,5 +1,7 @@
 # ADR-042：持续助手会话与单次运行上下文分界
 
+> 后续局部修订：[ADR-106](106-persistent-assistant-conversations.md)采纳空闲超过 12 小时后下次生成新开、回看不切换及明确继续历史会话才切换当前会话，并引入可恢复 DSH 运行记录。持续讨论与单次候选任务的区分、完整历史、显式携入、输入预算和删除边界保持；新会话策略与持久化待实现。
+
 > 后续修订：[ADR-091](091-retire-runtime-todos-and-auto-summary.md)明确不增加运行计划和自动过程摘要；本文对 ADR-009 单次运行机制的保留不再包含 Todo／摘要中间件要求。框架、Skill、预算、持续讨论与删除边界保持。
 
 > 2026-10-21 设计审查：关于自动 Skill 尚未实现的描述为历史阶段状态，当前工程装配见[演进任务索引](../../.scratch/memory-skill-evolution/planning.md)。主动样本按 [ADR-082](082-retire-explicit-style-samples.md)退役；持续讨论与单次运行边界、保存与删除合同继续有效。
