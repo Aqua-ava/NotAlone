@@ -1,3 +1,4 @@
+import {createSyntheticProfile} from './profile-support.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -55,9 +56,7 @@ export async function startReplyServiceHost(t, database, reply, {pluginPath = 't
   const providerPort = provider.address().port;
   const profileDir = join(home, 'profiles', 'notalone'); await mkdir(profileDir, { recursive: true });
   await writeFile(join(profileDir, 'package.json'), JSON.stringify({ private: true, dsh: { profile: { bundles: [] } } }));
-  let patch = await readFile(new URL('../profile/cordis.patch.yml', import.meta.url), 'utf8');
-  patch = patch.replace('PLUGIN_PATH', resolve(pluginPath)).replace('PROVIDER_URL', `http://127.0.0.1:${provider.address().port}/anthropic`);
-  patch = patch.replace('    - id: tools\n', "    - id: reply-skill-registry\n      name: '@deepseek-ai/dsh-skill'\n    - id: tools\n");
+  let patch = await createSyntheticProfile(resolve(pluginPath), `http://127.0.0.1:${provider.address().port}/anthropic`);
   await writeFile(join(profileDir, 'cordis.patch.yml'), patch);
   const child = spawn(process.execPath, ['--import', resolve('test/observe.mjs'), resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'notalone'], {
     cwd: home, env: { PATH: process.env.PATH, HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', DEEPSEEK_API_KEY: 'synthetic-only', NOTALONE_SYNTHETIC_PROVIDER_URL: `http://127.0.0.1:${provider.address().port}/anthropic`, NOTALONE_SYNTHETIC_DATABASE: database.name, NOTALONE_SYNTHETIC_DATABASE_USER: database.user, ...(database.replyOwner?{NOTALONE_SYNTHETIC_REPLY_OWNER:database.replyOwner}:{}), ...(database.replyToken?{NOTALONE_SYNTHETIC_REPLY_TOKEN:database.replyToken}:{}), ...environment }, stdio: ['ignore', 'pipe', 'pipe'],

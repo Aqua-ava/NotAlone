@@ -1,3 +1,4 @@
+# 正常宿主与合成测试共用此插件装配；测试差异由 test/profile-support.mjs 显式注入。
 - insert:
     - id: llm
       name: '@deepseek-ai/dsh-llm'

@@ -1,3 +1,4 @@
+import {createSyntheticProfile} from './profile-support.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -55,9 +56,7 @@ export async function startReplyPreflightHost(t, reply, fixture = false) {
   const providerPort = provider.address().port;
   const profileDir = join(home, 'profiles', 'notalone'); await mkdir(profileDir, { recursive: true });
   await writeFile(join(profileDir, 'package.json'), JSON.stringify({ private: true, dsh: { profile: { bundles: [] } } }));
-  let patch = await readFile(new URL('../profile/cordis.patch.yml', import.meta.url), 'utf8');
-  patch = patch.replace('PLUGIN_PATH', resolve('test/reply-preflight-runtime-plugin.ts')).replace('PROVIDER_URL', `http://127.0.0.1:${provider.address().port}/anthropic`);
-  patch = patch.replace('    - id: tools\n', "    - id: reply-skill-registry\n      name: '@deepseek-ai/dsh-skill'\n    - id: tools\n");
+  let patch = await createSyntheticProfile(resolve('test/reply-preflight-runtime-plugin.ts'), `http://127.0.0.1:${provider.address().port}/anthropic`);
   if (fixture) patch += `    - id: stalled-tool
       name: '${resolve('test/stalled-tool.ts')}'
 `;

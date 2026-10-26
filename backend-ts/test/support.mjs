@@ -1,3 +1,4 @@
+import {createSyntheticProfile} from './profile-support.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -55,8 +56,7 @@ export async function startHost(t, reply, fixture = false) {
   const providerPort = provider.address().port;
   const profileDir = join(home, 'profiles', 'notalone'); await mkdir(profileDir, { recursive: true });
   await writeFile(join(profileDir, 'package.json'), JSON.stringify({ private: true, dsh: { profile: { bundles: [] } } }));
-  let patch = await readFile(new URL('../profile/cordis.patch.yml', import.meta.url), 'utf8');
-  patch = patch.replace('PLUGIN_PATH', resolve('src/plugin.ts')).replace('PROVIDER_URL', `http://127.0.0.1:${provider.address().port}/anthropic`);
+  let patch = await createSyntheticProfile(resolve('src/plugin.ts'), `http://127.0.0.1:${provider.address().port}/anthropic`);
   if (fixture) patch += `    - id: stalled-tool
       name: '${resolve('test/stalled-tool.ts')}'
 `;
