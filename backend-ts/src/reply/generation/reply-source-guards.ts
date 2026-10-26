@@ -15,10 +15,34 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const same=(a:unknown,b:unknown):boolean=>canonical(a)===canonical(b);
 export type DiscussionGuard=(client:pg.Client,scope:AssistantScope,requestId:string)=>Promise<unknown>;
 export type SavedSkillPolicyChange=(client:pg.Client,scope:AssistantScope,requestId:string)=>Promise<string|null>;
+interface SourceValidation {
+  client:pg.Client;owner:string;live:boolean;active:Set<string>;
+  verified:Map<DiscussionGuard|undefined,Map<string,string[]>>;
+  navigation:Map<string,string[]>;
+}
+const validations=new AsyncLocalStorage<SourceValidation>();
+/** 仅覆盖一次同事务只读复验；独立读取、提交或出站前复验必须重新建立作用域。 */
+export async function withReplyValidationScope<T>(client:pg.Client,scope:AssistantScope,work:()=>Promise<T>):Promise<T> {
+  const parent=validationFor(client,scope.owner_id);
+  const validation:SourceValidation={client,owner:scope.owner_id,live:true,active:parent?.active??new Set(),verified:new Map(),navigation:new Map()};
+  try{return await validations.run(validation,work);}
+  finally{validation.live=false;if(!parent)validation.active.clear();validation.verified.clear();validation.navigation.clear();}
+}
+function validationFor(client:pg.Client,owner:string):SourceValidation|undefined {
+  const current=validations.getStore();
+  return current?.live&&current.client===client&&current.owner===owner?current:undefined;
+}
+/** 递归只读讨论沿用当前复验；独立入口新建，写入必须留在此调用返回之后。 */
+export async function ensureReplyValidationScope<T>(client:pg.Client,scope:AssistantScope,work:()=>Promise<T>):Promise<T> {
+  return validationFor(client,scope.owner_id)?work():withReplyValidationScope(client,scope,work);
+}
 export async function registeredNavigationDependencies(client:pg.Client,scope:AssistantScope):Promise<string[]> {
+  const current=validationFor(client,scope.owner_id),cached=current?.navigation.get(scope.contact_id);
+  if(cached)return [...cached];
   const args=Array.from({length:8},()=>[scope.owner_id,scope.contact_id]).flat();
   const ids=(await client.query(sql.registeredNavigation,args)).rows.map(r=>r.id);
-  if(ids.some(id=>typeof id!=='string'||!uuid.test(id)))reject();return unique(ids);
+  if(ids.some(id=>typeof id!=='string'||!uuid.test(id)))reject();
+  const result=unique(ids);current?.navigation.set(scope.contact_id,result);return [...result];
 }
 export async function requireDependencies(client:pg.Client,scope:AssistantScope,ids:string[],historical:boolean):Promise<void> {
   if(!ids.length)return;
@@ -27,14 +51,15 @@ export async function requireDependencies(client:pg.Client,scope:AssistantScope,
   const row=(await client.query(sql.availableDependencies,[scope.owner_id,scope.contact_id,ids,historical,navigation])).rows[0];
   if(!row?.available)reject();
 }
-interface SourceValidation {client:pg.Client;owner:string;active:Set<string>;verified:Map<string,string[]>}
-const validations=new AsyncLocalStorage<SourceValidation>();
 export async function requireReplySourcesCurrent(client:pg.Client,scope:AssistantScope,requestId:string,historical:boolean,discussion?:DiscussionGuard):Promise<string[]> {
-  const current=validations.getStore();
-  if(!current||current.client!==client||current.owner!==scope.owner_id)return validations.run({client,owner:scope.owner_id,active:new Set(),verified:new Map()},()=>requireReplySourcesCurrent(client,scope,requestId,historical,discussion));
-  const key=requestId+':'+historical;
-  if(current.verified.has(key))return [...current.verified.get(key)!];
-  if(current.active.has(requestId))reject();current.active.add(requestId);
+  const current=validationFor(client,scope.owner_id);
+  if(!current)return withReplyValidationScope(client,scope,()=>requireReplySourcesCurrent(client,scope,requestId,historical,discussion));
+  const key=scope.contact_id+':'+requestId+':'+historical;
+  let verified=current.verified.get(discussion);
+  if(!verified){verified=new Map();current.verified.set(discussion,verified);}
+  if(current.active.has(requestId))reject();
+  if(verified.has(key))return [...verified.get(key)!];
+  current.active.add(requestId);
   try {
     if(!(await client.query('SELECT 1 FROM reply_request WHERE id=$1 AND owner_id=$2 AND contact_id=$3',[requestId,scope.owner_id,scope.contact_id])).rowCount)reject();
     const ancestors=(await client.query(sql.ancestorRequests,[scope.owner_id,requestId,scope.owner_id])).rows.map(r=>r.id);if(!ancestors.length)reject();
@@ -56,7 +81,7 @@ export async function requireReplySourcesCurrent(client:pg.Client,scope:Assistan
       if(!captured.length&&needs)reject();for(const id of captured)sources.add(id);
     }
     if(sources.size&&(await client.query(`SELECT id FROM unnest($1::uuid[]) source(id) WHERE NOT EXISTS(SELECT 1 FROM source_document document WHERE document.owner_id=$2 AND document.id=source.id AND document.status='active' UNION ALL SELECT 1 FROM local_wechat_observation observation WHERE observation.owner_id=$2 AND observation.id=source.id) LIMIT 1`,[unique(sources),scope.owner_id])).rowCount)reject();
-    const result=unique(sources);current.verified.set(key,result);return [...result];
+    const result=unique(sources);verified.set(key,result);return [...result];
   } finally {current.active.delete(requestId);}
 }
 export async function forbiddenGenerationMemoryDependencies(client:pg.Client,scope:AssistantScope,ids:string[]):Promise<{id:string;kind:MemoryKind}[]> {

@@ -5,6 +5,7 @@ import type { ReplyStoreInput, ReplyStoreRequest, ReplyStoreContext, ReplyStoreE
 import { ReplyStoreError } from './reply-store.ts';
 import { canonical, snapshot, capturedEdges, inputRows, generationDependencies, evidenceSources, carryEdges, activeMessage } from './reply-assistant-erasure.ts';
 import { anchor as anchorSql } from './reply-assistant-erasure-sql.ts';
+import { ensureReplyValidationScope } from './reply-source-guards.ts';
 type Row=Record<string,any>;
 export interface AssistantScope {owner_id:string;contact_id:string}
 /** 只能由已认证内部08应用接缝提供，公开生成解析器必须拒绝这些字段。 */
@@ -153,6 +154,9 @@ export class ReplyAssistantGuards {
     return this.requireReplyDiscussion(client,{...row,request_id:row.id,lease_expires_at:new Date(row.lease_expires_at)},null,false);
   }
   private async discussion(client:pg.Client,request:ReplyStoreRequest,snap:Row,current:boolean):Promise<string[]> {
+    return ensureReplyValidationScope(client,request,()=>this.discussionScoped(client,request,snap,current));
+  }
+  private async discussionScoped(client:pg.Client,request:ReplyStoreRequest,snap:Row,current:boolean):Promise<string[]> {
     const scope=scopeOf(request);snapshot(snap,scope.owner_id,scope.contact_id,request.idempotency_key);
     // 完整的已捕获身份复验和原指纹，不将存在性当来源资格。
     await capturedEdges(client,request.owner_id,request.request_id,snap);

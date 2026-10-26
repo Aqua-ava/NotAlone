@@ -1,13 +1,112 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import pg from 'pg';
 import {setup} from './reply-assistant-erasure-support.mjs';
 import {ReplyAssistantGuards} from '../src/reply/generation/reply-assistant-guards.ts';
 import * as source from '../src/reply/generation/reply-source-guards.ts';
 import {PostgresReplyDiscussionContext,assistantDiscussionPayload,continuationReferencePayload} from '../src/reply/discussion/reply-discussion-context.ts';
 import {fingerprint} from '../src/reply/generation/reply-assistant-erasure.ts';
-function service(x){let guards;const ports={...source,requireReplySourcesCurrent:(c,s,r,h)=>source.requireReplySourcesCurrent(c,s,r,h,(c,s,r)=>guards.requireReplyDiscussionById(c,s,r)),requireCurrentReplyMemory:async()=>{},requireSavedSkillPolicy:async()=>{},requireActiveBinding:async()=>x.binding,navigationDependencyIds:()=>[]};guards=new ReplyAssistantGuards(ports);return new PostgresReplyDiscussionContext({guards,ports});}
+function assistant(x){let guards;const discussion=(c,s,r)=>guards.requireReplyDiscussionById(c,s,r);const ports={...source,requireReplySourcesCurrent:(c,s,r,h)=>source.requireReplySourcesCurrent(c,s,r,h,discussion),requireCurrentReplyMemory:async()=>{},requireSavedSkillPolicy:async()=>{},requireActiveBinding:async()=>x.binding,navigationDependencyIds:()=>[]};guards=new ReplyAssistantGuards(ports);return {guards,ports};}
+function service(x){return new PostgresReplyDiscussionContext(assistant(x));}
 async function request(x,g){const r=(await x.f.client.query('SELECT * FROM reply_request WHERE id=$1',[g.request])).rows[0];return {...r,request_id:r.id};}
+test('嵌套复验保留外层递归检测，子作用域结束不能清除外层活动来源',async t=>{
+ const x=await setup(t),a=await x.generation(),b=await x.generation(),scope={owner_id:x.owner,contact_id:x.contact};
+ let visits=0;
+ const discussion=async(client,current)=>{
+  if(++visits>1)throw new Error('循环未在数据库递归前拒绝');
+  await source.withReplyValidationScope(client,current,()=>source.requireReplySourcesCurrent(client,current,b.request,false));
+  await source.withReplyValidationScope(client,{...current,contact_id:randomUUID()},()=>source.requireReplySourcesCurrent(client,current,a.request,false,discussion));
+ };
+ await assert.rejects(source.withReplyValidationScope(x.f.client,scope,()=>source.requireReplySourcesCurrent(x.f.client,scope,a.request,false,discussion)),{code:'reply_context_invalidated'});
+ assert.equal(visits,1);
+});
+test('来源复验缓存隔离联系人、历史模式和守卫，失败不缓存并返回副本',async t=>{
+ const x=await setup(t),g=await x.generation(),scope={owner_id:x.owner,contact_id:x.contact};
+ let firstCalls=0,secondCalls=0,failed=true;
+ const first=async()=>{firstCalls++;},second=async()=>{secondCalls++;if(failed)throw new Error('合成失败');};
+ await source.withReplyValidationScope(x.f.client,scope,async()=>{
+  const result=await source.requireReplySourcesCurrent(x.f.client,scope,g.request,false,first);result.push(randomUUID());
+  assert.deepEqual(await source.requireReplySourcesCurrent(x.f.client,scope,g.request,false,first),[]);
+  await source.requireReplySourcesCurrent(x.f.client,scope,g.request,true,first);assert.equal(firstCalls,2);
+  await assert.rejects(source.requireReplySourcesCurrent(x.f.client,{...scope,contact_id:randomUUID()},g.request,false,first),{code:'reply_context_invalidated'});
+  await assert.rejects(source.requireReplySourcesCurrent(x.f.client,{...scope,owner_id:randomUUID()},g.request,false,first),{code:'reply_context_invalidated'});
+  await assert.rejects(source.requireReplySourcesCurrent(x.f.client,scope,g.request,false,second),/合成失败/);
+  failed=false;await source.requireReplySourcesCurrent(x.f.client,scope,g.request,false,second);assert.equal(secondCalls,2);
+  await source.withReplyValidationScope(x.f.client,scope,()=>source.requireReplySourcesCurrent(x.f.client,scope,g.request,false,first));assert.equal(firstCalls,3);
+ });
+ await source.requireReplySourcesCurrent(x.f.client,scope,g.request,false,first);assert.equal(firstCalls,4);
+});
+test('复验不跨数据库连接共享成功结果，导航按联系人隔离且结束后失效',async t=>{
+ const x=await setup(t),g=await x.generation(),scope={owner_id:x.owner,contact_id:x.contact},id=randomUUID(),next=randomUUID();
+ const database=(await x.f.client.query('SELECT current_database() AS name')).rows[0].name;
+ const other=new pg.Client({host:'/tmp',database});await other.connect();
+ const update=ids=>x.f.client.query('UPDATE reply_request SET context_snapshot=$2 WHERE id=$1',[g.request,JSON.stringify({navigation_dependency_ids:ids})]);
+ await update([id]);let calls=0,release,delayed;
+ const guard=async()=>{calls++;},gate=new Promise(resolve=>{release=resolve;});
+ try{
+  await source.withReplyValidationScope(x.f.client,scope,async()=>{
+   await source.requireReplySourcesCurrent(x.f.client,scope,g.request,false,guard);
+   await source.requireReplySourcesCurrent(other,scope,g.request,false,guard);assert.equal(calls,2);
+   const registered=await source.registeredNavigationDependencies(x.f.client,scope);assert.deepEqual(registered,[id]);registered.length=0;
+   assert.deepEqual(await source.registeredNavigationDependencies(x.f.client,scope),[id]);
+   assert.deepEqual(await source.registeredNavigationDependencies(x.f.client,{...scope,contact_id:randomUUID()}),[]);
+   assert.deepEqual(await source.registeredNavigationDependencies(x.f.client,{...scope,owner_id:randomUUID()}),[]);
+   delayed=gate.then(()=>source.registeredNavigationDependencies(x.f.client,scope));
+  });
+  await update([next]);release();assert.deepEqual(await delayed,[next]);
+ }finally{release();await other.end();}
+});
+test('保存候选的完整讨论复验复用历史来源，独立复验重新查询',async t=>{
+ const x=await setup(t),services=assistant(x),s=new PostgresReplyDiscussionContext(services),memory=randomUUID();
+ await x.f.client.query("INSERT INTO confirmed_memory(id,owner_id,contact_id,text_content,category,source_ids,adoption_method)VALUES($1,$2,$3,'合成偏好','preference',$4,'manual')",[memory,x.owner,x.contact,[x.contact]]);
+ for(let index=0;index<3;index++){
+  const g=await x.generation([memory]),r=await request(x,g),d=await s.read(x.f.client,r);
+  await services.guards.captureReplyDiscussion(x.f.client,r,d.snapshot);
+ }
+ const g=await x.generation(),r=await request(x,g),d=await s.read(x.f.client,r);
+ await services.guards.captureReplyDiscussion(x.f.client,r,d.snapshot);
+ const query=x.f.client.query.bind(x.f.client);let navigation=0;const sources=new Map();
+ x.f.client.query=(sql,...args)=>{
+  if(typeof sql==='string'&&sql.includes('jsonb_path_query(turn.prepared_context'))navigation++;
+  if(sql==='SELECT 1 FROM reply_request WHERE id=$1 AND owner_id=$2 AND contact_id=$3')sources.set(args[0][0],(sources.get(args[0][0])??0)+1);
+  return query(sql,...args);
+ };
+ try{
+  for(let pass=0;pass<2;pass++){
+   navigation=0;sources.clear();
+   assert.deepEqual(await services.guards.requireReplyDiscussion(x.f.client,r,d.snapshot,true),[memory]);
+   assert.equal(navigation,1,'同次保存前完整复验应共享导航注册读取');
+   assert.equal(sources.size,4);assert([...sources.values()].every(count=>count===1),'历史来源递归图应在一次复验内去重');
+  }
+ }finally{x.f.client.query=query;}
+});
+test('单次完整讨论复验只扫描一次导航并去重历史来源，下次复验重新读取',async t=>{
+ const x=await setup(t),s=service(x);
+ for(let index=0;index<3;index++){
+  const generation=await x.generation(),r=await request(x,generation),discussion=await s.read(x.f.client,r);
+  await x.f.client.query('UPDATE reply_request SET context_snapshot=$2 WHERE id=$1',
+   [generation.request,JSON.stringify({assistant_discussion_snapshot:discussion.snapshot})]);
+ }
+ const current=await x.generation(),r=await request(x,current),query=x.f.client.query.bind(x.f.client);
+ let navigation=0;const sourceReads=new Map();
+ x.f.client.query=(sql,...args)=>{
+  if(typeof sql==='string'&&sql.includes('jsonb_path_query(turn.prepared_context'))navigation++;
+  if(sql==='SELECT 1 FROM reply_request WHERE id=$1 AND owner_id=$2 AND contact_id=$3')sourceReads.set(args[0][0],(sourceReads.get(args[0][0])??0)+1);
+  return query(sql,...args);
+ };
+ try{
+  const first=await s.read(x.f.client,r);
+  assert.equal(navigation,1,'同次只读讨论装配不能逐条重扫导航注册表');
+  assert.equal(sourceReads.size,4);
+  assert([...sourceReads.values()].every(count=>count===1),'共享历史来源在同次复验中只校验一次');
+  navigation=0;sourceReads.clear();
+  await s.validateCurrent(x.f.client,r,first);
+  assert.equal(navigation,1,'独立提交复验必须重新查询，不能沿用前一阶段缓存');
+  assert.equal(sourceReads.size,4);
+  assert([...sourceReads.values()].every(count=>count===1));
+ }finally{x.f.client.query=query;}
+});
 test('实际PG完整历史保留旧用户输入，当前输入不重复进入历史',async t=>{
  const x=await setup(t),old=await x.generation(),current=await x.generation(),s=service(x),r=await request(x,current);
  const discussion=await s.read(x.f.client,r),payload=assistantDiscussionPayload(discussion);

@@ -6,6 +6,7 @@ import type {ReplyStoreRequest} from '../generation/reply-store.ts';
 import {ReplyStoreError} from '../generation/reply-store.ts';
 import {canonical,fingerprint,legacyJson,inputRows,generationDependencies,carryEdges,capturedEdges,snapshot} from '../generation/reply-assistant-erasure.ts';
 import {anchor as anchorSQL} from '../generation/reply-assistant-erasure-sql.ts';
+import {withReplyValidationScope} from '../generation/reply-source-guards.ts';
 type Row=Record<string,any>;
 type Change=Record<string,unknown>;
 export type ReplyPreparationIdentity=Pick<ReplyStoreRequest,'owner_id'|'contact_id'|'conversation_binding_id'|'idempotency_key'>;
@@ -101,6 +102,9 @@ export class PostgresReplyDiscussionContext {
    return item('candidate_carry',canonical({messages:v!.messages}),row.id,{turn_id:parent!.turn_id,reply_request_id:parent!.reply_request_id,candidate_id:v!.candidate_id,version_id:v!.id,parent_version_id:v!.parent_version_id,candidate_number:v!.candidate_number,version_number:v!.version_number,is_explicitly_selected:true,basis_changes:v!.basis_changes});
  }
  private async build(client:pg.Client,request:DiscussionRequest,selected?:Row):Promise<ReplyDiscussionContext|null> {
+   return withReplyValidationScope(client,request,()=>this.buildScoped(client,request,selected));
+ }
+ private async buildScoped(client:pg.Client,request:DiscussionRequest,selected?:Row):Promise<ReplyDiscussionContext|null> {
    const scope={owner_id:request.owner_id,contact_id:request.contact_id};await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${scope.owner_id}`]);
    if(request.request_id!==null&&!(await client.query('SELECT 1 FROM reply_request WHERE id=$1 AND owner_id=$2 AND contact_id=$3 AND conversation_binding_id=$4 AND idempotency_key=$5',[request.request_id,scope.owner_id,scope.contact_id,request.conversation_binding_id,request.idempotency_key])).rowCount)reject();
    const anchor=(await client.query(anchorSQL.replace('turn.input_payload,','turn.input_payload::text AS input_payload_text,'),[scope.owner_id,scope.contact_id,request.idempotency_key])).rows[0];
