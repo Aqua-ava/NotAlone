@@ -46,8 +46,8 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage }: { 
   const localDraftOnly = sameScope && Boolean(state.generationBlock) && state.savedSession?.phase === 'failed'
     && state.savedSession.sessionId === null && state.mode === 'rewrite_draft' && state.options.inputKind === undefined
     && !state.result && state.sessionCatalog?.phase !== 'loading' && !state.sessionCatalog?.selectionPending;
-  const viewingHistory = state.sessionCatalog?.phase === 'ready' && Boolean(state.savedSession?.sessionId)
-    && state.savedSession?.sessionId !== state.sessionCatalog.currentSessionId;
+  const viewingHistory = Boolean(state.sessionCatalog) && Boolean(state.savedSession?.sessionId)
+    && state.savedSession?.sessionId !== state.sessionCatalog?.currentSessionId;
   const inputBlocked = viewingHistory || !sameScope || submitting || state.phase === 'waiting'
     || state.savedSession?.phase === 'loading' || state.sessionCatalog?.phase === 'loading' || state.sessionCatalog?.selectionPending === true
     || state.sourceAvailability !== undefined || state.sessionDeletion === 'deleting';

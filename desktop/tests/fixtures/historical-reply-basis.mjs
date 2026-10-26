@@ -22,6 +22,7 @@ const compiled = await build({ stdin: { contents: `
   export { TraceController } from './src/main/traces/controller';
   export { BackendRequestFailure, JsonClient } from './src/main/backend/json-client';
   export { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
+  export { UnifiedReplyWorkspace } from './src/renderer/UnifiedReplyWorkspace';
   export { ReplyEvidence } from './src/renderer/ReplyEvidence';
   export { ReplyCandidates } from './src/renderer/RewritePanel';
   export { readReplyEvidence } from './src/main/reply/evidence-read';

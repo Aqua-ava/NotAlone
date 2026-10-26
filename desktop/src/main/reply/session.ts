@@ -2195,7 +2195,7 @@ export class ReplySession {
   }
   private assertCurrentSession(): void {
     const saved = this.state.savedSession?.sessionId, catalog = this.state.sessionCatalog;
-    if (saved && catalog?.phase === 'ready' && saved !== catalog.currentSessionId) {
+    if (saved && catalog && saved !== catalog.currentSessionId) {
       throw new Error('请先明确继续此会话，或返回当前会话后生成。');
     }
   }

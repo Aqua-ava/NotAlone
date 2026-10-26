@@ -1,7 +1,64 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { historicalReplyFixture, renderSession } from './fixtures/historical-reply-basis.mjs';
+import { historicalReplyFixture, renderSession, ports } from './fixtures/historical-reply-basis.mjs';
+
+test('历史目录刷新失败仍要求明确继续，Main和工作区都保持生成门禁', async () => {
+  const f = await historicalReplyFixture(), currentId = randomUUID(), originalRequest = f.backend.requestJson;
+  let historical = false, fail = false, catalogGate;
+  const renderWorkspace = state => ports.renderToStaticMarkup(ports.createElement(ports.UnifiedReplyWorkspace,
+    { contacts: { state: f.contacts.getState() }, replies: { state } }));
+  const disabledSuggestion = /<button(?=[^>]*aria-label="帮我想想")(?=[^>]*disabled="")[^>]*>/;
+  f.backend.requestJson = async request => {
+    if (request.path.endsWith('/assistant-sessions') && request.method === 'GET') {
+      if (catalogGate) await catalogGate;
+      if (fail) throw new ports.BackendRequestFailure('response', 503, 'unavailable');
+      return { generation: f.records.generation, data: { sessions: [
+        { session_id: f.sessionId, is_current: !historical },
+        ...(historical ? [{ session_id: currentId, is_current: true }] : []),
+      ], current_session_id: historical ? currentId : f.sessionId } };
+    }
+    return originalRequest(request);
+  };
+  try {
+    await f.bridge.readSavedSession(f.scope);
+    await f.bridge.enterWorkspace(f.scope);
+    assert.doesNotMatch(renderWorkspace(await f.bridge.getState()), disabledSuggestion,
+      '首次已确认当前会话仍可正常生成');
+    historical = true;
+    await f.bridge.viewSavedSession({ ...f.scope, sessionId: f.sessionId });
+    await f.bridge.enterWorkspace(f.scope);
+    f.contacts.setDraft({ ...f.scope, text: '合成未明确继续的历史输入' });
+    let releaseCatalog;
+    catalogGate = new Promise(resolve => { releaseCatalog = resolve; });
+    const refreshing = f.bridge.listSavedSessions(f.scope);
+    try {
+      const loading = await f.bridge.getState();
+      assert.equal(loading.sessionCatalog.phase, 'loading');
+      assert.match(renderWorkspace(loading), disabledSuggestion);
+      await assert.rejects(f.bridge.generate({ ...f.scope, newRequest: true }), /明确继续/);
+    } finally { catalogGate = undefined; releaseCatalog(); await refreshing; }
+    fail = true;
+    await f.bridge.listSavedSessions(f.scope);
+    const failed = await f.bridge.getState(), mark = f.calls.length;
+    assert.equal(failed.sessionCatalog.phase, 'failed');
+    assert.equal(failed.sessionCatalog.currentSessionId, currentId);
+    let generationError;
+    await f.bridge.generate({ ...f.scope, newRequest: true, workspaceAction: 'suggest' })
+      .catch(error => { generationError = error.message; });
+    assert.equal(f.calls.slice(mark).filter(call => call.method === 'POST'
+      && /\/(replies(?:\/prepare)?|continue)$/.test(call.path)).length, 0,
+    '目录故障不能向未经继续的历史段发出准备或生成');
+    assert.match(generationError, /明确继续/);
+    assert.match(renderWorkspace(failed), disabledSuggestion);
+    fail = false;
+    await f.bridge.listSavedSessions(f.scope);
+    await assert.rejects(f.bridge.generate({ ...f.scope, newRequest: true }), /明确继续/);
+    await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
+    assert.equal((await f.bridge.getState()).sessionCatalog.currentSessionId, f.sessionId);
+    assert.equal(f.calls.filter(call => call.path.endsWith('/resume')).length, 1);
+  } finally { await f.replies.beginGenerationClosing(() => {}); }
+});
 
 test('生产Main与preload的历史查看只读，明确继续才切换当前', async () => {
   const f = await historicalReplyFixture();

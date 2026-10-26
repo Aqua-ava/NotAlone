@@ -14,6 +14,7 @@ import {isAbsolute,join} from 'node:path';
 import type {Client} from 'pg';
 import {ReplyError} from '../generation/reply-contract.ts';
 import type {VerifiedReplyScope} from '../generation/reply-scope.ts';
+import {assistantRuntimeDeletionPending} from './assistant-runtime-erasure.ts';
 
 type Transaction=<T>(work:(client:Client)=>Promise<T>)=>Promise<T>;
 type Scope=Pick<VerifiedReplyScope,'owner_id'|'contact_id'>;
@@ -99,12 +100,7 @@ export class AssistantRuntime {
  }
  private async requireAllowed(client:Client,scope:Scope,session:string|null):Promise<void>{
   // 来源的owner memory/carry闭包可跨联系人；完成前先保守封禁本人生成，不删除无关档案。
-  const blocked=await client.query(`SELECT 1 FROM cross_domain_deletion_operation operation
-   WHERE operation.owner_id=$1 AND operation.status<>'succeeded' AND (
-    operation.scope_kind IN ('source','account') OR operation.scope_kind='contact' AND operation.contact_id=$2
-    OR operation.scope_kind='discussion' AND operation.contact_id=$2 AND operation.target_id=$3)
-   UNION ALL SELECT 1 FROM assistant_runtime_deletion_target WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 LIMIT 1`,[scope.owner_id,scope.contact_id,session]);
-  if(blocked.rowCount)throw new ReplyError('reply_deletion_pending',409);
+  if(await assistantRuntimeDeletionPending(client,scope,session))throw new ReplyError('reply_deletion_pending',409);
  }
  private async lookup(client:Client,scope:VerifiedReplyScope,requestKey:string,configuration:string):Promise<RuntimeRow|null>{
   const anchor=(await client.query(`SELECT turn.session_id FROM assistant_session_turn turn JOIN assistant_session session ON session.id=turn.session_id AND session.owner_id=turn.owner_id AND session.contact_id=turn.contact_id WHERE turn.owner_id=$1 AND turn.contact_id=$2 AND turn.idempotency_key=$3 AND turn.conversation_binding_id=$4 AND turn.input_payload IS NOT NULL AND turn.state<>'redacted'`,[scope.owner_id,scope.contact_id,requestKey,scope.conversation_binding_id])).rows[0];
