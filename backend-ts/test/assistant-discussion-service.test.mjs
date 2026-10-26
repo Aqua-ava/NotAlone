@@ -10,6 +10,8 @@ import {
 } from '../src/reply/discussion/assistant-discussion-service.ts';
 import {PostgresReplyStore} from '../src/reply/generation/reply-store.ts';
 import {deleteSourceReplies} from '../src/preferences/preference-erasure.ts';
+import pg from 'pg';
+import {readPublicReplyEvidence} from '../src/host/pure-ts-reply-evidence.ts';
 
 async function fixture(t) {
   const storage = await createStorageFixture();
@@ -103,6 +105,44 @@ async function completedGeneration(f, session, text = '合成原候选', binding
   );
   return {turn, input, requestKey, request, candidate, message, evidence, group};
 }
+
+test('讨论和候选依据读取可共享来源锁，写操作仍与读取互斥', async (t) => {
+  const f = await fixture(t), scope = {owner_id:f.owner,contact_id:f.contact};
+  const session = await f.service.defaultSession(scope);
+  const generated = await completedGeneration(f,session);
+  const database = (await f.storage.client.query('SELECT current_database() AS name')).rows[0].name;
+  const holder = new pg.Client({host:'/tmp',database});
+  await holder.connect();
+  const transaction = work => f.transaction(async client => {
+    await client.query("SET LOCAL lock_timeout = '100ms'");
+    return work(client);
+  });
+  const service = new AssistantDiscussionService({transaction,skillsRoot:`${f.storage.directory}/skills`});
+  try {
+    await holder.query('BEGIN');
+    await holder.query('SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))',[`owner:${f.owner}`]);
+    await holder.query('SELECT id FROM assistant_session WHERE id=$1 FOR SHARE',[session]);
+    assert.equal((await service.readCandidate(scope,session,generated.candidate)).candidate_id,generated.candidate);
+    assert.equal(await service.selectedCandidate(scope,session),null);
+    assert.equal((await service.readSession(scope,session)).turns[0].state,'completed');
+    assert.equal((await readPublicReplyEvidence({runtimeOwnerId:f.owner,businessTransaction:transaction},
+      `${f.storage.directory}/skills`,f.contact,generated.request)).status,200);
+    await assert.rejects(service.createSession(scope),error => error instanceof AssistantDiscussionError && error.code==='unavailable',
+      '写操作仍须等待同一来源范围内的读取结束');
+    await holder.query('ROLLBACK');
+    assert.equal(typeof await service.createSession(scope),'string');
+    await holder.query('BEGIN');
+    await holder.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${f.owner}`]);
+    await assert.rejects(service.readCandidate(scope,session,generated.candidate),
+      error => error instanceof AssistantDiscussionError && error.code==='unavailable',
+      '来源写入或删除持锁期间仍不得发布读取结果');
+    assert.equal((await readPublicReplyEvidence({runtimeOwnerId:f.owner,businessTransaction:transaction},
+      `${f.storage.directory}/skills`,f.contact,generated.request)).status,503);
+  } finally {
+    await holder.query('ROLLBACK');
+    await holder.end();
+  }
+});
 
 test('渠道绑定建立后仍可读取既有手动确认生成，不把两种来源混用', async (t) => {
   const f = await fixture(t);

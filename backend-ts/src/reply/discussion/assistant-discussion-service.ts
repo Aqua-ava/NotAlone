@@ -134,11 +134,12 @@ export class AssistantDiscussionService {
     this.ports=guards.ports;
   }
 
-  private async transaction<T>(scope:AssistantDiscussionScope,work:(client:Client)=>Promise<T>):Promise<T>{
+  private async transaction<T>(scope:AssistantDiscussionScope,work:(client:Client)=>Promise<T>,read=false):Promise<T>{
     this.scope(scope);
     try{
       return await this.options.transaction(async client=>{
-        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${scope.owner_id}`]);
+        // 同范围读取共享来源锁；写入和删除继续排他，防止复验期间来源改变。
+        await client.query(`SELECT ${read?'pg_advisory_xact_lock_shared':'pg_advisory_xact_lock'}(hashtextextended($1,0))`,[`owner:${scope.owner_id}`]);
         return work(client);
       });
     }catch(error){
@@ -531,7 +532,7 @@ export class AssistantDiscussionService {
       await this.sessionRow(client,scope,sessionId);
       const candidate=await this.candidateRow(client,scope,sessionId,candidateId);
       return this.history(client,scope,sessionId,candidate);
-    });
+    },true);
   }
 
   async selectCandidate(
@@ -595,7 +596,7 @@ export class AssistantDiscussionService {
         selection_id:row.id,selection_number:Number(row.selection_number),
         session_id:row.session_id,candidate_id:row.candidate_id,version_id:row.version_id,
       };
-    });
+    },true);
   }
 
   async carryCandidate(
@@ -694,7 +695,7 @@ export class AssistantDiscussionService {
 
   async readSession(scope:AssistantDiscussionScope,sessionId:string):Promise<Row>{
     return this.transaction(scope,async client=>{
-      const session=await this.sessionRow(client,scope,sessionId,true);
+      const session=await this.sessionRow(client,scope,sessionId);
       let currentBinding:string|null=null;
       try{currentBinding=await this.activeBinding(client,scope,true);}catch{}
       const manualBindings=new Set((await client.query(
@@ -804,7 +805,7 @@ export class AssistantDiscussionService {
         session_id:sessionId,current_input_version_id:session.current_input_version_id,
         turns,inputs,
       };
-    });
+    },true);
   }
 
   async interrupt(

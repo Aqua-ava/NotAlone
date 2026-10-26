@@ -29,7 +29,7 @@ export async function readPublicReplyEvidence(storage:HostStorage,skillsRoot:str
  try{
   const body=await storage.businessTransaction(async client=>{
    try{
-    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${owner}`]);
+    await client.query('SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))',[`owner:${owner}`]);
     const row=(await client.query('SELECT *,context_snapshot::text AS snapshot_text FROM reply_request WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[owner,contact,request])).rows[0];
     if(!row)throw new ReplyStoreError('reply_not_found');
     if((await client.query('SELECT 1 FROM reply_invalidated_key WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3',[owner,contact,row.idempotency_key])).rowCount)invalid();
