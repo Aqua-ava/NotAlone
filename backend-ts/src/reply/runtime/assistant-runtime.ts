@@ -5,13 +5,14 @@ import type {AssistantRuntimePlan,AssistantRuntimePlanReader} from './assistant-
 import AgentLoop from '@deepseek-ai/dsh-agent-loop';
 import Sessions,{SessionId,type SessionEvent} from '@deepseek-ai/dsh-session';
 import type {} from '@deepseek-ai/dsh-session-persistence';
+import {SessionPersistenceCorruptionError,SessionPersistenceNotFoundError} from '@deepseek-ai/dsh-session-persistence';
 import Tools from '@deepseek-ai/dsh-tools';
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
 import Projections from '@deepseek-ai/dsh-session-projection';
 import * as JsonlPersistence from '@deepseek-ai/dsh-session-persistence-jsonl';
 import {createHash,randomUUID} from 'node:crypto';
-import {mkdir,lstat,readFile,writeFile,rm,realpath} from 'node:fs/promises';
-import {isAbsolute,join} from 'node:path';
+import {mkdir,lstat,readFile,writeFile,rm,realpath,readdir} from 'node:fs/promises';
+import {isAbsolute,join,basename} from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {fingerprint} from '../generation/reply-assistant-erasure.ts';
 import {digest as eventDigest} from '../../memory/overview/evidence/sources.ts';
@@ -43,6 +44,8 @@ export interface AssistantRuntimeLease {
 }
 const validId=(value:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const unavailable=():never=>{throw new ReplyError('reply_context_unavailable',409);};
+class RuntimeStorageDiverged extends Error {}
+const repairable=(error:unknown)=>error instanceof SessionPersistenceCorruptionError||error instanceof SessionPersistenceNotFoundError||error instanceof RuntimeStorageDiverged||(error as NodeJS.ErrnoException)?.code==='ENOENT';
 export function assistantRuntimeConfiguration(value:unknown):string{return createHash('sha256').update(JSON.stringify(value)).digest('hex');}
 
 export class AssistantRuntime {
@@ -75,6 +78,42 @@ export class AssistantRuntime {
  private async runtimeDirectory(directory:string,runtimeId:string):Promise<string>{
   if(!validId(runtimeId))return unavailable();const root=join(directory,runtimeId),status=await lstat(root);
   if(!status.isDirectory()||status.isSymbolicLink()||(status.mode&0o077)!==0||status.uid!==process.getuid?.()||await realpath(root)!==root)return unavailable();return root;
+ }
+ /** 先核验整个应用副本；未知归属、链接和权限错误不能当成可覆盖的损坏。 */
+ private async privateTree(root:string):Promise<void>{
+  for(const entry of await readdir(root,{recursive:true})){
+   const path=join(root,entry),status=await lstat(path);
+   // 官方POSIX锁以默认0644创建，只含锁定inode；正文和目录仍要求私有权限。
+   const allowedMode=basename(path)==='session.lock'&&status.isFile()?0o022:0o077;
+   if(status.isSymbolicLink()||!status.isFile()&&!status.isDirectory()||(status.mode&allowedMode)!==0||status.uid!==process.getuid?.()||await realpath(path)!==path)return unavailable();
+  }
+ }
+ /** 官方write-open先取得跨进程锁再解码；锁冲突和未知close失败不进入重建。 */
+ private async inspect(scope:Scope,row:RuntimeRow,signal:AbortSignal,retainWriterFailure:()=>void,checkReference:boolean):Promise<{usable:boolean;retire:boolean}>{
+  let world:Awaited<ReturnType<AssistantRuntime['world']>>|undefined,writerFailed=false;
+  try{
+   const directory=await this.directory(scope,row.session_id,false);if(!directory)return {usable:false,retire:false};
+   const root=await this.runtimeDirectory(directory,row.runtime_session_id);await this.privateTree(root);world=await this.world(root);
+   const handle=await world.persistence.open(SessionId(row.runtime_session_id),'write',{signal});
+   try{
+    const events=(await handle.read(0,undefined,{signal})).events;
+    if(row.state!=='ready'||events.length!==row.committed_event_count||!row.committed_event_sha256||eventDigest(events)!==row.committed_event_sha256)return {usable:false,retire:true};
+    if(checkReference&&row.committed_request_id===null)await this.readReference(directory,row);
+    return {usable:true,retire:true};
+   }finally{try{await handle.close();}catch(error){writerFailed=true;retainWriterFailure();throw error;}}
+  }catch(error){
+   // 官方open会聚合解码失败与锁释放失败；没有返回handle也不能假定释放成功。
+   if(error instanceof AggregateError)retainWriterFailure();
+   if(signal.aborted||writerFailed||!repairable(error))throw error;
+   if(error instanceof SessionPersistenceNotFoundError&&world){
+    // 缺档不等于无人写入；用官方create/flush在同一路径取得真实锁，再允许替换。
+    const session=world.ctx.sessions.create(SessionId(row.runtime_session_id)),handle=await world.persistence.create(session.header,{signal});
+    try{await handle.flush();}finally{try{await handle.close();}catch(closeError){retainWriterFailure();throw closeError;}}
+    return {usable:false,retire:true};
+   }
+   // 目录已缺失时不删除未知旧路径；新实例使用不同路径，删除链仍覆盖整个讨论。
+   return {usable:false,retire:error instanceof SessionPersistenceCorruptionError||error instanceof RuntimeStorageDiverged};
+  }finally{try{await world?.close();}catch(error){retainWriterFailure();throw error;}}
  }
  private async world(root:string){
   let ctx=this.options.ctx;
@@ -144,12 +183,12 @@ export class AssistantRuntime {
    if(row?.state==='blocked')return unavailable();
    if(row?.state==='ready')await this.requireCommitted(scope,row);
    if(options.generation&&!row){await this.options.transaction(client=>this.requireGenerationReady(client,scope,session,options.requestKey));return {changed:false};}
-   if(options.generation&&row?.state==='dirty')return materialization(row);
    if(row?.qualification&&(row.qualification.binding_id!==plan.binding_id||row.qualification.scope?.owner_id!==scope.owner_id||row.qualification.scope?.contact_id!==scope.contact_id))return unavailable();
-   if(row?.state==='ready'&&row.configuration_sha256===configuration&&isDeepStrictEqual(inspectedQualification(row.qualification),plan.qualification))return materialization(row);
+   const storage=row?await this.inspect(scope,row,combined,()=>{writerFailed=true;},row.configuration_sha256===configuration&&isDeepStrictEqual(inspectedQualification(row.qualification),plan.qualification)):{usable:false,retire:false};
+   if(storage.usable&&row?.state==='ready'&&row.configuration_sha256===configuration&&isDeepStrictEqual(inspectedQualification(row.qualification),plan.qualification))return materialization(row);
    // 只新增合法背景或新完成业务轮时保留真实SDK历史；材料变化或范围收窄必须换底层实例。
    const contains=(previous:Record<string,string>,current:Record<string,string>)=>Object.entries(previous).every(([key,value])=>current[key]===value);
-   if(row?.state==='ready'&&row.origin==='generated'&&row.qualification&&row.configuration_sha256===configuration
+   if(storage.usable&&row?.state==='ready'&&row.origin==='generated'&&row.qualification&&row.configuration_sha256===configuration
     &&row.qualification.version===plan.qualification.version&&row.qualification.contract===plan.qualification.contract&&isDeepStrictEqual(row.qualification.policy,plan.qualification.policy)&&contains(row.qualification.records,plan.qualification.records)&&contains(row.qualification.inventory,plan.qualification.inventory)){
     const qualification=retainReferenceProof(plan.qualification,row.qualification);
     await this.options.transaction(async client=>{await this.requireAllowed(client,scope,session);if(!isDeepStrictEqual((await readPlan(client)).qualification,plan.qualification))return unavailable();await client.query("UPDATE assistant_runtime_session SET qualification=$5 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$4 AND state='ready'",[scope.owner_id,scope.contact_id,session,row.runtime_session_id,JSON.stringify(qualification)]);});
@@ -161,11 +200,6 @@ export class AssistantRuntime {
    combined.throwIfAborted();
    const directory=(await this.directory(scope,session,true))!,runtimeId=randomUUID();
    const origin=row?'business_rebuild':'business_bootstrap';
-   if(row){
-    if(!validId(row.runtime_session_id))return unavailable();
-    const previous=await this.world(await this.runtimeDirectory(directory,row.runtime_session_id));
-    try{const handle=await previous.persistence.open(SessionId(row.runtime_session_id),'write',{signal:combined});try{await handle.flush();}finally{try{await handle.close();}catch(error){writerFailed=true;throw error;}}}finally{await previous.close();}
-   }
    await this.options.transaction(async client=>{
     await this.requireAllowed(client,scope,session);
     if(!isDeepStrictEqual((await readPlan(client)).qualification,plan.qualification))return unavailable();
@@ -174,7 +208,7 @@ export class AssistantRuntime {
      :await client.query(`INSERT INTO assistant_runtime_session(owner_id,contact_id,session_id,runtime_session_id,configuration_sha256,state,origin) VALUES($1,$2,$3,$4,$5,'dirty',$6) ON CONFLICT(owner_id,contact_id,session_id) DO NOTHING`,[scope.owner_id,scope.contact_id,session,runtimeId,configuration,origin]);
     if(claim.rowCount!==1)throw new ReplyError('reply_in_progress',409);
    });
-   if(row){if(!validId(row.runtime_session_id))return unavailable();await rm(join(directory,row.runtime_session_id),{recursive:true,force:true});}
+   if(row&&storage.retire){if(!validId(row.runtime_session_id))return unavailable();await rm(join(directory,row.runtime_session_id),{recursive:true,force:true});}
    const root=join(directory,runtimeId);await mkdir(root,{mode:0o700});world=await this.world(root);
    const sdkSession=world.ctx.sessions.create(SessionId(runtimeId)),writer=await world.persistence.create(sdkSession.header,{signal:combined});
    let count:number,eventSha:string;
@@ -234,11 +268,11 @@ export class AssistantRuntime {
    const world=await this.world(await this.runtimeDirectory(directory,row.runtime_session_id));
    try{
     const handle=await world.persistence.open(SessionId(row.runtime_session_id),'read',{signal});
-    try{const history=await handle.read(0,undefined,{signal});if(history.events.length!==row.committed_event_count||!row.committed_event_sha256||eventDigest(history.events)!==row.committed_event_sha256)return unavailable();return {sessionId:SessionId(row.runtime_session_id),events:history.events,qualification_sha256:fingerprint(row.qualification),...(row.committed_request_id===null?{businessReference:await this.readReference(directory,row)}:{})};}finally{await handle.close();}
+    try{const history=await handle.read(0,undefined,{signal});if(history.events.length!==row.committed_event_count||!row.committed_event_sha256||eventDigest(history.events)!==row.committed_event_sha256)throw new RuntimeStorageDiverged();return {sessionId:SessionId(row.runtime_session_id),events:history.events,qualification_sha256:fingerprint(row.qualification),...(row.committed_request_id===null?{businessReference:await this.readReference(directory,row)}:{})};}finally{await handle.close();}
    }finally{await world.close();}
   }catch(error){
    if(signal?.aborted)throw error;
-   await this.options.transaction(client=>this.quarantine(client,scope,row.session_id));
+   await this.options.transaction(client=>this.quarantine(client,scope,row.session_id,repairable(error)));
    if(error instanceof ReplyError)throw error;
    throw new ReplyError('reply_runtime_unavailable',503);
   }
@@ -312,9 +346,9 @@ export class AssistantRuntime {
   }
  }
  /** 隔离不合格运行副本；保留业务历史和文件，禁止继续恢复，供明确修复或删除。 */
- async quarantine(client:Client,scope:Scope,session:string):Promise<void>{
+ async quarantine(client:Client,scope:Scope,session:string,canRebuild=false):Promise<void>{
   const key=this.key(scope,session);if(this.active.has(key))throw new ReplyError('reply_in_progress',409);
-  await client.query("UPDATE assistant_runtime_session SET state='blocked' WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3",[scope.owner_id,scope.contact_id,session]);
+  await client.query("UPDATE assistant_runtime_session SET state=$4 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND state<>'blocked'",[scope.owner_id,scope.contact_id,session,canRebuild?'dirty':'blocked']);
  }
  /** 删除入口只触及已核验归属的应用目录；失败保留数据库映射供重试。 */
  async erase(client:Client,scope:Scope,session:string):Promise<void>{

@@ -378,6 +378,16 @@ export class AssistantGenerationJobs {
     }
     if (this.closing) this.deliverClosingReceipt(job, active);
   }
+  private receiveRecoveredReceipt(job: OwnedAssistantGeneration, receipt: AssistantGenerationReceipt): OwnedAssistantGeneration {
+    if (receipt.sessionId !== job.identity.sessionId) {
+      const active = this.jobs.get(job);
+      if (!active || active.receipt || !active.transportEnded || active.stage !== 'preparing'
+        || receipt.previousSessionId !== job.identity.sessionId || receipt.requestKey !== job.identity.requestKey) throw new Error('恢复的分段回执归属无效。');
+      const accepted = Object.freeze({ identity: Object.freeze({ ...job.identity, sessionId: receipt.sessionId }), signal: job.signal });
+      this.jobs.delete(job); this.jobs.set(accepted, active); job = accepted;
+    }
+    this.receiveReceipt(job, receipt); return job;
+  }
   // 业务失败可结束本地等待，但历史 failed 不能证明 C 当前没有运行租约。
   private failedResponseReceived(job: OwnedAssistantGeneration, canRetry = false, generationActive?: boolean): void {
     const active = this.jobs.get(job);
@@ -422,7 +432,8 @@ export class AssistantGenerationJobs {
     const jobs = [...this.jobs];
     for (const [, active] of jobs) active.controller.abort();
     // 原认证目标仍在时结算接纳的身份；没有回执必须实际读回，不能把失败当未领取。
-    this.connectionChange = Promise.all(jobs.map(async ([job, active]) => {
+    this.connectionChange = Promise.all(jobs.map(async ([originalJob, active]) => {
+      let job = originalJob;
       await active.preparationSettled;
       await this.settleUserCancellation(job, active);
       if (active.terminal || active.settledWithoutGeneration) return;
@@ -432,7 +443,7 @@ export class AssistantGenerationJobs {
         if (!('requestKey' in job.identity)) throw new Error('原准备身份尚未确认，不能重载配置。');
         const recovered = await stopping.recover(job.identity as AssistantGenerationIdentity);
         if (recovered === null) { active.terminal = true; this.jobs.delete(job); return; }
-        this.receiveReceipt(job as OwnedAssistantGeneration, recovered);
+        job = this.receiveRecoveredReceipt(job as OwnedAssistantGeneration, recovered);
       }
       if (!active.receipt) throw new Error('原生成回执尚未确认，不能重载配置。');
       await stopping.interrupt({ ...job.identity, ...active.receipt }, 'configuration_reload');
@@ -450,7 +461,8 @@ export class AssistantGenerationJobs {
       this.closingJobs = [...this.jobs];
     }
     // 没有回执不等于没有准备请求；退出必须等到每个已接纳请求的准备阶段终结。
-    return Promise.all((this.closingJobs ?? []).map(async ([job, active]) => {
+    return Promise.all((this.closingJobs ?? []).map(async ([originalJob, active]) => {
+      let job = originalJob;
       if (active.terminal) return;
       if (active.closingTask) {
         try { await active.closingTask; return; } catch { active.closingTask = undefined; }
@@ -462,7 +474,7 @@ export class AssistantGenerationJobs {
       if (!active.receipt && retrying && recovery && 'requestKey' in job.identity) {
         const recovered = await recovery(job.identity as AssistantGenerationIdentity);
         if (recovered === null) { active.terminal = true; this.jobs.delete(job); return; }
-        this.receiveReceipt(job as OwnedAssistantGeneration, recovered);
+        job = this.receiveRecoveredReceipt(job as OwnedAssistantGeneration, recovered);
       }
       if (!active.receipt) throw new Error('本次生成身份尚未确认，退出尚未完成。');
       await this.deliverClosingReceipt(job, active);
@@ -519,7 +531,7 @@ export class AssistantGenerationJobs {
         && item.requestKey === identity.requestKey && (inputVersionId === null || item.inputVersionId === inputVersionId))) return false;
       throw new Error('这次生成已经结束或不再属于当前助手会话。');
     }
-    const [job, active] = entry;
+    const [originalJob, active] = entry; let job = originalJob;
     if (active.receipt?.state === 'completed') return false;
     if (active.userCancellation) return active.userCancellation;
     if (!active.stopping) throw new Error('本次生成的停止连接尚未确认。');
@@ -537,6 +549,13 @@ export class AssistantGenerationJobs {
           while (this.finished.size > 32) this.finished.delete(this.finished.keys().next().value!);
           active.controller.abort(); this.jobs.delete(job); this.drain(); this.changed();
           return true;
+        }
+        if (!active.receipt && active.transportEnded) {
+          let recovered: AssistantGenerationReceipt | null;
+          try { recovered = await active.stopping!.recover(job.identity as AssistantGenerationIdentity); }
+          catch (error) { throw new Error('本次准备的停止身份尚未确认。', { cause: error }); }
+          if (recovered === null) { active.terminal = true; active.controller.abort(); this.jobs.delete(job); this.changed(); return true; }
+          job = this.receiveRecoveredReceipt(job as OwnedAssistantGeneration, recovered);
         }
         if (!active.receipt) throw new Error('本次准备的停止身份尚未确认。');
         receipt = active.receipt;

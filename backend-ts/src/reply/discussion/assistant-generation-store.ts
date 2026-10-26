@@ -220,5 +220,10 @@ export class AssistantGenerationStore {
    await client.query("UPDATE assistant_session_turn SET state='completed',interruption_reason=NULL,reply_request_id=$2,dependency_ids=$3,updated_at=now() WHERE id=$1",[row.id,saved.id,deps]);
   },signal);
  }
- async fail(scope:VerifiedReplyScope,row:GenerationRow):Promise<void>{await this.transaction(scope,client=>client.query("UPDATE assistant_session_turn SET state='failed',updated_at=now() WHERE owner_id=$1 AND contact_id=$2 AND id=$3 AND state='running'",[scope.owner_id,scope.contact_id,row.id]));}
+ async fail(scope:VerifiedReplyScope,row:GenerationRow,interruption?:'app_quit'):Promise<void>{await this.transaction(scope,async client=>{
+  const completed=(await client.query("SELECT 1 FROM reply_request WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3 AND state='completed'",[scope.owner_id,scope.contact_id,row.idempotency_key])).rowCount;
+  // 文件关闭或发布失败不撤销已经可靠提交的候选；仍沿同一来源、输入和Skill守卫裁定。
+  if(completed||interruption){await interruptAssistantGeneration(this,client,scope,row.session_id,row.idempotency_key,row.input_version_id,'app_quit');return;}
+  await client.query("UPDATE assistant_session_turn SET state='failed',updated_at=now() WHERE owner_id=$1 AND contact_id=$2 AND id=$3 AND state='running'",[scope.owner_id,scope.contact_id,row.id]);
+ });}
 }

@@ -14,7 +14,7 @@ export async function interruptAssistantGeneration(backend: Pick<BackendHost, 'g
         ...(interruptionReason === 'app_quit' ? {} : { reason: interruptionReason }) }, maxResponseBytes: 4096 });
     const value = response.data;
     if (response.generation !== receipt.connectionGeneration || !isRecord(value)
-      || Object.keys(value).length !== 6 || !Object.hasOwn(value, 'interruption_reason')) throw new Error('生成停止未获确认。');
+      || ![6, 7].includes(Object.keys(value).length) || !Object.hasOwn(value, 'interruption_reason')) throw new Error('生成停止未获确认。');
     const { interruption_reason: reason, ...identity } = value;
     const stopped = readAssistantGenerationReceipt(identity, receipt.sessionId, receipt.requestKey);
     if (stopped.turnId !== receipt.turnId || stopped.inputVersionId !== receipt.inputVersionId
@@ -44,20 +44,28 @@ export async function interruptAssistantGeneration(backend: Pick<BackendHost, 'g
   }
 }
 
-// 回执丢失后只在明确退出重试读取原会话；实际请求键唯一匹配，不能猜 turn/input 或创建新输入。
+// 明确收尾重试只读原受理；分段别名由后端证明，不猜 turn/input、不重新提交正文。
 export async function recoverAssistantGenerationReceipt(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>,
   identity: AssistantGenerationIdentity): Promise<AssistantGenerationReceipt | null> {
   if (backend.getConnectionGeneration() !== identity.connectionGeneration) throw new Error('退出生成归属尚未确认。');
+  let foundSession = false;
   try {
     const saved = await readAssistantSession(backend, identity.contactId, identity.sessionId, new AbortController().signal);
+    foundSession = true;
     const turns = saved.turns.filter((item) => item.requestKey === identity.requestKey);
-    if (saved.generation !== identity.connectionGeneration || turns.length !== 1) throw new Error('退出生成身份尚未读到。');
+    if (saved.generation !== identity.connectionGeneration || backend.getConnectionGeneration() !== identity.connectionGeneration || turns.length > 1) throw new Error('退出生成身份尚未读到。');
+    if (turns.length === 0) {
+      const response = await backend.requestJson({ method: 'POST', path: `/api/contacts/${identity.contactId}/assistant-sessions/${identity.sessionId}/generation-receipt`,
+        body: { request_key: identity.requestKey }, maxResponseBytes: 4096 });
+      if (response.generation !== identity.connectionGeneration || backend.getConnectionGeneration() !== identity.connectionGeneration) throw new Error('退出生成归属尚未确认。');
+      return readAssistantGenerationReceipt(response.data, identity.sessionId, identity.requestKey);
+    }
     const turn = turns[0]!;
     if (['redacted', 'unavailable'].includes(turn.state) && turn.input === null && turn.reply === null) return null;
     return readAssistantGenerationReceipt({ session_id: identity.sessionId, turn_id: turn.turnId,
       input_version_id: turn.inputVersionId, request_key: identity.requestKey, state: turn.state }, identity.sessionId, identity.requestKey);
   } catch (error) {
-    if (error instanceof BackendRequestFailure && error.kind === 'response' && error.status === 404 && error.code === 'not_found'
+    if (!foundSession && error instanceof BackendRequestFailure && error.kind === 'response' && error.status === 404 && error.code === 'not_found'
       && backend.getConnectionGeneration() === identity.connectionGeneration) return null;
     throw error;
   }

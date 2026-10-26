@@ -3,9 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {request as httpRequest} from 'node:http';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,mkdir,readdir,readFile,writeFile,rm,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,readdir,readFile,writeFile,rm,stat,chmod,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-support.mjs';
 
@@ -37,6 +39,219 @@ async function upgradeLegacyProvenance(f){
  await f.f.client.query('ALTER TABLE assistant_session DROP COLUMN legacy_runtime_pending');
  await f.f.client.query(await readFile(new URL('../database/migrations/122_assistant_legacy_resume_provenance.sql',import.meta.url),'utf8'));
 }
+
+function hostOutput(host,marker){
+ if(host.output.includes(marker))return Promise.resolve();
+ return new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>{cleanup();reject(Error(`自有宿主屏障超时：${marker}`));},10000);
+  const data=()=>{if(host.output.includes(marker)){cleanup();resolve();}},exit=()=>{cleanup();reject(Error('自有宿主在屏障前退出'));};
+  function cleanup(){clearTimeout(timer);host.child.stdout.off('data',data);host.child.off('exit',exit);}
+  host.child.stdout.on('data',data);host.child.once('exit',exit);
+ });
+}
+
+test('自有宿主SIGKILL后中断未过期和已过期任务，明确重试幂等且重启零模型',{timeout:60000},async t=>{
+ const f=await fixture(t);let host=await f.start();
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ for(const expired of [false,true]){
+  const command=f.input(`合成崩溃保留输入${expired}`),gate=f.holdNext();
+  const running=f.request(host,`${path}/replies`,command).catch(error=>error);await gate.entered;
+  if(expired)await f.f.client.query("UPDATE reply_request SET lease_expires_at=now()-interval '1 second' WHERE idempotency_key=$1",[command.idempotency_key]);
+  assert.deepEqual(await host.stop('SIGKILL'),[null,'SIGKILL']);await running;gate.release();
+  host=await f.start();assert.equal(host.requests.length,0,'再次启动不自动重发模型');
+  const history=await f.request(host,path),turn=history.turns.find(turn=>turn.request_key===command.idempotency_key);
+  assert.equal(turn.state,'failed');assert.equal(turn.interruption_reason,'app_quit');assert.equal(turn.reply,null);
+  assert.match(JSON.stringify(turn.input),/合成崩溃保留输入/);
+  const retry={original_turn_id:turn.turn_id,original_input_version_id:turn.input_version_id,request_key:randomUUID()};
+  const completed=await f.request(host,`${path}/retry-interrupted`,retry);
+  assert.equal(completed.state,'completed');assert.deepEqual(await f.request(host,`${path}/retry-interrupted`,retry),completed);
+  assert.equal(host.requests.length,1,'明确重试只生成并保存一次');
+  assert.equal((await f.request(host,path)).turns.filter(turn=>turn.request_key===retry.request_key).length,1);
+ }
+});
+
+test('自有宿主正常退出等待在途任务收尾，重启显示中断且不自动生成',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`,input=f.input('合成正常退出未完成输入'),gate=f.holdNext();
+ const running=f.request(host,`${path}/replies`,input).catch(error=>error);await gate.entered;const exited=await host.stop();await running;gate.release();assert.equal(exited[0],0);
+ const restarted=await f.start(),turn=(await f.request(restarted,path)).turns.find(turn=>turn.request_key===input.idempotency_key);
+ assert.equal(turn.state,'failed');assert.equal(turn.interruption_reason,'app_quit');assert.equal(turn.reply,null);assert.match(JSON.stringify(turn.input),/合成正常退出未完成输入/);assert.equal(restarted.requests.length,0);
+});
+
+test('缺失和损坏存档在原讨论按有效业务记录一次重建，恢复本身零模型',{timeout:60000},async t=>{
+ const f=await fixture(t);let host=await f.start();
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.request(host,`${path}/replies`,f.input('合成恢复前原输入'));
+ const history=await f.request(host,path);
+ for(const damage of ['missing_log','missing_directory','corrupt','event_count','torn_tail','dirty']){
+  await host.stop();
+  const root=join(f.businessHome,'assistant-runtime',f.owner,f.contact,session),row=(await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0],runtimeRoot=join(root,row.runtime_session_id),files=await readdir(runtimeRoot,{recursive:true});
+  const log=join(runtimeRoot,files.find(file=>file.endsWith('.jsonl')));
+  if(damage==='missing_log')await rm(log);
+  if(damage==='missing_directory'){
+   await rm(runtimeRoot,{recursive:true});
+  }
+  if(damage==='corrupt')await writeFile(log,'{broken\n'+(await readFile(log,'utf8')).split('\n').slice(1).join('\n'));
+  if(damage==='event_count')await f.f.client.query('UPDATE assistant_runtime_session SET committed_event_count=committed_event_count+1 WHERE session_id=$1',[session]);
+  if(damage==='torn_tail')await writeFile(log,(await readFile(log,'utf8'))+'{"uncommitted_ghost":"合成撕裂尾');
+  if(damage==='dirty')await f.f.client.query("UPDATE assistant_runtime_session SET state='dirty' WHERE session_id=$1",[session]);
+  host=await f.start();assert.deepEqual(await f.request(host,path),history,'业务可见历史独立于运行档');
+  assert.equal((await f.request(host,`${path}/resume`,{})).session_id,session,damage);
+  if(damage!=='torn_tail')assert.notEqual((await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0].runtime_session_id,row.runtime_session_id,damage);
+  assert.equal(host.requests.length,0,'读取及恢复不得请求模型');
+ }
+ await f.request(host,`${path}/replies`,f.input('合成恢复后明确生成'));
+ assert.match(JSON.stringify(host.requests[0].body),/合成恢复前原输入/);assert.doesNotMatch(JSON.stringify(host.requests[0].body),/合成撕裂尾/);
+});
+
+test('业务已保存而运行提交失败仍显示可靠候选，SIGKILL后同键只读重放',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.f.client.query("CREATE FUNCTION synthetic_reject_runtime_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.state='ready' AND NEW.committed_request_id IS NOT NULL THEN RAISE EXCEPTION 'synthetic runtime commit refusal'; END IF; RETURN NEW; END $$; CREATE TRIGGER synthetic_reject_runtime_commit BEFORE UPDATE ON assistant_runtime_session FOR EACH ROW EXECUTE FUNCTION synthetic_reject_runtime_commit()");
+ const command=f.input('合成业务已保存原输入');
+ const response=await fetch(host.url+`${path}/replies`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(command)});
+ assert.equal(response.status,502);assert.equal(host.requests.length,1);
+ const saved=await f.request(host,path),turn=saved.turns.find(turn=>turn.request_key===command.idempotency_key);
+ assert.equal(turn.state,'completed');assert.equal(turn.reply.candidates[0].text,'合成保存候选');
+ assert.deepEqual(await host.stop('SIGKILL'),[null,'SIGKILL']);
+ await f.f.client.query('DROP TRIGGER synthetic_reject_runtime_commit ON assistant_runtime_session');
+ // 模拟旧版本在DB保存后留下的失败投影；再次启动必须按同一DB完成凭据裁定。
+ await f.f.client.query("UPDATE assistant_session_turn SET state='failed' WHERE id=$1",[turn.turn_id]);
+ const restarted=await f.start();assert.deepEqual(await f.request(restarted,path),saved);assert.equal(restarted.requests.length,0);
+ const replay=await f.request(restarted,`${path}/replies`,command);assert.equal(replay.turn_id,turn.turn_id);assert.equal(replay.candidates[0].candidate_id,turn.reply.candidates[0].candidate_id);assert.equal(restarted.requests.length,0);
+ await f.request(restarted,`${path}/resume`,{});assert.equal(restarted.requests.length,0);
+});
+
+test('真实完成HTTP正文回执丢失后重启可读原候选，同键重放不再调用模型',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`,command=f.input('合成完成回执丢失输入');
+ await new Promise((resolve,reject)=>{
+  const request=httpRequest(host.url+`${path}/replies`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact}},response=>{assert.equal(response.statusCode,200);response.destroy();resolve();});request.once('error',reject);request.end(JSON.stringify(command));
+ });
+ const saved=await f.request(host,path),turn=saved.turns.find(turn=>turn.request_key===command.idempotency_key);assert.equal(turn.state,'completed');assert.equal(host.requests.length,1);
+ await host.stop('SIGKILL');const restarted=await f.start();assert.deepEqual(await f.request(restarted,path),saved);
+ const replay=await f.request(restarted,`${path}/replies`,command);assert.equal(replay.candidates[0].candidate_id,turn.reply.candidates[0].candidate_id);assert.equal(restarted.requests.length,0);
+});
+
+test('真实JSONL已fsync而DB候选事务被阻断，SIGKILL后不恢复幽灵输出',{timeout:60000},async t=>{
+ const f=await fixture(t),control=join(f.businessHome,'runtime-faults.json');
+ await writeFile(control,JSON.stringify({durable_marker:'合成磁盘先于提交幽灵'}),{mode:0o600});
+ const host=await f.start({NOTALONE_SYNTHETIC_RUNTIME_FAULTS:control}),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.f.client.query('SELECT pg_advisory_lock(700612)');
+ await f.f.client.query('CREATE FUNCTION synthetic_hold_candidate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(700612); RETURN NEW; END $$; CREATE TRIGGER synthetic_hold_candidate BEFORE INSERT ON reply_candidate FOR EACH ROW EXECUTE FUNCTION synthetic_hold_candidate()');
+ f.setCandidateText('合成磁盘先于提交幽灵');const running=f.request(host,`${path}/replies`,f.input('合成应保留的未完成输入')).catch(error=>error);
+ try{
+  await hostOutput(host,'VALIDATION_RUNTIME_DURABLE_MARKER');
+  const root=join(f.businessHome,'assistant-runtime'),files=await readdir(root,{recursive:true});
+  assert.match(await readFile(join(root,files.find(file=>file.endsWith('.jsonl'))),'utf8'),/合成磁盘先于提交幽灵/,'真实fsync后的文件含模型输出');
+  assert.deepEqual(await host.stop('SIGKILL'),[null,'SIGKILL']);await running;
+ }finally{await f.f.client.query('SELECT pg_advisory_unlock(700612)');}
+ await f.f.client.query('DROP TRIGGER synthetic_hold_candidate ON reply_candidate');
+ const restarted=await f.start(),saved=await f.request(restarted,path);
+ assert.doesNotMatch(JSON.stringify(saved),/合成磁盘先于提交幽灵/);assert.match(JSON.stringify(saved),/合成应保留的未完成输入/);assert.equal(restarted.requests.length,0);
+ await f.request(restarted,`${path}/resume`,{});assert.equal(restarted.requests.length,0);
+ f.setCandidateText('合成新可靠候选');await f.request(restarted,`${path}/replies`,f.input('合成崩溃后明确请求'));
+ assert.doesNotMatch(JSON.stringify(restarted.requests[0].body),/合成磁盘先于提交幽灵/);
+});
+
+test('重建磁盘拒写每次动作有界失败，原输入与历史保留，明确恢复后可继续',{timeout:60000},async t=>{
+ const f=await fixture(t),control=join(f.businessHome,'runtime-faults.json');await writeFile(control,'{}',{mode:0o600});
+ const host=await f.start({NOTALONE_SYNTHETIC_RUNTIME_FAULTS:control}),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.request(host,`${path}/replies`,f.input('合成磁盘故障前输入'));const saved=await f.request(host,path);
+ const root=join(f.businessHome,'assistant-runtime'),files=await readdir(root,{recursive:true});await rm(join(root,files.find(file=>file.endsWith('.jsonl'))));
+ await writeFile(control,JSON.stringify({fail_reference:true}));
+ for(let attempt=1;attempt<=2;attempt++){
+  const response=await fetch(host.url+`${path}/resume`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:'{}'});
+  assert.equal(response.status,503);assert.deepEqual(await f.request(host,path),saved);assert.equal(host.requests.length,1);
+  assert.equal(host.output.split('VALIDATION_RUNTIME_WRITE_REFUSED').length-1,attempt,'一次明确动作仅一次建档，不自动循环');
+ }
+ await writeFile(control,'{}');await f.request(host,`${path}/resume`,{});assert.deepEqual(await f.request(host,path),saved);assert.equal(host.requests.length,1);
+});
+
+test('缺档但官方SDK写锁仍活时拒绝重建，不解除或删除活锁',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.request(host,`${path}/replies`,f.input('合成活锁前输入'));
+ const row=(await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0],root=join(f.businessHome,'assistant-runtime',f.owner,f.contact,session,row.runtime_session_id);
+ const holder=spawn(process.execPath,[new URL('./assistant-runtime-lock-holder.mjs',import.meta.url).pathname,root,row.runtime_session_id],{stdio:['pipe','pipe','pipe']}),exited=once(holder,'exit');let output='';holder.stdout.on('data',data=>{output+=data;});holder.stderr.on('data',data=>{output+=data;});
+ const holderState={child:holder,get output(){return output;}};
+ t.after(async()=>{if(holder.exitCode===null&&holder.signalCode===null)holder.kill('SIGTERM');await exited;});
+ await hostOutput(holderState,'VALIDATION_LOCK_READY');
+ assert.equal(holder.exitCode,null);
+ const files=await readdir(root,{recursive:true}),log=join(root,files.find(file=>file.endsWith('.jsonl'))),lock=join(root,files.find(file=>file.endsWith('/session.lock'))),before=await stat(lock);await rm(log);
+ const response=await fetch(host.url+`${path}/resume`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:'{}'});
+ assert.equal(response.status,503);assert.equal(host.requests.length,1);assert.equal((await stat(lock)).ino,before.ino);assert.equal((await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0].runtime_session_id,row.runtime_session_id);
+ holder.kill('SIGTERM');await exited;
+ await f.request(host,`${path}/resume`,{});assert.equal(host.requests.length,1);
+});
+
+test('分段准备回执全丢后可按原会话和请求键只读找回受理，不改变输入或再生成',{timeout:60000},async t=>{
+ const f=await fixture(t),clock=join(f.businessHome,'domain-clock');await writeFile(clock,'2030-06-01T00:00:00Z');
+ const host=await f.start({NOTALONE_SYNTHETIC_ASSISTANT_CLOCK:clock}),base=`/api/contacts/${f.contact}/assistant-sessions`,{session_id:old}=await f.request(host,base,{}),path=`${base}/${old}`;
+ await f.request(host,`${path}/replies`,f.input('合成分段前讨论'));await writeFile(clock,'2030-06-01T13:00:00Z');
+ const input=f.input('合成准备回执丢失原输入'),prepared=await f.request(host,`${path}/replies/prepare`,input);
+ assert.notEqual(prepared.session_id,old);assert.equal(prepared.previous_session_id,old);
+ const before=await f.request(host,base),history=await f.request(host,`${base}/${prepared.session_id}`),calls=host.requests.length;
+ assert.ok(!(await f.request(host,path)).turns.some(turn=>turn.request_key===input.idempotency_key));
+ assert.deepEqual(await f.request(host,`${path}/generation-receipt`,{request_key:input.idempotency_key}),prepared);
+ assert.deepEqual(await f.request(host,base),before);assert.deepEqual(await f.request(host,`${base}/${prepared.session_id}`),history);assert.equal(host.requests.length,calls);
+ assert.deepEqual(await f.request(host,`${path}/replies/prepare`,input),prepared,'旧URL同冻结命令仍返回原受理');
+ const {session_id:unrelated}=await f.request(host,base,{});
+ const wrong=await fetch(host.url+`${base}/${unrelated}/generation-receipt`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify({request_key:input.idempotency_key})});assert.equal(wrong.status,404);
+ await f.request(host,`${path}/replies`,input);assert.equal(host.requests.length,calls+1);
+ assert.equal((await f.request(host,`${path}/generation-receipt`,{request_key:input.idempotency_key})).state,'completed');assert.equal(host.requests.length,calls+1);
+});
+
+test('未来格式、SDK身份、链接和权限错误保持原档与业务历史，零出站失败关闭',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.request(host,`${path}/replies`,f.input('合成不可信档案前输入'));const saved=await f.request(host,path);
+ const row=(await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0],root=join(f.businessHome,'assistant-runtime',f.owner,f.contact,session,row.runtime_session_id),files=await readdir(root,{recursive:true}),log=join(root,files.find(file=>file.endsWith('.jsonl'))),original=await readFile(log,'utf8');
+ for(const damage of ['future','identity','cwd','symlink','permissions']){
+  if(['future','identity','cwd'].includes(damage)){
+   const lines=original.split('\n'),header=JSON.parse(lines[0]);if(damage==='future')header.version=10000;if(damage==='identity')header.id=randomUUID();if(damage==='cwd')header.cwd='/synthetic-unrelated';lines[0]=JSON.stringify(header);await writeFile(log,lines.join('\n'));
+  }
+  if(damage==='symlink'){await rm(log);const target=join(f.businessHome,'synthetic-unrelated.jsonl');await writeFile(target,original,{mode:0o600});await symlink(target,log);}
+  if(damage==='permissions')await chmod(log,0o644);
+  const before=await readFile(log,'utf8'),response=await fetch(host.url+`${path}/resume`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:'{}'});
+  assert.ok([409,503].includes(response.status),damage);assert.equal(await readFile(log,'utf8'),before,damage);assert.deepEqual(await f.request(host,path),saved);assert.equal(host.requests.length,1);
+  assert.equal((await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0].runtime_session_id,row.runtime_session_id);
+  if(damage==='symlink')await rm(log);await writeFile(log,original,{mode:0o600});await chmod(log,0o600);
+ }
+ await f.request(host,`${path}/resume`,{});assert.equal(host.requests.length,1);
+});
+
+test('官方写句柄关闭未确认时保留同会话占用，重启前不假定可修',{timeout:60000},async t=>{
+ const f=await fixture(t),control=join(f.businessHome,'runtime-faults.json');await writeFile(control,'{}',{mode:0o600});
+ const host=await f.start({NOTALONE_SYNTHETIC_RUNTIME_FAULTS:control}),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.request(host,`${path}/replies`,f.input('合成关闭未确认前输入'));const saved=await f.request(host,path);
+ await writeFile(control,JSON.stringify({fail_lock_close:true}));
+ const resume=()=>fetch(host.url+`${path}/resume`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:'{}'});
+ assert.equal((await resume()).status,503);await writeFile(control,'{}');assert.equal((await resume()).status,409);
+ assert.deepEqual(await f.request(host,path),saved);assert.equal(host.requests.length,1);
+ await host.stop();const restarted=await f.start();await f.request(restarted,`${path}/resume`,{});assert.deepEqual(await f.request(restarted,path),saved);assert.equal(restarted.requests.length,0);
+});
+
+test('官方open解码失败且释放锁也失败时保留未知占用，不能立即覆盖坏档',{timeout:60000},async t=>{
+ const f=await fixture(t),control=join(f.businessHome,'runtime-faults.json');await writeFile(control,'{}',{mode:0o600});
+ const host=await f.start({NOTALONE_SYNTHETIC_RUNTIME_FAULTS:control}),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.request(host,`${path}/replies`,f.input('合成open释放未知前输入'));const saved=await f.request(host,path);
+ const root=join(f.businessHome,'assistant-runtime'),files=await readdir(root,{recursive:true}),log=join(root,files.find(file=>file.endsWith('.jsonl')));await writeFile(log,'{broken\n');await writeFile(control,JSON.stringify({fail_lock_close:true}));
+ const resume=()=>fetch(host.url+`${path}/resume`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:'{}'});
+ assert.equal((await resume()).status,503);await writeFile(control,'{}');assert.equal((await resume()).status,409);assert.equal(await readFile(log,'utf8'),'{broken\n');
+ assert.deepEqual(await f.request(host,path),saved);await host.stop();const restarted=await f.start();await f.request(restarted,`${path}/resume`,{});assert.equal(restarted.requests.length,0);
+});
+
+test('修复写盘屏障期间来源修正必须拒绝旧资格发布，再恢复只带有效资料',{timeout:60000},async t=>{
+ const f=await fixture(t),control=join(f.businessHome,'runtime-faults.json');await writeFile(control,'{}',{mode:0o600});
+ const host=await f.start({NOTALONE_SYNTHETIC_RUNTIME_FAULTS:control}),source=randomUUID(),message=randomUUID();
+ await f.f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'manual','synthetic.jsonl',$4,1)",[source,f.owner,f.contact,'6'.repeat(64)]);
+ await f.f.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) VALUES($1,$2,$3,'contact','text','合成修复前失效背景_06',now())",[message,f.owner,f.contact]);
+ await f.f.client.query("INSERT INTO message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,'source_document',$4,'synthetic','{}')",[message,f.owner,f.contact,source]);
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`,input=text=>({...f.input(text),content:{type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:text,include_relationship_context:true}});
+ await f.request(host,`${path}/replies`,input('合成修复前意图'));assert.match(JSON.stringify(host.requests[0].body),/合成修复前失效背景_06/);
+ const root=join(f.businessHome,'assistant-runtime'),files=await readdir(root,{recursive:true});await rm(join(root,files.find(file=>file.endsWith('.jsonl'))));await writeFile(control,JSON.stringify({hold_reference:true}));
+ const repairing=fetch(host.url+`${path}/resume`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:'{}'});await hostOutput(host,'VALIDATION_RUNTIME_WRITE_HELD');
+ await f.f.client.query("UPDATE message SET text_content='合成修复后当前背景_06',speaker='user' WHERE id=$1",[message]);host.child.kill('SIGUSR2');
+ assert.equal((await repairing).status,409);assert.equal(host.requests.length,1);assert.match(JSON.stringify(await f.request(host,path)),/合成修复前意图/);
+ await writeFile(control,'{}');await f.request(host,`${path}/resume`,{});assert.equal(host.requests.length,1);
+ await f.request(host,`${path}/replies`,input('合成修复后当前意图'));assert.doesNotMatch(JSON.stringify(host.requests[1].body),/合成修复前失效背景_06/);assert.match(JSON.stringify(host.requests[1].body),/合成修复后当前背景_06/);
+});
 
 test('目录与历史浏览保持当前和真实活动，明确继续原段才刷新活动且零模型',{timeout:60000},async t=>{
  const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;

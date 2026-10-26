@@ -58,7 +58,7 @@ export async function startReplyServiceHost(t, database, reply, {pluginPath = 't
   await writeFile(join(profileDir, 'package.json'), JSON.stringify({ private: true, dsh: { profile: { bundles: [] } } }));
   let patch = await createSyntheticProfile(resolve(pluginPath), `http://127.0.0.1:${provider.address().port}/anthropic`);
   await writeFile(join(profileDir, 'cordis.patch.yml'), patch);
-  const child = spawn(process.execPath, ['--import', resolve('test/observe.mjs'), resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'notalone'], {
+  const child = spawn(process.execPath, ['--import', resolve('test/observe.mjs'), ...(environment.NOTALONE_SYNTHETIC_RUNTIME_FAULTS?['--import',resolve('test/assistant-runtime-faults.mjs')]:[]), resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', 'notalone'], {
     cwd: home, env: { PATH: process.env.PATH, HOME: home, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', DEEPSEEK_API_KEY: 'synthetic-only', NOTALONE_SYNTHETIC_PROVIDER_URL: `http://127.0.0.1:${provider.address().port}/anthropic`, NOTALONE_SYNTHETIC_DATABASE: database.name, NOTALONE_SYNTHETIC_DATABASE_USER: database.user, ...(database.replyOwner?{NOTALONE_SYNTHETIC_REPLY_OWNER:database.replyOwner}:{}), ...(database.replyToken?{NOTALONE_SYNTHETIC_REPLY_TOKEN:database.replyToken}:{}), ...environment }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = ''; child.stderr.on('data', b => { output += b; });

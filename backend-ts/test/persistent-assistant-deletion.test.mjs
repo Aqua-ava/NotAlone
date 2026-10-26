@@ -9,20 +9,37 @@ import {mkdir,writeFile,readFile,rm,stat,chmod} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {sendEvents,useTool} from './reply-service-runtime-support.mjs';
+import {createRequire} from 'node:module';
+const desktopRequire=createRequire(new URL('../../desktop/package.json',import.meta.url));
+const {build}=desktopRequire('esbuild');
+const desktopPorts=build({stdin:{contents:`
+ export {ContactSession} from './src/main/contacts/session';
+ export {BackendHost} from './src/main/backend/host';
+ export {RuntimeClient} from './src/main/backend/runtime-client';
+ export {BackendRequestFailure} from './src/main/backend/json-client';
+ export {installReplyBridge} from './src/main/reply/bridge';
+ export {createReplyBridge} from './src/preload/reply';
+ export {AssistantSessionPanel} from './src/renderer/AssistantSessionPanel';
+ export {createElement} from 'react';
+ export {renderToStaticMarkup} from 'react-dom/server';
+`,resolveDir:new URL('../../desktop/',import.meta.url).pathname},bundle:true,platform:'node',format:'cjs',write:false,loader:{'.css':'empty'}}).then(output=>{const loaded={exports:{}};new Function('require','module','exports',output.outputFiles[0].text)(desktopRequire,loaded,loaded.exports);return loaded.exports;});
 async function fixture(t){
  const f=await createStorageFixture(),owner=randomUUID(),contact=randomUUID(),session=randomUUID();
- const home=join(f.directory,'host'),info=join(f.directory,'backend.info');let child,exited,output='',gate,readGate;
+ const home=join(f.directory,'host'),info=join(f.directory,'backend.info');let child,exited,output='',gate,readGate,deletionGate,connection;
  const requests=[],releaseGates=new Set();
  await f.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成删除用户')",[owner]);
  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成删除联系人')",[contact,owner]);
  await f.client.query('INSERT INTO assistant_session(id,owner_id,contact_id,is_default,last_user_activity_at) VALUES($1,$2,$3,true,clock_timestamp())',[session,owner,contact]);
  await writeFile(f.envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${f.client.database}\nNOTALONE_OWNER_ID=${owner}\nNOTALONE_DEEPSEEK_API_KEY=synthetic-only\nNOTALONE_SKILLS_DIR=${f.directory}/skills\nNOTALONE_MANAGED_USER_DATA=${f.directory}\n`,{mode:0o600});
- const readTrigger=join(f.directory,'hold-runtime-read'),closeTrigger=join(f.directory,'fail-commit-close'),closeObserved=join(f.directory,'commit-close-failed'),readPreload=join(f.directory,'read-barrier.mjs');
- await writeFile(readPreload,`import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+ const readTrigger=join(f.directory,'hold-runtime-read'),closeTrigger=join(f.directory,'fail-commit-close'),closeObserved=join(f.directory,'commit-close-failed'),deletionTrigger=join(f.directory,'hold-deletion-commit'),readPreload=join(f.directory,'read-barrier.mjs');
+ await writeFile(readPreload,`import fs from 'node:fs';import {syncBuiltinESMExports,createRequire} from 'node:module';
+ const pg=createRequire(${JSON.stringify(resolve('package.json'))})('pg'),query=pg.Client.prototype.query,deleting=new WeakSet();
+ pg.Client.prototype.query=function(...args){const sql=String(args[0]?.text??args[0]),pending=query.apply(this,args);if(!pending?.then)return pending;return pending.then(async result=>{if(sql.includes('INSERT INTO public.cross_domain_deletion_operation')&&fs.existsSync(${JSON.stringify(deletionTrigger)}))deleting.add(this);if(sql==='COMMIT'&&deleting.delete(this)&&fs.existsSync(${JSON.stringify(deletionTrigger)})){fs.unlinkSync(${JSON.stringify(deletionTrigger)});await fetch(process.env.NOTALONE_SYNTHETIC_PROVIDER_URL+'/deletion-commit');}return result;});};
  const original=fs.promises.readFile,originalOpen=fs.promises.open,locks=new Map(),held=[];
  fs.promises.open=async function(path,...args){const handle=await originalOpen.call(this,path,...args);if(String(path).includes('/assistant-runtime/')&&String(path).endsWith('/session.lock')){const count=(locks.get(String(path))??0)+1;locks.set(String(path),count);if(count===2&&fs.existsSync(${JSON.stringify(closeTrigger)})){fs.unlinkSync(${JSON.stringify(closeTrigger)});held.push(handle);handle.close=async()=>{fs.writeFileSync(${JSON.stringify(closeObserved)},'synthetic commit close failure');throw Object.assign(new Error('synthetic commit close failure'),{code:'EIO'});};}}return handle;};
  fs.promises.readFile=async function(path,...args){if(String(path).includes('/assistant-runtime/')&&String(path).endsWith('.jsonl')&&fs.existsSync(${JSON.stringify(readTrigger)})){fs.unlinkSync(${JSON.stringify(readTrigger)});await fetch(process.env.NOTALONE_SYNTHETIC_PROVIDER_URL+'/runtime-read');}return original.call(this,path,...args);};syncBuiltinESMExports();`,{mode:0o600});
  const provider=createServer(async(req,res)=>{
+  if(req.url==='/deletion-commit'){const held=deletionGate;deletionGate=undefined;held.enter();await held.wait;res.end('released');return;}
   if(req.url==='/runtime-read'){const held=readGate;readGate=undefined;held.enter();await held.wait;res.end('released');return;}
   let raw='';for await(const part of req)raw+=part;requests.push(JSON.parse(raw));
   const events=[{type:'message_start',message:{id:'synthetic',model:'deepseek-flash',usage:{input_tokens:12,output_tokens:0}}},{},{},{},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:9}},{type:'message_stop'}];
@@ -38,15 +55,54 @@ async function fixture(t){
   await writeFile(join(home,'host.json'),JSON.stringify({projectDirectory:resolve('..'),envFilePath:f.envFilePath,infoPath:info,businessHome:f.directory,persistentAssistantHome:f.directory,home,parentPid:process.pid}));
   child=spawn(process.execPath,['--import',resolve('test/main-host-reply-chain-preload.mjs'),'--import',readPreload,resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','notalone'],{cwd:home,env:{PATH:process.env.PATH,HOME:home,DSH_HOME:home,DSH_TELEMETRY_DISABLED:'1',NOTALONE_HOST_CONFIG:join(home,'host.json'),NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}`},stdio:['pipe','pipe','pipe']});
   exited=once(child,'exit');output='';child.stderr.on('data',b=>{output+=b;});child.stdout.on('data',b=>{output+=b;});
-  let connection;for(let i=0;i<150&&child.exitCode===null&&child.signalCode===null;i++){try{connection=Object.fromEntries((await readFile(info,'utf8')).trim().split('\n').map(line=>line.split('=')));break;}catch{}await new Promise(r=>setTimeout(r,50));}
+  connection=undefined;for(let i=0;i<150&&child.exitCode===null&&child.signalCode===null;i++){try{connection=Object.fromEntries((await readFile(info,'utf8')).trim().split('\n').map(line=>line.split('=')));break;}catch{}await new Promise(r=>setTimeout(r,50));}
   assert.ok(connection,'生产Host须发布握手：'+output);
   const request=async(path,body,method=body===undefined?'GET':'POST')=>{const response=await fetch(`http://${connection.address}${path}`,{method,headers:{Authorization:`Bearer ${connection.token}`,'Content-Type':'application/json',...(path.includes('/assistant-session')?{'X-NotAlone-Manual-Contact':contact}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,body:await response.json()};};
   const confirmed=await request(`/api/contacts/${contact}/manual-confirmation`,{});assert.ok([200,404].includes(confirmed.status),JSON.stringify(confirmed));return request;
  };
  const directory=join(f.directory,'assistant-runtime',owner,contact,session);
  const seed=async()=>{const runtime=randomUUID();await mkdir(join(directory,runtime,'forks'),{mode:0o700,recursive:true});for(const path of [join(f.directory,'assistant-runtime'),join(f.directory,'assistant-runtime',owner),join(f.directory,'assistant-runtime',owner,contact),directory])await chmod(path,0o700);await writeFile(join(directory,'ownership.json'),JSON.stringify({version:1,owner_id:owner,contact_id:contact,session_id:session}),{mode:0o600});await writeFile(join(directory,runtime,'forks','synthetic.jsonl'),'合成运行正文');await f.client.query("INSERT INTO assistant_runtime_session(owner_id,contact_id,session_id,runtime_session_id,configuration_sha256,state) VALUES($1,$2,$3,$4,$5,'dirty')",[owner,contact,session,runtime,'a'.repeat(64)]);};
- return {...f,owner,contact,session,directory,requests,start,stop,seed,failCommitClose:async()=>{await writeFile(closeTrigger,'synthetic');},closeObserved,holdRead:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);readGate={enter,wait};releaseGates.add(release);await writeFile(readTrigger,'synthetic');return {entered,release};},path:`/api/contacts/${contact}/assistant-sessions/${session}`,input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true}),hold:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};releaseGates.add(release);return {entered,release};}};
+ return {...f,owner,contact,session,directory,requests,start,stop,seed,get connection(){return connection;},failCommitClose:async()=>{await writeFile(closeTrigger,'synthetic');},closeObserved,holdDeletionCommit:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);deletionGate={enter,wait};releaseGates.add(release);await writeFile(deletionTrigger,'synthetic');return {entered,release};},holdRead:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);readGate={enter,wait};releaseGates.add(release);await writeFile(readTrigger,'synthetic');return {entered,release};},path:`/api/contacts/${contact}/assistant-sessions/${session}`,input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true}),hold:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};releaseGates.add(release);return {entered,release};}};
 }
+test('真实Host与生产Main拒删未知分段受理的旧别名，明确停止后才可重试删除',{timeout:45000},async t=>{
+ const f=await fixture(t),request=await f.start(),ports=await desktopPorts;
+ await f.client.query('UPDATE assistant_session SET last_user_activity_at=now()-make_interval(hours=>13) WHERE id=$1',[f.session]);
+ const runtime=new ports.RuntimeClient({...f.connection,port:Number(f.connection.address.split(':')[1]),pid:Number(f.connection.pid)}),backend=new ports.BackendHost(f.directory);
+ backend.target=runtime;backend.generation=7;backend.state={phase:'connected',revision:1};backend.confirmManualInput(f.contact,7);t.after(()=>runtime.cancelPending());
+ const wire=backend.requestJson.bind(backend),calls=[];let accepted,key;
+ backend.requestJson=async options=>{calls.push({method:options.method,path:options.path});const response=await wire(options);if(options.path.endsWith('/replies/prepare')){accepted=response.data;key=options.body.idempotency_key;throw new ports.BackendRequestFailure('connection');}return response;};
+ const contacts=new ports.ContactSession(async()=>({generation:7,contacts:[{contactId:f.contact,displayName:'合成分段删除联系人',messageCount:0,sourceCount:0}]}));contacts.setConnection(7);await contacts.refreshContacts();
+ const handlers=new Map(),listeners=new Map(),replies=ports.installReplyBridge({handle:(name,handler)=>handlers.set(name,handler),publish:(name,value)=>{for(const listener of listeners.get(name)??[])listener(undefined,value);}},backend,contacts);
+ const bridge=ports.createReplyBridge({invoke:async(name,...args)=>handlers.get(name)(...args),on:(name,listener)=>{const set=listeners.get(name)??new Set();set.add(listener);listeners.set(name,set);},removeListener:(name,listener)=>listeners.get(name)?.delete(listener)});
+ contacts.selectContact({contactId:f.contact,scopeRevision:contacts.getState().scopeRevision});const scope={contactId:f.contact,scopeRevision:contacts.getState().scopeRevision};
+ await bridge.readSavedSession(scope);await bridge.enterWorkspace(scope);contacts.setDraft({...scope,text:'合成回执全丢后删除旧段'});await bridge.generate({...scope,newRequest:true,workspaceAction:'express'});
+ assert.ok(accepted);assert.notEqual(accepted.session_id,f.session);assert.equal(f.requests.length,0);
+ const freshPath=`/api/contacts/${f.contact}/assistant-sessions/${accepted.session_id}`,before=await request(freshPath);assert.equal(before.body.turns[0].state,'running');
+ await bridge.deleteSavedSession({...scope,sessionId:f.session,confirmed:true});const failed=await bridge.getState();
+ assert.equal(failed.sessionDeletion,'failed','旧段删除不得丢失实际新段受理证明');assert.equal(failed.generationJobs.find(job=>job.requestKey===key)?.phase,'unconfirmed');
+ assert.equal((await request(f.path)).status,200);assert.deepEqual(await request(freshPath),before,'拒删不能默认取消独立新段');
+ assert.deepEqual((await request(`/api/deletions?scope_kind=discussion&contact_id=${f.contact}`)).body.operations,[],'拒绝发生在创建删除操作和pending fence之前');
+ const html=ports.renderToStaticMarkup(ports.createElement(ports.AssistantSessionPanel,{replies:{state:failed}}));assert.match(html,/<button[^>]*aria-label=.停止本次生成.[^>]*>/);assert.doesNotMatch(html,/<button[^>]*aria-label=.停止本次生成.[^>]*disabled/);
+ await bridge.stopGeneration({...scope,sessionId:f.session,requestKey:key,inputVersionId:null});
+ const stopped=await request(freshPath);assert.equal(stopped.body.turns[0].turn_id,accepted.turn_id);assert.equal(stopped.body.turns[0].input_version_id,accepted.input_version_id);assert.equal(stopped.body.turns[0].interruption_reason,'user_cancelled');
+ await bridge.deleteSavedSession({...scope,sessionId:f.session,confirmed:true});assert.equal((await bridge.getState()).sessionDeletion,'deleted');assert.equal((await request(f.path)).status,404);
+ const retained=await request(freshPath);assert.equal(retained.status,200);assert.equal(retained.body.turns[0].turn_id,accepted.turn_id);assert.equal(retained.body.turns[0].state,'failed');assert.equal(f.requests.length,0);await replies.beginGenerationClosing(()=>assert.fail('原任务已明确停止'));
+});
+
+test('真实删除预检后并发分段受理，实际owner事务复验拒删且失败op可在停止后重试',{timeout:45000},async t=>{
+ const f=await fixture(t),request=await f.start();
+ await f.client.query('UPDATE assistant_session SET last_user_activity_at=now()-make_interval(hours=>13) WHERE id=$1',[f.session]);
+ const gate=await f.holdDeletionCommit(),deleting=request(f.path,{confirmed:true},'DELETE');await gate.entered;
+ const command=f.input('合成预检通过后才受理的新段'),prepared=await request(f.path+'/replies/prepare',command);assert.equal(prepared.status,200,JSON.stringify(prepared));assert.notEqual(prepared.body.session_id,f.session);
+ gate.release();const refused=await deleting;assert.equal(refused.status,202,JSON.stringify(refused));const operation=refused.body.operation_id;
+ const status=await request('/api/deletions/'+operation);assert.equal(status.body.status,'failed');assert.equal((await request(f.path)).status,200);
+ const freshPath=`/api/contacts/${f.contact}/assistant-sessions/${prepared.body.session_id}`,before=await request(freshPath);assert.equal(before.body.turns[0].state,'running');
+ const proof=await request(f.path+'/generation-receipt',{request_key:command.idempotency_key});assert.deepEqual(proof.body,prepared.body);
+ const stopped=await request(freshPath+'/interrupt',{request_key:command.idempotency_key,input_version_id:prepared.body.input_version_id,reason:'user_cancelled'});assert.equal(stopped.status,200,JSON.stringify(stopped));
+ const retried=await request('/api/deletions/'+operation+'/retry',{confirmed:true});assert.equal(retried.status,202,JSON.stringify(retried));assert.equal((await request('/api/deletions/'+operation)).body.status,'succeeded');assert.equal((await request(f.path)).status,404);
+ const retained=await request(freshPath);assert.equal(retained.body.turns[0].turn_id,prepared.body.turn_id);assert.equal(retained.body.turns[0].interruption_reason,'user_cancelled');assert.equal(f.requests.length,0);
+});
+
 test('生产公开会话删除清除归属运行分叉并在同目录重启后保持删除',{timeout:45000},async t=>{
  const f=await fixture(t);await f.seed();let request=await f.start();
  const deleted=await request(f.path,{confirmed:true},'DELETE');assert.equal(deleted.status,200,JSON.stringify(deleted));

@@ -55,9 +55,9 @@ export function createPureTsPublicApi(options:{ownerId?:string;available:boolean
     if(!uuid.test(parts[4])){respond(400,{error:'invalid_scope'});return true;}
     const result=await readPublicReplyEvidence(options.storage,options.skillsRoot,scope.contact_id,parts[4]);respond(result.status,result.body);return true;
    }
-   const generationPath=/^\/api\/contacts\/[^/]+\/assistant-sessions\/[^/]+\/(?:replies|replace|retry-interrupted|continue|interrupt|preparation-format)(?:\/|$)/.test(path);
+   const generationPath=/^\/api\/contacts\/[^/]+\/assistant-sessions\/[^/]+\/(?:replies|replace|retry-interrupted|continue|interrupt|preparation-format|generation-receipt)(?:\/|$)/.test(path);
    if(generationPath&&options.generation){
-    if(!options.available&&req.method==='POST'&&!/\/(?:interrupt|preparation-format)$/.test(path)&&!path.includes('/status/')){respond(503,{error:'reply_unavailable'});return true;}
+    if(!options.available&&req.method==='POST'&&!/\/(?:interrupt|preparation-format|generation-receipt)$/.test(path)&&!path.includes('/status/')){respond(503,{error:'reply_unavailable'});return true;}
     const verified=await resolvePublicReplyScope(options.storage,scope.contact_id,req.headers['x-notalone-manual-contact']===contact);
     const result=await withPublicReplyScope(verified,()=>options.generation!.handle({method:req.method??'',path:req.url??path,body,scope:verified,signal:controller.signal,respondAsync:req.headers.prefer==='respond-async'}));
     if(result){

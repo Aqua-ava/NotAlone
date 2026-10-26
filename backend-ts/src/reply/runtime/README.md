@@ -18,9 +18,15 @@
 
 直接先追加业务 `user/message` 的探针只能证明 resume：首次真实 followup 后，锁定 SDK 的[格式校验](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/session/session-format-v3-to-v4/src/relationships.ts#L124)要求系统消息位于受保护的首节点，会拒绝这种先用户后系统的档案。本实现用空档和自有伴随文件避开该不合法顺序，不手造 SDK 执行轮，不使用 experimental plugin record，也不修改 SDK。只有真实 Host 跨重启、首次生成及再次续用测试才作为该接线可用的依据。
 
-`materialize(scope, session, configuration, readPlan, signal, options)` 是恢复票复用的零模型构建接缝，返回原业务身份、新运行身份、origin、状态、事件数、业务提交身份、资格摘要和无正文变化回执。`AssistantRuntimePlanReader(client,build?:true)` 必须将第二参数透传给 `AssistantRuntimeProjection.read` 的末参数：默认只返回资格，显式 true 才返回经过同一守卫的完整 payload；未返回 payload 时构建失败关闭。资格 scope 仅包含 owner/contact，binding 单独严格核验，避免不同入口的额外已验证字段引起重复重建。无需新迁移，117—122 均保持不变。存储损坏、缺失、异常退出及未提交轮的分类和有界恢复由后续恢复职责补齐；本接缝不从坏档挑候选，不自动发模型请求，也不放开删除或身份封禁。
+`materialize(scope, session, configuration, readPlan, signal, options)` 是共用的零模型构建接缝，返回原业务身份、新运行身份、origin、状态、事件数、业务提交身份、资格摘要和无正文变化回执。`AssistantRuntimePlanReader(client,build?:true)` 必须将第二参数透传给 `AssistantRuntimeProjection.read` 的末参数：默认只返回资格，显式 true 才返回经过同一守卫的完整 payload；未返回 payload 时构建失败关闭。资格 scope 仅包含 owner/contact，binding 单独严格核验，避免不同入口的额外已验证字段引起重复重建。无需新迁移，117—122 均保持不变。
+
+恢复先验证受管目录和所有文件，再以官方写句柄核验锁与日志。缺档、已知损坏、事件数／摘要分歧及 dirty 副本在一次明确操作内至多重建一次，正文只来自当前有效业务投影；未来格式、身份不符、链接、权限、活写锁及未知关闭失败拒绝恢复，保留可读业务历史。日志缺失但目录仍在时，官方 create/flush 先在原路径取得真实锁，不能因没有 JSONL 就绕过持有者。未知关闭失败保留进程内会话占用，重启前不能假定安全。删除 pending／blocked 不能被修复解除；读盘期间新发现的可修分歧只标 dirty，下一次明确动作才重建。
+
+宿主取得唯一启动责任后、公开接口就绪前，按原任务身份裁定中断，不以旧业务租约阻止已死宿主的恢复。正常退出等待在途任务取消和释放，取消结算为中断；已可靠提交的 DB 候选始终先赢，文件发布失败不把它降成普通失败。SDK 未完成轮的关闭不是半步续跑，读取、重建及启动均不发模型。明确重试沿原输入与新 retry 请求键保持幂等，普通 completed 同键重放仍只读。公开 `generation-receipt` 只按原 owner/contact、请求键及受理会话别名找回回执，不提交正文或触发准备；Main 仅在明确收尾重试时采用，并验证原连接与 previous_session_id，迟到结果不迁入新视图。
 
 Host 组合根在模型装配前创建唯一运行管理器，供启动删除恢复及模型端共用。合成宿主可在可信启动配置中显式提供同 businessHome 的 `persistentAssistantHome`；当前正常配置仍保持临时运行，完整恢复及桌面验收另行完成。
+
+空闲分段的准备回执可能全部丢失。实际新段任务仍 running 时，原请求段暂不允许删除，避免删除外键把唯一受理别名置空；公开协调器在创建删除操作前检查，实际删除的 owner 事务内再次复验，覆盖预检后的并发受理。拒绝不默认取消独立新段；Main 保留未知作业并允许用户明确核对、停止后重试删除，其他来源／生成门禁保持。已创建操作在复验失败时保留可重试状态，停止新段不依赖旧段删除完成；分段中断回执的可选 previous_session_id 仍经原身份解析器核验。
 
 删除操作提交后就建立早期屏障，先在事务外取消并排空相关轮次，再执行任何可能失败的备份核验、闭包擦除或文件清理。来源的 owner memory／携入依赖可跨联系人，因此未完成的来源清理保守暂停同一本人的恢复和生成，历史只读及无关档案保留；清理成功后才解除，失败显示“资料清理未完成，暂时不能生成”并保留明确重试。联系人／账户按自身范围协调，包括没有助手 turn 的兼容临时轮；讨论删除只匹配自身会话或已核验闭包。
 

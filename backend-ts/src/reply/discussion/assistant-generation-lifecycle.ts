@@ -8,7 +8,7 @@ import type {AuthenticatedContinuation} from '../generation/reply-assistant-guar
 import type {ReplyRequestInput} from '../generation/reply-contract.ts';
 import {parseAssistantContinuation,reserveAssistantContinuation,AssistantContinuationClarification} from './assistant-generation-continuation.ts';
 import {AssistantGenerationJobs} from './assistant-generation-jobs.ts';
-import {checkGenerationFormat} from './assistant-generation-format.ts';
+import {checkGenerationFormat,requireGenerationInput} from './assistant-generation-format.ts';
 import {interruptAssistantGeneration} from './assistant-generation-interruption.ts';
 import {parseAssistantGeneration,reserveAssistantAdoption} from './assistant-generation-adoption.ts';
 import {ReplyStoreError} from '../generation/reply-store.ts';
@@ -65,7 +65,7 @@ export class AssistantGenerationLifecycle {
    const result=await this.options.replyService[prepare?'prepare':'generate'](scope,input,signal,auth?{authenticatedContinuation:auth}:{});signal.throwIfAborted();
    if(prepare)return generationReceipt(row);
    await this.store.complete(scope,sessionId,row,result,signal);const session=await this.discussion.readSession(scope,sessionId);return {...session.turns.find((turn:GenerationRow)=>turn.turn_id===row.id),session_id:sessionId};
-  }catch(error){if((error as {code?:string}).code!=='reply_in_progress')await this.store.fail(scope,row);throw error;}finally{if(!prepare)this.generating.delete(key);}
+  }catch(error){if((error as {code?:string}).code!=='reply_in_progress')await this.store.fail(scope,row,this.stopping?'app_quit':undefined);throw error;}finally{if(!prepare)this.generating.delete(key);}
  }
  async replace(scope:VerifiedReplyScope,session:string,body:unknown,signal:AbortSignal,prepare=false){
   if(!exact(body,['running_request_key','replacement']))return invalid();
@@ -96,7 +96,7 @@ export class AssistantGenerationLifecycle {
    if(!['GET','DELETE'].includes(input.method))return {status:405,payload:{error:'method_not_allowed'}};
    try{if(replyUuid(parts[2])!==input.scope.contact_id)return {status:404,payload:{error:'not_found'}};replyUuid(parts[4]);return this.jobs.status(input.scope,'/'+parts.slice(0,7).join('/'),replyUuid(parts[8]),input.method==='DELETE');}catch{return {status:404,payload:{error:'not_found'}};}
   }
-  if(parts.length!==6&&parts.length!==7||parts[0]!=='api'||parts[1]!=='contacts'||parts[3]!=='assistant-sessions'||!['replies','replace','retry-interrupted','continue','interrupt','preparation-format'].includes(parts[5])||parts.length===7&&(parts[6]!=='prepare'||['interrupt','preparation-format'].includes(parts[5])))return null;
+  if(parts.length!==6&&parts.length!==7||parts[0]!=='api'||parts[1]!=='contacts'||parts[3]!=='assistant-sessions'||!['replies','replace','retry-interrupted','continue','interrupt','preparation-format','generation-receipt'].includes(parts[5])||parts.length===7&&(parts[6]!=='prepare'||['interrupt','preparation-format','generation-receipt'].includes(parts[5])))return null;
   if(input.method!=='POST')return {status:405,payload:{error:'method_not_allowed'}};
   if(this.stopping)return {status:503,payload:{error:'runtime_stopping'}};
   const operation=(async()=>{try{
@@ -116,6 +116,11 @@ export class AssistantGenerationLifecycle {
    if(parts[5]==='replace')payload=await this.replace(input.scope,session,input.body,signal,parts.length===7);
    else if(parts[5]==='retry-interrupted')payload=await this.retryInterrupted(input.scope,session,input.body,signal,parts.length===7);
    else if(parts[5]==='continue')payload=await this.continue(input.scope,session,input.body,signal,parts.length===7);
+   else if(parts[5]==='generation-receipt'){
+    const body=input.body;if(!exact(body,['request_key']))return invalid();const key=replyUuid(body.request_key);
+    // 只读原受理别名，不重建输入、准备上下文或领取模型任务。
+    payload=await this.store.transaction(input.scope,async client=>generationReceipt(await requireGenerationInput(this.store,client,input.scope,session,key)),signal);
+   }
    else if(parts[5]==='preparation-format'){
     const body=input.body;if(!exact(body,['request_key','input_version_id']))return invalid();const key=replyUuid(body.request_key),version=replyUuid(body.input_version_id);payload=await this.store.transaction(input.scope,client=>checkGenerationFormat(this.store,client,input.scope,session,key,version),signal);if(!payload)throw new AssistantGenerationError('not_found',undefined,404);
    }
@@ -140,10 +145,9 @@ export class AssistantGenerationLifecycle {
   replyUuid(ownerId);
   if(this.pending.size)throw new AssistantGenerationError('assistant_session_in_progress');
   await this.store.transaction({owner_id:ownerId,contact_id:ownerId},async client=>{
-   const rows=(await client.query("SELECT t.*,r.state AS request_state,r.lease_expires_at,coalesce(m.id IS NOT NULL,false) AS manual FROM assistant_session_turn t LEFT JOIN reply_request r ON r.owner_id=t.owner_id AND r.contact_id=t.contact_id AND r.idempotency_key=t.idempotency_key LEFT JOIN manual_contact_confirmation m ON m.owner_id=t.owner_id AND m.contact_id=t.contact_id AND m.id=t.conversation_binding_id WHERE t.owner_id=$1 AND t.state='running' ORDER BY t.created_at,t.id FOR UPDATE OF t",[ownerId])).rows;
+   const rows=(await client.query("SELECT t.*,r.state AS request_state,coalesce(m.id IS NOT NULL,false) AS manual FROM assistant_session_turn t LEFT JOIN reply_request r ON r.owner_id=t.owner_id AND r.contact_id=t.contact_id AND r.idempotency_key=t.idempotency_key LEFT JOIN manual_contact_confirmation m ON m.owner_id=t.owner_id AND m.contact_id=t.contact_id AND m.id=t.conversation_binding_id WHERE t.owner_id=$1 AND (t.state='running' OR t.state='failed' AND t.interruption_reason IS NULL AND r.state='completed') ORDER BY t.created_at,t.id FOR UPDATE OF t",[ownerId])).rows;
    for(const row of rows){
-    // 宿主应先取得本业务唯一责任；仍有运行租约时不凭进程重启猜测安全终态。
-    if(row.request_state==='running')throw new AssistantGenerationError('assistant_generation_recovery_unconfirmed',undefined,503);
+    // 仅在唯一自有宿主启动、公开接口就绪前调用；旧进程已退出，业务租约不能阻止中断裁定。
     const scope:VerifiedReplyScope={owner_id:ownerId,contact_id:row.contact_id,conversation_binding_id:row.conversation_binding_id,confirmation:row.manual?'manual':'desktop'};
     await interruptAssistantGeneration(this.store,client,scope,row.session_id,row.idempotency_key,row.input_version_id,'app_quit');
    }
