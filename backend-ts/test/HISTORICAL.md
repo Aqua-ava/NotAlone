@@ -13,6 +13,8 @@ npm run test:historical -- --list
 
 清单中的 `currentCoverage` 和 `protectedAssetCoverage` 指向当前承接入口，不表示旧断言已逐项等价覆盖；未运行的历史测试不能计作当前版本通过。
 
+`nonreply-comparison-plan.test.mjs` 和 `nonreply-comparison-blind.test.mjs` 是固定旧树的迁移评测工具测试，原文件与全部断言保留在上述历史来源中。它们需要 Git 忽略的 `.scratch/dsh-ts-migration/resumed-nonreply-evaluation/` 执行器、`baseline/` 冻结材料及旧 Python 环境；仅导出 Git 树无法恢复这些前置。当前入口对这两项明确报告前置未满足，不隐式复制材料或安装环境。两项均未执行，不能称为历史评测通过；从默认入口移除的是两个因模块缺失而从未执行断言的失败模块，当前持久会话测试不替代旧 1056/1152 分母与盲评验证。
+
 ## 显式恢复历史验证
 
 历史入口固定使用提交 `23a767330e4af8a024629a00c8740344be564259`，导出完整旧树并复用锁定版本的 Node 依赖，不从当前源码导入旧 Python 实现。
