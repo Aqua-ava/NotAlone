@@ -14,6 +14,9 @@ if(area==='--list'){
  console.log(JSON.stringify({sourceCommit:commit,files:inventory.entries.length,cases:inventory.archivedCases.length,executed:false}));
 }else{
  if(!['backend','desktop-node','desktop-pages','desktop-app'].includes(area))throw new Error('需要显式历史范围：backend <文件>、desktop-node <文件>、desktop-pages <原页面参数> 或 desktop-app <原App参数>；先用 --list 查看登记。');
+ const requested=area==='backend'?`backend-ts/test/${(args[0]??'').replace(/^test\//,'')}`:null;
+ const prerequisites=inventory.entries.find(row=>row.path===requested)?.externalPrerequisites;
+ if(prerequisites?.length)throw new Error(`历史测试前置未满足：${requested} 需要固定 Git 树之外的冻结材料 ${prerequisites.join('、')}。当前历史入口只恢复固定 Git 树，不复制被忽略的材料；须先另行恢复并核验历史评测环境。本次未执行历史测试，不能记为通过。`);
  const python=process.env.NOTALONE_HISTORICAL_PYTHON;
  if(!python||!isAbsolute(python))throw new Error('历史测试须显式设置 NOTALONE_HISTORICAL_PYTHON 为固定23a依赖的独立 venv Python；正常测试不需要 Python。');
  const version=JSON.parse(execFileSync(python,['-I','-c','import sys,json; print(json.dumps(dict(prefix=sys.prefix,base=sys.base_prefix)))'],{encoding:'utf8',timeout:10000}));

@@ -4,6 +4,39 @@
   "policy": "历史测试与专用执行器已从当前工作树删除，来源保留在固定 Git 旧树；显式命令在该旧树和独立 venv 运行。currentCoverage 为现行入口指针，不表示逐项等价或本轮已执行。",
   "entries": [
     {
+      "path": "backend-ts/test/nonreply-comparison-blind.test.mjs",
+      "reason": "固定迁移评测工具的盲包合同；依赖 Git 忽略的执行器与冻结材料，不能计作当前业务测试。",
+      "legacyDependencies": [
+        ".scratch/dsh-ts-migration/resumed-nonreply-evaluation/runner.mjs",
+        ".scratch/dsh-ts-migration/resumed-nonreply-evaluation/blind.mjs"
+      ],
+      "externalPrerequisites": [
+        ".scratch/dsh-ts-migration/resumed-nonreply-evaluation/",
+        ".scratch/dsh-ts-migration/baseline/"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-persistent-assistant.test.mjs",
+        "backend-ts/test/persistent-assistant-runtime.test.mjs"
+      ],
+      "boundary": "固定来源保留全部原断言；外部冻结材料未恢复，历史测试未执行。现行入口覆盖持久会话，不代表盲评工具或模型质量验证等价。"
+    },
+    {
+      "path": "backend-ts/test/nonreply-comparison-plan.test.mjs",
+      "reason": "固定迁移评测工具的 1056/1152 分母合同；依赖 Git 忽略的执行器与 56 份冻结材料，不能计作当前业务测试。",
+      "legacyDependencies": [
+        ".scratch/dsh-ts-migration/resumed-nonreply-evaluation/runner.mjs"
+      ],
+      "externalPrerequisites": [
+        ".scratch/dsh-ts-migration/resumed-nonreply-evaluation/",
+        ".scratch/dsh-ts-migration/baseline/"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/pure-ts-persistent-assistant.test.mjs",
+        "backend-ts/test/persistent-assistant-runtime.test.mjs"
+      ],
+      "boundary": "固定来源保留全部原断言；外部冻结材料未恢复，历史测试未执行。现行入口覆盖持久会话，不代表旧成对评测、完整分母或模型质量验证等价。"
+    },
+    {
       "path": "backend-ts/test/contact-context.test.mjs",
       "reason": "固定迁移阶段的 Python 执行器／旧桥接或 oracle 对照；不证明当前 TS 已通过",
       "legacyDependencies": [

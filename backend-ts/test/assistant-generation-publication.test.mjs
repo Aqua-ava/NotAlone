@@ -111,8 +111,13 @@ test('生成中切换联系人后晚结果仅属于原会话，切回读取不�
  }finally{x.release();await running;}
 });
 
-test('公开异步准备的接纳与查询只返回原身份，取消不发布完成候选',{timeout:30000},async t=>{
- const x=await publicationFixture(t),session=x.replies.getState().savedSession.sessionId;
+for(const idle of [false,true])test(`公开异步准备${idle?'空闲分段后':'同段内'}的接纳与查询保留受理身份，取消不发布完成候选`,{timeout:30000},async t=>{
+ const x=await publicationFixture(t);
+ assert.equal(x.replies.getState().savedSession.sessionId,null,'读取空目录不隐式创建会话');
+ const created=await x.app.request(`/api/contacts/${x.contact}/assistant-sessions`,{},'POST',x.app.connection.token,{'X-NotAlone-Manual-Contact':x.contact});
+ assert.equal(created.status,200);assert.match(created.data.session_id,/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+ const session=created.data.session_id;
+ if(idle)await x.f.client.query("UPDATE assistant_session SET last_user_activity_at=clock_timestamp()-interval '13 hours' WHERE owner_id=$1 AND contact_id=$2 AND id=$3",[x.owner,x.contact,session]);
  const path=`/api/contacts/${x.contact}/assistant-sessions/${session}`;
  const body={contact_id:x.contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:'合成草稿',include_relationship_context:false},skill_disabled:true};
  const accepted=await x.app.request(`${path}/replies/prepare`,body,'POST',x.app.connection.token,{Prefer:'respond-async','X-NotAlone-Manual-Contact':x.contact});
@@ -120,7 +125,10 @@ test('公开异步准备的接纳与查询只返回原身份，取消不发布�
  const prepared=await x.client.perform({method:'POST',path:`${path}/replies/prepare`,body,asyncPreparation:true,manualContactId:x.contact});
  const queried=await x.client.perform({method:'GET',path:`${path}/replies/prepare/status/${accepted.data.preparation_id}`,manualContactId:x.contact});
  assert.equal(queried.status,200);assert.deepEqual(queried,prepared);
- assert.deepEqual(Object.keys(queried.data).sort(),['input_version_id','request_key','session_id','state','turn_id']);
+ assert.deepEqual(Object.keys(queried.data).sort(),['input_version_id',...(idle?['previous_session_id']:[]),'request_key','session_id','state','turn_id']);
+ assert.equal(queried.data.request_key,body.idempotency_key);
+ if(idle){assert.equal(queried.data.previous_session_id,session);assert.notEqual(queried.data.session_id,session);}
+ else assert.equal(queried.data.session_id,session);
  const interrupted=await x.app.request(`${path}/interrupt`,{request_key:body.idempotency_key,input_version_id:prepared.data.input_version_id,reason:'user_cancelled'},'POST',x.app.connection.token,{'X-NotAlone-Manual-Contact':x.contact});
  assert.equal(interrupted.status,200);assert.equal(interrupted.data.state,'failed');assert.equal(interrupted.data.interruption_reason,'user_cancelled');
  assert.equal(x.provider.requests.length,0);

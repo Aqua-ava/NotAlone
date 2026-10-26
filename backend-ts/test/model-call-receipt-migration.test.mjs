@@ -8,7 +8,7 @@ import {seedMigrationBaseline,prepareTestSchema} from './schema-fixture.mjs';
 import pg from 'pg';
 import {HostStorage} from '../src/platform/database/host-storage.ts';
 
-test('109升级当前116保留业务UUID及未知用量，receipt隔离和关键约束损坏关闭门禁',async t=>{
+test('109升级当前122保留业务UUID及未知用量，receipt隔离和关键约束损坏关闭门禁',async t=>{
   const root=new URL('../../',import.meta.url).pathname;
   const directory=await mkdtemp(join(tmpdir(),'notalone-receipt-upgrade-'));
   const {mkdir}=await import('node:fs/promises');
@@ -18,7 +18,7 @@ test('109升级当前116保留业务UUID及未知用量，receipt隔离和关键
     if(!/^\d{3}_.*\.sql$/.test(file))continue;
     const version=Number(file.slice(0,3));
     if(version<=109)await copyFile(join(root,'backend-ts/database/migrations',file),join(baseline,file));
-    if(version<=116)await copyFile(join(root,'backend-ts/database/migrations',file),join(current,file));
+    if(version<=122)await copyFile(join(root,'backend-ts/database/migrations',file),join(current,file));
   }
   const name=`notalone_receipt_upgrade_${randomUUID().replaceAll('-','')}_test`;
   const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();
@@ -58,16 +58,19 @@ test('109升级当前116保留业务UUID及未知用量，receipt隔离和关键
   assert.deepEqual(await storage.compatibility(),{code:'migration_pending'});
   await migrate(current);
   assert.deepEqual(await storage.compatibility(),{code:'ready'});
-  assert.deepEqual(await snapshot(),before,'所有既有业务表内容保持不变');
+  assert.deepEqual(await snapshot(),{...before,assistant_session:before.assistant_session.map(row=>({...row,last_user_activity_at:null,idle_previous_session_id:null,legacy_runtime_pending:false}))},'原业务字段保持不变，旧空会话的新增运行字段使用安全默认值');
   assert.equal((await client.query('SELECT count(*)::int AS n FROM model_call_receipt')).rows[0].n,0);
   const originalLedger=(await client.query('SELECT * FROM outbound_ledger_entry WHERE id=$1',[ledgerId])).rows[0];
   assert.equal(originalLedger.input_tokens,null);assert.equal(originalLedger.output_tokens,null);
   assert.equal((await client.query('SELECT id FROM assistant_session WHERE id=$1',[session])).rows[0].id,session);
   const ledger=(await client.query('SELECT name,checksum FROM notalone_schema_migration ORDER BY name')).rows;
-  assert.equal(ledger.length,116);
+  assert.equal(ledger.length,122);
   for(const [entry,code] of [[ledger[110],'migration_history_mismatch'],[ledger[111],'migration_history_mismatch'],
     [ledger[112],'migration_history_mismatch'],[ledger[113],'migration_history_mismatch'],
-    [ledger[114],'migration_history_mismatch'],[ledger[115],'migration_pending']]){
+    [ledger[114],'migration_history_mismatch'],[ledger[115],'migration_history_mismatch'],
+    [ledger[116],'migration_history_mismatch'],[ledger[117],'migration_history_mismatch'],
+    [ledger[118],'migration_history_mismatch'],[ledger[119],'migration_history_mismatch'],
+    [ledger[120],'migration_history_mismatch'],[ledger[121],'migration_pending']]){
     await client.query('DELETE FROM notalone_schema_migration WHERE name=$1',[entry.name]);
     assert.deepEqual(await storage.compatibility(),{code});
     await assert.rejects(storage.businessReadTransaction(async()=>{}),{code});
@@ -76,11 +79,11 @@ test('109升级当前116保留业务UUID及未知用量，receipt隔离和关键
   await client.query("UPDATE notalone_schema_migration SET checksum='wrong' WHERE name=$1",[ledger[109].name]);
   assert.deepEqual(await storage.compatibility(),{code:'migration_history_mismatch'});
   await client.query('UPDATE notalone_schema_migration SET checksum=$2 WHERE name=$1',[ledger[109].name,ledger[109].checksum]);
-  await writeFile(join(current,'117_unknown.sql'),'SELECT 1;\n');
-  assert.deepEqual(await storage.compatibility(),{code:'migration_files_invalid'});await rm(join(current,'117_unknown.sql'));
-  await client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('117_unknown.sql',$1)",['a'.repeat(64)]);
+  await writeFile(join(current,'123_unknown.sql'),'SELECT 1;\n');
+  assert.deepEqual(await storage.compatibility(),{code:'migration_files_invalid'});await rm(join(current,'123_unknown.sql'));
+  await client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('123_unknown.sql',$1)",['a'.repeat(64)]);
   assert.deepEqual(await storage.compatibility(),{code:'migration_history_mismatch'});
-  await client.query("DELETE FROM notalone_schema_migration WHERE name='117_unknown.sql'");
+  await client.query("DELETE FROM notalone_schema_migration WHERE name='123_unknown.sql'");
   await client.query('ALTER TABLE model_call_receipt RENAME COLUMN scope_kind TO missing_scope');
   assert.deepEqual(await storage.compatibility(),{code:'schema_incomplete'});
   await client.query('ALTER TABLE model_call_receipt RENAME COLUMN missing_scope TO scope_kind');
