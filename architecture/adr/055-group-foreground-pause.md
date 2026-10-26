@@ -1,5 +1,7 @@
 # ADR-055：群聊前台暂停与私聊恢复
 
+> 后续局部修订：[ADR-105](105-fresh-verified-foreground-recovery.md)以当前新鲜有效绑定观察自动恢复确认，替代历史失败持续阻断及按原因限定恢复的条款；当前识别、绑定、时效和主动手动模式保护保持。
+
 > 2026-10-21 设计审查：群聊暂停与可靠私聊恢复继续有效。下文统一质量阈值的适用范围须结合 [ADR-076](076-session-list-assisted-name-matching.md)、[ADR-077](077-exact-session-name-before-edit-neighbors.md)的完整名称与完整名单核验；窄质量例外不允许群聊自动绑定或正文读取。
 
 > 状态：已采纳；真实App效果待人工可视验收

@@ -1,5 +1,7 @@
 # ADR-054：前台采集上下文变化后的可靠绑定恢复
 
+> 后续局部修订：[ADR-105](105-fresh-verified-foreground-recovery.md)以当前新鲜有效绑定观察自动恢复确认，替代历史失败持续阻断及按原因限定恢复的条款；当前识别、绑定、时效和主动手动模式保护保持。
+
 > 2026-10-21 设计审查：繁忙和技术失败的恢复规则后由 [ADR-056](056-foreground-busy-and-observation-budget.md)及 [ADR-073](073-foreground-observation-independent-of-background-sync.md)局部修订；纯质量门的窄例外见 [ADR-076](076-session-list-assisted-name-matching.md)、[ADR-077](077-exact-session-name-before-edit-neighbors.md)。下文“一律人工确认”不得覆盖这些例外，未知错误、歧义、失效绑定及明确手动模式的保护仍保留。
 
 > 状态：已采纳；修复版实机仍待验证

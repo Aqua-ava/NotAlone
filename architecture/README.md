@@ -167,6 +167,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 102. [ADR-102：以精简 DSH 和 TypeScript 统一后端](adr/102-dsh-typescript-backend-migration.md)
 103. [ADR-103：统一业务后台任务的查看、停止与恢复](adr/103-unified-background-task-management.md)
 104. [ADR-104：记忆生成逻辑按领域模块维护](adr/104-tencent-source-memory-engine.md)
+105. [ADR-105：以当前有效绑定观察恢复前台确认](adr/105-fresh-verified-foreground-recovery.md)
 
 ## 当前架构决策
 

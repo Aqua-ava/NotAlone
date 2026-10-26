@@ -5,8 +5,8 @@ import { initialForegroundState, type ForegroundState, type ForegroundConfirmati
 import { foregroundObservation } from './observation';
 import type { SyncControlState } from '../../shared/sync-control-bridge';
 import type { ForegroundChangeSource, HeaderChangePermit } from './native-change-source';
-import { isAwaitingForegroundSelection, isKnownForegroundReason, isTransientForegroundContextChange,
-  isTransientForegroundStartup, isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
+import { isAwaitingForegroundSelection, isKnownForegroundReason,
+  isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
@@ -40,8 +40,6 @@ export class ForegroundController {
   private captureAuthorityRevision = 0;
   private selectingObservedContact = false;
   private measurement: ((value: ForegroundMeasurement) => void) | undefined;
-  private manualRequired = false;
-  private qualityOnlyManualGate = false;
   private flight: Flight | undefined;
   private nameExpiry: ReturnType<typeof setTimeout> | undefined;
   private generation: number | undefined;
@@ -177,8 +175,6 @@ export class ForegroundController {
     const contact = this.contacts.getState();
     this.invalidatePending(); ++this.epoch; ++this.captureAuthorityRevision;
     const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
-    this.manualRequired = false;
-    this.qualityOnlyManualGate = false;
     this.state = { ...this.state, manualInput: false };
     this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
     this.publish({ foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null,
@@ -271,7 +267,7 @@ export class ForegroundController {
         this.loggedUnknownReasons.add(observation.reason);
         console.warn('foreground_observation_unknown_reason', { phase: observation.phase, reason: observation.reason });
       }
-      // 丢弃已过时的身份/待选择结果，避免旧建议建立永久人工门；技术失败及安全暂停仍处理。
+      // 丢弃已过时的身份/待选择结果，避免旧观察恢复资格或显示旧建议；技术失败及安全暂停仍处理。
       if (this.changePending && (observation.phase === 'confirmed'
         || observation.phase === 'manual-required' && isAwaitingForegroundSelection(observation.reason))) return;
       // 群聊暂停跨助手获焦/失败保留，只有新的完整私聊证据才能解除。
@@ -279,22 +275,8 @@ export class ForegroundController {
         || (observation.phase === 'manual-required' && observation.reason === 'unmatched_requires_selection');
       const unsupportedConversation = isUnsupportedForegroundConversation(observation.reason)
         || (this.state.unsupportedConversation && !privateVerified);
-      // 未绑定只撤销当轮资格；后续完整绑定可独立恢复，不清除低分或歧义等既有人工门。
-      if ((observation.phase === 'manual-required' && observation.reason !== 'unmatched_requires_selection') || (observation.phase === 'unavailable'
-        && !isTransientForegroundContextChange(observation.reason)
-        && !isTransientForegroundStartup(observation.reason))) {
-        this.qualityOnlyManualGate = observation.reason === 'quality_unverified'
-          && (!this.manualRequired || this.qualityOnlyManualGate);
-        this.manualRequired = true;
-      }
-      // 新鲜名单核验或旧尾部文字证据只解除单纯质量门，不覆盖歧义、超时或明确手动模式。
-      if (observation.phase === 'confirmed' && ['confirmed_active_binding_name_match',
-        'confirmed_active_binding_emoji_fallback'].includes(observation.reason)
-        && this.qualityOnlyManualGate) {
-        this.manualRequired = false;
-        this.qualityOnlyManualGate = false;
-      }
-      if (unsupportedConversation || this.manualRequired || observation.phase === 'manual-required'
+      // 失败撤销当轮资格；新的完整绑定核验可独立恢复。明确手动模式在观察入口停采。
+      if (unsupportedConversation || observation.phase === 'manual-required'
         || observation.phase === 'unavailable' || observation.reason === 'sync_disabled') this.qualification = undefined;
       this.state = { ...this.state, unsupportedConversation };
       // 消费前先废弃flight，内部选择不能把已消费的观察当异步旧结果。
@@ -308,12 +290,6 @@ export class ForegroundController {
           this.qualification = undefined;
           this.clearObservation('manual-required', 'contact_unavailable'); return;
         }
-        if (this.manualRequired) {
-          this.publish({ phase: 'manual-required', reason: 'manual_confirmation_required',
-            observedAt: observation.observedAt, probeAvailable: true, wechatInFront: true,
-            recognizedName: observation.recognizedName, recognitionConfidence: observation.recognitionConfidence,
-            suggestedContactId: observation.contactId }); return;
-        }
         this.selectingObservedContact = true;
         let selected;
         try { selected = this.contacts.selectContact({ contactId: observation.contactId, scopeRevision: scope }); }
@@ -321,6 +297,7 @@ export class ForegroundController {
         this.qualification = { generation, scopeRevision: selected.scopeRevision,
           contactId: observation.contactId, kind: 'verified-binding' };
       }
+      // 保留桥接状态结构兼容；成功直接确认，不再发布待确认联系人建议。
       this.publish({ phase: observation.phase, reason: observation.reason, observedAt: observation.observedAt,
         recognizedName: unsupportedConversation ? null : observation.recognizedName,
         recognitionConfidence: unsupportedConversation ? null : observation.recognitionConfidence,
@@ -328,7 +305,7 @@ export class ForegroundController {
       this.measure('result_published', performance.now() - began, changedContact);
     }).catch((error: unknown) => {
       if (!current()) return;
-      // 认证接口明确繁忙时撤销当轮资格；不改变此前已触发的人工确认门。
+      // 认证接口明确繁忙时保留具体原因；本轮撤销资格，后续独立观察可重新核验。
       const busy = error instanceof BackendRequestFailure && error.kind === 'response'
         && error.status === 409 && error.code === 'foreground_observation_busy';
       this.clearObservation('unavailable', busy ? 'foreground_observation_busy' : 'observation_unavailable');
@@ -395,10 +372,6 @@ export class ForegroundController {
   }
   private clearObservation(phase: ForegroundState['phase'], reason: string | null): void {
     if (phase === 'manual-required' || phase === 'unavailable') this.qualification = undefined;
-    if (reason === 'observation_timeout' || reason === 'observation_unavailable' || reason === 'contact_unavailable') {
-      this.manualRequired = true;
-      this.qualityOnlyManualGate = false;
-    }
     this.publish({ phase, reason, observedAt: null, probeAvailable: null, wechatInFront: null,
       recognizedName: null, recognitionConfidence: null,
       foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });

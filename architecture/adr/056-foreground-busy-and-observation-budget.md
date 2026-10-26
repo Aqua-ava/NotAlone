@@ -1,5 +1,7 @@
 # ADR-056：前台观察繁忙恢复与有限执行预算
 
+> 后续局部修订：[ADR-105](105-fresh-verified-foreground-recovery.md)以当前新鲜有效绑定观察自动恢复确认，替代历史失败持续阻断及按原因限定恢复的条款；当前识别、绑定、时效和主动手动模式保护保持。
+
 > 2026-10-21 设计审查：纯质量失败后的人工门后由 [ADR-076](076-session-list-assisted-name-matching.md)、[ADR-077](077-exact-session-name-before-edit-neighbors.md)增加窄例外；独立前台执行见 [ADR-073](073-foreground-observation-independent-of-background-sync.md)。[ADR-088](088-normal-switch-one-second-optimization-target.md)已明确一秒仅为正常切换的优化目标，不是所有场景的硬门；本文执行超时、身份和新鲜度边界保持。
 
 > 状态：已采纳；修复包实机结果另行记录

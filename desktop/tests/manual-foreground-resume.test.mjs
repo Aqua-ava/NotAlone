@@ -213,6 +213,22 @@ test('公开观察解析允许名单匹配成功和旧表情核验，不能接�
  assert.throws(() => ports.foregroundObservation(observationResponse('confirmed', 'unmatched_requires_selection', id).data));
 });
 
+test('探针超时后新的低分唯一绑定匹配自动恢复确认', async t => {
+ const f = fixture(t);
+ f.setObservation(async () => observationResponse('unavailable', 'probe_timeout'));
+ await f.foreground.observeBeforeShow();
+ assert.notEqual(f.foreground.getGenerationBlock(), null);
+ const response = observationResponse('confirmed', 'confirmed_active_binding_name_match', id);
+ Object.assign(response.data, { recognized_name: '合成甲', recognition_confidence: Math.fround(0.3) });
+ f.setObservation(async () => response);
+ await f.foreground.observeBeforeShow();
+ assert.equal(f.foreground.getGenerationBlock(), null);
+ assert.equal(f.foreground.getState().confirmation, 'verified-binding');
+ assert.equal(f.foreground.getState().confirmedContactId, id);
+ assert.equal(f.foreground.getState().suggestedContactId, null);
+ assert.equal(f.foreground.getState().recognitionConfidence, Math.fround(0.3));
+});
+
 test('名单核验可恢复单纯质量门且兼容旧表情证据，原始低分仍展示', async t => {
  for (const reason of ['confirmed_active_binding_name_match', 'confirmed_active_binding_emoji_fallback']) {
   const f = fixture(t);
@@ -229,30 +245,40 @@ test('名单核验可恢复单纯质量门且兼容旧表情证据，原始低�
  }
 });
 
-test('名单核验不能清除歧义、超时、不可用的混合历史或明确手动模式', async t => {
+test('当前完整绑定核验成功可恢复歧义、超时和不可用的混合历史', async t => {
  const quality = ['manual-required', 'quality_unverified'];
  const failures = [['manual-required', 'ambiguous_requires_selection'], ['unavailable', 'probe_timeout'],
   ['unavailable', 'binding_verification_unavailable']];
- for (const confirmedReason of ['confirmed_active_binding_name_match', 'confirmed_active_binding_emoji_fallback']) {
+ for (const confirmedReason of ['confirmed_active_binding', 'confirmed_active_binding_name_match', 'confirmed_active_binding_emoji_fallback']) {
   for (const failure of failures) {
    for (const prior of [[failure], [quality, failure], [failure, quality]]) {
     const f = fixture(t);
+    f.setObservation(async () => observationResponse('confirmed', confirmedReason, id));
+    await f.foreground.observeBeforeShow();
+    assert.equal(f.foreground.getGenerationBlock(), null);
     for (const [phase, reason] of prior) {
      f.setObservation(async () => observationResponse(phase, reason)); await f.foreground.observeBeforeShow();
+     assert.notEqual(f.foreground.getGenerationBlock(), null, '当前失败必须撤销旧确认资格');
     }
     f.setObservation(async () => observationResponse('confirmed', confirmedReason, id));
     await f.foreground.observeBeforeShow();
-    assert.equal(f.foreground.getState().reason, 'manual_confirmation_required');
-    assert.notEqual(f.foreground.getGenerationBlock(), null);
+    assert.equal(f.foreground.getState().reason, confirmedReason);
+    assert.equal(f.foreground.getState().confirmedContactId, id);
+    assert.equal(f.foreground.getGenerationBlock(), null);
    }
   }
+ }
+});
+
+test('明确手动输入模式不会因自动识别成功而退出', async t => {
+ for (const confirmedReason of ['confirmed_active_binding', 'confirmed_active_binding_name_match', 'confirmed_active_binding_emoji_fallback']) {
   const f = fixture(t); await f.enterManual();
   let calls = 0; f.setObservation(async () => { ++calls; return observationResponse('confirmed', confirmedReason, id); });
   await f.foreground.observeBeforeShow(); assert.equal(calls, 0); assert.equal(f.foreground.getState().manualInput, true);
  }
 });
 
-test('未绑定只限制当轮并明确提示选择，返回可靠绑定私聊无需清除旧人工门', async t => {
+test('未绑定只限制当轮并明确提示选择，返回可靠绑定私聊自动恢复', async t => {
  const f = fixture(t);
  f.setObservation(async () => observationResponse('confirmed', 'confirmed_active_binding', id));
  await f.foreground.observeBeforeShow();assert.equal(f.foreground.getGenerationBlock(), null);
@@ -271,15 +297,19 @@ test('未绑定只限制当轮并明确提示选择，返回可靠绑定私聊�
  assert.match(JSON.stringify(panel), /当前会话未匹配到已确认绑定，请在上方选择联系人/);
 });
 
-test('低置信度、歧义或技术失败的人工门不会被随后未绑定和群聊抹除', async t => {
+test('失败后经过未绑定和群聊仍阻止生成，新的可靠私聊绑定才恢复', async t => {
  for (const [phase, reason] of [['manual-required', 'ambiguous_requires_selection'],
   ['manual-required', 'quality_unverified'], ['unavailable', 'probe_timeout']]) {
   const f = fixture(t);
   f.setObservation(async () => observationResponse(phase, reason));await f.foreground.observeBeforeShow();
   f.setObservation(async () => observationResponse('manual-required', 'unmatched_requires_selection'));await f.foreground.observeBeforeShow();
-  f.setObservation(async () => observationResponse('paused', 'group_chat_suspected'));await f.foreground.observeBeforeShow();
-  f.setObservation(async () => observationResponse('confirmed', 'confirmed_active_binding', id));await f.foreground.observeBeforeShow();
-  assert.equal(f.foreground.getState().reason, 'manual_confirmation_required');
   assert.notEqual(f.foreground.getGenerationBlock(), null);
+  f.setObservation(async () => observationResponse('paused', 'group_chat_suspected'));await f.foreground.observeBeforeShow();
+  assert.notEqual(f.foreground.getGenerationBlock(), null);
+  assert.equal(f.foreground.getState().unsupportedConversation, true);
+  f.setObservation(async () => observationResponse('confirmed', 'confirmed_active_binding', id));await f.foreground.observeBeforeShow();
+  assert.equal(f.foreground.getState().reason, 'confirmed_active_binding');
+  assert.equal(f.foreground.getState().unsupportedConversation, false);
+  assert.equal(f.foreground.getGenerationBlock(), null);
  }
 });

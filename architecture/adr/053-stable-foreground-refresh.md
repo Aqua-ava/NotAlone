@@ -1,5 +1,7 @@
 # ADR-053：前台定位刷新与稳定结果展示
 
+> 后续局部修订：[ADR-105](105-fresh-verified-foreground-recovery.md)以当前新鲜有效绑定观察自动恢复确认，替代历史失败持续阻断及按原因限定恢复的条款；当前识别、绑定、时效和主动手动模式保护保持。
+
 > 2026-10-21 设计审查：不增设辅助采集的阶段限制由 [ADR-057](057-header-change-triggered-foreground-observation.md)局部替代，仅允许受控的顶部像素变化提示；变化通知到达时取消正常等待的调度后由 [ADR-078](078-request-driven-native-observation-worker.md)修订，普通周期仍按原间隔运行。名称新鲜度、失败退避与仅正式观察授予身份保持，不能扩大为正文采集。
 
 > 状态：已采纳；正式App的修复效果仍须按实际场次验证
