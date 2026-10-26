@@ -25,8 +25,13 @@ export async function replyInputFixture(rounds) {
   const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {},
     subscribeMessages: (observer) => observer.connected(), requestJson: async (request) => { calls.push(request); const { path } = request;
       if (path.endsWith('/replies/prepare')) throw new Error('合成准备失败，记录输入后停止。');
+      if (path.startsWith('/api/deletions?')) return { generation: 1, data: { operations: [] } };
+      if (path.endsWith('/assistant-sessions') && request.method === 'GET') return { generation: 1,
+        data: path === `/api/contacts/${contactId}/assistant-sessions`
+          ? { sessions: [{ session_id: sessionId, is_current: true }], current_session_id: sessionId }
+          : { sessions: [], current_session_id: null } };
       return { generation: 1,
-      data: path.endsWith('/default') ? { session_id: sessionId } : path.includes('/skills/catalog') || path === '/api/skills' ? { skills: [] }
+      data: path.includes('/skills/catalog') || path === '/api/skills' ? { skills: [] }
         : path.endsWith('/selections') ? { selection: null }
         : path.includes('/messages?') ? { contact_id: contactId, messages: [], next_cursor: null } : structuredClone(saved) }; } };
   const contacts = new ContactSession(async () => ({ generation: 1, contacts: [contactId, otherContactId].map(contactId => ({
@@ -43,6 +48,7 @@ export async function replyInputFixture(rounds) {
   contacts.selectContact({ contactId, scopeRevision: contacts.getState().scopeRevision });
   const scope = () => ({ contactId: contacts.getState().selectedContactId, scopeRevision: contacts.getState().scopeRevision });
   await bridge.readSavedSession(scope());
+  assert.equal(replies.getState().savedSession?.sessionId, sessionId);
   assert.equal(replies.getState().savedSession?.turns.length, rounds);
   events.length = 0; responses.length = 0;
   return { bridge, replies, contacts, scope, events, responses, otherContactId, handlers, calls, contactDraftUpdate, setForward: (listener) => { forward = listener; } };
