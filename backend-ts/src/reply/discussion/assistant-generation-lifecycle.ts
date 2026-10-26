@@ -140,10 +140,9 @@ export class AssistantGenerationLifecycle {
   replyUuid(ownerId);
   if(this.pending.size)throw new AssistantGenerationError('assistant_session_in_progress');
   await this.store.transaction({owner_id:ownerId,contact_id:ownerId},async client=>{
-   const rows=(await client.query("SELECT t.*,r.state AS request_state,r.lease_expires_at,coalesce(m.id IS NOT NULL,false) AS manual FROM assistant_session_turn t LEFT JOIN reply_request r ON r.owner_id=t.owner_id AND r.contact_id=t.contact_id AND r.idempotency_key=t.idempotency_key LEFT JOIN manual_contact_confirmation m ON m.owner_id=t.owner_id AND m.contact_id=t.contact_id AND m.id=t.conversation_binding_id WHERE t.owner_id=$1 AND t.state='running' ORDER BY t.created_at,t.id FOR UPDATE OF t",[ownerId])).rows;
+   const rows=(await client.query("SELECT t.*,r.state AS request_state,coalesce(m.id IS NOT NULL,false) AS manual FROM assistant_session_turn t LEFT JOIN reply_request r ON r.owner_id=t.owner_id AND r.contact_id=t.contact_id AND r.idempotency_key=t.idempotency_key LEFT JOIN manual_contact_confirmation m ON m.owner_id=t.owner_id AND m.contact_id=t.contact_id AND m.id=t.conversation_binding_id WHERE t.owner_id=$1 AND (t.state='running' OR t.state='failed' AND t.interruption_reason IS NULL AND r.state='completed') ORDER BY t.created_at,t.id FOR UPDATE OF t",[ownerId])).rows;
    for(const row of rows){
-    // 宿主应先取得本业务唯一责任；仍有运行租约时不凭进程重启猜测安全终态。
-    if(row.request_state==='running')throw new AssistantGenerationError('assistant_generation_recovery_unconfirmed',undefined,503);
+    // 仅在唯一自有宿主启动、公开接口就绪前调用；旧进程已退出，业务租约不能阻止中断裁定。
     const scope:VerifiedReplyScope={owner_id:ownerId,contact_id:row.contact_id,conversation_binding_id:row.conversation_binding_id,confirmation:row.manual?'manual':'desktop'};
     await interruptAssistantGeneration(this.store,client,scope,row.session_id,row.idempotency_key,row.input_version_id,'app_quit');
    }

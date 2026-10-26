@@ -38,6 +38,69 @@ async function upgradeLegacyProvenance(f){
  await f.f.client.query(await readFile(new URL('../database/migrations/122_assistant_legacy_resume_provenance.sql',import.meta.url),'utf8'));
 }
 
+test('自有宿主SIGKILL后中断未过期和已过期任务，明确重试幂等且重启零模型',{timeout:60000},async t=>{
+ const f=await fixture(t);let host=await f.start();
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ for(const expired of [false,true]){
+  const command=f.input(`合成崩溃保留输入${expired}`),gate=f.holdNext();
+  const running=f.request(host,`${path}/replies`,command).catch(error=>error);await gate.entered;
+  if(expired)await f.f.client.query("UPDATE reply_request SET lease_expires_at=now()-interval '1 second' WHERE idempotency_key=$1",[command.idempotency_key]);
+  assert.deepEqual(await host.stop('SIGKILL'),[null,'SIGKILL']);await running;gate.release();
+  host=await f.start();assert.equal(host.requests.length,0,'再次启动不自动重发模型');
+  const history=await f.request(host,path),turn=history.turns.find(turn=>turn.request_key===command.idempotency_key);
+  assert.equal(turn.state,'failed');assert.equal(turn.interruption_reason,'app_quit');assert.equal(turn.reply,null);
+  assert.match(JSON.stringify(turn.input),/合成崩溃保留输入/);
+  const retry={original_turn_id:turn.turn_id,original_input_version_id:turn.input_version_id,request_key:randomUUID()};
+  const completed=await f.request(host,`${path}/retry-interrupted`,retry);
+  assert.equal(completed.state,'completed');assert.deepEqual(await f.request(host,`${path}/retry-interrupted`,retry),completed);
+  assert.equal(host.requests.length,1,'明确重试只生成并保存一次');
+  assert.equal((await f.request(host,path)).turns.filter(turn=>turn.request_key===retry.request_key).length,1);
+ }
+});
+
+test('缺失和损坏存档在原讨论按有效业务记录一次重建，恢复本身零模型',{timeout:60000},async t=>{
+ const f=await fixture(t);let host=await f.start();
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.request(host,`${path}/replies`,f.input('合成恢复前原输入'));
+ const history=await f.request(host,path);
+ for(const damage of ['missing_log','missing_directory','corrupt','event_count','torn_tail','dirty']){
+  await host.stop();
+  const root=join(f.businessHome,'assistant-runtime',f.owner,f.contact,session),row=(await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0],runtimeRoot=join(root,row.runtime_session_id),files=await readdir(runtimeRoot,{recursive:true});
+  const log=join(runtimeRoot,files.find(file=>file.endsWith('.jsonl')));
+  if(damage==='missing_log')await rm(log);
+  if(damage==='missing_directory'){
+   await rm(runtimeRoot,{recursive:true});
+  }
+  if(damage==='corrupt')await writeFile(log,(await readFile(log,'utf8'))+'{broken\n');
+  if(damage==='event_count')await f.f.client.query('UPDATE assistant_runtime_session SET committed_event_count=committed_event_count+1 WHERE session_id=$1',[session]);
+  if(damage==='torn_tail')await writeFile(log,(await readFile(log,'utf8'))+'{"uncommitted_ghost":"合成撕裂尾');
+  if(damage==='dirty')await f.f.client.query("UPDATE assistant_runtime_session SET state='dirty' WHERE session_id=$1",[session]);
+  host=await f.start();assert.deepEqual(await f.request(host,path),history,'业务可见历史独立于运行档');
+  assert.equal((await f.request(host,`${path}/resume`,{})).session_id,session,damage);
+  if(damage!=='torn_tail')assert.notEqual((await f.f.client.query('SELECT runtime_session_id FROM assistant_runtime_session WHERE session_id=$1',[session])).rows[0].runtime_session_id,row.runtime_session_id,damage);
+  assert.equal(host.requests.length,0,'读取及恢复不得请求模型');
+ }
+ await f.request(host,`${path}/replies`,f.input('合成恢复后明确生成'));
+ assert.match(JSON.stringify(host.requests[0].body),/合成恢复前原输入/);assert.doesNotMatch(JSON.stringify(host.requests[0].body),/合成撕裂尾/);
+});
+
+test('业务已保存而运行提交失败仍显示可靠候选，SIGKILL后同键只读重放',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.f.client.query("CREATE FUNCTION synthetic_reject_runtime_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.state='ready' AND NEW.committed_request_id IS NOT NULL THEN RAISE EXCEPTION 'synthetic runtime commit refusal'; END IF; RETURN NEW; END $$; CREATE TRIGGER synthetic_reject_runtime_commit BEFORE UPDATE ON assistant_runtime_session FOR EACH ROW EXECUTE FUNCTION synthetic_reject_runtime_commit()");
+ const command=f.input('合成业务已保存原输入');
+ const response=await fetch(host.url+`${path}/replies`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(command)});
+ assert.equal(response.status,502);assert.equal(host.requests.length,1);
+ const saved=await f.request(host,path),turn=saved.turns.find(turn=>turn.request_key===command.idempotency_key);
+ assert.equal(turn.state,'completed');assert.equal(turn.reply.candidates[0].text,'合成保存候选');
+ assert.deepEqual(await host.stop('SIGKILL'),[null,'SIGKILL']);
+ await f.f.client.query('DROP TRIGGER synthetic_reject_runtime_commit ON assistant_runtime_session');
+ // 模拟旧版本在DB保存后留下的失败投影；再次启动必须按同一DB完成凭据裁定。
+ await f.f.client.query("UPDATE assistant_session_turn SET state='failed' WHERE id=$1",[turn.turn_id]);
+ const restarted=await f.start();assert.deepEqual(await f.request(restarted,path),saved);assert.equal(restarted.requests.length,0);
+ const replay=await f.request(restarted,`${path}/replies`,command);assert.equal(replay.turn_id,turn.turn_id);assert.equal(replay.reply.candidates[0].candidate_id,turn.reply.candidates[0].candidate_id);assert.equal(restarted.requests.length,0);
+ await f.request(restarted,`${path}/resume`,{});assert.equal(restarted.requests.length,0);
+});
+
 test('目录与历史浏览保持当前和真实活动，明确继续原段才刷新活动且零模型',{timeout:60000},async t=>{
  const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
  assert.deepEqual(await f.request(host,base),{sessions:[],current_session_id:null});
