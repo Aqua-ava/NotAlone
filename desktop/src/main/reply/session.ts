@@ -18,7 +18,7 @@ import { actOnExploration, explorationIdentity, openExploration, type Exploratio
 import { mergeReplyMessages, readReplyMessages } from './messages';
 import { readReplyEvidence } from './evidence-read';
 import { fitsReplyTextLimit, replyFailureDecision, replyTextLimit } from '../../shared/reply-contract';
-import { defaultAssistantSession, deleteAssistantSession, readAssistantSession } from './assistant-sessions';
+import { currentAssistantSession, defaultAssistantSession, deleteAssistantSession, readAssistantSession } from './assistant-sessions';
 import { listAssistantSessions, newAssistantSession, selectAssistantSession } from './assistant-session-catalog';
 import type { AssistantInterruptedRetry, AssistantSessionSelection } from '../../shared/reply-bridge';
 import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
@@ -250,6 +250,7 @@ export class ReplySession {
   }
 
   async continueSession(update: ReplyContinuation): Promise<void> {
+    this.assertCurrentSession();
     const contacts = this.assertScope(update);
     this.assertSessionSelection();
     if (this.state.generationBlock || this.state.phase === 'waiting' || this.state.exploration.phase === 'waiting') {
@@ -533,7 +534,7 @@ export class ReplySession {
       && selection.contactId === this.state.contactId && generation === this.backend.getConnectionGeneration()
       && this.sessionProjection.isReadCurrent(projectionRead);
     try {
-      const resolved = heldSessionId ? undefined : await defaultAssistantSession(this.backend, selection.contactId, pending.signal);
+      const resolved = heldSessionId ? undefined : await currentAssistantSession(this.backend, selection.contactId, pending.signal);
       if (resolved?.deletionOperationId) {
         if (current() && resolved.generation === generation) {
           this.sessionProjection.invalidateSource();
@@ -545,6 +546,12 @@ export class ReplySession {
       }
       const sessionId = heldSessionId ?? resolved!.sessionId;
       if (!current()) return;
+      if (resolved?.catalog) this.publish({ sessionCatalog: { phase: 'ready', items: resolved.catalog.items,
+        currentSessionId: resolved.catalog.currentSessionId } });
+      if (!sessionId) {
+        this.publish({ savedSession: { phase: 'ready', sessionId: null, turns: [], inputs: [], currentInputVersionId: null } });
+        return;
+      }
       projectionRead = this.sessionProjection.resolveReadSession(projectionRead, sessionId);
       let saved = await readAssistantSession(this.backend, selection.contactId, sessionId, pending.signal);
       if (current() && saved.generation === generation) {
@@ -673,8 +680,10 @@ export class ReplySession {
       || view.displayVersionId !== command.versionId) throw new Error('请重新核对并选用要携入的保存版本。');
     await this.switchSavedSession(command, Object.freeze({ ...command }));
   }
+  async viewSavedSession(selection: AssistantSessionSelection): Promise<void> { await this.switchSavedSession(selection, undefined, true); }
+  async resumeSavedSession(selection: AssistantSessionSelection): Promise<void> { await this.switchSavedSession(selection); }
   async selectSavedSession(selection: AssistantSessionSelection): Promise<void> { await this.switchSavedSession(selection); }
-  private async switchSavedSession(selection: ContactSelection & { sessionId?: string }, carry?: AssistantCandidateCarry): Promise<void> {
+  private async switchSavedSession(selection: ContactSelection & { sessionId?: string }, carry?: AssistantCandidateCarry, viewOnly = false): Promise<void> {
     this.assertScope(selection);
     if (this.catalogPending || this.state.exploration.phase === 'waiting'
       || this.state.savedSession?.phase === 'loading' || this.state.sessionDeletion === 'deleting'
@@ -692,7 +701,7 @@ export class ReplySession {
     this.publish({ sessionCatalog: { phase: 'loading', items: previous?.items ?? [],
       currentSessionId: previous?.currentSessionId ?? null, selectionPending: previous?.selectionPending } });
     try {
-      const selected = carry ? await newAssistantSessionWithCandidate(this.backend, carry, pending.signal) : selection.sessionId
+      const selected = viewOnly ? { sessionId: selection.sessionId!, generation } : carry ? await newAssistantSessionWithCandidate(this.backend, carry, pending.signal) : selection.sessionId
         ? await selectAssistantSession(this.backend, selection.contactId, selection.sessionId, pending.signal)
         : await newAssistantSession(this.backend, selection.contactId, pending.signal);
       if (!current() || selected.generation !== generation) return;
@@ -711,12 +720,15 @@ export class ReplySession {
       this.lastAttempt = undefined;
       this.invalidateExploration(); this.derivedIntent = { direction: false, purpose: false };
       this.notifyInputChanged(); this.retainedContent.delete(selection.contactId); this.contacts.clearDraft(selection);
-      const items = (previous?.items ?? []).map((item) => ({ ...item, isCurrent: item.sessionId === saved.sessionId }));
-      if (!items.some((item) => item.sessionId === saved.sessionId)) items.push({ sessionId: saved.sessionId, isCurrent: true });
+      const catalog = viewOnly ? await listAssistantSessions(this.backend, selection.contactId, pending.signal) : undefined;
+      if (!current() || catalog && catalog.generation !== generation) return;
+      const currentSessionId = viewOnly ? catalog!.currentSessionId : saved.sessionId;
+      const items = catalog?.items ?? (previous?.items ?? []).map((item) => ({ ...item, isCurrent: item.sessionId === currentSessionId }));
+      if (!items.some((item) => item.sessionId === saved.sessionId)) items.push({ sessionId: saved.sessionId, isCurrent: saved.sessionId === currentSessionId });
       this.candidateVersions.setScope(null); this.candidateSourceCheck = undefined;
       this.publish({ savedSession: { phase: 'ready', sessionId: saved.sessionId, turns: saved.turns,
         inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId },
-        sessionCatalog: { phase: 'loading', items, currentSessionId: saved.sessionId, selectionPending: true },
+        sessionCatalog: { phase: 'loading', items, currentSessionId, selectionPending: true },
         sessionDeletion: undefined, confirmedSessionDeletion: undefined,
         options: defaults(), workspaceMigrationNotice: undefined, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
         mode: 'rewrite_draft', scene: '', targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '',
@@ -727,7 +739,7 @@ export class ReplySession {
       if (current()) {
         // 完成通知发出前释放切换锁，接收方才能立即进入新会话的工作区。
         this.catalogPending = undefined;
-        this.publish({ sessionCatalog: { phase: 'ready', items, currentSessionId: saved.sessionId, selectionPending: false } });
+        this.publish({ sessionCatalog: { phase: 'ready', items, currentSessionId, selectionPending: false } });
       }
     } catch (error) {
       if (carry && current() && generation !== undefined && error instanceof BackendRequestFailure
@@ -1291,6 +1303,7 @@ export class ReplySession {
     return { ...common, mode: 'reply_to_message', target: structuredClone(target), direction: this.state.direction };
   }
   private async runStrategy(job: StrategyJob): Promise<void> {
+    this.assertCurrentSession();
     this.refreshGenerationEligibility();
     this.assertSessionSelection();
     if (this.state.generationBlock) return;
@@ -1469,6 +1482,7 @@ export class ReplySession {
   }
 
   async generate(selection: GenerateReply): Promise<void> {
+    this.assertCurrentSession();
     let contactState = this.assertScope(selection);
     if (selection.workspaceAction === undefined && this.state.mode !== 'rewrite_draft' && !fitsReplyTextLimit([this.state.correction, this.state.requirements].filter(Boolean).join('\n'))) throw new Error(`请将补充内容缩短至${replyTextLimit}个字符以内再生成。`);
     this.assertSessionSelection();
@@ -1634,6 +1648,7 @@ export class ReplySession {
   private async generateInput(selection: GenerateReply, input: ReplyInputSnapshot,
     replaceable?: PendingAssistantGenerationReceipt, expectedInputVersionId?: string, interrupted?: InterruptedReplyOrigin,
     messageAdoption?: MessageAdoptionCommand): Promise<void> {
+    this.assertCurrentSession();
     const adoptNewMessageId = messageAdoption?.messageId;
     if (selection.newRequest && adoptNewMessageId === undefined) this.workspaceRequirementInputVersion = undefined;
     if (adoptNewMessageId !== undefined && (!isUuid(adoptNewMessageId) || !isUuid(expectedInputVersionId)
@@ -1720,6 +1735,10 @@ export class ReplySession {
       }
       // 完成核验已取得可信完整快照；保留它，避免页面再次全量读取并抢占本轮候选版本加载。
       this.publish({ phase: 'ready', savedSession: accepted.snapshot,
+      ...(this.state.sessionCatalog?.phase === 'ready' && this.state.sessionCatalog.currentSessionId === null
+        ? { sessionCatalog: { phase: 'ready' as const, currentSessionId: result.assistantSessionId,
+          items: [...this.state.sessionCatalog.items.filter(item => item.sessionId !== result.assistantSessionId),
+            { sessionId: result.assistantSessionId, isCurrent: true }] } } : {}),
       inputBudgetNotice,
       ...(result.assistantSessionId !== this.state.savedSession?.sessionId ? { sessionDeletion: undefined } : {}),
       result: { replyRequestId: result.replyRequestId, assistantSessionId: result.assistantSessionId,
@@ -2173,6 +2192,12 @@ export class ReplySession {
       throw new Error('本次联系人已变化，请重新确认。');
     }
     return state;
+  }
+  private assertCurrentSession(): void {
+    const saved = this.state.savedSession?.sessionId, catalog = this.state.sessionCatalog;
+    if (saved && catalog && saved !== catalog.currentSessionId) {
+      throw new Error('请先明确继续此会话，或返回当前会话后生成。');
+    }
   }
   private assertSessionSelection(): void {
     if (this.pendingExpressionPreferenceDeletions > 0 || this.pendingOwnerContextChanges > 0 || this.retainedSourceValidation?.checking) {

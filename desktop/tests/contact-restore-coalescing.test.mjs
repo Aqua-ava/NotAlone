@@ -30,6 +30,8 @@ async function fixture(t) {
       await control.barrier?.(request);
       if (control.respond) { const data = control.respond(request); if (data) return { generation: 7, data }; }
       if (control.missing.has(id)) throw new BackendRequestFailure('response', 404, 'not_found');
+      if (request.path.endsWith('/assistant-sessions') && request.method === 'GET') return { generation: 7, data: {
+        sessions: [{ session_id: sessions.get(id), is_current: true }], current_session_id: sessions.get(id) } };
       if (request.path.endsWith('/selections')) return { generation: 7, data: { selection: null } };
       return { generation: 7, data: request.path.endsWith('/assistant-session/default')
         ? { session_id: sessions.get(id) }

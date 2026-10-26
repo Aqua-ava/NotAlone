@@ -66,6 +66,8 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     listSavedSessions: (...args: unknown[]) => ipcRenderer.invoke('reply:list-saved-sessions', ...args),
     newSavedSession: (...args: unknown[]) => ipcRenderer.invoke('reply:new-saved-session', ...args),
     newSavedSessionWithCandidate: (...args: unknown[]) => ipcRenderer.invoke('reply:new-with-candidate', ...args),
+    viewSavedSession: (...args: unknown[]) => ipcRenderer.invoke('reply:view-saved-session', ...args),
+    resumeSavedSession: (...args: unknown[]) => ipcRenderer.invoke('reply:resume-saved-session', ...args),
     selectSavedSession: (...args: unknown[]) => ipcRenderer.invoke('reply:select-saved-session', ...args),
     deleteSavedSession: (...args: unknown[]) => ipcRenderer.invoke('reply:delete-saved-session', ...args),
     reconnectMessages: (...args: unknown[]) => ipcRenderer.invoke('reply:reconnect-messages', ...args),

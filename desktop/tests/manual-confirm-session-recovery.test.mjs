@@ -40,13 +40,13 @@ async function fixture(t, holdFirstRead = false, holdSessionRead = false) {
     calls.push({ path: options.path, manualContactId: options.manualContactId ?? null });
     if (options.path.startsWith('/api/deletions?')) return { operations: [] };
     if (options.path.endsWith('/manual-confirmation')) { confirmed = true; return { confirmed: true }; }
-    if (options.path.endsWith('/assistant-session/default')) {
+    if (options.path.endsWith('/assistant-sessions')) {
       observeFirstRead();
       if (!confirmed || options.manualContactId !== contactId) {
         if (holdFirstRead) await firstRead;
         throw new BackendRequestFailure('response', 409, 'assistant_session_rejected');
       }
-      return { session_id: sessionId };
+      return { sessions: [{ session_id: sessionId, is_current: true }], current_session_id: sessionId };
     }
     if (options.path.endsWith('/selections')) return { selection: null };
     if (options.path === `/api/contacts/${contactId}/assistant-sessions/${sessionId}`) {
@@ -86,7 +86,7 @@ for (const pending of [false, true]) {
     assert.equal(f.replies.getState().savedSession.sessionId, sessionId);
     f.rejectFirst(); await settle();
     assert.equal(f.replies.getState().savedSession.phase, 'ready');
-    const reads = f.calls.filter((call) => call.path.endsWith('/assistant-session/default'));
+    const reads = f.calls.filter((call) => call.path.endsWith('/assistant-sessions'));
     assert.deepEqual(reads.map((call) => call.manualContactId), [null, contactId]);
     const count = f.calls.length;
     f.replies.refreshGenerationEligibility();
