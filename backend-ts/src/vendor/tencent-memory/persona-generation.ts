@@ -1,7 +1,4 @@
-/** 腾讯增量画像源码复用：MemoryCore/src/core/prompts/persona-generation.ts。
- * 6a4bb55ea54834d8265ce52024d3e3c75db30d38；Copyright (C) 2026 Tencent；MIT 见 LICENSE。
- * 保留首次/增量、变化场景、现有画像和迭代指南；适配 profile.md、来源条目及显式完成。
- * 移除与关系资料无关的 code 模式、心理驱动力推测和替用户决策模板。 */
+/** Copyright (C) 2026 Tencent；MIT 许可见本目录 LICENSE。 */
 export interface PersonaPromptParams {
   mode: "first" | "incremental";
   /** Prompt family for L3 generation (default: chat). */

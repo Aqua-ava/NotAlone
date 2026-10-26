@@ -1,8 +1,4 @@
-/**
- * 源码复用：TencentDB-Agent-Memory / MemoryCore/src/core/prompts/l1-extraction.ts。
- * 固定版本：6a4bb55ea54834d8265ce52024d3e3c75db30d38；Copyright (C) 2026 Tencent。
- * MIT 许可见本目录 LICENSE。适配真实双方、结构化工具和原始精度/未知时间；移除无关 code 模式。
- */
+/** Copyright (C) 2026 Tencent；MIT 许可见本目录 LICENSE。 */
 interface ConversationMessage { id: string; role: string; timestamp: string | null; content: string; }
 
 export const EXTRACT_MEMORIES_SYSTEM_PROMPT = `你是专业的"情境切分与记忆提取专家"。

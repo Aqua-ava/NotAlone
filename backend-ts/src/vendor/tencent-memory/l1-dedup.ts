@@ -1,6 +1,4 @@
-/** 腾讯统一候选池源码复用；来源 MemoryCore/src/core/prompts/l1-dedup.ts。
- * 6a4bb55ea54834d8265ce52024d3e3c75db30d38；Copyright (C) 2026 Tencent；MIT 见 LICENSE。
- * 适配 NotAlone 动作/工具字段；不包含上游模型调用或写入兜底。 */
+/** Copyright (C) 2026 Tencent；MIT 许可见本目录 LICENSE。 */
 interface ExtractedMemory { content: string; type: string; priority?: number; scene_name?: string; }
 interface MemoryRecord extends ExtractedMemory { id: string; timestamps?: string[]; }
 export const CONFLICT_DETECTION_SYSTEM_PROMPT = `你是记忆冲突检测器。批量比较多条【新记忆】与【统一候选记忆池】中的已有记忆，逐条决定如何处理。

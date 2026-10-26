@@ -9,7 +9,6 @@
 | 查评测方法、提案、结果与证据 | [评测索引](evaluations/README.md) |
 | 开发、验证或处理任务 | [仓库规则](../AGENTS.md)、[Agent 工作流](agents/workflow.md)、[工程工作流](agents/engineering.md)、[任务约定](agents/issue-tracker.md) |
 | 理解领域词汇或核对设计约束 | [领域语言](../CONTEXT.md)、[架构索引](../architecture/README.md) |
-| 核对第三方源码复用 | [腾讯记忆源码复用说明](third-party/tencent-memory-reference.md) |
 | 查外部资料与技术比较 | [调研目录](../research/) |
 | 查可复现实验实现 | [独立实验](../experiments/) |
 
@@ -17,7 +16,7 @@
 
 - `guides/` 保存操作说明与环境、权限、故障记录；当前命令以各工程 README 和配置为准。
 - `evaluations/` 按主题保存评测材料；日期、结论、停止原因、授权范围和证据标识沿用原记录。
-- `agents/` 保存 Agent 工作规则，`third-party/` 保存本项目的第三方复用说明。
+- `agents/` 保存 Agent 工作规则。
 - 领域词汇留在根目录 `CONTEXT.md`，现行规格、决策及草案留在 `architecture/`，调研留在 `research/`，任务与规格按约定留在 `.scratch/`。
 
 ## 历史路径与证据

@@ -1,6 +1,4 @@
-/** 腾讯场景维护源码复用：MemoryCore/src/core/prompts/scene-extraction.ts。
- * 6a4bb55ea54834d8265ce52024d3e3c75db30d38；Copyright (C) 2026 Tencent；MIT 见 LICENSE。
- * 保留 UPDATE/MERGE/CREATE 和动态输入构建；适配来源版本、受限暂存及本项目 META 格式。 */
+/** Copyright (C) 2026 Tencent；MIT 许可见本目录 LICENSE。 */
 type MemoryPromptMode = "chat";
 export interface SceneExtractionPromptParams {
   memoriesJson: string;

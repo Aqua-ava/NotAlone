@@ -1,6 +1,6 @@
 # NotAlone 架构文档
 
-> 2026-10-25 记忆实现方向：[ADR-104](adr/104-tencent-source-memory-engine.md)采纳以腾讯 TypeScript 源码复用为主，替换重复实现；来源、角色与协议适配见[说明](../docs/third-party/tencent-memory-reference.md)。工程切片与真实模型／桌面验收分别核验，不由采用上游推断质量通过。
+> 2026-10-25 记忆实现方向：[ADR-104](adr/104-tencent-source-memory-engine.md)采纳以腾讯 TypeScript 源码复用为主，替换重复实现；角色与协议适配见该 ADR。工程切片与真实模型／桌面验收分别核验，不由采用上游推断质量通过。
 
 > 2026-10-26 后端状态：[ADR-102](adr/102-dsh-typescript-backend-migration.md)的当前产品入口已切换为 DSH 与 TypeScript，Python 后台与历史测试退出当前工作树；原 PostgreSQL、资料、SQL 迁移及仍使用的合成夹具保留。历史对照通过固定 Git 树恢复，入口见[后台说明](../backend-ts/README.md)。这不代表全部等价或发行验收通过，实际证据与未测项见[执行交接](../.scratch/dsh-ts-migration/execution.md)。
 
