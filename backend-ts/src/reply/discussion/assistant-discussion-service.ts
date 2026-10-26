@@ -1,10 +1,11 @@
 import {captureAssistantRuntimeDependencies,assistantRuntimeDeletionPending} from '../runtime/assistant-runtime-erasure.ts';
+import {ReplyError} from '../generation/reply-contract.ts';
 import {recordAssistantUserActivity,type AssistantClock} from './assistant-user-activity.ts';
 /**
  * 助手讨论的 TypeScript 业务责任方。
  *
  * PostgreSQL 保存可重开的讨论、输入版本、候选版本、显式选择和来源依赖；
- * 这里不创建 DSH Session、不保存运行 checkpoint，也不调用模型。
+ * 这里不调用模型；运行建档委托独立管理器，不伪造业务请求或完成凭据。
  */
 import type {Client} from 'pg';
 import {SkillFiles} from '../../skills/skill-files.ts';
@@ -41,6 +42,7 @@ export interface AssistantDiscussionServiceOptions {
   transaction<T>(work:(client:Client)=>Promise<T>):Promise<T>;
   skillsRoot:string;
   assistantClock?:AssistantClock;
+  materializeRuntime?:(scope:AssistantDiscussionScope,sessionId:string,binding:string,signal:AbortSignal)=>Promise<{changed:boolean}>;
   eraseRuntime?:(client:Client,scope:AssistantDiscussionScope,sessionId:string)=>Promise<void>;
   environment?:NodeJS.ProcessEnv;
   resolveBinding?:(client:Client,scope:AssistantDiscussionScope,allowManual:boolean)=>Promise<string>;
@@ -365,15 +367,22 @@ export class AssistantDiscussionService {
     },true);
   }
 
-  async selectSession(scope:AssistantDiscussionScope,sessionId:string):Promise<string>{
-    return this.transaction(scope,async client=>{
+  async selectSession(scope:AssistantDiscussionScope,sessionId:string,signal:AbortSignal=new AbortController().signal):Promise<string>{return (await this.resumeSession(scope,sessionId,signal)).session_id;}
+  async resumeSession(scope:AssistantDiscussionScope,sessionId:string,signal:AbortSignal=new AbortController().signal):Promise<{session_id:string;context_refresh?:{changed:true}}>{
+    let changed=false;
+    if(this.options.materializeRuntime){
+      const binding=await this.transaction(scope,async client=>{await this.contact(client,scope);await this.sessionRow(client,scope,sessionId,true);return this.activeBinding(client,scope,true);});
+      try{changed=(await this.options.materializeRuntime(scope,sessionId,binding,signal)).changed;}catch(error){if(error instanceof ReplyStoreError)reject('conflict',error.code);if(error instanceof ReplyError)throw new AssistantDiscussionError(error.status===409?'conflict':'unavailable',error.code,error.status);throw error;}
+    }
+    await this.transaction(scope,async client=>{
       await this.contact(client,scope);
       const binding=await this.activeBinding(client,scope,true);
       await this.sessionRow(client,scope,sessionId,true);
       if(await assistantRuntimeDeletionPending(client,scope,sessionId))reject('conflict','deletion_pending');
       for(const row of await inputRows(client,scope.owner_id,scope.contact_id,sessionId)){
         if(row.conversation_binding_id!==binding)reject('conflict','binding_changed');
-        if(row.state!=='active')reject('conflict','source_unavailable');
+        if(row.state!=='active'){if(this.options.materializeRuntime)continue;reject('conflict','source_unavailable');}
+        if(this.options.materializeRuntime)continue;
         if(row.input_type==='candidate_carry')await this.carryContent(client,scope,row);
         const dependencies=[...new Set<string>([...(row.dependency_ids??[]),...(row.turn_dependencies??[])])];
         await this.assistant.verifiedDiscussionDependencies(client,scope,dependencies,false);
@@ -391,9 +400,14 @@ export class AssistantDiscussionService {
         'UPDATE assistant_session SET is_default=TRUE WHERE owner_id=$1 AND contact_id=$2 AND id=$3',
         [scope.owner_id,scope.contact_id,sessionId],
       );
+      if(this.options.materializeRuntime){
+        const confirmed=await client.query(`UPDATE assistant_session session SET legacy_runtime_pending=false WHERE session.owner_id=$1 AND session.contact_id=$2 AND session.id=$3
+          AND EXISTS(SELECT 1 FROM assistant_runtime_session runtime WHERE runtime.owner_id=session.owner_id AND runtime.contact_id=session.contact_id AND runtime.session_id=session.id AND runtime.state='ready' AND runtime.qualification IS NOT NULL AND runtime.committed_event_sha256 IS NOT NULL AND (runtime.origin<>'generated' OR runtime.committed_request_id IS NOT NULL))`,[scope.owner_id,scope.contact_id,sessionId]);
+        if(confirmed.rowCount!==1)reject('conflict','runtime_bootstrap_unconfirmed');
+      }
       await recordAssistantUserActivity(client,scope,sessionId,this.options.assistantClock);
-      return sessionId;
     });
+    return {session_id:sessionId,...(changed?{context_refresh:{changed:true as const}}:{})};
   }
 
   async recordInput(

@@ -158,7 +158,7 @@ export interface ReplyResult {
   inputBudget?: AssistantInputBudget;
   continuation?: { candidateId: string | null; versionId: string | null; candidateGroupId: string };
 }
-export type ReplyFailureCode = 'deletion_pending' | 'history_sync_pending' | 'history_incomplete_confirmation_required' | 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'candidates_rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable' | 'provider_context_limit' | 'prepared_context_reprepare_required' | 'prepared_context_running' | 'prepared_context_unconfirmed';
+export type ReplyFailureCode = 'resume_required' | 'deletion_pending' | 'history_sync_pending' | 'history_incomplete_confirmation_required' | 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'candidates_rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable' | 'provider_context_limit' | 'prepared_context_reprepare_required' | 'prepared_context_running' | 'prepared_context_unconfirmed';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplyGenerationJobState {
@@ -206,6 +206,7 @@ export interface ReplySessionState {
   canRetry: boolean;
   savedSession?: SavedAssistantSession;
   sessionCatalog?: AssistantSessionCatalog;
+  contextRefresh?: { sessionId: string };
   idleRollover?: { sessionId: string; previousSessionId: string };
   sessionDeletion?: 'deleting' | 'failed' | 'deleted' | 'missing';
   inputBudgetNotice?: AssistantInputBudgetNotice;

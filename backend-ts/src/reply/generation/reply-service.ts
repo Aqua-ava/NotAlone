@@ -1,5 +1,6 @@
+import {AssistantRuntimeProjection,assistantRuntimePolicy} from '../runtime/assistant-runtime-projection.ts';
 /** 回复生成总装：每轮只持有一个前台许可，所有来源复验和保存仍由业务事务负责。 */
-import {assistantRuntimeConfiguration,type AssistantRuntime,type AssistantRuntimeLease} from '../runtime/assistant-runtime.ts';
+import {assistantRuntimeConfiguration,type AssistantRuntime,type AssistantRuntimeLease,type AssistantRuntimeHistory} from '../runtime/assistant-runtime.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import type {Client} from 'pg';
 import {randomUUID} from 'node:crypto';
@@ -55,6 +56,14 @@ export interface ReplyInternalContext {
  history_message_ids?:string[]|null;
  validateExploredContext?:ReplyGenerationGuardOptions['validateExploredContext'];
 }
+function runtimePlanReader(options:ReplyServiceOptions,scope:VerifiedReplyScope,input:ReplyRequestInput,internal:ReplyInternalContext){
+ const projection=new AssistantRuntimeProjection(options.skillsRoot),policy=assistantRuntimePolicy(input,internal.history_message_ids);
+ return async(client:Client)=>{
+  const row=(await client.query('SELECT session_id FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3 AND conversation_binding_id=$4',[scope.owner_id,scope.contact_id,input.idempotency_key,scope.conversation_binding_id])).rows[0];
+  if(!row)throw new ReplyError('reply_context_unavailable',409);
+  return projection.read(client,scope,row.session_id,scope.conversation_binding_id,input.idempotency_key,policy);
+ };
+}
 type ReplyBudgetState=Pick<PreparedReply,'context'|'discussion'|'preferences'|'skillRevision'|'historyBudget'>;
 function replyResources(options:ReplyServiceOptions,transaction:ReplyServiceOptions['transaction'],scope:VerifiedReplyScope,input:ReplyRequestInput,internal:ReplyInternalContext,selectedSkillFailure?:ReplyGenerationGuardOptions['selectedSkillFailure']){
  let controller:ReturnType<typeof createReplyGenerationGuards>;
@@ -67,7 +76,7 @@ function replyResources(options:ReplyServiceOptions,transaction:ReplyServiceOpti
   const explored=input.suggestion?createReplyExploredContextValidator({scope,input,skillsRoot:options.skillsRoot,authenticatedContinuation:internal.authenticatedContinuation}):undefined;
   const validateExploredContext=explored?async(client:Client,context:Parameters<typeof explored>[1])=>{await explored(client,context);await internal.validateExploredContext?.(client,context);}:internal.validateExploredContext;
   const savedSkill=createReplySkillGuards({files:new SkillFiles(options.skillsRoot),requireDiscussionDependencies:discussionValidator});
-  controller=createReplyGenerationGuards({scope,input,runtimeHistory:options.assistantRuntime?(client,identity)=>options.assistantRuntime!.hasHistory(client,scope,identity.idempotency_key,assistantRuntimeConfiguration({version:1,model:options.model,binding:scope.conversation_binding_id})):undefined,authenticatedContinuation:internal.authenticatedContinuation,skillPort,savedSkill,validateExploredContext,selectedSkillFailure});
+  controller=createReplyGenerationGuards({scope,input,validateRuntime:options.assistantRuntime?(client)=>options.assistantRuntime!.validate(client,scope,input.idempotency_key,assistantRuntimeConfiguration({version:1,model:options.model,binding:scope.conversation_binding_id}),runtimePlanReader(options,scope,input,internal)):undefined,runtimeHistory:options.assistantRuntime?(client,identity)=>options.assistantRuntime!.hasHistory(client,scope,identity.idempotency_key,assistantRuntimeConfiguration({version:1,model:options.model,binding:scope.conversation_binding_id})):undefined,authenticatedContinuation:internal.authenticatedContinuation,skillPort,savedSkill,validateExploredContext,selectedSkillFailure});
   return {controller,skillPort,savedSkill,explored};
  }catch(error){skillPort.dispose();throw error;}
 }
@@ -113,7 +122,13 @@ export class ReplyGenerationService {
     ||!['off','low','high','max'].includes(m.reasoningEffort))throw new ReplyError('reply_model_configuration_invalid',503);
   this.options={...options,model:structuredClone(m)};
  }
- private async measurePrepared(scope:VerifiedReplyScope,input:ReplyRequestInput,internal:ReplyInternalContext,state:ReplyBudgetState,transaction:ReplyServiceOptions['transaction'],requireCurrent:()=>Promise<void>,signal:AbortSignal):Promise<MessagesBudgetReceipt>{
+ private async refreshRuntime(scope:VerifiedReplyScope,input:ReplyRequestInput,internal:ReplyInternalContext,signal:AbortSignal):Promise<void>{
+  const runtime=this.options.assistantRuntime;if(!runtime)return;
+  const reader=runtimePlanReader(this.options,scope,input,internal);
+  const session=await this.options.transaction(async client=>(await client.query('SELECT session_id FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3 AND conversation_binding_id=$4',[scope.owner_id,scope.contact_id,input.idempotency_key,scope.conversation_binding_id])).rows[0]?.session_id);
+  if(session)await runtime.materialize(scope,session,assistantRuntimeConfiguration({version:1,model:this.options.model,binding:scope.conversation_binding_id}),reader,signal,{generation:true,requestKey:input.idempotency_key});
+ }
+ private async measurePrepared(scope:VerifiedReplyScope,input:ReplyRequestInput,internal:ReplyInternalContext,state:ReplyBudgetState,transaction:ReplyServiceOptions['transaction'],requireCurrent:()=>Promise<void>,signal:AbortSignal,onHistory?:(history:AssistantRuntimeHistory|null)=>void):Promise<MessagesBudgetReceipt>{
   const model=this.options.model;
   // 官方预检销毁自己的scope；每次裁剪重测均使用独立Skill运行态。
   const {skillPort}=replyResources(this.options,transaction,scope,input,internal);
@@ -129,10 +144,11 @@ export class ReplyGenerationService {
    const unavailable=async():Promise<never>=>{throw new ReplyError('reply_preflight_tool_execution_invalid',502);};
    const tools=[...history?.tools()??[],...(replyScenarioReadPolicy(state.context).reads.length?[createReplyScenarioReadTool(unavailable)]:[]),...skill.tools()];
    const runtime=await this.options.assistantRuntime?.history(scope,input.idempotency_key,assistantRuntimeConfiguration({version:1,model,binding:scope.conversation_binding_id}),signal);
+   onHistory?.(runtime??null);
    return await preflightReplyAgent(this.options.ctx,{
     seed:runtime?.events,
     binding:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort,toolChoice:'any'},profile:model.budgetProfile,
-    prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation,aliases,runtime_history:!!runtime}),
+    prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation,aliases,runtime_history:!!runtime})+(runtime?.businessReference?"\n\n"+JSON.stringify(runtime.businessReference):""),
     requireCurrent,validateRegistry:()=>skill.validateRegistry(signal),
     async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion,aliases),temperature:model.temperature},{tools,skillSession:skill,executeOutput:unavailable,signal});},
    },signal);
@@ -148,13 +164,14 @@ export class ReplyGenerationService {
    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${verified.owner_id}`]);return operation(client);
   });
   signal.throwIfAborted();await transaction(client=>requireReplyScope(client,verified,input));
+  await this.refreshRuntime(verified,input,internal,signal);
   const {controller,skillPort,explored}=replyResources(this.options,transaction,verified,input,internal);
   try{
    const prepared=new ReplyPreparedContexts({command:input,discussion:controller.discussion,assistant:controller.assistant,explored});
    const identity={owner_id:verified.owner_id,contact_id:verified.contact_id,conversation_binding_id:verified.conversation_binding_id,idempotency_key:input.idempotency_key};
    const result=await prepareAssistantReply({transaction,scope:verified,input,authenticatedContinuation:internal.authenticatedContinuation,assistant:controller.assistant,prepared,
     fitBudget:(state,options)=>fitPreparedReplyBudget(state,options,selected=>this.measurePrepared(verified,input,internal,selected,transaction,async()=>{
-     signal.throwIfAborted();await transaction(async client=>{await requireReplyScope(client,verified,input);await prepared.validate(client,identity,selected);if(input.suggestion)await internal.validateExploredContext?.(client,selected.context);});signal.throwIfAborted();
+     signal.throwIfAborted();await transaction(async client=>{await requireReplyScope(client,verified,input);await this.options.assistantRuntime?.validate(client,verified,input.idempotency_key,assistantRuntimeConfiguration({version:1,model:this.options.model,binding:verified.conversation_binding_id}),runtimePlanReader(this.options,verified,input,internal));await prepared.validate(client,identity,selected);if(input.suggestion)await internal.validateExploredContext?.(client,selected.context);});signal.throwIfAborted();
     },signal)),
    },signal);
    return {receipt:result.receipt,...(result.budget?{input_budget:publicBudget(result.budget,this.options.model.warning_ratio)}:{})};
@@ -172,6 +189,7 @@ export class ReplyGenerationService {
   });
   signal.throwIfAborted();
   await transaction(client=>requireReplyScope(client,verified,input));
+  await this.refreshRuntime(verified,input,internal,signal);
   // 在领取租约之前等前台许可，排队不会耗尽30秒业务租约；loop不再重复领取。
   const round=await this.options.arbiter.acquire('foreground',signal);
   let settled=false,owned:ReplyStoreRequest|undefined,skill:ReplySkillSession|undefined;
@@ -190,8 +208,9 @@ export class ReplyGenerationService {
    skill=await ReplySkillSession.open(skillPort,{ownerId:verified.owner_id,contactId:verified.contact_id,scene:input.scene??''},input,signal,aliases);
    const preparation=new ReplyPreparation({transaction,controller,explored,requireCurrent:async client=>{await store.requireCurrentInTransaction(client,request);await requireReplyScope(client,verified,input);}});
    const prepared:PreparedReply=await transaction(client=>preparation.prepare(client,{request,command:input,skillRevision:skill!.revision,history_message_ids:internal.history_message_ids}));
-   const requireCurrent=async()=>{signal.throwIfAborted();await transaction(client=>preparation.validateCurrent(client,prepared));await skill!.runtime.validate(signal);signal.throwIfAborted();};
-   const fitted=await fitPreparedReplyBudget(prepared,{frozen:prepared.frozen,signal},selected=>this.measurePrepared(verified,input,internal,selected,transaction,requireCurrent,signal));
+   const requireCurrent=async()=>{signal.throwIfAborted();await transaction(async client=>{await preparation.validateCurrent(client,prepared);await this.options.assistantRuntime?.validate(client,verified,input.idempotency_key,assistantRuntimeConfiguration({version:1,model,binding:verified.conversation_binding_id}),runtimePlanReader(this.options,verified,input,internal));});await skill!.runtime.validate(signal);signal.throwIfAborted();};
+   let measuredRuntime:AssistantRuntimeHistory|null=null;
+   const fitted=await fitPreparedReplyBudget(prepared,{frozen:prepared.frozen,signal},selected=>this.measurePrepared(verified,input,internal,selected,transaction,requireCurrent,signal,history=>{measuredRuntime=history;}));
    prepared.context=fitted.state.context;const physicalLimit=replyPhysicalLimit(prepared.context,model.physical_limit);preparation.finalize(prepared);
    await store.prepareContext(request,prepared.storeContext);
    const history=allowsHistory(input)&&!recentOnly(input)?new ReplyHistory({transaction,scope:verified,binding_id:verified.conversation_binding_id,
@@ -201,9 +220,9 @@ export class ReplyGenerationService {
     requireCurrent:client=>preparation.validateCurrent(client,prepared),aliases}):null;
    const tools=[...history?.tools()??[],...preparation.scenarioTools(prepared,aliases),...skill.tools()];
    let saved:ReplyStoreResult|undefined;
-   runtime=await this.options.assistantRuntime?.acquire(verified,input.idempotency_key,request.request_id,assistantRuntimeConfiguration({version:1,model,binding:verified.conversation_binding_id}));
+   runtime=await this.options.assistantRuntime?.acquire(verified,input.idempotency_key,request.request_id,assistantRuntimeConfiguration({version:1,model,binding:verified.conversation_binding_id}),measuredRuntime);
    const generated=await generateReplyLoop(this.options.ctx,{...verified,request_id:request.request_id,...model,physical_limit:physicalLimit,candidate_limit:replyCandidateLimit(prepared.context),
-    prompt:replyPayloadText({request:input,context:prepared.context,preferences:prepared.preferences.preferences,discussion:prepared.discussion,authenticated:internal.authenticatedContinuation,aliases,runtime_history:runtime?.resume??false}),
+    prompt:replyPayloadText({request:input,context:prepared.context,preferences:prepared.preferences.preferences,discussion:prepared.discussion,authenticated:internal.authenticatedContinuation,aliases,runtime_history:runtime?.resume??false})+(runtime?.businessReference?"\n\n"+JSON.stringify(runtime.businessReference):""),
     system_prompt:replySystemPrompt(prepared.context,prepared.discussion,aliases)},
    {runtime,provider:this.options.provider,budgetProfile:model.budgetProfile,acquire:async()=>({id:round.id,settle:async()=>{}}),requireCurrent,skillSession:skill,tools,aliases,
     evidenceIds:()=>new Set([...prepared.context.evidence.filter(e=>e.model_visible).map(e=>e.evidence_id),...history?.evidence.map(e=>e.evidence_id)??[]]),
@@ -217,7 +236,7 @@ export class ReplyGenerationService {
      saved=await store.save(request,context,candidateRows(candidates),used as unknown as Record<string,unknown>|null,commitSignal);
     }},signal);
    if(!saved)throw new ReplyError('reply_persistence_unavailable',503);
-   await runtime?.commit(generated.eventCount);
+   await runtime?.commit(generated.eventCount,runtimePlanReader(this.options,verified,input,internal));
    return await resultPayload(saved);
   }catch(error){
    let rejected=failure(error,signal,model);

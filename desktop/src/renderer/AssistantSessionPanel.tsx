@@ -141,6 +141,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {replies.state.idleRollover?.sessionId === saved?.sessionId && replies.state.contactId && <p role="status">已开启新讨论
       <button disabled={busy} onClick={() => void replies.resumeSavedSession(replies.state.idleRollover!.previousSessionId)}>继续上一段</button>
     </p>}
+    {replies.state.contextRefresh?.sessionId === saved?.sessionId && <p role="status">已更新当前聊天和有效资料，历史讨论仅作参考。</p>}
     {catalog?.phase === 'loading' && <p role="status">正在核对助手会话…</p>}
     {catalog?.selectionPending && catalog.phase !== 'loading' && <p role="alert">助手会话操作尚未确认，请刷新列表后明确选择会话。</p>}
     {catalog?.phase === 'failed' && !catalog.selectionPending && <p role="alert">助手会话列表暂不可用，请刷新重试。</p>}
@@ -196,6 +197,9 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       </li>)}
     </ul>}
         <div className="session-actions" role="group" aria-label="正在查看的讨论操作">
+    {saved?.sessionId && <button disabled={busy} onClick={() => void replies.resumeSavedSession(saved.sessionId!)}>
+      {catalog?.phase === 'failed' ? '重试继续此会话' : '继续此会话'}
+    </button>}
     <button disabled={!replies.state.contactId || saved?.phase === 'loading' || deleting || catalog?.phase === 'loading' || catalog?.selectionPending} onClick={() => void replies.readSavedSession()}>
       {saved?.phase === 'failed' ? '重试读取已保存讨论' : '查看已保存讨论'}
     </button>

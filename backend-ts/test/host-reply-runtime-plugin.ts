@@ -54,7 +54,7 @@ export async function apply(ctx:Context){
   const runtime=await createHostReplyRuntime({ctx,storage,arbiter,ledger,token:process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN!,
     ...(process.env.NOTALONE_SYNTHETIC_ASSISTANT_CLOCK?{assistantClock:()=>readFile(process.env.NOTALONE_SYNTHETIC_ASSISTANT_CLOCK!,'utf8')}:{ }),
     ...(skillLibrary?{skillLibrary}:{}),
-    ...(process.env.NOTALONE_SYNTHETIC_PERSISTENT==='1'?{publicRuntime:true,persistentAssistantHome:home}:{}),
+    ...(process.env.NOTALONE_SYNTHETIC_PERSISTENT==='1'?{publicRuntime:true,persistentAssistantHome:home}:process.env.NOTALONE_SYNTHETIC_PUBLIC==='1'?{publicRuntime:true}:{}),
     ...(extractionEnabled?{extractionEnabled:true,extractionAdoptionEnabled:true}:{}),
     ...(traceStore?{sourceTraces:traceStore}:{}),
     ...(permitServer?{extractionPermit:{path:join(home,'l2-permit.sock'),token:l2Token}}:{}),
@@ -63,6 +63,11 @@ export async function apply(ctx:Context){
     model:{provider:'notalone-host-reply-test',model:'deepseek-flash',maxTokens:256,temperature:Number(process.env.NOTALONE_SYNTHETIC_REPLY_TEMPERATURE??'0'),reasoningEffort:'off',physical_limit:2,deadline_ms:10000,warning_ratio:0.8,budgetProfile:{context_window_tokens:65536,safety_margin_tokens:128}}}});
   const server=createServer(async(req,res)=>{
     const url=new URL(req.url??'','http://localhost');
+    if(/^\/api\/skills\/[^/]+\/(enable|disable)$/.test(url.pathname)&&req.method==='POST'){
+      if(req.headers.authorization!==`Bearer ${process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN}`){res.writeHead(401).end('{}');return;}
+      for await(const _part of req){};
+      try{skillLibrary??=new SkillLibrary(storage,new SkillFiles(skillsRoot));const result=await skillLibrary.handle('POST',url,{});res.writeHead(200,{'content-type':'application/json'}).end(stringifyJson(result));}catch(error){res.writeHead((error as {status?:number}).status??503).end('{}');}return;
+    }
     if(skillLearningRoute(req.method??'',url.pathname)){
       if(req.headers.authorization!==`Bearer ${process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN}`){
         res.writeHead(401,{'content-type':'application/json'});res.end('{"error":"unauthorized"}');return;
@@ -93,7 +98,7 @@ export async function apply(ctx:Context){
         res.writeHead(202,{'content-type':'application/json'});res.end(stringifyJson({replayed:true}));return;
       }
     }
-    if(process.env.NOTALONE_SYNTHETIC_PERSISTENT==='1'&&url.pathname.startsWith('/api/')){
+    if((process.env.NOTALONE_SYNTHETIC_PERSISTENT==='1'||process.env.NOTALONE_SYNTHETIC_PUBLIC==='1')&&url.pathname.startsWith('/api/')){
       if(req.headers.authorization!==`Bearer ${process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN}`){res.writeHead(401);res.end('{}');return;}
       if(await runtime.handlePublic(req,res,url))return;
     }

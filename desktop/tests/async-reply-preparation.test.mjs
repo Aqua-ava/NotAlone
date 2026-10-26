@@ -44,11 +44,14 @@ test('准备超过八秒时仍等候同一任务，短网络请求不重复提�
 
 test('查询失败按原准备提交校验未领取证明，错键不释放身份', async (t) => {
   const proof = { contact_id: contactId, session_id: sessionId, request_key: requestKey, state: 'not_reserved' };
-  let actualProof = proof;
+  let actualProof = proof, reason = 'source_deleted';
   const f = await fixture(t, (req) => req.method === 'POST' ? { status: 202, data: pending }
-    : { status: 409, data: { error: 'assistant_session_rejected', reason: 'source_deleted', no_generation: actualProof } });
+    : { status: 409, data: { error: 'assistant_session_rejected', reason, no_generation: actualProof } });
   await assert.rejects(f.client.perform(request), (error) => error instanceof BackendRequestFailure
     && error.noGeneration?.requestKey === requestKey && error.reason === 'source_deleted');
+  reason = 'resume_required';
+  await assert.rejects(f.client.perform(request), (error) => error instanceof BackendRequestFailure
+    && error.noGeneration?.requestKey === requestKey && error.reason === 'resume_required');
   actualProof = { ...proof, request_key: randomUUID() };
   await assert.rejects(f.client.perform(request), (error) => error instanceof BackendRequestFailure && error.noGeneration === undefined);
 });

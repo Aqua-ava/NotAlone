@@ -752,6 +752,7 @@ export class ReplySession {
         inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId },
         sessionCatalog: { phase: 'loading', items, currentSessionId, selectionPending: true },
         sessionDeletion: undefined, confirmedSessionDeletion: undefined, idleRollover: undefined,
+        contextRefresh: !viewOnly && 'contextRefreshed' in selected && selected.contextRefreshed ? { sessionId: saved.sessionId } : undefined,
         options: defaults(), workspaceMigrationNotice: undefined, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
         mode: 'rewrite_draft', scene: '', targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '',
         skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], contentRestoreNotice: undefined, candidateDrafts: [],
