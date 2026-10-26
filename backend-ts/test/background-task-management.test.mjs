@@ -7,7 +7,7 @@ import {
   BusinessTaskApi,
   PostgresBusinessTaskManager,
 } from '../src/tasks/background-task-management.ts';
-import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/tasks/store.ts';
 
 async function fixture(t) {
   const storage=await createStorageFixture();

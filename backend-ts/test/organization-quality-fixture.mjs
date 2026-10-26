@@ -1,6 +1,6 @@
 /** 质量公开 HTTP seam，数据库只包含本文件创建的随机合成资料。 */
 import {createServer} from 'node:http';
-import {createLayeredMemoryManagement} from '../src/memory/layered/layered-memory-management.ts';
+import {createLayeredMemoryManagement} from '../src/memory/records/documents/service.ts';
 import {OrganizationQualityStore} from '../src/diagnostics/organization-quality-store.ts';
 import {createOrganizationQualityApi} from '../src/diagnostics/organization-quality-api.ts';
 import {managementFixture} from './layered-memory-management-fixture.mjs';

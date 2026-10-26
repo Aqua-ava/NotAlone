@@ -1,6 +1,6 @@
 /** 唯一任务 Worker 的学习步骤：有界提案与来源复核，不持有HTTP发布权限。 */
-import type {ExtractionClaim} from '../memory/extraction/extraction-task-store.ts';
-import type {ExtractionWorkerResult,ExtractionWorkerRunner} from '../memory/extraction/extraction-worker.ts';
+import type {ExtractionClaim} from '../memory/extraction/tasks/store.ts';
+import type {ExtractionWorkerResult,ExtractionWorkerRunner} from '../memory/extraction/tasks/worker.ts';
 import {SkillLearningError,SkillLearningInvalid,type SkillLearningScope} from './skill-learning-contract.ts';
 import type {SkillLearningRuntime} from './skill-learning-runtime.ts';
 import type {SkillLearningStore} from './skill-learning-store.ts';

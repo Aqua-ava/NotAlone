@@ -6,7 +6,7 @@ import {readContextMemories,selectContextMemories,memoryEvidence,pendingSelectio
 import {readContextMessages,readOptionalContext,selectReplyMessageWindow,requireReplyMessageWindowCount} from './reply-context-read.ts';
 import type {Client} from 'pg';
 import {randomUUID} from 'node:crypto';
-import {canonicalJSON} from '../../memory/overview/contact-overview-evidence.ts';
+import {canonicalJSON} from '../../memory/overview/evidence/sources.ts';
 import {replyUuid} from '../generation/reply-contract.ts';
 import {blankTiming,ReplyContextError,PENDING_REASON,HISTORICAL_REASON,type ReplyContextBuildInput,type BuiltReplyContext,type ReplyContextEvidence,type ContextScope,type ReplyContextOptions} from './reply-context-types.ts';
 export * from './reply-context-types.ts';

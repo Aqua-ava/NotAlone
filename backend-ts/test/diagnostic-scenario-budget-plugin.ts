@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-cmdline';
 import {createServer} from 'node:http';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {installModelProvider} from '../src/platform/models/model-provider.ts';
-import {createL2ScenarioModel} from '../src/memory/layered/l2-scenario-model.ts';
+import {createL2ScenarioModel} from '../src/memory/scenarios/model.ts';
 
 export const name='diagnostic-scenario-budget-synthetic';
 export const inject=['llm','appReady'];

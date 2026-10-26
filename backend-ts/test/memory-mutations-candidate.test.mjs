@@ -4,11 +4,11 @@ import { randomUUID } from 'node:crypto';
 import { writeFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createStorageFixture } from './host-storage-fixture.mjs';
-import { captureSnapshot, sha } from '../src/memory/overview/contact-overview-evidence.ts';
-import { candidateActionBody, mutateMemoryCandidate } from '../src/memory/management/memory-mutations-candidate.ts';
-import { mutateMemory } from '../src/memory/management/memory-mutations.ts';
-import { protectCandidate } from '../src/memory/management/memory-mutations-protection.ts';
-import { candidatePayload } from '../src/memory/management/memory-candidate-projection.ts';
+import { captureSnapshot, sha } from '../src/memory/overview/evidence/sources.ts';
+import { candidateActionBody, mutateMemoryCandidate } from '../src/memory/records/mutations/candidate.ts';
+import { mutateMemory } from '../src/memory/records/mutations.ts';
+import { protectCandidate } from '../src/memory/records/mutations/protection.ts';
+import { candidatePayload } from '../src/memory/records/candidate-projection.ts';
 
 test('候选入口保留精确字段与整数版本合同', () => {
   for (const body of [{expected_revision:true},{previous_memory_id:randomUUID(),expected_revision:1.5},{previous_memory_id:randomUUID(),expected_revision:1,extra:1}])

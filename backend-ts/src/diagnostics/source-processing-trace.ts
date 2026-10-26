@@ -1,7 +1,7 @@
 /** 完整来源、处理、提取、核验、裁决和写入追踪；正文只从既有敏感表读取。 */
 import {createHash} from 'node:crypto';
 import type pg from 'pg';
-import {eraseSourceTraces,eraseTraceBodies} from '../memory/management/memory-mutations-erasure.ts';
+import {eraseSourceTraces,eraseTraceBodies} from '../memory/records/mutations/erasure.ts';
 
 export interface TraceScope {ownerId:string;contactId:string}
 export type MemoryTraceRecordKind='message'|'candidate'|'contact_memory'|'owner_memory'|'task';

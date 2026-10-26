@@ -7,7 +7,7 @@ import {createConnection} from 'node:net';
 import {createInterface} from 'node:readline';
 import type {installModelProvider} from '../platform/models/model-provider.ts';
 import {modelLedgerInputBudget,type ModelLedgerReceipt,type ModelLedgerUsage} from '../platform/models/model-ledger.ts';
-import {extractionUnconfirmedRequests,recordExtractionModelReceipt,ExtractionModelError,type ExtractionPermitEndpoint} from '../memory/extraction/extraction-model.ts';
+import {extractionUnconfirmedRequests,recordExtractionModelReceipt,ExtractionModelError,type ExtractionPermitEndpoint} from '../memory/extraction/model.ts';
 import {validateQualityModelClaim,qualityModelRequestId} from './quality-model-authorization.ts';
 import {OrganizationQualityError} from './organization-quality-contract.ts';
 import type {OrganizationQualityModelInput,OrganizationQualityModelResult} from './organization-quality-runtime.ts';

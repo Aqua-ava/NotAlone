@@ -30,7 +30,7 @@ export async function deleteSourceReplies(client:pg.Client,owner:string,removedI
  const eraseAssistant=ports?.eraseAssistantDependencies??createAssistantErasure({eraseSkillLearning:(connection,selectedOwner,ids)=>eraseSkillLearning(connection,selectedOwner,ids,ports)});
  requests=[...new Set([...requests,...await eraseAssistant(client,owner,removedIds,requests)])];
  if(ports?.eraseMemoryUpgrades)await ports.eraseMemoryUpgrades(client,owner,removedIds);
- else {const {eraseMemoryUpgrades}=await import('../memory/management/memory-mutations-erasure.ts');await eraseMemoryUpgrades(client,owner,removedIds);}
+ else {const {eraseMemoryUpgrades}=await import('../memory/records/mutations/erasure.ts');await eraseMemoryUpgrades(client,owner,removedIds);}
  await eraseSkillLearning(client,owner,[...new Set([...removedIds,...requests])],ports);
  if(!requests.length)return;
  await client.query('INSERT INTO public.reply_invalidated_key(owner_id,contact_id,idempotency_key) SELECT owner_id,contact_id,idempotency_key FROM public.reply_request WHERE owner_id=$1 AND id=ANY($2::uuid[]) ON CONFLICT DO NOTHING',[owner,requests]);

@@ -1,8 +1,8 @@
 /** 只读分层资料资格：绑定当前事务中的来源指纹，不信任概览缓存或记录存在性。 */
 import type {Client} from 'pg';
 import {readReplyContactOverview,readReplyOwnerOverview} from './reply-context-overview.ts';
-import {canonicalJSON,digest} from '../../memory/overview/contact-overview-evidence.ts';
-import {epochMicros} from '../../memory/overview/contact-overview-time.ts';
+import {canonicalJSON,digest} from '../../memory/overview/evidence/sources.ts';
+import {epochMicros} from '../../memory/overview/projection/time.ts';
 import {ReplyContextError,type ContextMetadata} from './reply-context-types.ts';
 import {forbiddenGenerationMemoryDependencies} from '../generation/reply-source-guards.ts';
 export interface LayeredScope {owner_id:string;contact_id:string|null}

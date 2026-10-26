@@ -1,7 +1,7 @@
 /** 独立质量合同绑定实际实现、模型与预算；不签发产品自动采纳权限。 */
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {DEFAULT_L2_SCENARIO_BUDGET,type L2ScenarioBudget} from '../memory/layered/l2-scenario-workspace.ts';
+import {DEFAULT_L2_SCENARIO_BUDGET,type L2ScenarioBudget} from '../memory/scenarios/workspace.ts';
 
 export type QualityRow=Record<string,any>;
 export type OrganizationQualityBudget=L2ScenarioBudget&{max_profile_entries:number};
@@ -48,8 +48,8 @@ function sourceIdentity(names:string[]):string {
   return qualityDigest(Object.fromEntries(sources));
 }
 export function createOrganizationQualityContract(overrides:Partial<OrganizationQualityContract>={}):OrganizationQualityContract {
-  const organization=['../memory/layered/l2-scenario-workspace.ts','../memory/layered/l3-profile-workspace.ts','../memory/layered/l2-scenario-service.ts','../memory/layered/l3-profile-service.ts',
-    '../memory/layered/layered-memory-management-source-policy.ts','../memory/layered/layered-memory-management-target.ts'];
+  const organization=['../memory/scenarios/workspace.ts','../memory/profiles/workspace.ts','../memory/scenarios/service.ts','../memory/profiles/service.ts',
+    '../memory/records/documents/source-policy.ts','../memory/records/documents/target.ts'];
   const rules=sourceIdentity(organization);
   const contract:OrganizationQualityContract={provider:'unconfigured',request_model:'unconfigured',
     verifier_provider:'unconfigured',verifier_model:'unconfigured',rules_version:rules,prompt_version:rules,

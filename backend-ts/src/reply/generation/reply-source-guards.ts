@@ -6,7 +6,7 @@ import type { AssistantScope } from './reply-assistant-guards.ts';
 import { ReplyStoreError } from './reply-store.ts';
 import { evidenceSources,generationDependencies,canonical,legacyJson } from './reply-assistant-erasure.ts';
 import { projectReplyMemoryMetadata,type MemoryKind } from '../context/reply-context-memory.ts';
-import { pythonISO } from '../../memory/overview/contact-overview-time.ts';
+import { pythonISO } from '../../memory/overview/projection/time.ts';
 import * as sql from './reply-source-guards-sql.ts';
 type Row=Record<string,any>;
 const reject=():never=>{throw new ReplyStoreError('reply_context_invalidated');};

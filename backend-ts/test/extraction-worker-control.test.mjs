@@ -4,8 +4,8 @@ import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import pg from 'pg';
 import {createExtractionFixture} from './extraction-fixture.mjs';
-import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
-import {ExtractionWorker} from '../src/memory/extraction/extraction-worker.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/tasks/store.ts';
+import {ExtractionWorker} from '../src/memory/extraction/tasks/worker.ts';
 import {ExtractionWorkerTaskControl,TaskControlError} from '../src/tasks/task-control.ts';
 
 async function waitFor(check,timeoutMs=3000){

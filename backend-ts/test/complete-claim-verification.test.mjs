@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {parseDirectExtraction} from '../src/memory/extraction/extraction-protocol.ts';
-import {prepareSourceVerification} from '../src/memory/extraction/complete-claim-verification.ts';
-import {attachVerifiedSourceReceipt} from '../src/memory/extraction/extraction-evidence.ts';
-import {parseStoredJSON} from '../src/memory/overview/contact-overview-evidence.ts';
+import {parseDirectExtraction} from '../src/memory/extraction/protocol.ts';
+import {prepareSourceVerification} from '../src/memory/extraction/verification/complete-claim.ts';
+import {attachVerifiedSourceReceipt} from '../src/memory/extraction/verification/evidence.ts';
+import {parseStoredJSON} from '../src/memory/overview/evidence/sources.ts';
 
 const mechanism = JSON.parse(readFileSync(new URL('./fixtures/complete-claim-mechanism.json', import.meta.url)));
 const owner = '11111111-1111-4111-8111-111111111111';

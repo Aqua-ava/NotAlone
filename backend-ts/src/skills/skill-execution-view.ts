@@ -2,7 +2,7 @@
 import {createHash} from 'node:crypto';
 import type {Client} from 'pg';
 import type {SkillScope} from './skill-runtime.ts';
-import {canonicalJSON} from '../memory/overview/contact-overview-evidence.ts';
+import {canonicalJSON} from '../memory/overview/evidence/sources.ts';
 export type SkillRow=Record<string,any>;
 export class SkillPortError extends Error {readonly code:string;constructor(code='skill_unavailable'){super(code);this.code=code;}}
 export function skillDigest(value:unknown):string{return createHash('sha256').update(canonicalJSON(value,true)).digest('hex');}

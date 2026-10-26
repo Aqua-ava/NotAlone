@@ -1,7 +1,7 @@
 /** 草稿审核、冻结对照与原子发布；模型始终在事务外，只拿到只读草稿投影。 */
 import type pg from 'pg';
 import {randomUUID} from 'node:crypto';
-import {canonicalJSON} from '../memory/overview/contact-overview-evidence.ts';
+import {canonicalJSON} from '../memory/overview/evidence/sources.ts';
 import type {SkillFiles,SkillMethod,SkillVersionFiles} from './skill-files.ts';
 import type {SkillLibrary} from './skill-library.ts';
 import {validatePackage,type SkillPackage} from './skill-package.ts';

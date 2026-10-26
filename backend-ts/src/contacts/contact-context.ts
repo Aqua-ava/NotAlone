@@ -41,7 +41,7 @@ export class ContactContext {
         FROM public.source_document source LEFT JOIN public.background_task task ON task.owner_id=source.owner_id AND task.contact_id=source.contact_id AND task.source_document_id=source.id AND task.task_type='delete'
         WHERE source.owner_id=$1 AND source.contact_id=$2 ORDER BY source.imported_at DESC,source.id`,[owner,contact])).rows};
       else if(url.pathname.endsWith('/relationship-overview')) {
-        const {readContactOverview,OverviewError}=await import('../memory/overview/contact-overview.ts');
+        const {readContactOverview,OverviewError}=await import('../memory/overview/service.ts');
         try {result={overview:await readContactOverview(client,owner,contact,internal)};}
         catch(error){if(error instanceof OverviewError)throw new ContactContextError(error.code,error.status);throw error;}
       }

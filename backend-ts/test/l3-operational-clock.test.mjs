@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 import {randomUUID} from 'node:crypto';
 import {readdir, readFile} from 'node:fs/promises';
-import {L3ProfileService} from '../src/memory/layered/l3-profile-service.ts';
+import {L3ProfileService} from '../src/memory/profiles/service.ts';
 import {createHostModelAccounting} from '../src/host/host-model-accounting.ts';
-import {renderProfile} from '../src/memory/layered/l3-profile-workspace.ts';
+import {renderProfile} from '../src/memory/profiles/workspace.ts';
 import {readReplyContactOverview, readReplyOwnerOverview} from '../src/reply/context/reply-context-overview.ts';
-import {scenarioDigest} from '../src/memory/layered/l2-scenario-workspace.ts';
+import {scenarioDigest} from '../src/memory/scenarios/workspace.ts';
 
 const budget = {
   max_memories: 20,

@@ -11,7 +11,7 @@ import {selectApplicablePreferences,validatePreferenceSnapshot} from '../../pref
 import {encodePreparedContext,decodePreparedContext,PreparedContextFormatError} from './reply-prepared-codec.ts';
 import {readContextMessages} from '../context/reply-context-read.ts';
 import {readContextMemories,memoryEvidence,type MemoryKind} from '../context/reply-context-memory.ts';
-import {canonicalJSON} from '../../memory/overview/contact-overview-evidence.ts';
+import {canonicalJSON} from '../../memory/overview/evidence/sources.ts';
 import {evidenceSources,generationDependencies} from './reply-assistant-erasure.ts';
 import {replyGenerationNavigationDependencies,restoreLegacyEmptyPreferences,isLegacyEmptyPreferences,type ReplyPreferenceSnapshot} from './reply-generation-guards.ts';
 import type {ReplyExploredContextValidator} from '../exploration/reply-exploration-guards.ts';

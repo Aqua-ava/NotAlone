@@ -10,7 +10,7 @@ import { HostStorage, HostStorageError } from '../src/platform/database/host-sto
 import { SkillLearningNotFound, normalizeProposal } from '../src/skills/skill-learning-contract.ts';
 import { SkillFiles } from '../src/skills/skill-files.ts';
 import { SkillLibrary } from '../src/skills/skill-library.ts';
-import { ExtractionTaskStore } from '../src/memory/extraction/extraction-task-store.ts';
+import { ExtractionTaskStore } from '../src/memory/extraction/tasks/store.ts';
 import { SkillLearningStore } from '../src/skills/skill-learning-store.ts';
 import { SkillReviewStore } from '../src/skills/skill-review-store.ts';
 import { SkillHistoryPolicyStore } from '../src/skills/skill-history-policy-store.ts';

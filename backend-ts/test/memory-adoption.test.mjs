@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createExtractionFixture} from './extraction-fixture.mjs';
-import {freezeExtractionSources} from '../src/memory/extraction/extraction-sources.ts';
-import {attachVerifiedSourceReceipt} from '../src/memory/extraction/extraction-evidence.ts';
-import {sha} from '../src/memory/overview/contact-overview-evidence.ts';
-import {MemoryAdoption} from '../src/memory/management/memory-adoption.ts';
-import {mutateMemory} from '../src/memory/management/memory-mutations.ts';
+import {freezeExtractionSources} from '../src/memory/extraction/sources.ts';
+import {attachVerifiedSourceReceipt} from '../src/memory/extraction/verification/evidence.ts';
+import {sha} from '../src/memory/overview/evidence/sources.ts';
+import {MemoryAdoption} from '../src/memory/adoption/engine.ts';
+import {mutateMemory} from '../src/memory/records/mutations.ts';
 
 async function setup(){
  const fixture=await createExtractionFixture(),c=fixture.client,owner=randomUUID(),contact=randomUUID(),other=randomUUID();

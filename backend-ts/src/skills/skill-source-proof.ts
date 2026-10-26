@@ -1,7 +1,7 @@
 /** 发布来源只读核验；既有证明保留原格式，不用当前资料补写旧证明。 */
 import {DatabaseError} from 'pg';
 import type {Client} from 'pg';
-import {captureSnapshot,validateFrozen,canonicalJSON,parseStoredJSON} from '../memory/overview/contact-overview-evidence.ts';
+import {captureSnapshot,validateFrozen,canonicalJSON,parseStoredJSON} from '../memory/overview/evidence/sources.ts';
 import {SkillPortError,skillDigest} from './skill-execution-view.ts';
 import type {SkillRow} from './skill-execution-view.ts';
 import {requireSkillDependencies} from './skill-source-dependencies.ts';

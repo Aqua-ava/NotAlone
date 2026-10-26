@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-cmdline';
 import {createServer} from 'node:http';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {installModelProvider} from '../src/platform/models/model-provider.ts';
-import {createExtractionModelCaller,ExtractionModelError,extractionUnconfirmedRequests,recordExtractionModelReceipt} from '../src/memory/extraction/extraction-model.ts';
+import {createExtractionModelCaller,ExtractionModelError,extractionUnconfirmedRequests,recordExtractionModelReceipt} from '../src/memory/extraction/model.ts';
 export const name='extraction-model-synthetic';export const inject=['llm','appReady'];
 export function apply(ctx:Context) {
  const providerOptions={connection:resolveAdapterOptions({baseURL:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL!,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous' as never};

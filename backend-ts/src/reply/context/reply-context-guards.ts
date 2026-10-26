@@ -1,6 +1,6 @@
 import type {Client} from 'pg';
 import type {ReplyStoreEvidence} from '../generation/reply-store.ts';
-import {canonicalJSON} from '../../memory/overview/contact-overview-evidence.ts';
+import {canonicalJSON} from '../../memory/overview/evidence/sources.ts';
 import {readContextMemories,memoryEvidence,pendingSelectionReason,type MemoryKind} from './reply-context-memory.ts';
 import {ReplyContextError,type ContextScope} from './reply-context-types.ts';
 /** 必须由实际writer在同一owner锁事务调用；状态、正文及当前语义投影逐字段比较。 */

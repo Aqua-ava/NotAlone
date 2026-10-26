@@ -10,7 +10,7 @@ import {
 import {
   buildDeepSeekStrictVerificationRequest,decodeDeepSeekStrictVerificationResponse,
   DEEPSEEK_STRICT_VERIFICATION_ENDPOINT,type DeepSeekStrictVerificationResponse,
-} from '../../memory/extraction/deepseek-strict-verification.ts';
+} from '../../memory/extraction/verification/deepseek-strict.ts';
 export interface ModelProviderCall {
   sessionId: string; attempt_id: string; permit_id: string;
   binding: MessagesBudgetBinding; profile: MessagesBudgetProfile;

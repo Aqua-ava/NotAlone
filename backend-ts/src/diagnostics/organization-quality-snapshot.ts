@@ -1,7 +1,7 @@
 /** 冻结来源及纠错范围；只读产品层，不创建第二套记忆算法或发布路径。 */
 import type {Client} from 'pg';
-import {managementInputs,managementState} from '../memory/layered/layered-memory-management-store.ts';
-import type {L2ScenarioMemory,L2ScenarioScope,L2ScenarioVersion} from '../memory/layered/l2-scenario-workspace.ts';
+import {managementInputs,managementState} from '../memory/records/documents/store.ts';
+import type {L2ScenarioMemory,L2ScenarioScope,L2ScenarioVersion} from '../memory/scenarios/workspace.ts';
 import {qualityConflict,qualityDigest,qualityInvalid,qualityJSON,qualitySpacedJSON,type QualityRow,type OrganizationQualityBudget} from './organization-quality-contract.ts';
 
 export function qualityMemory(entry:QualityRow):L2ScenarioMemory {

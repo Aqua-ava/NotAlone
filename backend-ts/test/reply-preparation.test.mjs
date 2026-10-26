@@ -45,7 +45,7 @@ test('prepare默认双概览且目录修订不一致不能降级继续',async t=
 });
 test('实际scenario Tool绑定冻结目录、同事务资格并将回执写入最终快照',async t=>{
  const x=await setup(t,true),memory=randomUUID(),batch=randomUUID(),version=randomUUID(),scenario=randomUUID();
- const {readReplyOwnerOverview}=await import('../src/reply/context/reply-context-overview.ts'),{digest}=await import('../src/memory/overview/contact-overview-evidence.ts');
+ const {readReplyOwnerOverview}=await import('../src/reply/context/reply-context-overview.ts'),{digest}=await import('../src/memory/overview/evidence/sources.ts');
  await x.f.client.query("INSERT INTO owner_memory(id,owner_id,text_content,category,topic,source_ids,adoption_method) VALUES($1,$2,'清淡饮食','preference','other',$3,'manual')",[memory,x.owner,[x.owner]]);
  const entry=(await readReplyOwnerOverview(x.f.client,x.owner,true)).entries[0],manifest=[{...entry.dependency_manifest,organization_timing_sha256:digest(entry.memory.timing)}];
  await x.f.client.query("UPDATE layered_memory_state SET enabled=true,status='ready',settings_generation=1,organization_generation=1 WHERE owner_id=$1 AND contact_id IS NULL",[x.owner]);

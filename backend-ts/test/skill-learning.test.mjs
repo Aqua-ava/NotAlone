@@ -5,7 +5,7 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {HostStorage} from '../src/platform/database/host-storage.ts';
-import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/tasks/store.ts';
 import {SkillFiles} from '../src/skills/skill-files.ts';
 import {codepointLength,finishBatch,learningInputText,normalizeProposal} from '../src/skills/skill-learning-contract.ts';
 import {SkillLearningStore} from '../src/skills/skill-learning-store.ts';
@@ -18,7 +18,7 @@ import {SkillLearningHttp} from '../src/skills/skill-learning-http.ts';
 import {prepareReviewContext} from '../src/skills/skill-review-service.ts';
 import {captureReviewSources,reviewSourcesCurrent} from '../src/skills/skill-review-sources.ts';
 import {readReplyContactOverview,readReplyOwnerOverview} from '../src/reply/context/reply-context-overview.ts';
-import {digest} from '../src/memory/overview/contact-overview-evidence.ts';
+import {digest} from '../src/memory/overview/evidence/sources.ts';
 import {captureSkillGeneration,requireReviewSources} from '../src/skills/skill-source-proof.ts';
 import {CONTACT_LAYERED_BUDGET,OWNER_LAYERED_BUDGET,requireLayeredMaterial,selectLayeredMaterial,
   validateLayeredSnapshot} from '../src/reply/context/reply-context-layered.ts';

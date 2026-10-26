@@ -1,10 +1,10 @@
 /** 回复双概览在调用方同一事务读取；只返回来源可核验的导航。 */
 import type {Client} from 'pg';
-import {readContactOverview} from '../../memory/overview/contact-overview.ts';
+import {readContactOverview} from '../../memory/overview/service.ts';
 import {skillOwnerLineage} from '../../skills/skill-source-owner-lineage.ts';
-import {projectOverviewMemory,overviewRecordDigest} from '../../memory/overview/contact-overview-memory.ts';
-import {projectEvolution,projectVersionEvidence} from '../../memory/overview/contact-overview-versions.ts';
-import {digest,UnavailableEvidence,overviewReferences,readLineage} from '../../memory/overview/contact-overview-evidence.ts';
+import {projectOverviewMemory,overviewRecordDigest} from '../../memory/overview/projection/memory.ts';
+import {projectEvolution,projectVersionEvidence} from '../../memory/overview/projection/versions.ts';
+import {digest,UnavailableEvidence,overviewReferences,readLineage} from '../../memory/overview/evidence/sources.ts';
 import {projectReplyMemoryMetadata,ownerMemorySourceDependencies} from './reply-context-memory.ts';
 import {ReplyContextError,type ContextScope,type ContextMetadata} from './reply-context-types.ts';
 export interface ReplyOverviewSnapshot {

@@ -12,17 +12,17 @@ import {ReplyError} from '../reply/generation/reply-contract.ts';
 import {ReplyStoreError} from '../reply/generation/reply-store.ts';
 import {ExplorationService} from '../reply/exploration/exploration-service.ts';
 import {createExplorationHttp} from '../reply/exploration/exploration-http.ts';
-import {createExtractionModelCaller,extractionUnconfirmedRequests,type ExtractionModelInput,type ExtractionPermitEndpoint} from '../memory/extraction/extraction-model.ts';
-import {ExtractionBatchService,ExtractionBatchError,type ExtractionRetryPolicy} from '../memory/extraction/extraction-batch-service.ts';
-import {createExtractionBatchHttp} from '../memory/extraction/extraction-batch-http.ts';
-import {createExtractionAdoptionHost,runExtractionWithAdoption} from '../memory/extraction/extraction-adoption-host.ts';
-import {ExtractionTaskStore} from '../memory/extraction/extraction-task-store.ts';
-import {ExtractionTaskRunner} from '../memory/extraction/extraction-task-runner.ts';
-import {ExtractionWorker} from '../memory/extraction/extraction-worker.ts';
-import {ContactMemoryIndexRunner} from '../memory/overview/contact-memory-index.ts';
+import {createExtractionModelCaller,extractionUnconfirmedRequests,type ExtractionModelInput,type ExtractionPermitEndpoint} from '../memory/extraction/model.ts';
+import {ExtractionBatchService,ExtractionBatchError,type ExtractionRetryPolicy} from '../memory/extraction/service.ts';
+import {createExtractionBatchHttp} from '../memory/extraction/http.ts';
+import {createExtractionAdoptionHost,runExtractionWithAdoption} from '../memory/adoption/host.ts';
+import {ExtractionTaskStore} from '../memory/extraction/tasks/store.ts';
+import {ExtractionTaskRunner} from '../memory/extraction/tasks/runner.ts';
+import {ExtractionWorker} from '../memory/extraction/tasks/worker.ts';
+import {ContactMemoryIndexRunner} from '../memory/overview/catalog.ts';
 import {ExtractionWorkerTaskControl,type TaskControlPort} from '../tasks/task-control.ts';
 import {createLocalEmbeddingLifecycle} from '../platform/models/local-embedding-lifecycle.ts';
-import {createExtractionPolicyVersion} from '../memory/extraction/extraction-policy-version.ts';
+import {createExtractionPolicyVersion} from '../memory/extraction/policy-version.ts';
 import {AssistantDiscussionError,AssistantDiscussionService} from '../reply/discussion/assistant-discussion-service.ts';
 import {createAssistantDiscussionHttp} from '../reply/discussion/assistant-discussion-http.ts';
 import {createPureTsPublicApi} from './pure-ts-public-api.ts';
@@ -31,15 +31,15 @@ import {resolveRequestBinding,withPublicReplyScope,withoutPublicReplyScope} from
 import {
   createL2ScenarioHost,
   type L2ScenarioHostCandidate,
-} from '../memory/layered/l2-scenario-host.ts';
-import {createL2ScenarioHttp} from '../memory/layered/l2-scenario-http.ts';
-import {createL2ScenarioSourceValidator} from '../memory/layered/l2-scenario-source-validation.ts';
-import {createL2ScenarioWorkerRunner} from '../memory/layered/l2-scenario-worker.ts';
+} from '../memory/scenarios/host.ts';
+import {createL2ScenarioHttp} from '../memory/scenarios/http.ts';
+import {createL2ScenarioSourceValidator} from '../memory/scenarios/source-validation.ts';
+import {createL2ScenarioWorkerRunner} from '../memory/scenarios/worker.ts';
 import {
   L2ScenarioConflict,
   type L2ScenarioQualityReader,
-} from '../memory/layered/l2-scenario-service.ts';
-import {L2ScenarioError,DEFAULT_L2_SCENARIO_BUDGET,type L2ScenarioBudget} from '../memory/layered/l2-scenario-workspace.ts';
+} from '../memory/scenarios/service.ts';
+import {L2ScenarioError,DEFAULT_L2_SCENARIO_BUDGET,type L2ScenarioBudget} from '../memory/scenarios/workspace.ts';
 import {createOrganizationQualityApi} from '../diagnostics/organization-quality-api.ts';
 import {createOrganizationQualityContract} from '../diagnostics/organization-quality-contract.ts';
 import {createOrganizationQualityRuntime,type OrganizationQualityRuntime} from '../diagnostics/organization-quality-runtime.ts';

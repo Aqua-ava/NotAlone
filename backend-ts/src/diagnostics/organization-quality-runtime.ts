@@ -6,8 +6,8 @@ import {qualityInputSourceRef,type OrganizationQualitySource,type OrganizationQu
 import type {OrganizationQualityPhase,QualityRow} from './organization-quality-contract.ts';
 import {OrganizationQualityError,qualityKeys} from './organization-quality-contract.ts';
 import {L2ScenarioDocumentWorkspace,L2ScenarioError,L2ScenarioVerificationError,runScenarioDocumentAgent,validateScenarioDocument,
-  verifyScenarioProposal,type L2ScenarioDraft,type L2ScenarioMemory,type L2ScenarioVersion,type ScenarioDocumentCall,type ScenarioDocumentCallPort} from '../memory/layered/l2-scenario-workspace.ts';
-import {L3ProfileWorkspace,filterProfileProposal,runProfileDocumentAgent,validateProfile,verifyProfileProposal} from '../memory/layered/l3-profile-workspace.ts';
+  verifyScenarioProposal,type L2ScenarioDraft,type L2ScenarioMemory,type L2ScenarioVersion,type ScenarioDocumentCall,type ScenarioDocumentCallPort} from '../memory/scenarios/workspace.ts';
+import {L3ProfileWorkspace,filterProfileProposal,runProfileDocumentAgent,validateProfile,verifyProfileProposal} from '../memory/profiles/workspace.ts';
 import {qualityModelMemories,qualityModelScenarios} from './organization-quality-snapshot.ts';
 import {qualityModelRequestId} from './quality-model-authorization.ts';
 

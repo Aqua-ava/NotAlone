@@ -1,8 +1,8 @@
 /** 单次结构化学习提案；只走统一后台模型许可、预算和实际调用台账。 */
 import {randomUUID} from 'node:crypto';
 import type {ContentBlock} from '@deepseek-ai/dsh-llm';
-import type {ExtractionModelInput} from '../memory/extraction/extraction-model.ts';
-import type {ExtractionClaim} from '../memory/extraction/extraction-task-store.ts';
+import type {ExtractionModelInput} from '../memory/extraction/model.ts';
+import type {ExtractionClaim} from '../memory/extraction/tasks/store.ts';
 import {modelTaskRequestId} from '../host/host-model-accounting.ts';
 import {
   MAX_LEARNING_INPUT_CHARS,MAX_LEARNING_MATERIALS,SkillLearningError,SkillLearningInvalid,

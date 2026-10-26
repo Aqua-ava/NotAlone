@@ -1,8 +1,8 @@
 /** 学习授权、批次、待审草稿的权威 PostgreSQL 状态；每次保存复验原任务围栏。 */
 import type pg from 'pg';
 import {randomUUID} from 'node:crypto';
-import {canonicalJSON,validateFrozen} from '../memory/overview/contact-overview-evidence.ts';
-import type {ExtractionClaim,ExtractionTaskStore} from '../memory/extraction/extraction-task-store.ts';
+import {canonicalJSON,validateFrozen} from '../memory/overview/evidence/sources.ts';
+import type {ExtractionClaim,ExtractionTaskStore} from '../memory/extraction/tasks/store.ts';
 import type {SkillFiles} from './skill-files.ts';
 import {
   SkillLearningInvalid,SkillLearningNotFound,normalizeProposal,

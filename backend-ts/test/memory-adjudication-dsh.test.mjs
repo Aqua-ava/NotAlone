@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {DshMemoryAdjudicationRuntime} from '../src/memory/management/memory-adjudication-dsh.ts';
+import {DshMemoryAdjudicationRuntime} from '../src/memory/adoption/adjudication-dsh.ts';
 
 const scope={owner_id:randomUUID(),contact_id:randomUUID()},memory=randomUUID(),candidateMessage=randomUUID(),priorMessage=randomUUID();
 const item={candidate_index:0,

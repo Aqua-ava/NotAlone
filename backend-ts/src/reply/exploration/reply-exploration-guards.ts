@@ -11,7 +11,7 @@ import {requireCurrentReplyMemory} from '../context/reply-context-guards.ts';
 import {SkillFiles} from '../../skills/skill-files.ts';
 import {createReplySkillGuards} from '../generation/reply-skill-guards.ts';
 import {requireExplorationEvidence} from './reply-exploration-evidence.ts';
-import {canonicalJSON} from '../../memory/overview/contact-overview-evidence.ts';
+import {canonicalJSON} from '../../memory/overview/evidence/sources.ts';
 type Row=Record<string,any>;
 export interface ReplyExplorationOptions {scope:VerifiedReplyScope;input:ReplyRequestInput;skillsRoot:string;authenticatedContinuation?:AuthenticatedContinuation}
 export interface ReplyExploredContextValidator {

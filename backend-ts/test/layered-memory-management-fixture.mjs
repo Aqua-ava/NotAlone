@@ -3,11 +3,11 @@ import pg from 'pg';
 import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {prepareDatabaseSchema} from '../src/platform/database/schema-prepare.ts';
-import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
-import {createLayeredMemoryManagement} from '../src/memory/layered/layered-memory-management.ts';
-import {L2ScenarioService} from '../src/memory/layered/l2-scenario-service.ts';
-import {DEFAULT_L2_SCENARIO_BUDGET} from '../src/memory/layered/l2-scenario-workspace.ts';
-import {renderProfile} from '../src/memory/layered/l3-profile-workspace.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/tasks/store.ts';
+import {createLayeredMemoryManagement} from '../src/memory/records/documents/service.ts';
+import {L2ScenarioService} from '../src/memory/scenarios/service.ts';
+import {DEFAULT_L2_SCENARIO_BUDGET} from '../src/memory/scenarios/workspace.ts';
+import {renderProfile} from '../src/memory/profiles/workspace.ts';
 
 export async function managementFixture(t, options = {}) {
   const name = `notalone_layered_${randomUUID().replaceAll('-', '')}_test`;

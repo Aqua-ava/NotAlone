@@ -9,7 +9,7 @@ import {
   validateIncrementalProfile,
   validateProfile,
   verifyProfileProposal,
-} from '../src/memory/layered/l3-profile-workspace.ts';
+} from '../src/memory/profiles/workspace.ts';
 
 const memory = {
   memory_id: randomUUID(),

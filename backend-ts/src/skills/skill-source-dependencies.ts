@@ -1,6 +1,6 @@
 /** 沿历史实际身份展开全部来源；仅查询，不生成学习材料。 */
 import type {Client} from 'pg';
-import {activeRef} from '../memory/overview/contact-overview-evidence.ts';
+import {activeRef} from '../memory/overview/evidence/sources.ts';
 import {SkillPortError} from './skill-execution-view.ts';
 import {captureParentPublications} from './skill-source-proof.ts';
 import type {Visit} from './skill-source-proof.ts';

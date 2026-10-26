@@ -14,4 +14,4 @@ L1 提取、批量裁决、L2 场景整理和 L3 长期背景生成直接归入�
 - 生成仅依据同联系人资料；不补造心理动机或代替用户决策。分类、主体、时间、来源版本、场景文件格式和显式完成协议保持约束。
 - 真实验收继续限定用户本轮指定且唯一核验的联系人；费用按已确认范围暂豁免。合成检查、模型质量和实际桌面验收分别报告。
 
-提取实现在 `memory/extraction/`，裁决实现在 `memory/management/`，场景与长期背景实现在 `memory/layered/`。实现变化不表示历史失败、未知回执或真实记忆质量已解决。
+提取实现在 `memory/extraction/`，裁决与采纳实现在 `memory/adoption/`，已存资料管理位于 `memory/records/`，场景与长期背景分别位于 `memory/scenarios/` 和 `memory/profiles/`，概览与目录位于 `memory/overview/`。阅读入口见[记忆模块](../../backend-ts/src/memory/README.md)。实现变化不表示历史失败、未知回执或真实记忆质量已解决。

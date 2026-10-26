@@ -1,6 +1,6 @@
 import type {Client} from 'pg';
-import {activeRef,digest} from '../../memory/overview/contact-overview-evidence.ts';
-import {pythonISO} from '../../memory/overview/contact-overview-time.ts';
+import {activeRef,digest} from '../../memory/overview/evidence/sources.ts';
+import {pythonISO} from '../../memory/overview/projection/time.ts';
 import {blankTiming,type ContextScope,type ReplyContextEvidence} from './reply-context-types.ts';
 export async function readContextMessages(client:Client,scope:ContextScope,options:{ids?:string[]|null;target?:string;limit?:number}={}):Promise<ReplyContextEvidence[]>{
  const rows=(await client.query(`SELECT m.id,m.owner_id,m.contact_id,m.speaker,m.occurred_at::text,

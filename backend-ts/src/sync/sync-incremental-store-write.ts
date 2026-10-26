@@ -7,7 +7,7 @@ import type pg from 'pg';
 import {HostStorageError} from '../platform/database/host-storage.ts';
 import {parseJson,stringifyJson} from '../host/host-json.ts';
 import type {NormalizedIncrementalMessage,IncrementalProcessingRecord} from './sync-incremental-normalize.ts';
-import {recordExtractionObservation} from '../memory/extraction/extraction-task-store-schedule.ts';
+import {recordExtractionObservation} from '../memory/extraction/tasks/store-schedule.ts';
 type Receipt=Record<string,unknown>;
 export async function saveIncrementalMessages(c:pg.Client,owner:string,contact:string,observation:string,messages:readonly NormalizedIncrementalMessage[]){
   const ids:string[]=[],created:(string|null)[]=[],receipts=new Map<string,Receipt>();

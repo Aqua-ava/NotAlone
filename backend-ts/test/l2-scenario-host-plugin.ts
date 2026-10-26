@@ -5,7 +5,7 @@ import {createServer} from 'node:http';
 import pg from 'pg';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {installModelProvider} from '../src/platform/models/model-provider.ts';
-import {createL2ScenarioHost} from '../src/memory/layered/l2-scenario-host.ts';
+import {createL2ScenarioHost} from '../src/memory/scenarios/host.ts';
 
 export const name = 'l2-scenario-synthetic-host';
 export const inject = ['llm', 'appReady'];

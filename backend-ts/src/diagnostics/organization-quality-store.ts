@@ -1,8 +1,8 @@
 /** 质量输入、审核与运行复用 079 原表和 owner 短事务，不发布产品记忆。 */
 import type {Client} from 'pg';
 import {randomUUID} from 'node:crypto';
-import type {ManagementTransaction} from '../memory/layered/layered-memory-management-store.ts';
-import {scenarioTopicId,validateScenarioDocument,type L2ScenarioDraft,type L2ScenarioMemory,type L2ScenarioScope,type L2ScenarioVersion} from '../memory/layered/l2-scenario-workspace.ts';
+import type {ManagementTransaction} from '../memory/records/documents/store.ts';
+import {scenarioTopicId,validateScenarioDocument,type L2ScenarioDraft,type L2ScenarioMemory,type L2ScenarioScope,type L2ScenarioVersion} from '../memory/scenarios/workspace.ts';
 import {createOrganizationQualityContract,FACT_PREPARATION_DATASET_VERSION,qualityConflict,qualityDigest,qualityInvalid,
   qualityKeys,qualityMissing,qualityJSON,QUALITY_UUID,OrganizationQualityError,type OrganizationQualityContract,type QualityRow} from './organization-quality-contract.ts';
 import {checkQualityCase,qualityBoundedInput,qualityCurrentScenarios,qualityFactCorrections,qualityMemory,qualityModelMemories,

@@ -4,7 +4,7 @@ import pg from 'pg';
 import {randomUUID} from 'node:crypto';
 import {readdir,readFile} from 'node:fs/promises';
 import {createHostModelAccounting,modelTaskRequestId} from '../src/host/host-model-accounting.ts';
-import {adoptionPurposeRequestId} from '../src/memory/extraction/extraction-adoption-service.ts';
+import {adoptionPurposeRequestId} from '../src/memory/adoption/service.ts';
 async function fixture(t){
  const db=`notalone_accounting_${randomUUID().replaceAll('-','')}_test`,admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();let c;
  t.after(async()=>{await c?.end();await admin.query(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`);await admin.end();});

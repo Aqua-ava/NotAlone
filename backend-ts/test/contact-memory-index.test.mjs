@@ -8,9 +8,9 @@ import {
   ContactMemoryIndexError,
   ContactMemoryIndexRunner,
   PostgresContactMemoryIndexRepository,
-} from '../src/memory/overview/contact-memory-index.ts';
-import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
-import {ExtractionWorker} from '../src/memory/extraction/extraction-worker.ts';
+} from '../src/memory/overview/catalog.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/tasks/store.ts';
+import {ExtractionWorker} from '../src/memory/extraction/tasks/worker.ts';
 
 async function createIndexFixture(t){
   const fixture=await createExtractionFixture();

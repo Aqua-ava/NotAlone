@@ -8,7 +8,7 @@ import {randomUUID} from 'node:crypto';
 import {SkillFiles,packageManifest,type SkillVersionFiles,type SkillMethod} from '../../skills/skill-files.ts';
 import {canonicalRoot,checkNoLinks,readBounded,readPackage,serializeSkillDocument,sha256,validatePackage,type SkillPackage} from '../../skills/skill-package.ts';
 import {resolveSkillsRoot} from '../../skills/skills-root.ts';
-import {canonicalJSON} from '../../memory/overview/contact-overview-evidence.ts';
+import {canonicalJSON} from '../../memory/overview/evidence/sources.ts';
 
 type Row=Record<string,any>;
 const fail=():never=>{throw new Error('skill_content_upgrade_required');};

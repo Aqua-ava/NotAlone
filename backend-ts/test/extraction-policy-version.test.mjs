@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createExtractionPolicyVersion,validateExtractionRuntimeConfig} from '../src/memory/extraction/extraction-policy-version.ts';
+import {createExtractionPolicyVersion,validateExtractionRuntimeConfig} from '../src/memory/extraction/policy-version.ts';
 
 test('显式五键策略和旧null/v1同形校验，不借新字段升级旧任务', () => {
   for (const value of [null,{version:1,mode:'legacy',rule_set_sha256:null},

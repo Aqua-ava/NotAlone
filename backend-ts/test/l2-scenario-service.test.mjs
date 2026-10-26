@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
-import {L2ScenarioService} from '../src/memory/layered/l2-scenario-service.ts';
-import {completeL2ScenarioWorkerStep} from '../src/memory/layered/l2-scenario-worker.ts';
+import {L2ScenarioService} from '../src/memory/scenarios/service.ts';
+import {completeL2ScenarioWorkerStep} from '../src/memory/scenarios/worker.ts';
 import {readReplyContactOverview} from '../src/reply/context/reply-context-overview.ts';
 import {captureLayeredSnapshot,validateLayeredSnapshot} from '../src/reply/context/reply-context-layered.ts';
-import {renderProfile} from '../src/memory/layered/l3-profile-workspace.ts';
+import {renderProfile} from '../src/memory/profiles/workspace.ts';
 
 const budget = {
   max_memories: 20,

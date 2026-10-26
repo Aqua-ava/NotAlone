@@ -1,8 +1,8 @@
 /** 原 Python v2/schema15 包装格式；外部 command 只由已验证请求提供。 */
 import {preparedSchema} from './reply-prepared-schema.ts';
-import {normalizeEvent,normalizeConditions,normalizeEvolution} from '../../memory/overview/contact-overview-metadata.ts';
+import {normalizeEvent,normalizeConditions,normalizeEvolution} from '../../memory/overview/projection/metadata.ts';
 import {allowsHistory} from '../context/reply-context.ts';
-import {epochMicros} from '../../memory/overview/contact-overview-time.ts';
+import {epochMicros} from '../../memory/overview/projection/time.ts';
 import type {ReplyRequestInput} from './reply-contract.ts';
 import {stringifyJson} from '../../host/host-json.ts';
 type Row=Record<string,any>;

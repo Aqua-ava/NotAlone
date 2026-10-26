@@ -12,11 +12,11 @@ import path from 'node:path';
 import { HostStorage, HostStorageError } from './platform/database/host-storage.ts';
 import { ContactContext, ContactContextError, contactContextRoute } from './contacts/contact-context.ts';
 import { ContactHandoff } from './contacts/contact-handoff.ts';
-import { MemoryService, memoryRoute } from './memory/management/memory-service.ts';
-import { MemoryError } from './memory/management/memory-errors.ts';
+import { MemoryService, memoryRoute } from './memory/records/service.ts';
+import { MemoryError } from './memory/records/errors.ts';
 import { PreferenceService, PreferenceError, preferenceRoute } from './preferences/preference-service.ts';
-import { MemoryManagementHandoff } from './memory/management/memory-management-handoff.ts';
-import { parseMemoryManagementJSON } from './memory/management/memory-management-json.ts';
+import { MemoryManagementHandoff } from './memory/records/handoff.ts';
+import { parseMemoryManagementJSON } from './memory/records/json.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from './sync/wechat-http-body.ts';
 import { parseJson, stringifyJson } from './host/host-json.ts';
 import { createWechatScopeApi, isWechatScopeRoute, wechatScopeBodyLimit } from './sync/wechat-scope-api.ts';
@@ -26,8 +26,8 @@ import { createSyncIncrementalApi } from './sync/sync-incremental-api.ts';
 import {resolveHistoryRuntime} from './imports/history-runtime.ts';
 import {startHostModelRuntime} from './host/host-model-runtime.ts';
 import {usageSummary} from './diagnostics/usage-summary.ts';
-import {ExtractionTaskStore} from './memory/extraction/extraction-task-store.ts';
-import {ExtractionProgressApi} from './memory/extraction/extraction-progress-http.ts';
+import {ExtractionTaskStore} from './memory/extraction/tasks/store.ts';
+import {ExtractionProgressApi} from './memory/extraction/tasks/progress-http.ts';
 import {SourceProcessingTraceStore} from './diagnostics/source-processing-trace.ts';
 import {SourceProcessingTraceApi} from './diagnostics/source-processing-trace-http.ts';
 import {HistoryImportApi} from './imports/history-import-api.ts';
@@ -41,7 +41,7 @@ import {PureTsTaskEvents} from './host/pure-ts-task-events.ts';
 import {PureTsFollowSmoke} from './host/pure-ts-follow-smoke.ts';
 import {PureTsMaintenance} from './host/pure-ts-maintenance.ts';
 import {acquireManagedDatabaseLease} from './platform/database/managed-database-lifetime.ts';
-import {createLayeredMemoryManagement} from './memory/layered/layered-memory-management.ts';
+import {createLayeredMemoryManagement} from './memory/records/documents/service.ts';
 import {
  UnavailableTaskControl,
  type TaskControlPort,type TaskScope,

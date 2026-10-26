@@ -1,6 +1,6 @@
 # 后台源码入口
 
-业务文件按职责归组，文件名和导出名称保持；测试仍在 [`../test/`](../test/)。
+业务文件按职责归组，目录内文件名省略重复的业务前缀；测试仍在 [`../test/`](../test/)。记忆模块的入口和内部划分见 [memory/README.md](memory/README.md)。
 
 ## 启动与装配
 
@@ -13,9 +13,11 @@
 | 联系人、身份与绑定 | [contacts/](contacts/) |
 | 历史导入与格式解析 | [imports/](imports/) |
 | 记忆提取与来源核验 | [memory/extraction/](memory/extraction/) |
-| 记忆查看、修改、采纳与删除 | [memory/management/](memory/management/) |
+| 记忆裁决、去重与自动采纳 | [memory/adoption/](memory/adoption/) |
+| 已存记忆与生成资料的查询、修改和删除 | [memory/records/](memory/records/) |
 | 概览与记忆目录 | [memory/overview/](memory/overview/) |
-| L2 场景、L3 背景与分层资料管理 | [memory/layered/](memory/layered/) |
+| L2 场景整理 | [memory/scenarios/](memory/scenarios/) |
+| L3 长期背景生成 | [memory/profiles/](memory/profiles/) |
 | 检索与排序 | [retrieval/](retrieval/) |
 | 回复上下文、生成、讨论与探索 | [reply/](reply/) |
 | Skill 文件、执行、学习与审核 | [skills/](skills/) |

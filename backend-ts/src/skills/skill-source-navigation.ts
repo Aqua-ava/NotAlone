@@ -1,6 +1,6 @@
 /** 审核导航只沿原记忆锚点核验；记录摘要沿 Python 的字段与空格编码。 */
 import type {Client} from 'pg';
-import {canonicalJSON,parseStoredJSON,readLineage,activeRef} from '../memory/overview/contact-overview-evidence.ts';
+import {canonicalJSON,parseStoredJSON,readLineage,activeRef} from '../memory/overview/evidence/sources.ts';
 import {SkillPortError,skillDigest} from './skill-execution-view.ts';
 import {skillOwnerLineage} from './skill-source-owner-lineage.ts';
 import type {SkillRow} from './skill-execution-view.ts';

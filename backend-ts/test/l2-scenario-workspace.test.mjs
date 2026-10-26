@@ -7,7 +7,7 @@ import {
   runScenarioDocumentAgent,
   validateScenarioDocument,
   verifyScenarioProposal,
-} from '../src/memory/layered/l2-scenario-workspace.ts';
+} from '../src/memory/scenarios/workspace.ts';
 
 const budget = {
   max_memories: 12,

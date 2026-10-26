@@ -1,6 +1,6 @@
 /** 任务控制只提交已核验的固定动作，不代理任意URL或创建新任务。 */
-import type {ExtractionTaskStore} from '../memory/extraction/extraction-task-store.ts';
-import type {ExtractionWorker} from '../memory/extraction/extraction-worker.ts';
+import type {ExtractionTaskStore} from '../memory/extraction/tasks/store.ts';
+import type {ExtractionWorker} from '../memory/extraction/tasks/worker.ts';
 
 export interface TaskScope {ownerId:string;contactId:string|null}
 export interface TaskControlPort {

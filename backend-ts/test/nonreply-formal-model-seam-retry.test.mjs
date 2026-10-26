@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {createExtractionFixture} from './extraction-fixture.mjs';
-import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
-import {ExtractionTaskRunner} from '../src/memory/extraction/extraction-task-runner.ts';
-import {ExtractionBatchService} from '../src/memory/extraction/extraction-batch-service.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/tasks/store.ts';
+import {ExtractionTaskRunner} from '../src/memory/extraction/tasks/runner.ts';
+import {ExtractionBatchService} from '../src/memory/extraction/service.ts';
 
 async function observeRecovery(policy){
   const fixture=await createExtractionFixture(),c=fixture.client,controller=new AbortController();let pool;

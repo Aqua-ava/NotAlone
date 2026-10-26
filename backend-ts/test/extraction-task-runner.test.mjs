@@ -4,12 +4,12 @@ import {createHash,randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import pg from 'pg';
 import {createExtractionFixture} from './extraction-fixture.mjs';
-import {ExtractionAdoptionService} from '../src/memory/extraction/extraction-adoption-service.ts';
-import {ExtractionBatchService} from '../src/memory/extraction/extraction-batch-service.ts';
-import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
-import {ExtractionTaskRunner} from '../src/memory/extraction/extraction-task-runner.ts';
-import {ExtractionAdoptionError} from '../src/memory/extraction/extraction-adoption-service.ts';
-import {ExtractionWorker} from '../src/memory/extraction/extraction-worker.ts';
+import {ExtractionAdoptionService} from '../src/memory/adoption/service.ts';
+import {ExtractionBatchService} from '../src/memory/extraction/service.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/tasks/store.ts';
+import {ExtractionTaskRunner} from '../src/memory/extraction/tasks/runner.ts';
+import {ExtractionAdoptionError} from '../src/memory/adoption/service.ts';
+import {ExtractionWorker} from '../src/memory/extraction/tasks/worker.ts';
 import {EMBEDDING_MODEL,EMBEDDING_REVISION} from '../src/retrieval/retrieval-embedding.ts';
 
 async function waitFor(check,timeoutMs=5000){

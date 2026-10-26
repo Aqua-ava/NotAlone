@@ -1,10 +1,10 @@
-import {protectCandidate} from '../../memory/management/memory-mutations-protection.ts';
+import {protectCandidate} from '../../memory/records/mutations/protection.ts';
 import type {Client} from 'pg';
-import {activeRef,canonicalJSON,digest,decisionAvailable,validateFrozen,captureSnapshot} from '../../memory/overview/contact-overview-evidence.ts';
-import {projectTiming,pythonISO,epochMicros} from '../../memory/overview/contact-overview-time.ts';
-import {normalizeEvent,normalizeConditions} from '../../memory/overview/contact-overview-metadata.ts';
-import {projectEvolution} from '../../memory/overview/contact-overview-versions.ts';
-import {dimensionSourcesCurrent,candidateDigest} from '../../memory/overview/contact-overview-dimensions.ts';
+import {activeRef,canonicalJSON,digest,decisionAvailable,validateFrozen,captureSnapshot} from '../../memory/overview/evidence/sources.ts';
+import {projectTiming,pythonISO,epochMicros} from '../../memory/overview/projection/time.ts';
+import {normalizeEvent,normalizeConditions} from '../../memory/overview/projection/metadata.ts';
+import {projectEvolution} from '../../memory/overview/projection/versions.ts';
+import {dimensionSourcesCurrent,candidateDigest} from '../../memory/overview/evidence/dimensions.ts';
 import {recallMemories,mergeMemoryRecalls} from '../../retrieval/retrieval-ranking.ts';
 import {ReplyContextError,PENDING_REASON,HISTORICAL_REASON,type ContextScope,type ContextMetadata,type ReplyContextEvidence} from './reply-context-types.ts';
 type Row=ContextMetadata;

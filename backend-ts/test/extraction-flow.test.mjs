@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runExtractionFlow} from '../src/memory/extraction/extraction-flow.ts';
-import {canonicalJSON} from '../src/memory/overview/contact-overview-evidence.ts';
+import {runExtractionFlow} from '../src/memory/extraction/flow.ts';
+import {canonicalJSON} from '../src/memory/overview/evidence/sources.ts';
 const owner='11111111-1111-4111-8111-111111111111',contact='22222222-2222-4222-8222-222222222222',message='33333333-3333-4333-8333-333333333333';
 const window={owner_id:owner,contact_id:contact,messages:[{message_id:message,text:'有事爱直接打电话',sender:'contact',occurred_at:'2024-02-01T00:00:00Z',text_representation:'text'}],target_message_ids:[message]};
 const fact={text:'联系人有事爱直接打电话',category:'preference',subject:'contact',topic:'other',source_message_ids:[message],confidence:0.9,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],interpretation_reason:'原话明确表达偏好'};

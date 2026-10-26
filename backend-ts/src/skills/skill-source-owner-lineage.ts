@@ -1,7 +1,7 @@
 /** 本人记忆沿原SELF及手录根复验，供Skill来源使用。 */
 import type {Client} from 'pg';
-import {activeRef,UnavailableEvidence,parseStoredJSON,decisionAvailable,validateFrozen,documentsAvailable,captureSnapshot,digest} from '../memory/overview/contact-overview-evidence.ts';
-import type {Evidence} from '../memory/overview/contact-overview-evidence.ts';
+import {activeRef,UnavailableEvidence,parseStoredJSON,decisionAvailable,validateFrozen,documentsAvailable,captureSnapshot,digest} from '../memory/overview/evidence/sources.ts';
+import type {Evidence} from '../memory/overview/evidence/sources.ts';
 export async function skillOwnerLineage(client: Client, owner: string, memory: Evidence): Promise<Evidence> {
   const contact=null;
   const identifiers: string[] = memory.source_ids.filter((id:string)=>id!==owner);

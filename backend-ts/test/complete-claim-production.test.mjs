@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {createExtractionFixture} from './extraction-fixture.mjs';
-import {ExtractionAdoptionService} from '../src/memory/extraction/extraction-adoption-service.ts';
-import {ExtractionBatchService} from '../src/memory/extraction/extraction-batch-service.ts';
-import {ExtractionTaskStore} from '../src/memory/extraction/extraction-task-store.ts';
-import {ExtractionTaskRunner} from '../src/memory/extraction/extraction-task-runner.ts';
-import {createExtractionPolicyVersion} from '../src/memory/extraction/extraction-policy-version.ts';
+import {ExtractionAdoptionService} from '../src/memory/adoption/service.ts';
+import {ExtractionBatchService} from '../src/memory/extraction/service.ts';
+import {ExtractionTaskStore} from '../src/memory/extraction/tasks/store.ts';
+import {ExtractionTaskRunner} from '../src/memory/extraction/tasks/runner.ts';
+import {createExtractionPolicyVersion} from '../src/memory/extraction/policy-version.ts';
 import {modelTaskRequestId} from '../src/host/host-model-accounting.ts';
 import {EMBEDDING_MODEL,EMBEDDING_REVISION} from '../src/retrieval/retrieval-embedding.ts';
 

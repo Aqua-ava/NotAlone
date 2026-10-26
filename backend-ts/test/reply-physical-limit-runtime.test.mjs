@@ -6,7 +6,7 @@ import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-
 import {normalizeReplyInput,parseReplyRequest} from '../src/reply/generation/reply-contract.ts';
 import {decodePreparedContext} from '../src/reply/generation/reply-prepared-codec.ts';
 import {readReplyOwnerOverview} from '../src/reply/context/reply-context-overview.ts';
-import {digest} from '../src/memory/overview/contact-overview-evidence.ts';
+import {digest} from '../src/memory/overview/evidence/sources.ts';
 
 async function fixture(t){
  const f=await createStorageFixture();

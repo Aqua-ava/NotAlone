@@ -1,6 +1,6 @@
 /** 从授权范围生成有界学习批次；模型只见材料与现有策略身份，不直接读库。 */
 import type {Client} from 'pg';
-import {activeRef} from '../memory/overview/contact-overview-evidence.ts';
+import {activeRef} from '../memory/overview/evidence/sources.ts';
 import type {SkillFiles,SkillVersionFiles} from './skill-files.ts';
 import {wholeStrategyId} from './skill-execution-view.ts';
 import {

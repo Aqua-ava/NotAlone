@@ -1,8 +1,8 @@
 /** 本次实际目录的完整单段读取与累计回执；调用方保持同一事务/范围锁。 */
 import type {Client} from 'pg';
 import {replyUuid} from '../generation/reply-contract.ts';
-import {canonicalJSON} from '../../memory/overview/contact-overview-evidence.ts';
-import {pythonISO} from '../../memory/overview/contact-overview-time.ts';
+import {canonicalJSON} from '../../memory/overview/evidence/sources.ts';
+import {pythonISO} from '../../memory/overview/projection/time.ts';
 import {validateLayeredSnapshot,payloadJSON,type LayeredMaterial} from './reply-context-layered.ts';
 import {ReplyContextError,type ContextMetadata,type BuiltReplyContext} from './reply-context-types.ts';
 import type {EvidenceAliases} from '../generation/reply-evidence-alias.ts';
