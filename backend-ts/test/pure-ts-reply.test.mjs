@@ -20,7 +20,7 @@ test('纯 TS 公开回复调用本机供应商并持久重放，撤销绑定后�
  assert.deepEqual(await app.request('/api/reply/generate',body),first);assert.equal(requests.length,1);
  const evidence=await app.request(`/api/contacts/${contact}/replies/${first.data.reply_request_id}/evidence`);
  assert.equal(evidence.status,200,JSON.stringify(evidence));assert.equal(evidence.data.candidate_output[0].candidate_id,first.data.candidates[0].candidate_id);assert.equal(evidence.data.evidence[0].text,'明天见');assert.equal(requests.length,1);
- const session=await app.request(`/api/contacts/${contact}/assistant-session/default`,{});assert.equal(session.status,200);
+ const session=await app.request(`/api/contacts/${contact}/assistant-sessions`,{});assert.equal(session.status,200);
  const sessionPath=`/api/contacts/${contact}/assistant-sessions/${session.data.session_id}`;
  const command={...body,idempotency_key:randomUUID()};
  const prepared=await app.request(`${sessionPath}/replies/prepare`,command);assert.equal(prepared.status,200,JSON.stringify(prepared));assert.equal(requests.length,1,'准备不能调用供应商');

@@ -448,19 +448,31 @@ test('归属标记被替换时不能恢复他人存档，已保存业务历史�
  assert.equal(response.status,409);assert.equal(restarted.requests.length,0);
 });
 
-test('恢复的真实模型历史计入零HTTP预检与出站硬上限，历史仍可回看',{timeout:60000},async t=>{
+// 65536窗口/256输出/128余量的合成边界；正常产品配置另由pure-ts-persistent-assistant覆盖。
+test('合成小预算下恢复历史提示近限，预检及直达生成硬限仍可回看并明确新开',{timeout:60000},async t=>{
  const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
- let rejected=false;const text='合成文字'.repeat(250);
+ let rejected=false,warned=false;const text='合成文字'.repeat(250);
  for(let i=0;i<5;i++){
   const input=f.input(text),before=host.requests.length;
   const response=await fetch(host.url+`${path}/replies/prepare`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(input)}),prepared=await response.json();
   assert.equal(host.requests.length,before,'预检始终零HTTP');
-  if(response.status===409){assert.equal(prepared.input_budget?.state,'exceeded',JSON.stringify(prepared));assert.ok(prepared.input_budget.input_tokens>65536-384);rejected=true;break;}
-  assert.equal(response.status,200,JSON.stringify(prepared));await f.request(host,`${path}/replies`,input);
+  if(response.status===409){
+   assert.equal(prepared.input_budget?.state,'exceeded',JSON.stringify(prepared));assert.ok(prepared.input_budget.input_tokens>65536-384);
+   const direct=await fetch(host.url+`${path}/replies`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(input)}),failure=await direct.json();
+   assert.equal(direct.status,409,JSON.stringify(failure));assert.equal(failure.input_budget?.state,'exceeded');assert.equal(host.requests.length,before,'绕过准备直达生成仍不得出站');
+   rejected=true;break;
+  }
+  assert.equal(response.status,200,JSON.stringify(prepared));const generated=await f.request(host,`${path}/replies`,input);
+  if(generated.input_budget?.state==='warning'){assert.equal(generated.input_budget.allowed,true);warned=true;}
+  t.diagnostic(JSON.stringify({synthetic_budget_round:i+1,...generated.input_budget}));
  }
  assert.equal(rejected,true,'累积完整运行历史后必须拒绝，不能静默丢弃或用空会话低估');assert.ok(host.requests.length>=2);
+ assert.equal(warned,true,'达到硬限之前已有可展示的近限提示');
  assert.ok(host.requests[1].body.messages.some(message=>message.role==='assistant'),'第二轮使用SDK真实历史');
  assert.match(JSON.stringify(await f.request(host,path)),/合成保存候选/);
+ const before=host.requests.length,{session_id:next}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{});
+ assert.notEqual(next,session);await f.request(host,`/api/contacts/${f.contact}/assistant-sessions/${next}/replies`,f.input('明确新开的短讨论'));
+ assert.equal(host.requests.length,before+1);assert.doesNotMatch(JSON.stringify(host.requests.at(-1).body),/合成文字合成文字|合成保存候选/,'显式新段不自动带回超限的旧讨论');
 });
 
 

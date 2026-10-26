@@ -179,7 +179,8 @@ async function start(ctx: Context) {
   const skills=new SkillHost(storage,deletionSkillsRoot);
   let layeredManagement:ReturnType<typeof createLayeredMemoryManagement>|undefined;
   let maintenance:PureTsMaintenance|undefined;
-  const assistantRuntime=new AssistantRuntime({ctx,transaction:work=>storage.businessTransaction(work),home:config.businessHome,persistent:config.persistentAssistantHome===config.businessHome});
+  // 官方运行副本属于稳定业务目录；临时 profile 退出时只释放句柄，不删除用户讨论。
+  const assistantRuntime=new AssistantRuntime({ctx,transaction:work=>storage.businessTransaction(work),home:config.businessHome});
   const deletions=storage.runtimeOwnerId
     ?new CrossDomainDeletionService({storage,skillsRoot:deletionSkillsRoot,assistantRuntime})
     :undefined;
