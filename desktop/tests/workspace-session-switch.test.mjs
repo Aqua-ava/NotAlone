@@ -173,3 +173,35 @@ test('生产Main与preload继续旧讨论显示无正文的背景更新提示，
     assert.doesNotMatch(renderSession(await f.bridge.getState()), /已更新当前聊天和有效资料/);
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
+
+test('当前旧段被要求明确继续时入口可达，继续失败后仍可重试而不自动生成', async () => {
+  const f = await historicalReplyFixture(), original = f.backend.requestJson;
+  let resumed = false, failResume = true;
+  f.backend.requestJson = async request => {
+    if (request.path.endsWith('/replies/prepare') && !resumed) {
+      f.calls.push(request);
+      throw new ports.BackendRequestFailure('response', 409, 'assistant_session_rejected', 'resume_required', undefined,
+        { contactId: f.scope.contactId, sessionId: f.sessionId, requestKey: request.body.idempotency_key, state: 'not_reserved' });
+    }
+    if (request.path.endsWith('/resume')) {
+      f.calls.push(request);
+      if (failResume) throw new ports.BackendRequestFailure('response', 503, 'unavailable');
+      resumed = true;
+    }
+    return original(request);
+  };
+  try {
+    await f.bridge.readSavedSession(f.scope); await f.bridge.enterWorkspace(f.scope);
+    f.contacts.setDraft({ ...f.scope, text: '合成旧段本次明确输入' });
+    await f.bridge.generate({ ...f.scope, newRequest: true, workspaceAction: 'express' });
+    assert.equal((await f.bridge.getState()).errorCode, 'resume_required');
+    assert.match(renderSession(await f.bridge.getState()), />继续此会话<\/button>/, '当前旧段也须有明确继续入口');
+    await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
+    assert.equal((await f.bridge.getState()).sessionCatalog.phase, 'failed');
+    assert.match(renderSession(await f.bridge.getState()), />重试继续此会话<\/button>/, '失败目录不能移除唯一恢复操作');
+    failResume = false; await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
+    assert.equal((await f.bridge.getState()).sessionCatalog.currentSessionId, f.sessionId);
+    assert.equal((await f.bridge.getState()).sessionCatalog.phase, 'ready');
+    assert.equal(f.calls.filter(call => call.path.endsWith('/replies')).length, 0, '明确继续与重试本身零生成');
+  } finally { await f.replies.beginGenerationClosing(() => {}); }
+});

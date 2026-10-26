@@ -197,6 +197,9 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       </li>)}
     </ul>}
         <div className="session-actions" role="group" aria-label="正在查看的讨论操作">
+    {saved?.sessionId && <button disabled={busy} onClick={() => void replies.resumeSavedSession(saved.sessionId!)}>
+      {catalog?.phase === 'failed' ? '重试继续此会话' : '继续此会话'}
+    </button>}
     <button disabled={!replies.state.contactId || saved?.phase === 'loading' || deleting || catalog?.phase === 'loading' || catalog?.selectionPending} onClick={() => void replies.readSavedSession()}>
       {saved?.phase === 'failed' ? '重试读取已保存讨论' : '查看已保存讨论'}
     </button>

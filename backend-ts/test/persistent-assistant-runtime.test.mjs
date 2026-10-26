@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {request as httpRequest} from 'node:http';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,mkdir,readdir,writeFile,rm,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,readdir,readFile,writeFile,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createStorageFixture} from './host-storage-fixture.mjs';
@@ -29,6 +29,13 @@ async function fixture(t){
   const result=await response.json();assert.equal(response.status,200,JSON.stringify(result)+(response.ok?"":host.output));return result;
  };
  return {f,owner,contact,binding,token,businessHome,start,request,setUseSkill:value=>{useSkill=value;},setNextTool:value=>{nextTool=value;},maxActive:()=>maxActive,setCandidateText:text=>{candidateText=text;},holdNext:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};return {entered,release};},input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true})};
+}
+
+// 自有库只恢复122涉及的旧结构，再执行原迁移SQL验证来源分类；保留生产迁移器的连接门禁，不把此处当整套升级验收。
+async function upgradeLegacyProvenance(f){
+ assert.match(f.f.client.database,/^notalone_ts_host_[a-f0-9]+_test$/);
+ await f.f.client.query('ALTER TABLE assistant_session DROP COLUMN legacy_runtime_pending');
+ await f.f.client.query(await readFile(new URL('../database/migrations/122_assistant_legacy_resume_provenance.sql',import.meta.url),'utf8'));
 }
 
 test('目录与历史浏览保持当前和真实活动，明确继续原段才刷新活动且零模型',{timeout:60000},async t=>{
@@ -339,14 +346,22 @@ test('旧业务讨论仅首次明确继续零HTTP建档，真实重启后保留�
  const first=await f.request(legacy,`${path}/replies`,f.input('合成旧记录一次性要求'));
  const versionsPath=`${path}/candidates/${first.candidates[0].candidate_id}/versions`,original=(await f.request(legacy,versionsPath)).versions[0];
  const edited=await f.request(legacy,versionsPath,{edit_key:randomUUID(),parent_version_id:original.version_id,messages:original.messages.map(m=>({...m,text:'合成旧记录编辑版本'}))});
- await legacy.stop();const host=await f.start(),before=await f.request(host,path);
+ await legacy.stop();await upgradeLegacyProvenance(f);const host=await f.start(),before=await f.request(host,path);
  const exists=async()=>{try{return (await readdir(join(f.businessHome,'assistant-runtime'),{recursive:true})).filter(p=>p.endsWith('.jsonl'));}catch(e){if(e.code==='ENOENT')return [];throw e;}};
  assert.equal((await exists()).length,0,'只读历史不建立档案');
+ const gatedInput=f.input('合成当前意图优先：保持随意'),beforeCatalog=await f.request(host,base);
+ assert.equal(beforeCatalog.current_session_id,session,'旧段仍是当前段且刚被编辑，不能借空闲分段绕过明确继续');
+ for(const action of ['replies/prepare','replies']){
+  const response=await fetch(host.url+`${path}/${action}`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(gatedInput)});
+  assert.equal(response.status,409);const rejected=await response.json();assert.equal(rejected.error,'assistant_session_rejected');assert.equal(rejected.reason,'resume_required');if(action==='replies/prepare')assert.deepEqual(rejected.no_generation,{contact_id:f.contact,session_id:session,request_key:gatedInput.idempotency_key,state:'not_reserved'});
+  assert.equal(host.requests.length,0);assert.equal((await exists()).length,0,'未经resume不自动建立旧讨论档案');
+  assert.deepEqual(await f.request(host,path),before,'拒绝前不写新turn或覆盖旧输入');assert.deepEqual(await f.request(host,base),beforeCatalog,'拒绝不刷新活动或切当前');
+ }
  const resumed=await f.request(host,`${path}/resume`,{});assert.equal(resumed.session_id,session);assert.equal(host.requests.length,0);
  assert.equal((await exists()).length,1,'明确继续按真实业务记录建立官方可恢复档案');
  assert.deepEqual(await f.request(host,path),before,'建档不改旧业务记录');assert.deepEqual(await f.request(host,versionsPath),edited);
  await host.stop();const restarted=await f.start();await f.request(restarted,`${path}/resume`,{});assert.equal(restarted.requests.length,0);
- await f.request(restarted,`${path}/replies`,f.input('合成当前意图优先：保持随意'));
+ await f.request(restarted,`${path}/replies`,gatedInput);
  const body=JSON.stringify(restarted.requests[0].body);assert.match(body,/合成旧记录一次性要求/);assert.match(body,/合成旧记录编辑版本/);assert.match(body,/合成保存候选/);assert.match(body,/assistant_discussion_reference/);assert.match(body,/is_sent/);
  await f.request(restarted,`${path}/replies`,f.input('合成随后继续'));
  assert.doesNotMatch(JSON.stringify(restarted.requests[1].body.messages.at(-1)),/合成旧记录编辑版本|合成旧记录一次性要求/,'原讨论引用只携入一次，随后复用真实SDK历史');
@@ -424,4 +439,27 @@ test('旧历史独有背景在模型等待中被修正后逐阶段复验，迟�
  await gate.entered;assert.doesNotMatch(JSON.stringify(host.requests.at(-1).body.messages.at(-1)),/合成旧历史独有背景_04F/,'本轮当前背景已不含旧消息，资格复验仍须覆盖SDK旧历史');
  await f.f.client.query("UPDATE message SET text_content='合成旧背景已修正_04H' WHERE owner_id=$1 AND contact_id=$2 AND id=$3",[f.owner,f.contact,old]);gate.release();
  const response=await running;assert.equal(response.status,409,JSON.stringify(await response.json()));assert.equal(host.requests.length,2,'来源改变后不得继续下一次物理出站');assert.doesNotMatch(JSON.stringify(await f.request(host,path)),/合成迟到不得保存_04G/);
+});
+
+test('无历史新段首次先准备再生成无需继续，零HTTP准备不自动建档',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`,input=f.input('合成新段首次请求');
+ await f.request(host,`${path}/replies/prepare`,input);assert.equal(host.requests.length,0);
+ const files=await readdir(join(f.businessHome,'assistant-runtime'),{recursive:true}).catch(e=>{if(e.code==='ENOENT')return [];throw e;});assert.equal(files.filter(p=>p.endsWith('.jsonl')).length,0);
+ assert.equal((await f.request(host,`${path}/replies`,input)).session_id,session);assert.equal(host.requests.length,1);
+});
+
+test('升级后新段方向输入跨重启首次生成不被误判为旧讨论',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.request(host,`${path}/inputs`,{content:{type:'purpose_exploration',purpose_hint:'合成本轮新段方向'}});await host.stop();
+ const restarted=await f.start(),input=f.input('合成新段首次表达');await f.request(restarted,`${path}/replies/prepare`,input);assert.equal(restarted.requests.length,0);
+ assert.equal((await f.request(restarted,`${path}/replies`,input)).session_id,session);assert.equal(restarted.requests.length,1);assert.ok(JSON.stringify(restarted.requests[0].body).includes('合成本轮新段方向'));
+});
+
+
+test('升级前无历史空壳在升级后写新方向并生成，无需先继续',{timeout:60000},async t=>{
+ const f=await fixture(t),legacy=await f.start({NOTALONE_SYNTHETIC_PERSISTENT:'0',NOTALONE_SYNTHETIC_PUBLIC:'1'}),{session_id:session}=await f.request(legacy,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await legacy.stop();await upgradeLegacyProvenance(f);const host=await f.start();
+ await f.request(host,`${path}/inputs`,{content:{type:'purpose_exploration',purpose_hint:'合成升级后空壳新方向'}});
+ const input=f.input('合成空壳首次表达');await f.request(host,`${path}/replies/prepare`,input);assert.equal(host.requests.length,0);
+ assert.equal((await f.request(host,`${path}/replies`,input)).session_id,session);assert.equal(host.requests.length,1);
 });

@@ -46,6 +46,7 @@ export function replyFailureDecision(evidence: ReplyFailureEvidence): ReplyFailu
   if (code === 'assistant_session_save_failed') return { errorCode: 'save_failed', canRetry: true, known: true };
   if (reason === 'target_message_unavailable') return { errorCode: 'target_unavailable', canRetry: true, known: true };
   if (reason && sourceUnavailableReasons.has(reason)) return { errorCode: 'source_unavailable', canRetry: true, known: true };
+  if (code && rejectedCodes.has(code) && reason === 'resume_required') return { errorCode: 'resume_required', canRetry: false, known: true };
   if (code && rejectedCodes.has(code)) return { errorCode: 'rejected', canRetry: true, known: true };
   if (code && unavailableCodes.has(code)) return { errorCode: 'unavailable', canRetry: true, known: true };
   return { errorCode: 'generation_failed', canRetry: true, known: false };

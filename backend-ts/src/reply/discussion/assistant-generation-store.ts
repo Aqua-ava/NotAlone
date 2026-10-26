@@ -20,7 +20,7 @@ export function matchesGenerationSession(row:GenerationRow,sessionId:string):boo
  return row.session_id===sessionId||row.requested_session_id===sessionId;
 }
 export interface AssistantGenerationReceipt {session_id:string;turn_id:string;request_key:string;input_version_id:string;state:string;previous_session_id?:string;interruption_reason?:string|null}
-export interface AssistantGenerationStoreOptions {transaction<T>(work:(client:Client)=>Promise<T>):Promise<T>;skillsRoot:string;assistantClock?:AssistantClock;resolveBinding?:ReplyAssistantPorts['requireActiveBinding']}
+export interface AssistantGenerationStoreOptions {transaction<T>(work:(client:Client)=>Promise<T>):Promise<T>;skillsRoot:string;assistantClock?:AssistantClock;requireSessionReady?:(client:Client,scope:VerifiedReplyScope,session:string,excludeRequestKey?:string)=>Promise<void>;resolveBinding?:ReplyAssistantPorts['requireActiveBinding']}
 export class AssistantGenerationError extends ReplyError {
  readonly reason?:string;
  no_generation?:{contact_id:string;session_id:string;request_key:string;state:'not_reserved'};
@@ -99,7 +99,7 @@ export class AssistantGenerationStore {
     const contact=(await client.query('SELECT 1 FROM contact WHERE owner_id=$1 AND id=$2',[scope.owner_id,scope.contact_id])).rowCount;
     const reserved=(await client.query('SELECT 1 FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3 UNION ALL SELECT 1 FROM reply_request WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3',[scope.owner_id,scope.contact_id,key])).rowCount;
     if(!contact||reserved)throw error;
-    await client.query('INSERT INTO reply_invalidated_key(owner_id,contact_id,idempotency_key) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[scope.owner_id,scope.contact_id,key]);
+    if(error.reason!=='resume_required')await client.query('INSERT INTO reply_invalidated_key(owner_id,contact_id,idempotency_key) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[scope.owner_id,scope.contact_id,key]);
     error.no_generation={contact_id:scope.contact_id,session_id:session,request_key:key,state:'not_reserved'};return error;
    }
   },signal);
@@ -117,6 +117,7 @@ export class AssistantGenerationStore {
   }
   if((await client.query('SELECT 1 FROM reply_invalidated_key WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3',[scope.owner_id,scope.contact_id,input.idempotency_key])).rowCount)generationReject('request_deleted');
   if(existing){
+   if(existing.state!=='completed')await this.options.requireSessionReady?.(client,scope,existing.session_id,existing.state==='running'?input.idempotency_key:undefined);
    await this.guards.assistant.prepareAssistantReplyStart(client,{...scope,idempotency_key:input.idempotency_key,normalized_input:normalized,continued_from_candidate_id:input.continued_from_candidate_id},options.auth);
    await this.guards.assistant.verifiedDiscussionDependencies(client,scope,existing.dependency_ids,true);
    await this.guards.ports.requireGenerationMemoryDependencies(client,scope,existing.dependency_ids);
@@ -141,6 +142,7 @@ export class AssistantGenerationStore {
   const moved=sessionId!==requestedSessionId;
   // 新键不能夺走已受理轮的当前输入；显式替换继续走原来的撤销合同。
   if(!options.runningKey&&(await client.query(`SELECT 1 FROM assistant_session_turn turn LEFT JOIN reply_request request ON request.owner_id=turn.owner_id AND request.contact_id=turn.contact_id AND request.idempotency_key=turn.idempotency_key WHERE turn.owner_id=$1 AND turn.contact_id=$2 AND turn.session_id=$3 AND (request.state='running' AND request.lease_expires_at>clock_timestamp() OR request.id IS NULL AND turn.state='running')`,[scope.owner_id,scope.contact_id,sessionId])).rowCount)throw new AssistantGenerationError('assistant_session_in_progress');
+  await this.options.requireSessionReady?.(client,scope,sessionId);
   if(!moved&&input.expected_input_version_id!==undefined&&session.current_input_version_id!==input.expected_input_version_id)generationReject('input_version_stale');
   const deps=new Set(options.dependencies??[]);
   if(!moved&&input.expected_input_version_id)for(const id of await this.current(client,scope,sessionId,input.expected_input_version_id))deps.add(id);

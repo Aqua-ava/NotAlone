@@ -17,7 +17,7 @@ import {fingerprint} from '../generation/reply-assistant-erasure.ts';
 import {digest as eventDigest} from '../../memory/overview/evidence/sources.ts';
 import type {Client} from 'pg';
 import {ReplyError} from '../generation/reply-contract.ts';
-import type {VerifiedReplyScope} from '../generation/reply-scope.ts';
+import {ReplyRejected,type VerifiedReplyScope} from '../generation/reply-scope.ts';
 import {assistantRuntimeDeletionPending} from './assistant-runtime-erasure.ts';
 
 type Transaction=<T>(work:(client:Client)=>Promise<T>)=>Promise<T>;
@@ -112,6 +112,16 @@ export class AssistantRuntime {
    const combined=AbortSignal.any([signal,controller.signal]);combined.throwIfAborted();return await work(combined);
   }finally{this.operations.delete(operation);finish();}
  }
+ /** 尚无运行档案的既有讨论只能明确继续；新段的精确候选携入不冒充旧讨论恢复。 */
+ async requireGenerationReady(client:Client,scope:Scope,session:string,excludeRequestKey?:string):Promise<void>{
+  if(!this.persistent)return;await this.requireAllowed(client,scope,session);
+  const legacy=(await client.query(`SELECT 1 FROM assistant_session session WHERE session.owner_id=$1 AND session.contact_id=$2 AND session.id=$3 AND session.legacy_runtime_pending
+   AND NOT EXISTS(SELECT 1 FROM assistant_runtime_session runtime WHERE runtime.owner_id=$1 AND runtime.contact_id=$2 AND runtime.session_id=$3)
+   AND EXISTS(SELECT 1 FROM assistant_session_input input LEFT JOIN assistant_session_turn turn ON turn.owner_id=input.owner_id AND turn.contact_id=input.contact_id AND turn.session_id=input.session_id AND turn.id=input.turn_id
+    WHERE input.owner_id=$1 AND input.contact_id=$2 AND input.session_id=$3 AND input.state='active'
+     AND ($4::uuid IS NULL OR turn.idempotency_key IS DISTINCT FROM $4::uuid))`,[scope.owner_id,scope.contact_id,session,excludeRequestKey??null])).rowCount;
+  if(legacy)throw new ReplyRejected('resume_required');
+ }
  /** 显式继续和有资格变化的生成共用零模型建档器；06可复用，不自动吞存储故障。 */
  async materialize(scope:Scope,session:string,configuration:string,readPlan:AssistantRuntimePlanReader,signal:AbortSignal,options:{generation?:boolean;requestKey?:string}={}):Promise<AssistantRuntimeMaterialization>{
   if(this.options.persistent===false)return {changed:false};
@@ -129,7 +139,8 @@ export class AssistantRuntime {
    if(plan.session_id!==session||plan.scope.owner_id!==scope.owner_id||plan.scope.contact_id!==scope.contact_id)return unavailable();
    if(row?.state==='blocked')return unavailable();
    if(row?.state==='ready')await this.requireCommitted(scope,row);
-   if(options.generation&&(!row&&Object.keys(plan.qualification.records).length===0||row?.state==='dirty'))return row?materialization(row):{changed:false};
+   if(options.generation&&!row){await this.options.transaction(client=>this.requireGenerationReady(client,scope,session,options.requestKey));return {changed:false};}
+   if(options.generation&&row?.state==='dirty')return materialization(row);
    if(row?.qualification&&(row.qualification.binding_id!==plan.binding_id||row.qualification.scope?.owner_id!==scope.owner_id||row.qualification.scope?.contact_id!==scope.contact_id))return unavailable();
    if(row?.state==='ready'&&row.configuration_sha256===configuration&&isDeepStrictEqual(row.qualification,plan.qualification))return materialization(row);
    // 只新增合法背景或新完成业务轮时保留真实SDK历史；材料变化或范围收窄必须换底层实例。

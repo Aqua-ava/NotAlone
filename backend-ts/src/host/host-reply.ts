@@ -217,7 +217,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       try{return await options.storage.businessTransaction(async client=>{
         try{return await work(client);}catch(error){failure=error;throw error;}
       });}catch(error){throw failure??error;}
-    },assistantClock:options.assistantClock,skillsRoot:discussionSkillsRoot,environment:options.storage.runtimeEnvironment(),replyService:delegated,resolveBinding:resolveRequestBinding,runInScope:withPublicReplyScope,
+    },requireSessionReady:assistantRuntime?.persistent?(client,scope,session,key)=>assistantRuntime.requireGenerationReady(client,scope,session,key):undefined,assistantClock:options.assistantClock,skillsRoot:discussionSkillsRoot,environment:options.storage.runtimeEnvironment(),replyService:delegated,resolveBinding:resolveRequestBinding,runInScope:withPublicReplyScope,
   }):undefined;
   if(generation&&owner)await generation.recover(owner);
   const publicApi=createPureTsPublicApi({ownerId:owner,available:options.configuration!==null,discussion:discussionService,reply:delegated,storage:options.storage,skillsRoot:discussionSkillsRoot,generation,

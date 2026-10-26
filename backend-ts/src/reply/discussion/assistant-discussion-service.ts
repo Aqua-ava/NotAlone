@@ -400,6 +400,11 @@ export class AssistantDiscussionService {
         'UPDATE assistant_session SET is_default=TRUE WHERE owner_id=$1 AND contact_id=$2 AND id=$3',
         [scope.owner_id,scope.contact_id,sessionId],
       );
+      if(this.options.materializeRuntime){
+        const confirmed=await client.query(`UPDATE assistant_session session SET legacy_runtime_pending=false WHERE session.owner_id=$1 AND session.contact_id=$2 AND session.id=$3
+          AND EXISTS(SELECT 1 FROM assistant_runtime_session runtime WHERE runtime.owner_id=session.owner_id AND runtime.contact_id=session.contact_id AND runtime.session_id=session.id AND runtime.state='ready' AND runtime.qualification IS NOT NULL AND runtime.committed_event_sha256 IS NOT NULL AND (runtime.origin<>'generated' OR runtime.committed_request_id IS NOT NULL))`,[scope.owner_id,scope.contact_id,sessionId]);
+        if(confirmed.rowCount!==1)reject('conflict','runtime_bootstrap_unconfirmed');
+      }
       await recordAssistantUserActivity(client,scope,sessionId,this.options.assistantClock);
     });
     return {session_id:sessionId,...(changed?{context_refresh:{changed:true as const}}:{})};
