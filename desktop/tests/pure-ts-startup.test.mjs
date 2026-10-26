@@ -50,9 +50,8 @@ test('纯 TS 诊断在没有Python与旧源码时沿同一空库准备schema并�
  await admin.query(`CREATE DATABASE "${name}" TEMPLATE template0`);
  t.after(async()=>{await admin.query(`DROP DATABASE "${name}"`);await admin.end();});
  const userData=path.join(directory,'diagnostic'),projectDirectory=path.join(userData,'project'),infoPath=path.join(userData,'backend.info');
- await mkdir(path.join(projectDirectory,'backend/database'),{recursive:true});
+ await mkdir(projectDirectory,{recursive:true});
  await symlink(path.resolve('../backend-ts'),path.join(projectDirectory,'backend-ts'),'dir');
- await symlink(path.resolve('../backend/database/migrations'),path.join(projectDirectory,'backend/database/migrations'),'dir');
  await writeFile(path.join(userData,'backend-launch.json'),JSON.stringify({projectDirectory,backendInfoPath:infoPath,envFilePath:path.join(userData,'synthetic.env')}));
  const keys=['NOTALONE_HOST_RUNTIME','NOTALONE_DATABASE_URL','NOTALONE_DISABLE_DOTENV','PATH'],prior=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
  delete process.env.NOTALONE_HOST_RUNTIME;

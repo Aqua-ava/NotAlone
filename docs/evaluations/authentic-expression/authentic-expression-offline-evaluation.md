@@ -5,8 +5,8 @@
 ```bash
 conda activate NotAlone
 PYTHONPATH=backend/src python -m notalone.reply.fidelity_evaluation \
-  --dataset backend/tests/fixtures/fidelity/synthetic-v1.json \
-  --run backend/tests/fixtures/fidelity/controlled-v1.json \
+  --dataset backend-ts/test/fixtures/fidelity/synthetic-v1.json \
+  --run backend-ts/test/fixtures/fidelity/controlled-v1.json \
   --output /private/tmp/notalone-fidelity-report.json
 ```
 

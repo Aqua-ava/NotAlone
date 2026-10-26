@@ -432,7 +432,7 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 
 未保存时，`envFilePath` 默认使用所选项目根目录 `.env`，`backendInfoPath` 默认使用 `~/.notalone/backend.info`；受控运行可用 `NOTALONE_ENV_FILE` / `NOTALONE_BACKEND_INFO` 提供初始值。已保存路径优先于这些初始环境变量。CLI/探针可留空，显示对应渠道不可用；诊断只检查可执行文件，不运行 helper，缺 helper 不阻塞独立的后端配置能力。保存文件只含路径，不含配置内容、模型密钥或握手 token。
 
-诊断通过 Electron 内置 Node 的独立子进程加载所选项目的 `backend-ts/src/host-storage.ts`，读取 `backend/database/migrations` 并检查数据库兼容性；就绪后通过 `launchDsh` 启动唯一的 TypeScript／DSH 后台。两者不依赖 Python／Conda 或 Finder 的 PATH。只读入口使用有界连接和 READ ONLY 事务，仅核对必要 schema 元数据、审计基线与迁移账本，不读取联系人/聊天正文、不迁移或接管业务库、不创建参考库。只读结果为 `migration_pending` 时，另一个受控步骤按[原库结构补齐](#数据库沿用与结构补齐)执行缺少版本并复验；诊断本身保持只读。缺基线、文件或账本漂移、必要结构缺失继续阻止连接，不用新空库绕过。机器就绪与本人身份/模型首启分开显示。
+诊断通过 Electron 内置 Node 的独立子进程加载所选项目的 `backend-ts/src/host-storage.ts`，读取 `backend-ts/database/migrations` 并检查数据库兼容性；就绪后通过 `launchDsh` 启动唯一的 TypeScript／DSH 后台。两者不依赖 Python／Conda 或 Finder 的 PATH。只读入口使用有界连接和 READ ONLY 事务，仅核对必要 schema 元数据、审计基线与迁移账本，不读取联系人/聊天正文、不迁移或接管业务库、不创建参考库。只读结果为 `migration_pending` 时，另一个受控步骤按[原库结构补齐](#数据库沿用与结构补齐)执行缺少版本并复验；诊断本身保持只读。缺基线、文件或账本漂移、必要结构缺失继续阻止连接，不用新空库绕过。机器就绪与本人身份/模型首启分开显示。
 
 主进程确认没有持有运行时或未完成的启动任务时，才允许直接保存。连接查询失败产生的“尚未连接”仍可能持有原服务；此时先点击“停止服务以修改路径”，通过原已验证目标认证确认停读并等待服务退场，才恢复路径编辑。失败保留旧目标、原路径和停读恢复入口，不能保存新路径或另起后端。保存与新连接串行，落盘前再次核验资格；保存不会自动连接。点击“重新检查并连接”重新经过只读门禁，重复重试不会启动多个后端。
 

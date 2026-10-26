@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HostStorage } from '../src/host-storage.ts';
 
-const migrationsDirectory = new URL('../../backend/database/migrations/', import.meta.url).pathname;
+const migrationsDirectory = new URL('../database/migrations/', import.meta.url).pathname;
 test('受控配置保留模型和资料位置，凭据不进入状态响应', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'notalone-host-storage-'));
   try {

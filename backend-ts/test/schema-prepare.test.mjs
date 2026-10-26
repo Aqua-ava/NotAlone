@@ -6,7 +6,7 @@ import {mkdtemp,rm,readdir,readFile,writeFile,mkdir,copyFile} from 'node:fs/prom
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-const migrationsDirectory=new URL('../../backend/database/migrations',import.meta.url).pathname;
+const migrationsDirectory=new URL('../database/migrations',import.meta.url).pathname;
 async function fixture(t){
  const name=`notalone_schema_ts_${randomUUID().replaceAll('-','')}_test`;
  const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();

@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {createBlindPacket,digest,verifyBlindPacket,bindSubmittedReview} from '../experiments/reply-blind-packet.mjs';
 import {auditReplyRuntimeSources} from '../src/reply-comparison-sources.ts';
 const capture=JSON.parse(await readFile(new URL('./fixtures/reply-blind-packet-pilot.json',import.meta.url),'utf8'));
-const dataset=JSON.parse(await readFile(new URL('../../backend/tests/fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'));
+const dataset=JSON.parse(await readFile(new URL('./fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'));
 const seed='91'.repeat(32);
 // 为新增反例保持原DTO、PG快照及已有摘要自洽；这不是新的模型采集。
 function editOutput(capture,edit,index=0){

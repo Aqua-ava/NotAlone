@@ -75,7 +75,7 @@ async function start(ctx: Context) {
     rmSync(config.home,{recursive:true,force:true});
   };
   process.once('exit',exitCleanup);
-  const storage = await HostStorage.open({envFilePath:config.envFilePath,migrationsDirectory:path.join(config.projectDirectory,'backend/database/migrations'),environment:{...Object.fromEntries(Object.entries(process.env).filter(([key])=>key.startsWith('PG') || key.startsWith('NOTALONE_') && key!=='NOTALONE_HOST_CONFIG')),HOME:config.businessHome}});
+  const storage = await HostStorage.open({envFilePath:config.envFilePath,migrationsDirectory:path.join(config.projectDirectory,'backend-ts/database/migrations'),environment:{...Object.fromEntries(Object.entries(process.env).filter(([key])=>key.startsWith('PG') || key.startsWith('NOTALONE_') && key!=='NOTALONE_HOST_CONFIG')),HOME:config.businessHome}});
   const compatibility = await storage.compatibility();
   if (compatibility.code !== 'ready') throw new Error('HOST_DATABASE_UNAVAILABLE');
   const ownerStatus=await storage.setupStatus();

@@ -54,7 +54,7 @@ async function fixture(t,{budget=true,afterReserve}={}) {
   await client.end();await admin.query(`DROP DATABASE "${name}"`);await admin.end();
   await rm(directory,{recursive:true,force:true});
  });
- const migrations=new URL('../../backend/database/migrations/',import.meta.url);
+ const migrations=new URL('../database/migrations/',import.meta.url);
  for(const file of (await readdir(migrations)).filter(f=>f.endsWith('.sql')).sort())await client.query(await readFile(new URL(file,migrations),'utf8'));
  const owner=(await client.query("INSERT INTO owner(display_name) VALUES('合成') RETURNING id")).rows[0].id;
  const contact=(await client.query("INSERT INTO contact(owner_id,display_name) VALUES($1,'合成') RETURNING id",[owner])).rows[0].id;

@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {buildReplyComparisonReport,createReplyComparisonPlan} from '../src/reply-comparison.ts';
 
 const manifestText=await readFile(new URL('./fixtures/reply-comparison-material-manifest.json',import.meta.url),'utf8');
-const datasetText=await readFile(new URL('../../backend/tests/fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8');
+const datasetText=await readFile(new URL('./fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8');
 const manifest=JSON.parse(manifestText),dataset=JSON.parse(datasetText);
 const canonical=value=>JSON.stringify(value&&typeof value==='object'?Array.isArray(value)?value.map(v=>JSON.parse(canonical(v))):Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(canonical(value[k]))])):value);
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:canonical(value)).digest('hex');

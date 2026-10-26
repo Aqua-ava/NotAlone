@@ -11,7 +11,7 @@ export async function pureTsFixture(t){
  const name=`notalone_pure_ts_${randomUUID().replaceAll('-','')}_test`;
  const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();
  await admin.query(`CREATE DATABASE "${name}" TEMPLATE template0`);
- const prepared=await prepareDatabaseSchema({databaseUrl:`host=/tmp dbname=${name}`,migrationsDirectory:resolve('../backend/database/migrations'),environment:{HOME:directory}});
+ const prepared=await prepareDatabaseSchema({databaseUrl:`host=/tmp dbname=${name}`,migrationsDirectory:resolve('../backend-ts/database/migrations'),environment:{HOME:directory}});
  if(prepared.code!=='ready'){await admin.query(`DROP DATABASE "${name}"`);await admin.end();await rm(directory,{recursive:true,force:true});throw new Error('纯 TS 合成库准备失败：'+prepared.code);}
  const client=new pg.Client({host:'/tmp',database:name});await client.connect();
  const hosts=[],cleanups=[];

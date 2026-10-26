@@ -155,7 +155,7 @@ async function fixture(t) {
   await admin.query(`CREATE DATABASE "${database}" TEMPLATE template0`);
   client = new pg.Client({host:'/tmp', database});
   await client.connect();
-  const migrations = new URL('../../backend/database/migrations/', import.meta.url);
+  const migrations = new URL('../database/migrations/', import.meta.url);
   for (const name of (await readdir(migrations)).filter(name => name.endsWith('.sql')).sort()) {
     await client.query(await readFile(new URL(name, migrations), 'utf8'));
   }

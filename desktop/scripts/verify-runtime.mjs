@@ -20,7 +20,7 @@ try {
   const node=process.execPath, pg=path.join(relocated,'postgres/bin');
   const diagnostic=path.join(relocated,'project/backend-ts/src/schema-prepare-cli.ts');
   const execute = async (file,values,extra={}) => run(file,values,{env:{...environment,...extra},cwd:report,timeout:60_000,maxBuffer:2*1024*1024});
-  await execute(node,[diagnostic,'--migrations',path.join(relocated,'project/backend/database/migrations')]).catch(error=>{ if(!error.stdout?.includes('database_unconfigured'))throw error; }); results.isolatedImport=true;
+  await execute(node,[diagnostic,'--migrations',path.join(relocated,'project/backend-ts/database/migrations')]).catch(error=>{ if(!error.stdout?.includes('database_unconfigured'))throw error; }); results.isolatedImport=true;
   const password=randomBytes(24).toString('hex'), pwfile=path.join(report,'pg-password');
   await writeFile(pwfile,password,{mode:0o600}); database=path.join(report,'database');
   await execute(path.join(pg,'initdb'),['-D',database,'-U','notalone','--pwfile',pwfile,'--auth-local=scram-sha-256','--auth-host=scram-sha-256','--locale=C','--encoding=UTF8']);
@@ -34,7 +34,7 @@ try {
   if(!ready)throw new Error('runtime_postgres_timeout');
   const pgRun=async(name,values)=>run(path.join(pg,name),values,{cwd:report,env:pgEnvironment,timeout:60_000,maxBuffer:2*1024*1024});
   await pgRun('createdb',['runtime_source']);
-  const migration=path.join(relocated,'project/backend/database/migrations');
+  const migration=path.join(relocated,'project/backend-ts/database/migrations');
   const dbUrl=(name)=>`postgresql://notalone:${password}@127.0.0.1:${port}/${name}`;
   const migrate=JSON.parse((await execute(node,[diagnostic,'--migrations',migration,'--prepare'],{NOTALONE_DATABASE_URL:dbUrl('runtime_source')})).stdout);
   const expectedMigrations=(await readdir(migration,{withFileTypes:true})).filter(entry=>entry.isFile()&&entry.name.endsWith('.sql')).map(entry=>entry.name).sort();

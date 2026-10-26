@@ -184,13 +184,13 @@ export class StartupDiagnostics {
     // 独立子进程保留硬超时与退出回收，不装配模型、业务任务或 DSH 遥测。
     const program = `const {HostStorage}=await import(${JSON.stringify(pathToFileURL(path.join(project, 'backend-ts/src/host-storage.ts')).href)});
       let storage; let code='diagnostic_failed';
-      try { storage=await HostStorage.open({envFilePath:process.env.NOTALONE_ENV_FILE,migrationsDirectory:${JSON.stringify(path.join(project, 'backend/database/migrations'))},environment:process.env});
+      try { storage=await HostStorage.open({envFilePath:process.env.NOTALONE_ENV_FILE,migrationsDirectory:${JSON.stringify(path.join(project, 'backend-ts/database/migrations'))},environment:process.env});
         code=(await storage.compatibility()).code; } catch {} finally { await storage?.close(); }
       console.log(JSON.stringify({code}));`;
     if (!canStart() || this.closing) return 'diagnostic_failed';
     return new Promise((resolve) => {
       const args = prepareSchema
-        ? ['--experimental-strip-types', path.join(project, 'backend-ts/src/schema-prepare-cli.ts'), '--migrations', path.join(project, 'backend/database/migrations'), '--prepare']
+        ? ['--experimental-strip-types', path.join(project, 'backend-ts/src/schema-prepare-cli.ts'), '--migrations', path.join(project, 'backend-ts/database/migrations'), '--prepare']
         : ['--experimental-strip-types', '--input-type=module', '-e', program];
       const child = spawn(executable, args, {
         cwd: project, env: { ...backendEnvironment({ ...config, projectDirectory: project }, this.userData),

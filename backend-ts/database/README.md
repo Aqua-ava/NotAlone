@@ -1,4 +1,4 @@
-> 2026-10-26当前入口：正常数据库诊断与明确结构补齐改用 `node backend-ts/src/schema-prepare-cli.ts --migrations backend/database/migrations`（补齐另加`--prepare`，从仓库根目录执行）。原116份SQL和未知结构停写规则保持。下方旧Python命令为历史恢复记录，仅在固定Git旧树及显式历史环境复现；不能从当前HEAD执行已退役模块。
+> 2026-10-26当前入口：正常数据库诊断与明确结构补齐改用 `node backend-ts/src/schema-prepare-cli.ts --migrations backend-ts/database/migrations`（补齐另加`--prepare`，从仓库根目录执行）。原116份SQL和未知结构停写规则保持。下方旧Python命令为历史恢复记录，仅在固定Git旧树及显式历史环境复现；不能从当前HEAD执行已退役模块。
 
 # 数据库迁移
 
@@ -28,7 +28,7 @@ NOTALONE_ENV_FILE='/绝对路径/受控配置.env' \
 
 ## 执行与恢复
 
-本页命令从 `backend/` 目录执行（从仓库根目录先 `cd backend`）；连接串由环境变量提供，迁移命令不会读取 `.env`：
+以下历史 Python 命令仅在固定 Git 旧树的 `backend/` 目录执行（从仓库根目录先 `cd backend`）；连接串由环境变量提供，迁移命令不会读取 `.env`：
 
 ```bash
 conda activate NotAlone

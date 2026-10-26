@@ -34,6 +34,7 @@ function frozen(manifestText:string,datasetText:string){
  if(digest(manifestText)!==MANIFEST_SHA)invalid('frozen_manifest_sha256');
  const manifest=JSON.parse(manifestText),dataset=JSON.parse(datasetText);
  const suite=manifest.suites.find((s:Row)=>s.suite==='reply_fidelity');
+ // 冻结清单中的路径是历史来源键；当前数据已迁至 backend-ts/test/fixtures，清单字节与摘要保持不变。
  const material=manifest.materials.find((m:Row)=>m.path==='backend/tests/fixtures/fidelity/synthetic-v1.json');
  if(!material||digest(datasetText)!==material.sha256)invalid('frozen_dataset_sha256');
  if(suite.count!==16||!Array.isArray(dataset.cases)||dataset.cases.length!==16||new Set(dataset.cases.map((c:Row)=>c.case_id)).size!==16)invalid('frozen_cases');

@@ -14,7 +14,7 @@ test('重叠manual/desktop请求不串同scope或跨scope身份，结束与后�
   await f.client.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator)VALUES($1,$2,$3,'wechat','synthetic',$4)",[desktop[i],owner,contacts[i],'friend-'+i]);
   await f.client.query('INSERT INTO manual_contact_confirmation(id,owner_id,contact_id)VALUES($1,$2,$3)',[manual[i],owner,contacts[i]]);
  }
- const storage=await HostStorage.open({envFilePath:join(f.directory,'runtime.env'),migrationsDirectory:resolve('../backend/database/migrations'),environment:{NOTALONE_OWNER_ID:owner}});f.cleanup(()=>storage.close());
+ const storage=await HostStorage.open({envFilePath:join(f.directory,'runtime.env'),migrationsDirectory:resolve('../backend-ts/database/migrations'),environment:{NOTALONE_OWNER_ID:owner}});f.cleanup(()=>storage.close());
  const clients=await Promise.all([0,1].map(async()=>{const client=new pg.Client({host:'/tmp',database:f.client.database});await client.connect();return client;}));f.cleanup(async()=>{for(const client of clients)await client.end();});
  const scopeA={owner_id:owner,contact_id:contacts[0]},scopeB={owner_id:owner,contact_id:contacts[1]};
  const verifiedManual=await resolvePublicReplyScope(storage,contacts[0],true),verifiedDesktop=await resolvePublicReplyScope(storage,contacts[0]);

@@ -61,7 +61,7 @@
 
 ### 从源码运行
 
-源码开发需要 macOS、Homebrew、PostgreSQL、Swift 与 Node.js ≥ 24。后端统一使用 TypeScript 与 DSH；安装脚本准备锁定的 Node 依赖、开发库与原生探针。**已有数据库请先阅读 [迁移与恢复说明](backend/database/README.md)。**
+源码开发需要 macOS、Homebrew、PostgreSQL、Swift 与 Node.js ≥ 24。后端统一使用 TypeScript 与 DSH；安装脚本准备锁定的 Node 依赖、开发库与原生探针。**已有数据库请先阅读 [迁移与恢复说明](backend-ts/database/README.md)。**
 
 在仓库根目录运行：
 
@@ -97,7 +97,7 @@ zsh scripts/install.sh
 
 脚本检查依赖，按锁安装 TypeScript 后台与桌面依赖，尝试启动本地 PostgreSQL、创建开发库并通过 Node 按版本应用迁移，缺失时生成权限为 `0600` 的根 `.env`，随后构建原生探针。模型密钥由你另行配置；安装过程不启动桌面 App、HTTP 服务或微信读取。
 
-已有数据库请先阅读 [迁移与恢复说明](backend/database/README.md)：无版本记录的旧库会停止等待核验，不自动猜测基线或重放历史 SQL。
+已有数据库请先阅读 [迁移与恢复说明](backend-ts/database/README.md)：无版本记录的旧库会停止等待核验，不自动猜测基线或重放历史 SQL。
 
 ### 3. 准备并启动桌面端
 
@@ -132,7 +132,7 @@ npm run dev
 | 检索与记忆 | 生产检索使用 SQL / 全文路径，向量检索未启用；正常记忆维护默认启用逐项来源核验；历史维度放行台账不再是正常维护的前置条件。 |
 | 平台与分发 | 当前面向 macOS；Windows 微信适配未实现，桌面包尚未完成 Developer ID 分发与公证。 |
 
-运行证据见 [桌面端说明](desktop/README.md)、[后端说明](backend/README.md)与 [macOS 验收记录](docs/guides/macos-app-permissions-and-errors.md)。架构文档中的设计不代表功能已通过端到端验收。
+运行证据见 [桌面端说明](desktop/README.md)、[后端说明](backend-ts/README.md)与 [macOS 验收记录](docs/guides/macos-app-permissions-and-errors.md)。架构文档中的设计不代表功能已通过端到端验收。
 
 ## 隐私与控制
 
@@ -151,8 +151,7 @@ npm run dev
 ```text
 NotAlone/
 ├── desktop/          Electron + React/TypeScript 桌面端
-├── backend-ts/       TypeScript 业务、DSH profile 与 Node 测试
-├── backend/          原 SQL 迁移、合成材料与历史测试资产
+├── backend-ts/       TypeScript 业务、DSH profile、SQL 迁移与 Node 测试
 ├── native/macos/     Swift 原生截图、OCR 与会话定位探针
 ├── website/          独立静态官网
 ├── scripts/          安装、部署与公开前检查
@@ -165,7 +164,7 @@ NotAlone/
 | 操作说明、评测与研究材料的分类入口 | [文档索引](docs/README.md) |
 | 桌面运行、构建与验收 | [desktop/README.md](desktop/README.md) |
 | 后端安装、HTTP 与 CLI | [backend-ts/README.md](backend-ts/README.md) |
-| 数据库升级与旧库恢复 | [backend/database/README.md](backend/database/README.md) |
+| 数据库升级与旧库恢复 | [backend-ts/database/README.md](backend-ts/database/README.md) |
 | 原生探针与权限 | [native/macos/README.md](native/macos/README.md) · [权限与启动错误](docs/guides/macos-app-permissions-and-errors.md) |
 | 领域词汇与架构决策 | [CONTEXT.md](CONTEXT.md) · [架构索引](architecture/README.md) |
 | 记忆的来源、提取与删除 | [完整追踪](architecture/current/memory-extraction-trace.md) · [维度放行台账](docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md) |
@@ -213,10 +212,10 @@ npm test
 数据库只读诊断和明确补齐入口：
 
 ```bash
-node backend-ts/src/schema-prepare-cli.ts --migrations backend/database/migrations
-node backend-ts/src/schema-prepare-cli.ts --prepare --migrations backend/database/migrations
+node backend-ts/src/schema-prepare-cli.ts --migrations backend-ts/database/migrations
+node backend-ts/src/schema-prepare-cli.ts --prepare --migrations backend-ts/database/migrations
 ```
 
-历史 Python 后台及测试已从当前工作树清理，对照仍保存在固定 Git 提交与显式独立测试环境；登记及命令见 `backend-ts/test/historical-inventory.json`、`npm run test:historical -- --list`。`backend/database/` 的 SQL 和 `backend/tests/` 下的合成 JSON／JSONL 夹具继续保留原路径与字节。历史结果不表示当前源码通过，正常测试不依赖 Conda 或 Python 后端。
+历史 Python 后台及测试已从当前工作树清理，对照仍保存在固定 Git 提交与显式独立测试环境；登记及命令见 `backend-ts/test/historical-inventory.json`、`npm run test:historical -- --list`。`backend-ts/database/` 的 SQL 和 `backend-ts/test/fixtures/` 下的合成 JSON／JSONL 夹具保留原始字节，现已归入 TypeScript 后台；冻结历史清单中的原路径仅用于来源追溯。历史结果不表示当前源码通过，正常测试不依赖 Conda 或 Python 后端。
 
 迁移本轮的固定采集为96/96成功、96次物理调用、0重试；用户明确跳过回复盲评和启动／内存对照，未评／未测不写为通过。详见[范围及实测记录](.scratch/dsh-ts-migration/final-acceptance-closeout/capture-summary.json)。当前源码开发验证与旧安装包、发布验收分别记录。

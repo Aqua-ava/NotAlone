@@ -25,7 +25,7 @@ export async function apply(ctx:Context){
   const home=process.env.HOME!,envFilePath=join(home,'synthetic.env'),skillsRoot=join(home,'skills');
   await mkdir(skillsRoot,{mode:0o700});
   await writeFile(envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${database}\nNOTALONE_OWNER_ID=${owner}\n`,{mode:0o600});
-  const storage=await HostStorage.open({envFilePath,migrationsDirectory:new URL('../../backend/database/migrations',import.meta.url).pathname,environment:{HOME:home}});
+  const storage=await HostStorage.open({envFilePath,migrationsDirectory:new URL('../database/migrations',import.meta.url).pathname,environment:{HOME:home}});
   let skillLibrary:SkillLibrary|undefined;
   if(process.env.NOTALONE_SYNTHETIC_SKILL_PACKAGE){
     skillLibrary=new SkillLibrary(storage,new SkillFiles(skillsRoot));

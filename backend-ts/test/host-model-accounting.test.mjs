@@ -9,7 +9,7 @@ async function fixture(t){
  const db=`notalone_accounting_${randomUUID().replaceAll('-','')}_test`,admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();let c;
  t.after(async()=>{await c?.end();await admin.query(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`);await admin.end();});
  await admin.query(`CREATE DATABASE "${db}" TEMPLATE template0`);c=new pg.Client({host:'/tmp',database:db});await c.connect();
- for(const f of (await readdir(new URL('../../backend/database/migrations/',import.meta.url))).sort())await c.query(await readFile(new URL(`../../backend/database/migrations/${f}`,import.meta.url),'utf8'));
+ for(const f of (await readdir(new URL('../database/migrations/',import.meta.url))).sort())await c.query(await readFile(new URL(`../database/migrations/${f}`,import.meta.url),'utf8'));
  const owner=(await c.query("INSERT INTO owner(display_name) VALUES('合成') RETURNING id")).rows[0].id;
  const contact=(await c.query("INSERT INTO contact(owner_id,display_name) VALUES($1,'合成') RETURNING id",[owner])).rows[0].id;
  await c.query("INSERT INTO conversation_binding(owner_id,contact_id,channel,account_scope,conversation_locator,status) VALUES($1,$2,'wechat','synthetic','synthetic','active')",[owner,contact]);

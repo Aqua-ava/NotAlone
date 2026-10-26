@@ -14,11 +14,11 @@ test('108升级当前116保留既有数据，严格拒绝迁移缺口、未知�
   const {mkdir}=await import('node:fs/promises');
   const baseline=join(directory,'baseline'),current=join(directory,'current');
   await mkdir(baseline);await mkdir(current);
-  for(const file of await readdir(join(root,'backend/database/migrations'))){
+  for(const file of await readdir(join(root,'backend-ts/database/migrations'))){
     if(!/^\d{3}_.*\.sql$/.test(file))continue;
     const version=Number(file.slice(0,3));
-    if(version<=108)await copyFile(join(root,'backend/database/migrations',file),join(baseline,file));
-    if(version<=116)await copyFile(join(root,'backend/database/migrations',file),join(current,file));
+    if(version<=108)await copyFile(join(root,'backend-ts/database/migrations',file),join(baseline,file));
+    if(version<=116)await copyFile(join(root,'backend-ts/database/migrations',file),join(current,file));
   }
   const name=`notalone_suppress_${randomUUID().replaceAll('-','')}_test`;
   const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();

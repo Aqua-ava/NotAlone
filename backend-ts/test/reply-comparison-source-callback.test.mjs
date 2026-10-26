@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {auditReplyRuntimeSources} from '../src/reply-comparison-sources.ts';
 const bytes=await readFile(new URL('./fixtures/reply-comparison-multi-attempt-v4.json',import.meta.url));
 assert.equal(createHash('sha256').update(bytes).digest('hex'),'7ccaff5445d3ba12db5bd7483e6732ab88a5e54153ebba688260a8cdd4c334b6');
-const records=JSON.parse(bytes).records,dataset=JSON.parse(await readFile(new URL('../../backend/tests/fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'));
+const records=JSON.parse(bytes).records,dataset=JSON.parse(await readFile(new URL('./fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'));
 const clone=arm=>structuredClone(records.find(row=>row.arm===arm));
 const audit=row=>auditReplyRuntimeSources(dataset.cases.find(member=>member.case_id===row.case_id),row,row.output);
 function unknown(row){let result;try{result=audit(row);}catch(error){assert.match(error.message,/^reply_comparison_invalid:runtime_/);return;}assert.equal(result.status,'undetermined');assert.equal(result.derived_proof,undefined);assert.equal(result.attempt_count,2);}

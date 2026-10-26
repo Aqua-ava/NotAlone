@@ -62,7 +62,7 @@ test('大范围历史状态不阻断初始清除后的最新优先联系人登�
    now(),now(),CASE WHEN right(contact_id::text,12)::bigint<=5 THEN 'local_history_missing' ELSE NULL END
   FROM conversation_binding WHERE owner_id=$1`,[owner]);
  await f.client.query('INSERT INTO front_sync_state(owner_id,enabled) VALUES($1,false)',[owner]);
- const storage=await HostStorage.open({envFilePath:join(f.directory,'unused.env'),migrationsDirectory:resolve('../backend/database/migrations'),
+ const storage=await HostStorage.open({envFilePath:join(f.directory,'unused.env'),migrationsDirectory:resolve('../backend-ts/database/migrations'),
   environment:{NOTALONE_DISABLE_DOTENV:'1',NOTALONE_DATABASE_URL:`host=/tmp dbname=${f.client.database}`,NOTALONE_OWNER_ID:owner}});
  const incremental=await createSyncIncrementalApi({storage,executable:join(f.directory,'must-not-run'),historyOwner:'typescript',publish:async()=>{assert.fail('优先提示不得派发正文任务');}});
  const events=new PureTsEvents(owner),publicSync=await PureTsSync.create(storage,incremental,events);

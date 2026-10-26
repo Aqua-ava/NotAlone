@@ -6,7 +6,7 @@ import * as sources from '../src/reply-comparison-sources.ts';
 import {buildReplyComparisonReport} from '../src/reply-comparison.ts';
 import {createBlindPacket,bindSubmittedReview,digest} from '../experiments/reply-blind-packet.mjs';
 const manifestText=await readFile(new URL('./fixtures/reply-comparison-material-manifest.json',import.meta.url),'utf8');
-const datasetText=await readFile(new URL('../../backend/tests/fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'),dataset=JSON.parse(datasetText),manifest=JSON.parse(manifestText);
+const datasetText=await readFile(new URL('./fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'),dataset=JSON.parse(datasetText),manifest=JSON.parse(manifestText);
 const fixtureText=await readFile(new URL('./fixtures/reply-comparison-multi-attempt-v4.json',import.meta.url),'utf8');
 assert.equal(createHash('sha256').update(fixtureText).digest('hex'),'7ccaff5445d3ba12db5bd7483e6732ab88a5e54153ebba688260a8cdd4c334b6');
 const given=JSON.parse(fixtureText),seed='67'.repeat(32),dimensions=['evidence_correctness','intent_preservation','no_unsupported_content','relationship_fit','chinese_usability'];

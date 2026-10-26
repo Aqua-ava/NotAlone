@@ -101,8 +101,8 @@ fi
 # ------------------------------------------------------------------
 log "检查版本记录并应用待执行迁移…"
 NOTALONE_DATABASE_URL="${database_url}" \
-    node "${repo_root}/backend-ts/src/schema-prepare-cli.ts" --prepare --migrations "${repo_root}/backend/database/migrations" \
-    || fail "迁移未完成；请按错误提示与 backend/database/README.md 处理，不要重放历史 SQL。"
+    node "${repo_root}/backend-ts/src/schema-prepare-cli.ts" --prepare --migrations "${repo_root}/backend-ts/database/migrations" \
+    || fail "迁移未完成；请按错误提示与 backend-ts/database/README.md 处理，不要重放历史 SQL。"
 
 # ------------------------------------------------------------------
 # 4. 生成/校验 .env（不写任何密钥）

@@ -162,7 +162,7 @@ export class ManagedRuntime {
         pgEnvironment, canStart, 'database_prepare_failed', 10_000, true);
       if (found.trim() !== '1') await this.run(path.join(components.postgres, 'psql'), ['-X', '--no-password', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', 'CREATE DATABASE notalone'],
         pgEnvironment, canStart, 'database_prepare_failed', 10_000);
-      await this.run(process.execPath, ['--experimental-strip-types', path.join(components.project, 'backend-ts/src/schema-prepare-cli.ts'), '--migrations', path.join(components.project, 'backend/database/migrations'), '--prepare'],
+      await this.run(process.execPath, ['--experimental-strip-types', path.join(components.project, 'backend-ts/src/schema-prepare-cli.ts'), '--migrations', path.join(components.project, 'backend-ts/database/migrations'), '--prepare'],
         { ...childEnvironment, NOTALONE_DATABASE_URL: databaseUrl,
           ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: undefined, NODE_NO_WARNINGS: '1' }, canStart, 'database_prepare_failed', 60_000);
       if (!canStart()) throw new ManagedRuntimeFailure('runtime_cancelled');

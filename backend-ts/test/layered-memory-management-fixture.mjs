@@ -15,7 +15,7 @@ export async function managementFixture(t, options = {}) {
   await admin.connect();
   await admin.query(`CREATE DATABASE "${name}" TEMPLATE template0`);
   const result = await prepareDatabaseSchema({databaseUrl:`host=/tmp dbname=${name}`,
-    migrationsDirectory:new URL('../../backend/database/migrations/', import.meta.url).pathname, environment:{}});
+    migrationsDirectory:new URL('../database/migrations/', import.meta.url).pathname, environment:{}});
   if (result.code !== 'ready') throw new Error(`合成结构准备失败：${result.code}`);
   const pool = new pg.Pool({host:'/tmp', database:name, max:6});
   const transaction = async work => {

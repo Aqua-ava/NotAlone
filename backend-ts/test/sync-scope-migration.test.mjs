@@ -10,7 +10,7 @@ import pg from 'pg';
 // 只创建本用例随机_test库；从真实107迁移集升级，不修改历史SQL或业务库。
 test('107升级108只快照已明确同意且有效绑定，重放不扩大到新绑定，原记录原ID保留',async t=>{
   const root=new URL('../../',import.meta.url).pathname;
-  const migrations=join(root,'backend/database/migrations');
+  const migrations=join(root,'backend-ts/database/migrations');
   const directory=await mkdtemp(join(tmpdir(),'notalone-wechat-migration-'));
   const name=`notalone_wechat_migration_${randomUUID().replaceAll('-','')}_test`;
   const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();

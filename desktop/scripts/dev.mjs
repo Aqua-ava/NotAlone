@@ -81,7 +81,7 @@ async function develop() {
       [appDirectory, '--notalone-dev', ...developmentDebugArguments(process.env.NOTALONE_DEV_CDP, args[1]), ...(background ? ['--notalone-dev-background'] : []), ...(args.length ? [`--user-data-dir=${args[1]}`] : [])], { cwd: project, env: environment, detached: true,
         stdio: ['ignore', 'inherit', 'inherit', 'ipc'] }));
     await builder.watch();
-    for (const [directory, extension] of [['../backend/database/migrations', '.sql'], ['../backend-ts/src', '.ts']]) {
+    for (const [directory, extension] of [['../backend-ts/database/migrations', '.sql'], ['../backend-ts/src', '.ts']]) {
       watchers.push(watch(path.resolve(project, directory), { recursive: true }, (_event, filename) => {
         if (filename?.endsWith(extension)) restart();
       }));

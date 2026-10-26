@@ -2,7 +2,7 @@
 
 > 2026-10-21 决定收敛：新增联系人按 [ADR-087](../adr/087-wechat-confirmed-contact-onboarding.md)及 [ADR-089](../adr/089-all-private-wechat-sync-scope.md)从真实微信会话加入，支持逐会话确认或全部私聊范围授权，独立创建与导入新建的旧接口待退役；历史 `manual_create` 记录保留读取与删除语义。默认自动采纳按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；下文标明的历史协议及评测不得当作默认流水线。
 
-> 状态：已采纳的产品约束；当前独立版采用本机 PostgreSQL 作为权威业务库，已有资料按 ADR-066 沿用原连接和资料位置。已实现表结构以[版本化迁移](../../backend/database/migrations)为准；本文中的目标数据对象不代表都已落地，实际启用与验收分别核验。
+> 状态：已采纳的产品约束；当前独立版采用本机 PostgreSQL 作为权威业务库，已有资料按 ADR-066 沿用原连接和资料位置。已实现表结构以[版本化迁移](../../backend-ts/database/migrations)为准；本文中的目标数据对象不代表都已落地，实际启用与验收分别核验。
 
 > 后续目标：记忆时间状态、可追溯概览与自动 Skill 生命周期由[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)及[正式规格](../../.scratch/memory-skill-evolution/spec.md)局部细化；独立集成候选现已完成联系人与本人概览的合成验证，下方 v1 数据对象仍描述基础约束；真实模型质量与实际 App／微信另验。
 

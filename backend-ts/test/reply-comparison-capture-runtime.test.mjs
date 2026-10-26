@@ -33,7 +33,7 @@ function modelPayload(body){
  visit(body);assert.equal(found.length,1);return found[0];
 }
 test('实际DSH请求完成后从PG重建v2来源并交现有审计通过',{timeout:60000},async t=>{
- const f=await createStorageFixture(),dataset=JSON.parse(await readFile(new URL('../../backend/tests/fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'));
+ const f=await createStorageFixture(),dataset=JSON.parse(await readFile(new URL('./fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'));
  const member=dataset.cases.find(item=>item.case_id==='paired-decline');assert.ok(member);
  const owner=randomUUID(),contact=randomUUID(),binding=randomUUID(),scope={owner_id:owner,contact_id:contact,conversation_binding_id:binding,confirmation:'manual'};
  await f.client.query("INSERT INTO owner(id,display_name)VALUES($1,'合成采集本人')",[owner]);

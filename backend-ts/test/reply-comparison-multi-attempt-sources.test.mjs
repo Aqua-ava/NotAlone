@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {auditReplyRuntimeSources} from '../src/reply-comparison-sources.ts';
 const text=await readFile(new URL('./fixtures/reply-comparison-multi-attempt-v4.json',import.meta.url),'utf8');
 assert.equal(createHash('sha256').update(text).digest('hex'),'7ccaff5445d3ba12db5bd7483e6732ab88a5e54153ebba688260a8cdd4c334b6');
-const capture=JSON.parse(text),dataset=JSON.parse(await readFile(new URL('../../backend/tests/fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'));
+const capture=JSON.parse(text),dataset=JSON.parse(await readFile(new URL('./fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8'));
 const memberFor=row=>dataset.cases.find(member=>member.case_id===row.case_id);
 const audit=row=>auditReplyRuntimeSources(memberFor(row),row,row.output);
 const canonical=value=>value===null||typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?'['+value.map(canonical).join(',')+']':'{'+Object.keys(value).sort().map(key=>JSON.stringify(key)+':'+canonical(value[key])).join(',')+'}';

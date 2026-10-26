@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import pg from 'pg';
 import { prepareDatabaseSchema } from '../src/schema-prepare.ts';
 
-const migrationsDirectory = new URL('../../backend/database/migrations/', import.meta.url).pathname;
+const migrationsDirectory = new URL('../database/migrations/', import.meta.url).pathname;
 const ownedDatabase = /^notalone_ts_host_[a-f0-9]{32}_test$/;
 
 // 只创建本轮随机合成库，不读取项目 .env，也不调用历史 Python 后端。

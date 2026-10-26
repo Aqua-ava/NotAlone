@@ -61,7 +61,7 @@ if (options['--check-directory']) {
       await cp(path.join(repository, 'backend-ts', name), path.join(backend, name), { recursive: true, dereference: true,
         filter: source => !/(?:^|\/)(?:\.cache|__pycache__|\.env(?:\.[^/]*)?)(?:\/|$)/.test(source) });
     }
-    await cp(path.join(repository, 'backend/database'), path.join(project, 'backend/database'), { recursive: true });
+    await cp(path.join(repository, 'backend-ts/database'), path.join(project, 'backend-ts/database'), { recursive: true });
     const licenses = path.join(root, 'licenses'); await mkdir(licenses);
     await prepareRuntimeAttribution({ lock: attribution, download, directory: path.join(licenses, 'attribution') });
     await cp(path.join(scripts, 'runtime/THIRD-PARTY-SOURCES.md'), path.join(licenses, 'README.md'));

@@ -20,8 +20,8 @@ NOTALONE_HISTORICAL_PYTHON=/absolute/venv/bin/python npm run test:historical -- 
 Node结构入口从仓库根目录运行：
 
 ```bash
-node backend-ts/src/schema-prepare-cli.ts --migrations backend/database/migrations
-node backend-ts/src/schema-prepare-cli.ts --prepare --migrations backend/database/migrations
+node backend-ts/src/schema-prepare-cli.ts --migrations backend-ts/database/migrations
+node backend-ts/src/schema-prepare-cli.ts --prepare --migrations backend-ts/database/migrations
 ```
 
 原116份SQL、账本摘要、未知结构停写、旧NULL/v1政策、来源和删除决定保持。正常运行不会自动下载向量模型；显式准备使用 `node scripts/prepare_memory_embedding.mjs`，`--offline` 验证原固定缓存。
@@ -29,3 +29,10 @@ node backend-ts/src/schema-prepare-cli.ts --prepare --migrations backend/databas
 回复始终绑定已确认联系人。临时DSH执行状态不成为长期关系资料；来源、权限、预算、事务和调度由业务模块控制。外部聊天发送不属于Tool，最终消息由用户手动发送。关闭同步或退出时停读，取消和迟到结果不得写入已失效范围。
 
 本轮迁移采集96/96成功、96物理调用、0重试；回复盲评及启动/RSS重复对照按用户要求跳过，不能称为质量或性能验收通过。开发实际App、合成HTTP/PG、模型和发行验收分别记录，未执行打包。
+
+## 数据库与合成测试材料
+
+- `database/` 保存数据库迁移 SQL 与[迁移恢复说明](database/README.md)，供当前安装、开发启动和运行时结构检查使用。
+- `test/fixtures/` 保存导入和回复评测的 JSON／JSONL 合成材料；`test/fixtures/historical-server/` 保存历史批量更新重放材料。
+- 原根目录 `backend/` 已移除。迁移只改变仓库文件位置，SQL 和合成数据原始字节保持不变，不移动或升级业务数据库、`.env` 或用户资料。
+- 冻结评测清单及固定 Git 树中的 `backend/...` 是历史来源标识，保留原路径和摘要；当前文件读取统一使用新位置。

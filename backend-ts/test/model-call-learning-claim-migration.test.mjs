@@ -14,11 +14,11 @@ test('110升级116保留原数据与unknown收据，学习claim完整约束和�
   const {mkdir}=await import('node:fs/promises');
   const baseline=join(directory,'baseline'),current=join(directory,'current');
   await mkdir(baseline);await mkdir(current);
-  for(const file of await readdir(join(root,'backend/database/migrations'))){
+  for(const file of await readdir(join(root,'backend-ts/database/migrations'))){
     if(!/^\d{3}_.*\.sql$/.test(file))continue;
     const version=Number(file.slice(0,3));
-    if(version<=110)await copyFile(join(root,'backend/database/migrations',file),join(baseline,file));
-    if(version<=116)await copyFile(join(root,'backend/database/migrations',file),join(current,file));
+    if(version<=110)await copyFile(join(root,'backend-ts/database/migrations',file),join(baseline,file));
+    if(version<=116)await copyFile(join(root,'backend-ts/database/migrations',file),join(current,file));
   }
   const name=`notalone_claim_${randomUUID().replaceAll('-','')}_test`;
   const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();

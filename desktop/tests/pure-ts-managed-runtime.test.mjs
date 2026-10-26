@@ -23,7 +23,7 @@ test('全新受管库经TS监督和原迁移首次准备，PATH无Conda且组件
  for(const module of ['managed-postgres.ts','managed-database-lifetime.ts'])await add(`project/backend-ts/src/${module}`,await readFile(path.resolve('../backend-ts/src',module)));
  await add('project/backend-ts/src/launch.ts','// 合成构件入口。\n');await add('project/backend-ts/profile/host.patch.yml','[]\n');
  const {readdir}=await import('node:fs/promises');
- for(const name of await readdir('../backend/database/migrations'))if(name.endsWith('.sql'))await add(`project/backend/database/migrations/${name}`,await readFile(path.join('../backend/database/migrations',name)));
+ for(const name of await readdir('../backend-ts/database/migrations'))if(name.endsWith('.sql'))await add(`project/backend-ts/database/migrations/${name}`,await readFile(path.join('../backend-ts/database/migrations',name)));
  await writeFile(path.join(root,'manifest.json'),JSON.stringify({formatVersion:1,architecture:process.arch,paths:managedLayout,components:[1].map(n=>({name:`synthetic-${n}`,version:'test',source:'repository:synthetic',sha256:'a'.repeat(64)})),files:entries}));
  const subject=await build({stdin:{contents:"export {ManagedRuntime} from './src/main/startup/managed-runtime.ts'; export {loadBackendConfiguration} from './src/main/backend/config.ts';",resolveDir:path.resolve('.')},bundle:true,platform:'node',format:'esm',write:false});
  const subjectPath=path.join(directory,'subject.mjs');await writeFile(subjectPath,subject.outputFiles[0].text);const {ManagedRuntime,loadBackendConfiguration}=await import(subjectPath);
@@ -34,7 +34,7 @@ test('全新受管库经TS监督和原迁移首次准备，PATH无Conda且组件
   assert.equal(config.runtime,'dsh');assert.equal(config.pythonExecutable,undefined);
   await runtime.start(config,()=>true);
   assert.equal(entries.some(entry=>entry.path.startsWith('python/')||entry.path.endsWith('.py')),false);
-  const storage=await HostStorage.open({envFilePath:config.envFilePath,migrationsDirectory:path.join(root,'project/backend/database/migrations'),environment:{}});
+  const storage=await HostStorage.open({envFilePath:config.envFilePath,migrationsDirectory:path.join(root,'project/backend-ts/database/migrations'),environment:{}});
   try{assert.deepEqual(await storage.compatibility(),{code:'ready'});assert.equal((await storage.setupStatus()).initialized,false);}finally{await storage.close();}
   assert.ok(config.managedLifetimeLock);assert.equal(await runtime.stop(),true);
  }finally{if(prior===undefined)delete process.env.NOTALONE_HOST_RUNTIME;else process.env.NOTALONE_HOST_RUNTIME=prior;}

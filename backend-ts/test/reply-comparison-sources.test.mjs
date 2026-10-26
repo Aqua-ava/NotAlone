@@ -8,7 +8,7 @@ import {auditReplyRuntimeSources,captureReplyRuntimeSourceAttempt,replyCompariso
 const canonical=value=>value===null||typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?'['+value.map(canonical).join(',')+']':'{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}';
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:canonical(value)).digest('hex');
 const manifestText=await readFile(new URL('./fixtures/reply-comparison-material-manifest.json',import.meta.url),'utf8');
-const datasetText=await readFile(new URL('../../backend/tests/fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8');
+const datasetText=await readFile(new URL('./fixtures/fidelity/synthetic-v1.json',import.meta.url),'utf8');
 const originalPilot=JSON.parse(await readFile(new URL('./fixtures/reply-comparison-source-pilot.json',import.meta.url),'utf8'));
 function reportRun(collection){
  const configuration={provider:'syntax-probe-only',endpoint:'http://127.0.0.1',request_model:'syntax-probe-only',temperature:0,top_p:1,reasoning:'off',max_output_tokens:4096,stop:[],timeout_ms:10000,max_retries:0,seed:null,prompt_hash:null,tool_schema_hash:null,environment_hash:null};
