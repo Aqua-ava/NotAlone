@@ -23,7 +23,7 @@ test('受控配置保留模型和资料位置，凭据不进入状态响应', as
 
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
-test('原账本及120升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人', async () => {
+test('原账本及121升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人', async () => {
   const fixture = await createStorageFixture();
   try {
     const storage = await HostStorage.open(fixture.options);
@@ -39,7 +39,7 @@ test('原账本及120升级只读核验后允许首次本人创建，重开恢�
     assert.equal((await unbound.setupStatus()).runtime_owner_configured, false);
     await assert.rejects(unbound.initializeOwner('猜选'), { code: 'owner_already_configured' });
     assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM public.owner')).rows[0].n, 1);
-    assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM public.notalone_schema_migration')).rows[0].n, 120);
+    assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM public.notalone_schema_migration')).rows[0].n, 121);
   } finally { await fixture.close(); }
 });
 
@@ -111,7 +111,7 @@ test('035接管基线与后续账本分开校验，未完成迁移只读停写',
     const middle=(await fixture.client.query("DELETE FROM public.notalone_schema_migration WHERE name='115_user_cancelled_generation.sql' RETURNING name,checksum")).rows[0];
     assert.deepEqual(await storage.compatibility(), {code:'migration_history_mismatch'});
     await fixture.client.query('INSERT INTO public.notalone_schema_migration(name,checksum) VALUES($1,$2)',[middle.name,middle.checksum]);
-    await fixture.client.query("DELETE FROM public.notalone_schema_migration WHERE name='120_assistant_idle_admission.sql'");
+    await fixture.client.query("DELETE FROM public.notalone_schema_migration WHERE name='121_assistant_runtime_qualification.sql'");
     assert.deepEqual(await storage.compatibility(), {code:'migration_pending'});
     await assert.rejects(storage.initializeOwner('不自动迁移'), {code:'migration_pending'});
     await fixture.client.query('UPDATE public.notalone_schema_baseline SET restore_verified_at=NULL');

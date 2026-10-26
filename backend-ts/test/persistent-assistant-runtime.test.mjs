@@ -3,14 +3,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {request as httpRequest} from 'node:http';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,readdir,writeFile,rm,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,readdir,writeFile,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {startReplyServiceHost,sendEvents,useTool} from './reply-service-runtime-support.mjs';
 
 async function fixture(t){
- let candidateText='合成保存候选',gate=null,active=0,maxActive=0;
+ let candidateText='合成保存候选',gate=null,active=0,maxActive=0,nextTool=null,useSkill=false;
  const f=await createStorageFixture(),owner=randomUUID(),contact=randomUUID(),binding=randomUUID(),token=randomUUID()+randomUUID();
  const businessHome=await mkdtemp(join(tmpdir(),'notalone-persistent-assistant-'));
  t.after(async()=>{await f.close();await rm(businessHome,{recursive:true,force:true});});
@@ -20,13 +20,15 @@ async function fixture(t){
  const start=(environment={})=>startReplyServiceHost(t,{name:f.client.database,user:f.client.user,replyOwner:owner,replyToken:token,close:async()=>{}},(_req,res,requests,events)=>{
    active++;maxActive=Math.max(maxActive,active);res.once('finish',()=>{active--;});
    const body=requests.at(-1).body,last=body.messages.at(-1),raw=JSON.stringify(last),citation=[...raw.matchAll(/(?:evidence_id\\?"\s*:\s*\\?")(c\d+)/g)].at(-1)?.[1]??'c1';
-   if(body.tools.some(tool=>tool.name==='ExplorationOutput'))useTool(events,'ExplorationOutput',{understanding:'合成近期联系',ambiguities:[],citation_ids:[],options:[{intent:'了解近况',label:'关心',reason:'由用户决定',citation_ids:[],recommended:false,pause:false},{intent:'稍后联系',label:'稍后',reason:'由用户决定',citation_ids:[],recommended:false,pause:false}],question:null,current_step:'选择本次意愿',tradeoffs:[]});else useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:null,candidates:[{text:candidateText,basis:'本轮明确原句',citation_ids:[citation],risk_notes:[]}]});if(gate){const current=gate;gate=null;current.enter();current.wait.then(()=>sendEvents(res,events));return;}sendEvents(res,events);
+   if(nextTool){const tool=nextTool;nextTool=null;const selected=tool(body);useTool(events,selected.name,selected.args);sendEvents(res,events);return;}
+   const skillAlias=useSkill?[...JSON.stringify(body).matchAll(/version_id\\?"\s*:\s*\\?"(k\d+)/g)].at(-1)?.[1]??null:null;
+   if(body.tools.some(tool=>tool.name==='ExplorationOutput'))useTool(events,'ExplorationOutput',{understanding:'合成近期联系',ambiguities:[],citation_ids:[],options:[{intent:'了解近况',label:'关心',reason:'由用户决定',citation_ids:[],recommended:false,pause:false},{intent:'稍后联系',label:'稍后',reason:'由用户决定',citation_ids:[],recommended:false,pause:false}],question:null,current_step:'选择本次意愿',tradeoffs:[]});else useTool(events,'ReplyRuntimeOutput',{used_skill_version_id:skillAlias,candidates:[{text:candidateText,basis:'本轮明确原句',citation_ids:[citation],risk_notes:[]}]});if(gate){const current=gate;gate=null;current.enter();current.wait.then(()=>sendEvents(res,events));return;}sendEvents(res,events);
  },{pluginPath:'test/host-reply-runtime-plugin.ts',environment:{NOTALONE_SYNTHETIC_PERSISTENT:'1',NOTALONE_SYNTHETIC_BUSINESS_HOME:businessHome,...environment}});
  const request=async(host,path,body,method=body===undefined?'GET':'POST')=>{
   const response=await fetch(host.url+path,{method,headers:{Authorization:`Bearer ${token}`,'content-type':'application/json','x-notalone-manual-contact':contact},...(body===undefined?{}:{body:JSON.stringify(body)})});
-  const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));return result;
+  const result=await response.json();assert.equal(response.status,200,JSON.stringify(result)+(response.ok?"":host.output));return result;
  };
- return {f,owner,contact,binding,token,businessHome,start,request,maxActive:()=>maxActive,setCandidateText:text=>{candidateText=text;},holdNext:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};return {entered,release};},input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true})};
+ return {f,owner,contact,binding,token,businessHome,start,request,setUseSkill:value=>{useSkill=value;},setNextTool:value=>{nextTool=value;},maxActive:()=>maxActive,setCandidateText:text=>{candidateText=text;},holdNext:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};return {entered,release};},input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true})};
 }
 
 test('目录与历史浏览保持当前和真实活动，明确继续原段才刷新活动且零模型',{timeout:60000},async t=>{
@@ -145,13 +147,13 @@ test('公开同键并发只写一轮，其他联系人不能读取或恢复其�
  const wrong=await fetch(host.url+path.replace(f.contact,other),{headers:{Authorization:`Bearer ${f.token}`,'x-notalone-manual-contact':other}});assert.equal(wrong.status,404);assert.equal(host.requests.length,1);
 });
 
-test('运行配置不符时零出站，业务候选仍可查看',{timeout:60000},async t=>{
+test('合法模型配置改变时安全替换底层运行，业务讨论与候选保持',{timeout:60000},async t=>{
  const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
  await f.request(host,`${path}/replies`,f.input('合成配置原句'));await host.stop();
  const changed=await f.start({NOTALONE_SYNTHETIC_REPLY_TEMPERATURE:'0.1'});
  const history=await f.request(changed,path);assert.match(JSON.stringify(history),/合成保存候选/);
  const response=await fetch(changed.url+`${path}/replies`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(f.input('配置变化后需核验'))});
- assert.equal(response.status,409);assert.equal(changed.requests.length,0);
+ assert.equal(response.status,200,JSON.stringify(await response.json())+(response.ok?"":changed.output));assert.equal(changed.requests.length,1);assert.equal(changed.requests[0].body.temperature,0.1);assert.match(JSON.stringify(changed.requests[0].body),/合成保存候选/);
 });
 
 test('模型日志已写而业务保存失败，未提交候选不会成为历史或下一轮运行上下文',{timeout:60000},async t=>{
@@ -328,4 +330,98 @@ test('空闲后的明确补充要求生成新段，同键继续命令仍可重�
  await f.request(host,path,{confirmed:true},'DELETE');
  const rejected=await fetch(host.url+`${base}/${prepared.session_id}/continue`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(command)});
  assert.ok([404,409].includes(rejected.status));assert.equal(host.requests.length,count,'旧候选删除后零出站');
+});
+
+
+test('旧业务讨论仅首次明确继续零HTTP建档，真实重启后保留原候选及编辑版本',{timeout:60000},async t=>{
+ const f=await fixture(t),legacy=await f.start({NOTALONE_SYNTHETIC_PERSISTENT:'0',NOTALONE_SYNTHETIC_PUBLIC:'1'}),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:session}=await f.request(legacy,base,{}),path=`${base}/${session}`;
+ const first=await f.request(legacy,`${path}/replies`,f.input('合成旧记录一次性要求'));
+ const versionsPath=`${path}/candidates/${first.candidates[0].candidate_id}/versions`,original=(await f.request(legacy,versionsPath)).versions[0];
+ const edited=await f.request(legacy,versionsPath,{edit_key:randomUUID(),parent_version_id:original.version_id,messages:original.messages.map(m=>({...m,text:'合成旧记录编辑版本'}))});
+ await legacy.stop();const host=await f.start(),before=await f.request(host,path);
+ const exists=async()=>{try{return (await readdir(join(f.businessHome,'assistant-runtime'),{recursive:true})).filter(p=>p.endsWith('.jsonl'));}catch(e){if(e.code==='ENOENT')return [];throw e;}};
+ assert.equal((await exists()).length,0,'只读历史不建立档案');
+ const resumed=await f.request(host,`${path}/resume`,{});assert.equal(resumed.session_id,session);assert.equal(host.requests.length,0);
+ assert.equal((await exists()).length,1,'明确继续按真实业务记录建立官方可恢复档案');
+ assert.deepEqual(await f.request(host,path),before,'建档不改旧业务记录');assert.deepEqual(await f.request(host,versionsPath),edited);
+ await host.stop();const restarted=await f.start();await f.request(restarted,`${path}/resume`,{});assert.equal(restarted.requests.length,0);
+ await f.request(restarted,`${path}/replies`,f.input('合成当前意图优先：保持随意'));
+ const body=JSON.stringify(restarted.requests[0].body);assert.match(body,/合成旧记录一次性要求/);assert.match(body,/合成旧记录编辑版本/);assert.match(body,/合成保存候选/);assert.match(body,/assistant_discussion_reference/);assert.match(body,/is_sent/);
+ await f.request(restarted,`${path}/replies`,f.input('合成随后继续'));
+ assert.doesNotMatch(JSON.stringify(restarted.requests[1].body.messages.at(-1)),/合成旧记录编辑版本|合成旧记录一次性要求/,'原讨论引用只携入一次，随后复用真实SDK历史');
+});
+
+
+test('修正模型曾见的背景后继续原段，整份新请求排除旧正文并提示变化',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),source=randomUUID(),message=randomUUID();
+ await f.f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'manual','synthetic.jsonl',$4,1)",[source,f.owner,f.contact,'c'.repeat(64)]);
+ await f.f.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) VALUES($1,$2,$3,'contact','text','合成旧背景唯一标记_04A',now())",[message,f.owner,f.contact]);
+ await f.f.client.query("INSERT INTO message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,'source_document',$4,'synthetic','{}')",[message,f.owner,f.contact,source]);
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ const contextual=text=>({...f.input(text),content:{type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:text,include_relationship_context:true}});
+ await f.request(host,`${path}/replies`,contextual('合成有当前背景的问候'));
+ assert.match(JSON.stringify(host.requests[0].body),/合成旧背景唯一标记_04A/,'测试材料确实曾在实际供应商请求中出现');
+ await f.f.client.query("UPDATE message SET text_content='合成修正后背景_04B',speaker='user' WHERE owner_id=$1 AND contact_id=$2 AND id=$3",[f.owner,f.contact,message]);
+ const count=host.requests.length,resumed=await f.request(host,`${path}/resume`,{});assert.equal(resumed.session_id,session);assert.equal(host.requests.length,count);assert.equal(resumed.context_refresh?.changed,true);
+ await f.request(host,`${path}/replies`,contextual('合成当前意愿保持随意'));
+ const body=JSON.stringify(host.requests.at(-1).body);assert.doesNotMatch(body,/合成旧背景唯一标记_04A/);assert.match(body,/合成修正后背景_04B/);assert.match(body,/speaker_role[^a-z]+owner/);
+});
+
+
+test('未重新点击继续时收窄背景范围仍先重建，旧prompt全文不得再次外发',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),source=randomUUID(),message=randomUUID();
+ await f.f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'manual','synthetic.jsonl',$4,1)",[source,f.owner,f.contact,'d'.repeat(64)]);
+ await f.f.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) VALUES($1,$2,$3,'contact','text','合成范围收窄必须消失_04C',now())",[message,f.owner,f.contact]);
+ await f.f.client.query("INSERT INTO message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,'source_document',$4,'synthetic','{}')",[message,f.owner,f.contact,source]);
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ await f.request(host,`${path}/replies`,{...f.input('合成原问候'),content:{type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:'合成原问候',include_relationship_context:true}});
+ assert.match(JSON.stringify(host.requests[0].body),/合成范围收窄必须消失_04C/);
+ const input=f.input('合成本轮只改原句');await f.request(host,`${path}/replies/prepare`,input);assert.equal(host.requests.length,1);
+ await f.request(host,`${path}/replies`,input);assert.doesNotMatch(JSON.stringify(host.requests[1].body),/合成范围收窄必须消失_04C/);
+ assert.match(JSON.stringify(await f.request(host,path)),/合成保存候选/,'业务历史仍保留可回看候选');
+});
+
+
+test('新增合法聊天继续时背景变化可见，保留同一SDK历史并使用最新消息',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),{session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ const contextual=text=>({...f.input(text),content:{type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:text,include_relationship_context:true}});
+ await f.request(host,`${path}/replies`,contextual('合成连续背景前轮'));const files=(await readdir(join(f.businessHome,'assistant-runtime'),{recursive:true})).filter(p=>p.endsWith('.jsonl'));
+ const source=randomUUID(),message=randomUUID();await f.f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'manual','synthetic-new.jsonl',$4,1)",[source,f.owner,f.contact,'e'.repeat(64)]);
+ await f.f.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) VALUES($1,$2,$3,'contact','text','合成新增合法背景_04D',now())",[message,f.owner,f.contact]);
+ await f.f.client.query("INSERT INTO message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,'source_document',$4,'synthetic','{}')",[message,f.owner,f.contact,source]);
+ const resumed=await f.request(host,`${path}/resume`,{});assert.equal(resumed.context_refresh?.changed,true);assert.equal(host.requests.length,1);
+ await f.request(host,`${path}/replies`,contextual('合成当前新意图优先'));
+ const body=host.requests.at(-1).body;assert.match(JSON.stringify(body),/合成新增合法背景_04D/);assert.ok(body.messages.some(m=>m.role==='assistant'&&JSON.stringify(m).includes('合成保存候选')));
+ assert.doesNotMatch(JSON.stringify(body.messages.at(-1)),/assistant_discussion|合成连续背景前轮/);assert.deepEqual((await readdir(join(f.businessHome,'assistant-runtime'),{recursive:true})).filter(p=>p.endsWith('.jsonl')),files);
+});
+
+
+test('停用已读取Skill后继续原段，旧system和read_file工具正文均不再外发',{timeout:60000},async t=>{
+ const f=await fixture(t),pkg=join(f.businessHome,'synthetic-skill-04');await mkdir(pkg);await writeFile(join(pkg,'SKILL.md'),'---\nname: synthetic-skill-04\ndescription: 合成回复策略\n---\n\n合成旧Skill正文唯一标记_04E\n');
+ const host=await f.start({NOTALONE_SYNTHETIC_SKILL_PACKAGE:pkg}),entry=(await f.f.client.query('SELECT v.id,s.id AS skill_id FROM reply_skill_version v JOIN reply_skill s ON s.id=v.skill_id WHERE s.owner_id=$1',[f.owner])).rows[0];
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ f.setUseSkill(true);f.setNextTool(body=>{const file=JSON.stringify(body).match(/\/notalone\/reply-skills\/[^"\\ ]+\/SKILL\.md/)?.[0];assert.ok(file);return {name:'read_file',args:{file_path:file}};});
+ await f.request(host,`${path}/replies`,{...f.input('合成Skill本轮原句'),skill_disabled:false,skill_version_id:entry.id});
+ assert.equal(host.requests.length,2);assert.ok(host.requests[1].body.messages.some(m=>JSON.stringify(m).includes('tool_result')&&JSON.stringify(m).includes('合成旧Skill正文唯一标记_04E')),'真实工具结果确实曾进入供应商请求');
+ await f.request(host,`/api/skills/${entry.skill_id}/disable`,{});const count=host.requests.length,resumed=await f.request(host,`${path}/resume`,{});assert.equal(resumed.context_refresh?.changed,true);assert.equal(host.requests.length,count);
+ f.setUseSkill(false);await f.request(host,`${path}/replies`,f.input('合成新原句不使用旧Skill'));
+ assert.doesNotMatch(JSON.stringify(host.requests.at(-1).body),/合成旧Skill正文唯一标记_04E/);assert.match(JSON.stringify(await f.request(host,path)),/合成保存候选/);
+});
+
+test('旧历史独有背景在模型等待中被修正后逐阶段复验，迟到输出不保存也不再出站',{timeout:60000},async t=>{
+ const f=await fixture(t),host=await f.start(),source=randomUUID(),old=randomUUID(),freshSource=randomUUID();
+ await f.f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'manual','synthetic-old.jsonl',$4,1),($5,$2,$3,'manual','synthetic-recent.jsonl',$6,55)",[source,f.owner,f.contact,'a'.repeat(64),freshSource,'b'.repeat(64)]);
+ await f.f.client.query("INSERT INTO message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) VALUES($1,$2,$3,'contact','text','合成旧历史独有背景_04F',now()-interval '1 day')",[old,f.owner,f.contact]);
+ await f.f.client.query("INSERT INTO message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES($1,$2,$3,'source_document',$4,'synthetic-old','{}')",[old,f.owner,f.contact,source]);
+ const {session_id:session}=await f.request(host,`/api/contacts/${f.contact}/assistant-sessions`,{}),path=`/api/contacts/${f.contact}/assistant-sessions/${session}`;
+ const contextual=text=>({...f.input(text),content:{type:'rewrite_draft',input_kind:'workspace',workspace_action:'express',draft_text:text,include_relationship_context:true}});
+ await f.request(host,`${path}/replies`,contextual('合成前轮问候'));assert.match(JSON.stringify(host.requests[0].body),/合成旧历史独有背景_04F/);
+ const added=(await f.f.client.query("INSERT INTO message(owner_id,contact_id,speaker,message_type,text_content,occurred_at) SELECT $1,$2,'contact','text','合成近期合法消息'||i,now()+i*interval '1 microsecond' FROM generate_series(1,55) i RETURNING id",[f.owner,f.contact])).rows.map(r=>r.id);
+ await f.f.client.query("INSERT INTO message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) SELECT id,$1,$2,'source_document',$3,id::text,'{}'::jsonb FROM unnest($4::uuid[]) id",[f.owner,f.contact,freshSource,added]);
+ f.setCandidateText('合成迟到不得保存_04G');const gate=f.holdNext(),input=contextual('合成本轮只参考近期背景');
+ const running=fetch(host.url+`${path}/replies`,{method:'POST',headers:{Authorization:`Bearer ${f.token}`,'content-type':'application/json','x-notalone-manual-contact':f.contact},body:JSON.stringify(input)});
+ await gate.entered;assert.doesNotMatch(JSON.stringify(host.requests.at(-1).body.messages.at(-1)),/合成旧历史独有背景_04F/,'本轮当前背景已不含旧消息，资格复验仍须覆盖SDK旧历史');
+ await f.f.client.query("UPDATE message SET text_content='合成旧背景已修正_04H' WHERE owner_id=$1 AND contact_id=$2 AND id=$3",[f.owner,f.contact,old]);gate.release();
+ const response=await running;assert.equal(response.status,409,JSON.stringify(await response.json()));assert.equal(host.requests.length,2,'来源改变后不得继续下一次物理出站');assert.doesNotMatch(JSON.stringify(await f.request(host,path)),/合成迟到不得保存_04G/);
 });

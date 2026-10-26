@@ -32,6 +32,7 @@ export interface ReplyGenerationGuardOptions {
  skillPort:Pick<PostgresSkillPort,'validateUseInTransaction'|'validateInTransaction'>;
  savedSkill:ReturnType<typeof createReplySkillGuards>;
  selectedSkillFailure?:()=>SelectedSkillFailure|null;
+ validateRuntime?:(client:pg.Client)=>Promise<void>;
  runtimeHistory?:(client:pg.Client,identity:{idempotency_key:string})=>Promise<boolean>;
  /** suggestion入口必须提供实际探索回执复验，普通入口不需要。 */
  validateExploredContext?:(client:pg.Client,context:BuiltReplyContext)=>Promise<void>;
@@ -67,7 +68,7 @@ export function createReplyGenerationGuards(options:ReplyGenerationGuardOptions)
      if(!legacy||legacy.expression_preference_revision!==null||(await client.query('SELECT 1 FROM reply_expression_preference_use WHERE reply_request_id=$1',[request.request_id])).rowCount)invalid();
    }
    if(built.reply_request_id!==request.request_id||!equal(built.scope,{owner_id:scope.owner_id,contact_id:scope.contact_id})||built.conversation_binding_id!==scope.conversation_binding_id||!equal(built.command.content,input.content)||built.command.contact_id!==input.contact_id||built.command.continued_from_candidate_id!==input.continued_from_candidate_id||!equal(context.evidence,built.evidence)||String(context.skill_library_revision)!==state.skillRevision)invalid();
-   await requireReplyScope(client,scope,input);
+   await requireReplyScope(client,scope,input);await options.validateRuntime?.(client);
    await new PostgresReplyContext(client,{...state.contextOptions,readContinuationBasis:(c,s,b,id)=>assistant.readContinuationBasis(c,s,b,id)}).validateCurrent(built);
    await requireCurrentReplyMemory(client,built.scope,built.evidence);
    await discussion.validateCurrent(client,request,state.discussion);

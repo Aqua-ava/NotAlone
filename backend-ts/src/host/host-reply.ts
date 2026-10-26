@@ -1,5 +1,6 @@
+import {AssistantRuntimeProjection} from '../reply/runtime/assistant-runtime-projection.ts';
 /** 宿主装配真实回复服务；独立内部鉴权，停止后排空实际调用再释放官方适配器。 */
-import {AssistantRuntime} from '../reply/runtime/assistant-runtime.ts';
+import {assistantRuntimeConfiguration,AssistantRuntime} from '../reply/runtime/assistant-runtime.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import type pg from 'pg';
@@ -201,7 +202,9 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     get runtime(){return qualityRuntime;},
   }):undefined;
   const assistantRuntime=options.assistantRuntime??(options.persistentAssistantHome?new AssistantRuntime({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),home:options.persistentAssistantHome}):undefined);
+  const runtimeProjection=new AssistantRuntimeProjection(discussionSkillsRoot);
   const discussionService=new AssistantDiscussionService({
+      materializeRuntime:assistantRuntime?.persistent&&options.configuration?(scope,session,binding,signal)=>execute(signal,combined=>assistantRuntime.materialize(scope,session,assistantRuntimeConfiguration({version:1,model:options.configuration!.model,binding}),client=>runtimeProjection.read(client,scope,session,binding),combined)):undefined,
       eraseRuntime:assistantRuntime?(client,scope,session)=>assistantRuntime.erase(client,scope,session):undefined,
       transaction:discussionTransaction,assistantClock:options.assistantClock,
       skillsRoot:discussionSkillsRoot,

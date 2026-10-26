@@ -154,3 +154,22 @@ test('恢复助手对话后保留当时的不完整历史警告', async () => {
     assert.match(renderSession(f.replies.getState()), /历史覆盖不完整/);
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
+
+test('生产Main与preload继续旧讨论显示无正文的背景更新提示，回看其他讨论清除提示', async () => {
+  const f = await historicalReplyFixture(), original = f.backend.requestJson, other = randomUUID();
+  f.backend.requestJson = async request => {
+    if (request.path.endsWith('/resume')) return { generation: f.records.generation,
+      data: { session_id: f.sessionId, context_refresh: { changed: true } } };
+    if (request.path.endsWith('/' + other)) return { generation: f.records.generation,
+      data: { session_id: other, current_input_version_id: null, turns: [], inputs: [] } };
+    return original(request);
+  };
+  try {
+    await f.bridge.readSavedSession(f.scope);
+    await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
+    assert.equal((await f.bridge.getState()).sessionCatalog.currentSessionId, f.sessionId);
+    assert.match(renderSession(await f.bridge.getState()), /已更新当前聊天和有效资料/);
+    await f.bridge.viewSavedSession({ ...f.scope, sessionId: other });
+    assert.doesNotMatch(renderSession(await f.bridge.getState()), /已更新当前聊天和有效资料/);
+  } finally { await f.replies.beginGenerationClosing(() => {}); }
+});

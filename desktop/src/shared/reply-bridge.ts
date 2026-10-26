@@ -206,6 +206,7 @@ export interface ReplySessionState {
   canRetry: boolean;
   savedSession?: SavedAssistantSession;
   sessionCatalog?: AssistantSessionCatalog;
+  contextRefresh?: { sessionId: string };
   idleRollover?: { sessionId: string; previousSessionId: string };
   sessionDeletion?: 'deleting' | 'failed' | 'deleted' | 'missing';
   inputBudgetNotice?: AssistantInputBudgetNotice;

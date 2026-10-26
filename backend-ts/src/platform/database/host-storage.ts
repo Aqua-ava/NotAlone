@@ -8,7 +8,7 @@ import { userInfo } from 'node:os';
 import { isIP } from 'node:net';
 import type { ConnectionOptions } from 'node:tls';
 
-const EXPECTED_MIGRATION_COUNT = 120;
+const EXPECTED_MIGRATION_COUNT = 121;
 
 export class HostStorageError extends Error {
   readonly code: string;
@@ -552,6 +552,7 @@ const BASELINE_CHECKSUMS = [
   "a78d5bde2c9bc07c8681acf6d6f6512b40895b2fdedc3b3ed87f54dbea40381b",
   "866aac5fc8e0bbfb3ad61315b3fef290587f760289ed1af95bc4a9867238b974",
   "8a4c92028b633d98d27510a881d832839c4d1003a308878407dff95542cffdda",
+  "1f4db1f82b184fc0b652654a938bb46fd39d0c4095d4bfcaa9baca1ab0d687ef",
 ];
 const REQUIRED_TABLES = [
   "assistant_runtime_session",

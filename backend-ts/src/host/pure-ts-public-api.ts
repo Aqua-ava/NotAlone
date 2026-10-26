@@ -79,7 +79,7 @@ export function createPureTsPublicApi(options:{ownerId?:string;available:boolean
     else if(parts.length===5&&req.method==='DELETE'){
      if(!exact(body,['confirmed'])||body.confirmed!==true)throw new AssistantDiscussionError('invalid');result=await service.deleteSession(scope,session);
     }else if(parts.length===6&&['select','resume'].includes(parts[5])&&req.method==='POST'){
-     if(!exact(body,[]))throw new AssistantDiscussionError('invalid');result={session_id:await service.selectSession(scope,session)};
+     if(!exact(body,[]))throw new AssistantDiscussionError('invalid');result=await service.resumeSession(scope,session,controller.signal);
     }else if(parts.length===6&&parts[5]==='inputs'&&req.method==='POST'){
      if(!exact(body,['content'],['expected_input_version_id']))throw new AssistantDiscussionError('invalid');
      result={session_id:session,input_version_id:await service.recordInput(scope,session,body.content,body.expected_input_version_id??null)};
