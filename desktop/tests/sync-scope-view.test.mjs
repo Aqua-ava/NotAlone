@@ -69,7 +69,7 @@ test('老授权在设置页明确说明历史读取范围扩大，接受后才�
  await expect(page.getByRole('button',{name:'允许读取历史',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'暂不读取',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'允许读取历史',exact:true}).click();
- await expect(page.getByText('已允许读取已授权微信私聊在本机现有的全部文字历史，并继续同步新消息。',{exact:true})).toBeVisible();
+ await expect(page.getByText('已允许读取授权会话在这台电脑上的历史文字消息，并持续同步新消息。',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'允许读取历史',exact:true})).toHaveCount(0);
  assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{scopeRevision:4,decision:'accepted',confirmed:true});
 });
@@ -92,7 +92,7 @@ test('拒绝历史读取保留增量说明，之后仍可明确允许',async t=>
  await expect(page.getByText('历史读取未开启：已有授权会话继续只同步新消息。允许后，会读取它们在本机现有的全部文字历史，再继续同步新消息。',{exact:true})).toBeVisible();
  assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{scopeRevision:4,decision:'declined',confirmed:true});
  await page.getByRole('button',{name:'允许读取历史',exact:true}).click();
- await expect(page.getByText('已允许读取已授权微信私聊在本机现有的全部文字历史，并继续同步新消息。',{exact:true})).toBeVisible();
+ await expect(page.getByText('已允许读取授权会话在这台电脑上的历史文字消息，并持续同步新消息。',{exact:true})).toBeVisible();
  assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{scopeRevision:4,decision:'accepted',confirmed:true});
 });
 
@@ -112,20 +112,29 @@ test('消息历史覆盖按联系人显示四态、当前进度和汇总，关�
  window.update=()=>{state={...state,revision:2,report:{...state.report,historyCoverages:historyCoverages.map((c,i)=>i===1?{...c,phase:'complete',messageCount:250,pageCount:5}:c)}};
  for(const fn of listeners)fn(state);render('contact-2');};render('contact-1');
  `);
- const section=page.getByRole('region',{name:'消息历史覆盖',exact:true});
- await expect(section.getByText('尚未开始',{exact:true})).toBeVisible();
- await expect(section.getByText('同步中',{exact:true})).toBeVisible();
- await expect(section.getByText('完整',{exact:true})).toBeVisible();
- await expect(section.getByText('不完整',{exact:true})).toBeVisible();
- await expect(section.getByText('读取超时，正在自动重试。',{exact:true})).toBeVisible();
+ const section=page.getByRole('region',{name:'聊天同步进度',exact:true});
+ await expect(section.getByText('合成联系人3',{exact:true})).toBeVisible();
+ await expect(section.getByText('读取暂时超时，开启同步时会自动重试。',{exact:true})).toBeVisible();
+ await expect(section.getByText('合成联系人2',{exact:true})).not.toBeVisible();
+ await expect(section.getByText('当前联系人：合成联系人1',{exact:true})).not.toBeVisible();
+ await expect(section.getByText('已读完 1 / 4 个会话的本机历史',{exact:true})).toBeVisible();
+ await expect(section.getByRole('progressbar')).toHaveAttribute('value','1');
+ await expect(section).not.toContainText('水位');
+ await expect(section).not.toContainText('页');
+ await expect(page.getByRole('region',{name:'关系资料处理',exact:true})).toContainText('聊天读完后，还需要整理关系资料');
+ await section.getByText('查看正在读取和等待同步的会话（2）',{exact:true}).click();
  await expect(section.getByText('当前联系人：合成联系人1',{exact:true})).toBeVisible();
- await expect(section.getByText('已保存 100 条文字，已读取 1 页。',{exact:true})).toBeVisible();
- await expect(section.getByText('共 4 个会话：完整 1，同步中 1，不完整 1，尚未开始 1。',{exact:true})).toBeVisible();
- await expect(page.getByRole('region',{name:'关系资料处理',exact:true})).toContainText('消息历史完整不代表关系资料已处理完成');
+ await expect(section.getByText('等待同步',{exact:true})).toBeVisible();
+ await section.getByText('查看已读完的会话（1）',{exact:true}).click();
+ await expect(section.getByText('合成联系人2',{exact:true})).toBeVisible();
  await page.evaluate(()=>window.update());
  await expect(section.getByText('当前联系人：合成联系人2',{exact:true})).toBeVisible();
- await expect(section.getByText('已保存 250 条文字，已读取 5 页。',{exact:true})).toBeVisible();
- await expect(section.getByText('共 4 个会话：完整 2，同步中 0，不完整 1，尚未开始 1。',{exact:true})).toBeVisible();
+ await expect(section.getByText('本机历史已读完 · 已保存 250 条文字消息',{exact:true})).toBeVisible();
+ await expect(section.getByText('已读完 2 / 4 个会话的本机历史',{exact:true})).toBeVisible();
+ await expect(section.getByRole('progressbar')).toHaveAttribute('value','2');
+ await section.getByText('查看已读完的会话（2）',{exact:true}).click();
+ await expect(section.getByText('当前联系人：合成联系人2',{exact:true})).not.toBeVisible();
+ await expect(section.getByText('合成联系人3',{exact:true})).toBeVisible();
 });
 
 test('会话类型冲突与范围未核验明确显示已停读，不暗示仍在读取正文', async t => {
@@ -138,7 +147,7 @@ test('会话类型冲突与范围未核验明确显示已停读，不暗示仍�
  createRoot(document.getElementById('root')).render(<HistoryCoverageStatus coverages={coverages}
  contacts={coverages.map((row,i)=>({contactId:row.contactId,displayName:'合成联系人'+i}))}/>);
  `);
- const section=page.getByRole('region',{name:'消息历史覆盖',exact:true});
+ const section=page.getByRole('region',{name:'聊天同步进度',exact:true});
  await expect(section.getByRole('status').filter({hasText:'会话类型与私聊授权不一致，已停止读取；请在联系人中核对关联。'})).toBeVisible();
  await expect(section.getByRole('status').filter({hasText:'暂时无法确认会话属于已授权私聊，已停止读取；核验通过后再继续。'})).toBeVisible();
  await expect(section).not.toContainText('正在自动重试');
@@ -177,10 +186,10 @@ test('联系人详情只显示当前联系人的覆盖进度，切换时不沿�
  window.select=render;render('a');
  `);
  const summary=page.getByRole('complementary',{name:'本次联系人资料摘要'});
- await expect(summary.getByText('完整',{exact:true})).toBeVisible();
- await expect(summary.getByText('已保存 200 条文字，已读取 2 页。',{exact:true})).toBeVisible();
+ await expect(summary.getByText('本机历史已读完',{exact:true})).toBeVisible();
+ await expect(summary.getByText('本机历史已读完 · 已保存 200 条文字消息',{exact:true})).toBeVisible();
  await page.evaluate(()=>window.select('b'));
- await expect(summary.getByText('不完整',{exact:true})).toBeVisible();
- await expect(summary.getByText('已保存 10 条文字，已读取 1 页。',{exact:true})).toBeVisible();
- await expect(summary.getByText('完整',{exact:true})).toHaveCount(0);
+ await expect(summary.getByText('历史尚未读完',{exact:true})).toBeVisible();
+ await expect(summary.getByText('历史尚未读完 · 已保存 10 条文字消息',{exact:true})).toBeVisible();
+ await expect(summary.getByText('本机历史已读完',{exact:true})).toHaveCount(0);
 });

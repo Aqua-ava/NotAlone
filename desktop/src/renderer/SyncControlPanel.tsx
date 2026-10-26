@@ -102,7 +102,7 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
           <button className="button" disabled={!available} onClick={() => void changeScope('all_private')}>重试自动关联</button></div>}
       </section>
       {report && <section aria-label="历史聊天读取">
-        <h3>读取更早的聊天记录</h3>
+        <h3>历史聊天</h3>
         {historyAuthorization === 'required' && <>
           <p role="status">读取范围将扩大：此前的同步授权只读取新消息。允许后，NotAlone 会读取当前已授权微信私聊在本机现有的全部文字历史，再继续同步新消息。</p>
           <p>聊天记录仍只保存在本机。历史读取仍只在后台同步开启且应用运行时进行。选择暂不读取不会改变同步总开关或已有会话授权，之后仍可在这里允许。</p>
@@ -113,11 +113,11 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
           <p role="status">历史读取未开启：已有授权会话继续只同步新消息。允许后，会读取它们在本机现有的全部文字历史，再继续同步新消息。</p>
           <button className="button" disabled={!available} onClick={() => void decideHistory('accepted')}>允许读取历史</button>
         </>}
-        {historyAuthorization === 'accepted' && <p role="status">已允许读取已授权微信私聊在本机现有的全部文字历史，并继续同步新消息。</p>}
+        {historyAuthorization === 'accepted' && <p role="status">已允许读取授权会话在这台电脑上的历史文字消息，并持续同步新消息。</p>}
         {historyAuthorization === 'unknown' && <p>历史读取授权状态尚未确认，请刷新同步状态后重试。</p>}
         {state.busy === 'history' && <p role="status">正在保存历史读取授权…</p>}
       </section>}
-      {report && <p>{backgroundLabels[report.backgroundPhase]}。已确认范围：{report.confirmedBindingCount}个会话。</p>}
+      {report && <p>{backgroundLabels[report.backgroundPhase]}。已授权 {report.confirmedBindingCount} 个会话。</p>}
       {scopeNotice && <p role="alert">部分已授权会话暂停读取：{scopeNotice}</p>}
       {state.phase === 'loading' && <p role="status">正在确认同步状态…</p>}
       {state.phase === 'offline' && <p>连接本机服务后查看与控制后台同步。</p>}

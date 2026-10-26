@@ -2,18 +2,18 @@ import type { HistoryCoverage, HistoryCoveragePhase } from '../shared/sync-contr
 import { syncScopeNotice } from './sync-scope-notice';
 
 const labels: Record<HistoryCoveragePhase, string> = {
-  not_started: '尚未开始', syncing: '同步中', complete: '完整', incomplete: '不完整',
+  not_started: '等待同步', syncing: '正在读取历史', complete: '本机历史已读完', incomplete: '历史尚未读完',
 };
 const reasons: Record<string, string> = {
-  cli_timeout: '读取超时，正在自动重试。',
-  cli_output_invalid: '读取结果无法解析，正在自动重试。',
-  cli_freshness_unknown: '读取结果的新鲜度尚未确认，正在自动重试。',
-  cli_normalization_failed: '消息格式无法识别，正在自动重试。',
-  local_history_deleted: '本机微信记录已删除，无法确认更早历史。',
-  local_history_empty: '本机微信没有可读记录，无法确认历史完整。',
-  history_empty: '本次没有读到历史记录，无法确认历史完整。',
-  cli_message_table_missing: '本机消息表不可读，正在自动重试。',
-  history_page_stalled: '历史分页未能继续，正在自动重试。',
+  cli_timeout: '读取暂时超时，开启同步时会自动重试。',
+  cli_output_invalid: '暂时无法读取微信记录，开启同步时会自动重试。',
+  cli_freshness_unknown: '暂时无法确认是否读到了最新记录，开启同步时会自动重试。',
+  cli_normalization_failed: '部分消息暂时无法读取，开启同步时会自动重试。',
+  local_history_deleted: '这台电脑上的微信记录已删除，无法读取更早的聊天。',
+  local_history_empty: '这台电脑上的微信暂时没有可读取的聊天记录。',
+  history_empty: '暂时没有读到聊天记录，还不能确认历史是否读完。',
+  cli_message_table_missing: '暂时无法打开本机微信记录，开启同步时会自动重试。',
+  history_page_stalled: '读取更早的聊天时暂时中断，开启同步时会自动重试。',
 };
 
 export function ContactHistoryCoverage({ coverages, contactId }: {
@@ -21,10 +21,9 @@ export function ContactHistoryCoverage({ coverages, contactId }: {
 }) {
   const rows = coverages?.filter(item => item.contactId === contactId);
   return <div aria-label="当前联系人消息历史覆盖">
-    {!rows?.length ? <p>消息历史覆盖尚未确认。</p> : rows.map(row => <div key={row.bindingId}>
-      <p>消息历史覆盖：<strong>{labels[row.phase]}</strong></p>
-      <p>已保存 {row.messageCount} 条文字，已读取 {row.pageCount} 页。</p>
-      {row.phase === 'incomplete' && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode ?? ''] ?? '读取失败或本机记录不可读，正在自动重试；当前历史不完整。'}</p>}
+    {!rows?.length ? <p>暂时还不知道历史聊天是否读完。</p> : rows.map(row => <div key={row.bindingId}>
+      <p><strong>{labels[row.phase]}</strong> · 已保存 {row.messageCount} 条文字消息</p>
+      {row.phase === 'incomplete' && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode ?? ''] ?? '部分聊天暂时无法读取，开启同步时会自动重试。'}</p>}
     </div>)}
   </div>;
 }
@@ -37,19 +36,33 @@ export function HistoryCoverageStatus({ coverages, contacts = [], currentContact
   const names = new Map(contacts.map(contact => [contact.contactId, contact.displayName]));
   const total = (phase: HistoryCoveragePhase) => coverages?.filter(row => row.phase === phase).length ?? 0;
   const ids = [...new Set(coverages?.map(row => row.contactId))];
+  const renderContacts = (rows: HistoryCoverage[]) => [...new Set(rows.map(row => row.contactId))].map(contactId => <div key={contactId}>
+    <h4>{contactId === currentContactId ? '当前联系人：' : ''}{names.get(contactId) ?? '未命名联系人'}</h4>
+    <ContactHistoryCoverage coverages={rows} contactId={contactId} />
+  </div>);
+  const incomplete = coverages?.filter(row => row.phase === 'incomplete') ?? [];
+  const pending = coverages?.filter(row => row.phase === 'syncing' || row.phase === 'not_started') ?? [];
+  const complete = coverages?.filter(row => row.phase === 'complete') ?? [];
   return <>
-    <section aria-label="消息历史覆盖"><h3>消息历史覆盖</h3>
-      {coverages === undefined ? <p>历史覆盖状态尚未确认，请刷新后查看。</p>
-        : <p>共 {coverages.length} 个会话：完整 {total('complete')}，同步中 {total('syncing')}，不完整 {total('incomplete')}，尚未开始 {total('not_started')}。</p>}
-      <p>完整仅表示已读到本机可读历史的约定水位；连接或即时读取成功不代表历史完整。</p>
-      {currentContactId && !ids.includes(currentContactId) && <p>当前联系人消息历史覆盖尚未确认。</p>}
-      {ids.map(contactId => <div key={contactId}>
-        <h4>{contactId === currentContactId ? '当前联系人：' : ''}{names.get(contactId) ?? `联系人 ${contactId}`}</h4>
-        <ContactHistoryCoverage coverages={coverages} contactId={contactId} />
-      </div>)}
+    <section aria-label="聊天同步进度"><h3>聊天同步进度</h3>
+      {coverages === undefined ? <p>暂时无法获取同步进度，请刷新后查看。</p>
+        : coverages.length === 0 ? <p>暂无会话的历史同步进度。</p> : <>
+          <p>已读完 {complete.length} / {coverages.length} 个会话的本机历史</p>
+          <progress aria-label="本机历史读取进度" value={complete.length} max={coverages.length} />
+          <p>正在读取 {total('syncing')} 个 · 等待同步 {total('not_started')} 个 · 需要关注 {incomplete.length} 个</p>
+        </>}
+      <p>只读取这台电脑上微信能提供的文字记录；已删除或仅在其他设备上的记录不包含在内。</p>
+      {currentContactId && !ids.includes(currentContactId) && <p>当前联系人的同步进度暂时未知。</p>}
+      {incomplete.length > 0 && <div><h4>需要关注的会话（{incomplete.length}）</h4>{renderContacts(incomplete)}</div>}
+      {pending.length > 0 && <details className="sync-backfill-details">
+        <summary>查看正在读取和等待同步的会话（{pending.length}）</summary>{renderContacts(pending)}
+      </details>}
+      {complete.length > 0 && <details className="sync-backfill-details">
+        <summary>查看已读完的会话（{complete.length}）</summary>{renderContacts(complete)}
+      </details>}
     </section>
     <section aria-label="关系资料处理"><h3>关系资料处理</h3>
-      <p>关系资料独立排队处理；消息历史完整不代表关系资料已处理完成。具体处理状态请到「关系资料」查看。</p>
+      <p>聊天读完后，还需要整理关系资料。整理进度可到「关系资料」查看。</p>
     </section>
   </>;
 }
