@@ -23,6 +23,8 @@ export interface AssistantRuntimeLease {
  ctx:Context;sessionId:SessionId;resume:boolean;
  /** 调用方先释放官方句柄并确认业务提交，再标记可恢复。 */
  commit(expectedEventCount:number):Promise<void>;
+ /** SDK无法确认写句柄关闭时保留占用；重启前不能假定安全删除。 */
+ retainWriterFailure():void;
  release():Promise<void>;
 }
 const validId=(value:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -30,9 +32,10 @@ const unavailable=():never=>{throw new ReplyError('reply_context_unavailable',40
 export function assistantRuntimeConfiguration(value:unknown):string{return createHash('sha256').update(JSON.stringify(value)).digest('hex');}
 
 export class AssistantRuntime {
+ private readonly operations=new Set<{scope:Scope;session:string|null;controller:AbortController;done:Promise<void>}>();
  private readonly active=new Map<string,{resume:boolean;requestKey:string}>();
- private readonly options:{ctx:Context;transaction:Transaction;home:string};
- constructor(options:{ctx:Context;transaction:Transaction;home:string}){
+ private readonly options:{ctx:Context;transaction:Transaction;home:string;persistent?:boolean};
+ constructor(options:{ctx:Context;transaction:Transaction;home:string;persistent?:boolean}){
   this.options=options;
   if(!isAbsolute(options.home))throw new ReplyError('reply_runtime_unavailable',503);
  }
@@ -79,9 +82,35 @@ export class AssistantRuntime {
    return {ctx:consumer,persistence:consumer.sessionPersistence,close:async()=>{inheritScope?.();for(const fiber of [...plugins].reverse())await fiber.dispose();}};
   }catch(error){inheritScope?.();for(const fiber of plugins.reverse())await fiber.dispose();throw error;}
  }
+ /** 整轮准备、读档、模型、提交和释放共用一个取消与完成边界。 */
+ async run<T>(scope:Scope,requestKey:string,signal:AbortSignal,work:(signal:AbortSignal)=>Promise<T>):Promise<T>{
+  const controller=new AbortController();let finish!:()=>void;
+  const operation={scope,session:null as string|null,controller,done:new Promise<void>(resolve=>{finish=resolve;})};
+  this.operations.add(operation);
+  try{
+   await this.options.transaction(async client=>{
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${scope.owner_id}`]);
+    const row=(await client.query('SELECT session_id FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3',[scope.owner_id,scope.contact_id,requestKey])).rows[0];
+    operation.session=row?.session_id??null;
+    await this.requireAllowed(client,scope,operation.session);
+   });
+   const combined=AbortSignal.any([signal,controller.signal]);combined.throwIfAborted();return await work(combined);
+  }finally{this.operations.delete(operation);finish();}
+ }
+ private async requireAllowed(client:Client,scope:Scope,session:string|null):Promise<void>{
+  // 来源的owner memory/carry闭包可跨联系人；完成前先保守封禁本人生成，不删除无关档案。
+  const blocked=await client.query(`SELECT 1 FROM cross_domain_deletion_operation operation
+   WHERE operation.owner_id=$1 AND operation.status<>'succeeded' AND (
+    operation.scope_kind IN ('source','account') OR operation.scope_kind='contact' AND operation.contact_id=$2
+    OR operation.scope_kind='discussion' AND operation.contact_id=$2 AND operation.target_id=$3)
+   UNION ALL SELECT 1 FROM assistant_runtime_deletion_target WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 LIMIT 1`,[scope.owner_id,scope.contact_id,session]);
+  if(blocked.rowCount)throw new ReplyError('reply_deletion_pending',409);
+ }
  private async lookup(client:Client,scope:VerifiedReplyScope,requestKey:string,configuration:string):Promise<RuntimeRow|null>{
   const anchor=(await client.query(`SELECT turn.session_id FROM assistant_session_turn turn JOIN assistant_session session ON session.id=turn.session_id AND session.owner_id=turn.owner_id AND session.contact_id=turn.contact_id WHERE turn.owner_id=$1 AND turn.contact_id=$2 AND turn.idempotency_key=$3 AND turn.conversation_binding_id=$4 AND turn.input_payload IS NOT NULL AND turn.state<>'redacted'`,[scope.owner_id,scope.contact_id,requestKey,scope.conversation_binding_id])).rows[0];
   if(!anchor)return null;
+  await this.requireAllowed(client,scope,anchor.session_id);
+  if(this.options.persistent===false)return null;
   const row=(await client.query('SELECT * FROM assistant_runtime_session WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3',[scope.owner_id,scope.contact_id,anchor.session_id])).rows[0] as RuntimeRow|undefined;
   if(row&&row.configuration_sha256!==configuration)return unavailable();
   if(row?.state==='blocked')return unavailable();
@@ -93,7 +122,7 @@ export class AssistantRuntime {
   const active=this.active.get(this.key(scope,row.session_id));
   return row.state==='ready'||row.state==='dirty'&&active?.resume===true&&active.requestKey===requestKey;
  }
- async history(scope:VerifiedReplyScope,requestKey:string,configuration:string):Promise<AssistantRuntimeHistory|null>{
+ async history(scope:VerifiedReplyScope,requestKey:string,configuration:string,signal?:AbortSignal):Promise<AssistantRuntimeHistory|null>{
   const row=await this.options.transaction(client=>this.lookup(client,scope,requestKey,configuration));
   if(!row)return null;
   if(this.active.has(this.key(scope,row.session_id)))throw new ReplyError('reply_in_progress',409);
@@ -103,10 +132,11 @@ export class AssistantRuntime {
    const directory=await this.directory(scope,row.session_id,false);if(!directory)return unavailable();
    const world=await this.world(join(directory,row.runtime_session_id));
    try{
-    const handle=await world.persistence.open(SessionId(row.runtime_session_id),'read');
-    try{const history=await handle.read(0);if(history.events.length!==row.committed_event_count)return unavailable();return {sessionId:SessionId(row.runtime_session_id),events:history.events};}finally{await handle.close();}
+    const handle=await world.persistence.open(SessionId(row.runtime_session_id),'read',{signal});
+    try{const history=await handle.read(0,undefined,{signal});if(history.events.length!==row.committed_event_count)return unavailable();return {sessionId:SessionId(row.runtime_session_id),events:history.events};}finally{await handle.close();}
    }finally{await world.close();}
   }catch(error){
+   if(signal?.aborted)throw error;
    await this.options.transaction(client=>this.quarantine(client,scope,row.session_id));
    if(error instanceof ReplyError)throw error;
    throw new ReplyError('reply_runtime_unavailable',503);
@@ -138,19 +168,43 @@ export class AssistantRuntime {
    });
    const root=join(directory,row.runtime_session_id);await mkdir(root,{mode:0o700,recursive:true});
    const status=await lstat(root);if(!status.isDirectory()||status.isSymbolicLink())return unavailable();
-   world=await this.world(root);let released=false;
-   return {ctx:world.ctx,sessionId:SessionId(row.runtime_session_id),resume,
+   world=await this.world(root);let released=false,writerFailed=false;
+   return {retainWriterFailure:()=>{writerFailed=true;},ctx:world.ctx,sessionId:SessionId(row.runtime_session_id),resume,
     commit:async(expectedEventCount)=>{
      if(!Number.isSafeInteger(expectedEventCount)||expectedEventCount<1)return unavailable();
      const handle=await world!.persistence.open(SessionId(row!.runtime_session_id),'write');let eventCount:number;
-     try{await handle.flush();eventCount=(await handle.read(0)).events.length;if(eventCount<expectedEventCount)return unavailable();}finally{await handle.close();}
+     try{await handle.flush();eventCount=(await handle.read(0)).events.length;if(eventCount<expectedEventCount)return unavailable();}finally{try{await handle.close();}catch(error){writerFailed=true;throw error;}}
      await this.options.transaction(async client=>{
      await this.requireCommittedInTransaction(client,scope,row!.session_id,requestId);
      const changed=await client.query("UPDATE assistant_runtime_session SET state='ready',committed_request_id=$4,committed_event_count=$6 WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3 AND runtime_session_id=$5 AND state='dirty'",[scope.owner_id,scope.contact_id,row!.session_id,requestId,row!.runtime_session_id,eventCount]);if(changed.rowCount!==1)return unavailable();
     });},
-    release:async()=>{if(released)return;released=true;try{await world!.close();}finally{this.active.delete(key);}},
+    release:async()=>{if(released)return;released=true;try{await world!.close();}catch(error){writerFailed=true;throw error;}finally{if(!writerFailed)this.active.delete(key);}},
    };
   }catch(error){try{await world?.close();}finally{this.active.delete(key);}throw error;}
+ }
+ /** 在任何可失败清理之前，按持久操作范围取消并排空；临时轮不依赖会话映射。 */
+ async drain(operationId:string):Promise<void>{
+  const {operation,targets}=await this.options.transaction(async client=>({
+   operation:(await client.query('SELECT * FROM cross_domain_deletion_operation WHERE id=$1',[operationId])).rows[0],
+   targets:(await client.query('SELECT * FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operationId])).rows,
+  }));
+  if(!operation?.owner_id)return;
+  const writers=[...this.operations].filter(active=>active.scope.owner_id===operation.owner_id&&(
+   ['source','account'].includes(operation.scope_kind)
+   ||operation.scope_kind==='contact'&&operation.contact_id===active.scope.contact_id
+   ||operation.scope_kind==='discussion'&&operation.contact_id===active.scope.contact_id&&operation.target_id===active.session
+   ||targets.some(target=>target.contact_id===active.scope.contact_id&&target.session_id===active.session)));
+  for(const writer of writers)writer.controller.abort('scope_deleted');
+  await Promise.all(writers.map(writer=>writer.done));
+ }
+ /** 目标不随业务级联丢失；清盘完成后才允许删除操作验证成功。 */
+ async cleanup(operationId:string):Promise<void>{
+  await this.drain(operationId);
+  const targets=await this.options.transaction(async client=>(await client.query('SELECT * FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operationId])).rows);
+  for(const target of targets){
+   await this.options.transaction(client=>this.erase(client,target,target.session_id));
+   await this.options.transaction(async client=>{await client.query('UPDATE assistant_runtime_deletion_target SET cleaned=true WHERE operation_id=$1 AND owner_id=$2 AND contact_id=$3 AND session_id=$4',[operationId,target.owner_id,target.contact_id,target.session_id]);});
+  }
  }
  /** 隔离不合格运行副本；保留业务历史和文件，禁止继续恢复，供明确修复或删除。 */
  async quarantine(client:Client,scope:Scope,session:string):Promise<void>{
@@ -161,6 +215,7 @@ export class AssistantRuntime {
  async erase(client:Client,scope:Scope,session:string):Promise<void>{
   const key=this.key(scope,session);if(this.active.has(key))throw new ReplyError('reply_in_progress',409);
   const directory=await this.directory(scope,session,false);if(directory)await rm(directory,{recursive:true,force:false});
+  if(await this.directory(scope,session,false)!==null)return unavailable();
   await client.query('DELETE FROM assistant_runtime_session WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3',[scope.owner_id,scope.contact_id,session]);
  }
 }

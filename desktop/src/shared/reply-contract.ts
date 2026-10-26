@@ -42,6 +42,7 @@ export function replyFailureDecision(evidence: ReplyFailureEvidence): ReplyFailu
         : { errorCode: 'prepared_context_reprepare_required', canRetry: false, known: true };
   }
   if (code && timeoutCodes.has(code)) return { errorCode: 'timeout', canRetry: true, known: true };
+  if (code === 'reply_deletion_pending') return { errorCode: 'deletion_pending', canRetry: false, known: true };
   if (code === 'assistant_session_save_failed') return { errorCode: 'save_failed', canRetry: true, known: true };
   if (reason === 'target_message_unavailable') return { errorCode: 'target_unavailable', canRetry: true, known: true };
   if (reason && sourceUnavailableReasons.has(reason)) return { errorCode: 'source_unavailable', canRetry: true, known: true };

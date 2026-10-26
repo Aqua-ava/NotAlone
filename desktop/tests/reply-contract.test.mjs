@@ -67,6 +67,7 @@ test('回复失败码映射集中一处：已知码分类明确，未知码显�
   for (const code of ['reply_timeout', 'assistant_preparation_timeout']) {
     assert.deepEqual(decide({ code }), { errorCode: 'timeout', canRetry: true, known: true });
   }
+  assert.deepEqual(decide({ code: 'reply_deletion_pending' }), { errorCode: 'deletion_pending', canRetry: false, known: true });
   assert.deepEqual(decide({ code: 'assistant_session_save_failed' }), { errorCode: 'save_failed', canRetry: true, known: true });
   assert.deepEqual(decide({ reason: 'target_message_unavailable' }), { errorCode: 'target_unavailable', canRetry: true, known: true });
   for (const reason of ['source_unavailable', 'source_deleted']) {

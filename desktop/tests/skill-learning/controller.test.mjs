@@ -216,9 +216,11 @@ async function deletionFixture() {
         throw new ports.BackendRequestFailure('response', 503, 'controlled_delete_failure');
       }
       records.deleted.add(kind);
-      return { generation, data: kind === 'session' ? { session_id: sessionId, state: 'deleted' }
+      return { generation, data: kind === 'session' ? { session_id: sessionId, state: 'deleted', operation_id: taskId }
         : kind === 'source' ? { task_id: taskId, status: 'succeeded' } : { state: 'deleted' } };
     }
+    if (request.path === `/api/deletions/${taskId}`) return { generation, data: { operation_id: taskId, scope_kind: 'discussion', status: 'succeeded' } };
+    if (request.path.startsWith('/api/deletions?')) return { generation, data: { operations: [] } };
     if (request.path.endsWith('/assistant-session/default')) return { generation, data: { session_id: sessionId } };
     if (request.path.includes('/assistant-sessions/')) {
       if (records.verificationBarrier) {
@@ -344,36 +346,29 @@ for (const [kind, label] of [['preference', '偏好'], ['memory', '记忆'], ['s
   });
 }
 
-test('助手会话DELETE已提交但响应丢失时，门禁等待同SID的404复验并且重复状态不重复开启', async () => {
+test('助手会话DELETE响应丢失后保持失败，明确重试核验原operation才解除门禁', async () => {
   const f = await deletionFixture();
-  const verification = f.records.verificationBarrier = Promise.withResolvers();
-  const entered = f.records.verificationEntered = Promise.withResolvers();
   f.records.failure = 'session'; f.records.failAfterCommit = true;
-  const removing = f.remove('session');
   try {
-    f.deletions.session.resolve();
-    await entered.promise;
-    const calls = f.records.calls.filter(call => call.path.endsWith('/skill-learning')).length;
+    f.deletions.session.resolve(); await f.remove('session');
+    assert.equal(f.replies.getState().sessionDeletion, 'failed');
+    assert.equal(f.replies.getState().confirmedSessionDeletion, undefined);
     await f.learning.refresh(f.scope());
     assert.deepEqual(f.learning.getState().drafts, []);
-    assert.equal(f.records.calls.filter(call => call.path.endsWith('/skill-learning')).length, calls,
-      'DELETE响应未知不结束同SID存在性核对');
-    assert.deepEqual(f.records.phases.session, ['started']);
-    verification.resolve(); await removing;
-    assert.equal(f.replies.getState().sessionDeletion, 'missing');
+    f.records.failure = null; await f.remove('session');
+    assert.equal(f.replies.getState().sessionDeletion, 'deleted');
     assert.equal(f.replies.getState().confirmedSessionDeletion.sessionId, f.sessionId);
     const confirmedRevision = f.replies.getState().confirmedSessionDeletion.revision;
     for (const text of ['合成新草稿一。', '合成新草稿二。']) {
       f.contacts.setDraft({ ...f.scope(), text });
       assert.equal(f.replies.getState().confirmedSessionDeletion.revision, confirmedRevision);
     }
-    assert.deepEqual(f.records.phases.session, ['started', 'settled']);
+    assert.deepEqual(f.records.phases.session, ['started', 'settled', 'started', 'settled']);
     await f.learning.refresh(f.scope());
     assert.equal(f.learning.getState().phase, 'ready');
     assert.deepEqual(f.learning.getState().drafts, []);
   } finally {
-    verification.resolve(); f.deletions.session.resolve(); await removing;
-    await rm(f.owned, { recursive: true, force: true });
+    f.deletions.session.resolve(); await rm(f.owned, { recursive: true, force: true });
   }
 });
 

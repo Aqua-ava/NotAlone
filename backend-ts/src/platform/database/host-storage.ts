@@ -8,7 +8,7 @@ import { userInfo } from 'node:os';
 import { isIP } from 'node:net';
 import type { ConnectionOptions } from 'node:tls';
 
-const EXPECTED_MIGRATION_COUNT = 117;
+const EXPECTED_MIGRATION_COUNT = 118;
 
 export class HostStorageError extends Error {
   readonly code: string;
@@ -553,6 +553,8 @@ const BASELINE_CHECKSUMS = [
   "866aac5fc8e0bbfb3ad61315b3fef290587f760289ed1af95bc4a9867238b974"
 ];
 const REQUIRED_TABLES = [
+  "assistant_runtime_session",
+  "assistant_runtime_deletion_target",
   "background_task",
   "background_task_step",
   "channel_identity",
@@ -593,6 +595,7 @@ const REQUIRED_TABLES = [
   "wechat_observation_cursor"
 ];
 const REQUIRED_COLUMNS: Record<string, Record<string,string>> = {
+  "assistant_runtime_deletion_target": {"operation_id":"uuid","owner_id":"uuid","contact_id":"uuid","session_id":"uuid","cleaned":"boolean"},
   "model_call_learning_claim": {
       "attempt_id": "uuid",
       "owner_id": "uuid",

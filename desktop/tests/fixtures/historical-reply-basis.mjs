@@ -112,6 +112,7 @@ export async function historicalReplyFixture({ replyRequestId } = {}) {
         await records.beforeResponse?.(request);
         return { generation: records.generation, data: response };
       }
+      if (request.path.startsWith('/api/deletions?')) return { generation: records.generation, data: { operations: [] } };
       const data = request.path.endsWith('/assistant-session/default') ? { session_id: records.saved.session_id }
         : request.path.endsWith('/continue/prepare') ? { session_id: sessionId, turn_id: continuation.turnId,
           input_version_id: continuation.inputVersionId, request_key: continuation.requestKey, state: 'running' }

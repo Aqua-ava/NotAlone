@@ -38,6 +38,7 @@ async function fixture(t, holdFirstRead = false, holdSessionRead = false) {
   host.state = { phase: 'connected' };
   host.target = { subscribeMessages() {}, async requestJson(options) {
     calls.push({ path: options.path, manualContactId: options.manualContactId ?? null });
+    if (options.path.startsWith('/api/deletions?')) return { operations: [] };
     if (options.path.endsWith('/manual-confirmation')) { confirmed = true; return { confirmed: true }; }
     if (options.path.endsWith('/assistant-session/default')) {
       observeFirstRead();

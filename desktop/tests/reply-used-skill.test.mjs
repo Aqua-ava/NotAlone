@@ -39,6 +39,7 @@ async function generate(usedSkill, disabled = false) {
       }
       if (request.path.endsWith('/assistant-sessions')) return { generation: 7,
         data: { sessions: [{ session_id: sessionId, is_current: true }], current_session_id: sessionId } };
+      if (request.path.startsWith('/api/deletions?')) return { generation: 7, data: { operations: [] } };
       if (request.path.endsWith('/assistant-session/default')) return { generation: 7, data: { session_id: sessionId } };
       if (request.path.endsWith('/selections')) return { generation: 7, data: { selection: null } };
       if (request.path.endsWith('/versions')) {

@@ -127,7 +127,7 @@ export class ReplyGenerationService {
     prior_budget:state.context.retrieval?.source_messages??state.historyBudget,requireCurrent:async()=>requireCurrent(),aliases}):null;
    const unavailable=async():Promise<never>=>{throw new ReplyError('reply_preflight_tool_execution_invalid',502);};
    const tools=[...history?.tools()??[],...(replyScenarioReadPolicy(state.context).reads.length?[createReplyScenarioReadTool(unavailable)]:[]),...skill.tools()];
-   const runtime=await this.options.assistantRuntime?.history(scope,input.idempotency_key,assistantRuntimeConfiguration({version:1,model,binding:scope.conversation_binding_id}));
+   const runtime=await this.options.assistantRuntime?.history(scope,input.idempotency_key,assistantRuntimeConfiguration({version:1,model,binding:scope.conversation_binding_id}),signal);
    return await preflightReplyAgent(this.options.ctx,{
     seed:runtime?.events,
     binding:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort,toolChoice:'any'},profile:model.budgetProfile,
@@ -137,7 +137,11 @@ export class ReplyGenerationService {
    },signal);
   }finally{probeSkill?.close();skillPort.dispose();}
  }
- async prepare(scope:VerifiedReplyScope,body:unknown,signal:AbortSignal,internal:ReplyInternalContext={}){
+ async prepare(scope:VerifiedReplyScope,body:unknown,signal:AbortSignal,internal:ReplyInternalContext={}):Promise<Awaited<ReturnType<ReplyGenerationService['prepareCommand']>>>{
+  const key=parseReplyRequest(body,internal.authenticatedContinuation).idempotency_key;
+  return this.options.assistantRuntime?this.options.assistantRuntime.run(scope,key,signal,combined=>this.prepareCommand(scope,body,combined,internal)):this.prepareCommand(scope,body,signal,internal);
+ }
+ private async prepareCommand(scope:VerifiedReplyScope,body:unknown,signal:AbortSignal,internal:ReplyInternalContext={}){
   const input=parseReplyRequest(body,internal.authenticatedContinuation),verified=structuredClone(scope);
   const transaction:ReplyServiceOptions['transaction']=operation=>this.options.transaction(async client=>{
    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${verified.owner_id}`]);return operation(client);
@@ -155,7 +159,11 @@ export class ReplyGenerationService {
    return {receipt:result.receipt,...(result.budget?{input_budget:publicBudget(result.budget,this.options.model.warning_ratio)}:{})};
   }catch(error){throw failure(error,signal,this.options.model);}finally{skillPort.dispose();}
  }
- async generate(scope:VerifiedReplyScope,body:unknown,signal:AbortSignal,internal:ReplyInternalContext={}){
+ async generate(scope:VerifiedReplyScope,body:unknown,signal:AbortSignal,internal:ReplyInternalContext={}):Promise<Awaited<ReturnType<ReplyGenerationService['generateCommand']>>>{
+  const key=parseReplyRequest(body,internal.authenticatedContinuation).idempotency_key;
+  return this.options.assistantRuntime?this.options.assistantRuntime.run(scope,key,signal,combined=>this.generateCommand(scope,body,combined,internal)):this.generateCommand(scope,body,signal,internal);
+ }
+ private async generateCommand(scope:VerifiedReplyScope,body:unknown,signal:AbortSignal,internal:ReplyInternalContext={}){
   const input=parseReplyRequest(body,internal.authenticatedContinuation),verified=structuredClone(scope),model=this.options.model;
   const transaction=<T>(operation:(client:Client)=>Promise<T>)=>this.options.transaction(async client=>{
    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${verified.owner_id}`]);

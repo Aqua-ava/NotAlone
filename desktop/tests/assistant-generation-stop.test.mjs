@@ -54,6 +54,7 @@ async function fixture({ beforePrepare } = {}) {
       const contactId = /^\/api\/contacts\/([0-9a-f-]+)\//.exec(request.path)?.[1];
       const pathSessionId = /\/assistant-sessions\/([0-9a-f-]+)(?:\/|$)/.exec(request.path)?.[1];
       const session = pathSessionId ? sessionsById.get(pathSessionId) : sessions.get(contactId);
+      if (request.path.startsWith('/api/deletions?')) return { generation: responseGeneration, data: { operations: [] } };
       if (request.path.endsWith('/assistant-session/default')) {
         return { generation: responseGeneration, data: { session_id: session.sessionId } };
       }

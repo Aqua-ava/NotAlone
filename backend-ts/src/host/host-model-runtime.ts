@@ -1,3 +1,4 @@
+import type {AssistantRuntime} from '../reply/runtime/assistant-runtime.ts';
 /** 统一 TS 模型宿主；稳定journal、可信PG授权及唯一私有回复。 */
 import type {Context} from '@deepseek-ai/cordis';
 import {getOrCreateAnonymousUserId} from '@deepseek-ai/dsh-anonymous-user-id';
@@ -24,6 +25,7 @@ export class HostModelRuntimeError extends Error {
   constructor(code:string){super(code);this.code=code;}
 }
 export interface HostModelRuntimeOptions {
+  assistantRuntime?:AssistantRuntime;
   ctx:Context;storage:HostStorage;environment:Readonly<NodeJS.ProcessEnv>;
   businessHome:string;projectDirectory:string;infoPath:string;envFilePath:string;
   sourceTraces?:Pick<SourceProcessingTraceStore,
@@ -79,7 +81,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
       activeConfiguration={skillsRoot:configuredSkillsRoot,model:configuration.model,
         provider:{...configuration.provider,resolveUserId:()=>anonymousId}};
     }
-    reply=await createHostReplyRuntime({ctx:options.ctx,storage:options.storage,arbiter:modelHost.arbiter,
+    reply=await createHostReplyRuntime({ctx:options.ctx,assistantRuntime:options.assistantRuntime,storage:options.storage,arbiter:modelHost.arbiter,
       ledger,token,configuration:activeConfiguration,extractionEnabled:true,
       extractionAdoptionEnabled:true,
       extractionConcurrency:modelBackgroundConcurrency(environment),

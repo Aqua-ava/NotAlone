@@ -117,3 +117,20 @@ test('停用后的原次重试保留请求键和用户编辑，明确重新生�
   assert.deepEqual((await f.bridge.getState()).result.usedSkill, { name: '合成受范围约束策略', versionId,
     loadState: 'loaded', executionView: { policyRevision: 4, methodIds: [methodId], sha256: 'b'.repeat(64) } });
 });
+
+test('资料删除屏障保留当前输入并在界面说明清理未完成，不能伪称其他资料已删', async () => {
+  const f = await historicalReplyFixture();
+  f.records.failure = request => request.path.endsWith('/replies/prepare')
+    ? new ports.BackendRequestFailure('response', 409, 'reply_deletion_pending') : null;
+  await f.bridge.readSavedSession(f.scope);
+  f.contacts.setDraft({ ...f.scope, text: '合成清理期间保留的独立草稿。' });
+  await f.bridge.generate({ ...f.scope, newRequest: true });
+  const state = await f.bridge.getState();
+  assert.equal(state.errorCode, 'deletion_pending'); assert.equal(state.canRetry, false);
+  assert.equal(f.contacts.getState().draft, '合成清理期间保留的独立草稿。');
+  const previousWindow = globalThis.window; globalThis.window = { notalone: {} };
+  try {
+    const html = ports.renderToStaticMarkup(ports.createElement(ports.ReplyCandidates, { replies: { state } }));
+    assert.match(html, /资料清理未完成，暂时不能生成/);
+  } finally { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
+});

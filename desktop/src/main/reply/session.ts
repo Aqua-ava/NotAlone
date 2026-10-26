@@ -533,7 +533,17 @@ export class ReplySession {
       && selection.contactId === this.state.contactId && generation === this.backend.getConnectionGeneration()
       && this.sessionProjection.isReadCurrent(projectionRead);
     try {
-      const sessionId = heldSessionId ?? (await defaultAssistantSession(this.backend, selection.contactId, pending.signal)).sessionId;
+      const resolved = heldSessionId ? undefined : await defaultAssistantSession(this.backend, selection.contactId, pending.signal);
+      if (resolved?.deletionOperationId) {
+        if (current() && resolved.generation === generation) {
+          this.sessionProjection.invalidateSource();
+          this.publish({ sessionDeletion: 'failed', result: null, selectedCandidateId: null, canRetry: false,
+            confirmedSessionDeletion: undefined,
+            savedSession: { phase: 'failed', sessionId: resolved.sessionId, turns: [], inputs: [], currentInputVersionId: null } });
+        }
+        return;
+      }
+      const sessionId = heldSessionId ?? resolved!.sessionId;
       if (!current()) return;
       projectionRead = this.sessionProjection.resolveReadSession(projectionRead, sessionId);
       let saved = await readAssistantSession(this.backend, selection.contactId, sessionId, pending.signal);

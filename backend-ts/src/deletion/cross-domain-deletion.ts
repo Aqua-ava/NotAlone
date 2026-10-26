@@ -1,3 +1,5 @@
+import type {AssistantRuntime} from '../reply/runtime/assistant-runtime.ts';
+import {captureAssistantRuntimeScope,withAssistantRuntimeErasure} from '../reply/runtime/assistant-runtime-erasure.ts';
 /** 跨域删除的管理入口；确定性业务模块拥有事务、租约和完成判定。 */
 import {createHash,randomUUID} from 'node:crypto';
 import {existsSync,lstatSync,readdirSync,rmdirSync,unlinkSync} from 'node:fs';
@@ -80,14 +82,15 @@ function scopeKey(owner:string,subject:readonly unknown[]):string{return digest(
 
 /** 来源、联系人、账户和讨论删除共用同一持久操作、租约和完成判定。 */
 export class CrossDomainDeletionService {
+  private readonly runtime?:AssistantRuntime;
   private readonly storage:HostStorage;
   private readonly owner:string;
   private readonly skillsRoot:string;
   private readonly discussions:AssistantDiscussionService;
   private readonly files:SkillFiles;
-  constructor(options:{storage:HostStorage;skillsRoot:string}){
+  constructor(options:{storage:HostStorage;skillsRoot:string;assistantRuntime?:AssistantRuntime}){
     if(!options?.skillsRoot?.trim())throw new Error('deletion_skills_root_required');
-    this.storage=options.storage;this.skillsRoot=options.skillsRoot;this.files=new SkillFiles(this.skillsRoot);
+    this.runtime=options.assistantRuntime;this.storage=options.storage;this.skillsRoot=options.skillsRoot;this.files=new SkillFiles(this.skillsRoot);
     const owner=this.storage.runtimeOwnerId?.toLowerCase();
     if(!owner)throw new CrossDomainDeletionError('deletion_unavailable',503);
     this.owner=owner;
@@ -109,7 +112,11 @@ export class CrossDomainDeletionService {
       if(contact)throw new CrossDomainDeletionError('deletion_request_invalid',400);
       if(url.pathname==='/api/account'&&!url.search)return this.deleteAccount(owner,body);
     }
-    if(method==='GET'&&url.pathname==='/api/deletions'&&!url.search)return this.list(owner);
+    if(method==='GET'&&url.pathname==='/api/deletions'){
+      if(!url.search)return this.list(owner);
+      if([...url.searchParams.keys()].sort().join(',')!=='contact_id,scope_kind'||url.searchParams.get('scope_kind')!=='discussion')throw new CrossDomainDeletionError('deletion_request_invalid',400);
+      return this.list(owner,id(url.searchParams.get('contact_id')??''));
+    }
     const retry=/^\/api\/deletions\/([^/]+)\/retry$/.exec(url.pathname);
     if(method==='POST'&&retry&&!url.search){
       if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length!==1||(body as Row).confirmed!==true){
@@ -188,26 +195,27 @@ export class CrossDomainDeletionService {
       await client.query(`INSERT INTO public.cross_domain_deletion_operation
         (id,subject_sha256,scope_kind,owner_id,contact_id,target_id)
         VALUES($1,$2,'discussion',$3,$4,$5)`,[created,subject,owner,contact,session]);
+      await captureAssistantRuntimeScope(client,created,owner,contact,session);
       return {id:created,scope_kind:'discussion',owner_id:owner,contact_id:contact,target_id:session,status:'queued',phase:'invalidate'} as Row;
     });
-    if(operation.status==='succeeded')return {status:200,body:{session_id:session,state:'deleted'}};
-    try{
-      await this.executeDiscussion(operation);
-    }catch(error){
-      if(error instanceof CrossDomainDeletionError)throw error;
-      throw new CrossDomainDeletionError('discussion_deletion_failed',503);
-    }
+    if(operation.status==='succeeded')return {status:200,body:{session_id:session,state:'deleted',operation_id:operation.id}};
+    // 执行失败仍返回原操作身份；调用方必须读取完成状态，不能用业务404替代清盘回执。
+    await this.executeDiscussion(operation).catch(()=>{});
     const current=await this.read(owner,operation.id);
     return current.body.status==='succeeded'
-      ?{status:200,body:{session_id:session,state:'deleted'}}
+      ?{status:200,body:{session_id:session,state:'deleted',operation_id:operation.id}}
       :{status:202,body:{operation_id:operation.id,state:'accepted'}};
   }
 
-  private async executeDiscussion(operation:Row):Promise<void>{
+  private executeDiscussion(operation:Row):Promise<void>{return withAssistantRuntimeErasure(operation.id,()=>this.eraseDiscussion(operation));}
+
+  private async eraseDiscussion(operation:Row):Promise<void>{
     const claimed=await this.claim(operation.id);
     if(!claimed)return;
     try{
+      await this.runtime?.drain(claimed.id);
       await this.discussions.deleteSession({owner_id:claimed.owner_id,contact_id:claimed.contact_id},claimed.target_id);
+      await this.cleanupRuntime(claimed);
       await this.cleanupFiles(claimed.owner_id);
       await this.complete(claimed,'discussion');
     }catch(error){
@@ -218,10 +226,13 @@ export class CrossDomainDeletionService {
     }
   }
 
-  private async executeSource(operation:Row):Promise<void>{
+  private executeSource(operation:Row):Promise<void>{return withAssistantRuntimeErasure(operation.id,()=>this.eraseSource(operation));}
+
+  private async eraseSource(operation:Row):Promise<void>{
     const claimed=await this.claim(operation.id);
     if(!claimed)return;
     try{
+      await this.runtime?.drain(claimed.id);
       await this.storage.businessTransaction(async client=>{
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${claimed.owner_id}:${claimed.contact_id}`]);
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${claimed.owner_id}`]);
@@ -245,6 +256,7 @@ export class CrossDomainDeletionService {
         }
         await client.query("UPDATE public.cross_domain_deletion_operation SET phase='verify',updated_at=now() WHERE id=$1",[claimed.id]);
       });
+      await this.cleanupRuntime(claimed);
       await this.cleanupFiles(claimed.owner_id);
       await this.storage.businessTransaction(async client=>{
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${claimed.owner_id}:${claimed.contact_id}`]);
@@ -287,6 +299,7 @@ export class CrossDomainDeletionService {
           await client.query("UPDATE public.background_task_step SET status='succeeded',finished_at=now() WHERE task_id=$1",[claimed.id]);
           await client.query("UPDATE public.background_task SET status='succeeded',current_step='verify_not_retrievable',finished_at=now(),updated_at=now() WHERE id=$1",[claimed.id]);
         }
+        await this.finishRuntimeTargets(client,claimed.id);
         const succeeded=(await client.query(`UPDATE public.cross_domain_deletion_operation
           SET status='succeeded',phase='complete',source_kind=NULL,owner_id=NULL,contact_id=NULL,target_id=NULL,lease_expires_at=NULL,finished_at=now(),updated_at=now()
           WHERE id=$1 AND status='running' AND lease_generation=$2`,[claimed.id,claimed.lease_generation])).rowCount;
@@ -327,16 +340,20 @@ export class CrossDomainDeletionService {
           WHERE owner_id=$1 AND contact_id=$2 AND status='active'`,[owner,contact,operation]);
         await cancelScopedTasks(client,owner,contact);
       }
+      await captureAssistantRuntimeScope(client,operation,owner,contact);
       return {id:operation,scope_kind:'contact',owner_id:owner,contact_id:contact,target_id:contact,status:'queued',phase:'invalidate'} as Row;
     });
     await this.executeContact(operation);
     return {status:202,body:{operation_id:operation.id}};
   }
 
-  private async executeContact(operation:Row):Promise<void>{
+  private executeContact(operation:Row):Promise<void>{return withAssistantRuntimeErasure(operation.id,()=>this.eraseContact(operation));}
+
+  private async eraseContact(operation:Row):Promise<void>{
     const claimed=await this.claim(operation.id);
     if(!claimed)return;
     try{
+      await this.runtime?.drain(claimed.id);
       await this.storage.businessTransaction(async client=>{
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`contact:${claimed.owner_id}:${claimed.contact_id}`]);
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${claimed.owner_id}`]);
@@ -365,6 +382,7 @@ export class CrossDomainDeletionService {
         }
         await client.query("UPDATE public.cross_domain_deletion_operation SET phase='verify',updated_at=now() WHERE id=$1",[claimed.id]);
       });
+      await this.cleanupRuntime(claimed);
       await this.cleanupFiles(claimed.owner_id);
       await this.complete(claimed,'contact');
     }catch(error){
@@ -398,16 +416,20 @@ export class CrossDomainDeletionService {
         WHERE task.id=step.task_id AND task.owner_id=$1 AND step.status<>'succeeded'`,[owner]);
       await client.query(`UPDATE public.background_task SET status='cancelled',last_error_code='account_deleted',finished_at=now(),updated_at=now()
         WHERE owner_id=$1 AND status IN ('queued','running','verifying','failed')`,[owner]);
+      await captureAssistantRuntimeScope(client,operation,owner);
       return {id:operation,scope_kind:'account',owner_id:owner,contact_id:null,target_id:owner,status:'queued',phase:'invalidate'} as Row;
     });
     await this.executeAccount(operation);
     return {status:202,body:{operation_id:operation.id}};
   }
 
-  private async executeAccount(operation:Row):Promise<void>{
+  private executeAccount(operation:Row):Promise<void>{return withAssistantRuntimeErasure(operation.id,()=>this.eraseAccount(operation));}
+
+  private async eraseAccount(operation:Row):Promise<void>{
     const claimed=await this.claim(operation.id);
     if(!claimed)return;
     try{
+      await this.runtime?.drain(claimed.id);
       await this.storage.businessTransaction(async client=>{
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${claimed.owner_id}`]);
         await this.assertLease(client,claimed);
@@ -441,6 +463,7 @@ export class CrossDomainDeletionService {
         await client.query('DELETE FROM public.owner WHERE id=$1',[claimed.owner_id]);
         await client.query("UPDATE public.cross_domain_deletion_operation SET phase='verify',updated_at=now() WHERE id=$1",[claimed.id]);
       });
+      await this.cleanupRuntime(claimed);
       await this.cleanupFiles(claimed.owner_id);
       await this.complete(claimed,'account');
     }catch(error){
@@ -479,6 +502,7 @@ export class CrossDomainDeletionService {
         [operation.owner_id,operation.contact_id,operation.target_id])).rowCount){
         throw new CrossDomainDeletionError('deletion_verification_failed',409);
       }
+      await this.finishRuntimeTargets(client,operation.id);
       const completed=(await client.query(`UPDATE public.cross_domain_deletion_operation
         SET status='succeeded',phase='complete',owner_id=NULL,contact_id=NULL,target_id=NULL,lease_expires_at=NULL,error_code=NULL,finished_at=now(),updated_at=now()
         WHERE id=$1 AND status='running' AND lease_generation=$2`,[operation.id,operation.lease_generation])).rowCount;
@@ -488,6 +512,11 @@ export class CrossDomainDeletionService {
     if(!verified)throw new CrossDomainDeletionError('deletion_verification_failed',409);
   }
 
+  private async finishRuntimeTargets(client:pg.Client,id:string):Promise<void>{
+    if((await client.query('SELECT 1 FROM assistant_runtime_deletion_target WHERE operation_id=$1 AND NOT cleaned LIMIT 1',[id])).rowCount)throw new CrossDomainDeletionError('assistant_runtime_cleanup_required',409);
+    await client.query('DELETE FROM assistant_runtime_deletion_target WHERE operation_id=$1',[id]);
+  }
+
   private async fail(operation:Row,error:unknown):Promise<void>{
     const code=error instanceof HostStorageError?error.code:'deletion_execution_failed';
     await this.storage.businessTransaction(async client=>{
@@ -495,6 +524,12 @@ export class CrossDomainDeletionService {
         SET status='failed',phase='verify',error_code=$2,lease_expires_at=NULL,finished_at=now(),updated_at=now()
         WHERE id=$1 AND status='running' AND lease_generation=$3`,[operation.id,code,operation.lease_generation]);
     });
+  }
+
+  private async cleanupRuntime(operation:Row):Promise<void>{
+    const targets=await this.storage.businessReadTransaction(async client=>(await client.query('SELECT * FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operation.id])).rows);
+    if(targets.length&&!this.runtime)throw new CrossDomainDeletionError('assistant_runtime_cleanup_required',409);
+    await this.runtime?.cleanup(operation.id);
   }
 
   private async cleanupFiles(owner:string):Promise<void>{
@@ -568,14 +603,14 @@ export class CrossDomainDeletionService {
   }
 
   private async read(owner:string,operation:string):Promise<CrossDomainDeletionResponse>{
-    const row=await this.storage.businessReadTransaction(async client=>(await client.query(`SELECT id,scope_kind,status,phase,error_code,created_at,updated_at,finished_at
+    const row=await this.storage.businessReadTransaction(async client=>(await client.query(`SELECT id,scope_kind,status,phase,error_code,contact_id,target_id,created_at,updated_at,finished_at
       FROM public.cross_domain_deletion_operation WHERE id=$1 AND(owner_id=$2 OR(status='succeeded' AND owner_id IS NULL))`,[operation,owner])).rows[0]);
     if(!row)throw new CrossDomainDeletionError('deletion_not_found',404);
     return {status:200,body:publicOperation(row)};
   }
-  private async list(owner:string):Promise<CrossDomainDeletionResponse>{
-    const rows=await this.storage.businessReadTransaction(async client=>(await client.query(`SELECT id,scope_kind,status,phase,error_code,created_at,updated_at,finished_at
-      FROM public.cross_domain_deletion_operation WHERE owner_id=$1 ORDER BY created_at DESC,id DESC LIMIT 50`,[owner])).rows);
+  private async list(owner:string,contact:string|null=null):Promise<CrossDomainDeletionResponse>{
+    const rows=await this.storage.businessReadTransaction(async client=>(await client.query(`SELECT id,scope_kind,status,phase,error_code,contact_id,target_id,created_at,updated_at,finished_at
+      FROM public.cross_domain_deletion_operation WHERE owner_id=$1 AND ($2::uuid IS NULL OR(contact_id=$2 AND scope_kind='discussion' AND status<>'succeeded')) ORDER BY created_at DESC,id DESC LIMIT 50`,[owner,contact])).rows);
     return {status:200,body:{operations:rows.map(publicOperation)}};
   }
 }
@@ -583,6 +618,7 @@ export class CrossDomainDeletionService {
 function publicOperation(row:Row){
   if(!statuses.has(row.status)||!phases.has(row.phase))throw new CrossDomainDeletionError('deletion_result_invalid',500);
   return {operation_id:row.id,scope_kind:row.scope_kind,status:row.status,phase:row.phase,error_code:row.error_code,
+    ...(row.status!=='succeeded'?{contact_id:row.contact_id,target_id:row.target_id}:{}),
     created_at:row.created_at,updated_at:row.updated_at,finished_at:row.finished_at};
 }
 

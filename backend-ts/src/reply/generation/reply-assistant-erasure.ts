@@ -1,3 +1,4 @@
+import {captureAssistantRuntimeDependencies} from '../runtime/assistant-runtime-erasure.ts';
 /** 来源删除前验证真实助手父边并清除准备/恢复副本；调用方持有 owner 事务锁。 */
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
@@ -196,6 +197,7 @@ export function createAssistantErasure(ports:AssistantErasurePorts) {
     const selected=(await client.query(sql.lineage,[owner,removedIds,requestIds.filter(r=>!excluded.has(r)),explicit,null,JSON.stringify(carry),JSON.stringify(captured)])).rows;
     const turns=sorted([...explicit,...selected.map(r=>r.turn_id).filter(Boolean)]), inputs=selected.map(r=>r.id);
     const requests=sorted([...requestIds,...selected.map(r=>r.request_id).filter(Boolean)]);
+    await captureAssistantRuntimeDependencies(client,owner,turns,requests,inputs);
     // 学习/发布可能递归进入回复删除；边已经完整预捕获，不重新读取被清空的身份。
     await ports.eraseSkillLearning(client,owner,sorted([...removedIds,...requests,...turns,...inputs]));
     const rows=(await client.query(sql.sourceTurns,[owner,removedIds,requests,turns,null,null])).rows;
