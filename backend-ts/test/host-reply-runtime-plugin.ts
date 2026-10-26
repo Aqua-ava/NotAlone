@@ -22,8 +22,8 @@ export const inject=['llm','agents','tools','sessions','systemPrompt','skills','
 export async function apply(ctx:Context){
   const database=process.env.NOTALONE_SYNTHETIC_DATABASE!,owner=process.env.NOTALONE_SYNTHETIC_REPLY_OWNER!;
   if(!/^notalone_ts_host_[a-f0-9]+_test$/.test(database)||!owner)throw Error('仅允许随机合成库及指定合成本人');
-  const home=process.env.HOME!,envFilePath=join(home,'synthetic.env'),skillsRoot=join(home,'skills');
-  await mkdir(skillsRoot,{mode:0o700});
+  const home=process.env.NOTALONE_SYNTHETIC_BUSINESS_HOME??process.env.HOME!,envFilePath=join(home,'synthetic.env'),skillsRoot=join(home,'skills');
+  await mkdir(skillsRoot,{mode:0o700,recursive:true});
   await writeFile(envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${database}\nNOTALONE_OWNER_ID=${owner}\n`,{mode:0o600});
   const storage=await HostStorage.open({envFilePath,migrationsDirectory:new URL('../database/migrations',import.meta.url).pathname,environment:{HOME:home}});
   let skillLibrary:SkillLibrary|undefined;
@@ -53,12 +53,13 @@ export async function apply(ctx:Context){
   }
   const runtime=await createHostReplyRuntime({ctx,storage,arbiter,ledger,token:process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN!,
     ...(skillLibrary?{skillLibrary}:{}),
+    ...(process.env.NOTALONE_SYNTHETIC_PERSISTENT==='1'?{publicRuntime:true,persistentAssistantHome:home}:{}),
     ...(extractionEnabled?{extractionEnabled:true,extractionAdoptionEnabled:true}:{}),
     ...(traceStore?{sourceTraces:traceStore}:{}),
     ...(permitServer?{extractionPermit:{path:join(home,'l2-permit.sock'),token:l2Token}}:{}),
     configuration:{skillsRoot,
     provider:{provider:'notalone-host-reply-test',connection:resolveAdapterOptions({baseURL:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL!,thinking:'disabled',maxTokens:256,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous' as never},
-    model:{provider:'notalone-host-reply-test',model:'deepseek-flash',maxTokens:256,temperature:0,reasoningEffort:'off',physical_limit:2,deadline_ms:10000,warning_ratio:0.8,budgetProfile:{context_window_tokens:65536,safety_margin_tokens:128}}}});
+    model:{provider:'notalone-host-reply-test',model:'deepseek-flash',maxTokens:256,temperature:Number(process.env.NOTALONE_SYNTHETIC_REPLY_TEMPERATURE??'0'),reasoningEffort:'off',physical_limit:2,deadline_ms:10000,warning_ratio:0.8,budgetProfile:{context_window_tokens:65536,safety_margin_tokens:128}}}});
   const server=createServer(async(req,res)=>{
     const url=new URL(req.url??'','http://localhost');
     if(skillLearningRoute(req.method??'',url.pathname)){
@@ -90,6 +91,10 @@ export async function apply(ctx:Context){
       if(layered.replayBody){
         res.writeHead(202,{'content-type':'application/json'});res.end(stringifyJson({replayed:true}));return;
       }
+    }
+    if(process.env.NOTALONE_SYNTHETIC_PERSISTENT==='1'&&url.pathname.startsWith('/api/')){
+      if(req.headers.authorization!==`Bearer ${process.env.NOTALONE_SYNTHETIC_REPLY_TOKEN}`){res.writeHead(401);res.end('{}');return;}
+      if(await runtime.handlePublic(req,res,url))return;
     }
     if(await runtime.handle(req,res))return;
     if(req.method==='POST'&&req.url==='/close-reply'){

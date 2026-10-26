@@ -1,4 +1,5 @@
 /** 宿主装配真实回复服务；独立内部鉴权，停止后排空实际调用再释放官方适配器。 */
+import {AssistantRuntime} from '../reply/runtime/assistant-runtime.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import type pg from 'pg';
@@ -78,6 +79,8 @@ export interface HostReplyOptions {
   embeddingFactory?:Parameters<typeof createLocalEmbeddingLifecycle>[0];
   discussionSkillsRoot?:string;
   publicRuntime?:boolean;
+  /** 完整启用前仅由隔离合成装配显式提供。 */
+  persistentAssistantHome?:string;
   sourceTraces?:Pick<SourceProcessingTraceStore,
     'findMemoryTraceRecordInTransaction'|'validateMemoryTraceRecordInTransaction'>;
   l2Quality?:L2ScenarioQualityReader;
@@ -195,7 +198,9 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
     ownerId:owner,transaction:work=>options.storage.businessTransaction(work),contract:qualityContract,
     get runtime(){return qualityRuntime;},
   }):undefined;
+  const assistantRuntime=options.persistentAssistantHome?new AssistantRuntime({ctx:options.ctx,transaction:work=>options.storage.businessTransaction(work),home:options.persistentAssistantHome}):undefined;
   const discussionService=new AssistantDiscussionService({
+      eraseRuntime:assistantRuntime?(client,scope,session)=>assistantRuntime.erase(client,scope,session):undefined,
       transaction:discussionTransaction,
       skillsRoot:discussionSkillsRoot,
       environment:options.storage.runtimeEnvironment(),
@@ -263,7 +268,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
       if(owner&&extraction&&learningStore)learningRuntime=new SkillLearningRuntime({store:learningStore,call,
         binding:{provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,reasoningEffort:m.reasoningEffort},
         profile:m.budgetProfile});
-      service=new ReplyGenerationService({ctx:options.ctx,
+      service=new ReplyGenerationService({ctx:options.ctx,assistantRuntime,
         transaction:work=>options.storage.businessTransaction(work),
         arbiter:options.arbiter,ledger:options.ledger,provider,
         skillsRoot:options.configuration.skillsRoot,model:options.configuration.model});

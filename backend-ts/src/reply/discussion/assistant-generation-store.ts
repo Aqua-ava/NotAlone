@@ -120,6 +120,8 @@ export class AssistantGenerationStore {
    return existing;
   }
   if((await client.query('SELECT 1 FROM reply_request WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3',[scope.owner_id,scope.contact_id,input.idempotency_key])).rowCount)throw new AssistantGenerationError('assistant_session_input_conflict');
+  // 新键不能夺走已受理轮的当前输入；显式替换继续走原来的撤销合同。
+  if(!options.runningKey&&(await client.query(`SELECT 1 FROM assistant_session_turn turn JOIN reply_request request ON request.owner_id=turn.owner_id AND request.contact_id=turn.contact_id AND request.idempotency_key=turn.idempotency_key WHERE turn.owner_id=$1 AND turn.contact_id=$2 AND turn.session_id=$3 AND request.state='running' AND request.lease_expires_at>clock_timestamp()`,[scope.owner_id,scope.contact_id,sessionId])).rowCount)throw new AssistantGenerationError('assistant_session_in_progress');
   if(input.expected_input_version_id!==undefined&&session.current_input_version_id!==input.expected_input_version_id)generationReject('input_version_stale');
   const deps=new Set(options.dependencies??[]);
   if(input.expected_input_version_id)for(const id of await this.current(client,scope,sessionId,input.expected_input_version_id))deps.add(id);

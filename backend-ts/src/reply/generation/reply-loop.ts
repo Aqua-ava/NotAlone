@@ -1,4 +1,5 @@
 /** 官方 Agent/Tool 有界循环。一次输出只作结构/引用校验，不再请求语义复核。 */
+import type {AssistantRuntimeLease} from '../runtime/assistant-runtime.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import {createUserMessage,ReasoningEffortId,LlmError,type StreamChunk,type TokenUsage} from '@deepseek-ai/dsh-llm';
 import {SessionId} from '@deepseek-ai/dsh-session';
@@ -17,6 +18,7 @@ export interface ReplyLoopInput {
   prompt:string;system_prompt:string;physical_limit:number;deadline_ms:number;candidate_limit?:1|2|3;
 }
 export interface ReplyLoopPorts {
+  runtime?:AssistantRuntimeLease|null;
   requireCurrent():Promise<void>;
   acquire(signal:AbortSignal):Promise<{id:string;settle():Promise<void>}>;
   provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;
@@ -49,7 +51,7 @@ export async function registerReplyAgentSetup(scope:Context,input:Pick<ReplyLoop
  scope.tools.register(createReplyOutputTool(options.executeOutput));
  return dispose;
 }
-export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:ReplyLoopPorts,outerSignal:AbortSignal):Promise<{candidates:ReplyCandidateInput[];budgets:MessagesBudgetReceipt[]}> {
+export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:ReplyLoopPorts,outerSignal:AbortSignal):Promise<{candidates:ReplyCandidateInput[];budgets:MessagesBudgetReceipt[];eventCount:number}> {
   if(!Number.isSafeInteger(input.physical_limit)||input.physical_limit<1||!Number.isSafeInteger(input.deadline_ms)||input.deadline_ms<1||input.deadline_ms>REPLY_EXECUTION_DEADLINE_MS)throw new ReplyError('reply_budget_unavailable',502);
   if(ports.tools.some(t=>!allowed.has(t.name))||new Set(ports.tools.map(t=>t.name)).size!==ports.tools.length)throw new ReplyError('reply_tools_invalid',502);
   outerSignal.throwIfAborted();
@@ -58,7 +60,8 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(new ReplyError('reply_timeout',504)),input.deadline_ms);
   const signal=AbortSignal.any([outerSignal,controller.signal,...ports.skillSession?[ports.skillSession.runtime.signal]:[]]);
-  const sessionId=SessionId(randomUUID()),budgets:MessagesBudgetReceipt[]=[],candidateLimit=input.candidate_limit??3;
+  ctx=ports.runtime?.ctx??ctx;
+  const sessionId=ports.runtime?.sessionId??SessionId(randomUUID()),budgets:MessagesBudgetReceipt[]=[],candidateLimit=input.candidate_limit??3;
   let candidates:ReplyCandidateInput[]|null=null,calls=0,failure:unknown=null;
   let lastFinish:string|undefined,completionCallLimit=0;
   let handle:Awaited<ReturnType<Context['agents']['create']>>|undefined;
@@ -114,7 +117,7 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
   const cancel=()=>handle?.agent.cancel({kind:'disposed'});
   signal.addEventListener('abort',cancel,{once:true});
   try {
-    handle=await ctx.agents.create({sessionId,signal,agentOptions:{provider:input.provider,model:input.model,maxTokens:input.maxTokens,reasoningEffort:ReasoningEffortId(input.reasoningEffort)},async setup(scope){
+    const agentOptions={signal,agentOptions:{provider:input.provider,model:input.model,maxTokens:input.maxTokens,reasoningEffort:ReasoningEffortId(input.reasoningEffort)},async setup(scope:Context){
       scope.on('agent/error',event=>{failure??=event.error;});
       scope.on('agent/pre-step',async (_position,next)=>{
         if(candidates||failure)return {kind:'reject'};
@@ -133,7 +136,8 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
           try {signal.throwIfAborted();await ports.requireCurrent();if(candidates||Object.keys(args).sort().join(',')!=='candidates,used_skill_version_id')throw new ReplyError('reply_candidates_rejected');const validated=validateReplyCandidates(restoreReplyEvidenceAliases(args,ports.aliases),ports.evidenceIds(),candidateLimit);const claim=args.used_skill_version_id;if(!(claim===null||typeof claim==='string'))throw new ReplyError('reply_candidates_rejected');if(ports.skillSession)await ports.skillSession.captureClaim(claim,signal);else if(claim!==null)throw new ReplyError('reply_candidates_rejected');signal.throwIfAborted();candidates=validated;exec.concludeTurn();return '候选已完成结构和引用校验。';}
           catch(error){failure=error instanceof ReplyError&&error.code==='reply_candidates_rejected'?new ReplyOutputError('output_candidates_invalid'):error;throw failure;}
         }});
-    }});
+    }};
+    handle=ports.runtime?.resume?await ctx.agents.resume({...agentOptions,resumeSessionId:sessionId}):await ctx.agents.create({...agentOptions,sessionId});
     await ports.skillSession?.validateRegistry(signal);
     signal.throwIfAborted();
     handle.agent.followup(createUserMessage({source:{kind:'user'},content:[{type:'text',text:input.prompt}]}));
@@ -149,7 +153,7 @@ export async function generateReplyLoop(ctx:Context,input:ReplyLoopInput,ports:R
     if(!candidates||calls===0)throw new ReplyOutputError('output_missing');
     await ports.requireCurrent();
     await ports.persist(candidates,budgets,signal);
-    return {candidates,budgets};
+    return {candidates,budgets,eventCount:handle.agent.session.seq};
   } finally {
     clearTimeout(timer);signal.removeEventListener('abort',cancel);
     // 保留interceptor直到实际流与agent全部收尾；不得先释放全局许可。

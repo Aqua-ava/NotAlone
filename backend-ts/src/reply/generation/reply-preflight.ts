@@ -4,12 +4,13 @@ import type {} from '@deepseek-ai/dsh-agent';
 import {randomUUID} from 'node:crypto';
 import {DeepSeekAdapter,resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {createUserMessage,ReasoningEffortId,type StreamChunk} from '@deepseek-ai/dsh-llm';
-import {SessionId} from '@deepseek-ai/dsh-session';
+import {SessionId,type SessionEvent} from '@deepseek-ai/dsh-session';
 import {prepareBoundMessagesRequest,measureSerializedMessages,type MessagesBudgetBinding,type MessagesBudgetProfile,type MessagesBudgetReceipt} from '../../platform/models/model-input-budget.ts';
 import {ReplyError} from './reply-contract.ts';
 type Setup=NonNullable<Parameters<Context['agents']['create']>[0]['setup']>;
 export interface ReplyPreflightInput {
  binding:MessagesBudgetBinding;profile:MessagesBudgetProfile;prompt:string;
+ seed?:readonly SessionEvent[];
  /** 必须与正式生成共用实际Agent安装函数，包含system、全部tools及Skill注册。 */
  setup:Setup;
  requireCurrent():Promise<void>;
@@ -42,7 +43,7 @@ export async function preflightReplyAgent(ctx:Context,input:ReplyPreflightInput,
  const cancel=()=>handle?.agent.cancel({kind:'disposed'});signal.addEventListener('abort',cancel,{once:true});
  try{
    await input.requireCurrent();
-   handle=await ctx.agents.create({sessionId,signal,agentOptions:{provider:providerAlias,model:input.binding.model,maxTokens:input.binding.maxTokens,reasoningEffort:ReasoningEffortId(input.binding.reasoningEffort)},setup:input.setup});
+   handle=await ctx.agents.create({sessionId,signal,seed:input.seed,agentOptions:{provider:providerAlias,model:input.binding.model,maxTokens:input.binding.maxTokens,reasoningEffort:ReasoningEffortId(input.binding.reasoningEffort)},setup:input.setup});
    await input.validateRegistry();signal.throwIfAborted();
    handle.agent.followup(createUserMessage({source:{kind:'user'},content:[{type:'text',text:input.prompt}]}));
    await handle.agent.whenIdle();signal.throwIfAborted();

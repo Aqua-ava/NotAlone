@@ -32,6 +32,7 @@ export interface ReplyGenerationGuardOptions {
  skillPort:Pick<PostgresSkillPort,'validateUseInTransaction'|'validateInTransaction'>;
  savedSkill:ReturnType<typeof createReplySkillGuards>;
  selectedSkillFailure?:()=>SelectedSkillFailure|null;
+ runtimeHistory?:(client:pg.Client,identity:{idempotency_key:string})=>Promise<boolean>;
  /** suggestion入口必须提供实际探索回执复验，普通入口不需要。 */
  validateExploredContext?:(client:pg.Client,context:BuiltReplyContext)=>Promise<void>;
 }
@@ -57,7 +58,7 @@ export function createReplyGenerationGuards(options:ReplyGenerationGuardOptions)
  const {assistant,ports}=createReplyAssistantGuards(options.savedSkill,async(client,s)=>{
   if(s.owner_id!==scope.owner_id||s.contact_id!==scope.contact_id)invalid();await requireReplyScope(client,scope,input);return scope.conversation_binding_id;
  });
- const discussion=new PostgresReplyDiscussionContext({guards:assistant,ports});
+ const discussion=new PostgresReplyDiscussionContext({guards:assistant,ports,metadataOnly:options.runtimeHistory,selectedReference:options.authenticatedContinuation?.continuation_reference??undefined});
  const assistantContext=(context:ReplyStoreContext):ReplyAssistantContext=>({...context,continuation_basis:prepared!.context.continuation_basis,assistant_discussion_snapshot:prepared!.discussion?.snapshot??null});
  async function validate(client:pg.Client,request:ReplyStoreRequest,context:ReplyStoreContext):Promise<PreparedGenerationState>{
    if(!prepared)unavailable();matches(request);const state=prepared!,built=state.context;if(state.preferences.revision===null&&!isLegacyEmptyPreferences(state.preferences))invalid();

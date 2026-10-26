@@ -38,6 +38,7 @@ export interface AssistantDiscussionInput {
 export interface AssistantDiscussionServiceOptions {
   transaction<T>(work:(client:Client)=>Promise<T>):Promise<T>;
   skillsRoot:string;
+  eraseRuntime?:(client:Client,scope:AssistantDiscussionScope,sessionId:string)=>Promise<void>;
   environment?:NodeJS.ProcessEnv;
   resolveBinding?:(client:Client,scope:AssistantDiscussionScope,allowManual:boolean)=>Promise<string>;
 }
@@ -898,6 +899,7 @@ export class AssistantDiscussionService {
         [scope.owner_id,scope.contact_id,sessionId],
       )).rows[0];
       if(!session)return {session_id:sessionId,state:'deleted' as const};
+      await this.options.eraseRuntime?.(client,scope,sessionId);
       await eraseManagedUpdateBackups(client,this.options.environment??{});
       await client.query(`
         INSERT INTO reply_invalidated_key(owner_id,contact_id,idempotency_key)
