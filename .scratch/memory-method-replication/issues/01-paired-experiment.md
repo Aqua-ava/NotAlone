@@ -24,4 +24,4 @@ Blocked by: none
 
 复刻叙事后提取与来源时间精修，完成冻结 24 场景四臂各两次共 192 次自然实验；两个 Agent 完成全量盲评，第三个对困难来源 48 次二次盲评，主 Agent 裁决两处时间关联。留出集全流程同时完整正确 A/B/C/D 为 11/9/12/16（各32），组合有局部收益但错误自动采纳仍6、主体错误2→3，故不接生产、不改真实记忆。
 
-26 个新增接口测试、4 模块 mypy 通过；完整 Python 1123 项通过、3 跳过，36 迁移在一次性合成库验证后清理。Standards 0，Spec 三处评分问题已修，复核未解决0。旧测试夹具的扩展 mypy 仍失败，未宣称全仓库类型通过。结果与复现见 [实验报告](../../../docs/memory-method-replication-experiment-20261002.md)。
+26 个新增接口测试、4 模块 mypy 通过；完整 Python 1123 项通过、3 跳过，36 迁移在一次性合成库验证后清理。Standards 0，Spec 三处评分问题已修，复核未解决0。旧测试夹具的扩展 mypy 仍失败，未宣称全仓库类型通过。结果与复现见 [实验报告](../../../docs/evaluations/memory/model-comparisons/memory-method-replication-experiment-20261002.md)。

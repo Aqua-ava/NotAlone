@@ -36,7 +36,7 @@
 
 ## 实际归档、失败及回归
 
-全部时刻为 Asia/Taipei，提前写有限计划，App／helper 启动上限均为 **0**。归档沿本机 `man ditto` 的 `-c -k --keepParent` 入口，使用已有 Mac20 归档修复所采用的 `--norsrc`，避免 AppleDouble 使 framework 签名失效；不保留 resource forks／xattrs／ACL／quarantine，不声称这些系统元数据已经复制。[已有打包元数据修复记录](../../docs/macos-app-permissions-and-errors.md)（361 行）
+全部时刻为 Asia/Taipei，提前写有限计划，App／helper 启动上限均为 **0**。归档沿本机 `man ditto` 的 `-c -k --keepParent` 入口，使用已有 Mac20 归档修复所采用的 `--norsrc`，避免 AppleDouble 使 framework 签名失效；不保留 resource forks／xattrs／ACL／quarantine，不声称这些系统元数据已经复制。[已有打包元数据修复记录](../../docs/guides/macos-app-permissions-and-errors.md)（361 行）
 
 | 检查 | 预注册时段 | 实际结果 |
 | --- | --- | --- |

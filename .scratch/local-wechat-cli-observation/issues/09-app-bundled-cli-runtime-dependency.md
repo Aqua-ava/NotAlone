@@ -6,7 +6,7 @@ State: resolved
 Blocked by: none
 
 长期权限与启动错误台账：
-[macOS App 权限与启动错误记录](../../../docs/macos-app-permissions-and-errors.md)。
+[macOS App 权限与启动错误记录](../../../docs/guides/macos-app-permissions-and-errors.md)。
 
 ## What to fix
 

@@ -177,7 +177,7 @@ B 优先以真实本机 cross encoder 的 `scores.reranker` 作为相关性过�
 本地阅读入口：
 
 - [领域语言](../../CONTEXT.md)、[领域与数据契约](../../architecture/current/domain-data.md)、[核心流程](../../architecture/current/core-flows.md)、[隐私与删除](../../architecture/current/privacy-deletion.md)。
-- [现有词法评测基线](../../docs/memory-recall-evaluation-baseline.md)与[第一期规格](../memory-recall/spec.md)：历史结果仅作先例，本任务未重跑。
+- [现有词法评测基线](../../docs/evaluations/memory/memory-recall-evaluation-baseline.md)与[第一期规格](../memory-recall/spec.md)：历史结果仅作先例，本任务未重跑。
 - [检索协议](../../src/notalone/retrieval/ports.py)、[权威回读](../../src/notalone/persistence/retrieval.py)、[回复上下文](../../src/notalone/reply/context.py)、[查询规则](../../src/notalone/retrieval/lexical.py)。
 - [记忆评测 runner](../../src/notalone/retrieval/recall_evaluation.py)、[合成用例](../../src/notalone/retrieval/recall_cases.py)、[Context 测试](../../tests/unit/reply/test_context_retrieval.py)。
 

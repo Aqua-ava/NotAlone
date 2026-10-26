@@ -16,7 +16,7 @@
 - `backend/src/notalone/front_sync/foreground_locator.py`：新观察只查全类型元数据与当前owner/channel/account active绑定，无tail或正文写入。全类型同名项包括未绑定私聊和群聊，51项即拒绝唯一性；改名、失效、模糊和查询失败均无自动身份。
 - `desktop/src/main/foreground/controller.ts`：可信show前一次新观察、1500ms；helper focused暂停、连接/联系人/编辑/生命周期变动使旧结果失效，已有编辑保留并要求确认。`desktop/src/main/backend/config.ts`将本轮userData的profile传给实际后端，不用历史sync/status作为当前身份。
 - `desktop/src/main/foreground/calibration-profile.ts`：9字段精确集合、有限数值、[0,1]置信度、整数像素/毫秒、每图<=160000像素、scale[1,3]和耗时<=400000ms；未知正文/图像/扩展字段拒绝。结果0600独占临时文件与原子rename，current失效不写。
-- [权限记录新增节](../../docs/macos-app-permissions-and-errors.md#2026-10-13-ocr质量分项诊断准备)：不改TCC或签名策略，不新增权限请求；实际helper路径、父进程、identifier、签名与权限归属仍由Root实测。
+- [权限记录新增节](../../docs/guides/macos-app-permissions-and-errors.md#2026-10-13-ocr质量分项诊断准备)：不改TCC或签名策略，不新增权限请求；实际helper路径、父进程、identifier、签名与权限归属仍由Root实测。
 
 API证据只支持接口，不认证实机。Context7目录无工具；Apple搜索返回的[SCStreamConfiguration.sourceRect](https://developer.apple.com/documentation/screencapturekit/scstreamconfiguration/sourcerect?language=objc)说明display源区域，单window模式忽略该参数；此源码使用display filter包含单一窗口，保持逐区限制。本机Xcode SDK `SCStream.h`也注明display逻辑点坐标。[VNRecognizedText.confidence](https://developer.apple.com/documentation/vision/vnrecognizedtext/confidence?language=objc)约定[0,1]置信度；实际图像/识别质量仍须测试。官方页面直开仅JS占位、Markdown接口失败和curl TLS失败均保留，不借失败抓取推断新API行为。
 

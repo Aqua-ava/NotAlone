@@ -41,7 +41,7 @@ Root 收据将四项均记录为 arm64／signature verified。没有执行这些
 
 ## 签名、权限与许可界限
 
-Root 实际主包 `codesign --verify --deep --strict` 返回0；主包identifier为 `com.notalone.desktop`、ad-hoc、TeamIdentifier not set。子Agent本次没有重跑codesign。Info.plist的 `NSAllowsArbitraryLoads=false`，无UsageDescription字段。静态签名与当前可用性都不能认证Developer ID、公证或TCC责任归属；E尚未实际进行权限预检、Capture或联系人定位。[权限与错误台账](../../docs/macos-app-permissions-and-errors.md)、[已有最小归属核查](goal-ocr-permission-attribution-20261013.md)
+Root 实际主包 `codesign --verify --deep --strict` 返回0；主包identifier为 `com.notalone.desktop`、ad-hoc、TeamIdentifier not set。子Agent本次没有重跑codesign。Info.plist的 `NSAllowsArbitraryLoads=false`，无UsageDescription字段。静态签名与当前可用性都不能认证Developer ID、公证或TCC责任归属；E尚未实际进行权限预检、Capture或联系人定位。[权限与错误台账](../../docs/guides/macos-app-permissions-and-errors.md)、[已有最小归属核查](goal-ocr-permission-attribution-20261013.md)
 
 随包 `Contents/Resources/notalone-third-party` 恰九份材料，完整集合、字节和SHA与C相同；逐一实际比对通过：
 

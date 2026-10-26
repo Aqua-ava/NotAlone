@@ -1,6 +1,6 @@
 # 记忆质量离线预检（2026-10-12）
 
-本文件补齐[既有方案](memory-quality-plan-20261012.md)可自主完成的公开输入核对及代码配置快照，不开放模型执行门。当前真实供应商配置与人工语义核定仍未完成；42／84 是方案提出的真实 HTTP 上限，本轮模型、SDK、HTTP、业务库调用均为 0。新增功能继续冻结，OCR 继续暂停，[默认放行台账](../../docs/memory-adoption-dimension-release-ledger.md)不改。
+本文件补齐[既有方案](memory-quality-plan-20261012.md)可自主完成的公开输入核对及代码配置快照，不开放模型执行门。当前真实供应商配置与人工语义核定仍未完成；42／84 是方案提出的真实 HTTP 上限，本轮模型、SDK、HTTP、业务库调用均为 0。新增功能继续冻结，OCR 继续暂停，[默认放行台账](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)不改。
 
 ## 输入与核定方法
 

@@ -19,7 +19,7 @@
 
 ### 1. 查询只取当前正文
 
-召回 query 就是本次要处理的文字：`reply_to_message` 取待回复消息正文，`rewrite_draft` 取草稿正文。表达方向只约束说法，不进入 query；近期消息继续作为上下文证据，不参与记忆评分。当前实现先归一化 query；不超过 200 个字符时完整参与分词，超出时取开头 100 字和结尾 100 字，并以分隔符隔开，避免截断处拼出不存在的词。此策略修复长消息尾部关键词漏召回，中段仍可能遗漏；见[召回评测记录](../../docs/memory-recall-evaluation-baseline.md)与[实现](../../backend/src/notalone/retrieval/lexical.py)。
+召回 query 就是本次要处理的文字：`reply_to_message` 取待回复消息正文，`rewrite_draft` 取草稿正文。表达方向只约束说法，不进入 query；近期消息继续作为上下文证据，不参与记忆评分。当前实现先归一化 query；不超过 200 个字符时完整参与分词，超出时取开头 100 字和结尾 100 字，并以分隔符隔开，避免截断处拼出不存在的词。此策略修复长消息尾部关键词漏召回，中段仍可能遗漏；见[召回评测记录](../../docs/evaluations/memory/memory-recall-evaluation-baseline.md)与[实现](../../backend/src/notalone/retrieval/lexical.py)。
 
 ### 2. 第一期只对记忆正文做中文词法评分
 
@@ -67,7 +67,7 @@
 - 预算：超限 0，本人记忆不占用联系人预算；
 - 排序：优先级正确率 ≥ 90%。
 
-不达标时先调整词法与阈值，不得放宽门槛。阈值与预算的标定结果记入 `docs/memory-recall-evaluation-baseline.md`。
+不达标时先调整词法与阈值，不得放宽门槛。阈值与预算的标定结果记入 `docs/evaluations/memory/memory-recall-evaluation-baseline.md`。
 
 ### 7. 第一期边界
 
@@ -91,6 +91,6 @@
 
 ## 验证
 
-- 评测门槛断言在 CI 通过，标定结果落 `docs/memory-recall-evaluation-baseline.md`。
+- 评测门槛断言在 CI 通过，标定结果落 `docs/evaluations/memory/memory-recall-evaluation-baseline.md`。
 - 回归覆盖：中文改写、无关记忆不注入、跨联系人隔离、失效与删除、双预算截断、排序优先级。
 - PostgreSQL 侧保留隔离与失效集成测试；`selection_reason` 与证据类型随回复快照持久化。

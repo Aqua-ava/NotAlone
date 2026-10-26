@@ -21,9 +21,9 @@
 
 ## 原私有与留出缺口
 
-原私有基线为同一联系人6窗各两轮，共12必需机会/6可选机会、17原候选，旧严格6/12及2/6保持；原文件位置与SHA来自[冻结计划](../../docs/memory-fixed-verifier-crossover-plan-20261003.md)。原fixture SHA为`f3d0a0344d67ad3a18fff5b63e3c2842761439e1cf83cfb7db74461f9839d17b`，Gold SHA为`fa06f4b139b6b973cfc6d706c02caba7e46777b92b18aee8a1f63c6dffd2818d`。原引用的私有audit目录目前不存在。
+原私有基线为同一联系人6窗各两轮，共12必需机会/6可选机会、17原候选，旧严格6/12及2/6保持；原文件位置与SHA来自[冻结计划](../../docs/evaluations/memory/source-verification/memory-fixed-verifier-crossover-plan-20261003.md)。原fixture SHA为`f3d0a0344d67ad3a18fff5b63e3c2842761439e1cf83cfb7db74461f9839d17b`，Gold SHA为`fa06f4b139b6b973cfc6d706c02caba7e46777b92b18aee8a1f63c6dffd2818d`。原引用的私有audit目录目前不存在。
 
-旧留出是[分组计划](../../docs/memory-target-group-wire-plan-20261003.md)8个合成场景中的4窗；完整manifest SHA为`1bd7cca7f2d806f0a217bdb550af3d6f5138090354f773ed3efae384fe2a97f6`，Gold SHA为`a92205a9aa69ef9d322085be89cfbf0e3cc0375a6d25eccd03bb62e4e8943f7e`。检查仓库、端侧audit、可访问临时目录与公开历史清理备份后，未找到匹配原文件。未解码留出，也未把现行公开holdout标签当成旧留出。
+旧留出是[分组计划](../../docs/evaluations/memory/extraction/memory-target-group-wire-plan-20261003.md)8个合成场景中的4窗；完整manifest SHA为`1bd7cca7f2d806f0a217bdb550af3d6f5138090354f773ed3efae384fe2a97f6`，Gold SHA为`a92205a9aa69ef9d322085be89cfbf0e3cc0375a6d25eccd03bb62e4e8943f7e`。检查仓库、端侧audit、可访问临时目录与公开历史清理备份后，未找到匹配原文件。未解码留出，也未把现行公开holdout标签当成旧留出。
 
 因此“原同批复测”和“原留出回放”均未执行，需要恢复匹配原SHA的归档。全部聊天授权可支持必要新样本，但新抽样不能恢复原同批可比性，不重写旧成绩。
 

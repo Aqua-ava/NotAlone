@@ -4,7 +4,7 @@
 > 决策日期：2026-10-22
 >
 > 修订 [ADR-036](036-per-dimension-adoption-release.md) 第 5 条与
-> [维度放行台账](../../docs/memory-adoption-dimension-release-ledger.md) 第 4 节；
+> [维度放行台账](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md) 第 4 节；
 > 不改变 ADR-085 的默认自动采纳边界与历史评测合同。
 
 ## 背景

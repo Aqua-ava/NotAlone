@@ -117,7 +117,7 @@ npm run dev
 
 下述是历史渠道研发入口，首版 App 不引导启用：先预览、确认并**正式导入**一份单联系人历史，建立本人微信渠道身份。导入后如提示同步宿主尚未装配，点击“认证停读并重新加载同步服务”；连接恢复后，再到“联系人 → 添加微信联系人”主动选择会话、点击“确认并授权所选会话”，最后开启总开关。仅预览或初始化本人身份还不足以启用微信同步。
 
-微信同步需要在机器环境中另行配置外置 CLI 路径。前台定位探针可稍后配置，其屏幕录制权限及签名归属见 [权限说明](docs/macos-app-permissions-and-errors.md)；目前 OCR 仍有实机验收缺项。
+微信同步需要在机器环境中另行配置外置 CLI 路径。前台定位探针可稍后配置，其屏幕录制权限及签名归属见 [权限说明](docs/guides/macos-app-permissions-and-errors.md)；目前 OCR 仍有实机验收缺项。
 
 </details>
 
@@ -132,7 +132,7 @@ npm run dev
 | 检索与记忆 | 生产检索使用 SQL / 全文路径，向量检索未启用；正常记忆维护默认启用逐项来源核验；历史维度放行台账不再是正常维护的前置条件。 |
 | 平台与分发 | 当前面向 macOS；Windows 微信适配未实现，桌面包尚未完成 Developer ID 分发与公证。 |
 
-运行证据见 [桌面端说明](desktop/README.md)、[后端说明](backend/README.md)与 [macOS 验收记录](docs/macos-app-permissions-and-errors.md)。架构文档中的设计不代表功能已通过端到端验收。
+运行证据见 [桌面端说明](desktop/README.md)、[后端说明](backend/README.md)与 [macOS 验收记录](docs/guides/macos-app-permissions-and-errors.md)。架构文档中的设计不代表功能已通过端到端验收。
 
 ## 隐私与控制
 
@@ -142,7 +142,7 @@ npm run dev
 - **资料有来源，也有删除路径。** 可删除单份导入来源及失去来源支持的派生资料；其他来源仍支持的消息保留。微信原聊天、原始导入文件与外部模型副本须分别处理，当前来源删除入口不提供联系人或账户整体删除。
 - **完整追踪同样属于敏感资料。** 含正文的提取追踪默认保存在数据库，持续到手动删除或来源删除；90 天任务清理只清终态任务元数据。`.env`、私人聊天、追踪、备份和截图不应提交到 Git。
 
-自动采纳必须带来源、标记为 `auto` 且可撤销；模型置信度与来源支持不等于真实准确率。[维度放行台账](docs/memory-adoption-dimension-release-ledger.md)保留历史评测与显式维度协议。默认自动采纳按 [ADR-085](architecture/adr/085-source-verified-automatic-adoption.md)：通过来源及适用检查后自动裁决，不以额外语用、置信度或风险标签制造人工待办；人工保护、删除及关系矛盾待定例外保留。
+自动采纳必须带来源、标记为 `auto` 且可撤销；模型置信度与来源支持不等于真实准确率。[维度放行台账](docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)保留历史评测与显式维度协议。默认自动采纳按 [ADR-085](architecture/adr/085-source-verified-automatic-adoption.md)：通过来源及适用检查后自动裁决，不以额外语用、置信度或风险标签制造人工待办；人工保护、删除及关系矛盾待定例外保留。
 
 主动收藏表达样本按[ADR-082](architecture/adr/082-retire-explicit-style-samples.md)退役；候选编辑、复制及用户明确管理的长期表达偏好保留。
 
@@ -162,12 +162,13 @@ NotAlone/
 
 | 想了解什么 | 从这里开始 |
 | --- | --- |
+| 操作说明、评测与研究材料的分类入口 | [文档索引](docs/README.md) |
 | 桌面运行、构建与验收 | [desktop/README.md](desktop/README.md) |
 | 后端安装、HTTP 与 CLI | [backend-ts/README.md](backend-ts/README.md) |
 | 数据库升级与旧库恢复 | [backend/database/README.md](backend/database/README.md) |
-| 原生探针与权限 | [native/macos/README.md](native/macos/README.md) · [权限与启动错误](docs/macos-app-permissions-and-errors.md) |
+| 原生探针与权限 | [native/macos/README.md](native/macos/README.md) · [权限与启动错误](docs/guides/macos-app-permissions-and-errors.md) |
 | 领域词汇与架构决策 | [CONTEXT.md](CONTEXT.md) · [架构索引](architecture/README.md) |
-| 记忆的来源、提取与删除 | [完整追踪](architecture/current/memory-extraction-trace.md) · [维度放行台账](docs/memory-adoption-dimension-release-ledger.md) |
+| 记忆的来源、提取与删除 | [完整追踪](architecture/current/memory-extraction-trace.md) · [维度放行台账](docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md) |
 | 开发约定与任务工作流 | [AGENTS.md](AGENTS.md) · [工程工作流](docs/agents/engineering.md) |
 | 官网预览与部署 | [website/README.md](website/README.md) |
 

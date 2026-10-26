@@ -12,7 +12,7 @@
 | [指代 07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | `open / needs-info`，0/5 项；主集现在是 **16 条**，历史 13/15 不属于现行基线 | 固定 16 条主集及 3 条语义补充分别报告；先测当前提示和配置，再判断是否存在稳定失败 | 确定性回归与追踪 110 项通过不证明模型准确率；指代运行时键当前不可推导，测准也不能自动放行 |
 | [维度放行 03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | `claimed / ready-for-human`，3/4 项；机制已有，六类键验收仍只覆盖 3 类，放行数为 0 | 分开核对质量计数、语义标注和键可推导性；仅对已复现失败形成后续评测范围 | 不补字段、迁移或 ADR，不扩大默认放行集，不以 `meets_gate=true` 直接宣布生产可自动采纳 |
 
-历史记录只作归因线索：[核心事实在案聚合](../../docs/memory-core-claim-retention-20261002.md)、[16 次重复测量](../../docs/memory-claim-retention-repetition-pilot-result-20261005.md)、[档 A](../../docs/memory-dimension-release-tier-a-result-20261006.md)、[truth_intent](../../docs/memory-dimension-release-truth-intent-result-20261006.md)、[time 提前收止](../../docs/memory-dimension-release-time-truth-intent-result-20261006.md)。16 次重复测量只有两个匿名窗口，结论是“无可观测对照信号”；E=0，不能证明核心覆盖改善。档 A 的 subject 一般错误 2、paraphrase 假事 3；truth_intent 一般错误 4，均未达标签；time 属未完成且有安全错误的批次。
+历史记录只作归因线索：[核心事实在案聚合](../../docs/evaluations/memory/source-verification/memory-core-claim-retention-20261002.md)、[16 次重复测量](../../docs/evaluations/memory/source-verification/memory-claim-retention-repetition-pilot-result-20261005.md)、[档 A](../../docs/evaluations/memory/dimension-release/memory-dimension-release-tier-a-result-20261006.md)、[truth_intent](../../docs/evaluations/memory/dimension-release/memory-dimension-release-truth-intent-result-20261006.md)、[time 提前收止](../../docs/evaluations/memory/dimension-release/memory-dimension-release-time-truth-intent-result-20261006.md)。16 次重复测量只有两个匿名窗口，结论是“无可观测对照信号”；E=0，不能证明核心覆盖改善。档 A 的 subject 一般错误 2、paraphrase 假事 3；truth_intent 一般错误 4，均未达标签；time 属未完成且有安全错误的批次。
 
 ## 2. 可复用材料和待冻结信息
 
@@ -88,7 +88,7 @@ P1/P2 是当前合成样本的观察计划，不把“两轮”视为充分统�
 
 达标签仍为用例数 ≥15、假事 0、记错人 0、一般错误 ≤1，由[当前 summarize](../../backend/src/notalone/memory_extraction/evaluation.py)输出；语义标注覆盖另报，完整原始分母另核。现有 runner 对未捕获异常只写原始失败记录、没有纳入 `results` 的汇总，未来执行须核对计划全量与失败/未运行，不照抄部分 `summarize()` 冒充整场通过。
 
-当前 evaluator 的 auto 是原有三道门的“若该维度放行”理想去向，不叠加生产第 4 道门、不写库。[运行时键](../../backend/src/notalone/memory_extraction/dimensions.py)仅能推导 subject、time、truth_intent；paraphrase、reference、media、reported 缺结构化字段，达标签也不能放行。质量改善和自动采纳是不同执行门，按 [ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)、[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)及[放行台账](../../docs/memory-adoption-dimension-release-ledger.md)保持来源核验、0.7、风险白名单与语用限制；不关闭维度门、不用 `RELEASE_ALL_DIMENSIONS` 改生产。
+当前 evaluator 的 auto 是原有三道门的“若该维度放行”理想去向，不叠加生产第 4 道门、不写库。[运行时键](../../backend/src/notalone/memory_extraction/dimensions.py)仅能推导 subject、time、truth_intent；paraphrase、reference、media、reported 缺结构化字段，达标签也不能放行。质量改善和自动采纳是不同执行门，按 [ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)、[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)及[放行台账](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)保持来源核验、0.7、风险白名单与语用限制；不关闭维度门、不用 `RELEASE_ALL_DIMENSIONS` 改生产。
 
 ## 6. 按原工作流承接
 

@@ -143,7 +143,7 @@ Spec: ../spec.md
 - 2026-10-13（解除暂停后的最小采集与低置信分项）：Root按有限test:app／共享租约串行执行C／D／E／F各1启动，保留前三场capture0与F低置信失败。必要身份四布尔诊断d166a0f3没有新OS查询或放松门，新D包ASAR376c9a53…／11native摘要32315b3e…及签名、六dist逐字核同。F入口96.388301375秒／exit1，实际到names：顶部180×50／0.5、行160×40／0.3000000119、复读0.5、scale2、634ms；固定代码路径先核三非空同名再因不足0.90停止，无profile／绑定。源路径推断3细条＋3名字共6成功最小调用，非独立帧计数。结合E实际非前台context停采，仅第1条采集边界获得实机证据；重名／改名／失效／生成保护、焦点与CLI独立及TCC责任归属仍未验，第2／3条不勾。实际预检成功不等签名权限归属已认证。F14个已记录PID和userData gone、leaseabsent、294包项／strict不变，其他历史个体资源覆盖不足保留；发送8／来信0不变。见[四场实测及收尾](../../unfinished-work/goal-ocr-front-context-20261013.md)，原失败、State／Triage／依赖保持。
 
 
-- 2026-10-13（录屏权限归属独立核查）：Root只读查看实际系统设置已开启的NotAloneApp条目，并在Finder揭示旧Swift `macos_app/build/NotAloneApp.app`／`com.notalone.app`；当前D包为Electron `com.notalone.desktop`、ad-hoc／无Team，不能沿旧条目认证新包责任归属。未改权限／签名、未新启动／采集／模型／发送，也未保存图像或账号／证书主体；未知归属Finder窗口保留。F可用预检和采集边界证据保持，原第三AC仍未勾，其他AC／State不变。见[最小核查证据](../../unfinished-work/goal-ocr-permission-attribution-20261013.md)与[权限台账](../../../docs/macos-app-permissions-and-errors.md)。
+- 2026-10-13（录屏权限归属独立核查）：Root只读查看实际系统设置已开启的NotAloneApp条目，并在Finder揭示旧Swift `macos_app/build/NotAloneApp.app`／`com.notalone.app`；当前D包为Electron `com.notalone.desktop`、ad-hoc／无Team，不能沿旧条目认证新包责任归属。未改权限／签名、未新启动／采集／模型／发送，也未保存图像或账号／证书主体；未知归属Finder窗口保留。F可用预检和采集边界证据保持，原第三AC仍未勾，其他AC／State不变。见[最小核查证据](../../unfinished-work/goal-ocr-permission-attribution-20261013.md)与[权限台账](../../../docs/guides/macos-app-permissions-and-errors.md)。
 
 ### 2026-10-16 微信正向未达与用户暂缓现场验收
 

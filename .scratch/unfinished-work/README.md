@@ -63,7 +63,7 @@
 | --- | --- | --- |
 | Mac管理窗口与输入小窗 | [Mac任务索引](../mac-desktop-app/README.md)中的01–17、19已关闭：窗口、后端生命周期、诊断、首启、联系人、导入、改写、复制、明确方向回复、依据、资料查看/编辑/删除、授权、同步控制、消息事件与编辑保护 | 18/20未关闭；不能说完整Mac产品已验收。旧Swift主界面已退役 |
 | 导入到回复的后端闭环 | [核心闭环](../core-business-flow/spec.md)、[导入自动处理](../import-memory-auto/spec.md)、[观察自动处理](../observation-memory-auto/spec.md)、[回复模块](../reply-module-flow/spec.md)的已发布任务已关闭；公开HTTP、正式PG/Worker、来源、幂等、恢复和删除有合成验收 | 脚本模型通过不等于真实模型质量通过，独立CLI入口也不代表App整合完成 |
-| 记忆与可追踪依据 | 提取/来源核验、本人和联系人记忆、待确认候选、时效、追踪和删除链路已有实现；[追踪三票](../memory-extraction-trace/spec.md)已关闭 | 整体事实覆盖和指代质量仍未达标；[自动采纳放行表](../../docs/memory-adoption-dimension-release-ledger.md)仍为空 |
+| 记忆与可追踪依据 | 提取/来源核验、本人和联系人记忆、待确认候选、时效、追踪和删除链路已有实现；[追踪三票](../memory-extraction-trace/spec.md)已关闭 | 整体事实覆盖和指代质量仍未达标；[自动采纳放行表](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)仍为空 |
 | 检索与Skill管理 | [词法召回](../memory-recall/spec.md)、[上下文/Skill](../memory-skill-context/spec.md)、[Skill库](../skill-library/spec.md)已有实现与原票验证；聊天策略11票也已关闭 | 向量试验未默认启用，受控模型策略验收不代签真实模型语义质量 |
 | 打包与部分原生能力 | [任务20](../mac-desktop-app/issues/20-mac-app-delivery.md)记录helper核验/随包、仓库探针构建、候选包签名；同一新包Finder及23个完整非OCR场景通过，含系统导入、人工小窗显示／隐藏、Finder前台小窗及真实CLI后台／正常退出 | 当前仅本机ad-hoc；WCDB精确构建/二进制许可、真实来信事件、双联系人及OCR仍缺，不宣称完整交付 |
 | 真实微信单联系人同步 | [任务04](../native-app-backend/issues/04-real-wechat-follow-smoke.md)：新消息读取/入库/去重、故障自动恢复、关闭期间补齐、故障期间补齐均有实际记录 | 只覆盖已授权单联系人及记录中的测试条件，未覆盖双联系人；后续最终App运行／退出分项见下方独立记录 |

@@ -44,4 +44,4 @@ Conda `NotAlone`、`backend/` 中，以环境替换和两套网络构造／socke
 
 独立人工Gold仍缺，前次预检发现的转述auto、瞬时状态空时间及借用方向等分歧保留，未改expected或评分来凑通过。完整原始请求／允许的原始响应、错误与额外候选的可靠私有保存、思考字段排除、解析／评分结果、计划全量与失败／未运行对账，以及最终runner装配仍未实现。本轮只注入保存故障证明批次停发，不能据此宣称完整结果保存器已交付。
 
-42／84仍为未激活的拟议新上限，不复用旧余额。07保持claimed／needs-info与原模型验收0/5；核心真实6/12、各维度门槛、[空放行台账](../../docs/memory-adoption-dimension-release-ledger.md)及六张未关闭原票保持。
+42／84仍为未激活的拟议新上限，不复用旧余额。07保持claimed／needs-info与原模型验收0/5；核心真实6/12、各维度门槛、[空放行台账](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)及六张未关闭原票保持。

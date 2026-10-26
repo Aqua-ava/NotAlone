@@ -3,7 +3,7 @@
 > 状态：已收束；正式决定见 ADR-028
 > 日期：2026-09-17
 >
-> 第一期已实现并由离线评测门槛放行（见 `docs/memory-recall-evaluation-baseline.md`），现行行为已回填 `architecture/current/`。遗留的向量补充评估条件保留在 ADR-005 第 5 节与 ADR-028 第 7 节。
+> 第一期已实现并由离线评测门槛放行（见 `docs/evaluations/memory/memory-recall-evaluation-baseline.md`），现行行为已回填 `architecture/current/`。遗留的向量补充评估条件保留在 ADR-005 第 5 节与 ADR-028 第 7 节。
 >
 > 2026-10-22 后继说明：本文“不做待确认候选注入”的第一期边界已由 [ADR-035](../../adr/035-pending-candidate-unconfirmed-reply-reference.md) 解除；query 截断以 [ADR-028](../../adr/028-lexical-memory-recall-phase-1.md) 第 2 节的“开头 100 字符＋结尾 100 字符”为准，本文 §2 的“截取前 200 字符”仅历史。
 
@@ -90,7 +90,7 @@
 | 预算 | 超限 0，双预算独立 |
 | 排序 | 优先级正确率 ≥ 90% |
 
-不达标先调词法与阈值，不得放宽门槛；标定结果记 `docs/memory-recall-evaluation-baseline.md`。
+不达标先调词法与阈值，不得放宽门槛；标定结果记 `docs/evaluations/memory/memory-recall-evaluation-baseline.md`。
 
 ## 9. 涉及改动
 

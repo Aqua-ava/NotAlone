@@ -16,7 +16,7 @@
 
 ## 生产候选与实际边界
 
-生产构建新增独立 `notalone-header-change-source`，复用原CLI编译代码，分别签名；当前包完整清单核验两个入口、核心库、字节、执行位及固定签名identifier。旧两文件包保留正式观察并停用辅助源，外部正式探针不触发兄弟文件搜索或同体回退。见[ADR-057](../../architecture/adr/057-header-change-triggered-foreground-observation.md)和[权限台账](../../docs/macos-app-permissions-and-errors.md)。
+生产构建新增独立 `notalone-header-change-source`，复用原CLI编译代码，分别签名；当前包完整清单核验两个入口、核心库、字节、执行位及固定签名identifier。旧两文件包保留正式观察并停用辅助源，外部正式探针不触发兄弟文件搜索或同体回退。见[ADR-057](../../architecture/adr/057-header-change-triggered-foreground-observation.md)和[权限台账](../../docs/guides/macos-app-permissions-and-errors.md)。
 
 相关回归8/8、类型检查及桌面安全65/65通过；Swift共98项，96通过、2个既有实验跳过、0失败；独立Standards和Spec均0。新候选 `remaining-nine-final-20261015-v5` 构建并严格签名通过，18项来源、两个不同identifier，ASAR为 `a888634004538e3bc441204a8018238c38a6435720825e2a37afafba98f4ef0c`。这些构建与自动测试不替代新包实机。
 

@@ -33,6 +33,6 @@
 
 **限制（如实保留）**：① **模型遵守率未验证**——只证明提示词与 schema 写了规则、评测口径能区分输出，不证明 `ecnu-max` 会照做；未跑 `notalone-memory-evaluate --dimension time`，因此短期记忆仍可能被永久保留。② 「这两天」「这几天」这类模糊期间的推算仍靠模型，无统一行为保证。③ `valid_at` 继续不参与自动采纳判断，短期事实若给出未来 `valid_at` 仍按既有 `pragmatic:future_validity` 进待确认。
 
-**后续归属**：模型遵守率验证需要 `NOTALONE_EVALUATION_API_KEY` 评测预算，范围与上限见[按维度放行的评测预算提案](../../../docs/memory-dimension-release-evaluation-proposal-20261005.md)（`time` 维度 24 条、上限 48 次），由票 03 的预算决定承接；未批准前不读凭据、不联网、不运行评测。
+**后续归属**：模型遵守率验证需要 `NOTALONE_EVALUATION_API_KEY` 评测预算，范围与上限见[按维度放行的评测预算提案](../../../docs/evaluations/memory/dimension-release/memory-dimension-release-evaluation-proposal-20261005.md)（`time` 维度 24 条、上限 48 次），由票 03 的预算决定承接；未批准前不读凭据、不联网、不运行评测。
 
 **数据影响**：只改提示词文本、schema 描述与合成用例；未连接数据库、未读取 `.env` 或真实聊天、未写入业务记忆、未运行真实模型。

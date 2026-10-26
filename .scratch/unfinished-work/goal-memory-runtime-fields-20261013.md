@@ -1,6 +1,6 @@
 # 维度运行字段核查与日期槽红反馈（2026-10-13）
 
-本片承接[原03票](../memory-accuracy-next/issues/03-per-dimension-rollout.md)、[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)及[放行台账](../../docs/memory-adoption-dimension-release-ledger.md)。Root要求独立核运行字段，随后授权仓库外最小合成负控；真实App组合与新V桥源码冻结期间不改产品源码、schema、提示、Gold、ADR或业务库，不改0.7、风险白名单、语用门和默认空放行表。
+本片承接[原03票](../memory-accuracy-next/issues/03-per-dimension-rollout.md)、[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)及[放行台账](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)。Root要求独立核运行字段，随后授权仓库外最小合成负控；真实App组合与新V桥源码冻结期间不改产品源码、schema、提示、Gold、ADR或业务库，不改0.7、风险白名单、语用门和默认空放行表。
 
 ## 当前真实观察及边界
 

@@ -18,7 +18,7 @@ macOS App 图标使用独立的 `assets/app-icon.png` 母版（1024×1024、sRGB
 
 修改品牌 Logo 后，在 `desktop/` 执行 `swift scripts/render-app-icon.swift src/renderer/assets/logo.png assets/app-icon.png` 重新生成 App 母版，再正常打包。生成器仅供开发使用，普通打包直接读取 PNG，不新增 Swift 编译依赖；界面与官网继续使用各自的原 Logo。
 
-2026-10-10 23:30 实机补记：同一微信 PID 的 52×20 辅助小窗口曾触发窗口歧义；现在仅排除极小辅助窗，未知尺寸与多个聊天窗口仍拒绝。纯原生布局和门禁测试 9/9，打包及严格 ad-hoc 签名通过，真实公开坐标保存已成功。此前两次校验停在 `context / wechat_not_in_front`；23:34 用户手动切前台后已进入真实最小区域采集/OCR，但在 `names / quality_unverified` 安全停止。23:39分项诊断进一步确认两处完整名称一致、最低OCR置信度不足0.90（`session_name_confidence_low`）；未降低门槛。尚无可信 profile，前台定位未通过；没有新权限申请或原始帧持久化。限定单联系人实际新事件读取已通过；生产后台有界轮询与独立 PostgreSQL 验收确认测试消息入库 1 条、重启/重开不重复、关闭时 CLI 调用为 0，空结果最新性修复后补齐无错误。相关后端 85/85；临时库已清理。全局流、异常恢复、双联系人切换及完整 App 退出仍待验证，见[验收台账](../docs/macos-app-permissions-and-errors.md)。
+2026-10-10 23:30 实机补记：同一微信 PID 的 52×20 辅助小窗口曾触发窗口歧义；现在仅排除极小辅助窗，未知尺寸与多个聊天窗口仍拒绝。纯原生布局和门禁测试 9/9，打包及严格 ad-hoc 签名通过，真实公开坐标保存已成功。此前两次校验停在 `context / wechat_not_in_front`；23:34 用户手动切前台后已进入真实最小区域采集/OCR，但在 `names / quality_unverified` 安全停止。23:39分项诊断进一步确认两处完整名称一致、最低OCR置信度不足0.90（`session_name_confidence_low`）；未降低门槛。尚无可信 profile，前台定位未通过；没有新权限申请或原始帧持久化。限定单联系人实际新事件读取已通过；生产后台有界轮询与独立 PostgreSQL 验收确认测试消息入库 1 条、重启/重开不重复、关闭时 CLI 调用为 0，空结果最新性修复后补齐无错误。相关后端 85/85；临时库已清理。全局流、异常恢复、双联系人切换及完整 App 退出仍待验证，见[验收台账](../docs/guides/macos-app-permissions-and-errors.md)。
 
 任务 05 已接入应用运行期间的多联系人生成调度：用户显式生成先取得准备回执并固定上下文，再等待一个执行许可；当前连接最多接纳 8 个未结算任务。切换、编辑、隐藏不会改写已准备请求，切回从原会话只读恢复，失败重试复用原操作。原请求被替换的实际回执或连接失效会释放本地执行许可；旧传输可能仍在收尾，实际模型互斥仍由后端保证。
 
@@ -44,7 +44,7 @@ Electron + React/TypeScript 的本机 Mac App，当前完成管理后台与横�
 
 小窗当前使用 ADR-079 的统一表达工作区，关系语境默认开启且可关闭；“帮我表达”需要自己的想法，“帮我想想”允许从当前已确认语境提出建议。Main 通过已确认联系人的助手会话接口准备并生成，历史输入模式和显式版本接口保留兼容。每组候选可编辑并查看本次参考；同一次请求按原键恢复，明确新生成才建立新请求。小窗布局、系统剪贴板与最终原生交付的验证范围分别记录，不能由 HTTP 成功推断全部验收。
 
-2026-10-16 修复默认小窗中候选被输入区挤出、又排在多轮历史之后的问题：输入与结果共用中部滚动区，顶部和底部操作栏固定；当前候选先于已保存讨论显示，新结果及生成失败会自动进入视口。`candidate-visibility` 使用 680×520 页面、生产控制器及隔离 HTTP/PG，覆盖三轮草稿、回应消息、编辑框可见比例、固定操作栏和失败提示；修复前候选编辑框视口交集为 0。主 Agent 已用 Computer Use 在新签名 App 中恢复既有讨论并直接看到三条候选，未重新调用模型或发送消息；原启动路径已更新并保留旧包备份。验证命令与限制见[验收台账](../docs/macos-app-permissions-and-errors.md)。
+2026-10-16 修复默认小窗中候选被输入区挤出、又排在多轮历史之后的问题：输入与结果共用中部滚动区，顶部和底部操作栏固定；当前候选先于已保存讨论显示，新结果及生成失败会自动进入视口。`candidate-visibility` 使用 680×520 页面、生产控制器及隔离 HTTP/PG，覆盖三轮草稿、回应消息、编辑框可见比例、固定操作栏和失败提示；修复前候选编辑框视口交集为 0。主 Agent 已用 Computer Use 在新签名 App 中恢复既有讨论并直接看到三条候选，未重新调用模型或发送消息；原启动路径已更新并保留旧包备份。验证命令与限制见[验收台账](../docs/guides/macos-app-permissions-and-errors.md)。
 
 旧方向探索中的关键问题、确认与“上一组候选”规则仅用于兼容流程；正常工作区按 ADR-079 在用户点击后直接给出建议候选，不再把“先确认方向”作为统一前置。未知信息仍不能冒充事实，输入变化后旧结果不代表新输入的生成结果。
 
@@ -126,7 +126,7 @@ React 界面和 CSS 保存后直接更新；兼容的组件修改会保留当前
 
 `npm start` 等同于 `npm run dev`；`npm run build` 只验证生产前端构建。当前 `npm run package`、直接执行 `scripts/package.mjs` 和 `npm run test:package` 都在构建或输出写入前拒绝，没有环境开关或确认口令。只有用户明确发起发布任务，才单独调整发布门禁；权限或原生验收不自动构成例外。下面的打包参数供未来发布任务参考，当前不可直接执行。开发模式通过不能代替分发验收。
 
-打包缺省仍使用本地 ad-hoc 签名。需要固定证书身份时，显式执行 `npm run package -- --with-probe --signing-identity "$NOTALONE_SIGNING_IDENTITY"`；该变量由操作者事先设置为已选身份名称或完整证书摘要，不保存到仓库。App 与自研探针使用同一参数；单独准备探针可用 `node scripts/prepare-probe.mjs --destination <绝对路径> --signing-identity "$NOTALONE_SIGNING_IDENTITY"`。参数无效或签名失败立即停止，不自动选择或回退。输出按实际签名检查区分 ad-hoc 与证书签名，权限延续、正式分发及公证仍须另验，见[权限记录](../docs/macos-app-permissions-and-errors.md)。
+打包缺省仍使用本地 ad-hoc 签名。需要固定证书身份时，显式执行 `npm run package -- --with-probe --signing-identity "$NOTALONE_SIGNING_IDENTITY"`；该变量由操作者事先设置为已选身份名称或完整证书摘要，不保存到仓库。App 与自研探针使用同一参数；单独准备探针可用 `node scripts/prepare-probe.mjs --destination <绝对路径> --signing-identity "$NOTALONE_SIGNING_IDENTITY"`。参数无效或签名失败立即停止，不自动选择或回退。输出按实际签名检查区分 ad-hoc 与证书签名，权限延续、正式分发及公证仍须另验，见[权限记录](../docs/guides/macos-app-permissions-and-errors.md)。
 
 Psycopg专属wheel、重建和替换工具随Python后端退役。旧验证记录保留为历史材料；当前受管组件为TypeScript项目与PostgreSQL，后台使用Electron内置Node，打包搬动和签名可用性需另行发布验收。
 
@@ -148,7 +148,7 @@ npm run package
 
 修改自动刷新页面后运行 `npm run test:polling`：用合成响应和可控慢请求检查刷新进行中的按钮、焦点及内容，不只检查请求完成后的画面。后台核验保留同范围已就绪视图，首次加载、手动刷新及写入仍有反馈；读取失败、来源删除、切换联系人和重连继续撤下失效内容。该命令使用本机已有 Chrome，不下载浏览器、不读取真实聊天或调用模型。
 
-本机 arm64 产物为 `out/NotAlone-darwin-arm64/NotAlone.app`。可在 Finder 双击打开；包只包含编译后的本地资源和最小启动清单，不依赖开发服务器、原型目录或仓库绝对路径。打包只替换本目录的 `out/` 产物，不覆盖历史 App。当前为 ad-hoc 本机签名，未做 Developer ID 分发、公证或 DMG；权限与签名边界见[台账](../docs/macos-app-permissions-and-errors.md)。
+本机 arm64 产物为 `out/NotAlone-darwin-arm64/NotAlone.app`。可在 Finder 双击打开；包只包含编译后的本地资源和最小启动清单，不依赖开发服务器、原型目录或仓库绝对路径。打包只替换本目录的 `out/` 产物，不覆盖历史 App。当前为 ad-hoc 本机签名，未做 Developer ID 分发、公证或 DMG；权限与签名边界见[台账](../docs/guides/macos-app-permissions-and-errors.md)。
 
 桌面资源构建、打包和仓库探针准备会在写入前核对实际输出卷与临时卷，任一可用空间不足 15 GiB 即停止；新输出按最近的已有祖先核验，已有目录的软链接按目标卷核验。在线打包还核对并复用 `~/Library/Caches/electron` 下载缓存，`download.cacheRoot` 已按[官方接口](https://electron.github.io/packager/main/interfaces/Options.html#download)与安装的 Packager 20.3.0 / Get 5.1.0 核对。开发时复用固定输出，验收后的旧 App、重复运行时与临时编译目录按[开发磁盘占用规则](../docs/agents/engineering.md#开发磁盘占用)清理；自定义 `--output-directory` 成功后由调用者负责收尾。
 
@@ -400,7 +400,7 @@ NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Conten
 
 窗口测试验证双窗口打开、关闭隐藏、互相恢复、菜单恢复、整体隐藏后仅恢复目标窗口、退出回收，以及随包 logo 加载和真实未就绪状态。macOS 的 `hide` 菜单角色由 Cocoa 执行，`MenuItem.click()` 不执行该默认动作；自动化确认公开菜单项后，通过 `Menu.sendActionToFirstResponder('hide:')` 执行原生隐藏，再操作窗口菜单并读取两窗可见结果。实际 CUA 点击菜单另行核验同一边界。后端测试通过公开 App 操作和本机 HTTP 核验单实例、受控启动/复用、认证、断线重试、握手非法或变化、迟到状态、退出失败/超时与恢复；包含实际 `notalone.server.command` 和 `BackendServer` 的启动/停读场景。入口资源故障只修改隔离构建副本，不损坏签名包。
 
-`tests/desktop-controls.spec.ts` 验证注册结果、改键与重启恢复、注册/保存失败保留旧键、正文置顶按钮、隐藏恢复及退出注销。注册失败场景在隔离启动包装中先安排系统注册，再同步加载原始 App 入口；只控制必要系统边界，不替换业务模块，不调用快捷键回调，签名包跳过该夹具。截图在 `test-results/` 或指定 `artifacts/` 目录中，均不提交。这些自动验收不证明全局键盘派发、联系人隔离、剪贴板、权限或真实微信渠道可用；另行完成的两次系统按键实机结果见[权限与验收台账](../docs/macos-app-permissions-and-errors.md)。
+`tests/desktop-controls.spec.ts` 验证注册结果、改键与重启恢复、注册/保存失败保留旧键、正文置顶按钮、隐藏恢复及退出注销。注册失败场景在隔离启动包装中先安排系统注册，再同步加载原始 App 入口；只控制必要系统边界，不替换业务模块，不调用快捷键回调，签名包跳过该夹具。截图在 `test-results/` 或指定 `artifacts/` 目录中，均不提交。这些自动验收不证明全局键盘派发、联系人隔离、剪贴板、权限或真实微信渠道可用；另行完成的两次系统按键实机结果见[权限与验收台账](../docs/guides/macos-app-permissions-and-errors.md)。
 
 `tests/startup-diagnostics.spec.ts` 验证 Python/包缺失、数据库不可用、缺基线、账本漂移、待迁移和必要结构缺失，以及公开路径修正和重试。真实只读 Python 入口与实际 `BackendServer` 均来自当前工作树。App 以 `/` 为工作目录、清空 Conda 变量并限制 PATH，检查无需预先激活终端的启动条件；这项自动化不等同于用户在 Finder 双击的实机验收。`tests/startup-cancellation.spec.ts` 在受控 Python 包装边界延迟诊断并忽略 SIGTERM，验证超时/退出回收自有子进程、迟到结果不能启动后端；释放后仍执行真实诊断入口。
 

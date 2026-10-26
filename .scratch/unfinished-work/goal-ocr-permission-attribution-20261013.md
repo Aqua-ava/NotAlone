@@ -8,4 +8,4 @@ Root 在系统设置的录屏权限页读取已开启的 `NotAloneApp` 条目，
 
 “在访达中显示”后出现的 build 窗口没有场前归属记录，Root 未关闭该未知归属窗口。系统设置停留在录屏页，没有修改系统安全设置。后续须在最终新包的有限 `test:app` 场分别验证可用性与实际责任归属；旧版权限条目、静态签名和成功预检不能相互代替。
 
-关联：[原18](../mac-desktop-app/issues/18-foreground-locator.md)、[权限台账](../../docs/macos-app-permissions-and-errors.md)、[既有四场结果](goal-ocr-front-context-20261013.md)。
+关联：[原18](../mac-desktop-app/issues/18-foreground-locator.md)、[权限台账](../../docs/guides/macos-app-permissions-and-errors.md)、[既有四场结果](goal-ocr-front-context-20261013.md)。

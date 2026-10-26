@@ -65,7 +65,7 @@ ADR-027）的边界声明直接冲突；同时实现勘察发现 `summarize().me
    放行的必要条件：当前用例集的语义标注覆盖很低，"达标签"可能只是计数结果，
    所以放行还必须同时满足"该维度的运行时键可推导"与"语义标注覆盖足够或有独立
    人工复核记录"，并经用户逐类批准。
-7. **放行台账**：新增 `docs/memory-adoption-dimension-release-ledger.md` 记录
+7. **放行台账**：新增 `docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md` 记录
    当前放行表（空集）、放行所需证据与批准步骤、以及回退方式；代码默认值必须与
    台账一致，并用测试断言默认放行表为空。
 8. **修订 ADR-033 末条**：该条"不以旧去向达标签替代语义准确率，不放宽门槛或
