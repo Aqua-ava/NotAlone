@@ -1,4 +1,5 @@
 /** 回复生成总装：每轮只持有一个前台许可，所有来源复验和保存仍由业务事务负责。 */
+import {assistantRuntimeConfiguration,type AssistantRuntime,type AssistantRuntimeLease} from '../runtime/assistant-runtime.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import type {Client} from 'pg';
 import {randomUUID} from 'node:crypto';
@@ -40,6 +41,7 @@ export interface ReplyServiceModel {
 }
 export interface ReplyServiceOptions {
  ctx:Context;
+ assistantRuntime?:AssistantRuntime;
  transaction<T>(operation:(client:Client)=>Promise<T>):Promise<T>;
  provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;
  arbiter:Pick<ModelPermitArbiter,'acquire'>;
@@ -64,7 +66,7 @@ function replyResources(options:ReplyServiceOptions,transaction:ReplyServiceOpti
   const explored=input.suggestion?createReplyExploredContextValidator({scope,input,skillsRoot:options.skillsRoot,authenticatedContinuation:internal.authenticatedContinuation}):undefined;
   const validateExploredContext=explored?async(client:Client,context:Parameters<typeof explored>[1])=>{await explored(client,context);await internal.validateExploredContext?.(client,context);}:internal.validateExploredContext;
   const savedSkill=createReplySkillGuards({files:new SkillFiles(options.skillsRoot),requireDiscussionDependencies:discussionValidator});
-  controller=createReplyGenerationGuards({scope,input,authenticatedContinuation:internal.authenticatedContinuation,skillPort,savedSkill,validateExploredContext,selectedSkillFailure});
+  controller=createReplyGenerationGuards({scope,input,runtimeHistory:options.assistantRuntime?(client,identity)=>options.assistantRuntime!.hasHistory(client,scope,identity.idempotency_key,assistantRuntimeConfiguration({version:1,model:options.model,binding:scope.conversation_binding_id})):undefined,authenticatedContinuation:internal.authenticatedContinuation,skillPort,savedSkill,validateExploredContext,selectedSkillFailure});
   return {controller,skillPort,savedSkill,explored};
  }catch(error){skillPort.dispose();throw error;}
 }
@@ -125,9 +127,11 @@ export class ReplyGenerationService {
     prior_budget:state.context.retrieval?.source_messages??state.historyBudget,requireCurrent:async()=>requireCurrent(),aliases}):null;
    const unavailable=async():Promise<never>=>{throw new ReplyError('reply_preflight_tool_execution_invalid',502);};
    const tools=[...history?.tools()??[],...(replyScenarioReadPolicy(state.context).reads.length?[createReplyScenarioReadTool(unavailable)]:[]),...skill.tools()];
+   const runtime=await this.options.assistantRuntime?.history(scope,input.idempotency_key,assistantRuntimeConfiguration({version:1,model,binding:scope.conversation_binding_id}));
    return await preflightReplyAgent(this.options.ctx,{
+    seed:runtime?.events,
     binding:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort,toolChoice:'any'},profile:model.budgetProfile,
-    prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation,aliases}),
+    prompt:replyPayloadText({request:input,context:state.context,preferences:state.preferences.preferences,discussion:state.discussion,authenticated:internal.authenticatedContinuation,aliases,runtime_history:!!runtime}),
     requireCurrent,validateRegistry:()=>skill.validateRegistry(signal),
     async setup(agentScope){await registerReplyAgentSetup(agentScope,{system_prompt:replySystemPrompt(state.context,state.discussion,aliases),temperature:model.temperature},{tools,skillSession:skill,executeOutput:unavailable,signal});},
    },signal);
@@ -162,7 +166,7 @@ export class ReplyGenerationService {
   // 在领取租约之前等前台许可，排队不会耗尽30秒业务租约；loop不再重复领取。
   const round=await this.options.arbiter.acquire('foreground',signal);
   let settled=false,owned:ReplyStoreRequest|undefined,skill:ReplySkillSession|undefined;
-  let activeStore:PostgresReplyStore|undefined,activeSkillPort:PostgresSkillPort|undefined;
+  let activeStore:PostgresReplyStore|undefined,activeSkillPort:PostgresSkillPort|undefined,runtime:AssistantRuntimeLease|null|undefined;
   const settle=async()=>{if(!settled){settled=true;round.settle();}};
   try{
   const {controller,skillPort,savedSkill,explored}=replyResources(this.options,transaction,verified,input,internal,()=>skill?.selectedSkillFailure()??null);activeSkillPort=skillPort;
@@ -188,10 +192,11 @@ export class ReplyGenerationService {
     requireCurrent:client=>preparation.validateCurrent(client,prepared),aliases}):null;
    const tools=[...history?.tools()??[],...preparation.scenarioTools(prepared,aliases),...skill.tools()];
    let saved:ReplyStoreResult|undefined;
-   await generateReplyLoop(this.options.ctx,{...verified,request_id:request.request_id,...model,physical_limit:physicalLimit,candidate_limit:replyCandidateLimit(prepared.context),
-    prompt:replyPayloadText({request:input,context:prepared.context,preferences:prepared.preferences.preferences,discussion:prepared.discussion,authenticated:internal.authenticatedContinuation,aliases}),
+   runtime=await this.options.assistantRuntime?.acquire(verified,input.idempotency_key,request.request_id,assistantRuntimeConfiguration({version:1,model,binding:verified.conversation_binding_id}));
+   const generated=await generateReplyLoop(this.options.ctx,{...verified,request_id:request.request_id,...model,physical_limit:physicalLimit,candidate_limit:replyCandidateLimit(prepared.context),
+    prompt:replyPayloadText({request:input,context:prepared.context,preferences:prepared.preferences.preferences,discussion:prepared.discussion,authenticated:internal.authenticatedContinuation,aliases,runtime_history:runtime?.resume??false}),
     system_prompt:replySystemPrompt(prepared.context,prepared.discussion,aliases)},
-   {provider:this.options.provider,budgetProfile:model.budgetProfile,acquire:async()=>({id:round.id,settle}),requireCurrent,skillSession:skill,tools,aliases,
+   {runtime,provider:this.options.provider,budgetProfile:model.budgetProfile,acquire:async()=>({id:round.id,settle:async()=>{}}),requireCurrent,skillSession:skill,tools,aliases,
     evidenceIds:()=>new Set([...prepared.context.evidence.filter(e=>e.model_visible).map(e=>e.evidence_id),...history?.evidence.map(e=>e.evidence_id)??[]]),
     reserve:async(receipt,budget,limit)=>{await this.options.ledger.reserve({...receipt,input_budget:modelLedgerInputBudget(budget)},limit);},
     record:receipt=>this.options.ledger.record(receipt),
@@ -203,11 +208,12 @@ export class ReplyGenerationService {
      saved=await store.save(request,context,candidateRows(candidates),used as unknown as Record<string,unknown>|null,commitSignal);
     }},signal);
    if(!saved)throw new ReplyError('reply_persistence_unavailable',503);
+   await runtime?.commit(generated.eventCount);
    return await resultPayload(saved);
   }catch(error){
    let rejected=failure(error,signal,model);
    if(owned&&activeStore)try{await activeStore.fail(owned,rejected instanceof ReplyOutputError?`reply_${rejected.reason}`:rejected.code);}catch{rejected=new ReplyError('reply_persistence_unavailable',503);}
    throw rejected;
-  }finally{skill?.close();activeSkillPort?.dispose();await settle();}
+  }finally{try{await runtime?.release();}finally{skill?.close();activeSkillPort?.dispose();await settle();}}
  }
 }

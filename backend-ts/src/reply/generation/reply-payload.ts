@@ -15,6 +15,7 @@ export interface ReplyPayloadInput {
  /** 只能来自08可信接缝，公开解析器拒绝这些字段。 */
  authenticated?:AuthenticatedContinuation;
  aliases?:EvidenceAliases;
+ runtime_history?:boolean;
 }
 
 const unavailable=():never=>{throw new ReplyError('reply_context_unavailable');};
@@ -44,7 +45,7 @@ export function replyFidelityContract(payload:Record<string,unknown>){
  multiple_confirmations:'include_latest_sourced_value_for_each_known_item_not_just_one',
  recipient_text:'exclude_internal_selection_and_composition_instructions'}};
 }
-export function buildReplyPayload({request,context,preferences=[],discussion=null,authenticated,aliases}:ReplyPayloadInput){
+export function buildReplyPayload({request,context,preferences=[],discussion=null,authenticated,aliases,runtime_history=false}:ReplyPayloadInput){
  const c=request.content;
  if(request.contact_id!==context.scope.contact_id)return unavailable();
  const continuation=context.continuation_basis;
@@ -83,7 +84,7 @@ export function buildReplyPayload({request,context,preferences=[],discussion=nul
  const reference=continuationReferencePayload(discussion,context.scope,request.continued_from_candidate_id,{type:c.type,...typeof c.draft_text==='string'?{draft_text:c.draft_text}:{}},authenticated);
  if(reference)payload.continuation_reference=aliases?aliasReplyEvidenceReferences(reference,aliases):reference;
  const recentOnly=c.type==='rewrite_draft'&&c.input_kind==='workspace'&&Array.isArray(c.excluded_message_ids)&&c.excluded_message_ids.length>0;
- if(discussion&&!recentOnly){
+ if(discussion&&!recentOnly&&!runtime_history){
   const projected=assistantDiscussionPayload(discussion);
   payload.assistant_discussion=aliases?aliasReplyEvidenceReferences(projected,aliases):projected;
  }

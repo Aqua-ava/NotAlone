@@ -46,7 +46,9 @@ function messages(value:unknown):{message_id:string;text:string}[] {
 export class PostgresReplyDiscussionContext {
  private readonly guards:ReplyAssistantGuards;
  private readonly ports:ReplyAssistantPorts;
- constructor(options:{guards:ReplyAssistantGuards;ports:ReplyAssistantPorts}) {this.guards=options.guards;this.ports=options.ports;}
+ private readonly selectedReference?:{candidate_id:string;version_id:string};
+ private readonly metadataOnly?:((client:pg.Client,identity:ReplyPreparationIdentity)=>Promise<boolean>);
+ constructor(options:{guards:ReplyAssistantGuards;ports:ReplyAssistantPorts;selectedReference?:{candidate_id:string;version_id:string};metadataOnly?:(client:pg.Client,identity:ReplyPreparationIdentity)=>Promise<boolean>}) {this.guards=options.guards;this.ports=options.ports;this.metadataOnly=options.metadataOnly;this.selectedReference=options.selectedReference;}
  async read(client:pg.Client,request:ReplyStoreRequest):Promise<ReplyDiscussionContext|null> {return this.build(client,request);}
  async readPreparation(client:pg.Client,identity:ReplyPreparationIdentity):Promise<ReplyDiscussionContext>{const result=await this.build(client,{...identity,request_id:null});if(!result)reject();return result!;}
  async validatePreparation(client:pg.Client,identity:ReplyPreparationIdentity,discussion:ReplyDiscussionContext|null):Promise<void>{if(discussion===null)reject();await this.validate(client,{...identity,request_id:null},discussion);}
@@ -112,6 +114,9 @@ export class PostgresReplyDiscussionContext {
    const pointer=(await client.query('SELECT current_input_version_id FROM assistant_session WHERE owner_id=$1 AND contact_id=$2 AND id=$3',[scope.owner_id,scope.contact_id,anchor.session_id])).rows[0];
    if(pointer?.current_input_version_id!==anchor.input_version_id||anchor.anchor_input_state!=='active'||!['running','failed','completed'].includes(anchor.state)||anchor.input_payload_text===null||anchor.anchor_binding_id!==anchor.conversation_binding_id||anchor.conversation_binding_id!==request.conversation_binding_id||await this.ports.requireActiveBinding(client,scope)!==anchor.conversation_binding_id)reject();
    const rows=await inputRows(client,scope.owner_id,scope.contact_id,anchor.session_id),current=rows.find(r=>r.id===anchor.input_version_id);if(!current)reject();await this.generation(client,scope,current!);
+   // 持久运行可用时不构造完整历史 items 或复制进提示；不可变校验仍读取正文并计算指纹。
+   // 首次建立及故障重建构造完整 items，明确引用只额外构造所选版本。
+   const metadataOnly=await this.metadataOnly?.(client,request)??false;
    const items:DiscussionItem[]=[],records:Row[]=[],basis=new Set<string>();
    const wanted=selected?new Set<string>(selected.records.map((r:Row)=>r.input_version_id)):null;
    for(const row of rows){
@@ -119,23 +124,23 @@ export class PostgresReplyDiscussionContext {
      const identity=(kind:string,hash:string,fields:Row={})=>({kind,input_version_id:row.id,payload_sha256:hash,turn_id:null,candidate_id:null,version_id:null,...fields});
      if(row.input_type!=='generation'){
        if(row.state!=='active'||row.content===null){if(selected)reject();continue;}
-       let discussion:DiscussionItem;
-       try {if(row.input_type==='candidate_carry')discussion=await this.carry(client,scope,row);else{await this.guards.verifiedDiscussionDependencies(client,scope,row.dependency_ids,false);discussion=item('discussion_input',canonical(row.content),row.id);}}
+       let discussion:DiscussionItem|undefined;
+       try {if(row.input_type==='candidate_carry')discussion=await this.carry(client,scope,row);else{await this.guards.verifiedDiscussionDependencies(client,scope,row.dependency_ids,false);if(!metadataOnly)discussion=item('discussion_input',canonical(row.content),row.id);}}
        catch(e){if(!selected&&eligibilityError(e))continue;throw e;}
-       for(const d of row.dependency_ids)basis.add(d);items.push(discussion);
+       for(const d of row.dependency_ids)basis.add(d);if(discussion&&!metadataOnly)items.push(discussion);
        records.push(identity('discussion_input',fingerprint([row.content,row.conversation_binding_id,unique(row.dependency_ids)])));continue;
      }
      let deps:string[];try{deps=await this.generation(client,scope,row);}catch(e){if(!selected&&eligibilityError(e))continue;throw e;}
      for(const d of deps)basis.add(d);
      if(!selected||selected.records.some((r:Row)=>r.kind==='generation_input'&&r.input_version_id===row.id)){
-       items.push(item('generation_input',canonical(row.input_payload),row.id,{turn_id:row.turn_id,reply_request_id:row.reply_request_id}));
+       if(!metadataOnly)items.push(item('generation_input',canonical(row.input_payload),row.id,{turn_id:row.turn_id,reply_request_id:row.reply_request_id}));
        records.push(identity('generation_input',fingerprint([row.input_payload,row.input_digest,row.conversation_binding_id,row.reply_request_id,deps,[]]),{turn_id:row.turn_id}));
      }
      if(row.turn_state!=='completed'||row.request_state!=='completed')continue;
      for(const v of await this.versions(client,scope,row)){
        if(selected&&!selected.records.some((r:Row)=>r.kind==='candidate_version'&&r.version_id===v.id))continue;
        const text=canonical({messages:v.messages,requirements:v.requirements});
-       items.push(item('candidate_version',text,row.id,{turn_id:row.turn_id,reply_request_id:row.reply_request_id,candidate_id:v.candidate_id,version_id:v.id,parent_version_id:v.parent_version_id,candidate_number:v.candidate_number,version_number:v.version_number,is_default_display:v.id===v.default_id,is_explicitly_selected:v.id===v.selected_id,basis_changes:v.basis_changes}));
+       if(!metadataOnly||this.selectedReference?.candidate_id===v.candidate_id&&this.selectedReference?.version_id===v.id)items.push(item('candidate_version',text,row.id,{turn_id:row.turn_id,reply_request_id:row.reply_request_id,candidate_id:v.candidate_id,version_id:v.id,parent_version_id:v.parent_version_id,candidate_number:v.candidate_number,version_number:v.version_number,is_default_display:v.id===v.default_id,is_explicitly_selected:v.id===v.selected_id,basis_changes:v.basis_changes}));
        records.push(identity('candidate_version',fingerprint([text,v.version_number,v.parent_version_id,row.reply_request_id,v.candidate_number]),{turn_id:row.turn_id,candidate_id:v.candidate_id,version_id:v.id}));
      }
    }
