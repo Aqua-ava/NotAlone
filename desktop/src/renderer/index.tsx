@@ -12,6 +12,7 @@ import { managerPages, type ManagerPage } from './pages';
 import { DesktopControls, HelperPinControl, ShortcutWarning } from './DesktopControls';
 import logo from './assets/logo.png';
 import './style.css';
+import './usage.css';
 import './helper-layout.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
 import { FirstFrameError } from './FirstFrameError';
