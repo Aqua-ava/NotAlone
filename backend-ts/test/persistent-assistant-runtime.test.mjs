@@ -378,6 +378,28 @@ test('正常运行续用只检查资格摘要，不再为长旧候选构造整�
  t.diagnostic('真实PG结果字节 '+JSON.stringify({ready_result_bytes:qualificationReads.reduce((n,q)=>n+q.result_bytes,0),ready_old_candidate_bytes:qualificationReads.reduce((n,q)=>n+q.marker_bytes,0),generation_guard_old_candidate_bytes:allReads.reduce((n,q)=>n+q.marker_bytes,0)}));
 });
 
+test('公开连续准备减少数据库往返，零HTTP预检仍保留完整官方历史',{timeout:60000},async t=>{
+ const f=await fixture(t),sqlLog=join(f.businessHome,'prepare-cost.jsonl');
+ const host=await f.start({NOTALONE_SYNTHETIC_SQL_RESULT_LOG:sqlLog,NOTALONE_SYNTHETIC_SQL_MARKER:'合成准备往返预算'}),base=`/api/contacts/${f.contact}/assistant-sessions`;
+ const {session_id:session}=await f.request(host,base,{}),path=`${base}/${session}`,cost=[],results=[];
+ for(const text of ['合成首轮准备：周五见','合成第二轮准备：改为周六见']){
+  const input=f.input(text),httpBefore=host.requests.length;
+  await writeFile(sqlLog,'');await f.request(host,`${path}/replies/prepare`,input);
+  cost.push((await readFile(sqlLog,'utf8')).trim().split('\n').filter(Boolean).length);
+  assert.equal(host.requests.length,httpBefore,'公开准备始终零模型HTTP');
+  const result=await f.request(host,`${path}/replies`,input);
+  assert.equal(result.state,'completed');assert.equal(result.candidates[0].text,'合成保存候选');
+  results.push(result);
+ }
+ assert.equal(host.requests.length,2);
+ assert.match(JSON.stringify(host.requests[1].body.messages),/合成首轮准备：周五见/);
+ assert.match(JSON.stringify(host.requests[1].body.messages.at(-1)),/合成第二轮准备：改为周六见/);
+ assert.ok(host.requests[1].body.messages.some(m=>m.role==='assistant'&&JSON.stringify(m).includes('合成保存候选')));
+ t.diagnostic('公开prepare物理查询预算 '+JSON.stringify(cost));
+ if(process.env.NOTALONE_SYNTHETIC_PREPARE_EVIDENCE)await writeFile(process.env.NOTALONE_SYNTHETIC_PREPARE_EVIDENCE,JSON.stringify({cost,bodies:host.requests.map(request=>request.body),results}),{mode:0o600});
+ assert.ok(cost[0]<462&&cost[1]<740&&cost[0]+cost[1]<=1066,`两轮总准备往返不得超过原临时版1066，连续第二轮须低于740，且各轮低于原持久版462/1119，实际${cost}`);
+});
+
 test('旧资格格式在同一业务段零HTTP重建，伴随正文凭据独立且篡改后拒绝出站',{timeout:60000},async t=>{
  const f=await fixture(t),host=await f.start(),base=`/api/contacts/${f.contact}/assistant-sessions`;
  const {session_id:session}=await f.request(host,base,{}),path=`${base}/${session}`;

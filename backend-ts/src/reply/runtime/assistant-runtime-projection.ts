@@ -82,9 +82,12 @@ export class AssistantRuntimeProjection {
   const sharedTables=['expression_preference','scenario_document_version','layered_profile_version','layered_memory_state','skill_scope_policy','reply_skill'];
   const ownerTables=['owner_memory','owner_memory_state','skill_library'];
   const inventory:Record<string,string>={};
+  const queries:string[]=[];
   for(const [tables,predicate] of [[contactTables,'owner_id=$1 AND contact_id=$2'],[sharedTables,'owner_id=$1 AND (contact_id IS NULL OR contact_id=$2)'],[ownerTables,'owner_id=$1']] as const){
-   for(const table of tables){const rows=(await client.query(`SELECT coalesce(to_jsonb(t)->>'id',concat_ws(':',to_jsonb(t)->>'owner_id',to_jsonb(t)->>'contact_id')) AS key,encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS digest FROM public.${table} t WHERE ${predicate}`,predicate.includes('$2')?[scope.owner_id,scope.contact_id]:[scope.owner_id])).rows;for(const row of rows)inventory[table+':'+row.key]=row.digest;}
+   for(const table of tables)queries.push(`SELECT '${table}' AS kind,coalesce(to_jsonb(t)->>'id',concat_ws(':',to_jsonb(t)->>'owner_id',to_jsonb(t)->>'contact_id')) AS key,encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') AS digest FROM public.${table} t WHERE ${predicate}`);
   }
+  // 同阶段读取仍覆盖全部原表、范围与逐行摘要，只合并数据库往返。
+  for(const row of (await client.query(queries.join(' UNION ALL '),[scope.owner_id,scope.contact_id])).rows)inventory[row.kind+':'+row.key]=row.digest;
   for(const row of (await client.query(`SELECT version.*,skill.owner_id,skill.name,skill.id AS skill_id FROM reply_skill_version version JOIN reply_skill skill ON skill.id=version.skill_id WHERE skill.owner_id=$1 AND (skill.contact_id IS NULL OR skill.contact_id=$2)`,[scope.owner_id,scope.contact_id])).rows)inventory['reply_skill_version:'+row.id]=fingerprint(row);
   return inventory;
  }

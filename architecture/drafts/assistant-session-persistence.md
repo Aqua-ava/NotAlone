@@ -1,6 +1,6 @@
 # 助手会话持久化与空闲分段（讨论记录）
 
-> 状态：设计讨论已收敛，用户已确认全部产品规则和存储分工。正式决定见 [ADR-106](../adr/106-persistent-assistant-conversations.md)；持久化和新分段策略待实现，本文保留决策来历。
+> 状态：设计讨论已收敛，用户已确认全部产品规则和存储分工。正式决定见 [ADR-106](../adr/106-persistent-assistant-conversations.md)；持久化和新分段策略已实现并接入正常开发入口，当前验证结论及限制见 ADR-106；本文保留决策来历。
 
 ## 已确认的产品方向
 
@@ -19,8 +19,8 @@
 ## 当前约束与已核对事实
 
 - 术语沿用 [助手会话、候选回复任务和回复上下文](../../CONTEXT.md)；不把助手会话等同于单次模型调用、微信会话或长期关系记忆。
-- 讨论起点为 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)的临时 DSH 执行与数据库恢复方案；用户现已通过 ADR-106 局部修订候选回复范围内的存储和恢复约定。当前实现仍采用原临时会话路径。
-- 当前业务记录、候选和准备快照保存在 PostgreSQL；每轮生成新建并释放 DSH 会话。DSH 宿主目录是临时目录，退出时清理，不能直接作为新方案的长期保存位置。代码入口为 `backend-ts/src/reply/generation/reply-loop.ts`、`backend-ts/src/launch.ts`。
+- 讨论起点为 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)的临时 DSH 执行与数据库恢复方案；用户现已通过 ADR-106 局部修订候选回复范围内的存储和恢复约定。原临时会话实现仅为讨论起点时状态；当前实现及验收限制见 ADR-106。
+- 讨论开始时，业务记录、候选和准备快照保存在 PostgreSQL，每轮生成新建并释放 DSH 会话；当时 DSH 宿主目录是退出时清理的临时目录。现已改用 ADR-106 的稳定本机运行记录存储，数据库继续持有可见业务历史。原临时路径的代码入口为 `backend-ts/src/reply/generation/reply-loop.ts`、`backend-ts/src/launch.ts`。
 - 已安装 DSH 的官方会话持久化后端采用本机文件，支持按会话身份恢复。释放运行实例不等于删除文件；联系人归属、保留策略及产品删除责任仍需由 NotAlone 管理。中断后的恢复不代表从原来半步继续。
 - [ADR-042](../adr/042-assistant-session-context-boundary.md)及其后续修订仍要求持续讨论不自动摘要、不静默截断；达到硬预算时显式新开。持久化会话不会消除模型输入预算。
 
