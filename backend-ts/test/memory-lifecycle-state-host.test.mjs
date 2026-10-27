@@ -154,3 +154,25 @@ test('受阻主卡按安全错误类别给中文原因与下一步，未知技�
   assert.equal(current.reason.includes(cases[i][0]),false);assert.deepEqual(current.actions,[]);
  }
 });
+
+test('未归属旧提取失败不被活跃主题盖过，撤销任务归属只留历史不影响当前完成',{timeout:60000},async t=>{
+ const legacy=randomUUID(),contact=randomUUID(),scope=randomUUID(),round=randomUUID(),success=randomUUID(),retired=randomUUID();
+ const host=await lifecycleHost(t,async(f,owner)=>{
+  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$3,'合成旧阶段'),($2,$3,'合成有效归属')",[legacy,contact,owner]);
+  await f.client.query("INSERT INTO background_task(owner_id,contact_id,task_type,status,current_step,message_count,last_error_code) VALUES($1,$2,'observation','failed','extract_memory',0,'verification_contract_invalid')",[owner,legacy]);
+  const live=(await f.client.query("INSERT INTO background_task(owner_id,contact_id,task_type,status,current_step,message_count) VALUES($1,$2,'layered_memory','running','organize_memory',0) RETURNING id",[owner,legacy])).rows[0].id;
+  await f.client.query("INSERT INTO background_task_step(task_id,step_name,step_order,status,lease_expires_at) VALUES($1,'organize_memory',1,'running',now()+interval '1 hour')",[live]);
+  await f.client.query('INSERT INTO memory_processing_scope(id,owner_id,contact_id) VALUES($1,$2,$3)',[scope,owner,contact]);
+  await f.client.query("INSERT INTO memory_processing_round(id,scope_id,owner_id,contact_id,round_number,control_generation,status) VALUES($1,$2,$3,$4,1,0,'completed')",[round,scope,owner,contact]);
+  await f.client.query('UPDATE memory_processing_scope SET active_round_id=$1 WHERE id=$2',[round,scope]);
+  await f.client.query("INSERT INTO background_task(id,owner_id,contact_id,task_type,status,current_step,message_count,last_error_code) VALUES($1,$3,$4,'layered_memory','succeeded','organize_memory',0,NULL),($2,$3,$4,'layered_memory','failed','organize_memory',0,'old_retired_failure')",[success,retired,owner,contact]);
+  await f.client.query('INSERT INTO memory_processing_round_task(round_id,task_id,owner_id,contact_id,active) VALUES($1,$2,$4,$5,true),($1,$3,$4,$5,false)',[round,success,retired,owner,contact]);
+ });
+ const old=(await host.request(`/api/contacts/${legacy}/memory-processing/state`)).data;
+ assert.equal(old.current.status,'blocked','旧提取失败优先于活跃主题；缺少可信轮次不宣称整体进行中');
+ assert.match(old.current.reason,/归属/);assert.match(old.current.reason,/核验/);
+ const current=(await host.request(`/api/contacts/${contact}/memory-processing/state`)).data;
+ assert.equal(current.current.status,'completed','撤销归属的失败任务不得参与当前判断');
+ assert.equal(current.current.reason_code,null);assert.equal(current.history.entries.length,2);
+ assert.equal(current.history.entries.some(task=>task.task_id===retired&&task.reason_code==='old_retired_failure'),true);
+});

@@ -44,7 +44,7 @@ export class MemoryProcessingQuery {
     (SELECT count(*)::int FROM memory_processing_target target WHERE target.task_id=t.id AND target.completed_at IS NOT NULL) AS processed
     FROM memory_processing_round_task membership JOIN background_task t ON t.id=membership.task_id
     LEFT JOIN memory_processing_plan plan ON plan.task_id=t.id
-    WHERE membership.round_id=$1 AND membership.owner_id=$2 AND membership.contact_id IS NOT DISTINCT FROM $3::uuid
+    WHERE membership.active AND membership.round_id=$1 AND membership.owner_id=$2 AND membership.contact_id IS NOT DISTINCT FROM $3::uuid
     ORDER BY t.updated_at DESC,t.id`,[scope.active_round_id,this.ownerId,contactId])).rows:[];
    if(!scope?.active_round_id){
     tasks=(await c.query<Task>(`SELECT DISTINCT ON (CASE WHEN t.task_type IN ('import','observation') THEN 'extraction' ELSE 'organization' END) t.*,NULL::uuid AS round_id,
@@ -66,7 +66,7 @@ export class MemoryProcessingQuery {
    let status:Status='waiting',reason:string|null=null,code:string|null=failed?.last_error_code??null;
    if(scope?.intent==='pause'){status='paused';reason=failed?`你已暂停记忆处理；${processingReason(code)}`:'你已暂停记忆处理，已有结果保留。';}
    else if(!scope?.active_round_id&&tasks.length){
-    status=live?'processing':'blocked';reason=`旧处理记录尚未建立可验证的轮次归属，请查看详情核对；不会自动继续。${failed?processingReason(code):''}`;code??='legacy_attribution_unverified';
+    status='blocked';reason=`旧处理记录尚未建立可验证的轮次归属，请查看详情核对；不会自动继续。${failed?processingReason(code):''}`;code??='legacy_attribution_unverified';
    }else if(failed||scope?.round_status==='blocked'||scope?.round_generation!==undefined&&scope.round_generation!==null&&scope.round_generation!==scope.control_generation){
     status='blocked';reason=processingReason(code);code??='processing_requires_repair';
    }else if(live)status='processing';
