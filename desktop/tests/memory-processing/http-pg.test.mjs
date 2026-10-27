@@ -48,3 +48,46 @@ test('真实记忆页经正式profile认证HTTP读取同一范围状态与历史
   });
   assert.equal((await host.request('/api/runtime/status')).data.taskWorker.state, 'running');
 });
+
+
+test('真实记忆页暂停和继续同一范围，动作回执后重读持久状态且本人独立', { timeout: 90000 }, async t => {
+  const host = await lifecycleHost(t, async (f, owner) => {
+    await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$3,'合成页面一'),($2,$3,'合成页面二')", [ids.contact, ids.other, owner]);
+  });
+  const actions = [];
+  const f = await fixture(async request => {
+    if (request.method === 'POST') actions.push({ path: request.path, body: request.body });
+    const result = await host.request(request.path, { method: request.method, body: request.body });
+    if (result.status !== 200) throw new Error('合成页面HTTP动作失败');
+    return { generation: 1, data: result.data };
+  });
+  await withMemoryPage(f, t.signal, async page => {
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
+    await card.getByRole('status').filter({ hasText: /^等待处理$/ }).waitFor();
+    await card.getByRole('button', { name: '暂停处理', exact: true }).click();
+    await card.getByRole('status').filter({ hasText: /^已暂停$/ }).waitFor();
+    assert.equal((await host.request(`/api/contacts/${ids.contact}/memory-processing/state`)).data.current.status, 'paused');
+    await page.getByRole('button', { name: '我', exact: true }).click();
+    await card.getByRole('status').filter({ hasText: /^等待处理$/ }).waitFor();
+    assert.equal((await host.request('/api/owner/memory-processing/state')).data.current.status, 'waiting');
+    await page.getByRole('button', { name: '对方', exact: true }).click();
+    await card.getByRole('status').filter({ hasText: /^已暂停$/ }).waitFor();
+    await card.getByRole('button', { name: '继续处理', exact: true }).click();
+    await card.getByRole('status').filter({ hasText: /^等待处理$/ }).waitFor();
+    assert.equal((await host.request(`/api/contacts/${ids.contact}/memory-processing/state`)).data.current.status, 'waiting');
+    await page.getByRole('button', { name: '我', exact: true }).click();
+    await card.getByRole('status').filter({ hasText: /^等待处理$/ }).waitFor();
+    await card.getByRole('button', { name: '暂停处理', exact: true }).click();
+    await card.getByRole('status').filter({ hasText: /^已暂停$/ }).waitFor();
+    assert.equal((await host.request(`/api/contacts/${ids.contact}/memory-processing/state`)).data.current.status, 'waiting');
+    await card.getByRole('button', { name: '继续处理', exact: true }).click();
+    await card.getByRole('status').filter({ hasText: /^等待处理$/ }).waitFor();
+    assert.deepEqual(actions.map(action => action.path), [
+      `/api/contacts/${ids.contact}/memory-processing/pause`, `/api/contacts/${ids.contact}/memory-processing/continue`,
+      '/api/owner/memory-processing/pause', '/api/owner/memory-processing/continue',
+    ]);
+    assert.deepEqual(actions.map(action => action.body.action_version), [0, 1, 0, 1]);
+    assert.ok(actions.every(action => /^[0-9a-f-]{36}$/.test(action.body.operation_id)));
+    assert.notEqual(actions[0].body.operation_id, actions[1].body.operation_id);
+  });
+});

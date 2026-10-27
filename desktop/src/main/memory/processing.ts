@@ -1,6 +1,7 @@
-import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingTask, MemoryProcessingHistoryRequest, MemoryProcessingHistory, MemoryProcessingCurrent, MemoryProcessingUnit } from '../../shared/memory-processing';
+import type { MemoryProcessing, MemoryProcessingControlAction, MemoryProcessingControlRequest, MemoryProcessingControlReceipt, MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingTask, MemoryProcessingHistoryRequest, MemoryProcessingHistory, MemoryProcessingCurrent, MemoryProcessingUnit } from '../../shared/memory-processing';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
+import { BackendRequestFailure } from '../backend/json-client';
 import { isUuid } from '../uuid';
 
 export function processingArguments(args: unknown[]): MemoryProcessingRequest {
@@ -12,6 +13,14 @@ export function processingArguments(args: unknown[]): MemoryProcessingRequest {
     return { scope: 'contact', contactId: value.contactId.toLowerCase(), scopeRevision: value.scopeRevision as number };
   }
   throw new Error('记忆进度范围不可用。');
+}
+
+export function processingControlArguments(args: unknown[]): MemoryProcessingControlRequest {
+  const fields = args[0];
+  if (args.length !== 1 || !fields || typeof fields !== 'object' || Array.isArray(fields)) throw new Error('记忆处理操作不可用。');
+  const { actionVersion, operationId, ...request } = fields as Record<string, unknown>;
+  if (!Number.isSafeInteger(actionVersion) || (actionVersion as number) < 0 || !isUuid(operationId)) throw new Error('记忆处理操作不可用。');
+  return { ...processingArguments([request]), actionVersion: actionVersion as number, operationId: operationId.toLowerCase() };
 }
 
 export function processingResumeArguments(args: unknown[]): MemoryProcessingResumeRequest {
@@ -73,20 +82,20 @@ function cursor(value: unknown): string | null {
 function current(data: unknown): MemoryProcessingCurrent {
   if (!record(data) || !['waiting', 'processing', 'completed', 'paused', 'blocked'].includes(data.status as string)
     || (data.phase !== null && !['extraction', 'verification', 'topics', 'profile', 'retry'].includes(data.phase as string))
-    || typeof data.has_usable_results !== 'boolean' || !Array.isArray(data.actions) || data.actions.length !== 0) throw invalid();
+    || typeof data.has_usable_results !== 'boolean' || !Array.isArray(data.actions) || data.actions.some(action => !['pause', 'continue'].includes(action)) || new Set(data.actions).size !== data.actions.length) throw invalid();
   const processedCount = count(data.processed_count), totalCount = count(data.total_count), quantityUnit = unit(data.unit);
   if ((processedCount !== null && totalCount !== null && processedCount > totalCount)
     || ((processedCount !== null || totalCount !== null) && quantityUnit === null)) throw invalid();
   return { status: data.status as MemoryProcessingCurrent['status'], roundId: nullableId(data.round_id),
     phase: data.phase as MemoryProcessingCurrent['phase'], processedCount, totalCount, unit: quantityUnit,
     pendingCount: count(data.pending_count), reason: nullableText(data.reason), reasonCode: nullableText(data.reason_code),
-    hasUsableResults: data.has_usable_results, actions: [] };
+    hasUsableResults: data.has_usable_results, actions: data.actions as MemoryProcessingControlAction[] };
 }
 function processing(data: unknown, request: MemoryProcessingRequest): MemoryProcessing {
-  const value = scope(data, request), generation = count(value.control_generation);
-  if (generation === null || !record(value.history)) throw invalid();
+  const value = scope(data, request), generation = count(value.control_generation), actionVersion = count(value.action_version);
+  if (generation === null || actionVersion === null || !record(value.history)) throw invalid();
   return { scope: request.scope, contactId: request.scope === 'owner' ? null : request.contactId,
-    controlGeneration: generation, current: current(value.current),
+    controlGeneration: generation, actionVersion, current: current(value.current),
     history: { entries: entries(value.history.entries, request), nextCursor: cursor(value.history.next_cursor),
       ...(value.history.error === undefined ? {} : { error: nullableText(value.history.error) ?? undefined }) } };
 }
@@ -101,6 +110,7 @@ export function processingHistoryArguments(args: unknown[]): MemoryProcessingHis
 // 读取与历史分页分别撤销；联系人选择和后台连接代次变化立即使晚结果失效。
 export class MemoryProcessingController {
   private reads = new Map<string, AbortController>();
+  private controls = new Map<string, { controller: AbortController; action: MemoryProcessingControlAction; request: MemoryProcessingControlRequest; result: Promise<MemoryProcessingControlReceipt> }>();
   constructor(private backend: BackendHost, private contacts: ContactSession) {}
   private key(request: MemoryProcessingRequest) { return request.scope === 'owner' ? 'owner' : `${request.contactId}:${request.scopeRevision}`; }
   private current(request: MemoryProcessingRequest, generation: number | undefined) {
@@ -110,12 +120,43 @@ export class MemoryProcessingController {
   }
   synchronize(contactOnly = false) {
     for (const [key, operation] of this.reads) if (!contactOnly || !key.startsWith('owner:')) { operation.abort(); this.reads.delete(key); }
+    for (const [key, operation] of this.controls) if (!contactOnly || key !== 'owner') { operation.controller.abort(); this.controls.delete(key); }
   }
   cancel(request: MemoryProcessingRequest) {
     for (const kind of ['state', 'history']) {
       const key = `${this.key(request)}:${kind}`;
       this.reads.get(key)?.abort(); this.reads.delete(key);
     }
+  }
+  control(action: MemoryProcessingControlAction, request: MemoryProcessingControlRequest): Promise<MemoryProcessingControlReceipt> {
+    const generation = this.backend.getConnectionGeneration();
+    if (!this.current(request, generation)) return Promise.reject(new Error('记忆处理范围已变化。'));
+    const key = this.key(request), existing = this.controls.get(key);
+    if (existing) return existing.action === action && existing.request.operationId === request.operationId && existing.request.actionVersion === request.actionVersion
+      ? existing.result : Promise.reject(new Error('正在确认记忆处理操作，请稍后刷新状态。'));
+    this.cancel(request);
+    const controller = new AbortController();
+    const result = (async (): Promise<MemoryProcessingControlReceipt> => {
+      try {
+        const root = request.scope === 'owner' ? '/api/owner/memory-processing' : `/api/contacts/${request.contactId}/memory-processing`;
+        const response = await this.backend.requestJson({ method: 'POST', path: `${root}/${action}`,
+          body: { action_version: request.actionVersion, operation_id: request.operationId }, signal: controller.signal });
+        if (controller.signal.aborted || response.generation !== generation || !this.current(request, generation)) throw new Error('记忆处理范围已变化。');
+        const data = response.data;
+        if (!record(data) || data.accepted !== true || data.operation_id !== request.operationId || data.action !== action
+          || !Number.isSafeInteger(data.action_version) || (data.action_version as number) < request.actionVersion
+          || data.control_generation !== data.action_version || typeof data.replayed !== 'boolean') throw invalid();
+        return { accepted: true, operationId: request.operationId, action, actionVersion: data.action_version as number,
+          controlGeneration: data.control_generation as number, replayed: data.replayed };
+      } catch (error) {
+        if (controller.signal.aborted || !this.current(request, generation)) throw new Error('记忆处理范围已变化。');
+        if (error instanceof BackendRequestFailure && error.code === 'memory_processing_state_conflict') throw new Error('处理状态已变化，请刷新后再操作。');
+        if (error instanceof BackendRequestFailure && error.code === 'memory_processing_continue_unsafe') throw new Error('当前尚不能安全继续，请查看处理原因。');
+        throw new Error('操作结果暂未确认，请刷新状态后再操作。');
+      } finally { if (this.controls.get(key)?.controller === controller) this.controls.delete(key); }
+    })();
+    this.controls.set(key, { controller, action, request, result });
+    return result;
   }
   async resume(_request: MemoryProcessingResumeRequest): Promise<void> {
     throw new Error('统一记忆处理操作尚不可用，请先核对处理详情。');

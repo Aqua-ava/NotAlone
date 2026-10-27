@@ -1,4 +1,4 @@
-import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingHistoryRequest, MemoryProcessingHistory } from './memory-processing';
+import type { MemoryProcessing, MemoryProcessingControlRequest, MemoryProcessingControlReceipt, MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingHistoryRequest, MemoryProcessingHistory } from './memory-processing';
 import type { PersonalBackground } from './personal-background';
 import type { ContactSelection } from './contact-session-bridge';
 
@@ -267,6 +267,8 @@ export interface OwnerLayeredMemoryState extends MemoryOverviewState<LayeredMemo
   mutation: MemoryReadingState['mutation'];
 }
 export interface MemoryBridge {
+  pauseProcessing(request: MemoryProcessingControlRequest): Promise<MemoryProcessingControlReceipt>;
+  continueProcessing(request: MemoryProcessingControlRequest): Promise<MemoryProcessingControlReceipt>;
   refreshProcessingResults(request: MemoryProcessingRequest): Promise<void>;
   resumeProcessing(request: MemoryProcessingResumeRequest): Promise<void>;
   readProcessingHistory(request: MemoryProcessingHistoryRequest): Promise<MemoryProcessingHistory>;

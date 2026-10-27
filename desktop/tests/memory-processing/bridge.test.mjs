@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fixture, ids } from '../layered-memory/support.mjs';
+import { BackendRequestFailure, fixture, ids } from '../layered-memory/support.mjs';
 import { lifecyclePayload } from './payload.mjs';
 
 test('生产具名桥接读取权威五态合同，不从历史首屏推测状态', async () => {
@@ -118,4 +118,46 @@ test('本人读取不会被联系人选择变化取消，无效计数或未指�
     try { await assert.rejects(invalid.bridge.readProcessing({ scope: 'contact', ...invalid.selection() })); }
     finally { invalid.disconnect(); }
   }
+});
+
+
+test('具名范围动作校验版本和幂等标识，合并重复请求且拒绝并发新意图', async () => {
+  const reply = Promise.withResolvers();
+  const requests = [];
+  const f = await fixture(request => { requests.push(request); return reply.promise; });
+  try {
+    const request = { scope: 'contact', ...f.selection(), actionVersion: 3, operationId: ids.memory };
+    const one = f.bridge.pauseProcessing(request), two = f.bridge.pauseProcessing(request);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].path, `/api/contacts/${ids.contact}/memory-processing/pause`);
+    assert.deepEqual(requests[0].body, { action_version: 3, operation_id: ids.memory });
+    await assert.rejects(f.bridge.continueProcessing({ ...request, operationId: ids.other }));
+    reply.resolve({ generation: 1, data: { accepted: true, operation_id: ids.memory, action: 'pause', action_version: 4, control_generation: 4, replayed: false } });
+    assert.equal((await one).actionVersion, 4);
+    assert.equal((await two).accepted, true);
+    for (const invalid of [{ actionVersion: -1 }, { actionVersion: 1.5 }, { operationId: '../tasks' }, { taskId: ids.work }, { url: '/api/tasks' }]) {
+      await assert.rejects(f.bridge.pauseProcessing({ ...request, ...invalid }));
+    }
+    assert.equal(requests.length, 1);
+  } finally { reply.resolve({ generation: 1, data: {} }); f.disconnect(); }
+});
+
+test('本人动作无需联系人且只使用本人路径，错误与异常回执不能冒充成功', async () => {
+  let fail = false;
+  const requests = [];
+  const f = await fixture(async request => {
+    requests.push(request);
+    if (fail) throw new BackendRequestFailure('response', 409, 'memory_processing_state_conflict');
+    return { generation: 1, data: { accepted: true, operation_id: ids.memory, action: 'continue', action_version: 2, control_generation: 2, replayed: true } };
+  }, { noContact: true });
+  try {
+    const request = { scope: 'owner', actionVersion: 1, operationId: ids.memory };
+    assert.equal((await f.bridge.continueProcessing(request)).replayed, true);
+    assert.equal(requests[0].path, '/api/owner/memory-processing/continue');
+    await assert.rejects(f.bridge.pauseProcessing(request), /操作结果暂未确认/);
+    fail = true;
+    await assert.rejects(f.bridge.continueProcessing(request), /处理状态已变化/);
+    assert.ok(requests.every(request => request.path.startsWith('/api/owner/memory-processing/')));
+  } finally { f.disconnect(); }
 });

@@ -1,5 +1,5 @@
 import { conditionProposal } from './condition-proposal';
-import { MemoryProcessingController, processingArguments, processingResumeArguments, processingHistoryArguments } from './processing';
+import { MemoryProcessingController, processingArguments, processingControlArguments, processingResumeArguments, processingHistoryArguments } from './processing';
 import { OwnerLayeredMemoryController } from './owner-layered';
 import { noArguments, type PageCommands } from '../page-commands';
 import type { LayeredMemoryManagementRequest, OwnerLayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
@@ -31,6 +31,7 @@ export function installMemoryBridge(commands: PageCommands, backend: BackendHost
   contacts.onStateChanged(state => {
     if (state.scopeRevision !== processingScopeRevision) { processingScopeRevision = state.scopeRevision; processing.synchronize(true); commands.publish('memory:processing-invalidated', { scope: 'contact' }, 'manager'); }
   });
+  for (const action of ['pause', 'continue'] as const) commands.handle(`memory:${action}-processing`, (...args: unknown[]) => processing.control(action, processingControlArguments(args)), 'manager');
   commands.handle('memory:resume-processing', (...args: unknown[]) => processing.resume(processingResumeArguments(args)), 'manager');
   commands.handle('memory:read-processing-history', (...args: unknown[]) => processing.history(processingHistoryArguments(args)), 'manager');
   commands.handle('memory:read-processing', (...args: unknown[]) => processing.read(processingArguments(args)), 'manager');

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingTask, MemoryProcessingUnit } from '../shared/memory-processing';
+import type { MemoryProcessing, MemoryProcessingControlAction, MemoryProcessingRequest, MemoryProcessingTask, MemoryProcessingUnit } from '../shared/memory-processing';
 
 const names = { waiting: '等待处理', processing: '处理中', completed: '已完成', paused: '已暂停', blocked: '处理受阻' };
 const phases = { extraction: '提取记忆', verification: '核验保存', topics: '整理主题', profile: '更新画像', retry: '等待自动重试' };
@@ -40,15 +40,19 @@ function MemoryProcessingContent({ request, onProgress, children }: ProcessingPr
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState('');
   const [resultError, setResultError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [acting, setActing] = useState<MemoryProcessingControlAction | null>(null);
   const [loading, setLoading] = useState(true);
   const [epoch, setEpoch] = useState(0);
   const active = useRef(false), historyReading = useRef(false), revision = useRef(0);
-  const refresh = useRef<() => Promise<void>>(async () => {}), progressCallback = useRef(onProgress);
+  const actionReading = useRef(false);
+  const controlAttempt = useRef<{ action: MemoryProcessingControlAction; actionVersion: number; operationId: string } | null>(null);
+  const refresh = useRef<(force?: boolean) => Promise<void>>(async () => {}), progressCallback = useRef(onProgress);
   progressCallback.current = onProgress;
   const scopeKey = request.scope === 'owner' ? 'owner' : `${request.contactId}:${request.scopeRevision}`;
   useEffect(() => window.notalone.memory.onProcessingInvalidated(event => {
     if (event.scope === 'contact' && request.scope === 'owner') return;
-    revision.current++; active.current = false;
+    revision.current++; active.current = false; actionReading.current = false; controlAttempt.current = null; setActing(null); setActionError('');
     setValue(null); setHistory([]); setNextCursor(null); setLoading(true); setHistoryLoading(false);
     setError(''); setHistoryError(''); setResultError(''); setEpoch(value => value + 1);
   }), [scopeKey]);
@@ -56,8 +60,9 @@ function MemoryProcessingContent({ request, onProgress, children }: ProcessingPr
     let alive = true, timer: ReturnType<typeof setTimeout> | undefined, inFlight: Promise<void> | undefined;
     let signature: string | undefined, firstHistory: string | undefined;
     active.current = true;
-    const read = (silent = false): Promise<void> => {
-      if (inFlight) return inFlight;
+    const read = (silent = false, force = false): Promise<void> => {
+      if (actionReading.current && !force) return Promise.resolve();
+      if (inFlight && !force) return inFlight;
       if (!alive || document.hidden) return Promise.resolve();
       if (!silent) setLoading(true);
       const operationRevision = revision.current;
@@ -80,13 +85,14 @@ function MemoryProcessingContent({ request, onProgress, children }: ProcessingPr
       })();
       inFlight = operation;
       void operation.finally(() => {
-        if (inFlight === operation) inFlight = undefined;
+        if (inFlight !== operation) return;
+        inFlight = undefined;
         clearTimeout(timer);
         if (alive && !document.hidden) timer = setTimeout(() => void read(true), 2000);
       });
       return operation;
     };
-    refresh.current = read;
+    refresh.current = force => read(false, force);
     const visibility = () => {
       clearTimeout(timer);
       if (document.hidden) void window.notalone.memory.cancelProcessingRead(request).catch(() => {});
@@ -95,11 +101,36 @@ function MemoryProcessingContent({ request, onProgress, children }: ProcessingPr
     document.addEventListener('visibilitychange', visibility);
     void read();
     return () => {
-      alive = false; active.current = false; revision.current++; historyReading.current = false;
+      alive = false; active.current = false; revision.current++; historyReading.current = false; actionReading.current = false;
       clearTimeout(timer); document.removeEventListener('visibilitychange', visibility);
       void window.notalone.memory.cancelProcessingRead(request).catch(() => {});
     };
   }, [scopeKey, epoch]);
+  async function control(action: MemoryProcessingControlAction) {
+    if (!value || actionReading.current || loading || !value.current.actions.includes(action)) return;
+    const currentRevision = ++revision.current;
+    actionReading.current = true; setActing(action); setActionError('');
+    historyReading.current = false; setHistoryLoading(false);
+    if (controlAttempt.current?.action !== action || controlAttempt.current.actionVersion !== value.actionVersion) {
+      controlAttempt.current = { action, actionVersion: value.actionVersion, operationId: crypto.randomUUID() };
+    }
+    const { actionVersion, operationId } = controlAttempt.current;
+    try {
+      const command = action === 'pause' ? window.notalone.memory.pauseProcessing : window.notalone.memory.continueProcessing;
+      await command({ ...request, actionVersion, operationId });
+      if (!active.current || currentRevision !== revision.current) return;
+      controlAttempt.current = null;
+    } catch {
+      if (!active.current || currentRevision !== revision.current) return;
+      setActionError('操作结果暂未确认，请核对最新状态后再操作。');
+    } finally {
+      if (active.current && currentRevision === revision.current) {
+        // 接纳回执不代表业务完成；动作资格与主状态都重新取自权威读取。
+        await refresh.current(true);
+        if (active.current && currentRevision === revision.current) { actionReading.current = false; setActing(null); }
+      }
+    }
+  }
   async function loadHistory(firstPage = false) {
     if ((!nextCursor && !firstPage) || historyReading.current) return;
     const currentRevision = revision.current;
@@ -118,7 +149,7 @@ function MemoryProcessingContent({ request, onProgress, children }: ProcessingPr
   const current = value?.current;
   const count = current && quantity(current.processedCount, current.totalCount, current.unit);
   return <>
-    <section className="memory-processing-card" aria-label="关系资料处理状态" aria-busy={loading}>
+    <section className="memory-processing-card" aria-label="关系资料处理状态" aria-busy={loading || acting !== null}>
       <div className="memory-processing-bar">
         <div className="memory-processing-brief">
           <strong role={error ? 'alert' : 'status'}>{error || (current ? names[current.status] : '正在读取状态…')}</strong>
@@ -129,11 +160,15 @@ function MemoryProcessingContent({ request, onProgress, children }: ProcessingPr
             && <span className="memory-processing-count">另有 {current.pendingCount} 条聊天等待处理</span>}
         </div>
         <div className="memory-processing-actions">
-          <button className="button" disabled={loading} onClick={() => void refresh.current()}>刷新状态</button>
+          {current?.actions.map(action => <button key={action} className="button" disabled={loading || acting !== null}
+            onClick={() => void control(action)}>{action === 'pause' ? '暂停处理' : '继续处理'}</button>)}
+          <button className="button" disabled={loading || acting !== null} onClick={() => { setActionError(''); void refresh.current(); }}>刷新状态</button>
           <button className="memory-processing-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}>{detailsOpen ? '收起详情' : '查看详情'}</button>
         </div>
       </div>
       {current?.hasUsableResults && ['blocked', 'paused'].includes(current.status) && <p>已保存的合法记忆与画像仍可查看和使用。</p>}
+      {acting && <p role="status">正在确认{acting === 'pause' ? '暂停' : '继续'}操作，处理状态以重新读取为准。</p>}
+      {actionError && <p role="alert">{actionError}</p>}
       {resultError && <p role="alert">{resultError}</p>}
       {detailsOpen && <div className="memory-processing-details">
         <p className="memory-section-note">记忆处理包括提取、核验、主题整理和画像更新；消息同步由同步设置单独管理。</p>

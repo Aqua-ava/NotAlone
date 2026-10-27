@@ -1,6 +1,16 @@
 import type { ContactSelection } from './contact-session-bridge';
 
 export type MemoryProcessingRequest = { scope: 'owner' } | ({ scope: 'contact' } & ContactSelection);
+export type MemoryProcessingControlAction = 'pause' | 'continue';
+export type MemoryProcessingControlRequest = MemoryProcessingRequest & { actionVersion: number; operationId: string };
+export interface MemoryProcessingControlReceipt {
+  accepted: true;
+  operationId: string;
+  action: MemoryProcessingControlAction;
+  actionVersion: number;
+  controlGeneration: number;
+  replayed: boolean;
+}
 export type MemoryProcessingAction = 'resume' | 'restart';
 export type MemoryProcessingResumeRequest = MemoryProcessingRequest & { taskId: string; action: MemoryProcessingAction };
 export type MemoryProcessingHistoryRequest = MemoryProcessingRequest & { cursor: string | null };
@@ -17,8 +27,7 @@ export interface MemoryProcessingCurrent {
   reason: string | null;
   reasonCode: string | null;
   hasUsableResults: boolean;
-  /** 查询票不提供尚未接入安全控制的动作。 */
-  actions: [];
+  actions: MemoryProcessingControlAction[];
 }
 export interface MemoryProcessingTask {
   taskId: string;
@@ -45,6 +54,7 @@ export interface MemoryProcessing {
   scope: 'owner' | 'contact';
   contactId: string | null;
   controlGeneration: number;
+  actionVersion: number;
   current: MemoryProcessingCurrent;
   history: Pick<MemoryProcessingHistory, 'entries' | 'nextCursor' | 'error'>;
 }

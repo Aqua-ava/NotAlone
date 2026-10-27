@@ -1,6 +1,6 @@
 import { ids, payload } from '../layered-memory/support.mjs';
 export function lifecyclePayload(overrides = {}) {
-  return { scope: 'contact', contact_id: ids.contact, control_generation: 0,
+  return { scope: 'contact', contact_id: ids.contact, control_generation: 0, action_version: 0,
     current: { status: 'waiting', round_id: null, phase: null, processed_count: null, total_count: null, unit: null,
       pending_count: 0, reason: '暂无待处理资料。', reason_code: null, has_usable_results: false, actions: [] },
     history: { entries: [], next_cursor: null }, ...overrides };
