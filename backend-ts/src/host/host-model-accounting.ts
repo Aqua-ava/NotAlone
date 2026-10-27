@@ -1,3 +1,4 @@
+import {memoryExecutionAllowed} from '../memory/processing/control.ts';
 /** 过渡后台模型调用的宿主资格：同事务核原任务、额度和预约收据。 */
 import {createHash} from 'node:crypto';
 import type pg from 'pg';
@@ -33,7 +34,7 @@ async function authority(client:pg.Client,r:ModelLedgerReceipt,c:ModelTaskClaim)
   JOIN background_task_step s ON s.task_id=t.id WHERE t.id=$1 AND s.id=$2 AND s.step_name=$3
   AND t.owner_id=$4 AND t.contact_id IS NOT DISTINCT FROM $5 AND t.current_step=s.step_name
   AND t.status IN ('queued','running','verifying') AND s.status='running' AND s.worker_id=$6
-  AND s.lease_generation=$7 AND s.lease_expires_at>clock_timestamp() FOR UPDATE OF t,s`,
+  AND s.lease_generation=$7 AND s.lease_expires_at>clock_timestamp() AND ${memoryExecutionAllowed} FOR UPDATE OF t,s`,
   [c.task_id,c.step_id,c.step_name,r.owner_id,r.contact_id,c.worker_id,c.lease_generation])).rows[0];
  if(!task)reject('model_accounting_claim_stale');
  const bound=async()=>Boolean((await client.query("SELECT 1 FROM conversation_binding WHERE owner_id=$1 AND contact_id=$2 AND status='active'",[r.owner_id,r.contact_id])).rowCount);
@@ -139,6 +140,7 @@ export function createHostModelAccounting(options:{transaction:Transaction;uncon
   return (await client.query('SELECT DISTINCT request_id FROM model_call_receipt WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2 AND permit_id=ANY($3::uuid[])',[owner,contact,permits])).rows.map(row=>row.request_id);
  };
  return {
+  unconfirmedRequestsInTransaction:unconfirmed,
   async unconfirmedRequests(scope:{owner_id:string;contact_id:string|null}):Promise<string[]> {
    return options.transaction(client=>unconfirmed(client,scope.owner_id,scope.contact_id));
   },

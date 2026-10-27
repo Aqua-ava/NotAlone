@@ -63,7 +63,7 @@ export class ExtractionProgressApi {
     if(error instanceof ExtractionTaskError&&['worker_scan_invalid','resume_request_invalid'].includes(error.code)){
       return {status:400,body:{error:'memory_processing_request_invalid'}};
     }
-    if(error instanceof ExtractionTaskError&&['source_unavailable','resume_action_mismatch','task_no_remaining_step'].includes(error.code)){
+    if(error instanceof ExtractionTaskError&&['source_unavailable','resume_action_mismatch','task_no_remaining_step','memory_processing_paused'].includes(error.code)){
       return {status:409,body:{error:'memory_processing_state_conflict'}};
     }
     return {status:503,body:{error:'memory_processing_unavailable'}};

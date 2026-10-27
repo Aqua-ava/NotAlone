@@ -8,7 +8,7 @@ import { userInfo } from 'node:os';
 import { isIP } from 'node:net';
 import type { ConnectionOptions } from 'node:tls';
 
-const EXPECTED_MIGRATION_COUNT = 124;
+const EXPECTED_MIGRATION_COUNT = 125;
 
 export class HostStorageError extends Error {
   readonly code: string;

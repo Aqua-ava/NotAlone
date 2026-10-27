@@ -113,6 +113,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
       },
       callExtraction:runtime.callExtraction,
       extractionControl,
+      unconfirmedMemoryRequestsInTransaction:accounting.unconfirmedRequestsInTransaction,
       extractionWorkerStatus:runtime.extractionWorkerStatus,
       stopAccepting,
       close():Promise<void>{

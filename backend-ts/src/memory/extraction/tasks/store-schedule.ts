@@ -1,3 +1,4 @@
+import {memoryScopePaused} from '../../processing/control.ts';
 /** 原097持久观察调度；业务身份来自已提交来源，通知正文不参与入队。 */
 import type pg from 'pg';
 import {ExtractionTaskError,lockExtractionScope,type ExtractionScope,type ExtractionTaskStore} from './store.ts';
@@ -43,6 +44,7 @@ async function observationTask(c:pg.ClientBase,scope:ExtractionScope,n:number,ru
 }
 export async function claimExtractionSchedule(c:pg.ClientBase,scope:ExtractionScope,runtimeConfig:CompleteClaimRuntimeConfig|null=null):Promise<string|null>{
  await lockExtractionScope(c,scope);
+ if(await memoryScopePaused(c,scope))return null;
  const state=(await c.query('SELECT *,due_at<=now() AS due,last_input_at+interval \'600 seconds\' AS idle_at FROM memory_extraction_schedule WHERE owner_id=$1 AND contact_id=$2 FOR UPDATE',[scope.ownerId,scope.contactId])).rows[0];
  if(!state?.due)return null;
  const previous=(await c.query("SELECT id,status FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type='observation'",[scope.ownerId,scope.contactId])).rows[0];

@@ -67,7 +67,7 @@ export class ExtractionWorker {
   private wakeResolve:(()=>void)|null=null;
   private wakeTimer:NodeJS.Timeout|null=null;
   private readonly wakes=new Map<string|undefined,Wake>();
-  private activeTask:{scope:ExtractionScope;taskId:string;abort:AbortController}|null=null;
+  private activeTask:{scope:ExtractionScope;taskId:string;abort:AbortController;drained:Promise<void>}|null=null;
 
   constructor(options:ExtractionWorkerOptions){
     if(!uuid.test(options.ownerId))throw new ExtractionTaskError('worker_scope_invalid');
@@ -128,6 +128,15 @@ export class ExtractionWorker {
       ||active.taskId!==taskId.toLowerCase())return false;
     active.abort.abort();
     return true;
+  }
+
+  /** 范围暂停仅等待匹配的本地执行排空，超时不推断供应商状态。 */
+  async drain(scope:ExtractionScope,taskId:string,timeoutMs=4_000):Promise<boolean>{
+    const active=this.activeTask;
+    if(!active||active.scope.ownerId!==scope.ownerId||active.scope.contactId!==scope.contactId||active.taskId!==taskId)return true;
+    let timer:NodeJS.Timeout|undefined;
+    try{return await Promise.race([active.drained.then(()=>true),new Promise<boolean>(resolve=>{timer=setTimeout(()=>resolve(false),timeoutMs);})]);}
+    finally{if(timer)clearTimeout(timer);}
   }
 
   /** 超时不会强抢运行中的模型调用；未排空时仍由原租约在进程退出后恢复。 */
@@ -226,8 +235,9 @@ export class ExtractionWorker {
     if(!runner)throw new ExtractionTaskError('worker_step_unsupported');
     const stepAbort=new AbortController();
     const signal=AbortSignal.any([globalSignal,stepAbort.signal]);
+    let finishDrain!:()=>void;const drained=new Promise<void>(resolve=>{finishDrain=resolve;});
     this.activeTask={scope:{ownerId:claim.ownerId,contactId:claim.contactId},
-      taskId:claim.taskId,abort:stepAbort};
+      taskId:claim.taskId,abort:stepAbort,drained};
     let heartbeatError:unknown;
     const heartbeat=setInterval(()=>{
       if(signal.aborted)return;
@@ -255,6 +265,7 @@ export class ExtractionWorker {
     }finally{
       clearInterval(heartbeat);
       if(this.activeTask?.abort===stepAbort)this.activeTask=null;
+      finishDrain();
     }
   }
 }

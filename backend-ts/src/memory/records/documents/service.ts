@@ -1,3 +1,4 @@
+import {memoryScopePaused} from '../../processing/control.ts';
 /** 原公开 L2/L3 管理合同；只调度原任务，不持有模型或第二套状态库。 */
 import type {Client} from 'pg';
 import {L2ScenarioService,L2ScenarioConflict} from '../../scenarios/service.ts';
@@ -93,6 +94,7 @@ export function createLayeredMemoryManagement(options:LayeredMemoryManagementOpt
         const scope:L2ScenarioScope={owner_id:options.ownerId,contact_id:candidate.contact_id};
         const outcome=await transaction(async client=>{
           await lockManagementScope(client,scope);signal.throwIfAborted();
+          if(await memoryScopePaused(client,{ownerId:scope.owner_id,contactId:scope.contact_id}))return;
           const state=await managementState(client,scope);
           if(!state.enabled||!state.maintenance_allowed
             ||(await managementJobs(client,scope)).some(job=>job.state==='active'
@@ -198,6 +200,7 @@ export function createLayeredMemoryManagement(options:LayeredMemoryManagementOpt
           throw new LayeredMemoryManagementError('model_configuration_unavailable',503);
         const outcome=await transaction(async client=>{
           await lockManagementScope(client,scope);signal.throwIfAborted();
+          if(['enable','refresh','continue'].includes(action)&&await memoryScopePaused(client,{ownerId:scope.owner_id,contactId:scope.contact_id}))throw new LayeredMemoryManagementError('memory_processing_paused');
           const state=await managementState(client,scope),generation=Number(state.settings_generation);
           let cancelled:string[]=[];
           const replay=generation!==body.settings_generation&&['enable','disable','delete'].includes(action)

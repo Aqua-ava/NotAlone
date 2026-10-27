@@ -1,3 +1,4 @@
+import {memoryScopePaused} from '../memory/processing/control.ts';
 /** 全部业务任务的只读投影与显式生命周期动作；不创建 Agent 或计划工具。 */
 import type pg from 'pg';
 
@@ -399,6 +400,7 @@ export class PostgresBusinessTaskManager {
           AND ($4::boolean=false OR t.contact_id IS NULL)
         FOR UPDATE OF t`,[request.taskId,ownerId,request.contactId??null,ownerOnly])).rows[0];
       if(!row)throw new BusinessTaskError('task_not_found',404);
+      if(['import','observation','layered_memory'].includes(row.task_type)&&await memoryScopePaused(database,{ownerId,contactId:row.contact_id}))throw new BusinessTaskError('memory_processing_paused');
       if(!['import','observation'].includes(row.task_type))
         throw new BusinessTaskError('task_recovery_requires_domain_action');
       if(row.live_lease)throw new BusinessTaskError('task_recovery_busy');

@@ -1,3 +1,4 @@
+import {memoryExecutionAllowed} from '../processing/control.ts';
 /** 迁移 A 段的实际服务：读取原 trace/window，核原任务租约；B 段仍由原唯一写入方提交。 */
 import type pg from 'pg';
 import {randomUUID,createHash} from 'node:crypto';
@@ -52,7 +53,7 @@ async function lockedClaim(client:pg.Client,input:ExtractionBatchInput):Promise<
  const row=(await client.query(`SELECT t.extraction_runtime_config FROM background_task t JOIN background_task_step s ON s.task_id=t.id
   WHERE t.id=$1 AND s.id=$2 AND t.owner_id=$3 AND t.contact_id=$4 AND t.task_type IN ('import','observation')
   AND t.current_step='extract_memory' AND t.status='running' AND s.step_name='extract_memory' AND s.status='running'
-  AND s.worker_id=$5 AND s.lease_generation=$6 AND s.lease_expires_at>clock_timestamp() AND ${sourceAllowed} FOR UPDATE OF t,s`,
+  AND s.worker_id=$5 AND s.lease_generation=$6 AND s.lease_expires_at>clock_timestamp() AND ${sourceAllowed} AND ${memoryExecutionAllowed} FOR UPDATE OF t,s`,
  [c.task_id,c.step_id,input.owner_id,input.contact_id,c.worker_id,c.lease_generation])).rows[0];
  if(!row)reject();
  return validateExtractionRuntimeConfig(row.extraction_runtime_config);

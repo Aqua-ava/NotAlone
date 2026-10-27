@@ -29,12 +29,12 @@ const record=(value:unknown):value is Record<string,unknown>=>Boolean(value)&&ty
 /** 本地TaskApi与导入wake共用同一宿主内唯一提取Worker，不再代理Python。 */
 export class ExtractionWorkerTaskControl implements TaskControlPort {
  private readonly store:Pick<ExtractionTaskStore,'resume'>;
- private readonly worker:Pick<ExtractionWorker,'wake'|'cancel'>;
+ private readonly worker:Pick<ExtractionWorker,'wake'|'cancel'>&Partial<Pick<ExtractionWorker,'drain'>>;
  private closed=false;
  private closing:Promise<void>|undefined;
  private readonly inFlight=new Set<Promise<unknown>>();
 
- constructor(options:{store:Pick<ExtractionTaskStore,'resume'>;worker:Pick<ExtractionWorker,'wake'|'cancel'>}){
+ constructor(options:{store:Pick<ExtractionTaskStore,'resume'>;worker:Pick<ExtractionWorker,'wake'|'cancel'>&Partial<Pick<ExtractionWorker,'drain'>>}){
   this.store=options.store;this.worker=options.worker;
  }
 
@@ -72,7 +72,9 @@ export class ExtractionWorkerTaskControl implements TaskControlPort {
  stop(scope:TaskScope,taskId:string):Promise<boolean>{
   return this.invoke(async()=>{
    if(this.closed)throw new TaskControlError('worker_unavailable');
-   return this.worker.cancel({ownerId:scope.ownerId,contactId:scope.contactId},taskId);
+   const cancelled=this.worker.cancel({ownerId:scope.ownerId,contactId:scope.contactId},taskId);
+   if(cancelled)await this.worker.drain?.(scope,taskId);
+   return cancelled;
   });
  }
 

@@ -1,3 +1,4 @@
+import {memoryExecutionAllowed} from '../processing/control.ts';
 /** L2 场景冻结、模型暂存、独立核验、事务发布和管理；不领取任务或发送外部消息。 */
 import type {Client} from 'pg';
 import {randomUUID} from 'node:crypto';
@@ -210,7 +211,7 @@ async function assertClaim(client: Client, scope: L2ScenarioScope, claim: L2Scen
     WHERE t.id=$1 AND s.id=$2 AND t.owner_id=$3 AND t.contact_id IS NOT DISTINCT FROM $4::uuid
       AND t.task_type='layered_memory' AND t.current_step='organize_memory'
       AND t.status IN ('queued','running','verifying') AND s.step_name=$5 AND s.status='running'
-      AND s.worker_id=$6 AND s.lease_generation=$7 AND s.lease_expires_at>clock_timestamp()`,
+      AND s.worker_id=$6 AND s.lease_generation=$7 AND s.lease_expires_at>clock_timestamp() AND ${memoryExecutionAllowed}`,
   [claim.task_id, claim.step_id, scope.owner_id, contactParameter(scope), claim.step_name, claim.worker_id, claim.lease_generation])).rowCount;
   if (!row) throw new L2ScenarioConflict('l2_scenario_claim_stale');
 }

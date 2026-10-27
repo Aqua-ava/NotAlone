@@ -10,7 +10,7 @@ test('正式认证本人状态无需联系人且空资料保持等待，读取�
  assert.equal(result.data.scope,'owner');assert.equal(result.data.contact_id,null);
  assert.equal(result.data.current.status,'waiting');
  assert.equal(result.data.current.reason,'暂无待处理资料。');
- assert.deepEqual(result.data.current.actions,[]);
+ assert.deepEqual(result.data.current.actions,['pause']);
  assert.deepEqual(result.data.history,{entries:[],next_cursor:null});
  assert.equal((await host.request('/api/owner/memory-processing/state',{authenticated:false})).status,401);
  const runtime=await host.request('/api/runtime/status');
@@ -44,7 +44,7 @@ test('范围控制优先于真实失败，当前轮次不受旧历史失败覆�
   const {data,status:code}=await host.request(`/api/contacts/${contact}/memory-processing/state`);
   assert.equal(code,200);assert.equal(data.current.status,status,status);
   assert.equal(data.current.round_id,round);assert.equal(data.control_generation,7);
-  assert.deepEqual(data.current.actions,[]);
+  assert.deepEqual(data.current.actions,status==='paused'?[]:['pause']);
  }
  const blocked=(await host.request(`/api/contacts/${contacts.blocked.contact}/memory-processing/state`)).data.current;
  assert.match(blocked.reason,/核验|处理|修复/);
@@ -94,7 +94,7 @@ test('旧提取失败不能被画像成功掩盖，旧停止没有可信控制�
  assert.equal(failed.history.entries.length,2);assert.ok(failed.history.entries.every(task=>task.attribution==='legacy'));
  const cancelled=(await host.request(`/api/contacts/${stopped}/memory-processing/state`)).data;
  assert.equal(cancelled.current.status,'blocked');assert.match(cancelled.current.reason,/归属|旧/);
- assert.deepEqual(cancelled.current.actions,[]);
+ assert.deepEqual(cancelled.current.actions,['pause']);
 });
 
 test('当前提取只展示真实消息计划计数，不把画像记忆或任务步骤相加',{timeout:60000},async t=>{
@@ -151,7 +151,7 @@ test('受阻主卡按安全错误类别给中文原因与下一步，未知技�
  for(let i=0;i<cases.length;i++){
   const current=(await host.request(`/api/contacts/${contacts[i]}/memory-processing/state`)).data.current;
   assert.equal(current.status,'blocked');assert.ok(current.reason.includes(cases[i][1]),cases[i][0]);
-  assert.equal(current.reason.includes(cases[i][0]),false);assert.deepEqual(current.actions,[]);
+  assert.equal(current.reason.includes(cases[i][0]),false);assert.deepEqual(current.actions,['pause']);
  }
 });
 

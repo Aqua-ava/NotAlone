@@ -1,3 +1,4 @@
+import {memoryExecutionAllowed} from '../processing/control.ts';
 /** L3 长期背景的持久工作、增量跳过、独立核验、原子发布、撤回和纠错。 */
 import type {Client} from 'pg';
 import {filterLayeredMemoryManagementEntries} from '../records/documents/source-policy.ts';
@@ -171,7 +172,7 @@ async function assertClaim(client: Client, scope: L3ProfileScope, claim: L3Profi
       AND t.task_type='layered_memory' AND t.current_step='organize_memory'
       AND t.status IN ('queued','running','verifying') AND s.step_name='organize_memory'
       AND s.status='running' AND s.worker_id=$5 AND s.lease_generation=$6
-      AND s.lease_expires_at>clock_timestamp()`,
+      AND s.lease_expires_at>clock_timestamp() AND ${memoryExecutionAllowed}`,
   [claim.task_id, claim.step_id, scope.owner_id, contactParameter(scope), claim.worker_id, claim.lease_generation])).rowCount;
   if (!row) throw new L3ProfileServiceConflict('l3_profile_claim_stale');
 }
