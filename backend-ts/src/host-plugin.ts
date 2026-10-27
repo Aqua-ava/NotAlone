@@ -29,7 +29,6 @@ import {resolveHistoryRuntime} from './imports/history-runtime.ts';
 import {startHostModelRuntime} from './host/host-model-runtime.ts';
 import {usageSummary} from './diagnostics/usage-summary.ts';
 import {ExtractionTaskStore} from './memory/extraction/tasks/store.ts';
-import {ExtractionProgressApi} from './memory/extraction/tasks/progress-http.ts';
 import {SourceProcessingTraceStore} from './diagnostics/source-processing-trace.ts';
 import {SourceProcessingTraceApi} from './diagnostics/source-processing-trace-http.ts';
 import {HistoryImportApi} from './imports/history-import-api.ts';
@@ -47,6 +46,7 @@ import {PureTsMaintenance} from './host/pure-ts-maintenance.ts';
 import {acquireManagedDatabaseLease} from './platform/database/managed-database-lifetime.ts';
 import {createLayeredMemoryManagement} from './memory/records/documents/service.ts';
 import {recoverMemoryProcessingOnStartup} from './memory/processing/recovery.ts';
+import {adoptLegacyMemoryProcessing} from './memory/processing/legacy-adoption.ts';
 import {
  UnavailableTaskControl,
  type TaskControlPort,type TaskScope,
@@ -102,12 +102,6 @@ async function start(ctx: Context) {
   };
   const memoryProcessingControl=storage.runtimeOwnerId?new MemoryProcessingControl(progressPool,storage.runtimeOwnerId,taskControl,(client,scope)=>{if(!modelRuntime)throw Error('model_runtime_unavailable');return modelRuntime.unconfirmedMemoryRequestsInTransaction(client as pg.Client,scope.ownerId,scope.contactId);}):undefined;
   const memoryProcessingQuery=storage.runtimeOwnerId?new MemoryProcessingQuery(progressPool,storage.runtimeOwnerId,(client,scope)=>{if(!modelRuntime)throw Error('model_runtime_unavailable');return modelRuntime.unconfirmedMemoryRequestsInTransaction(client as pg.Client,scope.ownerId,scope.contactId);}):undefined;
-  const progress=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
-    ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId,{
-      // progress先于模型运行时装配；这里必须在请求时转发到启动后绑定的唯一TaskControl。
-      wake:(scope,taskId)=>taskControl.wake(scope,taskId).then(()=>undefined),
-    })
-    : undefined;
   const traceStore=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new SourceProcessingTraceStore(progressPool)
     : undefined;
@@ -351,21 +345,6 @@ async function start(ctx: Context) {
       }
       const unifiedMemoryResult=await memoryProcessingQuery?.handle(req.method??'',url);
       if(unifiedMemoryResult){respond(unifiedMemoryResult.status,unifiedMemoryResult.body);return;}
-      const progressPath=/^\/api\/contacts\/[^/]+\/memory-processing(?:\/resume)?$|^\/api\/owner\/memory-processing(?:\/resume)?$/.test(url.pathname);
-      if(progress&&progressPath){
-        let body:Record<string,any>|undefined;
-        if(req.method==='POST'&&url.pathname.endsWith('/resume')){
-          try{body=await readBody(req);}catch{body=undefined;}
-        }
-        const result=await progress.handle(req.method??'',url.pathname,body);
-        if(result){
-          if(url.search){respond(400,{error:'memory_processing_request_invalid'});return;}
-          respond(result.status,result.body);return;
-        }
-        if(req.method==='POST'&&url.pathname.includes('/memory-processing')){
-          respond(400,{error:'memory_processing_request_invalid'});return;
-        }
-      }
       const tracePath=/^\/api\/contacts\/[^/]+\/(?:memory-traces|source-processing-traces)(?:\/|$)/.test(url.pathname);
       if(tracePath){
         if(!traces){respond(503,{error:'source_processing_trace_unavailable'});return;}
@@ -517,6 +496,7 @@ async function start(ctx: Context) {
   const address=server.address();if(!address || typeof address==='string')throw new Error('HOST_LISTEN_FAILED');
   try {
     if(deletions)await deletions.recover();
+    if(storage.runtimeOwnerId)await adoptLegacyMemoryProcessing(progressPool,storage.runtimeOwnerId);
     modelRuntime=await startHostModelRuntime({ctx,storage,assistantRuntime,environment:runtimeEnvironment,
       businessHome:config.businessHome,projectDirectory:config.projectDirectory,infoPath:config.infoPath,envFilePath:config.envFilePath,
       ...(traceStore?{sourceTraces:traceStore}:{}),skillLibrary:skills.library,

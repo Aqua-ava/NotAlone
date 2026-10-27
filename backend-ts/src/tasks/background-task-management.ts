@@ -1,4 +1,3 @@
-import {memoryScopePaused} from '../memory/processing/control.ts';
 /** 全部业务任务的只读投影与显式生命周期动作；不创建 Agent 或计划工具。 */
 import type pg from 'pg';
 
@@ -154,8 +153,10 @@ interface MutableTask {
 const taskTypes=new Set<BusinessTaskType>([
   'import','observation','delete','skill_learning','layered_memory','memory_upgrade',
 ]);
+const unifiedMemoryTypes=new Set<BusinessTaskType>(['import','observation','layered_memory']);
 const activeStatuses=new Set(['queued','running','verifying']);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUnifiedMemoryTask=(type:BusinessTaskType)=>unifiedMemoryTypes.has(type);
 
 function count(value:unknown):number {
   const result=Number(value??0);
@@ -175,26 +176,19 @@ function normalizedStatus(taskType:BusinessTaskType,raw:string,live:boolean,jobS
   return 'interrupted';
 }
 function recoveryEligible(task:MutableTask):boolean {
-  if(task.task_type==='memory_upgrade')return false;
-  if(task.task_type==='import')return task.source_status==='active';
-  if(task.task_type==='observation')return task.binding_active===true;
-  if(task.task_type==='skill_learning')return task.binding_active===true&&task.learning_enabled===true;
-  return task.layered_enabled===true&&['active','paused','failed'].includes(task.job_state??'');
+  return task.task_type==='skill_learning'
+    &&task.binding_active===true&&task.learning_enabled===true;
 }
 function actions(task:MutableTask,status:BusinessTaskStatus):BusinessTaskAction[] {
   if(task.task_type==='memory_upgrade')return [];
+  if(isUnifiedMemoryTask(task.task_type))return [];
   if(task.last_error_code==='model_call_outcome_unknown'
     ||task.steps.some(step=>step.error_code==='model_call_outcome_unknown'))return [];
   if(['queued','running','verifying'].includes(status))return [{kind:'stop'}];
   if(!['failed','cancelled','paused','interrupted'].includes(status)||!recoveryEligible(task))return [];
   if(task.task_type==='delete')return [];
   if(task.task_type==='skill_learning')return [{kind:'recover',target:'skill_learning'}];
-  if(task.task_type==='layered_memory'){
-    if(task.work_revision===null||task.settings_generation===null)return [];
-    return [{kind:'recover',target:'layered_memory',
-      work_revision:task.work_revision,settings_generation:task.settings_generation}];
-  }
-  return [{kind:'recover',target:'tasks'}];
+  return [];
 }
 function currentStep(task:MutableTask,phase:string):BusinessTaskStep|undefined {
   return task.steps.find(step=>step.name===phase)
@@ -331,6 +325,8 @@ export class PostgresBusinessTaskManager {
           AND ($4::boolean=false OR contact_id IS NULL) FOR UPDATE`,
       [request.taskId,ownerId,request.contactId??null,ownerOnly])).rows[0];
       if(!task)throw new BusinessTaskError('task_not_found',404);
+      if(isUnifiedMemoryTask(task.task_type))
+        throw new BusinessTaskError('task_stop_requires_memory_control');
       if(task.status==='succeeded')return {task_id:request.taskId,status:'completed'};
       if(task.status==='failed')return {task_id:request.taskId,status:'failed'};
       if(task.status==='cancelled')return {task_id:request.taskId,status:'stopped'};
@@ -343,16 +339,6 @@ export class PostgresBusinessTaskManager {
       await database.query(`UPDATE public.background_task
         SET status='cancelled',last_error_code='task_stopped',finished_at=clock_timestamp(),updated_at=clock_timestamp()
         WHERE id=$1 AND status IN ('queued','running','verifying')`,[request.taskId]);
-      if(task.task_type==='layered_memory'){
-        await database.query(`UPDATE public.layered_memory_job
-          SET state='paused',revision=revision+1,last_action='pause'
-          WHERE task_id=$1 AND owner_id=$2 AND contact_id IS NOT DISTINCT FROM $3::uuid
-            AND state='active'`,[request.taskId,ownerId,task.contact_id]);
-        await database.query(`UPDATE public.layered_memory_state
-          SET status='paused',updated_at=clock_timestamp()
-          WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid AND enabled`,
-        [ownerId,task.contact_id]);
-      }
       return {task_id:request.taskId,status:'stopped'};
     });
   }
@@ -400,17 +386,13 @@ export class PostgresBusinessTaskManager {
           AND ($4::boolean=false OR t.contact_id IS NULL)
         FOR UPDATE OF t`,[request.taskId,ownerId,request.contactId??null,ownerOnly])).rows[0];
       if(!row)throw new BusinessTaskError('task_not_found',404);
-      if(['import','observation','layered_memory'].includes(row.task_type)&&await memoryScopePaused(database,{ownerId,contactId:row.contact_id}))throw new BusinessTaskError('memory_processing_paused');
-      if(!['import','observation'].includes(row.task_type))
+      if(isUnifiedMemoryTask(row.task_type))
         throw new BusinessTaskError('task_recovery_requires_domain_action');
       if(row.live_lease)throw new BusinessTaskError('task_recovery_busy');
       if(row.status==='succeeded')return {task_id:request.taskId,status:'completed'};
       if(request.action==='restart'&&row.status!=='cancelled'
         ||request.action==='resume'&&!['failed','running','verifying'].includes(row.status))
         throw new BusinessTaskError('task_recovery_conflict');
-      if(row.task_type==='import'&&row.source_status!=='active'
-        ||row.task_type==='observation'&&row.binding_active!==true)
-        throw new BusinessTaskError('task_source_unavailable');
       const unknown=(await database.query(`SELECT 1 FROM public.background_task_step
         WHERE task_id=$1 AND status<>'succeeded' AND last_error_code='model_call_outcome_unknown'
         LIMIT 1`,[request.taskId])).rowCount;

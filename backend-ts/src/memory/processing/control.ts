@@ -5,6 +5,10 @@ import {unconfirmedARequests} from '../extraction/tasks/store-recovery.ts';
 import type {TaskControlPort,TaskScope,TaskExecutionLease} from '../../tasks/task-control.ts';
 import {profileOnlyRecoveryAllowed} from '../records/documents/recovery.ts';
 import {resumeInterruptedCurrentRound} from './round-recovery.ts';
+import {
+  legacyAdoptionAwaitingContinue,
+  markLegacyAdoptionResumed,
+} from './legacy-adoption.ts';
 
 export class MemoryProcessingControlError extends Error {
  readonly code:string;readonly status:number;
@@ -111,7 +115,8 @@ export class MemoryProcessingControl {
     generation=Number(previous.accepted_generation);
    }else{
     if(Number(current.control_generation)!==data.action_version)throw new MemoryProcessingControlError();
-    if(action==='continue'&&(current.intent!=='pause'&&!await memoryHasInterruptedWork(c,scope,current.active_round_id)||await memoryContinueBlocker(c,scope,current.active_round_id,this.unconfirmed)!==null))throw new MemoryProcessingControlError('memory_processing_continue_unsafe');
+    const legacyResume=action==='continue'&&await legacyAdoptionAwaitingContinue(c,scope,current.active_round_id);
+    if(action==='continue'&&(current.intent!=='pause'&&!legacyResume&&!await memoryHasInterruptedWork(c,scope,current.active_round_id)||await memoryContinueBlocker(c,scope,current.active_round_id,this.unconfirmed)!==null))throw new MemoryProcessingControlError('memory_processing_continue_unsafe');
     if(action==='pause'&&current.intent==='pause')throw new MemoryProcessingControlError();
     generation=Number(current.control_generation)+1;
     if(!Number.isSafeInteger(generation))throw new MemoryProcessingControlError('memory_processing_unavailable',503);
@@ -127,6 +132,7 @@ export class MemoryProcessingControl {
     }else{
      // 只修复已明确允许的未完成阶段；不调用会加额或重置尝试次数的旧 resume。
      taskIds=await resumeInterruptedCurrentRound(c,scope,current.active_round_id);
+     await markLegacyAdoptionResumed(c,scope,current.active_round_id);
      await c.query('UPDATE memory_processing_round SET control_generation=$2,status=CASE WHEN status=\'blocked\' THEN \'waiting\' ELSE status END WHERE id=$1',[current.active_round_id,generation]);
     }
     await c.query('INSERT INTO memory_processing_operation(scope_id,operation_id,action,action_version,accepted_generation) VALUES($1,$2,$3,$4,$5)',[current.id,data.operation_id,action,data.action_version,generation]);

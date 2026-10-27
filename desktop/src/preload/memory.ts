@@ -1,4 +1,4 @@
-import type { MemoryProcessingControlRequest, MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingHistoryRequest } from '../shared/memory-processing';
+import type { MemoryProcessingControlRequest, MemoryProcessingRequest, MemoryProcessingHistoryRequest } from '../shared/memory-processing';
 import type { PageTransport } from './transport';
 import type { ContactSelection } from '../shared/contact-session-bridge';
 import type { LayeredMemoryReadRequest, LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryBridge, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState, MemoryCorrectionRequest, MemoryReadRequest, MemoryReadingState, MemoryRemovalRequest } from '../shared/memory-bridge';
@@ -8,7 +8,6 @@ export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
     pauseProcessing: (...args: [MemoryProcessingControlRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:pause-processing', args[0]) : Promise.reject(new Error('记忆处理操作不可用。')),
     continueProcessing: (...args: [MemoryProcessingControlRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:continue-processing', args[0]) : Promise.reject(new Error('记忆处理操作不可用。')),
     refreshProcessingResults: (...args: [MemoryProcessingRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:refresh-processing-results', args[0]) : Promise.reject(new Error('记忆结果读取不可用。')),
-    resumeProcessing: (...args: [MemoryProcessingResumeRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:resume-processing', args[0]) : Promise.reject(new Error('记忆任务操作不可用。')),
     readProcessingHistory: (...args: [MemoryProcessingHistoryRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:read-processing-history', args[0]) : Promise.reject(new Error('处理历史读取不可用。')),
     onProcessingInvalidated: (listener: (event: { scope: 'all' | 'contact' }) => void) => {
       if (typeof listener !== 'function') throw new Error('记忆处理读取不可用。');

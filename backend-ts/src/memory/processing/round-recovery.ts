@@ -69,7 +69,12 @@ export async function resumeInterruptedCurrentRound(
      WHERE member.round_id=$1 AND member.active
        AND task.owner_id=$2
        AND task.contact_id IS NOT DISTINCT FROM $3::uuid
-       AND task.status='queued'
+       AND task.status IN ('queued','running','verifying')
+       AND EXISTS(
+         SELECT 1 FROM public.background_task_step step
+         WHERE step.task_id=task.id
+           AND step.status IN ('pending','retryable')
+       )
      ORDER BY task.id`,
     [roundId, scope.ownerId, scope.contactId],
   )).rows.map((row: {id:string}) => row.id);

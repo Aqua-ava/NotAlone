@@ -119,8 +119,8 @@ test('统一任务列表按owner投影全部业务类型、真实步骤与实际
     ['parse','succeeded',4,4],['normalize','succeeded',4,4],
     ['extract_memory','running',3,4],['index','pending',0,4],['verify','pending',0,4],
   ]);
-  assert.deepEqual(importItem.actions,[{kind:'stop'}]);
-  assert.deepEqual(list.tasks.find(item=>item.task_id===observed).actions,[{kind:'stop'}]);
+  assert.deepEqual(importItem.actions,[],'记忆任务只从统一处理入口暂停或继续');
+  assert.deepEqual(list.tasks.find(item=>item.task_id===observed).actions,[]);
   assert.equal(list.tasks.find(item=>item.task_id===observed).total_count,null,
     '缺少可信目标总量时必须保留未知');
   assert.deepEqual(list.tasks.find(item=>item.task_id===deleted).actions,[],
@@ -137,8 +137,7 @@ test('统一任务列表按owner投影全部业务类型、真实步骤与实际
   assert.equal(ownerTask.status,'paused','领域暂停与过期租约不得继续显示运行中');
   assert.equal(ownerTask.processed_count,2);
   assert.equal(ownerTask.total_count,5);
-  assert.deepEqual(ownerTask.actions,[{kind:'recover',target:'layered_memory',
-    work_revision:7,settings_generation:3}],'过期租约只开放用户显式恢复，不自动宣布成功');
+  assert.deepEqual(ownerTask.actions,[],'本人记忆任务也必须走统一处理入口');
   assert.equal(all.tasks.some(item=>item.task_id===learning),true);
   assert.equal(all.tasks.some(item=>item.task_id===retired),true);
   assert.equal(all.tasks.length,6,'不得读取其他owner的任务');
@@ -156,7 +155,7 @@ test('统一任务列表按owner投影全部业务类型、真实步骤与实际
   assert.deepEqual(after,before,'纯列表读取不得唤醒、重排或写入任务');
 });
 
-test('统一停止使原租约失效、幂等取消且不能提交晚结果',async t=>{
+test('通用停止入口拒绝记忆任务且不改写原租约，范围隔离保持',async t=>{
   const f=await fixture(t);
   const pool=new pg.Pool({host:'/tmp',database:f.storage.client.database,max:2});
   const store=new ExtractionTaskStore(pool);
@@ -176,7 +175,7 @@ test('统一停止使原租约失效、幂等取消且不能提交晚结果',asy
       status:'queued',step:'extract_memory',messages:1},[
       {name:'extract_memory',status:'pending',total:1},
     ]);
-    const otherBefore=(await f.storage.client.query(`SELECT t.status,s.status step_status,
+    const before=(await f.storage.client.query(`SELECT t.status,s.status step_status,
       s.lease_generation,s.worker_id,s.lease_expires_at FROM background_task t
       JOIN background_task_step s ON s.task_id=t.id WHERE t.id=$1`,[otherId])).rows;
     await assert.rejects(f.manager.stop(f.owner,{contactId:otherContact,taskId}),{code:'task_not_found'});
@@ -184,32 +183,27 @@ test('统一停止使原租约失效、幂等取消且不能提交晚结果',asy
       '本人范围动作不得命中联系人任务');
     await assert.rejects(f.manager.stop(f.otherOwner,{taskId}),{code:'task_not_found'});
 
-    assert.deepEqual(await f.manager.stop(f.owner,{contactId:f.contact,taskId}),{
-      task_id:taskId,status:'stopped',
-    });
-    const stopped=(await f.storage.client.query(`SELECT t.status,t.last_error_code,t.finished_at,
+    const original=(await f.storage.client.query(`SELECT t.status,t.last_error_code,
       s.status step_status,s.worker_id,s.lease_expires_at,s.lease_generation
       FROM background_task t JOIN background_task_step s ON s.task_id=t.id
-      WHERE t.id=$1 AND s.step_name='extract_memory'`,[taskId])).rows[0];
-    assert.equal(stopped.status,'cancelled');
-    assert.equal(stopped.last_error_code,'task_stopped');
-    assert.ok(stopped.finished_at instanceof Date);
-    assert.equal(stopped.step_status,'cancelled');
-    assert.equal(stopped.worker_id,null);
-    assert.equal(stopped.lease_expires_at,null);
-    assert.ok(Number(stopped.lease_generation)>claim.leaseGeneration);
-    await assert.rejects(store.complete(claim,4,4),{code:'lease_stale'});
-    assert.deepEqual(await f.manager.stop(f.owner,{contactId:f.contact,taskId}),{
-      task_id:taskId,status:'stopped',
-    });
+      WHERE t.id=$1 AND s.step_name='extract_memory'`,[taskId])).rows;
+    await assert.rejects(
+      f.manager.stop(f.owner,{contactId:f.contact,taskId}),
+      {code:'task_stop_requires_memory_control'},
+    );
+    const unchanged=(await f.storage.client.query(`SELECT t.status,t.last_error_code,
+      s.status step_status,s.worker_id,s.lease_expires_at,s.lease_generation
+      FROM background_task t JOIN background_task_step s ON s.task_id=t.id
+      WHERE t.id=$1 AND s.step_name='extract_memory'`,[taskId])).rows;
+    assert.deepEqual(unchanged,original,'通用入口拒绝时不能撤销统一控制下的原租约');
     assert.deepEqual((await f.storage.client.query(`SELECT t.status,s.status step_status,
       s.lease_generation,s.worker_id,s.lease_expires_at FROM background_task t
-      JOIN background_task_step s ON s.task_id=t.id WHERE t.id=$1`,[otherId])).rows,otherBefore,
-    '停止一个任务不得改写其他联系人租约');
+      JOIN background_task_step s ON s.task_id=t.id WHERE t.id=$1`,[otherId])).rows,before,
+    '拒绝记忆任务不得改写其他联系人租约');
   }finally{await pool.end();}
 });
 
-test('显式恢复只重排原失败任务并保留成功步骤、来源和未知调用资格',async t=>{
+test('通用恢复入口拒绝记忆任务且不重置失败步骤、来源或未知调用',async t=>{
   const f=await fixture(t);
   const pool=new pg.Pool({host:'/tmp',database:f.storage.client.database,max:2});
   const store=new ExtractionTaskStore(pool);
@@ -227,28 +221,21 @@ test('显式恢复只重排原失败任务并保留成功步骤、来源和未�
 
     await assert.rejects(f.manager.recover(f.owner,{scope:'owner',taskId,action:'resume'}),
       {code:'task_not_found'},'本人范围恢复不得命中联系人任务');
-    assert.deepEqual(await f.manager.recover(f.owner,{
+    await assert.rejects(f.manager.recover(f.owner,{
       contactId:f.contact,taskId,action:'resume',
-    }),{task_id:taskId,status:'queued'});
-    const resumed=(await f.storage.client.query(`SELECT t.status,t.current_step,t.last_error_code,
+    }),{code:'task_recovery_requires_domain_action'});
+    const unchanged=(await f.storage.client.query(`SELECT t.status,t.current_step,t.last_error_code,
       t.source_document_id,t.owner_id,t.contact_id,t.message_count,s.step_name,s.status step_status,
       s.attempt_count,s.lease_generation
       FROM background_task t JOIN background_task_step s ON s.task_id=t.id
       WHERE t.id=$1 ORDER BY s.step_order`,[taskId])).rows;
-    assert.deepEqual({
-      status:resumed[0].status,current_step:resumed[0].current_step,
-      last_error_code:resumed[0].last_error_code,source_document_id:resumed[0].source_document_id,
-      owner_id:resumed[0].owner_id,contact_id:resumed[0].contact_id,message_count:resumed[0].message_count,
-    },{
-      status:'queued',current_step:'extract_memory',last_error_code:null,
-      source_document_id:before.source_document_id,owner_id:before.owner_id,
-      contact_id:before.contact_id,message_count:before.message_count,
-    });
-    assert.deepEqual(resumed.map(row=>[row.step_name,row.step_status,row.attempt_count]),[
-      ['parse','succeeded',1],['normalize','succeeded',1],
-      ['extract_memory','pending',0],['index','pending',0],['verify','pending',0],
-    ]);
-    assert.equal(Number(resumed[2].lease_generation),1,'重排推进代次但不重新写入旧结果');
+    assert.equal(unchanged[0].status,'failed');
+    assert.equal(unchanged[0].source_document_id,before.source_document_id);
+    assert.equal(unchanged[0].owner_id,before.owner_id);
+    assert.equal(unchanged[0].contact_id,before.contact_id);
+    assert.equal(unchanged[0].message_count,before.message_count);
+    assert.deepEqual(unchanged.slice(2).map(row=>[row.step_name,row.step_status]),
+      [['extract_memory','failed'],['index','pending'],['verify','pending']]);
 
     await f.storage.client.query(`UPDATE background_task SET status='failed',
       last_error_code='model_call_outcome_unknown',finished_at=now() WHERE id=$1`,[taskId]);
@@ -256,7 +243,7 @@ test('显式恢复只重排原失败任务并保留成功步骤、来源和未�
       last_error_code='model_call_outcome_unknown' WHERE task_id=$1 AND step_name='extract_memory'`,[taskId]);
     await assert.rejects(f.manager.recover(f.owner,{
       contactId:f.contact,taskId,action:'resume',
-    }),{code:'task_recovery_unknown'});
+    }),{code:'task_recovery_requires_domain_action'});
     assert.equal((await f.storage.client.query('SELECT status,last_error_code FROM background_task WHERE id=$1',[taskId])).rows[0].status,'failed',
       '未知物理调用不能被统一恢复入口清零');
     assert.deepEqual((await f.manager.list(f.owner,{contactId:f.contact})).tasks
@@ -269,13 +256,10 @@ test('显式恢复只重排原失败任务并保留成功步骤、来源和未�
       WHERE task_id=$1 AND status<>'succeeded'`,[taskId]);
     await assert.rejects(f.manager.recover(f.owner,{
       contactId:f.contact,taskId,action:'resume',
-    }),{code:'task_recovery_conflict'});
-    assert.deepEqual(await f.manager.recover(f.owner,{
-      contactId:f.contact,taskId,action:'restart',
-    }),{task_id:taskId,status:'queued'});
+    }),{code:'task_recovery_requires_domain_action'});
     await assert.rejects(f.manager.recover(f.owner,{
-      contactId:f.contact,taskId,action:'resume',
-    }),{code:'task_recovery_conflict'},'排队任务不能伪装成失败恢复');
+      contactId:f.contact,taskId,action:'restart',
+    }),{code:'task_recovery_requires_domain_action'});
   }finally{await pool.end();}
 });
 
@@ -328,7 +312,7 @@ test('任务HTTP入口严格限定owner范围、固定动作与闭集字段',asy
   assert.equal(calls.length,0);
 });
 
-test('停止Skill、删除与L2/L3只撤销执行，不重置授权或扩大来源',async t=>{
+test('停止Skill与删除只撤销执行，L2/L3只由统一记忆控制处理',async t=>{
   const f=await fixture(t);
   const skill=await task(f.storage.client,{owner:f.owner,contact:f.contact,type:'skill_learning',
     status:'queued',step:'propose_skill',messages:3},[
@@ -361,11 +345,19 @@ test('停止Skill、删除与L2/L3只撤销执行，不重置授权或扩大来�
   assert.equal((await f.manager.stop(f.owner,{contactId:f.contact,taskId:deletion})).status,'stopped');
   assert.deepEqual((await f.storage.client.query('SELECT status FROM source_document WHERE id=$1',
     [f.deleteSource])).rows,[{status:'delete_failed'}]);
-  assert.equal((await f.manager.stop(f.owner,{taskId:layered})).status,'stopped');
+  const layeredBefore=(await f.storage.client.query(`SELECT job.state,job.last_action,
+    state.status state_status,state.enabled,t.status task_status
+    FROM layered_memory_job job JOIN layered_memory_state state
+      ON state.owner_id=job.owner_id AND state.contact_id IS NOT DISTINCT FROM job.contact_id
+    JOIN background_task t ON t.id=job.task_id WHERE job.task_id=$1`,[layered])).rows;
+  await assert.rejects(
+    f.manager.stop(f.owner,{taskId:layered}),
+    {code:'task_stop_requires_memory_control'},
+  );
   assert.deepEqual((await f.storage.client.query(`SELECT job.state,job.last_action,
     state.status state_status,state.enabled,t.status task_status
     FROM layered_memory_job job JOIN layered_memory_state state
       ON state.owner_id=job.owner_id AND state.contact_id IS NOT DISTINCT FROM job.contact_id
     JOIN background_task t ON t.id=job.task_id WHERE job.task_id=$1`,[layered])).rows,
-  [{state:'paused',last_action:'pause',state_status:'paused',enabled:true,task_status:'cancelled'}]);
+  layeredBefore,'拒绝通用停止不得改写领域暂停或任务状态');
 });

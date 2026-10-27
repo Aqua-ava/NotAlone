@@ -1,4 +1,4 @@
-import type { MemoryProcessing, MemoryProcessingControlAction, MemoryProcessingControlRequest, MemoryProcessingControlReceipt, MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingTask, MemoryProcessingHistoryRequest, MemoryProcessingHistory, MemoryProcessingCurrent, MemoryProcessingUnit } from '../../shared/memory-processing';
+import type { MemoryProcessing, MemoryProcessingControlAction, MemoryProcessingControlRequest, MemoryProcessingControlReceipt, MemoryProcessingRequest, MemoryProcessingTask, MemoryProcessingHistoryRequest, MemoryProcessingHistory, MemoryProcessingCurrent, MemoryProcessingUnit } from '../../shared/memory-processing';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { BackendRequestFailure } from '../backend/json-client';
@@ -21,14 +21,6 @@ export function processingControlArguments(args: unknown[]): MemoryProcessingCon
   const { actionVersion, operationId, ...request } = fields as Record<string, unknown>;
   if (!Number.isSafeInteger(actionVersion) || (actionVersion as number) < 0 || !isUuid(operationId)) throw new Error('记忆处理操作不可用。');
   return { ...processingArguments([request]), actionVersion: actionVersion as number, operationId: operationId.toLowerCase() };
-}
-
-export function processingResumeArguments(args: unknown[]): MemoryProcessingResumeRequest {
-  const fields = args[0] as Record<string, unknown> | undefined;
-  if (args.length !== 1 || !fields || typeof fields !== 'object' || Array.isArray(fields)
-    || !isUuid(fields.taskId) || !['resume', 'restart'].includes(fields.action as string)) throw new Error('记忆任务操作不可用。');
-  const { taskId, action, ...scope } = fields;
-  return { ...processingArguments([scope]), taskId: (taskId as string).toLowerCase(), action: action as 'resume' | 'restart' };
 }
 
 const invalid = () => new Error('记忆处理响应不可用。');
@@ -157,9 +149,6 @@ export class MemoryProcessingController {
     })();
     this.controls.set(key, { controller, action, request, result });
     return result;
-  }
-  async resume(_request: MemoryProcessingResumeRequest): Promise<void> {
-    throw new Error('统一记忆处理操作尚不可用，请先核对处理详情。');
   }
   private async get(request: MemoryProcessingRequest, kind: 'state' | 'history', query = ''): Promise<unknown> {
     const generation = this.backend.getConnectionGeneration();

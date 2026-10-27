@@ -19,7 +19,7 @@ async function waitFor(check,timeoutMs=10000,intervalMs=20){
  throw new Error('synthetic_resume_timeout');
 }
 
-test('真实host-plugin将导入与观察resume交给同一TS Worker且不创建任务',{timeout:60000},async t=>{
+test('真实host-plugin退役逐任务记忆恢复与宽范围进度入口且不执行存量任务',{timeout:60000},async t=>{
  const fixture=await createStorageFixture(),owner=randomUUID(),contact=randomUUID();
  const importSource=randomUUID(),binding=randomUUID(),observation=randomUUID();
  const importTask=randomUUID(),observationTask=randomUUID();
@@ -139,30 +139,25 @@ test('真实host-plugin将导入与观察resume交给同一TS Worker且不创建
  const workerId=runtime.data.taskWorker.worker_id;
  assert.match(workerId,/^[a-f0-9-]{36}$/);
 
- assert.deepEqual(await request(`/api/contacts/${contact}/memory-processing/resume`,{
+ assert.equal((await request(`/api/contacts/${contact}/memory-processing/resume`,{
   task_id:importTask,action:'resume',
- }),{status:200,data:{task_id:importTask,status:'queued'}});
- await waitFor(async()=>(await taskStatus(importTask)).data.status==='succeeded');
- const imported=await taskStatus(importTask);
- assert.equal(imported.data.task_id,importTask);
- assert.equal(imported.data.task_type,'import');
-
- assert.deepEqual(await request('/api/owner/memory-processing/resume',{
+ })).status,404);
+ assert.equal((await request('/api/owner/memory-processing/resume',{
   task_id:observationTask,action:'resume',
- }),{status:200,data:{task_id:observationTask,status:'queued'}});
- await waitFor(async()=>(await taskStatus(observationTask)).data.status==='succeeded');
- assert.equal((await taskStatus(observationTask)).data.task_type,'observation');
- assert.deepEqual((await taskStatus(observationTask)).data.steps.map(step=>step.name),
-  ['extract_memory','index','verify']);
-
- const progress=await request('/api/owner/memory-processing');
- assert.equal(progress.status,200);
- assert.equal(progress.data.scope,'owner');
- assert.deepEqual(new Set(progress.data.tasks.map(task=>task.task_id)),new Set([importTask,observationTask]));
+ })).status,404);
+ assert.equal((await request(`/api/contacts/${contact}/memory-processing`)).status,404);
+ assert.equal((await request('/api/owner/memory-processing')).status,404);
+ assert.equal((await taskStatus(importTask)).data.status,'failed');
+ assert.equal((await taskStatus(observationTask)).data.status,'failed');
+ const unified=await request(`/api/contacts/${contact}/memory-processing/state`);
+ assert.equal(unified.status,200);
+ assert.equal(unified.data.current.status,'blocked');
+ assert.deepEqual(unified.data.current.actions,[]);
+ assert.match(unified.data.current.reason,/旧处理|归属|核对/);
  assert.equal((await fixture.client.query('SELECT count(*)::int AS count FROM background_task')).rows[0].count,2,
-  '恢复只能复用原任务，不得创建新任务');
+  '入口退役和存量接入不得创建重复执行任务');
  assert.equal((await request(`/api/tasks/status?contact_id=${randomUUID()}&task_id=${importTask}`)).status,404,
-  '恢复不得扩大联系人范围');
+  '读取不得扩大联系人范围');
 
  const finalRuntime=await request('/api/runtime/status');
  assert.equal(finalRuntime.data.taskWorker.worker_id,workerId,'领取者必须仍是启动时的唯一TS Worker');

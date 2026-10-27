@@ -40,14 +40,14 @@ for (const scope of ['contact', 'owner']) test(`${scope} 进度变化静默刷�
 });
 
 
-test('本人状态无须联系人，拒绝联系人任务伪装为本人历史，且未授权逐任务恢复', async () => {
+test('本人状态无须联系人，拒绝联系人任务伪装为本人历史，且不暴露逐任务恢复', async () => {
   let data = lifecyclePayload({ scope: 'owner', contact_id: null });
   const requests = [];
   const f = await fixture(async request => { requests.push(request); return { generation: 1, data }; }, { noContact: true });
   try {
     assert.equal((await f.bridge.readProcessing({ scope: 'owner' })).scope, 'owner');
     assert.equal(requests[0].path, '/api/owner/memory-processing/state');
-    await assert.rejects(f.bridge.resumeProcessing({ scope: 'owner', taskId: ids.work, action: 'resume' }));
+    assert.equal('resumeProcessing' in f.bridge, false);
     data = { ...data, history: { entries: [historyEntry()], next_cursor: null } };
     await assert.rejects(f.bridge.readProcessing({ scope: 'owner' }));
     assert.ok(requests.every(request => request.method === 'GET'));

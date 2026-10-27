@@ -90,10 +90,11 @@ test('旧提取失败不能被画像成功掩盖，旧停止没有可信控制�
  });
  const failed=(await host.request(`/api/contacts/${contact}/memory-processing/state`)).data;
  assert.equal(failed.current.status,'blocked');assert.match(failed.current.reason,/旧|归属|核对/);
- assert.equal(failed.current.round_id,null);assert.equal(failed.current.total_count,null);
+ assert.notEqual(failed.current.round_id,null);assert.equal(failed.current.total_count,null);
+ assert.deepEqual(failed.current.actions,[]);
  assert.equal(failed.history.entries.length,2);assert.ok(failed.history.entries.every(task=>task.attribution==='legacy'));
  const cancelled=(await host.request(`/api/contacts/${stopped}/memory-processing/state`)).data;
- assert.equal(cancelled.current.status,'blocked');assert.match(cancelled.current.reason,/归属|旧/);
+ assert.equal(cancelled.current.status,'waiting');assert.match(cancelled.current.reason,/旧|历史/);
  assert.deepEqual(cancelled.current.actions,['pause']);
 });
 
@@ -155,7 +156,7 @@ test('受阻主卡按安全错误类别给中文原因与下一步，未知技�
  }
 });
 
-test('未归属旧提取失败不被活跃主题盖过，撤销任务归属只留历史不影响当前完成',{timeout:60000},async t=>{
+test('无法唯一核验的旧任务不被活跃主题盖过，撤销任务归属只留历史不影响当前完成',{timeout:60000},async t=>{
  const legacy=randomUUID(),contact=randomUUID(),scope=randomUUID(),round=randomUUID(),success=randomUUID(),retired=randomUUID();
  const host=await lifecycleHost(t,async(f,owner)=>{
   await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$3,'合成旧阶段'),($2,$3,'合成有效归属')",[legacy,contact,owner]);
@@ -170,7 +171,8 @@ test('未归属旧提取失败不被活跃主题盖过，撤销任务归属只�
  });
  const old=(await host.request(`/api/contacts/${legacy}/memory-processing/state`)).data;
  assert.equal(old.current.status,'blocked','旧提取失败优先于活跃主题；缺少可信轮次不宣称整体进行中');
- assert.match(old.current.reason,/归属/);assert.match(old.current.reason,/核验/);
+ assert.match(old.current.reason,/归属/);assert.match(old.current.reason,/核对/);
+ assert.deepEqual(old.current.actions,[]);
  const current=(await host.request(`/api/contacts/${contact}/memory-processing/state`)).data;
  assert.equal(current.current.status,'completed','撤销归属的失败任务不得参与当前判断');
  assert.equal(current.current.reason_code,null);assert.equal(current.history.entries.length,2);

@@ -38,7 +38,7 @@ test('持续暂停拦截旧恢复与真实Worker领取，其他范围和独立�
   await f.client.query("INSERT INTO background_task_step(task_id,step_name,step_order,status) VALUES($1,'extract_memory',1,'succeeded'),($1,'index',2,'pending'),($1,'verify',3,'pending')",[task]);
  });
  const legacy=await host.request(`/api/contacts/${contact}/memory-processing/resume`,{method:'POST',body:{task_id:task,action:'resume'}});
- assert.equal(legacy.status,409);
+ assert.equal(legacy.status,404);
  assert.equal((await host.request(`/api/contacts/${contact}/memory-processing/state`)).data.current.status,'paused');
  assert.equal((await host.request(`/api/contacts/${other}/memory-processing/state`)).data.current.status,'waiting');
  const before=(await host.request(`/api/contacts/${contact}/layered-memory`)).data.layered_memory.enabled;

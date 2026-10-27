@@ -7,6 +7,7 @@ import {
   type MemoryProcessingUnconfirmed,
 } from './control.ts';
 import { resumeInterruptedCurrentRound } from './round-recovery.ts';
+import { legacyAdoptionAwaitingContinue } from './legacy-adoption.ts';
 
 export interface MemoryStartupTask {
   contact_id: string | null;
@@ -71,6 +72,14 @@ export async function recoverMemoryProcessingOnStartup(
         )).rows[0];
         if (!current || current.round_status === 'completed'
           || current.round_generation !== current.control_generation) {
+          await client.query('COMMIT');
+          continue;
+        }
+        if (await legacyAdoptionAwaitingContinue(
+          client,
+          scope,
+          current.active_round_id,
+        )) {
           await client.query('COMMIT');
           continue;
         }

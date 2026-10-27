@@ -30,19 +30,17 @@ function fixture(t) {
   let selected = contactId;
   let scopeRevision = 4;
   const tasks = [
-    task('20000000-0000-4000-8000-000000000001', 'import', 'running', [{ kind: 'stop' }]),
-    task('20000000-0000-4000-8000-000000000002', 'import', 'failed', [{ kind: 'recover', target: 'tasks' }]),
+    task('20000000-0000-4000-8000-000000000001', 'import', 'running', []),
+    task('20000000-0000-4000-8000-000000000002', 'import', 'failed', []),
     task('20000000-0000-4000-8000-000000000003', 'skill_learning', 'failed',
       [{ kind: 'recover', target: 'skill_learning' }]),
-    task('20000000-0000-4000-8000-000000000004', 'layered_memory', 'failed',
-      [{ kind: 'recover', target: 'layered_memory', work_revision: 7, settings_generation: 3 }]),
+    task('20000000-0000-4000-8000-000000000004', 'layered_memory', 'failed', []),
     task('20000000-0000-4000-8000-000000000005', 'delete', 'failed', []),
   ];
   const ownerTasks = [
-    { ...task('20000000-0000-4000-8000-000000000006', 'layered_memory', 'running',
-      [{ kind: 'stop' }]), contact_id: null, scope_kind: 'owner' },
-    { ...task('20000000-0000-4000-8000-000000000007', 'layered_memory', 'failed',
-      [{ kind: 'recover', target: 'layered_memory', work_revision: 9, settings_generation: 5 }]),
+    { ...task('20000000-0000-4000-8000-000000000006', 'layered_memory', 'running', []),
+      contact_id: null, scope_kind: 'owner' },
+    { ...task('20000000-0000-4000-8000-000000000007', 'layered_memory', 'failed', []),
     contact_id: null, scope_kind: 'owner' },
   ];
   const backend = {
@@ -92,39 +90,28 @@ test('后台任务控制器只经统一入口读取并严格验证全部动作',
   assert.equal(state.tasks.length, 5);
   assert.deepEqual(state.tasks.map(item => item.status),
     ['running', 'failed', 'failed', 'failed', 'failed']);
-  assert.deepEqual(state.tasks[3].actions, [{ kind: 'recover', target: 'layered_memory',
-    workRevision: 7, settingsGeneration: 3 }]);
+  assert.deepEqual(state.tasks[2].actions, [{ kind: 'recover', target: 'skill_learning' }]);
+  assert.deepEqual(state.tasks[3].actions, []);
   f.controller.cancelRead();
 });
 
-test('停止和恢复按任务类型调用固定入口，结果以重读持久状态为准', async t => {
+test('只执行后端公开动作，记忆任务不能经通用任务入口停止或恢复', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(t);
   const read = () => f.controller.read({ scope: 'contact', contactId, scopeRevision: 4 });
   await read();
-  await f.controller.stop({ scope: 'contact', contactId, scopeRevision: 4,
-    taskId: '20000000-0000-4000-8000-000000000001' });
-  assert.deepEqual(f.calls.find(call => call.path === '/api/tasks/stop'), {
-    method: 'POST', path: '/api/tasks/stop',
-    body: { contact_id: contactId, task_id: '20000000-0000-4000-8000-000000000001' },
-    signal: f.calls.find(call => call.path === '/api/tasks/stop').signal,
-    maxResponseBytes: 262144,
-  });
-  assert.ok(f.calls.filter(call => call.path.startsWith('/api/tasks?')).length >= 2);
-
-  await f.controller.recover({ scope: 'contact', contactId, scopeRevision: 4,
-    taskId: '20000000-0000-4000-8000-000000000002' });
-  assert.deepEqual(f.calls.find(call => call.path === '/api/tasks/recover').body, {
-    contact_id: contactId, task_id: '20000000-0000-4000-8000-000000000002', action: 'resume',
-  });
+  await assert.rejects(f.controller.stop({ scope: 'contact', contactId, scopeRevision: 4,
+    taskId: '20000000-0000-4000-8000-000000000001' }), /不允许/);
+  await assert.rejects(f.controller.recover({ scope: 'contact', contactId, scopeRevision: 4,
+    taskId: '20000000-0000-4000-8000-000000000002' }), /不允许/);
+  assert.equal(f.calls.some(call => call.path === '/api/tasks/stop'), false);
+  assert.equal(f.calls.some(call => call.path === '/api/tasks/recover'), false);
   await f.controller.recover({ scope: 'contact', contactId, scopeRevision: 4,
     taskId: '20000000-0000-4000-8000-000000000003' });
   assert.equal(f.calls.find(call => call.path === `/api/contacts/${contactId}/skill-learning`).body.resume, true);
-  await f.controller.recover({ scope: 'contact', contactId, scopeRevision: 4,
-    taskId: '20000000-0000-4000-8000-000000000004' });
-  assert.deepEqual(f.calls.find(call => call.path === `/api/contacts/${contactId}/layered-memory/continue`).body, {
-    work_revision: 7, settings_generation: 3,
-  });
+  await assert.rejects(f.controller.recover({ scope: 'contact', contactId, scopeRevision: 4,
+    taskId: '20000000-0000-4000-8000-000000000004' }), /不允许/);
+  assert.equal(f.calls.some(call => call.path === `/api/contacts/${contactId}/layered-memory/continue`), false);
   await assert.rejects(f.controller.recover({ scope: 'contact', contactId, scopeRevision: 4,
     taskId: '20000000-0000-4000-8000-000000000005' }), /不允许/);
   f.controller.cancelRead();
@@ -157,13 +144,16 @@ test('本人任务使用独立owner范围，不混入当前联系人', async t =
     '20000000-0000-4000-8000-000000000007',
   ]);
   assert.equal(f.controller.getState().contactId, null);
-  await f.controller.stop({ ...selection, taskId: '20000000-0000-4000-8000-000000000006' });
-  assert.deepEqual(f.calls.find(call => call.path === '/api/tasks/stop').body, {
-    scope: 'owner', task_id: '20000000-0000-4000-8000-000000000006',
-  });
-  await f.controller.recover({ ...selection, taskId: '20000000-0000-4000-8000-000000000007' });
-  assert.deepEqual(f.calls.find(call => call.path === '/api/memories/owner/layered-memory/continue').body, {
-    work_revision: 9, settings_generation: 5,
-  });
+  await assert.rejects(
+    f.controller.stop({ ...selection, taskId: '20000000-0000-4000-8000-000000000006' }),
+    /不允许/,
+  );
+  await assert.rejects(
+    f.controller.recover({ ...selection, taskId: '20000000-0000-4000-8000-000000000007' }),
+    /不允许/,
+  );
+  assert.equal(f.calls.some(call => call.path === '/api/tasks/stop'
+    || call.path === '/api/tasks/recover'
+    || call.path.includes('/layered-memory/continue')), false);
   f.controller.cancelRead();
 });

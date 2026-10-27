@@ -11,8 +11,6 @@ export interface MemoryProcessingControlReceipt {
   controlGeneration: number;
   replayed: boolean;
 }
-export type MemoryProcessingAction = 'resume' | 'restart';
-export type MemoryProcessingResumeRequest = MemoryProcessingRequest & { taskId: string; action: MemoryProcessingAction };
 export type MemoryProcessingHistoryRequest = MemoryProcessingRequest & { cursor: string | null };
 export type MemoryProcessingStatus = 'waiting' | 'processing' | 'completed' | 'paused' | 'blocked';
 export type MemoryProcessingUnit = 'messages' | 'memories' | 'steps';

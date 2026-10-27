@@ -235,10 +235,14 @@ export class ExtractionTaskStore {
       )
       OR EXISTS(
         SELECT 1 FROM memory_processing_scope control
+        JOIN memory_processing_round round ON round.id=control.active_round_id
         JOIN memory_processing_round_task membership
           ON membership.round_id=control.active_round_id
         WHERE control.owner_id=t.owner_id
           AND control.contact_id IS NOT DISTINCT FROM t.contact_id
+          AND control.intent='run'
+          AND round.control_generation=control.control_generation
+          AND round.status IN ('waiting','processing')
           AND membership.task_id=t.id AND membership.active
       )
     )

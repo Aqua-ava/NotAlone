@@ -20,6 +20,8 @@ interface Scope extends pg.QueryResultRow {
  round_status:Status|null;round_generation:string|null;phase:Phase|null;
  round_target_unit:'messages'|'memories'|'steps'|null;round_target_count:string|null;
  round_frozen_count:number|null;round_processed_count:number|null;
+ legacy_decision:'adopted'|'unresolved'|null;
+ legacy_resume_required:boolean|null;
 }
 export class MemoryProcessingQuery {
  private readonly pool:pg.Pool;private readonly ownerId:string;private readonly unconfirmed?:MemoryProcessingUnconfirmed;
@@ -42,8 +44,11 @@ export class MemoryProcessingQuery {
    if(match[2]==='history')return {status:200,body:{scope:contactId===null?'owner':'contact',contact_id:contactId,...await readProcessingHistory(c,this.ownerId,contactId,cursor)}};
    let scope=(await c.query<Scope>(`SELECT s.*,r.status AS round_status,r.control_generation AS round_generation,r.phase,
     r.target_unit AS round_target_unit,r.target_count AS round_target_count,
-    NULL::int AS round_frozen_count,NULL::int AS round_processed_count
-    FROM memory_processing_scope s LEFT JOIN memory_processing_round r ON r.id=s.active_round_id AND r.scope_id=s.id
+    NULL::int AS round_frozen_count,NULL::int AS round_processed_count,
+    adoption.decision AS legacy_decision,adoption.resume_required AS legacy_resume_required
+    FROM memory_processing_scope s
+    LEFT JOIN memory_processing_round r ON r.id=s.active_round_id AND r.scope_id=s.id
+    LEFT JOIN memory_processing_legacy_adoption adoption ON adoption.scope_id=s.id
     WHERE s.owner_id=$1 AND s.contact_id IS NOT DISTINCT FROM $2::uuid`,[this.ownerId,contactId])).rows[0];
    if(scope?.active_round_id){
     const progress=(await c.query<{frozen_count:number;processed_count:number}>(`SELECT
@@ -111,6 +116,12 @@ export class MemoryProcessingQuery {
     AND EXISTS(SELECT 1 FROM message_source_ref ref WHERE ref.message_id=receipt.message_id AND ref.observation_id=observation.id)`,[this.ownerId,contactId])).rows[0].n);
    const pendingTarget=await pendingProcessingTargetCount(c,{ownerId:this.ownerId,contactId});
    const pending=pendingObservation+pendingTarget;
+   const legacyIncomplete=scope?.active_round_id?false:(await c.query(`SELECT 1
+    FROM background_task task WHERE task.owner_id=$1
+      AND task.contact_id IS NOT DISTINCT FROM $2::uuid
+      AND task.task_type IN ('import','observation','layered_memory')
+      AND task.status IN ('queued','running','verifying','failed','paused')
+    LIMIT 1`,[this.ownerId,contactId])).rowCount===1;
    const pendingWork=Boolean(scope?.active_round_id&&(await c.query(`SELECT 1
     FROM background_task task
     JOIN memory_processing_scope control
@@ -129,10 +140,21 @@ export class MemoryProcessingQuery {
     (await c.query("SELECT 1 FROM confirmed_memory WHERE owner_id=$1 AND contact_id=$2 AND status='active' LIMIT 1",[this.ownerId,contactId])).rowCount;
    const failed=tasks.find(task=>['failed','cancelled','paused'].includes(task.status));
    const live=tasks.find(task=>task.live&&['running','verifying'].includes(task.status));
+   const legacyUnresolved=scope?.legacy_decision==='unresolved';
+   const legacyAdoptedPending=scope?.legacy_decision==='adopted'&&scope.legacy_resume_required===true;
    let status:Status='waiting',reason:string|null=null,code:string|null=failed?.last_error_code??null;
    if(scope?.intent==='pause'){status='paused';reason=failed?`你已暂停记忆处理；${processingReason(code)}`:'你已暂停记忆处理，已有结果保留。';}
-   else if(!scope?.active_round_id&&tasks.length){
+   else if(legacyUnresolved){
+    status='blocked';code='legacy_attribution_unverified';
+    reason='旧处理记录存在多个候选或缺少可信归属，系统保留了历史但不会猜测执行。请查看详情核对。';
+   }else if(!scope?.active_round_id&&legacyIncomplete){
     status='blocked';reason=`旧处理记录尚未建立可验证的轮次归属，请查看详情核对；不会自动继续。${failed?processingReason(code):''}`;code??='legacy_attribution_unverified';
+   }else if(!scope?.active_round_id&&tasks.length){
+    reason='旧处理记录只保留在历史中，暂无待处理资料。';
+   }else if(legacyAdoptedPending){
+    status='blocked';
+    code=failed?.last_error_code??'legacy_adoption_requires_confirmation';
+    reason=`已找到可核实的旧处理记录；请核对后继续，系统不会自动重放。${failed?processingReason(code):''}`;
    }else if(failed||scope?.round_status==='blocked'||scope?.round_generation!==undefined&&scope.round_generation!==null&&scope.round_generation!==scope.control_generation){
     status='blocked';reason=processingReason(code);code??='processing_requires_repair';
    }else if(live)status='processing';
@@ -158,8 +180,13 @@ export class MemoryProcessingQuery {
    try{history=await readProcessingHistory(c,this.ownerId,contactId,null);await c.query('RELEASE SAVEPOINT memory_processing_history_read');}
    catch{await c.query('ROLLBACK TO SAVEPOINT memory_processing_history_read');history={entries:[],next_cursor:null,error:'处理历史暂不可用，请刷新重试。'};}
    const blocker=scope&&(scope.intent==='pause'||status==='blocked')?await memoryContinueBlocker(c,{ownerId:this.ownerId,contactId},scope.active_round_id,this.unconfirmed):null;
-   const actions=scope?.intent==='pause'?(blocker===null?['continue']:[]):
-    status==='blocked'&&blocker===null&&scope?.active_round_id&&await memoryHasInterruptedWork(c,{ownerId:this.ownerId,contactId},scope.active_round_id)?['pause','continue']:['pause'];
+   const interrupted=scope?.active_round_id
+    ?await memoryHasInterruptedWork(c,{ownerId:this.ownerId,contactId},scope.active_round_id):false;
+   const continueSafe=blocker===null&&Boolean(scope)
+    &&(scope.intent==='pause'||legacyAdoptedPending||interrupted);
+   const actions=legacyUnresolved?[]:
+    scope?.intent==='pause'?(continueSafe?['continue']:[]):
+    status==='blocked'&&continueSafe?['pause','continue']:['pause'];
    if(scope?.intent==='pause'&&blocker&&!code){code=blocker;reason=`你已暂停记忆处理；${processingReason(code)}`;}
    return {status:200,body:{action_version:safeCount(scope?.control_generation??0),scope:contactId===null?'owner':'contact',contact_id:contactId,control_generation:safeCount(scope?.control_generation??0),
     current:{status,round_id:scope?.active_round_id??null,phase,
