@@ -1,5 +1,8 @@
 import {memoryScopePaused} from '../../processing/control.ts';
-import {acceptTaskIntoProcessingRound} from '../../processing/round.ts';
+import {
+ acceptTaskIntoProcessingRound,
+ reopenMemoryProcessingRoundForExplicitTaskContinue,
+} from '../../processing/round.ts';
 /** 原公开 L2/L3 管理合同；只调度原任务，不持有模型或第二套状态库。 */
 import type {Client} from 'pg';
 import {L2ScenarioService,L2ScenarioConflict} from '../../scenarios/service.ts';
@@ -228,6 +231,10 @@ export function createLayeredMemoryManagement(options:LayeredMemoryManagementOpt
           let current=await managementState(client,scope);
           if(action==='refresh'||action==='enable')current=await refreshManagementGeneration(client,scope,current,inputs);
           const enqueued=await enqueueManagementJob(client,scope,current,inputs,budget,contract,action,body.work_revision);
+          if(action==='continue')await reopenMemoryProcessingRoundForExplicitTaskContinue(
+            client,
+            {ownerId:scope.owner_id,contactId:scope.contact_id,taskId:enqueued.taskId},
+          );
           await acceptTaskIntoProcessingRound(client,
             {ownerId:scope.owner_id,contactId:scope.contact_id},enqueued.taskId,
             {unit:'memories',targetCount:inputs.manifest.length,reuseActiveRound:true});

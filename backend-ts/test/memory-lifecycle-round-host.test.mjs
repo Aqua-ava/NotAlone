@@ -45,6 +45,31 @@ function roundProvider(state,{profileSupported=true}={}){
  });
 }
 
+async function seedObservationInput(fixture,owner,contactId,{localId,text}){
+ const binding=randomUUID(),observation=randomUUID(),message=randomUUID();
+ await fixture.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成观察') ON CONFLICT DO NOTHING",
+  [contactId,owner]);
+ await fixture.client.query(`INSERT INTO conversation_binding
+  (id,owner_id,contact_id,channel,account_scope,conversation_locator,status)
+  VALUES($1,$2,$3,'wechat','synthetic-observation',$4,'active')`,
+ [binding,owner,contactId,`synthetic-${observation}`]);
+ await fixture.client.query(`INSERT INTO local_wechat_observation
+  (id,owner_id,contact_id,binding_id,mode,cli_version,conversation_locator,
+   last_local_id,last_cursor,record_count,event_count)
+  VALUES($1,$2,$3,$4,'live','synthetic',$5,$6,$7,1,1)`,
+ [observation,owner,contactId,binding,`synthetic-${observation}`,localId,String(localId)]);
+ await fixture.client.query(`INSERT INTO message
+  (id,owner_id,contact_id,speaker,message_type,text_content,occurred_at)
+  VALUES($1,$2,$3,'contact','text',$4,now())`,
+ [message,owner,contactId,text]);
+ await fixture.client.query(`INSERT INTO message_source_ref
+  (message_id,owner_id,contact_id,source_kind,observation_id,source_locator,raw_payload)
+  VALUES($1,$2,$3,'local_wechat_observation',$4,$5,$6)`,
+ [message,owner,contactId,observation,`synthetic:observation:${localId}`,
+  {synthetic:true,local_id:localId}]);
+ return {binding,observation,message};
+}
+
 test('正常导入自动接纳一个可验证首轮，而不是落入旧任务归属',{timeout:60000},async t=>{
  let seeded;
  const provider=createServer(async(req,res)=>{
@@ -109,11 +134,12 @@ test('正式Worker零候选仍结束整轮，不伪造主题画像版本或额�
 });
 
 test('本轮目标在首次领取时冻结，运行中形成的新任务进入后续等待集合',{timeout:60000},async t=>{
- let seed,held,entered;
+ let seed,entered;
+ const held=[];
  const started=new Promise(resolve=>{entered=resolve;});
  const provider=createServer(async(req,res)=>{
   let raw='';for await(const chunk of req)raw+=chunk;
-  const input=JSON.parse(raw);held={res,input};entered();
+  const input=JSON.parse(raw);held.push({res,input});if(held.length===1)entered();
  });
  provider.listen(0,'127.0.0.1');await once(provider,'listening');
  t.after(async()=>{provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));});
@@ -143,15 +169,16 @@ test('本轮目标在首次领取时冻结，运行中形成的新任务进入�
    {ownerId:host.owner,contactId:seed.contactId},laterSource,1,
   );
  }finally{await pool.end();}
- sendSyntheticTool(held.res,held.input.tools[0].name,{scenes:[]});
+ sendSyntheticTool(held[0].res,held[0].input.tools[0].name,{scenes:[]});
  const root=`/api/contacts/${seed.contactId}/memory-processing`;
  let lastState;
  try{
   await untilLifecycle(async()=>{
    lastState=(await host.request(`${root}/state`)).data;
    return (await host.client.query(
-    'SELECT status FROM memory_processing_round WHERE id=$1',[seed.round],
-   )).rows[0].status==='completed';
+    'SELECT status FROM memory_processing_round WHERE scope_id=$1 AND round_number=2',
+    [seed.scope],
+   )).rows[0]?.status==='processing';
   },15000);
  }catch(error){
   const tasks=(await host.client.query(`SELECT t.id,t.task_type,t.status,t.last_error_code,
@@ -169,21 +196,132 @@ test('本轮目标在首次领取时冻结，运行中形成的新任务进入�
    FROM memory_processing_round round WHERE round.id=$1`,[seed.round])).rows[0];
   assert.fail(JSON.stringify({state:lastState,tasks,roundFacts,host:host.output().slice(-5000),error:String(error)}));
  }
- const state=(await host.request(`${root}/state`)).data.current;
- assert.equal(state.round_id,seed.round);
- assert.equal(state.status,'waiting');
- assert.equal(state.processed_count,1);assert.equal(state.total_count,1);
- assert.equal(state.pending_count,1);
+ const rounds=(await host.client.query(`SELECT id,round_number,status,target_count
+  FROM memory_processing_round WHERE scope_id=$1 ORDER BY round_number`,[seed.scope])).rows;
+ assert.equal(rounds.length,2);
+ assert.equal(rounds[0].status,'completed');
+ assert.equal(rounds[1].status,'processing');
+ assert.notEqual(rounds[1].id,seed.round);
+ const first=(await host.request(`${root}/state`)).data.current;
+ assert.equal(first.round_id,rounds[1].id);
+ assert.equal(first.status,'processing');
+ assert.equal(first.processed_count,0);assert.equal(first.total_count,1);
+ assert.equal(first.pending_count,0);
  assert.equal((await host.client.query(`SELECT count(*)::int AS n
   FROM memory_processing_round_target snapshot
   WHERE snapshot.round_id=$1`,[seed.round])).rows[0].n,1);
  assert.equal((await host.client.query(`SELECT count(*)::int AS n
-  FROM memory_processing_target WHERE message_id=$1`,[later])).rows[0].n,1);
+  FROM memory_processing_round_target snapshot
+  WHERE snapshot.round_id=$1 AND snapshot.message_id=$2`,[rounds[1].id,later])).rows[0].n,1);
  assert.equal((await host.client.query(`SELECT count(*)::int AS n
   FROM memory_processing_round_task WHERE round_id=$1 AND task_id=$2`,[seed.round,laterTask])).rows[0].n,0);
  assert.equal((await host.client.query(
   'SELECT status FROM background_task WHERE id=$1',[laterTask],
- )).rows[0].status,'queued');
+ )).rows[0].status,'running');
+ await untilLifecycle(()=>held.length===2,5000);
+ assert.equal(held.length,2);
+ sendSyntheticTool(held[1].res,held[1].input.tools[0].name,{scenes:[]});
+ await untilLifecycle(async()=>(await host.request(`${root}/state`)).data.current.status==='completed',15000);
+ const completed=(await host.request(`${root}/state`)).data.current;
+ assert.equal(completed.round_id,rounds[1].id);
+ assert.equal(completed.processed_count,1);assert.equal(completed.total_count,1);
+ assert.equal(completed.pending_count,0);
+});
+
+test('真实Worker持续接续后续轮次，受阻联系人保留排队而另一联系人完成',{timeout:90000},async t=>{
+ const firstText='自动接续第一轮合成资料';
+ let heldFirst=null,firstStartedResolve;
+ const firstStarted=new Promise(resolve=>{firstStartedResolve=resolve;});
+ const provider=createServer(async(req,res)=>{
+  let raw='';for await(const chunk of req)raw+=chunk;
+  const input=JSON.parse(raw);
+  if(raw.includes(firstText)&&heldFirst===null){
+   heldFirst={res,input};firstStartedResolve();return;
+  }
+  sendSyntheticTool(res,input.tools[0].name,{scenes:[]});
+ });
+ provider.listen(0,'127.0.0.1');await once(provider,'listening');
+ t.after(async()=>{provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));});
+ let blocked,other;
+ const host=await lifecycleHost(t,async(f,owner)=>{
+  blocked=await seedRoundInput(f,owner,{texts:['受阻联系人原有合成资料。']});
+  other=await seedRoundInput(f,owner,{texts:['另一联系人合成资料。']});
+  await f.client.query(`UPDATE background_task_step SET status='failed',attempt_count=3,
+    last_error_code='temporary_model_failure'
+   WHERE task_id=$1`,[blocked.task]);
+  await f.client.query(`UPDATE background_task SET status='failed',retry_count=3,
+    last_error_code='temporary_model_failure',finished_at=now() WHERE id=$1`,[blocked.task]);
+  await f.client.query("UPDATE memory_processing_round SET status='blocked' WHERE id=$1",[blocked.round]);
+ },{providerUrl:`http://127.0.0.1:${provider.address().port}`});
+ const blockedRoot=`/api/contacts/${blocked.contactId}/memory-processing`;
+ const otherRoot=`/api/contacts/${other.contactId}/memory-processing`;
+ await untilLifecycle(async()=>(await host.request(`${otherRoot}/state`)).data.current.status==='completed',20000);
+ assert.equal((await host.request(`${blockedRoot}/state`)).data.current.status,'blocked');
+ const blockedLater=await seedObservationInput(host,host.owner,blocked.contactId,{
+  localId:9,text:'受阻后保存的合成观察。',
+ });
+ const pool=new pg.Pool({host:'/tmp',database:host.client.database,max:2});
+ try{
+  const store=new ExtractionTaskStore(pool),scope={ownerId:host.owner,contactId:blocked.contactId};
+  await store.transaction(scope,client=>store.recordObservation(client,scope,blockedLater.observation,[blockedLater.message]));
+  await Promise.all(Array.from({length:4},()=>store.enqueueObservation(scope,[blockedLater.message])));
+ }finally{await pool.end();}
+ assert.equal((await host.request(`${blockedRoot}/state`)).data.current.status,'blocked');
+ assert.equal((await host.client.query(`SELECT task_id FROM memory_extraction_receipt WHERE message_id=$1`,
+  [blockedLater.message])).rows[0].task_id,null);
+ assert.equal((await host.client.query(`SELECT count(*)::int AS n FROM background_task
+  WHERE owner_id=$1 AND contact_id=$2 AND task_type='observation'`,
+ [host.owner,blocked.contactId])).rows[0].n,0);
+
+ await host.client.query('BEGIN');
+ let first;
+ try{
+  first=await seedRoundInput(host,host.owner,{texts:[firstText]});
+  await host.client.query('COMMIT');
+ }catch(error){
+  await host.client.query('ROLLBACK');
+  throw error;
+ }
+ await Promise.race([firstStarted,new Promise((_,reject)=>setTimeout(
+  ()=>reject(new Error('真实Worker未领取第一轮固定目标')),15000,
+ ))]);
+ const later=await seedObservationInput(host,host.owner,first.contactId,{
+  localId:10,text:'自动接续第二轮合成资料。',
+ });
+ const pool2=new pg.Pool({host:'/tmp',database:host.client.database,max:2});
+ try{
+  const store=new ExtractionTaskStore(pool2),scope={ownerId:host.owner,contactId:first.contactId};
+  await store.transaction(scope,client=>store.recordObservation(client,scope,later.observation,[later.message]));
+  await store.enqueueObservation(scope,[later.message]);
+ }finally{await pool2.end();}
+ sendSyntheticTool(heldFirst.res,heldFirst.input.tools[0].name,{scenes:[]});
+ const root=`/api/contacts/${first.contactId}/memory-processing`;
+ await untilLifecycle(async()=>{
+  const state=(await host.request(`${root}/state`)).data.current;
+  const rounds=(await host.client.query(`SELECT id,status FROM memory_processing_round
+   WHERE scope_id=$1 ORDER BY round_number`,[first.scope])).rows;
+  return rounds.length===2&&rounds.every(round=>round.status==='completed')
+   &&state.status==='completed';
+ },25000);
+ const rounds=(await host.client.query(`SELECT id,round_number,status,target_count
+  FROM memory_processing_round WHERE scope_id=$1 ORDER BY round_number`,[first.scope])).rows;
+ assert.equal(rounds.length,2);
+ assert.deepEqual(rounds.map(round=>round.status),['completed','completed']);
+ assert.deepEqual(rounds.map(round=>round.target_count),['1','1']);
+ const secondFrozen=(await host.client.query(`SELECT snapshot.message_id,member.task_id,
+   task.task_type,task.status
+  FROM memory_processing_round_target snapshot
+  JOIN memory_processing_round_task member
+    ON member.round_id=snapshot.round_id AND member.task_id=snapshot.task_id
+  JOIN background_task task ON task.id=member.task_id
+  WHERE snapshot.round_id=$1 AND member.active`,[rounds[1].id])).rows;
+ assert.deepEqual(secondFrozen.map(row=>({...row})),[{message_id:later.message,
+  task_id:secondFrozen[0].task_id,task_type:'observation',status:'succeeded'}]);
+ const final=(await host.request(`${root}/state`)).data.current;
+ assert.equal(final.round_id,rounds[1].id);
+ assert.equal(final.status,'completed');
+ assert.equal(final.processed_count,1);assert.equal(final.total_count,1);
+ assert.equal(final.pending_count,0);
 });
 
 test('逐条拒绝不合格候选时其余合法记忆继续保存并完成整轮',{timeout:60000},async t=>{

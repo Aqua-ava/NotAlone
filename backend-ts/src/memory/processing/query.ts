@@ -19,6 +19,7 @@ interface Scope extends pg.QueryResultRow {
  id:string;control_generation:string;intent:'run'|'pause';active_round_id:string|null;
  round_status:Status|null;round_generation:string|null;phase:Phase|null;
  round_target_unit:'messages'|'memories'|'steps'|null;round_target_count:string|null;
+ round_frozen_count:number|null;round_processed_count:number|null;
 }
 export class MemoryProcessingQuery {
  private readonly pool:pg.Pool;private readonly ownerId:string;private readonly unconfirmed?:MemoryProcessingUnconfirmed;
@@ -39,10 +40,26 @@ export class MemoryProcessingQuery {
    const exists=contactId===null?await c.query('SELECT 1 FROM owner WHERE id=$1',[this.ownerId]):await c.query('SELECT 1 FROM contact WHERE owner_id=$1 AND id=$2',[this.ownerId,contactId]);
    if(!exists.rowCount)return {status:404,body:{error:'memory_processing_not_found'}};
    if(match[2]==='history')return {status:200,body:{scope:contactId===null?'owner':'contact',contact_id:contactId,...await readProcessingHistory(c,this.ownerId,contactId,cursor)}};
-   const scope=(await c.query<Scope>(`SELECT s.*,r.status AS round_status,r.control_generation AS round_generation,r.phase,
-    r.target_unit AS round_target_unit,r.target_count AS round_target_count
+   let scope=(await c.query<Scope>(`SELECT s.*,r.status AS round_status,r.control_generation AS round_generation,r.phase,
+    r.target_unit AS round_target_unit,r.target_count AS round_target_count,
+    NULL::int AS round_frozen_count,NULL::int AS round_processed_count
     FROM memory_processing_scope s LEFT JOIN memory_processing_round r ON r.id=s.active_round_id AND r.scope_id=s.id
     WHERE s.owner_id=$1 AND s.contact_id IS NOT DISTINCT FROM $2::uuid`,[this.ownerId,contactId])).rows[0];
+   if(scope?.active_round_id){
+    const progress=(await c.query<{frozen_count:number;processed_count:number}>(`SELECT
+      count(*)::int AS frozen_count,
+      count(DISTINCT CASE WHEN target.completed_at IS NOT NULL THEN snapshot.message_id END)::int AS processed_count
+     FROM memory_processing_round_target snapshot
+     LEFT JOIN memory_processing_target target
+       ON target.task_id=snapshot.task_id AND target.message_id=snapshot.message_id
+     WHERE snapshot.round_id=$1`,
+    [scope.active_round_id])).rows[0];
+    scope={
+     ...scope,
+     round_frozen_count:progress.frozen_count,
+     round_processed_count:progress.processed_count,
+    };
+   }
    let tasks=scope?.active_round_id?(await c.query<Task>(`SELECT t.*,membership.round_id,
     EXISTS(SELECT 1 FROM background_task_step step WHERE step.task_id=t.id AND step.status='running' AND step.lease_expires_at>clock_timestamp()) AS live,
     plan.task_id IS NOT NULL AS planned,
@@ -126,12 +143,15 @@ export class MemoryProcessingQuery {
    else if(!scope?.active_round_id&&pending===0)reason='暂无待处理资料。';
    const progress=live??failed??tasks.find(task=>task.planned)??tasks[0];
    const plannedProgress=tasks.find(task=>task.planned);
-   const reliable=plannedProgress
+   const frozenProgress=scope?.round_target_unit==='messages'&&(scope.round_frozen_count??0)>0
+    ? {processed:scope.round_processed_count??0,total:safeCount(scope.round_target_count??0),unit:'messages' as const}
+    : null;
+   const reliable=frozenProgress??(plannedProgress
     ? {processed:plannedProgress.processed,total:plannedProgress.total,unit:'messages' as const}
     : scope?.round_target_count!==null&&scope?.round_target_count!==undefined
       ? {processed:progress?.step_processed??0,total:safeCount(scope.round_target_count),
         unit:scope.round_target_unit}
-      : null;
+      : null);
    const phase=tasks.some(task=>task.live&&task.profile_stage)?'profile':scope?.phase??null;
    await c.query('SAVEPOINT memory_processing_history_read');
    let history;

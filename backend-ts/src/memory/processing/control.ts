@@ -13,7 +13,15 @@ export class MemoryProcessingControlError extends Error {
 export const memoryExecutionAllowed=`(t.task_type NOT IN ('import','observation','layered_memory') OR NOT EXISTS(
  SELECT 1 FROM memory_processing_scope control WHERE control.owner_id=t.owner_id
  AND control.contact_id IS NOT DISTINCT FROM t.contact_id AND (control.intent='pause'
- OR COALESCE(s.memory_control_generation,0)<>control.control_generation)))`;
+ OR COALESCE(s.memory_control_generation,0)<>control.control_generation
+ OR EXISTS(
+  SELECT 1 FROM memory_processing_round round
+  JOIN memory_processing_round_task member ON member.round_id=round.id
+  WHERE round.id=control.active_round_id AND member.task_id=t.id
+    AND member.owner_id=t.owner_id
+    AND member.contact_id IS NOT DISTINCT FROM t.contact_id
+    AND member.active AND round.status IN ('blocked','completed')
+ ))))`;
 export async function memoryScopePaused(c:pg.ClientBase,scope:TaskScope):Promise<boolean>{
  return Boolean((await c.query("SELECT 1 FROM memory_processing_scope WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid AND intent='pause'",[scope.ownerId,scope.contactId])).rowCount);
 }

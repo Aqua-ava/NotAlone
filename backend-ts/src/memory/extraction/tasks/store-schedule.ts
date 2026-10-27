@@ -46,6 +46,12 @@ async function observationTask(c:pg.ClientBase,scope:ExtractionScope,n:number,ru
 export async function claimExtractionSchedule(c:pg.ClientBase,scope:ExtractionScope,runtimeConfig:CompleteClaimRuntimeConfig|null=null):Promise<string|null>{
  await lockExtractionScope(c,scope);
  if(await memoryScopePaused(c,scope))return null;
+ // 受阻时新观察只保留为待处理回执；不得重置原任务的失败事实或尝试预算。
+ const activeRound=(await c.query(`SELECT round.status
+  FROM memory_processing_scope control
+  JOIN memory_processing_round round ON round.id=control.active_round_id
+  WHERE control.owner_id=$1 AND control.contact_id=$2`,[scope.ownerId,scope.contactId])).rows[0];
+ if(activeRound?.status==='blocked')return null;
  const state=(await c.query('SELECT *,due_at<=now() AS due,last_input_at+interval \'600 seconds\' AS idle_at FROM memory_extraction_schedule WHERE owner_id=$1 AND contact_id=$2 FOR UPDATE',[scope.ownerId,scope.contactId])).rows[0];
  if(!state?.due)return null;
  const previous=(await c.query("SELECT id,status FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type='observation'",[scope.ownerId,scope.contactId])).rows[0];

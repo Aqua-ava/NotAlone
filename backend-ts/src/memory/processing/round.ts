@@ -60,7 +60,13 @@ export async function acceptTaskIntoProcessingRound(
        FROM public.memory_processing_round WHERE id=$1`,
       [control.active_round_id],
     )).rows[0] ?? null;
-    if (unit !== 'memories' || !activeRound) return null;
+    if (!activeRound) return null;
+    if (unit === 'messages') {
+      return activeRound.status === 'completed'
+        ? startNextMemoryProcessingRoundIfReady(client, scope)
+        : null;
+    }
+    if (unit !== 'memories') return null;
     if (activeRound.status === 'completed') {
       activeRound = null;
     } else if (options.reuseActiveRound
@@ -163,6 +169,152 @@ export async function acceptTaskIntoProcessingRound(
   };
 }
 
+/** 当前轮结束后，只把尚未归轮的合法消息目标及所属真实任务组成下一轮。 */
+export async function startNextMemoryProcessingRoundIfReady(
+  client: pg.ClientBase,
+  scope: {ownerId:string;contactId:string|null},
+): Promise<AcceptedProcessingRound | null> {
+  if (scope.contactId === null) return null;
+  const control = (await client.query(
+    `SELECT * FROM public.memory_processing_scope
+     WHERE owner_id=$1 AND contact_id=$2 FOR UPDATE`,
+    [scope.ownerId, scope.contactId],
+  )).rows[0];
+  if (!control?.active_round_id || control.intent === 'pause') return null;
+  const active = (await client.query(
+    `SELECT id,status,control_generation
+     FROM public.memory_processing_round
+     WHERE id=$1 AND scope_id=$2
+     FOR UPDATE`,
+    [control.active_round_id, control.id],
+  )).rows[0];
+  if (!active || active.status !== 'completed'
+    || Number(active.control_generation) !== Number(control.control_generation)) {
+    return null;
+  }
+  const pending = (await client.query(
+    `SELECT DISTINCT ON (target.message_id) target.task_id,target.message_id
+     FROM public.memory_processing_target target
+     JOIN public.background_task task
+       ON task.id=target.task_id AND task.owner_id=target.owner_id
+       AND task.contact_id=target.contact_id
+     WHERE target.owner_id=$1 AND target.contact_id=$2
+       AND target.completed_at IS NULL
+       AND task.task_type IN ('import','observation')
+       AND task.status IN ('queued','running','verifying','succeeded')
+       AND (
+         task.task_type='import' AND EXISTS(
+           SELECT 1 FROM public.source_document source
+           WHERE source.id=task.source_document_id AND source.owner_id=task.owner_id
+             AND source.contact_id=task.contact_id AND source.status='active'
+         )
+         OR task.task_type='observation' AND EXISTS(
+           SELECT 1 FROM public.conversation_binding binding
+           WHERE binding.owner_id=task.owner_id AND binding.contact_id=task.contact_id
+             AND binding.status='active'
+         )
+       )
+       AND NOT EXISTS(
+         SELECT 1 FROM public.memory_processing_round_target assigned
+         WHERE assigned.task_id=target.task_id
+           AND assigned.message_id=target.message_id
+       )
+       AND NOT EXISTS(
+         SELECT 1 FROM public.memory_processing_receipt receipt
+         WHERE receipt.message_id=target.message_id
+           AND receipt.owner_id=target.owner_id
+           AND receipt.contact_id=target.contact_id
+       )
+     ORDER BY target.message_id,target.task_id`,
+    [scope.ownerId, scope.contactId],
+  )).rows as {task_id:string;message_id:string}[];
+  if (!pending.length) return null;
+  const taskIds = [...new Set(pending.map(row => row.task_id))];
+  const messageIds = new Set(pending.map(row => row.message_id));
+  const next = Number((await client.query(
+    `SELECT COALESCE(max(round_number),0)+1 AS round_number
+     FROM public.memory_processing_round WHERE scope_id=$1`,
+    [control.id],
+  )).rows[0].round_number);
+  if (!Number.isSafeInteger(next) || next < 1) {
+    throw new Error('memory_processing_round_number_invalid');
+  }
+  const round = (await client.query(
+    `INSERT INTO public.memory_processing_round
+       (scope_id,owner_id,contact_id,round_number,control_generation,status,phase,target_unit,target_count)
+     VALUES($1,$2,$3,$4,$5,'waiting','extraction','messages',$6)
+     RETURNING id,round_number,control_generation`,
+    [
+      control.id,
+      scope.ownerId,
+      scope.contactId,
+      next,
+      control.control_generation,
+      messageIds.size,
+    ],
+  )).rows[0];
+  await client.query(
+    `UPDATE public.memory_processing_scope
+     SET active_round_id=$2,updated_at=clock_timestamp() WHERE id=$1`,
+    [control.id, round.id],
+  );
+  // 同一观察任务可能在本轮运行中登记了后续目标；前一轮结束后从提取阶段
+  // 重新排队该原任务。保留重试与回执，不新建任务或刷新累计预算。
+  await client.query(
+    `UPDATE public.background_task_step step
+     SET status='pending',attempt_count=0,processed_count=0,
+       total_count=CASE WHEN step.step_name IN ('extract_memory','index','verify')
+         THEN $3 ELSE step.total_count END,
+       worker_id=NULL,lease_expires_at=NULL,last_error_code=NULL,
+       started_at=NULL,finished_at=NULL,updated_at=clock_timestamp()
+     FROM public.background_task task
+     WHERE step.task_id=task.id AND task.id=ANY($1::uuid[])
+       AND task.owner_id=$2 AND task.contact_id=$4 AND task.status='succeeded'`,
+    [taskIds, scope.ownerId, messageIds.size, scope.contactId],
+  );
+  await client.query(
+    `UPDATE public.background_task task
+     SET status='queued',
+       current_step=CASE WHEN task.task_type='observation' THEN 'extract_memory' ELSE 'parse' END,
+       message_count=GREATEST(task.message_count,$3),observation_pending=false,
+       last_error_code=NULL,started_at=NULL,finished_at=NULL,updated_at=clock_timestamp()
+     WHERE task.id=ANY($1::uuid[]) AND task.owner_id=$2
+       AND task.contact_id=$4 AND task.status='succeeded'`,
+    [taskIds, scope.ownerId, messageIds.size, scope.contactId],
+  );
+  await client.query(
+    `UPDATE public.memory_processing_round_task SET active=false
+     WHERE task_id=ANY($1::uuid[]) AND owner_id=$2
+       AND contact_id=$3 AND active`,
+    [taskIds, scope.ownerId, scope.contactId],
+  );
+  await client.query(
+    `INSERT INTO public.memory_processing_round_task
+       (round_id,task_id,owner_id,contact_id,active)
+     SELECT $1,task_id,$2,$3,true FROM unnest($4::uuid[]) task_id
+     ON CONFLICT(round_id,task_id) DO UPDATE SET active=true`,
+    [round.id, scope.ownerId, scope.contactId, taskIds],
+  );
+  const frozen = await client.query(
+    `INSERT INTO public.memory_processing_round_target(round_id,task_id,message_id)
+     SELECT $1,task_id,message_id FROM unnest($2::uuid[],$3::uuid[]) AS pending(task_id,message_id)
+     ON CONFLICT DO NOTHING RETURNING message_id`,
+    [
+      round.id,
+      pending.map(row => row.task_id),
+      pending.map(row => row.message_id),
+    ],
+  );
+  if (frozen.rowCount !== pending.length) {
+    throw new Error('memory_processing_round_target_snapshot_invalid');
+  }
+  return {
+    id: round.id,
+    round_number: Number(round.round_number),
+    control_generation: Number(round.control_generation),
+  };
+}
+
 export async function markRoundTaskProcessing(
   client: pg.ClientBase,
   scope: RoundTaskScope,
@@ -182,6 +334,36 @@ export async function markRoundTaskProcessing(
        AND round.status IN ('waiting','processing')`,
     [scope.taskId, scope.ownerId, scope.contactId, phase],
   );
+}
+
+/** 旧主题画像入口的显式继续只重开由该原任务造成的受阻轮次。 */
+export async function reopenMemoryProcessingRoundForExplicitTaskContinue(
+  client: pg.ClientBase,
+  scope: RoundTaskScope,
+): Promise<boolean> {
+  const result = await client.query(
+    `UPDATE public.memory_processing_round round
+     SET status='waiting',completed_at=NULL
+     FROM public.memory_processing_round_task membership,
+       public.memory_processing_scope control
+     WHERE membership.round_id=round.id AND membership.task_id=$3
+       AND control.id=round.scope_id AND control.active_round_id=round.id
+       AND membership.owner_id=$1
+       AND membership.contact_id IS NOT DISTINCT FROM $2::uuid
+       AND membership.active AND control.intent='run'
+       AND round.owner_id=$1 AND round.contact_id IS NOT DISTINCT FROM $2::uuid
+       AND round.status='blocked'
+       AND NOT EXISTS(
+         SELECT 1 FROM public.memory_processing_round_task other_membership
+         JOIN public.background_task other_task ON other_task.id=other_membership.task_id
+         WHERE other_membership.round_id=round.id AND other_membership.active
+           AND other_membership.task_id<>membership.task_id
+           AND other_task.status IN ('failed','cancelled')
+       )
+     RETURNING round.id`,
+    [scope.ownerId, scope.contactId, scope.taskId],
+  );
+  return result.rowCount === 1;
 }
 
 export interface MemoryProcessingOrganization {
@@ -237,7 +419,9 @@ export async function completeMemoryProcessingRoundIfReady(
      RETURNING round.id`,
     [scope.taskId, scope.ownerId, scope.contactId],
   );
-  return result.rowCount === 1;
+  if (result.rowCount !== 1) return false;
+  await startNextMemoryProcessingRoundIfReady(client, scope);
+  return true;
 }
 
 /** 当前轮次之外新增、仍未归入任何轮次的合法消息目标；供 04 自动接纳后续轮次。 */
@@ -247,7 +431,7 @@ export async function pendingProcessingTargetCount(
 ): Promise<number> {
   if (scope.contactId === null) return 0;
   const count = Number((await client.query(
-    `SELECT count(*)::int AS n
+    `SELECT count(DISTINCT target.message_id)::int AS n
      FROM public.memory_processing_target target
      JOIN public.memory_processing_scope control
        ON control.owner_id=target.owner_id
@@ -263,6 +447,12 @@ export async function pendingProcessingTargetCount(
          SELECT 1 FROM public.memory_processing_round_target assigned
          WHERE assigned.task_id=target.task_id
            AND assigned.message_id=target.message_id
+       )
+       AND NOT EXISTS(
+         SELECT 1 FROM public.memory_processing_receipt receipt
+         WHERE receipt.message_id=target.message_id
+           AND receipt.owner_id=target.owner_id
+           AND receipt.contact_id=target.contact_id
        )`,
     [scope.ownerId, scope.contactId],
   )).rows[0].n);
