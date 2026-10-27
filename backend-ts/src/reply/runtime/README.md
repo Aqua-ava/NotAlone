@@ -34,6 +34,8 @@ Host 组合根在模型装配前创建唯一持久运行管理器，供启动删
 
 公开来源、联系人和助手会话删除沿真实业务闭包，在级联或正文擦除之前将目标及阻断持久绑定到原 deletion operation（迁移 118）。文件清理失败后，即使业务会话已不存在，目标仍可跨重启核验、阻断恢复并明确重试；受管更新恢复副本沿原归属校验清除。成功后只保留去身份凭证。未完成讨论删除允许同 owner、contact 范围只读查找最小 UUID，桌面重启据此恢复失败占位，不能把 404 当作清盘成功。
 
+删除清盘先在独立 owner 锁事务中核验完整 marker、私有归属父层及无链接的目录树，将原操作／范围及原生 dev、ino、birthtime_ns、uid 的无损字符串身份提交到临时 target（迁移 123），然后才在下一 owner 锁事务清子项、marker 和目录。部分删除、最终 rmdir 失败或宿主中断后，只有同操作、同范围、同原生目录可在缺 marker 时续跑；已存证明不能被替换目录的新 marker 覆写，旧 marker 缺失且无证明的目录仍拒绝清盘。证明只用于删除，不进入恢复、准备、公开回执或普通日志；成功随 target 一并删除，不改变最终去身份凭证合同。持久 Host 的旧私有 delete 在鉴权和请求核验后、业务事务前明确拒绝，必须使用公开跨域协调器；非持久兼容入口保持原合同。
+
 合成回归通过真实产品 Host、官方 JSONL、环回供应商与文件读取屏障验证跨重启清理、迟到结果、故障重试及无关讨论保留。它们不证明真实模型效果或原生 App 验收。
 
 所有 DSH 能力固定为 `0.2.1-rc.2`，Cordis 为 `4.0.5`。运行世界仍挂在正式 profile 的同一根 context，使用官方 Session、Agent、Projection、SystemPrompt、Tools、JSONL 和 AgentLoop 插件；不修改 SDK，也不另建启动根。为适配该版本隔离子作用域的依赖继承，薄插件沿用[官方 Loader 的 `internal/plugin` 与 `Inject.resolve` 接缝](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/vendor/loader/src/index.ts#L129)，仅补本轮 Loop 直接子 fiber 的明确依赖，随运行世界关闭撤销。

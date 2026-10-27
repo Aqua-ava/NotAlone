@@ -52,6 +52,7 @@ function failure(error:unknown):{status:number;body:Row}{
 
 export function createAssistantDiscussionHttp(options:{
   ownerId?:string;token:string;service:AssistantDiscussionService;
+  deleteEnabled?:boolean;
   onChanged?:(scope:AssistantDiscussionScope)=>void;
 }){
   if(options.token.length<32||options.ownerId!==undefined&&!identifier(options.ownerId))throw new Error('discussion_http_config_invalid');
@@ -110,6 +111,8 @@ export function createAssistantDiscussionHttp(options:{
           result=await options.service.readSession(scope,session());break;
         case 'delete':
           if(!sessionId||!exact(request,['confirmed'])||request.confirmed!==true)invalid();
+          // 持久Host必须走公开跨域删除协调器，不能在旧owner事务内直接擦除运行档案。
+          if(options.deleteEnabled===false){respond(503,{error:'discussion_unavailable'});return true;}
           result=await options.service.deleteSession(scope,session());break;
         case 'input':
           if(!sessionId||!exact(request,['content'],['expected_input_version_id']))invalid();
