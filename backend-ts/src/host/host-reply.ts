@@ -223,7 +223,7 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
   const publicApi=createPureTsPublicApi({ownerId:owner,available:options.configuration!==null,discussion:discussionService,reply:delegated,storage:options.storage,skillsRoot:discussionSkillsRoot,generation,
     exploration:{execute:(scope,session,action,request,signal,internal)=>execute(signal,combined=>exploration!.execute(scope,session,action,request,combined,internal))}});
   const discussionHttp=createAssistantDiscussionHttp({ownerId:owner,token:options.token,
-    service:discussionService,
+    service:discussionService,deleteEnabled:!assistantRuntime?.persistent,
     onChanged:scope=>{void scheduleLearning({owner_id:scope.owner_id,contact_id:scope.contact_id});}});
   const learningFiles=new SkillFiles(discussionSkillsRoot);
   let reviewStore:SkillReviewStore|undefined;

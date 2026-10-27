@@ -5,8 +5,8 @@ import {randomUUID,createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {spawn} from 'node:child_process';
-import {mkdir,writeFile,readFile,rm,stat,chmod} from 'node:fs/promises';
-import {join,resolve} from 'node:path';
+import {mkdir,writeFile,readFile,rm,stat,chmod,readdir,rename,symlink} from 'node:fs/promises';
+import {join,resolve,dirname} from 'node:path';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {sendEvents,useTool} from './reply-service-runtime-support.mjs';
 import {createRequire} from 'node:module';
@@ -25,20 +25,23 @@ const desktopPorts=build({stdin:{contents:`
 `,resolveDir:new URL('../../desktop/',import.meta.url).pathname},bundle:true,platform:'node',format:'cjs',write:false,loader:{'.css':'empty'}}).then(output=>{const loaded={exports:{}};new Function('require','module','exports',output.outputFiles[0].text)(desktopRequire,loaded,loaded.exports);return loaded.exports;});
 async function fixture(t){
  const f=await createStorageFixture(),owner=randomUUID(),contact=randomUUID(),session=randomUUID();
- const home=join(f.directory,'host'),info=join(f.directory,'backend.info');let child,exited,output='',gate,readGate,deletionGate,connection;
+ const home=join(f.directory,'host'),info=join(f.directory,'backend.info');let child,exited,output='',gate,readGate,deletionGate,identityGate,cleanupGate,connection;
  const requests=[],releaseGates=new Set();
  await f.client.query("INSERT INTO owner(id,display_name) VALUES($1,'合成删除用户')",[owner]);
  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成删除联系人')",[contact,owner]);
  await f.client.query('INSERT INTO assistant_session(id,owner_id,contact_id,is_default,last_user_activity_at) VALUES($1,$2,$3,true,clock_timestamp())',[session,owner,contact]);
  await writeFile(f.envFilePath,`NOTALONE_DATABASE_URL=host=/tmp dbname=${f.client.database}\nNOTALONE_OWNER_ID=${owner}\nNOTALONE_DEEPSEEK_API_KEY=synthetic-only\nNOTALONE_SKILLS_DIR=${f.directory}/skills\nNOTALONE_MANAGED_USER_DATA=${f.directory}\n`,{mode:0o600});
- const readTrigger=join(f.directory,'hold-runtime-read'),closeTrigger=join(f.directory,'fail-commit-close'),closeObserved=join(f.directory,'commit-close-failed'),deletionTrigger=join(f.directory,'hold-deletion-commit'),readPreload=join(f.directory,'read-barrier.mjs');
- await writeFile(readPreload,`import fs from 'node:fs';import {syncBuiltinESMExports,createRequire} from 'node:module';
- const pg=createRequire(${JSON.stringify(resolve('package.json'))})('pg'),query=pg.Client.prototype.query,deleting=new WeakSet();
- pg.Client.prototype.query=function(...args){const sql=String(args[0]?.text??args[0]),pending=query.apply(this,args);if(!pending?.then)return pending;return pending.then(async result=>{if(sql.includes('INSERT INTO public.cross_domain_deletion_operation')&&fs.existsSync(${JSON.stringify(deletionTrigger)}))deleting.add(this);if(sql==='COMMIT'&&deleting.delete(this)&&fs.existsSync(${JSON.stringify(deletionTrigger)})){fs.unlinkSync(${JSON.stringify(deletionTrigger)});await fetch(process.env.NOTALONE_SYNTHETIC_PROVIDER_URL+'/deletion-commit');}return result;});};
+ const readTrigger=join(f.directory,'hold-runtime-read'),closeTrigger=join(f.directory,'fail-commit-close'),closeObserved=join(f.directory,'commit-close-failed'),deletionTrigger=join(f.directory,'hold-deletion-commit'),identityTrigger=join(f.directory,'hold-runtime-identity-commit'),cleanupTrigger=join(f.directory,'hold-runtime-cleanup-write'),privateCapture=join(f.directory,'capture-private-token'),privateToken=join(f.directory,'synthetic-private-token'),readPreload=join(f.directory,'read-barrier.mjs');
+ await writeFile(readPreload,`import fs from 'node:fs';import crypto from 'node:crypto';import {syncBuiltinESMExports,createRequire} from 'node:module';
+ const randomBytes=crypto.randomBytes;crypto.randomBytes=function(...args){const result=randomBytes.apply(this,args);if(args[0]===32&&fs.existsSync(${JSON.stringify(privateCapture)})&&process.env.HOME===${JSON.stringify(home)}&&process.env.DSH_HOME===${JSON.stringify(home)}&&new Error().stack?.split('\\n')[2]?.includes(${JSON.stringify(resolve('src/host/host-model-runtime.ts')+':')}))fs.writeFileSync(${JSON.stringify(privateToken)},result.toString('base64url'),{mode:0o600});return result;};
+ const pg=createRequire(${JSON.stringify(resolve('package.json'))})('pg'),query=pg.Client.prototype.query,deleting=new WeakSet(),proving=new WeakSet();
+ pg.Client.prototype.query=function(...args){const sql=String(args[0]?.text??args[0]),pending=query.apply(this,args);if(!pending?.then)return pending;return pending.then(async result=>{if(sql.startsWith('UPDATE assistant_runtime_deletion_target SET cleaned=true')&&fs.existsSync(${JSON.stringify(cleanupTrigger)})){fs.unlinkSync(${JSON.stringify(cleanupTrigger)});await fetch(process.env.NOTALONE_SYNTHETIC_PROVIDER_URL+'/runtime-cleanup-write');}if(sql.startsWith('UPDATE assistant_runtime_deletion_target SET directory_identity=')&&fs.existsSync(${JSON.stringify(identityTrigger)}))proving.add(this);if(sql==='COMMIT'&&proving.delete(this)&&fs.existsSync(${JSON.stringify(identityTrigger)})){fs.unlinkSync(${JSON.stringify(identityTrigger)});await fetch(process.env.NOTALONE_SYNTHETIC_PROVIDER_URL+'/runtime-identity-commit');}if(sql.includes('INSERT INTO public.cross_domain_deletion_operation')&&fs.existsSync(${JSON.stringify(deletionTrigger)}))deleting.add(this);if(sql==='COMMIT'&&deleting.delete(this)&&fs.existsSync(${JSON.stringify(deletionTrigger)})){fs.unlinkSync(${JSON.stringify(deletionTrigger)});await fetch(process.env.NOTALONE_SYNTHETIC_PROVIDER_URL+'/deletion-commit');}return result;});};
  const original=fs.promises.readFile,originalOpen=fs.promises.open,locks=new Map(),held=[];
  fs.promises.open=async function(path,...args){const handle=await originalOpen.call(this,path,...args);if(String(path).includes('/assistant-runtime/')&&String(path).endsWith('/session.lock')){const count=(locks.get(String(path))??0)+1;locks.set(String(path),count);if(count===2&&fs.existsSync(${JSON.stringify(closeTrigger)})){fs.unlinkSync(${JSON.stringify(closeTrigger)});held.push(handle);handle.close=async()=>{fs.writeFileSync(${JSON.stringify(closeObserved)},'synthetic commit close failure');throw Object.assign(new Error('synthetic commit close failure'),{code:'EIO'});};}}return handle;};
  fs.promises.readFile=async function(path,...args){if(String(path).includes('/assistant-runtime/')&&String(path).endsWith('.jsonl')&&fs.existsSync(${JSON.stringify(readTrigger)})){fs.unlinkSync(${JSON.stringify(readTrigger)});await fetch(process.env.NOTALONE_SYNTHETIC_PROVIDER_URL+'/runtime-read');}return original.call(this,path,...args);};syncBuiltinESMExports();`,{mode:0o600});
  const provider=createServer(async(req,res)=>{
+  if(req.url==='/runtime-cleanup-write'){const held=cleanupGate;cleanupGate=undefined;held.enter();await held.wait;res.end('released');return;}
+  if(req.url==='/runtime-identity-commit'){const held=identityGate;identityGate=undefined;held.enter();await held.wait;res.end('released');return;}
   if(req.url==='/deletion-commit'){const held=deletionGate;deletionGate=undefined;held.enter();await held.wait;res.end('released');return;}
   if(req.url==='/runtime-read'){const held=readGate;readGate=undefined;held.enter();await held.wait;res.end('released');return;}
   let raw='';for await(const part of req)raw+=part;requests.push(JSON.parse(raw));
@@ -62,7 +65,7 @@ async function fixture(t){
  };
  const directory=join(f.directory,'assistant-runtime',owner,contact,session);
  const seed=async()=>{const runtime=randomUUID();await mkdir(join(directory,runtime,'forks'),{mode:0o700,recursive:true});for(const path of [join(f.directory,'assistant-runtime'),join(f.directory,'assistant-runtime',owner),join(f.directory,'assistant-runtime',owner,contact),directory])await chmod(path,0o700);await writeFile(join(directory,'ownership.json'),JSON.stringify({version:1,owner_id:owner,contact_id:contact,session_id:session}),{mode:0o600});await writeFile(join(directory,runtime,'forks','synthetic.jsonl'),'合成运行正文');await f.client.query("INSERT INTO assistant_runtime_session(owner_id,contact_id,session_id,runtime_session_id,configuration_sha256,state) VALUES($1,$2,$3,$4,$5,'dirty')",[owner,contact,session,runtime,'a'.repeat(64)]);};
- return {...f,owner,contact,session,directory,requests,start,stop,seed,get connection(){return connection;},failCommitClose:async()=>{await writeFile(closeTrigger,'synthetic');},closeObserved,holdDeletionCommit:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);deletionGate={enter,wait};releaseGates.add(release);await writeFile(deletionTrigger,'synthetic');return {entered,release};},holdRead:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);readGate={enter,wait};releaseGates.add(release);await writeFile(readTrigger,'synthetic');return {entered,release};},path:`/api/contacts/${contact}/assistant-sessions/${session}`,input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true}),hold:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};releaseGates.add(release);return {entered,release};}};
+ return {...f,owner,contact,session,directory,requests,start,stop,seed,capturePrivateToken:()=>writeFile(privateCapture,'synthetic'),privateToken,crash:async()=>{child.kill('SIGKILL');await exited;await rm(info,{force:true});},holdCleanupWrite:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);cleanupGate={enter,wait};releaseGates.add(release);await writeFile(cleanupTrigger,'synthetic');return {entered,release};},holdIdentityCommit:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);identityGate={enter,wait};releaseGates.add(release);await writeFile(identityTrigger,'synthetic');return {entered,release};},get connection(){return connection;},failCommitClose:async()=>{await writeFile(closeTrigger,'synthetic');},closeObserved,holdDeletionCommit:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);deletionGate={enter,wait};releaseGates.add(release);await writeFile(deletionTrigger,'synthetic');return {entered,release};},holdRead:async()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);readGate={enter,wait};releaseGates.add(release);await writeFile(readTrigger,'synthetic');return {entered,release};},path:`/api/contacts/${contact}/assistant-sessions/${session}`,input:text=>({contact_id:contact,idempotency_key:randomUUID(),content:{type:'rewrite_draft',draft_text:text,include_relationship_context:false},skill_disabled:true}),hold:()=>{let enter,release;const entered=new Promise(r=>enter=r),wait=new Promise(r=>release=r);gate={enter,wait};releaseGates.add(release);return {entered,release};}};
 }
 test('真实Host与生产Main拒删未知分段受理的旧别名，明确停止后才可重试删除',{timeout:45000},async t=>{
  const f=await fixture(t),request=await f.start(),ports=await desktopPorts;
@@ -139,6 +142,118 @@ test('生产来源删除清除真实JSONL，清理失败跨重启保留阻断且
  await writeFile(marker,identity);await request('/api/deletions/'+operation+'/retry',{confirmed:true});
  const completed=(await request('/api/deletions/'+operation)).body;assert.equal(completed.status,'succeeded');assert.equal(completed.contact_id,undefined);assert.equal(completed.target_id,undefined);await assert.rejects(stat(f.directory),{code:'ENOENT'});
  await f.stop();request=await f.start();assert.notEqual((await request(f.path+'/replies',input)).status,200);assert.equal(f.requests.length,before);
+});
+
+test('正式Host深层事件叶目录删除失败后恢复权限，同一操作重试必须删尽正文',{timeout:45000},async t=>{
+ const f=await fixture(t),request=await f.start();assert.equal((await request(f.path+'/replies',f.input('合成深层权限删除重试'))).status,200);
+ const archive=(await readdir(f.directory,{recursive:true})).find(path=>path.endsWith('/session.v4.jsonl'));assert.ok(archive,'必须使用真实SDK运行正文');
+ const leaf=dirname(join(f.directory,archive));assert.notEqual(leaf,f.directory);assert.equal((await stat(leaf)).mode&0o777,0o700);
+ let restored=false;
+ try{
+  await chmod(leaf,0o500);const accepted=await request(f.path,{confirmed:true},'DELETE');assert.equal(accepted.status,202);
+  const operation=accepted.body.operation_id,first=(await request('/api/deletions/'+operation)).body;assert.equal(first.status,'failed');
+  const firstRemaining=await readdir(f.directory,{recursive:true}),firstTargets=(await f.client.query('SELECT owner_id,contact_id,session_id,cleaned,directory_identity IS NOT NULL AS proof_committed FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operation])).rows;
+  assert.equal(firstTargets[0].proof_committed,true,'先独立提交证明，部分文件清理失败不能回滚它');
+  await chmod(leaf,0o700);restored=true;
+  const restoredModes=await Promise.all([f.directory,join(f.directory,archive.split('/')[0]),dirname(leaf),leaf].map(async path=>(await stat(path)).mode&0o777));
+  await request('/api/deletions/'+operation+'/retry',{confirmed:true});const after=(await request('/api/deletions/'+operation)).body;
+  const remaining=await readdir(f.directory,{recursive:true}).catch(error=>{if(error.code==='ENOENT')return [];throw error;});
+  const targets=(await f.client.query('SELECT cleaned FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operation])).rows;
+  t.diagnostic('真实权限恢复同操作重试 '+JSON.stringify({first:first.status,firstMarkerPresent:firstRemaining.includes('ownership.json'),after:after.status,phase:after.phase,restoredModes,remaining,targets,model_http:f.requests.length}));
+  if(process.env.NOTALONE_SYNTHETIC_DELETE_RETRY_EVIDENCE)await writeFile(process.env.NOTALONE_SYNTHETIC_DELETE_RETRY_EVIDENCE,JSON.stringify({operation,first,firstRemaining,firstTargets,after,restoredModes,remaining,targets}),{mode:0o600});
+  assert.equal(after.operation_id,operation);assert.equal(after.status,'succeeded','恢复叶目录权限后必须由同一operation完成清理，不能停在failed');
+  assert.equal(targets.length,0,'成功后必须移除target及其目录证明');assert.equal(Object.hasOwn(after,'directory_identity'),false);await assert.rejects(stat(f.directory),{code:'ENOENT'});assert.equal(f.requests.length,1);
+ }finally{if(!restored)await chmod(leaf,0o700).catch(error=>{if(error.code!=='ENOENT')throw error;});}
+});
+
+test('正式Host已删marker但最终目录删除失败，恢复父权限后跨重启同op续跑',{timeout:45000},async t=>{
+ const f=await fixture(t);await f.seed();let request=await f.start();const parent=dirname(f.directory);
+ try{
+  await chmod(parent,0o500);const accepted=await request(f.path,{confirmed:true},'DELETE');assert.equal(accepted.status,202);const operation=accepted.body.operation_id;
+  assert.equal((await request('/api/deletions/'+operation)).body.status,'failed');assert.deepEqual(await readdir(f.directory),[],'真实rmdir失败前正文与marker均已移除');
+  assert.equal((await f.client.query('SELECT directory_identity IS NOT NULL AS proven,cleaned FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operation])).rows[0].proven,true);
+  await chmod(parent,0o700);await f.stop();request=await f.start();await request('/api/deletions/'+operation+'/retry',{confirmed:true});
+  assert.equal((await request('/api/deletions/'+operation)).body.status,'succeeded');await assert.rejects(stat(f.directory),{code:'ENOENT'});
+  assert.equal((await f.client.query('SELECT 1 FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operation])).rowCount,0);assert.equal(f.requests.length,0);
+ }finally{await chmod(parent,0o700);}
+});
+
+test('正式Host证明事务独立提交后进程中断，重启使用同一证明续跑',{timeout:45000},async t=>{
+ const f=await fixture(t);await f.seed();let request=await f.start();const gate=await f.holdIdentityCommit();
+ const pending=request(f.path,{confirmed:true},'DELETE').catch(()=>null);await gate.entered;
+ const rows=(await f.client.query('SELECT operation_id,directory_identity,cleaned FROM assistant_runtime_deletion_target')).rows;assert.equal(rows.length,1);const target=rows[0],proof=target.directory_identity;
+ assert.equal(target.cleaned,false);assert.deepEqual(Object.keys(proof).sort(),['version','operation_id','owner_id','contact_id','session_id','dev','ino','birthtime_ns','uid'].sort());
+ for(const key of ['dev','ino','birthtime_ns','uid'])assert.match(proof[key],/^\d+$/,'原生bigint身份不经过Number转换');
+ const native=await stat(f.directory,{bigint:true});assert.equal(proof.dev,String(native.dev));assert.equal(proof.ino,String(native.ino));assert.equal(proof.birthtime_ns,String(native.birthtimeNs));assert.equal(proof.uid,String(native.uid));
+ assert.ok((await readFile(join(f.directory,'ownership.json'),'utf8')).includes(f.session));
+ await f.crash();gate.release();await pending;
+ // 真实旧进程已死，只推进本库原操作租约；不改生产60秒期限，也不伪造目录证明。
+ assert.equal((await f.client.query('SELECT status FROM cross_domain_deletion_operation WHERE id=$1',[target.operation_id])).rows[0].status,'running');
+ await f.client.query("UPDATE cross_domain_deletion_operation SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[target.operation_id]);
+ request=await f.start();await request('/api/deletions/'+target.operation_id+'/retry',{confirmed:true});
+ assert.equal((await request('/api/deletions/'+target.operation_id)).body.status,'succeeded');await assert.rejects(stat(f.directory),{code:'ENOENT'});
+ assert.equal((await f.client.query('SELECT 1 FROM assistant_runtime_deletion_target WHERE operation_id=$1',[target.operation_id])).rowCount,0);assert.equal(f.requests.length,0);
+});
+
+test('正式Host目录已删但清盘事务未提交时中断，旧证明仍可完成同op',{timeout:45000},async t=>{
+ const f=await fixture(t);await f.seed();let request=await f.start();const gate=await f.holdCleanupWrite(),pending=request(f.path,{confirmed:true},'DELETE').catch(()=>null);await gate.entered;
+ await assert.rejects(stat(f.directory),{code:'ENOENT'});const target=(await f.client.query('SELECT operation_id,directory_identity IS NOT NULL AS proven,cleaned FROM assistant_runtime_deletion_target')).rows[0];
+ assert.equal(target.proven,true);assert.equal(target.cleaned,false,'文件已清但UPDATE仍在未提交真实事务内');await f.crash();gate.release();await pending;
+ await f.client.query("UPDATE cross_domain_deletion_operation SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[target.operation_id]);
+ request=await f.start();assert.equal((await request('/api/deletions/'+target.operation_id)).body.status,'succeeded');
+ assert.equal((await f.client.query('SELECT 1 FROM assistant_runtime_deletion_target WHERE operation_id=$1',[target.operation_id])).rowCount,0);assert.equal(f.requests.length,0);
+});
+
+test('正式Host缺失初始marker与外部链接均不得取得清盘证明',{timeout:45000},async t=>{
+ for(const kind of ['missing-marker','root-link','child-link'])await t.test(kind,async t=>{
+  const f=await fixture(t);await f.seed();const home=f.directory.split('/assistant-runtime/')[0],foreign=join(home,'unrelated');let retained;
+  if(kind==='missing-marker'){await rm(join(f.directory,'ownership.json'));retained=join(f.directory,(await readdir(f.directory)).find(name=>name!=='ownership.json'),'forks','synthetic.jsonl');}
+  else if(kind==='root-link'){await rename(f.directory,foreign);await symlink(foreign,f.directory);retained=join(foreign,(await readdir(foreign)).find(name=>name!=='ownership.json'),'forks','synthetic.jsonl');}
+  else{await mkdir(foreign,{mode:0o700});retained=join(foreign,'keep.txt');await writeFile(retained,'合成无关文件');await symlink(foreign,join(f.directory,'external'));}
+  const before=await readFile(retained,'utf8'),request=await f.start(),accepted=await request(f.path,{confirmed:true},'DELETE');assert.equal(accepted.status,202);const operation=accepted.body.operation_id;
+  assert.equal((await request('/api/deletions/'+operation)).body.status,'failed');assert.equal(await readFile(retained,'utf8'),before);
+  assert.equal((await f.client.query('SELECT directory_identity FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operation])).rows[0].directory_identity,null);
+  await request('/api/deletions/'+operation+'/retry',{confirmed:true});assert.equal((await request('/api/deletions/'+operation)).body.status,'failed');assert.equal(await readFile(retained,'utf8'),before);assert.equal(f.requests.length,0);
+ });
+});
+
+test('正式Host已存证明不接受错op范围inode或新marker替换目录',{timeout:45000},async t=>{
+ for(const kind of ['operation_id','owner_id','contact_id','session_id','ino','replacement','root-link','child-link'])await t.test(kind,async t=>{
+  const f=await fixture(t);await f.seed();const request=await f.start(),parent=dirname(f.directory);let operation,proof;
+  try{await chmod(parent,0o500);const accepted=await request(f.path,{confirmed:true},'DELETE');assert.equal(accepted.status,202);operation=accepted.body.operation_id;assert.deepEqual(await readdir(f.directory),[]);proof=(await f.client.query('SELECT directory_identity FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operation])).rows[0].directory_identity;assert.ok(proof);}finally{await chmod(parent,0o700);}
+  let expected=proof,retained;
+  if(['operation_id','owner_id','contact_id','session_id','ino'].includes(kind)){
+   expected={...proof,[kind]:kind==='ino'?String(BigInt(proof.ino)+1n):randomUUID()};
+   await f.client.query('UPDATE assistant_runtime_deletion_target SET directory_identity=$2 WHERE operation_id=$1',[operation,JSON.stringify(expected)]);
+   retained=join(f.directory,'keep.txt');await writeFile(retained,'合成身份不符必须保留');
+  }else{
+   const foreign=join(parent,randomUUID());
+   if(kind==='child-link'){await mkdir(foreign,{mode:0o700});retained=join(foreign,'keep.txt');await writeFile(retained,'合成无关会话');await symlink(foreign,join(f.directory,'external'));}
+   else{await rename(f.directory,foreign);if(kind==='root-link'){await symlink(foreign,f.directory);retained=join(foreign,'keep.txt');}else{await mkdir(f.directory,{mode:0o700});await writeFile(join(f.directory,'ownership.json'),JSON.stringify({version:1,owner_id:f.owner,contact_id:f.contact,session_id:f.session}),{mode:0o600});retained=join(f.directory,'keep.txt');}await writeFile(retained,'合成替换目录不能冒认归属');}
+  }
+  const before=await readFile(retained,'utf8');await request('/api/deletions/'+operation+'/retry',{confirmed:true});const status=(await request('/api/deletions/'+operation)).body;
+  assert.equal(status.status,'failed');assert.equal(await readFile(retained,'utf8'),before);assert.doesNotMatch(JSON.stringify(status),/directory_identity|birthtime_ns|"ino"|"dev"/);
+  assert.deepEqual((await f.client.query('SELECT directory_identity FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operation])).rows[0].directory_identity,expected,'不得用替换目录的新marker覆写已存证明');assert.equal(f.requests.length,0);
+ });
+});
+
+test('正式持久Host拒绝已认证private删除且零副作用，同夹具公开删除成功',{timeout:45000},async t=>{
+ const f=await fixture(t);await f.seed();await f.capturePrivateToken();const request=await f.start(),token=await readFile(f.privateToken,'utf8');assert.equal((await stat(f.privateToken)).mode&0o777,0o600);assert.notEqual(token,f.connection.token);
+ const snapshot=async()=>({database:(await f.client.query('SELECT (SELECT count(*)::int FROM assistant_session) AS sessions,(SELECT count(*)::int FROM assistant_runtime_session) AS runtimes,(SELECT count(*)::int FROM cross_domain_deletion_operation) AS operations,(SELECT count(*)::int FROM assistant_runtime_deletion_target) AS targets,(SELECT count(*)::int FROM reply_invalidated_key) AS invalidated')).rows[0],files:await Promise.all((await readdir(f.directory,{recursive:true})).sort().map(async name=>{const path=join(f.directory,name),status=await stat(path);return [name,status.mode,status.isFile()?createHash('sha256').update(await readFile(path)).digest('hex'):null];}))});
+ const before=await snapshot();
+ const unauthorized=await fetch(`http://${f.connection.address}/internal/discussion`,{method:'POST',headers:{Authorization:`Bearer ${f.connection.token}`,'Content-Type':'application/json'},body:JSON.stringify({owner_id:f.owner,contact_id:f.contact,session_id:f.session,action:'delete',request:{confirmed:true}})});assert.equal(unauthorized.status,401);await unauthorized.json();assert.deepEqual(await snapshot(),before);
+ const response=await fetch(`http://${f.connection.address}/internal/discussion`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({owner_id:f.owner,contact_id:f.contact,session_id:f.session,action:'delete',request:{confirmed:true}})}),body=await response.json();
+ const after=await snapshot().catch(error=>error.code==='ENOENT'?null:Promise.reject(error));t.diagnostic(JSON.stringify({private_status:response.status,directory_present:after!==null,model_http:f.requests.length}));
+ assert.equal(response.status,503);assert.deepEqual(body,{error:'discussion_unavailable'});assert.deepEqual(after,before,'拒绝必须发生在业务事务及FS改动之前');assert.equal(f.requests.length,0);
+ const accepted=await request(f.path,{confirmed:true},'DELETE');assert.equal(accepted.status,200);assert.equal((await request('/api/deletions/'+accepted.body.operation_id)).body.status,'succeeded');await assert.rejects(stat(f.directory),{code:'ENOENT'});assert.equal(f.requests.length,0);
+});
+
+test('正式Host成功删除只清当前运行会话且不保留目录证明',{timeout:45000},async t=>{
+ const f=await fixture(t);await f.seed();const other=join(dirname(f.directory),randomUUID());await mkdir(other,{mode:0o700});const retained=join(other,'keep.txt');await writeFile(retained,'合成无关会话正文');
+ const request=await f.start(),accepted=await request(f.path,{confirmed:true},'DELETE');assert.equal(accepted.status,200);const operation=accepted.body.operation_id;
+ assert.equal(await readFile(retained,'utf8'),'合成无关会话正文');await assert.rejects(stat(f.directory),{code:'ENOENT'});
+ assert.equal((await f.client.query('SELECT 1 FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operation])).rowCount,0);
+ const receipt=(await request('/api/deletions/'+operation)).body;assert.equal(receipt.status,'succeeded');assert.equal(receipt.owner_id,undefined);assert.equal(receipt.contact_id,undefined);assert.equal(receipt.target_id,undefined);assert.doesNotMatch(JSON.stringify(receipt),/directory_identity|birthtime_ns|"ino"|"dev"/);assert.equal(f.requests.length,0);
 });
 
 test('删除等待真实官方恢复读档结束，等待期间阻断新恢复与出站',{timeout:45000},async t=>{

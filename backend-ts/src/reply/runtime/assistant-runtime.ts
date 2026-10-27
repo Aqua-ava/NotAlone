@@ -20,6 +20,7 @@ import type {Client} from 'pg';
 import {ReplyError} from '../generation/reply-contract.ts';
 import {ReplyRejected,type VerifiedReplyScope} from '../generation/reply-scope.ts';
 import {assistantRuntimeDeletionPending} from './assistant-runtime-erasure.ts';
+import {captureRuntimeDeletionIdentity,eraseRuntimeDeletionDirectory,requireRuntimeDeletionIdentity} from './assistant-runtime-deletion-directory.ts';
 
 type Transaction=<T>(work:(client:Client)=>Promise<T>)=>Promise<T>;
 type Scope=Pick<VerifiedReplyScope,'owner_id'|'contact_id'>;
@@ -359,8 +360,23 @@ export class AssistantRuntime {
   await this.drain(operationId);
   const targets=await this.options.transaction(async client=>(await client.query('SELECT * FROM assistant_runtime_deletion_target WHERE operation_id=$1',[operationId])).rows);
   for(const target of targets){
-   await this.options.transaction(client=>this.erase(client,target,target.session_id));
-   await this.options.transaction(async client=>{await client.query('UPDATE assistant_runtime_deletion_target SET cleaned=true WHERE operation_id=$1 AND owner_id=$2 AND contact_id=$3 AND session_id=$4',[operationId,target.owner_id,target.contact_id,target.session_id]);});
+   // 此事务必须先提交；清盘可能部分失败，证明不能随后续文件错误一起回滚。
+   await this.options.transaction(async client=>{
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${target.owner_id}`]);
+    const current=(await client.query('SELECT * FROM assistant_runtime_deletion_target WHERE operation_id=$1 AND owner_id=$2 AND contact_id=$3 AND session_id=$4 FOR UPDATE',[operationId,target.owner_id,target.contact_id,target.session_id])).rows[0];
+    if(!current)return;if(this.active.has(this.key(current,current.session_id)))throw new ReplyError('reply_in_progress',409);
+    if(current.directory_identity!==null){requireRuntimeDeletionIdentity(current,current.directory_identity);return;}
+    const proof=await captureRuntimeDeletionIdentity(this.options.home,current);
+    if(proof)await client.query('UPDATE assistant_runtime_deletion_target SET directory_identity=$5 WHERE operation_id=$1 AND owner_id=$2 AND contact_id=$3 AND session_id=$4',[operationId,current.owner_id,current.contact_id,current.session_id,JSON.stringify(proof)]);
+   });
+   await this.options.transaction(async client=>{
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${target.owner_id}`]);
+    const current=(await client.query('SELECT * FROM assistant_runtime_deletion_target WHERE operation_id=$1 AND owner_id=$2 AND contact_id=$3 AND session_id=$4 FOR UPDATE',[operationId,target.owner_id,target.contact_id,target.session_id])).rows[0];
+    if(!current)return;if(this.active.has(this.key(current,current.session_id)))throw new ReplyError('reply_in_progress',409);
+    await eraseRuntimeDeletionDirectory(this.options.home,current,current.directory_identity);
+    await client.query('DELETE FROM assistant_runtime_session WHERE owner_id=$1 AND contact_id=$2 AND session_id=$3',[current.owner_id,current.contact_id,current.session_id]);
+    await client.query('UPDATE assistant_runtime_deletion_target SET cleaned=true WHERE operation_id=$1 AND owner_id=$2 AND contact_id=$3 AND session_id=$4',[operationId,current.owner_id,current.contact_id,current.session_id]);
+   });
   }
  }
  /** 隔离不合格运行副本；保留业务历史和文件，禁止继续恢复，供明确修复或删除。 */
