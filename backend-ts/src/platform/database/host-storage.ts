@@ -374,7 +374,8 @@ export class HostStorage {
       catch (error) { businessFailure = business; throw error; }
       finally { lease?.revoke(); }
       this.assertOpen();
-      await client.query('COMMIT');
+      // PostgreSQL 会将已中止事务的 COMMIT 转成 ROLLBACK，不能向调用方报告提交成功。
+      if ((await client.query('COMMIT')).command !== 'COMMIT') throw new HostStorageError('database_unavailable');
       committed = true;
       return result;
     } catch (error) {

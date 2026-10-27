@@ -1,7 +1,7 @@
 import {requireScenarioReceipts} from './reply-context-scenario.ts';
 import {captureLayeredSnapshot,selectLayeredMaterial,requireLayeredMaterial,CONTACT_LAYERED_BUDGET,OWNER_LAYERED_BUDGET} from './reply-context-layered.ts';
 import {readReplyContactOverview,readReplyOwnerOverview,type ReplyOverviewSnapshot} from './reply-context-overview.ts';
-import {ReplyHistory} from '../generation/reply-history.ts';
+import {ReplyHistory,ReplyHistoryRecoveryError} from '../generation/reply-history.ts';
 import {readContextMemories,selectContextMemories,memoryEvidence,pendingSelectionReason,type MemoryKind} from './reply-context-memory.ts';
 import {readContextMessages,readOptionalContext,selectReplyMessageWindow,requireReplyMessageWindowCount} from './reply-context-read.ts';
 import type {Client} from 'pg';
@@ -18,6 +18,21 @@ export function recentOnly(input:ReplyContextBuildInput['request']):boolean {
 }
 export function modelVisibleEvidence(context:BuiltReplyContext):ReplyContextEvidence[]{return context.evidence.filter(item=>item.model_visible);}
 function riskNotes(text:string):string[]{return ([['转账',['转账','汇款']],['验证码',['验证码']],['地址',['地址']],['借款',['借款','借钱']],['承诺',['承诺']],['见面安排',['见面','约见']],['关系冲突',['冲突','吵架','分手']]] as [string,string[]][]).filter(([,terms])=>terms.some(t=>text.includes(t))).map(([label])=>`请核实${label}相关内容。`);}
+/** 来源窗口复用外层事务时，失败只回滚窗口并恢复原限时；恢复失败必须向外传播。 */
+async function sourceWindowTransaction<T>(client:Client,work:(client:Client)=>Promise<T>):Promise<T>{
+ try{await client.query('SAVEPOINT reply_context_source_window');}
+ catch(error){throw new ReplyHistoryRecoveryError(error);}
+ try{
+  const prior=(await client.query("SELECT current_setting('statement_timeout') AS value")).rows[0].value;
+  const value=await work(client);
+  await client.query("SELECT set_config('statement_timeout',$1,true)",[prior]);
+  await client.query('RELEASE SAVEPOINT reply_context_source_window');return value;
+ }catch(error){
+  try{await client.query('ROLLBACK TO SAVEPOINT reply_context_source_window');await client.query('RELEASE SAVEPOINT reply_context_source_window');}
+  catch(recoveryError){throw new ReplyHistoryRecoveryError(recoveryError);}
+  throw error;
+ }
+}
 function validateEvidence(context:BuiltReplyContext):void {
  const seen=new Set<string>();
  for(const item of context.evidence){
@@ -111,7 +126,7 @@ export class PostgresReplyContext {
    const anchors=[...new Set<string>(evidence.filter(item=>item.navigation?.scope_kind==='contact'&&['historical','current_unverified'].includes(item.timing.current_status)).flatMap(item=>item.navigation!.source_message_ids))].filter(id=>!existing.has(id));
    if(anchors.length){
     if(!input.conversation_binding_id)throw new ReplyContextError('来源窗口缺少已验证会话绑定。');
-    const history=new ReplyHistory({transaction:fn=>fn(this.client),scope,binding_id:input.conversation_binding_id,initial_evidence_ids:evidence.map(item=>item.evidence_id),navigation_message_ids:anchors,excluded_message_ids:c.excluded_message_ids as string[]??[],allowed_message_ids:result.history_message_ids,requireCurrent:async()=>{await this.validateCurrent(result);}});
+    const history=new ReplyHistory({transaction:fn=>sourceWindowTransaction(this.client,fn),scope,binding_id:input.conversation_binding_id,initial_evidence_ids:evidence.map(item=>item.evidence_id),navigation_message_ids:anchors,excluded_message_ids:c.excluded_message_ids as string[]??[],allowed_message_ids:result.history_message_ids,requireCurrent:async()=>{await this.validateCurrent(result);}});
     for(const anchor of anchors){const remaining=50-existing.size-history.evidence.length;if(remaining<=0){retrieval.queries.push({kind:'message',purpose:'source_window',status:'budget_exceeded',evidence_ids:[],limit:1});retrieval.source_messages.exhausted=true;if(retrieval.status!=='unavailable')retrieval.status='budget_exhausted';break;}const width=Math.min(7,remaining),before=Math.min(3,Math.floor((width-1)/2));await history.query({session_id:input.conversation_binding_id,anchor_message_id:anchor,before,after:width-before-1,timeout_ms:500});const trace=history.tool_calls.at(-1)!;retrieval.queries.push({kind:'message',purpose:'source_window',status:trace.status==='timeout'?'failed':trace.status,evidence_ids:trace.status==='succeeded'?trace.evidence_ids:[],limit:width});if(['failed','timeout'].includes(trace.status))retrieval.status='unavailable';if(trace.status==='budget_exceeded'){retrieval.source_messages.exhausted=true;if(retrieval.status!=='unavailable')retrieval.status='budget_exhausted';break;}}
     evidence.push(...history.evidence);result.tool_calls=history.tool_calls;Object.assign(retrieval.source_messages,{used_calls:Math.min(3,history.tool_calls.length),used_count:history.evidence.length,used_tokens:history.token_count});
    }
