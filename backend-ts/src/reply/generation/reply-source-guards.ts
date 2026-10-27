@@ -1,5 +1,6 @@
 /** 回复来源、导航与记忆资格的原表守卫；调用方持有owner事务锁。 */
 import { AsyncLocalStorage } from 'node:async_hooks';
+import {withReplyRecordReadScope} from './reply-record-read-scope.ts';
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
 import type { AssistantScope } from './reply-assistant-guards.ts';
@@ -25,7 +26,7 @@ const validations=new AsyncLocalStorage<SourceValidation>();
 export async function withReplyValidationScope<T>(client:pg.Client,scope:AssistantScope,work:()=>Promise<T>):Promise<T> {
   const parent=validationFor(client,scope.owner_id);
   const validation:SourceValidation={client,owner:scope.owner_id,live:true,active:parent?.active??new Set(),verified:new Map(),navigation:new Map()};
-  try{return await validations.run(validation,work);}
+  try{return await validations.run(validation,()=>withReplyRecordReadScope(client,scope.owner_id,work));}
   finally{validation.live=false;if(!parent)validation.active.clear();validation.verified.clear();validation.navigation.clear();}
 }
 function validationFor(client:pg.Client,owner:string):SourceValidation|undefined {

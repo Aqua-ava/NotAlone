@@ -411,7 +411,7 @@ test('公开连续准备减少数据库往返，零HTTP预检仍保留完整官�
  assert.ok(host.requests[1].body.messages.some(m=>m.role==='assistant'&&JSON.stringify(m).includes('合成保存候选')));
  t.diagnostic('完整公开prepare HTTP墙钟与物理查询 '+JSON.stringify({cost,wall_ms:wall}));
  if(process.env.NOTALONE_SYNTHETIC_PREPARE_EVIDENCE)await writeFile(process.env.NOTALONE_SYNTHETIC_PREPARE_EVIDENCE,JSON.stringify({cost,wall_ms:wall,bodies:host.requests.map(request=>request.body),results}),{mode:0o600});
- assert.ok(cost[0]<=326&&cost[1]<740&&cost[0]+cost[1]<1000,`完整公开准备各轮须不高于原临时版326/740，两轮总往返须低于1000，实际${cost}；用户等待仍须另验完整公开HTTP墙钟`);
+ assert.ok(cost[0]<323&&cost[1]<670&&cost[0]+cost[1]<940,`完整公开准备各轮须降低上一固定候选323/670，总往返低于940，实际${cost}；用户等待仍须另验完整公开HTTP墙钟`);
 });
 
 test('旧资格格式在同一业务段零HTTP重建，伴随正文凭据独立且篡改后拒绝出站',{timeout:60000},async t=>{

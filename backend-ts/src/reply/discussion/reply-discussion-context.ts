@@ -22,6 +22,7 @@ export interface ReplyDiscussionContext {
  scope:AssistantScope;session_id:string;request_key:string;current_input_version_id:string;items:DiscussionItem[];
  snapshot:Record<string,any>;notice:string;
 }
+interface DiscussionBuild {discussion:ReplyDiscussionContext;dependencies:string[]}
 export interface AssistantDiscussionPayload {
  session_id:string;request_key:string;current_input_version_id:string;factual_role:'assistant_discussion_reference';weight:'low';notice:string;
  items:(Omit<DiscussionItem,'basis_changes'> & {role:'assistant_candidate'|'user';is_sent:false;basis_changes?:Change[]})[];
@@ -51,28 +52,27 @@ export class PostgresReplyDiscussionContext {
  private readonly selectedReference?:{candidate_id:string;version_id:string};
  private readonly metadataOnly?:((client:pg.Client,identity:ReplyPreparationIdentity)=>Promise<boolean>);
  constructor(options:{guards:ReplyAssistantGuards;ports:ReplyAssistantPorts;selectedReference?:{candidate_id:string;version_id:string};requireRuntimeMaterials?:(client:pg.Client,scope:AssistantScope,row:Row)=>Promise<void>;metadataOnly?:(client:pg.Client,identity:ReplyPreparationIdentity)=>Promise<boolean>}) {this.requireRuntimeMaterials=options.requireRuntimeMaterials;this.guards=options.guards;this.ports=options.ports;this.metadataOnly=options.metadataOnly;this.selectedReference=options.selectedReference;}
- async read(client:pg.Client,request:ReplyStoreRequest):Promise<ReplyDiscussionContext|null> {return this.build(client,request);}
- async readPreparation(client:pg.Client,identity:ReplyPreparationIdentity):Promise<ReplyDiscussionContext>{const result=await this.build(client,{...identity,request_id:null});if(!result)reject();return result!;}
+ async read(client:pg.Client,request:ReplyStoreRequest):Promise<ReplyDiscussionContext|null> {return (await this.build(client,request))?.discussion??null;}
+ async readPreparation(client:pg.Client,identity:ReplyPreparationIdentity):Promise<ReplyDiscussionContext>{const result=await this.build(client,{...identity,request_id:null});if(!result)reject();return result!.discussion;}
  async validatePreparation(client:pg.Client,identity:ReplyPreparationIdentity,discussion:ReplyDiscussionContext|null):Promise<void>{if(discussion===null)reject();await this.validate(client,{...identity,request_id:null},discussion);}
  async preparationDependencies(client:pg.Client,identity:ReplyPreparationIdentity,discussion:ReplyDiscussionContext):Promise<string[]>{
-   await this.validatePreparation(client,identity,discussion);
-   const rows=new Map((await inputRows(client,identity.owner_id,identity.contact_id,discussion.session_id)).map(r=>[r.id,r]));
-   const deps=new Set<string>();
-   for(const record of discussion.snapshot.records){const row=rows.get(record.input_version_id);if(!row)reject();for(const id of record.kind==='discussion_input'?row!.dependency_ids:await generationDependencies(client,identity.owner_id,identity.contact_id,row!))deps.add(id);}
-   return unique(deps);
+   if(discussion===null)reject();
+   return this.validate(client,{...identity,request_id:null},discussion);
  }
  async validateCurrent(client:pg.Client,request:ReplyStoreRequest,discussion:ReplyDiscussionContext|null):Promise<void> {
    await this.validate(client,request,discussion);
  }
- private async validate(client:pg.Client,request:DiscussionRequest,discussion:ReplyDiscussionContext|null):Promise<void> {
-   if(discussion===null){if(await this.build(client,request)!==null)reject();return;}
+ private async validate(client:pg.Client,request:DiscussionRequest,discussion:ReplyDiscussionContext|null):Promise<string[]> {
+   if(discussion===null){if(await this.build(client,request)!==null)reject();return [];}
    if(!same(discussion.scope,{owner_id:request.owner_id,contact_id:request.contact_id})||discussion.request_key!==request.idempotency_key)reject();
    snapshot(discussion.snapshot,request.owner_id,request.contact_id,request.idempotency_key);
-   const current=await this.build(client,request,discussion.snapshot);
+   const rebuilt=await this.build(client,request,discussion.snapshot),current=rebuilt?.discussion;
    if(!current||!same(current.snapshot,discussion.snapshot))reject();
    // 展示/选择标记可随后变化；实际传给模型的正文仍必须逐项相同。
    const identity=(i:DiscussionItem)=>[i.kind,i.input_version_id,i.turn_id,i.reply_request_id,i.candidate_id,i.version_id,i.parent_version_id,i.candidate_number,i.version_number,i.text,i.basis_changes];
    if(!same(current!.items.map(identity),discussion.items.map(identity)))reject();
+   // 本次完整构建已汇总合格记录的依赖；逐项比较成功后才交回，不另读一遍历史。
+   return [...rebuilt!.dependencies];
  }
  private async generation(client:pg.Client,scope:AssistantScope,row:Row):Promise<string[]> {
    if(row.state!=='active'||!['running','failed','completed'].includes(row.turn_state)||(row.input_payload_present===undefined?row.input_payload===null:!row.input_payload_present))reject();
@@ -174,10 +174,10 @@ export class PostgresReplyDiscussionContext {
    }
    return {items,records,basis};
  }
- private async build(client:pg.Client,request:DiscussionRequest,selected?:Row):Promise<ReplyDiscussionContext|null> {
+ private async build(client:pg.Client,request:DiscussionRequest,selected?:Row):Promise<DiscussionBuild|null> {
    return withReplyValidationScope(client,request,()=>this.buildScoped(client,request,selected));
  }
- private async buildScoped(client:pg.Client,request:DiscussionRequest,selected?:Row):Promise<ReplyDiscussionContext|null> {
+ private async buildScoped(client:pg.Client,request:DiscussionRequest,selected?:Row):Promise<DiscussionBuild|null> {
    const scope={owner_id:request.owner_id,contact_id:request.contact_id};await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${scope.owner_id}`]);
    if(request.request_id!==null&&!(await client.query('SELECT 1 FROM reply_request WHERE id=$1 AND owner_id=$2 AND contact_id=$3 AND conversation_binding_id=$4 AND idempotency_key=$5',[request.request_id,scope.owner_id,scope.contact_id,request.conversation_binding_id,request.idempotency_key])).rowCount)reject();
    const anchor=(await client.query(anchorSQL.replace('turn.input_payload,','turn.input_payload::text AS input_payload_text,'),[scope.owner_id,scope.contact_id,request.idempotency_key])).rows[0];
@@ -191,7 +191,7 @@ export class PostgresReplyDiscussionContext {
    const {items,records,basis}=await this.assemble(client,scope,rows,anchor.input_version_id,metadataOnly,selected);
    const snap={version:1,scope,session_id:anchor.session_id,request_key:request.idempotency_key,current_input_version_id:anchor.input_version_id,current_turn_id:anchor.id,current_payload_sha256:fingerprint([anchor.input_digest,legacyJson(anchor.input_payload_text),anchor.conversation_binding_id]),records,basis_revision_sha256:await this.ports.historicalBasisRevision(client,scope,unique(basis))};
    if(request.request_id!==null)await capturedEdges(client,scope.owner_id,request.request_id,snap);
-   return {scope,session_id:anchor.session_id,request_key:request.idempotency_key,current_input_version_id:anchor.input_version_id,items,snapshot:snap,notice:DISCUSSION_NOTICE};
+   return {discussion:{scope,session_id:anchor.session_id,request_key:request.idempotency_key,current_input_version_id:anchor.input_version_id,items,snapshot:snap,notice:DISCUSSION_NOTICE},dependencies:unique(basis)};
  }
 }
 export function assistantDiscussionPayload(discussion:ReplyDiscussionContext):AssistantDiscussionPayload {

@@ -122,11 +122,14 @@ export class ReplyGenerationService {
     ||!['off','low','high','max'].includes(m.reasoningEffort))throw new ReplyError('reply_model_configuration_invalid',503);
   this.options={...options,model:structuredClone(m)};
  }
- private async refreshRuntime(scope:VerifiedReplyScope,input:ReplyRequestInput,internal:ReplyInternalContext,signal:AbortSignal):Promise<void>{
-  const runtime=this.options.assistantRuntime;if(!runtime)return;
+ private async requireReplySession(client:Client,scope:VerifiedReplyScope,input:ReplyRequestInput):Promise<string|null>{
+  await requireReplyScope(client,scope,input);if(!this.options.assistantRuntime)return null;
+  return (await client.query('SELECT session_id FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3 AND conversation_binding_id=$4',[scope.owner_id,scope.contact_id,input.idempotency_key,scope.conversation_binding_id])).rows[0]?.session_id??null;
+ }
+ private async refreshRuntime(scope:VerifiedReplyScope,input:ReplyRequestInput,internal:ReplyInternalContext,signal:AbortSignal,session:string|null):Promise<void>{
+  const runtime=this.options.assistantRuntime;if(!runtime||!session)return;
   const reader=runtimePlanReader(this.options,scope,input,internal);
-  const session=await this.options.transaction(async client=>(await client.query('SELECT session_id FROM assistant_session_turn WHERE owner_id=$1 AND contact_id=$2 AND idempotency_key=$3 AND conversation_binding_id=$4',[scope.owner_id,scope.contact_id,input.idempotency_key,scope.conversation_binding_id])).rows[0]?.session_id);
-  if(session)await runtime.materialize(scope,session,assistantRuntimeConfiguration({version:1,model:this.options.model,binding:scope.conversation_binding_id}),reader,signal,{generation:true,requestKey:input.idempotency_key});
+  await runtime.materialize(scope,session,assistantRuntimeConfiguration({version:1,model:this.options.model,binding:scope.conversation_binding_id}),reader,signal,{generation:true,requestKey:input.idempotency_key});
  }
  private async measurePrepared(scope:VerifiedReplyScope,input:ReplyRequestInput,internal:ReplyInternalContext,state:ReplyBudgetState,transaction:ReplyServiceOptions['transaction'],requireCurrent:()=>Promise<void>,signal:AbortSignal,onHistory?:(history:AssistantRuntimeHistory|null)=>void):Promise<MessagesBudgetReceipt>{
   const model=this.options.model;
@@ -163,8 +166,8 @@ export class ReplyGenerationService {
   const transaction:ReplyServiceOptions['transaction']=operation=>this.options.transaction(async client=>{
    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`owner:${verified.owner_id}`]);return operation(client);
   });
-  signal.throwIfAborted();await transaction(client=>requireReplyScope(client,verified,input));
-  await this.refreshRuntime(verified,input,internal,signal);
+  signal.throwIfAborted();const session=await transaction(client=>this.requireReplySession(client,verified,input));
+  await this.refreshRuntime(verified,input,internal,signal,session);
   const {controller,skillPort,explored}=replyResources(this.options,transaction,verified,input,internal);
   try{
    const prepared=new ReplyPreparedContexts({command:input,discussion:controller.discussion,assistant:controller.assistant,explored});
@@ -188,8 +191,8 @@ export class ReplyGenerationService {
    return operation(client);
   });
   signal.throwIfAborted();
-  await transaction(client=>requireReplyScope(client,verified,input));
-  await this.refreshRuntime(verified,input,internal,signal);
+  const session=await transaction(client=>this.requireReplySession(client,verified,input));
+  await this.refreshRuntime(verified,input,internal,signal,session);
   // 在领取租约之前等前台许可，排队不会耗尽30秒业务租约；loop不再重复领取。
   const round=await this.options.arbiter.acquire('foreground',signal);
   let settled=false,owned:ReplyStoreRequest|undefined,skill:ReplySkillSession|undefined;

@@ -1,4 +1,5 @@
 import {captureAssistantRuntimeDependencies} from '../runtime/assistant-runtime-erasure.ts';
+import {readReplyRecord} from './reply-record-read-scope.ts';
 /** 来源删除前验证真实助手父边并清除准备/恢复副本；调用方持有 owner 事务锁。 */
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
@@ -86,11 +87,12 @@ export function snapshot(payload: unknown, owner:string,contact:string,key:strin
   return p;
 }
 export async function inputRows(client:pg.Client,owner:string,contact:string,session:string):Promise<Row[]> {
-  return (await client.query(`SELECT input.id,input.session_id,input.turn_id,input.input_type,input.state,input.content::text AS content_text,input.conversation_binding_id,input.dependency_ids,
+  const rows=await readReplyRecord(client,owner,'inputs:'+JSON.stringify([contact,session]),async()=>(await client.query(`SELECT input.id,input.session_id,input.turn_id,input.input_type,input.state,input.content::text AS content_text,input.conversation_binding_id,input.dependency_ids,
     turn.state AS turn_state,turn.input_payload::text AS input_payload_text,turn.input_digest,turn.dependency_ids AS turn_dependencies,request.id AS reply_request_id,request.state AS request_state
     FROM assistant_session_input input LEFT JOIN assistant_session_turn turn ON turn.id=input.turn_id AND turn.input_version_id=input.id AND turn.owner_id=input.owner_id AND turn.contact_id=input.contact_id AND turn.session_id=input.session_id
     LEFT JOIN reply_request request ON(turn.reply_request_id IS NULL OR request.id=turn.reply_request_id) AND request.owner_id=turn.owner_id AND request.contact_id=turn.contact_id AND request.conversation_binding_id=turn.conversation_binding_id AND request.idempotency_key=turn.idempotency_key
-    WHERE input.owner_id=$1 AND input.contact_id=$2 AND input.session_id=$3 ORDER BY input.created_at,coalesce(input.turn_id,input.id)`,[owner,contact,session])).rows.map(row=>({...row,content:legacyJson(row.content_text),input_payload:legacyJson(row.input_payload_text)}));
+    WHERE input.owner_id=$1 AND input.contact_id=$2 AND input.session_id=$3 ORDER BY input.created_at,coalesce(input.turn_id,input.id)`,[owner,contact,session])).rows);
+  return rows.map(row=>({...row,content:legacyJson(row.content_text),input_payload:legacyJson(row.input_payload_text)}));
 }
 async function requireGeneration(client:pg.Client,owner:string,contact:string,row:Row):Promise<void> {
   if(row.input_type!=='generation'||row.state!=='active'||!['running','failed','completed'].includes(row.turn_state)||row.input_payload===null||row.input_digest===null)reject();
@@ -126,6 +128,11 @@ export async function evidenceSources(client:pg.Client,owner:string,e:Row,strict
   return reject();
 }
 export async function generationDependencies(client:pg.Client,owner:string,contact:string,row:Row):Promise<string[]> {
+  const dependencies=ids(row.turn_dependencies??[]);
+  if(typeof row.reply_request_id!=='string')return readGenerationDependencies(client,owner,contact,row);
+  return readReplyRecord(client,owner,'dependencies:'+JSON.stringify([contact,row.reply_request_id,dependencies]),()=>readGenerationDependencies(client,owner,contact,row));
+}
+async function readGenerationDependencies(client:pg.Client,owner:string,contact:string,row:Row):Promise<string[]> {
   const dependencies=new Set<string>(ids(row.turn_dependencies??[]));
   if(row.reply_request_id===null)return sorted(dependencies);
   // 祖先材料与原始来源在同一只读语句批取；无证据行时仍读取当前请求的原始来源。
