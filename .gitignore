@@ -18,15 +18,11 @@ __pycache__/
 .coverage
 .pytest_cache/
 
-# 本机调研、聊天导出与临时实验资料
+# 本机调研、聊天导出、会话截图、临时资料与模型许可状态
 /research/
 /chat_exports/
 /.scratch/
-
-# Computer Use 与本机会话产物（含真实界面截图，不入仓）
 .dsh-computer-use/
-
-# 本机模型许可运行状态
 /model-permits/
 
 # pnpm workspace 安装产物
