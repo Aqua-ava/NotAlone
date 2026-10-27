@@ -1,5 +1,6 @@
 /** 固定本机 embedding 的宿主生命周期；惰性打开、并发复用，关闭前排空在途推理。 */
-import {createLocalEmbedding,EmbeddingUnavailableError} from '../../retrieval/retrieval-embedding.ts';
+import {createLocalEmbedding,embeddingSnapshot,EmbeddingUnavailableError} from '../../retrieval/retrieval-embedding.ts';
+import {isAbsolute,join} from 'node:path';
 import type {EmbedTexts} from '../../retrieval/retrieval-hybrid.ts';
 
 type LocalEmbedding=Pick<Awaited<ReturnType<typeof createLocalEmbedding>>,'embed'|'close'>;
@@ -7,6 +8,15 @@ export interface LocalEmbeddingLifecycle {
   embed:EmbedTexts;
   close():Promise<void>;
   opened():boolean;
+}
+
+/** 业务资源由稳定目录定位，不能继承 DSH 为隔离运行而设置的 HOME。 */
+export function createBusinessEmbeddingFactory(businessHome:string,cacheDirectory?:string):()=>Promise<LocalEmbedding>{
+  const cache=cacheDirectory??join(businessHome,'.cache/notalone/memory-embedding');
+  if(!isAbsolute(businessHome)||!isAbsolute(cache)||/[\0\r\n]/.test(businessHome+cache))
+    throw new EmbeddingUnavailableError(new Error('embedding_cache_path_invalid'));
+  const snapshot=embeddingSnapshot(cache);
+  return ()=>createLocalEmbedding(snapshot);
 }
 
 export function createLocalEmbeddingLifecycle(

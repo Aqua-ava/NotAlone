@@ -269,6 +269,26 @@ test('合成PG：停用、人工修正、来源删除、并发世代、模型失
   }finally{await f.close();}
 });
 
+test('合成PG：模型前失败保存同批安全诊断，保留原异常且不复制敏感正文',async()=>{
+  const f=await createStorageFixture();try{
+    const x=await createScope(f);
+    const failure=Object.assign(new TypeError('合成聊天与 sk-synthetic-secret'),{
+      code:'NO_ADAPTER',failure:{code:'NO_ADAPTER',status:503,message:'合成提示词'},
+    });
+    const port=fakePort(x.memory,{before:()=>{throw failure;}});
+    await assert.rejects(service(f,port).run(x.scope,x.claim,new AbortController().signal),error=>error===failure);
+    const batch=(await f.client.query('SELECT status,error_code,output_payload FROM layered_memory_batch WHERE task_id=$1',[x.taskId])).rows[0];
+    assert.equal(batch.status,'failed');
+    assert.equal(batch.error_code,'l2_scenario_model_failed');
+    assert.equal(batch.output_payload.error_diagnostic.phase,'proposal');
+    assert.equal(batch.output_payload.error_diagnostic.errors[0].name,'TypeError');
+    assert.deepEqual(batch.output_payload.error_diagnostic.errors[0].provider_failure,{code:'NO_ADAPTER',status:503});
+    const encoded=JSON.stringify(batch.output_payload.error_diagnostic);
+    for(const secret of ['合成聊天','synthetic-secret','合成提示词'])assert.ok(!encoded.includes(secret),secret);
+    assert.equal(port.calls,1);
+  }finally{await f.close();}
+});
+
 test('合成PG：场景撤回同步清除回复副本并使冻结快照失效',async()=>{
   const f=await createStorageFixture();try{
     const x=await createScope(f),l2=service(f,fakePort(x.memory));

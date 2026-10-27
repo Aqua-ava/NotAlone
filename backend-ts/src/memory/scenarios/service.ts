@@ -3,6 +3,7 @@ import type {Client} from 'pg';
 import {randomUUID} from 'node:crypto';
 import type {MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
 import type {ContextMetadata} from '../../reply/context/reply-context-types.ts';
+import {layeredFailureDiagnostic,type LayeredFailureDiagnostic,type LayeredFailurePhase} from '../../diagnostics/layered-failure-diagnostic.ts';
 import {readReplyContactOverview, readReplyOwnerOverview} from '../../reply/context/reply-context-overview.ts';
 import {deleteSourceReplies} from '../../preferences/preference-erasure.ts';
 import {L3ProfileService} from '../profiles/service.ts';
@@ -708,7 +709,7 @@ export class L2ScenarioService {
     });
   }
 
-  async fail(work: L2ScenarioPreparedWork, code: string): Promise<void> {
+  async fail(work: L2ScenarioPreparedWork, code: string, diagnostic?:LayeredFailureDiagnostic): Promise<void> {
     if (!/^[a-z0-9_]{1,80}$/.test(code)) throw new L2ScenarioError('l2_scenario_failure_code_invalid');
     await this.transaction(async client => {
       await lockScope(client, work.scope);
@@ -721,9 +722,12 @@ export class L2ScenarioService {
       const state = await readState(client, work.scope);
       if (!state?.enabled || Number(state.settings_generation) !== work.settings_generation
         || Number(state.organization_generation) !== work.organization_generation) return;
-      const failed = await client.query(`UPDATE public.layered_memory_batch SET status='failed',error_code=$2
+      const failed = await client.query(`UPDATE public.layered_memory_batch SET status='failed',error_code=$2,
+        output_payload=CASE WHEN $6::jsonb IS NULL THEN output_payload
+          ELSE COALESCE(output_payload,'{}'::jsonb)||$6::jsonb END
         WHERE id=$1 AND task_id=$3 AND owner_id=$4 AND contact_id IS NOT DISTINCT FROM $5::uuid AND status='running'`,
-      [work.batch_id, code, work.claim.task_id, work.scope.owner_id, contactParameter(work.scope)]);
+      [work.batch_id, code, work.claim.task_id, work.scope.owner_id, contactParameter(work.scope),
+        diagnostic?JSON.stringify({error_diagnostic:diagnostic}):null]);
       if (failed.rowCount !== 1) return;
       await client.query(`UPDATE public.layered_memory_state
         SET status=$3,error_code=$4,updated_at=$5
@@ -746,9 +750,11 @@ export class L2ScenarioService {
       await this.l3.run(scope, claim, signal);
       return {state: await this.read(scope), status: 'idle', processed_count: 0};
     }
+    let phase:LayeredFailurePhase='workspace';
     try {
       signal.throwIfAborted();
       const workspace = new L2ScenarioDocumentWorkspace(work.inputs, work.current, this.budget);
+      phase='proposal';
       const proposal = await runScenarioDocumentAgent({
         workspace,
         port: this.model,
@@ -762,8 +768,10 @@ export class L2ScenarioService {
         requireCurrent: () => this.requireCurrent(work),
       });
       signal.throwIfAborted();
+      phase='record_proposal';
       await this.recordProposal(work, proposal.scenarios);
       signal.throwIfAborted();
+      phase='verification';
       const verification = await verifyScenarioProposal({
         scenarios: proposal.scenarios,
         memories: work.inputs,
@@ -777,11 +785,15 @@ export class L2ScenarioService {
         signal,
         requireCurrent: () => this.requireCurrent(work),
       });
+      phase='record_verification';
       await this.recordVerification(work, verification.result, null);
       signal.throwIfAborted();
+      phase='publish';
       await this.publish(work, proposal.scenarios, signal);
       signal.throwIfAborted();
+      phase='profile';
       if (work.profile_required) await this.l3.run(scope, claim, signal);
+      phase='read';
       return {
         state: await this.read(scope),
         status: 'completed',
@@ -794,7 +806,8 @@ export class L2ScenarioService {
       const code = error instanceof L2ScenarioError || error instanceof L2ScenarioConflict
         ? error.code
         : 'l2_scenario_model_failed';
-      await this.fail(work, signal.aborted ? 'l2_scenario_cancelled' : code).catch(() => {});
+      await this.fail(work, signal.aborted ? 'l2_scenario_cancelled' : code,
+        layeredFailureDiagnostic(error,phase)).catch(() => {});
       throw error;
     }
   }

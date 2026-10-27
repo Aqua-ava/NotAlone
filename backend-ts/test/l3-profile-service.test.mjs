@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createStorageFixture} from './host-storage-fixture.mjs';
 import {L3ProfileService} from '../src/memory/profiles/service.ts';
+import {L2ScenarioService} from '../src/memory/scenarios/service.ts';
 import {renderProfile} from '../src/memory/profiles/workspace.ts';
 import {captureLayeredSnapshot, selectLayeredMaterial, validateLayeredSnapshot} from '../src/reply/context/reply-context-layered.ts';
 import {readReplyContactOverview, readReplyOwnerOverview} from '../src/reply/context/reply-context-overview.ts';
@@ -474,6 +475,38 @@ test('合成PG：底层来源失效物理清除L3、目录和冻结回复快照'
     assert.equal((await f.client.query(`SELECT count(*)::int n FROM layered_profile_batch
       WHERE owner_id=$1 AND contact_id=$2`, [x.ownerId,x.contactId])).rows[0].n, 0);
   } finally { await f.close(); }
+});
+
+test('合成PG：仅恢复L3时失败诊断写入画像批次，不改写已成功L2或泄漏异常正文',async()=>{
+  const f=await createStorageFixture();
+  try{
+    const x=await createScope(f);
+    const failure=Object.assign(new TypeError('合成聊天与 sk-synthetic-profile-secret'),{
+      code:'NO_ADAPTER',failure:{code:'NO_ADAPTER',status:503,message:'合成画像提示词'},
+    });
+    let calls=0;
+    const transaction=async work=>{
+      await f.client.query('BEGIN');
+      try{const value=await work(f.client);await f.client.query('COMMIT');return value;}
+      catch(error){await f.client.query('ROLLBACK');throw error;}
+    };
+    const l2=new L2ScenarioService({transaction,binding,profile,budget,
+      now:()=>new Date('2026-10-25T02:00:00Z'),
+      model:{async call(input){calls++;await input.requireCurrent();throw failure;}},
+    });
+    await assert.rejects(l2.run(x.scope,x.claim,new AbortController().signal),error=>error===failure);
+    const batch=(await f.client.query('SELECT status,error_code,output_payload FROM layered_profile_batch WHERE task_id=$1',[x.taskId])).rows[0];
+    assert.equal(batch.status,'failed');
+    assert.equal(batch.error_code,'l3_profile_model_failed');
+    assert.equal(batch.output_payload.error_diagnostic.phase,'proposal');
+    assert.equal(batch.output_payload.error_diagnostic.errors[0].name,'TypeError');
+    assert.deepEqual(batch.output_payload.error_diagnostic.errors[0].provider_failure,{code:'NO_ADAPTER',status:503});
+    for(const secret of ['合成聊天','synthetic-profile-secret','合成画像提示词'])assert.ok(!JSON.stringify(batch.output_payload.error_diagnostic).includes(secret),secret);
+    const l2Batch=(await f.client.query('SELECT status,output_payload FROM layered_memory_batch WHERE id=$1',[x.l2BatchId])).rows[0];
+    assert.equal(l2Batch.status,'succeeded');
+    assert.equal(l2Batch.output_payload,null);
+    assert.equal(calls,1);
+  }finally{await f.close();}
 });
 
 test('合成PG：取消不发布，显式恢复只重试同一L3并受两次尝试上限约束', async () => {

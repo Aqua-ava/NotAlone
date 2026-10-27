@@ -13,6 +13,7 @@ import {createHostReplyRuntime} from './host-reply.ts';
 import {createHostModelAccounting} from './host-model-accounting.ts';
 import {PostgresModelLedger,PostgresModelLedgerDetails} from '../platform/models/model-ledger.ts';
 import {startModelHost,modelBackgroundConcurrency} from '../platform/models/model-host.ts';
+import {createBusinessEmbeddingFactory} from '../platform/models/local-embedding-lifecycle.ts';
 import type {SourceProcessingTraceStore} from '../diagnostics/source-processing-trace.ts';
 import type {L2ScenarioQualityReader} from '../memory/scenarios/service.ts';
 import type {L2ScenarioBudget} from '../memory/scenarios/workspace.ts';
@@ -84,6 +85,7 @@ export async function startHostModelRuntime(options:HostModelRuntimeOptions){
     reply=await createHostReplyRuntime({ctx:options.ctx,assistantRuntime:options.assistantRuntime,storage:options.storage,arbiter:modelHost.arbiter,
       ledger,token,configuration:activeConfiguration,extractionEnabled:true,
       extractionAdoptionEnabled:true,
+      embeddingFactory:createBusinessEmbeddingFactory(options.businessHome,environment.NOTALONE_MEMORY_EMBEDDING_CACHE),
       extractionConcurrency:modelBackgroundConcurrency(environment),
       discussionSkillsRoot:configuredSkillsRoot,
       publicRuntime:true,

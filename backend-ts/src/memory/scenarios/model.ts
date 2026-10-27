@@ -20,6 +20,7 @@ import {
   type ExtractionPermitEndpoint,
 } from '../extraction/model.ts';
 import type {ScenarioDocumentCall, ScenarioDocumentCallPort, ScenarioDocumentCallResult} from './workspace.ts';
+import {withLayeredFailureOperation,type LayeredFailureOperation} from '../../diagnostics/layered-failure-diagnostic.ts';
 
 interface PermitState {
   state: string;
@@ -84,10 +85,15 @@ function providerFailure(error: LlmError | LlmFailure): {name: 'LlmError'|'LlmFa
 export class L2ScenarioModelError extends Error {
   readonly code: string;
   readonly receipt: ModelLedgerReceipt | null;
-  constructor(code: string, receipt: ModelLedgerReceipt|null = null, cause?: unknown) {
+  readonly provider_failure:{code:string;status?:number}|null;
+  readonly operation:LayeredFailureOperation|undefined;
+  constructor(code: string, receipt: ModelLedgerReceipt|null = null, cause?: unknown,
+    providerFailure:{code:string;status?:number}|null=null,operation?:LayeredFailureOperation) {
     super(code, cause === undefined ? undefined : {cause});
     this.code = code;
     this.receipt = receipt;
+    this.provider_failure=providerFailure;
+    this.operation=operation;
     this.name = 'L2ScenarioModelError';
   }
 }
@@ -109,19 +115,19 @@ export function createL2ScenarioModel(options: {
   return {
     async call(input: ScenarioDocumentCall): Promise<ScenarioDocumentCallResult> {
       input.signal.throwIfAborted();
-      await input.requireCurrent();
+      await withLayeredFailureOperation('model_scope',()=>input.requireCurrent());
       input.signal.throwIfAborted();
-      if ((await extractionUnconfirmedRequests(options.permit, {
+      if ((await withLayeredFailureOperation('model_recovery',()=>extractionUnconfirmedRequests(options.permit, {
         owner_id: input.owner_id,
         contact_id: input.contact_id,
-      })).includes(input.claim.task_id)) {
+      }))).includes(input.claim.task_id)) {
         throw new L2ScenarioModelError('l2_scenario_model_recovery_unknown');
       }
       const binding = {
         ...input.binding,
         reasoningEffort: ReasoningEffortId(input.binding.reasoningEffort),
       };
-      const prepared = await options.ctx.llm.prepareCall(binding, input.signal);
+      const prepared = await withLayeredFailureOperation('model_prepare',()=>options.ctx.llm.prepareCall(binding, input.signal));
       const connection = connect(options.permit, input.signal);
       const attemptId = randomUUID();
       const ledgerEntryId = input.contact_id === null ? null : randomUUID();
@@ -137,14 +143,15 @@ export function createL2ScenarioModel(options: {
       let usage: ModelLedgerUsage | null = null;
       let success = false;
       let observedFailure: {name: 'LlmError'|'LlmFailure'; code: string; status?: number} | null = null;
+      let observedError:unknown;
       try {
-        const granted = await connection.exchange({
+        const granted = await withLayeredFailureOperation('model_permit',()=>connection.exchange({
           op: 'acquire',
           token: options.permit.token,
           kind: 'background',
           attempt_id: attemptId,
           worker: {pid: process.pid, parentPid: process.ppid, executable: process.execPath},
-        }, 0);
+        }, 0));
         if (granted.state !== 'granted' || !granted.permit_id) {
           throw new L2ScenarioModelError('l2_scenario_model_permit_unavailable');
         }
@@ -176,15 +183,15 @@ export function createL2ScenarioModel(options: {
           requireCurrent: input.requireCurrent,
           beforeDispatch: async value => {
             receipt = {...base, input_budget: modelLedgerInputBudget(value.budget)};
-            const response = await connection.exchange({
+            const response = await withLayeredFailureOperation('model_reservation',()=>connection.exchange({
               op: 'reserve',
               token: options.permit.token,
               receipt,
               claim: input.claim,
-            });
+            }));
             if (response.state !== 'reserved') {
               reservationRejected = true;
-              throw new L2ScenarioModelError('l2_scenario_model_reservation_rejected');
+              throw new L2ScenarioModelError('l2_scenario_model_reservation_rejected',null,undefined,null,'model_reservation');
             }
             reserved = true;
             input.signal.throwIfAborted();
@@ -217,6 +224,7 @@ export function createL2ScenarioModel(options: {
           }
         }
       } catch (error) {
+        observedError=error;
         if (error instanceof LlmError) observedFailure = providerFailure(error);
         else if (!(error instanceof L2ScenarioModelError)) {
           observedFailure = {name: 'LlmError', code: input.signal.aborted ? 'ABORTED' : 'STREAM_FAILED'};
@@ -289,9 +297,9 @@ export function createL2ScenarioModel(options: {
       if (!success || !receipt) {
         if (input.signal.aborted) throw new L2ScenarioModelError('l2_scenario_model_cancelled', receipt);
         if (observedFailure?.code === 'CONTEXT_WINDOW_EXCEEDED') {
-          throw new L2ScenarioModelError('l2_scenario_model_context_limit', receipt);
+          throw new L2ScenarioModelError('l2_scenario_model_context_limit',receipt,observedError,observedFailure,'model_stream');
         }
-        throw new L2ScenarioModelError('l2_scenario_model_failed', receipt);
+        throw new L2ScenarioModelError('l2_scenario_model_failed',receipt,observedError,observedFailure,'model_stream');
       }
       input.signal.throwIfAborted();
       await input.requireCurrent();

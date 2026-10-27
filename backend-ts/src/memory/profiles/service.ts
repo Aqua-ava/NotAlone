@@ -5,6 +5,7 @@ import {managementTargetInputs} from '../records/documents/target.ts';
 import {randomUUID} from 'node:crypto';
 import type {MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
 import type {ContextMetadata} from '../../reply/context/reply-context-types.ts';
+import {layeredFailureDiagnostic,type LayeredFailurePhase} from '../../diagnostics/layered-failure-diagnostic.ts';
 import {readReplyContactOverview, readReplyOwnerOverview} from '../../reply/context/reply-context-overview.ts';
 import {epochMicros} from '../overview/projection/time.ts';
 import {deleteSourceReplies} from '../../preferences/preference-erasure.ts';
@@ -882,11 +883,13 @@ export class L3ProfileService {
     signal.throwIfAborted();
     const work = await this.prepare(scope, claim);
     if (!work || work === 'settled') return this.read(scope);
+    let phase:LayeredFailurePhase='workspace';
     try {
       signal.throwIfAborted();
       const corrections = correctionContext(work.feedback);
       const rejectedTexts = new Set(corrections.map(item => String(item.rejected_text)));
       const workspace = new L3ProfileWorkspace(work.existing_profile, work.scenarios, work.memories, this.budget);
+      phase='proposal';
       const agent = await runProfileDocumentAgent({
         workspace,
         existing:work.existing_profile,
@@ -907,6 +910,7 @@ export class L3ProfileService {
         requireCurrent:() => this.requireCurrent(work),
         remainingCalls:work.model_calls_remaining,
       });
+      phase='record_proposal';
       const filtered = filterProfileProposal(
         {entries:agent.proposal.entries},
         work.memories,
@@ -924,6 +928,7 @@ export class L3ProfileService {
         throw new L2ScenarioError('l3_profile_proposal_invalid');
       }
       signal.throwIfAborted();
+      phase='verification';
       const verification = await verifyProfileProposal({
         entries:filtered.entries,
         memories:work.memories,
@@ -941,11 +946,13 @@ export class L3ProfileService {
         corrections,
         remainingCalls:Math.max(0, work.model_calls_remaining - agent.calls),
       });
+      phase='record_verification';
       await this.recordVerification(work, verification.result, null, verification.attempts);
       const supported = filtered.entries.filter((_entry,index) =>
         verification.result.results.some(result => result.entry_index === index && result.supported));
       if (filtered.entries.length && !supported.length) throw new L2ScenarioError('l3_profile_faithfulness_rejected');
       signal.throwIfAborted();
+      phase='publish';
       await this.publish(work, validateProfile({entries:supported}, work.memories, this.budget), signal);
       return this.read(scope);
     } catch (error) {
@@ -957,7 +964,7 @@ export class L3ProfileService {
         : error instanceof L3ProfileVerificationError
           ? {verification_trace:error.trace}
           : undefined;
-      await this.fail(work, code, diagnostics).catch(() => {});
+      await this.fail(work,code,{...diagnostics,error_diagnostic:layeredFailureDiagnostic(error,phase)}).catch(() => {});
       throw error;
     }
   }
