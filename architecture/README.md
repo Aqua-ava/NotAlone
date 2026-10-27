@@ -170,6 +170,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 103. [ADR-103：统一业务后台任务的查看、停止与恢复](adr/103-unified-background-task-management.md)
 104. [ADR-104：记忆生成逻辑按领域模块维护](adr/104-tencent-source-memory-engine.md)
 105. [ADR-105：以当前有效绑定观察恢复前台确认](adr/105-fresh-verified-foreground-recovery.md)
+107. [ADR-107：统一记忆处理入口与安全自动恢复](adr/107-unified-memory-processing-lifecycle.md)
 
 ## 当前架构决策
 

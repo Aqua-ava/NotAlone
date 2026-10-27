@@ -3,6 +3,7 @@
 > 状态：已采纳
 > 决策日期：2026-10-25
 > 局部修订：[ADR-015](015-background-task-and-memory-index-lifecycle.md)第 3 条“用户暂不提供取消入口”；[ADR-034](034-explicit-failed-task-recovery-selection.md)的原任务恢复规则继续有效。
+> 后续局部修订：[ADR-107](107-unified-memory-processing-lifecycle.md)统一记忆处理的用户入口，并允许符合条件的未完成处理安全自动恢复；内部任务记录和领域守卫保留，其他任务仍按本文管理。
 > 实现边界：Ticket 22 的 TS 任务管理候选与 DSH profile 回归；来源删除执行仍由 Ticket 17 接管，最终切换与真实 App 验收由 Ticket 24／25 把关。
 
 ## 背景
