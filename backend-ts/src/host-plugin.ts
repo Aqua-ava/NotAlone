@@ -46,6 +46,7 @@ import {PureTsFollowSmoke} from './host/pure-ts-follow-smoke.ts';
 import {PureTsMaintenance} from './host/pure-ts-maintenance.ts';
 import {acquireManagedDatabaseLease} from './platform/database/managed-database-lifetime.ts';
 import {createLayeredMemoryManagement} from './memory/records/documents/service.ts';
+import {recoverMemoryProcessingOnStartup} from './memory/processing/recovery.ts';
 import {
  UnavailableTaskControl,
  type TaskControlPort,type TaskScope,
@@ -523,6 +524,20 @@ async function start(ctx: Context) {
     const control=modelRuntime.extractionControl;
     if(!control)throw new Error('EXTRACTION_WORKER_UNAVAILABLE');
     activeTaskControl=control;
+    if(storage.runtimeOwnerId&&modelRuntime.replyStatus.state==='ready'){
+      const recovered=await recoverMemoryProcessingOnStartup({
+        pool:progressPool,ownerId:storage.runtimeOwnerId,
+        unconfirmed:(client,scope)=>modelRuntime!.unconfirmedMemoryRequestsInTransaction(
+          client as pg.Client,scope.ownerId,scope.contactId,
+        ),
+      });
+      for(const task of recovered){
+        await taskControl.wake(
+          {ownerId:storage.runtimeOwnerId,contactId:task.contact_id},
+          task.task_id,
+        ).catch(()=>{});
+      }
+    }
     if(storage.runtimeOwnerId)layeredManagement=createLayeredMemoryManagement({
       ownerId:storage.runtimeOwnerId,transaction:work=>storage.businessTransaction(work),
       ...(modelRuntime?.qualityApi?{

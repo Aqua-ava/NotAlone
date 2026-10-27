@@ -3,7 +3,8 @@ import type pg from 'pg';
 import {memoryModelRequestIds} from './model-requests.ts';
 import {unconfirmedARequests} from '../extraction/tasks/store-recovery.ts';
 import type {TaskControlPort,TaskScope,TaskExecutionLease} from '../../tasks/task-control.ts';
-import {profileOnlyRecoveryAllowed,resumeProfileOnlyRecovery} from '../records/documents/recovery.ts';
+import {profileOnlyRecoveryAllowed} from '../records/documents/recovery.ts';
+import {resumeInterruptedCurrentRound} from './round-recovery.ts';
 
 export class MemoryProcessingControlError extends Error {
  readonly code:string;readonly status:number;
@@ -125,14 +126,7 @@ export class MemoryProcessingControl {
      await c.query("UPDATE background_task SET status='queued',updated_at=clock_timestamp() WHERE id=ANY($1::uuid[]) AND status IN ('running','verifying')",[taskIds]);
     }else{
      // 只修复已明确允许的未完成阶段；不调用会加额或重置尝试次数的旧 resume。
-     await resumeProfileOnlyRecovery(c,scope,current.active_round_id);
-     await c.query(`UPDATE background_task_step step SET status='pending',worker_id=NULL,lease_expires_at=NULL,
-      lease_generation=lease_generation+1,last_error_code=NULL,updated_at=clock_timestamp() FROM memory_processing_round_task member
-      WHERE member.round_id=$1 AND member.active AND member.task_id=step.task_id AND (step.status IN ('failed','retryable') OR step.status='running' AND step.lease_expires_at<=clock_timestamp())`,[current.active_round_id]);
-     await c.query(`UPDATE background_task t SET status='queued',last_error_code=NULL,finished_at=NULL,updated_at=clock_timestamp()
-      FROM memory_processing_round_task member WHERE member.round_id=$1 AND member.active AND member.task_id=t.id AND t.status IN ('failed','running','verifying')`,[current.active_round_id]);
-     taskIds=(await c.query(`SELECT t.id FROM background_task t JOIN memory_processing_round_task member ON member.task_id=t.id
-      WHERE member.round_id=$1 AND member.active AND t.owner_id=$2 AND t.contact_id IS NOT DISTINCT FROM $3::uuid AND t.status='queued'`,[current.active_round_id,this.ownerId,contactId])).rows.map(row=>row.id);
+     taskIds=await resumeInterruptedCurrentRound(c,scope,current.active_round_id);
      await c.query('UPDATE memory_processing_round SET control_generation=$2,status=CASE WHEN status=\'blocked\' THEN \'waiting\' ELSE status END WHERE id=$1',[current.active_round_id,generation]);
     }
     await c.query('INSERT INTO memory_processing_operation(scope_id,operation_id,action,action_version,accepted_generation) VALUES($1,$2,$3,$4,$5)',[current.id,data.operation_id,action,data.action_version,generation]);

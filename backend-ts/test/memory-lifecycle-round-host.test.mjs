@@ -175,10 +175,11 @@ test('本轮目标在首次领取时冻结，运行中形成的新任务进入�
  try{
   await untilLifecycle(async()=>{
    lastState=(await host.request(`${root}/state`)).data;
-   return (await host.client.query(
+   const round=(await host.client.query(
     'SELECT status FROM memory_processing_round WHERE scope_id=$1 AND round_number=2',
     [seed.scope],
-   )).rows[0]?.status==='processing';
+   )).rows[0];
+   return round?.status==='processing'&&lastState.current.status==='processing';
   },15000);
  }catch(error){
   const tasks=(await host.client.query(`SELECT t.id,t.task_type,t.status,t.last_error_code,

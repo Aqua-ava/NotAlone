@@ -143,16 +143,16 @@ test('暂停阻止后续阶段领取而另一范围完成，继续复用原任�
 
 test('可信当前轮次的安全受阻直接提供继续，不要求先暂停且不重做成功提取',{timeout:60000},async t=>{
  const contact=randomUUID(),source=randomUUID(),task=randomUUID(),scope=randomUUID(),round=randomUUID();
- const host=await lifecycleHost(t,async(f,owner)=>{
-  await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成安全受阻')",[contact,owner]);
-  await f.client.query('INSERT INTO memory_processing_scope(id,owner_id,contact_id) VALUES($1,$2,$3)',[scope,owner,contact]);
-  await f.client.query("INSERT INTO memory_processing_round(id,scope_id,owner_id,contact_id,round_number,control_generation,status,phase) VALUES($1,$2,$3,$4,1,0,'blocked','verification')",[round,scope,owner,contact]);
-  await f.client.query('UPDATE memory_processing_scope SET active_round_id=$1 WHERE id=$2',[round,scope]);
-  await f.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'wechat_jsonl','synthetic-recoverable.jsonl',$4,0)",[source,owner,contact,'d'.repeat(64)]);
-  await f.client.query("INSERT INTO background_task(id,owner_id,contact_id,source_document_id,task_type,status,current_step,message_count,last_error_code) VALUES($1,$2,$3,$4,'import','failed','index',0,'lease_expired')",[task,owner,contact,source]);
-  await f.client.query("INSERT INTO background_task_step(task_id,step_name,step_order,status,attempt_count,last_error_code) VALUES($1,'extract_memory',1,'succeeded',1,NULL),($1,'index',2,'failed',1,'lease_expired'),($1,'verify',3,'pending',0,NULL)",[task]);
-  await f.client.query('INSERT INTO memory_processing_round_task(round_id,task_id,owner_id,contact_id) VALUES($1,$2,$3,$4)',[round,task,owner,contact]);
- });
+ const host=await lifecycleHost(t);
+ // 宿主启动后形成新的可恢复中断，验证运行中的显式继续仍只复用原任务。
+ await host.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成安全受阻')",[contact,host.owner]);
+ await host.client.query('INSERT INTO memory_processing_scope(id,owner_id,contact_id) VALUES($1,$2,$3)',[scope,host.owner,contact]);
+ await host.client.query("INSERT INTO memory_processing_round(id,scope_id,owner_id,contact_id,round_number,control_generation,status,phase) VALUES($1,$2,$3,$4,1,0,'blocked','verification')",[round,scope,host.owner,contact]);
+ await host.client.query('UPDATE memory_processing_scope SET active_round_id=$1 WHERE id=$2',[round,scope]);
+ await host.client.query("INSERT INTO source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) VALUES($1,$2,$3,'wechat_jsonl','synthetic-recoverable.jsonl',$4,0)",[source,host.owner,contact,'d'.repeat(64)]);
+ await host.client.query("INSERT INTO background_task(id,owner_id,contact_id,source_document_id,task_type,status,current_step,message_count,last_error_code) VALUES($1,$2,$3,$4,'import','failed','index',0,'lease_expired')",[task,host.owner,contact,source]);
+ await host.client.query("INSERT INTO background_task_step(task_id,step_name,step_order,status,attempt_count,last_error_code) VALUES($1,'extract_memory',1,'succeeded',1,NULL),($1,'index',2,'failed',1,'lease_expired'),($1,'verify',3,'pending',0,NULL)",[task]);
+ await host.client.query('INSERT INTO memory_processing_round_task(round_id,task_id,owner_id,contact_id) VALUES($1,$2,$3,$4)',[round,task,host.owner,contact]);
  const root=`/api/contacts/${contact}/memory-processing`;
  const state=(await host.request(`${root}/state`)).data;
  assert.equal(state.current.status,'blocked');assert.ok(state.current.actions.includes('continue'));
