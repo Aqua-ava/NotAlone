@@ -215,3 +215,27 @@ test('额度耗尽仍允许成功回执的无模型收尾，未完成画像继�
  assert.equal((await host.request(`${root(needsProfile)}/continue`,{method:'POST',body:{action_version:1,operation_id:randomUUID()}})).status,409);
  assert.equal((await host.request('/api/ledger/summary')).data.total_attempts,0);
 });
+
+test('六十四个已暂停到期范围不占维护候选，其他范围仍自动完成确定性工作',{timeout:60000},async t=>{
+ const contacts=Array.from({length:65},()=>randomUUID()),active=contacts.at(-1);
+ const host=await lifecycleHost(t,async(f,owner)=>{
+  await f.client.query("INSERT INTO contact(id,owner_id,display_name) SELECT id,$2,'合成维护范围' FROM unnest($1::uuid[]) AS id",[contacts,owner]);
+  await f.client.query(`INSERT INTO memory_processing_scope(owner_id,contact_id,intent,control_generation)
+   SELECT $2,id,CASE WHEN id=$3 THEN 'run' ELSE 'pause' END,CASE WHEN id=$3 THEN 0 ELSE 1 END FROM unnest($1::uuid[]) AS id`,[contacts,owner,active]);
+  await f.client.query(`INSERT INTO layered_memory_state(owner_id,contact_id,enabled,status,maintenance_allowed,dirty_revision,next_due_at)
+   SELECT $2,id,true,'stale',true,1,CASE WHEN id=$3 THEN now()-interval '1 minute' ELSE now()-interval '1 day' END
+   FROM unnest($1::uuid[]) AS id`,[contacts,owner,active]);
+ });
+ const root=id=>`/api/contacts/${id}/memory-processing/state`;
+ // 不点击开启／继续；正常维护必须自行越过前64个已暂停的到期范围。
+ await until(async()=>(await host.request(root(active))).data.history.entries.find(task=>task.task_type==='layered_memory'&&task.status==='succeeded'),3000);
+ const layered=(await host.request(`/api/contacts/${active}/layered-memory`)).data.layered_memory;
+ assert.equal(layered.maintenance_pending,false);
+ assert.equal(layered.status,'empty');
+ for(const contact of [contacts[0],contacts[63]]){
+  const paused=(await host.request(root(contact))).data;
+  assert.equal(paused.current.status,'paused');assert.deepEqual(paused.history.entries,[]);
+ }
+ assert.equal((await host.request('/api/runtime/status')).data.taskWorker.state,'running');
+ assert.equal((await host.request('/api/ledger/summary')).data.total_attempts,0);
+});

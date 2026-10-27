@@ -85,7 +85,9 @@ export function createLayeredMemoryManagement(options:LayeredMemoryManagementOpt
       if(options.modelWorkAvailable?.()===false)return {enqueued:[],nextDueAt:null,nextDelayMs:1_000};
       const now=options.now?.()??new Date();
       const scopes=await transaction(async client=>(await client.query(`SELECT contact_id FROM public.layered_memory_state
-        WHERE owner_id=$1 AND enabled AND maintenance_allowed AND (
+        WHERE owner_id=$1 AND enabled AND maintenance_allowed
+        AND NOT EXISTS(SELECT 1 FROM public.memory_processing_scope control WHERE control.owner_id=$1
+          AND control.contact_id IS NOT DISTINCT FROM layered_memory_state.contact_id AND control.intent='pause') AND (
           next_due_at<=$2 AND (dirty_revision>consumed_revision OR status='stale') OR next_boundary_at<=$2)
         ORDER BY LEAST(next_due_at,next_boundary_at),scope_kind,scope_key LIMIT 64`,[options.ownerId,now])).rows);
       const enqueued:string[]=[];
@@ -114,6 +116,8 @@ export function createLayeredMemoryManagement(options:LayeredMemoryManagementOpt
       }
       const next=await transaction(async client=>(await client.query(`SELECT min(LEAST(next_due_at,next_boundary_at)) AS due
         FROM public.layered_memory_state WHERE owner_id=$1 AND enabled AND maintenance_allowed
+        AND NOT EXISTS(SELECT 1 FROM public.memory_processing_scope control WHERE control.owner_id=$1
+          AND control.contact_id IS NOT DISTINCT FROM layered_memory_state.contact_id AND control.intent='pause')
         AND (dirty_revision>consumed_revision OR status='stale' OR next_boundary_at IS NOT NULL)`,[options.ownerId])).rows[0]?.due);
       const nextDueAt=next?new Date(next).toISOString():null;
       // 没有 LISTEN 的宿主仍可用有界一秒轮询观察新资料；不创建常驻私有 Timer。
