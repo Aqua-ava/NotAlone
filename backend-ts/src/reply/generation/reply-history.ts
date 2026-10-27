@@ -7,6 +7,10 @@ import {replyUuid} from './reply-contract.ts';
 import type {EvidenceAliases} from './reply-evidence-alias.ts';
 import type {ContextScope,ReplyContextEvidence} from '../context/reply-context-types.ts';
 export interface HistoryTrace {tool_name:string;status:'succeeded'|'empty'|'failed'|'timeout'|'budget_exceeded';evidence_ids:string[];latency_ms:number}
+/** 同事务的来源窗口无法恢复时，不能作为普通的可选读取失败继续。 */
+export class ReplyHistoryRecoveryError extends Error {
+  constructor(cause:unknown){super('回复历史事务恢复失败。',{cause});this.name='ReplyHistoryRecoveryError';}
+}
 export interface HistoryOptions {
   transaction<T>(fn:(client:pg.Client)=>Promise<T>):Promise<T>;
   scope:ContextScope;binding_id:string;initial_evidence_ids:string[];navigation_message_ids?:string[];
@@ -65,7 +69,7 @@ export class ReplyHistory {
        const evidenceId=this.options.aliases?.aliasFor(r.evidence_id)??r.evidence_id;
        return {evidence_id:evidenceId,message_id:evidenceId,role:r.speaker_role,speaker_role:r.speaker_role,factual_role:'source_message_statement',occurred_at:r.timing.source_started_at,session_id:this.options.aliases?this.sessionAlias():null,can_query_context:this.options.aliases!==undefined,status:r.status,text:r.text,timing:r.timing};
       })});
-    }catch(error){signal?.throwIfAborted();finish('failed');return this.status('failed',name==='conversation_search'?'history_search_failed':'history_query_failed');}
+    }catch(error){if(error instanceof ReplyHistoryRecoveryError)throw error;signal?.throwIfAborted();finish('failed');return this.status('failed',name==='conversation_search'?'history_search_failed':'history_query_failed');}
   }
   async search(args:{query:string;top_k?:number;occurred_after?:string|null;occurred_before?:string|null;timeout_ms?:number},signal?:AbortSignal):Promise<string>{
     return this.run('conversation_search',args.timeout_ms??500,signal,async client=>{

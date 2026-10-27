@@ -20,6 +20,8 @@ export async function createStorageFixture() {
     if (!ownedDatabase.test(name)) throw new Error('合成 PG 清理范围不匹配');
     // 排空前核对当前连接确属本轮库，禁止按前缀扫描或删除其他测试库。
     if (connected) {
+      // 即使测试在中止事务内失败，也先回滚，才能查询并确认当前连接的库归属。
+      await client.query('ROLLBACK');
       const current = await client.query('SELECT current_database() AS name');
       if (current.rows[0]?.name !== name) throw new Error('合成 PG 清理范围不匹配');
       await client.query(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity
