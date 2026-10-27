@@ -1,88 +1,89 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingTask } from '../shared/memory-processing';
-import { MemoryList } from './MemoryList';
-import { needsAttention, summarizeProcessing } from './memory-processing-summary';
+import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingTask, MemoryProcessingUnit } from '../shared/memory-processing';
 
-const names = { queued: '等待生成记忆', extracting: '正在生成记忆', organizing: '正在整理记忆', completed: '本次处理完成',
-  interrupted: '记忆生成已中断', failed: '记忆生成失败', stopped: '记忆生成已停止' };
-function reason(task: MemoryProcessingTask) {
-  if (task.reasonCode === 'model_configuration_unavailable') return '模型配置不可用，请在设置中核对后继续。';
-  if (task.reasonCode === 'execution_resources_unavailable') return '执行资源暂不可用，请稍后继续。';
-  if (task.reasonCode === 'processing_outcome_unknown') return '部分历史处理结果无法核实，请查看处理详情。';
-  if (task.reasonCode === 'batches_skipped') return '部分批次未成功提取，已跳过；处理结束不代表全部聊天均已成功提取。';
-  if (task.reasonCode === 'source_unavailable') return '来源已删除或不可用，无法继续此任务。';
-  if (task.reasonCode === 'execution_interrupted') return '上次执行已中断，已保存的处理进度仍保留。';
-  if (task.reasonCode === 'memory_extraction_failed') return '上次未能从聊天中生成记忆，具体原因未记录。';
-  if (task.reasonCode === 'task_cancelled') return '任务已停止，重新开始会重新核对这次资料。';
-  if (task.status === 'failed') return '后台未能完成处理，请核对配置或稍后继续。';
-  return '';
+const names = { waiting: '等待处理', processing: '处理中', completed: '已完成', paused: '已暂停', blocked: '处理受阻' };
+const phases = { extraction: '提取记忆', verification: '核验保存', topics: '整理主题', profile: '更新画像', retry: '等待自动重试' };
+const taskNames = { import: '历史导入', observation: '聊天资料提取', layered_memory: '主题与画像整理' };
+const taskStatuses: Record<string, string> = { queued: '等待执行', running: '执行中', verifying: '核验中', succeeded: '已完成',
+  failed: '失败', cancelled: '已停止', paused: '原任务暂停', interrupted: '执行中断' };
+const units: Record<MemoryProcessingUnit, string> = { messages: '条聊天', memories: '条记忆', steps: '个步骤' };
+function quantity(processed: number | null, total: number | null, unit: MemoryProcessingUnit | null) {
+  if (processed === null || unit === null) return null;
+  return `已处理 ${processed}${total === null ? '' : ` / ${total}`} ${units[unit]}`;
 }
-function timestamp(value: string) { return new Date(value).toLocaleString('zh-CN', { hour12: false }); }
-function TaskProgress({ task, historical = false }: { task: MemoryProcessingTask; historical?: boolean }) {
-  return <>
-    <p className="memory-processing-count">{task.processedCount === null ? (historical ? '旧记录，暂无统计' : '暂无进度统计')
-      : task.totalCount === null ? `已处理 ${task.processedCount} 条聊天 · 总量暂不可用`
-        : `已处理 ${task.processedCount} / ${task.totalCount} 条聊天`}</p>
-    {!historical && task.processedCount !== null && task.totalCount !== null && task.totalCount > 0 &&
-      <progress aria-label="聊天处理进度" value={task.processedCount} max={task.totalCount} />}
-    {(task.createdCount !== null || task.updatedCount !== null) && <p>{[
-      task.createdCount !== null ? `新增 ${task.createdCount} 条记忆` : null,
-      task.updatedCount !== null ? `更新 ${task.updatedCount} 条记忆` : null,
-    ].filter(Boolean).join(' · ')}</p>}
-    <p className="memory-section-note">更新时间：{timestamp(task.updatedAt)}</p>
-  </>;
+function HistoryEntry({ task }: { task: MemoryProcessingTask }) {
+  return <article>
+    <h3>{taskNames[task.taskType]} · {taskStatuses[task.status] ?? '历史记录'}</h3>
+    <p>{quantity(task.processedCount, task.totalCount, task.unit) ?? '暂无可靠处理量统计'}</p>
+    <p className="memory-section-note">更新时间：{new Date(task.updatedAt).toLocaleString('zh-CN', { hour12: false })}</p>
+    {task.attribution === 'legacy' && <p>旧记录的轮次归属尚无法核实，保留原结果，不据此自动继续。</p>}
+    <p className="memory-section-note">任务编号：{task.taskId}</p>
+    {task.reasonCode && <p className="memory-section-note">原始原因：{task.reasonCode}</p>}
+  </article>;
 }
 
 type ProcessingProps = {
-  request: MemoryProcessingRequest; contactNames: Record<string, string>;
-  onProgress?: () => Promise<void>; children?: ReactNode;
+  request: MemoryProcessingRequest;
+  onProgress?: () => Promise<void>;
+  children?: ReactNode;
 };
-
 export function MemoryProcessingCard(props: Omit<ProcessingProps, 'request'> & { request?: MemoryProcessingRequest }) {
-  const request = props.request;
-  return request ? <MemoryProcessingContent {...props} request={request}
-    key={request.scope === 'owner' ? 'owner' : `${request.contactId}:${request.scopeRevision}`} /> : <>{props.children}</>;
+  return props.request ? <MemoryProcessingContent {...props} request={props.request}
+    key={props.request.scope === 'owner' ? 'owner' : `${props.request.contactId}:${props.request.scopeRevision}`} /> : <>{props.children}</>;
 }
-
-function MemoryProcessingContent({ request, contactNames, onProgress, children }: ProcessingProps) {
+function MemoryProcessingContent({ request, onProgress, children }: ProcessingProps) {
   const [value, setValue] = useState<MemoryProcessing | null>(null);
+  const [history, setHistory] = useState<MemoryProcessingTask[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState('');
-  const [actionError, setActionError] = useState('');
   const [resultError, setResultError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [working, setWorking] = useState(false);
-  const refresh = useRef<() => Promise<void>>(async () => {});
-  const alive = useRef(true), busy = useRef(false), progressCallback = useRef(onProgress);
+  const [epoch, setEpoch] = useState(0);
+  const active = useRef(false), historyReading = useRef(false), revision = useRef(0);
+  const refresh = useRef<() => Promise<void>>(async () => {}), progressCallback = useRef(onProgress);
   progressCallback.current = onProgress;
   const scopeKey = request.scope === 'owner' ? 'owner' : `${request.contactId}:${request.scopeRevision}`;
+  useEffect(() => window.notalone.memory.onProcessingInvalidated(event => {
+    if (event.scope === 'contact' && request.scope === 'owner') return;
+    revision.current++; active.current = false;
+    setValue(null); setHistory([]); setNextCursor(null); setLoading(true); setHistoryLoading(false);
+    setError(''); setHistoryError(''); setResultError(''); setEpoch(value => value + 1);
+  }), [scopeKey]);
   useEffect(() => {
-    let active = true, timer: ReturnType<typeof setTimeout> | undefined, inFlight: Promise<void> | undefined, lastProgress: string | undefined;
-    alive.current = true;
-    const schedule = () => {
-      clearTimeout(timer);
-      if (active && !document.hidden && !busy.current) timer = setTimeout(() => void read(true), 2000);
-    };
+    let alive = true, timer: ReturnType<typeof setTimeout> | undefined, inFlight: Promise<void> | undefined;
+    let signature: string | undefined, firstHistory: string | undefined;
+    active.current = true;
     const read = (silent = false): Promise<void> => {
       if (inFlight) return inFlight;
-      if (!active || document.hidden || busy.current) return Promise.resolve();
+      if (!alive || document.hidden) return Promise.resolve();
       if (!silent) setLoading(true);
+      const operationRevision = revision.current;
       const operation = (async () => {
         try {
           const next = await window.notalone.memory.readProcessing(request);
-          if (!active || document.hidden) return;
+          if (!alive || !active.current || operationRevision !== revision.current || document.hidden) return;
           setValue(next); setError('');
-          const signature = JSON.stringify(next.tasks.map(task => [task.taskId, task.status, task.processedCount, task.createdCount, task.updatedCount]));
-          if (lastProgress !== undefined && lastProgress !== signature) {
-            try { await progressCallback.current?.(); if (active) setResultError(''); }
-            catch { if (active) setResultError('处理进度已更新，记忆内容暂未刷新；当前显示上次读取的资料。'); return; }
+          const nextHistory = JSON.stringify(next.history);
+          if (nextHistory !== firstHistory) { setHistory(next.history.entries); setNextCursor(next.history.nextCursor); setHistoryError(next.history.error ?? ''); firstHistory = nextHistory; }
+          const nextSignature = JSON.stringify([next.controlGeneration, next.current]);
+          if (signature !== undefined && signature !== nextSignature) {
+            try { await progressCallback.current?.(); if (alive && active.current && operationRevision === revision.current) setResultError(''); }
+            catch { if (alive && active.current && operationRevision === revision.current) setResultError('处理状态已更新，记忆内容暂未刷新；当前保留上次读取的资料。'); }
           }
-          lastProgress = signature;
-        } catch { if (active && !document.hidden) { setValue(null); setError('处理状态暂时读取失败，请刷新重试。'); } }
-        finally { if (active) setLoading(false); }
+          signature = nextSignature;
+        } catch {
+          if (alive && active.current && operationRevision === revision.current && !document.hidden) { setValue(null); setError('状态暂不可用'); }
+        } finally { if (alive && active.current && operationRevision === revision.current) setLoading(false); }
       })();
       inFlight = operation;
-      void operation.finally(() => { if (inFlight === operation) inFlight = undefined; schedule(); });
+      void operation.finally(() => {
+        if (inFlight === operation) inFlight = undefined;
+        clearTimeout(timer);
+        if (alive && !document.hidden) timer = setTimeout(() => void read(true), 2000);
+      });
       return operation;
     };
     refresh.current = read;
@@ -94,85 +95,60 @@ function MemoryProcessingContent({ request, contactNames, onProgress, children }
     document.addEventListener('visibilitychange', visibility);
     void read();
     return () => {
-      active = false; alive.current = false; clearTimeout(timer); document.removeEventListener('visibilitychange', visibility);
+      alive = false; active.current = false; revision.current++; historyReading.current = false;
+      clearTimeout(timer); document.removeEventListener('visibilitychange', visibility);
       void window.notalone.memory.cancelProcessingRead(request).catch(() => {});
     };
-  }, [scopeKey]);
-  async function resume(selected: MemoryProcessingTask[]) {
-    if (busy.current || selected.length === 0) return;
-    busy.current = true; setWorking(true); setActionError('');
+  }, [scopeKey, epoch]);
+  async function loadHistory(firstPage = false) {
+    if ((!nextCursor && !firstPage) || historyReading.current) return;
+    const currentRevision = revision.current;
+    historyReading.current = true; setHistoryLoading(true); setHistoryError('');
     try {
-      // busy 阻止新查询；先等待已有查询完成，避免旧响应覆盖恢复后的状态。
-      await refresh.current();
-      for (const task of selected) {
-        if (!alive.current) return;
-        // 每次恢复都会使桥接层快照失效；逐项重读，且不恢复状态已变化的任务。
-        const next = await window.notalone.memory.readProcessing(request);
-        if (!alive.current) return;
-        setValue(next);
-        const current = next.tasks.find(item => item.taskId === task.taskId);
-        if (current?.action && current.action === task.action) {
-          await window.notalone.memory.resumeProcessing({ ...request, taskId: current.taskId, action: current.action });
-        }
-      }
-    } catch { if (alive.current) setActionError('操作结果未确认，已重新读取状态；请核对后再试。'); }
-    finally {
-      busy.current = false;
-      if (alive.current) { setWorking(false); await refresh.current(); }
+      const page = await window.notalone.memory.readProcessingHistory({ ...request, cursor: firstPage ? null : nextCursor });
+      if (!active.current || currentRevision !== revision.current) return;
+      setHistory(previous => firstPage ? page.entries : [...previous, ...page.entries.filter(entry => !previous.some(existing => existing.taskId === entry.taskId))]);
+      setNextCursor(page.nextCursor);
+    } catch {
+      if (active.current && currentRevision === revision.current) setHistoryError('处理历史暂时无法读取，请重试；当前处理状态保持不变。');
+    } finally {
+      if (active.current && currentRevision === revision.current) { historyReading.current = false; setHistoryLoading(false); }
     }
   }
-  const tasks = value?.tasks ?? [];
-  const currentTasks = tasks.filter(task => (task.status !== 'completed' && task.status !== 'stopped') || needsAttention(task));
-  const history = tasks.filter(task => !currentTasks.includes(task));
-  const overall = value ? summarizeProcessing(value) : null;
-  const progress = tasks.length === 1 ? tasks[0] : null;
-  const button = (task: MemoryProcessingTask) => task.action && <button className="button" disabled={working || loading}
-    onClick={() => void resume([task])}>{working ? '提交中…' : task.action === 'restart' ? '重新开始' : '继续'}</button>;
-  const summary = error ? '状态读取失败，请重试' : !value ? '正在读取状态…' : overall?.title;
-  const refreshButton = <button className="button" disabled={loading || working} onClick={() => void refresh.current()}>刷新进度</button>;
-  const taskEntry = (task: MemoryProcessingTask, historical = false) => <article key={task.taskId}>
-    <h3>{task.taskType === 'import' ? '历史导入' : '聊天资料的关系提取'} · {names[task.status]}</h3>
-    {request.scope === 'owner' && <p className="memory-section-note">{contactNames[task.contactId] ?? '其他联系人'}的聊天</p>}
-    <TaskProgress task={task} historical={historical} />
-    {reason(task) && <p>{reason(task)}</p>}{button(task)}
-  </article>;
-  const pendingCount = value?.pendingCount ?? 0;
+  const current = value?.current;
+  const count = current && quantity(current.processedCount, current.totalCount, current.unit);
   return <>
-    {((value?.tasks.length ?? 0) > 0 || value?.hasMore || pendingCount > 0 || !value || error || actionError || resultError) && <section className="memory-processing-card" aria-label="关系资料处理状态" aria-busy={working}>
-      <p className="memory-section-note">关系资料处理只表示从已同步聊天中提取关系资料的进度，不代表消息历史覆盖是否完整。</p>
+    <section className="memory-processing-card" aria-label="关系资料处理状态" aria-busy={loading}>
       <div className="memory-processing-bar">
-        <div className="memory-processing-brief">{summary && <strong role={error || overall?.incomplete ? 'alert' : 'status'}>
-          {summary}</strong>}
-          {!error && overall && <span className="memory-section-note">{overall.note}</span>}
-          {pendingCount > 0 && <span className="memory-processing-count">另有 {pendingCount} 条聊天等待开始处理</span>}
-          {!error && progress?.processedCount !== null && progress?.processedCount !== undefined && <span className="memory-processing-count">
-            {progress.totalCount === null ? `已处理 ${progress.processedCount} 条聊天` : `已处理 ${progress.processedCount} / ${progress.totalCount} 条聊天`}</span>}
+        <div className="memory-processing-brief">
+          <strong role={error ? 'alert' : 'status'}>{error || (current ? names[current.status] : '正在读取状态…')}</strong>
+          {current?.phase && <span>{phases[current.phase]}</span>}
+          {current?.reason && <span className="memory-section-note">{current.reason}</span>}
+          {count && <span className="memory-processing-count">{count}</span>}
+          {current?.pendingCount !== null && current?.pendingCount !== undefined && current.pendingCount > 0
+            && <span className="memory-processing-count">另有 {current.pendingCount} 条聊天等待处理</span>}
         </div>
-        <div className="memory-processing-actions">{!error && overall && overall.actions.length > 0 &&
-          <button className="button" disabled={working || loading} onClick={() => void resume(overall.actions)}>
-            {working ? '提交中…' : overall.actionLabel}</button>}
-          <button className="memory-processing-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}>{detailsOpen ? '收起' : '查看详情'}</button>
+        <div className="memory-processing-actions">
+          <button className="button" disabled={loading} onClick={() => void refresh.current()}>刷新状态</button>
+          <button className="memory-processing-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}>{detailsOpen ? '收起详情' : '查看详情'}</button>
         </div>
       </div>
-      {actionError && <p role="alert">操作未确认，请查看详情。</p>}
-      {resultError && <p role="alert">内容暂未刷新，请查看详情。</p>}
+      {current?.hasUsableResults && ['blocked', 'paused'].includes(current.status) && <p>已保存的合法记忆与画像仍可查看和使用。</p>}
+      {resultError && <p role="alert">{resultError}</p>}
       {detailsOpen && <div className="memory-processing-details">
-        {refreshButton}
-        {error && <p role="alert">{error}</p>}{actionError && <p>{actionError}</p>}{resultError && <p>{resultError}</p>}
-        {currentTasks.length > 1 && <p className="memory-section-note">以下是各项处理记录；聊天资料可能重叠，进度不相加。</p>}
-        {currentTasks.map(task => taskEntry(task))}
-        {(history.length > 0 || value?.hasMore) && <details className="memory-disclosure memory-secondary memory-processing-history" aria-label="处理历史">
-          <summary>处理历史{history.length > 0 ? `（${history.length}）` : ''}</summary>
-          <div className="memory-processing-details">
-            <p className="memory-section-note">这里记录聊天的处理结果，记忆内容在资料列表中。</p>
-            <MemoryList items={history} label="处理历史" className="memory-processing-history-list">
-              {task => taskEntry(task, true)}
-            </MemoryList>
-            {value?.hasMore && <p className="memory-section-note">仅显示最近记录，较早记录未列出。</p>}
-          </div>
-        </details>}
+        <p className="memory-section-note">记忆处理包括提取、核验、主题整理和画像更新；消息同步由同步设置单独管理。</p>
+        {current?.roundId && <p className="memory-section-note">轮次编号：{current.roundId}</p>}
+        {current?.reasonCode && <p className="memory-section-note">原始原因：{current.reasonCode}</p>}
+        <details className="memory-disclosure memory-secondary memory-processing-history" aria-label="处理历史">
+          <summary>处理历史</summary>
+          {history.map(task => <HistoryEntry key={task.taskId} task={task} />)}
+          {history.length === 0 && !historyError && <p>暂无处理历史。</p>}
+          {historyError && <><p role="alert">{historyError}</p>
+            {!nextCursor && <button className="button" disabled={historyLoading} onClick={() => void loadHistory(true)}>重新读取历史</button>}</>}
+          {nextCursor && <button className="button" disabled={historyLoading} onClick={() => void loadHistory()}>{historyLoading ? '正在读取历史…' : '加载更多历史'}</button>}
+        </details>
       </div>}
-    </section>}
+    </section>
     {children}
   </>;
 }

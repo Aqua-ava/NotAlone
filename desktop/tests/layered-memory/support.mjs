@@ -9,6 +9,8 @@ const compiled = await build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
   export { installMemoryBridge } from './src/main/memory/bridge';
   export { createMemoryBridge } from './src/preload/memory';
+  export { installBackgroundTaskBridge } from './src/main/background-tasks/bridge';
+  export { createBackgroundTaskBridge } from './src/preload/background-tasks';
   export { BackendRequestFailure } from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, packages: 'external', platform: 'node', format: 'cjs', write: false });
 const compiledModule = { exports: {} };
@@ -39,13 +41,18 @@ export async function fixture(requestJson, { noContact = false } = {}) {
   contacts.setConnection(generation); await contacts.refreshContacts();
   if (!noContact) contacts.selectContact({ contactId: ids.contact, scopeRevision: contacts.getState().scopeRevision });
   const handlers = new Map(), listeners = new Map();
-  const controller = ports.installMemoryBridge({ handle: (name, handler, role) => handlers.set(name, { handler, role }),
-    publish: (channel, state) => { for (const listener of listeners.get(channel) ?? []) listener(null, state); } }, backend, contacts);
-  const bridge = ports.createMemoryBridge({ invoke: (name, ...args) => Promise.resolve().then(() => handlers.get(name).handler(...args)),
+  const commands = { handle: (name, handler, role) => handlers.set(name, { handler, role }),
+    publish: (channel, state) => { for (const listener of listeners.get(channel) ?? []) listener(null, state); } };
+  const controller = ports.installMemoryBridge(commands, backend, contacts);
+  ports.installBackgroundTaskBridge(commands, backend, contacts);
+  const transport = { invoke: (name, ...args) => Promise.resolve().then(() => handlers.get(name).handler(...args)),
     on: (name, listener) => { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(listener); },
-    removeListener: (name, listener) => listeners.get(name)?.delete(listener) });
+    removeListener: (name, listener) => listeners.get(name)?.delete(listener) };
+  const bridge = ports.createMemoryBridge(transport);
+  const backgroundBridge = ports.createBackgroundTaskBridge(transport);
   const selection = () => ({ contactId: contacts.getState().selectedContactId, scopeRevision: contacts.getState().scopeRevision });
-  return { controller, contacts, bridge, handlers, selection, disconnect: () => { generation = undefined;
+  return { controller, contacts, bridge, backgroundBridge, handlers, selection, changeConnection: next => { generation = next;
+    contacts.setConnection(next); for (const listener of backendListeners) listener({}); }, disconnect: () => { generation = undefined;
     contacts.setConnection(undefined); for (const listener of backendListeners) listener({}); } };
 }
 

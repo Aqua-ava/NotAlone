@@ -14,7 +14,6 @@ import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } f
 import { MemoryEvidence } from './MemoryEvidence';
 import type { TraceRecordKind } from '../shared/trace-bridge';
 import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
-import { BackgroundTasksPanel } from './BackgroundTasksPanel';
 
 const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' },
   contact: { phase: 'idle', items: [] }, owner: { phase: 'idle', items: [] },
@@ -347,15 +346,13 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
     <div className="memory-toolbar"><button className="button" disabled={!contact || [state.contact, state.owner, state.pending, state.sources].some((section) => section.phase === 'loading')}
         onClick={() => void memory.refresh()}>刷新记忆</button></div>
     </div>
-    <div className="memory-view-content" key={`${scopeKey}:${view}`}>
-    {contact && <BackgroundTasksPanel selection={view === 'owner'
-      ? { scope: 'owner', scopeRevision: session.state.scopeRevision }
-      : { scope: 'contact', contactId: contact.contactId, scopeRevision: session.state.scopeRevision }} />}
-    <MemoryProcessingCard request={contact ? { scope: 'contact', contactId: contact.contactId, scopeRevision: session.state.scopeRevision } : undefined}
-      contactNames={Object.fromEntries(session.state.contacts.map(contact => [contact.contactId, contact.displayName]))}
-      onProgress={contact ? () => window.notalone.memory.refreshProcessingResults({ scope: 'contact', contactId: contact.contactId,
-        scopeRevision: session.state.scopeRevision }) : undefined}>
-    {!contact ? <section className="memory-no-contact" aria-label="资料范围未确认"><h2>选择一位联系人</h2>
+    <div className="memory-view-content" key={view === 'owner' ? 'owner' : `${scopeKey}:${view}`}>
+    <MemoryProcessingCard request={view === 'owner' ? { scope: 'owner' } : contact ? { scope: 'contact', contactId: contact.contactId, scopeRevision: session.state.scopeRevision } : undefined}
+      onProgress={view === 'owner' ? () => window.notalone.memory.refreshProcessingResults({ scope: 'owner' })
+        : contact ? () => window.notalone.memory.refreshProcessingResults({ scope: 'contact', contactId: contact.contactId,
+          scopeRevision: session.state.scopeRevision }) : undefined}>
+    {view === 'owner' && <OwnerLayeredMemoryPanel />}
+    {!contact && view !== 'owner' ? <section className="memory-no-contact" aria-label="资料范围未确认"><h2>选择一位联系人</h2>
       <p>请在顶部选择联系人，再查看你们之间记住的事。</p>
       {session.state.contacts.length === 0 && <button className="button" onClick={() => navigate('contacts')}>添加联系人</button>}</section>
       : <>
@@ -389,14 +386,13 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
                 `主题资料引用的${reference.level === 'owner' ? '本人' : '联系人'}资料`);
             }} />
         </div>}
-        {view === 'owner' && <ReadingSection title="我的记忆" note="" empty="还没有记住你和这位联系人交流中的事。"
+        {view === 'owner' && contact && <ReadingSection title="我的记忆" note="" empty="还没有记住你和这位联系人交流中的事。"
           state={state.owner} retry={() => void memory.refresh('owner')}>
           <AdditionControl key={`owner:${scopeKey}`} level="owner" phase={state.mutation.phase} add={memory.add} />
           <MemoryList key={scopeKey} items={state.owner.items} label="我的记忆">{entry => <MemoryCard
             key={`${entry.memoryId}:${entry.revision}`} content={entry} memory={entry} removalTarget={memoryRemovalTarget(entry, state[entry.level].items)} sources={state.sources}
             trace={trace} correct={memory.correct} remove={memory.remove} busy={state.mutation.phase === 'working'} />}</MemoryList>
         </ReadingSection>}
-        {view === 'owner' && <OwnerLayeredMemoryPanel />}
         {view === 'pending' && <ReadingSection title="待确认候选" note="这些内容还没记住，需要你核对一下。" empty="暂时没有需要确认的内容。"
           state={state.pending} retry={() => void memory.refresh('pending')}>
           <MemoryList key={scopeKey} items={state.pending.items} label="待确认候选">{(entry) => <MemoryCard key={entry.candidateId} content={entry} candidate={entry} sources={state.sources}

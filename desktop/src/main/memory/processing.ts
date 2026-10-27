@@ -1,4 +1,4 @@
-import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingTask } from '../../shared/memory-processing';
+import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingTask, MemoryProcessingHistoryRequest, MemoryProcessingHistory, MemoryProcessingCurrent, MemoryProcessingUnit } from '../../shared/memory-processing';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { isUuid } from '../uuid';
@@ -22,44 +22,85 @@ export function processingResumeArguments(args: unknown[]): MemoryProcessingResu
   return { ...processingArguments([scope]), taskId: (taskId as string).toLowerCase(), action: action as 'resume' | 'restart' };
 }
 
-function processing(data: unknown, request: MemoryProcessingRequest): MemoryProcessing {
-  const value = data as Record<string, unknown> | null;
-  const contactId = request.scope === 'contact' ? request.contactId : null;
-  if (!value || value.scope !== request.scope || value.contact_id !== contactId || typeof value.has_more !== 'boolean' || !Array.isArray(value.tasks)) throw new Error('记忆进度响应不可用。');
-  const count = (value: unknown): number | null => {
-    if (value === null) return null;
-    if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error('记忆进度统计不可用。');
-    return value as number;
-  };
+const invalid = () => new Error('记忆处理响应不可用。');
+const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+function count(value: unknown): number | null {
+  if (value === null) return null;
+  if (!Number.isSafeInteger(value) || (value as number) < 0) throw invalid();
+  return value as number;
+}
+function nullableId(value: unknown): string | null {
+  if (value === null) return null;
+  if (!isUuid(value)) throw invalid();
+  return value.toLowerCase();
+}
+function nullableText(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== 'string') throw invalid();
+  return value;
+}
+function unit(value: unknown): MemoryProcessingUnit | null {
+  if (value !== null && !['messages', 'memories', 'steps'].includes(value as string)) throw invalid();
+  return value as MemoryProcessingUnit | null;
+}
+function scope(data: unknown, request: MemoryProcessingRequest): Record<string, unknown> {
+  if (!record(data) || data.scope !== request.scope || data.contact_id !== (request.scope === 'owner' ? null : request.contactId)) throw invalid();
+  return data;
+}
+function entries(data: unknown, request: MemoryProcessingRequest): MemoryProcessingTask[] {
+  if (!Array.isArray(data)) throw invalid();
   const seen = new Set<string>();
-  const tasks = value.tasks.map((raw: unknown): MemoryProcessingTask => {
-    const entry = raw as Record<string, unknown> | null;
-    if (!entry || !isUuid(entry.task_id) || seen.has(entry.task_id) || !isUuid(entry.contact_id)
-      || (contactId !== null && entry.contact_id !== contactId) || !['import', 'observation'].includes(entry.task_type as string)
-      || !['queued', 'extracting', 'organizing', 'completed', 'interrupted', 'failed', 'stopped'].includes(entry.status as string)
-      || typeof entry.phase !== 'string' || typeof entry.updated_at !== 'string' || !Number.isFinite(Date.parse(entry.updated_at))
-      || (entry.reason_code !== null && typeof entry.reason_code !== 'string')
-      || ![null, 'resume', 'restart'].includes(entry.action as string | null)
-      || (entry.action === 'resume' && !['interrupted', 'failed'].includes(entry.status as string))
-      || (entry.action === 'restart' && entry.status !== 'stopped')) throw new Error('记忆任务状态不可用。');
-    seen.add(entry.task_id);
-    const processedCount = count(entry.processed_count), totalCount = count(entry.total_count);
-    if (processedCount !== null && totalCount !== null && processedCount > totalCount) throw new Error('记忆进度统计不可用。');
-    return { taskId: entry.task_id, contactId: entry.contact_id, taskType: entry.task_type as MemoryProcessingTask['taskType'],
-      status: entry.status as MemoryProcessingTask['status'], phase: entry.phase,
-      processedCount, totalCount, createdCount: count(entry.created_count), updatedCount: count(entry.updated_count),
-      updatedAt: entry.updated_at, reasonCode: entry.reason_code as string | null, action: entry.action as MemoryProcessingTask['action'] };
+  return data.map(raw => {
+    if (!record(raw) || !isUuid(raw.task_id) || seen.has(raw.task_id) || raw.contact_id !== (request.scope === 'owner' ? null : request.contactId)
+      || !['import', 'observation', 'layered_memory'].includes(raw.task_type as string)
+      || !['queued', 'running', 'verifying', 'succeeded', 'failed', 'cancelled', 'paused', 'interrupted'].includes(raw.status as string)
+      || typeof raw.phase !== 'string' || typeof raw.updated_at !== 'string' || !Number.isFinite(Date.parse(raw.updated_at))
+      || !['verified', 'legacy'].includes(raw.attribution as string)) throw invalid();
+    seen.add(raw.task_id);
+    const processedCount = count(raw.processed_count), totalCount = count(raw.total_count);
+    if (processedCount !== null && totalCount !== null && processedCount > totalCount) throw invalid();
+    return { taskId: raw.task_id, roundId: nullableId(raw.round_id), contactId: nullableId(raw.contact_id),
+      taskType: raw.task_type as MemoryProcessingTask['taskType'], status: raw.status as string, phase: raw.phase,
+      processedCount, totalCount, unit: unit(raw.unit), updatedAt: raw.updated_at,
+      reasonCode: nullableText(raw.reason_code), attribution: raw.attribution as MemoryProcessingTask['attribution'] };
   });
-  const pendingCount = count(value.pending_count ?? 0);
-  if (pendingCount === null) throw new Error('记忆进度统计不可用。');
-  return { scope: request.scope, contactId, tasks, pendingCount, hasMore: value.has_more as boolean };
+}
+function cursor(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,2048}$/.test(value)) throw invalid();
+  return value;
+}
+function current(data: unknown): MemoryProcessingCurrent {
+  if (!record(data) || !['waiting', 'processing', 'completed', 'paused', 'blocked'].includes(data.status as string)
+    || (data.phase !== null && !['extraction', 'verification', 'topics', 'profile', 'retry'].includes(data.phase as string))
+    || typeof data.has_usable_results !== 'boolean' || !Array.isArray(data.actions) || data.actions.length !== 0) throw invalid();
+  const processedCount = count(data.processed_count), totalCount = count(data.total_count), quantityUnit = unit(data.unit);
+  if ((processedCount !== null && totalCount !== null && processedCount > totalCount)
+    || ((processedCount !== null || totalCount !== null) && quantityUnit === null)) throw invalid();
+  return { status: data.status as MemoryProcessingCurrent['status'], roundId: nullableId(data.round_id),
+    phase: data.phase as MemoryProcessingCurrent['phase'], processedCount, totalCount, unit: quantityUnit,
+    pendingCount: count(data.pending_count), reason: nullableText(data.reason), reasonCode: nullableText(data.reason_code),
+    hasUsableResults: data.has_usable_results, actions: [] };
+}
+function processing(data: unknown, request: MemoryProcessingRequest): MemoryProcessing {
+  const value = scope(data, request), generation = count(value.control_generation);
+  if (generation === null || !record(value.history)) throw invalid();
+  return { scope: request.scope, contactId: request.scope === 'owner' ? null : request.contactId,
+    controlGeneration: generation, current: current(value.current),
+    history: { entries: entries(value.history.entries, request), nextCursor: cursor(value.history.next_cursor),
+      ...(value.history.error === undefined ? {} : { error: nullableText(value.history.error) ?? undefined }) } };
+}
+export function processingHistoryArguments(args: unknown[]): MemoryProcessingHistoryRequest {
+  const value = args[0];
+  if (args.length !== 1 || !record(value) || (value.cursor !== null && typeof value.cursor !== 'string')) throw invalid();
+  const { cursor: pageCursor, ...request } = value;
+  cursor(pageCursor);
+  return { ...processingArguments([request]), cursor: pageCursor as string | null };
 }
 
-// 页面只读轮询；离开页面或切换联系人立即撤销当前读取，不扫描或启动任务。
+// 读取与历史分页分别撤销；联系人选择和后台连接代次变化立即使晚结果失效。
 export class MemoryProcessingController {
   private reads = new Map<string, AbortController>();
-  private snapshots = new Map<string, { generation: number; value: MemoryProcessing }>();
-  private writes = new Map<string, { action: string; promise: Promise<void> }>();
   constructor(private backend: BackendHost, private contacts: ContactSession) {}
   private key(request: MemoryProcessingRequest) { return request.scope === 'owner' ? 'owner' : `${request.contactId}:${request.scopeRevision}`; }
   private current(request: MemoryProcessingRequest, generation: number | undefined) {
@@ -68,47 +109,36 @@ export class MemoryProcessingController {
       && (request.scope === 'owner' || (selection.selectedContactId === request.contactId && selection.scopeRevision === request.scopeRevision));
   }
   synchronize(contactOnly = false) {
-    for (const [key, operation] of this.reads) if (!contactOnly || key !== 'owner') { operation.abort(); this.reads.delete(key); }
-    for (const key of this.snapshots.keys()) if (!contactOnly || key !== 'owner') this.snapshots.delete(key);
+    for (const [key, operation] of this.reads) if (!contactOnly || !key.startsWith('owner:')) { operation.abort(); this.reads.delete(key); }
   }
-  cancel(request: MemoryProcessingRequest) { const key = this.key(request); this.reads.get(key)?.abort(); this.reads.delete(key); }
-  async resume(request: MemoryProcessingResumeRequest): Promise<void> {
-    const generation = this.backend.getConnectionGeneration(), key = this.key(request);
-    if (!this.current(request, generation)) throw new Error('记忆任务范围已变化。');
-    const snapshot = this.snapshots.get(key);
-    const task = snapshot && snapshot.generation === generation ? snapshot.value.tasks.find(task => task.taskId === request.taskId) : undefined;
-    if (!task || task.action !== request.action) throw new Error('任务状态已变化，请刷新后重试。');
-    const writeKey = `${generation}:${request.taskId}`, pending = this.writes.get(writeKey);
-    if (pending) {
-      if (pending.action !== request.action) throw new Error('记忆任务正在处理。');
-      return pending.promise;
+  cancel(request: MemoryProcessingRequest) {
+    for (const kind of ['state', 'history']) {
+      const key = `${this.key(request)}:${kind}`;
+      this.reads.get(key)?.abort(); this.reads.delete(key);
     }
-    const promise = (async () => {
-      const path = request.scope === 'owner' ? '/api/owner/memory-processing/resume' : `/api/contacts/${request.contactId}/memory-processing/resume`;
-      const result = await this.backend.requestJson({ method: 'POST', path, body: { task_id: request.taskId, action: request.action } });
-      const data = result.data as Record<string, unknown> | null;
-      if (!this.current(request, generation) || result.generation !== generation || !data || data.task_id !== request.taskId
-        || !['queued', 'running', 'busy', 'completed'].includes(data.status as string)) throw new Error('操作结果未确认，请刷新任务状态。');
-      this.snapshots.delete(key);
-    })();
-    this.writes.set(writeKey, { action: request.action, promise });
-    try { await promise; } finally { this.writes.delete(writeKey); }
+  }
+  async resume(_request: MemoryProcessingResumeRequest): Promise<void> {
+    throw new Error('统一记忆处理操作尚不可用，请先核对处理详情。');
+  }
+  private async get(request: MemoryProcessingRequest, kind: 'state' | 'history', query = ''): Promise<unknown> {
+    const generation = this.backend.getConnectionGeneration();
+    if (!this.current(request, generation)) throw new Error('记忆处理范围已变化。');
+    const key = `${this.key(request)}:${kind}`;
+    this.reads.get(key)?.abort();
+    const operation = new AbortController(); this.reads.set(key, operation);
+    try {
+      const root = request.scope === 'owner' ? '/api/owner/memory-processing' : `/api/contacts/${request.contactId}/memory-processing`;
+      const result = await this.backend.requestJson({ method: 'GET', path: `${root}/${kind}${query}`, signal: operation.signal });
+      if (operation.signal.aborted || this.reads.get(key) !== operation || result.generation !== generation || !this.current(request, generation)) throw new Error('记忆处理范围已变化。');
+      return result.data;
+    } finally { if (this.reads.get(key) === operation) this.reads.delete(key); }
   }
   async read(request: MemoryProcessingRequest): Promise<MemoryProcessing> {
-    const generation = this.backend.getConnectionGeneration();
-    if (generation === undefined || !this.current(request, generation)) throw new Error('记忆进度范围已变化。');
-    this.cancel(request);
-    const key = this.key(request), operation = new AbortController(); this.reads.set(key, operation);
-    try {
-      const path = request.scope === 'owner' ? '/api/owner/memory-processing' : `/api/contacts/${request.contactId}/memory-processing`;
-      const result = await this.backend.requestJson({ method: 'GET', path, signal: operation.signal });
-      if (operation.signal.aborted || this.reads.get(key) !== operation || result.generation !== generation || !this.current(request, generation)) throw new Error('记忆进度范围已变化。');
-      const value = processing(result.data, request);
-      this.snapshots.set(key, { generation, value });
-      return value;
-    } catch (error) {
-      if (this.reads.get(key) === operation) this.snapshots.delete(key);
-      throw error;
-    } finally { if (this.reads.get(key) === operation) this.reads.delete(key); }
+    return processing(await this.get(request, 'state'), request);
+  }
+  async history(request: MemoryProcessingHistoryRequest): Promise<MemoryProcessingHistory> {
+    const value = scope(await this.get(request, 'history', request.cursor === null ? '' : `?cursor=${encodeURIComponent(request.cursor)}`), request);
+    return { scope: request.scope, contactId: request.scope === 'owner' ? null : request.contactId,
+      entries: entries(value.entries, request), nextCursor: cursor(value.next_cursor) };
   }
 }

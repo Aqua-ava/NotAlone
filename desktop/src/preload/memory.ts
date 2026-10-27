@@ -1,4 +1,4 @@
-import type { MemoryProcessingRequest, MemoryProcessingResumeRequest } from '../shared/memory-processing';
+import type { MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingHistoryRequest } from '../shared/memory-processing';
 import type { PageTransport } from './transport';
 import type { ContactSelection } from '../shared/contact-session-bridge';
 import type { LayeredMemoryReadRequest, LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryBridge, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState, MemoryCorrectionRequest, MemoryReadRequest, MemoryReadingState, MemoryRemovalRequest } from '../shared/memory-bridge';
@@ -7,6 +7,13 @@ export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
   return Object.freeze({
     refreshProcessingResults: (...args: [MemoryProcessingRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:refresh-processing-results', args[0]) : Promise.reject(new Error('记忆结果读取不可用。')),
     resumeProcessing: (...args: [MemoryProcessingResumeRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:resume-processing', args[0]) : Promise.reject(new Error('记忆任务操作不可用。')),
+    readProcessingHistory: (...args: [MemoryProcessingHistoryRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:read-processing-history', args[0]) : Promise.reject(new Error('处理历史读取不可用。')),
+    onProcessingInvalidated: (listener: (event: { scope: 'all' | 'contact' }) => void) => {
+      if (typeof listener !== 'function') throw new Error('记忆处理读取不可用。');
+      const receive = (_event: unknown, event: { scope: 'all' | 'contact' }) => listener(event);
+      ipcRenderer.on('memory:processing-invalidated', receive);
+      return () => ipcRenderer.removeListener('memory:processing-invalidated', receive);
+    },
     readProcessing: (...args: [MemoryProcessingRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:read-processing', args[0]) : Promise.reject(new Error('记忆进度读取不可用。')),
     cancelProcessingRead: (...args: [MemoryProcessingRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:cancel-processing-read', args[0]) : Promise.reject(new Error('记忆进度读取不可用。')),
     readOwnerMemories: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('memory:read-owner-facts') : Promise.reject(new Error('本人资料读取不可用。')),

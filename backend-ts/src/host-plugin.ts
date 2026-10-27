@@ -33,6 +33,7 @@ import {SourceProcessingTraceStore} from './diagnostics/source-processing-trace.
 import {SourceProcessingTraceApi} from './diagnostics/source-processing-trace-http.ts';
 import {HistoryImportApi} from './imports/history-import-api.ts';
 import {PostgresTaskStatusStore,TaskApi} from './tasks/task-api.ts';
+import {MemoryProcessingQuery} from './memory/processing/query.ts';
 import {BusinessTaskApi,PostgresBusinessTaskManager} from './tasks/background-task-management.ts';
 import {CrossDomainDeletionService,crossDomainDeletionRoute,serveCrossDomainDeletion} from './deletion/cross-domain-deletion.ts';
 import {pureTsRuntimeEnvironment} from './host/pure-ts-runtime.ts';
@@ -96,6 +97,7 @@ async function start(ctx: Context) {
     const close=(activeTaskControl as TaskControlPort&{close?:()=>Promise<void>}).close;
     return close?close.call(activeTaskControl):Promise.resolve();
   };
+  const memoryProcessingQuery=storage.runtimeOwnerId?new MemoryProcessingQuery(progressPool,storage.runtimeOwnerId):undefined;
   const progress=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new ExtractionProgressApi(new ExtractionTaskStore(progressPool),storage.runtimeOwnerId,{
       // progress先于模型运行时装配；这里必须在请求时转发到启动后绑定的唯一TaskControl。
@@ -339,6 +341,8 @@ async function start(ctx: Context) {
         if(!result){respond(404,{error:'not_found'});return;}
         respond(result.status,result.body);return;
       }
+      const unifiedMemoryResult=await memoryProcessingQuery?.handle(req.method??'',url);
+      if(unifiedMemoryResult){respond(unifiedMemoryResult.status,unifiedMemoryResult.body);return;}
       const progressPath=/^\/api\/contacts\/[^/]+\/memory-processing(?:\/resume)?$|^\/api\/owner\/memory-processing(?:\/resume)?$/.test(url.pathname);
       if(progress&&progressPath){
         let body:Record<string,any>|undefined;

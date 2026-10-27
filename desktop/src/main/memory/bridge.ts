@@ -1,5 +1,5 @@
 import { conditionProposal } from './condition-proposal';
-import { MemoryProcessingController, processingArguments, processingResumeArguments } from './processing';
+import { MemoryProcessingController, processingArguments, processingResumeArguments, processingHistoryArguments } from './processing';
 import { OwnerLayeredMemoryController } from './owner-layered';
 import { noArguments, type PageCommands } from '../page-commands';
 import type { LayeredMemoryManagementRequest, OwnerLayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
@@ -26,12 +26,13 @@ function requestArguments(args: unknown[]): MemoryReadRequest {
 export function installMemoryBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): MemoryReadingController {
   const memory = new MemoryReadingController(backend, contacts);
   const processing = new MemoryProcessingController(backend, contacts);
-  backend.onStateChanged(() => processing.synchronize());
+  backend.onStateChanged(() => { processing.synchronize(); commands.publish('memory:processing-invalidated', { scope: 'all' }, 'manager'); });
   let processingScopeRevision = contacts.getState().scopeRevision;
   contacts.onStateChanged(state => {
-    if (state.scopeRevision !== processingScopeRevision) { processingScopeRevision = state.scopeRevision; processing.synchronize(true); }
+    if (state.scopeRevision !== processingScopeRevision) { processingScopeRevision = state.scopeRevision; processing.synchronize(true); commands.publish('memory:processing-invalidated', { scope: 'contact' }, 'manager'); }
   });
   commands.handle('memory:resume-processing', (...args: unknown[]) => processing.resume(processingResumeArguments(args)), 'manager');
+  commands.handle('memory:read-processing-history', (...args: unknown[]) => processing.history(processingHistoryArguments(args)), 'manager');
   commands.handle('memory:read-processing', (...args: unknown[]) => processing.read(processingArguments(args)), 'manager');
   commands.handle('memory:cancel-processing-read', (...args: unknown[]) => processing.cancel(processingArguments(args)), 'manager');
   const owner = new OwnerLayeredMemoryController(backend, state => commands.publish('memory:owner-layered-changed', state, 'manager'), phase => memory.ownerFactsChanged(phase), phase => memory.ownerLayeredContextChanged(phase));

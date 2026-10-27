@@ -52,10 +52,6 @@ test('记忆页接线复用既有 preload 能力，不新增通道并保留 corr
   assert.match(pageSource, /layeredMemory\.value\?\.correctionTarget/, '必须保留既有纠错定位依赖');
   assert.match(pageSource, /<LayeredMemorySections state=\{state\.layeredMemory\}/, '联系人记忆下方须展示整理结果');
   assert.match(pageSource, /<OwnerLayeredMemoryPanel \/>/, '本人视图须读取独立的本人主题资料');
-  assert.match(pageSource, /<BackgroundTasksPanel selection=\{view === 'owner'\s*\? \{ scope: 'owner'/,
-    '本人视图须读取 owner-only 后台任务');
-  assert.match(pageSource, /: \{ scope: 'contact', contactId: contact\.contactId/,
-    '联系人视图须只读取当前联系人后台任务');
   assert.doesNotMatch(pageSource, /invoke\(/, 'renderer 不得直接新增 IPC 通道');
 });
 

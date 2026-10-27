@@ -1,4 +1,4 @@
-import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingResumeRequest } from './memory-processing';
+import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingResumeRequest, MemoryProcessingHistoryRequest, MemoryProcessingHistory } from './memory-processing';
 import type { PersonalBackground } from './personal-background';
 import type { ContactSelection } from './contact-session-bridge';
 
@@ -269,6 +269,8 @@ export interface OwnerLayeredMemoryState extends MemoryOverviewState<LayeredMemo
 export interface MemoryBridge {
   refreshProcessingResults(request: MemoryProcessingRequest): Promise<void>;
   resumeProcessing(request: MemoryProcessingResumeRequest): Promise<void>;
+  readProcessingHistory(request: MemoryProcessingHistoryRequest): Promise<MemoryProcessingHistory>;
+  onProcessingInvalidated(listener: (event: { scope: 'all' | 'contact' }) => void): () => void;
   readProcessing(request: MemoryProcessingRequest): Promise<MemoryProcessing>;
   cancelProcessingRead(request: MemoryProcessingRequest): Promise<void>;
   readOwnerMemories(): Promise<void>;

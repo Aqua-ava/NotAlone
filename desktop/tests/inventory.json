@@ -151,7 +151,8 @@
     "tests/overview-reply-retrieval.test.mjs",
     "tests/reply-contract.test.mjs",
     "tests/pure-ts-managed-runtime.test.mjs",
-    "tests/pure-ts-startup.test.mjs"
+    "tests/pure-ts-startup.test.mjs",
+    "tests/memory-processing/http-pg.test.mjs"
   ],
   "native": [
     "tests/header-change-native-acceptance.spec.ts",
