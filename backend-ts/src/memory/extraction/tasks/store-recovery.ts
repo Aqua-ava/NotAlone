@@ -4,8 +4,8 @@ import {modelTaskRequestId} from '../../../host/host-model-accounting.ts';
 import {ExtractionTaskError,type ExtractionScope,type ExtractionTaskStore} from './store.ts';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export interface UnsettledExtraction {direct:Set<string>;windows:Map<string,Set<string>>;}
-export async function unconfirmedARequests(c:pg.ClientBase,scope:ExtractionScope):Promise<Set<string>>{
- const tasks=(await c.query("SELECT id FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type IN ('import','observation')",[scope.ownerId,scope.contactId])).rows.map(r=>r.id as string);
+export async function unconfirmedARequests(c:pg.ClientBase,scope:ExtractionScope,taskIds?:readonly string[]):Promise<Set<string>>{
+ const tasks=(await c.query("SELECT id FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type IN ('import','observation')",[scope.ownerId,scope.contactId])).rows.map(r=>r.id as string).filter(id=>taskIds===undefined||taskIds.includes(id));
  const rows=(await c.query(`SELECT tr.trace_id,tr.batch_key,e.stage,e.payload->>'execution_id' AS execution_id,
   e.payload->>'task_id' AS task_id,e.payload->>'request_id' AS request_id,e.payload->>'input_sha256' AS input_sha256,
   e.payload->>'rule_version' AS rule_version,e.payload#>>'{typescript_a_receipt,a_execution_id}' AS consumed_id,

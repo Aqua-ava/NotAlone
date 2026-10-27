@@ -93,7 +93,7 @@ async function start(ctx: Context) {
     run:(scope:TaskScope,taskId:string)=>activeTaskControl.run(scope,taskId),
     retry:(scope:TaskScope,taskId:string)=>activeTaskControl.retry(scope,taskId),
     wake:(scope:TaskScope,taskId:string)=>activeTaskControl.wake(scope,taskId),
-    stop:(scope:TaskScope,taskId:string)=>activeTaskControl.stop?.(scope,taskId)??Promise.resolve(false),
+    stop:(scope:TaskScope,taskId:string,expectedLease?:{stepId:string;leaseGeneration:number})=>activeTaskControl.stop?.(scope,taskId,expectedLease)??Promise.resolve(false),
   };
   const closeTaskControl=()=>{
     const close=(activeTaskControl as TaskControlPort&{close?:()=>Promise<void>}).close;

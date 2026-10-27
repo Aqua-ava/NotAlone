@@ -2,12 +2,13 @@
 import type {ExtractionTaskStore} from '../memory/extraction/tasks/store.ts';
 import type {ExtractionWorker} from '../memory/extraction/tasks/worker.ts';
 
+export interface TaskExecutionLease {stepId:string;leaseGeneration:number}
 export interface TaskScope {ownerId:string;contactId:string|null}
 export interface TaskControlPort {
   run(scope:TaskScope,taskId:string):Promise<'started'|'busy'>;
   retry(scope:TaskScope,taskId:string):Promise<{task_id:string;status:'queued'}>;
   wake(scope:TaskScope,taskId:string):Promise<'started'|'busy'|'queued'>;
-  stop?(scope:TaskScope,taskId:string):Promise<boolean>;
+  stop?(scope:TaskScope,taskId:string,expectedLease?:TaskExecutionLease):Promise<boolean>;
 }
 export class TaskControlError extends Error {
   readonly code:string;
@@ -69,11 +70,11 @@ export class ExtractionWorkerTaskControl implements TaskControlPort {
  }
 
  /** 持久任务已取消后尽量中断匹配的在途调用；返回值不代替已提交状态。 */
- stop(scope:TaskScope,taskId:string):Promise<boolean>{
+ stop(scope:TaskScope,taskId:string,expectedLease?:TaskExecutionLease):Promise<boolean>{
   return this.invoke(async()=>{
    if(this.closed)throw new TaskControlError('worker_unavailable');
-   const cancelled=this.worker.cancel({ownerId:scope.ownerId,contactId:scope.contactId},taskId);
-   if(cancelled)await this.worker.drain?.(scope,taskId);
+   const cancelled=this.worker.cancel({ownerId:scope.ownerId,contactId:scope.contactId},taskId,expectedLease);
+   if(cancelled)await this.worker.drain?.(scope,taskId,expectedLease);
    return cancelled;
   });
  }

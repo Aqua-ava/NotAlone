@@ -8,7 +8,7 @@ import {seedMigrationBaseline,prepareTestSchema} from './schema-fixture.mjs';
 import pg from 'pg';
 import {HostStorage} from '../src/platform/database/host-storage.ts';
 
-test('110升级当前124保留原数据与unknown收据，学习claim完整约束和级联',async t=>{
+test('110升级当前125保留原数据与unknown收据，学习claim完整约束和级联',async t=>{
   const root=new URL('../../',import.meta.url).pathname;
   const directory=await mkdtemp(join(tmpdir(),'notalone-learning-claim-upgrade-'));
   const {mkdir}=await import('node:fs/promises');
@@ -18,7 +18,7 @@ test('110升级当前124保留原数据与unknown收据，学习claim完整约�
     if(!/^\d{3}_.*\.sql$/.test(file))continue;
     const version=Number(file.slice(0,3));
     if(version<=110)await copyFile(join(root,'backend-ts/database/migrations',file),join(baseline,file));
-    if(version<=124)await copyFile(join(root,'backend-ts/database/migrations',file),join(current,file));
+    if(version<=125)await copyFile(join(root,'backend-ts/database/migrations',file),join(current,file));
   }
   const name=`notalone_claim_${randomUUID().replaceAll('-','')}_test`;
   const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();
@@ -66,13 +66,13 @@ test('110升级当前124保留原数据与unknown收据，学习claim完整约�
   const original=(await client.query('SELECT attempt_id,outcome,input_tokens,output_tokens,cost_amount FROM model_call_receipt WHERE attempt_id=$1',[originalAttempt])).rows[0];
   assert.deepEqual(original,{attempt_id:originalAttempt,outcome:'unknown',input_tokens:null,output_tokens:null,cost_amount:null});
   const ledger=(await client.query('SELECT name,checksum FROM notalone_schema_migration ORDER BY name')).rows;
-  assert.equal(ledger.length,124);
+  assert.equal(ledger.length,125);
   for(const [entry,code] of [[ledger[111],'migration_history_mismatch'],[ledger[112],'migration_history_mismatch'],
     [ledger[113],'migration_history_mismatch'],[ledger[114],'migration_history_mismatch'],
     [ledger[115],'migration_history_mismatch'],[ledger[116],'migration_history_mismatch'],
     [ledger[117],'migration_history_mismatch'],[ledger[118],'migration_history_mismatch'],
     [ledger[119],'migration_history_mismatch'],[ledger[120],'migration_history_mismatch'],
-    [ledger[121],'migration_history_mismatch'],[ledger[123],'migration_pending']]){
+    [ledger[121],'migration_history_mismatch'],[ledger[123],'migration_history_mismatch'],[ledger[124],'migration_pending']]){
     await client.query('DELETE FROM notalone_schema_migration WHERE name=$1',[entry.name]);
     assert.deepEqual(await storage.compatibility(),{code});
     await assert.rejects(storage.businessReadTransaction(async()=>{}),{code});

@@ -1,4 +1,5 @@
 /** 原 PostgreSQL 队列的唯一后台任务 Worker；只领取一个步骤，不起第二个计时循环。 */
+import type {TaskExecutionLease} from '../../../tasks/task-control.ts';
 import {randomUUID} from 'node:crypto';
 import {ExtractionTaskError,type ExtractionClaim,type ExtractionScope,type ExtractionTaskStore} from './store.ts';
 
@@ -67,7 +68,7 @@ export class ExtractionWorker {
   private wakeResolve:(()=>void)|null=null;
   private wakeTimer:NodeJS.Timeout|null=null;
   private readonly wakes=new Map<string|undefined,Wake>();
-  private activeTask:{scope:ExtractionScope;taskId:string;abort:AbortController;drained:Promise<void>}|null=null;
+  private activeTask:{scope:ExtractionScope;taskId:string;abort:AbortController;drained:Promise<void>;leaseGeneration:number;stepId:string}|null=null;
 
   constructor(options:ExtractionWorkerOptions){
     if(!uuid.test(options.ownerId))throw new ExtractionTaskError('worker_scope_invalid');
@@ -121,19 +122,20 @@ export class ExtractionWorker {
   }
 
   /** 只中止当前声明的原任务；持久取消仍由任务表提交前完成。 */
-  cancel(scope:ExtractionScope,taskId:string):boolean {
+  cancel(scope:ExtractionScope,taskId:string,expectedLease?:TaskExecutionLease):boolean {
     const active=this.activeTask;
     if(!active||active.scope.ownerId!==scope.ownerId.toLowerCase()
       ||active.scope.contactId!==(scope.contactId?.toLowerCase()??null)
-      ||active.taskId!==taskId.toLowerCase())return false;
+      ||active.taskId!==taskId.toLowerCase()
+      ||expectedLease!==undefined&&(active.stepId!==expectedLease.stepId||active.leaseGeneration!==expectedLease.leaseGeneration))return false;
     active.abort.abort();
     return true;
   }
 
   /** 范围暂停仅等待匹配的本地执行排空，超时不推断供应商状态。 */
-  async drain(scope:ExtractionScope,taskId:string,timeoutMs=4_000):Promise<boolean>{
+  async drain(scope:ExtractionScope,taskId:string,expectedLease?:TaskExecutionLease,timeoutMs=4_000):Promise<boolean>{
     const active=this.activeTask;
-    if(!active||active.scope.ownerId!==scope.ownerId||active.scope.contactId!==scope.contactId||active.taskId!==taskId)return true;
+    if(!active||active.scope.ownerId!==scope.ownerId||active.scope.contactId!==scope.contactId||active.taskId!==taskId||expectedLease!==undefined&&(active.stepId!==expectedLease.stepId||active.leaseGeneration!==expectedLease.leaseGeneration))return true;
     let timer:NodeJS.Timeout|undefined;
     try{return await Promise.race([active.drained.then(()=>true),new Promise<boolean>(resolve=>{timer=setTimeout(()=>resolve(false),timeoutMs);})]);}
     finally{if(timer)clearTimeout(timer);}
@@ -237,7 +239,7 @@ export class ExtractionWorker {
     const signal=AbortSignal.any([globalSignal,stepAbort.signal]);
     let finishDrain!:()=>void;const drained=new Promise<void>(resolve=>{finishDrain=resolve;});
     this.activeTask={scope:{ownerId:claim.ownerId,contactId:claim.contactId},
-      taskId:claim.taskId,abort:stepAbort,drained};
+      taskId:claim.taskId,abort:stepAbort,drained,leaseGeneration:claim.leaseGeneration,stepId:claim.stepId};
     let heartbeatError:unknown;
     const heartbeat=setInterval(()=>{
       if(signal.aborted)return;

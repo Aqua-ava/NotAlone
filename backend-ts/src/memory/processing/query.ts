@@ -1,6 +1,6 @@
 /** 统一记忆处理的只读边界；查询不建轮次、不唤醒任务，也不授予执行资格。 */
 import type pg from 'pg';
-import {memoryContinueBlocker,type MemoryProcessingUnconfirmed} from './control.ts';
+import {memoryContinueBlocker,memoryHasInterruptedWork,type MemoryProcessingUnconfirmed} from './control.ts';
 import {processingReason} from './reason.ts';
 import {historyCursor,readProcessingHistory} from './history.ts';
 
@@ -79,8 +79,9 @@ export class MemoryProcessingQuery {
    let history;
    try{history=await readProcessingHistory(c,this.ownerId,contactId,null);await c.query('RELEASE SAVEPOINT memory_processing_history_read');}
    catch{await c.query('ROLLBACK TO SAVEPOINT memory_processing_history_read');history={entries:[],next_cursor:null,error:'处理历史暂不可用，请刷新重试。'};}
-   const blocker=scope?.intent==='pause'?await memoryContinueBlocker(c,{ownerId:this.ownerId,contactId},scope.active_round_id,this.unconfirmed):null;
-   const actions=scope?.intent==='pause'?(blocker===null?['continue']:[]):['pause'];
+   const blocker=scope&&(scope.intent==='pause'||status==='blocked')?await memoryContinueBlocker(c,{ownerId:this.ownerId,contactId},scope.active_round_id,this.unconfirmed):null;
+   const actions=scope?.intent==='pause'?(blocker===null?['continue']:[]):
+    status==='blocked'&&blocker===null&&scope?.active_round_id&&await memoryHasInterruptedWork(c,{ownerId:this.ownerId,contactId},scope.active_round_id)?['pause','continue']:['pause'];
    if(scope?.intent==='pause'&&blocker&&!code){code=blocker;reason=`你已暂停记忆处理；${processingReason(code)}`;}
    return {status:200,body:{action_version:safeCount(scope?.control_generation??0),scope:contactId===null?'owner':'contact',contact_id:contactId,control_generation:safeCount(scope?.control_generation??0),
     current:{status,round_id:scope?.active_round_id??null,phase:scope?.phase??null,

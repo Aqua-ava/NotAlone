@@ -1,6 +1,6 @@
 # 统一记忆处理合同
 
-本模块提供 ADR-107 的范围状态、历史和持续暂停／继续。控制复用真实任务与唯一 Worker；固定轮次执行及启动自动恢复由后续任务接入。
+本模块提供 ADR-107 的范围状态、历史和持续暂停／继续。安全中断的受阻范围可直接继续，无须先暂停。控制复用真实任务与唯一 Worker；固定轮次执行及启动自动恢复由后续任务接入。
 
 - `GET /api/contacts/:contactId/memory-processing/state`：只读取认证本人及指定联系人。
 - `GET /api/owner/memory-processing/state`：只读取认证本人且 `contact_id IS NULL`，不依赖选中联系人。
@@ -8,7 +8,7 @@
 
 - `POST /api/contacts/:contactId/memory-processing/{pause|continue}` 与本人对应路径接受 `{action_version,operation_id}`；版本由状态顶层 `action_version` 取得，操作标识是 UUID。
 - 响应 `{accepted:true,operation_id,action,action_version,control_generation,replayed}` 只确认控制意图接纳；调用方随后重新读取状态。同一标识和请求体重放返回原接纳回执，不再取消或唤醒。
-- 过期版本或同标识不同请求返回 `409 memory_processing_state_conflict`；当前不能安全继续返回 `409 memory_processing_continue_unsafe`。暂停后的未决／未知调用、未消费 A 段、来源失效、不可恢复失败或耗尽预算均不授予继续动作。
+- 过期版本或同标识不同请求返回 `409 memory_processing_state_conflict`；当前不能安全继续返回 `409 memory_processing_continue_unsafe`。暂停后的未决／未知调用、未消费 A 段、来源失效、不可恢复失败或仍需模型但额度耗尽时均不授予继续动作；仅消费已成功回执的确定性收尾无需增加模型额度。
 
 旧 `/memory-processing` 和 `/resume` 是隔离的兼容合同，新的本人页面不调用它们。旧 owner 宽查不能作为本人状态或动作的依据，后续兼容收口任务负责退役。
 
@@ -35,8 +35,8 @@
 
 ## 暂停与继续的执行围栏
 
-迁移 `125_memory_processing_control.sql` 增加无正文操作回执和步骤的 `memory_control_generation`。控制事务按联系人锁、本人锁的顺序串行；暂停推进范围代次并撤销所有记忆在途租约，再尽力中止匹配执行并最多等待本地排空四秒。供应商是否停止和实际费用只由原调用回执表示。
+迁移 `125_memory_processing_control.sql` 增加无正文操作回执和步骤的 `memory_control_generation`。控制事务按联系人锁、本人锁的顺序串行；暂停推进范围代次并撤销所有记忆在途租约，再按原步骤身份与租约代次尽力中止匹配执行并最多等待本地排空四秒。供应商是否停止和实际费用只由原调用回执表示。
 
-领取、A 段、采纳提交、主题、画像和模型预约共用范围资格。暂停后迅速继续也不能使旧代次／旧租约结果重新合法。已有调用的 `recordReserved` 结算独立于执行资格。继续只复用原来源、成功步骤、回执和累计预算，不调用会重置尝试次数或补额度的旧恢复动作。自动观察通知、旧恢复、旧主题 enable/refresh/continue 和维护调度均不能解除持久暂停；同步保存、来源删除和 Skill 不受该门禁限制。
+领取、A 段、采纳提交、主题、画像和模型预约共用范围资格。暂停后迅速继续也不能使旧代次／旧租约结果重新合法。已有调用的 `recordReserved` 结算独立于执行资格。回执检查仅使用真实记忆任务、冻结批次及最小来源关联对应的请求，独立回复与 Skill 的未决回执不阻止记忆继续。继续只复用原来源、成功步骤、回执和累计预算，不调用会重置尝试次数或补额度的旧恢复动作。自动观察通知、旧恢复、旧主题 enable/refresh/continue 和维护调度均不能解除持久暂停；同步保存、来源删除和 Skill 不受该门禁限制。
 
 正式 HTTP、实际 Worker 和环回供应商时序验证见 `test/memory-lifecycle-control-host.test.mjs`。测试支持的 `restartHost()` 重建同一合成库、同一本人与正式 profile，用于验证暂停持久性；它不为产品新增测试端点。
