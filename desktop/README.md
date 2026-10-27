@@ -109,22 +109,24 @@ B负责人工作树的 `reply-strategy-dialogue` 和 `reply-strategy-invalidatio
 
 ### 日常开发热更新
 
-日常修改使用开发模式，先运行 `npm run dev:status` 核验当前项目实例；没有实例才启动。`npm run dev` 在编译前取得项目级监督器互斥，检测到已有开发宿主和监督器时复用；监督器尚在启动时也不创建第二套构建器。发现打包版或孤立宿主时拒绝启动并提示正常退出；未知或遗留互斥记录不会自动删除。不要从 `out/` 打开打包版代替开发实例，也不为普通代码修改重新打包：
+日常修改使用开发模式，先运行 `pnpm run dev:status` 核验当前项目实例；没有实例才启动。`pnpm run dev` 在编译前取得项目级监督器互斥，检测到已有开发宿主和监督器时复用；监督器尚在启动时也不创建第二套构建器。发现打包版或孤立宿主时拒绝启动并提示正常退出；未知或遗留互斥记录不会自动删除。不要从 `out/` 打开打包版代替开发实例，也不为普通代码修改重新打包：
 
 ```bash
 cd desktop
-npm run dev
+pnpm run dev:status
+# 状态为 stopped 时再启动
+pnpm run dev
 ```
 
 React 界面和 CSS 保存后直接更新；兼容的组件修改会保留当前页面和组件状态，修改 Hook 结构或入口 HTML 时仍可能重新挂载或刷新页面。main、preload 和被引用的共享 TypeScript 编译成功后自动重启；后端 `backend-ts/src/` 的 TypeScript 与原迁移 SQL 变化也会请求重启。重启前沿用正式的认证停读和生成结算流程；未确认停止时保留原 App 及恢复提示，不强杀，也不启动第二份。主进程重启会清除尚未保存的界面临时状态。首次显式启动正常显示管理后台；之后源码触发或终端 `r` 请求的重启只在后台预加载窗口，不自动显示或抢焦点。需要查看时点击 Dock 图标或“窗口 → 管理后台”，输入小窗仍可由原快捷键唤出。
 
 开发版顶部变化加速源固定读取 `desktop/.dev/resources/notalone-probe`，使用仓库准备工具生成的整组探针、独立辅助源、核心库和清单，并复用正式资源的完整性与签名身份核验。只在已验证的开发入口启用；资源缺失或损坏时退回周期识别，不搜索配置探针旁的文件，也不改变后端资料位置或运行模式。此目录中的辅助源仅提示顶部变化，联系人仍由正式观察核验。
 
-开发模式沿用既有解释器、配置文件和资料位置，后端源码固定从本次命令所在仓库加载；该覆盖只在内存中生效，不改写原来的启动路径。开发路径缺失时，可在“设置 → 高级 → 故障排查”的“本机启动路径”选择 `NotAlone` 环境的解释器。先通过菜单退出已有安装版 App，避免单例只唤回旧窗口。需要独立空配置做界面验收时使用 `npm run dev -- --user-data-dir /绝对路径`。开发服务只监听本机并验证本次令牌，窗口仍使用 `notalone://app`，正式包不读取开发资源。
+开发模式沿用既有解释器、配置文件和资料位置，后端源码固定从本次命令所在仓库加载；该覆盖只在内存中生效，不改写原来的启动路径。开发路径缺失时，可在“设置 → 高级 → 故障排查”的“本机启动路径”选择 `NotAlone` 环境的解释器。先通过菜单退出已有安装版 App，避免单例只唤回旧窗口。需要独立空配置做界面验收时，在 `desktop/` 使用 `pnpm run dev --user-data-dir /绝对路径`。开发服务只监听本机并验证本次令牌，窗口仍使用 `notalone://app`，正式包不读取开发资源。
 
 终端输入 `r` 再回车可手动重启；`Ctrl+C` 或 App 的“退出 NotAlone”会正常停服并结束开发服务器。编译错误会保留原 App，修正并保存后自动重试；新增依赖后重新运行开发命令。开发启动与安全重启复用上述数据库检查：仅有真实缺少的版本时原地补齐结构，界面或普通源码保存不会另建、备份或搬动数据库，不更改同步授权。构建缓存位于忽略的 `.dev/`；它不包含应用资料。
 
-`npm start` 等同于 `npm run dev`；`npm run build` 只验证生产前端构建。当前 `npm run package`、直接执行 `scripts/package.mjs` 和 `npm run test:package` 都在构建或输出写入前拒绝，没有环境开关或确认口令。只有用户明确发起发布任务，才单独调整发布门禁；权限或原生验收不自动构成例外。下面的打包参数供未来发布任务参考，当前不可直接执行。开发模式通过不能代替分发验收。
+`pnpm start` 等同于 `pnpm run dev`；`pnpm run build` 只验证生产前端构建。当前 `npm run package`、直接执行 `scripts/package.mjs` 和 `npm run test:package` 都在构建或输出写入前拒绝，没有环境开关或确认口令。只有用户明确发起发布任务，才单独调整发布门禁；权限或原生验收不自动构成例外。下面的打包参数供未来发布任务参考，当前不可直接执行。开发模式通过不能代替分发验收。
 
 打包缺省仍使用本地 ad-hoc 签名。需要固定证书身份时，显式执行 `npm run package -- --with-probe --signing-identity "$NOTALONE_SIGNING_IDENTITY"`；该变量由操作者事先设置为已选身份名称或完整证书摘要，不保存到仓库。App 与自研探针使用同一参数；单独准备探针可用 `node scripts/prepare-probe.mjs --destination <绝对路径> --signing-identity "$NOTALONE_SIGNING_IDENTITY"`。参数无效或签名失败立即停止，不自动选择或回退。输出按实际签名检查区分 ad-hoc 与证书签名，权限延续、正式分发及公证仍须另验，见[权限记录](../docs/guides/macos-app-permissions-and-errors.md)。
 
@@ -140,8 +142,9 @@ cd desktop
 pnpm run typecheck
 pnpm test                # 类型检查、安全调度、自研探针及外置路径配置，真实 App 不运行
 npm run test:polling     # 后台刷新稳定性回归，含无头 Chrome 页面；不启动 Electron
-npm run dev             # 日常开发
-npm start               # 与 npm run dev 相同
+pnpm run dev:status     # 先核验并复用现有开发实例
+pnpm run dev            # 日常开发
+pnpm start              # 与 pnpm run dev 相同
 npm run package
 ```
 

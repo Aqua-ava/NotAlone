@@ -63,12 +63,13 @@
 
 源码开发需要 macOS、Homebrew、PostgreSQL、Swift 与 Node.js ≥ 24。后端统一使用 TypeScript 与 DSH；安装脚本准备锁定的 Node 依赖、开发库与原生探针。**已有数据库请先阅读 [迁移与恢复说明](backend-ts/database/README.md)。**
 
-在仓库根目录运行：
+先确认 Node.js ≥ 24 和 pnpm 11.25.0 可用。若尚未安装 pnpm，可使用 `npm install --global pnpm@11.25.0`；已安装时无需执行。然后在仓库根目录运行：
 
 ```bash
-npm install --global pnpm@11.25.0
 zsh scripts/install.sh
-npm run dev
+pnpm run dev:status
+# 状态为 stopped 时再启动
+pnpm run dev
 ```
 
 启动后还需配置本机后端路径、初始化本人并配置模型；完整步骤如下。源码启动和默认前端打包不等于已取得包含完整运行时的受管版 App。
@@ -100,16 +101,18 @@ zsh scripts/install.sh
 
 ### 3. 准备并启动桌面端
 
-前后端统一由根目录 pnpm workspace 管理，版本锁定在根 `pnpm-lock.yaml`；`backend-ts/` 和 `desktop/` 各自声明依赖。请在仓库根目录安装，不使用 `npm install` 或 `npm ci` 安装项目依赖。运行脚本不会自动安装或修改锁文件；`npm run dev` 只是运行开发脚本，沿用现有桌面开发入口。
+前后端统一由根目录 pnpm workspace 管理，版本锁定在根 `pnpm-lock.yaml`；`backend-ts/` 和 `desktop/` 各自声明依赖。请在仓库根目录安装，不使用 `npm install` 或 `npm ci` 安装项目依赖。运行脚本不会自动安装或修改锁文件；`pnpm run dev` 运行桌面开发入口。
 
 根目录可运行 `pnpm typecheck`、`pnpm test:backend`、`pnpm test:desktop`；`pnpm test` 串行执行两端测试。新增依赖用 `pnpm --filter ./backend-ts add <包名>` 或 `pnpm --filter ./desktop add <包名>`。
 
 ```bash
 pnpm install --frozen-lockfile
-npm run dev
+pnpm run dev:status
+# 状态为 stopped 时再启动
+pnpm run dev
 ```
 
-日常使用 `npm run dev`：React/CSS 保存后热更新，main、preload、共享代码与 TypeScript 后台变化后安全重启。`npm start` 等同于开发模式；仅构建用 `npm run build`。打包与运行打包版仅限用户明确发起的发布任务，`pnpm --dir desktop run package` 当前受发布门禁限制，详见[日常开发热更新](desktop/README.md#日常开发热更新)。默认包只含前端；可用 `--with-probe` 附带 NotAlone 自研探针，微信 CLI / WCDB 始终由用户在本机另行准备。
+日常使用 `pnpm run dev`：React/CSS 保存后热更新，main、preload、共享代码与 TypeScript 后台变化后安全重启。`pnpm start` 等同于开发模式；仅构建用 `pnpm run build`。打包与运行打包版仅限用户明确发起的发布任务，`pnpm --dir desktop run package` 当前受发布门禁限制，详见[日常开发热更新](desktop/README.md#日常开发热更新)。默认包只含前端；可用 `--with-probe` 附带 NotAlone 自研探针，微信 CLI / WCDB 始终由用户在本机另行准备。
 
 ### 4. 首次连接与使用
 
@@ -192,7 +195,7 @@ node scripts/install_git_hooks.mjs
 
 ## 命令与验证
 
-日常入口是 `cd desktop && npm run dev:status`，复用已有开发实例；没有实例才运行 `npm run dev`。后台由官方 DSH profile 装配 TypeScript 业务模块，沿用原 `.env`、PostgreSQL、本人和联系人身份及资料位置。
+日常入口是 `cd desktop && pnpm run dev:status`，复用已有开发实例；没有实例才运行 `pnpm run dev`。后台由官方 DSH profile 装配 TypeScript 业务模块，沿用原 `.env`、PostgreSQL、本人和联系人身份及资料位置。
 
 ```bash
 cd backend-ts

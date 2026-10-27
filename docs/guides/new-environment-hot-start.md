@@ -221,10 +221,10 @@ fatal: unable to auto-detect email address
 export PATH="$HOME/miniconda3/envs/NotAlone/bin:$PATH"
 pg_isready -h 127.0.0.1 -p 5432
 cd desktop
-npm run dev:status
+pnpm run dev:status
 ```
 
-如果状态为 `stopped`，使用持久终端会话执行 `npm run dev`。如果状态为 `development`，复用现有实例，不启动第二份。若实例被非正常回收并留下 socket，先确认没有存活宿主和持有者，再清理对应租约。
+如果状态为 `stopped`，按[工程工作流](../agents/engineering.md)启动 `pnpm run dev`。如果状态为 `development`，复用现有实例，不启动第二份。若实例被非正常回收并留下 socket，先确认没有存活宿主和持有者，再清理对应租约。
 
 ## 剩余风险
 

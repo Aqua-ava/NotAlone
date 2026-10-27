@@ -134,6 +134,6 @@ print
 print "──────────────────────────────────────────────────────────"
 print "[install] 完成。"
 print "[install] TypeScript 后台、数据库与 Mac 原生探针已准备。"
-print "[install] 开发桌面入口：cd desktop && npm run dev；首次初始化见 README。"
+print "[install] 开发桌面入口：cd desktop && pnpm run dev:status；无实例时运行 pnpm run dev；首次初始化见 README。"
 print "[install] 已知前置：需要微信桌面版、自装 wechat-cli、探针屏幕录制权限（见 README）。"
 print "──────────────────────────────────────────────────────────"
