@@ -5,6 +5,14 @@ import {extractionTargets,extractionCheckpoint,extractionProgress,ownerExtractio
 import {unsettledExtraction,blockedExtraction,quarantineExtraction} from './store-recovery.ts';
 import {recordExtractionObservation,claimExtractionSchedule,enqueueExtractionObservation} from './store-schedule.ts';
 import {completeL2ScenarioWorkerStep} from '../../scenarios/worker.ts';
+import {
+ blockMemoryProcessingRound,
+ completeMemoryProcessingRoundIfReady,
+ continueMemoryProcessingAfterExtraction,
+ acceptTaskIntoProcessingRound,
+ markRoundTaskProcessing,
+ type MemoryProcessingOrganization,
+} from '../../processing/round.ts';
 import {assertExtractionPolicyWindow,resolveExtractionPolicy,validateExtractionRuntimeConfig,type ExtractionPolicyVersion,type CompleteClaimRuntimeConfig} from '../policy-version.ts';
 export interface ExtractionScope {ownerId:string;contactId:string|null;}
 export interface ExtractionClaim extends ExtractionScope {
@@ -17,6 +25,7 @@ export interface ExtractionStoreOptions {
  verificationPolicy?:'complete-claim-v1';
  unconfirmedRequests?:(scope:ExtractionScope)=>Promise<readonly string[]>|readonly string[];
  processingState?:(scope:ExtractionScope,taskId:string)=>'active'|'queued'|null;
+ organization?:MemoryProcessingOrganization;
 }
 export class ExtractionTaskError extends Error {
  readonly code:string;constructor(code:string){super(code);this.code=code;}
@@ -78,6 +87,22 @@ export class ExtractionTaskStore {
    const id=inserted.rows[0]?.id??(await c.query("SELECT id FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND source_document_id=$3 AND task_type='import' FOR UPDATE",[scope.ownerId,scope.contactId,sourceId])).rows[0]?.id;
    if(!id)throw new ExtractionTaskError('task_not_found');
    for(const [index,name] of ['parse','normalize','extract_memory','index','verify'].entries())await c.query(`INSERT INTO background_task_step(task_id,step_name,step_order,total_count) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,[id,name,index+1,messageCount]);
+   await c.query(`INSERT INTO memory_processing_plan(task_id,owner_id,contact_id)
+    VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,[id,scope.ownerId,scope.contactId]);
+   await c.query(`INSERT INTO memory_processing_target(task_id,message_id,owner_id,contact_id)
+    SELECT $1,m.id,m.owner_id,m.contact_id FROM message m
+    JOIN message_source_ref ref ON ref.message_id=m.id AND ref.owner_id=m.owner_id
+      AND ref.contact_id=m.contact_id AND ref.source_document_id=$4
+    WHERE m.owner_id=$2 AND m.contact_id=$3
+      AND m.speaker IN ('user','contact')
+      AND length(btrim(COALESCE(NULLIF(m.text_content,''),m.media_placeholder,'')))>0
+      AND EXISTS(SELECT 1 FROM source_document d WHERE d.id=$4 AND d.owner_id=$2
+        AND d.contact_id=$3 AND d.status='active')
+      AND m.occurred_at IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM memory_processing_receipt receipt
+        WHERE receipt.message_id=m.id AND receipt.owner_id=m.owner_id AND receipt.contact_id=m.contact_id)
+    ON CONFLICT DO NOTHING`,[id,scope.ownerId,scope.contactId,sourceId]);
+   await acceptTaskIntoProcessingRound(c,scope,id);
    return id;
   });
  }
@@ -92,7 +117,7 @@ export class ExtractionTaskStore {
      WHERE t.owner_id=$1 AND t.contact_id=$2 AND s.step_name='extract_memory' AND s.status='running' AND s.lease_expires_at<=now()`,[scope.ownerId,scope.contactId])).rows;
     for(const row of expired){
      await quarantineExtraction(c,scope,row.id,unsettled.windows.get(row.id)??new Set());
-     if(await blockedExtraction(c,unsettled,row.id,false))await this.markUnknown(c,row.id,row.step_id);
+    if(await blockedExtraction(c,unsettled,row.id,false))await this.markUnknown(c,scope,row.id,row.step_id);
     }
     // 只恢复本票负责的提取步骤；其他业务 Worker 的租约不得顺带重排。
     await c.query(`UPDATE background_task_step s SET status=CASE WHEN attempt_count>=3 THEN 'failed' ELSE 'retryable' END,
@@ -200,6 +225,23 @@ export class ExtractionTaskStore {
       OR ${skillLearningAllowed})
     AND t.status IN ('queued','running','verifying')
     AND ($6::boolean=false OR t.task_type='skill_learning')
+    AND (
+      t.task_type='skill_learning'
+      OR NOT EXISTS(
+        SELECT 1 FROM memory_processing_scope control
+        WHERE control.owner_id=t.owner_id
+          AND control.contact_id IS NOT DISTINCT FROM t.contact_id
+          AND control.active_round_id IS NOT NULL
+      )
+      OR EXISTS(
+        SELECT 1 FROM memory_processing_scope control
+        JOIN memory_processing_round_task membership
+          ON membership.round_id=control.active_round_id
+        WHERE control.owner_id=t.owner_id
+          AND control.contact_id IS NOT DISTINCT FROM t.contact_id
+          AND membership.task_id=t.id AND membership.active
+      )
+    )
     AND ($3::uuid IS NULL OR t.id=$3) AND s.step_name=ANY($4::text[]) AND s.status IN ('pending','retryable')
     AND NOT(t.id=ANY($5::uuid[]))
     AND (s.status='pending' OR s.attempt_count<3)
@@ -231,14 +273,18 @@ export class ExtractionTaskStore {
     lease_generation=lease_generation+1,worker_id=$2,lease_expires_at=now()+$3*interval '1 millisecond',last_error_code=NULL,
     started_at=COALESCE(started_at,now()),updated_at=now() WHERE id=$1 RETURNING lease_expires_at,lease_generation,attempt_count`,[row.step_id,input.workerId,input.leaseMs,row.task_type==='skill_learning',scope.ownerId,scope.contactId])).rows[0];
    await c.query("UPDATE background_task SET status=$2,current_step=$3,last_error_code=NULL,started_at=COALESCE(started_at,clock_timestamp()),updated_at=now() WHERE id=$1",[row.task_id,['verify','verify_skill_drafts'].includes(row.step_name)?'verifying':'running',row.step_name]);
+   if(row.task_type!=='skill_learning')await markRoundTaskProcessing(c,{
+     ownerId:scope.ownerId,contactId:scope.contactId,taskId:row.task_id,
+   },row.step_name==='extract_memory'?'extraction':row.step_name==='organize_memory'?'topics':'verification');
    return {...scope,taskId:row.task_id,stepId:row.step_id,stepName:row.step_name,workerId:input.workerId,leaseGeneration:Number(lease.lease_generation),
     attemptCount:lease.attempt_count,messageCount:row.message_count,sourceDocumentId:row.source_document_id,taskType:row.task_type,
     leaseExpiresAt:lease.lease_expires_at,runtimeConfig:row.extraction_runtime_config??null};
   });
  }
- async markUnknown(c:pg.ClientBase,taskId:string,stepId:string):Promise<void>{
+ async markUnknown(c:pg.ClientBase,scope:ExtractionScope,taskId:string,stepId:string):Promise<void>{
   await c.query("UPDATE background_task_step SET status='failed',worker_id=NULL,lease_expires_at=NULL,last_error_code='model_call_outcome_unknown',updated_at=now() WHERE id=$1",[stepId]);
   await c.query("UPDATE background_task SET status='failed',last_error_code='model_call_outcome_unknown',finished_at=now(),updated_at=now() WHERE id=$1",[taskId]);
+  await blockMemoryProcessingRound(c,{...scope,taskId});
  }
  async fail(claim:ExtractionClaim,errorCode:string,retryable:boolean):Promise<'failed'|'retryable'>{
   if(!/^[a-zA-Z0-9_]{1,64}$/.test(errorCode))throw new ExtractionTaskError('task_error_code_invalid');
@@ -255,6 +301,7 @@ export class ExtractionTaskStore {
      await c.query(`UPDATE layered_memory_state SET status='failed',error_code=$3,updated_at=now()
        WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid AND enabled`,
      [claim.ownerId,claim.contactId,errorCode]);
+     await blockMemoryProcessingRound(c,claim);
     }
     return status;
    }
@@ -268,11 +315,12 @@ export class ExtractionTaskStore {
    const unsettled=await unsettledExtraction(this,c,claim);
    if(await blockedExtraction(c,unsettled,claim.taskId,false)){
     await quarantineExtraction(c,claim,claim.taskId,unsettled.windows.get(claim.taskId)??new Set());
-    await this.markUnknown(c,claim.taskId,claim.stepId);return 'failed';
+    await this.markUnknown(c,claim,claim.taskId,claim.stepId);return 'failed';
    }
    const status=retryable&&claim.attemptCount<3?'retryable':'failed';
    await c.query("UPDATE background_task_step SET status=$2,worker_id=NULL,lease_expires_at=NULL,last_error_code=$3,updated_at=now() WHERE id=$1",[claim.stepId,status,errorCode]);
    await c.query("UPDATE background_task SET status=$2,retry_count=retry_count+1,last_error_code=$3,finished_at=CASE WHEN $2='failed' THEN now() ELSE NULL END,updated_at=now() WHERE id=$1",[claim.taskId,status==='failed'?'failed':'running',errorCode]);
+   if(status==='failed')await blockMemoryProcessingRound(c,claim);
    return status;
   });
  }
@@ -301,7 +349,7 @@ export class ExtractionTaskStore {
    }
    const unsettled=await unsettledExtraction(this,c,claim);
    if(await blockedExtraction(c,unsettled,claim.taskId,false)){
-    await quarantineExtraction(c,claim,claim.taskId,unsettled.windows.get(claim.taskId)??new Set());await this.markUnknown(c,claim.taskId,claim.stepId);return false;
+    await quarantineExtraction(c,claim,claim.taskId,unsettled.windows.get(claim.taskId)??new Set());await this.markUnknown(c,claim,claim.taskId,claim.stepId);return false;
    }
    // 与原Worker一致：返还一次尝试，租约到期或显式恢复后才允许新执行者领取。
    return Boolean((await c.query("UPDATE background_task_step SET attempt_count=attempt_count-1,updated_at=now() WHERE id=$1 AND attempt_count>0",[claim.stepId])).rowCount);
@@ -312,7 +360,9 @@ export class ExtractionTaskStore {
   if(claim.stepName==='organize_memory'){
    await this.transaction(claim,async c=>{
     await this.assertLease(c,claim);
-    await completeL2ScenarioWorkerStep(c,claim,processedCount);
+    const completion=await completeL2ScenarioWorkerStep(c,claim,processedCount);
+    if(completion.state==='complete')await completeMemoryProcessingRoundIfReady(c,claim);
+    else await blockMemoryProcessingRound(c,claim);
    });
    return;
   }
@@ -347,6 +397,7 @@ export class ExtractionTaskStore {
     lease_expires_at=NULL,last_error_code=NULL,started_at=NULL,finished_at=NULL,updated_at=now() WHERE task_id=$1`,[claim.taskId]);
    await c.query(`UPDATE background_task SET status=$2,current_step=$3,observation_pending=false,last_error_code=NULL,
     started_at=CASE WHEN $4 THEN NULL ELSE started_at END,finished_at=CASE WHEN $4 THEN NULL ELSE now() END,updated_at=now() WHERE id=$1`,[claim.taskId,requeue?'queued':'succeeded',requeue?'extract_memory':claim.stepName,requeue]);
+   if(!requeue)await continueMemoryProcessingAfterExtraction(c,claim,this.options.organization);
   });
  }
  async assertLease(c:pg.ClientBase,claim:ExtractionClaim):Promise<void>{

@@ -74,7 +74,20 @@ export async function completeManagementTask(f,state,{owner=false,beforeCall,top
   const memoryId=owner?f.ownerMemoryId:f.memoryId;
   const text=owner?'本人曾参加合成课程。':'双方曾共同参加合成课程。';
   const claim=await f.store.claim(taskScope,{taskId:state.work_id,workerId:randomUUID(),leaseMs:30_000,supportedSteps:['organize_memory']});
-  if(!claim)throw new Error('正式覆盖任务必须可领取');
+  if(!claim){
+    const facts=await f.pool.query(`SELECT t.status AS task_status,s.status AS step_status,
+      control.active_round_id,round.status AS round_status,
+      membership.active AS member_active
+     FROM background_task t
+     JOIN background_task_step s ON s.task_id=t.id AND s.step_name='organize_memory'
+     LEFT JOIN memory_processing_scope control
+       ON control.owner_id=t.owner_id AND control.contact_id IS NOT DISTINCT FROM t.contact_id
+     LEFT JOIN memory_processing_round round ON round.id=control.active_round_id
+     LEFT JOIN memory_processing_round_task membership
+       ON membership.round_id=round.id AND membership.task_id=t.id
+     WHERE t.id=$1`,[state.work_id]);
+    throw new Error(`正式覆盖任务必须可领取 ${JSON.stringify(facts.rows)}`);
+  }
   let calls=0;
   const model={async call(input){
     calls++;await input.requireCurrent();await beforeCall?.(calls,input);

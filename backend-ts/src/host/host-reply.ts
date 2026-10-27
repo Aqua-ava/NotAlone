@@ -309,7 +309,8 @@ export async function createHostReplyRuntime(options:HostReplyOptions) {
           call});
         if(options.extractionAdoptionEnabled){
           adoptionPool=await options.storage.businessPool();
-          const store=new ExtractionTaskStore(adoptionPool,{policyVersion,verificationPolicy:options.extractionVerificationPolicy});
+          const store=new ExtractionTaskStore(adoptionPool,{policyVersion,verificationPolicy:options.extractionVerificationPolicy,
+            ...(l2Scenarios?{organization:{budget:options.l2Budget??DEFAULT_L2_SCENARIO_BUDGET}}:{})});
           const binding={provider:m.provider,model:m.model,maxTokens:m.maxTokens,temperature:m.temperature,
             reasoningEffort:m.reasoningEffort},profile=m.budgetProfile;
           adoptionHost=createExtractionAdoptionHost({ownerId:owner,taskStore:store,

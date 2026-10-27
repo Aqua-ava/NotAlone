@@ -41,5 +41,6 @@ export async function lifecycleHost(t,seed,options={}){
   const response=await fetch(`http://${connection.address}${path}`,{method,headers:{...(authenticated?{Authorization:`Bearer ${connection.token}`} : {}),...(body===undefined?{}:{'content-type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(15000)});
   return {status:response.status,data:await response.json()};
  };
- return {...fixture,owner,request,stopHost,restartHost:async()=>{await stopHost();await startHost();}};
+ return {...fixture,owner,request,stopHost,output:()=>output,
+  restartHost:async()=>{await stopHost();await startHost();}};
 }

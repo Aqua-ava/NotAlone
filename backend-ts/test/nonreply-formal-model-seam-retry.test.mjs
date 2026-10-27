@@ -19,8 +19,6 @@ async function observeRecovery(policy){
     await c.query("INSERT INTO message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload)VALUES($1,$2,$3,'source_document',$4,'line:1',$5)",[message,owner,contact,source,{time_iso:'2026-09-15T00:00:00Z'}]);
     pool=new pg.Pool({host:'/tmp',database:c.database,max:2});const store=new ExtractionTaskStore(pool);
     const task=await store.enqueueImport({ownerId:owner,contactId:contact},source,1);
-    await c.query('INSERT INTO memory_processing_plan(task_id,owner_id,contact_id)VALUES($1,$2,$3)',[task,owner,contact]);
-    await c.query('INSERT INTO memory_processing_target(task_id,message_id,owner_id,contact_id)VALUES($1,$2,$3,$4)',[task,message,owner,contact]);
     await c.query("UPDATE background_task_step SET status='succeeded',processed_count=1,total_count=1 WHERE task_id=$1 AND step_name IN ('parse','normalize')",[task]);
     const claim=await store.claim({ownerId:owner,contactId:contact},{taskId:task,workerId:randomUUID(),leaseMs:60000,supportedSteps:['extract_memory']});
     let recovery;

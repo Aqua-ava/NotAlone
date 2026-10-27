@@ -110,7 +110,7 @@ test('global-worker会话锁贯穿run与步骤完成，退出释放后才允许�
  }finally{await held?.release();await f.close();}
 });
 
-test('观察持久调度保留阈值、同任务身份、冻结目标和撤销后事件拒绝',async()=>{
+test('观察持久调度保留阈值、同任务身份和当前轮冻结目标，并拒绝撤销后事件',async()=>{
  const f=await fixture();try{
   const binding=randomUUID();await f.pool.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic','synthetic')",[binding,f.scope.ownerId,f.scope.contactId]);
   const first=await addObservation(f,binding,1);
@@ -118,7 +118,7 @@ test('观察持久调度保留阈值、同任务身份、冻结目标和撤销�
   const claim=await f.store.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000});assert.deepEqual((await f.store.targets(claim)).targetIds,[first.message]);
   const second=await addObservation(f,binding,2);assert.equal(await f.store.claimScheduled(f.scope),null);
   const third=await addObservation(f,binding,3);assert.equal(await f.store.claimScheduled(f.scope),task);
-  assert.equal((await f.store.targets(claim)).targetIds.length,3);
+  assert.deepEqual((await f.store.targets(claim)).targetIds,[first.message]);
   assert.equal((await f.store.progress(f.scope,task)).tasks[0].total_count,3);
   await f.pool.query("UPDATE conversation_binding SET status='revoked',revoked_at=now() WHERE id=$1",[binding]);
   assert.equal(await f.store.enqueueObservation(f.scope,[second.message,third.message]),null);
@@ -126,7 +126,7 @@ test('观察持久调度保留阈值、同任务身份、冻结目标和撤销�
  }finally{await f.close();}
 });
 
-test('原批次unknown隔离旧目标，删除窗口正文保留input关联，真正新目标可运行',async()=>{
+test('原批次unknown隔离旧目标，删除窗口正文保留input关联，新目标留到后续轮次',async()=>{
  const f=await fixture();try{
   const binding=randomUUID();await f.pool.query("INSERT INTO conversation_binding(id,owner_id,contact_id,channel,account_scope,conversation_locator) VALUES($1,$2,$3,'wechat','synthetic','synthetic')",[binding,f.scope.ownerId,f.scope.contactId]);
   const first=await addObservation(f,binding,1),task=await f.store.enqueueObservation(f.scope,[first.message]);
@@ -140,10 +140,18 @@ test('原批次unknown隔离旧目标，删除窗口正文保留input关联，�
   await f.pool.query("INSERT INTO memory_extraction_trace_link(trace_id,owner_id,contact_id,record_kind,record_id,commit_status,operation) VALUES($1,$2,$3,'message',$4,'committed','input')",[trace,f.scope.ownerId,f.scope.contactId,first.message]);
   await f.pool.query('DELETE FROM memory_extraction_trace_event WHERE trace_id=$1',[trace]);
   assert.equal(await blocked.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000}),null);
-  const second=await addObservation(f,binding,2);await addObservation(f,binding,3);assert.equal(await f.store.claimScheduled(f.scope),task);
+  const second=await addObservation(f,binding,2),third=await addObservation(f,binding,3);
+  assert.equal(await f.store.claimScheduled(f.scope),task);
   const fresh=await blocked.claim(f.scope,{taskId:task,workerId:randomUUID(),leaseMs:30000});assert.ok(fresh);
-  assert.ok((await blocked.targets(fresh)).targetIds.includes(second.message));
-  assert.ok(!(await blocked.targets(fresh)).targetIds.includes(first.message));
+  assert.deepEqual((await blocked.targets(fresh)).targetIds,[]);
+  const pending=(await f.pool.query(`SELECT target.message_id
+   FROM memory_processing_target target
+   WHERE target.task_id=$1 AND target.completed_at IS NULL
+     AND NOT EXISTS(
+       SELECT 1 FROM memory_processing_round_target snapshot
+       WHERE snapshot.task_id=target.task_id AND snapshot.message_id=target.message_id
+     ) ORDER BY target.message_id`,[task])).rows.map(row=>row.message_id).sort();
+  assert.deepEqual(pending,[second.message,third.message].sort());
  }finally{await f.close();}
 });
 

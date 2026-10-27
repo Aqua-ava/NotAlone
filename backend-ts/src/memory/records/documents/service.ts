@@ -1,4 +1,5 @@
 import {memoryScopePaused} from '../../processing/control.ts';
+import {acceptTaskIntoProcessingRound} from '../../processing/round.ts';
 /** 原公开 L2/L3 管理合同；只调度原任务，不持有模型或第二套状态库。 */
 import type {Client} from 'pg';
 import {L2ScenarioService,L2ScenarioConflict} from '../../scenarios/service.ts';
@@ -106,6 +107,9 @@ export function createLayeredMemoryManagement(options:LayeredMemoryManagementOpt
           if(Number(current.dirty_revision)<=Number(current.consumed_revision)&&current.status!=='stale')return;
           const refreshed=await refreshManagementGeneration(client,scope,current,inputs);
           const result=await enqueueManagementJob(client,scope,refreshed,inputs,budget,contract,'refresh');
+          await acceptTaskIntoProcessingRound(client,
+            {ownerId:scope.owner_id,contactId:scope.contact_id},result.taskId,
+            {unit:'memories',targetCount:inputs.manifest.length});
           signal.throwIfAborted();
           return result;
         });
@@ -224,6 +228,9 @@ export function createLayeredMemoryManagement(options:LayeredMemoryManagementOpt
           let current=await managementState(client,scope);
           if(action==='refresh'||action==='enable')current=await refreshManagementGeneration(client,scope,current,inputs);
           const enqueued=await enqueueManagementJob(client,scope,current,inputs,budget,contract,action,body.work_revision);
+          await acceptTaskIntoProcessingRound(client,
+            {ownerId:scope.owner_id,contactId:scope.contact_id},enqueued.taskId,
+            {unit:'memories',targetCount:inputs.manifest.length,reuseActiveRound:true});
           return {...enqueued,cancelled:[...cancelled,...enqueued.cancelled]};
         });
         for(const id of outcome.cancelled)await options.cancel?.(scope,id);

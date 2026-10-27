@@ -1,4 +1,5 @@
 import {memoryScopePaused} from '../../processing/control.ts';
+import {acceptTaskIntoProcessingRound} from '../../processing/round.ts';
 /** 原097持久观察调度；业务身份来自已提交来源，通知正文不参与入队。 */
 import type pg from 'pg';
 import {ExtractionTaskError,lockExtractionScope,type ExtractionScope,type ExtractionTaskStore} from './store.ts';
@@ -71,6 +72,7 @@ export async function claimExtractionSchedule(c:pg.ClientBase,scope:ExtractionSc
    WHERE w.owner_id=m.owner_id AND w.contact_id=m.contact_id AND (m.occurred_at,m.created_at,m.id)<=(boundary.occurred_at,boundary.created_at,boundary.id))))
   AND NOT EXISTS(SELECT 1 FROM memory_processing_receipt r WHERE r.message_id=m.id AND r.owner_id=m.owner_id AND r.contact_id=m.contact_id) ON CONFLICT DO NOTHING`,[scope.ownerId,scope.contactId,taskId,observations,legacy]);
  await c.query('UPDATE memory_extraction_receipt SET task_id=$3 WHERE owner_id=$1 AND contact_id=$2 AND task_id IS NULL AND observation_id=ANY($4::uuid[])',[scope.ownerId,scope.contactId,taskId,observations]);
+ await acceptTaskIntoProcessingRound(c,scope,taskId);
  await c.query('UPDATE local_wechat_observation SET memory_enqueued_at=now() WHERE id=ANY($1::uuid[])',[observations]);
  const remaining=await count(c,scope);
  await c.query(`UPDATE memory_extraction_schedule SET pending_count=$3,due_at=CASE WHEN $3>0 THEN now() ELSE NULL END,

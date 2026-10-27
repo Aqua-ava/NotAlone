@@ -122,7 +122,7 @@ test('当前提取只展示真实消息计划计数，不把画像记忆或任�
 
 test('历史读取异常不覆盖权威当前状态，状态读取异常不制造业务失败或执行事实',{timeout:60000},async t=>{
  const host=await lifecycleHost(t);
- await host.client.query('DROP TABLE memory_processing_round_task');
+ await host.client.query('DROP TABLE memory_processing_round_target; DROP TABLE memory_processing_round_task');
  const current=await host.request('/api/owner/memory-processing/state');
  assert.equal(current.status,200);assert.equal(current.data.current.status,'waiting');
  assert.match(current.data.history.error,/历史暂不可用/);

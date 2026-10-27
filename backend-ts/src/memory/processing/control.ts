@@ -3,6 +3,7 @@ import type pg from 'pg';
 import {memoryModelRequestIds} from './model-requests.ts';
 import {unconfirmedARequests} from '../extraction/tasks/store-recovery.ts';
 import type {TaskControlPort,TaskScope,TaskExecutionLease} from '../../tasks/task-control.ts';
+import {profileOnlyRecoveryAllowed,resumeProfileOnlyRecovery} from '../records/documents/recovery.ts';
 
 export class MemoryProcessingControlError extends Error {
  readonly code:string;readonly status:number;
@@ -30,12 +31,15 @@ export async function memoryContinueBlocker(c:pg.ClientBase,scope:TaskScope,acti
  AND request_id=ANY($3::uuid[]) AND outcome IN ('pending','unknown') LIMIT 1`,[scope.ownerId,scope.contactId,[...requests]])).rowCount)return 'model_call_outcome_unknown';
  for(const task of tasks){
   if(task.status==='succeeded')continue;
+  const profileRecovery=task.task_type==='layered_memory'
+    &&await profileOnlyRecoveryAllowed(c,scope,task.id);
   if(task.status==='failed'&&!task.last_error_code)return 'processing_requires_repair';
   if((await c.query("SELECT 1 FROM background_task_step WHERE task_id=$1 AND status='running' AND lease_expires_at>clock_timestamp() LIMIT 1",[task.id])).rowCount)return 'execution_unavailable';
-  if(task.status==='cancelled'||task.last_error_code&&!['lease_expired','worker_stopped','task_interrupted'].includes(task.last_error_code))return 'processing_requires_repair';
+  if(!profileRecovery&&(task.status==='cancelled'||task.last_error_code
+    &&!['lease_expired','worker_stopped','task_interrupted'].includes(task.last_error_code)))return 'processing_requires_repair';
   if(task.task_type==='import'&&!(await c.query("SELECT 1 FROM source_document WHERE id=$1 AND owner_id=$2 AND contact_id=$3 AND status='active'",[task.source_document_id,scope.ownerId,scope.contactId])).rowCount)return 'source_unavailable';
   if(task.task_type==='observation'&&!(await c.query("SELECT 1 FROM conversation_binding WHERE owner_id=$1 AND contact_id=$2 AND status='active'",[scope.ownerId,scope.contactId])).rowCount)return 'source_unavailable';
-  if(task.task_type==='layered_memory'&&!(await c.query(`SELECT 1 FROM layered_memory_job job JOIN layered_memory_state state
+  if(task.task_type==='layered_memory'&&!profileRecovery&&!(await c.query(`SELECT 1 FROM layered_memory_job job JOIN layered_memory_state state
    ON state.owner_id=job.owner_id AND state.contact_id IS NOT DISTINCT FROM job.contact_id
    WHERE job.task_id=$1 AND job.state='active' AND state.enabled AND job.settings_generation=state.settings_generation
    AND (job.model_calls_used<job.model_call_limit OR job.pending_receipt
@@ -50,11 +54,23 @@ export async function memoryContinueBlocker(c:pg.ClientBase,scope:TaskScope,acti
 /** 运行意图下仅恢复可信当前轮次的中断，不把普通等待或无依据阻碍当作重试授权。 */
 export async function memoryHasInterruptedWork(c:pg.ClientBase,scope:TaskScope,roundId:string|null):Promise<boolean>{
  if(roundId===null)return false;
- return Boolean((await c.query(`SELECT 1 FROM memory_processing_round_task member JOIN background_task task ON task.id=member.task_id
+ if((await c.query(`SELECT 1 FROM memory_processing_round_task member JOIN background_task task ON task.id=member.task_id
   WHERE member.round_id=$1 AND member.active AND task.owner_id=$2 AND task.contact_id IS NOT DISTINCT FROM $3::uuid
   AND (task.status='failed' AND task.last_error_code IN ('lease_expired','worker_stopped','task_interrupted')
    OR task.status IN ('running','verifying') AND EXISTS(SELECT 1 FROM background_task_step step WHERE step.task_id=task.id
-    AND step.status='running' AND step.lease_expires_at<=clock_timestamp())) LIMIT 1`,[roundId,scope.ownerId,scope.contactId])).rowCount);
+    AND step.status='running' AND step.lease_expires_at<=clock_timestamp()))
+  LIMIT 1`,[roundId,scope.ownerId,scope.contactId])).rowCount)return true;
+ const profileTasks=(await c.query(`SELECT task.id
+  FROM memory_processing_round_task member
+  JOIN background_task task ON task.id=member.task_id
+  WHERE member.round_id=$1 AND member.active AND task.owner_id=$2
+    AND task.contact_id IS NOT DISTINCT FROM $3::uuid
+    AND task.status='failed' AND task.task_type='layered_memory'`,
+ [roundId,scope.ownerId,scope.contactId])).rows;
+ for(const task of profileTasks){
+  if(await profileOnlyRecoveryAllowed(c,scope,task.id))return true;
+ }
+ return false;
 }
 export class MemoryProcessingControl {
  private readonly pool:pg.Pool;private readonly ownerId:string;private readonly tasks:TaskControlPort;private readonly unconfirmed?:MemoryProcessingUnconfirmed;
@@ -101,6 +117,7 @@ export class MemoryProcessingControl {
      await c.query("UPDATE background_task SET status='queued',updated_at=clock_timestamp() WHERE id=ANY($1::uuid[]) AND status IN ('running','verifying')",[taskIds]);
     }else{
      // 只修复已明确允许的未完成阶段；不调用会加额或重置尝试次数的旧 resume。
+     await resumeProfileOnlyRecovery(c,scope,current.active_round_id);
      await c.query(`UPDATE background_task_step step SET status='pending',worker_id=NULL,lease_expires_at=NULL,
       lease_generation=lease_generation+1,last_error_code=NULL,updated_at=clock_timestamp() FROM memory_processing_round_task member
       WHERE member.round_id=$1 AND member.active AND member.task_id=step.task_id AND (step.status IN ('failed','retryable') OR step.status='running' AND step.lease_expires_at<=clock_timestamp())`,[current.active_round_id]);
