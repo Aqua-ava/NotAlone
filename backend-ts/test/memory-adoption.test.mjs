@@ -287,6 +287,46 @@ test('合成PG：相关独立事实KEEP并存且不消费旧父版本来源',asy
  }finally{await x.fixture.close();}
 });
 
+test('合成PG：单条关系证据无效只留待确认，其他合法候选继续采纳',async()=>{
+ const x=await setup();
+ try{
+  const oldMessage=await x.message('合成联系人喜欢茶','2026-10-01T08:00:00.123456+08:00');
+  await new MemoryAdoption({ownerId:x.owner,transaction:x.transaction,embed:x.embed})
+   .adoptBatch({contact_id:x.contact,...(await x.trace()),signal:new AbortController().signal,facts:[{fact:await x.fact(oldMessage)}]});
+  const old=(await x.c.query("SELECT id FROM public.confirmed_memory WHERE status='active'")).rows[0];
+  const walk=await x.message('合成联系人喜欢清晨散步','2026-10-01T09:00:00.123456+08:00');
+  const oldWalk=(await x.c.query(`INSERT INTO public.confirmed_memory
+   (owner_id,contact_id,text_content,category,source_ids,adoption_method,status)
+   VALUES($1,$2,'合成联系人喜欢清晨散步','preference',$3,'auto','active') RETURNING id`,
+  [x.owner,x.contact,[walk]])).rows[0];
+  const coffee=await x.message('合成联系人喜欢咖啡','2026-10-02T08:00:00.123456+08:00');
+  const milk=await x.message('合成联系人喜欢牛奶','2026-10-03T08:00:00.123456+08:00');
+  const runtime={
+   async adjudicate(){return [0,1].map(candidate_index=>({candidate_index,
+    action:candidate_index===0?'keep':'merge',replaced_memory_id:null,
+    merged_memory_ids:candidate_index===0?[]:[old.id,oldWalk.id],
+    merged_text:candidate_index===0?null:'合成联系人喜欢茶和清晨散步',duplicate_memory_id:null,
+    relation:{kind:candidate_index===0?'independent':'supplement',
+     related_memory_ids:candidate_index===0?[old.id]:[old.id,oldWalk.id],
+     explanation:'合成独立偏好',claim_changed:false,condition_changed:false,
+     evidence:[{message_id:oldMessage,quote:'合成联系人喜欢茶'}]}}));},
+   async verifyRelations(items){return items.map(item=>({candidate_index:item.candidate_index,supported:true,
+    source_receipt:item.relation_source_receipt,claim_changed:false,condition_changed:false,
+    evidence:[{message_id:item.candidate.source_message_ids[0],
+     quote:item.candidate_index===0?'合成联系人喜欢咖啡':'不存在的逐字引文'},
+     ...(item.candidate_index===0?[{message_id:oldMessage,quote:'合成联系人喜欢茶'}]:[])]}));},
+   async verifyMerge(){throw new Error('关系证据无效时不应继续合并核验');},
+  };
+  const result=await new MemoryAdoption({ownerId:x.owner,transaction:x.transaction,embed:x.embed,adjudication:runtime})
+   .adoptBatch({contact_id:x.contact,...(await x.trace()),signal:new AbortController().signal,
+    facts:[{fact:await x.fact(coffee)},{fact:await x.fact(milk)}]});
+  assert.deepEqual({adopted:result.adopted,pending:result.pending,failed:result.failed},{adopted:1,pending:1,failed:0});
+  assert.equal((await x.c.query("SELECT count(*)::int n FROM public.confirmed_memory WHERE text_content=$1 AND status='active'",['合成联系人喜欢咖啡'])).rows[0].n,1);
+  assert.deepEqual((await x.c.query("SELECT status,failure_reason FROM public.memory_candidate WHERE text_content=$1",['合成联系人喜欢牛奶'])).rows[0],
+   {status:'pending',failure_reason:'timeline:relation_evidence_not_verbatim'});
+ }finally{await x.fixture.close();}
+});
+
 test('合成PG：合并父版本原子退役、完整来源依赖和提交前来源复验',async()=>{
  const x=await setup();
  try{

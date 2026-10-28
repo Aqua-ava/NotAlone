@@ -21,6 +21,7 @@ interface Scope extends pg.QueryResultRow {
  round_target_unit:'messages'|'memories'|'steps'|null;round_target_count:string|null;
  round_frozen_count:number|null;round_processed_count:number|null;
  legacy_decision:'adopted'|'unresolved'|null;
+ legacy_round_id:string|null;
  legacy_resume_required:boolean|null;
 }
 export class MemoryProcessingQuery {
@@ -45,7 +46,8 @@ export class MemoryProcessingQuery {
    let scope=(await c.query<Scope>(`SELECT s.*,r.status AS round_status,r.control_generation AS round_generation,r.phase,
     r.target_unit AS round_target_unit,r.target_count AS round_target_count,
     NULL::int AS round_frozen_count,NULL::int AS round_processed_count,
-    adoption.decision AS legacy_decision,adoption.resume_required AS legacy_resume_required
+    adoption.decision AS legacy_decision,adoption.round_id AS legacy_round_id,
+    adoption.resume_required AS legacy_resume_required
     FROM memory_processing_scope s
     LEFT JOIN memory_processing_round r ON r.id=s.active_round_id AND r.scope_id=s.id
     LEFT JOIN memory_processing_legacy_adoption adoption ON adoption.scope_id=s.id
@@ -140,8 +142,10 @@ export class MemoryProcessingQuery {
     (await c.query("SELECT 1 FROM confirmed_memory WHERE owner_id=$1 AND contact_id=$2 AND status='active' LIMIT 1",[this.ownerId,contactId])).rowCount;
    const failed=tasks.find(task=>['failed','cancelled','paused'].includes(task.status));
    const live=tasks.find(task=>task.live&&['running','verifying'].includes(task.status));
-   const legacyUnresolved=scope?.legacy_decision==='unresolved';
-   const legacyAdoptedPending=scope?.legacy_decision==='adopted'&&scope.legacy_resume_required===true;
+   const legacyActive=Boolean(scope?.active_round_id&&scope.active_round_id===scope.legacy_round_id);
+   const legacyUnresolved=scope?.legacy_decision==='unresolved'&&legacyActive;
+   const legacyAdoptedPending=scope?.legacy_decision==='adopted'
+    &&scope.legacy_resume_required===true&&legacyActive;
    let status:Status='waiting',reason:string|null=null,code:string|null=failed?.last_error_code??null;
    if(scope?.intent==='pause'){status='paused';reason=failed?`你已暂停记忆处理；${processingReason(code)}`:'你已暂停记忆处理，已有结果保留。';}
    else if(legacyUnresolved){

@@ -203,9 +203,10 @@ test('本轮目标在首次领取时冻结，运行中形成的新任务进入�
  assert.equal(rounds[0].status,'completed');
  assert.equal(rounds[1].status,'processing');
  assert.notEqual(rounds[1].id,seed.round);
- const first=(await host.request(`${root}/state`)).data.current;
- assert.equal(first.round_id,rounds[1].id);
- assert.equal(first.status,'processing');
+ const first=await untilLifecycle(async()=>{
+  const current=(await host.request(`${root}/state`)).data.current;
+  return current.round_id===rounds[1].id&&current.status==='processing'?current:null;
+ },5000);
  assert.equal(first.processed_count,0);assert.equal(first.total_count,1);
  assert.equal(first.pending_count,0);
  assert.equal((await host.client.query(`SELECT count(*)::int AS n

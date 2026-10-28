@@ -7,6 +7,10 @@ import {
   enqueueManagementJob,
 } from '../records/documents/store.ts';
 import type {L2ScenarioBudget} from '../scenarios/workspace.ts';
+import {
+  legacyAdoptionUnresolvedForRound,
+  unresolvedLegacyTaskSql,
+} from './legacy-adoption.ts';
 
 interface RoundTaskScope {
   ownerId: string;
@@ -21,8 +25,8 @@ export interface AcceptedProcessingRound {
 }
 
 /**
- * 新任务只在范围没有当前轮次时接纳首轮。已有完成或受阻轮次时保留新任务
- * 为后续待处理，由下一轮的显式调度合同接管。
+ * 新任务只在范围没有当前轮次时接纳首轮。已有完成或真实处理受阻轮次时保留
+ * 新任务为后续待处理；无法核验的存量隔离轮次不阻断新的增量工作。
  */
 export async function acceptTaskIntoProcessingRound(
   client: pg.ClientBase,
@@ -34,6 +38,10 @@ export async function acceptTaskIntoProcessingRound(
     reuseActiveRound?:boolean;
   } = {},
 ): Promise<AcceptedProcessingRound | null> {
+  if ((await client.query(
+    `SELECT ${unresolvedLegacyTaskSql('$1')} AS quarantined`,
+    [taskId],
+  )).rows[0].quarantined) return null;
   await client.query(
     `INSERT INTO public.memory_processing_scope(owner_id,contact_id)
      VALUES($1,$2) ON CONFLICT DO NOTHING`,
@@ -62,18 +70,25 @@ export async function acceptTaskIntoProcessingRound(
     )).rows[0] ?? null;
     if (!activeRound) return null;
     if (unit === 'messages') {
-      return activeRound.status === 'completed'
-        ? startNextMemoryProcessingRoundIfReady(client, scope)
-        : null;
-    }
-    if (unit !== 'memories') return null;
-    if (activeRound.status === 'completed') {
+      if (activeRound.status === 'completed') {
+        return startNextMemoryProcessingRoundIfReady(client, scope);
+      }
+      if (activeRound.status !== 'blocked'
+        || !await legacyAdoptionUnresolvedForRound(client, scope, activeRound.id)) {
+        return null;
+      }
+      // 旧归属隔离轮次继续保留 blocked 事实；新资料从下一轮独立开始。
       activeRound = null;
-    } else if (options.reuseActiveRound
-      && ['waiting','processing'].includes(activeRound.status)) {
-      reuseActiveRound = true;
     } else {
-      return null;
+      if (unit !== 'memories') return null;
+      if (activeRound.status === 'completed') {
+        activeRound = null;
+      } else if (options.reuseActiveRound
+        && ['waiting','processing'].includes(activeRound.status)) {
+        reuseActiveRound = true;
+      } else {
+        return null;
+      }
     }
   }
   let targetCount = options.targetCount ?? null;
@@ -202,6 +217,7 @@ export async function startNextMemoryProcessingRoundIfReady(
        AND target.completed_at IS NULL
        AND task.task_type IN ('import','observation')
        AND task.status IN ('queued','running','verifying','succeeded')
+       AND NOT ${unresolvedLegacyTaskSql('task.id')}
        AND (
          task.task_type='import' AND EXISTS(
            SELECT 1 FROM public.source_document source
@@ -439,6 +455,7 @@ export async function pendingProcessingTargetCount(
      WHERE target.owner_id=$1 AND target.contact_id=$2
        AND target.completed_at IS NULL
        AND control.active_round_id IS NOT NULL
+       AND NOT ${unresolvedLegacyTaskSql('target.task_id')}
        AND EXISTS(
          SELECT 1 FROM public.memory_processing_round_target snapshot
          WHERE snapshot.round_id=control.active_round_id

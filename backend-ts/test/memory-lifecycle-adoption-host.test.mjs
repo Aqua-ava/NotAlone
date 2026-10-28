@@ -212,9 +212,12 @@ test('歧义或无计划存量保持阻塞且不执行，旧停止只保留历�
     JOIN memory_processing_scope scope ON scope.id=adoption.scope_id
     WHERE scope.owner_id=$1 AND scope.contact_id=$2`,[host.owner,ambiguous.contact])).rows[0];
   assert.deepEqual(unresolved,{decision:'unresolved',evidence_code:'ambiguous_incomplete_tasks',resume_required:false});
-  assert.equal((await host.client.query(`SELECT count(*)::int AS n FROM memory_processing_round_task membership
+  assert.deepEqual((await host.client.query(`SELECT count(*)::int AS total,
+    count(*) FILTER (WHERE membership.active)::int AS active
+    FROM memory_processing_round_task membership
     JOIN memory_processing_scope scope ON scope.id=(SELECT scope_id FROM memory_processing_round WHERE id=membership.round_id)
-    WHERE scope.owner_id=$1 AND scope.contact_id=$2`,[host.owner,ambiguous.contact])).rows[0].n,0);
+    WHERE scope.owner_id=$1 AND scope.contact_id=$2`,[host.owner,ambiguous.contact])).rows[0],
+  {total:2,active:0});
   for (const legacy of [withoutPlan,emptyPlan]) {
     const state=(await host.request(
       `/api/contacts/${legacy.contact}/memory-processing/state`,
@@ -238,6 +241,69 @@ test('歧义或无计划存量保持阻塞且不执行，旧停止只保留历�
   assert.equal(stoppedState.history.entries[0].attribution,'legacy');
   assert.equal((await host.client.query(`SELECT count(*)::int AS n FROM memory_processing_scope
     WHERE owner_id=$1 AND contact_id=$2`,[host.owner,stopped.contact])).rows[0].n,0);
+});
+
+test('无法核验归属的存量隔离后，新到达的增量观察仍自动提取',{timeout:60000},async t=>{
+ let calls=0,legacy,later,held,startedResolve;
+ const started=new Promise(resolve=>{startedResolve=resolve;});
+ const provider=createServer(async(req,res)=>{
+  calls++;
+  let raw='';for await(const chunk of req)raw+=chunk;
+  const input=JSON.parse(raw);
+  if(raw.includes('隔离旧归属后到达的合成增量聊天')&&held===undefined){
+   held={res,input};startedResolve();return;
+  }
+  sendSyntheticTool(res,input.tools[0].name,{scenes:[]});
+ });
+ provider.listen(0,'127.0.0.1');await once(provider,'listening');
+ t.after(async()=>{provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));});
+ const host=await lifecycleHost(t,async(f,owner)=>{
+  legacy=await legacyImport(f,owner);
+  await legacyObservationTask(f,owner,legacy.contact);
+  later=await seedObservationInput(f,owner,legacy.contact,{
+   localId:51,text:'隔离旧归属后到达的合成增量聊天。',
+  });
+  const pool=new pg.Pool({host:'/tmp',database:f.client.database,max:2});
+  try{
+   const store=new ExtractionTaskStore(pool),scope={ownerId:owner,contactId:legacy.contact};
+   await store.transaction(scope,client=>store.recordObservation(
+    client,scope,later.observation,[later.message],
+   ));
+  }finally{await pool.end();}
+ },{providerUrl:`http://127.0.0.1:${provider.address().port}`});
+ const root=`/api/contacts/${legacy.contact}/memory-processing`;
+ await Promise.race([started,new Promise((_,reject)=>setTimeout(
+  ()=>reject(new Error('新观察未进入独立增量轮次')),15000,
+ ))]);
+ const active=(await host.request(`${root}/state`)).data;
+ assert.equal(active.current.status,'processing');
+ assert.notEqual(active.current.round_id,null);
+ assert.equal(active.current.total_count,1);
+ sendSyntheticTool(held.res,held.input.tools[0].name,{scenes:[]});
+ const completed=await untilLifecycle(async()=>{
+  const next=(await host.request(`${root}/state`)).data;
+  return next.current.status==='completed'?next:null;
+ },15000);
+ const rounds=(await host.client.query(`SELECT id,round_number,status,target_count
+  FROM memory_processing_round WHERE scope_id=(
+   SELECT id FROM memory_processing_scope WHERE owner_id=$1 AND contact_id=$2
+  ) ORDER BY round_number`,[host.owner,legacy.contact])).rows;
+ assert.equal(rounds.length,2);
+ assert.deepEqual(rounds.map(round=>round.status),['blocked','completed']);
+ assert.equal(completed.current.round_id,rounds[1].id);
+ assert.equal(completed.current.total_count,1);
+ assert.equal(completed.current.pending_count,0);
+ assert.equal(calls,1);
+ assert.equal((await host.client.query(
+  'SELECT decision FROM memory_processing_legacy_adoption WHERE owner_id=$1 AND contact_id=$2',
+  [host.owner,legacy.contact],
+ )).rows[0].decision,'unresolved');
+ const currentTask=(await host.client.query(`SELECT task_id
+  FROM memory_processing_round_task WHERE round_id=$1 AND active`,[rounds[1].id])).rows[0].task_id;
+ assert.ok(currentTask);
+ assert.equal((await host.client.query(
+  'SELECT task_id FROM memory_extraction_receipt WHERE message_id=$1',[later.message],
+ )).rows[0].task_id,currentTask);
 });
 
 test('零目标或旧暂停L2/L3保持不执行，可信本人整理只待显式继续',{timeout:60000},async t=>{

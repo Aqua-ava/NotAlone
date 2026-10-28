@@ -159,7 +159,13 @@ interface Snapshot {
  sources:Map<string,SourceDetails>;
  claims:Map<string,string[]>;
 }
-interface VerifiedDecision {decision:AdjudicationDecision;verification:RelationVerification|null;merge:MergeVerification|null;forcedPending:string|null}
+interface VerifiedDecision {
+ decision:AdjudicationDecision;
+ verification:RelationVerification|null;
+ merge:MergeVerification|null;
+ forcedPending:string|null;
+ relationFailure:string|null;
+}
 interface CommitOutcome {result:AdoptionResult}
 interface Shortcut {kind:'deleted'|'duplicate';memory:SimilarMemory|null}
 
@@ -331,7 +337,7 @@ function pendingIdentity(row:MemoryRow,fact:AdoptionFact):boolean{
   &&(row.interpretation_reason??'')===fact.interpretation_reason&&same(row.dimension_evidence,fact.dimension_evidence)
   &&row.source_dependency_mode===fact.source_dependency_mode&&Boolean(row.requires_all_sources)===fact.requires_all_sources;
 }
-function validEvidence(decision:AdjudicationDecision,item:AdjudicationItem,verification:RelationVerification|undefined):void{
+function relationEvidenceFailure(decision:AdjudicationDecision,item:AdjudicationItem,verification:RelationVerification|undefined):string|null{
  if(!actions.has(decision.action)||decision.candidate_index!==item.candidate_index)fail('adjudication_invalid');
  const available=new Set(item.similar.map(memory=>memory.memory_id));
  const relationIds=decision.relation?.related_memory_ids??[];
@@ -354,23 +360,28 @@ function validEvidence(decision:AdjudicationDecision,item:AdjudicationItem,verif
  if(decision.action!=='noop'&&decision.duplicate_memory_id)fail('adjudication_invalid');
  if(decision.relation){
   if(!relationIds.length||!decision.relation.explanation.trim()||[...decision.relation.explanation].length>1000)fail('adjudication_invalid');
-  if(!verification)fail('adjudication_relation_unsupported');
+  if(!verification)fail('adjudication_relation_verification_missing');
   const checked:RelationVerification=verification!;
   if(checked.candidate_index!==item.candidate_index
-   ||checked.claim_changed!==decision.relation.claim_changed||checked.condition_changed!==decision.relation.condition_changed
-   ||checked.source_receipt!==item.relation_source_receipt||!checked.evidence.length)fail('adjudication_relation_unsupported');
+   ||checked.source_receipt!==item.relation_source_receipt)fail('adjudication_relation_contract_invalid');
+  if(checked.claim_changed!==decision.relation.claim_changed)return 'timeline:relation_claim_mismatch';
+  if(checked.condition_changed!==decision.relation.condition_changed)return 'timeline:relation_condition_mismatch';
+  if(!checked.evidence.length)return 'timeline:relation_evidence_missing';
   const texts=new Map<string,string>();
   for(const source of item.similar)for(const row of source.source_texts)texts.set(row.message_id,row.text);
   for(const row of item.candidate_source_texts)texts.set(row.message_id,row.text);
-  for(const evidence of checked.evidence)if(!texts.has(evidence.message_id)||!texts.get(evidence.message_id)!.includes(evidence.quote))fail('adjudication_relation_unsupported');
+  for(const evidence of checked.evidence)
+   if(!texts.has(evidence.message_id)||!texts.get(evidence.message_id)!.includes(evidence.quote))
+    return 'timeline:relation_evidence_not_verbatim';
   const cited=new Set(checked.evidence.map(row=>row.message_id));
-  if(!item.candidate.source_message_ids.some(source=>cited.has(source)))fail('adjudication_relation_unsupported');
+  if(!item.candidate.source_message_ids.some(source=>cited.has(source)))return 'timeline:relation_candidate_source_missing';
   for(const relatedId of relationIds){
    const parent=item.similar.find(memory=>memory.memory_id===relatedId);
    const available=parent?.source_message_ids.filter(source=>texts.has(source))??[];
-   if(available.length&&!available.some(source=>cited.has(source)))fail('adjudication_relation_unsupported');
+   if(available.length&&!available.some(source=>cited.has(source)))return 'timeline:relation_parent_source_missing';
   }
  }
+ return null;
 }
 function canReplace(item:AdjudicationItem,parent:SimilarMemory):string|null{
  if(parent.adoption_method==='manual')return 'manual_parent_protected';
@@ -474,7 +485,7 @@ export class MemoryAdoption {
   if(related.length){
    if(!this.adjudication)fail('adjudication_unavailable',true);
    relationRows=await this.adjudication!.verifyRelations(related,related.map(item=>decisions.get(item.candidate_index)!),input.signal);
-   if(relationRows.length!==related.length)fail('adjudication_relation_unsupported',true);
+   if(relationRows.length!==related.length)fail('adjudication_relation_verification_count',true);
   }
   const consumers=new Map<string,number[]>();
   for(const item of modelled){
@@ -488,9 +499,9 @@ export class MemoryAdoption {
   for(const item of items){
    const decision=decisions.get(item.candidate_index)!;
    const relation=relationRows.find(row=>row.candidate_index===item.candidate_index);
-   validEvidence(decision,item,relation);
+   const relationFailure=relationEvidenceFailure(decision,item,relation);
    let merge:MergeVerification|null=null;
-   if(decision.action==='merge'){
+   if(!relationFailure&&decision.action==='merge'){
     const sourceIds=mergeSources(item,decision);
     const receipt=(await this.transaction(client=>sourceDetails(client,scope,sourceIds))).receipt??'';
     merge=await this.adjudication!.verifyMerge(item,decision,sourceIds,receipt,input.signal);
@@ -501,7 +512,11 @@ export class MemoryAdoption {
     if(merge.source_receipt!==receipt)fail('merge_verification_failed:receipt');
     if(!mergeEvidenceValid(item,merge))fail('merge_verification_failed:evidence');
    }
-   verified.set(item.candidate_index,{decision,verification:relation??null,merge,forcedPending:conflicted.has(item.candidate_index)?'parent_already_consumed':null});
+   verified.set(item.candidate_index,{decision,
+    verification:relationFailure&&relation?{...relation,supported:false}:relation??null,
+    merge,
+    forcedPending:conflicted.has(item.candidate_index)?'parent_already_consumed':null,
+    relationFailure});
   }
   // 先写新增/并存，再写会支出旧父版本的更新与合并，保证同批内部冲突可见。
   const priority=(index:number)=>shortcuts.has(index)?0:['update','merge'].includes(verified.get(index)!.decision.action)?2:1;
@@ -573,6 +588,7 @@ export class MemoryAdoption {
    return this.commitTrace(client,scope,input,index,{candidate_index:index,disposition:'skipped_deleted',candidate_id:null,memory_id:null,
     parent_memory_ids:[],decision:null,reason:'deleted_fingerprint'},[]);
   if(verified.forcedPending)return this.commitPending(client,scope,input,index,entry,verified.forcedPending,decision,verified.verification);
+  if(verified.relationFailure)return this.commitPending(client,scope,input,index,entry,verified.relationFailure,decision,verified.verification);
   if(decision.relation&&(!verified.verification?.supported||decision.relation.kind==='unresolved_conflict'))
    return this.commitPending(client,scope,input,index,entry,
     decision.relation.kind==='unresolved_conflict'?'timeline:unresolved_conflict':'timeline:relation_unknown',decision,verified.verification);

@@ -24,6 +24,16 @@ interface Evidence {
 }
 const incomplete = `task.status IN ('queued','running','verifying','failed','paused')`;
 
+/** 只由调用方传入内部 SQL 标识；任务 UUID 唯一，旧隔离身份不随当前轮次变化。 */
+export function unresolvedLegacyTaskSql(taskIdentity:string):string {
+  return `EXISTS(
+    SELECT 1 FROM public.memory_processing_round_task quarantine
+    JOIN public.memory_processing_legacy_adoption adoption
+      ON adoption.round_id=quarantine.round_id
+    WHERE quarantine.task_id=${taskIdentity} AND adoption.decision='unresolved'
+  )`;
+}
+
 function phase(step:string):Phase {
   if (['parse','normalize','extract_memory'].includes(step)) return 'extraction';
   if (['index','verify'].includes(step)) return 'verification';
@@ -151,7 +161,8 @@ async function createAdoption(
   client:pg.ClientBase,
   ownerId:string,
   contactId:string|null,
-  task:LegacyTask,
+  primaryTask:LegacyTask,
+  quarantineCandidates:LegacyTask[],
   evidence:Evidence|null,
   unresolvedCode:string,
 ):Promise<void> {
@@ -165,7 +176,7 @@ async function createAdoption(
     `INSERT INTO public.memory_processing_round
      (scope_id,owner_id,contact_id,round_number,control_generation,status,phase,target_unit,target_count)
      VALUES($1,$2,$3,1,0,'blocked',$4,$5,$6) RETURNING id`,
-    [scope,ownerId,contactId,evidence?.phase??phase(task.current_step),evidence?.unit??null,evidence?.count??null],
+    [scope,ownerId,contactId,evidence?.phase??phase(primaryTask.current_step),evidence?.unit??null,evidence?.count??null],
   )).rows[0].id;
   await client.query(
     'UPDATE public.memory_processing_scope SET active_round_id=$1 WHERE id=$2',
@@ -175,28 +186,51 @@ async function createAdoption(
     await client.query(
       `INSERT INTO public.memory_processing_round_task
        (round_id,task_id,owner_id,contact_id) VALUES($1,$2,$3,$4)`,
-      [round,task.id,ownerId,contactId],
+      [round,primaryTask.id,ownerId,contactId],
     );
     if (evidence.messageTargetIds.length) {
       await client.query(
         `INSERT INTO public.memory_processing_round_target(round_id,task_id,message_id)
          SELECT $1,$2,message_id FROM unnest($3::uuid[]) message_id`,
-        [round,task.id,evidence.messageTargetIds],
+        [round,primaryTask.id,evidence.messageTargetIds],
       );
     }
+  } else {
+    // 无法核验的旧任务只进入隔离轮次，不能冒充当前执行；保留其原状态和执行历史。
+    await client.query(
+      `INSERT INTO public.memory_processing_round_task
+       (round_id,task_id,owner_id,contact_id,active)
+       SELECT $1,task_id,$2,$3,false FROM unnest($4::uuid[]) task_id
+       ON CONFLICT DO NOTHING`,
+      [round,ownerId,contactId,quarantineCandidates.map(candidate=>candidate.id)],
+    );
   }
   const reason=decision==='adopted'?null:unresolvedCode;
   await client.query(
     `INSERT INTO public.memory_processing_legacy_adoption
      (owner_id,contact_id,scope_id,round_id,task_id,decision,evidence_code,resume_required,reason_code)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [ownerId,contactId,scope,round,evidence?task.id:null,decision,
+    [ownerId,contactId,scope,round,evidence?primaryTask.id:null,decision,
       evidence?.code??unresolvedCode,evidence!==null,reason],
   );
 }
 
 function legacyUnresolvedReason(task:LegacyTask):string {
   return task.status==='paused'?'legacy_paused_unverified':'legacy_evidence_unavailable';
+}
+
+export async function legacyAdoptionUnresolvedForRound(
+  client:pg.ClientBase,
+  scope:TaskScope,
+  roundId:string|null,
+):Promise<boolean> {
+  if (roundId === null) return false;
+  return (await client.query(
+    `SELECT 1 FROM public.memory_processing_legacy_adoption
+     WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid
+       AND round_id=$3 AND decision='unresolved'`,
+    [scope.ownerId,scope.contactId,roundId],
+  )).rowCount === 1;
 }
 
 export async function legacyAdoptionAwaitingContinue(
@@ -302,7 +336,7 @@ export async function adoptLegacyMemoryProcessing(
         }
         const unresolvedCode=tasks.length>1?'ambiguous_incomplete_tasks':legacyUnresolvedReason(tasks[0]);
         await createAdoption(
-          client,ownerId,contactId,tasks[0],evidence,unresolvedCode,
+          client,ownerId,contactId,tasks[0],tasks,evidence,unresolvedCode,
         );
         await client.query('COMMIT');
       } catch (error) {
@@ -314,4 +348,20 @@ export async function adoptLegacyMemoryProcessing(
     }
     if (candidates.length<64) break;
   }
+  // 升级已有记录时也没有任务编号字段可依赖；按接入时间补齐隔离归属，
+  // 只标记接入前已存在的真实任务，不把之后保存的增量资料误并入旧轮次。
+  await pool.query(
+    `INSERT INTO public.memory_processing_round_task
+     (round_id,task_id,owner_id,contact_id,active)
+     SELECT adoption.round_id,task.id,adoption.owner_id,adoption.contact_id,false
+     FROM public.memory_processing_legacy_adoption adoption
+     JOIN public.background_task task
+       ON task.owner_id=adoption.owner_id
+       AND task.contact_id IS NOT DISTINCT FROM adoption.contact_id
+       AND task.task_type IN ('import','observation','layered_memory')
+       AND task.created_at<=adoption.adopted_at
+     WHERE adoption.owner_id=$1 AND adoption.decision='unresolved'
+     ON CONFLICT DO NOTHING`,
+    [ownerId],
+  );
 }

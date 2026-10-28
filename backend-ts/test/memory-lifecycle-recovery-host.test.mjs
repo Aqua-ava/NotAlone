@@ -21,6 +21,26 @@ async function markExtractionInterrupted(client,task,round,code='lease_expired')
   await client.query("UPDATE memory_processing_round SET status='blocked' WHERE id=$1",[round]);
 }
 
+async function markLegacyRelationEvidenceFailure(client,{task,round}){
+  await markExtractionInterrupted(client,task,round,'adjudication_relation_unsupported');
+  const trace=randomUUID();
+  await client.query(`INSERT INTO memory_extraction_trace
+    (trace_id,owner_id,contact_id,run_id,batch_key,status,finished_at,failure_stage,error_code)
+    SELECT $1,owner_id,contact_id,$2,$3,'business_failed',now(),'batch_end','adjudication_relation_unsupported'
+    FROM background_task WHERE id=$4`,[trace,randomUUID(),'b'.repeat(64),task]);
+  await client.query(`INSERT INTO memory_extraction_trace_event
+    (event_id,trace_id,owner_id,contact_id,position,stage,payload)
+    SELECT $1,$2,owner_id,contact_id,1,'window',jsonb_build_object(
+      'task_runtime',jsonb_build_object('task_id',id::text))
+    FROM background_task WHERE id=$3`,[randomUUID(),trace,task]);
+  await client.query(`INSERT INTO memory_extraction_trace_call
+    (call_id,trace_id,owner_id,contact_id,purpose,called_at,finished_at,response_status,
+     provider_attempts,ledger_entry_id,ledger_commit_status,disposition)
+    SELECT $1,trace_id,owner_id,contact_id,'relation_verification',now(),now(),'returned',
+      1,$2,'committed','consumed'
+    FROM memory_extraction_trace WHERE trace_id=$3`,[randomUUID(),randomUUID(),trace]);
+}
+
 async function seedLayeredInterruption(f,owner,{outcome=null,versionMismatch=false}={}){
   const contact=randomUUID(),scope=randomUUID(),round=randomUUID(),task=randomUUID();
   await f.client.query("INSERT INTO contact(id,owner_id,display_name) VALUES($1,$2,'合成恢复阻断')",[contact,owner]);
@@ -125,6 +145,7 @@ test('启动恢复不越过暂停、未知回执、撤销来源、版本失效�
     paused:'启动恢复暂停联系人合成资料。',
     source:'启动恢复撤销来源合成资料。',
     repair:'启动恢复人工修复合成资料。',
+    unproven:'启动恢复缺少回执证明的旧关系错误。',
   };
   let calls=0,seed,budgets=[],taskCount=0;
   const provider=createServer(async(req,res)=>{
@@ -148,6 +169,8 @@ test('启动恢复不越过暂停、未知回执、撤销来源、版本失效�
     await f.client.query("UPDATE source_document SET status='delete_requested' WHERE id=$1",[seed.source.source]);
     seed.repair=await seedRoundInput(f,owner,{texts:[texts.repair]});
     await markExtractionInterrupted(f.client,seed.repair.task,seed.repair.round,'verification_contract_invalid');
+    seed.unproven=await seedRoundInput(f,owner,{texts:[texts.unproven]});
+    await markExtractionInterrupted(f.client,seed.unproven.task,seed.unproven.round,'adjudication_relation_unsupported');
     seed.pending=await seedLayeredInterruption(f,owner,{outcome:'pending'});
     seed.unknown=await seedLayeredInterruption(f,owner,{outcome:'unknown'});
     seed.version=await seedLayeredInterruption(f,owner,{versionMismatch:true});
@@ -167,13 +190,13 @@ test('启动恢复不越过暂停、未知回执、撤销来源、版本失效�
   const paused=(await host.request(`/api/contacts/${seed.paused.contactId}/memory-processing/state`)).data.current;
   assert.equal(paused.status,'paused');
   assert.deepEqual(paused.actions,['continue']);
-  for(const key of ['source','repair','pending','unknown','version']){
+  for(const key of ['source','repair','unproven','pending','unknown','version']){
     const contact=seed[key].contact??seed[key].contactId;
     const current=(await host.request(`/api/contacts/${contact}/memory-processing/state`)).data.current;
     assert.equal(current.status,'blocked',key);
     assert.deepEqual(current.actions,['pause'],key);
   }
-  for(const key of ['paused','source','repair','pending','unknown','version']){
+  for(const key of ['paused','source','repair','unproven','pending','unknown','version']){
     const fact=(await host.client.query(`SELECT task.status AS task_status,round.status AS round_status
       FROM background_task task JOIN memory_processing_round round ON round.id=$2
       WHERE task.id=$1`,[seed[key].task,seed[key].round])).rows[0];
@@ -182,6 +205,33 @@ test('启动恢复不越过暂停、未知回执、撤销来源、版本失效�
   assert.equal((await host.client.query('SELECT count(*)::int AS n FROM background_task')).rows[0].n,taskCount);
   assert.deepEqual((await host.client.query(`SELECT task_id,model_calls_used,model_call_limit
     FROM layered_memory_job ORDER BY task_id`)).rows,budgets);
+});
+
+test('旧版本整批关系证据错误在启动后可安全重试候选级处理',{timeout:60000},async t=>{
+ let calls=0,seed;
+ const provider=createServer(async(req,res)=>{
+  calls++;
+  let raw='';for await(const chunk of req)raw+=chunk;
+  const input=JSON.parse(raw);
+  assert.equal(input.tools?.[0]?.name,'DirectMemoryExtractionOutput');
+  sendSyntheticTool(res,input.tools[0].name,{scenes:[]});
+ });
+ provider.listen(0,'127.0.0.1');await once(provider,'listening');
+ t.after(async()=>{provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));});
+ const host=await lifecycleHost(t,async(f,owner)=>{
+  seed=await seedRoundInput(f,owner,{texts:['旧关系核验错误重试的合成资料。']});
+  await markLegacyRelationEvidenceFailure(f.client,seed);
+ },{providerUrl:`http://127.0.0.1:${provider.address().port}`});
+ await untilLifecycle(async()=>{
+  const state=(await host.request(
+   `/api/contacts/${seed.contactId}/memory-processing/state`,
+  )).data.current;
+  return state.status==='completed';
+ },20000);
+ assert.equal(calls,1);
+ assert.equal((await host.client.query(
+  'SELECT status,last_error_code FROM background_task WHERE id=$1',[seed.task],
+ )).rows[0].status,'succeeded');
 });
 
 test('重启只补成功主题后的失败画像，保留原批次、任务与累计预算',{timeout:90000},async t=>{

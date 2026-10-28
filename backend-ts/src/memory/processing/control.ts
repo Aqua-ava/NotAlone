@@ -8,25 +8,54 @@ import {resumeInterruptedCurrentRound} from './round-recovery.ts';
 import {
   legacyAdoptionAwaitingContinue,
   markLegacyAdoptionResumed,
+  unresolvedLegacyTaskSql,
 } from './legacy-adoption.ts';
 
 export class MemoryProcessingControlError extends Error {
  readonly code:string;readonly status:number;
  constructor(code='memory_processing_state_conflict',status=409){super(code);this.code=code;this.status=status;}
 }
+const recoverableTaskErrors=new Set([
+ 'lease_expired',
+ 'worker_stopped',
+ 'task_interrupted',
+]);
+const legacyRelationEvidenceError='adjudication_relation_unsupported';
+async function legacyRelationEvidenceRetryable(c:pg.ClientBase,taskId:string):Promise<boolean>{
+ return Boolean((await c.query(`SELECT 1
+  FROM background_task task
+  JOIN memory_extraction_trace_event window_event ON window_event.stage='window'
+    AND window_event.payload#>>'{task_runtime,task_id}'=task.id::text
+  JOIN memory_extraction_trace trace ON trace.trace_id=window_event.trace_id
+    AND trace.owner_id=window_event.owner_id AND trace.contact_id=window_event.contact_id
+  WHERE task.id=$1 AND task.last_error_code=$2 AND trace.error_code=$2
+    AND trace.status='business_failed' AND trace.failure_stage='batch_end'
+    AND EXISTS(
+      SELECT 1 FROM memory_extraction_trace_call trace_call
+      WHERE trace_call.trace_id=trace.trace_id AND trace_call.owner_id=trace.owner_id
+        AND trace_call.contact_id=trace.contact_id AND trace_call.purpose='relation_verification'
+        AND trace_call.response_status='returned' AND trace_call.provider_attempts>0
+        AND trace_call.ledger_commit_status='committed'
+    )
+  LIMIT 1`,[taskId,legacyRelationEvidenceError])).rowCount);
+}
 /** SQL 只引用调用方已核定的 t/s，不把本人 NULL 范围扩展成所有联系人。 */
-export const memoryExecutionAllowed=`(t.task_type NOT IN ('import','observation','layered_memory') OR NOT EXISTS(
- SELECT 1 FROM memory_processing_scope control WHERE control.owner_id=t.owner_id
- AND control.contact_id IS NOT DISTINCT FROM t.contact_id AND (control.intent='pause'
- OR COALESCE(s.memory_control_generation,0)<>control.control_generation
- OR EXISTS(
-  SELECT 1 FROM memory_processing_round round
-  JOIN memory_processing_round_task member ON member.round_id=round.id
-  WHERE round.id=control.active_round_id AND member.task_id=t.id
-    AND member.owner_id=t.owner_id
-    AND member.contact_id IS NOT DISTINCT FROM t.contact_id
-    AND member.active AND round.status IN ('blocked','completed')
- ))))`;
+export const memoryExecutionAllowed=`(t.task_type NOT IN ('import','observation','layered_memory') OR (
+ NOT EXISTS(
+  SELECT 1 FROM memory_processing_scope control WHERE control.owner_id=t.owner_id
+  AND control.contact_id IS NOT DISTINCT FROM t.contact_id AND (control.intent='pause'
+  OR COALESCE(s.memory_control_generation,0)<>control.control_generation
+  OR EXISTS(
+   SELECT 1 FROM memory_processing_round round
+   JOIN memory_processing_round_task member ON member.round_id=round.id
+   WHERE round.id=control.active_round_id AND member.task_id=t.id
+     AND member.owner_id=t.owner_id
+     AND member.contact_id IS NOT DISTINCT FROM t.contact_id
+     AND member.active AND round.status IN ('blocked','completed')
+  ))
+ )
+ AND NOT ${unresolvedLegacyTaskSql('t.id')}
+))`;
 export async function memoryScopePaused(c:pg.ClientBase,scope:TaskScope):Promise<boolean>{
  return Boolean((await c.query("SELECT 1 FROM memory_processing_scope WHERE owner_id=$1 AND contact_id IS NOT DISTINCT FROM $2::uuid AND intent='pause'",[scope.ownerId,scope.contactId])).rowCount);
 }
@@ -48,8 +77,13 @@ export async function memoryContinueBlocker(c:pg.ClientBase,scope:TaskScope,acti
     &&await profileOnlyRecoveryAllowed(c,scope,task.id);
   if(task.status==='failed'&&!task.last_error_code)return 'processing_requires_repair';
   if((await c.query("SELECT 1 FROM background_task_step WHERE task_id=$1 AND status='running' AND lease_expires_at>clock_timestamp() LIMIT 1",[task.id])).rowCount)return 'execution_unavailable';
+  const recoverableError=task.last_error_code!==null&&(
+    recoverableTaskErrors.has(task.last_error_code)
+    ||task.last_error_code===legacyRelationEvidenceError
+      &&await legacyRelationEvidenceRetryable(c,task.id)
+  );
   if(!profileRecovery&&(task.status==='cancelled'||task.last_error_code
-    &&!['lease_expired','worker_stopped','task_interrupted'].includes(task.last_error_code)))return 'processing_requires_repair';
+    &&!recoverableError))return 'processing_requires_repair';
   if(task.task_type==='import'&&!(await c.query("SELECT 1 FROM source_document WHERE id=$1 AND owner_id=$2 AND contact_id=$3 AND status='active'",[task.source_document_id,scope.ownerId,scope.contactId])).rowCount)return 'source_unavailable';
   if(task.task_type==='observation'&&!(await c.query("SELECT 1 FROM conversation_binding WHERE owner_id=$1 AND contact_id=$2 AND status='active'",[scope.ownerId,scope.contactId])).rowCount)return 'source_unavailable';
   if(task.task_type==='layered_memory'&&!profileRecovery&&!(await c.query(`SELECT 1 FROM layered_memory_job job JOIN layered_memory_state state
@@ -69,10 +103,20 @@ export async function memoryHasInterruptedWork(c:pg.ClientBase,scope:TaskScope,r
  if(roundId===null)return false;
  if((await c.query(`SELECT 1 FROM memory_processing_round_task member JOIN background_task task ON task.id=member.task_id
   WHERE member.round_id=$1 AND member.active AND task.owner_id=$2 AND task.contact_id IS NOT DISTINCT FROM $3::uuid
-  AND (task.status='failed' AND task.last_error_code IN ('lease_expired','worker_stopped','task_interrupted')
-   OR task.status IN ('running','verifying') AND EXISTS(SELECT 1 FROM background_task_step step WHERE step.task_id=task.id
-    AND step.status='running' AND step.lease_expires_at<=clock_timestamp()))
+  AND task.status IN ('running','verifying') AND EXISTS(SELECT 1 FROM background_task_step step WHERE step.task_id=task.id
+    AND step.status='running' AND step.lease_expires_at<=clock_timestamp())
   LIMIT 1`,[roundId,scope.ownerId,scope.contactId])).rowCount)return true;
+ const failed=(await c.query(`SELECT task.id,task.last_error_code
+  FROM memory_processing_round_task member
+  JOIN background_task task ON task.id=member.task_id
+  WHERE member.round_id=$1 AND member.active AND task.owner_id=$2
+    AND task.contact_id IS NOT DISTINCT FROM $3::uuid AND task.status='failed'`,
+ [roundId,scope.ownerId,scope.contactId])).rows;
+ for(const task of failed){
+  if(recoverableTaskErrors.has(task.last_error_code)
+   ||task.last_error_code===legacyRelationEvidenceError
+    &&await legacyRelationEvidenceRetryable(c,task.id))return true;
+ }
  const profileTasks=(await c.query(`SELECT task.id
   FROM memory_processing_round_task member
   JOIN background_task task ON task.id=member.task_id

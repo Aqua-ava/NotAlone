@@ -1,5 +1,9 @@
 import {memoryScopePaused} from '../../processing/control.ts';
 import {acceptTaskIntoProcessingRound} from '../../processing/round.ts';
+import {
+ legacyAdoptionUnresolvedForRound,
+ unresolvedLegacyTaskSql,
+} from '../../processing/legacy-adoption.ts';
 /** 原097持久观察调度；业务身份来自已提交来源，通知正文不参与入队。 */
 import type pg from 'pg';
 import {ExtractionTaskError,lockExtractionScope,type ExtractionScope,type ExtractionTaskStore} from './store.ts';
@@ -8,6 +12,7 @@ const pendingSource=`FROM memory_extraction_receipt r JOIN local_wechat_observat
  JOIN conversation_binding b ON b.id=o.binding_id AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id
  WHERE r.owner_id=$1 AND r.contact_id=$2 AND r.task_id IS NULL AND b.status='active'
  AND EXISTS(SELECT 1 FROM message_source_ref ref WHERE ref.message_id=r.message_id AND ref.observation_id=o.id)`;
+const notQuarantinedLegacyTask=`NOT ${unresolvedLegacyTaskSql('task.id')}`;
 async function count(c:pg.ClientBase,scope:ExtractionScope):Promise<number>{return(await c.query(`SELECT count(*)::int AS n ${pendingSource}`,[scope.ownerId,scope.contactId])).rows[0].n;}
 export async function recordExtractionObservation(c:pg.ClientBase,scope:ExtractionScope,observationId:string,ids:readonly string[]):Promise<void>{
  if(!ids.length)return;await lockExtractionScope(c,scope);
@@ -19,7 +24,11 @@ export async function recordExtractionObservation(c:pg.ClientBase,scope:Extracti
   ON b.id=o.binding_id AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id WHERE m.owner_id=$1 AND m.contact_id=$2
   AND o.id=$3 AND m.id=ANY($4::uuid[]) AND b.status='active' ON CONFLICT DO NOTHING RETURNING message_id`,[scope.ownerId,scope.contactId,observationId,ids])).rows;
  if(!inserted.length)return;
- const previous=(await c.query("SELECT id,status FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type='observation' FOR UPDATE",[scope.ownerId,scope.contactId])).rows[0];
+ const previous=(await c.query(`SELECT task.id,task.status FROM background_task task
+  WHERE task.owner_id=$1 AND task.contact_id=$2 AND task.task_type='observation'
+  AND ${notQuarantinedLegacyTask}
+  ORDER BY task.created_at DESC,task.id DESC LIMIT 1 FOR UPDATE`,
+ [scope.ownerId,scope.contactId])).rows[0];
  if(previous?.status==='cancelled'){
   await c.query('UPDATE memory_extraction_receipt SET task_id=$3 WHERE owner_id=$1 AND contact_id=$2 AND task_id IS NULL AND NOT(message_id=ANY($4::uuid[]))',[scope.ownerId,scope.contactId,previous.id,inserted.map(r=>r.message_id)]);
   await c.query('DELETE FROM memory_processing_plan WHERE task_id=$1',[previous.id]);
@@ -31,7 +40,11 @@ export async function recordExtractionObservation(c:pg.ClientBase,scope:Extracti
 }
 async function observationTask(c:pg.ClientBase,scope:ExtractionScope,n:number,runtimeConfig:CompleteClaimRuntimeConfig|null):Promise<string>{
  if(!(await c.query("SELECT 1 FROM conversation_binding WHERE owner_id=$1 AND contact_id=$2 AND status='active' LIMIT 1 FOR KEY SHARE",[scope.ownerId,scope.contactId])).rowCount)throw new ExtractionTaskError('source_unavailable');
- const existing=(await c.query("SELECT id,status FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type='observation' FOR UPDATE",[scope.ownerId,scope.contactId])).rows[0];
+ const existing=(await c.query(`SELECT task.id,task.status FROM background_task task
+  WHERE task.owner_id=$1 AND task.contact_id=$2 AND task.task_type='observation'
+  AND ${notQuarantinedLegacyTask}
+  ORDER BY task.created_at DESC,task.id DESC LIMIT 1 FOR UPDATE`,
+ [scope.ownerId,scope.contactId])).rows[0];
  let taskId=existing?.id;
  if(!existing)taskId=(await c.query("INSERT INTO background_task(owner_id,contact_id,source_document_id,task_type,status,current_step,message_count,extraction_runtime_config) VALUES($1,$2,NULL,'observation','queued','extract_memory',$3,$4::jsonb) RETURNING id",[scope.ownerId,scope.contactId,n,runtimeConfig?JSON.stringify(runtimeConfig):null])).rows[0].id;
  else if(['succeeded','failed','cancelled'].includes(existing.status)){
@@ -46,15 +59,20 @@ async function observationTask(c:pg.ClientBase,scope:ExtractionScope,n:number,ru
 export async function claimExtractionSchedule(c:pg.ClientBase,scope:ExtractionScope,runtimeConfig:CompleteClaimRuntimeConfig|null=null):Promise<string|null>{
  await lockExtractionScope(c,scope);
  if(await memoryScopePaused(c,scope))return null;
- // 受阻时新观察只保留为待处理回执；不得重置原任务的失败事实或尝试预算。
- const activeRound=(await c.query(`SELECT round.status
+ // 真实处理阻碍继续排队；无法核验的存量隔离轮次不阻断后续增量。
+ const activeRound=(await c.query(`SELECT round.id,round.status
   FROM memory_processing_scope control
   JOIN memory_processing_round round ON round.id=control.active_round_id
   WHERE control.owner_id=$1 AND control.contact_id=$2`,[scope.ownerId,scope.contactId])).rows[0];
- if(activeRound?.status==='blocked')return null;
+ if(activeRound?.status==='blocked'
+  &&!await legacyAdoptionUnresolvedForRound(c,scope,activeRound.id))return null;
  const state=(await c.query('SELECT *,due_at<=now() AS due,last_input_at+interval \'600 seconds\' AS idle_at FROM memory_extraction_schedule WHERE owner_id=$1 AND contact_id=$2 FOR UPDATE',[scope.ownerId,scope.contactId])).rows[0];
  if(!state?.due)return null;
- const previous=(await c.query("SELECT id,status FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type='observation'",[scope.ownerId,scope.contactId])).rows[0];
+ const previous=(await c.query(`SELECT task.id,task.status FROM background_task task
+  WHERE task.owner_id=$1 AND task.contact_id=$2 AND task.task_type='observation'
+  AND ${notQuarantinedLegacyTask}
+  ORDER BY task.created_at DESC,task.id DESC LIMIT 1`,
+ [scope.ownerId,scope.contactId])).rows[0];
  if(previous?.status==='cancelled'&&state.task_id)return null;
  if(previous&&['queued','running','verifying'].includes(previous.status)){
   const pending=(await c.query('SELECT count(*)::int AS n FROM memory_processing_target WHERE task_id=$1 AND completed_at IS NULL',[previous.id])).rows[0].n;
@@ -94,6 +112,11 @@ export async function enqueueExtractionObservation(store:ExtractionTaskStore,sco
   if(!source.rowCount)return null;
   const claimed=await claimExtractionSchedule(c,scope,await store.newTaskSnapshot());if(claimed)return claimed;
   if(!source.rows[0].memory_enqueued_at)return null;
-  return (await c.query("SELECT id FROM background_task WHERE owner_id=$1 AND contact_id=$2 AND task_type='observation' AND status IN ('queued','running','verifying')",[scope.ownerId,scope.contactId])).rows[0]?.id??null;
+  return (await c.query(`SELECT task.id FROM background_task task
+   WHERE task.owner_id=$1 AND task.contact_id=$2 AND task.task_type='observation'
+   AND task.status IN ('queued','running','verifying')
+   AND ${notQuarantinedLegacyTask}
+   ORDER BY task.created_at DESC,task.id DESC LIMIT 1`,
+  [scope.ownerId,scope.contactId])).rows[0]?.id??null;
  });
 }

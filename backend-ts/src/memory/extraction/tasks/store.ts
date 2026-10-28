@@ -13,6 +13,7 @@ import {
  markRoundTaskProcessing,
  type MemoryProcessingOrganization,
 } from '../../processing/round.ts';
+import {unresolvedLegacyTaskSql} from '../../processing/legacy-adoption.ts';
 import {assertExtractionPolicyWindow,resolveExtractionPolicy,validateExtractionRuntimeConfig,type ExtractionPolicyVersion,type CompleteClaimRuntimeConfig} from '../policy-version.ts';
 export interface ExtractionScope {ownerId:string;contactId:string|null;}
 export interface ExtractionClaim extends ExtractionScope {
@@ -225,6 +226,7 @@ export class ExtractionTaskStore {
       OR ${skillLearningAllowed})
     AND t.status IN ('queued','running','verifying')
     AND ($6::boolean=false OR t.task_type='skill_learning')
+    AND NOT ${unresolvedLegacyTaskSql('t.id')}
     AND (
       t.task_type='skill_learning'
       OR NOT EXISTS(

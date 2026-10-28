@@ -8,7 +8,7 @@ import {seedMigrationBaseline,prepareTestSchema} from './schema-fixture.mjs';
 import pg from 'pg';
 import {HostStorage} from '../src/platform/database/host-storage.ts';
 
-test('108升级当前127保留既有数据，严格拒绝迁移缺口、未知版本和抑制表字段缺失',async t=>{
+test('108升级当前128保留既有数据，严格拒绝迁移缺口、未知版本和抑制表字段缺失',async t=>{
   const root=new URL('../../',import.meta.url).pathname;
   const directory=await mkdtemp(join(tmpdir(),'notalone-suppression-upgrade-'));
   const {mkdir}=await import('node:fs/promises');
@@ -18,7 +18,7 @@ test('108升级当前127保留既有数据，严格拒绝迁移缺口、未知�
     if(!/^\d{3}_.*\.sql$/.test(file))continue;
     const version=Number(file.slice(0,3));
     if(version<=108)await copyFile(join(root,'backend-ts/database/migrations',file),join(baseline,file));
-    if(version<=127)await copyFile(join(root,'backend-ts/database/migrations',file),join(current,file));
+    if(version<=128)await copyFile(join(root,'backend-ts/database/migrations',file),join(current,file));
   }
   const name=`notalone_suppress_${randomUUID().replaceAll('-','')}_test`;
   const admin=new pg.Client({host:'/tmp',database:'postgres'});await admin.connect();
@@ -58,7 +58,7 @@ test('108升级当前127保留既有数据，严格拒绝迁移缺口、未知�
   assert.deepEqual(await snapshot(),before,'所有既有业务表内容保持不变');
   assert.equal((await client.query('SELECT count(*)::int AS n FROM wechat_auto_read_suppression')).rows[0].n,0,'不能猜测回填丢失的历史删除身份');
   const ledger=(await client.query('SELECT name,checksum FROM notalone_schema_migration ORDER BY name')).rows;
-  assert.equal(ledger.length,127);
+  assert.equal(ledger.length,128);
   for(const [entry,code] of [[ledger[109],'migration_history_mismatch'],[ledger[110],'migration_history_mismatch'],
     [ledger[111],'migration_history_mismatch'],[ledger[112],'migration_history_mismatch'],
     [ledger[113],'migration_history_mismatch'],[ledger[114],'migration_history_mismatch'],
@@ -67,17 +67,17 @@ test('108升级当前127保留既有数据，严格拒绝迁移缺口、未知�
     [ledger[119],'migration_history_mismatch'],[ledger[120],'migration_history_mismatch'],
     [ledger[121],'migration_history_mismatch'],[ledger[123],'migration_history_mismatch'],
     [ledger[124],'migration_history_mismatch'],[ledger[125],'migration_history_mismatch'],
-    [ledger[126],'migration_pending']]){
+    [ledger[126],'migration_history_mismatch'],[ledger[127],'migration_pending']]){
     await client.query('DELETE FROM notalone_schema_migration WHERE name=$1',[entry.name]);
     assert.deepEqual(await storage.compatibility(),{code});
     await client.query('INSERT INTO notalone_schema_migration(name,checksum) VALUES($1,$2)',[entry.name,entry.checksum]);
   }
-  await writeFile(join(current,'128_unknown.sql'),'SELECT 1;\n');
+  await writeFile(join(current,'129_unknown.sql'),'SELECT 1;\n');
   assert.deepEqual(await storage.compatibility(),{code:'migration_files_invalid'});
-  await rm(join(current,'128_unknown.sql'));
-  await client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('128_unknown.sql',$1)",['a'.repeat(64)]);
+  await rm(join(current,'129_unknown.sql'));
+  await client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('129_unknown.sql',$1)",['a'.repeat(64)]);
   assert.deepEqual(await storage.compatibility(),{code:'migration_history_mismatch'});
-  await client.query("DELETE FROM notalone_schema_migration WHERE name='128_unknown.sql'");
+  await client.query("DELETE FROM notalone_schema_migration WHERE name='129_unknown.sql'");
   await client.query('ALTER TABLE wechat_auto_read_suppression RENAME COLUMN identity_create_time TO missing_identity');
   assert.deepEqual(await storage.compatibility(),{code:'schema_incomplete'});
   await client.query('ALTER TABLE wechat_auto_read_suppression RENAME COLUMN missing_identity TO identity_create_time');
