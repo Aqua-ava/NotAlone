@@ -99,8 +99,8 @@ export const identityDeletionDomain={
  authorizeFile():never {throw new StorageFailure('identity_has_no_managed_files');},
  fileCleared():never {throw new StorageFailure('identity_has_no_managed_files');},
  verify(tx:StorageTransaction,operation:IdentityDeletionOperation){
-  if(operation.scope.kind==='discussion'){
-   const check={result:'not_applicable' as const,proof:'identity_outside_discussion_scope'};
+  if(['discussion','media_result_clear','media_result_replace'].includes(operation.scope.kind)){
+   const check={result:'not_applicable' as const,proof:'identity_outside_precise_domain_scope'};
    return {database_rows:check,derived_eligibility:check,trace_payloads:check,request_replay:check,scope_suppression:check};
   }
   const empty=collectIdentityTargets(tx,operation).length===0;
