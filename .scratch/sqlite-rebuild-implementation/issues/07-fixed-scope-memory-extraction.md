@@ -99,3 +99,5 @@ MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/stat
 正式profile增量证据：新增sqlite-memory-profile.test.mjs，正常contacts/history准备两联系人4文字并停读、真实关闭准备者Worker后，launchDsh加载原sqlite.patch和真正sqlite-host-plugin（运行profile逐字比较，不替换业务插件）。只在测试node包装器将两个固定官方供应商URL转本轮127.0.0.1、认证限定synthetic-only并拒绝其他出站。正式共享ModelHost、认证HTTP及Worker完成2次提取、2次strict逐项核验，4目标成功、4条auto待裁决输出、同key仍4次实际环回请求；本人贡献复用同轮同payload阶段事件，无第二次模型调用、正式记忆行0。正常配置、输出上限、上下文与安全余量不缩减，输入、候选及完整过程来源按准备时独立message/record映射配对核验，不只比较正文集合。
 
 该单例最终1/1、约1.54秒；backend pnpm typecheck、4文件node --check及空白检查通过。首次10秒超时因目录watch未唤醒，改监听自有WAL后通过，是测试监听问题而非生产red→green。独立双轴发现的候选归属断言缺口及清理fetch无期限均已补齐，复核关闭；正常API期限3秒、清理请求2秒后继续有界退出/终止。正常shutdown后握手、锁、profile home、唯一模型socket均消失，同库重开integrity/FK通过，自有临时根清理。另提供prepare-memory-desktop.mjs，只准备合成库及环回供应商、绝不启动App；其3种供应商边界冒烟不计为DSH或业务证据。实际App仍待调度，旧真实质量失败独立保留，不作为新增外部调用前提。
+
+实际开发入口的测试网络边界另提供test-only CJS父预加载器：正常pnpm run dev可经NODE_OPTIONS装入，按私有本轮plan、test角色、数据库、项目/env/info、父PID及固定DSH参数核验唯一子进程，只插入既有network guard及两个合成字段；不替换业务插件或profile，不改模型预算、stdio和寿命管道，普通子进程透传。新增纯Node用例4/4与两文件node --check通过（补校验前错误executable及business角色曾未被拒绝），双轴复核0新增；safe-node已登记，本次未运行Electron/App/CUA。预加载/spawn收据只证明边界拦截，后续仍需真实开发App加载及业务验收，不能把该4/4算作App通过。
