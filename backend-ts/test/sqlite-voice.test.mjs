@@ -20,7 +20,7 @@ import {VoiceMediaAdapter} from '../src/media/voice/adapter.ts';
 import {fixture} from './media-support.mjs';
 import {createHash} from 'node:crypto';
 const digest=data=>createHash('sha256').update(data).digest('hex');
-function syntheticPort(data,options={}) {return {read:async context=>({expectedBytes:options.expectedBytes??data.length,expectedSha256:digest(data),bytes:(async function*(){yield data;})(),finish:async()=>({protocol:'voice-complete-read-v1',complete:options.complete??true,expectedBytes:options.expectedBytes??data.length,association:{protocol:'media-association-v1',profileId:'synthetic-voice-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-voice-resource'}})})};}
+function syntheticPort(data,options={}) {return {read:async context=>({authority:context.token,close:async()=>{},expectedBytes:options.expectedBytes??data.length,expectedSha256:digest(data),bytes:(async function*(){yield data;})(),finish:async()=>({protocol:'voice-complete-read-v1',complete:options.complete??true,expectedBytes:options.expectedBytes??data.length,association:{protocol:'media-association-v1',profileId:'synthetic-voice-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-voice-resource'}})})};}
 test('缺完整读取证明不能发布SILK；合法SILK解码失败明确有限结果，读取关闭可本地重转',async t=>{
  const silk=packets(1,1,1);let fail=true,reads=0;
  const port=syntheticPort(silk,{complete:false});const read=port.read;port.read=async c=>{reads++;return read(c);};
@@ -125,4 +125,68 @@ test('同步Worker卡住时墙钟上限真正终止线程，不仅拒绝外层Pr
 
 test('条件导入入口偏移不得执行未经摘要校验的代码',async t=>{
  const {encode}=await import('silk-wasm');const {data}=await encode(Buffer.alloc(9600),24000);const decoder=await isolatedDecoder(t,'redirect-entry');const pcm=await decoder.decode(data,new AbortController().signal);assert.equal(pcm.length,9600);
+});
+
+import {createVoiceMediaAdapter} from '../src/media/voice/index.ts';
+test('默认正式工厂未装认证资源端口时拒绝新微信语音提取',async t=>{
+ const adapter=createVoiceMediaAdapter();const f=await fixture(t,adapter),m=f.messages.find(m=>m.kind==='voice');
+ assert.equal((await f.media.read(f.contact,m.id)).capabilities.extract,false);
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'default-real-extract-unavailable',goal:'extract'}),{code:'media_adapter_unavailable'});
+ assert.equal(adapter.supports('voice','audio_conversion'),true);assert.equal(adapter.supports('image','extract'),false);
+});
+
+test('语音资源close失败保持共同holder，删除不能提前完成且可在同操作重试',async t=>{
+ let allow=false;t.after(()=>{allow=true;});const port=syntheticPort(packets(1,1,1));const read=port.read;port.read=async c=>({...await read(c),close:async()=>{if(!allow)throw Error('合成未结算句柄');}});
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'reader-close-failed',goal:'extract'}),{code:'voice_reader_release_failed'});
+ await f.media.clear(f.contact,m.id,'retry-same-voice-reader-clear').catch(()=>{});
+ const op=(await f.media.deletion.list({ownerId:f.owner})).find(o=>o.scope.kind==='media_result_clear');assert.notEqual(op.state,'completed');
+ allow=true;await f.media.clear(f.contact,m.id,'retry-same-voice-reader-clear');assert.equal((await f.media.deletion.status(op)).state,'completed');
+});
+
+test('资源端口的实际读取资格不符时不迭代语音字节，仍结算close',async t=>{
+ let bytes=0,closed=0;const port=syntheticPort(packets(1,1,1));const read=port.read;
+ port.read=async c=>({...await read(c),authority:{...c.token,source_generation:'different-source'},bytes:(async function*(){bytes++;yield packets(1,1,1);})(),close:async()=>{closed++;}});
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'different-voice-authority',goal:'extract'}),{code:'voice_authority_mismatch'});assert.equal(bytes,0);assert.equal(closed,1);
+});
+
+test('语音来源正在close时清除等待实际结算，撤销后不发布原件',async t=>{
+ let enter,release,aborted;const entered=new Promise(r=>{enter=r;}),gate=new Promise(r=>{release=r;}),stopped=new Promise(r=>{aborted=r;});t.after(()=>release());
+ const port=syntheticPort(packets(1,1,1));const read=port.read;port.read=async c=>{c.signal.addEventListener('abort',()=>aborted(),{once:true});return {...await read(c),close:async()=>{enter();await gate;}};};
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
+ const saving=f.media.extract(f.contact,m.id,{requestKey:'voice-draining-reader',goal:'extract'});const rejected=assert.rejects(saving);await entered;
+ let completed=false;const clearing=f.media.clear(f.contact,m.id,'voice-clear-draining').then(v=>{completed=true;return v;});await stopped;
+ const op=(await f.media.deletion.list({ownerId:f.owner})).find(o=>o.scope.kind==='media_result_clear');assert.notEqual(op.state,'completed');assert.equal(completed,false);
+ release();await rejected;const cleared=await clearing;assert.equal(cleared.state,'cleared');assert.equal((await f.media.deletion.status(op)).state,'completed');assert.deepEqual(cleared.files,[]);
+});
+
+test('端口原地改写token及source不能刷新固定资格，语音字节保持未读',async t=>{
+ let bytes=0;const port=syntheticPort(packets(1,1,1));const read=port.read;
+ port.read=async c=>{c.token.source_generation='different-source';c.source.support.sourceGeneration='different-source';return {...await read(c),bytes:(async function*(){bytes++;yield packets(1,1,1);})()};};
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'mutated-reader-token',goal:'extract'}),{code:'voice_authority_mismatch'});assert.equal(bytes,0);
+});
+
+test('读取中修改预期长度摘要不能把整包截短伪造成完整复制',async t=>{
+ const full=packets(1,1,1,1),short=full.subarray(0,-3);const port=syntheticPort(full);const read=port.read;
+ port.read=async c=>{const resource=await read(c);const finish=resource.finish;resource.bytes=(async function*(){resource.expectedBytes=short.length;resource.expectedSha256=digest(short);yield short;})();resource.finish=async()=>({...await finish(),expectedBytes:resource.expectedBytes});return resource;};
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'mutated-copy-contract',goal:'extract'}),{code:'voice_copy_incomplete'});assert.deepEqual((await f.media.read(f.contact,m.id)).files,[]);
+});
+
+test('已打开资源的复制元数据读取抛错仍须关闭原生读者',async t=>{
+ let closed=0;const port=syntheticPort(packets(1,1,1));const read=port.read;
+ port.read=async c=>{const resource=await read(c);Object.defineProperty(resource,'expectedBytes',{get(){throw Error('合成元数据异常');}});resource.close=async()=>{closed++;};return resource;};
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'throwing-resource-metadata',goal:'extract'}));assert.equal(closed,1);
+});
+
+test('关闭宿主等待迟到资源打开，释放失败不能被早先空读者集合掩盖',async t=>{
+ let enter,release,decoderClosed,allow=false;const entered=new Promise(r=>{enter=r;}),gate=new Promise(r=>{release=r;}),closed=new Promise(r=>{decoderClosed=r;});t.after(()=>{allow=true;release();});
+ const port=syntheticPort(packets(1,1,1));const read=port.read;port.read=async c=>{enter();await gate;return {...await read(c),close:async()=>{if(!allow)throw Error('合成迟到读者未结算');}};};
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{decoderClosed();}}})),m=f.messages.find(m=>m.kind==='voice');
+ const extracting=f.media.extract(f.contact,m.id,{requestKey:'late-resource-opening',goal:'extract'});const extractRejected=assert.rejects(extracting);await entered;
+ const closing=f.media.close();const closeRejected=assert.rejects(closing,{code:'voice_reader_release_failed'});await closed;release();await extractRejected;await closeRejected;
+ allow=true;await f.media.close();
 });

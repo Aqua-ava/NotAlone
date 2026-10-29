@@ -1,6 +1,7 @@
 import {constants} from 'node:fs';
 import {open} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {isDeepStrictEqual} from 'node:util';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {MediaAdapter,MediaExecution,MediaValidation} from '../sqlite/contracts.ts';
 import type {VoiceResourcePort,VoiceDecoder} from './contracts.ts';
@@ -20,13 +21,22 @@ async function localBytes(location:string, maximum:number):Promise<Buffer> {
   } finally {await file.close();}
 }
 const validation=(playable:boolean):MediaValidation=>({format:playable?'wav':'silk',mimeType:playable?'audio/wav':'audio/silk',containerValid:true,viewable:false,playable,imageQuality:'not_applicable',qualityProof:null});
+type VoiceResult=Awaited<ReturnType<MediaAdapter['execute']>>;
 export class VoiceMediaAdapter implements MediaAdapter {
   readonly version='voice-silk-wasm-3.7.1-v1';
   private readonly source:VoiceResourcePort|undefined;
   private readonly decoder:VoiceDecoder;
+  private readonly readers=new Set<()=>Promise<void>>();
+  private readonly executions=new Set<Promise<VoiceResult>>();
+  private closing=false;
   constructor(options:{source?:VoiceResourcePort;decoder:VoiceDecoder}) {this.source=options.source;this.decoder=options.decoder;}
   supports(kind:string,goal:string):boolean {return kind==='voice'&&(goal==='audio_conversion'||goal==='extract'&&!!this.source);}
-  async execute(context:MediaExecution) {
+  execute(context:MediaExecution):Promise<VoiceResult> {
+    if(this.closing)return Promise.reject(new StorageFailure('voice_adapter_closed'));
+    const execution=this.run(context);this.executions.add(execution);
+    const settled=()=>{this.executions.delete(execution);};void execution.then(settled,settled);return execution;
+  }
+  private async run(context:MediaExecution) {
     await context.checkpoint();
     let silk:Buffer, parentFileId:string;
     let association=null;
@@ -35,18 +45,29 @@ export class VoiceMediaAdapter implements MediaAdapter {
       silk=await localBytes(context.input.localPath,voiceLimits.inputBytes); await context.checkpoint();if(silk.length!==context.input.expectedBytes||sha256(silk)!==context.input.expectedSha256)throw new StorageFailure('voice_file_changed');inspectSilk(silk);parentFileId=context.input.fileId;
     } else {
       if (context.goal!=='extract'||!this.source||!context.source||!context.token) throw new StorageFailure('voice_source_unavailable');
-      const resource=await this.source.read({contactId:context.contactId,messageId:context.messageId,source:context.source,token:context.token,signal:context.signal});await context.checkpoint();
-      if (!Number.isSafeInteger(resource.expectedBytes)||resource.expectedBytes<1||resource.expectedBytes>voiceLimits.inputBytes||!/^[a-f0-9]{64}$/.test(resource.expectedSha256)) throw new StorageFailure('voice_copy_unproven');
+      if(context.source.support.status!=='supported'||context.source.contactId!==context.contactId||context.source.messageId!==context.messageId||context.source.raw.kind!=='voice'||context.source.support.sourceGeneration!==context.token.source_generation)throw new StorageFailure('voice_source_unverified');
+      const fixedToken=Object.freeze(structuredClone(context.token)),fixedSource=structuredClone(context.source);
+      const resource=await this.source.read({contactId:context.contactId,messageId:context.messageId,source:structuredClone(fixedSource),token:structuredClone(fixedToken),signal:context.signal,checkpoint:context.checkpoint});
+      let released=false,closing:Promise<void>|undefined;
+      const close=():Promise<void>=>{if(released)return Promise.resolve();return closing??=Promise.resolve().then(()=>resource.close()).then(()=>{released=true;this.readers.delete(close);},()=>{closing=undefined;throw new StorageFailure('voice_reader_release_failed');});};
+      this.readers.add(close);
+      try {
+      context.retainReader(close);
+      const expectedBytes=resource.expectedBytes,expectedSha256=resource.expectedSha256;
+      await context.checkpoint();if(!isDeepStrictEqual(resource.authority,fixedToken))throw new StorageFailure('voice_authority_mismatch');
+      if (!Number.isSafeInteger(expectedBytes)||expectedBytes<1||expectedBytes>voiceLimits.inputBytes||!/^[a-f0-9]{64}$/.test(expectedSha256)) throw new StorageFailure('voice_copy_unproven');
       const chunks:Buffer[]=[];let size=0;const iterator=resource.bytes[Symbol.asyncIterator]();
       try {for(;;) {await context.checkpoint();const next=await iterator.next();await context.checkpoint();if(next.done)break;
-        if (!(next.value instanceof Uint8Array)||size+next.value.byteLength>resource.expectedBytes) throw new StorageFailure('voice_copy_incomplete');
+        if (!(next.value instanceof Uint8Array)||size+next.value.byteLength>expectedBytes) throw new StorageFailure('voice_copy_incomplete');
         size+=next.value.byteLength;chunks.push(Buffer.from(next.value));
       }} finally {await iterator.return?.();}
       silk=Buffer.concat(chunks,size);const proof=await resource.finish();await context.checkpoint();
-      if(size!==resource.expectedBytes||sha256(silk)!==resource.expectedSha256)throw new StorageFailure('voice_copy_incomplete');
-      if (proof.protocol!=='voice-complete-read-v1'||proof.complete!==true||proof.expectedBytes!==size||proof.association.recordId!==context.source.recordId||proof.association.messageId!==context.messageId) throw new StorageFailure('voice_copy_unproven');
-      association=proof.association;inspectSilk(silk);
-      parentFileId=(await this.save(context,silk,false)).fileId;
+      if(!isDeepStrictEqual(resource.authority,fixedToken))throw new StorageFailure('voice_authority_mismatch');
+      if(size!==expectedBytes||sha256(silk)!==expectedSha256)throw new StorageFailure('voice_copy_incomplete');
+      if (proof.protocol!=='voice-complete-read-v1'||proof.complete!==true||proof.expectedBytes!==size||proof.association.recordId!==fixedSource.recordId||proof.association.messageId!==context.messageId) throw new StorageFailure('voice_copy_unproven');
+      association=structuredClone(proof.association);inspectSilk(silk);
+      } finally {await close();}
+      await context.checkpoint();parentFileId=(await this.save(context,silk,false)).fileId;
     }
     let wav:Buffer;
     try {
@@ -66,5 +87,10 @@ export class VoiceMediaAdapter implements MediaAdapter {
       bytes:(async function*(){for(let offset=0;offset<data.length;offset+=65536){await context.checkpoint();yield data.subarray(offset,offset+65536);}})(),
       validate:async location=>{const actual=await localBytes(location,playable?voiceLimits.pcmBytes+44:voiceLimits.inputBytes);await context.checkpoint();if(playable)inspectWav(actual);else inspectSilk(actual);return validation(playable);}});
   }
-  close():Promise<void> {return this.decoder.close();}
+  async close():Promise<void> {
+    this.closing=true;
+    const drain=async()=>{await Promise.allSettled([...this.executions]);const results=await Promise.allSettled([...this.readers].map(close=>close()));const failure=results.find(r=>r.status==='rejected');if(failure?.status==='rejected')throw failure.reason;};
+    const results=await Promise.allSettled([Promise.resolve().then(()=>this.decoder.close()),drain()]);
+    const failure=results.find(r=>r.status==='rejected');if(failure?.status==='rejected')throw failure.reason;
+  }
 }

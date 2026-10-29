@@ -26,6 +26,7 @@ import { SqliteDeletionHttp, deletionQueryAllowed } from './storage/sqlite/delet
 import { SqliteHistoryService } from './history/sqlite/service.ts';
 import { SqliteHistoryHttp, historyQueryAllowed, projectHistorySyncStatus } from './history/sqlite/http.ts';
 import { createWechatHistoryChannel } from './history/sqlite/wechat-channel.ts';
+import { createVoiceMediaAdapter } from './media/voice/index.ts';
 import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 
 export const name = 'notalone-sqlite-host';
@@ -130,7 +131,7 @@ export async function apply(ctx: Context) {
     const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData));
     media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
-    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:[]});
+    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:[createVoiceMediaAdapter()]});
     await media.initialize();
     contacts.setReadStop(async contactId=>{await Promise.all([history?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);});
     const mediaHttp = new SqliteMediaHttp(media);
