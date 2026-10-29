@@ -53,6 +53,7 @@ test('实际派发后连接中断保留最终测量预留，未知实耗不填�
  const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'合成未知回执',confirmedContact:true};
  await assert.rejects(f.turns.generate(input));assert.equal(f.requests.length,1);
  const [call]=await f.storage.execute('discussionTest.calls',{ownerId:owner});assert.equal(call.state,'unknown');assert.equal(call.settlement_state,'unknown');assert.ok(call.reserved_budget_units>512n);assert.equal(call.actual_budget_units,null);assert.ok(JSON.parse(call.receipt).inputBudget.input_tokens>0);
+ assert.deepEqual(await f.storage.execute('memoryExtraction.unconfirmed',{owner_id:owner,contact_id:f.ids[0]}),[],'07计费回查不能冒领讨论producer的未知请求');
  await assert.rejects(f.turns.generate(input),{code:'discussion_request_stale'});assert.equal(f.requests.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
