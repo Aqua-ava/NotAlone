@@ -141,6 +141,12 @@ export function createDeletionActions(configInput?: DeletionRegistration): Stora
       tx.run("UPDATE deletion_operation SET runner_token=?,runner_runtime=?,state='cleaning' WHERE operation_id=?", [token, lease.runtimeId, row.operation_id]);
       return { ...snapshot(tx, find(tx, input)), token };
     }),
+    action('recollect', 'write', (tx, input, lease) => {
+      const config = registration(configInput), row = claim(tx, input, lease);
+      refresh(tx, row, config, lease);
+      tx.run("UPDATE deletion_operation SET state='cleaning' WHERE operation_id=?", [row.operation_id]);
+      return { ...snapshot(tx, find(tx, input)), token: input.token };
+    }),
     action('clearTarget', 'write', (tx, input, lease) => {
       const config = registration(configInput), row = claim(tx, input, lease), op = operation(row);
       const targetRow = tx.get('SELECT * FROM deletion_target WHERE operation_id=? AND target_no=?', [op.operationId, input.targetNo]) ?? fail('deletion_target_invalid');
