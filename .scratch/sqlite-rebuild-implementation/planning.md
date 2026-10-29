@@ -36,7 +36,7 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | open |
 | [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | open |
 | [11 助手讨论与 DSH 副本](issues/11-assistant-discussions-and-runtime.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
-| [12 候选回复与依据](issues/12-reply-candidates-and-basis.md) | [11](issues/11-assistant-discussions-and-runtime.md) | ready-for-agent | claimed |
+| [12 候选回复与依据](issues/12-reply-candidates-and-basis.md) | [11](issues/11-assistant-discussions-and-runtime.md) | ready-for-agent | resolved |
 | [13 表达偏好接回（本轮暂缓）](issues/13-expression-preferences.md) | [12](issues/12-reply-candidates-and-basis.md) | wontfix | open |
 | [14 官方 Skill 加载接回](issues/14-official-skill-loading.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [15 既有纠错与诊断功能改接（本轮暂缓）](issues/15-feedback-and-quality-adaptation.md) | [09](issues/09-memory-documents-publication.md) | wontfix | open |
@@ -102,7 +102,7 @@ flowchart TD
 
 ## 当前总进度
 
-本轮有效17项：已集成8项（01、02、05、07、11、14、16、17）；执行中2项（08、12）；确实受阻1项（03：真实状态语义及来源生命周期未认证）；等待依赖6项（04、06、09、10、20、21）。08、12已在独立工作树核验前置后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03实现及合成／实际App已完成的部分复用证据，不重新执行。
+本轮有效17项：已集成9项（01、02、05、07、11、12、14、16、17）；执行中1项（08）；确实受阻1项（03：真实状态语义及来源生命周期未认证）；等待依赖6项（04、06、09、10、20、21）。08、12已在独立工作树核验前置后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03实现及合成／实际App已完成的部分复用证据，不重新执行。
 
 ## 领取与并行约定
 
@@ -178,6 +178,6 @@ flowchart TD
 
 - 18已完成正常App的停读本地重转、实际播放、单独清除和来源删除，Goal实际complete并保留祖先集成；两份删除各40项复核且无阻塞、受管文件归零。当前七项resolved，19仍等待03。用户已明确将撤回校准留待以后手动操作：B发送态已唯一观察，撤回／未观测状态继续未验证，不等待或重复要求此项，不放宽对应读取门禁。
 
-- 当前有效范围为17项，01、02、05、07、11、14、16、17已完成集成；08和12执行中，03真实历史仍受状态语义与来源连续性证据阻塞，04、06、09、10、20、21按依赖等待。撤回测试按用户要求跳过；独立只读复核未发现可以仅凭现有观察安全放开真实历史的依据，不额外要求迁移／恢复实验。
+- 当前有效范围为17项，01、02、05、07、11、12、14、16、17已完成集成；08执行中，03真实历史仍受状态语义与来源连续性证据阻塞，04、06、09、10、20、21按依赖等待。撤回测试按用户要求跳过；独立只读复核未发现可以仅凭现有观察安全放开真实历史的依据，不额外要求迁移／恢复实验。
 
-- 08的记忆管理页面和固定桌面桥已集成；隔离合成资料的实际App验收覆盖修改采纳、人工保护、版本恢复、纠错、记录变化、并发冲突及来源删除后撤下，最新失效反馈修复仍待提交集成。桌面已释放给12；08继续实现正常关系裁决与无损数据库升级，临时的同范围全部待定防护不算完成。12已通过正式记忆写者与候选版本失效的组合检查，最新来源失效修复仍须实际App复验；09正式文档写者的组合仍是20切换前门禁。
+- 08的记忆管理页面、固定桌面桥和实际App失效反馈修复已集成；隔离合成资料验收覆盖修改采纳、人工保护、版本恢复、纠错、记录变化、并发冲突及来源删除后撤下。08继续实现正常关系裁决、准确来源引用与无损数据库升级，临时的同范围全部待定防护不算完成。12已通过正式记忆写者与候选版本失效组合检查，并完成来源失效的实际App复验；09正式文档写者的组合仍是20切换前门禁。
