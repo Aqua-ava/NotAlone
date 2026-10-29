@@ -1,0 +1,32 @@
+# SQLite / 媒体设计接续
+
+- 当前四份规格已定稿，实施未启动；本轮恢复并观察热更新开发App，未读真实微信、发消息、建库、迁移或清理业务资料。
+- 唯一主结构入口：[统一设计](greenfield-design.md)，机器目录consolidated-schema.json。
+- 当前77表：71业务、4诊断、2元数据；778字段、215基础FK。数量非目标，DDL/集成未验证。
+- 媒体Q1–Q11全部A，三实体已按用户确认整合：message_media、media_extraction_attempt、media_file。
+- 单条手动操作、受管独立副本；可单清媒体保留消息，明确重提；无批量、自动恢复、跨消息文件共享、独立媒体删除账本。
+- 允许明确缩略图/质量未知及SILK已存未可播放；已选范围本地重转允许总开关关闭；新微信读取仍需开关/勾选/身份/来源。
+- 新结果先校验再发布，不降级旧合法完整组合；发布与旧文件清理目标同事务；空间不足不驱逐其他媒体。
+- deletion_operation加message_identity及media_result_clear/replace；目标按独立file_id/身份/代次清，不误删新文件/原件。
+- 外部读取指capture_record；本地转换指同消息current/present音频源文件；二分支严格，数据/媒体/选中代次与租约仍复验。
+- 退出/异常后未完成尝试中断，不自动新读微信；只恢复已登记的本地清理。新明确操作才新attempt，重送key不执行第二次。
+- 基础规则：空SQLite不迁旧PG，不保存旧PG业务备份；未来清理保留密钥、原Skill和外部原文件，本轮不执行。
+- 身份owner/contact隔离，原聊天不直接编辑不建message_version；记忆候选不存采纳前多稿，回复候选统一版本。
+- 任务固定一轮/输入冻结，unknown按item/scope互斥不盲重发；真实输入追踪与必要证据分开，来源删除涵盖实际上下文。
+- 文档基线在前置记忆阶段完成后冻结，完整集合CAS发布；人工保护归memory head，version只保存形成快照。
+- Skill仅官方加载与最小关联，原目录不孤儿误删，未知待核验；Q43材料共享仍暂缓。
+- 云端工程已明确取消；当前四方案为数据库、同步/记忆、首用、媒体，边界见map.md#plan-alignment。
+- 全表分组图schema-relations.md；旧115名称查漏仅静态映射，旧媒体表不照搬、不迁数据。
+- validate-sketch.py检查目录/卡片/图/候选键/FK/链接；审阅记录sketch-review.md区分设计与实际验证。
+- 技术报告：research/sqlite-ready-{cli-contract,constraints,media-runtime,runtime-deletion}.md；工程路线已回写三主稿。
+- 渠道当前入口research/wechat-channel-resolution-v2.md：版本支持档认证完整出现键；单次只读WCDB连接枚举完整身份S(B)，覆盖本机未读历史；接受B不后移，暂存排除不提前生效。
+- 二轮纠正Q24未指定鼠标点击毫秒、未来外部回填另列兼容；旧删除排除不撤销，未知回填不直接当新。读取开关/勾选贯穿查询和接受，关闭时缺边界仍pending。
+- 版本4.0.6/29387已确认；当前结构检查因原PG不可连、授权范围无法核验而受阻。原生v3固定源码研究WCDB 12/12及生命周期合成14/14已有证据；最终制品与真实发送／撤回未验，媒体资源映射独立验证。
+- 本地路线：node:sqlite专用Worker；silk-wasm3.7.1+TS WAV+macOS格式helper；固定受管路径发布；DSH先dispose/close再精确删。WXGF不支持，V2图片密钥须受控。
+- 本轮SQLite专项11/11、.dat纯字节7/7、媒体/DSH目标Electron合成探针通过；无产品实现。runtime_copy.expected_identity在preparing可空，SessionId预选；媒体状态唯一+CAS租约。
+- 原研究11/11合成探针不证明77表。正式ADR目标替代范围与代码实现仍需按后续任务处理。
+- 另一处.gitignore改动移除.scratch忽略（非本任务），工作区扫描发现其他草稿私人路径/内部标识；不覆盖该改动、不提交不安全资料。
+- 桌面仅pnpm run dev先查dev:status；本轮已用CUA正常退出遗留窗口并恢复开发实例，管理页确认数据库未连接。禁止自行打包、push或PR。
+- 快照现行协议是每分片独立observer/reader、短获取窗口采样、保持reader枚举；不是旧的全扫描静止条件。
+- 用户最新要求迁移／恢复实验先不考虑，保留未验证；不影响四份规格定稿，旧排除/来源连续性规则保持。
+- 当前结果与剩余验收见research/wechat-spec-finalization-validation.md；下一步是拆实施票，本轮不发布票或实现。
