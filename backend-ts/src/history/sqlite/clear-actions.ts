@@ -16,6 +16,10 @@ const generation = (value: unknown): bigint => typeof value === 'string' && /^(0
 const boundedText = (value: unknown, max = 512): string => typeof value === 'string' && value.length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value) ? value : fail('history_clear_request_invalid');
 const integerCount = (value: unknown, max = maxBoundaryMembers): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max ? value : fail('history_clear_request_invalid');
 const row = (value: StorageRow | undefined, code: string): StorageRow => value ?? fail(code);
+/** 旧结构升级夹具可能只安装到本票之前的迁移；缺表时按“尚未具备该能力”拒绝，不把升级测试变成SQL错误。 */
+function hasTable(tx: StorageTransaction, name: string): boolean {
+  return Boolean(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?", [name]));
+}
 
 function clearOperation(tx: StorageTransaction, ownerId: string, operationId: string, contactId: string): StorageRow {
   return row(tx.get("SELECT * FROM deletion_operation WHERE owner_identity=? AND operation_id=? AND scope_kind='contact_history' AND contact_identity=?", [ownerId, operationId, contactId]), 'history_clear_operation_invalid');
@@ -321,6 +325,7 @@ export function assertVerifiedHistoryBoundary(tx: StorageTransaction, token: Rea
 }
 /** 接受页时判定一条来源身份是否属于任一已接受 B；显式重读授权可跨该联系人的清空边界恢复。 */
 export function clearBoundaryExclusion(tx: StorageTransaction, input: { ownerId: string; conversationId: string; externalKey: string; restoreOperationId: string | null }): boolean {
+  if (!hasTable(tx, 'history_cutoff_member') || !hasTable(tx, 'history_cutoff')) return false;
   const excluded = tx.get(`SELECT 1 FROM history_cutoff_member m
    JOIN history_cutoff c ON c.owner_id=m.owner_id AND c.conversation_id=m.conversation_id AND c.barrier_generation=m.barrier_generation
    WHERE m.owner_id=? AND m.conversation_id=? AND m.scheme='local' AND m.external_key=? AND c.state='verified' LIMIT 1`,
@@ -331,17 +336,21 @@ export function clearBoundaryExclusion(tx: StorageTransaction, input: { ownerId:
 }
 /** undefined 表示不是显式重读目标；null 表示重读授权没有对应清空边界。 */
 export function restoreOperationForGoal(tx: StorageTransaction, ownerId: string, goalId: string): string | null | undefined {
+  if (!hasTable(tx, 'history_restore')) return undefined;
   const restore = tx.get("SELECT cutoff_operation_id FROM history_restore WHERE owner_id=? AND goal_id=? AND state IN ('active','completed')", [ownerId, goalId]);
   return restore === undefined ? undefined : restore.cutoff_operation_id === null ? null : String(restore.cutoff_operation_id);
 }
 export function completeRestoreGoal(tx: StorageTransaction, ownerId: string, goalId: string, at: number): void {
+  if (!hasTable(tx, 'history_restore')) return;
   tx.run("UPDATE history_restore SET state='completed',completed_at=? WHERE owner_id=? AND goal_id=? AND state='active'", [at, ownerId, goalId]);
 }
 /** 05 删除复核用：该清空操作是否已有被原子接受的完整 B。 */
 export function verifiedCutoffForOperation(tx: StorageTransaction, ownerId: string, operationId: string, contactId: string): StorageRow | undefined {
+  if (!hasTable(tx, 'history_cutoff')) return undefined;
   return tx.get("SELECT * FROM history_cutoff WHERE owner_id=? AND operation_id=? AND contact_id=? AND state='verified'", [ownerId, operationId, contactId]);
 }
 /** 清空完成前 history 域必须保持 scope_suppression 未通过。 */
 export function pendingBoundaryForContact(tx: StorageTransaction, ownerId: string, contactId: string): boolean {
+  if (!hasTable(tx, 'history_cutoff')) return false;
   return Boolean(tx.get("SELECT 1 FROM history_cutoff WHERE owner_id=? AND contact_id=? AND state='pending'", [ownerId, contactId]));
 }
