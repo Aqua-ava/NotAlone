@@ -10,13 +10,15 @@ import {ManagedFiles} from '../../../src/storage/sqlite/deletion/managed-files.t
 import {SqliteMemoryManagement} from '../../../src/memory/sqlite/management/service.ts';
 
 /** 固定真实提取、核验、裁决、存储与Worker；仅模型物理边界替身。 */
-export async function unknownFixture(t,{unknownScope='contact',unknownStage='document_scene',beforeCall}={}) {
+export async function unknownFixture(t,{unknownScope='contact',unknownStage='document_scene',beforeCall,mutateExtraction,beforeDocuments,adjudicationRespond}={}) {
  const f=await fixture(t,{registryModule:new URL('./unknown-registry.mjs',import.meta.url).href}),a=f.saved[0].contact_id,b=f.saved[1].contact_id,holders=new ActiveHolders(),calls=[],receipts=[];let extraction,unknownSent=false;
  const normal=supplier();
  const extractionPort=modelPort(()=>extraction.accounting,async(request,input)=>{
   if(request.purpose!=='extraction')return normal.respond(request,input);
   const payload=JSON.parse(request.user);
-  return normal.respond({...request,user:JSON.stringify({...payload,messages:payload.messages.filter(m=>payload.target_message_ids.includes(m.message_id))})},input);
+  const response=await normal.respond({...request,user:JSON.stringify({...payload,messages:payload.messages.filter(m=>payload.target_message_ids.includes(m.message_id))})},input);
+  if(mutateExtraction){const body=JSON.parse(response.blocks[0].arguments);for(const scene of body.scenes)for(const fact of scene.memories)mutateExtraction(fact);response.blocks[0].arguments=JSON.stringify(body);await request.validateOutput(response.blocks);}
+  return response;
  });
  const documentAccounting=()=>({...extraction.accounting,reserve:async(receipt,claim)=>{await extraction.accounting.reserve(receipt,claim);receipts.push(structuredClone(receipt));}});
  const documentPort=modelPort(documentAccounting,async(request,input)=>{
@@ -32,9 +34,9 @@ export async function unknownFixture(t,{unknownScope='contact',unknownStage='doc
   if(payload.layer==='l3')return request.messages.length===1?tool('write',{path:'profile.md',content:`# 长期背景\n\n<!-- ENTRY ${JSON.stringify({kind:'fact',section:'interests',basis:'正式记忆直接记载。',temporal_status:'stable',uncertainty:'',references:[{memory_id:memory.memory_id,revision:memory.revision}]})} -->\n${memory.text}`}):tool('ProfileProposalComplete',{});
   throw new Error('unexpected synthetic document call');
  });
- const adjudication=new SqliteMemoryAdjudication(f.storage,owner,modelPort(()=>extraction.accounting,adjudicationSupplier()),holders);
+ const adjudication=new SqliteMemoryAdjudication(f.storage,owner,modelPort(()=>extraction.accounting,adjudicationRespond??adjudicationSupplier()),holders);
  const documents=new SqliteMemoryDocuments(f.storage,owner,documentPort,holders);
- extraction=new SqliteMemoryExtraction(f.storage,owner,extractionPort,holders,async runId=>{await adjudication.publishRun(runId);await documents.publishRun(runId);});
+ extraction=new SqliteMemoryExtraction(f.storage,owner,extractionPort,holders,async runId=>{await adjudication.publishRun(runId);await beforeDocuments?.(runId);await documents.publishRun(runId);});
  t.after(async()=>{await extraction.close();await adjudication.close();await documents.close();});
  async function add(contactId,records){
   f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true});

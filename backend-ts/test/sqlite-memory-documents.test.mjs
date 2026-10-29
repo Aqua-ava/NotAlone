@@ -81,6 +81,23 @@ test('冻结后人工改记忆使本轮冲突，不刷新原基线或重算',asy
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
+test('正常运行状态按实际主题和画像阶段显示进度',async t=>{
+ const {documentFixture}=await import('./fixtures/memory-documents/support.mjs');
+ const scene=Promise.withResolvers(),profile=Promise.withResolvers(),releaseScene=Promise.withResolvers(),releaseProfile=Promise.withResolvers();let heldScene=false,heldProfile=false;
+ t.after(()=>{releaseScene.resolve();releaseProfile.resolve();});
+ const f=await documentFixture(t,{beforeCall:async({request})=>{
+  const data=JSON.parse(request.messages[0].content[0].text);
+  if(data.layer==='l2'&&!heldScene){heldScene=true;scene.resolve();await releaseScene.promise;}
+  if(data.layer==='l3'&&!heldProfile){heldProfile=true;profile.resolve();await releaseProfile.promise;}
+ }});
+ const run=await f.extraction.start('documents-stage-progress');await scene.promise;
+ assert.equal((await f.extraction.read(run.runId)).stage,'document_scene');
+ releaseScene.resolve();await profile.promise;
+ assert.equal((await f.extraction.read(run.runId)).stage,'document_profile');
+ releaseProfile.resolve();await f.extraction.waitForIdle(run.runId);
+ assert.equal((await f.extraction.read(run.runId)).stage,'completed');
+});
+
 test('正式SQLite profile共享模型宿主并经认证HTTP贯通08到09到12',{timeout:30000},async t=>{
  const {watch}=await import('node:fs');const {readFile,writeFile,access}=await import('node:fs/promises');
  const {join,dirname,resolve}=await import('node:path');const {createServer}=await import('node:http');const {once}=await import('node:events');const {randomUUID}=await import('node:crypto');

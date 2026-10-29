@@ -9,7 +9,7 @@ import {ManagedFiles} from '../../../src/storage/sqlite/deletion/managed-files.t
 import {renderProfile} from '../../../src/memory/profiles/workspace.ts';
 import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
 const registryModule=new URL('./deletion-registry.mjs',import.meta.url).href;
-export async function deletionFixture(t,{beforeCall,twoContacts=false,twoCaptures=false,noMemory=false,ownerB=true,targetOnly=false,orderOwnerA=false,preferText}={}){
+export async function deletionFixture(t,{beforeCall,beforeExtractionPrepare,beforeDocuments,extractionResponse,documentResponse,twoContacts=false,twoCaptures=false,noMemory=false,ownerB=true,targetOnly=false,orderOwnerA=false,preferText}={}){
  const f=await fixture(t,{registryModule}),contactId=f.saved[0].contact_id,otherContactId=f.saved[1].contact_id;
  f.channel.page=async scope=>{const other=scope.token.contact_id===otherContactId;const records=[record('1',{text:other?'我长期喜欢合成登山。':'我长期喜欢合成园艺。'})];if(twoContacts&&(!other||ownerB))records.push(record('2',{sender:'owner',text:other?'我长期偏好合成蓝茶。':'我长期偏好合成白茶。'}));return {target:f.target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true};};
  await f.service.synchronize(contactId);if(twoCaptures)await f.service.synchronize(contactId);if(twoContacts)await f.service.synchronize(otherContactId);await f.contacts.setReading(false);
@@ -17,6 +17,7 @@ export async function deletionFixture(t,{beforeCall,twoContacts=false,twoCapture
  const messages=(await f.service.read(contactId)).messages,message=messages.find(m=>m.text==='我长期喜欢合成园艺。'),ownerMessage=messages.find(m=>m.text==='我长期偏好合成白茶。'),holders=new ActiveHolders(),calls=[];let extraction;
  const respond=async(request,input)=>{
   const names=request.tools.map(x=>x.name),payload=JSON.parse(request.messages[0].content[0].text),memory=payload.memories.find(item=>preferText&&String(item.text??item.verbatim_text).includes(preferText))??payload.memories[0];calls.push({request,input});await beforeCall?.({request,input,calls});
+  const response=await documentResponse?.({request,input,payload,calls});if(response)return response;
   const tool=(name,args)=>({blocks:[{type:'tool-call',id:`deletion-${calls.length}`,name,arguments:JSON.stringify(args)}]});
   if(names.includes('ScenarioVerificationOutput'))return tool('ScenarioVerificationOutput',{results:payload.proposal.scenarios.flatMap((s,i)=>s.paragraphs.map((_,j)=>({scenario_index:i,paragraph_index:j,supported:true,evidence:[{memory_id:memory.memory_id,quote:memory.text}]})))});
   if(names.includes('ProfileVerificationOutput'))return tool('ProfileVerificationOutput',{results:payload.proposal.entries.map((entry,entry_index)=>{const source=payload.memories.find(m=>m.memory_id===entry.references[0].memory_id);return {entry_index,supported:true,evidence:[{memory_id:source.memory_id,quote:source.verbatim_text}]};})});
@@ -36,7 +37,10 @@ export async function deletionFixture(t,{beforeCall,twoContacts=false,twoCapture
   if(request.purpose!=='extraction')return extractor.respond(request,input);
   const payload=JSON.parse(request.user);return extractor.respond({...request,user:JSON.stringify({...payload,messages:payload.messages.filter(message=>payload.target_message_ids.includes(message.message_id))})},input);
  }:extractor.respond;
- extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,noMemory?undefined:extractionRespond),holders,async runId=>{await adjudication.publishRun(runId);await documents.publishRun(runId);});
+ const syntheticExtraction=async(request,input)=>await extractionResponse?.(request,input)??extractionRespond(request,input);
+ const extractionPort=modelPort(()=>extraction.accounting,noMemory?undefined:syntheticExtraction),prepare=extractionPort.prepare;
+ extractionPort.prepare=async(request,input)=>{await beforeExtractionPrepare?.({request,input});return prepare(request,input);};
+ extraction=new SqliteMemoryExtraction(f.storage,owner,extractionPort,holders,async runId=>{await adjudication.publishRun(runId);await beforeDocuments?.({runId,extraction,adjudication,documents});await documents.publishRun(runId);});
  t.after(async()=>{await extraction.close();await adjudication.close();await documents.close();});
  return {...f,owner,contactId,otherContactId,otherMessages,message,ownerMessage,holders,calls,adjudication,documents,extraction,deletion:new DeletionService(f.storage,holders,new ManagedFiles(f.root))};
 }

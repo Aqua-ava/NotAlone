@@ -7,6 +7,17 @@ import {memoryDeletionImpact} from '../../../src/memory/sqlite/deletion-impact.t
 const config={...installedDeletionRegistration,domains:[memoryDocumentsDeletionDomain,...installedDeletionRegistration.domains.filter(d=>d.id!=='memory_documents')],requiredDomains:[...new Set(['memory_documents',...installedDeletionRegistration.requiredDomains])]};
 const replacement=createDeletionActions(config),replaced=new Set(replacement.map(a=>a.name));
 export const registry={...base,actions:[...base.actions.filter(a=>!replaced.has(a.name)),...replacement,
+ {name:'fixture.failedRunWithoutPause',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
+  tx.run("UPDATE processing_run SET state='failed',pause_requested_at=NULL WHERE owner_id=? AND id=?",[ownerId,runId]);
+ }},
+ {name:'fixture.extractionFailures',mode:'read',retryBusy:false,execute(tx,{ownerId,taskId}){
+  return tx.all("SELECT a.state,a.error_code FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE s.owner_id=? AND s.task_id=? AND s.kind='extraction_verification' ORDER BY a.attempt_no",[ownerId,taskId]);
+ }},
+ {name:'fixture.removeDocumentMember',mode:'write',retryBusy:false,execute(tx,{ownerId,publicationId}){
+  const member=tx.get('SELECT document_id FROM publication_member WHERE owner_id=? AND publication_id=? ORDER BY document_id LIMIT 1',[ownerId,publicationId]);
+  if(!member)throw Error('synthetic_member_missing');
+  tx.run('DELETE FROM publication_member WHERE owner_id=? AND publication_id=? AND document_id=?',[ownerId,publicationId,member.document_id]);
+ }},
  {name:'fixture.documentIdentityCount',mode:'read',retryBusy:false,execute:(tx,{ownerId})=>tx.get('SELECT count(*) AS n FROM document_publication_identity WHERE owner_id=?',[ownerId]).n},
  {name:'fixture.documentIdentityShape',mode:'read',retryBusy:false,execute(tx,{ownerId,publicationId}){
   return {columns:tx.all("SELECT name FROM pragma_table_info('document_publication_identity') ORDER BY cid",[]).map(row=>row.name),identity:tx.get('SELECT * FROM document_publication_identity WHERE owner_id=? AND id=?',[ownerId,publicationId])??null};

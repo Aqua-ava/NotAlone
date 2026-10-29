@@ -24,8 +24,9 @@ export async function documentFixture(t,{beforeCall}={}){
  };
  const adjudication=new SqliteMemoryAdjudication(f.storage,owner,modelPort(()=>extraction.accounting,adjudicationSupplier()),holders);
  const documents=new SqliteMemoryDocuments(f.storage,owner,modelPort(()=>extraction.accounting,respond),holders);
- extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,supplier().respond),holders,async runId=>{await adjudication.publishRun(runId);await documents.publishRun(runId);});
+ const extractionPort=modelPort(()=>extraction.accounting,supplier().respond);
+ extraction=new SqliteMemoryExtraction(f.storage,owner,extractionPort,holders,async runId=>{await adjudication.publishRun(runId);await documents.publishRun(runId);});
  const management=new SqliteMemoryManagement(f.storage,owner);
  t.after(async()=>{await extraction.close();await adjudication.close();await documents.close();});
- return {...f,owner,contactId,holders,calls,extraction,adjudication,documents,management};
+ return {...f,owner,contactId,holders,calls,extraction,adjudication,documents,management,get extractionCalls(){return extractionPort.calls;}};
 }

@@ -26,6 +26,16 @@ for(const stage of ['document_scene','document_profile'])test(`联系人${stage}
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
+test('用户新轮复用成功提取但不能绕过未知文档效果锁',{timeout:20000},async t=>{
+ const f=await unknownFixture(t,{});await f.add(f.a,[f.record('1',{text:'我长期喜欢合成园艺。'})]);
+ const first=await f.extraction.start('unknown-retry-first');await f.extraction.waitForIdle(first.runId);
+ const count=f.calls.length,next=await f.extraction.start('unknown-retry-no-new-message');await f.extraction.waitForIdle(next.runId);
+ const run=await f.extraction.read(next.runId),task=run.tasks.find(item=>item.contactId===f.a),state=await f.documents.readTask(task.taskId);
+ assert.equal(run.total,1);assert.equal(run.succeeded,1);assert.equal(state.errorCode,'document_model_unknown');
+ assert.equal(f.calls.length,count,'新轮不能借复用已成功提取绕过未知效果锁');
+ assert.notEqual(run.state,'completed');assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
 test('本人主题调用未知后贡献联系人改变仍不得重发本人同效果，独立联系人可完成',{timeout:20000},async t=>{
  const f=await unknownFixture(t,{unknownScope:'self'});
  await f.add(f.a,[f.record('1',{sender:'owner',text:'我长期喜欢合成茶饮。'})]);
