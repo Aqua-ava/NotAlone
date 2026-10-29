@@ -44,6 +44,7 @@
     "tests/expression-preferences/reprepare.test.mjs",
     "tests/failure-visibility.test.mjs",
     "tests/first-frame-read.test.mjs",
+    "tests/fixed-memory-processing.test.mjs",
     "tests/foreground-confirmation-binding.test.mjs",
     "tests/foreground-latency.test.mjs",
     "tests/header-change-diagnostics.test.mjs",
@@ -128,6 +129,9 @@
     "tests/packaging/runtime-attribution.test.mjs"
   ],
   "headless": [
+    "tests/fixed-memory-processing-view.test.mjs",
+    "tests/memory-page-fixed-processing.test.mjs",
+    "tests/memory-processing-entry.test.mjs",
     "tests/visual-media-integration.test.mjs",
     "tests/candidate-manual-edit-view.test.mjs",
     "tests/desktop-interaction-view.test.mjs",

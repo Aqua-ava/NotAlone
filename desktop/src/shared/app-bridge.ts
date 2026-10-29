@@ -17,6 +17,7 @@ import type { SqliteDiscussionBridge } from './sqlite-discussion-bridge';
 import type { CandidateProvenanceBridge } from './candidate-provenance-bridge';
 import type { ExpressionPreferenceBridge } from './expression-preference-bridge';
 import type { MemoryBridge } from './memory-bridge';
+import type { FixedMemoryProcessingBridge } from './fixed-memory-processing';
 import type { BindingConsentBridge } from './binding-consent-bridge';
 import type { SyncControlBridge } from './sync-control-bridge';
 import type { SkillLearningBridge } from './skill-learning-bridge';
@@ -33,6 +34,7 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   expressionPreferences: ExpressionPreferenceBridge;
   skillLearning: SkillLearningBridge;
   memory: MemoryBridge; traces: TraceBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
+  fixedMemoryProcessing: FixedMemoryProcessingBridge;
   backgroundTasks: BackgroundTaskBridge;
 };
 import type { TraceBridge } from './trace-bridge';
