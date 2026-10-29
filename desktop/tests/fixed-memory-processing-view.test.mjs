@@ -77,6 +77,26 @@ test('来源或资格失效后的历史成功计数不能冒充正常无产出�
  });
 });
 
+test('页面暂停动作携带控制修订与操作标识，暂停后显示可继续',{timeout:20000},async t=>{
+ let current={...run(),state:'running',status:'processing',statusReason:null,actions:['pause'],pending:1,succeeded:0};
+ const actions=[];
+ await withPanel(t,async(method,...args)=>{
+  if(method==='readCurrent')return {connectionGeneration:3,run:current};
+  if(method==='pause'){
+   actions.push({method,args});current={...current,state:'paused',status:'paused',actions:['continue']};
+   return {connectionGeneration:3,run:current};
+  }
+ },async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByRole('button',{name:'暂停记忆处理'}).click();
+  assert.equal(actions.length,1);assert.equal(actions[0].method,'pause');
+  assert.equal(actions[0].args[0].runId,ids.run);assert.equal(actions[0].args[0].controlVersion,0);
+  assert.equal(actions[0].args[0].connectionGeneration,3);assert.match(actions[0].args[0].operationId,/^[a-f0-9-]{36}$/);
+  await panel.getByRole('status').filter({hasText:'已暂停'}).waitFor();
+  await panel.getByRole('button',{name:'继续原任务',exact:true}).waitFor();
+ });
+});
+
 test('全部适用阶段完成后页面显示整轮完成，不再声称主题未执行',{timeout:20000},async t=>{
  const completed={...run(),state:'completed',stage:'completed',laterStages:'completed'};
  await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:completed}:undefined,async page=>{
