@@ -40,7 +40,12 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 - 经总调度确认的独立工程小批 `sqlite-discussion-lifecycle-11` 上限3次发送前预留、15分钟、256输出；首个请求409，预留已用1、实际HTTP次数及实耗未知，调用保留unknown，只有用户发言而无助手发言。按停止合同结束，不重试、不续期、不退款，不归因供应商故障，不宣称模型质量或07结构化提取恢复。
 - 本地HTTP500最小用例复现并修复SDK终止错误分类丢失：只保留白名单kind/code/status/dispatch，随原预算receipt保存；不保存供应商错误正文、请求编号或因果链。32个相关用例、后端类型检查通过；Standards与Spec独立审查未决0。旧外部失败详情不可追回。
 - 小批后用正常 profile 不出站验证：原用户发言保留、dirty副本恢复受阻、新段为空、明确继续与重开不追加预留；两次shutdown均200且确认进程退出。该关闭证据是后续独立验证，不冒充首轮原始回执。
-- 实际开发App验收仍待桌面协调窗口；非空外部助手发言的保存／重开证据未取得。继续保持claimed，未勾选最终交付条件。
+- 总调度另行授权本机环回供应商工程资料：通过正常entries API、官方DSH/Adapter/SSE与真实SQLite生成两位合成联系人、三段及三条非空助手发言，各自具有真实唯一成功call和settled回执，未直接插成功行或复制候选。生成装配替换了供应商transport和凭据，独立arbiter；最终保留夹具统计为3次本机请求，不冒充准备阶段或全部历史总数，不耗真实问题账本。
+- 未改正式launchDsh/profile重开上述工程资料，三段entry身份、顺序、正文摘要、request/call关联完全一致，runtime ready、跨联系人404，模型请求增量0，shutdown200及进程退出通过。独立Spec窄审未决0；此处正式profile覆盖重开回读，本机合成SSE不能证明外部模型生成或质量。
+- 最小公共生成正例另行完成：复用已有固定transport测试工具，仅把Messages/strict目标映射到事先确认的127.0.0.1并拒绝外部连接，未改正式launchDsh/profile/sqlite-host共享ModelHost、provider、arbiter及业务提交。认证entries POST200，实际本机HTTP1次；精确request/attempt committed、唯一call succeeded/settled、真实assistant event与entry关联、完整manifest及ready边界、shutdown200及进程退出均通过。11 units为合成usage；真实问题账本前后不变。独立Spec公共接线窄审未决0；此段作为App资料第4段，前三段helper来源仍分列。
+- 实际开发App初验已显示公共生成段的非空用户／助手发言；甲的讨论草稿在切乙时撤下，乙仅显示自己的发言。切回甲发现合法讨论被旧候选恢复失败拖成failed，同一后台甲乙目录／发言GET均200/ready；该界面失败现场已保留。
+- `c17cc33f`以真实ReplySession的甲乙甲最小红例修复旧候选端口耦合：显式SQLite discussionEntries在读回及会话切换时跳过旧candidate/selections，普通独立草稿与来源校验仍沿原流程。2项SQLite回归、14项相关旧流程／来源测试、desktop类型通过，独立Standards与Spec未决0；App已正常退出，dev:status为stopped/pids=[]后释放桌面。
+- 下一短窗口仍须定向复验新分支、分段继续／新开、删除撤旧快照及原unknown恢复受阻。轻量测试清单检查发现当前基线19项未登记，其中本票6项已交总调度协调登记，不把其他13项扩为本票修复。非空外部助手发言的保存／重开证据仍未取得。继续保持claimed，未勾选最终交付条件。
 
 ## 规格与证据入口
 

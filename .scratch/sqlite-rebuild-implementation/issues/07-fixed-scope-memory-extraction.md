@@ -144,3 +144,5 @@ MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/stat
 离线新Worker读取原App库稳定复现self revoked/self候选1，integrity/FK ok；新回归另实际证实08 verifiedExtractionOutput仍接受该B-self产物。根因是DTO动态资格与候选/08仅按持久状态及单事件来源的门禁不一致。现共用assertTaskContributions，按task_contribution完整M:N复验原授权/冻结代次，快照DTO与候选复用同一动态任务状态；08同短事务先复验完整任务，再保留真实event inputs/sources复验。未伪造来源、读取时写状态或删除撤授权前合法正文；不影响其他合法联系人任务。
 
 新case两处red后green，相关verified-results/extraction/owner-contribution/deletion共19/19、backend类型及空白检查通过，双轴独立复核0新增。用原实际App合成库重开Worker复验：self候选0，两条原本人产物08均scope_stale，合法联系人候选1，integrity/FK ok，新增模型请求0；临时只读投影已删除。修复后的最小实际App观察及来源删除撤下仍待下一窗口，现State保持claimed、Goal未complete。已有效4/4、正常trace和布局证据复用，不重复整轮；私人资料及旧真实模型预算边界不变。
+
+集成复核：已无冲突取入根9730e4af（含2f44集中分类、11切回修复、5b96语音默认入口停用及本轮17项范围），未修改或恢复voice factory。当前记忆/宿主/registry及语音停用文件与根569f5266逐文件相同；正式profile2/2复用总指挥在此组合的本次有效结果。source另跑两端pnpm typecheck通过，test:inventory分类通过（只查文件名，不执行所登记测试）；此前19项缺登已由root集中补齐，07未自行改共享清单。后续按root要求实际合入569f分支祖先。root明确高级sources GET/来源页503归20，本票最小复验为原库候选资格与05认证DELETE后真实页面撤下，不新建高级来源UI。
