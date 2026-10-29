@@ -23,7 +23,8 @@ export class SqliteDiscussionHttp {
    if(raw!==url.pathname)invalid();
    const contactId=(match??fallback)![1],discussionId=match?.[2],command=match?.[3]??fallback?.[2];
    if(req.method==='POST'){
-    let value;try{value=JSON.parse((await readWechatHttpBody(req,110000,10000)).toString('utf8'));}catch(error){if(error instanceof WechatHttpBodyError)throw error;invalid();}
+    // 信封覆盖10万UTF-16字符的JSON转义形式；正文字符限制仍在具名受理事务核验。
+    let value;try{value=JSON.parse((await readWechatHttpBody(req,610000,10000)).toString('utf8'));}catch(error){if(error instanceof WechatHttpBodyError)throw error;invalid();}
     if(!value||typeof value!=='object'||Array.isArray(value))invalid();
     if(command==='entries'){
      if(!this.turns)throw new StorageFailure('discussion_model_unavailable');
