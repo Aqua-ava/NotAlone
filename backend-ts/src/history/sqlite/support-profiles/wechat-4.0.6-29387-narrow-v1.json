@@ -1,0 +1,78 @@
+{
+  "format": "wechat-private-history-support-v1",
+  "revision": 2,
+  "profileId": "wechat-4.0.6-29387-narrow-development-v1",
+  "status": "unverified",
+  "canReadHistory": false,
+  "program": {
+    "version": "4.0.6",
+    "build": "29387"
+  },
+  "artifacts": {
+    "cli": {
+      "bytes": 8643808,
+      "sha256": "50af1743d7035d727336a9718a7af152845adf2f650e1ffd0559a1e95d5ce819",
+      "kind": "notalone-history-cli-development"
+    },
+    "wcdb": {
+      "bytes": 4490832,
+      "sha256": "4f05cafc4626a142afca1818f0a88c4092a13d5f4c83e30cd5125b558ba0417d",
+      "sqliteVersion": "3.27.2"
+    }
+  },
+  "build": {
+    "sourceCommit": "795071fa0591da5fc2c6ab94a70f22ccd93ef06c",
+    "sourceTree": "5d617ff3250c27fd9b33a60cb0182e153c521057",
+    "goVersion": "1.26.5",
+    "goArchiveSha256": "efb87ff28af9a188d0536ef5d42e63dd52ba8263cd7344a993cc48dd11dedb6a",
+    "readonlyPatchSha256": "c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa",
+    "historyPatchSha256": "3f862837a6fed12296456c06beeea9c26eda64e7a1751c894c18c4cad2ecebfa",
+    "overlaySha256": "d4117cb0ea970f4f066945fae65cec8b2a21df296ed0165ec81a8a51c2f26eef",
+    "signing": "ad-hoc-development"
+  },
+  "capabilities": {
+    "programVersion": "supported",
+    "exactSchema": "supported",
+    "declaredLocalKey": "supported",
+    "automaticAllocation": "supported",
+    "serverIdUniqueConstraint": "unsupported",
+    "statusColumn": "supported",
+    "statusSemantics": "unverified",
+    "sourceLifecycle": "unverified",
+    "restartContinuity": "unverified",
+    "recoveryMapping": "unverified",
+    "snapshotBarrier": "unverified",
+    "partitionCoverage": "unverified",
+    "normalHistory": "unverified"
+  },
+  "observation": {
+    "checkedPartitionCount": 8,
+    "targetTableCount": 2,
+    "columnCounts": [
+      17,
+      17
+    ],
+    "declaredPrimaryKey": [
+      "local_id"
+    ],
+    "autoIncrement": true,
+    "allIndexesUnique": false,
+    "indexCounts": [
+      4,
+      4
+    ],
+    "triggerCounts": [
+      0,
+      0
+    ],
+    "messageRowsRead": false
+  },
+  "nativeSyntheticAssertions": {
+    "passed": 60,
+    "failed": 0,
+    "skipped": 0,
+    "race": true,
+    "packages": 2
+  },
+  "evidence": "docs/verification/sqlite-private-history-support-03.md"
+}
