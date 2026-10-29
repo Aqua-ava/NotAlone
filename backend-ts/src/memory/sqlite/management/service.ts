@@ -5,6 +5,7 @@ export class SqliteMemoryManagement {
  private storage:SqliteStorage;readonly ownerId:string;
  constructor(storage:SqliteStorage,ownerId:string){this.storage=storage;this.ownerId=ownerId;}
  importRun(runId:string){return this.storage.execute<{candidateIds:string[]}>('memory.importRun',{ownerId:this.ownerId,runId});}
+ publishRun(runId:string){return this.storage.execute<{candidateIds:string[];decisions:MemoryDecisionResult[]}>('memory.publishRun',{ownerId:this.ownerId,runId});}
  read(scope:MemoryScope){return this.storage.execute<MemoryManagementView>('memory.read',{ownerId:this.ownerId,scope});}
  decide(request:MemoryDecisionRequest){return this.storage.execute<MemoryDecisionResult>('memory.applyDecision',{ownerId:this.ownerId,request});}
  /** 系统入口不开放给HTTP或Tool；仍从真实候选producer复验，不能传正文。 */

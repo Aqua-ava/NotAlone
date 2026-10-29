@@ -112,3 +112,14 @@ test('本人原任务混合贡献依赖传递给修正版本，删除另一贡�
  assert.equal((await deletion.advance({ownerId:owner,operationId:plan.operationId})).state,'completed');
  const after=(await f.management.read(self)).memories.find(row=>row.id===accepted.memoryId);assert.equal(after.current,null);assert.ok(after.versions.every(v=>v.body===null));
 });
+
+test('处理结束窄hook从07正常核验输出自动发布，重试不重复决定或洗成人工确认',async t=>{
+ const f=await fixture(t),contactId=f.saved[0].contact_id;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期住在高雄。'})],completedPartitions:['shard-a'],exhausted:true});await f.service.synchronize(contactId);await f.contacts.setReading(false);
+ const management=new SqliteMemoryManagement(f.storage,owner);let extraction;
+ extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,supplier().respond),undefined,runId=>management.publishRun(runId));t.after(()=>extraction.close());
+ const run=await extraction.start('normal-hook-auto');await extraction.waitForIdle();
+ const before=await management.read({scopeKind:'contact',contactId});assert.equal(before.memories.length,1);assert.equal(before.memories[0].current.adoptionMode,'auto');assert.equal(before.candidates[0].state,'adopted');
+ assert.equal(before.memories[0].decisions[0].actorKind,'system');await management.publishRun(run.runId);const after=await management.read({scopeKind:'contact',contactId});assert.deepEqual(after,before);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
