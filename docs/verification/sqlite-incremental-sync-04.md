@@ -18,7 +18,7 @@
 - 游标作用域摘要覆盖账号实例、稳定会话、来源代次、固定目标（描述/分片/表实例）、支持档制品与结构、声明主键、状态/连续性语义、声明能力与游标合同；不含 `read_epoch`/grant/selection_generation，使关闭再开启与重选可续读，而账号/版本/分片/目标/语义变化一定失配。
 - `ingestRecords` 是历史与增量共用的逐条接受：来源排除优先、稳定身份幂等、可认证字段仅在原值为空时补齐、状态只记录渠道原始值、身份冲突隔离、删除中的消息拒绝整页提交。
 - 每页接受前由存储动作复验读资格（含总开关 `read_enabled`/`read_epoch`）、目标/游标、barrier 代次与删除围栏；取消/关闭后迟到页整事务回滚且检查点不推进。
-- 增量协调器：仅启动/开启/重选唤醒并定时运行；关闭、退出、取消与范围变化停止后续查询并 abort 在途；范围失效类错误停止自动重试并保留可见原因，瞬时故障保留降级在后续 tick 重试。
+- 增量协调器：仅启动/开启/重选唤醒并定时运行；关闭、退出、取消与范围变化停止后续查询并 abort 在途；范围失效类错误停止自动重试并保留可见原因，瞬时故障保留降级在后续 tick 重试，恢复成功后不残留旧错误。
 
 迁移：`read_goal` 增加 `resume_cursor/cursor_scope_digest/cursor_scheme/handoff_from_goal_id/pages_accepted/last_accepted_at`，`message` 增加 `status_code/status_observed_at`；只 ALTER，不重建既有 CHECK、不建新表。当前工作树因 registry 要求版本连续、票 09 的 13 尚未进基线而暂用 13；09 集成后改为 14（只改函数参数与 registry 一行）。
 
@@ -58,7 +58,7 @@ ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Content
 cd desktop && npx tsc --noEmit && node --test tests/incremental-sync-status.test.mjs ...
 ```
 
-结果：backend typecheck 0 错误；相关后端测试 71/71 通过；新增增量测试 handoff 4、sync 4、controls 7（含 5 个子场景）全部通过；宿主测试 8/8（Electron node）；desktop typecheck 0 错误，新增桌面测试 2/2、相关桌面同步测试 24/24。`node scripts/check_public_history.mjs --ref HEAD --working-tree` 0 问题。
+结果：backend typecheck 0 错误；相关后端测试 71/71 通过；新增增量测试 handoff 4、sync 4、controls 8 顶层（含 5 个子场景）全部通过；宿主测试 8/8（Electron node）；desktop typecheck 0 错误，新增桌面测试 2/2、相关桌面同步测试 24/24。`node scripts/check_public_history.mjs --ref HEAD --working-tree` 0 问题。
 
 环境说明：工作树默认无 `node_modules`；运行宿主测试时临时软链主仓依赖，提交/检查前已移除（软链会使公开前检查报本机路径）。`sync-scope-view` 等 Playwright 页面测试因本机缺浏览器二进制未运行，属环境缺口而非本票代码回归。
 

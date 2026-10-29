@@ -283,3 +283,21 @@ test('关闭协调器取消在途增量读取，迟到页不提交且关闭不�
   assert.equal((await f.history.read(binding.contact_id)).messages.length,1);
   assert.equal(f.coordinator.getState().phase,'closed');
 });
+
+test('瞬时故障降级后恢复成功时清除可见错误，不残留旧失败',async t=>{
+  const f=await fixture(t);
+  f.state.historyRecords=[record('1')];
+  const [binding]=await select(f); await f.contacts.setReading(true);
+  await f.history.synchronize(binding.contact_id);
+  let attempts=0;
+  f.state.tailHook=async(scope,target,cursor)=>{ if(++attempts===1)throw new StorageFailure('history_native_unavailable'); return {records:[record('2')],caughtUp:true,cursorOut:'tail-2'}; };
+  await wake(f);
+  let state=f.coordinator.getState();
+  assert.equal(state.contacts[0].phase,'degraded');
+  assert.equal(state.lastError,'history_native_unavailable');
+  await wake(f);
+  state=f.coordinator.getState();
+  assert.equal(state.contacts[0].phase,'caught_up');
+  assert.equal(state.lastError,null,'恢复后不再报告旧失败');
+  assert.equal((await f.history.read(binding.contact_id)).messages.length,2);
+});

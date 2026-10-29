@@ -81,14 +81,16 @@ export class IncrementalHistoryCoordinator {
     const anyBlocked = [...this.#states.values()].some(state => state.phase === 'blocked');
     return {
       phase: this.#closed ? this.#closeDone ? 'closed' : 'closing' : this.#pump ? this.#active.size ? 'running' : 'scheduled' : anyBlocked ? 'blocked' : 'idle',
-      lastError: this.#lastError,
+      // 全局错误只汇总残留的逐人/目录/停止失败；恢复成功后不再报告旧错误。
+      lastError: this.#lastError ?? [...this.#states.values()].find(state => state.lastError !== null)?.lastError ?? null,
       contacts: [...this.#states.values()].map(state => ({ ...state })),
     };
   }
   async waitForIdle(): Promise<void> { while (this.#pump) await this.#pump; }
   #notify(): void { this.#changed.resolve(); this.#changed = notification(); }
   #state(contactId: string, phase: IncrementalContactPhase, error: string | null = null): void {
-    this.#states.set(contactId, { contactId, phase, lastError: error }); if (error) this.#lastError = error;
+    // 逐人错误只留在联系人条目，避免恢复成功后全局残留旧失败。
+    this.#states.set(contactId, { contactId, phase, lastError: error });
   }
   #startPump(): void {
     if (this.#pump || this.#closed) return;
@@ -102,6 +104,7 @@ export class IncrementalHistoryCoordinator {
     let directory: Awaited<ReturnType<IncrementalHistoryDirectoryPort['directory']>>;
     try { directory = await this.#directory.directory(); }
     catch { this.#lastError = 'history_incremental_directory_failed'; await this.#cancel(); return; }
+    if (this.#lastError === 'history_incremental_directory_failed') this.#lastError = null;
     if (this.#closed || revision !== this.#revision) return;
     if (typeof directory.read_enabled !== 'boolean' || !Array.isArray(directory.bindings)) { this.#lastError = 'history_incremental_directory_failed'; await this.#cancel(); return; }
     // 总开关关闭时不再发起任何渠道查询，并取消所有在途读取。
@@ -156,7 +159,6 @@ export class IncrementalHistoryCoordinator {
       const code = safeError(error);
       if (transientCodes.has(code)) { this.#state(job.contactId, 'degraded', code); return; }
       // 未分类与范围失效都保守停止自动重试，保留可见错误，等待下一次明确唤醒。
-      if (!fatalCodes.has(code)) this.#lastError = code;
       this.#attempted.set(job.contactId, job.key); this.#state(job.contactId, 'blocked', code);
     }).finally(() => {
       this.#active.delete(job.contactId);
