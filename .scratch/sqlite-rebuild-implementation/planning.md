@@ -27,7 +27,7 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [02 联系人绑定与同步授权](issues/02-contact-binding-and-read-grants.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [03 首次历史同步与消息展示](issues/03-private-history-sync.md) | [02](issues/02-contact-binding-and-read-grants.md) | ready-for-agent | claimed |
 | [04 增量同步与读取控制](issues/04-incremental-sync-controls.md) | [03](issues/03-private-history-sync.md) | ready-for-agent | open |
-| [05 统一来源删除与清理流程](issues/05-source-deletion-and-cleanup.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | claimed |
+| [05 统一来源删除与清理流程](issues/05-source-deletion-and-cleanup.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | open |
 | [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | open |
 | [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | open |
@@ -164,3 +164,5 @@ flowchart TD
 - 14公共Skill接线已通过正常宿主/配置检查并纳入统一基线，实际App关联、启停、缺失/冲突与正常退出重开通过；剩余受管目录拒绝边界小补丁。05已拿到真实统一提交继续正常删除路由/compact验收，无需等14整票收尾。03获得下一窄认证桌面窗口，现有工具已从应用既有配置定位，仍须认证真实字节/协议/来源。
 
 - 最新检查点：01、02、14已完成并集成；03历史核心按实际顺序发布v5，后台类型及历史／HTTP 19项通过，真实窄schema／来源认证继续执行。05宿主接线已与v5集成，正常宿主运行中账号删除及真实compact单例通过；元数据缓存／在途读取屏障和实际App验收仍在实施，03／05均保持claimed。桌面当前由05独占，释放后交03；05完成并实际集成后立即并行派发07、11、16。
+
+- 05已完成真实正常宿主与实际App删除／compact验收并集成；联系人、账号、缓存与在途读取排空、Skill原件保留及失效快照撤下通过，Goal实际complete。当前01、02、05、14共四项resolved。07、11、16依赖已满足，即刻从包含真实02／05提交的基线分别派发，不等待03；03继续窄渠道认证和历史公共接线，独占桌面。
