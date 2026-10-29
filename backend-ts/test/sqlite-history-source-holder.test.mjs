@@ -28,7 +28,8 @@ const channel = () => ({
 
 async function fixture(t) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-source-holder-')));
-  const storage = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test' });
+  const storage = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test',
+    registryModule: new URL('./fixtures/history/registry.mjs', import.meta.url).href });
   const holders = new ActiveHolders(), readers = [];
   const contacts = new SqliteContactService(storage, owner, metadata());
   t.after(async () => {

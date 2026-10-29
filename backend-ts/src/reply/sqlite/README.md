@@ -25,3 +25,19 @@
 删除fence先把受影响实际发言从available不可逆转为cleared，擦除正文并断开实际call/event引用（请求身份保留到后续清行）。available状态始终要求真实成功call和原始事件，不允许更新旧正文；cleared不能复活。这样07可在排空后先清追踪，11随后清请求闭环，blocked期间产品读口也不会返回旧正文。文件目标仅在官方所有者排空、完整manifest登记后产生，不能提前冻结活动writer的旧清单。
 
 手动确认通过(owner_id,contact_id,confirmation_id)真实复合FK固定同联系人；context身份、冻结修订和实际材料不可原地改写。运行中每次出站/提交继续复验请求绑定或手动确认资格；只有已核验的前台binding证明可用于自动身份，渠道元数据建联本身不替代前台会话确认。
+
+## 正常业务端口与验证边界
+
+`SqliteDiscussionService` 提供list/view/newDiscussion/continueDiscussion/begin/trace；回看与继续不触发模型。`SqliteDiscussionRuntime` 将真实官方副本、活动holder、目录创建意图和完整关闭清单串联；`SqliteDiscussionTurns` 接受一次明确的联系人与文字请求，冻结实际entry及显式选取的同联系人message，执行无Tool、至多一次物理调用的讨论。候选生成、候选编辑和长期偏好由其他票负责。
+
+`SqliteDiscussionSkillProtection` 的assertCurrent、recordSelection、recordInput均通过具名动作复验真实call/attempt/context/来源；实际Skill输入写事务同时requireSkillRun及requireSkillRevision。`selected`事件不产生loaded输入。实际读取经14官方provider，原目录不改写、不复制为新来源。
+
+`discussionCallDeletionDomain`（model-deletion.ts，id为discussion_calls）仅管理07共用表的discussion producer，不建第二套调用表。prepareCall在operation_scope登记真实联系人；来源/讨论清理封存无正文不可复用回执，联系人/账号清对应调用。必需域包括discussion_calls和discussion；建议次序discussion_calls、memory_extraction、discussion、history、identity、skill_metadata，其他领域按实际FK加入。未知在途发送在fence后保留unknown，取消不宣称未发送。
+
+`SqliteDiscussionHttp` 复用原assistant-sessions目录、新开、读取与resume路由，返回显式SQLite实际entries；DELETE始终交05。可选turns提供显式entries POST，未配置模型时拒绝。HTTP不接受owner、SQL、文件定位或SDK身份；恢复核验后再次读取业务权威，不返回旧正文快照。
+
+当前后台组合已用真实SQLite Worker、07共同producer、官方DSH/Adapter、环回SSE及真实受管目录验证；无SQLite业务端口替身的正常/重开/Skill/来源/账号/在途取消与故障窗口见sqlite-discussion-integration.test.mjs。早期driver/generation测试中的业务端口替身仍只用于局部机制，不冒充正式profile、外部模型质量或实际桌面验收。公共宿主、桌面页面及受控外部模型验收继续单列记录。
+
+运行attempt还保存受理时database runtime_id与epoch，存储重开后旧业务租约不可继续冻结输入、登记副本或提交。副本preparing_attempt_id通过真实FK固定创建者；正常身份落库必须复验同一attempt，关闭/恢复清理仅能登记身份为blocked或deleting，不改current。来源闭包在尚无runtime_context时仍经request→attempt→preparing copy覆盖准备目录。
+
+run/inspect获取阶段纳入同一pending排空；close开始后拒绝新获取，等待已进入的SQLite读取与实际DSH释放结算。HTTP恢复核验从当前正常模型配置、当前Skill资格及业务选择重新计算预期摘要，不能把副本自己保存的摘要当作当前配置证明。

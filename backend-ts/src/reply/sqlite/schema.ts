@@ -36,6 +36,7 @@ CREATE TABLE reply_attempt (
  state TEXT NOT NULL CHECK(state IN ('running','committed','cancelled','failed','invalidated')),
  lease_token TEXT NOT NULL,accepted_data_generation INTEGER NOT NULL,accepted_discussion_generation INTEGER NOT NULL,
  accepted_source_revision INTEGER NOT NULL,started_at INTEGER NOT NULL,finished_at INTEGER,error_code TEXT,
+ accepted_runtime_id TEXT NOT NULL DEFAULT '',accepted_storage_epoch INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(owner_id,id),UNIQUE(owner_id,request_id,attempt_no),UNIQUE(owner_id,request_id,id),
  FOREIGN KEY(owner_id,request_id) REFERENCES reply_request(owner_id,id)
 ) STRICT;
@@ -107,11 +108,12 @@ CREATE TABLE runtime_copy (
  address_json TEXT CHECK(address_json IS NULL OR json_valid(address_json)),
  write_generation INTEGER NOT NULL CHECK(write_generation>=0),accepted_data_generation INTEGER NOT NULL,source_revision INTEGER NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('preparing','dirty','ready','blocked','deleting','deleted')),
- committed_request_id TEXT,committed_event_boundary TEXT,configuration_digest TEXT,
+ committed_request_id TEXT,committed_event_boundary TEXT,configuration_digest TEXT,preparing_attempt_id TEXT,
  cleanup_operation_id TEXT,manifest_complete INTEGER NOT NULL DEFAULT 0 CHECK(manifest_complete IN (0,1)),
  PRIMARY KEY(owner_id,id),UNIQUE(owner_id,contact_id,discussion_id,id),
  FOREIGN KEY(owner_id,contact_id,discussion_id) REFERENCES assistant_discussion(owner_id,contact_id,id),
  FOREIGN KEY(owner_id,committed_request_id) REFERENCES reply_request(owner_id,id),
+ FOREIGN KEY(owner_id,preparing_attempt_id) REFERENCES reply_attempt(owner_id,id),
  CHECK(state NOT IN ('dirty','ready') OR address_json IS NOT NULL),
  CHECK(state<>'ready' OR (committed_request_id IS NOT NULL AND committed_event_boundary IS NOT NULL AND configuration_digest IS NOT NULL)),
  CHECK(state<>'deleted' OR address_json IS NULL)
