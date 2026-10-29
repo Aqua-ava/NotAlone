@@ -155,6 +155,7 @@ export const discussionDeletionDomain:DeletionDomain={
   for(const requestId of affected.requests){
    const request=tx.get('SELECT request_key FROM reply_request WHERE owner_id=? AND id=?',[op.ownerId,requestId]);
    if(!request)continue;
+   if(tx.get("SELECT 1 FROM request_tombstone WHERE owner_identity=? AND request_key=? AND request_namespace GLOB '*:discussion.begin' AND deletion_operation_id IS NOT ?",[op.ownerId,request.request_key,op.operationId]))fail('discussion_request_cleanup_conflict');
    invalidated.push({namespace:'discussion.begin',key:String(request.request_key)});
    tx.run("UPDATE reply_attempt SET state='invalidated',lease_token=?,finished_at=COALESCE(finished_at,?),error_code='source_deleted' WHERE owner_id=? AND request_id=? AND state<>'invalidated'",[hash([op.operationId,requestId]),Date.now(),op.ownerId,requestId]);
    tx.run("UPDATE reply_request SET state='invalidated' WHERE owner_id=? AND id=?",[op.ownerId,requestId]);
@@ -202,6 +203,7 @@ export const discussionDeletionDomain:DeletionDomain={
   if(!tx.get('SELECT 1 FROM runtime_file WHERE owner_id=? AND copy_id=? AND cleared=0',[op.ownerId,copy.id]))removeCopy(tx,copy);
  },
  verify(tx,op){
+  if(!supported(op.scope)){const na:CheckResult={result:'not_applicable',proof:'discussion_scope_not_applicable'};return {database_rows:na,derived_eligibility:na,trace_payloads:na,request_replay:na,scope_suppression:na};}
   const empty=collect(tx,op).length===0;
   const checked:CheckResult=empty?pass('discussion_payloads_and_copies_cleared'):{result:'blocked',proof:'discussion_payloads_or_copies_remain'};
   const affected=closure(tx,op),fenced=(!wholeDiscussion(op.scope)||discussions(tx,op).every(d=>d.state!=='active'))&&affected.requests.size===0;

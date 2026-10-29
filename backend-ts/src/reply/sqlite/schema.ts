@@ -19,7 +19,7 @@ CREATE TABLE reply_request (
  request_key TEXT NOT NULL,trigger_entry_id TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('discussion','reply')),
  identity_origin TEXT NOT NULL CHECK(identity_origin IN ('manual','binding')),binding_id TEXT,verification_id TEXT,confirmation_id TEXT,
  state TEXT NOT NULL CHECK(state IN ('accepted','running','committed','cancelled','invalidated')),
- PRIMARY KEY(owner_id,id),UNIQUE(owner_id,discussion_id,request_key),UNIQUE(owner_id,contact_id,discussion_id,id),
+ PRIMARY KEY(owner_id,id),UNIQUE(owner_id,discussion_id,request_key),UNIQUE(owner_id,request_key),UNIQUE(owner_id,contact_id,discussion_id,id),
  FOREIGN KEY(owner_id,contact_id,discussion_id) REFERENCES assistant_discussion(owner_id,contact_id,id),
  FOREIGN KEY(owner_id,contact_id,discussion_id,trigger_entry_id) REFERENCES discussion_entry(owner_id,contact_id,discussion_id,id) DEFERRABLE INITIALLY DEFERRED,
  FOREIGN KEY(owner_id,contact_id,binding_id) REFERENCES conversation_binding(owner_id,contact_id,id),
