@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readCoverage} from '../../../history/sqlite/read.ts';
-import {discussionRequestActions,requireAttempt} from '../requests.ts';
+import {discussionRequestActions,requireAttempt,decode} from '../requests.ts';
 import {discussionModelActions} from '../model-actions.ts';
 import {requireDiscussion} from '../actions.ts';
 import {emptyReplyKnowledge,type ReplyKnowledgeReader} from './contracts.ts';
@@ -38,6 +38,11 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   const details=tx.get('SELECT * FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,i.requestId])??fail('reply_request_unavailable');
   requireReplyCoverage(tx,i.ownerId,i.contactId,details.coverage_warning!==null);
   freeze.execute(tx,i,lease);return freezeReplyInput(tx,i,reader);
+ }),
+ action('configuration','read',(tx,i)=>{
+  const d=requireDiscussion(tx,i);if(!d.current_runtime_id)return null;
+  const row=tx.get("SELECT r.id,c.id context_id,c.skill_run_json FROM runtime_copy x JOIN reply_request r ON r.owner_id=x.owner_id AND r.id=x.committed_request_id JOIN reply_context c ON c.owner_id=r.owner_id AND c.request_id=r.id WHERE x.owner_id=? AND x.id=? AND r.kind='reply' AND r.state='committed' AND c.state='active'",[i.ownerId,d.current_runtime_id]);
+  if(!row)return null;requireReplyInput(tx,i,String(row.context_id),reader);return {requestId:String(row.id),revision:decode(String(row.skill_run_json))};
  }),
  action('assertInput','read',(tx,i)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);return true;}),
  action('commitCandidates','write',(tx,i,lease)=>{
