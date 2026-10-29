@@ -56,7 +56,7 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure{
  }
  if(tx.get("SELECT 1 FROM sqlite_master WHERE name='reply_candidate_input_source'")){
   const scope=op.scope;
-  if(scope.kind==='source'||scope.kind==='contact_history')for(const item of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=?',[op.ownerId]))if(item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId))result.contexts.add(String(item.context_id));
+  if(scope.kind==='source'||scope.kind==='contact_history'||scope.kind==='contact')for(const item of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=?',[op.ownerId]))if(item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId))result.contexts.add(String(item.context_id));
  }
  // request_tombstone是05同操作持久闭包；清context后仍能找到尚待清理的请求。
  for(const r of tx.all(`SELECT r.id FROM reply_request r JOIN request_tombstone t ON t.owner_identity=r.owner_id AND t.request_key=r.request_key

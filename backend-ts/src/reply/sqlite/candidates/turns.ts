@@ -44,7 +44,7 @@ export class SqliteReplyTurns {
    const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?eligible.map(skillAnchor):[]};
    const view=await o.discussions.view(input.contactId,attempt.discussionId),entries=view.entries.filter((e:any)=>e.content_state==='available');
    const history=await o.storage.execute<any>('history.read',{ownerId,contactId:input.contactId,limit:20});
-   const messageIds=input.contextMessageIds??history.messages.map((m:any)=>m.id);
+   const messageIds=input.contextMessageIds??history.messages.filter((m:any)=>m.kind==='text').map((m:any)=>m.id);
    const messages=await o.storage.execute<any[]>('discussion.messages',{...attempt,messageIds});
    const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items:[...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))],at:Date.now()});
    const prompt='本次明确请求：'+input.text+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
