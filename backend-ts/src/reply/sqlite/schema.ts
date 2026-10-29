@@ -98,7 +98,7 @@ CREATE TABLE runtime_copy (
  sdk_instance_id TEXT NOT NULL UNIQUE,managed_locator TEXT NOT NULL UNIQUE,
  address_json TEXT CHECK(address_json IS NULL OR json_valid(address_json)),
  write_generation INTEGER NOT NULL CHECK(write_generation>=0),accepted_data_generation INTEGER NOT NULL,source_revision INTEGER NOT NULL,
- state TEXT NOT NULL CHECK(state IN ('preparing','dirty','ready','retired','blocked','cleanup_pending','cleared')),
+ state TEXT NOT NULL CHECK(state IN ('preparing','dirty','ready','blocked','deleting','deleted')),
  committed_request_id TEXT,committed_event_boundary TEXT,configuration_digest TEXT,
  cleanup_operation_id TEXT,manifest_complete INTEGER NOT NULL DEFAULT 0 CHECK(manifest_complete IN (0,1)),
  PRIMARY KEY(owner_id,id),UNIQUE(owner_id,contact_id,discussion_id,id),
@@ -106,7 +106,7 @@ CREATE TABLE runtime_copy (
  FOREIGN KEY(owner_id,committed_request_id) REFERENCES reply_request(owner_id,id),
  CHECK(state NOT IN ('dirty','ready') OR address_json IS NOT NULL),
  CHECK(state<>'ready' OR (committed_request_id IS NOT NULL AND committed_event_boundary IS NOT NULL AND configuration_digest IS NOT NULL)),
- CHECK(state<>'cleared' OR address_json IS NULL)
+ CHECK(state<>'deleted' OR address_json IS NULL)
 ) STRICT;
 CREATE TRIGGER runtime_scope_immutable BEFORE UPDATE OF owner_id,id,contact_id,discussion_id,sdk_instance_id,managed_locator,write_generation,accepted_data_generation,source_revision ON runtime_copy
 BEGIN SELECT RAISE(ABORT,'runtime_scope_immutable'); END;
