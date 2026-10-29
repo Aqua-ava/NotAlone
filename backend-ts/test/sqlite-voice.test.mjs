@@ -126,3 +126,11 @@ test('同步Worker卡住时墙钟上限真正终止线程，不仅拒绝外层Pr
 test('条件导入入口偏移不得执行未经摘要校验的代码',async t=>{
  const {encode}=await import('silk-wasm');const {data}=await encode(Buffer.alloc(9600),24000);const decoder=await isolatedDecoder(t,'redirect-entry');const pcm=await decoder.decode(data,new AbortController().signal);assert.equal(pcm.length,9600);
 });
+
+import {createVoiceMediaAdapter} from '../src/media/voice/index.ts';
+test('默认正式工厂未装认证资源端口时拒绝新微信语音提取',async t=>{
+ const adapter=createVoiceMediaAdapter();const f=await fixture(t,adapter),m=f.messages.find(m=>m.kind==='voice');
+ assert.equal((await f.media.read(f.contact,m.id)).capabilities.extract,false);
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'default-real-extract-unavailable',goal:'extract'}),{code:'media_adapter_unavailable'});
+ assert.equal(adapter.supports('voice','audio_conversion'),true);assert.equal(adapter.supports('image','extract'),false);
+});

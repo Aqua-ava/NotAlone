@@ -45,3 +45,29 @@ Blocked by: [16 单条媒体保存与清除](16-single-message-media-lifecycle.m
 - App首次使用整条线继续搁置，不做首用向导、组件准备、新模型设置、干净机器验收／发布；不做微信迁移／恢复实验。
 - 未核验现有真实范围时不得读取微信，不能为验证语音擅自开启同步、扫描账号或扩大联系人范围。
 - 不做转写、媒体入记忆、模型调用、云上传、批量提取或自动重提；保留用户亲自发送外部消息的边界。
+
+## Answer
+
+实现及合成验证已保存，State保持claimed；正式宿主装配和实际App尚待完成。真实微信语音唯一关联按19另验，当前默认工厂不装资源端口、不开放新语音读取。
+
+### 已实现
+
+- `backend-ts/src/media/voice/`提供唯一资源完整读取端口、严格腾讯SILK检查、24kHz单声道s16le PCM/WAV、可终止Worker及默认仅本地重转工厂。固定silk-wasm3.7.1及离线资产摘要，完整告知随src部署，无ASR/OCR/模型或CDN。
+- 复用16同一文件、租约、holders及05删除账本。播放件失败仅在本次已验证原件存在时允许有限结果；失败文件精确清理，不降低旧合法播放组合。本地输入实际字节按受管长度/摘要检查，发布前再次核文件。未改迁移v6或另建删除域。
+- 正常桥、认证HTTP和页面显示明确不可播放原因，允许停读后手动本地重转；原始件/播放件分别登记并关联父输入。ADR126记录已采纳边界。
+
+### 当前有效验证
+
+Node24.19.0，锁定依赖及隔离合成SQLite/受管目录，正常业务服务和正式桥/HTTP；只替换唯一资源端口为明确长度/摘要/来源的合成资源，首轮解码故障与ENOSPC分别注入。
+
+- `node --test backend-ts/test/sqlite-voice.test.mjs`：首12项通过；覆盖缺完整证明、整帧截短、解码失败、有限保存、停读重转、失败WAV精确清理、不降级旧组合、来源/取消/清除并发及输入换字节。
+- `node --test backend-ts/test/sqlite-media.test.mjs backend-ts/test/sqlite-media-deletion.test.mjs`：29/29通过。
+- `cd desktop && node --test tests/voice-media-integration.test.mjs`：1/1通过；页面先有限结果，停读后真实WASM转换，Chrome实际播放0.200秒，清除先撤下音频再ACK；ACK前文件存在且删除未完成，之后两件实际消失、占位保留。测试仅固定隔离HTTP目标，未替换桥或结果快照。
+- `node --import ./backend-ts/test/fixtures/voice/offline.mjs --test --test-name-pattern='锁定WASM|离线WASM资产缺失|条件导入入口偏移' backend-ts/test/sqlite-voice.test.mjs`：3/3通过；200ms合成纯音为9600字节PCM/9644字节WAV，afinfo独立确认格式与时长。
+- `node --test --test-name-pattern='同步Worker卡住' backend-ts/test/sqlite-voice.test.mjs`：1/1通过，10秒实际终止同步死循环Worker，关闭已结算。该用例复制生产解码类并仅替换Worker为阻塞夹具，不伪称正常codec卡死。
+- 同锁定Electron44.7.0（Node24.21.0、darwin arm64）以ELECTRON_RUN_AS_NODE=1执行上述禁网三项：3/3通过；仅独立组件，无App窗口。
+- 默认工厂业务入口1/1通过，未装认证资源端口时拒绝新微信提取。两端`pnpm typecheck`及`git diff --check`通过；双轴审查发现入口偏移P2，补反例并固定同一已校验绝对CJS加载后，Standards/Spec剩余均0。公开历史checkpoint检查issues=0。
+
+### 剩余与数据影响
+
+准备的自包含App种子为`backend-ts/test/fixtures/voice/desktop-seed.mjs`，通过业务服务建立有限SILK与完整SILK/WAV两个联系人，保存前关闭读取，无模型或真实渠道配置。尚未启动App；正式宿主接线后需实际界面核对本地转换/播放/清除及资格失效快照撤下。未读取真实语音、未向外发送、未改微信原件，未做首用、发布或迁移恢复实验。
