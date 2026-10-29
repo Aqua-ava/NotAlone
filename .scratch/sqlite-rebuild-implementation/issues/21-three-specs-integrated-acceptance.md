@@ -42,3 +42,11 @@ Blocked by: [20 默认切换 SQLite 与旧业务清理](20-sqlite-cutover-and-le
 本轮仅发布，尚未开始实现。`ready-for-agent`表示任务描述可供后续安排，不能据此自动领取、改代码、建业务库、读取微信或发起模型调用；须在用户后续明确要求实现时才开始并将State改为claimed。
 
 后续开发及桌面验收只用`pnpm run dev`，先`dev:status`核验并复用热更新实例；不得自行打包、运行打包版、改发布门禁、push或创建PR。只处理必要的合成或已获准资料，不提交私人聊天、身份、凭据、截图或真实媒体。App首次使用继续搁置，迁移／恢复实验不纳入本轮。
+
+## Comments
+
+- 2026-10-30 t21-integrated-acceptance 组合验收执行（仅追加，State/Triage 由 Lead 维护、未改动）：
+  - 基线 `codex/sqlite-rebuild-integration@d8c55619`，工作树 `sqlite-rebuild-21`；验收记录见 `docs/verification/21-three-specs-integrated-acceptance.md`（17 项有效范围矩阵、四项暂缓状态、组合实测、实际开发 App 交互、未通过项与所需授权/制品）。
+  - 本轮组合回归 592/592（A 同步/清空/删除 125、B 记忆/文档/控制 145、C 媒体 68、D 切换/回复/讨论/Skill 94、E Electron 宿主 30、F 桌面模块 56、G 裁决/迁移/共享结构 74）；两端 typecheck 结果见记录。实际开发 App（隔离合成 userData、无真实模型/微信/打包）：默认 SQLite 启动 manifest completed 8/8 checks、结构版本 15；记忆/文档状态展示；认证来源删除后旧候选/正式记忆/主题资料撤下；联系人清空进入 boundary_pending（exact_channel_cutoff_required）无成功文案；正常退出 stopped/pids[]；重开同 databaseId、结构 15、integrity/FK ok。重开后联系人目录读取失败已交 t20 诊断，结论前按「未认证/待诊断」记录。
+  - 未通过/受阻：03 第 1/2 条真实普通历史、状态语义与来源生命周期、跨启动连续性；04 真实增量尾部、重选/断线/微信非前台 CLI；06 真实 observer/reader 协议与最终只读制品；20 真实旧业务对象清理（归属不明、未执行）；19 真实媒体唯一关联暂缓；真实模型仅 07/11 两次受限真实调用。本票保持 **claimed**，不以已提交代码或已发布任务关闭，需相应授权/制品后另行认证。
+  - 边界：未发送/撤回外部消息、未读取真实微信正文/媒体/名单、未调用真实模型、未迁移/恢复实验、未打包/运行打包版、未 push/PR；未改 planning.md 或其他票；`docs/verification/21-*` 为唯一新增交付文件。
