@@ -4,6 +4,7 @@ import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 export interface HistorySupportReport {
   protocol: 'private-history-v1'; profileId: string; adapterVersion: string;
   status: 'supported' | 'unsupported' | 'unverified'; reason: string | null;
+  accountKey: string; conversationKey: string; sourceGeneration: string;
   programVersion: string; build: string; artifactSha256: string;
   schemaFingerprint: string; declaredPrimaryKey: readonly string[];
   identity: 'source-table-local-v1'; statusSemantics: string; continuity: string;
@@ -13,7 +14,7 @@ export interface HistoryScope {
 }
 export interface HistoryTarget {
   protocol: 'private-history-v1'; descriptor: string;
-  partitions: readonly string[]; sourceGeneration: string;
+  partitions: readonly string[]; tables: readonly {partition:string;instance:string}[]; sourceGeneration: string;
 }
 export interface HistoryRecord {
   partition: string; table: string; localId: string | null; serverId: string | null;
@@ -45,9 +46,20 @@ export interface StoredMessage {
   kind: HistoryRecord['kind']; text: string | null; originalType: string;
   sentAt: string | null; timePrecision: HistoryRecord['timePrecision'];
   orderScheme: string | null; orderKey: string | null;
+  // 当前按保存位置分页；ordering描述展示次序，不能从原消息orderScheme推定。
   displayPosition: string; ordering: 'verified' | 'unknown'; sourceRecordIds: string[];
 }
 export interface HistoryRead {
   messages: StoredMessage[]; coverage: HistoryCoverage;
   replyEligibility: 'ready' | 'history_syncing' | 'history_incomplete';
+}
+/** 仅供受信任派生服务固定实际来源；隔离记录不从此入口流出。 */
+export interface HistorySource {
+  recordId: string; contactId: string; messageId: string; captureId: string; goalId: string;
+  itemNo: number; capturedAt: string; adapterVersion: string; normalizerVersion: string;
+  cursorIn: string | null; cursorOut: string | null;
+  raw: HistoryRecord; support: HistorySupportReport;
+}
+export interface MessageSourceReference {
+  owner_id: string; contact_id: string; record_id: string; message_id: string;
 }

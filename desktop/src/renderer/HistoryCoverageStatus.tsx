@@ -14,6 +14,13 @@ const reasons: Record<string, string> = {
   history_empty: '暂时没有读到聊天记录，还不能确认历史是否读完。',
   cli_message_table_missing: '暂时无法打开本机微信记录，开启同步时会自动重试。',
   history_page_stalled: '读取更早的聊天时暂时中断，开启同步时会自动重试。',
+  history_identity_quarantined: '部分消息身份或内容存在冲突，已隔离待核验，不作为聊天或回复依据。',
+  history_support_unsupported: '当前微信结构明确不支持，正文读取保持关闭。',
+  history_support_unverified: '当前微信读取能力尚未核验，正文读取保持关闭。',
+  history_identity_conflict: '部分消息身份存在冲突，已隔离待核验，不作为聊天或回复依据。',
+  history_identity_insufficient: '部分消息无法可靠识别，已隔离待核验，不作为聊天或回复依据。',
+  history_partitions_missing: '本机历史分片未完整读到，不能确认历史已读完。',
+  history_interrupted: '本次历史读取已中断，已保存部分不代表完整历史。',
 };
 
 export function ContactHistoryCoverage({ coverages, contactId }: {
@@ -22,7 +29,7 @@ export function ContactHistoryCoverage({ coverages, contactId }: {
   const rows = coverages?.filter(item => item.contactId === contactId);
   return <div aria-label="当前联系人消息历史覆盖">
     {!rows?.length ? <p>暂时还不知道历史聊天是否读完。</p> : rows.map(row => <div key={row.bindingId}>
-      <p><strong>{labels[row.phase]}</strong> · 已保存 {row.messageCount} 条文字消息</p>
+      <p><strong>{labels[row.phase]}</strong> · 已保存 {row.messageCount} 条文字消息、{row.nonTextCount} 条非文字占位</p>
       {row.phase === 'incomplete' && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode ?? ''] ?? '部分聊天暂时无法读取，开启同步时会自动重试。'}</p>}
     </div>)}
   </div>;
@@ -51,7 +58,7 @@ export function HistoryCoverageStatus({ coverages, contacts = [], currentContact
           <progress aria-label="本机历史读取进度" value={complete.length} max={coverages.length} />
           <p>正在读取 {total('syncing')} 个 · 等待同步 {total('not_started')} 个 · 需要关注 {incomplete.length} 个</p>
         </>}
-      <p>只读取这台电脑上微信能提供的文字记录；已删除或仅在其他设备上的记录不包含在内。</p>
+      <p>只读取这台电脑上微信能提供的文字与非文字占位；不下载媒体，已删除或仅在其他设备上的记录不包含在内。</p>
       {currentContactId && !ids.includes(currentContactId) && <p>当前联系人的同步进度暂时未知。</p>}
       {incomplete.length > 0 && <div><h4>需要关注的会话（{incomplete.length}）</h4>{renderContacts(incomplete)}</div>}
       {pending.length > 0 && <details className="sync-backfill-details">

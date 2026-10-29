@@ -175,6 +175,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 107. [ADR-107：统一记忆处理入口与安全自动恢复](adr/107-unified-memory-processing-lifecycle.md)
 108. [ADR-108：隔离无法核验的存量记忆任务](adr/108-isolate-unresolved-legacy-memory-processing.md)
 
+- [ADR-113：SQLite 私聊历史、消息身份与实际来源](adr/113-sqlite-private-history-source-contract.md)
+
 ## 当前架构决策
 
 - 完整本机首用及资料生命周期按 [ADR-101](adr/101-local-app-first-use-lifecycle.md)与[新票据](../.scratch/local-app-first-use/planning.md)落实：保留 PostgreSQL，默认仅所选会话，复用原库与历史同步；完整独立交付仍待验收。

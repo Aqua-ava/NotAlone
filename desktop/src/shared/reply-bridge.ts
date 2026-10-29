@@ -87,6 +87,9 @@ export interface ReplyMessage {
   text: string | null;
   mediaPlaceholder: string | null;
   occurredAt: string | null;
+  // SQLite稳定展示位置不代表真实消息先后；旧渠道无此声明时保持旧合同。
+  ordering?: 'verified' | 'unknown';
+  displayPosition?: string;
   quoted: { text: string; targetMessageId: string | null } | null;
 }
 export interface ReplyMessagesState {

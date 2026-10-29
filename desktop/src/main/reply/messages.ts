@@ -14,6 +14,11 @@ export function mergeReplyMessages(previous: readonly ReplyMessage[], incoming: 
   const messages = new Map(previous.map((message) => [message.messageId, message]));
   for (const message of incoming) messages.set(message.messageId, message);
   return [...messages.values()].sort((left, right) => {
+    if (left.displayPosition !== undefined && right.displayPosition !== undefined) {
+      const a = BigInt(left.displayPosition), b = BigInt(right.displayPosition);
+      if (a !== b) return a > b ? -1 : 1;
+      return left.messageId.localeCompare(right.messageId);
+    }
     const leftTime = left.occurredAt === null ? -Infinity : Date.parse(left.occurredAt);
     const rightTime = right.occurredAt === null ? -Infinity : Date.parse(right.occurredAt);
     if (leftTime !== rightTime) return leftTime < rightTime ? 1 : -1;
@@ -40,11 +45,15 @@ export async function readReplyMessages(backend: Pick<BackendHost, 'requestJson'
       || !(item.occurred_at === null || (typeof item.occurred_at === 'string' && Number.isFinite(Date.parse(item.occurred_at))))
       || !(item.quoted === null || (record(item.quoted) && typeof item.quoted.text === 'string' && item.quoted.text.length <= 65_536
         && (item.quoted.target_message_id === null || isUuid(item.quoted.target_message_id))))) throw new Error('消息列表格式无效。');
+    const sqliteOrder = 'ordering' in item || 'display_position' in item;
+    if (sqliteOrder && (!['verified', 'unknown'].includes(item.ordering as string)
+      || typeof item.display_position !== 'string' || !/^(0|[1-9][0-9]{0,18})$/.test(item.display_position))) throw new Error('消息列表格式无效。');
     const messageId = item.message_id.toLowerCase();
     if (known.has(messageId)) throw new Error('消息列表格式无效。');
     known.add(messageId);
     return { messageId, speaker: item.speaker as ReplyMessage['speaker'], messageType: item.message_type,
       text: item.text, mediaPlaceholder: item.media_placeholder, occurredAt: item.occurred_at as string | null,
+      ...(sqliteOrder ? { ordering: item.ordering as 'verified' | 'unknown', displayPosition: item.display_position as string } : {}),
       quoted: item.quoted === null ? null : { text: item.quoted.text as string,
         targetMessageId: item.quoted.target_message_id === null ? null : (item.quoted.target_message_id as string).toLowerCase() } };
   });
