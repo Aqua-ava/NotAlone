@@ -115,3 +115,30 @@ test('候选继续被后端判定失效时同时清草稿、旧携入及Skill选
  await draft.fill('资格失效时必须清掉的合成草稿');await region.getByRole('combobox',{name:'本次回复Skill',exact:true}).selectOption(ids.skill);await region.getByRole('button',{name:'以此版本继续',exact:true}).click();
  await expect(region.getByRole('alert')).toContainText('已失效');await expect(draft).toHaveValue('');await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('combobox',{name:'本次回复Skill',exact:true})).toHaveCount(0);await expect(region.getByText('本次实际载入的 Skill',{exact:true})).toHaveCount(0);
 });
+
+test('权威读取发现已展示候选资格失效时清草稿与旧携入，不只移除候选列表',{timeout:30000},async t=>{
+ let invalid=false;const f=await panel(t,async op=>{
+  if(op.action==='select')return {id:ids.selection};
+  if(op.action==='read')return invalid?{...pageData(),requests:[{...pageData().requests[0],sourceState:'unavailable',candidates:[],loadedSkills:[],selections:[]}]}:pageData();
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'候选回复'}),draft=region.getByRole('textbox',{name:'本次想法',exact:true});
+ await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('后端已判失效时不应残留的草稿');invalid=true;
+ await region.getByRole('button',{name:'重新读取候选',exact:true}).click();await expect(draft).toHaveValue('');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
+});
+
+test('短暂读取失败后权威读取确认来源失效，仍撤下旧选稿草稿与携入',{timeout:30000},async t=>{
+ let reads=0;const f=await panel(t,async op=>{
+  if(op.action==='select')return {id:ids.selection};
+  if(op.action==='read'){
+   if(++reads===1)return pageData();
+   if(reads===2)throw new Error('候选结果尚未确认，请重新读取。');
+   return {...pageData(),requests:[{...pageData().requests[0],sourceState:'unavailable',candidates:[],loadedSkills:[],selections:[]}]};
+  }
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'候选回复'}),draft=region.getByRole('textbox',{name:'本次想法',exact:true}),read=region.getByRole('button',{name:'重新读取候选',exact:true});
+ await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('短暂读失败后仍挂旧选稿的合成草稿');
+ await read.click();await expect(region.getByRole('alert')).toContainText('尚未确认');await expect(draft).toHaveValue('短暂读失败后仍挂旧选稿的合成草稿');
+ await read.click();await expect(region.getByText('这次候选的来源已失效，正文与依据已撤下。',{exact:true})).toBeVisible();await expect(draft).toHaveValue('');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
+});

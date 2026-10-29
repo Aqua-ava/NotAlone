@@ -7,20 +7,30 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const scopeKey=JSON.stringify([contactId,scopeRevision,sessionId]),latest=useRef({scopeKey,bridge,disabled});latest.current={scopeKey,bridge,disabled};
  const revision=useRef(0),mounted=useRef(false),operation=useRef<object|null>(null);
  const retry=useRef<{fingerprint:string;requestKey:string}|null>(null);
+ const qualifiedRequests=useRef<string[]>([]);
  const [page,setPage]=useState<SqliteCandidatePage|null>(null),[draft,setDraft]=useState(''),[partial,setPartial]=useState(false),[carry,setCarry]=useState<string|undefined>();
  const [selectedSkill,setSelectedSkill]=useState('');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [edits,setEdits]=useState<Record<string,string[]>>({}),[inspected,setInspected]=useState<Record<string,SqliteCandidateVersion>>({});
  const available=!!bridge.candidates&&!!contactId&&!!sessionId&&!disabled;
- function clear(){++revision.current;operation.current=null;retry.current=null;setPage(null);setDraft('');setPartial(false);setCarry(undefined);setSelectedSkill('');setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
+ function clear(){++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setPartial(false);setCarry(undefined);setSelectedSkill('');setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
  useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(clear);return()=>{mounted.current=false;++revision.current;operation.current=null;off();};},[bridge]);
  useEffect(()=>{clear();if(available)void run({action:'read'});},[scopeKey,bridge,disabled]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
+ function showPage(next:SqliteCandidatePage){
+  // 仅保留无正文的来源标识，短暂读取失败后仍能核对旧草稿的资格。
+  const readable=qualifiedRequests.current;
+  if(readable.some(id=>!next.requests.some(r=>r.requestId===id&&r.sourceState==='available'))){
+   setDraft('');setCarry(undefined);setSelectedSkill('');setPartial(false);retry.current=null;setNotice('');
+  }
+  qualifiedRequests.current=next.requests.filter(r=>r.sourceState==='available'&&r.candidates.length).map(r=>r.requestId);
+  setPage(next);setEdits({});setInspected({});
+ }
  function rejectOperation(error:unknown){
   const text=error instanceof Error?error.message:'候选结果尚未确认，请重新读取。';
   setEdits({});setInspected({});setNotice('');
   if(/失效|已变化|已不可用|请先确认/.test(text)){
-   setPage(null);setDraft('');setCarry(undefined);setSelectedSkill('');setPartial(false);retry.current=null;
+   qualifiedRequests.current=[];setPage(null);setDraft('');setCarry(undefined);setSelectedSkill('');setPartial(false);retry.current=null;
   }else setPage(old=>old?{coverage:old.coverage,requests:[]}:null);
   setError(text);
  }
@@ -31,7 +41,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   const scope={contactId,scopeRevision,sessionId};
   try{
    const response=await bridge.candidates.execute({...scope,...command} as SqliteCandidateOperation);if(!current())return;
-   if(command.action==='read'){setPage(readSqliteCandidatePage(response));setEdits({});setInspected({});}
+   if(command.action==='read'){showPage(readSqliteCandidatePage(response));}
    else if(command.action==='version')setInspected(v=>({...v,[command.candidateId]:readSqliteCandidateVersion(response)}));
    else{
     if(command.action==='generate'){
@@ -44,7 +54,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
      const selection=response as {id:string};if(typeof selection.id!=='string')throw new Error('选稿结果尚未确认，请重新读取。');
      setNotice(`已选用第${command.versionNo}版；选用不表示已发送。`);
     }else setNotice('修改已保存为新版本，继承依据尚未重新核验。');
-    const next=await bridge.candidates.execute({...scope,action:'read'});if(!current())return;setPage(readSqliteCandidatePage(next));setEdits({});setInspected({});
+    const next=await bridge.candidates.execute({...scope,action:'read'});if(!current())return;showPage(readSqliteCandidatePage(next));
    }
   }catch(e){if(current())rejectOperation(e);}
   finally{if(current()){operation.current=null;setBusy(false);}}
