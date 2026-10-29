@@ -65,3 +65,9 @@ Blocked by: [01 SQLite 基础与生命周期](01-sqlite-runtime-lifecycle.md)
 - 新SkillLibraryController严格校验最小DTO、大整数修订及连接代次，manager具名通道只构造/api/skills白名单；目录名与明确确认、核验和启停CAS均由页面产生，不能传owner、任意路径或SQL。
 - SqliteSkillLibraryPage显示中文启停／待核验／缺失／冲突及历史不可读锚点；显式目录发现、核验、启停通过无头Chrome交互检查，旧操作无请求。
 - `desktop`中新增sqlite-library与sqlite-library-view共3项通过；与view/tabs/controller相关27项首跑26项通过，通道白名单更新后唯一失败用例单独复跑通过。desktop类型检查通过。未以无头页面代替实际App或共用宿主验收。
+
+2026-10-29 账号删除集成补充：
+
+- 正常管理读写与运行资格加入同事务owner.active门，deleting/deleted/missing含空目录均拒绝。新回归在修复前基线上确实因未拒绝而失败，修复后通过。
+- `skillMetadataDeletionDomain`仅account清本领域两表和业务定位／摘要，类型化row目标不含原路径或内容摘要，支持重复清理、跨owner拒绝和完整性复核；所有文件授权／清理入口拒绝，原件字节保留。其他实际输入与runtime副本仍须独立领域注册。
+- 2项新增场景、sqlite-skills相关18项、backend类型检查通过；工厂返回值对当前05 DeletionDomain独立类型赋值通过（含authorizeFile合同）。尚待统一基线公共接线和实机。

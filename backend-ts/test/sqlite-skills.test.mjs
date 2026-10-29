@@ -214,3 +214,37 @@ test('末尾scope检查期间停用Skill，组合事务必须同时拒绝旧目�
  const run=await openSqliteSkillRun(library,scope,port);armed=true;
  await assert.rejects(run.validate(),{code:'skill_run_invalidated'});
 });
+
+test('账号fence后拒绝迟到管理写入和空目录运行资格，其他owner不受影响',async t=>{
+ const {library,storage,root}=await fixture(t);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
+ const anchor=skillAnchor(item),frozen={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[anchor]};
+ await storage.execute('fixture.owner',{ownerId:'owner-b'});const other=new SqliteSkillLibrary(storage,'owner-b',root);await other.discover('gentle');
+ for(const state of ['deleting','deleted']){
+  await storage.execute('fixture.ownerState',{ownerId:'owner-a',state});
+  await assert.rejects(library.discover('gentle'),{code:'skill_owner_unavailable'});
+  await assert.rejects(library.setEnabled(item.id,item.headRevision,'disabled'),{code:'skill_owner_unavailable'});
+  await assert.rejects(library.verify(item.id,item.headRevision),{code:'skill_owner_unavailable'});
+  await assert.rejects(library.list(),{code:'skill_owner_unavailable'});
+  await assert.rejects(storage.execute('skills.assertRun',{ownerId:'owner-a',revision:frozen}),{code:'skill_owner_unavailable'});
+ }
+ await assert.rejects(storage.execute('skills.assertRun',{ownerId:'missing',revision:{packages:[],eligible:[]}}),{code:'skill_owner_unavailable'});
+ assert.equal((await other.list()).length,1);
+});
+
+test('账号元数据删除合同清两表并可重试，拒绝越owner且原目录字节保留',async t=>{
+ const {library,storage,root,bytes}=await fixture(t);const item=await library.discover('gentle');
+ const account={ownerId:'owner-a',operationId:'account-delete',scope:{kind:'account'}};
+ await assert.rejects(storage.execute('fixture.skillFence',account),{code:'skill_deletion_not_fenced'});
+ const source={...account,scope:{kind:'source',contactId:'contact-a',sourceId:'source-a'}};
+ assert.deepEqual(await storage.execute('fixture.skillTargets',source),[]);
+ await storage.execute('fixture.owner',{ownerId:'owner-b'});const other=new SqliteSkillLibrary(storage,'owner-b',root);await other.discover('gentle');
+ await storage.execute('fixture.ownerState',{ownerId:'owner-a',state:'deleting'});await storage.execute('fixture.skillFence',account);
+ const targets=await storage.execute('fixture.skillTargets',account);assert.equal(targets.length,2);assert.ok(targets.every(t=>t.kind==='row'&&!JSON.stringify(t).includes(root)));
+ assert.equal((await storage.execute('fixture.skillVerify',account)).database_rows.result,'blocked');
+ await assert.rejects(storage.execute('fixture.skillClear',{operation:account,target:{...targets[0],key:{...targets[0].key,owner_id:'owner-b'}}}),{code:'skill_deletion_target_invalid'});
+ for(const target of [...targets].reverse()){await storage.execute('fixture.skillClear',{operation:account,target});await storage.execute('fixture.skillClear',{operation:account,target});}
+ assert.equal(await storage.execute('fixture.skillCounts',{ownerId:'owner-a'}),0n);assert.equal((await other.list()).length,1);
+ const verified=await storage.execute('fixture.skillVerify',account);assert.equal(verified.database_rows.result,'passed');assert.equal(verified.derived_eligibility.result,'passed');assert.equal(verified.trace_payloads.result,'not_applicable');
+ assert.equal(await readFile(join(root,'gentle/SKILL.md'),'utf8'),bytes);
+ assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

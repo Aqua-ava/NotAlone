@@ -33,9 +33,13 @@
 
 ## 删除接入边界
 
-本模块没有文件删除、清理器、目录覆盖或孤儿扫描代码。空库缺引用、旧 PG 行缺失和任何管理状态都不构成原目录删除授权。原 Skill 目录不得登记成05的受管文件删除目标。
+本模块没有文件删除、文件清理器、目录覆盖或孤儿扫描代码。空库缺引用、旧 PG 行缺失和任何管理状态都不构成原目录删除授权。原 Skill 目录不得登记成05的受管文件删除目标。
 
 05/11/12需要登记含实际 Skill 输入的追踪行与 runtime 副本；由追踪／副本领域负责 collect、fence、clear、verify。包来源资格变化则调用 `requireVerification`；包不复制成新独立来源。`requireSkillRun`／`requireSkillRevision` 应和02的 `assertReadEligibility`、05的删除资格检查处于调用追踪写入的同一短事务。14不导入未集成的并行票模块，不提供恒真的生产替身，不把缺域注册当作删除完成。测试夹具显式提供 `fixture_scope`／`fixture_input` 与撤销擦除，仅证明合同要求；真实删除注册与运行副本清理必须在后续接入窗口复核。
+
+正常管理动作和 `requireSkillRun`／`requireSkillRevision` 在同一短事务要求 `owner.state=active`；deleting、deleted、missing均拒绝，包括零包目录。
+
+`deletion.ts` 导出 `skillMetadataDeletionDomain()`，id为 `skill_metadata`，注册到05的domains与requiredDomains。仅account范围清除本owner的package/revision行、物理定位和摘要，fence须在02将owner置为deleting/deleted后调用，删除处理器自身允许同操作重试。只产生类型化row目标，authorizeFile/fileCleared始终拒绝，原目录字节保留。其他contact/source范围不清owner包；实际Skill输入与runtime副本继续由对应写入域登记、清理和复核，不能借本域not_applicable隐藏缺域。工厂已对当前05 DeletionDomain做独立类型赋值检查；若其他域外键尚未清除，行清理会阻止并等待同操作重试。
 
 ## 当前版本依据
 
