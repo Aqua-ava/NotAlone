@@ -11,7 +11,7 @@
 - 115 个旧 PG 名称逐项分类闭合：80 本轮实现（含 1 项同时落到实现表与替代落点）、1 由来源级排除替代、8 目标表本轮暂缓（13／15 范围）、2 查询派生不建表、1 手动导入入口退役、16 本轮范围外（Skill 学习／审核等）、7 已确认退役。逐项 disposition 已落到提交 fixture 并有覆盖断言。
 - 产品运行入口（`sqlite-host-plugin.ts`、`launch.ts`、桌面 main）运行时 import 图 **0 个 pg 值导入**；旧 PG 宿主、managed PostgreSQL、旧 schema 准备与手动文件导入入口不可从产品入口到达。
 - 默认开发入口实测：无预置控制文件时自动创建独立 `database_id`／owner／迁移账本，8 项切换核验全通过，正常关停与重开沿用同一实例；维护态与失败重试在隔离演练中覆盖。
-- 真实清理：本机无 PostgreSQL socket／进程，默认 App `userData` 未发现受管 PG 集群、旧业务副本目录或 SQLite 控制面；存在旧启动配置指向的外部项目与握手，内容未读取、归属未确认。**真实旧业务库与应用副本无法精确归属，实际清理保持受阻，未执行任何真实删除。**
+- 真实清理：本机经只读复核无 PostgreSQL 进程/数据目录、无旧业务库或旧业务副本；默认 App `userData` 仅 Chromium 级缓存与开发工具/开发配置制品（非旧业务数据，按边界保留），`~/.notalone` 仅 270 个用户 Skill 原目录。**第 8 条为 N/A（无清理对象），未执行任何真实删除。**
 - 已按本轮范围显式修订 ADR-101／102、089／100、107／108，并补充 ADR-109 的阶段关闭说明。
 
 ## 2. 结构与 DDL 核对
@@ -102,15 +102,23 @@
 - 隔离合成演练（`sqlite-cutover-rehearsal.test.mjs`，11 项全通过）：空根默认创建；未授权旧目标保持维护态且不删不建；未知归属阻断且不删；旧写入者存活阻断→停写并授权后清理完成、保留模型密钥／Skill／外部原件并切配置；清理失败保留维护态→修复现场同操作重试且不重建空库；创建后异常不以新空库掩盖失败；配置被篡改拒绝、目标缺失不重建；媒体区占用阻断→移除后沿用同一目标实例完成切换；synthetic 授权不得清理非隔离根、真实根必须 confirmed_local；清理完成但目标创建失败保持维护态且不恢复旧 writer／不建第二个空库；清理后配置切换前重新出现旧写入者时停止切换。
 - 结构审计（`sqlite-cutover-structure.test.mjs`，4 项全通过）；退役静态回归（`sqlite-cutover-retirement.test.mjs`，5 项全通过，锁定产品入口 import 图、launch 只读 SQLite profile、导入入口移除、13／15／17 能力 unavailable、managed PG 不可达）。
 
-## 7. 真实对象归属与清理状态（受阻）
+## 7. 实际对象归属与真实清理状态（N/A：本机无旧业务对象）
 
-只读核验事实（未读取业务内容、未创建控制面、未删除任何对象）：
+2026-10-30 以只读命令独立复核（未读取任何配置/.env 内容、未删除或改写任何用户文件、未创建控制面）：
 
-- 本机无 PostgreSQL socket（`/tmp/.s.PGSQL.5432` 不存在），无 postgres 进程；t03 此前亦确认本机无 PG。
-- 默认 Electron `userData` 下不存在 `managed/`、`managed/postgres`、`managed/state.json`、`managed/updates`、`managed/runtime.env`、`assistant-runtime`、`sqlite-development.json`、`database-cutover`；因此没有可识别归属的受管旧 PG 集群、旧业务副本或本票控制面。
-- 默认 `userData` 存在旧 `backend-launch.json`，指向的外部项目目录与握手内容未读取、归属未确认；未运行真实切换，因此未对其做任何清理或改写。
-- `~/.notalone/skills` 存在 270 个用户 Skill 目录（外部 Skill 原目录），按边界保留，未读取、未修改、未删除。
-- 结论：**真实旧业务库、含内容助手会话、缓存、派生文件与应用持有的旧业务副本无法精确归属**；本票不执行真实切库、drop、真实清理或真实维护态切换。实际清理状态为受阻，需后续明确授权、停止旧写入者并逐目标确认归属后才可执行；本文件不保存私人数据、凭据或可恢复定位。
+| 对象 | 只读结果 | 归属与处置 |
+| --- | --- | --- |
+| PostgreSQL 进程/数据目录 | 无 postgres 进程；无 `/tmp/.s.PGSQL.5432` socket；`/opt/homebrew/var/postgres*`、`/usr/local/var/postgres*`、`~/Library/Application Support/Postgres` 均不存在 | 本机无旧 PG 业务库/数据目录，无真实清理对象 |
+| `~/.notalone` | 仅 `skills/`：270 个目录、5.2M；无 `backend.info` 或其他业务文件 | 用户 Skill 原目录，按保留边界不删除、不读取 |
+| 默认 Electron userData | 仅 Chromium 级缓存（`Cache` 598M、Graphite/GPU/Code Cache 等）、`wechat-tool` 17M、`wechat-tool-dev-20261023` 12M、`desktop-settings.json`、`backend-launch.json`（447B，0600）、Preferences/Local State 等；maxdepth 3 无 `managed/`、`state.json`、NotAlone 业务 `*.sqlite`、`assistant-runtime`、`updates/`、`runtime-copies/`、`sqlite-development.json`、`database-cutover/` | Chromium 缓存与开发工具制品属本机开发 App/开发链路资产，非旧业务数据；按保留边界不删除，不属旧业务清理对象 |
+| `declarative_performance_observer.db` | 32K，Chromium 性能观测数据库（顶层 Chromium 文件命名，非 NotAlone 业务库） | 非旧业务数据，保留 |
+| `backend-launch.json` | 只读 stat：447B、0600；字段级盘点由 Lead 只读完成（backendInfoPath/envFilePath/projectDirectory/pythonExecutable/syncProbePath/wechatCliPath），指向当前开发仓库与开发制品；本文件复核未读取内容 | 开发启动配置，不是旧业务数据；未改写 |
+| `~/Library/Application Support/NotAlone` | 空目录（0B） | 无数据 |
+| 微信/外部原件 | 未扫描、未读取；按既有边界保留 | 不在旧业务清理范围 |
+
+- **结论**：本机不存在真实旧业务库、含内容助手会话、旧媒体/派生业务副本或应用持有的旧业务数据；仅存 Chromium 级缓存与开发工具/开发配置制品，归属为本机开发 App，非旧业务数据，按保留边界不删除、不属旧业务清理对象。未执行任何真实删除、drop、切库或迁移。
+- **残余边界**：代码层的真实清理路径（`database-cutover/` 控制面 + `authorization.json` + 精确归属核验）已隔离演练通过但未在本机执行；其他机器上的真实旧业务对象仍须按归属与授权单独核验，本记录不构成其清理凭据。本文件不保存私人数据、凭据或可恢复定位。
+- **验收重评**：第 8 条重评为 **N/A（本机无清理对象）+ 只读证据**；第 12 条保持通过（正常开发入口已复核默认库身份/关键业务/关停，且真实归属/清理状态与限制已按本文件记录）。最终 12/12 判定见 §10。
 
 ## 8. ADR 修订（实施中显式修订，不由文档发布声称已切）
 
@@ -161,15 +169,17 @@
 | 5 | 维护态撤销并核验旧 writer／任务／DSH 停止；不强杀未知进程；未确认停写不双写 | 通过（合同与演练） | 停写核验、配置切换前二次核验与维护态在演练覆盖；真实环境无旧 PG 进程、无受管旧副本；未知写入者阻断不杀 |
 | 6 | 新独立 database_id／owner／SQLite 账本；不迁旧业务；不保留旧 PG 备份；重试不造第二个空库 | 通过（隔离与代码合同） | 默认入口实测；重试身份复用与 target_unrecorded 测试 |
 | 7 | 切换控制与清理进度位于不随目标删除的控制面；唯一恢复凭据不入待删目标 | 通过 | `database-cutover/manifest.json` 控制面；manifest 仅存固定身份／摘要／进度，不存密码或正文 |
-| 8 | 按确认归属清理旧库／会话／缓存／派生文件；保留模型密钥、原 Skill、外部原件 | 隔离演练通过；真实清理受阻 | 演练验证保留与清理边界；真实对象归属未知，保持受阻并记录 |
+| 8 | 按确认归属清理旧库／会话／缓存／派生文件；保留模型密钥、原 Skill、外部原件 | **N/A（本机无清理对象）+ 只读证据** | 本机无旧 PG/旧业务库/含内容助手会话/旧媒体派生副本；仅 Chromium 缓存与开发制品（非旧业务数据、按边界保留）；隔离演练验证清理与保留边界；未执行真实删除（§7） |
 | 9 | 空库无 Skill 业务行不触发孤儿误删或默认全停用；可证启停／未知分开接回官方加载 | 通过 | 空 Skill 行检查 passed；原目录保留；Skill 票既有 verified/unknown 合同 |
 | 10 | 全部必要面核验完成才原子切配置；失败继续维护态不回退旧 writer、不自动空库 | 通过（合同与演练） | 8 项检查、失败注入与重试测试；配置写入失败后目标身份复用 |
 | 11 | 按范围退役手动导入与旧 PG 启动路径；显式修订 ADR；不以文档声称已切 | 通过 | 导入与旧 PG 入口退役；6 份 ADR＋ADR-109 修订；真实切库未执行 |
-| 12 | 正常开发入口复核默认库身份、关键业务和关停；记录实际归属／清理状态／限制 | 通过（隔离根） | §9 开发入口实测与本文件 §7 真实归属记录 |
+| 12 | 正常开发入口复核默认库身份、关键业务和关停；记录实际归属／清理状态／限制 | 通过（隔离根） | §9 开发入口实测（默认 SQLite、5 页 UI、正常关停、重开同 database_id/owner）与本文件 §7 只读归属记录；未保存私人数据/凭据/可恢复定位 |
+
+**最终判定：12/12——11 条通过 + 第 8 条 N/A（本机无对象、只读证据），建议将票 20 标 resolved。** 真实切库/drop/清理/打包/远端操作仍未执行；本判定只覆盖本机开发环境与已记录证据范围。
 
 ## 11. 限制与未认证项
 
-- 未执行真实切库、drop、真实旧业务清理、维护态切换或旧数据迁移；真实旧对象归属不明，实际清理受阻。
+- 未执行真实切库、drop、真实旧业务清理、维护态切换或旧数据迁移；本机经只读复核不存在真实旧业务对象（§7），故第 8 条为 N/A（无对象）而非“受阻”；代码级真实清理路径仅隔离演练，未在本机执行。
 - 未操作微信、未发送消息、未调用真实模型、未打包或运行打包版、未 push／PR；发布面（release inventory／打包脚本）未修改。
 - `managed-postgres.ts` 与 `schema-prepare-cli.ts` 源文件按裁决保留（已不可从产品入口到达，发布清单引用未改，属发布面范围外），不视为活跃能力。
 - 92 个需要 PG 的 current 测试是既有基线红，不在本票修；不作为产品入口可用性的依据。
