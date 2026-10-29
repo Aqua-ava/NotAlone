@@ -44,6 +44,7 @@
     "tests/expression-preferences/reprepare.test.mjs",
     "tests/failure-visibility.test.mjs",
     "tests/first-frame-read.test.mjs",
+    "tests/fixed-memory-development-network.test.mjs",
     "tests/fixed-memory-processing.test.mjs",
     "tests/foreground-confirmation-binding.test.mjs",
     "tests/foreground-latency.test.mjs",
