@@ -126,3 +126,20 @@ Computer Use 实际操作管理后台和输入小窗：乙显示历史不完整�
 可行的安全方向是：读取正文前，按 owner/contact 持久记录正在使用的来源证据与失证围栏；保留既有精确排除，在同一提交事务内复验授权、数据代次、围栏和当前快照资格。发生无法证明的分片/表实例变化、读取中断或重启后无法续证时，旧排除和围栏必须保留，停止该范围并报告缺口；不能通过新来源代次、重选或后台重试自动清除。围栏需在可能读取之前持久生效，不能只在会回滚的失败事务中写入，也不能仅靠进程内状态保证崩溃后仍生效。这是待实现的合同，不代表现有代码已经具备上述跨次失证围栏。
 
 当前证据不足以将此方向作为正常可用实现：未知状态下仍不能判断哪些行可纳入正文；失去连接后的连续性和旧排除到新实例的身份映射不可证明。永久阻断能避免错误恢复，却不能满足04无声缺口/合法新消息续读，以及06精确边界后继续新消息的正向承诺；全部拒绝也不是这些验收的通过。需要经过认证的消息状态和来源实例连续性或可信映射，以及与04/06共享的精确边界、持续排除、并发删除和迟到页原子合同。只保留固定快照而放行正文，或以时间、最大 localId、重新确认账号和哈希代替映射，均不能解决该缺口。本次未改生产门禁，也没有读取真实微信、发送或撤回消息、做迁移恢复或调用模型。
+
+## 2026-10-29 票03第1/2条双次真实 metadata 复核（仍未认证）
+
+本轮只做两次真实、只读的 metadata 快照，目标是判断票03第1/2条的历史范围、状态语义、来源连续性和覆盖能否认证。正式 `backend-launch.json` 当前指向已安装 CLI `d566d4842b656ca5b07a8af0c1fdada5c225724e9e7fda28e409b06f117d0655`；该制品调用 `notalone-history` 时在打开来源前以 `notalone_command_disabled`、退出码 2 拒绝，因此不具备本轮所需的 metadata 入口，不能作为已安装正式支持档的证据。两次真实快照使用保留的开发只读制品 `d555fdcedf100eba62e8dbc4dbcde50901b3f1b8198f6a6a44e62cfb66c26327`；其 manifest 明确为 `notalone-history-cli-development`、ad-hoc development、`realWechatVerified=false`，不能替代正式安装制品认证。正式配置路径的这一次拒绝没有打开 SQLite 来源，不计为真实读取。
+
+每次快照均只请求 `metadata-account` → `inspect-account-schema` → 精确目标 `resolve` → `inspect` → 单条文字 `observe-metadata` → `support`。没有请求 `target/page`，没有读取 `message_content`、source/XML、媒体、整份联系人名单或会话列表，没有发送、撤回、模型调用或产品数据库写入。两次结果只在端侧解析并落为不含账号、联系人名称、原始消息ID、时间戳或原始分片路径的摘要；目标名称、账号键、会话键和来源代次只保留相等关系，不进入本文件。
+
+两次可比较字段一致，未观察到差异：
+
+- 账号：`wechat-account-metadata-v1` 均为 `verified`，程序 `4.0.6/build 29387`，`configuredAccount=verified`，`continuity=held-contact-session-instances`，`normalHistory=false`；CLI 与 WCDB 摘要分别为上述 `d555…` 和 `4f05cafc4626a142afca1818f0a88c4092a13d5f4c83e30cd5125b558ba0417d`。账号和来源代次在两次独立进程间相等；期间只正常退出并重开 NotAlone App，WeChat 进程没有重启。
+- 账号结构：`session` 19 列，声明主键 `username`，schema version 11，3 个索引；`contact` 22 列，声明主键 `id`，schema version 22，1 个索引；账号结构摘要 `9b7f2d14a94a21b4`。两张表的实例摘要、列和索引在两次间一致。
+- 消息结构：检查 8 个分片，其中 2 个目标消息表；均为 17 列、声明主键 `local_id`、`AUTOINCREMENT`，各有 1 个组合索引和 3 个单列非唯一索引（含 `server_id`，不提供唯一约束）。两个表实例摘要分别为 `12ff3e6af6323b82`（schema version 229/rootpage 310）和 `6da1a20246f3e94b`（schema version 695/rootpage 6893）；消息 schema 摘要 `c79d35e6b8a272a9`。完整分片集合、表实例、主键和索引在两次间一致。
+- 单条可观察状态：两次均匹配同一文字元数据位置，`localIdHash=d4735e3a265e16ee`，`serverId` 为正整数、`originalType=1`、原始 `status=4`、发送方类别为 `contact`、`createTime` 为正整数；报告均为 `statusSemantics=unverified`、`normalHistory=false`、`observationScope=single-fixed-snapshot`。同一原值不能证明状态4的业务含义，也不能覆盖发送、撤回、别名补齐或删除状态。
+
+认证结论：可以认证本次两个时刻的当前账号结构、精确目标、8 分片中的 2 个消息表实例、`local_id` 声明主键、表结构及一个原始状态值在两次间相同；不能据此认证票03第1/2条要求的真实历史范围、状态语义、来源生命周期、跨重启来源连续性或覆盖。`support` 仍返回 `unverified`、`history_message_state_unverified`，其中 `normalHistory`、`statusSemantics`、`sourceLifecycle`、`restartContinuity`、`recoveryMapping`、`snapshotBarrier`、`partitionCoverage` 全为 `unverified`。相同固定切面无法证明变化间映射；当前保留的正式 CLI 又缺少 metadata 入口，开发制品也不能冒充正式支持档。
+
+因此本轮不放宽真实正文门禁、不修改 support profile、不把全拒绝写成正常历史可用，票03保持 claimed。数据影响仅为上述只读 metadata 查询；没有读取正文或其他私人资料，没有向指定目标或任何其他对象发送消息。两次快照后 App 以正常 Cmd+Q 退出；`dev:status` 返回 `stopped`/空 PID，任务自有 App/监督器/DSH 进程和开发握手均已清理，WeChat 保持原运行状态。
