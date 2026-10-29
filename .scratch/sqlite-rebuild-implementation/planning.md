@@ -190,6 +190,8 @@ flowchart TD
 
 - 用户在独立会话另行授权的真实供应商合成复测：07源提交两次调用及两个目标成功，11源提交一次调用成功且重开未增请求；总指挥已核对状态数量和祖先关系。各自旧unknown保留，09没有因此获得真实外呼授权；不认证微信或真实聊天语义质量。
 
+- 2026-10-30 票10代码集成（State保持claimed，实机验收待）：执行会话t10最终1f798662（无新增迁移，1..15保留；含09暂停修复b2a4f0f1与06清空2fdde8e2）；已--no-ff集成b5241920。执行会话门禁：两端typecheck 0、控制14/14、记忆+清空+删除+09文档+08管理108/108、09文档+控制25/25、桌面23/23、inventory通过、public 0。主仓复跑：backend typecheck 0、控制测试通过、inventory通过。剩实机App验收（暂停小批收尾/继续复用成功步骤/退出重开/unknown/租约接替/删除晚到）待窗口。集成后20的四个硬依赖（06、10、14、16）全部实际进基线，释放task-6。
+
 - 2026-10-30 票06桌面pending路径实机验证通过：t06在隔离合成根（/tmp/t09-node/bin/node v24.21.0、CDP dev开关、合成SQLite schema15两位联系人；未接真实微信/未调模型/未打包）完成5项：实际管理后台显示结构版本15、选中合成乙出现清空面板、清空确认后显示boundary_pending+原因exact_channel_cutoff_required且无成功文案（生产HTTP复核phase=boundary_pending/completed=false/deletion_state=blocked/stored_messages=0/stored_sources=0/联系人选择保留）、刷新仍pending、重读确认提示“结果尚未确认”无成功文案、正常退出后stopped/pids[]并删合成根。第12条真实observer/reader协议仍pending如实记录。无代码改动、无新hash。
 
 - 2026-10-30 票09文档阶段暂停边界修复集成：t10发现scene→profile阶段间未复验pause_requested_at（普通暂停后仍启动画像小批），t09以claimScene/claimProfile领取前复验pause_requested_at（暂停返回null保持pending）+普通暂停时场景收尾直接incomplete+run可单独领取画像小批供continue恢复修复（0f16b89d，分支HEAD 25e06116）；已--no-ff集成b2a4f0f1。主仓复跑：backend typecheck 0、文档10文件+提取101/101、desktop typecheck 0、桌面46/46；原12条验收无回退。
