@@ -52,7 +52,7 @@ export function BackendConnectionNote({ state, startup, onDiagnose }: {
     <b>{title}</b><p role={failedStop ? 'alert' : undefined}>{message}</p>
     {actionError && <p role="alert">{actionError}</p>}</div>
     {state.canRetryConnection && <button className="button" onClick={() => attempt('重试连接未成功，请稍后再试。', () => window.notalone.backend.retryConnection())}>重试连接</button>}
-    {onDiagnose && startup?.mode !== 'managed' && <button className="button" onClick={onDiagnose}>查看诊断</button>}
+    {onDiagnose && <button className="button" onClick={onDiagnose}>查看诊断</button>}
     {state.canRetryShutdown && <button className="button" onClick={() => attempt('重试停读尚未获确认，请稍后再试。', () => window.notalone.backend.quit())}>重试停读并退出</button>}
   </section>;
 }

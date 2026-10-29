@@ -31,7 +31,7 @@ export interface SqliteDevelopmentState {
 export interface StartupState {
   sqlite?: SqliteDevelopmentState;
   phase: 'idle' | 'checking' | 'ready' | 'blocked' | 'first-run' | 'preparing' | 'cancelled';
-  mode?: 'managed' | 'external';
+  mode?: 'external';
   step?: 'checking-components' | 'preparing-data' | 'starting-database' | 'preparing-database' | 'updating-schema' | 'stopping';
   code?: StartupCode;
   revision: number;

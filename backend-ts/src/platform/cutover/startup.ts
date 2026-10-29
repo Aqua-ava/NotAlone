@@ -36,6 +36,8 @@ export interface DefaultDatabaseOptions {
   /** 新建实例的默认能力；已有启动配置时一律沿用原配置。 */
   capabilities?: SqliteCapabilitiesConfiguration['capabilities'];
   skillPackageRoot?: string;
+  /** 仅隔离合成根允许 synthetic 授权清理；真实 userData 必须使用 confirmed_local。 */
+  allowSyntheticAuthorization?: boolean;
 }
 export interface DefaultDatabaseInternals {
   manifest?: CutoverManifest;
@@ -154,6 +156,11 @@ async function switchDatabase(userData: string, manifest: CutoverManifest, optio
       manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_authorization_invalid' });
       throw new Blocked('cutover_authorization_invalid', 'authorization_scope_incomplete', manifest);
     }
+    // synthetic 授权只用于隔离合成根；真实 userData 必须由本地确认授权覆盖，避免一份合成文件删真实对象。
+    if (authorization.scope === 'synthetic' && options.allowSyntheticAuthorization !== true) {
+      manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_authorization_invalid' });
+      throw new Blocked('cutover_authorization_invalid', 'synthetic_authorization_requires_isolated_root', manifest);
+    }
   }
 
   // 逐目标清理：已清理的跳过，失败保留现场并由同操作重试；授权对象变化后重新识别。
@@ -188,6 +195,12 @@ async function switchDatabase(userData: string, manifest: CutoverManifest, optio
     const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), at: Date.now() });
     manifest = saveManifest(userData, { ...manifest, phase: 'target_ready', target: { ...manifest.target!, ownerId } });
     manifest = await verifyTarget(userData, manifest, storage, ownerId);
+    // 清理完成到配置切换之间再次核验旧写入者，防止清理后重新出现的旧进程被新配置掩盖。
+    const lateWriters = checkLegacyWriters(userData).filter(record => record.state !== 'stopped');
+    if (lateWriters.length) {
+      manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_legacy_writer_running' });
+      throw new Blocked('cutover_legacy_writer_running', lateWriters.map(record => `${record.name}:${record.state}`).join(','), manifest);
+    }
     const configuration = ensured.configuration;
     if (created || !loadStartupConfiguration(userData)) saveStartupConfiguration(userData, configuration);
     const stored = loadStartupConfiguration(userData);
@@ -213,9 +226,10 @@ async function ensureTargetInstance(userData: string, manifest: CutoverManifest,
   current: () => CutoverManifest, options: DefaultDatabaseOptions): Promise<Ensured> {
   const existingConfiguration = loadStartupConfiguration(userData);
   const baseConfiguration = (databaseId: string): StartupConfiguration => {
-    const capabilities = existingConfiguration?.capabilities;
-    return { formatVersion: 1, intent: 'open', role: 'test', expectedDatabaseId: databaseId,
-      ...(capabilities ? { capabilities } : {}), ...(existingConfiguration?.skillPackageRoot ? { skillPackageRoot: existingConfiguration.skillPackageRoot } : {}) };
+    const capabilities = existingConfiguration?.capabilities ?? options.capabilities ?? DEFAULT_CAPABILITIES;
+    const root = existingConfiguration?.skillPackageRoot ?? options.skillPackageRoot ?? path.join(userData, 'skill-packages');
+    return { formatVersion: 1, intent: 'open', role: 'test', expectedDatabaseId: databaseId, capabilities,
+      ...(capabilities.includes('skills') ? { skillPackageRoot: root } : {}) };
   };
   if (manifest.target) {
     try {
@@ -253,12 +267,8 @@ async function ensureTargetInstance(userData: string, manifest: CutoverManifest,
   }
   const capabilities = options.capabilities ?? DEFAULT_CAPABILITIES;
   const root = options.skillPackageRoot ?? skillPackageRoot;
-  if (!capabilities.includes('skills')) {
-    const configuration: StartupConfiguration = { formatVersion: 1, intent: 'open', role: 'test', expectedDatabaseId: storage.status.databaseId, capabilities };
-    return { manifest, storage, configuration };
-  }
   const configuration: StartupConfiguration = { formatVersion: 1, intent: 'open', role: 'test', expectedDatabaseId: storage.status.databaseId,
-    capabilities, skillPackageRoot: root };
+    capabilities, ...(capabilities.includes('skills') ? { skillPackageRoot: root } : {}) };
   manifest = saveManifest(userData, { ...current(), targetOrigin: 'created', target: { databaseFile: 'managed/sqlite/notalone.sqlite', databaseId: storage.status.databaseId,
     ownerId: '', role: 'test' }, targetCreatePending: false });
   return { manifest, storage, configuration };

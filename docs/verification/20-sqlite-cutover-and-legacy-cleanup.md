@@ -8,7 +8,7 @@
 
 - 实际 SQLite 结构：迁移 1–15 共创建 **82 表**（67 个本轮实现的逻辑目录表 + 15 个实现关联／账本表），**814 字段**、424 个外键列（149 个复合 FK 组）、60 个显式索引（25 个部分唯一）、252 个 CHECK（71 表含 CHECK）、92 个触发器、全部 82 表 STRICT。
 - 77 表逻辑目录逐项分类闭合：67 实现、9 用户暂缓且入口关闭、1 由 06 来源级排除替代；**未为暂缓功能建空表**，也未把骨架当完成。
-- 115 个旧 PG 名称逐项分类闭合：79 本轮实现、2 查询派生不建表、10 目标表本轮暂缓（13／15 范围）、1 手动导入入口退役、7 已确认退役、16 本轮范围外（Skill 学习／审核等）。无未分类项。
+- 115 个旧 PG 名称逐项分类闭合：80 本轮实现（含 1 项同时落到实现表与替代落点）、1 由来源级排除替代、8 目标表本轮暂缓（13／15 范围）、2 查询派生不建表、1 手动导入入口退役、16 本轮范围外（Skill 学习／审核等）、7 已确认退役。逐项 disposition 已落到提交 fixture 并有覆盖断言。
 - 产品运行入口（`sqlite-host-plugin.ts`、`launch.ts`、桌面 main）运行时 import 图 **0 个 pg 值导入**；旧 PG 宿主、managed PostgreSQL、旧 schema 准备与手动文件导入入口不可从产品入口到达。
 - 默认开发入口实测：无预置控制文件时自动创建独立 `database_id`／owner／迁移账本，8 项切换核验全通过，正常关停与重开沿用同一实例；维护态与失败重试在隔离演练中覆盖。
 - 真实清理：本机无 PostgreSQL socket／进程，默认 App `userData` 未发现受管 PG 集群、旧业务副本目录或 SQLite 控制面；存在旧启动配置指向的外部项目与握手，内容未读取、归属未确认。**真实旧业务库与应用副本无法精确归属，实际清理保持受阻，未执行任何真实删除。**
@@ -38,17 +38,19 @@
   | 发布指针／当前版本循环 FK | 5 | 采用延迟 NO ACTION 的循环 FK 未在迁移 1–15 加回；本轮由发布动作事务内同 scope 检查与既有 08／09 回归覆盖，不新增迁移 16 |
   | 范围候选键（`(owner,contact)` 等） | 27 | 复合候选键 FK 未全部声明；由 92 个范围触发器（33 个来源／范围一致性）与具名动作复验共同承担。已确认差异：触发器覆盖不到的分支仍需业务复验，不能只凭同 owner 外键认定权限正确 |
   | 材料／版本分支 | 8 | 指向暂缓表或由实现子表承载的选择／反馈／偏好分支；实际由子表 FK 与动作校验承担 |
-- 索引与触发器：60 个显式索引中 25 个部分唯一，覆盖当前版本／发布指针、有效租约、媒体 current/present、消息去重、任务领取、删除重试与来源反查；92 个触发器按类别为范围／来源一致性 33、不可变／终态 35、写入状态迁移 7、其他 17。逐表集合见结构基线 fixture 与附录 A。
-- 事务与约束验证（结构测试）：实际 DDL 与 82 表基线逐表一致；迁移账本 1–15、`user_version=15`；重开后 database_id 与结构视图稳定；外键、CHECK、唯一键和范围触发器在 SQLite 内拒绝非法写入；显式事务回滚不残留；`integrity_check` 与 `foreign_key_check` 通过。
+- 索引与触发器：60 个显式索引中 25 个部分唯一，覆盖当前版本／发布指针、有效租约、媒体 current/present、消息去重、任务领取、删除重试与来源反查；92 个触发器按类别为范围／来源一致性 33、不可变／终态 35、写入状态迁移 7、其他 17，触发器名称、所属表与归一化后的完整 body 均进入基线逐项比对。
+- 事务与约束验证（结构测试）：实际 DDL 与 82 表基线逐表一致，比较范围包含每表归一化 `sqlite_master.sql`（全部 252 条 CHECK 与约束）、列类型／NOT NULL／默认值、外键列组与 `on_update`／`on_delete`／`match`、索引完整定义与 SQL、92 个触发器 body、视图集合；迁移账本 1–15、`user_version=15`；重开后 database_id 与结构视图稳定；5 类真实反例（外键拒绝、CHECK 拒绝、范围触发器拒绝 ×2、事务回滚）均被 SQLite 阻止；`integrity_check` 与 `foreign_key_check` 通过。
+- 可复现命令：`cd backend-ts && node test/fixtures/cutover/build-structure-baseline.mjs` 重新生成结构基线；`node test/fixtures/cutover/build-audit-catalog.mjs <consolidated-schema.json> <consolidated-legacy-check.json>` 重新生成 77 表与 115 旧名称的 disposition fixture。fixture 记录来源工件名与 SHA-256，不复制私人明文。
 
 ### 2.3 验证方式
 
-- 以同版本 `node:sqlite`（SQLite 3.53.4）在隔离根按迁移 1–15 创建实例，用 `sqlite_master`／`PRAGMA` 导出实际结构并与逻辑目录比对；结果固定为 `backend-ts/test/fixtures/cutover/structure-baseline.json`，由 `sqlite-cutover-structure.test.mjs` 逐表锁定，后续漂移直接失败。
-- 结构基线同时约束暂缓／替代表不出现、危险 DDL 与范围触发器集合不增减。
+- 以同版本 `node:sqlite`（SQLite 3.53.4）在隔离根按迁移 1–15 创建实例，导出实际结构并与固定基线比对；基线由 `backend-ts/test/fixtures/cutover/build-structure-baseline.mjs` 生成，测试 `sqlite-cutover-structure.test.mjs` 逐表锁定，任何 DDL／CHECK／触发器 body／FK action／索引／视图漂移直接失败。
+- 逻辑目录与旧名称使用 `logical-catalog.json`、`legacy-disposition.json` 两个可公开提交的 fixture 承载（77 表／778 字段／215 FK 计数、115 项 disposition 与落点），由 `sqlite-cutover-audit.test.mjs` 与代码分类、实际表集合交叉断言；原始设计工件仍在 `.scratch/sqlite-database-rebuild/`，fixture 只保留表名／计数／结论。
+- 结构基线同时约束暂缓／替代表不出现，以及危险 DDL 与范围触发器集合不增减。
 
 ## 3. 旧 PG 名称映射（115）
 
-- 分类：79 本轮实现（旧事实在新结构有明确落点）；2 查询派生不建持久表；10 目标表本轮暂缓（落到 13／15 暂缓表，入口关闭）；1 旧手动导入入口退役（`import_confirmation`）；7 已确认退役（旧升级／计划／候选流程不复刻、`organization_quality_revocation` 无消费者）；16 本轮范围外（`reply_skill_*`／`skill_learning_*`／`skill_review_*`／`skill_policy_*` 等学习审核平台）。
+- 分类：80 本轮实现（旧事实在新结构有明确落点；其中 1 项同时涉及实现表与 06 来源级排除替代）；1 由 06 来源级排除直接替代；8 目标表本轮暂缓（落到 13／15 暂缓表，入口关闭）；2 查询派生不建持久表；1 旧手动导入入口退役（`import_confirmation`）；7 已确认退役（旧升级／计划／候选流程不复刻、`organization_quality_revocation` 无消费者）；16 本轮范围外（`reply_skill_*`／`skill_learning_*`／`skill_review_*`／`skill_policy_*` 等学习审核平台）。共 115 项，0 未分类。
 - 逐项落点与结论见附录 B；`consolidated-legacy-check.json` 的“接线未验证”描述是设计期状态，本票对每个落点补了实现／暂缓／退役分类，但不把分类当作逐条 SQL 兼容或旧数据迁移承诺。
 
 ## 4. 消费者映射与改接
@@ -74,9 +76,10 @@
 | 媒体 | `media/sqlite/**`（迁移 6，三实体 + 统一删除扩展） | mediaExtraction unavailable；18 语音最小停用、19 暂缓 |
 | 删除／元数据 | `storage/sqlite/**`（迁移 2，统一删除账本，7 个删除 scope） | 旧 cross-domain 消费者不可达 |
 
-- 全仓仍有 129 个源文件引用 pg：仅 **3 个值导入**（`platform/database/host-storage.ts`、`skills/skill-learning-http.ts`、`skills/skill-source-proof.ts`），均不可从产品入口运行时可到达；其余 126 个仅类型导入。它们保留为不可达遗留源码，本票不删除全部旧模块，也不把“文件存在”当作活跃消费者。
+- 全仓仍有 129 个源文件引用 pg：仅 **4 个文件存在值导入（4 处语句，其中 1 处为动态 import）**——`platform/database/host-storage.ts`、`reply/discussion/assistant-generation-lifecycle.ts`、`skills/skill-learning-http.ts`、`skills/skill-source-proof.ts`；均不可从三个产品入口运行时可到达，退役回归用精确快照锁定该集合。其余 125 个仅类型导入。它们保留为不可达遗留源码，本票不删除全部旧模块，也不把“文件存在”当作活跃消费者。
 - 92 个 current 测试需要本机 PostgreSQL（本机无 PG 时既有基线即为红）：**单列为既有基线，不修、不掩盖**；它们不构成产品入口的活跃消费者，也不作为本票验收依据。
-- 13 偏好、15 纠错／诊断、18 语音、19 真实媒体入口：SQLite 宿主 ownership 明确声明 `expressionPreferences`／`replies`／`skillLearning`／`taskApi`／`tasks`／`imports`／`mediaExtraction` 为 unavailable；媒体适配器以空列表装配，语音保存／转换与真实资源关联不开放。13／15 不通过本票补做功能来解除依赖。
+- 13 偏好、15 纠错／诊断、18 语音、19 真实媒体入口：SQLite 宿主 ownership 明确声明 `expressionPreferences`／`replies`／`skillLearning`／`taskApi`／`tasks`／`imports`／`mediaExtraction` 为 unavailable；媒体适配器以空列表装配，语音保存／转换与真实资源关联不开放。行为回归（`sqlite-cutover-disabled-capabilities.test.mjs`）实际启动 SQLite 宿主并断言旧回复生成、Skill 学习、手动导入、媒体提取路由返回 503/404，只开放 contacts／discussions 等本轮已实现能力。13／15 不通过本票补做功能来解除依赖。
+- 语义澄清：ownership 的 `replies: 'unavailable'` 指旧 PG 回复生成入口已退役，不代表 12 的候选回复不可用；候选回复由 `discussions` 能力与 `reply/sqlite/**` 承载，`status.ownership.discussions` 为 typescript，旧 `/api/reply/generate` 保持 503。
 
 ## 5. 媒体、删除与 Skill 闭包
 
@@ -93,9 +96,10 @@
 - 控制面位置：`${userData}/database-cutover/manifest.json`（目录 0700、文件 0600、原子写＋目录 fsync），记录目标 `database_id`／owner、阶段、旧目标清单、停写核验、检查面与授权摘要；**不放在待删除的旧 PG 或 SQLite 文件内**，不保存密码、token、正文或可恢复定位。启动配置 `sqlite-development.json` 仅在全部检查通过后原子写入。
 - 目标识别：只把 userData 内结构可证明归属的对象标 confirmed（受管 PG 集群、受管状态、runtime.env、受管更新档案、`assistant-runtime` 会话副本、导入标记、生命周期锁、握手）；未知归属、符号链接、越界路径、未预期结构一律阻断。模型密钥、用户 Skill 原目录与外部微信原件从不在清理目标内；`runtime.env` 清理只删旧数据库连接／PG 密码行，保留模型密钥行。
 - 授权：真实清理必须有显式 `authorization.json`（目标 id + clean 决定 + 范围标签）；未授权、授权不完整或归属未知均保持维护态，不清理。隔离演练用 `scope: synthetic` 授权。
-- 维护态：存在未完成切换时正常入口只发布维护态并在界面显示原因与重试／诊断入口，不启动旧 PG、不启动新业务写入、不创建第二个空库；重试沿用已记录目标身份，已清理目标幂等跳过。
+- 维护态：存在未完成切换时正常入口只发布维护态并在界面显示原因与重试／诊断入口，不启动旧 PG、不启动新业务写入、不创建第二个空库；重试沿用已记录目标身份，已清理目标幂等跳过。清理完成与配置切换之间再次核验旧写入者，若旧进程重新出现则停止在维护态、不写启动配置。
+- 切换顺序与失败语义：编排固定为「识别→停写核验→按授权清理→创建／打开目标→目标检查→二次停写核验→原子写配置」。旧业务清理先于新库创建；若清理成功而目标创建／检查失败，保持维护态，不恢复旧 writer、不写配置、不以异常自动换空库；重试从已记录阶段继续，若目标文件已产生但身份未记录则停止并要求人工核验，避免第二次创建空库。
 - 新实例：空隔离根创建新 `database_id`、新 owner 与迁移账本 1–15；重试只按 `database_id` 打开，数据库文件存在但身份未记录时停止并保留现场（`cutover_target_unrecorded`），不自动删除重建。
-- 隔离合成演练（`sqlite-cutover-rehearsal.test.mjs`，8 项全通过）：空根默认创建；未授权旧目标保持维护态且不删不建；未知归属阻断且不删；旧写入者存活阻断→停写并授权后清理完成、保留模型密钥／Skill／外部原件并切配置；清理失败保留维护态→修复现场同操作重试且不重建空库；创建后异常不以新空库掩盖失败；配置被篡改拒绝、目标缺失不重建；媒体区占用阻断→移除后沿用同一目标实例完成切换。
+- 隔离合成演练（`sqlite-cutover-rehearsal.test.mjs`，11 项全通过）：空根默认创建；未授权旧目标保持维护态且不删不建；未知归属阻断且不删；旧写入者存活阻断→停写并授权后清理完成、保留模型密钥／Skill／外部原件并切配置；清理失败保留维护态→修复现场同操作重试且不重建空库；创建后异常不以新空库掩盖失败；配置被篡改拒绝、目标缺失不重建；媒体区占用阻断→移除后沿用同一目标实例完成切换；synthetic 授权不得清理非隔离根、真实根必须 confirmed_local；清理完成但目标创建失败保持维护态且不恢复旧 writer／不建第二个空库；清理后配置切换前重新出现旧写入者时停止切换。
 - 结构审计（`sqlite-cutover-structure.test.mjs`，4 项全通过）；退役静态回归（`sqlite-cutover-retirement.test.mjs`，5 项全通过，锁定产品入口 import 图、launch 只读 SQLite profile、导入入口移除、13／15／17 能力 unavailable、managed PG 不可达）。
 
 ## 7. 真实对象归属与清理状态（受阻）
@@ -122,24 +126,35 @@
 
 | 验证 | 命令（工作树根） | 结果 |
 | --- | --- | --- |
-| 后端类型 | `cd backend-ts && npx tsc --noEmit` | 0 错误 |
-| 桌面类型 | `cd desktop && npx tsc --noEmit` | 0 错误 |
-| 切换结构／演练／退役 | `cd backend-ts && node --test test/sqlite-cutover-{structure,rehearsal,retirement}.test.mjs` | 17/17 通过（4＋8＋5） |
-| 相关后端模块 | `node --test test/sqlite-storage.test.mjs test/sqlite-host-*.test.mjs test/sqlite-skill*.test.mjs test/sqlite-history*.test.mjs test/sqlite-clear-http.test.mjs test/sqlite-memory-{control,schema}.test.mjs test/sqlite-media.test.mjs test/sqlite-deletion.test.mjs test/sqlite-shared-producer-schema.test.mjs` | 113/113 通过 |
+| 后端锁定类型 | `cd backend-ts && <主仓>/backend-ts/node_modules/.bin/tsc --noEmit`（TypeScript 7.0.2） | 0 错误 |
+| 桌面锁定类型 | `cd desktop && <同一 tsc> --noEmit` | 0 错误 |
+| 切换结构／演练／审计／退役／停用 | `cd backend-ts && node --test test/sqlite-cutover-{structure,rehearsal,audit,retirement,disabled-capabilities}.test.mjs` | 24/24 通过（4＋11＋2＋5＋2） |
+| 相关后端模块 | 见 §9.1 | 113/113 通过 |
 | 桌面启动相关 | `cd desktop && node --test tests/sqlite-development.test.mjs tests/startup-continuity.test.mjs tests/pure-ts-startup.test.mjs` | 16/16 通过 |
 | 测试清单 | `cd desktop && node scripts/test-inventory.mjs` | 登记通过 |
-| 正常开发入口 | 隔离根 + `/tmp/t09-node/bin/node desktop/scripts/dev.mjs --user-data-dir <root>` | 默认创建 SQLite（8 项检查全 passed）、5 页 UI 正常、无 console error、正常关停 pids[]、握手删除、重开同 database_id／owner；隔离根已清理 |
-| 公开前检查 | `node scripts/check_public_history.mjs --ref HEAD --working-tree` | 见最终提交（定稿时执行） |
+| 正常开发入口 | 隔离根 + `/tmp/t09-node/bin/node desktop/scripts/dev.mjs --user-data-dir <root>`（即 `pnpm run dev` 执行的同一脚本） | 默认创建 SQLite（8 项检查全 passed）、5 页 UI 正常、无 console error、正常关停 pids[]、握手删除、重开同 database_id／owner；隔离根已清理 |
+| 当前用例实跑对照 | `cd backend-ts && node test/run-current.mjs --test-reporter=spec`（本树 vs 15ac355a 隔离树） | 见 §9.2 |
+| 公开前检查 | `node scripts/check_public_history.mjs --ref HEAD --working-tree` | 0 问题（定稿提交时重跑） |
+
+### 9.1 相关后端模块
+
+`node --test test/sqlite-storage.test.mjs test/sqlite-host-*.test.mjs test/sqlite-skill*.test.mjs test/sqlite-history*.test.mjs test/sqlite-clear-http.test.mjs test/sqlite-memory-{control,schema}.test.mjs test/sqlite-media.test.mjs test/sqlite-deletion.test.mjs test/sqlite-shared-producer-schema.test.mjs`：113/113 通过。
+
+### 9.2 当前用例实跑与基线对照
+
+- 本树：257 项 current 文件实际执行；失败集中在「本机无 PostgreSQL」基线（`connect ENOENT /tmp/.s.PGSQL.5432` 或「合成 PG 准备失败」），与 15ac355a 隔离基线树同类失败一致；修复后不再有 `backend_launch_requires_sqlite` 新增失败。
+- `sqlite-memory-profile.test.mjs` 的 2 项失败在 15ac355a 基线上同样存在（同一隔离树复现），属既有失败，不由本票引入。
+- 新增 cutover 测试文件全部纳入 current 执行并通过；不修改 92 个需 PG 的既有测试，也不把它们计作本票验收。
 
 ## 10. 12 条验收逐条判定
 
 | # | 验收项 | 判定 | 证据／限制 |
 | ---: | --- | --- | --- |
-| 1 | 77 表／778 字段／215 FK／115 名称逐项核对与 DDL／索引／CHECK／范围触发器／事务验证 | 通过（含已确认差异） | 本文件 §2、§3 与附录 A–C；结构基线 fixture 逐表锁定；不新增迁移 16 |
+| 1 | 77 表／778 字段／215 FK／115 名称逐项核对与 DDL／索引／CHECK／范围触发器／事务验证 | 通过（含已确认差异） | 本文件 §2、§3 与附录 A–C；结构基线逐表锁定完整 SQL／CHECK／触发器 body／FK action／索引／视图；logical-catalog 与 legacy-disposition fixture 覆盖断言；不新增迁移 16 |
 | 2 | 活跃 PG 消费者改接或按范围退役；13／15 停用且无旧 PG 回退 | 通过 | 产品入口运行时 import 图 0 pg 值导入；域级改接表；unavailable 声明与无 sqlite 配置失败 |
 | 3 | 16 媒体结构／文件登记／发布替换／统一删除／活动引用先通过；17 入口关闭；18／19 暂缓；媒体闭包完整 | 通过（真实资源未认证） | 三实体结构与删除注册在基线；17 real 入口关闭；18／19 不启用；媒体区未知归属阻断 |
-| 4 | 隔离合成演练目标识别／停机／清理／失败重试／配置切换；未知不清理 | 通过（隔离） | 8 项演练；真实清理对象归属未知，真实对象不清理 |
-| 5 | 维护态撤销并核验旧 writer／任务／DSH 停止；不强杀未知进程；未确认停写不双写 | 通过（合同与演练） | 停写核验与维护态在演练覆盖；真实环境无旧 PG 进程、无受管旧副本；未知写入者阻断不杀 |
+| 4 | 隔离合成演练目标识别／停机／清理／失败重试／配置切换；未知不清理 | 通过（隔离） | 11 项演练，含 synthetic 授权隔离根门禁、清理后失败与清理后旧 writer 重现；真实清理对象归属未知，真实对象不清理 |
+| 5 | 维护态撤销并核验旧 writer／任务／DSH 停止；不强杀未知进程；未确认停写不双写 | 通过（合同与演练） | 停写核验、配置切换前二次核验与维护态在演练覆盖；真实环境无旧 PG 进程、无受管旧副本；未知写入者阻断不杀 |
 | 6 | 新独立 database_id／owner／SQLite 账本；不迁旧业务；不保留旧 PG 备份；重试不造第二个空库 | 通过（隔离与代码合同） | 默认入口实测；重试身份复用与 target_unrecorded 测试 |
 | 7 | 切换控制与清理进度位于不随目标删除的控制面；唯一恢复凭据不入待删目标 | 通过 | `database-cutover/manifest.json` 控制面；manifest 仅存固定身份／摘要／进度，不存密码或正文 |
 | 8 | 按确认归属清理旧库／会话／缓存／派生文件；保留模型密钥、原 Skill、外部原件 | 隔离演练通过；真实清理受阻 | 演练验证保留与清理边界；真实对象归属未知，保持受阻并记录 |
@@ -158,6 +173,23 @@
 - `read_exclusion` 整会话排除分支未实现，只有 06 的来源级排除；本轮不开放未确认的整会话范围。
 - 开发入口以 `role: 'test'` 的受控实例复核；App 首次使用、安装向导与发布流程继续搁置，不能把本次开发入口验证当作发布包或真实用户迁移通过。
 - 真实微信历史覆盖、媒体唯一关联与模型语义质量仍未认证，相关入口保持关闭。
+- 当前用例实跑仍有既有 PG 基线失败（本机无 PG）与 15ac355a 同样存在的 2 项 memory-profile 失败；本票不修、不掩盖，也不据此宣称全量测试全绿。
+- `managed-postgres.ts`、`schema-prepare-cli.ts` 源文件按裁决保留且不可从产品入口到达；release inventory／打包脚本未改，属发布面范围外。
+
+## 12. 审查阻断修复复核（final）
+
+| 阻断 | 修复 | 证据 |
+| --- | --- | --- |
+| S-B1 后端锁定类型 10 errors | 补 `SqliteCapabilitiesConfiguration` 类型导入，收紧 `StartupConfiguration` 的 capabilities 必填与 Skill 根成组 | TypeScript 7.0.2 `tsc --noEmit` 0 错误 |
+| S-B2 桌面锁定类型 7 errors＋导入按钮残留 | process.ts 要求 sqlite 配置并固定最小环境；host.ts 删除 managed 分支；BindingConsentPage 删除导入导航；StartupSettings／backend-status 清理 managed 死分支；startup-bridge mode 收紧 | 同一锁定 tsc 0 错误；源码检索无 `navigate('import')`／ImportController |
+| S-B3 旧 helper 无 sqlite 调用 | contact-context-support helper 明确装配受控 SQLite；python-retirement-host 移入 historical 登记并删除当前树文件；修复 launch 对 businessHome 的过度相等校验（真实宿主允许 userData 子目录） | `run-current` 实跑无 `backend_launch_requires_sqlite` 残留失败；sqlite-history-startup-host 3 项恢复通过 |
+| S1 结构审计未锁 CHECK／trigger body／FK action | 基线改为归一化完整 SQL＋完整 PRAGMA 导出（列默认值、FK action、索引 SQL、92 触发器 body、视图），提交生成脚本与复现命令；反例扩展到 5 类 | `sqlite-cutover-structure.test.mjs` 4/4；基线 metadata 252 CHECK／92 trigger／814 字段／173 FK 组 |
+| S2 77/778/215/115 disposition 未落提交 | 提交 `logical-catalog.json`（77／778／215，67 实现／9 暂缓／1 替代）与 `legacy-disposition.json`（115 项、0 未分类）＋生成脚本；审计测试断言计数与落点；verification 引用原始工件 | `sqlite-cutover-audit.test.mjs` 2/2 |
+| S3 synthetic 授权可删真实根 | `allowSyntheticAuthorization` 仅在系统临时根下的隔离 userData 由桌面探针传入；真实根必须 `confirmed_local`，否则 blocked 且不删除 | rehearsal「synthetic 授权不得清理非隔离根；真实根必须 confirmed_local」通过 |
+| S4 消费者映射不精确／replies 语义 | 退役测试锁定 4 个 pg 值导入文件快照（含动态 import），3 个产品入口 0 可达；verification 澄清 replies 指旧 PG 生成入口，候选回复由 discussions 承载并加行为断言 | `sqlite-cutover-retirement.test.mjs` 5/5；disabled-capabilities 2/2 |
+| S5 13/15/18/19 证据偏弱 | 新增行为测试：实际启动 SQLite 宿主校验 ownership unavailable 与旧回复／Skill／导入／媒体路由 503/404 | `sqlite-cutover-disabled-capabilities.test.mjs` 2/2 |
+| S6 演练缺口 | 增 synthetic 门禁、清理后创建失败、清理后旧 writer 重现 3 项；媒体非空路径已有用例 | rehearsal 11/11 |
+| S7 切换顺序风险 | verification §6 写明清理→建库→检查→二次停写→原子切换及失败保持维护态语义 | 本文 §6、§12 |
 
 ## 附录 A：77 表逐项结构核对
 
@@ -265,14 +297,14 @@
 | 16 | `contact_memory_state` | 本轮实现 | `contact` |
 | 17 | `conversation_binding` | 本轮实现 | `conversation_binding` |
 | 18 | `cross_domain_deletion_operation` | 本轮实现 | `deletion_operation`、`deletion_target`、`deletion_check` |
-| 19 | `expression_preference` | 本轮暂缓（目标表不建） | `expression_preference`、`expression_preference_version`、`preference_source` |
-| 20 | `expression_preference_operation` | 本轮暂缓（目标表不建） | `expression_preference_version`、`request_tombstone`、`deletion_operation` |
+| 19 | `expression_preference` | 本轮暂缓（目标表不建，入口关闭） | `expression_preference`、`expression_preference_version`、`preference_source` |
+| 20 | `expression_preference_operation` | 本轮暂缓（目标表不建，入口关闭） | `expression_preference_version`、`request_tombstone`、`deletion_operation` |
 | 21 | `expression_preference_state` | 本轮实现 | `owner` |
 | 22 | `front_sync_state` | 本轮实现 | `owner` |
 | 23 | `import_confirmation` | 入口退役（手动导入） | — |
 | 24 | `layered_memory_batch` | 本轮实现 | `step_attempt`、`execution_event`、`execution_input`、`event_source` |
-| 25 | `layered_memory_fact_correction` | 本轮暂缓（目标表不建） | `organization_feedback`、`feedback_input` |
-| 26 | `layered_memory_feedback` | 本轮暂缓（目标表不建） | `organization_feedback`、`feedback_input` |
+| 25 | `layered_memory_fact_correction` | 本轮暂缓（目标表不建，入口关闭） | `organization_feedback`、`feedback_input` |
+| 26 | `layered_memory_feedback` | 本轮暂缓（目标表不建，入口关闭） | `organization_feedback`、`feedback_input` |
 | 27 | `layered_memory_generation` | 本轮实现 | `document_publication`、`publication_member` |
 | 28 | `layered_memory_job` | 本轮实现 | `processing_task`、`processing_step`、`step_attempt` |
 | 29 | `layered_memory_state` | 本轮实现 | `owner`、`contact` |
@@ -308,11 +340,11 @@
 | 59 | `message_source_ref` | 本轮实现 | `capture_record` |
 | 60 | `model_call_learning_claim` | 本轮实现 | `model_call` |
 | 61 | `model_call_receipt` | 本轮实现 | `model_operation`、`model_call` |
-| 62 | `organization_quality_attempt` | 本轮暂缓（目标表不建） | `quality_attempt` |
-| 63 | `organization_quality_case` | 本轮暂缓（目标表不建） | `quality_case`、`quality_case_input` |
-| 64 | `organization_quality_fact_intent` | 本轮暂缓（目标表不建） | `memory_decision`、`organization_feedback` |
+| 62 | `organization_quality_attempt` | 本轮暂缓（目标表不建，入口关闭） | `quality_attempt` |
+| 63 | `organization_quality_case` | 本轮暂缓（目标表不建，入口关闭） | `quality_case`、`quality_case_input` |
+| 64 | `organization_quality_fact_intent` | 本轮暂缓（目标表不建，入口关闭） | `memory_decision`、`organization_feedback` |
 | 65 | `organization_quality_revocation` | 已确认退役 | — |
-| 66 | `organization_quality_run` | 本轮暂缓（目标表不建） | `quality_run` |
+| 66 | `organization_quality_run` | 本轮暂缓（目标表不建，入口关闭） | `quality_run` |
 | 67 | `outbound_ledger_entry` | 本轮实现 | `model_operation`、`model_call` |
 | 68 | `owner` | 本轮实现 | `owner` |
 | 69 | `owner_channel_identity` | 本轮实现 | `channel_account` |
@@ -354,14 +386,16 @@
 | 105 | `source_processing_batch` | 本轮实现 | `sync_capture` |
 | 106 | `source_processing_capture_tombstone` | 本轮实现 | `request_tombstone` |
 | 107 | `source_processing_record` | 本轮实现 | `capture_record` |
-| 108 | `wechat_auto_read_suppression` | 已确认退役 | `read_exclusion`、`history_cutoff` |
+| 108 | `wechat_auto_read_suppression` | 本轮实现 | `read_exclusion`、`history_cutoff` |
 | 109 | `wechat_binding_history_authorization` | 本轮实现 | `read_grant`、`read_goal` |
 | 110 | `wechat_history_sync_authorization` | 本轮实现 | `read_grant`、`read_goal` |
 | 111 | `wechat_message_metadata` | 本轮实现 | `capture_record`、`message` |
 | 112 | `wechat_observation_baseline` | 本轮实现 | `history_cutoff`、`read_goal` |
 | 113 | `wechat_observation_cursor` | 本轮实现 | `read_goal` |
-| 114 | `wechat_sync_exclusion` | 已确认退役 | `read_exclusion` |
+| 114 | `wechat_sync_exclusion` | 已由06来源级排除替代 | `read_exclusion` |
 | 115 | `wechat_sync_scope` | 本轮实现 | `channel_account`、`owner` |
+
+说明：disposition 与落点由 `backend-ts/test/fixtures/cutover/build-audit-catalog.mjs` 从设计工件生成并提交；原始工件保留在 `.scratch/sqlite-database-rebuild/`，fixture 仅含表名、分类与计数。
 
 ## 附录 C：已确认结构差异明细
 

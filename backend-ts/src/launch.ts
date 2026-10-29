@@ -103,7 +103,7 @@ export async function launchDsh(config: LaunchConfiguration, canStart: () => boo
     if (!path.isAbsolute(value) || /[\0\r\n]/.test(value)) throw new Error('backend_launch_unconfigured');
   }
   // 默认业务只有 SQLite 宿主；没有 sqlite 配置时不回退旧 PG 插件或 managed PostgreSQL。
-  if (!config.sqlite || config.sqlite.role !== 'test' || config.sqlite.userData !== config.businessHome) throw new Error('backend_launch_requires_sqlite');
+  if (!config.sqlite || config.sqlite.role !== 'test') throw new Error('backend_launch_requires_sqlite');
   const lockPath = `${config.infoPath}.dsh-lock`;
   await mkdir(path.dirname(config.infoPath), { recursive: true, mode: 0o700 });
   const nonce = randomUUID();

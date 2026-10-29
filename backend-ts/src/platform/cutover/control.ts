@@ -3,6 +3,7 @@ import { constants } from 'node:fs';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
+import type { SqliteCapabilitiesConfiguration } from '../../sqlite-capabilities.ts';
 import { CUTOVER_AUTHORIZATION, CUTOVER_DIRECTORY, CUTOVER_FORMAT_VERSION, CUTOVER_MANIFEST, CUTOVER_STARTUP_CONFIG,
   type CutoverAuthorization, type CutoverManifest } from './contracts.ts';
 

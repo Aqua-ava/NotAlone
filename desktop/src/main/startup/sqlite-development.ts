@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { SqliteLaunchConfiguration } from '../../../../backend-ts/src/launch';
@@ -28,7 +30,7 @@ export class SqliteDevelopmentProbe {
     this.contactConfiguration = undefined;
     if (!canStart()) return blocked('sqlite_cancelled');
     let result: ReadyResult | MaintenanceResult;
-    try { result = await this.probe(); }
+    try { result = await this.probe(await this.isolatedRoot()); }
     catch { return blocked('sqlite_diagnostic_failed'); }
     if (!canStart()) return blocked('sqlite_cancelled');
     if (result.phase === 'maintenance') return blocked(typeof result.code === 'string' && failureCodes.has(result.code) ? result.code : 'cutover_storage_failed');
@@ -39,12 +41,21 @@ export class SqliteDevelopmentProbe {
       capabilities: result.configuration.capabilities };
   }
 
-  private probe(): Promise<ReadyResult | MaintenanceResult> {
+  /** synthetic 授权只允许在系统临时根下的隔离资料目录使用。 */
+  private async isolatedRoot(): Promise<boolean> {
+    try {
+      const temporary = await realpath(tmpdir());
+      const candidate = await realpath(this.userData);
+      return candidate.startsWith(`${temporary}${path.sep}`);
+    } catch { return false; }
+  }
+
+  private probe(allowSyntheticAuthorization: boolean): Promise<ReadyResult | MaintenanceResult> {
     const moduleUrl = pathToFileURL(path.join(this.projectDirectory, 'backend-ts/src/platform/cutover/startup.ts')).href;
     // 与开发宿主同一 Node；切换检查只读写 SQLite 与受控目录，不启动 PG、DSH、微信或模型。
     const program = `(async()=>{ try {
       const {runDefaultDatabaseStartup}=await import(${JSON.stringify(moduleUrl)});
-      const result=await runDefaultDatabaseStartup({userData:${JSON.stringify(this.userData)}});
+      const result=await runDefaultDatabaseStartup({userData:${JSON.stringify(this.userData)},allowSyntheticAuthorization:${allowSyntheticAuthorization}});
       console.log(JSON.stringify(result));
     } catch(error) { console.log(JSON.stringify({phase:'maintenance',code:'cutover_storage_failed',detail:'probe_failed'})); } })();`;
     return new Promise((resolve, reject) => {

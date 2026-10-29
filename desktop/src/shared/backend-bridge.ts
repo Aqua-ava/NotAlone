@@ -1,5 +1,5 @@
 export type BackendPhase = 'disconnected' | 'connecting' | 'connected' | 'stopping' | 'shutdown-failed' | 'stopped';
-export type BackendErrorCode = 'backend_launch_unconfigured' | 'backend_handshake_invalid' | 'backend_connection_failed' | 'backend_shutdown_unconfirmed';
+export type BackendErrorCode = 'backend_launch_unconfigured' | 'backend_launch_requires_sqlite' | 'backend_handshake_invalid' | 'backend_connection_failed' | 'backend_shutdown_unconfirmed';
 
 // 这里只传递非秘密连接状态；认证信息始终留在主进程，启动路径由具名诊断桥接管理。
 export interface BackendState {

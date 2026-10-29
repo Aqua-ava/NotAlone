@@ -2405,6 +2405,18 @@
         "backend-ts/test/sqlite-history-http.test.mjs"
       ],
       "boundary": "历史资料只经已确认范围的 CLI 同步进入；不表示旧文件导入格式或行为通过验收。"
+    },
+    {
+      "path": "backend-ts/test/python-retirement-host.test.mjs",
+      "reason": "旧 PostgreSQL/Python 宿主退役合同；正常入口已只支持受控 SQLite，该用例的启动方式不再存在。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-cutover-retirement.test.mjs"
+      ],
+      "boundary": "旧宿主与 Python 退役结论已由静态退役回归覆盖；不表示旧执行器或旧 PG 宿主仍可运行。"
     }
   ],
   "archivedCases": [

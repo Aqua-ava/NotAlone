@@ -80,7 +80,7 @@ export function StartupSettings({ state, backend, open = false, onOpenChange }: 
 }) {
   return <details className="startup-troubleshooting" open={open} onToggle={(event) => onOpenChange?.(event.currentTarget.open)}>
     <summary>故障排查</summary>
-    {open && <>{state.mode === 'managed' || state.sqlite ? <StartupDiagnostics state={state} /> : <StartupPathSettings state={state} backend={backend} />}<DiagnosticExport /></>}
+    {open && <>{state.sqlite ? <StartupDiagnostics state={state} /> : <StartupPathSettings state={state} backend={backend} />}<DiagnosticExport /></>}
   </details>;
 }
 
