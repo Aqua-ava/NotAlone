@@ -84,3 +84,5 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 2026-10-29 实际合成App已补齐：同scope正常dev development，监督器/App/DSH握手实际存活；CUA查看乙/甲各8条、六类占位、未知时间/顺序，乙不完整警告、甲初始完整。known合成source正式DELETE completed，实际刷新8→7仅撤旧正文其余保留；刷新同步状态后甲1文字6占位且旧goal失效显示不足。目录硬编码0已修736f82970d38bb188be70107a9ae33a65b7b8b62：仅聚合owner/contact当前可见消息，不读正文，无两历史表时兼容身份v3；source_count沿0、source GET仍20待办。相关41项、后台类型、双轴0及独立新增2项通过。正常监督器重载后实际目录甲7乙8/甲摘要7/helper7与覆盖一致，旧正文未恢复；Cmd+Q后同scope stopped/pids[]，自有监督器/App/DSH PID消失及握手删除，立即释放桌面。不将预灌App作为自动首次入口，也不将逐来源删尽作为06正式清空证明，详见验证文档。
 
 验收勾选区分实现与真实可用性：第3至12条的约定实现、合成/正式服务、已保存资料App及缺证门禁证据已补；第1/2条真实普通历史仍未完成，状态语义与来源生命周期没有认证，真实target/page继续全拒绝。用户跳过撤回不等于补齐该门槛，不重开B、真实媒体或模型校准。State继续claimed，Goal不complete。
+
+2026-10-29 只读连续性评估：账号sourceGeneration只绑定账号及contact/session实例，data_version只可在同一observer连接前后比较；固定多分片切面不证明跨次或重启连续性。内存合成SQLite使用正式normalize及生产排除查询验证：原local键命中，改变来源代次或仅改变表实例后旧local键不命中；这不是现有真实门禁已被绕过的证明，账号代次变化另有拒绝。持久失证围栏与保留精确排除可构成安全保护方向，但不能证明未知消息状态或把旧排除可靠映射到新实例；永久阻断无法满足04合法增量和06边界后新消息正例。缺少这些证据前不放宽真实正文门禁、不将全拒绝写为验收通过；具体条件及SQLite官方依据见docs/verification/sqlite-private-history-support-03.md。只运行合成实验，未修改生产代码或共享删除/索引，State继续claimed、Goal不complete。
