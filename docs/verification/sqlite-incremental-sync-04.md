@@ -13,6 +13,9 @@
 | `03d29a15` | 正式宿主生命周期、`/api/sync/status` 增量投影、桌面解析与可见展示 |
 | `60ca9212` | 修复退出时在途读取未取消（close 先取消再等释放）并补关闭语义用例 |
 | `7075a55a` | 收敛逐人/全局错误汇总与降级恢复语义 |
+| `45086f26` | 修复 t03 审查阻断项（锁定 TS typecheck、能力声明、P0/P1 测试） |
+| `bf0a1a6e` | 按复审建议收紧关闭有界断言与复现命令 |
+| `dd0ddfb6` | 合并 09 集成基线并将增量迁移定稿为 14 |
 
 关键合同：
 
@@ -23,7 +26,7 @@
 - 增量协调器：仅启动/开启/重选唤醒并定时运行；关闭、退出、取消与范围变化停止后续查询并 abort 在途（关闭流程先取消再等释放）；范围失效类错误停止自动重试并保留可见原因，瞬时故障保留降级在后续 tick 重试，恢复成功后不残留旧错误；只投影已分类的可见错误码。
 - 增量读取额外要求适配器支持档声明 `capabilities.incrementalTail='supported'`；仅存在方法不构成放行。
 
-迁移：`read_goal` 增加 `resume_cursor/cursor_scope_digest/cursor_scheme/handoff_from_goal_id/pages_accepted/last_accepted_at`，`message` 增加 `status_code/status_observed_at`；只 ALTER，不重建既有 CHECK、不建新表。当前工作树因 registry 要求版本连续、票 09 的 13 尚未进基线而暂用 13；09 集成后改为 14（只改函数参数与 registry 一行）。
+迁移：`read_goal` 增加 `resume_cursor/cursor_scope_digest/cursor_scheme/handoff_from_goal_id/pages_accepted/last_accepted_at`，`message` 增加 `status_code/status_observed_at`；只 ALTER，不重建既有 CHECK、不建新表。迁移版本定稿为 14：已合并含 09 的集成分支（`5551aa5e`，memoryDocumentsMigration(13)），registry 连续登记为 `memoryDocumentsMigration(13), historyIncrementalMigration(14)`。
 
 审查修复（t03 双轴审查对象 `33e7dedc..b9bf30a9`）：
 
@@ -70,7 +73,7 @@ ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Content
 cd desktop && pnpm run typecheck && node --test tests/incremental-sync-status.test.mjs ...
 ```
 
-结果：backend `pnpm run typecheck`（锁定 `typescript 7.0.2`）0 错误；相关后端测试 71/71 通过；新增增量测试 handoff 6、sync 5、controls 8 顶层（含 6 个子场景）、迁移升级 1 全部通过；宿主测试 8/8（Electron node）；desktop typecheck 0 错误，新增桌面测试 2/2、相关桌面同步测试 24/24。`node scripts/check_public_history.mjs --ref HEAD --working-tree` 0 问题。
+结果（合并 09 基线后复跑）：backend `pnpm run typecheck`（锁定 `typescript 7.0.2`）0 错误；本票相关后端模块 97/98（唯一失败为上述 09 基线既有问题，与本票无关；本票新增与回归测试全部通过：增量 handoff 6、sync 5、controls 8 顶层含子场景、迁移升级 1、03/05 历史相关回归等）；宿主测试 8/8（Electron Node）；desktop `pnpm run typecheck` 0 错误、相关桌面测试 24/24。`node scripts/check_public_history.mjs --ref HEAD --working-tree` 0 问题。
 
 环境说明：工作树默认无 `node_modules`；运行宿主测试时临时软链主仓依赖，提交/检查前已移除（软链会使公开前检查报本机路径）。`sync-scope-view` 等 Playwright 页面测试因本机缺浏览器二进制未运行，属环境缺口而非本票代码回归。
 
@@ -79,4 +82,5 @@ cd desktop && pnpm run typecheck && node --test tests/incremental-sync-status.te
 - 真实微信读取保持关闭：`wechat-channel` 未配置/未认证时 inspect 返回 `unverified`，靶目标被拒绝；生产适配器不实现 `tail`，增量显示明确不可用/受阻，不伪造已同步。票 03 的渠道状态语义与来源连续性仍未认证。
 - 票 06 的精确清空边界（verified B）未接入：`suppression.ts` 的 `assertHistoryReadBoundary` 仍按 `barrier_generation`/`history_deletion_fence` 拒绝，清空后读取恢复不放行。
 - 未启动真实 App/微信/模型/媒体；无真实界面与真实渠道证据。桌面窗口待 Lead 在 09 后安排。
-- 迁移 14 编号与最终基线合并待 09（13）进入集成分支后完成。
+- 已合并 09 集成基线并定稿迁移 14；最终交付前需按 Lead 指示再核对集成基线与最终 commit。
+- 合并后 `sqlite-memory-extraction.test.mjs` 一项失败在纯基线 `5551aa5e` 可复现、在 09 之前基线 `0197bea4` 通过，属 09 集成既有问题（已单独报告 Lead），不计入本票验证结果。
