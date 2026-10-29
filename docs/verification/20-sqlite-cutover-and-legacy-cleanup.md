@@ -142,9 +142,11 @@
 
 ### 9.2 当前用例实跑与基线对照
 
-- 本树：257 项 current 文件实际执行；失败集中在「本机无 PostgreSQL」基线（`connect ENOENT /tmp/.s.PGSQL.5432` 或「合成 PG 准备失败」），与 15ac355a 隔离基线树同类失败一致；修复后不再有 `backend_launch_requires_sqlite` 新增失败。
-- `sqlite-memory-profile.test.mjs` 的 2 项失败在 15ac355a 基线上同样存在（同一隔离树复现），属既有失败，不由本票引入。
-- 新增 cutover 测试文件全部纳入 current 执行并通过；不修改 92 个需 PG 的既有测试，也不把它们计作本票验收。
+- 本树实跑：`tests 1559 / pass 946 / fail 612`，失败文件集合 108 个；除 `sqlite-memory-profile.test.mjs` 的 2 项断言失败外，全部为「本机无 PostgreSQL」基线（`connect ENOENT /tmp/.s.PGSQL.5432` 或「合成 PG 准备失败」）。
+- 15ac355a 隔离基线树实跑：`tests 1506 / pass 928 / fail 577`，失败文件集合 111 个；非 PG 失败同样为 `sqlite-memory-profile.test.mjs` 的 2 项。
+- 按失败文件集合对比：本树**无新增失败文件**；相对基线减少/消失的旧文件为 `host-launch.test.mjs`、`python-retirement-host.test.mjs`（已按退役登记删除）与 `host-readiness.test.mjs`。失败计数差异来自 PG 连接失败的子测试数与新增 cutover 测试（新增文件全部通过），不表示新增回归。
+- 修复后不再有 `backend_launch_requires_sqlite` 残留失败；`sqlite-history-startup-host.test.mjs` 3 项恢复通过。
+- 新增 cutover 测试文件全部纳入 current 执行并通过；不修改需 PG 的既有测试，也不把它们计作本票验收。
 
 ## 10. 12 条验收逐条判定
 
@@ -182,7 +184,7 @@
 | --- | --- | --- |
 | S-B1 后端锁定类型 10 errors | 补 `SqliteCapabilitiesConfiguration` 类型导入，收紧 `StartupConfiguration` 的 capabilities 必填与 Skill 根成组 | TypeScript 7.0.2 `tsc --noEmit` 0 错误 |
 | S-B2 桌面锁定类型 7 errors＋导入按钮残留 | process.ts 要求 sqlite 配置并固定最小环境；host.ts 删除 managed 分支；BindingConsentPage 删除导入导航；StartupSettings／backend-status 清理 managed 死分支；startup-bridge mode 收紧 | 同一锁定 tsc 0 错误；源码检索无 `navigate('import')`／ImportController |
-| S-B3 旧 helper 无 sqlite 调用 | contact-context-support helper 明确装配受控 SQLite；python-retirement-host 移入 historical 登记并删除当前树文件；修复 launch 对 businessHome 的过度相等校验（真实宿主允许 userData 子目录） | `run-current` 实跑无 `backend_launch_requires_sqlite` 残留失败；sqlite-history-startup-host 3 项恢复通过 |
+| S-B3 旧 helper 无 sqlite 调用 | contact-context-support helper 明确装配受控 SQLite；python-retirement-host 移入 historical 登记并删除当前树文件；修复 launch 对 businessHome 的过度相等校验（真实宿主允许 userData 子目录） | `run-current` 实跑：本树 vs 15ac355a 基线无新增失败文件；无 `backend_launch_requires_sqlite` 残留；sqlite-history-startup-host 3 项恢复通过 |
 | S1 结构审计未锁 CHECK／trigger body／FK action | 基线改为归一化完整 SQL＋完整 PRAGMA 导出（列默认值、FK action、索引 SQL、92 触发器 body、视图），提交生成脚本与复现命令；反例扩展到 5 类 | `sqlite-cutover-structure.test.mjs` 4/4；基线 metadata 252 CHECK／92 trigger／814 字段／173 FK 组 |
 | S2 77/778/215/115 disposition 未落提交 | 提交 `logical-catalog.json`（77／778／215，67 实现／9 暂缓／1 替代）与 `legacy-disposition.json`（115 项、0 未分类）＋生成脚本；审计测试断言计数与落点；verification 引用原始工件 | `sqlite-cutover-audit.test.mjs` 2/2 |
 | S3 synthetic 授权可删真实根 | `allowSyntheticAuthorization` 仅在系统临时根下的隔离 userData 由桌面探针传入；真实根必须 `confirmed_local`，否则 blocked 且不删除 | rehearsal「synthetic 授权不得清理非隔离根；真实根必须 confirmed_local」通过 |
