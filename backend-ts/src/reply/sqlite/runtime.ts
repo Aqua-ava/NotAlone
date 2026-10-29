@@ -17,7 +17,7 @@ function fail(code:string):never{throw new StorageFailure(code);}
 const same=(a:ManagedAddress,b:ManagedAddress)=>JSON.stringify(a)===JSON.stringify(b);
 /** 每副本独占所有者；所有文件操作均在SQLite短事务外进行。 */
 export class SqliteDiscussionRuntime {
- private readonly storage:SqliteStorage;private readonly ownerId:string;private readonly userData:string;private readonly ctx:Context;private readonly holders:ActiveHolders;private readonly files:ManagedFiles;private readonly held=new Map<string,HeldCopy>();private stopping=false;private readonly fault?:Fault;
+ private readonly storage:SqliteStorage;private readonly ownerId:string;private readonly userData:string;private readonly ctx:Context;private readonly holders:ActiveHolders;private readonly files:ManagedFiles;private readonly held=new Map<string,HeldCopy>();private stopping=false;private readonly pending=new Set<Promise<unknown>>();private closing?:Promise<void>;private readonly fault?:Fault;
  constructor(options:{storage:SqliteStorage;ownerId:string;userData:string;ctx:Context;holders:ActiveHolders;fault?:Fault}){this.storage=options.storage;this.ownerId=options.ownerId;this.userData=options.userData;this.ctx=options.ctx;this.holders=options.holders;this.files=new ManagedFiles(options.userData);this.fault=options.fault;}
  private location(copy:RuntimeCopy){return path.join(this.userData,'managed/runtime-copies',copy.managedLocator);}
  private execute<T=any>(name:string,copy:RuntimeCopy,input:object={}):Promise<T>{return this.storage.execute(`runtime.${name}`,{ownerId:this.ownerId,contactId:copy.contactId,discussionId:copy.discussionId,copyId:copy.id,...input});}
@@ -38,7 +38,7 @@ export class SqliteDiscussionRuntime {
    const marker=await lstat(path.join(this.location(copy),'.notalone-copy'),{bigint:true});
    if(!marker.isFile()||marker.isSymbolicLink()||marker.nlink!==1n||marker.uid!==BigInt(process.getuid!())||(marker.mode&0o077n)!==0n||await readFile(path.join(this.location(copy),'.notalone-copy'),'utf8')!==this.marker(copy))fail('discussion_runtime_identity_conflict');
   }
-  if(!copy.address||copy.state==='preparing')copy=await this.execute<RuntimeCopy>('attach',copy,{address:actual});
+  if(!copy.address||copy.state==='preparing')copy=await this.execute<RuntimeCopy>('attach',copy,{address:actual,cleanupOnly:true});
   const manifest:ManagedAddress[]=[];
   const walk=async(locator:string)=>{
    const root=this.files.capture('runtime',locator,'directory');manifest.push(root);
@@ -61,11 +61,18 @@ export class SqliteDiscussionRuntime {
   }});
   this.held.set(copy.id,held);return held;
  }
- async inspect(contactId:string,discussionId:string,copyId:string,configurationDigest:string):Promise<{copy:RuntimeCopy;boundary:DshEventBoundary}>{
+ private track<T>(work:()=>Promise<T>):Promise<T>{
+  if(this.stopping)return Promise.reject(new StorageFailure('discussion_runtime_closed'));
+  const pending=work();this.pending.add(pending);pending.then(()=>this.pending.delete(pending),()=>this.pending.delete(pending));return pending;
+ }
+ inspect(contactId:string,discussionId:string,copyId:string,configurationDigest:string){return this.track(()=>this.inspectOwned(contactId,discussionId,copyId,configurationDigest));}
+ run<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal):Promise<T>{return this.track(()=>this.runOwned(attempt,configurationDigest,work,signal));}
+ private async inspectOwned(contactId:string,discussionId:string,copyId:string,configurationDigest:string):Promise<{copy:RuntimeCopy;boundary:DshEventBoundary}>{
   if(this.stopping)fail('discussion_runtime_closed');
   const copy=await this.storage.execute<RuntimeCopy>('runtime.inspect',{ownerId:this.ownerId,contactId,discussionId,copyId});
   if(copy.state!=='ready'||copy.configurationDigest!==configurationDigest||!copy.address||!copy.eventBoundary)fail('discussion_runtime_recovery_blocked');
   if(!same(this.files.capture('runtime',copy.managedLocator,'directory'),copy.address))fail('discussion_runtime_identity_conflict');
+  if(this.stopping)fail('discussion_runtime_closed');
   if(this.stopping)fail('discussion_runtime_closed');
   const held=this.bind(copy);if(held.busy)fail('discussion_runtime_busy');held.busy=true;
   const done=Promise.withResolvers<void>();held.workDone=done.promise;held.finish=done.resolve;
@@ -76,9 +83,9 @@ export class SqliteDiscussionRuntime {
    await this.execute('inspect',copy);return {copy,boundary:history.boundary};
   }finally{done.resolve();await held.release();}
  }
- async run<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal):Promise<T>{
+ private async runOwned<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal):Promise<T>{
   if(this.stopping)fail('discussion_runtime_closed');signal?.throwIfAborted();
-  const discussion=await this.storage.execute<any>('discussion.view',attempt);
+  const discussion=await this.storage.execute<any>('discussion.view',attempt);if(this.stopping)fail('discussion_runtime_closed');
   let copy:RuntimeCopy|undefined;
   if(discussion.discussion.currentRuntimeId){
    try{
@@ -91,6 +98,7 @@ export class SqliteDiscussionRuntime {
   }
   let restoring=!!copy;
   if(!copy){const id=randomUUID();copy=await this.storage.execute<RuntimeCopy>('runtime.prepare',{...attempt,copyId:id,sdkInstanceId:randomUUID(),locator:id,configurationDigest});}
+  if(this.stopping)fail('discussion_runtime_closed');
   const held=this.bind(copy);if(held.busy)fail('discussion_runtime_busy');held.busy=true;const done=Promise.withResolvers<void>();held.workDone=done.promise;held.finish=done.resolve;
   const combined=signal?AbortSignal.any([signal,held.controller.signal]):held.controller.signal;
   let result!:T,boundary:DshEventBoundary|undefined,succeeded=false;
@@ -104,7 +112,7 @@ export class SqliteDiscussionRuntime {
     if(!same(this.files.capture('runtime',copy.managedLocator,'directory'),createdAddress))fail('discussion_runtime_identity_conflict');
     const marker=path.join(this.location(copy),'.notalone-copy');await writeFile(marker,this.marker(copy),{flag:'wx',mode:0o600});const fd=await open(marker,'r');try{await fd.sync();}finally{await fd.close();}
     await this.syncDirectory(this.location(copy));await this.syncDirectory(path.dirname(this.location(copy)));await this.fault?.('beforeIdentity');
-    copy=await this.execute<RuntimeCopy>('attach',copy,{address:this.files.capture('runtime',copy.managedLocator,'directory')});held.copy=copy;await this.fault?.('afterIdentity');
+    copy=await this.execute<RuntimeCopy>('attach',copy,{...attempt,address:this.files.capture('runtime',copy.managedLocator,'directory')});held.copy=copy;await this.fault?.('afterIdentity');
    }
    combined.throwIfAborted();await this.execute('inspect',copy);
    held.driver=await createDshRuntime(this.ctx,{root:this.location(copy)});
@@ -118,5 +126,8 @@ export class SqliteDiscussionRuntime {
   if(succeeded){await this.fault?.('beforeReady');await this.execute('ready',copy,{...attempt,eventBoundary:JSON.stringify(boundary),configurationDigest});}
   return result;
  }
- async close():Promise<void>{this.stopping=true;await Promise.all([...this.held.values()].map(held=>held.release()));}
+ close():Promise<void>{
+  this.stopping=true;for(const held of this.held.values())held.controller.abort();
+  return this.closing??=(async()=>{await Promise.allSettled([...this.pending]);await Promise.all([...this.held.values()].map(held=>held.release()));})().catch(error=>{this.closing=undefined;throw error;});
+ }
 }

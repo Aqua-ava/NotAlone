@@ -3,7 +3,7 @@ import {StorageFailure,type StorageAction,type StorageRow,type StorageTransactio
 import {requireSkillRun} from '../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requestAllowed} from '../../storage/sqlite/deletion/actions.ts';
-import {requireDiscussion,requireDiscussionContact,identifier,discussionView} from './actions.ts';
+import {requireDiscussion,requireDiscussionContact,identifier,discussionView,selectDiscussionForRequest} from './actions.ts';
 import type {DiscussionAttempt} from './contracts.ts';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 export const encode=(v:unknown)=>JSON.stringify(v,(_key,value)=>typeof value==='bigint'?{$integer:String(value)}:value);
@@ -26,9 +26,10 @@ function requireIdentity(tx:StorageTransaction,ownerId:string,contactId:string,r
  }else fail('discussion_identity_required');
 }
 export function requireAttempt(tx:StorageTransaction,i:DiscussionAttempt,committed=false):StorageRow{
+ const instance=tx.get('SELECT runtime_id,epoch FROM database_instance WHERE slot=1')!;
  const d=requireDiscussion(tx,i),c=requireDiscussionContact(tx,i.ownerId,i.contactId);
  const row=tx.get(`SELECT a.*,r.discussion_id,r.contact_id,r.state request_state,r.request_key,r.identity_origin,r.confirmation_id,r.binding_id,r.verification_id FROM reply_attempt a JOIN reply_request r ON r.owner_id=a.owner_id AND r.id=a.request_id WHERE a.owner_id=? AND a.id=? AND r.contact_id=? AND r.discussion_id=?`,[i.ownerId,identifier(i.attemptId),i.contactId,i.discussionId])??fail('discussion_request_stale');
- if(row.request_id!==i.requestId||row.lease_token!==i.leaseToken||row.accepted_data_generation!==c.data_generation||row.accepted_discussion_generation!==d.generation||row.accepted_source_revision!==c.source_revision||row.accepted_data_generation!==i.dataGeneration||row.accepted_discussion_generation!==i.discussionGeneration||row.accepted_source_revision!==i.sourceRevision
+ if(row.accepted_runtime_id!==instance.runtime_id||row.accepted_storage_epoch!==instance.epoch||row.request_id!==i.requestId||row.lease_token!==i.leaseToken||row.accepted_data_generation!==c.data_generation||row.accepted_discussion_generation!==d.generation||row.accepted_source_revision!==c.source_revision||row.accepted_data_generation!==i.dataGeneration||row.accepted_discussion_generation!==i.discussionGeneration||row.accepted_source_revision!==i.sourceRevision
  || !(row.state==='running'&&row.request_state==='running'||committed&&row.state==='committed'&&row.request_state==='committed'))fail('discussion_request_stale');
  requireIdentity(tx,i.ownerId,i.contactId,String(row.request_key),row.identity_origin==='manual'?{kind:'manual',confirmationId:row.confirmation_id}:{kind:'binding',bindingId:row.binding_id,verificationId:row.verification_id},c.data_generation as bigint);
  return row;
@@ -48,20 +49,14 @@ export const discussionRequestActions:StorageAction[]=[
    return {attempt:attemptView(a,old),replayed:true,segmented:false};
   }
   if(tx.get("SELECT 1 FROM model_operation o JOIN reply_request r ON r.owner_id=o.owner_id AND r.id=o.reply_request_id WHERE r.owner_id=? AND r.contact_id=? AND o.state='unknown' AND o.commit_forbidden_at IS NULL",[i.ownerId,i.contactId]))fail('discussion_call_unknown');
-  let d=tx.get("SELECT * FROM assistant_discussion WHERE owner_id=? AND contact_id=? AND state='active' AND is_current=1",[i.ownerId,i.contactId]);
-  const segmented=!!d&&BigInt(i.at)-(d.last_activity_at as bigint)>43_200_000n;
-  if(!d||segmented){
-   tx.run('UPDATE assistant_discussion SET is_current=0 WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId]);
-   tx.run("INSERT INTO assistant_discussion(owner_id,id,contact_id,state,is_current,created_at,last_activity_at) VALUES(?,?,?,'active',1,?,?)",[i.ownerId,i.discussionId,i.contactId,i.at,i.at]);
-   d=requireDiscussion(tx,i);
-  }
+  const selected=selectDiscussionForRequest(tx,{...i,id:i.discussionId}),d=selected.row,segmented=selected.segmented;
   const contact=requireDiscussionContact(tx,i.ownerId,i.contactId);
   const proof=i.identity;
   requireIdentity(tx,i.ownerId,i.contactId,i.requestKey,proof,contact.data_generation as bigint);
   tx.run("INSERT INTO reply_request VALUES(?,?,?,?,?,?,'discussion',?,?,?,?,'running')",[i.ownerId,i.requestId,i.contactId,d.id,i.requestKey,i.entryId,proof.kind,proof.kind==='binding'?proof.bindingId:null,proof.kind==='binding'?proof.verificationId:null,proof.kind==='manual'?proof.confirmationId:null]);
   const pos=tx.get('SELECT COALESCE(MAX(position),0)+1 n FROM discussion_entry WHERE owner_id=? AND discussion_id=?',[i.ownerId,d.id])!.n;
   tx.run("INSERT INTO discussion_entry(owner_id,id,contact_id,discussion_id,position,role,body,origin_request_id,content_state) VALUES(?,?,?,?,?,'user',?,?,'available')",[i.ownerId,i.entryId,i.contactId,d.id,pos,i.text,i.requestId]);
-  tx.run("INSERT INTO reply_attempt(owner_id,id,request_id,attempt_no,state,lease_token,accepted_data_generation,accepted_discussion_generation,accepted_source_revision,started_at) VALUES(?,?,?,1,'running',?,?,?,?,?)",[i.ownerId,i.attemptId,i.requestId,i.leaseToken,contact.data_generation,d.generation,contact.source_revision,i.at]);
+  tx.run("INSERT INTO reply_attempt(owner_id,id,request_id,attempt_no,state,lease_token,accepted_data_generation,accepted_discussion_generation,accepted_source_revision,started_at,accepted_runtime_id,accepted_storage_epoch) VALUES(?,?,?,1,'running',?,?,?,?,?,?,?)",[i.ownerId,i.attemptId,i.requestId,i.leaseToken,contact.data_generation,d.generation,contact.source_revision,i.at,lease.runtimeId,lease.epoch]);
   tx.run('UPDATE assistant_discussion SET last_activity_at=? WHERE owner_id=? AND id=?',[i.at,i.ownerId,d.id]);
   const request=tx.get('SELECT * FROM reply_request WHERE owner_id=? AND id=?',[i.ownerId,i.requestId])!;
   return {attempt:attemptView(tx.get('SELECT * FROM reply_attempt WHERE owner_id=? AND id=?',[i.ownerId,i.attemptId])!,request),discussion:discussionView(d),replayed:false,segmented};

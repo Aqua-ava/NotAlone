@@ -11,6 +11,6 @@ export class SqliteDiscussionService {
  view(contactId:string,discussionId:string){return this.execute('view',{contactId,discussionId});}
  newDiscussion(contactId:string){return this.execute<Discussion>('new',{contactId,id:randomUUID()});}
  forRequest(contactId:string){return this.execute<{discussion:Discussion;segmented:boolean}>('forRequest',{contactId,id:randomUUID()});}
- begin(contactId:string,requestKey:string,text:string,identity:{kind:'manual';confirmationId:string}|{kind:'binding';bindingId:string;verificationId:string}){return this.execute('begin',{contactId,requestKey,text,identity,discussionId:randomUUID(),requestId:randomUUID(),entryId:randomUUID(),attemptId:randomUUID(),leaseToken:randomUUID()});}
+ begin(contactId:string,requestKey:string,text:string,identity:{kind:'manual';confirmationId:string}|{kind:'binding';bindingId:string;verificationId:string},expectedDiscussionId?:string){return this.execute('begin',{contactId,requestKey,text,identity,expectedDiscussionId,discussionId:randomUUID(),requestId:randomUUID(),entryId:randomUUID(),attemptId:randomUUID(),leaseToken:randomUUID()});}
  continueDiscussion(contactId:string,discussionId:string){return this.execute<Discussion>('continue',{contactId,discussionId});}
 }

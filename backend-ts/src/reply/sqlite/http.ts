@@ -44,7 +44,7 @@ export class SqliteDiscussionHttp {
      let recovery='none';
      if(view.discussion.currentRuntimeId){
       recovery='blocked';
-      if(this.runtime&&view.configurationDigest)try{await this.runtime.inspect(contactId,discussionId,view.discussion.currentRuntimeId,view.configurationDigest);recovery='ready';}catch{}
+      if(this.runtime&&this.turns)try{const expected=await this.turns.configurationFor(contactId,discussionId);await this.runtime.inspect(contactId,discussionId,view.discussion.currentRuntimeId,expected);recovery='ready';}catch{}
      }
      view=await this.service.view(contactId,discussionId);
      respond(res,200,{mode:'sqlite',session_id:discussionId,entries:view.entries.map((e:any)=>({entry_id:e.id,position:String(e.position),role:e.role,text:e.body,request_id:e.origin_request_id,call_id:e.origin_call_id,content_state:e.content_state})),runtime_recovery:recovery});

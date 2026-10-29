@@ -18,15 +18,23 @@ const systemPrompt='你是中文关系沟通讨论助手。本次只围绕用户
 export class SqliteDiscussionTurns {
  private readonly storage:SqliteStorage;private readonly discussions:SqliteDiscussionService;private readonly runtime:SqliteDiscussionRuntime;private readonly model:HostReplyModelConfiguration;private readonly provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;private readonly arbiter:ModelPermitArbiter;private readonly library?:SqliteSkillLibrary;private readonly authorize:(contactId:string)=>Promise<void>;
  constructor(options:{storage:SqliteStorage;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>}){this.storage=options.storage;this.discussions=options.discussions;this.runtime=options.runtime;this.model=options.model;this.provider=options.provider;this.arbiter=options.arbiter;this.library=options.library;this.authorize=options.authorize;}
+ private digest(revision:SkillRunRevision):string{return createHash('sha256').update(encode({format:1,systemPrompt,model:this.model,revision})).digest('hex');}
+ async configurationFor(contactId:string,discussionId:string):Promise<string>{
+  const view=await this.discussions.view(contactId,discussionId),last=[...view.entries].reverse().find((e:any)=>e.role==='assistant'&&e.content_state==='available');
+  let selected:string|undefined;
+  if(last){const trace=await this.discussions.trace(contactId,discussionId,last.origin_request_id);const selection=trace.events.find((e:any)=>e.kind==='skill_selection');if(selection)selected=JSON.parse(selection.payload).selected?.packageId;}
+  const catalog=this.library?await this.library.list():await this.storage.execute<any[]>('skills.list',{ownerId:this.discussions.ownerId});
+  const eligible=this.library?catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!selected||p.id===selected)).map(skillAnchor):[];
+  for(const anchor of eligible)await this.library!.assertAnchor(anchor);
+  return this.digest({packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible});
+ }
  async generate(input:{contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;selectedPackageId?:string;contextMessageIds?:string[];signal?:AbortSignal}){
   if(input.confirmedContact!==true)throw new StorageFailure('discussion_identity_required');
   input.signal?.throwIfAborted();await this.authorize(input.contactId);
   // 具名请求是用户明确点击产生；不同于打开App、回看或后台消息事件。
   const ownerId=this.discussions.ownerId;
   const confirmationId=await this.storage.execute<string>('identity.manualConfirm',{ownerId,contactId:input.contactId,contextToken:input.requestKey,id:randomUUID(),at:Date.now()});
-  const current=await this.discussions.list(input.contactId);
-  if(current.currentDiscussionId!==input.discussionId)throw new StorageFailure('discussion_explicit_continue_required');
-  const accepted=await this.discussions.begin(input.contactId,input.requestKey,input.text,{kind:'manual',confirmationId});
+  const accepted=await this.discussions.begin(input.contactId,input.requestKey,input.text,{kind:'manual',confirmationId},input.discussionId);
   const attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {replayed:true,discussionId:attempt.discussionId,segmented:false};
   try{
@@ -43,7 +51,7 @@ export class SqliteDiscussionTurns {
   await this.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:this.model.provider,requestKey:callId,inputSeal});
   const protection=new SqliteDiscussionSkillProtection({storage:this.storage,attempt,contextId,callId,authorize:()=>this.authorize(input.contactId)});
   const skillRun=this.library?await openSqliteSkillRun(this.library,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):null;
-  const configurationDigest=createHash('sha256').update(encode({format:1,systemPrompt,model:this.model,revision})).digest('hex');
+  const configurationDigest=this.digest(revision);
   const background=messages.length?'本次明确引用的聊天资料：\n'+messages.map(m=>`${m.sender_role==='owner'?'我':'对方'}：${m.text_body}`).join('\n')+'\n\n':'';
   const rebuilt=background+entries.map((e:any)=>`${e.role==='user'?'用户':'助手'}：${e.body}`).join('\n\n');
   await runSingleDiscussionTurn({runtime:this.runtime,storage:this.storage,attempt,contextId,callId,configurationDigest,prompt:background+input.text,rebuildPrompt:rebuilt,systemPrompt,model:this.model,provider:this.provider,arbiter:this.arbiter,skillRun,skillProtection:protection,skillRevision:revision,signal:input.signal});

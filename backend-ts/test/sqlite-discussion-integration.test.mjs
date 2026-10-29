@@ -31,7 +31,7 @@ async function fixture(t,options={}){
  const provider=installModelProvider(ctx,{provider:'synthetic-official',connection:resolveAdapterOptions({baseURL:`http://127.0.0.1:${server.address().port}/anthropic`,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
  const model={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}};
  const skillRoot=join(root,'user-skills');await mkdir(skillRoot,{mode:0o700});const holders=new ActiveHolders();let runtime;let service;let turns;let library;
- const bind=async()=>{service=new SqliteDiscussionService(storage,owner);runtime=new SqliteDiscussionRuntime({storage,ownerId:owner,userData:root,ctx,holders,fault:options.fault});await runtime.initialize();library=new SqliteSkillLibrary(storage,owner,skillRoot);turns=new SqliteDiscussionTurns({storage,discussions:service,runtime,library,model,provider,arbiter:new ModelPermitArbiter(),authorize:async()=>{}});};await bind();
+ const bind=async()=>{service=new SqliteDiscussionService(storage,owner,options.clock??Date.now);runtime=new SqliteDiscussionRuntime({storage:options.runtimeStorageHook?{status:storage.status,execute:(...args)=>options.runtimeStorageHook(storage,...args)}:storage,ownerId:owner,userData:root,ctx,holders,fault:options.fault});await runtime.initialize();library=new SqliteSkillLibrary(storage,owner,skillRoot);turns=new SqliteDiscussionTurns({storage,discussions:service,runtime,library,model,provider,arbiter:new ModelPermitArbiter(),authorize:async()=>{}});};await bind();
  t.after(async()=>{try{await runtime.close();}catch(error){if(!options.expectedBlocked)throw error;}await provider.dispose();await ctx.fiber.dispose();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await storage.close();await rm(root,{recursive:true,force:true});});
  return {root,ids,requests,skillRoot,contacts,holders,get service(){return service;},get storage(){return storage;},get runtime(){return runtime;},get turns(){return turns;},get library(){return library;},async reopen(){await runtime.close();const id=storage.status.databaseId;await storage.close();storage=await SqliteStorage.open({userData:root,intent:'open',expectedDatabaseId:id,role:'test',registryModule});await bind();}};
 }
@@ -110,4 +110,47 @@ test('真实调用在途时来源fence先撤旧正文，等待Agent排空后清�
  assert.ok((await f.service.view(f.ids[0],d.id)).entries.every(e=>e.body===null));
  const result=await service.advance(op);release.resolve();const late=await pending;
  assert.equal(result.state,'completed',JSON.stringify(result.checks));assert.ok(late.error);assert.equal((await f.service.view(f.ids[0],d.id)).entries.length,0);assert.deepEqual(await f.storage.execute('runtime.inventory',{ownerId:owner}),[]);assert.equal(f.requests.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('关闭等待尚未登记holder的真实SQLite获取阶段，返回后不再创建目录或模型调用',async t=>{
+ const entered=Promise.withResolvers(),release=Promise.withResolvers();let gated=false;
+ const f=await fixture(t,{runtimeStorageHook:async(storage,name,input,...args)=>{const result=await storage.execute(name,input,...args);if(name==='discussion.view'&&!gated){gated=true;entered.resolve();await release.promise;}return result;}});
+ const d=await f.service.newDiscussion(f.ids[0]);const pending=f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'关闭获取阶段合成要求',confirmedContact:true}).then(()=>({ok:true}),error=>({error}));
+ await entered.promise;let closed=false;const closing=f.runtime.close().then(()=>{closed=true;});await new Promise(resolve=>setImmediate(resolve));assert.equal(closed,false);
+ release.resolve();await closing;const result=await pending;assert.ok(result.error);assert.equal(f.requests.length,0);assert.deepEqual(await f.storage.execute('runtime.inventory',{ownerId:owner}),[]);
+});
+
+test('旧preparing仅恢复清理身份，关闭不能覆盖新ready副本的current指针',async t=>{
+ const f=await fixture(t);const d=await f.service.newDiscussion(f.ids[0]),key=randomUUID();
+ const confirmationId=await f.contacts.manualConfirm(f.ids[0],key);const a=(await f.service.begin(f.ids[0],key,'崩溃前的合成要求',{kind:'manual',confirmationId})).attempt;
+ const copyId=randomUUID(),sdkInstanceId=randomUUID(),configurationDigest='a'.repeat(64);const copy=await f.storage.execute('runtime.prepare',{...a,copyId,sdkInstanceId,locator:copyId,configurationDigest});
+ const dir=join(f.root,'managed/runtime-copies',copyId);await mkdir(dir,{mode:0o700});await writeFile(join(dir,'.notalone-copy'),JSON.stringify({format:1,databaseId:f.storage.status.databaseId,copyId,sessionId:sdkInstanceId,contactId:f.ids[0],discussionId:d.id,writeGeneration:String(copy.writeGeneration)}),{mode:0o600});
+ await f.reopen();await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'重开后的新合成要求',confirmedContact:true});const fresh=(await f.service.view(f.ids[0],d.id)).discussion.currentRuntimeId;assert.notEqual(fresh,copyId);
+ await f.runtime.close();assert.equal((await f.service.view(f.ids[0],d.id)).discussion.currentRuntimeId,fresh);assert.equal((await f.storage.execute('runtime.inventory',{ownerId:owner})).find(c=>c.id===copyId).state,'blocked');assert.equal(f.requests.length,1);
+});
+
+test('正常HTTP核验当前配置后区分真实ready与资格变化后的恢复受阻',async t=>{
+ const {SqliteDiscussionHttp}=await import('../src/reply/sqlite/http.ts');const f=await fixture(t);const d=await f.service.newDiscussion(f.ids[0]);await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'恢复可用状态合成要求',confirmedContact:true});
+ const http=new SqliteDiscussionHttp(f.service,()=>true,f.runtime,f.turns);const server=createServer((req,res)=>http.handle(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));const url=`http://127.0.0.1:${server.address().port}/api/contacts/${f.ids[0]}/assistant-sessions/${d.id}`;
+ assert.equal((await (await fetch(url)).json()).runtime_recovery,'ready');
+ await mkdir(join(f.skillRoot,'changed'),{mode:0o700});await writeFile(join(f.skillRoot,'changed/SKILL.md'),'---\nname: changed\ndescription: 合成新方法\n---\n只用于资格改变的合成方法。\n',{mode:0o600});await f.library.discover('changed');assert.equal((await (await fetch(url)).json()).runtime_recovery,'blocked');assert.equal(f.requests.length,1);
+});
+
+test('十二小时分段或显式换段后，同原URL及请求键重送仍回原请求而不重发模型',async t=>{
+ let now=1000;const f=await fixture(t,{clock:()=>now});const d=await f.service.newDiscussion(f.ids[0]);now+=43_200_001;
+ const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'跨十二小时的合成请求',confirmedContact:true};const first=await f.turns.generate(input);assert.equal(first.segmented,true);assert.notEqual(first.discussionId,d.id);
+ const repeated=await f.turns.generate(input);assert.equal(repeated.replayed,true);assert.equal(repeated.discussionId,first.discussionId);assert.equal(f.requests.length,1);
+ await f.service.newDiscussion(f.ids[0]);assert.equal((await f.turns.generate(input)).discussionId,first.discussionId);assert.equal(f.requests.length,1);
+});
+
+test('真实source清理包含尚无runtime_context的准备副本及目录，解除真实attempt外键后完成',async t=>{
+ const entered=Promise.withResolvers(),release=Promise.withResolvers();const f=await fixture(t,{fault:async point=>{if(point==='beforeIdentity'){entered.resolve();await release.promise;}}}),message=await sourceMessage(f);const d=await f.service.newDiscussion(f.ids[0]);
+ const pending=f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'准备阶段带来源的合成要求',confirmedContact:true,contextMessageIds:[message.id]}).then(()=>({ok:true}),error=>({error}));
+ await entered.promise;const copies=await f.storage.execute('runtime.inventory',{ownerId:owner});assert.equal(copies[0].state,'preparing');const service=await deletion(f),op=await service.plan({ownerId:owner,requestKey:randomUUID(),scope:{kind:'source',contactId:f.ids[0],sourceId:message.sourceRecordIds[0]}});
+ const advancing=service.advance(op);release.resolve();const done=await advancing;assert.ok((await pending).error);assert.equal(done.state,'completed',JSON.stringify(done.checks));await assert.rejects(access(join(f.root,'managed/runtime-copies',copies[0].managedLocator)),{code:'ENOENT'});assert.deepEqual(await f.storage.execute('runtime.inventory',{ownerId:owner}),[]);assert.equal(f.requests.length,0);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('存储重开后旧业务attempt租约不可再冻结输入或创建副本',async t=>{
+ const f=await fixture(t),d=await f.service.newDiscussion(f.ids[0]),key=randomUUID();const confirmationId=await f.contacts.manualConfirm(f.ids[0],key);const a=(await f.service.begin(f.ids[0],key,'旧实例合成要求',{kind:'manual',confirmationId})).attempt;await f.reopen();
+ await assert.rejects(f.storage.execute('discussion.freezeContext',{...a,contextId:randomUUID(),skillRun:{packages:[],eligible:[]},items:[],at:Date.now()}),{code:'discussion_request_stale'});const id=randomUUID();await assert.rejects(f.storage.execute('runtime.prepare',{...a,copyId:id,sdkInstanceId:randomUUID(),locator:id,configurationDigest:'a'.repeat(64)}),{code:'discussion_request_stale'});assert.equal(f.requests.length,0);
 });

@@ -44,6 +44,8 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure{
  const items=tx.all('SELECT * FROM reply_context_item WHERE owner_id=?',[op.ownerId]);
  const entries=tx.all('SELECT id,origin_request_id FROM discussion_entry WHERE owner_id=?',[op.ownerId]);
  const incorporations=tx.all('SELECT * FROM runtime_context WHERE owner_id=?',[op.ownerId]);
+ const attempts=tx.all('SELECT id,request_id FROM reply_attempt WHERE owner_id=?',[op.ownerId]);
+ const preparing=tx.all("SELECT id,preparing_attempt_id FROM runtime_copy WHERE owner_id=? AND state<>'deleted'",[op.ownerId]);
  if(wholeDiscussion(op.scope)){
   for(const c of contexts)if(ds.has(String(c.discussion_id)))result.contexts.add(String(c.id));
   for(const r of requests)if(ds.has(String(r.discussion_id)))result.requests.add(String(r.id));
@@ -61,6 +63,8 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure{
   const count=result.contexts.size+result.requests.size+result.copies.size;
   for(const c of contexts)if(result.contexts.has(String(c.id))&&c.request_id!==null)result.requests.add(String(c.request_id));
   for(const c of contexts)if(c.request_id!==null&&result.requests.has(String(c.request_id)))result.contexts.add(String(c.id));
+  const affectedAttempts=new Set(attempts.filter(a=>result.requests.has(String(a.request_id))).map(a=>String(a.id)));
+  for(const copy of preparing)if(copy.preparing_attempt_id!==null&&affectedAttempts.has(String(copy.preparing_attempt_id)))result.copies.add(String(copy.id));
   const affectedEntries=new Set(entries.filter(e=>result.requests.has(String(e.origin_request_id))).map(e=>String(e.id)));
   for(const item of items)if(item.kind==='entry'&&affectedEntries.has(String(item.entry_id)))result.contexts.add(String(item.context_id));
   for(const i of incorporations)if(result.contexts.has(String(i.context_id))){
@@ -170,7 +174,7 @@ export const discussionDeletionDomain:DeletionDomain={
   for(const c of copies(tx,op)){
    if(c.cleanup_operation_id!==null&&c.cleanup_operation_id!==op.operationId)fail('discussion_runtime_cleanup_conflict');
    tx.run("UPDATE assistant_discussion SET current_runtime_id=NULL WHERE owner_id=? AND current_runtime_id=?",[op.ownerId,c.id]);
-   tx.run("UPDATE runtime_copy SET state='deleting',cleanup_operation_id=?,committed_request_id=NULL,committed_event_boundary=NULL,configuration_digest=NULL WHERE owner_id=? AND id=?",[op.operationId,op.ownerId,c.id]);
+   tx.run("UPDATE runtime_copy SET state='deleting',cleanup_operation_id=?,committed_request_id=NULL,committed_event_boundary=NULL,configuration_digest=NULL,preparing_attempt_id=NULL WHERE owner_id=? AND id=?",[op.operationId,op.ownerId,c.id]);
    tx.run("UPDATE runtime_context SET provenance_state='invalidated' WHERE owner_id=? AND copy_id=?",[op.ownerId,c.id]);
   }
   return invalidated;

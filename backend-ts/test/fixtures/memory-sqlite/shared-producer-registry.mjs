@@ -6,7 +6,7 @@ function reply(tx,owner,contact,message,record){
  tx.run("INSERT INTO assistant_discussion(owner_id,id,contact_id,title,state,created_at,last_activity_at) VALUES(?,?,?,NULL,'active',1,1)",[owner,id,contact]);
  tx.run("INSERT INTO reply_request(owner_id,id,contact_id,discussion_id,request_key,trigger_entry_id,kind,identity_origin,binding_id,verification_id,state) VALUES(?,?,?,?,?,?,'discussion','binding',?,?,'accepted')",[owner,request,contact,id,randomUUID(),entry,grant.binding_id,grant.verification_id]);
  tx.run("INSERT INTO discussion_entry VALUES(?,?,?,?,1,'user','合成请求',?,NULL,NULL,'available')",[owner,entry,contact,id,request]);
- tx.run("INSERT INTO reply_attempt VALUES(?,?,?,1,'running',?,0,0,0,1,NULL,NULL)",[owner,attempt,request,randomUUID()]);
+ tx.run("INSERT INTO reply_attempt(owner_id,id,request_id,attempt_no,state,lease_token,accepted_data_generation,accepted_discussion_generation,accepted_source_revision,started_at,finished_at,error_code) VALUES(?,?,?,1,'running',?,0,0,0,1,NULL,NULL)",[owner,attempt,request,randomUUID()]);
  tx.run("INSERT INTO reply_context VALUES(?,?,?,?,'request',?,?,0,0,0,0,'{}',1,'active')",[owner,context,contact,id,attempt,request]);
  tx.run("INSERT INTO reply_context_item VALUES(?,?,1,'message','context',1,?,?,?,1,NULL,NULL,NULL)",[owner,context,contact,message,record]);
  tx.run("INSERT INTO reply_context_item VALUES(?,?,2,'entry','context',2,NULL,NULL,NULL,NULL,?,NULL,NULL)",[owner,context,entry]);

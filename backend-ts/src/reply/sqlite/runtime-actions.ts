@@ -34,13 +34,14 @@ export const runtimeActions:StorageAction[]=[
   requireAttempt(tx,i);const d=requireDiscussion(tx,i),c=requireDiscussionContact(tx,i.ownerId,i.contactId);
   identifier(i.copyId);identifier(i.sdkInstanceId);
   if(i.locator!==i.copyId||!/^[a-f0-9]{64}$/.test(i.configurationDigest))fail('discussion_input_invalid');
-  tx.run(`INSERT INTO runtime_copy(owner_id,id,contact_id,discussion_id,sdk_instance_id,managed_locator,write_generation,accepted_data_generation,source_revision,state,configuration_digest) VALUES(?,?,?,?,?,?,?,?,?,'preparing',?)`,[i.ownerId,i.copyId,i.contactId,i.discussionId,i.sdkInstanceId,i.locator,d.generation,c.data_generation,c.source_revision,i.configurationDigest]);
+  tx.run(`INSERT INTO runtime_copy(owner_id,id,contact_id,discussion_id,sdk_instance_id,managed_locator,write_generation,accepted_data_generation,source_revision,state,configuration_digest,preparing_attempt_id) VALUES(?,?,?,?,?,?,?,?,?,'preparing',?,?)`,[i.ownerId,i.copyId,i.contactId,i.discussionId,i.sdkInstanceId,i.locator,d.generation,c.data_generation,c.source_revision,i.configurationDigest,i.attemptId]);
   return runtimeView(copy(tx,i));
  }),
  action('attach','write',(tx,i)=>{
   const row=copy(tx,i);address(i.address,row,true);
   if(row.address_json!==null&&row.address_json!==JSON.stringify(i.address))fail('discussion_runtime_identity_conflict');
-  if(row.state==='preparing'){requireRuntimeCurrent(tx,i);tx.run("UPDATE runtime_copy SET address_json=?,state='dirty' WHERE owner_id=? AND id=?",[JSON.stringify(i.address),i.ownerId,i.copyId]);tx.run('UPDATE assistant_discussion SET current_runtime_id=? WHERE owner_id=? AND id=?',[i.copyId,i.ownerId,i.discussionId]);}
+  if(row.state==='preparing'&&i.cleanupOnly===true){tx.run("UPDATE runtime_copy SET address_json=?,state='blocked' WHERE owner_id=? AND id=?",[JSON.stringify(i.address),i.ownerId,i.copyId]);}
+  else if(row.state==='preparing'){requireAttempt(tx,i);if(row.preparing_attempt_id!==i.attemptId)fail('discussion_runtime_preparation_stale');requireRuntimeCurrent(tx,i);tx.run("UPDATE runtime_copy SET address_json=?,state='dirty' WHERE owner_id=? AND id=?",[JSON.stringify(i.address),i.ownerId,i.copyId]);tx.run('UPDATE assistant_discussion SET current_runtime_id=? WHERE owner_id=? AND id=?',[i.copyId,i.ownerId,i.discussionId]);}
   else if(['deleting','blocked'].includes(String(row.state)))tx.run('UPDATE runtime_copy SET address_json=? WHERE owner_id=? AND id=?',[JSON.stringify(i.address),i.ownerId,i.copyId]);
   else fail('discussion_runtime_state_conflict');
   return runtimeView(copy(tx,i));
