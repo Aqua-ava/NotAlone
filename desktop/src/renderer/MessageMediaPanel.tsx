@@ -86,8 +86,9 @@ function MediaDetails({bridge,selection}:{bridge:MessageMediaBridge;selection:Me
     {state.busy==='clear'&&<p role="status">正在核对清理，请等待文件和活动引用复核完成。</p>}
     {snapshot&&<>
       <p role="status">{resultLabel(snapshot)}</p>
+      {snapshot.requestedAttempt&&<p role="status">本次请求：{stateLabels[snapshot.requestedAttempt.state]}</p>}
       {snapshot.files.length>0&&snapshot.latestAttempt&&['failed','interrupted','revoked'].includes(snapshot.latestAttempt.state)&&<p className="rewrite-privacy">以下是先前合法保存的文件，本次操作未发布新结果。</p>}
-      {snapshot.latestAttempt?.errorCode&&<p className="rewrite-privacy">{snapshot.latestAttempt.errorCode==='media_space_insufficient'?'本次空间不足，已停止新增写入。请清理本机空间；先前合法保存的媒体仍保留。':'本次处理有未完成步骤，请根据文件状态核对结果。'}</p>}
+      {snapshot.latestAttempt?.errorCode&&<p className="rewrite-privacy">{snapshot.latestAttempt.errorCode==='media_resource_too_large'?'文件超过当前单文件32MiB上限，本次未保存；已有文件保留。':snapshot.latestAttempt.errorCode==='media_space_insufficient'?'本次空间不足，已停止新增写入。请清理本机空间；先前合法保存的媒体仍保留。':'本次处理有未完成步骤，请根据文件状态核对结果。'}</p>}
       {snapshot.cleanup&&snapshot.cleanup.state!=='completed'&&<p role="status">{snapshot.cleanup.state==='blocked'?'清理尚未完成，可继续原清理操作。':'文件清理尚在复核中。'}</p>}
       {snapshot.files.length>0&&<ul className="message-media-files">{snapshot.files.map(file=><li key={file.fileId}>
         <span><span>{file.role==='image_display'?(file.imageQuality==='original'?'原图':file.imageQuality==='thumbnail'?'缩略图，原图未取得':'图片质量未核验'):

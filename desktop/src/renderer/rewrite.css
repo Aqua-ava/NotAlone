@@ -69,3 +69,11 @@
 .workspace-message-list .reply-message small { display: block; }
 .candidate-reason > small { color: #54728a; font-weight: 600; }
 .candidate-reason .reply-basis { margin-top: 6px; }
+
+/* 单条媒体操作置于消息选择区下方，避免label包含按钮或播放控件。 */
+.workspace-message-list .workspace-message-row { flex-direction: column; align-items: stretch; }
+.reply-message-selection { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.reply-message-selection > span { min-width: 0; flex: 1; }
+.message-media-panel { min-width: 0; width: 100%; overflow-wrap: anywhere; }
+.message-media-panel img, .message-media-panel video { max-width: 100%; max-height: 280px; object-fit: contain; }
+.message-media-panel audio { width: 100%; }

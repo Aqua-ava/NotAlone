@@ -16,7 +16,7 @@ export class SqliteMediaService {
  readonly holders:ActiveHolders;
  readonly files:MediaFiles;
  readonly deletion:DeletionService;
- private readonly active=new Map<string,{controller:AbortController;done:Promise<void>;contactId:string}>();
+ private readonly active=new Map<string,{controller:AbortController;done:Promise<void>;contactId:string;goal:MediaGoal}>();
  private readonly previews=new Map<string,PreviewSession>();
  private readonly openings=new Set<Promise<MediaPreview>>();
  private readonly operations=new Set<Promise<unknown>>();
@@ -54,7 +54,7 @@ export class SqliteMediaService {
   const handle:AttemptHandle={...scope,attemptId:begin.attemptId,leaseToken:begin.leaseToken!};
   const controller=new AbortController();const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
   let settle!:()=>void;const done=new Promise<void>(resolve=>{settle=resolve;});
-  this.active.set(begin.attemptId,{controller,done,contactId});let release:(()=>Promise<void>)|undefined;let failure:unknown;const savedFiles:{address:ManagedAddress;bytes:number;digest:string}[]=[];const saves:Promise<{fileId:string}>[]=[];let acceptingSaves=true;
+  this.active.set(begin.attemptId,{controller,done,contactId,goal:input.goal});let release:(()=>Promise<void>)|undefined;let failure:unknown;const savedFiles:{address:ManagedAddress;bytes:number;digest:string}[]=[];const saves:Promise<{fileId:string}>[]=[];let acceptingSaves=true;
   const checkpoint=async()=>{if(this.closed||controller.signal.aborted)throw new StorageFailure('media_interrupted');await this.options.storage.execute('media.check',handle);};
   const saveFile=async(file:MediaFileInput):Promise<{fileId:string}>=>{
      await checkpoint();const allocated=await this.options.storage.execute<{fileId:string;locator:string}>('media.allocate',{...handle,role:file.role,parentFileId:file.parentFileId});
@@ -70,8 +70,7 @@ export class SqliteMediaService {
 
   };
   const trackedSave=(file:MediaFileInput):Promise<{fileId:string}>=>{
-   if(!acceptingSaves)return Promise.reject(new StorageFailure('media_adapter_finished'));
-   const saving=saveFile(file);saves.push(saving);void saving.catch(()=>{});return saving;
+   const saving=acceptingSaves?saveFile(file):Promise.reject(new StorageFailure('media_adapter_finished'));saves.push(saving);void saving.catch(()=>{});return saving;
   };
   try{
    release=this.holders.register({key:`mediaAttempt:${begin.attemptId}`,ownerId:this.ownerId,contactId,generation:BigInt(begin.dataGeneration),close:async()=>{controller.abort();await done;}});
@@ -109,7 +108,8 @@ export class SqliteMediaService {
   try{await probe;}finally{this.probes.delete(fileId);}
  }
  private async inspectFile(contactId:string,messageId:string,fileId:string):Promise<void>{
-  const scope={ownerId:this.ownerId,contactId,messageId,fileId};const file=await this.options.storage.execute<FileReference>('media.file',scope);
+  const scope={ownerId:this.ownerId,contactId,messageId,fileId};let file:FileReference;
+  try{file=await this.options.storage.execute<FileReference>('media.file',scope);}catch(error){if(error instanceof StorageFailure&&error.code==='media_file_not_found')return;throw error;}
   let settle!:()=>void;const done=new Promise<void>(resolve=>{settle=resolve;});
   const release=this.holders.register({key:`mediaProbe:${fileId}`,ownerId:this.ownerId,contactId,generation:BigInt(file.dataGeneration),close:()=>done});
   try{
@@ -136,7 +136,7 @@ export class SqliteMediaService {
  }
  previewStatus(sessionId:string):{state:'active'|'revoking'}{const session=this.previews.get(sessionId);if(!session)throw new StorageFailure('media_preview_not_found');return {state:session.state};}
  async releasePreview(sessionId:string):Promise<void>{const session=this.previews.get(sessionId);if(!session)return;session.ack();await session.release();this.previews.delete(sessionId);}
- async stop(contactId?:string):Promise<void>{const entries=[...this.active.values()].filter(e=>!contactId||e.contactId===contactId);for(const e of entries)e.controller.abort();await Promise.all(entries.map(e=>e.done));}
+ async stop(contactId?:string,mode:'all'|'wechat'='all'):Promise<void>{const entries=[...this.active.values()].filter(e=>(!contactId||e.contactId===contactId)&&(mode==='all'||e.goal!=='audio_conversion'));for(const e of entries)e.controller.abort();await Promise.all(entries.map(e=>e.done));}
  async close():Promise<void>{this.closed=true;for(const e of this.active.values())e.controller.abort();for(const s of this.previews.values())s.state='revoking';await Promise.all(this.options.adapters.map(a=>a.close?.()));await Promise.allSettled([...this.openings,...this.operations]);
   let timer:NodeJS.Timeout|undefined;
   try{await Promise.race([Promise.all([...this.previews.values()].map(s=>s.release())),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new StorageFailure('media_preview_release_pending')),5000);})]);}finally{clearTimeout(timer);}

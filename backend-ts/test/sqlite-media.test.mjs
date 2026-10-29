@@ -7,20 +7,7 @@ import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
 import {SqliteMediaService} from '../src/media/sqlite/service.ts';
-export async function fixture(t,adapter=null){
- const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-media-')));
- const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',registryModule:new URL('./fixtures/media/registry.mjs',import.meta.url).href});
- const owner='00000000-0000-4000-8000-000000000001';
- const metadata={account:async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[{externalKey:'friend-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},{externalKey:'friend-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}]};
- const contacts=new SqliteContactService(storage,owner,metadata);await contacts.initialize();const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);const snapshot=await contacts.candidates(true);const saved=await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(s=>({locator:s.username,observed_display_name:s.display_name,expected_selection_generation:s.selection_generation})));
- const report={protocol:'private-history-v1',profileId:'synthetic-v1',adapterVersion:'synthetic-1',status:'supported',reason:null,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'synthetic-generation-1'};
- const target={protocol:'private-history-v1',descriptor:'synthetic-fixed',partitions:['a'],tables:[{partition:'a',instance:'one'}],sourceGeneration:'source-1'};
- const channel={inspect:async s=>({...report,accountKey:s.accountKey,conversationKey:s.conversationKey,sourceGeneration:s.token.source_generation}),target:async()=>target,page:async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:['image','voice','video','text'].map((kind,i)=>({partition:'a',table:'one',localId:String(i+1),serverId:'0',sender:'contact',kind,text:kind==='text'?'合成文字':null,originalType:kind,sentAt:null,timePrecision:null,orderScheme:null,orderKey:null})),completedPartitions:['a'],exhausted:true})};
- const history=new SqliteHistoryService(storage,contacts,channel);const contact=saved.bindings[0].contact_id;await history.synchronize(contact);const messages=(await history.read(contact)).messages;
- const media=new SqliteMediaService({storage,contacts,history,userData:root,adapters:adapter?[adapter]:[]});await media.initialize();
- t.after(async()=>{await media.close();await history.close();await contacts.close();await storage.close();await rm(root,{recursive:true,force:true});});
- return {root,storage,contacts,history,media,owner,contact,messages,saved:saved.bindings};
-}
+import {fixture} from './media-support.mjs';
 test('只接受单条已核验媒体消息，未安装类型明确不可执行且跨联系人拒绝',async t=>{
  const f=await fixture(t);const image=f.messages.find(m=>m.kind==='image');
  const value=await f.media.read(f.contact,image.id);assert.equal(value.state,'available');assert.deepEqual(value.files,[]);assert.equal(value.capabilities.extract,false);
@@ -129,16 +116,16 @@ test('不完整复制停止本次写入且无失败字节留存，不影响其�
 });
 
 test('语音原始件有限保存，本地重转在关闭读取时可执行且保留原始父件',async t=>{
- const {createHash}=await import('node:crypto');let reads=0;
+ const {createHash}=await import('node:crypto');let reads=0,conversionSignal,enteredConversion,releaseConversion;const entered=new Promise(resolve=>{enteredConversion=resolve;});const gate=new Promise(resolve=>{releaseConversion=resolve;});
  const adapter={version:'synthetic-voice-v1',supports:kind=>kind==='voice',execute:async context=>{
-  if(context.goal==='extract'){reads++;assert.ok(context.source);assert.ok(context.token);}else{assert.equal(context.source,null);assert.equal(context.token,null);assert.ok(context.input);}
+  if(context.goal==='extract'){reads++;assert.ok(context.source);assert.ok(context.token);}else{assert.equal(context.source,null);assert.equal(context.token,null);assert.ok(context.input);conversionSignal=context.signal;enteredConversion();await Promise.race([gate,new Promise(resolve=>context.signal.addEventListener('abort',resolve,{once:true}))]);}
   const bytes=Buffer.from(context.goal==='extract'?'synthetic-silk':'synthetic-wav');
   await context.save({role:context.goal==='extract'?'audio_source':'audio_playback',...(context.input?{parentFileId:context.input.fileId}:{}),expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),bytes:(async function*(){yield bytes;})(),validate:async()=>({format:context.goal==='extract'?'synthetic-silk':'synthetic-wav',mimeType:context.goal==='extract'?'audio/silk':'audio/wav',containerValid:true,viewable:false,playable:context.goal!=='extract',imageQuality:'not_applicable',qualityProof:null})});
   return {association:context.source?{protocol:'media-association-v1',profileId:'synthetic-voice-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-voice'}:null,...(context.goal==='extract'?{errorCode:'synthetic_conversion_unavailable'}:{})};
  }};
  const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='voice');const first=await f.media.extract(f.contact,m.id,{requestKey:'silk',goal:'extract'});assert.equal(first.latestAttempt.outcome,'limited');assert.equal(first.files[0].playable,false);
  await f.contacts.setReading(false);assert.equal((await f.media.read(f.contact,m.id)).capabilities.audioConversion,true);
- const converted=await f.media.extract(f.contact,m.id,{requestKey:'local-wav',goal:'audio_conversion'});assert.equal(converted.latestAttempt.outcome,'full');assert.equal(converted.files.length,2);assert.ok(converted.files.find(f=>f.role==='audio_playback').playable);assert.equal(converted.files.find(f=>f.role==='audio_source').fileId,first.files[0].fileId);assert.equal(reads,1);
+ const converting=f.media.extract(f.contact,m.id,{requestKey:'local-wav',goal:'audio_conversion'});await entered;await f.media.stop(undefined,'wechat');const interrupted=conversionSignal.aborted;releaseConversion();assert.equal(interrupted,false);const converted=await converting;assert.equal(converted.latestAttempt.outcome,'full');assert.equal(converted.files.length,2);assert.ok(converted.files.find(f=>f.role==='audio_playback').playable);assert.equal(converted.files.find(f=>f.role==='audio_source').fileId,first.files[0].fileId);assert.equal(reads,1);
  await f.media.clear(f.contact,m.id,'clear-silk-and-wav');assert.deepEqual((await f.media.read(f.contact,m.id)).files,[]);
 });
 

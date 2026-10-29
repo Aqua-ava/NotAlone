@@ -1,3 +1,5 @@
+import { mediaMigration } from '../../media/sqlite/schema.ts';
+import { createMediaActions } from '../../media/sqlite/actions.ts';
 import { historyMigration } from '../../history/sqlite/schema.ts';
 import { historyActions } from '../../history/sqlite/actions.ts';
 import { identityMigration } from '../../contacts/sqlite/schema.ts';
@@ -26,6 +28,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5)],
-  actions: [...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6)],
+  actions: [...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...createMediaActions(installedDeletionRegistration)],
 };

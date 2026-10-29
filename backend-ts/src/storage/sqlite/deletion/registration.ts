@@ -1,3 +1,4 @@
+import { composeMediaDeletionRegistration } from '../../../media/sqlite/deletion.ts';
 import { historyDeletionDomain } from '../../../history/sqlite/deletion.ts';
 import { historyReaderHolderKey } from '../../../history/sqlite/service.ts';
 import { identityDeletionAuthority, identityDeletionDomain } from '../../../contacts/sqlite/deletion.ts';
@@ -5,7 +6,7 @@ import { skillMetadataDeletionDomain } from '../../../skills/sqlite/deletion.ts'
 import { StorageFailure, type StorageAction } from '../contracts.ts';
 import type { DeletionDomain, DeletionRegistration, DeletionScope } from './contracts.ts';
 
-export const installedDeletionScopes = ['source', 'contact', 'account'] as const;
+export const installedDeletionScopes = ['source', 'contact', 'account', 'media_result_clear', 'media_result_replace'] as const;
 const supported = (scope: DeletionScope) => installedDeletionScopes.some(kind => kind === scope.kind);
 
 // inspect/target尚无goal时也持有真实只读连接，来源删除必须覆盖这些早期读者。
@@ -19,7 +20,7 @@ const installedHistoryDomain:DeletionDomain={...historyDeletionDomain,collect(tx
   return targets.map(target=>({...target,holderKeys:[...new Set([...target.holderKeys,...keys])]}));
 }};
 // contact_history的精确截断由06提供；不因本票接通来源删除而扩大范围。
-export const installedDeletionRegistration: DeletionRegistration = {
+const baseDeletionRegistration: DeletionRegistration = {
   authority: {
     fence(tx, ownerId, scope) {
       if (!supported(scope)) throw new StorageFailure('deletion_scope_unavailable');
@@ -33,6 +34,8 @@ export const installedDeletionRegistration: DeletionRegistration = {
   domains: [installedHistoryDomain, identityDeletionDomain, skillMetadataDeletionDomain()],
   requiredDomains: ['history', 'identity', 'skill_metadata'],
 };
+
+export const installedDeletionRegistration = composeMediaDeletionRegistration(baseDeletionRegistration);
 
 // 名单缓存覆盖全部联系人，任何未完成删除期间都不重新开启该内存持有者。
 export const installedDeletionActions: StorageAction[] = [{name: 'deletion.metadataAvailable', mode: 'read', retryBusy: false,

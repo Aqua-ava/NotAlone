@@ -1,3 +1,4 @@
+import type { MessageMediaBridge } from './media-bridge';
 import type { UsageBridge } from './usage-bridge';
 import type { WechatSetupBridge } from './wechat-setup-bridge';
 import type { ForegroundBridge } from './foreground-bridge';
@@ -22,6 +23,7 @@ import type { BackgroundTaskBridge } from './background-task-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
   usage: UsageBridge;
+  media: MessageMediaBridge;
   backend: BackendBridge; setup: SetupBridge; wechatSetup: WechatSetupBridge; startup: StartupBridge;
   screenPermission: ScreenPermissionBridge;
   contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge; replies: ReplyBridge;

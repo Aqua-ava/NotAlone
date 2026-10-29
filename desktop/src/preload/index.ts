@@ -1,3 +1,4 @@
+import { createMessageMediaBridge } from './media';
 import { createUsageBridge } from './usage';
 import { createWechatSetupBridge } from './wechat-setup';
 import { createForegroundBridge } from './foreground';
@@ -23,6 +24,7 @@ import { createBackgroundTaskBridge } from './background-tasks';
 
 const bridge: AppBridge = {
   usage: createUsageBridge(ipcRenderer),
+  media: createMessageMediaBridge(ipcRenderer),
   backend: createBackendBridge(ipcRenderer),
   setup: createSetupBridge(),
   wechatSetup: createWechatSetupBridge(ipcRenderer),
