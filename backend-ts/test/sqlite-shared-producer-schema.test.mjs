@@ -16,3 +16,27 @@ test('共享调用拒绝跨请求和上下文、混合producer、越界输入及
   await assert.rejects(f.storage.execute('fixture.sharedViolation',{owner,a:f.a,b:f.b,m:f.m,kind}),undefined,kind);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'},kind);
  }
 });
+
+test('成功执行指针拒绝缺失、非成功与跨owner执行，并允许05先清指针再删除',async t=>{
+ const f=await seeded(t);
+ for(const kind of ['running_attempt','missing_attempt','different_step_attempt','foreign_owner_attempt','insert_different_step_attempt','insert_foreign_owner_attempt','insert_missing_attempt','attempt_regression','attempt_delete']){
+  await assert.rejects(f.storage.execute('fixture.sharedCompletion',{owner,m:f.m,kind}),undefined,kind);
+  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'},kind);
+ }
+ assert.equal(await f.storage.execute('fixture.sharedCompletion',{owner,m:f.m,kind:'fenced_clear'}),true);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('新执行复用同operation已知回执，事件直接保留真实call且不新增发送',async t=>{
+ const f=await seeded(t);
+ const reused=await f.storage.execute('fixture.sharedReuse',{owner,a:f.a,b:f.b,m:f.m,kind:'valid'});
+ assert.equal(reused.before,3n);assert.equal(reused.after,3n);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+test('复用事件拒绝跨owner、别operation及未知回执，更新也不能换旧证明',async t=>{
+ const f=await seeded(t);
+ for(const kind of ['foreign_owner','other_operation','other_step','other_request','unknown','sealed','missing','both_calls','update_unknown','update_other_operation','update_missing']){
+  await assert.rejects(f.storage.execute('fixture.sharedReuse',{owner,a:f.a,b:f.b,m:f.m,kind}),undefined,kind);
+  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'},kind);
+ }
+});

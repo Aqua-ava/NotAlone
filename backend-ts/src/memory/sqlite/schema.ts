@@ -1,4 +1,14 @@
 import type { StorageMigration } from '../../storage/sqlite/contracts.ts';
+// 复用只认同一逻辑operation的已知回执；INSERT和UPDATE使用相同资格条件。
+const reusableCall = `SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
+ JOIN step_attempt a ON a.owner_id=NEW.owner_id AND a.id=NEW.step_attempt_id
+ WHERE c.owner_id=NEW.owner_id AND c.id=NEW.reused_call_id AND c.state='succeeded'
+ AND NEW.reply_attempt_id IS NULL AND o.memory_step_id=a.step_id AND o.commit_forbidden_at IS NULL
+ UNION ALL
+ SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
+ JOIN reply_attempt a ON a.owner_id=NEW.owner_id AND a.id=NEW.reply_attempt_id
+ WHERE c.owner_id=NEW.owner_id AND c.id=NEW.reused_call_id AND c.state='succeeded'
+ AND NEW.step_attempt_id IS NULL AND o.reply_request_id=a.request_id AND o.commit_forbidden_at IS NULL`;
 /** 版本由集成者追加；不修改任何已经发布的迁移。 */
 export const memoryExtractionMigration=(version:number):StorageMigration=>({version,sql:`
 CREATE TABLE processing_run (
@@ -53,7 +63,8 @@ CREATE TABLE task_contribution (
 CREATE TABLE processing_step (
  owner_id TEXT NOT NULL,id TEXT NOT NULL,task_id TEXT NOT NULL,step_no INTEGER NOT NULL,kind TEXT NOT NULL CHECK(kind='extraction_verification'),
  state TEXT NOT NULL CHECK(state IN ('pending','running','succeeded','failed','unknown','revoked')),input_state TEXT NOT NULL CHECK(input_state='frozen'),successful_attempt_id TEXT,
- PRIMARY KEY(owner_id,id),UNIQUE(owner_id,task_id,step_no),FOREIGN KEY(owner_id,task_id) REFERENCES processing_task(owner_id,id) ON DELETE CASCADE
+ PRIMARY KEY(owner_id,id),UNIQUE(owner_id,task_id,step_no),FOREIGN KEY(owner_id,task_id) REFERENCES processing_task(owner_id,id) ON DELETE CASCADE,
+ FOREIGN KEY(owner_id,id,successful_attempt_id) REFERENCES step_attempt(owner_id,step_id,id)
 ) STRICT;
 CREATE TABLE step_input (
  owner_id TEXT NOT NULL,step_id TEXT NOT NULL,input_no INTEGER NOT NULL,run_id TEXT NOT NULL,run_input_no INTEGER NOT NULL,
@@ -65,9 +76,22 @@ CREATE TABLE step_attempt (
  owner_id TEXT NOT NULL,id TEXT NOT NULL,step_id TEXT NOT NULL,attempt_no INTEGER NOT NULL,resume_no INTEGER NOT NULL,
  lease_token TEXT NOT NULL,lease_expires_at INTEGER NOT NULL,accepted_control_revision INTEGER NOT NULL,runtime_token TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('running','succeeded','failed','unknown','aborted')),started_at INTEGER NOT NULL,finished_at INTEGER,error_code TEXT,
- PRIMARY KEY(owner_id,id),UNIQUE(owner_id,step_id,attempt_no),FOREIGN KEY(owner_id,step_id) REFERENCES processing_step(owner_id,id) ON DELETE CASCADE
+ PRIMARY KEY(owner_id,id),UNIQUE(owner_id,step_id,id),UNIQUE(owner_id,step_id,attempt_no),FOREIGN KEY(owner_id,step_id) REFERENCES processing_step(owner_id,id) ON DELETE CASCADE
 ) STRICT;
 CREATE UNIQUE INDEX attempt_running ON step_attempt(owner_id,step_id) WHERE state='running';
+CREATE TRIGGER step_successful_attempt_insert BEFORE INSERT ON processing_step
+ WHEN NEW.successful_attempt_id IS NOT NULL AND NOT EXISTS (
+ SELECT 1 FROM step_attempt a WHERE a.owner_id=NEW.owner_id AND a.step_id=NEW.id AND a.id=NEW.successful_attempt_id AND a.state='succeeded')
+ BEGIN SELECT RAISE(ABORT,'step_successful_attempt_invalid'); END;
+CREATE TRIGGER step_successful_attempt_update BEFORE UPDATE OF owner_id,id,successful_attempt_id ON processing_step
+ WHEN NEW.successful_attempt_id IS NOT NULL AND NOT EXISTS (
+ SELECT 1 FROM step_attempt a WHERE a.owner_id=NEW.owner_id AND a.step_id=NEW.id AND a.id=NEW.successful_attempt_id AND a.state='succeeded')
+ BEGIN SELECT RAISE(ABORT,'step_successful_attempt_invalid'); END;
+CREATE TRIGGER successful_attempt_reference BEFORE UPDATE OF owner_id,id,step_id,state ON step_attempt
+ WHEN (NEW.owner_id<>OLD.owner_id OR NEW.id<>OLD.id OR NEW.step_id<>OLD.step_id OR NEW.state<>'succeeded')
+ AND EXISTS (SELECT 1 FROM processing_step s WHERE s.owner_id=OLD.owner_id AND s.id=OLD.step_id AND s.successful_attempt_id=OLD.id)
+ BEGIN SELECT RAISE(ABORT,'successful_attempt_still_referenced'); END;
+
 CREATE TABLE model_operation (
  owner_id TEXT NOT NULL,id TEXT NOT NULL,purpose TEXT NOT NULL CHECK(purpose IN ('extraction','verification','discussion')),memory_step_id TEXT,
  slot INTEGER NOT NULL,input_seal TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('prepared','in_flight','unknown','resolved','applied','failed','sealed')),
@@ -103,21 +127,25 @@ CREATE TABLE model_call (
 CREATE TABLE execution_event (
  owner_id TEXT NOT NULL,id TEXT NOT NULL,step_attempt_id TEXT,event_no INTEGER NOT NULL,kind TEXT NOT NULL,
  originated_call_id TEXT,payload TEXT NOT NULL CHECK(json_valid(payload)),payload_format TEXT NOT NULL DEFAULT 'json-v1',
- content_state TEXT NOT NULL DEFAULT 'present' CHECK(content_state='present'),created_at INTEGER NOT NULL,reply_attempt_id TEXT,
+ content_state TEXT NOT NULL DEFAULT 'present' CHECK(content_state='present'),created_at INTEGER NOT NULL,reply_attempt_id TEXT,reused_call_id TEXT,
  PRIMARY KEY(owner_id,id),UNIQUE(owner_id,step_attempt_id,event_no),UNIQUE(owner_id,reply_attempt_id,event_no),
  FOREIGN KEY(owner_id,step_attempt_id) REFERENCES step_attempt(owner_id,id) ON DELETE CASCADE,
  FOREIGN KEY(owner_id,reply_attempt_id) REFERENCES reply_attempt(owner_id,id) ON DELETE CASCADE,
  FOREIGN KEY(owner_id,originated_call_id) REFERENCES model_call(owner_id,id),
+ FOREIGN KEY(owner_id,reused_call_id) REFERENCES model_call(owner_id,id),
+ CHECK(originated_call_id IS NULL OR reused_call_id IS NULL),
  CHECK((step_attempt_id IS NULL)<>(reply_attempt_id IS NULL))
 ) STRICT;
 CREATE TABLE execution_input (
  owner_id TEXT NOT NULL,event_id TEXT NOT NULL,input_no INTEGER NOT NULL,role TEXT NOT NULL,presentation_no INTEGER NOT NULL,
- planned_step_id TEXT,planned_input_no INTEGER,reply_context_id TEXT,context_item_no INTEGER,
+ planned_step_id TEXT,planned_input_no INTEGER,reply_context_id TEXT,context_item_no INTEGER,producer_event_id TEXT,
  PRIMARY KEY(owner_id,event_id,input_no),FOREIGN KEY(owner_id,event_id) REFERENCES execution_event(owner_id,id) ON DELETE CASCADE,
  FOREIGN KEY(owner_id,planned_step_id,planned_input_no) REFERENCES step_input(owner_id,step_id,input_no),
  FOREIGN KEY(owner_id,reply_context_id,context_item_no) REFERENCES reply_context_item(owner_id,context_id,item_no),
- CHECK((planned_step_id IS NOT NULL AND planned_input_no IS NOT NULL AND reply_context_id IS NULL AND context_item_no IS NULL)
- OR (planned_step_id IS NULL AND planned_input_no IS NULL AND reply_context_id IS NOT NULL AND context_item_no IS NOT NULL))
+ FOREIGN KEY(owner_id,producer_event_id) REFERENCES execution_event(owner_id,id) ON DELETE CASCADE,
+ CHECK((planned_step_id IS NOT NULL AND planned_input_no IS NOT NULL AND reply_context_id IS NULL AND context_item_no IS NULL AND producer_event_id IS NULL)
+ OR (planned_step_id IS NULL AND planned_input_no IS NULL AND reply_context_id IS NOT NULL AND context_item_no IS NOT NULL AND producer_event_id IS NULL)
+ OR (planned_step_id IS NULL AND planned_input_no IS NULL AND reply_context_id IS NULL AND context_item_no IS NULL AND producer_event_id IS NOT NULL AND role='verified_contribution'))
 ) STRICT;
 CREATE TABLE event_source (
  owner_id TEXT NOT NULL,event_id TEXT NOT NULL,source_contact_id TEXT NOT NULL,record_id TEXT NOT NULL,
@@ -143,11 +171,26 @@ CREATE TRIGGER execution_input_scope BEFORE INSERT ON execution_input WHEN NOT E
  WHERE e.owner_id=NEW.owner_id AND e.id=NEW.event_id AND e.reply_attempt_id=c.reply_attempt_id
  AND c.reply_context_id=NEW.reply_context_id
  UNION ALL
- SELECT 1 FROM execution_event e JOIN execution_reuse er ON er.owner_id=e.owner_id AND er.event_id=e.id
- JOIN model_call c ON c.owner_id=er.owner_id AND c.id=er.call_id
+ SELECT 1 FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=e.reused_call_id
  JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
  JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id
- WHERE e.owner_id=NEW.owner_id AND e.id=NEW.event_id AND a.request_id=o.reply_request_id AND c.reply_context_id=NEW.reply_context_id)
+ WHERE e.owner_id=NEW.owner_id AND e.id=NEW.event_id AND a.request_id=o.reply_request_id AND c.reply_context_id=NEW.reply_context_id
+ UNION ALL
+ SELECT 1 FROM execution_event result
+ JOIN step_attempt ra ON ra.owner_id=result.owner_id AND ra.id=result.step_attempt_id
+ JOIN processing_step rs ON rs.owner_id=ra.owner_id AND rs.id=ra.step_id
+ JOIN processing_task rt ON rt.owner_id=rs.owner_id AND rt.id=rs.task_id
+ JOIN execution_event source ON source.owner_id=result.owner_id AND source.id=NEW.producer_event_id
+ JOIN step_attempt sa ON sa.owner_id=source.owner_id AND sa.id=source.step_attempt_id
+ JOIN processing_step ss ON ss.owner_id=sa.owner_id AND ss.id=sa.step_id
+ JOIN processing_task st ON st.owner_id=ss.owner_id AND st.id=ss.task_id
+ JOIN task_contribution tc ON tc.owner_id=rt.owner_id AND tc.task_id=rt.id AND tc.run_id=rt.run_id AND tc.source_contact_id=st.contact_id
+ WHERE result.owner_id=NEW.owner_id AND result.id=NEW.event_id AND rt.scope_kind='self' AND rt.contact_id IS NULL
+ AND st.scope_kind='contact' AND st.contact_id IS NOT NULL AND st.run_id=rt.run_id AND st.state='succeeded'
+ AND result.kind='verified_output' AND source.kind='verified_self_contribution' AND result.payload=source.payload
+ AND sa.state='succeeded' AND ss.state='succeeded' AND ss.successful_attempt_id=sa.id
+ AND json_extract(source.payload,'$.fact.subject')='self' AND json_extract(source.payload,'$.scopeKind')='self'
+ AND json_extract(source.payload,'$.contactId') IS NULL)
  BEGIN SELECT RAISE(ABORT,'execution_input_scope'); END;
 CREATE TRIGGER execution_input_immutable BEFORE UPDATE ON execution_input BEGIN SELECT RAISE(ABORT,'execution_input_immutable'); END;
 CREATE TRIGGER model_operation_parent_immutable BEFORE UPDATE OF owner_id,purpose,memory_step_id,reply_request_id ON model_operation
@@ -185,6 +228,17 @@ CREATE TRIGGER event_call_producer BEFORE INSERT ON execution_event WHEN NEW.ori
  AND ((c.step_attempt_id=NEW.step_attempt_id AND NEW.reply_attempt_id IS NULL)
  OR (c.reply_attempt_id=NEW.reply_attempt_id AND NEW.step_attempt_id IS NULL)))
  BEGIN SELECT RAISE(ABORT,'event_call_producer'); END;
+CREATE TRIGGER event_reused_call_insert BEFORE INSERT ON execution_event
+ WHEN NEW.reused_call_id IS NOT NULL AND NOT EXISTS (
+ ${reusableCall})
+ BEGIN SELECT RAISE(ABORT,'event_reused_call_invalid'); END;
+CREATE TRIGGER event_reused_call_update BEFORE UPDATE OF owner_id,step_attempt_id,reply_attempt_id,originated_call_id,reused_call_id ON execution_event
+ WHEN NEW.reused_call_id IS NOT NULL AND NOT EXISTS (
+ ${reusableCall})
+ BEGIN SELECT RAISE(ABORT,'event_reused_call_invalid'); END;
+CREATE TRIGGER event_reused_call_immutable BEFORE UPDATE OF reused_call_id ON execution_event
+ WHEN NEW.reused_call_id IS NOT OLD.reused_call_id
+ BEGIN SELECT RAISE(ABORT,'event_reused_call_immutable'); END;
 CREATE TRIGGER event_source_planned BEFORE INSERT ON event_source WHEN NOT EXISTS (
  SELECT 1 FROM execution_input x JOIN step_input si ON si.owner_id=x.owner_id AND si.step_id=x.planned_step_id AND si.input_no=x.planned_input_no
  JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no
@@ -199,6 +253,7 @@ CREATE TRIGGER event_source_planned BEFORE INSERT ON event_source WHEN NOT EXIST
  WHERE x.owner_id=NEW.owner_id AND x.event_id=NEW.event_id AND i.kind='entry' AND es.record_id=NEW.record_id AND es.source_contact_id=NEW.source_contact_id)
  BEGIN SELECT RAISE(ABORT,'event_source_planned'); END;
 CREATE TRIGGER event_source_immutable BEFORE UPDATE ON event_source BEGIN SELECT RAISE(ABORT,'event_source_immutable'); END;
+CREATE INDEX execution_input_producer ON execution_input(owner_id,producer_event_id) WHERE producer_event_id IS NOT NULL;
 CREATE INDEX run_inputs_source ON run_input(owner_id,source_contact_id,record_id);
 CREATE INDEX event_sources_record ON event_source(owner_id,source_contact_id,record_id);
 `});

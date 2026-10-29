@@ -80,7 +80,7 @@ export function finalizeOwnerContributions(tx:StorageTransaction,input:{ownerId:
  }
  for(const source of sources){
   const eventId=append('verified_output',String(source.event.payload),source.rows);
-  tx.run('INSERT INTO self_contribution(owner_id,event_id,producer_event_id) VALUES(?,?,?)',[ownerId,eventId,source.event.id]);
+  tx.run("INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,producer_event_id) VALUES(?,?,?,'verified_contribution',?,?)",[ownerId,eventId,source.rows.length+1,source.rows.length+1,source.event.id]);
  }
  append('stage_result',JSON.stringify({outcome:sources.length?'verified_pending_decision':'no_new_memory',outputCount:sources.length,laterStages:'pending'}),frozen);
  currentAttempt(tx,ownerId,attemptId,lease);

@@ -1,4 +1,3 @@
-import {memoryOwnerContributionMigration} from '../../memory/sqlite/owner-schema.ts';
 import { discussionMigration } from '../../reply/sqlite/schema.ts';
 import { executionActions } from '../../memory/sqlite/execution.ts';
 import { memoryExecutionMigration } from '../../memory/sqlite/execution-schema.ts';
@@ -32,6 +31,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), discussionMigration(6), memoryExtractionMigration(7), memoryExecutionMigration(8), memoryOwnerContributionMigration(9)],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), discussionMigration(6), memoryExtractionMigration(7), memoryExecutionMigration(8)],
   actions: [...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions],
 };

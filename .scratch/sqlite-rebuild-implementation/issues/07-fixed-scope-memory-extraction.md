@@ -42,3 +42,26 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 - 后续开发只用 `pnpm run dev`，先执行 `dev:status`核验并复用实例；不得擅自打包、运行旧包、修改发布门禁、推送或创建远端分支／PR。
 - App首次使用继续搁置；组件安装、新模型设置、干净机器和发布、微信迁移／恢复实验均不属于本任务。不新增模型或凭据入口，沿现有配置核验用途与最小文本出站授权。
 - 合成结果与真实模型、真实微信、产品集成分别记账。当前未核验的真实账号／联系人读取范围不可读取；不发送外部消息，不把开发验证能力加入产品工具。
+
+
+## Answer
+
+2026-10-29实施中，State保持claimed、Goal实际active。02/05指定依赖均已用merge-base核验进入bc7fb905基线；11的真实producer/FK小合同已按总指挥指令逐项实际取入。本票没有领取其他任务，未改统一索引。
+
+已落受版本管理的领域实现：
+
+- `backend-ts/src/memory/sqlite/`提供原子固定run/contact/message/record/解释修订、跨轮processing_item、固定任务/小批及手动暂停继续、独立本人producer、实际输入顺序和完整载荷追踪。模型侧复用正常E/V提示、complete-claim-v1与唯一ModelHost；HTTP只收具名启动/控制和读取，不接owner、SQL或任意输入。
+- `verifiedExtractionOutput(tx,{ownerId,eventId})`供08同事务复验后建立正式候选，保留auto与真实producer/来源；07没有写正式记忆版本或文档发布。本人阶段用既有execution_input的typed阶段事件输入，不新增并行产物身份；调用复用已收敛为execution_event.reused_call_id。当前新增工厂均未由总指挥发布，最终编号串行集成，v1–v5未改。
+- 删除域只负责extraction/verification，显式authority与requiredDomains通过05唯一服务装配。固定窗口、实际前文、本人混合阶段和活动调用均入闭包；单来源清理保留封存无正文台账及未知效果占用，换合法来源/新run不能盲重发；联系人/账号删除再清对应最小台账。discussion_calls由11独立负责，不重复实现。
+- 独立桌面shared/main/preload/renderer模块已落；读取拒绝、失效通知、卸载/旧连接迟到回调均撤下候选和过程正文。unknown仅封其任务，其他失败/暂停任务可沿原run继续。
+
+实际验证（全部隔离合成资料，真实供应商小批另列）：
+
+1. 首份共享DDL真实Worker迁移/重开1/1、共享memory/reply producer结构与越界约束原2/2；后端领域相关19/19及typecheck已通过。依次补齐并验证旧失败轮重做、实际presentation顺序、成功attempt复合FK、合法call复用及并发效果占用、unknown经来源删除换源重发、公共认证失败暂停等审查反例。新反例均有实际red→green；仅复跑受影响文件/用例，不反复全量。
+2. 官方DSH+真实SQLite Worker/accounting+认证HTTP+正常模型端口的全链单例通过，含读取关闭、同key不重复、无产出成功及实际派发未知后原任务继续/新轮不重发。唯一替换外部供应商为环回SSE和合成渠道；复用sqlite.patch，仅替测试宿主并补当前缺少的公开llm服务，模型/预算/期限未降低；不冒充正式宿主已接线。
+3. `node --test test/sqlite-storage.test.mjs test/sqlite-private-history.test.mjs test/sqlite-deletion.test.mjs test/sqlite-host-launch.test.mjs`：49/49。桌面具名控制器及真实无头Chrome组件测试最终6/6、桌面typecheck通过；实际App尚未运行。
+4. 精确只读现有backend-launch.json配置指针，正常解析器确认deepseek-flash配置可装配、凭据存在，未打印或复制密钥。真实供应商隔离合成小批固定问题预算2次/10分钟；已预留1，调用已知failed，无E/V语义结果、成功目标0/2、候选0。旧追踪未保留安全错误分类，实际HTTP次数、token实耗及具体失败原因未知；独立Agent确认不能认证语义质量。已以unknown结案，未重发/加预算/改模型设置。后续代码已保存稳定错误code/status，环回真实DSH 401反例验证不复制异常原文并可区别已观察HTTP与未知。此限制不写成模型可用或微信认证通过。
+
+待完成：公共sqlite-host/llm/关闭生命周期、具名桥聚合与真实MemoryPage的最小接线由总指挥串行安排；随后必须使用pnpm run dev的实际App进行固定进度、未知/失败、删除或资格失效后的本地快照撤下验收。当前未获得桌面占用，未启动/重启/抢焦点，dev:status只读核验为stopped。完成该必要验收及最终独立复核之前不resolved、不Goal complete。
+
+数据与资源：只用临时role=test库、合成身份/正文、环回服务；真实供应商小批也仅两条固定合成文字。未读取私人微信或PG、未发送/撤回外部消息、未改私人配置、未打包/push/PR。正常测试等待调用、ModelHost和SQLite排空并清精确自有根，真实小批报告和无正文预算仅留仓库外私有目录，未提交正文/凭据。

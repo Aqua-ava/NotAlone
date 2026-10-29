@@ -19,10 +19,10 @@
 
 `http.ts`提供`SqliteMemoryExtractionHttp(service,authorize)`：认证POST `/api/memory-processing/runs`仅接受UUID `request_key`，GET `/runs/current`与`/runs/:id`读取固定轮次；POST `/runs/:id/pause|continue`仅空对象；GET `/tasks/:id/events`读取独立可删除追踪。owner、SQL、来源子集及任意模型配置均不接受HTTP输入，Origin拒绝，响应no-store。
 
-`outputs.ts`导出`verifiedExtractionOutput(tx,{ownerId,eventId})`，08在正式候选提交的同一短事务内调用。返回真实`producedAttemptId/outputNo`、scope、原fact、auto来历和全部实际来源。本人产物由独立self attempt产生，`self_contribution`完整外键连接原联系人窗口的已核验贡献；不改写事实、不作裁决、不冒充用户确认。
+`outputs.ts`导出`verifiedExtractionOutput(tx,{ownerId,eventId})`，08在正式候选提交的同一短事务内调用。返回真实`producedAttemptId/outputNo`、scope、原fact、auto来历和全部实际来源。本人产物由独立self attempt产生，通过`execution_input`的`verified_contribution`事件材料分支，以同owner复合外键引用原联系人窗口的`verified_self_contribution`事件，并同时保存实际消息窗口和全部来源；不改写事实、不作裁决、不冒充用户确认。
 
 `registration.ts`提供本写者的精确`memoryExtractionDeletionAuthority`和`memoryExtractionDeletionRegistration()`。本分支显式装配memory_extraction→history→identity→skill_metadata，只开放实际source/contact/account；清空边界由06接续。公共宿主每增加讨论/媒体等真实写者都必须扩requiredDomains和精确authority，不能把本分支当作完整产品注册。`deletion.ts`来源闭包覆盖固定输入、实际前文和本人混合阶段；source保留封存无正文调用及原范围，contact/account连同此前封存调用清除。
 
 活动调用登记`memory:${taskId}`到与05相同的ActiveHolders，关闭回调取消并等待真实业务finally与末次写入。正常关闭等待所有在途任务及模型端口。原始资料、规范消息和外部微信不由本模块读写；完整追踪只进SQLite，不进普通日志或Git。
 
-`contracts.ts`给11提供已实现producer/input分支的TypeScript合同。当前未发布的组合暂号由公共registry依次分配，集成按最终顺序调整；每个工厂独立接收version，不改v1–v5。
+`contracts.ts`给11提供已实现producer/input分支的TypeScript合同。当前未发布的组合暂号由公共registry依次分配，集成按最终顺序调整；每个工厂独立接收version，不改已发布v1–v5。本人阶段复用既有事件材料，不新增产物身份或正文表，原暂号owner9不发布。

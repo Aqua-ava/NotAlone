@@ -37,7 +37,7 @@ export function apply(ctx:Context) {
       const result=await port.invoke(request,context);
       res.end(JSON.stringify({text:result.text,receipt:result.receipt}));
     }catch(error){res.end(JSON.stringify({error:error&&typeof error==='object'&&'code'in error?error.code:
-      error instanceof Error?error.message:'synthetic_unknown'}));}
+      error instanceof Error?error.message:'synthetic_unknown',...((error as any)?.provider_failure?{providerFailure:(error as any).provider_failure}:{}),...((error as any)?.receipt?{dispatch:(error as any).receipt.dispatch,outcome:(error as any).receipt.outcome}:{})}));}
   });
   const ready=ctx.appReady!.onReady(()=>server.listen(0,'127.0.0.1',()=>{
     const address=server.address();if(address&&typeof address!=='string')process.stdout.write(`SQLITE_MODEL_PORT_READY http://127.0.0.1:${address.port}\n`);
