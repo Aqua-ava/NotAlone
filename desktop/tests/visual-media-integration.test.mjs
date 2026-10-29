@@ -11,7 +11,7 @@ import {promisify} from 'node:util';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
 import {fixture} from '../../backend-ts/test/media-support.mjs';
-import {png,resourcePort} from '../../backend-ts/test/visual-media-support.mjs';
+import {png,resourcePort,datV4} from '../../backend-ts/test/visual-media-support.mjs';
 import {VisualMediaAdapter} from '../../backend-ts/src/media/visual/adapter.ts';
 import {SqliteContactHttp} from '../../backend-ts/src/contacts/sqlite/http.ts';
 import {SqliteMediaHttp} from '../../backend-ts/src/media/sqlite/http.ts';
@@ -95,7 +95,7 @@ function missingKeyDat(){
 }
 
 test('真实图片类型经HTTP和具名桥显示缩略图、补原图及失败，撤下预览后才完成清除',{timeout:25000},async t=>{
- const options={data:png,quality:{kind:'thumbnail',proof:'synthetic-thumbnail-v1'}};
+ const options={data:datV4(png),envelope:'wechat_dat',quality:{kind:'thumbnail',proof:'synthetic-thumbnail-v1'}};
  const h=await visualPage(t,'image',options),{page,f,message}=h;
  await page.getByRole('button',{name:'保存这条图片',exact:true}).click();
  await expect(page.getByText('缩略图，原图未取得',{exact:true})).toBeVisible();
@@ -108,6 +108,20 @@ test('真实图片类型经HTTP和具名桥显示缩略图、补原图及失败�
  await page.getByRole('button',{name:'刷新媒体状态',exact:true}).click();
  await expect(page.getByText('缺少当前账号已核验的图片密钥，或密钥不匹配；本次未取得图片。',{exact:true})).toBeVisible();
  const failed=await f.media.read(f.contact,message.id);assert.equal(failed.latestAttempt.errorCode,'needs_image_key');assert.equal(failed.files[0].fileId,original.files[0].fileId);assert.equal(h.opens(),3);
+ const padding=datV4(png),cipher=createCipheriv('aes-128-ecb',Buffer.from('cfcd208495d565ef'),null);cipher.setAutoPadding(false);
+ Buffer.concat([cipher.update(Buffer.alloc(16)),cipher.final()]).copy(padding,31);
+ const oversized=datV4(png);oversized.writeUInt32LE(0xffffffff,6);
+ for(const [data,envelope,code,label] of [
+  [padding,'wechat_dat','image_dat_invalid','图片加密封装的长度或填充校验失败，本次未保存新结果。'],
+  [oversized,'wechat_dat','image_dat_invalid','图片加密封装的长度或填充校验失败，本次未保存新结果。'],
+  [Buffer.from('wxgf-unsupported'),'wechat_dat','unsupported','此封装尚未支持，本次未保存新结果。'],
+  [Buffer.from('unknown-format'),'plain','media_format_unsupported','此媒体格式或编码尚未支持，本次未保存新结果。'],
+ ]){
+  options.data=data;options.envelope=envelope;
+  await page.getByRole('button',{name:'补提原图',exact:true}).click();await expect(page.getByRole('alert')).toContainText('媒体操作结果尚未确认');
+  await page.getByRole('button',{name:'刷新媒体状态',exact:true}).click();await expect(page.getByText(label,{exact:true})).toBeVisible();
+  const result=await f.media.read(f.contact,message.id);assert.equal(result.latestAttempt.errorCode,code);assert.equal(result.files[0].fileId,original.files[0].fileId);
+ }
  await page.getByRole('button',{name:'查看文件',exact:true}).click();
  const image=page.getByRole('img',{name:'本条消息的已存图片'});await expect.poll(()=>image.evaluate(element=>({width:element.naturalWidth,height:element.naturalHeight}))).toEqual({width:1,height:1});
  const current=await f.storage.execute('media.file',{ownerId:f.owner,contactId:f.contact,messageId:message.id,fileId:original.files[0].fileId}),location=f.media.files.location(current.address);
@@ -121,7 +135,7 @@ test('真实图片类型经HTTP和具名桥显示缩略图、补原图及失败�
  await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByText('图片质量未核验',{exact:true})).toBeVisible();
  assert.equal((await f.media.read(f.contact,message.id)).latestAttempt.outcome,'quality_unknown');
  await page.getByRole('button',{name:'清除这条媒体',exact:true}).click();await expect(page.getByText('媒体已清除，聊天占位保留',{exact:true})).toBeVisible();
- assert.equal(h.opens(),4);assert.deepEqual(h.publicationFailures,[]);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+ assert.equal(h.opens(),8);assert.deepEqual(h.publicationFailures,[]);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
 test('真实视频类型经正常页面播放H264与AAC，拒绝未知编码及截断并撤下活动播放器',{timeout:35000},async t=>{
@@ -144,7 +158,8 @@ test('真实视频类型经正常页面播放H264与AAC，拒绝未知编码及�
  await page.getByRole('button',{name:'播放文件',exact:true}).click();const player=page.locator('video');
  await expect(player).toHaveAttribute('src',/^blob:/);
  await expect.poll(()=>player.evaluate(element=>({width:element.videoWidth,height:element.videoHeight,duration:element.duration}))).toEqual({width:16,height:16,duration:2});
- await player.evaluate(async element=>{element.muted=true;await element.play();});
+ const playerBounds=await player.boundingBox();assert.ok(playerBounds.width>=300&&playerBounds.height>=150,'合法小尺寸视频也须留出可操作的播放控件');
+ await player.press('Space');
  await expect.poll(()=>player.evaluate(element=>!element.paused&&element.currentTime>0),{timeout:3000}).toBe(true);
  const current=await f.storage.execute('media.file',{ownerId:f.owner,contactId:f.contact,messageId:message.id,fileId:saved.files[0].fileId}),location=f.media.files.location(current.address);
  assert.deepEqual(await readFile(location),video);
