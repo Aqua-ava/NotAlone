@@ -19,3 +19,8 @@ export function readSqliteDiscussion(value:unknown,sessionId:string,generation:n
  });
  return {sessionId,turns:[] as SavedAssistantTurn[],inputs:[] as SavedAssistantInput[],currentInputVersionId:null,generation,discussionEntries:entries,runtimeRecovery:value.runtime_recovery as SqliteRuntimeRecovery};
 }
+
+/** 资格变化先清空实际发言；只允许随后新的权威读取恢复仍合法的正文。 */
+export function invalidatedSqliteDiscussion(value?:{discussionEntries?:SqliteDiscussionEntry[]}):{discussionEntries?:SqliteDiscussionEntry[];runtimeRecovery?:SqliteRuntimeRecovery}{
+ return value?.discussionEntries===undefined?{}:{discussionEntries:[],runtimeRecovery:'blocked'};
+}

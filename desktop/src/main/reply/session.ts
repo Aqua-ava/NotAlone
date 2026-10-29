@@ -1,3 +1,4 @@
+import {invalidatedSqliteDiscussion} from './sqlite-discussion-read';
 import type { ReplyStateUpdate } from '../../shared/reply-bridge';
 import { continuationGeneration, strategyGeneration, ordinaryGeneration, type OrdinaryFailureObservation, type OrdinaryGenerationResult } from './assistant-generation-adapters';
 import { randomUUID } from 'node:crypto';
@@ -153,7 +154,7 @@ export class ReplySession {
         this.workspaceRequirementInputVersion = undefined;
         this.cancelContactRestore();
         this.retainedContent.clear(); this.retainedRetries.clear(); this.restoredRetry = undefined; this.pendingContent = undefined; this.retainedSourceValidation = undefined; this.contentGeneration = undefined;
-        this.publish({ inputBudgetNotice: undefined, scene: '', inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
+        this.publish({ ...(this.state.savedSession?.discussionEntries === undefined ? {} : {savedSession:{...this.state.savedSession,phase:'idle' as const,...invalidatedSqliteDiscussion(this.state.savedSession)}}), inputBudgetNotice: undefined, scene: '', inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
         this.generationJobs.cancelAll();
         this.cancelPending();
         this.candidateVersions.setScope(null);
@@ -185,7 +186,7 @@ export class ReplySession {
       messages: { phase: 'loading', items: [], nextCursor: null }, targetMessageId: null,
       ...invalidatedIntent(this.derivedIntent),
       exploration: { phase: 'idle', result: null },
-      savedSession: state.savedSession ? { ...state.savedSession,
+      savedSession: state.savedSession ? { ...state.savedSession, ...invalidatedSqliteDiscussion(state.savedSession),
         phase: state.savedSession.phase === 'failed' ? 'failed' : 'loading', turns: [], inputs: [], currentInputVersionId: null } : undefined,
       candidateVersions: state.candidateVersions ? { ...state.candidateVersions, phase: 'loading',
         items: state.candidateVersions.items.map((item) => ({ ...item, phase: 'loading', history: null, displayVersionId: null })) } : undefined,
@@ -749,7 +750,8 @@ export class ReplySession {
       if (!items.some((item) => item.sessionId === saved.sessionId)) items.push({ sessionId: saved.sessionId, isCurrent: saved.sessionId === currentSessionId });
       this.candidateVersions.setScope(null); this.candidateSourceCheck = undefined;
       this.publish({ savedSession: { phase: 'ready', sessionId: saved.sessionId, turns: saved.turns,
-        inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId },
+        inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId,
+        ...(saved.discussionEntries === undefined ? {} : {discussionEntries:saved.discussionEntries,runtimeRecovery:saved.runtimeRecovery}) },
         sessionCatalog: { phase: 'loading', items, currentSessionId, selectionPending: true },
         sessionDeletion: undefined, confirmedSessionDeletion: undefined, idleRollover: undefined,
         contextRefresh: !viewOnly && 'contextRefreshed' in selected && selected.contextRefreshed ? { sessionId: saved.sessionId } : undefined,
@@ -885,7 +887,7 @@ export class ReplySession {
     this.candidateVersions.setScope(null);
     this.publish({ result: null, selectedCandidateId: null, phase: 'idle', canRetry: false,
       candidateDrafts: [], sourceAvailability: held ? 'checking' : undefined,
-      ...(this.state.savedSession ? { savedSession: { ...this.state.savedSession, phase: 'idle' as const,
+      ...(this.state.savedSession ? { savedSession: { ...this.state.savedSession, ...invalidatedSqliteDiscussion(this.state.savedSession), phase: 'idle' as const,
         turns: [], inputs: [], currentInputVersionId: null } } : {}) });
   }
   async revalidateOwnerContextChange(): Promise<void> {
@@ -906,7 +908,7 @@ export class ReplySession {
     this.candidateVersions.setScope(null);
     this.publish({ result: null, selectedCandidateId: null, phase: 'idle', canRetry: false,
       candidateDrafts: [], sourceAvailability: this.heldResult ? 'checking' : undefined,
-      ...(this.state.savedSession ? { savedSession: { ...this.state.savedSession, phase: 'idle' as const,
+      ...(this.state.savedSession ? { savedSession: { ...this.state.savedSession, ...invalidatedSqliteDiscussion(this.state.savedSession), phase: 'idle' as const,
         turns: [], inputs: [], currentInputVersionId: null } } : {}) });
   }
   async revalidateExpressionPreferences(): Promise<void> {
@@ -929,7 +931,7 @@ export class ReplySession {
     if (activeContact && activeContent) this.retainedContent.set(activeContact, activeContent);
     const validation = { checking: true }; this.retainedSourceValidation = validation;
     this.pendingContent = undefined; this.savedRead?.abort();
-    this.publish({ candidateDrafts: [] });
+    this.publish({ candidateDrafts: [], ...(this.state.savedSession?.discussionEntries === undefined ? {} : {savedSession:{...this.state.savedSession,...invalidatedSqliteDiscussion(this.state.savedSession)}}) });
     const retainedValidation = Promise.all([this.revalidateRetainedContents(), this.revalidateRetryInputs()]).finally(() => {
       if (this.retainedSourceValidation === validation) {
         validation.checking = false;
@@ -956,7 +958,7 @@ export class ReplySession {
       this.invalidateExploration();
       this.savedRead?.abort();
       this.savedRead = undefined;
-      if (this.state.savedSession && !candidateSnapshotAccepted) this.publish({ savedSession: { ...this.state.savedSession, phase: 'idle', turns: [], inputs: [], currentInputVersionId: null } });
+      if (this.state.savedSession && !candidateSnapshotAccepted) this.publish({ savedSession: { ...this.state.savedSession, ...invalidatedSqliteDiscussion(this.state.savedSession), phase: 'idle', turns: [], inputs: [], currentInputVersionId: null } });
       const held = this.heldResult ?? (this.state.result ? {
         result: this.state.result, selectedCandidateId: this.state.selectedCandidateId,
       } : undefined);
@@ -2119,7 +2121,8 @@ export class ReplySession {
     this.candidateSourceCheck = undefined;
     check.pending.abort();
     const snapshot = { phase: 'ready' as const, sessionId: saved.sessionId, turns, inputs,
-      currentInputVersionId: saved.currentInputVersionId };
+      currentInputVersionId: saved.currentInputVersionId,
+      ...(saved.discussionEntries === undefined ? {} : {discussionEntries:saved.discussionEntries,runtimeRecovery:saved.runtimeRecovery}) };
     this.publish({ savedSession: snapshot,
       ...(messages ? { messages, ...(targetUnavailable ? { targetMessageId: null } : {}) } : {}),
       ...(clearMessageDirection ? { direction: '' } : {}),
@@ -2170,7 +2173,7 @@ export class ReplySession {
     const placeholder = '相关来源不可用';
     this.publish({ ...(!affected ? { messages: { phase: 'idle' as const, items: [], nextCursor: null }, targetMessageId: null } : {}),
       ...(clearDerived ? invalidatedIntent(this.derivedIntent) : {}),
-      ...(saved ? { savedSession: { ...saved,
+      ...(saved ? { savedSession: { ...saved, ...invalidatedSqliteDiscussion(saved),
       turns: saved.turns.map((turn) => turnIds.has(turn.turnId)
         ? { ...turn, state: 'unavailable', input: null, reply: null, placeholder } : turn),
       inputs: saved.inputs.map((input) => !affected || inputIds.has(input.inputVersionId)
