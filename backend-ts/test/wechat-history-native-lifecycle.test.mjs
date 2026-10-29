@@ -31,7 +31,7 @@ async function fixture(t,replies) {
    if(r.account!=='${account}'||r.conversation!=='${conversation}'||r.consent!=='selected-test-lifecycle-metadata-v1')process.exit(92);
    data=replies[offset++];if(data===null)return;
   }else process.exit(93);
-  process.stdout.write(JSON.stringify({ok:true,data})+'\\n');
+  process.stdout.write(JSON.stringify(data?.syntheticError?{ok:false,error:{code:data.syntheticError}}:{ok:true,data})+'\\n');
  });
 `;
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-lifecycle-WCDB');await writeFile(join(root,'lib','libWCDB.dylib'),wcdb);
@@ -127,4 +127,13 @@ test('取消生命周期观察等待真实子进程退出，不保留迟到记�
  const rejected=assert.rejects(pending,{code:'history_native_cancelled'});await waitForRequest(f.logFile,'next');controller.abort();await rejected;
  noProcess(Number(await readFile(f.pidFile,'utf8')));
  await assert.rejects(f.client.observeTestMetadataSelected('current'),{code:'history_native_cancelled'});
+});
+
+test('受控观察固定原因码可区分门禁且拒绝后排空',async t=>{
+ for(const code of ['history_test_sender_unverified','history_test_sender_ambiguous','history_test_new_rows_ambiguous','history_test_type_unverified','history_test_key_unverified']){
+  const f=await fixture(t,[{syntheticError:code}]);await select(f.client);
+  await assert.rejects(f.client.observeTestMetadataSelected('arm'),{code});
+  noProcess(Number(await readFile(f.pidFile,'utf8')));
+  await assert.rejects(f.client.observeTestMetadataSelected('current'),{code});
+ }
 });

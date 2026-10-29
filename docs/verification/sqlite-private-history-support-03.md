@@ -60,3 +60,11 @@ dev:status为stopped，无本工作树dev进程；未启动、重启或关闭开
 新字节见[匿名受控观察记录](../../backend-ts/src/history/sqlite/support-profiles/wechat-4.0.6-29387-controlled-state-v1.json)。fresh archive 定向原生 race 28 顶层／含子用例 57 项通过，0失败0跳过；typed 两文件组合28项、后台类型检查通过。合成验证含 Close 取消与实际 reader 排空、空 MAX、跨分片同主键、同期多行、未知 sender／type、schema／文件变化、缺失行不顶替及歧义后不可复活。双轴复核的资源与失败重试问题已修复。
 
 本次只证明第一条在实际 UI 发送成功；pending、server 别名补齐及撤回语义仍未验证，普通历史保持门禁。迁移／恢复继续排除，公共首次触发和合成 App 展示／删除验收继续推进。
+
+## v8 本人类别修复与发送前校验
+
+锁定上游 795071fa 的 main.go:8440–8453 用 selfWxid() 区分账号目录设备后缀，既有本人消息分类同样复用该函数。三处窄投影此前直接比较完整 cfg.Wxid，合成设备后缀用例能复现本人变 unknown。现仅发送者类别使用官方派生值，账号隔离键及 sourceGeneration 不变。不能据此倒推 v7 的具体失败原因，也不回找第一条身份。
+
+arm 新增所选现存分片 Name2Id 的 canonical/raw 精确有界计数；未知、重复或冲突在发送之前终止，不枚举用户名或返回原始账号。另以固定原因码区分新增多行、sender、type 和主键门禁；错误仍永久关闭观察。新字节及匿名预检见[v8 发送前校验](../../backend-ts/src/history/sqlite/support-profiles/wechat-4.0.6-29387-controlled-preflight-v2.json)。实际正式客户端 resolve/inspect/support 后，8 分片／2 目标表的发送者预检和 arm 通过，lockedCount=0，随后 reader 与子进程关闭；未发送、撤回或读取正文。
+
+设备后缀三投影先红后绿，相关原生 race 26 顶层／含子例 71 项通过；新五类固定原因码均验证客户端拒绝后排空。另从 v8 fresh archive 运行更广定向回归并保存本地日志。实际预检只证明本次元数据映射可证，不认证正在运行微信当前登录账号、消息状态或普通历史资格。第二条操作仍须独立桌面时段及新基线。

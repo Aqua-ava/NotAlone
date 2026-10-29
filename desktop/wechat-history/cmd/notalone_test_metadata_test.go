@@ -134,47 +134,59 @@ func TestNotAloneTestMetadataRequiresArmAndFixedBudget(t *testing.T) {
 }
 
 func TestNotAloneTestMetadataCloseCancelsAndDrains(t *testing.T) {
-	f := newNotaloneSnapshotFixture(t, 1)
-	if err := f.writers[0].Exec("DROP TABLE Name2Id;CREATE VIEW Name2Id AS WITH RECURSIVE slow(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM slow WHERE n<1000000000) SELECT 1 AS rowid,'synthetic-owner' AS user_name FROM slow WHERE n=1000000000"); err != nil {
-		t.Fatal(err)
-	}
-	refreshNotaloneMetadataInspection(t, &f)
-	w := newNotaloneTestMetadataWatch()
-	defer w.Close()
-	if _, err := w.observe(context.Background(), f.server, f.selected, f.inspected, "arm"); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.writers[0].Exec("INSERT INTO " + quoteIdent(f.table) + "(local_type,real_sender_id) VALUES(1,1)"); err != nil {
-		t.Fatal(err)
-	}
-	finished := make(chan error, 1)
-	go func() {
-		_, err := w.observe(context.Background(), f.server, f.selected, f.inspected, "next")
-		finished <- err
-	}()
-	// 定时取消模拟读取进行时退出；断言关闭实际排空，不能等native长查询自然完成。
-	<-time.After(30 * time.Millisecond)
-	closed := make(chan error, 1)
-	go func() { closed <- w.Close() }()
-	select {
-	case err := <-closed:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Close没有取消在途查询")
-	}
-	select {
-	case err := <-finished:
-		if err == nil {
-			t.Fatal("取消后返回了部分观察")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("Close返回但读取未排空")
-	}
-	rows, err := f.writers[0].QueryBounded(context.Background(), 1, "PRAGMA wal_checkpoint(TRUNCATE)")
-	if err != nil || len(rows) != 1 || rowInt64(rows[0], "busy") != 0 {
-		t.Fatalf("关闭后reader未释放:%v %v", rows, err)
+	for _, mode := range []string{"close", "context-cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newNotaloneSnapshotFixture(t, 1)
+			w := newNotaloneTestMetadataWatch()
+			defer w.Close()
+			if _, err := w.observe(context.Background(), f.server, f.selected, f.inspected, "arm"); err != nil {
+				t.Fatal(err)
+			}
+			entered := make(chan struct{})
+			w.beforeCapture = func(ctx context.Context, snapshot *notaloneSnapshot) error {
+				close(entered)
+				_, err := snapshot.shards[0].reader.QueryBounded(ctx, 1, "WITH RECURSIVE slow(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM slow WHERE n<1000000000) SELECT max(n) AS maximum FROM slow")
+				return err
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			finished := make(chan error, 1)
+			go func() { _, err := w.observe(ctx, f.server, f.selected, f.inspected, "next"); finished <- err }()
+			<-entered
+			// 明确的实例hook只替合成测试增加长QueryBounded，正常arm与preflight保持原路径。
+			<-time.After(30 * time.Millisecond)
+			closed := make(chan error, 1)
+			if mode == "close" {
+				go func() { closed <- w.Close() }()
+			} else {
+				cancel()
+			}
+			select {
+			case err := <-finished:
+				if err == nil {
+					t.Fatal("取消后返回了部分观察")
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("取消没有排空原生查询")
+			}
+			if mode == "close" {
+				select {
+				case err := <-closed:
+					if err != nil {
+						t.Fatal(err)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("Close没有等待实际读取结束")
+				}
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			rows, err := f.writers[0].QueryBounded(context.Background(), 1, "PRAGMA wal_checkpoint(TRUNCATE)")
+			if err != nil || len(rows) != 1 || rowInt64(rows[0], "busy") != 0 {
+				t.Fatalf("关闭后reader未释放:%v %v", rows, err)
+			}
+		})
 	}
 }
 

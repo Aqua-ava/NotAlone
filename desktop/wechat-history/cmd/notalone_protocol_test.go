@@ -21,6 +21,9 @@ func notaloneProtocolFixture(t *testing.T, supported bool) *notaloneHistorySessi
 	if err = writer.Exec(`CREATE TABLE Name2Id(user_name TEXT);INSERT INTO Name2Id(rowid,user_name) VALUES(1,'friend-a');UPDATE "Msg_` + talkerHash("friend-a") + `" SET server_id=0,local_type=1,real_sender_id=1,create_time=1700000000,status=0;`); err != nil {
 		t.Fatal(err)
 	}
+	if err = writer.Exec("INSERT INTO Name2Id(rowid,user_name) VALUES(2,'" + s.selfWxid() + "')"); err != nil {
+		t.Fatal(err)
+	}
 	writer.Close()
 	h := newNotaloneHistorySession(s)
 	t.Cleanup(h.close)

@@ -34,6 +34,8 @@ type notaloneTestMetadataWatch struct {
 	started                   time.Time
 	calls                     int
 	closed                    bool
+	// 仅供合成取消测试注入长原生查询；协议不能装配此回调。
+	beforeCapture func(context.Context, *notaloneSnapshot) error
 }
 
 func newNotaloneTestMetadataWatch() *notaloneTestMetadataWatch {
@@ -78,9 +80,13 @@ func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, sele
 	}()
 	if action == "arm" {
 		w.started = time.Now()
+		owner := s.selfWxid()
+		if owner == "" || !notaloneIdentity.MatchString(owner) || owner == selected.Conversation {
+			return report, notaloneFailure("history_test_sender_unverified")
+		}
 		for _, table := range inspection.Tables {
 			if !table.AutoIncrement || len(table.DeclaredPrimaryKey) != 1 || table.DeclaredPrimaryKey[0] != "local_id" {
-				return report, notaloneFailure("history_identity_unverified")
+				return report, notaloneFailure("history_test_key_unverified")
 			}
 		}
 		directory := filepath.Join(s.cfg.DBRoot, "db_storage", "message")
@@ -122,11 +128,18 @@ func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, sele
 	stop := context.AfterFunc(snapshot.life, cancel)
 	defer func() { stop(); cancel() }()
 	if action == "arm" {
-		w.baseline, err = snapshot.testMetadataBaseline(op)
+		if err = snapshot.testMetadataSenderPreflight(op); err == nil {
+			w.baseline, err = snapshot.testMetadataBaseline(op)
+		}
 	}
 	if action == "next" {
 		if len(w.locked) >= 2 {
 			return report, notaloneFailure("history_request_invalid")
+		}
+		if w.beforeCapture != nil {
+			if e := w.beforeCapture(op, snapshot); e != nil {
+				return report, notaloneFailure("history_metadata_unavailable")
+			}
 		}
 		var candidate *notaloneSnapshotShard
 		total := int64(0)
@@ -145,7 +158,7 @@ func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, sele
 			}
 			total += count
 			if total > 1 {
-				return report, notaloneFailure("history_identity_ambiguous")
+				return report, notaloneFailure("history_test_new_rows_ambiguous")
 			}
 			if count == 1 {
 				candidate = shard
@@ -157,16 +170,22 @@ func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, sele
 			if e != nil {
 				return report, e
 			}
-			if record == nil || record.LocalID == nil || record.OriginalType == nil || record.Sender != "owner" {
-				return report, notaloneFailure("history_identity_ambiguous")
+			if record == nil || record.LocalID == nil {
+				return report, notaloneFailure("history_test_key_unverified")
+			}
+			if record.Sender != "owner" {
+				return report, notaloneFailure("history_test_sender_unverified")
+			}
+			if record.OriginalType == nil {
+				return report, notaloneFailure("history_test_type_unverified")
 			}
 			typeID, e := strconv.ParseInt(*record.OriginalType, 10, 64)
 			if e != nil || uint64(typeID)&0xffffffff != 1 {
-				return report, notaloneFailure("history_identity_ambiguous")
+				return report, notaloneFailure("history_test_type_unverified")
 			}
 			id, e := strconv.ParseInt(*record.LocalID, 10, 64)
 			if e != nil {
-				return report, notaloneFailure("history_identity_ambiguous")
+				return report, notaloneFailure("history_test_key_unverified")
 			}
 			baseline, e := snapshot.testMetadataBaseline(op)
 			if e != nil {
@@ -230,7 +249,7 @@ func (n *notaloneSnapshot) testMetadataBaseline(ctx context.Context) (map[string
 		}
 		maximum, ok := rows[0]["maximum"].(int64)
 		if !ok {
-			return nil, notaloneFailure("history_identity_unverified")
+			return nil, notaloneFailure("history_test_key_unverified")
 		}
 		result[shard.partition] = &maximum
 	}
@@ -253,7 +272,7 @@ func (n *notaloneSnapshot) testMetadataRecord(ctx context.Context, shard *notalo
 		}
 		if len(names) == 1 {
 			switch rowString(names[0], "user_name") {
-			case n.selected.Account:
+			case n.senderOwner:
 				r.Sender = "owner"
 			case n.selected.Conversation:
 				r.Sender = "contact"
@@ -261,4 +280,48 @@ func (n *notaloneSnapshot) testMetadataRecord(ctx context.Context, shard *notalo
 		}
 	}
 	return r, nil
+}
+
+// 只核对固定账号候选的有界计数，不枚举Name2Id或输出原始账号名。
+func (n *notaloneSnapshot) testMetadataSenderPreflight(ctx context.Context) error {
+	owner := n.senderOwner
+	if owner == "" || !notaloneIdentity.MatchString(owner) || owner == n.selected.Conversation {
+		return notaloneFailure("history_test_sender_unverified")
+	}
+	for _, shard := range n.shards {
+		if !shard.present {
+			continue
+		}
+		count := func(name string) (int64, error) {
+			rows, err := shard.reader.QueryBounded(ctx, 1, "SELECT count(*) AS count FROM (SELECT 1 FROM Name2Id WHERE user_name=? LIMIT 2)", name)
+			if err != nil || len(rows) != 1 {
+				return 0, notaloneFailure("history_test_sender_unverified")
+			}
+			value, ok := rows[0]["count"].(int64)
+			if !ok || value < 0 || value > 2 {
+				return 0, notaloneFailure("history_test_sender_unverified")
+			}
+			return value, nil
+		}
+		canonicalCount, err := count(owner)
+		if err != nil {
+			return err
+		}
+		if canonicalCount > 1 {
+			return notaloneFailure("history_test_sender_ambiguous")
+		}
+		if owner != n.selected.Account {
+			rawCount, err := count(n.selected.Account)
+			if err != nil {
+				return err
+			}
+			if rawCount > 0 {
+				return notaloneFailure("history_test_sender_ambiguous")
+			}
+		}
+		if canonicalCount != 1 {
+			return notaloneFailure("history_test_sender_unverified")
+		}
+	}
+	return nil
 }

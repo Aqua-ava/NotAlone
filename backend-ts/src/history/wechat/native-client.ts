@@ -68,6 +68,8 @@ const allowedErrors = new Set([
   'history_page_budget_exhausted', 'history_page_read_failed', 'history_shards_changed',
   'history_snapshot_cancelled', 'history_snapshot_closed', 'history_snapshot_unavailable',
   'history_snapshot_window_changed', 'history_text_unknown', 'history_text_invalid',
+  'history_test_sender_unverified', 'history_test_sender_ambiguous', 'history_test_new_rows_ambiguous',
+  'history_test_type_unverified', 'history_test_key_unverified',
 ]);
 function object(value: unknown, keys: readonly string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();

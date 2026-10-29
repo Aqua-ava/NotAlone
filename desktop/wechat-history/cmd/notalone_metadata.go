@@ -117,7 +117,7 @@ func (n *notaloneSnapshot) observeMetadata(ctx context.Context, kind string) (*n
 			names, err := shard.reader.QueryBounded(op, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", senderID)
 			if err == nil && len(names) == 1 {
 				switch rowString(names[0], "user_name") {
-				case n.selected.Account:
+				case n.senderOwner:
 					observation.Sender = "owner"
 				case n.selected.Conversation:
 					observation.Sender = "contact"
