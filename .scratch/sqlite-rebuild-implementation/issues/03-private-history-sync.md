@@ -60,3 +60,10 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 尚未完成：总指挥在05之后串行聚合history HTTP／capability／启动停止与共享删除注册，并安排实际App消息UI验收；真实支持档窄接口缺证仍阻断真实正文。未把外部制品缺失或读取拒绝计作正常路径通过，Goal不标complete，票不resolved。公共修改只有registry的最小history迁移/actions追加（本树暂4，实际集成序决定）；profile、launch、host、desktop startup未改。所有提交仅本票；公开历史检查持续0问题。
 
 总集成检查点：已审核心最终净差异按实际集成序追加history迁移v5，保留已发布v1–v4及Skill动作。集成后backend类型检查、历史服务／HTTP 19/19通过；真实渠道认证和公共宿主接线继续实施，State保持claimed。
+
+
+2026-10-29 后续检查点：正式宿主／消息／覆盖／共享删除接线已本地提交71fe749604e4b66a35a462ab5e62c2c04934754f，正常DSH非空分页及重开、source/contact/account删除等33/33通过；未以预灌库证明首次自动派发。消息资格失败撤旧正文与迟到保护66755ab5、coverage显示与正文可用性解耦20357a86均有定向红绿，实际App仍待串行窗口。
+
+新窄操作从锁定上游与Go离线构建，原用户组件和配置未替换。最终开发CLI上正式typed client对唯一获准对象仅resolve/inspect/support：8分片、2表，当前结构／声明主键／自增规则已核验，server索引非唯一；未读消息行或正文，正常target因真实状态及来源生命周期未认证拒绝。分项报告与最终字节见docs/verification/sqlite-private-history-support-03.md及support-profiles/wechat-4.0.6-29387-narrow-v1.json。fresh归档源码定向+race60项／2包通过、0失败0跳过；NUL截断已修复f3894fc3，缺配置自动发现、账号预检和guard回收a6ae5a86已修。
+
+仍在实施：正常首次自动派发的独立协调器与正式service测试；连续来源删除遗漏早期旧代次读者的P1复现已确认，正按共享holder领域资格补齐；首次自动入口、实际App消息／覆盖／删除旧正文的证据未满足。真实状态与跨启动／原位恢复连续性仍缺独立证据，不扩大范围补发送／撤回或迁移恢复实验。State继续claimed、Goal继续active，不把结构成功、全拒绝或预灌数据计作03完成。
