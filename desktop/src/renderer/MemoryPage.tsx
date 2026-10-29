@@ -312,7 +312,7 @@ type MemoryView = keyof typeof memoryViews;
 export function MemoryPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
   return <MemoryProcessingEntry bridge={window.notalone.fixedMemoryProcessing} backend={window.notalone.backend}
     scopeKey={`${session.state.selectedContactId}:${session.state.scopeRevision}`}
-    sqliteChildren={<SqliteMemoryManagementPanel bridge={window.notalone.sqliteMemoryManagement} contactId={session.state.selectedContactId} scopeRevision={session.state.scopeRevision}/>}>
+    sqliteChildren={(processingRevision,completedRunId)=><SqliteMemoryManagementPanel bridge={window.notalone.sqliteMemoryManagement} contactId={session.state.selectedContactId} scopeRevision={session.state.scopeRevision} documentsRefreshKey={processingRevision} completedRunId={completedRunId}/> }>
     <LegacyMemoryPage session={session} navigate={navigate}/>
   </MemoryProcessingEntry>;
 }

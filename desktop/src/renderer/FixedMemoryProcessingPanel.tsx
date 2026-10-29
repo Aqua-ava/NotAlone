@@ -5,13 +5,16 @@ function status(run: FixedProcessingRun | null): string {
   if (!run) return '尚未开始';
   if (run.unknown > 0) return '调用结果待核实';
   if (run.tasks.length > 0 && run.tasks.every(task => task.state === 'revoked')) return '范围已失效';
+  if (run.state === 'completed') return '本轮已完成';
+  if (run.stage === 'document_scene') return '正在整理主题资料';
+  if (run.stage === 'document_profile') return '正在整理长期概览';
   if (run.state === 'incomplete' && run.succeeded === run.total && run.total > 0) return '提取核验已结束';
   return { pending: '等待提取与核验', running: '正在提取与核验', paused: '已暂停', failed: '提取核验失败',
-    incomplete: '本轮尚未完成', revoked: '范围已失效' }[run.state];
+    incomplete: '本轮尚未完成', revoked: '范围已失效', completed: '本轮已完成' }[run.state];
 }
 
 /** 由记忆页面传入具名桥；scopeKey变化或失效事件先撤下全部本地快照。 */
-export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: FixedMemoryProcessingBridge; scopeKey?: string | number }) {
+export function FixedMemoryProcessingPanel({ bridge, scopeKey = '', onRunUpdated }: { bridge: FixedMemoryProcessingBridge; scopeKey?: string | number; onRunUpdated?:(run:FixedProcessingRun|null)=>void }) {
   const [view, setView] = useState<FixedProcessingView | null>(null);
   const [trace, setTrace] = useState<FixedProcessingTrace | null>(null);
   const [error, setError] = useState('');
@@ -23,7 +26,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
     setBusy(true); setError(''); setView(null); setTrace(null);
     try {
       const next = await operation();
-      if (active.current && accepted === revision.current) { setView(next); return next; }
+      if (active.current && accepted === revision.current) { setView(next); onRunUpdated?.(next.run); return next; }
       return null;
     } catch {
       if (active.current && accepted === revision.current) {
@@ -93,7 +96,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
       {noNewMemory && <p>已处理，未产生新记忆</p>}
       {run.failed > 0 && <p>有 {run.failed} 条目标尚未通过提取核验。</p>}
       {run.unknown > 0 && <p>有 {run.unknown} 条目标调用结果未知，核实前不会重新发送。</p>}
-      <p>主题整理、长期概览尚未执行，本轮未完成。</p>
+      {run.laterStages==='completed'?<p>主题整理与长期概览已完成。</p>:<p>主题整理、长期概览尚未全部完成。</p>}
       {run.candidates.length > 0 && <section aria-label="本轮已核验候选">
         <h3>来源已核验的候选</h3>
         <p>以下候选来自自动提取，正式记忆与决定请查看下方。</p>

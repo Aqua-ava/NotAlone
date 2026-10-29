@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { controlledFiles } from './files.ts';
 import { registry as defaultRegistry } from './registry.ts';
 import { memoryAdjudicationMigration, memoryAdjudicationRebuildPolicy, memoryAdjudicationRebuildChecksum, memoryAdjudicationUpgradeSteps } from '../../memory/sqlite/management/adjudication-schema.ts';
+import { memoryDocumentsMigration, memoryDocumentsRebuildPolicy, memoryDocumentsRebuildChecksum, memoryDocumentsUpgradeSteps } from '../../memory/sqlite/documents/schema.ts';
 import { StorageFailure, type OpenStorageOptions, type StorageRegistry, type StorageTransaction, type StorageLease, type StorageMaintenance } from './contracts.ts';
 
 const port = parentPort!;
@@ -30,9 +31,14 @@ try {
   // 只有编译进应用的固定版本和完整SQL可以进入事务外关FK路径。
   for (const migration of registry.migrations) {
     if (migration.sql === memoryAdjudicationMigration(12).sql && migration.rebuild !== memoryAdjudicationRebuildPolicy) throw new StorageFailure('migration_rebuild_forbidden');
-    if (migration.rebuild !== undefined && (
-    migration.rebuild !== memoryAdjudicationRebuildPolicy || migration.version !== 12
-    || migration.sql !== memoryAdjudicationMigration(12).sql || digest(migration.sql) !== memoryAdjudicationRebuildChecksum)) throw new StorageFailure('migration_rebuild_forbidden');
+    if (migration.sql === memoryDocumentsMigration(13).sql && migration.rebuild !== memoryDocumentsRebuildPolicy) throw new StorageFailure('migration_rebuild_forbidden');
+    if (migration.rebuild !== undefined) {
+      const allowed = migration.rebuild === memoryAdjudicationRebuildPolicy && migration.version === 12
+        && migration.sql === memoryAdjudicationMigration(12).sql && digest(migration.sql) === memoryAdjudicationRebuildChecksum
+        || migration.rebuild === memoryDocumentsRebuildPolicy && migration.version === 13
+        && migration.sql === memoryDocumentsMigration(13).sql && digest(migration.sql) === memoryDocumentsRebuildChecksum;
+      if (!allowed) throw new StorageFailure('migration_rebuild_forbidden');
+    }
   }
   const files = controlledFiles(options.userData, options.intent === 'create');
   db = new DatabaseSync(files.database, { enableForeignKeyConstraints: true, allowExtension: false, timeout: 100 });
@@ -86,7 +92,8 @@ try {
       const applied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
       for (const migration of registry.migrations.slice(applied)) {
         if (migration.rebuild) {
-          for (const step of memoryAdjudicationUpgradeSteps) {
+          const steps = migration.rebuild === memoryAdjudicationRebuildPolicy ? memoryAdjudicationUpgradeSteps : memoryDocumentsUpgradeSteps;
+          for (const step of steps) {
             connection.exec(step.sql);
             if (step.phase === 'check') checks();
             const observed: unknown = registry.migrationObserver?.({version: migration.version, phase: step.phase});
