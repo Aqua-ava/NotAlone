@@ -23,5 +23,5 @@
     "reliableHistoryCursor": "unverified"
   },
   "nativeSyntheticAssertions": { "passed": 12, "total": 12 },
-  "evidence": "research/wechat-sqlite-history-support-03.md"
+  "evidence": "docs/verification/sqlite-private-history-support-03.md"
 }
