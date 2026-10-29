@@ -39,7 +39,7 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [14 官方 Skill 加载接回](issues/14-official-skill-loading.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [15 既有纠错与诊断功能改接](issues/15-feedback-and-quality-adaptation.md) | [09](issues/09-memory-documents-publication.md) | ready-for-agent | open |
 | [16 单条媒体保存与清除](issues/16-single-message-media-lifecycle.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
-| [17 图片与视频提取](issues/17-image-video-extraction.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | claimed |
+| [17 图片与视频提取](issues/17-image-video-extraction.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | resolved |
 | [18 语音保存与转换](issues/18-voice-save-and-conversion.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | claimed |
 | [19 媒体真实关联与组合验收](issues/19-media-integration-acceptance.md) | [03](issues/03-private-history-sync.md)、[17](issues/17-image-video-extraction.md)、[18](issues/18-voice-save-and-conversion.md) | ready-for-agent | open |
 | [20 默认切换 SQLite 与旧业务清理](issues/20-sqlite-cutover-and-legacy-cleanup.md) | [06](issues/06-clear-and-resync-history.md)、[10](issues/10-memory-processing-controls.md)、[13](issues/13-expression-preferences.md)、[14](issues/14-official-skill-loading.md)、[15](issues/15-feedback-and-quality-adaptation.md)、[16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | open |
@@ -176,3 +176,5 @@ flowchart TD
 - 公共共享合同已按源祖先合并：讨论、记忆提取与执行追踪分别追加为迁移7／8／9，既有1–6保持不变；真实SQLite共享约束及删除7项、两端类型通过。07的唯一模型宿主注入检查点亦已集成，root补装配1项，复用条件未变的源验证。07／11继续claimed，正式宿主与实际App验收尚未完成。
 
 - 17图片／视频完整检查点已集成，最小检查与双轴复核通过，正在独占短实际App窗口；18语音离线实现、依赖及许可证检查点已保存，Spec增量复核与实机待完成。03已按授权发送并保留第一条固定测试，随后唯一关联歧义停止；第二条未发送也未撤回，不据此认证真实状态。桌面已释放给17，03继续匿名原因诊断与首次历史公共hook收尾。
+
+- 17已完成实际App和资源固定证明修复，Goal实际complete、最终源已保留祖先集成；PNG清除、视频控件播放、来源／联系人删除撤下快照均通过，root补图片／语音联合变异4项。当前共六项resolved，其余按直接依赖继续；19仍等待03和18，真实媒体范围已由用户明确为指定会话最新图片、视频、语音各一条（存在且能核验归属时读取）。
