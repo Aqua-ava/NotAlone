@@ -1,6 +1,6 @@
 # 21 三份规格组合验收记录
 
-日期：2026-10-30。执行会话：`t21-integrated-acceptance`（共享任务 task-7）。验收基线：`codex/sqlite-rebuild-integration`@`b8577686`（初稿基于 `d8c55619`；随后票20 跨重启回归提交 `ed4bce2c`/`b8577686` 已合并复核，无产品代码改动），本票工作树 `sqlite-rebuild-21`（同名分支，仅本地提交，不 push/PR）。
+日期：2026-10-30。执行会话：`t21-integrated-acceptance`（共享任务 task-7）。验收基线：`codex/sqlite-rebuild-integration`@`d1068fbf`（初稿基于 `d8c55619`；随后票20 跨重启回归 `b8577686` 与跨重启联系人目录失效修复 `154ac9e2`（05×06 交互）经 `d1068fbf` 集成，本票已合并复核），本票工作树 `sqlite-rebuild-21`（同名分支，仅本地提交，不 push/PR）。
 
 本记录只做组合验收与证据收口，不补实现、不改其他票状态。已 resolved 票引用其既有有效证据并按未变化条件复用，未重跑其整套；本轮实际执行的组合批次与 App 交互单独记录。合成、实际开发 App、真实模型、真实微信分列记账；未认证项不得解释为通过。
 
@@ -8,8 +8,9 @@
 
 - **17 项有效范围**（01–12、14、16、17、20、21）中，01、02、05、07、08、09、11、12、14、16、17 已 resolved 且实现/结构已进集成基线；03、04、06、10、20 实现已进基线但 State 保持 claimed，其真实渠道/清理门槛未认证。
 - 本轮实测的集成组合回归：7 个批次 **592/592 通过**（A 同步/清空/删除 125、B 记忆/文档/控制 145、C 媒体 68、D 切换/回复/讨论/Skill 94、E Electron 宿主 30、F 桌面模块 56、G 裁决/迁移/共享结构 74），两端 typecheck 结果见 §3/§9。
-- 基线复核追加：票20 新增跨重启宿主回归（`sqlite-cutover-restart-host.test.mjs`）与 20 verification §13「跨重启 UI 复核限制」；本票在 Electron Node 下复跑切换批次 **25/25**（含 restart-host 1/1），无产品代码改动；本票观察到的「重启后联系人 UI 读取失败」仍按「未认证/待诊断」记录（见 §4.5、§7）。
-- 实际开发 App（热更新 dev，隔离合成 userData）完成：默认 SQLite 自动创建（manifest `completed`，8/8 checks passed）、记忆/文档状态展示、认证来源删除后旧资料实际撤下、联系人清空进入 `boundary_pending` 且无成功文案、正常退出 `stopped/pids[]`、重开同 `databaseId`/结构 15/`integrity=ok`/`foreignKeys=ok`。
+- 基线复核追加：票20 跨重启宿主回归与「跨重启 UI 复核限制」（20 verification §13）；本票在修复基线 `d1068fbf` 上复跑批 H **25/25**（含 restart-host 1/1），并跑修复回归批 I **45/45**（含新增 `sqlite-deletion-metadata-restart` 2 项）、批 J **21/21**（Electron 宿主）、批 K **27/27**（Electron 下 restart 回归 + 批 H 复跑）。
+- 本票报告的「重启后联系人同步状态/目录读取失败」已由 t20 定位为 **05×06 交互缺陷**（`deletion.metadataAvailable` 把清空内容类未完成删除误当身份删除），修复源 `154ac9e2` 经 `d1068fbf` 集成；本票用同构根按原顺序（source DELETE completed → 清空 boundary_pending → 正常退出 → 同根重启）完成 **App 级闭环复验**：`/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status`、`/api/deletions`、清空状态均 200，联系人页无读取失败（§4.5）。该修复不改变真实微信/真实模型门槛，相关列仍按未认证记录。
+- 实际开发 App（热更新 dev，隔离合成 userData）完成：默认 SQLite 自动创建（manifest `completed`，8/8 checks passed）、记忆/文档状态展示、认证来源删除后旧资料实际撤下、联系人清空进入 `boundary_pending` 且无成功文案、正常退出 `stopped/pids[]`、重开同 `databaseId`/结构 15/`integrity=ok`/`foreignKeys=ok`；重开后联系人目录与授权读取正常（原 05×06 缺陷修复后 App 闭环复验，§4.5）。
 - **未通过/受阻（关键）**：03 真实普通历史、状态语义与来源生命周期、跨启动连续性；04 真实增量尾部（重选/断线/微信非前台 CLI 同步未认证）；06 真实 observer/reader 边界协议与最终只读制品（生产保持 `boundary_pending`）；20 真实旧业务库/副本清理（对象归属不明，实际清理未执行）；19 真实媒体唯一关联用户暂缓。真实模型仅 07/11 两次用户另行授权的受限真实调用，其余未测。
 - 因此本票**保持 claimed 并报告受阻**，不以已提交代码或已发布任务关闭规格；即使全部合成与 App 交互通过，也不能替代 03/04/06/20 的真实渠道/清理认证。
 - 17 项矩阵见 §1；四项用户暂缓见 §2；组合实测见 §3；App 证据见 §4；未通过项与所需授权见 §7。
@@ -21,7 +22,7 @@
 | 项 | 实现 | 集成 | 合成验证 | 实际 App | 真实模型 | 真实微信 | 证据指针（节选） |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 01 SQLite 底座与生命周期 | 通过 | 通过 | 通过 | 通过 | 不适用 | 不适用 | 票 Answer：`.scratch/sqlite-rebuild-implementation/issues/01-sqlite-runtime-lifecycle.md:42`；`backend-ts/test/sqlite-storage.test.mjs`（本轮复跑 10/10）；迁移 1–15、82 表/252 CHECK/92 触发器 body：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md:17-27,42`；ADR-109 |
-| 02 联系人绑定与同步授权 | 通过 | 通过 | 通过 | 部分（联系人与授权显示通过；重开后联系人目录读取待诊断，见 §4.5） | 不适用 | 未认证（真实逐人确认/范围） | 票 Answer：`02-contact-binding-and-read-grants.md:43`；`sqlite-contact-binding.test.mjs`、`sqlite-contact-close.test.mjs`（批 A 125/125 内含）；ADR-110 |
+| 02 联系人绑定与同步授权 | 通过 | 通过 | 通过 | 通过（重开后联系人目录与授权读取正常；原 05×06 缺陷已修复并 App 闭环复验，见 §4.5） | 不适用 | 未认证（真实逐人确认/范围） | 票 Answer：`02-contact-binding-and-read-grants.md:43`；`sqlite-contact-binding.test.mjs`、`sqlite-contact-close.test.mjs`（批 A 125/125 内含）；ADR-110 |
 | 03 首次历史同步与消息展示 | 通过 | 通过 | 通过 | 部分（合成 App 展示/覆盖/删除撤下） | 不适用 | **受阻**（第 1/2 条真实未过） | 12 条逐条判定与缺口：`docs/verification/sqlite-private-history-support-03.md:198-215,217-225`；票 Comments/Answer：`03-private-history-sync.md:46,54`；真实 metadata 仅受控只读观察（5/7 类型，无正文），普通 target/page 全拒绝 |
 | 04 增量同步与读取控制 | 通过 | 通过 | 通过 | 部分（总开关/授权/阶段/取消/覆盖；重选/断线/非前台 CLI 未过） | 不适用 | **未认证** | 票与验证记录：`docs/verification/sqlite-incremental-sync-04.md:39-53,80-84`；t04 实机部分通过：`planning.md:209`；批 A 内增量/控制/HTTP 用例通过 |
 | 05 统一来源删除与清理 | 通过 | 通过 | 通过 | 通过 | 不适用 | 不适用（真实删除链依赖 03/06 捕获） | 票 Answer：`05-source-deletion-and-cleanup.md:43`；`sqlite-deletion*.test.mjs`（批 A）、Electron 宿主删除 E 30/30；本轮实际 App 认证 source DELETE 202→completed 并撤下旧资料（§4） |
@@ -35,7 +36,7 @@
 | 14 官方 Skill 加载接回 | 通过 | 通过 | 通过 | 通过 | 不适用（隔离加载无模型请求） | 不适用 | 票 Answer：`14-official-skill-loading.md:49` 起；批 D skill/host 通过；空库 Skill 安全：`docs/verification/20-...:164` |
 | 16 单条媒体保存与清除 | 通过 | 通过 | 通过 | 通过（四类删除/预览，条件未变复用） | 不适用（不调模型） | 未认证（真实类型未安装，入口拒绝） | 票 Answer：`16-single-message-media-lifecycle.md:49` 起；批 C `sqlite-media*` 68/68、E `media-host`、F 桌面 message-media 56/56 |
 | 17 图片与视频提取 | 通过 | 通过 | 通过 | 通过（PNG/视频/清除/来源删除，复用） | 不适用 | 未认证（19 暂缓，真实关联入口关闭） | 票 Answer 含支持矩阵：`17-image-video-extraction.md:47` 起；批 C visual/DAT、F 桌面；原生 helper 合成证据按其票内声明范围复用 |
-| 20 默认切换 SQLite 与旧业务清理 | 通过 | 通过 | 通过（隔离演练） | 通过（默认入口实测；本轮空根复验） | 不适用 | 不适用；**真实旧业务清理受阻** | 12 条判定：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md:151-166`；真实归属受阻：同文件 `:105-113`；跨重启宿主回归与限制：同文件 `:197-205`（本票复跑批 H 25/25，含 `sqlite-cutover-restart-host.test.mjs` 1/1）；t20 集成记录：`planning.md:193`；本轮空根 manifest 8/8 checks（§4） |
+| 20 默认切换 SQLite 与旧业务清理 | 通过 | 通过 | 通过（隔离演练） | 通过（默认入口实测；本轮空根复验） | 不适用 | 不适用；**真实旧业务清理受阻** | 12 条判定：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md:151-166`；真实归属受阻：同文件 `:105-113`；跨重启宿主回归与限制：同文件 `:197-205`（本票复跑批 H 25/25、修复后批 K 27/27）；t20 集成记录：`planning.md:193`；本轮空根 manifest 8/8 checks（§4） |
 | 21 三份规格组合验收 | 本记录 | 本记录 | 本轮 592/592（A–G） | 本轮完成（§4） | 仅 07/11 受限 | 未认证（仅 03 受控 metadata 观察，无正文） | 本文档；未通过项 §7；四项暂缓 §2 |
 
 ## 2. 四项用户暂缓（不启用、不补验收、不计通过）
@@ -51,7 +52,7 @@
 
 ## 3. 组合行为实测
 
-执行环境：Node `/tmp/t09-node/bin/node` v24.21.0；Electron 44.7.0（44.7.0 / Node 24.21.0）；SQLite 3.53.4；锁定 TypeScript 7.0.2；隔离临时 SQLite `role=test` 与合成身份/消息，不读取真实微信、不调用真实模型、不发送外部消息、不打包。日志位于 `/tmp/t21-batch-*.log`、`/tmp/t21-typecheck.log`。两端 `pnpm run typecheck`（backend/desktop）均 0 错误。基线复核后新增批次 H（票20 跨重启宿主回归 25/25，日志 `/tmp/t21-batch-h-restart.log`）。
+执行环境：Node `/tmp/t09-node/bin/node` v24.21.0；Electron 44.7.0（44.7.0 / Node 24.21.0）；SQLite 3.53.4；锁定 TypeScript 7.0.2；隔离临时 SQLite `role=test` 与合成身份/消息，不读取真实微信、不调用真实模型、不发送外部消息、不打包。日志位于 `/tmp/t21-batch-*.log`、`/tmp/t21-typecheck.log`。两端 `pnpm run typecheck`（backend/desktop）均 0 错误。基线复核后新增批 H（票20 跨重启宿主回归 25/25，`/tmp/t21-batch-h-restart.log`）、批 I（修复回归 45/45，`/tmp/t21-batch-i-restartfix.log`）、批 J（Electron 宿主 21/21，`/tmp/t21-batch-j-host-fix.log`）、批 K（Electron 下 restart 回归 + 批 H 复跑 27/27，`/tmp/t21-batch-k-fix-verify.log`）。
 
 ### 3.1 关闭读取、取消单人、独立暂停、来源删除的四种语义
 
@@ -123,12 +124,12 @@
 
 - 正常退出（监督器 INT→IPC `notalone-dev-quit`→`app.quit`）后同 scope `dev:status` 返回 `{"mode":"stopped","pids":[]}`，端口/环回供应商/App 进程退出。
 - 同根重开：`database-cutover/manifest.json` 仍 `completed`、同一 `databaseId=216a44ab-…`、`ownerId=00000000-0000-4000-8000-000000000001`；离线 `SqliteStorage.open` 复核 `schemaVersion=15`、`integrity=ok`、`foreignKeys=ok`；删除与清空决定持久。
-- **观察边界（未认证/待诊断）**：重开后联系人页显示「联系人同步状态读取失败…当前不能确认授权范围」，刷新仍失败；本轮未认证跨重启 UI 正常。t20 已在 20 verification §13 用无预置控制文件的隔离根做连续 3 个启动/退出周期（`/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status` 均 200，CDP `contacts.getState().directoryPhase=ready`、`bindings.getState().phase=ready`，`sessionIssue=unavailable` 仅因隔离根无真实 CLI）并新增 `sqlite-cutover-restart-host.test.mjs` 回归，均未复现，故当前不判定为 20 缺陷。与本票场景的差异已回传 t20：首轮执行过认证 source DELETE（completed）+ 联系人清空（boundary_pending）后重启，且根由记忆准备脚本预置 `sqlite-development.json`/`backend-launch.json`。结论前保持「未认证/待诊断」，不写成产品缺陷或通过；如获短窗口可按同变更一次复现并抓 4 个 API 响应与 BindingConsent phase。
-- 证据：`/tmp/t21-evidence/t21-manifest-prepared-restart.json`、`/tmp/t21-evidence/t21-prepared-restart.png`。
+- **首轮观察与修复闭环**：初稿复验时（基线 `d8c55619`）重开后联系人页显示「联系人同步状态读取失败…当前不能确认授权范围」；t20 按本票回传的差异（首轮 source DELETE completed + 清空 boundary_pending）复现并定位为 `deletion.metadataAvailable` 在内容类未完成删除时误关闭名单服务（`/api/contacts`、`/api/sync/cli-bindings` 409 `identity_closed`、`/api/sync/status` 503），修复源 `154ac9e2` 经 `d1068fbf` 集成。本票在修复基线用同构根按原顺序重跑：认证 source DELETE 202→`completed`、清空进入 `boundary_pending`（`deletion_state=blocked`、`exact_channel_cutoff_required`）→ 正常退出（`dev:status stopped/pids[]`）→ 同根重启后 `/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status`、`/api/deletions`、清空状态均为 **200**；CDP 联系人页无读取失败、两位联系人可见（合成乙 2 条消息、合成甲 0 条消息 + 清空 pending），清空状态仍为 `boundary_pending`/blocked。隔离根无真实 CLI 时微信会话名单 `sessionIssue=unavailable` 属预期环境限制，不影响联系人目录/绑定/授权/删除进度读取。
+- 证据：`/tmp/t21-evidence/restart-fix-*.json|png`（删除 202、清空 pending 截图、重启后 6 个 API 响应、联系人页截图、最终 `stopped/pids[]`）。
 
 ### 4.6 清理
 
-合成根与空根均已按精确 realpath 删除；环回供应商停止；无残留开发 App/监督器/端口；`pids=[]`。原始截图/JSON/manifest 仅保留在 `/tmp/t21-evidence/`（不含私人数据），提交中只保留本验收记录。
+合成根（初稿与修复闭环复验各一）、空根均已按精确 realpath 删除；环回供应商停止；无残留开发 App/监督器/端口；`pids=[]`。原始截图/JSON/manifest 仅保留在 `/tmp/t21-evidence/`（不含私人数据），提交中只保留本验收记录。
 
 ## 5. 三份规格覆盖对照
 
@@ -143,6 +144,7 @@
 
 **合成侧（本轮实际执行）**：
 - 创建/删除隔离临时用户目录：空根（默认 SQLite 自动创建，databaseId `6540d866-…`）与合成记忆根（databaseId `216a44ab-…`，两位合成联系人/5 条合成文字/候选/正式记忆 v2/主题文档状态）。
+- 修复闭环复验另建/删除一个同构合成根（databaseId `4252b707-…`）：认证 source DELETE（completed）+ 清空（boundary_pending/blocked）→ 正常退出 → 同根重启，接口与 UI 读取正常；根已删除，证据在 `/tmp/t21-evidence/restart-fix-*`。
 - 实际执行认证删除 1 个合成来源（operation completed、3 域 checks passed）、清空 1 位合成联系人聊天（boundary_pending，已存聊天清理）、退出/重开同一 SQLite 实例。
 - 轮次合成库仅在系统临时根，`role=test`；经 realpath 精确核验后删除，无进程/文件引用残留。
 
@@ -162,7 +164,7 @@
 | 05 真实来源删除链 | 未认证（依赖 03/06 真实捕获） | 真实来源捕获后按 05 账本执行真实删除；当前无真实捕获，只有合成来源与正式 HTTP 合成删除证据 |
 | 16/17 真实媒体类型关联 | 未认证（19 暂缓） | 真实微信媒体唯一关联与质量证明；用户暂缓不读取，入口保持关闭 |
 | 10 App 内模型相关控制状态 | 未在 App 构造 | 真实模型供应商/预算授权与可捕获窗口；本轮以控制测试 + 桌面 headless 覆盖，不冒充真实模型通过 |
-| 重启后联系人 UI 读取（本票观察） | 待诊断，未认证 | t20 在 20 verification §13：3 周期与新增 `sqlite-cutover-restart-host.test.mjs` 回归均正常（相关 API 200、`directoryPhase=ready`），未判定为 20 缺陷；与本票的差异是首轮执行过 source DELETE(completed)+清空(boundary_pending) 后重启。需一次带同变更的重启复现并抓 `/api/contacts`、`/api/sync/cli-bindings`、`/api/setup/status`、`/api/deletions` 与 BindingConsent phase 后定论 |
+| 重启后联系人 UI 读取（本票观察） | **已定位并修复**（App 级闭环复验通过） | 05×06 交互：`deletion.metadataAvailable` 把清空内容类未完成删除误当身份删除，修复源 `154ac9e2` 经 `d1068fbf` 集成；新增 `sqlite-deletion-metadata-restart` 回归（批 I/K 通过），本票同构根 App 复验 contacts/cli-bindings/sync/setup/deletions/清空状态均 200 且 UI 无读取失败（§4.5）；20 切库路径无缺陷 |
 | 20 真实旧业务清理 | **受阻** | 精确旧对象归属确认（本机无 PG socket；默认 userData 旧启动配置指向外部项目/握手，内容未读、归属未确认）、停止旧写入者、逐目标清理授权；未执行真实切库/drop/清理 |
 | 19 真实媒体唯一关联 | 用户暂缓 | 本轮不读取；保持未验证且入口不放行 |
 | 真实模型总体 | 仅 07/11 受限 | 其余无本轮真实调用授权；真实语义质量未认证；07/11 复测仅合成文本/固定范围 |
@@ -171,7 +173,7 @@
 
 ## 8. 遗留问题与剩余风险
 
-1. **重开后联系人目录读取失败**（§4.5）：t20 复现未果（20 verification §13：3 周期 + 新增自动化回归均正常），当前不判定为 20 缺陷；本票按「未认证/待诊断」保留，需一次带「source DELETE completed + 清空 boundary_pending」变更的重启复现（抓 `/api/contacts`、`/api/sync/cli-bindings`、`/api/setup/status`、`/api/deletions` 与 BindingConsent phase）后才能定论；若为缺陷则修复并补集成后按新 hash 最小复验。
+1. **重启后联系人目录读取失败（已修复）**：t20 定位为 05×06 交互缺陷（`deletion.metadataAvailable` 误关闭名单服务），修复源 `154ac9e2` 经 `d1068fbf` 集成；新增 `sqlite-deletion-metadata-restart` 回归 2/2（批 I/K 通过）与本票 App 同构根闭环复验（§4.5）。隔离根无真实 CLI 时 `sessionIssue=unavailable` 属预期环境限制，不影响联系人目录/绑定/授权/删除进度读取。
 2. **工作树环境差异**：`SqliteStorage` 要求 userData 为 realpath（`/tmp` 符号路径会 `cutover_storage_failed/unsafe_storage_path`）；dev server 的 `@fs` 需要工作树根 `node_modules` 软链，否则前端资源 403。两者均在主仓不成立/由主仓依赖满足，记录为复现条件，不解释为产品缺陷。
 3. **真实渠道证据缺口**：03/04/06 真实微信读取、状态语义、来源连续性与精确边界仍无认证；生产入口保持拒绝/`boundary_pending`。不得以“全部拒绝”或合成正例当成正常路径通过。
 4. **真实清理缺口**：20 的真实旧业务对象归属不明，实际清理未执行；需用户/架构决策与逐目标授权。
@@ -240,6 +242,11 @@ node --test \
 ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --test \
   test/sqlite-cutover-restart-host.test.mjs test/sqlite-cutover-structure.test.mjs test/sqlite-cutover-rehearsal.test.mjs \
   test/sqlite-cutover-audit.test.mjs test/sqlite-cutover-retirement.test.mjs test/sqlite-cutover-disabled-capabilities.test.mjs
+# 批 I（45/45；重启修复回归，普通 Node）
+node --test test/sqlite-deletion-metadata-restart.test.mjs test/sqlite-deletion-metadata.test.mjs test/sqlite-deletion.test.mjs \
+  test/sqlite-clear-resync.test.mjs test/sqlite-clear-http.test.mjs test/sqlite-cutover-launch-sqlite-guard.test.mjs
+# 批 J（21/21；Electron 自带 Node）：cutover-restart-host、history-host、host-launch/close、contact-close
+# 批 K（27/27；Electron 自带 Node）：sqlite-deletion-metadata-restart + 批 H 六文件（修复后复跑）
 # 两端类型检查（0 错误）：backend/desktop 各 `pnpm run typecheck`（= 锁定 typescript 7.0.2 的 `tsc --noEmit`；`backend-ts/node_modules/typescript/package.json` 实测 version=7.0.2，日志 /tmp/t21-typecheck.log 仅记命令与退出码）
 
 # 实际 App（隔离合成根，realpath；未配置真实模型、未操作微信、未打包）
@@ -248,6 +255,11 @@ NOTALONE_DEV_CDP=1 NOTALONE_ENV_FILE=<root>/empty.env node scripts/dev.mjs --use
 # 只读 CDP 证据采集：/tmp/t21-cdp.mjs（pages/eval/screenshot）
 # 认证删除：DELETE http://<handshake address>/api/contacts/<contact>/sources/<source> -H "Authorization: Bearer <token>"
 node scripts/development-status.mjs --user-data-dir <realpath-root>   # 退出后 stopped/pids[]
+# 修复闭环复验（二次）：prepare-memory-management-desktop.mjs（backend-only）建同构根 →
+#   dev 启动 → 认证 source DELETE（completed）→ 联系人页清空（boundary_pending）→ 正常退出 →
+#   同根重启 → 抓 /api/contacts、/api/sync/cli-bindings、/api/sync/status、/api/setup/status、
+#   /api/deletions、/api/contacts/<id>/history/clear（均 200）+ CDP 联系人页截图（无读取失败）；
+#   证据 /tmp/t21-evidence/restart-fix-*.json|png、restart-fix-status-final.json。
 ```
 
 证据清单：`/tmp/t21-evidence/`（空根 manifest 与截图、合成根 manifest、联系人/记忆/清空 pending/重开截图、删除 HTTP 响应与删除状态 JSON）；组合日志另含 `/tmp/t21-batch-h-restart.log`（基线复核 25/25，含空隔离根/旧写入者/审计用例）。本文件提交后，历史证据路径不进入 Git。
@@ -257,4 +269,4 @@ node scripts/development-status.mjs --user-data-dir <realpath-root>   # 退出�
 - 未新增外部发送能力；未发送/撤回任何外部消息；未读取真实微信正文、名单、媒体或凭据；未调用真实模型；未访问/迁移/恢复真实业务库；未启用 13/15/18/19；未打包、未运行打包版、未改发布门禁；未 push/PR、未创建远端分支。
 - 未修改 `planning.md`、其他票文件、State/Triage（本票文件仅追加 Comments）；新增桌面测试 0 个，未改 `desktop/tests/inventory.json`。
 - 资源：合成根与空根删除、供应商停止、App/监督器退出、`dev:status stopped/pids[]`、无残留进程/端口；工作树依赖软链与 `.dev` 构建产物在提交前移除/保留为未跟踪且不提交；证据仅留 `/tmp` 与本记录，不含私人数据或可恢复定位。
-- 复核：`git status` 仅本任务文档/票 Comments 变更；`git diff --check` 通过；公开前检查 `node scripts/check_public_history.mjs --ref 9ba6e733` issues 0（t03 只读复核，未带 working-tree，故 currentFiles 为 0）；本文件修订提交前另跑 `--ref HEAD --working-tree`，结果 issues 0（currentFiles 覆盖本次两文件），记录于票 Comments 与最终回报。
+- 复核：`git status` 仅本任务文档/票 Comments 变更（软链已移除）；`git diff --check` 通过；公开前检查 `node scripts/check_public_history.mjs --ref 9ba6e733` issues 0（t03 只读复核，未带 working-tree，故 currentFiles 为 0）；本修订提交前 `--ref HEAD --working-tree` issues 0（currentFiles 1970），提交后同命令复跑 issues 0（currentFiles 1970 / historicalCommits 2894），记录于票 Comments 与最终回报。
