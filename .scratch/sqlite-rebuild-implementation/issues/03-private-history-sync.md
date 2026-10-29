@@ -72,3 +72,7 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 2026-10-29 最新收敛：P1来源删除早期读者遗漏已修复5650ad84e9a1893785be000d35aaf0b70cc432b6，连续三来源接受代次及新合法代次／他人／默认无flag均有红绿和独立复核。首次历史协调器c72eca1abc0baf868574aa84eb17fcbfe4ac3880正式Storage／ContactService／HistoryService10/10、相关组合28/28；未预灌验证正常首次派发，停止／新wake／扫描名单变化两处漏派已修。总指挥已实际集成这两项。当前等待16保存实际公共基线后串行接startup/confirm/enable hooks，并保留媒体停读与本地转换的区别；实际App窗口仍由总指挥分配。真实支持档与票/Goal状态不变，不能把独立协调器当公共自动入口已验收。
 
 2026-10-29受控状态检查点12cfb6ab：v6单条类型元数据已观察5条，v7受控watch正式typed 28项/原生race57项（28顶层）及类型检查通过。另获人类固定A/B及仅撤回B一次授权，实际仅发送A一次并由微信界面确认；next身份歧义即闭锁并关闭，B未发、无撤回/重发/扩读。原因保持未分类，不能据此宣称真实渠道不支持。找到独立可复现sender映射缺陷：锁定上游selfWxid区分账号目录设备后缀，三处投影此前直接比较完整账号；正在修复并加发送前精确计数门禁和固定安全原因码。普通历史仍关闭，迁移/恢复不新增为本票要求。桌面已释放17；后续等待11公共checkpoint后实际merge总基线接首次触发，再进行合成实际App。State claimed/Goal active。
+
+2026-10-29公共短检查点：89069571已保存正式工具配置账号metadata；真实v9完整结构、v10资格、v11正式端口重复证据一致且关闭，无整名单或正文。d8f2d159正式history-channel已保存。2cf0e4f实际merge公共af98a3ba，保留源祖先、迁移1..9、11共享模型与关闭失败保留SQLite、媒体全关wechat/撤销all。本轮公共startup/成功confirm/enable wake、disable/revoke stop、退出先排空coordinator、显式CLI路径及最新blocked状态已接。正式HTTP/launchDsh/profile等相关组合24/24及后台类型通过；未预灌消息/goal、未手动history/sync证明自动入口，双轴反例已修。
+
+仍缺独立实际App消息/覆盖/删除撤正文证据。真实正文状态未验证，保持门禁。B未发送：Cua消息点击AXError.notImplemented，不能保证撤回，现依最新人类指令改为未来观察器ready后由用户手动一次B；先发送不撤回、唯一锁定再仅撤回B。A保持不动，迁移恢复继续排除；State claimed/Goal active。
