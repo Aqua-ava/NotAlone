@@ -361,3 +361,40 @@ test('late page identities never resurrect and channel boundary uses identity me
   // 边界候选只从必要的身份元数据拼装，不含正文。
   for (const member of f.state.boundaryMembers) assert.equal(Object.keys(member).sort().join(','), 'localId,partition');
 });
+
+test('边界候选校验拒绝窗口/覆盖/实例/成员/摘要不一致，并允许空历史集合完整接受', async t => {
+  const f = await fixture(t);
+  const { storage, contacts, clear } = f.current;
+  const token = await contacts.eligibility(f.contactA);
+  const scope = await storage.execute('history.scope', { token });
+  const members = [identity('shard-a', '1'), identity('shard-b', '2')];
+  const good = buildCandidate(scope, members);
+  assert.doesNotThrow(() => prepareBoundaryCandidate(scope, good));
+  const cases = [
+    ['分片覆盖缺失', candidate => { candidate.partitions = candidate.partitions.slice(1); }, 'history_boundary_candidate_incomplete'],
+    ['分片成员数不符', candidate => { candidate.partitions[0].memberCount = 9; }, 'history_boundary_candidate_incomplete'],
+    ['实例替换', candidate => { candidate.instanceContinuity = false; }, 'history_boundary_instance_changed'],
+    ['命名空间变化', candidate => { candidate.namespaceContinuity = false; }, 'history_boundary_namespace_changed'],
+    ['成员表实例不符', candidate => { candidate.members[0].table = 'other-instance'; }, 'history_boundary_member_invalid'],
+    ['成员重复', candidate => { candidate.members[1] = { ...candidate.members[0] }; }, 'history_boundary_member_duplicate'],
+    ['manifest不符', candidate => { candidate.manifestSha256 = 'd'.repeat(64); }, 'history_boundary_manifest_mismatch'],
+    ['支持档未认证边界能力', candidate => { candidate.support = { ...candidate.support, capabilities: {} }; }, 'history_boundary_support_unverified'],
+  ];
+  for (const [label, mutate, reason] of cases) {
+    const candidate = structuredClone(good);
+    mutate(candidate);
+    assert.throws(() => prepareBoundaryCandidate(scope, candidate), error => error.reason === reason, label);
+  }
+  const window = structuredClone(good);
+  window.partitions[0].preSample = 'window-a';
+  window.partitions[0].postSample = 'window-b';
+  assert.throws(() => prepareBoundaryCandidate(scope, window), error => error.reason === 'history_boundary_window_changed' && error.retryable === true);
+
+  // 空历史集合也是完整 S(B)：允许 0 成员并完成清空/清理。
+  f.state.pageRecords = [];
+  f.state.boundaryMembers = [];
+  const status = await clear.clear(f.contactB);
+  assert.equal(status.phase, 'completed');
+  assert.equal(status.boundary.state, 'verified');
+  assert.equal(status.boundary.memberCount, 0);
+});
