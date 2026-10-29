@@ -8,6 +8,7 @@ import { backendEnvironment, configurationPaths, loadBackendConfiguration, saveB
 import { BackendFailure, readConnection } from '../backend/connection';
 import { ManagedRuntime, ManagedRuntimeFailure } from './managed-runtime';
 import { historicalUpdateComplete } from './historical-update';
+import { SqliteDevelopmentProbe } from './sqlite-development';
 
 const reportCodes = new Set<StartupCode>(['ready',
   'database_unconfigured', 'database_unavailable', 'baseline_missing', 'baseline_invalid',
@@ -22,8 +23,10 @@ export class StartupDiagnostics {
   private closing = false;
   private localSetupEpoch = 0;
   private readonly managed: ManagedRuntime;
+  private readonly sqliteDevelopment?: SqliteDevelopmentProbe;
 
-  constructor(private readonly userData: string, private readonly resourcesDirectory?: string) {
+  constructor(private readonly userData: string, private readonly resourcesDirectory?: string, developmentProjectDirectory?: string) {
+    if (developmentProjectDirectory) this.sqliteDevelopment = new SqliteDevelopmentProbe(userData, developmentProjectDirectory);
     this.managed = new ManagedRuntime(userData, resourcesDirectory,
       (step) => { if (!this.closing) this.publish({ phase: 'preparing', mode: 'managed', step, code: undefined }); });
   }
@@ -54,7 +57,7 @@ export class StartupDiagnostics {
   }
   stopManagedRuntime(): Promise<boolean> { return this.managed.stop(); }
 
-  getState(): StartupState { return { ...this.state, helperWarnings: [...this.state.helperWarnings] }; }
+  getState(): StartupState { return { ...this.state, ...(this.state.sqlite ? { sqlite: { ...this.state.sqlite } } : {}), helperWarnings: [...this.state.helperWarnings] }; }
   onStateChanged(listener: (state: StartupState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -79,12 +82,21 @@ export class StartupDiagnostics {
     }).finally(() => { this.saving = undefined; });
     return this.saving;
   }
-  cancel(): void { this.closing = true; this.managed.cancel(); this.cancelProbe?.(); }
+  cancel(): void { this.closing = true; this.managed.cancel(); this.sqliteDevelopment?.cancel(); this.cancelProbe?.(); }
 
   async ensureReady(config: BackendConfiguration, canStart: () => boolean): Promise<void> {
     if (!canStart() || this.closing) throw new BackendFailure('backend_connection_failed');
     await this.saving?.catch(() => {});
     if (!canStart() || this.closing) return;
+    const sqlite = await this.sqliteDevelopment?.run(() => canStart() && !this.closing);
+    if (!canStart() || this.closing) return;
+    if (sqlite) {
+      this.publish({ phase: 'blocked', mode: 'external', step: undefined, sqlite, helperWarnings: [],
+        code: sqlite.phase === 'ready' ? 'sqlite_business_unavailable' : 'sqlite_storage_failed' });
+      // 底座诊断通过不代表业务切换完成；此模式不启动旧 PG 或后台业务。
+      throw new BackendFailure('backend_connection_failed');
+    }
+    if (this.state.sqlite) this.publish({ sqlite: undefined });
     if (!await historicalUpdateComplete(this.userData, config.source !== 'external')) {
       this.publish({ phase: 'blocked', mode: config.source === 'external' ? 'external' : 'managed',
         step: undefined, code: 'runtime_configuration_invalid' });

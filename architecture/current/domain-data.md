@@ -1,5 +1,7 @@
 # 现行领域与数据契约
 
+> SQLite 底座目标按 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)局部修订原 PG 保留条款；01 仅提供受控实例与存储合同，默认业务尚未切换。其余来源、范围、删除及 DSH 约束保持，完整结构和消费者在实施 20 切换前复核。
+
 > 2026-10-21 决定收敛：新增联系人按 [ADR-087](../adr/087-wechat-confirmed-contact-onboarding.md)及 [ADR-089](../adr/089-all-private-wechat-sync-scope.md)从真实微信会话加入，支持逐会话确认或全部私聊范围授权，独立创建与导入新建的旧接口待退役；历史 `manual_create` 记录保留读取与删除语义。默认自动采纳按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；下文标明的历史协议及评测不得当作默认流水线。
 
 > 状态：已采纳的产品约束；当前独立版采用本机 PostgreSQL 作为权威业务库，已有资料按 ADR-066 沿用原连接和资料位置。已实现表结构以[版本化迁移](../../backend-ts/database/migrations)为准；本文中的目标数据对象不代表都已落地，实际启用与验收分别核验。

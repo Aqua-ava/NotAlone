@@ -4,6 +4,7 @@ export type StartupCode = 'ready' | 'launch_unconfigured' | 'configuration_inval
   | 'baseline_missing' | 'baseline_invalid' | 'migration_history_mismatch' | 'migration_pending'
   | 'schema_incomplete' | 'migration_files_invalid' | 'diagnostic_timeout' | 'diagnostic_failed'
   | 'database_writers_present' | 'database_update_requires_local' | 'migration_busy' | 'migration_failed'
+  | 'sqlite_business_unavailable' | 'sqlite_storage_failed'
   | 'runtime_components_unavailable' | 'runtime_configuration_invalid' | 'runtime_cancelled'
   | 'database_prepare_failed' | 'database_start_failed' | 'database_already_running' | 'local_setup_required' | 'runtime_stop_unconfirmed';
 
@@ -15,7 +16,14 @@ export interface StartupPaths {
   wechatCliPath: string;
   syncProbePath: string;
 }
+export interface SqliteDevelopmentState {
+  phase: 'ready' | 'blocked';
+  code: string;
+  schemaVersion?: number;
+  sqliteVersion?: string;
+}
 export interface StartupState {
+  sqlite?: SqliteDevelopmentState;
   phase: 'idle' | 'checking' | 'ready' | 'blocked' | 'first-run' | 'preparing' | 'cancelled';
   mode?: 'managed' | 'external';
   step?: 'checking-components' | 'preparing-data' | 'starting-database' | 'preparing-database' | 'updating-schema' | 'stopping';

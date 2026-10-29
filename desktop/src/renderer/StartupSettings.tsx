@@ -34,6 +34,18 @@ export function StartupReadiness({ state, backend, onConfigure }: {
     catch { setError('暂时无法重新连接，请稍后重试或查看诊断。'); }
     finally { setRetrying(false); }
   }
+  if (state.sqlite) return <section className="startup-readiness" aria-label="SQLite 存储诊断">
+    <h2>SQLite 存储诊断</h2>
+    <p role={state.sqlite.phase === 'ready' ? 'status' : 'alert'}>{state.sqlite.phase === 'ready'
+      ? 'SQLite 底座已就绪，业务功能尚未切换。' : 'SQLite 底座检查未通过，已有资料现场已保留。'}</p>
+    {state.sqlite.phase === 'ready' && <p>结构版本 {state.sqlite.schemaVersion} · SQLite {state.sqlite.sqliteVersion}</p>}
+    {state.sqlite.phase === 'blocked' && <p>诊断代码：{state.sqlite.code}</p>}
+    <p>此模式仅核验隔离存储，不开放联系人、同步、记忆或回复。</p>
+    <button className="button" disabled={!backend?.canRetryConnection || retrying} onClick={() => void retry()}>
+      {retrying ? '正在检查…' : '重新检查存储'}
+    </button>
+    {error && <p role="alert">{error}</p>}
+  </section>;
   if (state.phase === 'ready') return null;
   if (state.mode === 'managed') return <ManagedSetup state={state} />;
   const blocked = state.phase === 'blocked' || (backend?.phase === 'disconnected' && !!backend.errorCode);
@@ -69,7 +81,7 @@ export function StartupSettings({ state, backend, open = false, onOpenChange }: 
 }) {
   return <details className="startup-troubleshooting" open={open} onToggle={(event) => onOpenChange?.(event.currentTarget.open)}>
     <summary>故障排查</summary>
-    {open && <>{state.mode === 'managed' ? <StartupDiagnostics state={state} /> : <StartupPathSettings state={state} backend={backend} />}<DiagnosticExport /></>}
+    {open && <>{state.mode === 'managed' || state.sqlite ? <StartupDiagnostics state={state} /> : <StartupPathSettings state={state} backend={backend} />}<DiagnosticExport /></>}
   </details>;
 }
 
@@ -166,6 +178,8 @@ const pathFields: Array<[keyof StartupPaths, string]> = [
   ['wechatCliPath', '微信 CLI（可稍后配置）'], ['syncProbePath', '前台定位探针（可稍后配置）'],
 ];
 const startupMessages: Record<StartupCode, [string, string]> = {
+  sqlite_business_unavailable: ['SQLite 底座已就绪，业务功能尚未切换。', '当前只核验隔离存储；业务能力须在对应实现及验收完成后开放。'],
+  sqlite_storage_failed: ['SQLite 底座检查未通过，已有资料现场已保留。', '核对固定诊断代码和受控配置后重试；不要删除或替换数据库。'],
   local_setup_required: ['准备你的本机空间。', '联系人、聊天和关系资料保存在这台 Mac。点击开始即可准备，无需安装开发工具。'],
   runtime_components_unavailable: ['App 运行组件缺失或校验未通过。', '请重新取得完整的 NotAlone App 后打开；已有本机资料会保留。'],
   runtime_configuration_invalid: ['本机资料环境需要恢复。', '已有目录或配置无法安全核验。请保留本机资料，使用支持恢复的版本继续，勿删除资料目录。'],

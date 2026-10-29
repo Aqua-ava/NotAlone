@@ -76,7 +76,7 @@ void app.whenReady().then(async () => {
   installResources(appSession, development);
   const windows = new AppWindows(appSession);
   const resourcesDirectory = app.isPackaged ? process.resourcesPath : undefined;
-  const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory);
+  const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory, development?.projectDirectory);
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory,
     () => diagnostics.stopManagedRuntime());
   installUsageBridge(windows, new UsageController(backend));
