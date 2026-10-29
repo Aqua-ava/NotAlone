@@ -172,6 +172,7 @@
 .background-task-error { color: #99594e; }
 
 .sqlite-memory-management { margin-top: 20px; padding: 18px; border: 1px solid #dce1d8; border-radius: 14px; }
+.sqlite-memory-documents { margin-top: 24px; padding-top: 18px; border-top: 1px solid #dce1d8; }
 .sqlite-memory-management h2, .sqlite-memory-management h3 { color: var(--panel-heading); }
 .sqlite-memory-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .sqlite-memory-actions button[aria-pressed="true"] { background: #e3ede7; border-color: #537c8a; }

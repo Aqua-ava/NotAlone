@@ -25,7 +25,7 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string){
   const p=JSON.parse(String(e.payload));return [{id:String(e.id),attemptId:String(e.step_attempt_id),outputNo:number(e.event_no),scopeKind:p.scopeKind,contactId:p.contactId,body:p.fact.text,fact:p.fact,state:'verified_pending_decision',origin:'auto'}];
  });
  return {runId,state:String(r!.state),total:targets.length,succeeded,failed:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'failed')).length,unknown:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'unknown')).length,
-  stage:'extraction_verification',laterStages:'pending',tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
+  stage:r!.state==='completed'?'completed':'extraction_verification',laterStages:r!.state==='completed'?'completed':'pending',tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
    total:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id).length,succeeded:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id&&targetSucceeded(i)).length,errorCode:t.error_code===null?null:String(t.error_code)})),
   inputs:inputs.map(i=>({inputNo:number(i.input_no),role:String(i.role),contactId:String(i.source_contact_id),messageId:String(i.message_id),recordId:String(i.record_id),itemId:i.item_id===null?null:String(i.item_id)})),candidates};
 }

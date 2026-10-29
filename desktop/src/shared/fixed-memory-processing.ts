@@ -1,5 +1,5 @@
 /** SQLite 固定轮次；提取核验成功不表示主题与概览已完成。 */
-export type FixedProcessingRunState = 'pending' | 'running' | 'paused' | 'failed' | 'incomplete' | 'revoked';
+export type FixedProcessingRunState = 'pending' | 'running' | 'paused' | 'failed' | 'incomplete' | 'revoked' | 'completed';
 export type FixedProcessingTaskState = FixedProcessingRunState | 'unknown' | 'succeeded' | 'awaiting_decision';
 export interface FixedProcessingTask {
   taskId: string; scopeKind: 'contact' | 'self'; contactId: string | null; state: FixedProcessingTaskState;
@@ -14,7 +14,7 @@ export interface FixedProcessingCandidate {
 }
 export interface FixedProcessingRun {
   runId: string; state: FixedProcessingRunState; total: number; succeeded: number; failed: number; unknown: number;
-  stage: 'extraction_verification'; laterStages: 'pending'; tasks: FixedProcessingTask[];
+  stage: 'extraction_verification' | 'completed'; laterStages: 'pending' | 'completed'; tasks: FixedProcessingTask[];
   inputs: FixedProcessingInput[]; candidates: FixedProcessingCandidate[];
 }
 export interface FixedProcessingEvent {

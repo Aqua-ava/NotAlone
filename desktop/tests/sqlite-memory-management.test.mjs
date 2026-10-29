@@ -117,3 +117,57 @@ test('重复终态独立于目标是否仍有效，不冒充采纳或复活已�
  assert.equal(value.view.memories.find(m=>m.id===other).current,null);
  assert.equal(value.view.memories.find(m=>m.id===other).state,'withdrawn');
 });
+
+test('主题资料只读取当前完整发布集合，范围变化后迟到快照不得回填',async t=>{
+ const memberId=candidate,publicationId=requestKey;
+ const value={scope:{scopeKind:'contact',contactId:contact},status:'processing',publication:{id:publicationId,members:[{documentId:memberId,versionNo:'1'}]},documents:[{id:memberId,versionNo:'1',scopeKind:'contact',contactId:contact,kind:'scene',title:'合成园艺',statements:[{text:'联系人喜欢合成园艺。',kind:'fact',basis:null,section:null,uncertainty:null,temporalStatus:null,leftClaim:null,rightClaim:null,resolutionState:null,resolutionText:null,references:[{memory_id:requestKey,revision:1,level:'contact',provenance_kind:'source_supported',memoryText:'正式合成记忆依据。',timing:{},event:null,conditions:null,evolution:null,valid_at:null,invalid_at:null}]}]}]};
+ let pending,started,held=false;const wait=new Promise(r=>{pending=r;}),entered=new Promise(r=>{started=r;});
+ const f=await fixture(t,async()=>{if(held){started();return wait;}return value;});
+ const input={scope:{scopeKind:'contact',contactId:contact},displayContactId:contact,scopeRevision:1};
+ const snapshot=await f.controller.readDocuments(input);assert.equal(snapshot.view.status,'processing');assert.equal(snapshot.view.documents[0].statements[0].text,'联系人喜欢合成园艺。');assert.equal(snapshot.view.documents[0].statements[0].references[0].memoryText,'正式合成记忆依据。');
+ assert.equal(f.calls[0].path,`/api/memory-documents?scope_kind=contact&contact_id=${contact}`);
+ held=true;const old=f.controller.readDocuments(input);await entered;f.change();pending(value);await assert.rejects(old);assert.equal(f.invalidations.length,1);
+});
+
+test('主题资料桥拒绝跨范围、半套成员及缺少依据',async t=>{
+ const docId=candidate,publicationId=requestKey;
+ const doc={id:docId,versionNo:'1',scopeKind:'contact',contactId:contact,kind:'profile',title:'长期背景',statements:[{text:'长期合成活动。',kind:'fact',basis:'正式记忆直接支持。',section:'interests',uncertainty:'',temporalStatus:'stable',leftClaim:null,rightClaim:null,resolutionState:null,resolutionText:null,references:[{memory_id:requestKey,revision:1,level:'contact',provenance_kind:'source_supported',memoryText:'正式合成记忆依据。'}]}]};
+ let response={scope:{scopeKind:'contact',contactId:contact},status:'completed',publication:{id:publicationId,members:[{documentId:docId,versionNo:'1'}]},documents:[doc]};
+ const f=await fixture(t,async()=>response),input={scope:{scopeKind:'contact',contactId:contact},displayContactId:contact,scopeRevision:1};
+ assert.equal((await f.controller.readDocuments(input)).view.documents.length,1);
+ response={...response,status:'needs_revalidation'};
+ assert.equal((await f.controller.readDocuments(input)).view.documents.length,1,'本轮待核验时保留仍合法的旧发布集合');
+ response={...response,status:'completed'};
+ for(const bad of [
+  {...response,scope:{scopeKind:'contact',contactId:other}},
+  {...response,documents:[{...doc,contactId:other}]},
+  {...response,publication:{id:publicationId,members:[]}},
+  {...response,publication:null},
+  {...response,documents:[{...doc,statements:[{...doc.statements[0],references:[]}]}]},
+ ]){response=bad;await assert.rejects(f.controller.readDocuments(input));}
+ assert.equal(f.invalidations.length,5);
+});
+
+test('正常07→08→09合成处理的真实发布结果通过主进程范围解码',async t=>{
+ const {documentFixture}=await import('../../backend-ts/test/fixtures/memory-documents/support.mjs');
+ const data=await documentFixture(t);const run=await data.extraction.start('desktop-documents-real');await data.extraction.waitForIdle();
+ const raw=await data.documents.read({scopeKind:'contact',contactId:data.contactId});assert.equal(raw.documents.length,2);
+ const root=await mkdtemp(path.join(tmpdir(),'notalone-documents-bridge-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const output=path.join(root,'controller.mjs');await build({entryPoints:['src/main/memory/sqlite-management.ts'],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
+ const {SqliteMemoryManagementController}=await import(pathToFileURL(output));
+ const controller=new SqliteMemoryManagementController({getConnectionGeneration:()=>1,requestJson:async()=>({generation:1,data:raw})},()=>{},{getState:()=>({selectedContactId:data.contactId,scopeRevision:1})});
+ const snapshot=await controller.readDocuments({scope:{scopeKind:'contact',contactId:data.contactId},displayContactId:data.contactId,scopeRevision:1});
+ assert.equal(snapshot.view.publication.members.length,2);assert.deepEqual(snapshot.view.documents.map(d=>d.kind).sort(),['profile','scene']);
+ assert.ok(snapshot.view.documents.every(d=>d.statements.some(s=>s.text.includes('联系人长期喜欢合成园艺'))));
+ assert.deepEqual(await data.storage.check(),{integrity:'ok',foreignKeys:'ok'});assert.ok(run.runId);
+});
+
+test('主题只读桥只接受一个范围请求且不暴露发布写入',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'notalone-documents-preload-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const output=path.join(root,'preload.mjs');await build({entryPoints:['src/preload/sqlite-memory-management.ts'],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
+ const {createSqliteMemoryManagementBridge}=await import(pathToFileURL(output)),calls=[];
+ const bridge=createSqliteMemoryManagementBridge({invoke:async(...args)=>{calls.push(args);return {};},on(){},removeListener(){}});
+ const input={scope:{scopeKind:'contact',contactId:contact},displayContactId:contact,scopeRevision:1};
+ await bridge.readDocuments(input);assert.deepEqual(calls,[['memory:documents-read',input]]);
+ await assert.rejects(bridge.readDocuments());await assert.rejects(bridge.readDocuments(input,{}));assert.equal('publish' in bridge,false);assert.equal(calls.length,1);
+});

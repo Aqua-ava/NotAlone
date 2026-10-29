@@ -5,7 +5,8 @@ import {noArguments} from '../page-commands';
 import {isUuid} from '../uuid';
 import {memoryCandidateStates} from '../../shared/sqlite-memory-management';
 import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementRead,MemoryManagementDecision,MemoryManagementSnapshot,
- MemoryManagementOutcome,MemoryManagementView,MemoryMergeParent,MemoryScope,MemorySource,MemoryVersionView,MemoryView} from '../../shared/sqlite-memory-management';
+ MemoryManagementOutcome,MemoryManagementView,MemoryMergeParent,MemoryScope,MemorySource,MemoryVersionView,MemoryView,
+ MemoryDocumentsSnapshot,MemoryDocumentsView,MemoryDocumentReference,MemoryDocumentStatement,MemoryDocumentView} from '../../shared/sqlite-memory-management';
 import {withdrawnProtectionVersion} from '../../shared/sqlite-memory-management';
 
 class ManagementInvalid extends Error {constructor(){super('记忆资料或范围已变化，请重新读取。');}}
@@ -31,6 +32,39 @@ function readView(raw:unknown,s:MemoryScope,displayContactId:string):MemoryManag
  const memories:MemoryView[]=array(value.memories).map(raw=>{const m=object(raw),ms=scope({scopeKind:m.scopeKind,contactId:m.contactId});if(!sameScope(ms,s)||typeof m.manualProtection!=='boolean')throw invalid();const versions=array(m.versions).map(version),current=m.current===null?null:version(m.current);if(current&&!versions.some(v=>JSON.stringify(v)===JSON.stringify(current))||versions.some(v=>v.mergeParents.some(p=>p.memoryId===uuid(m.id))))throw invalid();return {...ms,id:uuid(m.id),headRevision:decimal(m.headRevision),state:member(m.state,['active','withdrawn','invalidated']),manualProtection:m.manualProtection,current,versions,decisions:array(m.decisions).map(raw=>{const d=object(raw);return {id:uuid(d.id),action:member(d.action,['accept','edit_accept','reject','auto_accept','auto_update','auto_retire','auto_noop','correct','change','restore','withdraw','protect','unprotect','manual']),actorKind:member(d.actorKind,['user','system']),createdAt:decimal(d.createdAt),expectedHeadRevision:d.expectedHeadRevision===null?null:decimal(d.expectedHeadRevision),expectedVersionNo:d.expectedVersionNo===null?null:decimal(d.expectedVersionNo),outcome:member(d.outcome,['applied','redacted'])};})};}).filter(m=>s.scopeKind==='contact'?m.versions.every(v=>v.sources.every(source=>source.contactId===displayContactId)&&v.contributingContactIds.every(id=>id===displayContactId)):m.versions.some(v=>v.body!==null&&owned(v.sources)&&ownsContribution(v.contributingContactIds))&&m.versions.every(v=>v.body===null||owned(v.sources)&&ownsContribution(v.contributingContactIds)));
  return {candidates,memories};
 }
+function readDocumentsView(raw:unknown,expected:MemoryScope):MemoryDocumentsView {
+ const value=object(raw);if(!sameScope(scope(value.scope),expected))throw invalid();
+ const status=member(value.status,['idle','processing','conflict','needs_revalidation','completed']);
+ const nullableText=(v:unknown)=>v===null?null:text(v,48000);
+ const documents:MemoryDocumentView[]=array(value.documents).map(rawDocument=>{
+  const d=object(rawDocument),actual=scope({scopeKind:d.scopeKind,contactId:d.contactId});if(!sameScope(actual,expected))throw invalid();
+  const kind=member(d.kind,['scene','profile']),versionNo=decimal(d.versionNo);if(versionNo==='0')throw invalid();
+  const statements:MemoryDocumentStatement[]=array(d.statements).map(rawStatement=>{
+   const statement=object(rawStatement),kind=member(statement.kind,['fact','inference','contradiction']);
+   const references:MemoryDocumentReference[]=array(statement.references).map(rawReference=>{
+    const reference=object(rawReference);if(!Number.isSafeInteger(reference.revision)||Number(reference.revision)<1)throw invalid();
+    const level=member(reference.level,['owner','contact']);if(level!==(expected.scopeKind==='self'?'owner':'contact'))throw invalid();
+    const memoryText=text(reference.memoryText,48000);if(!memoryText.trim())throw invalid();
+    return {memoryId:uuid(reference.memory_id),versionNo:reference.revision as number,level,provenanceKind:member(reference.provenance_kind,['manual_entry','source_supported']),memoryText};
+   });
+   if(!references.length||new Set(references.map(r=>`${r.memoryId}:${r.versionNo}`)).size!==references.length)throw invalid();
+   const leftClaim=nullableText(statement.leftClaim),rightClaim=nullableText(statement.rightClaim),resolutionText=nullableText(statement.resolutionText);
+   const resolutionState=statement.resolutionState===null?null:member(statement.resolutionState,['unresolved','resolved']);
+   if(kind==='contradiction'&&(!leftClaim||!rightClaim||!resolutionState||resolutionState==='resolved'&&!resolutionText)
+    ||kind!=='contradiction'&&(leftClaim!==null||rightClaim!==null||resolutionState!==null||resolutionText!==null))throw invalid();
+   return {text:text(statement.text,48000),kind,basis:nullableText(statement.basis),section:nullableText(statement.section),uncertainty:nullableText(statement.uncertainty),temporalStatus:nullableText(statement.temporalStatus),leftClaim,rightClaim,resolutionState,resolutionText,references};
+  });
+  if(!statements.length||!text(d.title,240).trim())throw invalid();return {...actual,id:uuid(d.id),versionNo,kind,title:text(d.title,240),statements};
+ });
+ let publication:MemoryDocumentsView['publication']=null;
+ if(value.publication!==null){
+  const p=object(value.publication),members=array(p.members).map(rawMember=>{const m=object(rawMember),versionNo=decimal(m.versionNo);if(versionNo==='0')throw invalid();return {documentId:uuid(m.documentId),versionNo};});
+  if(new Set(members.map(m=>m.documentId)).size!==members.length||members.length!==documents.length
+   ||members.some(m=>!documents.some(d=>d.id===m.documentId&&d.versionNo===m.versionNo)))throw invalid();
+  publication={id:uuid(p.id),members};
+ }else if(documents.length)throw invalid();
+ return {status,publication,documents};
+}
 type Contacts={getState():{selectedContactId:string|null;scopeRevision:number}};
 /** 不缓存正文；每次决定重新核验页面可管理范围，迟到响应不能重新发布旧快照。 */
 export class SqliteMemoryManagementController {
@@ -55,6 +89,12 @@ export class SqliteMemoryManagementController {
  async read(input:MemoryManagementRead):Promise<MemoryManagementSnapshot>{
   const accepted=this.validate(input),revision=this.revision;try{const response=await this.request(`/api/memory-management?scope_kind=${accepted.scope.scopeKind}${accepted.scope.contactId?`&contact_id=${accepted.scope.contactId}`:''}`,'GET');this.validate(input);return {connectionGeneration:response.generation,scope:accepted.scope,view:readView(response.data,accepted.scope,accepted.displayContactId)};}
   catch{if(revision===this.revision)this.synchronize();throw invalid();}
+ }
+ async readDocuments(input:MemoryManagementRead):Promise<MemoryDocumentsSnapshot>{
+  const accepted=this.validate(input),revision=this.revision;
+  try{const response=await this.request(`/api/memory-documents?scope_kind=${accepted.scope.scopeKind}${accepted.scope.contactId?`&contact_id=${accepted.scope.contactId}`:''}`,'GET');
+   this.validate(input);return {connectionGeneration:response.generation,scope:accepted.scope,view:readDocumentsView(response.data,accepted.scope)};
+  }catch{if(revision===this.revision)this.synchronize();throw invalid();}
  }
  async decide(input:MemoryManagementDecision):Promise<MemoryManagementOutcome>{
   try{
@@ -84,6 +124,7 @@ export function installSqliteMemoryManagementBridge(commands:PageCommands,backen
  const controller=new SqliteMemoryManagementController(backend,()=>commands.publish('memory:management-invalidated',{},'manager'),contacts);
  backend.onStateChanged(()=>controller.synchronize());
  commands.handle('memory:management-read',(...args)=>{if(args.length!==1)throw invalid();return controller.read(args[0] as MemoryManagementRead);},'manager');
+ commands.handle('memory:documents-read',(...args)=>{if(args.length!==1)throw invalid();return controller.readDocuments(args[0] as MemoryManagementRead);},'manager');
  commands.handle('memory:management-decide',(...args)=>{if(args.length!==1)throw invalid();return controller.decide(args[0] as MemoryManagementDecision);},'manager');
  commands.handle('memory:management-release',(...args)=>{noArguments(args);controller.release();},'manager');return controller;
 }

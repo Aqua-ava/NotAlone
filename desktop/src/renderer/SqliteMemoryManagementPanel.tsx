@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementOutcome,MemoryManagementSnapshot,MemorySource,MemoryVerificationState,MemoryVersionView,MemoryView,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
 import {withdrawnProtectionVersion} from '../shared/sqlite-memory-management';
+import {SqliteMemoryDocumentsPanel} from './SqliteMemoryDocumentsPanel';
 
 type Decision=Omit<MemoryDecisionRequest,'requestKey'>;
 const outcomeMessages={conflict:'资料已被其他操作修改，存在并发冲突。请刷新后重新决定。',source_stale:'来源或范围已失效，已撤下原资料。请重新读取。',protected:'当前记忆受人工保护，请刷新核对；撤销前须先明确解除保护。',unavailable:'本次决定暂未确认，请重新读取当前状态后再操作。'};
@@ -64,34 +65,40 @@ function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(req
 }
 
 /** 资格失效或顶部范围变化立即卸载正文、依据和未提交编辑，迟到结果不再挂回。 */
-export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision}:{bridge:SqliteMemoryManagementBridge;contactId:string|null;scopeRevision:number}){
+export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,documentsRefreshKey=0,completedRunId=null}:{bridge:SqliteMemoryManagementBridge;contactId:string|null;scopeRevision:number;documentsRefreshKey?:number;completedRunId?:string|null}){
  const [scopeKind,setScopeKind]=useState<'contact'|'self'>('contact');
  const context=useRef({bridge,contactId,scopeRevision,scopeKind});
  if(context.current.bridge!==bridge||context.current.contactId!==contactId||context.current.scopeRevision!==scopeRevision||context.current.scopeKind!==scopeKind)context.current={bridge,contactId,scopeRevision,scopeKind};
  const accepted=context.current;
- const [state,setState]=useState<{context:typeof accepted;snapshot:MemoryManagementSnapshot}|null>(null),[notice,setNotice]=useState<{context:typeof accepted;message:string;error:boolean}|null>(null),[busy,setBusy]=useState(false);
- const active=useRef(false),revision=useRef(0),refresh=useRef<()=>Promise<boolean>>(async()=>false);
+ const [state,setState]=useState<{context:typeof accepted;snapshot:MemoryManagementSnapshot}|null>(null),[notice,setNotice]=useState<{context:typeof accepted;message:string;error:boolean}|null>(null),[busy,setBusy]=useState(false),[documentsBlocked,setDocumentsBlocked]=useState(false);
+ const active=useRef(false),revision=useRef(0),refresh=useRef<(preserve?:boolean)=>Promise<boolean>>(async()=>false);
+ const decisionPending=useRef(false),lastCompletedRun=useRef(completedRunId),completionRefreshPending=useRef(false);
  const scope={scopeKind,contactId:scopeKind==='self'?null:contactId};
  const readRequest=contactId?{scope,displayContactId:contactId,scopeRevision}:null;
  const current=state?.context===accepted?state.snapshot:null,currentNotice=notice?.context===accepted?notice:null;
- refresh.current=async()=>{
-  if(!readRequest)return false;const token=++revision.current;setState(null);setBusy(true);setNotice(null);
-  try{const next=await bridge.read(readRequest);if(active.current&&context.current===accepted&&token===revision.current){setState({context:accepted,snapshot:next});return true;}}
-  catch{if(active.current&&context.current===accepted&&token===revision.current)setNotice({context:accepted,message:'来源或范围暂不可用，已撤下原资料，请重新读取。',error:true});}
+ refresh.current=async(preserve=false)=>{
+  if(!readRequest)return false;const token=++revision.current;if(!preserve)setState(null);setBusy(true);setNotice(null);
+  try{const next=await bridge.read(readRequest);if(active.current&&context.current===accepted&&token===revision.current){setState({context:accepted,snapshot:next});if(!decisionPending.current)setDocumentsBlocked(false);return true;}}
+  catch{if(active.current&&context.current===accepted&&token===revision.current){setState(null);setDocumentsBlocked(true);setNotice({context:accepted,message:'来源或范围暂不可用，已撤下原资料，请重新读取。',error:true});}}
   finally{if(active.current&&context.current===accepted&&token===revision.current)setBusy(false);}
   return false;
  };
  useEffect(()=>{
-  active.current=true;setState(null);setNotice(null);setBusy(false);
-  const unsubscribe=bridge.onInvalidated(()=>{revision.current++;setState(null);setBusy(false);setNotice({context:accepted,message:'资料资格或连接已变化，已撤下正文、依据和编辑，请重新读取。',error:true});});
+  active.current=true;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setNotice(null);setBusy(false);setDocumentsBlocked(false);
+  const unsubscribe=bridge.onInvalidated(()=>{revision.current++;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setDocumentsBlocked(true);setBusy(false);setNotice({context:accepted,message:'资料资格或连接已变化，已撤下正文、依据和编辑，请重新读取。',error:true});});
   if(contactId)void refresh.current();
   return()=>{active.current=false;revision.current++;unsubscribe();void bridge.release().catch(()=>{});};
  },[accepted]);
+ useEffect(()=>{
+  if(completedRunId!==lastCompletedRun.current){lastCompletedRun.current=completedRunId;if(completedRunId)completionRefreshPending.current=true;}
+  if(completionRefreshPending.current&&!busy&&contactId){completionRefreshPending.current=false;void refresh.current(true);}
+ },[completedRunId,busy,accepted]);
  async function decide(request:Decision){
-  if(!current||!readRequest||busy)return;const snapshot=current;revision.current++;setState(null);setBusy(true);setNotice(null);
+  if(!current||!readRequest||busy)return;const snapshot=current,token=++revision.current;decisionPending.current=true;setDocumentsBlocked(true);setState(null);setBusy(true);setNotice(null);
   let outcome:MemoryManagementOutcome;
   try{outcome=await bridge.decide({...readRequest,connectionGeneration:snapshot.connectionGeneration,request:{...request,requestKey:crypto.randomUUID()}});}catch{outcome={status:'unavailable'};}
-  if(!active.current||context.current!==accepted)return;
+  if(!active.current||context.current!==accepted||token!==revision.current){decisionPending.current=false;return;}
+  decisionPending.current=false;
   if(outcome.status!=='applied'){setBusy(false);setNotice({context:accepted,message:outcomeMessages[outcome.status],error:true});return;}
   const refreshed=await refresh.current();if(active.current&&context.current===accepted)setNotice({context:accepted,message:refreshed?(successMessages[request.action]??'决定已保存。'):'决定已保存，但当前资料暂不可读。已撤下原资料，请重新读取。',error:!refreshed});
  }
@@ -99,10 +106,14 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision}:{br
   <header><h2>记忆候选与版本</h2><p className="hint">查看固定原稿、来源和每次决定。编辑在提交后形成正式版本。</p></header>
   <div className="sqlite-memory-actions" role="group" aria-label="记忆对象"><button type="button" aria-pressed={scopeKind==='contact'} onClick={()=>setScopeKind('contact')}>对方</button><button type="button" aria-pressed={scopeKind==='self'} onClick={()=>setScopeKind('self')}>我</button><button type="button" disabled={!contactId||busy} onClick={()=>void refresh.current()}>刷新记忆管理</button></div>
   {!contactId?<p>请先从顶部选择联系人。</p>:<>
-   {scopeKind==='self'&&<p className="hint">这里只展示完整贡献和来源均属于当前联系人的本人资料；混合贡献、混合来源与无联系人归属资料不在此页显示。</p>}
+   {scopeKind==='self'&&<p className="hint">记忆候选与版本仅展示完整贡献和来源均属于当前联系人的本人资料；主题资料与长期概览按合法发布集合展示。</p>}
    {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
    {current&&<><h3>候选原稿</h3>{current.view.candidates.length===0?<p>当前范围没有可展示的候选。</p>:current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}
     <h3>正式记忆</h3>{current.view.memories.length===0?<p>当前范围没有可展示的正式记忆。</p>:current.view.memories.map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</>}
   </>}
+  {readRequest&&typeof bridge.readDocuments==='function'&&(documentsBlocked?<section className="sqlite-memory-documents" aria-label="主题资料与长期概览">
+   <h2>主题资料与长期概览</h2><p role={busy?'status':'alert'}>{busy?'正在核对更新后的主题资料…':'资料资格尚未重新核验，已撤下正文和依据。'}</p>
+   {!busy&&<button type="button" onClick={()=>void refresh.current()}>重新读取主题资料</button>}
+  </section>:<SqliteMemoryDocumentsPanel key={`${scopeKind}:${contactId}:${scopeRevision}`} bridge={bridge} request={readRequest} refreshKey={documentsRefreshKey}/>)}
  </section>;
 }
