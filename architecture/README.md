@@ -1,5 +1,7 @@
 # NotAlone 架构文档
 
+> 2026-10-29 SQLite 底座：[ADR-109](adr/109-controlled-sqlite-storage-foundation.md)局部修订 ADR-101／102 的 PG 目标，按已确认规格从空 SQLite 分票重建。实施 01 只提供受控生命周期、Worker 与存储合同，默认业务仍为 PG；领域结构、正式切换和组合验收继续按实施任务推进。
+
 > 2026-10-26 助手会话决定：[ADR-106](adr/106-persistent-assistant-conversations.md)已采纳每位联系人独立的持久会话、空闲 12 小时分段和旧会话明确继续；数据库作为可见业务历史主记录，DSH 文件保存可恢复执行记录。新策略、持久化与删除链已实现并接入正常开发入口，局部修订 ADR-042／102，不改变已有来源与输入预算边界。隔离合成、实际热更新、性能与有界模型样例的结论及限制见 ADR-106，不据此宣称整体性能或质量提升。
 
 > 2026-10-26 记忆实现方向：[ADR-104](adr/104-tencent-source-memory-engine.md)中的生成与提示构建直接归入本地记忆模块，统一使用业务协议。合成检查与真实模型、桌面质量分别核验。
@@ -210,3 +212,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 [ADR-070](adr/070-automatic-memory-maintenance.md) 记录默认自动维护记忆与旧资料升级退役；实现与验证见[本次规格](../.scratch/automatic-memory-maintenance/spec.md)。
 
 [ADR-081](adr/081-source-grounded-memory-time-and-conditions.md) 记录来源锚点、日期精度、适用条件与有据时间线；[规格与实现索引](../.scratch/memory-temporal-semantics/planning.md) 分别记录目标、工程验证和质量限制。
+
+109. [ADR-109：受控 SQLite 底座与分票切换](adr/109-controlled-sqlite-storage-foundation.md)

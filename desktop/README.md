@@ -154,6 +154,23 @@ npm run package
 
 桌面资源构建、打包和仓库探针准备会在写入前核对实际输出卷与临时卷，任一可用空间不足 15 GiB 即停止；新输出按最近的已有祖先核验，已有目录的软链接按目标卷核验。在线打包还核对并复用 `~/Library/Caches/electron` 下载缓存，`download.cacheRoot` 已按[官方接口](https://electron.github.io/packager/main/interfaces/Options.html#download)与安装的 Packager 20.3.0 / Get 5.1.0 核对。开发时复用固定输出，验收后的旧 App、重复运行时与临时编译目录按[开发磁盘占用规则](../docs/agents/engineering.md#开发磁盘占用)清理；自定义 `--output-directory` 成功后由调用者负责收尾。
 
+### SQLite 底座开发诊断
+
+实施票 01 提供显式的隔离存储诊断。默认业务仍沿用 PostgreSQL；此入口仅检查 SQLite Worker、实例和结构，不启动 PG、DSH、微信或模型，也不开放业务能力。
+
+先运行 `pnpm run dev:status`，确认没有需要复用的开发实例，再准备独立的临时用户目录：
+
+```bash
+sqlite_test_root="$(mktemp -d /private/tmp/notalone-sqlite-XXXXXX)"
+printf '%s\n' '{"formatVersion":1,"intent":"create","role":"test"}' > "$sqlite_test_root/sqlite-development.json"
+chmod 600 "$sqlite_test_root/sqlite-development.json"
+pnpm run dev --user-data-dir "$sqlite_test_root"
+# 另一个终端核验同一隔离根的热更新宿主及监督器
+pnpm run dev:status --user-data-dir "$sqlite_test_root"
+```
+
+控制文件只由已经核验的开发宿主读取，禁止业务角色、重置、任意数据库路径或扩展模块。成功创建后保存为 `intent: "open"` 和实际 `expectedDatabaseId`；普通重开沿用该实例，缺失、损坏或身份不符时保留现场并显示固定诊断代码。诊断就绪只表示底座就绪，界面继续显示业务尚未切换。升级由同一实例的存储迁移执行；界面不提供重置按钮。未设置控制文件时，开发入口行为保持原样。
+
 ## 屏幕录制授权
 
 外置配置模式启动与热重启仅静默检查屏幕录制权限，不显示模态授权引导；缺权限在应用配置和输入小窗中提示。权限检查、主动授权和后端定位共用本机启动配置的探针解析，开发模式不要求重新打包。点击“开启屏幕录制授权”才请求系统许可，“已授权，重新检测”只复查；系统未再次弹窗时，在打开的“屏幕与系统音频录制”中核对本次应用或探针，开发模式可能显示 Electron。系统要求重新打开时，正常退出再启动开发模式。原生权限命令不采集画面或聊天内容，权限就绪也不代替联系人绑定核验。

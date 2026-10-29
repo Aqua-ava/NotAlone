@@ -1,5 +1,7 @@
 # 现行核心流程
 
+> SQLite 底座目标按 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)局部修订原 PG 保留条款；01 仅提供受控实例与存储合同，默认业务尚未切换。其余来源、范围、删除及 DSH 约束保持，完整结构和消费者在实施 20 切换前复核。
+
 > 2026-10-23 后端迁移决定：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)采纳精简 DSH 与 TypeScript 后端，最终替换 Python、LangChain／LangGraph／DeepAgents。当前代码已切换TypeScript／DSH，旧Python后端与框架执行分支退役；本轮开发验证范围及用户跳过项见迁移25／26记录。Electron 独立，TS 业务与 DSH 共用官方 profile 启动的后台进程，由薄插件装配普通业务模块；PostgreSQL、现有功能与数据保留。ADR-006／009／010 的框架选择由 ADR-102 替代，其范围、来源、预算、删除和人工发送约束保持。
 
 > 首用交互与生命周期补充：[ADR-101](../adr/101-local-app-first-use-lifecycle.md)默认仅所选会话，保留明确选择全部私聊的分支；下文 ADR-095 全部范围原子提交仅用于该选择。列表访问先取得必要同意并丢弃夹带摘要，工具准备不授权正文读取。重装沿用留存资料，彻底删除需明确范围与二次确认；异常诊断脱敏且不自动上传。完整首用及独立交付仍待[新规格](../../.scratch/local-app-first-use/spec.md)验收。
