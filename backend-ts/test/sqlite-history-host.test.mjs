@@ -21,18 +21,18 @@ import {launchDsh} from '../src/launch.ts';
 const owner='00000000-0000-4000-8000-000000000063';
 const evidence={externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1'};
 const createMetadata=()=>({account:async()=>evidence,sessions:async()=>['a','b','c'].map(name=>({externalKey:`friend-${name}`,displayName:`合成${name}`,kind:'private',identityAssurance:'verified'}))});
-function createChannel(){
+function createChannel(options={}){
  return {inspect:async scope=>({protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:'supported',reason:null,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'source-1',serverAliasSemantics:'unverified'}),
  target:async()=>({protocol:'private-history-v1',descriptor:'synthetic-target',partitions:['p'],tables:[{partition:'p',instance:'t'}],sourceGeneration:'source-1'}),
  page:async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,completedPartitions:['p'],exhausted:true,records:[['1','text','合成历史'],['2','voice',null]].map(([localId,kind,text])=>({partition:'p',table:'t',localId,serverId:'0',sender:'contact',kind,text,originalType:kind==='text'?'1':'34',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0'}))})};
 }
-async function seed(t){
+async function seed(t,options={}){
  const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-history-host-')));t.after(()=>rm(root,{recursive:true,force:true}));
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'});const databaseId=storage.status.databaseId;
  const contacts=new SqliteContactService(storage,owner,createMetadata());await contacts.initialize();const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);
  const snapshot=await contacts.candidates(true);await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(row=>({locator:row.username,observed_display_name:row.display_name,expected_selection_generation:'0'})));
  const bindings=(await contacts.directory()).bindings;
- const history=new SqliteHistoryService(storage,contacts,createChannel);for(const binding of bindings)await history.synchronize(binding.contact_id);
+ const history=new SqliteHistoryService(storage,contacts,createChannel(options));for(const binding of bindings)await history.synchronize(binding.contact_id);
  const source=(await history.read(bindings[0].contact_id)).messages.find(message=>message.kind==='text').sourceRecordIds[0];
  await history.close();await contacts.close();await storage.close();return {root,databaseId,bindings,source};
 }
@@ -116,4 +116,21 @@ test('现有撤销与总开关HTTP在持久撤资格后等待对应渠道退出�
   assert.equal((await request('/api/sync/disable',{})).status,200);await assert.rejects(reads[1],{code:'history_interrupted'});assert.deepEqual(closed,[a.contact_id,b.contact_id]);
   await assert.rejects(history.synchronize(b.contact_id),{code:'read_not_authorized'});
  }finally{await history.close();await Promise.allSettled(reads);server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await contacts.close();await storage.close();}
+});
+
+test('宿主增量协调器随读取开关/退出启停，真实渠道未提供增量能力时可见拒绝且不写入',async t=>{
+ const f=await seed(t,{tailHandoff:true});
+ const {host,request}=await startHost(t,f);const contact=f.bindings[0].contact_id;
+ // 真实适配器未认证且没有增量尾部能力：交接检查点存在也不得读取或声称已同步。
+ const status=await request('/api/sync/status');assert.equal(status.status,200);
+ const row=status.body.cli_history_coverages.find(item=>item.contact_id===contact);
+ assert.ok(row);assert.equal(row.phase,'complete','历史覆盖本身仍显示已完成');
+ assert.ok(['blocked','incomplete','unavailable'].includes(row.incremental_phase),'增量不得伪报已同步');
+ assert.ok(['history_tail_unsupported','history_support_unverified','history_incremental_unavailable'].includes(row.incremental_failure_code));
+ assert.deepEqual((await request(`/api/contacts/${contact}/messages`)).body.messages.filter(message=>message.text!==null).map(message=>message.text),['合成历史']);
+ // 关闭总开关：停止协调器，保留资料与选择。
+ const disabled=await request('/api/sync/disable','POST',{});assert.equal(disabled.status,200);assert.equal(disabled.body.sync_enabled,false);
+ const after=await request('/api/sync/status');assert.equal(after.body.sync_enabled,false);
+ assert.equal((await request(`/api/contacts/${contact}/messages`)).body.messages.filter(message=>message.text!==null).length,1);
+ await request('/api/runtime/shutdown','POST',{});assert.equal(await host.waitForExit(15000),true);
 });

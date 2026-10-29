@@ -31,18 +31,35 @@ export interface HistoryPage {
   records: readonly HistoryRecord[];
   // 只有核验过的固定目标、完整分片及可靠续读协议才能报告终页。
   completedPartitions: readonly string[]; exhausted: boolean;
+  // 终页可提供保守续读游标（允许重叠、不得跳项），供历史→增量无缺口交接；缺失表示该适配器不能证明交接。
+  resumeCursor?: string | null;
+}
+export interface HistoryTailPage {
+  target: string; cursorIn: string; cursorOut: string;
+  records: readonly HistoryRecord[]; caughtUp: boolean;
 }
 export interface HistoryChannel {
   inspect(scope: HistoryScope, signal?: AbortSignal): Promise<HistorySupportReport>;
   target(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryTarget>;
   page(scope: HistoryScope, target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<HistoryPage>;
+  // 可选增量尾部能力：只由支持档声明 incrementalTail=supported 的已认证适配器提供。
+  tail?(scope: HistoryScope, target: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTailPage>;
+  // 06 精确历史边界能力：仅已认证适配器提供，生产适配器不实现（空缺即拒绝）。
+  boundarySnapshot?(scope: HistoryScope, signal?: AbortSignal): Promise<unknown>;
   close?(): Promise<void>;
 }
 export type HistoryPhase = 'not_started' | 'running' | 'complete' | 'incomplete';
+/** 增量检查点的持久事实；运行中/受阻等实时状态由协调器单独投影。 */
+export type HistoryIncrementalPhase = 'not_started' | 'ready' | 'incomplete' | 'invalidated' | 'unavailable';
+export interface HistoryIncrementalCoverage {
+  goalId: string | null; phase: HistoryIncrementalPhase; failureCode: string | null; cursorPresent: boolean;
+  pagesAccepted: number; lastAcceptedAt: number | null; resumedFromGoalId: string | null;
+}
 export interface HistoryCoverage {
   goalId: string | null; contactId: string; bindingId: string | null;
   phase: HistoryPhase; failureCode: string | null; cursor: string | null;
   messageCount: number; nonTextCount: number; pageCount: number; quarantinedCount: number;
+  incremental?: HistoryIncrementalCoverage;
 }
 export interface StoredMessage {
   id: string; contactId: string; bindingId: string; sender: 'owner' | 'contact';

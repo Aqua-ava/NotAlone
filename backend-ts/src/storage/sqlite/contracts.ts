@@ -17,7 +17,7 @@ export interface StorageTransaction {
   get(sql: string, values?: SQLInputValue[]): StorageRow | undefined;
   all(sql: string, values?: SQLInputValue[]): StorageRow[];
 }
-export interface StorageMigration { version: number; sql: string; rebuild?: 'memory-adjudication-v1' }
+export interface StorageMigration { version: number; sql: string; rebuild?: 'memory-adjudication-v1' | 'memory-documents-v1' }
 export interface StorageMaintenance {
   checkpoint(): { busy: bigint; log: bigint; checkpointed: bigint };
   vacuum(): void;

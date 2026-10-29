@@ -31,12 +31,16 @@ function reasonText(reason: string | null): string {
   return '处理暂时受阻，请查看处理原因后重试';
 }
 function stageText(run: FixedProcessingRun): string {
-  if (run.stage !== 'extraction_verification') return '正在整理主题资料与长期概览';
+  if (run.stage === 'document_scene') return '正在整理主题资料';
+  if (run.stage === 'document_profile') return '正在整理长期概览';
+  if (run.stage !== 'extraction_verification') return '正在处理后续阶段';
   return '正在提取与核验';
 }
 function statusText(run: FixedProcessingRun | null): string {
   if (!run) return '尚未开始';
-  if (run.status === 'completed') return '本轮已完成';
+  if (run.status === 'completed' || run.state === 'completed' || run.stage === 'completed' || run.laterStages === 'completed') return '本轮已完成';
+  if (run.stage === 'document_scene') return '正在整理主题资料';
+  if (run.stage === 'document_profile') return '正在整理长期概览';
   if (run.status === 'paused') return '已暂停';
   if (run.status === 'blocked') return reasonText(run.statusReason);
   if (run.status === 'processing') return stageText(run);
@@ -44,7 +48,7 @@ function statusText(run: FixedProcessingRun | null): string {
 }
 
 /** 由记忆页面传入具名桥；scopeKey变化或失效事件先撤下全部本地快照。 */
-export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: FixedMemoryProcessingBridge; scopeKey?: string | number }) {
+export function FixedMemoryProcessingPanel({ bridge, scopeKey = '', onRunUpdated }: { bridge: FixedMemoryProcessingBridge; scopeKey?: string | number; onRunUpdated?:(run:FixedProcessingRun|null)=>void }) {
   const [view, setView] = useState<FixedProcessingView | null>(null);
   const [trace, setTrace] = useState<FixedProcessingTrace | null>(null);
   const [error, setError] = useState('');
@@ -56,7 +60,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
     setBusy(true); setError(''); setView(null); setTrace(null);
     try {
       const next = await operation();
-      if (active.current && accepted === revision.current) { setView(next); return next; }
+      if (active.current && accepted === revision.current) { setView(next); onRunUpdated?.(next.run); return next; }
       return null;
     } catch {
       if (active.current && accepted === revision.current) {
@@ -128,7 +132,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
       {noNewMemory && <p>已处理，未产生新记忆</p>}
       {run.failed > 0 && <p>有 {run.failed} 条目标尚未通过提取核验。</p>}
       {run.unknown > 0 && <p>有 {run.unknown} 条目标调用结果未知，核实前不会重新发送。</p>}
-      {(run.status === 'processing' || run.status === 'paused' || run.statusReason === 'later_stages_pending') && <p>主题整理、长期概览尚未执行，本轮未完成。</p>}
+      {run.laterStages==='completed'?<p>主题整理与长期概览已完成。</p>:<p>主题整理、长期概览尚未全部完成。</p>}
       {run.candidates.length > 0 && <section aria-label="本轮已核验候选">
         <h3>来源已核验的候选</h3>
         <p>以下候选来自自动提取，正式记忆与决定请查看下方。</p>

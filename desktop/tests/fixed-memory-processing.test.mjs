@@ -79,3 +79,16 @@ test('面板释放只取消正文，模式核验仍等待其回执且完整资�
  entered=Promise.withResolvers();response=Promise.withResolvers();
  const body=f.controller.read();await entered.promise;f.controller.release();response.resolve(snapshot());await assert.rejects(body);
 });
+
+test('只有全部阶段完成的权威合同才接受整轮完成',async t=>{
+ let data={...snapshot(),state:'completed',stage:'completed',laterStages:'completed'};
+ const f=await fixture(t,async()=>data);const completed=await f.controller.read();assert.equal(completed.run.state,'completed');assert.equal(completed.run.laterStages,'completed');
+ for(const invalid of [{...data,laterStages:'pending'},{...data,state:'incomplete'},{...data,stage:'extraction_verification'}]){data=invalid;await assert.rejects(f.controller.read());}
+});
+
+test('主进程接受权威的主题和画像运行阶段',async t=>{
+ let data={...snapshot(),state:'running',stage:'document_scene'};
+ const f=await fixture(t,async()=>data);assert.equal((await f.controller.read()).run.stage,'document_scene');
+ data={...data,stage:'document_profile'};assert.equal((await f.controller.read()).run.stage,'document_profile');
+ data={...data,stage:'invented'};await assert.rejects(f.controller.read());
+});

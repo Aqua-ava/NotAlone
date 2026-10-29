@@ -3,6 +3,7 @@ import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from './memory/
 import {createSqliteModelRuntime} from './host/sqlite-model-runtime.ts';
 import {readSqliteModelEnvironment} from './host/sqlite-model-config.ts';
 import {createSqliteMemoryRuntime} from './memory/sqlite/runtime.ts';
+import {SqliteMemoryDocumentsHttp,memoryDocumentsQueryAllowed} from './memory/sqlite/documents/http.ts';
 import {createSqliteDiscussionHost} from './reply/sqlite/host-runtime.ts';
 import { SqliteMediaService } from './media/sqlite/service.ts';
 import { SqliteMediaHttp } from './media/sqlite/http.ts';
@@ -29,6 +30,7 @@ import { SqliteHistoryService } from './history/sqlite/service.ts';
 import { SqliteHistoryHttp, historyQueryAllowed, projectHistorySyncStatus } from './history/sqlite/http.ts';
 import { createWechatHistoryChannel } from './history/sqlite/wechat-channel.ts';
 import { FirstHistoryCoordinator } from './history/sqlite/coordinator.ts';
+import { IncrementalHistoryCoordinator } from './history/sqlite/incremental-coordinator.ts';
 import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 
 export const name = 'notalone-sqlite-host';
@@ -44,11 +46,11 @@ export function authorizeSqliteRequest(req: IncomingMessage, token: string): boo
 interface SqliteHostResource { close(): Promise<void> }
 /** 逐域尝试真实排空；任何业务所有者未释放时保留共享模型与SQLite，允许原操作续清。 */
 export async function closeSqliteHostResources(resources: {
-  firstHistory?: SqliteHostResource; discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
+  firstHistory?: SqliteHostResource; incremental?: SqliteHostResource; discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
   contacts?: SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
 }): Promise<void> {
   const failures: unknown[] = [];
-  for (const resource of [resources.firstHistory, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts]) {
+  for (const resource of [resources.firstHistory, resources.incremental, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts]) {
     try { await resource?.close(); } catch (error) { failures.push(error); }
   }
   if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
@@ -75,6 +77,7 @@ export async function apply(ctx: Context) {
   let contacts: ContactMetadataLifetime | undefined;
   let history: SqliteHistoryService | undefined;
   let firstHistory: FirstHistoryCoordinator | undefined;
+  let incremental: IncrementalHistoryCoordinator | undefined;
   let media: SqliteMediaService | undefined;
   let models: Awaited<ReturnType<typeof createSqliteModelRuntime>> | undefined;
   let memory: Awaited<ReturnType<typeof createSqliteMemoryRuntime>> | undefined;
@@ -91,7 +94,7 @@ export async function apply(ctx: Context) {
     state = 'stopping'; readyDispose(); models?.stopAccepting();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
-    await closeSqliteHostResources({firstHistory,discussions,memory,media,history,contacts,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
+    await closeSqliteHostResources({firstHistory,incremental,discussions,memory,media,history,contacts,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
     if (published) await rm(config.infoPath, { force: true });
     state = 'stopped';
   })().catch(error=>{stopping=undefined;throw error;});
@@ -123,13 +126,15 @@ export async function apply(ctx: Context) {
     if(capabilities.capabilities.some(capability=>capability==='history')){
       history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionHolders);
       firstHistory=new FirstHistoryCoordinator(contacts,history);
-      contacts.setReadStart(()=>firstHistory!.wake());
+      incremental=new IncrementalHistoryCoordinator(contacts,history);
+      // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
+      contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();});
     }
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
     const historyStatus=async()=>{
       const directory=await contacts!.directory();
       const coverage=await Promise.all(directory.bindings.filter(binding=>binding.status==='active').map(async binding=>({...await history!.coverage(binding.contact_id),bindingId:binding.binding_id})));
-      return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState());
+      return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState(),incremental?.getState());
     };
     const library=capabilities.skillPackageRoot?new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot):undefined;
     const skills=library?new SqliteSkillHttp(library,req=>authorizeSqliteRequest(req,token)):undefined;
@@ -139,7 +144,7 @@ export async function apply(ctx: Context) {
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
     }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:[]});
     await media.initialize();
-    contacts.setReadStop(async contactId=>{await Promise.all([firstHistory?firstHistory.stop(contactId):history?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);});
+    contacts.setReadStop(async contactId=>{await Promise.all([firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);});
     const mediaHttp = new SqliteMediaHttp(media);
     const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');
     const modelEnvironment=discussionsEnabled||memoryEnabled?await readSqliteModelEnvironment(config.envFilePath,process.env):{};
@@ -152,13 +157,14 @@ export async function apply(ctx: Context) {
     // 即使入口未开启，也恢复并持有旧副本的清理所有者，避免资料删除遗漏持久副本。
     memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,
       ...(models?.shared?{sharedModel:models.shared}:{}),holders:deletionHolders,authorize:req=>authorizeSqliteRequest(req,token),adjudicationEnabled:memoryEnabled});
+    const memoryDocumentsHttp=memoryEnabled&&memory.documents?new SqliteMemoryDocumentsHttp(memory.documents,req=>authorizeSqliteRequest(req,token)):undefined;
     discussions=await createSqliteDiscussionHost({ctx,storage,ownerId,userData:sqlite.userData,holders:deletionHolders,library,authorizeRequest:req=>authorizeSqliteRequest(req,token),
       ...(models?.shared?{model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}}:{})});
     const deletions = new SqliteDeletionHttp(deletionService, ownerId);
     const ownership = { contacts: 'typescript', wechat: 'typescript',
       deletion: 'typescript', media: 'typescript', mediaExtraction: 'unavailable', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
       taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'typescript',
-      wechatBodySync: history?'typescript':'unavailable', wechatIncremental: 'unavailable', wechatHistory: history?'typescript':'unavailable',
+      wechatBodySync: history?'typescript':'unavailable', wechatIncremental: history?'typescript':'unavailable', wechatHistory: history?'typescript':'unavailable',
       foregroundLocation: 'unavailable', contactContext: 'unavailable', memory: memoryEnabled?'typescript':'unavailable', memoryManagement:memoryEnabled?'typescript':'unavailable', discussions:discussionsEnabled?'typescript':'unavailable',
       expressionPreferences: 'unavailable', replies: 'unavailable' };
     const handleRequest=async (req:IncomingMessage,res:ServerResponse):Promise<void> => {
@@ -167,7 +173,7 @@ export async function apply(ctx: Context) {
       let url: URL;
       try { url = new URL(req.url ?? '', 'http://localhost'); }
       catch { respond(400, { error: 'invalid_request' }); return; }
-      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
+      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)||memoryDocumentsHttp&&memoryDocumentsQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
       try {
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
           respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
@@ -183,7 +189,7 @@ export async function apply(ctx: Context) {
         if(history&&req.method==='GET'&&url.pathname==='/api/sync/status'){
           respond(200,await historyStatus());return;
         }
-        if (!await deletions.handle(req,res)&&!await memoryManagementHttp?.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!(discussionsEnabled&&await discussions!.http.handle(req,res))&&!(memoryEnabled&&await memory!.http.handle(req,res))&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
+        if (!await deletions.handle(req,res)&&!await memoryManagementHttp?.handle(req,res)&&!await memoryDocumentsHttp?.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!(discussionsEnabled&&await discussions!.http.handle(req,res))&&!(memoryEnabled&&await memory!.http.handle(req,res))&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
     };
     server=createServer((req,res)=>{
@@ -205,7 +211,7 @@ export async function apply(ctx: Context) {
           await link(pending, config.infoPath); published = true;
         } finally { await rm(pending, { force: true }); }
       })();
-      void publication.then(()=>{if(state==='running')firstHistory?.wake();}).catch(() => ctx.appExit!(1));
+      void publication.then(()=>{if(state==='running'){firstHistory?.wake();incremental?.wake();incremental?.start();}}).catch(() => ctx.appExit!(1));
     });
   } catch {
     await close();

@@ -3,6 +3,7 @@ import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
 import type { HistoryCoverage, HistoryRead, StoredMessage } from './contracts.ts';
 import type { FirstHistoryCoordinatorState } from './coordinator.ts';
+import type { IncrementalHistoryCoordinatorState } from './incremental-coordinator.ts';
 
 interface HistoryHttpService {
   read(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
@@ -35,7 +36,7 @@ export function projectHistoryMessages(read: HistoryRead, limit: number) {
   };
 }
 /** 公共宿主负责实际渠道可用性；本函数只投影已持久化的覆盖，不发起读取。 */
-export function projectHistorySyncStatus(base: Record<string, unknown>, persistedCoverages: readonly HistoryCoverage[], runtime?:FirstHistoryCoordinatorState) {
+export function projectHistorySyncStatus(base: Record<string, unknown>, persistedCoverages: readonly HistoryCoverage[], runtime?:FirstHistoryCoordinatorState, incremental?:IncrementalHistoryCoordinatorState) {
   const blocked=new Set<string>();
   const globalFailure=runtime?.phase==='blocked'&&(runtime.contacts.length===0
     ||runtime.lastError==='history_first_directory_failed'||runtime.lastError==='history_first_stop_failed')?runtime.lastError:null;
@@ -49,17 +50,39 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, persiste
   const incomplete = coverages.filter(row => row.phase === 'incomplete'||blocked.has(row.contactId)).length;
   const pending = coverages.filter(row => (row.phase === 'not_started' || row.phase === 'running')&&!blocked.has(row.contactId)).length;
   const textCount = (row: HistoryCoverage) => Math.max(0, row.messageCount - row.nonTextCount);
+  const incrementalRuntime = (contactId: string) => incremental?.contacts.find(contact => contact.contactId === contactId);
+  // 运行中/降级只影响展示；持久检查点仍是是否允许继续读取的事实。
+  const incrementalPhase = (row: HistoryCoverage) => {
+    const live = incrementalRuntime(row.contactId);
+    if (live) {
+      if (live.phase === 'blocked') return 'blocked';
+      if (live.phase === 'degraded') return 'incomplete';
+      if (live.phase === 'queued' || live.phase === 'running') return 'syncing';
+      if (live.phase === 'stopped') return 'stopped';
+    }
+    return row.incremental?.phase ?? 'not_started';
+  };
+  const rows = coverages.filter(row => row.bindingId !== null);
+  const incrementalPhases = rows.map(incrementalPhase);
+  const incrementalFailure = rows.map(row => incrementalRuntime(row.contactId)?.lastError ?? row.incremental?.failureCode ?? null).find(code => code !== null) ?? null;
+  const incrementalOverallPhase = incrementalPhases.includes('blocked') ? 'incomplete'
+    : incrementalPhases.includes('syncing') ? 'active'
+      : incrementalPhases.length > 0 && incrementalPhases.every(phase => phase === 'unavailable') ? 'unavailable'
+        : incrementalPhases.includes('incomplete') || incrementalPhases.includes('invalidated') ? 'incomplete' : 'idle';
   return { ...base,
     cli_history_authorization_state: coverages.some(row=>row.bindingId!==null)?'accepted':'unknown', cli_history_authorization_version: coverages.some(row=>row.bindingId!==null)?1:null, cli_history_authorization_current_version: 1,
     cli_history_coverages: coverages.filter(row => row.bindingId !== null).map(row => ({
       binding_id: row.bindingId, contact_id: row.contactId, phase: row.phase === 'running' ? 'syncing' : row.phase,
       failure_code: row.failureCode, message_count: textCount(row), non_text_count: row.nonTextCount, page_count: row.pageCount,
+      incremental_phase: incrementalPhase(row), incremental_failure_code: incrementalRuntime(row.contactId)?.lastError ?? row.incremental?.failureCode ?? null,
+      incremental_last_accepted_at: row.incremental?.lastAcceptedAt ?? null, incremental_pages: row.incremental?.pagesAccepted ?? 0,
     })),
     cli_backfill_phase: pending > 0 ? 'backfilling' : incomplete > 0 ? 'incomplete' : coverages.length > 0 ? 'complete' : 'not_required',
     cli_backfill_failure_code: coverages.find(row => row.failureCode !== null)?.failureCode ?? null,
     cli_backfill_total_contacts: coverages.length, cli_backfill_completed_contacts: completed,
     cli_backfill_succeeded_contacts: completed, cli_backfill_skipped_contacts: 0, cli_backfill_failed_contacts: 0,
     cli_backfill_incomplete_contacts: incomplete, cli_backfill_pending_contacts: pending,
+    cli_incremental_phase: incrementalOverallPhase, cli_incremental_failure_code: incrementalFailure,
     cli_backfill_total_message_count: coverages.reduce((sum, row) => sum + textCount(row), 0),
     cli_backfill_total_non_text_count: coverages.reduce((sum, row) => sum + row.nonTextCount, 0),
   };

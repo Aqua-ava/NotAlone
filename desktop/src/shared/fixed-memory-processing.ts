@@ -1,5 +1,5 @@
 /** SQLite 固定轮次；提取核验成功不表示主题与概览已完成。 */
-export type FixedProcessingRunState = 'pending' | 'running' | 'paused' | 'failed' | 'incomplete' | 'revoked';
+export type FixedProcessingRunState = 'pending' | 'running' | 'paused' | 'failed' | 'incomplete' | 'revoked' | 'completed';
 /** 统一轮次状态：待处理、处理中、暂停、受阻、完成；历史失败不得冒充当前状态。 */
 export type FixedProcessingStatus = 'waiting' | 'processing' | 'paused' | 'blocked' | 'completed';
 export type FixedProcessingControlAction = 'pause' | 'continue';
@@ -20,7 +20,7 @@ export interface FixedProcessingCandidate {
 }
 export interface FixedProcessingRun {
   runId: string; state: FixedProcessingRunState; total: number; succeeded: number; failed: number; unknown: number;
-  stage: 'extraction_verification'; laterStages: 'pending'; tasks: FixedProcessingTask[];
+  stage: 'extraction_verification' | 'document_scene' | 'document_profile' | 'completed'; laterStages: 'pending' | 'completed'; tasks: FixedProcessingTask[];
   /** 控制投影：固定轮次的统一状态、可执行动作、固定原因与计数；不含百分比。 */
   status: FixedProcessingStatus; statusReason: string | null; actions: FixedProcessingControlAction[];
   controlVersion: number; pending: number; revoked: number; calls: FixedProcessingCallSummary;

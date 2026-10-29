@@ -8,6 +8,25 @@ import {assertContribution,assertInputs,currentAttempt,inputRows,fail,textId} fr
 import {applyControl,takeOverExpiredAttempt} from './control.ts';
 import {snapshot} from './runs.ts';
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryExtraction.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
+const budgetNumbers=['input_tokens','max_output_tokens','context_window_tokens','safety_margin_tokens','serialized_bytes'] as const;
+function budgetSummary(value:unknown):Record<string,number>|null {
+ if(!value||typeof value!=='object'||Array.isArray(value))return null;
+ const budget=value as Record<string,unknown>;
+ if(budgetNumbers.some(key=>!Number.isSafeInteger(budget[key])||Number(budget[key])<1))return null;
+ return Object.fromEntries(budgetNumbers.map(key=>[key,Number(budget[key])]));
+}
+/** 删除正文后保留核对与结算所需数值，不保留输入摘要或请求指纹。 */
+export function minimalModelReceipt(raw:unknown):string|null {
+ if(raw===null)return null;
+ let value:Record<string,unknown>;try{value=typeof raw==='string'?JSON.parse(raw):raw as Record<string,unknown>;}catch{return null;}
+ const fields=['attempt_id','permit_id','request_id','owner_id','contact_id','scope_kind','provider','model','called_at','latency_ms','dispatch','outcome'];
+ const result:Record<string,unknown>=Object.fromEntries(fields.filter(k=>value[k]===null||typeof value[k]==='string'||typeof value[k]==='number').map(k=>[k,value[k]]));
+ const budget=budgetSummary(value.input_budget??value.input_budget_summary);if(budget)result.input_budget_summary=budget;
+ for(const [key,allowed] of [['usage',['input_tokens','output_tokens','cache_read_tokens','cache_write_tokens']],['cost',['status','amount','currency','pricing_version']]] as const){
+  const source=value[key];if(source&&typeof source==='object'&&!Array.isArray(source)){const record=source as Record<string,unknown>;result[key]=Object.fromEntries(allowed.filter(k=>record[k]===null||typeof record[k]==='string'||typeof record[k]==='number').map(k=>[k,record[k]]));}
+ }
+ return JSON.stringify(result);
+}
 function event(tx:StorageTransaction,i:{ownerId:string;attemptId:string;kind:string;payload:unknown;inputNos?:number[];callId?:string;reuseId?:string},lease:StorageLease):string {
  const {attempt,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
  const selected=i.inputNos===undefined?rows:i.inputNos.map(no=>rows.find(r=>Number(r.input_no)===no)??fail('memory_extraction_input_not_frozen'));
@@ -59,7 +78,9 @@ function prepareStep(tx:StorageTransaction,i:{ownerId:string;runId:string;taskId
    WHERE i.owner_id=? AND i.run_id=? AND i.source_contact_id=? AND i.role='target' AND p.extraction_state<>'succeeded'
    AND NOT EXISTS(SELECT 1 FROM step_input si JOIN processing_step ps ON ps.owner_id=si.owner_id AND ps.id=si.step_id WHERE si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no AND ps.task_id=? AND ps.state<>'revoked') ORDER BY i.input_no LIMIT 20`,[i.ownerId,i.runId,t.contact_id,i.taskId]);
   if(!rows.length){
+   const reuseGuard=tx.get('SELECT 1 FROM schema_migration WHERE version=13')?`AND NOT EXISTS(SELECT 1 FROM document_extraction_reuse reuse JOIN step_attempt a ON a.owner_id=reuse.owner_id AND a.id=reuse.source_attempt_id AND a.state='succeeded' JOIN processing_step original ON original.owner_id=a.owner_id AND original.id=a.step_id AND original.state='succeeded' AND original.successful_attempt_id=a.id WHERE reuse.owner_id=i.owner_id AND reuse.run_id=i.run_id AND reuse.input_no=i.input_no)`:'';
    const elsewhere=!!tx.get(`SELECT 1 FROM run_input i WHERE i.owner_id=? AND i.run_id=? AND i.source_contact_id=? AND i.role='target'
+    ${reuseGuard}
     AND NOT EXISTS(SELECT 1 FROM step_input si JOIN processing_step ps ON ps.owner_id=si.owner_id AND ps.id=si.step_id WHERE si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no AND ps.task_id=? AND ps.state='succeeded')`,[i.ownerId,i.runId,t.contact_id,i.taskId]);
    tx.run('UPDATE processing_task SET state=?,error_code=? WHERE owner_id=? AND id=?',[elsewhere?'incomplete':'succeeded',elsewhere?'targets_completed_elsewhere':null,i.ownerId,i.taskId]);return null;
   }
@@ -117,21 +138,35 @@ export const executionActions:StorageAction[]=[
  }),
  action('receipt','write',(tx,raw)=>{
   const r=(raw as {receipt:ModelLedgerReceipt}).receipt;validateModelLedgerReceipt(r);
-  const c=tx.get('SELECT c.*,o.state AS op_state FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE c.owner_id=? AND c.id=? AND c.request_key=?',[r.owner_id,r.attempt_id,r.request_id]);
+  const c=tx.get('SELECT c.*,o.state AS op_state,o.purpose AS op_purpose FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE c.owner_id=? AND c.id=? AND c.request_key=?',[r.owner_id,r.attempt_id,r.request_id]);
   if(!c||c.receipt===null||r.provider!==c.provider||r.model!==c.model)return fail('memory_extraction_reservation_missing');
-  const old=JSON.parse(String(c.receipt)) as ModelLedgerReceipt;
-  if(old.permit_id!==r.permit_id||old.contact_id!==r.contact_id||JSON.stringify(old.input_budget)!==JSON.stringify(r.input_budget))fail('memory_extraction_receipt_mismatch');
-  if(c.state==='succeeded'||c.state==='failed'){if(c.receipt!==JSON.stringify(r))fail('memory_extraction_receipt_conflict');return true;}
+  const old=JSON.parse(String(c.receipt)) as ModelLedgerReceipt&{input_budget_summary?:Record<string,number>};
+  const redacted=c.op_state==='sealed'&&c.step_attempt_id===null&&old.input_budget===undefined;
+  const sameIdentity=old.attempt_id===r.attempt_id&&old.request_id===r.request_id&&old.owner_id===r.owner_id&&old.permit_id===r.permit_id&&old.contact_id===r.contact_id
+   &&(old.scope_kind??'contact')===(r.scope_kind??'contact')&&old.provider===r.provider&&old.model===r.model&&old.called_at===r.called_at;
+  const budget=r.input_budget,summary=budgetSummary(budget);
+  const sameBudget=redacted?!!summary&&!!old.input_budget_summary&&JSON.stringify(old.input_budget_summary)===JSON.stringify(summary)
+   &&BigInt(summary.input_tokens!+summary.max_output_tokens!)===c.reserved_budget_units&&BigInt(summary.max_output_tokens!)===c.output_cap&&BigInt(summary.input_tokens!)<=BigInt(String(c.input_cap))
+   :JSON.stringify(old.input_budget)===JSON.stringify(budget);
+  if(!sameIdentity||!sameBudget)fail('memory_extraction_receipt_mismatch');
+  if(c.state==='succeeded'||c.state==='failed'){if((redacted?minimalModelReceipt(c.receipt)!==minimalModelReceipt(r):c.receipt!==JSON.stringify(r)))fail('memory_extraction_receipt_conflict');return true;}
   const unknown=r.outcome==='unknown'||r.outcome==='pending'||r.dispatch==='authorized_unconfirmed';
   const state=unknown?'unknown':r.outcome==='succeeded'?'succeeded':'failed';
   const usage=r.usage;const actual=usage?usage.input_tokens+usage.output_tokens:null;
-  tx.run('UPDATE model_call SET state=?,received_at=?,actual_budget_units=?,settlement_state=?,receipt=? WHERE owner_id=? AND id=?',[state,Date.now(),actual,unknown?'unknown':'settled',JSON.stringify(r),r.owner_id,c.id]);
+  tx.run('UPDATE model_call SET state=?,received_at=?,actual_budget_units=?,settlement_state=?,receipt=? WHERE owner_id=? AND id=?',[state,Date.now(),actual,unknown?'unknown':'settled',redacted?minimalModelReceipt(r):JSON.stringify(r),r.owner_id,c.id]);
   if(c.op_state!=='sealed')tx.run('UPDATE model_operation SET state=? WHERE owner_id=? AND id=?',[unknown?'unknown':state==='succeeded'?'resolved':'failed',r.owner_id,c.operation_id]);
+  const documentCall=c.op_purpose==='document_scene'||c.op_purpose==='document_profile';
+  const cannotCommit=documentCall&&!tx.get("SELECT 1 FROM step_attempt WHERE owner_id=? AND id=? AND state='running'",[r.owner_id,c.step_attempt_id]);
+  const release=state==='failed'||state==='succeeded'&&(c.op_state==='sealed'||cannotCommit);
   if(unknown)for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='unknown' WHERE owner_id=? AND operation_id=?`,[r.owner_id,c.operation_id]);
-  if(!unknown&&state==='failed')for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=?`,[r.owner_id,c.operation_id]);
+  if(!unknown&&release)for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=?`,[r.owner_id,c.operation_id]);
+  if(documentCall){
+   if(unknown)tx.run("UPDATE document_effect_scope SET state='unknown' WHERE owner_id=? AND operation_id=?",[r.owner_id,c.operation_id]);
+   else if(release)tx.run("UPDATE document_effect_scope SET state='released' WHERE owner_id=? AND operation_id=?",[r.owner_id,c.operation_id]);
+  }
   return true;
  }),
- action('unconfirmed','read',(tx,raw)=>{const i=raw as {owner_id:string;contact_id:string|null};return tx.all(`SELECT DISTINCT c.request_key FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id JOIN operation_scope s ON s.owner_id=c.owner_id AND s.operation_id=c.operation_id WHERE c.owner_id=? AND o.purpose IN ('extraction','verification','adjudication','relation_verification','merge_verification') AND c.state IN ('sending','unknown')${i.contact_id===null?'':' AND s.source_contact_id=?'}`,i.contact_id===null?[textId(i.owner_id)]:[textId(i.owner_id),textId(i.contact_id)]).map(c=>String(c.request_key));}),
+ action('unconfirmed','read',(tx,raw)=>{const i=raw as {owner_id:string;contact_id:string|null};return tx.all(`SELECT DISTINCT c.request_key FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id JOIN operation_scope s ON s.owner_id=c.owner_id AND s.operation_id=c.operation_id WHERE c.owner_id=? AND o.purpose IN ('extraction','verification','adjudication','relation_verification','merge_verification','document_scene','document_profile') AND c.state IN ('sending','unknown')${i.contact_id===null?'':' AND s.source_contact_id=?'}`,i.contact_id===null?[textId(i.owner_id)]:[textId(i.owner_id),textId(i.contact_id)]).map(c=>String(c.request_key));}),
  action('finish','write',(tx,raw,lease)=>{
   const i=raw as {ownerId:string;attemptId:string;outcome:{accepted:unknown[];extraction_completed:boolean;failure_kind:string|null;rejected_count:number;candidate_trace_ids:string[];verification:{fact:unknown;result:unknown}[]};verificationRefs?:(CandidateVerificationReference|null)[];inputNos:number[]};const {attempt,task,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
   if(!i.outcome.extraction_completed||i.outcome.failure_kind!==null)fail('memory_extraction_protocol_incomplete');
@@ -168,10 +203,14 @@ export const executionActions:StorageAction[]=[
   return {...snapshot(tx,applied.ownerId,applied.runId),replayed:applied.replayed};
  }),
  action('settleRun','write',(tx,raw,lease)=>{
-  const i=raw as {ownerId:string;runId:string};reconcile(tx,i.ownerId,i.runId);
+  const i=raw as {ownerId:string;runId:string;laterWork?:boolean};reconcile(tx,i.ownerId,i.runId);
   const tasks=tx.all("SELECT * FROM processing_task WHERE owner_id=? AND run_id=? AND scope_kind='contact'",[i.ownerId,i.runId]);
   if(tasks.every(t=>t.state==='succeeded'))finalizeOwnerContributions(tx,i,lease);
-  tx.run("UPDATE processing_run SET state=CASE WHEN pause_requested_at IS NOT NULL THEN 'paused' WHEN EXISTS(SELECT 1 FROM processing_task t WHERE t.owner_id=processing_run.owner_id AND t.run_id=processing_run.id AND t.state='failed') THEN 'failed' ELSE 'incomplete' END WHERE owner_id=? AND id=? AND state<>'revoked'",[i.ownerId,i.runId]);return snapshot(tx,i.ownerId,i.runId);
+  tx.run("UPDATE processing_run SET state=CASE WHEN pause_requested_at IS NOT NULL THEN 'paused' WHEN EXISTS(SELECT 1 FROM processing_task t WHERE t.owner_id=processing_run.owner_id AND t.run_id=processing_run.id AND t.state='failed') THEN 'failed' WHEN ? THEN 'running' ELSE 'incomplete' END WHERE owner_id=? AND id=? AND state<>'revoked'",[i.laterWork?1:0,i.ownerId,i.runId]);return snapshot(tx,i.ownerId,i.runId);
+ }),
+ action('finishLater','write',(tx,raw)=>{
+  const i=raw as {ownerId:string;runId:string};
+  tx.run("UPDATE processing_run SET state=CASE WHEN pause_requested_at IS NOT NULL THEN 'paused' WHEN EXISTS(SELECT 1 FROM processing_task t WHERE t.owner_id=processing_run.owner_id AND t.run_id=processing_run.id AND t.state='failed') THEN 'failed' ELSE 'incomplete' END WHERE owner_id=? AND id=? AND state='running'",[i.ownerId,i.runId]);return snapshot(tx,i.ownerId,i.runId);
  }),
  action('recover','write',(tx,raw,lease)=>{
   const {ownerId}=raw as {ownerId:string};

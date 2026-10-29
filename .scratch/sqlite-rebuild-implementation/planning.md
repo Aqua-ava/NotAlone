@@ -28,13 +28,13 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [01 SQLite 基础与生命周期](issues/01-sqlite-runtime-lifecycle.md) | 无 | ready-for-agent | resolved |
 | [02 联系人绑定与同步授权](issues/02-contact-binding-and-read-grants.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [03 首次历史同步与消息展示](issues/03-private-history-sync.md) | [02](issues/02-contact-binding-and-read-grants.md) | needs-info | claimed |
-| [04 增量同步与读取控制](issues/04-incremental-sync-controls.md) | [03](issues/03-private-history-sync.md) | ready-for-agent | open |
+| [04 增量同步与读取控制](issues/04-incremental-sync-controls.md) | [03](issues/03-private-history-sync.md) | ready-for-agent | claimed |
 | [05 统一来源删除与清理流程](issues/05-source-deletion-and-cleanup.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
-| [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | open |
+| [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | claimed |
 | [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
 | [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | resolved |
 | [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | claimed |
-| [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | open |
+| [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | claimed |
 | [11 助手讨论与 DSH 副本](issues/11-assistant-discussions-and-runtime.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
 | [12 候选回复与依据](issues/12-reply-candidates-and-basis.md) | [11](issues/11-assistant-discussions-and-runtime.md) | ready-for-agent | resolved |
 | [13 表达偏好接回（本轮暂缓）](issues/13-expression-preferences.md) | [12](issues/12-reply-candidates-and-basis.md) | wontfix | open |
@@ -189,3 +189,11 @@ flowchart TD
 - 09 已按 08 实际集成提交启动独立执行会话，依赖祖先与 Goal 均已核验；只处理主题资料与长期概览，保留已发布迁移 1–12。
 
 - 用户在独立会话另行授权的真实供应商合成复测：07源提交两次调用及两个目标成功，11源提交一次调用成功且重开未增请求；总指挥已核对状态数量和祖先关系。各自旧unknown保留，09没有因此获得真实外呼授权；不认证微信或真实聊天语义质量。
+
+- 2026-10-30 票04集成（含审查修复）：执行会话t04最终bad4c4ef（迁移14=historyIncrementalMigration，仅ALTER read_goal/message，不重建CHECK不建新表）；已--no-ff集成3ba737fc。集成前经t03独立Standards/Spec双轴审查，发现并修复3个阻断：提交树typecheck 10错误（错误收窄+SQLInputValue）、close不取消在途读取/迟到页可提交、未校验支持档incrementalTail能力；t03 delta复审确认三项闭环。主仓复跑：backend typecheck 0、增量4文件25/25、宿主12/12（Electron Node）、desktop typecheck 0、桌面5文件21/21。已知问题：09集成引入sqlite-memory-extraction 1项失败（0197bea4通过、5551aa5e失败），已交t09定位修复，不计入04。真实渠道增量能力仍属03门禁，打开前保持不可用。
+
+- 2026-10-30 票09代码集成（桌面复验进行中，State保持claimed）：执行会话t09恢复b1f3未提交工作并提交e0f51331/8c7a66b5/fc5b2c54/e7df7dcd+merge dc8366c6；迁移1..13（13=memoryDocumentsMigration），1–12原文未改。已--no-ff集成5551aa5e；主仓复跑门禁：backend typecheck 0、Electron Node下文档10文件90/90、desktop typecheck 0、桌面4文件46/46。09桌面实际App用例a–d（合成库+环回供应商）进行中，完成后补最终12条判定。
+
+- 2026-10-30 票03收口（task-1 complete）：执行会话t03把基线并入dsh/sqlite-rebuild-03并只读复核首次自动入口/能力报告/删除注册接线，未发现授权内需补写代码；提交34a6f98b仅+103行文档（合并后审计、12条逐条判定、精确真实缺口），已--no-ff集成7b934d73，集成后backend typecheck通过。03结论：第1/2条真实普通历史、状态语义、来源生命周期、跨重启连续性仍未认证，真实target/page全拒绝；需用户授权（真实逐人确认读取、固定文本发送+仅撤回一次）与正式窄操作制品，撤回测试此前已被用户跳过。State保持claimed、不resolved；03剩余工作转入需用户/架构决策的阻塞项，不空等。
+
+- 2026-10-30 DSH 总指挥接管并派发剩余批次：核对 GitHub 无远端操作；集成分支 codex/sqlite-rebuild-integration @ 33e7dedc（14 由 67b28e9a、16 由 1683fbcf 核验为基线祖先；03 工作树 bbec 仅 1 个未合并文档提交 +17 行，源码已集成；09 工作树 b1f3 为 109e1d50 + 28 改 6 未跟踪，须保留）。桌面 dev:status stopped/pids[]，WeChat PID 892 运行。已并发派发 5 个执行会话：t03（task-1，恢复 bbec 并先并基线）、t04（task-2，新 worktree sqlite-rebuild-04）、t06（task-3，新 worktree sqlite-rebuild-06）、t09（task-4，恢复 b1f3）、t10（task-5，新 worktree sqlite-rebuild-10）；20=task-6 blocked_by [06,10]，21=task-7 blocked_by [20]。桌面串行队列：03→09→04/06/10。pnpm 经 /tmp/notalone-env.sh shim（默认 PATH 无 node/pnpm）。06/10 的共享路径集成门禁分别等 04、04+09 实际进基线。
