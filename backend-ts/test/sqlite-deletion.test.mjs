@@ -234,3 +234,12 @@ test('账户新独立删除必须有新请求键，普通任务状态交给原�
   const ordinary = await fetch(endpoint + '/api/tasks/status?contact_id=a&task_id=ordinary-import');
   assert.equal(ordinary.status, 418); assert.equal(await ordinary.text(), 'ordinary_task_handler');
 });
+test('领域回调意外返回Promise时回滚目标进度，不能提前确认已清理', async t => {
+  const f = await fixture(t); await f.storage.execute('sample.seed', {});
+  const op = await f.service().plan(request()); await f.storage.execute('sample.asyncClear', {});
+  const result = await f.service().advance(op);
+  assert.equal(result.state, 'blocked');
+  assert.ok(result.targets.every(t => t.state !== 'cleared'));
+  assert.equal(result.checks.find(c => c.kind === 'final_recheck').result.proof, 'async_transaction_forbidden');
+  assert.equal((await f.storage.execute('sample.read', {})).bodies.length, 2);
+});

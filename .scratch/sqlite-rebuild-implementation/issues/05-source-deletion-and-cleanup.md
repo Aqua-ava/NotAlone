@@ -51,7 +51,7 @@ Blocked by: [01 SQLite 基础与生命周期](01-sqlite-runtime-lifecycle.md)
 
 实际验证：
 
-1. Node v24.19.0；`node --test backend-ts/test/sqlite-deletion.test.mjs backend-ts/test/sqlite-storage.test.mjs`：26/26（16删除、10底座）。覆盖正常/幂等、旧代次及旧runner、跨联系人合成贡献、owner错误回滚、同操作部分失败/重开、未知目录/链接/替换文件、持有者末次写入/超时/明确失败续跑、新计划旧检查失效、单来源/联系人/账户台账差异、SQLite长读者checkpoint busy与页/WAL/SHM/临时文件维护、生产HTTP/普通任务透传/账户新请求。
+1. Node v24.19.0；`node --test backend-ts/test/sqlite-deletion.test.mjs backend-ts/test/sqlite-storage.test.mjs`：最初26/26（16删除、10底座）；新增领域Promise回调反例后删除模块17/17，底座10项条件未变沿用有效结果。覆盖正常/幂等、旧代次及旧runner、跨联系人合成贡献、owner错误回滚、同操作部分失败/重开、未知目录/链接/替换文件、持有者末次写入/超时/明确失败续跑、新计划旧检查失效、单来源/联系人/账户台账差异、SQLite长读者checkpoint busy与页/WAL/SHM/临时文件维护、生产HTTP/普通任务透传/账户新请求及异步领域回调拒绝。
 2. `pnpm --dir backend-ts typecheck`通过。`cd desktop && node --test tests/sqlite-development.test.mjs`：5/5；另新增`sqlite-source-deletion-contract.test.mjs`，使用生产HTTP+真实临时SQLite，直接复用现有桌面deletionReceipt/deletionTask读取器验证回执和最终状态，1/1。此前缺esbuild的环境失败在离线安装锁定依赖后通过，未改变锁文件。
 3. TDD记录：首切片先因模块缺失red；错误owner及文件资格反例red后补拦截。独立code-review Standards初审2项、Spec初审3项（账户问题重叠）；四处实际问题均补失败回归后修复，双轴增量复核0项。未机械跑全量、真实模型或微信。
 4. 实现提交后`node scripts/check_public_history.mjs --ref HEAD --working-tree`：2541提交、19287历史blob、1584当前文件、0问题；后续补充提交后继续执行公开检查。`git diff --check`通过。未push、远端分支或PR。

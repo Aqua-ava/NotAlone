@@ -14,6 +14,8 @@
 
 每个`DeletionDomain`注册以下同步回调，均在专用Worker短事务内执行：
 
+统一模块对领域及authority回调的Promise返回作运行时拒绝；即使TypeScript的void回调允许误传async函数，也不能提前提交目标清理进度。此检查不撤回回调已经发起的外部动作，可信注册代码仍不得在这些回调内调用文件/模型/CLI。
+
 1. `fence(tx,operation)`：撤销派生检索、恢复、生成及旧请求资格，返回需要墓碑的`{namespace,key}`。必须幂等。命名空间为固定业务名，如`media.extract`，模块自动加databaseId前缀。
 2. `collect(tx,operation)`：沿实际输入反查完整删除闭包，包括只作上下文的来源、输入输出追踪、全部状态的候选/版本/文档/回复、本人跨联系人贡献，以及当前/退役/暂存/在途副本。展示citation不能替代真实依赖。不要把已删输入换指另一条记录来保住旧证明。
 3. `rowKinds`声明每种行的真实复合主键及`ownerKey`；`clearRow`执行本领域清理及范围复验。统一模块拒绝未知行种、主键缺项、多项和跨owner目标，不拼接业务SQL。
