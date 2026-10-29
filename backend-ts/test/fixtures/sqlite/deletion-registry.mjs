@@ -21,6 +21,7 @@ const domain = {
     return targets;
   },
   clearRow(tx, op, target) {
+    if (tx.get('SELECT 1 FROM sample_control WHERE value=4')) return Promise.resolve();
     tx.run(`DELETE FROM ${target.rowKind} WHERE owner=? AND id=?`, [op.ownerId, target.key.id]);
     if (tx.get('SELECT 1 FROM sample_control WHERE value=1')) {
       tx.run('UPDATE sample_control SET value=0');
@@ -57,4 +58,5 @@ export const registry = { migrations: [...base.migrations, sampleMigration], act
   { name: 'sample.retainFile', mode: 'write', retryBusy: false, execute(tx) { tx.run('INSERT INTO sample_control VALUES(1,2)'); } },
   { name: 'sample.large', mode: 'write', retryBusy: false, execute(tx) { tx.run("INSERT INTO sample_body VALUES('o','a','large','r1',?,1)", ['合成大正文'.repeat(100000)]); } },
   { name: 'sample.refill', mode: 'write', retryBusy: false, execute(tx) { tx.run("INSERT INTO sample_body VALUES('o','a','fresh','r3','新独立合成资料',1)"); } },
+  { name: 'sample.asyncClear', mode: 'write', retryBusy: false, execute(tx) { tx.run('INSERT INTO sample_control VALUES(1,4)'); } },
 ] };
