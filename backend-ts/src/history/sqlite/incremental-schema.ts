@@ -1,7 +1,7 @@
 import type { StorageMigration } from '../../storage/sqlite/contracts.ts';
 
 /**
- * 迁移 13（合入基线后为 14）：增量交接与检查点（只 ALTER，不重建既有 CHECK）。
+ * 迁移 14：增量交接与检查点（只 ALTER，不重建既有 CHECK）。
  * - read_goal 增加终页续读游标、游标作用域证据与检查点进度；
  * - message 增加发送状态观察列；语义解释仍依赖支持档，代码不把状态值推断为完成。
  */

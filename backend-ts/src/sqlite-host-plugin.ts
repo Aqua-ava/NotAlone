@@ -3,6 +3,7 @@ import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from './memory/
 import {createSqliteModelRuntime} from './host/sqlite-model-runtime.ts';
 import {readSqliteModelEnvironment} from './host/sqlite-model-config.ts';
 import {createSqliteMemoryRuntime} from './memory/sqlite/runtime.ts';
+import {SqliteMemoryDocumentsHttp,memoryDocumentsQueryAllowed} from './memory/sqlite/documents/http.ts';
 import {createSqliteDiscussionHost} from './reply/sqlite/host-runtime.ts';
 import { SqliteMediaService } from './media/sqlite/service.ts';
 import { SqliteMediaHttp } from './media/sqlite/http.ts';
@@ -156,6 +157,7 @@ export async function apply(ctx: Context) {
     // 即使入口未开启，也恢复并持有旧副本的清理所有者，避免资料删除遗漏持久副本。
     memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,
       ...(models?.shared?{sharedModel:models.shared}:{}),holders:deletionHolders,authorize:req=>authorizeSqliteRequest(req,token),adjudicationEnabled:memoryEnabled});
+    const memoryDocumentsHttp=memoryEnabled&&memory.documents?new SqliteMemoryDocumentsHttp(memory.documents,req=>authorizeSqliteRequest(req,token)):undefined;
     discussions=await createSqliteDiscussionHost({ctx,storage,ownerId,userData:sqlite.userData,holders:deletionHolders,library,authorizeRequest:req=>authorizeSqliteRequest(req,token),
       ...(models?.shared?{model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}}:{})});
     const deletions = new SqliteDeletionHttp(deletionService, ownerId);
@@ -171,7 +173,7 @@ export async function apply(ctx: Context) {
       let url: URL;
       try { url = new URL(req.url ?? '', 'http://localhost'); }
       catch { respond(400, { error: 'invalid_request' }); return; }
-      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
+      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)||memoryDocumentsHttp&&memoryDocumentsQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
       try {
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
           respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
@@ -187,7 +189,7 @@ export async function apply(ctx: Context) {
         if(history&&req.method==='GET'&&url.pathname==='/api/sync/status'){
           respond(200,await historyStatus());return;
         }
-        if (!await deletions.handle(req,res)&&!await memoryManagementHttp?.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!(discussionsEnabled&&await discussions!.http.handle(req,res))&&!(memoryEnabled&&await memory!.http.handle(req,res))&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
+        if (!await deletions.handle(req,res)&&!await memoryManagementHttp?.handle(req,res)&&!await memoryDocumentsHttp?.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!(discussionsEnabled&&await discussions!.http.handle(req,res))&&!(memoryEnabled&&await memory!.http.handle(req,res))&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
     };
     server=createServer((req,res)=>{

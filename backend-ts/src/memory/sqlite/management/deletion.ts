@@ -27,6 +27,13 @@ function releaseTypedConsumers(tx:StorageTransaction,op:DeletionOperation,parent
  const steps=tx.all(`SELECT DISTINCT step_id FROM step_input WHERE owner_id=? AND ${predicate}`,values);
  const plannedSteps=new Set(tx.all("SELECT target_payload FROM deletion_target WHERE operation_id=? AND domain='memory_extraction' AND row_kind='processing_step' AND target_payload IS NOT NULL",[op.operationId]).map(r=>(JSON.parse(String(r.target_payload)) as RowDeletionTarget).key.id));
  for(const {step_id:stepId} of steps){
+  const step=tx.get('SELECT kind,state FROM processing_step WHERE owner_id=? AND id=?',[op.ownerId,stepId]);
+  if(step&&['document_scene','document_profile'].includes(String(step.kind))&&step.state==='succeeded'){
+   const unused=tx.all(`SELECT input_no FROM step_input i WHERE i.owner_id=? AND i.step_id=? AND ${predicate}
+    AND NOT EXISTS(SELECT 1 FROM execution_input x WHERE x.owner_id=i.owner_id AND x.planned_step_id=i.step_id AND x.planned_input_no=i.input_no)`,[op.ownerId,stepId,...values.slice(1)]);
+   for(const row of unused)tx.run('DELETE FROM step_input WHERE owner_id=? AND step_id=? AND input_no=?',[op.ownerId,stepId,row.input_no]);
+   if(!tx.get(`SELECT 1 FROM step_input WHERE owner_id=? AND step_id=? AND ${predicate} LIMIT 1`,[op.ownerId,stepId,...values.slice(1)]))continue;
+  }
   if(!plannedSteps.has(String(stepId))||!tx.get("SELECT 1 FROM processing_step WHERE owner_id=? AND id=? AND state='revoked'",[op.ownerId,stepId]))fail('memory_typed_consumer_not_fenced');
   const events=`SELECT e.id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id WHERE a.owner_id=? AND a.step_id=?`;
   tx.run(`DELETE FROM execution_input WHERE owner_id=? AND (planned_step_id=? OR event_id IN (${events}) OR producer_event_id IN (${events}))`,[op.ownerId,stepId,op.ownerId,stepId,op.ownerId,stepId]);

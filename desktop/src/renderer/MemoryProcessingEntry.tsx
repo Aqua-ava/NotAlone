@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { BackendBridge } from '../shared/backend-bridge';
-import type { FixedMemoryProcessingBridge, FixedProcessingMode } from '../shared/fixed-memory-processing';
+import type { FixedMemoryProcessingBridge, FixedProcessingMode, FixedProcessingRun } from '../shared/fixed-memory-processing';
 import { FixedMemoryProcessingPanel } from './FixedMemoryProcessingPanel';
 
 export interface MemoryProcessingEntryProps {
@@ -8,7 +8,7 @@ export interface MemoryProcessingEntryProps {
   backend: Pick<BackendBridge, 'onStateChanged'>;
   scopeKey?: string | number;
   children: ReactNode;
-  sqliteChildren?: ReactNode;
+  sqliteChildren?: ReactNode | ((processingRevision:number,completedRunId:string|null)=>ReactNode);
 }
 
 type EntryScope = Pick<MemoryProcessingEntryProps, 'bridge' | 'backend' | 'scopeKey'>;
@@ -19,6 +19,11 @@ type EntryState = { scope: EntryScope } & (
 /** 模式经本机桥核验后才挂载对应的记忆页面。 */
 export function MemoryProcessingEntry({ bridge, backend, scopeKey, children, sqliteChildren }: MemoryProcessingEntryProps) {
   const [state, setState] = useState<EntryState | null>(null);
+  const [processingRevision,setProcessingRevision]=useState(0);
+  const [completedRunId,setCompletedRunId]=useState<string|null>(null);
+  const onRunUpdated=useCallback((run:FixedProcessingRun|null)=>{
+    setProcessingRevision(value=>value+1);setCompletedRunId(run?.state==='completed'?run.runId:null);
+  },[]);
   const scope = useRef<EntryScope>({ bridge, backend, scopeKey });
   if (scope.current.bridge !== bridge || scope.current.backend !== backend || scope.current.scopeKey !== scopeKey) {
     scope.current = { bridge, backend, scopeKey };
@@ -56,7 +61,7 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, children, sql
   const current = state?.scope === acceptedScope ? state : null;
   if (current?.phase === 'ready') {
     if (current.mode.mode === 'legacy') return children;
-    if (current.mode.mode === 'sqlite') return <><FixedMemoryProcessingPanel bridge={bridge} scopeKey={scopeKey}/>{sqliteChildren}</>;
+    if (current.mode.mode === 'sqlite') return <><FixedMemoryProcessingPanel bridge={bridge} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}</>;
   }
   if (current?.phase === 'disconnected') return <p role="status">本机连接已变化，正在等待重新连接。</p>;
   if (current?.phase === 'failed') return <section aria-label="记忆处理模式">
