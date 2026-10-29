@@ -1,12 +1,14 @@
 # 18：语音保存与转换
 
-Triage: ready-for-agent
+Triage: wontfix
 State: resolved
 Type: task
 Parent: [微信媒体资源提取与语音文件转换](../../wechat-media-extraction/spec.md)
 Blocked by: [16 单条媒体保存与清除](16-single-message-media-lifecycle.md)
 
 > 2026-10-29发布规格，后续已按授权完成实现与验收，结果见Answer。[任务索引与共同约定](../planning.md)。
+
+> 2026-10-29用户决定：本轮暂缓。历史resolved、提交、已完成Goal与下文证据保留，仅表示此前完成的实现。本轮不交付语音保存／转换，不再进行真实语音读取、提取、转换或播放验收；仅最小关闭默认语音适配器和新增保存／重转入口，保留已有文件访问与清理。原验收条款仅保留为未来恢复时的历史范围，不要求本轮执行，也不标为通过。[当前有效范围](../planning.md)。
 
 ## 交付行为
 
