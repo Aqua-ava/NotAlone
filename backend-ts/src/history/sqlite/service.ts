@@ -91,6 +91,35 @@ export class SqliteHistoryService {
    throw error;
   }
  });}
+ /** 增量只从已证明的完整作用域检查点续读；每页接受前由存储动作复验资格、代次与删除状态。 */
+ synchronizeIncremental(contactId:string,signal?:AbortSignal):Promise<HistoryCoverage>{return this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal)=>{
+  if(typeof channel.tail!=='function')throw new StorageFailure('history_tail_unsupported');
+  let goal:{id:string;target:HistoryTarget;cursor:string}|undefined;
+  const check=()=>this.check(scope,controller);
+  try{
+   const inspect=async()=>{
+    const evidence=await channel.inspect(scope,controller.signal);await check();assertSupport(evidence);
+    if(evidence.accountKey!==scope.accountKey||evidence.conversationKey!==scope.conversationKey||evidence.sourceGeneration!==scope.token.source_generation)throw new StorageFailure('history_external_scope_changed');
+    return evidence;
+   };
+   const report=await inspect();
+   // 只有支持档明确声明增量能力才继续；仅存在方法不等于认证通过。
+   if(report.capabilities?.incrementalTail!=='supported')throw new StorageFailure('history_tail_unsupported');
+   goal=await this.storage.execute<typeof goal|null>('history.incrementalPending',{token:scope.token,report})??undefined;
+   if(!goal)goal=await this.storage.execute('history.beginIncremental',{token:scope.token,report,id:randomUUID(),at:Date.now()});
+   registerGoal(goal!.id);
+   for(let index=0;index<200;index++){
+    await check();const page=await channel.tail(scope,goal!.target,goal!.cursor,controller.signal);await check();
+    if(serializeSupport(await inspect())!==serializeSupport(report))throw new StorageFailure('history_support_changed');
+    const coverage=await this.storage.execute<HistoryCoverage>('history.acceptIncrementalPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId});
+    if(page.caughtUp)return coverage;goal!.cursor=page.cursorOut;
+   }
+   return await this.storage.execute('history.incrementalInterrupt',{ownerId:this.contacts.ownerId,contactId,goalId:goal!.id,code:'history_page_budget_exhausted'});
+  }catch(error){
+   if(goal){try{await this.storage.execute('history.incrementalInterrupt',{ownerId:this.contacts.ownerId,contactId,goalId:goal.id,code:error instanceof StorageFailure?error.code:'history_incremental_interrupted'});}catch{/* 旧资格不允许推进水位。 */}}
+   throw error;
+  }
+ });}
  async stop(contactId?:string):Promise<void>{const entries=[...this.active.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);await Promise.all(entries.map(entry=>entry.stop()));await Promise.all(entries.map(entry=>entry.done));}
  async close():Promise<void>{this.closed=true;await this.stop();}
 }
