@@ -5,6 +5,7 @@ import type {StorageAction,StorageTransaction,StorageRow,StorageLease} from '../
 import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../platform/models/model-ledger.ts';
 import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
 import {assertContribution,assertInputs,currentAttempt,inputRows,fail,textId} from './qualification.ts';
+import {applyControl,takeOverExpiredAttempt} from './control.ts';
 import {snapshot} from './runs.ts';
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryExtraction.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
 const budgetNumbers=['input_tokens','max_output_tokens','context_window_tokens','safety_margin_tokens','serialized_bytes'] as const;
@@ -61,7 +62,8 @@ function prepareStep(tx:StorageTransaction,i:{ownerId:string;runId:string;taskId
  if(!r||r.pause_requested_at!==null||['paused','revoked'].includes(String(r.state)))return null;
  const t=tx.get("SELECT * FROM processing_task WHERE owner_id=? AND id=? AND run_id=? AND scope_kind='contact'",[i.ownerId,i.taskId,i.runId]);
  if(!t||['revoked','unknown','succeeded','awaiting_decision'].includes(String(t.state)))return null;
- if(tx.get("SELECT 1 FROM step_attempt WHERE owner_id=? AND step_id IN (SELECT id FROM processing_step WHERE owner_id=? AND task_id=?) AND state='running'",[i.ownerId,i.ownerId,i.taskId]))return null;
+ // 过期租约在领取时保守接替：先按“未发出/已发出未知”收尾旧attempt，再允许新attempt。
+ if(!takeOverExpiredAttempt(tx,i.ownerId,i.taskId))return null;
  let s=tx.get("SELECT * FROM processing_step WHERE owner_id=? AND task_id=? AND state IN ('failed','pending') ORDER BY step_no LIMIT 1",[i.ownerId,i.taskId]);
  while(s){
   const completed=inputRows(tx,i.ownerId,String(s.id)).filter(row=>row.role==='target').some(row=>tx.get("SELECT 1 FROM processing_item WHERE owner_id=? AND id=? AND extraction_state='succeeded'",[i.ownerId,row.item_id]));
@@ -195,10 +197,10 @@ export const executionActions:StorageAction[]=[
   tx.run("UPDATE processing_task SET state=?,error_code=? WHERE owner_id=? AND id=(SELECT task_id FROM processing_step WHERE owner_id=? AND id=?) AND state<>'revoked'",[state,i.code,i.ownerId,i.ownerId,a.step_id]);return true;
  }),
  action('control','write',(tx,raw)=>{
-  const i=raw as {ownerId:string;runId:string;action:'pause'|'continue'};textId(i.ownerId);textId(i.runId);if(!['pause','continue'].includes(i.action))fail('memory_extraction_input_invalid');reconcile(tx,i.ownerId,i.runId);
-  if(i.action==='pause'){tx.run("UPDATE processing_run SET pause_requested_at=?,state='paused' WHERE owner_id=? AND id=? AND state<>'revoked'",[Date.now(),i.ownerId,i.runId]);}
-  else{tx.run("UPDATE processing_run SET pause_requested_at=NULL,state='pending',intent_revision=intent_revision+1 WHERE owner_id=? AND id=? AND state<>'revoked'",[i.ownerId,i.runId]);tx.run("UPDATE processing_task SET state='pending',resume_no=resume_no+1 WHERE owner_id=? AND run_id=? AND state IN ('failed','paused')",[i.ownerId,i.runId]);}
-  return snapshot(tx,i.ownerId,i.runId);
+  const input=raw as {ownerId:string;runId:string;action:'pause'|'continue';actionVersion?:number;operationId?:string};
+  reconcile(tx,textId(input.ownerId),textId(input.runId));
+  const applied=applyControl(tx,input);
+  return {...snapshot(tx,applied.ownerId,applied.runId),replayed:applied.replayed};
  }),
  action('settleRun','write',(tx,raw,lease)=>{
   const i=raw as {ownerId:string;runId:string;laterWork?:boolean};reconcile(tx,i.ownerId,i.runId);

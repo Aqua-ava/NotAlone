@@ -7,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 
 const ids={run:'11111111-1111-4111-8111-111111111111',task:'22222222-2222-4222-8222-222222222222',contact:'33333333-3333-4333-8333-333333333333',request:'44444444-4444-4444-8444-444444444444'};
-const snapshot=()=>({runId:ids.run,state:'incomplete',total:1,succeeded:1,failed:0,unknown:0,stage:'extraction_verification',laterStages:'pending',
+const snapshot=()=>({runId:ids.run,state:'incomplete',total:1,succeeded:1,failed:0,unknown:0,stage:'extraction_verification',laterStages:'pending',status:'blocked',statusReason:'later_stages_pending',actions:[],controlVersion:0,pending:0,revoked:0,calls:{prepared:0,sending:0,succeeded:4,failed:0,unknown:0},
  tasks:[{taskId:ids.task,scopeKind:'contact',contactId:ids.contact,state:'succeeded',total:1,succeeded:1,errorCode:null}],inputs:[],candidates:[]});
 async function fixture(t,handle){
  const root=await mkdtemp(path.join(tmpdir(),'notalone-fixed-processing-'));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -33,9 +33,22 @@ test('状态读取拒绝会通知撤下旧快照，失效后旧回调不能返�
  await assert.rejects(old);assert.equal(f.invalidations.length,2);
 });
 test('unknown、无产出与缺失阶段不互相伪装，非法成功状态拒绝',async t=>{
- let data={...snapshot(),state:'failed',succeeded:0,unknown:1};
+ let data={...snapshot(),state:'failed',succeeded:0,unknown:1,status:'blocked',statusReason:'model_receipt_unknown',actions:[],pending:0,calls:{prepared:0,sending:0,succeeded:1,failed:0,unknown:1}};
  const f=await fixture(t,async()=>data);assert.equal((await f.controller.read()).run.unknown,1);
  data={...snapshot(),state:'completed'};await assert.rejects(f.controller.read());assert.equal(f.invalidations.length,1);
+});
+
+test('控制动作携带控制修订与操作标识，旧版本不覆盖并撤下快照',async t=>{
+ const operation='55555555-5555-4555-8555-555555555555';
+ const f=await fixture(t,async req=>{
+  if(req.path.endsWith('/pause')){assert.deepEqual(req.body,{action_version:0,operation_id:operation});return {...snapshot(),state:'paused',status:'paused',statusReason:null,actions:['continue'],controlVersion:1};}
+  return snapshot();
+ });
+ const paused=await f.controller.control('pause',{runId:ids.run,controlVersion:0,operationId:operation,connectionGeneration:1});
+ assert.equal(paused.run.status,'paused');assert.equal(paused.run.controlVersion,1);
+ assert.equal(f.calls.at(-1).method,'POST');assert.equal(f.calls.at(-1).path,`/api/memory-processing/runs/${ids.run}/pause`);
+ await assert.rejects(f.controller.control('pause',{runId:ids.run,controlVersion:9,operationId:operation,connectionGeneration:1}));
+ await assert.rejects(f.controller.control('continue',{runId:ids.run,controlVersion:0,operationId:'not-a-uuid',connectionGeneration:1}));
 });
 
 test('记忆入口沿认证运行状态识别存储模式，未知模式不回落旧页面',async t=>{

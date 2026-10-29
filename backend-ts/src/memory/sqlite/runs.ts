@@ -3,6 +3,7 @@ import type {StorageAction,StorageTransaction,StorageRow} from '../../storage/sq
 import {assertContribution,assertInputs,assertTaskContributions,fail,inputRows,textId} from './qualification.ts';
 import {assertSourceEligibility} from '../../history/sqlite/source.ts';
 import {laterStagesState} from './documents/actions.ts';
+import {projectControl} from './control.ts';
 const number=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_count_invalid');return Number(v);};
 /** 新轮只复用有原始成功提取证明且文档阶段受阻的目标，不重新发送提取。 */
 function reusableExtraction(tx:StorageTransaction,ownerId:string,contactId:string,item:StorageRow):StorageRow|undefined{
@@ -67,10 +68,12 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string){
   try{const deps=tx.all(`SELECT i.* FROM execution_input x JOIN step_input si ON si.owner_id=x.owner_id AND si.step_id=x.planned_step_id AND si.input_no=x.planned_input_no JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no WHERE x.owner_id=? AND x.event_id=?`,[ownerId,e.id]);assertInputs(tx,ownerId,runId,deps);}catch{return [];}
   const p=JSON.parse(String(e.payload));return [{id:String(e.id),attemptId:String(e.step_attempt_id),outputNo:number(e.event_no),scopeKind:p.scopeKind,contactId:p.contactId,body:p.fact.text,fact:p.fact,state:'verified_pending_decision',origin:'auto'}];
  });
- return {runId,state:String(r!.state),total:targets.length,succeeded,failed:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'failed')).length,unknown:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'unknown')).length,
-  stage:r!.state==='completed'?'completed':runningDocument?String(runningDocument.kind):'extraction_verification',laterStages:laterStagesState(tx,ownerId,runId).state==='completed'?'completed':'pending',tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
+ const laterStages:('pending'|'completed')=laterStagesState(tx,ownerId,runId).state==='completed'?'completed':'pending';
+ const result={runId,state:String(r!.state),total:targets.length,succeeded,failed:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'failed')).length,unknown:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'unknown')).length,
+  stage:r!.state==='completed'?'completed':runningDocument?String(runningDocument.kind):'extraction_verification',laterStages,tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
    total:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id).length,succeeded:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id&&targetSucceeded(i)).length,errorCode:t.error_code===null?null:String(t.error_code)})),
   inputs:inputs.map(i=>({inputNo:number(i.input_no),role:String(i.role),contactId:String(i.source_contact_id),messageId:String(i.message_id),recordId:String(i.record_id),itemId:i.item_id===null?null:String(i.item_id)})),candidates};
+ return {...result,...projectControl(tx,ownerId,r!,{taskStates,laterStages})};
 }
 export const runActions:StorageAction[]=[{name:'memoryExtraction.findRequest',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;requestKey:string};const r=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[textId(i.ownerId),textId(i.requestKey)]);return r?snapshot(tx,i.ownerId,String(r.id)):null;}},{name:'memoryExtraction.contactGeneration',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;contactId:string};const r=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);if(!r)fail('memory_extraction_scope_stale');return {generation:String(r!.data_generation)};}},{name:'memoryExtraction.start',mode:'write',retryBusy:true,execute(tx,raw){
  const i=raw as {ownerId:string;requestKey:string;policyConfig:unknown;followupStages?:boolean};const ownerId=textId(i.ownerId),requestKey=textId(i.requestKey);

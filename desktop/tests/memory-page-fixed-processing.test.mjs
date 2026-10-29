@@ -10,7 +10,9 @@ test('真实记忆页面在 SQLite 模式仅挂载固定处理，资格失效撤
   };
   let run = {
     runId: ids.run, state: 'incomplete', total: 1, succeeded: 1, failed: 0, unknown: 0,
-    stage: 'extraction_verification', laterStages: 'pending', inputs: [],
+    stage: 'extraction_verification', laterStages: 'pending',
+    status: 'blocked', statusReason: 'later_stages_pending', actions: [], controlVersion: 0, pending: 0, revoked: 0,
+    calls: { prepared: 0, sending: 0, succeeded: 2, failed: 0, unknown: 0 }, inputs: [],
     tasks: [{ taskId: ids.task, scopeKind: 'contact', contactId: ids.contact, state: 'succeeded', total: 1, succeeded: 1, errorCode: null }],
     candidates: [{ id: ids.record, scopeKind: 'contact', contactId: ids.contact, body: '合成记忆页面候选', state: 'verified_pending_decision', origin: 'auto' }],
   };
