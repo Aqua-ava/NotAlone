@@ -96,3 +96,7 @@ DSH查证：声明、锁及实际解析核心均为0.2.1-rc.2；核对安装 cmd
 重新核对获准私聊与保留的第一条后，用 v11 正式客户端核验工具配置账号、所选私聊的账号／来源相等和当前8分片2表，成功开启新基线，锁定数为0。观察器就绪后，由人类手动发送固定第二条一次并确认尚未撤回；随后 next 在共同固定快照唯一锁定1条本人文字记录：originalType 为1、原始 status 为2、serverId 已分配、local 主键精确保留。没有读取正文、source/XML、媒体或其他私聊，也没有追溯关联第一条。匿名结果绑定本次 v11 CLI／overlay／WCDB，见[v11 人工发送态报告](../../backend-ts/src/history/sqlite/support-profiles/wechat-4.0.6-29387-controlled-state-v2.json)。
 
 人类随后明确指示撤回测试先跳过，由其以后手动处理。观察器立即 close，退出0；实际观察器及原生子进程均已消失，未执行 current 或其他消息读取，第一、第二条均未再操作。这是本次发送后快照的原始字段观察，不证明 status=2 的通用送达含义，也未观察 pending、server 别名补齐或撤回转移。上述能力及来源生命周期继续 unverified，普通正文门禁不放宽；不把跳过写成缺授权或渠道不支持。
+
+## 20 公共旧路由接线待办
+
+当前桌面来源管理通过 `GET /api/contacts/:id/sources` 列举来源（`desktop/src/main/sources/controller.ts:80`），SQLite 宿主尚无该列表路由；`SqliteDeletionHttp` 只承接具名来源 DELETE、删除状态与任务查询，不能由其成功推断来源列表可用。20 切换前须复核并接回来源列表公共合同，保持联系人隔离和删除资格。本票实际 App 删除验收使用已知合成 sourceId 调用正式 DELETE，再刷新实际消息列表验证旧正文撤下；此证据不认证通用来源管理列表。

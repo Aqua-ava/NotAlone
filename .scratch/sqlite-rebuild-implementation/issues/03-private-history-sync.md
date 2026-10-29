@@ -78,3 +78,5 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 仍缺独立实际App消息/覆盖/删除撤正文证据。真实正文状态未验证，保持门禁。B未发送：Cua消息点击AXError.notImplemented，不能保证撤回，现依最新人类指令改为未来观察器ready后由用户手动一次B；先发送不撤回、唯一锁定再仅撤回B。A保持不动，迁移恢复继续排除；State claimed/Goal active。
 
 2026-10-29 v11人工B发送态：正式客户端工具配置账号与ran账号/来源相等，8分片2表，arm新基线0；人类手动发送第二条一次并确认未撤回，next唯一锁定1条owner/type1/raw-status2、serverId已分配、local主键精确保留。随后人类明确将撤回测试跳过，立即close退出0，观察器及native进程实际消失，无current或额外消息读取；A/B均原样保留，不重发。公开匿名controlled-state-v2绑定实际v11字节；pending/撤回/server补齐/来源生命周期仍unverified，普通正文门禁保持。桌面已释放11，实际App消息/覆盖/删除撤正文仍待窗口。State仍claimed。
+
+20公共接线待办：SQLite尚未承接桌面来源管理所需GET /api/contacts/:id/sources，正式具名来源DELETE及删除状态已承接。本票用已知合成sourceId执行正式DELETE并在实际App刷新验证撤下，不宣称来源列表可用；具体调用与边界已记docs/verification/sqlite-private-history-support-03.md。
