@@ -20,9 +20,9 @@ const processingErrors:Record<string,string>={
   media_association_unverified:'这条消息与资源尚未唯一核验，当前不能读取。',
   media_resource_too_large:'文件超过当前单文件32MiB上限，本次未保存；已有文件保留。',
   media_space_insufficient:'本次空间不足，已停止新增写入。请清理本机空间；先前合法保存的媒体仍保留。',
-    voice_decode_failed:'语音解码失败；可手动重试本地转换。',
-    voice_runtime_unavailable:'本机语音转换组件不可用；请检查离线资源。',
-    voice_conversion_timeout:'本地转换超过时间上限，已停止；可手动重试。',
+    voice_decode_failed:'语音解码失败；语音处理本轮暂缓，先前合法文件保留。',
+    voice_runtime_unavailable:'本机语音转换组件不可用；语音处理本轮暂缓。',
+    voice_conversion_timeout:'本地转换超过时间上限，已停止；语音处理本轮暂缓。',
     voice_conversion_cancelled:'本地转换已取消，未发布新播放文件。',
     voice_container_invalid:'语音容器无效或不受支持，本次未保存新结果。',
     voice_resource_limit:'语音超过当前输入、包数或输出上限，本次已停止。',
@@ -49,8 +49,8 @@ function unavailableReason(code:string|null):string {
   if(code==='media_adapter_unavailable'||code==='media_type_unavailable')return '此类型提取尚未接入，当前不可用。';
   if(code==='media_cleanup_pending')return '媒体清理尚未完成，请继续核对原清理操作。';
   if(code==='media_already_running')return '这条媒体正在处理，请刷新查看当前操作。';
-  if(code==='read_not_authorized')return '读取总开关已关闭或当前读取资格已失效；已存文件仍可查看，本地语音转换按资格开放。';
-  if(code==='reading_disabled'||code==='identity_reading_disabled'||code==='read_disabled')return '读取总开关已关闭；已存文件仍可查看，本地语音转换按资格开放。';
+  if(code==='read_not_authorized')return '读取总开关已关闭或当前读取资格已失效；已存文件仍可查看或清除。';
+  if(code==='reading_disabled'||code==='identity_reading_disabled'||code==='read_disabled')return '读取总开关已关闭；已存文件仍可查看或清除。';
   if(code)return '当前读取或联系人资格不满足；请核对联系人勾选、读取开关和来源状态。';
   return '';
 }
@@ -60,11 +60,11 @@ export function MessageMediaPanel({bridge,selection,messageType}:{bridge?:Messag
   if(!['image','video','voice'].includes(messageType))return null;
   return <div className="message-media-panel">
     <button type="button" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>媒体文件</button>
-    {expanded && (bridge?<MediaDetails key={`${selection.contactId}:${selection.messageId}:${selection.scopeRevision}`} bridge={bridge} selection={selection}/>
+    {expanded && (bridge?<MediaDetails key={`${selection.contactId}:${selection.messageId}:${selection.scopeRevision}`} bridge={bridge} selection={selection} messageType={messageType}/>
       :<p role="status">媒体能力尚未连接，当前不可用。</p>)}
   </div>;
 }
-function MediaDetails({bridge,selection}:{bridge:MessageMediaBridge;selection:MessageMediaSelection}) {
+function MediaDetails({bridge,selection,messageType}:{bridge:MessageMediaBridge;selection:MessageMediaSelection;messageType:string}) {
   const [state,setState]=useState<MessageMediaState>(emptyState),[error,setError]=useState<string|null>(null);
   const [preview,setPreview]=useState<{sessionId:string;url:string;mimeType:string}|null>(null);
   const previewRef=useRef<typeof preview>(null),imageRef=useRef<HTMLImageElement>(null),playerRef=useRef<HTMLMediaElement|null>(null);
@@ -96,6 +96,7 @@ function MediaDetails({bridge,selection}:{bridge:MessageMediaBridge;selection:Me
     return ()=>{mounted.current=false;++sequence.current;unsubscribe();stopPreview();void release(false);};
   },[bridge,selection.contactId,selection.messageId,selection.scopeRevision]);
   const snapshot=sameScope(state)?state.snapshot:null;
+  const voiceProcessingDeferred=messageType==='voice'||snapshot?.kind==='voice';
   const run=async(action:()=>Promise<void>)=>{setError(null);try{await action();}catch{if(mounted.current)setError('媒体操作暂不可用，请刷新状态后重试。');}};
   const open=async(fileId:string)=>{
     setError(null);await release();const opening=++sequence.current;let acquired:string|undefined;
@@ -113,6 +114,7 @@ function MediaDetails({bridge,selection}:{bridge:MessageMediaBridge;selection:Me
   const liveAttempt=snapshot?.latestAttempt && ['pending','running'].includes(snapshot.latestAttempt.state);
   return <section className="message-media-details" aria-label="本条消息媒体">
     <p className="rewrite-privacy">只处理这条消息。保存的媒体留在本机，不转写或加入记忆。</p>
+    {voiceProcessingDeferred&&<p role="status">语音保存与格式转换本轮暂缓；已存资料仍可查看或清除。</p>}
     {(state.phase==='loading')&&<p role="status">正在读取媒体状态…</p>}
     {extracting&&<p role="status">本次媒体操作进行中，可刷新查看，或清除以停止旧操作。</p>}
     {state.busy==='clear'&&<p role="status">正在核对清理，请等待文件和活动引用复核完成。</p>}
@@ -130,9 +132,8 @@ function MediaDetails({bridge,selection}:{bridge:MessageMediaBridge;selection:Me
       </li>)}</ul>}
       {unavailableReason(snapshot.capabilities.reason)&&<p role="status">{unavailableReason(snapshot.capabilities.reason)}</p>}
       <div className="message-media-actions">
-        <button type="button" disabled={busy||!!liveAttempt||!snapshot.capabilities.extract} onClick={()=>goal('extract')}>保存这条{kindLabels[snapshot.kind]}</button>
+        {!voiceProcessingDeferred&&<button type="button" disabled={busy||!!liveAttempt||!snapshot.capabilities.extract} onClick={()=>goal('extract')}>保存这条{kindLabels[snapshot.kind]}</button>}
         {snapshot.kind==='image'&&<button type="button" disabled={busy||!!liveAttempt||!snapshot.capabilities.originalUpgrade} onClick={()=>goal('original_upgrade')}>补提原图</button>}
-        {snapshot.kind==='voice'&&<button type="button" disabled={busy||!!liveAttempt||!snapshot.capabilities.audioConversion} onClick={()=>goal('audio_conversion')}>本地转为可播放文件</button>}
         <button type="button" disabled={state.busy==='clear'||state.busy==='preview'} onClick={()=>void run(()=>bridge.clear(selection))}>{snapshot.cleanup&&snapshot.cleanup.state!=='completed'?'继续清理原操作':'清除这条媒体'}</button>
       </div>
     </>}
@@ -143,7 +144,7 @@ function MediaDetails({bridge,selection}:{bridge:MessageMediaBridge;selection:Me
       <button type="button" onClick={()=>void release()}>关闭预览</button>
     </div>}
     {(error||state.error)&&<p role="alert">{error??state.error}</p>}
-    {state.retryGoal&&<button type="button" disabled={busy} onClick={()=>void run(()=>bridge.retry(selection))}>重查同次媒体操作</button>}
+    {!voiceProcessingDeferred&&state.retryGoal&&<button type="button" disabled={busy} onClick={()=>void run(()=>bridge.retry(selection))}>重查同次媒体操作</button>}
     <button type="button" disabled={state.busy==='clear'} onClick={()=>void run(()=>bridge.inspect(selection))}>刷新媒体状态</button>
   </section>;
 }
