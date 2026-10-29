@@ -142,9 +142,13 @@ test('未知回执不盲目重发；迟到已知回执恢复后才能继续并�
  assert.equal(view.unknown,1);assert.equal(view.status,'blocked');assert.equal(view.statusReason,'model_receipt_unknown');
  assert.deepEqual(view.actions,[],'unknown未解时不提供继续');
  const callsAfterFailure=x.state.calls;assert.equal(callsAfterFailure,1);
- await assert.rejects(x.service.continue(run.runId,view.controlVersion,randomUUID()),error=>error instanceof StorageFailure&&error.code==='memory_extraction_continue_unsafe');
+ const continued=await x.service.continue(run.runId,view.controlVersion,randomUUID());
+ await x.service.waitForIdle(run.runId);
  assert.equal(x.state.calls,callsAfterFailure,'继续不能无条件重发未知请求');
- const again=await x.service.read(run.runId);assert.equal(again.controlVersion,view.controlVersion);assert.equal(again.unknown,1);
+ const again=await x.service.read(run.runId);
+ assert.equal(again.unknown,1,'继续不清除unknown');
+ assert.equal(again.status,'blocked');assert.deepEqual(again.actions,[]);
+ assert.equal(continued.status,'blocked');
  const trace=await x.service.trace(view.tasks.find(task=>task.scopeKind==='contact').taskId);
  assert.equal(trace.calls[0].state,'unknown');
 });

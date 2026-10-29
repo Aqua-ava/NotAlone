@@ -167,22 +167,14 @@ export function applyControl(tx:StorageTransaction,input:unknown):{ownerId:strin
  if(i.action==='pause'){
   if(state==='revoked'||state==='completed')fail('memory_extraction_control_conflict');
   if(state==='paused'||run.pause_requested_at!==null)return {ownerId,runId,replayed:true};
-  if(!['preparing','pending','running'].includes(state))fail('memory_extraction_control_conflict');
+  // 已结束轮次没有可暂停的小批；按幂等空操作返回，不把暂停请求伪造成执行状态。
+  if(!['preparing','pending','running'].includes(state))return {ownerId,runId,replayed:true};
   tx.run("UPDATE processing_run SET pause_requested_at=?,state='paused',intent_revision=intent_revision+1 WHERE owner_id=? AND id=? AND state IN ('preparing','pending','running')",[Date.now(),ownerId,runId]);
   return {ownerId,runId,replayed:false};
  }
  if(state==='revoked'||state==='completed'||state==='preparing')fail('memory_extraction_control_conflict');
- // 已知回执的中断可以安全重试（复用既有回执）；真实未知任务保持 unknown，不重发。
+ // 已知回执的中断可以安全重试（复用既有回执）；真实未知任务保持 unknown，不重发也不清除。
  reconcileKnownInterruptions(tx,ownerId,runId);
- const unresolved=!!tx.get(`SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
-  JOIN processing_step s ON s.owner_id=o.owner_id AND s.id=o.memory_step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
-  WHERE t.owner_id=? AND t.run_id=? AND c.state IN ('sending','unknown') LIMIT 1`,[ownerId,runId]);
- const resumableTasks=tx.all("SELECT id,scope_kind,contact_id FROM processing_task WHERE owner_id=? AND run_id=? AND state IN ('failed','paused')",[ownerId,runId]);
- const pendingWork=!!tx.get(`SELECT 1 FROM run_input i JOIN step_input si ON si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no
-  JOIN processing_step s ON s.owner_id=si.owner_id AND s.id=si.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
-  WHERE i.owner_id=? AND i.run_id=? AND i.role='target' AND s.state IN ('failed','pending') AND t.state NOT IN ('unknown','revoked') LIMIT 1`,[ownerId,runId]);
- // 仍有真实未知发送且没有其他可重试工作时，继续会变成无条件重发：拒绝。
- if(unresolved&&!resumableTasks.length&&!pendingWork)fail('memory_extraction_continue_unsafe');
  if(!['paused','failed','incomplete'].includes(state)&&run.pause_requested_at===null)return {ownerId,runId,replayed:true};
  tx.run("UPDATE processing_run SET pause_requested_at=NULL,state='pending',intent_revision=intent_revision+1 WHERE owner_id=? AND id=?",[ownerId,runId]);
  // 只恢复失败/暂停任务并推进控制修订；unknown 任务保持原样，不能靠继续刷新资格。
