@@ -21,6 +21,18 @@ export interface WechatSchemaInspection {
   format: 'wechat-message-schema-v1'; status: 'unverified'; scopeDigest: string;
   sourceGeneration: string; schemaFingerprint: string; tables: WechatTableSchema[]; checkedPartitions: string[];
 }
+export interface WechatMessageMetadataRecord {
+  partition: string; table: string; localId: string | null; serverId: string | null;
+  originalType: string | null; status: string | null;
+  // 原始秒字段仅作元数据观察，不转换或认证为消息发送时间。
+  createTime: string | null; sender: 'owner' | 'contact' | 'unknown';
+  statusSemantics: 'unverified'; normalHistory: false; observationScope: 'single-fixed-snapshot';
+}
+export interface WechatMessageMetadataObservation {
+  format: 'wechat-message-metadata-observation-v1'; status: 'unverified'; scopeDigest: string;
+  sourceGeneration: string; schemaFingerprint: string; kind: HistoryRecord['kind'];
+  checkedPartitions: string[]; record: WechatMessageMetadataRecord | null;
+}
 export interface NarrowWechatClientOptions {
   executable: string; expectedCliSha256: string; expectedWcdbSha256: string;
   environment?: Record<string, string | undefined>;
@@ -197,6 +209,41 @@ function historyPage(value: unknown, target: HistoryTarget, cursor: string | nul
   if (completedPartitions.some(partition => !target.partitions.includes(partition))) return fail();
   return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target)), completedPartitions, exhausted };
 }
+function metadataKind(originalType: string | null): HistoryRecord['kind'] {
+  switch (originalType === null ? null : BigInt(originalType) & 0xffffffffn) {
+    case 1n: return 'text';
+    case 3n: return 'image';
+    case 34n: return 'voice';
+    case 43n: case 62n: return 'video';
+    case 49n: return 'file';
+    case 47n: return 'sticker';
+    default: return 'other';
+  }
+}
+function metadataObservation(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, kind: HistoryRecord['kind']): WechatMessageMetadataObservation {
+  const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'kind', 'checkedPartitions', 'record']);
+  if (row.format !== 'wechat-message-metadata-observation-v1' || row.status !== 'unverified' || row.kind !== kind
+    || hash(row.scopeDigest) !== digest(`${scope.accountKey}\0${scope.conversationKey}`)
+    || row.sourceGeneration !== scope.sourceGeneration || row.schemaFingerprint !== schema.schemaFingerprint) return fail();
+  const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
+  if (JSON.stringify([...checkedPartitions].sort()) !== JSON.stringify([...schema.checkedPartitions].sort())) return fail();
+  let record: WechatMessageMetadataRecord | null = null;
+  if (row.record !== null) {
+    const item = object(row.record, ['partition', 'table', 'localId', 'serverId', 'originalType', 'status', 'createTime', 'sender', 'statusSemantics', 'normalHistory', 'observationScope']);
+    const partition = hash(item.partition), table = hash(item.table);
+    if (!schema.tables.some(candidate => candidate.partition === partition && candidate.target === table)
+      || !['owner', 'contact', 'unknown'].includes(item.sender as string)
+      || item.statusSemantics !== 'unverified' || item.normalHistory !== false || item.observationScope !== 'single-fixed-snapshot') return fail();
+    const nullableInteger = (value: unknown) => value === null ? null : exactInteger(value);
+    const originalType = nullableInteger(item.originalType);
+    if (metadataKind(originalType) !== kind) return fail();
+    record = { partition, table, localId: nullableInteger(item.localId), serverId: nullableInteger(item.serverId),
+      originalType, status: nullableInteger(item.status), createTime: nullableInteger(item.createTime),
+      sender: item.sender as WechatMessageMetadataRecord['sender'], statusSemantics: 'unverified', normalHistory: false, observationScope: 'single-fixed-snapshot' };
+  }
+  return { format: 'wechat-message-metadata-observation-v1', status: 'unverified', scopeDigest: schema.scopeDigest,
+    sourceGeneration: scope.sourceGeneration, schemaFingerprint: schema.schemaFingerprint, kind, checkedPartitions, record };
+}
 function signalValid(signal?: AbortSignal): void {
   if (signal !== undefined && !(signal instanceof AbortSignal)) fail('history_request_invalid');
 }
@@ -275,6 +322,16 @@ export class NarrowWechatClient {
         if (this.#schema && this.#schema.schemaFingerprint !== parsed.schemaFingerprint || this.#support && this.#support.schemaFingerprint !== parsed.schemaFingerprint) fail('history_support_changed');
         this.#schema = structuredClone(parsed); return parsed;
       });
+    }, signal);
+  }
+  observeMetadataSelected(kind: HistoryRecord['kind'], signal?: AbortSignal): Promise<WechatMessageMetadataObservation> {
+    try { signalValid(signal); if (!['text', 'image', 'voice', 'video', 'file', 'sticker', 'other'].includes(kind)) fail('history_request_invalid'); }
+    catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(async () => {
+      const scope = this.#selected, schema = this.#schema;
+      if (!scope || !schema) return fail('history_scope_unverified');
+      return this.#request({ op: 'observe-metadata', account: scope.accountKey, conversation: scope.conversationKey,
+        consent: 'selected-message-metadata-v1', kind }, value => metadataObservation(value, scope, schema, kind));
     }, signal);
   }
   supportSelected(signal?: AbortSignal): Promise<HistorySupportReport> {

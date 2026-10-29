@@ -8,6 +8,9 @@
 
 快照原语在观察连接的共同 data_version 窗口内固定所有分片 reader，再通过声明的主键分页；持有期间的新提交不进入原快照。快照两分钟到期，关闭及取消先中断真实查询，再回收 reader。排序字段始终不冒充先后证据，server_id 非唯一时不签发别名。
 
-状态原值捕获和真实消息资格分开。`snapshot-opaque-v1` 只用于明确的合成原语验证，不构成真实 status、恢复或跨启动连续性认证；正式支持档缺证时保持 unverified，不读取真实正文或启动正常历史。
+状态原值捕获和真实消息资格分开。`snapshot-opaque-v1` 只用于明确的合成原语验证或无正文的单条元数据诊断，不构成真实 status、恢复或跨启动连续性认证；正式支持档缺证时保持 unverified，不读取真实正文或启动正常历史。
 
 定向原生测试需设置 `NOTALONE_TEST_WCDB` 指向被核验的现存 dylib，测试只创建合成临时数据库。验收证据见 `docs/verification/sqlite-private-history-support-03.md`；最终产品字节必须另行核对，开发构建 manifest 不宣称真实微信通过。
+
+
+`observe-metadata` 只在同一已解析目标及显式 `selected-message-metadata-v1` 下执行。每次固定全分片reader，仅按指定类型选择一条元数据；固定切面探针只投影常量，不额外取任意消息ID。输出不含正文、source/XML或媒体，字段、类型低32位与全部作用域均严格核验。无匹配返回NULL，未知状态始终unverified；观察不写正常捕获、不授予target/page或完整覆盖资格。取消、超时和Close仍等待真实读者释放。
