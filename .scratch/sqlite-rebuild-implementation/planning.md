@@ -34,7 +34,7 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
 | [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | resolved |
 | [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | resolved |
-| [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | claimed |
+| [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | resolved |
 | [11 助手讨论与 DSH 副本](issues/11-assistant-discussions-and-runtime.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
 | [12 候选回复与依据](issues/12-reply-candidates-and-basis.md) | [11](issues/11-assistant-discussions-and-runtime.md) | ready-for-agent | resolved |
 | [13 表达偏好接回（本轮暂缓）](issues/13-expression-preferences.md) | [12](issues/12-reply-candidates-and-basis.md) | wontfix | open |
@@ -102,7 +102,7 @@ flowchart TD
 
 ## 当前总进度
 
-2026-10-30 最终状态：17项中12项 resolved（01、02、05、07、08、09、11、12、14、16、17、20）；03/04/06/10/21 均已实现并实际集成但 State=claimed：03真实普通历史/状态语义/来源生命周期/跨重启连续性未认证；04真实增量/重选/断线/微信不在前台CLI同步未认证（受控dev实机部分通过）；06真实observer/reader边界协议与最终只读制品未认证（生产保持boundary_pending）；10模型相关控制状态未在App内构造（模型语义未认证）；20真实清理经只读盘点重评：本机无旧业务对象（N/A+只读证据，未执行任何删除、未读.env内容），12/12通过并已resolved；21组合验收矩阵已产出（17项矩阵+四项暂缓+组合592/592+App闭环）但上述真实门槛未过、保持受阻抗。13/15/18/19用户暂缓（wontfix，入口关闭，不计通过）。本批全部变更已本地提交于集成分支 2bdec8c6，无push/PR/打包；工作区仅保留用户原有.gitignore修改与未跟踪资料，以及本批本地协调文件（.scratch手写handoff/report，未跟踪、不发布）。
+2026-10-30 最终状态：17项中13项 resolved（01、02、05、07、08、09、10、11、12、14、16、17、20）；03/04/06/21 均已实现并实际集成但 State=claimed：03真实普通历史/状态语义/来源生命周期/跨重启连续性未认证；04真实增量/重选/断线/微信不在前台CLI同步未认证（受控dev实机部分通过）；06真实observer/reader边界协议与最终只读制品未认证（生产保持boundary_pending）；10已通过App级环回供应商实机验收（开始/处理中/暂停小批收尾/继续复用/退出重开/单人失败/共用故障/unknown，14/14）并resolved（真实模型语义仍单独记录）；20真实清理经只读盘点重评：本机无旧业务对象（N/A+只读证据，未执行任何删除、未读.env内容），12/12通过并已resolved；21组合验收矩阵已产出（17项矩阵+四项暂缓+组合592/592+App闭环）但上述真实门槛未过、保持受阻抗。13/15/18/19用户暂缓（wontfix，入口关闭，不计通过）。本批全部变更已本地提交于集成分支 2bdec8c6，无push/PR/打包；工作区仅保留用户原有.gitignore修改与未跟踪资料，以及本批本地协调文件（.scratch手写handoff/report，未跟踪、不发布）。
 
 历史（2026-10-29）：本轮有效17项：已集成且当前验收通过10项（01、02、05、07、08、11、12、14、16、17）；03因真实状态语义及来源生命周期未认证受阻；09独立会话执行中；04、06、10、20、21等待依赖。08、12已在独立工作树核验前置后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03实现及合成／实际App已完成的部分复用证据，不重新执行。
 
@@ -227,3 +227,5 @@ flowchart TD
 - 2026-10-30 DSH 总指挥接管并派发剩余批次：核对 GitHub 无远端操作；集成分支 codex/sqlite-rebuild-integration @ 33e7dedc（14 由 67b28e9a、16 由 1683fbcf 核验为基线祖先；03 工作树 bbec 仅 1 个未合并文档提交 +17 行，源码已集成；09 工作树 b1f3 为 109e1d50 + 28 改 6 未跟踪，须保留）。桌面 dev:status stopped/pids[]，WeChat PID 892 运行。已并发派发 5 个执行会话：t03（task-1，恢复 bbec 并先并基线）、t04（task-2，新 worktree sqlite-rebuild-04）、t06（task-3，新 worktree sqlite-rebuild-06）、t09（task-4，恢复 b1f3）、t10（task-5，新 worktree sqlite-rebuild-10）；20=task-6 blocked_by [06,10]，21=task-7 blocked_by [20]。桌面串行队列：03→09→04/06/10。pnpm 经 /tmp/notalone-env.sh shim（默认 PATH 无 node/pnpm）。06/10 的共享路径集成门禁分别等 04、04+09 实际进基线。
 
 - 2026-10-30（Goal round1）票20解决：t20只读复核确认本机无PG进程/数据目录、~/.notalone仅270个Skill原目录5.2M、默认userData仅Chromium缓存+wechat-tool开发制品+配置（无managed/state.json/旧业务SQLite/assistant-runtime/updates/runtime-copies）、NotAlone为空目录；据此第8条重评N/A（本机无清理对象）+只读证据，第12条保持通过，最终12/12（11通过+第8条N/A）。aff0366d已集成3bae162a；票20 State改为resolved。未执行任何真实删除/drop/切库/迁移，未读.env内容，目标不完整等安全门禁未变。
+
+- 2026-10-30（Goal round2）票10解决：t10复用t09环回供应商思路（隔离合成库+真实热更新dev+CDP；仅供应商传输边界用/tmp本机环回供应商与既有test-only网络守卫，官方地址重定向127.0.0.1、拒绝其他出站；未新增产品开关/配置，替身未提交），App实机通过：开始→处理中→暂停(20/27提交后已暂停、无百分比/伪完成)→Cmd+Q重开保持暂停→继续27/27且首批未重发→单人失败(乙failed/甲继续)→共用故障固定原因+手动继续→unknown无继续/不重发。实机发现并修复：在途sending被误投影unknown、共用故障原因界面固定展示(sharedFaultCode)，均补回归。0fac4ada已集成a731d471；主仓复跑：两端typecheck 0、sqlite-memory-control 16/16、桌面固定处理23/23、inventory通过。票10 State=resolved（真实模型语义/真实微信边界单独记录，租约接替与取消清空由后端真实用例覆盖）。
