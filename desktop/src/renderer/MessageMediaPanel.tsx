@@ -139,7 +139,7 @@ function MediaDetails({bridge,selection}:{bridge:MessageMediaBridge;selection:Me
     {preview&&<div className="message-media-preview">
       {preview.mimeType.startsWith('image/')?<img ref={imageRef} src={preview.url} alt="本条消息的已存图片" style={{maxWidth:'100%',maxHeight:360}}/>:
         preview.mimeType.startsWith('audio/')?<audio ref={node=>{playerRef.current=node;}} src={preview.url} controls/>:
-        <video ref={node=>{playerRef.current=node;}} src={preview.url} controls style={{maxWidth:'100%',maxHeight:360}}/>}
+        <video ref={node=>{playerRef.current=node;}} src={preview.url} controls style={{width:'100%',minHeight:160,maxHeight:360}}/>}
       <button type="button" onClick={()=>void release()}>关闭预览</button>
     </div>}
     {(error||state.error)&&<p role="alert">{error??state.error}</p>}
