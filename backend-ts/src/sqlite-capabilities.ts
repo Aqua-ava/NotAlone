@@ -1,11 +1,12 @@
 import path from 'node:path';
 export interface SqliteCapabilitiesConfiguration {
- capabilities: ['contacts'] | ['contacts','skills'] | ['contacts','history'] | ['contacts','skills','history'];
+ capabilities: ('contacts'|'skills'|'history'|'discussions'|'memory')[];
  skillPackageRoot?: string;
 }
 /** 固定顺序保留既有contacts/skills合同；history不授权真实渠道或新增范围。 */
 export function readSqliteCapabilities(value:unknown,skillPackageRoot:unknown,userData:string):SqliteCapabilitiesConfiguration|undefined {
- const supported=[['contacts'],['contacts','skills'],['contacts','history'],['contacts','skills','history']];
+ const base=[['contacts'],['contacts','skills'],['contacts','history'],['contacts','skills','history']];
+ const supported=[...base,...base.map(shape=>[...shape,'discussions']),...base.map(shape=>[...shape,'memory']),...base.map(shape=>[...shape,'discussions','memory'])];
  if(!Array.isArray(value)||!supported.some(shape=>shape.length===value.length&&shape.every((entry,index)=>entry===value[index])))return undefined;
  const capabilities=value.slice() as SqliteCapabilitiesConfiguration['capabilities'];
  if(!value.includes('skills'))return skillPackageRoot===undefined?{capabilities}:undefined;

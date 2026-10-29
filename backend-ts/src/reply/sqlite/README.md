@@ -43,3 +43,13 @@
 run/inspect获取阶段纳入同一pending排空；close开始后拒绝新获取，等待已进入的SQLite读取与实际DSH释放结算。HTTP恢复核验从当前正常模型配置、当前Skill资格及业务选择重新计算预期摘要，不能把副本自己保存的摘要当作当前配置证明。
 
 `createSqliteDiscussionHost` 只拥有本领域 service/runtime/http，接收宿主唯一的 provider 与 arbiter。关闭先停受理，取消并等待尚未进入副本管理器的整轮请求（包括受理、冻结及失败清理），再关闭真实副本并等待所有 HTTP 权威读取；公共宿主只能在这些步骤成功后关闭 SQLite，释放失败保留同操作重试条件。
+
+## 正式开发宿主接线
+
+`registry`保留已发布1至6版，按总调度共同基线追加7 discussion、8 memory、9 execution，具名动作及删除域实际注册。官方SQLite profile加载共享LLM服务；明确的`discussions`、`memory`能力分别启用HTTP入口，未配置模型仍可回看和明确继续。领域清理所有者始终初始化，以便能力未启用时也能清理旧副本。
+
+`sqlite-model-config`只从已确认env指针读取模型白名单；`sqlite-model-runtime`创建唯一ModelHost、arbiter和provider，07只消费共享对象。discussion用真实dispatch/commit预算与同一arbiter；socket计费仍由07具名事务核验，未知查询合并两种producer的真实调用键，不虚构ModelLedgerReceipt.purpose或第二账本。旧实例attempt在正常启动标记不可续写，已发送状态保留unknown，准备调用记failed，不为恢复重新发送。
+
+宿主关闭先停新工作，逐域排空；任一业务或模型关闭未证明成功时不关SQLite。journal末写失败后可沿原关闭续清，只有真实内核锁释放才标结束。来源删除started事件同步撤正文并锁定读取，DELETE回执丢失不能让旧快照继续留在界面；随后权威读取才能恢复仍合法内容。
+
+正式launchDsh/profile已验证两个合成联系人、非空用户发言、隔离、新开、明确继续和重开不调用模型；共享模型装配、关闭失败恢复及实际桌面控制器均有独立回归。实际App和受控外部模型验收继续单列，当前证据不等同产品整体或真实渠道质量验收。

@@ -4,7 +4,7 @@ import { installUsageBridge } from './usage/bridge';
 import { WechatSetupController } from './setup/wechat-controller';
 import { installWechatSetupBridge } from './setup/wechat-bridge';
 import { installForegroundBridge } from './foreground/bridge';
-import { coordinateOwnerContextChanges } from './reply/owner-context-changes';
+import { coordinateOwnerContextChanges, coordinateSourceContextChanges } from './reply/owner-context-changes';
 import { NativeHeaderChangeSource } from './foreground/native-change-source';
 import { openHeaderChangeDiagnostics } from './foreground/header-change-diagnostics';
 import { resolveHeaderChangeSourcePath } from './backend/bundled-helpers';
@@ -154,6 +154,7 @@ void app.whenReady().then(async () => {
     const preferenceChecking = preferences.invalidateSource(contactId);
     await Promise.all([checking, memoryChecking, preferenceChecking]);
   });
+  coordinateSourceContextChanges(sources, replies);
   coordinateSkillLearningSourceDeletion(skillLearning, sources);
   sources.onDeletion((phase) => {
     memory.sourceDeletionChanged(phase);

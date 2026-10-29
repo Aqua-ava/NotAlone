@@ -20,7 +20,7 @@ export async function createSqliteDiscussionHost(options:{
 }){
  const service=new SqliteDiscussionService(options.storage,options.ownerId);
  const runtime=new SqliteDiscussionRuntime(options);
- try{await runtime.initialize();}catch(error){await runtime.close().catch(()=>{});throw error;}
+ try{await options.storage.execute('discussion.recover',{ownerId:options.ownerId});await runtime.initialize();}catch(error){await runtime.close().catch(()=>{});throw error;}
  let stopping=false,closing:Promise<void>|undefined;
  const turns=options.model?new SqliteDiscussionTurns({storage:options.storage,discussions:service,runtime,
   model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,
