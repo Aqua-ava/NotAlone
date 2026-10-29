@@ -10,6 +10,7 @@ import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {documentFixture} from './fixtures/memory-documents/support.mjs';
+import {fixture as clearFixture,identity as clearIdentity,record as clearRecord} from './sqlite-clear-support.mjs';
 
 const registryModule=new URL('./fixtures/memory-control/registry.mjs',import.meta.url).href;
 const controlRegistry=new URL('./fixtures/memory-management/registry.mjs',import.meta.url).href;
@@ -403,4 +404,41 @@ test('历史失败不冒充当前状态：修正后继续成功不再显示失�
  assert.equal(succeeded.succeeded,1);
  assert.equal(succeeded.status,'blocked');assert.equal(succeeded.statusReason,'later_stages_pending');
  assert.equal(succeeded.candidates.length,1);
+});
+
+test('清空聊天后旧模型结果与重试晚到不恢复内容，新消息按新资格留到下一次启动',async t=>{
+ const f=await clearFixture(t,{registryModule});
+ const contact=f.contactA;
+ f.state.pageRecords=[clearRecord('shard-a','1',{text:'我长期住在高雄。'})];
+ f.state.boundaryMembers=[clearIdentity('shard-a','1')];
+ await f.current.history.synchronize(contact);
+ assert.equal((await f.current.history.read(contact)).messages.length,1);
+ const external=supplier();
+ let service,release;const gate=new Promise(resolve=>release=resolve);let entered;const enteredPromise=new Promise(resolve=>entered=resolve);
+ const base=modelPort(()=>service.accounting,async(request,input)=>{entered();await gate;return external.respond(request,input);});
+ const port={prepare:base.prepare,close:base.close,invoke:base.invoke,get calls(){return base.calls;}};
+ service=new SqliteMemoryExtraction(f.current.storage,owner,port,f.current.holders);
+ t.after(async()=>{release();await service.close();});
+ const run=await service.start('control-clear-late');await enteredPromise;
+ const clearing=f.current.clear.clear(contact);
+ await wait(80);release();
+ const status=await clearing;
+ assert.equal(status.completed,true,JSON.stringify(status));
+ assert.equal((await f.current.history.read(contact)).messages.length,0,'清空删除已保存聊天');
+ const management=new SqliteMemoryManagement(f.current.storage,owner);
+ assert.deepEqual(await management.read({scopeKind:'contact',contactId:contact}),{candidates:[],memories:[]},'旧模型晚到不恢复内容');
+ await assert.rejects(service.read(run.runId),error=>error instanceof StorageFailure&&error.code==='memory_extraction_not_found','清空后旧轮次不可读');
+ await assert.rejects(management.importRun(run.runId),error=>error instanceof StorageFailure&&error.code==='memory_run_not_found','旧轮次重试晚到不能恢复内容');
+ // 清空后新消息按新资格同步，且只在用户明确启动时处理。
+ f.state.pageRecords=[clearRecord('shard-a','2',{text:'我现在长期住在台南。'})];
+ const coverage=await f.current.history.synchronize(contact);
+ const restored=await f.current.history.read(contact);
+ assert.equal(restored.messages.length,1);
+ assert.equal(restored.messages[0].text,'我现在长期住在台南。');
+ const callsBeforeNext=base.calls;
+ const next=await service.start('control-clear-new');await service.waitForIdle(next.runId);
+ const view=await service.read(next.runId);
+ assert.equal(view.total,1);assert.equal(view.succeeded,1);
+ assert.equal(view.candidates.length,1);
+ assert.equal(base.calls-callsBeforeNext,2,'只有新消息的提取与核验调用');
 });
