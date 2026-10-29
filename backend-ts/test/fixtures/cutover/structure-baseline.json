@@ -1,0 +1,10384 @@
+{
+ "schemaVersion": 15,
+ "sqliteVersion": "3.53.4",
+ "tables": {
+  "assistant_discussion": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "title",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "current_runtime_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "is_current",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "last_activity_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "runtime_copy",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "runtime_copy",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "runtime_copy",
+     "from": "id",
+     "to": "discussion_id"
+    },
+    {
+     "table": "runtime_copy",
+     "from": "current_runtime_id",
+     "to": "id"
+    },
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "discussion_current_contact",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_assistant_discussion_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_assistant_discussion_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": [
+    "discussion_scope_immutable"
+   ]
+  },
+  "binding_verification": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "identity_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "method",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "proof_format",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "proof",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "verified_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "conversation_binding",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "binding_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_binding_verification_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "binding_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_binding_verification_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": [
+    "verification_immutable"
+   ]
+  },
+  "capture_record": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "capture_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "item_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "raw_payload",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "observed_scheme",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "observed_key",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "normalizer_version",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "reason_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "availability",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "message",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "message",
+     "from": "message_id",
+     "to": "id"
+    },
+    {
+     "table": "sync_capture",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "sync_capture",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "sync_capture",
+     "from": "capture_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "capture_record_message",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "message_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_capture_record_4",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "id",
+      "message_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_capture_record_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_capture_record_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "capture_id",
+      "item_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_capture_record_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": [
+    "capture_record_binding",
+    "capture_record_immutable",
+    "capture_record_no_restore"
+   ]
+  },
+  "channel_account": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "identity_scheme",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "external_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "display_name",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "identity_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "source_generation",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "scope_mode",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "scope_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "scope_confirmed_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "current_wechat_account",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_channel_account_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "identity_scheme",
+      "external_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_channel_account_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": []
+  },
+  "channel_conversation": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "account_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "identity_scheme",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "external_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "display_name",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "barrier_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "channel_account",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "channel_account",
+     "from": "account_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_channel_conversation_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "account_id",
+      "identity_scheme",
+      "external_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_channel_conversation_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": []
+  },
+  "contact": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "display_name",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "remark",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "selection_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "data_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "source_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "memory_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "document_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "feedback_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "current_publication_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_contact_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": []
+  },
+  "conversation_binding": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "conversation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "identity_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "channel_conversation",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "channel_conversation",
+     "from": "conversation_id",
+     "to": "id"
+    },
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "verified_contact_binding",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ]
+    },
+    {
+     "name": "verified_conversation_binding",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "conversation_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_conversation_binding_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_conversation_binding_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": [
+    "binding_identity_immutable"
+   ]
+  },
+  "database_instance": {
+   "columns": [
+    {
+     "name": "slot",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 1
+    },
+    {
+     "name": "database_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "format_family",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "role",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "runtime_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "epoch",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "schema_digest",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_database_instance_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "database_id"
+     ]
+    }
+   ],
+   "checks": 5,
+   "strict": true,
+   "triggers": []
+  },
+  "decision_candidate": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "decision_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "candidate_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "relation_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_state_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "memory_candidate",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_candidate",
+     "from": "candidate_id",
+     "to": "id"
+    },
+    {
+     "table": "memory_decision",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_decision",
+     "from": "decision_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "decision_candidate_reverse",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "candidate_id"
+     ]
+    },
+    {
+     "name": "memory_candidate_one_consumption",
+     "unique": 1,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "candidate_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_decision_candidate_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "decision_id",
+      "candidate_id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": [
+    "decision_candidate_scope",
+    "noop_candidate_fixed",
+    "noop_candidate_removed",
+    "noop_candidate_scope"
+   ]
+  },
+  "deletion_check": {
+   "columns": [
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "plan_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "check_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "check_no",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "result",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "checked_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "verifier_version",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "minimal_proof",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "deletion_operation",
+     "from": "operation_id",
+     "to": "operation_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_deletion_check_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "operation_id",
+      "plan_revision",
+      "check_kind",
+      "check_no"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": []
+  },
+  "deletion_operation": {
+   "columns": [
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "owner_identity",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "request_namespace",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_identity",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "source_identity",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "discussion_identity",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "message_identity",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "plan_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "domain_manifest",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "runner_token",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "runner_runtime",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "completed_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "deletion_owner_progress",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_identity",
+      "created_at",
+      "operation_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_deletion_operation_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_identity",
+      "operation_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_deletion_operation_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_identity",
+      "request_namespace",
+      "request_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_deletion_operation_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "operation_id"
+     ]
+    }
+   ],
+   "checks": 7,
+   "strict": true,
+   "triggers": []
+  },
+  "deletion_target": {
+   "columns": [
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "target_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "storage_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "domain",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "target_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "row_kind",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "row_key_snapshot",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "managed_locator",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "expected_identity",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "target_payload",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "plan_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "attempts",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "last_error_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "deletion_operation",
+     "from": "operation_id",
+     "to": "operation_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "deletion_target_progress",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "operation_id",
+      "state",
+      "target_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_deletion_target_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "operation_id",
+      "domain",
+      "target_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_deletion_target_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "operation_id",
+      "target_no"
+     ]
+    }
+   ],
+   "checks": 6,
+   "strict": true,
+   "triggers": []
+  },
+  "discussion_entry": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "discussion_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "position",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "role",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "body",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "origin_request_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "origin_call_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "origin_event_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "content_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "execution_event",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "execution_event",
+     "from": "origin_event_id",
+     "to": "id"
+    },
+    {
+     "table": "model_call",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "model_call",
+     "from": "origin_call_id",
+     "to": "id"
+    },
+    {
+     "table": "reply_request",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_request",
+     "from": "origin_request_id",
+     "to": "id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "discussion_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_discussion_entry_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "discussion_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_discussion_entry_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "discussion_id",
+      "position"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_discussion_entry_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 5,
+   "strict": true,
+   "triggers": [
+    "discussion_entry_call",
+    "discussion_entry_clear_only",
+    "discussion_entry_immutable",
+    "discussion_entry_request"
+   ]
+  },
+  "document_basis": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "document_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "block_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "statement_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 5
+    },
+    {
+     "name": "basis_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 6
+    },
+    {
+     "name": "event_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "input_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "relation_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contradiction_side",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "execution_input",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "execution_input",
+     "from": "event_id",
+     "to": "event_id"
+    },
+    {
+     "table": "execution_input",
+     "from": "input_no",
+     "to": "input_no"
+    },
+    {
+     "table": "document_statement",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "document_statement",
+     "from": "document_id",
+     "to": "document_id"
+    },
+    {
+     "table": "document_statement",
+     "from": "version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "document_statement",
+     "from": "block_no",
+     "to": "block_no"
+    },
+    {
+     "table": "document_statement",
+     "from": "statement_no",
+     "to": "statement_no"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "document_basis_input",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "event_id",
+      "input_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_document_basis_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "document_id",
+      "version_no",
+      "block_no",
+      "statement_no",
+      "basis_no"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": [
+    "document_basis_producer"
+   ]
+  },
+  "document_block": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "document_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "block_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "heading",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "memory_document_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "document_id",
+     "to": "document_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "version_no",
+     "to": "version_no"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_document_block_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "document_id",
+      "version_no",
+      "block_no"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": [
+    "document_block_scope"
+   ]
+  },
+  "document_effect_scope": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "effect_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    },
+    {
+     "table": "model_operation",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "model_operation",
+     "from": "operation_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "document_effect_scope_contact_active",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "effect_kind"
+     ]
+    },
+    {
+     "name": "document_effect_scope_self_active",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "effect_kind"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_document_effect_scope_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "operation_id"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": [
+    "document_effect_scope_operation"
+   ]
+  },
+  "document_extraction_reuse": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "run_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "input_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "source_attempt_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "step_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "source_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "run_input",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "run_input",
+     "from": "run_id",
+     "to": "run_id"
+    },
+    {
+     "table": "run_input",
+     "from": "input_no",
+     "to": "input_no"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "document_extraction_reuse_attempt",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "source_attempt_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_document_extraction_reuse_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "run_id",
+      "input_no"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": [
+    "document_extraction_reuse_immutable",
+    "document_extraction_reuse_scope"
+   ]
+  },
+  "document_publication": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "publication_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "run_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "input_contract_version",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "basis_task_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "published_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "member_count",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "members_digest",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "availability",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "processing_task",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_task",
+     "from": "basis_task_id",
+     "to": "id"
+    },
+    {
+     "table": "processing_task",
+     "from": "run_id",
+     "to": "run_id"
+    },
+    {
+     "table": "processing_run",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_run",
+     "from": "run_id",
+     "to": "id"
+    },
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    },
+    {
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "publication_contact_no",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "publication_no"
+     ]
+    },
+    {
+     "name": "publication_self_no",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "publication_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_document_publication_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 6,
+   "strict": true,
+   "triggers": [
+    "document_publication_fixed",
+    "document_publication_identity_insert",
+    "document_publication_scope"
+   ]
+  },
+  "document_publication_identity": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_document_publication_identity_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": []
+  },
+  "document_replacement": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "document_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "old_document_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "old_version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 5
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "memory_document_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "old_document_id",
+     "to": "document_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "old_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "document_id",
+     "to": "document_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "version_no",
+     "to": "version_no"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_document_replacement_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "document_id",
+      "version_no",
+      "old_document_id",
+      "old_version_no"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": []
+  },
+  "document_statement": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "document_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "block_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "statement_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 5
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "body",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "rationale",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "left_claim",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "right_claim",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "resolution_state",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "resolution_text",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "profile_kind",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "section",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "temporal_status",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "uncertainty",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "document_block",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "document_block",
+     "from": "document_id",
+     "to": "document_id"
+    },
+    {
+     "table": "document_block",
+     "from": "version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "document_block",
+     "from": "block_no",
+     "to": "block_no"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_document_statement_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "document_id",
+      "version_no",
+      "block_no",
+      "statement_no"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": []
+  },
+  "event_source": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "event_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "source_contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "record_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "capture_record",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "record_id",
+     "to": "id"
+    },
+    {
+     "table": "execution_event",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "execution_event",
+     "from": "event_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "event_sources_record",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "source_contact_id",
+      "record_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_event_source_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "event_id",
+      "record_id"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": [
+    "event_source_immutable",
+    "event_source_planned"
+   ]
+  },
+  "execution_event": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "step_attempt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "event_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "originated_call_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "payload",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "payload_format",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "content_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "reply_attempt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "reused_call_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "model_call",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "model_call",
+     "from": "reused_call_id",
+     "to": "id"
+    },
+    {
+     "table": "model_call",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "model_call",
+     "from": "originated_call_id",
+     "to": "id"
+    },
+    {
+     "table": "reply_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_attempt",
+     "from": "reply_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "step_attempt_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_execution_event_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "reply_attempt_id",
+      "event_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_execution_event_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "step_attempt_id",
+      "event_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_execution_event_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": [
+    "event_call_producer",
+    "event_producer_immutable",
+    "event_reused_call_immutable",
+    "event_reused_call_insert",
+    "event_reused_call_update"
+   ]
+  },
+  "execution_input": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "event_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "input_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "role",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "presentation_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "planned_step_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "planned_input_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "reply_context_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "context_item_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "producer_event_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "execution_event",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "execution_event",
+     "from": "producer_event_id",
+     "to": "id"
+    },
+    {
+     "table": "reply_context_item",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_context_item",
+     "from": "reply_context_id",
+     "to": "context_id"
+    },
+    {
+     "table": "reply_context_item",
+     "from": "context_item_no",
+     "to": "item_no"
+    },
+    {
+     "table": "step_input",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "step_input",
+     "from": "planned_step_id",
+     "to": "step_id"
+    },
+    {
+     "table": "step_input",
+     "from": "planned_input_no",
+     "to": "input_no"
+    },
+    {
+     "table": "execution_event",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "execution_event",
+     "from": "event_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "execution_input_producer",
+     "unique": 0,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "producer_event_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_execution_input_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "event_id",
+      "input_no"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": [
+    "execution_input_immutable",
+    "execution_input_scope"
+   ]
+  },
+  "history_cutoff": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "conversation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "barrier_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "source_generation",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "account_key",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "conversation_key",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "protocol",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "target_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "support_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "proof_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "manifest_sha256",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "boundary_token",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "member_count",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "reason",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "established_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "deletion_operation",
+     "from": "owner_id",
+     "to": "owner_identity"
+    },
+    {
+     "table": "deletion_operation",
+     "from": "operation_id",
+     "to": "operation_id"
+    },
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    },
+    {
+     "table": "channel_conversation",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "channel_conversation",
+     "from": "conversation_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_history_cutoff_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "operation_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_history_cutoff_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "conversation_id",
+      "barrier_generation"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": []
+  },
+  "history_cutoff_member": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "conversation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "barrier_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "member_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "partition",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "table_instance",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "scheme",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "external_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "history_cutoff",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "history_cutoff",
+     "from": "conversation_id",
+     "to": "conversation_id"
+    },
+    {
+     "table": "history_cutoff",
+     "from": "barrier_generation",
+     "to": "barrier_generation"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "history_cutoff_member_identity",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "conversation_id",
+      "scheme",
+      "external_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_history_cutoff_member_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "conversation_id",
+      "barrier_generation",
+      "scheme",
+      "external_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_history_cutoff_member_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "conversation_id",
+      "barrier_generation",
+      "member_no"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": []
+  },
+  "history_deletion_fence": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_history_deletion_fence_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": []
+  },
+  "history_restore": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "authorization_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "conversation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "verification_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "grant_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "selection_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "barrier_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "cutoff_operation_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "goal_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "completed_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "read_goal",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "read_goal",
+     "from": "goal_id",
+     "to": "id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "binding_id",
+     "to": "id"
+    },
+    {
+     "table": "channel_conversation",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "channel_conversation",
+     "from": "conversation_id",
+     "to": "id"
+    },
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "history_restore_contact",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "created_at"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_history_restore_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "authorization_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_history_restore_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "request_key"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": []
+  },
+  "history_source_exclusion": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "conversation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "scheme",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "external_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "channel_conversation",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "channel_conversation",
+     "from": "conversation_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_history_source_exclusion_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "conversation_id",
+      "scheme",
+      "external_key"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": []
+  },
+  "manual_confirmation": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "context_token",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_data_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "confirmed_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "revoked_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "discussion_confirmation_scope",
+     "unique": 1,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_manual_confirmation_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "context_token"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_manual_confirmation_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": [
+    "manual_identity_immutable"
+   ]
+  },
+  "media_extraction_attempt": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "attempt_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "goal",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "record_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "input_file_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_media_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_head_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_data_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_read_epoch",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_selection_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "grant_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "binding_verification_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "runtime_token",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "eligibility_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "runtime_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "result_outcome",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "lease_token",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "lease_expires_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "requested_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "started_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "finished_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "adapter_version",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "association_proof_format",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "association_proof",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "error_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "cleanup_operation_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "media_file",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "media_file",
+     "from": "input_file_id",
+     "to": "id"
+    },
+    {
+     "table": "binding_verification",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "binding_verification",
+     "from": "binding_verification_id",
+     "to": "id"
+    },
+    {
+     "table": "read_grant",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "read_grant",
+     "from": "grant_id",
+     "to": "id"
+    },
+    {
+     "table": "capture_record",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "record_id",
+     "to": "id"
+    },
+    {
+     "table": "capture_record",
+     "from": "message_id",
+     "to": "message_id"
+    },
+    {
+     "table": "message_media",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "message_media",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "message_media",
+     "from": "message_id",
+     "to": "message_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "media_attempt_input",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "input_file_id"
+     ]
+    },
+    {
+     "name": "media_attempt_record",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "record_id"
+     ]
+    },
+    {
+     "name": "media_active_attempt",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "message_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_media_extraction_attempt_4",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "message_id",
+      "attempt_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_media_extraction_attempt_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "request_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_media_extraction_attempt_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "message_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_media_extraction_attempt_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 12,
+   "strict": true,
+   "triggers": [
+    "media_attempt_identity_immutable"
+   ]
+  },
+  "media_file": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "produced_attempt_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "role",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "image_quality",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "quality_proof",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "format",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "mime_type",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "byte_size",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "content_digest",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "managed_locator",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "expected_file_identity",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "managed_address",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "parent_file_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "content_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "publish_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "container_valid",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "viewable",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "playable",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "cleanup_operation_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "media_file",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "media_file",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "media_file",
+     "from": "message_id",
+     "to": "message_id"
+    },
+    {
+     "table": "media_file",
+     "from": "parent_file_id",
+     "to": "id"
+    },
+    {
+     "table": "media_extraction_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "media_extraction_attempt",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "media_extraction_attempt",
+     "from": "message_id",
+     "to": "message_id"
+    },
+    {
+     "table": "media_extraction_attempt",
+     "from": "produced_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "message_media",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "message_media",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "message_media",
+     "from": "message_id",
+     "to": "message_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "media_file_parent",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "parent_file_id"
+     ]
+    },
+    {
+     "name": "media_file_producer",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "produced_attempt_id"
+     ]
+    },
+    {
+     "name": "media_file_scope",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "message_id",
+      "publish_state"
+     ]
+    },
+    {
+     "name": "media_current_role",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "message_id",
+      "role"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_media_file_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "managed_locator"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_media_file_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "message_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_media_file_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 13,
+   "strict": true,
+   "triggers": [
+    "media_file_identity_immutable",
+    "media_file_parent_cycle"
+   ]
+  },
+  "memory": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "current_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "head_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "manual_protection",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "protection_decision_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "memory_decision",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_decision",
+     "from": "protection_decision_id",
+     "to": "id"
+    },
+    {
+     "table": "memory_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "id",
+     "to": "memory_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "current_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    },
+    {
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "memory_scope",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "scope_kind",
+      "contact_id",
+      "state"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 5,
+   "strict": true,
+   "triggers": [
+    "memory_head_closure"
+   ]
+  },
+  "memory_candidate": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "proposed_body",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "produced_attempt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "event_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "output_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "execution_event",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "execution_event",
+     "from": "event_id",
+     "to": "id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "produced_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    },
+    {
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "candidate_producer",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "produced_attempt_id"
+     ]
+    },
+    {
+     "name": "candidate_scope",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "scope_kind",
+      "contact_id",
+      "state"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_candidate_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "event_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_candidate_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "produced_attempt_id",
+      "output_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_candidate_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": [
+    "candidate_real_producer",
+    "duplicate_candidate_insert",
+    "duplicate_candidate_terminal",
+    "duplicate_candidate_transition",
+    "memory_candidate_fixed"
+   ]
+  },
+  "memory_citation": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "candidate_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "memory_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "source_contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "record_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "span_start",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "span_end",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "explanation",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "capture_record",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "record_id",
+     "to": "id"
+    },
+    {
+     "table": "capture_record",
+     "from": "message_id",
+     "to": "message_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "memory_id",
+     "to": "memory_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "memory_candidate",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_candidate",
+     "from": "candidate_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "memory_citation_candidate",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "candidate_id"
+     ]
+    },
+    {
+     "name": "memory_citation_version",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "memory_id",
+      "version_no"
+     ]
+    },
+    {
+     "name": "memory_citation_source",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "source_contact_id",
+      "record_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_citation_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": [
+    "memory_citation_scope"
+   ]
+  },
+  "memory_decision": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "request_seal",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "action",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "actor_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "execution_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "target_memory_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "expected_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "expected_head_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "restored_from_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "outcome",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "memory_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "target_memory_id",
+     "to": "memory_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "restored_from_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "memory_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "target_memory_id",
+     "to": "memory_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "expected_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "memory",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory",
+     "from": "target_memory_id",
+     "to": "id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "execution_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "memory_decision_execution",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "execution_id"
+     ]
+    },
+    {
+     "name": "memory_decision_target",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "target_memory_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_decision_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "request_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_decision_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 7,
+   "strict": true,
+   "triggers": [
+    "auto_noop_consume",
+    "auto_noop_execution",
+    "auto_retire_execution"
+   ]
+  },
+  "memory_document": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    },
+    {
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_memory_document_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": []
+  },
+  "memory_document_version": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "document_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "version_identity",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "title",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "hint",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "topic_key",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "produced_attempt_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "previous_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "input_contract_version",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "content_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "memory_document_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "document_id",
+     "to": "document_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "previous_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "step_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "produced_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "memory_document",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_document",
+     "from": "document_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "document_version_producer",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "produced_attempt_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_document_version_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "version_identity"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_document_version_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "document_id",
+      "version_no"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": [
+    "document_producer_scope"
+   ]
+  },
+  "memory_required_message": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "candidate_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "memory_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "source_contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "message",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "message",
+     "from": "message_id",
+     "to": "id"
+    },
+    {
+     "table": "memory_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "memory_id",
+     "to": "memory_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "memory_candidate",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_candidate",
+     "from": "candidate_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "memory_required_source",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "source_contact_id",
+      "message_id"
+     ]
+    },
+    {
+     "name": "memory_required_version",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "memory_id",
+      "version_no",
+      "message_id"
+     ]
+    },
+    {
+     "name": "memory_required_candidate",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "candidate_id",
+      "message_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_required_message_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": [
+    "memory_required_scope"
+   ]
+  },
+  "memory_version": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "memory_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "body",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "formation_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "adoption_mode",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "decision_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "previous_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "restored_from_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "protection_at_formation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "content_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "provenance_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "memory_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "memory_id",
+     "to": "memory_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "restored_from_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "memory_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "memory_id",
+     "to": "memory_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "previous_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "memory_decision",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_decision",
+     "from": "decision_id",
+     "to": "id"
+    },
+    {
+     "table": "memory",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory",
+     "from": "memory_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "memory_version_restored",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "memory_id",
+      "restored_from_version_no"
+     ]
+    },
+    {
+     "name": "memory_version_previous",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "memory_id",
+      "previous_version_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_version_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "decision_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_memory_version_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "memory_id",
+      "version_no"
+     ]
+    }
+   ],
+   "checks": 9,
+   "strict": true,
+   "triggers": [
+    "memory_version_decision",
+    "memory_version_fixed"
+   ]
+  },
+  "message": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "identity_scheme",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "external_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "sender_role",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "text_body",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "original_type",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "sent_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "time_precision",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "order_scheme",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "order_key",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "interpretation_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "availability",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "display_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "status_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "status_observed_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "conversation_binding",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "binding_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "message_contact_display",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "display_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_message_5",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "binding_id",
+      "identity_scheme",
+      "external_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_message_4",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "binding_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_message_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_message_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_message_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "display_no"
+     ]
+    }
+   ],
+   "checks": 7,
+   "strict": true,
+   "triggers": [
+    "message_immutable"
+   ]
+  },
+  "message_alias": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "scheme",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "external_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "message",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "message",
+     "from": "binding_id",
+     "to": "binding_id"
+    },
+    {
+     "table": "message",
+     "from": "message_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_message_alias_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "binding_id",
+      "scheme",
+      "external_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_message_alias_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": []
+  },
+  "message_media": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "media_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "head_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "message",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "message",
+     "from": "message_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_message_media_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "message_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_message_media_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "message_id"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": [
+    "media_head_kind"
+   ]
+  },
+  "model_call": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "attempt_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "step_attempt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "provider",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "receipt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "sent_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "received_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "error_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "reserved_budget_units",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "actual_budget_units",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "settlement_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "receipt",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "reply_attempt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "reply_context_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "model",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "configuration_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "input_cap",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "output_cap",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_context",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_context",
+     "from": "reply_attempt_id",
+     "to": "attempt_id"
+    },
+    {
+     "table": "reply_context",
+     "from": "reply_context_id",
+     "to": "id"
+    },
+    {
+     "table": "reply_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_attempt",
+     "from": "reply_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "step_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "model_operation",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "model_operation",
+     "from": "operation_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_model_call_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "provider",
+      "request_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_model_call_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "operation_id",
+      "attempt_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_model_call_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 8,
+   "strict": true,
+   "triggers": [
+    "model_call_identity_immutable",
+    "model_call_producer",
+    "model_call_producer_update"
+   ]
+  },
+  "model_operation": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "purpose",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "memory_step_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "slot",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "input_seal",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "commit_forbidden_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "reply_request_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_request",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_request",
+     "from": "reply_request_id",
+     "to": "id"
+    },
+    {
+     "table": "processing_step",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_step",
+     "from": "memory_step_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_model_operation_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "reply_request_id",
+      "purpose",
+      "slot"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_model_operation_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "memory_step_id",
+      "purpose",
+      "slot"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_model_operation_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": [
+    "adjudication_operation_step",
+    "document_operation_step",
+    "model_operation_parent_immutable"
+   ]
+  },
+  "operation_item": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "item_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "effect_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "processing_item",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_item",
+     "from": "item_id",
+     "to": "id"
+    },
+    {
+     "table": "model_operation",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "model_operation",
+     "from": "operation_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "operation_item_occupied",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "item_id",
+      "effect_kind"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_operation_item_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "operation_id",
+      "item_id",
+      "effect_kind"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": []
+  },
+  "operation_scope": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "operation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "source_contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "effect_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "source_contact_id",
+     "to": "id"
+    },
+    {
+     "table": "model_operation",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "model_operation",
+     "from": "operation_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "operation_scopes_source",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "source_contact_id",
+      "operation_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_operation_scope_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "operation_id",
+      "source_contact_id",
+      "effect_kind"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": []
+  },
+  "owner": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "read_enabled",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "read_epoch",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "memory_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "preference_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "skill_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "document_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "feedback_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "current_publication_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_owner_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": []
+  },
+  "processing_item": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "purpose",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "extraction_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "pipeline_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "completion_attempt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "step_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "completion_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "message",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "message",
+     "from": "message_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "processing_item_message",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "message_id",
+      "purpose"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_processing_item_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_processing_item_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 5,
+   "strict": true,
+   "triggers": []
+  },
+  "processing_run": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "start_request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "intent_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "pause_requested_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "started_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_owner_feedback_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "policy_config",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_processing_run_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "start_request_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_processing_run_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": []
+  },
+  "processing_step": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "task_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "step_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "input_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "successful_attempt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "not_applicable_reason",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_memory_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "step_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "id",
+     "to": "step_id"
+    },
+    {
+     "table": "step_attempt",
+     "from": "successful_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "processing_task",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_task",
+     "from": "task_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_processing_step_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "task_id",
+      "step_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_processing_step_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 6,
+   "strict": true,
+   "triggers": [
+    "step_memory_revision_immutable",
+    "step_successful_attempt_insert",
+    "step_successful_attempt_update"
+   ]
+  },
+  "processing_task": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "run_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "control_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "resume_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "error_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "document_basis_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_memory_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_document_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_publication_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    },
+    {
+     "table": "processing_run",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_run",
+     "from": "run_id",
+     "to": "id"
+    },
+    {
+     "table": "document_publication_identity",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "document_publication_identity",
+     "from": "accepted_publication_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "task_self_scope",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "run_id"
+     ]
+    },
+    {
+     "name": "task_contact_scope",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "run_id",
+      "contact_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_processing_task_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "id",
+      "run_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_processing_task_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 5,
+   "strict": true,
+   "triggers": [
+    "document_identity_task_cleanup",
+    "document_task_basis_fixed",
+    "task_scope_immutable"
+   ]
+  },
+  "publication_member": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "publication_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "document_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "memory_document_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "document_id",
+     "to": "document_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "document_publication",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "document_publication",
+     "from": "publication_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_publication_member_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "publication_id",
+      "document_id"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": [
+    "document_member_scope"
+   ]
+  },
+  "read_goal": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "grant_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_data_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_barrier_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "target_protocol",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "target_descriptor",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "target_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "eligibility_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "support_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "cursor",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "coverage_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "completed_partitions",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "failure_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "resume_cursor",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "cursor_scope_digest",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "cursor_scheme",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "handoff_from_goal_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "pages_accepted",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "last_accepted_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "read_grant",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "read_grant",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "read_grant",
+     "from": "binding_id",
+     "to": "binding_id"
+    },
+    {
+     "table": "read_grant",
+     "from": "grant_id",
+     "to": "id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "binding_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "read_goal_contact",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "created_at"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_read_goal_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_read_goal_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": [
+    "goal_immutable"
+   ]
+  },
+  "read_grant": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "verification_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "selection_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "granted_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "revoked_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "reason",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "binding_verification",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "binding_verification",
+     "from": "binding_id",
+     "to": "binding_id"
+    },
+    {
+     "table": "binding_verification",
+     "from": "verification_id",
+     "to": "id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "binding_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "active_contact_read_grant",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_read_grant_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "binding_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_read_grant_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "selection_generation"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_read_grant_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": [
+    "grant_identity_immutable",
+    "grant_revocation_final",
+    "grant_verification_generation"
+   ]
+  },
+  "reply_attempt": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "request_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "attempt_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "lease_token",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_data_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_discussion_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_source_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "started_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "finished_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "error_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_runtime_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_storage_epoch",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_request",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_request",
+     "from": "request_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "reply_one_live_attempt",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "request_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_attempt_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "request_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_attempt_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "request_id",
+      "attempt_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_attempt_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": []
+  },
+  "reply_basis": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "candidate_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "basis_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "context_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "item_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "verification_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_candidate_input",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_candidate_input",
+     "from": "context_id",
+     "to": "context_id"
+    },
+    {
+     "table": "reply_candidate_input",
+     "from": "item_no",
+     "to": "item_no"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "candidate_id",
+     "to": "candidate_id"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "version_no",
+     "to": "version_no"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_basis_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "candidate_id",
+      "version_no",
+      "basis_no"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": [
+    "reply_basis_immutable"
+   ]
+  },
+  "reply_candidate": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "request_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "candidate_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_request",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_request",
+     "from": "request_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_candidate_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "request_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_candidate_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "request_id",
+      "candidate_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_candidate_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": []
+  },
+  "reply_candidate_context": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "context_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "owner_memory_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_memory_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "owner_document_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_document_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_context",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_context",
+     "from": "context_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_candidate_context_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "context_id"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": [
+    "reply_candidate_context_immutable"
+   ]
+  },
+  "reply_candidate_input": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "context_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "item_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "identity_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "text_body",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_context",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_context",
+     "from": "context_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_candidate_input_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "context_id",
+      "item_no"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": [
+    "reply_input_immutable"
+   ]
+  },
+  "reply_candidate_input_source": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "context_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "item_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "source_contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "record_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "capture_record",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "record_id",
+     "to": "id"
+    },
+    {
+     "table": "capture_record",
+     "from": "message_id",
+     "to": "message_id"
+    },
+    {
+     "table": "reply_candidate_input",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_candidate_input",
+     "from": "context_id",
+     "to": "context_id"
+    },
+    {
+     "table": "reply_candidate_input",
+     "from": "item_no",
+     "to": "item_no"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_candidate_input_source_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "context_id",
+      "item_no",
+      "record_id"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": []
+  },
+  "reply_candidate_request": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "request_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "coverage_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "coverage_warning",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "carried_selection_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_selection",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_selection",
+     "from": "carried_selection_id",
+     "to": "id"
+    },
+    {
+     "table": "reply_request",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_request",
+     "from": "request_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_candidate_request_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "request_id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": [
+    "reply_candidate_request_immutable"
+   ]
+  },
+  "reply_candidate_version": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "candidate_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "origin_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "parent_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "call_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "output_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "content_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "part_count",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "model_call",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "model_call",
+     "from": "call_id",
+     "to": "id"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "candidate_id",
+     "to": "candidate_id"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "parent_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "reply_candidate",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_candidate",
+     "from": "candidate_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_candidate_version_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "call_id",
+      "output_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_candidate_version_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "candidate_id",
+      "version_no"
+     ]
+    }
+   ],
+   "checks": 5,
+   "strict": true,
+   "triggers": [
+    "reply_version_call",
+    "reply_version_clear_only"
+   ]
+  },
+  "reply_context": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "discussion_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "origin_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "attempt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "request_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "preference_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "skill_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "owner_memory_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "contact_memory_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "skill_run_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "frozen_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_attempt",
+     "from": "request_id",
+     "to": "request_id"
+    },
+    {
+     "table": "reply_attempt",
+     "from": "attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "reply_request",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_request",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "reply_request",
+     "from": "discussion_id",
+     "to": "discussion_id"
+    },
+    {
+     "table": "reply_request",
+     "from": "request_id",
+     "to": "id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "discussion_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_context_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "attempt_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_context_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "discussion_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_context_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": [
+    "reply_context_immutable"
+   ]
+  },
+  "reply_context_item": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "context_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "item_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "role",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "presentation_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "source_contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "record_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "entry_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "package_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "package_revision_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "skill_package_revision",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "skill_package_revision",
+     "from": "package_id",
+     "to": "package_id"
+    },
+    {
+     "table": "skill_package_revision",
+     "from": "package_revision_no",
+     "to": "revision_no"
+    },
+    {
+     "table": "discussion_entry",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "discussion_entry",
+     "from": "entry_id",
+     "to": "id"
+    },
+    {
+     "table": "capture_record",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "record_id",
+     "to": "id"
+    },
+    {
+     "table": "capture_record",
+     "from": "message_id",
+     "to": "message_id"
+    },
+    {
+     "table": "reply_context",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_context",
+     "from": "context_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_context_item_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "context_id",
+      "item_no"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": [
+    "reply_context_item_immutable",
+    "reply_context_item_scope"
+   ]
+  },
+  "reply_execution_input": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "event_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "context_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "item_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 4
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_candidate_input",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_candidate_input",
+     "from": "context_id",
+     "to": "context_id"
+    },
+    {
+     "table": "reply_candidate_input",
+     "from": "item_no",
+     "to": "item_no"
+    },
+    {
+     "table": "execution_event",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "execution_event",
+     "from": "event_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_execution_input_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "event_id",
+      "context_id",
+      "item_no"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": [
+    "reply_execution_input_scope"
+   ]
+  },
+  "reply_request": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "discussion_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "trigger_entry_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "identity_origin",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "verification_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "confirmation_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "manual_confirmation",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "manual_confirmation",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "manual_confirmation",
+     "from": "confirmation_id",
+     "to": "id"
+    },
+    {
+     "table": "binding_verification",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "binding_verification",
+     "from": "binding_id",
+     "to": "binding_id"
+    },
+    {
+     "table": "binding_verification",
+     "from": "verification_id",
+     "to": "id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "conversation_binding",
+     "from": "binding_id",
+     "to": "id"
+    },
+    {
+     "table": "discussion_entry",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "discussion_entry",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "discussion_entry",
+     "from": "discussion_id",
+     "to": "discussion_id"
+    },
+    {
+     "table": "discussion_entry",
+     "from": "trigger_entry_id",
+     "to": "id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "discussion_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_request_4",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "discussion_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_request_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "request_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_request_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "discussion_id",
+      "request_key"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_request_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 4,
+   "strict": true,
+   "triggers": [
+    "reply_request_scope_immutable"
+   ]
+  },
+  "reply_selection": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "request_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "selection_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "candidate_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "selected_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_candidate_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "candidate_id",
+     "to": "candidate_id"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "reply_candidate",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_candidate",
+     "from": "request_id",
+     "to": "request_id"
+    },
+    {
+     "table": "reply_candidate",
+     "from": "candidate_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_selection_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "request_id",
+      "selection_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_reply_selection_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": [
+    "reply_selection_immutable"
+   ]
+  },
+  "reply_version_part": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "candidate_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "version_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "part_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 4
+    },
+    {
+     "name": "text_body",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_candidate_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "candidate_id",
+     "to": "candidate_id"
+    },
+    {
+     "table": "reply_candidate_version",
+     "from": "version_no",
+     "to": "version_no"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_reply_version_part_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "candidate_id",
+      "version_no",
+      "part_no"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": [
+    "reply_part_immutable"
+   ]
+  },
+  "request_tombstone": {
+   "columns": [
+    {
+     "name": "owner_identity",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "request_namespace",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "invalidation_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "authority_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "deletion_operation_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "deletion_operation",
+     "from": "owner_identity",
+     "to": "owner_identity"
+    },
+    {
+     "table": "deletion_operation",
+     "from": "deletion_operation_id",
+     "to": "operation_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_request_tombstone_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_identity",
+      "request_namespace",
+      "request_key"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": []
+  },
+  "run_contact": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "run_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "grant_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_selection_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_data_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_identity_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_account_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_source_generation",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_feedback_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "read_grant",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "read_grant",
+     "from": "grant_id",
+     "to": "id"
+    },
+    {
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id"
+    },
+    {
+     "table": "processing_run",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_run",
+     "from": "run_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "run_contacts_source",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "run_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_run_contact_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "run_id",
+      "contact_id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": [
+    "run_contact_immutable"
+   ]
+  },
+  "run_input": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "run_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "input_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "role",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "source_contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "item_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "record_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_interpretation_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "processing_item",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_item",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "processing_item",
+     "from": "item_id",
+     "to": "id"
+    },
+    {
+     "table": "capture_record",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "record_id",
+     "to": "id"
+    },
+    {
+     "table": "capture_record",
+     "from": "message_id",
+     "to": "message_id"
+    },
+    {
+     "table": "run_contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "run_contact",
+     "from": "run_id",
+     "to": "run_id"
+    },
+    {
+     "table": "run_contact",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "run_inputs_source",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "source_contact_id",
+      "record_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_run_input_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "run_id",
+      "message_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_run_input_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "run_id",
+      "input_no"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": [
+    "run_input_freeze",
+    "run_input_immutable"
+   ]
+  },
+  "runtime_context": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "copy_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "incorporation_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "context_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "event_start",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "event_end",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "provenance_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_context",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_context",
+     "from": "context_id",
+     "to": "id"
+    },
+    {
+     "table": "runtime_copy",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "runtime_copy",
+     "from": "copy_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "runtime_context_origin",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "context_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_runtime_context_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "copy_id",
+      "incorporation_no"
+     ]
+    }
+   ],
+   "checks": 3,
+   "strict": true,
+   "triggers": [
+    "runtime_context_scope"
+   ]
+  },
+  "runtime_copy": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "discussion_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "sdk_instance_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "managed_locator",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "address_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "write_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_data_generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "source_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "committed_request_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "committed_event_boundary",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "configuration_digest",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "preparing_attempt_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "cleanup_operation_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "manifest_complete",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "reply_attempt",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_attempt",
+     "from": "preparing_attempt_id",
+     "to": "id"
+    },
+    {
+     "table": "reply_request",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "reply_request",
+     "from": "committed_request_id",
+     "to": "id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "assistant_discussion",
+     "from": "discussion_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "runtime_discussion",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "discussion_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_runtime_copy_4",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "discussion_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_runtime_copy_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_runtime_copy_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "managed_locator"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_runtime_copy_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "sdk_instance_id"
+     ]
+    }
+   ],
+   "checks": 7,
+   "strict": true,
+   "triggers": [
+    "runtime_commit_request",
+    "runtime_scope_immutable"
+   ]
+  },
+  "runtime_file": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "copy_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "file_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "address_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "cleared",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "runtime_copy",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "runtime_copy",
+     "from": "copy_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_runtime_file_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "copy_id",
+      "address_json"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_runtime_file_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "file_id"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": []
+  },
+  "schema_migration": {
+   "columns": [
+    {
+     "name": "version",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 1
+    },
+    {
+     "name": "checksum",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "applied_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [],
+   "checks": 2,
+   "strict": true,
+   "triggers": []
+  },
+  "skill_package": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "directory_name",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "directory_identity",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "display_name",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "description",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "enabled_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "enabled_origin",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "verification_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "verification_reason",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "current_revision_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "head_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "skill_package_revision",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "skill_package_revision",
+     "from": "id",
+     "to": "package_id"
+    },
+    {
+     "table": "skill_package_revision",
+     "from": "current_revision_no",
+     "to": "revision_no"
+    },
+    {
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_skill_package_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "directory_name"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_skill_package_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "directory_identity"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_skill_package_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 5,
+   "strict": true,
+   "triggers": []
+  },
+  "skill_package_revision": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "package_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "revision_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "manifest_digest",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "content_digest",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "source_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "verification_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "verified_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "availability",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "skill_package",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "skill_package",
+     "from": "package_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "skill_one_current_revision",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "package_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_skill_package_revision_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "package_id",
+      "revision_no"
+     ]
+    }
+   ],
+   "checks": 7,
+   "strict": true,
+   "triggers": [
+    "skill_revision_anchor_immutable"
+   ]
+  },
+  "step_attempt": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "step_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "attempt_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "resume_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "lease_token",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "lease_expires_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "accepted_control_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "runtime_token",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "started_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "finished_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "error_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "processing_step",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_step",
+     "from": "step_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "attempt_running",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "step_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_step_attempt_3",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "step_id",
+      "attempt_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_step_attempt_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "step_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_step_attempt_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": [
+    "successful_attempt_reference"
+   ]
+  },
+  "step_input": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "step_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "input_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 3
+    },
+    {
+     "name": "run_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "run_input_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "candidate_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_state_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "memory_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "memory_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_head_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "source_contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "record_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "accepted_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "document_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "document_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "publication_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "document_publication_identity",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "document_publication_identity",
+     "from": "publication_id",
+     "to": "id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "document_id",
+     "to": "document_id"
+    },
+    {
+     "table": "memory_document_version",
+     "from": "document_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "capture_record",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "capture_record",
+     "from": "record_id",
+     "to": "id"
+    },
+    {
+     "table": "capture_record",
+     "from": "message_id",
+     "to": "message_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "memory_id",
+     "to": "memory_id"
+    },
+    {
+     "table": "memory_version",
+     "from": "memory_version_no",
+     "to": "version_no"
+    },
+    {
+     "table": "memory_candidate",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "memory_candidate",
+     "from": "candidate_id",
+     "to": "id"
+    },
+    {
+     "table": "run_input",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "run_input",
+     "from": "run_id",
+     "to": "run_id"
+    },
+    {
+     "table": "run_input",
+     "from": "run_input_no",
+     "to": "input_no"
+    },
+    {
+     "table": "processing_step",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_step",
+     "from": "step_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "document_input_version",
+     "unique": 0,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "document_id",
+      "document_version_no"
+     ]
+    },
+    {
+     "name": "step_inputs_source",
+     "unique": 0,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "source_contact_id",
+      "record_id"
+     ]
+    },
+    {
+     "name": "step_inputs_memory",
+     "unique": 0,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "memory_id",
+      "memory_version_no"
+     ]
+    },
+    {
+     "name": "step_inputs_candidate",
+     "unique": 0,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "candidate_id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_step_input_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "step_id",
+      "run_id",
+      "run_input_no"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_step_input_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "step_id",
+      "input_no"
+     ]
+    }
+   ],
+   "checks": 2,
+   "strict": true,
+   "triggers": [
+    "document_identity_input_cleanup",
+    "step_input_immutable",
+    "step_input_scope"
+   ]
+  },
+  "sync_capture": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "goal_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "read_epoch",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "runtime_token",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "captured_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "adapter_version",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "cursor_in",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "cursor_out",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "error_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "pk": 0
+    },
+    {
+     "name": "response_digest",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "read_goal",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "read_goal",
+     "from": "contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "read_goal",
+     "from": "goal_id",
+     "to": "id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_sync_capture_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "id"
+     ]
+    },
+    {
+     "name": "sqlite_autoindex_sync_capture_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ]
+    }
+   ],
+   "checks": 1,
+   "strict": true,
+   "triggers": []
+  },
+  "task_contribution": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 1
+    },
+    {
+     "name": "task_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 2
+    },
+    {
+     "name": "run_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 0
+    },
+    {
+     "name": "source_contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "pk": 3
+    }
+   ],
+   "foreignKeys": [
+    {
+     "table": "run_contact",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "run_contact",
+     "from": "run_id",
+     "to": "run_id"
+    },
+    {
+     "table": "run_contact",
+     "from": "source_contact_id",
+     "to": "contact_id"
+    },
+    {
+     "table": "processing_task",
+     "from": "owner_id",
+     "to": "owner_id"
+    },
+    {
+     "table": "processing_task",
+     "from": "task_id",
+     "to": "id"
+    },
+    {
+     "table": "processing_task",
+     "from": "run_id",
+     "to": "run_id"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_task_contribution_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "task_id",
+      "source_contact_id"
+     ]
+    }
+   ],
+   "checks": 0,
+   "strict": true,
+   "triggers": []
+  }
+ },
+ "triggers": {
+  "adjudication_operation_step": "model_operation",
+  "auto_noop_consume": "memory_decision",
+  "auto_noop_execution": "memory_decision",
+  "auto_retire_execution": "memory_decision",
+  "binding_identity_immutable": "conversation_binding",
+  "candidate_real_producer": "memory_candidate",
+  "capture_record_binding": "capture_record",
+  "capture_record_immutable": "capture_record",
+  "capture_record_no_restore": "capture_record",
+  "decision_candidate_scope": "decision_candidate",
+  "discussion_entry_call": "discussion_entry",
+  "discussion_entry_clear_only": "discussion_entry",
+  "discussion_entry_immutable": "discussion_entry",
+  "discussion_entry_request": "discussion_entry",
+  "discussion_scope_immutable": "assistant_discussion",
+  "document_basis_producer": "document_basis",
+  "document_block_scope": "document_block",
+  "document_effect_scope_operation": "document_effect_scope",
+  "document_extraction_reuse_immutable": "document_extraction_reuse",
+  "document_extraction_reuse_scope": "document_extraction_reuse",
+  "document_identity_input_cleanup": "step_input",
+  "document_identity_task_cleanup": "processing_task",
+  "document_member_scope": "publication_member",
+  "document_operation_step": "model_operation",
+  "document_producer_scope": "memory_document_version",
+  "document_publication_fixed": "document_publication",
+  "document_publication_identity_insert": "document_publication",
+  "document_publication_scope": "document_publication",
+  "document_task_basis_fixed": "processing_task",
+  "duplicate_candidate_insert": "memory_candidate",
+  "duplicate_candidate_terminal": "memory_candidate",
+  "duplicate_candidate_transition": "memory_candidate",
+  "event_call_producer": "execution_event",
+  "event_producer_immutable": "execution_event",
+  "event_reused_call_immutable": "execution_event",
+  "event_reused_call_insert": "execution_event",
+  "event_reused_call_update": "execution_event",
+  "event_source_immutable": "event_source",
+  "event_source_planned": "event_source",
+  "execution_input_immutable": "execution_input",
+  "execution_input_scope": "execution_input",
+  "goal_immutable": "read_goal",
+  "grant_identity_immutable": "read_grant",
+  "grant_revocation_final": "read_grant",
+  "grant_verification_generation": "read_grant",
+  "manual_identity_immutable": "manual_confirmation",
+  "media_attempt_identity_immutable": "media_extraction_attempt",
+  "media_file_identity_immutable": "media_file",
+  "media_file_parent_cycle": "media_file",
+  "media_head_kind": "message_media",
+  "memory_candidate_fixed": "memory_candidate",
+  "memory_citation_scope": "memory_citation",
+  "memory_head_closure": "memory",
+  "memory_required_scope": "memory_required_message",
+  "memory_version_decision": "memory_version",
+  "memory_version_fixed": "memory_version",
+  "message_immutable": "message",
+  "model_call_identity_immutable": "model_call",
+  "model_call_producer": "model_call",
+  "model_call_producer_update": "model_call",
+  "model_operation_parent_immutable": "model_operation",
+  "noop_candidate_fixed": "decision_candidate",
+  "noop_candidate_removed": "decision_candidate",
+  "noop_candidate_scope": "decision_candidate",
+  "reply_basis_immutable": "reply_basis",
+  "reply_candidate_context_immutable": "reply_candidate_context",
+  "reply_candidate_request_immutable": "reply_candidate_request",
+  "reply_context_immutable": "reply_context",
+  "reply_context_item_immutable": "reply_context_item",
+  "reply_context_item_scope": "reply_context_item",
+  "reply_execution_input_scope": "reply_execution_input",
+  "reply_input_immutable": "reply_candidate_input",
+  "reply_part_immutable": "reply_version_part",
+  "reply_request_scope_immutable": "reply_request",
+  "reply_selection_immutable": "reply_selection",
+  "reply_version_call": "reply_candidate_version",
+  "reply_version_clear_only": "reply_candidate_version",
+  "run_contact_immutable": "run_contact",
+  "run_input_freeze": "run_input",
+  "run_input_immutable": "run_input",
+  "runtime_commit_request": "runtime_copy",
+  "runtime_context_scope": "runtime_context",
+  "runtime_scope_immutable": "runtime_copy",
+  "skill_revision_anchor_immutable": "skill_package_revision",
+  "step_input_immutable": "step_input",
+  "step_input_scope": "step_input",
+  "step_memory_revision_immutable": "processing_step",
+  "step_successful_attempt_insert": "processing_step",
+  "step_successful_attempt_update": "processing_step",
+  "successful_attempt_reference": "step_attempt",
+  "task_scope_immutable": "processing_task",
+  "verification_immutable": "binding_verification"
+ },
+ "views": []
+}
