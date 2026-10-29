@@ -42,9 +42,9 @@ export class SqliteHistoryService {
   try{
    const token=await this.contacts.eligibility(contactId);const scope=await this.storage.execute<HistoryScope>('history.scope',{token});
    await this.check(scope,controller);channel=this.createChannel();
-   const register=(key:string)=>releases.push(this.holders.register({key,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),close:stop}));
+   const register=(key:string,coversAllSources=false)=>releases.push(this.holders.register({key,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources,close:stop}));
    // target会打开固定快照；没有goal之前也必须先登记实际读者。
-   register(historyReaderHolderKey(contactId,token.data_generation));
+   register(historyReaderHolderKey(contactId,token.data_generation),true);
    return await run(scope,channel,controller,goalId=>register(`history:${goalId}`));
   }finally{
    let cleanupError:unknown;
