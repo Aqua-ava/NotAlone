@@ -22,7 +22,7 @@ test('显式SQLite联系人使用官方DSH最小profile，认证、关闭和重�
   t.after(()=>rm(root,{recursive:true,force:true}));
   const storage = await SqliteStorage.open({userData:root,intent:'create',role:'test'});
   const databaseId=storage.status.databaseId;await storage.close();
-  const infoPath=path.join(root,'managed/sqlite/backend.info');
+  const infoPath=path.join(root,'managed/sqlite-backend.info');
   const config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,
     envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{},
     sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts']}};
@@ -55,7 +55,7 @@ test('SQLite官方profile随父宿主EOF退出并清理握手和临时home', asy
   const storage = await SqliteStorage.open({userData:root,intent:'create',role:'test'});
   const databaseId=storage.status.databaseId;await storage.close();
   const config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,
-    envFilePath:path.join(root,'unused.env'),infoPath:path.join(root,'managed/sqlite/backend.info'),businessHome:root,environment:{},
+    envFilePath:path.join(root,'unused.env'),infoPath:path.join(root,'managed/sqlite-backend.info'),businessHome:root,environment:{},
     sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts']}};
   const script=`import {launchDsh} from ${JSON.stringify(new URL('../src/launch.ts',import.meta.url).href)};const host=await launchDsh(JSON.parse(process.argv[1]),()=>true);process.send({pid:host.pid});`;
   const parent=spawn(process.execPath,['--input-type=module','-e',script,JSON.stringify(config)],{stdio:['ignore','ignore','ignore','ipc']});
@@ -71,4 +71,30 @@ test('SQLite官方profile随父宿主EOF退出并清理握手和临时home', asy
   assert.equal(running(),false);
   await assert.rejects(access(config.infoPath),{code:'ENOENT'});
   await assert.rejects(access(record.home),{code:'ENOENT'});
+});
+
+test('SQLite正式宿主接通显式合成Skill父目录，状态与CAS管理可重开且原件不改',async t=>{
+ const {mkdir,writeFile}=await import('node:fs/promises');
+ const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-sqlite-skills-host-')));t.after(()=>rm(root,{recursive:true,force:true}));
+ const skillPackageRoot=path.join(root,'skill-packages');await mkdir(path.join(skillPackageRoot,'gentle'),{recursive:true});
+ const document='---\nname: gentle\ndescription: 用于合成表达\n---\n先回应感受。\n说明情况。\n保留选择。\n';await writeFile(path.join(skillPackageRoot,'gentle/SKILL.md'),document);
+ const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'});const databaseId=storage.status.databaseId;await storage.close();
+ const infoPath=path.join(root,'managed/sqlite-backend.info');
+ const config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{},
+  sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','skills'],skillPackageRoot}};
+ let packageId;
+ for(let attempt=0;attempt<2;attempt++){
+  const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());const info=await handshake(host,infoPath);
+  const request=async(route,body)=>{const res=await fetch(`http://${info.address}`+route,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${info.token}`,'content-type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:res.status,body:await res.json()};};
+  const status=(await request('/api/runtime/status')).body;assert.deepEqual(status.capabilities,['contacts','skills']);assert.equal(status.ownership.skills,'typescript');assert.equal(status.ownership.skillLearning,'unavailable');
+  let view=(await request('/api/skills')).body;assert.equal(view.mode,'minimal');
+  if(!attempt){
+   assert.deepEqual(view.skills,[]);let item=(await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).body.skill;packageId=item.package_id;assert.equal(item.enabled_state,'unknown');
+   item=(await request(`/api/skills/${packageId}/enable`,{expected_head_revision:item.head_revision,confirmed:true})).body.skill;assert.equal(item.enabled_state,'enabled');
+  }else{assert.equal(view.skills[0].package_id,packageId);assert.equal(view.skills[0].enabled_state,'enabled');}
+  assert.equal((await request('/api/contacts/11111111-1111-4111-8111-111111111111/skill-learning',{})).status,503);
+  assert.equal((await request('/api/reply/generate',{})).status,503);
+  assert.equal(await readFile(path.join(skillPackageRoot,'gentle/SKILL.md'),'utf8'),document);
+  await request('/api/runtime/shutdown',{});assert.equal(await host.waitForExit(15000),true);
+ }
 });

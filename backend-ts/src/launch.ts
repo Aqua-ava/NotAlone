@@ -6,9 +6,10 @@ import { randomUUID, createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { constants } from 'node:fs';
 import { processIdentityState, type ProcessIdentity } from './platform/process/process-identity.ts';
+import type { SqliteCapabilitiesConfiguration } from './sqlite-capabilities.ts';
 
-export interface SqliteLaunchConfiguration {
-  userData: string; expectedDatabaseId: string; role: 'test'; capabilities: ['contacts']; wechatCliPath?: string;
+export interface SqliteLaunchConfiguration extends SqliteCapabilitiesConfiguration {
+  userData: string; expectedDatabaseId: string; role: 'test'; wechatCliPath?: string;
 }
 export interface LaunchConfiguration {
   nodeExecutable: string; projectDirectory: string; envFilePath: string; infoPath: string;

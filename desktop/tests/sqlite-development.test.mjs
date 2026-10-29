@@ -10,6 +10,9 @@ after(() => rm(root, { recursive: true, force: true }));
 const built = await build({ entryPoints: ['src/main/startup/sqlite-development.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
 await writeFile(path.join(root, 'subject.mjs'), built.outputFiles[0].text);
 const { SqliteDevelopmentProbe } = await import(path.join(root, 'subject.mjs'));
+const diagnosticsBuilt = await build({ entryPoints: ['src/main/startup/diagnostics.ts'], bundle: true, platform:'node',format:'esm',write:false });
+await writeFile(path.join(root,'diagnostics.mjs'),diagnosticsBuilt.outputFiles[0].text);
+const { StartupDiagnostics } = await import(path.join(root,'diagnostics.mjs'));
 
 // 此测试替身仅覆盖桌面与存储子进程之间的合同；真实存储由底座测试验证。
 async function fixture(name) {
@@ -78,9 +81,6 @@ test('开发控制拒绝业务库、重置和宽权限配置，不创建库', as
   await assert.rejects(readFile(path.join(f.userData,'synthetic-instance')),{code:'ENOENT'});
 });
 
-const diagnosticsBuilt = await build({ entryPoints: ['src/main/startup/diagnostics.ts'], bundle: true, platform:'node',format:'esm',write:false });
-await writeFile(path.join(root,'diagnostics.mjs'),diagnosticsBuilt.outputFiles[0].text);
-const { StartupDiagnostics } = await import(path.join(root,'diagnostics.mjs'));
 
 test('正常诊断门禁显式开发模式展示底座就绪并封锁业务，普通模式忽略开发文件', async () => {
   const f = await fixture('normal-gate');
@@ -125,8 +125,20 @@ test('显式联系人能力通过底座检查后沿官方宿主启动配置，�
   await development.ensureReady(config,()=>true);
   assert.equal(development.getState().phase,'ready');
   assert.deepEqual(config.sqlite,{userData:f.userData,expectedDatabaseId:'synthetic-id',role:'test',capabilities:['contacts'],wechatCliPath:config.wechatCliPath});
-  assert.equal(config.infoPath,path.join(f.userData,'managed/sqlite/backend.info'));
+  assert.equal(config.infoPath,path.join(f.userData,'managed/sqlite-backend.info'));
   assert.equal(config.projectDirectory,f.project);
   assert.equal(config.source,'external');
   assert.deepEqual(JSON.parse(await readFile(f.config,'utf8')).capabilities,['contacts']);
+});
+
+test('显式Skill开发能力只接受隔离根内包父目录，持久化重开不猜原owner目录',async()=>{
+ const f=await fixture('skills-capability'),skillPackageRoot=path.join(f.userData,'skill-packages');
+ await writeFile(f.config,JSON.stringify({formatVersion:1,intent:'create',role:'test',capabilities:['contacts','skills'],skillPackageRoot}),{mode:0o600});
+ const probe=new SqliteDevelopmentProbe(f.userData,f.project);const created=await probe.run(()=>true);
+ assert.equal(created.phase,'ready');assert.deepEqual(created.capabilities,['contacts','skills']);
+ assert.equal(probe.getContactConfiguration().skillPackageRoot,skillPackageRoot);
+ const saved=JSON.parse(await readFile(f.config,'utf8'));assert.equal(saved.intent,'open');assert.equal(saved.skillPackageRoot,skillPackageRoot);
+ saved.skillPackageRoot=path.join(root,'outside-originals');await writeFile(f.config,JSON.stringify(saved),{mode:0o600});
+ assert.equal((await probe.run(()=>true)).code,'sqlite_configuration_invalid');
+ delete saved.skillPackageRoot;await writeFile(f.config,JSON.stringify(saved),{mode:0o600});assert.equal((await probe.run(()=>true)).code,'sqlite_configuration_invalid');
 });
