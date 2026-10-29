@@ -11,8 +11,8 @@ function respond(res:ServerResponse,status:number,value:unknown){res.writeHead(s
 function invalid():never{throw new StorageFailure('discussion_input_invalid');}
 /** 认证由唯一宿主注入，owner固定在服务；不接收SQL、路径、运行身份或资格证明。 */
 export class SqliteDiscussionHttp {
- private readonly service:SqliteDiscussionService;private readonly authorize:(req:IncomingMessage)=>boolean;private readonly runtime?:SqliteDiscussionRuntime;private readonly turns?:SqliteDiscussionTurns;
- constructor(service:SqliteDiscussionService,authorize:(req:IncomingMessage)=>boolean,runtime?:SqliteDiscussionRuntime,turns?:SqliteDiscussionTurns){this.service=service;this.authorize=authorize;this.runtime=runtime;this.turns=turns;}
+ private readonly service:SqliteDiscussionService;private readonly authorize:(req:IncomingMessage)=>boolean;private readonly runtime?:SqliteDiscussionRuntime;private readonly turns?:SqliteDiscussionTurns;private readonly candidateConfiguration?: (contactId:string,discussionId:string)=>Promise<string|null>;
+ constructor(service:SqliteDiscussionService,authorize:(req:IncomingMessage)=>boolean,runtime?:SqliteDiscussionRuntime,turns?:SqliteDiscussionTurns,candidateConfiguration?:(contactId:string,discussionId:string)=>Promise<string|null>){this.service=service;this.authorize=authorize;this.runtime=runtime;this.turns=turns;this.candidateConfiguration=candidateConfiguration;}
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const raw=req.url??'',url=new URL(raw,'http://localhost'),match=route.exec(url.pathname),fallback=defaultRoute.exec(url.pathname);
   if(!match&&!fallback)return false;
@@ -45,7 +45,7 @@ export class SqliteDiscussionHttp {
      let recovery='none';
      if(view.discussion.currentRuntimeId){
       recovery='blocked';
-      if(this.runtime&&this.turns)try{const expected=await this.turns.configurationFor(contactId,discussionId);await this.runtime.inspect(contactId,discussionId,view.discussion.currentRuntimeId,expected);recovery='ready';}catch{}
+      if(this.runtime&&this.turns)try{const expected=await this.candidateConfiguration?.(contactId,discussionId)??await this.turns.configurationFor(contactId,discussionId);await this.runtime.inspect(contactId,discussionId,view.discussion.currentRuntimeId,expected);recovery='ready';}catch{}
      }
      view=await this.service.view(contactId,discussionId);
      respond(res,200,{mode:'sqlite',session_id:discussionId,entries:view.entries.map((e:any)=>({entry_id:e.id,position:String(e.position),role:e.role,text:e.body,request_id:e.origin_request_id,call_id:e.origin_call_id,content_state:e.content_state})),runtime_recovery:recovery});

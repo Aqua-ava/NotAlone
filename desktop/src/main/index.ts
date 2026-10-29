@@ -145,7 +145,7 @@ void app.whenReady().then(async () => {
   memory.onRecordDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   replies.onSessionDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   const candidateProvenance = installCandidateProvenanceBridge(commands, backend, contacts, replies);
-  const skillLearning = installSkillLearningBridge(commands, backend, contacts);
+  const skillLearning = installSkillLearningBridge(commands, backend, contacts,()=>sqliteDiscussion.synchronize(true));
   const preferenceDeletion = coordinateSkillLearningDeletion(skillLearning, memory, replies,
     expressionPreferenceDeletion(traces, replies, candidateProvenance));
   const preferences = installExpressionPreferenceBridge(commands, backend, contacts, {

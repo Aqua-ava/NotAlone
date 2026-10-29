@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readCoverage} from '../../../history/sqlite/read.ts';
-import {discussionRequestActions,requireAttempt} from '../requests.ts';
+import {discussionRequestActions,requireAttempt,decode} from '../requests.ts';
 import {discussionModelActions} from '../model-actions.ts';
 import {requireDiscussion} from '../actions.ts';
 import {emptyReplyKnowledge,type ReplyKnowledgeReader} from './contracts.ts';
@@ -39,6 +39,11 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   requireReplyCoverage(tx,i.ownerId,i.contactId,details.coverage_warning!==null);
   freeze.execute(tx,i,lease);return freezeReplyInput(tx,i,reader);
  }),
+ action('configuration','read',(tx,i)=>{
+  const d=requireDiscussion(tx,i);if(!d.current_runtime_id)return null;
+  const row=tx.get("SELECT r.id,c.id context_id,c.skill_run_json FROM runtime_copy x JOIN reply_request r ON r.owner_id=x.owner_id AND r.id=x.committed_request_id JOIN reply_context c ON c.owner_id=r.owner_id AND c.request_id=r.id WHERE x.owner_id=? AND x.id=? AND r.kind='reply' AND r.state='committed' AND c.state='active'",[i.ownerId,d.current_runtime_id]);
+  if(!row)return null;requireReplyInput(tx,i,String(row.context_id),reader);return {requestId:String(row.id),revision:decode(String(row.skill_run_json))};
+ }),
  action('assertInput','read',(tx,i)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);return true;}),
  action('commitCandidates','write',(tx,i,lease)=>{
   requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);parseReplyOutput(i.text);
@@ -50,12 +55,12 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
  }),
  action('view','read',(tx,i)=>{
   requireDiscussion(tx,i);
-  const requests=tx.all(`SELECT r.id,d.coverage_warning FROM reply_request r JOIN reply_candidate_request d ON d.owner_id=r.owner_id AND d.request_id=r.id WHERE r.owner_id=? AND r.contact_id=? AND r.discussion_id=? AND r.state='committed' ORDER BY r.rowid`,[i.ownerId,i.contactId,i.discussionId]);
+  const requests=tx.all(`SELECT r.id,r.state,d.coverage_warning FROM reply_request r JOIN reply_candidate_request d ON d.owner_id=r.owner_id AND d.request_id=r.id WHERE r.owner_id=? AND r.contact_id=? AND r.discussion_id=? ORDER BY r.rowid`,[i.ownerId,i.contactId,i.discussionId]);
   return requests.map(r=>{
    const candidates=tx.all('SELECT id FROM reply_candidate WHERE owner_id=? AND request_id=? ORDER BY candidate_no',[i.ownerId,r.id]).map(k=>{
     try{const v=requireCandidate(tx,{...i,candidateId:String(k.id)},reader);return versionView(tx,i.ownerId,String(k.id),v.version.version_no as bigint);}catch{return null;}
    }).filter(Boolean);
-   return {...i,requestId:r.id,coverageWarning:r.coverage_warning,candidates,selections:candidates.length?tx.all('SELECT * FROM reply_selection WHERE owner_id=? AND request_id=? ORDER BY selection_no',[i.ownerId,r.id]).map(s=>({id:s.id,candidateId:s.candidate_id,versionNo:Number(s.version_no),selectionNo:Number(s.selection_no)})):[]};
+   return {...i,requestId:r.id,generationState:tx.get("SELECT 1 FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? AND c.state='unknown'",[i.ownerId,r.id])?'unknown':r.state==='cancelled'?'failed':r.state,coverageWarning:r.coverage_warning,candidates,sourceState:candidates.length?'available':'unavailable',loadedSkills:candidates.length?tx.all("SELECT e.payload FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE e.owner_id=? AND a.request_id=? AND e.kind='skill_input' ORDER BY e.event_no",[i.ownerId,r.id]).map(e=>{const p=JSON.parse(String(e.payload));return {packageId:p.loaded.packageId,revisionNo:Number(p.loaded.revisionNo?.$integer??p.loaded.revisionNo),relativePath:p.relativePath,text:p.text};}):[],selections:candidates.length?tx.all('SELECT * FROM reply_selection WHERE owner_id=? AND request_id=? ORDER BY selection_no',[i.ownerId,r.id]).map(s=>({id:s.id,candidateId:s.candidate_id,versionNo:Number(s.version_no),selectionNo:Number(s.selection_no)})):[]};
   });
  }),
  action('version','read',(tx,i)=>{const v=requireCandidate(tx,i,reader);return versionView(tx,i.ownerId,i.candidateId,v.version.version_no as bigint);}),

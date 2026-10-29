@@ -36,8 +36,8 @@ export async function fixture(t,options={}){
   await rm(root,{recursive:true,force:true});
  })();
  t.after(close);
- // 不注入测试registry，候选与删除合同始终由正式注册表安装。
- storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'});
+ // 默认正式注册表；知识消费者测试可显式替换外部发布者边界。
+ storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',...(options.registryModule?{registryModule:options.registryModule}:{})});
  const metadata={
   account:async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-v1'}),
   sessions:async()=>['a','b'].map((externalKey,index)=>({externalKey,displayName:index?'合成乙':'合成甲',kind:'private',identityAssurance:'verified'})),

@@ -22,6 +22,14 @@ interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;dis
 export class SqliteReplyTurns {
  private readonly options:Options;private stopping=false;private readonly pending=new Set<Promise<unknown>>();private readonly controllers=new Set<AbortController>();
  constructor(options:Options){this.options=options;}
+ private digest(requestId:string,revision:SkillRunRevision){return createHash('sha256').update(encode({format:1,systemPrompt,model:this.options.model,revision,requestId})).digest('hex');}
+ async configurationFor(contactId:string,discussionId:string):Promise<string|null>{
+  const o=this.options,scope={ownerId:o.service.ownerId,contactId,discussionId};
+  const read=()=>o.storage.execute<{requestId:string;revision:SkillRunRevision}|null>('reply.configuration',scope);
+  const current=await read();if(!current)return null;
+  for(const anchor of current.revision.eligible)await o.library?.assertAnchor(anchor);
+  const checked=await read();return checked?this.digest(checked.requestId,checked.revision):null;
+ }
  generate(input:ReplyGenerationInput){
   if(this.stopping)return Promise.reject(new StorageFailure('reply_runtime_closed'));
   const controller=new AbortController();this.controllers.add(controller);
@@ -44,12 +52,12 @@ export class SqliteReplyTurns {
    const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?eligible.map(skillAnchor):[]};
    const view=await o.discussions.view(input.contactId,attempt.discussionId),entries=view.entries.filter((e:any)=>e.content_state==='available');
    const history=await o.storage.execute<any>('history.read',{ownerId,contactId:input.contactId,limit:20});
-   const messageIds=input.contextMessageIds??history.messages.map((m:any)=>m.id);
+   const messageIds=input.contextMessageIds??history.messages.filter((m:any)=>m.kind==='text').map((m:any)=>m.id);
    const messages=await o.storage.execute<any[]>('discussion.messages',{...attempt,messageIds});
    const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items:[...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))],at:Date.now()});
    const prompt='本次明确请求：'+input.text+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
    // 每次候选任务重建独立副本；旧候选只有显式选择才进入新输入。
-   const configurationDigest=createHash('sha256').update(encode({format:1,systemPrompt,model:o.model,revision,requestId:attempt.requestId})).digest('hex');
+   const configurationDigest=this.digest(attempt.requestId,revision);
    await o.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:o.model.provider,requestKey:callId,inputSeal:createHash('sha256').update(prompt).digest('hex'),model:o.model.model,configurationId:configurationDigest,inputCap:o.model.budgetProfile.context_window_tokens-o.model.maxTokens-o.model.budgetProfile.safety_margin_tokens,outputCap:o.model.maxTokens});
    const base=new SqliteDiscussionSkillProtection({storage:o.storage,attempt,contextId,callId,authorize:()=>o.authorize(input.contactId)});
    const assertInput=()=>o.storage.execute('reply.assertInput',{...attempt,contextId});
