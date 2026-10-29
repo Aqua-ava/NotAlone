@@ -1,15 +1,17 @@
-import {useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import type {SkillLibraryBridge,SkillLibraryItem,SkillLibrarySnapshot,SqliteSkillLibrarySnapshot} from '../shared/skill-library-bridge';
 const enabledLabels={enabled:'已启用',disabled:'已停用',unknown:'待核验启停'};
 const verificationLabels={verified:'目录已核验',pending:'待核验',missing:'目录或文件缺失',conflict:'目录身份冲突',invalid:'文件校验失败'};
-export function SqliteSkillLibraryPage({initial,bridge,onModeChange}:{initial:SqliteSkillLibrarySnapshot;bridge:SkillLibraryBridge;onModeChange:(value:SkillLibrarySnapshot)=>void}) {
+export function SqliteSkillLibraryPage({initial,bridge,onModeChange,onUnavailable}:{initial:SqliteSkillLibrarySnapshot;bridge:SkillLibraryBridge;onModeChange:(value:SkillLibrarySnapshot)=>void;onUnavailable:()=>void}) {
  const [view,setView]=useState(initial),[busy,setBusy]=useState(false),[error,setError]=useState(''),[stale,setStale]=useState(false);
  const [directoryName,setDirectoryName]=useState(''),[confirmed,setConfirmed]=useState(false);
+ const active=useRef(true);
+ useEffect(()=>{active.current=true;return()=>{active.current=false;};},[]);
  async function perform(operation:()=>Promise<SkillLibrarySnapshot>){
   if(busy)return;setBusy(true);setError('');
-  try {const next=await operation();if(next.mode!=='sqlite'){onModeChange(next);return;}setView(next);setStale(false);setConfirmed(false);}
-  catch(reason){setStale(true);setError(reason instanceof Error?reason.message:'Skill 状态暂不可用，请刷新后再操作。');}
-  finally{setBusy(false);}
+  try {const next=await operation();if(!active.current)return;if(next.mode!=='sqlite'){onModeChange(next);return;}setView(next);setStale(false);setConfirmed(false);}
+  catch(reason){if(!active.current)return;setStale(true);setError(reason instanceof Error?reason.message:'Skill 状态暂不可用，请刷新后再操作。');onUnavailable();}
+  finally{if(active.current)setBusy(false);}
  }
  const command=(item:SkillLibraryItem)=>({packageId:item.packageId,expectedHeadRevision:item.headRevision,connectionGeneration:view.connectionGeneration,confirmed:true as const});
  return <section aria-label="Skill管理">
