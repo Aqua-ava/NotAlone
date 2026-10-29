@@ -1126,7 +1126,10 @@ export class ReplySession {
       this.publish({ messages: { phase: 'ready', items, nextCursor } });
       if (noticeRefresh) this.messageNotices.confirmRefresh(noticeRefresh);
     } catch {
-      if (current()) this.publish({ messages: { ...this.state.messages, phase: 'failed' } });
+      if (current()) {
+        this.invalidateInput();
+        this.publish({ messages: { phase: 'failed', items: [], nextCursor: null }, targetMessageId: null });
+      }
     } finally { if (this.messagePending === pending) this.messagePending = undefined; }
   }
   private acceptAutomaticMessagePage(page: Awaited<ReturnType<typeof readReplyMessages>>): ReplySessionState['messages'] | undefined {
