@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {registry as base} from '../../../src/storage/sqlite/registry.ts';
+import {registry as base} from '../sqlite/discussion-registry.mjs';
 function reply(tx,owner,contact,message,record){
  const id=randomUUID(),request=randomUUID(),entry=randomUUID(),attempt=randomUUID(),context=randomUUID(),operation=randomUUID(),call=randomUUID(),event=randomUUID();
  const grant=tx.get('SELECT * FROM read_grant WHERE owner_id=? AND contact_id=? AND revoked_at IS NULL',[owner,contact]);

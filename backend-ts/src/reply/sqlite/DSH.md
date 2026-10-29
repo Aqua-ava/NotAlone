@@ -24,3 +24,11 @@
 ## 本票验证
 
 `node --test test/sqlite-discussion-dsh.test.mjs` 使用真实官方 Loader、Session、JSONL、AgentLoop 与临时受管目录，全部数据合成；未连接微信、未调用模型。覆盖非空事件重开、真实 Agent create/dispose/resume、close 期间末写、根目录身份替换、真实 scope finalizer 故障。上述测试不是正常产品 profile、真实模型质量或桌面验收的替代。
+
+## 单次讨论执行壳
+
+`generation.ts` 的 `runSingleDiscussionTurn` 接受宿主已准备的请求／调用身份、正常模型配置及 `installModelProvider` 实例，进入 `SqliteDiscussionRuntime.run`。它只允许一个实际模型 stream，禁止 Tool 与自动重试；以显式 SessionId 过滤 `llm/stream`，发送前通过具名 `runtime.inspect` 和 `SkillRunProtection` 复验，在 `beforeDispatch` 等待 `discussion.dispatchCall` 保存实际完整 DSH 请求。此载荷去掉 AbortSignal，不含认证头，不冒充逐字 HTTP 请求实体。
+
+选定 Skill 经真实 `SqliteSkillRun.mount` 及官方 `SkillRegistry.snapshot/get` 加载，必须显式传入 `scopeOf(agentCtx)`；省略 scope 的官方读取只看全局层。没有选定时不把目录或选择事实冒充正文载入。模型结束后等待 `whenIdle/dispose`，从持久日志读取本次新增的非 interrupted `assistant/message`，核对 provider、model 和 text 后才提交 `discussion.commitAssistant`。失败仅走 `discussion.failCall`，可能已授权的尝试不猜测为未发送；许可在真实 SDK 收尾后释放。
+
+`sqlite-discussion-generation.test.mjs` 使用真实官方 DSH、正常业务 ModelProvider、环回 HTTP/SSE 和持久文件；SQLite 讨论动作与 RuntimeManager 通过明确业务端口替身隔离，未声称完成实际 SQLite 讨论接线。Skill 用例另复用真实 SQLite Skill 库、原目录和官方 provider，保护端口为显式合同替身。覆盖正常发言、已完成会话 resume、HTTP 失败不重试、流中取消、发送前及结果返回后来源失效，以及选择／实际载入分开记录。全部资料合成，没有外部模型或微信调用。

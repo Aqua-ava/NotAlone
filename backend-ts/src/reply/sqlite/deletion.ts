@@ -146,7 +146,7 @@ function requireModelRequestReleased(tx:StorageTransaction,ownerId:string,reques
   ||tx.get('SELECT 1 FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=?',[ownerId,requestId])
   ||tx.get('SELECT 1 FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE a.owner_id=? AND a.request_id=?',[ownerId,requestId]))fail('discussion_model_cleanup_pending');
 }
-export const discussionDeletionRequiredDomains=['discussion'] as const;
+export const discussionDeletionRequiredDomains=['discussion_calls','discussion'] as const;
 /** 注册次序：07模型/追踪域→本域→identity→skill_metadata。文件I/O始终由05在事务外执行。 */
 export const discussionDeletionDomain:DeletionDomain={
  id:'discussion',rowKinds,
