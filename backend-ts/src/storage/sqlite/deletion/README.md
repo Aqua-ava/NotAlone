@@ -31,7 +31,7 @@
 
 宿主创建一个共享`ActiveHolders`和`ManagedFiles(userData)`，传入`DeletionService`。`plan/status/advance`是本票业务入口；后续认证HTTP接线调用此服务，不能直接暴露内部claim/clear/verify/compact动作。
 
-`http.ts`导出生产`SqliteDeletionHttp(service,ownerId).handle(req,res):Promise<boolean>`，未匹配时返回false。必须置于02共用的唯一Bearer/Origin认证后；无需新后端。沿用`DELETE /api/contacts/:contact/sources/:source`（空正文）、讨论删除（confirmed）、联系人删除（confirmed及confirm_contact_id）、账户删除（confirmed及confirm_scope=account）、`GET /api/deletions[/:id]`、`POST /api/deletions/:id/retry`和来源`GET /api/tasks/status?contact_id=...&task_id=...`。请求不能提供owner、目标SQL或内部复核；公开状态只返回最小进度，完成后不返回目标身份。source删除回task_id，状态符合现有来源控制器；后续来源目录仍由实际写者提供。没有新的媒体泛化HTTP范围，媒体16继续自己的明确操作。隔离HTTP测试复用生产适配器与真实临时SQLite，外围仅替换为固定合成认证；未据此认证正式宿主聚合或真实App。
+`http.ts`导出生产`SqliteDeletionHttp(service,ownerId).handle(req,res):Promise<boolean>`，未匹配时返回false。必须置于02共用的唯一Bearer/Origin认证后；无需新后端。沿用`DELETE /api/contacts/:contact/sources/:source`（空正文）、讨论删除（confirmed）、联系人删除（confirmed及confirm_contact_id）、账户删除（confirmed及confirm_scope=account）、`GET /api/deletions[/:id]`、`POST /api/deletions/:id/retry`和来源`GET /api/tasks/status?contact_id=...&task_id=...`。请求不能提供owner、目标SQL或内部复核；公开状态只返回最小进度，完成后不返回目标身份。source删除回task_id，状态符合现有来源控制器；后续来源目录仍由实际写者提供。没有新的媒体泛化HTTP范围，媒体16继续自己的明确操作。隔离HTTP测试复用生产适配器与真实临时SQLite，外围仅替换为固定合成认证；正式开发宿主与实际App另以隔离合成账号完成联系人/账号删除和刷新验收，不将它扩为尚未安装写者的验收。
 
 HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供，新独立删除使用新key。账户scope不能永久充当请求身份，否则新增资料后会重放旧完成结果。旧来源/讨论/联系人空key调用只在其内部ID删除后永久失效、不复用的条件下按固定目标去重；新业务调用应传明确请求key。来源回执包含实际`status`，普通非删除task_id返回false交给既有处理器。
 
@@ -44,6 +44,8 @@ HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供�
 `ManagedFiles`只允许`managed/runtime-copies`、`managed/media`、`managed/cache`三个固定区。`prepareArea`只建空私有区；`capture(area,locator,kind)`取得实际dev/ino/birthtimeNs/uid与每级父目录身份。locator是受限相对定位，不能是绝对路径、点段或符号链接。文件必须为当前用户拥有、私有权限且nlink=1；目录目标只用rmdir删除空目录。数据库、Skill原目录、模型密钥、微信原件和用户外部原文件不属于这些可删区。
 
 写者先登记创建意图，以排他方式创建空暂存对象，保存真实文件身份后才能写正文/交给SDK。尚不能证明归属的preparing副本必须由领域verify保持blocked；不能伪造inode、扫描猜测目录或把未知文件当已清理。DSH整副本须由11枚举已登记的文件与目录目标，不能只删猜测的一个JSONL。删除器在受控宿主命名空间内串行复验身份并删除，不能对抗同一系统用户恶意并发替换路径；所有合作写者必须经过代次与持有者门禁。
+
+桌面 Skill 页读取或操作失败时撤下父子快照，显式重新读取后才展示资料；卸载后的迟到回调不能影响新连接快照。账号删除后的联系人刷新同样清空旧目录。这里没有新增账号重置或首次使用流程。
 
 ## 完成、重试与存储面
 
