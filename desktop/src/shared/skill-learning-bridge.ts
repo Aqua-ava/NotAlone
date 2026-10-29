@@ -1,4 +1,5 @@
 import type { ContactSelection } from './contact-session-bridge';
+import type { SkillLibraryBridge } from './skill-library-bridge';
 
 export interface SkillDraft {
   draft_id: string; revision: number; status: 'pending' | 'published' | 'rejected'; logical_skill_id: string;
@@ -69,7 +70,7 @@ export interface SkillLearningState {
   history: SkillHistoryState | null;
   policies: SkillPolicyState | null;
 }
-export interface SkillLearningBridge {
+export interface SkillLearningBridge extends SkillLibraryBridge {
   getState(): Promise<SkillLearningState>;
   refresh(selection: ContactSelection): Promise<void>;
   poll(selection: ContactSelection): Promise<void>;

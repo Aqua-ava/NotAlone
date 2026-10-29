@@ -1,0 +1,43 @@
+import {useState} from 'react';
+import type {SkillLibraryBridge,SkillLibraryItem,SkillLibrarySnapshot,SqliteSkillLibrarySnapshot} from '../shared/skill-library-bridge';
+const enabledLabels={enabled:'已启用',disabled:'已停用',unknown:'待核验启停'};
+const verificationLabels={verified:'目录已核验',pending:'待核验',missing:'目录或文件缺失',conflict:'目录身份冲突',invalid:'文件校验失败'};
+export function SqliteSkillLibraryPage({initial,bridge,onModeChange}:{initial:SqliteSkillLibrarySnapshot;bridge:SkillLibraryBridge;onModeChange:(value:SkillLibrarySnapshot)=>void}) {
+ const [view,setView]=useState(initial),[busy,setBusy]=useState(false),[error,setError]=useState(''),[stale,setStale]=useState(false);
+ const [directoryName,setDirectoryName]=useState(''),[confirmed,setConfirmed]=useState(false);
+ async function perform(operation:()=>Promise<SkillLibrarySnapshot>){
+  if(busy)return;setBusy(true);setError('');
+  try {const next=await operation();if(next.mode!=='sqlite'){onModeChange(next);return;}setView(next);setStale(false);setConfirmed(false);}
+  catch(reason){setStale(true);setError(reason instanceof Error?reason.message:'Skill 状态暂不可用，请刷新后再操作。');}
+  finally{setBusy(false);}
+ }
+ const command=(item:SkillLibraryItem)=>({packageId:item.packageId,expectedHeadRevision:item.headRevision,connectionGeneration:view.connectionGeneration,confirmed:true as const});
+ return <section aria-label="Skill管理">
+  <h2>已有 Skill</h2>
+  <p>启停决定与文件核验分别显示。这里的状态不代表本次回复已加载。</p>
+  <button className="button" disabled={busy} onClick={()=>void perform(()=>bridge.readLibrary())}>{busy?'正在核对…':'刷新 Skill 状态'}</button>
+  {error&&<p role="alert">{error}</p>}
+  {!view.skills.length&&<p role="status">还没有已关联的 Skill，原目录会保留。</p>}
+  {view.skills.map(item=><article className="memory-card" key={item.packageId} aria-label={`Skill ${item.name}`}>
+   <h3>{item.name}</h3><p>{item.description}</p>
+   <p role="status">{enabledLabels[item.enabledState]} · {verificationLabels[item.verificationState]}</p>
+   <p>{item.currentRevisionNo?`当前修订 ${item.currentRevisionNo}`:'暂无可用修订'}</p>
+   {item.verificationReason==='source_qualification_changed'&&<p>来源资格待核验，不能仅凭相同文件恢复使用。</p>}
+   <div className="button-row">
+    <button className="button" disabled={busy||stale||item.verificationReason==='source_qualification_changed'} onClick={()=>void perform(()=>bridge.verifyLibrary(command(item)))}>重新核验</button>
+    {item.enabledState!=='enabled'&&<button className="button" disabled={busy||stale} onClick={()=>void perform(()=>bridge.changeLibraryEnabled({...command(item),enabled:true}))}>确认启用</button>}
+    {item.enabledState!=='disabled'&&<button className="button" disabled={busy||stale} onClick={()=>void perform(()=>bridge.changeLibraryEnabled({...command(item),enabled:false}))}>{item.enabledState==='unknown'?'确认停用':'停用'}</button>}
+   </div>
+   <details><summary>查看修订锚点</summary>
+    {item.revisions.map(revision=><div key={revision.revisionNo}><p>修订 {revision.revisionNo} · {revision.availability==='current'?'当前可核验':'历史正文不可据此读取'}</p>
+     <p className="skill-revision-digest">清单摘要：{revision.manifestDigest}</p><p className="skill-revision-digest">内容摘要：{revision.contentDigest}</p></div>)}
+   </details>
+  </article>)}
+  <form className="skill-library-form" aria-label="关联 Skill 目录" onSubmit={event=>{event.preventDefault();if(confirmed&&directoryName&&!busy&&!stale)void perform(()=>bridge.discoverLibrary({directoryName,connectionGeneration:view.connectionGeneration,confirmed:true}));}}>
+   <h3>关联已有目录</h3><p>填写已配置包父目录内的一个目录名。首次关联只登记目录与修订，启用需要明确选择。</p>
+   <label>包目录名称<input value={directoryName} onChange={event=>{setDirectoryName(event.target.value);setConfirmed(false);}} placeholder="例如 gentle-response" maxLength={64} disabled={busy}/></label>
+   <label><input type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)} disabled={busy}/>确认关联这个 Skill 目录</label>
+   <button className="button" disabled={busy||stale||!confirmed||!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(directoryName)} type="submit">核验并关联目录</button>
+  </form>
+ </section>;
+}

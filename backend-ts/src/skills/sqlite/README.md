@@ -17,7 +17,7 @@
 
 ## 正常业务 HTTP 适配
 
-`SqliteSkillHttp(library, authorize).handle(req,res)` 由共用宿主装配，复用原 `/api/skills` 路径；authorize必须注入宿主唯一 Bearer/Origin 认证，owner和目录根不接受请求传入。GET返回含中文state_label的最小状态投影，不含物理路径。POST `/api/skills/discover` 明确确认配置根内的目录名；`/:id/verify|enable|disable` 以十进制expected_head_revision做CAS，均要求confirmed=true。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。适配器已通过正式profile与隔离HTTP验证，共享宿主/现有界面接线另记真实验收。
+`SqliteSkillHttp(library, authorize).handle(req,res)` 由共用宿主装配，复用原 `/api/skills` 路径；authorize必须注入宿主唯一 Bearer/Origin 认证，owner和目录根不接受请求传入。GET返回含中文state_label的最小状态投影，不含物理路径。POST `/api/skills/discover` 明确确认配置根内的目录名；`/:id/verify|enable|disable` 以十进制expected_head_revision做CAS，均要求confirmed=true。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。适配器已通过正式profile与隔离HTTP验证；现有SkillLearningPage已提供最小DTO分支和manager具名桥接，以精确CAS管理中文状态。共享宿主和实际App反馈另记真实验收。
 
 ## 官方加载与实际输入
 

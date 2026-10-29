@@ -58,3 +58,10 @@ Blocked by: [01 SQLite 基础与生命周期](01-sqlite-runtime-lifecycle.md)
 - 独立Standards审查发现并修复夹具重复领域假设及原始IO错误路径泄漏；Spec审查发现并修复异步材料核验后的资格复验竞态，改为同短事务复验scope与冻结Skill集合，并补正式profile迟到结果；正常入口缺口如上保留未完成。
 - 已运行backend最小TDD及相关回归（详见最终回报），类型检查通过。官方CLI+共用host.patch隔离profile验证状态、真实provider读取、内容变化、目录冲突／缺失、迟到结果和权限拒绝，未发模型网络请求。
 - `desktop dev:status`为stopped，未启动／重启／关闭桌面实例，未操作微信或读取ran；不以合成资料声称真实渠道／App验收。未改公共registry、默认PG、模型配置、用户原目录或其他票；未push／PR。
+
+2026-10-29 桌面最小适配补充（仍待实际App验收）：
+
+- 现有SkillLearningPage先通过具名桥接读取业务模式，SQLite最小分支不挂载旧学习／审核／回滚页；可在无联系人时查看本人包状态。
+- 新SkillLibraryController严格校验最小DTO、大整数修订及连接代次，manager具名通道只构造/api/skills白名单；目录名与明确确认、核验和启停CAS均由页面产生，不能传owner、任意路径或SQL。
+- SqliteSkillLibraryPage显示中文启停／待核验／缺失／冲突及历史不可读锚点；显式目录发现、核验、启停通过无头Chrome交互检查，旧操作无请求。
+- `desktop`中新增sqlite-library与sqlite-library-view共3项通过；与view/tabs/controller相关27项首跑26项通过，通道白名单更新后唯一失败用例单独复跑通过。desktop类型检查通过。未以无头页面代替实际App或共用宿主验收。

@@ -55,6 +55,10 @@ function undoPolicySelection(args: unknown[]) {
 }
 export function installSkillLearningBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession) {
   const controller = new SkillLearningController(backend, contacts);
+  commands.handle('skill-library:read', (...args) => { noArguments(args); return controller.readLibrary(); }, 'manager');
+  commands.handle('skill-library:discover', (...args) => { if(args.length!==1)throw new Error('Skill 操作无效。'); return controller.discoverLibrary(args[0]); }, 'manager');
+  commands.handle('skill-library:verify', (...args) => { if(args.length!==1)throw new Error('Skill 操作无效。'); return controller.verifyLibrary(args[0]); }, 'manager');
+  commands.handle('skill-library:enabled', (...args) => { if(args.length!==1)throw new Error('Skill 操作无效。'); return controller.changeLibraryEnabled(args[0]); }, 'manager');
   controller.onStateChanged((state) => commands.publish('skill-learning:state-changed', state, 'manager'));
   commands.handle('skill-learning:get-state', (...args) => { noArguments(args); return controller.getState(); }, 'manager');
   commands.handle('skill-learning:refresh', (...args) => controller.refresh(selection(args)), 'manager');
