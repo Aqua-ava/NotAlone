@@ -1,6 +1,6 @@
 # SQLite Skill 最小关联（实施14）
 
-仅接回官方 DSH Skill provider、包／修订身份和业务查询；不创建学习、审核发布或方法级策略表。原 Skill 目录始终只读。默认 PG 宿主及 UI 尚未切换；生产装配由实施20集成，05/11/12真实链另行组合验收。
+仅接回官方 DSH Skill provider、包／修订身份和业务查询；不创建学习、审核发布或方法级策略表。原 Skill 目录始终只读。默认 PG 宿主尚未切换；本票生产 HTTP 适配器等待共用 SQLite 认证入口串行接线及界面复核，未完成前任务保持 claimed；05/11/12真实链另行组合验收。
 
 ## 迁移与查询
 
@@ -14,6 +14,10 @@
 - `requireVerification(id, expectedHead)` 供来源资格失效时封禁，标为 pending、撤销当前指针和旧修订可用性，但保留启停和原目录。此状态不允许只凭相同字节 `verify` 恢复；真实来源恢复合同待05接入。
 
 每个修订保存清单 SHA-256、原始 SKILL.md 与全部资源的内容 SHA-256、source_kind=user_directory、核验时间及可用性。摘要不等于审核或用户授权。正文和资源不在两张业务表复制，也不创建文件历史库；旧修订 unavailable 即使后来字节相同也不恢复。重新核验建立新修订，历史正文只可从仍合法的实际调用载荷查回。
+
+## 正常业务 HTTP 适配
+
+`SqliteSkillHttp(library, authorize).handle(req,res)` 由共用宿主装配，复用原 `/api/skills` 路径；authorize必须注入宿主唯一 Bearer/Origin 认证，owner和目录根不接受请求传入。GET返回含中文state_label的最小状态投影，不含物理路径。POST `/api/skills/discover` 明确确认配置根内的目录名；`/:id/verify|enable|disable` 以十进制expected_head_revision做CAS，均要求confirmed=true。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。适配器已通过正式profile与隔离HTTP验证，共享宿主/现有界面接线另记真实验收。
 
 ## 官方加载与实际输入
 

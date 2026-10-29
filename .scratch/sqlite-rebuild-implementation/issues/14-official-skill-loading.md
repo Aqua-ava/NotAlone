@@ -45,3 +45,16 @@ Blocked by: [01 SQLite 基础与生命周期](01-sqlite-runtime-lifecycle.md)
 - 后续桌面开发只用 `pnpm run dev`，先以 `dev:status` 核验并复用监督器；不得自行打包、运行打包版、推送、创建远端分支或 Pull Request。
 - 测试使用隔离合成资料；真实微信读取范围、模型凭据或文本出站授权未核验时不得放行。合成验证不代表真实渠道、模型质量或产品整体已验收。
 - 通用范围、执行和证据口径见[本轮任务索引](../planning.md)。本票不修改或关闭父规格和旧研究任务。
+
+## Answer
+
+2026-10-29：独立实现与隔离回归已完成，State保持claimed、Goal active；正常共用宿主与现有界面接线／验收尚待总指挥的串行集成窗口，未以测试HTTP冒充完整业务接回。
+
+- 实施代码：`backend-ts/src/skills/sqlite/`，仅package/revision两张业务表、独立启停和核验、目录身份与不可变清单／内容锚点。原目录只读，空库不孤儿清理；未知不自动启停。
+- 官方DSH沿公开scoped registerProvider，版本声明／锁／安装均0.2.1-rc.2、Cordis4.0.5；固定源码687f282e与安装lib/types及lib/index已核对所用合同，全制品可复现构建对应未验证。证据位置见本模块README。
+- `SqliteSkillHttp`提供正常业务/api/skills最小管理适配，必需宿主认证，中文状态反馈；当前尚未接共用宿主，旧删除／学习／回滚不可用。
+- 选择与实际输入分开登记；11/12需提供`SkillRunProtection`并在追踪写事务内调用`requireSkillRevision`，同时复验02联系人及05来源／删除资格。来源资格改变则pending，不能凭相同文件洗回可用。
+- 05/11/12尚未集成，测试使用明确fixture_scope／fixture_input合同替身，验证输入登记、删除擦除、跨联系人隔离、迟到写入和scope释放；不认证真实删除／运行副本链路或真实模型输入。
+- 独立Standards审查发现并修复夹具重复领域假设及原始IO错误路径泄漏；Spec审查发现并修复异步材料核验后的资格复验竞态，补正式profile迟到结果；正常入口缺口如上保留未完成。
+- 已运行backend最小TDD及相关回归（详见最终回报），类型检查通过。官方CLI+共用host.patch隔离profile验证状态、真实provider读取、内容变化、目录冲突／缺失、迟到结果和权限拒绝，未发模型网络请求。
+- `desktop dev:status`为stopped，未启动／重启／关闭桌面实例，未操作微信或读取ran；不以合成资料声称真实渠道／App验收。未改公共registry、默认PG、模型配置、用户原目录或其他票；未push／PR。

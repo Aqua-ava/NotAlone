@@ -57,6 +57,7 @@ export class SqliteSkillRun {
       await abortable(this.protection.assertCurrent(this.scope,combined),combined);
       if(catalogRevision(await this.library.list())!==this.revision)throw new SqliteSkillError('skill_run_invalidated');
       for(const item of this.eligible())await this.library.assertAnchor(skillAnchor(item));
+      await abortable(this.protection.assertCurrent(this.scope,combined),combined);
       combined.throwIfAborted();
     }catch(error){this.close();throw error;}
   }

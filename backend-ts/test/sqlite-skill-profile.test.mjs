@@ -26,8 +26,11 @@ test('正式profile隔离回归：Skill最小管理与官方加载、原目录�
   child.once('exit',()=>{clearTimeout(timer);reject(new Error('官方profile提前退出：'+output.slice(-2500)));});
   child.stdout.on('data',b=>{output+=b;const match=output.match(/SQLITE_SKILL_READY (http:\/\/127\.0\.0\.1:\d+)/);if(match){clearTimeout(timer);resolveReady(match[1]);}});
  });
- const request=async(path,input)=>{const response=await fetch(base+path,{method:input?'POST':'GET',headers:{'content-type':'application/json'},body:input?JSON.stringify(input):undefined});return {status:response.status,body:await response.json()};};
+ const request=async(path,input)=>{const response=await fetch(base+path,{method:input?'POST':'GET',headers:{'content-type':'application/json',authorization:'Bearer profile-only'},body:input?JSON.stringify(input):undefined});return {status:response.status,body:await response.json()};};
  assert.deepEqual((await request('/state')).body,[]);
+ assert.deepEqual((await request('/api/skills')).body.skills,[]);
+ const discovered=await request('/api/skills/discover',{directory_name:'gentle',confirmed:true});
+ assert.equal(discovered.body.skill.enabled_state,'unknown');assert.match(discovered.body.skill.state_label,/待核验启停/);
  let item=(await request('/discover',{name:'gentle'})).body;
  assert.equal(item.enabledState,'unknown');assert.equal((await request('/load',{id:item.id})).status,409);
  item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'enabled'})).body;
@@ -35,6 +38,9 @@ test('正式profile隔离回归：Skill最小管理与官方加载、原目录�
  assert.equal(loaded.body.input.text,loaded.body.content);assert.equal(loaded.body.input.package_id,item.id);assert.equal(loaded.body.hostCatalog,0);
  assert.equal((await request('/load',{id:item.id,contactId:'other'})).status,409);
  assert.equal((await request('/discover',{name:'../gentle'})).status,409);
+ assert.equal((await request('/late-load',{id:item.id})).body.code,'skill_run_invalidated');
+ item=(await request('/state')).body[0];assert.equal(item.enabledState,'disabled');
+ item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'enabled'})).body;
  const stale=item.headRevision;item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'disabled'})).body;
  assert.equal((await request('/verify',{id:item.id,head:stale})).status,409);assert.equal((await request('/load',{id:item.id})).status,409);
  await writeFile(join(root,'gentle/SKILL.md'),bytes+'新的合成步骤。\n');

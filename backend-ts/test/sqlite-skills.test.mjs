@@ -172,3 +172,37 @@ test('重开沿用已知启停及未知状态，缺业务引用不触发目录�
  assert.equal(await readFile(join(root,'gentle','SKILL.md'),'utf8'),bytes);
  await assert.rejects(openSqliteSkillRun(same,{contactId:'contact-a',callId:'no-protection'},null),{code:'skill_protection_required'});
 });
+
+test('目录读取失败只返回固定错误码，不泄露物理路径',async t=>{
+ const {library,root}=await fixture(t);const item=await library.discover('gentle');await rm(join(root,'gentle'),{recursive:true});
+ await assert.rejects(library.verify(item.id,item.headRevision),error=>{
+  assert.equal(error.code,'skill_directory_unavailable');assert.equal(error.path,undefined);assert.doesNotMatch(error.message,/originals|SKILL\.md|ENOENT/);return true;
+ });
+});
+
+test('材料核验期间来源撤销时返回前再次核资格，不能放行物理发送',async t=>{
+ const {library,storage,scope}=await mounted(t);const port=trackedProtection(storage);let armed=false;
+ port.assertCurrent=async scope=>{await storage.execute('fixture.checkScope',scope);if(armed){armed=false;await storage.execute('fixture.revoke',scope);}};
+ const run=await openSqliteSkillRun(library,scope,port);armed=true;
+ await assert.rejects(run.validate(),{code:'fixture_scope_revoked'});
+});
+
+test('数据库拒绝缺启用来历的NULL分支及不可变锚点改写',async t=>{
+ const {library,storage}=await fixture(t);const item=await library.discover('gentle');
+ await assert.rejects(storage.execute('fixture.invalidEnabledOrigin',{ownerId:'owner-a',id:item.id}));
+ await assert.rejects(storage.execute('fixture.mutateAnchor',{ownerId:'owner-a',id:item.id}));
+ assert.equal((await library.get(item.id)).enabledState,'unknown');
+});
+
+test('仅正文成功后读取本修订辅助资源，真实资源载荷参与同一追踪',async t=>{
+ const {library,storage,item,scope,root,ctx,key,layer}=await mounted(t);
+ await mkdir(join(root,'gentle/references'));await writeFile(join(root,'gentle/references/guide.md'),'合成的补充说明。');
+ const current=await library.verify(item.id,item.headRevision),anchor=skillAnchor(current);
+ const run=await openSqliteSkillRun(library,scope,trackedProtection(storage));run.mount(layer.ctx);
+ await assert.rejects(run.readResource(anchor,'references/guide.md'),{code:'skill_body_required'});
+ await ctx.skills.get('gentle',{scope:key});
+ assert.equal(await run.readResource(anchor,'references/guide.md'),'合成的补充说明。');
+ await assert.rejects(run.readResource(anchor,'../../SKILL.md'),{code:'skill_path_invalid'});
+ const rows=await storage.execute('fixture.inputs',scope);assert.equal(rows.length,2);assert.equal(rows[1].relative_path,'references/guide.md');assert.equal(rows[1].text,'合成的补充说明。');
+ run.close();
+});

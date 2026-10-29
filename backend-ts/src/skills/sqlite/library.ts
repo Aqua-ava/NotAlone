@@ -89,6 +89,14 @@ export class SqliteSkillLibrary {
     return this.storage.execute('skills.observe',input);
   }
   private readDirectory(directoryName: string): DirectorySnapshot {
+    try {return this.readDirectorySnapshot(directoryName);}
+    catch(error) {
+      if(error instanceof SqliteSkillError)throw error;
+      const code=(error as {code?:string})?.code;
+      throw new SqliteSkillError(code==='ENOENT'||code==='EACCES'||code==='file_unavailable'?'skill_directory_unavailable':'skill_package_invalid');
+    }
+  }
+  private readDirectorySnapshot(directoryName: string): DirectorySnapshot {
     validateName(directoryName);
     const path=join(this.root,directoryName);checkNoLinks(path);
     const identity=()=>{const info=lstatSync(path,{bigint:true});if(!info.isDirectory())throw new SqliteSkillError('skill_directory_conflict');return JSON.stringify([path,info.dev.toString(),info.ino.toString()]);};
@@ -102,7 +110,7 @@ export class SqliteSkillLibrary {
   }
   private async recordProblem(item: SkillPackageState,error: unknown): Promise<void> {
     const code=(error as {code?:string})?.code;
-    const verificationState: SkillVerificationState=code==='ENOENT'||code==='file_unavailable'?'missing':code==='skill_directory_conflict'?'conflict':code==='skill_content_changed'?'pending':'invalid';
+    const verificationState: SkillVerificationState=code==='skill_directory_unavailable'?'missing':code==='skill_directory_conflict'?'conflict':code==='skill_content_changed'?'pending':'invalid';
     if(item.verificationState===verificationState && item.currentRevisionNo===null)return;
     try {await this.storage.execute('skills.invalidate',{ownerId:this.ownerId,id:item.id,expectedHead:item.headRevision,verificationState,reason:verificationState==='missing'?'directory_unavailable':verificationState==='conflict'?'directory_identity_changed':verificationState==='pending'?'content_changed':'package_invalid'});}
     catch(error){if((error as {code?:string}).code!=='skill_revision_conflict')throw error;}

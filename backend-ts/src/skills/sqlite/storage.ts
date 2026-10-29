@@ -13,7 +13,7 @@ CREATE TABLE skill_package (
  verification_reason TEXT, current_revision_no INTEGER,
  head_revision INTEGER NOT NULL CHECK(head_revision>=1),
  PRIMARY KEY(owner_id,id), UNIQUE(owner_id,directory_identity), UNIQUE(owner_id,directory_name),
- CHECK((enabled_state='unknown' AND enabled_origin IS NULL) OR (enabled_state<>'unknown' AND enabled_origin='user_action')),
+ CHECK((enabled_state='unknown' AND enabled_origin IS NULL) OR (enabled_state<>'unknown' AND enabled_origin IS 'user_action')),
  FOREIGN KEY(owner_id,id,current_revision_no) REFERENCES skill_package_revision(owner_id,package_id,revision_no)
 ) STRICT;
 CREATE TABLE skill_package_revision (
