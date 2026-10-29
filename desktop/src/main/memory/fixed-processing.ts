@@ -42,6 +42,7 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
   if (!statuses.includes(String(value.status)) || (value.statusReason !== null && (typeof value.statusReason !== 'string' || !reasonCode.test(value.statusReason)))
     || !Array.isArray(value.actions) || value.actions.some(action => !controlActions.includes(String(action))) || new Set(value.actions).size !== value.actions.length) throw invalid();
   const controlVersion = count(value.controlVersion), pending = count(value.pending), revoked = count(value.revoked);
+  if (value.sharedFaultCode !== undefined && value.sharedFaultCode !== null && (typeof value.sharedFaultCode !== 'string' || !reasonCode.test(value.sharedFaultCode))) throw invalid();
   const callInput = row(value.calls);
   if (Object.keys(callInput).length !== callStates.length || callStates.some(state => !Object.hasOwn(callInput, state))) throw invalid();
   const calls = Object.fromEntries(callStates.map(state => [state, count(callInput[state])])) as unknown as FixedProcessingRun['calls'];
@@ -69,7 +70,7 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
   return { runId: id(value.runId), state: value.state as FixedProcessingRun['state'], total, succeeded, failed, unknown,
     stage: value.stage as FixedProcessingRun['stage'], laterStages: value.laterStages as FixedProcessingRun['laterStages'],
     status: value.status as FixedProcessingRun['status'],
-    statusReason: value.statusReason as string | null, actions: value.actions as FixedProcessingRun['actions'],
+    statusReason: value.statusReason as string | null, sharedFaultCode: (value.sharedFaultCode as string | null | undefined) ?? null, actions: value.actions as FixedProcessingRun['actions'],
     controlVersion, pending, revoked, calls, tasks, inputs, candidates };
 }
 function readTrace(raw: unknown): FixedProcessingTrace {

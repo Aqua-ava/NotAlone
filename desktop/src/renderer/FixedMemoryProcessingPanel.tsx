@@ -132,6 +132,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '', onRunUpdated
       {noNewMemory && <p>已处理，未产生新记忆</p>}
       {run.failed > 0 && <p>有 {run.failed} 条目标尚未通过提取核验。</p>}
       {run.unknown > 0 && <p>有 {run.unknown} 条目标调用结果未知，核实前不会重新发送。</p>}
+      {run.sharedFaultCode && <p>模型配置或服务不可用：{sharedReasons[run.sharedFaultCode] ?? '通用模型故障'}。修复后重新开始处理。</p>}
       {run.laterStages==='completed'?<p>主题整理与长期概览已完成。</p>:<p>主题整理、长期概览尚未全部完成。</p>}
       {run.candidates.length > 0 && <section aria-label="本轮已核验候选">
         <h3>来源已核验的候选</h3>

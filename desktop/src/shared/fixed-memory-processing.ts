@@ -22,7 +22,7 @@ export interface FixedProcessingRun {
   runId: string; state: FixedProcessingRunState; total: number; succeeded: number; failed: number; unknown: number;
   stage: 'extraction_verification' | 'document_scene' | 'document_profile' | 'completed'; laterStages: 'pending' | 'completed'; tasks: FixedProcessingTask[];
   /** 控制投影：固定轮次的统一状态、可执行动作、固定原因与计数；不含百分比。 */
-  status: FixedProcessingStatus; statusReason: string | null; actions: FixedProcessingControlAction[];
+  status: FixedProcessingStatus; statusReason: string | null; sharedFaultCode: string | null; actions: FixedProcessingControlAction[];
   controlVersion: number; pending: number; revoked: number; calls: FixedProcessingCallSummary;
   inputs: FixedProcessingInput[]; candidates: FixedProcessingCandidate[];
 }

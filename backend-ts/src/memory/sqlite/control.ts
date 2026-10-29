@@ -121,7 +121,7 @@ export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageR
  const activeTasks=taskRows.filter(task=>taskStates.get(String(task.id))!=='revoked');
  const failedTasks=activeTasks.filter(task=>taskStates.get(String(task.id))==='failed');
  const sharedFault=activeTasks.map(task=>task.error_code===null?null:String(task.error_code)).find(code=>isSharedFailure(code))??null;
- const callUnknown=callsSummary.unknown>0||callsSummary.sending>0;
+ const callUnknown=callsSummary.unknown>0;
  const classUnknown=classes.states.includes('unknown');
  const taskUnknown=[...taskStates.values()].includes('unknown');
  const anyUnknown=callUnknown||classUnknown;

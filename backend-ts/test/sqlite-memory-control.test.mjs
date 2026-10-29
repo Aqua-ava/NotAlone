@@ -137,6 +137,7 @@ test('单人失败只让其受阻，共用模型故障暂停整轮并显示固�
  await x.service.continue(run.runId,view.controlVersion,randomUUID());await x.service.waitForIdle(run.runId);
  view=await x.service.read(run.runId);
  assert.equal(view.status,'blocked');assert.equal(view.statusReason,'extraction_model_authentication_failed');
+ assert.equal(view.sharedFaultCode,'extraction_model_authentication_failed');
  assert.deepEqual(view.actions,['continue']);
  assert.equal(x.state.calls,callsBeforeShared,'共用故障没有新增模型调用');
 });
@@ -452,4 +453,19 @@ test('没有可处理固定目标时不伪装范围失效或完成',async t=>{
  assert.equal(view.status,'blocked');assert.equal(view.statusReason,'no_pending_inputs');
  assert.deepEqual(view.actions,[]);assert.notEqual(view.status,'completed');
  assert.equal(x.state.calls,0);
+});
+
+test('在途已发送不是未知回执：发送中保持处理中，可暂停且不显示受阻',async t=>{
+ const f=await fixtureWithMessages(t,{a:['我长期住在高雄。']});
+ const x=extractionFixture(f);t.after(async()=>{release?.();await x.service.close();});
+ const external=supplier();
+ let release;const gate=new Promise(resolve=>release=resolve);let entered;const enteredPromise=new Promise(resolve=>entered=resolve);
+ x.state.respond=async(request,input)=>{entered();await gate;return external.respond(request,input);};
+ const run=await x.service.start('control-sending');await enteredPromise;
+ const sending=await x.service.read(run.runId);
+ assert.equal(sending.calls.sending,1);
+ assert.equal(sending.status,'processing');assert.equal(sending.statusReason,null);
+ assert.deepEqual(sending.actions,['pause']);
+ release();await x.service.waitForIdle(run.runId);
+ assert.equal((await x.service.read(run.runId)).succeeded,1);
 });
