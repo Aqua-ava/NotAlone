@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,readFile} from 'node:fs/promises';
+import {mkdtemp,rm,readFile,rename,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {startModelHost,modelBackgroundConcurrency} from '../src/platform/models/model-host.ts';
@@ -45,4 +45,21 @@ test('Unicode数字、下划线和Python空白与旧int解析合成对照',()=>{
  const expected=[3,3,3,3,3,3,3,null,null,null,null,null,null];
  const actual=values.map(value=>{try{return modelBackgroundConcurrency({NOTALONE_EXTRACTION_BATCH_CONCURRENCY:value});}catch{return null;}});
  assert.deepEqual(actual,expected);
+});
+
+test('关闭前置步骤暂时失败后同一模型宿主可重试完成关闭',async t=>{
+ const host=await startModelHost(await options(t));const failure=new Error('合成暂时关闭失败');
+ await assert.rejects(host.close(async()=>{throw failure;}),error=>error===failure);
+ await host.close(async()=>{});
+});
+
+
+test('许可journal末写失败后恢复原状态文件，同一关闭操作继续释放真实资源',async t=>{
+ const config=await options(t),host=await startModelHost(config),backup=host.statePath+'.backup';
+ t.after(()=>host.shutdown().catch(()=>{}));
+ await rename(host.statePath,backup);await mkdir(host.statePath);
+ await assert.rejects(host.close(async()=>{}));
+ await rm(host.statePath,{recursive:true});await rename(backup,host.statePath);
+ await host.close(async()=>{});
+ const next=await startModelHost(config);assert.deepEqual(next.unknownSettlements(),[]);await next.close(async()=>{});
 });

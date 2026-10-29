@@ -16,6 +16,7 @@ import type {DiscussionAttempt} from './contracts.ts';
 const systemPrompt='你是中文关系沟通讨论助手。本次只围绕用户已确认的一位联系人讨论。区分用户想法、已有事实和推测；帮助澄清表达，不虚构经历、情绪或承诺。你不会发送任何外部消息，最终消息由用户本人选择、修改并亲自发送。历史助手发言不是联系人事实，一次性要求不自动成为长期偏好。';
 /** 正常业务协调：实际请求、冻结来源、官方运行与SQLite提交分别有独立边界。 */
 export class SqliteDiscussionTurns {
+ private stopping=false;private readonly pending=new Set<Promise<unknown>>();private readonly controllers=new Set<AbortController>();private closing?:Promise<void>;
  private readonly storage:SqliteStorage;private readonly discussions:SqliteDiscussionService;private readonly runtime:SqliteDiscussionRuntime;private readonly model:HostReplyModelConfiguration;private readonly provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;private readonly arbiter:ModelPermitArbiter;private readonly library?:SqliteSkillLibrary;private readonly authorize:(contactId:string)=>Promise<void>;
  constructor(options:{storage:SqliteStorage;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>}){this.storage=options.storage;this.discussions=options.discussions;this.runtime=options.runtime;this.model=options.model;this.provider=options.provider;this.arbiter=options.arbiter;this.library=options.library;this.authorize=options.authorize;}
  private digest(revision:SkillRunRevision):string{return createHash('sha256').update(encode({format:1,systemPrompt,model:this.model,revision})).digest('hex');}
@@ -28,12 +29,23 @@ export class SqliteDiscussionTurns {
   for(const anchor of eligible)await this.library!.assertAnchor(anchor);
   return this.digest({packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible});
  }
- async generate(input:{contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;selectedPackageId?:string;contextMessageIds?:string[];signal?:AbortSignal}){
+ generate(input:{contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;selectedPackageId?:string;contextMessageIds?:string[];signal?:AbortSignal}){
+  if(this.stopping)return Promise.reject(new StorageFailure('discussion_runtime_closed'));
+  const controller=new AbortController();this.controllers.add(controller);
+  const pending=this.generateOwned({...input,signal:input.signal?AbortSignal.any([controller.signal,input.signal]):controller.signal});
+  this.pending.add(pending);const release=()=>{this.pending.delete(pending);this.controllers.delete(controller);};pending.then(release,release);return pending;
+ }
+ close():Promise<void>{
+  this.stopping=true;for(const controller of this.controllers)controller.abort();
+  return this.closing??=Promise.allSettled([...this.pending]).then(()=>{});
+ }
+ private async generateOwned(input:{contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;selectedPackageId?:string;contextMessageIds?:string[];signal?:AbortSignal}){
   if(input.confirmedContact!==true)throw new StorageFailure('discussion_identity_required');
   input.signal?.throwIfAborted();await this.authorize(input.contactId);
   // 具名请求是用户明确点击产生；不同于打开App、回看或后台消息事件。
   const ownerId=this.discussions.ownerId;
   const confirmationId=await this.storage.execute<string>('identity.manualConfirm',{ownerId,contactId:input.contactId,contextToken:input.requestKey,id:randomUUID(),at:Date.now()});
+  input.signal?.throwIfAborted();
   const accepted=await this.discussions.begin(input.contactId,input.requestKey,input.text,{kind:'manual',confirmationId},input.discussionId);
   const attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {replayed:true,discussionId:attempt.discussionId,segmented:false};

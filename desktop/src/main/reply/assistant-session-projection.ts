@@ -147,7 +147,8 @@ export class AssistantSessionProjection {
 
   private ready(saved: Snapshot): SavedAssistantSession {
     return { phase: 'ready', sessionId: saved.sessionId, turns: saved.turns, inputs: saved.inputs,
-      currentInputVersionId: saved.currentInputVersionId };
+      currentInputVersionId: saved.currentInputVersionId,
+      ...(saved.discussionEntries === undefined ? {} : { discussionEntries:saved.discussionEntries, runtimeRecovery:saved.runtimeRecovery }) };
   }
 
   private completed(saved: Pick<SavedAssistantSession, 'turns' | 'inputs' | 'currentInputVersionId'>,

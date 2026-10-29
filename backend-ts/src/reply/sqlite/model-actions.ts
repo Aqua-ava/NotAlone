@@ -1,9 +1,10 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
+import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction,type StorageLease} from '../../storage/sqlite/contracts.ts';
 import {requireSkillRevision,requireSkillRun} from '../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requireAttempt,encode,decode} from './requests.ts';
 import {requireRuntimeCurrent} from './runtime-actions.ts';
+import {identifier} from './actions.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 function context(tx:StorageTransaction,i:any):StorageRow{
  const row=tx.get("SELECT * FROM reply_context WHERE owner_id=? AND id=? AND request_id=? AND attempt_id=? AND contact_id=? AND discussion_id=? AND state='active'",[i.ownerId,i.contextId,i.requestId,i.attemptId,i.contactId,i.discussionId])??fail('discussion_context_invalid');
@@ -30,8 +31,35 @@ function inheritSources(tx:StorageTransaction,i:any,eventId:string,withInputs:bo
   if(item.kind==='entry')for(const source of tx.all('SELECT s.* FROM event_source s JOIN discussion_entry e ON e.owner_id=s.owner_id AND e.origin_event_id=s.event_id WHERE e.owner_id=? AND e.id=?',[i.ownerId,item.entry_id]))tx.run('INSERT OR IGNORE INTO event_source VALUES(?,?,?,?)',[i.ownerId,eventId,source.source_contact_id,source.record_id]);
  }
 }
-const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name:`discussion.${name}`,mode,retryBusy:mode==='write',execute});
+const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:StorageLease)=>unknown):StorageAction=>({name:`discussion.${name}`,mode,retryBusy:mode==='write',execute});
 export const discussionModelActions:StorageAction[]=[
+ action('unconfirmed','read',(tx,i)=>{
+  const ownerId=identifier(i.owner_id),contactId=i.contact_id===null?null:identifier(i.contact_id);
+  return tx.all(`SELECT DISTINCT c.request_key FROM model_call c
+   JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
+   JOIN operation_scope s ON s.owner_id=o.owner_id AND s.operation_id=o.id
+   WHERE c.owner_id=? AND o.purpose='discussion' AND c.state IN ('sending','unknown')${contactId===null?'':' AND s.source_contact_id=?'}`,
+   contactId===null?[ownerId]:[ownerId,contactId]).map(row=>String(row.request_key));
+ }),
+ action('recover','write',(tx,i,lease)=>{
+  const ownerId=identifier(i.ownerId),attempts=tx.all(`SELECT a.id,a.request_id FROM reply_attempt a
+   JOIN reply_request r ON r.owner_id=a.owner_id AND r.id=a.request_id
+   WHERE a.owner_id=? AND r.kind='discussion' AND a.state='running'
+   AND (a.accepted_runtime_id<>? OR a.accepted_storage_epoch<>?)`,[ownerId,lease.runtimeId,lease.epoch]);
+  for(const attempt of attempts){
+   // 发送授权事务已经提交时无法证明外部是否收到；重开只保留未知，不能自动重送。
+   tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown',error_code='runtime_interrupted' WHERE owner_id=? AND reply_attempt_id=? AND state='sending'",[ownerId,attempt.id]);
+   tx.run("UPDATE model_call SET state='failed',settlement_state='settled',error_code='not_dispatched' WHERE owner_id=? AND reply_attempt_id=? AND state='prepared'",[ownerId,attempt.id]);
+   for(const call of tx.all('SELECT operation_id,state FROM model_call WHERE owner_id=? AND reply_attempt_id=?',[ownerId,attempt.id])){
+    if(call.state!=='unknown'&&call.state!=='failed')continue;
+    tx.run("UPDATE model_operation SET state=? WHERE owner_id=? AND id=? AND state<>'sealed'",[call.state,ownerId,call.operation_id]);
+    tx.run('UPDATE operation_scope SET state=? WHERE owner_id=? AND operation_id=?',[call.state==='unknown'?'unknown':'released',ownerId,call.operation_id]);
+   }
+   tx.run("UPDATE reply_attempt SET state='failed',finished_at=COALESCE(finished_at,?),error_code='runtime_interrupted' WHERE owner_id=? AND id=?",[Date.now(),ownerId,attempt.id]);
+   tx.run("UPDATE reply_request SET state='cancelled' WHERE owner_id=? AND id=? AND state='running'",[ownerId,attempt.request_id]);
+  }
+  return attempts.length;
+ }),
  action('prepareCall','write',(tx,i)=>{
   requireAttempt(tx,i);context(tx,i);
   if(!/^[a-f0-9]{64}$/.test(i.inputSeal)||typeof i.provider!=='string'||!i.provider||typeof i.requestKey!=='string'||!i.requestKey

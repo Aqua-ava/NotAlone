@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {join} from 'node:path';
+import {access} from 'node:fs/promises';
+import {fixture,owner} from './fixtures/memory-sqlite/support.mjs';
+import {createSqliteModelRuntime} from '../src/host/sqlite-model-runtime.ts';
+import {createSqliteMemoryRuntime} from '../src/memory/sqlite/runtime.ts';
+import {createSqliteDiscussionHost} from '../src/reply/sqlite/host-runtime.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
+test('同一宿主的记忆与讨论共享唯一真实许可服务及adapter，领域关闭不销毁共享资源',async t=>{
+ const f=await fixture(t);let registered=0,disposed=0,models,memory,discussion;
+ t.after(async()=>{await discussion?.close();await memory?.close();await models?.close();});
+ const ctx={llm:{registerAdapter(){registered++;return async()=>{disposed++;};}}};
+ const options={ctx,environment:{NOTALONE_DEEPSEEK_API_KEY:'synthetic-only',NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:'512'},userData:f.root,businessHome:f.root,infoPath:join(f.root,'info'),envFilePath:join(f.root,'model.env')};
+ models=await createSqliteModelRuntime(options);assert.ok(models.shared);assert.equal(registered,1);const holders=new ActiveHolders();
+ memory=await createSqliteMemoryRuntime({...options,storage:f.storage,ownerId:owner,holders,authorize:()=>false,sharedModel:models.shared});
+ discussion=await createSqliteDiscussionHost({ctx,storage:f.storage,ownerId:owner,userData:f.root,holders,authorizeRequest:()=>false,model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}});
+ assert.equal(registered,1);await discussion.close();await memory.close();assert.equal(disposed,0);await access(models.shared.permit.path);
+ await models.close();assert.equal(disposed,1);await assert.rejects(access(models.shared.permit.path),{code:'ENOENT'});
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

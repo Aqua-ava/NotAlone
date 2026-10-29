@@ -74,6 +74,7 @@ type notaloneSnapshot struct {
 	guard          *notaloneSourceGuard
 	shards         []*notaloneSnapshotShard
 	selected       notaloneResolved
+	senderOwner    string
 	profile        notaloneReadProfile
 	table          string
 	target         notaloneSnapshotTarget
@@ -173,7 +174,8 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 		return nil, notaloneFailure("history_source_unverified")
 	}
 	life, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	n := &notaloneSnapshot{life: life, cancel: cancel, guard: guard, selected: selected, profile: profile, table: "Msg_" + talkerHash(selected.Conversation)}
+	// 目录账号身份继续用于scope；sender使用锁定上游selfWxid的账号名规范。
+	n := &notaloneSnapshot{life: life, cancel: cancel, guard: guard, selected: selected, senderOwner: s.selfWxid(), profile: profile, table: "Msg_" + talkerHash(selected.Conversation)}
 	defer func() {
 		if err != nil {
 			_ = n.Close()
@@ -464,7 +466,7 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 			names, e := shard.reader.QueryBounded(ctx, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", senderID)
 			if e == nil && len(names) == 1 {
 				switch rowString(names[0], "user_name") {
-				case n.selected.Account:
+				case n.senderOwner:
 					record.Sender = "owner"
 				case n.selected.Conversation:
 					record.Sender = "contact"

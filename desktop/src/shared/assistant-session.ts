@@ -1,3 +1,4 @@
+import type {SqliteDiscussionEntry,SqliteRuntimeRecovery} from './sqlite-discussion';
 import type { ReplyCandidate, ReplyUsedSkill } from './reply-bridge';
 import type { AssistantInputBudget } from './assistant-input-budget';
 import type { ReplyBasisChange } from './reply-basis-change';
@@ -21,6 +22,8 @@ export interface SavedAssistantTurn {
 export interface SavedAssistantSession {
   phase: 'idle' | 'loading' | 'ready' | 'failed';
   sessionId: string | null;
+  discussionEntries?: SqliteDiscussionEntry[];
+  runtimeRecovery?: SqliteRuntimeRecovery;
   turns: SavedAssistantTurn[];
   currentInputVersionId: string | null;
   inputs: SavedAssistantInput[];
