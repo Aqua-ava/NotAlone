@@ -1,7 +1,7 @@
 # 08：记忆候选、版本与修正
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [同步、聊天清空与记忆处理规则](../../sync-memory-behavior/spec.md)、[SQLite数据库重建](../../sqlite-database-rebuild/spec.md)
 Blocked by: [07 固定范围的记忆提取与核验](07-fixed-scope-memory-extraction.md)
@@ -40,3 +40,16 @@ Blocked by: [07 固定范围的记忆提取与核验](07-fixed-scope-memory-extr
 - 后续开发只用 `pnpm run dev`，先执行 `dev:status`核验并复用实例；不得擅自打包、运行旧包、修改发布门禁、推送或创建远端分支／PR。
 - App首次使用继续搁置；组件安装、新模型设置、干净机器和发布、微信迁移／恢复实验均不属于本任务。不新增模型或凭据入口，沿现有配置核验用途与最小文本出站授权。
 - 合成结果与真实模型、真实微信、产品集成分别记账。当前未核验的真实账号／联系人读取范围不可读取；不发送外部消息，不把开发验证能力加入产品工具。
+
+## Comments
+
+### 08 离线合同检查点
+
+- Goal 已实际创建为 active，任务保持 claimed；依赖 c8e926ef 与 9b3541b3 已用 merge-base --is-ancestor 核验。
+- 已落受版本管理源码：`backend-ts/src/memory/sqlite/management/knowledge.ts` 导出 `createMemoryKnowledgeReader({includeUnconfirmed:false})` 和默认 `memoryKnowledgeReader`，实现12的 `ReplyKnowledgeReader`。本人 `self` 显式映射 `owner`；正式版本 `kind=memory`、auto/confirmed，候选 `kind=memory_candidate`、unconfirmed；额外 `headRevision:bigint` 随 identity_json 保存，复验版本、头修订、精确来源、正文与资格。拒绝、来源/范围失效内容不进入生成。
+- `management/service.ts` 提供 `importRun/read/decide/automatic`；system入口不开放HTTP或Tool。下一迁移工厂 `memoryManagementMigration(version)` 当前聚合追加11，不改1..10；05显式注册增加 `memory_management`。
+- 当前最小真实SQLite/07合成正常供应商用例5/5及backend typecheck通过，尚未作为最终验收；无新外部模型、无微信/桌面启动。
+- 待root集中登记：`backend-ts/test/sqlite-memory-management.test.mjs` 建议 current（backend Node集成）；`backend-ts/test/fixtures/memory-management/supplier.mjs` 与 `registry.mjs` 建议 fixture/support。inventory本票未写。
+- host公共文件未改。将提供只消费现有共享模型的处理结束hook和独立认证管理HTTP；12可组合本reader与09 reader，不另建memory表。
+
+核心复核补强：独立Spec审查复现本人B产物经人工修正后丢失A冻结贡献删除依赖，已补递归前驱/恢复闭包及回归；Standards指出本域全owner扫描，现改来源索引反查。正式知识合同将语义 `citationSources` 与冻结资格 `qualificationSources` 分开，`sources`为精确依赖并集供12闭包，不把资格来源伪称证据引句；完整本人M:N依赖和每条record/revision复验。决定展示按持久CAS头修订排序，不以毫秒时钟或随机id表示真实操作顺序。最终核心6/6、backend typecheck、diff --check通过；Standards窄复核0新增，Spec确认原P1关闭，后续宿主/界面与消费者组合继续验证，State仍claimed。

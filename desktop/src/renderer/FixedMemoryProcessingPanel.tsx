@@ -4,6 +4,7 @@ import type { FixedMemoryProcessingBridge, FixedProcessingRun, FixedProcessingTr
 function status(run: FixedProcessingRun | null): string {
   if (!run) return '尚未开始';
   if (run.unknown > 0) return '调用结果待核实';
+  if (run.tasks.length > 0 && run.tasks.every(task => task.state === 'revoked')) return '范围已失效';
   if (run.state === 'incomplete' && run.succeeded === run.total && run.total > 0) return '提取核验已结束';
   return { pending: '等待提取与核验', running: '正在提取与核验', paused: '已暂停', failed: '提取核验失败',
     incomplete: '本轮尚未完成', revoked: '范围已失效' }[run.state];
@@ -76,7 +77,8 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
     } finally { if (active.current && accepted === revision.current) setBusy(false); }
   }
   const run = view?.run ?? null;
-  const allExtracted = run && run.total > 0 && run.succeeded === run.total;
+  const noNewMemory = run && run.total > 0 && run.succeeded === run.total && run.candidates.length === 0
+    && run.tasks.length > 0 && run.tasks.every(task => ['succeeded', 'awaiting_decision'].includes(task.state));
   const canContinue = run && !['pending', 'running', 'revoked'].includes(run.state) && run.succeeded < run.total
     && run.tasks.some(task => task.scopeKind === 'contact' && ['failed', 'paused', 'pending'].includes(task.state)
       && task.succeeded < task.total && !['targets_completed_elsewhere', 'memory_extraction_targets_completed_elsewhere'].includes(task.errorCode ?? ''));
@@ -88,7 +90,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
     {busy && <p aria-live="polite">正在核对处理状态…</p>}
     {run && <>
       <p>已处理 {run.succeeded} / {run.total} 条文字目标</p>
-      {allExtracted && run.candidates.length === 0 && <p>已处理，未产生新记忆</p>}
+      {noNewMemory && <p>已处理，未产生新记忆</p>}
       {run.failed > 0 && <p>有 {run.failed} 条目标尚未通过提取核验。</p>}
       {run.unknown > 0 && <p>有 {run.unknown} 条目标调用结果未知，核实前不会重新发送。</p>}
       <p>主题整理、长期概览尚未执行，本轮未完成。</p>

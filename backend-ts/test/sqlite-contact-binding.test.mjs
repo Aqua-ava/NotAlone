@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
 const owner='00000000-0000-4000-8000-000000000001';
@@ -30,6 +31,15 @@ test('空库不预选，同名渠道身份分别建立联系人，重复确认�
  await service.confirm(next.snapshot_token,[{...choice,locator:'friend-b'}]);
  const contacts=(await service.directory()).contacts;
  assert.equal(contacts.length,2);assert.notEqual(contacts[0].contact_id,contacts[1].contact_id);
+});
+test('仅身份旧基线未安装历史表时目录合法返回零消息，不要求正文能力',async t=>{
+ const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-identity-only-count-'))),module=join(root,'identity-only.mjs');
+ await writeFile(module,`import {registry as production} from ${JSON.stringify(new URL('../src/storage/sqlite/registry.ts',import.meta.url).href)};export const registry={migrations:production.migrations.filter(m=>m.version<=3),actions:production.actions.filter(a=>a.name.startsWith('identity.'))};`);
+ let storage,service;t.after(async()=>{await service?.close();await storage?.close();await rm(root,{recursive:true,force:true});});
+ storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',registryModule:pathToFileURL(module).href});assert.equal(storage.status.schemaVersion,3);
+ service=new SqliteContactService(storage,owner,{account:async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[{externalKey:'friend-a',displayName:'合成身份',kind:'private',identityAssurance:'verified'}]});
+ await service.initialize();await connect(service);const snapshot=await service.candidates(true);await service.confirm(snapshot.snapshot_token,[{locator:'friend-a',observed_display_name:'合成身份',expected_selection_generation:'0'}]);
+ const directory=await service.directory();assert.equal(directory.contacts.length,1);assert.deepEqual(directory.contacts[0].data_status,{message_count:0,source_count:0});
 });
 test('取消立即拒绝旧结果，重选沿用绑定但新许可不复活旧令牌',async t=>{
  const {service}=await fixture(t);await connect(service);await service.setReading(true);

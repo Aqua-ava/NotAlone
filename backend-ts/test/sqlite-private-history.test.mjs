@@ -33,6 +33,26 @@ test('已授权单联系人历史正常入库，精确身份和非文字占位�
  assert.equal((await service.read(saved[1].contact_id)).messages.length,0);
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
+test('联系人HTTP目录消息数等于当前可见规范消息，来源删除即时变7、删尽变0且隔离范围',async t=>{
+ const {service,contacts,channel,saved,storage,root}=await fixture(t),[a,b]=saved;
+ const kinds=['text','image','voice','video','file','sticker','other','text'];
+ channel.page=async(scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,completedPartitions:['shard-a'],exhausted:true,
+  records:kinds.slice(0,scope.token.contact_id===a.contact_id?8:3).map((kind,index)=>record(String(index+1),{kind,text:kind==='text'?`合成计数文字${index}`:null}))});
+ await service.synchronize(a.contact_id);await service.synchronize(b.contact_id);
+ const {SqliteContactHttp}=await import('../src/contacts/sqlite/http.ts'),{createServer}=await import('node:http');const http=new SqliteContactHttp(contacts);
+ const server=createServer(async(req,res)=>{if(!await http.handle(req,res))res.writeHead(404).end();});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
+ const counts=async()=>{const response=await fetch(`http://127.0.0.1:${server.address().port}/api/contacts`);assert.equal(response.status,200);return (await response.json()).contacts;};
+ const count=async id=>(await counts()).find(row=>row.contact_id===id).data_status.message_count;
+ assert.equal((await service.read(a.contact_id)).messages.length,8);assert.equal(await count(a.contact_id),8);assert.equal(await count(b.contact_id),3);
+ const other=new SqliteContactService(storage,'00000000-0000-4000-8000-000000000002',{account:async()=>{throw new Error('不读取外部元数据');},sessions:async()=>[]});await other.initialize();assert.deepEqual((await other.directory()).contacts,[]);await other.close();
+ const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');const deletion=new DeletionService(storage,service.holders,new ManagedFiles(root));
+ const source=(await service.read(a.contact_id)).messages[0].sourceRecordIds[0],plan=await deletion.plan({ownerId:owner,requestKey:'synthetic-directory-source',scope:{kind:'source',contactId:a.contact_id,sourceId:source}});
+ assert.equal((await service.read(a.contact_id)).messages.length,7);assert.equal(await count(a.contact_id),7);assert.equal(await count(b.contact_id),3);
+ assert.equal((await deletion.advance(plan)).state,'completed');assert.equal(await count(a.contact_id),7);
+ for(const message of (await service.read(a.contact_id)).messages){const clear=await deletion.plan({ownerId:owner,requestKey:`synthetic-directory-clear-${message.id}`,scope:{kind:'source',contactId:a.contact_id,sourceId:message.sourceRecordIds[0]}});assert.equal((await deletion.advance(clear)).state,'completed');}
+ assert.equal((await service.read(a.contact_id)).messages.length,0);assert.equal(await count(a.contact_id),0);assert.equal(await count(b.contact_id),3);
+});
 test('跨分片同localId分别保存，server0不合并，补齐别名及排序变化不创建第二条',async t=>{
  const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
  let turn=0;channel.page=async(_s,_t,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:turn++===0?[record('1'),record('1',{partition:'shard-b'})]:[record('1',{serverId:'18446744073709551615',orderScheme:'synthetic-seq',orderKey:'100'}),record('2',{serverId:'18446744073709551615',text:'合成正文1'})],completedPartitions:target.partitions,exhausted:true});
