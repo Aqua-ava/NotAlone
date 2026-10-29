@@ -14,6 +14,7 @@ CREATE TABLE assistant_discussion (
 CREATE UNIQUE INDEX discussion_current_contact ON assistant_discussion(owner_id,contact_id) WHERE is_current=1 AND state='active';
 CREATE TRIGGER discussion_scope_immutable BEFORE UPDATE OF owner_id,id,contact_id ON assistant_discussion
 BEGIN SELECT RAISE(ABORT,'discussion_scope_immutable'); END;
+CREATE UNIQUE INDEX discussion_confirmation_scope ON manual_confirmation(owner_id,contact_id,id);
 CREATE TABLE reply_request (
  owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,discussion_id TEXT NOT NULL,
  request_key TEXT NOT NULL,trigger_entry_id TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('discussion','reply')),
@@ -24,7 +25,7 @@ CREATE TABLE reply_request (
  FOREIGN KEY(owner_id,contact_id,discussion_id,trigger_entry_id) REFERENCES discussion_entry(owner_id,contact_id,discussion_id,id) DEFERRABLE INITIALLY DEFERRED,
  FOREIGN KEY(owner_id,contact_id,binding_id) REFERENCES conversation_binding(owner_id,contact_id,id),
  FOREIGN KEY(owner_id,binding_id,verification_id) REFERENCES binding_verification(owner_id,binding_id,id),
- FOREIGN KEY(owner_id,confirmation_id) REFERENCES manual_confirmation(owner_id,id),
+ FOREIGN KEY(owner_id,contact_id,confirmation_id) REFERENCES manual_confirmation(owner_id,contact_id,id),
  CHECK((identity_origin='manual' AND confirmation_id IS NOT NULL AND binding_id IS NULL AND verification_id IS NULL)
  OR (identity_origin='binding' AND binding_id IS NOT NULL AND verification_id IS NOT NULL AND confirmation_id IS NULL))
 ) STRICT;
@@ -50,6 +51,8 @@ CREATE TABLE reply_context (
  FOREIGN KEY(owner_id,request_id,attempt_id) REFERENCES reply_attempt(owner_id,request_id,id),
  CHECK((origin_kind='request' AND attempt_id IS NOT NULL AND request_id IS NOT NULL) OR (origin_kind='rebuild' AND attempt_id IS NULL AND request_id IS NULL))
 ) STRICT;
+CREATE TRIGGER reply_context_immutable BEFORE UPDATE OF owner_id,id,contact_id,discussion_id,origin_kind,attempt_id,request_id,preference_revision,skill_revision,owner_memory_revision,contact_memory_revision,skill_run_json,frozen_at ON reply_context
+BEGIN SELECT RAISE(ABORT,'reply_context_immutable'); END;
 CREATE TABLE reply_context_item (
  owner_id TEXT NOT NULL,context_id TEXT NOT NULL,item_no INTEGER NOT NULL CHECK(item_no>=1),
  kind TEXT NOT NULL CHECK(kind IN ('message','entry','skill')),role TEXT NOT NULL,presentation_no INTEGER NOT NULL,
@@ -63,6 +66,8 @@ CREATE TABLE reply_context_item (
  OR (kind='entry' AND entry_id IS NOT NULL AND source_contact_id IS NULL AND message_id IS NULL AND record_id IS NULL AND accepted_revision IS NULL AND package_id IS NULL AND package_revision_no IS NULL)
  OR (kind='skill' AND package_id IS NOT NULL AND package_revision_no IS NOT NULL AND source_contact_id IS NULL AND message_id IS NULL AND record_id IS NULL AND accepted_revision IS NULL AND entry_id IS NULL))
 ) STRICT;
+CREATE TRIGGER reply_context_item_immutable BEFORE UPDATE ON reply_context_item
+BEGIN SELECT RAISE(ABORT,'reply_context_item_immutable'); END;
 CREATE TRIGGER reply_context_item_scope BEFORE INSERT ON reply_context_item WHEN
  (NEW.kind='message' AND NOT EXISTS(SELECT 1 FROM reply_context c WHERE c.owner_id=NEW.owner_id AND c.id=NEW.context_id AND c.contact_id=NEW.source_contact_id))
  OR (NEW.kind='entry' AND NOT EXISTS(SELECT 1 FROM reply_context c JOIN discussion_entry e ON e.owner_id=c.owner_id AND e.contact_id=c.contact_id AND e.discussion_id=c.discussion_id WHERE c.owner_id=NEW.owner_id AND c.id=NEW.context_id AND e.id=NEW.entry_id))
@@ -87,7 +92,7 @@ WHEN NOT (OLD.content_state='available' AND NEW.content_state='cleared' AND NEW.
 BEGIN SELECT RAISE(ABORT,'discussion_entry_clear_only'); END;
 CREATE TRIGGER discussion_entry_request BEFORE INSERT ON discussion_entry WHEN NOT EXISTS(
  SELECT 1 FROM reply_request r WHERE r.owner_id=NEW.owner_id AND r.contact_id=NEW.contact_id AND r.discussion_id=NEW.discussion_id AND r.id=NEW.origin_request_id
- AND (NEW.role='assistant' OR r.trigger_entry_id=NEW.id))
+ AND ((NEW.role='assistant' AND r.trigger_entry_id<>NEW.id) OR (NEW.role='user' AND r.trigger_entry_id=NEW.id)))
 BEGIN SELECT RAISE(ABORT,'discussion_entry_request'); END;
 CREATE TRIGGER discussion_entry_call BEFORE INSERT ON discussion_entry WHEN NEW.role='assistant' AND NOT EXISTS(
  SELECT 1 FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id

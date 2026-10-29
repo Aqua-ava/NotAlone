@@ -23,3 +23,5 @@
 请求幂等命名空间固定为 `databaseId:discussion.begin`，request_key在同owner内唯一。相同key重送仅回查原contact/原讨论/原请求，跨contact、正文冲突、取消或失效均拒绝；空闲分段前先检查该键，不能因十二小时或换段重送模型。05以相同namespace/key写删除墓碑，来源闭包清理后仍不可重受理。
 
 删除fence先把受影响实际发言从available不可逆转为cleared，擦除正文并断开实际call/event引用（请求身份保留到后续清行）。available状态始终要求真实成功call和原始事件，不允许更新旧正文；cleared不能复活。这样07可在排空后先清追踪，11随后清请求闭环，blocked期间产品读口也不会返回旧正文。文件目标仅在官方所有者排空、完整manifest登记后产生，不能提前冻结活动writer的旧清单。
+
+手动确认通过(owner_id,contact_id,confirmation_id)真实复合FK固定同联系人；context身份、冻结修订和实际材料不可原地改写。运行中每次出站/提交继续复验请求绑定或手动确认资格；只有已核验的前台binding证明可用于自动身份，渠道元数据建联本身不替代前台会话确认。
