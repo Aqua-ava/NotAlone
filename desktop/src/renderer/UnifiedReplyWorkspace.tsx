@@ -67,7 +67,8 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage }: { 
       setSubmission(current => current === pending ? null : current);
     }
   }
-  const latest = state.messages.items.reduce<string | null>((value, message) => {
+  const unknownMessageOrder = state.messages.items.some(message => message.ordering === 'unknown');
+  const latest = unknownMessageOrder ? null : state.messages.items.reduce<string | null>((value, message) => {
     const time = message.occurredAt;
     return time && (!value || Date.parse(time) > Date.parse(value)) ? time : value;
   }, null);
@@ -103,6 +104,7 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage }: { 
         <button disabled={disabled || state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新最近聊天</button>
         {state.messages.items.length > 0 && <>
           <p className="rewrite-privacy">以下是最近记录；取消勾选可从本次生成中排除。实际使用的依据会随候选展示。</p>
+          {unknownMessageOrder && <p role="status" className="rewrite-privacy">部分记录的顺序未核验，以下按保存位置展示，不代表真实聊天先后。</p>}
           {excluded.length > 0 && <p role="status" className="rewrite-privacy">已排除 {excluded.length} 条消息。本次自动背景只参考未排除的最近聊天和补充内容，避免关系资料带回已排除的内容。</p>}
           <div className="workspace-message-list" role="group" aria-label="最近聊天材料">
             {state.messages.items.map(message => <label className="reply-message" key={message.messageId}>
@@ -110,7 +112,7 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage }: { 
                 checked={!excluded.includes(message.messageId)} disabled={disabled || !options.includeRelationshipContext}
                 onChange={event => update({ excludedMessageIds: event.target.checked
                   ? excluded.filter(id => id !== message.messageId) : [...excluded, message.messageId] })} />
-              <span><small>{message.speaker === 'contact' ? '对方' : message.speaker === 'user' ? '我' : '系统'} · {message.occurredAt ? new Date(message.occurredAt).toLocaleString('zh-CN') : '时间未知'}</small>
+              <span><small>{message.speaker === 'contact' ? '对方' : message.speaker === 'user' ? '我' : '系统'} · {message.occurredAt ? new Date(message.occurredAt).toLocaleString('zh-CN') : '时间未知'}{message.ordering === 'unknown' ? ' · 顺序未核验' : ''}</small>
                 <span className="reply-message-text">{message.text ?? message.mediaPlaceholder ?? '无文字内容'}</span></span>
             </label>)}
           </div>

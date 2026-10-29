@@ -1,7 +1,7 @@
 # 03：首次历史同步与消息展示
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [同步与记忆规格](../../sync-memory-behavior/spec.md)；[SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)
 Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-grants.md)
@@ -40,3 +40,9 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 本轮仅发布，尚未开始实现。`ready-for-agent`表示任务描述可供后续安排，不能据此自动领取、改代码、建业务库、读取微信或发起模型调用；须在用户后续明确要求实现时才开始并将State改为claimed。
 
 后续开发及桌面验收只用`pnpm run dev`，先`dev:status`核验并复用热更新实例；不得自行打包、运行打包版、改发布门禁、push或创建PR。只处理必要的合成或已获准资料，不提交私人聊天、身份、凭据、截图或真实媒体。App首次使用继续搁置，迁移／恢复实验不纳入本轮。
+
+## Comments
+
+2026-10-29 实施中。依赖c2ae74b4/f4cd6888均为祖先，独立工作树；Goal已启用。稳定合同小提交07164d22098e8effad706785fcaac6bc3d4713ea。独立服务、迁移工厂、05真实删除注册、HTTP和消息UI已形成正常合成路径；等待独立审查与公共宿主串行集成，不标resolved。
+
+真实渠道缺证：已知项目配置没有CLI路径，限定已知构建/制品目录没有最终CLI/WCDB；历史审计未保留候选绝对目录且缺manifest。现只读白名单没有schema窄操作，普通tail会读正文，不能据此补结构证据。程序4.0.6/build29387只证明程序版本，12项研究原生及14项合成生命周期不认证最终制品/当前schema/状态/连续性。未读取真实正文、他人名单、密钥或媒体，未安装/初始化组件、启停App、发送/撤回。真实ran正常授权/读取仍不可用。contact_history精确截断由06负责，缺证时受阻；不把受阻或全部拒绝记作正常同步通过。

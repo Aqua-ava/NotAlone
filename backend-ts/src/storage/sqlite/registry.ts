@@ -1,3 +1,5 @@
+import { historyMigration } from '../../history/sqlite/schema.ts';
+import { historyActions } from '../../history/sqlite/actions.ts';
 import { identityMigration } from '../../contacts/sqlite/schema.ts';
 import { identityActions } from '../../contacts/sqlite/actions.ts';
 import type { StorageRegistry } from './contracts.ts';
@@ -22,7 +24,7 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3)],
+` }, deletionMigration(2), identityMigration(3), historyMigration(4)],
   // 02及各写者集成后传入真实注册；缺失时拒绝删除，不用空闭包宣称成功。
-  actions: [...createDeletionActions(), ...identityActions],
+  actions: [...createDeletionActions(), ...identityActions, ...historyActions],
 };

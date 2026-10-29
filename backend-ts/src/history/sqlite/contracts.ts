@@ -4,6 +4,7 @@ import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 export interface HistorySupportReport {
   protocol: 'private-history-v1'; profileId: string; adapterVersion: string;
   status: 'supported' | 'unsupported' | 'unverified'; reason: string | null;
+  accountKey: string; conversationKey: string; sourceGeneration: string;
   programVersion: string; build: string; artifactSha256: string;
   schemaFingerprint: string; declaredPrimaryKey: readonly string[];
   identity: 'source-table-local-v1'; statusSemantics: string; continuity: string;
@@ -50,4 +51,11 @@ export interface StoredMessage {
 export interface HistoryRead {
   messages: StoredMessage[]; coverage: HistoryCoverage;
   replyEligibility: 'ready' | 'history_syncing' | 'history_incomplete';
+}
+/** 仅供受信任派生服务固定实际来源；隔离记录不从此入口流出。 */
+export interface HistorySource {
+  recordId: string; contactId: string; messageId: string; captureId: string; goalId: string;
+  itemNo: number; capturedAt: string; adapterVersion: string; normalizerVersion: string;
+  cursorIn: string | null; cursorOut: string | null;
+  raw: HistoryRecord; support: HistorySupportReport;
 }
