@@ -29,6 +29,9 @@ const processingErrors:Record<string,string>={
     voice_pcm_invalid:'本次语音输出格式校验失败，未发布新播放文件。',
     voice_copy_unproven:'缺少语音完整读取或唯一归属证明，本次未保存。',
     voice_copy_incomplete:'语音实际字节与固定来源证明不符，本次未保存。',
+    voice_source_unverified:'语音来源或消息范围未核验，本次未读取。',
+    voice_authority_mismatch:'语音资源的当前读取资格不符，本次未保存。',
+    voice_reader_release_failed:'语音读取尚未结算，清理未完成；请继续原清理操作。',
 };
 function resultLabel(snapshot:MediaSnapshot):string {
   if(snapshot.state==='cleared')return '媒体已清除，聊天占位保留';
