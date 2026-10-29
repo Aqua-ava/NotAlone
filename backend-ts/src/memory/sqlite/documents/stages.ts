@@ -13,6 +13,11 @@ import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 
 export interface DocumentClaim {attemptId:string;stepId:string;taskId:string;runId:string;kind:'document_scene'|'document_profile';scopeKind:'self'|'contact';contactId:string|null;claim:ModelTaskClaim;memories:L2ScenarioMemory[];scenarios:any[];profile:any;}
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute} as StorageAction);
+/** 普通暂停后不再启动新的文档小批；正在执行的批次允许收尾。 */
+function runPaused(tx:StorageTransaction,ownerId:string,runId:string):boolean {
+ const run=tx.get('SELECT pause_requested_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
+ return !run||run.pause_requested_at!==null;
+}
 const digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 function eligible(tx:StorageTransaction,ownerId:string,t:StorageRow){
  const contributions=new Set(tx.all('SELECT source_contact_id FROM task_contribution WHERE owner_id=? AND task_id=?',[ownerId,t.id]).map(c=>String(c.source_contact_id)));
@@ -42,14 +47,23 @@ function createStep(tx:StorageTransaction,ownerId:string,t:StorageRow,kind:Docum
  if(kind==='document_profile')for(const v of tx.all(`SELECT v.* FROM memory_document_version v JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE v.owner_id=? AND s.task_id=? AND s.kind='document_scene' AND s.state='succeeded' AND a.state='succeeded' AND v.content_state='present' ORDER BY v.document_id`,[ownerId,t.id]))
   tx.run("INSERT INTO step_input(owner_id,step_id,input_no,kind,document_id,document_version_no,publication_id) VALUES(?,?,?,'document',?,?,NULL)",[ownerId,stepId,++inputNo,v.document_id,v.version_no]);
  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,?,?,?,?,?,'running',?,NULL,NULL)",[ownerId,attemptId,stepId,t.resume_no,randomUUID(),now+300_000,t.control_revision,lease.runtimeId,now]);
- const rendered=renderDocuments(tx,ownerId,members,selected.map(x=>x.memory));
+  let renderMembers=members;
+  if(kind==='document_profile'){
+   // 继续暂停前的任务时，主题版本可能已保存但尚未发布；画像输入必须使用本轮真实场景版本。
+   const staged=tx.all(`SELECT v.*,d.kind,d.scope_kind,d.contact_id,d.state FROM memory_document_version v JOIN memory_document d ON d.owner_id=v.owner_id AND d.id=v.document_id
+    JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
+    WHERE v.owner_id=? AND s.task_id=? AND s.kind='document_scene' AND s.state='succeeded' AND a.state='succeeded' AND v.content_state='present' ORDER BY d.id`,[ownerId,t.id]);
+   const stagedIds=new Set(staged.map(row=>String(row.document_id)));
+   renderMembers=[...members.filter(member=>!stagedIds.has(String(member.document_id))),...staged];
+  }
+  const rendered=renderDocuments(tx,ownerId,renderMembers,selected.map(x=>x.memory));
  return {attemptId,stepId,taskId:String(t.id),runId:String(t.run_id),kind,scopeKind:t.scope_kind as 'self'|'contact',contactId:t.contact_id as string|null,claim:{task_id:String(t.id),step_id:stepId,step_name:kind,worker_id:lease.runtimeId,lease_generation:Number(t.resume_no)},memories:selected.map(x=>x.memory),scenarios:rendered.scenarios,profile:rendered.profile};
 }
 export function current(tx:StorageTransaction,ownerId:string,attemptId:string,lease:StorageLease):{attempt:StorageRow;t:StorageRow} {
  const a=tx.get(`SELECT a.*,s.kind,s.state AS step_state,t.id AS task_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE a.owner_id=? AND a.id=?`,[ownerId,attemptId]);
  if(!a||a.state!=='running'||a.step_state!=='running'||a.runtime_token!==lease.runtimeId||BigInt(Date.now())>(a.lease_expires_at as bigint))fail('document_attempt_stale');
  const t=task(tx,ownerId,String(a!.task_id));if(a!.accepted_control_revision!==t.control_revision)fail('document_attempt_stale');
- preconditions(tx,ownerId,t);const r=revisions(tx,ownerId,t);
+ preconditions(tx,ownerId,t,{allowPaused:true});const r=revisions(tx,ownerId,t);
  if(t.document_basis_state!=='frozen'||r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
  frozenMemories(tx,ownerId,String(a!.step_id));
  for(const i of tx.all("SELECT * FROM step_input WHERE owner_id=? AND step_id=? AND kind='message'",[ownerId,a!.step_id]))sourceStillValid(tx,ownerId,{contactId:String(i.source_contact_id),messageId:String(i.message_id),recordId:String(i.record_id),acceptedRevision:i.accepted_revision as bigint});
@@ -102,6 +116,7 @@ function fixedPublication(tx:StorageTransaction,ownerId:string,t:StorageRow,base
 }
 export const memoryDocumentsStageActions:StorageAction[]=[
  act('noteFailure','write',(tx,i)=>{const t=task(tx,textId(i.ownerId),textId(i.taskId));if(t.state!=='revoked')tx.run('UPDATE processing_task SET error_code=? WHERE owner_id=? AND id=?',[textId(i.code),i.ownerId,i.taskId]);return true;}),
+ act('runPaused','read',(tx,i)=>runPaused(tx,textId(i.ownerId),textId(i.runId))),
  act('recover','write',(tx,i,lease)=>{
   const ownerId=textId(i.ownerId);
   const attempts=tx.all(`SELECT a.id,a.step_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
@@ -120,7 +135,10 @@ export const memoryDocumentsStageActions:StorageAction[]=[
   return attempts.length;
  }),
  act('claimScene','write',(tx,i,lease)=>{
-  const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));if(t.document_basis_state!=='pending')return null;
+  const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));
+  // 普通暂停只阻止新小批；已完成的提取核验与正在执行的场景批次可收尾，继续后再领取主题。
+  if(runPaused(tx,ownerId,String(t.run_id)))return null;
+  if(t.document_basis_state!=='pending')return null;
   preconditions(tx,ownerId,t);const base=revisions(tx,ownerId,t),selected=eligible(tx,ownerId,t);
   tx.run("UPDATE processing_task SET document_basis_state='frozen',accepted_memory_revision=?,accepted_document_revision=?,accepted_publication_id=? WHERE owner_id=? AND id=? AND document_basis_state='pending'",[base.memory_revision,base.document_revision,base.current_publication_id,ownerId,t.id]);
   const frozen=task(tx,ownerId,String(t.id));
@@ -132,6 +150,7 @@ export const memoryDocumentsStageActions:StorageAction[]=[
  act('claimProfile','write',(tx,i,lease)=>{
   const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));
   if(tx.get("SELECT 1 FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_profile'",[ownerId,t.id]))return null;
+  if(runPaused(tx,ownerId,String(t.run_id)))return null;
   const scene=tx.get("SELECT successful_attempt_id FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_scene' AND state='succeeded'",[ownerId,t.id]);
   if(!scene)fail('document_scene_incomplete');
   preconditions(tx,ownerId,t);const r=revisions(tx,ownerId,t);

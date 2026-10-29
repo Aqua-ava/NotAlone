@@ -98,7 +98,7 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   markSuccess(tx,ownerId,attempt);return true;
  }),
  act('publish','write',(tx,i)=>{
-  const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));preconditions(tx,ownerId,t);
+  const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));preconditions(tx,ownerId,t,{allowPaused:true});
   const r=revisions(tx,ownerId,t);
   if(t.document_basis_state!=='frozen'||r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
   const stages=tx.all("SELECT kind,state FROM processing_step WHERE owner_id=? AND task_id=? AND kind IN ('document_scene','document_profile')",[ownerId,t.id]);

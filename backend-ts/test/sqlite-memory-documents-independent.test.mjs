@@ -34,7 +34,8 @@ test('用户暂停整轮后已成功任务不能开始文档阶段',async t=>{
  const memory=await new SqliteMemoryManagement(f.storage,f.owner).read({scopeKind:'contact',contactId:f.contactId});
  assert.ok(memory.memories.length,'暂停前乙的08前置阶段已完成');
  assert.equal((await f.documents.readTask(task.taskId)).outcome,'incomplete');
- await assert.rejects(f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:task.taskId}),{code:'document_preceding_stage_incomplete'});
+ assert.equal(await f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:task.taskId}),null,'普通暂停不领取新文档小批');
+ assert.equal(await f.storage.execute('memoryDocuments.claimProfile',{ownerId:f.owner,taskId:task.taskId}),null);
  assert.equal(f.calls.length,0);assert.equal((await f.documents.read({scopeKind:'contact',contactId:f.contactId})).publication,null);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
@@ -53,7 +54,8 @@ for(const unpausedFailure of [false,true])test(`公共模型配置失败时${unp
  const failures=await f.storage.execute('fixture.extractionFailures',{ownerId:f.owner,taskId:failed.taskId});
  assert.ok(failures.some(attempt=>attempt.state==='failed'&&attempt.error_code==='extraction_model_unconfigured'),'公共配置故障来自真实07尝试');
  assert.equal((await f.documents.readTask(succeeded.taskId)).outcome,'incomplete');
- await assert.rejects(f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:succeeded.taskId}),{code:'document_preceding_stage_incomplete'});
+ if(unpausedFailure)await assert.rejects(f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:succeeded.taskId}),{code:'document_preceding_stage_incomplete'});
+ else assert.equal(await f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:succeeded.taskId}),null,'普通暂停不领取新文档小批');
  assert.equal(f.calls.length,0);assert.equal((await f.documents.read({scopeKind:'contact',contactId:successfulContact})).publication,null);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

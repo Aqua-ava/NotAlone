@@ -32,7 +32,16 @@ export class SqliteMemoryDocuments {
    if(this.stop.signal.aborted)break;
    try{
     const claim=await this.storage.execute<DocumentClaim|null>('memoryDocuments.claimScene',{ownerId:this.ownerId,taskId});
-    if(!claim){results.push(await this.readTask(taskId));await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);continue;}
+    if(!claim){
+     // 已冻结且场景成功的任务可能停在暂停/中断的小批边界；继续时单独领取画像，不重新整理主题。
+     const view=await this.readTask(taskId),stages=Array.isArray(view?.stages)?view.stages as {kind:string;status:string}[]:[];
+     const sceneDone=stages.some(stage=>stage.kind==='scene'&&stage.status==='succeeded'),profileDone=stages.some(stage=>stage.kind==='profile');
+     if(sceneDone&&!profileDone){
+      const profileClaim=await this.storage.execute<DocumentClaim|null>('memoryDocuments.claimProfile',{ownerId:this.ownerId,taskId});
+      if(profileClaim){const result=await this.processTask(profileClaim);results.push(result);if(result.errorCode==='document_model_unconfigured')break;continue;}
+     }
+     results.push(view);await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);continue;
+    }
     const result=await this.processTask(claim);results.push(result);
     if(result.errorCode==='document_model_unconfigured')break;
    }catch(error){
@@ -49,10 +58,19 @@ export class SqliteMemoryDocuments {
   try{
    const contacts=await this.storage.execute<{contactId:string;generation:string}[]>('memoryDocuments.holders',{ownerId:this.ownerId,attemptId:initial.attemptId});
    for(const contact of contacts)releases.push(this.holders.register({key:`memoryDocuments:${initial.attemptId}_${contact.contactId}`,ownerId:this.ownerId,contactId:contact.contactId,coversAllSources:true,generation:BigInt(contact.generation),close:async()=>{controller.abort();await done;}}));
-   const scene=await this.processScene(initial,signal);
-   signal.throwIfAborted();
-   active=await this.storage.execute<DocumentClaim>('memoryDocuments.claimProfile',{ownerId:this.ownerId,taskId:initial.taskId});
-   if(!active)throw new StorageFailure('document_stage_incomplete');
+   let scene:{scenarios:any[]};
+   if(initial.kind==='document_scene'){
+    scene=await this.processScene(initial,signal);
+    signal.throwIfAborted();
+    // 场景批次收尾后如已请求普通暂停，不再领取画像小批；任务保持可继续而不是失败。
+    if(await this.storage.execute<boolean>('memoryDocuments.runPaused',{ownerId:this.ownerId,runId:initial.runId}))return {taskId:initial.taskId,outcome:'incomplete'};
+    active=await this.storage.execute<DocumentClaim>('memoryDocuments.claimProfile',{ownerId:this.ownerId,taskId:initial.taskId});
+    if(!active)throw new StorageFailure('document_stage_incomplete');
+   }else{
+    // 暂停/中断后继续：画像小批单独领取，使用本轮已保存的主题版本。
+    scene={scenarios:initial.scenarios};
+    active=initial;
+   }
    await this.processProfile(active,scene,signal);
    signal.throwIfAborted();
    const result=await this.storage.execute<{taskId:string;outcome:string}>('memoryDocuments.publish',{ownerId:this.ownerId,taskId:initial.taskId});
