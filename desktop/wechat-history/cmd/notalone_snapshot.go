@@ -368,13 +368,13 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 		value := cursor
 		page.CursorIn = &value
 	}
-	for n.shardIndex < len(n.shards) && len(page.Records) < 100 {
+	for n.shardIndex < len(n.shards) && len(page.Records) < 16 {
 		shard := n.shards[n.shardIndex]
 		if shard.done {
 			n.shardIndex++
 			continue
 		}
-		remaining := 100 - len(page.Records)
+		remaining := 16 - len(page.Records)
 		query := "SELECT local_id,server_id,local_type,real_sender_id,create_time,status FROM " + quoteIdent(n.table)
 		args := []any{}
 		if shard.lastID != nil {

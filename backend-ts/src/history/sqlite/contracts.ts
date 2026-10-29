@@ -8,6 +8,7 @@ export interface HistorySupportReport {
   programVersion: string; build: string; artifactSha256: string;
   schemaFingerprint: string; declaredPrimaryKey: readonly string[];
   serverAliasSemantics?: 'verified_within_scope' | 'unverified' | 'unsupported';
+  capabilities?: Readonly<Record<string, 'supported' | 'unsupported' | 'unverified'>>;
   identity: 'source-table-local-v1'; statusSemantics: string; continuity: string;
 }
 export interface HistoryScope {
