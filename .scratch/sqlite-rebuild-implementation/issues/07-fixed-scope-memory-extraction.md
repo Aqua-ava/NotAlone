@@ -101,3 +101,7 @@ MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/stat
 该单例最终1/1、约1.54秒；backend pnpm typecheck、4文件node --check及空白检查通过。首次10秒超时因目录watch未唤醒，改监听自有WAL后通过，是测试监听问题而非生产red→green。独立双轴发现的候选归属断言缺口及清理fetch无期限均已补齐，复核关闭；正常API期限3秒、清理请求2秒后继续有界退出/终止。正常shutdown后握手、锁、profile home、唯一模型socket均消失，同库重开integrity/FK通过，自有临时根清理。另提供prepare-memory-desktop.mjs，只准备合成库及环回供应商、绝不启动App；其3种供应商边界冒烟不计为DSH或业务证据。实际App仍待调度，旧真实质量失败独立保留，不作为新增外部调用前提。
 
 实际开发入口的测试网络边界另提供test-only CJS父预加载器：正常pnpm run dev可经NODE_OPTIONS装入，按私有本轮plan、test角色、数据库、项目/env/info、父PID及固定DSH参数核验唯一子进程，只插入既有network guard及两个合成字段；不替换业务插件或profile，不改模型预算、stdio和寿命管道，普通子进程透传。新增纯Node用例4/4与两文件node --check通过（补校验前错误executable及business角色曾未被拒绝），双轴复核0新增；safe-node已登记，本次未运行Electron/App/CUA。预加载/spawn收据只证明边界拦截，后续仍需真实开发App加载及业务验收，不能把该4/4算作App通过。
+
+新增正式profile未知回执单例：环回供应商完整读取1条合成请求后断开socket，HTTP与trace真实显示unknown、预约预算保留而实耗未知；另一联系人已prepared但等待许可，不能把准备当作HTTP派发。同key与continue不追加实收请求，pause后正常shutdown返回stopped并实际退出；真实Worker重开保留unknown，另一条原prepared调用同callId转failed。最终仅unknown用例1/1、约1.21秒；node --check、空白检查通过，后台类型复用本次首次1/1时有效结果。双轴补强关闭了异常目录递归清理、计数漏掉解析失败或关闭阶段请求、every空集误过3项测试缺口：异常socket保留现场，handler入口和退出后均核对实收1/错误空/audit仅1redirect，持久化调用明确长度及身份。正常路径无强制终止，握手/锁/profile/socket与自有根均无残留，无生产缺口、真实供应商或桌面操作。
+
+另外将正常开发测试父预加载器实际接入Node→正式DSH启动冒烟，读取认证SQLite/memory状态、正常关闭，preload/spawn收据均形成、供应商请求0并清理自有根；仅证明真实Node启动接缝，未启动Electron，不能替代App验收。总指挥已将9cd前端合入357c5a2，并将03后端钩子合入451932ca；实际桌面仍由03人工B观察独占，07准备就绪后等待窗口。

@@ -160,3 +160,94 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
  assert.ok(evidence.calls.every(call=>call.state==='succeeded'&&call.settlement==='settled'&&call.model===normal.model.model&&call.maxOutputTokens===normal.model.maxTokens&&call.contextWindowTokens===normal.model.budgetProfile.context_window_tokens&&call.safetyMarginTokens===normal.model.budgetProfile.safety_margin_tokens&&call.serializedBytes>0&&call.inputTokens+call.maxOutputTokens+call.safetyMarginTokens<=call.contextWindowTokens));
  assert.equal(await readFile(envFilePath,'utf8'),'NOTALONE_DEEPSEEK_API_KEY=synthetic-only\n');
 });
+
+test('正式SQLite profile的unknown保持可读和幂等，暂停后关闭排空另一联系人许可等待',{timeout:30000},async t=>{
+ const cleanups=[];let host,provider,reopened,info,launchRecord,shutdownAttempted=false;
+ const f=await fixture({after:cleanup=>cleanups.push(cleanup)}),root=f.root;
+ const infoPath=join(root,'managed/sqlite-backend.info'),envFilePath=join(root,'synthetic.env');
+ const auditPath=join(root,'synthetic-network.jsonl'),stderrPath=join(root,'synthetic-host.stderr'),wrapper=join(root,'synthetic-node');
+ const socketIdentity=createHash('sha256').update(JSON.stringify([resolve(infoPath),resolve(envFilePath)])).digest('hex').slice(0,24);
+ const socketDirectory=join('/tmp',`na-model-${process.getuid?.()??'local'}-${socketIdentity}`);
+ const exists=async path=>{try{await access(path);return true;}catch(error){if(error.code==='ENOENT')return false;throw error;}};
+ const api=async(route,{body,method=body===undefined?'GET':'POST',auth=true,timeoutMs=3000}={})=>{
+  const response=await fetch(`http://${info.address}${route}`,{method,headers:auth?{Authorization:`Bearer ${info.token}`}:{},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(timeoutMs)});
+  return {status:response.status,data:await response.json()};
+ };
+ t.after(async()=>{
+  const forced=Boolean(host?.isRunning());
+  if(forced){
+   if(info&&!shutdownAttempted)await api('/api/runtime/shutdown',{method:'POST',timeoutMs:2000}).catch(()=>{});
+   if(!await host.waitForExit(1000))assert.equal(await host.terminate(),true,'只终止本轮正式profile自有子进程');
+  }
+  assert.ok(!host?.isRunning());await reopened?.close();
+  if(provider?.listening){const closed=once(provider,'close',{signal:AbortSignal.timeout(2000)});provider.closeAllConnections();provider.close();await closed;}
+  await f.service.close();await f.contacts.close();
+  const socketResidue=await exists(socketDirectory);
+  if(socketResidue){
+   t.diagnostic(JSON.stringify({phase:'unknown_fixture_cleanup',forced,socketResidue,childStopped:!host?.isRunning(),rootPreserved:true,root,socketDirectory}));
+   throw new Error(`synthetic_unknown_socket_residue_preserved: ${socketDirectory}; diagnostic_root: ${root}`);
+  }
+  for(const cleanup of cleanups.reverse())await cleanup();
+  await assert.rejects(access(root),error=>error.code==='ENOENT');
+  t.diagnostic(JSON.stringify({phase:'unknown_fixture_cleanup',forced,socketResidue,childStopped:!host?.isRunning(),rootRemoved:true}));
+ },{timeout:30000});
+ const contactIds=f.saved.map(binding=>binding.contact_id),contactForMessage=new Map();
+ f.channel.page=async scope=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:scope.token.contact_id===contactIds[0]?'合成甲长期住在高雄。':'合成乙长期住在台南。'})],completedPartitions:['shard-a'],exhausted:true});
+ for(const contactId of contactIds){await f.service.synchronize(contactId);for(const message of (await f.service.read(contactId)).messages)contactForMessage.set(message.id,contactId);}
+ await f.contacts.setReading(false);const databaseId=f.storage.status.databaseId;
+ await f.service.close();await f.contacts.close();await f.storage.close();await assert.rejects(f.storage.check(),{code:'worker_failed'});
+ for(const [path,text] of [[envFilePath,'NOTALONE_DEEPSEEK_API_KEY=synthetic-only\n'],[auditPath,''],[stderrPath,'']])await writeFile(path,text,{mode:0o600,flag:'wx'});
+ const guard=new URL('./fixtures/sqlite-memory-profile-network-guard.mjs',import.meta.url).pathname;
+ await writeFile(wrapper,`#!/bin/sh\nexec ${quote(process.execPath)} --import ${quote(guard)} "$@" 2>> ${quote(stderrPath)}\n`,{mode:0o700,flag:'wx'});
+ const requests=[],supplierErrors=[];let received=0;
+ provider=createServer(async(req,res)=>{
+  received++;
+  try{
+   assert.equal(req.url,'/anthropic/v1/messages');assert.equal(req.headers['x-api-key'],'synthetic-only');
+   let raw='';for await(const chunk of req)raw+=chunk;const body=JSON.parse(raw);
+   const payload=JSON.parse(body.messages.find(message=>message.role==='user').content.find(block=>block.type==='text').text);
+   requests.push({body,payload});res.destroy();
+  }catch(error){supplierErrors.push(error instanceof Error?error.message:'synthetic_unknown_supplier_failed');res.destroy();}
+ });
+ provider.listen(0,'127.0.0.1');await once(provider,'listening',{signal:AbortSignal.timeout(2000)});
+ host=await launchDsh({nodeExecutable:wrapper,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,
+  environment:{NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}`,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},
+  sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history','memory']}},()=>true);
+ info=await changed(dirname(infoPath),async()=>Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const n=line.indexOf('=');return [line.slice(0,n),line.slice(n+1)];})),value=>Boolean(value.address&&value.token),{timeoutMs:8000,label:'unknown正式profile握手'});
+ launchRecord=JSON.parse(await readFile(infoPath+'.dsh-lock','utf8'));
+ const profile=await readFile(join(launchRecord.home,'profiles/notalone/cordis.patch.yml'),'utf8'),official=await readFile(new URL('../profile/sqlite.patch.yml',import.meta.url),'utf8');
+ assert.equal(profile,official.replace('PLUGIN_PATH',JSON.stringify(resolve('src/sqlite-host-plugin.ts'))));
+ assert.equal((await api('/api/memory-processing/runs/current',{auth:false})).status,401);
+ assert.equal((await api('/api/runtime/status')).data.state,'running');assert.equal((await api('/api/sync/status')).data.sync_enabled,false);
+ const requestKey=randomUUID(),first=await api('/api/memory-processing/runs',{body:{request_key:requestKey}});assert.equal(first.status,200);assert.equal(first.data.total,2);
+ assert.deepEqual(new Map(first.data.inputs.map(input=>[input.messageId,input.contactId])),contactForMessage);
+ const observed=await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),async()=>{
+  const run=await api(`/api/memory-processing/runs/${first.data.runId}`);assert.equal(run.status,200);
+  const tasks=await Promise.all(run.data.tasks.filter(task=>task.scopeKind==='contact').map(async task=>({task,trace:await api(`/api/memory-processing/tasks/${task.taskId}/events`)})));
+  return {run:run.data,tasks};
+ },value=>value.run.unknown===1&&value.tasks.some(item=>item.task.state==='running'&&item.trace.status===200&&item.trace.data.calls.some(call=>call.state==='prepared')),{timeoutMs:10000,label:'unknown与另一联系人许可等待'});
+ assert.deepEqual(supplierErrors,[]);assert.equal(requests.length,1);assert.equal(observed.run.succeeded,0);assert.equal(observed.run.candidates.length,0);
+ const uncertain=observed.tasks.find(item=>item.task.state==='unknown'),waiting=observed.tasks.find(item=>item.task.state==='running');assert.ok(uncertain);assert.ok(waiting);assert.notEqual(uncertain.task.contactId,waiting.task.contactId);
+ assert.equal(uncertain.trace.status,200);assert.equal(uncertain.trace.data.calls.length,1);const call=uncertain.trace.data.calls[0];assert.equal(call.state,'unknown');assert.ok(BigInt(call.reservedBudgetUnits)>0n);assert.equal(call.actualBudgetUnits,null);
+ assert.ok(uncertain.trace.data.events.some(event=>event.kind==='model_input'));assert.ok(uncertain.trace.data.events.some(event=>event.kind==='model_failure'));assert.ok(!uncertain.trace.data.events.some(event=>['extraction_return','verification_return','verified_output'].includes(event.kind)));
+ assert.equal(waiting.trace.data.calls.length,1);assert.equal(waiting.trace.data.calls[0].state,'prepared');assert.ok(waiting.trace.data.events.some(event=>event.kind==='model_input'));
+ const normal=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});assert.equal(normal.status,'configured');assert.equal(requests[0].body.model,normal.model.model);assert.equal(requests[0].body.max_tokens,normal.model.maxTokens);
+ assert.deepEqual(new Set(requests[0].payload.messages.map(message=>contactForMessage.get(message.message_id))),new Set([uncertain.task.contactId]));
+ assert.equal((await api('/api/memory-processing/runs',{body:{request_key:requestKey}})).data.runId,first.data.runId);
+ assert.equal((await api(`/api/memory-processing/runs/${first.data.runId}/continue`,{body:{}})).status,200);
+ const paused=await api(`/api/memory-processing/runs/${first.data.runId}/pause`,{body:{}});assert.equal(paused.status,200);assert.equal(paused.data.state,'paused');assert.equal(paused.data.unknown,1);
+ assert.equal((await api('/api/memory-processing/runs',{body:{request_key:requestKey}})).data.runId,first.data.runId);assert.equal(requests.length,1,'unknown同key与继续均不盲目重发');
+ assert.equal((await readdir(join(root,'model-permits'))).length,1);
+ const redirects=(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.equal(redirects.length,1);assert.deepEqual(redirects[0],{kind:'redirect',officialPath:'/anthropic/v1/messages',syntheticAuthentication:true});
+ shutdownAttempted=true;const stopped=await api('/api/runtime/shutdown',{method:'POST',timeoutMs:5000}).catch(error=>({status:null,error:error.name}));
+ const exited=await host.waitForExit(stopped.status===200?5000:1000),runtime=exited?null:await api('/api/runtime/status').catch(error=>({status:null,error:error.name}));
+ const residues={info:await exists(infoPath),lock:await exists(infoPath+'.dsh-lock'),profile:await exists(launchRecord.home),socket:await exists(socketDirectory)};
+ t.diagnostic(JSON.stringify({phase:'unknown_normal_shutdown',receivedRequests:received,parsedRequests:requests.length,unknown:observed.run.unknown,waitingCall:waiting.trace.data.calls[0].state,pause:paused.data.state,shutdown:stopped,exited,runtime,residues}));
+ assert.equal(stopped.status,200,'正常关闭应有界排空另一联系人许可等待');assert.equal(stopped.data.state,'stopped');assert.equal(exited,true);assert.deepEqual(residues,{info:false,lock:false,profile:false,socket:false});assert.equal(requests.length,1);
+ reopened=await SqliteStorage.open({userData:root,intent:'open',role:'test',expectedDatabaseId:databaseId});assert.deepEqual(await reopened.check(),{integrity:'ok',foreignKeys:'ok'});
+ const persisted=await reopened.execute('memoryExtraction.read',{ownerId:owner,runId:first.data.runId});assert.equal(persisted.state,'paused');assert.equal(persisted.unknown,1);assert.equal(persisted.candidates.length,0);
+ const persistedUnknown=await reopened.execute('memoryExtraction.trace',{ownerId:owner,taskId:uncertain.task.taskId});assert.equal(persistedUnknown.calls.length,1);assert.equal(persistedUnknown.calls[0].state,'unknown');
+ const persistedWaiting=await reopened.execute('memoryExtraction.trace',{ownerId:owner,taskId:waiting.task.taskId});assert.equal(persistedWaiting.calls.length,1);assert.equal(persistedWaiting.calls[0].callId,waiting.trace.data.calls[0].callId);assert.equal(persistedWaiting.calls[0].state,'failed');
+ assert.equal(received,1);assert.equal(requests.length,1);assert.deepEqual(supplierErrors,[]);
+ const finalRedirects=(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.equal(finalRedirects.length,1);assert.deepEqual(finalRedirects,redirects);
+});
