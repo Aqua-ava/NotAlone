@@ -81,3 +81,9 @@ node --test tests/visual-media-integration.test.mjs tests/message-media-view.tes
 尚待总指挥串行分配实际App窗口，使用独立合成目录验证Electron实际图片/视频及删除/失效快照撤下；没有启动/抢占桌面，dev:status为stopped/pids[]。真实ran未逐条指定媒体消息且资源关联未认证，因此不读取，留19按类型认证。首用、发布、离线分发打包及迁移/恢复继续搁置。
 
 原生测试/页面夹具按自有目录清理；已核验无进程引用后清理本票旧探针约364KiB→0，保留当前helper/夹具生成器268KiB供验收。无真实业务资料/密钥出站，无外部消息。独立两轴审查与最终提交/公开历史复核待本检查点后完成，全部验收满足前不resolved/complete。
+
+### 独立审查修复检查点
+
+Standards初审P1复现资源close抛错后媒体holder被提前释放，已在16上下文增加最小内部retainReader钩子；同attempt holder保留关闭失败状态，原删除重试实际关闭成功才释放，没有新增删除平台。Spec初审P2复现正确V2密钥解出APNG被误报缺密钥，现保留media_format_unsupported，仅实际图片解码不匹配映射needs_image_key。两项均补正常服务回归；Standards复核0项，Spec复核待回报。
+
+新增实际验证：`node --test backend-ts/test/sqlite-visual-media.test.mjs backend-ts/test/sqlite-media.test.mjs backend-ts/test/visual-dat.test.mjs` 34/34通过（10类型业务+20基础媒体回归+4DAT）。16公共合同最小变化仅contracts.ts/service.ts/README.md；18不需修改已发布迁移，资源读者可复用新增钩子。`backend-ts/test/prepare-visual-desktop.mjs`提供自包含合成图片/视频App资料准备，读取开关关闭，未启动App；不复制真实配置、不调用模型，待总指挥分配窗口后使用。

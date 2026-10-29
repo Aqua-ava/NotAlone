@@ -105,3 +105,26 @@ test('图片分段读取关闭开关后拒绝新发布，旧合法副本及同�
  assert.equal(opens,2);const repeated=await f.media.extract(f.contact,image.id,{requestKey,goal:'extract'});assert.equal(repeated.requestedAttempt.state,'failed');assert.equal(opens,2);
  assert.equal((await readdir(join(f.root,'managed/media'))).length,1);
 });
+test('资源close失败不能释放媒体holder或宣称删除完成，原删除重试实际复核释放',async t=>{
+ let failClose=true;
+ const options={onClose:async()=>{if(failClose)throw new Error('synthetic-close-failure');}};
+ const f=await fixture(t,new VisualMediaAdapter(resourcePort(options))),image=f.messages.find(m=>m.kind==='image');
+ await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}));
+ const op=await f.media.deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'media_result_clear',contactId:f.contact,messageId:image.id}});
+ const blocked=await f.media.deletion.advance({ownerId:f.owner,operationId:op.operationId});assert.notEqual(blocked.state,'completed');
+ failClose=false;const completed=await f.media.deletion.advance({ownerId:f.owner,operationId:op.operationId});assert.equal(completed.state,'completed');
+ assert.equal((await readdir(join(f.root,'managed/media'))).length,0);
+});
+test('正确V2密钥解出APNG时保持不支持格式，不能误报缺密钥',async t=>{
+ const chunk=(type,payload)=>{
+  const body=Buffer.concat([Buffer.from(type),payload]),result=Buffer.alloc(payload.length+12);result.writeUInt32BE(payload.length);body.copy(result,4);
+  let crc=0xffffffff;for(const byte of body){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc&1)?(crc>>>1)^0xedb88320:crc>>>1;}
+  result.writeUInt32BE((crc^0xffffffff)>>>0,result.length-4);return result;
+ };
+ const animation=Buffer.alloc(8);animation.writeUInt32BE(1);
+ const frame=Buffer.alloc(26);frame.writeUInt32BE(1,4);frame.writeUInt32BE(1,8);frame.writeUInt16BE(1,20);frame.writeUInt16BE(10,22);
+ const apng=Buffer.concat([png.subarray(0,33),chunk('acTL',animation),chunk('fcTL',frame),png.subarray(33)]),key=Buffer.from('synthetic-key17!');
+ const f=await fixture(t,new VisualMediaAdapter(resourcePort({envelope:'wechat_dat',data:datV4(apng,{version:2,key}),withImageKey:async consume=>consume({aesKey:key})}))),image=f.messages.find(m=>m.kind==='image');
+ await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_format_unsupported'});
+ assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
+});

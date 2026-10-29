@@ -44,14 +44,29 @@ export class VisualMediaAdapter implements MediaAdapter {
   readonly version='visual-media-v1';
   private readonly resources:VisualResourcePort;
   private readonly validate:VisualValidator;
+  private readonly readers=new Set<()=>Promise<void>>();
+  private readonly executions=new Set<Promise<unknown>>();
+  private closing=false;
   constructor(resources:VisualResourcePort,validate:VisualValidator=validateVisual){this.resources=resources;this.validate=validate;}
   supports(kind:MediaKind,goal:MediaGoal):boolean{return kind==='image'&&(goal==='extract'||goal==='original_upgrade')||kind==='video'&&goal==='extract';}
-  async execute(execution:MediaExecution){
+  execute(execution:MediaExecution){
+    if(this.closing)return Promise.reject(new StorageFailure('media_closed'));
+    const operation=this.run(execution);this.executions.add(operation);
+    void operation.then(()=>this.executions.delete(operation),()=>this.executions.delete(operation));return operation;
+  }
+  async close():Promise<void>{this.closing=true;await Promise.allSettled([...this.executions]);await Promise.all([...this.readers].map(close=>close()));}
+  private async run(execution:MediaExecution){
     if(!this.supports(execution.kind,execution.goal)||!execution.source||!execution.token)throw new StorageFailure('media_association_unverified');
-    if(execution.source.support.status!=='supported'||execution.source.contactId!==execution.contactId||execution.source.messageId!==execution.messageId||execution.source.raw.kind!==execution.kind)throw new StorageFailure('media_association_unverified');
+    if(execution.source.support.status!=='supported'||execution.source.contactId!==execution.contactId||execution.source.messageId!==execution.messageId||execution.source.raw.kind!==execution.kind||execution.source.support.sourceGeneration!==execution.token.source_generation)throw new StorageFailure('media_association_unverified');
     const context:VisualRequest={contactId:execution.contactId,messageId:execution.messageId,kind:execution.kind as 'image'|'video',goal:execution.goal as 'extract'|'original_upgrade',source:execution.source,token:execution.token,signal:execution.signal,checkpoint:execution.checkpoint};
     await context.checkpoint();
     const resource=await this.resources.open(context);
+    let released=false,closing:Promise<void>|undefined;
+    const close=():Promise<void>=>{
+      if(released)return Promise.resolve();
+      return closing??=Promise.resolve().then(()=>resource.close()).then(()=>{released=true;this.readers.delete(close);},()=>{closing=undefined;throw new StorageFailure('media_reader_release_failed');});
+    };
+    this.readers.add(close);execution.retainReader(close);
     let output:Buffer|undefined,input:Buffer|undefined;
     try {
       await context.checkpoint();proof(context,resource);
@@ -78,7 +93,7 @@ export class VisualMediaAdapter implements MediaAdapter {
         })(),validate:async(localPath,signal)=>{
           await context.checkpoint();let validation;
           try{validation=await this.validate(localPath,context.kind,signal);}catch(error){
-            if(usesV2&&error instanceof StorageFailure&&['media_image_invalid','media_format_unsupported'].includes(error.code))throw new StorageFailure('needs_image_key');
+            if(usesV2&&error instanceof StorageFailure&&error.code==='media_image_invalid')throw new StorageFailure('needs_image_key');
             throw error;
           }
           await context.checkpoint();
@@ -87,6 +102,6 @@ export class VisualMediaAdapter implements MediaAdapter {
         }});
       await context.checkpoint();
       return {association:resource.association};
-    } finally {output?.fill(0);input?.fill(0);await resource.close();}
+    } finally {output?.fill(0);input?.fill(0);await close();}
   }
 }
