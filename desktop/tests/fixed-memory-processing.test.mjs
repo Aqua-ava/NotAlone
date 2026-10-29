@@ -53,3 +53,16 @@ test('具名模式桥不接受renderer自选模式或额外参数',async t=>{
  assert.deepEqual(await bridge.readMode(),{mode:'sqlite',connectionGeneration:1});assert.deepEqual(calls,[['memory:fixed-processing-mode']]);
  await assert.rejects(bridge.readMode('legacy'));assert.equal(calls.length,1);
 });
+
+test('面板释放只取消正文，模式核验仍等待其回执且完整资格变化会取消模式',async t=>{
+ let entered=Promise.withResolvers(),response=Promise.withResolvers();
+ const f=await fixture(t,async()=>{entered.resolve();return response.promise;});
+ const mode=f.controller.mode();await entered.promise;f.controller.release();
+ response.resolve({state:'running',runtime:'dsh',hostRuntime:'typescript',storage:'sqlite'});
+ assert.deepEqual(await mode,{connectionGeneration:1,mode:'sqlite'});
+ entered=Promise.withResolvers();response=Promise.withResolvers();
+ const staleMode=f.controller.mode();await entered.promise;f.changeGeneration();
+ response.resolve({state:'running',runtime:'dsh',hostRuntime:'typescript',storage:'sqlite'});await assert.rejects(staleMode);
+ entered=Promise.withResolvers();response=Promise.withResolvers();
+ const body=f.controller.read();await entered.promise;f.controller.release();response.resolve(snapshot());await assert.rejects(body);
+});

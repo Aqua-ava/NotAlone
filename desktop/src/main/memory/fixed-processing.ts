@@ -77,40 +77,50 @@ function readTrace(raw: unknown): FixedProcessingTrace {
 /** 不保存过程正文；快照只返回当前请求，所有持有页面同时收到资格失效通知。 */
 export class FixedMemoryProcessingController {
   private revision = 0;
+  private modeRevision = 0;
   private readonly requests = new Set<AbortController>();
+  private readonly modeRequests = new Set<AbortController>();
   constructor(private readonly backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>,
     private readonly publishInvalidated: () => void) {}
   synchronize(): void {
+    this.modeRevision++;
+    for (const operation of this.modeRequests) operation.abort();
+    this.modeRequests.clear(); this.invalidateBody();
+  }
+  private invalidateBody(): void {
     this.revision++;
     for (const operation of this.requests) operation.abort();
     this.requests.clear(); this.publishInvalidated();
   }
-  release(): void { this.synchronize(); }
+  // 页面撤下正文不影响替代页面正在核验的存储模式。
+  release(): void { this.invalidateBody(); }
   private generation(input: unknown, fields: string[]): Record<string, unknown> {
     const value = row(input); exact(value, fields);
     if (!Number.isSafeInteger(value.connectionGeneration) || this.backend.getConnectionGeneration() !== value.connectionGeneration) throw invalid();
     return value;
   }
-  private async request(path: string, method: 'GET' | 'POST', body?: unknown, expectedGeneration?: number): Promise<{generation: number; data: unknown}> {
-    const generation = this.backend.getConnectionGeneration(), revision = this.revision;
+  private async request(path: string, method: 'GET' | 'POST', body?: unknown, expectedGeneration?: number, kind: 'body' | 'mode' = 'body'): Promise<{generation: number; data: unknown}> {
+    const currentRevision = () => kind === 'mode' ? this.modeRevision : this.revision;
+    const generation = this.backend.getConnectionGeneration(), revision = currentRevision();
     if (generation === undefined || expectedGeneration !== undefined && expectedGeneration !== generation) throw invalid();
-    const operation = new AbortController(); this.requests.add(operation);
+    const requests = kind === 'mode' ? this.modeRequests : this.requests;
+    const operation = new AbortController(); requests.add(operation);
     try {
       const result = await this.backend.requestJson({ path, method, ...(body === undefined ? {} : { body }), signal: operation.signal,
         timeoutMs: 10000, maxResponseBytes: 8_388_608 });
-      if (operation.signal.aborted || revision !== this.revision || result.generation !== generation || this.backend.getConnectionGeneration() !== generation) throw invalid();
+      if (operation.signal.aborted || revision !== currentRevision() || result.generation !== generation || this.backend.getConnectionGeneration() !== generation) throw invalid();
       return result;
     } catch {
-      if (!operation.signal.aborted && revision === this.revision) this.synchronize();
+      if (!operation.signal.aborted && revision === currentRevision()) this.synchronize();
       throw invalid();
-    } finally { this.requests.delete(operation); }
+    } finally { requests.delete(operation); }
   }
   private view(response: {generation: number; data: unknown}): FixedProcessingView {
     try { return { connectionGeneration: response.generation, run: readFixedProcessingRun(response.data) }; }
     catch { this.synchronize(); throw invalid(); }
   }
   async mode(): Promise<FixedProcessingMode> {
-    const response = await this.request('/api/runtime/status', 'GET');
+    const response = await this.request('/api/runtime/status', 'GET', undefined, undefined, 'mode');
     try {
       const value = row(response.data);
       if (value.state !== 'running' || value.runtime !== 'dsh' || value.hostRuntime !== 'typescript'
