@@ -14,18 +14,18 @@ Blocked by: [07 固定范围的记忆提取与核验](07-fixed-scope-memory-extr
 
 ## 验收条件
 
-- [ ] 经07正常流程产生候选，记录真实产生执行、范围与固定模型原稿；不建立采纳前多稿历史，不原地改写原稿，也不承诺未提交编辑草稿跨重启恢复。
-- [ ] 查看候选可回到必要消息及实际来源；待核验、拒绝、已采纳分别可见，未核验候选不得冒充已确认事实进入普通检索或生成。
-- [ ] 明确采纳或修改并采纳时，保存真实 `memory_decision`并产生正式 `memory_version`；决定、候选、范围和目标版本相互匹配，不由伪造决定或孤立版本绕过流程。
-- [ ] 本人和联系人使用共用记忆／版本结构并严格核验范围形状；本人资料保留每个贡献联系人及其真实来源，联系人资料不能引用他人输入。
-- [ ] 当前记忆指针、版本号、决定和依据在同一短事务提交；并发修改按当前头修订和预期版本CAS拒绝冲突，不静默覆盖新版本或更新错误记忆。
-- [ ] 自动采纳与更新必须有合法必要消息、来源语义核验及 `auto`来历，支持明确撤销，不冒称用户确认；来源不足或核验未完成不得发布正式版本。
-- [ ] 修正错误与记录变化沿既有语义区分，保留形成和操作顺序；旧错误／已失效版本不再作为当前事实使用，历史可见性仍服从来源删除。
-- [ ] 撤销仍可合法恢复的自动更新时，在同一记忆下新增恢复版本并记录被恢复版本及原前驱，不直接回拨或覆写旧版本，不把自动内容变成无来源手录或用户确认事实。
-- [ ] 恢复与自动更新均复验当前来源、范围、预期头修订和当前人工保护；当前保护归记忆头，由真实保护／解除决定变更，不从旧版本形成快照恢复旧保护。
-- [ ] 通过05清除失去必要来源的候选、版本正文、决定敏感材料及派生依赖，覆盖本人跨联系人来源闭包；其他合法来源不能替换旧依据保住已失效证明，合法独立手录不被无关删除误删。
-- [ ] 正常界面反馈区分采纳成功、拒绝、修正、合法撤销、并发冲突及来源失效；旧操作重复提交返回原结果或明确拒绝，不能重新执行或复活已删版本。
-- [ ] 隔离正常入口覆盖模型原稿到修改采纳、auto撤销新增版本、并发保护变化、两联系人／本人隔离及来源删除后的晚到采纳／恢复；检索到的当前版本与界面一致，删除内容不可检索或回写。
+- [x] 经07正常流程产生候选，记录真实产生执行、范围与固定模型原稿；不建立采纳前多稿历史，不原地改写原稿，也不承诺未提交编辑草稿跨重启恢复。
+- [x] 查看候选可回到必要消息及实际来源；待核验、拒绝、已采纳分别可见，未核验候选不得冒充已确认事实进入普通检索或生成。
+- [x] 明确采纳或修改并采纳时，保存真实 `memory_decision`并产生正式 `memory_version`；决定、候选、范围和目标版本相互匹配，不由伪造决定或孤立版本绕过流程。
+- [x] 本人和联系人使用共用记忆／版本结构并严格核验范围形状；本人资料保留每个贡献联系人及其真实来源，联系人资料不能引用他人输入。
+- [x] 当前记忆指针、版本号、决定和依据在同一短事务提交；并发修改按当前头修订和预期版本CAS拒绝冲突，不静默覆盖新版本或更新错误记忆。
+- [x] 自动采纳与更新必须有合法必要消息、来源语义核验及 `auto`来历，支持明确撤销，不冒称用户确认；来源不足或核验未完成不得发布正式版本。
+- [x] 修正错误与记录变化沿既有语义区分，保留形成和操作顺序；旧错误／已失效版本不再作为当前事实使用，历史可见性仍服从来源删除。
+- [x] 撤销仍可合法恢复的自动更新时，在同一记忆下新增恢复版本并记录被恢复版本及原前驱，不直接回拨或覆写旧版本，不把自动内容变成无来源手录或用户确认事实。
+- [x] 恢复与自动更新均复验当前来源、范围、预期头修订和当前人工保护；当前保护归记忆头，由真实保护／解除决定变更，不从旧版本形成快照恢复旧保护。
+- [x] 通过05清除失去必要来源的候选、版本正文、决定敏感材料及派生依赖，覆盖本人跨联系人来源闭包；其他合法来源不能替换旧依据保住已失效证明，合法独立手录不被无关删除误删。
+- [x] 正常界面反馈区分采纳成功、拒绝、修正、合法撤销、并发冲突及来源失效；旧操作重复提交返回原结果或明确拒绝，不能重新执行或复活已删版本。
+- [x] 隔离正常入口覆盖模型原稿到修改采纳、auto撤销新增版本、并发保护变化、两联系人／本人隔离及来源删除后的晚到采纳／恢复；检索到的当前版本与界面一致，删除内容不可检索或回写。
 
 ## 验证与证据
 
@@ -41,39 +41,41 @@ Blocked by: [07 固定范围的记忆提取与核验](07-fixed-scope-memory-extr
 - App首次使用继续搁置；组件安装、新模型设置、干净机器和发布、微信迁移／恢复实验均不属于本任务。不新增模型或凭据入口，沿现有配置核验用途与最小文本出站授权。
 - 合成结果与真实模型、真实微信、产品集成分别记账。当前未核验的真实账号／联系人读取范围不可读取；不发送外部消息，不把开发验证能力加入产品工具。
 
-## Comments
+## 执行记录
 
-### 08 离线合同检查点
-
-- Goal 已实际创建为 active，任务保持 claimed；依赖 c8e926ef 与 9b3541b3 已用 merge-base --is-ancestor 核验。
-- 已落受版本管理源码：`backend-ts/src/memory/sqlite/management/knowledge.ts` 导出 `createMemoryKnowledgeReader({includeUnconfirmed:false})` 和默认 `memoryKnowledgeReader`，实现12的 `ReplyKnowledgeReader`。本人 `self` 显式映射 `owner`；正式版本 `kind=memory`、auto/confirmed，候选 `kind=memory_candidate`、unconfirmed；额外 `headRevision:bigint` 随 identity_json 保存，复验版本、头修订、精确来源、正文与资格。拒绝、来源/范围失效内容不进入生成。
-- `management/service.ts` 提供 `importRun/read/decide/automatic`；system入口不开放HTTP或Tool。下一迁移工厂 `memoryManagementMigration(version)` 当前聚合追加11，不改1..10；05显式注册增加 `memory_management`。
-- 当前最小真实SQLite/07合成正常供应商用例5/5及backend typecheck通过，尚未作为最终验收；无新外部模型、无微信/桌面启动。
-- 待root集中登记：`backend-ts/test/sqlite-memory-management.test.mjs` 建议 current（backend Node集成）；`backend-ts/test/fixtures/memory-management/supplier.mjs` 与 `registry.mjs` 建议 fixture/support。inventory本票未写。
-- host公共文件未改。将提供只消费现有共享模型的处理结束hook和独立认证管理HTTP；12可组合本reader与09 reader，不另建memory表。
-
-核心复核补强：独立Spec审查复现本人B产物经人工修正后丢失A冻结贡献删除依赖，已补递归前驱/恢复闭包及回归；Standards指出本域全owner扫描，现改来源索引反查。正式知识合同将语义 `citationSources` 与冻结资格 `qualificationSources` 分开，`sources`为精确依赖并集供12闭包，不把资格来源伪称证据引句；完整本人M:N依赖和每条record/revision复验。决定展示按持久CAS头修订排序，不以毫秒时钟或随机id表示真实操作顺序。最终核心6/6、backend typecheck、diff --check通过；Standards窄复核0新增，Spec确认原P1关闭，后续宿主/界面与消费者组合继续验证，State仍claimed。
-
-宿主接线检查点：实际merge root `97aebf8d`，保留12 `candidateTurns.configurationFor` resolver。正式reader实际安装点是Worker registry的 `createReplyCandidateActions(memoryKnowledgeReader)`，无需给主线程候选宿主增加无效reader壳。认证管理HTTP和07处理结束 `afterRunSettled→publishRun` 已落盘，使用现有sharedModel/provider/arbiter，不新增模型调用；共9/9管理/认证/实际08→12消费者组合与backend types通过。组合由07正常合成supplier形成正式本人记忆、12正常DSH环回生成，05删除A后B讨论候选清空且请求未增加，非预塞已采纳结果。
-
-新增待root分类：`backend-ts/test/sqlite-memory-management-http.test.mjs`、`backend-ts/test/sqlite-memory-reply-integration.test.mjs`（current Node）；`desktop/tests/sqlite-memory-management.test.mjs`（safe-node）、`desktop/tests/sqlite-memory-management-view.test.mjs`（headless）。桌面独立组件/桥及入口13/13；真实App尚待本次已获短lease。07旧正式profile的formalMemoryRows断言随正常自动发布变为12，未重跑旧4/4流程；本票新增窄hook与写者消费者组合验证发布和删除，新真实质量认证仍未知。
-
-后续Spec窄审发现并补真实red→green：默认publisher原会对已有人工保护记忆另建auto身份（2条而非1条）。现该scope存在记忆身份时保留关系待定；条件/事件不完整、未决含义或已过期的适用期也不发布，不以来源核验代替旧新裁决。自动更新内部动作仍核精确目标、头CAS及当前保护；不新增外部关系模型。新保护反例、完整10项本域/认证/真实消费者组合、backend types通过。正常4产物现为4候选+3正式记忆+3版本，旧profile预期改10；root此前12行验证不用于本次变化，其余未变07证据复用。
+已获本票实现及隔离合成验收授权；依赖07最终版与根协调消费者接线已合入。本票不修改实施索引、其他票状态或发布门禁，不推送远端。
 
 ## Answer
 
-### 已完成的管理与实际App阶段（任务仍 claimed）
+实现、集成与必要验收已完成；State 暂保持 claimed，仅待保存实现提交后清理指定合成资源并记录收尾。
 
-- 固定原稿、用户采纳/修改/拒绝、真实决定、正式版本、错误修正/记录变化、保护/解除及合法恢复已接正常管理页与具名桥。本人视图按完整贡献联系人及实际引用双重复验；所有管理/当前知识读取沿同一模型，未另建表。
-- 实际App使用本票独立合成test库、停读，先核同userData dev:status stopped/pids=[]，仅pnpm run dev；核对真实Electron父PID与spawn守卫收据及认证SQLite/memoryManagement状态后操作。未调用微信、未新增真实模型或外部消息。
-- Computer Use实际操作：自动版本2→开启保护（撤销禁用）→明确解除→撤销新增版本3（恢复自1、前驱2）→错误修正版本4；认证API安排同一对象并发保护，页面旧编辑明确显示冲突且无旧正文；切另一联系人查看原始消息依据，修改采纳形成用户版本1而原稿不变，再记录变化为版本2。
-- 来源删除两次均经05正常认证DELETE，202且completed。第一次发现迟到旧编辑把来源失效误报冲突；补真实red→green后，第二次实际显示“来源或范围已失效，已撤下原资料”。候选、受影响正文、依据及未提交编辑撤下；刷新07处理及08管理后无旧候选、无当前可引用版本。API独立核对自动/恢复/修正版本2–4均redacted，真实独立手录版本1仍present，只供历史管理。
-- 实机另发现宿主总查询白名单拒绝08带范围GET；补精确self/contact白名单及回归，热重启复验正常。新HTTP2/2、主进程controller5/5、删除2/2、两端types通过；此前Chrome组件/入口13项与08→12写者消费者组合有效部分复用。一次从仓库根误跑桌面测试因cwd解析失败，已在desktop正确目录补跑5/5，未把该失败算产品问题。
-- 正常Cmd+Q后同userData dev:status stopped/pids=[]；本轮App、DSH宿主及监督器全部已知PID均不存在，握手/锁已消失，供应商准备进程也已不存在，网络守卫记录新增0。原隔离库重开integrity/FK均ok；桌面已明确释放给总指挥/12。
+### 最终行为与数据影响
 
-### 必要剩余工作
+- 07真实具名核验链准入固定原稿；保留逐事实验证事件、实际call、Unicode精确引句及必要来源。旧缺失具名链的存档标待核验；人工改写的正文不会继承原稿的语义已核验标签。已完成资料沿存档来源读取，在途及未决产物继续复验冻结授权。
+- 默认流程复用官方DSH与唯一共享ModelHost/provider，逐候选冻结当前范围和真实旧资料，按8条分页完成真实裁决、独立关系核验，合并另核正文及全部所选父来源。65条旧资料实测9页18次调用；任何页未知、来源失效、保护或头变化均不发布，unknown不重发且保持预算占用。关闭和删除会中止并排空本域调用，不释放共享provider。
+- 自动更新新增auto版本；多父合并为每个退役父保存真实auto_retire决定。用户恢复提交完整父当前快照，在同一事务逐父新增恢复决定及版本；旧快照冲突，保护后解除并刷新可合法恢复，不回拨旧指针或恢复旧保护。
+- 同源同事实重复生成真实auto_noop决定，由同一SQL语句原子写消费关系并将候选转为duplicate，显示“已跳过重复资料”；不产版本、不改变头或保护、不复活已撤回目标。全部动作目标字段互斥，夹带替换/合并字段保持待处理且无成功决定；重复候选不进入未确认知识，已撤回目标不进入当前知识。
+- 来源删除沿有索引的实际事件输入、typed消费者及真实版本祖先清理，不把同轮可用窗口或冻结贡献一律当作每条结果的消息来源。同step独立产物及独立手录保留；本人跨联系人真实依赖、下游回复输入和晚到提交仍严格失效。管理归属保留完整冻结贡献，语义证据与资格依赖分开。
+- 受控迁移12固定重建processing_step、step_input、model_operation、memory_decision、memory_candidate，保留旧图、索引及触发器。1–11未改；事务外停FK、写锁内重验与短事务复制替换，integrity/FK检查通过才提交，最后恢复FK；恢复失败关闭连接。固定SQL为40,545 bytes，SHA256为58fc1827fd2e5e3a82fc0beb454ae948e189e08cc957bb49187352586a9f34a3。
 
-- 完整默认自动关系裁决仍未完成：保护绕过已修，但临时“存在旧身份就待定”不能替代可信独立新增、更新/合并/跳过与二次来源关系核验。保持claimed/Goal active，继续沿官方共享模型、真实purpose/执行/预算/unknown及当前范围/头/保护短事务实现；不把旧PG service直接接SQLite。
-- 已发布迁移1–11不改；下一追加迁移与Worker受控重建将先形成设计、真实旧库图/失败回滚证据后实现。总指挥已分配本票窗口，桌面保持释放。
-- 总指挥新增语义审计：完整execution_input不能全部伪称事实引句；候选真实语义证据与资格依赖正在按同fact/attempt核对并修复。正常complete-claim-v1已核验所有facts的规则保持，旧配置/恢复仅按具体反例判断，不泛称正常流程跳过。
-- 本阶段仅软件/本机合成验收，真实供应商语义质量与真实微信不认证；首用、13/15/18/19暂缓和禁止外部发送继续有效。
+### 自动验证
+
+- 最终相关12个backend模块70/70（30.03s，pipefail=0）；涵盖管理/HTTP、准入、自动裁决与证据、删除、08→12消费者、本人贡献、共享协议及官方模型端口。新增知识读取断言后的duplicate五场景另复验5/5（2.17s）。
+- 最终迁移模块11/11（2.84s，pipefail=0）：真实旧11全图与账本、copy/drop/rename/check回滚重试、checksum许可、写锁、旧WAL租约读、FK恢复失败关库，以及13种伪造/消费故障的同语句完整回滚。
+- 正式SQLite profile正向场景1/1（2.46s）：唯一官方宿主、认证HTTP、两联系人及本人；本机合成供应商共6次真实记账调用，4候选+4记忆+4版本。此证据只认证软件集成，不认证真实供应商语义质量。
+- 桌面具名桥/严格解码及真实Chrome合成页面17/17，backend与desktop的pnpm run typecheck通过，git diff --check通过；Standards与Spec最终窄审均0项未关闭。
+- 实际命令：backend-ts目录执行有界120s的node --test，文件为sqlite-memory-management、sqlite-memory-management-http、sqlite-memory-candidate-admission、sqlite-memory-adjudication、sqlite-memory-adjudication-evidence、sqlite-memory-adjudication-deletion、sqlite-adjudication-deletion、sqlite-memory-reply-integration、sqlite-reply-knowledge-integration、sqlite-owner-contribution、memory-adjudication-dsh、sqlite-memory-adjudication-model-port（均.test.mjs）。迁移另执行node --test test/sqlite-adjudication-migration.test.mjs；profile执行node --test --test-name-pattern='正式SQLite profile使用' test/sqlite-memory-profile.test.mjs。命令均有pipefail，未用tail掩盖退出码。
+
+### 真实开发App验收
+
+- 仅使用隔离合成资料、总开关停读及pnpm run dev；先核验全局和同userData stopped/pids=[]，启动后再次核对真实开发App PID和已连接界面。没有微信读取、外部模型、外部消息或打包。
+- 既有实际验收覆盖自动v2保护/解除、撤销新增v3、错误修正v4、认证API并发保护造成旧编辑冲突、另一联系人修改采纳且固定原稿不变、本人/联系人隔离。代码未改变的证据复用，不重复扩套。
+- 最后来源删除复验：真实v2为“来源已核验”，打开旧编辑后经认证DELETE返回202/status=succeeded；点击旧保存显示“来源或范围已失效，已撤下原资料”，正文、依据和编辑清除，刷新07与08后无候选、无当前可引用版本。
+- 最终duplicate实际App复验：候选显示“已跳过重复资料”且无采纳按钮，目标保持“已撤销／当前无可引用版本”，历史显示真实“系统自动决定·跳过重复资料”。已核实际截图和交互。
+- 两次末轮App均正常Cmd+Q；同userData dev:status为stopped/pids=[]，自有runner/App/supplier进程、握手及锁均消失，网络守卫请求均0，桌面已释放。开发staging经精确路径、Git未跟踪及无进程引用核验后清理，3,906,829 bytes→0；源码、验收记录和业务资料未作为缓存删除。
+
+### 收尾与限制
+
+先保存本任务实现提交，再按协调要求清理已确认无进程/锁的两份最终隔离合成根及本票post-ui私有检查点；完成后补记资源结果并将本票resolved。未触碰其他目录或用户资料。
+
+本轮认证范围是软件合同、本机合成供应商、正式宿主接线及实际开发App。真实微信资料、真实模型语义质量、首用和发布不在本票认证范围；外部发送仍由用户亲自执行。没有推送、远端分支或PR。

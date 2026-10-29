@@ -4,6 +4,7 @@ import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.m
 import {supplier} from './fixtures/memory-management/supplier.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
+import {adjudicationFixture,adjudicationSupplier} from './fixtures/memory-management/adjudication-support.mjs';
 
 async function prepared(t){
  const f=await fixture(t,{registryModule:new URL('./fixtures/memory-management/registry.mjs',import.meta.url).href}),[a,b]=f.saved.map(x=>x.contact_id);
@@ -28,24 +29,21 @@ test('正常核验原稿经真实修改采纳形成独立版本，原稿不变�
 });
 
 test('自动更新撤销追加恢复版本，保护变化令旧CAS失败且不会恢复旧保护',async t=>{
- const f=await prepared(t);await f.management.importRun(f.runId);
- const candidate=(await f.management.read({scopeKind:'contact',contactId:f.a})).candidates[0];
- const manual=await f.management.decide({requestKey:'independent',action:'manual',scope:{scopeKind:'contact',contactId:f.a},body:'独立手录资料'});
- let memory=(await f.management.read({scopeKind:'contact',contactId:f.a})).memories[0];
- const update={requestKey:'auto-update',action:'auto_update',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision],memoryId:manual.memoryId,expectedVersionNo:memory.current.versionNo,expectedHeadRevision:memory.headRevision};
- await f.management.automatic(update);memory=(await f.management.read({scopeKind:'contact',contactId:f.a})).memories[0];
- assert.equal(memory.current.body,'联系人长期住在高雄。');assert.equal(memory.current.adoptionMode,'auto');
- const restore={requestKey:'undo',action:'restore',memoryId:memory.id,expectedVersionNo:memory.current.versionNo,expectedHeadRevision:memory.headRevision,restoredFromVersionNo:'1'};
+ const f=await adjudicationFixture(t);await f.extract(['我长期住在高雄。'],{publish:true});
+ f.setRespond(adjudicationSupplier({action:'update'}));await f.extract(['我现在长期住在台南。'],{publish:true});
+ let memory=(await f.read()).memories[0];assert.equal(memory.current.versionNo,'2');
+ assert.equal(memory.current.body,'联系人现在长期住在台南。');assert.equal(memory.current.adoptionMode,'auto');
+ const restore={requestKey:'undo',action:'restore',memoryId:memory.id,expectedVersionNo:memory.current.versionNo,expectedHeadRevision:memory.headRevision,restoredFromVersionNo:'1',expectedMergedParents:[]};
  await f.management.decide({requestKey:'protect',action:'protect',memoryId:memory.id,expectedVersionNo:'2',expectedHeadRevision:memory.headRevision});
  await assert.rejects(f.management.decide(restore),{code:'memory_head_conflict'});
- memory=(await f.management.read({scopeKind:'contact',contactId:f.a})).memories[0];
+ memory=(await f.read()).memories[0];
  await assert.rejects(f.management.decide({...restore,expectedHeadRevision:memory.headRevision}),{code:'memory_protected'});
  await f.management.decide({requestKey:'unprotect',action:'unprotect',memoryId:memory.id,expectedVersionNo:'2',expectedHeadRevision:memory.headRevision});
- memory=(await f.management.read({scopeKind:'contact',contactId:f.a})).memories[0];
+ memory=(await f.read()).memories[0];
  await f.management.decide({...restore,expectedHeadRevision:memory.headRevision});
- memory=(await f.management.read({scopeKind:'contact',contactId:f.a})).memories[0];
- assert.equal(memory.current.versionNo,'3');assert.equal(memory.current.previousVersionNo,'2');assert.equal(memory.current.restoredFromVersionNo,'1');assert.equal(memory.current.body,'独立手录资料');assert.equal(memory.manualProtection,false);
- assert.equal(memory.versions[1].body,'联系人长期住在高雄。');assert.equal(memory.versions[1].adoptionMode,'auto');assert.equal(memory.current.adoptionMode,'manual');
+ memory=(await f.read()).memories[0];
+ assert.equal(memory.current.versionNo,'3');assert.equal(memory.current.previousVersionNo,'2');assert.equal(memory.current.restoredFromVersionNo,'1');assert.equal(memory.current.body,'联系人长期住在高雄。');assert.equal(memory.manualProtection,false);
+ assert.equal(memory.versions[1].body,'联系人现在长期住在台南。');assert.equal(memory.versions[1].adoptionMode,'auto');assert.equal(memory.current.adoptionMode,'auto');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -55,7 +53,7 @@ test('05来源删除清候选、版本及敏感决定，本人跨联系人闭包
  const candidate=(await f.management.read(aScope)).candidates[0];
  const adopted=await f.management.decide({requestKey:'before-delete',action:'edit_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision],body:'保留必要来源的人工改写'});
  const selfBefore=await f.management.read(selfScope);assert.equal(selfBefore.candidates.length,2);
- await f.management.automatic({requestKey:'self-auto',action:'auto_accept',candidateIds:[selfBefore.candidates[1].id],candidateRevisions:[selfBefore.candidates[1].stateRevision]});
+ const affectedSelf=selfBefore.candidates.find(c=>c.sources.every(s=>s.contactId===f.a));await f.management.automatic({requestKey:'self-auto',action:'auto_accept',candidateIds:[affectedSelf.id],candidateRevisions:[affectedSelf.stateRevision]});
  await f.management.decide({requestKey:'independent-self',action:'manual',scope:selfScope,body:'独立手录仍然合法'});
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');
  const {ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
@@ -99,18 +97,18 @@ test('正式知识读取只返回当前版，未确认独立标注并复验头�
  assert.equal((await f.storage.execute('fixture.memoryKnowledge',{...discussion,contactId:f.b})).filter(k=>k.scopeKind==='contact').length,0);
 });
 
-test('本人原任务混合贡献依赖传递给修正版本，删除另一贡献者不能保留新版正文',async t=>{
+test('本人完整授权归属与实际消息依赖分开，删除未参与来源保留合法修正版本',async t=>{
  const f=await prepared(t);await f.management.importRun(f.runId);const self={scopeKind:'self',contactId:null};
  const candidate=(await f.management.read(self)).candidates.find(c=>c.sources.every(s=>s.contactId===f.b));assert.ok(candidate);
  const accepted=await f.management.automatic({requestKey:'mixed-self-auto',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
  const knowledge=(await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId:f.b,discussionId:'synthetic'})).find(k=>k.id===accepted.memoryId);
- assert.deepEqual(new Set(knowledge.qualificationSources.map(s=>s.contactId)),new Set([f.a,f.b]));assert.ok(knowledge.citationSources.every(s=>s.contactId===f.b));assert.deepEqual(new Set(knowledge.sources.map(s=>s.contactId)),new Set([f.a,f.b]));
+ assert.deepEqual(new Set(knowledge.qualificationSources.map(s=>s.contactId)),new Set([f.b]));assert.ok(knowledge.citationSources.every(s=>s.contactId===f.b));assert.deepEqual(new Set(knowledge.sources.map(s=>s.contactId)),new Set([f.b]));
  const m=(await f.management.read(self)).memories.find(m=>m.id===accepted.memoryId);await f.management.decide({requestKey:'mixed-self-correct',action:'correct',memoryId:m.id,expectedVersionNo:'1',expectedHeadRevision:m.headRevision,body:'修正后的本人资料'});
  const source=(await f.management.read({scopeKind:'contact',contactId:f.a})).candidates[0].sources[0];
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');const {ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
  const deletion=new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root));const plan=await deletion.plan({ownerId:owner,requestKey:'delete-other-contribution',scope:{kind:'source',contactId:f.a,sourceId:source.recordId}});
  assert.equal((await deletion.advance({ownerId:owner,operationId:plan.operationId})).state,'completed');
- const after=(await f.management.read(self)).memories.find(row=>row.id===accepted.memoryId);assert.equal(after.current,null);assert.ok(after.versions.every(v=>v.body===null));
+ const after=(await f.management.read(self)).memories.find(row=>row.id===accepted.memoryId);assert.equal(after.current.body,'修正后的本人资料');assert.equal(after.current.verificationState,'pending');assert.ok(after.versions.every(v=>v.body!==null));assert.deepEqual(new Set(after.current.contributingContactIds),new Set([f.a,f.b]));
 });
 
 test('处理结束窄hook从07正常核验输出自动发布，重试不重复决定或洗成人工确认',async t=>{

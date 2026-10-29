@@ -17,7 +17,7 @@ export interface StorageTransaction {
   get(sql: string, values?: SQLInputValue[]): StorageRow | undefined;
   all(sql: string, values?: SQLInputValue[]): StorageRow[];
 }
-export interface StorageMigration { version: number; sql: string }
+export interface StorageMigration { version: number; sql: string; rebuild?: 'memory-adjudication-v1' }
 export interface StorageMaintenance {
   checkpoint(): { busy: bigint; log: bigint; checkpointed: bigint };
   vacuum(): void;
@@ -29,7 +29,10 @@ export type StorageAction = ActionBase & (
   | { mode: 'read' | 'write'; execute(transaction: StorageTransaction, input: unknown, lease: StorageLease): unknown }
   | { mode: 'maintenance'; retryBusy: false; execute(maintenance: StorageMaintenance, input: unknown, lease: StorageLease): unknown }
 );
-export interface StorageRegistry { migrations: StorageMigration[]; actions: StorageAction[] }
+export interface StorageRegistry { migrations: StorageMigration[]; actions: StorageAction[];
+  // 仅可信registry观察升级阶段，不授予连接、SQL或RPC能力；异常使整个升级回滚。
+  migrationObserver?:(event:{version:number;phase:'prepare'|'create'|'copy'|'drop'|'rename'|'recreate'|'check'})=>void;
+}
 export class StorageFailure extends Error {
   readonly code: string;
   constructor(code: string) { super(code); this.name = 'StorageFailure'; this.code = code; }

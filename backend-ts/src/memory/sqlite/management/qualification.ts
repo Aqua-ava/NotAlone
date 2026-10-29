@@ -1,3 +1,5 @@
+import {qualificationSources} from './dependencies.ts';
+import {projectCitations} from './evidence.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertSourceEligibility} from '../../../history/sqlite/source.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
@@ -16,13 +18,18 @@ export function available(tx:StorageTransaction,ownerId:string,s:MemoryScope,wri
  if(write&&tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))fail('memory_source_stale');
 }
 export function citations(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint}):StorageRow[]{
- return tx.all(`SELECT c.*,m.text_body FROM memory_citation c JOIN message m ON m.owner_id=c.owner_id AND m.contact_id=c.source_contact_id AND m.id=c.message_id WHERE c.owner_id=? AND ${parent.candidateId?'c.candidate_id=?':'c.memory_id=? AND c.version_no=?'} ORDER BY c.source_contact_id,c.message_id,c.record_id`,parent.candidateId?[ownerId,parent.candidateId]:[ownerId,parent.memoryId!,parent.versionNo!]);
+ const rows=tx.all(`SELECT c.*,m.text_body FROM memory_citation c JOIN message m ON m.owner_id=c.owner_id AND m.contact_id=c.source_contact_id AND m.id=c.message_id WHERE c.owner_id=? AND ${parent.candidateId?'c.candidate_id=?':'c.memory_id=? AND c.version_no=?'} ORDER BY c.source_contact_id,c.message_id,c.record_id`,parent.candidateId?[ownerId,parent.candidateId]:[ownerId,parent.memoryId!,parent.versionNo!]);
+ return projectCitations(tx,ownerId,parent,rows);
 }
 export function requireSources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint},manual=false):StorageRow[]{
  const rows=citations(tx,ownerId,parent);
  const required=tx.all(`SELECT source_contact_id,message_id FROM memory_required_message WHERE owner_id=? AND ${parent.candidateId?'candidate_id=?':'memory_id=? AND version_no=?'}`,parent.candidateId?[ownerId,parent.candidateId]:[ownerId,parent.memoryId!,parent.versionNo!]);
  if(!manual&&(!rows.length||!required.length))fail('memory_source_stale');
- for(const r of required)if(!rows.some(c=>c.source_contact_id===r.source_contact_id&&c.message_id===r.message_id))fail('memory_source_stale');
+ const uncited=required.filter(r=>!rows.some(c=>c.source_contact_id===r.source_contact_id&&c.message_id===r.message_id));
+ if(uncited.length){
+  const dependencies=qualificationSources(tx,ownerId,parent);
+  if(uncited.some(r=>!dependencies.some(d=>d.contactId===r.source_contact_id&&d.messageId===r.message_id)))fail('memory_source_stale');
+ }
  for(const r of rows){
   assertSourceEligibility(tx,{owner_id:ownerId,contact_id:String(r.source_contact_id),message_id:String(r.message_id),record_id:String(r.record_id)});
   const m=tx.get('SELECT interpretation_revision,text_body FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,r.source_contact_id,r.message_id]);
@@ -30,11 +37,16 @@ export function requireSources(tx:StorageTransaction,ownerId:string,parent:{cand
  }
  return rows;
 }
-export function requireCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow):void{
+export function requireCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow){
  if(c.state!=='pending'||typeof c.event_id!=='string')fail('memory_candidate_stale');
  const output=verifiedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)});
  if(output.proposedBody!==c.proposed_body||output.producedAttemptId!==c.produced_attempt_id||output.scopeKind!==c.scope_kind||output.contactId!==c.contact_id||output.outputNo!==c.output_no)fail('memory_candidate_stale');
- requireSources(tx,ownerId,{candidateId:String(c.id)});
+ const actual=requireSources(tx,ownerId,{candidateId:String(c.id)});
+ if(output.semanticVerification.state==='verified'&&(actual.length!==output.citations.length||output.citations.some(expected=>!actual.some(row=>row.source_contact_id===expected.contactId&&row.message_id===expected.messageId&&row.record_id===expected.recordId&&row.accepted_revision===expected.interpretationRevision&&row.span_start===expected.spanStart&&row.span_end===expected.spanEnd))))fail('memory_candidate_stale');
+ return output.semanticVerification;
+}
+export function requireAutomaticCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow):void{
+ if(requireCandidate(tx,ownerId,c).state!=='verified')fail('memory_verification_pending');
 }
 export function requireVersion(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow):StorageRow[]{
  available(tx,ownerId,{scopeKind:m.scope_kind as 'self'|'contact',contactId:m.contact_id as string|null});

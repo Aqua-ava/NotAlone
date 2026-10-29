@@ -8,7 +8,7 @@ test('认证管理HTTP固定owner并拒绝系统决定、注入字段、Origin�
  const base=`http://127.0.0.1:${server.address().port}/api/memory-management`,headers={authorization:`Bearer ${token}`,'content-type':'application/json'};
  assert.equal((await fetch(`${base}?scope_kind=self`)).status,401);assert.equal((await fetch(`${base}?scope_kind=self`,{headers:{...headers,origin:'https://invalid.example'}})).status,401);
  assert.equal((await fetch(`${base}?scope_kind=self&scope_kind=contact`,{headers})).status,400);
- assert.equal((await fetch(`${base}/decisions`,{method:'POST',headers,body:JSON.stringify({requestKey:randomUUID(),action:'auto_accept',candidateIds:[],candidateRevisions:[]})})).status,400);
+ for(const action of ['auto_accept','auto_update','auto_retire','auto_noop'])assert.equal((await fetch(`${base}/decisions`,{method:'POST',headers,body:JSON.stringify({requestKey:randomUUID(),action,candidateIds:[],candidateRevisions:[]})})).status,400);
  assert.equal((await fetch(`${base}/decisions`,{method:'POST',headers,body:JSON.stringify({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'self',contactId:null},body:'独立合成手录',ownerId:owner})})).status,400);
  const created=await fetch(`${base}/decisions`,{method:'POST',headers,body:JSON.stringify({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'self',contactId:null},body:'独立合成手录'})});assert.equal(created.status,200);
  const read=await fetch(`${base}?scope_kind=self`,{headers});assert.equal(read.status,200);assert.equal((await read.json()).memories[0].current.body,'独立合成手录');
