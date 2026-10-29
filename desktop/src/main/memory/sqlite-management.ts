@@ -63,7 +63,7 @@ export class SqliteMemoryManagementController {
    if(action==='restore')clean.restoredFromVersionNo=decimal(request.restoredFromVersionNo);
    const snapshot=await this.read(accepted);this.validate(input,true);
    if(clean.candidateIds?.some(id=>!snapshot.view.candidates.some(c=>c.id===id)))return {status:'source_stale'};
-   if(clean.memoryId&&!snapshot.view.memories.some(m=>m.id===clean.memoryId))return {status:'source_stale'};
+   if(clean.memoryId&&!snapshot.view.memories.some(m=>m.id===clean.memoryId&&m.state==='active'&&m.current!==null))return {status:'source_stale'};
    const response=await this.request('/api/memory-management/decisions','POST',clean);this.validate(input,true);
    const result=object(response.data);return {status:'applied',result:{decisionId:uuid(result.decisionId),memoryId:result.memoryId===null?null:uuid(result.memoryId),versionNo:result.versionNo===null?null:decimal(result.versionNo),action:member(result.action,[action])}};
   }catch(error){

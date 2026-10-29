@@ -59,3 +59,21 @@ Blocked by: [07 固定范围的记忆提取与核验](07-fixed-scope-memory-extr
 新增待root分类：`backend-ts/test/sqlite-memory-management-http.test.mjs`、`backend-ts/test/sqlite-memory-reply-integration.test.mjs`（current Node）；`desktop/tests/sqlite-memory-management.test.mjs`（safe-node）、`desktop/tests/sqlite-memory-management-view.test.mjs`（headless）。桌面独立组件/桥及入口13/13；真实App尚待本次已获短lease。07旧正式profile的formalMemoryRows断言随正常自动发布变为12，未重跑旧4/4流程；本票新增窄hook与写者消费者组合验证发布和删除，新真实质量认证仍未知。
 
 后续Spec窄审发现并补真实red→green：默认publisher原会对已有人工保护记忆另建auto身份（2条而非1条）。现该scope存在记忆身份时保留关系待定；条件/事件不完整、未决含义或已过期的适用期也不发布，不以来源核验代替旧新裁决。自动更新内部动作仍核精确目标、头CAS及当前保护；不新增外部关系模型。新保护反例、完整10项本域/认证/真实消费者组合、backend types通过。正常4产物现为4候选+3正式记忆+3版本，旧profile预期改10；root此前12行验证不用于本次变化，其余未变07证据复用。
+
+## Answer
+
+### 已完成的管理与实际App阶段（任务仍 claimed）
+
+- 固定原稿、用户采纳/修改/拒绝、真实决定、正式版本、错误修正/记录变化、保护/解除及合法恢复已接正常管理页与具名桥。本人视图按完整贡献联系人及实际引用双重复验；所有管理/当前知识读取沿同一模型，未另建表。
+- 实际App使用本票独立合成test库、停读，先核同userData dev:status stopped/pids=[]，仅pnpm run dev；核对真实Electron父PID与spawn守卫收据及认证SQLite/memoryManagement状态后操作。未调用微信、未新增真实模型或外部消息。
+- Computer Use实际操作：自动版本2→开启保护（撤销禁用）→明确解除→撤销新增版本3（恢复自1、前驱2）→错误修正版本4；认证API安排同一对象并发保护，页面旧编辑明确显示冲突且无旧正文；切另一联系人查看原始消息依据，修改采纳形成用户版本1而原稿不变，再记录变化为版本2。
+- 来源删除两次均经05正常认证DELETE，202且completed。第一次发现迟到旧编辑把来源失效误报冲突；补真实red→green后，第二次实际显示“来源或范围已失效，已撤下原资料”。候选、受影响正文、依据及未提交编辑撤下；刷新07处理及08管理后无旧候选、无当前可引用版本。API独立核对自动/恢复/修正版本2–4均redacted，真实独立手录版本1仍present，只供历史管理。
+- 实机另发现宿主总查询白名单拒绝08带范围GET；补精确self/contact白名单及回归，热重启复验正常。新HTTP2/2、主进程controller5/5、删除2/2、两端types通过；此前Chrome组件/入口13项与08→12写者消费者组合有效部分复用。一次从仓库根误跑桌面测试因cwd解析失败，已在desktop正确目录补跑5/5，未把该失败算产品问题。
+- 正常Cmd+Q后同userData dev:status stopped/pids=[]；本轮App、DSH宿主及监督器全部已知PID均不存在，握手/锁已消失，供应商准备进程也已不存在，网络守卫记录新增0。原隔离库重开integrity/FK均ok；桌面已明确释放给总指挥/12。
+
+### 必要剩余工作
+
+- 完整默认自动关系裁决仍未完成：保护绕过已修，但临时“存在旧身份就待定”不能替代可信独立新增、更新/合并/跳过与二次来源关系核验。保持claimed/Goal active，继续沿官方共享模型、真实purpose/执行/预算/unknown及当前范围/头/保护短事务实现；不把旧PG service直接接SQLite。
+- 已发布迁移1–11不改；下一追加迁移与Worker受控重建将先形成设计、真实旧库图/失败回滚证据后实现。总指挥已分配本票窗口，桌面保持释放。
+- 总指挥新增语义审计：完整execution_input不能全部伪称事实引句；候选真实语义证据与资格依赖正在按同fact/attempt核对并修复。正常complete-claim-v1已核验所有facts的规则保持，旧配置/恢复仅按具体反例判断，不泛称正常流程跳过。
+- 本阶段仅软件/本机合成验收，真实供应商语义质量与真实微信不认证；首用、13/15/18/19暂缓和禁止外部发送继续有效。
