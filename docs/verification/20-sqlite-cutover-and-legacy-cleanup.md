@@ -128,7 +128,7 @@
 | --- | --- | --- |
 | 后端锁定类型 | `cd backend-ts && <主仓>/backend-ts/node_modules/.bin/tsc --noEmit`（TypeScript 7.0.2） | 0 错误 |
 | 桌面锁定类型 | `cd desktop && <同一 tsc> --noEmit` | 0 错误 |
-| 切换结构／演练／审计／退役／停用 | `cd backend-ts && node --test test/sqlite-cutover-{structure,rehearsal,audit,retirement,disabled-capabilities}.test.mjs` | 24/24 通过（4＋11＋2＋5＋2） |
+| 切换结构／演练／审计／退役／停用／跨重启宿主 | `cd backend-ts && node --test test/sqlite-cutover-{structure,rehearsal,audit,retirement,disabled-capabilities,restart-host}.test.mjs` | 25/25 通过（4＋11＋2＋5＋2＋1） |
 | 相关后端模块 | 见 §9.1 | 113/113 通过 |
 | 桌面启动相关 | `cd desktop && node --test tests/sqlite-development.test.mjs tests/startup-continuity.test.mjs tests/pure-ts-startup.test.mjs` | 16/16 通过 |
 | 测试清单 | `cd desktop && node scripts/test-inventory.mjs` | 登记通过 |
@@ -147,6 +147,7 @@
 - 按失败文件集合对比：本树**无新增失败文件**；相对基线减少/消失的旧文件为 `host-launch.test.mjs`、`python-retirement-host.test.mjs`（已按退役登记删除）与 `host-readiness.test.mjs`。失败计数差异来自 PG 连接失败的子测试数与新增 cutover 测试（新增文件全部通过），不表示新增回归。
 - 修复后不再有 `backend_launch_requires_sqlite` 残留失败；`sqlite-history-startup-host.test.mjs` 3 项恢复通过。
 - 新增 cutover 测试文件全部纳入 current 执行并通过；不修改需 PG 的既有测试，也不把它们计作本票验收。
+- 跨重启回归：`sqlite-cutover-restart-host.test.mjs` 连续两次默认启动后再启动真实 SQLite 宿主，验证同 `database_id`／owner、`/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status` 均为 200，`/api/sync/cli-sessions` 无明确同意时返回 409 metadata_consent_required；第三次默认启动仍同一实例。
 
 ## 10. 12 条验收逐条判定
 
@@ -192,6 +193,16 @@
 | S5 13/15/18/19 证据偏弱 | 新增行为测试：实际启动 SQLite 宿主校验 ownership unavailable 与旧回复／Skill／导入／媒体路由 503/404 | `sqlite-cutover-disabled-capabilities.test.mjs` 2/2 |
 | S6 演练缺口 | 增 synthetic 门禁、清理后创建失败、清理后旧 writer 重现 3 项；媒体非空路径已有用例 | rehearsal 11/11 |
 | S7 切换顺序风险 | verification §6 写明清理→建库→检查→二次停写→原子切换及失败保持维护态语义 | 本文 §6、§12 |
+
+## 13. 跨重启 UI 复核限制（t21 报告，2026-10-30）
+
+t21 在隔离合成根报告：首次启动正常，Cmd 正常退出后同根重启，database_id／结构／离线 integrity 正常，但联系人页显示「联系人同步状态读取失败」。本会话按该路径补充复核：
+
+- **本会话复现步骤**：隔离根不预置 `sqlite-development.json`；`/tmp/t09-node/bin/node desktop/scripts/dev.mjs --user-data-dir <root>` 启动；首轮确认默认创建、manifest completed、8 项检查 passed、联系人页正常；分别以 dev 监督器 SIGINT 与 Electron app.quit（SIGTERM）正常退出，确认 `dev:status` stopped/pids[]；同根重启两次。
+- **连续 3 周期证据**：每周期后端 `/api/runtime/status` 200（storage=sqlite、capabilities 五能力、ownership.contacts=typescript）、`/api/contacts` 200、`/api/sync/cli-bindings` 200（identity_protocol=sqlite-selected-v1）、`/api/sync/status` 200、`/api/setup/status` 200；CDP 实测联系人页无「读取失败」提示，`contacts.getState().directoryPhase=ready`、`bindings.getState().phase=ready`，`sessionIssue=unavailable` 仅因隔离根无真实微信 CLI；三次启动 database_id 与 owner 一致。
+- **自动化回归**：`backend-ts/test/sqlite-cutover-restart-host.test.mjs` 固化了「默认启动→重开→宿主重启后读取联系人／绑定／同步／setup」路径，断言 200、身份一致、不建第二个空库；`sqlite-cutover-rehearsal` 的合成授权与媒体区用例继续覆盖切换失败/重试。
+- **已知环境限制（非产品缺陷）**：隔离根没有真实 `wechat-cli`／前台探针时，读取微信会话名单需要用户明确同意且会返回 `sessionIssue=unavailable`；这不影响联系人目录、持久绑定与授权状态读取。UI 文案「联系人同步状态读取失败」来自 `BindingConsentController phase=failed`（其数据源是 setup/cli-bindings/sync 状态，不是 `/api/contacts`），当前证据不足以归因到 20 的默认切换：`reopenCompleted` 不执行清理、不改写配置，本会话连续 3 周期与新增自动化回归均未出现该失败。
+- **待 t21 补充字段以最终判定**：失败时 userData 绝对路径与是否同一路径重启、是否预置合成 CLI/联系人/授权或执行过删除（是否存在未完成 deletion_operation）、失败时 `/api/contacts`／`/api/sync/cli-bindings`／`/api/setup/status` 实际状态码与 network 记录、失败页面控制器与可复现日志。若证据显示确为代码缺陷，本文件与测试先行，再按缺陷修复；当前不把环境限制误报为产品缺陷。
 
 ## 附录 A：77 表逐项结构核对
 
