@@ -21,6 +21,9 @@ func notaloneProtocolFixture(t *testing.T, supported bool) *notaloneHistorySessi
 	if err = writer.Exec(`CREATE TABLE Name2Id(user_name TEXT);INSERT INTO Name2Id(rowid,user_name) VALUES(1,'friend-a');UPDATE "Msg_` + talkerHash("friend-a") + `" SET server_id=0,local_type=1,real_sender_id=1,create_time=1700000000,status=0;`); err != nil {
 		t.Fatal(err)
 	}
+	if err = writer.Exec("INSERT INTO Name2Id(rowid,user_name) VALUES(2,'" + s.selfWxid() + "')"); err != nil {
+		t.Fatal(err)
+	}
 	writer.Close()
 	h := newNotaloneHistorySession(s)
 	t.Cleanup(h.close)
@@ -183,6 +186,9 @@ func TestNotAloneHistoryMetadataProtocolRejectsBeforeSourceAccess(t *testing.T) 
 		{Operation: "observe-metadata", Account: "a", Conversation: "b", Consent: "selected-message-metadata-v1", Kind: "all"},
 		{Operation: "observe-metadata", Account: "a", Conversation: "b", Consent: "selected-message-metadata-v1", Kind: "text", Target: "injected"},
 		{Operation: "resolve", Consent: "selected-metadata-v1", DisplayName: "x", Kind: "text"},
+		{Operation: "observe-test-metadata", Account: "a", Conversation: "b", Consent: "wrong", Kind: "arm"},
+		{Operation: "observe-test-metadata", Account: "a", Conversation: "b", Consent: "selected-test-lifecycle-metadata-v1", Kind: "all"},
+		{Operation: "observe-test-metadata", Account: "a", Conversation: "b", Consent: "selected-test-lifecycle-metadata-v1", Kind: "arm", Target: "injected"},
 	} {
 		h := newNotaloneHistorySession(&server{})
 		_, err := h.handle(context.Background(), request)
@@ -190,5 +196,28 @@ func TestNotAloneHistoryMetadataProtocolRejectsBeforeSourceAccess(t *testing.T) 
 		if err == nil || err.Error() != "history_request_invalid" {
 			t.Fatalf("错误许可/类型先访问了来源:%v", err)
 		}
+	}
+}
+
+func TestNotAloneHistoryTestMetadataProtocolKeepsHistoryGate(t *testing.T) {
+	h := notaloneProtocolFixture(t, false)
+	r := notaloneHistoryRequest{Operation: "observe-test-metadata", Account: h.selected.Account, Conversation: h.selected.Conversation, Consent: "selected-test-lifecycle-metadata-v1", Kind: "arm"}
+	value, err := h.handle(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := value.(notaloneTestMetadataReport)
+	if report.Status != "unverified" || report.LockedCount != 0 || len(report.Records) != 0 {
+		t.Fatal(report)
+	}
+	r.Kind = "next"
+	if _, err = h.handle(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	r.Kind = ""
+	r.Operation = "target"
+	r.Consent = "selected-history-v1"
+	if _, err = h.handle(context.Background(), r); err == nil || err.Error() != "history_support_unverified" {
+		t.Fatalf("开发诊断不能授予正文资格:%v", err)
 	}
 }

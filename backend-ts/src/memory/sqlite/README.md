@@ -2,7 +2,7 @@
 
 ## 共享执行和实际追踪合同
 
-`schema.ts`导出`memoryExtractionMigration(version:number)`，`execution-schema.ts`导出`memoryExecutionMigration(version:number)`。当前源码测试组合暂用discussion v6、memory v7、execution v8；公共宿主按已发布迁移后连续分配，不能直接覆盖公共注册表或改已发布v1–v5。所有时间为毫秒，整数由Worker读为bigint。领域动作不暴露任意SQL。
+`schema.ts`导出`memoryExtractionMigration(version:number)`，`execution-schema.ts`导出`memoryExecutionMigration(version:number)`。公共宿主已注册discussion v7、memory v8、execution v9，保留media v6；已发布v1–v9不可改写，后续只追加增量迁移。所有时间为毫秒，整数由Worker读为bigint。领域动作不暴露任意SQL。
 
 07拥有`processing_run/run_contact/processing_item/run_input/processing_task/task_contribution/processing_step/step_input/step_attempt`以及通用`model_operation/operation_item/model_call/execution_event/execution_input/event_source`。记忆producer的`model_call`必须沿operation关联同一个step，event的原始call必须属于同attempt，实际input必须指向同step冻结输入，event_source必须在该步固定窗口内。来源固定引用`capture_record.id`，不是文本或旧PG来源ID。
 
@@ -17,7 +17,7 @@
 
 `service.ts`的`SqliteMemoryExtraction`绑定宿主owner，`start(requestKey)`只消费已保存资料，并异步执行固定目标；`pause/continue/read/trace/waitForIdle/close`不调用微信。`initialize()`只恢复状态，不重发模型。普通暂停在小批边界收尾；撤销和来源删除在每次发送与提交的同一短事务复验。`model-port.ts`沿原正常提取提示、complete-claim-v1核验策略和唯一ModelHost，禁自动HTTP/流程重试；`runtime.ts`供公共宿主组合，未配置时保留可见失败，不能隐式换供应商。宿主须注入llm并复用现有环境加载，不能因为工厂存在声称已经产品接线。
 
-多业务宿主先装配唯一ModelHost和provider，再将同一provider与permit传给`createSqliteExtractionModelPort`；同时向讨论传相同provider和该ModelHost的arbiter。提取端口`close`只取消并排空自己调用，不释放注入的共享provider；宿主须在记忆、讨论等所有调用者排空后统一dispose。未注入provider时，端口沿独立装配路径自行安装并释放；`createSqliteMemoryRuntime`属于此独立路径，不能与另一个同名adapter并行装配。
+多业务宿主先装配唯一ModelHost和provider，再将同一provider与permit传给`createSqliteExtractionModelPort`；同时向讨论传相同provider和该ModelHost的arbiter。提取端口`close`只取消并排空自己调用，不释放注入的共享provider；宿主须在记忆、讨论等所有调用者排空后统一dispose。未注入provider时，端口沿独立装配路径自行安装并释放，不能与另一个同名adapter并行装配。
 
 公共宿主调用`createSqliteMemoryRuntime`时注入`sharedModel: {configuration, provider, permit, resolveUserId}`。此分支只使用共享许可端点及adapter，匿名身份已由provider绑定，不另建ModelHost、arbiter、身份目录或provider，也不持有其关闭能力；close只排空本service。configuration必须来自宿主安全读取既有env文件后的正常解析，`NOTALONE_ENV_FILE`仅是路径，解析器不会自行加载。未注入的独立测试路径才自行安装/关闭资源。
 
@@ -29,6 +29,6 @@
 
 `registration.ts`提供本写者的精确`memoryExtractionDeletionAuthority`和`memoryExtractionDeletionRegistration()`。本分支显式装配memory_extraction→history→identity→skill_metadata，只开放实际source/contact/account；清空边界由06接续。公共宿主每增加讨论/媒体等真实写者都必须扩requiredDomains和精确authority，不能把本分支当作完整产品注册。`deletion.ts`来源闭包覆盖固定输入、实际前文和本人混合阶段；source保留封存无正文调用及原范围，contact/account连同此前封存调用清除。
 
-活动调用登记`memory:${taskId}`到与05相同的ActiveHolders，关闭回调取消并等待真实业务finally与末次写入。正常关闭共享同一Promise，等待已受理的SQLite准备、所有在途任务及模型端口；claim或代次读取晚返回时先检查停止状态，不能继续派发。原始资料、规范消息和外部微信不由本模块读写；完整追踪只进SQLite，不进普通日志或Git。
+活动调用登记`memory:${taskId}`到与05相同的ActiveHolders，关闭回调取消并等待真实业务finally与末次写入。正常关闭共享同一Promise，等待已受理的SQLite准备、所有在途任务及模型端口；claim或代次读取晚返回时先检查停止状态，不能继续派发。释放失败仅清除关闭缓存供原对象重试，业务停止信号不恢复；成功关闭结果仍复用。原始资料、规范消息和外部微信不由本模块读写；完整追踪只进SQLite，不进普通日志或Git。
 
-`contracts.ts`给11提供已实现producer/input分支的TypeScript合同。当前未发布的组合暂号由公共registry依次分配，集成按最终顺序调整；每个工厂独立接收version，不改已发布v1–v5。本人阶段复用既有事件材料，不新增产物身份或正文表，原暂号owner9不发布。
+`contracts.ts`给11提供已实现producer/input分支的TypeScript合同。每个工厂独立接收version，公共registry使用已发布的7/8/9组合；后续不可改写这些版本。本人阶段复用既有事件材料，不新增产物身份或正文表，旧owner工厂已删除。

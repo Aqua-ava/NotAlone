@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import {fixture,owner,modelPort} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 
+test('关闭失败后沿原service重试模型释放，已停止的业务不能重新受理',async t=>{
+ const f=await fixture(t);let closes=0;
+ const memory=new SqliteMemoryExtraction(f.storage,owner,{prepare:async()=>{throw Error('不得调用');},invoke:async()=>{throw Error('不得调用');},close:async()=>{if(++closes===1)throw Error('合成模型释放失败');}});
+ await assert.rejects(memory.close(),/合成模型释放失败/);
+ await assert.rejects(memory.start('no-reopen-after-close-error'),{code:'memory_extraction_closed'});
+ await memory.close();await memory.close();assert.equal(closes,2);
+});
+
 test('并发关闭共同等待模型端口真正排空，不让第二次close提前返回',async t=>{
  const f=await fixture(t),entered=Promise.withResolvers(),release=Promise.withResolvers();
  let closes=0;

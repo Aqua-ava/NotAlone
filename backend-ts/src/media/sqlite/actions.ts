@@ -137,6 +137,13 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
   if(f.role==='image_display'&&(!v.viewable||!['original','thumbnail','unknown'].includes(v.imageQuality))||f.role==='video_playback'&&!v.playable||f.role==='audio_playback'&&!v.playable||f.role!=='image_display'&&v.imageQuality!=='not_applicable'||v.imageQuality==='original'&&(!v.qualityProof||!/^[-a-zA-Z0-9_:]{1,128}$/.test(v.qualityProof)))fail('media_validation_invalid');
   tx.run('UPDATE media_file SET format=?,mime_type=?,byte_size=?,content_digest=?,container_valid=1,viewable=?,playable=?,image_quality=?,quality_proof=? WHERE owner_id=? AND id=?',[v.format,v.mimeType,i.byteSize,i.digest,v.viewable?1:0,v.playable?1:0,v.imageQuality,v.qualityProof,i.ownerId,i.fileId]);return true;
  }),
+ action('discardPlayback','write',(tx,i,lease)=>{
+  const a=assertAttempt(tx,i,lease);if(a.goal!=='extract'||message(tx,i).kind!=='voice')fail('media_failure_mode_invalid');
+  const file=one(tx,"SELECT * FROM media_file WHERE owner_id=? AND contact_id=? AND message_id=? AND id=? AND produced_attempt_id=? AND role='audio_playback' AND publish_state='staged'",[i.ownerId,i.contactId,i.messageId,id(i.fileId),i.attemptId],'media_file_not_found');
+  if(!tx.get("SELECT 1 FROM media_file WHERE owner_id=? AND produced_attempt_id=? AND id=? AND role='audio_source' AND publish_state='staged' AND content_state='present' AND container_valid=1 AND content_digest IS NOT NULL",[i.ownerId,i.attemptId,file.parent_file_id]))fail('media_audio_source_required');
+  tx.run("UPDATE media_file SET publish_state='cleanup_pending' WHERE owner_id=? AND id=?",[i.ownerId,i.fileId]);
+  return {discarded:true};
+ }),
  action('publish','write',(tx,i,lease)=>{
   const a=assertAttempt(tx,i,lease);const proof=i.association as MediaAssociationProof|null;
   if(a.goal!=='audio_conversion'){
@@ -156,7 +163,7 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
   for(const f of fresh)tx.run("UPDATE media_file SET publish_state='current' WHERE owner_id=? AND id=?",[i.ownerId,f.id]);
   tx.run("UPDATE media_extraction_attempt SET state='completed',result_outcome=?,lease_token=NULL,lease_expires_at=NULL,finished_at=?,association_proof_format=?,association_proof=?,error_code=? WHERE owner_id=? AND id=?",[outcome,Date.now(),proof?'media-association-v1':null,proof?JSON.stringify(proof):null,i.errorCode??null,i.ownerId,i.attemptId]);
   tx.run('UPDATE message_media SET head_revision=head_revision+1 WHERE owner_id=? AND message_id=?',[i.ownerId,i.messageId]);
-  if(current.some(f=>!keepIds.has(f.id))||tx.get("SELECT 1 FROM media_file WHERE owner_id=? AND message_id=? AND publish_state='retired' AND content_state='present'",[i.ownerId,i.messageId]))planDeletion(tx,lease,registration,{ownerId:i.ownerId,requestKey:`${i.attemptId}-replace`,scope:{kind:'media_result_replace',contactId:i.contactId,messageId:i.messageId}});
+  if(current.some(f=>!keepIds.has(f.id))||tx.get("SELECT 1 FROM media_file WHERE owner_id=? AND message_id=? AND publish_state IN ('retired','cleanup_pending') AND content_state='present'",[i.ownerId,i.messageId]))planDeletion(tx,lease,registration,{ownerId:i.ownerId,requestKey:`${i.attemptId}-replace`,scope:{kind:'media_result_replace',contactId:i.contactId,messageId:i.messageId}});
   return snapshot(tx,i);
  }),
  action('fail','write',(tx,i,lease)=>{

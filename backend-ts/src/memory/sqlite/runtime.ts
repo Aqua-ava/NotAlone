@@ -42,6 +42,9 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:Sql
   }
   service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders);await service.initialize();
   const http=new SqliteMemoryExtractionHttp(service,options.authorize);let closing:Promise<void>|undefined;
-  return {service,http,configurationState:configuration.status,close:()=>closing??=modelHost?modelHost.close(()=>service.close()):service.close()};
+  return {service,http,configurationState:configuration.status,close:()=>closing??=(async()=>{
+   // 自有许可先停领；业务释放失败时保留host，重试成功后才关闭其账本与socket。
+   modelHost?.arbiter.stop();await service.close();if(modelHost)await modelHost.close(async()=>{});
+  })().catch(error=>{closing=undefined;throw error;})};
  }catch(error){await port.close?.();await modelHost?.shutdown();throw error;}
 }

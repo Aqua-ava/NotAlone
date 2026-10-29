@@ -1,0 +1,18 @@
+{
+  "format": "wechat-controlled-metadata-preflight-v1",
+  "cliSha256": "aa2949dd23d259b2762ae3b1156f1efc1a368ffcd4bc56f7a4c58c615fdcca66",
+  "overlaySha256": "b326bdb3a5c46d80e8e66cf1792dd6ada8f8e78b3eeacc724dd04af02dc6669d",
+  "bodyRead": false,
+  "sourceXmlRead": false,
+  "sent": false,
+  "recall": false,
+  "rawIdentitiesPersisted": false,
+  "displayNameExact": true,
+  "checkedPartitions": 8,
+  "presentTables": 2,
+  "historyStatus": "unverified",
+  "senderPreflightPassed": true,
+  "lockedCount": 0,
+  "status": "unverified",
+  "closed": true
+}

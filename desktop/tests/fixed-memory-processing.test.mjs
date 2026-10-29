@@ -37,3 +37,19 @@ test('unknown、无产出与缺失阶段不互相伪装，非法成功状态拒�
  const f=await fixture(t,async()=>data);assert.equal((await f.controller.read()).run.unknown,1);
  data={...snapshot(),state:'completed'};await assert.rejects(f.controller.read());assert.equal(f.invalidations.length,1);
 });
+
+test('记忆入口沿认证运行状态识别存储模式，未知模式不回落旧页面',async t=>{
+ let storage='sqlite';const f=await fixture(t,async req=>{assert.equal(req.path,'/api/runtime/status');assert.equal(req.method,'GET');assert.equal(req.body,undefined);return {state:'running',runtime:'dsh',hostRuntime:'typescript',...(storage===undefined?{}:{storage})};});
+ assert.deepEqual(await f.controller.mode(),{connectionGeneration:1,mode:'sqlite'});
+ storage=undefined;assert.deepEqual(await f.controller.mode(),{connectionGeneration:1,mode:'legacy'});
+ storage='unverified';await assert.rejects(f.controller.mode());assert.equal(f.invalidations.length,1);
+});
+
+test('具名模式桥不接受renderer自选模式或额外参数',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'notalone-fixed-mode-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const output=path.join(root,'preload.mjs');await build({entryPoints:['src/preload/fixed-memory-processing.ts'],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
+ const {createFixedMemoryProcessingBridge}=await import(pathToFileURL(output));const calls=[];
+ const bridge=createFixedMemoryProcessingBridge({invoke:async(...args)=>{calls.push(args);return {mode:'sqlite',connectionGeneration:1};}});
+ assert.deepEqual(await bridge.readMode(),{mode:'sqlite',connectionGeneration:1});assert.deepEqual(calls,[['memory:fixed-processing-mode']]);
+ await assert.rejects(bridge.readMode('legacy'));assert.equal(calls.length,1);
+});
