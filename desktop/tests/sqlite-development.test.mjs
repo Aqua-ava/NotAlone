@@ -61,6 +61,9 @@ test('开发控制拒绝业务库、重置和宽权限配置，不创建库', as
     {formatVersion:1,intent:'reset',role:'test'},
     {formatVersion:1,intent:'open',role:'test'},
     {formatVersion:1,intent:'create',role:'test',userData:'/untrusted'},
+    {formatVersion:1,intent:'create',role:'test',capabilities:[]},
+    {formatVersion:1,intent:'create',role:'test',capabilities:['contacts','messages']},
+    {formatVersion:1,intent:'create',role:'test',capabilities:['contacts','contacts']},
   ]) {
     await writeFile(f.config,JSON.stringify(config),{mode:0o600});
     assert.deepEqual(await new SqliteDevelopmentProbe(f.userData,f.project).run(()=>true),{phase:'blocked',code:'sqlite_configuration_invalid'});
@@ -112,4 +115,18 @@ test('桌面存储探针通过真实Worker创建和重开隔离库', async () =>
   assert.equal(JSON.parse(saved).intent,'open');
   assert.deepEqual(await probe.run(()=>true),created);
   assert.equal(await readFile(config,'utf8'),saved);
+});
+
+test('显式联系人能力通过底座检查后沿官方宿主启动配置，不授权其他业务', async () => {
+  const f = await fixture('contacts-capability');
+  await writeFile(f.config,JSON.stringify({formatVersion:1,intent:'create',role:'test',capabilities:['contacts']}),{mode:0o600});
+  const config = {source:'first-run',runtime:'dsh',infoPath:path.join(f.userData,'unrelated.info'),wechatCliPath:path.join(f.userData,'configured-cli')};
+  const development = new StartupDiagnostics(f.userData,undefined,f.project);
+  await development.ensureReady(config,()=>true);
+  assert.equal(development.getState().phase,'ready');
+  assert.deepEqual(config.sqlite,{userData:f.userData,expectedDatabaseId:'synthetic-id',role:'test',capabilities:['contacts'],wechatCliPath:config.wechatCliPath});
+  assert.equal(config.infoPath,path.join(f.userData,'managed/sqlite/backend.info'));
+  assert.equal(config.projectDirectory,f.project);
+  assert.equal(config.source,'external');
+  assert.deepEqual(JSON.parse(await readFile(f.config,'utf8')).capabilities,['contacts']);
 });

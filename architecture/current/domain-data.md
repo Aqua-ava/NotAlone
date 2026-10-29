@@ -1,5 +1,7 @@
 # 现行领域与数据契约
 
+> 本轮空 SQLite 的联系人身份与逐人授权按 [ADR-110](../adr/110-selected-sqlite-contact-read-grants.md)：不迁旧授权、不启用全部私聊，取消立即封禁旧资格。默认 PG 切换前仍遵循原合同；首用搁置不取消授权核验。
+
 > SQLite 底座目标按 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)局部修订原 PG 保留条款；01 仅提供受控实例与存储合同，默认业务尚未切换。其余来源、范围、删除及 DSH 约束保持，完整结构和消费者在实施 20 切换前复核。
 
 > 2026-10-21 决定收敛：新增联系人按 [ADR-087](../adr/087-wechat-confirmed-contact-onboarding.md)及 [ADR-089](../adr/089-all-private-wechat-sync-scope.md)从真实微信会话加入，支持逐会话确认或全部私聊范围授权，独立创建与导入新建的旧接口待退役；历史 `manual_create` 记录保留读取与删除语义。默认自动采纳按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；下文标明的历史协议及评测不得当作默认流水线。

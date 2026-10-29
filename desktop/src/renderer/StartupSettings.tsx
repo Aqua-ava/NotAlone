@@ -37,10 +37,10 @@ export function StartupReadiness({ state, backend, onConfigure }: {
   if (state.sqlite) return <section className="startup-readiness" aria-label="SQLite 存储诊断">
     <h2>SQLite 存储诊断</h2>
     <p role={state.sqlite.phase === 'ready' ? 'status' : 'alert'}>{state.sqlite.phase === 'ready'
-      ? 'SQLite 底座已就绪，业务功能尚未切换。' : 'SQLite 底座检查未通过，已有资料现场已保留。'}</p>
+      ? state.sqlite.capabilities?.includes('contacts') ? 'SQLite 联系人存储已就绪。' : 'SQLite 底座已就绪，业务功能尚未切换。' : 'SQLite 底座检查未通过，已有资料现场已保留。'}</p>
     {state.sqlite.phase === 'ready' && <p>结构版本 {state.sqlite.schemaVersion} · SQLite {state.sqlite.sqliteVersion}</p>}
     {state.sqlite.phase === 'blocked' && <p>诊断代码：{state.sqlite.code}</p>}
-    <p>此模式仅核验隔离存储，不开放联系人、同步、记忆或回复。</p>
+    <p>{state.sqlite.capabilities?.includes('contacts') ? '当前仅开放联系人身份与逐人授权；正文同步、记忆和回复尚未开放。' : '此模式仅核验隔离存储，不开放联系人、同步、记忆或回复。'}</p>
     <button className="button" disabled={!backend?.canRetryConnection || retrying} onClick={() => void retry()}>
       {retrying ? '正在检查…' : '重新检查存储'}
     </button>

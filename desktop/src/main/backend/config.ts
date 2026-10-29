@@ -1,4 +1,5 @@
 import { constants } from 'node:fs';
+import type { SqliteLaunchConfiguration } from '../../../../backend-ts/src/launch';
 import { lstat, mkdir, open, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
@@ -26,6 +27,8 @@ function validStartupPath(value: unknown, allowEmpty = false): value is string {
 export interface BackendConfiguration {
   // 产品后台只有官方 DSH + TS 一条启动路径。
   runtime?: 'dsh';
+  // 仅由通过底座检查的显式开发能力配置注入，不从页面或路径配置接受。
+  sqlite?: SqliteLaunchConfiguration;
   // 仅本次受管 PG 监督器生成；不从磁盘配置或页面接受。
   managedLifetimeLock?: string;
   source?: 'external' | 'managed' | 'first-run';

@@ -25,7 +25,7 @@ export class StartupDiagnostics {
   private readonly managed: ManagedRuntime;
   private readonly sqliteDevelopment?: SqliteDevelopmentProbe;
 
-  constructor(private readonly userData: string, private readonly resourcesDirectory?: string, developmentProjectDirectory?: string) {
+  constructor(private readonly userData: string, private readonly resourcesDirectory?: string, private readonly developmentProjectDirectory?: string) {
     if (developmentProjectDirectory) this.sqliteDevelopment = new SqliteDevelopmentProbe(userData, developmentProjectDirectory);
     this.managed = new ManagedRuntime(userData, resourcesDirectory,
       (step) => { if (!this.closing) this.publish({ phase: 'preparing', mode: 'managed', step, code: undefined }); });
@@ -88,9 +88,20 @@ export class StartupDiagnostics {
     if (!canStart() || this.closing) throw new BackendFailure('backend_connection_failed');
     await this.saving?.catch(() => {});
     if (!canStart() || this.closing) return;
+    delete config.sqlite;
     const sqlite = await this.sqliteDevelopment?.run(() => canStart() && !this.closing);
     if (!canStart() || this.closing) return;
     if (sqlite) {
+      const contacts = this.sqliteDevelopment?.getContactConfiguration();
+      if (sqlite.phase === 'ready' && contacts) {
+        config.sqlite = { ...contacts, ...(config.wechatCliPath ? { wechatCliPath: config.wechatCliPath } : {}) };
+        config.infoPath = path.join(this.userData, 'managed/sqlite/backend.info');
+        config.runtime = 'dsh';
+        config.projectDirectory = this.developmentProjectDirectory;
+        config.source = 'external';
+        this.publish({ phase: 'ready', mode: 'external', step: undefined, sqlite, helperWarnings: [], code: 'ready' });
+        return;
+      }
       this.publish({ phase: 'blocked', mode: 'external', step: undefined, sqlite, helperWarnings: [],
         code: sqlite.phase === 'ready' ? 'sqlite_business_unavailable' : 'sqlite_storage_failed' });
       // 底座诊断通过不代表业务切换完成；此模式不启动旧 PG 或后台业务。

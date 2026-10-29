@@ -1,11 +1,11 @@
 export interface CliSessionSummary {
-  locator: string; displayName: string; lastTimestamp: number | null; boundContactId: string | null;
+  locator: string; displayName: string; lastTimestamp: number | null; boundContactId: string | null; selectionGeneration?: string; knownContactId?: string | null;
 }
 export interface BindingSummary {
-  bindingId: string; contactId: string; locator: string; displayName: string | null; status: 'active' | 'revoked';
+  bindingId: string; contactId: string; locator: string; displayName: string | null; status: 'active' | 'revoked'; selectionGeneration?: string;
 }
 export interface BindingConsentState {
-  revision: number; scopeRevision: number;
+  revision: number; scopeRevision: number; selectionOnly?: boolean;
   phase: 'offline' | 'loading' | 'ready' | 'owner-unconfigured' | 'unavailable' | 'failed';
   // 已保存关联仅用于展示；正文授权始终只认 bindings 的 active 集合。
   knownBindings?: BindingSummary[];

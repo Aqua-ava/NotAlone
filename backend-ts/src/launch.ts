@@ -7,9 +7,12 @@ import { createServer } from 'node:net';
 import { constants } from 'node:fs';
 import { processIdentityState, type ProcessIdentity } from './platform/process/process-identity.ts';
 
+export interface SqliteLaunchConfiguration {
+  userData: string; expectedDatabaseId: string; role: 'test'; capabilities: ['contacts']; wechatCliPath?: string;
+}
 export interface LaunchConfiguration {
   nodeExecutable: string; projectDirectory: string; envFilePath: string; infoPath: string;
-  businessHome: string; environment?: NodeJS.ProcessEnv;
+  businessHome: string; environment?: NodeJS.ProcessEnv; sqlite?: SqliteLaunchConfiguration;
 }
 export interface OwnedDshProcess {
   readonly pid: number;
@@ -148,8 +151,9 @@ export async function launchDsh(config: LaunchConfiguration, canStart: () => boo
     await mkdir(profile, { recursive: true, mode: 0o700 });
     await writeFile(path.join(profile, 'package.json'), JSON.stringify({private:true,dsh:{profile:{bundles:[]}}}), {mode:0o600});
     const backend = path.join(config.projectDirectory, 'backend-ts');
-    const patch = await readFile(path.join(backend, 'profile/host.patch.yml'), 'utf8');
-    await writeFile(path.join(profile, 'cordis.patch.yml'), patch.replace('PLUGIN_PATH', JSON.stringify(path.join(backend, 'src/host-plugin.ts'))), {mode:0o600});
+    const patch = await readFile(path.join(backend, config.sqlite ? 'profile/sqlite.patch.yml' : 'profile/host.patch.yml'), 'utf8');
+    const plugin = config.sqlite ? 'src/sqlite-host-plugin.ts' : 'src/host-plugin.ts';
+    await writeFile(path.join(profile, 'cordis.patch.yml'), patch.replace('PLUGIN_PATH', JSON.stringify(path.join(backend, plugin))), {mode:0o600});
     const launch = { ...config, environment: undefined, home, parentPid: process.pid, lockNonce: nonce };
     await writeFile(path.join(home, 'host.json'), JSON.stringify(launch), {mode:0o600});
     await guarded(lockPath, () => atomicRecord(lockPath, { nonce, parentPid:process.pid, home }));

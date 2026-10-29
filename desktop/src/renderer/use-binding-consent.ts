@@ -39,7 +39,7 @@ export function useBindingConsent(contacts: ContactSessionView) {
       && !state.bindings.some((binding) => binding.locator === locator)
       && (!item.target || item.target === 'new' || contacts.state.contacts.some((contact) => contact.contactId === item.target)))));
   }, [state, contacts.state.contacts]);
-  useEffect(() => { setHistoryAuthorized(false); }, [selection, state.sessions, state.scopeRevision]);
+  useEffect(() => { setHistoryAuthorized(false); }, [selection, state.sessions, state.scopeRevision, state.selectionOnly]);
   async function refresh() {
     setHistoryAuthorized(false);
     try { await window.notalone.bindings.refresh(); setError(''); }
@@ -48,7 +48,7 @@ export function useBindingConsent(contacts: ContactSessionView) {
   async function confirm() {
     const scopeRevision = state.scopeRevision;
     try {
-      await window.notalone.bindings.confirmSelections({ scopeRevision, historyAuthorized, selections: Object.entries(selection).map(([locator, item]) =>
+      await window.notalone.bindings.confirmSelections({ scopeRevision, historyAuthorized: state.selectionOnly === true || historyAuthorized, selections: Object.entries(selection).map(([locator, item]) =>
         ({ locator, displayName: item.displayName, contactId: item.target === 'new' ? null : item.target })) });
       if (scopeRevision === latest.current.scopeRevision) setError('');
     } catch { if (scopeRevision === latest.current.scopeRevision) setError('本次授权选择已失效，请刷新后重新确认。'); }

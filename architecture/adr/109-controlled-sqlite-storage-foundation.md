@@ -20,4 +20,4 @@ DSH 官方 profile、薄插件、官方 Skill 加载与生命周期保持；模�
 
 ## 实现与证据边界
 
-代码合同见 [SQLite 存储](../../backend-ts/src/storage/sqlite/README.md)，实施证据见 [01](../../.scratch/sqlite-rebuild-implementation/issues/01-sqlite-runtime-lifecycle.md)。当前只含两张工程元数据表；02/05/14 等逐票增加正式领域 DDL 与具名动作，完整结构、消费者和存储面完整性须在 20 切换前复核。独立合成测试、实际开发入口和真实微信认证分别报告；本票不认证 77 表业务或微信端到端。
+代码合同见 [SQLite 存储](../../backend-ts/src/storage/sqlite/README.md)，实施证据见 [01](../../.scratch/sqlite-rebuild-implementation/issues/01-sqlite-runtime-lifecycle.md)。实施 01 时只含两张工程元数据表；02 的身份与逐人授权见 [ADR-110](110-selected-sqlite-contact-read-grants.md)，05/14 等逐票增加正式领域 DDL 与具名动作，完整结构、消费者和存储面完整性须在 20 切换前复核。独立合成测试、实际开发入口和真实微信认证分别报告；本票不认证 77 表业务或微信端到端。
