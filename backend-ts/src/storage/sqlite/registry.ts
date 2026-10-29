@@ -1,12 +1,12 @@
-import {discussionMigration} from '../../reply/sqlite/schema.ts';
 import {discussionActions} from '../../reply/sqlite/actions.ts';
 import {discussionRequestActions} from '../../reply/sqlite/requests.ts';
 import {runtimeActions} from '../../reply/sqlite/runtime-actions.ts';
 import {discussionModelActions} from '../../reply/sqlite/model-actions.ts';
-import {memoryExtractionMigration} from '../../memory/sqlite/schema.ts';
-import {memoryExecutionMigration} from '../../memory/sqlite/execution-schema.ts';
-import {runActions} from '../../memory/sqlite/runs.ts';
-import {executionActions} from '../../memory/sqlite/execution.ts';
+import { discussionMigration } from '../../reply/sqlite/schema.ts';
+import { executionActions } from '../../memory/sqlite/execution.ts';
+import { memoryExecutionMigration } from '../../memory/sqlite/execution-schema.ts';
+import { runActions } from '../../memory/sqlite/runs.ts';
+import { memoryExtractionMigration } from '../../memory/sqlite/schema.ts';
 import { mediaMigration } from '../../media/sqlite/schema.ts';
 import { createMediaActions } from '../../media/sqlite/actions.ts';
 import { historyMigration } from '../../history/sqlite/schema.ts';
