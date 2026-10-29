@@ -58,7 +58,8 @@
 ## 复现命令
 
 ```bash
-cd backend-ts && npx tsc --noEmit
+# 使用仓库锁定依赖的 TypeScript 7.0.2；不要用 npx（可能解析到非锁定版本）
+cd backend-ts && pnpm run typecheck
 node --test test/sqlite-incremental-{handoff,sync,controls}.test.mjs \
   test/sqlite-first-history-coordinator.test.mjs test/sqlite-history-http.test.mjs \
   test/sqlite-history-hooks.test.mjs test/sqlite-history-source-holder.test.mjs \
@@ -66,10 +67,10 @@ node --test test/sqlite-incremental-{handoff,sync,controls}.test.mjs \
   test/sqlite-deletion-metadata.test.mjs test/sqlite-adjudication-migration.test.mjs
 ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron \
   --test test/sqlite-history-host.test.mjs
-cd desktop && npx tsc --noEmit && node --test tests/incremental-sync-status.test.mjs ...
+cd desktop && pnpm run typecheck && node --test tests/incremental-sync-status.test.mjs ...
 ```
 
-结果：backend typecheck 使用主仓锁定二进制（`typescript 7.0.2`）0 错误；相关后端测试 71/71 通过；新增增量测试 handoff 6、sync 5、controls 8 顶层（含 6 个子场景）、迁移升级 1 全部通过；宿主测试 8/8（Electron node）；desktop typecheck 0 错误，新增桌面测试 2/2、相关桌面同步测试 24/24。`node scripts/check_public_history.mjs --ref HEAD --working-tree` 0 问题。
+结果：backend `pnpm run typecheck`（锁定 `typescript 7.0.2`）0 错误；相关后端测试 71/71 通过；新增增量测试 handoff 6、sync 5、controls 8 顶层（含 6 个子场景）、迁移升级 1 全部通过；宿主测试 8/8（Electron node）；desktop typecheck 0 错误，新增桌面测试 2/2、相关桌面同步测试 24/24。`node scripts/check_public_history.mjs --ref HEAD --working-tree` 0 问题。
 
 环境说明：工作树默认无 `node_modules`；运行宿主测试时临时软链主仓依赖，提交/检查前已移除（软链会使公开前检查报本机路径）。`sync-scope-view` 等 Playwright 页面测试因本机缺浏览器二进制未运行，属环境缺口而非本票代码回归。
 

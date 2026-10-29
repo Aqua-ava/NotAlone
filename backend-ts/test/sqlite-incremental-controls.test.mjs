@@ -287,10 +287,12 @@ test('关闭协调器取消在途增量读取，迟到页不提交且关闭不�
   await f.history.synchronize(binding.contact_id);
   const entered=deferred(),gate=deferred();
   f.state.tailHook=async()=>{entered.resolve();await gate.promise;return {records:[record('2')],caughtUp:true,cursorOut:'tail-9'};};
+  // 关闭必须由自身取消路径驱动：不手动释放 gate，由渠道 close 解除在途并应在有界时间内结束。
   f.state.closeHook=async()=>{gate.resolve();};
   f.coordinator.wake(); await entered.promise;
-  const closing=f.coordinator.close();
-  gate.resolve(); await closing;
+  const started=Date.now();
+  await f.coordinator.close();
+  assert.ok(Date.now()-started<2000,'关闭应在有界时间内结束');
   assert.equal((await f.history.read(binding.contact_id)).coverage.incremental.pagesAccepted,0,'退出时在途页不得提交');
   assert.equal((await f.history.read(binding.contact_id)).messages.length,1);
   assert.equal(f.coordinator.getState().phase,'closed');
