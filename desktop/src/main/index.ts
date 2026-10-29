@@ -139,7 +139,7 @@ void app.whenReady().then(async () => {
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
-  const sqliteDiscussion = installSqliteDiscussionBridge(commands, backend, contacts);
+  const sqliteDiscussion = installSqliteDiscussionBridge(commands, backend, contacts,()=>foreground.getGenerationBlock()===null);
   coordinateOwnerContextChanges(memory, replies);
   memory.onOwnerContextChanged((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   memory.onRecordDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
@@ -152,7 +152,9 @@ void app.whenReady().then(async () => {
     started: () => { sqliteDiscussion.synchronize(true); preferenceDeletion.started(); },
     settled: () => preferenceDeletion.settled(),
   });
-  foreground.onStateChanged(() => replies.refreshGenerationEligibility());
+  let candidateGenerationBlock=foreground.getGenerationBlock();
+  foreground.onStateChanged(() => { replies.refreshGenerationEligibility(); const next=foreground.getGenerationBlock();
+    if(next!==candidateGenerationBlock){candidateGenerationBlock=next;sqliteDiscussion.synchronize(true);} });
   const sources = installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
     traces.invalidateSource();
     skillLearning.invalidate();
