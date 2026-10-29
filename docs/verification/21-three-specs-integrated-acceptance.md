@@ -1,18 +1,19 @@
 # 21 三份规格组合验收记录
 
-日期：2026-10-30。执行会话：`t21-integrated-acceptance`（共享任务 task-7）。验收基线：`codex/sqlite-rebuild-integration`@`d1068fbf`（初稿基于 `d8c55619`；随后票20 跨重启回归 `b8577686` 与跨重启联系人目录失效修复 `154ac9e2`（05×06 交互）经 `d1068fbf` 集成，本票已合并复核），本票工作树 `sqlite-rebuild-21`（同名分支，仅本地提交，不 push/PR）。
+日期：2026-10-30（初稿；2026-10-30 增补见 §11）。执行会话：`t21-integrated-acceptance`（共享任务 task-7）。验收基线：`codex/sqlite-rebuild-integration`@`ccf047b8`（初稿基于 `d8c55619`；中间复核 `d1068fbf`；随后票20/10 resolved 同步 `aff0366d`/`0fac4ada` 等经 `ccf047b8` 集成，本票已合并复核），本票工作树 `sqlite-rebuild-21`（同名分支，仅本地提交，不 push/PR）。
 
 本记录只做组合验收与证据收口，不补实现、不改其他票状态。已 resolved 票引用其既有有效证据并按未变化条件复用，未重跑其整套；本轮实际执行的组合批次与 App 交互单独记录。合成、实际开发 App、真实模型、真实微信分列记账；未认证项不得解释为通过。
 
 ## 0. 结论摘要
 
-- **17 项有效范围**（01–12、14、16、17、20、21）中，01、02、05、07、08、09、11、12、14、16、17 已 resolved 且实现/结构已进集成基线；03、04、06、10、20 实现已进基线但 State 保持 claimed，其真实渠道/清理门槛未认证。
+- **17 项有效范围**（01–12、14、16、17、20、21）中，01、02、05、07、08、09、10、11、12、14、16、17、20 已 resolved 且实现/结构已进集成基线（13 项）；03、04、06 实现已进基线但 State 保持 claimed（真实渠道门槛未认证）；21 为本票。
 - 本轮实测的集成组合回归：7 个批次 **592/592 通过**（A 同步/清空/删除 125、B 记忆/文档/控制 145、C 媒体 68、D 切换/回复/讨论/Skill 94、E Electron 宿主 30、F 桌面模块 56、G 裁决/迁移/共享结构 74），两端 typecheck 结果见 §3/§9。
 - 基线复核追加：票20 跨重启宿主回归与「跨重启 UI 复核限制」（20 verification §13）；本票在修复基线 `d1068fbf` 上复跑批 H **25/25**（含 restart-host 1/1），并跑修复回归批 I **45/45**（含新增 `sqlite-deletion-metadata-restart` 2 项）、批 J **21/21**（Electron 宿主）、批 K **27/27**（Electron 下 restart 回归 + 批 H 复跑）。
 - 本票报告的「重启后联系人同步状态/目录读取失败」已由 t20 定位为 **05×06 交互缺陷**（`deletion.metadataAvailable` 把清空内容类未完成删除误当身份删除），修复源 `154ac9e2` 经 `d1068fbf` 集成；本票用同构根按原顺序（source DELETE completed → 清空 boundary_pending → 正常退出 → 同根重启）完成 **App 级闭环复验**：`/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status`、`/api/deletions`、清空状态均 200，联系人页无读取失败（§4.5）。该修复不改变真实微信/真实模型门槛，相关列仍按未认证记录。
+- **2026-10-30 增补（票10/20 resolved 同步，见 §11）**：票20 经 `aff0366d`（集成 `3bae162a`）标 resolved，真实清理重评 **N/A（本机无清理对象）+ 只读证据**，最终 12/12＝11 通过+第 8 条 N/A；票10 经 `0fac4ada`（集成 `a731d471`）标 resolved，App 级环回供应商实机通过开始/暂停小批收尾/继续复用/退出重开/单人失败/共用故障固定原因/unknown，并修复在途 sending 误判与共用故障原因展示；证据见 20 verification §7/§10 与 `docs/verification/10-memory-processing-controls.md`。本票按条件变化仅最小复跑 `sqlite-memory-control` 16/16，未重跑组合批次。
 - 实际开发 App（热更新 dev，隔离合成 userData）完成：默认 SQLite 自动创建（manifest `completed`，8/8 checks passed）、记忆/文档状态展示、认证来源删除后旧资料实际撤下、联系人清空进入 `boundary_pending` 且无成功文案、正常退出 `stopped/pids[]`、重开同 `databaseId`/结构 15/`integrity=ok`/`foreignKeys=ok`；重开后联系人目录与授权读取正常（原 05×06 缺陷修复后 App 闭环复验，§4.5）。
-- **未通过/受阻（关键）**：03 真实普通历史、状态语义与来源生命周期、跨启动连续性；04 真实增量尾部（重选/断线/微信非前台 CLI 同步未认证）；06 真实 observer/reader 边界协议与最终只读制品（生产保持 `boundary_pending`）；20 真实旧业务库/副本清理（对象归属不明，实际清理未执行）；19 真实媒体唯一关联用户暂缓。真实模型仅 07/11 两次用户另行授权的受限真实调用，其余未测。
-- 因此本票**保持 claimed 并报告受阻**，不以已提交代码或已发布任务关闭规格；即使全部合成与 App 交互通过，也不能替代 03/04/06/20 的真实渠道/清理认证。
+- **未通过/受阻（关键）**：03 真实普通历史、状态语义与来源生命周期、跨启动连续性；04 真实增量尾部（重选/断线/微信非前台 CLI 同步未认证）；06 真实 observer/reader 边界协议与最终只读制品（生产保持 `boundary_pending`）；19 真实媒体唯一关联用户暂缓。20 真实清理已重评 **N/A（本机无清理对象）+ 只读证据**，10 已 resolved；真实模型仅 07/11 两次用户另行授权的受限真实调用，其余未测。
+- 因此本票**保持 claimed 并报告受阻**，不以已提交代码或已发布任务关闭规格；即使全部合成与 App 交互通过，也不能替代 03/04/06 的真实渠道认证（20 真实清理本机 N/A，其他机器另行核验）。
 - 17 项矩阵见 §1；四项用户暂缓见 §2；组合实测见 §3；App 证据见 §4；未通过项与所需授权见 §7。
 
 ## 1. 17 项有效范围验收矩阵
@@ -30,13 +31,13 @@
 | 07 固定范围的记忆提取与核验 | 通过 | 通过 | 通过 | 通过 | 受限真实调用成功（2 目标合成文本；语义质量未认证） | 不适用 | 票 Answer/最终核对表：`07-fixed-scope-memory-extraction.md:47` 起；真实供应商合成复测：`07-...:171`；批 B 145/145 内含 extraction 相关；本轮 App 记忆页 1/1、候选与自动采纳显示（§4） |
 | 08 记忆候选、版本与修正 | 通过 | 通过 | 通过 | 通过 | 未测（环回合成供应商） | 不适用 | 票 Answer：`08-memory-candidates-and-versions.md:48` 起（70/70、迁移 11/11、profile 1/1、桌面 17/17）；批 G 补充裁决/删除/迁移；t08 实际 App 复验：`planning.md:187` |
 | 09 主题资料与长期概览 | 通过 | 通过 | 通过 | 通过 | 未测（环回供应商） | 不适用 | 票 Answer：`09-memory-documents-publication.md:50`；09 集成与复验：`planning.md:213,219`；批 B 内 documents 8 文件 145/145 的一部分；本轮 App 文档区状态可见（§4） |
-| 10 记忆处理控制与恢复 | 通过 | 通过 | 通过 | 部分（固定面板/暂停继续/退出重开；模型相关子项未在 App 构造） | 未测 | 不适用 | t10 实机修正与验收边界：`planning.md:199`；控制/记忆测试批 B；票 State claimed、无 Answer（未 resolved） |
+| 10 记忆处理控制与恢复 | 通过 | 通过 | 通过（t10 控制 16/16、桌面固定处理 23/23；本轮新基线最小复跑 `sqlite-memory-control` 16/16） | 通过（t10 App 级环回供应商实机：开始/暂停小批收尾/继续复用/退出重开/单人失败/共用故障固定原因/unknown；两处实机发现修复） | 未测（仅供应商传输边界环回；语义/网络质量未认证） | 不适用 | 票已 resolved；证据 `docs/verification/10-memory-processing-controls.md`（全篇，含复跑命令）、提交 `0fac4ada`/集成 `a731d471`；planning 已改 resolved |
 | 11 助手讨论与 DSH 副本 | 通过 | 通过 | 通过 | 通过 | 受限真实调用成功（1 次，重开不重复；质量未认证） | 不适用 | 票 Answer 12 条表：`11-assistant-discussions-and-runtime.md:51` 起；真实供应商复测：`11-...:95`；批 D 讨论/DSH 通过 |
 | 12 候选回复与依据 | 通过 | 通过 | 通过 | 通过 | 未测（合成供应商） | 不适用 | 票 Answer：`12-reply-candidates-and-basis.md:53` 起；批 D reply 候选/知识集成 + 桌面 F；t12 实际 App 生成/编辑/选稿/来源失效撤下（票内） |
 | 14 官方 Skill 加载接回 | 通过 | 通过 | 通过 | 通过 | 不适用（隔离加载无模型请求） | 不适用 | 票 Answer：`14-official-skill-loading.md:49` 起；批 D skill/host 通过；空库 Skill 安全：`docs/verification/20-...:164` |
 | 16 单条媒体保存与清除 | 通过 | 通过 | 通过 | 通过（四类删除/预览，条件未变复用） | 不适用（不调模型） | 未认证（真实类型未安装，入口拒绝） | 票 Answer：`16-single-message-media-lifecycle.md:49` 起；批 C `sqlite-media*` 68/68、E `media-host`、F 桌面 message-media 56/56 |
 | 17 图片与视频提取 | 通过 | 通过 | 通过 | 通过（PNG/视频/清除/来源删除，复用） | 不适用 | 未认证（19 暂缓，真实关联入口关闭） | 票 Answer 含支持矩阵：`17-image-video-extraction.md:47` 起；批 C visual/DAT、F 桌面；原生 helper 合成证据按其票内声明范围复用 |
-| 20 默认切换 SQLite 与旧业务清理 | 通过 | 通过 | 通过（隔离演练） | 通过（默认入口实测；本轮空根复验） | 不适用 | 不适用；**真实旧业务清理受阻** | 12 条判定：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md:151-166`；真实归属受阻：同文件 `:105-113`；跨重启宿主回归与限制：同文件 `:197-205`（本票复跑批 H 25/25、修复后批 K 27/27）；t20 集成记录：`planning.md:193`；本轮空根 manifest 8/8 checks（§4） |
+| 20 默认切换 SQLite 与旧业务清理 | 通过 | 通过 | 通过（隔离演练；12/12＝11 通过+第 8 条 N/A） | 通过（默认入口实测；本轮空根复验） | 不适用 | 不适用；真实清理 **N/A（本机无清理对象）+ 只读证据** | 票已 resolved；实际对象只读盘点：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md:105-121`（§7）；12/12 判定：同文件 `:161-179`（§10）；t21 根因修复：同文件 `:212` 起（§13）；提交 `aff0366d`/集成 `3bae162a`；跨重启回归复跑批 H 25/25、批 K 27/27；本轮空根 manifest 8/8 checks（§4） |
 | 21 三份规格组合验收 | 本记录 | 本记录 | 本轮 592/592（A–G） | 本轮完成（§4） | 仅 07/11 受限 | 未认证（仅 03 受控 metadata 观察，无正文） | 本文档；未通过项 §7；四项暂缓 §2 |
 
 ## 2. 四项用户暂缓（不启用、不补验收、不计通过）
@@ -52,7 +53,7 @@
 
 ## 3. 组合行为实测
 
-执行环境：Node `/tmp/t09-node/bin/node` v24.21.0；Electron 44.7.0（44.7.0 / Node 24.21.0）；SQLite 3.53.4；锁定 TypeScript 7.0.2；隔离临时 SQLite `role=test` 与合成身份/消息，不读取真实微信、不调用真实模型、不发送外部消息、不打包。日志位于 `/tmp/t21-batch-*.log`、`/tmp/t21-typecheck.log`。两端 `pnpm run typecheck`（backend/desktop）均 0 错误。基线复核后新增批 H（票20 跨重启宿主回归 25/25，`/tmp/t21-batch-h-restart.log`）、批 I（修复回归 45/45，`/tmp/t21-batch-i-restartfix.log`）、批 J（Electron 宿主 21/21，`/tmp/t21-batch-j-host-fix.log`）、批 K（Electron 下 restart 回归 + 批 H 复跑 27/27，`/tmp/t21-batch-k-fix-verify.log`）。
+执行环境：Node `/tmp/t09-node/bin/node` v24.21.0；Electron 44.7.0（44.7.0 / Node 24.21.0）；SQLite 3.53.4；锁定 TypeScript 7.0.2；隔离临时 SQLite `role=test` 与合成身份/消息，不读取真实微信、不调用真实模型、不发送外部消息、不打包。日志位于 `/tmp/t21-batch-*.log`、`/tmp/t21-typecheck.log`。两端 `pnpm run typecheck`（backend/desktop）均 0 错误。基线复核后新增批 H（票20 跨重启宿主回归 25/25，`/tmp/t21-batch-h-restart.log`）、批 I（修复回归 45/45，`/tmp/t21-batch-i-restartfix.log`）、批 J（Electron 宿主 21/21，`/tmp/t21-batch-j-host-fix.log`）、批 K（Electron 下 restart 回归 + 批 H 复跑 27/27，`/tmp/t21-batch-k-fix-verify.log`）。**2026-10-30 增补**：因票10/20 resolved 带来产品代码变化，按条件变化只最小复跑受影响的 `sqlite-memory-control.test.mjs`（Electron Node）16/16（`/tmp/t21-addendum-control.log`）；t10/t20 其余证据引用其 verification 文档，未重跑 A–K 组合批次。
 
 ### 3.1 关闭读取、取消单人、独立暂停、来源删除的四种语义
 
@@ -136,7 +137,7 @@
 | 规格 | 覆盖条目 | 本轮证据与限制 |
 | --- | --- | --- |
 | SQLite 数据库重建（`spec.md:38-91`） | 01、02、05、09、14、16、20、21（结构/事务/实例生命周期/切换清理） | 82 表实际 DDL、迁移 1–15、252 CHECK/92 触发器 body、隔离切换演练 11 项（`docs/verification/20-...:19-113`）；真实旧库清理受阻 |
-| 同步、聊天清空与记忆处理（`sync-memory-behavior/spec.md:77-209`） | 02、03、04、06、07、08、09、10、11、12（逐人授权/历史增量/清空重读/手动记忆全阶段） | 批 A/B/D/G 合计 364+ 项、03/04/06 真实渠道门槛未认证；10 模型相关控制状态未在 App 内构造 |
+| 同步、聊天清空与记忆处理（`sync-memory-behavior/spec.md:77-209`） | 02、03、04、06、07、08、09、10、11、12（逐人授权/历史增量/清空重读/手动记忆全阶段） | 批 A/B/D/G 合计 364+ 项、03/04/06 真实渠道门槛未认证；10 已由 t10 App 级环回供应商实机覆盖（真实模型/微信未认证，见 §11） |
 | 微信媒体提取（`wechat-media-extraction/spec.md:50-97`） | 16、17（单条图片/视频/语音机制）；18、19 暂缓 | 批 C/E/F 媒体机制通过；真实微信媒体唯一关联（19）未认证且入口关闭；18 最小停用 |
 | 统一结构依据（`greenfield-design.md`） | 表/键/状态/事务 | 设计目录 77 表逐一 disposition 见 `docs/verification/20-...` 附录 A–C；不宣称 DDL 外行为已通过 |
 
@@ -163,9 +164,9 @@
 | 02 真实逐人确认与读取范围 | 未认证 | 用户在真实私聊完成逐人选择/确认，真实账号、名单与支持档 metadata 核验；当前真实 target/page 门禁拒绝 |
 | 05 真实来源删除链 | 未认证（依赖 03/06 真实捕获） | 真实来源捕获后按 05 账本执行真实删除；当前无真实捕获，只有合成来源与正式 HTTP 合成删除证据 |
 | 16/17 真实媒体类型关联 | 未认证（19 暂缓） | 真实微信媒体唯一关联与质量证明；用户暂缓不读取，入口保持关闭 |
-| 10 App 内模型相关控制状态 | 未在 App 构造 | 真实模型供应商/预算授权与可捕获窗口；本轮以控制测试 + 桌面 headless 覆盖，不冒充真实模型通过 |
+| 10 真实模型（控制场景） | 未认证 | App 级已用环回供应商完成开始/暂停/继续/单人失败/共用故障/unknown 实机（t10 已 resolved，`docs/verification/10-memory-processing-controls.md`）；真实供应商语义与网络条件未认证 |
 | 重启后联系人 UI 读取（本票观察项，已修复） | **已定位并修复**（App 级闭环复验通过） | 05×06 交互：`deletion.metadataAvailable` 把清空内容类未完成删除误当身份删除，修复源 `154ac9e2` 经 `d1068fbf` 集成；新增 `sqlite-deletion-metadata-restart` 回归（批 I/K 通过），本票同构根 App 复验 contacts/cli-bindings/sync/setup/deletions/清空状态均 200 且 UI 无读取失败（§4.5）；20 切库路径无缺陷 |
-| 20 真实旧业务清理 | **受阻** | 精确旧对象归属确认（本机无 PG socket；默认 userData 旧启动配置指向外部项目/握手，内容未读、归属未确认）、停止旧写入者、逐目标清理授权；未执行真实切库/drop/清理 |
+| 20 真实旧业务清理 | **N/A（本机无清理对象）+ 只读证据** | t20 只读盘点：本机无 PG 进程/数据目录/旧业务库/含内容助手会话/旧媒体派生副本；`~/.notalone` 仅 270 个 Skill 目录 5.2M，默认 userData 仅 Chromium 缓存与开发制品；代码级清理路径仅隔离演练，其他机器另行核验（`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md` §7/§10，提交 `aff0366d`/集成 `3bae162a`） |
 | 19 真实媒体唯一关联 | 用户暂缓 | 本轮不读取；保持未验证且入口不放行 |
 | 真实模型总体 | 仅 07/11 受限 | 其余无本轮真实调用授权；真实语义质量未认证；07/11 复测仅合成文本/固定范围 |
 
@@ -176,9 +177,10 @@
 1. **重启后联系人目录读取失败（已修复）**：t20 定位为 05×06 交互缺陷（`deletion.metadataAvailable` 误关闭名单服务），修复源 `154ac9e2` 经 `d1068fbf` 集成；新增 `sqlite-deletion-metadata-restart` 回归 2/2（批 I/K 通过）与本票 App 同构根闭环复验（§4.5）。隔离根无真实 CLI 时 `sessionIssue=unavailable` 属预期环境限制，不影响联系人目录/绑定/授权/删除进度读取。
 2. **工作树环境差异**：`SqliteStorage` 要求 userData 为 realpath（`/tmp` 符号路径会 `cutover_storage_failed/unsafe_storage_path`）；dev server 的 `@fs` 需要工作树根 `node_modules` 软链，否则前端资源 403。两者均在主仓不成立/由主仓依赖满足，记录为复现条件，不解释为产品缺陷。
 3. **真实渠道证据缺口**：03/04/06 真实微信读取、状态语义、来源连续性与精确边界仍无认证；生产入口保持拒绝/`boundary_pending`。不得以“全部拒绝”或合成正例当成正常路径通过。
-4. **真实清理缺口**：20 的真实旧业务对象归属不明，实际清理未执行；需用户/架构决策与逐目标授权。
+4. **真实清理（本机 N/A）**：t20 只读盘点确认本机无旧 PG、旧业务库、含内容助手会话、旧媒体/派生副本；`~/.notalone` 仅 Skill 原目录，默认 userData 仅 Chromium 缓存与开发制品（非旧业务数据、按边界保留）。代码级清理路径仅隔离演练，其他机器上的真实旧对象仍须按归属与授权单独核验（20 verification §7/§10，提交 `aff0366d`/集成 `3bae162a`）。
 5. **模型质量**：真实供应商语义质量仅 07/11 有限调用，未认证；旧 unknown/失败原因保留，不推断、不重发。
 6. **`run-current` 全量 612 失败**：按 t20 §9.2 口径，除 2 项 `sqlite-memory-profile` 既有失败外，其余均为无 PG 环境基线失败；本票不重跑全量，只跑相关组合批次，不把全量失败混入本票结论。
+7. **增补后状态**：票20、票10 已 resolved（见 §11）；20 真实清理为 N/A（本机无对象），10 App 控制场景通过（环回供应商）；本票仍 claimed，因 03/04/06 真实渠道门槛（06 依赖 04）、19 用户暂缓与真实模型语义质量未认证。
 
 ## 9. 复现命令与证据
 
@@ -276,4 +278,17 @@ node scripts/development-status.mjs --user-data-dir <realpath-root>   # 退出�
 - 未新增外部发送能力；未发送/撤回任何外部消息；未读取真实微信正文、名单、媒体或凭据；未调用真实模型；未访问/迁移/恢复真实业务库；未启用 13/15/18/19；未打包、未运行打包版、未改发布门禁；未 push/PR、未创建远端分支。
 - 未修改 `planning.md`、其他票文件、State/Triage（本票文件仅追加 Comments）；新增桌面测试 0 个，未改 `desktop/tests/inventory.json`。
 - 资源：合成根与空根删除、供应商停止、App/监督器退出、`dev:status stopped/pids[]`、无残留进程/端口；工作树依赖软链与 `.dev` 构建产物在提交前移除/保留为未跟踪且不提交；证据仅留 `/tmp` 与本记录，不含私人数据或可恢复定位。
-- 复核：`git status` 仅本任务文档/票 Comments 变更（软链已移除）；`git diff --check` 通过；公开前检查 `node scripts/check_public_history.mjs --ref 9ba6e733` issues 0（t03 只读复核，未带 working-tree，故 currentFiles 为 0）；`--ref abb9d36a --working-tree` issues 0（currentFiles 1970 / historicalCommits 2894）；本可选微调提交后同命令复跑 issues 0（currentFiles 1970 / historicalCommits 见最终回报）。
+- 复核：`git status` 仅本任务文档/票 Comments 变更（软链已移除）；`git diff --check` 通过；公开前检查 `node scripts/check_public_history.mjs --ref 9ba6e733` issues 0（t03 只读复核，未带 working-tree，故 currentFiles 为 0）；`--ref abb9d36a --working-tree` issues 0（currentFiles 1970 / historicalCommits 2894）；本增补提交后同命令复跑 issues 0（currentFiles 1970 / historicalCommits 见最终回报）。
+
+## 11. 2026-10-30 增补记录（票10/20 resolved 同步）
+
+增补性质：仅文档与证据指针同步，不重跑组合验收、不改实现、不改票 State/Triage 与 planning。基线重核为 `codex/sqlite-rebuild-integration`@`ccf047b8`（本工作树已合并该基线）。
+
+| 票 | 新状态 | 集成提交 | 证据与结论 |
+| --- | --- | --- | --- |
+| 20 默认切换 SQLite 与旧业务清理 | **resolved** | 源 `aff0366d`，集成 `3bae162a` | 只读盘点本机无旧业务对象（无 PG 进程/数据目录；`~/.notalone` 仅 270 个 Skill 目录 5.2M；默认 userData 仅 Chromium 缓存+wechat-tool 开发制品+配置，无 managed/state.json/旧业务 SQLite/assistant-runtime/updates/runtime-copies；`~/Library/Application Support/NotAlone` 空）。第 8 条重评 **N/A（本机无清理对象）+ 只读证据**，第 12 条保持通过，最终 **12/12＝11 通过+第 8 条 N/A**；代码级清理路径仅隔离演练，其他机器另行核验。证据：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md` §7（`:105-121`）、§10（`:161-179`）、§13（`:212` 起）；本票矩阵 row 20、§7、§8 已同步。 |
+| 10 记忆处理控制与恢复 | **resolved** | 源 `0fac4ada`，集成 `a731d471` | t10 复用 09 环回供应商方式完成 App 级实机（真实热更新 dev + 隔离合成库 + CDP；仅供应商传输边界用 `/tmp` 环回供应商与既有 test-only 网络守卫，未新增产品开关/配置）：开始/处理中/普通暂停小批收尾/继续复用成功步骤/退出重开保持暂停/单人失败/共用故障固定原因（`sharedFaultCode`）/unknown 不提供继续且不自动重发；实机发现并修复「在途 sending 被误投影 unknown」「共用故障原因固定展示」。后端控制 16/16、桌面 23/23、两端 typecheck 0。证据：`docs/verification/10-memory-processing-controls.md`；本票矩阵 row 10、§7、§5 已同步。 |
+
+增补后的最小复跑（条件变化的受影响项）：`ELECTRON_RUN_AS_NODE=1 <Electron> --test test/sqlite-memory-control.test.mjs` → **16/16**（`/tmp/t21-addendum-control.log`）；A–K 组合批次按条件未变复用既有结果，不重复执行。
+
+结论不变：本票仍 **claimed/受阻**——03 真实普通历史/状态语义/来源生命周期/跨启动连续性、04 真实增量/重选/断线、06 真实 observer/reader（依赖 04）未认证；19 用户暂缓、真实模型语义质量未认证。20/10 的 resolved 与本票 App/组合证据不构成对上述真实渠道门槛的替代。
