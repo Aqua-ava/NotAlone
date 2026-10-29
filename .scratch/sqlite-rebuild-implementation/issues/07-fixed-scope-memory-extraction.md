@@ -132,3 +132,15 @@ MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/stat
 实际App准备就绪：使用prepare-memory-desktop.mjs的独立合成root，分别核验positive（可hold观察进度）、no_new、protocol_failed、unknown；所有场景仍用正常提示词、正式profile和默认预算。仅在获得桌面窗口后执行pnpm run dev，先dev:status核验复用；明确禁止打包。开始任何模型动作前必须同时核对真实Electron父进程的preload/spawn守卫收据、认证SQLite/memory状态、test实例身份与停读状态；缺任一收据就停止，不因已出现页面而点击开始。来源/资格失效与旧回调仍走正常具名桥和真实页面，自动检查、实际App与真实模型质量分别记账。当前11持有App窗口，07不自行启动实例；旧真实模型问题失败/unknown及过期预算0保持不变。
 
 收口审计补强：原正式profile只检查extraction_return/verification_return存在，不能充分支持“完整返回已核对”。现环回supplier记录实际序列化送出的完整output，positive按准备时独立联系人映射、purpose及callId定位唯一持久化model_output，核对唯一tool-call名称并深比较全部arguments；未从verified产物反推预期。只重跑positive1/1、约1.71秒，两文件node --check及空白检查通过；unknown和TypeScript未变，复用已有结果。Standards/Spec独立复核均0新增；该证据证明本场景标准化工具返回的完整保存，不认证真实供应商语义质量。另以ps实际确认11的隔离开发Electron PID586正在运行，07等待该桌面流程，不把调度文件本身当进程存活证据。
+
+### 实际App首轮与资格缺陷修复
+
+获总指挥正式07桌面窗口后，实际准备的隔离test库含两位合成联系人、4条文字，停读、处理轮次0，准备Worker关闭且integrity/FK通过。仅以pnpm run dev启动同锁Electron44.7.0，保留工具长会话；Electron由既有开发脚本detached装配。父环境净化，实际核对Electron父PID对应的唯一spawn守卫收据、认证SQLite/memory状态及停读后，才点击正常记忆入口。无真实微信或外部模型请求。
+
+实际UI已观察：固定面板替代旧记忆页、点击开始冻结4目标、0/4进度、主题/长期概览pending；测试供应商30秒hold在观察时到期返回合成500，页面显示已暂停和2条未通过目标。释放hold后通过“继续原任务”完成4/4、4条auto待裁决输出（联系人及本人），总5次环回实收含原失败1及正常E/V4；不是生产缺陷red→green或真实质量证明。通过具名桥展开任务、实际输入及model_output；长JSON横向裁切被实机截图发现，局部样式修复后换行、限高并可内部滚动，热更新释放快照后正常刷新恢复。布局修复已单独提交3268a9cb，桌面类型、空白检查和Standards复核通过。
+
+实际通过联系人页撤销一位合成联系人的同步授权，回到记忆页后发现本人任务显示revoked、其过程读取409，但另一位贡献者的一条本人候选仍显示。正常Cmd+Q后监督器退出0、dev:status stopped/pids[]，Electron与宿主退出，自有supplier关闭，桌面明确释放给总指挥；合成库保留用于原场景复验。高级来源管理页当前GET sources返回503 sqlite_capability_unavailable，未把该来源UI删除记为通过，也未扩大为07的并行来源能力。
+
+离线新Worker读取原App库稳定复现self revoked/self候选1，integrity/FK ok；新回归另实际证实08 verifiedExtractionOutput仍接受该B-self产物。根因是DTO动态资格与候选/08仅按持久状态及单事件来源的门禁不一致。现共用assertTaskContributions，按task_contribution完整M:N复验原授权/冻结代次，快照DTO与候选复用同一动态任务状态；08同短事务先复验完整任务，再保留真实event inputs/sources复验。未伪造来源、读取时写状态或删除撤授权前合法正文；不影响其他合法联系人任务。
+
+新case两处red后green，相关verified-results/extraction/owner-contribution/deletion共19/19、backend类型及空白检查通过，双轴独立复核0新增。用原实际App合成库重开Worker复验：self候选0，两条原本人产物08均scope_stale，合法联系人候选1，integrity/FK ok，新增模型请求0；临时只读投影已删除。修复后的最小实际App观察及来源删除撤下仍待下一窗口，现State保持claimed、Goal未complete。已有效4/4、正常trace和布局证据复用，不重复整轮；私人资料及旧真实模型预算边界不变。
