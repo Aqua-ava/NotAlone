@@ -31,8 +31,8 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [04 增量同步与读取控制](issues/04-incremental-sync-controls.md) | [03](issues/03-private-history-sync.md) | ready-for-agent | open |
 | [05 统一来源删除与清理流程](issues/05-source-deletion-and-cleanup.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | open |
-| [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | claimed |
-| [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | open |
+| [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
+| [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | claimed |
 | [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | open |
 | [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | open |
 | [11 助手讨论与 DSH 副本](issues/11-assistant-discussions-and-runtime.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
@@ -102,7 +102,7 @@ flowchart TD
 
 ## 当前总进度
 
-本轮有效17项：已集成7项（01、02、05、11、14、16、17）；进行中3项（03、07、12）；等待依赖7项（04、06、08、09、10、20、21）。12已创建独立执行会话及工作树，必须先实际取入11集成提交。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03真实消息状态认证缺口仍如实保留。
+本轮有效17项：已集成8项（01、02、05、07、11、14、16、17）；进行中3项（03、08、12）；等待依赖6项（04、06、09、10、20、21）。08、12已创建独立执行会话和工作树，须核验实际前置提交后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03真实消息状态认证缺口仍如实保留。
 
 ## 领取与并行约定
 
