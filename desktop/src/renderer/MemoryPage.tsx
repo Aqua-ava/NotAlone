@@ -14,6 +14,7 @@ import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } f
 import { MemoryEvidence } from './MemoryEvidence';
 import type { TraceRecordKind } from '../shared/trace-bridge';
 import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
+import { MemoryProcessingEntry } from './MemoryProcessingEntry';
 
 const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' },
   contact: { phase: 'idle', items: [] }, owner: { phase: 'idle', items: [] },
@@ -308,6 +309,13 @@ const memoryViews = { contact: '对方', owner: '我', pending: '待确认' } as
 type MemoryView = keyof typeof memoryViews;
 
 export function MemoryPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
+  return <MemoryProcessingEntry bridge={window.notalone.fixedMemoryProcessing} backend={window.notalone.backend}
+    scopeKey={`${session.state.selectedContactId}:${session.state.scopeRevision}`}>
+    <LegacyMemoryPage session={session} navigate={navigate}/>
+  </MemoryProcessingEntry>;
+}
+
+function LegacyMemoryPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
   const memory = useMemoryReading(session);
   const scopeKey = `${session.state.selectedContactId}:${session.state.scopeRevision}`;
   const [view, selectView] = useState<MemoryView>('contact');

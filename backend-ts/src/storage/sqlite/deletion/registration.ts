@@ -1,3 +1,6 @@
+import {discussionDeletionDomain,withDiscussionDeletionAuthority} from '../../../reply/sqlite/deletion.ts';
+import {discussionCallDeletionDomain} from '../../../reply/sqlite/model-deletion.ts';
+import {memoryExtractionDeletionDomain} from '../../../memory/sqlite/deletion.ts';
 import { composeMediaDeletionRegistration } from '../../../media/sqlite/deletion.ts';
 import { historyDeletionDomain } from '../../../history/sqlite/deletion.ts';
 import { historyReaderHolderKey } from '../../../history/sqlite/service.ts';
@@ -6,7 +9,7 @@ import { skillMetadataDeletionDomain } from '../../../skills/sqlite/deletion.ts'
 import { StorageFailure, type StorageAction } from '../contracts.ts';
 import type { DeletionDomain, DeletionRegistration, DeletionScope } from './contracts.ts';
 
-export const installedDeletionScopes = ['source', 'contact', 'account', 'media_result_clear', 'media_result_replace'] as const;
+export const installedDeletionScopes = ['source', 'contact', 'account', 'media_result_clear', 'media_result_replace', 'discussion'] as const;
 const supported = (scope: DeletionScope) => installedDeletionScopes.some(kind => kind === scope.kind);
 
 // inspect/target尚无goal时也持有真实只读连接，来源删除必须覆盖这些早期读者。
@@ -31,11 +34,12 @@ const baseDeletionRegistration: DeletionRegistration = {
         : {result: 'blocked', proof: 'scope_handler_unavailable'};
     },
   },
-  domains: [installedHistoryDomain, identityDeletionDomain, skillMetadataDeletionDomain()],
-  requiredDomains: ['history', 'identity', 'skill_metadata'],
+  domains: [discussionCallDeletionDomain, memoryExtractionDeletionDomain, discussionDeletionDomain, installedHistoryDomain, identityDeletionDomain, skillMetadataDeletionDomain()],
+  requiredDomains: ['discussion_calls', 'memory_extraction', 'discussion', 'history', 'identity', 'skill_metadata'],
 };
 
-export const installedDeletionRegistration = composeMediaDeletionRegistration(baseDeletionRegistration);
+const mediaRegistration=composeMediaDeletionRegistration(baseDeletionRegistration);
+export const installedDeletionRegistration:DeletionRegistration={...mediaRegistration,authority:withDiscussionDeletionAuthority(mediaRegistration.authority)};
 
 // 名单缓存覆盖全部联系人，任何未完成删除期间都不重新开启该内存持有者。
 export const installedDeletionActions: StorageAction[] = [{name: 'deletion.metadataAvailable', mode: 'read', retryBusy: false,

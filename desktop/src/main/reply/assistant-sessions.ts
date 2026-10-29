@@ -1,5 +1,6 @@
+import {readSqliteDiscussion} from './sqlite-discussion-read';
 import { createHash } from 'node:crypto';
-import type { SavedAssistantDiscussion, SavedAssistantInput, SavedAssistantTurn } from '../../shared/assistant-session';
+import type { SavedAssistantDiscussion, SavedAssistantInput, SavedAssistantTurn, SavedAssistantSession } from '../../shared/assistant-session';
 import { readAssistantCarry } from './assistant-candidate-carry';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
@@ -113,7 +114,7 @@ export async function defaultAssistantSession(backend: BackendHost, contactId: s
   return { sessionId: response.data.session_id.toLowerCase(), generation: response.generation };
 }
 
-export async function readAssistantSession(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>, contactId: string, sessionId: string, signal: AbortSignal) {
+export async function readAssistantSession(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>, contactId: string, sessionId: string, signal: AbortSignal): Promise<Omit<SavedAssistantSession,'phase'|'sessionId'> & {sessionId:string;generation:number}> {
   const path = `/api/contacts/${contactId}/assistant-sessions/${sessionId}`;
   const generation = backend.getConnectionGeneration?.();
   const current = () => !signal.aborted && (typeof backend.getConnectionGeneration !== 'function'
@@ -131,6 +132,7 @@ export async function readAssistantSession(backend: Pick<BackendHost, 'getConnec
   }
   if (!current() || generation !== undefined && response.generation !== generation) throw new BackendRequestFailure('cancelled');
   const value = response.data;
+  if (isRecord(value) && value.mode === 'sqlite') return readSqliteDiscussion(value,sessionId,response.generation);
   if (!isRecord(value) || value.session_id !== sessionId || !Array.isArray(value.turns) || !Array.isArray(value.inputs)
     || (value.current_input_version_id !== null && !isUuid(value.current_input_version_id))) throw new Error('已保存讨论暂不可用。');
   const known = new Set<string>();

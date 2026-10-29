@@ -48,7 +48,7 @@ export const discussionRequestActions:StorageAction[]=[
    const a=tx.get('SELECT * FROM reply_attempt WHERE owner_id=? AND request_id=? ORDER BY attempt_no DESC LIMIT 1',[i.ownerId,old.id])!;
    return {attempt:attemptView(a,old),replayed:true,segmented:false};
   }
-  if(tx.get("SELECT 1 FROM model_operation o JOIN reply_request r ON r.owner_id=o.owner_id AND r.id=o.reply_request_id WHERE r.owner_id=? AND r.contact_id=? AND o.state='unknown' AND o.commit_forbidden_at IS NULL",[i.ownerId,i.contactId]))fail('discussion_call_unknown');
+  if(tx.get("SELECT 1 FROM model_operation o JOIN reply_request r ON r.owner_id=o.owner_id AND r.id=o.reply_request_id WHERE r.owner_id=? AND r.contact_id=? AND o.state IN ('in_flight','unknown') AND o.commit_forbidden_at IS NULL",[i.ownerId,i.contactId]))fail('discussion_call_unknown');
   const selected=selectDiscussionForRequest(tx,{...i,id:i.discussionId}),d=selected.row,segmented=selected.segmented;
   const contact=requireDiscussionContact(tx,i.ownerId,i.contactId);
   const proof=i.identity;

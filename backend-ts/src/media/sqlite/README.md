@@ -22,4 +22,6 @@
 
 `requestedAttempt` 在明确提取/同键重查响应中固定原操作回执；`latestAttempt` 仍反映当前最新尝试，二者不互换。服务独立跟踪所有启动中的请求、文件保存Promise与类型探针，适配器遗漏await不构成提前释放理由。启动及查看时核验已存文件；缺失/损坏撤下可用声明并标记失效，不自动新读微信，只有明确清除或新发布才执行对应清理。
 
+17补充 `context.retainReader(close)`：外部资源打开后立即登记幂等排空回调；关闭失败保留同一 `mediaAttempt` holder，删除不能completed，沿原删除重试实际关闭成功才释放。适配器自身也须等待全部执行和未释放读者，不以抛异常代表读者已经结算。此钩子不新增持久迁移、删除域或HTTP字段。
+
 公共接线已核对安装及锁定DSH 0.2.1-rc.2、Cordis 4.0.5、dsh-cmdline 0.2.1-rc.2；沿官方profile与已有ctx.effect资源释放扩展。官方参考commit 687f282e8625c6b8d11ff58211a90524be2e4317的docs/cordis-primer.md，安装Cordis lib/index.js:1169的effect按逆序等待异步disposer，dsh-cmdline lib/index.js:50的exitOnStdinEnd只请求appReady后的退出。未改框架核心、模型、Tools或新增profile替身；制品与参考源码逐字构建等价仍未验证。

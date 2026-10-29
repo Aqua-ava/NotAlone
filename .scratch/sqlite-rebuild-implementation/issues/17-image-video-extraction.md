@@ -1,7 +1,7 @@
 # 17：图片与视频提取
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [微信媒体资源提取与语音文件转换](../../wechat-media-extraction/spec.md)
 Blocked by: [16 单条媒体保存与清除](16-single-message-media-lifecycle.md)
@@ -43,3 +43,55 @@ Blocked by: [16 单条媒体保存与清除](16-single-message-media-lifecycle.m
 - App首次使用整条线继续搁置，不做首用向导、组件准备、新模型设置、干净机器／发布或迁移／恢复实验。
 - 未核验真实账号、联系人、读取范围及类型资源归属时不读取微信；不自动启用同步或扩大权限。
 - 不做OCR、ASR、媒体模型理解、云上传、批量提取、自动重提或跨消息共享；最终外部消息仍由用户亲自发送。
+
+## Answer
+
+2026-10-29实现检查点，State仍为claimed、Goal仍active；实际App验收窗口尚未获总指挥分配，不将自动页面验证写成Electron实测完成。工作树基线1683fbcf47d31fed5be36d7f283a7a3919565052，已实际核验16源221e7cc9c93653f1cf9e24a25417d2901db20427与集成2d82a52a4c3dd43b7712706a82c6e8cd6699e015均为HEAD祖先。稳定资源合同检查点610e2648a8e4cd0b7f56592bc932b665d5195b5f已提交，公开历史issues=0。
+
+### 实现及下游合同
+
+- `backend-ts/src/media/visual/contracts.ts` 的VisualResourcePort只接单条固定来源和读取资格，19认证实际资源映射后提供完整快照字节数/摘要、质量证明及可排空读者；未认证前正式宿主adapters=[]，不读真实微信。`adapter.ts` 通过16正常MediaAdapter/save发布，复验关联与资格、32MiB和8192分段上限，不接路径/SQL、不跨消息共享。
+- DAT依据锁定微信CLI2.0.1-rc.5固定源码实现纯字节V3 XOR及V4 V1/V2；检查版本头、保留位、声明长度、AES对齐、PKCS7及解密长度。V2受控内存密钥缺失/不匹配为needs_image_key，未知/WXGF为unsupported，不刷新/扫描或搜索兄弟文件。MIT完整告知随类型模块保留。
+- `native/media-validation/` 的ImageIO/AVFoundation窄helper只读FD3；PNG/JPEG/GIF/BMP完整容器边界及全帧绘制、MP4 H264/AAC全部视音轨实际解码。32MiB/10秒及尺寸、累计像素、帧数/时长等限额，取消等待进程退出，错误不含路径/字节。ImageIO容忍部分尾部截断的实测促使补完整容器校验；可解码仍不证明原图。TIFF/HEIC/WebP/APNG、未知codec/封装保守unsupported，macOS15只验证部署目标编译。
+- 原图补提无可靠original证明明确失败；缩略图/unknown分开呈现，失败保留合法旧件。复用16同一删除/holders，无新迁移或删除注册；源流close等待在途结算，来源删除拒绝晚到发布。DAT仅本次内存处理，副本只由16写入独立受管文件，微信/用户原件保持不动。
+- 页面只补具体中文类型错误；正常HTTP、桥和原页面不另造平台。公共改动仅MessageMediaPanel.tsx及本票headless测试inventory一行。ADR预留125已落文档，架构索引接线由总指挥集成时处理；未改registry/公共宿主/main/preload/native-history协议。
+
+### 实际验证账
+
+Node24.19.0、锁定TypeScript7.0.2/Electron44.7.0；离线frozen-lockfile安装，0下载，无package/lock变更。Swift6.4、SDK/macOS27.0.1、arm64，部署目标macOS15；一手接口和支持矩阵见模块README。没有模型或真实微信读取，账号/资源端口均为明确合成。
+
+```bash
+# 仓库根：17/17（8业务 + 4DAT + 5原生；实际SQLite/受管文件/ImageIO/AVFoundation）
+node --test backend-ts/test/visual-dat.test.mjs backend-ts/test/sqlite-visual-media.test.mjs native/media-validation/test.mjs
+# 原生新增真实10秒超时单例：1/1，10005.572ms
+cd backend-ts && node --test --test-name-pattern='真实10秒墙钟' ../native/media-validation/test.mjs
+# 两端受影响类型检查均通过
+pnpm --dir backend-ts run typecheck
+pnpm --dir desktop run typecheck
+# desktop/：3/3（2实际类型接口/页面 + 1原页面回归）
+node --test tests/visual-media-integration.test.mjs tests/message-media-view.test.mjs
+```
+
+业务覆盖真实类型缩略图/原图/未知质量、V3/V4成功、缺密钥、坏padding/超长声明、V2实际解码不匹配、错误账号/代次、复制长度/摘要不符、关闭读取及同键不重读、来源删除等待close且晚到不能复活。页面经正式认证HTTP、BackendHost/RuntimeClient、具名桥和生产CSP，实际img解码、H264/AAC播放时间推进；HEVC/截断明确失败。图片/视频均先撤下DOM/src/blob，再ACK完成删除；保留消息占位及外部合成原件。未模拟业务快照或类型验证，唯一合成替代是渠道账号/消息资源。
+
+基线另有12个既有测试缺inventory登记，完整inventory检查仍失败，本票仅登记新用例，不宣称默认全量通过。未受影响16的空间故障、重启/代次及闭包验证复用原有效结果，不重复全量。
+
+### 未完成与资源收尾
+
+尚待总指挥串行分配实际App窗口，使用独立合成目录验证Electron实际图片/视频及删除/失效快照撤下；没有启动/抢占桌面，dev:status为stopped/pids[]。真实ran未逐条指定媒体消息且资源关联未认证，因此不读取，留19按类型认证。首用、发布、离线分发打包及迁移/恢复继续搁置。
+
+原生测试/页面夹具按自有目录清理；已核验无进程引用后清理本票旧探针约364KiB→0，保留当前helper/夹具生成器268KiB供验收。无真实业务资料/密钥出站，无外部消息。独立两轴审查与最终提交/公开历史复核待本检查点后完成，全部验收满足前不resolved/complete。
+
+### 独立审查修复检查点
+
+Standards初审P1复现资源close抛错后媒体holder被提前释放，已在16上下文增加最小内部retainReader钩子；同attempt holder保留关闭失败状态，原删除重试实际关闭成功才释放，没有新增删除平台。Spec初审P2复现正确V2密钥解出APNG被误报缺密钥，现保留media_format_unsupported，仅实际图片解码不匹配映射needs_image_key。两项均补正常服务回归；Standards与Spec最终复核各0项。Standards最小回归3/3、Spec定向2/2通过。
+
+新增实际验证：`node --test backend-ts/test/sqlite-visual-media.test.mjs backend-ts/test/sqlite-media.test.mjs backend-ts/test/visual-dat.test.mjs` 34/34通过（10类型业务+20基础媒体回归+4DAT）。16公共合同最小变化仅contracts.ts/service.ts/README.md；18不需修改已发布迁移，资源读者可复用新增钩子。`backend-ts/test/prepare-visual-desktop.mjs`提供自包含合成图片/视频App资料准备，读取开关关闭，未启动App；不复制真实配置、不调用模型，待总指挥分配窗口后使用。
+
+### 当前可集成检查点
+
+实现源提交依次610e2648a8e4cd0b7f56592bc932b665d5195b5f、9e21fb989cb5a8eae80d85c29d81060118fed4cb、ae284457d0ab3f1118543d1769ec04fae24394d0；已通过merge cc8c0a374d4194df1ac59d280a2909016504f9bc纳入根基线317b6820f3fcb3131004f7dc200e0132d043370e，保留03/11及16全部源祖先。未手工改规划索引、依赖或公共宿主。合入后frozen离线安装无依赖改动、两端类型检查及正式桥页面3/3复验通过；34项业务/字节及原生6项的相关代码、配置、依赖条件未变，复用既有结果。公开历史检查cc8c0a3的issues=0。
+
+精确只读既有开发配置的wechatCliPath并核本机制品：普通文件8495824字节，SHA256 d566d4842b656ca5b07a8af0c1fdada5c225724e9e7fda28e409b06f117d0655，未执行该程序、未读密钥或私人消息。该摘要不能认证固定源等价、媒体映射或质量，本票真实能力继续关闭。原生helper及合成夹具由已提交源码显式生成，测试不依赖未提交探针。
+
+实际App仍受03串行桌面占用阻塞，未启动/重启或抢焦点。已运行合成App资料准备，成功生成图片与H264/AAC独立受管副本并关闭全部种子服务；后续按本票准备脚本重生即可。Goal active、State claimed；剩余必要工作为获桌面窗口后实际App检查和资源收尾，再补最终证据/本地提交并复核公开历史，不能提前resolved或complete。

@@ -54,15 +54,16 @@ type notaloneMetadataReport struct {
 	Record            *notaloneMetadataObservation `json:"record"`
 }
 type notaloneHistorySession struct {
-	server    *server
-	selected  *notaloneResolved
-	guards    []*notaloneSourceGuard
-	life      context.Context
-	cancel    context.CancelFunc
-	snapshot  *notaloneSnapshot
-	inspected *notaloneInspection
-	program   func(context.Context) (notaloneProgramVersion, error)
-	certify   func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
+	server       *server
+	selected     *notaloneResolved
+	guards       []*notaloneSourceGuard
+	life         context.Context
+	cancel       context.CancelFunc
+	snapshot     *notaloneSnapshot
+	inspected    *notaloneInspection
+	program      func(context.Context) (notaloneProgramVersion, error)
+	certify      func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
+	testMetadata *notaloneTestMetadataWatch
 }
 
 func newNotaloneHistorySession(s *server) *notaloneHistorySession {
@@ -71,6 +72,9 @@ func newNotaloneHistorySession(s *server) *notaloneHistorySession {
 }
 func (h *notaloneHistorySession) close() {
 	h.cancel()
+	if h.testMetadata != nil {
+		_ = h.testMetadata.Close()
+	}
 	if h.snapshot != nil {
 		_ = h.snapshot.Close()
 		h.snapshot = nil
@@ -332,7 +336,7 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 	return result, certification.ReadProfile, nil
 }
 func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRequest) (any, error) {
-	if r.Operation != "observe-metadata" && r.Kind != "" {
+	if r.Operation != "observe-metadata" && r.Operation != "observe-test-metadata" && r.Kind != "" {
 		return nil, notaloneFailure("history_request_invalid")
 	}
 	switch r.Operation {
@@ -342,6 +346,10 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		}
 	case "observe-metadata":
 		if r.Consent != "selected-message-metadata-v1" || !validNotaloneMetadataKind(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
+	case "observe-test-metadata":
+		if r.Consent != "selected-test-lifecycle-metadata-v1" || !validNotaloneTestMetadataAction(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
 	case "inspect", "support", "target", "page":
@@ -375,6 +383,23 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	}
 	if r.Operation == "inspect" {
 		return h.inspect(ctx)
+	}
+	if r.Operation == "observe-test-metadata" {
+		inspection, err := h.inspect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if h.testMetadata == nil {
+			h.testMetadata = newNotaloneTestMetadataWatch()
+		}
+		report, err := h.testMetadata.observe(ctx, h.server, *h.selected, inspection, r.Kind)
+		if err != nil {
+			return nil, err
+		}
+		if err = h.currentAccount(); err != nil {
+			return nil, err
+		}
+		return report, nil
 	}
 	if r.Operation == "observe-metadata" {
 		inspection, err := h.inspect(ctx)

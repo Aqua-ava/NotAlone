@@ -4,16 +4,48 @@ import type { MediaGoal, MediaSnapshot, MessageMediaBridge, MessageMediaSelectio
 const stateLabels = {pending:'待执行',running:'进行中',completed:'已保存',failed:'本次提取失败',interrupted:'已中断，等待明确新操作',revoked:'本次操作资格已失效'};
 const kindLabels = {image:'图片',video:'视频',voice:'语音'};
 const emptyState:MessageMediaState={revision:-1,contactId:null,messageId:null,scopeRevision:0,phase:'idle',snapshot:null,busy:null,retryGoal:null,error:null};
+const processingErrors:Record<string,string>={
+  needs_image_key:'缺少当前账号已核验的图片密钥，或密钥不匹配；本次未取得图片。',
+  unsupported:'此封装尚未支持，本次未保存新结果。',
+  image_dat_invalid:'图片加密封装的长度或填充校验失败，本次未保存新结果。',
+  media_format_unsupported:'此媒体格式或编码尚未支持，本次未保存新结果。',
+  media_image_invalid:'图片内容或实际解码校验失败，本次未保存新结果。',
+  media_video_invalid:'视频容器不完整或无法完整解码，本次未保存新结果。',
+  media_resource_incomplete:'资源完整读取或复制证明不符，本次未保存新结果。',
+  media_original_unavailable:'本次未取得有可靠质量证明的原图；先前合法文件保留。',
+  media_quality_unverified:'图片质量证明尚未核验，本次未保存新结果。',
+  media_validation_timeout:'媒体校验超时，本次未完成；先前合法文件保留。',
+  media_resource_limit:'媒体超过当前尺寸、帧数或时长上限，本次未保存新结果。',
+  media_validator_unavailable:'本机媒体校验组件尚未就绪，当前不可提取。',
+  media_association_unverified:'这条消息与资源尚未唯一核验，当前不能读取。',
+  media_resource_too_large:'文件超过当前单文件32MiB上限，本次未保存；已有文件保留。',
+  media_space_insufficient:'本次空间不足，已停止新增写入。请清理本机空间；先前合法保存的媒体仍保留。',
+    voice_decode_failed:'语音解码失败；可手动重试本地转换。',
+    voice_runtime_unavailable:'本机语音转换组件不可用；请检查离线资源。',
+    voice_conversion_timeout:'本地转换超过时间上限，已停止；可手动重试。',
+    voice_conversion_cancelled:'本地转换已取消，未发布新播放文件。',
+    voice_container_invalid:'语音容器无效或不受支持，本次未保存新结果。',
+    voice_resource_limit:'语音超过当前输入、包数或输出上限，本次已停止。',
+    voice_pcm_invalid:'本次语音输出格式校验失败，未发布新播放文件。',
+    voice_copy_unproven:'缺少语音完整读取或唯一归属证明，本次未保存。',
+    voice_copy_incomplete:'语音实际字节与固定来源证明不符，本次未保存。',
+    voice_source_unverified:'语音来源或消息范围未核验，本次未读取。',
+    voice_authority_mismatch:'语音资源的当前读取资格不符，本次未保存。',
+    voice_reader_release_failed:'语音读取尚未结算，清理未完成；请继续原清理操作。',
+};
 function resultLabel(snapshot:MediaSnapshot):string {
   if(snapshot.state==='cleared')return '媒体已清除，聊天占位保留';
   if(snapshot.state==='invalidated')return '媒体文件或来源已失效，请核对后明确重提或清除';
   if(snapshot.state==='deleting')return '正在清除媒体，尚未完成';
   const attempt=snapshot.latestAttempt;
   if(!attempt)return '尚未提取';
+  if(attempt.state==='completed'&&snapshot.kind==='voice'&&snapshot.files.some(f=>f.role==='audio_source')&&!snapshot.files.some(f=>f.role==='audio_playback'&&f.playable))return '语音已保存，暂不可播放';
   if(attempt.state==='completed')return attempt.outcome==='limited'?'已保存有限结果':attempt.outcome==='quality_unknown'?'已保存，质量未核验':'已保存完整结果';
   return stateLabels[attempt.state];
 }
+
 function unavailableReason(code:string|null):string {
+  if(code&&processingErrors[code])return processingErrors[code];
   if(code==='media_adapter_unavailable'||code==='media_type_unavailable')return '此类型提取尚未接入，当前不可用。';
   if(code==='media_cleanup_pending')return '媒体清理尚未完成，请继续核对原清理操作。';
   if(code==='media_already_running')return '这条媒体正在处理，请刷新查看当前操作。';
@@ -88,7 +120,7 @@ function MediaDetails({bridge,selection}:{bridge:MessageMediaBridge;selection:Me
       <p role="status">{resultLabel(snapshot)}</p>
       {snapshot.requestedAttempt&&<p role="status">本次请求：{stateLabels[snapshot.requestedAttempt.state]}</p>}
       {snapshot.files.length>0&&snapshot.latestAttempt&&['failed','interrupted','revoked'].includes(snapshot.latestAttempt.state)&&<p className="rewrite-privacy">以下是先前合法保存的文件，本次操作未发布新结果。</p>}
-      {snapshot.latestAttempt?.errorCode&&<p className="rewrite-privacy">{snapshot.latestAttempt.errorCode==='media_resource_too_large'?'文件超过当前单文件32MiB上限，本次未保存；已有文件保留。':snapshot.latestAttempt.errorCode==='media_space_insufficient'?'本次空间不足，已停止新增写入。请清理本机空间；先前合法保存的媒体仍保留。':'本次处理有未完成步骤，请根据文件状态核对结果。'}</p>}
+      {snapshot.latestAttempt?.errorCode&&<p className="rewrite-privacy">{processingErrors[snapshot.latestAttempt.errorCode]??'本次处理有未完成步骤，请根据文件状态核对结果。'}</p>}
       {snapshot.cleanup&&snapshot.cleanup.state!=='completed'&&<p role="status">{snapshot.cleanup.state==='blocked'?'清理尚未完成，可继续原清理操作。':'文件清理尚在复核中。'}</p>}
       {snapshot.files.length>0&&<ul className="message-media-files">{snapshot.files.map(file=><li key={file.fileId}>
         <span><span>{file.role==='image_display'?(file.imageQuality==='original'?'原图':file.imageQuality==='thumbnail'?'缩略图，原图未取得':'图片质量未核验'):

@@ -13,10 +13,12 @@ import { createScreenPermissionBridge } from './screen-permission';
 import { createContactSessionBridge } from './contact-session';
 import { createImportBridge } from './imports';
 import { createReplyBridge } from './reply';
+import { createSqliteDiscussionBridge } from './sqlite-discussion';
 import { createCandidateProvenanceBridge } from './candidate-provenance';
 import { createExpressionPreferenceBridge } from './expression-preferences';
 import { createSkillLearningBridge } from './skill-learning';
 import { createMemoryBridge } from './memory';
+import { createFixedMemoryProcessingBridge } from './fixed-memory-processing';
 import { createBindingConsentBridge } from './binding-consent';
 import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
@@ -33,12 +35,14 @@ const bridge: AppBridge = {
   contacts: createContactSessionBridge(ipcRenderer),
   imports: createImportBridge(ipcRenderer),
   replies: createReplyBridge(ipcRenderer),
+  sqliteDiscussion: createSqliteDiscussionBridge(ipcRenderer),
   candidateProvenance: createCandidateProvenanceBridge(ipcRenderer),
   expressionPreferences: createExpressionPreferenceBridge(ipcRenderer),
   skillLearning: createSkillLearningBridge(ipcRenderer),
   candidateCopy: createCandidateCopyBridge(ipcRenderer),
   sources: createSourceDeletionBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
+  fixedMemoryProcessing: createFixedMemoryProcessingBridge(ipcRenderer),
   backgroundTasks: createBackgroundTaskBridge(ipcRenderer),
   traces: createTraceBridge(ipcRenderer),
   bindings: createBindingConsentBridge(ipcRenderer),
