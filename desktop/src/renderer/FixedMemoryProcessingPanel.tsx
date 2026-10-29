@@ -80,7 +80,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
   const canContinue = run && !['pending', 'running', 'revoked'].includes(run.state) && run.succeeded < run.total
     && run.tasks.some(task => task.scopeKind === 'contact' && ['failed', 'paused', 'pending'].includes(task.state)
       && task.succeeded < task.total && !['targets_completed_elsewhere', 'memory_extraction_targets_completed_elsewhere'].includes(task.errorCode ?? ''));
-  return <section className="memory-processing-card" aria-label="固定范围记忆处理">
+  return <section className="memory-processing-card fixed-memory-processing" aria-label="固定范围记忆处理">
     <h2>记忆处理</h2>
     <p>处理当前勾选联系人已保存的有效文字。关闭微信读取后仍可手动处理。</p>
     {error && <p role="alert">{error}</p>}
