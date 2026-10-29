@@ -42,3 +42,14 @@ Blocked by: [06 清空聊天与明确重读历史](06-clear-and-resync-history.m
 本轮仅发布，尚未开始实现。`ready-for-agent`表示任务描述可供后续安排，不能据此自动领取、改代码、建业务库、读取微信或发起模型调用；须在用户后续明确要求实现时才开始并将State改为claimed。
 
 后续开发及桌面验收只用`pnpm run dev`，先`dev:status`核验并复用热更新实例；不得自行打包、运行打包版、改发布门禁、push或创建PR。只处理必要的合成或已获准资料，不提交私人聊天、身份、凭据、截图或真实媒体。App首次使用继续搁置，迁移／恢复实验不纳入本轮。
+
+## Comments
+
+2026-10-30 t20-cutover 定稿记录（State/Triage 由 Lead 维护，未改动）
+
+- 分支/工作树：`sqlite-rebuild-20`（独立工作树）；先 from `5fbe770c`，后合入 Lead 指定基线 `15ac355a`（merge f1692624）。提交：6c8c184f（cutover 控制面与演练）、52ab1a6f（旧 PG 启动路径与手动导入退役）、8efbabfd（审计文档与 ADR 修订）、4f782e12（审查阻断修复）、ad44bafa（run-current 对照）、本 Comments 提交。
+- 验证入口：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md`（77/778/215/115 逐项、82 表实际 DDL 与 252 CHECK／92 触发器 body／FK action／索引／视图、37 组 FK 差异、消费者映射、11 项隔离演练、真实归属受阻、12 条验收判定、审查修复复核）。
+- 结构：迁移 1..15 未改；`cutover.snapshot` 只读动作；实际 82 表/814 字段；77 表分类 67 实现／9 暂缓入口关闭／1 由 06 来源级排除替代；115 旧名称 0 未分类。
+- 消费者：产品三入口运行时 0 个 pg 值导入；4 个遗留文件值导入（含 1 动态）不可达；13/15/18/19 ownership unavailable 并含旧路由 503 行为回归；手动导入与旧 PG 启动路径已退役，managed-postgres/schema-prepare 源文件按裁决保留不可达、发布清单未改。
+- 安全/切换：控制面在 `database-cutover/manifest.json`；synthetic 授权仅隔离根允许，真实根必须 confirmed_local；清理完成→建目标→检查→二次停写→原子写配置；失败保持维护态、不恢复旧 writer、不建第二个空库。真实清理对象归属不明，实际清理受阻未执行。
+- 验证：锁定 TypeScript 7.0.2 两端 typecheck 0；cutover 相关 24/24；相关后端模块 113/113；桌面启动 16/16；正常开发入口实测默认 SQLite（8 检查 passed、5 页 UI、关停 pids[]、重开同 database_id/owner，隔离根已清理）；run-current 本树 1559 项 vs 15ac355a 基线 1506 项，失败文件集合无新增（非 PG 失败仅 memory-profile 2 项且基线同样存在）；公开检查 0 问题。
