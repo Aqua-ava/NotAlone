@@ -1,7 +1,7 @@
 # 20：默认切换 SQLite 与旧业务清理
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Type: task
 Parent: [SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)
 Blocked by: [06 清空聊天与明确重读历史](06-clear-and-resync-history.md)；[10 记忆处理控制与恢复](10-memory-processing-controls.md)；[14 官方 Skill 加载接回](14-official-skill-loading.md)；[16 单条媒体保存与清除](16-single-message-media-lifecycle.md)

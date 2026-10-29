@@ -44,7 +44,7 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [17 图片与视频提取](issues/17-image-video-extraction.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | resolved |
 | [18 语音保存与转换（本轮暂缓）](issues/18-voice-save-and-conversion.md) | [16](issues/16-single-message-media-lifecycle.md) | wontfix | resolved |
 | [19 媒体真实关联与组合验收（本轮暂缓）](issues/19-media-integration-acceptance.md) | [03](issues/03-private-history-sync.md)、[17](issues/17-image-video-extraction.md)、[18](issues/18-voice-save-and-conversion.md) | wontfix | open |
-| [20 默认切换 SQLite 与旧业务清理](issues/20-sqlite-cutover-and-legacy-cleanup.md) | [06](issues/06-clear-and-resync-history.md)、[10](issues/10-memory-processing-controls.md)、[14](issues/14-official-skill-loading.md)、[16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | claimed |
+| [20 默认切换 SQLite 与旧业务清理](issues/20-sqlite-cutover-and-legacy-cleanup.md) | [06](issues/06-clear-and-resync-history.md)、[10](issues/10-memory-processing-controls.md)、[14](issues/14-official-skill-loading.md)、[16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | resolved |
 | [21 三份规格组合验收](issues/21-three-specs-integrated-acceptance.md) | [20](issues/20-sqlite-cutover-and-legacy-cleanup.md) | ready-for-agent | claimed |
 
 ## 依赖图
@@ -102,7 +102,7 @@ flowchart TD
 
 ## 当前总进度
 
-2026-10-30 最终状态：17项中11项 resolved（01、02、05、07、08、09、11、12、14、16、17）；03/04/06/10/20/21 均已实现并实际集成但 State=claimed：03真实普通历史/状态语义/来源生命周期/跨重启连续性未认证；04真实增量/重选/断线/微信不在前台CLI同步未认证（受控dev实机部分通过）；06真实observer/reader边界协议与最终只读制品未认证（生产保持boundary_pending）；10模型相关控制状态未在App内构造（模型语义未认证）；20真实旧业务清理因本机无PG、旧对象归属不明未执行、保持受阻；21组合验收矩阵已产出（17项矩阵+四项暂缓+组合592/592+App闭环）但上述真实门槛未过、保持受阻抗。13/15/18/19用户暂缓（wontfix，入口关闭，不计通过）。本批全部变更已本地提交于集成分支 2bdec8c6，无push/PR/打包；工作区仅保留用户原有.gitignore修改与未跟踪资料，以及本批本地协调文件（.scratch手写handoff/report，未跟踪、不发布）。
+2026-10-30 最终状态：17项中12项 resolved（01、02、05、07、08、09、11、12、14、16、17、20）；03/04/06/10/21 均已实现并实际集成但 State=claimed：03真实普通历史/状态语义/来源生命周期/跨重启连续性未认证；04真实增量/重选/断线/微信不在前台CLI同步未认证（受控dev实机部分通过）；06真实observer/reader边界协议与最终只读制品未认证（生产保持boundary_pending）；10模型相关控制状态未在App内构造（模型语义未认证）；20真实清理经只读盘点重评：本机无旧业务对象（N/A+只读证据，未执行任何删除、未读.env内容），12/12通过并已resolved；21组合验收矩阵已产出（17项矩阵+四项暂缓+组合592/592+App闭环）但上述真实门槛未过、保持受阻抗。13/15/18/19用户暂缓（wontfix，入口关闭，不计通过）。本批全部变更已本地提交于集成分支 2bdec8c6，无push/PR/打包；工作区仅保留用户原有.gitignore修改与未跟踪资料，以及本批本地协调文件（.scratch手写handoff/report，未跟踪、不发布）。
 
 历史（2026-10-29）：本轮有效17项：已集成且当前验收通过10项（01、02、05、07、08、11、12、14、16、17）；03因真实状态语义及来源生命周期未认证受阻；09独立会话执行中；04、06、10、20、21等待依赖。08、12已在独立工作树核验前置后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03实现及合成／实际App已完成的部分复用证据，不重新执行。
 
@@ -225,3 +225,5 @@ flowchart TD
 - 2026-10-30 票03收口（task-1 complete）：执行会话t03把基线并入dsh/sqlite-rebuild-03并只读复核首次自动入口/能力报告/删除注册接线，未发现授权内需补写代码；提交34a6f98b仅+103行文档（合并后审计、12条逐条判定、精确真实缺口），已--no-ff集成7b934d73，集成后backend typecheck通过。03结论：第1/2条真实普通历史、状态语义、来源生命周期、跨重启连续性仍未认证，真实target/page全拒绝；需用户授权（真实逐人确认读取、固定文本发送+仅撤回一次）与正式窄操作制品，撤回测试此前已被用户跳过。State保持claimed、不resolved；03剩余工作转入需用户/架构决策的阻塞项，不空等。
 
 - 2026-10-30 DSH 总指挥接管并派发剩余批次：核对 GitHub 无远端操作；集成分支 codex/sqlite-rebuild-integration @ 33e7dedc（14 由 67b28e9a、16 由 1683fbcf 核验为基线祖先；03 工作树 bbec 仅 1 个未合并文档提交 +17 行，源码已集成；09 工作树 b1f3 为 109e1d50 + 28 改 6 未跟踪，须保留）。桌面 dev:status stopped/pids[]，WeChat PID 892 运行。已并发派发 5 个执行会话：t03（task-1，恢复 bbec 并先并基线）、t04（task-2，新 worktree sqlite-rebuild-04）、t06（task-3，新 worktree sqlite-rebuild-06）、t09（task-4，恢复 b1f3）、t10（task-5，新 worktree sqlite-rebuild-10）；20=task-6 blocked_by [06,10]，21=task-7 blocked_by [20]。桌面串行队列：03→09→04/06/10。pnpm 经 /tmp/notalone-env.sh shim（默认 PATH 无 node/pnpm）。06/10 的共享路径集成门禁分别等 04、04+09 实际进基线。
+
+- 2026-10-30（Goal round1）票20解决：t20只读复核确认本机无PG进程/数据目录、~/.notalone仅270个Skill原目录5.2M、默认userData仅Chromium缓存+wechat-tool开发制品+配置（无managed/state.json/旧业务SQLite/assistant-runtime/updates/runtime-copies）、NotAlone为空目录；据此第8条重评N/A（本机无清理对象）+只读证据，第12条保持通过，最终12/12（11通过+第8条N/A）。aff0366d已集成3bae162a；票20 State改为resolved。未执行任何真实删除/drop/切库/迁移，未读.env内容，目标不完整等安全门禁未变。
