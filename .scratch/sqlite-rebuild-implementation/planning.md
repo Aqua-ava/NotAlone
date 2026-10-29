@@ -190,6 +190,10 @@ flowchart TD
 
 - 用户在独立会话另行授权的真实供应商合成复测：07源提交两次调用及两个目标成功，11源提交一次调用成功且重开未增请求；总指挥已核对状态数量和祖先关系。各自旧unknown保留，09没有因此获得真实外呼授权；不认证微信或真实聊天语义质量。
 
+- 2026-10-30 票06桌面pending路径实机验证通过：t06在隔离合成根（/tmp/t09-node/bin/node v24.21.0、CDP dev开关、合成SQLite schema15两位联系人；未接真实微信/未调模型/未打包）完成5项：实际管理后台显示结构版本15、选中合成乙出现清空面板、清空确认后显示boundary_pending+原因exact_channel_cutoff_required且无成功文案（生产HTTP复核phase=boundary_pending/completed=false/deletion_state=blocked/stored_messages=0/stored_sources=0/联系人选择保留）、刷新仍pending、重读确认提示“结果尚未确认”无成功文案、正常退出后stopped/pids[]并删合成根。第12条真实observer/reader协议仍pending如实记录。无代码改动、无新hash。
+
+- 2026-10-30 票09文档阶段暂停边界修复集成：t10发现scene→profile阶段间未复验pause_requested_at（普通暂停后仍启动画像小批），t09以claimScene/claimProfile领取前复验pause_requested_at（暂停返回null保持pending）+普通暂停时场景收尾直接incomplete+run可单独领取画像小批供continue恢复修复（0f16b89d，分支HEAD 25e06116）；已--no-ff集成b2a4f0f1。主仓复跑：backend typecheck 0、文档10文件+提取101/101、desktop typecheck 0、桌面46/46；原12条验收无回退。
+
 - 2026-10-30 票04实机验收（部分通过，State保持claimed）：t04在受控dev（主仓已集成04的HEAD d866a4fe+隔离userData+合成SQLite schema14；未操作微信/未发送/未接真实模型/未打包）核验：结构版本14、联系人授权显示、增量阶段与失败原因可见、总开关开→关→开资料与检查点保留（read_epoch 1→2→3）、取消单人只停该人且资料保留（active 2→1）、覆盖不足如实显示、正常退出后pids[]/端口关闭/DB持久事实（messages=4、grants 3/active1、游标与pagesAccepted保留）。未完成并如实记录：重选（需读微信会话元数据，受控环境禁止操作微信）、断线实机构造、微信不在前台有效授权CLI同步（真实读取门禁关闭）——三项不计通过。无代码缺陷、无新hash、桌面已释放给06。
 
 - 2026-10-30 票06代码集成（State保持claimed，真实S(B)未认证）：执行会话t06最终a2e6862d（迁移15=historyClearMigration；按04接缝替换suppression函数体、两处accept接ingest clear_excluded、宿主路由与关闭、桌面联系人页面板）；已--no-ff集成2fdde8e2。t03双轴审查发现的阻断B1（取消/中断不使候选失效）、B3（B未绑定source_generation）及S5/S6/S3均已修复并补用例；B2（真实observer/reader协议与制品）如实保持pending，不冒充。主仓复跑：backend typecheck 0、清空/重读+清空HTTP 21/21；执行会话复跑清空17/17、HTTP4/4、历史/删除/增量107/107、宿主28/28、desktop typecheck 0、inventory通过、public 0。票06真实部分未过，不resolved。

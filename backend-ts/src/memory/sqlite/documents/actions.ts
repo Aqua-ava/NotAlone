@@ -14,11 +14,13 @@ export function revisions(tx:StorageTransaction,ownerId:string,t:StorageRow):Sto
   tx.get('SELECT memory_revision,document_revision,current_publication_id FROM contact WHERE owner_id=? AND id=?',[ownerId,t.contact_id]);
  if(!row)fail('document_scope_stale');return row!;
 }
-export function preconditions(tx:StorageTransaction,ownerId:string,t:StorageRow):void {
+export function preconditions(tx:StorageTransaction,ownerId:string,t:StorageRow,options:{allowPaused?:boolean}={}):void {
  available(tx,ownerId,{scopeKind:t.scope_kind as 'self'|'contact',contactId:t.contact_id as string|null},true);
  if(!['succeeded','awaiting_decision'].includes(String(t.state)))fail('document_preceding_stage_incomplete');
  const run=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);
- if(!run||run.pause_requested_at!==null||['revoked','paused'].includes(String(run.state)))fail('document_preceding_stage_incomplete');
+ if(!run||run.state==='revoked')fail('document_preceding_stage_incomplete');
+ // 普通暂停只阻止新小批；已启动的步骤允许收尾，继续后再处理后续阶段。
+ if(!options.allowPaused&&(run!.pause_requested_at!==null||run!.state==='paused'))fail('document_preceding_stage_incomplete');
  if(run!.state==='failed'){
   // 仅放行其他联系人的局部提取失败；公共模型故障仍由整轮暂停保护。
   const failedContact=tx.get("SELECT 1 FROM processing_task WHERE owner_id=? AND run_id=? AND scope_kind='contact' AND id<>? AND state='failed'",[ownerId,t.run_id,t.id]);
