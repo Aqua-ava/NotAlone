@@ -143,3 +143,87 @@ Computer Use 实际操作管理后台和输入小窗：乙显示历史不完整�
 认证结论：可以认证本次两个时刻的当前账号结构、精确目标、8 分片中的 2 个消息表实例、`local_id` 声明主键、表结构及一个原始状态值在两次间相同；不能据此认证票03第1/2条要求的真实历史范围、状态语义、来源生命周期、跨重启来源连续性或覆盖。`support` 仍返回 `unverified`、`history_message_state_unverified`，其中 `normalHistory`、`statusSemantics`、`sourceLifecycle`、`restartContinuity`、`recoveryMapping`、`snapshotBarrier`、`partitionCoverage` 全为 `unverified`。相同固定切面无法证明变化间映射；当前保留的正式 CLI 又缺少 metadata 入口，开发制品也不能冒充正式支持档。
 
 因此本轮不放宽真实正文门禁、不修改 support profile、不把全拒绝写成正常历史可用，票03保持 claimed。数据影响仅为上述只读 metadata 查询；没有读取正文或其他私人资料，没有向指定目标或任何其他对象发送消息。两次快照后 App 以正常 Cmd+Q 退出；`dev:status` 返回 `stopped`/空 PID，任务自有 App/监督器/DSH 进程和开发握手均已清理，WeChat 保持原运行状态。
+
+## 2026-10-30 合并基线后的分支审计、接线复核与逐条真实缺口（仍未认证）
+
+本轮只做分支合并、只读代码审计、既有证据有效期复核与最小相关重跑；没有启动实际 App、没有读取真实微信正文或元数据、没有发送或撤回、没有迁移／恢复实验、没有模型调用。以下“已过”只指票内已勾选的约定实现与合成／正式服务证据，不等于真实渠道认证。
+
+### 分支与合并审计
+
+- 独立工作树（路径不记录）原为 detached HEAD `e6998001`（父 `a11e04a0`，仅在本文追加双次 metadata 复核段），工作区 clean。恢复为本地分支 `dsh/sqlite-rebuild-03`，未 reset／clean／覆盖。
+- 实际执行 `git merge codex/sqlite-rebuild-integration`（基线 `33e7dedc`），无冲突，生成 merge commit `28d78174`；工作区保持 clean，未 push。
+- 合并后与基线双向差：`git rev-list --count 33e7dedc..HEAD` = 2（`e6998001` 文档提交 + merge commit），反向 = 0；追加本节前 `git diff --stat 33e7dedc..HEAD` 只有本文 +17 行。
+- `git diff --stat a11e04a0..33e7dedc -- backend-ts/src/history` 为空：03 源码已随基线全部集成，旧工作树不作为当前产品状态。
+- 集成侧对 03 接线的实际影响：`backend-ts/src/sqlite-host-plugin.ts` 仅新增记忆管理路由（当前文件 `:170`、`:186`），history 服务、协调器、启动唤醒、关闭顺序行未变；桌面历史／消息 UI 文件自合成 App 证据提交 `2f18f7a1` 起 `git diff --stat` 为空。其他集成增量属记忆裁决、候选回复等相邻票，不在本票范围。
+
+### 首次自动入口接线（当前树证据）
+
+- `backend-ts/src/sqlite-host-plugin.ts:123-127`：能力含 `history` 时创建 `SqliteHistoryService` 与 `FirstHistoryCoordinator`，`contacts.setReadStart(()=>firstHistory.wake())`；`:142` 停读时 `firstHistory.stop(contactId)` 并等待媒体停读；`:208` 在 appReady 发布握手后 `firstHistory.wake()`；`:94` 关闭顺序先 `firstHistory` 再 `history`、`contacts`、模型与 SQLite。
+- `backend-ts/src/history/sqlite/coordinator.ts:31` 注释明确只由启动、明确确认或开启操作唤醒，首次历史结束后不派发增量、不轮询；`:51-57` wake 清理取消键并重新调度；`:152-168` 单人 stop／整体 close 先取消并等待真实 reader 排空。
+- 复核判定：公共首次自动入口的“合成原生子进程 + 正式 HTTP 授权 + 空库”证据仍有效。`sqlite-history-startup-host.test.mjs` 覆盖全新启动不预灌、账号确认 / 名单同意 / 联系人确认 / 开启读取后自动首次 capture，且不调用 `/history/sync`、不预植消息或 goal；未知支持档保持缺口并零 target/page。仍不能把该合成结果当真实支持档已验收。
+
+### 版本化能力报告复核
+
+- `backend-ts/src/history/sqlite/contracts.ts:4-13`：`HistorySupportReport` 固定 `protocol:'private-history-v1'`、`profileId`、`adapterVersion`，`status` 为 `supported|unsupported|unverified` 三值，并含 `serverAliasSemantics`、13 项三值 `capabilities`、`identity`、`statusSemantics`、`continuity`。
+- `backend-ts/src/history/wechat/native-client.ts:209-235` 解析并逐项校验 13 项能力键，缺省或越界拒绝；`statusSemantics`／`continuity` 在非 `supported` 时只接受固定未认证文本。
+- 版本化制品报告：`support-profiles/wechat-4.0.6-29387-narrow-v1.json`（`format`／`revision:2`／`profileId`＋13 项三值）、`-account-metadata-v1.json`、`-metadata-v1.json`、`-controlled-state-v2.json`；支持档当前 `status:unverified`、`canReadHistory:false`，`statusSemantics`／`sourceLifecycle`／`restartContinuity`／`recoveryMapping`／`snapshotBarrier`／`partitionCoverage`／`normalHistory` 均为 `unverified`。
+- 宿主运行能力报告 `sqlite-host-plugin.ts:158-163`：`wechatBodySync`／`wechatHistory` 在 history 能力存在时为 `typescript`，`wechatIncremental` 仍 `unavailable`。未发现“字段存在即冒充已认证”的记录。
+
+### 来源删除注册复核
+
+- `backend-ts/src/storage/sqlite/deletion/registration.ts:17-26`：`installedHistoryDomain` 在正式 `historyDeletionDomain.collect` 之上，为 `source` 删除追加早期读者 holder 键（`historyReaderHolderKey(contactId, accepted_data_generation)` 及前置代次），覆盖 inspect/target 尚无 goal 的读者；`:39-40` 已把 `history` 加入 domains 与 requiredDomains。
+- `backend-ts/src/history/sqlite/service.ts:15,45-48`：读取前先登记 `history:read_<contactId>_<generation>`（`coversAllSources:true`），有 goal 后再登记 `history:<goalId>`，finally 逆序释放并等待真实关闭；`:94-95` stop／close 排空。
+- `backend-ts/src/history/sqlite/deletion.ts:32-77`：fence 写持久来源排除／删除围栏并把旧 `capture_record`／`read_goal` 置失效，collect 只按固定操作账本收集，clear 校验 owner、identity 与 planned target，verify 拒绝残留行。
+- 复核判定：写入／删除注册合同与早读者排空已有合成和正式 HTTP 证据（本轮重跑见下）；真实来源删除链仍未运行（无真实捕获），`contact_history` 精确截断属 06，来源列表 GET 属 20。
+
+### 本轮最小重跑与证据复用
+
+| 验证 | 命令／来源 | 本次结果 | 复用理由 |
+| --- | --- | --- | --- |
+| 后台类型检查 | `cd backend-ts && pnpm run typecheck`（`tsc --noEmit`） | 退出 0，无错误输出 | 合并后必跑的编译门禁 |
+| 03 相关模块 | `ELECTRON_RUN_AS_NODE=1 <Electron 44.7.0> --test` 13 个文件：`sqlite-private-history`、`sqlite-history-http`、`sqlite-contact-binding`、`sqlite-storage`、`sqlite-deletion`、`sqlite-history-host`、`sqlite-history-hooks`、`sqlite-first-history-coordinator`、`sqlite-history-sync-status`、`sqlite-history-source-holder`、`sqlite-wechat-history-channel`、`sqlite-host-close`、`sqlite-history-startup-host` | tests 109 / pass 109 / fail 0 / skipped 0 | 合并树一次性覆盖服务、HTTP、删除注册、hook、协调器、宿主启动 |
+| 对照：同一批（除 startup-host 外 12 文件）用普通 `node` | 同一命令去 `ELECTRON_RUN_AS_NODE` | pass 101，仅 2 个启动宿主用例失败：`No usable native binding found for node-addon-require-builtin-darwin-arm64` | 环境限制：DSH runtime node（TeamID `NAN929V4UM`、hardened runtime）无法加载 pnpm 的 ad-hoc `require_builtin.node`；主仓与工作树同缺本地构建，与本次合并和 03 代码无关。改用 Electron 44.7.0 自带 Node v24.21.0（与真实 App 后台启动方式一致）后 4/4 通过 |
+| PG 依赖宿主测试 `wechat-history-status-host.test.mjs` | 需要本机 PostgreSQL | 未运行：连接 `/tmp/.s.PGSQL.5432` ENOENT | 本地无 PG；该文件不在既有一组 03 证据内，条件未变 |
+| 合成实际 App 展示／删除／覆盖／目录计数 | 提交 `2f18f7a1` 记录，CUA 实操 | 复用 | 历史与消息 UI、backend history 源码自该提交起未变；集成只改相邻记忆模块 |
+| 空库正式 HTTP 自动首次派发（startup 4 项） | 本轮 `sqlite-history-startup-host.test.mjs` 4/4 | 重新通过 | 合并后重跑，替代旧计数 |
+| 真实 metadata 双次快照与 v6 单条类型观察 | `e6998001` 段、`metadata-v1.json`、v9／v10／v11 支持档 | 复用，未重跑 | 制品字节、账号配置、WCDB 与目标对象相等关系未变，WeChat 进程未重启；条件未变不重跑 |
+| 公开历史检查 | `node scripts/check_public_history.mjs --ref HEAD --working-tree` | 提交前后执行，见提交回报 | 提交后必跑 |
+
+### metadata-only 只读诊断判定
+
+- 已授权诊断（七种类型各最多一条，仅来源键、type/status/serverId/sender 类别/create_time）已在 v6 执行：文字、图片、文件家族、表情、其他共 5 条匹配；语音与视频未匹配，报告“未观察”，未报告不支持或完整；原始状态只观察到 2、4。
+- 本轮不重跑。原因：读取对象、开发只读制品（`d555f…`）、配套 WCDB（`4f05ca…`）、账号与目标相等关系均未变化，重复同一固定切面不会产生新的观察；语音／视频“未观察”是该单一授权会话快照内没有匹配行，不是探测失败，也不能由同一对象重跑补成“完整”。
+- 若要关闭语音／视频类型观察缺口，需要另一个包含该类型消息的已授权私聊快照（新的对象级授权），而不是本票本轮可自行扩大的读取范围。本次未读取 `message_content`／source／XML／媒体，未写普通 captures，未提升 `normalHistory`，无匹配项按“未观察”记账。
+
+### 12 条验收逐条判定
+
+判定说明：“实现＋合成已验”指票内已勾选的约定行为有正式服务／合成／受控 HTTP 证据；真实列仍标注未认证。真实普通历史、真实状态语义与来源生命周期、真实删除链保持未过。
+
+| # | 验收条 | 判定 | 已有证据 | 还缺的证据／所需授权或制品 |
+| --- | --- | --- | --- | --- |
+| 1 | 首次历史限于已选联系人及本机可读消息，共用规范化，不恢复手动导入 | 实现＋合成已验；真实未过 | 协调器／服务／规范化／正式 HTTP 空库自动派发；合成 App 展示 | 真实支持档 `status=supported` 且真实逐人确认读取（02 真实对象）；当前真实 target/page 全部拒绝 |
+| 2 | 版本化能力报告区分已支持／不支持／未验证；核验 schema、主键、分片／表实例、状态字段、来源连续性 | 报告与结构核验已过；状态与连续性未过 | 13 项三值报告；8 分片 2 表 17 列、`local_id` 主键、`server_id` 非唯一、状态列；双次快照结构一致 | 真实状态转移（发送／撤回／别名补齐）与跨重启／实例连续性证据；撤回归属人类操作授权 |
+| 3 | 内部消息身份、来源出现键、服务端别名、续读位置分开；大整数、serverId=0、合法补齐 | 实现＋合成已验 | `contracts.ts` 身份／别名／游标拆分；相关测试与既有 63/63 | 真实渠道侧同一出现身份与别名补齐的真实样本（受状态门禁阻断） |
+| 4 | 跨分片同 local_id、排序变化、同秒、乱序、多页重复无歧义 | 实现＋合成已验 | 分片／排序／多页测试与合成 DSH 分页 | 真实多分片分页与乱序样本 |
+| 5 | 身份不足隔离，不进入正常聊天／记忆／生成，不能绕过授权 | 实现＋合成已验 | 隔离记录与实际读取谓词测试 | 真实范围下的隔离观察 |
+| 6 | 文字存正文；非文字为空并保留类型与位置；不下载媒体、不触发记忆或模型 | 实现＋合成已验 | 合成 App 六类占位、非文字空正文测试 | 真实类型元数据仅 5/7 类型被观察，语音／视频未观察；真实正文未读取 |
+| 7 | 捕获／来源／消息／游标／覆盖具名事务原子提交，提交前复验 | 实现＋合成已验 | 事务与迟到页测试、正式宿主删除闭包测试 | 真实读取下的原子提交观察 |
+| 8 | 分页／分片缺失／身份冲突／中断显示真实覆盖不足，进行中阻止生成 | 实现＋合成已验 | 覆盖显示与正文可用性解耦、警告 UI、生成阻断测试 | 真实覆盖不足场景观察；依赖真实 target/page |
+| 9 | 保存完整来源关联、删除目标注册、迟到写入资格保护；05 合同替身验证 | 实现＋合成＋正式 HTTP 已验；真实删除链未过 | 删除域注册、早读者 holder、正式 DELETE 合成 App 8→7、来源列表属 20 | 真实来源删除需先有真实捕获；`contact_history` 精确截断属 06；sources GET 属 20 |
+| 10 | 合成源覆盖正常／重复／冲突／中断与界面反馈；真实未核验时保持门禁 | 已过（合成） | 合成 App CUA 证据、覆盖警告 | — （真实渠道见 1／2） |
+| 11 | 复用 WCDB 原生 12 项与生命周期 14 项声明范围；研究摘要不等于产品字节；不做迁移／恢复 | 已过（限定字节与声明范围） | 配套 dylib 12/12 原生合成；v5–v11 支持档 | 无新增；不扩到迁移／恢复 |
+| 12 | 显式统一 ADR-100 及旧 baseline 阅读入口与本轮首次历史目标 | 已过（文档／入口） | ADR-100／113 与旧 baseline 条款统一记录 | 无新增 |
+
+### 精确真实缺口与所需授权／制品
+
+1. 真实普通历史（第 1 条）：需用户按 02 对真实私聊完成逐人确认与读取授权，且支持档为 `supported`；当前正式安装 CLI `d566d4…` 调用 `notalone-history` 时以 `notalone_command_disabled` 退出 2，缺 metadata／history 窄操作；开发制品 `d555f…` 的 manifest 为 ad-hoc development、`realWechatVerified=false`，不能冒充正式支持档。在支持档未认证前，即使确认完成，target/page 仍会被门禁拒绝。
+2. 状态语义与来源生命周期（第 2 条）：需精确对象固定文字的“发送后保留”与“发送后仅撤回一次”的人工授权与可操作撤回归口。人类已指示跳过撤回；CUA 对消息气泡点击返回 `AXError.notImplemented`，不能保证撤回。pending、server 别名补齐需可捕获窗口，未捕获即保持 unverified；禁止重发、重试或扩读其他消息。
+3. 跨启动／实例连续性：`sourceGeneration` 不含消息分片实例，`data_version` 仅同一连接可比；持久失证围栏仍是待实现合同。需架构决策与实现授权、真实重启观察协议；迁移／恢复实验继续排除。
+4. 真实覆盖（第 1／8 条）：需真实 target/page 全量分页及分片缺失场景，传递依赖第 1、2 项。
+5. 真实删除链（第 9 条后半）：需先有真实捕获与来源，传递依赖第 1 项；`contact_history` 精确截断属 06，来源列表 GET 属 20，不在本票扩大范围。
+6. 语音／视频类型元数据：需另一个包含该类型消息的已授权私聊快照；同一对象重跑不会产生新观察。
+7. 正式制品：需正式签名且含窄操作的 CLI，或由用户／总指挥明确开发制品可用于哪一层认证；当前开发制品声明不能替代正式安装制品。
+
+### 数据影响与资源清理
+
+本轮改动只有本验证文档与票内追加评论，无产品代码、schema、支持档或配置变更；未启动实际 App／监督器／受控观察器／模型；未读取真实微信正文、名单或媒体，未发送或撤回消息；未改迁移／恢复。分支仅本地，未 push、未建 PR。临时产物仅为 `/tmp` 下的测试日志与被终止测试进程的子进程，测试夹具在用例内自清理；未发现遗留 `notalone-dsh-host-*` 目录或本票自有进程。
