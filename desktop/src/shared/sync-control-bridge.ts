@@ -43,6 +43,7 @@ export interface SyncPriorityReport {
 
 // 只展示最近循环的最小报告，不提供微信定位标识、观察身份或正文。
 export interface SyncStatusReport {
+  selectionOnly?: boolean; bodyAvailable?: boolean;
   enabled: boolean;
   syncScope?: SyncScope;
   syncScopeFailureCode?: string | null;

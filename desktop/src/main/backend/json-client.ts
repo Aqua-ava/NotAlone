@@ -19,6 +19,7 @@ export interface JsonRequest {
   acceptAssistantContinuationClarification?: true;
   acceptAssistantNoGenerationProof?: true;
   manualContactId?: string;
+  metadataConsent?: true;
 }
 
 // 只携带安全分类；业务模块自行映射已知错误，不把响应原文转给界面。
@@ -138,6 +139,7 @@ export class JsonClient {
       const req = request({
         hostname: '127.0.0.1', port: this.connection.port, method, path,
         headers: { Authorization: `Bearer ${this.connection.token}`, Accept: 'application/json',
+          ...(options.metadataConsent ? { 'X-NotAlone-Metadata-Consent': 'selected-list' } : {}),
           ...(options.manualContactId ? { 'X-NotAlone-Manual-Contact': options.manualContactId } : {}),
           ...(options.asyncPreparation ? { Prefer: 'respond-async' } : {}),
           'Content-Type': 'application/json', 'Content-Length': String(body.length) },

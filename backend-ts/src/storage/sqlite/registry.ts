@@ -1,3 +1,5 @@
+import { identityMigration } from '../../contacts/sqlite/schema.ts';
+import { identityActions } from '../../contacts/sqlite/actions.ts';
 import type { StorageRegistry } from './contracts.ts';
 
 // 已发布版本不可修改；后续业务票在此追加连续版本及具名动作。
@@ -18,6 +20,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }],
-  actions: [],
+` }, identityMigration(2)],
+  actions: [...identityActions],
 };

@@ -17,9 +17,11 @@ export class OwnedBackendProcess {
     const { projectDirectory } = await validateLaunchConfiguration(config);
     // 路径核验含异步 I/O，最终 spawn 前再次检查退出/连接代际，不在退出后新建读取进程。
     if (!canStart()) throw new BackendFailure('backend_connection_failed');
-    const environment = backendEnvironment({ ...config, projectDirectory }, config.source === 'managed' ? path.dirname(path.dirname(config.infoPath)) : projectDirectory);
+    const environment: NodeJS.ProcessEnv = config.sqlite ? { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, TZ: process.env.TZ, TMPDIR: process.env.TMPDIR }
+      : backendEnvironment({ ...config, projectDirectory }, config.source === 'managed' ? path.dirname(path.dirname(config.infoPath)) : projectDirectory);
     return launchDsh({ nodeExecutable: process.execPath, projectDirectory,
       envFilePath: config.envFilePath || path.join(projectDirectory, '.env'), infoPath: config.infoPath,
-      environment, businessHome: environment.HOME || os.homedir() }, canStart);
+      environment, businessHome: config.sqlite?.userData || environment.HOME || os.homedir(),
+      ...(config.sqlite ? { sqlite: config.sqlite } : {}) }, canStart);
   }
 }

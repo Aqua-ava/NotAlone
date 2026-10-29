@@ -1,3 +1,4 @@
+import type { BindingConsentState } from '../shared/binding-consent-bridge';
 import { UsagePanel } from './UsagePanel';
 import { historyReplyEligibility } from '../shared/history-reply-eligibility';
 import type { HistoryCoveragePhase, SyncControlState } from '../shared/sync-control-bridge';
@@ -40,6 +41,8 @@ export function App() {
   const permission = useScreenPermission();
   const contactSession = useContactSession();
   const replies = useReplySession(helper);
+  const { state: consent } = useRevisionedSession<BindingConsentState>({ revision: -1, scopeRevision: 0, phase: 'offline',
+    sessions: [], bindings: [], syncEnabled: null, sessionIssue: 'not-requested', busy: null, errorCode: null, notice: null }, window.notalone.bindings, !helper);
   const { state: historySync } = useRevisionedSession<SyncControlState>({ revision: -1, scopeRevision: 0,
     phase: 'offline', report: null, busy: null, errorCode: null }, window.notalone.syncControl, helper);
   useEffect(() => { if (helper) void window.notalone.syncControl.refresh().catch(() => {}); }, [contactSession.state.selectedContactId]);
@@ -153,7 +156,7 @@ export function App() {
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
-        {page === 'sync' && <WechatSetupPanel bridge={window.notalone.wechatSetup}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>}
+        {page === 'sync' && <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>}
         {page !== 'config' && page !== 'contacts' && page !== 'import' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>

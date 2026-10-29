@@ -1,0 +1,4 @@
+# SQLite 联系人能力仍由官方 profile 装配；不加载模型、Agent 或 Tool 插件。
+- insert:
+    - id: notalone-sqlite-host
+      name: PLUGIN_PATH

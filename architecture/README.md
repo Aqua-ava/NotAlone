@@ -214,3 +214,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 [ADR-081](adr/081-source-grounded-memory-time-and-conditions.md) 记录来源锚点、日期精度、适用条件与有据时间线；[规格与实现索引](../.scratch/memory-temporal-semantics/planning.md) 分别记录目标、工程验证和质量限制。
 
 109. [ADR-109：受控 SQLite 底座与分票切换](adr/109-controlled-sqlite-storage-foundation.md)
+
+110. [ADR-110：SQLite 联系人身份与逐人读取授权](adr/110-selected-sqlite-contact-read-grants.md)

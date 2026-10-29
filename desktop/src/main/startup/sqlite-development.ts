@@ -4,9 +4,10 @@ import { lstat, open, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import type { SqliteLaunchConfiguration } from '../../../../backend-ts/src/launch';
 import type { SqliteDevelopmentState } from '../../shared/startup-bridge';
 
-type Configuration = { formatVersion: 1; intent: 'create' | 'open'; role: 'test'; expectedDatabaseId?: string };
+type Configuration = { formatVersion: 1; intent: 'create' | 'open'; role: 'test'; expectedDatabaseId?: string; capabilities?: ['contacts'] };
 type ProbeResult = { databaseId: string; schemaVersion: number; sqliteVersion: string };
 const failureCodes = new Set(['storage_configuration_invalid', 'instance_required', 'unsafe_storage_path',
   'storage_identity_changed', 'storage_missing', 'storage_already_exists', 'instance_mismatch', 'schema_drift',
@@ -17,11 +18,16 @@ const blocked = (code: string): SqliteDevelopmentState => ({ phase: 'blocked', c
 /** 只在 Main 已核验的开发模式显式装配，普通启动不读取此控制文件。 */
 export class SqliteDevelopmentProbe {
   private cancelChild: (() => void) | undefined;
+  private contactConfiguration: SqliteLaunchConfiguration | undefined;
+  getContactConfiguration(): SqliteLaunchConfiguration | undefined {
+    return this.contactConfiguration ? { ...this.contactConfiguration, capabilities: ['contacts'] } : undefined;
+  }
   constructor(private readonly userData: string, private readonly projectDirectory: string) {}
 
   cancel(): void { this.cancelChild?.(); }
 
   async run(canStart: () => boolean): Promise<SqliteDevelopmentState | undefined> {
+    this.contactConfiguration = undefined;
     const target = path.join(this.userData, 'sqlite-development.json');
     let config: Configuration;
     let identity: { dev: number; ino: number };
@@ -37,7 +43,8 @@ export class SqliteDevelopmentProbe {
         if (bytesRead > 4096) return blocked('sqlite_configuration_invalid');
         const value = JSON.parse(data.subarray(0, bytesRead).toString('utf8'));
         if (!value || typeof value !== 'object' || Array.isArray(value)
-          || Object.keys(value).some(key => !['formatVersion', 'intent', 'role', 'expectedDatabaseId'].includes(key))
+          || Object.keys(value).some(key => !['formatVersion', 'intent', 'role', 'expectedDatabaseId', 'capabilities'].includes(key))
+          || (value.capabilities !== undefined && (!Array.isArray(value.capabilities) || value.capabilities.length !== 1 || value.capabilities[0] !== 'contacts'))
           || value.formatVersion !== 1 || value.role !== 'test' || !['create', 'open'].includes(value.intent)
           || (value.intent === 'create' ? value.expectedDatabaseId !== undefined
             : typeof value.expectedDatabaseId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value.expectedDatabaseId))) {
@@ -61,14 +68,16 @@ export class SqliteDevelopmentProbe {
         try {
           const file = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
           try {
-            await file.writeFile(`${JSON.stringify({ formatVersion: 1, intent: 'open', role: 'test', expectedDatabaseId: result.databaseId })}\n`);
+            await file.writeFile(`${JSON.stringify({ formatVersion: 1, intent: 'open', role: 'test', expectedDatabaseId: result.databaseId, ...(config.capabilities ? { capabilities: config.capabilities } : {}) })}\n`);
             await file.sync();
           } finally { await file.close(); }
           if (!canStart()) return blocked('sqlite_cancelled');
           await rename(temporary, target);
         } finally { await rm(temporary, { force: true }); }
       }
-      return { phase: 'ready', code: 'sqlite_ready', schemaVersion: result.schemaVersion, sqliteVersion: result.sqliteVersion };
+      if (config.capabilities) this.contactConfiguration = { userData: this.userData, expectedDatabaseId: result.databaseId, role: 'test', capabilities: ['contacts'] };
+      return { phase: 'ready', code: 'sqlite_ready', schemaVersion: result.schemaVersion, sqliteVersion: result.sqliteVersion,
+        ...(config.capabilities ? { capabilities: ['contacts'] } : {}) };
     } catch (error) {
       const code = (error as { code?: unknown })?.code;
       return blocked(typeof code === 'string' && failureCodes.has(code) ? code : 'sqlite_diagnostic_failed');

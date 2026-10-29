@@ -94,7 +94,7 @@ function parseSyncReport(value: unknown): SyncStatusReport {
     || typeof fields.cli_bound_count !== 'number' || !Number.isSafeInteger(fields.cli_bound_count)
     || fields.cli_bound_count < 0) throw new Error('同步报告不可用。');
   if ('sync_scope' in fields && fields.sync_scope !== 'all_private' && fields.sync_scope !== 'selected') throw new Error('同步报告不可用。');
-  return { syncScope: (fields.sync_scope ?? 'selected') as SyncScope,
+  return { ...(fields.identity_protocol === 'sqlite-selected-v1' ? { selectionOnly: true, bodyAvailable: fields.body_available === true } : {}), syncScope: (fields.sync_scope ?? 'selected') as SyncScope,
     syncScopeFailureCode: 'sync_scope_failure_code' in fields ? failureCode(fields.sync_scope_failure_code) : null,
     ...historyAuthorization(fields),
     historyCoverages: historyCoverages(fields.cli_history_coverages),

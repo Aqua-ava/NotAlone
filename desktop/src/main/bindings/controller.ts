@@ -7,6 +7,11 @@ import type { ContactSession } from '../contacts/session';
 import { isBindingIdentifier, isConversationLocator } from './validation';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+const selectionGeneration = (value: unknown): string | undefined => {
+  if (value === undefined) return;
+  if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,17})$/.test(value)) throw new Error('授权代次不可用。');
+  return value;
+};
 const identifier = (value: unknown): string => {
   if (!isBindingIdentifier(value)) throw new Error('授权目录不可用。');
   return value.toLowerCase();
@@ -19,7 +24,8 @@ export function bindingSummary(value: unknown): BindingSummary {
   if (!record(value) || (value.status !== 'active' && value.status !== 'revoked')
     || (value.display_name !== null && typeof value.display_name !== 'string')) throw new Error('授权目录不可用。');
   return { bindingId: identifier(value.binding_id), contactId: identifier(value.contact_id),
-    locator: locator(value.conversation_locator), displayName: value.display_name, status: value.status };
+    locator: locator(value.conversation_locator), displayName: value.display_name, status: value.status,
+    ...(value.selection_generation === undefined ? {} : { selectionGeneration: selectionGeneration(value.selection_generation) }) };
 }
 function bindings(value: unknown): BindingSummary[] {
   if (!record(value) || !Array.isArray(value.bindings)) throw new Error('授权目录不可用。');
@@ -41,7 +47,9 @@ function sessions(value: unknown): CliSessionSummary[] {
     if (!record(entry) || typeof entry.display_name !== 'string' || !entry.display_name.trim()
       || (entry.last_timestamp !== null && (!Number.isSafeInteger(entry.last_timestamp) || typeof entry.last_timestamp !== 'number'))) throw new Error('会话元数据不可用。');
     return { locator: locator(entry.username), displayName: entry.display_name, lastTimestamp: entry.last_timestamp as number | null,
-      boundContactId: entry.bound_contact_id === null ? null : identifier(entry.bound_contact_id) };
+      boundContactId: entry.bound_contact_id === null ? null : identifier(entry.bound_contact_id),
+      ...(entry.selection_generation === undefined ? {} : { selectionGeneration: selectionGeneration(entry.selection_generation),
+        knownContactId: entry.known_contact_id === null ? null : identifier(entry.known_contact_id) }) };
   });
   if (new Set(items.map((item) => item.locator)).size !== items.length) throw new Error('会话元数据不可用。');
   return items;
@@ -53,6 +61,9 @@ class SelectionStale extends Error {}
 export class BindingConsentController {
   private state: BindingConsentState = { revision: 0, scopeRevision: 0, phase: 'offline',
     sessions: [], bindings: [], knownBindings: [], syncEnabled: null, sessionIssue: 'not-requested', busy: null, errorCode: null, notice: null };
+  private identityProtocol = false;
+  private snapshotToken: string | undefined;
+  private snapshotGenerations = new Map<string, string>();
   private generation: number | undefined;
   private epoch = 0;
   private readonly listeners = new Set<(state: BindingConsentState) => void>();
@@ -61,7 +72,7 @@ export class BindingConsentController {
     backend.onStateChanged(() => {
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
-      this.generation = generation; ++this.epoch;
+      this.generation = generation; ++this.epoch; this.snapshotToken = undefined; this.snapshotGenerations.clear();
       this.publish({ phase: 'offline', sessions: [], bindings: [], knownBindings: [], syncEnabled: null, sessionIssue: 'not-requested',
         busy: null, errorCode: null, notice: null,
         scopeRevision: this.state.scopeRevision + 1 });
@@ -98,21 +109,36 @@ export class BindingConsentController {
       }
       const directory = await this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' });
       if (!this.current(operation)) return;
-      const active = bindings(directory.data);
-      const known = knownBindings(directory.data, active);
+      this.identityProtocol = record(directory.data) && directory.data.identity_protocol === 'sqlite-selected-v1';
+      let active = bindings(directory.data);
+      let known = knownBindings(directory.data, active);
       const list = await Promise.allSettled([
         // 启动和重连只读本机已保存状态；微信元数据须由用户明确刷新。
-        readSessions ? this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-sessions' })
+        readSessions ? this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-sessions', metadataConsent: true })
           : Promise.resolve({ data: { sessions: [] } }),
         this.backend.requestJson({ method: 'GET', path: '/api/sync/status' }),
       ]);
       if (!this.current(operation)) return;
       let sessionList: CliSessionSummary[] = preserveSessions ? this.state.sessions : [];
       let sessionIssue: BindingConsentState['sessionIssue'] = preserveSessions ? this.state.sessionIssue : readSessions ? null : 'not-requested';
-      if (readSessions && list[0].status === 'fulfilled') sessionList = sessions(list[0].value.data);
+      if (readSessions && list[0].status === 'fulfilled') {
+        sessionList = sessions(list[0].value.data);
+        if (this.identityProtocol) {
+          const payload = list[0].value.data;
+          if (!record(payload) || typeof payload.snapshot_token !== 'string') throw new Error('名单核验凭据不可用。');
+          this.snapshotToken = payload.snapshot_token;
+          this.snapshotGenerations = new Map(sessionList.map(row => [row.locator, row.selectionGeneration ?? '']));
+        }
+      }
       else if (list[0].status === 'rejected') sessionIssue = list[0].reason instanceof BackendRequestFailure && list[0].reason.status === 503 ? 'unavailable' : 'failed';
+      // 元数据核验可能撤销改名/冲突绑定，发布前重读同一持久授权。
+      if (readSessions && this.identityProtocol) {
+        const currentDirectory = await this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' });
+        if (!this.current(operation)) return;
+        active = bindings(currentDirectory.data); known = knownBindings(currentDirectory.data, active);
+      }
       const status = list[1].status === 'fulfilled' ? list[1].value.data : null;
-      this.publish({ phase: 'ready', bindings: active, knownBindings: known, sessions: sessionList, sessionIssue,
+      this.publish({ phase: 'ready', selectionOnly: this.identityProtocol, bindings: active, knownBindings: known, sessions: sessionList, sessionIssue,
         syncEnabled: record(status) && typeof status.sync_enabled === 'boolean' ? status.sync_enabled : null });
     } catch (error) {
       if (!this.current(operation)) return;
@@ -131,15 +157,17 @@ export class BindingConsentController {
       this.validateSelections(confirmation.selections, this.state.sessions, this.state.bindings);
       // 最终提交前重新读取元数据与授权，不把旧列表或名称当作新的确认。
       const [metadata, directory] = await Promise.all([
-        this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-sessions' }),
+        this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-sessions', metadataConsent: true }),
         this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' }),
       ]);
       if (!this.current(operation)) return;
       this.validateSelections(confirmation.selections, sessions(metadata.data), bindings(directory.data));
       const result = await this.backend.requestJson({ method: 'POST', path: '/api/sync/cli-bindings/confirm', body: {
+        ...(this.identityProtocol ? { snapshot_token: this.snapshotToken } : {}),
         history_authorized: confirmation.historyAuthorized ?? false,
         selections: confirmation.selections.map((item) => ({ locator: item.locator, display_name: item.displayName,
           observed_display_name: item.displayName,
+          ...(this.identityProtocol ? { expected_selection_generation: this.snapshotGenerations.get(item.locator) } : {}),
           ...(item.contactId === null ? {} : { contact_id: item.contactId }) })),
       } });
       if (!this.current(operation)) return;
@@ -182,7 +210,8 @@ export class BindingConsentController {
     this.publish({ busy: 'revoke', errorCode: null, notice: null });
     try {
       const response = await this.backend.requestJson({ method: 'POST', path: '/api/sync/cli-bindings/revoke',
-        body: { contact_id: revocation.contactId, binding_id: revocation.bindingId } });
+        body: { contact_id: revocation.contactId, binding_id: revocation.bindingId,
+          ...(this.identityProtocol ? { expected_selection_generation: this.state.bindings.find(item => item.bindingId === revocation.bindingId)?.selectionGeneration } : {}) } });
       if (!this.current(operation)) return;
       const result = bindingSummary(response.data);
       if (result.status !== 'revoked' || result.bindingId !== revocation.bindingId || result.contactId !== revocation.contactId) throw new Error('撤销结果尚未确认。');
