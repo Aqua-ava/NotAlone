@@ -1,0 +1,27 @@
+{
+  "format": "wechat-private-history-support-v1",
+  "revision": 1,
+  "profileId": "wechat-4.0.6-29387-d566d484-4f05cafc",
+  "status": "unverified",
+  "canReadHistory": false,
+  "program": { "version": "4.0.6", "build": "29387" },
+  "artifacts": {
+    "cli": { "bytes": 8495824, "sha256": "d566d4842b656ca5b07a8af0c1fdada5c225724e9e7fda28e409b06f117d0655" },
+    "wcdb": { "bytes": 4490832, "sha256": "4f05cafc4626a142afca1818f0a88c4092a13d5f4c83e30cd5125b558ba0417d", "sqliteVersion": "3.27.2" }
+  },
+  "capabilities": {
+    "artifactSignatureIntegrity": "supported",
+    "readonlyAccountStatus": "supported",
+    "expectedWcdbObservedLoaded": "supported",
+    "nativeSyntheticBarrier": "supported",
+    "narrowMessageSchemaCommand": "unsupported",
+    "currentMessageSchema": "unverified",
+    "declaredPrimaryKey": "unverified",
+    "shardAndTableInstances": "unverified",
+    "messageLifecycleSemantics": "unverified",
+    "sourceContinuity": "unverified",
+    "reliableHistoryCursor": "unverified"
+  },
+  "nativeSyntheticAssertions": { "passed": 12, "total": 12 },
+  "evidence": "research/wechat-sqlite-history-support-03.md"
+}

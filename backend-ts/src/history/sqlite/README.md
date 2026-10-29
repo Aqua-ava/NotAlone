@@ -13,3 +13,5 @@
 宿主在关闭同步、撤销及退出时调用 `stop/close` 并等待释放，不能只停止后续调度。
 
 宿主必须给 `SqliteHistoryService` 与 `DeletionService` 传同一个 `ActiveHolders`，来源目标携带实际读取goal的holderKeys。关闭/删除等待查询终结及finally释放；忽略取消的渠道会使删除超时受阻，不能仅abort后completed。
+
+本次实际制品的三值证据在 `support-profiles/wechat-4.0.6-29387.json`；该静态档仍unverified且不能自动替代运行时匹配，详见research/wechat-sqlite-history-support-03.md。

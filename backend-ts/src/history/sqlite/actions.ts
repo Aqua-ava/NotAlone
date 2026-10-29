@@ -38,7 +38,7 @@ export const historyActions:StorageAction[]=[
   if(!Array.isArray(target.tables)||target.tables.length>10000||target.partitions.some(p=>!target.tables.some(t=>t.partition===p))
    ||target.tables.some(t=>!target.partitions.includes(t.partition)||typeof t.instance!=='string'||!t.instance||t.instance.length>512)
    ||new Set(target.tables.map(t=>JSON.stringify([t.partition,t.instance]))).size!==target.tables.length)fail('history_target_unverified');
-  // 精确清空/来源抑制尚未由16提供时保持关闭，不能靠时间戳或重选绕过。
+  // 精确清空尚未由06提供时保持关闭，不能靠时间戳或重选绕过。
   if(BigInt(token.barrier_generation)!==0n||tx.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))fail('history_suppression_unverified');
   tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?)`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at]);
   return {id:i.id,target,cursor:null};

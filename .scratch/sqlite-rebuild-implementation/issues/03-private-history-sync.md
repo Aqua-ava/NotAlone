@@ -48,3 +48,13 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 真实渠道缺证：已知项目配置没有CLI路径，限定已知构建/制品目录没有最终CLI/WCDB；历史审计未保留候选绝对目录且缺manifest。现只读白名单没有schema窄操作，普通tail会读正文，不能据此补结构证据。程序4.0.6/build29387只证明程序版本，12项研究原生及14项合成生命周期不认证最终制品/当前schema/状态/连续性。未读取真实正文、他人名单、密钥或媒体，未安装/初始化组件、启停App、发送/撤回。真实ran正常授权/读取仍不可用。contact_history精确截断由06负责，缺证时受阻；不把受阻或全部拒绝记作正常同步通过。
 
 2026-10-29 审查收敛：Standards轴发现旧删除误停新代次、count转Number缺边界检查，另有别名查询重复；Spec轴独立复现旧删除误伤、待删来源仍可读取和保存顺序误标已核验。已补反例并修复：按接受代次fence、来源availability即时撤下、派生同事务assertSourceEligibility、展示兜底始终明确未知、共享holder完整释放。额外覆盖长出现键删除、已知server别名抑制和目标外表实例隔离。后台相关63/63、桌面相关20/20、浏览器警告交互2/2及两端类型检查通过；浏览器使用已安装Chrome，无下载。一次从仓库根执行desktop测试因其cwd要求失败，改在desktop目录执行后通过。仍待公共聚合与实机，不resolved。
+
+## Answer
+
+阶段结果（未完成，State保持claimed）：正常合成路径、来源删除注册与消息UI已实现并创建本地提交，独立Standards／Spec审查的问题均修复并通过定向复核。稳定下游入口为backend-ts/src/history/sqlite/contracts.ts、source.ts、service.ts、http.ts与deletion.ts。捕获／消息／来源／游标／覆盖同事务；精确整数、跨分片身份、server补齐、冲突隔离、不可变实际来源、未知展示顺序、重开及迟到页均已验证。source删除使用05真实service/domain/authority和共享ActiveHolders，待删来源即时撤下，后继合法代次不被旧删除误伤；contact_history精确截断仍由06负责。
+
+实际验证：后台sqlite-private-history、sqlite-history-http、sqlite-contact-binding、sqlite-storage、sqlite-deletion五文件63/63；backend与desktop的pnpm typecheck通过；desktop目录下sqlite-history-messages、local-history-sync、sync-scope 20/20，已安装Chrome的history-reply-warning-view 2/2。只有合成渠道替换外部端口，正式服务／HTTP／SQLite／05删除均未替换。未运行本票真实消息App链，未对真实微信正文做正常路径认证。
+
+最新真实证据：已从既有配置精确定位现存CLI和WCDB，字节与历史静态审计一致，签名完整性通过。一次严格只读status退出0，并观测实际进程加载预期配套WCDB；该库字节上的既有原生合成探针12/12，SQLite3.27.2，临时库自动清理。可公开脱敏证据在research/wechat-sqlite-history-support-03.md及support-profiles/wechat-4.0.6-29387.json，不保存账号、聊天、截图、凭据或真实源路径。Computer Use核对当前窗口为指定对象，没有切换他人或发送／撤回；未启停开发实例。前述“未找到制品”已由此次精确配置定位补齐，但CLI仍无消息schema窄操作，当前真实schema／声明主键／分片表实例／状态及来源连续性未认证。保持真实metadata与历史读取unverified，不能正常逐人授权并读取ran正文；不安装／初始化组件或借tail补证。
+
+尚未完成：总指挥在05之后串行聚合history HTTP／capability／启动停止与共享删除注册，并安排实际App消息UI验收；真实支持档窄接口缺证仍阻断真实正文。未把外部制品缺失或读取拒绝计作正常路径通过，Goal不标complete，票不resolved。公共修改只有registry的最小history迁移/actions追加（本树暂4，实际集成序决定）；profile、launch、host、desktop startup未改。所有提交仅本票；公开历史检查持续0问题。
