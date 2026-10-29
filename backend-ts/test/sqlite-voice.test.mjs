@@ -174,3 +174,10 @@ test('读取中修改预期长度摘要不能把整包截短伪造成完整复�
  const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
  await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'mutated-copy-contract',goal:'extract'}),{code:'voice_copy_incomplete'});assert.deepEqual((await f.media.read(f.contact,m.id)).files,[]);
 });
+
+test('已打开资源的复制元数据读取抛错仍须关闭原生读者',async t=>{
+ let closed=0;const port=syntheticPort(packets(1,1,1));const read=port.read;
+ port.read=async c=>{const resource=await read(c);Object.defineProperty(resource,'expectedBytes',{get(){throw Error('合成元数据异常');}});resource.close=async()=>{closed++;};return resource;};
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'throwing-resource-metadata',goal:'extract'}));assert.equal(closed,1);
+});

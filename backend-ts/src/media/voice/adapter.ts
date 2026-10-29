@@ -40,11 +40,12 @@ export class VoiceMediaAdapter implements MediaAdapter {
       if(context.source.support.status!=='supported'||context.source.contactId!==context.contactId||context.source.messageId!==context.messageId||context.source.raw.kind!=='voice'||context.source.support.sourceGeneration!==context.token.source_generation)throw new StorageFailure('voice_source_unverified');
       const fixedToken=Object.freeze(structuredClone(context.token)),fixedSource=structuredClone(context.source);
       const resource=await this.source.read({contactId:context.contactId,messageId:context.messageId,source:structuredClone(fixedSource),token:structuredClone(fixedToken),signal:context.signal,checkpoint:context.checkpoint});
-      const expectedBytes=resource.expectedBytes,expectedSha256=resource.expectedSha256;
       let released=false,closing:Promise<void>|undefined;
       const close=():Promise<void>=>{if(released)return Promise.resolve();return closing??=Promise.resolve().then(()=>resource.close()).then(()=>{released=true;this.readers.delete(close);},()=>{closing=undefined;throw new StorageFailure('voice_reader_release_failed');});};
-      this.readers.add(close);context.retainReader(close);
+      this.readers.add(close);
       try {
+      context.retainReader(close);
+      const expectedBytes=resource.expectedBytes,expectedSha256=resource.expectedSha256;
       await context.checkpoint();if(!isDeepStrictEqual(resource.authority,fixedToken))throw new StorageFailure('voice_authority_mismatch');
       if (!Number.isSafeInteger(expectedBytes)||expectedBytes<1||expectedBytes>voiceLimits.inputBytes||!/^[a-f0-9]{64}$/.test(expectedSha256)) throw new StorageFailure('voice_copy_unproven');
       const chunks:Buffer[]=[];let size=0;const iterator=resource.bytes[Symbol.asyncIterator]();
