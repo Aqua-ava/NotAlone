@@ -26,6 +26,11 @@ function event(tx:StorageTransaction,i:any,kind:string,payload:unknown):string{
  return id;
 }
 function inheritSources(tx:StorageTransaction,i:any,eventId:string,withInputs:boolean):void{
+ if(tx.get("SELECT 1 FROM sqlite_master WHERE type='table' AND name='reply_candidate_input'")){
+  for(const item of tx.all('SELECT item_no FROM reply_candidate_input WHERE owner_id=? AND context_id=?',[i.ownerId,i.contextId]))if(withInputs)tx.run('INSERT INTO reply_execution_input VALUES(?,?,?,?)',[i.ownerId,eventId,i.contextId,item.item_no]);
+  for(const s of tx.all('SELECT DISTINCT source_contact_id,record_id FROM reply_candidate_input_source WHERE owner_id=? AND context_id=?',[i.ownerId,i.contextId]))tx.run('INSERT OR IGNORE INTO event_source VALUES(?,?,?,?)',[i.ownerId,eventId,s.source_contact_id,s.record_id]);
+ }
+
  for(const item of tx.all('SELECT * FROM reply_context_item WHERE owner_id=? AND context_id=? ORDER BY item_no',[i.ownerId,i.contextId])){
   if(withInputs)tx.run('INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,reply_context_id,context_item_no) VALUES(?,?,?,?,?,?,?)',[i.ownerId,eventId,item.item_no,item.role,item.presentation_no,i.contextId,item.item_no]);
   if(item.kind==='message')tx.run('INSERT OR IGNORE INTO event_source VALUES(?,?,?,?)',[i.ownerId,eventId,item.source_contact_id,item.record_id]);
@@ -45,7 +50,7 @@ export const discussionModelActions:StorageAction[]=[
  action('recover','write',(tx,i,lease)=>{
   const ownerId=identifier(i.ownerId),attempts=tx.all(`SELECT a.id,a.request_id FROM reply_attempt a
    JOIN reply_request r ON r.owner_id=a.owner_id AND r.id=a.request_id
-   WHERE a.owner_id=? AND r.kind='discussion' AND a.state='running'
+   WHERE a.owner_id=? AND r.kind IN ('discussion','reply') AND a.state='running'
    AND (a.accepted_runtime_id<>? OR a.accepted_storage_epoch<>?)`,[ownerId,lease.runtimeId,lease.epoch]);
   for(const attempt of attempts){
    // 发送授权事务已经提交时无法证明外部是否收到；重开只保留未知，不能自动重送。

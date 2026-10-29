@@ -54,6 +54,10 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure{
   const scope=op.scope;
   for(const item of items)if(item.kind==='message'&&'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId))result.contexts.add(String(item.context_id));
  }
+ if(tx.get("SELECT 1 FROM sqlite_master WHERE name='reply_candidate_input_source'")){
+  const scope=op.scope;
+  if(scope.kind==='source'||scope.kind==='contact_history')for(const item of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=?',[op.ownerId]))if(item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId))result.contexts.add(String(item.context_id));
+ }
  // request_tombstone是05同操作持久闭包；清context后仍能找到尚待清理的请求。
  for(const r of tx.all(`SELECT r.id FROM reply_request r JOIN request_tombstone t ON t.owner_identity=r.owner_id AND t.request_key=r.request_key
   WHERE r.owner_id=? AND t.deletion_operation_id=? AND t.request_namespace GLOB '*:discussion.begin'`,[op.ownerId,op.operationId]))result.requests.add(String(r.id));
@@ -63,6 +67,7 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure{
   const count=result.contexts.size+result.requests.size+result.copies.size;
   for(const c of contexts)if(result.contexts.has(String(c.id))&&c.request_id!==null)result.requests.add(String(c.request_id));
   for(const c of contexts)if(c.request_id!==null&&result.requests.has(String(c.request_id)))result.contexts.add(String(c.id));
+  if(tx.get("SELECT 1 FROM sqlite_master WHERE name='reply_candidate_request'"))for(const carried of tx.all('SELECT d.request_id,s.request_id origin_request FROM reply_candidate_request d JOIN reply_selection s ON s.owner_id=d.owner_id AND s.id=d.carried_selection_id WHERE d.owner_id=?',[op.ownerId]))if(result.requests.has(String(carried.origin_request)))result.requests.add(String(carried.request_id));
   const affectedAttempts=new Set(attempts.filter(a=>result.requests.has(String(a.request_id))).map(a=>String(a.id)));
   for(const copy of preparing)if(copy.preparing_attempt_id!==null&&affectedAttempts.has(String(copy.preparing_attempt_id)))result.copies.add(String(copy.id));
   const affectedEntries=new Set(entries.filter(e=>result.requests.has(String(e.origin_request_id))).map(e=>String(e.id)));

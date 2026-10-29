@@ -1,7 +1,7 @@
 # 12：候选回复与依据
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [数据库重建](../../sqlite-database-rebuild/spec.md)、[同步与记忆规则](../../sync-memory-behavior/spec.md)
 Blocked by: [11 助手讨论与 DSH 副本](11-assistant-discussions-and-runtime.md)
@@ -49,3 +49,13 @@ Blocked by: [11 助手讨论与 DSH 副本](11-assistant-discussions-and-runtime
 - 后续桌面开发只用 `pnpm run dev`，先以 `dev:status` 核验并复用监督器；不得自行打包、运行打包版、推送、创建远端分支或 Pull Request。
 - 测试使用隔离合成资料；真实微信读取范围、模型凭据或文本出站授权未核验时不得放行。合成验证不代表真实渠道、模型质量或产品整体已验收。
 - 通用范围、执行和证据口径见[本轮任务索引](../planning.md)。本票不修改或关闭父规格和旧研究任务。
+
+## Answer
+
+### 首个合同检查点（仍 claimed）
+
+- 已实际合入11集成7fad32016f8c18f3fd77c73c56bd005a1cb1117c，并核验f5cb11f8e52c3f78176611c86508f9f613fb34e1为祖先。
+- Goal active；候选领域位于`backend-ts/src/reply/sqlite/candidates/`，导出10版迁移工厂、具名动作、服务、共享执行消费者及删除域。08/09消费者为`contracts.ts`的ReplyKnowledgeReader，缺少正式写者时空集合。
+- Node24执行`pnpm --dir backend-ts run typecheck`通过；`node --test backend-ts/test/sqlite-reply-candidates.test.mjs`3/3通过。真实SQLite、官方DSH、provider/arbiter、本机环回SSE及受管目录；渠道与供应商均合成，无真实模型或微信新读取。
+- 已验证首次历史门禁、v1多条消息、手改v2/过期编辑拒绝、具体版本改选、同键不重复调用、完整输入来源删除与非当前副本清理、另一联系人保留及integrity/FK。
+- HTTP/UI、覆盖不足确认、在途删除/unknown/Skill、正式08/09组合及桌面验收待继续，不据此resolved。

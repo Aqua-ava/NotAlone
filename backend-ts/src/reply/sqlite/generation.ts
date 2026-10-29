@@ -24,7 +24,7 @@ export interface SingleDiscussionTurnOptions {
  prompt:string;rebuildPrompt?:string;systemPrompt:string;model:HostReplyModelConfiguration;
  provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;
  skillRun:SqliteSkillRun|null;skillProtection:SkillRunProtection;skillRevision:SkillRunRevision;
- signal?:AbortSignal;
+ commitAction?:'reply.commitCandidates';signal?:AbortSignal;
 }
 export interface SingleDiscussionTurnResult {text:string;copyId:string;callId:string;sessionEvent:SessionEvent<'assistant/message'>}
 function fail(code='discussion_generation_failed'):never{throw new StorageFailure(code);}
@@ -138,7 +138,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     const text=event.data.message.content.filter(block=>block.type==='text').map(block=>block.text).join('');
     if(!text.trim()||text.length>100_000)fail('discussion_assistant_event_invalid');
     await requireCurrent();
-    await options.storage.execute('discussion.commitAssistant',{...attempt,copyId:work.copy.id,callId,contextId,text,sessionEvent:event,skillRun:options.skillRevision});
+    await options.storage.execute(options.commitAction??'discussion.commitAssistant',{...attempt,copyId:work.copy.id,callId,contextId,text,sessionEvent:event,skillRun:options.skillRevision});
     committed=true;return {text,copyId:work.copy.id,callId,sessionEvent:event};
    }finally{
     combined.removeEventListener('abort',cancel);
