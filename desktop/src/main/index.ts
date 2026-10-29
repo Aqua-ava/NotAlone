@@ -1,3 +1,4 @@
+import { installMessageMediaBridge } from './media/bridge';
 import { UsageController } from './usage/controller';
 import { installUsageBridge } from './usage/bridge';
 import { WechatSetupController } from './setup/wechat-controller';
@@ -82,6 +83,7 @@ void app.whenReady().then(async () => {
   installUsageBridge(windows, new UsageController(backend));
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
+  const media = installMessageMediaBridge(commands, backend, contacts);
   const foreground = installForegroundBridge(commands, backend, contacts);
   const screenPermission = new ScreenPermissionController({
     inspect: (request, signal) => inspectConfiguredScreenPermission(
@@ -145,16 +147,17 @@ void app.whenReady().then(async () => {
     await Promise.all([checking, memoryChecking, preferenceChecking]);
   });
   coordinateSkillLearningSourceDeletion(skillLearning, sources);
-  sources.onDeletion((phase) => memory.sourceDeletionChanged(phase));
+  sources.onDeletion((phase) => { memory.sourceDeletionChanged(phase); if(phase==='started')media.invalidate(); });
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => candidateProvenance.recordCopied(selection, text)));
-  backend.setConnectionChangePreparation(() => replies.prepareGenerationConnectionChange());
+  backend.setConnectionChangePreparation(async () => { await media.invalidateAndDrain(); await replies.prepareGenerationConnectionChange(); });
   installSetupBridge(windows, new SetupController(backend));
   installWechatSetupBridge(commands, new WechatSetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend, app.getPath('userData'));
   app.on('before-quit', () => { foreground.stopContinuous(); diagnostics.cancel(); });
   installQuitLifecycle(backend, windows, async () => {
+    await media.prepareClosing();
     await syncPriority.dispose();
     await headerChanges.shutdown();
     await replies.beginGenerationClosing(

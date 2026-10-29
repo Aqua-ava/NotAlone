@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build } from 'esbuild';
+import {readFile} from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
 
 test('单消息媒体页只在明确操作后提取，失效撤下文件与播放副本',{timeout:20000},async t=>{
@@ -19,14 +20,16 @@ test('单消息媒体页只在明确操作后提取，失效撤下文件与播�
  window.revokePreview=()=>{for(const listener of previewListeners)listener(window.currentSession);};
  createRoot(document.getElementById('root')).render(<MessageMediaPanel bridge={bridge} selection={{contactId:state.contactId,messageId:state.messageId,scopeRevision:1}} messageType="image"/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,loader:{'.css':'empty'},logLevel:'silent'});
  const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());const page=await browser.newPage();
- await page.route('http://127.0.0.1/media-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/media-test');await page.addScriptTag({content:compiled.outputFiles[0].text});
+ const html=await readFile('src/renderer/index.html','utf8');const policy=/http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html)[1];
+ await page.route('http://127.0.0.1/media-script.js',route=>route.fulfill({contentType:'application/javascript',body:compiled.outputFiles[0].text}));
+ await page.route('http://127.0.0.1/media-test',route=>route.fulfill({contentType:'text/html',body:`<meta http-equiv="Content-Security-Policy" content="${policy}"><div id="root"></div><script src="/media-script.js"></script>`}));await page.goto('http://127.0.0.1/media-test');
  assert.deepEqual(await page.evaluate(()=>window.calls),[]);
  await page.getByRole('button',{name:'媒体文件',exact:true}).click();
  await expect(page.getByRole('button',{name:'保存这条图片',exact:true})).toBeEnabled();
  assert.deepEqual(await page.evaluate(()=>window.calls),['inspect']);
  await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByText('缩略图，原图未取得',{exact:true})).toBeVisible();
  await expect(page.getByText('已保存有限结果',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'查看文件',exact:true}).click();await expect(page.getByRole('img',{name:'本条消息的已存图片'})).toHaveAttribute('src',/^blob:/);
+ await page.getByRole('button',{name:'查看文件',exact:true}).click();await expect(page.getByRole('img',{name:'本条消息的已存图片'})).toHaveAttribute('src',/^blob:/);await expect.poll(()=>page.getByRole('img').evaluate(image=>image.complete&&image.naturalWidth>0)).toBe(true);
  await page.evaluate(()=>window.revokePreview());await expect(page.getByRole('img')).toHaveCount(0);assert.equal(await page.evaluate(()=>window.releaseCount),1);assert.equal(await page.evaluate(()=>window.releasedSrc),null);
  await page.evaluate(()=>{window.currentSession='00000000-0000-4000-8000-000000000006';window.revokeBeforeDelivery=true;});await page.getByRole('button',{name:'查看文件',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>window.releaseCount)).toBe(2);await expect(page.getByRole('img')).toHaveCount(0);

@@ -91,7 +91,7 @@ export function App() {
         已切换联系人，正在恢复这位联系人的历史讨论与回复…
       </p>}
     <UnifiedReplyWorkspace contacts={contactSession} replies={replies}
-      historyCoverage={historyCoverage} />
+      historyCoverage={historyCoverage} media={window.notalone.media} />
     <PrioritySyncStatus contactId={contactSession.state.selectedContactId} bridge={window.notalone.syncControl} />
     {replies.state.messageNotice.phase === 'connected' && <>
       {replies.state.messageNotice.needsRefresh && <p role="status">消息提醒有待核对，请主动刷新消息。生成依据仍是原快照。</p>}

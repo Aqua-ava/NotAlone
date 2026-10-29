@@ -14,7 +14,7 @@ HTTP拟定：GET/POST/DELETE `/api/contacts/:contactId/messages/:messageId/media
 
 `schema.ts:mediaMigration(version)`、`actions.ts:createMediaActions(registration)`、`deletion.ts:composeMediaDeletionRegistration(base)` 与 `service.ts:SqliteMediaService` 独立导出。全宿主只维护一份完整 registration，包含当前已安装的 history / identity / skill_metadata 等域，然后经 compose 加入 media；registry 的删除动作与媒体动作使用同一个对象。不要将未安装域写进 requiredDomains，也不要省略已有写者。
 
-服务使用 `MediaContactPort` 和 `MediaSourcePort` 窄接口；联系人资格应代理当前05生命周期持有的联系人服务，不能另造元数据缓存，也不能在联系人删除后重新装载旧对象。`initialize()` 只中断旧runtime未完成尝试并恢复已登记本地清理；GET不会领取提取。`stop(contactId?)` 用于取消选中/停读协调（本地转换关闭读取开关不必取消），每段及发布事务仍独立复验。所有领域服务及删除协调器必须共享一个 `ActiveHolders`。
+服务使用 `MediaContactPort` 和 `MediaSourcePort` 窄接口；联系人资格应代理当前05生命周期持有的联系人服务，不能另造元数据缓存，也不能在联系人删除后重新装载旧对象。`initialize()` 只中断旧runtime未完成尝试并恢复已登记本地清理；GET不会领取提取。`stop(contactId?)` 用于取消选中并排空全部在途分支；关闭读取总开关使用 `stop(undefined, 'wechat')`，保留仍合法的本地转换，每段及发布事务仍独立复验。所有领域服务及删除协调器必须共享一个 `ActiveHolders`。
 
 正常宿主将 `SqliteMediaHttp.handle` 放在Bearer/无Origin认证之后。未认证真实类型时传 `adapters:[]`，页面明确不可用。桌面桥 `installMessageMediaBridge` 与 `createMessageMediaBridge` 使用固定方法；`MessageMediaPanel` 只挂到image/video/voice聊天行。连接准备与退出必须等待 `invalidateAndDrain` / `prepareClosing`；来源或联系人删除开始撤下旧快照。前端撤下DOM/blob后才 `releasePreview`；后端 `close` 也不把仅取消视为释放。
 

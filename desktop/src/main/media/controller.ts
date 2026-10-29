@@ -145,7 +145,7 @@ export class MessageMediaController {
     if(!this.previews.has(preview.sessionId) || preview.revoking)return;
     try {
       const state=await preview.connection.status();
-      if(state !== 'active')this.revokePreview(preview);else this.schedulePreview(preview);
+      if(state !== 'active')this.invalidate();else this.schedulePreview(preview);
     } catch {this.revokePreview(preview);}
   }
   private revokePreview(preview:Preview):void {if(preview.revoking)return;preview.revoking=true;clearTimeout(preview.timer);for(const listener of this.previewListeners)listener(preview.sessionId);}
