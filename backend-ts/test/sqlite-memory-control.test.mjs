@@ -442,3 +442,14 @@ test('清空聊天后旧模型结果与重试晚到不恢复内容，新消息�
  assert.equal(view.candidates.length,1);
  assert.equal(base.calls-callsBeforeNext,2,'只有新消息的提取与核验调用');
 });
+
+test('没有可处理固定目标时不伪装范围失效或完成',async t=>{
+ const f=await fixtureWithMessages(t,{a:[]});
+ const x=extractionFixture(f);t.after(()=>x.service.close());
+ const run=await x.service.start('control-no-inputs');await x.service.waitForIdle(run.runId);
+ const view=await x.service.read(run.runId);
+ assert.equal(view.total,0);
+ assert.equal(view.status,'blocked');assert.equal(view.statusReason,'no_pending_inputs');
+ assert.deepEqual(view.actions,[]);assert.notEqual(view.status,'completed');
+ assert.equal(x.state.calls,0);
+});
