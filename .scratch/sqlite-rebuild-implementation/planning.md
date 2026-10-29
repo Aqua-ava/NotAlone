@@ -229,3 +229,5 @@ flowchart TD
 - 2026-10-30（Goal round1）票20解决：t20只读复核确认本机无PG进程/数据目录、~/.notalone仅270个Skill原目录5.2M、默认userData仅Chromium缓存+wechat-tool开发制品+配置（无managed/state.json/旧业务SQLite/assistant-runtime/updates/runtime-copies）、NotAlone为空目录；据此第8条重评N/A（本机无清理对象）+只读证据，第12条保持通过，最终12/12（11通过+第8条N/A）。aff0366d已集成3bae162a；票20 State改为resolved。未执行任何真实删除/drop/切库/迁移，未读.env内容，目标不完整等安全门禁未变。
 
 - 2026-10-30（Goal round2）票10解决：t10复用t09环回供应商思路（隔离合成库+真实热更新dev+CDP；仅供应商传输边界用/tmp本机环回供应商与既有test-only网络守卫，官方地址重定向127.0.0.1、拒绝其他出站；未新增产品开关/配置，替身未提交），App实机通过：开始→处理中→暂停(20/27提交后已暂停、无百分比/伪完成)→Cmd+Q重开保持暂停→继续27/27且首批未重发→单人失败(乙failed/甲继续)→共用故障固定原因+手动继续→unknown无继续/不重发。实机发现并修复：在途sending被误投影unknown、共用故障原因界面固定展示(sharedFaultCode)，均补回归。0fac4ada已集成a731d471；主仓复跑：两端typecheck 0、sqlite-memory-control 16/16、桌面固定处理23/23、inventory通过。票10 State=resolved（真实模型语义/真实微信边界单独记录，租约接替与取消清空由后端真实用例覆盖）。
+
+- 2026-10-30（Goal round2）票21矩阵增补集成：t21仅文档更新row10/20为resolved并补证据指针/§5/§7/§8/§11增补记录；resolved计数13项（01/02/05/07/08/09/10/11/12/14/16/17/20），仍claimed/受阻（03/04/06真实渠道门槛、06依赖04、19暂缓、真实模型语义未认证）。c8be50d5已集成86db8e01；主仓public check committed ref issues 0。
