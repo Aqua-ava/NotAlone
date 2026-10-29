@@ -85,3 +85,5 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 11公共关闭接线发现原runtime永久缓存关闭reject，导致保留SQLite后不能重试释放；沿调用链确认service和自有model-port也有同类缓存。现仅在失败catch清closing后重throw，成功仍缓存，stop/AbortController继续有效，不恢复业务接收。runtime、service和自有adapter释放失败的3项反例均实际red→green；相关close/runtime/model-port三文件8/8和backend类型通过，未重跑整套。首轮失败反例的after hook抛错阻断了fixture清理，现测试收尾捕获预期错误；终止精确自有测试进程后，以lsof无活动引用与database_instance.role=test核验清理了其精确临时根，未碰开发实例或私人数据。
 
 同次独立复核进一步发现自有host的嵌套关闭缓存：业务dispose失败会被ModelHost.close永久记录。新增真实owned ModelHost/provider反例先red，再将记忆runtime自有路径调整为arbiter.stop→service.close成功→ModelHost.close；共享路径仍不持有host关闭能力。现在同一runtime可重试业务释放，业务停止状态不恢复，成功关闭复用；相关三文件最终9/9与类型通过，双轴复核均确认原发现关闭。没有修改公共model-host.ts；该模块自身socket/journal关闭失败不在此次证据范围，未声称已验证或修复。
+
+MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/status及连接代次读取，只接受running/dsh/typescript，明确storage=sqlite走固定处理，当前PG缺省storage映射legacy，其余拒绝并撤下快照。preload/main均不接renderer模式或额外参数，只返回模式和连接代次，不外泄运行状态其他字段。两新增反例red→green，原controller/panel加新case最终8/8、桌面类型通过，双轴复核0新增。这里只提交07自有shared/main/preload及测试；正常MemoryPage、公共IPC汇总和实际App仍等11正式profile及桌面窗口，未把桥接测试当实机验收。

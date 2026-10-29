@@ -3,7 +3,7 @@ import type { PageCommands } from '../page-commands';
 import { noArguments } from '../page-commands';
 import { isUuid } from '../uuid';
 import type { FixedProcessingCall, FixedProcessingControl, FixedProcessingEvent, FixedProcessingRun,
-  FixedProcessingStart, FixedProcessingTrace, FixedProcessingTraceRequest, FixedProcessingView } from '../../shared/fixed-memory-processing';
+  FixedProcessingStart, FixedProcessingTrace, FixedProcessingTraceRequest, FixedProcessingView, FixedProcessingMode } from '../../shared/fixed-memory-processing';
 
 const invalid = () => new Error('记忆处理状态不可用，请刷新后重试。');
 const row = (value: unknown): Record<string, unknown> => {
@@ -109,6 +109,15 @@ export class FixedMemoryProcessingController {
     try { return { connectionGeneration: response.generation, run: readFixedProcessingRun(response.data) }; }
     catch { this.synchronize(); throw invalid(); }
   }
+  async mode(): Promise<FixedProcessingMode> {
+    const response = await this.request('/api/runtime/status', 'GET');
+    try {
+      const value = row(response.data);
+      if (value.state !== 'running' || value.runtime !== 'dsh' || value.hostRuntime !== 'typescript'
+        || value.storage !== undefined && value.storage !== 'sqlite') throw invalid();
+      return { connectionGeneration: response.generation, mode: value.storage === 'sqlite' ? 'sqlite' : 'legacy' };
+    } catch { this.synchronize(); throw invalid(); }
+  }
   async read(): Promise<FixedProcessingView> { return this.view(await this.request('/api/memory-processing/runs/current', 'GET')); }
   async start(input: FixedProcessingStart): Promise<FixedProcessingView> {
     const value = this.generation(input, ['requestKey', 'connectionGeneration']), requestKey = id(value.requestKey);
@@ -131,6 +140,7 @@ export class FixedMemoryProcessingController {
 export function installFixedMemoryProcessingBridge(commands: PageCommands, backend: BackendHost): FixedMemoryProcessingController {
   const controller = new FixedMemoryProcessingController(backend, () => commands.publish('memory:fixed-processing-invalidated', {}, 'manager'));
   backend.onStateChanged(() => controller.synchronize());
+  commands.handle('memory:fixed-processing-mode', (...args) => { noArguments(args); return controller.mode(); }, 'manager');
   commands.handle('memory:fixed-processing-current', (...args) => { noArguments(args); return controller.read(); }, 'manager');
   commands.handle('memory:fixed-processing-start', (...args) => {
     if (args.length !== 1) throw invalid(); return controller.start(args[0] as FixedProcessingStart);

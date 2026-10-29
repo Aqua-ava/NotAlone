@@ -4,6 +4,7 @@ import type { FixedMemoryProcessingBridge, FixedProcessingControl, FixedProcessi
 export function createFixedMemoryProcessingBridge(transport: PageTransport): FixedMemoryProcessingBridge {
   const fail = () => Promise.reject(new Error('记忆处理操作不可用。'));
   return Object.freeze({
+    readMode: (...args: unknown[]) => args.length === 0 ? transport.invoke('memory:fixed-processing-mode') : fail(),
     readCurrent: (...args: unknown[]) => args.length === 0 ? transport.invoke('memory:fixed-processing-current') : fail(),
     start: (...args: [FixedProcessingStart]) => args.length === 1 ? transport.invoke('memory:fixed-processing-start', args[0]) : fail(),
     pause: (...args: [FixedProcessingControl]) => args.length === 1 ? transport.invoke('memory:fixed-processing-pause', args[0]) : fail(),

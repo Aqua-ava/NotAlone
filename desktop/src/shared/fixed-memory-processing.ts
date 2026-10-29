@@ -27,10 +27,12 @@ export interface FixedProcessingCall {
 }
 export interface FixedProcessingTrace { events: FixedProcessingEvent[]; calls: FixedProcessingCall[] }
 export interface FixedProcessingView { connectionGeneration: number; run: FixedProcessingRun | null }
+export interface FixedProcessingMode { connectionGeneration: number; mode: 'sqlite' | 'legacy' }
 export interface FixedProcessingStart { requestKey: string; connectionGeneration: number }
 export interface FixedProcessingControl { runId: string; connectionGeneration: number }
 export interface FixedProcessingTraceRequest { taskId: string; connectionGeneration: number }
 export interface FixedMemoryProcessingBridge {
+  readMode(): Promise<FixedProcessingMode>;
   readCurrent(): Promise<FixedProcessingView>;
   start(request: FixedProcessingStart): Promise<FixedProcessingView>;
   pause(request: FixedProcessingControl): Promise<FixedProcessingView>;
