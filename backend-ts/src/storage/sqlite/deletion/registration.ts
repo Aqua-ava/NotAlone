@@ -44,12 +44,16 @@ const baseDeletionRegistration: DeletionRegistration = {
 const mediaRegistration=composeMediaDeletionRegistration(baseDeletionRegistration);
 export const installedDeletionRegistration:DeletionRegistration={...mediaRegistration,authority:withDiscussionDeletionAuthority(mediaRegistration.authority)};
 
-// 名单缓存覆盖全部联系人，任何未完成删除期间都不重新开启该内存持有者。
+// 只有会移除/更换联系人身份的未完成删除（contact/account）才关闭名单服务；
+// 来源、清空聊天、讨论与媒体删除只清理内容，联系人与绑定身份仍有效，关闭后会让重启后的
+// 联系人目录/授权状态/删除进度全部不可读（t21 跨重启问题）。这些领域的写入门禁仍由各自
+// 删除边界与 holder fence 负责，不靠关闭只读名单服务实现。
 export const installedDeletionActions: StorageAction[] = [{name: 'deletion.metadataAvailable', mode: 'read', retryBusy: false,
   execute(tx, input) {
     const ownerId = (input as {ownerId?: unknown})?.ownerId;
     if (typeof ownerId !== 'string' || !ownerId || ownerId.length > 256) throw new StorageFailure('deletion_input_invalid');
     return !!tx.get(`SELECT 1 FROM owner WHERE owner_id=? AND state='active'
-      AND NOT EXISTS(SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state!='completed')`, [ownerId, ownerId]);
+      AND NOT EXISTS(SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state!='completed'
+        AND scope_kind IN ('contact','account'))`, [ownerId, ownerId]);
   },
 }];
