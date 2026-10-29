@@ -73,7 +73,7 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string){
   inputs:inputs.map(i=>({inputNo:number(i.input_no),role:String(i.role),contactId:String(i.source_contact_id),messageId:String(i.message_id),recordId:String(i.record_id),itemId:i.item_id===null?null:String(i.item_id)})),candidates};
 }
 export const runActions:StorageAction[]=[{name:'memoryExtraction.findRequest',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;requestKey:string};const r=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[textId(i.ownerId),textId(i.requestKey)]);return r?snapshot(tx,i.ownerId,String(r.id)):null;}},{name:'memoryExtraction.contactGeneration',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;contactId:string};const r=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);if(!r)fail('memory_extraction_scope_stale');return {generation:String(r!.data_generation)};}},{name:'memoryExtraction.start',mode:'write',retryBusy:true,execute(tx,raw){
- const i=raw as {ownerId:string;requestKey:string;policyConfig:unknown};const ownerId=textId(i.ownerId),requestKey=textId(i.requestKey);
+ const i=raw as {ownerId:string;requestKey:string;policyConfig:unknown;followupStages?:boolean};const ownerId=textId(i.ownerId),requestKey=textId(i.requestKey);
  const existing=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[ownerId,requestKey]);if(existing)return snapshot(tx,ownerId,String(existing.id));
  const owner=tx.get("SELECT * FROM owner WHERE owner_id=? AND state='active'",[ownerId]);if(!owner)fail('memory_extraction_scope_stale');
  if(tx.get('SELECT 1 FROM request_tombstone WHERE owner_identity=? AND request_key=?',[ownerId,requestKey]))fail('memory_extraction_request_deleted');
@@ -91,7 +91,8 @@ export const runActions:StorageAction[]=[{name:'memoryExtraction.findRequest',mo
  LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'
  WHERE m.owner_id=? AND m.contact_id=? AND m.kind='text' AND length(trim(m.text_body))>0 AND m.availability='available'
  AND r.id=(SELECT min(rr.id) FROM capture_record rr WHERE rr.owner_id=m.owner_id AND rr.message_id=m.id AND rr.state='normalized' AND rr.availability='available') ORDER BY m.display_no`,[ownerId,c.id]);
-  const canReuse=!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();
+  // 只有接线了后续文档阶段的正常宿主才复用已有提取证明；仅提取入口保持“已成功目标不重做”。
+  const canReuse=i.followupStages===true&&!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();
   if(canReuse)for(const row of rows){const proof=reusableExtraction(tx,ownerId,String(c.id),row);if(proof)reused.set(String(row.id),proof);}
   const targets=rows.filter(r=>r.extraction_state!=='succeeded'||reused.has(String(r.id)));if(!targets.length)continue;
   tx.run('INSERT INTO run_contact VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[ownerId,runId,c.id,c.grant_id,c.binding_id,c.selection_generation,c.data_generation,c.identity_generation,c.scope_revision,c.source_generation,c.feedback_revision,'active']);

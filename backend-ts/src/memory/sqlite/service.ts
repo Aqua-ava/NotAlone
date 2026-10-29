@@ -40,7 +40,7 @@ export class SqliteMemoryExtraction {
   const prior=await this.storage.execute<any>('memoryExtraction.findRequest',{ownerId:this.ownerId,requestKey});
   this.available();
   if(prior)return prior;
-  const run=await this.storage.execute<any>('memoryExtraction.start',{ownerId:this.ownerId,requestKey,policyConfig:policy.newTaskConfig()});
+  const run=await this.storage.execute<any>('memoryExtraction.start',{ownerId:this.ownerId,requestKey,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
   this.launch(run.runId);return run;
   });
  }
