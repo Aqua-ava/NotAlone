@@ -67,6 +67,7 @@ Node24.19.0，锁定依赖及隔离合成SQLite/受管目录，正常业务服�
 - `node --test --test-name-pattern='同步Worker卡住' backend-ts/test/sqlite-voice.test.mjs`：1/1通过，10秒实际终止同步死循环Worker，关闭已结算。该用例复制生产解码类并仅替换Worker为阻塞夹具，不伪称正常codec卡死。
 - 同锁定Electron44.7.0（Node24.21.0、darwin arm64）以ELECTRON_RUN_AS_NODE=1执行上述禁网三项：3/3通过；仅独立组件，无App窗口。
 - 默认工厂业务入口1/1通过，未装认证资源端口时拒绝新微信提取。两端`pnpm typecheck`及`git diff --check`通过；双轴审查发现入口偏移P2，补反例并固定同一已校验绝对CJS加载后，Standards/Spec剩余均0。公开历史checkpoint检查issues=0。
+- 联合媒体读者合同下补齐资源authority/close及retainReader，`node --test --test-name-pattern='语音资源close失败|实际读取资格|来源正在close' backend-ts/test/sqlite-voice.test.mjs` 3/3通过：资格不符不迭代字节，释放失败不完成删除，同次清理可重试，清除等待真正结算后不发布原件。
 
 ### 剩余与数据影响
 

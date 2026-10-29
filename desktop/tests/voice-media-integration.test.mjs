@@ -18,7 +18,7 @@ test('正式页面保存单语音有限结果，停读后本地WASM重转并播�
  const {encode}=createRequire(new URL('../../backend-ts/package.json',import.meta.url))('silk-wasm');
  const pcm=Buffer.alloc(9600);for(let i=0;i<4800;i++)pcm.writeInt16LE(Math.round(4000*Math.sin(2*Math.PI*440*i/24000)),i*2);
  const {data:silk}=await encode(pcm,24000);let reads=0,failDecode=true;
- const source={read:async c=>{reads++;return {expectedBytes:silk.length,expectedSha256:createHash('sha256').update(silk).digest('hex'),bytes:(async function*(){yield silk;})(),finish:async()=>({protocol:'voice-complete-read-v1',complete:true,expectedBytes:silk.length,association:{protocol:'media-association-v1',profileId:'synthetic-voice-page-v1',recordId:c.source.recordId,messageId:c.messageId,resourceIdentity:'synthetic-voice-one'}})};}};
+ const source={read:async c=>{reads++;return {authority:c.token,close:async()=>{},expectedBytes:silk.length,expectedSha256:createHash('sha256').update(silk).digest('hex'),bytes:(async function*(){yield silk;})(),finish:async()=>({protocol:'voice-complete-read-v1',complete:true,expectedBytes:silk.length,association:{protocol:'media-association-v1',profileId:'synthetic-voice-page-v1',recordId:c.source.recordId,messageId:c.messageId,resourceIdentity:'synthetic-voice-one'}})};}};
  const wasm=new SilkWasmDecoder();const adapter=new VoiceMediaAdapter({source,decoder:{decode:async(...args)=>{if(failDecode)throw Error('合成首轮失败');return wasm.decode(...args);},close:()=>wasm.close()}});
  const cleanup=[];const f=await fixture({after:cb=>cleanup.push(cb)},adapter);const message=f.messages.find(m=>m.kind==='voice');
  let browser,page,server,media,ready=false,holdRelease=false;let dispatch=Promise.resolve();const releaseArrived=deferred(),releaseGate=deferred();const released=[];
