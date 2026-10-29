@@ -104,3 +104,20 @@ test('本地输入在初验后被换字节也不得进入解码或发布',async 
  const execute=adapter.execute.bind(adapter);adapter.execute=async c=>{if(c.input){const {writeFile}=await import('node:fs/promises');const changed=packets(1,1,1);changed[12]=1;await writeFile(c.input.localPath,changed);}return execute(c);};
  await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'changed-local-bytes',goal:'audio_conversion'}),{code:'voice_file_changed'});assert.equal(calls,1);
 });
+
+async function isolatedDecoder(t,workerMode='missing-asset') {
+ const {mkdtemp,mkdir,copyFile,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {pathToFileURL}=await import('node:url');const {createRequire}=await import('node:module');
+ const root=await mkdtemp(`${tmpdir()}/notalone-voice-worker-`);t.after(()=>rm(root,{recursive:true,force:true}));
+ for(const dir of ['src/media/voice','src/storage/sqlite','node_modules/silk-wasm/lib'])await mkdir(`${root}/${dir}`,{recursive:true});
+ for(const file of ['decoder.ts','format.ts'])await copyFile(new URL(`../src/media/voice/${file}`,import.meta.url),`${root}/src/media/voice/${file}`);
+ await copyFile(new URL('../src/storage/sqlite/contracts.ts',import.meta.url),`${root}/src/storage/sqlite/contracts.ts`);
+ if(workerMode==='blocked')await writeFile(`${root}/src/media/voice/decoder-worker.mjs`,'for(;;){}\n');
+ else {await copyFile(new URL('../src/media/voice/decoder-worker.mjs',import.meta.url),`${root}/src/media/voice/decoder-worker.mjs`);const require=createRequire(import.meta.url);await copyFile(require.resolve('silk-wasm'),`${root}/node_modules/silk-wasm/lib/index.cjs`);await writeFile(`${root}/node_modules/silk-wasm/package.json`,JSON.stringify({name:'silk-wasm',version:'3.7.1',main:'lib/index.cjs'}));}
+ const {SilkWasmDecoder:Decoder}=await import(pathToFileURL(`${root}/src/media/voice/decoder.ts`).href);const decoder=new Decoder();t.after(()=>decoder.close());return decoder;
+}
+test('离线WASM资产缺失明确组件不可用，不补下载',{timeout:5000},async t=>{
+ const decoder=await isolatedDecoder(t);await assert.rejects(decoder.decode(packets(1,1,1),new AbortController().signal),{code:'voice_runtime_unavailable'});
+});
+test('同步Worker卡住时墙钟上限真正终止线程，不仅拒绝外层Promise',{timeout:15000},async t=>{
+ const decoder=await isolatedDecoder(t,'blocked');const started=Date.now();await assert.rejects(decoder.decode(packets(1,1,1),new AbortController().signal),{code:'voice_conversion_timeout'});await decoder.close();assert.ok(Date.now()-started<13000);
+});
