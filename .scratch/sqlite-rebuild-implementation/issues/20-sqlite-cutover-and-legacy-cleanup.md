@@ -53,3 +53,9 @@ Blocked by: [06 清空聊天与明确重读历史](06-clear-and-resync-history.m
 - 消费者：产品三入口运行时 0 个 pg 值导入；4 个遗留文件值导入（含 1 动态）不可达；13/15/18/19 ownership unavailable 并含旧路由 503 行为回归；手动导入与旧 PG 启动路径已退役，managed-postgres/schema-prepare 源文件按裁决保留不可达、发布清单未改。
 - 安全/切换：控制面在 `database-cutover/manifest.json`；synthetic 授权仅隔离根允许，真实根必须 confirmed_local；清理完成→建目标→检查→二次停写→原子写配置；失败保持维护态、不恢复旧 writer、不建第二个空库。真实清理对象归属不明，实际清理受阻未执行。
 - 验证：锁定 TypeScript 7.0.2 两端 typecheck 0；cutover 相关 24/24；相关后端模块 113/113；桌面启动 16/16；正常开发入口实测默认 SQLite（8 检查 passed、5 页 UI、关停 pids[]、重开同 database_id/owner，隔离根已清理）；run-current 本树 1559 项 vs 15ac355a 基线 1506 项，失败文件集合无新增（非 PG 失败仅 memory-profile 2 项且基线同样存在）；公开检查 0 问题。
+
+2026-10-30 真实清理重评（只读复核，未读 .env/配置内容、未删除任何文件、未执行真实清理）
+
+- 本机独立复核：无 postgres 进程/`/tmp/.s.PGSQL.5432` socket，`/opt/homebrew/var/postgres*`、`/usr/local/var/postgres*`、`~/Library/Application Support/Postgres` 均不存在；`~/.notalone` 仅 270 个用户 Skill 原目录（5.2M），无 backend.info 或其他业务文件；默认 Electron userData 仅 Chromium 级缓存（Cache 598M 等）、wechat-tool 17M、wechat-tool-dev-20261023 12M、desktop-settings.json、backend-launch.json（447B/0600，字段级由 Lead 只读盘点，指向当前开发仓库）、Preferences/Local State，maxdepth 3 无 managed/、state.json、NotAlone 业务 SQLite、assistant-runtime、updates/、runtime-copies/、sqlite-development.json、database-cutover/；`~/Library/Application Support/NotAlone` 为空目录。
+- 结论：本机不存在真实旧业务库、含内容助手会话、旧媒体/派生业务副本；仅存 Chromium 缓存与开发工具/开发配置制品，归属本机开发 App，非旧业务数据，按保留边界不删除、不属旧业务清理对象。
+- 重评：第 8 条 **N/A（本机无清理对象）+只读证据**；第 12 条保持通过（正常开发入口已复核默认库身份/关键业务/关停，归属与清理状态已记录）。最终 **12/12（11 通过 + 第 8 条 N/A）**，证据见 docs/verification/20-sqlite-cutover-and-legacy-cleanup.md §7/§10。建议 State=resolved。
