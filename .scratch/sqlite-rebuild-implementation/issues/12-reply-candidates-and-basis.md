@@ -6,9 +6,9 @@ Type: task
 Parent: [数据库重建](../../sqlite-database-rebuild/spec.md)、[同步与记忆规则](../../sync-memory-behavior/spec.md)
 Blocked by: [11 助手讨论与 DSH 副本](11-assistant-discussions-and-runtime.md)
 
-> 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
+> 2026-10-29已获明确实现授权，已领取实施。[任务索引与共同约定](../planning.md)。
 
-> 发布阶段：仅发布，未开始实现。
+> 执行阶段：后端、桌面、正式记忆消费者已交付；来源失效最新修复待最小实际App复验，当前仍claimed。
 
 > 2026-10-29范围修订：12继续实施；13长期表达偏好本轮暂缓，候选不读取或使用长期偏好，不保存、管理或新接入该能力。当次明确写作要求仅作用本次，原用户资料保留。
 
@@ -44,7 +44,7 @@ Blocked by: [11 助手讨论与 DSH 副本](11-assistant-discussions-and-runtime
 
 ## 范围与执行门禁
 
-- 本轮只发布任务；`ready-for-agent` 表示具备后续安排入口，不授权启动实现。收到用户明确实现指令后才可领取并修改产品。
+- 已收到用户明确实现授权；本票独立工作树实施并创建本地提交，不推送或创建PR。
 - App 首次使用继续搁置；不新增首用向导、微信组件准备、模型设置、干净机器或发布任务，不执行微信迁移／恢复实验。复用已有配置仍须核验其有效性与资料用途授权。
 - 后续桌面开发只用 `pnpm run dev`，先以 `dev:status` 核验并复用监督器；不得自行打包、运行打包版、推送、创建远端分支或 Pull Request。
 - 测试使用隔离合成资料；真实微信读取范围、模型凭据或文本出站授权未核验时不得放行。合成验证不代表真实渠道、模型质量或产品整体已验收。
@@ -52,10 +52,25 @@ Blocked by: [11 助手讨论与 DSH 副本](11-assistant-discussions-and-runtime
 
 ## Answer
 
-### 首个合同检查点（仍 claimed）
+### 交付与边界
 
-- 已实际合入11集成7fad32016f8c18f3fd77c73c56bd005a1cb1117c，并核验f5cb11f8e52c3f78176611c86508f9f613fb34e1为祖先。
-- Goal active；候选领域位于`backend-ts/src/reply/sqlite/candidates/`，导出10版迁移工厂、具名动作、服务、共享执行消费者及删除域。08/09消费者为`contracts.ts`的ReplyKnowledgeReader，缺少正式写者时空集合。
-- Node24执行`pnpm --dir backend-ts run typecheck`通过；`node --test backend-ts/test/sqlite-reply-candidates.test.mjs`3/3通过。真实SQLite、官方DSH、provider/arbiter、本机环回SSE及受管目录；渠道与供应商均合成，无真实模型或微信新读取。
-- 已验证首次历史门禁、v1多条消息、手改v2/过期编辑拒绝、具体版本改选、同键不重复调用、完整输入来源删除与非当前副本清理、另一联系人保留及integrity/FK。
-- HTTP/UI、覆盖不足确认、在途删除/unknown/Skill、正式08/09组合及桌面验收待继续，不据此resolved。
+- 实际合入11的7fad32016f8c18f3fd77c73c56bd005a1cb1117c及其f5cb11f8e52c3f78176611c86508f9f613fb34e1祖先；10版增量迁移不改已发布1至9版。候选身份不含正文，v1模型稿、父版本手改稿、有序短消息、具体版本选择均独立保存。
+- 正常认证HTTP与固定IPC提供生成、读取、编辑、选稿、版本回看；复用11官方DSH、07模型账本、provider/arbiter与14真实Skill加载。请求身份、历史覆盖、单次不完整确认、凭据和文本用途门禁沿正式路径，不新增模型设置或外部发送能力。
+- 输入冻结本人／当前联系人精确记忆、文档版本与全部来源；显示依据仅可引用实际调用输入。手改继承依据标记未重新核验。缺少正文的版本、过期来源、迟到结果与unknown重发不能恢复旧稿。
+- 05删除使用11完整实际输入及显式携入闭包，包含本人资料的跨联系人来源，清候选、选择、调用及受管副本。前台身份确认、Skill变更及来源失效同时撤下敏感页面快照；网络未知保留原请求键，权威读取失效后清草稿与携入。
+- 08的真实生产读取器已合入；07真实产物自动发布、08人工建立／修正／保护与12消费者有最小组合证据。该证据不代表08自动关系裁决已完成。09正式发布文档写者仍是20前集成门禁，不把合成文档合同视为完整集成。
+- 13／15／18／19继续暂缓；候选不读取、保存或管理长期表达偏好，一次写作要求仅作用本次。最终消息始终由用户亲自发送。
+
+### 自动验证
+
+- Node24；后端类型检查、桌面类型检查均通过。`test/sqlite-reply-candidates.test.mjs`10项、`test/sqlite-reply-candidate-input-regressions.test.mjs`2项及正常官方profile的`test/sqlite-reply-candidates-profile.test.mjs`1项通过；覆盖历史门禁、版本／选择、幂等／unknown、真实Skill、媒体过滤、迟到删除、发布资格、缺失正文、恢复副本及认证HTTP。
+- 实际合入08生产读取器后，`node --test test/sqlite-reply-knowledge-integration.test.mjs test/sqlite-memory-reply-integration.test.mjs`2/2通过：正式记忆进入完整输入；修正或保护修订使旧编辑／选稿／携入失效，新生成只读当前版；删除本人另一联系人贡献者清候选闭包。integrity/FK均ok。
+- 桌面固定桥`node --test tests/sqlite-reply-candidate-bridge.test.mjs`5项通过；真实React/headless的`node --test tests/sqlite-reply-candidates.test.mjs`最新7/7通过，包含网络短暂失败后权威失效仍清草稿／携入的先红后绿反例。inventory通过：safe-node142、headless28、isolated-http-pg6、native9、app11、historical1。
+- 独立Spec与Standards审查已完成；媒体过滤、本人跨联系人删除及继续失败残留均有回归修复，最新无正文来源标识修复复审无新增发现。公开历史与当前文件扫描issues0；最终提交后再核。
+
+### 实际开发App与待收口项
+
+- 只运行`pnpm run dev`，独立合成用户目录，正式官方profile／SQLite／DSH／IPC；外部渠道与供应商为合成，真实模型调用0、微信新读取0、外部发送0。实际完成生成两条短消息、编辑v2、选v2、回看v1、重开无额外调用、甲乙切换隔离、实际Skill加载、停用后撤下旧草稿／候选／依据／Skill，以及前台确认丢失禁用。
+- 首轮网络审计2次本机重定向、blocked0；供应商2次合成请求。正常退出后自有App／开发监督器／供应商均停止，握手和锁消失；隔离库integrity/FK正常，17,420,213字节合成验收目录清理。保留最新3.8MB开发构建，无打包或发布。
+- 最新947／eefa／4c22来源失效修复的最小实际App补验正在排队，尚不以headless替代此项；完成后补充操作与清理记录，再判定State及Goal。
+- 真实外部模型质量、真实微信端到端及09正式发布文档写者组合未验证。后者按已批准范围交20切换前门禁，21扩大组合，不关闭父规格。
