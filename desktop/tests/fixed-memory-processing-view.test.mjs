@@ -63,3 +63,12 @@ test('同轮unknown只封对应任务，其他failed或paused目标可沿原run�
   await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByRole('status').filter({hasText:'本轮尚未完成'}).waitFor();assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0);
  });
 });
+test('来源或资格失效后的历史成功计数不能冒充正常无产出成功', {timeout:20000},async t=>{
+ const invalidated={...run(),tasks:run().tasks.map(task=>({...task,state:'revoked'}))};
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:invalidated}:undefined,async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.locator(':scope > p').filter({hasText:'已处理 1 / 1 条文字目标'}).waitFor();
+  assert.equal(await panel.getByText('已处理，未产生新记忆',{exact:true}).count(),0,'失效不能被解释成提取成功但没有值得保存的新记忆');
+  await panel.getByRole('status').filter({hasText:'范围已失效'}).waitFor();
+ });
+});
