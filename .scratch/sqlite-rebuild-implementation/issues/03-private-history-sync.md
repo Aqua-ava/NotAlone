@@ -76,3 +76,5 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 2026-10-29公共短检查点：89069571已保存正式工具配置账号metadata；真实v9完整结构、v10资格、v11正式端口重复证据一致且关闭，无整名单或正文。d8f2d159正式history-channel已保存。2cf0e4f实际merge公共af98a3ba，保留源祖先、迁移1..9、11共享模型与关闭失败保留SQLite、媒体全关wechat/撤销all。本轮公共startup/成功confirm/enable wake、disable/revoke stop、退出先排空coordinator、显式CLI路径及最新blocked状态已接。正式HTTP/launchDsh/profile等相关组合24/24及后台类型通过；未预灌消息/goal、未手动history/sync证明自动入口，双轴反例已修。
 
 仍缺独立实际App消息/覆盖/删除撤正文证据。真实正文状态未验证，保持门禁。B未发送：Cua消息点击AXError.notImplemented，不能保证撤回，现依最新人类指令改为未来观察器ready后由用户手动一次B；先发送不撤回、唯一锁定再仅撤回B。A保持不动，迁移恢复继续排除；State claimed/Goal active。
+
+2026-10-29 v11人工B发送态：正式客户端工具配置账号与ran账号/来源相等，8分片2表，arm新基线0；人类手动发送第二条一次并确认未撤回，next唯一锁定1条owner/type1/raw-status2、serverId已分配、local主键精确保留。随后人类明确将撤回测试跳过，立即close退出0，观察器及native进程实际消失，无current或额外消息读取；A/B均原样保留，不重发。公开匿名controlled-state-v2绑定实际v11字节；pending/撤回/server补齐/来源生命周期仍unverified，普通正文门禁保持。桌面已释放11，实际App消息/覆盖/删除撤正文仍待窗口。State仍claimed。
