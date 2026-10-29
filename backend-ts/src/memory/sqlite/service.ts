@@ -77,10 +77,9 @@ export class SqliteMemoryExtraction {
    }
   }
   if(!this.stopped){
-   const settled=await this.storage.execute<any>('memoryExtraction.settleRun',{ownerId:this.ownerId,runId,laterWork:!!this.afterRunSettled});
-   // 普通暂停在提取小批收尾后生效：不在暂停状态下启动后续文档批次，等待用户明确继续。
-   const deferred=settled?.state==='paused';
-   if(!deferred)try{if(!this.stopped)await this.afterRunSettled?.(runId);}
+   // 后续文档阶段的暂停边界由09在领取动作内复验；提取层只保证不自动重试失败模型。
+   await this.storage.execute('memoryExtraction.settleRun',{ownerId:this.ownerId,runId,laterWork:!!this.afterRunSettled});
+   try{if(!this.stopped)await this.afterRunSettled?.(runId);}
    finally{if(this.afterRunSettled)await this.storage.execute('memoryExtraction.finishLater',{ownerId:this.ownerId,runId});}
   }
  }
