@@ -31,7 +31,7 @@ async function fixture(t,options={}){
  const provider=installModelProvider(ctx,{provider:'synthetic-official',connection:resolveAdapterOptions({baseURL:`http://127.0.0.1:${server.address().port}/anthropic`,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
  const model={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}};
  const skillRoot=join(root,'user-skills');await mkdir(skillRoot,{mode:0o700});const holders=new ActiveHolders();let runtime;let service;let turns;let library;
- const bind=async()=>{service=new SqliteDiscussionService(storage,owner,options.clock??Date.now);runtime=new SqliteDiscussionRuntime({storage:options.runtimeStorageHook?{status:storage.status,execute:(...args)=>options.runtimeStorageHook(storage,...args)}:storage,ownerId:owner,userData:root,ctx,holders,fault:options.fault});await runtime.initialize();library=new SqliteSkillLibrary(storage,owner,skillRoot);turns=new SqliteDiscussionTurns({storage,discussions:service,runtime,library,model,provider,arbiter:new ModelPermitArbiter(),authorize:async()=>{}});};await bind();
+ const bind=async()=>{service=new SqliteDiscussionService(storage,owner,options.clock??Date.now);runtime=new SqliteDiscussionRuntime({storage:options.runtimeStorageHook?{status:storage.status,execute:(...args)=>options.runtimeStorageHook(storage,...args)}:storage,ownerId:owner,userData:root,ctx,holders,fault:options.fault});await runtime.initialize();library=new SqliteSkillLibrary(storage,owner,skillRoot);turns=new SqliteDiscussionTurns({storage:options.turnStorageHook?{status:storage.status,execute:(...args)=>options.turnStorageHook(storage,...args)}:storage,discussions:service,runtime,library,model,provider,arbiter:new ModelPermitArbiter(),authorize:async()=>{}});};await bind();
  t.after(async()=>{try{await runtime.close();}catch(error){if(!options.expectedBlocked)throw error;}await provider.dispose();await ctx.fiber.dispose();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await storage.close();await rm(root,{recursive:true,force:true});});
  return {root,ids,requests,skillRoot,contacts,holders,get service(){return service;},get storage(){return storage;},get runtime(){return runtime;},get turns(){return turns;},get library(){return library;},async reopen(){await runtime.close();const id=storage.status.databaseId;await storage.close();storage=await SqliteStorage.open({userData:root,intent:'open',expectedDatabaseId:id,role:'test',registryModule});await bind();}};
 }
@@ -153,4 +153,29 @@ test('真实source清理包含尚无runtime_context的准备副本及目录，�
 test('存储重开后旧业务attempt租约不可再冻结输入或创建副本',async t=>{
  const f=await fixture(t),d=await f.service.newDiscussion(f.ids[0]),key=randomUUID();const confirmationId=await f.contacts.manualConfirm(f.ids[0],key);const a=(await f.service.begin(f.ids[0],key,'旧实例合成要求',{kind:'manual',confirmationId})).attempt;await f.reopen();
  await assert.rejects(f.storage.execute('discussion.freezeContext',{...a,contextId:randomUUID(),skillRun:{packages:[],eligible:[]},items:[],at:Date.now()}),{code:'discussion_request_stale'});const id=randomUUID();await assert.rejects(f.storage.execute('runtime.prepare',{...a,copyId:id,sdkInstanceId:randomUUID(),locator:id,configurationDigest:'a'.repeat(64)}),{code:'discussion_request_stale'});assert.equal(f.requests.length,0);
+});
+
+
+test('宿主关闭排空尚未进入副本管理器的整轮受理，不先关闭SQLite',async t=>{
+ const entered=Promise.withResolvers(),release=Promise.withResolvers();
+ const f=await fixture(t,{turnStorageHook:async(storage,name,input)=>{if(name==='identity.manualConfirm'){entered.resolve();await release.promise;}return storage.execute(name,input);}});
+ const discussion=await f.service.newDiscussion(f.ids[0]);
+ const turn=f.turns.generate({contactId:f.ids[0],discussionId:discussion.id,requestKey:randomUUID(),text:'关闭前仍在受理的合成讨论',confirmedContact:true});
+ const rejected=assert.rejects(turn);await entered.promise;
+ let closed=false;const closing=f.turns.close().then(()=>{closed=true;});await new Promise(resolve=>setImmediate(resolve));assert.equal(closed,false);
+ release.resolve();await closing;await rejected;assert.equal(f.requests.length,0);
+ await assert.rejects(f.turns.generate({contactId:f.ids[0],discussionId:discussion.id,requestKey:randomUUID(),text:'关闭后拒绝新请求',confirmedContact:true}),{code:'discussion_runtime_closed'});
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+
+test('讨论宿主关闭等待普通HTTP权威读取，不向已关闭存储补读',async t=>{
+ const {createSqliteDiscussionHost}=await import('../src/reply/sqlite/host-runtime.ts');const f=await fixture(t);const discussion=await f.service.newDiscussion(f.ids[0]);
+ const entered=Promise.withResolvers(),release=Promise.withResolvers();
+ const storage={status:f.storage.status,execute:async(name,input)=>{if(name==='discussion.view'){entered.resolve();await release.promise;}return f.storage.execute(name,input);}};
+ const host=await createSqliteDiscussionHost({storage,ownerId:owner,userData:f.root,ctx:{},holders:f.holders,authorizeRequest:()=>true});
+ const server=createServer((req,res)=>host.http.handle(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const request=fetch('http://127.0.0.1:'+server.address().port+'/api/contacts/'+f.ids[0]+'/assistant-sessions/'+discussion.id);await entered.promise;
+ let closed=false;const closing=host.close().then(()=>{closed=true;});await new Promise(resolve=>setImmediate(resolve));const before=closed;
+ release.resolve();const response=await request;assert.equal(response.status,200);await response.json();await closing;assert.equal(before,false);
 });
