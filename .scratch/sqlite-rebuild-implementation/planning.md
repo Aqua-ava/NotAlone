@@ -190,6 +190,14 @@ flowchart TD
 
 - 用户在独立会话另行授权的真实供应商合成复测：07源提交两次调用及两个目标成功，11源提交一次调用成功且重开未增请求；总指挥已核对状态数量和祖先关系。各自旧unknown保留，09没有因此获得真实外呼授权；不认证微信或真实聊天语义质量。
 
+- 2026-10-30 票04实机验收（部分通过，State保持claimed）：t04在受控dev（主仓已集成04的HEAD d866a4fe+隔离userData+合成SQLite schema14；未操作微信/未发送/未接真实模型/未打包）核验：结构版本14、联系人授权显示、增量阶段与失败原因可见、总开关开→关→开资料与检查点保留（read_epoch 1→2→3）、取消单人只停该人且资料保留（active 2→1）、覆盖不足如实显示、正常退出后pids[]/端口关闭/DB持久事实（messages=4、grants 3/active1、游标与pagesAccepted保留）。未完成并如实记录：重选（需读微信会话元数据，受控环境禁止操作微信）、断线实机构造、微信不在前台有效授权CLI同步（真实读取门禁关闭）——三项不计通过。无代码缺陷、无新hash、桌面已释放给06。
+
+- 2026-10-30 票06代码集成（State保持claimed，真实S(B)未认证）：执行会话t06最终a2e6862d（迁移15=historyClearMigration；按04接缝替换suppression函数体、两处accept接ingest clear_excluded、宿主路由与关闭、桌面联系人页面板）；已--no-ff集成2fdde8e2。t03双轴审查发现的阻断B1（取消/中断不使候选失效）、B3（B未绑定source_generation）及S5/S6/S3均已修复并补用例；B2（真实observer/reader协议与制品）如实保持pending，不冒充。主仓复跑：backend typecheck 0、清空/重读+清空HTTP 21/21；执行会话复跑清空17/17、HTTP4/4、历史/删除/增量107/107、宿主28/28、desktop typecheck 0、inventory通过、public 0。票06真实部分未过，不resolved。
+
+- 2026-10-30 票09完成并 resolved（本轮第11项）：t09 在实际热更新 App（合成库+环回供应商，12次文档协议调用/errors=0，未操作微信/未接真实模型）完成 a–d 复验：权威阶段序列 extraction_verification→document_scene→document_profile→completed；记忆页显示同一发布集合两篇文档；本人全局概览不在联系人页展示；正常 quit 后 dev:status stopped/pids[]，合成临时根与供应商已清理。12 条验收逐条通过（d 项“时间待核验”实际 App 未强制构造，已由无头页面用例覆盖并如实记录）。边界：真实模型语义质量、真实微信数据、最终产品切换未认证，单独记账。桌面窗口已释放，下一顺位 04。
+
+- 2026-10-30 票09回归修复集成：t09定位 memoryExtraction.start 的复用条件错误（新增 document_extraction_reuse 未区分本轮是否接线后续文档阶段，导致仅提取服务第二轮把已成功目标又纳入，next.total=2）；d5f3ee55 以 `followupStages = afterRunSettled!==undefined` 修复，runs 仅在 followupStages===true 且迁移13时启用复用。已--no-ff集成13a33b18；主仓复跑：backend typecheck 0、sqlite-memory-extraction 10/10（原失败转绿）、09文档10文件90/90、desktop typecheck 0。
+
 - 2026-10-30 票04集成（含审查修复）：执行会话t04最终bad4c4ef（迁移14=historyIncrementalMigration，仅ALTER read_goal/message，不重建CHECK不建新表）；已--no-ff集成3ba737fc。集成前经t03独立Standards/Spec双轴审查，发现并修复3个阻断：提交树typecheck 10错误（错误收窄+SQLInputValue）、close不取消在途读取/迟到页可提交、未校验支持档incrementalTail能力；t03 delta复审确认三项闭环。主仓复跑：backend typecheck 0、增量4文件25/25、宿主12/12（Electron Node）、desktop typecheck 0、桌面5文件21/21。已知问题：09集成引入sqlite-memory-extraction 1项失败（0197bea4通过、5551aa5e失败），已交t09定位修复，不计入04。真实渠道增量能力仍属03门禁，打开前保持不可用。
 
 - 2026-10-30 票09代码集成（桌面复验进行中，State保持claimed）：执行会话t09恢复b1f3未提交工作并提交e0f51331/8c7a66b5/fc5b2c54/e7df7dcd+merge dc8366c6；迁移1..13（13=memoryDocumentsMigration），1–12原文未改。已--no-ff集成5551aa5e；主仓复跑门禁：backend typecheck 0、Electron Node下文档10文件90/90、desktop typecheck 0、桌面4文件46/46。09桌面实际App用例a–d（合成库+环回供应商）进行中，完成后补最终12条判定。

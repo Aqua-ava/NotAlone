@@ -5,6 +5,7 @@ import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryPage, HistoryTailPage, HistoryTarget, HistorySupportReport } from './contracts.ts';
 import { ingestRecords } from './ingest.ts';
 import { readCoverage, readMessages } from './read.ts';
+import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
 const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
@@ -64,7 +65,9 @@ export const historyActions:StorageAction[]=[
   if(resumeCursor!==null&&!page.exhausted)fail('history_page_invalid');
   const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
   tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?)",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,page.cursorOut,digest]);
-  const {quarantined}=ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records});
+  const restoreOperationId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
+  const {quarantined}=ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
+   exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId})?'clear_excluded':null});
   const partitions=new Set<string>([...JSON.parse(String(goal.completed_partitions)),...page.completedPartitions]);
   const unresolved=quarantined||Boolean(tx.get("SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id WHERE c.owner_id=? AND c.goal_id=? AND r.state='quarantined'",[token.owner_id,goal.id]));
   const complete=page.exhausted&&target.partitions.every(p=>partitions.has(p))&&!unresolved;
@@ -79,6 +82,7 @@ export const historyActions:StorageAction[]=[
    if(!existing)tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,cursor,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,handoff_from_goal_id,pages_accepted) VALUES(?,?,?,?,?,?,?,'incremental',?,?,?,?,?,?,'running','ready',?,?,?,?,0)`,
     [token.owner_id,randomUUID(),token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(report),resumeCursor,i.at,scopeDigest,historyCursorScheme,goal.id]);
   }
+  if(complete)completeRestoreGoal(tx,token.owner_id,String(goal.id),i.at);
   return readCoverage(tx,token.owner_id,token.contact_id);
  }),
  action('history.interrupt','write',(tx,i)=>{const goal=currentGoal(tx,i.token,i.goalId);if(goal.state==='running'||goal.state==='incomplete')tx.run("UPDATE read_goal SET state='incomplete',failure_code=? WHERE owner_id=? AND id=?",[i.code,i.token.owner_id,goal.id]);return readCoverage(tx,i.token.owner_id,i.token.contact_id);}),
@@ -118,7 +122,9 @@ export const historyActions:StorageAction[]=[
   const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
   if(historyCursorScopeDigest(token,report,target)!==goal.cursor_scope_digest)fail('history_cursor_scope_changed');
   tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?)",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,cursorOut,digest]);
-  ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records});
+  const incrementalRestoreId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
+  ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
+   exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId:incrementalRestoreId})?'clear_excluded':null});
   // 成功接受的一页同时恢复目标为运行态：此前的中断原因不再代表当前状态。
   tx.run("UPDATE read_goal SET cursor=?,pages_accepted=pages_accepted+1,last_accepted_at=?,coverage_state=?,state='running',failure_code=NULL WHERE owner_id=? AND id=?",[cursorOut,BigInt(i.at),page.caughtUp?'caught_up':'partial',token.owner_id,goal.id]);
   return readCoverage(tx,token.owner_id,token.contact_id);

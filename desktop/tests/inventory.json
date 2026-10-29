@@ -138,11 +138,13 @@
     "tests/sqlite-discussion-read.test.mjs",
     "tests/sqlite-discussion-session.test.mjs",
     "tests/sqlite-discussion-source-lifecycle.test.mjs",
+    "tests/sqlite-history-clear-contract.test.mjs",
     "tests/sqlite-history-clearing.test.mjs",
     "tests/sqlite-history-messages.test.mjs",
     "tests/sqlite-source-deletion-contract.test.mjs",
     "tests/sqlite-reply-candidate-bridge.test.mjs",
-    "tests/sqlite-memory-management.test.mjs"
+    "tests/sqlite-memory-management.test.mjs",
+    "tests/incremental-sync-status.test.mjs"
   ],
   "headless": [
     "tests/fixed-memory-processing-view.test.mjs",

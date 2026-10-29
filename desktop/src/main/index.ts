@@ -38,6 +38,7 @@ import { installFixedMemoryProcessingBridge } from './memory/fixed-processing';
 import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
 import { installSyncControlBridge } from './sync/bridge';
+import { installHistoryClearBridge } from './history-clear/bridge';
 import { SyncPriorityController } from './sync/priority';
 import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
@@ -136,8 +137,9 @@ void app.whenReady().then(async () => {
   };
   installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange);
   const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange);
+  const historyClear = installHistoryClearBridge(commands, backend, contacts);
   const syncPriority = new SyncPriorityController(backend, contacts, sync);
-  app.on('before-quit', () => { sync.dispose(); void syncPriority.dispose(); });
+  app.on('before-quit', () => { sync.dispose(); historyClear.dispose(); void syncPriority.dispose(); });
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
