@@ -1,3 +1,6 @@
+import { SqliteMediaService } from './media/sqlite/service.ts';
+import { SqliteMediaHttp } from './media/sqlite/http.ts';
+import { StorageFailure } from './storage/sqlite/contracts.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import { exitOnStdinEnd } from '@deepseek-ai/dsh-cmdline';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
@@ -16,6 +19,9 @@ import { DeletionService } from './storage/sqlite/deletion/service.ts';
 import { ActiveHolders } from './storage/sqlite/deletion/holders.ts';
 import { ManagedFiles } from './storage/sqlite/deletion/managed-files.ts';
 import { SqliteDeletionHttp, deletionQueryAllowed } from './storage/sqlite/deletion/http.ts';
+import { SqliteHistoryService } from './history/sqlite/service.ts';
+import { SqliteHistoryHttp, historyQueryAllowed, projectHistorySyncStatus } from './history/sqlite/http.ts';
+import { createWechatHistoryChannel } from './history/sqlite/wechat-channel.ts';
 import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 
 export const name = 'notalone-sqlite-host';
@@ -26,6 +32,19 @@ export function authorizeSqliteRequest(req: IncomingMessage, token: string): boo
   const supplied = Buffer.from(typeof req.headers.authorization === 'string' ? req.headers.authorization : '');
   const expected = Buffer.from(`Bearer ${token}`);
   return req.headers.origin === undefined && authCount === 1 && supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+interface SqliteHostResource { close(): Promise<void> }
+/** 一个领域关闭失败仍须结算其他读写者，存储最后关闭；失败不能变成stopped。 */
+export async function closeSqliteHostResources(resources: {
+  media?: SqliteHostResource; history?: SqliteHostResource;
+  contacts?: SqliteHostResource; storage?: SqliteHostResource;
+}): Promise<void> {
+  const failures: unknown[] = [];
+  for (const resource of [resources.media, resources.history, resources.contacts, resources.storage]) {
+    try { await resource?.close(); } catch (error) { failures.push(error); }
+  }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
 }
 
 /** 显式开发能力分支；领域事实及资格仍由联系人服务与受控动作负责。 */
@@ -43,6 +62,8 @@ export async function apply(ctx: Context) {
   let storage: SqliteStorage | undefined;
   let opening: Promise<SqliteStorage> | undefined;
   let contacts: ContactMetadataLifetime | undefined;
+  let history: SqliteHistoryService | undefined;
+  let media: SqliteMediaService | undefined;
   let server: Server | undefined;
   let published = false;
   let readyDispose = () => {};
@@ -54,8 +75,7 @@ export async function apply(ctx: Context) {
     state = 'stopping'; readyDispose();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
-    try { await contacts?.close(); }
-    finally { await storage?.close(); }
+    await closeSqliteHostResources({media, history, contacts, storage});
     if (published) await rm(config.infoPath, { force: true });
     state = 'stopped';
   })();
@@ -84,12 +104,28 @@ export async function apply(ctx: Context) {
     contacts = new ContactMetadataLifetime(storage, ownerId, deletionHolders, () => createWechatContactMetadata(sqlite.wechatCliPath));
     await contacts.initialize();
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    if(capabilities.capabilities.some(capability=>capability==='history')){
+      history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(),deletionHolders);
+    }
+    const historyHttp=history?new SqliteHistoryHttp(history):undefined;
+    const historyStatus=async()=>{
+      const directory=await contacts!.directory();
+      const coverage=await Promise.all(directory.bindings.filter(binding=>binding.status==='active').map(async binding=>({...await history!.coverage(binding.contact_id),bindingId:binding.binding_id})));
+      return projectHistorySyncStatus(await contacts!.syncStatus(),coverage);
+    };
     const skills=capabilities.skillPackageRoot?new SqliteSkillHttp(new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot),req=>authorizeSqliteRequest(req,token)):undefined;
-    const deletions = new SqliteDeletionHttp(new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData)), ownerId);
+    const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData));
+    media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
+      if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
+    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:[]});
+    await media.initialize();
+    contacts.setReadStop(async contactId=>{await Promise.all([history?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);});
+    const mediaHttp = new SqliteMediaHttp(media);
+    const deletions = new SqliteDeletionHttp(deletionService, ownerId);
     const ownership = { contacts: 'typescript', wechat: 'typescript',
-      deletion: 'typescript', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
+      deletion: 'typescript', media: 'typescript', mediaExtraction: 'unavailable', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
       taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'typescript',
-      wechatBodySync: 'unavailable', wechatIncremental: 'unavailable', wechatHistory: 'unavailable',
+      wechatBodySync: history?'typescript':'unavailable', wechatIncremental: 'unavailable', wechatHistory: history?'typescript':'unavailable',
       foregroundLocation: 'unavailable', contactContext: 'unavailable', memory: 'unavailable',
       expressionPreferences: 'unavailable', replies: 'unavailable' };
     server = createServer(async (req, res) => {
@@ -98,7 +134,7 @@ export async function apply(ctx: Context) {
       let url: URL;
       try { url = new URL(req.url ?? '', 'http://localhost'); }
       catch { respond(400, { error: 'invalid_request' }); return; }
-      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !deletionQueryAllowed(req.method, url))) { respond(400, { error: 'invalid_request' }); return; }
+      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
       try {
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
           respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
@@ -108,7 +144,13 @@ export async function apply(ctx: Context) {
           res.once('finish', () => ctx.appExit!(0)); respond(200, { state, runtime: 'dsh' }); return;
         }
         if (state !== 'running') { respond(503, { error: 'runtime_stopping' }); return; }
-        if (!await deletions.handle(req,res)&&!await skills?.handle(req,res)&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
+        if(req.method==='GET'&&url.pathname==='/api/setup/status'){
+          respond(200,{runtime_owner_configured:true,owner_id:ownerId,storage:'sqlite',capabilities:capabilities.capabilities});return;
+        }
+        if(history&&req.method==='GET'&&url.pathname==='/api/sync/status'){
+          respond(200,await historyStatus());return;
+        }
+        if (!await deletions.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
     });
     server.requestTimeout = 15_000; server.headersTimeout = 10_000;

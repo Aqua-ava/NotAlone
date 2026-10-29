@@ -7,7 +7,7 @@ import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 const owner='00000000-0000-4000-8000-000000000001';
-const report={protocol:'private-history-v1',profileId:'synthetic-v1',adapterVersion:'1',status:'supported',reason:null,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'synthetic-generation-1'};
+const report={serverAliasSemantics:'verified_within_scope',protocol:'private-history-v1',profileId:'synthetic-v1',adapterVersion:'1',status:'supported',reason:null,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'synthetic-generation-1'};
 const record=(id,extra={})=>({partition:'shard-a',table:'table-instance-1',localId:id,serverId:'0',sender:'contact',kind:'text',text:`合成正文${id}`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,...extra});
 async function fixture(t,options={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-history-')));
@@ -175,4 +175,10 @@ test('固定目标之外的表实例不能伪装已认证来源',async t=>{
  const {service,channel,saved,target}=await fixture(t);target.tables=[{partition:'shard-a',instance:'table-instance-1'}];
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{table:'unverified-instance'})],completedPartitions:['shard-a'],exhausted:true});
  const coverage=await service.synchronize(saved[0].contact_id);assert.equal(coverage.phase,'incomplete');assert.equal(coverage.quarantinedCount,1);assert.equal((await service.read(saved[0].contact_id)).messages.length,0);
+});
+test('未核验服务端别名唯一性时不凭相同正文合并不同本地身份',async t=>{
+ const {service,channel,saved,target}=await fixture(t);const inspect=channel.inspect;
+ channel.inspect=async scope=>({...await inspect(scope),serverAliasSemantics:'unverified'});
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{serverId:'55',text:'同文同秒'}),record('2',{serverId:'55',text:'同文同秒'})],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(saved[0].contact_id);assert.equal((await service.read(saved[0].contact_id)).messages.length,2);
 });

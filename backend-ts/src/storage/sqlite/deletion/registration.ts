@@ -1,13 +1,26 @@
+import { composeMediaDeletionRegistration } from '../../../media/sqlite/deletion.ts';
+import { historyDeletionDomain } from '../../../history/sqlite/deletion.ts';
+import { historyReaderHolderKey } from '../../../history/sqlite/service.ts';
 import { identityDeletionAuthority, identityDeletionDomain } from '../../../contacts/sqlite/deletion.ts';
 import { skillMetadataDeletionDomain } from '../../../skills/sqlite/deletion.ts';
 import { StorageFailure, type StorageAction } from '../contracts.ts';
-import type { DeletionRegistration, DeletionScope } from './contracts.ts';
+import type { DeletionDomain, DeletionRegistration, DeletionScope } from './contracts.ts';
 
-export const installedDeletionScopes = ['contact', 'account'] as const;
+export const installedDeletionScopes = ['source', 'contact', 'account', 'media_result_clear', 'media_result_replace'] as const;
 const supported = (scope: DeletionScope) => installedDeletionScopes.some(kind => kind === scope.kind);
 
-// 只注册当前真实写者；03/06/11/16安装时必须补自己的闭包及精确authority后才能放行。
-export const installedDeletionRegistration: DeletionRegistration = {
+// inspect/target尚无goal时也持有真实只读连接，来源删除必须覆盖这些早期读者。
+const installedHistoryDomain:DeletionDomain={...historyDeletionDomain,collect(tx,operation){
+  const targets=historyDeletionDomain.collect(tx,operation);
+  if(operation.scope.kind!=='source')return targets;
+  const {ownerId,acceptedGeneration,scope}=operation;
+  const generations=tx.all('SELECT DISTINCT accepted_data_generation AS generation FROM read_goal WHERE owner_id=? AND contact_id=? AND accepted_data_generation<?',[ownerId,scope.contactId,acceptedGeneration]).map(row=>String(row.generation));
+  if(acceptedGeneration>0n)generations.push(String(acceptedGeneration-1n));
+  const keys=[...new Set(generations.map(generation=>historyReaderHolderKey(scope.contactId,generation)))];
+  return targets.map(target=>({...target,holderKeys:[...new Set([...target.holderKeys,...keys])]}));
+}};
+// contact_history的精确截断由06提供；不因本票接通来源删除而扩大范围。
+const baseDeletionRegistration: DeletionRegistration = {
   authority: {
     fence(tx, ownerId, scope) {
       if (!supported(scope)) throw new StorageFailure('deletion_scope_unavailable');
@@ -18,9 +31,11 @@ export const installedDeletionRegistration: DeletionRegistration = {
         : {result: 'blocked', proof: 'scope_handler_unavailable'};
     },
   },
-  domains: [identityDeletionDomain, skillMetadataDeletionDomain()],
-  requiredDomains: ['identity', 'skill_metadata'],
+  domains: [installedHistoryDomain, identityDeletionDomain, skillMetadataDeletionDomain()],
+  requiredDomains: ['history', 'identity', 'skill_metadata'],
 };
+
+export const installedDeletionRegistration = composeMediaDeletionRegistration(baseDeletionRegistration);
 
 // 名单缓存覆盖全部联系人，任何未完成删除期间都不重新开启该内存持有者。
 export const installedDeletionActions: StorageAction[] = [{name: 'deletion.metadataAvailable', mode: 'read', retryBusy: false,

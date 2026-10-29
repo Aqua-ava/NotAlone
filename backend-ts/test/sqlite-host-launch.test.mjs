@@ -137,7 +137,7 @@ test('正常DSH运行中账号DELETE真实compact并公开复核，Skill元数�
   assert.equal((await request('/api/deletions?contact_id=11111111-1111-4111-8111-111111111111&scope_kind=discussion')).status,200);
   assert.equal((await request('/api/tasks/status?contact_id=11111111-1111-4111-8111-111111111111&task_id=11111111-1111-4111-8111-111111111111')).status,503);
   const source=await request('/api/contacts/11111111-1111-4111-8111-111111111111/sources/22222222-2222-4222-8222-222222222222','DELETE');
-  assert.equal(source.status,503);assert.equal((await source.json()).error,'deletion_scope_unavailable');
+  assert.equal(source.status,404);assert.equal((await source.json()).error,'identity_not_found');
   const discussion=await request('/api/contacts/11111111-1111-4111-8111-111111111111/assistant-sessions/22222222-2222-4222-8222-222222222222','DELETE',{confirmed:true});
   assert.equal(discussion.status,503);
   if(withSkill){
@@ -164,7 +164,7 @@ test('正常DSH运行中账号DELETE真实compact并公开复核，Skill元数�
   if(withSkill)assert.equal(state.checks.find(c=>c.domain==='skill_metadata'&&c.kind==='database_rows').result,'passed');
   assert.equal(JSON.stringify(state).includes('managed/'),false);
   const runtime=await (await request('/api/runtime/status')).json();assert.equal(runtime.state,'running');assert.equal(host.isRunning(),true);
-  assert.deepEqual(runtime.deletion_scopes,['contact','account']);assert.equal(runtime.ownership.deletion,'typescript');
+  assert.deepEqual(runtime.deletion_scopes,['source','contact','account','media_result_clear','media_result_replace']);assert.equal(runtime.ownership.deletion,'typescript');
   await access(infoPath);
   assert.equal((await (await request('/api/deletions')).json()).operations.length,withSkill?2:1);
   assert.equal((await (await request('/api/account','DELETE',{confirmed:true,confirm_scope:'account'},{'Idempotency-Key':'synthetic-account-delete'})).json()).operation_id,accepted.operation_id);

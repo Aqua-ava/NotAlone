@@ -40,7 +40,7 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, coverage
   const pending = coverages.filter(row => row.phase === 'not_started' || row.phase === 'running').length;
   const textCount = (row: HistoryCoverage) => Math.max(0, row.messageCount - row.nonTextCount);
   return { ...base,
-    cli_history_authorization_state: 'accepted', cli_history_authorization_version: 1, cli_history_authorization_current_version: 1,
+    cli_history_authorization_state: coverages.some(row=>row.bindingId!==null)?'accepted':'unknown', cli_history_authorization_version: coverages.some(row=>row.bindingId!==null)?1:null, cli_history_authorization_current_version: 1,
     cli_history_coverages: coverages.filter(row => row.bindingId !== null).map(row => ({
       binding_id: row.bindingId, contact_id: row.contactId, phase: row.phase === 'running' ? 'syncing' : row.phase,
       failure_code: row.failureCode, message_count: textCount(row), non_text_count: row.nonTextCount, page_count: row.pageCount,
@@ -57,6 +57,11 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, coverage
 function send(res: ServerResponse, status: number, value: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(value));
+}
+/** 全局查询门只放行现有消息分页形状，具体值仍由本处理器验证。 */
+export function historyQueryAllowed(method:string|undefined,url:URL):boolean {
+ if(method!=='GET'||!/^\/api\/contacts\/[a-f0-9-]{36}\/messages$/.test(url.pathname))return false;
+ return [...url.searchParams.keys()].every(key=>['limit','before'].includes(key))&&url.searchParams.getAll('limit').length<=1&&url.searchParams.getAll('before').length<=1;
 }
 /** 宿主先做唯一Bearer/无Origin认证；所有范围由已绑定的服务owner确定。 */
 export class SqliteHistoryHttp {
