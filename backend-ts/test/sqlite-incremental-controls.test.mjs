@@ -267,3 +267,19 @@ test('账号变化、支持语义变化、游标失效、目标不连续或交�
     assert.equal(state.lastError, 'history_incremental_unavailable');
   });
 });
+
+test('关闭协调器取消在途增量读取，迟到页不提交且关闭不被挂起',async t=>{
+  const f=await fixture(t);
+  f.state.historyRecords=[record('1')];
+  const [binding]=await select(f); await f.contacts.setReading(true);
+  await f.history.synchronize(binding.contact_id);
+  const entered=deferred(),gate=deferred();
+  f.state.tailHook=async()=>{entered.resolve();await gate.promise;return {records:[record('2')],caughtUp:true,cursorOut:'tail-9'};};
+  f.state.closeHook=async()=>{gate.resolve();};
+  f.coordinator.wake(); await entered.promise;
+  const closing=f.coordinator.close();
+  gate.resolve(); await closing;
+  assert.equal((await f.history.read(binding.contact_id)).coverage.incremental.pagesAccepted,0,'退出时在途页不得提交');
+  assert.equal((await f.history.read(binding.contact_id)).messages.length,1);
+  assert.equal(f.coordinator.getState().phase,'closed');
+});

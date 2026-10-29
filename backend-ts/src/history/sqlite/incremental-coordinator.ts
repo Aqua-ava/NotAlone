@@ -185,7 +185,8 @@ export class IncrementalHistoryCoordinator {
     await this.#history.stop(contactId); await Promise.all(active.map(entry => entry.done));
   }
   async stop(contactId?: string): Promise<void> {
-    if (this.#closed) return;
+    // 关闭流程也必须能取消在途读取：close() 先置 #closed，再调用本方法排空。
+    if (this.#closeDone) return;
     if (contactId) { this.#stoppedContacts.add(contactId); this.#state(contactId, 'stopped'); }
     else this.#wakePending = false;
     try { await this.#cancel(contactId); }

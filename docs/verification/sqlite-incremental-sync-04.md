@@ -32,7 +32,7 @@
 | 取消某人只停该人并撤销提交资格，其他继续；重选只在新资格补齐、不复活旧执行、不清除旧排除 | 取消 A 在途页不提交而 B 继续；重选后旧目标 `invalidated` 且旧代次写入被拒；05 来源删除产生的排除在重读后仍不复活被删消息 |
 | 账号变化/分片不连续/游标失效/覆盖不明确时停止范围并可见报错 | 账号变化、支持语义变化、游标失效、目标不连续分别 `blocked` 且错误码可见；状态 JSON 不含渠道会话细节；终页无续读游标时增量显式 `unavailable` |
 | 新消息、发送状态补齐、可认证更新分别处理；不重复建消息、未知状态不猜完成 | 已存在行补齐发送时间与原始状态码；状态缺失不清除已有观察；无关语义；身份冲突进入隔离并可见 |
-| 捕获写入、处理关联与检查点原子提交；每页复验资格/代次/删除；迟到页不推进水位 | 在途页在关闭后 `pagesAccepted` 不推进、`lastAcceptedAt` 为空；旧代次迟到页 `read_not_authorized`；重开从原检查点补齐 |
+| 捕获写入、处理关联与检查点原子提交；每页复验资格/代次/删除；迟到页不推进水位 | 在途页在关闭（总开关或协调器 close）后 `pagesAccepted` 不推进、`lastAcceptedAt` 为空；旧代次迟到页 `read_not_authorized`；关闭等待在途释放且不挂起；重开从原检查点补齐 |
 | 重开仅恢复仍有效且允许的读取；不自动调模型/媒体 | 关闭总开关后新协调器 wake 零渠道 IO；开启后按 `tail-1/tail-2` 持久游标恢复，不从头重读 |
 | 现有界面核验开启/关闭/退出/取消重选/断线/覆盖不足；微信不在前台仍可同步 | 宿主合成测试覆盖启动→关闭→退出；桌面解析与覆盖界面单测覆盖停止/不可用/原因展示；**真实 App/微信界面验收未执行**，等待串行桌面窗口 |
 | 03/06 未认证能力继续拒绝；合成正向路径证明合法新消息能进入 | 真实渠道仍无增量尾部能力并保持拒绝（宿主测试 `history_tail_unsupported`）；清空边界接缝 `assertHistoryReadBoundary` 仍拒绝 barrier/fence；合成正向路径已证明新消息可入库 |
@@ -58,7 +58,7 @@ ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Content
 cd desktop && npx tsc --noEmit && node --test tests/incremental-sync-status.test.mjs ...
 ```
 
-结果：backend typecheck 0 错误；相关后端测试 71/71 通过；新增增量测试 handoff 4、sync 4、controls 6（含 5 个子场景）全部通过；宿主测试 8/8（Electron node）；desktop typecheck 0 错误，新增桌面测试 2/2、相关桌面同步测试 24/24。`node scripts/check_public_history.mjs --ref HEAD --working-tree` 0 问题。
+结果：backend typecheck 0 错误；相关后端测试 71/71 通过；新增增量测试 handoff 4、sync 4、controls 7（含 5 个子场景）全部通过；宿主测试 8/8（Electron node）；desktop typecheck 0 错误，新增桌面测试 2/2、相关桌面同步测试 24/24。`node scripts/check_public_history.mjs --ref HEAD --working-tree` 0 问题。
 
 环境说明：工作树默认无 `node_modules`；运行宿主测试时临时软链主仓依赖，提交/检查前已移除（软链会使公开前检查报本机路径）。`sync-scope-view` 等 Playwright 页面测试因本机缺浏览器二进制未运行，属环境缺口而非本票代码回归。
 
