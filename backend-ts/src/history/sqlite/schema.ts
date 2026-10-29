@@ -5,8 +5,8 @@ CREATE TABLE history_deletion_fence (
  PRIMARY KEY(owner_id,contact_id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id)
 ) STRICT;
 CREATE TABLE history_source_exclusion (
- owner_id TEXT NOT NULL,conversation_id TEXT NOT NULL,external_key TEXT NOT NULL,operation_id TEXT NOT NULL,
- PRIMARY KEY(owner_id,conversation_id,external_key),
+ owner_id TEXT NOT NULL,conversation_id TEXT NOT NULL,scheme TEXT NOT NULL CHECK(scheme IN ('local','server')),external_key TEXT NOT NULL,operation_id TEXT NOT NULL,
+ PRIMARY KEY(owner_id,conversation_id,scheme,external_key),
  FOREIGN KEY(owner_id,conversation_id) REFERENCES channel_conversation(owner_id,id)
 ) STRICT;
 CREATE TABLE read_goal (
@@ -40,21 +40,23 @@ CREATE TABLE message (
  CHECK((sent_at IS NULL)=(time_precision IS NULL)),CHECK((order_scheme IS NULL)=(order_key IS NULL))
 ) STRICT;
 CREATE TABLE message_alias (
- owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,binding_id TEXT NOT NULL,scheme TEXT NOT NULL,external_key TEXT NOT NULL,message_id TEXT NOT NULL,
- PRIMARY KEY(owner_id,contact_id,binding_id,scheme,external_key),
+ owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,binding_id TEXT NOT NULL,scheme TEXT NOT NULL,external_key TEXT NOT NULL,message_id TEXT NOT NULL,
+ PRIMARY KEY(owner_id,id),UNIQUE(owner_id,contact_id,binding_id,scheme,external_key),
  FOREIGN KEY(owner_id,contact_id,binding_id,message_id) REFERENCES message(owner_id,contact_id,binding_id,id)
 ) STRICT;
 CREATE TABLE capture_record (
- owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,capture_id TEXT NOT NULL,item_no INTEGER NOT NULL,
+ owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,capture_id TEXT NOT NULL,item_no INTEGER NOT NULL CHECK(item_no>=0 AND item_no<1000),
  state TEXT NOT NULL CHECK(state IN ('normalized','quarantined','excluded')),message_id TEXT,raw_payload TEXT,
- observed_scheme TEXT,observed_key TEXT,normalizer_version TEXT NOT NULL,reason_code TEXT,
+ observed_scheme TEXT,observed_key TEXT,normalizer_version TEXT NOT NULL,reason_code TEXT,availability TEXT NOT NULL DEFAULT 'available' CHECK(availability IN ('available','deleting')),
  PRIMARY KEY(owner_id,id),UNIQUE(owner_id,capture_id,item_no),UNIQUE(owner_id,contact_id,id),UNIQUE(owner_id,contact_id,id,message_id),
  FOREIGN KEY(owner_id,contact_id,capture_id) REFERENCES sync_capture(owner_id,contact_id,id),
  FOREIGN KEY(owner_id,contact_id,message_id) REFERENCES message(owner_id,contact_id,id),
  CHECK((state='normalized' AND message_id IS NOT NULL AND reason_code IS NULL) OR (state IN ('quarantined','excluded') AND message_id IS NULL AND reason_code IS NOT NULL))
 ) STRICT;
-CREATE TRIGGER capture_record_immutable BEFORE UPDATE ON capture_record WHEN OLD.state IN ('normalized','excluded')
+CREATE TRIGGER capture_record_immutable BEFORE UPDATE OF owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code ON capture_record WHEN OLD.state IN ('normalized','excluded')
  BEGIN SELECT RAISE(ABORT,'capture_record_immutable'); END;
+CREATE TRIGGER capture_record_no_restore BEFORE UPDATE OF availability ON capture_record WHEN NEW.availability<>'deleting'
+ BEGIN SELECT RAISE(ABORT,'capture_record_no_restore'); END;
 CREATE TRIGGER capture_record_binding BEFORE INSERT ON capture_record WHEN NEW.message_id IS NOT NULL
  AND NOT EXISTS (SELECT 1 FROM sync_capture c JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
  JOIN message m ON m.owner_id=NEW.owner_id AND m.contact_id=NEW.contact_id AND m.id=NEW.message_id

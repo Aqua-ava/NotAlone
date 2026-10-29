@@ -4,7 +4,7 @@ import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { SqliteStorage } from '../../storage/sqlite/client.ts';
 import type { SqliteContactService } from '../../contacts/sqlite/service.ts';
 import type { HistoryChannel, HistorySource, HistoryCoverage, HistoryRead, HistoryScope, HistoryTarget, HistorySupportReport } from './contracts.ts';
-import { assertSupport } from './actions.ts';
+import { assertSupport, serializeSupport } from './actions.ts';
 interface PendingGoal { id:string; target:HistoryTarget; cursor:string|null }
 /** 渠道I/O始终在事务外；每次读取前后与原子接收时分别复验当前资格。 */
 export class SqliteHistoryService {
@@ -30,7 +30,8 @@ export class SqliteHistoryService {
  async synchronize(contactId:string,signal?:AbortSignal):Promise<HistoryCoverage>{
   if(this.active.has(contactId))throw new StorageFailure('history_already_running');
   let finished!:()=>void;const done=new Promise<void>(resolve=>{finished=resolve;});
-  const controller=new AbortController();this.active.set(contactId,{controller,done});
+  let completed!:()=>void;const completion=new Promise<void>(resolve=>{completed=resolve;});
+  const controller=new AbortController();this.active.set(contactId,{controller,done:completion});
   let release:(()=>Promise<void>)|undefined;
   const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
   let scope:HistoryScope|undefined;let goal:PendingGoal|undefined;
@@ -50,7 +51,7 @@ export class SqliteHistoryService {
    // 有界处理；达到预算只留下可恢复缺口，不能把部分页数当作完整。
    for(let index=0;index<1000;index++){
     await check();const page=await this.channel.page(scope,goal!.target,goal!.cursor,controller.signal);await check();
-    if(JSON.stringify(await inspect())!==JSON.stringify(report))throw new StorageFailure('history_support_changed');
+    if(serializeSupport(await inspect())!==serializeSupport(report))throw new StorageFailure('history_support_changed');
     const coverage=await this.storage.execute<HistoryCoverage>('history.acceptPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId});
     if(page.exhausted)return coverage;goal!.cursor=page.cursorOut;
    }
@@ -58,7 +59,7 @@ export class SqliteHistoryService {
   }catch(error){
    if(scope&&goal){try{await this.storage.execute('history.interrupt',{token:scope.token,goalId:goal.id,code:error instanceof StorageFailure?error.code:'history_read_interrupted'});}catch{/* 旧资格不允许推进覆盖；原事务已保留缺口。 */}}
    throw error;
-  }finally{finished();if(release)await release();this.active.delete(contactId);signal?.removeEventListener('abort',abort);}
+  }finally{finished();try{if(release)await release();}finally{this.active.delete(contactId);signal?.removeEventListener('abort',abort);completed();}}
  }
  async stop(contactId?:string):Promise<void>{const entries=[...this.active.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);for(const entry of entries)entry.controller.abort();await Promise.all(entries.map(entry=>entry.done));}
  async close():Promise<void>{this.closed=true;for(const entry of this.active.values())entry.controller.abort();await this.channel.close?.();await Promise.all([...this.active.values()].map(entry=>entry.done));}

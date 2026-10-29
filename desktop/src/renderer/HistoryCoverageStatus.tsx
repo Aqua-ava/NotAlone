@@ -14,6 +14,8 @@ const reasons: Record<string, string> = {
   history_empty: '暂时没有读到聊天记录，还不能确认历史是否读完。',
   cli_message_table_missing: '暂时无法打开本机微信记录，开启同步时会自动重试。',
   history_page_stalled: '读取更早的聊天时暂时中断，开启同步时会自动重试。',
+  history_identity_quarantined: '部分消息身份或内容存在冲突，已隔离待核验，不作为聊天或回复依据。',
+  history_support_unsupported: '当前微信结构明确不支持，正文读取保持关闭。',
   history_support_unverified: '当前微信读取能力尚未核验，正文读取保持关闭。',
   history_identity_conflict: '部分消息身份存在冲突，已隔离待核验，不作为聊天或回复依据。',
   history_identity_insufficient: '部分消息无法可靠识别，已隔离待核验，不作为聊天或回复依据。',

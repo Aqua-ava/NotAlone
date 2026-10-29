@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { StorageFailure, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { DeletionDomain, DeletionOperation, RowDeletionTarget, CheckResult } from '../../storage/sqlite/deletion/contracts.ts';
-const rowKinds=Object.fromEntries(['capture_record','message_alias','message','sync_capture','read_goal'].map(kind=>[kind,{keys:kind==='message_alias'?['owner_id','contact_id','binding_id','scheme','external_key']:['owner_id','id'],ownerKey:'owner_id'}]));
+const rowKinds=Object.fromEntries(['capture_record','message_alias','message','sync_capture','read_goal'].map(kind=>[kind,{keys:['owner_id','id'],ownerKey:'owner_id'}]));
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const identity=(kind:string,key:Record<string,string>):string=>createHash('sha256').update(JSON.stringify([kind,Object.keys(key).sort().map(k=>[k,key[k]])])).digest('hex');
 const target=(kind:string,key:Record<string,string>):RowDeletionTarget=>({kind:'row',domain:'history',rowKind:kind,key,identity:identity(kind,key),holderKeys:[]});
@@ -16,7 +16,7 @@ function scopeRows(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget
  const messages=scope.kind==='source'?[...new Set(records.flatMap(r=>r.message_id?[String(r.message_id)]:[]))]:tx.all(`SELECT id FROM message WHERE owner_id=?${scope.kind==='account'?'':' AND contact_id=?'} AND availability='deleting'`,scope.kind==='account'?[ownerId]:[ownerId,scope.contactId]).map(r=>String(r.id));
  for(const id of messages){
   if(tx.all('SELECT id FROM capture_record WHERE owner_id=? AND message_id=?',[ownerId,id]).some(r=>!deleting.has(String(r.id))))continue;
-  for(const a of tx.all('SELECT * FROM message_alias WHERE owner_id=? AND message_id=?',[ownerId,id]))targets.push(target('message_alias',{owner_id:ownerId,contact_id:String(a.contact_id),binding_id:String(a.binding_id),scheme:String(a.scheme),external_key:String(a.external_key)}));
+  for(const a of tx.all('SELECT * FROM message_alias WHERE owner_id=? AND message_id=?',[ownerId,id]))targets.push(target('message_alias',{owner_id:ownerId,id:String(a.id)}));
   targets.push(target('message',{owner_id:ownerId,id}));
  }
  if(scope.kind!=='source'){
@@ -35,18 +35,26 @@ export const historyDeletionDomain:DeletionDomain={
   const {ownerId,scope}=op;
   if(!['source','contact_history','contact','account'].includes(scope.kind))return [];
   if(scope.kind==='source'){
-   const r=tx.get('SELECT r.observed_key,b.conversation_id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id WHERE r.owner_id=? AND r.contact_id=? AND r.id=?',[ownerId,scope.contactId,scope.sourceId]);
+   const r=tx.get('SELECT r.observed_key,r.message_id,b.conversation_id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id WHERE r.owner_id=? AND r.contact_id=? AND r.id=?',[ownerId,scope.contactId,scope.sourceId]);
    if(!r){if(tx.get("SELECT 1 FROM deletion_target WHERE operation_id=? AND domain='history'",[op.operationId]))return [];throw new StorageFailure('history_source_not_found');}
-   if(r.observed_key)tx.run('INSERT OR IGNORE INTO history_source_exclusion VALUES(?,?,?,?)',[ownerId,r.conversation_id,r.observed_key,op.operationId]);
+   if(r.observed_key){
+    tx.run('INSERT OR IGNORE INTO history_source_exclusion VALUES(?,?,?,?,?)',[ownerId,r.conversation_id,'local',r.observed_key,op.operationId]);
+    if(r.message_id)for(const alias of tx.all('SELECT scheme,external_key FROM message_alias WHERE owner_id=? AND message_id=?',[ownerId,r.message_id]))
+     tx.run('INSERT OR IGNORE INTO history_source_exclusion VALUES(?,?,?,?,?)',[ownerId,r.conversation_id,alias.scheme,alias.external_key,op.operationId]);
+   }
    else tx.run('INSERT OR IGNORE INTO history_deletion_fence VALUES(?,?,?)',[ownerId,scope.contactId,op.operationId]);
   }else{
    const contacts=scope.kind==='account'?tx.all('SELECT id FROM contact WHERE owner_id=?',[ownerId]).map(r=>String(r.id)):[scope.contactId];
    for(const contact of contacts){
     tx.run('INSERT OR IGNORE INTO history_deletion_fence VALUES(?,?,?)',[ownerId,contact,op.operationId]);
-    tx.run("UPDATE message SET availability='deleting' WHERE owner_id=? AND contact_id=?",[ownerId,contact]);
+    tx.run(`UPDATE message SET availability='deleting' WHERE owner_id=? AND contact_id=? AND id IN (SELECT r.message_id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE g.owner_id=?${scope.kind==='account'?'':' AND g.accepted_data_generation<?'})`,scope.kind==='account'?[ownerId,contact,ownerId]:[ownerId,contact,ownerId,op.acceptedGeneration]);
    }
   }
-  tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_deleted' WHERE owner_id=?${scope.kind==='account'?'':' AND contact_id=?'} AND state<>'invalidated'`,scope.kind==='account'?[ownerId]:[ownerId,scope.contactId]);
+  const older=scope.kind==='account'?'':' AND accepted_data_generation<?';
+  const args=scope.kind==='account'?[ownerId]:[ownerId,scope.contactId,op.acceptedGeneration];
+  const contacts=scope.kind==='account'?'':' AND contact_id=?';
+  tx.run(`UPDATE capture_record SET availability='deleting' WHERE owner_id=?${scope.kind==='source'?' AND contact_id=? AND id=?':contacts} AND capture_id IN (SELECT c.id FROM sync_capture c JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE g.owner_id=?${older})`,scope.kind==='source'?[ownerId,scope.contactId,scope.sourceId,ownerId,op.acceptedGeneration]:scope.kind==='account'?[ownerId,ownerId]:[ownerId,scope.contactId,ownerId,op.acceptedGeneration]);
+  tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_deleted' WHERE owner_id=?${contacts}${older} AND state<>'invalidated'`,args);
   return [];
  },
  collect:scopeRows,

@@ -18,7 +18,7 @@ async function fixture(t,options={}){
  const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);
  const snapshot=await contacts.candidates(true);
  const saved=await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(s=>({locator:s.username,observed_display_name:s.display_name,expected_selection_generation:s.selection_generation})));
- const target={protocol:'private-history-v1',descriptor:'fixed-synthetic-target',partitions:['shard-a'],sourceGeneration:'source-1'};
+ const target={protocol:'private-history-v1',descriptor:'fixed-synthetic-target',partitions:['shard-a'],tables:[{partition:'shard-a',instance:'table-instance-1'}],sourceGeneration:'source-1'};
  const channel={inspect:async scope=>({...report,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation}),target:async()=>target,page:async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('9007199254740993'),record('2',{kind:'voice',text:'不应保存媒体转写'})],completedPartitions:['shard-a'],exhausted:true})};
  const service=new SqliteHistoryService(storage,contacts,channel);
  return {storage,contacts,channel,service,saved:saved.bindings,target,root};
@@ -34,7 +34,7 @@ test('已授权单联系人历史正常入库，精确身份和非文字占位�
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 test('跨分片同localId分别保存，server0不合并，补齐别名及排序变化不创建第二条',async t=>{
- const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];
+ const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
  let turn=0;channel.page=async(_s,_t,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:turn++===0?[record('1'),record('1',{partition:'shard-b'})]:[record('1',{serverId:'18446744073709551615',orderScheme:'synthetic-seq',orderKey:'100'}),record('2',{serverId:'18446744073709551615',text:'合成正文1'})],completedPartitions:target.partitions,exhausted:true});
  const contact=saved[0].contact_id;await service.synchronize(contact);assert.equal((await service.read(contact)).messages.length,2);
  await service.synchronize(contact);const result=await service.read(contact);assert.equal(result.messages.length,2);assert.equal(result.coverage.quarantinedCount,0);
@@ -47,12 +47,12 @@ test('未知身份与内容冲突隔离，非文字夹带正文不保存，覆�
  const result=await service.read(contact);assert.equal(result.messages.length,2);assert.equal(result.replyEligibility,'history_incomplete');assert.equal(result.messages.find(m=>m.kind==='other').text,null);
 });
 test('部分分片和分页中断保持真实缺口，重试从已提交cursor继续',async t=>{
- const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];
+ const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
  let interrupted=false;channel.page=async(_s,_t,cursor)=>{if(cursor==='page-2'&&!interrupted){interrupted=true;throw new Error('synthetic interruption');}return {target:target.descriptor,cursorIn:cursor,cursorOut:cursor===null?'page-2':null,records:[record(cursor===null?'1':'2')],completedPartitions:cursor===null?['shard-a']:['shard-b'],exhausted:cursor!==null};};
  const contact=saved[0].contact_id;await assert.rejects(service.synchronize(contact));assert.equal((await service.read(contact)).coverage.cursor,'page-2');assert.equal((await service.read(contact)).replyEligibility,'history_incomplete');
  await service.synchronize(contact);assert.equal((await service.coverage(contact)).phase,'complete');assert.equal((await service.read(contact)).messages.length,2);
 });
-test('读取前未授权不调用正文，读取中撤销、停读、账号换代均拒绝迟到页',async t=>{
+test('读取前未授权不调用正文，停读拒绝迟到页',async t=>{
  const {service,channel,saved,contacts,target}=await fixture(t);let pages=0;
  const a=saved[0],b=saved[1];await contacts.revoke(b.contact_id,b.binding_id,b.selection_generation);
  channel.page=async()=>{pages++;await contacts.setReading(false);return {target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true};};
@@ -130,6 +130,8 @@ test('来源消息游标覆盖同事务回滚，响应重放幂等且身份正�
  await storage.execute('history.acceptPage',input);await storage.execute('history.acceptPage',input);assert.equal((await service.coverage(a.contact_id)).pageCount,1);
  const voice=(await service.read(a.contact_id)).messages.find(m=>m.kind==='voice');
  const message=(await service.read(a.contact_id)).messages.find(m=>m.kind==='text');
+ assert.equal(await storage.execute('fixture.assertSource',{owner_id:owner,contact_id:a.contact_id,record_id:message.sourceRecordIds[0],message_id:message.id}),true);
+ await assert.rejects(storage.execute('fixture.assertSource',{owner_id:owner,contact_id:b.contact_id,record_id:message.sourceRecordIds[0],message_id:message.id}),{code:'history_source_not_available'});
  await assert.rejects(storage.execute('fixture.constraints',{kind:'record',owner,message:message.id,record:voice.sourceRecordIds[0]}));
  await assert.rejects(storage.execute('fixture.constraints',{kind:'body',owner,message:message.id}));
  await assert.rejects(storage.execute('fixture.constraints',{kind:'alias',owner,contact:b.contact_id,binding:b.binding_id,message:message.id}));
@@ -138,7 +140,7 @@ test('可靠排序后补保留内部身份与旧来源，未知时间可合法�
  const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;let turn=0;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',turn++===0?{sentAt:null,timePrecision:null}:{serverId:'5',orderScheme:'synthetic-seq',orderKey:'9007199254740993'})],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const before=(await service.read(contact)).messages[0];const provenance=await service.source(contact,before.sourceRecordIds[0]);
- await service.synchronize(contact);const after=(await service.read(contact)).messages[0];assert.equal(after.id,before.id);assert.equal(after.orderKey,'9007199254740993');assert.equal(after.sentAt,'1700000000000');assert.equal(after.sourceRecordIds.length,2);assert.deepEqual(await service.source(contact,provenance.recordId),provenance);
+ await service.synchronize(contact);const after=(await service.read(contact)).messages[0];assert.equal(after.id,before.id);assert.equal(after.orderKey,'9007199254740993');assert.equal(after.ordering,'unknown');assert.equal(after.sentAt,'1700000000000');assert.equal(after.sourceRecordIds.length,2);assert.deepEqual(await service.source(contact,provenance.recordId),provenance);
 });
 test('能力三值分别保留，真实未认证适配器不读正文，不能冒充正常路径',async t=>{
  const {createWechatHistoryChannel}=await import('../src/history/sqlite/wechat-channel.ts');const unavailable=createWechatHistoryChannel();
@@ -146,4 +148,31 @@ test('能力三值分别保留，真实未认证适配器不读正文，不能�
  const {service,channel,saved}=await fixture(t);let pages=0;channel.page=async()=>{pages++;throw new Error('must not read');};
  channel.inspect=async scope=>({...report,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,status:'unsupported'});
  await assert.rejects(service.synchronize(saved[0].contact_id),{code:'history_support_unsupported'});assert.equal(pages,0);
+});
+test('source删除接收即撤下待删来源，旧删除refresh不误停新代次合法消息',async t=>{
+ const {service,channel,saved,storage,target,root}=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=saved[0].contact_id;
+ await service.synchronize(contact);const original=(await service.read(contact)).messages.find(m=>m.kind==='text');const source=original.sourceRecordIds[0];
+ const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');const deletion=new DeletionService(storage,service.holders,new ManagedFiles(root));
+ const plan=await deletion.plan({ownerId:owner,requestKey:'old-new-generation',scope:{kind:'source',contactId:contact,sourceId:source}});
+ await assert.rejects(storage.execute('fixture.assertSource',{owner_id:owner,contact_id:contact,record_id:source,message_id:original.id}),{code:'history_source_not_available'});
+ await assert.rejects(service.source(contact,source),{code:'history_source_not_found'});assert.equal((await service.read(contact)).messages.length,1);
+ let entered;const reading=new Promise(r=>entered=r);let release;const page=new Promise(r=>release=r);
+ channel.page=async()=>{entered();await page;return {target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('10')],completedPartitions:['shard-a'],exhausted:true};};
+ const run=service.synchronize(contact);run.catch(()=>{});await reading;
+ assert.equal((await deletion.advance({ownerId:owner,operationId:plan.operationId})).state,'completed');release();assert.equal((await run).phase,'complete');
+ assert.ok((await service.read(contact)).messages.some(m=>m.text==='合成正文10'));
+});
+test('最后来源删除保留已知服务端别名抑制，长出现键不阻断删除注册',async t=>{
+ const f=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=f.saved[0].contact_id;f.target.partitions=['p'.repeat(180)];f.target.tables=[{partition:f.target.partitions[0],instance:'t'.repeat(180)}];let next=false;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record(next?'2':'1',{partition:f.target.partitions[0],table:'t'.repeat(180),serverId:'9007199254740993',text:'合成同一消息'})],completedPartitions:f.target.partitions,exhausted:true});
+ await f.service.synchronize(contact);const source=(await f.service.read(contact)).messages[0].sourceRecordIds[0];
+ const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');const deletion=new DeletionService(f.storage,f.service.holders,new ManagedFiles(f.root));
+ const plan=await deletion.plan({ownerId:owner,requestKey:'alias-excluded-large-key',scope:{kind:'source',contactId:contact,sourceId:source}});
+ assert.equal((await deletion.advance({ownerId:owner,operationId:plan.operationId})).state,'completed');next=true;
+ await f.service.synchronize(contact);assert.equal((await f.service.read(contact)).messages.length,0);
+});
+test('固定目标之外的表实例不能伪装已认证来源',async t=>{
+ const {service,channel,saved,target}=await fixture(t);target.tables=[{partition:'shard-a',instance:'table-instance-1'}];
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{table:'unverified-instance'})],completedPartitions:['shard-a'],exhausted:true});
+ const coverage=await service.synchronize(saved[0].contact_id);assert.equal(coverage.phase,'incomplete');assert.equal(coverage.quarantinedCount,1);assert.equal((await service.read(saved[0].contact_id)).messages.length,0);
 });
