@@ -23,6 +23,7 @@ import type { BindingConsentBridge } from './binding-consent-bridge';
 import type { SyncControlBridge } from './sync-control-bridge';
 import type { SkillLearningBridge } from './skill-learning-bridge';
 import type { BackgroundTaskBridge } from './background-task-bridge';
+import type { HistoryClearBridge } from './history-clear-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
   usage: UsageBridge;
@@ -38,5 +39,6 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   fixedMemoryProcessing: FixedMemoryProcessingBridge;
   sqliteMemoryManagement: SqliteMemoryManagementBridge;
   backgroundTasks: BackgroundTaskBridge;
+  historyClear: HistoryClearBridge;
 };
 import type { TraceBridge } from './trace-bridge';

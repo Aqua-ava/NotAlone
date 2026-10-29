@@ -12,7 +12,7 @@ import { skillMetadataDeletionDomain } from '../../../skills/sqlite/deletion.ts'
 import { StorageFailure, type StorageAction } from '../contracts.ts';
 import type { DeletionDomain, DeletionRegistration, DeletionScope } from './contracts.ts';
 
-export const installedDeletionScopes = ['source', 'contact', 'account', 'media_result_clear', 'media_result_replace', 'discussion'] as const;
+export const installedDeletionScopes = ['source', 'contact', 'contact_history', 'account', 'media_result_clear', 'media_result_replace', 'discussion'] as const;
 const supported = (scope: DeletionScope) => installedDeletionScopes.some(kind => kind === scope.kind);
 
 // inspect/target尚无goal时也持有真实只读连接，来源删除必须覆盖这些早期读者。
@@ -25,7 +25,7 @@ const installedHistoryDomain:DeletionDomain={...historyDeletionDomain,collect(tx
   const keys=[...new Set(generations.map(generation=>historyReaderHolderKey(scope.contactId,generation)))];
   return targets.map(target=>({...target,holderKeys:[...new Set([...target.holderKeys,...keys])]}));
 }};
-// contact_history的精确截断由06提供；不因本票接通来源删除而扩大范围。
+// contact_history的精确截断由06提供：history域只在其完整B被原子接受后通过scope_suppression复核。
 const baseDeletionRegistration: DeletionRegistration = {
   authority: {
     fence(tx, ownerId, scope) {

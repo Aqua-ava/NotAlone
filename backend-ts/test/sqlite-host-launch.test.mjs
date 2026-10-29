@@ -164,7 +164,7 @@ test('正常DSH运行中账号DELETE真实compact并公开复核，Skill元数�
   if(withSkill)assert.equal(state.checks.find(c=>c.domain==='skill_metadata'&&c.kind==='database_rows').result,'passed');
   assert.equal(JSON.stringify(state).includes('managed/'),false);
   const runtime=await (await request('/api/runtime/status')).json();assert.equal(runtime.state,'running');assert.equal(host.isRunning(),true);
-  assert.deepEqual(runtime.deletion_scopes,['source','contact','account','media_result_clear','media_result_replace','discussion']);assert.equal(runtime.ownership.deletion,'typescript');
+  assert.deepEqual(runtime.deletion_scopes,['source','contact','contact_history','account','media_result_clear','media_result_replace','discussion']);assert.equal(runtime.ownership.deletion,'typescript');
   await access(infoPath);
   assert.equal((await (await request('/api/deletions')).json()).operations.length,withSkill?2:1);
   assert.equal((await (await request('/api/account','DELETE',{confirmed:true,confirm_scope:'account'},{'Idempotency-Key':'synthetic-account-delete'})).json()).operation_id,accepted.operation_id);

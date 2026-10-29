@@ -24,6 +24,7 @@ import { createBindingConsentBridge } from './binding-consent';
 import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 import { createBackgroundTaskBridge } from './background-tasks';
+import { createHistoryClearBridge } from './history-clear';
 
 const bridge: AppBridge = {
   usage: createUsageBridge(ipcRenderer),
@@ -50,6 +51,7 @@ const bridge: AppBridge = {
   bindings: createBindingConsentBridge(ipcRenderer),
   foreground: createForegroundBridge(ipcRenderer),
   syncControl: createSyncControlBridge(ipcRenderer),
+  historyClear: createHistoryClearBridge(ipcRenderer),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),
   hideWindow: () => ipcRenderer.invoke('window:hide'),
