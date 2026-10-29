@@ -138,10 +138,17 @@ test('持有者释放失败不能伪报完成，未知目录/链接/外部原件
   assert.throws(() => f.files.capture('skills', 'anything'), {code: 'deletion_file_ownership'});
   assert.equal(await readFile(external, 'utf8'), '用户合成原件');
 });
-test('默认聚合缺少领域注册时拒绝删除，不把空闭包判成功', async t => {
+test('默认聚合缺少来源处理器时拒绝删除，不把身份空闭包判成功', async t => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-delete-unwired-')));
   const storage = await SqliteStorage.open({userData: root, intent: 'create', role: 'test'});
-  try { await assert.rejects(storage.execute('deletion.plan', request()), {code: 'deletion_domain_unavailable'}); }
+  try {
+    for(const scope of [{kind:'source',contactId:'a',sourceId:'r1'},{kind:'contact_history',contactId:'a'},
+      {kind:'discussion',contactId:'a',discussionId:'discussion'},
+      {kind:'media_result_clear',contactId:'a',messageId:'m'},{kind:'media_result_replace',contactId:'a',messageId:'m'}]) {
+      await assert.rejects(storage.execute('deletion.plan', request('unwired',scope)), {code: 'deletion_scope_unavailable'});
+    }
+    assert.deepEqual(await storage.execute('deletion.list',{ownerId:'o'}),[]);
+  }
   finally {await storage.close(); await rm(root, {recursive: true, force: true});}
 });
 test('文件清理前复验领域代次与保留资格，不只凭旧路径和inode删除', async t => {
@@ -173,7 +180,8 @@ test('原来源删除HTTP和公开进度访问真实SQLite服务，认证前拒�
   const progress = await (await send(`/api/tasks/status?contact_id=a&task_id=${value.task_id}`)).json();
   assert.equal(progress.task_type, 'delete'); assert.equal(progress.status, 'succeeded'); assert.ok(progress.steps.every(s => s.status === 'succeeded'));
   const state = await send(`/api/deletions/${value.operation_id}`); const text = await state.text();
-  assert.equal(JSON.parse(text).state, 'completed'); assert.equal(text.includes('copy.txt'), false); assert.equal(text.includes('managed'), false);
+  assert.equal(JSON.parse(text).state, 'completed'); assert.equal(text.includes('copy.txt'), false); assert.equal(text.includes('managed/'), false);
+  assert.equal(text.includes('managed_locator'), false); assert.equal(text.includes('expected_identity'), false);
   assert.equal((await (await send('/api/contacts/a/sources/r1', 'DELETE')).json()).task_id, value.task_id);
   assert.equal((await send(`/api/deletions/${value.operation_id}/retry`, 'POST', {})).status, 400);
   assert.equal((await send(`/api/deletions/${value.operation_id}/retry`, 'POST', {confirmed: true})).status, 200);
