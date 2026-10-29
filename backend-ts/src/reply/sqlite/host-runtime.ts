@@ -32,7 +32,7 @@ export async function createSqliteDiscussionHost(options:{
  const candidates=new SqliteReplyCandidateService(options.storage,options.ownerId);
  const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,discussions:service,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
  const candidateHttp=new SqliteReplyCandidateHttp({storage:options.storage,service:candidates,turns:candidateTurns,authorize:options.authorizeRequest});
- const handler=new SqliteDiscussionHttp(service,options.authorizeRequest,runtime,turns),requests=new Set<Promise<boolean>>();
+ const handler=new SqliteDiscussionHttp(service,options.authorizeRequest,runtime,turns,candidateTurns?(contactId,discussionId)=>candidateTurns.configurationFor(contactId,discussionId):undefined),requests=new Set<Promise<boolean>>();
  const http={handle(request:IncomingMessage,response:ServerResponse):Promise<boolean>{
   if(stopping){response.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});response.end(JSON.stringify({error:'discussion_runtime_closed'}));return Promise.resolve(true);}
   const pending=(async()=>await candidateHttp.handle(request,response)||await handler.handle(request,response))();requests.add(pending);const release=()=>requests.delete(pending);pending.then(release,release);return pending;
