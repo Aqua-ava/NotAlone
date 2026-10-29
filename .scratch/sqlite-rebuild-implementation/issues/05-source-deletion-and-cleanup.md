@@ -1,12 +1,12 @@
 # 05：统一来源删除与清理流程
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)
 Blocked by: [01 SQLite 基础与生命周期](01-sqlite-runtime-lifecycle.md)
 
-> 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
+> 2026-10-29已领取实施。[任务索引与共同约定](../planning.md)。
 
 ## 交付行为
 

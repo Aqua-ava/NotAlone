@@ -1,5 +1,5 @@
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
-export const domainMigration = {version:2,sql:`
+export const domainMigration = {version:base.migrations.length+1,sql:`
 CREATE TABLE scope(owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,PRIMARY KEY(owner_id,contact_id)) STRICT;
 CREATE TABLE fact(owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,id TEXT NOT NULL,value INTEGER,kind TEXT NOT NULL,reference TEXT,
 PRIMARY KEY(owner_id,contact_id,id),FOREIGN KEY(owner_id,contact_id) REFERENCES scope(owner_id,contact_id),

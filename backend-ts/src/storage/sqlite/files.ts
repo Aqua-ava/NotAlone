@@ -1,4 +1,4 @@
-import { constants, lstatSync, mkdirSync, openSync, closeSync, realpathSync, readdirSync } from 'node:fs';
+import { constants, lstatSync, mkdirSync, openSync, closeSync, realpathSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { StorageFailure } from './contracts.ts';
 
@@ -41,5 +41,14 @@ export function controlledFiles(userData: string, create: boolean) {
     }
   };
   verify();
-  return { database, verify };
+  const inspectSidecars = () => {
+    verify();
+    const size = (suffix: string): bigint => {
+      try { return statSync(database + suffix, {bigint: true}).size; }
+      catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return 0n; throw e; }
+    };
+    return {walBytes: size('-wal'), shmBytes: size('-shm'), journalBytes: size('-journal'),
+      unexpectedFiles: readdirSync(directory).filter(name => !['notalone.sqlite', 'notalone.sqlite-wal', 'notalone.sqlite-shm', 'notalone.sqlite-journal'].includes(name)).length};
+  };
+  return { database, verify, inspectSidecars };
 }

@@ -1,4 +1,6 @@
 import type { StorageRegistry } from './contracts.ts';
+import { deletionMigration } from './deletion/schema.ts';
+import { createDeletionActions } from './deletion/actions.ts';
 
 // 已发布版本不可修改；后续业务票在此追加连续版本及具名动作。
 export const registry: StorageRegistry = {
@@ -18,6 +20,7 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }],
-  actions: [],
+` }, deletionMigration(2)],
+  // 02及各写者集成后传入真实注册；缺失时拒绝删除，不用空闭包宣称成功。
+  actions: createDeletionActions(),
 };

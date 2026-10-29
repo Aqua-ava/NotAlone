@@ -22,6 +22,7 @@ export interface StorageMaintenance {
   checkpoint(): { busy: bigint; log: bigint; checkpointed: bigint };
   vacuum(): void;
   check(): { integrity: 'ok'; foreignKeys: 'ok' };
+  inspect(): { freePages: bigint; tempStore: bigint; secureDelete: bigint; walBytes: bigint; shmBytes: bigint; journalBytes: bigint; unexpectedFiles: number };
 }
 type ActionBase = { name: string; retryBusy: boolean };
 export type StorageAction = ActionBase & (

@@ -12,7 +12,7 @@ async function fixture(t){
 test('首次创建并重开同一实例，旧运行租约不能写入',async t=>{
  const options=await fixture(t);
  const first=await SqliteStorage.open(options);const status=first.status;
- assert.equal(status.schemaVersion,1);assert.equal(typeof status.epoch,'bigint');
+ assert.equal(status.schemaVersion,baseRegistry.migrations.length);assert.equal(typeof status.epoch,'bigint');
  assert.match(status.databaseId,/^[a-f0-9-]{36}$/);assert.equal(status.role,'test');
  assert.equal((await stat(join(options.userData,'managed/sqlite/notalone.sqlite'))).mode&0o777,0o600);
  assert.equal((await stat(join(options.userData,'managed/sqlite'))).mode&0o777,0o700);
@@ -51,7 +51,7 @@ import {chmod,writeFile,readFile,symlink,mkdir,rename} from 'node:fs/promises';
 import {DatabaseSync} from 'node:sqlite';
 import {registry as baseRegistry} from '../src/storage/sqlite/registry.ts';
 const databasePath=o=>join(o.userData,'managed/sqlite/notalone.sqlite');
-async function makeRegistry(options,name,sql,version=2){
+async function makeRegistry(options,name,sql,version=baseRegistry.migrations.length+1){
  const file=join(options.userData,`${name}.mjs`);
  await writeFile(file,`import {registry as base} from ${JSON.stringify(new URL('../src/storage/sqlite/registry.ts',import.meta.url).href)}; export const registry={migrations:[...base.migrations,{version:${version},sql:${JSON.stringify(sql)}}],actions:[]};`);
  return new URL(`file://${file}`).href;
@@ -60,10 +60,10 @@ test('升级失败保留实例与原版本，修正后升级且重复打开不�
  const options=await fixture(t);let s=await SqliteStorage.open(options);const id=s.status.databaseId;await s.close();
  const bad=await makeRegistry(options,'bad','CREATE TABLE upgraded(id INTEGER); INSERT INTO nonexistent VALUES(1);');
  await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id,registryModule:bad}));
- s=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id});assert.equal(s.status.schemaVersion,1);await s.close();
+ s=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id});assert.equal(s.status.schemaVersion,baseRegistry.migrations.length);await s.close();
  const good=await makeRegistry(options,'good','CREATE TABLE upgraded(id INTEGER); INSERT INTO upgraded VALUES(7);');
- s=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id,registryModule:good});assert.equal(s.status.schemaVersion,2);await s.close();
- s=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id,registryModule:good});assert.equal(s.status.schemaVersion,2);await s.close();
+ s=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id,registryModule:good});assert.equal(s.status.schemaVersion,baseRegistry.migrations.length+1);await s.close();
+ s=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id,registryModule:good});assert.equal(s.status.schemaVersion,baseRegistry.migrations.length+1);await s.close();
  await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id}),{code:'schema_too_new'});
 });
 test('普通打开拒绝缺失、实例不符、损坏、漂移和未知高版本，不换空库',async t=>{
@@ -131,7 +131,7 @@ test('进程中断升级后由同一实例回滚恢复，未提交版本不留�
   child.kill('SIGKILL');await exited;
  }finally{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await exited;}}
  const recovered=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id});
- try{assert.equal(recovered.status.databaseId,id);assert.equal(recovered.status.schemaVersion,1);assert.deepEqual(await recovered.check(),{integrity:'ok',foreignKeys:'ok'});}finally{await recovered.close();}
+ try{assert.equal(recovered.status.databaseId,id);assert.equal(recovered.status.schemaVersion,baseRegistry.migrations.length);assert.deepEqual(await recovered.check(),{integrity:'ok',foreignKeys:'ok'});}finally{await recovered.close();}
 });
 
  test('运行中数据库文件被替换及配置根符号链接时拒绝访问',async t=>{

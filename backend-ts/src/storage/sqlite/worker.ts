@@ -108,6 +108,9 @@ try {
               checkpoint() { maintenanceAllowed(); return get('PRAGMA wal_checkpoint(TRUNCATE)') as unknown as ReturnType<StorageMaintenance['checkpoint']>; },
               vacuum() { maintenanceAllowed(); connection.exec('VACUUM'); },
               check() { maintenanceAllowed(); return checks(); },
+              inspect() { maintenanceAllowed(); return {freePages: get('PRAGMA freelist_count')!.freelist_count as bigint,
+                tempStore: get('PRAGMA temp_store')!.temp_store as bigint, secureDelete: get('PRAGMA secure_delete')!.secure_delete as bigint,
+                ...files.inspectSidecars()}; },
             };
             const tx: StorageTransaction = {
               run(sql, values = []) { permitted(); connection.prepare(sql).run(...bindings(values)); },
