@@ -18,7 +18,15 @@ export function preconditions(tx:StorageTransaction,ownerId:string,t:StorageRow)
  available(tx,ownerId,{scopeKind:t.scope_kind as 'self'|'contact',contactId:t.contact_id as string|null},true);
  if(!['succeeded','awaiting_decision'].includes(String(t.state)))fail('document_preceding_stage_incomplete');
  const run=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);
- if(!run||run.pause_requested_at!==null||['revoked','failed','paused'].includes(String(run.state)))fail('document_preceding_stage_incomplete');
+ if(!run||run.pause_requested_at!==null||['revoked','paused'].includes(String(run.state)))fail('document_preceding_stage_incomplete');
+ if(run!.state==='failed'){
+  // 仅放行其他联系人的局部提取失败；公共模型故障仍由整轮暂停保护。
+  const failedContact=tx.get("SELECT 1 FROM processing_task WHERE owner_id=? AND run_id=? AND scope_kind='contact' AND id<>? AND state='failed'",[ownerId,t.run_id,t.id]);
+  const commonFailure=tx.get(`SELECT 1 FROM processing_task failed JOIN processing_step s ON s.owner_id=failed.owner_id AND s.task_id=failed.id AND s.kind='extraction_verification' AND s.state='failed'
+   JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id AND a.state='failed' AND a.attempt_no=(SELECT max(latest.attempt_no) FROM step_attempt latest WHERE latest.owner_id=s.owner_id AND latest.step_id=s.id)
+   WHERE failed.owner_id=? AND failed.run_id=? AND failed.state='failed' AND a.error_code IN ('extraction_model_unconfigured','extraction_model_configuration_invalid','extraction_model_credentials_unavailable','extraction_model_authentication_failed','extraction_model_provider_unavailable') LIMIT 1`,[ownerId,t.run_id]);
+  if(t.scope_kind!=='contact'||!failedContact||commonFailure)fail('document_preceding_stage_incomplete');
+ }
  assertTaskContributions(tx,ownerId,String(t.run_id),String(t.id));
  const inputs=tx.all(`SELECT i.* FROM run_input i JOIN task_contribution c ON c.owner_id=i.owner_id AND c.run_id=i.run_id AND c.source_contact_id=i.source_contact_id
   WHERE c.owner_id=? AND c.task_id=? ORDER BY i.input_no`,[ownerId,t.id]);
@@ -35,6 +43,35 @@ export function taskView(tx:StorageTransaction,ownerId:string,taskId:string){
  const t=task(tx,ownerId,taskId),steps=stages(tx,ownerId,taskId);
  const publication=tx.get('SELECT id FROM document_publication WHERE owner_id=? AND basis_task_id=? AND availability=\'available\'',[ownerId,taskId]);
  return {taskId,basis:{state:String(t.document_basis_state),memoryRevision:t.accepted_memory_revision===null?null:String(t.accepted_memory_revision),documentRevision:t.accepted_document_revision===null?null:String(t.accepted_document_revision),publicationId:t.accepted_publication_id===null?null:String(t.accepted_publication_id)},stages:steps,errorCode:t.error_code===null?null:String(t.error_code),outcome:publication&&steps.length===2&&steps.every(s=>['succeeded','not_applicable'].includes(s.status))?'completed':'incomplete'};
+}
+export interface LaterStagesState {state:'completed'|'pending'|'failed'|'revoked';reasons:string[]}
+/** 整轮后置阶段投影：completed 仅在全部任务适用阶段结束、完整发布集合仍可用且无未解未知文档调用时成立。 */
+export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:string):LaterStagesState {
+ const run=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
+ if(!run)return {state:'pending',reasons:['document_run_missing']};
+ if(run.state==='revoked')return {state:'revoked',reasons:['document_run_revoked']};
+ // 12 及更早结构没有文档表；迁移前的轮次视图不能据此宣称后置阶段完成。
+ if(!tx.get('SELECT 1 FROM schema_migration WHERE version=13'))return {state:run.state==='completed'?'completed':run.state==='failed'?'failed':'pending',reasons:['document_schema_unavailable']};
+ const reasons:string[]=[];
+ const tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId]);
+ if(!tasks.length)reasons.push('document_run_without_tasks');
+ for(const t of tasks){
+  const view=taskView(tx,ownerId,String(t.id));
+  if(view.outcome!=='completed'){reasons.push(`document_task_${String(t.id)}_${view.errorCode??'incomplete'}`);continue;}
+  const p=tx.get("SELECT * FROM document_publication WHERE owner_id=? AND basis_task_id=? AND availability='available'",[ownerId,t.id]);
+  const current=revisions(tx,ownerId,t);
+  if(!p||current.current_publication_id!==p.id){reasons.push(`document_publication_${String(t.id)}_unavailable`);continue;}
+  try{publicationMembers(tx,ownerId,String(p.id),String(t.scope_kind),t.contact_id as string|null);}
+  catch{reasons.push(`document_publication_${String(t.id)}_incomplete`);}
+ }
+ // 未解 unknown 仍可能出现在租约或调用回执上；不能以缺记录或任务态冒充完成。
+ const unresolved=tx.get(`SELECT 1 FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
+  WHERE t.owner_id=? AND t.run_id=? AND s.kind IN ('document_scene','document_profile')
+  AND (s.state='unknown' OR EXISTS(SELECT 1 FROM step_attempt a WHERE a.owner_id=s.owner_id AND a.step_id=s.id AND a.state='unknown')
+   OR EXISTS(SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE o.owner_id=s.owner_id AND o.memory_step_id=s.id AND c.state='unknown')) LIMIT 1`,[ownerId,runId]);
+ if(unresolved)reasons.push('document_call_unknown');
+ if(reasons.length)return {state:run.state==='failed'?'failed':'pending',reasons};
+ return run.state==='completed'?{state:'completed',reasons:[]}:{state:'pending',reasons:[`document_run_${String(run.state)}`]};
 }
 const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:fn});
 export const memoryDocumentsActions:StorageAction[]=[

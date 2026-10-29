@@ -1,7 +1,44 @@
 import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageTransaction,StorageRow} from '../../storage/sqlite/contracts.ts';
-import {assertContribution,assertInputs,assertTaskContributions,fail,textId} from './qualification.ts';
+import {assertContribution,assertInputs,assertTaskContributions,fail,inputRows,textId} from './qualification.ts';
+import {assertSourceEligibility} from '../../history/sqlite/source.ts';
+import {laterStagesState} from './documents/actions.ts';
 const number=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_count_invalid');return Number(v);};
+/** 新轮只复用有原始成功提取证明且文档阶段受阻的目标，不重新发送提取。 */
+function reusableExtraction(tx:StorageTransaction,ownerId:string,contactId:string,item:StorageRow):StorageRow|undefined{
+ if(item.extraction_state!=='succeeded'||item.pipeline_state!=='pending'||!item.item_id)return;
+ const proof=tx.get(`SELECT a.id AS attempt_id,s.id AS step_id,t.run_id,original.record_id,original.accepted_interpretation_revision FROM step_attempt a
+  JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id AND s.kind='extraction_verification' AND s.state='succeeded' AND s.successful_attempt_id=a.id
+  JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id AND t.scope_kind='contact' AND t.contact_id=? AND t.state IN ('succeeded','awaiting_decision')
+  JOIN step_input si ON si.owner_id=s.owner_id AND si.step_id=s.id AND si.kind='run_message'
+  JOIN run_input original ON original.owner_id=si.owner_id AND original.run_id=si.run_id AND original.input_no=si.run_input_no
+  WHERE a.owner_id=? AND a.state='succeeded' AND original.role='target' AND original.item_id=? AND original.message_id=?
+  AND (t.error_code LIKE 'document_%' OR EXISTS(SELECT 1 FROM processing_step d WHERE d.owner_id=t.owner_id AND d.task_id=t.id AND d.kind IN ('document_scene','document_profile') AND d.state IN ('failed','unknown'))
+   OR (t.document_basis_state='pending' AND NOT EXISTS(SELECT 1 FROM processing_step d WHERE d.owner_id=t.owner_id AND d.task_id=t.id AND d.kind IN ('document_scene','document_profile'))))
+  AND NOT EXISTS(SELECT 1 FROM execution_event e JOIN step_attempt oa ON oa.owner_id=e.owner_id AND oa.id=e.step_attempt_id
+   JOIN processing_step os ON os.owner_id=oa.owner_id AND os.id=oa.step_id LEFT JOIN memory_candidate c ON c.owner_id=e.owner_id AND c.event_id=e.id
+   WHERE e.owner_id=t.owner_id AND os.task_id=t.id AND e.kind='verified_output' AND (c.id IS NULL OR c.state='pending'))
+  AND NOT EXISTS(SELECT 1 FROM memory_candidate c JOIN step_attempt ca ON ca.owner_id=c.owner_id AND ca.id=c.produced_attempt_id
+   JOIN processing_step cs ON cs.owner_id=ca.owner_id AND cs.id=ca.step_id JOIN processing_task ct ON ct.owner_id=cs.owner_id AND ct.id=cs.task_id
+   WHERE c.owner_id=t.owner_id AND ct.run_id=t.run_id AND c.state='pending' AND (ct.id=t.id OR ct.scope_kind='self'))
+  ORDER BY a.started_at DESC LIMIT 1`,[contactId,ownerId,item.item_id,item.id]);
+ if(!proof||proof.accepted_interpretation_revision!==item.interpretation_revision)return;
+ try{
+  assertSourceEligibility(tx,{owner_id:ownerId,contact_id:contactId,message_id:String(item.id),record_id:String(proof.record_id)});
+  assertTaskContributions(tx,ownerId,String(proof.run_id),String(tx.get('SELECT task_id FROM processing_step WHERE owner_id=? AND id=?',[ownerId,proof.step_id])!.task_id));
+  assertInputs(tx,ownerId,String(proof.run_id),inputRows(tx,ownerId,String(proof.step_id)));return proof;
+ }catch{return;}
+}
+/** 每次使用复用证明都重验原 producer 的整窗和原授权，不以新轮代次刷新旧证明。 */
+export function currentReuseAttempt(tx:StorageTransaction,ownerId:string,runId:string,inputNo:bigint):string|undefined{
+ const proof=tx.get(`SELECT a.id,s.id AS step_id,t.id AS task_id,t.run_id AS original_run_id FROM document_extraction_reuse reuse
+  JOIN step_attempt a ON a.owner_id=reuse.owner_id AND a.id=reuse.source_attempt_id AND a.state='succeeded'
+  JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id AND s.kind='extraction_verification' AND s.state='succeeded' AND s.successful_attempt_id=a.id
+  JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id AND t.state IN ('succeeded','awaiting_decision')
+  WHERE reuse.owner_id=? AND reuse.run_id=? AND reuse.input_no=?`,[ownerId,runId,inputNo]);
+ if(!proof)return;
+ try{assertTaskContributions(tx,ownerId,String(proof.original_run_id),String(proof.task_id));assertInputs(tx,ownerId,String(proof.original_run_id),inputRows(tx,ownerId,String(proof.step_id)));return String(proof.id);}catch{return;}
+}
 export function snapshot(tx:StorageTransaction,ownerId:string,runId:string){
  const r=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);if(!r)fail('memory_extraction_not_found');
  const inputs=tx.all('SELECT * FROM run_input WHERE owner_id=? AND run_id=? ORDER BY input_no',[ownerId,runId]);
@@ -16,16 +53,22 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string){
  WHERE si.owner_id=? AND si.run_id=? AND s.kind='extraction_verification' AND t.scope_kind='contact' AND t.contact_id=i.source_contact_id`,[ownerId,runId])){
   const key=String(row.run_input_no),states=targetStates.get(key)??new Set<string>();states.add(String(row.state));targetStates.set(key,states);
  }
+ if(tx.get('SELECT 1 FROM schema_migration WHERE version=13'))for(const row of tx.all('SELECT input_no FROM document_extraction_reuse WHERE owner_id=? AND run_id=?',[ownerId,runId])){
+  if(!currentReuseAttempt(tx,ownerId,runId,row.input_no as bigint))continue;
+  const key=String(row.input_no),states=targetStates.get(key)??new Set<string>();states.add('succeeded');targetStates.set(key,states);
+ }
  const targetHasState=(i:StorageRow,state:string)=>targetStates.get(String(i.input_no))?.has(state)??false;
  const targetSucceeded=(i:StorageRow)=>targetHasState(i,'succeeded');
  const succeeded=targets.filter(targetSucceeded).length;
+ const runningDocument=tx.get(`SELECT s.kind FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
+  WHERE t.owner_id=? AND t.run_id=? AND t.state<>'revoked' AND s.state='running' AND s.kind IN ('document_scene','document_profile') ORDER BY s.step_no LIMIT 1`,[ownerId,runId]);
  const candidates=tx.all(`SELECT e.*,t.id AS task_id,t.scope_kind,t.contact_id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE t.owner_id=? AND t.run_id=? AND e.kind='verified_output' AND t.state<>'revoked' ORDER BY e.created_at,e.event_no`,[ownerId,runId]).flatMap(e=>{
   if(taskStates.get(String(e.task_id))==='revoked')return [];
   try{const deps=tx.all(`SELECT i.* FROM execution_input x JOIN step_input si ON si.owner_id=x.owner_id AND si.step_id=x.planned_step_id AND si.input_no=x.planned_input_no JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no WHERE x.owner_id=? AND x.event_id=?`,[ownerId,e.id]);assertInputs(tx,ownerId,runId,deps);}catch{return [];}
   const p=JSON.parse(String(e.payload));return [{id:String(e.id),attemptId:String(e.step_attempt_id),outputNo:number(e.event_no),scopeKind:p.scopeKind,contactId:p.contactId,body:p.fact.text,fact:p.fact,state:'verified_pending_decision',origin:'auto'}];
  });
  return {runId,state:String(r!.state),total:targets.length,succeeded,failed:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'failed')).length,unknown:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'unknown')).length,
-  stage:r!.state==='completed'?'completed':'extraction_verification',laterStages:r!.state==='completed'?'completed':'pending',tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
+  stage:r!.state==='completed'?'completed':runningDocument?String(runningDocument.kind):'extraction_verification',laterStages:laterStagesState(tx,ownerId,runId).state==='completed'?'completed':'pending',tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
    total:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id).length,succeeded:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id&&targetSucceeded(i)).length,errorCode:t.error_code===null?null:String(t.error_code)})),
   inputs:inputs.map(i=>({inputNo:number(i.input_no),role:String(i.role),contactId:String(i.source_contact_id),messageId:String(i.message_id),recordId:String(i.record_id),itemId:i.item_id===null?null:String(i.item_id)})),candidates};
 }
@@ -43,19 +86,22 @@ export const runActions:StorageAction[]=[{name:'memoryExtraction.findRequest',mo
  WHERE c.owner_id=? AND c.state='active' AND b.state='verified' AND a.identity_state='verified' ORDER BY c.id`,[ownerId]);
  let inputNo=0;const contributing:string[]=[];
  for(const c of contacts){
-  const rows=tx.all(`SELECT m.*,r.id AS record_id,p.id AS item_id,p.extraction_state FROM message m
+  const rows=tx.all(`SELECT m.*,r.id AS record_id,p.id AS item_id,p.extraction_state,p.pipeline_state FROM message m
  JOIN capture_record r ON r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available'
  LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'
  WHERE m.owner_id=? AND m.contact_id=? AND m.kind='text' AND length(trim(m.text_body))>0 AND m.availability='available'
  AND r.id=(SELECT min(rr.id) FROM capture_record rr WHERE rr.owner_id=m.owner_id AND rr.message_id=m.id AND rr.state='normalized' AND rr.availability='available') ORDER BY m.display_no`,[ownerId,c.id]);
-  const targets=rows.filter(r=>r.extraction_state!=='succeeded');if(!targets.length)continue;
+  const canReuse=!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();
+  if(canReuse)for(const row of rows){const proof=reusableExtraction(tx,ownerId,String(c.id),row);if(proof)reused.set(String(row.id),proof);}
+  const targets=rows.filter(r=>r.extraction_state!=='succeeded'||reused.has(String(r.id)));if(!targets.length)continue;
   tx.run('INSERT INTO run_contact VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[ownerId,runId,c.id,c.grant_id,c.binding_id,c.selection_generation,c.data_generation,c.identity_generation,c.scope_revision,c.source_generation,c.feedback_revision,'active']);
   assertContribution(tx,ownerId,runId,String(c.id));contributing.push(String(c.id));
-  const context=rows.filter(r=>r.extraction_state==='succeeded').slice(-8); // 有界前文也在点击事务内冻结。
+  const context=rows.filter(r=>r.extraction_state==='succeeded'&&!reused.has(String(r.id))).slice(-8); // 有界前文也在点击事务内冻结。
   for(const m of [...context,...targets]){
-   const isTarget=m.extraction_state!=='succeeded';let itemId=isTarget?m.item_id:null;
+   const proof=reused.get(String(m.id)),isTarget=m.extraction_state!=='succeeded'||!!proof;let itemId=isTarget?m.item_id:null;
    if(isTarget&&!itemId){itemId=randomUUID();tx.run("INSERT INTO processing_item VALUES(?,?,?,?,'memory_extraction','pending','pending',NULL)",[ownerId,itemId,c.id,m.id]);}
-   tx.run("INSERT INTO run_input VALUES(?,?,?,?,'message',?,?,?,?,?)",[ownerId,runId,++inputNo,isTarget?'target':'context',c.id,itemId,m.id,m.record_id,m.interpretation_revision]);
+   tx.run("INSERT INTO run_input VALUES(?,?,?,?,'message',?,?,?,?,?)",[ownerId,runId,++inputNo,isTarget?'target':'context',c.id,itemId,m.id,proof?.record_id??m.record_id,m.interpretation_revision]);
+   if(proof)tx.run('INSERT INTO document_extraction_reuse VALUES(?,?,?,?)',[ownerId,runId,inputNo,proof.attempt_id]);
   }
   const taskId=randomUUID();tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,contact_id,state) VALUES(?,?,?,'contact',?,'pending')",[ownerId,taskId,runId,c.id]);
   tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[ownerId,taskId,runId,c.id]);

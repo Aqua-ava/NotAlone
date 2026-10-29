@@ -12,6 +12,7 @@ import {parseAdjudications,parseRelations,mergeResult} from '../../adoption/adju
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {applyDecision,retireMergedParents} from './actions.ts';
 import {sourceVerificationState} from './evidence.ts';
+import {memoryTimeEligibility} from './temporal.ts';
 import {available,fail,id,requireAutomaticCandidate,requireVersion,requireSources} from './qualification.ts';
 import {qualificationSources,mergeKnowledgeSources} from './dependencies.ts';
 import type {SqliteAdjudicationModelPurpose} from './model-port.ts';
@@ -39,11 +40,13 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
  if(task.pause_requested_at!==null)fail('memory_adjudication_paused');
  const scopeKind=c!.scope_kind as 'self'|'contact',contactId=c!.contact_id as string|null;available(tx,ownerId,{scopeKind,contactId},true);
  const fact=output.fact;
- if(fact.alternatives?.length||fact.invalid_at&&Date.parse(fact.invalid_at)<=Date.now()||fact.conditions?.items.some((x:any)=>x.source_supported!==true)||fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null))fail('memory_conditions_pending');
+ if(memoryTimeEligibility(tx,ownerId,{candidateId})!=='eligible'||fact.alternatives?.length||fact.conditions?.items.some((x:any)=>x.source_supported!==true)||fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null))fail('memory_conditions_pending');
  const memories=tx.all("SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND state IN ('active','withdrawn') ORDER BY id",[ownerId,scopeKind,contactId]);
  const parents:Basis['parents']=[],similar:SimilarMemory[]=[];
  for(const m of memories){
-  const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!v)fail('memory_head_conflict');requireVersion(tx,ownerId,m,v!);
+  const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!v)fail('memory_head_conflict');
+  if(memoryTimeEligibility(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint})!=='eligible')continue;
+  requireVersion(tx,ownerId,m,v!);
   const prior=versionFact(tx,ownerId,v!),textSources=sources(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint});
   parents.push({id:String(m.id),versionNo:String(v!.version_no),headRevision:String(m.head_revision),protected:m.manual_protection===1n||m.state==='withdrawn'});
   similar.push({memory_id:String(m.id),revision:String(v!.version_no),text:String(v!.body),category:prior?.category??'user_memory',topic:prior?.topic??'',subject:scopeKind==='self'?'self':'contact',adoption_method:v!.adoption_mode==='auto'&&m.state==='active'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint})==='verified'?'auto':'manual',source_message_ids:[...new Set(textSources.map(s=>s.message_id))],source_texts:textSources,statement_time:textSources.map(s=>s.occurred_at).filter((s):s is string=>s!==null).sort().at(-1)??null,valid_at:prior?.valid_at??null,invalid_at:prior?.invalid_at??null,event:prior?.event??null,conditions:prior?.conditions??null,source_receipt:digest(textSources),source_dependency_mode:prior?.source_dependency_mode??'all',requires_all_sources:prior?.requires_all_sources??true});

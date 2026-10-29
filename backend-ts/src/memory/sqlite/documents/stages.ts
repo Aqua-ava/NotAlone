@@ -5,7 +5,7 @@ import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger.ts'
 import {validateModelLedgerReceipt} from '../../../platform/models/model-ledger.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
 import type {L2ScenarioMemory} from '../../scenarios/workspace.ts';
-import {actualInputSources,memoryBasis,frozenMemories,eligiblePriorMembers,publicationDigest,renderDocuments,sourceStillValid} from './basis.ts';
+import {actualInputSources,memoryBasis,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,sourceStillValid} from './basis.ts';
 import {documentActualInputs} from './inputs.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
@@ -18,9 +18,9 @@ function eligible(tx:StorageTransaction,ownerId:string,t:StorageRow){
  const contributions=new Set(tx.all('SELECT source_contact_id FROM task_contribution WHERE owner_id=? AND task_id=?',[ownerId,t.id]).map(c=>String(c.source_contact_id)));
  const selected:{row:StorageRow;version:StorageRow;memory:L2ScenarioMemory;sources:ReplySource[]}[]=[];
  for(const m of tx.all("SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND state='active' ORDER BY id",[ownerId,t.scope_kind,t.contact_id])){
-  const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!v)continue;
-  try {const value=memoryBasis(tx,ownerId,m,v);if(value.sources.some(s=>!contributions.has(s.contactId)))continue;selected.push({row:m,version:v,...value});}
-  catch(error){if(!(error instanceof StorageFailure))throw error;}
+  const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!v)fail('document_memory_missing');
+  try {const value=memoryBasis(tx,ownerId,m,v!);if(value.sources.some(s=>!contributions.has(s.contactId)))continue;selected.push({row:m,version:v!,...value});}
+  catch(error){if(!(error instanceof StorageFailure)||error.code!=='document_memory_stale')throw error;}
  }
  return selected;
 }
@@ -71,11 +71,31 @@ function appendEvent(tx:StorageTransaction,ownerId:string,attempt:StorageRow,kin
  for(const source of actualInputSources(tx,ownerId,actual))tx.run('INSERT OR IGNORE INTO event_source VALUES(?,?,?,?)',[ownerId,eventId,source.contactId,source.recordId]);
  return eventId;
 }
-function emptyPublication(tx:StorageTransaction,ownerId:string,t:StorageRow,base:StorageRow){
+function unchangedContributions(tx:StorageTransaction,ownerId:string,oldTaskId:string,newTaskId:string):boolean {
+ const rows=(taskId:string)=>tx.all(`SELECT c.source_contact_id,r.grant_id,r.binding_id,r.accepted_selection_generation,r.accepted_data_generation,
+  r.accepted_identity_generation,r.accepted_account_revision,r.accepted_source_generation,r.accepted_feedback_revision
+  FROM task_contribution c JOIN run_contact r ON r.owner_id=c.owner_id AND r.run_id=c.run_id AND r.contact_id=c.source_contact_id
+  WHERE c.owner_id=? AND c.task_id=? ORDER BY c.source_contact_id`,[ownerId,taskId]);
+ const old=rows(oldTaskId),current=rows(newTaskId),keys=['source_contact_id','grant_id','binding_id','accepted_selection_generation','accepted_data_generation','accepted_identity_generation','accepted_account_revision','accepted_source_generation','accepted_feedback_revision'];
+ return old.length>0&&old.length===current.length&&old.every((row,index)=>keys.every(key=>row[key]===current[index]?.[key]));
+}
+function unchangedMembers(tx:StorageTransaction,ownerId:string,t:StorageRow,base:StorageRow):StorageRow[]|null {
+ if(base.current_publication_id===null)return null;
+ const prior=tx.get(`SELECT p.*,previous.accepted_memory_revision AS prior_memory_revision,previous.document_basis_state AS prior_basis_state
+  FROM document_publication p JOIN processing_task previous ON previous.owner_id=p.owner_id AND previous.id=p.basis_task_id
+  WHERE p.owner_id=? AND p.id=? AND p.scope_kind=? AND p.contact_id IS ?`,[ownerId,base.current_publication_id,t.scope_kind,t.contact_id]);
+ if(!prior||prior.availability!=='available'||prior.prior_basis_state!=='frozen'||prior.prior_memory_revision!==base.memory_revision||!unchangedContributions(tx,ownerId,String(prior.basis_task_id),String(t.id)))return null;
+ const members=eligiblePriorMembers(tx,ownerId,t);
+ if(!members.length||BigInt(members.length)!==prior.member_count)return null;
+ publicationMembers(tx,ownerId,String(prior.id),String(t.scope_kind),t.contact_id as string|null);
+ return members;
+}
+function fixedPublication(tx:StorageTransaction,ownerId:string,t:StorageRow,base:StorageRow,members:StorageRow[],reason:string){
  const next=tx.get('SELECT coalesce(max(step_no),0) AS n FROM processing_step WHERE owner_id=? AND task_id=?',[ownerId,t.id])!.n as bigint;
- for(const [index,kind] of ['document_scene','document_profile'].entries())tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,not_applicable_reason,accepted_memory_revision) VALUES(?,?,?,?,?,'not_applicable','frozen','no_eligible_memories',?)",[ownerId,randomUUID(),t.id,next+BigInt(index+1),kind,base.memory_revision]);
+ for(const [index,kind] of ['document_scene','document_profile'].entries())tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,not_applicable_reason,accepted_memory_revision) VALUES(?,?,?,?,?,'not_applicable','frozen',?,?)",[ownerId,randomUUID(),t.id,next+BigInt(index+1),kind,reason,base.memory_revision]);
  const p=randomUUID(),number=tx.get('SELECT coalesce(max(publication_no),0)+1 AS n FROM document_publication WHERE owner_id=? AND scope_kind=? AND contact_id IS ?',[ownerId,t.scope_kind,t.contact_id])!.n;
- tx.run("INSERT INTO document_publication VALUES(?,?,?,?,?,?,'documents-v1',?,?,0,?,'available')",[ownerId,p,t.scope_kind,t.contact_id,number,t.run_id,t.id,Date.now(),publicationDigest([])]);
+ tx.run("INSERT INTO document_publication VALUES(?,?,?,?,?,?,'documents-v1',?,?,?,?,'available')",[ownerId,p,t.scope_kind,t.contact_id,number,t.run_id,t.id,Date.now(),members.length,publicationDigest(members.map(member=>({documentId:String(member.document_id),versionNo:member.version_no as bigint})))]);
+ for(const member of members)tx.run('INSERT INTO publication_member VALUES(?,?,?,?)',[ownerId,p,member.document_id,member.version_no]);
  if(t.scope_kind==='self')tx.run('UPDATE owner SET current_publication_id=?,document_revision=document_revision+1 WHERE owner_id=? AND memory_revision=? AND document_revision=? AND current_publication_id IS ?',[p,ownerId,base.memory_revision,base.document_revision,base.current_publication_id]);
  else tx.run('UPDATE contact SET current_publication_id=?,document_revision=document_revision+1 WHERE owner_id=? AND id=? AND memory_revision=? AND document_revision=? AND current_publication_id IS ?',[p,ownerId,t.contact_id,base.memory_revision,base.document_revision,base.current_publication_id]);
  if(revisions(tx,ownerId,t).current_publication_id!==p)fail('document_publication_conflict');
@@ -104,7 +124,9 @@ export const memoryDocumentsStageActions:StorageAction[]=[
   preconditions(tx,ownerId,t);const base=revisions(tx,ownerId,t),selected=eligible(tx,ownerId,t);
   tx.run("UPDATE processing_task SET document_basis_state='frozen',accepted_memory_revision=?,accepted_document_revision=?,accepted_publication_id=? WHERE owner_id=? AND id=? AND document_basis_state='pending'",[base.memory_revision,base.document_revision,base.current_publication_id,ownerId,t.id]);
   const frozen=task(tx,ownerId,String(t.id));
-  if(!selected.length){if(base.current_publication_id!==null&&eligiblePriorMembers(tx,ownerId,frozen).length)fail('document_existing_collection_requires_review');emptyPublication(tx,ownerId,frozen,base);return null;}
+  if(!selected.length){if(base.current_publication_id!==null&&eligiblePriorMembers(tx,ownerId,frozen).length)fail('document_existing_collection_requires_review');fixedPublication(tx,ownerId,frozen,base,[],'no_eligible_memories');return null;}
+  const unchanged=unchangedMembers(tx,ownerId,frozen,base);
+  if(unchanged){fixedPublication(tx,ownerId,frozen,base,unchanged,'unchanged_memories');return null;}
   return createStep(tx,ownerId,frozen,'document_scene',lease);
  }),
  act('claimProfile','write',(tx,i,lease)=>{

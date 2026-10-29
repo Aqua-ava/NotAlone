@@ -129,8 +129,11 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   for(const target of tx.all("SELECT * FROM run_input WHERE owner_id=? AND run_id=? AND role='target'",[ownerId,runId])){
    const attempt=tx.get(`SELECT s.successful_attempt_id FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
     WHERE i.owner_id=? AND i.run_id=? AND i.run_input_no=? AND s.kind='extraction_verification' AND s.state='succeeded' AND t.scope_kind='contact' AND t.contact_id=? LIMIT 1`,[ownerId,runId,target.input_no,target.source_contact_id]);
-   if(!attempt?.successful_attempt_id)fail('document_completion_input_missing');
-   tx.run("UPDATE processing_item SET pipeline_state='completed',completion_attempt_id=? WHERE owner_id=? AND id=? AND extraction_state='succeeded' AND pipeline_state='pending'",[attempt!.successful_attempt_id,ownerId,target.item_id]);
+   const reused=attempt?null:tx.get(`SELECT a.id AS successful_attempt_id FROM document_extraction_reuse reuse JOIN step_attempt a ON a.owner_id=reuse.owner_id AND a.id=reuse.source_attempt_id AND a.state='succeeded'
+    JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id AND s.kind='extraction_verification' AND s.state='succeeded' AND s.successful_attempt_id=a.id
+    WHERE reuse.owner_id=? AND reuse.run_id=? AND reuse.input_no=?`,[ownerId,runId,target.input_no]);
+   const completedAttempt=attempt?.successful_attempt_id??reused?.successful_attempt_id;if(!completedAttempt)fail('document_completion_input_missing');
+   tx.run("UPDATE processing_item SET pipeline_state='completed',completion_attempt_id=? WHERE owner_id=? AND id=? AND extraction_state='succeeded' AND pipeline_state='pending'",[completedAttempt!,ownerId,target.item_id]);
   }
   tx.run("UPDATE processing_run SET state='completed' WHERE owner_id=? AND id=? AND state<>'revoked'",[ownerId,runId]);return true;
  }),
