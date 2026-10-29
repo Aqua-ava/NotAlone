@@ -77,6 +77,9 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
   }
   const run = view?.run ?? null;
   const allExtracted = run && run.total > 0 && run.succeeded === run.total;
+  const canContinue = run && !['pending', 'running', 'revoked'].includes(run.state) && run.succeeded < run.total
+    && run.tasks.some(task => task.scopeKind === 'contact' && ['failed', 'paused', 'pending'].includes(task.state)
+      && task.succeeded < task.total && !['targets_completed_elsewhere', 'memory_extraction_targets_completed_elsewhere'].includes(task.errorCode ?? ''));
   return <section className="memory-processing-card" aria-label="固定范围记忆处理">
     <h2>记忆处理</h2>
     <p>处理当前勾选联系人已保存的有效文字。关闭微信读取后仍可手动处理。</p>
@@ -115,7 +118,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
       <button type="button" disabled={busy} onClick={() => void refresh.current()}>刷新处理状态</button>
       <button type="button" disabled={busy || !view || run?.state === 'running' || run?.state === 'pending'} onClick={() => void start()}>开始记忆处理</button>
       {run && ['pending', 'running'].includes(run.state) && <button type="button" disabled={busy} onClick={() => void control('pause')}>暂停记忆处理</button>}
-      {run && ['paused', 'failed'].includes(run.state) && run.unknown === 0 && <button type="button" disabled={busy} onClick={() => void control('continue')}>继续原任务</button>}
+      {canContinue && <button type="button" disabled={busy} onClick={() => void control('continue')}>继续原任务</button>}
     </div>
   </section>;
 }

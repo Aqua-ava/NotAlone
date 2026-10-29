@@ -60,10 +60,11 @@ export class SqliteDiscussionTurns {
   const messages=await this.storage.execute<any[]>('discussion.messages',{...attempt,messageIds:input.contextMessageIds??[]});
   await this.storage.execute('discussion.freezeContext',{...attempt,contextId,skillRun:revision,items:[...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))],at:Date.now()});
   const inputSeal=createHash('sha256').update(encode({contextId,text:input.text,model:this.model,revision})).digest('hex');
-  await this.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:this.model.provider,requestKey:callId,inputSeal});
+  const configurationDigest=this.digest(revision);
+  await this.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:this.model.provider,requestKey:callId,inputSeal,
+   model:this.model.model,configurationId:configurationDigest,inputCap:this.model.budgetProfile.context_window_tokens-this.model.maxTokens-this.model.budgetProfile.safety_margin_tokens,outputCap:this.model.maxTokens});
   const protection=new SqliteDiscussionSkillProtection({storage:this.storage,attempt,contextId,callId,authorize:()=>this.authorize(input.contactId)});
   const skillRun=this.library?await openSqliteSkillRun(this.library,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):null;
-  const configurationDigest=this.digest(revision);
   const background=messages.length?'本次明确引用的聊天资料：\n'+messages.map(m=>`${m.sender_role==='owner'?'我':'对方'}：${m.text_body}`).join('\n')+'\n\n':'';
   const rebuilt=background+entries.map((e:any)=>`${e.role==='user'?'用户':'助手'}：${e.body}`).join('\n\n');
   await runSingleDiscussionTurn({runtime:this.runtime,storage:this.storage,attempt,contextId,callId,configurationDigest,prompt:background+input.text,rebuildPrompt:rebuilt,systemPrompt,model:this.model,provider:this.provider,arbiter:this.arbiter,skillRun,skillProtection:protection,skillRevision:revision,signal:input.signal});

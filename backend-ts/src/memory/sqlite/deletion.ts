@@ -6,7 +6,6 @@ import {identityDeletionAuthority} from '../../contacts/sqlite/deletion.ts';
 
 const domain='memory_extraction';
 const rowKinds:DeletionDomain['rowKinds']={
-  execution_reuse:{keys:['owner_id','event_id'],ownerKey:'owner_id'},
   event_source:{keys:['owner_id','event_id','record_id'],ownerKey:'owner_id'},
   execution_input:{keys:['owner_id','event_id','input_no'],ownerKey:'owner_id'},
   execution_event:{keys:['owner_id','id'],ownerKey:'owner_id'},
@@ -26,6 +25,12 @@ const rowKinds:DeletionDomain['rowKinds']={
 };
 const allowed=(op:DeletionOperation)=>['source','contact_history','contact','account'].includes(op.scope.kind);
 const eraseLedger=(op:DeletionOperation)=>op.scope.kind==='contact'||op.scope.kind==='account';
+// 删除来源只撤销提交资格；未决发送的逐消息效果身份仍须阻止换来源或换轮重发。
+function preserveUnknownOccupation(tx:StorageTransaction,op:DeletionOperation,row:StorageRow):boolean {
+  return !eraseLedger(op)&&row.state==='unknown'&&!!tx.get(
+    "SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE c.owner_id=? AND c.operation_id=? AND c.state IN ('sending','unknown') AND o.state='sealed' AND o.commit_forbidden_at IS NOT NULL",
+    [op.ownerId,row.operation_id]);
+}
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const check=(ok:boolean,proof:string):CheckResult=>({result:ok?'passed':'blocked',proof});
@@ -112,7 +117,7 @@ function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]
     targets.push(old.get(identity)??{kind:'row',domain,rowKind:kind,key,identity,holderKeys:holders});
   };
   const events=new Set(c.events.map(e=>String(e.id)));
-  for(const kind of ['execution_reuse','event_source','execution_input'])
+  for(const kind of ['event_source','execution_input'])
     for(const row of tx.all(`SELECT * FROM ${kind} WHERE owner_id=?`,[op.ownerId]))if(events.has(String(row.event_id)))add(kind,row);
   c.events.forEach(r=>add('execution_event',r));
   const steps=new Set(c.steps.map(s=>String(s.id)));
@@ -120,7 +125,7 @@ function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]
   const operations=new Set(c.operations.map(o=>String(o.id)));
   for(const row of tx.all('SELECT * FROM model_call WHERE owner_id=?',[op.ownerId]))if(operations.has(String(row.operation_id))
     &&(eraseLedger(op)||row.step_attempt_id!==null))add('model_call',row);
-  for(const row of tx.all('SELECT * FROM operation_item WHERE owner_id=?',[op.ownerId]))if(operations.has(String(row.operation_id)))add('operation_item',row);
+  for(const row of tx.all('SELECT * FROM operation_item WHERE owner_id=?',[op.ownerId]))if(operations.has(String(row.operation_id))&&!preserveUnknownOccupation(tx,op,row))add('operation_item',row);
   if(eraseLedger(op))for(const row of tx.all('SELECT * FROM operation_scope WHERE owner_id=?',[op.ownerId]))if(operations.has(String(row.operation_id)))add('operation_scope',row);
   c.operations.filter(o=>eraseLedger(op)||o.memory_step_id!==null).forEach(r=>add('model_operation',r));
   c.attempts.forEach(r=>add('step_attempt',r));c.steps.forEach(r=>add('processing_step',r));
@@ -151,6 +156,7 @@ export const memoryExtractionDeletionDomain:DeletionDomain={
     for(const attempt of c.attempts)tx.run("UPDATE step_attempt SET state='aborted',finished_at=?,error_code='source_deleted' WHERE owner_id=? AND id=? AND state='running'",[now,op.ownerId,attempt.id]);
     for(const item of c.items)tx.run("UPDATE processing_item SET extraction_state='invalidated' WHERE owner_id=? AND id=? AND extraction_state NOT IN ('invalidated','deleted')",[op.ownerId,item.id]);
     for(const operation of c.operations)tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=COALESCE(commit_forbidden_at,?),input_seal='deleted' WHERE owner_id=? AND id=?",[now,op.ownerId,operation.id]);
+    if(!eraseLedger(op))for(const operation of c.operations)tx.run("UPDATE operation_item SET state='unknown' WHERE owner_id=? AND operation_id=? AND EXISTS(SELECT 1 FROM model_call WHERE owner_id=? AND operation_id=? AND state IN ('sending','unknown'))",[op.ownerId,operation.id,op.ownerId,operation.id]);
     const affectedRuns=new Set(c.tasks.map(t=>String(t.run_id))),wholeRuns=new Set(c.runs.map(r=>String(r.id)));
     for(const runId of affectedRuns)tx.run('UPDATE processing_run SET state=? WHERE owner_id=? AND id=?',[wholeRuns.has(runId)?'revoked':'incomplete',op.ownerId,runId]);
     const requests=tx.all('SELECT start_request_key,id FROM processing_run WHERE owner_id=?',[op.ownerId])
@@ -171,6 +177,10 @@ export const memoryExtractionDeletionDomain:DeletionDomain={
       if(call)tx.run(`UPDATE model_call SET step_attempt_id=NULL,receipt=? WHERE ${where}`,[receiptSummary(call.receipt),...args]);
     }else if(target.rowKind==='model_operation'&&!eraseLedger(op)){
       tx.run(`UPDATE model_operation SET memory_step_id=NULL,state='sealed',input_seal='deleted' WHERE ${where}`,args);
+    }else if(target.rowKind==='operation_item'&&!eraseLedger(op)){
+      const item=tx.get(`SELECT * FROM operation_item WHERE ${where}`,args);
+      if(item&&preserveUnknownOccupation(tx,op,item))return;
+      tx.run(`DELETE FROM operation_item WHERE ${where}`,args);
     }else if(target.rowKind==='processing_item'&&!eraseLedger(op)){
       const item=tx.get(`SELECT * FROM processing_item WHERE ${where}`,args);if(!item)return;
       const preserved=tx.get("SELECT 1 FROM capture_record WHERE owner_id=? AND contact_id=? AND message_id=? AND availability='available' AND state='normalized'",[op.ownerId,item.contact_id,item.message_id]);

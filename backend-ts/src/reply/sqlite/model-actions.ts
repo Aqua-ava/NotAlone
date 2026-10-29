@@ -34,11 +34,13 @@ const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:a
 export const discussionModelActions:StorageAction[]=[
  action('prepareCall','write',(tx,i)=>{
   requireAttempt(tx,i);context(tx,i);
-  if(!/^[a-f0-9]{64}$/.test(i.inputSeal)||typeof i.provider!=='string'||!i.provider||typeof i.requestKey!=='string'||!i.requestKey)fail('discussion_call_invalid');
+  if(!/^[a-f0-9]{64}$/.test(i.inputSeal)||typeof i.provider!=='string'||!i.provider||typeof i.requestKey!=='string'||!i.requestKey
+   ||typeof i.model!=='string'||!i.model||!/^[a-f0-9]{64}$/.test(i.configurationId)
+   ||!Number.isSafeInteger(i.inputCap)||i.inputCap<=0||!Number.isSafeInteger(i.outputCap)||i.outputCap<=0)fail('discussion_call_invalid');
   const old=tx.get('SELECT * FROM model_operation WHERE owner_id=? AND reply_request_id=?',[i.ownerId,i.requestId]);
   if(old)fail('discussion_call_already_reserved');
   tx.run("INSERT INTO model_operation(owner_id,id,purpose,reply_request_id,slot,input_seal,state) VALUES(?,?,'discussion',?,0,?,'prepared')",[i.ownerId,i.operationId,i.requestId,i.inputSeal]);
-  tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,reply_attempt_id,reply_context_id,provider,request_key,state,reserved_budget_units,settlement_state) VALUES(?,?,?,1,?,?,?,?,'prepared',0,'reserved')",[i.ownerId,i.callId,i.operationId,i.attemptId,i.contextId,i.provider,i.requestKey]);
+  tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,reply_attempt_id,reply_context_id,provider,request_key,state,reserved_budget_units,settlement_state,model,configuration_id,input_cap,output_cap) VALUES(?,?,?,1,?,?,?,?,'prepared',0,'reserved',?,?,?,?)",[i.ownerId,i.callId,i.operationId,i.attemptId,i.contextId,i.provider,i.requestKey,i.model,i.configurationId,i.inputCap,i.outputCap]);
   tx.run("INSERT INTO operation_scope VALUES(?,?,?,'discussion','reserved')",[i.ownerId,i.operationId,i.contactId]);
   return {callId:i.callId,operationId:i.operationId};
  }),
@@ -61,9 +63,15 @@ export const discussionModelActions:StorageAction[]=[
   const c=call(tx,i);revision(tx,i,i.skillRun);requireRuntimeCurrent(tx,i);
   if(c.state!=='prepared')fail('discussion_call_already_dispatched');
   if(!tx.get("SELECT 1 FROM runtime_context WHERE owner_id=? AND copy_id=? AND context_id=? AND provenance_state='verified'",[i.ownerId,i.copyId,i.contextId]))fail('discussion_runtime_input_missing');
+  const b=i.budget;
+  if(!b||b.provider!==c.provider||b.model!==c.model||b.maxTokens!==Number(c.output_cap)
+   ||!Number.isSafeInteger(b.input_tokens)||b.input_tokens<=0||b.input_tokens>Number(c.input_cap)
+   ||!Number.isSafeInteger(b.input_tokens+b.maxTokens)||!Number.isSafeInteger(b.serialized_bytes)||b.serialized_bytes<=0
+   ||b.measurement_kind!=='approximate'||typeof b.measurement_id!=='string'||!b.measurement_id||!/^[a-f0-9]{64}$/.test(b.request_sha256))fail('discussion_call_budget_invalid');
   const payload=JSON.stringify(i.requestPayload);if(!payload||payload.length>2_000_000)fail('discussion_call_payload_invalid');
   const id=event(tx,i,'model_request',{format:'dsh-input-v1',request:i.requestPayload});inheritSources(tx,i,id,true);
-  tx.run("UPDATE model_call SET state='sending',sent_at=? WHERE owner_id=? AND id=?",[Date.now(),i.ownerId,i.callId]);
+  tx.run("UPDATE model_call SET state='sending',sent_at=?,reserved_budget_units=?,receipt=? WHERE owner_id=? AND id=?",[Date.now(),b.input_tokens+b.maxTokens,JSON.stringify({format:'dsh-budget-v1',inputBudget:b}),i.ownerId,i.callId]);
+  tx.run("UPDATE operation_scope SET state='sent' WHERE owner_id=? AND operation_id=?",[i.ownerId,c.operation_id]);
   tx.run("UPDATE model_operation SET state='in_flight' WHERE owner_id=? AND id=?",[i.ownerId,c.operation_id]);
   return id;
  }),
@@ -72,7 +80,13 @@ export const discussionModelActions:StorageAction[]=[
   const e=i.sessionEvent,message=e?.data?.message;
   const text=Array.isArray(message?.content)?message.content.filter((p:any)=>p.type==='text').map((p:any)=>p.text).join(''):null;
   if(c.state!=='sending'||runtime.state!=='dirty'||e.type!=='assistant/message'||e.data.interrupted||text!==i.text||typeof text!=='string'||!text.trim()||message.source?.provider!==c.provider)fail('discussion_assistant_event_invalid');
-  tx.run("UPDATE model_call SET state='succeeded',received_at=?,receipt=?,settlement_state='settled' WHERE owner_id=? AND id=?",[Date.now(),JSON.stringify({format:'dsh-assistant-event-v1',seq:e.seq,usage:e.data.usage??null}),i.ownerId,i.callId]);
+  const usage=e.data.usage;
+  const counters=usage?[usage.inputTokens,usage.outputTokens,usage.cacheReadTokens??0,usage.cacheWriteTokens??0]:null;
+  if(counters&&counters.some(n=>!Number.isSafeInteger(n)||n<0))fail('discussion_call_usage_invalid');
+  const actual=counters?counters.reduce((sum,n)=>sum+n,0):null;
+  if(actual!==null&&!Number.isSafeInteger(actual))fail('discussion_call_usage_invalid');
+  tx.run("UPDATE model_call SET state='succeeded',received_at=?,actual_budget_units=?,receipt=?,settlement_state='settled' WHERE owner_id=? AND id=?",[Date.now(),actual,JSON.stringify({format:'dsh-assistant-event-v1',seq:e.seq,usage:usage??null,inputBudget:JSON.parse(String(c.receipt)).inputBudget}),i.ownerId,i.callId]);
+  tx.run("UPDATE operation_scope SET state='released' WHERE owner_id=? AND operation_id=?",[i.ownerId,c.operation_id]);
   tx.run("UPDATE model_operation SET state='applied' WHERE owner_id=? AND id=?",[i.ownerId,c.operation_id]);
   const id=event(tx,i,'assistant_message',{text,sessionEvent:e});inheritSources(tx,i,id,true);
   const pos=tx.get('SELECT COALESCE(MAX(position),0)+1 n FROM discussion_entry WHERE owner_id=? AND discussion_id=?',[i.ownerId,i.discussionId])!.n;
@@ -87,6 +101,7 @@ export const discussionModelActions:StorageAction[]=[
   if(!['prepared','sending'].includes(String(c.state)))return;
   const state=i.dispatched?'unknown':'failed';
   tx.run('UPDATE model_call SET state=?,error_code=?,settlement_state=? WHERE owner_id=? AND id=?',[state,'discussion_call_failed',i.dispatched?'unknown':'settled',i.ownerId,i.callId]);tx.run('UPDATE model_operation SET state=? WHERE owner_id=? AND id=?',[state==='unknown'?'unknown':'failed',i.ownerId,c.operation_id]);
+  tx.run('UPDATE operation_scope SET state=? WHERE owner_id=? AND operation_id=?',[i.dispatched?'unknown':'released',i.ownerId,c.operation_id]);
   tx.run("UPDATE reply_attempt SET state='failed',finished_at=?,error_code=? WHERE owner_id=? AND id=? AND state='running'",[Date.now(),'discussion_call_failed',i.ownerId,i.attemptId]);
   tx.run("UPDATE reply_request SET state='cancelled' WHERE owner_id=? AND id=? AND state='running'",[i.ownerId,c.reply_attempt_id?i.requestId:null]);
  }),

@@ -20,4 +20,5 @@ export const registry={migrations:base.migrations,actions:[...base.actions.filte
   tx.run("UPDATE runtime_copy SET manifest_complete=1 WHERE owner_id='o' AND id=?",[i.copyId]);
  }},
  {name:'discussionTest.control',mode:'read',retryBusy:false,execute(tx){return {contacts:tx.all("SELECT id,data_generation FROM contact WHERE owner_id='o' ORDER BY id"),discussions:tx.all("SELECT id,state,generation FROM assistant_discussion WHERE owner_id='o' ORDER BY id"),copies:tx.all("SELECT id,state,cleanup_operation_id FROM runtime_copy WHERE owner_id='o'")};}},
+ {name:'discussionTest.calls',mode:'read',retryBusy:false,execute(tx,i){return tx.all('SELECT state,reserved_budget_units,actual_budget_units,settlement_state,receipt,model,input_cap,output_cap FROM model_call WHERE owner_id=?',[i.ownerId]);}},
 ]};

@@ -37,7 +37,7 @@ export class SqliteMemoryExtraction {
  async pause(runId:string){this.available();return this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'pause'});}
  async continue(runId:string){this.available();await this.initialize();const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue'});this.launch(runId);return run;}
  private launch(runId:string){if(this.runs.has(runId)||this.stopped)return;const work=this.executeRun(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});}
- async waitForIdle(){await Promise.all([...this.runs.values()]);}
+ async waitForIdle(runId?:string){if(runId!==undefined){await this.runs.get(runId);return;}await Promise.all([...this.runs.values()]);}
  private async executeRun(runId:string){
   const before=await this.read(runId);
   for(const task of before.tasks.filter((t:any)=>t.scopeKind==='contact')){
@@ -56,7 +56,7 @@ export class SqliteMemoryExtraction {
     }catch(error){
      const code=error instanceof StorageFailure?error.code:typeof (error as any)?.code==='string'&&(error as any).code.startsWith('extraction_model_')?(error as any).code:'memory_extraction_failed';
      await this.storage.execute('memoryExtraction.fail',{ownerId:this.ownerId,attemptId:batch.attemptId,code});
-     if(['extraction_model_unconfigured','extraction_model_configuration_invalid','extraction_model_credentials_unavailable'].includes(code))await this.pause(runId);
+     if(['extraction_model_unconfigured','extraction_model_configuration_invalid','extraction_model_credentials_unavailable','extraction_model_authentication_failed','extraction_model_provider_unavailable'].includes(code))await this.pause(runId);
      break;
     }finally{this.active.delete(task.taskId);finish();await release?.();}
    }
@@ -67,25 +67,35 @@ export class SqliteMemoryExtraction {
   const policy=await this.version();const resolved=policy.resolve(batch.policyConfig);
   const requireCurrent=async()=>{signal.throwIfAborted();await policy.assertCurrent();await this.storage.execute('memoryExtraction.current',{ownerId:this.ownerId,attemptId:batch.attemptId});};
   const rows=[...batch.rows].sort((a,b)=>a.sent_at!==null&&b.sent_at!==null?(a.sent_at as bigint)<(b.sent_at as bigint)?-1:(a.sent_at as bigint)>(b.sent_at as bigint)?1:Number(a.input_no)-Number(b.input_no):Number(a.input_no)-Number(b.input_no));
+  const actualNos=rows.map(row=>Number(row.input_no));
   const window:ExtractionWindow={owner_id:this.ownerId,contact_id:batch.contactId,target_message_ids:rows.filter(r=>r.role==='target').map(r=>String(r.message_id)),messages:rows.map(r=>({message_id:String(r.message_id),text:String(r.text_body),sender:r.sender_role==='owner'?'self':'contact',occurred_at:r.sent_at===null?null:new Date(Number(r.sent_at)).toISOString()}))};
-  let commonFailure:string|null=null;
-  const commonCodes=['extraction_model_unconfigured','extraction_model_configuration_invalid','extraction_model_credentials_unavailable'];
+  let commonFailure:string|null=null;let modelFailure:string|null=null;
+  const commonCodes=['extraction_model_unconfigured','extraction_model_configuration_invalid','extraction_model_credentials_unavailable','extraction_model_authentication_failed','extraction_model_provider_unavailable'];
   const outcome=await runExtractionFlow({window,signal,mode:resolved.mode,verificationPolicy:resolved.verification,max_retries:0,requireCurrent,
-   record:async e=>{await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:e.stage,payload:e.payload});},
+   record:async e=>{await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:e.stage,payload:e.payload,inputNos:actualNos});},
    invoke:async request=>{
     const scope={owner_id:this.ownerId,contact_id:batch.contactId};
     let prepared:SqliteExtractionModelPreparation;try{prepared=await this.model.prepare(request,{scope,signal,requireCurrent});}catch(error){if(commonCodes.includes((error as any)?.code))commonFailure=(error as any).code;throw error;}
     const serial={purpose:request.purpose,system:request.system,user:request.user,tool:request.tool};
-    const call=await this.storage.execute<any>('memoryExtraction.prepareCall',{ownerId:this.ownerId,attemptId:batch.attemptId,purpose:request.purpose,request:serial,provider:prepared.provider,model:prepared.model,configurationId:prepared.configurationId,inputCap:prepared.maxInputTokens,outputCap:prepared.maxOutputTokens});
-    if(call.reused){await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_reused',payload:{state:'known_result'},reuseId:call.callId});return {blocks:call.blocks};}
-    const result=await this.model.invoke(request,{requestId:call.requestId,attemptId:call.callId,scope,claim:batch.claim,signal,requireCurrent,onReceipt:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});}});
-    await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_output',payload:{blocks:result.blocks},callId:call.callId});return result;
+    const call=await this.storage.execute<any>('memoryExtraction.prepareCall',{ownerId:this.ownerId,attemptId:batch.attemptId,purpose:request.purpose,request:serial,provider:prepared.provider,model:prepared.model,configurationId:prepared.configurationId,inputCap:prepared.maxInputTokens,outputCap:prepared.maxOutputTokens,inputNos:actualNos});
+    if(call.reused){await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_reused',payload:{state:'known_result'},reuseId:call.callId,inputNos:actualNos});return {blocks:call.blocks};}
+    let result:{blocks:readonly unknown[]};
+    try{result=await this.model.invoke(request,{requestId:call.requestId,attemptId:call.callId,scope,claim:batch.claim,signal,requireCurrent,onReceipt:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});}});}
+    catch(error){
+     const value=error as {code?:unknown;provider_failure?:{code?:unknown;status?:unknown}};
+     const code=typeof value?.code==='string'&&/^extraction_model_[a-z_]+$/.test(value.code)?value.code:'extraction_model_unavailable';
+     const status=typeof value?.provider_failure?.status==='number'?value.provider_failure.status:null;
+     const providerCode=typeof value?.provider_failure?.code==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(value.provider_failure.code)?value.provider_failure.code:null;
+     modelFailure=code;if(status===401||status===403)commonFailure='extraction_model_authentication_failed';else if(status===429||status!==null&&status>=500)commonFailure='extraction_model_provider_unavailable';
+     await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_failure',payload:{code,providerCode,status},callId:call.callId,inputNos:actualNos});throw error;
+    }
+    await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_output',payload:{blocks:result.blocks},callId:call.callId,inputNos:actualNos});return result;
    }});
   await requireCurrent();
   if(commonFailure)throw new StorageFailure(commonFailure);
-  if(outcome.failure_kind!==null||!outcome.extraction_completed)throw new StorageFailure('memory_extraction_protocol_incomplete');
+  if(outcome.failure_kind!==null||!outcome.extraction_completed)throw new StorageFailure(modelFailure??'memory_extraction_protocol_incomplete');
   if(outcome.rejected_count>0&&outcome.accepted.length===0)throw new StorageFailure('memory_extraction_source_insufficient');
-  await this.storage.execute('memoryExtraction.finish',{ownerId:this.ownerId,attemptId:batch.attemptId,outcome});
+  await this.storage.execute('memoryExtraction.finish',{ownerId:this.ownerId,attemptId:batch.attemptId,outcome,inputNos:actualNos});
  }
  async close(){if(this.stopped)return;this.stopped=true;for(const entry of this.active.values())entry.abort.abort();await Promise.allSettled([...this.runs.values()]);await this.model.close?.();}
 }

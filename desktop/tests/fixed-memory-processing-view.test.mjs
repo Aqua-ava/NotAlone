@@ -40,3 +40,26 @@ test('旧页迟到正文不能填回，新读取失败撤下快照，unknown不�
   await panel.getByRole('alert').waitFor();assert.equal(await panel.getByText('不得恢复旧正文',{exact:true}).count(),0);
  });
 });
+test('同轮unknown只封对应任务，其他failed或paused目标可沿原run继续，已无目标不展示继续', {timeout:20000},async t=>{
+ const otherTask='55555555-5555-4555-8555-555555555555',otherContact='66666666-6666-4666-8666-666666666666';
+ const blocked={taskId:ids.task,scopeKind:'contact',contactId:ids.contact,state:'unknown',total:1,succeeded:0,errorCode:'memory_extraction_receipt_unknown'};
+ const retryable={taskId:otherTask,scopeKind:'contact',contactId:otherContact,state:'failed',total:1,succeeded:0,errorCode:'memory_extraction_source_insufficient'};
+ let current={...run(),state:'incomplete',total:2,succeeded:0,failed:1,unknown:1,tasks:[blocked,retryable]};const actions=[];
+ await withPanel(t,async(method,...args)=>{
+  if(method==='readCurrent')return {connectionGeneration:7,run:current};
+  if(method==='continue'){
+   actions.push({method,args});current={...current,succeeded:1,failed:0,tasks:[blocked,{...retryable,state:'succeeded',succeeded:1,errorCode:null}]};return {connectionGeneration:7,run:current};
+  }
+ },async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByRole('status').filter({hasText:'调用结果待核实'}).waitFor();
+  await panel.getByRole('button',{name:'继续原任务',exact:true}).click();assert.deepEqual(actions,[{method:'continue',args:[{runId:ids.run,connectionGeneration:7}]}]);
+  await panel.getByText('已处理 1 / 2 条文字目标',{exact:true}).waitFor();assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0,'unknown-only没有可继续任务');
+  for(const state of ['failed','paused','pending']){
+   current={...run(),state:'incomplete',succeeded:0,tasks:[{...retryable,state}]};
+   await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByRole('button',{name:'继续原任务',exact:true}).waitFor();
+  }
+  current={...run(),state:'incomplete',succeeded:0,tasks:[{...retryable,state:'incomplete',errorCode:'targets_completed_elsewhere'}]};
+  await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByRole('status').filter({hasText:'本轮尚未完成'}).waitFor();assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0);
+ });
+});

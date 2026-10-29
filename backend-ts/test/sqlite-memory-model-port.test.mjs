@@ -17,7 +17,7 @@ test('未配置模型不会建立提取端口或静默选择其他供应商',()=
 
 test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未知禁重发与迟到资格', {timeout:25000},async t=>{
   const directory=await mkdtemp(join(tmpdir(),'na-sqlite-model-port-'));
-  let host,child,exited,provider,failReceipt=false,requests=0;
+  let host,child,exited,provider,failReceipt=false,rejectHTTP=false,requests=0;
   const reserved=new Map();
   t.after(async()=>{
     if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');
@@ -34,6 +34,7 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
   provider=createServer(async(req,res)=>{
     let raw='';for await(const chunk of req)raw+=chunk;requests++;
     assert.equal(req.headers['x-api-key'],'synthetic-only');
+    if(rejectHTTP){rejectHTTP=false;res.writeHead(401,{'content-type':'application/json'});res.end(JSON.stringify({type:'error',error:{type:'authentication_error',message:'合成供应商原始正文不进入安全元数据'}}));return;}
     const events=[{type:'message_start',message:{id:'synthetic',model:'deepseek-flash',usage:{input_tokens:3,output_tokens:0}}},
       {type:'content_block_start',index:0,content_block:{type:'text',text:''}},
       {type:'content_block_delta',index:0,delta:{type:'text_delta',text:'合成输出'}},
@@ -65,10 +66,11 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
   const noCredentials=await call({noCredentials:true});assert.equal(noCredentials.error,'extraction_model_credentials_unavailable');assert.equal(requests,1);
   const oversized=await call({oversized:true});assert.equal(oversized.error,'extraction_model_budget_exceeded');assert.equal(requests,1);
   const late=await call({lateDeletion:true});assert.equal(late.error,'synthetic_scope_deleted');assert.equal(requests,2);
+  rejectHTTP=true;const authentication=await call();assert.equal(authentication.error,'extraction_model_call_failed');assert.deepEqual(authentication.providerFailure,{name:'LlmFailure',code:'AUTH',status:401});assert.equal(authentication.dispatch,'response_observed');assert.equal(authentication.outcome,'failed');assert.doesNotMatch(JSON.stringify(authentication),/合成供应商原始正文/);assert.equal(requests,3);
   failReceipt=true;
   const unknownContext={...context,requestId:randomUUID(),attemptId:randomUUID()};
-  const unknown=await call({context:unknownContext});assert.equal(unknown.error,'extraction_model_ack_unknown');assert.equal(requests,3);
-  const retried=await call({context:{...unknownContext,attemptId:randomUUID()}});assert.equal(retried.error,'extraction_model_recovery_unknown');assert.equal(requests,3);
+  const unknown=await call({context:unknownContext});assert.equal(unknown.error,'extraction_model_ack_unknown');assert.equal(requests,4);
+  const retried=await call({context:{...unknownContext,attemptId:randomUUID()}});assert.equal(retried.error,'extraction_model_recovery_unknown');assert.equal(requests,4);
   assert.equal((await call({close:true})).closed,true);
-  assert.equal((await call()).error,'extraction_model_closed');assert.equal(requests,3);
+  assert.equal((await call()).error,'extraction_model_closed');assert.equal(requests,4);
 });

@@ -7,6 +7,7 @@
 2026-10-29 核对 `backend-ts/package.json`、`pnpm-lock.yaml` 与实际安装制品：DSH/session/agent/agent-loop/persistence/jsonl 均为 `0.2.1-rc.2`，Cordis 为 `4.0.5`；公开 Loader 为 `1.0.6`，新增为直接依赖，未升级底层版本。源码参考提交为 `687f282e8625c6b8d11ff58211a90524be2e4317`；本机相邻源码 HEAD 不同，查证用 `git show` 固定对象，未改源码工作树。未证明 npm 制品与该源码树可复现逐字一致。
 
 - `dsh-agent/lib/types/index.d.ts:42-145`：调用方提供官方 `SessionId`；`AgentRegistry.create/resume` 返回具有 `dispose()` 的所有者。
+- `dsh-llm/lib/types/types.d.ts:154-172`：`TokenUsage.inputTokens`仅计未缓存输入，与`cacheReadTokens/cacheWriteTokens`互斥；总配额实耗将三者与outputTokens相加，缺少usage保留NULL。`dsh-session/lib/types/types.d.ts:330-338`的真实assistant事件提供该usage。发送前预算取现有provider最终序列化测量，不能用模型配置上界或零值冒充实测。
 - `dsh-agent-loop/lib/index.js:1702-1737`，对应[固定源码](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/core/agent-loop/src/index.ts#L544)：释放依次 cancel、whenIdle、scope.dispose、持久 handle.close，再撤下注册；不能把 cancel 当排空。
 - `dsh-session-persistence/lib/types/handle.d.ts:37-105`，对应[固定源码](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/session/session-persistence/src/handle.ts)：flush 是耐久屏障；close 不可取消，须排空并释放所有权。
 - `dsh-session-persistence-jsonl/lib/index.js:149-176,385-442,3614-3640`：close 可继续 drainLive 末写；provider 保留消费者释放期间的写入路由，根 Context 并发释放没有顺序保证。

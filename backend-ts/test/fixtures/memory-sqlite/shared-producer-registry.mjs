@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {registry as base} from '../sqlite/discussion-registry.mjs';
+import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 function reply(tx,owner,contact,message,record){
  const id=randomUUID(),request=randomUUID(),entry=randomUUID(),attempt=randomUUID(),context=randomUUID(),operation=randomUUID(),call=randomUUID(),event=randomUUID();
  const grant=tx.get('SELECT * FROM read_grant WHERE owner_id=? AND contact_id=? AND revoked_at IS NULL',[owner,contact]);
@@ -11,6 +11,7 @@ function reply(tx,owner,contact,message,record){
  tx.run("INSERT INTO reply_context_item VALUES(?,?,1,'message','context',1,?,?,?,1,NULL,NULL,NULL)",[owner,context,contact,message,record]);
  tx.run("INSERT INTO reply_context_item VALUES(?,?,2,'entry','context',2,NULL,NULL,NULL,NULL,?,NULL,NULL)",[owner,context,entry]);
  tx.run("INSERT INTO model_operation(owner_id,id,purpose,reply_request_id,slot,input_seal,state) VALUES(?,?,'discussion',?,0,'synthetic','resolved')",[owner,operation,request]);
+ tx.run("INSERT INTO operation_scope VALUES(?,?,?,'discussion','released')",[owner,operation,contact]);
  tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,reply_attempt_id,reply_context_id,provider,request_key,state,reserved_budget_units,settlement_state) VALUES(?,?,?,1,?,?,'synthetic',?,'succeeded',10,'settled')",[owner,call,operation,attempt,context,randomUUID()]);
  tx.run("INSERT INTO execution_event(owner_id,id,reply_attempt_id,event_no,kind,originated_call_id,payload,created_at) VALUES(?,?,?,1,'assistant_message',?,'{\"text\":\"合成回答\"}',1)",[owner,event,attempt,call]);
  tx.run("INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,reply_context_id,context_item_no) VALUES(?,?,1,'context',1,?,1)",[owner,event,context]);
@@ -32,13 +33,88 @@ function memory(tx,owner,contact,message,record){
  tx.run('INSERT INTO step_input VALUES(?,?,1,?,1)',[owner,step,run]);
  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[owner,attempt,step]);
  tx.run("INSERT INTO model_operation(owner_id,id,purpose,memory_step_id,slot,input_seal,state) VALUES(?,?,'extraction',?,0,'synthetic','resolved')",[owner,operation,step]);
+ tx.run("INSERT INTO operation_scope VALUES(?,?,?,'extraction','released')",[owner,operation,contact]);
  tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,step_attempt_id,provider,request_key,state,reserved_budget_units,settlement_state) VALUES(?,?,?,1,?,'synthetic',?,'succeeded',10,'settled')",[owner,call,operation,attempt,randomUUID()]);
  tx.run("INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,originated_call_id,payload,created_at) VALUES(?,?,?,1,'model_output',?,'{\"blocks\":[]}',1)",[owner,event,attempt,call]);
  tx.run("INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,planned_step_id,planned_input_no) VALUES(?,?,1,'target',1,?,1)",[owner,event,step]);
  tx.run('INSERT INTO event_source VALUES(?,?,?,?)',[owner,event,contact,record]);
  return {run,item,task,step,attempt,operation,call,event,contact,message,record};
 }
-const actions=[{name:'fixture.sharedSeed',mode:'write',retryBusy:false,execute(tx,i){
+function completion(tx,{owner,m,kind}){
+ const step=randomUUID(),attempt=randomUUID();
+ if(kind==='running_attempt'){
+  tx.run("UPDATE processing_step SET state='succeeded',successful_attempt_id=? WHERE owner_id=? AND id=?",[m.attempt,owner,m.step]);return true;
+ }
+ if(kind==='missing_attempt'){
+  tx.run('UPDATE processing_step SET successful_attempt_id=? WHERE owner_id=? AND id=?',[attempt,owner,m.step]);return true;
+ }
+ const foreign=kind==='foreign_owner_attempt'||kind==='insert_foreign_owner_attempt';
+ const scopeOwner=foreign?randomUUID():owner;
+ let task=m.task;
+ if(foreign){
+  const run=randomUUID();task=randomUUID();
+  tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,1)',[scopeOwner]);
+  tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config) VALUES(?,?,?,'running',1,0,'{}')",[scopeOwner,run,randomUUID()]);
+  tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,state) VALUES(?,?,?,'self','running')",[scopeOwner,task,run]);
+ }
+ tx.run("INSERT INTO processing_step VALUES(?,?,?,2,'extraction_verification','running','frozen',NULL)",[scopeOwner,step,task]);
+ tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','succeeded',1,1,NULL)",[scopeOwner,attempt,step]);
+ if(kind==='different_step_attempt'||kind==='foreign_owner_attempt')
+  tx.run('UPDATE processing_step SET successful_attempt_id=? WHERE owner_id=? AND id=?',[attempt,owner,m.step]);
+ else if(kind==='insert_different_step_attempt'||kind==='insert_foreign_owner_attempt'||kind==='insert_missing_attempt')
+  tx.run("INSERT INTO processing_step VALUES(?,?,?,3,'extraction_verification','succeeded','frozen',?)",[owner,randomUUID(),m.task,kind==='insert_missing_attempt'?randomUUID():attempt]);
+ else {
+  tx.run("UPDATE processing_step SET state='succeeded',successful_attempt_id=? WHERE owner_id=? AND id=?",[attempt,scopeOwner,step]);
+  if(kind==='attempt_regression')tx.run("UPDATE step_attempt SET state='failed' WHERE owner_id=? AND id=?",[scopeOwner,attempt]);
+  else if(kind==='attempt_delete')tx.run('DELETE FROM step_attempt WHERE owner_id=? AND id=?',[scopeOwner,attempt]);
+  else {
+   // 05先撤销成功指针，再删除执行与步骤；合法清理仍应通过。
+   tx.run("UPDATE processing_step SET state='revoked',successful_attempt_id=NULL WHERE owner_id=? AND id=?",[scopeOwner,step]);
+   tx.run('DELETE FROM step_attempt WHERE owner_id=? AND id=?',[scopeOwner,attempt]);
+   tx.run('DELETE FROM processing_step WHERE owner_id=? AND id=?',[scopeOwner,step]);
+  }
+ }
+ return true;
+}
+function reuse(tx,{owner,a,b,m,kind}){
+ const attempt=randomUUID(),replyAttempt=randomUUID(),memoryEvent=randomUUID(),replyEvent=randomUUID();
+ tx.run("UPDATE step_attempt SET state='succeeded' WHERE owner_id=? AND id=?",[owner,m.attempt]);
+ tx.run("INSERT INTO step_attempt VALUES(?,?,?,2,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[owner,attempt,m.step]);
+ tx.run("UPDATE reply_attempt SET state='committed',finished_at=1 WHERE owner_id=? AND id=?",[owner,a.attempt]);
+ tx.run("INSERT INTO reply_attempt(owner_id,id,request_id,attempt_no,state,lease_token,accepted_data_generation,accepted_discussion_generation,accepted_source_revision,started_at,finished_at,error_code) VALUES(?,?,?,2,'running','synthetic',0,0,0,1,NULL,NULL)",[owner,replyAttempt,a.request]);
+ const before=tx.get('SELECT count(*) n FROM model_call WHERE owner_id=?',[owner]).n;
+ let eventOwner=owner,eventAttempt=attempt,call=m.call,origin=null;
+ if(kind==='foreign_owner'){
+  eventOwner=randomUUID();const run=randomUUID(),task=randomUUID(),step=randomUUID();eventAttempt=randomUUID();
+  tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,1)',[eventOwner]);
+  tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config) VALUES(?,?,?,'running',1,0,'{}')",[eventOwner,run,randomUUID()]);
+  tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,state) VALUES(?,?,?,'self','running')",[eventOwner,task,run]);
+  tx.run("INSERT INTO processing_step VALUES(?,?,?,1,'extraction_verification','running','frozen',NULL)",[eventOwner,step,task]);
+  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[eventOwner,eventAttempt,step]);
+ }else if(kind==='other_operation')call=a.call;
+ else if(kind==='other_step'){
+  const step=randomUUID();eventAttempt=randomUUID();
+  tx.run("INSERT INTO processing_step VALUES(?,?,?,2,'extraction_verification','running','frozen',NULL)",[owner,step,m.task]);
+  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[owner,eventAttempt,step]);
+ }else if(kind==='unknown')tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown' WHERE owner_id=? AND id=?",[owner,m.call]);
+ else if(kind==='sealed')tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=1 WHERE owner_id=? AND id=?",[owner,m.operation]);
+ else if(kind==='missing')call=randomUUID();
+ else if(kind==='both_calls'){eventAttempt=m.attempt;origin=m.call;}
+ tx.run("INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,originated_call_id,reused_call_id,payload,created_at) VALUES(?,?,?,3,'model_reused',?,?,'{\"blocks\":[]}',1)",[eventOwner,memoryEvent,eventAttempt,origin,call]);
+ tx.run("INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,planned_step_id,planned_input_no) VALUES(?,?,1,'target',1,?,1)",[owner,memoryEvent,m.step]);
+ tx.run('INSERT INTO event_source VALUES(?,?,?,?)',[owner,memoryEvent,m.contact,m.record]);
+ tx.run("INSERT INTO execution_event(owner_id,id,reply_attempt_id,event_no,kind,reused_call_id,payload,created_at) VALUES(?,?,?,1,'model_reused',?,'{\"text\":\"合成回答\"}',1)",[owner,replyEvent,replyAttempt,kind==='other_request'?b.call:a.call]);
+ tx.run("INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,reply_context_id,context_item_no) VALUES(?,?,1,'context',1,?,1)",[owner,replyEvent,a.context]);
+ tx.run('INSERT INTO event_source VALUES(?,?,?,?)',[owner,replyEvent,a.contact,a.record]);
+ if(kind==='update_unknown'){
+  tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown' WHERE owner_id=? AND id=?",[owner,m.call]);
+  tx.run('UPDATE execution_event SET reused_call_id=reused_call_id WHERE owner_id=? AND id=?',[owner,memoryEvent]);
+ }else if(kind==='update_other_operation')tx.run('UPDATE execution_event SET reused_call_id=? WHERE owner_id=? AND id=?',[b.call,owner,replyEvent]);
+ else if(kind==='update_missing')tx.run('UPDATE execution_event SET reused_call_id=? WHERE owner_id=? AND id=?',[randomUUID(),owner,memoryEvent]);
+ const after=tx.get('SELECT count(*) n FROM model_call WHERE owner_id=?',[owner]).n;
+ return {before,after,memoryEvent,replyEvent};
+}
+const actions=[{name:'fixture.sharedReuse',mode:'write',retryBusy:false,execute:reuse},{name:'fixture.sharedCompletion',mode:'write',retryBusy:false,execute:completion},{name:'fixture.sharedSeed',mode:'write',retryBusy:false,execute(tx,i){
  const a=reply(tx,i.owner,i.contacts[0].contactId,i.contacts[0].messageId,i.contacts[0].recordId);
  const b=reply(tx,i.owner,i.contacts[1].contactId,i.contacts[1].messageId,i.contacts[1].recordId);
  const m=memory(tx,i.owner,i.contacts[0].contactId,i.contacts[0].messageId,i.contacts[0].recordId);
