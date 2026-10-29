@@ -135,6 +135,7 @@ export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageR
  if(anyUnknown)return {...base,status:'blocked',statusReason:'model_receipt_unknown',actions:retryable?['continue']:[]};
  if(interruptedKnown)return {...base,status:'blocked',statusReason:'interrupted_known_receipts',actions:['continue']};
  if(sharedFault)return {...base,status:'blocked',statusReason:sharedFault,actions:retryable?['continue']:[]};
+ if(!taskRows.length)return {...base,status:'blocked',statusReason:'no_pending_inputs',actions:[]};
  if(!activeTasks.length)return {...base,status:'blocked',statusReason:'scope_revoked',actions:[]};
  if(pauseRequested||state==='paused')return {...base,status:'paused',statusReason:null,actions:['continue']};
  if(failedTasks.length)return {...base,status:'blocked',statusReason:activeTasks.length&&failedTasks.length===activeTasks.length?'round_failed':'contact_failed',actions:retryable?['continue']:[]};
