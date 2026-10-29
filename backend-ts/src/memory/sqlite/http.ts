@@ -26,8 +26,10 @@ export class SqliteMemoryExtractionHttp {
     value=await this.service.start(body.request_key);
    }else if(run![2]){
     if(req.method!=='POST'||run![1]==='current'||!uuid.test(run![1]!))throw new StorageFailure('memory_extraction_request_invalid');
-    const body=JSON.parse((await readWechatHttpBody(req,1024,10_000)).toString('utf8')||'{}');if(!body||Array.isArray(body)||Object.keys(body).length)throw new StorageFailure('memory_extraction_request_invalid');
-    value=await (run![2]==='pause'?this.service.pause(run![1]!):this.service.continue(run![1]!));
+    const body=JSON.parse((await readWechatHttpBody(req,1024,10_000)).toString('utf8')||'{}');
+    const fields=body&&typeof body==='object'&&!Array.isArray(body)?Object.keys(body).sort().join(','):'';
+    if(fields!=='action_version,operation_id'||!Number.isSafeInteger(body.action_version)||body.action_version<0||!uuid.test(body.operation_id??''))throw new StorageFailure('memory_extraction_request_invalid');
+    value=await (run![2]==='pause'?this.service.pause(run![1]!,body.action_version,body.operation_id):this.service.continue(run![1]!,body.action_version,body.operation_id));
    }else{if(req.method!=='GET'||run![1]!=='current'&&!uuid.test(run![1]!))throw new StorageFailure('memory_extraction_request_invalid');value=await this.service.read(run![1]==='current'?undefined:run![1]);}
    send(res,200,value);
   }catch(error){const code=error instanceof StorageFailure?error.code:'memory_extraction_request_invalid';send(res,code.includes('not_found')?404:code==='memory_extraction_request_invalid'?400:409,{error:code});}

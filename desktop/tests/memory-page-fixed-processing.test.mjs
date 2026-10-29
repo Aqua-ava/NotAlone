@@ -10,7 +10,9 @@ test('真实记忆页面在 SQLite 模式仅挂载固定处理，资格失效撤
   };
   const run = {
     runId: ids.run, state: 'incomplete', total: 1, succeeded: 1, failed: 0, unknown: 0,
-    stage: 'extraction_verification', laterStages: 'pending', inputs: [],
+    stage: 'extraction_verification', laterStages: 'pending',
+    status: 'blocked', statusReason: 'later_stages_pending', actions: [], controlVersion: 0, pending: 0, revoked: 0,
+    calls: { prepared: 0, sending: 0, succeeded: 2, failed: 0, unknown: 0 }, inputs: [],
     tasks: [{ taskId: ids.task, scopeKind: 'contact', contactId: ids.contact, state: 'succeeded', total: 1, succeeded: 1, errorCode: null }],
     candidates: [{ id: ids.record, scopeKind: 'contact', contactId: ids.contact, body: '合成记忆页面候选', state: 'verified_pending_decision', origin: 'auto' }],
   };
@@ -38,6 +40,12 @@ test('真实记忆页面在 SQLite 模式仅挂载固定处理，资格失效撤
           onInvalidated: listener => { invalidations.add(listener); return () => invalidations.delete(listener); },
         },
         backend: {onStateChanged: () => () => {}},
+        sqliteMemoryManagement: new Proxy({}, {get: (_, method) => {
+          if (method === 'onInvalidated') return () => () => {};
+          if (method === 'read') return async () => ({ connectionGeneration: 1, view: { candidates: [], memories: [] } });
+          if (method === 'onNotice') return () => () => {};
+          return () => Promise.reject(new Error('SQLite 管理桥未在本页测试范围。'));
+        }}),
         memory: new Proxy({}, {get: (_, method) => (...args) => {
           window.legacyCalls.push(method);
           if (method.startsWith('on')) return () => {};

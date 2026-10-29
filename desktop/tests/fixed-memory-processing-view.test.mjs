@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {chromium} from '@playwright/test';
 const ids={run:'11111111-1111-4111-8111-111111111111',task:'22222222-2222-4222-8222-222222222222',contact:'33333333-3333-4333-8333-333333333333'};
-const run=()=>({runId:ids.run,state:'incomplete',total:1,succeeded:1,failed:0,unknown:0,stage:'extraction_verification',laterStages:'pending',
+const run=()=>({runId:ids.run,state:'incomplete',total:1,succeeded:1,failed:0,unknown:0,stage:'extraction_verification',laterStages:'pending',status:'blocked',statusReason:'later_stages_pending',actions:[],controlVersion:0,pending:0,revoked:0,calls:{prepared:0,sending:0,succeeded:4,failed:0,unknown:0},
  tasks:[{taskId:ids.task,scopeKind:'contact',contactId:ids.contact,state:'succeeded',total:1,succeeded:1,errorCode:null}],inputs:[],candidates:[]});
 async function withPanel(t,command,testPage){
  const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {FixedMemoryProcessingPanel} from './src/renderer/FixedMemoryProcessingPanel';
@@ -30,13 +30,13 @@ test('旧页迟到正文不能填回，新读取失败撤下快照，unknown不�
   if(method==='readCurrent'){
    if(mode==='late'){started();return pending;}
    if(mode==='denied')throw new Error('synthetic_deleted');
-   return {connectionGeneration:1,run:{...run(),state:'failed',succeeded:0,unknown:1,candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'合法候选快照',state:'verified_pending_decision',origin:'auto'}]}};
+   return {connectionGeneration:1,run:{...run(),state:'failed',succeeded:0,unknown:1,status:'blocked',statusReason:'model_receipt_unknown',actions:[],pending:0,calls:{prepared:0,sending:0,succeeded:1,failed:0,unknown:1},candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'合法候选快照',state:'verified_pending_decision',origin:'auto'}]}};
   }
  },async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
   await panel.getByText('合法候选快照',{exact:true}).waitFor();await panel.getByText('调用结果待核实',{exact:true}).waitFor();assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0);
   mode='denied';await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByRole('alert').waitFor();assert.equal(await panel.getByText('合法候选快照',{exact:true}).count(),0);
-  mode='late';await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await entered;await page.evaluate(()=>window.invalidate());release({connectionGeneration:1,run:{...run(),candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'不得恢复旧正文',state:'verified_pending_decision',origin:'auto'}]}});
+  mode='late';await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await entered;await page.evaluate(()=>window.invalidate());release({connectionGeneration:1,run:{...run(),status:'blocked',statusReason:'model_receipt_unknown',actions:[],pending:0,calls:{prepared:0,sending:0,succeeded:1,failed:0,unknown:1},candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'不得恢复旧正文',state:'verified_pending_decision',origin:'auto'}]}});
   await panel.getByRole('alert').waitFor();assert.equal(await panel.getByText('不得恢复旧正文',{exact:true}).count(),0);
  });
 });
@@ -44,27 +44,31 @@ test('同轮unknown只封对应任务，其他failed或paused目标可沿原run�
  const otherTask='55555555-5555-4555-8555-555555555555',otherContact='66666666-6666-4666-8666-666666666666';
  const blocked={taskId:ids.task,scopeKind:'contact',contactId:ids.contact,state:'unknown',total:1,succeeded:0,errorCode:'memory_extraction_receipt_unknown'};
  const retryable={taskId:otherTask,scopeKind:'contact',contactId:otherContact,state:'failed',total:1,succeeded:0,errorCode:'memory_extraction_source_insufficient'};
- let current={...run(),state:'incomplete',total:2,succeeded:0,failed:1,unknown:1,tasks:[blocked,retryable]};const actions=[];
+ let current={...run(),state:'incomplete',total:2,succeeded:0,failed:1,unknown:1,status:'blocked',statusReason:'model_receipt_unknown',actions:['continue'],pending:0,revoked:0,calls:{prepared:0,sending:0,succeeded:2,failed:0,unknown:1},tasks:[blocked,retryable]};const actions=[];
  await withPanel(t,async(method,...args)=>{
   if(method==='readCurrent')return {connectionGeneration:7,run:current};
   if(method==='continue'){
-   actions.push({method,args});current={...current,succeeded:1,failed:0,tasks:[blocked,{...retryable,state:'succeeded',succeeded:1,errorCode:null}]};return {connectionGeneration:7,run:current};
+   actions.push({method,args});current={...current,succeeded:1,failed:0,status:'blocked',statusReason:'model_receipt_unknown',actions:[],pending:0,tasks:[blocked,{...retryable,state:'succeeded',succeeded:1,errorCode:null}]};return {connectionGeneration:7,run:current};
   }
  },async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
   await panel.getByRole('status').filter({hasText:'调用结果待核实'}).waitFor();
-  await panel.getByRole('button',{name:'继续原任务',exact:true}).click();assert.deepEqual(actions,[{method:'continue',args:[{runId:ids.run,connectionGeneration:7}]}]);
+  await panel.getByRole('button',{name:'继续原任务',exact:true}).click();
+  assert.equal(actions.length,1);assert.equal(actions[0].method,'continue');
+  assert.equal(actions[0].args[0].runId,ids.run);assert.equal(actions[0].args[0].controlVersion,0);
+  assert.equal(actions[0].args[0].connectionGeneration,7);assert.match(actions[0].args[0].operationId,/^[a-f0-9-]{36}$/);
   await panel.getByText('已处理 1 / 2 条文字目标',{exact:true}).waitFor();assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0,'unknown-only没有可继续任务');
+  const retryProjection={failed:{status:'blocked',statusReason:'contact_failed'},paused:{status:'paused',statusReason:null},pending:{status:'blocked',statusReason:'round_incomplete'}};
   for(const state of ['failed','paused','pending']){
-   current={...run(),state:'incomplete',succeeded:0,tasks:[{...retryable,state}]};
+   current={...run(),state:'incomplete',succeeded:0,pending:state==='pending'?1:0,actions:['continue'],status:retryProjection[state].status,statusReason:retryProjection[state].statusReason,tasks:[{...retryable,state}]};
    await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByRole('button',{name:'继续原任务',exact:true}).waitFor();
   }
-  current={...run(),state:'incomplete',succeeded:0,tasks:[{...retryable,state:'incomplete',errorCode:'targets_completed_elsewhere'}]};
+  current={...run(),state:'incomplete',succeeded:0,pending:1,status:'blocked',statusReason:'round_incomplete',actions:[],tasks:[{...retryable,state:'incomplete',errorCode:'targets_completed_elsewhere'}]};
   await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByRole('status').filter({hasText:'本轮尚未完成'}).waitFor();assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0);
  });
 });
 test('来源或资格失效后的历史成功计数不能冒充正常无产出成功', {timeout:20000},async t=>{
- const invalidated={...run(),tasks:run().tasks.map(task=>({...task,state:'revoked'}))};
+ const invalidated={...run(),status:'blocked',statusReason:'scope_revoked',actions:[],pending:0,revoked:1,tasks:run().tasks.map(task=>({...task,state:'revoked'}))};
  await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:invalidated}:undefined,async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
   await panel.locator(':scope > p').filter({hasText:'已处理 1 / 1 条文字目标'}).waitFor();

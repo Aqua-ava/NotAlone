@@ -27,12 +27,23 @@ function scope(value: Record<string, unknown>) {
   return { scopeKind: value.scopeKind as 'self' | 'contact', contactId: value.scopeKind === 'self' ? null : id(value.contactId) };
 }
 const runStates = ['pending', 'running', 'paused', 'failed', 'incomplete', 'revoked'];
+const statuses = ['waiting', 'processing', 'paused', 'blocked', 'completed'];
+const controlActions = ['pause', 'continue'];
+const reasonCode = /^[a-z][a-z0-9_]{0,63}$/;
+const callStates = ['prepared', 'sending', 'succeeded', 'failed', 'unknown'];
 export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null {
   if (raw === null) return null;
   const value = row(raw);
   if (!runStates.includes(String(value.state)) || value.stage !== 'extraction_verification' || value.laterStages !== 'pending') throw invalid();
   const total = count(value.total), succeeded = count(value.succeeded), failed = count(value.failed), unknown = count(value.unknown);
   if (succeeded + failed + unknown > total) throw invalid();
+  if (!statuses.includes(String(value.status)) || (value.statusReason !== null && (typeof value.statusReason !== 'string' || !reasonCode.test(value.statusReason)))
+    || !Array.isArray(value.actions) || value.actions.some(action => !controlActions.includes(String(action))) || new Set(value.actions).size !== value.actions.length) throw invalid();
+  const controlVersion = count(value.controlVersion), pending = count(value.pending), revoked = count(value.revoked);
+  const callInput = row(value.calls);
+  if (Object.keys(callInput).length !== callStates.length || callStates.some(state => !Object.hasOwn(callInput, state))) throw invalid();
+  const calls = Object.fromEntries(callStates.map(state => [state, count(callInput[state])])) as unknown as FixedProcessingRun['calls'];
+  if (pending + revoked > total) throw invalid();
   const tasks = array(value.tasks).map(rawTask => {
     const task = row(rawTask), total = count(task.total), succeeded = count(task.succeeded);
     if (![...runStates, 'unknown', 'succeeded', 'awaiting_decision'].includes(String(task.state)) || succeeded > total) throw invalid();
@@ -54,7 +65,9 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
   if (new Set(tasks.map(task => task.taskId)).size !== tasks.length || new Set(inputs.map(input => input.inputNo)).size !== inputs.length
     || new Set(candidates.map(candidate => candidate.id)).size !== candidates.length) throw invalid();
   return { runId: id(value.runId), state: value.state as FixedProcessingRun['state'], total, succeeded, failed, unknown,
-    stage: 'extraction_verification', laterStages: 'pending', tasks, inputs, candidates };
+    stage: 'extraction_verification', laterStages: 'pending', status: value.status as FixedProcessingRun['status'],
+    statusReason: value.statusReason as string | null, actions: value.actions as FixedProcessingRun['actions'],
+    controlVersion, pending, revoked, calls, tasks, inputs, candidates };
 }
 function readTrace(raw: unknown): FixedProcessingTrace {
   const value = row(raw);
@@ -134,9 +147,11 @@ export class FixedMemoryProcessingController {
     return this.view(await this.request('/api/memory-processing/runs', 'POST', { request_key: requestKey }, value.connectionGeneration as number));
   }
   async control(action: 'pause' | 'continue', input: FixedProcessingControl): Promise<FixedProcessingView> {
-    const value = this.generation(input, ['runId', 'connectionGeneration']), runId = id(value.runId);
-    const view = this.view(await this.request(`/api/memory-processing/runs/${runId}/${action}`, 'POST', {}, value.connectionGeneration as number));
-    if (view.run?.runId !== runId) { this.synchronize(); throw invalid(); }
+    const value = this.generation(input, ['runId', 'controlVersion', 'operationId', 'connectionGeneration']), runId = id(value.runId);
+    const actionVersion = count(value.controlVersion);
+    const view = this.view(await this.request(`/api/memory-processing/runs/${runId}/${action}`, 'POST',
+      { action_version: actionVersion, operation_id: id(value.operationId) }, value.connectionGeneration as number));
+    if (view.run?.runId !== runId || view.run.controlVersion < actionVersion) { this.synchronize(); throw invalid(); }
     return view;
   }
   async trace(input: FixedProcessingTraceRequest): Promise<FixedProcessingTrace> {

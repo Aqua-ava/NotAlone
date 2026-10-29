@@ -1,13 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FixedMemoryProcessingBridge, FixedProcessingRun, FixedProcessingTrace, FixedProcessingView } from '../shared/fixed-memory-processing';
 
-function status(run: FixedProcessingRun | null): string {
+const sharedReasons: Record<string, string> = {
+  extraction_model_unconfigured: '模型尚未配置',
+  extraction_model_configuration_invalid: '模型配置无效',
+  extraction_model_credentials_unavailable: '模型凭据不可用',
+  extraction_model_authentication_failed: '模型认证失败',
+  extraction_model_provider_unavailable: '模型服务暂不可用',
+  extraction_model_scope_invalid: '模型用途范围不可用',
+  memory_extraction_model_configuration_invalid: '模型配置无效',
+};
+const blockedReasons: Record<string, string> = {
+  model_receipt_unknown: '调用结果待核实',
+  interrupted_known_receipts: '上次调用中断但回执可验证，可安全继续',
+  run_revoked: '范围已失效',
+  scope_revoked: '范围已失效',
+  later_stages_pending: '提取核验已结束',
+  later_stages_failed: '主题整理或长期概览阶段受阻',
+  owner_contribution_pending: '本人资料阶段因范围变化未提交，需要新一轮处理',
+  contact_failed: '部分联系人处理受阻，可继续重试',
+  round_failed: '本轮处理受阻',
+  round_incomplete: '本轮尚未完成',
+  no_pending_inputs: '当前没有待处理的文字目标',
+};
+/** 固定原因码由后端给出；界面只做固定文案映射，不把历史失败或数量换算成完成。 */
+function reasonText(reason: string | null): string {
+  if (!reason) return '处理暂时受阻';
+  if (blockedReasons[reason]) return blockedReasons[reason];
+  if (sharedReasons[reason]) return `模型配置或服务不可用：${sharedReasons[reason]}。修复后可继续。`;
+  return '处理暂时受阻，请查看处理原因后重试';
+}
+function stageText(run: FixedProcessingRun): string {
+  if (run.stage !== 'extraction_verification') return '正在整理主题资料与长期概览';
+  return '正在提取与核验';
+}
+function statusText(run: FixedProcessingRun | null): string {
   if (!run) return '尚未开始';
-  if (run.unknown > 0) return '调用结果待核实';
-  if (run.tasks.length > 0 && run.tasks.every(task => task.state === 'revoked')) return '范围已失效';
-  if (run.state === 'incomplete' && run.succeeded === run.total && run.total > 0) return '提取核验已结束';
-  return { pending: '等待提取与核验', running: '正在提取与核验', paused: '已暂停', failed: '提取核验失败',
-    incomplete: '本轮尚未完成', revoked: '范围已失效' }[run.state];
+  if (run.status === 'completed') return '本轮已完成';
+  if (run.status === 'paused') return '已暂停';
+  if (run.status === 'blocked') return reasonText(run.statusReason);
+  if (run.status === 'processing') return stageText(run);
+  return run.total === 0 ? '当前没有待处理的文字目标' : '等待提取与核验';
 }
 
 /** 由记忆页面传入具名桥；scopeKey变化或失效事件先撤下全部本地快照。 */
@@ -46,7 +79,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
     };
   }, [bridge, scopeKey]);
   useEffect(() => {
-    if (!view?.run || !['pending', 'running'].includes(view.run.state)) return;
+    if (view?.run?.status !== 'processing') return;
     const timer = setTimeout(() => { if (!document.hidden) void refresh.current(); }, 2000);
     const visible = () => { if (!document.hidden) void refresh.current(); };
     document.addEventListener('visibilitychange', visible);
@@ -60,7 +93,8 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
   }
   async function control(action: 'pause' | 'continue') {
     if (!view?.run || busy) return;
-    const request = { runId: view.run.runId, connectionGeneration: view.connectionGeneration };
+    const request = { runId: view.run.runId, controlVersion: view.run.controlVersion,
+      operationId: crypto.randomUUID(), connectionGeneration: view.connectionGeneration };
     await receive(() => bridge[action](request));
   }
   async function readTrace(taskId: string) {
@@ -77,23 +111,24 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
     } finally { if (active.current && accepted === revision.current) setBusy(false); }
   }
   const run = view?.run ?? null;
-  const noNewMemory = run && run.total > 0 && run.succeeded === run.total && run.candidates.length === 0
+  const allTargetsDone = run && run.total > 0 && run.succeeded === run.total && run.pending === 0;
+  const noNewMemory = allTargetsDone && run.candidates.length === 0
     && run.tasks.length > 0 && run.tasks.every(task => ['succeeded', 'awaiting_decision'].includes(task.state));
-  const canContinue = run && !['pending', 'running', 'revoked'].includes(run.state) && run.succeeded < run.total
-    && run.tasks.some(task => task.scopeKind === 'contact' && ['failed', 'paused', 'pending'].includes(task.state)
-      && task.succeeded < task.total && !['targets_completed_elsewhere', 'memory_extraction_targets_completed_elsewhere'].includes(task.errorCode ?? ''));
+  const startDisabled = busy || !view || (run !== null && ['processing', 'paused'].includes(run.status));
   return <section className="memory-processing-card fixed-memory-processing" aria-label="固定范围记忆处理">
     <h2>记忆处理</h2>
     <p>处理当前勾选联系人已保存的有效文字。关闭微信读取后仍可手动处理。</p>
     {error && <p role="alert">{error}</p>}
-    {view && <p role="status">{status(run)}</p>}
+    {view && <p role="status">{statusText(run)}</p>}
     {busy && <p aria-live="polite">正在核对处理状态…</p>}
     {run && <>
       <p>已处理 {run.succeeded} / {run.total} 条文字目标</p>
+      {run.pending > 0 && <p>待处理 {run.pending} 条文字目标</p>}
+      {run.revoked > 0 && <p>有 {run.revoked} 条目标因取消勾选或来源删除失效，不计入待处理。</p>}
       {noNewMemory && <p>已处理，未产生新记忆</p>}
       {run.failed > 0 && <p>有 {run.failed} 条目标尚未通过提取核验。</p>}
       {run.unknown > 0 && <p>有 {run.unknown} 条目标调用结果未知，核实前不会重新发送。</p>}
-      <p>主题整理、长期概览尚未执行，本轮未完成。</p>
+      {(run.status === 'processing' || run.status === 'paused' || run.statusReason === 'later_stages_pending') && <p>主题整理、长期概览尚未执行，本轮未完成。</p>}
       {run.candidates.length > 0 && <section aria-label="本轮已核验候选">
         <h3>来源已核验的候选</h3>
         <p>以下候选来自自动提取，正式记忆与决定请查看下方。</p>
@@ -118,9 +153,9 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
     </>}
     <div className="memory-processing-actions">
       <button type="button" disabled={busy} onClick={() => void refresh.current()}>刷新处理状态</button>
-      <button type="button" disabled={busy || !view || run?.state === 'running' || run?.state === 'pending'} onClick={() => void start()}>开始记忆处理</button>
-      {run && ['pending', 'running'].includes(run.state) && <button type="button" disabled={busy} onClick={() => void control('pause')}>暂停记忆处理</button>}
-      {canContinue && <button type="button" disabled={busy} onClick={() => void control('continue')}>继续原任务</button>}
+      <button type="button" disabled={startDisabled} onClick={() => void start()}>开始记忆处理</button>
+      {run?.actions.includes('pause') && <button type="button" disabled={busy} onClick={() => void control('pause')}>暂停记忆处理</button>}
+      {run?.actions.includes('continue') && <button type="button" disabled={busy} onClick={() => void control('continue')}>继续原任务</button>}
     </div>
   </section>;
 }

@@ -12,7 +12,9 @@ function deferred() {
 function currentView(connectionGeneration, body) {
   return { connectionGeneration, run: {
     runId: '11111111-1111-4111-8111-111111111111', state: 'incomplete', total: 1, succeeded: 1,
-    failed: 0, unknown: 0, stage: 'extraction_verification', laterStages: 'pending', tasks: [], inputs: [],
+    failed: 0, unknown: 0, stage: 'extraction_verification', laterStages: 'pending',
+    status: 'blocked', statusReason: 'later_stages_pending', actions: [], controlVersion: 0, pending: 0, revoked: 0,
+    calls: { prepared: 0, sending: 0, succeeded: 2, failed: 0, unknown: 0 }, tasks: [], inputs: [],
     candidates: [{ id: '22222222-2222-4222-8222-222222222222', scopeKind: 'contact', contactId: '33333333-3333-4333-8333-333333333333',
       body, state: 'verified_pending_decision', origin: 'auto' }],
   } };

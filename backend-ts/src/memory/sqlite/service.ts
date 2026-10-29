@@ -5,6 +5,7 @@ import {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
 import {createExtractionPolicyVersion,type ExtractionPolicyVersion} from '../extraction/policy-version.ts';
 import {runExtractionFlow,type ExtractionInvocation} from '../extraction/flow.ts';
 import {assertCompleteClaimAdmission} from '../extraction/verification/complete-claim.ts';
+import {isSharedFailure,sharedFailureCodes} from './control.ts';
 import type {CandidateVerificationReference} from './management/admission.ts';
 import type {ExtractionWindow} from '../extraction/protocol.ts';
 import type {ModelPermitAccounting,ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
@@ -46,8 +47,9 @@ export class SqliteMemoryExtraction {
  }
  read(runId?:string){this.available();return this.storage.execute<any>('memoryExtraction.read',{ownerId:this.ownerId,runId});}
  trace(taskId:string){this.available();return this.storage.execute<any>('memoryExtraction.trace',{ownerId:this.ownerId,taskId});}
- async pause(runId:string){return this.admit(()=>this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'pause'}));}
- async continue(runId:string){return this.admit(async()=>{await this.initialize();this.available();const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue'});this.launch(runId);return run;});}
+ /** 用户暂停带控制修订CAS；共享故障的宿主内暂停不带版本，仍走同一事务状态机。 */
+ async pause(runId:string,actionVersion?:number,operationId?:string){return this.admit(()=>this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'pause',...(actionVersion===undefined?{}:{actionVersion,operationId})}));}
+ async continue(runId:string,actionVersion:number,operationId:string){return this.admit(async()=>{await this.initialize();this.available();const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue',actionVersion,operationId});this.launch(runId);return run;});}
  private launch(runId:string){if(this.runs.has(runId)||this.stopped)return;const work=this.executeRun(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});}
  async waitForIdle(runId?:string){if(runId!==undefined){await this.runs.get(runId);return;}await Promise.all([...this.runs.values()]);}
  private async executeRun(runId:string){
@@ -69,7 +71,7 @@ export class SqliteMemoryExtraction {
     }catch(error){
      const code=error instanceof StorageFailure?error.code:typeof (error as any)?.code==='string'&&(error as any).code.startsWith('extraction_model_')?(error as any).code:'memory_extraction_failed';
      await this.storage.execute('memoryExtraction.fail',{ownerId:this.ownerId,attemptId:batch.attemptId,code});
-     if(['extraction_model_unconfigured','extraction_model_configuration_invalid','extraction_model_credentials_unavailable','extraction_model_authentication_failed','extraction_model_provider_unavailable'].includes(code))await this.pause(runId);
+     if(isSharedFailure(code))await this.pause(runId);
      break;
     }finally{this.active.delete(task.taskId);finish();await release?.();}
    }
@@ -85,7 +87,7 @@ export class SqliteMemoryExtraction {
   let commonFailure:string|null=null;let modelFailure:string|null=null;
   let verificationInputEventId:string|null=null,verificationCall:{callId:string;reused:boolean}|null=null;
   const verificationEvents=new Map<string,string>();
-  const commonCodes=['extraction_model_unconfigured','extraction_model_configuration_invalid','extraction_model_credentials_unavailable','extraction_model_authentication_failed','extraction_model_provider_unavailable'];
+  const commonCodes=[...sharedFailureCodes];
   const outcome=await runExtractionFlow({window,signal,mode:resolved.mode,verificationPolicy:resolved.verification,max_retries:0,requireCurrent,
    record:async e=>{
     const isVerification=e.stage==='verification';
