@@ -1,3 +1,5 @@
+import {replyCandidateMigration} from '../../reply/sqlite/candidates/schema.ts';
+import {replyCandidateActions} from '../../reply/sqlite/candidates/actions.ts';
 import {discussionActions} from '../../reply/sqlite/actions.ts';
 import {discussionRequestActions} from '../../reply/sqlite/requests.ts';
 import {runtimeActions} from '../../reply/sqlite/runtime-actions.ts';
@@ -37,6 +39,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9)],
-  actions: [...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...createMediaActions(installedDeletionRegistration)],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10)],
+  actions: [...replyCandidateActions, ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...createMediaActions(installedDeletionRegistration)],
 };

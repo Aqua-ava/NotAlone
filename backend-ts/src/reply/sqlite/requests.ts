@@ -53,7 +53,7 @@ export const discussionRequestActions:StorageAction[]=[
   const contact=requireDiscussionContact(tx,i.ownerId,i.contactId);
   const proof=i.identity;
   requireIdentity(tx,i.ownerId,i.contactId,i.requestKey,proof,contact.data_generation as bigint);
-  tx.run("INSERT INTO reply_request VALUES(?,?,?,?,?,?,'discussion',?,?,?,?,'running')",[i.ownerId,i.requestId,i.contactId,d.id,i.requestKey,i.entryId,proof.kind,proof.kind==='binding'?proof.bindingId:null,proof.kind==='binding'?proof.verificationId:null,proof.kind==='manual'?proof.confirmationId:null]);
+  tx.run("INSERT INTO reply_request VALUES(?,?,?,?,?,?,?,?,?,?,?, 'running')",[i.ownerId,i.requestId,i.contactId,d.id,i.requestKey,i.entryId,i.kind==='reply'?'reply':'discussion',proof.kind,proof.kind==='binding'?proof.bindingId:null,proof.kind==='binding'?proof.verificationId:null,proof.kind==='manual'?proof.confirmationId:null]);
   const pos=tx.get('SELECT COALESCE(MAX(position),0)+1 n FROM discussion_entry WHERE owner_id=? AND discussion_id=?',[i.ownerId,d.id])!.n;
   tx.run("INSERT INTO discussion_entry(owner_id,id,contact_id,discussion_id,position,role,body,origin_request_id,content_state) VALUES(?,?,?,?,?,'user',?,?,'available')",[i.ownerId,i.entryId,i.contactId,d.id,pos,i.text,i.requestId]);
   tx.run("INSERT INTO reply_attempt(owner_id,id,request_id,attempt_no,state,lease_token,accepted_data_generation,accepted_discussion_generation,accepted_source_revision,started_at,accepted_runtime_id,accepted_storage_epoch) VALUES(?,?,?,1,'running',?,?,?,?,?,?,?)",[i.ownerId,i.attemptId,i.requestId,i.leaseToken,contact.data_generation,d.generation,contact.source_revision,i.at,lease.runtimeId,lease.epoch]);
