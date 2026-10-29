@@ -82,7 +82,7 @@ export const historyActions:StorageAction[]=[
   tx.run('UPDATE read_goal SET cursor=?,completed_partitions=?,state=?,coverage_state=?,failure_code=? WHERE owner_id=? AND id=?',[page.cursorOut,JSON.stringify([...partitions]),state,complete?'complete':'partial',code,token.owner_id,goal.id]);
   return readCoverage(tx,token.owner_id,token.contact_id);
  }),
- action('history.interrupt','write',(tx,i)=>{const goal=currentGoal(tx,i.token,i.goalId);if(goal.state==='running')tx.run("UPDATE read_goal SET state='incomplete',failure_code=? WHERE owner_id=? AND id=?",[i.code,i.token.owner_id,goal.id]);return readCoverage(tx,i.token.owner_id,i.token.contact_id);}),
+ action('history.interrupt','write',(tx,i)=>{const goal=currentGoal(tx,i.token,i.goalId);if(goal.state==='running'||goal.state==='incomplete')tx.run("UPDATE read_goal SET state='incomplete',failure_code=? WHERE owner_id=? AND id=?",[i.code,i.token.owner_id,goal.id]);return readCoverage(tx,i.token.owner_id,i.token.contact_id);}),
  action('history.source','read',(tx,i)=>{
   readCoverage(tx,i.ownerId,i.contactId);
   const row=tx.get(`SELECT r.*,c.goal_id,c.captured_at,c.adapter_version,c.cursor_in,c.cursor_out,g.support_json
