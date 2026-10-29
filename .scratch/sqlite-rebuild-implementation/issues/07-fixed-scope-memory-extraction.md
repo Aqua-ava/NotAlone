@@ -87,3 +87,11 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 同次独立复核进一步发现自有host的嵌套关闭缓存：业务dispose失败会被ModelHost.close永久记录。新增真实owned ModelHost/provider反例先red，再将记忆runtime自有路径调整为arbiter.stop→service.close成功→ModelHost.close；共享路径仍不持有host关闭能力。现在同一runtime可重试业务释放，业务停止状态不恢复，成功关闭复用；相关三文件最终9/9与类型通过，双轴复核均确认原发现关闭。没有修改公共model-host.ts；该模块自身socket/journal关闭失败不在此次证据范围，未声称已验证或修复。
 
 MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/status及连接代次读取，只接受running/dsh/typescript，明确storage=sqlite走固定处理，当前PG缺省storage映射legacy，其余拒绝并撤下快照。preload/main均不接renderer模式或额外参数，只返回模式和连接代次，不外泄运行状态其他字段。两新增反例red→green，原controller/panel加新case最终8/8、桌面类型通过，双轴复核0新增。这里只提交07自有shared/main/preload及测试；正常MemoryPage、公共IPC汇总和实际App仍等11正式profile及桌面窗口，未把桥接测试当实机验收。
+
+按调度要求仅复查既有私有报告与预算账本的安全元数据：2目标、0成功、0候选，1条extraction调用记录为failed，预留406310单位、实耗未知；存档未保存dispatch及完整receipt，只有model_input/extraction_recovery各1事件，不能证明实际HTTP次数或具体供应商失败原因。模型必需配置与预算profile字段缺项均0，不等于认证成功或实际出站。诊断账本max_calls=2、used=1、streak=1，轮次outcome=unknown；按实现的秒级deadline核对已过期，有效剩余预算0。此次只读，没有读取/输出凭据或正文，没有新请求/新预算/重试，后来的env加载修复不能反推旧调用。
+
+独立MemoryProcessingEntry已按认证mode挂载固定Panel或既有页面，pending/失败/断连不挂正文，render同步scope fence及revision阻止旧模式回写。独立Spec实际用真实controller+React发现联动P2：替代mode请求会被旧Panel卸载时release取消；先补controller及Chrome联动red，再把正文释放与mode取消域隔离，synchronize仍同时撤两域。当前controller6/6、Entry真实React+Chrome6/6及桌面类型通过，Spec复核关闭该P2。这里只是独立入口准备，后续正式MemoryPage聚合与实际App仍须完成。
+
+正式前端检查点：按总指挥分配的公共前端窗口，实际合并根af98a3ba，接入main/preload/AppBridge与真实MemoryPage；保留11讨论、媒体及关闭协调。联系人scopeRevision、来源删除started、连接准备及退出均立即synchronize。SQLite只挂固定处理面板，PG经认证模式才挂既有页面；来源或资格失效撤下候选与过程正文。公共后端host/profile/config由03持有，本轮未修改；已发布迁移及registry与af98完全一致。
+
+本轮桌面pnpm typecheck通过；既有真实MemoryPage主卡单例1/1、新真实MemoryPage固定处理及失效单例1/1通过，后者使用正式React页面与控制器，仅替换合成网络。Standards/Spec独立复核均0新增。补登记本票4个桌面测试（controller为safe-node，其余3个为headless）；test:inventory仍被根基线遗留的19个其他票未登记测试拒绝，未执行那些测试、未改其分类。af98原有21项缺登包含本票2项，此次已补齐；不是分类检查通过。实际App未运行，桌面仍由18占用，后续正式profile合成流程与实际App验收继续推进，State保持claimed、Goal保持active；真实供应商质量限制仍如前，不重试或续期旧预算。

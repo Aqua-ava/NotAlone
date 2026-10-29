@@ -18,6 +18,7 @@ import { createCandidateProvenanceBridge } from './candidate-provenance';
 import { createExpressionPreferenceBridge } from './expression-preferences';
 import { createSkillLearningBridge } from './skill-learning';
 import { createMemoryBridge } from './memory';
+import { createFixedMemoryProcessingBridge } from './fixed-memory-processing';
 import { createBindingConsentBridge } from './binding-consent';
 import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
@@ -41,6 +42,7 @@ const bridge: AppBridge = {
   candidateCopy: createCandidateCopyBridge(ipcRenderer),
   sources: createSourceDeletionBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
+  fixedMemoryProcessing: createFixedMemoryProcessingBridge(ipcRenderer),
   backgroundTasks: createBackgroundTaskBridge(ipcRenderer),
   traces: createTraceBridge(ipcRenderer),
   bindings: createBindingConsentBridge(ipcRenderer),
