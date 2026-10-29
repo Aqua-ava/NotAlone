@@ -1,6 +1,12 @@
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistorySource } from '../../history/sqlite/contracts.ts';
 
+export interface MediaContactPort {
+  readonly ownerId: string;
+  eligibility(contactId: string): Promise<ReadEligibility>;
+}
+export interface MediaSourcePort {source(contactId: string, recordId: string): Promise<HistorySource>}
+
 export type MediaKind = 'image' | 'video' | 'voice';
 export type MediaGoal = 'extract' | 'original_upgrade' | 'audio_conversion';
 export type MediaRole = 'image_display' | 'video_playback' | 'audio_source' | 'audio_playback';

@@ -9,3 +9,13 @@
 HTTP拟定：GET/POST/DELETE `/api/contacts/:contactId/messages/:messageId/media`；POST只接受 `{request_key,goal}`，DELETE要求 `Idempotency-Key`。预览POST `.../media/files/:fileId/preview`；GET/DELETE `/api/media/previews/:sessionId` 观察撤下并确认释放。活动预览被删除封禁后须端侧撤下实际对象再释放；未确认释放保持删除未完成。文件路径不出站，不跨消息共享。
 
 文件API依据：Node v24官方fs文档 https://nodejs.org/docs/latest-v24.x/api/fs.html ，使用本机v24.19.0的open(O_EXCL/O_NOFOLLOW)、FileHandle.write/sync/stat、statfs及受版本管理的ManagedFiles身份校验。实现与实际验证证据由16任务Answer记录。
+
+## 已实现的装配入口
+
+`schema.ts:mediaMigration(version)`、`actions.ts:createMediaActions(registration)`、`deletion.ts:composeMediaDeletionRegistration(base)` 与 `service.ts:SqliteMediaService` 独立导出。全宿主只维护一份完整 registration，包含当前已安装的 history / identity / skill_metadata 等域，然后经 compose 加入 media；registry 的删除动作与媒体动作使用同一个对象。不要将未安装域写进 requiredDomains，也不要省略已有写者。
+
+服务使用 `MediaContactPort` 和 `MediaSourcePort` 窄接口；联系人资格应代理当前05生命周期持有的联系人服务，不能另造元数据缓存，也不能在联系人删除后重新装载旧对象。`initialize()` 只中断旧runtime未完成尝试并恢复已登记本地清理；GET不会领取提取。`stop(contactId?)` 用于取消选中/停读协调（本地转换关闭读取开关不必取消），每段及发布事务仍独立复验。所有领域服务及删除协调器必须共享一个 `ActiveHolders`。
+
+正常宿主将 `SqliteMediaHttp.handle` 放在Bearer/无Origin认证之后。未认证真实类型时传 `adapters:[]`，页面明确不可用。桌面桥 `installMessageMediaBridge` 与 `createMessageMediaBridge` 使用固定方法；`MessageMediaPanel` 只挂到image/video/voice聊天行。连接准备与退出必须等待 `invalidateAndDrain` / `prepareClosing`；来源或联系人删除开始撤下旧快照。前端撤下DOM/blob后才 `releasePreview`；后端 `close` 也不把仅取消视为释放。
+
+创建后、身份登记前崩溃会保留未知身份阻塞；不会据随机文件名猜测归属或删除。容量/类型/文件写入故障只清本次安全目标，旧合法结果保留。当前单文件保存及可撤销预览统一上限32MiB；超过时在读取字节前拒绝本次新增，不谎报可在App内播放。上述限制是本票有界资源合同，类型能力与真实播放仍由17/18验收。
