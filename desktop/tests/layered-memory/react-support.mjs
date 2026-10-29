@@ -22,7 +22,9 @@ export async function withMemoryPage(f, signal, run) {
       window.deliverBackgroundTasks = state => { for (const listener of backgroundListeners) listener(state); };
       window.deliverMemory = (state) => { for (const listener of listeners) listener(state); };
       window.deliverOwnerMemory = (state) => { for (const listener of ownerListeners) listener(state); };
-      window.notalone = { memory: new Proxy({}, { get: (_, method) => method === 'onStateChanged'
+      window.notalone = { backend: { onStateChanged: () => () => {} },
+        fixedMemoryProcessing: { readMode: async () => ({ mode: 'legacy', connectionGeneration: 1 }) },
+        memory: new Proxy({}, { get: (_, method) => method === 'onStateChanged'
         ? (listener) => { listeners.add(listener); return () => listeners.delete(listener); }
         : method === 'onProcessingInvalidated'
         ? (listener) => { processingListeners.add(listener); return () => processingListeners.delete(listener); }

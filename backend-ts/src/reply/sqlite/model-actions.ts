@@ -5,6 +5,7 @@ import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requireAttempt,encode,decode} from './requests.ts';
 import {requireRuntimeCurrent} from './runtime-actions.ts';
 import {identifier} from './actions.ts';
+import {sanitizeDiscussionFailure} from './failure.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 function context(tx:StorageTransaction,i:any):StorageRow{
  const row=tx.get("SELECT * FROM reply_context WHERE owner_id=? AND id=? AND request_id=? AND attempt_id=? AND contact_id=? AND discussion_id=? AND state='active'",[i.ownerId,i.contextId,i.requestId,i.attemptId,i.contactId,i.discussionId])??fail('discussion_context_invalid');
@@ -128,6 +129,9 @@ export const discussionModelActions:StorageAction[]=[
   const c=tx.get('SELECT * FROM model_call WHERE owner_id=? AND id=? AND reply_attempt_id=?',[i.ownerId,i.callId,i.attemptId]);if(!c)return;
   if(!['prepared','sending'].includes(String(c.state)))return;
   const state=i.dispatched?'unknown':'failed';
+  const failure=sanitizeDiscussionFailure(i.failure);
+  if(failure)tx.run('UPDATE model_call SET receipt=? WHERE owner_id=? AND id=?',
+   [JSON.stringify({...(c.receipt?JSON.parse(String(c.receipt)):{}),failure}),i.ownerId,i.callId]);
   tx.run('UPDATE model_call SET state=?,error_code=?,settlement_state=? WHERE owner_id=? AND id=?',[state,'discussion_call_failed',i.dispatched?'unknown':'settled',i.ownerId,i.callId]);tx.run('UPDATE model_operation SET state=? WHERE owner_id=? AND id=?',[state==='unknown'?'unknown':'failed',i.ownerId,c.operation_id]);
   tx.run('UPDATE operation_scope SET state=? WHERE owner_id=? AND operation_id=?',[i.dispatched?'unknown':'released',i.ownerId,c.operation_id]);
   tx.run("UPDATE reply_attempt SET state='failed',finished_at=?,error_code=? WHERE owner_id=? AND id=? AND state='running'",[Date.now(),'discussion_call_failed',i.ownerId,i.attemptId]);

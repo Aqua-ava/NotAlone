@@ -5,6 +5,11 @@ import type {VisualRequest, VisualResource, VisualResourcePort, VisualValidator}
 import {decodeWechatDat, MAX_VISUAL_BYTES} from './dat.ts';
 import {validateVisual} from './native.ts';
 
+function fixedData<T>(value:T):T {
+  const copy=structuredClone(value);
+  const freeze=(item:unknown):void=>{if(item&&typeof item==='object'){for(const child of Object.values(item))freeze(child);Object.freeze(item);}};
+  freeze(copy);return copy;
+}
 function proof(context:VisualRequest, resource:VisualResource):void {
   const {source,token}=context,association=resource.association;
   if (!source || !token || source.support.status!=='supported' || source.contactId!==context.contactId || source.messageId!==context.messageId ||
@@ -58,17 +63,24 @@ export class VisualMediaAdapter implements MediaAdapter {
   private async run(execution:MediaExecution){
     if(!this.supports(execution.kind,execution.goal)||!execution.source||!execution.token)throw new StorageFailure('media_association_unverified');
     if(execution.source.support.status!=='supported'||execution.source.contactId!==execution.contactId||execution.source.messageId!==execution.messageId||execution.source.raw.kind!==execution.kind||execution.source.support.sourceGeneration!==execution.token.source_generation)throw new StorageFailure('media_association_unverified');
-    const context:VisualRequest={contactId:execution.contactId,messageId:execution.messageId,kind:execution.kind as 'image'|'video',goal:execution.goal as 'extract'|'original_upgrade',source:execution.source,token:execution.token,signal:execution.signal,checkpoint:execution.checkpoint};
+    // 预期与端口输入分开持有；端口不能同时改写被验证对象和预期。
+    const context:VisualRequest=Object.freeze({contactId:execution.contactId,messageId:execution.messageId,kind:execution.kind as 'image'|'video',goal:execution.goal as 'extract'|'original_upgrade',source:fixedData(execution.source),token:fixedData(execution.token),signal:execution.signal,checkpoint:execution.checkpoint});
     await context.checkpoint();
-    const resource=await this.resources.open(context);
+    const request:VisualRequest=Object.freeze({...context,source:fixedData(context.source),token:fixedData(context.token)});
+    const opened=await this.resources.open(request);
+    const closeResource=opened.close;
     let released=false,closing:Promise<void>|undefined;
     const close=():Promise<void>=>{
       if(released)return Promise.resolve();
-      return closing??=Promise.resolve().then(()=>resource.close()).then(()=>{released=true;this.readers.delete(close);},()=>{closing=undefined;throw new StorageFailure('media_reader_release_failed');});
+      return closing??=Promise.resolve().then(()=>closeResource.call(opened)).then(()=>{released=true;this.readers.delete(close);},()=>{closing=undefined;throw new StorageFailure('media_reader_release_failed');});
     };
     this.readers.add(close);execution.retainReader(close);
     let output:Buffer|undefined,input:Buffer|undefined;
     try {
+      // 长度/摘要/质量/关联均固定于打开回执，不能由后来的流补造或替换。
+      const resource:VisualResource=Object.freeze({association:fixedData(opened.association),authority:fixedData(opened.authority),
+        envelope:opened.envelope,expectedBytes:opened.expectedBytes,expectedSha256:opened.expectedSha256,complete:opened.complete,
+        quality:fixedData(opened.quality),bytes:opened.bytes,withImageKey:opened.withImageKey?.bind(opened),close});
       await context.checkpoint();proof(context,resource);
       if(context.kind==='video'&&resource.envelope!=='plain')throw new StorageFailure('unsupported');
       const imageQuality=context.kind==='image'?quality(resource):null;

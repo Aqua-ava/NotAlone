@@ -1,6 +1,6 @@
 # 13：表达偏好接回
 
-Triage: ready-for-agent
+Triage: wontfix
 State: open
 Type: task
 Parent: [数据库重建](../../sqlite-database-rebuild/spec.md)、[同步与记忆规则](../../sync-memory-behavior/spec.md)
@@ -9,6 +9,8 @@ Blocked by: [12 候选回复与依据](12-reply-candidates-and-basis.md)
 > 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
 
 > 发布阶段：仅发布，未开始实现。
+
+> 2026-10-29用户决定：本轮暂缓。不启动长期偏好保存、管理或生成接入，候选回复不使用长期偏好；一次性写作要求仍限本次，不静默持久化。已有资料保留，08记忆版本修正与12候选回复仍在范围内。原验收条款仅保留为未来恢复时的历史范围，不要求本轮执行，也不标为通过。[当前有效范围](../planning.md)。
 
 ## 交付行为
 

@@ -1,12 +1,14 @@
 # 19：媒体真实关联与组合验收
 
-Triage: ready-for-agent
+Triage: wontfix
 State: open
 Type: task
 Parent: [微信媒体资源提取与语音文件转换](../../wechat-media-extraction/spec.md)
 Blocked by: [03 首次历史同步与消息展示](03-private-history-sync.md)；[17 图片与视频提取](17-image-video-extraction.md)；[18 语音保存与转换](18-voice-save-and-conversion.md)
 
 > 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
+
+> 2026-10-29用户决定：本轮暂缓。整票本轮不做，不派发、不读取真实图片／视频／语音、不做专门组合验收；此前ran最新各一条的授权不再用于继续本票。不将本票拆到03、17或21补做；未认证的真实关联入口继续不可用，已有16／17成果和安全隔离／删除保护保留。原验收条款仅保留为未来恢复时的历史范围，不要求本轮执行，也不标为通过。[当前有效范围](../planning.md)。
 
 ## 交付行为
 

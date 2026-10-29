@@ -87,3 +87,48 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 同次独立复核进一步发现自有host的嵌套关闭缓存：业务dispose失败会被ModelHost.close永久记录。新增真实owned ModelHost/provider反例先red，再将记忆runtime自有路径调整为arbiter.stop→service.close成功→ModelHost.close；共享路径仍不持有host关闭能力。现在同一runtime可重试业务释放，业务停止状态不恢复，成功关闭复用；相关三文件最终9/9与类型通过，双轴复核均确认原发现关闭。没有修改公共model-host.ts；该模块自身socket/journal关闭失败不在此次证据范围，未声称已验证或修复。
 
 MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/status及连接代次读取，只接受running/dsh/typescript，明确storage=sqlite走固定处理，当前PG缺省storage映射legacy，其余拒绝并撤下快照。preload/main均不接renderer模式或额外参数，只返回模式和连接代次，不外泄运行状态其他字段。两新增反例red→green，原controller/panel加新case最终8/8、桌面类型通过，双轴复核0新增。这里只提交07自有shared/main/preload及测试；正常MemoryPage、公共IPC汇总和实际App仍等11正式profile及桌面窗口，未把桥接测试当实机验收。
+
+按调度要求仅复查既有私有报告与预算账本的安全元数据：2目标、0成功、0候选，1条extraction调用记录为failed，预留406310单位、实耗未知；存档未保存dispatch及完整receipt，只有model_input/extraction_recovery各1事件，不能证明实际HTTP次数或具体供应商失败原因。模型必需配置与预算profile字段缺项均0，不等于认证成功或实际出站。诊断账本max_calls=2、used=1、streak=1，轮次outcome=unknown；按实现的秒级deadline核对已过期，有效剩余预算0。此次只读，没有读取/输出凭据或正文，没有新请求/新预算/重试，后来的env加载修复不能反推旧调用。
+
+独立MemoryProcessingEntry已按认证mode挂载固定Panel或既有页面，pending/失败/断连不挂正文，render同步scope fence及revision阻止旧模式回写。独立Spec实际用真实controller+React发现联动P2：替代mode请求会被旧Panel卸载时release取消；先补controller及Chrome联动red，再把正文释放与mode取消域隔离，synchronize仍同时撤两域。当前controller6/6、Entry真实React+Chrome6/6及桌面类型通过，Spec复核关闭该P2。这里只是独立入口准备，后续正式MemoryPage聚合与实际App仍须完成。
+
+正式前端检查点：按总指挥分配的公共前端窗口，实际合并根af98a3ba，接入main/preload/AppBridge与真实MemoryPage；保留11讨论、媒体及关闭协调。联系人scopeRevision、来源删除started、连接准备及退出均立即synchronize。SQLite只挂固定处理面板，PG经认证模式才挂既有页面；来源或资格失效撤下候选与过程正文。公共后端host/profile/config由03持有，本轮未修改；已发布迁移及registry与af98完全一致。
+
+本轮桌面pnpm typecheck通过；既有真实MemoryPage主卡单例1/1、新真实MemoryPage固定处理及失效单例1/1通过，后者使用正式React页面与控制器，仅替换合成网络。Standards/Spec独立复核均0新增。补登记本票4个桌面测试（controller为safe-node，其余3个为headless）；test:inventory仍被根基线遗留的19个其他票未登记测试拒绝，未执行那些测试、未改其分类。af98原有21项缺登包含本票2项，此次已补齐；不是分类检查通过。实际App未运行，桌面仍由18占用，后续正式profile合成流程与实际App验收继续推进，State保持claimed、Goal保持active；真实供应商质量限制仍如前，不重试或续期旧预算。
+
+正式profile增量证据：新增sqlite-memory-profile.test.mjs，正常contacts/history准备两联系人4文字并停读、真实关闭准备者Worker后，launchDsh加载原sqlite.patch和真正sqlite-host-plugin（运行profile逐字比较，不替换业务插件）。只在测试node包装器将两个固定官方供应商URL转本轮127.0.0.1、认证限定synthetic-only并拒绝其他出站。正式共享ModelHost、认证HTTP及Worker完成2次提取、2次strict逐项核验，4目标成功、4条auto待裁决输出、同key仍4次实际环回请求；本人贡献复用同轮同payload阶段事件，无第二次模型调用、正式记忆行0。正常配置、输出上限、上下文与安全余量不缩减，输入、候选及完整过程来源按准备时独立message/record映射配对核验，不只比较正文集合。
+
+该单例最终1/1、约1.54秒；backend pnpm typecheck、4文件node --check及空白检查通过。首次10秒超时因目录watch未唤醒，改监听自有WAL后通过，是测试监听问题而非生产red→green。独立双轴发现的候选归属断言缺口及清理fetch无期限均已补齐，复核关闭；正常API期限3秒、清理请求2秒后继续有界退出/终止。正常shutdown后握手、锁、profile home、唯一模型socket均消失，同库重开integrity/FK通过，自有临时根清理。另提供prepare-memory-desktop.mjs，只准备合成库及环回供应商、绝不启动App；其3种供应商边界冒烟不计为DSH或业务证据。实际App仍待调度，旧真实质量失败独立保留，不作为新增外部调用前提。
+
+实际开发入口的测试网络边界另提供test-only CJS父预加载器：正常pnpm run dev可经NODE_OPTIONS装入，按私有本轮plan、test角色、数据库、项目/env/info、父PID及固定DSH参数核验唯一子进程，只插入既有network guard及两个合成字段；不替换业务插件或profile，不改模型预算、stdio和寿命管道，普通子进程透传。新增纯Node用例4/4与两文件node --check通过（补校验前错误executable及business角色曾未被拒绝），双轴复核0新增；safe-node已登记，本次未运行Electron/App/CUA。预加载/spawn收据只证明边界拦截，后续仍需真实开发App加载及业务验收，不能把该4/4算作App通过。
+
+新增正式profile未知回执单例：环回供应商完整读取1条合成请求后断开socket，HTTP与trace真实显示unknown、预约预算保留而实耗未知；另一联系人已prepared但等待许可，不能把准备当作HTTP派发。同key与continue不追加实收请求，pause后正常shutdown返回stopped并实际退出；真实Worker重开保留unknown，另一条原prepared调用同callId转failed。最终仅unknown用例1/1、约1.21秒；node --check、空白检查通过，后台类型复用本次首次1/1时有效结果。双轴补强关闭了异常目录递归清理、计数漏掉解析失败或关闭阶段请求、every空集误过3项测试缺口：异常socket保留现场，handler入口和退出后均核对实收1/错误空/audit仅1redirect，持久化调用明确长度及身份。正常路径无强制终止，握手/锁/profile/socket与自有根均无残留，无生产缺口、真实供应商或桌面操作。
+
+另外将正常开发测试父预加载器实际接入Node→正式DSH启动冒烟，读取认证SQLite/memory状态、正常关闭，preload/spawn收据均形成、供应商请求0并清理自有根；仅证明真实Node启动接缝，未启动Electron，不能替代App验收。总指挥已将9cd前端合入357c5a2，并将03后端钩子合入451932ca；实际桌面仍由03人工B观察独占，07准备就绪后等待窗口。
+
+已实际无冲突合并根357c5a2018d4cd79652b4a14fbeb3abbc1d25e92，保留其451932ca首次历史钩子、账号认证及17/11修复，不编辑公共后端。因正式宿主及停读关闭接线变化，只补受影响sqlite-memory-profile.test.mjs两单例2/2（正产出约1.67秒、unknown约0.93秒，总2.72秒）及backend pnpm typecheck通过；unknown诊断实收1、关闭200/stopped、forced=false、全部残留false，自有根删除。发布迁移及registry保持与根一致。桌面类型及真实MemoryPage单例复用根357同源码有效结果，不重跑全量；实际App仍未运行，等待03人工B窗口结束后的正式分配。
+
+### 工程收口核对（实际App尚缺证）
+
+下表对应上方14条验收条件。测试结果复用前述有效记录，不以代码或单元测试冒充实际App；在桌面条件补齐前保持claimed，尚不勾选整体验收。
+
+| 条件 | 当前可核验证据 | 尚待补齐 |
+| --- | --- | --- |
+| 1 正常入口与请求幂等 | 正式profile正产出单例核对冻结输入及同key实收4次不增加；实际MemoryPage单例核对SQLite只挂固定面板 | 实际App经具名桥点击开始 |
+| 2 全量固定目标与跨轮身份 | extraction单例覆盖后到早时间消息不入旧轮、旧失败轮不冒领新轮成功、pause/continue复用task | 实际App观察进度与继续原任务 |
+| 3 停读与合法文字范围 | 正式profile停读处理4文字；extraction末例排除未勾选、非文字及未核验资料 | 实际App停读状态下手动处理 |
+| 4 联系人与本人隔离 | 正式profile按准备时独立message/record映射逐条核对输入、候选和过程；typed本人贡献同轮同payload | 实际App查看联系人及本人候选 |
+| 5 有界前文 | backend-ts/src/memory/sqlite/runs.ts:53在点击事务中仅冻结已处理前文最后8条；deletion前文单例清除整窗依赖并沿同item重新核验 | 无新增实际微信读取；不以App画面证明数据库上界 |
+| 6 正常模型与调用状态 | model-port实际DSH核对最终预算/用途；正式profile保持默认模型与预算；unknown单例实收1且同key/continue不追加 | 实际App区分准备、返回及unknown |
+| 7 逐项核验与失败 | 正式profile2E+2strict V；verified-results证据不足单例不计无产出成功，保存真实返回及逐项核验事实 | 实际App协议失败状态 |
+| 8 无产出成功 | extraction与官方DSH无产出单例成功计数、后续不重做；真实React面板显示明确文案 | 实际App无产出文案及再次开始无新增调用 |
+| 9 自动来历与08边界 | 正式profile4条auto待裁决输出、正式memory行0；verifiedExtractionOutput同事务输出接口 | 实际App自动提取与待裁决说明 |
+| 10 完整追踪 | 正式profile核对实际发送窗口、完整模型标准化工具参数、claim及来源；presentation顺序单例核对inputNos与实际窗口一致 | 实际App展开实际输入与返回 |
+| 11 资格与混合本人失效 | extraction取消单例拒绝旧回调且其他联系人继续；deletion单例撤销混合本人任务 | 实际App资格失效撤下快照 |
+| 12 05删除闭包 | deletion/unknown-deletion覆盖真实holder退出、前文传递依赖、unknown保留占用及其他来源不可盲重发 | 实际App来源删除撤下候选与过程 |
+| 13 状态反馈 | controller/Entry/实际MemoryPage和Panel真实React用例区分无产出、失败、unknown、后续pending及旧回包 | 实际App状态与交互观察 |
+| 14 正常组合入口 | 正式profile两联系人及本人、停读、同key；领域与React单例覆盖新消息、删除与迟到 | 合成正式SDK工程链与实际App联合收口 |
+
+实际App准备就绪：使用prepare-memory-desktop.mjs的独立合成root，分别核验positive（可hold观察进度）、no_new、protocol_failed、unknown；所有场景仍用正常提示词、正式profile和默认预算。仅在获得桌面窗口后执行pnpm run dev，先dev:status核验复用；明确禁止打包。开始任何模型动作前必须同时核对真实Electron父进程的preload/spawn守卫收据、认证SQLite/memory状态、test实例身份与停读状态；缺任一收据就停止，不因已出现页面而点击开始。来源/资格失效与旧回调仍走正常具名桥和真实页面，自动检查、实际App与真实模型质量分别记账。当前11持有App窗口，07不自行启动实例；旧真实模型问题失败/unknown及过期预算0保持不变。
+
+收口审计补强：原正式profile只检查extraction_return/verification_return存在，不能充分支持“完整返回已核对”。现环回supplier记录实际序列化送出的完整output，positive按准备时独立联系人映射、purpose及callId定位唯一持久化model_output，核对唯一tool-call名称并深比较全部arguments；未从verified产物反推预期。只重跑positive1/1、约1.71秒，两文件node --check及空白检查通过；unknown和TypeScript未变，复用已有结果。Standards/Spec独立复核均0新增；该证据证明本场景标准化工具返回的完整保存，不认证真实供应商语义质量。另以ps实际确认11的隔离开发Electron PID586正在运行，07等待该桌面流程，不把调度文件本身当进程存活证据。

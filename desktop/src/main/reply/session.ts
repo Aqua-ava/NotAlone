@@ -613,8 +613,10 @@ export class ReplySession {
           ...(resultTurn && result ? { result: { ...result,
             basisChanges: resultTurn.basisChanges ?? resultTurn.reply?.basisChanges } } : {}),
           ...(invalid ? { result: null, selectedCandidateId: null, phase: 'idle', canRetry: false } : {}) }, 'authoritative');
-        await this.restoreCandidateVersions(selection, saved.sessionId,
+        // SQLite实际发言不拥有旧候选选择；不可让未开放的候选端口阻断讨论回看及独立输入恢复。
+        if (saved.discussionEntries === undefined) await this.restoreCandidateVersions(selection, saved.sessionId,
           saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []), true);
+        else this.candidateVersions.setScope(null);
         if (current() && content && this.pendingContent === content && inputOperation === this.operation
           && (content.sessionId === null || content.sessionId === saved.sessionId)) {
           const restoredInput = await validateContactInput(this.backend, selection.contactId, content,
@@ -759,7 +761,7 @@ export class ReplySession {
         mode: 'rewrite_draft', scene: '', targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '',
         skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], contentRestoreNotice: undefined, candidateDrafts: [],
         result: null, selectedCandidateId: null, canRetry: false, phase: 'idle', errorCode: undefined }, 'authoritative');
-      await this.restoreCandidateVersions(selection, saved.sessionId,
+      if (saved.discussionEntries === undefined) await this.restoreCandidateVersions(selection, saved.sessionId,
         saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []), true);
       if (current()) {
         // 完成通知发出前释放切换锁，接收方才能立即进入新会话的工作区。

@@ -7,7 +7,9 @@ State: claimed
 
 ## 范围与规格
 
-本索引是这21项实施任务的统一入口，不另写一套规格。仅承接以下三份已定稿规格：
+> 2026-10-29用户最新范围：13表达偏好、15纠错诊断、18语音保存／转换、19媒体真实关联组合验收均本轮暂缓；保留原21项编号，本轮有效17项。18的既有实现与历史验收证据保留，不计本轮交付完成；仅做必要的入口停用。13、15、19不派发，不将19拆入其他任务继续验收。真实媒体唯一关联未验证时继续关闭对应入口；既有数据访问、隔离和删除保护保留，不据此删除用户资料。
+
+本索引是原21项实施任务的统一入口，不另写一套规格。以下三份已定稿规格按上述本轮范围执行；暂缓条款不记为通过：
 
 - [SQLite数据库重建](../sqlite-database-rebuild/spec.md)：结构、事务、实例生命周期、既有业务改接及旧业务清理切换。
 - [同步与记忆](../sync-memory-behavior/spec.md)：逐人授权、历史/增量、清空/重读和手动记忆处理。
@@ -19,7 +21,7 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 
 ## 已批准的任务与直接依赖
 
-下列编号与用户确认的提案完全一致。一票一文件；Blocked by只列真正直接依赖，其他外部放行条件在票内验收。
+保留原提案编号，一票一文件。有效任务的Blocked by只列本轮真正直接依赖；暂缓票保留原依赖供以后参考，不参与本轮调度。wontfix表示用户本轮不做，不表示永久废弃。18的resolved仅表示已发生的历史实现，不代表当前交付。
 
 | 编号与任务 | Blocked by | Triage | State |
 | --- | --- | --- | --- |
@@ -35,19 +37,19 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | open |
 | [11 助手讨论与 DSH 副本](issues/11-assistant-discussions-and-runtime.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | claimed |
 | [12 候选回复与依据](issues/12-reply-candidates-and-basis.md) | [11](issues/11-assistant-discussions-and-runtime.md) | ready-for-agent | open |
-| [13 表达偏好接回](issues/13-expression-preferences.md) | [12](issues/12-reply-candidates-and-basis.md) | ready-for-agent | open |
+| [13 表达偏好接回（本轮暂缓）](issues/13-expression-preferences.md) | [12](issues/12-reply-candidates-and-basis.md) | wontfix | open |
 | [14 官方 Skill 加载接回](issues/14-official-skill-loading.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
-| [15 既有纠错与诊断功能改接](issues/15-feedback-and-quality-adaptation.md) | [09](issues/09-memory-documents-publication.md) | ready-for-agent | open |
+| [15 既有纠错与诊断功能改接（本轮暂缓）](issues/15-feedback-and-quality-adaptation.md) | [09](issues/09-memory-documents-publication.md) | wontfix | open |
 | [16 单条媒体保存与清除](issues/16-single-message-media-lifecycle.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
-| [17 图片与视频提取](issues/17-image-video-extraction.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | claimed |
-| [18 语音保存与转换](issues/18-voice-save-and-conversion.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | claimed |
-| [19 媒体真实关联与组合验收](issues/19-media-integration-acceptance.md) | [03](issues/03-private-history-sync.md)、[17](issues/17-image-video-extraction.md)、[18](issues/18-voice-save-and-conversion.md) | ready-for-agent | open |
-| [20 默认切换 SQLite 与旧业务清理](issues/20-sqlite-cutover-and-legacy-cleanup.md) | [06](issues/06-clear-and-resync-history.md)、[10](issues/10-memory-processing-controls.md)、[13](issues/13-expression-preferences.md)、[14](issues/14-official-skill-loading.md)、[15](issues/15-feedback-and-quality-adaptation.md)、[16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | open |
-| [21 三份规格组合验收](issues/21-three-specs-integrated-acceptance.md) | [19](issues/19-media-integration-acceptance.md)、[20](issues/20-sqlite-cutover-and-legacy-cleanup.md) | ready-for-agent | open |
+| [17 图片与视频提取](issues/17-image-video-extraction.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | resolved |
+| [18 语音保存与转换（本轮暂缓）](issues/18-voice-save-and-conversion.md) | [16](issues/16-single-message-media-lifecycle.md) | wontfix | resolved |
+| [19 媒体真实关联与组合验收（本轮暂缓）](issues/19-media-integration-acceptance.md) | [03](issues/03-private-history-sync.md)、[17](issues/17-image-video-extraction.md)、[18](issues/18-voice-save-and-conversion.md) | wontfix | open |
+| [20 默认切换 SQLite 与旧业务清理](issues/20-sqlite-cutover-and-legacy-cleanup.md) | [06](issues/06-clear-and-resync-history.md)、[10](issues/10-memory-processing-controls.md)、[14](issues/14-official-skill-loading.md)、[16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | open |
+| [21 三份规格组合验收](issues/21-three-specs-integrated-acceptance.md) | [20](issues/20-sqlite-cutover-and-legacy-cleanup.md) | ready-for-agent | open |
 
 ## 依赖图
 
-箭头从前置任务指向后续任务。
+箭头只表示本轮有效依赖；四个暂缓节点不参与调度。
 
 ```mermaid
 flowchart TD
@@ -63,13 +65,13 @@ flowchart TD
   T10["10 处理控制"]
   T11["11 讨论与副本"]
   T12["12 候选与依据"]
-  T13["13 表达偏好"]
+  T13["13 表达偏好（本轮暂缓）"]
   T14["14 官方Skill"]
-  T15["15 纠错诊断"]
+  T15["15 纠错诊断（本轮暂缓）"]
   T16["16 媒体生命周期"]
   T17["17 图片视频"]
-  T18["18 语音转换"]
-  T19["19 媒体验收"]
+  T18["18 语音转换（本轮暂缓）"]
+  T19["19 媒体验收（本轮暂缓）"]
   T20["20 切换与清旧"]
   T21["21 组合验收"]
   T01 --> T02
@@ -87,33 +89,28 @@ flowchart TD
   T02 --> T11
   T05 --> T11
   T11 --> T12
-  T12 --> T13
   T01 --> T14
-  T09 --> T15
   T02 --> T16
   T05 --> T16
   T16 --> T17
-  T16 --> T18
-  T03 --> T19
-  T17 --> T19
-  T18 --> T19
   T06 --> T20
   T10 --> T20
-  T13 --> T20
   T14 --> T20
-  T15 --> T20
   T16 --> T20
-  T19 --> T21
   T20 --> T21
 ```
+
+## 当前总进度
+
+本轮有效17项：已集成6项（01、02、05、14、16、17）；进行中3项（03、07、11）；等待依赖8项（04、06、08、09、10、12、20、21）。18历史实现完成但本轮不交付，停用补丁单独记录。撤回测试已按用户要求暂停，B保持现状，不再等待用户操作；03真实消息状态认证缺口仍如实保留。
 
 ## 领取与并行约定
 
 - 本轮已获准实施，当前前沿为01；01实际完成并集成后立即并行释放02、05、14。下游工作树必须包含已集成前置提交。
 - 02和05完成后，07记忆提取、11助手讨论、16媒体生命周期可以并行，03历史同步也可沿02推进；公共文件或同一桌面实例仍须协调单一写入者。
-- 17图片视频与18语音可在16完成后并行；每张功能票自身已经包含入口、状态、测试和删除处理，19只做媒体组合与真实关联验收。
-- 20正式切换须先具备完整目标结构、全部存储消费者改接、媒体文件登记/删除及活动引用复核；不能等21才补这些条件。17至19未通过时，对应用户媒体能力不得开放。
-- 21依赖19和20，收口三份规格组合行为；没有首用、安装包或发布票。存在外部证据缺口时按实际结果报告，不因本地检查通过就关闭真实验收。
+- 17图片视频的既有实现和证据保留；18语音及19全部真实关联组合验收本轮暂缓，不再派发、读真实媒体或借其他票补做。未认证的真实资源入口继续拒绝。
+- 20正式切换须先具备本轮目标结构、有效存储消费者改接、媒体文件登记/删除及活动引用复核；不能等21才补这些条件。13、15入口停用且不回退旧PG；18保持最小停用，真实媒体未认证不开放。原表目录数量用于查漏，不为凑数实施暂缓功能。
+- 21本轮只依赖20及其有效依赖，收口17项有效任务组合行为；13、15、18、19标为用户暂缓，不记作验收通过，不转移到21补做。没有首用、安装包或发布票；其余真实渠道证据缺口仍据实报告。
 - 03、14等早票按已定合同完成自身来源注册、资格保护和隔离测试；05及后续写者尚未就绪时明确使用合同替身，不宣称实际删除／运行链路已通过。真实链路、记忆／文档写者与回复消费者的兼容性必须在20切换前验证，21只扩大组合；清理或资格保护不完整的能力不能开放到真实业务数据。
 
 ## 各票共同验收与执行边界
@@ -121,7 +118,7 @@ flowchart TD
 1. 用户现已明确授权本轮实施；开始的任务改为claimed，真实验收满足后才resolved。Triage表示下一步处理角色，不表示真实渠道、产品功能或验收已完成。
 2. 每张实现票贯通相应业务接口、持久化、现有界面反馈和测试；不新增手动聊天文件导入或外部消息发送能力。后续业务写者随票接入05删除闭包，不能留到最后才补隔离、来源或迟到保护。
 3. 测试优先通过正常业务入口和正式profile，用独立SQLite、受管目录和合成/匿名化资料；替身只放在明确外部边界并记录差异。按单场景、相关模块、必要组合场景阶梯验证，复用条件未变的有效结果。
-4. 合成数据可以验证本地实现；真实支持档未认证时运行时禁止相应真实读取。当前微信仅程序版本4.0.6/build29387已确认，真实结构、状态与最终读取制品仍需证据；这些挂在03、06、19及组合验收，不以未知默认支持，也不反复另开研究票。
+4. 合成数据可以验证本地实现；真实支持档未认证时运行时禁止相应真实读取。当前微信仅程序版本4.0.6/build29387已确认，真实结构、状态与最终读取制品仍需证据；正文渠道证据仍挂在03、06及有效组合验收；19真实媒体验收已暂缓，不再读取，不以未知默认支持，也不反复另开研究票。
 5. 原生WCDB研究库12项、生命周期合成14项及既有SQLite/媒体/DSH证据仅证明其明确范围，不能替代当前微信、最终制品或新业务接线。全部拒绝输入不等于正常路径、新消息不漏或真实媒体关联通过。证据见[定稿记录](../../research/wechat-spec-finalization-validation.md)。
 6. 正文、必要元数据与新媒体读取同受已核验账号、联系人、总开关和代次控制；关闭读取不停止合法已保存文字的手动记忆处理，取消联系人/来源失效则立即撤销相关提交。模型配置可用性和必要文本出站授权沿现有配置核验，不新增首用设置。
 7. 实际依赖和真实验收条件满足后才能将任务resolved；本索引不自动把研究/设计完成、代码提交、静态结构通过或部分功能映射为产品完成。未完成/受阻证据如实保留，不更改已确认规则。
@@ -176,3 +173,7 @@ flowchart TD
 - 公共共享合同已按源祖先合并：讨论、记忆提取与执行追踪分别追加为迁移7／8／9，既有1–6保持不变；真实SQLite共享约束及删除7项、两端类型通过。07的唯一模型宿主注入检查点亦已集成，root补装配1项，复用条件未变的源验证。07／11继续claimed，正式宿主与实际App验收尚未完成。
 
 - 17图片／视频完整检查点已集成，最小检查与双轴复核通过，正在独占短实际App窗口；18语音离线实现、依赖及许可证检查点已保存，Spec增量复核与实机待完成。03已按授权发送并保留第一条固定测试，随后唯一关联歧义停止；第二条未发送也未撤回，不据此认证真实状态。桌面已释放给17，03继续匿名原因诊断与首次历史公共hook收尾。
+
+- 17已完成实际App和资源固定证明修复，Goal实际complete、最终源已保留祖先集成；PNG清除、视频控件播放、来源／联系人删除撤下快照均通过，root补图片／语音联合变异4项。当前共六项resolved，其余按直接依赖继续；19仍等待03和18，真实媒体范围已由用户明确为指定会话最新图片、视频、语音各一条（存在且能核验归属时读取）。
+
+- 18已完成正常App的停读本地重转、实际播放、单独清除和来源删除，Goal实际complete并保留祖先集成；两份删除各40项复核且无阻塞、受管文件归零。当前七项resolved，19仍等待03。用户已明确将撤回校准留待以后手动操作：B发送态已唯一观察，撤回／未观测状态继续未验证，不等待或重复要求此项，不放宽对应读取门禁。

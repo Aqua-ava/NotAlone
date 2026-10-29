@@ -23,11 +23,12 @@ try {
   await f.media.extract(f.contact,video.id,{requestKey:randomUUID(),goal:'extract'});
   await f.contacts.setReading(false);
   const databaseId=f.storage.status.databaseId;
+  const contactDisplayName=(await f.contacts.directory()).bindings.find(binding=>binding.contact_id===f.contact)?.display_name;
   await f.media.close();await f.history.close();await f.contacts.close();await f.storage.close();
   await writeFile(join(f.root,'empty.env'),'# 合成媒体桌面验收，不配置模型或微信\n',{flag:'wx',mode:0o600});
   await writeFile(join(f.root,'sqlite-development.json'),JSON.stringify({formatVersion:1,intent:'open',role:'test',expectedDatabaseId:databaseId,capabilities:['contacts','history']}),{flag:'wx',mode:0o600});
   await writeFile(join(f.root,'backend-launch.json'),JSON.stringify({projectDirectory:project,envFilePath:join(f.root,'empty.env'),backendInfoPath:join(f.root,'managed/sqlite-backend.info')}),{flag:'wx',mode:0o600});
-  const receipt={synthetic:true,userData:f.root,databaseId,ownerId:f.owner,contactId:f.contact,imageId:image.id,videoId:video.id,sourceIds:[...image.sourceRecordIds,...video.sourceRecordIds],reading:false};
+  const receipt={synthetic:true,userData:f.root,databaseId,ownerId:f.owner,contactId:f.contact,contactDisplayName,imageId:image.id,videoId:video.id,sourceIds:[...image.sourceRecordIds,...video.sourceRecordIds],reading:false};
   if(process.argv[2])await writeFile(resolve(process.argv[2]),JSON.stringify(receipt),{flag:'wx',mode:0o600});
   console.log(JSON.stringify(receipt));
 } catch(error) {for(const close of cleanups.reverse())await close();throw error;}

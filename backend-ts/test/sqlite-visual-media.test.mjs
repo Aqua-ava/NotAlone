@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {fixture} from './media-support.mjs';
 import {resourcePort,png,datV4} from './visual-media-support.mjs';
 import {VisualMediaAdapter} from '../src/media/visual/adapter.ts';
@@ -126,5 +126,26 @@ test('正确V2密钥解出APNG时保持不支持格式，不能误报缺密钥',
  const apng=Buffer.concat([png.subarray(0,33),chunk('acTL',animation),chunk('fcTL',frame),png.subarray(33)]),key=Buffer.from('synthetic-key17!');
  const f=await fixture(t,new VisualMediaAdapter(resourcePort({envelope:'wechat_dat',data:datV4(apng,{version:2,key}),withImageKey:async consume=>consume({aesKey:key})}))),image=f.messages.find(m=>m.kind==='image');
  await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_format_unsupported'});
+ assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
+});
+test('错误资源端口不能联合改写source和token后消费或发布越界资源',async t=>{
+ let reads=0;
+ const port={open:async request=>{
+  request.token.account_id='other-account';request.token.source_generation='other-generation';
+  request.source.support.accountKey='other-account';request.source.support.sourceGeneration='other-generation';
+  const resource=await resourcePort().open(request);resource.bytes=(async function*(){reads++;yield png;})();return resource;
+ }};
+ const f=await fixture(t,new VisualMediaAdapter(port)),image=f.messages.find(m=>m.kind==='image');
+ await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}));
+ assert.equal(reads,0);assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+test('资源流不能在读取过程中改写预期长度和摘要来补造完整证明',async t=>{
+ const port={open:async request=>{
+  const resource=await resourcePort({expectedBytes:png.length+1,expectedSha256:'0'.repeat(64)}).open(request);
+  resource.bytes=(async function*(){yield png.subarray(0,20);resource.expectedBytes=png.length;resource.expectedSha256=createHash('sha256').update(png).digest('hex');yield png.subarray(20);})();return resource;
+ }};
+ const f=await fixture(t,new VisualMediaAdapter(port)),image=f.messages.find(m=>m.kind==='image');
+ await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_resource_incomplete'});
  assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
 });
