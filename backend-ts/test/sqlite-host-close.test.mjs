@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 import {closeSqliteHostResources} from '../src/sqlite-host-plugin.ts';
 
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
+test('退出先排空首次派发器，再关闭历史和共享存储',async()=>{
+ const gate=deferred(),started=deferred(),calls=[];
+ const closing=closeSqliteHostResources({firstHistory:{close:async()=>{calls.push('first-start');started.resolve();await gate.promise;calls.push('first-done');}},history:{close:async()=>{calls.push('history');}},contacts:{close:async()=>{calls.push('contacts');}},models:{close:async()=>{calls.push('models');}},storage:{close:async()=>{calls.push('storage');}}});
+ await started.promise;assert.deepEqual(calls,['first-start']);gate.resolve();await closing;
+ assert.deepEqual(calls,['first-start','first-done','history','contacts','models','storage']);
+});
+test('首次派发排空失败继续关闭其他领域，但保留共享模型和SQLite供重试',async()=>{
+ let fail=true;const calls=[],failure=new Error('合成首次派发器未排空');
+ const resources={firstHistory:{close:async()=>{calls.push('first');if(fail)throw failure;}},history:{close:async()=>{calls.push('history');}},contacts:{close:async()=>{calls.push('contacts');}},models:{close:async()=>{calls.push('models');}},storage:{close:async()=>{calls.push('storage');}}};
+ await assert.rejects(closeSqliteHostResources(resources),error=>error instanceof AggregateError&&error.errors[0]===failure);
+ assert.deepEqual(calls,['first','history','contacts']);fail=false;await closeSqliteHostResources(resources);
+ assert.deepEqual(calls,['first','history','contacts','first','history','contacts','models','storage']);
+});
 test('媒体关闭失败仍逐域排空历史和联系人，保留存储供同操作恢复',async()=>{
  const mediaFailure=new Error('合成媒体关闭失败');const historyGate=deferred(),historyStarted=deferred(),contactGate=deferred(),contactStarted=deferred();const calls=[];
  const closing=closeSqliteHostResources({

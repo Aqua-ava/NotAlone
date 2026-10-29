@@ -17,10 +17,14 @@
 本次实际制品的三值证据在 `support-profiles/wechat-4.0.6-29387.json`；该静态档仍unverified且不能自动替代运行时匹配，详见docs/verification/sqlite-private-history-support-03.md。
 
 
-`FirstHistoryCoordinator` 是03首次历史的唤醒层，依赖受控 `directory` 与正式 `SqliteHistoryService`。`wake()` 后台合并请求，最多两位联系人并发；只处理有效授权下尚未完整的首次覆盖，不做持续增量、轮询、记忆或媒体。`stop(contactId?)`、`close()` 等待真实渠道返回及关闭；`getState()` 只返回固定状态和脱敏错误，`waitForIdle()` 供诊断及验收。启动、确认成功和开启读取的公共触发点须串行接入；关闭／撤销回调要保留其他领域原有停读与本地处理区别，不得以历史回调覆盖媒体等消费者。
+`FirstHistoryCoordinator` 是03首次历史的唤醒层，依赖受控 `directory` 与正式 `SqliteHistoryService`。`wake()` 后台合并请求，最多两位联系人并发；只处理有效授权下尚未完整的首次覆盖，不做持续增量、轮询、记忆或媒体。`stop(contactId?)`、`close()` 等待真实渠道返回及关闭；`getState()` 只返回固定状态和脱敏错误，`waitForIdle()` 供诊断及验收。正式宿主在成功启动并发布握手后、逐人确认成功及开启读取后唤醒；确认 HTTP 不等待整批历史。全局关闭同时停止首次历史和微信媒体读取，保留合法本地转换；撤销按联系人停止全部读取。退出先排空协调器，再沿共享领域关闭合同处理消费者、模型与SQLite；失败保留共享资源供原操作重试。
 
 重开按原目标与游标恢复；来源不承认旧游标时保存真实不完整和最新失败原因，不清零为完整。首次派发已由正式 SQLite／联系人／历史服务验证，公共宿主触发与实际 App 验收仍单独记录。来源删除的 `coversAllSources` 只给可能持有该联系人任意来源的早期历史读者声明；按旧数据代次排空，不从已有 goal 猜测当前内存读者。
+
+公共接线已有正式 HTTP 与 launchDsh/profile 合成验证：无消息／goal 预植，正常授权后自动首次入库，持久开关下启动自动派发；未知支持零 target/page 并显示最新受阻原因。状态只覆盖显示层错误，不伪造持久 goal、完整覆盖或正文可用性。实际 App 的消息、覆盖及删除后正文撤下仍需独立桌面证据。
 
 开发窄客户端另有 `observeTestMetadataSelected('arm'|'next'|'current')`：一次基线、逐阶段唯一 owner/text 新行、最多两条，复查只用内部已锁主键。错误终止观察并排空，不重试改变时序关联；未知状态不放行正常历史。真实 UI 发送成功不能代替状态语义认证。
 
 `createWechatHistoryChannel(executable?)` 使用显式工具路径及固定旁侧 manifest，经正式窄客户端核验制品和支持档。实例绑定账号、稳定会话键及完整读取 token；任一范围字段变化关闭读者。未配置或支持未认证时拒绝正文，不自动寻找工具。原生 target／cursor 只属于签发它的固定快照进程，失效时保留 incomplete 和明确错误，不把新快照冒充旧游标续读。公共宿主须传入受控配置路径；真实支持状态仍按运行时报告。
+
+联系人窄元数据与正文资格分开：工具配置账号按固定版本／完整 contact、SessionTable 结构／可读性及前后配置和来源守卫核验，账号 generation 与稳定私聊 resolve 共用来源公式。名单只在服务明确同意后读取必要私聊字段；未知支持、重复或缺失拒绝。metadata verified 不授权正文，也不表示前台登录核验。端口失败排空旧客户端，后续显式重检可重新核验，不能恢复旧授权。

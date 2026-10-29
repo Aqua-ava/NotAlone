@@ -105,3 +105,5 @@ MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/stat
 新增正式profile未知回执单例：环回供应商完整读取1条合成请求后断开socket，HTTP与trace真实显示unknown、预约预算保留而实耗未知；另一联系人已prepared但等待许可，不能把准备当作HTTP派发。同key与continue不追加实收请求，pause后正常shutdown返回stopped并实际退出；真实Worker重开保留unknown，另一条原prepared调用同callId转failed。最终仅unknown用例1/1、约1.21秒；node --check、空白检查通过，后台类型复用本次首次1/1时有效结果。双轴补强关闭了异常目录递归清理、计数漏掉解析失败或关闭阶段请求、every空集误过3项测试缺口：异常socket保留现场，handler入口和退出后均核对实收1/错误空/audit仅1redirect，持久化调用明确长度及身份。正常路径无强制终止，握手/锁/profile/socket与自有根均无残留，无生产缺口、真实供应商或桌面操作。
 
 另外将正常开发测试父预加载器实际接入Node→正式DSH启动冒烟，读取认证SQLite/memory状态、正常关闭，preload/spawn收据均形成、供应商请求0并清理自有根；仅证明真实Node启动接缝，未启动Electron，不能替代App验收。总指挥已将9cd前端合入357c5a2，并将03后端钩子合入451932ca；实际桌面仍由03人工B观察独占，07准备就绪后等待窗口。
+
+已实际无冲突合并根357c5a2018d4cd79652b4a14fbeb3abbc1d25e92，保留其451932ca首次历史钩子、账号认证及17/11修复，不编辑公共后端。因正式宿主及停读关闭接线变化，只补受影响sqlite-memory-profile.test.mjs两单例2/2（正产出约1.67秒、unknown约0.93秒，总2.72秒）及backend pnpm typecheck通过；unknown诊断实收1、关闭200/stopped、forced=false、全部残留false，自有根删除。发布迁移及registry保持与根一致。桌面类型及真实MemoryPage单例复用根357同源码有效结果，不重跑全量；实际App仍未运行，等待03人工B窗口结束后的正式分配。
