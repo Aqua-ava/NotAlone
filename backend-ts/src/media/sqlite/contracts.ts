@@ -50,6 +50,8 @@ export interface MediaExecution extends MediaScope {
   input: {fileId: string; localPath: string} | null;
   /** 每次外部读取/转换分段前后都应调用；服务还在写入和发布时复验。 */
   checkpoint(): Promise<void>;
+  /** 外部读者须先登记；释放失败保留同一attempt holder，删除重试仍须实际复核。 */
+  retainReader(close:()=>Promise<void>):void;
   save(input: MediaFileInput): Promise<{fileId: string}>;
 }
 export interface MediaAdapter {

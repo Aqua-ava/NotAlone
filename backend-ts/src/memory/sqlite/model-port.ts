@@ -27,7 +27,9 @@ export interface SqliteExtractionModelPortOptions {
   ctx:Context;
   configuration:HostReplyConfiguration;
   permit:ExtractionPermitEndpoint;
-  resolveUserId:ModelProviderConfiguration['resolveUserId'];
+  resolveUserId?:ModelProviderConfiguration['resolveUserId'];
+  /** 受信任宿主可注入唯一provider；其生命周期由宿主在所有业务排空后结束。 */
+  provider?:ReturnType<typeof installModelProvider>;
   /** 业务层核验本轮用途、文本范围及授权；不能只凭配置存在即授权。 */
   authorizePurpose(input:{purpose:ExtractionInvocation['purpose'];scope:SqliteExtractionModelScope},signal:AbortSignal):Promise<void>;
 }
@@ -49,13 +51,14 @@ export function createSqliteExtractionModelPort(options:SqliteExtractionModelPor
   if(!positive(binding.maxTokens)||!positive(profile.context_window_tokens)||!positive(profile.safety_margin_tokens)
     ||profile.context_window_tokens<=binding.maxTokens+profile.safety_margin_tokens
     ||providerConfiguration.provider!==binding.provider||!positive(model.deadline_ms)
-    ||typeof options.authorizePurpose!=='function')fail('extraction_model_configuration_invalid');
+    ||typeof options.authorizePurpose!=='function'||!options.provider&&typeof options.resolveUserId!=='function')fail('extraction_model_configuration_invalid');
   const preparation:SqliteExtractionModelPreparation={provider:binding.provider,model:binding.model,
     configurationId:createHash('sha256').update(JSON.stringify({binding,profile,
       baseURL:providerConfiguration.connection.baseURL,deadline:model.deadline_ms})).digest('hex'),
     maxInputTokens:profile.context_window_tokens-binding.maxTokens-profile.safety_margin_tokens,
     maxOutputTokens:binding.maxTokens,contextWindowTokens:profile.context_window_tokens,safetyMarginTokens:profile.safety_margin_tokens};
-  const provider=installModelProvider(options.ctx,{...providerConfiguration,resolveUserId:options.resolveUserId});
+  const ownsProvider=!options.provider;
+  const provider=options.provider??installModelProvider(options.ctx,{...providerConfiguration,resolveUserId:options.resolveUserId!});
   const caller=createExtractionModelCaller({ctx:options.ctx,provider,permit:options.permit});
   const stopped=new AbortController();
   const active=new Set<Promise<unknown>>();
@@ -100,7 +103,7 @@ export function createSqliteExtractionModelPort(options:SqliteExtractionModelPor
   return {
     prepare,invoke,
     close():Promise<void>{
-      return closing??=(async()=>{stopped.abort();await Promise.allSettled([...active]);await provider.dispose();})();
+      return closing??=(async()=>{stopped.abort();await Promise.allSettled([...active]);if(ownsProvider)await provider.dispose();})();
     },
   };
 }

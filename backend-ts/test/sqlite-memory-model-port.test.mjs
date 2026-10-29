@@ -61,16 +61,19 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
   const call=async(body={})=>await(await fetch(url,{method:'POST',body:JSON.stringify({context:{...context,requestId:randomUUID(),attemptId:randomUUID()},...body})})).json();
   const prepared=await call({prepare:true});assert.equal(prepared.maxOutputTokens,512);assert.equal(prepared.maxInputTokens,126464);
   assert.match(prepared.configurationId,/^[a-f0-9]{64}$/);assert.equal(requests,0);
-  const success=await call();assert.equal(success.text,'合成输出');assert.equal(success.receipt.outcome,'succeeded');assert.equal(requests,1);
+  const success=await call();assert.equal(success.text,'合成输出');assert.equal(success.receipt.outcome,'succeeded');assert.equal(requests,1);assert.equal(success.sharedCalls,1);
   const denied=await call({deny:true});assert.equal(denied.error,'synthetic_purpose_denied');assert.equal(requests,1);
   const noCredentials=await call({noCredentials:true});assert.equal(noCredentials.error,'extraction_model_credentials_unavailable');assert.equal(requests,1);
   const oversized=await call({oversized:true});assert.equal(oversized.error,'extraction_model_budget_exceeded');assert.equal(requests,1);
   const late=await call({lateDeletion:true});assert.equal(late.error,'synthetic_scope_deleted');assert.equal(requests,2);
   rejectHTTP=true;const authentication=await call();assert.equal(authentication.error,'extraction_model_call_failed');assert.deepEqual(authentication.providerFailure,{name:'LlmFailure',code:'AUTH',status:401});assert.equal(authentication.dispatch,'response_observed');assert.equal(authentication.outcome,'failed');assert.doesNotMatch(JSON.stringify(authentication),/合成供应商原始正文/);assert.equal(requests,3);
+  const shared=await call({sharedProbe:true});
+  assert.equal(shared.text,'合成输出');assert.equal(shared.sharedCalls,5);assert.equal(requests,4);
+  // 未知许可必须保守占用；先验证临时端口关闭，再由原端口派发，不能靠新scope绕过未知占用。
   failReceipt=true;
   const unknownContext={...context,requestId:randomUUID(),attemptId:randomUUID()};
-  const unknown=await call({context:unknownContext});assert.equal(unknown.error,'extraction_model_ack_unknown');assert.equal(requests,4);
-  const retried=await call({context:{...unknownContext,attemptId:randomUUID()}});assert.equal(retried.error,'extraction_model_recovery_unknown');assert.equal(requests,4);
+  const unknown=await call({context:unknownContext});assert.equal(unknown.error,'extraction_model_ack_unknown');assert.equal(requests,5,'关闭另一个提取端口后原端口仍复用宿主provider');
+  const retried=await call({context:{...unknownContext,attemptId:randomUUID()}});assert.equal(retried.error,'extraction_model_recovery_unknown');assert.equal(requests,5);
   assert.equal((await call({close:true})).closed,true);
-  assert.equal((await call()).error,'extraction_model_closed');assert.equal(requests,4);
+  assert.equal((await call()).error,'extraction_model_closed');assert.equal(requests,5);
 });
