@@ -29,3 +29,23 @@ test('同步HTTP投影映射运行状态并报告文字与占位，不把部分�
  assert.equal(incomplete.cli_backfill_incomplete_contacts,1);
  assert.equal(incomplete.cli_history_coverages[0].failure_code,'history_identity_conflict');
 });
+
+test('同步HTTP投影单独报告增量检查点与降级，不把不可用或受阻标成已同步',()=>{
+ const incremental={goalId:'00000000-0000-4000-8000-000000000003',phase:'ready',failureCode:null,cursorPresent:true,pagesAccepted:3,lastAcceptedAt:1700000000000,resumedFromGoalId:id};
+ const projected=projectHistorySyncStatus({sync_enabled:true},[{...coverage,phase:'complete',incremental}]);
+ assert.equal(projected.cli_history_coverages[0].incremental_phase,'ready');
+ assert.equal(projected.cli_history_coverages[0].incremental_pages,3);
+ assert.equal(projected.cli_history_coverages[0].incremental_last_accepted_at,1700000000000);
+ assert.equal(projected.cli_incremental_phase,'idle');
+ assert.equal(projected.cli_incremental_failure_code,null);
+ // 运行状态覆盖持久阶段：受阻可见且优先于检查点。
+ const blocked=projectHistorySyncStatus({},[{...coverage,phase:'complete',incremental}],undefined,{phase:'blocked',lastError:null,contacts:[{contactId:id,phase:'blocked',lastError:'history_tail_unsupported'}]});
+ assert.equal(blocked.cli_history_coverages[0].incremental_phase,'blocked');
+ assert.equal(blocked.cli_history_coverages[0].incremental_failure_code,'history_tail_unsupported');
+ assert.equal(blocked.cli_incremental_phase,'incomplete');
+ assert.equal(blocked.cli_incremental_failure_code,'history_tail_unsupported');
+ // 交接不可证明：全部不可用时不伪报已同步。
+ const unavailable=projectHistorySyncStatus({},[{...coverage,phase:'complete',incremental:{goalId:null,phase:'unavailable',failureCode:'history_incremental_unavailable',cursorPresent:false,pagesAccepted:0,lastAcceptedAt:null,resumedFromGoalId:null}}]);
+ assert.equal(unavailable.cli_incremental_phase,'unavailable');
+ assert.equal(unavailable.cli_history_coverages[0].incremental_failure_code,'history_incremental_unavailable');
+});
