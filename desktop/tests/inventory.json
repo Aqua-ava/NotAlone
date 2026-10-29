@@ -44,6 +44,7 @@
     "tests/expression-preferences/reprepare.test.mjs",
     "tests/failure-visibility.test.mjs",
     "tests/first-frame-read.test.mjs",
+    "tests/fixed-memory-development-network.test.mjs",
     "tests/fixed-memory-processing.test.mjs",
     "tests/foreground-confirmation-binding.test.mjs",
     "tests/foreground-latency.test.mjs",
@@ -127,10 +128,19 @@
     "tests/reply-generation-transport.test.mjs",
     "tests/packaging/build-space.test.mjs",
     "tests/packaging/runtime-attribution.test.mjs",
+    "tests/message-media-bridge.test.mjs",
+    "tests/message-media-controller.test.mjs",
+    "tests/message-media-transport.test.mjs",
+    "tests/packaging/build-history-cli.test.mjs",
+    "tests/skill-learning/sqlite-library.test.mjs",
+    "tests/sqlite-development.test.mjs",
     "tests/sqlite-discussion-bridge.test.mjs",
     "tests/sqlite-discussion-read.test.mjs",
     "tests/sqlite-discussion-session.test.mjs",
-    "tests/sqlite-discussion-source-lifecycle.test.mjs"
+    "tests/sqlite-discussion-source-lifecycle.test.mjs",
+    "tests/sqlite-history-clearing.test.mjs",
+    "tests/sqlite-history-messages.test.mjs",
+    "tests/sqlite-source-deletion-contract.test.mjs"
   ],
   "headless": [
     "tests/fixed-memory-processing-view.test.mjs",
@@ -155,6 +165,9 @@
     "tests/sync-scope-view.test.mjs",
     "tests/wechat-setup-view.test.mjs",
     "tests/history-reply-warning-view.test.mjs",
+    "tests/message-media-integration.test.mjs",
+    "tests/message-media-view.test.mjs",
+    "tests/skill-learning/sqlite-library-view.test.mjs",
     "tests/sqlite-discussion-composer.test.mjs",
     "tests/sqlite-discussion-panel.test.mjs"
   ],
@@ -190,5 +203,7 @@
     "tests/scheduling/launch-rejection.spec.ts",
     "tests/windows.spec.ts"
   ],
-  "historical": []
+  "historical": [
+    "tests/voice-media-integration.test.mjs"
+  ]
 }

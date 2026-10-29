@@ -1,12 +1,14 @@
 # 15：既有纠错与诊断功能改接
 
-Triage: ready-for-agent
+Triage: wontfix
 State: open
 Type: task
 Parent: [同步、聊天清空与记忆处理规则](../../sync-memory-behavior/spec.md)、[SQLite数据库重建](../../sqlite-database-rebuild/spec.md)
 Blocked by: [09 主题资料与长期概览](09-memory-documents-publication.md)
 
 > 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
+
+> 2026-10-29用户决定：本轮暂缓。不实施或启用既有纠错保护／诊断改接，不以20切换门槛为由补做；一般必要工程验证与08记忆版本修正仍在范围内。原验收条款仅保留为未来恢复时的历史范围，不要求本轮执行，也不标为通过。[当前有效范围](../planning.md)。
 
 ## 交付行为
 

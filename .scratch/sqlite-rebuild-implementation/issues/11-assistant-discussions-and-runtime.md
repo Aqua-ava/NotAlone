@@ -45,7 +45,7 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 - 最小公共生成正例另行完成：复用已有固定transport测试工具，仅把Messages/strict目标映射到事先确认的127.0.0.1并拒绝外部连接，未改正式launchDsh/profile/sqlite-host共享ModelHost、provider、arbiter及业务提交。认证entries POST200，实际本机HTTP1次；精确request/attempt committed、唯一call succeeded/settled、真实assistant event与entry关联、完整manifest及ready边界、shutdown200及进程退出均通过。11 units为合成usage；真实问题账本前后不变。独立Spec公共接线窄审未决0；此段作为App资料第4段，前三段helper来源仍分列。
 - 实际开发App初验已显示公共生成段的非空用户／助手发言；甲的讨论草稿在切乙时撤下，乙仅显示自己的发言。切回甲发现合法讨论被旧候选恢复失败拖成failed，同一后台甲乙目录／发言GET均200/ready；该界面失败现场已保留。
 - `c17cc33f`以真实ReplySession的甲乙甲最小红例修复旧候选端口耦合：显式SQLite discussionEntries在读回及会话切换时跳过旧candidate/selections，普通独立草稿与来源校验仍沿原流程。2项SQLite回归、14项相关旧流程／来源测试、desktop类型通过，独立Standards与Spec未决0；App已正常退出，dev:status为stopped/pids=[]后释放桌面。
-- 下一短窗口仍须定向复验新分支、分段继续／新开、删除撤旧快照及原unknown恢复受阻。按总调度最终分配，本票6项已单独登记（safe-node4、headless2），原其他成员与顺序保留；完整清单仍有外票13项未登记，由总调度集中补齐，不把此全局状态记作通过。非空外部助手发言的保存／重开证据仍未取得。继续保持claimed，未勾选最终交付条件。
+- 下一短窗口仍须定向复验新分支、分段继续／新开、删除撤旧快照及原unknown恢复受阻。本票6项已登记（safe-node4、headless2），随后实际合入中央登记提交`2f44ce6c`并精确采用root完整清单，确认无重复。`test:inventory`通过：safe-node141、headless27、isolated-http-pg6、native9、app11、historical1；此命令仅检查文件名，未执行测试，不替代既有16／32项回归或实际App。非空外部助手发言的保存／重开证据仍未取得。继续保持claimed，未勾选最终交付条件。
 
 ## 规格与证据入口
 
