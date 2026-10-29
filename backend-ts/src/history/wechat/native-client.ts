@@ -21,6 +21,20 @@ export interface WechatSchemaInspection {
   format: 'wechat-message-schema-v1'; status: 'unverified'; scopeDigest: string;
   sourceGeneration: string; schemaFingerprint: string; tables: WechatTableSchema[]; checkedPartitions: string[];
 }
+export interface WechatAccountSchema {
+  format: 'wechat-account-schema-v1'; status: 'unverified'; accountKey: string; sourceGeneration: string;
+  schemaFingerprint: string; tables: (Omit<WechatTableSchema, 'role'> & {role: 'contact' | 'session'})[]; normalHistory: false;
+}
+export interface WechatAccountMetadata {
+  format: 'wechat-account-metadata-v1'; status: 'verified' | 'unverified'; reason: string | null;
+  accountKey: string; identityScheme: 'wechat.account.v1'; sourceGeneration: string; supportProfile: string;
+  programVersion: string; build: string; artifactSha256: string; wcdbSha256: string;
+  configuredAccount: 'verified' | 'unverified'; continuity: 'held-contact-session-instances'; normalHistory: false;
+}
+export interface WechatPrivateSessionMetadata {
+  format: 'wechat-private-session-metadata-v1'; account: WechatAccountMetadata;
+  sessions: {username: string; displayName: string; kind: 'private'; identityAssurance: 'verified'}[];
+}
 export interface WechatMessageMetadataRecord {
   partition: string; table: string; localId: string | null; serverId: string | null;
   originalType: string | null; status: string | null;
@@ -52,6 +66,7 @@ const digest = (input: string | Buffer) => createHash('sha256').update(input).di
 const fail = (code = 'history_protocol_invalid'): never => { throw new StorageFailure(code); };
 const hashPattern = /^[a-f0-9]{64}$/;
 const allowedErrors = new Set([
+  'history_metadata_profile_unverified', 'history_program_version_uncertified',
   'history_request_invalid', 'history_operation_unsupported', 'history_scope_unverified',
   'history_account_unavailable', 'history_account_changed', 'history_native_unavailable',
   'history_metadata_unavailable', 'history_identity_unverified', 'history_identity_ambiguous',
@@ -137,6 +152,54 @@ function inspection(value: unknown, scope: ResolvedWechatScope): WechatSchemaIns
   if (tables.some(item => !checkedPartitions.includes(item.partition))) return fail();
   return { format: 'wechat-message-schema-v1', status: 'unverified', scopeDigest: row.scopeDigest as string,
     sourceGeneration: scope.sourceGeneration, schemaFingerprint: hash(row.schemaFingerprint), tables, checkedPartitions };
+}
+function accountIdentity(value: unknown): string {
+  const parsed = text(value);
+  return /^[A-Za-z0-9_.@-]{1,255}$/.test(parsed) ? parsed : fail();
+}
+function accountSchema(value: unknown): WechatAccountSchema {
+  const row = object(value, ['format', 'status', 'accountKey', 'sourceGeneration', 'schemaFingerprint', 'tables', 'normalHistory']);
+  if (row.format !== 'wechat-account-schema-v1' || row.status !== 'unverified' || row.normalHistory !== false) return fail();
+  const tables = list(row.tables, 2, value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();
+    const role = (value as Record<string, unknown>).role;
+    if (role !== 'contact' && role !== 'session') return fail();
+    return { ...table({ ...value, role: 'private_message' }), role: role as 'contact' | 'session' };
+  }, 2);
+  unique(tables.map(item => item.role)); unique(tables.map(item => item.target));
+  return { format: 'wechat-account-schema-v1', status: 'unverified', accountKey: accountIdentity(row.accountKey), sourceGeneration: hash(row.sourceGeneration), schemaFingerprint: hash(row.schemaFingerprint), tables, normalHistory: false };
+}
+function accountMetadata(value: unknown, options: NarrowWechatClientOptions): WechatAccountMetadata {
+  const row = object(value, ['format', 'status', 'reason', 'accountKey', 'identityScheme', 'sourceGeneration', 'supportProfile', 'programVersion', 'build', 'artifactSha256', 'wcdbSha256', 'configuredAccount', 'continuity', 'normalHistory']);
+  if (row.format !== 'wechat-account-metadata-v1' || row.identityScheme !== 'wechat.account.v1'
+    || row.supportProfile !== 'wechat-4.0.6-29387-account-session-metadata-v1'
+    || row.continuity !== 'held-contact-session-instances' || row.normalHistory !== false
+    || hash(row.artifactSha256) !== options.expectedCliSha256 || hash(row.wcdbSha256) !== options.expectedWcdbSha256
+    || typeof row.programVersion !== 'string' || !/^[0-9]{1,3}(\.[0-9]{1,3}){1,3}$/.test(row.programVersion)
+    || typeof row.build !== 'string' || !/^[0-9]{1,12}$/.test(row.build)) return fail();
+  if (row.status === 'verified') {
+    if (row.configuredAccount !== 'verified' || row.reason !== null || row.programVersion !== '4.0.6' || row.build !== '29387') return fail();
+  } else if (row.status !== 'unverified' || row.configuredAccount !== 'unverified'
+    || !['history_metadata_profile_unverified', 'history_program_version_uncertified'].includes(row.reason as string)) return fail();
+  return { format: 'wechat-account-metadata-v1', status: row.status as WechatAccountMetadata['status'], reason: row.reason as string | null,
+    accountKey: accountIdentity(row.accountKey), identityScheme: 'wechat.account.v1', sourceGeneration: hash(row.sourceGeneration), supportProfile: row.supportProfile as string,
+    programVersion: row.programVersion, build: row.build, artifactSha256: row.artifactSha256 as string, wcdbSha256: row.wcdbSha256 as string,
+    configuredAccount: row.configuredAccount as WechatAccountMetadata['configuredAccount'], continuity: 'held-contact-session-instances', normalHistory: false };
+}
+function privateSessionMetadata(value: unknown, expected: WechatAccountMetadata, options: NarrowWechatClientOptions): WechatPrivateSessionMetadata {
+  const row = object(value, ['format', 'account', 'sessions']);
+  const account = accountMetadata(row.account, options);
+  if (row.format !== 'wechat-private-session-metadata-v1' || account.status !== 'verified' || JSON.stringify(account) !== JSON.stringify(expected)) return fail();
+  const sessions = list(row.sessions, 5000, value => {
+    const item = object(value, ['username', 'displayName', 'kind', 'identityAssurance']);
+    const username = accountIdentity(item.username);
+    if (item.kind !== 'private' || item.identityAssurance !== 'verified' || username.startsWith('@') || username.startsWith('gh_') || username.startsWith('biz_')
+      || ['@chatroom', '@weclaw', '@openim', '@stranger'].some(suffix => username.endsWith(suffix))
+      || ['brandsessionholder', 'brandservicesessionholder'].includes(username)) return fail();
+    return {username, displayName: text(item.displayName), kind: 'private' as const, identityAssurance: 'verified' as const};
+  });
+  unique(sessions.map(item => item.username));
+  return {format: 'wechat-private-session-metadata-v1', account, sessions};
 }
 function opaque(value: unknown): string { return text(value, 64_000); }
 function unsigned(value: unknown): string {
@@ -317,6 +380,7 @@ export class NarrowWechatClient {
   #queue: Promise<void> = Promise.resolve();
   #native?: NativeProcess;
   #selected?: ResolvedWechatScope;
+  #account?: WechatAccountMetadata;
   #schema?: WechatSchemaInspection;
   #support?: HistorySupportReport;
   #target?: HistoryTarget;
@@ -326,11 +390,43 @@ export class NarrowWechatClient {
   #failureCode = 'history_native_closed';
   #stopping?: Promise<void>;
   constructor(options: NarrowWechatClientOptions) { this.#options = validatedOptions(options); }
+  inspectAccountSchema(signal?: AbortSignal): Promise<WechatAccountSchema> {
+    try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(() => this.#request({op:'inspect-account-schema',consent:'account-schema-v1'}, value => {
+      const parsed = accountSchema(value);
+      if (this.#selected && (parsed.accountKey !== this.#selected.accountKey || parsed.sourceGeneration !== this.#selected.sourceGeneration)
+        || this.#account && (parsed.accountKey !== this.#account.accountKey || parsed.sourceGeneration !== this.#account.sourceGeneration)) fail('history_scope_changed');
+      return parsed;
+    }), signal);
+  }
+  accountMetadata(signal?: AbortSignal): Promise<WechatAccountMetadata> {
+    try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(() => this.#request({op:'metadata-account',consent:'account-session-metadata-v1'}, value => {
+      const parsed = accountMetadata(value, this.#options);
+      if (this.#account && JSON.stringify(parsed) !== JSON.stringify(this.#account)
+        || this.#selected && (parsed.accountKey !== this.#selected.accountKey || parsed.sourceGeneration !== this.#selected.sourceGeneration)) fail('history_scope_changed');
+      this.#account = structuredClone(parsed); return parsed;
+    }), signal);
+  }
+  privateSessionMetadata(evidence: WechatAccountMetadata, signal?: AbortSignal): Promise<WechatPrivateSessionMetadata> {
+    try { signalValid(signal); accountMetadata(evidence, this.#options); }
+    catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(() => {
+      if (!this.#account || JSON.stringify(evidence) !== JSON.stringify(this.#account)) return fail('history_scope_unverified');
+      if (this.#account.status !== 'verified') return fail('history_metadata_profile_unverified');
+      const account = this.#account;
+      return this.#request({op:'metadata-sessions',account:account.accountKey,consent:'private-session-list-metadata-v1'}, value => privateSessionMetadata(value, account, this.#options), 4 * 1024 * 1024);
+    }, signal);
+  }
   resolveSelected(name: string, signal?: AbortSignal): Promise<ResolvedWechatScope> {
     try { signalValid(signal); if (typeof name !== 'string' || !name.length || Buffer.byteLength(name, 'utf8') > 255 || /[\u0000\r\n]/.test(name)) fail('history_request_invalid'); }
     catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
     return this.#enqueue(async () => {
-      const scope = await this.#request({ op: 'resolve', displayName: name, consent: 'selected-metadata-v1' }, resolved);
+      const scope = await this.#request({ op: 'resolve', displayName: name, consent: 'selected-metadata-v1' }, value => {
+        const parsed = resolved(value);
+        if (this.#account && (parsed.accountKey !== this.#account.accountKey || parsed.sourceGeneration !== this.#account.sourceGeneration)) return fail('history_scope_changed');
+        return parsed;
+      });
       this.#selected = { ...scope }; this.#schema = undefined; this.#support = undefined; this.#target = undefined; return scope;
     }, signal);
   }
@@ -513,7 +609,7 @@ export class NarrowWechatClient {
   }
   async #stop(code: string): Promise<void> {
     if (this.#stopped) { await this.#stopping; return; }
-    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#testMetadata = undefined;
+    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#testMetadata = undefined;
     const pending = this.#pending; this.#pending = undefined;
     this.#stopping = (async () => {
       const native = this.#native;

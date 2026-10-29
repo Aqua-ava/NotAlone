@@ -54,16 +54,17 @@ type notaloneMetadataReport struct {
 	Record            *notaloneMetadataObservation `json:"record"`
 }
 type notaloneHistorySession struct {
-	server       *server
-	selected     *notaloneResolved
-	guards       []*notaloneSourceGuard
-	life         context.Context
-	cancel       context.CancelFunc
-	snapshot     *notaloneSnapshot
-	inspected    *notaloneInspection
-	program      func(context.Context) (notaloneProgramVersion, error)
-	certify      func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
-	testMetadata *notaloneTestMetadataWatch
+	server            *server
+	selected          *notaloneResolved
+	guards            []*notaloneSourceGuard
+	life              context.Context
+	cancel            context.CancelFunc
+	snapshot          *notaloneSnapshot
+	inspected         *notaloneInspection
+	program           func(context.Context) (notaloneProgramVersion, error)
+	certify           func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
+	testMetadata      *notaloneTestMetadataWatch
+	accountGeneration string
 }
 
 func newNotaloneHistorySession(s *server) *notaloneHistorySession {
@@ -161,7 +162,7 @@ func (h *notaloneHistorySession) resolve(ctx context.Context, name string) (nota
 }
 func (h *notaloneHistorySession) bindMetadata(ctx context.Context, name string) (result notaloneResolved, err error) {
 	base := len(h.guards)
-	alreadyBound := h.selected != nil
+	alreadyBound := h.accountGeneration != ""
 	defer func() {
 		if !alreadyBound && err != nil {
 			for _, guard := range h.guards[base:] {
@@ -169,19 +170,12 @@ func (h *notaloneHistorySession) bindMetadata(ctx context.Context, name string) 
 			}
 			h.guards = h.guards[:base]
 			h.selected = nil
+			h.accountGeneration = ""
 		}
 	}()
-	var fingerprints []string
-	if h.selected == nil {
-		for _, part := range []struct{ dir, file string }{{"session", "session.db"}, {"contact", "contact.db"}} {
-			directory := filepath.Join(h.server.cfg.DBRoot, "db_storage", part.dir)
-			guard, err := newNotaloneSourceGuard(directory, []string{filepath.Join(directory, part.file)})
-			if err != nil {
-				return notaloneResolved{}, notaloneFailure("history_source_unverified")
-			}
-			h.guards = append(h.guards, guard)
-			fingerprints = append(fingerprints, guard.Fingerprint())
-		}
+	generation, err := h.bindAccountMetadata(ctx)
+	if err != nil {
+		return result, err
 	}
 	result, err = h.resolve(ctx, name)
 	if err != nil {
@@ -190,11 +184,9 @@ func (h *notaloneHistorySession) bindMetadata(ctx context.Context, name string) 
 	if h.selected != nil && (h.selected.Account != result.Account || h.selected.Conversation != result.Conversation || h.selected.DisplayName != result.DisplayName) {
 		return result, notaloneFailure("history_scope_changed")
 	}
+	result.SourceGeneration = generation
 	if h.selected == nil {
-		result.SourceGeneration = notaloneHash(result.Account, strings.Join(fingerprints, "|"))
 		h.selected = &result
-	} else {
-		result.SourceGeneration = h.selected.SourceGeneration
 	}
 	return result, h.currentAccount()
 }
@@ -340,6 +332,18 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		return nil, notaloneFailure("history_request_invalid")
 	}
 	switch r.Operation {
+	case "inspect-account-schema":
+		if r.Consent != "account-schema-v1" || r.Account != "" || r.Conversation != "" || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
+	case "metadata-account":
+		if r.Consent != "account-session-metadata-v1" || r.Account != "" || r.Conversation != "" || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
+	case "metadata-sessions":
+		if r.Consent != "private-session-list-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || r.Conversation != "" || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
 	case "resolve":
 		if r.Consent != "selected-metadata-v1" || r.DisplayName == "" || r.Account != "" || r.Conversation != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
@@ -368,6 +372,18 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	}
 	if err := h.currentAccount(); err != nil {
 		return nil, err
+	}
+	if r.Operation == "inspect-account-schema" {
+		return h.inspectAccountSchema(ctx)
+	}
+	if r.Operation == "metadata-account" {
+		return h.metadataAccount(ctx)
+	}
+	if r.Operation == "metadata-sessions" {
+		if r.Account != h.server.cfg.Wxid {
+			return nil, notaloneFailure("history_scope_unverified")
+		}
+		return h.metadataSessions(ctx)
 	}
 	if r.Operation == "resolve" {
 		return h.bindMetadata(ctx, r.DisplayName)
