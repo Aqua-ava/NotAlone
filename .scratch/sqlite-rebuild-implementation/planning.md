@@ -33,7 +33,7 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | claimed |
 | [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
 | [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | resolved |
-| [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | claimed |
+| [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | resolved |
 | [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | claimed |
 | [11 助手讨论与 DSH 副本](issues/11-assistant-discussions-and-runtime.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
 | [12 候选回复与依据](issues/12-reply-candidates-and-basis.md) | [11](issues/11-assistant-discussions-and-runtime.md) | ready-for-agent | resolved |
@@ -44,8 +44,8 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [17 图片与视频提取](issues/17-image-video-extraction.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | resolved |
 | [18 语音保存与转换（本轮暂缓）](issues/18-voice-save-and-conversion.md) | [16](issues/16-single-message-media-lifecycle.md) | wontfix | resolved |
 | [19 媒体真实关联与组合验收（本轮暂缓）](issues/19-media-integration-acceptance.md) | [03](issues/03-private-history-sync.md)、[17](issues/17-image-video-extraction.md)、[18](issues/18-voice-save-and-conversion.md) | wontfix | open |
-| [20 默认切换 SQLite 与旧业务清理](issues/20-sqlite-cutover-and-legacy-cleanup.md) | [06](issues/06-clear-and-resync-history.md)、[10](issues/10-memory-processing-controls.md)、[14](issues/14-official-skill-loading.md)、[16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | open |
-| [21 三份规格组合验收](issues/21-three-specs-integrated-acceptance.md) | [20](issues/20-sqlite-cutover-and-legacy-cleanup.md) | ready-for-agent | open |
+| [20 默认切换 SQLite 与旧业务清理](issues/20-sqlite-cutover-and-legacy-cleanup.md) | [06](issues/06-clear-and-resync-history.md)、[10](issues/10-memory-processing-controls.md)、[14](issues/14-official-skill-loading.md)、[16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | claimed |
+| [21 三份规格组合验收](issues/21-three-specs-integrated-acceptance.md) | [20](issues/20-sqlite-cutover-and-legacy-cleanup.md) | ready-for-agent | claimed |
 
 ## 依赖图
 
