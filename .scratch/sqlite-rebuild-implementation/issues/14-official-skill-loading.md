@@ -1,14 +1,14 @@
 # 14：官方 Skill 加载接回
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [数据库重建](../../sqlite-database-rebuild/spec.md)
 Blocked by: [01 SQLite 基础与生命周期](01-sqlite-runtime-lifecycle.md)
 
-> 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
+> 2026-10-29已领取实现。[任务索引与共同约定](../planning.md)。
 
-> 发布阶段：仅发布，未开始实现。
+> 实现阶段：按本票范围推进；组合删除／回复链路待后续接入复核。
 
 ## 交付行为
 
