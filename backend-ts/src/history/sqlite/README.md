@@ -15,3 +15,8 @@
 宿主必须给 `SqliteHistoryService` 与 `DeletionService` 传同一个 `ActiveHolders`，来源目标携带实际读取goal的holderKeys。关闭/删除等待查询终结及finally释放；忽略取消的渠道会使删除超时受阻，不能仅abort后completed。
 
 本次实际制品的三值证据在 `support-profiles/wechat-4.0.6-29387.json`；该静态档仍unverified且不能自动替代运行时匹配，详见docs/verification/sqlite-private-history-support-03.md。
+
+
+`FirstHistoryCoordinator` 是03首次历史的唤醒层，依赖受控 `directory` 与正式 `SqliteHistoryService`。`wake()` 后台合并请求，最多两位联系人并发；只处理有效授权下尚未完整的首次覆盖，不做持续增量、轮询、记忆或媒体。`stop(contactId?)`、`close()` 等待真实渠道返回及关闭；`getState()` 只返回固定状态和脱敏错误，`waitForIdle()` 供诊断及验收。启动、确认成功和开启读取的公共触发点须串行接入；关闭／撤销回调要保留其他领域原有停读与本地处理区别，不得以历史回调覆盖媒体等消费者。
+
+重开按原目标与游标恢复；来源不承认旧游标时保存真实不完整和最新失败原因，不清零为完整。首次派发已由正式 SQLite／联系人／历史服务验证，公共宿主触发与实际 App 验收仍单独记录。来源删除的 `coversAllSources` 只给可能持有该联系人任意来源的早期历史读者声明；按旧数据代次排空，不从已有 goal 猜测当前内存读者。
