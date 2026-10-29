@@ -31,4 +31,3 @@ function checkScope(tx,i){
  const row=tx.get('SELECT active FROM fixture_scope WHERE owner_id=? AND contact_id=? AND call_id=?',[i.ownerId,i.contactId,i.callId]);
  if(row?.active!==1n)throw new StorageFailure('fixture_scope_revoked');
 }
-
