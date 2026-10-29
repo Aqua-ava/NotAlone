@@ -38,22 +38,25 @@ export class VoiceMediaAdapter implements MediaAdapter {
     } else {
       if (context.goal!=='extract'||!this.source||!context.source||!context.token) throw new StorageFailure('voice_source_unavailable');
       if(context.source.support.status!=='supported'||context.source.contactId!==context.contactId||context.source.messageId!==context.messageId||context.source.raw.kind!=='voice'||context.source.support.sourceGeneration!==context.token.source_generation)throw new StorageFailure('voice_source_unverified');
-      const resource=await this.source.read({contactId:context.contactId,messageId:context.messageId,source:context.source,token:context.token,signal:context.signal,checkpoint:context.checkpoint});
+      const fixedToken=Object.freeze(structuredClone(context.token)),fixedSource=structuredClone(context.source);
+      const resource=await this.source.read({contactId:context.contactId,messageId:context.messageId,source:structuredClone(fixedSource),token:structuredClone(fixedToken),signal:context.signal,checkpoint:context.checkpoint});
+      const expectedBytes=resource.expectedBytes,expectedSha256=resource.expectedSha256;
       let released=false,closing:Promise<void>|undefined;
       const close=():Promise<void>=>{if(released)return Promise.resolve();return closing??=Promise.resolve().then(()=>resource.close()).then(()=>{released=true;this.readers.delete(close);},()=>{closing=undefined;throw new StorageFailure('voice_reader_release_failed');});};
       this.readers.add(close);context.retainReader(close);
       try {
-      await context.checkpoint();if(!isDeepStrictEqual(resource.authority,context.token))throw new StorageFailure('voice_authority_mismatch');
-      if (!Number.isSafeInteger(resource.expectedBytes)||resource.expectedBytes<1||resource.expectedBytes>voiceLimits.inputBytes||!/^[a-f0-9]{64}$/.test(resource.expectedSha256)) throw new StorageFailure('voice_copy_unproven');
+      await context.checkpoint();if(!isDeepStrictEqual(resource.authority,fixedToken))throw new StorageFailure('voice_authority_mismatch');
+      if (!Number.isSafeInteger(expectedBytes)||expectedBytes<1||expectedBytes>voiceLimits.inputBytes||!/^[a-f0-9]{64}$/.test(expectedSha256)) throw new StorageFailure('voice_copy_unproven');
       const chunks:Buffer[]=[];let size=0;const iterator=resource.bytes[Symbol.asyncIterator]();
       try {for(;;) {await context.checkpoint();const next=await iterator.next();await context.checkpoint();if(next.done)break;
-        if (!(next.value instanceof Uint8Array)||size+next.value.byteLength>resource.expectedBytes) throw new StorageFailure('voice_copy_incomplete');
+        if (!(next.value instanceof Uint8Array)||size+next.value.byteLength>expectedBytes) throw new StorageFailure('voice_copy_incomplete');
         size+=next.value.byteLength;chunks.push(Buffer.from(next.value));
       }} finally {await iterator.return?.();}
       silk=Buffer.concat(chunks,size);const proof=await resource.finish();await context.checkpoint();
-      if(size!==resource.expectedBytes||sha256(silk)!==resource.expectedSha256)throw new StorageFailure('voice_copy_incomplete');
-      if (proof.protocol!=='voice-complete-read-v1'||proof.complete!==true||proof.expectedBytes!==size||proof.association.recordId!==context.source.recordId||proof.association.messageId!==context.messageId) throw new StorageFailure('voice_copy_unproven');
-      association=proof.association;inspectSilk(silk);
+      if(!isDeepStrictEqual(resource.authority,fixedToken))throw new StorageFailure('voice_authority_mismatch');
+      if(size!==expectedBytes||sha256(silk)!==expectedSha256)throw new StorageFailure('voice_copy_incomplete');
+      if (proof.protocol!=='voice-complete-read-v1'||proof.complete!==true||proof.expectedBytes!==size||proof.association.recordId!==fixedSource.recordId||proof.association.messageId!==context.messageId) throw new StorageFailure('voice_copy_unproven');
+      association=structuredClone(proof.association);inspectSilk(silk);
       } finally {await close();}
       await context.checkpoint();parentFileId=(await this.save(context,silk,false)).fileId;
     }

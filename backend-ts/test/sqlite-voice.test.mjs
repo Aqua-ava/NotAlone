@@ -160,3 +160,17 @@ test('语音来源正在close时清除等待实际结算，撤销后不发布原
  const op=(await f.media.deletion.list({ownerId:f.owner})).find(o=>o.scope.kind==='media_result_clear');assert.notEqual(op.state,'completed');assert.equal(completed,false);
  release();await rejected;const cleared=await clearing;assert.equal(cleared.state,'cleared');assert.equal((await f.media.deletion.status(op)).state,'completed');assert.deepEqual(cleared.files,[]);
 });
+
+test('端口原地改写token及source不能刷新固定资格，语音字节保持未读',async t=>{
+ let bytes=0;const port=syntheticPort(packets(1,1,1));const read=port.read;
+ port.read=async c=>{c.token.source_generation='different-source';c.source.support.sourceGeneration='different-source';return {...await read(c),bytes:(async function*(){bytes++;yield packets(1,1,1);})()};};
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'mutated-reader-token',goal:'extract'}),{code:'voice_authority_mismatch'});assert.equal(bytes,0);
+});
+
+test('读取中修改预期长度摘要不能把整包截短伪造成完整复制',async t=>{
+ const full=packets(1,1,1,1),short=full.subarray(0,-3);const port=syntheticPort(full);const read=port.read;
+ port.read=async c=>{const resource=await read(c);const finish=resource.finish;resource.bytes=(async function*(){resource.expectedBytes=short.length;resource.expectedSha256=digest(short);yield short;})();resource.finish=async()=>({...await finish(),expectedBytes:resource.expectedBytes});return resource;};
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'mutated-copy-contract',goal:'extract'}),{code:'voice_copy_incomplete'});assert.deepEqual((await f.media.read(f.contact,m.id)).files,[]);
+});
