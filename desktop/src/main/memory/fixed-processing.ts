@@ -32,7 +32,7 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
   const value = row(raw);
   if (!runStates.includes(String(value.state)) || (value.state === 'completed'
     ? value.stage !== 'completed' || value.laterStages !== 'completed'
-    : value.stage !== 'extraction_verification' || value.laterStages !== 'pending')) throw invalid();
+    : !['extraction_verification','document_scene','document_profile'].includes(String(value.stage)) || value.laterStages !== 'pending')) throw invalid();
   const total = count(value.total), succeeded = count(value.succeeded), failed = count(value.failed), unknown = count(value.unknown);
   if (succeeded + failed + unknown > total) throw invalid();
   const tasks = array(value.tasks).map(rawTask => {

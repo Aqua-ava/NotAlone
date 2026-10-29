@@ -14,7 +14,7 @@ export interface FixedProcessingCandidate {
 }
 export interface FixedProcessingRun {
   runId: string; state: FixedProcessingRunState; total: number; succeeded: number; failed: number; unknown: number;
-  stage: 'extraction_verification' | 'completed'; laterStages: 'pending' | 'completed'; tasks: FixedProcessingTask[];
+  stage: 'extraction_verification' | 'document_scene' | 'document_profile' | 'completed'; laterStages: 'pending' | 'completed'; tasks: FixedProcessingTask[];
   inputs: FixedProcessingInput[]; candidates: FixedProcessingCandidate[];
 }
 export interface FixedProcessingEvent {

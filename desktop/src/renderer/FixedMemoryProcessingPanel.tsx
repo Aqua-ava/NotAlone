@@ -6,6 +6,8 @@ function status(run: FixedProcessingRun | null): string {
   if (run.unknown > 0) return '调用结果待核实';
   if (run.tasks.length > 0 && run.tasks.every(task => task.state === 'revoked')) return '范围已失效';
   if (run.state === 'completed') return '本轮已完成';
+  if (run.stage === 'document_scene') return '正在整理主题资料';
+  if (run.stage === 'document_profile') return '正在整理长期概览';
   if (run.state === 'incomplete' && run.succeeded === run.total && run.total > 0) return '提取核验已结束';
   return { pending: '等待提取与核验', running: '正在提取与核验', paused: '已暂停', failed: '提取核验失败',
     incomplete: '本轮尚未完成', revoked: '范围已失效', completed: '本轮已完成' }[run.state];

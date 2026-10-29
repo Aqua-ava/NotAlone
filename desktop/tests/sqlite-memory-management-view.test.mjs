@@ -178,6 +178,33 @@ test('已发布资料在后台来源失效后自动撤下正文和展开依据',
  },true);
 });
 
+test('当前联系人本人视图不显示或请求全局本人概览',{timeout:20000},async t=>{
+ const scopes=[];
+ await panel(t,async(method,input)=>{
+  if(method==='read')return view();
+  if(method==='readDocuments'){scopes.push(input.scope.scopeKind);return {connectionGeneration:1,scope:input.scope,view:{status:'idle',publication:null,documents:[]}};}
+  throw new Error('unexpected command');
+ },async page=>{
+  const management=page.getByRole('region',{name:'记忆候选与版本'});
+  await management.getByRole('button',{name:'我',exact:true}).click();
+  await management.getByText('本人全局概览不在当前联系人页面展示。',{exact:true}).waitFor({timeout:3000});
+  assert.equal(await page.getByRole('region',{name:'主题资料与长期概览'}).count(),0);
+  assert.ok(scopes.every(kind=>kind==='contact'));
+ },true);
+});
+
+test('修正资料时间待核验时管理页可查看并标明不能用于生成',{timeout:20000},async t=>{
+ const version={mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'needs_revalidation',versionNo:'1',body:'时间待核验的合成记忆',formationKind:'correction',adoptionMode:'user',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:id,sources:[source],contributingContactIds:[contact]};
+ const snapshot={connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{candidates:[],memories:[{id,scopeKind:'contact',contactId:contact,headRevision:'1',state:'active',manualProtection:false,current:version,versions:[version],decisions:[]}]}};
+ await panel(t,async method=>method==='read'?snapshot:{connectionGeneration:1,scope:snapshot.scope,view:{status:'idle',publication:null,documents:[]}},async page=>{
+  const management=page.getByRole('region',{name:'记忆候选与版本'});
+  // 同一版本同时作为当前版和历史版展示，两处都应带时间核验提示。
+  await management.getByText('时间待核验，暂不用于生成。',{exact:true}).first().waitFor({timeout:3000});
+  assert.equal(await management.getByText('时间待核验，暂不用于生成。',{exact:true}).count(),2);
+  await management.getByText('时间待核验的合成记忆',{exact:true}).first().waitFor();
+ },true);
+});
+
 test('主题资料区分并发冲突和待核验，待核验时不显示旧集合',{timeout:20000},async t=>{
  const docId='33333333-3333-4333-8333-333333333333';let status='conflict';
  const snapshot=()=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:status!=='invalid'?{status:status==='waiting'?'needs_revalidation':status,publication:{id,members:[{documentId:docId,versionNo:'1'}]},documents:[{id:docId,versionNo:'1',scopeKind:'contact',contactId:contact,kind:'profile',title:'长期背景',statements:[{text:'旧集合仍有资格。',kind:'fact',basis:'旧版有依据。',section:'interests',uncertainty:'',temporalStatus:'stable',leftClaim:null,rightClaim:null,resolutionState:null,resolutionText:null,references:[{memoryId:id,versionNo:1,level:'contact',provenanceKind:'source_supported',memoryText:'合法旧版记忆依据。'}]}]}]}:{status:'needs_revalidation',publication:null,documents:[]}});

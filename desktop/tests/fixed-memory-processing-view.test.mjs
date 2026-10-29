@@ -80,3 +80,13 @@ test('全部适用阶段完成后页面显示整轮完成，不再声称主题�
   assert.equal(await panel.getByText('主题整理、长期概览尚未执行，本轮未完成。',{exact:true}).count(),0);
  });
 });
+
+test('页面按真实主题和画像阶段显示处理中状态',{timeout:20000},async t=>{
+ let current={...run(),state:'running',stage:'document_scene'};
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:undefined,async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByRole('status').filter({hasText:'正在整理主题资料'}).waitFor({timeout:3000});
+  current={...current,stage:'document_profile'};await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();
+  await panel.getByRole('status').filter({hasText:'正在整理长期概览'}).waitFor({timeout:3000});
+ });
+});

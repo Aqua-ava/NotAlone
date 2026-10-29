@@ -18,6 +18,17 @@ async function fixture(t,handle){
  return {controller,calls,invalidations,state,change:()=>{generation++;controller.synchronize();}};
 }
 const scope={scopeKind:'self',contactId:null},read={scope,displayContactId:contact,scopeRevision:1};
+test('当前联系人页面不得读取全局本人主题与概览',async t=>{
+ const f=await fixture(t,async()=>{throw new Error('本人全局概览不应请求');});
+ await assert.rejects(f.controller.readDocuments(read));assert.equal(f.calls.length,0);
+});
+test('主进程保留记忆时间资格并对缺失状态保守处理',async t=>{
+ let timeStatus='needs_revalidation';
+ const version=()=>({mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus,versionNo:'1',body:'待核验时间的合成记忆',formationKind:'correction',adoptionMode:'user',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:requestKey,sources:[source(contact)],contributingContactIds:[contact]});
+ const f=await fixture(t,async()=>({candidates:[],memories:[{id:candidate,scopeKind:'self',contactId:null,headRevision:'1',state:'active',manualProtection:false,current:version(),versions:[version()],decisions:[]}]}));
+ assert.equal((await f.controller.read(read)).view.memories[0].current.timeStatus,'needs_revalidation');
+ timeStatus=undefined;assert.equal((await f.controller.read(read)).view.memories[0].current.timeStatus,'invalid');
+});
 test('本人管理仅返回当前联系人独立来源，具名决定不接受跨范围对象',async t=>{
  const f=await fixture(t,async()=>({candidates:[item(candidate,[source(contact)]),item(other,[source(contact),source(other)])],memories:[]}));
  const value=await f.controller.read(read);assert.equal(value.connectionGeneration,1);assert.deepEqual(value.view.candidates.map(c=>c.id),[candidate]);

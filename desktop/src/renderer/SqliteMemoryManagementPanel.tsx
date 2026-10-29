@@ -39,7 +39,11 @@ function Candidate({candidate,busy,decide}:{candidate:MemoryCandidateView;busy:b
 }
 function Version({version,current}:{version:MemoryVersionView;current:boolean}){
  return <div className={current?'':'sqlite-memory-old'}><p>版本 {version.versionNo} · {formationNames[version.formationKind]??version.formationKind} · {adoptionNames[version.adoptionMode]??version.adoptionMode}{current?' · 当前版本':' · 不作为当前事实'}</p>
-  {version.body===null?<p>正文已清除或来源已失效。</p>:<><Verification state={version.verificationState}/><p className="sqlite-memory-body">{current?version.body:<s>{version.body}</s>}</p><Sources sources={version.sources}/></>}
+  {version.body===null?<p>正文已清除或来源已失效。</p>:<><Verification state={version.verificationState}/>
+   {version.timeStatus==='needs_revalidation'&&<p>时间待核验，暂不用于生成。</p>}
+   {version.timeStatus==='invalid'&&<p>时间资料异常，暂不用于生成。</p>}
+   {version.timeStatus==='out_of_window'&&<p>不在有效时间内，不再引用。</p>}
+   <p className="sqlite-memory-body">{current&&version.timeStatus!=='out_of_window'?version.body:<s>{version.body}</s>}</p><Sources sources={version.sources}/></>}
   {version.restoredFromVersionNo&&<p>恢复自版本 {version.restoredFromVersionNo}，原前驱为版本 {version.previousVersionNo}。</p>}
  </div>;
 }
@@ -106,12 +110,12 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
   <header><h2>记忆候选与版本</h2><p className="hint">查看固定原稿、来源和每次决定。编辑在提交后形成正式版本。</p></header>
   <div className="sqlite-memory-actions" role="group" aria-label="记忆对象"><button type="button" aria-pressed={scopeKind==='contact'} onClick={()=>setScopeKind('contact')}>对方</button><button type="button" aria-pressed={scopeKind==='self'} onClick={()=>setScopeKind('self')}>我</button><button type="button" disabled={!contactId||busy} onClick={()=>void refresh.current()}>刷新记忆管理</button></div>
   {!contactId?<p>请先从顶部选择联系人。</p>:<>
-   {scopeKind==='self'&&<p className="hint">记忆候选与版本仅展示完整贡献和来源均属于当前联系人的本人资料；主题资料与长期概览按合法发布集合展示。</p>}
+   {scopeKind==='self'&&<><p className="hint">记忆候选与版本仅展示完整贡献和来源均属于当前联系人的本人资料。</p><p className="hint">本人全局概览不在当前联系人页面展示。</p></>}
    {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
    {current&&<><h3>候选原稿</h3>{current.view.candidates.length===0?<p>当前范围没有可展示的候选。</p>:current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}
     <h3>正式记忆</h3>{current.view.memories.length===0?<p>当前范围没有可展示的正式记忆。</p>:current.view.memories.map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</>}
   </>}
-  {readRequest&&typeof bridge.readDocuments==='function'&&(documentsBlocked?<section className="sqlite-memory-documents" aria-label="主题资料与长期概览">
+  {readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'&&(documentsBlocked?<section className="sqlite-memory-documents" aria-label="主题资料与长期概览">
    <h2>主题资料与长期概览</h2><p role={busy?'status':'alert'}>{busy?'正在核对更新后的主题资料…':'资料资格尚未重新核验，已撤下正文和依据。'}</p>
    {!busy&&<button type="button" onClick={()=>void refresh.current()}>重新读取主题资料</button>}
   </section>:<SqliteMemoryDocumentsPanel key={`${scopeKind}:${contactId}:${scopeRevision}`} bridge={bridge} request={readRequest} refreshKey={documentsRefreshKey}/>)}
