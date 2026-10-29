@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { StorageFailure, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { DeletionDomain, DeletionOperation, RowDeletionTarget, CheckResult } from '../../storage/sqlite/deletion/contracts.ts';
+import { verifiedCutoffForOperation } from './clear-actions.ts';
 const rowKinds=Object.fromEntries(['capture_record','message_alias','message','sync_capture','read_goal'].map(kind=>[kind,{keys:['owner_id','id'],ownerKey:'owner_id'}]));
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const identity=(kind:string,key:Record<string,string>):string=>createHash('sha256').update(JSON.stringify([kind,Object.keys(key).sort().map(k=>[k,key[k]])])).digest('hex');
@@ -70,9 +71,15 @@ export const historyDeletionDomain:DeletionDomain={
  fileCleared(){throw new StorageFailure('history_has_no_managed_files');},
  verify(tx,op){
   const empty=scopeRows(tx,op).length===0;
-  const blocked=op.scope.kind==='contact_history'||Boolean('contactId'in op.scope&&tx.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=?',[op.ownerId,op.scope.contactId]));
+  // 联系人聊天清空只有在该操作自己的完整 B 被原子接受后才通过写入抑制复核；
+  // 其他删除范围仍由身份/来源排除证明，不把缺失边界当作成功。
+  const suppression=op.scope.kind==='contact_history'
+   ?verifiedCutoffForOperation(tx,op.ownerId,op.operationId,op.scope.contactId)
+     ?pass('verified_boundary_manifest_accepted')
+     :{result:'blocked' as const,proof:'exact_channel_cutoff_required'}
+   :pass(op.scope.kind==='source'?'identity_fence_and_source_exclusions':'identity_revoked_or_exact_source_excluded');
   return {database_rows:empty?pass('history_rows_cleared'):{result:'blocked',proof:'history_rows_remain'},
    derived_eligibility:{result:'not_applicable',proof:'history_no_derived_results'},trace_payloads:empty?pass('history_capture_payloads_cleared'):{result:'blocked',proof:'history_payloads_remain'},
-   request_replay:pass('identity_fence_and_source_exclusions'),scope_suppression:blocked&&op.scope.kind!=='contact'&&op.scope.kind!=='account'?{result:'blocked',proof:'exact_channel_cutoff_required'}:pass('identity_revoked_or_exact_source_excluded')};
+   request_replay:pass('identity_fence_and_source_exclusions'),scope_suppression:suppression};
  }
 };

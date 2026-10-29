@@ -5,6 +5,7 @@ import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryPage, HistoryTarget, HistorySupportReport } from './contracts.ts';
 import { prepareRecord } from './normalize.ts';
 import { readCoverage, readMessages } from './read.ts';
+import { assertHistoryReadBoundary, clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
 export const serializeSupport=(report:HistorySupportReport):string=>JSON.stringify(Object.fromEntries(Object.entries(report).sort(([a],[b])=>a.localeCompare(b))));
@@ -38,8 +39,8 @@ export const historyActions:StorageAction[]=[
   if(!Array.isArray(target.tables)||target.tables.length>10000||target.partitions.some(p=>!target.tables.some(t=>t.partition===p))
    ||target.tables.some(t=>!target.partitions.includes(t.partition)||typeof t.instance!=='string'||!t.instance||t.instance.length>512)
    ||new Set(target.tables.map(t=>JSON.stringify([t.partition,t.instance]))).size!==target.tables.length)fail('history_target_unverified');
-  // 精确清空尚未由06提供时保持关闭，不能靠时间戳或重选绕过。
-  if(BigInt(token.barrier_generation)!==0n||tx.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))fail('history_suppression_unverified');
+  // 清空已原子接受完整 B 后允许新资格读取；未接受时旧 fence 继续封禁。
+  assertHistoryReadBoundary(tx,token);
   tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?)`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at]);
   return {id:i.id,target,cursor:null};
  }),
@@ -54,10 +55,13 @@ export const historyActions:StorageAction[]=[
   const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
   tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?)",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,page.cursorOut,digest]);
   let quarantined=false;
+  const restoreOperationId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
   for(const [index,input]of page.records.entries()){
    const prepared=prepareRecord(input,token.source_generation,target);const r=prepared.value;let reason=prepared.reason;let message:StorageRow|undefined;
    const excluded=prepared.localKey&&tx.get("SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? AND ((scheme='local' AND external_key=?) OR (scheme='server' AND external_key=?))",[token.owner_id,token.conversation_id,prepared.localKey,report.serverAliasSemantics==='verified_within_scope'?prepared.serverKey:null]);
    if(excluded)reason='source_excluded';
+   // 已接受 B 的成员身份不能因旧页重读复活；只有本次显式重读授权可绕过对应清空的排除。
+   else if(prepared.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:prepared.localKey,restoreOperationId}))reason='history_boundary_excluded';
    if(!reason){
     const local=aliasMessage(tx,token,'local',prepared.localKey!);
     const server=report.serverAliasSemantics==='verified_within_scope'&&prepared.serverKey?aliasMessage(tx,token,'server',prepared.serverKey):undefined;
@@ -71,8 +75,8 @@ export const historyActions:StorageAction[]=[
      for(const [scheme,key]of [['local',prepared.localKey],['server',report.serverAliasSemantics==='verified_within_scope'?prepared.serverKey:null]])if(key)tx.run('INSERT OR IGNORE INTO message_alias(owner_id,id,contact_id,binding_id,scheme,external_key,message_id) VALUES(?,?,?,?,?,?,?)',[token.owner_id,randomUUID(),token.contact_id,token.binding_id,scheme!,key,message.id]);
     }
    }
-   if(reason&&reason!=='source_excluded')quarantined=true;
-   tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[token.owner_id,randomUUID(),token.contact_id,i.captureId,index,reason==='source_excluded'?'excluded':reason?'quarantined':'normalized',reason?null:message!.id,excluded?null:prepared.raw,prepared.localKey?'source-table-local-v1':null,prepared.localKey,'1',reason]);
+   if(reason&&reason!=='source_excluded'&&reason!=='history_boundary_excluded')quarantined=true;
+   tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[token.owner_id,randomUUID(),token.contact_id,i.captureId,index,reason==='source_excluded'||reason==='history_boundary_excluded'?'excluded':reason?'quarantined':'normalized',reason?null:message!.id,excluded?null:prepared.raw,prepared.localKey?'source-table-local-v1':null,prepared.localKey,'1',reason]);
   }
   const partitions=new Set<string>([...JSON.parse(String(goal.completed_partitions)),...page.completedPartitions]);
   const unresolved=quarantined||Boolean(tx.get("SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id WHERE c.owner_id=? AND c.goal_id=? AND r.state='quarantined'",[token.owner_id,goal.id]));
@@ -80,6 +84,7 @@ export const historyActions:StorageAction[]=[
   const state=complete?'complete':page.exhausted?'incomplete':'running';const code=unresolved?'history_identity_quarantined':page.exhausted&&!complete?'history_partitions_missing':null;
   if(quarantined)tx.run("UPDATE sync_capture SET state='quarantined',error_code='history_identity_quarantined' WHERE owner_id=? AND id=?",[token.owner_id,i.captureId]);
   tx.run('UPDATE read_goal SET cursor=?,completed_partitions=?,state=?,coverage_state=?,failure_code=? WHERE owner_id=? AND id=?',[page.cursorOut,JSON.stringify([...partitions]),state,complete?'complete':'partial',code,token.owner_id,goal.id]);
+  if(complete)completeRestoreGoal(tx,token.owner_id,String(goal.id),i.at);
   return readCoverage(tx,token.owner_id,token.contact_id);
  }),
  action('history.interrupt','write',(tx,i)=>{const goal=currentGoal(tx,i.token,i.goalId);if(goal.state==='running'||goal.state==='incomplete')tx.run("UPDATE read_goal SET state='incomplete',failure_code=? WHERE owner_id=? AND id=?",[i.code,i.token.owner_id,goal.id]);return readCoverage(tx,i.token.owner_id,i.token.contact_id);}),

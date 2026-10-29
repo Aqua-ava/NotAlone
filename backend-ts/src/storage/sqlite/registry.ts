@@ -17,6 +17,8 @@ import { memoryExtractionMigration } from '../../memory/sqlite/schema.ts';
 import { mediaMigration } from '../../media/sqlite/schema.ts';
 import { createMediaActions } from '../../media/sqlite/actions.ts';
 import { historyMigration } from '../../history/sqlite/schema.ts';
+import { historyClearMigration } from '../../history/sqlite/clear-schema.ts';
+import { historyClearActions } from '../../history/sqlite/clear-actions.ts';
 import { historyActions } from '../../history/sqlite/actions.ts';
 import { identityMigration } from '../../contacts/sqlite/schema.ts';
 import { identityActions } from '../../contacts/sqlite/actions.ts';
@@ -44,6 +46,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12)],
-  actions: [...memoryAdjudicationActions, ...memoryManagementActions, ...createReplyCandidateActions(memoryKnowledgeReader), ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...createMediaActions(installedDeletionRegistration)],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12), historyClearMigration(13)],
+  actions: [...memoryAdjudicationActions, ...memoryManagementActions, ...createReplyCandidateActions(memoryKnowledgeReader), ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...historyClearActions, ...createMediaActions(installedDeletionRegistration)],
 };
