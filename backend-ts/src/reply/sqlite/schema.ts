@@ -77,11 +77,14 @@ CREATE TABLE discussion_entry (
  FOREIGN KEY(owner_id,origin_request_id) REFERENCES reply_request(owner_id,id),
  FOREIGN KEY(owner_id,origin_call_id) REFERENCES model_call(owner_id,id),
  FOREIGN KEY(owner_id,origin_event_id) REFERENCES execution_event(owner_id,id),
- CHECK((role='user' AND origin_call_id IS NULL AND origin_event_id IS NULL) OR (role='assistant' AND origin_call_id IS NOT NULL AND origin_event_id IS NOT NULL)),
+ CHECK((role='user' AND origin_call_id IS NULL AND origin_event_id IS NULL) OR (role='assistant' AND ((content_state='available' AND origin_call_id IS NOT NULL AND origin_event_id IS NOT NULL) OR (content_state='cleared' AND origin_call_id IS NULL AND origin_event_id IS NULL)))),
  CHECK((content_state='available' AND body IS NOT NULL) OR (content_state='cleared' AND body IS NULL))
 ) STRICT;
-CREATE TRIGGER discussion_entry_immutable BEFORE UPDATE OF owner_id,id,contact_id,discussion_id,position,role,origin_request_id,origin_call_id ON discussion_entry
+CREATE TRIGGER discussion_entry_immutable BEFORE UPDATE OF owner_id,id,contact_id,discussion_id,position,role,origin_request_id ON discussion_entry
 BEGIN SELECT RAISE(ABORT,'discussion_entry_immutable'); END;
+CREATE TRIGGER discussion_entry_clear_only BEFORE UPDATE OF body,content_state,origin_call_id,origin_event_id ON discussion_entry
+WHEN NOT (OLD.content_state='available' AND NEW.content_state='cleared' AND NEW.body IS NULL AND NEW.origin_call_id IS NULL AND NEW.origin_event_id IS NULL)
+BEGIN SELECT RAISE(ABORT,'discussion_entry_clear_only'); END;
 CREATE TRIGGER discussion_entry_request BEFORE INSERT ON discussion_entry WHEN NOT EXISTS(
  SELECT 1 FROM reply_request r WHERE r.owner_id=NEW.owner_id AND r.contact_id=NEW.contact_id AND r.discussion_id=NEW.discussion_id AND r.id=NEW.origin_request_id
  AND (NEW.role='assistant' OR r.trigger_entry_id=NEW.id))
