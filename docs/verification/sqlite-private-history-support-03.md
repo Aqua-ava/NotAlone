@@ -68,3 +68,15 @@ dev:status为stopped，无本工作树dev进程；未启动、重启或关闭开
 arm 新增所选现存分片 Name2Id 的 canonical/raw 精确有界计数；未知、重复或冲突在发送之前终止，不枚举用户名或返回原始账号。另以固定原因码区分新增多行、sender、type 和主键门禁；错误仍永久关闭观察。新字节及匿名预检见[v8 发送前校验](../../backend-ts/src/history/sqlite/support-profiles/wechat-4.0.6-29387-controlled-preflight-v2.json)。实际正式客户端 resolve/inspect/support 后，8 分片／2 目标表的发送者预检和 arm 通过，lockedCount=0，随后 reader 与子进程关闭；未发送、撤回或读取正文。
 
 设备后缀三投影先红后绿，相关原生 race 26 顶层／含子例 71 项通过；新五类固定原因码均验证客户端拒绝后排空。另从 v8 fresh archive 运行更广定向回归并保存本地日志。实际预检只证明本次元数据映射可证，不认证正在运行微信当前登录账号、消息状态或普通历史资格。第二条操作仍须独立桌面时段及新基线。
+
+后续取得短桌面时段后，先核对所选会话、第一条保留状态和空输入框。Computer Use 对消息气泡的单独坐标点击直接返回 AXError.notImplemented，聊天区无可操作 AX 节点，键盘菜单也未打开撤回入口。第二条尚未输入或发送，未开启新基线，未回撤第一条；确认无观察器和开发实例后释放桌面。此项为实际操作能力缺口，已有固定发送／撤回授权仍有效，不能写成缺少授权或状态测试通过。
+
+## v9／v10 工具配置账号的元数据认证
+
+按 ADR-095:16–19 和 ADR-110:7–11，认证对象是已配置工具账号；前台登录账号不是此证据。固定 inspect-account-schema 只读取 contact／SessionTable 声明、完整列和索引 xinfo、主键及触发器摘要。实际微信仍为 4.0.6/build29387：SessionTable 为19列、3索引、username主键，contact为22列、1索引、id主键；均非自动递增、无触发器。两次配置账号及来源守卫复验通过，未投影名单或聊天记录。
+
+正式 metadata-account 支持档按上述完整结构、当前程序版本和配套 WCDB 字节匹配，再固定 SELECT 1 LIMIT 1 核验会话可读性，前后重核结构、配置及两份持有中来源实例。v10 正式客户端多次 accountMetadata 证据完全一致；与唯一获准私聊 resolve 的完整配置账号、sourceGeneration 相同，metadataStatus/configuredAccount 为 verified，连续性只声明 held-contact-session-instances。普通历史支持仍 unverified，target 实际被门禁拒绝。全部读者及子进程已关闭，无整名单、正文、source/XML、发送或撤回。匿名结构和资格绑定见[配置账号元数据支持档](../../backend-ts/src/history/sqlite/support-profiles/wechat-4.0.6-29387-account-metadata-v1.json)。
+
+metadata-sessions 是独立许可的固定窄操作，仅必要私聊身份与名称，服务端5000界，超量整批拒绝；明确非私聊先排除，可能私聊仍须唯一 contact、合法 verify_flag 和官方分类。真实整名单本次未读，不以合成列表冒称端到端认证。正式空库 ContactService 与合成原生进程8项通过；未知版本、重复、缺失、夹带正文、账号／来源变化及关闭取消均有覆盖。失败后显式重检重新创建客户端，本次操作不自动重试，旧授权不恢复；该恢复缺陷及非私聊缺 contact 反例均先红后绿，独立复核收敛。
+
+v10 fresh archive 的定向原生 race 共37顶层／含子例91项通过，0失败0跳过；之后名单提前分类仅补受影响定向 race，客户端恢复仅补新增两例及类型检查。真实资格绑定 v10 字节，后续新制品须按实际字节复验；未变化底座沿既有证据复用，不重复宣称重跑。
