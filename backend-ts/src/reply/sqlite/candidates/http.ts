@@ -19,7 +19,8 @@ export class SqliteReplyCandidateHttp {
    const [,contactId,discussionId,candidateId,command,version]=match,scope={contactId,discussionId};
    if(req.method==='GET'&&!candidateId){
     const requests=await o.service.view(contactId,discussionId),coverage=await o.storage.execute('history.coverage',{ownerId:o.service.ownerId,contactId});
-    respond(res,200,{requests:requests.map(({ownerId:_owner,...r})=>r),coverage});
+    const skills=await o.storage.execute<any[]>('skills.list',{ownerId:o.service.ownerId});
+    respond(res,200,{requests:requests.map(({ownerId:_owner,...r})=>r),coverage,availableSkills:skills.filter(s=>s.enabledState==='enabled'&&s.verificationState==='verified'&&s.currentRevisionNo!==null).map(s=>({packageId:s.id,name:s.displayName,revisionNo:Number(s.currentRevisionNo)}))});
    }else if(req.method==='GET'&&command.startsWith('versions/'))respond(res,200,await o.service.version({...scope,candidateId,versionNo:Number(version)}));
    else if(req.method==='POST'){
     let v;try{v=JSON.parse((await readWechatHttpBody(req,610000,10000)).toString('utf8'));}catch(error){if(error instanceof WechatHttpBodyError)throw error;invalid();}

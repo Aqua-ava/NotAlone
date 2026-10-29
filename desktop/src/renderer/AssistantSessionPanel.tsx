@@ -124,7 +124,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     || replies.state.sessionDeletion === 'failed' || replies.state.sourceAvailability === 'checking';
   const currentDiscussion = catalog?.phase === 'ready' && !catalog.selectionPending
     && !!saved?.sessionId && catalog.currentSessionId === saved.sessionId;
-  const discussionDisabled = busy || !!confirmation || !currentDiscussion || saved?.phase !== 'ready'
+  const discussionDisabled = Boolean(replies.state.generationBlock) || busy || !!confirmation || !currentDiscussion || saved?.phase !== 'ready'
     || Boolean(replies.state.sourceAvailability) || replies.state.phase === 'waiting' || activeContactJobs.length > 0
     || replies.state.sessionDeletion === 'deleted' || replies.state.sessionDeletion === 'missing';
   useEffect(() => { setConfirmation(null); setCopyError(false); }, [replies.state.contactId, replies.state.scopeRevision, saved?.sessionId]);
