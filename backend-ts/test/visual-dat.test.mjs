@@ -27,3 +27,17 @@ test('DAT拒绝未知版本和WXGF，不把未支持封装伪装成图片',()=>{
  const reserved=v4(png);reserved[14]=1;assert.throws(()=>decodeWechatDat(reserved),{code:'unsupported'});
  assert.throws(()=>decodeWechatDat(v4(Buffer.concat([Buffer.from('wxgf'),Buffer.alloc(60)])),{xorKey:0x31}),{code:'unsupported'});
 });
+test('DAT声明长度与padding先核验，超长整数不溢出，V2错误密钥明确拒绝',()=>{
+ for(const length of [0xffffffff,0xfffffff0]){
+  const aes=v4(png);aes.writeUInt32LE(length,6);assert.throws(()=>decodeWechatDat(aes,{xorKey:0x31}),{code:'image_dat_invalid'});
+  const xor=v4(png);xor.writeUInt32LE(length,10);assert.throws(()=>decodeWechatDat(xor,{xorKey:0x31}),{code:'image_dat_invalid'});
+ }
+ const truncated=v4(png).subarray(0,14);assert.throws(()=>decodeWechatDat(truncated),{code:'image_dat_invalid'});
+ const mismatch=v4(png);mismatch.writeUInt32LE(17,6);assert.throws(()=>decodeWechatDat(mismatch,{xorKey:0x31}),{code:'image_dat_invalid'});
+ const invalid=Buffer.from(png.subarray(0,16));invalid[15]=0;
+ const cipher=createCipheriv('aes-128-ecb',Buffer.from('cfcd208495d565ef'),null);cipher.setAutoPadding(false);
+ const padding=v4(png);Buffer.concat([cipher.update(invalid),cipher.final()]).copy(padding,31);
+ assert.throws(()=>decodeWechatDat(padding,{xorKey:0x31}),{code:'image_dat_invalid'});
+ const key=Buffer.from('synthetic-key17!');assert.throws(()=>decodeWechatDat(v4(png,{version:2,key}),{aesKey:Buffer.alloc(16),xorKey:0x31}),{code:'needs_image_key'});
+ assert.throws(()=>decodeWechatDat(Buffer.alloc(32*1024*1024+1)),{code:'media_resource_too_large'});
+});
