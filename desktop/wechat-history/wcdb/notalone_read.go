@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
+	"unsafe"
 
 	"github.com/ebitengine/purego"
 )
@@ -15,6 +16,8 @@ var boundedBootstrap struct {
 	path      string
 	interrupt func(uintptr)
 }
+
+const notaloneBoundedCellByteLimit = 8 << 20
 
 // BootstrapBounded 必须作为进程首个 Bootstrap 串行调用，避免把另一引擎的
 // interrupt 用于既有连接；普通 Bootstrap 已初始化而无法核对时保持不可用。
@@ -62,7 +65,7 @@ func BootstrapBounded(library string) (err error) {
 	return nil
 }
 
-// QueryBounded 复用上游参数绑定和列解码，整数始终保持 int64。
+// QueryBounded 复用上游参数绑定，整数始终保持 int64，单个 cell 最多 8 MiB。
 // 调用方独占此 DB，必须等本方法返回后才 Close 或执行下一查询。
 // 返回前先回收取消协程，再 finalize，防止迟到 interrupt 影响后续操作。
 func (d *DB) QueryBounded(ctx context.Context, maxRows int, sql string, args ...any) ([]Row, error) {
@@ -131,8 +134,47 @@ func (d *DB) QueryBounded(ctx context.Context, maxRows int, sql string, args ...
 		}
 		row := make(Row, ncol)
 		for i := int32(0); i < ncol; i++ {
-			row[names[i]] = readColumn(stmt, i)
+			value, err := readNotaloneBoundedColumn(stmt, i)
+			if err != nil {
+				return nil, err
+			}
+			row[names[i]] = value
 		}
 		rows = append(rows, row)
+	}
+}
+
+func readNotaloneBoundedColumn(stmt uintptr, i int32) (any, error) {
+	kind := sqlite3_column_type(stmt, i)
+	switch kind {
+	case COL_INT:
+		return sqlite3_column_int64(stmt, i), nil
+	case COL_FLOAT:
+		return sqlite3_column_double(stmt, i), nil
+	case COL_NULL:
+		return nil, nil
+	case COL_TEXT, COL_BLOB:
+		var p unsafe.Pointer
+		if kind == COL_TEXT {
+			p = sqlite3_column_text(stmt, i)
+		} else {
+			p = sqlite3_column_blob(stmt, i)
+		}
+		// TEXT 也必须按字节数复制，C 字符串会丢掉内嵌 NUL 及其后的损坏字节。
+		n := sqlite3_column_bytes(stmt, i)
+		if n < 0 || (n > 0 && p == nil) {
+			return nil, errors.New("bounded_query_cell_invalid")
+		}
+		if n > notaloneBoundedCellByteLimit {
+			return nil, errors.New("bounded_query_cell_limit")
+		}
+		if kind == COL_TEXT {
+			return string(unsafe.Slice((*byte)(p), int(n))), nil
+		}
+		value := make([]byte, int(n))
+		copy(value, unsafe.Slice((*byte)(p), int(n)))
+		return value, nil
+	default:
+		return nil, errors.New("bounded_query_cell_invalid")
 	}
 }

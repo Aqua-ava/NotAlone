@@ -2,10 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
 )
 
 func TestDecodeNotaloneTextPlainUTF8(t *testing.T) {
@@ -41,6 +45,45 @@ func TestDecodeNotaloneTextUnknownAndInvalidUTF8(t *testing.T) {
 	}
 	for _, input := range []any{[]byte{0xff, 0xfe}, string([]byte{0xff}), []byte{0xe4, 0xb8}} {
 		assertNotaloneTextError(t, input, "history_text_invalid")
+	}
+}
+
+func TestDecodeNotaloneTextAfterBoundedRead(t *testing.T) {
+	library := os.Getenv("NOTALONE_TEST_WCDB")
+	if library == "" {
+		t.Skip("未指定隔离测试使用的 WCDB 制品")
+	}
+	if err := wcdb.BootstrapBounded(library); err != nil {
+		t.Fatal(err)
+	}
+	db, err := wcdb.OpenPlain(filepath.Join(t.TempDir(), "synthetic.db"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, input := range [][]byte{
+		[]byte("a\x00b"),
+		{'a', 0, 0xff},
+		compressedNotaloneText(t, []byte("合成压缩文字\x00尾部")),
+	} {
+		rows, err := db.QueryBounded(context.Background(), 1, "SELECT CAST(? AS TEXT) AS content", input)
+		if err != nil || len(rows) != 1 {
+			t.Fatalf("合成TEXT读取失败：%v", err)
+		}
+		decoded, err := decodeNotaloneText(rows[0]["content"])
+		if bytes.Equal(input, []byte{'a', 0, 0xff}) {
+			if decoded != nil || err == nil || err.Error() != "history_text_invalid" {
+				t.Fatal("NUL后损坏UTF-8必须隔离且不返回前缀正文")
+			}
+			continue
+		}
+		want := "a\x00b"
+		if bytes.HasPrefix(input, []byte{0x28, 0xb5, 0x2f, 0xfd}) {
+			want = "合成压缩文字\x00尾部"
+		}
+		if err != nil || decoded == nil || *decoded != want {
+			t.Fatalf("TEXT完整字节未到达解码器：%v", err)
+		}
 	}
 }
 
