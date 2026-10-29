@@ -57,6 +57,7 @@ test('单次讨论经真实官方DSH/Adapter/环回HTTP后只提交真实assista
  assert.equal(result.text,'这是实际环回模型返回的合成讨论发言。');assert.equal(f.requests.length,1);assert.equal((f.requests[0].tools??[]).length,0);
  const dispatch=f.actions.find(a=>a.name==='discussion.dispatchCall');assert.ok(dispatch);
  assert.equal(JSON.stringify(dispatch.input.requestPayload).includes('这是合成用户发言。'),true);assert.equal('signal' in dispatch.input.requestPayload,false);
+ assert.ok(dispatch.input.budget.input_tokens>0);assert.equal(dispatch.input.budget.maxTokens,512);
  const commit=f.actions.find(a=>a.name==='discussion.commitAssistant');assert.equal(commit.input.sessionEvent.type,'assistant/message');
  assert.equal(commit.input.sessionEvent.data.message.content.find(b=>b.type==='text').text,result.text);
  assert.equal(f.actions.some(a=>a.name==='discussion.failCall'),false);assert.equal(f.arbiter.snapshot().foregroundActive,false);assert.ok(f.checks.length>0);

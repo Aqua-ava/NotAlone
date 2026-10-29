@@ -77,9 +77,9 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
       await options.skillRun?.validate(combined);
       const requestPayload=payload(request);
       call=options.provider.beginCall({sessionId:work.sessionId,attempt_id:callId,permit_id:permit!.id,binding,profile:model.budgetProfile,
-       requireCurrent,beforeDispatch:async()=>{
+       requireCurrent,beforeDispatch:async({budget})=>{
         await requireCurrent();await options.skillRun?.validate(combined);
-        await options.storage.execute('discussion.dispatchCall',{...attempt,copyId:work.copy.id,callId,contextId,requestPayload,skillRun:options.skillRevision});
+        await options.storage.execute('discussion.dispatchCall',{...attempt,copyId:work.copy.id,callId,contextId,requestPayload,budget,skillRun:options.skillRevision});
        }});
       for await(const chunk of next()){
        combined.throwIfAborted();
