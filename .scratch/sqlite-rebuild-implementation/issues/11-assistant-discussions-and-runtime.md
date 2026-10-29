@@ -42,6 +42,7 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 - 小批后用正常 profile 不出站验证：原用户发言保留、dirty副本恢复受阻、新段为空、明确继续与重开不追加预留；两次shutdown均200且确认进程退出。该关闭证据是后续独立验证，不冒充首轮原始回执。
 - 总调度另行授权本机环回供应商工程资料：通过正常entries API、官方DSH/Adapter/SSE与真实SQLite生成两位合成联系人、三段及三条非空助手发言，各自具有真实唯一成功call和settled回执，未直接插成功行或复制候选。生成装配替换了供应商transport和凭据，独立arbiter；最终保留夹具统计为3次本机请求，不冒充准备阶段或全部历史总数，不耗真实问题账本。
 - 未改正式launchDsh/profile重开上述工程资料，三段entry身份、顺序、正文摘要、request/call关联完全一致，runtime ready、跨联系人404，模型请求增量0，shutdown200及进程退出通过。独立Spec窄审未决0；此处正式profile覆盖重开回读，本机合成SSE不能证明外部模型生成或质量。
+- 最小公共生成正例另行完成：复用已有固定transport测试工具，仅把Messages/strict目标映射到事先确认的127.0.0.1并拒绝外部连接，未改正式launchDsh/profile/sqlite-host共享ModelHost、provider、arbiter及业务提交。认证entries POST200，实际本机HTTP1次；精确request/attempt committed、唯一call succeeded/settled、真实assistant event与entry关联、完整manifest及ready边界、shutdown200及进程退出均通过。11 units为合成usage；真实问题账本前后不变。独立Spec公共接线窄审未决0；此段作为App资料第4段，前三段helper来源仍分列。
 - 实际开发App验收仍待桌面协调窗口；非空外部助手发言的保存／重开证据未取得。继续保持claimed，未勾选最终交付条件。
 
 ## 规格与证据入口
