@@ -84,6 +84,14 @@ node --test tests/visual-media-integration.test.mjs tests/message-media-view.tes
 
 ### 独立审查修复检查点
 
-Standards初审P1复现资源close抛错后媒体holder被提前释放，已在16上下文增加最小内部retainReader钩子；同attempt holder保留关闭失败状态，原删除重试实际关闭成功才释放，没有新增删除平台。Spec初审P2复现正确V2密钥解出APNG被误报缺密钥，现保留media_format_unsupported，仅实际图片解码不匹配映射needs_image_key。两项均补正常服务回归；Standards复核0项，Spec复核待回报。
+Standards初审P1复现资源close抛错后媒体holder被提前释放，已在16上下文增加最小内部retainReader钩子；同attempt holder保留关闭失败状态，原删除重试实际关闭成功才释放，没有新增删除平台。Spec初审P2复现正确V2密钥解出APNG被误报缺密钥，现保留media_format_unsupported，仅实际图片解码不匹配映射needs_image_key。两项均补正常服务回归；Standards与Spec最终复核各0项。Standards最小回归3/3、Spec定向2/2通过。
 
 新增实际验证：`node --test backend-ts/test/sqlite-visual-media.test.mjs backend-ts/test/sqlite-media.test.mjs backend-ts/test/visual-dat.test.mjs` 34/34通过（10类型业务+20基础媒体回归+4DAT）。16公共合同最小变化仅contracts.ts/service.ts/README.md；18不需修改已发布迁移，资源读者可复用新增钩子。`backend-ts/test/prepare-visual-desktop.mjs`提供自包含合成图片/视频App资料准备，读取开关关闭，未启动App；不复制真实配置、不调用模型，待总指挥分配窗口后使用。
+
+### 当前可集成检查点
+
+实现源提交依次610e2648a8e4cd0b7f56592bc932b665d5195b5f、9e21fb989cb5a8eae80d85c29d81060118fed4cb、ae284457d0ab3f1118543d1769ec04fae24394d0；已通过merge cc8c0a374d4194df1ac59d280a2909016504f9bc纳入根基线317b6820f3fcb3131004f7dc200e0132d043370e，保留03/11及16全部源祖先。未手工改规划索引、依赖或公共宿主。合入后frozen离线安装无依赖改动、两端类型检查及正式桥页面3/3复验通过；34项业务/字节及原生6项的相关代码、配置、依赖条件未变，复用既有结果。公开历史检查cc8c0a3的issues=0。
+
+精确只读既有开发配置的wechatCliPath并核本机制品：普通文件8495824字节，SHA256 d566d4842b656ca5b07a8af0c1fdada5c225724e9e7fda28e409b06f117d0655，未执行该程序、未读密钥或私人消息。该摘要不能认证固定源等价、媒体映射或质量，本票真实能力继续关闭。原生helper及合成夹具由已提交源码显式生成，测试不依赖未提交探针。
+
+实际App仍受03串行桌面占用阻塞，未启动/重启或抢焦点。已运行合成App资料准备，成功生成图片与H264/AAC独立受管副本并关闭全部种子服务；后续按本票准备脚本重生即可。Goal active、State claimed；剩余必要工作为获桌面窗口后实际App检查和资源收尾，再补最终证据/本地提交并复核公开历史，不能提前resolved或complete。
