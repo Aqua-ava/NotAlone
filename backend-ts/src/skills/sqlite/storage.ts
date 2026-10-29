@@ -46,7 +46,12 @@ function key(input: unknown): Key {
   if (!input || typeof input !== 'object') fail('skill_input_invalid');
   const i = input as Key; text(i.ownerId); text(i.id); return i;
 }
+/** 正常管理和运行都要求本人仍有效；账号删除处理器直接操作自己的元数据。 */
+export function requireSkillOwner(tx: StorageTransaction,ownerId: string): void {
+  if(tx.get('SELECT state FROM owner WHERE owner_id=?',[text(ownerId)])?.state!=='active')fail('skill_owner_unavailable');
+}
 function state(tx: StorageTransaction, ownerId: string, id: string): SkillPackageState {
+  requireSkillOwner(tx,ownerId);
   const row = tx.get('SELECT * FROM skill_package WHERE owner_id=? AND id=?',[ownerId,id]);
   if (!row) fail('skill_missing');
   const revisions = tx.all('SELECT * FROM skill_package_revision WHERE owner_id=? AND package_id=? ORDER BY revision_no',[ownerId,id]);
@@ -73,6 +78,7 @@ export function requireSkillRevision(tx: StorageTransaction, ownerId: string, an
 }
 /** 与联系人／来源资格在同一短事务使用，避免末尾分离复验的交错窗口。 */
 export function requireSkillRun(tx: StorageTransaction, ownerId: string, revision: SkillRunRevision): void {
+  requireSkillOwner(tx,ownerId);
   const current=tx.all('SELECT id,head_revision FROM skill_package WHERE owner_id=?',[text(ownerId)]);
   if(current.length!==revision.packages.length || new Set(revision.packages.map(p=>p.id)).size!==current.length
     || current.some(row=>!revision.packages.some(p=>p.id===row.id && p.headRevision===row.head_revision)))fail('skill_run_invalidated');
@@ -81,11 +87,13 @@ export function requireSkillRun(tx: StorageTransaction, ownerId: string, revisio
 export const skillActions: StorageAction[] = [
   {name:'skills.list',mode:'read',retryBusy:false,execute(tx,input){
     const ownerId=text((input as {ownerId?:unknown})?.ownerId);
+    requireSkillOwner(tx,ownerId);
     return tx.all('SELECT id FROM skill_package WHERE owner_id=? ORDER BY directory_name',[ownerId]).map(row=>state(tx,ownerId,row.id as string));
   }},
   {name:'skills.get',mode:'read',retryBusy:false,execute(tx,input){const i=key(input);return state(tx,i.ownerId,i.id);}},
   {name:'skills.observe',mode:'write',retryBusy:false,execute(tx,input){
     const i=key(input) as SkillObservation;
+    requireSkillOwner(tx,i.ownerId);
     for(const value of [i.directoryName,i.directoryIdentity,i.displayName,i.description]) text(value);
     if(!/^[a-f0-9]{64}$/.test(i.manifestDigest)||!/^[a-f0-9]{64}$/.test(i.contentDigest)||typeof i.verifiedAt!=='bigint'||i.verifiedAt<0n) fail('skill_input_invalid');
     const exists=tx.get('SELECT id FROM skill_package WHERE owner_id=? AND id=?',[i.ownerId,i.id]);

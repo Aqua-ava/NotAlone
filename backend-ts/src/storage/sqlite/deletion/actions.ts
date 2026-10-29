@@ -3,6 +3,13 @@ import { StorageFailure, type StorageAction, type StorageLease, type StorageRow,
 import { checkKinds, type CheckKind, type CheckResult, type DeletionOperation, type DeletionRegistration, type DeletionScope, type DeletionSnapshot, type DeletionTarget } from './contracts.ts';
 
 const fail = (code: string): never => { throw new StorageFailure(code); };
+function synchronous<T>(value: T): T {
+  if (value && typeof (value as {then?: unknown}).then === 'function') {
+    void Promise.resolve(value).catch(() => {});
+    fail('async_transaction_forbidden');
+  }
+  return value;
+}
 const id = (value: unknown): string => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\x00-\x1f]/.test(value) ? value : fail('deletion_input_invalid');
 const proof = (value: CheckResult): CheckResult => {
   if (!value || !['passed', 'blocked', 'not_applicable'].includes(value.result) || !/^[a-z][a-z0-9_]{0,79}$/.test(value.proof)) fail('deletion_proof_invalid');
@@ -69,8 +76,8 @@ function refresh(tx: StorageTransaction, row: StorageRow, config: DeletionRegist
   if (manifest !== row.domain_manifest) fail('deletion_registry_changed');
   const op = operation(row); let changed = false;
   for (const domain of config.domains) {
-    for (const request of domain.fence(tx, op)) tombstoneRequest(tx, lease, { ownerId: op.ownerId, ...request, generation: op.acceptedGeneration, operationId: op.operationId });
-    for (const target of domain.collect(tx, op)) {
+    for (const request of synchronous(domain.fence(tx, op))) tombstoneRequest(tx, lease, { ownerId: op.ownerId, ...request, generation: op.acceptedGeneration, operationId: op.operationId });
+    for (const target of synchronous(domain.collect(tx, op))) {
       if (target.domain !== domain.id) fail('deletion_target_invalid');
       validateTarget(config, target, op.ownerId);
       const key = hash(target.kind === 'row' ? [target.rowKind, target.key, target.identity] : [target.fileId, target.generation]);
@@ -96,7 +103,7 @@ export function planDeletion(tx: StorageTransaction, lease: StorageLease, config
     if (canonical(operation(existing).scope) !== canonical(target)) fail('deletion_request_conflict');
     return snapshot(tx, existing);
   }
-  const generation = config.authority.fence(tx, owner, target);
+  const generation = synchronous(config.authority.fence(tx, owner, target));
   if (typeof generation !== 'bigint' || generation < 0n) fail('deletion_fence_invalid');
   const operationId = randomUUID();
   const fields = target as unknown as Record<string, string>;
@@ -140,7 +147,7 @@ export function createDeletionActions(configInput?: DeletionRegistration): Stora
       if (targetRow.state === 'cleared') return;
       const target = JSON.parse(targetRow.target_payload as string) as DeletionTarget; validateTarget(config, target, op.ownerId);
       const domain = config.domains.find(d => d.id === target.domain)!;
-      if (target.kind === 'row') domain.clearRow(tx, op, target); else domain.fileCleared(tx, op, target);
+      if (target.kind === 'row') synchronous(domain.clearRow(tx, op, target)); else synchronous(domain.fileCleared(tx, op, target));
       tx.run("UPDATE deletion_target SET state='cleared',attempts=attempts+1,last_error_code=NULL WHERE operation_id=? AND target_no=?", [op.operationId, input.targetNo]);
     }),
     action('authorizeFile', 'write', (tx, input, lease) => {
@@ -148,7 +155,7 @@ export function createDeletionActions(configInput?: DeletionRegistration): Stora
       const targetRow = tx.get("SELECT * FROM deletion_target WHERE operation_id=? AND target_no=? AND storage_kind='file' AND state!='cleared'", [op.operationId, input.targetNo]) ?? fail('deletion_target_invalid');
       const target = JSON.parse(targetRow.target_payload as string) as DeletionTarget;
       validateTarget(config, target, op.ownerId);
-      if (target.kind === 'file') config.domains.find(d => d.id === target.domain)!.authorizeFile(tx, op, target);
+      if (target.kind === 'file') synchronous(config.domains.find(d => d.id === target.domain)!.authorizeFile(tx, op, target));
       else fail('deletion_target_invalid');
     }),
     action('sealTargets', 'write', (tx, input, lease) => {
@@ -177,9 +184,9 @@ export function createDeletionActions(configInput?: DeletionRegistration): Stora
       }
       const op = operation(row);
       tx.run("UPDATE deletion_operation SET state='verifying' WHERE operation_id=?", [op.operationId]);
-      record(tx, op, 'write_fence', 'authority', config.authority.verify(tx, op));
+      record(tx, op, 'write_fence', 'authority', synchronous(config.authority.verify(tx, op)));
       for (const domain of config.domains) {
-        const checks = domain.verify(tx, op);
+        const checks = synchronous(domain.verify(tx, op));
         for (const kind of ['database_rows', 'derived_eligibility', 'trace_payloads', 'request_replay', 'scope_suppression'] as const) record(tx, op, kind, domain.id, checks[kind]);
       }
       record(tx, op, 'sqlite_pages_wal', 'coordinator', input.checks?.sqlite_pages_wal ?? { result: 'blocked', proof: 'missing_verification' });

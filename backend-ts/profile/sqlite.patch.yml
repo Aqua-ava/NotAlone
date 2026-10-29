@@ -1,4 +1,6 @@
-# SQLite 联系人能力仍由官方 profile 装配；不加载模型、Agent 或 Tool 插件。
+# SQLite联系人和Skill能力由官方profile装配；不加载模型、Agent或Tool插件。
 - insert:
+    - id: reply-skill-registry
+      name: '@deepseek-ai/dsh-skill'
     - id: notalone-sqlite-host
       name: PLUGIN_PATH

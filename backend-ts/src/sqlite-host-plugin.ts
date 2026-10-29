@@ -7,12 +7,19 @@ import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { SqliteStorage } from './storage/sqlite/client.ts';
 import type { SqliteLaunchConfiguration } from './launch.ts';
-import { SqliteContactService } from './contacts/sqlite/service.ts';
-import { SqliteContactHttp } from './contacts/sqlite/http.ts';
 import { createWechatContactMetadata } from './contacts/sqlite/wechat-metadata.ts';
+import { ContactMetadataLifetime } from './storage/sqlite/deletion/contact-metadata.ts';
+import {readSqliteCapabilities} from './sqlite-capabilities.ts';
+import {SqliteSkillLibrary} from './skills/sqlite/library.ts';
+import {SqliteSkillHttp} from './skills/sqlite/http.ts';
+import { DeletionService } from './storage/sqlite/deletion/service.ts';
+import { ActiveHolders } from './storage/sqlite/deletion/holders.ts';
+import { ManagedFiles } from './storage/sqlite/deletion/managed-files.ts';
+import { SqliteDeletionHttp, deletionQueryAllowed } from './storage/sqlite/deletion/http.ts';
+import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 
 export const name = 'notalone-sqlite-host';
-export const inject = ['appReady', 'appExit'];
+export const inject = ['appReady', 'appExit','skills'];
 
 export function authorizeSqliteRequest(req: IncomingMessage, token: string): boolean {
   const authCount = req.rawHeaders.filter((value, index) => index % 2 === 0 && value.toLowerCase() === 'authorization').length;
@@ -25,16 +32,17 @@ export function authorizeSqliteRequest(req: IncomingMessage, token: string): boo
 export async function apply(ctx: Context) {
   const config = JSON.parse(await readFile(process.env.NOTALONE_HOST_CONFIG!, 'utf8'));
   const sqlite = config.sqlite as SqliteLaunchConfiguration | undefined;
+  const capabilities=sqlite&&typeof sqlite.userData==='string'?readSqliteCapabilities(sqlite.capabilities,sqlite.skillPackageRoot,sqlite.userData):undefined;
   if (process.ppid !== config.parentPid || !sqlite || sqlite.role !== 'test'
     || !path.isAbsolute(sqlite.userData) || !/^[A-Za-z0-9_-]{1,128}$/.test(sqlite.expectedDatabaseId)
-    || !Array.isArray(sqlite.capabilities) || sqlite.capabilities.length !== 1 || sqlite.capabilities[0] !== 'contacts'
+    || !capabilities
     || sqlite.wechatCliPath !== undefined && !path.isAbsolute(sqlite.wechatCliPath)
-    || config.infoPath !== path.join(sqlite.userData, 'managed/sqlite/backend.info')) throw new Error('SQLITE_HOST_CONFIGURATION_INVALID');
+    || config.infoPath !== path.join(sqlite.userData, 'managed/sqlite-backend.info')) throw new Error('SQLITE_HOST_CONFIGURATION_INVALID');
   const token = randomBytes(32).toString('base64url');
   let state: 'running' | 'stopping' | 'stopped' = 'running';
   let storage: SqliteStorage | undefined;
   let opening: Promise<SqliteStorage> | undefined;
-  let service: SqliteContactService | undefined;
+  let contacts: ContactMetadataLifetime | undefined;
   let server: Server | undefined;
   let published = false;
   let readyDispose = () => {};
@@ -46,7 +54,7 @@ export async function apply(ctx: Context) {
     state = 'stopping'; readyDispose();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
-    try { await service?.close(); }
+    try { await contacts?.close(); }
     finally { await storage?.close(); }
     if (published) await rm(config.infoPath, { force: true });
     state = 'stopped';
@@ -72,13 +80,15 @@ export async function apply(ctx: Context) {
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), at: Date.now() });
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
-    service = new SqliteContactService(storage, ownerId, createWechatContactMetadata(sqlite.wechatCliPath));
-    await service.initialize();
+    const deletionHolders = new ActiveHolders();
+    contacts = new ContactMetadataLifetime(storage, ownerId, deletionHolders, () => createWechatContactMetadata(sqlite.wechatCliPath));
+    await contacts.initialize();
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
-    const contacts = new SqliteContactHttp(service);
+    const skills=capabilities.skillPackageRoot?new SqliteSkillHttp(new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot),req=>authorizeSqliteRequest(req,token)):undefined;
+    const deletions = new SqliteDeletionHttp(new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData)), ownerId);
     const ownership = { contacts: 'typescript', wechat: 'typescript',
-      deletion: 'unavailable', skills: 'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
-      taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'unavailable',
+      deletion: 'typescript', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
+      taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'typescript',
       wechatBodySync: 'unavailable', wechatIncremental: 'unavailable', wechatHistory: 'unavailable',
       foregroundLocation: 'unavailable', contactContext: 'unavailable', memory: 'unavailable',
       expressionPreferences: 'unavailable', replies: 'unavailable' };
@@ -88,17 +98,17 @@ export async function apply(ctx: Context) {
       let url: URL;
       try { url = new URL(req.url ?? '', 'http://localhost'); }
       catch { respond(400, { error: 'invalid_request' }); return; }
-      if (req.url !== url.pathname) { respond(400, { error: 'invalid_request' }); return; }
+      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !deletionQueryAllowed(req.method, url))) { respond(400, { error: 'invalid_request' }); return; }
       try {
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
-          respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', capabilities: ['contacts'], ownership }); return;
+          respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
         }
         if (req.method === 'POST' && url.pathname === '/api/runtime/shutdown') {
           await stopResources();
           res.once('finish', () => ctx.appExit!(0)); respond(200, { state, runtime: 'dsh' }); return;
         }
         if (state !== 'running') { respond(503, { error: 'runtime_stopping' }); return; }
-        if (!await contacts.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
+        if (!await deletions.handle(req,res)&&!await skills?.handle(req,res)&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
     });
     server.requestTimeout = 15_000; server.headersTimeout = 10_000;

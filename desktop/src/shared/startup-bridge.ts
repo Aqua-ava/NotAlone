@@ -17,7 +17,7 @@ export interface StartupPaths {
   syncProbePath: string;
 }
 export interface SqliteDevelopmentState {
-  capabilities?: ['contacts'];
+  capabilities?: ('contacts'|'skills')[];
   phase: 'ready' | 'blocked';
   code: string;
   schemaVersion?: number;

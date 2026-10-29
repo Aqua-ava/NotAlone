@@ -58,3 +58,5 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 最新真实证据：已从既有配置精确定位现存CLI和WCDB，字节与历史静态审计一致，签名完整性通过。一次严格只读status退出0，并观测实际进程加载预期配套WCDB；该库字节上的既有原生合成探针12/12，SQLite3.27.2，临时库自动清理。可公开脱敏证据在docs/verification/sqlite-private-history-support-03.md及support-profiles/wechat-4.0.6-29387.json，不保存账号、聊天、截图、凭据或真实源路径。Computer Use核对当前窗口为指定对象，没有切换他人或发送／撤回；未启停开发实例。前述“未找到制品”已由此次精确配置定位补齐，但CLI仍无消息schema窄操作，当前真实schema／声明主键／分片表实例／状态及来源连续性未认证。保持真实metadata与历史读取unverified，不能正常逐人授权并读取ran正文；不安装／初始化组件或借tail补证。
 
 尚未完成：总指挥在05之后串行聚合history HTTP／capability／启动停止与共享删除注册，并安排实际App消息UI验收；真实支持档窄接口缺证仍阻断真实正文。未把外部制品缺失或读取拒绝计作正常路径通过，Goal不标complete，票不resolved。公共修改只有registry的最小history迁移/actions追加（本树暂4，实际集成序决定）；profile、launch、host、desktop startup未改。所有提交仅本票；公开历史检查持续0问题。
+
+总集成检查点：已审核心最终净差异按实际集成序追加history迁移v5，保留已发布v1–v4及Skill动作。集成后backend类型检查、历史服务／HTTP 19/19通过；真实渠道认证和公共宿主接线继续实施，State保持claimed。

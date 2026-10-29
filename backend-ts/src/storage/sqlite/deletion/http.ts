@@ -8,6 +8,12 @@ import type { DeletionScope, DeletionSnapshot } from './contracts.ts';
 const invalid = (): never => { throw new StorageFailure('deletion_request_invalid'); };
 const identifier = (value: string) => /^[a-zA-Z0-9_-]{1,128}$/.test(value) ? value : invalid();
 const exact = (body: Record<string, unknown>, fields: string[]) => Object.keys(body).sort().join(',') === [...fields].sort().join(',');
+/** 共用宿主只放行现有只读查询形状，其他查询仍由全局边界拒绝。 */
+export function deletionQueryAllowed(method: string | undefined, url: URL): boolean {
+  if (method !== 'GET' || url.searchParams.size !== 2 || !/^[a-zA-Z0-9_-]{1,128}$/.test(url.searchParams.get('contact_id') ?? '')) return false;
+  return url.pathname === '/api/deletions' ? url.searchParams.get('scope_kind') === 'discussion'
+    : url.pathname === '/api/tasks/status' && /^[a-zA-Z0-9_-]{1,128}$/.test(url.searchParams.get('task_id') ?? '');
+}
 function publicOperation(op: DeletionSnapshot) {
   const status = {fenced: 'queued', cleaning: 'running', verifying: 'verifying', blocked: 'failed', completed: 'succeeded'}[op.state];
   const phase = {fenced: 'invalidate', cleaning: 'erase', verifying: 'verify', blocked: 'verify', completed: 'complete'}[op.state];
@@ -15,6 +21,7 @@ function publicOperation(op: DeletionSnapshot) {
   const scope = op.scope as DeletionScope & {contactId?: string; sourceId?: string; discussionId?: string; messageId?: string};
   return {operation_id: op.operationId, scope_kind: scope.kind, status, phase, state: op.state, error_code: error,
     ...(op.state !== 'completed' ? {contact_id: scope.contactId ?? null, target_id: scope.sourceId ?? scope.discussionId ?? scope.messageId ?? scope.contactId ?? op.ownerId} : {}),
+    checks: op.checks.map(c => ({kind: c.kind, domain: c.domain, result: c.result.result, proof: c.result.proof})),
     plan_revision: op.planRevision.toString(), created_at: op.createdAt, updated_at: op.completedAt ?? op.createdAt, finished_at: op.completedAt};
 }
 function taskStatus(op: DeletionSnapshot) {

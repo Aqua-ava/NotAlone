@@ -1,10 +1,10 @@
 # SQLite Skill 最小关联（实施14）
 
-仅接回官方 DSH Skill provider、包／修订身份和业务查询；不创建学习、审核发布或方法级策略表。原 Skill 目录始终只读。默认 PG 宿主尚未切换；本票生产 HTTP 适配器等待共用 SQLite 认证入口串行接线及界面复核，未完成前任务保持 claimed；05/11/12真实链另行组合验收。
+仅接回官方 DSH Skill provider、包／修订身份和业务查询；不创建学习、审核发布或方法级策略表。原 Skill 目录始终只读。显式 SQLite 开发配置已接通官方 profile、认证 HTTP 和现有 Skill 管理页；默认 PG 宿主尚未切换，05/11/12真实删除与回复链另行组合验收。
 
 ## 迁移与查询
 
-`storage.ts` 导出 `skillSchemaSql` 和 `skillActions`，集成方在02的 `owner(owner_id)` 建好后给 SQL 分配连续版本并注册动作，不改已发布 SQL。仅建立 `skill_package`、`skill_package_revision` 两张表；测试夹具的 owner、scope、input 表不进入生产。包复合主键和修订复合外键隔离 owner，revision 锚点字段有不可变触发器。公开调用只有固定动作，不接受 SQL。
+`storage.ts` 导出 `skillSchemaSql` 和 `skillActions`，公共 registry 在02身份迁移后追加版本4并注册动作，不改已发布 SQL。仅建立 `skill_package`、`skill_package_revision` 两张表；测试夹具的 owner、scope、input 表不进入生产。包复合主键和修订复合外键隔离 owner，revision 锚点字段有不可变触发器。公开调用只有固定动作，不接受 SQL。
 
 `SqliteSkillLibrary(storage, runtimeOwnerId, authorizedRoot)` 的 owner 和目录由已认证宿主配置提供，不能取自模型、任意 HTTP 请求或 Skill 文本。`discover(directoryName)` 仅处理明确指定的直接子目录，首次为 `unknown`；不查旧 PG、不从 `.versions` 猜审核或启用历史，不批量扫描真实目录作为测试。
 
@@ -17,7 +17,11 @@
 
 ## 正常业务 HTTP 适配
 
-`SqliteSkillHttp(library, authorize).handle(req,res)` 由共用宿主装配，复用原 `/api/skills` 路径；authorize必须注入宿主唯一 Bearer/Origin 认证，owner和目录根不接受请求传入。GET返回含中文state_label的最小状态投影，不含物理路径。POST `/api/skills/discover` 明确确认配置根内的目录名；`/:id/verify|enable|disable` 以十进制expected_head_revision做CAS，均要求confirmed=true。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。适配器已通过正式profile与隔离HTTP验证；现有SkillLearningPage已提供最小DTO分支和manager具名桥接，以精确CAS管理中文状态。共享宿主和实际App反馈另记真实验收。
+`SqliteSkillHttp(library, authorize).handle(req,res)` 已由 `sqlite-host-plugin.ts` 装配，复用原 `/api/skills` 路径；authorize注入宿主唯一 Bearer/Origin 认证，owner由身份域解析，目录根由显式 test 配置指定，两者不接受请求传入。GET返回含中文state_label的最小状态投影，不含物理路径。POST `/api/skills/discover` 明确确认配置根内的目录名；`/:id/verify|enable|disable` 以十进制expected_head_revision做CAS，均要求confirmed=true。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。现有SkillLearningPage提供最小DTO分支和manager具名桥接，以精确CAS管理中文状态。
+
+正常 `launchDsh` 使用 `profile/sqlite.patch.yml` 的官方 registry 和薄宿主；仅显式 `capabilities: [contacts, skills]` 配合隔离 userData 内的 `skillPackageRoot` 开放管理，缺失或无效配置拒绝启动。握手位于 `managed/sqlite-backend.info`，与数据库维护目录分开。该 profile 不装配模型、Agent 或 Tool；管理页状态不宣称回复已经加载 Skill。
+
+2026-10-29 通过 `pnpm run dev` 对合成包完成实际 App 验收：空库、明确关联为 unknown、启用、内容变化 pending、重新核验切换修订、停用、目录缺失、同字节换目录的身份冲突及正常退出重开后的停用／冲突持久化。卡片、按钮和摘要换行已检查；两次正常退出均停止开发 App 与后端并移除握手文件，原件字节保持。未读取真实微信或调用模型。
 
 ## 官方加载与实际输入
 
@@ -33,9 +37,13 @@
 
 ## 删除接入边界
 
-本模块没有文件删除、清理器、目录覆盖或孤儿扫描代码。空库缺引用、旧 PG 行缺失和任何管理状态都不构成原目录删除授权。原 Skill 目录不得登记成05的受管文件删除目标。
+本模块没有文件删除、文件清理器、目录覆盖或孤儿扫描代码。空库缺引用、旧 PG 行缺失和任何管理状态都不构成原目录删除授权。原 Skill 目录不得登记成05的受管文件删除目标。
 
 05/11/12需要登记含实际 Skill 输入的追踪行与 runtime 副本；由追踪／副本领域负责 collect、fence、clear、verify。包来源资格变化则调用 `requireVerification`；包不复制成新独立来源。`requireSkillRun`／`requireSkillRevision` 应和02的 `assertReadEligibility`、05的删除资格检查处于调用追踪写入的同一短事务。14不导入未集成的并行票模块，不提供恒真的生产替身，不把缺域注册当作删除完成。测试夹具显式提供 `fixture_scope`／`fixture_input` 与撤销擦除，仅证明合同要求；真实删除注册与运行副本清理必须在后续接入窗口复核。
+
+正常管理动作和 `requireSkillRun`／`requireSkillRevision` 在同一短事务要求 `owner.state=active`；deleting、deleted、missing均拒绝，包括零包目录。
+
+`deletion.ts` 导出 `skillMetadataDeletionDomain()`，id为 `skill_metadata`，注册到05的domains与requiredDomains。仅account范围清除本owner的package/revision行、物理定位和摘要，fence须在02将owner置为deleting/deleted后调用，删除处理器自身允许同操作重试。只产生类型化row目标，authorizeFile/fileCleared始终拒绝，原目录字节保留。其他contact/source范围不清owner包；实际Skill输入与runtime副本继续由对应写入域登记、清理和复核，不能借本域not_applicable隐藏缺域。工厂已对当前05 DeletionDomain做独立类型赋值检查；若其他域外键尚未清除，行清理会阻止并等待同操作重试。
 
 ## 当前版本依据
 
@@ -43,6 +51,6 @@
 
 - [固定源码的 SkillProvider / SkillProviderControl / registerProvider / get](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/skill/skill/src/index.ts#L247)：provider工厂同步注册，list/get异步；scope限定、控制器失效与释放；本地源码HEAD不同，使用 `git show` 固定提交阅读。
 - 锁定安装制品 `lib/types/index.d.ts:188,247,280` 和 `lib/index.js:147,250`：registerProvider生命周期、缓存失效、官方get调用provider、调用方取消。
-- 正式 `profile/host.patch.yml` 已启用官方registry；本票不修改DSH核心或profile，也不启用filesystem插件、通用读文件、Shell、网络下载或任意插件安装。
+- 正式 `profile/host.patch.yml` 与 SQLite 的 `profile/sqlite.patch.yml` 均使用官方registry；SQLite profile 仅增加官方registry与薄宿主接线，不修改DSH核心，也不启用filesystem插件、通用读文件、Shell、网络下载或任意插件安装。
 
-安装包无gitHead，未完成固定源码树对npm制品的全量可复现构建比对；本次只核验所用公开合同及实际安装行为。`sqlite-skill-profile.test.mjs` 复用正式patch，通过官方CLI启动隔离profile，仅替换业务宿主认证／追踪和模型配置（本机环回假地址，无模型请求）。不是生产宿主、真实模型、微信或App整体验收。
+安装包无gitHead，未完成固定源码树对npm制品的全量可复现构建比对；本次只核验所用公开合同及实际安装行为。`sqlite-skill-profile.test.mjs` 复用正式patch，通过官方CLI启动隔离profile，仅替换业务宿主认证／追踪和模型配置（本机环回假地址，无模型请求）；`sqlite-host-launch.test.mjs` 验证实际 SQLite profile 的认证管理、关闭及重开。实际 App 证据只覆盖上述管理行为，不覆盖真实模型、微信或完整回复链。
