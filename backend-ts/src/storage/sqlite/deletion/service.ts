@@ -24,13 +24,23 @@ export class DeletionService {
   status(input: Address): Promise<DeletionSnapshot> { return this.storage.execute('deletion.status', input); }
   list(input: {ownerId: string; contactId?: string}): Promise<DeletionSnapshot[]> { return this.storage.execute('deletion.list', input); }
   async advance(input: Address): Promise<DeletionSnapshot> {
-    const op = await this.storage.execute<Claimed>('deletion.claim', input);
+    let op = await this.storage.execute<Claimed>('deletion.claim', input);
     if (!op.token) return op;
-    const runner = {...input, token: op.token, planRevision: op.planRevision};
-    const keys = op.targets.flatMap(t => t.target?.holderKeys ?? []);
+    let runner = {...input, token: op.token, planRevision: op.planRevision};
+    let keys = op.targets.flatMap(t => t.target?.holderKeys ?? []);
     let targetNo: bigint | undefined;
     try {
-      await this.holders.drain(op, keys, this.options.drainTimeoutMs);
+      // close可产生末次文件/持有者；每次排空后重新收集，达到稳定闭包才开始清理。
+      let stable = false;
+      for (let round = 0; round < 8; round++) {
+        await this.holders.drain(op, keys, this.options.drainTimeoutMs);
+        const revision = op.planRevision;
+        op = await this.storage.execute<Claimed>('deletion.recollect', runner);
+        runner = {...runner, planRevision: op.planRevision};
+        keys = [...new Set([...keys, ...op.targets.flatMap(t => t.target?.holderKeys ?? [])])];
+        if (revision === op.planRevision && this.holders.verify(op, keys)) { stable = true; break; }
+      }
+      if (!stable) throw new StorageFailure('deletion_closure_unstable');
       const targets = [...op.targets].sort((a, b) => {
         const rank = (item: typeof a) => item.target?.kind === 'file' && item.target.address.kind === 'directory' ? 1000 - item.target.address.locator.split('/').length : 0;
         return rank(a) - rank(b);

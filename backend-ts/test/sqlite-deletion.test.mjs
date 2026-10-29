@@ -257,3 +257,24 @@ test('账号删除排空全部owner持有者，不拿联系人代次和账号epo
   const op=await f.service().plan(request('account-fence',{kind:'account'}));
   assert.equal((await f.service().advance(op)).state,'completed');assert.equal(closed,true);
 });
+
+test('关闭末写新文件和新持有者在同一runner重新收集至稳定闭包后首轮完成',async t=>{
+ const f=await fixture(t);await f.storage.execute('sample.seed',{});
+ f.files.prepareArea('runtime');
+ const add=async(name,key)=>{
+  const location=join(f.userData,'managed/runtime-copies',name);
+  await writeFile(location,'合成关闭末写',{mode:0o600});
+  await f.storage.execute('sample.file',{kind:'file',domain:'sample',ownerId:'o',fileId:name,generation:'1',address:f.files.capture('runtime',name),holderKeys:[key]});
+  return location;
+ };
+ let secondClosed=false;
+ f.holders.register({key:'sample:copy',ownerId:'o',generation:0n,async close(){
+  await add('late-a','sample:second');
+  f.holders.register({key:'sample:second',ownerId:'o',generation:0n,async close(){secondClosed=true;await add('late-b','sample:third');}});
+ }});
+ const op=await f.service().plan(request('close-new-files'));
+ const result=await f.service().advance(op);
+ assert.equal(result.operationId,op.operationId);assert.equal(result.state,'completed');
+ assert.ok(result.planRevision>op.planRevision);assert.equal(secondClosed,true);
+ for(const name of ['late-a','late-b'])await assert.rejects(readFile(join(f.userData,'managed/runtime-copies',name)),{code:'ENOENT'});
+});
