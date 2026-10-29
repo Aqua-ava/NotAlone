@@ -13,6 +13,35 @@ import { ManagedFiles } from '../src/storage/sqlite/deletion/managed-files.ts';
 import { launchDsh } from '../src/launch.ts';
 import { DatabaseSync } from 'node:sqlite';
 
+test('宿主级负例：手写未完成 contact 删除后重启仍返回 409 identity_closed', async t => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-metadata-host-gate-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const storage = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test' });
+  const ownerId = await storage.execute('identity.resolveOwner', { proposedOwnerId: '33333333-3333-4333-8333-333333333333', at: 1 });
+  await storage.close();
+  const db = new DatabaseSync(path.join(root, 'managed/sqlite/notalone.sqlite'));
+  try {
+    db.prepare("INSERT INTO deletion_operation(operation_id,owner_identity,request_namespace,request_key,scope_kind,contact_identity,accepted_generation,state,plan_revision,domain_manifest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+      .run('blocked-contact-operation', ownerId, 'metadata_host_gate', 'blocked-contact-key', 'contact', '44444444-4444-4444-8444-444444444444', 1, 'blocked', 1, '{}', 1);
+  } finally { db.close(); }
+  const infoPath = path.join(root, 'managed/sqlite-backend.info');
+  const host = await launchDsh({ nodeExecutable: process.execPath, projectDirectory: new URL('../../', import.meta.url).pathname,
+    envFilePath: path.join(root, 'unused.env'), infoPath, businessHome: root, environment: {},
+    sqlite: { userData: root, expectedDatabaseId: databaseId(root), role: 'test', capabilities: ['contacts'] } }, () => true);
+  t.after(() => host.terminate());
+  const info = await handshake(host, infoPath);
+  const get = async route => {
+    const response = await fetch(`http://${info.address}${route}`, { headers: { Authorization: `Bearer ${info.token}` } });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  };
+  const contacts = await get('/api/contacts');
+  assert.equal(contacts.status, 409, JSON.stringify(contacts));
+  assert.equal(contacts.body.error, 'identity_closed');
+  const bindings = await get('/api/sync/cli-bindings');
+  assert.equal(bindings.status, 409);
+  assert.equal(bindings.body.error, 'identity_closed');
+});
+
 async function handshake(host, infoPath) {
   const until = Date.now() + 15000;
   while (Date.now() < until && host.isRunning()) {
@@ -35,6 +64,9 @@ test('清空聊天 blocked 操作跨重启不再关闭联系人/绑定读取，�
   assert.equal(cleared.boundary?.state, 'blocked');
   const status = await f.storage.execute('deletion.metadataAvailable', { ownerId: owner });
   assert.equal(status, true, '来源/清空/讨论/媒体删除不关闭联系人身份元数据');
+  // 名单服务保持可读不等于放开身份写入：选择/撤销仍受既有资格与代次 CAS 约束。
+  await assert.rejects(() => f.contacts.revoke(contactId, f.saved[0].binding_id, '0'), /identity_generation|selection|stale|invalid|closed/i);
+  await assert.rejects(() => f.contacts.confirm('stale-selection-token', []), /selection_stale|identity_request_invalid|stale/i);
   await f.contacts.close();
   await f.storage.close();
   const infoPath = path.join(f.root, 'managed/sqlite-backend.info');

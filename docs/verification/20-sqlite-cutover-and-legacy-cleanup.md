@@ -133,7 +133,7 @@
 | 桌面启动相关 | `cd desktop && node --test tests/sqlite-development.test.mjs tests/startup-continuity.test.mjs tests/pure-ts-startup.test.mjs` | 16/16 通过 |
 | 测试清单 | `cd desktop && node scripts/test-inventory.mjs` | 登记通过 |
 | 正常开发入口 | 隔离根 + `/tmp/t09-node/bin/node desktop/scripts/dev.mjs --user-data-dir <root>`（即 `pnpm run dev` 执行的同一脚本） | 默认创建 SQLite（8 项检查全 passed）、5 页 UI 正常、无 console error、正常关停 pids[]、握手删除、重开同 database_id／owner；隔离根已清理 |
-| 当前用例实跑对照 | `cd backend-ts && node test/run-current.mjs --test-reporter=spec`（本树 vs 15ac355a 隔离树） | 见 §9.2 |
+| 当前用例实跑对照 | `cd backend-ts && node test/run-current.mjs --test-reporter=spec`（最终树 vs 15ac355a 隔离树） | 见 §9.2（最终树 1540/950/589，无新增失败文件） |
 | 公开前检查 | `node scripts/check_public_history.mjs --ref HEAD --working-tree` | 0 问题（定稿提交时重跑） |
 
 ### 9.1 相关后端模块
@@ -142,12 +142,12 @@
 
 ### 9.2 当前用例实跑与基线对照
 
-- 本树实跑：`tests 1559 / pass 946 / fail 612`，失败文件集合 108 个；除 `sqlite-memory-profile.test.mjs` 的 2 项断言失败外，全部为「本机无 PostgreSQL」基线（`connect ENOENT /tmp/.s.PGSQL.5432` 或「合成 PG 准备失败」）。
-- 15ac355a 隔离基线树实跑：`tests 1506 / pass 928 / fail 577`，失败文件集合 111 个；非 PG 失败同样为 `sqlite-memory-profile.test.mjs` 的 2 项。
-- 按失败文件集合对比：本树**无新增失败文件**；相对基线减少/消失的旧文件为 `host-launch.test.mjs` 与 `python-retirement-host.test.mjs`（已按退役登记删除）。`host-readiness.test.mjs` 仍为 current 且在两棵树均通过，不属于失败文件变化。失败计数差异来自 PG 连接失败的子测试数与新增 cutover 测试，不表示新增回归。
-- 修复后不再有 `backend_launch_requires_sqlite` 残留失败；`sqlite-history-startup-host.test.mjs` 3 项恢复通过。
+- **最终树实跑（退役 15 旧测试、新增跨重启/守卫/门禁回归后）**：current 246 文件，`tests 1540 / pass 950 / fail 589`，失败文件集合 93 个；除 `sqlite-memory-profile.test.mjs` 的 2 项断言失败外，全部为「本机无 PostgreSQL」基线（`connect ENOENT /tmp/.s.PGSQL.5432` 或「合成 PG 准备失败」）。**无新增失败文件**。
+- **修前树对照（保留为历史数字，已因测试退役/新增变化）**：本票中途树 `1559 / 946 / 612`（失败文件集合 108）；15ac355a 隔离基线树 `1506 / 928 / 577`（失败文件集合 111，非 PG 失败同样为 `sqlite-memory-profile` 的 2 项）。
+- 按失败文件集合对比：最终树相对基线**无新增失败文件**；消失的旧失败文件为 15 个已退役纯 PG/纯 TS 宿主测试、`host-launch.test.mjs` 与 `python-retirement-host.test.mjs`（均登记 historical 并删除）。`host-readiness.test.mjs` 仍为 current，在最终树通过；基线日志中其为文件加载阶段失败（本机环境差异），t03 独立复跑两树均通过，不计入本票变化。失败计数差异来自 PG 连接失败的子测试数、测试退役与新增 cutover 测试（新增文件全部通过），不表示新增回归。
+- 修复后不再有 `backend_launch_requires_sqlite` 残留失败；`sqlite-history-startup-host.test.mjs` 3 项恢复通过；新增 `sqlite-deletion-metadata-restart.test.mjs` 3 项（含宿主级 identity_closed 负例）通过。
 - 新增 cutover 测试文件全部纳入 current 执行并通过；不修改需 PG 的既有测试，也不把它们计作本票验收。
-- 旧 PG 宿主测试残留已清理：删除 15 个纯 PG／纯 TS 宿主测试与 2 个旧 fixture 并登记 historical（`pure-ts-*`、`assistant-generation-*`、`workspace-generation-stop-ipc`、`usage-summary-http`）；新增 `sqlite-cutover-launch-sqlite-guard.test.mjs` 静态守卫，current 测试与 helper 中所有 `launchDsh(` 所在文件必须存在受控 `sqlite:` 配置来源。
+- 旧 PG 宿主测试残留已清理：删除 15 个纯 PG／纯 TS 宿主测试并登记 historical（`pure-ts-*`、`assistant-generation-*`、`workspace-generation-stop-ipc`、`usage-summary-http`）；`pure-ts-runtime-fixture.mjs`、`usage-summary-fixture.mjs` 仅作为这些 historical entries 的 `legacyDependencies` 引用，不是独立 inventory entry。新增 `sqlite-cutover-launch-sqlite-guard.test.mjs` 静态守卫（文件级启发式，局限已注释）：current 测试与 helper 中含 `launchDsh(` 的文件必须存在受控 `sqlite:` 配置来源。
 - 跨重启回归：`sqlite-cutover-restart-host.test.mjs` 连续两次默认启动后再启动真实 SQLite 宿主，验证同 `database_id`／owner、`/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status` 均为 200，`/api/sync/cli-sessions` 无明确同意时返回 409 metadata_consent_required；第三次默认启动仍同一实例。
 
 ## 10. 12 条验收逐条判定
@@ -214,7 +214,9 @@
 
 **修复**：`deletion.metadataAvailable` 只在未完成的 **contact/account** 删除（会移除或更换联系人身份）时关闭名单服务；source/contact_history/discussion/media_result_* 的未完成操作只清理内容，其写入门禁继续由各领域边界与 holder fence 负责，联系人目录、持久绑定、授权与删除进度保持可读。迁移 1..15 与安全门禁未变。
 
-**回归**：`sqlite-deletion-metadata-restart.test.mjs` 两项——(a) 制造 blocked 的 contact_history 清空后，重启宿主 `/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、清空状态与 `/api/deletions` 均 200 且 blocked 进度可见；(b) 未完成的 contact/account 删除仍返回 metadataAvailable=false（安全门禁保持）。
+**回归**：`sqlite-deletion-metadata-restart.test.mjs` 三项——(a) 制造 blocked 的 contact_history 清空后，重启宿主 `/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、清空状态与 `/api/deletions` 均 200 且 blocked 进度可见；同时断言名单可读不等于放开身份写入：blocked 清空期间旧代次 `revoke` 与旧快照 `confirm` 仍被既有资格/代次 CAS 拒绝。(b) 未完成的 contact/account 删除仍返回 metadataAvailable=false（安全门禁保持）。(c) 宿主级负例：手写未完成 contact 删除后重启，`/api/contacts` 与 `/api/sync/cli-bindings` 仍返回 409 `identity_closed`，防止未来只改函数不测宿主。
+
+**边界说明**：该修复使内容类删除（source/contact_history/discussion/media_result_*）期间名单服务保持可读，也允许受既有资格／CAS 约束的身份写入（confirm/revoke/setReading/detectAccount）继续工作；这些身份动作本就有代次、资格与来源复验，不由名单服务开关充当唯一门禁。
 
 ### 13.2 干净根跨重启（补充证据）
 
