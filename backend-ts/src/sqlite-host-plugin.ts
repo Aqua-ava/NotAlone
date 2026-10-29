@@ -13,6 +13,11 @@ import { createWechatContactMetadata } from './contacts/sqlite/wechat-metadata.t
 import {readSqliteCapabilities} from './sqlite-capabilities.ts';
 import {SqliteSkillLibrary} from './skills/sqlite/library.ts';
 import {SqliteSkillHttp} from './skills/sqlite/http.ts';
+import { DeletionService } from './storage/sqlite/deletion/service.ts';
+import { ActiveHolders } from './storage/sqlite/deletion/holders.ts';
+import { ManagedFiles } from './storage/sqlite/deletion/managed-files.ts';
+import { SqliteDeletionHttp, deletionQueryAllowed } from './storage/sqlite/deletion/http.ts';
+import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 
 export const name = 'notalone-sqlite-host';
 export const inject = ['appReady', 'appExit','skills'];
@@ -81,9 +86,11 @@ export async function apply(ctx: Context) {
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     const contacts = new SqliteContactHttp(service);
     const skills=capabilities.skillPackageRoot?new SqliteSkillHttp(new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot),req=>authorizeSqliteRequest(req,token)):undefined;
+    const deletionHolders = new ActiveHolders();
+    const deletions = new SqliteDeletionHttp(new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData)), ownerId);
     const ownership = { contacts: 'typescript', wechat: 'typescript',
-      deletion: 'unavailable', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
-      taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'unavailable',
+      deletion: 'typescript', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
+      taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'typescript',
       wechatBodySync: 'unavailable', wechatIncremental: 'unavailable', wechatHistory: 'unavailable',
       foregroundLocation: 'unavailable', contactContext: 'unavailable', memory: 'unavailable',
       expressionPreferences: 'unavailable', replies: 'unavailable' };
@@ -93,17 +100,17 @@ export async function apply(ctx: Context) {
       let url: URL;
       try { url = new URL(req.url ?? '', 'http://localhost'); }
       catch { respond(400, { error: 'invalid_request' }); return; }
-      if (req.url !== url.pathname) { respond(400, { error: 'invalid_request' }); return; }
+      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !deletionQueryAllowed(req.method, url))) { respond(400, { error: 'invalid_request' }); return; }
       try {
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
-          respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', capabilities: capabilities.capabilities, ownership }); return;
+          respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
         }
         if (req.method === 'POST' && url.pathname === '/api/runtime/shutdown') {
           await stopResources();
           res.once('finish', () => ctx.appExit!(0)); respond(200, { state, runtime: 'dsh' }); return;
         }
         if (state !== 'running') { respond(503, { error: 'runtime_stopping' }); return; }
-        if (!await skills?.handle(req,res)&&!await contacts.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
+        if (!await deletions.handle(req,res)&&!await skills?.handle(req,res)&&!await contacts.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
     });
     server.requestTimeout = 15_000; server.headersTimeout = 10_000;

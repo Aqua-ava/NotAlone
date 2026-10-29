@@ -22,7 +22,7 @@
 
 ## 清理与故障
 
-实施05新增[统一删除合同](deletion/README.md)。`deletionMigration(version)`与具名动作独立在`deletion/`；领域通过真实授权、来源闭包及文件清理回调注册。默认缺少领域注册时拒绝删除，不把空计划判成功。公共maintenance新增只读`inspect()`，回传空闲页、内存临时存储、secure_delete、WAL/SHM/journal大小及未知辅助文件数，不能替代领域排空证明。
+实施05新增[统一删除合同](deletion/README.md)。`deletionMigration(version)`与具名动作独立在`deletion/`；领域通过真实授权、来源闭包及文件清理回调注册。当前显式SQLite宿主注册身份及Skill元数据域的联系人/账号范围；未装来源、历史清空、讨论或媒体处理器时拒绝，不把空计划判成功。公共maintenance新增只读`inspect()`，回传空闲页、内存临时存储、secure_delete、WAL/SHM/journal大小及未知辅助文件数，不能替代领域排空证明。
 
 所有连接启用 FK；WAL、FULL 同步、secure_delete、内存临时存储、1000页自动checkpoint及零 journal_size_limit。普通关闭不把 DELETE 宣称为存储面擦除。05 通过 `mode:maintenance` 注册具名维护动作；该模式不包事务、不自动重试，执行前后及每步复验实例租约；没有整体原子或回滚保证，Promise 拒绝不能撤销先前已完成维护，不得用于领域业务提交。调用者须先排空领域写者及长读者，独立核验 checkpoint、空闲页、必要 VACUUM、WAL/SHM 与受管文件及活动引用；失败不能 completed。01 不提供任意维护 SQL Tool，也不自动 VACUUM 或清库。维护结果不等于删除完成；05 必须核验checkpoint busy结果与全部清理面。
 

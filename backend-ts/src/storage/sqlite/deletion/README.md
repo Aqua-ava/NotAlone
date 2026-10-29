@@ -1,12 +1,13 @@
 # 统一来源删除合同（实施05）
 
-本模块只提供统一删除账本、受控执行和领域接入合同。默认业务仍为PG；默认registry尚无02及真实写者注册，`deletion.plan`明确拒绝`deletion_domain_unavailable`。隔离合成验收不代表记忆、DSH、媒体或页面的真实删除已接通。20切换前必须集成并复核所有实际写者。
+本模块提供统一删除账本、受控执行和领域接入合同。默认业务仍为PG；显式SQLite开发分支已在正常DSH宿主接通02身份域及14 Skill元数据域的联系人/账号删除。来源、聊天清空、讨论和媒体缺少完整处理器时明确拒绝`deletion_scope_unavailable`。记忆、非空DSH副本和媒体的真实删除由各写者接入，20切换前必须复核完整清单。
 
 ## 注册与短事务
 
-- `schema.ts`导出`deletionMigration(version)`，由集成registry赋连续版本；不要修改已集成SQL。当前独立工作树聚合为版本2。
+- `schema.ts`导出`deletionMigration(version)`，由集成registry赋连续版本；不要修改已集成SQL。本域已集成版本为2，身份和Skill迁移分别追加为3和4。
 - `contracts.ts`的`DeletionRegistration`包含真实`authority`、全部领域`domains`和显式`requiredDomains`清单。缺失处理器拒绝执行；清理期间注册清单变化也拒绝，不能用更小的闭包完成旧操作。02/16分别提供相应范围的`DeletionAuthority.fence/verify`，复用自己的资料/媒体代次，不新建第二套权限表。
 - `actions.ts`导出`createDeletionActions(registration)`，替换默认未接线的`deletion.*`动作。宿主仅装配受版本管理的回调；HTTP、renderer和Tool不得传入SQL、回调、模块路径或内部证明。05不增加任意SQL Tool或第二套后台。
+- `registration.ts`当前固定`identity + skill_metadata`及完整`requiredDomains`，只放行联系人/账号范围；不把discussion/media扩成联系人data_generation。新增写者必须随票补完整闭包、精确authority和范围放行，不能只改能力标志。正常DSH `/api/runtime/status`的`deletion_scopes`公开实际支持范围，不扩大contacts配置权限。
 - `planDeletion(tx,lease,registration,{ownerId,requestKey,scope})`可被可信领域动作组合调用，例如媒体原子发布旧文件清理意图。同事务先推进并撤销旧写入/使用资格，再固定闭包和幂等键；事务不得等待模型、CLI、SDK或文件I/O。
 - 范围包括`source/contact/contact_history/account/discussion/media_result_clear/media_result_replace`，有限字段形状见类型及DDL。同一实例、owner、固定删除namespace和requestKey只能指向同一范围；重复请求不再次推进代次。媒体clear/replace互不混用namespace。
 
@@ -33,6 +34,8 @@
 `http.ts`导出生产`SqliteDeletionHttp(service,ownerId).handle(req,res):Promise<boolean>`，未匹配时返回false。必须置于02共用的唯一Bearer/Origin认证后；无需新后端。沿用`DELETE /api/contacts/:contact/sources/:source`（空正文）、讨论删除（confirmed）、联系人删除（confirmed及confirm_contact_id）、账户删除（confirmed及confirm_scope=account）、`GET /api/deletions[/:id]`、`POST /api/deletions/:id/retry`和来源`GET /api/tasks/status?contact_id=...&task_id=...`。请求不能提供owner、目标SQL或内部复核；公开状态只返回最小进度，完成后不返回目标身份。source删除回task_id，状态符合现有来源控制器；后续来源目录仍由实际写者提供。没有新的媒体泛化HTTP范围，媒体16继续自己的明确操作。隔离HTTP测试复用生产适配器与真实临时SQLite，外围仅替换为固定合成认证；未据此认证正式宿主聚合或真实App。
 
 HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供，新独立删除使用新key。账户scope不能永久充当请求身份，否则新增资料后会重放旧完成结果。旧来源/讨论/联系人空key调用只在其内部ID删除后永久失效、不复用的条件下按固定目标去重；新业务调用应传明确请求key。来源回执包含实际`status`，普通非删除task_id返回false交给既有处理器。
+
+共用宿主仅对`GET /api/deletions?contact_id=...&scope_kind=discussion`及`GET /api/tasks/status?contact_id=...&task_id=...`放行严格查询形状，其他查询继续拒绝。公开操作状态的checks只包含种类、领域、结果和有限机器证明，不返回路径、文件身份或正文。正常DSH握手位于`managed/sqlite-backend.info`，不放进数据库辅助文件目录；运行中的账号删除已验证实际checkpoint/VACUUM及公开页/WAL复核，未知文件检查没有放宽。
 
 `ActiveHolders.register({key,ownerId,contactId?,generation,close})`必须在首次读写前执行。key为`domain:稳定副本ID`；generation为对应资料资格快照。业务仍须在DB动作内复验02/16资格，内存持有者登记不授予权限。返回的释放函数会等待close；不能手工移除尚未关闭的引用。close回调必须等待官方AgentHandle.dispose、读写handle.close、业务finally、预览/播放释放及末次写入。只有cancel不构成释放证明；超时/异常保持blocked，不能因此删文件。不同owner同名key不互相封禁；新的合法资料代次可登记新副本，不复活已封禁的旧key。
 
