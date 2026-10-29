@@ -33,4 +33,3 @@ export function supplier({negative=false}={}){
  };
  return {respond,windows,sources,purposes};
 }
-

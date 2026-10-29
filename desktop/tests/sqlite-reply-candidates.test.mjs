@@ -48,18 +48,18 @@ test('候选页面读取真实版本结构、保存多条编辑稿并选择具�
 
 test('覆盖不完整须本次确认，失败核对沿同请求键且显式选稿才携入',{timeout:30000},async t=>{
  let generated=0;const f=await panel(t,async operation=>{
-  if(operation.action==='read')return pageData(original(),'incomplete');
+  if(operation.action==='read')return {...pageData(original(),'incomplete'),availableSkills:[{packageId:ids.skill,name:'合成明确选择的方法',revisionNo:1}]};
   if(operation.action==='select')return {id:ids.selection,candidateId:operation.candidateId,versionNo:operation.versionNo,selectionNo:1};
   if(operation.action==='generate'){if(++generated===1)throw new Error('候选结果尚未确认，请保留原请求重试核对。');return receipt(operation,true);}
   throw new Error('未授权的合成页面操作');
  });
  const region=f.page.getByRole('region',{name:'候选回复'}),draft=region.getByRole('textbox',{name:'本次想法',exact:true}),generate=region.getByRole('button',{name:'生成候选',exact:true});
  await expect(region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true})).toBeVisible();await draft.fill('合成本次表达要求');await expect(generate).toBeDisabled();assert.equal(generated,0);
- await region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true}).check();await expect(generate).toBeEnabled();
+ await region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true}).check();await expect(generate).toBeEnabled();await region.getByRole('combobox',{name:'本次回复Skill',exact:true}).selectOption(ids.skill);
  await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('status')).toContainText('下一次明确请求');assert.equal(generated,0);
  await generate.click();await expect(region.getByRole('alert').filter({hasText:'候选结果尚未确认'})).toBeVisible();await expect(draft).toHaveValue('合成本次表达要求');
  await region.getByRole('button',{name:'重试核对候选',exact:true}).click();await expect.poll(()=>f.submitted.length).toBe(1);
- const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.equal(requests[0].acceptIncomplete,true);assert.equal(requests[0].carriedSelectionId,ids.selection);assert.equal(requests[1].requestKey,requests[0].requestKey);assert.equal(requests[1].text,requests[0].text);assert.equal(requests[1].carriedSelectionId,ids.selection);
+ const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.equal(requests[0].acceptIncomplete,true);assert.equal(requests[0].selectedPackageId,ids.skill);assert.equal(requests[1].selectedPackageId,ids.skill);assert.equal(requests[0].carriedSelectionId,ids.selection);assert.equal(requests[1].requestKey,requests[0].requestKey);assert.equal(requests[1].text,requests[0].text);assert.equal(requests[1].carriedSelectionId,ids.selection);
  await expect(draft).toHaveValue('');await expect(region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true})).not.toBeChecked();
 });
 

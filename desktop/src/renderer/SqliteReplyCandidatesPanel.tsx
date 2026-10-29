@@ -8,10 +8,11 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const revision=useRef(0),mounted=useRef(false),operation=useRef<object|null>(null);
  const retry=useRef<{fingerprint:string;requestKey:string}|null>(null);
  const [page,setPage]=useState<SqliteCandidatePage|null>(null),[draft,setDraft]=useState(''),[partial,setPartial]=useState(false),[carry,setCarry]=useState<string|undefined>();
+ const [selectedSkill,setSelectedSkill]=useState('');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [edits,setEdits]=useState<Record<string,string[]>>({}),[inspected,setInspected]=useState<Record<string,SqliteCandidateVersion>>({});
  const available=!!bridge.candidates&&!!contactId&&!!sessionId&&!disabled;
- function clear(){++revision.current;operation.current=null;retry.current=null;setPage(null);setDraft('');setPartial(false);setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
+ function clear(){++revision.current;operation.current=null;retry.current=null;setPage(null);setDraft('');setPartial(false);setCarry(undefined);setSelectedSkill('');setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
  useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(clear);return()=>{mounted.current=false;++revision.current;operation.current=null;off();};},[bridge]);
  useEffect(()=>{clear();if(available)void run({action:'read'});},[scopeKey,bridge,disabled]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
@@ -42,8 +43,8 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  }
  async function generate(){
   if(!draft.trim()||!page)return;
-  const fingerprint=JSON.stringify({draft,partial,carry}),requestKey=retry.current?.fingerprint===fingerprint?retry.current.requestKey:crypto.randomUUID();retry.current={fingerprint,requestKey};
-  await run({action:'generate',requestKey,text:draft,acceptIncomplete:partial,...(carry?{carriedSelectionId:carry}:{})});
+  const fingerprint=JSON.stringify({draft,partial,carry,selectedSkill}),requestKey=retry.current?.fingerprint===fingerprint?retry.current.requestKey:crypto.randomUUID();retry.current={fingerprint,requestKey};
+  await run({action:'generate',requestKey,text:draft,acceptIncomplete:partial,...(selectedSkill?{selectedPackageId:selectedSkill}:{}),...(carry?{carriedSelectionId:carry}:{})});
  }
  async function continueVersion(v:SqliteCandidateVersion){
   if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
@@ -59,6 +60,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   {!available&&<p role="status">请先确认联系人并明确继续当前助手讨论。</p>}
   {page&&(phase==='not_started'||phase==='running')&&<p role="status">历史尚未完成，完成后才能生成候选。</p>}
   {phase==='incomplete'&&<div role="alert"><p>历史覆盖不完整：仅使用已同步部分，可能缺少重要语境。警告会保存到本次依据。</p><label><input type="checkbox" checked={partial} disabled={busy||!available} onChange={e=>setPartial(e.target.checked)} />使用已同步部分继续</label></div>}
+  {!!page?.availableSkills?.length&&<label>本次回复 Skill<select aria-label="本次回复Skill" value={selectedSkill} disabled={busy||!available} onChange={e=>setSelectedSkill(e.target.value)}><option value="">本次不指定 Skill</option>{page.availableSkills.map(s=><option key={s.packageId} value={s.packageId}>{s.name} · 第{s.revisionNo}版</option>)}</select></label>}
   <label>本次想法<textarea aria-label="本次想法" value={draft} maxLength={100000} disabled={!available||busy} onChange={e=>setDraft(e.target.value)} /></label>
   <button disabled={!available||busy||historyBlocked||!draft.trim()} onClick={()=>void generate()}>{busy?'正在处理候选…':retry.current?'重试核对候选':'生成候选'}</button>
   <button disabled={!available||busy} onClick={()=>void run({action:'read'})}>重新读取候选</button>

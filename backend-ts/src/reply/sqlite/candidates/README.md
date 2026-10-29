@@ -12,4 +12,6 @@
 
 `replyCandidateDeletionDomain` 必须列入requiredDomains，并在discussion_calls前释放候选FK；其余原有域顺序保持。来源闭包由11收集，增量纳入知识/选稿完整来源及后续显式携入请求。fence立即撤下候选正文与依据、不可逆清除版本资格；05排空持有者后清实际输入、选择、版本、调用追踪及11完整受管文件。候选域自身没有文件目标，不能声称只删本域即完成删除。
 
-当前合成证据：`test/sqlite-reply-candidates.test.mjs`，外部渠道与供应商为明确本机合成边界，SQLite/历史服务/官方DSH/provider/arbiter/文件均为真实实现。正式08/09输出组合、认证HTTP、实际页面与真实模型质量按票单独记录；本说明不表示这些验收已完成。
+当前合成证据：`test/sqlite-reply-candidates.test.mjs`，外部渠道与供应商为明确本机合成边界，SQLite/历史服务/官方DSH/provider/arbiter/文件均为真实实现。认证HTTP及正常官方profile端到端已有独立合成回归，实际开发App完成生成、多条编辑、固定版本选稿、原版回看、重开与联系人切换；实际Skill停用后旧草稿、候选、依据及Skill快照共同撤下，权威重读不恢复。正式08/09输出组合在20前继续核验；真实外部模型质量未验证。
+
+前台确认资格由正常ForegroundController同时注入候选主进程门禁和页面禁用/撤快照边界，不能只靠renderer传confirmed_contact。SQLite讨论已识别后隐藏旧PG候选与长期偏好入口。当前Skill选择只作用本次，页面展示的是实际加载事件；Skill库变更在请求开始即撤销旧快照，失败也不保留旧正文。
