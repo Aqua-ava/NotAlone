@@ -1,3 +1,7 @@
+import {discussionActions} from '../../reply/sqlite/actions.ts';
+import {discussionRequestActions} from '../../reply/sqlite/requests.ts';
+import {runtimeActions} from '../../reply/sqlite/runtime-actions.ts';
+import {discussionModelActions} from '../../reply/sqlite/model-actions.ts';
 import { discussionMigration } from '../../reply/sqlite/schema.ts';
 import { executionActions } from '../../memory/sqlite/execution.ts';
 import { memoryExecutionMigration } from '../../memory/sqlite/execution-schema.ts';
@@ -34,5 +38,5 @@ CREATE TABLE schema_migration (
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
 ` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9)],
-  actions: [...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...createMediaActions(installedDeletionRegistration)],
+  actions: [...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...createMediaActions(installedDeletionRegistration)],
 };

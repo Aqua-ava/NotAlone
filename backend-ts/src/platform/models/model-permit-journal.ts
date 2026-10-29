@@ -86,7 +86,7 @@ export async function openModelPermitJournal(socketPath: string, statePath?: str
     lock.once('error', reject);
     lock.listen({host:'127.0.0.1',port,exclusive:true}, resolve);
   });
-  const release = () => new Promise<void>((resolve,reject) => lock.close(error => error ? reject(error) : resolve()));
+  const release = () => !lock.listening ? Promise.resolve() : new Promise<void>((resolve,reject) => lock.close(error => error ? reject(error) : resolve()));
   const host = await captureProcessIdentity(process.pid, process.ppid, process.execPath).catch(async error => {await release();throw error;});
   let state: JournalState = {version:1,host,active:[],unknown:[]};
   try {
@@ -114,8 +114,8 @@ export async function openModelPermitJournal(socketPath: string, statePath?: str
       if (released) return;
       // 活跃执行者存在时保留原身份；新实例须确认其死亡，不能只看socket已关闭。
       if (!state.active.length) { state = {...state,host:null}; atomicWrite(path,state); }
-      released = true;
       await release();
+      released = true;
     },
   };
 }

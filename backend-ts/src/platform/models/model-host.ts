@@ -87,7 +87,7 @@ export async function startModelHost(options: ModelHostOptions) {
           await server.close();
           await rmdir(socketDirectory).catch(()=>{});
         } catch (error) { await shutdown(); throw error; }
-      })();
+      })().catch(error=>{closing=undefined;throw error;});
     },
   };
 }
