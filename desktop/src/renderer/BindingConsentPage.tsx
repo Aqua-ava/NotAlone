@@ -53,7 +53,7 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
       <div className="bindings-submit"><span>{selectionOnly ? '同名联系人请核对稳定会话与联系人标识；停止已有同步请在联系人详情中撤销授权。' : '同名联系人请核对会话与联系人标识。取消勾选不会撤销已有授权。'}</span><button className="button primary"
         disabled={!!state.busy || !Object.keys(selection).length || Object.values(selection).some((item) => !item.target)} onClick={() => void consent.confirm()}>确认并授权所选会话</button></div>
     </section>}
-    {state.phase === 'unavailable' && <div><h3>微信同步尚未就绪</h3>{selectionOnly ? <p>当前无法核验微信账号或会话身份，尚不能读取聊天正文。请核对已有微信读取组件与账号状态后重试。</p> : <><p>请先完成本人渠道身份与本机微信读取配置。可继续使用手动联系人；已有单联系人文件可从设置中导入。</p><button className="button" onClick={() => navigate('import')}>前往从文件导入</button></>}</div>}
+    {state.phase === 'unavailable' && <div><h3>微信同步尚未就绪</h3>{selectionOnly ? <p>当前无法核验微信账号或会话身份，尚不能读取聊天正文。请核对已有微信读取组件与账号状态后重试。</p> : <><p>请先完成本人渠道身份与本机微信读取配置。可继续使用手动联系人；手动文件导入入口已退役。</p></>}</div>}
   </section>;
 }
 

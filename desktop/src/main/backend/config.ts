@@ -7,7 +7,6 @@ import path from 'node:path';
 import { BackendFailure } from './connection';
 import type { StartupPaths } from '../../shared/startup-bridge';
 import { resolveSyncProbePath } from './bundled-helpers';
-import { managedLayout } from '../startup/managed-manifest';
 
 const startupPathKeys = ['projectDirectory', 'envFilePath', 'backendInfoPath', 'wechatCliPath', 'syncProbePath'] as const;
 const startupPathKeySet = new Set<string>(startupPathKeys);
@@ -29,9 +28,8 @@ export interface BackendConfiguration {
   runtime?: 'dsh';
   // 仅由通过底座检查的显式开发能力配置注入，不从页面或路径配置接受。
   sqlite?: SqliteLaunchConfiguration;
-  // 仅本次受管 PG 监督器生成；不从磁盘配置或页面接受。
-  managedLifetimeLock?: string;
-  source?: 'external' | 'managed' | 'first-run';
+  // 默认业务只有 SQLite 一条启动路径；旧 managed／外置 PG 配置不再参与启动。
+  source?: 'external';
   infoPath: string;
   envFilePath?: string;
   projectDirectory?: string;
@@ -60,17 +58,6 @@ export async function loadBackendConfiguration(userData: string, resourcesDirect
     external = true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new BackendFailure('backend_connection_failed');
-  }
-  if (!external && resourcesDirectory) {
-    let managed = false;
-    try { await lstat(path.join(userData, 'managed/state.json')); managed = true; }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new BackendFailure('backend_connection_failed'); }
-    const root = path.join(resourcesDirectory, 'notalone-runtime');
-    return { source: managed ? 'managed' : 'first-run', runtime: 'dsh', infoPath: path.join(userData, 'managed/backend.info'),
-      envFilePath: path.join(userData, 'managed/runtime.env'),
-      ...(managed ? { projectDirectory: path.join(root, managedLayout.project) } : {}),
-      wechatCliPath: managed ? undefined : process.env.NOTALONE_WECHAT_CLI,
-      syncProbePath: await resolveSyncProbePath(resourcesDirectory, managed ? undefined : process.env.NOTALONE_SYNC_PROBE) };
   }
   for (const [key, selected] of Object.entries(value)) {
     // 旧字段不再参与启动或路径访问；保留原文件直到用户主动保存配置。
@@ -122,19 +109,6 @@ export async function saveBackendConfiguration(userData: string, paths: unknown,
 }
 
 export function backendEnvironment(config: BackendConfiguration, userData: string): NodeJS.ProcessEnv {
-  if (config.source === 'managed') {
-    // 只继承必要系统信息。开发机数据库、本人身份、模型密钥、代理和追踪不能抢过受管配置。
-    const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8', LC_ALL: 'C',
-      HOME: userData, TMPDIR: process.env.TMPDIR || '/tmp',
-      NOTALONE_BACKEND_INFO: config.infoPath, NOTALONE_ENV_FILE: config.envFilePath,
-      NOTALONE_MANAGED_USER_DATA: userData,
-      NOTALONE_WECHAT_CLI: path.join(userData, 'unconfigured-cli'),
-      NOTALONE_SYNC_PROBE: config.syncProbePath || path.join(userData, 'unconfigured-probe'),
-      NOTALONE_FOREGROUND_LAYOUT: path.join(userData, 'foreground-layout-profile.json') };
-    if (process.env.TZ) environment.TZ = process.env.TZ;
-    if (config.managedLifetimeLock) environment.NOTALONE_MANAGED_LIFETIME_LOCK = config.managedLifetimeLock;
-    return environment;
-  }
   const environment: NodeJS.ProcessEnv = { ...process.env,
     NOTALONE_MANAGED_USER_DATA: userData,
     NOTALONE_BACKEND_INFO: config.infoPath,
@@ -142,7 +116,6 @@ export function backendEnvironment(config: BackendConfiguration, userData: strin
     NOTALONE_WECHAT_CLI: config.wechatCliPath || path.join(userData, 'unconfigured-cli'),
     NOTALONE_SYNC_PROBE: config.syncProbePath || path.join(userData, 'unconfigured-probe'),
     NOTALONE_FOREGROUND_LAYOUT: path.join(userData, 'foreground-layout-profile.json') };
-  if (config.managedLifetimeLock) environment.NOTALONE_MANAGED_LIFETIME_LOCK = config.managedLifetimeLock;
   return environment;
 }
 
@@ -151,7 +124,7 @@ export async function validateLaunchConfiguration(config: BackendConfiguration):
     if (!config.projectDirectory) throw new Error();
     const projectDirectory = await realpath(config.projectDirectory);
     if (!(await stat(projectDirectory)).isDirectory()) throw new Error();
-    for (const entry of ['backend-ts/src/launch.ts', 'backend-ts/profile/host.patch.yml']) {
+    for (const entry of ['backend-ts/src/launch.ts', 'backend-ts/profile/sqlite.patch.yml']) {
       if (!(await stat(path.join(projectDirectory, entry))).isFile()) throw new Error();
     }
     return { projectDirectory };

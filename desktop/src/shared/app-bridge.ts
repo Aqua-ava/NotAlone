@@ -12,7 +12,6 @@ import type { SetupBridge } from './setup-bridge';
 import type { StartupBridge } from './startup-bridge';
 import type { ScreenPermissionBridge } from './screen-permission-bridge';
 import type { ContactSessionBridge } from './contact-session-bridge';
-import type { ImportBridge } from './import-bridge';
 import type { ReplyBridge } from './reply-bridge';
 import type { SqliteDiscussionBridge } from './sqlite-discussion-bridge';
 import type { CandidateProvenanceBridge } from './candidate-provenance-bridge';
@@ -30,7 +29,7 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   media: MessageMediaBridge;
   backend: BackendBridge; setup: SetupBridge; wechatSetup: WechatSetupBridge; startup: StartupBridge;
   screenPermission: ScreenPermissionBridge;
-  contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
+  contacts: ContactSessionBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
   sqliteDiscussion: SqliteDiscussionBridge;
   candidateProvenance: CandidateProvenanceBridge;
   expressionPreferences: ExpressionPreferenceBridge;

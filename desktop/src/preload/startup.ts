@@ -13,8 +13,6 @@ export function createStartupBridge(ipcRenderer: PageTransport): StartupBridge {
     savePaths: (...args: unknown[]) => args.length === 1 ? ipcRenderer.invoke('startup:save-paths', args[0]) : Promise.reject(new Error('启动路径无效')),
     retry: (...args: unknown[]) => invoke('startup:retry', args),
     prepareConfiguration: (...args: unknown[]) => invoke('startup:prepare-configuration', args),
-    beginLocalSetup: (...args: unknown[]) => invoke('startup:begin-local-setup', args),
-    cancelLocalSetup: (...args: unknown[]) => invoke('startup:cancel-local-setup', args),
     revealUpdateBackup: (...args: unknown[]) => invoke('startup:reveal-update-backup', args),
     onStateChanged: (listener: (state: StartupState) => void) => {
       if (typeof listener !== 'function') throw new Error('启动诊断不可用');

@@ -322,8 +322,7 @@ export class BackendHost {
     if (this.ownedChild) throw new BackendFailure('backend_connection_failed');
     this.ownedChild = await OwnedBackendProcess.launch(config, canStart);
     // spawn 已完成的子进程仍须取得认证目标并收尾；取消检查只阻止新的 spawn。
-    // 独立包冷导入的实测接近旧开发期预算，受管后台保留一次有界余量。
-    const deadline = Date.now() + (config.source === 'managed' ? 30_000 : 12_000);
+    const deadline = Date.now() + 12_000;
     while (Date.now() < deadline && this.ownedChild.isRunning()) {
       const started = await readConnection(config.infoPath);
       if (started) {

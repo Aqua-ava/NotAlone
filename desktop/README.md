@@ -154,22 +154,23 @@ npm run package
 
 桌面资源构建、打包和仓库探针准备会在写入前核对实际输出卷与临时卷，任一可用空间不足 15 GiB 即停止；新输出按最近的已有祖先核验，已有目录的软链接按目标卷核验。在线打包还核对并复用 `~/Library/Caches/electron` 下载缓存，`download.cacheRoot` 已按[官方接口](https://electron.github.io/packager/main/interfaces/Options.html#download)与安装的 Packager 20.3.0 / Get 5.1.0 核对。开发时复用固定输出，验收后的旧 App、重复运行时与临时编译目录按[开发磁盘占用规则](../docs/agents/engineering.md#开发磁盘占用)清理；自定义 `--output-directory` 成功后由调用者负责收尾。
 
-### SQLite 底座开发诊断
+### 默认 SQLite 开发入口
 
-实施票 01 提供显式的隔离存储诊断。默认业务仍沿用 PostgreSQL；此入口仅检查 SQLite Worker、实例和结构，不启动 PG、DSH、微信或模型，也不开放业务能力。
+实施票 20 起，正常开发入口默认使用受控 SQLite；旧 PostgreSQL／managed PG 启动路径与手动聊天文件导入入口已退役。默认启动由切换控制面（`database-cutover/manifest.json`）决定：没有旧业务对象的隔离根会创建独立 `database_id`、owner 与迁移账本，并原子写入 `sqlite-development.json`；存在未授权或无法归属的旧对象、旧写入者仍存活、目标结构/媒体/Skill 空库核验不通过时保持维护态，不创建第二个空库、不回退旧 writer。
 
 先运行 `pnpm run dev:status`，确认没有需要复用的开发实例，再准备独立的临时用户目录：
 
 ```bash
 sqlite_test_root="$(mktemp -d /private/tmp/notalone-sqlite-XXXXXX)"
-printf '%s\n' '{"formatVersion":1,"intent":"create","role":"test"}' > "$sqlite_test_root/sqlite-development.json"
-chmod 600 "$sqlite_test_root/sqlite-development.json"
+printf '%s' "{\"projectDirectory\":\"$(pwd)\",\"envFilePath\":\"$sqlite_test_root/synthetic.env\",\"backendInfoPath\":\"$sqlite_test_root/managed/sqlite-backend.info\"}" > "$sqlite_test_root/backend-launch.json"
+: > "$sqlite_test_root/synthetic.env"
+chmod 600 "$sqlite_test_root/backend-launch.json" "$sqlite_test_root/synthetic.env"
 pnpm run dev --user-data-dir "$sqlite_test_root"
 # 另一个终端核验同一隔离根的热更新宿主及监督器
 pnpm run dev:status --user-data-dir "$sqlite_test_root"
 ```
 
-控制文件只由已经核验的开发宿主读取，禁止业务角色、重置、任意数据库路径或扩展模块。成功创建后保存为 `intent: "open"` 和实际 `expectedDatabaseId`；普通重开沿用该实例，缺失、损坏或身份不符时保留现场并显示固定诊断代码。诊断就绪只表示底座就绪，界面继续显示业务尚未切换。升级由同一实例的存储迁移执行；界面不提供重置按钮。未设置控制文件时，开发入口行为保持原样。
+隔离根不得包含真实用户资料；`synthetic.env` 只放合成供应商配置，不写真实模型 key。普通重开沿用同一数据库身份；目标缺失、损坏、结构漂移或控制面记录不符时保留现场并显示固定诊断代码，不自动换空库。升级由同一实例的存储迁移执行；界面不提供重置按钮。旧对象的真实清理只在精确归属、明确授权并核验停写后执行，本轮不执行真实清理。
 
 实施票02与14还提供显式业务开发能力：控制文件设置 `capabilities: ["contacts", "skills"]`，并设置绝对路径 `skillPackageRoot` 为该隔离用户目录内独立的 `skill-packages` 目录。包由开发者自行创建，页面只关联明确填写的直接子目录；不推断旧账号、复制配置或扫描真实 Skill 目录。根目录不得与 `managed` 受管区重叠。配置成功后由官方 DSH profile 开放联系人和 Skill 管理，现有 Skill 页显示启停、待核验、缺失和身份冲突，支持明确核验及启停；正文同步、记忆、学习和回复仍不可用。控制文件保存能力与根目录供重开使用；握手写入 `managed/sqlite-backend.info`，不混入数据库目录。
 

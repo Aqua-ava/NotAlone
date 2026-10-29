@@ -1,8 +1,7 @@
 import path from 'node:path';
-import os from 'node:os';
 import { launchDsh } from '../../../../backend-ts/src/launch';
 import { BackendFailure } from './connection';
-import { backendEnvironment, validateLaunchConfiguration, type BackendConfiguration } from './config';
+import { validateLaunchConfiguration, type BackendConfiguration } from './config';
 
 export interface OwnedProcess {
   readonly pid: number;
@@ -17,11 +16,11 @@ export class OwnedBackendProcess {
     const { projectDirectory } = await validateLaunchConfiguration(config);
     // 路径核验含异步 I/O，最终 spawn 前再次检查退出/连接代际，不在退出后新建读取进程。
     if (!canStart()) throw new BackendFailure('backend_connection_failed');
-    const environment: NodeJS.ProcessEnv = config.sqlite ? { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, TZ: process.env.TZ, TMPDIR: process.env.TMPDIR }
-      : backendEnvironment({ ...config, projectDirectory }, config.source === 'managed' ? path.dirname(path.dirname(config.infoPath)) : projectDirectory);
+    // 唯一受支持的业务存储是受控 SQLite；没有切换控制面结果时不启动旧 PG 或空后台。
+    if (!config.sqlite) throw new BackendFailure('backend_launch_requires_sqlite');
+    const environment: NodeJS.ProcessEnv = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, TZ: process.env.TZ, TMPDIR: process.env.TMPDIR };
     return launchDsh({ nodeExecutable: process.execPath, projectDirectory,
       envFilePath: config.envFilePath || path.join(projectDirectory, '.env'), infoPath: config.infoPath,
-      environment, businessHome: config.sqlite?.userData || environment.HOME || os.homedir(),
-      ...(config.sqlite ? { sqlite: config.sqlite } : {}) }, canStart);
+      environment, businessHome: config.sqlite.userData, sqlite: config.sqlite }, canStart);
   }
 }

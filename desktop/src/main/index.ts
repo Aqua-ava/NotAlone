@@ -45,9 +45,6 @@ import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
 import { installStartupBridge } from './startup/bridge';
 import { configureDevelopmentProject, loadBackendConfiguration } from './backend/config';
-import { ImportController } from './imports/controller';
-import { installImportBridge } from './imports/bridge';
-import { installElectronImportFileSelection } from './imports/electron-file-selection';
 import { installBackgroundTaskBridge } from './background-tasks/bridge';
 
 app.setName('NotAlone');
@@ -82,8 +79,7 @@ void app.whenReady().then(async () => {
   const windows = new AppWindows(appSession);
   const resourcesDirectory = app.isPackaged ? process.resourcesPath : undefined;
   const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory, development?.projectDirectory);
-  const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory,
-    () => diagnostics.stopManagedRuntime());
+  const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory);
   installUsageBridge(windows, new UsageController(backend));
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
@@ -109,9 +105,6 @@ void app.whenReady().then(async () => {
   windows.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),
     onLifecycle: (event) => { foreground.notifyHelperLifecycle(event); replies.notifyHelperLifecycle(event); } });
   app.on('will-quit', () => foreground.dispose());
-  const imports = new ImportController(backend, contacts);
-  installImportBridge(commands, imports);
-  installElectronImportFileSelection(windows, imports);
   const memory = installMemoryBridge(commands, backend, contacts);
   const fixedMemoryProcessing = installFixedMemoryProcessingBridge(commands, backend);
   const sqliteMemoryManagement = installSqliteMemoryManagementBridge(commands, backend, contacts);

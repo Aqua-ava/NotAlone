@@ -47,7 +47,6 @@ export function StartupReadiness({ state, backend, onConfigure }: {
     {error && <p role="alert">{error}</p>}
   </section>;
   if (state.phase === 'ready') return null;
-  if (state.mode === 'managed') return <ManagedSetup state={state} />;
   const blocked = state.phase === 'blocked' || (backend?.phase === 'disconnected' && !!backend.errorCode);
   return <section className="startup-readiness" aria-label="启动状态">
     <h2>{blocked ? '启动遇到问题' : '正在启动 NotAlone'}</h2>
@@ -81,7 +80,7 @@ export function StartupSettings({ state, backend, open = false, onOpenChange }: 
 }) {
   return <details className="startup-troubleshooting" open={open} onToggle={(event) => onOpenChange?.(event.currentTarget.open)}>
     <summary>故障排查</summary>
-    {open && <>{state.mode === 'managed' || state.sqlite ? <StartupDiagnostics state={state} /> : <StartupPathSettings state={state} backend={backend} />}<DiagnosticExport /></>}
+    {open && <>{state.sqlite ? <StartupDiagnostics state={state} /> : <StartupPathSettings state={state} backend={backend} />}<DiagnosticExport /></>}
   </details>;
 }
 
@@ -130,16 +129,6 @@ function StartupPathSettings({ state, backend }: { state: StartupState; backend:
   }, []);
   const checking = state.phase === 'checking' || backend.phase === 'connecting';
   const editable = backend.canSaveStartupPaths && !checking && !saving && !preparing;
-  async function prepare() {
-    if (preparing || !backend.canPrepareConfiguration) return;
-    setPreparing(true);
-    try {
-      if (await window.notalone.startup.prepareConfiguration()) {
-        setMessage('本次服务已停止。修改并保存路径后，由你重新检查连接。'); setError('');
-      } else setError('服务停读未获确认，暂时不能修改路径。请按连接状态中的入口恢复。');
-    } catch { setError('服务停读未获确认，暂时不能修改路径。请按连接状态中的入口恢复。'); }
-    finally { setPreparing(false); }
-  }
   async function save() {
     if (!paths || !editable) return;
     setSaving(true);
@@ -151,7 +140,6 @@ function StartupPathSettings({ state, backend }: { state: StartupState; backend:
     try { setMessage(''); setError(''); await window.notalone.startup.retry(); }
     catch { setError('诊断暂时不可用，请稍后重试。'); }
   }
-  if (state.mode === 'managed') return <ManagedSetup state={state} />;
   return <section className="startup-settings" aria-label="本机启动配置">
     <StartupDiagnostics state={state} />
     <h2>本机启动路径</h2>
@@ -163,11 +151,9 @@ function StartupPathSettings({ state, backend }: { state: StartupState; backend:
       </label>)}
     </div>}
     <div className="startup-actions">
-      {(backend.canPrepareConfiguration || preparing) && <button className="button" disabled={preparing} onClick={() => void prepare()}>{preparing ? '正在确认停读…' : '停止服务以修改路径'}</button>}
       <button className="button" disabled={!paths || !editable} onClick={() => void save()}>{saving ? '正在保存…' : '保存启动路径'}</button>
       <button className="button" disabled={!backend.canRetryConnection || checking || saving} onClick={() => void retry()}>重新检查并连接</button>
     </div>
-    {!editable && (backend.canPrepareConfiguration || preparing) && <p>修改路径前需要停止本机服务。停止期间同步和回复生成暂不可用，已有资料会保留。</p>}
     {message && <p>{message}</p>}{error && <p role="alert">{error}</p>}
   </section>;
 }
@@ -211,40 +197,17 @@ const startupMessages: Record<StartupCode, [string, string]> = {
   migration_files_invalid: ['项目迁移文件不可核验。', '核对所选项目的连续迁移文件，恢复原始文件后重新检查。'],
   diagnostic_timeout: ['机器环境检查超时。', '检查本机服务和路径后重试；重新核验结构就绪后才会启动后台读取。'],
   diagnostic_failed: ['机器环境暂时无法核验。', '核对配置文件、数据库权限及必要结构后重新检查。'],
+  database_cutover_required: ['旧数据库需要切换，当前处于维护态。', '请保留现有资料，按维护态提示核验旧目标归属与停写状态后重试；App 不会自动清理、重建或回退旧数据库。'],
+  database_maintenance: ['本机数据库处于维护态。', '维护期间不启动业务写入；请按诊断提示确认旧目标清理或切换进度后重试。'],
+  cutover_manifest_invalid: ['切换控制面记录无法核验。', '保留数据库与控制面文件现场，不要删除；按恢复说明核对后重试。'],
+  cutover_authorization_required: ['旧数据库切换需要明确授权。', '只有精确归属并获确认的旧业务对象可清理；未获授权时保持维护态，不创建新空库。'],
+  cutover_authorization_invalid: ['旧数据库清理授权不完整或不匹配。', '重新核对授权对象与范围；未覆盖的对象不会被清理。'],
+  cutover_legacy_target_unclassified: ['存在无法证明归属的旧对象。', '切换已停止且不会删除未知对象；请核验归属并保留现场后重试。'],
+  cutover_legacy_writer_running: ['旧数据库仍有写入者或无法确认已停写。', '先正常退出旧版 App 与相关服务；不要强杀或接管未知进程。'],
+  cutover_cleanup_failed: ['旧对象清理未完成。', '保留现场并按同一操作重试；清理完成前不会切换配置或启动新旧双写。'],
+  cutover_checks_failed: ['切换目标核验未通过。', '按诊断代码核对结构、媒体闭包与 Skill 空库状态；目标不完整时不切换。'],
+  cutover_target_unrecorded: ['已存在未登记身份的数据库文件。', '保留文件与现场等待核验；不会删除它，也不会再创建另一个空库。'],
+  cutover_configuration_conflict: ['启动配置与已记录数据库身份不一致。', '保留现场并核对切换控制面记录后重试，不要手工覆盖数据库。'],
+  cutover_storage_failed: ['SQLite 目标数据库不可用或身份不符。', '保留文件现场并核对诊断代码；缺失或损坏时不会自动换空库。'],
+  sqlite_cancelled: ['本次存储检查已取消。', '可重新检查；已保存的受管文件与现场会保留。'],
 };
-
-function ManagedSetup({ state }: { state: StartupState }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const preparing = state.phase === 'preparing' || state.phase === 'checking';
-  const ready = state.phase === 'ready';
-  const steps = { 'checking-components': '正在检查 App 内的运行组件…', 'preparing-data': '正在准备仅保存在本机的资料空间…',
-    'starting-database': '正在启动本机资料服务…', 'preparing-database': '正在初始化或补齐当前数据库结构…',
-    'updating-schema': '正在补齐本机数据库结构…', 'stopping': '正在停止本次设置与本机服务…' };
-  async function begin() {
-    if (busy || preparing) return;
-    setBusy(true); setError('');
-    try { await window.notalone.startup.beginLocalSetup(); }
-    catch { setError('设置尚未完成，请按当前提示处理后重试。'); }
-    finally { setBusy(false); }
-  }
-  async function cancel() {
-    setError('');
-    try { if (!await window.notalone.startup.cancelLocalSetup()) setError('停止尚未获确认，请使用连接状态中的停读入口。'); }
-    catch { setError('停止尚未获确认，请稍后重试。'); }
-  }
-  return <section className="startup-settings" aria-label="本机首次设置">
-    <h2>{ready ? '本机环境已就绪' : '欢迎使用 NotAlone'}</h2>
-    <p role={state.phase === 'blocked' ? 'alert' : 'status'}>{preparing ? (state.step ? steps[state.step] : '正在检查本机服务…')
-      : ready ? '本机服务已通过检查。继续确认本人身份与模型设置。'
-        : state.code ? startupMessages[state.code][0] : '准备你的本机空间。'}</p>
-    {!ready && !preparing && <p>{state.code ? startupMessages[state.code][1] : startupMessages.local_setup_required[1]}</p>}
-    {!ready && <div className="startup-actions">
-      {preparing ? <button className="button" disabled={state.step === 'stopping'} onClick={() => void cancel()}>取消本次设置</button>
-        : <button className="button primary" disabled={busy} onClick={() => void begin()}>{busy ? '正在开始…'
-          : state.phase === 'first-run' ? '开始本机设置' : state.phase === 'cancelled' ? '继续本机设置' : '重试本机设置'}</button>}
-    </div>}
-    {state.phase === 'blocked' && <button className="button" onClick={() => void cancel()}>停止并返回</button>}
-    {error && <p role="alert">{error}</p>}
-  </section>;
-}

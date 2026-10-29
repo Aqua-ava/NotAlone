@@ -9,7 +9,11 @@ import { createStorageFixture } from './host-storage-fixture.mjs';
 
 export async function start(t, fixture, environment = {}, projectDirectory = resolve('..')) {
   const infoPath = join(fixture.directory, 'backend.info');
-  const host = await launchDsh({nodeExecutable:process.execPath,projectDirectory,envFilePath:fixture.envFilePath,infoPath,businessHome:fixture.directory,environment:{NOTALONE_MANAGED_USER_DATA:fixture.directory,...environment}},()=>true);
+  // 正常入口只支持受控 SQLite；旧 PG 宿主用例仍按原基线，不在本 helper 中恢复旧启动路径。
+  const {SqliteStorage} = await import('../src/storage/sqlite/client.ts');
+  const storage = await SqliteStorage.open({userData:fixture.directory,intent:'create',role:'test'});
+  const databaseId = storage.status.databaseId; await storage.close();
+  const host = await launchDsh({nodeExecutable:process.execPath,projectDirectory,envFilePath:fixture.envFilePath,infoPath,businessHome:fixture.directory,environment:{NOTALONE_MANAGED_USER_DATA:fixture.directory,...environment},sqlite:{userData:fixture.directory,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts']}},()=>true);
   (fixture.hosts ??= []).push(host);
   let connection;
   for (let i=0;i<150 && host.isRunning();i++) {
