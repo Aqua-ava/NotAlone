@@ -10,5 +10,7 @@ export function readSqliteCapabilities(value:unknown,skillPackageRoot:unknown,us
  if(typeof skillPackageRoot!=='string'||!path.isAbsolute(skillPackageRoot)||path.resolve(skillPackageRoot)!==skillPackageRoot)return undefined;
  const relative=path.relative(userData,skillPackageRoot);
  if(!relative||relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))return undefined;
+ // managed属于数据库／副本删除区；大小写别名也不能将用户原件放入受管区。
+ if(relative.split(path.sep)[0].toLowerCase()==='managed')return undefined;
  return {capabilities:['contacts','skills'],skillPackageRoot};
 }

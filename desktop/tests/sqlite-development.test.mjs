@@ -138,6 +138,11 @@ test('显式Skill开发能力只接受隔离根内包父目录，持久化重开
  assert.equal(created.phase,'ready');assert.deepEqual(created.capabilities,['contacts','skills']);
  assert.equal(probe.getContactConfiguration().skillPackageRoot,skillPackageRoot);
  const saved=JSON.parse(await readFile(f.config,'utf8'));assert.equal(saved.intent,'open');assert.equal(saved.skillPackageRoot,skillPackageRoot);
+ for(const relative of ['managed','managed/sqlite','managed/runtime-copies','managed/cache','managed/media','Managed','MANAGED/sqlite']) {
+  saved.skillPackageRoot=path.join(f.userData,relative);await writeFile(f.config,JSON.stringify(saved),{mode:0o600});
+  assert.equal((await probe.run(()=>true)).code,'sqlite_configuration_invalid',relative);
+  assert.equal(probe.getContactConfiguration(),undefined,relative);
+ }
  saved.skillPackageRoot=path.join(root,'outside-originals');await writeFile(f.config,JSON.stringify(saved),{mode:0o600});
  assert.equal((await probe.run(()=>true)).code,'sqlite_configuration_invalid');
  delete saved.skillPackageRoot;await writeFile(f.config,JSON.stringify(saved),{mode:0o600});assert.equal((await probe.run(()=>true)).code,'sqlite_configuration_invalid');
