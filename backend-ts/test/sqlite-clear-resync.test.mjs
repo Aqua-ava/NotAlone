@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareBoundaryCandidate } from '../src/history/sqlite/boundary.ts';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { SqliteStorage } from '../src/storage/sqlite/client.ts';
+import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { owner, fixture, restart, identity, identities, record, buildCandidate, createChannel, waitFor, target } from './sqlite-clear-support.mjs';
 
 const ids = (...values) => values.map(value => value.split('/'));
@@ -373,6 +378,7 @@ test('边界候选校验拒绝窗口/覆盖/实例/成员/摘要不一致，并�
   const cases = [
     ['分片覆盖缺失', candidate => { candidate.partitions = candidate.partitions.slice(1); }, 'history_boundary_candidate_incomplete'],
     ['分片成员数不符', candidate => { candidate.partitions[0].memberCount = 9; }, 'history_boundary_candidate_incomplete'],
+    ['每分片计数与成员不符', candidate => { candidate.partitions[0].memberCount = 0; candidate.partitions[1].memberCount = 2; }, 'history_boundary_candidate_incomplete'],
     ['实例替换', candidate => { candidate.instanceContinuity = false; }, 'history_boundary_instance_changed'],
     ['命名空间变化', candidate => { candidate.namespaceContinuity = false; }, 'history_boundary_namespace_changed'],
     ['成员表实例不符', candidate => { candidate.members[0].table = 'other-instance'; }, 'history_boundary_member_invalid'],
@@ -397,4 +403,130 @@ test('边界候选校验拒绝窗口/覆盖/实例/成员/摘要不一致，并�
   assert.equal(status.phase, 'completed');
   assert.equal(status.boundary.state, 'verified');
   assert.equal(status.boundary.memberCount, 0);
+});
+
+
+test('取消/中断使S(B)候选失效：不持久化接受、不显示完成，旧写入继续封禁', async t => {
+  const f = await fixture(t);
+  f.state.pageRecords = [record('shard-a', '1')];
+  f.state.boundaryMembers = [identity('shard-a', '1')];
+  await f.current.history.synchronize(f.contactA);
+  let releaseBoundary;
+  const gate = new Promise(resolve => { releaseBoundary = resolve; });
+  let enteredBoundary;
+  const boundaryEntered = new Promise(resolve => { enteredBoundary = resolve; });
+  f.state.boundaryHook = async () => { enteredBoundary(); await gate; };
+  const run = f.current.clear.clear(f.contactA);
+  await boundaryEntered;
+  const stopping = f.current.clear.stop(f.contactA);
+  releaseBoundary();
+  const [status] = await Promise.all([run, stopping]);
+  assert.equal(status.phase, 'boundary_pending');
+  assert.equal(status.completed, false);
+  assert.equal(status.boundaryReason, 'history_interrupted');
+  const cutoff = await f.current.storage.execute('history.cutoffStatus', { ownerId: owner, operationId: status.operationId });
+  assert.notEqual(cutoff.state, 'verified', '取消后候选不得被接受');
+  await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_suppression_unverified' });
+  f.state.boundaryHook = null;
+  const resumed = await (await restart(f, t)).clear.clear(f.contactA);
+  assert.equal(resumed.phase, 'completed', '恢复后同一操作仍可重新建立边界');
+});
+
+test('已接受B但清理未完成时新消息保留，重启后沿同一B续清且不重读边界', async t => {
+  const f = await fixture(t);
+  const { storage, contacts, deletion, history } = f.current;
+  f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2')];
+  f.state.boundaryMembers = identities([['shard-a', '1'], ['shard-a', '2']]);
+  await history.synchronize(f.contactA);
+  const plan = await deletion.plan({ ownerId: owner, requestKey: 'synthetic-slow-cleanup', scope: { kind: 'contact_history', contactId: f.contactA } });
+  const begin = await storage.execute('history.clearBegin', { ownerId: owner, contactId: f.contactA, operationId: plan.operationId, at: Date.now() });
+  const token = await contacts.eligibility(f.contactA);
+  const scope = await storage.execute('history.scope', { token });
+  const prepared = prepareBoundaryCandidate(scope, buildCandidate(scope, f.state.boundaryMembers));
+  await storage.execute('history.boundaryPersist', { ownerId: owner, operationId: plan.operationId, contactId: f.contactA,
+    barrierGeneration: begin.barrierGeneration, accountKey: scope.accountKey, conversationKey: scope.conversationKey, prepared });
+  const accepted = await storage.execute('history.boundaryAccept', { ownerId: owner, operationId: plan.operationId,
+    contactId: f.contactA, barrierGeneration: begin.barrierGeneration, at: Date.now() });
+  assert.equal(accepted.state, 'verified');
+  const manifest = accepted.manifestSha256;
+  // 慢清理期间新消息按新资格进入；旧消息此时尚未被05清理。
+  f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2'), record('shard-b', '6')];
+  const coverage = await history.synchronize(f.contactA);
+  assert.equal(coverage.phase, 'complete');
+  assert.ok((await history.read(f.contactA)).messages.some(message => message.text === '合成正文6'));
+  const boundaryCalls = f.state.boundaryCalls;
+  const restarted = await restart(f, t);
+  const pendingStatus = await restarted.clear.statusOf(f.contactA);
+  assert.equal(pendingStatus.phase, 'cleaning');
+  assert.equal(pendingStatus.completed, false);
+  const done = await restarted.clear.clear(f.contactA);
+  assert.equal(done.phase, 'completed');
+  assert.equal(f.state.boundaryCalls, boundaryCalls, '已接受B后重试不得重新读取边界');
+  assert.equal(done.boundary.barrierGeneration, begin.barrierGeneration);
+  assert.equal(done.boundary.manifestSha256, manifest);
+  const read = await restarted.history.read(f.contactA);
+  assert.deepEqual(read.messages.map(message => message.text), ['合成正文6'], '慢清理只清旧代次消息');
+});
+
+test('来源代次变化后旧B不放行普通读取，已清空旧成员不得复活', async t => {
+  const f = await fixture(t, { registryModule: new URL('./fixtures/history/source-change-registry.mjs', import.meta.url).href });
+  f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2')];
+  f.state.boundaryMembers = identities([['shard-a', '1'], ['shard-a', '2']]);
+  await f.current.history.synchronize(f.contactA);
+  const cleared = await f.current.clear.clear(f.contactA);
+  assert.equal(cleared.phase, 'completed');
+  await f.current.storage.execute('fixture.changeSourceGeneration', { ownerId: owner, sourceGeneration: 'source-2' });
+  const token = await f.current.contacts.eligibility(f.contactA);
+  assert.equal(token.source_generation, 'source-2');
+  assert.notEqual(token.barrier_generation, '0');
+  f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2'), record('shard-b', '7')];
+  await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_suppression_unverified' });
+  assert.equal((await f.current.history.read(f.contactA)).messages.length, 0, '跨来源代次不能复活旧消息');
+});
+
+test('v12旧结构库升级到当前15后联系人、同步与清空重读仍可工作', async t => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-clear-upgrade-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const legacy = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test',
+    registryModule: new URL('./fixtures/history/v12-registry.mjs', import.meta.url).href });
+  const databaseId = legacy.status.databaseId;
+  assert.equal(legacy.status.schemaVersion, 12);
+  const legacyContacts = new SqliteContactService(legacy, owner, { account: async () => { throw new Error('no metadata'); }, sessions: async () => [] });
+  await legacyContacts.initialize();
+  await legacy.close();
+  const upgraded = await SqliteStorage.open({ userData: root, intent: 'open', role: 'test', expectedDatabaseId: databaseId });
+  t.after(() => upgraded.close());
+  assert.equal(upgraded.status.schemaVersion, 15);
+  assert.deepEqual(await upgraded.check(), { integrity: 'ok', foreignKeys: 'ok' });
+  const { channel, state } = createChannel();
+  const holders = new (await import('../src/storage/sqlite/deletion/holders.ts')).ActiveHolders();
+  const { DeletionService } = await import('../src/storage/sqlite/deletion/service.ts');
+  const { ManagedFiles } = await import('../src/storage/sqlite/deletion/managed-files.ts');
+  const { SqliteHistoryService } = await import('../src/history/sqlite/service.ts');
+  const { SqliteHistoryClearService } = await import('../src/history/sqlite/clear.ts');
+  const { SqliteHistoryResyncService } = await import('../src/history/sqlite/resync.ts');
+  const contacts = new SqliteContactService(upgraded, owner, {
+    account: async () => ({ externalKey: 'synthetic-account', identityScheme: 'wechat.account.v1', sourceGeneration: 'source-1', assurance: 'verified', supportProfile: 'synthetic-metadata-v1' }),
+    sessions: async () => [{ externalKey: 'friend-a', displayName: '合成甲', kind: 'private', identityAssurance: 'verified' }] });
+  await contacts.initialize();
+  const detected = await contacts.detectAccount();
+  await contacts.confirmAccount(detected.candidate_token);
+  await contacts.setReading(true);
+  const snapshot = await contacts.candidates(true);
+  const saved = await contacts.confirm(snapshot.snapshot_token, snapshot.sessions.map(session => ({
+    locator: session.username, observed_display_name: session.display_name, expected_selection_generation: session.selection_generation })));
+  const contact = saved.bindings[0].contact_id;
+  state.pageRecords = [record('shard-a', '1')];
+  state.boundaryMembers = [identity('shard-a', '1')];
+  const deletion = new DeletionService(upgraded, holders, new ManagedFiles(root), { drainTimeoutMs: 2_000 });
+  const history = new SqliteHistoryService(upgraded, contacts, () => channel, holders);
+  const clear = new SqliteHistoryClearService(upgraded, contacts, () => channel, deletion, holders);
+  const resync = new SqliteHistoryResyncService(upgraded, contacts, () => channel, holders);
+  t.after(async () => { await resync.close(); await clear.close(); await history.close(); });
+  await history.synchronize(contact);
+  const cleared = await clear.clear(contact);
+  assert.equal(cleared.phase, 'completed');
+  const restored = await resync.resync(contact, { requestKey: 'upgrade-resync-1' });
+  assert.equal(restored.state, 'completed');
+  assert.equal((await history.read(contact)).messages.length, 1);
 });

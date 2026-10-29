@@ -66,7 +66,8 @@ export function createChannel(options = {}) {
       return { ...report, accountKey: scope.accountKey, conversationKey: scope.conversationKey,
         sourceGeneration: scope.token.source_generation };
     },
-    async target() { return { ...target, partitions: [...target.partitions], tables: target.tables.map(t => ({ ...t })) }; },
+    async target(scope) { return { ...target, sourceGeneration: scope?.token?.source_generation ?? target.sourceGeneration,
+      partitions: [...target.partitions], tables: target.tables.map(t => ({ ...t })) }; },
     async page(scope, fixed, cursor) {
       state.pageCalls++;
       if (state.pageHook) await state.pageHook(state);
@@ -112,8 +113,8 @@ export async function closeCurrent(ctx) {
 export async function fixture(t, options = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-clear-')));
   const { channel, state } = options.channel ? { channel: options.channel, state: options.state } : createChannel();
-  const ctx = { root, channel, state, maxBoundaryAttempts: options.maxBoundaryAttempts };
-  const storage = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test' });
+  const ctx = { root, channel, state, maxBoundaryAttempts: options.maxBoundaryAttempts, registryModule: options.registryModule };
+  const storage = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test', ...(options.registryModule ? { registryModule: options.registryModule } : {}) });
   const current = await attach(ctx, storage);
   await current.contacts.initialize();
   const candidate = await current.contacts.detectAccount();
@@ -133,7 +134,7 @@ export async function restart(ctx, t) {
   const previous = ctx.current;
   const databaseId = previous.storage.status.databaseId;
   await closeCurrent(ctx);
-  const storage = await SqliteStorage.open({ userData: ctx.root, intent: 'open', role: 'test', expectedDatabaseId: databaseId });
+  const storage = await SqliteStorage.open({ userData: ctx.root, intent: 'open', role: 'test', expectedDatabaseId: databaseId, ...(ctx.registryModule ? { registryModule: ctx.registryModule } : {}) });
   const current = await attach(ctx, storage);
   t.after(async () => { await closeCurrent(ctx); });
   return current;

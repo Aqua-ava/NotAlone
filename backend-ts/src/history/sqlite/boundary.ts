@@ -128,6 +128,12 @@ export function prepareBoundaryCandidate(scope: HistoryScope, candidate: History
     return { memberNo, partition: member.partition, tableInstance: member.table, localKey };
   });
   members.sort((left, right) => left.localKey.localeCompare(right.localKey)).forEach((member, memberNo) => { member.memberNo = memberNo; });
+  // 每分片实际成员数必须等于该分片 reader 计数；先把重复/非法成员暴露出来再核对。
+  const byPartition = new Map<string, number>();
+  for (const member of members) byPartition.set(member.partition, (byPartition.get(member.partition) ?? 0) + 1);
+  for (const [partition, evidence] of observed) {
+    if ((byPartition.get(partition) ?? 0) !== evidence.memberCount) fail('history_boundary_candidate_incomplete');
+  }
   const manifestSha256 = membersManifestSha256(fixed.descriptor, members);
   if (manifestSha256 !== candidate.manifestSha256) fail('history_boundary_manifest_mismatch');
   return { boundaryToken: candidate.boundaryToken, manifestSha256, members, target: fixed, support: report,
