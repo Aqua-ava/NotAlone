@@ -23,7 +23,7 @@ export interface MediaFileView {
 }
 export interface MediaSnapshot extends MediaScope {
   kind: MediaKind; state: 'available' | 'active' | 'cleared' | 'invalidated' | 'deleting';
-  generation: string; headRevision: string; latestAttempt: MediaAttemptView | null; files: MediaFileView[];
+  generation: string; headRevision: string; requestedAttempt?: MediaAttemptView; latestAttempt: MediaAttemptView | null; files: MediaFileView[];
   capabilities: {extract: boolean; originalUpgrade: boolean; audioConversion: boolean; reason: string | null};
   cleanup: {operationId: string; state: string} | null;
 }

@@ -102,7 +102,7 @@ export class MessageMediaController {
       const response=await this.backend.requestJson(input);
       if(!this.current(scope,revision) || response.generation !== scope.generation)return;
       const snapshot=readMediaSnapshot(response.data,scope.contactId,scope.messageId);
-      this.publish({phase:'ready',snapshot});if(snapshot.cleanup?.state === 'completed')this.clearRequest=undefined;
+      this.publish({phase:'ready',snapshot});if(snapshot.cleanup?.state === 'completed' || snapshot.state==='cleared'&&snapshot.cleanup===null)this.clearRequest=undefined;
     } catch {if(this.current(scope,revision))this.publish({phase:'failed',snapshot:null,error:'清除尚未确认完成，请刷新或继续清理原操作。'});}
     finally {if(this.current(scope,revision))this.publish({busy:null});}
   }
