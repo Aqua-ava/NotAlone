@@ -15,6 +15,7 @@ import { MemoryEvidence } from './MemoryEvidence';
 import type { TraceRecordKind } from '../shared/trace-bridge';
 import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
 import { MemoryProcessingEntry } from './MemoryProcessingEntry';
+import { SqliteMemoryManagementPanel } from './SqliteMemoryManagementPanel';
 
 const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' },
   contact: { phase: 'idle', items: [] }, owner: { phase: 'idle', items: [] },
@@ -310,7 +311,8 @@ type MemoryView = keyof typeof memoryViews;
 
 export function MemoryPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
   return <MemoryProcessingEntry bridge={window.notalone.fixedMemoryProcessing} backend={window.notalone.backend}
-    scopeKey={`${session.state.selectedContactId}:${session.state.scopeRevision}`}>
+    scopeKey={`${session.state.selectedContactId}:${session.state.scopeRevision}`}
+    sqliteChildren={<SqliteMemoryManagementPanel bridge={window.notalone.sqliteMemoryManagement} contactId={session.state.selectedContactId} scopeRevision={session.state.scopeRevision}/>}>
     <LegacyMemoryPage session={session} navigate={navigate}/>
   </MemoryProcessingEntry>;
 }
