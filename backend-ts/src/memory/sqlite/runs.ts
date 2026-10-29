@@ -1,14 +1,14 @@
 import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageTransaction,StorageRow} from '../../storage/sqlite/contracts.ts';
-import {assertContribution,assertInputs,fail,textId} from './qualification.ts';
+import {assertContribution,assertInputs,assertTaskContributions,fail,textId} from './qualification.ts';
 const number=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_count_invalid');return Number(v);};
 export function snapshot(tx:StorageTransaction,ownerId:string,runId:string){
  const r=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);if(!r)fail('memory_extraction_not_found');
  const inputs=tx.all('SELECT * FROM run_input WHERE owner_id=? AND run_id=? ORDER BY input_no',[ownerId,runId]);
  const targets=inputs.filter(i=>i.role==='target');
  const tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId]);
- const staleContacts=new Set<string>();
- for(const c of tx.all("SELECT contact_id FROM run_contact WHERE owner_id=? AND run_id=? ",[ownerId,runId]))try{assertContribution(tx,ownerId,runId,String(c.contact_id));}catch{staleContacts.add(String(c.contact_id));}
+ const taskStates=new Map<string,string>();
+ for(const task of tasks){let state=String(task.state);try{assertTaskContributions(tx,ownerId,runId,String(task.id));}catch{state='revoked';}taskStates.set(String(task.id),state);}
  const targetStates=new Map<string,Set<string>>();
  for(const row of tx.all(`SELECT si.run_input_no,s.state FROM step_input si JOIN processing_step s ON s.owner_id=si.owner_id AND s.id=si.step_id
  JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
@@ -19,12 +19,13 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string){
  const targetHasState=(i:StorageRow,state:string)=>targetStates.get(String(i.input_no))?.has(state)??false;
  const targetSucceeded=(i:StorageRow)=>targetHasState(i,'succeeded');
  const succeeded=targets.filter(targetSucceeded).length;
- const candidates=tx.all(`SELECT e.*,t.scope_kind,t.contact_id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE t.owner_id=? AND t.run_id=? AND e.kind='verified_output' AND t.state<>'revoked' ORDER BY e.created_at,e.event_no`,[ownerId,runId]).flatMap(e=>{
+ const candidates=tx.all(`SELECT e.*,t.id AS task_id,t.scope_kind,t.contact_id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE t.owner_id=? AND t.run_id=? AND e.kind='verified_output' AND t.state<>'revoked' ORDER BY e.created_at,e.event_no`,[ownerId,runId]).flatMap(e=>{
+  if(taskStates.get(String(e.task_id))==='revoked')return [];
   try{const deps=tx.all(`SELECT i.* FROM execution_input x JOIN step_input si ON si.owner_id=x.owner_id AND si.step_id=x.planned_step_id AND si.input_no=x.planned_input_no JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no WHERE x.owner_id=? AND x.event_id=?`,[ownerId,e.id]);assertInputs(tx,ownerId,runId,deps);}catch{return [];}
   const p=JSON.parse(String(e.payload));return [{id:String(e.id),attemptId:String(e.step_attempt_id),outputNo:number(e.event_no),scopeKind:p.scopeKind,contactId:p.contactId,body:p.fact.text,fact:p.fact,state:'verified_pending_decision',origin:'auto'}];
  });
  return {runId,state:String(r!.state),total:targets.length,succeeded,failed:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'failed')).length,unknown:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'unknown')).length,
-  stage:'extraction_verification',laterStages:'pending',tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:(t.scope_kind==='self'?staleContacts.size>0:staleContacts.has(String(t.contact_id)))?'revoked':String(t.state),
+  stage:'extraction_verification',laterStages:'pending',tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
    total:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id).length,succeeded:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id&&targetSucceeded(i)).length,errorCode:t.error_code===null?null:String(t.error_code)})),
   inputs:inputs.map(i=>({inputNo:number(i.input_no),role:String(i.role),contactId:String(i.source_contact_id),messageId:String(i.message_id),recordId:String(i.record_id),itemId:i.item_id===null?null:String(i.item_id)})),candidates};
 }

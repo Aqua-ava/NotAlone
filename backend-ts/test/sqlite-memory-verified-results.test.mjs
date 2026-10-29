@@ -91,3 +91,30 @@ test('语义核验逐项证据不足保留失败事实，已知模型返回不�
  assert.equal(trace.events.some(event=>event.kind==='verified_output'),false);
  assert.equal(done.laterStages,'pending');assert.notEqual(done.state,'completed');assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
+
+test('完成后撤销一位贡献者授权使完整本人混合任务候选失效，另一联系人合法结果保持可读',async t=>{
+ const f=await fixture(t,{registryModule:new URL('./fixtures/memory-sqlite/verified-output-registry.mjs',import.meta.url).href});const [a,b]=f.saved;
+ f.channel.page=async scope=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[
+  record('1',{text:scope.token.contact_id===a.contact_id?'我长期住在高雄。':'我长期住在台南。'}),
+  record('2',{sender:'owner',text:scope.token.contact_id===a.contact_id?'我长期偏好绿茶。':'我长期偏好红茶。'}),
+ ],completedPartitions:['shard-a'],exhausted:true});
+ for(const contactId of [a.contact_id,b.contact_id])await f.service.synchronize(contactId);
+ await f.contacts.setReading(false);
+ const external=supplier();let memory;const model=modelPort(()=>memory.accounting,external.respond);memory=new SqliteMemoryExtraction(f.storage,owner,model);t.after(()=>memory.close());
+ const requestKey='revoke-completed-self-contributor',started=await memory.start(requestKey);await memory.waitForIdle();
+ const before=await memory.read(started.runId),self=before.tasks.find(task=>task.scopeKind==='self'),kept=before.candidates.find(candidate=>candidate.contactId===b.contact_id);
+ assert.equal(before.succeeded,4);assert.equal(before.candidates.length,4);assert.equal(before.candidates.filter(candidate=>candidate.scopeKind==='self').length,2);assert.ok(kept);assert.equal(model.calls,4);
+ const keptSelf=before.candidates.find(candidate=>candidate.scopeKind==='self'&&candidate.body==='用户长期偏好红茶。');assert.ok(keptSelf);
+ const eligibleSelf=await f.storage.execute('fixture.verifiedExtractionOutput',{ownerId:owner,eventId:keptSelf.id});assert.equal(eligibleSelf.proposedBody,keptSelf.body);assert.ok(eligibleSelf.sources.every(source=>source.contactId===b.contact_id));
+ await f.contacts.revoke(a.contact_id,a.binding_id,a.selection_generation);
+ const after=await memory.read(started.runId);assert.equal(after.tasks.find(task=>task.taskId===self.taskId).state,'revoked');
+ await assert.rejects(memory.trace(self.taskId),{code:'memory_extraction_scope_stale'});
+ await assert.rejects(f.storage.execute('fixture.verifiedExtractionOutput',{ownerId:owner,eventId:keptSelf.id}),{code:'memory_extraction_scope_stale'},'08准入须复验整个本人任务的固定贡献资格');
+ assert.equal(after.candidates.filter(candidate=>candidate.scopeKind==='self').length,0,'本人混合任务任一贡献者失效后不得保留另一人的单条本人产物');
+ assert.deepEqual(after.candidates,[kept]);assert.equal(after.tasks.find(task=>task.contactId===b.contact_id).state,'succeeded');
+ await assert.rejects(memory.trace(before.tasks.find(task=>task.contactId===a.contact_id).taskId),{code:'memory_extraction_scope_stale'});
+ const keptTrace=await memory.trace(after.tasks.find(task=>task.contactId===b.contact_id).taskId);
+ assert.deepEqual(keptTrace.events.filter(event=>event.kind==='verified_output').map(event=>event.payload.fact.text),['联系人长期住在台南。']);
+ assert.equal((await f.storage.execute('fixture.verifiedExtractionOutput',{ownerId:owner,eventId:kept.id})).proposedBody,kept.body);
+ assert.deepEqual((await memory.start(requestKey)).candidates,[kept]);assert.equal(model.calls,4);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

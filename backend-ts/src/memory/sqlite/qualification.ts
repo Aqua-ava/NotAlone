@@ -19,6 +19,12 @@ export function assertContribution(tx:StorageTransaction,ownerId:string,runId:st
  AND a.scope_revision=rc.accepted_account_revision AND a.source_generation=rc.accepted_source_generation`,[ownerId,runId,contactId]);
  if(!valid)fail('memory_extraction_scope_stale');
 }
+/** 复验任务冻结的完整贡献范围，不能用单条产物实际来源替代本人混合任务门禁。 */
+export function assertTaskContributions(tx:StorageTransaction,ownerId:string,runId:string,taskId:string):void {
+ const contributions=tx.all('SELECT source_contact_id FROM task_contribution WHERE owner_id=? AND run_id=? AND task_id=?',[ownerId,runId,taskId]);
+ if(!contributions.length)fail('memory_extraction_scope_stale');
+ for(const contribution of contributions)assertContribution(tx,ownerId,runId,String(contribution.source_contact_id));
+}
 export function inputRows(tx:StorageTransaction,ownerId:string,stepId:string):StorageRow[]{
  return tx.all(`SELECT i.*,si.input_no AS planned_input_no,m.text_body,m.sender_role,m.sent_at FROM step_input si
  JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no
