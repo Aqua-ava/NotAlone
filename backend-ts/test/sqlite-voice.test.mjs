@@ -97,3 +97,10 @@ test('实际播放件校验失败后精确删除失败WAV，SILK与来源证明�
  const {readdir}=await import('node:fs/promises');assert.equal((await readdir(`${f.root}/managed/media`)).length,1);
  const operations=await f.media.deletion.list({ownerId:f.owner});assert.ok(operations.some(op=>op.scope.kind==='media_result_replace'&&op.state==='completed'));
 });
+
+test('本地输入在初验后被换字节也不得进入解码或发布',async t=>{
+ let calls=0;const decoder={decode:async()=>{calls++;throw Error('首轮有限结果');},close:async()=>{}};
+ const adapter=new VoiceMediaAdapter({source:syntheticPort(packets(1,1,1)),decoder});const f=await fixture(t,adapter),m=f.messages.find(m=>m.kind==='voice');await f.media.extract(f.contact,m.id,{requestKey:'before-file-change',goal:'extract'});
+ const execute=adapter.execute.bind(adapter);adapter.execute=async c=>{if(c.input){const {writeFile}=await import('node:fs/promises');const changed=packets(1,1,1);changed[12]=1;await writeFile(c.input.localPath,changed);}return execute(c);};
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'changed-local-bytes',goal:'audio_conversion'}),{code:'voice_file_changed'});assert.equal(calls,1);
+});
