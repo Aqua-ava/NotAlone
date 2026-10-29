@@ -251,3 +251,9 @@ test('领域回调意外返回Promise时回滚目标进度，不能提前确认�
   assert.equal(result.checks.find(c => c.kind === 'final_recheck').result.proof, 'async_transaction_forbidden');
   assert.equal((await f.storage.execute('sample.read', {})).bodies.length, 2);
 });
+test('账号删除排空全部owner持有者，不拿联系人代次和账号epoch比较而漏放', async t => {
+  const f=await fixture(t);await f.storage.execute('sample.seed',{});let closed=false;
+  f.holders.register({key:'sample:high_generation',ownerId:'o',contactId:'b',generation:999n,close:async()=>{closed=true;}});
+  const op=await f.service().plan(request('account-fence',{kind:'account'}));
+  assert.equal((await f.service().advance(op)).state,'completed');assert.equal(closed,true);
+});

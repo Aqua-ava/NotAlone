@@ -5,7 +5,7 @@ import { identityActions } from '../../contacts/sqlite/actions.ts';
 import type { StorageRegistry } from './contracts.ts';
 import { deletionMigration } from './deletion/schema.ts';
 import { createDeletionActions } from './deletion/actions.ts';
-import { installedDeletionRegistration } from './deletion/registration.ts';
+import { installedDeletionRegistration, installedDeletionActions } from './deletion/registration.ts';
 import { skillSchemaSql,skillActions } from '../../skills/sqlite/storage.ts';
 
 // 已发布版本不可修改；后续业务票在此追加连续版本及具名动作。
@@ -27,5 +27,5 @@ CREATE TABLE schema_migration (
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
 ` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5)],
-  actions: [...createDeletionActions(installedDeletionRegistration), ...identityActions, ...skillActions, ...historyActions],
+  actions: [...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions],
 };

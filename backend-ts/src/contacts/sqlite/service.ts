@@ -12,6 +12,8 @@ export class SqliteContactService {
  private candidate?:{token:string;evidence:AccountEvidence;at:number};
  private readonly snapshots=new Map<string,Snapshot>();
  private closed=false;
+ private readonly pendingMetadata=new Set<Promise<unknown>>();
+ private closing?:Promise<void>;
  private readonly storage:SqliteStorage;
  readonly ownerId:string;
  private readonly metadata:ContactMetadataPort;
@@ -20,9 +22,17 @@ export class SqliteContactService {
  private execute<T=any>(name:string,input:object):Promise<T>{if(this.closed)fail('identity_closed');return this.storage.execute(name,{ownerId:this.ownerId,at:this.clock(),...input});}
  initialize(){return this.execute('identity.initialize',{});}
  directory(){return this.execute<Directory>('identity.directory',{});}
+ private readMetadata<T>(read:()=>Promise<T>):Promise<T>{
+  if(this.closed)fail('identity_closed');
+  const pending=Promise.resolve().then(()=>{if(this.closed)fail('identity_closed');return read();})
+   .finally(()=>{this.pendingMetadata.delete(pending);});
+  this.pendingMetadata.add(pending);return pending;
+ }
  private async account(signal?:AbortSignal):Promise<AccountEvidence>{
+  if(this.closed)fail('identity_closed');
   let evidence:AccountEvidence;
-  try { evidence=await this.metadata.account(signal); } catch(error) {
+  try { evidence=await this.readMetadata(()=>this.metadata.account(signal)); } catch(error) {
+   if(signal?.aborted||this.closed)fail('identity_cancelled');
    const saved=await this.directory();
    if(saved.account&&!signal?.aborted)await this.execute('identity.invalidateAccount',{accountId:saved.account.id});
    throw error;
@@ -33,7 +43,7 @@ export class SqliteContactService {
   if(saved.account&&(evidence.assurance!=='verified'||saved.account.external_key!==evidence.externalKey||saved.account.source_generation!==evidence.sourceGeneration))await this.execute('identity.invalidateAccount',{accountId:saved.account.id});
   return evidence;
  }
- async detectAccount(signal?:AbortSignal){const evidence=await this.account(signal);this.candidate={token:randomUUID(),evidence,at:this.clock()};return {account_id:evidence.externalKey,candidate_token:this.candidate.token,verified:evidence.assurance==='verified'};}
+ async detectAccount(signal?:AbortSignal){const evidence=await this.account(signal);if(this.closed)fail('identity_closed');this.candidate={token:randomUUID(),evidence,at:this.clock()};return {account_id:evidence.externalKey,candidate_token:this.candidate.token,verified:evidence.assurance==='verified'};}
  async confirmAccount(token:string,signal?:AbortSignal){
   const c=this.candidate;if(!c||c.token!==token||this.clock()-c.at>120_000)fail('account_candidate_stale');
   const evidence=await this.account(signal);
@@ -51,7 +61,7 @@ export class SqliteContactService {
   if(evidence.assurance!=='verified')fail('metadata_identity_unverified');
   let rows:{externalKey:string;displayName:string}[];
   try {
-  const raw=await this.metadata.sessions(evidence,signal);
+  const raw=await this.readMetadata(()=>this.metadata.sessions(evidence,signal));
   if(signal?.aborted||this.closed)fail('identity_cancelled');
   if(!Array.isArray(raw)||raw.length>5000)fail('metadata_invalid');
   const known=await this.directory();
@@ -70,6 +80,7 @@ export class SqliteContactService {
   const token=randomUUID();
   const map=new Map(rows.map(row=>{const bound=directory.bindings.find(b=>b.conversation_locator===row.externalKey&&b.account_id===account.accountId);
    return [row.externalKey,{displayName:row.displayName,generation:bound?.selection_generation??'0',contactId:bound?.contact_id,verificationId:randomUUID(),grantId:randomUUID(),bindingId:randomUUID(),conversationId:randomUUID(),newContactId:randomUUID()}] as const;}));
+  if(this.closed)fail('identity_closed');
   this.snapshots.set(token,{at:this.clock(),evidence,accountId:account.accountId,scopeRevision:account.scopeRevision,rows:map});
   for(const [key,snapshot]of this.snapshots)if(this.clock()-snapshot.at>120_000||this.snapshots.size>32)this.snapshots.delete(key);
   return {snapshot_token:token,sessions:rows.map(row=>{const b=directory.bindings.find(b=>b.conversation_locator===row.externalKey&&b.account_id===account.accountId&&b.status==='active');return {username:row.externalKey,display_name:row.displayName,last_timestamp:null,bound_contact_id:b?.contact_id??null,known_contact_id:map.get(row.externalKey)?.contactId??null,selection_generation:map.get(row.externalKey)!.generation};})};
@@ -92,5 +103,12 @@ export class SqliteContactService {
  eligibility(contactId:string){return this.execute<ReadEligibility>('identity.eligibility',{contactId});}
  validate(token:ReadEligibility){if(token.owner_id!==this.ownerId)fail('read_not_authorized');return this.execute('identity.validate',{token});}
  manualConfirm(contactId:string,contextToken:string){if(!uuid(contactId))fail('identity_request_invalid');return this.execute<string>('identity.manualConfirm',{contactId,contextToken,id:randomUUID()});}
- async close(){this.closed=true;this.snapshots.clear();this.candidate=undefined;await this.metadata.close?.();}
+ close():Promise<void>{
+  this.closed=true;this.snapshots.clear();this.candidate=undefined;
+  return this.closing??=(async()=>{
+   await this.metadata.close?.();
+   // 端口close/abort返回不证明读取已结算；未结束的读取继续阻止删除完成。
+   await Promise.allSettled([...this.pendingMetadata]);
+  })().catch(error=>{this.closing=undefined;throw error;});
+ }
 }
