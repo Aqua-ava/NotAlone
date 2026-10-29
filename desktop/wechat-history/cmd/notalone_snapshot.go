@@ -249,7 +249,7 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 		query := "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?"
 		args := []any{n.table}
 		if shard.present {
-			query = "SELECT local_id FROM " + quoteIdent(n.table) + " ORDER BY local_id LIMIT 1"
+			query = "SELECT 1 AS present FROM " + quoteIdent(n.table) + " LIMIT 1"
 			args = nil
 		}
 		rows, e := shard.reader.QueryBounded(life, 1, query, args...)

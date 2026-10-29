@@ -57,6 +57,29 @@ async function fixture(t,mode='normal') {
    if(mode==='wrong-target-generation')data={...data,sourceGeneration:'f'.repeat(64)};
    if(mode==='wrong-target-table')data={...data,tables:[{partition:'d'.repeat(64),instance:'f'.repeat(64)}]};
   }
+  if(r.op==='observe-metadata'){
+   const rawType={text:'1',image:'3',voice:'34',video:'43',file:'49',sticker:'47',other:'1000'}[r.kind];
+   const record={partition:schema.tables[0].partition,table:schema.tables[0].target,localId:'9223372036854775807',serverId:'9007199254740993',originalType:rawType,status:'-9223372036854775808',createTime:'1700000000',sender:'contact',statusSemantics:'unverified',normalHistory:false,observationScope:'single-fixed-snapshot'};
+   if(mode.startsWith('metadata-raw:')){const raw=mode.slice('metadata-raw:'.length);record.originalType=raw==='null'?null:raw;}
+   data={format:'wechat-message-metadata-observation-v1',status:'unverified',scopeDigest:crypto.createHash('sha256').update('${account}'+'\\0'+currentConversation).digest('hex'),sourceGeneration:'${generation}',schemaFingerprint:'b'.repeat(64),kind:r.kind,checkedPartitions:schema.checkedPartitions,record};
+   if(mode==='metadata-null')data={...data,record:null};
+   if(mode==='metadata-body')data={...data,record:{...record,body:'forbidden-sensitive-body'}};
+   if(mode==='metadata-source')data={...data,record:{...record,source:'forbidden-sensitive-XML'}};
+   if(mode==='metadata-number')data={...data,record:{...record,localId:9007199254740993}};
+   if(mode==='metadata-overflow')data={...data,record:{...record,status:'9223372036854775808'}};
+   if(mode==='metadata-time-number')data={...data,record:{...record,createTime:1700000000}};
+   if(mode==='metadata-wrong-scope')data={...data,scopeDigest:'f'.repeat(64)};
+   if(mode==='metadata-wrong-generation')data={...data,sourceGeneration:'f'.repeat(64)};
+   if(mode==='metadata-wrong-schema')data={...data,schemaFingerprint:'f'.repeat(64)};
+   if(mode==='metadata-wrong-partitions')data={...data,checkedPartitions:['f'.repeat(64)]};
+   if(mode==='metadata-wrong-partition')data={...data,record:{...record,partition:'f'.repeat(64)}};
+   if(mode==='metadata-wrong-table')data={...data,record:{...record,table:'f'.repeat(64)}};
+   if(mode==='metadata-wrong-kind')data={...data,kind:r.kind==='text'?'image':'text'};
+   if(mode==='metadata-promoted')data={...data,record:{...record,normalHistory:true}};
+   if(mode==='metadata-promoted-status')data={...data,status:'supported'};
+   if(mode==='metadata-exhausted')data={...data,exhausted:true};
+   if(mode==='metadata-cancel')return;
+  }
   if(r.op==='page'){
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'合成分页文字',originalType:'1',sentAt:'1000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row],completedPartitions:['d'.repeat(64)],exhausted:true};
@@ -265,4 +288,57 @@ test('可选13项能力三值完整保留，部分结构通过不能升级整体
  assert.equal(report.capabilities.exactSchema,'supported');assert.equal(report.capabilities.serverIdUniqueConstraint,'unsupported');assert.equal(report.capabilities.sourceLifecycle,'unverified');
  assert.equal(report.status,'unverified');await assert.rejects(f.client.targetSelected(),{code:'history_support_unverified'});
  assert.deepEqual((await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse).map(r=>r.op),['resolve','support']);
+});
+
+test('metadata观察仅需已resolve并inspect的同scope，不增加正常历史资格',async t=>{
+ const f=await fixture(t,'unverified-support');await assert.rejects(f.client.observeMetadataSelected('text'),{code:'history_scope_unverified'});
+ await assert.rejects(readFile(f.pidFile),{code:'ENOENT'});
+ await f.client.resolveSelected('合成目标');await assert.rejects(f.client.observeMetadataSelected('text'),{code:'history_scope_unverified'});
+ const inspected=await f.client.inspectSelected();inspected.schemaFingerprint='f'.repeat(64);
+ assert.equal((await f.client.supportSelected()).status,'unverified');
+ await assert.rejects(f.client.observeMetadataSelected('sql'),{code:'history_request_invalid'});
+ for(const kind of ['text','image','voice','video','file','sticker','other']){
+  const observed=await f.client.observeMetadataSelected(kind);
+  assert.equal(observed.kind,kind);assert.equal(observed.status,'unverified');assert.equal(observed.record.localId,'9223372036854775807');
+  assert.equal(observed.record.serverId,'9007199254740993');assert.equal(observed.record.status,'-9223372036854775808');
+  assert.equal(observed.record.createTime,'1700000000');assert.equal(observed.record.normalHistory,false);assert.equal(observed.record.statusSemantics,'unverified');
+ }
+ await assert.rejects(f.client.targetSelected(),{code:'history_support_unverified'});
+ await assert.rejects(f.client.pageSelected({},null),{code:'history_support_unverified'});
+ const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse);
+ assert.deepEqual(requests.slice(3).map(request=>request.op),Array(7).fill('observe-metadata'));
+ assert.ok(requests.slice(3).every(request=>request.account===account&&request.conversation===conversation&&request.consent==='selected-message-metadata-v1'));
+ await f.client.resolveSelected('另一位合成联系人');await assert.rejects(f.client.observeMetadataSelected('text'),{code:'history_scope_unverified'});
+});
+test('metadata无匹配记录保留null，不报告exhausted或complete',async t=>{
+ const f=await fixture(t,'metadata-null');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+ const observed=await f.client.observeMetadataSelected('voice');assert.equal(observed.record,null);assert.equal('exhausted' in observed,false);assert.equal('completedPartitions' in observed,false);
+ await assert.rejects(f.client.targetSelected(),{code:'history_support_unverified'});
+});
+test('metadata原始类型必须按低32位匹配请求类型，不能借kind标签伪装',async t=>{
+ for(const [kind,raw] of [['text','3'],['image','1'],['voice','43'],['video','49'],['file','47'],['sticker','34'],['other','1'],['other','4294967297'],['text',null],['image',null]]){
+  const f=await fixture(t,`metadata-raw:${raw}`);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+  await assert.rejects(f.client.observeMetadataSelected(kind),error=>error.code==='history_protocol_invalid'&&error.message==='history_protocol_invalid');
+  noProcess(await waitForPid(f.pidFile));
+ }
+});
+test('metadata原始类型保留精确上32位、视频62和未知负数，不提升历史资格',async t=>{
+ for(const [kind,raw] of [['text','4294967297'],['video','62'],['video','4294967358'],['other','-1'],['other','-9223372036854775808'],['other',null]]){
+  const f=await fixture(t,`metadata-raw:${raw}`);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+  const observed=await f.client.observeMetadataSelected(kind);assert.equal(observed.record.originalType,raw);assert.equal(observed.kind,kind);
+  assert.equal(observed.status,'unverified');assert.equal(observed.record.normalHistory,false);
+  await assert.rejects(f.client.targetSelected(),{code:'history_support_unverified'});
+ }
+});
+test('metadata拒绝正文/XML字段、错误scope/schema/表、整数失真和资格升级，均退出进程',async t=>{
+ for(const mode of ['metadata-body','metadata-source','metadata-number','metadata-overflow','metadata-time-number','metadata-wrong-scope','metadata-wrong-generation','metadata-wrong-schema','metadata-wrong-partitions','metadata-wrong-partition','metadata-wrong-table','metadata-wrong-kind','metadata-promoted','metadata-promoted-status','metadata-exhausted']){
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+  await assert.rejects(f.client.observeMetadataSelected('text'),error=>error.code==='history_protocol_invalid'&&error.message==='history_protocol_invalid');
+  noProcess(await waitForPid(f.pidFile));
+ }
+});
+test('取消metadata观察会等真实子进程退出，不接收迟到观察',async t=>{
+ const f=await fixture(t,'metadata-cancel');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+ const controller=new AbortController();const pending=f.client.observeMetadataSelected('image',controller.signal);
+ const rejected=assert.rejects(pending,{code:'history_native_cancelled'});await waitForRequest(f.logFile,'observe-metadata');controller.abort();await rejected;noProcess(await waitForPid(f.pidFile));
 });

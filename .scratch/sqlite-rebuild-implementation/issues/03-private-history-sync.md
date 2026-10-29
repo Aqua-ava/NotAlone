@@ -67,3 +67,6 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 新窄操作从锁定上游与Go离线构建，原用户组件和配置未替换。最终开发CLI上正式typed client对唯一获准对象仅resolve/inspect/support：8分片、2表，当前结构／声明主键／自增规则已核验，server索引非唯一；未读消息行或正文，正常target因真实状态及来源生命周期未认证拒绝。分项报告与最终字节见docs/verification/sqlite-private-history-support-03.md及support-profiles/wechat-4.0.6-29387-narrow-v1.json。fresh归档源码定向+race60项／2包通过、0失败0跳过；NUL截断已修复f3894fc3，缺配置自动发现、账号预检和guard回收a6ae5a86已修。
 
 仍在实施：正常首次自动派发的独立协调器与正式service测试；连续来源删除遗漏早期旧代次读者的P1复现已确认，正按共享holder领域资格补齐；首次自动入口、实际App消息／覆盖／删除旧正文的证据未满足。真实状态与跨启动／原位恢复连续性仍缺独立证据，不扩大范围补发送／撤回或迁移恢复实验。State继续claimed、Goal继续active，不把结构成功、全拒绝或预灌数据计作03完成。
+
+
+2026-10-29 最新收敛：P1来源删除早期读者遗漏已修复5650ad84e9a1893785be000d35aaf0b70cc432b6，连续三来源接受代次及新合法代次／他人／默认无flag均有红绿和独立复核。首次历史协调器c72eca1abc0baf868574aa84eb17fcbfe4ac3880正式Storage／ContactService／HistoryService10/10、相关组合28/28；未预灌验证正常首次派发，停止／新wake／扫描名单变化两处漏派已修。总指挥已实际集成这两项。当前等待16保存实际公共基线后串行接startup/confirm/enable hooks，并保留媒体停读与本地转换的区别；实际App窗口仍由总指挥分配。真实支持档与票/Goal状态不变，不能把独立协调器当公共自动入口已验收。
