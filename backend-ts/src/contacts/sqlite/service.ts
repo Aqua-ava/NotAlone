@@ -5,7 +5,7 @@ import type { AccountEvidence, ContactMetadataPort, ContactSelection, ReadEligib
 function fail(code:string):never {throw new StorageFailure(code);}
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 const identity=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9_.@-]{1,255}$/.test(v);
-interface Directory { contacts: {contact_id:string;display_name:string;selection_generation:string;data_generation:string}[]; bindings:SavedContactBinding[];account:{id:string;external_key:string;source_generation:string;scope_revision:bigint}|null;read_enabled:boolean }
+interface Directory { contacts: {contact_id:string;display_name:string;selection_generation:string;data_generation:string;data_status:{message_count:number;source_count:number}}[]; bindings:SavedContactBinding[];account:{id:string;external_key:string;source_generation:string;scope_revision:bigint}|null;read_enabled:boolean }
 interface Snapshot {at:number; evidence:AccountEvidence;accountId:string;scopeRevision:string;rows:Map<string,{displayName:string;generation:string;contactId?:string;verificationId:string;grantId:string;bindingId:string;conversationId:string;newContactId:string}>}
 /** 所有渠道 I/O 在事务外；身份和提交资格在具名短事务内复验。 */
 export class SqliteContactService {
