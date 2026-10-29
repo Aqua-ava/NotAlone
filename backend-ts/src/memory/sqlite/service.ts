@@ -16,6 +16,7 @@ interface ClaimedStep {attemptId:string;stepId:string;taskId:string;runId:string
 export class SqliteMemoryExtraction {
  private storage:SqliteStorage;readonly ownerId:string;private model:ExtractionModelPort;readonly holders:ActiveHolders;
  private policy?:Promise<ExtractionPolicyVersion>;private initialized?:Promise<void>;private stopped=false;
+ private closing?:Promise<void>;private pending=new Set<Promise<unknown>>();
  private runs=new Map<string,Promise<void>>();private active=new Map<string,{abort:AbortController;done:Promise<void>}>();
  readonly accounting:ModelPermitAccounting;
  constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders()){
@@ -23,19 +24,27 @@ export class SqliteMemoryExtraction {
   this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute('memoryExtraction.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
  }
  private version(){return this.policy??=createExtractionPolicyVersion();}
- initialize(){return this.initialized??=(async()=>{await this.storage.execute('memoryExtraction.recover',{ownerId:this.ownerId});})();}
+ initialize(){this.available();return this.initialized??=this.admit(async()=>{await this.storage.execute('memoryExtraction.recover',{ownerId:this.ownerId});});}
  private available(){if(this.stopped)throw new StorageFailure('memory_extraction_closed');}
+ /** 关闭也等待已受理但尚未进入run的SQLite工作，防止宿主先释放存储。 */
+ private admit<T>(work:()=>Promise<T>):Promise<T>{
+  this.available();const pending=Promise.resolve().then(()=>{this.available();return work();});this.pending.add(pending);
+  void pending.then(()=>this.pending.delete(pending),()=>this.pending.delete(pending));return pending;
+ }
  async start(requestKey:string){
-  this.available();await this.initialize();const policy=await this.version();await policy.assertCurrent();
+  return this.admit(async()=>{
+  await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
   const prior=await this.storage.execute<any>('memoryExtraction.findRequest',{ownerId:this.ownerId,requestKey});
+  this.available();
   if(prior)return prior;
   const run=await this.storage.execute<any>('memoryExtraction.start',{ownerId:this.ownerId,requestKey,policyConfig:policy.newTaskConfig()});
   this.launch(run.runId);return run;
+  });
  }
  read(runId?:string){this.available();return this.storage.execute<any>('memoryExtraction.read',{ownerId:this.ownerId,runId});}
  trace(taskId:string){this.available();return this.storage.execute<any>('memoryExtraction.trace',{ownerId:this.ownerId,taskId});}
- async pause(runId:string){this.available();return this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'pause'});}
- async continue(runId:string){this.available();await this.initialize();const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue'});this.launch(runId);return run;}
+ async pause(runId:string){return this.admit(()=>this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'pause'}));}
+ async continue(runId:string){return this.admit(async()=>{await this.initialize();this.available();const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue'});this.launch(runId);return run;});}
  private launch(runId:string){if(this.runs.has(runId)||this.stopped)return;const work=this.executeRun(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});}
  async waitForIdle(runId?:string){if(runId!==undefined){await this.runs.get(runId);return;}await Promise.all([...this.runs.values()]);}
  private async executeRun(runId:string){
@@ -50,6 +59,7 @@ export class SqliteMemoryExtraction {
     const generation=BigInt((await this.storage.execute<any>('memoryExtraction.contactGeneration',{ownerId:this.ownerId,contactId:batch.contactId})).generation);
     let release:undefined|(()=>Promise<void>);
     try{
+     if(this.stopped)controller.abort();
      release=this.holders.register({ownerId:this.ownerId,key:`memory:${task.taskId}`,contactId:batch.contactId,generation,close:async()=>{controller.abort();await completed;}});
      this.active.set(task.taskId,{abort:controller,done:completed});
      await this.process(batch,controller.signal);
@@ -97,5 +107,5 @@ export class SqliteMemoryExtraction {
   if(outcome.rejected_count>0&&outcome.accepted.length===0)throw new StorageFailure('memory_extraction_source_insufficient');
   await this.storage.execute('memoryExtraction.finish',{ownerId:this.ownerId,attemptId:batch.attemptId,outcome,inputNos:actualNos});
  }
- async close(){if(this.stopped)return;this.stopped=true;for(const entry of this.active.values())entry.abort.abort();await Promise.allSettled([...this.runs.values()]);await this.model.close?.();}
+ close():Promise<void>{return this.closing??=(async()=>{this.stopped=true;for(const entry of this.active.values())entry.abort.abort();await Promise.allSettled([...this.pending]);await Promise.allSettled([...this.runs.values()]);await this.model.close?.();})();}
 }

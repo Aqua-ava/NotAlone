@@ -128,7 +128,7 @@ export const executionActions:StorageAction[]=[
   if(!unknown&&state==='failed')for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=?`,[r.owner_id,c.operation_id]);
   return true;
  }),
- action('unconfirmed','read',(tx,raw)=>{const i=raw as {owner_id:string;contact_id:string|null};return tx.all(`SELECT DISTINCT c.request_key FROM model_call c JOIN operation_scope s ON s.owner_id=c.owner_id AND s.operation_id=c.operation_id WHERE c.owner_id=? AND c.state IN ('sending','unknown')${i.contact_id===null?'':' AND s.source_contact_id=?'}`,i.contact_id===null?[textId(i.owner_id)]:[textId(i.owner_id),textId(i.contact_id)]).map(c=>String(c.request_key));}),
+ action('unconfirmed','read',(tx,raw)=>{const i=raw as {owner_id:string;contact_id:string|null};return tx.all(`SELECT DISTINCT c.request_key FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id JOIN operation_scope s ON s.owner_id=c.owner_id AND s.operation_id=c.operation_id WHERE c.owner_id=? AND o.purpose IN ('extraction','verification') AND c.state IN ('sending','unknown')${i.contact_id===null?'':' AND s.source_contact_id=?'}`,i.contact_id===null?[textId(i.owner_id)]:[textId(i.owner_id),textId(i.contact_id)]).map(c=>String(c.request_key));}),
  action('finish','write',(tx,raw,lease)=>{
   const i=raw as {ownerId:string;attemptId:string;outcome:{accepted:unknown[];extraction_completed:boolean;failure_kind:string|null;rejected_count:number};inputNos:number[]};const {attempt,task,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
   if(!i.outcome.extraction_completed||i.outcome.failure_kind!==null)fail('memory_extraction_protocol_incomplete');
