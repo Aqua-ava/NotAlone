@@ -125,7 +125,7 @@
 - 正常退出（监督器 INT→IPC `notalone-dev-quit`→`app.quit`）后同 scope `dev:status` 返回 `{"mode":"stopped","pids":[]}`，端口/环回供应商/App 进程退出。
 - 同根重开：`database-cutover/manifest.json` 仍 `completed`、同一 `databaseId=216a44ab-…`、`ownerId=00000000-0000-4000-8000-000000000001`；离线 `SqliteStorage.open` 复核 `schemaVersion=15`、`integrity=ok`、`foreignKeys=ok`；删除与清空决定持久。
 - **首轮观察与修复闭环**：初稿复验时（基线 `d8c55619`）重开后联系人页显示「联系人同步状态读取失败…当前不能确认授权范围」；t20 按本票回传的差异（首轮 source DELETE completed + 清空 boundary_pending）复现并定位为 `deletion.metadataAvailable` 在内容类未完成删除时误关闭名单服务（`/api/contacts`、`/api/sync/cli-bindings` 409 `identity_closed`、`/api/sync/status` 503），修复源 `154ac9e2` 经 `d1068fbf` 集成。本票在修复基线用同构根按原顺序重跑：认证 source DELETE 202→`completed`、清空进入 `boundary_pending`（`deletion_state=blocked`、`exact_channel_cutoff_required`）→ 正常退出（`dev:status stopped/pids[]`）→ 同根重启后 `/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status`、`/api/deletions`、清空状态均为 **200**；CDP 联系人页无读取失败、两位联系人可见（合成乙 2 条消息、合成甲 0 条消息 + 清空 pending），清空状态仍为 `boundary_pending`/blocked。隔离根无真实 CLI 时微信会话名单 `sessionIssue=unavailable` 属预期环境限制，不影响联系人目录/绑定/授权/删除进度读取。
-- 证据：`/tmp/t21-evidence/restart-fix-*.json|png`（删除 202、清空 pending 截图、重启后 6 个 API 响应、联系人页截图、最终 `stopped/pids[]`）。
+- 证据：`/tmp/t21-evidence/restart-fix-*.json|png`（删除 202、清空 pending 截图、重启后 6 个 API 响应、联系人页截图、最终 `stopped/pids[]`；`restart-fix-restart-contacts.png` 经 `file` 确认为 PNG image data，`read_image` 预览可能以 JPEG 归一化显示）。
 
 ### 4.6 清理
 
@@ -164,7 +164,7 @@
 | 05 真实来源删除链 | 未认证（依赖 03/06 真实捕获） | 真实来源捕获后按 05 账本执行真实删除；当前无真实捕获，只有合成来源与正式 HTTP 合成删除证据 |
 | 16/17 真实媒体类型关联 | 未认证（19 暂缓） | 真实微信媒体唯一关联与质量证明；用户暂缓不读取，入口保持关闭 |
 | 10 App 内模型相关控制状态 | 未在 App 构造 | 真实模型供应商/预算授权与可捕获窗口；本轮以控制测试 + 桌面 headless 覆盖，不冒充真实模型通过 |
-| 重启后联系人 UI 读取（本票观察） | **已定位并修复**（App 级闭环复验通过） | 05×06 交互：`deletion.metadataAvailable` 把清空内容类未完成删除误当身份删除，修复源 `154ac9e2` 经 `d1068fbf` 集成；新增 `sqlite-deletion-metadata-restart` 回归（批 I/K 通过），本票同构根 App 复验 contacts/cli-bindings/sync/setup/deletions/清空状态均 200 且 UI 无读取失败（§4.5）；20 切库路径无缺陷 |
+| 重启后联系人 UI 读取（本票观察项，已修复） | **已定位并修复**（App 级闭环复验通过） | 05×06 交互：`deletion.metadataAvailable` 把清空内容类未完成删除误当身份删除，修复源 `154ac9e2` 经 `d1068fbf` 集成；新增 `sqlite-deletion-metadata-restart` 回归（批 I/K 通过），本票同构根 App 复验 contacts/cli-bindings/sync/setup/deletions/清空状态均 200 且 UI 无读取失败（§4.5）；20 切库路径无缺陷 |
 | 20 真实旧业务清理 | **受阻** | 精确旧对象归属确认（本机无 PG socket；默认 userData 旧启动配置指向外部项目/握手，内容未读、归属未确认）、停止旧写入者、逐目标清理授权；未执行真实切库/drop/清理 |
 | 19 真实媒体唯一关联 | 用户暂缓 | 本轮不读取；保持未验证且入口不放行 |
 | 真实模型总体 | 仅 07/11 受限 | 其余无本轮真实调用授权；真实语义质量未认证；07/11 复测仅合成文本/固定范围 |
@@ -245,8 +245,15 @@ ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Content
 # 批 I（45/45；重启修复回归，普通 Node）
 node --test test/sqlite-deletion-metadata-restart.test.mjs test/sqlite-deletion-metadata.test.mjs test/sqlite-deletion.test.mjs \
   test/sqlite-clear-resync.test.mjs test/sqlite-clear-http.test.mjs test/sqlite-cutover-launch-sqlite-guard.test.mjs
-# 批 J（21/21；Electron 自带 Node）：cutover-restart-host、history-host、host-launch/close、contact-close
-# 批 K（27/27；Electron 自带 Node）：sqlite-deletion-metadata-restart + 批 H 六文件（修复后复跑）
+# 批 J（21/21；Electron 自带 Node）
+ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --test \
+  test/sqlite-cutover-restart-host.test.mjs test/sqlite-history-host.test.mjs test/sqlite-host-launch.test.mjs \
+  test/sqlite-host-close.test.mjs test/sqlite-contact-close.test.mjs
+# 批 K（27/27；Electron 自带 Node；sqlite-deletion-metadata-restart + 批 H 六文件修复后复跑）
+ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --test \
+  test/sqlite-deletion-metadata-restart.test.mjs test/sqlite-cutover-restart-host.test.mjs \
+  test/sqlite-cutover-structure.test.mjs test/sqlite-cutover-rehearsal.test.mjs test/sqlite-cutover-audit.test.mjs \
+  test/sqlite-cutover-retirement.test.mjs test/sqlite-cutover-disabled-capabilities.test.mjs
 # 两端类型检查（0 错误）：backend/desktop 各 `pnpm run typecheck`（= 锁定 typescript 7.0.2 的 `tsc --noEmit`；`backend-ts/node_modules/typescript/package.json` 实测 version=7.0.2，日志 /tmp/t21-typecheck.log 仅记命令与退出码）
 
 # 实际 App（隔离合成根，realpath；未配置真实模型、未操作微信、未打包）
@@ -269,4 +276,4 @@ node scripts/development-status.mjs --user-data-dir <realpath-root>   # 退出�
 - 未新增外部发送能力；未发送/撤回任何外部消息；未读取真实微信正文、名单、媒体或凭据；未调用真实模型；未访问/迁移/恢复真实业务库；未启用 13/15/18/19；未打包、未运行打包版、未改发布门禁；未 push/PR、未创建远端分支。
 - 未修改 `planning.md`、其他票文件、State/Triage（本票文件仅追加 Comments）；新增桌面测试 0 个，未改 `desktop/tests/inventory.json`。
 - 资源：合成根与空根删除、供应商停止、App/监督器退出、`dev:status stopped/pids[]`、无残留进程/端口；工作树依赖软链与 `.dev` 构建产物在提交前移除/保留为未跟踪且不提交；证据仅留 `/tmp` 与本记录，不含私人数据或可恢复定位。
-- 复核：`git status` 仅本任务文档/票 Comments 变更（软链已移除）；`git diff --check` 通过；公开前检查 `node scripts/check_public_history.mjs --ref 9ba6e733` issues 0（t03 只读复核，未带 working-tree，故 currentFiles 为 0）；本修订提交前 `--ref HEAD --working-tree` issues 0（currentFiles 1970），提交后同命令复跑 issues 0（currentFiles 1970 / historicalCommits 2894），记录于票 Comments 与最终回报。
+- 复核：`git status` 仅本任务文档/票 Comments 变更（软链已移除）；`git diff --check` 通过；公开前检查 `node scripts/check_public_history.mjs --ref 9ba6e733` issues 0（t03 只读复核，未带 working-tree，故 currentFiles 为 0）；`--ref abb9d36a --working-tree` issues 0（currentFiles 1970 / historicalCommits 2894）；本可选微调提交后同命令复跑 issues 0（currentFiles 1970 / historicalCommits 见最终回报）。
