@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/r266-tech/wx-cli/v2/internal/config"
 	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
@@ -41,15 +43,27 @@ type notaloneInspection struct {
 	CheckedPartitions []string              `json:"checkedPartitions"`
 }
 type notaloneHistorySession struct {
-	server   *server
-	selected *notaloneResolved
-	guards   []*notaloneSourceGuard
+	server    *server
+	selected  *notaloneResolved
+	guards    []*notaloneSourceGuard
+	life      context.Context
+	cancel    context.CancelFunc
+	snapshot  *notaloneSnapshot
+	inspected *notaloneInspection
+	program   func(context.Context) (notaloneProgramVersion, error)
+	certify   func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
 }
 
 func newNotaloneHistorySession(s *server) *notaloneHistorySession {
-	return &notaloneHistorySession{server: s}
+	life, cancel := context.WithCancel(context.Background())
+	return &notaloneHistorySession{server: s, life: life, cancel: cancel, program: readNotaloneProgramVersion, certify: certifyNotaloneProfile}
 }
 func (h *notaloneHistorySession) close() {
+	h.cancel()
+	if h.snapshot != nil {
+		_ = h.snapshot.Close()
+		h.snapshot = nil
+	}
 	for _, g := range h.guards {
 		_ = g.Close()
 	}
@@ -60,7 +74,22 @@ var notaloneIdentity = regexp.MustCompile(`^[A-Za-z0-9_.@-]{1,255}$`)
 
 // 仅使用现有schema2配置；不运行探钥、Keychain授权、缓存刷新或路径RPC。
 func (h *notaloneHistorySession) initialize() error {
-	if err := h.server.ensure(); err != nil {
+	// 缺少既有账号或根目录时直接拒绝，绝不走上游自动账号目录发现。
+	if !h.server.ok {
+		cfg, err := config.Load()
+		if err != nil || cfg.SchemaVersion != 2 || !cfg.Ready() || !notaloneIdentity.MatchString(cfg.Wxid) || !filepath.IsAbs(cfg.DBRoot) || filepath.Clean(cfg.DBRoot) != cfg.DBRoot {
+			return notaloneFailure("history_account_unavailable")
+		}
+		library, err := findWCDB()
+		if err != nil {
+			return notaloneFailure("history_native_unavailable")
+		}
+		h.server.cfg = cfg
+		h.server.wcdbPath = library
+		h.server.ok = true
+	}
+	cfg := h.server.cfg
+	if cfg == nil || cfg.SchemaVersion != 2 || !cfg.Ready() || !notaloneIdentity.MatchString(cfg.Wxid) || !filepath.IsAbs(cfg.DBRoot) || filepath.Clean(cfg.DBRoot) != cfg.DBRoot {
 		return notaloneFailure("history_account_unavailable")
 	}
 	if err := wcdb.BootstrapBounded(h.server.wcdbPath); err != nil {
@@ -71,6 +100,11 @@ func (h *notaloneHistorySession) initialize() error {
 func (h *notaloneHistorySession) currentAccount() error {
 	current, err := config.Load()
 	if err != nil || current.Wxid != h.server.cfg.Wxid || current.DBRoot != h.server.cfg.DBRoot || !current.Ready() {
+		return notaloneFailure("history_account_changed")
+	}
+	oldKeys, _ := json.Marshal(h.server.cfg.Keys)
+	newKeys, _ := json.Marshal(current.Keys)
+	if string(oldKeys) != string(newKeys) {
 		return notaloneFailure("history_account_changed")
 	}
 	for _, g := range h.guards {
@@ -110,8 +144,31 @@ func (h *notaloneHistorySession) resolve(ctx context.Context, name string) (nota
 	result = notaloneResolved{Account: h.server.cfg.Wxid, Conversation: username, DisplayName: rowString(rows[0], "display_name")}
 	return result, nil
 }
-func (h *notaloneHistorySession) bindMetadata(ctx context.Context, name string) (notaloneResolved, error) {
-	result, err := h.resolve(ctx, name)
+func (h *notaloneHistorySession) bindMetadata(ctx context.Context, name string) (result notaloneResolved, err error) {
+	base := len(h.guards)
+	alreadyBound := h.selected != nil
+	defer func() {
+		if !alreadyBound && err != nil {
+			for _, guard := range h.guards[base:] {
+				_ = guard.Close()
+			}
+			h.guards = h.guards[:base]
+			h.selected = nil
+		}
+	}()
+	var fingerprints []string
+	if h.selected == nil {
+		for _, part := range []struct{ dir, file string }{{"session", "session.db"}, {"contact", "contact.db"}} {
+			directory := filepath.Join(h.server.cfg.DBRoot, "db_storage", part.dir)
+			guard, err := newNotaloneSourceGuard(directory, []string{filepath.Join(directory, part.file)})
+			if err != nil {
+				return notaloneResolved{}, notaloneFailure("history_source_unverified")
+			}
+			h.guards = append(h.guards, guard)
+			fingerprints = append(fingerprints, guard.Fingerprint())
+		}
+	}
+	result, err = h.resolve(ctx, name)
 	if err != nil {
 		return result, err
 	}
@@ -119,17 +176,6 @@ func (h *notaloneHistorySession) bindMetadata(ctx context.Context, name string) 
 		return result, notaloneFailure("history_scope_changed")
 	}
 	if h.selected == nil {
-		var fingerprints []string
-		for _, part := range []struct{ dir, file string }{{"session", "session.db"}, {"contact", "contact.db"}} {
-			directory := filepath.Join(h.server.cfg.DBRoot, "db_storage", part.dir)
-			guard, e := newNotaloneSourceGuard(directory, []string{filepath.Join(directory, part.file)})
-			if e != nil {
-				h.close()
-				return result, notaloneFailure("history_source_unverified")
-			}
-			h.guards = append(h.guards, guard)
-			fingerprints = append(fingerprints, guard.Fingerprint())
-		}
 		result.SourceGeneration = notaloneHash(result.Account, strings.Join(fingerprints, "|"))
 		h.selected = &result
 	} else {
@@ -199,28 +245,108 @@ func (h *notaloneHistorySession) inspect(ctx context.Context) (notaloneInspectio
 	result.SchemaFingerprint = notaloneHash(string(encoded), strings.Join(result.CheckedPartitions, "|"))
 	return result, nil
 }
+
+type notaloneSupportReport struct {
+	Protocol             string            `json:"protocol"`
+	ProfileID            string            `json:"profileId"`
+	AdapterVersion       string            `json:"adapterVersion"`
+	Status               string            `json:"status"`
+	Reason               *string           `json:"reason"`
+	AccountKey           string            `json:"accountKey"`
+	ConversationKey      string            `json:"conversationKey"`
+	SourceGeneration     string            `json:"sourceGeneration"`
+	ProgramVersion       string            `json:"programVersion"`
+	Build                string            `json:"build"`
+	ArtifactSHA256       string            `json:"artifactSha256"`
+	SchemaFingerprint    string            `json:"schemaFingerprint"`
+	DeclaredPrimaryKey   []string          `json:"declaredPrimaryKey"`
+	ServerAliasSemantics string            `json:"serverAliasSemantics"`
+	Identity             string            `json:"identity"`
+	StatusSemantics      string            `json:"statusSemantics"`
+	Continuity           string            `json:"continuity"`
+	Capabilities         map[string]string `json:"capabilities,omitempty"`
+}
+
+func notaloneFileHash(file string) (string, error) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return "", notaloneFailure("history_artifact_unverified")
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}
+func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportReport, *notaloneReadProfile, error) {
+	result := notaloneSupportReport{Protocol: "private-history-v1", AdapterVersion: "1", Status: "unverified", AccountKey: h.selected.Account, ConversationKey: h.selected.Conversation, SourceGeneration: h.selected.SourceGeneration, ServerAliasSemantics: "unverified", Identity: "source-table-local-v1", DeclaredPrimaryKey: []string{}}
+	inspected, err := h.inspect(ctx)
+	if err != nil {
+		return result, nil, err
+	}
+	program, err := h.program(ctx)
+	if err != nil {
+		return result, nil, err
+	}
+	certification := h.certify(program, inspected.Tables)
+	result.ProfileID = certification.ProfileID
+	result.ProgramVersion = certification.ProgramVersion
+	result.Build = certification.Build
+	result.Status = certification.Status
+	result.SchemaFingerprint = inspected.SchemaFingerprint
+	result.DeclaredPrimaryKey = certification.DeclaredPrimaryKey
+	result.StatusSemantics = certification.StatusSemantics
+	result.Continuity = certification.Continuity
+	result.Capabilities = certification.Capabilities
+	if certification.Reason != "" {
+		reason := certification.Reason
+		result.Reason = &reason
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return result, nil, notaloneFailure("history_artifact_unverified")
+	}
+	result.ArtifactSHA256, err = notaloneFileHash(executable)
+	if err != nil {
+		return result, nil, err
+	}
+	library, err := notaloneFileHash(h.server.wcdbPath)
+	if err != nil || library != "4f05cafc4626a142afca1818f0a88c4092a13d5f4c83e30cd5125b558ba0417d" {
+		reason := "history_artifact_unverified"
+		result.Status = "unverified"
+		result.Reason = &reason
+		return result, nil, nil
+	}
+	if h.inspected != nil && h.snapshot != nil && h.inspected.SchemaFingerprint != inspected.SchemaFingerprint {
+		return result, nil, notaloneFailure("history_schema_changed")
+	}
+	h.inspected = &inspected
+	return result, certification.ReadProfile, nil
+}
 func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRequest) (any, error) {
-	if r.Operation == "resolve" {
+	switch r.Operation {
+	case "resolve":
 		if r.Consent != "selected-metadata-v1" || r.DisplayName == "" || r.Account != "" || r.Conversation != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
-	} else if r.Operation == "inspect" {
-		if r.Consent != "selected-schema-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+	case "inspect", "support", "target", "page":
+		consent := "selected-schema-v1"
+		if r.Operation == "target" || r.Operation == "page" {
+			consent = "selected-history-v1"
+		}
+		if r.Consent != consent || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || (r.Operation != "page" && (r.Target != "" || r.Cursor != "")) || (r.Operation == "page" && r.Target == "") {
 			return nil, notaloneFailure("history_request_invalid")
 		}
-	} else {
+	default:
 		return nil, notaloneFailure("history_operation_unsupported")
 	}
 	if err := h.initialize(); err != nil {
 		return nil, err
 	}
+	if err := h.currentAccount(); err != nil {
+		return nil, err
+	}
 	if r.Operation == "resolve" {
-		if r.Consent != "selected-metadata-v1" || r.Account != "" || r.Conversation != "" || r.Target != "" || r.Cursor != "" {
-			return nil, notaloneFailure("history_request_invalid")
-		}
 		return h.bindMetadata(ctx, r.DisplayName)
 	}
-	if h.selected == nil || r.Account != h.selected.Account || r.Conversation != h.selected.Conversation || r.DisplayName != "" {
+	if h.selected == nil || r.Account != h.selected.Account || r.Conversation != h.selected.Conversation {
 		return nil, notaloneFailure("history_scope_unverified")
 	}
 	if err := h.currentAccount(); err != nil {
@@ -229,10 +355,41 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	if _, err := h.bindMetadata(ctx, h.selected.Conversation); err != nil {
 		return nil, err
 	}
-	if r.Operation == "inspect" && r.Consent == "selected-schema-v1" && r.Target == "" && r.Cursor == "" {
+	if r.Operation == "inspect" {
 		return h.inspect(ctx)
 	}
-	return nil, notaloneFailure("history_operation_unsupported")
+	report, profile, err := h.support(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if r.Operation == "support" {
+		return report, nil
+	}
+	if report.Status != "supported" || profile == nil {
+		return nil, notaloneFailure("history_support_unverified")
+	}
+	if r.Operation == "target" {
+		if h.snapshot != nil {
+			_ = h.snapshot.Close()
+			h.snapshot = nil
+		}
+		snapshot, err := newNotaloneSnapshot(h.life, h.server, *h.selected, *h.inspected, *profile)
+		if err != nil {
+			return nil, err
+		}
+		h.snapshot = snapshot
+		return snapshot.Target(), nil
+	}
+	if h.snapshot == nil || r.Target != h.snapshot.Target().Descriptor {
+		return nil, notaloneFailure("history_target_invalid")
+	}
+	page, err := h.snapshot.Page(ctx, r.Cursor)
+	if err != nil {
+		_ = h.snapshot.Close()
+		h.snapshot = nil
+		return nil, err
+	}
+	return page, nil
 }
 func runNotaloneHistoryWithServer(s *server, input io.Reader, output io.Writer) {
 	session := newNotaloneHistorySession(s)

@@ -120,7 +120,7 @@ func TestNotAloneSnapshotPagesHoldCutWhileWriterContinues(t *testing.T) {
 				t.Fatalf("跨页期间正常写入失败：%v", e)
 			}
 		}
-		if len(page.Records) > 100 {
+		if len(page.Records) > 16 {
 			t.Fatal("超出每页预算")
 		}
 		if pages == 1 && page.CursorIn != nil {
@@ -152,7 +152,7 @@ func TestNotAloneSnapshotPagesHoldCutWhileWriterContinues(t *testing.T) {
 		}
 		cursor = *page.CursorOut
 	}
-	if pages != 3 || len(seen) != 206 || seen["206"] || seen["207"] {
+	if pages != 13 || len(seen) != 206 || seen["206"] || seen["207"] {
 		t.Fatalf("固定目标不完整：pages=%d count=%d", pages, len(seen))
 	}
 }
