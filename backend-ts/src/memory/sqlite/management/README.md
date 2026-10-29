@@ -13,3 +13,5 @@
 正常宿主在07结束后通过 `afterRunSettled` 调用 `publishRun`，仅使用已存核验结果，不新增模型调用。`memory.publishRun` 以 producer event 固定系统幂等键；已有决定不重复发布。管理HTTP只开放GET范围读取与POST用户决定，Bearer认证且拒绝Origin/owner/system字段。Worker在registry用 `createReplyCandidateActions(memoryKnowledgeReader)` 安装正式消费者，宿主没有第二套知识查询或模型壳。
 
 `MemoryKnowledgeItem.citationSources` 是实际语义引用，`qualificationSources` 是完整冻结贡献及版本祖先的资格依赖；`sources`为二者精确并集，供12输入与删除闭包使用。管理DTO单列 `contributingContactIds`，本人页面按完整贡献归属过滤，不能以B的单个引句把A+B任务展示为B独立资料。
+
+来源核验不是旧新关系裁决。默认 `publishRun` 仅在该范围尚无记忆身份时自动新增；已有身份、未决含义、过期适用期或未完成条件／事件核验保持候选待决定，不以另建身份绕过保护或撤回。内部 `auto_update` 仍要求精确现有目标、当前头CAS及当前保护复验；产品不开放让页面指定系统更新。这里不新增关系判断模型或将未完成关系证明冒称可自动覆盖。

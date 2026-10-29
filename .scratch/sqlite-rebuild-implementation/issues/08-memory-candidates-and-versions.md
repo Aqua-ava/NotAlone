@@ -57,3 +57,5 @@ Blocked by: [07 固定范围的记忆提取与核验](07-fixed-scope-memory-extr
 宿主接线检查点：实际merge root `97aebf8d`，保留12 `candidateTurns.configurationFor` resolver。正式reader实际安装点是Worker registry的 `createReplyCandidateActions(memoryKnowledgeReader)`，无需给主线程候选宿主增加无效reader壳。认证管理HTTP和07处理结束 `afterRunSettled→publishRun` 已落盘，使用现有sharedModel/provider/arbiter，不新增模型调用；共9/9管理/认证/实际08→12消费者组合与backend types通过。组合由07正常合成supplier形成正式本人记忆、12正常DSH环回生成，05删除A后B讨论候选清空且请求未增加，非预塞已采纳结果。
 
 新增待root分类：`backend-ts/test/sqlite-memory-management-http.test.mjs`、`backend-ts/test/sqlite-memory-reply-integration.test.mjs`（current Node）；`desktop/tests/sqlite-memory-management.test.mjs`（safe-node）、`desktop/tests/sqlite-memory-management-view.test.mjs`（headless）。桌面独立组件/桥及入口13/13；真实App尚待本次已获短lease。07旧正式profile的formalMemoryRows断言随正常自动发布变为12，未重跑旧4/4流程；本票新增窄hook与写者消费者组合验证发布和删除，新真实质量认证仍未知。
+
+后续Spec窄审发现并补真实red→green：默认publisher原会对已有人工保护记忆另建auto身份（2条而非1条）。现该scope存在记忆身份时保留关系待定；条件/事件不完整、未决含义或已过期的适用期也不发布，不以来源核验代替旧新裁决。自动更新内部动作仍核精确目标、头CAS及当前保护；不新增外部关系模型。新保护反例、完整10项本域/认证/真实消费者组合、backend types通过。正常4产物现为4候选+3正式记忆+3版本，旧profile预期改10；root此前12行验证不用于本次变化，其余未变07证据复用。

@@ -54,9 +54,9 @@ test('05来源删除清候选、版本及敏感决定，本人跨联系人闭包
  const aScope={scopeKind:'contact',contactId:f.a},selfScope={scopeKind:'self',contactId:null};
  const candidate=(await f.management.read(aScope)).candidates[0];
  const adopted=await f.management.decide({requestKey:'before-delete',action:'edit_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision],body:'保留必要来源的人工改写'});
- await f.management.decide({requestKey:'independent-self',action:'manual',scope:selfScope,body:'独立手录仍然合法'});
  const selfBefore=await f.management.read(selfScope);assert.equal(selfBefore.candidates.length,2);
  await f.management.automatic({requestKey:'self-auto',action:'auto_accept',candidateIds:[selfBefore.candidates[1].id],candidateRevisions:[selfBefore.candidates[1].stateRevision]});
+ await f.management.decide({requestKey:'independent-self',action:'manual',scope:selfScope,body:'独立手录仍然合法'});
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');
  const {ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
  const deletion=new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root));
@@ -122,4 +122,11 @@ test('处理结束窄hook从07正常核验输出自动发布，重试不重复�
  const before=await management.read({scopeKind:'contact',contactId});assert.equal(before.memories.length,1);assert.equal(before.memories[0].current.adoptionMode,'auto');assert.equal(before.candidates[0].state,'adopted');
  assert.equal(before.memories[0].decisions[0].actorKind,'system');await management.publishRun(run.runId);const after=await management.read({scopeKind:'contact',contactId});assert.deepEqual(after,before);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('已有记忆和人工保护时默认发布不能另建身份绕过旧新关系裁决',async t=>{
+ const f=await prepared(t),s={scopeKind:'contact',contactId:f.a};await f.management.importRun(f.runId);
+ const manual=await f.management.decide({requestKey:'protected-old',action:'manual',scope:s,body:'联系人长期住在台北。'});let m=(await f.management.read(s)).memories[0];
+ await f.management.decide({requestKey:'protect-old',action:'protect',memoryId:m.id,expectedVersionNo:'1',expectedHeadRevision:m.headRevision});
+ await f.management.publishRun(f.runId);const after=await f.management.read(s);assert.equal(after.memories.length,1);assert.equal(after.memories[0].id,manual.memoryId);assert.equal(after.candidates[0].state,'pending');assert.equal(after.memories[0].current.body,'联系人长期住在台北。');
 });

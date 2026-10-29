@@ -12,7 +12,7 @@ test('真实08写者与12消费者同事务冻结正式版本，删除本人贡�
  await f.contacts.setReading(true);for(const contactId of f.ids)await f.history.synchronize(contactId);await f.contacts.setReading(false);
  const management=new SqliteMemoryManagement(f.storage,f.owner);let extraction;extraction=new SqliteMemoryExtraction(f.storage,f.owner,modelPort(()=>extraction.accounting,supplier().respond),f.holders,runId=>management.publishRun(runId));t.after(()=>extraction.close());
  await extraction.start('08-to-12-writer-consumer');await extraction.waitForIdle();
- assert.equal((await management.read({scopeKind:'self',contactId:null})).memories.length,2);
+ assert.equal((await management.read({scopeKind:'self',contactId:null})).memories.length,1);
  const d=await f.discussions.newDiscussion(b),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
  await turns.generate({contactId:b,discussionId:d.id,requestKey:randomUUID(),text:'结合当前本人资料表达',confirmedContact:true});
  const before=await service.view(b,d.id);assert.equal(before[0].candidates[0].basis[0].verification,'actual_input');
