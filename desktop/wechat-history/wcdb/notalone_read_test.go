@@ -84,3 +84,45 @@ func TestNotAloneBoundedErrorsAreRedacted(t *testing.T) {
 		t.Fatal("未拒绝无效行预算")
 	}
 }
+
+func TestNotAloneBoundedTextPreservesNULAndInvalidTail(t *testing.T) {
+	db := boundedTestDB(t)
+	rows, err := db.QueryBounded(context.Background(), 1, "SELECT CAST(x'610062' AS TEXT) AS valid,CAST(x'6100ff' AS TEXT) AS invalid,x'610062' AS blob,9223372036854775807 AS exact,NULL AS absent")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("合成读取失败：%v", err)
+	}
+	if got, ok := rows[0]["valid"].(string); !ok || got != "a\x00b" {
+		t.Fatalf("TEXT内NUL被截断：%#v", rows[0]["valid"])
+	}
+	if got, ok := rows[0]["invalid"].(string); !ok || got != string([]byte{'a', 0, 0xff}) {
+		t.Fatalf("损坏尾部被静默丢弃：%x", []byte(got))
+	}
+	if got, ok := rows[0]["blob"].([]byte); !ok || string(got) != "a\x00b" {
+		t.Fatal("BLOB类型或内容改变")
+	}
+	if rows[0]["exact"] != int64(9223372036854775807) || rows[0]["absent"] != nil {
+		t.Fatal("整数或NULL类型改变")
+	}
+}
+
+func TestNotAloneBoundedCellLimitRejectsWholeQuery(t *testing.T) {
+	db := boundedTestDB(t)
+	const limit = 8 << 20
+	rows, err := db.QueryBounded(context.Background(), 1, "SELECT CAST(zeroblob(?) AS TEXT) AS text,zeroblob(?) AS blob", int64(limit), int64(limit))
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("边界cell应完整可读：%v", err)
+	}
+	if len(rows[0]["text"].(string)) != limit || len(rows[0]["blob"].([]byte)) != limit {
+		t.Fatal("边界cell被截断")
+	}
+	for _, query := range []string{"SELECT 'prefix' AS content UNION ALL SELECT CAST(zeroblob(?) AS TEXT)", "SELECT x'61' AS content UNION ALL SELECT zeroblob(?)"} {
+		rows, err = db.QueryBounded(context.Background(), 2, query, int64(limit+1))
+		if err == nil || err.Error() != "bounded_query_cell_limit" || rows != nil {
+			t.Fatalf("超限cell必须拒绝整页且不能保留前缀行：rows=%d err=%v", len(rows), err)
+		}
+	}
+	rows, err = db.QueryBounded(context.Background(), 1, "SELECT 7 AS value")
+	if err != nil || len(rows) != 1 || rows[0]["value"] != int64(7) {
+		t.Fatalf("拒绝后连接未可安全复用：%v", err)
+	}
+}
