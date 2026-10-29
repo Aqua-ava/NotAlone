@@ -27,7 +27,7 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | --- | --- | --- | --- |
 | [01 SQLite 基础与生命周期](issues/01-sqlite-runtime-lifecycle.md) | 无 | ready-for-agent | resolved |
 | [02 联系人绑定与同步授权](issues/02-contact-binding-and-read-grants.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
-| [03 首次历史同步与消息展示](issues/03-private-history-sync.md) | [02](issues/02-contact-binding-and-read-grants.md) | ready-for-agent | claimed |
+| [03 首次历史同步与消息展示](issues/03-private-history-sync.md) | [02](issues/02-contact-binding-and-read-grants.md) | needs-info | claimed |
 | [04 增量同步与读取控制](issues/04-incremental-sync-controls.md) | [03](issues/03-private-history-sync.md) | ready-for-agent | open |
 | [05 统一来源删除与清理流程](issues/05-source-deletion-and-cleanup.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | open |
@@ -102,7 +102,7 @@ flowchart TD
 
 ## 当前总进度
 
-本轮有效17项：已集成8项（01、02、05、07、11、14、16、17）；进行中3项（03、08、12）；等待依赖6项（04、06、09、10、20、21）。08、12已创建独立执行会话和工作树，须核验实际前置提交后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03真实消息状态认证缺口仍如实保留。
+本轮有效17项：已集成8项（01、02、05、07、11、14、16、17）；执行中2项（08、12）；确实受阻1项（03：真实状态语义及来源生命周期未认证）；等待依赖6项（04、06、09、10、20、21）。08、12已在独立工作树核验前置后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03实现及合成／实际App已完成的部分复用证据，不重新执行。
 
 ## 领取与并行约定
 
