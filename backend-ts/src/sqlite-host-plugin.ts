@@ -27,7 +27,6 @@ import { SqliteHistoryService } from './history/sqlite/service.ts';
 import { SqliteHistoryHttp, historyQueryAllowed, projectHistorySyncStatus } from './history/sqlite/http.ts';
 import { createWechatHistoryChannel } from './history/sqlite/wechat-channel.ts';
 import { FirstHistoryCoordinator } from './history/sqlite/coordinator.ts';
-import { createVoiceMediaAdapter } from './media/voice/index.ts';
 import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 
 export const name = 'notalone-sqlite-host';
@@ -133,9 +132,10 @@ export async function apply(ctx: Context) {
     const library=capabilities.skillPackageRoot?new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot):undefined;
     const skills=library?new SqliteSkillHttp(library,req=>authorizeSqliteRequest(req,token)):undefined;
     const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData));
+    // 语音保存与格式转换本轮暂缓；受管资料和共同删除服务继续运行。
     media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
-    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:[createVoiceMediaAdapter()]});
+    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:[]});
     await media.initialize();
     contacts.setReadStop(async contactId=>{await Promise.all([firstHistory?firstHistory.stop(contactId):history?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);});
     const mediaHttp = new SqliteMediaHttp(media);
