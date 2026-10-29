@@ -469,3 +469,51 @@ test('在途已发送不是未知回执：发送中保持处理中，可暂停�
  release();await x.service.waitForIdle(run.runId);
  assert.equal((await x.service.read(run.runId)).succeeded,1);
 });
+
+test('发送中崩溃重开显示未知回执且不提供继续、不自动提交',async t=>{
+ const f=await fixtureWithMessages(t,{a:['我长期住在高雄。']});
+ const external=supplier();
+ let service,release;const gate=new Promise(resolve=>release=resolve);let entered;const enteredPromise=new Promise(resolve=>entered=resolve);
+ const base=modelPort(()=>service.accounting,async(request,input)=>{entered();await gate;return external.respond(request,input);});
+ const port={prepare:base.prepare,close:base.close,invoke:base.invoke,get calls(){return base.calls;}};
+ service=new SqliteMemoryExtraction(f.storage,owner,port);t.after(async()=>{release();await service.close();});
+ const run=await service.start('control-sending-crash');await enteredPromise;
+ const contact=contactTask(await taskRows(f,run.runId),f.ca);
+ const running=await until(async()=>(await attempts(f,contact.id)).find(row=>row.state==='running'));
+ await f.storage.execute('fixture.setRuntimeToken',{ownerId:owner,attemptId:running.id,token:'synthetic-crashed-runtime'});
+ await f.storage.execute('memoryExtraction.recover',{ownerId:owner});
+ const view=await service.read(run.runId);
+ assert.equal(view.status,'blocked');assert.equal(view.statusReason,'model_receipt_unknown');
+ assert.deepEqual(view.actions,[],'发送中崩溃不能提供继续');
+ assert.equal(view.unknown,1);
+ const callsNow=await calls(f,run.runId);
+ assert.equal(callsNow.filter(row=>row.state==='unknown').length,1,'发送中崩溃保守记为未知');
+ // 迟到但可验证的回执只结算账本；旧租约不能提交业务，但可安全继续并复用该回执。
+ release();await service.waitForIdle(run.runId);
+ const after=await service.read(run.runId);
+ assert.equal(after.statusReason,'interrupted_known_receipts');
+ assert.deepEqual(after.actions,['continue']);
+ assert.equal(after.candidates.length,0,'崩溃旧租约不能提交业务');
+ const callsBeforeContinue=base.calls;
+ await service.continue(run.runId,after.controlVersion,randomUUID());
+ await service.waitForIdle(run.runId);
+ const done=await service.read(run.runId);
+ assert.equal(done.succeeded,done.total,'可验证回执安全恢复后完成固定目标');
+ // 崩溃前响应载荷未归档（回执已结算但 model_output 事件未落库），恢复时允许各补一次提取与核验；不重放未知回执。
+ assert.equal(base.calls-callsBeforeContinue,2);
+ assert.equal((await calls(f,run.runId)).filter(row=>row.state==='unknown'||row.state==='sending').length,0);
+});
+
+test('文档阶段共用模型故障归入整轮固定原因，不显示完成',async t=>{
+ const f=await fixtureWithMessages(t,{a:['我长期住在高雄。']});
+ const x=extractionFixture(f);t.after(()=>x.service.close());
+ const run=await x.service.start('control-document-shared');await x.service.waitForIdle(run.runId);
+ const before=await x.service.read(run.runId);
+ assert.equal(before.sharedFaultCode,null);
+ // 09 文档阶段 noteFailure 只写任务 error_code；此处按该合同注入固定原因验证整轮投影。
+ await f.storage.execute('fixture.setTaskError',{ownerId:owner,runId:run.runId,scopeKind:'contact',code:'document_model_unconfigured'});
+ const view=await x.service.read(run.runId);
+ assert.equal(view.sharedFaultCode,'document_model_unconfigured');
+ assert.equal(view.status,'blocked');assert.equal(view.statusReason,'document_model_unconfigured');
+ assert.notEqual(view.status,'completed');
+});

@@ -15,6 +15,10 @@ export const sharedFailureCodes=new Set([
  'extraction_model_provider_unavailable',
  'extraction_model_scope_invalid',
  'memory_extraction_model_configuration_invalid',
+ 'document_model_unconfigured',
+ 'document_model_configuration_invalid',
+ 'document_model_credentials_unavailable',
+ 'document_model_scope_invalid',
 ]);
 export const isSharedFailure=(code:unknown):boolean=>typeof code==='string'&&sharedFailureCodes.has(code);
 

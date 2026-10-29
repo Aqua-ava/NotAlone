@@ -9,6 +9,10 @@ const sharedReasons: Record<string, string> = {
   extraction_model_provider_unavailable: '模型服务暂不可用',
   extraction_model_scope_invalid: '模型用途范围不可用',
   memory_extraction_model_configuration_invalid: '模型配置无效',
+  document_model_unconfigured: '模型尚未配置',
+  document_model_configuration_invalid: '模型配置无效',
+  document_model_credentials_unavailable: '模型凭据不可用',
+  document_model_scope_invalid: '模型用途范围不可用',
 };
 const blockedReasons: Record<string, string> = {
   model_receipt_unknown: '调用结果待核实',
@@ -27,7 +31,7 @@ const blockedReasons: Record<string, string> = {
 function reasonText(reason: string | null): string {
   if (!reason) return '处理暂时受阻';
   if (blockedReasons[reason]) return blockedReasons[reason];
-  if (sharedReasons[reason]) return `模型配置或服务不可用：${sharedReasons[reason]}。修复后可继续。`;
+  if (sharedReasons[reason]) return `模型配置或服务不可用：${sharedReasons[reason]}。修复后可继续原任务。`;
   return '处理暂时受阻，请查看处理原因后重试';
 }
 function stageText(run: FixedProcessingRun): string {
@@ -132,7 +136,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '', onRunUpdated
       {noNewMemory && <p>已处理，未产生新记忆</p>}
       {run.failed > 0 && <p>有 {run.failed} 条目标尚未通过提取核验。</p>}
       {run.unknown > 0 && <p>有 {run.unknown} 条目标调用结果未知，核实前不会重新发送。</p>}
-      {run.sharedFaultCode && <p>模型配置或服务不可用：{sharedReasons[run.sharedFaultCode] ?? '通用模型故障'}。修复后重新开始处理。</p>}
+      {run.sharedFaultCode && run.sharedFaultCode !== run.statusReason && <p>模型配置或服务不可用：{sharedReasons[run.sharedFaultCode] ?? '通用模型故障'}。修复后可继续原任务或重新开始处理。</p>}
       {run.laterStages==='completed'?<p>主题整理与长期概览已完成。</p>:<p>主题整理、长期概览尚未全部完成。</p>}
       {run.candidates.length > 0 && <section aria-label="本轮已核验候选">
         <h3>来源已核验的候选</h3>
