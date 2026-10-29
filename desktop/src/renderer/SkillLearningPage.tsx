@@ -25,7 +25,7 @@ export function SkillLearningPage({ session }: { session: ContactSessionView }) 
     const unsubscribe=window.notalone.backend?.onStateChanged(state=>{if(state.phase==='connected')read();else{++request;setLibrary(null);setFailure('本机连接已变化，请重新读取 Skill 状态。');}});
     return()=>{active=false;unsubscribe?.();};
   },[bridge,attempt]);
-  if(library?.mode==='sqlite')return <SqliteSkillLibraryPage initial={library} bridge={bridge} onModeChange={setLibrary}/>;
+  if(library?.mode==='sqlite')return <SqliteSkillLibraryPage initial={library} bridge={bridge} onModeChange={setLibrary} onUnavailable={()=>{setLibrary(null);setFailure('Skill 状态暂不可用，请重新读取。');}}/>;
   if(library?.mode==='legacy')return <LegacySkillLearningPage session={session}/>;
   return <section aria-label="Skill管理"><h2>已有 Skill</h2>{failure?<><p role="alert">{failure}</p><button className="button" onClick={()=>setAttempt(value=>value+1)}>重新读取 Skill 状态</button></>:<p role="status">正在核对 Skill 状态…</p>}</section>;
 }
