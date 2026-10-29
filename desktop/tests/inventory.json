@@ -169,7 +169,8 @@
     "tests/message-media-view.test.mjs",
     "tests/skill-learning/sqlite-library-view.test.mjs",
     "tests/sqlite-discussion-composer.test.mjs",
-    "tests/sqlite-discussion-panel.test.mjs"
+    "tests/sqlite-discussion-panel.test.mjs",
+    "tests/sqlite-reply-candidates.test.mjs"
   ],
   "isolated-http-pg": [
     "tests/overview-reply-retrieval.test.mjs",

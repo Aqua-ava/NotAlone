@@ -1,3 +1,6 @@
+import {SqliteReplyCandidateService} from './candidates/service.ts';
+import {SqliteReplyTurns} from './candidates/turns.ts';
+import {SqliteReplyCandidateHttp} from './candidates/http.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
@@ -26,15 +29,18 @@ export async function createSqliteDiscussionHost(options:{
   model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,
   authorize:async()=>{if(stopping)throw new StorageFailure('discussion_runtime_closed');},
  }):undefined;
+ const candidates=new SqliteReplyCandidateService(options.storage,options.ownerId);
+ const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,discussions:service,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
+ const candidateHttp=new SqliteReplyCandidateHttp({storage:options.storage,service:candidates,turns:candidateTurns,authorize:options.authorizeRequest});
  const handler=new SqliteDiscussionHttp(service,options.authorizeRequest,runtime,turns),requests=new Set<Promise<boolean>>();
  const http={handle(request:IncomingMessage,response:ServerResponse):Promise<boolean>{
   if(stopping){response.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});response.end(JSON.stringify({error:'discussion_runtime_closed'}));return Promise.resolve(true);}
-  const pending=handler.handle(request,response);requests.add(pending);const release=()=>requests.delete(pending);pending.then(release,release);return pending;
+  const pending=(async()=>await candidateHttp.handle(request,response)||await handler.handle(request,response))();requests.add(pending);const release=()=>requests.delete(pending);pending.then(release,release);return pending;
  }};
- return {service,runtime,turns,http,
+ return {service,runtime,turns,candidates,candidateTurns,http,
   close():Promise<void>{
    stopping=true;
-   return closing??=(async()=>{await turns?.close();await runtime.close();await Promise.allSettled([...requests]);})().catch(error=>{closing=undefined;throw error;});
+   return closing??=(async()=>{await Promise.all([turns?.close(),candidateTurns?.close()]);await runtime.close();await Promise.allSettled([...requests]);})().catch(error=>{closing=undefined;throw error;});
   },
  };
 }
