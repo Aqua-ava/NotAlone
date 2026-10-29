@@ -31,7 +31,7 @@
 - 已实现表的逻辑目录字段预期 674 个，实际 726 个；净增 52 个。差异构成为 **49 个目录字段未落为同名列** + **101 个实现补充字段**。
   - 49 个未落字段集中在：暂缓目标的 quality／feedback／preference 分支；发布指针与循环 FK 字段（`owner.current_publication_id`、`contact.current_publication_id`、`processing_task.accepted_publication_id`、`reply_context.owner/contact_publication_id`）；材料／版本分支（`run_input`、`execution_input`、`reply_context_item`、`reply_basis` 等）。影响：这些事实在本轮范围外或由实现子表（`reply_candidate_input*`、`reply_candidate_context`、`reply_execution_input` 等）与 06／07／09／12 的既有合同承载，不能据此声称 77 表逐字段 1:1 兼容。
   - 101 个实现补充字段集中在：运行代次／租约／幂等键、证据与摘要、隔离与清理账本、显式失败原因、`history_*` 成员／fence／restore、`media_file` 发布与清理状态、`runtime_copy` 目录身份与清理意图、Skill 目录身份与启用来历。影响：属于实现必要账本，不新增领域平台；结构基线 fixture 已锁定，后续漂移会使结构审计测试失败。
-- 外键：逻辑目录 215 个基础 FK 契约，落到本轮已实现表的 186 组；实际 149 组。**51 个契约组未以 SQL FK 落地**，同时实现新增 14 组实际 FK，净差 37。分类与影响：
+- 外键：逻辑目录 215 个基础 FK 契约，落到本轮已实现表的 186 组；实际 **149 组**（已实现逻辑表白名单口径）。**51 个契约组未以 SQL FK 落地**，同时实现新增 14 组实际 FK，净差 37。结构基线 metadata 的 `foreignKeyGroups=173` 是包含 15 张实现关联／账本表在内的 **82 表全口径**，与 149 的外键契约口径不同，两者不能直接比较。分类与影响：
   | 类别 | 组数 | 影响与处置 |
   | --- | ---: | --- |
   | 暂缓目标表 | 11 | 目标表不建（13／15），FK 随之不建；入口关闭 |
@@ -128,7 +128,7 @@
 | --- | --- | --- |
 | 后端锁定类型 | `cd backend-ts && <主仓>/backend-ts/node_modules/.bin/tsc --noEmit`（TypeScript 7.0.2） | 0 错误 |
 | 桌面锁定类型 | `cd desktop && <同一 tsc> --noEmit` | 0 错误 |
-| 切换结构／演练／审计／退役／停用／跨重启宿主 | `cd backend-ts && node --test test/sqlite-cutover-{structure,rehearsal,audit,retirement,disabled-capabilities,restart-host}.test.mjs` | 25/25 通过（4＋11＋2＋5＋2＋1） |
+| 切换结构／演练／审计／退役／停用／跨重启／清除重启／启动守卫 | `cd backend-ts && node --test test/sqlite-cutover-{structure,rehearsal,audit,retirement,disabled-capabilities,restart-host,launch-sqlite-guard}.test.mjs test/sqlite-deletion-metadata-restart.test.mjs` | 28/28 通过（4＋11＋2＋5＋2＋1＋1＋2） |
 | 相关后端模块 | 见 §9.1 | 113/113 通过 |
 | 桌面启动相关 | `cd desktop && node --test tests/sqlite-development.test.mjs tests/startup-continuity.test.mjs tests/pure-ts-startup.test.mjs` | 16/16 通过 |
 | 测试清单 | `cd desktop && node scripts/test-inventory.mjs` | 登记通过 |
@@ -144,9 +144,10 @@
 
 - 本树实跑：`tests 1559 / pass 946 / fail 612`，失败文件集合 108 个；除 `sqlite-memory-profile.test.mjs` 的 2 项断言失败外，全部为「本机无 PostgreSQL」基线（`connect ENOENT /tmp/.s.PGSQL.5432` 或「合成 PG 准备失败」）。
 - 15ac355a 隔离基线树实跑：`tests 1506 / pass 928 / fail 577`，失败文件集合 111 个；非 PG 失败同样为 `sqlite-memory-profile.test.mjs` 的 2 项。
-- 按失败文件集合对比：本树**无新增失败文件**；相对基线减少/消失的旧文件为 `host-launch.test.mjs`、`python-retirement-host.test.mjs`（已按退役登记删除）与 `host-readiness.test.mjs`。失败计数差异来自 PG 连接失败的子测试数与新增 cutover 测试（新增文件全部通过），不表示新增回归。
+- 按失败文件集合对比：本树**无新增失败文件**；相对基线减少/消失的旧文件为 `host-launch.test.mjs` 与 `python-retirement-host.test.mjs`（已按退役登记删除）。`host-readiness.test.mjs` 仍为 current 且在两棵树均通过，不属于失败文件变化。失败计数差异来自 PG 连接失败的子测试数与新增 cutover 测试，不表示新增回归。
 - 修复后不再有 `backend_launch_requires_sqlite` 残留失败；`sqlite-history-startup-host.test.mjs` 3 项恢复通过。
 - 新增 cutover 测试文件全部纳入 current 执行并通过；不修改需 PG 的既有测试，也不把它们计作本票验收。
+- 旧 PG 宿主测试残留已清理：删除 15 个纯 PG／纯 TS 宿主测试与 2 个旧 fixture 并登记 historical（`pure-ts-*`、`assistant-generation-*`、`workspace-generation-stop-ipc`、`usage-summary-http`）；新增 `sqlite-cutover-launch-sqlite-guard.test.mjs` 静态守卫，current 测试与 helper 中所有 `launchDsh(` 所在文件必须存在受控 `sqlite:` 配置来源。
 - 跨重启回归：`sqlite-cutover-restart-host.test.mjs` 连续两次默认启动后再启动真实 SQLite 宿主，验证同 `database_id`／owner、`/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status` 均为 200，`/api/sync/cli-sessions` 无明确同意时返回 409 metadata_consent_required；第三次默认启动仍同一实例。
 
 ## 10. 12 条验收逐条判定
@@ -178,8 +179,12 @@
 - 真实微信历史覆盖、媒体唯一关联与模型语义质量仍未认证，相关入口保持关闭。
 - 当前用例实跑仍有既有 PG 基线失败（本机无 PG）与 15ac355a 同样存在的 2 项 memory-profile 失败；本票不修、不掩盖，也不据此宣称全量测试全绿。
 - `managed-postgres.ts`、`schema-prepare-cli.ts` 源文件按裁决保留且不可从产品入口到达；release inventory／打包脚本未改，属发布面范围外。
+- 旧 PG／纯 TS 宿主 current 测试已退役登记（15 测试＋2 fixture）；`sqlite-cutover-launch-sqlite-guard.test.mjs` 防止 current 新增无 sqlite 的 `launchDsh` 调用。
+- 结构基线比较不包含 `sqliteVersion`（随运行构建的 SQLite 版本变化），其余元数据逐项一致。
 
 ## 12. 审查阻断修复复核（final）
+
+> t03 delta 复审（38ddd016，15ac355a..38ddd016）五项 PASS 无阻断；本表下方新增 t21 根因修复与 t03 非阻断收口。
 
 | 阻断 | 修复 | 证据 |
 | --- | --- | --- |
@@ -194,15 +199,32 @@
 | S6 演练缺口 | 增 synthetic 门禁、清理后创建失败、清理后旧 writer 重现 3 项；媒体非空路径已有用例 | rehearsal 11/11 |
 | S7 切换顺序风险 | verification §6 写明清理→建库→检查→二次停写→原子切换及失败保持维护态语义 | 本文 §6、§12 |
 
-## 13. 跨重启 UI 复核限制（t21 报告，2026-10-30）
+## 13. 跨重启 UI 复核限制与 t21 根因修复（2026-10-30）
 
-t21 在隔离合成根报告：首次启动正常，Cmd 正常退出后同根重启，database_id／结构／离线 integrity 正常，但联系人页显示「联系人同步状态读取失败」。本会话按该路径补充复核：
+### 13.1 t21 场景复现（已定位根因）
 
-- **本会话复现步骤**：隔离根不预置 `sqlite-development.json`；`/tmp/t09-node/bin/node desktop/scripts/dev.mjs --user-data-dir <root>` 启动；首轮确认默认创建、manifest completed、8 项检查 passed、联系人页正常；分别以 dev 监督器 SIGINT 与 Electron app.quit（SIGTERM）正常退出，确认 `dev:status` stopped/pids[]；同根重启两次。
-- **连续 3 周期证据**：每周期后端 `/api/runtime/status` 200（storage=sqlite、capabilities 五能力、ownership.contacts=typescript）、`/api/contacts` 200、`/api/sync/cli-bindings` 200（identity_protocol=sqlite-selected-v1）、`/api/sync/status` 200、`/api/setup/status` 200；CDP 实测联系人页无「读取失败」提示，`contacts.getState().directoryPhase=ready`、`bindings.getState().phase=ready`，`sessionIssue=unavailable` 仅因隔离根无真实微信 CLI；三次启动 database_id 与 owner 一致。
-- **自动化回归**：`backend-ts/test/sqlite-cutover-restart-host.test.mjs` 固化了「默认启动→重开→宿主重启后读取联系人／绑定／同步／setup」路径，断言 200、身份一致、不建第二个空库；`sqlite-cutover-rehearsal` 的合成授权与媒体区用例继续覆盖切换失败/重试。
-- **已知环境限制（非产品缺陷）**：隔离根没有真实 `wechat-cli`／前台探针时，读取微信会话名单需要用户明确同意且会返回 `sessionIssue=unavailable`；这不影响联系人目录、持久绑定与授权状态读取。UI 文案「联系人同步状态读取失败」来自 `BindingConsentController phase=failed`（其数据源是 setup/cli-bindings/sync 状态，不是 `/api/contacts`），当前证据不足以归因到 20 的默认切换：`reopenCompleted` 不执行清理、不改写配置，本会话连续 3 周期与新增自动化回归均未出现该失败。
-- **待 t21 补充字段以最终判定**：失败时 userData 绝对路径与是否同一路径重启、是否预置合成 CLI/联系人/授权或执行过删除（是否存在未完成 deletion_operation）、失败时 `/api/contacts`／`/api/sync/cli-bindings`／`/api/setup/status` 实际状态码与 network 记录、失败页面控制器与可复现日志。若证据显示确为代码缺陷，本文件与测试先行，再按缺陷修复；当前不把环境限制误报为产品缺陷。
+按 t21 的差分复现：使用 `test/prepare-memory-management-desktop.mjs` 生成的同构隔离根（sqlite-development.json capabilities=contacts/history/memory；2 联系人、合成文字、候选与正式记忆 v2；无真实 CLI），启动真实 SQLite 宿主后执行：
+
+1. 认证 `DELETE /api/contacts/<甲>/sources/<sourceA>` → 202，source 删除操作 completed（全部 checks passed）。
+2. 联系人页清空聊天（`POST /api/contacts/<甲>/history/clear`）→ 返回 `boundary_pending`，`deletion_operation` 为 `contact_history`/**blocked**（`exact_channel_cutoff_required`），`history_cutoff` 为 blocked。
+3. 正常关闭宿主并用同一 realpath 根重启（分别用 `/api/runtime/shutdown` 与宿主 terminate 两种正常退出）。
+4. 重启后：`/api/runtime/status` 200（顶栏已连接）、`/api/setup/status` 200；但 `/api/contacts` 与 `/api/sync/cli-bindings` 返回 **409 `identity_closed`**、`/api/sync/status` 返回 **503**；`/api/deletions` 200 且能看到 blocked 操作与 `exact_channel_cutoff_required`。对应 UI 即 t21 的「联系人同步状态读取失败」「联系人目录读取失败」，刷新仍失败。
+
+**根因**：`deletion.metadataAvailable` 曾把任何未完成删除（含 source/contact_history/discussion/media_result_*）都视为身份元数据不可用；`ContactMetadataLifetime` 因此不绑定联系人服务，重启后所有联系人/绑定读取落入已关闭服务（`identity_closed`）。清空聊天因隔离根缺少精确边界能力会长期保持 `boundary_pending`/blocked，于是跨重启永久不可读。这是 05 删除门禁与 06 清空边界交互的缺陷，20 的切库/配置路径只是让该重启更常见，并非 20 引入。
+
+**修复**：`deletion.metadataAvailable` 只在未完成的 **contact/account** 删除（会移除或更换联系人身份）时关闭名单服务；source/contact_history/discussion/media_result_* 的未完成操作只清理内容，其写入门禁继续由各领域边界与 holder fence 负责，联系人目录、持久绑定、授权与删除进度保持可读。迁移 1..15 与安全门禁未变。
+
+**回归**：`sqlite-deletion-metadata-restart.test.mjs` 两项——(a) 制造 blocked 的 contact_history 清空后，重启宿主 `/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、清空状态与 `/api/deletions` 均 200 且 blocked 进度可见；(b) 未完成的 contact/account 删除仍返回 metadataAvailable=false（安全门禁保持）。
+
+### 13.2 干净根跨重启（补充证据）
+
+- 无预置 `sqlite-development.json` 的隔离根连续 3 周期「启动→正常退出（SIGINT 监督器／SIGTERM app.quit）→同根重启」：每周期 `/api/runtime/status` 200、`/api/contacts` 200、`/api/sync/cli-bindings` 200、`/api/sync/status` 200、`/api/setup/status` 200；CDP 联系人页无失败文案，`contacts.getState().directoryPhase=ready`、`bindings.getState().phase=ready`；`sessionIssue=unavailable` 仅因隔离根无真实微信 CLI；database_id 与 owner 一致。
+- `sqlite-cutover-restart-host.test.mjs` 固化默认启动→重开→宿主重启后的联系人/绑定/同步/setup 读取与同实例断言；`/api/sync/cli-sessions` 无明确同意时 409 metadata_consent_required。
+
+### 13.3 限制
+
+- 隔离根没有真实 `wechat-cli`／前台探针时，微信会话名单与真实同步不可用属既有环境限制；联系人目录、持久绑定与授权状态读取不受影响。
+- 本修复覆盖 UI 依赖的宿主接口与 blocked 删除跨重启状态；真实 App Cmd+Q 重启复验可在后续验收窗口用同一合成根完成（当前不新增桌面占用）。
 
 ## 附录 A：77 表逐项结构核对
 

@@ -22,7 +22,12 @@ async function fixture(t) {
 test('实际 DDL 与 82 表结构基线逐表一致（含 CHECK、触发器 body、FK action、索引 SQL 与视图）', async t => {
   const f = await fixture(t);
   const actual = dumpSchema(f.database);
-  assert.deepEqual(actual.metadata, baseline.metadata, '结构元数据与基线不一致');
+  // sqliteVersion 随运行构建的 SQLite 版本变化，不参与结构等价；其余元数据必须逐项一致。
+  const { sqliteVersion: actualSqliteVersion, ...actualStable } = actual.metadata;
+  const { sqliteVersion: baselineSqliteVersion, ...baselineStable } = baseline.metadata;
+  assert.match(actualSqliteVersion, /^\d+\.\d+\.\d+$/);
+  if (baselineSqliteVersion !== undefined) assert.match(baselineSqliteVersion, /^\d+\.\d+\.\d+$/);
+  assert.deepEqual(actualStable, baselineStable, '结构元数据与基线不一致');
   assert.equal(actual.metadata.checkCount, 252);
   assert.equal(actual.metadata.triggerCount, 92);
   assert.deepEqual(actual.metadata.migrationVersions, Array.from({ length: 15 }, (_, index) => index + 1));
