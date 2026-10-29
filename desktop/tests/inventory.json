@@ -138,6 +138,7 @@
     "tests/sqlite-discussion-read.test.mjs",
     "tests/sqlite-discussion-session.test.mjs",
     "tests/sqlite-discussion-source-lifecycle.test.mjs",
+    "tests/sqlite-history-clear-contract.test.mjs",
     "tests/sqlite-history-clearing.test.mjs",
     "tests/sqlite-history-messages.test.mjs",
     "tests/sqlite-source-deletion-contract.test.mjs",
