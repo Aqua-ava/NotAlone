@@ -58,6 +58,12 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false):
  }else if(['auto_update','correct','change','restore','withdraw','protect','unprotect'].includes(action))fail('memory_request_invalid');
  const s:MemoryScope=m?{scopeKind:m.scope_kind as 'self'|'contact',contactId:m.contact_id as string|null}:candidates[0]?{scopeKind:candidates[0].scope_kind as 'self'|'contact',contactId:candidates[0].contact_id as string|null}:scope(request.scope);
  available(tx,ownerId,s,true);
+ if(system&&candidates.length!==1)fail('memory_relationship_pending');
+ if(action==='auto_accept'&&tx.get('SELECT 1 FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ?',[ownerId,s.scopeKind,s.contactId]))fail('memory_relationship_pending');
+ if(system){
+  const fact=verifiedExtractionOutput(tx,{ownerId,eventId:String(candidates[0]!.event_id)}).fact;
+  if(Array.isArray(fact.alternatives)&&fact.alternatives.length||fact.invalid_at&&Date.parse(fact.invalid_at)<=Date.now()||fact.conditions?.items.some((item:any)=>item.source_supported!==true)||fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null))fail('memory_conditions_pending');
+ }
  if(candidates.some(c=>c.scope_kind!==s.scopeKind||c.contact_id!==s.contactId))fail('memory_scope_mismatch');
  if(m&&['auto_update','restore','withdraw'].includes(action)&&m.manual_protection===1n)fail('memory_protected');
  if((action==='auto_accept'||action==='accept'||action==='manual')&&m)fail('memory_request_invalid');
@@ -111,7 +117,8 @@ export const memoryManagementActions:StorageAction[]=[
   const ownerId=id((input as any)?.ownerId),imported=importRun(tx,input),results:MemoryDecisionResult[]=[];
   for(const candidateId of imported.candidateIds){
    const c=tx.get("SELECT * FROM memory_candidate WHERE owner_id=? AND id=? AND state='pending'",[ownerId,candidateId]);if(!c)continue;
-   results.push(applyDecision(tx,{ownerId,request:{requestKey:`memory:auto:${String(c.event_id)}`,action:'auto_accept',candidateIds:[candidateId],candidateRevisions:[String(c.state_revision)]}},true));
+   try{results.push(applyDecision(tx,{ownerId,request:{requestKey:`memory:auto:${String(c.event_id)}`,action:'auto_accept',candidateIds:[candidateId],candidateRevisions:[String(c.state_revision)]}},true));}
+   catch(error){if(!(error instanceof StorageFailure)||!['memory_relationship_pending','memory_conditions_pending'].includes(error.code))throw error;}
   }
   return {candidateIds:imported.candidateIds,decisions:results};
  }},
