@@ -105,7 +105,8 @@ function collect(tx:StorageTransaction,op:DeletionOperation):DeletionTarget[]{
  if(wholeDiscussion(op.scope))for(const d of discussions(tx,op))if(d.state!=='deleted'||d.title!==null)targets.push(rowTarget(op,'discussion_content',String(d.id),String(d.id)));
  for(const c of copies(tx,op)){
   targets.push(rowTarget(op,'runtime_barrier',String(c.id),String(c.discussion_id),String(c.id)));
-  for(const f of tx.all('SELECT * FROM runtime_file WHERE owner_id=? AND copy_id=? AND cleared=0',[op.ownerId,c.id]))targets.push(fileTarget(op,c,f));
+  // 活动writer的旧清单不能提前成为文件目标；排空关闭登记完整身份后由05重新收集。
+  if(c.manifest_complete===1n)for(const f of tx.all('SELECT * FROM runtime_file WHERE owner_id=? AND copy_id=? AND cleared=0',[op.ownerId,c.id]))targets.push(fileTarget(op,c,f));
  }
  return targets;
 }
@@ -159,6 +160,7 @@ export const discussionDeletionDomain:DeletionDomain={
    invalidated.push({namespace:'discussion.begin',key:String(request.request_key)});
    tx.run("UPDATE reply_attempt SET state='invalidated',lease_token=?,finished_at=COALESCE(finished_at,?),error_code='source_deleted' WHERE owner_id=? AND request_id=? AND state<>'invalidated'",[hash([op.operationId,requestId]),Date.now(),op.ownerId,requestId]);
    tx.run("UPDATE reply_request SET state='invalidated' WHERE owner_id=? AND id=?",[op.ownerId,requestId]);
+   tx.run("UPDATE discussion_entry SET body=NULL,content_state='cleared',origin_call_id=NULL,origin_event_id=NULL WHERE owner_id=? AND origin_request_id=? AND content_state='available'",[op.ownerId,requestId]);
   }
   for(const id of affected.contexts)tx.run("UPDATE reply_context SET state='invalidated' WHERE owner_id=? AND id=?",[op.ownerId,id]);
   if(wholeDiscussion(op.scope))for(const d of discussions(tx,op)){
