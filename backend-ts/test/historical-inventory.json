@@ -2417,6 +2417,276 @@
         "backend-ts/test/sqlite-cutover-retirement.test.mjs"
       ],
       "boundary": "旧宿主与 Python 退役结论已由静态退役回归覆盖；不表示旧执行器或旧 PG 宿主仍可运行。"
+    },
+    {
+      "path": "backend-ts/test/assistant-generation-explored.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/assistant-generation-lifecycle.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/assistant-generation-publication.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-binding-scope.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-lifetime.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-maintenance.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-persistent-assistant.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-quality.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-reply.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-runtime.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-shutdown.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-sync.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/pure-ts-task-events.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/workspace-generation-stop-ipc.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/usage-summary-http.test.mjs",
+      "reason": "旧 PostgreSQL/纯 TS 宿主测试依赖已退役的 host-plugin 与 PG schema；正常入口只支持受控 SQLite 宿主。",
+      "legacyDependencies": [
+        "backend-ts/src/host-plugin.ts",
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/test/pure-ts-runtime-fixture.mjs"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-discussion.test.mjs",
+        "backend-ts/test/sqlite-discussion-host.test.mjs",
+        "backend-ts/test/sqlite-reply-candidates.test.mjs",
+        "backend-ts/test/sqlite-memory-extraction.test.mjs",
+        "backend-ts/test/sqlite-memory-management.test.mjs",
+        "backend-ts/test/sqlite-cutover-restart-host.test.mjs"
+      ],
+      "boundary": "旧 PG 宿主/usage 台账语义不再作为当前入口覆盖；现行 SQLite 回复、记忆与重启用例单独执行，不表示逐项等价。"
     }
   ],
   "archivedCases": [
