@@ -26,6 +26,7 @@ type notaloneHistoryRequest struct {
 	Consent      string `json:"consent,omitempty"`
 	Target       string `json:"target,omitempty"`
 	Cursor       string `json:"cursor,omitempty"`
+	Kind         string `json:"kind,omitempty"`
 }
 type notaloneResolved struct {
 	Account          string `json:"accountKey"`
@@ -41,6 +42,16 @@ type notaloneInspection struct {
 	SchemaFingerprint string                `json:"schemaFingerprint"`
 	Tables            []notaloneTableSchema `json:"tables"`
 	CheckedPartitions []string              `json:"checkedPartitions"`
+}
+type notaloneMetadataReport struct {
+	Format            string                       `json:"format"`
+	Status            string                       `json:"status"`
+	ScopeDigest       string                       `json:"scopeDigest"`
+	SourceGeneration  string                       `json:"sourceGeneration"`
+	SchemaFingerprint string                       `json:"schemaFingerprint"`
+	Kind              string                       `json:"kind"`
+	CheckedPartitions []string                     `json:"checkedPartitions"`
+	Record            *notaloneMetadataObservation `json:"record"`
 }
 type notaloneHistorySession struct {
 	server    *server
@@ -321,9 +332,16 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 	return result, certification.ReadProfile, nil
 }
 func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRequest) (any, error) {
+	if r.Operation != "observe-metadata" && r.Kind != "" {
+		return nil, notaloneFailure("history_request_invalid")
+	}
 	switch r.Operation {
 	case "resolve":
 		if r.Consent != "selected-metadata-v1" || r.DisplayName == "" || r.Account != "" || r.Conversation != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
+	case "observe-metadata":
+		if r.Consent != "selected-message-metadata-v1" || !validNotaloneMetadataKind(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
 	case "inspect", "support", "target", "page":
@@ -358,6 +376,21 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	if r.Operation == "inspect" {
 		return h.inspect(ctx)
 	}
+	if r.Operation == "observe-metadata" {
+		inspection, err := h.inspect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		observation, err := observeNotaloneMessageMetadata(ctx, h.server, *h.selected, inspection, r.Kind)
+		if err != nil {
+			return nil, err
+		}
+		if err = h.currentAccount(); err != nil {
+			return nil, err
+		}
+		return notaloneMetadataReport{Format: "wechat-message-metadata-observation-v1", Status: "unverified", ScopeDigest: inspection.ScopeDigest, SourceGeneration: inspection.SourceGeneration, SchemaFingerprint: inspection.SchemaFingerprint, Kind: r.Kind, CheckedPartitions: inspection.CheckedPartitions, Record: observation}, nil
+	}
+
 	report, profile, err := h.support(ctx)
 	if err != nil {
 		return nil, err

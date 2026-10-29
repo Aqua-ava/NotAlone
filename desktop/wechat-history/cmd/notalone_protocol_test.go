@@ -7,6 +7,7 @@ import (
 	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -149,5 +150,45 @@ func TestNotAloneHistoryFailedResolveThenAccountChangeRejectsBeforeMetadata(t *t
 	}
 	if _, err := h.handle(context.Background(), request); err == nil || err.Error() != "history_account_changed" {
 		t.Fatalf("失败重试读取旧账号元数据:%v", err)
+	}
+}
+
+func TestNotAloneHistoryMetadataProtocolNeverGrantsNormalHistory(t *testing.T) {
+	h := notaloneProtocolFixture(t, false)
+	request := notaloneHistoryRequest{Operation: "observe-metadata", Account: h.selected.Account, Conversation: h.selected.Conversation, Consent: "selected-message-metadata-v1", Kind: "text"}
+	value, err := h.handle(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := value.(notaloneMetadataReport)
+	if report.Record == nil || report.Record.NormalHistory || report.Record.StatusSemantics != "unverified" || report.Status != "unverified" {
+		t.Fatal("元数据观察授予了普通消息资格")
+	}
+	data, _ := json.Marshal(report)
+	for _, forbidden := range []string{"private-body-sentinel", `"body":`, `"source":`, `"text":`} {
+		if strings.Contains(string(data), forbidden) {
+			t.Fatal("观察泄漏正文或来源内容")
+		}
+	}
+	request.Kind = ""
+	request.Operation = "target"
+	request.Consent = "selected-history-v1"
+	if _, err = h.handle(context.Background(), request); err == nil || err.Error() != "history_support_unverified" {
+		t.Fatalf("观察绕过了正文门禁:%v", err)
+	}
+}
+func TestNotAloneHistoryMetadataProtocolRejectsBeforeSourceAccess(t *testing.T) {
+	for _, request := range []notaloneHistoryRequest{
+		{Operation: "observe-metadata", Account: "a", Conversation: "b", Consent: "wrong", Kind: "text"},
+		{Operation: "observe-metadata", Account: "a", Conversation: "b", Consent: "selected-message-metadata-v1", Kind: "all"},
+		{Operation: "observe-metadata", Account: "a", Conversation: "b", Consent: "selected-message-metadata-v1", Kind: "text", Target: "injected"},
+		{Operation: "resolve", Consent: "selected-metadata-v1", DisplayName: "x", Kind: "text"},
+	} {
+		h := newNotaloneHistorySession(&server{})
+		_, err := h.handle(context.Background(), request)
+		h.close()
+		if err == nil || err.Error() != "history_request_invalid" {
+			t.Fatalf("错误许可/类型先访问了来源:%v", err)
+		}
 	}
 }
