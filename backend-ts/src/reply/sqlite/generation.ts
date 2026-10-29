@@ -11,6 +11,7 @@ import type {SqliteSkillRun} from '../../skills/sqlite/provider.ts';
 import type {SkillRunProtection,SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
+import {discussionFinishFailure,type DiscussionFailureEvidence} from './failure.ts';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
 import type {ModelPermitArbiter} from '../../platform/models/model-permits.ts';
 import {REPLY_EXECUTION_DEADLINE_MS} from '../generation/reply-execution-budget.ts';
@@ -38,7 +39,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
  const {attempt,callId,contextId,model}=options;
  if(!options.prompt.trim()||options.prompt.length>100_000||!options.systemPrompt.trim()
   ||!Number.isSafeInteger(model.deadline_ms)||model.deadline_ms<1||model.deadline_ms>REPLY_EXECUTION_DEADLINE_MS)fail('discussion_input_invalid');
- let dispatched=false,committed=false;
+ let dispatched=false,committed=false,failureEvidence:DiscussionFailureEvidence|undefined;
  const scope={ownerId:attempt.ownerId,contactId:attempt.contactId,callId};
  const deadline=new AbortController();let timer:NodeJS.Timeout|undefined;
  let permit:Awaited<ReturnType<ModelPermitArbiter['acquire']>>|undefined;
@@ -84,7 +85,11 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
       for await(const chunk of next()){
        combined.throwIfAborted();
        if(chunk.type==='finish'){
-        if(chunk.reason.kind!=='stop')fail('discussion_generation_failed');finished=true;
+        if(chunk.reason.kind!=='stop'){
+         failureEvidence=discussionFinishFailure(chunk.reason,call.observation().dispatch);
+         fail('discussion_generation_failed');
+        }
+        finished=true;
        }
        yield chunk;
       }
@@ -142,7 +147,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
   },signal);
  }catch(error){
   const code=signal.aborted?'discussion_generation_cancelled':error instanceof StorageFailure?error.code:'discussion_generation_failed';
-  if(!committed)await options.storage.execute('discussion.failCall',{...attempt,callId,dispatched,code});
+  if(!committed)await options.storage.execute('discussion.failCall',{...attempt,callId,dispatched,code,...(failureEvidence?{failure:failureEvidence}:{})});
   throw new StorageFailure(code);
  }finally{clearTimeout(timer);options.skillRun?.close();permit?.settle();}
 }

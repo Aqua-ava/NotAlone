@@ -69,6 +69,8 @@ test('环回HTTP失败只有一次物理调用，保留unknown结算且不提交
  assert.equal(f.requests.length,1);assert.equal(f.actions.filter(a=>a.name==='discussion.dispatchCall').length,1);
  assert.equal(f.actions.some(a=>a.name==='discussion.commitAssistant'),false);
  assert.equal(f.actions.find(a=>a.name==='discussion.failCall').input.dispatched,true);
+ assert.deepEqual(f.actions.find(a=>a.name==='discussion.failCall').input.failure,
+  {kind:'error',code:'SERVER',status:500,dispatch:'authorized_unconfirmed'});
  assert.equal(f.arbiter.snapshot().foregroundActive,false);
 });
 
