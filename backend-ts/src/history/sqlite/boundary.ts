@@ -31,6 +31,11 @@ export interface HistoryBoundaryCapability {
   /** 与 04 的 HistoryChannel 可选能力同名；只有认证过边界协议的适配器实现。 */
   boundarySnapshot(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryBoundaryCandidate>;
 }
+/** 04 在 contracts.ts 只声明 Promise<unknown>；这里是受信任适配器边界的唯一收窄点。 */
+export function boundarySnapshotOf(channel: { boundarySnapshot?: (scope: HistoryScope, signal?: AbortSignal) => Promise<unknown> }): HistoryBoundaryCapability['boundarySnapshot'] | undefined {
+  return typeof channel.boundarySnapshot === 'function'
+    ? channel.boundarySnapshot as HistoryBoundaryCapability['boundarySnapshot'] : undefined;
+}
 export interface PreparedBoundaryMember { memberNo: number; partition: string; tableInstance: string; localKey: string }
 export interface PreparedBoundary {
   boundaryToken: string; manifestSha256: string; members: PreparedBoundaryMember[];

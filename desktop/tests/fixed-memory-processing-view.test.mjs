@@ -15,7 +15,7 @@ test('无产出成功独立于后续阶段，失效通知立即撤下候选及�
  let current=run();
  await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:method==='trace'?{events:[{eventId:ids.task,attemptId:ids.task,kind:'request',payload:{input:'合成过程输入',output:'合成过程返回'},callId:null,inputNos:[1],sources:[{contactId:ids.contact,recordId:ids.task}]}],calls:[]}:undefined,async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.getByText('已处理，未产生新记忆',{exact:true}).waitFor();await panel.getByText('主题整理、长期概览尚未执行，本轮未完成。',{exact:true}).waitFor();assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
+  await panel.getByText('已处理，未产生新记忆',{exact:true}).waitFor();await panel.getByText('主题整理、长期概览尚未全部完成。',{exact:true}).waitFor();assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
   current={...run(),candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'合成候选正文',state:'verified_pending_decision',origin:'auto'}]};
   await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByText('合成候选正文',{exact:true}).waitFor();await panel.getByText('以下候选来自自动提取，正式记忆与决定请查看下方。',{exact:true}).waitFor();assert.equal(await panel.getByText('以下候选来自自动提取，等待正式记忆裁决。',{exact:true}).count(),0);
   await panel.locator('summary').filter({hasText:'查看本轮任务'}).click();await panel.getByRole('button',{name:'查看联系人 1过程',exact:true}).click();
@@ -70,5 +70,23 @@ test('来源或资格失效后的历史成功计数不能冒充正常无产出�
   await panel.locator(':scope > p').filter({hasText:'已处理 1 / 1 条文字目标'}).waitFor();
   assert.equal(await panel.getByText('已处理，未产生新记忆',{exact:true}).count(),0,'失效不能被解释成提取成功但没有值得保存的新记忆');
   await panel.getByRole('status').filter({hasText:'范围已失效'}).waitFor();
+ });
+});
+
+test('全部适用阶段完成后页面显示整轮完成，不再声称主题未执行',{timeout:20000},async t=>{
+ const completed={...run(),state:'completed',stage:'completed',laterStages:'completed'};
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:completed}:undefined,async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});await panel.getByRole('status').filter({hasText:'本轮已完成'}).waitFor();
+  assert.equal(await panel.getByText('主题整理、长期概览尚未执行，本轮未完成。',{exact:true}).count(),0);
+ });
+});
+
+test('页面按真实主题和画像阶段显示处理中状态',{timeout:20000},async t=>{
+ let current={...run(),state:'running',stage:'document_scene'};
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:undefined,async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByRole('status').filter({hasText:'正在整理主题资料'}).waitFor({timeout:3000});
+  current={...current,stage:'document_profile'};await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();
+  await panel.getByRole('status').filter({hasText:'正在整理长期概览'}).waitFor({timeout:3000});
  });
 });

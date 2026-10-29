@@ -25,6 +25,8 @@ export function ContactHistoryClear({ session }: { session: ContactSessionView }
   const [confirming, setConfirming] = useState<'clear' | 'resync' | null>(null);
   const [localError, setLocalError] = useState('');
   const latest = useRef(-1);
+  // 结果未知时复用同一请求键，避免重试建立第二份重读授权。
+  const pendingResyncKey = useRef<string | null>(null);
   const current = useRef(session.state); current.current = session.state;
   const selectedContactId = session.state.selectedContactId;
   const scopeRevision = session.state.scopeRevision;
@@ -35,7 +37,7 @@ export function ContactHistoryClear({ session }: { session: ContactSessionView }
     void window.notalone.historyClear.getState().then(receive).catch(() => { if (active) setLocalError('清空状态暂不可用。'); });
     return () => { active = false; unsubscribe(); };
   }, []);
-  useEffect(() => { setConfirming(null); setLocalError(''); }, [selectedContactId, scopeRevision]);
+  useEffect(() => { setConfirming(null); setLocalError(''); pendingResyncKey.current = null; }, [selectedContactId, scopeRevision]);
   useEffect(() => {
     if (selectedContactId && state.contactId === selectedContactId && state.scopeRevision === scopeRevision && state.phase === 'idle') void refresh();
   }, [selectedContactId, scopeRevision, state.contactId, state.scopeRevision]);
@@ -57,14 +59,17 @@ export function ContactHistoryClear({ session }: { session: ContactSessionView }
     const scope = current.current;
     if (!scope.selectedContactId) return;
     setConfirming(null); setLocalError('');
+    const requestKey = pendingResyncKey.current ?? `resync-${crypto.randomUUID()}`;
+    pendingResyncKey.current = requestKey;
     try {
       await window.notalone.historyClear.resync({ contactId: scope.selectedContactId,
-        scopeRevision: scope.scopeRevision, requestKey: `resync-${crypto.randomUUID()}`, confirmed: true });
-    } catch { if (current.current === scope) setLocalError('重新同步请求已失效，请刷新后重新确认。'); }
+        scopeRevision: scope.scopeRevision, requestKey, confirmed: true });
+    } catch { if (current.current === scope) setLocalError('重新同步结果尚未确认，请稍后刷新或重试同一操作。'); }
   }
   const visible = state.contactId === selectedContactId && state.scopeRevision === scopeRevision;
   const clear = visible ? state.clear : null;
   const resync = visible ? state.resync : null;
+  if (resync?.completed) pendingResyncKey.current = null;
   const busy = visible ? state.busy : null;
   const contactName = session.state.contacts.find(entry => entry.contactId === selectedContactId)?.displayName;
   return <section aria-label="清空聊天与重新同步历史" className="memory-section">

@@ -12,7 +12,7 @@ import type { HistoryClearContactGateway, HistoryClearChannelFactory } from './c
  * 普通重启/重选/后台重试不调用此服务；重读只写入历史来源，不恢复旧记忆、会话、媒体或旧证明。
  */
 export interface HistoryResyncStatus {
-  contactId: string; requestKey: string | null; state: 'none' | 'authorized' | 'active' | 'completed' | 'failed';
+  contactId: string; requestKey: string | null; state: 'none' | 'authorized' | 'active' | 'completed';
   authorizationId: string | null; grantId: string | null; cutoffOperationId: string | null;
   barrierGeneration: string | null; goalId: string | null; goalState: string | null;
   coverage: HistoryCoverage | null; completed: boolean;
@@ -22,7 +22,7 @@ interface RestoreGoal { id: string; state: string; coverageState: string; cursor
 interface StoredRestore {
   requestKey: string; authorizationId: string; contactId: string; grantId: string; selectionGeneration: string;
   barrierGeneration: string; cutoffOperationId: string | null; goalId: string | null;
-  state: 'authorized' | 'active' | 'completed' | 'failed'; goal: RestoreGoal | null;
+  state: 'authorized' | 'active' | 'completed'; goal: RestoreGoal | null;
 }
 const fail = (code: string): never => { throw new StorageFailure(code); };
 const clean = (value: unknown): string => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f]/.test(value) ? value : fail('history_restore_request_invalid');

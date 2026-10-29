@@ -1,7 +1,7 @@
 # 09：主题资料与长期概览
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [同步、聊天清空与记忆处理规则](../../sync-memory-behavior/spec.md)、[SQLite数据库重建](../../sqlite-database-rebuild/spec.md)
 Blocked by: [08 记忆候选、版本与修正](08-memory-candidates-and-versions.md)

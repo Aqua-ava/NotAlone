@@ -1,4 +1,5 @@
 import {memoryManagementDeletionDomain} from '../../../memory/sqlite/management/deletion.ts';
+import {memoryDocumentsDeletionDomain} from '../../../memory/sqlite/documents/deletion.ts';
 import {replyCandidateDeletionDomain} from '../../../reply/sqlite/candidates/deletion.ts';
 import {discussionDeletionDomain,withDiscussionDeletionAuthority} from '../../../reply/sqlite/deletion.ts';
 import {discussionCallDeletionDomain} from '../../../reply/sqlite/model-deletion.ts';
@@ -36,8 +37,8 @@ const baseDeletionRegistration: DeletionRegistration = {
         : {result: 'blocked', proof: 'scope_handler_unavailable'};
     },
   },
-  domains: [memoryManagementDeletionDomain, replyCandidateDeletionDomain, discussionCallDeletionDomain, memoryExtractionDeletionDomain, discussionDeletionDomain, installedHistoryDomain, identityDeletionDomain, skillMetadataDeletionDomain()],
-  requiredDomains: ['memory_management', 'reply_candidates', 'discussion_calls', 'memory_extraction', 'discussion', 'history', 'identity', 'skill_metadata'],
+  domains: [memoryDocumentsDeletionDomain, memoryManagementDeletionDomain, replyCandidateDeletionDomain, discussionCallDeletionDomain, memoryExtractionDeletionDomain, discussionDeletionDomain, installedHistoryDomain, identityDeletionDomain, skillMetadataDeletionDomain()],
+  requiredDomains: ['memory_documents', 'memory_management', 'reply_candidates', 'discussion_calls', 'memory_extraction', 'discussion', 'history', 'identity', 'skill_metadata'],
 };
 
 const mediaRegistration=composeMediaDeletionRegistration(baseDeletionRegistration);

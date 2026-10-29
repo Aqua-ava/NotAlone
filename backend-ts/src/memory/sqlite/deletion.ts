@@ -4,6 +4,7 @@ import {StorageFailure,type StorageRow,type StorageTransaction} from '../../stor
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 import {identityDeletionAuthority} from '../../contacts/sqlite/deletion.ts';
 import {memoryDeletionImpact,deletionRows,deletionIds} from './deletion-impact.ts';
+import {minimalModelReceipt} from './execution.ts';
 
 const domain='memory_extraction';
 const rowKinds:DeletionDomain['rowKinds']={
@@ -73,7 +74,7 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure {
   else if(eraseLedger(op)&&'contactId'in scope)for(const o of tx.all('SELECT operation_id FROM operation_scope WHERE owner_id=? AND source_contact_id=?',[ownerId,scope.contactId]))ledgerScope.add(String(o.operation_id));
   for(const target of impact.planned)if(target.domain===domain&&target.rowKind==='model_operation')ledgerScope.add(target.key.id);
   for(const o of deletionRows(tx,ownerId,'model_operation','memory_step_id',impact.steps))ledgerScope.add(String(o.id));
-  const operations=ledgerScope.size?tx.all("SELECT * FROM model_operation WHERE owner_id=? AND id IN (SELECT value FROM json_each(?)) AND purpose IN ('extraction','verification','adjudication','relation_verification','merge_verification') AND reply_request_id IS NULL ORDER BY id",[ownerId,deletionIds([...ledgerScope])]):[];
+  const operations=ledgerScope.size?tx.all("SELECT * FROM model_operation WHERE owner_id=? AND id IN (SELECT value FROM json_each(?)) AND purpose IN ('extraction','verification','adjudication','relation_verification','merge_verification','document_scene','document_profile') AND reply_request_id IS NULL ORDER BY id",[ownerId,deletionIds([...ledgerScope])]):[];
   const pairs=new Map<string,{run:string;contact:string}>();
   const pair=(run:unknown,contact:unknown)=>pairs.set(deletionIds([run,contact]),{run:String(run),contact:String(contact)});
   for(const i of impact.inputs)pair(i.run_id,i.source_contact_id);
@@ -124,24 +125,15 @@ function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]
   c.inputs.forEach(r=>add('run_input',r));c.contacts.forEach(r=>add('run_contact',r));
   c.items.filter(i=>eraseLedger(op)||i.message_id!==null).forEach(r=>add('processing_item',r));c.runs.forEach(r=>add('processing_run',r));return targets;
 }
-function receiptSummary(raw:unknown):string|null {
-  if(raw===null)return null;
-  let receipt:Record<string,unknown>;try{receipt=JSON.parse(String(raw));}catch{return null;}
-  const scalar=['attempt_id','permit_id','request_id','owner_id','contact_id','scope_kind','provider','model','called_at','latency_ms','dispatch','outcome'];
-  const result=Object.fromEntries(scalar.filter(k=>receipt[k]===null||typeof receipt[k]==='string'||typeof receipt[k]==='number').map(k=>[k,receipt[k]]));
-  const usage=receipt.usage;
-  if(usage&&typeof usage==='object'&&!Array.isArray(usage))result.usage=Object.fromEntries(['input_tokens','output_tokens','cache_read_tokens','cache_write_tokens']
-    .filter(k=>(usage as Record<string,unknown>)[k]===null||typeof (usage as Record<string,unknown>)[k]==='number').map(k=>[k,(usage as Record<string,unknown>)[k]]));
-  return JSON.stringify(result);
-}
-
 export const memoryExtractionDeletionDomain:DeletionDomain={
   id:domain,rowKinds,
   fence(tx,op){
     if(!allowed(op))return [];
     fenced(tx,op);const c=closure(tx,op),now=Date.now();
     for(const task of c.tasks)tx.run("UPDATE processing_task SET state='revoked',control_revision=control_revision+1,error_code='source_deleted' WHERE owner_id=? AND id=? AND state<>'revoked'",[op.ownerId,task.id]);
-    for(const step of c.steps)tx.run("UPDATE processing_step SET state='revoked',successful_attempt_id=NULL WHERE owner_id=? AND id=?",[op.ownerId,step.id]);
+    const documentSteps=!!tx.get("SELECT 1 FROM pragma_table_info('processing_step') WHERE name='not_applicable_reason'");
+    for(const step of c.steps)tx.run(documentSteps?"UPDATE processing_step SET state='revoked',successful_attempt_id=NULL,not_applicable_reason=NULL WHERE owner_id=? AND id=?":"UPDATE processing_step SET state='revoked',successful_attempt_id=NULL WHERE owner_id=? AND id=?",[op.ownerId,step.id]);
+    for(const attempt of c.attempts)tx.run("UPDATE processing_item SET pipeline_state='pending',completion_attempt_id=NULL WHERE owner_id=? AND completion_attempt_id=? AND pipeline_state='completed'",[op.ownerId,attempt.id]);
     for(const attempt of c.attempts)tx.run("UPDATE step_attempt SET state='aborted',finished_at=?,error_code='source_deleted' WHERE owner_id=? AND id=? AND state='running'",[now,op.ownerId,attempt.id]);
     for(const item of c.items)tx.run("UPDATE processing_item SET extraction_state='invalidated' WHERE owner_id=? AND id=? AND extraction_state NOT IN ('invalidated','deleted')",[op.ownerId,item.id]);
     for(const operation of c.operations)tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=COALESCE(commit_forbidden_at,?),input_seal='deleted' WHERE owner_id=? AND id=?",[now,op.ownerId,operation.id]);
@@ -162,7 +154,7 @@ export const memoryExtractionDeletionDomain:DeletionDomain={
     const keys=rowKinds[target.rowKind].keys,where=keys.map(k=>`${k}=?`).join(' AND '),args=keys.map(k=>target.key[k]);
     if(target.rowKind==='model_call'&&!eraseLedger(op)){
       const call=tx.get(`SELECT receipt FROM model_call WHERE ${where}`,args);
-      if(call)tx.run(`UPDATE model_call SET step_attempt_id=NULL,receipt=? WHERE ${where}`,[receiptSummary(call.receipt),...args]);
+      if(call)tx.run(`UPDATE model_call SET step_attempt_id=NULL,receipt=? WHERE ${where}`,[minimalModelReceipt(call.receipt),...args]);
     }else if(target.rowKind==='model_operation'&&!eraseLedger(op)){
       tx.run(`UPDATE model_operation SET memory_step_id=NULL,state='sealed',input_seal='deleted' WHERE ${where}`,args);
     }else if(target.rowKind==='operation_item'&&!eraseLedger(op)){
@@ -173,7 +165,7 @@ export const memoryExtractionDeletionDomain:DeletionDomain={
       const item=tx.get(`SELECT * FROM processing_item WHERE ${where}`,args);if(!item)return;
       const preserved=tx.get("SELECT 1 FROM capture_record WHERE owner_id=? AND contact_id=? AND message_id=? AND availability='available' AND state='normalized'",[op.ownerId,item.contact_id,item.message_id]);
       if(preserved)tx.run(`UPDATE processing_item SET extraction_state='invalidated' WHERE ${where}`,args);
-      else tx.run(`UPDATE processing_item SET message_id=NULL,extraction_state='deleted',pipeline_state='deleted' WHERE ${where}`,args);
+      else tx.run(`UPDATE processing_item SET message_id=NULL,extraction_state='deleted',pipeline_state='deleted',completion_attempt_id=NULL WHERE ${where}`,args);
     }else tx.run(`DELETE FROM ${target.rowKind} WHERE ${where}`,args);
   },
   authorizeFile(){fail('memory_extraction_has_no_managed_files');},

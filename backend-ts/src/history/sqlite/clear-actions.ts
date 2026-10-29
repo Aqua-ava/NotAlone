@@ -78,6 +78,12 @@ function validatePrepared(prepared: PreparedBoundary): { members: PreparedBounda
     || target.partitions.some(partition => !target.tables.some(table => table.partition === partition))
     || target.tables.some(table => !target.partitions.includes(table.partition))) fail('history_boundary_target_changed');
   if (!Array.isArray(prepared.members) || prepared.members.length > maxBoundaryMembers) fail('history_boundary_candidate_incomplete');
+  if (!prepared.proof || !Array.isArray(prepared.proof.partitions)) fail('history_boundary_candidate_incomplete');
+  const proofCounts = new Map<string, number>();
+  for (const evidence of prepared.proof.partitions) {
+    if (!evidence || typeof evidence.partition !== 'string' || proofCounts.has(evidence.partition)) fail('history_boundary_candidate_incomplete');
+    proofCounts.set(evidence.partition, Number(evidence.memberCount));
+  }
   if (prepared.support?.status !== 'supported' || prepared.support?.protocol !== 'private-history-v1'
     || prepared.support?.identity !== 'source-table-local-v1'
     || prepared.support?.capabilities?.[boundaryProtocol] !== 'supported') fail('history_boundary_support_unverified');
@@ -90,6 +96,12 @@ function validatePrepared(prepared: PreparedBoundary): { members: PreparedBounda
     return { memberNo, partition: member.partition, tableInstance: member.tableInstance, localKey: member.localKey };
   });
   members.sort((left, right) => left.localKey.localeCompare(right.localKey)).forEach((member, memberNo) => { member.memberNo = memberNo; });
+  // 每分片成员数必须等于该分片实际成员，不能只在总和上凑数。
+  const actualCounts = new Map<string, number>();
+  for (const member of members) actualCounts.set(member.partition, (actualCounts.get(member.partition) ?? 0) + 1);
+  for (const partition of target.partitions) {
+    if ((proofCounts.get(partition) ?? -1) !== (actualCounts.get(partition) ?? 0)) fail('history_boundary_candidate_incomplete');
+  }
   const manifest = membersManifestSha256(target.descriptor, members);
   if (manifest !== prepared.manifestSha256) fail('history_boundary_manifest_mismatch');
   if (!boundedText(prepared.boundaryToken, 64_000)) fail('history_boundary_proof_invalid');
@@ -240,7 +252,8 @@ export const historyClearActions: StorageAction[] = [
     const account = row(tx.get('SELECT * FROM channel_account WHERE owner_id=? AND id=? AND identity_state=\'verified\'', [ownerId, conversation.account_id]), 'history_restore_identity_unverified');
     const proof = input.proof;
     if (!proof || !boundedText(proof.sourceGeneration) || proof.sourceGeneration !== account.source_generation
-      || !boundedText(proof.supportProfile) || !boundedText(proof.accountKey) || !boundedText(proof.conversationKey)) fail('history_restore_identity_unverified');
+      || !boundedText(proof.supportProfile) || !boundedText(proof.accountKey) || !boundedText(proof.conversationKey)
+      || proof.accountKey !== account.external_key || proof.conversationKey !== conversation.external_key) fail('history_restore_identity_unverified');
     const authorizationId = boundedText(input.authorizationId), verificationId = boundedText(input.verificationId), grantId = boundedText(input.grantId);
     const selectionGeneration = (contact.selection_generation as bigint) + 1n;
     tx.run("UPDATE read_grant SET revoked_at=?,reason='explicit_restore' WHERE owner_id=? AND id=? AND revoked_at IS NULL", [input.at, ownerId, grant.id]);
@@ -319,9 +332,14 @@ export function assertVerifiedHistoryBoundary(tx: StorageTransaction, token: Rea
     if (tx.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=?', [token.owner_id, token.contact_id])) fail('history_suppression_unverified');
     return;
   }
+  if (!hasTable(tx, 'history_cutoff')) fail('history_suppression_unverified');
   const cutoff = tx.get("SELECT 1 FROM history_cutoff WHERE owner_id=? AND conversation_id=? AND barrier_generation=? AND state='verified'",
     [token.owner_id, token.conversation_id, barrier]);
   if (!cutoff) fail('history_suppression_unverified');
+  // B 必须绑定同一来源代次：来源换代后旧成员键不再命中，不能借此放行旧消息复活。
+  const row = tx.get("SELECT source_generation FROM history_cutoff WHERE owner_id=? AND conversation_id=? AND barrier_generation=? AND state='verified'",
+    [token.owner_id, token.conversation_id, barrier]);
+  if (!row || row.source_generation !== token.source_generation) fail('history_suppression_unverified');
 }
 /** 接受页时判定一条来源身份是否属于任一已接受 B；显式重读授权可跨该联系人的清空边界恢复。 */
 export function clearBoundaryExclusion(tx: StorageTransaction, input: { ownerId: string; conversationId: string; externalKey: string; restoreOperationId: string | null }): boolean {
@@ -349,8 +367,4 @@ export function verifiedCutoffForOperation(tx: StorageTransaction, ownerId: stri
   if (!hasTable(tx, 'history_cutoff')) return undefined;
   return tx.get("SELECT * FROM history_cutoff WHERE owner_id=? AND operation_id=? AND contact_id=? AND state='verified'", [ownerId, operationId, contactId]);
 }
-/** 清空完成前 history 域必须保持 scope_suppression 未通过。 */
-export function pendingBoundaryForContact(tx: StorageTransaction, ownerId: string, contactId: string): boolean {
-  if (!hasTable(tx, 'history_cutoff')) return false;
-  return Boolean(tx.get("SELECT 1 FROM history_cutoff WHERE owner_id=? AND contact_id=? AND state='pending'", [ownerId, contactId]));
-}
+

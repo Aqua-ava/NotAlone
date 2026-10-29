@@ -40,7 +40,7 @@ CREATE TABLE history_restore (
  conversation_id TEXT NOT NULL, binding_id TEXT NOT NULL, verification_id TEXT NOT NULL, grant_id TEXT NOT NULL,
  selection_generation INTEGER NOT NULL CHECK(selection_generation>0),
  barrier_generation INTEGER NOT NULL CHECK(barrier_generation>=0),
- cutoff_operation_id TEXT, goal_id TEXT, state TEXT NOT NULL CHECK(state IN ('authorized','active','completed','failed')),
+ cutoff_operation_id TEXT, goal_id TEXT, state TEXT NOT NULL CHECK(state IN ('authorized','active','completed')),
  created_at INTEGER NOT NULL, completed_at INTEGER,
  PRIMARY KEY(owner_id,request_key), UNIQUE(owner_id,authorization_id),
  FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id),

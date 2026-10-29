@@ -5,7 +5,7 @@ import type { ContactSession } from '../contacts/session';
 type Scope = { generation: number; contactId: string; scopeRevision: number };
 const phases = new Set(['none', 'boundary_pending', 'cleaning', 'cleanup_blocked', 'completed']);
 const boundaryStates = new Set(['pending', 'verified', 'blocked']);
-const resyncStates = new Set(['none', 'authorized', 'active', 'completed', 'failed']);
+const resyncStates = new Set(['none', 'authorized', 'active', 'completed']);
 const goalPhases = new Set(['not_started', 'syncing', 'complete', 'incomplete']);
 const text = (value: unknown, max = 512): string | null => typeof value === 'string' && value.length <= max ? value : null;
 const count = (value: unknown): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;

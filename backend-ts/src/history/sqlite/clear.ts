@@ -5,7 +5,7 @@ import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import { ActiveHolders } from '../../storage/sqlite/deletion/holders.ts';
 import type { DeletionService } from '../../storage/sqlite/deletion/service.ts';
 import type { HistoryChannel, HistoryScope } from './contracts.ts';
-import { HistoryBoundaryInvalid, prepareBoundaryCandidate, type HistoryBoundaryCandidate, type HistoryBoundaryCapability } from './boundary.ts';
+import { boundarySnapshotOf, HistoryBoundaryInvalid, prepareBoundaryCandidate, type HistoryBoundaryCandidate } from './boundary.ts';
 
 /**
  * 06 清空聊天编排：立即推进 05 删除代次并封禁旧写入，再尝试只读边界快照 S(B)。
@@ -16,7 +16,7 @@ export interface HistoryClearContactGateway {
   eligibility(contactId: string): Promise<ReadEligibility>;
   validate(token: ReadEligibility): Promise<unknown>;
 }
-export type HistoryClearChannelFactory = () => HistoryChannel & Partial<HistoryBoundaryCapability>;
+export type HistoryClearChannelFactory = () => HistoryChannel;
 export type HistoryClearPhase = 'none' | 'boundary_pending' | 'cleaning' | 'cleanup_blocked' | 'completed';
 export interface HistoryClearBoundaryView {
   conversationId: string; barrierGeneration: string; state: 'pending' | 'verified' | 'blocked';
@@ -111,8 +111,14 @@ export class SqliteHistoryClearService {
   /** 读取前、分段和接受前各复验一次资格；窗口变化只做有界重试。 */
   private async captureBoundary(contactId: string, operationId: string, barrierGeneration: string, signal: AbortSignal): Promise<string> {
     let token: ReadEligibility;
+    // 任何非成功退出都让未生效候选失效（取消/关停/失败均不得留下可接受候选）。
+    const invalidate = async (reason: string): Promise<string> => {
+      try { await this.storage.execute('history.boundaryInvalidate', { ownerId: this.owner(), operationId, reason }); }
+      catch { /* 失效写入失败保留原清空操作与 pending 状态，重试时先清理候选。 */ }
+      return reason;
+    };
     try { token = await this.contacts.eligibility(contactId); }
-    catch (error) { return safeReason(error, 'read_not_authorized'); }
+    catch (error) { return await invalidate(safeReason(error, 'read_not_authorized')); }
     const channel = this.createChannel();
     const stop = async () => { controller.abort(); await channel.close?.(); };
     const controller = new AbortController();
@@ -122,20 +128,25 @@ export class SqliteHistoryClearService {
       const scope = await this.storage.execute<HistoryScope>('history.scope', { token });
       release = this.holders.register({ key: `history:clear_${contactId}`, ownerId: this.owner(), contactId,
         coversAllSources: true, generation: BigInt(token.data_generation), close: stop });
-      const boundary = channel.boundarySnapshot;
-      if (typeof boundary !== 'function') return 'history_boundary_unverified';
+      const boundary = boundarySnapshotOf(channel);
+      if (!boundary) return await invalidate('history_boundary_unverified');
       let lastReason = 'history_boundary_unverified';
       for (let attempt = 1; attempt <= this.options.maxBoundaryAttempts; attempt++) {
-        if (combined.aborted) return 'history_interrupted';
+        if (combined.aborted) return await invalidate('history_interrupted');
         try {
           await this.contacts.validate(token);
           const candidate = await boundary.call(channel, scope, combined) as HistoryBoundaryCandidate;
+          // 取消/关停后返回的候选立即失效；不得在中断后持久化或接受 B。
+          if (combined.aborted) return await invalidate('history_interrupted');
           await this.contacts.validate(token);
           const prepared = prepareBoundaryCandidate(scope, candidate);
           await this.contacts.validate(token);
+          if (combined.aborted) return await invalidate('history_interrupted');
           await this.storage.execute('history.boundaryPersist', { ownerId: this.owner(), operationId, contactId,
             barrierGeneration, accountKey: scope.accountKey, conversationKey: scope.conversationKey, prepared });
+          if (combined.aborted) return await invalidate('history_interrupted');
           await this.contacts.validate(token);
+          if (combined.aborted) return await invalidate('history_interrupted');
           const accepted = await this.storage.execute<{ state: string }>('history.boundaryAccept', { ownerId: this.owner(), operationId, contactId, barrierGeneration, at: Date.now() });
           if (accepted.state === 'verified') return '';
           lastReason = 'history_boundary_pending';
@@ -146,7 +157,7 @@ export class SqliteHistoryClearService {
           break;
         }
       }
-      return lastReason;
+      return await invalidate(lastReason);
     } finally {
       try { if (release) await release(); } catch { /* 关闭失败保留原清空操作供重试。 */ }
       try { await channel.close?.(); } catch { /* 已由 holder close 关闭。 */ }

@@ -24,7 +24,7 @@ export class SqliteMemoryExtraction {
  readonly accounting:ModelPermitAccounting;
  constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string)=>Promise<unknown>)){
   this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;
-  this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute(claim?.step_name==='extraction_verification'?'memoryExtraction.reserve':'memoryAdjudication.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
+  this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute(claim?.step_name==='extraction_verification'?'memoryExtraction.reserve':claim?.step_name==='document_scene'||claim?.step_name==='document_profile'?'memoryDocuments.reserve':'memoryAdjudication.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
  }
  private version(){return this.policy??=createExtractionPolicyVersion();}
  initialize(){this.available();return this.initialized??=this.admit(async()=>{await this.storage.execute('memoryExtraction.recover',{ownerId:this.ownerId});});}
@@ -40,7 +40,7 @@ export class SqliteMemoryExtraction {
   const prior=await this.storage.execute<any>('memoryExtraction.findRequest',{ownerId:this.ownerId,requestKey});
   this.available();
   if(prior)return prior;
-  const run=await this.storage.execute<any>('memoryExtraction.start',{ownerId:this.ownerId,requestKey,policyConfig:policy.newTaskConfig()});
+  const run=await this.storage.execute<any>('memoryExtraction.start',{ownerId:this.ownerId,requestKey,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
   this.launch(run.runId);return run;
   });
  }
@@ -74,7 +74,11 @@ export class SqliteMemoryExtraction {
     }finally{this.active.delete(task.taskId);finish();await release?.();}
    }
   }
-  if(!this.stopped){await this.storage.execute('memoryExtraction.settleRun',{ownerId:this.ownerId,runId});if(!this.stopped)await this.afterRunSettled?.(runId);}
+  if(!this.stopped){
+   await this.storage.execute('memoryExtraction.settleRun',{ownerId:this.ownerId,runId,laterWork:!!this.afterRunSettled});
+   try{if(!this.stopped)await this.afterRunSettled?.(runId);}
+   finally{if(this.afterRunSettled)await this.storage.execute('memoryExtraction.finishLater',{ownerId:this.ownerId,runId});}
+  }
  }
  private async process(batch:ClaimedStep,signal:AbortSignal){
   const policy=await this.version();const resolved=policy.resolve(batch.policyConfig);
