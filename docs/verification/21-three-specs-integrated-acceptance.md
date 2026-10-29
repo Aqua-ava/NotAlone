@@ -1,6 +1,6 @@
 # 21 三份规格组合验收记录
 
-日期：2026-10-30。执行会话：`t21-integrated-acceptance`（共享任务 task-7）。验收基线：`codex/sqlite-rebuild-integration`@`d8c55619`，本票工作树 `sqlite-rebuild-21`（同名分支，仅本地提交，不 push/PR）。
+日期：2026-10-30。执行会话：`t21-integrated-acceptance`（共享任务 task-7）。验收基线：`codex/sqlite-rebuild-integration`@`b8577686`（初稿基于 `d8c55619`；随后票20 跨重启回归提交 `ed4bce2c`/`b8577686` 已合并复核，无产品代码改动），本票工作树 `sqlite-rebuild-21`（同名分支，仅本地提交，不 push/PR）。
 
 本记录只做组合验收与证据收口，不补实现、不改其他票状态。已 resolved 票引用其既有有效证据并按未变化条件复用，未重跑其整套；本轮实际执行的组合批次与 App 交互单独记录。合成、实际开发 App、真实模型、真实微信分列记账；未认证项不得解释为通过。
 
@@ -8,6 +8,7 @@
 
 - **17 项有效范围**（01–12、14、16、17、20、21）中，01、02、05、07、08、09、11、12、14、16、17 已 resolved 且实现/结构已进集成基线；03、04、06、10、20 实现已进基线但 State 保持 claimed，其真实渠道/清理门槛未认证。
 - 本轮实测的集成组合回归：7 个批次 **592/592 通过**（A 同步/清空/删除 125、B 记忆/文档/控制 145、C 媒体 68、D 切换/回复/讨论/Skill 94、E Electron 宿主 30、F 桌面模块 56、G 裁决/迁移/共享结构 74），两端 typecheck 结果见 §3/§9。
+- 基线复核追加：票20 新增跨重启宿主回归（`sqlite-cutover-restart-host.test.mjs`）与 20 verification §13「跨重启 UI 复核限制」；本票在 Electron Node 下复跑切换批次 **25/25**（含 restart-host 1/1），无产品代码改动；本票观察到的「重启后联系人 UI 读取失败」仍按「未认证/待诊断」记录（见 §4.5、§7）。
 - 实际开发 App（热更新 dev，隔离合成 userData）完成：默认 SQLite 自动创建（manifest `completed`，8/8 checks passed）、记忆/文档状态展示、认证来源删除后旧资料实际撤下、联系人清空进入 `boundary_pending` 且无成功文案、正常退出 `stopped/pids[]`、重开同 `databaseId`/结构 15/`integrity=ok`/`foreignKeys=ok`。
 - **未通过/受阻（关键）**：03 真实普通历史、状态语义与来源生命周期、跨启动连续性；04 真实增量尾部（重选/断线/微信非前台 CLI 同步未认证）；06 真实 observer/reader 边界协议与最终只读制品（生产保持 `boundary_pending`）；20 真实旧业务库/副本清理（对象归属不明，实际清理未执行）；19 真实媒体唯一关联用户暂缓。真实模型仅 07/11 两次用户另行授权的受限真实调用，其余未测。
 - 因此本票**保持 claimed 并报告受阻**，不以已提交代码或已发布任务关闭规格；即使全部合成与 App 交互通过，也不能替代 03/04/06/20 的真实渠道/清理认证。
@@ -19,12 +20,12 @@
 
 | 项 | 实现 | 集成 | 合成验证 | 实际 App | 真实模型 | 真实微信 | 证据指针（节选） |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 01 SQLite 底座与生命周期 | 通过 | 通过 | 通过 | 通过 | 不适用 | 不适用 | 票 Answer：`.scratch/sqlite-rebuild-implementation/issues/01-sqlite-runtime-lifecycle.md:42`；`backend-ts/test/sqlite-storage.test.mjs`（本轮复跑 10/10）；迁移 1–15、82 表/252 CHECK/92 触发器 body：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md:19,42`；ADR-109 |
-| 02 联系人绑定与同步授权 | 通过 | 通过 | 通过 | 通过 | 不适用 | 未认证（真实逐人确认/范围） | 票 Answer：`02-contact-binding-and-read-grants.md:43`；`sqlite-contact-binding.test.mjs`、`sqlite-contact-close.test.mjs`（批 A 125/125 内含）；ADR-110 |
-| 03 首次历史同步与消息展示 | 通过 | 通过 | 通过 | 部分（合成 App 展示/覆盖/删除撤下） | 不适用 | **受阻**（第 1/2 条真实未过） | 12 条逐条判定与缺口：`docs/verification/sqlite-private-history-support-03.md:198-225`；票 Comments/Answer：`03-private-history-sync.md:46,54`；真实 metadata 仅受控只读观察（5/7 类型，无正文），普通 target/page 全拒绝 |
+| 01 SQLite 底座与生命周期 | 通过 | 通过 | 通过 | 通过 | 不适用 | 不适用 | 票 Answer：`.scratch/sqlite-rebuild-implementation/issues/01-sqlite-runtime-lifecycle.md:42`；`backend-ts/test/sqlite-storage.test.mjs`（本轮复跑 10/10）；迁移 1–15、82 表/252 CHECK/92 触发器 body：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md:17-27,42`；ADR-109 |
+| 02 联系人绑定与同步授权 | 通过 | 通过 | 通过 | 部分（联系人与授权显示通过；重开后联系人目录读取待诊断，见 §4.5） | 不适用 | 未认证（真实逐人确认/范围） | 票 Answer：`02-contact-binding-and-read-grants.md:43`；`sqlite-contact-binding.test.mjs`、`sqlite-contact-close.test.mjs`（批 A 125/125 内含）；ADR-110 |
+| 03 首次历史同步与消息展示 | 通过 | 通过 | 通过 | 部分（合成 App 展示/覆盖/删除撤下） | 不适用 | **受阻**（第 1/2 条真实未过） | 12 条逐条判定与缺口：`docs/verification/sqlite-private-history-support-03.md:198-215,217-225`；票 Comments/Answer：`03-private-history-sync.md:46,54`；真实 metadata 仅受控只读观察（5/7 类型，无正文），普通 target/page 全拒绝 |
 | 04 增量同步与读取控制 | 通过 | 通过 | 通过 | 部分（总开关/授权/阶段/取消/覆盖；重选/断线/非前台 CLI 未过） | 不适用 | **未认证** | 票与验证记录：`docs/verification/sqlite-incremental-sync-04.md:39-53,80-84`；t04 实机部分通过：`planning.md:209`；批 A 内增量/控制/HTTP 用例通过 |
 | 05 统一来源删除与清理 | 通过 | 通过 | 通过 | 通过 | 不适用 | 不适用（真实删除链依赖 03/06 捕获） | 票 Answer：`05-source-deletion-and-cleanup.md:43`；`sqlite-deletion*.test.mjs`（批 A）、Electron 宿主删除 E 30/30；本轮实际 App 认证 source DELETE 202→completed 并撤下旧资料（§4） |
-| 06 清空聊天与明确重读历史 | 通过 | 通过 | 通过 | 部分/通过（pending 路径与合成清空） | 不适用 | **未认证**（observer/reader + 最终制品） | `docs/verification/sqlite-clear-and-resync-06.md:21-37,74-80`；批 A `sqlite-clear-resync`/`sqlite-clear-http` 通过；本轮 App `boundary_pending` + `exact_channel_cutoff_required`（§4）；t06 实机 pending 复核：`planning.md:205` |
+| 06 清空聊天与明确重读历史 | 通过 | 通过 | 通过 | 通过（仅 boundary_pending 行为与合成清空） | 不适用 | **未认证**（observer/reader + 最终制品） | `docs/verification/sqlite-clear-and-resync-06.md:21-37,74-80`；批 A `sqlite-clear-resync`/`sqlite-clear-http` 通过；本轮 App `boundary_pending` + `exact_channel_cutoff_required`（§4）；t06 实机 pending 复核：`planning.md:205` |
 | 07 固定范围的记忆提取与核验 | 通过 | 通过 | 通过 | 通过 | 受限真实调用成功（2 目标合成文本；语义质量未认证） | 不适用 | 票 Answer/最终核对表：`07-fixed-scope-memory-extraction.md:47` 起；真实供应商合成复测：`07-...:171`；批 B 145/145 内含 extraction 相关；本轮 App 记忆页 1/1、候选与自动采纳显示（§4） |
 | 08 记忆候选、版本与修正 | 通过 | 通过 | 通过 | 通过 | 未测（环回合成供应商） | 不适用 | 票 Answer：`08-memory-candidates-and-versions.md:48` 起（70/70、迁移 11/11、profile 1/1、桌面 17/17）；批 G 补充裁决/删除/迁移；t08 实际 App 复验：`planning.md:187` |
 | 09 主题资料与长期概览 | 通过 | 通过 | 通过 | 通过 | 未测（环回供应商） | 不适用 | 票 Answer：`09-memory-documents-publication.md:50`；09 集成与复验：`planning.md:213,219`；批 B 内 documents 8 文件 145/145 的一部分；本轮 App 文档区状态可见（§4） |
@@ -34,8 +35,8 @@
 | 14 官方 Skill 加载接回 | 通过 | 通过 | 通过 | 通过 | 不适用（隔离加载无模型请求） | 不适用 | 票 Answer：`14-official-skill-loading.md:49` 起；批 D skill/host 通过；空库 Skill 安全：`docs/verification/20-...:164` |
 | 16 单条媒体保存与清除 | 通过 | 通过 | 通过 | 通过（四类删除/预览，条件未变复用） | 不适用（不调模型） | 未认证（真实类型未安装，入口拒绝） | 票 Answer：`16-single-message-media-lifecycle.md:49` 起；批 C `sqlite-media*` 68/68、E `media-host`、F 桌面 message-media 56/56 |
 | 17 图片与视频提取 | 通过 | 通过 | 通过 | 通过（PNG/视频/清除/来源删除，复用） | 不适用 | 未认证（19 暂缓，真实关联入口关闭） | 票 Answer 含支持矩阵：`17-image-video-extraction.md:47` 起；批 C visual/DAT、F 桌面；原生 helper 合成证据按其票内声明范围复用 |
-| 20 默认切换 SQLite 与旧业务清理 | 通过 | 通过 | 通过（隔离演练） | 通过（默认入口实测；本轮空根复验） | 不适用 | 不适用；**真实旧业务清理受阻** | 12 条判定：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md:151-166`；真实归属受阻：同文件 `:105-113`；t20 集成记录：`planning.md:193`；本轮空根 manifest 8/8 checks（§4） |
-| 21 三份规格组合验收 | 本记录 | 本记录 | 本轮 592/592（A–G） | 本轮完成（§4） | 仅 07/11 受限 | 仅 03 受控 metadata | 本文档；未通过项 §7；四项暂缓 §2 |
+| 20 默认切换 SQLite 与旧业务清理 | 通过 | 通过 | 通过（隔离演练） | 通过（默认入口实测；本轮空根复验） | 不适用 | 不适用；**真实旧业务清理受阻** | 12 条判定：`docs/verification/20-sqlite-cutover-and-legacy-cleanup.md:151-166`；真实归属受阻：同文件 `:105-113`；跨重启宿主回归与限制：同文件 `:197-205`（本票复跑批 H 25/25，含 `sqlite-cutover-restart-host.test.mjs` 1/1）；t20 集成记录：`planning.md:193`；本轮空根 manifest 8/8 checks（§4） |
+| 21 三份规格组合验收 | 本记录 | 本记录 | 本轮 592/592（A–G） | 本轮完成（§4） | 仅 07/11 受限 | 未认证（仅 03 受控 metadata 观察，无正文） | 本文档；未通过项 §7；四项暂缓 §2 |
 
 ## 2. 四项用户暂缓（不启用、不补验收、不计通过）
 
@@ -50,7 +51,7 @@
 
 ## 3. 组合行为实测
 
-执行环境：Node `/tmp/t09-node/bin/node` v24.21.0；Electron 44.7.0（44.7.0 / Node 24.21.0）；SQLite 3.53.4；锁定 TypeScript 7.0.2；隔离临时 SQLite `role=test` 与合成身份/消息，不读取真实微信、不调用真实模型、不发送外部消息、不打包。日志位于 `/tmp/t21-batch-*.log`、`/tmp/t21-typecheck.log`。两端 `pnpm run typecheck`（backend/desktop）均 0 错误。
+执行环境：Node `/tmp/t09-node/bin/node` v24.21.0；Electron 44.7.0（44.7.0 / Node 24.21.0）；SQLite 3.53.4；锁定 TypeScript 7.0.2；隔离临时 SQLite `role=test` 与合成身份/消息，不读取真实微信、不调用真实模型、不发送外部消息、不打包。日志位于 `/tmp/t21-batch-*.log`、`/tmp/t21-typecheck.log`。两端 `pnpm run typecheck`（backend/desktop）均 0 错误。基线复核后新增批次 H（票20 跨重启宿主回归 25/25，日志 `/tmp/t21-batch-h-restart.log`）。
 
 ### 3.1 关闭读取、取消单人、独立暂停、来源删除的四种语义
 
@@ -95,7 +96,7 @@
 ### 4.1 默认 SQLite 启动（空隔离根）
 
 - 启动后 `database-cutover/manifest.json`：`phase=completed`、`targetOrigin=created`、8 项 checks 全 `passed`（target_identity、storage_integrity、structure、media_closure、skill_empty_safe、deletion_registration、writer_fence、legacy_cleanup）；目标 `managed/sqlite/notalone.sqlite`，新 `databaseId`/`ownerId`，`role=test`。
-- UI：`SQLite 联系人与历史消息存储已就绪`、`结构版本 15 · SQLite 3.53.4`；6 个管理页（关系与表达/Skill/联系人/记忆/同步设置/设置）可达，渲染无空白、console 无异常；联系人目录为空态提示正常。
+- UI：`SQLite 联系人与历史消息存储已就绪`、`结构版本 15 · SQLite 3.53.4`；5 个管理页（Skill/联系人/记忆/同步设置/设置）与侧栏分组标签「关系与表达」可达，渲染无空白、console 无异常；联系人目录为空态提示正常。
 - 证据：`/tmp/t21-evidence/manifest-empty-root.json`、`/tmp/t21-evidence/t21-app-empty-pages2.png`、`/tmp/t21-evidence/empty-root.sqlite`。
 - 环境注记：首次用 `/tmp/...`（非 realpath）路径启动得到 `cutover_storage_failed(unsafe_storage_path)`——存储路径校验要求 realpath；worktree 需补根 `node_modules` 软链，否则 dev server `@fs` 请求 403。均为工作树环境差异，非主干产品缺陷，已在 §8 记录。
 
@@ -108,7 +109,7 @@
 
 ### 4.3 认证来源删除后旧资料撤下
 
-- 通过 App 内认证宿主 DELETE `/api/contacts/<甲>/sources/<合成来源>`：HTTP 202，返回 `status=succeeded`；`GET /api/deletions` 显示 operation `completed`，各域 checks `passed`（discussion/discussion_calls/history 等）。
+- 通过 App 内认证宿主 DELETE `/api/contacts/<甲>/sources/<合成来源>`：cURL `-w '%{http_code}'` 实测 HTTP 202（状态码为终端输出、未落盘），响应体 `{"status":"succeeded"}` 见 `t21-delete-source.json`；`GET /api/deletions` 显示 operation `completed`，各域 checks `passed`（discussion/discussion_calls/history 等，见 `t21-deletions.json`）。
 - 刷新记忆页后：候选「当前范围没有可展示的候选」；正式记忆「已失效 · 当前无可引用版本」；「有 1 条目标因取消勾选或来源删除失效，不计入待处理」；主题资料「当前尚无已发布的主题资料」。旧资料实际撤下，不是仅隐藏按钮。
 - 证据：`/tmp/t21-evidence/t21-delete-source.json`、`/tmp/t21-evidence/t21-deletions.json`、`/tmp/t21-evidence/t21-prepared-memory-after-delete.png`。
 
@@ -122,7 +123,7 @@
 
 - 正常退出（监督器 INT→IPC `notalone-dev-quit`→`app.quit`）后同 scope `dev:status` 返回 `{"mode":"stopped","pids":[]}`，端口/环回供应商/App 进程退出。
 - 同根重开：`database-cutover/manifest.json` 仍 `completed`、同一 `databaseId=216a44ab-…`、`ownerId=00000000-0000-4000-8000-000000000001`；离线 `SqliteStorage.open` 复核 `schemaVersion=15`、`integrity=ok`、`foreignKeys=ok`；删除与清空决定持久。
-- **观察边界**：重开后联系人目录读取失败（UI「联系人同步状态读取失败…当前不能确认授权范围」，刷新仍失败），本轮未认证跨重启 UI 正常；已交 t20 定位是 20 启动接线缺陷还是隔离根缺真实微信元数据适配器的环境限制，待结论前按「未认证/待诊断」记录。
+- **观察边界（未认证/待诊断）**：重开后联系人页显示「联系人同步状态读取失败…当前不能确认授权范围」，刷新仍失败；本轮未认证跨重启 UI 正常。t20 已在 20 verification §13 用无预置控制文件的隔离根做连续 3 个启动/退出周期（`/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status` 均 200，CDP `contacts.getState().directoryPhase=ready`、`bindings.getState().phase=ready`，`sessionIssue=unavailable` 仅因隔离根无真实 CLI）并新增 `sqlite-cutover-restart-host.test.mjs` 回归，均未复现，故当前不判定为 20 缺陷。与本票场景的差异已回传 t20：首轮执行过认证 source DELETE（completed）+ 联系人清空（boundary_pending）后重启，且根由记忆准备脚本预置 `sqlite-development.json`/`backend-launch.json`。结论前保持「未认证/待诊断」，不写成产品缺陷或通过；如获短窗口可按同变更一次复现并抓 4 个 API 响应与 BindingConsent phase。
 - 证据：`/tmp/t21-evidence/t21-manifest-prepared-restart.json`、`/tmp/t21-evidence/t21-prepared-restart.png`。
 
 ### 4.6 清理
@@ -157,7 +158,11 @@
 | 03 跨启动/实例连续性 | 未通过 | 架构决策与实现授权、真实重启观察协议；`sourceGeneration` 不含消息分片实例、`data_version` 仅同连接可比；持久失证围栏仍是待实现合同 |
 | 04 真实增量/重选/断线/微信非前台 CLI | 未认证 | 真实支持档声明 `incrementalTail=supported` 与最终读取制品；受控真实重选（需读微信会话元数据）、断线实机构造与真实前台授权 |
 | 06 真实边界 observer/reader | 未认证 | 真实 WCDB observer/reader 协议、完整分片/命名空间连续性与最终只读制品；生产保持 `boundary_pending` |
+| 02 真实逐人确认与读取范围 | 未认证 | 用户在真实私聊完成逐人选择/确认，真实账号、名单与支持档 metadata 核验；当前真实 target/page 门禁拒绝 |
+| 05 真实来源删除链 | 未认证（依赖 03/06 真实捕获） | 真实来源捕获后按 05 账本执行真实删除；当前无真实捕获，只有合成来源与正式 HTTP 合成删除证据 |
+| 16/17 真实媒体类型关联 | 未认证（19 暂缓） | 真实微信媒体唯一关联与质量证明；用户暂缓不读取，入口保持关闭 |
 | 10 App 内模型相关控制状态 | 未在 App 构造 | 真实模型供应商/预算授权与可捕获窗口；本轮以控制测试 + 桌面 headless 覆盖，不冒充真实模型通过 |
+| 重启后联系人 UI 读取（本票观察） | 待诊断，未认证 | t20 在 20 verification §13：3 周期与新增 `sqlite-cutover-restart-host.test.mjs` 回归均正常（相关 API 200、`directoryPhase=ready`），未判定为 20 缺陷；与本票的差异是首轮执行过 source DELETE(completed)+清空(boundary_pending) 后重启。需一次带同变更的重启复现并抓 `/api/contacts`、`/api/sync/cli-bindings`、`/api/setup/status`、`/api/deletions` 与 BindingConsent phase 后定论 |
 | 20 真实旧业务清理 | **受阻** | 精确旧对象归属确认（本机无 PG socket；默认 userData 旧启动配置指向外部项目/握手，内容未读、归属未确认）、停止旧写入者、逐目标清理授权；未执行真实切库/drop/清理 |
 | 19 真实媒体唯一关联 | 用户暂缓 | 本轮不读取；保持未验证且入口不放行 |
 | 真实模型总体 | 仅 07/11 受限 | 其余无本轮真实调用授权；真实语义质量未认证；07/11 复测仅合成文本/固定范围 |
@@ -166,12 +171,12 @@
 
 ## 8. 遗留问题与剩余风险
 
-1. **重开后联系人目录读取失败**（§4.5）：t20 诊断中；结论前按未认证/待诊断，不写成产品缺陷或通过。若为 20 缺陷将修复并补集成，届时需按新 hash 复跑最小 App 复验。
+1. **重开后联系人目录读取失败**（§4.5）：t20 复现未果（20 verification §13：3 周期 + 新增自动化回归均正常），当前不判定为 20 缺陷；本票按「未认证/待诊断」保留，需一次带「source DELETE completed + 清空 boundary_pending」变更的重启复现（抓 `/api/contacts`、`/api/sync/cli-bindings`、`/api/setup/status`、`/api/deletions` 与 BindingConsent phase）后才能定论；若为缺陷则修复并补集成后按新 hash 最小复验。
 2. **工作树环境差异**：`SqliteStorage` 要求 userData 为 realpath（`/tmp` 符号路径会 `cutover_storage_failed/unsafe_storage_path`）；dev server 的 `@fs` 需要工作树根 `node_modules` 软链，否则前端资源 403。两者均在主仓不成立/由主仓依赖满足，记录为复现条件，不解释为产品缺陷。
 3. **真实渠道证据缺口**：03/04/06 真实微信读取、状态语义、来源连续性与精确边界仍无认证；生产入口保持拒绝/`boundary_pending`。不得以“全部拒绝”或合成正例当成正常路径通过。
 4. **真实清理缺口**：20 的真实旧业务对象归属不明，实际清理未执行；需用户/架构决策与逐目标授权。
 5. **模型质量**：真实供应商语义质量仅 07/11 有限调用，未认证；旧 unknown/失败原因保留，不推断、不重发。
-6. **`run-current` 全量 612 失败为既有 PG/基线缺口**（`docs/verification/20-...` §9.2），本票不重跑全量，只跑相关组合批次；不把全量失败混入本票结论。
+6. **`run-current` 全量 612 失败**：按 t20 §9.2 口径，除 2 项 `sqlite-memory-profile` 既有失败外，其余均为无 PG 环境基线失败；本票不重跑全量，只跑相关组合批次，不把全量失败混入本票结论。
 
 ## 9. 复现命令与证据
 
@@ -181,18 +186,61 @@ ln -sfn <main-repo>/backend-ts/node_modules backend-ts/node_modules
 ln -sfn <main-repo>/desktop/node_modules desktop/node_modules
 ln -sfn <main-repo>/node_modules node_modules
 
-# 组合批次（Node v24.21.0；日志 /tmp/t21-batch-*.log）
+# 组合批次（Node v24.21.0；日志 /tmp/t21-batch-*.log；批 E/H 用 Electron 自带 Node 24.21.0）
 cd backend-ts
-node --test <批 A 14 文件：incremental-{handoff,sync,controls}、first-history-coordinator、history-{http,hooks,source-holder}、clear-{resync,http}、deletion{, -metadata}、contact-{binding,close}、private-history>          # 125/125
-node --test <批 B 18 文件：memory-{control,extraction,documents*,owner-contribution,management*,candidate-admission,unknown-deletion,model-port}、shared-execution-deletion>                                    # 145/145
-node --test test/sqlite-media.test.mjs test/sqlite-media-deletion.test.mjs test/sqlite-visual-media.test.mjs test/sqlite-voice.test.mjs test/visual-dat.test.mjs                                            # 68/68
-node --test <批 D 16 文件：cutover-{audit,disabled-capabilities,rehearsal,retirement,structure}、skills*、reply-{candidates,candidate-input-regressions,knowledge-integration}、memory-reply-integration、discussion{,-host,-dsh,-integration,-deletion}>  # 94/94
-ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --test <批 E 7 文件：history-{host,startup-host,sync-status}、host-{launch,close}、contact-close、media-host>  # 30/30
+# 批 A（125/125）
+node --test \
+  test/sqlite-incremental-handoff.test.mjs test/sqlite-incremental-sync.test.mjs test/sqlite-incremental-controls.test.mjs \
+  test/sqlite-first-history-coordinator.test.mjs test/sqlite-history-http.test.mjs test/sqlite-history-hooks.test.mjs \
+  test/sqlite-history-source-holder.test.mjs test/sqlite-clear-resync.test.mjs test/sqlite-clear-http.test.mjs \
+  test/sqlite-deletion.test.mjs test/sqlite-deletion-metadata.test.mjs test/sqlite-contact-binding.test.mjs \
+  test/sqlite-contact-close.test.mjs test/sqlite-private-history.test.mjs
+# 批 B（145/145）
+node --test \
+  test/sqlite-memory-control.test.mjs test/sqlite-memory-extraction.test.mjs \
+  test/sqlite-memory-documents.test.mjs test/sqlite-memory-documents-migration.test.mjs \
+  test/sqlite-memory-documents-expiry.test.mjs test/sqlite-memory-documents-independent.test.mjs \
+  test/sqlite-memory-documents-reply.test.mjs test/sqlite-memory-documents-requalification.test.mjs \
+  test/sqlite-memory-documents-retry.test.mjs test/sqlite-memory-documents-unchanged.test.mjs \
+  test/sqlite-memory-documents-unknown.test.mjs test/sqlite-owner-contribution.test.mjs \
+  test/sqlite-memory-management.test.mjs test/sqlite-memory-management-http.test.mjs \
+  test/sqlite-memory-candidate-admission.test.mjs test/sqlite-memory-unknown-deletion.test.mjs \
+  test/sqlite-shared-execution-deletion.test.mjs test/sqlite-memory-model-port.test.mjs
+# 批 C（68/68）
+node --test test/sqlite-media.test.mjs test/sqlite-media-deletion.test.mjs test/sqlite-visual-media.test.mjs test/sqlite-voice.test.mjs test/visual-dat.test.mjs
+# 批 D（94/94）
+node --test \
+  test/sqlite-cutover-audit.test.mjs test/sqlite-cutover-disabled-capabilities.test.mjs test/sqlite-cutover-rehearsal.test.mjs \
+  test/sqlite-cutover-retirement.test.mjs test/sqlite-cutover-structure.test.mjs test/sqlite-skills.test.mjs \
+  test/sqlite-skill-host.test.mjs test/sqlite-reply-candidates.test.mjs test/sqlite-reply-candidate-input-regressions.test.mjs \
+  test/sqlite-reply-knowledge-integration.test.mjs test/sqlite-memory-reply-integration.test.mjs \
+  test/sqlite-discussion.test.mjs test/sqlite-discussion-host.test.mjs test/sqlite-discussion-dsh.test.mjs \
+  test/sqlite-discussion-integration.test.mjs test/sqlite-discussion-deletion.test.mjs
+# 批 E（30/30）
+ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --test \
+  test/sqlite-history-host.test.mjs test/sqlite-history-startup-host.test.mjs test/sqlite-host-launch.test.mjs \
+  test/sqlite-host-close.test.mjs test/sqlite-contact-close.test.mjs test/sqlite-history-sync-status.test.mjs test/sqlite-media-host.test.mjs
 cd ../desktop
-node --test <批 F 10 文件：sqlite-history-clear-contract、fixed-memory-processing-view、incremental-sync-status、message-media-{integration,view,controller}、sqlite-history-messages、sqlite-memory-management-view、sync-status-recovery、local-history-sync>  # 56/56
+# 批 F（56/56）
+node --test \
+  tests/sqlite-history-clear-contract.test.mjs tests/fixed-memory-processing-view.test.mjs \
+  tests/incremental-sync-status.test.mjs tests/message-media-integration.test.mjs \
+  tests/message-media-view.test.mjs tests/message-media-controller.test.mjs \
+  tests/sqlite-history-messages.test.mjs tests/sqlite-memory-management-view.test.mjs \
+  tests/sync-status-recovery.test.mjs tests/local-history-sync.test.mjs
 cd ../backend-ts
-node --test <批 G：memory-adjudication*、adjudication-{deletion,migration}、shared-producer-schema、memory-adjudication-dsh、candidate-admission、management-http>   # 结果见 /tmp/t21-batch-g-adjudication.log
-# 两端类型检查：backend/desktop 各 `pnpm run typecheck`（日志 /tmp/t21-typecheck.log）
+# 批 G（74/74）
+node --test \
+  test/sqlite-memory-adjudication.test.mjs test/sqlite-memory-adjudication-evidence.test.mjs \
+  test/sqlite-memory-adjudication-deletion.test.mjs test/sqlite-memory-adjudication-model-port.test.mjs \
+  test/sqlite-adjudication-deletion.test.mjs test/sqlite-adjudication-migration.test.mjs \
+  test/sqlite-shared-producer-schema.test.mjs test/memory-adjudication-dsh.test.mjs \
+  test/sqlite-memory-candidate-admission.test.mjs test/sqlite-memory-management-http.test.mjs
+# 批 H（25/25；基线复核追加，Electron 自带 Node）
+ELECTRON_RUN_AS_NODE=1 <desktop>/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --test \
+  test/sqlite-cutover-restart-host.test.mjs test/sqlite-cutover-structure.test.mjs test/sqlite-cutover-rehearsal.test.mjs \
+  test/sqlite-cutover-audit.test.mjs test/sqlite-cutover-retirement.test.mjs test/sqlite-cutover-disabled-capabilities.test.mjs
+# 两端类型检查（0 错误）：backend/desktop 各 `pnpm run typecheck`（= 锁定 typescript 7.0.2 的 `tsc --noEmit`；`backend-ts/node_modules/typescript/package.json` 实测 version=7.0.2，日志 /tmp/t21-typecheck.log 仅记命令与退出码）
 
 # 实际 App（隔离合成根，realpath；未配置真实模型、未操作微信、未打包）
 cd desktop
@@ -202,11 +250,11 @@ NOTALONE_DEV_CDP=1 NOTALONE_ENV_FILE=<root>/empty.env node scripts/dev.mjs --use
 node scripts/development-status.mjs --user-data-dir <realpath-root>   # 退出后 stopped/pids[]
 ```
 
-证据清单：`/tmp/t21-evidence/`（空根 manifest 与截图、合成根 manifest、联系人/记忆/清空 pending/重开截图、删除 HTTP 响应与删除状态 JSON）。本文件提交后，历史证据路径不进入 Git。
+证据清单：`/tmp/t21-evidence/`（空根 manifest 与截图、合成根 manifest、联系人/记忆/清空 pending/重开截图、删除 HTTP 响应与删除状态 JSON）；组合日志另含 `/tmp/t21-batch-h-restart.log`（基线复核 25/25，含空隔离根/旧写入者/审计用例）。本文件提交后，历史证据路径不进入 Git。
 
 ## 10. 危险项检查与资源清理
 
 - 未新增外部发送能力；未发送/撤回任何外部消息；未读取真实微信正文、名单、媒体或凭据；未调用真实模型；未访问/迁移/恢复真实业务库；未启用 13/15/18/19；未打包、未运行打包版、未改发布门禁；未 push/PR、未创建远端分支。
 - 未修改 `planning.md`、其他票文件、State/Triage（本票文件仅追加 Comments）；新增桌面测试 0 个，未改 `desktop/tests/inventory.json`。
 - 资源：合成根与空根删除、供应商停止、App/监督器退出、`dev:status stopped/pids[]`、无残留进程/端口；工作树依赖软链与 `.dev` 构建产物在提交前移除/保留为未跟踪且不提交；证据仅留 `/tmp` 与本记录，不含私人数据或可恢复定位。
-- 复核：`git status` 仅本任务文档/票 Comments 变更；`git diff --check` 通过；`node scripts/check_public_history.mjs --ref HEAD --working-tree` 结果见最终回报。
+- 复核：`git status` 仅本任务文档/票 Comments 变更；`git diff --check` 通过；公开前检查 `node scripts/check_public_history.mjs --ref 9ba6e733` issues 0（t03 只读复核，未带 working-tree，故 currentFiles 为 0）；本文件修订提交前另跑 `--ref HEAD --working-tree`，结果 issues 0（currentFiles 覆盖本次两文件），记录于票 Comments 与最终回报。
