@@ -112,7 +112,8 @@ async function isolatedDecoder(t,workerMode='missing-asset') {
  for(const file of ['decoder.ts','format.ts'])await copyFile(new URL(`../src/media/voice/${file}`,import.meta.url),`${root}/src/media/voice/${file}`);
  await copyFile(new URL('../src/storage/sqlite/contracts.ts',import.meta.url),`${root}/src/storage/sqlite/contracts.ts`);
  if(workerMode==='blocked')await writeFile(`${root}/src/media/voice/decoder-worker.mjs`,'for(;;){}\n');
- else {await copyFile(new URL('../src/media/voice/decoder-worker.mjs',import.meta.url),`${root}/src/media/voice/decoder-worker.mjs`);const require=createRequire(import.meta.url);await copyFile(require.resolve('silk-wasm'),`${root}/node_modules/silk-wasm/lib/index.cjs`);await writeFile(`${root}/node_modules/silk-wasm/package.json`,JSON.stringify({name:'silk-wasm',version:'3.7.1',main:'lib/index.cjs'}));}
+ else {await copyFile(new URL('../src/media/voice/decoder-worker.mjs',import.meta.url),`${root}/src/media/voice/decoder-worker.mjs`);const require=createRequire(import.meta.url);await copyFile(require.resolve('silk-wasm'),`${root}/node_modules/silk-wasm/lib/index.cjs`);await writeFile(`${root}/node_modules/silk-wasm/package.json`,JSON.stringify({name:'silk-wasm',version:'3.7.1',main:'lib/index.cjs',...(workerMode==='redirect-entry'?{exports:{require:'./lib/index.cjs',import:'./lib/unchecked.mjs'}}:{})}));
+ if(workerMode==='redirect-entry'){const {dirname,join}=await import('node:path');await copyFile(join(dirname(require.resolve('silk-wasm')),'silk.wasm'),`${root}/node_modules/silk-wasm/lib/silk.wasm`);await writeFile(`${root}/node_modules/silk-wasm/lib/unchecked.mjs`,'export async function decode(){return {data:new Uint8Array(2)};}');}}
  const {SilkWasmDecoder:Decoder}=await import(pathToFileURL(`${root}/src/media/voice/decoder.ts`).href);const decoder=new Decoder();t.after(()=>decoder.close());return decoder;
 }
 test('离线WASM资产缺失明确组件不可用，不补下载',{timeout:5000},async t=>{
@@ -120,4 +121,8 @@ test('离线WASM资产缺失明确组件不可用，不补下载',{timeout:5000}
 });
 test('同步Worker卡住时墙钟上限真正终止线程，不仅拒绝外层Promise',{timeout:15000},async t=>{
  const decoder=await isolatedDecoder(t,'blocked');const started=Date.now();await assert.rejects(decoder.decode(packets(1,1,1),new AbortController().signal),{code:'voice_conversion_timeout'});await decoder.close();assert.ok(Date.now()-started<13000);
+});
+
+test('条件导入入口偏移不得执行未经摘要校验的代码',async t=>{
+ const {encode}=await import('silk-wasm');const {data}=await encode(Buffer.alloc(9600),24000);const decoder=await isolatedDecoder(t,'redirect-entry');const pcm=await decoder.decode(data,new AbortController().signal);assert.equal(pcm.length,9600);
 });

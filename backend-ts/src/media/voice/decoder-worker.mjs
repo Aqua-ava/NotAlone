@@ -7,9 +7,10 @@ import path from 'node:path';
 let codec;
 try {
   const require=createRequire(import.meta.url),main=require.resolve('silk-wasm');
+  if(path.basename(main)!=='index.cjs')throw Error();
   const expected=[['index.cjs','74bb76aba57b1b52787e1eace2870eaaab2deec32241e28f47a138c6b98de065'],['silk.wasm','88152af59af535b8056ac806710824b2259a361027451b494f175f48fb39c807']];
   for(const [name,digest] of expected)if(createHash('sha256').update(await readFile(path.join(path.dirname(main),name))).digest('hex')!==digest)throw Error();
-  codec=await import('silk-wasm');
+  codec=require(main);
 } catch {parentPort.postMessage({code:'voice_runtime_unavailable'});}
 if(codec) {
   try {
