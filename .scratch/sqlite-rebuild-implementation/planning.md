@@ -190,6 +190,8 @@ flowchart TD
 
 - 用户在独立会话另行授权的真实供应商合成复测：07源提交两次调用及两个目标成功，11源提交一次调用成功且重开未增请求；总指挥已核对状态数量和祖先关系。各自旧unknown保留，09没有因此获得真实外呼授权；不认证微信或真实聊天语义质量。
 
+- 2026-10-30 票09完成并 resolved（本轮第11项）：t09 在实际热更新 App（合成库+环回供应商，12次文档协议调用/errors=0，未操作微信/未接真实模型）完成 a–d 复验：权威阶段序列 extraction_verification→document_scene→document_profile→completed；记忆页显示同一发布集合两篇文档；本人全局概览不在联系人页展示；正常 quit 后 dev:status stopped/pids[]，合成临时根与供应商已清理。12 条验收逐条通过（d 项“时间待核验”实际 App 未强制构造，已由无头页面用例覆盖并如实记录）。边界：真实模型语义质量、真实微信数据、最终产品切换未认证，单独记账。桌面窗口已释放，下一顺位 04。
+
 - 2026-10-30 票09回归修复集成：t09定位 memoryExtraction.start 的复用条件错误（新增 document_extraction_reuse 未区分本轮是否接线后续文档阶段，导致仅提取服务第二轮把已成功目标又纳入，next.total=2）；d5f3ee55 以 `followupStages = afterRunSettled!==undefined` 修复，runs 仅在 followupStages===true 且迁移13时启用复用。已--no-ff集成13a33b18；主仓复跑：backend typecheck 0、sqlite-memory-extraction 10/10（原失败转绿）、09文档10文件90/90、desktop typecheck 0。
 
 - 2026-10-30 票04集成（含审查修复）：执行会话t04最终bad4c4ef（迁移14=historyIncrementalMigration，仅ALTER read_goal/message，不重建CHECK不建新表）；已--no-ff集成3ba737fc。集成前经t03独立Standards/Spec双轴审查，发现并修复3个阻断：提交树typecheck 10错误（错误收窄+SQLInputValue）、close不取消在途读取/迟到页可提交、未校验支持档incrementalTail能力；t03 delta复审确认三项闭环。主仓复跑：backend typecheck 0、增量4文件25/25、宿主12/12（Electron Node）、desktop typecheck 0、桌面5文件21/21。已知问题：09集成引入sqlite-memory-extraction 1项失败（0197bea4通过、5551aa5e失败），已交t09定位修复，不计入04。真实渠道增量能力仍属03门禁，打开前保持不可用。
