@@ -23,7 +23,7 @@ export interface HistoryClearView {
 export type HistoryResyncPhase = 'none' | 'authorized' | 'active' | 'completed' | 'failed';
 export interface HistoryResyncView {
   contactId: string;
-  requestKey: string;
+  requestKey: string | null;
   state: HistoryResyncPhase;
   completed: boolean;
   goalPhase: 'not_started' | 'syncing' | 'complete' | 'incomplete' | null;

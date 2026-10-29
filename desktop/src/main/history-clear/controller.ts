@@ -27,7 +27,7 @@ function clearView(value: unknown): HistoryClearView {
 }
 function resyncView(value: unknown): HistoryResyncView {
   const row = value as Record<string, unknown> | null;
-  if (!row || typeof row !== 'object' || typeof row.contact_id !== 'string' || typeof row.request_key !== 'string'
+  if (!row || typeof row !== 'object' || typeof row.contact_id !== 'string' || (row.request_key !== null && typeof row.request_key !== 'string')
     || !resyncStates.has(String(row.state)) || typeof row.completed !== 'boolean') throw new Error('重读状态格式无法确认。');
   let goalPhase: HistoryResyncView['goalPhase'] = null;
   let messageCount = 0, nonTextCount = 0, failureCode: string | null = null;
@@ -37,7 +37,7 @@ function resyncView(value: unknown): HistoryResyncView {
     goalPhase = goal.phase as HistoryResyncView['goalPhase'];
     messageCount = count(goal.message_count); nonTextCount = count(goal.non_text_count); failureCode = text(goal.failure_code);
   }
-  return { contactId: row.contact_id, requestKey: row.request_key, state: row.state as HistoryResyncView['state'],
+  return { contactId: row.contact_id, requestKey: typeof row.request_key === 'string' ? row.request_key : null, state: row.state as HistoryResyncView['state'],
     completed: row.completed, goalPhase, messageCount, nonTextCount, failureCode };
 }
 export class HistoryClearController {
