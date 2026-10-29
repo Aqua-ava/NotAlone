@@ -4,7 +4,7 @@ export interface Discussion {id:string;contactId:string;state:'active'|'deleting
 export interface RuntimeCopy extends DiscussionScope {
  id:string;sdkInstanceId:string;managedLocator:string;address:ManagedAddress|null;
  writeGeneration:bigint;dataGeneration:bigint;sourceRevision:bigint;
- state:'preparing'|'dirty'|'ready'|'retired'|'blocked'|'cleanup_pending'|'cleared';
+ state:'preparing'|'dirty'|'ready'|'blocked'|'deleting'|'deleted';
  committedRequestId:string|null;eventBoundary:string|null;configurationDigest:string|null;
  cleanupOperationId:string|null;manifestComplete:boolean;
 }

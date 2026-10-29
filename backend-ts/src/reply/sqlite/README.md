@@ -13,3 +13,5 @@
 `runtime_copy` 在创建目录前保存副本ID、官方SessionId、不可复用定位、讨论代次及contact资料代次。`address_json` 为05完整ManagedAddress（含父目录身份）；只有登记真实身份后才可dirty/写DSH。业务提交、官方flush/close、事件摘要与配置/来源核验分别完成后才ready。dirty/preparing不能直接恢复。
 
 `runtime_file` 是关闭排空后完整清单，包含根目录及全部子目录/文件的独立身份。`manifest_complete` 不能由目录不存在推定；无身份准备件须通过同一创建意图核验后显式登记。删除fence后只准登记关闭产生的清理清单，不重新开放DSH writer。沿05同一operation的typed文件目标及holderKeys清理，文件I/O位于事务外。
+
+`runtime_file` 仅是 `runtime_copy.expected_identity` 的完整子项文件身份索引，辅助05生成typed `deletion_target`；它不拥有独立删除操作或进度账本。唯一删除operation、计划修订、runner及最终复核均沿05。副本状态沿统一设计的preparing/dirty/ready/blocked/deleting/deleted；退役表示不再由current_runtime_id指向，不新增状态。
