@@ -132,7 +132,7 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
         ? '同步操作结果尚未确认，请刷新同步状态后再决定下一步。'
         : '同步状态读取失败，请检查本机服务与 CLI 后刷新。'}</p>}
       {error && <p role="alert">{error}<button className="button" onClick={() => void retry()}>重试读取</button></p>}
-      {bodyAvailable && report && <HistoryCoverageStatus coverages={report.historyCoverages} contacts={contacts} currentContactId={currentContactId} />}
+      {report && <HistoryCoverageStatus coverages={report.historyCoverages} contacts={contacts} currentContactId={currentContactId} />}
       {bodyAvailable && report?.enabled && <SyncRecoveryStatus key={state.scopeRevision} report={report} />}
     </section>
   </div>;

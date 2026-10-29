@@ -7,10 +7,11 @@ export interface PreparedRecord { raw: string; localKey: string | null; serverKe
 export function prepareRecord(input:HistoryRecord,sourceGeneration:string,target:HistoryTarget):PreparedRecord {
  const r:HistoryRecord={partition:input?.partition,table:input?.table,localId:input?.localId,serverId:input?.serverId,
   sender:input?.sender,kind:input?.kind,text:input?.kind==='text'?input.text:null,originalType:input?.originalType,
-  sentAt:input?.sentAt,timePrecision:input?.timePrecision,orderScheme:input?.orderScheme,orderKey:input?.orderKey};
+  sentAt:input?.sentAt,timePrecision:input?.timePrecision,orderScheme:input?.orderScheme,orderKey:input?.orderKey,...(input?.status!==undefined?{status:input.status}:{} )};
  let reason:string|null=null;
  if(!label(r.partition)||!target.partitions.includes(r.partition)||!label(r.table)||!exactInteger(r.localId))reason='message_identity_insufficient';
  else if(!target.tables.some(t=>t.partition===r.partition&&t.instance===r.table))reason='message_table_unverified';
+ else if(r.status!==undefined&&r.status!==null&&(typeof r.status!=='string'||!/^-?(0|[1-9][0-9]{0,18})$/.test(r.status)||BigInt(r.status)<-9223372036854775808n||BigInt(r.status)>9223372036854775807n))reason='message_status_invalid';
  else if(r.serverId!==null&&!exactInteger(r.serverId))reason='message_alias_invalid';
  else if(!['owner','contact'].includes(r.sender)||!kinds.has(r.kind)||!label(r.originalType)||r.kind==='text'&&(typeof r.text!=='string'||r.text.length>1_000_000))reason='message_content_unverified';
  else if((r.sentAt===null)!==(r.timePrecision===null)||r.sentAt!==null&&(!exactInteger(r.sentAt)||BigInt(r.sentAt)>253402300799999n)||r.timePrecision!==null&&!['second','millisecond'].includes(r.timePrecision))reason='message_time_invalid';

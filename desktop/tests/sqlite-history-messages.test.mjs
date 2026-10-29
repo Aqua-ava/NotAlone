@@ -7,7 +7,7 @@ const bundled=await build({stdin:{contents:`
  import React from 'react'; import { renderToStaticMarkup } from 'react-dom/server';
  import { UnifiedReplyWorkspace } from './src/renderer/UnifiedReplyWorkspace';
  export { readReplyMessages, mergeReplyMessages } from './src/main/reply/messages';
- export function render(items) { return renderToStaticMarkup(<UnifiedReplyWorkspace contacts={{state:{selectedContactId:'c',scopeRevision:1,draft:''}}} replies={{state:{contactId:'c',scopeRevision:1,phase:'idle',mode:'rewrite_draft',options:{tone:'original',instruction:'',inputKind:'workspace',includeRelationshipContext:true},savedSession:{phase:'ready',sessionId:'s'},messages:{phase:'ready',items}}}} />); }
+ export function render(items,extra={}) { return renderToStaticMarkup(<UnifiedReplyWorkspace contacts={{state:{selectedContactId:'c',scopeRevision:1,draft:''}}} replies={{state:{contactId:'c',scopeRevision:1,phase:'idle',mode:'rewrite_draft',options:{tone:'original',instruction:'',inputKind:'workspace',includeRelationshipContext:true},savedSession:{phase:'ready',sessionId:'s'},messages:{phase:'ready',items},...extra}}} />); }
 `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'node',format:'cjs',write:false,loader:{'.css':'empty'}});
 const loaded={exports:{}};new Function('require','module','exports',bundled.outputFiles[0].text)(createRequire(import.meta.url),loaded,loaded.exports);
 const {readReplyMessages,mergeReplyMessages,render}=loaded.exports;
@@ -32,4 +32,9 @@ test('消息解析拒绝缺少顺序声明或非法展示位置，保留旧消�
  const old=wire();delete old.ordering;delete old.display_position;
  const read=await readReplyMessages(backend([old]),id,null,new AbortController().signal);
  assert.equal(read.messages[0].ordering,undefined);
+});
+
+test('已保存历史可独立刷新，不要求助手生成资格',()=>{
+ const html=render([], {generationBlock:'contact_unconfirmed',savedSession:{phase:'failed',sessionId:null}});
+ assert.match(html,/<button>刷新最近聊天<\/button>/);
 });

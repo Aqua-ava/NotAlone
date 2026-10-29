@@ -56,11 +56,11 @@ export const historyActions:StorageAction[]=[
   let quarantined=false;
   for(const [index,input]of page.records.entries()){
    const prepared=prepareRecord(input,token.source_generation,target);const r=prepared.value;let reason=prepared.reason;let message:StorageRow|undefined;
-   const excluded=prepared.localKey&&tx.get("SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? AND ((scheme='local' AND external_key=?) OR (scheme='server' AND external_key=?))",[token.owner_id,token.conversation_id,prepared.localKey,prepared.serverKey]);
+   const excluded=prepared.localKey&&tx.get("SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? AND ((scheme='local' AND external_key=?) OR (scheme='server' AND external_key=?))",[token.owner_id,token.conversation_id,prepared.localKey,report.serverAliasSemantics==='verified_within_scope'?prepared.serverKey:null]);
    if(excluded)reason='source_excluded';
    if(!reason){
     const local=aliasMessage(tx,token,'local',prepared.localKey!);
-    const server=prepared.serverKey?aliasMessage(tx,token,'server',prepared.serverKey):undefined;
+    const server=report.serverAliasSemantics==='verified_within_scope'&&prepared.serverKey?aliasMessage(tx,token,'server',prepared.serverKey):undefined;
     if(local&&server&&local.id!==server.id)reason='message_identity_conflict';
     else {message=local??server;if(message&&!sameMessage(message,r))reason='message_identity_conflict';}
     if(!reason){
@@ -68,7 +68,7 @@ export const historyActions:StorageAction[]=[
       tx.run(`INSERT INTO message(owner_id,id,contact_id,binding_id,identity_scheme,external_key,sender_role,kind,text_body,original_type,sent_at,time_precision,order_scheme,order_key,display_no) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,[token.owner_id,id,token.contact_id,token.binding_id,'source-table-local-v1',prepared.localKey,r.sender,r.kind,r.text,r.originalType,r.sentAt===null?null:BigInt(r.sentAt),r.timePrecision,r.orderScheme,r.orderKey,display]);message={id};}
      if(message.sent_at!==undefined&&(message.sent_at===null&&r.sentAt!==null||r.orderScheme!==null&&(message.order_scheme!==r.orderScheme||message.order_key!==r.orderKey)))
       tx.run('UPDATE message SET sent_at=coalesce(sent_at,?),time_precision=coalesce(time_precision,?),order_scheme=coalesce(?,order_scheme),order_key=coalesce(?,order_key),interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND id=?',[r.sentAt===null?null:BigInt(r.sentAt),r.timePrecision,r.orderScheme,r.orderKey,token.owner_id,message.id]);
-     for(const [scheme,key]of [['local',prepared.localKey],['server',prepared.serverKey]])if(key)tx.run('INSERT OR IGNORE INTO message_alias(owner_id,id,contact_id,binding_id,scheme,external_key,message_id) VALUES(?,?,?,?,?,?,?)',[token.owner_id,randomUUID(),token.contact_id,token.binding_id,scheme!,key,message.id]);
+     for(const [scheme,key]of [['local',prepared.localKey],['server',report.serverAliasSemantics==='verified_within_scope'?prepared.serverKey:null]])if(key)tx.run('INSERT OR IGNORE INTO message_alias(owner_id,id,contact_id,binding_id,scheme,external_key,message_id) VALUES(?,?,?,?,?,?,?)',[token.owner_id,randomUUID(),token.contact_id,token.binding_id,scheme!,key,message.id]);
     }
    }
    if(reason&&reason!=='source_excluded')quarantined=true;
@@ -82,7 +82,7 @@ export const historyActions:StorageAction[]=[
   tx.run('UPDATE read_goal SET cursor=?,completed_partitions=?,state=?,coverage_state=?,failure_code=? WHERE owner_id=? AND id=?',[page.cursorOut,JSON.stringify([...partitions]),state,complete?'complete':'partial',code,token.owner_id,goal.id]);
   return readCoverage(tx,token.owner_id,token.contact_id);
  }),
- action('history.interrupt','write',(tx,i)=>{const goal=currentGoal(tx,i.token,i.goalId);if(goal.state==='running')tx.run("UPDATE read_goal SET state='incomplete',failure_code=? WHERE owner_id=? AND id=?",[i.code,i.token.owner_id,goal.id]);return readCoverage(tx,i.token.owner_id,i.token.contact_id);}),
+ action('history.interrupt','write',(tx,i)=>{const goal=currentGoal(tx,i.token,i.goalId);if(goal.state==='running'||goal.state==='incomplete')tx.run("UPDATE read_goal SET state='incomplete',failure_code=? WHERE owner_id=? AND id=?",[i.code,i.token.owner_id,goal.id]);return readCoverage(tx,i.token.owner_id,i.token.contact_id);}),
  action('history.source','read',(tx,i)=>{
   readCoverage(tx,i.ownerId,i.contactId);
   const row=tx.get(`SELECT r.*,c.goal_id,c.captured_at,c.adapter_version,c.cursor_in,c.cursor_out,g.support_json

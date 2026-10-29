@@ -7,6 +7,8 @@ export interface HistorySupportReport {
   accountKey: string; conversationKey: string; sourceGeneration: string;
   programVersion: string; build: string; artifactSha256: string;
   schemaFingerprint: string; declaredPrimaryKey: readonly string[];
+  serverAliasSemantics?: 'verified_within_scope' | 'unverified' | 'unsupported';
+  capabilities?: Readonly<Record<string, 'supported' | 'unsupported' | 'unverified'>>;
   identity: 'source-table-local-v1'; statusSemantics: string; continuity: string;
 }
 export interface HistoryScope {
@@ -22,6 +24,7 @@ export interface HistoryRecord {
   text: string | null; originalType: string;
   sentAt: string | null; timePrecision: 'millisecond' | 'second' | null;
   orderScheme: string | null; orderKey: string | null;
+  status?: string | null;
 }
 export interface HistoryPage {
   target: string; cursorIn: string | null; cursorOut: string | null;
@@ -46,6 +49,7 @@ export interface StoredMessage {
   kind: HistoryRecord['kind']; text: string | null; originalType: string;
   sentAt: string | null; timePrecision: HistoryRecord['timePrecision'];
   orderScheme: string | null; orderKey: string | null;
+  status?: string | null;
   // 当前按保存位置分页；ordering描述展示次序，不能从原消息orderScheme推定。
   displayPosition: string; ordering: 'verified' | 'unknown'; sourceRecordIds: string[];
 }
