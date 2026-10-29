@@ -115,23 +115,28 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
  assert.ok(run.candidates.every(candidate=>candidate.origin==='auto'&&candidate.state==='verified_pending_decision'));assert.equal(run.laterStages,'pending');assert.notEqual(run.state,'completed');
  assert.equal(supplier.windows.length,2);assert.equal(supplier.verifications.length,2);
  const normal=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});assert.equal(normal.status,'configured');
- const extractionContacts=[],verificationContacts=[];
- for(const {body,payload} of supplier.windows){
+ const extractionContacts=[],verificationContacts=[],extractionOutputs=new Map(),verificationOutputs=new Map();
+ for(const {body,payload,output} of supplier.windows){
   assert.equal(body.model,normal.model.model);assert.equal(body.max_tokens,normal.model.maxTokens);
   const contacts=new Set(payload.messages.map(message=>{const prepared=preparedByMessage.get(message.message_id);assert.ok(prepared);assert.equal(message.text,prepared.text);assert.equal(message.sender,prepared.sender==='owner'?'self':'contact');return contactForMessage.get(message.message_id);}));
-  assert.equal(contacts.size,1);const [contactId]=contacts;extractionContacts.push(contactId);
+  assert.equal(contacts.size,1);const [contactId]=contacts;extractionContacts.push(contactId);extractionOutputs.set(contactId,output);
   assert.deepEqual(new Set(payload.messages.map(message=>message.message_id)),new Set(messagesForContact(contactId).map(message=>message.id)));
   assert.deepEqual(new Set(payload.target_message_ids),new Set(payload.messages.map(message=>message.message_id)));
  }
- for(const {body,payload} of supplier.verifications){
+ for(const {body,payload,output} of supplier.verifications){
   assert.equal(body.model,normal.model.model);assert.equal(body.max_tokens,normal.model.maxTokens);assert.equal(body.tools[0].function.strict,true);
   const contacts=new Set(payload.candidates.flatMap(candidate=>{assert.equal(candidate.source_message_ids.length,1);assert.deepEqual({subject:candidate.subject,text:candidate.text},expectedFact(candidate.source_message_ids[0]));return candidate.source_message_ids.map(id=>contactForMessage.get(id));}));
-  assert.equal(contacts.size,1);const [contactId]=contacts;verificationContacts.push(contactId);assert.equal(payload.candidates.length,2);
+  assert.equal(contacts.size,1);const [contactId]=contacts;verificationContacts.push(contactId);verificationOutputs.set(contactId,output);assert.equal(payload.candidates.length,2);
   assert.deepEqual(new Set(payload.candidates.flatMap(candidate=>candidate.source_message_ids)),new Set(messagesForContact(contactId).map(message=>message.id)));
  }
  assert.deepEqual(extractionContacts.sort(),[...contactIds].sort());assert.deepEqual(verificationContacts.sort(),[...contactIds].sort());
  for(const {task,trace} of traces.filter(item=>item.task.scopeKind==='contact')){
   assert.equal(trace.calls.length,2);assert.ok(trace.calls.every(call=>call.state==='succeeded'));assert.deepEqual(new Set(trace.calls.map(call=>call.purpose)),new Set(['extraction','verification']));
+  for(const [purpose,name,expected] of [['extraction','DirectMemoryExtractionOutput',extractionOutputs.get(task.contactId)],['verification','SourceVerificationOutput',verificationOutputs.get(task.contactId)]]){
+   assert.ok(expected);const calls=trace.calls.filter(call=>call.purpose===purpose);assert.equal(calls.length,1);
+   const returns=trace.events.filter(event=>event.kind==='model_output'&&event.callId===calls[0].callId);assert.equal(returns.length,1);
+   const tools=returns[0].payload.blocks.filter(block=>block.type==='tool-call');assert.equal(tools.length,1);assert.equal(tools[0].name,name);assert.deepEqual(JSON.parse(tools[0].arguments),expected);
+  }
   assert.ok(trace.events.some(event=>event.kind==='extraction_return'));assert.ok(trace.events.some(event=>event.kind==='verification_return'));
   assert.equal(trace.events.filter(event=>event.kind==='verification').length,2);assert.ok(trace.events.filter(event=>event.kind==='verification').every(event=>event.payload.result.verification_mode==='complete-claim-v1'&&event.payload.result.claim_validation.semantic_support==='supported'));
   assert.ok(expectedByContact.has(task.contactId));assert.ok(trace.events.every(event=>event.sources.every(source=>source.contactId===task.contactId&&contactForRecord.get(source.recordId)===task.contactId)));

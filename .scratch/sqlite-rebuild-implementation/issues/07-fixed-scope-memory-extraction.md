@@ -107,3 +107,28 @@ MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/stat
 另外将正常开发测试父预加载器实际接入Node→正式DSH启动冒烟，读取认证SQLite/memory状态、正常关闭，preload/spawn收据均形成、供应商请求0并清理自有根；仅证明真实Node启动接缝，未启动Electron，不能替代App验收。总指挥已将9cd前端合入357c5a2，并将03后端钩子合入451932ca；实际桌面仍由03人工B观察独占，07准备就绪后等待窗口。
 
 已实际无冲突合并根357c5a2018d4cd79652b4a14fbeb3abbc1d25e92，保留其451932ca首次历史钩子、账号认证及17/11修复，不编辑公共后端。因正式宿主及停读关闭接线变化，只补受影响sqlite-memory-profile.test.mjs两单例2/2（正产出约1.67秒、unknown约0.93秒，总2.72秒）及backend pnpm typecheck通过；unknown诊断实收1、关闭200/stopped、forced=false、全部残留false，自有根删除。发布迁移及registry保持与根一致。桌面类型及真实MemoryPage单例复用根357同源码有效结果，不重跑全量；实际App仍未运行，等待03人工B窗口结束后的正式分配。
+
+### 工程收口核对（实际App尚缺证）
+
+下表对应上方14条验收条件。测试结果复用前述有效记录，不以代码或单元测试冒充实际App；在桌面条件补齐前保持claimed，尚不勾选整体验收。
+
+| 条件 | 当前可核验证据 | 尚待补齐 |
+| --- | --- | --- |
+| 1 正常入口与请求幂等 | 正式profile正产出单例核对冻结输入及同key实收4次不增加；实际MemoryPage单例核对SQLite只挂固定面板 | 实际App经具名桥点击开始 |
+| 2 全量固定目标与跨轮身份 | extraction单例覆盖后到早时间消息不入旧轮、旧失败轮不冒领新轮成功、pause/continue复用task | 实际App观察进度与继续原任务 |
+| 3 停读与合法文字范围 | 正式profile停读处理4文字；extraction末例排除未勾选、非文字及未核验资料 | 实际App停读状态下手动处理 |
+| 4 联系人与本人隔离 | 正式profile按准备时独立message/record映射逐条核对输入、候选和过程；typed本人贡献同轮同payload | 实际App查看联系人及本人候选 |
+| 5 有界前文 | backend-ts/src/memory/sqlite/runs.ts:53在点击事务中仅冻结已处理前文最后8条；deletion前文单例清除整窗依赖并沿同item重新核验 | 无新增实际微信读取；不以App画面证明数据库上界 |
+| 6 正常模型与调用状态 | model-port实际DSH核对最终预算/用途；正式profile保持默认模型与预算；unknown单例实收1且同key/continue不追加 | 实际App区分准备、返回及unknown |
+| 7 逐项核验与失败 | 正式profile2E+2strict V；verified-results证据不足单例不计无产出成功，保存真实返回及逐项核验事实 | 实际App协议失败状态 |
+| 8 无产出成功 | extraction与官方DSH无产出单例成功计数、后续不重做；真实React面板显示明确文案 | 实际App无产出文案及再次开始无新增调用 |
+| 9 自动来历与08边界 | 正式profile4条auto待裁决输出、正式memory行0；verifiedExtractionOutput同事务输出接口 | 实际App自动提取与待裁决说明 |
+| 10 完整追踪 | 正式profile核对实际发送窗口、完整模型标准化工具参数、claim及来源；presentation顺序单例核对inputNos与实际窗口一致 | 实际App展开实际输入与返回 |
+| 11 资格与混合本人失效 | extraction取消单例拒绝旧回调且其他联系人继续；deletion单例撤销混合本人任务 | 实际App资格失效撤下快照 |
+| 12 05删除闭包 | deletion/unknown-deletion覆盖真实holder退出、前文传递依赖、unknown保留占用及其他来源不可盲重发 | 实际App来源删除撤下候选与过程 |
+| 13 状态反馈 | controller/Entry/实际MemoryPage和Panel真实React用例区分无产出、失败、unknown、后续pending及旧回包 | 实际App状态与交互观察 |
+| 14 正常组合入口 | 正式profile两联系人及本人、停读、同key；领域与React单例覆盖新消息、删除与迟到 | 合成正式SDK工程链与实际App联合收口 |
+
+实际App准备就绪：使用prepare-memory-desktop.mjs的独立合成root，分别核验positive（可hold观察进度）、no_new、protocol_failed、unknown；所有场景仍用正常提示词、正式profile和默认预算。仅在获得桌面窗口后执行pnpm run dev，先dev:status核验复用；明确禁止打包。开始任何模型动作前必须同时核对真实Electron父进程的preload/spawn守卫收据、认证SQLite/memory状态、test实例身份与停读状态；缺任一收据就停止，不因已出现页面而点击开始。来源/资格失效与旧回调仍走正常具名桥和真实页面，自动检查、实际App与真实模型质量分别记账。当前11持有App窗口，07不自行启动实例；旧真实模型问题失败/unknown及过期预算0保持不变。
+
+收口审计补强：原正式profile只检查extraction_return/verification_return存在，不能充分支持“完整返回已核对”。现环回supplier记录实际序列化送出的完整output，positive按准备时独立联系人映射、purpose及callId定位唯一持久化model_output，核对唯一tool-call名称并深比较全部arguments；未从verified产物反推预期。只重跑positive1/1、约1.71秒，两文件node --check及空白检查通过；unknown和TypeScript未变，复用已有结果。Standards/Spec独立复核均0新增；该证据证明本场景标准化工具返回的完整保存，不认证真实供应商语义质量。另以ps实际确认11的隔离开发Electron PID586正在运行，07等待该桌面流程，不把调度文件本身当进程存活证据。
