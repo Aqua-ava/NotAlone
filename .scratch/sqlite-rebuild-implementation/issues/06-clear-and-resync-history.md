@@ -1,7 +1,7 @@
 # 06：清空聊天与明确重读历史
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [同步与记忆规格](../../sync-memory-behavior/spec.md)；[SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)
 Blocked by: [04 增量同步与读取控制](04-incremental-sync-controls.md)；[05 统一来源删除与清理流程](05-source-deletion-and-cleanup.md)

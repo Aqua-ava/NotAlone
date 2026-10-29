@@ -1,7 +1,7 @@
 # 10：记忆处理控制与恢复
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [同步、聊天清空与记忆处理规则](../../sync-memory-behavior/spec.md)、[SQLite数据库重建](../../sqlite-database-rebuild/spec.md)
 Blocked by: [04 增量同步与读取控制](04-incremental-sync-controls.md)；[09 主题资料与长期概览](09-memory-documents-publication.md)

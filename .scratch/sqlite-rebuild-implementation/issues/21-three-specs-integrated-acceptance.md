@@ -1,7 +1,7 @@
 # 21：三份规格组合验收
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)；[同步与记忆规格](../../sync-memory-behavior/spec.md)；[媒体规格](../../wechat-media-extraction/spec.md)
 Blocked by: [20 默认切换 SQLite 与旧业务清理](20-sqlite-cutover-and-legacy-cleanup.md)

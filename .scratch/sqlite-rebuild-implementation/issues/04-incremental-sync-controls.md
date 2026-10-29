@@ -1,7 +1,7 @@
 # 04：增量同步与读取控制
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [同步与记忆规格](../../sync-memory-behavior/spec.md)；[SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)
 Blocked by: [03 首次历史同步与消息展示](03-private-history-sync.md)
