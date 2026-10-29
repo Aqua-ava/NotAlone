@@ -108,4 +108,3 @@ for(const action of ['protect','unprotect'])test(`合并父资料保护后旧恢
  else {const result=await f.management.decide(request),after=await f.read();assert.equal(active(after).length,2);for(const prior of original)assert.equal(after.memories.find(m=>m.id===prior.id).current.body,prior.current.body);assert.deepEqual(await f.management.decide(request),result);assert.deepEqual(await f.read(),after);}
  await healthy(f);
 });
-
