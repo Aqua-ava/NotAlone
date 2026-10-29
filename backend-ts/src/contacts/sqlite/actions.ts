@@ -6,6 +6,15 @@ const text = (value: unknown): string => typeof value==='string' && value.length
 const generation = (value: unknown): bigint => typeof value==='string' && /^(0|[1-9][0-9]{0,17})$/.test(value) ? BigInt(value) : fail('identity_request_invalid');
 const action = (name: string, mode: 'read'|'write', execute: (tx: StorageTransaction,input: any)=>unknown): StorageAction =>
   ({name,mode,retryBusy:true,execute:(tx,input)=>execute(tx,input)});
+function visibleMessageCounts(tx:StorageTransaction,owner:string):Map<string,number> {
+ // 仅身份存储可能尚未安装历史域；目录统计不要求历史表或正文读取能力。
+ if(tx.all("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('message','capture_record')").length!==2)return new Map();
+ return new Map(tx.all(`SELECT m.contact_id,count(*) AS n FROM message m WHERE m.owner_id=? AND m.availability='available'
+  AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available') GROUP BY m.contact_id`,[owner]).map(row=>{
+   if(typeof row.n!=='bigint'||row.n<0n||row.n>BigInt(Number.MAX_SAFE_INTEGER))return fail('identity_count_out_of_range');
+   return [String(row.contact_id),Number(row.n)];
+  }));
+}
 function revoke(tx: StorageTransaction, owner: string, contact: string, at: number, reason: string): void {
   const active=tx.get('SELECT id FROM read_grant WHERE owner_id=? AND contact_id=? AND revoked_at IS NULL',[owner,contact]);
   if (!active) return;
@@ -51,7 +60,10 @@ function eligibility(tx: StorageTransaction, owner: string, contact: string): Re
 export const identityActions: StorageAction[] = [
  action('identity.resolveOwner','write',(tx,i)=>{const owners=tx.all('SELECT owner_id FROM owner');if(owners.length>1)fail('owner_ambiguous');if(owners.length)return owners[0].owner_id;tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,?)',[text(i.proposedOwnerId),i.at]);return i.proposedOwnerId;}),
  action('identity.initialize','write',(tx,i)=>{text(i.ownerId);tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,?) ON CONFLICT(owner_id) DO NOTHING',[i.ownerId,i.at]);return i.ownerId;}),
- action('identity.directory','read',(tx,i)=>({contacts:tx.all("SELECT id AS contact_id,display_name,selection_generation,data_generation FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[text(i.ownerId)]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:0,source_count:0}})),bindings:bindings(tx,i.ownerId),account:tx.get("SELECT id,external_key,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[i.ownerId])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[i.ownerId])?.read_enabled===1n})),
+ action('identity.directory','read',(tx,i)=>{
+  const owner=text(i.ownerId),counts=visibleMessageCounts(tx,owner);
+  return {contacts:tx.all("SELECT id AS contact_id,display_name,selection_generation,data_generation FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[owner]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:counts.get(String(c.contact_id))??0,source_count:0}})),bindings:bindings(tx,owner),account:tx.get("SELECT id,external_key,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};
+ }),
  action('identity.connect','write',(tx,i)=>{
   one(tx,"SELECT owner_id FROM owner WHERE owner_id=? AND state='active'",[i.ownerId]);
   if(i.evidence.assurance!=='verified') fail('metadata_identity_unverified');
