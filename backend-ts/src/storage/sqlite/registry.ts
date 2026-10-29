@@ -1,3 +1,4 @@
+import { memoryExtractionMigration } from '../../memory/sqlite/schema.ts';
 import { historyMigration } from '../../history/sqlite/schema.ts';
 import { historyActions } from '../../history/sqlite/actions.ts';
 import { identityMigration } from '../../contacts/sqlite/schema.ts';
@@ -26,6 +27,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5)],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), memoryExtractionMigration(6)],
   actions: [...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions],
 };
