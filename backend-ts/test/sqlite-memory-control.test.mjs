@@ -365,3 +365,23 @@ test('暂停期间取消勾选立即失效，继续不复活已撤销范围',asy
  assert.deepEqual(after.actions,[]);
  assert.notEqual(continued.status,'completed');
 });
+
+test('历史失败不冒充当前状态：修正后继续成功不再显示失败计数',async t=>{
+ const f=await fixtureWithMessages(t,{a:['我长期住在高雄。']});
+ const x=extractionFixture(f);t.after(()=>x.service.close());
+ const normal=supplier();
+ x.state.prepare=async()=>{throw Object.assign(new Error('synthetic_bad_request'),{code:'extraction_model_request_invalid'});};
+ const run=await x.service.start('control-history-failure');await x.service.waitForIdle(run.runId);
+ const failed=await x.service.read(run.runId);
+ assert.equal(failed.failed,1);assert.equal(failed.succeeded,0);
+ assert.equal(failed.status,'blocked');assert.equal(failed.statusReason,'contact_failed');
+ assert.ok(failed.actions.includes('continue'));
+ x.state.prepare=null;x.state.respond=(request,input)=>normal.respond(request,input);
+ await x.service.continue(run.runId,failed.controlVersion,randomUUID());
+ await x.service.waitForIdle(run.runId);
+ const succeeded=await x.service.read(run.runId);
+ assert.equal(succeeded.failed,0,'历史失败不再冒充当前失败');
+ assert.equal(succeeded.succeeded,1);
+ assert.equal(succeeded.status,'blocked');assert.equal(succeeded.statusReason,'later_stages_pending');
+ assert.equal(succeeded.candidates.length,1);
+});
