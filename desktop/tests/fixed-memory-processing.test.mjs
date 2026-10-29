@@ -51,6 +51,15 @@ test('控制动作携带控制修订与操作标识，旧版本不覆盖并撤�
  await assert.rejects(f.controller.control('continue',{runId:ids.run,controlVersion:0,operationId:'not-a-uuid',connectionGeneration:1}));
 });
 
+test('共用故障原因码可展示，非法原因码拒绝且不撤下正在显示的原因',async t=>{
+ let data={...snapshot(),sharedFaultCode:'document_model_unconfigured'};
+ const f=await fixture(t,async()=>data);
+ const view=await f.controller.read();assert.equal(view.run.sharedFaultCode,'document_model_unconfigured');
+ data={...snapshot(),sharedFaultCode:'No Spaces Allowed'};
+ await assert.rejects(f.controller.read());
+ assert.equal(f.invalidations.length,1);
+});
+
 test('记忆入口沿认证运行状态识别存储模式，未知模式不回落旧页面',async t=>{
  let storage='sqlite';const f=await fixture(t,async req=>{assert.equal(req.path,'/api/runtime/status');assert.equal(req.method,'GET');assert.equal(req.body,undefined);return {state:'running',runtime:'dsh',hostRuntime:'typescript',...(storage===undefined?{}:{storage})};});
  assert.deepEqual(await f.controller.mode(),{connectionGeneration:1,mode:'sqlite'});

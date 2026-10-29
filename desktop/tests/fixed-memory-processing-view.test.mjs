@@ -97,6 +97,23 @@ test('页面暂停动作携带控制修订与操作标识，暂停后显示可�
  });
 });
 
+test('共用故障固定原因只显示一处，未知回执可附原因但不出现继续',{timeout:20000},async t=>{
+ let current={...run(),state:'incomplete',status:'blocked',statusReason:'model_receipt_unknown',sharedFaultCode:'document_model_unconfigured',actions:[],unknown:1,calls:{prepared:0,sending:0,succeeded:0,failed:0,unknown:1}};
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:2,run:current}:undefined,async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByRole('status').filter({hasText:'调用结果待核实'}).waitFor();
+  const unknownText=await panel.innerText();
+  assert.equal((unknownText.match(/模型配置或服务不可用/g)??[]).length,1,'未知回执只附一处共用原因');
+  assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0);
+  current={...current,statusReason:'document_model_unconfigured',unknown:0,calls:{prepared:0,sending:0,succeeded:1,failed:0,unknown:0}};
+  await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();
+  await panel.getByRole('status').filter({hasText:'模型配置或服务不可用'}).waitFor();
+  const blockedText=await panel.innerText();
+  assert.equal((blockedText.match(/模型配置或服务不可用/g)??[]).length,1,'共用故障原因不得同屏重复');
+  assert.equal(blockedText.includes('修复后可继续原任务'),true);
+ });
+});
+
 test('全部适用阶段完成后页面显示整轮完成，不再声称主题未执行',{timeout:20000},async t=>{
  const completed={...run(),state:'completed',stage:'completed',laterStages:'completed'};
  await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:completed}:undefined,async page=>{
