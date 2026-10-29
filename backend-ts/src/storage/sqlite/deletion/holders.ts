@@ -1,7 +1,7 @@
 import { StorageFailure } from '../contracts.ts';
 import type { DeletionOperation } from './contracts.ts';
 
-export interface ActiveResource { key: string; ownerId: string; contactId?: string; generation: bigint; close: () => Promise<void> }
+export interface ActiveResource { key: string; ownerId: string; contactId?: string; coversAllContacts?: boolean; generation: bigint; close: () => Promise<void> }
 interface HeldResource extends ActiveResource { closing?: Promise<void> }
 const scopedKey = (owner: string, key: string) => JSON.stringify([owner, key]);
 // 先登记后使用；close回调必须等待官方dispose/close、finally和末次写入，不得仅发cancel。
@@ -26,14 +26,14 @@ export class ActiveHolders {
     });
   }
   fence(op: DeletionOperation, keys: string[]): void {
-    for (const key of keys) this.blockedKeys.add(scopedKey(op.ownerId, key));
+    for (const key of [...keys, ...this.matching(op, keys).map(r => r.key)]) this.blockedKeys.add(scopedKey(op.ownerId, key));
     const advance = (map: Map<string, bigint>, key: string) => map.set(key, op.acceptedGeneration > (map.get(key) ?? -1n) ? op.acceptedGeneration : map.get(key)!);
     if (op.scope.kind === 'account') advance(this.blockedOwners, op.ownerId);
     if (op.scope.kind === 'contact' || op.scope.kind === 'contact_history') advance(this.blockedContacts, JSON.stringify([op.ownerId, op.scope.contactId]));
   }
   private matching(op: DeletionOperation, keys: string[]): HeldResource[] {
-    return [...this.held.values()].filter(r => r.ownerId === op.ownerId && (keys.includes(r.key) || (r.generation < op.acceptedGeneration && (op.scope.kind === 'account'
-      || ((op.scope.kind === 'contact' || op.scope.kind === 'contact_history') && r.contactId === op.scope.contactId)))));
+    return [...this.held.values()].filter(r => r.ownerId === op.ownerId && (keys.includes(r.key) || op.scope.kind === 'account'
+      || ((op.scope.kind === 'contact' || op.scope.kind === 'contact_history') && (r.coversAllContacts || (r.contactId === op.scope.contactId && r.generation < op.acceptedGeneration)))));
   }
   async drain(op: DeletionOperation, keys: string[], timeoutMs: number): Promise<void> {
     this.fence(op, keys);

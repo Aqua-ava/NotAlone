@@ -1,6 +1,6 @@
 import { identityDeletionAuthority, identityDeletionDomain } from '../../../contacts/sqlite/deletion.ts';
 import { skillMetadataDeletionDomain } from '../../../skills/sqlite/deletion.ts';
-import { StorageFailure } from '../contracts.ts';
+import { StorageFailure, type StorageAction } from '../contracts.ts';
 import type { DeletionRegistration, DeletionScope } from './contracts.ts';
 
 export const installedDeletionScopes = ['contact', 'account'] as const;
@@ -21,3 +21,13 @@ export const installedDeletionRegistration: DeletionRegistration = {
   domains: [identityDeletionDomain, skillMetadataDeletionDomain()],
   requiredDomains: ['identity', 'skill_metadata'],
 };
+
+// 名单缓存覆盖全部联系人，任何未完成删除期间都不重新开启该内存持有者。
+export const installedDeletionActions: StorageAction[] = [{name: 'deletion.metadataAvailable', mode: 'read', retryBusy: false,
+  execute(tx, input) {
+    const ownerId = (input as {ownerId?: unknown})?.ownerId;
+    if (typeof ownerId !== 'string' || !ownerId || ownerId.length > 256) throw new StorageFailure('deletion_input_invalid');
+    return !!tx.get(`SELECT 1 FROM owner WHERE owner_id=? AND state='active'
+      AND NOT EXISTS(SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state!='completed')`, [ownerId, ownerId]);
+  },
+}];

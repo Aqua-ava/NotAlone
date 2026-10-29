@@ -7,9 +7,8 @@ import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { SqliteStorage } from './storage/sqlite/client.ts';
 import type { SqliteLaunchConfiguration } from './launch.ts';
-import { SqliteContactService } from './contacts/sqlite/service.ts';
-import { SqliteContactHttp } from './contacts/sqlite/http.ts';
 import { createWechatContactMetadata } from './contacts/sqlite/wechat-metadata.ts';
+import { ContactMetadataLifetime } from './storage/sqlite/deletion/contact-metadata.ts';
 import {readSqliteCapabilities} from './sqlite-capabilities.ts';
 import {SqliteSkillLibrary} from './skills/sqlite/library.ts';
 import {SqliteSkillHttp} from './skills/sqlite/http.ts';
@@ -43,7 +42,7 @@ export async function apply(ctx: Context) {
   let state: 'running' | 'stopping' | 'stopped' = 'running';
   let storage: SqliteStorage | undefined;
   let opening: Promise<SqliteStorage> | undefined;
-  let service: SqliteContactService | undefined;
+  let contacts: ContactMetadataLifetime | undefined;
   let server: Server | undefined;
   let published = false;
   let readyDispose = () => {};
@@ -55,7 +54,7 @@ export async function apply(ctx: Context) {
     state = 'stopping'; readyDispose();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
-    try { await service?.close(); }
+    try { await contacts?.close(); }
     finally { await storage?.close(); }
     if (published) await rm(config.infoPath, { force: true });
     state = 'stopped';
@@ -81,12 +80,11 @@ export async function apply(ctx: Context) {
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), at: Date.now() });
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
-    service = new SqliteContactService(storage, ownerId, createWechatContactMetadata(sqlite.wechatCliPath));
-    await service.initialize();
-    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
-    const contacts = new SqliteContactHttp(service);
-    const skills=capabilities.skillPackageRoot?new SqliteSkillHttp(new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot),req=>authorizeSqliteRequest(req,token)):undefined;
     const deletionHolders = new ActiveHolders();
+    contacts = new ContactMetadataLifetime(storage, ownerId, deletionHolders, () => createWechatContactMetadata(sqlite.wechatCliPath));
+    await contacts.initialize();
+    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    const skills=capabilities.skillPackageRoot?new SqliteSkillHttp(new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot),req=>authorizeSqliteRequest(req,token)):undefined;
     const deletions = new SqliteDeletionHttp(new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData)), ownerId);
     const ownership = { contacts: 'typescript', wechat: 'typescript',
       deletion: 'typescript', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
@@ -110,7 +108,7 @@ export async function apply(ctx: Context) {
           res.once('finish', () => ctx.appExit!(0)); respond(200, { state, runtime: 'dsh' }); return;
         }
         if (state !== 'running') { respond(503, { error: 'runtime_stopping' }); return; }
-        if (!await deletions.handle(req,res)&&!await skills?.handle(req,res)&&!await contacts.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
+        if (!await deletions.handle(req,res)&&!await skills?.handle(req,res)&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
     });
     server.requestTimeout = 15_000; server.headersTimeout = 10_000;
