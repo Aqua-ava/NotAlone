@@ -1,0 +1,32 @@
+import type {BackendHost} from '../backend/host';
+import type {ContactSession} from '../contacts/session';
+import type {PageCommands} from '../page-commands';
+import {readSqliteCandidateOperation,readSqliteCandidatePage,readSqliteCandidateVersion,type SqliteCandidateOperation} from '../../shared/sqlite-reply-candidates';
+import type {SqliteDiscussionController} from './sqlite-discussion-bridge';
+const messages:Record<string,string>={discussion_generation_failed:'本次生成未完成，结果可能未知；请使用原请求核对。',reply_history_syncing:'历史尚未完成，请等待同步完成。',reply_history_incomplete:'历史覆盖不完整，请明确确认使用已有部分。',reply_model_unavailable:'现有模型配置尚未就绪。',discussion_model_unavailable:'现有模型配置尚未就绪。',discussion_call_unknown:'已有模型调用结果未知，请先核对原请求，不能换请求重发。',reply_input_stale:'资料版本已变化，请重新读取。',reply_source_unavailable:'本次候选来源已失效，请重新读取。',reply_content_unavailable:'这版正文已不可用。',reply_version_stale:'候选已被更新，请先读取最新版本。',reply_candidate_unavailable:'候选来源已失效，请重新读取。',discussion_request_stale:'原请求已失效，请重新读取。'};
+/** 仅当前连接、联系人和助手讨论可操作；失效先取消等待，迟到结果不穿过IPC。 */
+export function installSqliteReplyCandidateCommands(commands:PageCommands,backend:Pick<BackendHost,'requestJson'|'getConnectionGeneration'>,contacts:Pick<ContactSession,'getState'>,discussion:SqliteDiscussionController):void{
+ let revision=0;const active=new Set<AbortController>();
+ discussion.onInvalidated(()=>{++revision;for(const c of active)c.abort();active.clear();});
+ commands.handle('sqlite-reply-candidates:execute',async(...args)=>{
+  if(args.length!==1)throw new Error('本次候选操作无效。');const op=readSqliteCandidateOperation(args[0]);
+  discussion.synchronize();const boundary=revision,generation=backend.getConnectionGeneration();
+  const current=()=>{discussion.synchronize();const state=contacts.getState();if(boundary!==revision||generation===undefined||backend.getConnectionGeneration()!==generation||state.directoryPhase!=='ready'||state.selectedContactId!==op.contactId||state.scopeRevision!==op.scopeRevision||!state.contacts.some(c=>c.contactId===op.contactId))throw new Error('联系人或来源范围已失效，请重新读取。');};
+  current();const controller=new AbortController();active.add(controller);
+  const path=`/api/contacts/${op.contactId}/assistant-sessions/${op.sessionId}/reply-candidates`;
+  try{
+   const request=operationRequest(op,path),response=await backend.requestJson({...request,signal:controller.signal,timeoutMs:120000,maxResponseBytes:2_000_000});
+   current();if(controller.signal.aborted||response.generation!==generation)throw new Error('联系人或来源范围已失效，请重新读取。');
+   if(op.action==='read')return readSqliteCandidatePage(response.data);
+   if(op.action==='version'||op.action==='edit')return readSqliteCandidateVersion(response.data);
+   return response.data;
+  }catch(error){current();const code=(error as {code?:string}).code;throw new Error(code&&messages[code]?messages[code]:'候选结果尚未确认，请保留原请求重试核对。');}
+  finally{active.delete(controller);}
+ },'helper');
+}
+function operationRequest(op:SqliteCandidateOperation,path:string){
+ if(op.action==='read')return {method:'GET' as const,path};
+ if(op.action==='version')return {method:'GET' as const,path:`${path}/${op.candidateId}/versions/${op.versionNo}`};
+ if(op.action==='generate')return {method:'POST' as const,path,body:{request_key:op.requestKey,text:op.text,confirmed_contact:true,accept_incomplete:op.acceptIncomplete,...(op.carriedSelectionId?{carried_selection_id:op.carriedSelectionId}:{})}};
+ return {method:'POST' as const,path:`${path}/${op.candidateId}/${op.action}`,body:{version_no:op.versionNo,...(op.action==='edit'?{parts:op.parts}:{})}};
+}

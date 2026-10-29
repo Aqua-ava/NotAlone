@@ -1,3 +1,4 @@
+import {installSqliteReplyCandidateCommands} from './sqlite-reply-candidates';
 import {createHash} from 'node:crypto';
 import type {BackendHost} from '../backend/host';
 import type {ContactSession} from '../contacts/session';
@@ -60,6 +61,6 @@ export class SqliteDiscussionController {
  close():void {if(this.closed)return;this.closed=true;for(const off of this.unsubscribe)off();this.synchronize(true);this.listeners.clear();this.requests.clear();this.revokedKeys.clear();}
 }
 export function installSqliteDiscussionBridge(commands:PageCommands,backend:Backend,contacts:Contacts):SqliteDiscussionController {
- const controller=new SqliteDiscussionController(backend,contacts);controller.onInvalidated(event=>commands.publish('sqlite-discussion:invalidated',event,'helper'));
+ const controller=new SqliteDiscussionController(backend,contacts);installSqliteReplyCandidateCommands(commands,backend,contacts,controller);controller.onInvalidated(event=>commands.publish('sqlite-discussion:invalidated',event,'helper'));
  commands.handle('sqlite-discussion:submit',(...args)=>{if(args.length!==1)throw new Error('本次讨论操作无效。');return controller.submit(readSqliteDiscussionSubmit(args[0]));},'helper');return controller;
 }
