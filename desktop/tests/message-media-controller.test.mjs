@@ -66,3 +66,8 @@ test('关闭协调先撤下预览并等待页面确认，不用close回调冒充
  let settled=false;const closing=f.controller.prepareClosing().then(()=>{settled=true;});await Promise.resolve();assert.equal(revoked,true);assert.equal(releaseCount,0);assert.equal(settled,false);
  await assert.rejects(f.controller.inspect(selection));await f.controller.releasePreview(sessionId);await closing;assert.equal(releaseCount,1);assert.equal(settled,true);
 });
+test('清除完成后的新提取再清除使用新的明确请求身份',async()=>{
+ const f=fixture(input=>input.method==='DELETE'?snapshot({state:'cleared',cleanup:null,capabilities:{extract:true,originalUpgrade:false,audioConversion:false,reason:null}}):snapshot({state:'active',capabilities:{extract:true,originalUpgrade:false,audioConversion:false,reason:null}}));
+ await f.controller.inspect(selection);await f.controller.clear(selection);await f.controller.extract({...selection,goal:'extract'});await f.controller.clear(selection);
+ const deletes=f.calls.filter(c=>c.method==='DELETE');assert.equal(deletes.length,2);assert.notEqual(deletes[0].idempotencyKey,deletes[1].idempotencyKey);
+});

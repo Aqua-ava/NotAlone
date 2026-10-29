@@ -14,7 +14,7 @@ export interface MediaFile {
 export interface MediaSnapshot {
   contactId: string; messageId: string; kind: 'image' | 'video' | 'voice';
   state: 'available' | 'active' | 'cleared' | 'invalidated' | 'deleting'; generation: string; headRevision: string;
-  latestAttempt: MediaAttempt | null; files: MediaFile[];
+  latestAttempt: MediaAttempt | null; requestedAttempt?: MediaAttempt; files: MediaFile[];
   capabilities: { extract: boolean; originalUpgrade: boolean; audioConversion: boolean; reason: string | null };
   cleanup: { operationId: string; state: 'fenced' | 'cleaning' | 'verifying' | 'blocked' | 'completed' } | null;
 }

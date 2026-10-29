@@ -6,7 +6,7 @@ const kindLabels = {image:'图片',video:'视频',voice:'语音'};
 const emptyState:MessageMediaState={revision:-1,contactId:null,messageId:null,scopeRevision:0,phase:'idle',snapshot:null,busy:null,retryGoal:null,error:null};
 function resultLabel(snapshot:MediaSnapshot):string {
   if(snapshot.state==='cleared')return '媒体已清除，聊天占位保留';
-  if(snapshot.state==='invalidated')return '媒体来源已失效';
+  if(snapshot.state==='invalidated')return '媒体文件或来源已失效，请核对后明确重提或清除';
   if(snapshot.state==='deleting')return '正在清除媒体，尚未完成';
   const attempt=snapshot.latestAttempt;
   if(!attempt)return '尚未提取';

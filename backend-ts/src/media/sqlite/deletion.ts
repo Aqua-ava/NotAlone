@@ -87,7 +87,7 @@ function select(tx: StorageTransaction, op: DeletionOperation): Selection {
   return {attempts: attempts.filter(a => chosenAttempts.has(String(a.id))), files: files.filter(f => chosenFiles.has(String(f.id))), heads: selectedHeads};
 }
 function holderKeys(a: StorageRow | undefined, fileId?: string): string[] {
-  return [...(a ? [`mediaAttempt:${a.id}`] : []), ...(fileId ? [`mediaFile:${fileId}`] : [])];
+  return [...(a ? [`mediaAttempt:${a.id}`] : []), ...(fileId ? [`mediaFile:${fileId}`,`mediaProbe:${fileId}`] : [])];
 }
 function rowTarget(op: DeletionOperation, kind: keyof typeof rowKinds, row: StorageRow, keys: string[]): RowDeletionTarget {
   const key: Record<string, string> = kind === 'message_media' ? {owner_id: op.ownerId, message_id: String(row.message_id)} : {owner_id: op.ownerId, id: String(row.id)};

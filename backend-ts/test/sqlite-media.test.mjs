@@ -170,3 +170,38 @@ test('活动引用使用联系人资料代次而非媒体代次，较新合法�
  f.media.holders.fence({...op,scope:{kind:'contact_history',contactId:f.contact}},[]);
  const preview=await f.media.openPreview(f.contact,m.id,saved.files[0].fileId);assert.equal(f.media.previewStatus(preview.sessionId).state,'active');await f.media.releasePreview(preview.sessionId);
 });
+
+test('适配器遗漏await也须排空已启动文件探针，关闭不能提前释放在途句柄',async t=>{
+ const {createHash}=await import('node:crypto');const {open}=await import('node:fs/promises');let started,continueRead,settled=false;const ready=new Promise(resolve=>{started=resolve;});const continueGate=new Promise(resolve=>{continueRead=resolve;});let background;
+ const adapter={version:'synthetic-early-return-v1',supports:kind=>kind==='image',execute:async context=>{
+  background=context.save({role:'image_display',expectedBytes:imageBytes.length,expectedSha256:createHash('sha256').update(imageBytes).digest('hex'),bytes:(async function*(){yield imageBytes;})(),validate:async location=>{const held=await open(location);started();try{await continueGate;await held.readFile();return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:'thumbnail',qualityProof:null};}finally{await held.close();settled=true;}}});void background.catch(()=>{});
+  await ready;return {association:{protocol:'media-association-v1',profileId:'synthetic-media-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-early'}};
+ }};
+ const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='image');const extracting=f.media.extract(f.contact,m.id,{requestKey:'unawaited-save',goal:'extract'});void extracting.catch(()=>{});await ready;for(let step=0;step<10;step++)await f.storage.check();
+ let closed=false;const closing=f.media.close().then(()=>{closed=true;});for(let step=0;step<10;step++)await f.storage.check();const closedBeforeRelease=closed;continueRead();await background.catch(()=>{});await extracting.catch(()=>{});await closing;assert.equal(closedBeforeRelease,false);assert.equal(settled,true);
+});
+
+test('旧请求重送返回原尝试回执，不能把后来的失败解释为原操作结果',async t=>{
+ const adapter=imageAdapter();const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='image');const first=await f.media.extract(f.contact,m.id,{requestKey:'original-operation',goal:'extract'});
+ adapter.execute=async()=>{throw new Error('合成后一次失败');};await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'later-operation',goal:'extract'}));
+ const replay=await f.media.extract(f.contact,m.id,{requestKey:'original-operation',goal:'extract'});assert.equal(replay.requestedAttempt.attemptId,first.latestAttempt.attemptId);assert.equal(replay.requestedAttempt.state,'completed');assert.equal(replay.latestAttempt.state,'failed');
+});
+
+test('语音播放件不能脱离合法原始SILK父件单独发布',async t=>{
+ const {createHash}=await import('node:crypto');const adapter={version:'synthetic-no-source-v1',supports:kind=>kind==='voice',execute:async context=>{const bytes=Buffer.from('synthetic-wav');await context.save({role:'audio_playback',expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),bytes:(async function*(){yield bytes;})(),validate:async()=>({format:'synthetic-wav',mimeType:'audio/wav',containerValid:true,viewable:false,playable:true,imageQuality:'not_applicable',qualityProof:null})});return {association:{protocol:'media-association-v1',profileId:'synthetic-voice',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-wave'}};}};
+ const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='voice');await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'without-silk',goal:'extract'}),{code:'media_audio_source_required'});assert.deepEqual((await f.media.read(f.contact,m.id)).files,[]);
+});
+
+test('已发布文件缺失时查看撤下成功结果，明确新提取才恢复且无需自动读取',async t=>{
+ const {readdir,unlink}=await import('node:fs/promises');let runs=0;const adapter=imageAdapter();const execute=adapter.execute;adapter.execute=async context=>{runs++;return execute(context);};
+ const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='image');await f.media.extract(f.contact,m.id,{requestKey:'missing-original',goal:'extract'});
+ const names=await readdir(join(f.root,'managed','media'));await unlink(join(f.root,'managed','media',names[0]));
+ const unavailable=await f.media.read(f.contact,m.id);assert.equal(unavailable.state,'invalidated');assert.deepEqual(unavailable.files,[]);assert.equal(unavailable.latestAttempt.errorCode,'media_saved_file_unavailable');assert.equal(runs,1);
+ const recovered=await f.media.extract(f.contact,m.id,{requestKey:'explicit-missing-retry',goal:'extract'});assert.equal(recovered.files.length,1);assert.equal(runs,2);
+});
+
+test('关闭服务等待提取资格启动结算，旧入口不得在关闭后建立新尝试',async t=>{
+ const f=await fixture(t,imageAdapter());const m=f.messages.find(m=>m.kind==='image');let entered,proceed;const ready=new Promise(resolve=>{entered=resolve;});const gate=new Promise(resolve=>{proceed=resolve;});
+ const service=new SqliteMediaService({storage:f.storage,contacts:{ownerId:f.owner,eligibility:async id=>{entered();await gate;return f.contacts.eligibility(id);}},history:f.history,userData:f.root,adapters:[imageAdapter()]});await service.initialize();t.after(()=>service.close());
+ const extracting=service.extract(f.contact,m.id,{requestKey:'close-during-start',goal:'extract'});void extracting.catch(()=>{});await ready;let closed=false;const closing=service.close().then(()=>{closed=true;});for(let step=0;step<10;step++)await f.storage.check();const closedBeforeSettled=closed;proceed();await assert.rejects(extracting,{code:'media_closed'});await closing;assert.equal(closedBeforeSettled,false);assert.equal((await f.media.read(f.contact,m.id)).latestAttempt,null);
+});

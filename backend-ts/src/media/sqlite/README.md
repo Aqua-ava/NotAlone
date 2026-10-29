@@ -19,3 +19,7 @@ HTTP拟定：GET/POST/DELETE `/api/contacts/:contactId/messages/:messageId/media
 正常宿主将 `SqliteMediaHttp.handle` 放在Bearer/无Origin认证之后。未认证真实类型时传 `adapters:[]`，页面明确不可用。桌面桥 `installMessageMediaBridge` 与 `createMessageMediaBridge` 使用固定方法；`MessageMediaPanel` 只挂到image/video/voice聊天行。连接准备与退出必须等待 `invalidateAndDrain` / `prepareClosing`；来源或联系人删除开始撤下旧快照。前端撤下DOM/blob后才 `releasePreview`；后端 `close` 也不把仅取消视为释放。
 
 创建后、身份登记前崩溃会保留未知身份阻塞；不会据随机文件名猜测归属或删除。容量/类型/文件写入故障只清本次安全目标，旧合法结果保留。当前单文件保存及可撤销预览统一上限32MiB；超过时在读取字节前拒绝本次新增，不谎报可在App内播放。上述限制是本票有界资源合同，类型能力与真实播放仍由17/18验收。
+
+`requestedAttempt` 在明确提取/同键重查响应中固定原操作回执；`latestAttempt` 仍反映当前最新尝试，二者不互换。服务独立跟踪所有启动中的请求、文件保存Promise与类型探针，适配器遗漏await不构成提前释放理由。启动及查看时核验已存文件；缺失/损坏撤下可用声明并标记失效，不自动新读微信，只有明确清除或新发布才执行对应清理。
+
+公共接线已核对安装及锁定DSH 0.2.1-rc.2、Cordis 4.0.5、dsh-cmdline 0.2.1-rc.2；沿官方profile与已有ctx.effect资源释放扩展。官方参考commit 687f282e8625c6b8d11ff58211a90524be2e4317的docs/cordis-primer.md，安装Cordis lib/index.js:1169的effect按逆序等待异步disposer，dsh-cmdline lib/index.js:50的exitOnStdinEnd只请求appReady后的退出。未改框架核心、模型、Tools或新增profile替身；制品与参考源码逐字构建等价仍未验证。
