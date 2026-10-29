@@ -32,7 +32,7 @@ export class VoiceMediaAdapter implements MediaAdapter {
     let association=null;
     if (context.goal==='audio_conversion') {
       if (!context.input || context.source || context.token) throw new StorageFailure('voice_local_input_invalid');
-      silk=await localBytes(context.input.localPath,voiceLimits.inputBytes); await context.checkpoint();inspectSilk(silk);parentFileId=context.input.fileId;
+      silk=await localBytes(context.input.localPath,voiceLimits.inputBytes); await context.checkpoint();if(silk.length!==context.input.expectedBytes||sha256(silk)!==context.input.expectedSha256)throw new StorageFailure('voice_file_changed');inspectSilk(silk);parentFileId=context.input.fileId;
     } else {
       if (context.goal!=='extract'||!this.source||!context.source||!context.token) throw new StorageFailure('voice_source_unavailable');
       const resource=await this.source.read({contactId:context.contactId,messageId:context.messageId,source:context.source,token:context.token,signal:context.signal});await context.checkpoint();
@@ -58,10 +58,11 @@ export class VoiceMediaAdapter implements MediaAdapter {
       if(context.goal==='audio_conversion')throw error instanceof StorageFailure?error:new StorageFailure('voice_decode_failed');
       return {association,errorCode:error instanceof StorageFailure?error.code:'voice_decode_failed'};
     }
-    await this.save(context,wav,true,parentFileId);await context.checkpoint();return {association};
+    try {await this.save(context,wav,true,parentFileId);}catch(error){await context.checkpoint();if(context.goal==='audio_conversion')throw error;return {association,errorCode:error instanceof StorageFailure?error.code:'voice_playback_save_failed'};}
+    await context.checkpoint();return {association};
   }
   private save(context:MediaExecution,data:Buffer,playable:boolean,parentFileId?:string) {
-    return context.save({role:playable?'audio_playback':'audio_source',parentFileId,expectedBytes:data.length,expectedSha256:sha256(data),
+    return context.save({role:playable?'audio_playback':'audio_source',parentFileId,...(playable&&context.goal==='extract'?{failureMode:'retain_audio_source' as const}:{}),expectedBytes:data.length,expectedSha256:sha256(data),
       bytes:(async function*(){for(let offset=0;offset<data.length;offset+=65536){await context.checkpoint();yield data.subarray(offset,offset+65536);}})(),
       validate:async location=>{const actual=await localBytes(location,playable?voiceLimits.pcmBytes+44:voiceLimits.inputBytes);await context.checkpoint();if(playable)inspectWav(actual);else inspectSilk(actual);return validation(playable);}});
   }

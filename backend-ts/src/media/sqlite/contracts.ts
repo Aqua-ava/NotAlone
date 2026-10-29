@@ -39,6 +39,8 @@ export interface MediaValidation {
 }
 export interface MediaFileInput {
   role: MediaRole; parentFileId?: string;
+  /** 仅新语音的播放件失败可保留本次已验证原件，失败文件仍须统一清理。 */
+  failureMode?: 'retain_audio_source';
   expectedBytes: number; expectedSha256: string;
   bytes: AsyncIterable<Uint8Array>;
   /** 类型适配器校验实际落盘文件；完整性由保存服务另行核验。 */
@@ -47,7 +49,7 @@ export interface MediaFileInput {
 export interface MediaExecution extends MediaScope {
   goal: MediaGoal; kind: MediaKind; signal: AbortSignal;
   source: HistorySource | null; token: ReadEligibility | null;
-  input: {fileId: string; localPath: string} | null;
+  input: {fileId: string; localPath: string; expectedBytes:number; expectedSha256:string} | null;
   /** 每次外部读取/转换分段前后都应调用；服务还在写入和发布时复验。 */
   checkpoint(): Promise<void>;
   save(input: MediaFileInput): Promise<{fileId: string}>;

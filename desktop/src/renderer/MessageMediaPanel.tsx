@@ -10,8 +10,25 @@ function resultLabel(snapshot:MediaSnapshot):string {
   if(snapshot.state==='deleting')return '正在清除媒体，尚未完成';
   const attempt=snapshot.latestAttempt;
   if(!attempt)return '尚未提取';
+  if(attempt.state==='completed'&&snapshot.kind==='voice'&&snapshot.files.some(f=>f.role==='audio_source')&&!snapshot.files.some(f=>f.role==='audio_playback'&&f.playable))return '语音已保存，暂不可播放';
   if(attempt.state==='completed')return attempt.outcome==='limited'?'已保存有限结果':attempt.outcome==='quality_unknown'?'已保存，质量未核验':'已保存完整结果';
   return stateLabels[attempt.state];
+}
+function processingReason(code:string):string {
+  const messages:Record<string,string>={
+    voice_decode_failed:'语音解码失败；可手动重试本地转换。',
+    voice_runtime_unavailable:'本机语音转换组件不可用；请检查离线资源。',
+    voice_conversion_timeout:'本地转换超过时间上限，已停止；可手动重试。',
+    voice_conversion_cancelled:'本地转换已取消，未发布新播放文件。',
+    voice_container_invalid:'语音容器无效或不受支持，本次未保存新结果。',
+    voice_resource_limit:'语音超过当前输入、包数或输出上限，本次已停止。',
+    voice_pcm_invalid:'本次语音输出格式校验失败，未发布新播放文件。',
+    voice_copy_unproven:'缺少语音完整读取或唯一归属证明，本次未保存。',
+    voice_copy_incomplete:'语音实际字节与固定来源证明不符，本次未保存。',
+    media_resource_too_large:'文件超过当前单文件32MiB上限，本次未保存；已有文件保留。',
+    media_space_insufficient:'本次空间不足，已停止新增写入。请清理本机空间；先前合法保存的媒体仍保留。',
+  };
+  return messages[code]??'本次处理有未完成步骤，请根据文件状态核对结果。';
 }
 function unavailableReason(code:string|null):string {
   if(code==='media_adapter_unavailable'||code==='media_type_unavailable')return '此类型提取尚未接入，当前不可用。';
@@ -88,7 +105,7 @@ function MediaDetails({bridge,selection}:{bridge:MessageMediaBridge;selection:Me
       <p role="status">{resultLabel(snapshot)}</p>
       {snapshot.requestedAttempt&&<p role="status">本次请求：{stateLabels[snapshot.requestedAttempt.state]}</p>}
       {snapshot.files.length>0&&snapshot.latestAttempt&&['failed','interrupted','revoked'].includes(snapshot.latestAttempt.state)&&<p className="rewrite-privacy">以下是先前合法保存的文件，本次操作未发布新结果。</p>}
-      {snapshot.latestAttempt?.errorCode&&<p className="rewrite-privacy">{snapshot.latestAttempt.errorCode==='media_resource_too_large'?'文件超过当前单文件32MiB上限，本次未保存；已有文件保留。':snapshot.latestAttempt.errorCode==='media_space_insufficient'?'本次空间不足，已停止新增写入。请清理本机空间；先前合法保存的媒体仍保留。':'本次处理有未完成步骤，请根据文件状态核对结果。'}</p>}
+      {snapshot.latestAttempt?.errorCode&&<p className="rewrite-privacy">{processingReason(snapshot.latestAttempt.errorCode)}</p>}
       {snapshot.cleanup&&snapshot.cleanup.state!=='completed'&&<p role="status">{snapshot.cleanup.state==='blocked'?'清理尚未完成，可继续原清理操作。':'文件清理尚在复核中。'}</p>}
       {snapshot.files.length>0&&<ul className="message-media-files">{snapshot.files.map(file=><li key={file.fileId}>
         <span><span>{file.role==='image_display'?(file.imageQuality==='original'?'原图':file.imageQuality==='thumbnail'?'缩略图，原图未取得':'图片质量未核验'):

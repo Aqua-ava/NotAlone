@@ -33,3 +33,67 @@ test('缺完整读取证明不能发布SILK；合法SILK解码失败明确有限
  const result=await f.media.extract(f.contact,m.id,{requestKey:'local-retry',goal:'audio_conversion'});assert.equal(result.latestAttempt.outcome,'full');assert.equal(result.files.length,2);assert.equal(reads,2);assert.equal(result.files.find(f=>f.role==='audio_playback').playable,true);
  await f.media.clear(f.contact,m.id,'voice-clear');assert.deepEqual((await f.media.read(f.contact,m.id)).files,[]);assert.equal((await f.history.read(f.contact)).messages.length,4);
 });
+
+import {SilkWasmDecoder} from '../src/media/voice/decoder.ts';
+test('转换取消和退出等待Worker终止；闭合后不重新执行',async()=>{
+ const decoder=new SilkWasmDecoder();const controller=new AbortController();const pending=decoder.decode(packets(1,1,1),controller.signal);controller.abort();await assert.rejects(pending,{code:'voice_conversion_cancelled'});
+ const next=decoder.decode(packets(1,1,1),new AbortController().signal);const rejected=assert.rejects(next,{code:'voice_conversion_cancelled'});await decoder.close();await rejected;
+ await assert.rejects(decoder.decode(packets(1,1,1),new AbortController().signal),{code:'voice_conversion_cancelled'});
+});
+
+test('WAV写入失败仍发布已完整校验SILK，失败播放件进入同一删除计划',async t=>{
+ const decoder={decode:async()=>Buffer.alloc(9600),close:async()=>{}};
+ const f=await fixture(t,new VoiceMediaAdapter({source:syntheticPort(packets(1,1,1)),decoder}));const m=f.messages.find(m=>m.kind==='voice');
+ const create=f.media.files.create.bind(f.media.files);let writes=0;
+ f.media.files.create=async(...args)=>{writes++;if(writes===2){const {StorageFailure}=await import('../src/storage/sqlite/contracts.ts');throw new StorageFailure('media_space_insufficient');}return create(...args);};
+ const result=await f.media.extract(f.contact,m.id,{requestKey:'wav-space-failure',goal:'extract'});
+ assert.equal(result.latestAttempt.outcome,'limited');assert.equal(result.latestAttempt.errorCode,'media_space_insufficient');assert.deepEqual(result.files.map(f=>f.role),['audio_source']);
+ const {readdir}=await import('node:fs/promises');assert.equal((await readdir(new URL(`file://${f.root}/managed/media/`))).length,1);
+ await f.media.clear(f.contact,m.id,'clear-finite-wav-failure');assert.equal((await readdir(new URL(`file://${f.root}/managed/media/`))).length,0);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('锁定WASM离线解码合成纯音，独立afinfo核验PCM格式与播放长度',async t=>{
+ const {encode}=await import('silk-wasm');const {execFile}=await import('node:child_process');const {promisify}=await import('node:util');const {writeFile}=await import('node:fs/promises');
+ const input=Buffer.alloc(9600);for(let n=0;n<4800;n++)input.writeInt16LE(Math.round(4000*Math.sin(2*Math.PI*440*n/24000)),n*2);
+ const {data}=await encode(input,24000);const decoder=new SilkWasmDecoder();
+ const f=await fixture(t,new VoiceMediaAdapter({source:syntheticPort(data),decoder}));const m=f.messages.find(m=>m.kind==='voice');
+ const saved=await f.media.extract(f.contact,m.id,{requestKey:'real-codec-synthetic-resource',goal:'extract'});assert.equal(saved.latestAttempt.outcome,'full');assert.equal(saved.files.length,2);
+ const playback=saved.files.find(f=>f.role==='audio_playback');const preview=await f.media.openPreview(f.contact,m.id,playback.fileId);const wav=Buffer.from(preview.dataBase64,'base64');assert.equal(inspectWav(wav).durationMs,200);assert.equal(wav.length,9644);
+ const location=`${f.root}/independent-playback.wav`;await writeFile(location,wav);const result=await promisify(execFile)('/usr/bin/afinfo',[location]);assert.match(result.stdout,/24000 Hz/);assert.match(result.stdout,/1 ch/);assert.match(result.stdout,/0\.200000/);
+ await f.media.releasePreview(preview.sessionId);
+});
+
+test('整帧截短与缺长度不因容器合法而通过，未知codec结果不能降低已有播放组合',async t=>{
+ const silk=packets(1,1,1,1);let fail=false;const decoder={decode:async()=>{if(fail)throw Error('合成失败');return Buffer.alloc(9600);},close:async()=>{}};
+ const port=syntheticPort(silk);const adapter=new VoiceMediaAdapter({source:port,decoder});const f=await fixture(t,adapter),m=f.messages.find(m=>m.kind==='voice');
+ const first=await f.media.extract(f.contact,m.id,{requestKey:'voice-full-first',goal:'extract'});
+ port.read=syntheticPort(silk.subarray(0,-3),{expectedBytes:silk.length}).read;
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'whole-packet-short',goal:'extract'}),{code:'voice_copy_incomplete'});
+ port.read=async c=>({...await syntheticPort(silk).read(c),expectedBytes:undefined});await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'missing-length',goal:'extract'}),{code:'voice_copy_unproven'});
+ port.read=syntheticPort(silk).read;fail=true;await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'finite-would-degrade',goal:'extract'}),{code:'media_result_would_degrade'});
+ const after=await f.media.read(f.contact,m.id);assert.deepEqual(after.files.map(f=>f.fileId),first.files.map(f=>f.fileId));
+});
+
+for(const scenario of ['source','clear','unselect'])test(`本地转换在${scenario}撤销后拒绝迟到PCM，文件不复活`,async t=>{
+ let convert=false,entered;const ready=new Promise(r=>{entered=r;});
+ const decoder={decode:async(_silk,signal)=>{if(!convert)throw Error('合成首次暂不可解码');entered();await new Promise(r=>signal.addEventListener('abort',r,{once:true}));return Buffer.alloc(9600);},close:async()=>{}};
+ const f=await fixture(t,new VoiceMediaAdapter({source:syntheticPort(packets(1,1,1)),decoder}));const m=f.messages.find(m=>m.kind==='voice');await f.media.extract(f.contact,m.id,{requestKey:'source-before-revoke',goal:'extract'});await f.contacts.setReading(false);convert=true;
+ const converting=f.media.extract(f.contact,m.id,{requestKey:'late-local',goal:'audio_conversion'});const rejected=assert.rejects(converting);await ready;
+ if(scenario==='unselect') {const b=(await f.contacts.directory()).bindings.find(b=>b.contact_id===f.contact);await f.contacts.revoke(f.contact,b.binding_id,b.selection_generation);await f.media.stop(f.contact);}
+ else if(scenario==='clear')await f.media.clear(f.contact,m.id,'clear-converting');
+ else {const op=await f.media.deletion.plan({ownerId:f.owner,requestKey:'source-converting',scope:{kind:'source',contactId:f.contact,sourceId:m.sourceRecordIds[0]}});assert.equal((await f.media.deletion.advance(op)).state,'completed');}
+ await rejected;
+ const {readdir}=await import('node:fs/promises');assert.equal((await readdir(`${f.root}/managed/media`)).length,scenario==='unselect'?1:0);
+ if(scenario!=='source')assert.equal((await f.media.read(f.contact,m.id)).files.some(f=>f.role==='audio_playback'),false);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('实际播放件校验失败后精确删除失败WAV，SILK与来源证明仍合法',async t=>{
+ const decoder={decode:async()=>Buffer.alloc(9600),close:async()=>{}};
+ const f=await fixture(t,new VoiceMediaAdapter({source:syntheticPort(packets(1,1,1)),decoder})),m=f.messages.find(m=>m.kind==='voice');
+ const create=f.media.files.create.bind(f.media.files);let count=0;
+ f.media.files.create=async(...args)=>{if(++count===2)args[5]=async()=>{const {StorageFailure}=await import('../src/storage/sqlite/contracts.ts');throw new StorageFailure('voice_pcm_invalid');};return create(...args);};
+ const saved=await f.media.extract(f.contact,m.id,{requestKey:'failed-wav-on-disk',goal:'extract'});assert.equal(saved.latestAttempt.outcome,'limited');assert.equal(saved.latestAttempt.errorCode,'voice_pcm_invalid');assert.equal(saved.files.length,1);
+ const {readdir}=await import('node:fs/promises');assert.equal((await readdir(`${f.root}/managed/media`)).length,1);
+ const operations=await f.media.deletion.list({ownerId:f.owner});assert.ok(operations.some(op=>op.scope.kind==='media_result_replace'&&op.state==='completed'));
+});
