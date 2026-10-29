@@ -25,9 +25,9 @@
 
 必需的 `SkillRunProtection` 是05/11/12受信任宿主边界，缺失时拒绝打开：
 
-1. `assertCurrent(scope, signal)` 复验已确认联系人、调用、读取／资料／来源／删除代次、模型用途和出站范围；Skill不能赋予这些资格。
+1. `assertCurrent(scope, frozenRevision|null, signal)` 在同一短事务调用 `requireSkillRun(tx, scope.ownerId, frozenRevision)`（非null时）并复验已确认联系人、调用、读取／资料／来源／删除代次、模型用途和出站范围；Skill不能赋予这些资格。
 2. `recordSelection(scope, selected)` 分别记显式选择或 null；此事件不表示已加载或模型已使用。
-3. `recordInput(input, signal)` 保存实际返回的正文或资源文字、payloadDigest、selected/loaded 精确包修订、相对路径及 scope，登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRevision(tx, ownerId, input.loaded)`。单独事务外检查不够。
+3. `recordInput(input, signal)` 保存实际返回的正文或资源文字、payloadDigest、selected/loaded 精确包修订、相对路径及 scope，登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
 
 12必须在物理模型发送和业务提交前再次 `run.validate()`，记录真正发出的完整模型输入和模型回执。本票的读取事件仅证明官方provider读取了该正文，不能当作模型实际发送或成功回复的证据。DSH目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
 
@@ -35,7 +35,7 @@
 
 本模块没有文件删除、清理器、目录覆盖或孤儿扫描代码。空库缺引用、旧 PG 行缺失和任何管理状态都不构成原目录删除授权。原 Skill 目录不得登记成05的受管文件删除目标。
 
-05/11/12需要登记含实际 Skill 输入的追踪行与 runtime 副本；由追踪／副本领域负责 collect、fence、clear、verify。包来源资格变化则调用 `requireVerification`；包不复制成新独立来源。`requireSkillRevision` 应和02的 `assertReadEligibility`、05的删除资格检查处于调用追踪写入的同一短事务。14不导入未集成的并行票模块，不提供恒真的生产替身，不把缺域注册当作删除完成。测试夹具显式提供 `fixture_scope`／`fixture_input` 与撤销擦除，仅证明合同要求；真实删除注册与运行副本清理必须在后续接入窗口复核。
+05/11/12需要登记含实际 Skill 输入的追踪行与 runtime 副本；由追踪／副本领域负责 collect、fence、clear、verify。包来源资格变化则调用 `requireVerification`；包不复制成新独立来源。`requireSkillRun`／`requireSkillRevision` 应和02的 `assertReadEligibility`、05的删除资格检查处于调用追踪写入的同一短事务。14不导入未集成的并行票模块，不提供恒真的生产替身，不把缺域注册当作删除完成。测试夹具显式提供 `fixture_scope`／`fixture_input` 与撤销擦除，仅证明合同要求；真实删除注册与运行副本清理必须在后续接入窗口复核。
 
 ## 当前版本依据
 

@@ -35,10 +35,14 @@ export class SqliteSkillHttp {
  private readonly authorize: (req: IncomingMessage)=>boolean;
  constructor(library: SqliteSkillLibrary,authorize: (req: IncomingMessage)=>boolean) {this.library=library;this.authorize=authorize;}
  async handle(req: IncomingMessage,res: ServerResponse): Promise<boolean> {
-  const path=req.url??'';
-  if(path!=='/api/skills' && !path.startsWith('/api/skills/'))return false;
+  const raw=req.url??'';let url: URL;
+  try {url=new URL(raw,'http://localhost');}catch{return false;}
+  const path=url.pathname,legacyLearning=/^\/api\/contacts\/[^/]+\/skill-learning(?:\/|$)/.test(path);
+  if(path!=='/api/skills' && !path.startsWith('/api/skills/') && !legacyLearning)return false;
   if(!this.authorize(req)){respond(res,401,{error:'unauthorized'});return true;}
   try {
+   if(raw!==path)throw new SqliteSkillError('skill_request_invalid');
+   if(legacyLearning){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
    const match=/^\/api\/skills\/([a-f0-9-]{36})\/(verify|enable|disable)$/.exec(path);
    const query=path==='/api/skills';const discover=path==='/api/skills/discover';
    if(!query && !discover && !match){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}

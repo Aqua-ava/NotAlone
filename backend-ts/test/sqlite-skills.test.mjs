@@ -39,7 +39,7 @@ import {skillAnchor} from '../src/skills/sqlite/library.ts';
 function protection(storage){
  const selections=[],inputs=[];
  return {selections,inputs,
-  async assertCurrent(scope,signal){signal?.throwIfAborted();assert.equal(scope.ownerId,'owner-a');assert.equal(scope.contactId,'contact-a');},
+  async assertCurrent(scope,revision,signal){signal?.throwIfAborted();if(revision)await storage.execute('skills.assertRun',{ownerId:scope.ownerId,revision});assert.equal(scope.ownerId,'owner-a');assert.equal(scope.contactId,'contact-a');},
   async recordSelection(scope,selected){selections.push({scope,selected});},
   async recordInput(input){await storage.execute('skills.assertRevision',{ownerId:input.scope.ownerId,anchor:input.loaded});inputs.push(structuredClone(input));},
  };
@@ -119,7 +119,7 @@ test('来源资格失效后不能仅凭相同文件重新核验恢复',async t=>
 });
 
 function trackedProtection(storage){return {
- assertCurrent:(scope)=>storage.execute('fixture.checkScope',scope),
+ assertCurrent:(scope,revision)=>storage.execute('fixture.checkScope',{scope,revision}),
  recordSelection:async()=>{},
  recordInput:(input)=>storage.execute('fixture.input',input),
 };}
@@ -182,7 +182,7 @@ test('目录读取失败只返回固定错误码，不泄露物理路径',async 
 
 test('材料核验期间来源撤销时返回前再次核资格，不能放行物理发送',async t=>{
  const {library,storage,scope}=await mounted(t);const port=trackedProtection(storage);let armed=false;
- port.assertCurrent=async scope=>{await storage.execute('fixture.checkScope',scope);if(armed){armed=false;await storage.execute('fixture.revoke',scope);}};
+ port.assertCurrent=async(scope,revision)=>{await storage.execute('fixture.checkScope',{scope,revision});if(armed){armed=false;await storage.execute('fixture.revoke',scope);}};
  const run=await openSqliteSkillRun(library,scope,port);armed=true;
  await assert.rejects(run.validate(),{code:'fixture_scope_revoked'});
 });
@@ -205,4 +205,12 @@ test('仅正文成功后读取本修订辅助资源，真实资源载荷参与�
  await assert.rejects(run.readResource(anchor,'../../SKILL.md'),{code:'skill_path_invalid'});
  const rows=await storage.execute('fixture.inputs',scope);assert.equal(rows.length,2);assert.equal(rows[1].relative_path,'references/guide.md');assert.equal(rows[1].text,'合成的补充说明。');
  run.close();
+});
+
+test('末尾scope检查期间停用Skill，组合事务必须同时拒绝旧目录锚点',async t=>{
+ const {library,storage,scope,item}=await mounted(t);const port=trackedProtection(storage);let armed=false,checks=0;
+ const original=port.assertCurrent;
+ port.assertCurrent=async(...args)=>{if(armed&&++checks===2)await library.setEnabled(item.id,item.headRevision,'disabled');await original(...args);};
+ const run=await openSqliteSkillRun(library,scope,port);armed=true;
+ await assert.rejects(run.validate(),{code:'skill_run_invalidated'});
 });

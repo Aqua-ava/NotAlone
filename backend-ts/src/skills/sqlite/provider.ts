@@ -5,7 +5,7 @@ import type SkillRegistry from '@deepseek-ai/dsh-skill';
 import type {SkillCandidate,SkillProvider,SkillProviderControl} from '@deepseek-ai/dsh-skill';
 import {sha256} from '../skill-package.ts';
 import {SqliteSkillLibrary,SqliteSkillError,skillAnchor} from './library.ts';
-import type {SkillAnchor,SkillPackageState,SkillRunProtection,SkillRunScope} from './contracts.ts';
+import type {SkillAnchor,SkillPackageState,SkillRunProtection,SkillRunRevision,SkillRunScope} from './contracts.ts';
 
 const providerName='notalone-sqlite-skills';
 const virtualRoot='/notalone/reply-skills';
@@ -20,7 +20,7 @@ async function abortable<T>(work: Promise<T>,signal: AbortSignal): Promise<T> {
 export async function openSqliteSkillRun(library: SqliteSkillLibrary,request: {contactId:string;callId:string},protection: SkillRunProtection,selectedPackageId?: string,signal?: AbortSignal): Promise<SqliteSkillRun> {
   if(!request.contactId || !request.callId || !protection?.assertCurrent || !protection.recordInput || !protection.recordSelection)throw new SqliteSkillError('skill_protection_required');
   const scope=Object.freeze({ownerId:library.ownerId,contactId:request.contactId,callId:request.callId});
-  signal?.throwIfAborted();await protection.assertCurrent(scope,signal);
+  signal?.throwIfAborted();await protection.assertCurrent(scope,null,signal);
   const items=await library.list();
   const available=items.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null);
   for(const item of available)await library.assertAnchor(skillAnchor(item));
@@ -54,10 +54,10 @@ export class SqliteSkillRun {
   async validate(signal?: AbortSignal): Promise<void> {
     try {
       const combined=this.signal(signal);combined.throwIfAborted();
-      await abortable(this.protection.assertCurrent(this.scope,combined),combined);
+      await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
       if(catalogRevision(await this.library.list())!==this.revision)throw new SqliteSkillError('skill_run_invalidated');
       for(const item of this.eligible())await this.library.assertAnchor(skillAnchor(item));
-      await abortable(this.protection.assertCurrent(this.scope,combined),combined);
+      await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
       combined.throwIfAborted();
     }catch(error){this.close();throw error;}
   }
@@ -83,6 +83,9 @@ export class SqliteSkillRun {
     const unregister=this.unregister;this.unregister=undefined;unregister?.();
   }
   private signal(signal?: AbortSignal): AbortSignal {return signal?AbortSignal.any([this.controller.signal,signal]):this.controller.signal;}
+  private frozenRevision(): SkillRunRevision {
+    return {packages:this.catalog.map(item=>({id:item.id,headRevision:item.headRevision})),eligible:this.eligible().map(skillAnchor)};
+  }
   private eligible(): SkillPackageState[] {return this.catalog.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null && (!this.selected || item.id===this.selected.packageId));}
   private provider(control: SkillProviderControl): SkillProvider {
     if(control.signal.aborted)this.close();else control.signal.addEventListener('abort',()=>this.close(),{once:true,signal:this.controller.signal});
@@ -109,7 +112,7 @@ export class SqliteSkillRun {
     try {
       await this.validate(signal);
       const combined=this.signal(signal);
-      await abortable(this.protection.recordInput({scope:this.scope,selected:this.selection,loaded:{...anchor},relativePath,text,payloadDigest:sha256(text)},combined),combined);
+      await abortable(this.protection.recordInput({scope:this.scope,runRevision:this.frozenRevision(),selected:this.selection,loaded:{...anchor},relativePath,text,payloadDigest:sha256(text)},combined),combined);
       await this.validate(signal);
       return text;
     }catch(error){this.close();throw error;}

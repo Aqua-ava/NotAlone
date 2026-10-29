@@ -29,5 +29,7 @@ test('正常Skill业务HTTP适配：认证、状态查询与CAS启停，旧清�
  assert.equal((await request(`/api/skills/${item.package_id}/disable`,{expected_head_revision:stale,confirmed:true})).status,409);
  assert.equal((await request('/api/skills/discover',{directory_name:'gentle',confirmed:true,owner_id:'other'})).status,400);
  assert.equal((await request(`/api/skills/${item.package_id}/delete`,{confirmed:true})).status,503);
+ assert.equal((await request('/api/contacts/contact-a/skill-learning',{confirmed:true})).status,503);
+ assert.equal((await request('/api/skills?owner_id=other')).status,400);
  assert.equal(fallbacks,0);
 });

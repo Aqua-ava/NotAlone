@@ -34,7 +34,7 @@ export async function apply(ctx: Context): Promise<void> {
     const key={},layer=createScope(ctx,key);
     try {
      const run=await openSqliteSkillRun(library,scope,{
-      assertCurrent:scope=>storage.execute('fixture.checkScope',scope),recordSelection:async()=>{},
+      assertCurrent:(scope,revision)=>storage.execute('fixture.checkScope',{scope,revision}),recordSelection:async()=>{},
       recordInput:async actual=>{
        if(req.url==='/late-load'){const current=await library.get(input.id);await library.setEnabled(current.id,current.headRevision,'disabled');}
        await storage.execute('fixture.input',actual);
