@@ -9,6 +9,7 @@ import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
 import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
+import {documentFixture} from './fixtures/memory-documents/support.mjs';
 
 const registryModule=new URL('./fixtures/memory-control/registry.mjs',import.meta.url).href;
 const controlRegistry=new URL('./fixtures/memory-management/registry.mjs',import.meta.url).href;
@@ -317,4 +318,50 @@ test('05来源删除在途撤销提交资格，迟到结果不能恢复内容',a
  assert.deepEqual(await management.read({scopeKind:'contact',contactId:f.ca}),{candidates:[],memories:[]},'删除后不因迟到结果恢复内容');
  await assert.rejects(service.read(run.runId),error=>error instanceof StorageFailure&&error.code==='memory_extraction_not_found','删除后旧轮次不再可读');
  await assert.rejects(service.continue(run.runId,0,randomUUID()),error=>error instanceof StorageFailure&&error.code==='memory_extraction_not_found');
+});
+
+test('整轮完成只由09完整发布判定，未结束阶段与已有候选都不冒充完成',async t=>{
+ const observed=[];let fixtureState,runId;
+ fixtureState=await documentFixture(t,{beforeCall:async()=>{if(runId)observed.push(await fixtureState.extraction.read(runId));}});
+ runId=(await fixtureState.extraction.start('control-documents-complete')).runId;
+ await fixtureState.extraction.waitForIdle(runId);
+ const view=await fixtureState.extraction.read(runId);
+ assert.equal(view.state,'completed');
+ assert.equal(view.status,'completed');assert.equal(view.statusReason,null);assert.deepEqual(view.actions,[]);
+ assert.equal(view.stage,'completed');assert.equal(view.laterStages,'completed');
+ const during=observed.find(value=>value.stage==='document_scene'||value.stage==='document_profile');
+ assert.ok(during,'应观察到真实文档阶段');
+ assert.notEqual(during.status,'completed','仍有适用阶段未结束时不得显示整轮完成');
+ assert.equal(during.laterStages,'pending');
+ assert.ok(during.candidates.length>=1,'已有候选不等于整轮完成');
+ await assert.rejects(fixtureState.extraction.pause(runId,view.controlVersion,randomUUID()),error=>error instanceof StorageFailure&&error.code==='memory_extraction_control_conflict');
+ await assert.rejects(fixtureState.extraction.continue(runId,view.controlVersion,randomUUID()),error=>error instanceof StorageFailure&&error.code==='memory_extraction_control_conflict');
+});
+
+test('暂停期间取消勾选立即失效，继续不复活已撤销范围',async t=>{
+ const f=await fixtureWithMessages(t,{a:['我住在高雄。']});
+ const x=extractionFixture(f);t.after(async()=>{release?.();await x.service.close();});
+ let release;const gate=new Promise(resolve=>release=resolve);let entered;const enteredPromise=new Promise(resolve=>entered=resolve);
+ x.state.gate=gate;x.state.entered=entered;
+ const run=await x.service.start('control-pause-cancel');await enteredPromise;
+ const running=await x.service.read(run.runId);
+ await x.service.pause(run.runId,running.controlVersion,randomUUID());
+ release();await x.service.waitForIdle(run.runId);
+ const paused=await x.service.read(run.runId);
+ assert.equal(paused.status,'paused');
+ const binding=f.saved.find(row=>row.contact_id===f.ca);
+ await f.contacts.revoke(f.ca,binding.binding_id,binding.selection_generation);
+ const revoked=await x.service.read(run.runId);
+ assert.equal(revoked.tasks.find(task=>task.scopeKind==='contact').state,'revoked','暂停期间取消勾选立即撤销资格');
+ assert.equal(revoked.status,'blocked');assert.equal(revoked.statusReason,'scope_revoked');
+ assert.deepEqual(revoked.actions,[]);
+ const callsBefore=x.state.calls;
+ const continued=await x.service.continue(run.runId,revoked.controlVersion,randomUUID());
+ await x.service.waitForIdle(run.runId);
+ assert.equal(x.state.calls,callsBefore,'继续不复活已撤销范围，不新增模型调用');
+ const after=await x.service.read(run.runId);
+ assert.equal(after.tasks.find(task=>task.scopeKind==='contact').state,'revoked');
+ assert.equal(after.status,'blocked');assert.equal(after.statusReason,'scope_revoked');
+ assert.deepEqual(after.actions,[]);
+ assert.notEqual(continued.status,'completed');
 });
