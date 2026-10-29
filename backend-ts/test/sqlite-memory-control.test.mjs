@@ -95,6 +95,15 @@ test('普通暂停不启动新小批，执行中合法小批提交后显示暂�
  const attemptsAfter=await attempts(f,contact.taskId);
  assert.equal(attemptsAfter.length,2,'继续新增执行记录而非复用旧attempt');
  assert.equal(new Set(attemptsAfter.map(row=>row.step_id)).size,2,'成功步骤与新步骤分别保留');
+ // 暂停/继续期间后到的新消息留到下一次明确启动，不并入旧固定轮次。
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:Array.from({length:26},(_,index)=>record(String(index+1),{text:`我第${index+1}条合成消息。`})),completedPartitions:['shard-a'],exhausted:true});
+ await f.contacts.setReading(true);await f.service.synchronize(f.ca);
+ const afterNew=await x.service.read(run.runId);
+ assert.equal(afterNew.total,25,'新消息不并入已启动的固定轮次');
+ assert.equal(afterNew.succeeded,25);
+ const next=await x.service.start('control-pause-batch-next');await x.service.waitForIdle(next.runId);
+ const nextView=await x.service.read(next.runId);
+ assert.equal(nextView.total,1);assert.equal(nextView.succeeded,1,'新消息留到下一次明确启动时处理');
 });
 
 test('单人失败只让其受阻，共用模型故障暂停整轮并显示固定原因，失败不自动重试模型',async t=>{
@@ -168,6 +177,7 @@ test('退出中断后重开保持暂停/受阻与已完成结果，不自动模�
  let interruptedAtFinish=false;
  const observed={execute:async(name,input)=>{if(name==='memoryExtraction.finish'&&!interruptedAtFinish){interruptedAtFinish=true;entered();await gate;}return f.storage.execute(name,input);}};
  const service=new SqliteMemoryExtraction(observed,owner,port);t.after(async()=>{release();await service.close();});
+ const readEligibilityBefore=await f.contacts.eligibility(f.ca),pageCallsBefore=f.channel.page;
  const interrupted=await service.start('control-interrupted');await enteredPromise;
  const contact=await until(async()=>contactTask(await taskRows(f,interrupted.runId),f.ca));
  const running=await until(async()=>(await attempts(f,contact.id)).find(row=>row.state==='running'));
@@ -184,6 +194,11 @@ test('退出中断后重开保持暂停/受阻与已完成结果，不自动模�
  assert.equal(port.calls,callsBeforeContinue);
  const preserved=await service.read(first.runId);
  assert.equal(preserved.succeeded,1,'已完成轮次结果保留');
+ const readEligibilityAfter=await f.contacts.eligibility(f.ca);
+ assert.equal(String(readEligibilityAfter.selection_generation),String(readEligibilityBefore.selection_generation));
+ assert.equal(String(readEligibilityAfter.data_generation),String(readEligibilityBefore.data_generation));
+ assert.equal(readEligibilityAfter.owner_id,readEligibilityBefore.owner_id);
+ assert.equal(f.channel.page,pageCallsBefore,'记忆恢复不触发微信读取');
  // 迟到的业务提交因旧租约失效被拒绝，不产生内容。
  release();await service.waitForIdle(interrupted.runId);
  assert.equal((await service.read(interrupted.runId)).candidates.length,0);
