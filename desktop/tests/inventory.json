@@ -126,7 +126,11 @@
     "tests/dead-code-removal.test.mjs",
     "tests/reply-generation-transport.test.mjs",
     "tests/packaging/build-space.test.mjs",
-    "tests/packaging/runtime-attribution.test.mjs"
+    "tests/packaging/runtime-attribution.test.mjs",
+    "tests/sqlite-discussion-bridge.test.mjs",
+    "tests/sqlite-discussion-read.test.mjs",
+    "tests/sqlite-discussion-session.test.mjs",
+    "tests/sqlite-discussion-source-lifecycle.test.mjs"
   ],
   "headless": [
     "tests/fixed-memory-processing-view.test.mjs",
@@ -150,7 +154,9 @@
     "tests/workspace-submission.test.mjs",
     "tests/sync-scope-view.test.mjs",
     "tests/wechat-setup-view.test.mjs",
-    "tests/history-reply-warning-view.test.mjs"
+    "tests/history-reply-warning-view.test.mjs",
+    "tests/sqlite-discussion-composer.test.mjs",
+    "tests/sqlite-discussion-panel.test.mjs"
   ],
   "isolated-http-pg": [
     "tests/overview-reply-retrieval.test.mjs",
