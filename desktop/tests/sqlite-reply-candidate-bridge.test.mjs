@@ -85,6 +85,8 @@ test('已知失败按安全中文状态映射，未知错误不将供应商正�
   ['discussion_call_unknown','已有模型调用结果未知，请先核对原请求，不能换请求重发。'],
   ['reply_input_stale','资料版本已变化，请重新读取。'],
   ['reply_source_unavailable','本次候选来源已失效，请重新读取。'],
+  ['skill_run_invalidated','本次Skill资格已失效，请重新读取。'],
+  ['history_source_not_available','本次候选来源已失效，请重新读取。'],
   ['synthetic_provider_unknown','候选结果尚未确认，请保留原请求重试核对。'],
  ]){
   f.respond(async()=>{throw Object.assign(new Error('合成供应商私密正文与诊断'),{code});});

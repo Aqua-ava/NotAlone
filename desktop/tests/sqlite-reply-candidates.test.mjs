@@ -103,3 +103,15 @@ test('切换联系人撤下旧草稿与快照，旧读取迟到不能跨范围�
  await draft.fill('乙联系人的本次想法');await region.getByRole('button',{name:'生成候选',exact:true}).click();await expect.poll(()=>f.submitted.length).toBe(1);
  const generated=f.commands.find(c=>c.action==='generate');assert.equal(generated.contactId,ids.other);assert.equal(generated.scopeRevision,2);assert.equal(generated.sessionId,ids.otherSession);assert.equal(generated.text,'乙联系人的本次想法');assert.equal(generated.acceptIncomplete,false);assert.equal(generated.carriedSelectionId,undefined);
 });
+
+test('候选继续被后端判定失效时同时清草稿、旧携入及Skill选择快照',{timeout:30000},async t=>{
+ let selected=0;const f=await panel(t,async operation=>{
+  if(operation.action==='read')return {...pageData(),availableSkills:[{packageId:ids.skill,name:'将失效的合成方法',revisionNo:1}]};
+  if(operation.action==='select'){if(++selected===1)return {id:ids.selection};throw new Error('本次候选来源已失效，请重新读取。');}
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'候选回复'}),draft=region.getByRole('textbox',{name:'本次想法',exact:true});
+ await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
+ await draft.fill('资格失效时必须清掉的合成草稿');await region.getByRole('combobox',{name:'本次回复Skill',exact:true}).selectOption(ids.skill);await region.getByRole('button',{name:'以此版本继续',exact:true}).click();
+ await expect(region.getByRole('alert')).toContainText('已失效');await expect(draft).toHaveValue('');await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('combobox',{name:'本次回复Skill',exact:true})).toHaveCount(0);await expect(region.getByText('本次实际载入的 Skill',{exact:true})).toHaveCount(0);
+});
