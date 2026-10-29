@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
 import type { HistoryCoverage, HistoryRead, StoredMessage } from './contracts.ts';
+import type { FirstHistoryCoordinatorState } from './coordinator.ts';
 
 interface HistoryHttpService {
   read(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
@@ -34,10 +35,19 @@ export function projectHistoryMessages(read: HistoryRead, limit: number) {
   };
 }
 /** 公共宿主负责实际渠道可用性；本函数只投影已持久化的覆盖，不发起读取。 */
-export function projectHistorySyncStatus(base: Record<string, unknown>, coverages: readonly HistoryCoverage[]) {
+export function projectHistorySyncStatus(base: Record<string, unknown>, persistedCoverages: readonly HistoryCoverage[], runtime?:FirstHistoryCoordinatorState) {
+  const blocked=new Set<string>();
+  const globalFailure=runtime?.phase==='blocked'&&(runtime.contacts.length===0
+    ||runtime.lastError==='history_first_directory_failed'||runtime.lastError==='history_first_stop_failed')?runtime.lastError:null;
+  const coverages=persistedCoverages.map(row=>{
+    const current=runtime?.contacts.find(contact=>contact.contactId===row.contactId);
+    const failure=globalFailure??(current&&(current.phase==='blocked'||current.phase==='incomplete')?current.lastError:null);
+    if(row.phase==='complete'||!failure)return row;
+    blocked.add(row.contactId);return {...row,failureCode:failure};
+  });
   const completed = coverages.filter(row => row.phase === 'complete').length;
-  const incomplete = coverages.filter(row => row.phase === 'incomplete').length;
-  const pending = coverages.filter(row => row.phase === 'not_started' || row.phase === 'running').length;
+  const incomplete = coverages.filter(row => row.phase === 'incomplete'||blocked.has(row.contactId)).length;
+  const pending = coverages.filter(row => (row.phase === 'not_started' || row.phase === 'running')&&!blocked.has(row.contactId)).length;
   const textCount = (row: HistoryCoverage) => Math.max(0, row.messageCount - row.nonTextCount);
   return { ...base,
     cli_history_authorization_state: coverages.some(row=>row.bindingId!==null)?'accepted':'unknown', cli_history_authorization_version: coverages.some(row=>row.bindingId!==null)?1:null, cli_history_authorization_current_version: 1,

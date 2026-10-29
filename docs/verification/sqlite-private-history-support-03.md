@@ -82,3 +82,11 @@ metadata-sessions 是独立许可的固定窄操作，仅必要私聊身份与�
 v10 fresh archive 的定向原生 race 共37顶层／含子例91项通过，0失败0跳过；之后名单提前分类仅补受影响定向 race，客户端恢复仅补新增两例及类型检查。真实资格绑定 v10 字节，后续新制品须按实际字节复验；未变化底座沿既有证据复用，不重复宣称重跑。
 
 包含上述修复的 v11 已 fresh build 并通过严格开发签名核验。正式 createWechatContactMetadata 端口实际两次读取工具配置账号，assurance 均 verified、证据相等，随后端口及原生进程关闭；未调用名单或正文。新字节和端口结果已追加到同一支持档的 formalPortVerification，旧 v9／v10 证据保留各自制品绑定。
+
+## 首次自动入口的正式宿主验证
+
+实际合入公共基线 af98a3ba，保留迁移1至9、唯一共享模型、讨论／记忆／媒体消费者以及关闭失败保留SQLite的合同。联系人确认成功和开启读取只唤醒后台派发；关闭读取等待历史及微信媒体排空，撤销按联系人停止所有媒体，退出先排空首次协调器。宿主显式传入配置工具路径，不自动寻找或替换组件。
+
+hooks、覆盖状态、关闭顺序、正式 launchDsh/profile、既有非空 history 和 media 宿主相关组合24项通过，后台类型检查通过。正式初次入口用合成原生子进程及空库，经真实 HTTP 账号确认、名单同意、联系人确认和开启读取自动形成 capture／source／message／coverage，未调用手动同步接口、未预植消息或goal。启动场景只经正式联系人服务准备持久开关；未知支持保持not_started和原因，零 target/page，body_available仍false。来源删除、显示和实际 App 不由该合成结果代签。
+
+DSH查证：声明、锁及实际解析核心均为0.2.1-rc.2；核对安装 cmdline lib/types/index.d.ts:48 的 onReady(void listener) 成功启动一次／返回disposer，以及 lib/index.js:50–73 的effect释放。对应官方固定源码687f282e8625c6b8d11ff58211a90524be2e4317 packages/boot/cmdline/src/index.ts:52、123–145。本次只复用公开生命周期，不宣称整个npm制品已与源码逐字复现。
