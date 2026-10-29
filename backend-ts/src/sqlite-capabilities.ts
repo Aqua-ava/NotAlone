@@ -1,16 +1,17 @@
 import path from 'node:path';
 export interface SqliteCapabilitiesConfiguration {
- capabilities: ['contacts'] | ['contacts','skills'];
+ capabilities: ['contacts'] | ['contacts','skills'] | ['contacts','history'] | ['contacts','skills','history'];
  skillPackageRoot?: string;
 }
-/** 只用于显式test开发配置；Skill根限本次隔离userData内，不从旧owner或环境猜关联。 */
+/** 固定顺序保留既有contacts/skills合同；history不授权真实渠道或新增范围。 */
 export function readSqliteCapabilities(value:unknown,skillPackageRoot:unknown,userData:string):SqliteCapabilitiesConfiguration|undefined {
- if(!Array.isArray(value)||value[0]!=='contacts'||!(value.length===1||value.length===2&&value[1]==='skills'))return undefined;
- if(value.length===1)return skillPackageRoot===undefined?{capabilities:['contacts']}:undefined;
+ const supported=[['contacts'],['contacts','skills'],['contacts','history'],['contacts','skills','history']];
+ if(!Array.isArray(value)||!supported.some(shape=>shape.length===value.length&&shape.every((entry,index)=>entry===value[index])))return undefined;
+ const capabilities=value.slice() as SqliteCapabilitiesConfiguration['capabilities'];
+ if(!value.includes('skills'))return skillPackageRoot===undefined?{capabilities}:undefined;
  if(typeof skillPackageRoot!=='string'||!path.isAbsolute(skillPackageRoot)||path.resolve(skillPackageRoot)!==skillPackageRoot)return undefined;
  const relative=path.relative(userData,skillPackageRoot);
  if(!relative||relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))return undefined;
- // managed属于数据库／副本删除区；大小写别名也不能将用户原件放入受管区。
  if(relative.split(path.sep)[0].toLowerCase()==='managed')return undefined;
- return {capabilities:['contacts','skills'],skillPackageRoot};
+ return {capabilities,skillPackageRoot};
 }
