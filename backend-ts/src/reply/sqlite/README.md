@@ -53,3 +53,5 @@ run/inspect获取阶段纳入同一pending排空；close开始后拒绝新获取
 宿主关闭先停新工作，逐域排空；任一业务或模型关闭未证明成功时不关SQLite。journal末写失败后可沿原关闭续清，只有真实内核锁释放才标结束。来源删除started事件同步撤正文并锁定读取，DELETE回执丢失不能让旧快照继续留在界面；随后权威读取才能恢复仍合法内容。
 
 正式launchDsh/profile已验证两个合成联系人、非空用户发言、隔离、新开、明确继续和重开不调用模型；共享模型装配、关闭失败恢复及实际桌面控制器均有独立回归。实际App和受控外部模型验收继续单列，当前证据不等同产品整体或真实渠道质量验收。
+
+锁定的DSH、llm及deepseek adapter均为0.2.1-rc.2。官方`dsh-llm/lib/types/types.d.ts:131`及`:434`明确适配器异常以终止`finish.reason.failure`返回；`LlmFailure`在`:26`提供固定code及可选HTTP status。讨论在拒绝非stop终止前提取这些分类，随原有预算receipt保存；固定白名单再次过滤，不保存message、requestId、cause或任意供应商文本。环回HTTP500和断连接分别验证SERVER/status500及TRANSPORT，保守unknown结算和禁止自动重试不变；此修复不能追回旧存档已经丢失的错误详情。
