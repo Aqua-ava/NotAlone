@@ -6,6 +6,9 @@ import { AssistantInputBudgetNotice } from './AssistantInputBudgetNotice';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 import { ExpressionPreferenceBasis } from './ExpressionPreferenceBasis';
 import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
+import { SqliteDiscussionEntries } from './SqliteDiscussionEntries';
+import { SqliteDiscussionComposer } from './SqliteDiscussionComposer';
+import type { SqliteDiscussionReceipt } from '../shared/sqlite-discussion-bridge';
 
 const generationStatusText: Record<ReplyGenerationJobState['phase'], string> = {
   preparing: '正在准备本次生成。',
@@ -102,6 +105,9 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const currentCopyScope = useRef(copyScopeKey); currentCopyScope.current = copyScopeKey;
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
+  const sqliteDiscussion = saved?.discussionEntries !== undefined;
+  const contactScopeKey = `${replies.state.contactId}:${replies.state.scopeRevision}`;
+  const currentContactScope = useRef(contactScopeKey); currentContactScope.current = contactScopeKey;
   const currentContactJobs = replies.state.generationJobs?.filter((job) => job.contactId === replies.state.contactId) ?? [];
   const activeContactJobs = currentContactJobs.filter((job) => ['preparing', 'queued', 'generating', 'stopping', 'unconfirmed'].includes(job.phase));
   const visibleJob = activeContactJobs.length === 1 ? activeContactJobs[0] : undefined;
@@ -115,7 +121,25 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const busy = deleting || catalog?.phase === 'loading' || saved?.phase === 'loading'
     || replies.state.exploration.phase === 'waiting'
     || replies.state.sessionDeletion === 'failed' || replies.state.sourceAvailability === 'checking';
+  const currentDiscussion = catalog?.phase === 'ready' && !catalog.selectionPending
+    && !!saved?.sessionId && catalog.currentSessionId === saved.sessionId;
+  const discussionDisabled = busy || !!confirmation || !currentDiscussion || saved?.phase !== 'ready'
+    || Boolean(replies.state.sourceAvailability) || replies.state.phase === 'waiting' || activeContactJobs.length > 0
+    || replies.state.sessionDeletion === 'deleted' || replies.state.sessionDeletion === 'missing';
   useEffect(() => { setConfirmation(null); setCopyError(false); }, [replies.state.contactId, replies.state.scopeRevision, saved?.sessionId]);
+  useEffect(() => {
+    if (sqliteDiscussion && saved?.phase === 'ready' && saved.sessionId && (!catalog || catalog.phase === 'idle')) {
+      void replies.listSavedSessions();
+    }
+  }, [sqliteDiscussion, replies.state.contactId, replies.state.scopeRevision, saved?.sessionId, saved?.phase, catalog?.phase]);
+  function discussionSubmitted(receipt: SqliteDiscussionReceipt) {
+    const scope = contactScopeKey;
+    // 回执可指向分段后的新会话或原幂等请求；只通过正式回看操作刷新正文。
+    void (async () => {
+      await replies.viewSavedSession(receipt.sessionId);
+      if (currentContactScope.current === scope) await replies.listSavedSessions();
+    })();
+  }
   function confirmDelete() {
     if (!confirmation) return;
     const command = confirmation; setConfirmation(null);
@@ -174,6 +198,13 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {saved?.phase === 'loading' && <p role="status">正在读取已保存讨论…</p>}
     {saved?.phase === 'failed' && <p role="alert">已保存讨论暂不可用，请重试读取。</p>}
     {copyError && <p role="alert">复制来源暂不可确认，请重新读取讨论后核对。</p>}
+    {sqliteDiscussion && <>
+      <SqliteDiscussionEntries entries={saved.discussionEntries!} recovery={saved.runtimeRecovery} />
+      {catalog?.phase === 'ready' && !currentDiscussion && <p role="status">正在回看历史讨论，请先明确继续此会话后再提交。</p>}
+      <SqliteDiscussionComposer bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
+        scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled}
+        onSubmitted={discussionSubmitted} />
+    </>}
     <details className="session-browser">
       <summary><span>历史讨论</span><small>新开、切换或回看助手讨论</small>
         {saved?.phase === 'ready' && saved.turns.some((turn) => turn.state === 'failed')
@@ -207,7 +238,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       onClick={() => setConfirmation({ contactId: replies.state.contactId!, scopeRevision: replies.state.scopeRevision,
         sessionId: saved!.sessionId!, confirmed: true })}>删除正在查看的会话</button>
         </div>
-    {saved?.phase === 'ready' && <section className="session-history" aria-label="已保存的讨论" onCopy={noteHistoricalCopy}>
+    {saved?.phase === 'ready' && !sqliteDiscussion && <section className="session-history" aria-label="已保存的讨论" onCopy={noteHistoricalCopy}>
       {!saved.inputs.length && <p>当前会话还没有讨论。</p>}
       {saved.inputs.map((input) => {
         if (input.type !== 'generation') return <SavedDiscussion key={input.inputVersionId} input={input} />;

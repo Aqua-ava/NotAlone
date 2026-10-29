@@ -35,15 +35,19 @@ export function authorizeSqliteRequest(req: IncomingMessage, token: string): boo
 }
 
 interface SqliteHostResource { close(): Promise<void> }
-/** 一个领域关闭失败仍须结算其他读写者，存储最后关闭；失败不能变成stopped。 */
+/** 逐域尝试真实排空；任何业务所有者未释放时保留共享模型与SQLite，允许原操作续清。 */
 export async function closeSqliteHostResources(resources: {
-  media?: SqliteHostResource; history?: SqliteHostResource;
-  contacts?: SqliteHostResource; storage?: SqliteHostResource;
+  discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
+  contacts?: SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
 }): Promise<void> {
   const failures: unknown[] = [];
-  for (const resource of [resources.media, resources.history, resources.contacts, resources.storage]) {
+  for (const resource of [resources.discussions, resources.memory, resources.media, resources.history, resources.contacts]) {
     try { await resource?.close(); } catch (error) { failures.push(error); }
   }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
+  try { await resources.models?.close(); } catch (error) { failures.push(error); }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
+  try { await resources.storage?.close(); } catch (error) { failures.push(error); }
   if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
 }
 
@@ -78,14 +82,14 @@ export async function apply(ctx: Context) {
     await closeSqliteHostResources({media, history, contacts, storage});
     if (published) await rm(config.infoPath, { force: true });
     state = 'stopped';
-  })();
+  })().catch(error=>{stopping=undefined;throw error;});
   const closeServer = () => serverClosing ??= (async () => {
     if (server) { server.closeAllConnections(); await new Promise<void>(resolve => server!.close(() => resolve())); }
   })();
   const close = () => closing ??= (async () => {
-    try { await stopResources(); }
-    finally { await closeServer(); process.stdin.pause(); }
-  })();
+    await stopResources();
+    await closeServer(); process.stdin.pause();
+  })().catch(error=>{closing=undefined;throw error;});
   ctx.effect(() => close, 'notalone-sqlite-resources');
   // 官方 EOF 绑定在 appReady 之后请求有界退出，不掩盖启动失败。
   exitOnStdinEnd(ctx, 'notalone-sqlite-parent');
