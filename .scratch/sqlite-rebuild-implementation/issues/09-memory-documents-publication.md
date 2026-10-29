@@ -1,7 +1,7 @@
 # 09：主题资料与长期概览
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Type: task
 Parent: [同步、聊天清空与记忆处理规则](../../sync-memory-behavior/spec.md)、[SQLite数据库重建](../../sqlite-database-rebuild/spec.md)
 Blocked by: [08 记忆候选、版本与修正](08-memory-candidates-and-versions.md)
@@ -40,3 +40,13 @@ Blocked by: [08 记忆候选、版本与修正](08-memory-candidates-and-version
 - 后续开发只用 `pnpm run dev`，先执行 `dev:status`核验并复用实例；不得擅自打包、运行旧包、修改发布门禁、推送或创建远端分支／PR。
 - App首次使用继续搁置；组件安装、新模型设置、干净机器和发布、微信迁移／恢复实验均不属于本任务。不新增模型或凭据入口，沿现有配置核验用途与最小文本出站授权。
 - 合成结果与真实模型、真实微信、产品集成分别记账。当前未核验的真实账号／联系人读取范围不可读取；不发送外部消息，不把开发验证能力加入产品工具。
+
+## Comments
+
+2026-10-30 完成并 resolved（Lead 收口；执行会话 t09）。分支 dsh/sqlite-rebuild-09 提交 e0f51331、8c7a66b5、fc5b2c54、e7df7dcd + 回归修复 d5f3ee55（merge 1621d0f8）；--no-ff 集成 5551aa5e 与 13a33b18。迁移 1..13 定稿（13=memoryDocumentsMigration，1–12 原文未改），后续 04=14、06=15、10=16 依次追加。主仓复跑：backend typecheck 0、Electron Node 下文档 10 文件 90/90、sqlite-memory-extraction 10/10、desktop typecheck 0、桌面 46/46。实际热更新 App（合成库+环回供应商，12 次文档协议调用 errors=0，未操作微信/未接真实模型）：权威阶段序列 extraction_verification→document_scene→document_profile→completed；记忆页显示同一完整发布集合（长期背景/合成主题两篇，各带依据）；本人全局概览不在联系人页展示；正常 quit 后 dev:status stopped/pids[]，合成临时根与供应商已清理。12 条验收逐条通过。
+
+边界：真实模型语义质量、真实微信数据与最终产品切换未认证，单独记账；“修正后待时间核验”状态实际 App 未强制构造，已由无头页面用例覆盖并如实记录。
+
+## Answer
+
+完成。最终证据见调度记录与 docs/verification 相关记录；集成提交 5551aa5e、13a33b18。
