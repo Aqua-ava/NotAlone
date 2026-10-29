@@ -64,7 +64,7 @@ export interface MergeVerification {
 }
 export interface SimilarMemory {
  memory_id:string;
- revision:number;
+ revision:number|string;
  text:string;
  category:string;
  topic:string;

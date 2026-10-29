@@ -1,8 +1,9 @@
-/** 记忆提取的真实来源闭包；混合本人结果整体失效，其他联系人的任务保持独立。 */
+/** 按实际事件与输入清理来源；独立成功产物保留，待执行任务统一撤销。 */
 import {createHash} from 'node:crypto';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 import {identityDeletionAuthority} from '../../contacts/sqlite/deletion.ts';
+import {memoryDeletionImpact,deletionRows,deletionIds} from './deletion-impact.ts';
 
 const domain='memory_extraction';
 const rowKinds:DeletionDomain['rowKinds']={
@@ -46,67 +47,62 @@ function oldTargets(tx:StorageTransaction,op:DeletionOperation):Map<string,RowDe
   return found;
 }
 interface Closure {
-  tasks:StorageRow[];steps:StorageRow[];attempts:StorageRow[];events:StorageRow[];operations:StorageRow[];
-  inputs:StorageRow[];contacts:StorageRow[];items:StorageRow[];runs:StorageRow[];
+  tasks:StorageRow[];removedTasks:StorageRow[];steps:StorageRow[];attempts:StorageRow[];events:StorageRow[];operations:StorageRow[];
+  stepInputs:StorageRow[];contributions:StorageRow[];inputs:StorageRow[];contacts:StorageRow[];items:StorageRow[];runs:StorageRow[];
 }
 function closure(tx:StorageTransaction,op:DeletionOperation):Closure {
-  const empty:Closure={tasks:[],steps:[],attempts:[],events:[],operations:[],inputs:[],contacts:[],items:[],runs:[]};
+  const empty:Closure={tasks:[],removedTasks:[],steps:[],attempts:[],events:[],operations:[],stepInputs:[],contributions:[],inputs:[],contacts:[],items:[],runs:[]};
   if(!allowed(op))return empty;
-  const {ownerId,scope}=op;
-  const allTasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? ORDER BY id',[ownerId]);
-  const allContacts=tx.all('SELECT * FROM run_contact WHERE owner_id=? ORDER BY run_id,contact_id',[ownerId]);
-  const pairs=new Set<string>(),taskIds=new Set<string>();
-  const pair=(run:unknown,contact:unknown)=>JSON.stringify([String(run),String(contact)]);
-  if(scope.kind==='account'){
-    for(const contact of allContacts)pairs.add(pair(contact.run_id,contact.contact_id));
-    for(const task of allTasks)taskIds.add(String(task.id));
-  }else if('contactId'in scope){
-    if(scope.kind==='source'){
-      for(const row of tx.all('SELECT run_id FROM run_input WHERE owner_id=? AND source_contact_id=? AND record_id=?',[ownerId,scope.contactId,scope.sourceId]))
-        pairs.add(pair(row.run_id,scope.contactId));
-      // 实际来源依赖独立复核，不能只依赖候选展示引用。
-      for(const row of tx.all(`SELECT t.id,t.run_id FROM event_source es
-        JOIN execution_event e ON e.owner_id=es.owner_id AND e.id=es.event_id
-        JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
-        JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
-        JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
-        WHERE es.owner_id=? AND es.source_contact_id=? AND es.record_id=?`,[ownerId,scope.contactId,scope.sourceId])){
-        pairs.add(pair(row.run_id,scope.contactId));taskIds.add(String(row.id));
-      }
-    }else{
-      for(const contact of allContacts)if(contact.contact_id===scope.contactId
-        &&(contact.accepted_data_generation as bigint)<op.acceptedGeneration)pairs.add(pair(contact.run_id,contact.contact_id));
-    }
-    for(const contribution of tx.all('SELECT task_id,run_id,source_contact_id FROM task_contribution WHERE owner_id=?',[ownerId]))
-      if(pairs.has(pair(contribution.run_id,contribution.source_contact_id)))taskIds.add(String(contribution.task_id));
-    for(const task of allTasks)if(task.contact_id!==null&&pairs.has(pair(task.run_id,task.contact_id)))taskIds.add(String(task.id));
-  }
-  // 清理中引用会逐步移除；原计划继续固定原任务，不以消失的引用缩窄已接受闭包。
-  for(const target of oldTargets(tx,op).values())if(target.rowKind==='processing_task')taskIds.add(target.key.id);
-  const tasks=allTasks.filter(t=>taskIds.has(String(t.id)));
-  const steps=tx.all('SELECT * FROM processing_step WHERE owner_id=? ORDER BY id',[ownerId]).filter(s=>taskIds.has(String(s.task_id)));
-  const stepIds=new Set(steps.map(s=>String(s.id)));
-  const attempts=tx.all('SELECT * FROM step_attempt WHERE owner_id=? ORDER BY id',[ownerId]).filter(a=>stepIds.has(String(a.step_id)));
-  const attemptIds=new Set(attempts.map(a=>String(a.id)));
-  const events=tx.all('SELECT * FROM execution_event WHERE owner_id=? ORDER BY id',[ownerId]).filter(e=>attemptIds.has(String(e.step_attempt_id)));
+  const {ownerId,scope}=op,impact=memoryDeletionImpact(tx,op);
+  const tasks=deletionRows(tx,ownerId,'processing_task','id',impact.tasks),touched=deletionRows(tx,ownerId,'processing_step','id',impact.steps);
+  const events=deletionRows(tx,ownerId,'execution_event','id',impact.events),affectedEvents=deletionIds(impact.events);
+  const touchedAttempts=deletionRows(tx,ownerId,'step_attempt','step_id',impact.steps);
+  const attempts=touchedAttempts.filter(a=>!tx.get('SELECT 1 FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND id NOT IN (SELECT value FROM json_each(?)) LIMIT 1',[ownerId,a.id,affectedEvents]));
+  const attemptIds=attempts.map(a=>String(a.id));
+  const steps=touched.filter(step=>!tx.get('SELECT 1 FROM step_attempt WHERE owner_id=? AND step_id=? AND id NOT IN (SELECT value FROM json_each(?)) LIMIT 1',[ownerId,step.id,deletionIds(attemptIds)]));
+  const stepIds=steps.map(step=>String(step.id));
+  const removedTasks=tasks.filter(task=>!tx.get('SELECT 1 FROM processing_step WHERE owner_id=? AND task_id=? AND id NOT IN (SELECT value FROM json_each(?)) LIMIT 1',[ownerId,task.id,deletionIds(stepIds)]));
+  const removedTaskIds=removedTasks.map(task=>String(task.id));
+  const stepInputMap=new Map<string,StorageRow>();
+  for(const row of deletionRows(tx,ownerId,'step_input','step_id',stepIds))stepInputMap.set(deletionIds([row.step_id,row.input_no]),row);
+  for(const i of impact.stepInputs){const row=tx.get('SELECT * FROM step_input WHERE owner_id=? AND step_id=? AND input_no=?',[ownerId,i.stepId,i.inputNo]);if(row)stepInputMap.set(deletionIds([row.step_id,row.input_no]),row);}
+  const contributions=deletionRows(tx,ownerId,'task_contribution','task_id',removedTaskIds);
+  if(scope.kind==='contact')for(const task of tasks)if(!removedTaskIds.includes(String(task.id))){const row=tx.get('SELECT * FROM task_contribution WHERE owner_id=? AND task_id=? AND source_contact_id=?',[ownerId,task.id,scope.contactId]);if(row)contributions.push(row);}
   const ledgerScope=new Set<string>();
-  if(scope.kind==='account')for(const o of tx.all('SELECT id FROM model_operation WHERE owner_id=?',[ownerId]))ledgerScope.add(String(o.id));
+  if(scope.kind==='account')for(const o of tx.all("SELECT id FROM model_operation WHERE owner_id=? AND reply_request_id IS NULL",[ownerId]))ledgerScope.add(String(o.id));
   else if(eraseLedger(op)&&'contactId'in scope)for(const o of tx.all('SELECT operation_id FROM operation_scope WHERE owner_id=? AND source_contact_id=?',[ownerId,scope.contactId]))ledgerScope.add(String(o.operation_id));
-  for(const target of oldTargets(tx,op).values())if(target.rowKind==='model_operation')ledgerScope.add(target.key.id);
-  // 共用调用表还承载讨论生产者；本领域只拥有提取／核验分支及其封存记录。
-  const operations=tx.all("SELECT * FROM model_operation WHERE owner_id=? AND purpose IN ('extraction','verification') AND reply_request_id IS NULL ORDER BY id",[ownerId])
-    .filter(o=>stepIds.has(String(o.memory_step_id))||ledgerScope.has(String(o.id)));
-  for(const task of tasks)if(task.contact_id!==null)pairs.add(pair(task.run_id,task.contact_id));
-  const contacts=allContacts.filter(c=>pairs.has(pair(c.run_id,c.contact_id)));
-  const inputs=tx.all('SELECT * FROM run_input WHERE owner_id=? ORDER BY run_id,input_no',[ownerId])
-    .filter(i=>pairs.has(pair(i.run_id,i.source_contact_id)));
-  const itemIds=new Set(inputs.filter(i=>i.item_id!==null).map(i=>String(i.item_id)));
-  const items=tx.all('SELECT * FROM processing_item WHERE owner_id=? ORDER BY id',[ownerId]).filter(i=>
-    scope.kind==='account'||eraseLedger(op)&&'contactId'in scope&&i.contact_id===scope.contactId||itemIds.has(String(i.id)));
-  const affectedRuns=new Set(tasks.map(t=>String(t.run_id)));
-  const runs=tx.all('SELECT * FROM processing_run WHERE owner_id=? ORDER BY id',[ownerId]).filter(r=>scope.kind==='account'
-    ||affectedRuns.has(String(r.id))&&!allTasks.some(t=>t.run_id===r.id&&!taskIds.has(String(t.id))));
-  return {tasks,steps,attempts,events,operations,inputs,contacts,items,runs};
+  for(const target of impact.planned)if(target.domain===domain&&target.rowKind==='model_operation')ledgerScope.add(target.key.id);
+  for(const o of deletionRows(tx,ownerId,'model_operation','memory_step_id',impact.steps))ledgerScope.add(String(o.id));
+  const operations=ledgerScope.size?tx.all("SELECT * FROM model_operation WHERE owner_id=? AND id IN (SELECT value FROM json_each(?)) AND purpose IN ('extraction','verification','adjudication','relation_verification','merge_verification') AND reply_request_id IS NULL ORDER BY id",[ownerId,deletionIds([...ledgerScope])]):[];
+  const pairs=new Map<string,{run:string;contact:string}>();
+  const pair=(run:unknown,contact:unknown)=>pairs.set(deletionIds([run,contact]),{run:String(run),contact:String(contact)});
+  for(const i of impact.inputs)pair(i.run_id,i.source_contact_id);
+  for(const c of contributions)pair(c.run_id,c.source_contact_id);
+  for(const t of impact.planned)if(t.domain===domain&&t.rowKind==='run_contact')pair(t.key.run_id,t.key.contact_id);
+  if(scope.kind==='account')for(const c of tx.all('SELECT run_id,contact_id FROM run_contact WHERE owner_id=?',[ownerId]))pair(c.run_id,c.contact_id);
+  const contributionKeys=new Set(contributions.map(c=>deletionIds([c.task_id,c.source_contact_id]))),contacts:StorageRow[]=[];
+  for(const {run,contact} of pairs.values()){
+    const row=tx.get('SELECT * FROM run_contact WHERE owner_id=? AND run_id=? AND contact_id=?',[ownerId,run,contact]);if(!row)continue;
+    const inputNos=impact.inputs.filter(i=>i.run_id===run||String(i.run_id)===String(run)).map(i=>String(i.input_no));
+    if(tx.get('SELECT 1 FROM run_input WHERE owner_id=? AND run_id=? AND source_contact_id=? AND input_no NOT IN (SELECT value FROM json_each(?)) LIMIT 1',[ownerId,run,contact,deletionIds(inputNos)]))continue;
+    const needed=tx.all(`SELECT c.task_id,c.source_contact_id FROM processing_task t INDEXED BY task_contact_scope JOIN task_contribution c ON c.owner_id=t.owner_id AND c.task_id=t.id AND c.source_contact_id=? WHERE t.owner_id=? AND t.run_id=? AND t.scope_kind='contact' AND t.contact_id=?
+      UNION ALL SELECT c.task_id,c.source_contact_id FROM processing_task t INDEXED BY task_self_scope JOIN task_contribution c ON c.owner_id=t.owner_id AND c.task_id=t.id AND c.source_contact_id=? WHERE t.owner_id=? AND t.run_id=? AND t.scope_kind='self'`,[contact,ownerId,run,contact,contact,ownerId,run]);
+    if(needed.some(c=>!contributionKeys.has(deletionIds([c.task_id,c.source_contact_id]))))continue;
+    contacts.push(row);
+  }
+  const itemIds=new Set(impact.inputs.filter(i=>i.item_id!==null).map(i=>String(i.item_id)));
+  for(const t of impact.planned)if(t.domain===domain&&t.rowKind==='processing_item')itemIds.add(t.key.id);
+  for(const i of deletionRows(tx,ownerId,'operation_item','operation_id',operations.map(o=>String(o.id))))if(['extraction','verification'].includes(String(i.effect_kind)))itemIds.add(String(i.item_id));
+  const items=scope.kind==='account'?tx.all('SELECT * FROM processing_item WHERE owner_id=?',[ownerId]):scope.kind==='contact'?tx.all('SELECT * FROM processing_item WHERE owner_id=? AND contact_id=?',[ownerId,scope.contactId]):deletionRows(tx,ownerId,'processing_item','id',[...itemIds]);
+  const runIds=new Set([...tasks.map(t=>String(t.run_id)),...impact.inputs.map(i=>String(i.run_id)),...contacts.map(c=>String(c.run_id))]);
+  for(const t of impact.planned)if(t.domain===domain&&t.rowKind==='processing_run')runIds.add(t.key.id);
+  if(scope.kind==='account')for(const r of tx.all('SELECT id FROM processing_run WHERE owner_id=?',[ownerId]))runIds.add(String(r.id));
+  const runs=deletionRows(tx,ownerId,'processing_run','id',[...runIds]).filter(r=>
+    !tx.get(`SELECT 1 FROM (SELECT id FROM processing_task INDEXED BY task_contact_scope WHERE owner_id=? AND run_id=? AND scope_kind='contact'
+      UNION ALL SELECT id FROM processing_task INDEXED BY task_self_scope WHERE owner_id=? AND run_id=? AND scope_kind='self') WHERE id NOT IN (SELECT value FROM json_each(?)) LIMIT 1`,[ownerId,r.id,ownerId,r.id,deletionIds(removedTaskIds)])
+    &&!tx.get('SELECT 1 FROM run_input WHERE owner_id=? AND run_id=? AND input_no NOT IN (SELECT value FROM json_each(?)) LIMIT 1',[ownerId,r.id,deletionIds(impact.inputs.filter(i=>i.run_id===r.id).map(i=>String(i.input_no)))])
+    &&!tx.get('SELECT 1 FROM run_contact WHERE owner_id=? AND run_id=? AND contact_id NOT IN (SELECT value FROM json_each(?)) LIMIT 1',[ownerId,r.id,deletionIds(contacts.filter(c=>c.run_id===r.id).map(c=>String(c.contact_id)))]));
+  return {tasks,removedTasks,steps,attempts,events,operations,stepInputs:[...stepInputMap.values()],contributions,inputs:impact.inputs,contacts,items,runs};
 }
 function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[] {
   if(!allowed(op))return [];
@@ -116,24 +112,17 @@ function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]
     const key=Object.fromEntries(rowKinds[kind].keys.map(k=>[k,String(row[k])])),identity=address(kind,key);
     targets.push(old.get(identity)??{kind:'row',domain,rowKind:kind,key,identity,holderKeys:holders});
   };
-  const events=new Set(c.events.map(e=>String(e.id)));
-  for(const kind of ['event_source','execution_input'])
-    for(const row of tx.all(`SELECT * FROM ${kind} WHERE owner_id=?`,[op.ownerId]))if(events.has(String(row.event_id)))add(kind,row);
-  c.events.forEach(r=>add('execution_event',r));
-  const steps=new Set(c.steps.map(s=>String(s.id)));
-  for(const row of tx.all('SELECT * FROM step_input WHERE owner_id=?',[op.ownerId]))if(steps.has(String(row.step_id)))add('step_input',row);
-  const operations=new Set(c.operations.map(o=>String(o.id)));
-  for(const row of tx.all('SELECT * FROM model_call WHERE owner_id=?',[op.ownerId]))if(operations.has(String(row.operation_id))
-    &&(eraseLedger(op)||row.step_attempt_id!==null))add('model_call',row);
-  for(const row of tx.all('SELECT * FROM operation_item WHERE owner_id=?',[op.ownerId]))if(operations.has(String(row.operation_id))&&!preserveUnknownOccupation(tx,op,row))add('operation_item',row);
-  if(eraseLedger(op))for(const row of tx.all('SELECT * FROM operation_scope WHERE owner_id=?',[op.ownerId]))if(operations.has(String(row.operation_id)))add('operation_scope',row);
-  c.operations.filter(o=>eraseLedger(op)||o.memory_step_id!==null).forEach(r=>add('model_operation',r));
+  const eventIds=c.events.map(e=>String(e.id)),stepIds=new Set(c.steps.map(s=>String(s.id))),attemptIds=new Set(c.attempts.map(a=>String(a.id))),operationIds=c.operations.map(o=>String(o.id));
+  for(const kind of ['event_source','execution_input'])deletionRows(tx,op.ownerId,kind,'event_id',eventIds).forEach(r=>add(kind,r));
+  c.events.forEach(r=>add('execution_event',r));c.stepInputs.forEach(r=>add('step_input',r));
+  for(const row of deletionRows(tx,op.ownerId,'model_call','operation_id',operationIds))if(eraseLedger(op)||attemptIds.has(String(row.step_attempt_id)))add('model_call',row);
+  for(const row of deletionRows(tx,op.ownerId,'operation_item','operation_id',operationIds))if(!preserveUnknownOccupation(tx,op,row))add('operation_item',row);
+  if(eraseLedger(op))deletionRows(tx,op.ownerId,'operation_scope','operation_id',operationIds).forEach(r=>add('operation_scope',r));
+  c.operations.filter(o=>eraseLedger(op)||stepIds.has(String(o.memory_step_id))).forEach(r=>add('model_operation',r));
   c.attempts.forEach(r=>add('step_attempt',r));c.steps.forEach(r=>add('processing_step',r));
-  const tasks=new Set(c.tasks.map(t=>String(t.id)));
-  for(const row of tx.all('SELECT * FROM task_contribution WHERE owner_id=?',[op.ownerId]))if(tasks.has(String(row.task_id)))add('task_contribution',row);
-  c.tasks.forEach(r=>add('processing_task',r));c.inputs.forEach(r=>add('run_input',r));c.contacts.forEach(r=>add('run_contact',r));
-  c.items.filter(i=>eraseLedger(op)||i.message_id!==null).forEach(r=>add('processing_item',r));
-  c.runs.forEach(r=>add('processing_run',r));return targets;
+  c.contributions.forEach(r=>add('task_contribution',r));c.removedTasks.forEach(r=>add('processing_task',r));
+  c.inputs.forEach(r=>add('run_input',r));c.contacts.forEach(r=>add('run_contact',r));
+  c.items.filter(i=>eraseLedger(op)||i.message_id!==null).forEach(r=>add('processing_item',r));c.runs.forEach(r=>add('processing_run',r));return targets;
 }
 function receiptSummary(raw:unknown):string|null {
   if(raw===null)return null;
@@ -159,8 +148,7 @@ export const memoryExtractionDeletionDomain:DeletionDomain={
     if(!eraseLedger(op))for(const operation of c.operations)tx.run("UPDATE operation_item SET state='unknown' WHERE owner_id=? AND operation_id=? AND EXISTS(SELECT 1 FROM model_call WHERE owner_id=? AND operation_id=? AND state IN ('sending','unknown'))",[op.ownerId,operation.id,op.ownerId,operation.id]);
     const affectedRuns=new Set(c.tasks.map(t=>String(t.run_id))),wholeRuns=new Set(c.runs.map(r=>String(r.id)));
     for(const runId of affectedRuns)tx.run('UPDATE processing_run SET state=? WHERE owner_id=? AND id=?',[wholeRuns.has(runId)?'revoked':'incomplete',op.ownerId,runId]);
-    const requests=tx.all('SELECT start_request_key,id FROM processing_run WHERE owner_id=?',[op.ownerId])
-      .filter(r=>op.scope.kind==='account'||affectedRuns.has(String(r.id)));
+    const requests=op.scope.kind==='account'?tx.all('SELECT start_request_key,id FROM processing_run WHERE owner_id=?',[op.ownerId]):deletionRows(tx,op.ownerId,'processing_run','id',[...affectedRuns]);
     return requests.map(r=>({namespace:'memoryExtraction.start',key:String(r.start_request_key)}));
   },
   collect,

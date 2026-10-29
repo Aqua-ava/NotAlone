@@ -25,10 +25,10 @@ export async function fixture(t,options={}){
 }
 export function modelPort(accounting,respond=async request=>({blocks:[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify({scenes:[]})}]})){
  let calls=0;
- return {get calls(){return calls;},prepare:async(_r,i)=>{await i.requireCurrent();return {provider:'synthetic',model:'synthetic',configurationId:'synthetic-v1',maxInputTokens:100000,maxOutputTokens:16,contextWindowTokens:100100,safetyMarginTokens:16};},
+ return {close:async()=>{},get calls(){return calls;},prepare:async(_r,i)=>{await i.requireCurrent();return {provider:'synthetic',model:'synthetic',configurationId:'synthetic-v1',maxInputTokens:100000,maxOutputTokens:16,contextWindowTokens:100100,safetyMarginTokens:16};},
  async invoke(request,i){
   const {randomUUID,createHash}=await import('node:crypto');
-  await i.requireCurrent();const receipt={attempt_id:i.attemptId,permit_id:randomUUID(),request_id:i.requestId,...i.scope,provider:'synthetic',model:'synthetic',called_at:new Date().toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null},input_budget:{measurement_id:'synthetic-measurement',measurement_kind:'approximate',input_tokens:10,max_output_tokens:16,context_window_tokens:100100,safety_margin_tokens:16,request_sha256:createHash('sha256').update(request.user).digest('hex'),serialized_bytes:Buffer.byteLength(request.user)}};
+  await i.requireCurrent();const receipt={attempt_id:i.attemptId,permit_id:randomUUID(),request_id:i.requestId,...i.scope,...(i.scope.contact_id===null?{scope_kind:'owner_memory'}:{}),provider:'synthetic',model:'synthetic',called_at:new Date().toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null},input_budget:{measurement_id:'synthetic-measurement',measurement_kind:'approximate',input_tokens:10,max_output_tokens:16,context_window_tokens:100100,safety_margin_tokens:16,request_sha256:createHash('sha256').update(request.user).digest('hex'),serialized_bytes:Buffer.byteLength(request.user)}};
   await accounting().reserve(receipt,i.claim);calls++;
   const result=await respond(request,i);
   const settled={...receipt,dispatch:'response_observed',outcome:'succeeded',latency_ms:1,usage:{input_tokens:10,output_tokens:1,cache_read_tokens:null,cache_write_tokens:null}};

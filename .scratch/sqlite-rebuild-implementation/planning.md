@@ -27,16 +27,16 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | --- | --- | --- | --- |
 | [01 SQLite 基础与生命周期](issues/01-sqlite-runtime-lifecycle.md) | 无 | ready-for-agent | resolved |
 | [02 联系人绑定与同步授权](issues/02-contact-binding-and-read-grants.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
-| [03 首次历史同步与消息展示](issues/03-private-history-sync.md) | [02](issues/02-contact-binding-and-read-grants.md) | ready-for-agent | claimed |
+| [03 首次历史同步与消息展示](issues/03-private-history-sync.md) | [02](issues/02-contact-binding-and-read-grants.md) | needs-info | claimed |
 | [04 增量同步与读取控制](issues/04-incremental-sync-controls.md) | [03](issues/03-private-history-sync.md) | ready-for-agent | open |
 | [05 统一来源删除与清理流程](issues/05-source-deletion-and-cleanup.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | open |
 | [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
-| [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | claimed |
-| [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | open |
+| [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | resolved |
+| [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | claimed |
 | [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | open |
 | [11 助手讨论与 DSH 副本](issues/11-assistant-discussions-and-runtime.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
-| [12 候选回复与依据](issues/12-reply-candidates-and-basis.md) | [11](issues/11-assistant-discussions-and-runtime.md) | ready-for-agent | claimed |
+| [12 候选回复与依据](issues/12-reply-candidates-and-basis.md) | [11](issues/11-assistant-discussions-and-runtime.md) | ready-for-agent | resolved |
 | [13 表达偏好接回（本轮暂缓）](issues/13-expression-preferences.md) | [12](issues/12-reply-candidates-and-basis.md) | wontfix | open |
 | [14 官方 Skill 加载接回](issues/14-official-skill-loading.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [15 既有纠错与诊断功能改接（本轮暂缓）](issues/15-feedback-and-quality-adaptation.md) | [09](issues/09-memory-documents-publication.md) | wontfix | open |
@@ -102,7 +102,11 @@ flowchart TD
 
 ## 当前总进度
 
-本轮有效17项：已集成8项（01、02、05、07、11、14、16、17）；进行中3项（03、08、12）；等待依赖6项（04、06、09、10、20、21）。08、12已创建独立执行会话和工作树，须核验实际前置提交后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03真实消息状态认证缺口仍如实保留。
+本轮有效17项：已集成且当前验收通过10项（01、02、05、07、08、11、12、14、16、17）；03因真实状态语义及来源生命周期未认证受阻；09独立会话执行中；04、06、10、20、21等待依赖。08、12已在独立工作树核验前置后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03实现及合成／实际App已完成的部分复用证据，不重新执行。
+
+07跨窗口误删及08关系／合并引用覆盖、人工改文核验标识、撤回后去重等问题均已修复；最终后台70项、迁移11项、正式profile正例1项、桌面17项与实际合成App验证通过。总指挥补集成跨窗口及08→12各1项，源提交e8d01162实际纳入；09将在核验执行Goal后立即派发。
+
+03补充只读查证：当前账号来源指纹和单连接 data_version 不足以证明跨次来源连续；03源码及合成评估确认单次固定快照与永久失证围栏仍不能满足旧排除跨实例映射和后续新消息接续；不能替代状态语义或重启增量等既定门槛。撤回测试继续跳过，不进行微信操作或迁移／恢复实验。
 
 ## 领取与并行约定
 
@@ -177,3 +181,11 @@ flowchart TD
 - 17已完成实际App和资源固定证明修复，Goal实际complete、最终源已保留祖先集成；PNG清除、视频控件播放、来源／联系人删除撤下快照均通过，root补图片／语音联合变异4项。当前共六项resolved，其余按直接依赖继续；19仍等待03和18，真实媒体范围已由用户明确为指定会话最新图片、视频、语音各一条（存在且能核验归属时读取）。
 
 - 18已完成正常App的停读本地重转、实际播放、单独清除和来源删除，Goal实际complete并保留祖先集成；两份删除各40项复核且无阻塞、受管文件归零。当前七项resolved，19仍等待03。用户已明确将撤回校准留待以后手动操作：B发送态已唯一观察，撤回／未观测状态继续未验证，不等待或重复要求此项，不放宽对应读取门禁。
+
+- 当前有效范围为17项，01、02、05、07、11、12、14、16、17已完成集成；08执行中，03真实历史仍受状态语义与来源连续性证据阻塞，04、06、09、10、20、21按依赖等待。撤回测试按用户要求跳过；独立只读复核未发现可以仅凭现有观察安全放开真实历史的依据，不额外要求迁移／恢复实验。
+
+- 08的记忆管理页面、固定桌面桥和实际App失效反馈修复已集成；隔离合成资料验收覆盖修改采纳、人工保护、版本恢复、纠错、记录变化、并发冲突及来源删除后撤下。08继续实现正常关系裁决、准确来源引用与无损数据库升级，临时的同范围全部待定防护不算完成。12已通过正式记忆写者与候选版本失效组合检查，并完成来源失效的实际App复验；09正式文档写者的组合仍是20切换前门禁。
+
+- 09 已按 08 实际集成提交启动独立执行会话，依赖祖先与 Goal 均已核验；只处理主题资料与长期概览，保留已发布迁移 1–12。
+
+- 用户在独立会话另行授权的真实供应商合成复测：07源提交两次调用及两个目标成功，11源提交一次调用成功且重开未增请求；总指挥已核对状态数量和祖先关系。各自旧unknown保留，09没有因此获得真实外呼授权；不认证微信或真实聊天语义质量。

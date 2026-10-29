@@ -6,7 +6,7 @@ Type: task
 Parent: [同步、聊天清空与记忆处理规则](../../sync-memory-behavior/spec.md)、[SQLite数据库重建](../../sqlite-database-rebuild/spec.md)
 Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-grants.md)；[05 统一来源删除与清理流程](05-source-deletion-and-cleanup.md)
 
-> 2026-10-29已按后续实施授权完成本票工程交付；真实供应商语义质量另列。[任务索引与共同约定](../planning.md)。
+> 2026-10-29本票及跨窗口来源删除修复均已完成验证并集成；真实供应商语义质量另列。[任务索引与共同约定](../planning.md)。
 
 ## 交付行为
 
@@ -163,3 +163,9 @@ MemoryPage聚合前补齐具名readMode：主进程沿已认证/api/runtime/stat
 通过Computer Use Cmd+Q正常退出；开发监督器退出0，同userData dev:status返回stopped/pids[]（预期退出1），自有Electron和DSH Host均已退出；仅停止自有tripwire并确认实收0，随后明确释放桌面给03。收尾用Node24只读核验database_instance.role=test、integrity=ok、FK违规0及无info/lock/socket、无进程文件引用；原合成根24860 KiB与自有未跟踪.dev编译缓存3820 KiB清理后均0。旧真实质量私有报告及无正文预算账本保留。未清理真实业务库、私人微信、未知进程或其他工作树。
 
 最终新增验证命令为desktop下node --test tests/fixed-memory-processing-view.test.mjs（4/4）、pnpm run typecheck、同隔离userData的pnpm run dev:status及git diff --check。后端19/19、正式profile2/2、两端类型、真实MemoryPage、桥控制器及集中inventory复用前述同条件有效结果；没有重复全量。数据处理仍仅合成文字/身份、真实Worker和本机环回，未发送外部消息、未新增凭据/模型配置、未打包/push/PR。真实供应商旧失败原因与语义质量仍未知，过期预算有效剩余0。
+
+2026-10-29 总指挥复核重开：21条合成目标分[20,1]时，删除仅在第二窗口使用的来源，05完成后第一窗口的独立结果及过程被误撤。该来源未参与首窗口；合成复现脚本 /tmp/notalone-window-deletion-audit.mjs。07原提交保留、原Goal完成记录不改写；08当前独占相同删除模块并承担本相关修复，待实际集成及定向复核后再恢复resolved。本人真实混合来源、取消授权、未知回执与在途围栏必须保持。
+
+2026-10-29 重开验收修复：08源提交 ea05a1f42c0f0789ca9687106c86ff67c34782ea 及最终记录 e8d01162957cf2d4f86089ee11e45562a50e8cda 已随本次总集成纳入。正式05删除在21目标两窗口、共享本人步骤和在途裁决上按实际来源处理；独立未参与的成功结果保留，真实参与的正文、追踪与晚到资格仍清理。总指挥在集成工作树定向复核跨窗口及08→12各1项通过，保留执行会话最终70项、迁移11项及界面证据；State恢复resolved。
+
+2026-10-29 用户另行授权的真实供应商合成复测：独立会话在源提交 9b3541b3dcc71854722ba727ce362815f554663f 上通过正式 SQLite DSH profile 与认证 HTTP，固定范围两个目标成功、失败0、unknown 0；提取与核验各一次真实模型调用成功，产生2条候选并命中预期合成事实。该轮仍为 incomplete、laterStages=pending。未启动App、读取微信或发送外部聊天。总指挥已核验源提交为集成分支祖先，并仅投影核对本地私有结果报告的状态与数量；旧unknown及旧预算记录保留，旧失败原因不作推断。该合成复测不认证真实微信或真实聊天语义质量。

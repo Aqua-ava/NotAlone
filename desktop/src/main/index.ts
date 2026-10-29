@@ -1,3 +1,4 @@
+import {installSqliteMemoryManagementBridge} from './memory/sqlite-management';
 import { installMessageMediaBridge } from './media/bridge';
 import { UsageController } from './usage/controller';
 import { installUsageBridge } from './usage/bridge';
@@ -112,10 +113,11 @@ void app.whenReady().then(async () => {
   installElectronImportFileSelection(windows, imports);
   const memory = installMemoryBridge(commands, backend, contacts);
   const fixedMemoryProcessing = installFixedMemoryProcessingBridge(commands, backend);
+  const sqliteMemoryManagement = installSqliteMemoryManagementBridge(commands, backend, contacts);
   let memoryScopeRevision = contacts.getState().scopeRevision;
   contacts.onStateChanged(state => {
     if (state.scopeRevision !== memoryScopeRevision) {
-      memoryScopeRevision = state.scopeRevision; fixedMemoryProcessing.synchronize();
+      memoryScopeRevision = state.scopeRevision; fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize();
     }
   });
   installBackgroundTaskBridge(commands, backend, contacts);
@@ -139,20 +141,22 @@ void app.whenReady().then(async () => {
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
-  const sqliteDiscussion = installSqliteDiscussionBridge(commands, backend, contacts);
+  const sqliteDiscussion = installSqliteDiscussionBridge(commands, backend, contacts,()=>foreground.getGenerationBlock()===null);
   coordinateOwnerContextChanges(memory, replies);
   memory.onOwnerContextChanged((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   memory.onRecordDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   replies.onSessionDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   const candidateProvenance = installCandidateProvenanceBridge(commands, backend, contacts, replies);
-  const skillLearning = installSkillLearningBridge(commands, backend, contacts);
+  const skillLearning = installSkillLearningBridge(commands, backend, contacts,()=>sqliteDiscussion.synchronize(true));
   const preferenceDeletion = coordinateSkillLearningDeletion(skillLearning, memory, replies,
     expressionPreferenceDeletion(traces, replies, candidateProvenance));
   const preferences = installExpressionPreferenceBridge(commands, backend, contacts, {
     started: () => { sqliteDiscussion.synchronize(true); preferenceDeletion.started(); },
     settled: () => preferenceDeletion.settled(),
   });
-  foreground.onStateChanged(() => replies.refreshGenerationEligibility());
+  let candidateGenerationBlock=foreground.getGenerationBlock();
+  foreground.onStateChanged(() => { replies.refreshGenerationEligibility(); const next=foreground.getGenerationBlock();
+    if(next!==candidateGenerationBlock){candidateGenerationBlock=next;sqliteDiscussion.synchronize(true);} });
   const sources = installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
     traces.invalidateSource();
     skillLearning.invalidate();
@@ -166,12 +170,12 @@ void app.whenReady().then(async () => {
   coordinateSkillLearningSourceDeletion(skillLearning, sources);
   sources.onDeletion((phase) => {
     memory.sourceDeletionChanged(phase);
-    if (phase === 'started') { media.invalidate(); sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); }
+    if (phase === 'started') { media.invalidate(); sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize(); }
   });
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => candidateProvenance.recordCopied(selection, text)));
   backend.setConnectionChangePreparation(async () => {
-    fixedMemoryProcessing.synchronize();
+    fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize();
     sqliteDiscussion.synchronize(true);
     await media.invalidateAndDrain(); await replies.prepareGenerationConnectionChange();
   });
@@ -179,7 +183,7 @@ void app.whenReady().then(async () => {
   installWechatSetupBridge(commands, new WechatSetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend, app.getPath('userData'));
-  app.on('before-quit', () => { fixedMemoryProcessing.synchronize(); sqliteDiscussion.synchronize(true); foreground.stopContinuous(); diagnostics.cancel(); });
+  app.on('before-quit', () => { fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize(); sqliteDiscussion.synchronize(true); foreground.stopContinuous(); diagnostics.cancel(); });
   app.on('will-quit', () => sqliteDiscussion.close());
   installQuitLifecycle(backend, windows, async () => {
     await media.prepareClosing();

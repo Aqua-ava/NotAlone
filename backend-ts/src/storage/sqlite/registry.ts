@@ -1,5 +1,10 @@
+import {memoryAdjudicationMigration} from '../../memory/sqlite/management/adjudication-schema.ts';
+import {memoryAdjudicationActions} from '../../memory/sqlite/management/adjudication-actions.ts';
+import {memoryManagementMigration} from '../../memory/sqlite/management/schema.ts';
+import {memoryManagementActions} from '../../memory/sqlite/management/actions.ts';
 import {replyCandidateMigration} from '../../reply/sqlite/candidates/schema.ts';
-import {replyCandidateActions} from '../../reply/sqlite/candidates/actions.ts';
+import {createReplyCandidateActions} from '../../reply/sqlite/candidates/actions.ts';
+import {memoryKnowledgeReader} from '../../memory/sqlite/management/knowledge.ts';
 import {discussionActions} from '../../reply/sqlite/actions.ts';
 import {discussionRequestActions} from '../../reply/sqlite/requests.ts';
 import {runtimeActions} from '../../reply/sqlite/runtime-actions.ts';
@@ -39,6 +44,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10)],
-  actions: [...replyCandidateActions, ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...createMediaActions(installedDeletionRegistration)],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12)],
+  actions: [...memoryAdjudicationActions, ...memoryManagementActions, ...createReplyCandidateActions(memoryKnowledgeReader), ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...createMediaActions(installedDeletionRegistration)],
 };

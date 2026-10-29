@@ -3,6 +3,7 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import { controlledFiles } from './files.ts';
 import { registry as defaultRegistry } from './registry.ts';
+import { memoryAdjudicationMigration, memoryAdjudicationRebuildPolicy, memoryAdjudicationRebuildChecksum, memoryAdjudicationUpgradeSteps } from '../../memory/sqlite/management/adjudication-schema.ts';
 import { StorageFailure, type OpenStorageOptions, type StorageRegistry, type StorageTransaction, type StorageLease, type StorageMaintenance } from './contracts.ts';
 
 const port = parentPort!;
@@ -26,6 +27,13 @@ try {
   if (!registry.migrations.length || registry.migrations.some((m, i) => m.version !== i + 1 || typeof m.sql !== 'string')
     || new Set(registry.actions.map(a => a.name)).size !== registry.actions.length
     || registry.actions.some(a => !['read','write','maintenance'].includes(a.mode) || typeof a.execute !== 'function' || (a.mode === 'maintenance' && a.retryBusy) || a.name.startsWith('storage.') || !/^[a-z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]*$/.test(a.name))) throw new StorageFailure('registry_invalid');
+  // 只有编译进应用的固定版本和完整SQL可以进入事务外关FK路径。
+  for (const migration of registry.migrations) {
+    if (migration.sql === memoryAdjudicationMigration(12).sql && migration.rebuild !== memoryAdjudicationRebuildPolicy) throw new StorageFailure('migration_rebuild_forbidden');
+    if (migration.rebuild !== undefined && (
+    migration.rebuild !== memoryAdjudicationRebuildPolicy || migration.version !== 12
+    || migration.sql !== memoryAdjudicationMigration(12).sql || digest(migration.sql) !== memoryAdjudicationRebuildChecksum)) throw new StorageFailure('migration_rebuild_forbidden');
+  }
   const files = controlledFiles(options.userData, options.intent === 'create');
   db = new DatabaseSync(files.database, { enableForeignKeyConstraints: true, allowExtension: false, timeout: 100 });
   const connection = db;
@@ -60,25 +68,50 @@ try {
       || ledger.some((m, i) => m.version !== BigInt(i + 1) || m.checksum !== digest(registry.migrations[i].sql))) throw new StorageFailure('migration_drift');
   };
   if (options.intent === 'open') verifyExisting();
+  const initiallyApplied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
   const journal = get('PRAGMA journal_mode=WAL');
   if (journal?.journal_mode !== 'wal') throw new StorageFailure('wal_unavailable');
   connection.exec('PRAGMA wal_autocheckpoint=1000; PRAGMA journal_size_limit=0;');
   const databaseId = options.intent === 'create' ? randomUUID() : options.expectedDatabaseId!;
   const runtimeId = randomUUID();
-  transaction(true, () => {
-    if (options.intent === 'open') verifyExisting();
-    const applied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
-    for (const migration of registry.migrations.slice(applied)) {
-      connection.exec(migration.sql);
-      if (migration.version === 1 && options.intent === 'create') connection.prepare(`INSERT INTO database_instance VALUES(1,?,'notalone-sqlite-v1',?,?,?,0,'')`).run(databaseId, options.role, Date.now(), runtimeId);
-      connection.prepare('INSERT INTO schema_migration VALUES(?,?,?)').run(migration.version, digest(migration.sql), Date.now());
-      connection.exec(`PRAGMA user_version=${migration.version}`);
+  const rebuildPending = registry.migrations.slice(initiallyApplied).some(m => m.rebuild !== undefined);
+  try {
+    // SQLite只能在事务外改变FK开关；锁内仍复验完整现场，不沿用锁外账本。
+    if (rebuildPending) {
+      connection.exec('PRAGMA foreign_keys=OFF');
+      if (get('PRAGMA foreign_keys')?.foreign_keys !== 0n) throw new StorageFailure('foreign_keys_disable_failed');
     }
-    const epoch = get('SELECT epoch FROM database_instance WHERE slot=1')!.epoch as bigint;
-    if (epoch >= 9223372036854775807n) throw new StorageFailure('epoch_exhausted');
-    connection.prepare('UPDATE database_instance SET runtime_id=?,epoch=epoch+1,schema_digest=? WHERE slot=1').run(runtimeId, schemaDigest());
-    checks();
-  });
+    transaction(true, () => {
+      if (options.intent === 'open') verifyExisting();
+      const applied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
+      for (const migration of registry.migrations.slice(applied)) {
+        if (migration.rebuild) {
+          for (const step of memoryAdjudicationUpgradeSteps) {
+            connection.exec(step.sql);
+            if (step.phase === 'check') checks();
+            const observed: unknown = registry.migrationObserver?.({version: migration.version, phase: step.phase});
+            if (observed && typeof (observed as Promise<unknown>).then === 'function') {
+              void Promise.resolve(observed).catch(() => {}); throw new StorageFailure('async_migration_observer_forbidden');
+            }
+          }
+        } else connection.exec(migration.sql);
+        if (migration.version === 1 && options.intent === 'create') connection.prepare(`INSERT INTO database_instance VALUES(1,?,'notalone-sqlite-v1',?,?,?,0,'')`).run(databaseId, options.role, Date.now(), runtimeId);
+        connection.prepare('INSERT INTO schema_migration VALUES(?,?,?)').run(migration.version, digest(migration.sql), Date.now());
+        connection.exec(`PRAGMA user_version=${migration.version}`);
+      }
+      const epoch = get('SELECT epoch FROM database_instance WHERE slot=1')!.epoch as bigint;
+      if (epoch >= 9223372036854775807n) throw new StorageFailure('epoch_exhausted');
+      connection.prepare('UPDATE database_instance SET runtime_id=?,epoch=epoch+1,schema_digest=? WHERE slot=1').run(runtimeId, schemaDigest());
+      checks();
+    });
+  } finally {
+    if (rebuildPending) {
+      try {
+        connection.exec('PRAGMA foreign_keys=ON');
+        if (get('PRAGMA foreign_keys')?.foreign_keys !== 1n) throw new StorageFailure('foreign_keys_restore_failed');
+      } catch (error) { connection.close(); db = undefined; throw error; }
+    }
+  }
   files.verify();
   const status = {databaseId, runtimeId, epoch: get('SELECT epoch FROM database_instance WHERE slot=1')!.epoch,
     role: options.role, schemaVersion: registry.migrations.length, sqliteVersion: get('SELECT sqlite_version() AS v')!.v};
@@ -93,7 +126,7 @@ try {
     try {
       if (name === 'storage.close') { connection.close(); port.postMessage({id, value: null}); port.close(); return; }
       files.verify();
-      if (name === 'storage.check') { const value = transaction(false, () => { assertLease(lease); return checks(); }); port.postMessage({id, value}); return; }
+      if (name === 'storage.check') { const value = transaction(false, () => { assertLease(lease); return checks(); }); assertLease(lease); port.postMessage({id, value}); return; }
       const action = actions.get(name);
       if (!action) throw new StorageFailure('action_unavailable');
       let result: unknown;
@@ -131,6 +164,8 @@ try {
           };
           // 维护动作只允许可信注册代码使用；调用者先排空领域写者，结果仍需复核。
           result = action.mode === 'maintenance' ? invoke() : transaction(action.mode === 'write', invoke);
+          // WAL读事务内复核仍是旧快照；提交后新读提供返回前的租约检查点。
+          if (action.mode === 'read') assertLease(lease);
           break;
         } catch (error) { if (code(error) !== 'storage_busy' || !action.retryBusy || attempt >= 2) throw error; }
       }

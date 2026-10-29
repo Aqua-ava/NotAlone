@@ -96,7 +96,7 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '' }: { bridge: 
       <p>主题整理、长期概览尚未执行，本轮未完成。</p>
       {run.candidates.length > 0 && <section aria-label="本轮已核验候选">
         <h3>来源已核验的候选</h3>
-        <p>以下候选来自自动提取，等待正式记忆裁决。</p>
+        <p>以下候选来自自动提取，正式记忆与决定请查看下方。</p>
         {run.candidates.map(candidate => <article key={candidate.id}><p>{candidate.body}</p>
           <p>{candidate.scopeKind === 'self' ? '本人资料' : '联系人关系资料'} · 自动提取</p></article>)}
       </section>}

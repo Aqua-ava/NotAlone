@@ -107,6 +107,12 @@ function decisionFrom(value:unknown):AdjudicationDecision{
   ||row.replaced_memory_id!==null&&(typeof row.replaced_memory_id!=='string'||!uuid.test(row.replaced_memory_id))
   ||row.duplicate_memory_id!==null&&(typeof row.duplicate_memory_id!=='string'||!uuid.test(row.duplicate_memory_id))
   ||row.merged_text!==null&&typeof row.merged_text!=='string')throw new AdjudicationModelError('adjudication_model_output_invalid');
+ // 动作的目标字段必须互斥；结构矛盾不能在后续流程中被忽略并消费候选。
+ const merged=row.merged_memory_ids as string[];
+ if((row.action==='update')!==(row.replaced_memory_id!==null)
+  ||(row.action==='noop')!==(row.duplicate_memory_id!==null)
+  ||(row.action==='merge'?(merged.length<2||new Set(merged.map(id=>id.toLowerCase())).size!==merged.length||typeof row.merged_text!=='string'||!row.merged_text.trim()||[...row.merged_text].length>4096):(merged.length!==0||row.merged_text!==null)))
+  throw new AdjudicationModelError('adjudication_model_output_invalid');
  return {candidate_index:Number(row.candidate_index),action:row.action as AdjudicationDecision['action'],
   replaced_memory_id:row.replaced_memory_id===null?null:row.replaced_memory_id.toLowerCase(),
   merged_memory_ids:row.merged_memory_ids.map(id=>id.toLowerCase()),merged_text:row.merged_text as string|null,
@@ -119,18 +125,18 @@ function relationResult(value:unknown):RelationVerification|null{
  return {candidate_index:Number(row.candidate_index),supported:row.supported,evidence:evidence(row.evidence),
   claim_changed:row.claim_changed,condition_changed:row.condition_changed,source_receipt:''};
 }
-function mergeResult(value:unknown):{supported:boolean;text:string;evidence:{message_id:string;quote:string}[]}{
+export function mergeResult(value:unknown):{supported:boolean;text:string;evidence:{message_id:string;quote:string}[]}{
  const row=object(value);exact(row,['supported','text','evidence']);
  if(typeof row.supported!=='boolean'||typeof row.text!=='string'||!row.text.trim()||[...row.text].length>4096)
   throw new AdjudicationModelError('adjudication_model_output_invalid');
  return {supported:row.supported,text:row.text,evidence:evidence(row.evidence)};
 }
-function parseAdjudications(blocks:readonly unknown[]):AdjudicationDecision[]{
+export function parseAdjudications(blocks:readonly unknown[]):AdjudicationDecision[]{
  const decoded=readExtractionToolArguments(blocks,adjudicationSchema.title);
  if(Object.keys(decoded.value).join('|')!=='decisions'||!Array.isArray(decoded.value.decisions))throw new AdjudicationModelError('adjudication_model_output_invalid');
  return decoded.value.decisions.map(decisionFrom);
 }
-function parseRelations(blocks:readonly unknown[],items:readonly AdjudicationItem[]):RelationVerification[]{
+export function parseRelations(blocks:readonly unknown[],items:readonly AdjudicationItem[]):RelationVerification[]{
  const decoded=readExtractionToolArguments(blocks,relationVerificationSchema.title);
  if(Object.keys(decoded.value).join('|')!=='results'||!Array.isArray(decoded.value.results))throw new AdjudicationModelError('adjudication_model_output_invalid');
  const rows=decoded.value.results.map(relationResult);
@@ -222,8 +228,10 @@ export class DshMemoryAdjudicationRuntime implements AdjudicationRuntime {
   return rows.map(row=>({...row,usage:nextUsage(response.usage,'relation_verification')}));
  }
  async verifyMerge(item:AdjudicationItem,decision:AdjudicationDecision,sourceIds:readonly string[],sourceReceipt:string,signal:AbortSignal):Promise<MergeVerification>{
+  const selectedIds=decision.merged_memory_ids??[],selected={...item,similar:item.similar.filter(memory=>selectedIds.includes(memory.memory_id))};
+  if(selectedIds.length<2||selectedIds.length>8||new Set(selectedIds).size!==selectedIds.length||selected.similar.length!==selectedIds.length)failCall('adjudication_model_output_invalid');
   const request={purpose:'merge_verification' as const,request_key:`merge_verification:${this.batchKey}:${item.candidate_index}`,
-   system:relationsOnlyPrompt(),user:boundedUser(mergePayload(item,decision)),schema:mergeVerificationSchema as unknown as Record<string,unknown>,
+   system:relationsOnlyPrompt(),user:boundedUser(mergePayload(selected,decision)),schema:mergeVerificationSchema as unknown as Record<string,unknown>,
    signal,validateOutput:(blocks:readonly unknown[])=>{
     const decoded=readExtractionToolArguments(blocks,mergeVerificationSchema.title);mergeResult(decoded.value);
    }};

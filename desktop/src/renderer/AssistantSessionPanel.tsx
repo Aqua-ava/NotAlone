@@ -1,3 +1,4 @@
+import {SqliteReplyCandidatesPanel} from './SqliteReplyCandidatesPanel';
 import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import type { AssistantSessionDeletion, ReplyGenerationJobState } from '../shared/reply-bridge';
 import type { ReplySessionView } from './RewritePanel';
@@ -123,7 +124,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     || replies.state.sessionDeletion === 'failed' || replies.state.sourceAvailability === 'checking';
   const currentDiscussion = catalog?.phase === 'ready' && !catalog.selectionPending
     && !!saved?.sessionId && catalog.currentSessionId === saved.sessionId;
-  const discussionDisabled = busy || !!confirmation || !currentDiscussion || saved?.phase !== 'ready'
+  const discussionDisabled = Boolean(replies.state.generationBlock) || busy || !!confirmation || !currentDiscussion || saved?.phase !== 'ready'
     || Boolean(replies.state.sourceAvailability) || replies.state.phase === 'waiting' || activeContactJobs.length > 0
     || replies.state.sessionDeletion === 'deleted' || replies.state.sessionDeletion === 'missing';
   useEffect(() => { setConfirmation(null); setCopyError(false); }, [replies.state.contactId, replies.state.scopeRevision, saved?.sessionId]);
@@ -201,6 +202,8 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {sqliteDiscussion && <>
       <SqliteDiscussionEntries entries={saved.discussionEntries!} recovery={saved.runtimeRecovery} />
       {catalog?.phase === 'ready' && !currentDiscussion && <p role="status">正在回看历史讨论，请先明确继续此会话后再提交。</p>}
+      {window.notalone.sqliteDiscussion.candidates&&<SqliteReplyCandidatesPanel bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
+        scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled} onSubmitted={discussionSubmitted} />}
       <SqliteDiscussionComposer bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
         scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled}
         onSubmitted={discussionSubmitted} />

@@ -1,12 +1,14 @@
 # 03：首次历史同步与消息展示
 
-Triage: ready-for-agent
+Triage: needs-info
 State: claimed
 Type: task
 Parent: [同步与记忆规格](../../sync-memory-behavior/spec.md)；[SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)
 Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-grants.md)
 
 > 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
+
+> 当前受阻：实现、合成及实际App消息／覆盖／删除刷新／计数已验证；真实正文状态语义和来源生命周期仍未认证，正常target/page保持拒绝，验收第1、2条未完成。用户已跳过B撤回测试，保持现状，不重新发起操作；合成正例不替代真实渠道证据。后续任务继续按已确认依赖调度。
 
 ## 交付行为
 
@@ -86,3 +88,5 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 验收勾选区分实现与真实可用性：第3至12条的约定实现、合成/正式服务、已保存资料App及缺证门禁证据已补；第1/2条真实普通历史仍未完成，状态语义与来源生命周期没有认证，真实target/page继续全拒绝。用户跳过撤回不等于补齐该门槛，不重开B、真实媒体或模型校准。State继续claimed，Goal不complete。
 
 2026-10-29 只读连续性评估：账号sourceGeneration只绑定账号及contact/session实例，data_version只可在同一observer连接前后比较；固定多分片切面不证明跨次或重启连续性。内存合成SQLite使用正式normalize及生产排除查询验证：原local键命中，改变来源代次或仅改变表实例后旧local键不命中；这不是现有真实门禁已被绕过的证明，账号代次变化另有拒绝。持久失证围栏与保留精确排除可构成安全保护方向，但不能证明未知消息状态或把旧排除可靠映射到新实例；永久阻断无法满足04合法增量和06边界后新消息正例。缺少这些证据前不放宽真实正文门禁、不将全拒绝写为验收通过；具体条件及SQLite官方依据见docs/verification/sqlite-private-history-support-03.md。只运行合成实验，未修改生产代码或共享删除/索引，State继续claimed、Goal不complete。
+
+总指挥核对：03会话本次报告其实际Goal状态为blocked；单次补充调查已执行不等于Goal恢复或验收完成。总Goal仍active，后续依赖保持等待。

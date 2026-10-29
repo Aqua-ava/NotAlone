@@ -170,3 +170,16 @@
 .background-task-list summary { color: #426f8a; cursor: pointer; }
 .background-task-list ol { margin: 7px 0 0; padding-left: 22px; color: #627985; font-size: 12px; line-height: 1.8; }
 .background-task-error { color: #99594e; }
+
+.sqlite-memory-management { margin-top: 20px; padding: 18px; border: 1px solid #dce1d8; border-radius: 14px; }
+.sqlite-memory-management h2, .sqlite-memory-management h3 { color: var(--panel-heading); }
+.sqlite-memory-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.sqlite-memory-actions button[aria-pressed="true"] { background: #e3ede7; border-color: #537c8a; }
+.sqlite-memory-card { min-width: 0; padding: 14px 0; border-top: 1px solid #dce1d8; }
+.sqlite-memory-body, .sqlite-memory-sources blockquote, .sqlite-memory-sources p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sqlite-memory-sources blockquote { margin: 10px 0; padding-left: 12px; border-left: 3px solid #c6d7ca; }
+.sqlite-memory-management textarea { display: block; box-sizing: border-box; width: 100%; margin-top: 8px; resize: vertical; }
+.sqlite-memory-management details { margin: 10px 0; }
+.sqlite-memory-management summary { cursor: pointer; color: #426f8a; }
+.sqlite-memory-management ol { padding-left: 22px; }
+.sqlite-memory-old { color: #6a7776; }

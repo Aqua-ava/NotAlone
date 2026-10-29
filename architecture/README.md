@@ -218,3 +218,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 109. [ADR-109：受控 SQLite 底座与分票切换](adr/109-controlled-sqlite-storage-foundation.md)
 
 110. [ADR-110：SQLite 联系人身份与逐人读取授权](adr/110-selected-sqlite-contact-read-grants.md)
+
+117. [ADR-117：SQLite 记忆候选、决定与版本](adr/117-sqlite-memory-decisions-and-versions.md)

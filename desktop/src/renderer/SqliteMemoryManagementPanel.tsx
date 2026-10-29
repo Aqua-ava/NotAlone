@@ -1,0 +1,108 @@
+import {useEffect,useRef,useState} from 'react';
+import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementOutcome,MemoryManagementSnapshot,MemorySource,MemoryVerificationState,MemoryVersionView,MemoryView,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
+import {withdrawnProtectionVersion} from '../shared/sqlite-memory-management';
+
+type Decision=Omit<MemoryDecisionRequest,'requestKey'>;
+const outcomeMessages={conflict:'资料已被其他操作修改，存在并发冲突。请刷新后重新决定。',source_stale:'来源或范围已失效，已撤下原资料。请重新读取。',protected:'当前记忆受人工保护，请刷新核对；撤销前须先明确解除保护。',unavailable:'本次决定暂未确认，请重新读取当前状态后再操作。'};
+const successMessages:Record<string,string>={accept:'采纳成功，已形成正式版本。',edit_accept:'修改采纳成功，固定模型原稿保留。',reject:'已拒绝候选。',correct:'错误修正成功，旧版不再作为当前事实。',change:'变化已记录，旧版不再作为当前事实。',protect:'已开启当前人工保护。',unprotect:'已解除当前人工保护。',restore:'自动更新已撤销，已新增恢复版本。',withdraw:'已撤销首次自动采纳，内容不再作为当前事实。'};
+const formationNames:Record<string,string>={adoption:'采纳',correction:'纠正错误',change:'记录变化',restore:'撤销恢复',manual:'手动补充'};
+const adoptionNames:Record<string,string>={auto:'自动采纳',user:'用户采纳',manual:'手动补充'};
+function Verification({state}:{state:MemoryVerificationState}){
+ return <p className="hint">{state==='verified'?<strong>来源已核验</strong>:<><strong>来源待核验</strong>；可查看原话，但尚未确认来源支持这条资料。</>}</p>;
+}
+function Sources({sources}:{sources:MemorySource[]}){
+ return <details className="sqlite-memory-sources"><summary>查看来源</summary>{sources.length===0?<p>无可展示的来源。</p>:<ol>{sources.map((source,index)=><li key={`${source.recordId}:${index}`}>
+  <blockquote>{source.quote}</blockquote><details><summary>来源定位</summary><p>消息：{source.messageId}</p><p>来源记录：{source.recordId}</p><p>解释修订：{source.acceptedRevision}</p></details>
+ </li>)}</ol>}</details>;
+}
+function Editor({label,initial,submitLabel,busy,save,cancel}:{label:string;initial:string;submitLabel:string;busy:boolean;save:(body:string)=>void;cancel:()=>void}){
+ const [body,setBody]=useState(initial),length=[...body].length;
+ return <form onSubmit={event=>{event.preventDefault();if(body.trim()&&length<=12000&&!busy)save(body);}}>
+  <label>{label}<textarea value={body} onChange={event=>setBody(event.target.value)} maxLength={48000} rows={4} disabled={busy}/></label>
+  <p className="hint">本次编辑尚未提交；固定原稿保持不变。{length}/12000 字</p>
+  <div className="sqlite-memory-actions"><button type="submit" disabled={busy||!body.trim()||length>12000}>{submitLabel}</button><button type="button" disabled={busy} onClick={cancel}>取消编辑</button></div>
+ </form>;
+}
+function Candidate({candidate,busy,decide}:{candidate:MemoryCandidateView;busy:boolean;decide:(request:Decision)=>void}){
+ const [editing,setEditing]=useState(false),request={candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]};
+ return <article className="sqlite-memory-card" aria-label="记忆候选">
+  <p><strong>固定模型原稿</strong> · {{pending:'待决定（未确认）',adopted:'已采纳',rejected:'已拒绝',duplicate:'已跳过重复资料'}[candidate.state]??'状态待核对'}</p>
+  <Verification state={candidate.verificationState}/>
+  <p className="sqlite-memory-body">{candidate.body}</p><Sources sources={candidate.sources}/>
+  {candidate.state==='pending'&&(editing?<Editor label="修改候选正文" initial={candidate.body} submitLabel="保存修改并采纳" busy={busy} cancel={()=>setEditing(false)} save={body=>decide({...request,action:'edit_accept',body})}/>:<div className="sqlite-memory-actions">
+   <button type="button" disabled={busy} onClick={()=>decide({...request,action:'accept'})}>采纳原稿</button>
+   <button type="button" disabled={busy} onClick={()=>setEditing(true)}>修改并采纳</button>
+   <button type="button" disabled={busy} onClick={()=>decide({...request,action:'reject'})}>拒绝候选</button>
+  </div>)}
+ </article>;
+}
+function Version({version,current}:{version:MemoryVersionView;current:boolean}){
+ return <div className={current?'':'sqlite-memory-old'}><p>版本 {version.versionNo} · {formationNames[version.formationKind]??version.formationKind} · {adoptionNames[version.adoptionMode]??version.adoptionMode}{current?' · 当前版本':' · 不作为当前事实'}</p>
+  {version.body===null?<p>正文已清除或来源已失效。</p>:<><Verification state={version.verificationState}/><p className="sqlite-memory-body">{current?version.body:<s>{version.body}</s>}</p><Sources sources={version.sources}/></>}
+  {version.restoredFromVersionNo&&<p>恢复自版本 {version.restoredFromVersionNo}，原前驱为版本 {version.previousVersionNo}。</p>}
+ </div>;
+}
+function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(request:Decision)=>void}){
+ const [editing,setEditing]=useState<'correct'|'change'|null>(null),current=memory.current,withdrawnVersion=withdrawnProtectionVersion(memory);
+ const request={memoryId:memory.id,expectedVersionNo:(current??withdrawnVersion)?.versionNo,expectedHeadRevision:memory.headRevision};
+ const undoEligible=current?.adoptionMode==='auto'&&current.formationKind!=='restore';
+ return <article className="sqlite-memory-card" aria-label="正式记忆">
+  <p><strong>正式记忆</strong> · {memory.manualProtection?'当前人工保护已开启':'当前人工保护未开启'}{memory.state==='withdrawn'?' · 已撤销':memory.state==='invalidated'?' · 已失效':''}</p>
+  {current?<Version version={current} current/>:<p>当前无可引用版本。</p>}
+  {current&&(editing?<Editor key={`${memory.headRevision}:${editing}`} label={editing==='correct'?'修正后的正文':'变化后的正文'} initial={current.body??''} submitLabel={editing==='correct'?'保存错误修正':'保存变化记录'} busy={busy} cancel={()=>setEditing(null)} save={body=>decide({...request,action:editing,body})}/>:<div className="sqlite-memory-actions">
+   <button type="button" disabled={busy} onClick={()=>setEditing('correct')}>纠正错误</button>
+   <button type="button" disabled={busy} onClick={()=>setEditing('change')}>记录变化</button>
+   <button type="button" disabled={busy} onClick={()=>decide({...request,action:memory.manualProtection?'unprotect':'protect'})}>{memory.manualProtection?'解除人工保护':'开启人工保护'}</button>
+   {undoEligible&&<button type="button" disabled={busy||memory.manualProtection} onClick={()=>decide({...request,action:current.previousVersionNo===null?'withdraw':'restore',...(current.previousVersionNo===null?{}:{restoredFromVersionNo:current.previousVersionNo,expectedMergedParents:current.mergeParents.map(parent=>({...parent}))})})}>{current.mergeParentCount>1?`恢复合并前资料（共${current.mergeParentCount}项）`:current.previousVersionNo===null?'撤销首次自动采纳':'撤销自动更新'}</button>}
+  </div>)}
+  {undoEligible&&memory.manualProtection&&<p className="hint">撤销前须先明确解除当前人工保护。</p>}
+  {withdrawnVersion&&<div className="sqlite-memory-actions"><button type="button" disabled={busy} onClick={()=>decide({...request,action:memory.manualProtection?'unprotect':'protect'})}>{memory.manualProtection?'解除人工保护':'开启人工保护'}</button><p className="hint">资料已撤回，仍可调整人工保护；开启后会阻止整组恢复。</p></div>}
+  <details><summary>查看版本与决定历史</summary>{[...memory.versions].reverse().map(version=><Version key={version.versionNo} version={version} current={version.versionNo===current?.versionNo}/>)}
+   <ol>{memory.decisions.map(decision=><li key={decision.id}>{decision.actorKind==='system'?'系统自动决定':'用户决定'} · {({auto_accept:'自动采纳',auto_update:'自动更新',auto_retire:'已并入合并资料',auto_noop:'跳过重复资料',...successMessages}[decision.action]??decision.action)} · {decision.outcome==='redacted'?'敏感材料已清除':'已生效'}</li>)}</ol>
+  </details>
+ </article>;
+}
+
+/** 资格失效或顶部范围变化立即卸载正文、依据和未提交编辑，迟到结果不再挂回。 */
+export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision}:{bridge:SqliteMemoryManagementBridge;contactId:string|null;scopeRevision:number}){
+ const [scopeKind,setScopeKind]=useState<'contact'|'self'>('contact');
+ const context=useRef({bridge,contactId,scopeRevision,scopeKind});
+ if(context.current.bridge!==bridge||context.current.contactId!==contactId||context.current.scopeRevision!==scopeRevision||context.current.scopeKind!==scopeKind)context.current={bridge,contactId,scopeRevision,scopeKind};
+ const accepted=context.current;
+ const [state,setState]=useState<{context:typeof accepted;snapshot:MemoryManagementSnapshot}|null>(null),[notice,setNotice]=useState<{context:typeof accepted;message:string;error:boolean}|null>(null),[busy,setBusy]=useState(false);
+ const active=useRef(false),revision=useRef(0),refresh=useRef<()=>Promise<boolean>>(async()=>false);
+ const scope={scopeKind,contactId:scopeKind==='self'?null:contactId};
+ const readRequest=contactId?{scope,displayContactId:contactId,scopeRevision}:null;
+ const current=state?.context===accepted?state.snapshot:null,currentNotice=notice?.context===accepted?notice:null;
+ refresh.current=async()=>{
+  if(!readRequest)return false;const token=++revision.current;setState(null);setBusy(true);setNotice(null);
+  try{const next=await bridge.read(readRequest);if(active.current&&context.current===accepted&&token===revision.current){setState({context:accepted,snapshot:next});return true;}}
+  catch{if(active.current&&context.current===accepted&&token===revision.current)setNotice({context:accepted,message:'来源或范围暂不可用，已撤下原资料，请重新读取。',error:true});}
+  finally{if(active.current&&context.current===accepted&&token===revision.current)setBusy(false);}
+  return false;
+ };
+ useEffect(()=>{
+  active.current=true;setState(null);setNotice(null);setBusy(false);
+  const unsubscribe=bridge.onInvalidated(()=>{revision.current++;setState(null);setBusy(false);setNotice({context:accepted,message:'资料资格或连接已变化，已撤下正文、依据和编辑，请重新读取。',error:true});});
+  if(contactId)void refresh.current();
+  return()=>{active.current=false;revision.current++;unsubscribe();void bridge.release().catch(()=>{});};
+ },[accepted]);
+ async function decide(request:Decision){
+  if(!current||!readRequest||busy)return;const snapshot=current;revision.current++;setState(null);setBusy(true);setNotice(null);
+  let outcome:MemoryManagementOutcome;
+  try{outcome=await bridge.decide({...readRequest,connectionGeneration:snapshot.connectionGeneration,request:{...request,requestKey:crypto.randomUUID()}});}catch{outcome={status:'unavailable'};}
+  if(!active.current||context.current!==accepted)return;
+  if(outcome.status!=='applied'){setBusy(false);setNotice({context:accepted,message:outcomeMessages[outcome.status],error:true});return;}
+  const refreshed=await refresh.current();if(active.current&&context.current===accepted)setNotice({context:accepted,message:refreshed?(successMessages[request.action]??'决定已保存。'):'决定已保存，但当前资料暂不可读。已撤下原资料，请重新读取。',error:!refreshed});
+ }
+ return <section className="sqlite-memory-management" aria-label="记忆候选与版本">
+  <header><h2>记忆候选与版本</h2><p className="hint">查看固定原稿、来源和每次决定。编辑在提交后形成正式版本。</p></header>
+  <div className="sqlite-memory-actions" role="group" aria-label="记忆对象"><button type="button" aria-pressed={scopeKind==='contact'} onClick={()=>setScopeKind('contact')}>对方</button><button type="button" aria-pressed={scopeKind==='self'} onClick={()=>setScopeKind('self')}>我</button><button type="button" disabled={!contactId||busy} onClick={()=>void refresh.current()}>刷新记忆管理</button></div>
+  {!contactId?<p>请先从顶部选择联系人。</p>:<>
+   {scopeKind==='self'&&<p className="hint">这里只展示完整贡献和来源均属于当前联系人的本人资料；混合贡献、混合来源与无联系人归属资料不在此页显示。</p>}
+   {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
+   {current&&<><h3>候选原稿</h3>{current.view.candidates.length===0?<p>当前范围没有可展示的候选。</p>:current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}
+    <h3>正式记忆</h3>{current.view.memories.length===0?<p>当前范围没有可展示的正式记忆。</p>:current.view.memories.map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</>}
+  </>}
+ </section>;
+}

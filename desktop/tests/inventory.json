@@ -140,7 +140,9 @@
     "tests/sqlite-discussion-source-lifecycle.test.mjs",
     "tests/sqlite-history-clearing.test.mjs",
     "tests/sqlite-history-messages.test.mjs",
-    "tests/sqlite-source-deletion-contract.test.mjs"
+    "tests/sqlite-source-deletion-contract.test.mjs",
+    "tests/sqlite-reply-candidate-bridge.test.mjs",
+    "tests/sqlite-memory-management.test.mjs"
   ],
   "headless": [
     "tests/fixed-memory-processing-view.test.mjs",
@@ -169,7 +171,9 @@
     "tests/message-media-view.test.mjs",
     "tests/skill-learning/sqlite-library-view.test.mjs",
     "tests/sqlite-discussion-composer.test.mjs",
-    "tests/sqlite-discussion-panel.test.mjs"
+    "tests/sqlite-discussion-panel.test.mjs",
+    "tests/sqlite-reply-candidates.test.mjs",
+    "tests/sqlite-memory-management-view.test.mjs"
   ],
   "isolated-http-pg": [
     "tests/overview-reply-retrieval.test.mjs",
