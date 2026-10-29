@@ -9,10 +9,18 @@ import {join,resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {startModelHost} from '../src/platform/models/model-host.ts';
+import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 
 test('未配置模型不会建立提取端口或静默选择其他供应商',()=>{
   assert.throws(()=>createSqliteExtractionModelPort({configuration:{status:'unavailable',code:'reply_model_unconfigured'}}),
     error=>error.code==='extraction_model_unconfigured');
+});
+
+test('自有provider释放失败可重试同一端口，业务停止信号不恢复',async()=>{
+ const configuration=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});let disposals=0;
+ const port=createSqliteExtractionModelPort({ctx:{llm:{registerAdapter:()=>async()=>{if(++disposals===1)throw Error('合成adapter释放失败');}}},configuration,permit:{path:'/unused-synthetic-permit',token:'synthetic-only'},resolveUserId:()=> 'synthetic-anonymous',authorizePurpose:async()=>{}});
+ await assert.rejects(port.close(),/合成adapter释放失败/);await port.close();await port.close();assert.equal(disposals,2);
+ await assert.rejects(port.prepare({}, {signal:new AbortController().signal,requireCurrent:async()=>{},scope:{owner_id:randomUUID(),contact_id:randomUUID()}}),{code:'extraction_model_closed'});
 });
 
 test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未知禁重发与迟到资格', {timeout:25000},async t=>{

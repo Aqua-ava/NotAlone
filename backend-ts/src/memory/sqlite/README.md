@@ -29,6 +29,6 @@
 
 `registration.ts`提供本写者的精确`memoryExtractionDeletionAuthority`和`memoryExtractionDeletionRegistration()`。本分支显式装配memory_extraction→history→identity→skill_metadata，只开放实际source/contact/account；清空边界由06接续。公共宿主每增加讨论/媒体等真实写者都必须扩requiredDomains和精确authority，不能把本分支当作完整产品注册。`deletion.ts`来源闭包覆盖固定输入、实际前文和本人混合阶段；source保留封存无正文调用及原范围，contact/account连同此前封存调用清除。
 
-活动调用登记`memory:${taskId}`到与05相同的ActiveHolders，关闭回调取消并等待真实业务finally与末次写入。正常关闭共享同一Promise，等待已受理的SQLite准备、所有在途任务及模型端口；claim或代次读取晚返回时先检查停止状态，不能继续派发。原始资料、规范消息和外部微信不由本模块读写；完整追踪只进SQLite，不进普通日志或Git。
+活动调用登记`memory:${taskId}`到与05相同的ActiveHolders，关闭回调取消并等待真实业务finally与末次写入。正常关闭共享同一Promise，等待已受理的SQLite准备、所有在途任务及模型端口；claim或代次读取晚返回时先检查停止状态，不能继续派发。释放失败仅清除关闭缓存供原对象重试，业务停止信号不恢复；成功关闭结果仍复用。原始资料、规范消息和外部微信不由本模块读写；完整追踪只进SQLite，不进普通日志或Git。
 
 `contracts.ts`给11提供已实现producer/input分支的TypeScript合同。每个工厂独立接收version，公共registry使用已发布的7/8/9组合；后续不可改写这些版本。本人阶段复用既有事件材料，不新增产物身份或正文表，旧owner工厂已删除。
