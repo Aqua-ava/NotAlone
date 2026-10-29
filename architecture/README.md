@@ -220,3 +220,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 110. [ADR-110：SQLite 联系人身份与逐人读取授权](adr/110-selected-sqlite-contact-read-grants.md)
 
 117. [ADR-117：SQLite 记忆候选、决定与版本](adr/117-sqlite-memory-decisions-and-versions.md)
+
+118. [ADR-118：SQLite 场景资料与长期概览的完整发布](adr/118-sqlite-memory-documents-and-publication.md)
