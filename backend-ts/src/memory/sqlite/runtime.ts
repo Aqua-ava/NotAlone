@@ -22,7 +22,7 @@ export interface SqliteMemorySharedModel {
  resolveUserId:()=>string;
 }
 /** environment须由宿主安全加载env文件；configuration可复用该宿主已冻结的同一解析结果。 */
-export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean}){
+export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>}){
  const configuration=options.sharedModel?.configuration??resolveHostReplyConfiguration(options.environment);
  let service:SqliteMemoryExtraction;
  let modelHost:Awaited<ReturnType<typeof startModelHost>>|undefined;
@@ -40,7 +40,7 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:Sql
     ...(options.sharedModel?{provider:options.sharedModel.provider}:{}),
     authorizePurpose:async({purpose,scope},signal)=>{signal.throwIfAborted();if(scope.owner_id!==options.ownerId||!['extraction','verification'].includes(purpose))throw new StorageFailure('memory_extraction_model_scope_invalid');}});
   }
-  service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders);await service.initialize();
+  service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders,options.afterRunSettled);await service.initialize();
   const http=new SqliteMemoryExtractionHttp(service,options.authorize);let closing:Promise<void>|undefined;
   return {service,http,configurationState:configuration.status,close:()=>closing??=(async()=>{
    // 自有许可先停领；业务释放失败时保留host，重试成功后才关闭其账本与socket。

@@ -1,5 +1,5 @@
 import {randomUUID,createHash} from 'node:crypto';
-import type {StorageAction,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
+import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
 import {available,body,fail,id,integer,requireCandidate,requireSources,requireVersion,scope} from './qualification.ts';
 import {managementRead} from './read.ts';
@@ -96,11 +96,24 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false):
  }
  advance(tx,ownerId,s);return result(tx,ownerId,tx.get('SELECT * FROM memory_decision WHERE owner_id=? AND id=?',[ownerId,decisionId])!);
 }
+function importRun(tx:StorageTransaction,input:unknown):{candidateIds:string[]}{
+ const q=input as any,ownerId=id(q?.ownerId),runId=id(q?.runId),ids:string[]=[];
+ if(!tx.get('SELECT 1 FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]))fail('memory_run_not_found');
+ for(const e of tx.all(`SELECT e.id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE e.owner_id=? AND t.run_id=? AND e.kind='verified_output' ORDER BY e.id`,[ownerId,runId])){
+  try{ids.push(importOutput(tx,ownerId,String(e.id)));}
+  catch(error){if(!(error instanceof StorageFailure)||!['memory_extraction_scope_stale','memory_extraction_source_stale','memory_extraction_output_not_eligible','history_source_not_available'].includes(error.code))throw error;}
+ }
+ return {candidateIds:ids};
+}
 export const memoryManagementActions:StorageAction[]=[
- {name:'memory.importRun',mode:'write',retryBusy:true,execute(tx,input){
-  const q=input as any,ownerId=id(q?.ownerId),runId=id(q?.runId),ids:string[]=[];
-  for(const e of tx.all(`SELECT e.id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE e.owner_id=? AND t.run_id=? AND e.kind='verified_output' ORDER BY e.id`,[ownerId,runId]))ids.push(importOutput(tx,ownerId,String(e.id)));
-  return {candidateIds:ids};
+ {name:'memory.importRun',mode:'write',retryBusy:true,execute:importRun},
+ {name:'memory.publishRun',mode:'write',retryBusy:true,execute(tx,input){
+  const ownerId=id((input as any)?.ownerId),imported=importRun(tx,input),results:MemoryDecisionResult[]=[];
+  for(const candidateId of imported.candidateIds){
+   const c=tx.get("SELECT * FROM memory_candidate WHERE owner_id=? AND id=? AND state='pending'",[ownerId,candidateId]);if(!c)continue;
+   results.push(applyDecision(tx,{ownerId,request:{requestKey:`memory:auto:${String(c.event_id)}`,action:'auto_accept',candidateIds:[candidateId],candidateRevisions:[String(c.state_revision)]}},true));
+  }
+  return {candidateIds:imported.candidateIds,decisions:results};
  }},
  {name:'memory.applyDecision',mode:'write',retryBusy:true,execute:(tx,input)=>applyDecision(tx,input)},
  {name:'memory.applyAutomaticDecision',mode:'write',retryBusy:true,execute:(tx,input)=>applyDecision(tx,input,true)},
