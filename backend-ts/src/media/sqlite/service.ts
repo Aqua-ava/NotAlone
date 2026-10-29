@@ -54,10 +54,10 @@ export class SqliteMediaService {
   const handle:AttemptHandle={...scope,attemptId:begin.attemptId,leaseToken:begin.leaseToken!};
   const controller=new AbortController();const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
   let settle!:()=>void;const done=new Promise<void>(resolve=>{settle=resolve;});
-  this.active.set(begin.attemptId,{controller,done,contactId,goal:input.goal});let release:(()=>Promise<void>)|undefined;let failure:unknown;const savedFiles:{address:ManagedAddress;bytes:number;digest:string}[]=[];const saves:Promise<{fileId:string}>[]=[];let acceptingSaves=true;const readers=new Set<()=>Promise<void>>();
+  this.active.set(begin.attemptId,{controller,done,contactId,goal:input.goal});let release:(()=>Promise<void>)|undefined;let failure:unknown;const savedFiles:{address:ManagedAddress;bytes:number;digest:string}[]=[];const saves:Promise<{fileId:string}>[]=[];const finiteFailures=new Set<unknown>();let acceptingSaves=true;const readers=new Set<()=>Promise<void>>();
   const checkpoint=async()=>{if(this.closed||controller.signal.aborted)throw new StorageFailure('media_interrupted');await this.options.storage.execute('media.check',handle);};
   const saveFile=async(file:MediaFileInput):Promise<{fileId:string}>=>{
-     await checkpoint();const allocated=await this.options.storage.execute<{fileId:string;locator:string}>('media.allocate',{...handle,role:file.role,parentFileId:file.parentFileId});
+     await checkpoint();if(file.failureMode&&(file.failureMode!=='retain_audio_source'||state.kind!=='voice'||input.goal!=='extract'||file.role!=='audio_playback'))throw new StorageFailure('media_failure_mode_invalid');const allocated=await this.options.storage.execute<{fileId:string;locator:string}>('media.allocate',{...handle,role:file.role,parentFileId:file.parentFileId});
      let identified=false;
      try{
       const saved=await this.files.create(allocated.locator,async address=>{await this.options.storage.execute('media.identify',{...handle,fileId:allocated.fileId,address});identified=true;},checkpoint,file.bytes,{bytes:file.expectedBytes,digest:file.expectedSha256},location=>file.validate(location,controller.signal));
@@ -65,6 +65,7 @@ export class SqliteMediaService {
      }catch(error){
       // 只有本次尚未创建的目标可以登记不存在；创建后身份未知不能猜测清除。
       if(!identified){try{this.files.managed.capture('media',allocated.locator);}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')await this.options.storage.execute('media.uncreated',{...handle,fileId:allocated.fileId});}}
+      if(file.failureMode==='retain_audio_source'){await checkpoint();await this.options.storage.execute('media.discardPlayback',{...handle,fileId:allocated.fileId});finiteFailures.add(error);}
       throw error;
      }
 
@@ -76,12 +77,12 @@ export class SqliteMediaService {
    release=this.holders.register({key:`mediaAttempt:${begin.attemptId}`,ownerId:this.ownerId,contactId,generation:BigInt(begin.dataGeneration),close:async()=>{controller.abort();await done;for(const close of readers){await close();readers.delete(close);}}});
    await checkpoint();if(begin.inputFile)await this.files.verify(begin.inputFile.address,Number(begin.inputFile.byteSize),begin.inputFile.digest);const source=begin.recordId?await this.options.history.source(contactId,begin.recordId):null;await checkpoint();
    const result=await adapter.execute({contactId,messageId,goal:input.goal,kind:state.kind,signal:controller.signal,source,token:begin.token??null,
-    input:begin.inputFile?{fileId:begin.inputFile.fileId,localPath:this.files.location(begin.inputFile.address)}:null,checkpoint,
+    input:begin.inputFile?{fileId:begin.inputFile.fileId,localPath:this.files.location(begin.inputFile.address),expectedBytes:Number(begin.inputFile.byteSize),expectedSha256:begin.inputFile.digest}:null,checkpoint,
     retainReader:close=>{if(!acceptingSaves)throw new StorageFailure('media_adapter_finished');readers.add(close);},save:trackedSave});
    acceptingSaves=false;const results=await Promise.allSettled(saves);
-   const rejected=results.find(result=>result.status==='rejected');if(rejected?.status==='rejected')throw rejected.reason;
+   const rejected=results.find(result=>result.status==='rejected'&&!finiteFailures.has(result.reason));if(rejected?.status==='rejected')throw rejected.reason;
    for(const saved of savedFiles){await checkpoint();await this.files.verify(saved.address,saved.bytes,saved.digest);}
-   await checkpoint();await this.options.storage.execute('media.publish',{...handle,association:result.association,errorCode:result.errorCode});
+   await checkpoint();if(begin.inputFile)await this.files.verify(begin.inputFile.address,Number(begin.inputFile.byteSize),begin.inputFile.digest);await checkpoint();await this.options.storage.execute('media.publish',{...handle,association:result.association,errorCode:result.errorCode});
   }catch(error){failure=error;acceptingSaves=false;controller.abort();await Promise.allSettled(saves);try{await this.options.storage.execute('media.fail',{...handle,interrupted:failure instanceof StorageFailure&&['media_closed','media_interrupted'].includes(failure.code)||this.closed,code:error instanceof StorageFailure?error.code:'media_execution_failed'});}catch{/* 旧执行不能修改删除已固定的资格；保持原计划可复核。 */}}
   finally{settle();try{await release?.();}finally{this.active.delete(begin.attemptId);signal?.removeEventListener('abort',abort);}}
   await this.resumeCleanup();

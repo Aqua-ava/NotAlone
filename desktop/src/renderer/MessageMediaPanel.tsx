@@ -20,6 +20,15 @@ const processingErrors:Record<string,string>={
   media_association_unverified:'这条消息与资源尚未唯一核验，当前不能读取。',
   media_resource_too_large:'文件超过当前单文件32MiB上限，本次未保存；已有文件保留。',
   media_space_insufficient:'本次空间不足，已停止新增写入。请清理本机空间；先前合法保存的媒体仍保留。',
+    voice_decode_failed:'语音解码失败；可手动重试本地转换。',
+    voice_runtime_unavailable:'本机语音转换组件不可用；请检查离线资源。',
+    voice_conversion_timeout:'本地转换超过时间上限，已停止；可手动重试。',
+    voice_conversion_cancelled:'本地转换已取消，未发布新播放文件。',
+    voice_container_invalid:'语音容器无效或不受支持，本次未保存新结果。',
+    voice_resource_limit:'语音超过当前输入、包数或输出上限，本次已停止。',
+    voice_pcm_invalid:'本次语音输出格式校验失败，未发布新播放文件。',
+    voice_copy_unproven:'缺少语音完整读取或唯一归属证明，本次未保存。',
+    voice_copy_incomplete:'语音实际字节与固定来源证明不符，本次未保存。',
 };
 function resultLabel(snapshot:MediaSnapshot):string {
   if(snapshot.state==='cleared')return '媒体已清除，聊天占位保留';
@@ -27,9 +36,11 @@ function resultLabel(snapshot:MediaSnapshot):string {
   if(snapshot.state==='deleting')return '正在清除媒体，尚未完成';
   const attempt=snapshot.latestAttempt;
   if(!attempt)return '尚未提取';
+  if(attempt.state==='completed'&&snapshot.kind==='voice'&&snapshot.files.some(f=>f.role==='audio_source')&&!snapshot.files.some(f=>f.role==='audio_playback'&&f.playable))return '语音已保存，暂不可播放';
   if(attempt.state==='completed')return attempt.outcome==='limited'?'已保存有限结果':attempt.outcome==='quality_unknown'?'已保存，质量未核验':'已保存完整结果';
   return stateLabels[attempt.state];
 }
+
 function unavailableReason(code:string|null):string {
   if(code&&processingErrors[code])return processingErrors[code];
   if(code==='media_adapter_unavailable'||code==='media_type_unavailable')return '此类型提取尚未接入，当前不可用。';

@@ -1,7 +1,7 @@
 # 18：语音保存与转换
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [微信媒体资源提取与语音文件转换](../../wechat-media-extraction/spec.md)
 Blocked by: [16 单条媒体保存与清除](16-single-message-media-lifecycle.md)
