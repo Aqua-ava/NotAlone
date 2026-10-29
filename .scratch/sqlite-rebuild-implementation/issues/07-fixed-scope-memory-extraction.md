@@ -65,3 +65,7 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 待完成：公共sqlite-host/llm/关闭生命周期、具名桥聚合与真实MemoryPage的最小接线由总指挥串行安排；随后必须使用pnpm run dev的实际App进行固定进度、未知/失败、删除或资格失效后的本地快照撤下验收。当前未获得桌面占用，未启动/重启/抢焦点，dev:status只读核验为stopped。完成该必要验收及最终独立复核之前不resolved、不Goal complete。
 
 数据与资源：只用临时role=test库、合成身份/正文、环回服务；真实供应商小批也仅两条固定合成文字。未读取私人微信或PG、未发送/撤回外部消息、未改私人配置、未打包/push/PR。正常测试等待调用、ModelHost和SQLite排空并清精确自有根，真实小批报告和无正文预算仅留仓库外私有目录，未提交正文/凭据。
+
+共享合同合并检查点：以a5a039cce318d1d00392179f90f9639fd08cc979为07审查修复父提交，合并11源HEAD 0bd50ee395fd34232a1d4aeb9699846e89824feb，保留双方提交祖先。完整前置包含07的5cee7977、d0a179f6、f7c33de7及11的c4abb800、8ff58327、5fd60ca4、0bd50ee3；不要求额外未提交helper。冲突保留07最终typed本人产物、reused_call_id、未知占用与桌面修复，采用11最终请求/副本schema及discussion_calls实现；旧owner-schema/self_contribution未回流。源码测试registry仍暂用discussion6/memory7/execution8，公共集成必须保留既有发布版本和16的media6后另排连续编号，不能整份替换。
+
+本检查点验证账：后端pnpm typecheck通过；共享producer与组合删除7/7；记忆核心/来源删除/本人/官方DSH全链18/18；11的DSH、generation、integration、来源holder和通用删除54/54，讨论HTTP及副本删除另8/8。54项中两项最初因测试遗漏显式来源删除注册失败，改用现有history fixture后仅补跑该文件2/2，不隐瞒初次失败或重复全量。组合删除的直接合成种子仅证明结构和删除分支，实际DSH结果由独立正常业务用例证明。相同源码/配置/依赖可复用这些证据；迁移组合次序、公共宿主、模型adapter/许可生命周期、HTTP或桌面接线变化后需补相应组合验收。真实供应商语义质量和实际App限制仍如上，不随合并变为通过。

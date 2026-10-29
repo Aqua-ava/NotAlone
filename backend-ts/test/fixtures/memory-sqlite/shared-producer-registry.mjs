@@ -6,11 +6,12 @@ function reply(tx,owner,contact,message,record){
  tx.run("INSERT INTO assistant_discussion(owner_id,id,contact_id,title,state,created_at,last_activity_at) VALUES(?,?,?,NULL,'active',1,1)",[owner,id,contact]);
  tx.run("INSERT INTO reply_request(owner_id,id,contact_id,discussion_id,request_key,trigger_entry_id,kind,identity_origin,binding_id,verification_id,state) VALUES(?,?,?,?,?,?,'discussion','binding',?,?,'accepted')",[owner,request,contact,id,randomUUID(),entry,grant.binding_id,grant.verification_id]);
  tx.run("INSERT INTO discussion_entry VALUES(?,?,?,?,1,'user','合成请求',?,NULL,NULL,'available')",[owner,entry,contact,id,request]);
- tx.run("INSERT INTO reply_attempt VALUES(?,?,?,1,'running',?,0,0,0,1,NULL,NULL)",[owner,attempt,request,randomUUID()]);
+ tx.run("INSERT INTO reply_attempt(owner_id,id,request_id,attempt_no,state,lease_token,accepted_data_generation,accepted_discussion_generation,accepted_source_revision,started_at,finished_at,error_code) VALUES(?,?,?,1,'running',?,0,0,0,1,NULL,NULL)",[owner,attempt,request,randomUUID()]);
  tx.run("INSERT INTO reply_context VALUES(?,?,?,?,'request',?,?,0,0,0,0,'{}',1,'active')",[owner,context,contact,id,attempt,request]);
  tx.run("INSERT INTO reply_context_item VALUES(?,?,1,'message','context',1,?,?,?,1,NULL,NULL,NULL)",[owner,context,contact,message,record]);
  tx.run("INSERT INTO reply_context_item VALUES(?,?,2,'entry','context',2,NULL,NULL,NULL,NULL,?,NULL,NULL)",[owner,context,entry]);
  tx.run("INSERT INTO model_operation(owner_id,id,purpose,reply_request_id,slot,input_seal,state) VALUES(?,?,'discussion',?,0,'synthetic','resolved')",[owner,operation,request]);
+ tx.run("INSERT INTO operation_scope VALUES(?,?,?,'discussion','released')",[owner,operation,contact]);
  tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,reply_attempt_id,reply_context_id,provider,request_key,state,reserved_budget_units,settlement_state) VALUES(?,?,?,1,?,?,'synthetic',?,'succeeded',10,'settled')",[owner,call,operation,attempt,context,randomUUID()]);
  tx.run("INSERT INTO execution_event(owner_id,id,reply_attempt_id,event_no,kind,originated_call_id,payload,created_at) VALUES(?,?,?,1,'assistant_message',?,'{\"text\":\"合成回答\"}',1)",[owner,event,attempt,call]);
  tx.run("INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,reply_context_id,context_item_no) VALUES(?,?,1,'context',1,?,1)",[owner,event,context]);
@@ -32,6 +33,7 @@ function memory(tx,owner,contact,message,record){
  tx.run('INSERT INTO step_input VALUES(?,?,1,?,1)',[owner,step,run]);
  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[owner,attempt,step]);
  tx.run("INSERT INTO model_operation(owner_id,id,purpose,memory_step_id,slot,input_seal,state) VALUES(?,?,'extraction',?,0,'synthetic','resolved')",[owner,operation,step]);
+ tx.run("INSERT INTO operation_scope VALUES(?,?,?,'extraction','released')",[owner,operation,contact]);
  tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,step_attempt_id,provider,request_key,state,reserved_budget_units,settlement_state) VALUES(?,?,?,1,?,'synthetic',?,'succeeded',10,'settled')",[owner,call,operation,attempt,randomUUID()]);
  tx.run("INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,originated_call_id,payload,created_at) VALUES(?,?,?,1,'model_output',?,'{\"blocks\":[]}',1)",[owner,event,attempt,call]);
  tx.run("INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,planned_step_id,planned_input_no) VALUES(?,?,1,'target',1,?,1)",[owner,event,step]);
@@ -79,7 +81,7 @@ function reuse(tx,{owner,a,b,m,kind}){
  tx.run("UPDATE step_attempt SET state='succeeded' WHERE owner_id=? AND id=?",[owner,m.attempt]);
  tx.run("INSERT INTO step_attempt VALUES(?,?,?,2,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[owner,attempt,m.step]);
  tx.run("UPDATE reply_attempt SET state='committed',finished_at=1 WHERE owner_id=? AND id=?",[owner,a.attempt]);
- tx.run("INSERT INTO reply_attempt VALUES(?,?,?,2,'running','synthetic',0,0,0,1,NULL,NULL)",[owner,replyAttempt,a.request]);
+ tx.run("INSERT INTO reply_attempt(owner_id,id,request_id,attempt_no,state,lease_token,accepted_data_generation,accepted_discussion_generation,accepted_source_revision,started_at,finished_at,error_code) VALUES(?,?,?,2,'running','synthetic',0,0,0,1,NULL,NULL)",[owner,replyAttempt,a.request]);
  const before=tx.get('SELECT count(*) n FROM model_call WHERE owner_id=?',[owner]).n;
  let eventOwner=owner,eventAttempt=attempt,call=m.call,origin=null;
  if(kind==='foreign_owner'){
