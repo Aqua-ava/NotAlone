@@ -8,6 +8,7 @@ export interface MemoryProcessingEntryProps {
   backend: Pick<BackendBridge, 'onStateChanged'>;
   scopeKey?: string | number;
   children: ReactNode;
+  sqliteChildren?: ReactNode;
 }
 
 type EntryScope = Pick<MemoryProcessingEntryProps, 'bridge' | 'backend' | 'scopeKey'>;
@@ -16,7 +17,7 @@ type EntryState = { scope: EntryScope } & (
 );
 
 /** 模式经本机桥核验后才挂载对应的记忆页面。 */
-export function MemoryProcessingEntry({ bridge, backend, scopeKey, children }: MemoryProcessingEntryProps) {
+export function MemoryProcessingEntry({ bridge, backend, scopeKey, children, sqliteChildren }: MemoryProcessingEntryProps) {
   const [state, setState] = useState<EntryState | null>(null);
   const scope = useRef<EntryScope>({ bridge, backend, scopeKey });
   if (scope.current.bridge !== bridge || scope.current.backend !== backend || scope.current.scopeKey !== scopeKey) {
@@ -55,7 +56,7 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, children }: M
   const current = state?.scope === acceptedScope ? state : null;
   if (current?.phase === 'ready') {
     if (current.mode.mode === 'legacy') return children;
-    if (current.mode.mode === 'sqlite') return <FixedMemoryProcessingPanel bridge={bridge} scopeKey={scopeKey}/>;
+    if (current.mode.mode === 'sqlite') return <><FixedMemoryProcessingPanel bridge={bridge} scopeKey={scopeKey}/>{sqliteChildren}</>;
   }
   if (current?.phase === 'disconnected') return <p role="status">本机连接已变化，正在等待重新连接。</p>;
   if (current?.phase === 'failed') return <section aria-label="记忆处理模式">

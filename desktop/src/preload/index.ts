@@ -1,3 +1,4 @@
+import {createSqliteMemoryManagementBridge} from './sqlite-memory-management';
 import { createMessageMediaBridge } from './media';
 import { createUsageBridge } from './usage';
 import { createWechatSetupBridge } from './wechat-setup';
@@ -43,6 +44,7 @@ const bridge: AppBridge = {
   sources: createSourceDeletionBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
   fixedMemoryProcessing: createFixedMemoryProcessingBridge(ipcRenderer),
+  sqliteMemoryManagement: createSqliteMemoryManagementBridge(ipcRenderer),
   backgroundTasks: createBackgroundTaskBridge(ipcRenderer),
   traces: createTraceBridge(ipcRenderer),
   bindings: createBindingConsentBridge(ipcRenderer),

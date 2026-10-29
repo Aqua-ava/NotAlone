@@ -1,3 +1,4 @@
+import type {SqliteMemoryManagementBridge} from './sqlite-memory-management';
 import type { MessageMediaBridge } from './media-bridge';
 import type { UsageBridge } from './usage-bridge';
 import type { WechatSetupBridge } from './wechat-setup-bridge';
@@ -35,6 +36,7 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   skillLearning: SkillLearningBridge;
   memory: MemoryBridge; traces: TraceBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
   fixedMemoryProcessing: FixedMemoryProcessingBridge;
+  sqliteMemoryManagement: SqliteMemoryManagementBridge;
   backgroundTasks: BackgroundTaskBridge;
 };
 import type { TraceBridge } from './trace-bridge';
