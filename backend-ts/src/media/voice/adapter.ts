@@ -21,14 +21,22 @@ async function localBytes(location:string, maximum:number):Promise<Buffer> {
   } finally {await file.close();}
 }
 const validation=(playable:boolean):MediaValidation=>({format:playable?'wav':'silk',mimeType:playable?'audio/wav':'audio/silk',containerValid:true,viewable:false,playable,imageQuality:'not_applicable',qualityProof:null});
+type VoiceResult=Awaited<ReturnType<MediaAdapter['execute']>>;
 export class VoiceMediaAdapter implements MediaAdapter {
   readonly version='voice-silk-wasm-3.7.1-v1';
   private readonly source:VoiceResourcePort|undefined;
   private readonly decoder:VoiceDecoder;
   private readonly readers=new Set<()=>Promise<void>>();
+  private readonly executions=new Set<Promise<VoiceResult>>();
+  private closing=false;
   constructor(options:{source?:VoiceResourcePort;decoder:VoiceDecoder}) {this.source=options.source;this.decoder=options.decoder;}
   supports(kind:string,goal:string):boolean {return kind==='voice'&&(goal==='audio_conversion'||goal==='extract'&&!!this.source);}
-  async execute(context:MediaExecution) {
+  execute(context:MediaExecution):Promise<VoiceResult> {
+    if(this.closing)return Promise.reject(new StorageFailure('voice_adapter_closed'));
+    const execution=this.run(context);this.executions.add(execution);
+    const settled=()=>{this.executions.delete(execution);};void execution.then(settled,settled);return execution;
+  }
+  private async run(context:MediaExecution) {
     await context.checkpoint();
     let silk:Buffer, parentFileId:string;
     let association=null;
@@ -79,5 +87,10 @@ export class VoiceMediaAdapter implements MediaAdapter {
       bytes:(async function*(){for(let offset=0;offset<data.length;offset+=65536){await context.checkpoint();yield data.subarray(offset,offset+65536);}})(),
       validate:async location=>{const actual=await localBytes(location,playable?voiceLimits.pcmBytes+44:voiceLimits.inputBytes);await context.checkpoint();if(playable)inspectWav(actual);else inspectSilk(actual);return validation(playable);}});
   }
-  async close():Promise<void> {const results=await Promise.allSettled([this.decoder.close(),...[...this.readers].map(close=>close())]);const failure=results.find(r=>r.status==='rejected');if(failure?.status==='rejected')throw failure.reason;}
+  async close():Promise<void> {
+    this.closing=true;
+    const drain=async()=>{await Promise.allSettled([...this.executions]);const results=await Promise.allSettled([...this.readers].map(close=>close()));const failure=results.find(r=>r.status==='rejected');if(failure?.status==='rejected')throw failure.reason;};
+    const results=await Promise.allSettled([Promise.resolve().then(()=>this.decoder.close()),drain()]);
+    const failure=results.find(r=>r.status==='rejected');if(failure?.status==='rejected')throw failure.reason;
+  }
 }

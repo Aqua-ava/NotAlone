@@ -69,6 +69,7 @@ Node24.19.0，锁定依赖及隔离合成SQLite/受管目录，正常业务服�
 - 默认工厂业务入口1/1通过，未装认证资源端口时拒绝新微信提取。两端`pnpm typecheck`及`git diff --check`通过；双轴审查发现入口偏移P2，补反例并固定同一已校验绝对CJS加载后，Standards/Spec剩余均0。公开历史checkpoint检查issues=0。
 - 联合媒体读者合同下补齐资源authority/close及retainReader，`node --test --test-name-pattern='语音资源close失败|实际读取资格|来源正在close' backend-ts/test/sqlite-voice.test.mjs` 3/3通过：资格不符不迭代字节，释放失败不完成删除，同次清理可重试，清除等待真正结算后不发布原件。
 - 资格/来源及期望复制合同使用独立快照；端口原地改写token/source、流内修改预期长度/摘要的两个反例均先失败后通过。连同读取释放及正常WASM的定向7项通过，后台类型检查通过。
+- 元数据getter异常仍结算reader，宿主关闭等待迟到打开并复核释放失败；两项反例先红后绿，连同资格变异、原件有限保存、正常WASM及关闭并发的定向7项通过，不把早先空reader集合当作已释放。
 
 ### 剩余与数据影响
 

@@ -181,3 +181,12 @@ test('已打开资源的复制元数据读取抛错仍须关闭原生读者',asy
  const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{}}})),m=f.messages.find(m=>m.kind==='voice');
  await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'throwing-resource-metadata',goal:'extract'}));assert.equal(closed,1);
 });
+
+test('关闭宿主等待迟到资源打开，释放失败不能被早先空读者集合掩盖',async t=>{
+ let enter,release,decoderClosed,allow=false;const entered=new Promise(r=>{enter=r;}),gate=new Promise(r=>{release=r;}),closed=new Promise(r=>{decoderClosed=r;});t.after(()=>{allow=true;release();});
+ const port=syntheticPort(packets(1,1,1));const read=port.read;port.read=async c=>{enter();await gate;return {...await read(c),close:async()=>{if(!allow)throw Error('合成迟到读者未结算');}};};
+ const f=await fixture(t,new VoiceMediaAdapter({source:port,decoder:{decode:async()=>Buffer.alloc(9600),close:async()=>{decoderClosed();}}})),m=f.messages.find(m=>m.kind==='voice');
+ const extracting=f.media.extract(f.contact,m.id,{requestKey:'late-resource-opening',goal:'extract'});const extractRejected=assert.rejects(extracting);await entered;
+ const closing=f.media.close();const closeRejected=assert.rejects(closing,{code:'voice_reader_release_failed'});await closed;release();await extractRejected;await closeRejected;
+ allow=true;await f.media.close();
+});
