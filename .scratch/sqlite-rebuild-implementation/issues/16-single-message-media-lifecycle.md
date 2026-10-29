@@ -1,7 +1,7 @@
 # 16：单条媒体保存与清除
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [微信媒体资源提取与语音文件转换](../../wechat-media-extraction/spec.md)
 Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-grants.md)；[05 统一来源删除与清理流程](05-source-deletion-and-cleanup.md)
