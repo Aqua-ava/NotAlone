@@ -16,6 +16,14 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(clear);return()=>{mounted.current=false;++revision.current;operation.current=null;off();};},[bridge]);
  useEffect(()=>{clear();if(available)void run({action:'read'});},[scopeKey,bridge,disabled]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
+ function rejectOperation(error:unknown){
+  const text=error instanceof Error?error.message:'候选结果尚未确认，请重新读取。';
+  setEdits({});setInspected({});setNotice('');
+  if(/失效|已变化|已不可用|请先确认/.test(text)){
+   setPage(null);setDraft('');setCarry(undefined);setSelectedSkill('');setPartial(false);retry.current=null;
+  }else setPage(old=>old?{coverage:old.coverage,requests:[]}:null);
+  setError(text);
+ }
  async function run(command:Command){
   if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
   const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
@@ -38,7 +46,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     }else setNotice('修改已保存为新版本，继承依据尚未重新核验。');
     const next=await bridge.candidates.execute({...scope,action:'read'});if(!current())return;setPage(readSqliteCandidatePage(next));setEdits({});setInspected({});
    }
-  }catch(e){if(current()){setPage(old=>old?{...old,requests:[]}:null);setEdits({});setInspected({});if(e instanceof Error&&/失效|已变化|正文已不可用/.test(e.message)){setDraft('');setCarry(undefined);retry.current=null;}setError(e instanceof Error?e.message:'候选暂不可用，请重新读取。');}}
+  }catch(e){if(current())rejectOperation(e);}
   finally{if(current()){operation.current=null;setBusy(false);}}
  }
  async function generate(){
@@ -51,7 +59,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
   const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge&&!latest.current.disabled;
   try{const result=await bridge.candidates.execute({contactId,scopeRevision,sessionId,action:'select',candidateId:v.candidateId,versionNo:v.versionNo}) as {id:string};if(current()){if(typeof result.id!=='string')throw new Error('选稿结果尚未确认。');setCarry(result.id);setNotice(`下一次明确请求将继续第${v.versionNo}版候选。`);}}
-  catch(e){if(current()){setPage(null);setError(e instanceof Error?e.message:'候选暂不可用。');}}
+  catch(e){if(current())rejectOperation(e);}
   finally{if(current()){operation.current=null;setBusy(false);}}
  }
  const phase=page?.coverage.phase,historyBlocked=phase!=='complete'&&!(phase==='incomplete'&&partial);
@@ -79,7 +87,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     <button disabled={busy||!available} onClick={()=>void continueVersion(v)}>以此版本继续</button>
     {v.versionNo>1&&<button disabled={busy} onClick={()=>void run({action:'version',candidateId:v.candidateId,versionNo:v.versionNo-1})}>查看上一版</button>}
     {v.versionNo!==candidate.versionNo&&<button disabled={busy} onClick={()=>{setInspected(old=>{const next={...old};delete next[v.candidateId];return next;});setEdits({});}}>回到最新版本</button>}
-    <details><summary>依据</summary>{v.basis.map(b=><div key={b.itemNo}><p>{b.verification==='inherited_unverified'?'继承原依据，手工修改尚未重新核验':'产生此模型版本的实际输入'} · {b.kind}</p><p className="discussion-entry-text">{b.text}</p></div>)}</details>
+    <details><summary>依据</summary>{v.basis.map(b=><div key={b.itemNo}><p>{b.verification==='inherited_unverified'?'继承原依据，手工修改尚未重新核验':'产生此模型版本的实际输入'} · {({message:'聊天原文',entry:'本次讨论',memory:'已采纳记忆',memory_candidate:'未确认记忆',document:'已发布资料',selection:'明确选稿',coverage:'历史覆盖'} as Record<string,string>)[b.kind]??'实际资料'}</p><p className="discussion-entry-text">{b.text}</p></div>)}</details>
    </article>;})}
    {!!request.loadedSkills.length&&<details><summary>本次实际载入的 Skill</summary>{request.loadedSkills.map((s,index)=><div key={index}><p>第{s.revisionNo}版 · {s.relativePath}</p><p>{s.text}</p></div>)}</details>}
    {!!request.selections.length&&<p>已记录{request.selections.length}次选稿，最近选用第{request.selections.at(-1)!.versionNo}版。</p>}
