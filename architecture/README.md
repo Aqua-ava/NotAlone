@@ -31,7 +31,7 @@
 
 1. 先读根目录 [`CONTEXT.md`](../CONTEXT.md)，使用统一领域语言。
 2. 按任务读取一份或多份现行规格：[`domain-data.md`](current/domain-data.md)、[`core-flows.md`](current/core-flows.md)、[`privacy-deletion.md`](current/privacy-deletion.md)、[`skill-library.md`](current/skill-library.md)。涉及记忆提取溯源时，再读 [`memory-extraction-trace.md`](current/memory-extraction-trace.md)；全过程后端与 React 查看入口已实现并经合成验证，最终原生 App/渠道验收另按原任务推进。
-3. 只有涉及云端部署、回复运行时或真实表达质量时，才读取对应草案：[`cloud-engineering.md`](drafts/cloud-engineering.md)、[`agent-runtime.md`](drafts/agent-runtime.md)、[`authentic-expression.md`](drafts/authentic-expression.md)。
+3. 涉及回复运行时或真实表达质量时，读取对应草案：[`agent-runtime.md`](drafts/agent-runtime.md)、[`authentic-expression.md`](drafts/authentic-expression.md)。
 4. 当现行规格或草案引用 ADR 时，再读取对应决策；复审既有决定时必须新增 ADR 修订或替代，不能覆盖历史原因。
 
 聊天辅助产品讨论分别记录在[聊天回复策略草图](drafts/conversation-reply-strategy.md)和[持续会话与上下文管理草图](drafts/assistant-session-context.md)：前者讨论回应与主动联系两条路径，后者从 Q1 独立记录助手会话连续性及新开边界，均未替代现行规格。
@@ -182,7 +182,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。当前代码为TypeScript／DSH后台与Mac原生探针；Python后端和旧框架已退役，原生能力继续复用；实际验证及跳过项见迁移25／26。
-- 独立桌面版按 ADR-061 采用本机受管后台与 PostgreSQL，资料保存在本机；新装交付与最终验收状态分别核验。按 ADR-066，已有安装保留原数据库连接与资料位置，仅原地执行缺少的版本化 SQL，取消普通启动中的强制备份与复制切换；没有既有配置的新安装正常初始化空受管库。旧云端模块化单体目标不作为独立版的默认数据去向，PostgreSQL 仍是联系人、消息、关系资料、任务和删除状态的权威业务库。
+- 独立桌面版按 ADR-061 采用本机受管后台与 PostgreSQL，资料保存在本机；新装交付与最终验收状态分别核验。按 ADR-066，已有安装保留原数据库连接与资料位置，仅原地执行缺少的版本化 SQL，取消普通启动中的强制备份与复制切换；没有既有配置的新安装正常初始化空受管库。云端工程已由用户于2026-10-29取消，产品以本机应用为目标，PostgreSQL 仍是联系人、消息、关系资料、任务和删除状态的权威业务库。
 - 新联系人按 ADR-087／089 从真实微信会话加入，支持逐会话确认或全部私聊范围授权；ADR-095 补充已有可用外置工具的首次账号连接，无需先导入历史。已有联系人可手动表达，顶部选择器是唯一搜索入口；未配置机器的工具初始化与独立渠道验收仍未完成，ADR-065 的空目录无需微信首用承诺已被替代。资料更新按 ADR-066 原地补齐，历史副本删除清理、隐私与人工发送要求保持。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。

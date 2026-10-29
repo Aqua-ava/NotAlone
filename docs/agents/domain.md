@@ -14,10 +14,11 @@
 | 前台定位、OCR 或连续性 | `current/core-flows.md`、`current/privacy-deletion.md`、ADR-049、ADR-050、ADR-052，并沿其后续修订指针核对当前规则；追溯旧视觉方案时再读 ADR-001、ADR-003、ADR-017 |
 | 隐私、外部模型或连接器 | `current/privacy-deletion.md` 及对应接入的相关 ADR |
 | 本机交付、首启或资料更新 | `current/privacy-deletion.md`、ADR-061、ADR-065、ADR-066、ADR-095；开发与发布门禁见工程工作流 |
-| 云端存储或部署探索 | `current/privacy-deletion.md`、`drafts/cloud-engineering.md` 及相关 ADR；草案不改变本机独立版的数据位置 |
 | Agent、Tool、MCP、RAG 或编排框架 | `drafts/agent-runtime.md`、ADR-006、ADR-009、ADR-102；后者已采纳 DSH／TS 迁移，实际实现与验收仍按任务核验 |
 
 根目录 `CONTEXT.md` 存在时也要读取；缺失时继续任务，只在领域术语需要正式整理时使用 `domain-modeling` 创建。输出沿用其中已定义的名称；未定义的概念先判断是错误同义词，还是需通过 `domain-modeling` 补充的真实领域缺口。
+
+云端工程已由用户于2026-10-29取消，产品按本机应用设计。模型供应商API的范围、凭据和资料出站仍按隐私分支核验。
 
 ## 记录路由
 
