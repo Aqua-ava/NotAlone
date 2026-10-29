@@ -28,7 +28,8 @@ export interface HistoryBoundaryCandidate {
 }
 /** 可选能力：只有认证过边界协议的适配器才实现；正式微信适配器未认证时保持缺席。 */
 export interface HistoryBoundaryCapability {
-  boundary(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryBoundaryCandidate>;
+  /** 与 04 的 HistoryChannel 可选能力同名；只有认证过边界协议的适配器实现。 */
+  boundarySnapshot(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryBoundaryCandidate>;
 }
 export interface PreparedBoundaryMember { memberNo: number; partition: string; tableInstance: string; localKey: string }
 export interface PreparedBoundary {

@@ -330,7 +330,7 @@ test('边界能力未认证时先封禁旧写入并清理已存资料、明确bo
   f.state.boundaryMembers = allIdentities;
   await history.synchronize(f.contactA);
   f.state.boundaryAvailable = false;
-  delete f.channel.boundary;
+  delete f.channel.boundarySnapshot;
   const pending = await clear.clear(f.contactA);
   assert.equal(pending.phase, 'boundary_pending');
   assert.equal(pending.completed, false);
@@ -338,7 +338,7 @@ test('边界能力未认证时先封禁旧写入并清理已存资料、明确bo
   assert.equal(pending.storedMessages, 0, '缺边界仍清理已保存资料');
   await assert.rejects(history.synchronize(f.contactA), { code: 'history_suppression_unverified' });
   f.state.boundaryAvailable = true;
-  f.channel.boundary = async scope => {
+  f.channel.boundarySnapshot = async scope => {
     f.state.boundaryCalls++;
     return buildCandidate(scope, f.state.boundaryMembers);
   };

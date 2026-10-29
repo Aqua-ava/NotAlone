@@ -83,7 +83,7 @@ test('桌面清空控制器把未认证边界显示为boundary_pending而非完�
   f.state.boundaryMembers = [identity('shard-a', '1')];
   await f.current.history.synchronize(contact);
   f.state.boundaryAvailable = false;
-  delete f.channel.boundary;
+  delete f.channel.boundarySnapshot;
   const http = new SqliteHistoryClearHttp(f.current.clear, f.current.resync);
   const server = createServer(async (req, res) => {
     if (req.headers.authorization !== 'Bearer synthetic-clear-token') { res.writeHead(401); res.end(); return; }

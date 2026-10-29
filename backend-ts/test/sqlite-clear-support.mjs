@@ -75,7 +75,7 @@ export function createChannel(options = {}) {
         records: state.pageRecords, completedPartitions: [...target.partitions], exhausted: true };
     },
   };
-  if (state.boundaryAvailable) channel.boundary = async scope => {
+  if (state.boundaryAvailable) channel.boundarySnapshot = async scope => {
     state.boundaryCalls++;
     if (state.boundaryHook) await state.boundaryHook(state);
     if (state.boundaryFactory) return state.boundaryFactory(scope, state);

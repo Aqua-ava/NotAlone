@@ -38,8 +38,8 @@
 
 ```
 cd backend-ts
-node --test test/sqlite-clear-resync.test.mjs          # 12/12
-node --test test/sqlite-clear-http.test.mjs            # 4/4
+node --test test/sqlite-clear-resync.test.mjs          # 13/13
+node --test test/sqlite-clear-http.test.mjs            # 4/4（与上合计 17/17）
 node --test test/sqlite-private-history.test.mjs test/sqlite-history-http.test.mjs \
   test/sqlite-first-history-coordinator.test.mjs test/sqlite-history-sync-status.test.mjs \
   test/sqlite-history-hooks.test.mjs test/sqlite-deletion.test.mjs test/sqlite-deletion-metadata.test.mjs \
@@ -49,9 +49,10 @@ node --test test/sqlite-private-history.test.mjs test/sqlite-history-http.test.m
 ELECTRON_RUN_AS_NODE=1 <Electron> --test test/sqlite-history-startup-host.test.mjs \
   test/sqlite-history-host.test.mjs                     # 11/11（环境：仓库 Electron Node v24.21.0）
 pnpm run typecheck（backend-ts、desktop）               # 通过
+cd ../desktop && node --test tests/sqlite-history-clear-contract.test.mjs  # 2/2
 ```
 
-全量后端套件与桌面套件结果见集成回报。普通 `node` 运行宿主类测试会因 `node-addon-require-builtin` 原生绑定不可用而失败，已按 Lead 说明改用 Electron 自带 Node，未误判为代码回归。
+全量后端套件曾以 Electron Node 启动：SQLite/历史/宿主相关用例通过；其余失败集中在需要本机 PostgreSQL（`/tmp/.s.PGSQL.5432` 不存在）的历史合成夹具（如 `wechat-setup.test.mjs`、`workspace-generation-stop-ipc.test.mjs`），属环境缺口，不是本票代码回归；归档/真实宿主测试另按环境差异记账。普通 `node` 运行宿主类测试会因 `node-addon-require-builtin` 原生绑定不可用而失败，已按 Lead 说明改用 Electron 自带 Node。
 
 ## 数据影响
 
@@ -65,4 +66,5 @@ pnpm run typecheck（backend-ts、desktop）               # 通过
 2. 与 04 的共享 history 写入路径（`suppression.ts`/`ingest.ts`/`contracts.ts`/`service/http`/`sqlite-host-plugin`/desktop sync 状态）尚未接线：本分支为独立实现，按 Lead 约定在 04 进入基线后 rebase 并只做最小接线；当前迁移版本在本分支为 13 占位，合入时改为 15。
 3. 05 的非空记忆/助手/媒体闭包由各域自票验收；06 只验证 `contact_history` scope 经 05 注册域执行且无 blocked，端到端组合留 20/21。
 4. 桌面面板已实现并通过类型检查，实际热更新 App 的清空/重读交互验收待 Lead 分配串行桌面窗口；当前未启动 App、未占用桌面。
-5. 全量套件中历史归档/真实宿主测试依赖环境（Electron Node），报告按实际命令与差异记账。
+5. 全量套件中需要本机 PostgreSQL 的历史夹具无 PG 服务而失败（环境缺口，与 06 改动无关）；归档/真实宿主测试依赖 Electron Node，报告按实际命令与差异记账。
+6. 与 04 的接线清单（04 实际进入基线后执行）：迁移 13 占位改 15 并排在 14 之后；`suppression.ts` 的 `assertHistoryReadBoundary` 函数体改用本票 `assertVerifiedHistoryBoundary`（已接受 B 才放行，否则保持 `history_suppression_unverified`）；`ingest.ts` 的 `exclude` 回调在两个接受页动作中传入 `clearBoundaryExclusion`（返回 `clear_excluded`，来源删除仍保持 `source_excluded`）；`history.begin/beginIncremental` 调用点不动；`contracts.ts` 已声明可选 `boundarySnapshot`（本票能力同名）；`http.ts`/宿主/桌面增量状态只做追加投影。接线后重跑本票 17 项与 04 增量套件。

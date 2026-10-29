@@ -122,7 +122,7 @@ export class SqliteHistoryClearService {
       const scope = await this.storage.execute<HistoryScope>('history.scope', { token });
       release = this.holders.register({ key: `history:clear_${contactId}`, ownerId: this.owner(), contactId,
         coversAllSources: true, generation: BigInt(token.data_generation), close: stop });
-      const boundary = channel.boundary;
+      const boundary = channel.boundarySnapshot;
       if (typeof boundary !== 'function') return 'history_boundary_unverified';
       let lastReason = 'history_boundary_unverified';
       for (let attempt = 1; attempt <= this.options.maxBoundaryAttempts; attempt++) {

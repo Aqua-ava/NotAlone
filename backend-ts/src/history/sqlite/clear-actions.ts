@@ -309,7 +309,7 @@ function restoreView(value: StorageRow) {
 }
 
 /** history.begin 的唯一屏障门：无清空代次沿用旧 fence；有代次必须已接受完整 B。 */
-export function assertHistoryReadBoundary(tx: StorageTransaction, token: ReadEligibility): void {
+export function assertVerifiedHistoryBoundary(tx: StorageTransaction, token: ReadEligibility): void {
   const barrier = BigInt(token.barrier_generation);
   if (barrier === 0n) {
     if (tx.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=?', [token.owner_id, token.contact_id])) fail('history_suppression_unverified');

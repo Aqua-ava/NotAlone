@@ -83,7 +83,7 @@ test('正式清空/重读HTTP端点走正常服务入口，非法请求不触发
 
 test('正式微信适配器不提供边界能力，未认证能力保持拒绝', async () => {
   const channel = createWechatHistoryChannel();
-  assert.equal(typeof channel.boundary, 'undefined');
+  assert.equal(typeof channel.boundarySnapshot, 'undefined');
   const report = await channel.inspect({ token: {}, accountKey: 'unverified', conversationKey: 'unverified' });
   assert.equal(report.status, 'unverified');
   await assert.rejects(channel.target({ token: {}, accountKey: 'unverified', conversationKey: 'unverified' }), { code: 'history_support_unverified' });

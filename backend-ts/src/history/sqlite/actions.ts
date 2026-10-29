@@ -5,7 +5,7 @@ import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryPage, HistoryTarget, HistorySupportReport } from './contracts.ts';
 import { prepareRecord } from './normalize.ts';
 import { readCoverage, readMessages } from './read.ts';
-import { assertHistoryReadBoundary, clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
+import { assertVerifiedHistoryBoundary, clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
 export const serializeSupport=(report:HistorySupportReport):string=>JSON.stringify(Object.fromEntries(Object.entries(report).sort(([a],[b])=>a.localeCompare(b))));
@@ -40,7 +40,7 @@ export const historyActions:StorageAction[]=[
    ||target.tables.some(t=>!target.partitions.includes(t.partition)||typeof t.instance!=='string'||!t.instance||t.instance.length>512)
    ||new Set(target.tables.map(t=>JSON.stringify([t.partition,t.instance]))).size!==target.tables.length)fail('history_target_unverified');
   // 清空已原子接受完整 B 后允许新资格读取；未接受时旧 fence 继续封禁。
-  assertHistoryReadBoundary(tx,token);
+  assertVerifiedHistoryBoundary(tx,token);
   tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?)`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at]);
   return {id:i.id,target,cursor:null};
  }),
