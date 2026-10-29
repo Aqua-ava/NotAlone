@@ -103,7 +103,7 @@ export function createSqliteExtractionModelPort(options:SqliteExtractionModelPor
   return {
     prepare,invoke,
     close():Promise<void>{
-      return closing??=(async()=>{stopped.abort();await Promise.allSettled([...active]);if(ownsProvider)await provider.dispose();})();
+      return closing??=(async()=>{stopped.abort();await Promise.allSettled([...active]);if(ownsProvider)await provider.dispose();})().catch(error=>{closing=undefined;throw error;});
     },
   };
 }
