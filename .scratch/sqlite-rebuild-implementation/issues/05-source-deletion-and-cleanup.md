@@ -36,6 +36,26 @@ Blocked by: [01 SQLite 基础与生命周期](01-sqlite-runtime-lifecycle.md)
 
 可按已定模型与合成来源独立验证，不以等待真实微信作为本地清理前置。它只提供已确认共用合同；各新领域写者必须随票注册清理闭包，20切换前再验完整清单，不能到21才补基础保护。
 
-本轮仅发布，尚未开始实现。`ready-for-agent`表示任务描述可供后续安排，不能据此自动领取、改代码、建业务库、读取微信或发起模型调用；须在用户后续明确要求实现时才开始并将State改为claimed。
+当前已按明确分配领取实施；不自动领取其他任务。`ready-for-agent`只描述任务可执行性，不能据此扩大微信读取或模型调用范围。
 
 后续开发及桌面验收只用`pnpm run dev`，先`dev:status`核验并复用热更新实例；不得自行打包、运行打包版、改发布门禁、push或创建PR。只处理必要的合成或已获准资料，不提交私人聊天、身份、凭据、截图或真实媒体。App首次使用继续搁置，迁移／恢复实验不纳入本轮。
+
+## Answer
+
+2026-10-29 实施与独立审查已完成，**State仍为claimed**：生产适配器尚待02共用宿主认证路由串行聚合及必要反馈验收，当前不宣称正式入口整体可用或resolved。Goal已实际创建，状态active；未处理其他票。
+
+- 稳定实现提交：`5c852450020240e9e019ad5fb12974b1db697534`。独立模块`backend-ts/src/storage/sqlite/deletion/`提供四表迁移工厂、具名动作、来源闭包/资格撤销回调、受管持有者排空、类型化行/文件目标及逐存储面复核。完整接入入口见该目录README；默认缺真实领域注册时明确拒绝，不以空闭包完成。
+- `planDeletion`与领域发布组合短事务；`requestAllowed/tombstoneRequest`封禁旧请求重放；runner绑定实例/计划修订；新发现目标推进计划。文件I/O前另行复验领域归属/代次/仍需父件，再按dev/ino/birthtime/uid及父目录身份精确删除。失败/超时不移除活动引用，明确close失败可重试，未决close不并发重发。文件及引用复核后先清账本敏感定位，再维护SQLite页/WAL，防止完成账本本身留下旧定位。
+- 生产`SqliteDeletionHttp(service,ownerId).handle(req,res)`沿用现有来源DELETE与来源任务状态、删除列表/状态/重试；普通非删除task_id透传。owner固定于认证宿主，公开状态不含文件定位/证明/正文。账户新删除使用`Idempotency-Key`，旧key只重放原请求；来源稳定ID不复用条件下兼容旧空正文。未增加泛化SQL/文件Tool、模型或微信操作。
+- 公共最小变更：registry追加独立迁移/动作（当前本工作树版本2，集成顺序由总指挥赋号）；maintenance新增inspect及Worker/受控目录只读检查；01测试新增版本/结构预期改为跟随实际registry。已发布01 SQL未修改，默认PG业务未切换。
+
+实际验证：
+
+1. Node v24.19.0；`node --test backend-ts/test/sqlite-deletion.test.mjs backend-ts/test/sqlite-storage.test.mjs`：26/26（16删除、10底座）。覆盖正常/幂等、旧代次及旧runner、跨联系人合成贡献、owner错误回滚、同操作部分失败/重开、未知目录/链接/替换文件、持有者末次写入/超时/明确失败续跑、新计划旧检查失效、单来源/联系人/账户台账差异、SQLite长读者checkpoint busy与页/WAL/SHM/临时文件维护、生产HTTP/普通任务透传/账户新请求。
+2. `pnpm --dir backend-ts typecheck`通过。`cd desktop && node --test tests/sqlite-development.test.mjs`：5/5；另新增`sqlite-source-deletion-contract.test.mjs`，使用生产HTTP+真实临时SQLite，直接复用现有桌面deletionReceipt/deletionTask读取器验证回执和最终状态，1/1。此前缺esbuild的环境失败在离线安装锁定依赖后通过，未改变锁文件。
+3. TDD记录：首切片先因模块缺失red；错误owner及文件资格反例red后补拦截。独立code-review Standards初审2项、Spec初审3项（账户问题重叠）；四处实际问题均补失败回归后修复，双轴增量复核0项。未机械跑全量、真实模型或微信。
+4. 实现提交后`node scripts/check_public_history.mjs --ref HEAD --working-tree`：2541提交、19287历史blob、1584当前文件、0问题；后续补充提交后继续执行公开检查。`git diff --check`通过。未push、远端分支或PR。
+
+数据影响：只使用临时SQLite、受管目录与固定合成资料/认证；未连接未知PG、用户业务库或微信，未读真实联系人/聊天、未调用模型、未外发或撤回消息。受控根和测试HTTP均清理，离线安装工作树依赖未运行安装脚本。初次`dev:status`为stopped，桌面资源仍由总指挥安排，未启动/重启/关闭实例。
+
+未验证与集成门槛：02身份authority/domain及生产认证宿主聚合；07/11/14/16等真实输入依赖、非空DSH公开dispose/close和文件枚举、媒体/页面不可读由各写者接入验收，20切换前复核完整清单。本票合成close不冒充真实DSH或微信。保留无正文墓碑与抑制FK所需内部控制身份，不将它们当完整过程或外部删除证明；不承诺SSD、外部备份或模型供应商副本法证擦除。首次使用、组件安装、新模型设置、干净机器和迁移恢复实验继续搁置。
