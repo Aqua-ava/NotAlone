@@ -138,14 +138,14 @@ test('持有者释放失败不能伪报完成，未知目录/链接/外部原件
   assert.throws(() => f.files.capture('skills', 'anything'), {code: 'deletion_file_ownership'});
   assert.equal(await readFile(external, 'utf8'), '用户合成原件');
 });
-test('默认聚合缺少来源处理器时拒绝删除，不把身份空闭包判成功', async t => {
+test('显式缺少删除注册时统一拒绝，不把身份空闭包判成功', async t => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-delete-unwired-')));
-  const storage = await SqliteStorage.open({userData: root, intent: 'create', role: 'test'});
+  const storage = await SqliteStorage.open({userData: root, intent: 'create', role: 'test', registryModule: new URL('./fixtures/sqlite/deletion-unregistered-registry.mjs', import.meta.url).href});
   try {
-    for(const scope of [{kind:'source',contactId:'a',sourceId:'r1'},{kind:'contact_history',contactId:'a'},
+    for(const scope of [{kind:'account'},{kind:'contact',contactId:'a'},{kind:'source',contactId:'a',sourceId:'r1'},{kind:'contact_history',contactId:'a'},
       {kind:'discussion',contactId:'a',discussionId:'discussion'},
       {kind:'media_result_clear',contactId:'a',messageId:'m'},{kind:'media_result_replace',contactId:'a',messageId:'m'}]) {
-      await assert.rejects(storage.execute('deletion.plan', request('unwired',scope)), {code: 'deletion_scope_unavailable'});
+      await assert.rejects(storage.execute('deletion.plan', request('unwired',scope)), {code: 'deletion_domain_unavailable'});
     }
     assert.deepEqual(await storage.execute('deletion.list',{ownerId:'o'}),[]);
   }

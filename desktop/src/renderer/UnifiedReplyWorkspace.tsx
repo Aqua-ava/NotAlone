@@ -1,3 +1,5 @@
+import type { MessageMediaBridge } from '../shared/media-bridge';
+import { MessageMediaPanel } from './MessageMediaPanel';
 import { useEffect, useState } from 'react';
 import type { HistoryCoveragePhase } from '../shared/sync-control-bridge';
 import type { RewriteOptions, RewriteTone } from '../shared/reply-bridge';
@@ -12,7 +14,7 @@ const workspaceOptions = (options: RewriteOptions): RewriteOptions => ({ ...opti
 
 interface WorkspaceSubmission { contactId: string | null; scopeRevision: number; sessionId: string | null | undefined; }
 
-export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage }: { contacts: ContactSessionView; replies: ReplySessionView; historyCoverage?: HistoryCoveragePhase }) {
+export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage, media }: { contacts: ContactSessionView; replies: ReplySessionView; historyCoverage?: HistoryCoveragePhase; media?:MessageMediaBridge }) {
   const { state } = replies;
   const [historyConfirmation, setHistoryConfirmation] = useState<string | null>(null);
   const historyKey = `${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${historyCoverage}`;
@@ -107,14 +109,15 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage }: { 
           {unknownMessageOrder && <p role="status" className="rewrite-privacy">部分记录的顺序未核验，以下按保存位置展示，不代表真实聊天先后。</p>}
           {excluded.length > 0 && <p role="status" className="rewrite-privacy">已排除 {excluded.length} 条消息。本次自动背景只参考未排除的最近聊天和补充内容，避免关系资料带回已排除的内容。</p>}
           <div className="workspace-message-list" role="group" aria-label="最近聊天材料">
-            {state.messages.items.map(message => <label className="reply-message" key={message.messageId}>
+            {state.messages.items.map(message => <div className="reply-message workspace-message-row" key={message.messageId}><label className="reply-message-selection">
               <input type="checkbox" aria-label={`使用消息：${message.text ?? message.mediaPlaceholder ?? '无文字内容'}`}
                 checked={!excluded.includes(message.messageId)} disabled={disabled || !options.includeRelationshipContext}
                 onChange={event => update({ excludedMessageIds: event.target.checked
                   ? excluded.filter(id => id !== message.messageId) : [...excluded, message.messageId] })} />
               <span><small>{message.speaker === 'contact' ? '对方' : message.speaker === 'user' ? '我' : '系统'} · {message.occurredAt ? new Date(message.occurredAt).toLocaleString('zh-CN') : '时间未知'}{message.ordering === 'unknown' ? ' · 顺序未核验' : ''}</small>
                 <span className="reply-message-text">{message.text ?? message.mediaPlaceholder ?? '无文字内容'}</span></span>
-            </label>)}
+            </label>{state.contactId&&<MessageMediaPanel bridge={media} selection={{contactId:state.contactId,messageId:message.messageId,scopeRevision:state.scopeRevision}} messageType={message.messageType}/>}
+            </div>)}
           </div>
         </>}
         <label>补充聊天上下文<textarea aria-label="补充聊天上下文" rows={3} maxLength={65_536}

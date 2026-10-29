@@ -38,9 +38,9 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [13 表达偏好接回](issues/13-expression-preferences.md) | [12](issues/12-reply-candidates-and-basis.md) | ready-for-agent | open |
 | [14 官方 Skill 加载接回](issues/14-official-skill-loading.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [15 既有纠错与诊断功能改接](issues/15-feedback-and-quality-adaptation.md) | [09](issues/09-memory-documents-publication.md) | ready-for-agent | open |
-| [16 单条媒体保存与清除](issues/16-single-message-media-lifecycle.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | claimed |
-| [17 图片与视频提取](issues/17-image-video-extraction.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | open |
-| [18 语音保存与转换](issues/18-voice-save-and-conversion.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | open |
+| [16 单条媒体保存与清除](issues/16-single-message-media-lifecycle.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
+| [17 图片与视频提取](issues/17-image-video-extraction.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | claimed |
+| [18 语音保存与转换](issues/18-voice-save-and-conversion.md) | [16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | claimed |
 | [19 媒体真实关联与组合验收](issues/19-media-integration-acceptance.md) | [03](issues/03-private-history-sync.md)、[17](issues/17-image-video-extraction.md)、[18](issues/18-voice-save-and-conversion.md) | ready-for-agent | open |
 | [20 默认切换 SQLite 与旧业务清理](issues/20-sqlite-cutover-and-legacy-cleanup.md) | [06](issues/06-clear-and-resync-history.md)、[10](issues/10-memory-processing-controls.md)、[13](issues/13-expression-preferences.md)、[14](issues/14-official-skill-loading.md)、[15](issues/15-feedback-and-quality-adaptation.md)、[16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | open |
 | [21 三份规格组合验收](issues/21-three-specs-integrated-acceptance.md) | [19](issues/19-media-integration-acceptance.md)、[20](issues/20-sqlite-cutover-and-legacy-cleanup.md) | ready-for-agent | open |
@@ -168,3 +168,11 @@ flowchart TD
 - 05已完成真实正常宿主与实际App删除／compact验收并集成；联系人、账号、缓存与在途读取排空、Skill原件保留及失效快照撤下通过，Goal实际complete。当前01、02、05、14共四项resolved。07、11、16依赖已满足，即刻从包含真实02／05提交的基线分别派发，不等待03；03继续窄渠道认证和历史公共接线，独占桌面。
 
 - 07、11、16已实际创建独立执行会话与工作树，从包含02和05最终集成提交的分支并行启动；每票立即创建自己的Goal、仅负责分配票。当前四票执行中（03／07／11／16），其余按直接依赖等待，公共宿主与桌面仍由03串行占用。
+
+- 16已完成并按保留源祖先方式合并，media v6实际发布；后台36项、桌面19项、CSP解码及实际App四类删除、关闭异常均有证据，root仅补两端类型与跨模块3项。01／02／05／14／16共五项resolved，17与18即刻并行释放，真实类型关联仍由19按授权验收。后续统一完整合同与验证账，复用条件未变的结果，桌面按实际实例状态串行交接。
+
+- 17、18已实际创建独立会话与工作树并行启动，基线包含16最终源与root合并祖先，开始仅负责各自类型模块；03现按用户明确固定文字授权占用微信状态验收窗口，所有媒体真实关联仍待19。
+
+- 公共共享合同已按源祖先合并：讨论、记忆提取与执行追踪分别追加为迁移7／8／9，既有1–6保持不变；真实SQLite共享约束及删除7项、两端类型通过。07的唯一模型宿主注入检查点亦已集成，root补装配1项，复用条件未变的源验证。07／11继续claimed，正式宿主与实际App验收尚未完成。
+
+- 17图片／视频完整检查点已集成，最小检查与双轴复核通过，正在独占短实际App窗口；18语音离线实现、依赖及许可证检查点已保存，Spec增量复核与实机待完成。03已按授权发送并保留第一条固定测试，随后唯一关联歧义停止；第二条未发送也未撤回，不据此认证真实状态。桌面已释放给17，03继续匿名原因诊断与首次历史公共hook收尾。

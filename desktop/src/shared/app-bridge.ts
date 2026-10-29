@@ -1,3 +1,4 @@
+import type { MessageMediaBridge } from './media-bridge';
 import type { UsageBridge } from './usage-bridge';
 import type { WechatSetupBridge } from './wechat-setup-bridge';
 import type { ForegroundBridge } from './foreground-bridge';
@@ -12,6 +13,7 @@ import type { ScreenPermissionBridge } from './screen-permission-bridge';
 import type { ContactSessionBridge } from './contact-session-bridge';
 import type { ImportBridge } from './import-bridge';
 import type { ReplyBridge } from './reply-bridge';
+import type { SqliteDiscussionBridge } from './sqlite-discussion-bridge';
 import type { CandidateProvenanceBridge } from './candidate-provenance-bridge';
 import type { ExpressionPreferenceBridge } from './expression-preference-bridge';
 import type { MemoryBridge } from './memory-bridge';
@@ -22,9 +24,11 @@ import type { BackgroundTaskBridge } from './background-task-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
   usage: UsageBridge;
+  media: MessageMediaBridge;
   backend: BackendBridge; setup: SetupBridge; wechatSetup: WechatSetupBridge; startup: StartupBridge;
   screenPermission: ScreenPermissionBridge;
   contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
+  sqliteDiscussion: SqliteDiscussionBridge;
   candidateProvenance: CandidateProvenanceBridge;
   expressionPreferences: ExpressionPreferenceBridge;
   skillLearning: SkillLearningBridge;

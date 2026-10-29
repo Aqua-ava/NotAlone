@@ -1,7 +1,7 @@
 # 11：助手讨论与 DSH 副本
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [数据库重建](../../sqlite-database-rebuild/spec.md)、[同步与记忆规则](../../sync-memory-behavior/spec.md)
 Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-grants.md)；[05 统一来源删除与清理流程](05-source-deletion-and-cleanup.md)

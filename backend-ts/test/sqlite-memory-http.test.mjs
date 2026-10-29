@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {randomUUID} from 'node:crypto';
+import {fixture,owner,modelPort} from './fixtures/memory-sqlite/support.mjs';
+import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
+import {SqliteMemoryExtractionHttp} from '../src/memory/sqlite/http.ts';
+import {authorizeSqliteRequest} from '../src/sqlite-host-plugin.ts';
+test('正式Bearer认证HTTP冻结并处理已保存文字，拒绝Origin、owner和任意输入扩围',async t=>{
+ const f=await fixture(t);await f.service.synchronize(f.saved[0].contact_id);await f.contacts.setReading(false);let memory;memory=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>memory.accounting));t.after(()=>memory.close());
+ const token='synthetic-token',handler=new SqliteMemoryExtractionHttp(memory,req=>authorizeSqliteRequest(req,token));
+ const server=createServer(async(req,res)=>{if(!await handler.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const base=`http://127.0.0.1:${server.address().port}/api/memory-processing`,headers={authorization:`Bearer ${token}`,'content-type':'application/json'};
+ assert.equal((await fetch(`${base}/runs/current`)).status,401);assert.equal((await fetch(`${base}/runs/current`,{headers:{...headers,origin:'https://invalid.example'}})).status,401);
+ assert.equal((await fetch(`${base}/runs`,{method:'POST',headers,body:JSON.stringify({request_key:randomUUID(),owner_id:owner})})).status,400);
+ const requestKey=randomUUID();const started=await (await fetch(`${base}/runs`,{method:'POST',headers,body:JSON.stringify({request_key:requestKey})})).json();assert.equal(started.total,1);await memory.waitForIdle();
+ const done=await (await fetch(`${base}/runs/current`,{headers})).json();assert.equal(done.succeeded,1);assert.equal(done.laterStages,'pending');assert.equal((await (await fetch(`${base}/runs`,{method:'POST',headers,body:JSON.stringify({request_key:requestKey})})).json()).runId,done.runId);
+ const task=done.tasks.find(t=>t.scopeKind==='contact');const trace=await (await fetch(`${base}/tasks/${task.taskId}/events`,{headers})).json();assert.ok(trace.events.some(e=>e.kind==='stage_result'));assert.equal(trace.calls[0].state,'succeeded');assert.equal((await fetch(`${base}/runs/current?owner_id=${owner}`,{headers})).status,400);
+});

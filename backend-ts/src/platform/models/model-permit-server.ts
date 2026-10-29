@@ -142,9 +142,9 @@ export async function startModelPermitServer(options: {
     return shutdownPromise ??= (async () => {
       options.arbiter.stop();
       for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      if(server.listening)await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
       await journal.release();
-    })();
+    })().catch(error=>{shutdownPromise=undefined;throw error;});
   }
   return {
     shutdown,

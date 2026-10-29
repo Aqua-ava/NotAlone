@@ -59,7 +59,8 @@ function collectIdentityTargets(tx:StorageTransaction,operation:IdentityDeletion
  const targets:IdentityRowTarget[]=[];
  for(const contactId of ids){
   for(const kind of ['manual_confirmation','read_grant']){
-   if(kind==='read_grant'&&scope.kind==='contact_history')continue;
+   // 聊天清空保留独立助手讨论的手动归属依据；旧资料代次仍使它不可用于新写入。
+   if(scope.kind==='contact_history')continue;
    for(const row of tx.all(`SELECT id FROM ${kind} WHERE owner_id=? AND contact_id=?${scope.kind==='contact_history'?' AND accepted_data_generation<?':''}`,scope.kind==='contact_history'?[ownerId,contactId,operation.acceptedGeneration]:[ownerId,contactId]))targets.push(target(ownerId,kind,String(row.id)));
   }
   if(scope.kind==='contact_history')continue;
@@ -98,6 +99,10 @@ export const identityDeletionDomain={
  authorizeFile():never {throw new StorageFailure('identity_has_no_managed_files');},
  fileCleared():never {throw new StorageFailure('identity_has_no_managed_files');},
  verify(tx:StorageTransaction,operation:IdentityDeletionOperation){
+  if(['discussion','media_result_clear','media_result_replace'].includes(operation.scope.kind)){
+   const check={result:'not_applicable' as const,proof:'identity_outside_precise_domain_scope'};
+   return {database_rows:check,derived_eligibility:check,trace_payloads:check,request_replay:check,scope_suppression:check};
+  }
   const empty=collectIdentityTargets(tx,operation).length===0;
   return {database_rows:{result:empty?'passed' as const:'blocked' as const,proof:empty?'identity_private_facts_cleared':'identity_private_facts_remain'},
    derived_eligibility:{result:'not_applicable' as const,proof:'derived_domains_verify_their_own_results'},

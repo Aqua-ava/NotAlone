@@ -1,6 +1,13 @@
+import {createSqliteModelRuntime} from './host/sqlite-model-runtime.ts';
+import {readSqliteModelEnvironment} from './host/sqlite-model-config.ts';
+import {createSqliteMemoryRuntime} from './memory/sqlite/runtime.ts';
+import {createSqliteDiscussionHost} from './reply/sqlite/host-runtime.ts';
+import { SqliteMediaService } from './media/sqlite/service.ts';
+import { SqliteMediaHttp } from './media/sqlite/http.ts';
+import { StorageFailure } from './storage/sqlite/contracts.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import { exitOnStdinEnd } from '@deepseek-ai/dsh-cmdline';
-import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { link, readFile, rm, writeFile } from 'node:fs/promises';
 import { rmSync } from 'node:fs';
@@ -19,16 +26,34 @@ import { SqliteDeletionHttp, deletionQueryAllowed } from './storage/sqlite/delet
 import { SqliteHistoryService } from './history/sqlite/service.ts';
 import { SqliteHistoryHttp, historyQueryAllowed, projectHistorySyncStatus } from './history/sqlite/http.ts';
 import { createWechatHistoryChannel } from './history/sqlite/wechat-channel.ts';
+import { createVoiceMediaAdapter } from './media/voice/index.ts';
 import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 
 export const name = 'notalone-sqlite-host';
-export const inject = ['appReady', 'appExit','skills'];
+export const inject = ['appReady', 'appExit','skills','llm'];
 
 export function authorizeSqliteRequest(req: IncomingMessage, token: string): boolean {
   const authCount = req.rawHeaders.filter((value, index) => index % 2 === 0 && value.toLowerCase() === 'authorization').length;
   const supplied = Buffer.from(typeof req.headers.authorization === 'string' ? req.headers.authorization : '');
   const expected = Buffer.from(`Bearer ${token}`);
   return req.headers.origin === undefined && authCount === 1 && supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+interface SqliteHostResource { close(): Promise<void> }
+/** 逐域尝试真实排空；任何业务所有者未释放时保留共享模型与SQLite，允许原操作续清。 */
+export async function closeSqliteHostResources(resources: {
+  discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
+  contacts?: SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
+}): Promise<void> {
+  const failures: unknown[] = [];
+  for (const resource of [resources.discussions, resources.memory, resources.media, resources.history, resources.contacts]) {
+    try { await resource?.close(); } catch (error) { failures.push(error); }
+  }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
+  try { await resources.models?.close(); } catch (error) { failures.push(error); }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
+  try { await resources.storage?.close(); } catch (error) { failures.push(error); }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
 }
 
 /** 显式开发能力分支；领域事实及资格仍由联系人服务与受控动作负责。 */
@@ -47,6 +72,11 @@ export async function apply(ctx: Context) {
   let opening: Promise<SqliteStorage> | undefined;
   let contacts: ContactMetadataLifetime | undefined;
   let history: SqliteHistoryService | undefined;
+  let media: SqliteMediaService | undefined;
+  let models: Awaited<ReturnType<typeof createSqliteModelRuntime>> | undefined;
+  let memory: Awaited<ReturnType<typeof createSqliteMemoryRuntime>> | undefined;
+  let discussions: Awaited<ReturnType<typeof createSqliteDiscussionHost>> | undefined;
+  const requests=new Set<Promise<void>>();
   let server: Server | undefined;
   let published = false;
   let readyDispose = () => {};
@@ -55,21 +85,20 @@ export async function apply(ctx: Context) {
   let serverClosing: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   const stopResources = () => stopping ??= (async () => {
-    state = 'stopping'; readyDispose();
+    state = 'stopping'; readyDispose(); models?.stopAccepting();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
-    try { await history?.close(); await contacts?.close(); }
-    finally { await storage?.close(); }
+    await closeSqliteHostResources({discussions,memory,media,history,contacts,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
     if (published) await rm(config.infoPath, { force: true });
     state = 'stopped';
-  })();
+  })().catch(error=>{stopping=undefined;throw error;});
   const closeServer = () => serverClosing ??= (async () => {
     if (server) { server.closeAllConnections(); await new Promise<void>(resolve => server!.close(() => resolve())); }
   })();
   const close = () => closing ??= (async () => {
-    try { await stopResources(); }
-    finally { await closeServer(); process.stdin.pause(); }
-  })();
+    await stopResources();
+    await closeServer(); process.stdin.pause();
+  })().catch(error=>{closing=undefined;throw error;});
   ctx.effect(() => close, 'notalone-sqlite-resources');
   // 官方 EOF 绑定在 appReady 之后请求有界退出，不掩盖启动失败。
   exitOnStdinEnd(ctx, 'notalone-sqlite-parent');
@@ -90,7 +119,6 @@ export async function apply(ctx: Context) {
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     if(capabilities.capabilities.some(capability=>capability==='history')){
       history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(),deletionHolders);
-      contacts.setReadStop(contactId=>history!.stop(contactId));
     }
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
     const historyStatus=async()=>{
@@ -98,15 +126,34 @@ export async function apply(ctx: Context) {
       const coverage=await Promise.all(directory.bindings.filter(binding=>binding.status==='active').map(async binding=>({...await history!.coverage(binding.contact_id),bindingId:binding.binding_id})));
       return projectHistorySyncStatus(await contacts!.syncStatus(),coverage);
     };
-    const skills=capabilities.skillPackageRoot?new SqliteSkillHttp(new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot),req=>authorizeSqliteRequest(req,token)):undefined;
-    const deletions = new SqliteDeletionHttp(new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData)), ownerId);
+    const library=capabilities.skillPackageRoot?new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot):undefined;
+    const skills=library?new SqliteSkillHttp(library,req=>authorizeSqliteRequest(req,token)):undefined;
+    const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData));
+    media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
+      if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
+    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:[createVoiceMediaAdapter()]});
+    await media.initialize();
+    contacts.setReadStop(async contactId=>{await Promise.all([history?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);});
+    const mediaHttp = new SqliteMediaHttp(media);
+    const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');
+    const modelEnvironment=discussionsEnabled||memoryEnabled?await readSqliteModelEnvironment(config.envFilePath,process.env):{};
+    if(discussionsEnabled||memoryEnabled)models=await createSqliteModelRuntime({ctx,environment:modelEnvironment,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,
+      accounting:{reserve:async(receipt,claim)=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.reserve(receipt,claim);},
+        recordReserved:async receipt=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.recordReserved(receipt);},
+        unconfirmedRequests:async scope=>{if(scope.owner_id!==ownerId)throw new StorageFailure('sqlite_model_owner_invalid');return [...new Set([...(memory?await memory.service.accounting.unconfirmedRequests!(scope):[]),...await storage!.execute<string[]>('discussion.unconfirmed',scope)])];}}});
+    // 即使入口未开启，也恢复并持有旧副本的清理所有者，避免资料删除遗漏持久副本。
+    memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,
+      ...(models?.shared?{sharedModel:models.shared}:{}),holders:deletionHolders,authorize:req=>authorizeSqliteRequest(req,token)});
+    discussions=await createSqliteDiscussionHost({ctx,storage,ownerId,userData:sqlite.userData,holders:deletionHolders,library,authorizeRequest:req=>authorizeSqliteRequest(req,token),
+      ...(models?.shared?{model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}}:{})});
+    const deletions = new SqliteDeletionHttp(deletionService, ownerId);
     const ownership = { contacts: 'typescript', wechat: 'typescript',
-      deletion: 'typescript', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
+      deletion: 'typescript', media: 'typescript', mediaExtraction: 'unavailable', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
       taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'typescript',
       wechatBodySync: history?'typescript':'unavailable', wechatIncremental: 'unavailable', wechatHistory: history?'typescript':'unavailable',
-      foregroundLocation: 'unavailable', contactContext: 'unavailable', memory: 'unavailable',
+      foregroundLocation: 'unavailable', contactContext: 'unavailable', memory: memoryEnabled?'typescript':'unavailable', discussions:discussionsEnabled?'typescript':'unavailable',
       expressionPreferences: 'unavailable', replies: 'unavailable' };
-    server = createServer(async (req, res) => {
+    const handleRequest=async (req:IncomingMessage,res:ServerResponse):Promise<void> => {
       const respond = (status: number, value: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
       if (!authorizeSqliteRequest(req, token)) { respond(401, { error: 'unauthorized' }); return; }
       let url: URL;
@@ -128,8 +175,13 @@ export async function apply(ctx: Context) {
         if(history&&req.method==='GET'&&url.pathname==='/api/sync/status'){
           respond(200,await historyStatus());return;
         }
-        if (!await deletions.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
+        if (!await deletions.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!(discussionsEnabled&&await discussions!.http.handle(req,res))&&!(memoryEnabled&&await memory!.http.handle(req,res))&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
+    };
+    server=createServer((req,res)=>{
+      const pending=handleRequest(req,res),lifecycle=req.url==='/api/runtime/status'||req.url==='/api/runtime/shutdown';
+      if(!lifecycle){requests.add(pending);const release=()=>requests.delete(pending);pending.then(release,release);}
+      void pending.catch(()=>{if(!res.headersSent){res.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'sqlite_operation_unavailable'}));}else res.destroy();});
     });
     server.requestTimeout = 15_000; server.headersTimeout = 10_000;
     await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', () => { server!.removeListener('error', reject); resolve(); }); });

@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {fixture,owner,modelPort} from './fixtures/memory-sqlite/support.mjs';
+import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
+import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
+import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
+
+test('来源删除保留未知消息效果占用，其他合法来源不能让新轮盲目重发',async t=>{
+ const registryModule=new URL('./fixtures/sqlite-memory-deletion/registry.mjs',import.meta.url).href;
+ const f=await fixture(t,{registryModule});const contactId=f.saved[0].contact_id;
+ await f.service.synchronize(contactId);await f.service.synchronize(contactId);
+ const message=(await f.service.read(contactId)).messages.find(message=>message.kind==='text');
+ assert.equal(message.sourceRecordIds.length,2);
+ await f.contacts.setReading(false);
+ let memory;const model=modelPort(()=>memory.accounting,async()=>{throw new Error('synthetic_dispatch_unknown');});
+ memory=new SqliteMemoryExtraction(f.storage,owner,model);t.after(()=>memory.close());
+ const first=await memory.start('unknown-before-source-deletion');await memory.waitForIdle();
+ const initial=await memory.read(first.runId);assert.equal(initial.unknown,1,JSON.stringify({initial,calls:model.calls,trace:await memory.trace(first.tasks.find(task=>task.scopeKind==='contact').taskId)}));assert.equal(model.calls,1);
+ const accepted=first.inputs.find(input=>input.messageId===message.id);
+ const deletion=new DeletionService(f.storage,memory.holders,new ManagedFiles(f.root));
+ const plan=await deletion.plan({ownerId:owner,requestKey:'delete-one-of-two-sources',scope:{kind:'source',contactId,sourceId:accepted.recordId}});
+ const done=await deletion.advance({ownerId:owner,operationId:plan.operationId});assert.equal(done.state,'completed',JSON.stringify(done.checks));
+ const retained=(await f.service.read(contactId)).messages.find(row=>row.id===message.id);
+ assert.equal(retained.sourceRecordIds.length,1);assert.notEqual(retained.sourceRecordIds[0],accepted.recordId);
+ const next=await memory.start('unknown-after-source-deletion');await memory.waitForIdle();
+ assert.equal(next.inputs[0].itemId,accepted.itemId,'同一消息保留跨轮处理身份');
+ assert.equal(model.calls,1,'删除实际来源不能把未知效果改成可再次发送');
+ assert.equal((await memory.read(next.runId)).unknown,1);
+ const contactPlan=await deletion.plan({ownerId:owner,requestKey:'erase-unknown-contact',scope:{kind:'contact',contactId}});
+ assert.ok(contactPlan.targets.some(target=>target.target?.domain==='memory_extraction'&&target.target.rowKind==='operation_item'&&target.target.key.item_id===accepted.itemId),'整联系人删除能找回来源删除保留的未知占用');
+ assert.ok(contactPlan.targets.some(target=>target.target?.domain==='memory_extraction'&&target.target.rowKind==='model_call'),'整联系人删除同时清除封存未知调用');
+ const cleared=await deletion.advance({ownerId:owner,operationId:contactPlan.operationId});assert.equal(cleared.state,'completed',JSON.stringify(cleared.checks));
+ assert.equal(await memory.read(),null);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
