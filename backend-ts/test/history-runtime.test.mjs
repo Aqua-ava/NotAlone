@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {projectHistoryCoverages,resolveHistoryRuntime} from '../src/imports/history-runtime.ts';
+import {projectHistoryCoverages,resolveHistoryRuntime} from '../src/history/runtime.ts';
 
 const binding='22222222-2222-2222-2222-222222222222';
 const contact='33333333-3333-3333-3333-333333333333';

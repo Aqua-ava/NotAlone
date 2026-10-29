@@ -6,7 +6,10 @@ export type StartupCode = 'ready' | 'launch_unconfigured' | 'configuration_inval
   | 'database_writers_present' | 'database_update_requires_local' | 'migration_busy' | 'migration_failed'
   | 'sqlite_business_unavailable' | 'sqlite_storage_failed'
   | 'runtime_components_unavailable' | 'runtime_configuration_invalid' | 'runtime_cancelled'
-  | 'database_prepare_failed' | 'database_start_failed' | 'database_already_running' | 'local_setup_required' | 'runtime_stop_unconfirmed';
+  | 'database_prepare_failed' | 'database_start_failed' | 'database_already_running' | 'local_setup_required' | 'runtime_stop_unconfirmed'
+  | 'database_cutover_required' | 'database_maintenance' | 'cutover_manifest_invalid' | 'cutover_authorization_required'
+  | 'cutover_authorization_invalid' | 'cutover_legacy_target_unclassified' | 'cutover_legacy_writer_running' | 'cutover_cleanup_failed'
+  | 'cutover_checks_failed' | 'cutover_target_unrecorded' | 'cutover_configuration_conflict' | 'cutover_storage_failed' | 'sqlite_cancelled';
 
 // 只传递非秘密绝对路径与固定状态，配置文件内容和握手凭据不进入界面。
 export interface StartupPaths {
@@ -22,6 +25,8 @@ export interface SqliteDevelopmentState {
   code: string;
   schemaVersion?: number;
   sqliteVersion?: string;
+  /** 维护态：只保留现场与重试入口，不启动旧 PG 或双写后台。 */
+  maintenance?: boolean;
 }
 export interface StartupState {
   sqlite?: SqliteDevelopmentState;
@@ -41,8 +46,6 @@ export interface StartupBridge {
   getPaths(): Promise<StartupPaths>;
   savePaths(paths: StartupPaths): Promise<void>;
   prepareConfiguration(): Promise<boolean>;
-  beginLocalSetup(): Promise<void>;
-  cancelLocalSetup(): Promise<boolean>;
   revealUpdateBackup(): Promise<void>;
   retry(): Promise<void>;
   onStateChanged(listener: (state: StartupState) => void): () => void;

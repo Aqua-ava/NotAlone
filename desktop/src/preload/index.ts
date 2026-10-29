@@ -12,7 +12,6 @@ import { createSetupBridge } from './setup';
 import { createStartupBridge } from './startup';
 import { createScreenPermissionBridge } from './screen-permission';
 import { createContactSessionBridge } from './contact-session';
-import { createImportBridge } from './imports';
 import { createReplyBridge } from './reply';
 import { createSqliteDiscussionBridge } from './sqlite-discussion';
 import { createCandidateProvenanceBridge } from './candidate-provenance';
@@ -35,7 +34,6 @@ const bridge: AppBridge = {
   startup: createStartupBridge(ipcRenderer),
   screenPermission: createScreenPermissionBridge(ipcRenderer),
   contacts: createContactSessionBridge(ipcRenderer),
-  imports: createImportBridge(ipcRenderer),
   replies: createReplyBridge(ipcRenderer),
   sqliteDiscussion: createSqliteDiscussionBridge(ipcRenderer),
   candidateProvenance: createCandidateProvenanceBridge(ipcRenderer),

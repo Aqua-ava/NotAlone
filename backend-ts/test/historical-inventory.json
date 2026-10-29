@@ -2354,6 +2354,57 @@
         "desktop/tests/workspace-message-adoption-client.test.mjs"
       ],
       "boundary": "currentCoverage 仅指向仍有效的相邻 Node/界面/入口覆盖，不声明与历史 HTTP、页面或桌面验收逐项等价。"
+    },
+    {
+      "path": "backend-ts/test/host-launch.test.mjs",
+      "reason": "旧 PostgreSQL 宿主启动路径已退役；正常入口只支持受控 SQLite profile。",
+      "legacyDependencies": [
+        "backend-ts/profile/host.patch.yml",
+        "backend-ts/src/host-plugin.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-host-launch.test.mjs",
+        "backend-ts/test/sqlite-cutover-rehearsal.test.mjs"
+      ],
+      "boundary": "旧启动机制不再由产品入口调用；现行覆盖验证 SQLite 宿主握手、关闭与重开，不证明旧 PG 宿主行为。"
+    },
+    {
+      "path": "desktop/tests/pure-ts-managed-runtime.test.mjs",
+      "reason": "受管 PostgreSQL 运行时已退役；桌面正常入口默认使用受控 SQLite。",
+      "legacyDependencies": [
+        "desktop/src/main/startup/managed-runtime.ts",
+        "backend-ts/src/managed-postgres.ts"
+      ],
+      "currentCoverage": [
+        "desktop/tests/sqlite-development.test.mjs"
+      ],
+      "boundary": "旧受管 PG 首次准备不再属于产品路径；不表示原迁移或 PG 组件验证被否定。"
+    },
+    {
+      "path": "desktop/tests/startup-schema-guard.test.mjs",
+      "reason": "旧 PG schema 准备守卫随启动路径退役；SQLite 结构核验改由切换控制面与结构审计测试承担。",
+      "legacyDependencies": [
+        "desktop/src/main/startup/managed-runtime.ts",
+        "backend-ts/src/schema-prepare-cli.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-cutover-structure.test.mjs",
+        "desktop/tests/sqlite-development.test.mjs"
+      ],
+      "boundary": "旧 PG 迁移账本与结构补齐不再由桌面启动调用；现行覆盖只证明 SQLite 目标结构与切换合同。"
+    },
+    {
+      "path": "desktop/tests/import-existing-contact-target.test.mjs",
+      "reason": "手动聊天文件导入与导入新建入口已按本轮范围退役。",
+      "legacyDependencies": [
+        "backend-ts/src/imports/history-import-api.ts",
+        "desktop/src/main/imports/controller.ts"
+      ],
+      "currentCoverage": [
+        "backend-ts/test/sqlite-history-host.test.mjs",
+        "backend-ts/test/sqlite-history-http.test.mjs"
+      ],
+      "boundary": "历史资料只经已确认范围的 CLI 同步进入；不表示旧文件导入格式或行为通过验收。"
     }
   ],
   "archivedCases": [

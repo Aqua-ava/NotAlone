@@ -11,13 +11,6 @@ export const managerPages = {
     emptyDescription: '连接完成后，这里会显示你的联系人与消息、来源摘要。',
     action: '选择联系人',
   },
-  import: {
-    title: '从文件导入', icon: 'import',
-    description: '补充旧记录，查看或删除已导入资料。每次导入仅归属于一位联系人，确认预览后才会保存。',
-    emptyTitle: '请先连接本机服务',
-    emptyDescription: '连接完成后，选择一份单联系人历史文件并核对资料范围。',
-    action: '选择历史文件',
-  },
   memory: {
     title: '记忆', icon: 'memory',
     description: '记住彼此的经历与偏好，让每次回应更贴近你们。',

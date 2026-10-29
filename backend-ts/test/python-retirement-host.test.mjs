@@ -10,7 +10,7 @@ import {join,resolve} from 'node:path';
 import {launchDsh} from '../src/launch.ts';
 import {sendEvents,useTool} from './reply-service-runtime-support.mjs';
 import {pureTsRuntimeEnvironment} from '../src/host/pure-ts-runtime.ts';
-import {resolveHistoryRuntime} from '../src/imports/history-runtime.ts';
+import {resolveHistoryRuntime} from '../src/history/runtime.ts';
 import {pureTsFixture} from './pure-ts-runtime-fixture.mjs';
 import {waitForHostReady} from './host-readiness-support.mjs';
 

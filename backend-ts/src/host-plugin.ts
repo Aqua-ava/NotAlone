@@ -25,13 +25,12 @@ import { createWechatScopeApi, isWechatScopeRoute, wechatScopeBodyLimit } from '
 import {createForegroundLocationApi,foregroundLocationPath,isForegroundAuthorityMutation} from './foreground/foreground-location-api.ts';
 import {NativeForegroundProbe} from './foreground/foreground-location-probe.ts';
 import { createSyncIncrementalApi } from './sync/sync-incremental-api.ts';
-import {resolveHistoryRuntime} from './imports/history-runtime.ts';
+import {resolveHistoryRuntime} from './history/runtime.ts';
 import {startHostModelRuntime} from './host/host-model-runtime.ts';
 import {usageSummary} from './diagnostics/usage-summary.ts';
 import {ExtractionTaskStore} from './memory/extraction/tasks/store.ts';
 import {SourceProcessingTraceStore} from './diagnostics/source-processing-trace.ts';
 import {SourceProcessingTraceApi} from './diagnostics/source-processing-trace-http.ts';
-import {HistoryImportApi} from './imports/history-import-api.ts';
 import {PostgresTaskStatusStore,TaskApi} from './tasks/task-api.ts';
 import {MemoryProcessingQuery} from './memory/processing/query.ts';
 import {MemoryProcessingControl} from './memory/processing/control.ts';
@@ -107,12 +106,6 @@ async function start(ctx: Context) {
     : undefined;
   const traces=traceStore&&storage.runtimeOwnerId
     ? new SourceProcessingTraceApi(traceStore,storage.runtimeOwnerId)
-    : undefined;
-  const imports=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
-    ? new HistoryImportApi({
-      transaction:work=>storage.businessTransaction(work),ownerId:storage.runtimeOwnerId,
-      wake:(scope,taskId)=>taskControl.wake(scope,taskId),
-    })
     : undefined;
   const tasks=ownerStatus.runtime_owner_configured&&storage.runtimeOwnerId
     ? new TaskApi({ownerId:storage.runtimeOwnerId,store:new PostgresTaskStatusStore(progressPool),control:taskControl})
@@ -242,7 +235,7 @@ async function start(ctx: Context) {
           ownership:{setup:'typescript',credentials:'typescript',ledger:'typescript',schemaUpdates:'typescript-migration-command',
             contacts:'typescript',deletion:deletions?'typescript':'unavailable',wechat:'typescript',wechatScope:'typescript',
             skills:skills.status().owner,skillLearning:modelRuntime?'typescript':'unavailable',
-            imports:imports?'typescript':'unavailable',taskApi:tasks?'typescript':'unavailable',
+            imports:'unavailable',taskApi:tasks?'typescript':'unavailable',
             taskManagement:businessTasks?'typescript':'unavailable',tasks:'typescript',
             crossDomainDeletion:deletions?'typescript':'unavailable',replies:modelRuntime?'typescript':'unavailable',
             wechatBodySync:'typescript',wechatIncremental:'typescript',wechatHistory:historyRuntime,foregroundLocation:'typescript',
@@ -313,14 +306,6 @@ async function start(ctx: Context) {
       if(layeredMemoryPath&&modelRuntime){
         const layered=await modelRuntime.handleLayeredMemory(req,res,url);
         if(layered.handled)return;
-      }
-      if(url.pathname==='/api/imports/preview'||url.pathname==='/api/imports/commit'){
-        if(!imports){respond(503,{error:'import_unavailable'});return;}
-        if(url.search){respond(400,{error:'import_request_invalid'});return;}
-        const body=req.method==='POST'?await readBody(req):undefined;
-        const result=await imports.handle(req.method??'',url.pathname,body);
-        if(!result){respond(404,{error:'not_found'});return;}
-        respond(result.status,result.body);return;
       }
       if(url.pathname==='/api/tasks'||url.pathname==='/api/tasks/stop'||url.pathname==='/api/tasks/recover'){
         if(!businessTasks){respond(503,{error:'task_unavailable'});return;}

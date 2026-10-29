@@ -3,7 +3,7 @@ import type {HostStorage} from '../platform/database/host-storage.ts';
 import {HostStorageError} from '../platform/database/host-storage.ts';
 import {PostgresWechatSetupStore,WechatSetupConflict} from '../sync/wechat-setup.ts';
 import type {createSyncIncrementalApi} from '../sync/sync-incremental-api.ts';
-import {projectHistoryCoverages} from '../imports/history-runtime.ts';
+import {projectHistoryCoverages} from '../history/runtime.ts';
 import type {PureTsEvents} from './pure-ts-events.ts';
 type Incremental=Awaited<ReturnType<typeof createSyncIncrementalApi>>;
 type Row=Record<string,any>;

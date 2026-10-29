@@ -50,22 +50,6 @@ export function installStartupBridge(windows: AppWindows, diagnostics: StartupDi
     if (!caller.webContents.getURL().endsWith('#manager')) throw new Error('启动配置不可用');
     return backend.prepareConfiguration();
   });
-  ipcMain.handle('startup:begin-local-setup', async (event, ...args: unknown[]) => {
-    const caller = windows.validateCaller(event, args);
-    if (!caller.webContents.getURL().endsWith('#manager')) throw new Error('本机设置不可用');
-    await backend.saveStartupConfiguration((canSave) => diagnostics.prepareLocalSetup(canSave));
-    await backend.connect();
-  });
-  ipcMain.handle('startup:cancel-local-setup', async (event, ...args: unknown[]) => {
-    const caller = windows.validateCaller(event, args);
-    if (!caller.webContents.getURL().endsWith('#manager')) throw new Error('本机设置不可用');
-    diagnostics.cancelLocalSetup();
-    try {
-      const confirmed = await backend.prepareConfiguration();
-      diagnostics.completeLocalCancellation(confirmed);
-      return confirmed;
-    } catch (error) { diagnostics.completeLocalCancellation(false); throw error; }
-  });
   diagnostics.onStateChanged((state) => windows.publish('startup:state-changed', state));
   const manager = (event: Parameters<AppWindows['validateCaller']>[0], args: unknown[]) => {
     const caller = windows.validateCaller(event, args);
