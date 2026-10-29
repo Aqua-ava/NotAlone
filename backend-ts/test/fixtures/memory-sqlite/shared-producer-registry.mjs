@@ -1,10 +1,5 @@
 import {randomUUID} from 'node:crypto';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
-import {memoryExtractionMigration} from '../../../src/memory/sqlite/schema.ts';
-import {memoryExecutionMigration} from '../../../src/memory/sqlite/execution-schema.ts';
-import {discussionMigration} from '../../../src/reply/sqlite/schema.ts';
-const foundation=base.migrations.filter(m=>!m.sql.includes('CREATE TABLE processing_run')&&!m.sql.includes('CREATE TABLE operation_scope')&&!m.sql.includes('CREATE TABLE assistant_discussion'));
-const add=(sql,i)=>({...sql,version:foundation.length+i});
 function reply(tx,owner,contact,message,record){
  const id=randomUUID(),request=randomUUID(),entry=randomUUID(),attempt=randomUUID(),context=randomUUID(),operation=randomUUID(),call=randomUUID(),event=randomUUID();
  const grant=tx.get('SELECT * FROM read_grant WHERE owner_id=? AND contact_id=? AND revoked_at IS NULL',[owner,contact]);
@@ -67,4 +62,4 @@ const actions=[{name:'fixture.sharedSeed',mode:'write',retryBusy:false,execute(t
  default:throw new Error('unknown test');
  }return true;
 }}];
-export const registry={migrations:[...foundation,add(discussionMigration(0),1),add(memoryExtractionMigration(0),2),add(memoryExecutionMigration(0),3)],actions:[...base.actions,...actions]};
+export const registry={migrations:base.migrations,actions:[...base.actions,...actions]};
