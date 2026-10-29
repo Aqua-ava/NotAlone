@@ -190,6 +190,8 @@ flowchart TD
 
 - 用户在独立会话另行授权的真实供应商合成复测：07源提交两次调用及两个目标成功，11源提交一次调用成功且重开未增请求；总指挥已核对状态数量和祖先关系。各自旧unknown保留，09没有因此获得真实外呼授权；不认证微信或真实聊天语义质量。
 
+- 2026-10-30 票04集成（含审查修复）：执行会话t04最终bad4c4ef（迁移14=historyIncrementalMigration，仅ALTER read_goal/message，不重建CHECK不建新表）；已--no-ff集成3ba737fc。集成前经t03独立Standards/Spec双轴审查，发现并修复3个阻断：提交树typecheck 10错误（错误收窄+SQLInputValue）、close不取消在途读取/迟到页可提交、未校验支持档incrementalTail能力；t03 delta复审确认三项闭环。主仓复跑：backend typecheck 0、增量4文件25/25、宿主12/12（Electron Node）、desktop typecheck 0、桌面5文件21/21。已知问题：09集成引入sqlite-memory-extraction 1项失败（0197bea4通过、5551aa5e失败），已交t09定位修复，不计入04。真实渠道增量能力仍属03门禁，打开前保持不可用。
+
 - 2026-10-30 票09代码集成（桌面复验进行中，State保持claimed）：执行会话t09恢复b1f3未提交工作并提交e0f51331/8c7a66b5/fc5b2c54/e7df7dcd+merge dc8366c6；迁移1..13（13=memoryDocumentsMigration），1–12原文未改。已--no-ff集成5551aa5e；主仓复跑门禁：backend typecheck 0、Electron Node下文档10文件90/90、desktop typecheck 0、桌面4文件46/46。09桌面实际App用例a–d（合成库+环回供应商）进行中，完成后补最终12条判定。
 
 - 2026-10-30 票03收口（task-1 complete）：执行会话t03把基线并入dsh/sqlite-rebuild-03并只读复核首次自动入口/能力报告/删除注册接线，未发现授权内需补写代码；提交34a6f98b仅+103行文档（合并后审计、12条逐条判定、精确真实缺口），已--no-ff集成7b934d73，集成后backend typecheck通过。03结论：第1/2条真实普通历史、状态语义、来源生命周期、跨重启连续性仍未认证，真实target/page全拒绝；需用户授权（真实逐人确认读取、固定文本发送+仅撤回一次）与正式窄操作制品，撤回测试此前已被用户跳过。State保持claimed、不resolved；03剩余工作转入需用户/架构决策的阻塞项，不空等。
