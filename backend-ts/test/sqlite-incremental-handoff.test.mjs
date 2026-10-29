@@ -8,6 +8,7 @@ import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
+import { assertHistoryReadBoundary } from '../src/history/sqlite/suppression.ts';
 
 const owner = '00000000-0000-4000-8000-000000000086';
 const evidence = { externalKey: 'synthetic-account', identityScheme: 'wechat.account.v1', sourceGeneration: 'source-1', assurance: 'verified', supportProfile: 'synthetic-metadata-v1' };
@@ -137,4 +138,33 @@ test('同一响应重放幂等，不同响应用同一捕获id被拒绝', async 
   // 关闭后目标不得再接受迟到页。
   await f.contacts.setReading(false);
   await assert.rejects(f.storage.execute('history.acceptPage', { ...input, captureId: randomUUID(), at: Date.now() + 1 }), error => error instanceof StorageFailure && error.code === 'read_not_authorized');
+});
+
+test('增量响应重放幂等：同捕获同页不重复推进，同捕获不同页被拒绝', async t => {
+  const f = await fixture(t);
+  f.state.historyRecords = [record('1')];
+  const binding = await select(f);
+  await f.history.synchronize(binding.contact_id);
+  const token = await f.contacts.eligibility(binding.contact_id);
+  const coverage = await f.history.coverage(binding.contact_id);
+  const goalId = coverage.incremental.goalId;
+  assert.ok(goalId);
+  assert.equal(f.state.targetDescriptor, 'synthetic:friend-a');
+  const page = { target: f.state.targetDescriptor, cursorIn: 'tail-1', cursorOut: 'tail-2', caughtUp: true, records: [record('2')] };
+  const captureId = randomUUID();
+  const input = { token, goalId, captureId, page, at: Date.now(), runtimeToken: f.storage.status.runtimeId };
+  const first = await f.storage.execute('history.acceptIncrementalPage', input);
+  const replay = await f.storage.execute('history.acceptIncrementalPage', input);
+  assert.equal(first.incremental.pagesAccepted, 1);
+  assert.equal(replay.incremental.pagesAccepted, 1, '同一响应重放不重复推进检查点');
+  assert.equal((await f.history.read(binding.contact_id)).messages.length, 2);
+  await assert.rejects(f.storage.execute('history.acceptIncrementalPage', { ...input, page: { ...page, records: [record('3')] } }), { code: 'history_capture_replay_conflict' });
+  assert.equal((await f.history.read(binding.contact_id)).messages.length, 2);
+});
+
+test('清空代次与删除围栏下读取边界保持拒绝，不因重试放开', () => {
+  const base = { owner_id: 'owner', contact_id: 'contact', barrier_generation: '0' };
+  assert.doesNotThrow(() => assertHistoryReadBoundary({ get: () => undefined }, base, { kind: 'incremental' }));
+  assert.throws(() => assertHistoryReadBoundary({ get: () => undefined }, { ...base, barrier_generation: '1' }, { kind: 'history' }), { code: 'history_suppression_unverified' });
+  assert.throws(() => assertHistoryReadBoundary({ get: () => ({ 1: 1 }) }, base, { kind: 'incremental' }), { code: 'history_suppression_unverified' });
 });

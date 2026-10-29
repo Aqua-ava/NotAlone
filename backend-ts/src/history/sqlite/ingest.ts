@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { SQLInputValue } from 'node:sqlite';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryRecord, HistorySupportReport, HistoryTarget } from './contracts.ts';
@@ -61,7 +62,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
           throw new StorageFailure('history_deletion_in_progress');
         }
         if (message) {
-          const updates: string[] = []; const args: unknown[] = [];
+          const updates: string[] = []; const args: SQLInputValue[] = [];
           if (message.sent_at === null && record.sentAt !== null) { updates.push('sent_at=?', 'time_precision=?'); args.push(BigInt(record.sentAt), record.timePrecision); }
           if (record.orderScheme !== null && (message.order_scheme !== record.orderScheme || message.order_key !== record.orderKey)) { updates.push('order_scheme=?', 'order_key=?'); args.push(record.orderScheme, record.orderKey); }
           // 状态只记录渠道给出的原始值；未知或缺失不猜测完成，也不清除已有观察。

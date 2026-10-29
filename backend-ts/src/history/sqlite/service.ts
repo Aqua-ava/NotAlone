@@ -103,6 +103,8 @@ export class SqliteHistoryService {
     return evidence;
    };
    const report=await inspect();
+   // 只有支持档明确声明增量能力才继续；仅存在方法不等于认证通过。
+   if(report.capabilities?.incrementalTail!=='supported')throw new StorageFailure('history_tail_unsupported');
    goal=await this.storage.execute<typeof goal|null>('history.incrementalPending',{token:scope.token,report})??undefined;
    if(!goal)goal=await this.storage.execute('history.beginIncremental',{token:scope.token,report,id:randomUUID(),at:Date.now()});
    registerGoal(goal!.id);

@@ -27,7 +27,7 @@ function support(scope, state) {
     programVersion: 'synthetic', build: '1', artifactSha256: 'a'.repeat(64), schemaFingerprint: 'b'.repeat(64),
     declaredPrimaryKey: ['local_id'], identity: 'source-table-local-v1', statusSemantics: 'synthetic-raw-codes',
     continuity: 'synthetic-source-1', serverAliasSemantics: 'unverified',
-    ...(state.tailSupported ? { capabilities: { incrementalTail: 'supported' } } : {}),
+    ...(state.capabilityDeclared ? { capabilities: { incrementalTail: state.tailSupported ? 'supported' : 'unavailable' } } : {}),
     ...state.supportOverrides,
   };
 }
@@ -62,7 +62,7 @@ function createChannel(state) {
 }
 async function fixture(t, names = ['a']) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-incremental-controls-')));
-  const state = { creates: 0, inspects: 0, targets: 0, pages: [], tails: [], closes: 0, supportOverrides: {}, tailSupported: true,
+  const state = { creates: 0, inspects: 0, targets: 0, pages: [], tails: [], closes: 0, supportOverrides: {}, tailSupported: true, capabilityDeclared: true,
     historyRecords: [], tailBatches: [], tailSerial: 0, resumeCursor: 'tail-1', targetDescriptor: null, pageHook: null, tailHook: null, closeHook: null };
   const metadata = () => ({
     account: async () => ({ ...evidence }),
@@ -250,6 +250,18 @@ test('账号变化、支持语义变化、游标失效、目标不连续或交�
       assert.equal(JSON.stringify(state).includes('friend-'), false, '状态不得泄露渠道会话细节');
     });
   }
+  await t.test('支持档未声明增量能力', async t => {
+    const f = await fixture(t);
+    f.state.historyRecords = [record('1')];
+    f.state.capabilityDeclared = false;
+    const [binding] = await select(f); await f.contacts.setReading(true);
+    await f.history.synchronize(binding.contact_id);
+    const before = channelCounts(f.state);
+    await wake(f);
+    assert.equal(f.state.tails.length - before.tails, 0, '未声明能力的适配器不得进入尾部读取');
+    assert.equal(f.coordinator.getState().lastError, 'history_tail_unsupported');
+    assert.equal((await f.history.read(binding.contact_id)).coverage.incremental.pagesAccepted, 0);
+  });
   await t.test('交接不可证明', async t => {
     const f = await fixture(t);
     f.state.resumeCursor = null;

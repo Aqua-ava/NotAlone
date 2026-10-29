@@ -7,7 +7,7 @@ import { ingestRecords } from './ingest.ts';
 import { readCoverage, readMessages } from './read.ts';
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
-const fail=(code:string):never=>{throw new StorageFailure(code);};
+const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
 export const serializeSupport=(report:HistorySupportReport):string=>JSON.stringify(Object.fromEntries(Object.entries(report).sort(([a],[b])=>a.localeCompare(b))));
 export function assertSupport(report:HistorySupportReport):void {
@@ -113,13 +113,14 @@ export const historyActions:StorageAction[]=[
   assertHistoryReadBoundary(tx,token,{kind:'incremental'});
   if(String(goal.accepted_barrier_generation)!==String(token.barrier_generation))fail('history_suppression_changed');
   const target=JSON.parse(String(goal.target_json)) as HistoryTarget;
-  if(page?.target!==goal.target_descriptor||page.cursorIn!==goal.cursor||!Array.isArray(page.records)||page.records.length>1000||typeof page.cursorOut!=='string'||page.cursorOut===page.cursorIn&&page.caughtUp===false||typeof page.caughtUp!=='boolean')fail('history_page_invalid');
+  if(page?.target!==goal.target_descriptor||page.cursorIn!==goal.cursor||!Array.isArray(page.records)||page.records.length>1000||typeof page.cursorOut!=='string'||(page.cursorOut===page.cursorIn&&page.caughtUp===false)||typeof page.caughtUp!=='boolean')fail('history_page_invalid');
   const cursorOut=assertHistoryCursor(page.cursorOut,'history_page_invalid');
   const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
   if(historyCursorScopeDigest(token,report,target)!==goal.cursor_scope_digest)fail('history_cursor_scope_changed');
   tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?)",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,cursorOut,digest]);
   ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records});
-  tx.run('UPDATE read_goal SET cursor=?,pages_accepted=pages_accepted+1,last_accepted_at=?,coverage_state=? WHERE owner_id=? AND id=?',[cursorOut,BigInt(i.at),page.caughtUp?'caught_up':'partial',token.owner_id,goal.id]);
+  // 成功接受的一页同时恢复目标为运行态：此前的中断原因不再代表当前状态。
+  tx.run("UPDATE read_goal SET cursor=?,pages_accepted=pages_accepted+1,last_accepted_at=?,coverage_state=?,state='running',failure_code=NULL WHERE owner_id=? AND id=?",[cursorOut,BigInt(i.at),page.caughtUp?'caught_up':'partial',token.owner_id,goal.id]);
   return readCoverage(tx,token.owner_id,token.contact_id);
  }),
  action('history.incrementalInterrupt','write',(tx,i)=>{

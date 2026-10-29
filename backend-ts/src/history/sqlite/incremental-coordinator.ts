@@ -27,8 +27,10 @@ const transientCodes = new Set(['history_native_unavailable', 'history_native_ti
   'history_interrupted', 'history_incremental_interrupted', 'history_closed', 'history_already_running',
   'history_page_budget_exhausted', 'history_first_read_failed', 'history_snapshot_closed', 'history_snapshot_unavailable',
   'history_schema_changed', 'history_message_state_unverified', 'history_contact_gateway_unavailable', 'history_incomplete']);
+/** 只向界面投影已分类的可见错误码；未登记的内部失败统一收敛，避免泄露存储细节。 */
+const visibleCodes = new Set([...fatalCodes, ...transientCodes]);
 function safeError(error: unknown): string {
-  if (error instanceof StorageFailure && /^[a-z][a-z0-9_]{0,79}$/.test(error.code)) return error.code;
+  if (error instanceof StorageFailure && /^[a-z][a-z0-9_]{0,79}$/.test(error.code) && visibleCodes.has(error.code)) return error.code;
   return 'history_incremental_failed';
 }
 const bindingKey = (binding: IncrementalBinding) => JSON.stringify([binding.contact_id, binding.binding_id, binding.grant_id, binding.selection_generation]);
@@ -149,9 +151,13 @@ export class IncrementalHistoryCoordinator {
     })().then((coverage: HistoryCoverage) => {
       if (active.controller.signal.aborted) { this.#state(job.contactId, 'stopped'); return; }
       const incremental = coverage.incremental;
-      if (incremental?.phase === 'unavailable') {
+      if (incremental?.phase === 'unavailable' || incremental?.phase === 'invalidated') {
         const code = incremental.failureCode ?? 'history_incremental_unavailable';
         this.#attempted.set(job.contactId, job.key); this.#state(job.contactId, 'blocked', code); return;
+      }
+      if (incremental?.phase === 'incomplete') {
+        // 预算耗尽等可恢复中断保留降级，下一次 tick 从持久检查点继续。
+        this.#state(job.contactId, 'degraded', incremental.failureCode ?? 'history_incomplete'); return;
       }
       this.#attempted.delete(job.contactId); this.#state(job.contactId, 'caught_up');
     }).catch((error: unknown) => {

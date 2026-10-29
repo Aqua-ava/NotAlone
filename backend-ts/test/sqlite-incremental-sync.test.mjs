@@ -206,3 +206,29 @@ test('在途页在关闭后不推进检查点，旧代次迟到页被拒绝，�
   assert.deepEqual(read.messages.map(message => message.text).sort(), ['历史一', '在途新消息'].sort());
   assert.equal(read.coverage.incremental.pagesAccepted, 1);
 });
+
+test('分页预算耗尽保留不完整与可见原因，下一轮从检查点续读', async t => {
+  const f = await fixture(t);
+  f.state.historyRecords = [record('1')];
+  const [binding] = await select(f); await f.contacts.setReading(true);
+  await f.history.synchronize(binding.contact_id);
+  let pages = 0, lastCursor = 'tail-1';
+  f.state.tailHook = async (scope, target, cursor) => {
+    const recordId = String(100 + pages);
+    lastCursor = `tail-budget-${++pages}`;
+    return { target: target.descriptor, cursorIn: cursor, cursorOut: lastCursor, caughtUp: false, records: [record(recordId, { text: `批量${pages}` })] };
+  };
+  await wake(f);
+  const exhausted = await f.history.coverage(binding.contact_id);
+  assert.equal(exhausted.incremental.phase, 'incomplete');
+  assert.equal(exhausted.incremental.failureCode, 'history_page_budget_exhausted');
+  assert.equal(exhausted.incremental.pagesAccepted, 200);
+  assert.equal(f.coordinator.getState().contacts[0].phase, 'degraded', '预算耗尽属可恢复中断');
+  f.state.tailHook = null;
+  f.state.tailBatches.push(() => ({ records: [record('999', { text: '收尾' })], caughtUp: true, cursorOut: 'tail-done' }));
+  await wake(f);
+  assert.equal(f.state.tails.at(-1).cursor, lastCursor, '恢复必须从最后接受页的检查点续读');
+  const resumed = await f.history.read(binding.contact_id);
+  assert.equal(resumed.coverage.incremental.failureCode, null);
+  assert.equal(resumed.messages.at(0).text, '收尾');
+});
