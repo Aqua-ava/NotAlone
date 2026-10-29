@@ -31,8 +31,8 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [04 增量同步与读取控制](issues/04-incremental-sync-controls.md) | [03](issues/03-private-history-sync.md) | ready-for-agent | open |
 | [05 统一来源删除与清理流程](issues/05-source-deletion-and-cleanup.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
 | [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | open |
-| [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | claimed |
-| [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | claimed |
+| [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
+| [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | resolved |
 | [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | open |
 | [10 记忆处理控制与恢复](issues/10-memory-processing-controls.md) | [04](issues/04-incremental-sync-controls.md)、[09](issues/09-memory-documents-publication.md) | ready-for-agent | open |
 | [11 助手讨论与 DSH 副本](issues/11-assistant-discussions-and-runtime.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
@@ -102,9 +102,9 @@ flowchart TD
 
 ## 当前总进度
 
-本轮有效17项：已集成且当前验收通过8项（01、02、05、11、12、14、16、17）；07原提交已集成但因跨窗口误删复核重开，与执行中08共用删除路径修复；确实受阻1项（03：真实状态语义及来源生命周期未认证）；等待依赖6项（04、06、09、10、20、21）。08、12已在独立工作树核验前置后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03实现及合成／实际App已完成的部分复用证据，不重新执行。
+本轮有效17项：已集成且当前验收通过10项（01、02、05、07、08、11、12、14、16、17）；03因真实状态语义及来源生命周期未认证受阻；09依赖已就绪待派发；04、06、10、20、21等待依赖。08、12已在独立工作树核验前置后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03实现及合成／实际App已完成的部分复用证据，不重新执行。
 
-08仍在实现和独立复核：跨窗口无关来源误删、关系／合并引用覆盖不足及人工改文后核验标识错误已用合成数据复现并交由执行会话修复；多父恢复和取消联系人后的归档读取也在核对。尚未满足完整验收，09继续等待08实际集成。
+07跨窗口误删及08关系／合并引用覆盖、人工改文核验标识、撤回后去重等问题均已修复；最终后台70项、迁移11项、正式profile正例1项、桌面17项与实际合成App验证通过。总指挥补集成跨窗口及08→12各1项，源提交e8d01162实际纳入；09将在核验执行Goal后立即派发。
 
 03补充只读查证：当前账号来源指纹和单连接 data_version 不足以证明跨次来源连续；03源码及合成评估确认单次固定快照与永久失证围栏仍不能满足旧排除跨实例映射和后续新消息接续；不能替代状态语义或重启增量等既定门槛。撤回测试继续跳过，不进行微信操作或迁移／恢复实验。
 

@@ -17,7 +17,7 @@ test('无产出成功独立于后续阶段，失效通知立即撤下候选及�
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
   await panel.getByText('已处理，未产生新记忆',{exact:true}).waitFor();await panel.getByText('主题整理、长期概览尚未执行，本轮未完成。',{exact:true}).waitFor();assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
   current={...run(),candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'合成候选正文',state:'verified_pending_decision',origin:'auto'}]};
-  await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByText('合成候选正文',{exact:true}).waitFor();
+  await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByText('合成候选正文',{exact:true}).waitFor();await panel.getByText('以下候选来自自动提取，正式记忆与决定请查看下方。',{exact:true}).waitFor();assert.equal(await panel.getByText('以下候选来自自动提取，等待正式记忆裁决。',{exact:true}).count(),0);
   await panel.locator('summary').filter({hasText:'查看本轮任务'}).click();await panel.getByRole('button',{name:'查看联系人 1过程',exact:true}).click();
   await panel.locator('summary').filter({hasText:'request'}).click();await panel.locator('pre').filter({hasText:'合成过程输入'}).waitFor();
   await page.evaluate(()=>window.invalidate());await panel.getByRole('alert').waitFor();assert.equal(await panel.getByText('合成候选正文',{exact:true}).count(),0);assert.equal(await panel.locator('pre').filter({hasText:'合成过程输入'}).count(),0);

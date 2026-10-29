@@ -1,7 +1,8 @@
+import {qualificationSources} from './dependencies.ts';
 import {randomUUID,createHash} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
-import {available,body,fail,id,integer,requireCandidate,requireSources,requireVersion,scope} from './qualification.ts';
+import {available,body,fail,id,integer,requireCandidate,requireAutomaticCandidate,requireSources,requireVersion,scope} from './qualification.ts';
 import {managementRead} from './read.ts';
 import type {MemoryDecisionResult,MemoryScope} from './contracts.ts';
 const seal=(v:unknown):string=>createHash('sha256').update(JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).sort(([a],[b])=>a.localeCompare(b))):x)).digest('hex');
@@ -24,82 +25,153 @@ function importOutput(tx:StorageTransaction,ownerId:string,eventId:string):strin
  const prior=tx.get('SELECT id FROM memory_candidate WHERE owner_id=? AND event_id=?',[ownerId,eventId]);if(prior)return String(prior.id);
  const out=verifiedExtractionOutput(tx,{ownerId,eventId});const s={scopeKind:out.scopeKind,contactId:out.contactId};available(tx,ownerId,s,true);
  const candidateId=randomUUID();tx.run("INSERT INTO memory_candidate VALUES(?,?,?,?,?,?,?,?,'pending',0)",[ownerId,candidateId,out.scopeKind,out.contactId,out.proposedBody,out.producedAttemptId,eventId,out.outputNo]);
- const unique=new Map(out.sources.map(r=>[r.recordId,r]));
- evidence(tx,ownerId,{candidateId},[...unique.values()].map(r=>{
-  const m=tx.get('SELECT text_body FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,r.contactId,r.messageId]);
-  return {source_contact_id:r.contactId,message_id:r.messageId,record_id:r.recordId,accepted_revision:r.interpretationRevision,span_start:0n,span_end:BigInt([...String(m?.text_body??'')].length),explanation:null};
- }));return candidateId;
+ evidence(tx,ownerId,{candidateId},out.citations.map(r=>({source_contact_id:r.contactId,message_id:r.messageId,record_id:r.recordId,accepted_revision:r.interpretationRevision,span_start:r.spanStart,span_end:r.spanEnd,explanation:r.explanation})));
+
+ return candidateId;
 }
-export function applyDecision(tx:StorageTransaction,input:unknown,system=false):MemoryDecisionResult{
+export interface AutomaticDecisionAuthority {executionId:string;body?:string;formation?:'correction'|'change'|'adoption';parents?:{memoryId:string;versionNo:bigint}[]}
+export interface MergedParent {memoryId:string;versionNo:bigint;headRevision:bigint}
+/** 主合并版和每个被撤回父项各有真实决定，共用同一次裁决执行，不重复消费候选。 */
+export function retireMergedParents(tx:StorageTransaction,input:{ownerId:string;executionId:string;primaryMemoryId:string;requestKey:string;parents:MergedParent[]}):MemoryDecisionResult[]{
+ const {ownerId,executionId,primaryMemoryId,requestKey,parents}=input;
+ if(parents.length<2||parents.length>8||new Set(parents.map(p=>p.memoryId)).size!==parents.length||!parents.some(p=>p.memoryId===primaryMemoryId))fail('memory_merge_pending');
+ const primary=tx.get('SELECT * FROM memory WHERE owner_id=? AND id=?',[ownerId,primaryMemoryId])??fail('memory_head_conflict'),original=parents.find(p=>p.memoryId===primaryMemoryId)!;
+ const main=primary&&tx.get(`SELECT d.* FROM memory_version v JOIN memory_decision d ON d.owner_id=v.owner_id AND d.id=v.decision_id WHERE v.owner_id=? AND v.memory_id=? AND v.version_no=? AND d.action='auto_update' AND d.actor_kind='system' AND d.execution_id=? AND d.request_key=? AND d.outcome='applied'`,[ownerId,primaryMemoryId,primary.current_version_no,executionId,requestKey]);
+ if(!primary||!main||primary.state!=='active'||primary.current_version_no!==original.versionNo+1n||primary.head_revision!==original.headRevision+1n)fail('memory_head_conflict');
+ const snapshots=parents.filter(p=>p.memoryId!==primaryMemoryId).map(parent=>{
+  const memory=tx.get('SELECT * FROM memory WHERE owner_id=? AND id=?',[ownerId,parent.memoryId])??fail('memory_head_conflict');
+  if(!memory||memory.state!=='active'||memory.current_version_no!==parent.versionNo||memory.head_revision!==parent.headRevision)fail('memory_head_conflict');
+  if(memory.manual_protection===1n)fail('memory_protected');if(memory.scope_kind!==primary.scope_kind||memory.contact_id!==primary.contact_id)fail('memory_scope_mismatch');
+  const version=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,parent.memoryId,parent.versionNo])??fail('memory_merge_pending');
+  if(!version||version.adoption_mode!=='auto')fail('memory_merge_pending');requireVersion(tx,ownerId,memory,version);qualificationSources(tx,ownerId,{memoryId:parent.memoryId,versionNo:parent.versionNo});return {memory,parent};
+ });
+ return snapshots.map(({memory,parent})=>{
+  const decisionId=randomUUID(),key=`memory:merge-retire:${seal([requestKey,parent.memoryId])}`;
+  tx.run("INSERT INTO memory_decision(owner_id,id,request_key,request_seal,action,actor_kind,execution_id,target_memory_id,expected_version_no,expected_head_revision,created_at,outcome) VALUES(?,?,?,?,'auto_retire','system',?,?,?,?,?,'applied')",[ownerId,decisionId,key,seal({requestKey,executionId,memoryId:parent.memoryId,versionNo:String(parent.versionNo),headRevision:String(parent.headRevision)}),executionId,parent.memoryId,parent.versionNo,parent.headRevision,Date.now()]);
+  tx.run("UPDATE memory SET state='withdrawn',head_revision=head_revision+1 WHERE owner_id=? AND id=?",[ownerId,parent.memoryId]);advance(tx,ownerId,{scopeKind:memory.scope_kind as 'self'|'contact',contactId:memory.contact_id as string|null});
+  return {decisionId,memoryId:parent.memoryId,versionNo:null,action:'auto_retire'};
+ });
+}
+interface RetiredParent {memory:StorageRow;version:StorageRow;retirement:StorageRow;sources:StorageRow[]}
+function restorableMergedParents(tx:StorageTransaction,ownerId:string,primary:StorageRow,current:StorageRow,expected:unknown):RetiredParent[]{
+ const main=tx.get("SELECT * FROM memory_decision WHERE owner_id=? AND id=? AND action='auto_update' AND actor_kind='system' AND outcome='applied'",[ownerId,current.decision_id]);
+ const snapshots=expected===undefined?[]:expected;
+ if(!Array.isArray(snapshots))return fail('memory_request_invalid');
+ if(snapshots.length>7||snapshots.some(p=>!p||typeof p!=='object'||Object.keys(p).sort().join(',')!=='headRevision,memoryId,versionNo')||new Set(snapshots.map(p=>id(p.memoryId))).size!==snapshots.length)fail('memory_request_invalid');
+ for(const p of snapshots){integer(p.versionNo);integer(p.headRevision);}
+ const retirements=main?.execution_id?tx.all("SELECT * FROM memory_decision WHERE owner_id=? AND execution_id=? AND action='auto_retire' AND actor_kind='system' AND outcome='applied' ORDER BY target_memory_id",[ownerId,main.execution_id]):[];
+ if(retirements.length!==snapshots.length||retirements.some(r=>!snapshots.some(p=>p.memoryId===r.target_memory_id)))fail('memory_head_conflict');
+ return retirements.map(retirement=>{
+  const memory=tx.get('SELECT * FROM memory WHERE owner_id=? AND id=?',[ownerId,retirement.target_memory_id])??fail('memory_head_conflict');
+  const snapshot=snapshots.find(p=>p.memoryId===memory.id)!;
+  if(!memory||memory.state!=='withdrawn'||memory.current_version_no!==retirement.expected_version_no||memory.current_version_no!==integer(snapshot.versionNo)||memory.head_revision!==integer(snapshot.headRevision))fail('memory_head_conflict');
+  if(memory.manual_protection===1n)fail('memory_protected');if(memory.scope_kind!==primary.scope_kind||memory.contact_id!==primary.contact_id)fail('memory_scope_mismatch');
+  available(tx,ownerId,{scopeKind:memory.scope_kind as 'self'|'contact',contactId:memory.contact_id as string|null},true);
+  const version=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,memory.id,memory.current_version_no])??fail('memory_restore_not_eligible');
+  requireVersion(tx,ownerId,memory,version);qualificationSources(tx,ownerId,{memoryId:String(memory.id),versionNo:version.version_no as bigint});
+  return {memory,version,retirement,sources:requireSources(tx,ownerId,{memoryId:String(memory.id),versionNo:version.version_no as bigint},version.adoption_mode==='manual')};
+ });
+}
+function restoreMergedParents(tx:StorageTransaction,ownerId:string,requestKey:string,parents:RetiredParent[]):void{
+ for(const {memory,version,retirement,sources} of parents){
+  const decisionId=randomUUID(),versionNo=(version.version_no as bigint)+1n,key=`memory:merge-restore:${seal([requestKey,memory.id])}`;
+  tx.run("INSERT INTO memory_decision(owner_id,id,request_key,request_seal,action,actor_kind,target_memory_id,expected_version_no,expected_head_revision,restored_from_version_no,created_at,outcome) VALUES(?,?,?,?,'restore','user',?,?,?,?,?,'applied')",[ownerId,decisionId,key,seal({requestKey,retirementId:retirement.id}),memory.id,version.version_no,memory.head_revision,version.version_no,Date.now()]);
+  tx.run("INSERT INTO memory_version VALUES(?,?,?,?,'restore',?,?,?,?,0,'present','eligible')",[ownerId,memory.id,versionNo,version.body,version.adoption_mode,decisionId,version.version_no,version.version_no]);
+  evidence(tx,ownerId,{memoryId:String(memory.id),versionNo},sources);
+  tx.run("UPDATE memory SET current_version_no=?,state='active',head_revision=head_revision+1 WHERE owner_id=? AND id=?",[versionNo,ownerId,memory.id]);advance(tx,ownerId,{scopeKind:memory.scope_kind as 'self'|'contact',contactId:memory.contact_id as string|null});
+ }
+}
+export function applyDecision(tx:StorageTransaction,input:unknown,system=false,authority?:AutomaticDecisionAuthority):MemoryDecisionResult{
  const q=input as any,ownerId=id(q?.ownerId),request=q?.request??{},requestKey=id(request.requestKey),fingerprint=seal(request);
  if(tx.get('SELECT 1 FROM request_tombstone WHERE owner_identity=? AND request_namespace=? AND request_key=?',[ownerId,'memory.applyDecision',requestKey]))fail('memory_decision_deleted');
  const old=tx.get('SELECT * FROM memory_decision WHERE owner_id=? AND request_key=?',[ownerId,requestKey]);
  if(old){
   if(old.outcome!=='applied')fail('memory_decision_deleted');if(old.request_seal!==fingerprint)fail('memory_request_conflict');
   const m=old.target_memory_id?tx.get('SELECT * FROM memory WHERE owner_id=? AND id=?',[ownerId,old.target_memory_id]):null;
-  const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND decision_id=?',[ownerId,old.id]);if(m&&v)requireVersion(tx,ownerId,m,v);
+  const v=old.action==='auto_noop'?tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,old.target_memory_id,old.expected_version_no]):tx.get('SELECT * FROM memory_version WHERE owner_id=? AND decision_id=?',[ownerId,old.id]);if(m&&v)requireVersion(tx,ownerId,m,v);
+  if(old.action==='auto_noop'){if(!m||!v)fail('memory_source_stale');qualificationSources(tx,ownerId,{memoryId:String(old.target_memory_id),versionNo:old.expected_version_no as bigint});}
   return result(tx,ownerId,old);
  }
  const action=request.action as string;
- if(!(system?['auto_accept','auto_update']:['accept','edit_accept','reject','correct','change','restore','withdraw','protect','unprotect','manual']).includes(action))fail('memory_request_invalid');
+ if(action!=='restore'&&request.expectedMergedParents!==undefined)fail('memory_request_invalid');
+ if(!(system?['auto_accept','auto_update','auto_noop']:['accept','edit_accept','reject','correct','change','restore','withdraw','protect','unprotect','manual']).includes(action))fail('memory_request_invalid');
  const candidateIds=request.candidateIds??[],revisions=request.candidateRevisions??[];
  if(!Array.isArray(candidateIds)||!Array.isArray(revisions)||candidateIds.length>100||candidateIds.length!==revisions.length||new Set(candidateIds).size!==candidateIds.length)fail('memory_request_invalid');
- const needsCandidate=['accept','edit_accept','reject','auto_accept','auto_update'].includes(action);
+ const needsCandidate=['accept','edit_accept','reject','auto_accept','auto_update','auto_noop'].includes(action);
  if(needsCandidate!==!!candidateIds.length)fail('memory_request_invalid');
  const candidates:StorageRow[]=candidateIds.map((value:unknown,index:number)=>{
   const c=tx.get('SELECT * FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,id(value)]);
-  if(!c||c.state_revision!==integer(revisions[index]))return fail('memory_candidate_stale');requireCandidate(tx,ownerId,c);return c;
+  if(!c||c.state_revision!==integer(revisions[index]))return fail('memory_candidate_stale');requireCandidate(tx,ownerId,c);if(system)requireAutomaticCandidate(tx,ownerId,c);return c;
  });
  let m:StorageRow|undefined,previous:StorageRow|undefined;
  if(request.memoryId){
-  m=tx.get('SELECT * FROM memory WHERE owner_id=? AND id=?',[ownerId,id(request.memoryId)]);if(m?.state==='invalidated')return fail('memory_source_stale');if(!m||m.state!=='active')return fail('memory_head_conflict');
+  m=tx.get('SELECT * FROM memory WHERE owner_id=? AND id=?',[ownerId,id(request.memoryId)]);if(m?.state==='invalidated')return fail('memory_source_stale');if(!m||(m.state!=='active'&&!(m.state==='withdrawn'&&['protect','unprotect','auto_noop'].includes(action))))return fail('memory_head_conflict');
   if(m.current_version_no!==integer(request.expectedVersionNo)||m.head_revision!==integer(request.expectedHeadRevision))fail('memory_head_conflict');
   previous=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!previous)return fail('memory_head_conflict');requireVersion(tx,ownerId,m,previous);
- }else if(['auto_update','correct','change','restore','withdraw','protect','unprotect'].includes(action))fail('memory_request_invalid');
+ }else if(['auto_update','auto_noop','correct','change','restore','withdraw','protect','unprotect'].includes(action))fail('memory_request_invalid');
  const s:MemoryScope=m?{scopeKind:m.scope_kind as 'self'|'contact',contactId:m.contact_id as string|null}:candidates[0]?{scopeKind:candidates[0].scope_kind as 'self'|'contact',contactId:candidates[0].contact_id as string|null}:scope(request.scope);
  available(tx,ownerId,s,true);
  if(system&&candidates.length!==1)fail('memory_relationship_pending');
- if(action==='auto_accept'&&tx.get('SELECT 1 FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ?',[ownerId,s.scopeKind,s.contactId]))fail('memory_relationship_pending');
+ if(system&&['auto_update','auto_noop'].includes(action)&&!authority)fail('memory_relationship_pending');
+ if(action==='auto_accept'&&!authority&&tx.get('SELECT 1 FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ?',[ownerId,s.scopeKind,s.contactId]))fail('memory_relationship_pending');
  if(system){
   const fact=verifiedExtractionOutput(tx,{ownerId,eventId:String(candidates[0]!.event_id)}).fact;
   if(Array.isArray(fact.alternatives)&&fact.alternatives.length||fact.invalid_at&&Date.parse(fact.invalid_at)<=Date.now()||fact.conditions?.items.some((item:any)=>item.source_supported!==true)||fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null))fail('memory_conditions_pending');
  }
  if(candidates.some(c=>c.scope_kind!==s.scopeKind||c.contact_id!==s.contactId))fail('memory_scope_mismatch');
+ if(action==='auto_noop'){
+  const execution=tx.get(`SELECT 1 FROM step_attempt a JOIN processing_step ps ON ps.owner_id=a.owner_id AND ps.id=a.step_id
+   JOIN processing_task t ON t.owner_id=ps.owner_id AND t.id=ps.task_id
+   JOIN step_input ci ON ci.owner_id=ps.owner_id AND ci.step_id=ps.id AND ci.kind='candidate'
+   JOIN step_input mi ON mi.owner_id=ps.owner_id AND mi.step_id=ps.id AND mi.kind='memory'
+   JOIN execution_event e ON e.owner_id=a.owner_id AND e.step_attempt_id=a.id AND e.kind='adjudication_result'
+   JOIN execution_input x ON x.owner_id=e.owner_id AND x.event_id=e.id AND x.role='parent_memory' AND x.planned_step_id=mi.step_id AND x.planned_input_no=mi.input_no
+   WHERE a.owner_id=? AND a.id=? AND a.state='succeeded' AND ps.kind='adjudication' AND ps.state='succeeded' AND ps.successful_attempt_id=a.id
+   AND t.state IN ('succeeded','awaiting_decision') AND t.scope_kind=? AND t.contact_id IS ?
+   AND ci.candidate_id=? AND ci.accepted_state_revision=? AND mi.memory_id=? AND mi.memory_version_no=? AND mi.accepted_head_revision=?
+   AND json_extract(e.payload,'$.action')='auto_noop' AND json_extract(e.payload,'$.candidateId')=? AND json_extract(e.payload,'$.reason') IS NULL`,[ownerId,authority!.executionId,s.scopeKind,s.contactId,candidates[0]!.id,candidates[0]!.state_revision,m!.id,previous!.version_no,m!.head_revision,candidates[0]!.id]);
+  if(!execution)fail('memory_adjudication_output_unbound');
+  qualificationSources(tx,ownerId,{candidateId:String(candidates[0]!.id)});qualificationSources(tx,ownerId,{memoryId:String(m!.id),versionNo:previous!.version_no as bigint});
+ }
+
  if(m&&['auto_update','restore','withdraw'].includes(action)&&m.manual_protection===1n)fail('memory_protected');
  if((action==='auto_accept'||action==='accept'||action==='manual')&&m)fail('memory_request_invalid');
  if(action==='reject'&&m)fail('memory_request_invalid');
  if(action==='withdraw'&&(previous!.adoption_mode!=='auto'||previous!.previous_version_no!==null))fail('memory_restore_not_eligible');
- let restored:StorageRow|undefined;
+ let restored:StorageRow|undefined,retiredParents:RetiredParent[]=[];
  if(action==='restore'){
   if(previous!.adoption_mode!=='auto'||previous!.formation_kind==='restore'||previous!.previous_version_no===null||integer(request.restoredFromVersionNo)!==previous!.previous_version_no)fail('memory_restore_not_eligible');
-  restored=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m!.id,previous!.previous_version_no]);if(!restored)return fail('memory_restore_not_eligible');requireVersion(tx,ownerId,m!,restored);
+  restored=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m!.id,previous!.previous_version_no]);if(!restored)return fail('memory_restore_not_eligible');requireVersion(tx,ownerId,m!,restored);retiredParents=restorableMergedParents(tx,ownerId,m!,previous!,request.expectedMergedParents);
  }
- const noVersion=['reject','withdraw','protect','unprotect'].includes(action),memoryId=m?String(m.id):action==='reject'?null:randomUUID(),decisionId=randomUUID();
+ const noVersion=['reject','withdraw','protect','unprotect','auto_noop'].includes(action),memoryId=m?String(m.id):action==='reject'?null:randomUUID(),decisionId=randomUUID();
  if(!m&&memoryId)tx.run("INSERT INTO memory VALUES(?,?,?,?,NULL,0,'invalidated',0,NULL)",[ownerId,memoryId,s.scopeKind,s.contactId]);
- tx.run('INSERT INTO memory_decision VALUES(?,?,?,?,?,?,?,?,?,?,?,?,\'applied\')',[ownerId,decisionId,requestKey,fingerprint,action,system?'system':'user',system?candidates[0]!.produced_attempt_id:null,memoryId,previous?.version_no??null,m?.head_revision??null,restored?.version_no??null,Date.now()]);
- for(const c of candidates){
+ tx.run('INSERT INTO memory_decision VALUES(?,?,?,?,?,?,?,?,?,?,?,?,\'applied\')',[ownerId,decisionId,requestKey,fingerprint,action,system?'system':'user',system?authority?.executionId??candidates[0]!.produced_attempt_id:null,memoryId,previous?.version_no??null,m?.head_revision??null,restored?.version_no??null,Date.now()]);
+ // 重复跳过由决定触发器原子消费，避免留下无候选的无版本决定。
+ for(const c of action==='auto_noop'?[]:candidates){
   tx.run('INSERT INTO decision_candidate VALUES(?,?,?,?,?)',[ownerId,decisionId,c.id,action==='reject'?'rejected':'accepted',c.state_revision]);
   tx.run('UPDATE memory_candidate SET state=?,state_revision=state_revision+1 WHERE owner_id=? AND id=?',[action==='reject'?'rejected':'adopted',ownerId,c.id]);
  }
  if(noVersion){
   if(m&&action==='withdraw')tx.run("UPDATE memory SET state='withdrawn',head_revision=head_revision+1 WHERE owner_id=? AND id=?",[ownerId,memoryId]);
-  else if(m)tx.run('UPDATE memory SET manual_protection=?,protection_decision_id=?,head_revision=head_revision+1 WHERE owner_id=? AND id=?',[action==='protect'?1:0,decisionId,ownerId,memoryId]);
+  else if(m&&action!=='auto_noop')tx.run('UPDATE memory SET manual_protection=?,protection_decision_id=?,head_revision=head_revision+1 WHERE owner_id=? AND id=?',[action==='protect'?1:0,decisionId,ownerId,memoryId]);
  }else{
   const versionNo=previous?(previous.version_no as bigint)+1n:1n;
-  const text=restored?String(restored.body):['edit_accept','correct','change','manual'].includes(action)?body(request.body):candidates.map(c=>String(c.proposed_body)).join('\n');
+  const text=authority?.body?body(authority.body):restored?String(restored.body):['edit_accept','correct','change','manual'].includes(action)?body(request.body):candidates.map(c=>String(c.proposed_body)).join('\n');
   const mode=restored?String(restored.adoption_mode):system?'auto':action==='manual'||previous?.adoption_mode==='manual'&&!candidates.length?'manual':'user';
-  const formation=restored?'restore':action==='correct'?'correction':action==='change'?'change':action==='manual'?'manual':'adoption';
+  const formation=authority?.formation??(restored?'restore':action==='correct'?'correction':action==='change'?'change':action==='manual'?'manual':'adoption');
   tx.run("INSERT INTO memory_version VALUES(?,?,?,?,?,?,?,?,?,?,'present','eligible')",[ownerId,memoryId,versionNo,text,formation,mode,decisionId,previous?.version_no??null,restored?.version_no??null,m?.manual_protection??0n]);
   const sources:StorageRow[]=[];
   if(restored)sources.push(...requireSources(tx,ownerId,{memoryId:memoryId!,versionNo:restored.version_no as bigint},restored.adoption_mode==='manual'));
   else{
    if(previous)sources.push(...requireSources(tx,ownerId,{memoryId:memoryId!,versionNo:previous.version_no as bigint},previous.adoption_mode==='manual'));
+   for(const parent of authority?.parents??[])sources.push(...requireSources(tx,ownerId,{memoryId:parent.memoryId,versionNo:parent.versionNo}));
    for(const c of candidates)sources.push(...requireSources(tx,ownerId,{candidateId:String(c.id)}));
   }
   const distinct=new Map(sources.map(r=>[JSON.stringify([r.source_contact_id,r.record_id,r.span_start?.toString(),r.span_end?.toString()]),r]));
   evidence(tx,ownerId,{memoryId:memoryId!,versionNo},[...distinct.values()]);
   tx.run("UPDATE memory SET current_version_no=?,head_revision=head_revision+1,state='active' WHERE owner_id=? AND id=?",[versionNo,ownerId,memoryId]);
  }
+ if(action==='restore')restoreMergedParents(tx,ownerId,requestKey,retiredParents);
  advance(tx,ownerId,s);return result(tx,ownerId,tx.get('SELECT * FROM memory_decision WHERE owner_id=? AND id=?',[ownerId,decisionId])!);
 }
 function importRun(tx:StorageTransaction,input:unknown):{candidateIds:string[]}{
@@ -118,7 +190,7 @@ export const memoryManagementActions:StorageAction[]=[
   for(const candidateId of imported.candidateIds){
    const c=tx.get("SELECT * FROM memory_candidate WHERE owner_id=? AND id=? AND state='pending'",[ownerId,candidateId]);if(!c)continue;
    try{results.push(applyDecision(tx,{ownerId,request:{requestKey:`memory:auto:${String(c.event_id)}`,action:'auto_accept',candidateIds:[candidateId],candidateRevisions:[String(c.state_revision)]}},true));}
-   catch(error){if(!(error instanceof StorageFailure)||!['memory_relationship_pending','memory_conditions_pending'].includes(error.code))throw error;}
+   catch(error){if(!(error instanceof StorageFailure)||!['memory_relationship_pending','memory_conditions_pending','memory_verification_pending'].includes(error.code))throw error;}
   }
   return {candidateIds:imported.candidateIds,decisions:results};
  }},

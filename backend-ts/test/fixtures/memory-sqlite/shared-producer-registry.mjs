@@ -29,8 +29,8 @@ function memory(tx,owner,contact,message,record){
  tx.run("UPDATE processing_run SET state='running' WHERE owner_id=? AND id=?",[owner,run]);
  tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,contact_id,state) VALUES(?,?,?,'contact',?,'running')",[owner,task,run,contact]);
  tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[owner,task,run,contact]);
- tx.run("INSERT INTO processing_step VALUES(?,?,?,1,'extraction_verification','running','frozen',NULL)",[owner,step,task]);
- tx.run('INSERT INTO step_input VALUES(?,?,1,?,1)',[owner,step,run]);
+ tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,successful_attempt_id) VALUES(?,?,?,1,'extraction_verification','running','frozen',NULL)",[owner,step,task]);
+ tx.run('INSERT INTO step_input(owner_id,step_id,input_no,run_id,run_input_no) VALUES(?,?,1,?,1)',[owner,step,run]);
  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[owner,attempt,step]);
  tx.run("INSERT INTO model_operation(owner_id,id,purpose,memory_step_id,slot,input_seal,state) VALUES(?,?,'extraction',?,0,'synthetic','resolved')",[owner,operation,step]);
  tx.run("INSERT INTO operation_scope VALUES(?,?,?,'extraction','released')",[owner,operation,contact]);
@@ -57,12 +57,12 @@ function completion(tx,{owner,m,kind}){
   tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config) VALUES(?,?,?,'running',1,0,'{}')",[scopeOwner,run,randomUUID()]);
   tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,state) VALUES(?,?,?,'self','running')",[scopeOwner,task,run]);
  }
- tx.run("INSERT INTO processing_step VALUES(?,?,?,2,'extraction_verification','running','frozen',NULL)",[scopeOwner,step,task]);
+ tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,successful_attempt_id) VALUES(?,?,?,2,'extraction_verification','running','frozen',NULL)",[scopeOwner,step,task]);
  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','succeeded',1,1,NULL)",[scopeOwner,attempt,step]);
  if(kind==='different_step_attempt'||kind==='foreign_owner_attempt')
   tx.run('UPDATE processing_step SET successful_attempt_id=? WHERE owner_id=? AND id=?',[attempt,owner,m.step]);
  else if(kind==='insert_different_step_attempt'||kind==='insert_foreign_owner_attempt'||kind==='insert_missing_attempt')
-  tx.run("INSERT INTO processing_step VALUES(?,?,?,3,'extraction_verification','succeeded','frozen',?)",[owner,randomUUID(),m.task,kind==='insert_missing_attempt'?randomUUID():attempt]);
+  tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,successful_attempt_id) VALUES(?,?,?,3,'extraction_verification','succeeded','frozen',?)",[owner,randomUUID(),m.task,kind==='insert_missing_attempt'?randomUUID():attempt]);
  else {
   tx.run("UPDATE processing_step SET state='succeeded',successful_attempt_id=? WHERE owner_id=? AND id=?",[attempt,scopeOwner,step]);
   if(kind==='attempt_regression')tx.run("UPDATE step_attempt SET state='failed' WHERE owner_id=? AND id=?",[scopeOwner,attempt]);
@@ -89,12 +89,12 @@ function reuse(tx,{owner,a,b,m,kind}){
   tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,1)',[eventOwner]);
   tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config) VALUES(?,?,?,'running',1,0,'{}')",[eventOwner,run,randomUUID()]);
   tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,state) VALUES(?,?,?,'self','running')",[eventOwner,task,run]);
-  tx.run("INSERT INTO processing_step VALUES(?,?,?,1,'extraction_verification','running','frozen',NULL)",[eventOwner,step,task]);
+  tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,successful_attempt_id) VALUES(?,?,?,1,'extraction_verification','running','frozen',NULL)",[eventOwner,step,task]);
   tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[eventOwner,eventAttempt,step]);
  }else if(kind==='other_operation')call=a.call;
  else if(kind==='other_step'){
   const step=randomUUID();eventAttempt=randomUUID();
-  tx.run("INSERT INTO processing_step VALUES(?,?,?,2,'extraction_verification','running','frozen',NULL)",[owner,step,m.task]);
+  tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,successful_attempt_id) VALUES(?,?,?,2,'extraction_verification','running','frozen',NULL)",[owner,step,m.task]);
   tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[owner,eventAttempt,step]);
  }else if(kind==='unknown')tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown' WHERE owner_id=? AND id=?",[owner,m.call]);
  else if(kind==='sealed')tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=1 WHERE owner_id=? AND id=?",[owner,m.operation]);

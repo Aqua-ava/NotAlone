@@ -1,3 +1,5 @@
+import {SqliteMemoryAdjudication} from './management/adjudication-service.ts';
+import {createSqliteAdjudicationModelPort} from './management/model-port.ts';
 import {getOrCreateAnonymousUserId} from '@deepseek-ai/dsh-anonymous-user-id';
 import {join,dirname} from 'node:path';
 import {mkdir,lstat} from 'node:fs/promises';
@@ -22,9 +24,9 @@ export interface SqliteMemorySharedModel {
  resolveUserId:()=>string;
 }
 /** environment须由宿主安全加载env文件；configuration可复用该宿主已冻结的同一解析结果。 */
-export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>}){
+export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>;adjudicationEnabled?:boolean}){
  const configuration=options.sharedModel?.configuration??resolveHostReplyConfiguration(options.environment);
- let service:SqliteMemoryExtraction;
+ let service:SqliteMemoryExtraction;let adjudication:SqliteMemoryAdjudication|undefined;
  let modelHost:Awaited<ReturnType<typeof startModelHost>>|undefined;
  let port:ExtractionModelPort={prepare:async()=>{throw new StorageFailure('extraction_model_unconfigured');},invoke:async()=>{throw new StorageFailure('extraction_model_unconfigured');}};
  try{
@@ -40,11 +42,15 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:Sql
     ...(options.sharedModel?{provider:options.sharedModel.provider}:{}),
     authorizePurpose:async({purpose,scope},signal)=>{signal.throwIfAborted();if(scope.owner_id!==options.ownerId||!['extraction','verification'].includes(purpose))throw new StorageFailure('memory_extraction_model_scope_invalid');}});
   }
-  service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders,options.afterRunSettled);await service.initialize();
+  if(options.adjudicationEnabled){
+   const adjudicationPort=options.sharedModel&&configuration.status==='configured'?createSqliteAdjudicationModelPort({ctx:options.ctx,configuration,provider:options.sharedModel.provider,permit:options.sharedModel.permit,authorizePurpose:async({scope},signal)=>{signal.throwIfAborted();if(scope.owner_id!==options.ownerId)throw new StorageFailure('memory_adjudication_scope_invalid');}}):undefined;
+   adjudication=new SqliteMemoryAdjudication(options.storage,options.ownerId,adjudicationPort,options.holders);await adjudication.initialize();
+  }
+  service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders,adjudication?(runId)=>adjudication!.publishRun(runId):options.afterRunSettled);await service.initialize();
   const http=new SqliteMemoryExtractionHttp(service,options.authorize);let closing:Promise<void>|undefined;
   return {service,http,configurationState:configuration.status,close:()=>closing??=(async()=>{
    // 自有许可先停领；业务释放失败时保留host，重试成功后才关闭其账本与socket。
-   modelHost?.arbiter.stop();await service.close();if(modelHost)await modelHost.close(async()=>{});
+   modelHost?.arbiter.stop();await Promise.all([service.close(),adjudication?.close()]);if(modelHost)await modelHost.close(async()=>{});
   })().catch(error=>{closing=undefined;throw error;})};
- }catch(error){await port.close?.();await modelHost?.shutdown();throw error;}
+ }catch(error){await adjudication?.close();await port.close?.();await modelHost?.shutdown();throw error;}
 }

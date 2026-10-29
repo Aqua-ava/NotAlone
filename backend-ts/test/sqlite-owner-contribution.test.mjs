@@ -61,11 +61,11 @@ test('本人无产出也有独立成功阶段记录，主题概览仍未完成',
  const f=await setup(t,{empty:true});const run=await f.memory.read(f.start.runId);const task=run.tasks.find(task=>task.scopeKind==='self');const trace=await f.memory.trace(task.taskId);
  assert.equal(run.succeeded,2);assert.equal(task.state,'succeeded');assert.equal(run.candidates.length,0);assert.equal(trace.calls.length,0);assert.equal(trace.events.length,1);assert.equal(trace.events[0].kind,'stage_result');assert.equal(trace.events[0].payload.outcome,'no_new_memory');assert.equal(trace.events[0].payload.laterStages,'pending');assert.equal(run.laterStages,'pending');assert.notEqual(run.state,'completed');
 });
-test('删除一位实际贡献者清除完整本人阶段及关系，不保留另一标签下的旧混合证明',async t=>{
+test('单来源删除撤销本人在途资格并保留同步骤未参与来源的真实历史',async t=>{
  const f=await setup(t);const before=await f.memory.read(f.start.runId);const selfTask=before.tasks.find(task=>task.scopeKind==='self');assert.equal(before.candidates.length,2);
  const [contactId]=f.contacts;const source=(await f.service.read(contactId)).messages[0].sourceRecordIds[0];const deletion=new DeletionService(f.storage,f.memory.holders,new ManagedFiles(f.root));
  const plan=await deletion.plan({ownerId:owner,requestKey:'owner-real-contribution-delete',scope:{kind:'source',contactId,sourceId:source}});const done=await deletion.advance({ownerId:owner,operationId:plan.operationId});assert.equal(done.state,'completed',JSON.stringify(done.checks));
- await assert.rejects(f.memory.trace(selfTask.taskId),{code:'memory_extraction_not_found'});assert.equal((await f.memory.read(before.runId)).candidates.length,0);assert.deepEqual((await f.storage.execute('fixture.ownerProof',{ownerId:owner,runId:before.runId})).rows,[]);
+ await assert.rejects(f.memory.trace(selfTask.taskId),{code:'memory_extraction_not_found'});assert.equal((await f.memory.read(before.runId)).candidates.length,0);const preserved=(await f.storage.execute('fixture.ownerProof',{ownerId:owner,runId:before.runId})).rows;assert.equal(preserved.length,1);assert.equal(JSON.parse(preserved[0].payload).fact.text,'用户长期住在台南。');assert.equal(preserved[0].payload,preserved[0].original_payload);
  const other=(await f.memory.read(before.runId)).tasks.find(task=>task.contactId===f.contacts[1]);assert.equal(other.state,'succeeded');assert.ok((await f.memory.trace(other.taskId)).events.some(event=>event.kind==='verified_self_contribution'));
  assert.equal(f.model.calls,4);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

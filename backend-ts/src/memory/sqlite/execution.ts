@@ -1,3 +1,4 @@
+import {candidateAdmission,type CandidateVerificationReference} from './management/admission.ts';
 import {finalizeOwnerContributions} from './owner-contribution.ts';
 import {createHash,randomUUID} from 'node:crypto';
 import type {StorageAction,StorageTransaction,StorageRow,StorageLease} from '../../storage/sqlite/contracts.ts';
@@ -62,8 +63,8 @@ function prepareStep(tx:StorageTransaction,i:{ownerId:string;runId:string;taskId
   }
   const context=tx.all("SELECT * FROM run_input WHERE owner_id=? AND run_id=? AND source_contact_id=? AND role='context' ORDER BY input_no LIMIT 8",[i.ownerId,i.runId,t.contact_id]);
   const id=randomUUID();const n=tx.get('SELECT coalesce(max(step_no),0)+1 AS n FROM processing_step WHERE owner_id=? AND task_id=?',[i.ownerId,i.taskId])!.n;
-  tx.run("INSERT INTO processing_step VALUES(?,?,?,?,'extraction_verification','pending','frozen',NULL)",[i.ownerId,id,i.taskId,n]);
-  for(const [index,row] of [...context,...rows].entries())tx.run('INSERT INTO step_input VALUES(?,?,?,?,?)',[i.ownerId,id,index+1,i.runId,row.input_no]);
+  tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,successful_attempt_id) VALUES(?,?,?,?,'extraction_verification','pending','frozen',NULL)",[i.ownerId,id,i.taskId,n]);
+  for(const [index,row] of [...context,...rows].entries())tx.run('INSERT INTO step_input(owner_id,step_id,input_no,run_id,run_input_no) VALUES(?,?,?,?,?)',[i.ownerId,id,index+1,i.runId,row.input_no]);
   s=tx.get('SELECT * FROM processing_step WHERE owner_id=? AND id=?',[i.ownerId,id])!;
  }
  const rows=inputRows(tx,i.ownerId,String(s.id));assertInputs(tx,i.ownerId,i.runId,rows);
@@ -128,14 +129,20 @@ export const executionActions:StorageAction[]=[
   if(!unknown&&state==='failed')for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=?`,[r.owner_id,c.operation_id]);
   return true;
  }),
- action('unconfirmed','read',(tx,raw)=>{const i=raw as {owner_id:string;contact_id:string|null};return tx.all(`SELECT DISTINCT c.request_key FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id JOIN operation_scope s ON s.owner_id=c.owner_id AND s.operation_id=c.operation_id WHERE c.owner_id=? AND o.purpose IN ('extraction','verification') AND c.state IN ('sending','unknown')${i.contact_id===null?'':' AND s.source_contact_id=?'}`,i.contact_id===null?[textId(i.owner_id)]:[textId(i.owner_id),textId(i.contact_id)]).map(c=>String(c.request_key));}),
+ action('unconfirmed','read',(tx,raw)=>{const i=raw as {owner_id:string;contact_id:string|null};return tx.all(`SELECT DISTINCT c.request_key FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id JOIN operation_scope s ON s.owner_id=c.owner_id AND s.operation_id=c.operation_id WHERE c.owner_id=? AND o.purpose IN ('extraction','verification','adjudication','relation_verification','merge_verification') AND c.state IN ('sending','unknown')${i.contact_id===null?'':' AND s.source_contact_id=?'}`,i.contact_id===null?[textId(i.owner_id)]:[textId(i.owner_id),textId(i.contact_id)]).map(c=>String(c.request_key));}),
  action('finish','write',(tx,raw,lease)=>{
-  const i=raw as {ownerId:string;attemptId:string;outcome:{accepted:unknown[];extraction_completed:boolean;failure_kind:string|null;rejected_count:number};inputNos:number[]};const {attempt,task,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
+  const i=raw as {ownerId:string;attemptId:string;outcome:{accepted:unknown[];extraction_completed:boolean;failure_kind:string|null;rejected_count:number;candidate_trace_ids:string[];verification:{fact:unknown;result:unknown}[]};verificationRefs?:(CandidateVerificationReference|null)[];inputNos:number[]};const {attempt,task,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
   if(!i.outcome.extraction_completed||i.outcome.failure_kind!==null)fail('memory_extraction_protocol_incomplete');
   if(tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND step_attempt_id=? AND state<>'succeeded'",[i.ownerId,i.attemptId]))fail('memory_extraction_receipt_unknown');
   for(const [index,value] of i.outcome.accepted.entries()){
    const f=value as {subject:string;source_message_ids:string[]};if(!f.source_message_ids?.length||!f.source_message_ids.every(id=>rows.some(r=>r.message_id===id))||!f.source_message_ids.some(id=>rows.some(r=>r.message_id===id&&r.role==='target')))fail('memory_extraction_source_stale');
-   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:f.subject==='self'?'verified_self_contribution':'verified_output',payload:{outputNo:index+1,fact:value,scopeKind:f.subject==='self'?'self':'contact',contactId:f.subject==='self'?null:String(task.contact_id),origin:'auto',state:'verified_pending_decision'},inputNos:i.inputNos},lease);
+   const verification=i.verificationRefs?.[index]??null;
+   if(verification){
+    const checked=tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND id=? AND step_attempt_id=? AND kind='verification'",[i.ownerId,verification.eventId,i.attemptId]);
+    if(!checked||verification.candidateTraceId!==i.outcome.candidate_trace_ids[index]||!i.outcome.verification.some(v=>JSON.stringify(v.fact)===JSON.stringify(value)&&JSON.stringify(v.result)===JSON.stringify(JSON.parse(String(checked.payload)).result)))fail('memory_extraction_verification_unbound');
+   }
+   const outputId=event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:f.subject==='self'?'verified_self_contribution':'verified_output',payload:{outputNo:index+1,fact:value,scopeKind:f.subject==='self'?'self':'contact',contactId:f.subject==='self'?null:String(task.contact_id),origin:'auto',state:'verified_pending_decision',verification},inputNos:i.inputNos},lease);
+   if(verification&&candidateAdmission(tx,i.ownerId,{...tx.get('SELECT * FROM execution_event WHERE owner_id=? AND id=?',[i.ownerId,outputId])!,scope_kind:'contact',run_id:task.run_id},value as Record<string,any>,rows).state!=='verified')fail('memory_extraction_verification_unbound');
   }
   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'stage_result',payload:{outcome:i.outcome.accepted.length?'verified_pending_decision':'no_new_memory',rejected:i.outcome.rejected_count,laterStages:'pending'},inputNos:i.inputNos},lease);
   for(const row of rows.filter(r=>r.role==='target'))tx.run("UPDATE processing_item SET extraction_state='succeeded' WHERE owner_id=? AND id=?",[i.ownerId,row.item_id]);
@@ -166,7 +173,7 @@ export const executionActions:StorageAction[]=[
  }),
  action('recover','write',(tx,raw,lease)=>{
   const {ownerId}=raw as {ownerId:string};
-  for(const a of tx.all("SELECT * FROM step_attempt WHERE owner_id=? AND state='running' AND runtime_token<>?",[ownerId,lease.runtimeId])){
+  for(const a of tx.all("SELECT * FROM step_attempt WHERE owner_id=? AND state='running' AND runtime_token<>? AND step_id IN (SELECT id FROM processing_step WHERE kind='extraction_verification')",[ownerId,lease.runtimeId])){
    tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown' WHERE owner_id=? AND step_attempt_id=? AND state='sending'",[ownerId,a.id]);
    tx.run("UPDATE model_call SET state='failed',settlement_state='settled',error_code='not_dispatched' WHERE owner_id=? AND step_attempt_id=? AND state='prepared'",[ownerId,a.id]);
    const unknown=!!tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND step_attempt_id=? AND state='unknown'",[ownerId,a.id]);
