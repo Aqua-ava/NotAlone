@@ -98,6 +98,34 @@ test('正常运行状态按实际主题和画像阶段显示进度',async t=>{
  assert.equal((await f.extraction.read(run.runId)).stage,'completed');
 });
 
+test('场景执行中普通暂停后不领取画像小批，继续后从画像边界完成发布',{timeout:20000},async t=>{
+ const {documentFixture}=await import('./fixtures/memory-documents/support.mjs');
+ const started=Promise.withResolvers();let runId,pauseOnce=false,paused=false;
+ const f=await documentFixture(t,{beforeCall:async({request})=>{
+  const data=JSON.parse(request.messages[0].content[0].text);
+  if(data.layer==='l2'&&!pauseOnce){pauseOnce=true;await started.promise;await f.extraction.pause(runId);paused=true;}
+ }});
+ const run=await f.extraction.start('documents-pause-boundary');runId=run.runId;started.resolve();
+ await f.extraction.waitForIdle(run.runId);
+ assert.ok(paused,'测试必须在场景执行中实际请求暂停');
+ const snapshot=await f.extraction.read(run.runId),task=snapshot.tasks.find(item=>item.contactId===f.contactId);
+ assert.equal(snapshot.state,'paused');assert.notEqual(snapshot.state,'completed');
+ const state=await f.documents.readTask(task.taskId);
+ assert.equal(state.outcome,'incomplete');
+ assert.deepEqual(state.stages.map(stage=>stage.kind),['scene'],'暂停后不得启动画像小批');
+ assert.equal(state.stages[0].status,'succeeded');
+ assert.equal(f.calls.filter(call=>call.claim.step_name==='document_profile').length,0);
+ assert.equal((await f.documents.read({scopeKind:'contact',contactId:f.contactId})).publication,null);
+ // 用户明确继续：从画像小批边界继续，最终仍发布同一完整集合
+ await f.extraction.continue(run.runId);await f.extraction.waitForIdle(run.runId);
+ const completed=await f.extraction.read(run.runId);assert.equal(completed.state,'completed');
+ const final=await f.documents.readTask(task.taskId);
+ assert.deepEqual(final.stages.map(stage=>stage.status),['succeeded','succeeded']);
+ const view=await f.documents.read({scopeKind:'contact',contactId:f.contactId});
+ assert.equal(view.publication.members.length,2);assert.equal(view.documents.length,2);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
 test('正式SQLite profile共享模型宿主并经认证HTTP贯通08到09到12',{timeout:30000},async t=>{
  const {watch}=await import('node:fs');const {readFile,writeFile,access}=await import('node:fs/promises');
  const {join,dirname,resolve}=await import('node:path');const {createServer}=await import('node:http');const {once}=await import('node:events');const {randomUUID}=await import('node:crypto');
