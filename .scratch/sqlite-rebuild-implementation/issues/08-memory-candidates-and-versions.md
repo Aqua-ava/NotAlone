@@ -53,3 +53,7 @@ Blocked by: [07 固定范围的记忆提取与核验](07-fixed-scope-memory-extr
 - host公共文件未改。将提供只消费现有共享模型的处理结束hook和独立认证管理HTTP；12可组合本reader与09 reader，不另建memory表。
 
 核心复核补强：独立Spec审查复现本人B产物经人工修正后丢失A冻结贡献删除依赖，已补递归前驱/恢复闭包及回归；Standards指出本域全owner扫描，现改来源索引反查。正式知识合同将语义 `citationSources` 与冻结资格 `qualificationSources` 分开，`sources`为精确依赖并集供12闭包，不把资格来源伪称证据引句；完整本人M:N依赖和每条record/revision复验。决定展示按持久CAS头修订排序，不以毫秒时钟或随机id表示真实操作顺序。最终核心6/6、backend typecheck、diff --check通过；Standards窄复核0新增，Spec确认原P1关闭，后续宿主/界面与消费者组合继续验证，State仍claimed。
+
+宿主接线检查点：实际merge root `97aebf8d`，保留12 `candidateTurns.configurationFor` resolver。正式reader实际安装点是Worker registry的 `createReplyCandidateActions(memoryKnowledgeReader)`，无需给主线程候选宿主增加无效reader壳。认证管理HTTP和07处理结束 `afterRunSettled→publishRun` 已落盘，使用现有sharedModel/provider/arbiter，不新增模型调用；共9/9管理/认证/实际08→12消费者组合与backend types通过。组合由07正常合成supplier形成正式本人记忆、12正常DSH环回生成，05删除A后B讨论候选清空且请求未增加，非预塞已采纳结果。
+
+新增待root分类：`backend-ts/test/sqlite-memory-management-http.test.mjs`、`backend-ts/test/sqlite-memory-reply-integration.test.mjs`（current Node）；`desktop/tests/sqlite-memory-management.test.mjs`（safe-node）、`desktop/tests/sqlite-memory-management-view.test.mjs`（headless）。桌面独立组件/桥及入口13/13；真实App尚待本次已获短lease。07旧正式profile的formalMemoryRows断言随正常自动发布变为12，未重跑旧4/4流程；本票新增窄hook与写者消费者组合验证发布和删除，新真实质量认证仍未知。

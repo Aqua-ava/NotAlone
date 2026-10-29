@@ -14,13 +14,14 @@ export interface ExtractionModelPort {
 }
 interface ClaimedStep {attemptId:string;stepId:string;taskId:string;runId:string;contactId:string;rows:StorageRow[];policyConfig:unknown;claim:ModelTaskClaim}
 export class SqliteMemoryExtraction {
+ private afterRunSettled?:((runId:string)=>Promise<unknown>);
  private storage:SqliteStorage;readonly ownerId:string;private model:ExtractionModelPort;readonly holders:ActiveHolders;
  private policy?:Promise<ExtractionPolicyVersion>;private initialized?:Promise<void>;private stopped=false;
  private closing?:Promise<void>;private pending=new Set<Promise<unknown>>();
  private runs=new Map<string,Promise<void>>();private active=new Map<string,{abort:AbortController;done:Promise<void>}>();
  readonly accounting:ModelPermitAccounting;
- constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders()){
-  this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;
+ constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string)=>Promise<unknown>)){
+  this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;
   this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute('memoryExtraction.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
  }
  private version(){return this.policy??=createExtractionPolicyVersion();}
@@ -71,7 +72,7 @@ export class SqliteMemoryExtraction {
     }finally{this.active.delete(task.taskId);finish();await release?.();}
    }
   }
-  if(!this.stopped)await this.storage.execute('memoryExtraction.settleRun',{ownerId:this.ownerId,runId});
+  if(!this.stopped){await this.storage.execute('memoryExtraction.settleRun',{ownerId:this.ownerId,runId});if(!this.stopped)await this.afterRunSettled?.(runId);}
  }
  private async process(batch:ClaimedStep,signal:AbortSignal){
   const policy=await this.version();const resolved=policy.resolve(batch.policyConfig);
