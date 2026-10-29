@@ -1,7 +1,7 @@
 # 07：固定范围的记忆提取与核验
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Parent: [同步、聊天清空与记忆处理规则](../../sync-memory-behavior/spec.md)、[SQLite数据库重建](../../sqlite-database-rebuild/spec.md)
 Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-grants.md)；[05 统一来源删除与清理流程](05-source-deletion-and-cleanup.md)

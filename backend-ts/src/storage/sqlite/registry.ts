@@ -1,5 +1,8 @@
+import {memoryOwnerContributionMigration} from '../../memory/sqlite/owner-schema.ts';
 import { discussionMigration } from '../../reply/sqlite/schema.ts';
+import { executionActions } from '../../memory/sqlite/execution.ts';
 import { memoryExecutionMigration } from '../../memory/sqlite/execution-schema.ts';
+import { runActions } from '../../memory/sqlite/runs.ts';
 import { memoryExtractionMigration } from '../../memory/sqlite/schema.ts';
 import { historyMigration } from '../../history/sqlite/schema.ts';
 import { historyActions } from '../../history/sqlite/actions.ts';
@@ -29,6 +32,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), discussionMigration(6), memoryExtractionMigration(7), memoryExecutionMigration(8)],
-  actions: [ ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), discussionMigration(6), memoryExtractionMigration(7), memoryExecutionMigration(8), memoryOwnerContributionMigration(9)],
+  actions: [...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions],
 };
