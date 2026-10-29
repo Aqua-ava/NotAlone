@@ -60,3 +60,10 @@ test('本人候选和有正文版本按完整贡献过滤，B引句不能掩盖A
  const result=await f.controller.decide({...read,connectionGeneration:1,request:{requestKey,action:'accept',candidateIds:[other],candidateRevisions:['0']}});
  assert.equal(result.status,'source_stale');assert.equal(f.calls.filter(c=>c.method==='POST').length,0);
 });
+
+test('来源删除保留无正文记忆身份时返回来源失效且不再提交旧编辑',async t=>{
+ const v={versionNo:'1',body:null,formationKind:'adoption',adoptionMode:'user',previousVersionNo:null,restoredFromVersionNo:null,contentState:'redacted',provenanceState:'invalidated',decisionId:requestKey,contributingContactIds:[],sources:[]};
+ const f=await fixture(t,async r=>{if(r.method==='POST')throw new Error('来源失效不应继续写出');return {candidates:[],memories:[{id:candidate,scopeKind:'contact',contactId:contact,headRevision:'2',state:'invalidated',manualProtection:false,current:null,versions:[v],decisions:[]}]};});
+ const result=await f.controller.decide({...read,scope:{scopeKind:'contact',contactId:contact},connectionGeneration:1,request:{requestKey,action:'correct',memoryId:candidate,expectedVersionNo:'1',expectedHeadRevision:'1',body:'迟到旧编辑'}});
+ assert.equal(result.status,'source_stale');assert.equal(f.calls.filter(c=>c.method==='POST').length,0);
+});

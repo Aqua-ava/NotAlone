@@ -52,7 +52,7 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false):
  });
  let m:StorageRow|undefined,previous:StorageRow|undefined;
  if(request.memoryId){
-  m=tx.get('SELECT * FROM memory WHERE owner_id=? AND id=?',[ownerId,id(request.memoryId)]);if(!m||m.state!=='active')return fail('memory_head_conflict');
+  m=tx.get('SELECT * FROM memory WHERE owner_id=? AND id=?',[ownerId,id(request.memoryId)]);if(m?.state==='invalidated')return fail('memory_source_stale');if(!m||m.state!=='active')return fail('memory_head_conflict');
   if(m.current_version_no!==integer(request.expectedVersionNo)||m.head_revision!==integer(request.expectedHeadRevision))fail('memory_head_conflict');
   previous=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!previous)return fail('memory_head_conflict');requireVersion(tx,ownerId,m,previous);
  }else if(['auto_update','correct','change','restore','withdraw','protect','unprotect'].includes(action))fail('memory_request_invalid');

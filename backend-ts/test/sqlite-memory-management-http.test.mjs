@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';import {createServer} from 'node:http';
 import {fixture,owner} from './fixtures/memory-sqlite/support.mjs';
-import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';import {SqliteMemoryManagementHttp} from '../src/memory/sqlite/management/http.ts';
+import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from '../src/memory/sqlite/management/http.ts';
 import {authorizeSqliteRequest} from '../src/sqlite-host-plugin.ts';
 test('认证管理HTTP固定owner并拒绝系统决定、注入字段、Origin和重复范围',async t=>{
  const f=await fixture(t),service=new SqliteMemoryManagement(f.storage,owner),token='synthetic-management-token',handler=new SqliteMemoryManagementHttp(service,req=>authorizeSqliteRequest(req,token));
@@ -13,3 +13,5 @@ test('认证管理HTTP固定owner并拒绝系统决定、注入字段、Origin�
  const created=await fetch(`${base}/decisions`,{method:'POST',headers,body:JSON.stringify({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'self',contactId:null},body:'独立合成手录'})});assert.equal(created.status,200);
  const read=await fetch(`${base}?scope_kind=self`,{headers});assert.equal(read.status,200);assert.equal((await read.json()).memories[0].current.body,'独立合成手录');
 });
+
+test('宿主管理查询白名单仅允许GET的精确self/contact形状',()=>{assert.equal(memoryManagementQueryAllowed('GET',new URL('http://localhost/api/memory-management?scope_kind=self')),true);assert.equal(memoryManagementQueryAllowed('GET',new URL('http://localhost/api/memory-management?scope_kind=self&owner_id=foreign')),false);assert.equal(memoryManagementQueryAllowed('POST',new URL('http://localhost/api/memory-management?scope_kind=self')),false);});
