@@ -11,6 +11,7 @@ const bundle = await build({ stdin: { contents: `
  export { createForegroundBridge } from './src/preload/foreground';
  export { ForegroundPanel } from './src/renderer/ForegroundPanel';
  export { foregroundObservation } from './src/main/foreground/observation';
+ export { BackendRequestFailure } from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false,
  banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(path.join(process.cwd(), 'package.json'))});` } });
 const dir = await mkdtemp(path.join(tmpdir(), 'notalone-manual-resume-'));
@@ -49,6 +50,40 @@ function buttons(node) {
  if (!node || typeof node !== 'object') return [];
  return [...(node.type === 'button' ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap(buttons)];
 }
+
+test('账号验证失效、识别服务失败和连接中断分别提示真实恢复方式', async t => {
+ for (const [failure, reason, expected] of [
+  [new ports.BackendRequestFailure('response', 503, 'foreground_scope_unavailable'), 'foreground_scope_unavailable', /微信账号尚未连接或验证已失效.*同步设置/],
+  [new ports.BackendRequestFailure('response', 503, 'foreground_observation_unavailable'), 'foreground_observation_unavailable', /微信会话识别服务暂不可用.*重试/],
+  [new ports.BackendRequestFailure('response', 504, 'observation_timeout'), 'observation_timeout', /本轮观察超时.*重试/],
+  [new ports.BackendRequestFailure('connection'), 'observation_unavailable', /与本机服务的连接中断.*重试/],
+ ]) {
+  const f = fixture(t);
+  f.setObservation(async () => { throw failure; });
+  await f.foreground.observeBeforeShow();
+  const state = f.foreground.getState();
+  assert.equal(state.phase, 'unavailable');
+  assert.equal(state.reason, reason);
+  assert.notEqual(f.foreground.getGenerationBlock(), null);
+  const panel = JSON.stringify(ports.ForegroundPanel({ state, session: { state: f.state } }));
+  assert.match(panel, expected);
+  assert.doesNotMatch(panel, /请手动选择本次联系人/);
+  f.foreground.notifyHelperLifecycle('focused');
+  const focused = f.foreground.getState();
+  assert.equal(focused.suspendedByHelperFocus, true);
+  assert.equal(focused.reason, reason);
+  assert.match(JSON.stringify(ports.ForegroundPanel({ state: focused, session: { state: f.state } })), expected);
+ }
+});
+
+test('未知后端错误仅发布固定识别服务失败，不泄漏任意原因或冒充传输失败', async t => {
+ const f = fixture(t);
+ f.setObservation(async () => { throw new ports.BackendRequestFailure('response', 503, 'private_internal_error'); });
+ await f.foreground.observeBeforeShow();
+ assert.equal(f.foreground.getState().reason, 'foreground_observation_unavailable');
+ const panel = JSON.stringify(ports.ForegroundPanel({ state: f.foreground.getState() }));
+ assert.doesNotMatch(panel, /private_internal_error|传输失败|连接中断/);
+});
 
 test('权限恢复通知后台清除旧阻断，手动模式下不启动前台采集', async t => {
  const f=fixture(t),calls=[];

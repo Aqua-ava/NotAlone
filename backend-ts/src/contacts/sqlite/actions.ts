@@ -66,13 +66,35 @@ export const identityActions: StorageAction[] = [
  action('identity.foregroundSnapshot','read',(tx,i)=>{
   const owner=text(i.ownerId),row=tx.get("SELECT read_enabled,read_epoch FROM owner WHERE owner_id=? AND state='active'",[owner]);
   const account=tx.get("SELECT id,external_key,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner]);
-  const verifiedDesktop=new Set(tx.all(`SELECT g.binding_id FROM read_grant g JOIN binding_verification v ON v.owner_id=g.owner_id AND v.id=g.verification_id AND v.binding_id=g.binding_id
+  const scopes=new Map(tx.all(`SELECT b.id,p.data_generation,c.barrier_generation FROM conversation_binding b
+   JOIN contact p ON p.owner_id=b.owner_id AND p.id=b.contact_id JOIN channel_conversation c ON c.owner_id=b.owner_id AND c.id=b.conversation_id
+   WHERE b.owner_id=?`,[owner]).map(b=>[String(b.id),{dataGeneration:String(b.data_generation),barrierGeneration:String(b.barrier_generation)}]));
+  const verifiedDesktop=new Set(tx.all(`SELECT g.binding_id FROM read_grant g JOIN binding_verification v ON v.owner_id=g.owner_id AND v.binding_id=g.binding_id
    JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id AND b.contact_id=g.contact_id
    JOIN contact p ON p.owner_id=b.owner_id AND p.id=b.contact_id
+   JOIN channel_conversation c ON c.owner_id=b.owner_id AND c.id=b.conversation_id
+   JOIN channel_account a ON a.owner_id=c.owner_id AND a.id=c.account_id
    WHERE g.owner_id=? AND g.revoked_at IS NULL AND v.method='foreground_confirmation' AND b.state='verified' AND p.state='active'
-   AND v.identity_generation=b.identity_generation AND g.selection_generation=p.selection_generation`,[owner]).map(b=>String(b.binding_id)));
+   AND a.identity_state='verified' AND v.identity_generation=b.identity_generation AND g.selection_generation=p.selection_generation
+   AND json_extract(v.proof,'$.account_id')=a.id AND json_extract(v.proof,'$.source_generation')=a.source_generation
+   AND json_extract(v.proof,'$.grant_id')=g.id AND json_extract(v.proof,'$.selection_generation')=CAST(p.selection_generation AS TEXT)`,[owner]).map(b=>String(b.binding_id)));
   return {enabled:row?.read_enabled===1n,readEpoch:String(row?.read_epoch??''),account:account?{id:String(account.id),key:String(account.external_key),sourceGeneration:String(account.source_generation),revision:String(account.scope_revision)}:null,
-   bindings:bindings(tx,owner).filter(b=>b.status==='active'&&b.account_id===account?.id).map(b=>({...b,desktopVerified:verifiedDesktop.has(b.binding_id)}))};
+   bindings:bindings(tx,owner).filter(b=>b.status==='active'&&b.account_id===account?.id).map(b=>({...b,...scopes.get(b.binding_id)!,desktopVerified:verifiedDesktop.has(b.binding_id)}))};
+ }),
+ action('identity.confirmForeground','write',(tx,i)=>{
+  const proof=i.proof;if(!proof||typeof proof!=='object')fail('foreground_confirmation_stale');
+  const age=Date.now()-Date.parse(proof.observedAt);
+  if(!Number.isFinite(age)||age< -1000||age>=5000)fail('foreground_confirmation_stale');
+  const current=(()=>{try{return eligibility(tx,text(i.ownerId),text(proof.contactId));}catch{return fail('foreground_binding_required');}})();
+  if(current.binding_id!==proof.bindingId||current.account_id!==proof.accountId||current.source_generation!==proof.sourceGeneration
+   ||current.scope_revision!==proof.scopeRevision||current.read_epoch!==proof.readEpoch||current.grant_id!==proof.grantId||current.selection_generation!==proof.selectionGeneration
+   ||current.data_generation!==proof.dataGeneration||current.barrier_generation!==proof.barrierGeneration)fail('foreground_confirmation_stale');
+  if(typeof proof.observationId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(proof.observationId))fail('foreground_confirmation_stale');
+  const evidence=JSON.stringify({observation_id:proof.observationId,observed_at:proof.observedAt,account_id:current.account_id,source_generation:current.source_generation,grant_id:current.grant_id,selection_generation:current.selection_generation});
+  const old=tx.get('SELECT binding_id,proof FROM binding_verification WHERE owner_id=? AND id=?',[i.ownerId,proof.observationId]);
+  if(old){if(old.binding_id!==current.binding_id||old.proof!==evidence)fail('foreground_confirmation_stale');return {confirmed:true};}
+  tx.run("INSERT INTO binding_verification(owner_id,id,binding_id,identity_generation,method,proof_format,proof,verified_at) VALUES(?,?,?,?,'foreground_confirmation','identity-metadata-v1',?,?)",[i.ownerId,proof.observationId,current.binding_id,BigInt(current.identity_generation),evidence,i.at]);
+  return {confirmed:true};
  }),
  action('identity.directory','read',(tx,i)=>{
   const owner=text(i.ownerId),counts=visibleMessageCounts(tx,owner);

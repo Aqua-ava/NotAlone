@@ -17,6 +17,13 @@ async function pageFixture(t, phase='needs_detection', selectionOnly=false, fail
  await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});return page;
 }
 
+test('同账号来源连续性失效明确说明来源变化，不误报为微信账号不一致',async t=>{
+ const page=await pageFixture(t,'conflict',true,'identity_continuity_unverified');
+ await expect(page.getByRole('alert')).toContainText('本机微信数据来源已变化');
+ await expect(page.getByRole('alert')).toContainText('旧读取授权尚未恢复');
+ await expect(page.getByRole('alert')).not.toContainText('微信账号与当前配置不一致');
+});
+
 test('名单失败不显示空列表，明确全选只覆盖当前未添加私聊', async t => {
  const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page=await browser.newPage();

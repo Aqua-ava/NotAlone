@@ -62,7 +62,9 @@ export function WechatSetupPanel({ bridge, children, selectionOnly = false }: { 
       {blocked && <p role="alert">{toolFailureMessages[state.failureCode ?? ''] ?? (state.phase === 'tool_unavailable'
         ? toolFailureMessages.wechat_tool_unavailable
         : '暂时无法完成微信账号核验。请重新检测；若仍失败，请查看「设置」中的本机诊断。')}</p>}
-      {state.phase === 'conflict' && <p role="alert">微信账号与当前配置不一致，连接尚未完成。请核对本机微信读取配置后重新检测。</p>}
+      {state.phase === 'conflict' && <p role="alert">{state.failureCode === 'identity_continuity_unverified'
+        ? '本机微信数据来源已变化，暂时无法确认与原来源连续。旧读取授权尚未恢复；请先核验当前来源，再重新确认需要读取的会话。'
+        : '微信账号与当前配置不一致，连接尚未完成。请核对本机微信读取配置后重新检测。'}</p>}
       {state.phase === 'failed' && <p role="alert">微信连接状态暂时无法核验，请刷新状态或重新检测。</p>}
       <p>检测只检查本机微信读取工具及配置账号，不读取会话列表或聊天正文，也不会开启同步。</p>
       <button className="button" onClick={() => void operate(() => bridge.detect())}>检测微信账号</button>

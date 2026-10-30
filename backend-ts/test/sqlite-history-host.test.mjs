@@ -50,13 +50,29 @@ async function handshake(infoPath){
   const timer=setTimeout(()=>finish(new Error('正式history宿主未就绪')),15000);void load();
  });
 }
-async function startHost(t,f){
+async function startHost(t,f,environment={}){
  const infoPath=path.join(f.root,'managed/sqlite-backend.info');
- const host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:path.join(f.root,'unused.env'),infoPath,businessHome:f.root,environment:{},sqlite:{userData:f.root,expectedDatabaseId:f.databaseId,role:'test',capabilities:['contacts','history']}},()=>true);t.after(()=>host.terminate());
+ const host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:path.join(f.root,'unused.env'),infoPath,businessHome:f.root,environment,sqlite:{userData:f.root,expectedDatabaseId:f.databaseId,role:'test',capabilities:['contacts','history']}},()=>true);t.after(()=>host.terminate());
  const info=await handshake(infoPath);
  const request=async(route,method='GET',body,headers={})=>{const response=await fetch(`http://${info.address}`+route,{method,headers:{authorization:`Bearer ${info.token}`,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,body:await response.json()};};
  return {host,request};
 }
+test('正式前台观察HTTP保留账号范围失效原因，不误报为观察传输失败',async t=>{
+ const f=await seed(t);
+ const storage=await SqliteStorage.open({userData:f.root,intent:'open',expectedDatabaseId:f.databaseId,role:'test'});
+ const contacts=new SqliteContactService(storage,owner,{account:async()=>({...evidence,externalKey:'changed-synthetic-account'}),sessions:async()=>[]});
+ try{await contacts.detectAccount();}finally{await contacts.close();await storage.close();}
+ const {host,request}=await startHost(t,f,{NOTALONE_SYNC_PROBE:process.execPath});
+ try{
+  const result=await request('/api/sync/foreground/observe','POST',{});
+  assert.equal(result.status,503);
+  assert.deepEqual(result.body,{error:'foreground_scope_unavailable'});
+  const confirmation=await request('/api/sync/foreground/confirm','POST',{contact_id:f.bindings[0].contact_id,observation_id:'00000000-0000-4000-8000-000000000001'});
+  assert.equal(confirmation.status,409);assert.deepEqual(confirmation.body,{error:'foreground_confirmation_stale'});
+  const injected=await request('/api/sync/foreground/confirm','POST',{contact_id:f.bindings[0].contact_id,observation_id:'00000000-0000-4000-8000-000000000001',recognized_name:'页面不得提供名称事实'});
+  assert.equal(injected.status,400);assert.deepEqual(injected.body,{error:'foreground_confirmation_invalid'});
+ }finally{await request('/api/runtime/shutdown','POST',{});assert.equal(await host.waitForExit(15000),true);}
+});
 test('正式DSH重开读取非空历史及消息分页，真实未认证渠道保持明确拒绝',async t=>{
  const f=await seed(t);
  for(let attempt=0;attempt<2;attempt++){

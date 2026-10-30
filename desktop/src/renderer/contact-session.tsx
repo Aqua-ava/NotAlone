@@ -32,7 +32,9 @@ export function useContactSession() {
       if (active.current) setError('');
     } catch (error) {
       if (active.current) setError(error instanceof Error && error.message.includes('foreground_binding_required')
-        ? '当前联系人没有唯一有效的微信绑定，请选择“切换为手动输入”。'
+        ? '当前联系人没有与本次微信观察一致的有效绑定，请到同步设置重新确认会话，或切换为手动输入。'
+        : error instanceof Error && error.message.includes('foreground_confirmation_stale')
+        ? '微信识别结果已过期，请切回目标私聊，重新打开小窗后选择联系人。'
         : '联系人确认已失效，请重新选择本次联系人。');
     }
   }

@@ -30,21 +30,23 @@ export function installForegroundBridge(commands: PageCommands, backend: Backend
   commands.handle('foreground:confirm', async (...args: unknown[]) => {
     const confirmation = confirmationArguments(args);
     const generation = controller.checkConfirmation(confirmation);
-    // 只复验当前联系人已有绑定；不依赖同步服务，也不读取其他联系人的目录。
+    // 页面只选择联系人；正式观察回执由可信宿主持有，后端复验后保存独立桌面绑定证据。
+    const proof = controller.desktopConfirmation(confirmation);
     let response;
     try {
-      response = await backend.requestJson({ method: 'GET',
-        path: `/api/contacts/${confirmation.contactId}/assistant-session/binding` });
+      response = await backend.requestJson({ method: 'POST', path: '/api/sync/foreground/confirm',
+        body: proof, maxResponseBytes: 4096 });
     } catch (error) {
-      if (error instanceof BackendRequestFailure && error.status === 409 && error.code === 'assistant_session_rejected') {
-        throw new Error('foreground_binding_required');
+      if (error instanceof BackendRequestFailure && error.status === 409
+        && (error.code === 'foreground_binding_required' || error.code === 'foreground_confirmation_stale')) {
+        throw new Error(error.code);
       }
       throw error;
     }
     if (response.generation !== generation || backend.getConnectionGeneration() !== generation) {
       throw new Error('联系人确认已失效，请重新选择本次联系人。');
     }
-    controller.checkConfirmation(confirmation);
+    controller.desktopConfirmation(confirmation);
     const data = response.data;
     if (!data || typeof data !== 'object' || Object.keys(data).length !== 1 || !('confirmed' in data) || data.confirmed !== true) {
       throw new Error('微信绑定暂时无法核验，请重试或切换为手动输入。');

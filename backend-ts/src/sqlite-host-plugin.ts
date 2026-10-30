@@ -139,7 +139,7 @@ export async function apply(ctx: Context) {
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
       contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();});
     }
-    if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot());
+    if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot(),proof=>contacts!.confirmForeground(proof));
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
     const readHistoryStatus=async()=>{
@@ -224,13 +224,32 @@ export async function apply(ctx: Context) {
           if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length){respond(400,{error:'foreground_observation_invalid'});return;}
           await foreground.screenPermissionRestored();respond(200,{ok:true});return;
         }
+        if(foreground&&url.pathname==='/api/sync/foreground/confirm'){
+          if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}
+          let body:unknown;try{body=JSON.parse((await readWechatHttpBody(req,1024,3500)).toString('utf8'));}catch{respond(400,{error:'foreground_confirmation_invalid'});return;}
+          const fields=body&&typeof body==='object'&&!Array.isArray(body)?body as Record<string,unknown>:null;
+          const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+          if(!fields||Object.keys(fields).length!==2||!Object.keys(fields).every(k=>k==='contact_id'||k==='observation_id')
+            ||typeof fields.contact_id!=='string'||!uuid.test(fields.contact_id)||typeof fields.observation_id!=='string'||!uuid.test(fields.observation_id)){
+            respond(400,{error:'foreground_confirmation_invalid'});return;
+          }
+          const abort=new AbortController(),onAbort=()=>abort.abort();req.once('aborted',onAbort);
+          try{respond(200,await foreground.confirm(fields.contact_id,fields.observation_id,abort.signal));}
+          catch(error){const code=(error as {code?:string}).code;respond(409,{error:code==='foreground_binding_required'?code:'foreground_confirmation_stale'});}
+          finally{req.removeListener('aborted',onAbort);}return;
+        }
         if(foreground&&url.pathname==='/api/sync/foreground/observe'){
           if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}
           let body:unknown;try{body=JSON.parse((await readWechatHttpBody(req,1024,3500)).toString('utf8')||'{}');}catch{respond(400,{error:'foreground_observation_invalid'});return;}
           if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length){respond(400,{error:'foreground_observation_invalid'});return;}
           const abort=new AbortController(),onAbort=()=>abort.abort();req.once('aborted',onAbort);
           try{const result=await foreground.observe(abort.signal);const {recognized_name,recognition_confidence,...rest}=result;respond(200,{...rest,...(recognized_name===null?{}:{recognized_name,recognition_confidence})});}
-          catch(error){const code=(error as {code?:string}).code;respond(code==='foreground_observation_busy'?409:503,{error:code==='foreground_observation_busy'?code:'foreground_observation_unavailable'});}
+          catch(error){
+            const code=(error as {code?:string}).code;
+            // 只外露固定恢复原因；账号未验证和观察超时不能被折叠成传输故障。
+            const safe=code==='foreground_observation_busy'||code==='foreground_scope_unavailable'||code==='observation_timeout'?code:'foreground_observation_unavailable';
+            respond(safe==='foreground_observation_busy'?409:safe==='observation_timeout'?504:503,{error:safe});
+          }
           finally{req.removeListener('aborted',onAbort);}return;
         }
         if(history&&req.method==='GET'&&url.pathname==='/api/sync/status'){

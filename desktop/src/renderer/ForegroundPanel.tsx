@@ -33,7 +33,7 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
     {session?.error && <p role="alert">{session.error}</p>}
   </section>;
   const failure = foregroundFailureReason(state.reason);
-  const paused = state.phase === 'paused' || state.suspendedByHelperFocus;
+  const paused = state.phase === 'paused' || state.suspendedByHelperFocus && state.phase !== 'unavailable';
   const currentGroup = isUnsupportedForegroundConversation(state.reason);
   const message = currentGroup ? '群聊暂不支持，前台联系人匹配与新生成已暂停'
     : state.reason === 'sync_disabled' ? '同步总开关已关闭，前台识别暂停'
@@ -53,6 +53,8 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
       ? '系统前台状态未知，请手动选择本次联系人'
     : state.phase === 'unavailable' && state.reason === 'screen_capture_permission_missing'
       ? '缺少屏幕录制权限，授权后可重新识别微信会话'
+    : state.phase === 'unavailable' && failure && ['foreground_scope_unavailable', 'foreground_observation_unavailable', 'observation_unavailable', 'observation_timeout'].includes(state.reason ?? '')
+      ? failure.message
     : state.phase === 'unavailable' && failure ? `${failure.message}，请手动选择本次联系人`
     : state.phase === 'unavailable' ? '前台定位暂不可用，请手动选择联系人' : '前台定位尚未观察';
   return <section aria-label="前台会话定位">

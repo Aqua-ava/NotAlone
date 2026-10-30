@@ -45,6 +45,8 @@ export class ForegroundController {
   private generation: number | undefined;
   private scopeRevision: number;
   private readingScopeChanges = 0;
+  // 只由正式观察填入，进入小窗不延长原采集时间；页面不能提供或修改这份回执。
+  private confirmationObservation: { observationId: string; observedAt: string; generation: number; scopeRevision: number } | undefined;
   private qualification: { generation: number; scopeRevision: number; contactId: string;
     kind: 'manual-confirmed' | 'verified-binding' } | undefined;
   private readonly listeners = new Set<(state: ForegroundState) => void>();
@@ -92,6 +94,7 @@ export class ForegroundController {
       && generation !== undefined
       ? { generation } : undefined;
     if (hadPermit && !this.syncPermit) ++this.captureAuthorityRevision;
+    if (!this.syncPermit) this.confirmationObservation = undefined;
     if (!this.syncPermit) this.changePending = false;
     this.updateChangeSource();
   }
@@ -169,9 +172,17 @@ export class ForegroundController {
     }
     return generation;
   }
+  desktopConfirmation(selection: ForegroundConfirmation): { contact_id: string; observation_id: string } {
+    const generation = this.checkConfirmation(selection), receipt = this.confirmationObservation;
+    const age = receipt ? Date.now() - Date.parse(receipt.observedAt) : NaN;
+    if (!receipt || receipt.generation !== generation || receipt.scopeRevision !== selection.contactScopeRevision
+      || !Number.isFinite(age) || age < -1000 || age >= 5000) throw new Error('foreground_confirmation_stale');
+    return { contact_id: selection.contactId, observation_id: receipt.observationId };
+  }
   // 仅由helper具名桥调用；绑定核验成功后同步选择，旧观察不能覆盖资格。
   confirm(selection: ForegroundConfirmation) {
     const generation = this.checkConfirmation(selection);
+    this.confirmationObservation = undefined;
     const contact = this.contacts.getState();
     this.invalidatePending(); ++this.epoch; ++this.captureAuthorityRevision;
     const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
@@ -250,6 +261,7 @@ export class ForegroundController {
     const scope = this.contacts.getState().scopeRevision;
     const epoch = ++this.epoch;
     const began = performance.now();
+    this.confirmationObservation = undefined;
     this.measure('request_started');
     const abort = new AbortController();
     const current = () => !this.disposed && !abort.signal.aborted && epoch === this.epoch
@@ -279,6 +291,10 @@ export class ForegroundController {
       // 丢弃已过时的身份/待选择结果，避免旧观察恢复资格或显示旧建议；技术失败及安全暂停仍处理。
       if (this.changePending && (observation.phase === 'confirmed'
         || observation.phase === 'manual-required' && isAwaitingForegroundSelection(observation.reason))) return;
+      this.confirmationObservation = observation.phase === 'manual-required'
+        && observation.reason === 'unmatched_requires_selection' && observation.recognizedName
+        ? { observationId: observation.observationId, observedAt: observation.observedAt, generation, scopeRevision: scope }
+        : undefined;
       // 群聊暂停跨助手获焦/失败保留，只有新的完整私聊证据才能解除。
       const privateVerified = observation.phase === 'confirmed'
         || (observation.phase === 'manual-required' && observation.reason === 'unmatched_requires_selection');
@@ -314,10 +330,17 @@ export class ForegroundController {
       this.measure('result_published', performance.now() - began, changedContact);
     }).catch((error: unknown) => {
       if (!current()) return;
-      // 认证接口明确繁忙时保留具体原因；本轮撤销资格，后续独立观察可重新核验。
-      const busy = error instanceof BackendRequestFailure && error.kind === 'response'
-        && error.status === 409 && error.code === 'foreground_observation_busy';
-      this.clearObservation('unavailable', busy ? 'foreground_observation_busy' : 'observation_unavailable');
+      // 只保留固定业务原因；账号范围和服务失败不能误报为网络传输失败。
+      let reason = 'foreground_observation_unavailable';
+      if (error instanceof BackendRequestFailure) {
+        if (error.kind === 'connection') reason = 'observation_unavailable';
+        else if (error.kind === 'response') {
+          if (error.status === 409 && error.code === 'foreground_observation_busy') reason = error.code;
+          else if (error.status === 503 && error.code === 'foreground_scope_unavailable') reason = error.code;
+          else if ((error.status === 503 || error.status === 504) && error.code === 'observation_timeout') reason = error.code;
+        }
+      }
+      this.clearObservation('unavailable', reason);
     });
     // UI 超时可以结束等待，但底层传输未结算时仍占有唯一观察许可。
     const settled = request.finally(() => {
@@ -339,13 +362,18 @@ export class ForegroundController {
   }
   notifyHelperLifecycle(event: 'focused' | 'blurred' | 'hidden' | 'closed'): void {
     if (this.disposed) return;
+    if (event !== 'focused') this.confirmationObservation = undefined;
     const focused = event === 'focused';
     const wasFocused = this.state.suspendedByHelperFocus;
     if (focused === wasFocused && (focused || event === 'blurred')) return;
     if (wasFocused && !focused) this.refreshAfterHelperFocus = true;
     this.invalidatePending('paused'); ++this.epoch;
     this.publish({ suspendedByHelperFocus: event === 'focused', foregroundRevision: this.state.foregroundRevision + 1 });
-    if (event === 'focused') { this.cancelScheduled(); this.clearObservation('paused', 'helper_focused'); }
+    if (event === 'focused') {
+      this.cancelScheduled();
+      // 获焦只停止新采集；用户进入小窗查看时仍须看见刚取得的故障与恢复方式。
+      if (this.state.phase !== 'unavailable') this.clearObservation('paused', 'helper_focused');
+    }
     else this.scheduleNext();
   }
   invalidatePending(phase: 'paused' | 'unavailable' = 'unavailable'): void {
@@ -374,12 +402,14 @@ export class ForegroundController {
     if (this.disposed) return;
     this.changeSource?.dispose(); this.changeSource = undefined; this.changePending = false;
     this.cancelScheduled(); this.disposed = true; ++this.epoch; this.flight?.abort.abort();
+    this.confirmationObservation = undefined;
     clearTimeout(this.nameExpiry); this.nameExpiry = undefined;
     this.state = { ...this.state, recognizedName: null, recognitionConfidence: null };
     for (const unsubscribe of this.unsubscribe) unsubscribe();
     this.listeners.clear();
   }
   private clearObservation(phase: ForegroundState['phase'], reason: string | null): void {
+    if (reason !== 'helper_focused') this.confirmationObservation = undefined;
     if (phase === 'manual-required' || phase === 'unavailable') this.qualification = undefined;
     this.publish({ phase, reason, observedAt: null, probeAvailable: null, wechatInFront: null,
       recognizedName: null, recognitionConfidence: null,

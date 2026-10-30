@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'esbuild';
-const built = await build({ stdin: { contents: `export { WechatSetupController } from './src/main/setup/wechat-controller'; export { installWechatSetupBridge } from './src/main/setup/wechat-bridge'; export { createWechatSetupBridge } from './src/preload/wechat-setup';`, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
-const { WechatSetupController, installWechatSetupBridge, createWechatSetupBridge } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const built = await build({ stdin: { contents: `export { WechatSetupController } from './src/main/setup/wechat-controller'; export { installWechatSetupBridge } from './src/main/setup/wechat-bridge'; export { createWechatSetupBridge } from './src/preload/wechat-setup'; export { BackendRequestFailure } from './src/main/backend/json-client';`, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
+const { WechatSetupController, installWechatSetupBridge, createWechatSetupBridge, BackendRequestFailure } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const status = (state='ready') => ({state,account_id:'synthetic-account',candidate_token:state==='ready'?'synthetic-token':null,failure_code:null});
 const flush = async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
 function fixture(){
@@ -12,7 +12,7 @@ function fixture(){
  const backend={getConnectionGeneration:()=>generation,onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},
   async requestJson(request){requests.push(request);const captured=generation;
    if(request.path==='/api/setup/wechat/detect'){control.status=status();}
-   else if(request.method==='POST'){if(control.postBarrier)await control.postBarrier;control.status=control.confirmResult??status('restart_required');if(control.postLost)throw new Error('lost');}
+   else if(request.method==='POST'){if(control.postBarrier)await control.postBarrier;if(control.confirmError)throw control.confirmError;control.status=control.confirmResult??status('restart_required');if(control.postLost)throw new Error('lost');}
    else if(control.readBarrier)await control.readBarrier;
    return {generation:captured,data:control.status};},
   async restart(){control.restarts++;if(control.restartBarrier)await control.restartBarrier;if(!control.restartOk)return false;connect(undefined);control.status={...status('connected'),account_id:control.connectedAccount??'synthetic-account'};connect((generation??1)+1);return true;}};
@@ -114,6 +114,16 @@ test('确认时真实账号变化保留后端冲突原因，不重复探测或�
  const count=f.requests.length;
  await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});
  assert.equal(f.controller.getState().phase,'conflict');assert.equal(f.controller.getState().failureCode,'wechat_account_changed');
+ assert.equal(f.requests.length,count+1);assert.equal(f.control.restarts,0);
+});
+
+test('同一账号来源换代被明确拒绝时保留连续性原因，不被只读状态抹去',async()=>{
+ const f=fixture();await f.controller.detect();
+ f.control.confirmError=new BackendRequestFailure('response',503,'identity_continuity_unverified');
+ const count=f.requests.length;
+ await f.controller.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false});
+ assert.equal(f.controller.getState().phase,'conflict');
+ assert.equal(f.controller.getState().failureCode,'identity_continuity_unverified');
  assert.equal(f.requests.length,count+1);assert.equal(f.control.restarts,0);
 });
 

@@ -1,4 +1,5 @@
 import type { BackendHost } from '../backend/host';
+import { BackendRequestFailure } from '../backend/json-client';
 import { validWechatSetupConfirmation, type WechatSetupConfirmation, type WechatSetupState } from '../../shared/wechat-setup-bridge';
 
 type Operation = { generation: number; epoch: number };
@@ -106,8 +107,14 @@ export class WechatSetupController {
         if (!this.current(operation)) return;
         if (['connected', 'restart_required'].includes(value.state) && value.account_id !== accountId) throw new Error('account changed');
         this.accept(value);
-      } catch {
+      } catch (error) {
         if (!this.current(operation)) return;
+        // 已明确拒绝的来源换代没有保存成功，不能用普通状态读回抹去原因。
+        if (error instanceof BackendRequestFailure && error.kind === 'response'
+          && error.code === 'identity_continuity_unverified') {
+          this.accept({ state: 'conflict', account_id: null, candidate_token: null, failure_code: error.code });
+          return;
+        }
         // 只读核验已持久化结果；丢失响应时不重放授权。
         await this.read(operation, accountId);
       }

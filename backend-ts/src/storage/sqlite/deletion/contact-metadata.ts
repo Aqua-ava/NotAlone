@@ -64,6 +64,7 @@ export class ContactMetadataLifetime {
   async validate(token:ReadEligibility){return (await this.current()).validate(token);}
   async directory(){return (await this.current()).directory();}
   async foregroundSnapshot(){return (await this.current()).foregroundSnapshot();}
+  async confirmForeground(proof:import('../../../foreground/sqlite-foreground.ts').ForegroundBindingConfirmation){await (await this.current()).confirmForeground(proof);}
   async syncStatus(){await this.current();return this.http!.syncStatus();}
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     await this.refresh();
