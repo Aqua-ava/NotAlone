@@ -5,13 +5,13 @@ import {requireSkillRun} from '../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requireDiscussion,requireDiscussionContact,runtimeView,identifier} from './actions.ts';
 import {requireAttempt,decode} from './requests.ts';
-import {quarantinedDiscussionImpact} from './deletion.ts';
+import {invalidHistoryDiscussionImpact} from './deletion.ts';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name:`runtime.${name}`,mode,retryBusy:mode==='write',execute});
 function copy(tx:StorageTransaction,i:any):StorageRow{return tx.get('SELECT * FROM runtime_copy WHERE owner_id=? AND contact_id=? AND discussion_id=? AND id=?',[identifier(i.ownerId),identifier(i.contactId),identifier(i.discussionId),identifier(i.copyId)])??fail('discussion_runtime_unavailable');}
 export function requireRuntimeCurrent(tx:StorageTransaction,i:any):StorageRow{
  const row=copy(tx,i),d=requireDiscussion(tx,i),c=requireDiscussionContact(tx,i.ownerId,i.contactId);
- if(quarantinedDiscussionImpact(tx,i.ownerId).copies.has(String(row.id)))fail('discussion_runtime_invalidated');
+ if(invalidHistoryDiscussionImpact(tx,i.ownerId).copies.has(String(row.id)))fail('discussion_runtime_invalidated');
  if(row.state!=='preparing'&&d.current_runtime_id!==row.id||!['dirty','ready','preparing'].includes(String(row.state))||row.write_generation!==d.generation||row.accepted_data_generation!==c.data_generation||row.source_revision!==c.source_revision||row.cleanup_operation_id!==null)fail('discussion_runtime_invalidated');
  for(const context of tx.all('SELECT c.*,r.provenance_state FROM runtime_context r JOIN reply_context c ON c.owner_id=r.owner_id AND c.id=r.context_id WHERE r.owner_id=? AND r.copy_id=?',[i.ownerId,i.copyId])){
   if(context.provenance_state!=='verified'||context.state!=='active')fail('discussion_runtime_invalidated');

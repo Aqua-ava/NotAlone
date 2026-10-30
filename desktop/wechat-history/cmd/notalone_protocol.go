@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -61,6 +62,9 @@ type notaloneHistorySession struct {
 	cancel            context.CancelFunc
 	snapshot          *notaloneSnapshot
 	messageGuard      *notaloneSourceGuard
+	messageMonitor    *notaloneSourceGuard
+	guardLost         chan struct{}
+	guardLostOnce     sync.Once
 	inspected         *notaloneInspection
 	program           func(context.Context) (notaloneProgramVersion, error)
 	certify           func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
@@ -70,7 +74,7 @@ type notaloneHistorySession struct {
 
 func newNotaloneHistorySession(s *server) *notaloneHistorySession {
 	life, cancel := context.WithCancel(context.Background())
-	return &notaloneHistorySession{server: s, life: life, cancel: cancel, program: readNotaloneProgramVersion, certify: certifyNotaloneProfile}
+	return &notaloneHistorySession{server: s, life: life, cancel: cancel, program: readNotaloneProgramVersion, certify: certifyNotaloneProfile, guardLost: make(chan struct{})}
 }
 func (h *notaloneHistorySession) close() {
 	h.cancel()
@@ -84,6 +88,10 @@ func (h *notaloneHistorySession) close() {
 	if h.messageGuard != nil {
 		_ = h.messageGuard.Close()
 		h.messageGuard = nil
+	}
+	if h.messageMonitor != nil {
+		_ = h.messageMonitor.Close()
+		h.messageMonitor = nil
 	}
 	for _, g := range h.guards {
 		_ = g.Close()
@@ -108,7 +116,28 @@ func (h *notaloneHistorySession) ensureMessageGuard() error {
 	if err != nil {
 		return notaloneFailure("history_source_unverified")
 	}
+	// 事件通知使用独立队列，不能消耗读前核验使用的守卫事件。
+	monitor, err := newNotaloneSourceGuard(directory, files)
+	if err != nil {
+		_ = guard.Close()
+		return notaloneFailure("history_source_unverified")
+	}
+	if monitor.StartMonitor() != nil || guard.Check() != nil {
+		_ = monitor.Close()
+		_ = guard.Close()
+		return notaloneFailure("history_source_unverified")
+	}
 	h.messageGuard = guard
+	h.messageMonitor = monitor
+	go func() {
+		select {
+		case <-monitor.Lost():
+			if h.life.Err() == nil {
+				h.guardLostOnce.Do(func() { close(h.guardLost) })
+			}
+		case <-h.life.Done():
+		}
+	}()
 	return nil
 }
 
@@ -509,14 +538,43 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	return page, nil
 }
 func runNotaloneHistoryWithServer(s *server, input io.Reader, output io.Writer) {
-	session := newNotaloneHistorySession(s)
+	runNotaloneHistorySession(newNotaloneHistorySession(s), input, output)
+}
+func runNotaloneHistorySession(session *notaloneHistorySession, input io.Reader, output io.Writer) {
 	defer session.close()
+	if closer, ok := input.(io.Closer); ok {
+		defer closer.Close()
+	}
 	scanner := bufio.NewScanner(input)
 	scanner.Buffer(make([]byte, 4096), 131072)
 	encoder := json.NewEncoder(output)
-	for scanner.Scan() {
+	lines, stop := make(chan string), make(chan struct{})
+	defer close(stop)
+	go func() {
+		defer close(lines)
+		for scanner.Scan() {
+			select {
+			case lines <- scanner.Text():
+			case <-stop:
+				return
+			}
+		}
+	}()
+	for {
+		var line string
+		select {
+		case <-session.guardLost:
+			return
+		case <-session.life.Done():
+			return
+		case value, ok := <-lines:
+			if !ok {
+				return
+			}
+			line = value
+		}
 		request := notaloneHistoryRequest{}
-		decoder := json.NewDecoder(strings.NewReader(scanner.Text()))
+		decoder := json.NewDecoder(strings.NewReader(line))
 		decoder.DisallowUnknownFields()
 		err := decoder.Decode(&request)
 		var data any
@@ -526,10 +584,20 @@ func runNotaloneHistoryWithServer(s *server, input io.Reader, output io.Writer) 
 				err = notaloneFailure("history_request_invalid")
 			}
 		}
+		select {
+		case <-session.guardLost:
+			return
+		default:
+		}
 		if err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			data, err = session.handle(ctx, request)
 			cancel()
+		}
+		select {
+		case <-session.guardLost:
+			return
+		default:
 		}
 		if err != nil {
 			code := err.Error()

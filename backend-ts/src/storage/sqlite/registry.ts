@@ -25,6 +25,7 @@ import { historyIncrementalMigration } from '../../history/sqlite/incremental-sc
 import { historyClearMigration } from '../../history/sqlite/clear-schema.ts';
 import { historyContinuityMigration } from '../../history/sqlite/continuity-schema.ts';
 import { historyStateMigration } from '../../history/sqlite/state-schema.ts';
+import { historyGuardMigration } from '../../history/sqlite/guard-schema.ts';
 import { historyClearActions } from '../../history/sqlite/clear-actions.ts';
 import { historyActions } from '../../history/sqlite/actions.ts';
 import { identityMigration } from '../../contacts/sqlite/schema.ts';
@@ -54,6 +55,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12), memoryDocumentsMigration(13), historyIncrementalMigration(14), historyClearMigration(15), historyContinuityMigration(16), historyStateMigration(17)],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12), memoryDocumentsMigration(13), historyIncrementalMigration(14), historyClearMigration(15), historyContinuityMigration(16), historyStateMigration(17),historyGuardMigration(18)],
   actions: [...memoryDocumentsActions, ...memoryDocumentsStageActions, ...memoryDocumentsPublicationActions, ...memoryAdjudicationActions, ...memoryManagementActions, ...createReplyCandidateActions(combinedKnowledgeReader), ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...historyClearActions, ...createMediaActions(installedDeletionRegistration), ...cutoverActions],
 };

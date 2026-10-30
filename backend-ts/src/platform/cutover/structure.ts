@@ -18,7 +18,7 @@ export const DEFERRED_DESIGN_TABLES = ['expression_preference', 'expression_pref
 export const REPLACED_DESIGN_TABLES = ['read_exclusion'] as const;
 /** 实现需要的关联/账本/范围表，均有对应票与真实动作，不冒充逻辑目录之外的领域平台。 */
 export const IMPLEMENTATION_TABLES = ['document_effect_scope', 'document_extraction_reuse', 'document_publication_identity',
-  'document_replacement', 'history_cutoff_member', 'history_deletion_fence', 'history_continuity_fence', 'history_continuity_scope', 'history_message_quarantine', 'history_restore', 'history_source_exclusion',
+  'document_replacement', 'history_cutoff_member', 'history_deletion_fence', 'history_continuity_fence', 'history_continuity_scope', 'history_guard_lease', 'history_message_quarantine', 'history_restore', 'history_source_exclusion',
   'message_alias', 'reply_candidate_context', 'reply_candidate_input', 'reply_candidate_input_source', 'reply_candidate_request',
   'reply_execution_input', 'runtime_file'] as const;
 export const EXPECTED_TABLES: readonly string[] = [...IMPLEMENTED_DESIGN_TABLES, ...IMPLEMENTATION_TABLES].sort();

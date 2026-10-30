@@ -29,6 +29,12 @@ type notaloneSourceGuard struct {
 	fingerprint string
 	invalid     bool
 	closed      bool
+	lost        chan struct{}
+	lostOnce    sync.Once
+	monitoring  bool
+	monitorDone chan struct{}
+	closeDone   chan struct{}
+	closeError  error
 }
 
 func newNotaloneSourceGuard(directory string, files []string) (*notaloneSourceGuard, error) {
@@ -42,7 +48,7 @@ func newNotaloneSourceGuard(directory string, files []string) (*notaloneSourceGu
 			return nil, errors.New("source_guard_input_invalid")
 		}
 	}
-	guard := &notaloneSourceGuard{queue: -1}
+	guard := &notaloneSourceGuard{queue: -1, lost: make(chan struct{}), closeDone: make(chan struct{})}
 	accepted := false
 	defer func() {
 		if !accepted {
@@ -162,10 +168,47 @@ func (guard *notaloneSourceGuard) Check() error {
 	}
 	if !valid || !guard.checkEvents() {
 		guard.invalid = true
+		guard.lostOnce.Do(func() { close(guard.lost) })
 		return errors.New("source_guard_changed")
 	}
 	return nil
 }
+
+// 持续监听目录和文件实例变化；任何事件均终止可信期间。
+func (guard *notaloneSourceGuard) StartMonitor() error {
+	guard.mu.Lock()
+	defer guard.mu.Unlock()
+	if guard.closed || guard.invalid {
+		return errors.New("source_guard_changed")
+	}
+	if guard.monitoring {
+		return nil
+	}
+	var user syscall.Kevent_t
+	syscall.SetKevent(&user, 1, syscall.EVFILT_USER, syscall.EV_ADD|syscall.EV_CLEAR)
+	zero := syscall.Timespec{}
+	if count, err := syscall.Kevent(guard.queue, []syscall.Kevent_t{user}, nil, &zero); err != nil || count != 0 {
+		return errors.New("source_guard_watch_failed")
+	}
+	guard.monitoring = true
+	guard.monitorDone = make(chan struct{})
+	queue := guard.queue
+	go func() {
+		defer close(guard.monitorDone)
+		var events [1]syscall.Kevent_t
+		_, _ = syscall.Kevent(queue, nil, events[:], nil)
+		guard.mu.Lock()
+		defer guard.mu.Unlock()
+		// 阻塞监听无论因事件还是异常返回，都不能继续宣称守卫有效。
+		if !guard.closed {
+			guard.invalid = true
+			guard.lostOnce.Do(func() { close(guard.lost) })
+		}
+	}()
+	return nil
+}
+
+func (guard *notaloneSourceGuard) Lost() <-chan struct{} { return guard.lost }
 
 func (guard *notaloneSourceGuard) Fingerprint() string {
 	if guard == nil {
@@ -200,12 +243,33 @@ func (guard *notaloneSourceGuard) Close() error {
 		return nil
 	}
 	guard.mu.Lock()
-	defer guard.mu.Unlock()
 	if guard.closed {
-		return nil
+		done := guard.closeDone
+		guard.mu.Unlock()
+		<-done
+		return guard.closeError
 	}
 	guard.closed = true
-	failed := guard.queue >= 0 && syscall.Close(guard.queue) != nil
+	guard.lostOnce.Do(func() { close(guard.lost) })
+	failed := false
+	if guard.monitoring && guard.queue >= 0 {
+		var wake syscall.Kevent_t
+		syscall.SetKevent(&wake, 1, syscall.EVFILT_USER, 0)
+		wake.Fflags = syscall.NOTE_TRIGGER
+		zero := syscall.Timespec{}
+		_, err := syscall.Kevent(guard.queue, []syscall.Kevent_t{wake}, nil, &zero)
+		failed = err != nil
+	}
+	done := guard.monitorDone
+	guard.mu.Unlock()
+	// 不复用队列描述符，直到阻塞监听确认退出。
+	if done != nil && !failed {
+		<-done
+	}
+	guard.mu.Lock()
+	if guard.queue >= 0 && syscall.Close(guard.queue) != nil {
+		failed = true
+	}
 	guard.queue = -1
 	for i := range guard.watches {
 		if syscall.Close(guard.watches[i].fd) != nil {
@@ -214,7 +278,10 @@ func (guard *notaloneSourceGuard) Close() error {
 		guard.watches[i].fd = -1
 	}
 	if failed {
-		return errors.New("source_guard_close_failed")
+		guard.closeError = errors.New("source_guard_close_failed")
 	}
-	return nil
+	close(guard.closeDone)
+	err := guard.closeError
+	guard.mu.Unlock()
+	return err
 }

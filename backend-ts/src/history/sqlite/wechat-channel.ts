@@ -23,6 +23,8 @@ function scopeIdentity(scope:HistoryScope):string {
 }
 /** 每实例只绑定一个完整授权token；只经正式窄协议读取，不自动寻找工具或提升支持资格。 */
 class WechatHistoryChannel implements HistoryChannel {
+ readonly #guardLoss=Promise.withResolvers<void>();
+ readonly guardSession={loss:this.#guardLoss.promise};
  readonly #executable?:string;
  #native?:NarrowWechatClient;
  #opening?:Promise<NarrowWechatClient>;
@@ -36,7 +38,7 @@ class WechatHistoryChannel implements HistoryChannel {
    const options=await loadNarrowWechatOptions(this.#executable!);
    if(signal?.aborted)return reject('history_native_cancelled');
    if(this.#closed)return reject('history_native_closed');
-   const native=new NarrowWechatClient(options);this.#native=native;
+   const native=new NarrowWechatClient(options);this.#native=native;void native.stopped.then(()=>this.#guardLoss.resolve());
    const scope=this.#scope!,resolved=await native.resolveSelected(scope.conversationKey,signal);
    if(resolved.accountKey!==scope.accountKey)return reject('history_account_changed');
    if(resolved.conversationKey!==scope.conversationKey)return reject('history_scope_changed');
@@ -79,7 +81,7 @@ class WechatHistoryChannel implements HistoryChannel {
   });
  }
  async close():Promise<void>{
-  this.#closed=true;await this.#native?.close();
+  this.#closed=true;this.#guardLoss.resolve();await this.#native?.close();
   try{await this.#opening;}catch{/* 已失败的初始化也必须排空，不能再次打开读者。 */}
   await this.#native?.close();
  }

@@ -24,7 +24,8 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
  const historyGoal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='history' ORDER BY created_at DESC,rowid DESC LIMIT 1",[owner,contact]);
  const incrementalGoal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='incremental' ORDER BY created_at DESC,rowid DESC LIMIT 1",[owner,contact]);
  const goal=historyGoal;
- const continuityBlocked=Boolean(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[owner,contact]));
+ const continuityBlocked=Boolean(tx.get(`SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=? UNION ALL
+  SELECT 1 FROM history_guard_lease g JOIN database_instance d ON d.slot=1 WHERE g.owner_id=? AND g.contact_id=? AND (g.state<>'active' OR g.runtime_id<>d.runtime_id) LIMIT 1`,[owner,contact,owner,contact]));
  const blockedBinding=continuityBlocked&&!goal?tx.get("SELECT id FROM conversation_binding WHERE owner_id=? AND contact_id=? AND state='verified'",[owner,contact]):undefined;
  const counts=tx.get("SELECT count(*) AS messages,count(CASE WHEN kind<>'text' THEN 1 END) AS nontext FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available')",[owner,contact])!;
  const pages=goal?tx.get('SELECT count(*) AS n FROM sync_capture WHERE owner_id=? AND goal_id=?',[owner,goal.id])!.n:0n;

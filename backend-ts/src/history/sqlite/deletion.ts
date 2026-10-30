@@ -5,6 +5,7 @@ import { verifiedCutoffForOperation } from './clear-actions.ts';
 const rowKinds=Object.fromEntries(['capture_record','message_alias','message','sync_capture','read_goal'].map(kind=>[kind,{keys:['owner_id','id'],ownerKey:'owner_id'}]));
 rowKinds.history_continuity_fence={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
 rowKinds.history_continuity_scope={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
+rowKinds.history_guard_lease={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const identity=(kind:string,key:Record<string,string>):string=>createHash('sha256').update(JSON.stringify([kind,Object.keys(key).sort().map(k=>[k,key[k]])])).digest('hex');
 const target=(kind:string,key:Record<string,string>):RowDeletionTarget=>({kind:'row',domain:'history',rowKind:kind,key,identity:identity(kind,key),holderKeys:[]});
@@ -17,6 +18,7 @@ function scopeRows(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget
  const targets=records.map(r=>target('capture_record',{owner_id:ownerId,id:String(r.id)}));
  if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_continuity_fence WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_continuity_fence',{owner_id:ownerId,contact_id:String(r.contact_id)}));
  if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_continuity_scope WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_continuity_scope',{owner_id:ownerId,contact_id:String(r.contact_id)}));
+ if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_guard_lease WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_guard_lease',{owner_id:ownerId,contact_id:String(r.contact_id)}));
  const deleting=new Set(records.map(r=>String(r.id)));
  const messages=scope.kind==='source'?[...new Set(records.flatMap(r=>r.message_id?[String(r.message_id)]:[]))]:tx.all(`SELECT id FROM message WHERE owner_id=?${scope.kind==='account'?'':' AND contact_id=?'} AND availability='deleting'`,scope.kind==='account'?[ownerId]:[ownerId,scope.contactId]).map(r=>String(r.id));
  for(const id of messages){

@@ -81,10 +81,11 @@ function closure(tx:StorageTransaction,op:DeletionOperation,sourceKeys?:Readonly
  return result;
 }
 /** 复用来源删除的依赖闭包，仅计算失证影响，不执行删除。 */
-export function quarantinedDiscussionImpact(tx:StorageTransaction,ownerId:string):Closure{
- const sources=tx.all(`SELECT DISTINCT r.contact_id,r.id FROM history_message_quarantine q JOIN capture_record r
-  ON r.owner_id=q.owner_id AND r.contact_id=q.contact_id AND r.message_id=q.message_id
-  WHERE q.owner_id=? AND r.state='normalized'`,[ownerId]);
+export function invalidHistoryDiscussionImpact(tx:StorageTransaction,ownerId:string):Closure{
+ const sources=tx.all(`SELECT DISTINCT r.contact_id,r.id FROM capture_record r WHERE r.owner_id=? AND r.state='normalized' AND (
+  EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=r.owner_id AND q.contact_id=r.contact_id AND q.message_id=r.message_id)
+  OR EXISTS (SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=r.owner_id AND f.contact_id=r.contact_id)
+  OR EXISTS (SELECT 1 FROM history_guard_lease l JOIN database_instance d ON d.slot=1 WHERE l.owner_id=r.owner_id AND l.contact_id=r.contact_id AND (l.state<>'active' OR l.runtime_id<>d.runtime_id)))`,[ownerId]);
  if(!sources.length)return {contexts:new Set(),requests:new Set(),copies:new Set()};
  const sourceKeys=new Set(sources.map(source=>JSON.stringify([source.contact_id,source.id])));
  const op:DeletionOperation={operationId:'',ownerId,scope:{kind:'source',contactId:'',sourceId:''},acceptedGeneration:0n,planRevision:0n,state:'fenced',createdAt:'',completedAt:null};

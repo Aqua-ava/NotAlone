@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {requireDiscussion} from '../actions.ts';
 import {requireReplyInput} from './input.ts';
-import {quarantinedDiscussionImpact} from '../deletion.ts';
+import {invalidHistoryDiscussionImpact} from '../deletion.ts';
 import type {DiscussionScope} from '../contracts.ts';
 import type {ReplyCandidateVersion,ReplyKnowledgeReader} from './contracts.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
@@ -21,7 +21,7 @@ export function parseReplyOutput(text:string):{parts:string[];basis:number[]}[]{
 export function requireCandidate(tx:StorageTransaction,i:DiscussionScope&{candidateId:string;versionNo?:number},reader:ReplyKnowledgeReader){
  requireDiscussion(tx,i);
  const candidate=tx.get(`SELECT k.*,r.discussion_id,r.contact_id FROM reply_candidate k JOIN reply_request r ON r.owner_id=k.owner_id AND r.id=k.request_id WHERE k.owner_id=? AND k.id=? AND r.contact_id=? AND r.discussion_id=? AND r.state='committed'`,[i.ownerId,i.candidateId,i.contactId,i.discussionId])??fail('reply_candidate_unavailable');
- if(quarantinedDiscussionImpact(tx,i.ownerId).requests.has(String(candidate.request_id)))fail('reply_source_unavailable');
+ if(invalidHistoryDiscussionImpact(tx,i.ownerId).requests.has(String(candidate.request_id)))fail('reply_source_unavailable');
  for(const context of tx.all('SELECT id FROM reply_context WHERE owner_id=? AND request_id=?',[i.ownerId,candidate.request_id]))requireReplyInput(tx,i,String(context.id),reader);
  const version=tx.get(`SELECT * FROM reply_candidate_version WHERE owner_id=? AND candidate_id=? ${i.versionNo===undefined?'ORDER BY version_no DESC LIMIT 1':'AND version_no=?'}`,i.versionNo===undefined?[i.ownerId,i.candidateId]:[i.ownerId,i.candidateId,i.versionNo])??fail('reply_content_unavailable');
  if(version.content_state!=='available')fail('reply_content_unavailable');

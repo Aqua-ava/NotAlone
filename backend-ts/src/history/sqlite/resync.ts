@@ -90,6 +90,8 @@ export class SqliteHistoryResyncService {
       }
       if (before && ['authorized', 'active'].includes(before.state) && before.requestKey !== requestKey) fail('history_restore_already_running');
       const resume = before && before.requestKey === requestKey && before.state === 'active' && before.goal ? before.goal : null;
+      // 明确重读尚未接入跨批次守卫与持久围栏，不能通过独立渠道绕过正文门禁。
+      if(channel.guardSession)fail('history_source_continuity_unverified');
       // 新授权前必须重新核验当前账号/联系人资格；关闭读取或撤销后不能凭旧资格重读。
       const token = await this.contacts.eligibility(contactId).catch(error => {
         throw error instanceof StorageFailure ? error : new StorageFailure('read_not_authorized');

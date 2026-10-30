@@ -12,6 +12,8 @@ export function assertSourceEligibility(tx:StorageTransaction,ref:MessageSourceR
  WHERE r.owner_id=? AND r.contact_id=? AND r.id=? AND r.message_id=?
  AND r.state='normalized' AND r.availability='available' AND m.availability='available'
  AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
+ AND NOT EXISTS (SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id)
+ AND NOT EXISTS (SELECT 1 FROM history_guard_lease g JOIN database_instance d ON d.slot=1 WHERE g.owner_id=m.owner_id AND g.contact_id=m.contact_id AND (g.state<>'active' OR g.runtime_id<>d.runtime_id))
  AND m.binding_id=g.binding_id AND p.state='active' AND o.state='active'`,[ref.owner_id,ref.contact_id,ref.record_id,ref.message_id]);
  if(!valid)throw new StorageFailure('history_source_not_available');
 }

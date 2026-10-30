@@ -41,6 +41,8 @@ export interface HistoryTailPage {
   records: readonly HistoryRecord[]; caughtUp: boolean;
 }
 export interface HistoryChannel {
+  // 仅已实现持续原生守卫的渠道可声明；loss 在守卫无法继续时结束。
+  readonly guardSession?: { readonly loss: Promise<void> };
   inspect(scope: HistoryScope, signal?: AbortSignal): Promise<HistorySupportReport>;
   target(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryTarget>;
   page(scope: HistoryScope, target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<HistoryPage>;

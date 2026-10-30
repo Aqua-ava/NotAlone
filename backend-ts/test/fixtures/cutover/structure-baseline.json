@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 17,
+  "schemaVersion": 18,
   "migrationVersions": [
    1,
    2,
@@ -18,15 +18,16 @@
    14,
    15,
    16,
-   17
+   17,
+   18
   ],
-  "userVersion": 17,
+  "userVersion": 18,
   "sqliteVersion": "3.53.4",
-  "tableCount": 85,
-  "fieldCount": 826,
-  "foreignKeyGroups": 177,
+  "tableCount": 86,
+  "fieldCount": 834,
+  "foreignKeyGroups": 178,
   "triggerCount": 92,
-  "checkCount": 252,
+  "checkCount": 253,
   "viewCount": 0
  },
  "tables": {
@@ -3977,6 +3978,102 @@
     }
    ],
    "sql": "CREATE TABLE history_deletion_fence ( owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,operation_id TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
+  },
+  "history_guard_lease": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "conversation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "source_generation",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "guard_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "runtime_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_history_guard_lease_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE history_guard_lease ( owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,binding_id TEXT NOT NULL,conversation_id TEXT NOT NULL, source_generation TEXT NOT NULL,guard_id TEXT NOT NULL,runtime_id TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('active','lost')), PRIMARY KEY(owner_id,contact_id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
   },
   "history_message_quarantine": {
    "columns": [

@@ -377,6 +377,7 @@ interface NativeProcess { child: ChildProcessWithoutNullStreams; exited: Promise
 interface PendingResponse { limit: number; parse(value: unknown): unknown; resolve(value: unknown): void; reject(error: StorageFailure): void }
 /** 只提供已选目标的固定协议；正文分页另需当前支持认证，不提供通用命令、SQL或路径RPC。 */
 export class NarrowWechatClient {
+  readonly #stoppedSignal=Promise.withResolvers<void>();
   readonly #options: NarrowWechatClientOptions;
   #queue: Promise<void> = Promise.resolve();
   #native?: NativeProcess;
@@ -391,6 +392,7 @@ export class NarrowWechatClient {
   #failureCode = 'history_native_closed';
   #stopping?: Promise<void>;
   constructor(options: NarrowWechatClientOptions) { this.#options = validatedOptions(options); }
+  get stopped():Promise<void>{return this.#stoppedSignal.promise;}
   inspectAccountSchema(signal?: AbortSignal): Promise<WechatAccountSchema> {
     try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
     return this.#enqueue(() => this.#request({op:'inspect-account-schema',consent:'account-schema-v1'}, value => {
@@ -611,6 +613,7 @@ export class NarrowWechatClient {
   async #stop(code: string): Promise<void> {
     if (this.#stopped) { await this.#stopping; return; }
     this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#testMetadata = undefined;
+    this.#stoppedSignal.resolve();
     const pending = this.#pending; this.#pending = undefined;
     this.#stopping = (async () => {
       const native = this.#native;

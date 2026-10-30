@@ -8,7 +8,7 @@ import { readCoverage, readMessages } from './read.ts';
 import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
-import { assertSourceContinuity, fenceContinuity, preflightGeneration, preflightTarget } from './continuity.ts';
+import { assertSourceContinuity, assertLiveGuard, fenceContinuity, preflightGeneration, preflightTarget } from './continuity.ts';
 const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
 export const serializeSupport=(report:HistorySupportReport):string=>JSON.stringify(Object.fromEntries(Object.entries(report).sort(([a],[b])=>a.localeCompare(b))));
@@ -46,6 +46,32 @@ function currentIncremental(tx:StorageTransaction,token:ReadEligibility,report:H
 export const historyActions:StorageAction[]=[
  action('history.scope','read',(tx,i)=>{assertReadEligibility(tx,i.token);const row=tx.get(`SELECT a.external_key AS account_key,c.external_key AS conversation_key FROM channel_account a JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id WHERE a.owner_id=? AND a.id=? AND c.id=?`,[i.token.owner_id,i.token.account_id,i.token.conversation_id])??fail('history_scope_invalid');return {token:i.token,accountKey:row.account_key,conversationKey:row.conversation_key};}),
  action('history.preflightGeneration','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightGeneration(tx,token);}),
+ action('history.guardAcquire','write',(tx,i)=>{
+  const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
+  if(typeof i.guardId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(i.guardId))fail('history_guard_invalid');
+  if(!preflightGeneration(tx,token))return false;
+  const existing=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1')!;
+  if(existing){if(existing.guard_id===i.guardId&&existing.runtime_id===runtime.runtime_id&&existing.state==='active')return true;return fenceContinuity(tx,token);}
+  // 旧数据没有持久守卫记录时，不把第一次启动视为连续的恢复。
+  if(tx.get('SELECT 1 FROM read_goal WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id]))return fenceContinuity(tx,token);
+  tx.run("INSERT INTO history_guard_lease VALUES(?,?,?,?,?,?,?,'active')",[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,i.guardId,runtime.runtime_id]);
+  return true;
+ }),
+ action('history.guardCheck','read',(tx,i)=>{
+  const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
+  return Boolean(tx.get(`SELECT 1 FROM history_guard_lease g JOIN database_instance d ON d.slot=1 AND d.runtime_id=g.runtime_id
+   WHERE g.owner_id=? AND g.contact_id=? AND g.binding_id=? AND g.conversation_id=? AND g.source_generation=? AND g.guard_id=? AND g.state='active'
+   AND NOT EXISTS (SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=g.owner_id AND f.contact_id=g.contact_id)`,[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,i.guardId]));
+ }),
+ action('history.guardAuthorize','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertLiveGuard(tx,token,i.guardId);return true;}),
+ action('history.guardRelease','write',(tx,i)=>{
+  const token=i.token as ReadEligibility;
+  const guard=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=? AND binding_id=? AND conversation_id=? AND source_generation=? AND guard_id=?',[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,i.guardId]);
+  if(!guard)return false;
+  tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=? AND guard_id=?",[token.owner_id,token.contact_id,i.guardId]);
+  fenceContinuity(tx,token);return true;
+ }),
  action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;
   const scope=tx.get('SELECT conversation_id,source_generation FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
   if(scope?.conversation_id===token.conversation_id&&scope.source_generation===token.source_generation)return fenceContinuity(tx,token);
@@ -74,6 +100,7 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.acceptPage','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const goal=currentGoal(tx,token,i.goalId);const page=i.page as HistoryPage;
+  assertLiveGuard(tx,token,i.guardId);
   const digest=createHash('sha256').update(JSON.stringify(page)).digest('hex');
   const prior=tx.get('SELECT response_digest FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
   if(prior){if(prior.response_digest!==digest)fail('history_capture_replay_conflict');return readCoverage(tx,token.owner_id,token.contact_id);}
@@ -132,6 +159,7 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.acceptIncrementalPage','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const goal=currentGoal(tx,token,i.goalId);const page=i.page as HistoryTailPage;
+  assertLiveGuard(tx,token,i.guardId);
   const digest=createHash('sha256').update(JSON.stringify(page)).digest('hex');
   const prior=tx.get('SELECT response_digest FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
   if(prior){if(prior.response_digest!==digest)fail('history_capture_replay_conflict');return readCoverage(tx,token.owner_id,token.contact_id);}
@@ -167,7 +195,9 @@ export const historyActions:StorageAction[]=[
    JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
    JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
    WHERE r.owner_id=? AND r.contact_id=? AND r.id=? AND r.state='normalized' AND r.availability='available' AND m.availability='available'
-   AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)`,[i.ownerId,i.contactId,i.recordId])??fail('history_source_not_found');
+   AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
+   AND NOT EXISTS (SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id)
+   AND NOT EXISTS (SELECT 1 FROM history_guard_lease l JOIN database_instance d ON d.slot=1 WHERE l.owner_id=m.owner_id AND l.contact_id=m.contact_id AND (l.state<>'active' OR l.runtime_id<>d.runtime_id))`,[i.ownerId,i.contactId,i.recordId])??fail('history_source_not_found');
   return {recordId:row.id,contactId:row.contact_id,messageId:row.message_id,captureId:row.capture_id,goalId:row.goal_id,
    itemNo:Number(row.item_no),capturedAt:String(row.captured_at),adapterVersion:row.adapter_version,normalizerVersion:row.normalizer_version,
    cursorIn:row.cursor_in,cursorOut:row.cursor_out,raw:JSON.parse(String(row.raw_payload)),support:JSON.parse(String(row.support_json))};

@@ -45,10 +45,10 @@ async function fixture(t){
  const contacts=new SqliteContactService(storage,owner,{account:async()=>({externalKey:account,identityScheme:'wechat.account.v1',sourceGeneration:generation,assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[{externalKey:conversation,displayName:'展示名不是身份',kind:'private',identityAssurance:'verified'}]});
  await contacts.initialize();const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);
  const snapshot=await contacts.candidates(true);await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(s=>({locator:s.username,observed_display_name:s.display_name,expected_selection_generation:s.selection_generation})));
- const binding=(await contacts.directory()).bindings[0],history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(executable));
+ const channels=[],binding=(await contacts.directory()).bindings[0],history=new SqliteHistoryService(storage,contacts,()=>{const channel=createWechatHistoryChannel(executable);channels.push(channel);return channel;});
  t.after(async()=>{await history.close();await contacts.close();await storage.close();await rm(root,{recursive:true,force:true});});
  const scope=()=>contacts.eligibility(binding.contact_id).then(token=>({token,accountKey:account,conversationKey:conversation}));
- return {root,artifact,executable,manifestPath,manifest,planFile,logFile,pidFile,storage,contacts,history,binding,scope,setPlan:plan=>writeFile(planFile,JSON.stringify({mode:'supported',serverId:'0',...plan}))};
+ return {root,artifact,executable,manifestPath,manifest,planFile,logFile,pidFile,storage,contacts,history,binding,scope,channels,setPlan:plan=>writeFile(planFile,JSON.stringify({mode:'supported',serverId:'0',...plan}))};
 }
 async function requests(file){try{return (await readFile(file,'utf8')).trim().split('\n').map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}}
 function noProcess(pid){assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});}
@@ -66,7 +66,14 @@ test('正式受控渠道驱动联系人历史服务入库，非文字空正文�
  const after=(await f.history.read(contact)).messages;assert.equal(after.length,2);assert.equal(after.find(row=>row.kind==='text').id,text.id);assert.equal(after.find(row=>row.kind==='text').sourceRecordIds.length,2);
  const rows=await requests(f.logFile);assert.ok(rows.filter(row=>row.op==='resolve').every(row=>row.displayName===conversation));
  assert.deepEqual(rows.slice(0,4).map(row=>row.op),['resolve','inspect','support','target']);
- noProcess(Number(await readFile(f.pidFile,'utf8')));assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+ const pid=Number(await readFile(f.pidFile,'utf8'));assert.equal(f.channels.length,1);assert.doesNotThrow(()=>process.kill(pid,0));
+ await f.history.stop(contact);noProcess(pid);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('合成原生进程意外退出后，持久停读且不启动新进程',async t=>{
+ const f=await fixture(t),contact=f.binding.contact_id;await f.history.synchronize(contact);
+ const pid=Number(await readFile(f.pidFile,'utf8'));process.kill(pid,'SIGKILL');await f.channels[0].guardSession.loss;
+ await assert.rejects(f.history.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(f.channels.length,1);noProcess(pid);
 });
 
 test('无显式制品保持unverified，manifest缺失/链接/过大或制品身份不符均不启动进程',async t=>{

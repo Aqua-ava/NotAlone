@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"github.com/r266-tech/wx-cli/v2/internal/config"
 	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func notaloneProtocolFixture(t *testing.T, supported bool) *notaloneHistorySession {
@@ -121,6 +123,50 @@ func TestNotAloneHistoryGuardSurvivesExhaustedSnapshot(t *testing.T) {
 	h.close()
 	if guard.Check() == nil {
 		t.Fatal("原生会话关闭后守卫仍活动")
+	}
+}
+
+func TestNotAloneHistoryGuardReportsIdleLoss(t *testing.T) {
+	h := notaloneProtocolFixture(t, true)
+	r := notaloneHistoryRequest{Operation: "target", Account: h.selected.Account, Conversation: h.selected.Conversation, Consent: "selected-history-v1"}
+	if _, err := h.handle(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(h.server.cfg.DBRoot, "db_storage", "message", "message_0.db")
+	if err := os.Rename(file, file+".away"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-h.messageMonitor.Lost():
+	case <-time.After(2 * time.Second):
+		t.Fatal("空闲时来源变化没有主动通知")
+	}
+}
+
+func TestNotAloneHistoryProtocolStopsWhenIdleGuardIsLost(t *testing.T) {
+	h := notaloneProtocolFixture(t, true)
+	input, writer := io.Pipe()
+	reader, output := io.Pipe()
+	done := make(chan struct{})
+	go func() { runNotaloneHistorySession(h, input, output); _ = output.Close(); close(done) }()
+	t.Cleanup(func() { _ = writer.Close(); _ = reader.Close() })
+	r := notaloneHistoryRequest{Operation: "target", Account: h.selected.Account, Conversation: h.selected.Conversation, Consent: "selected-history-v1"}
+	encoded, _ := json.Marshal(r)
+	if _, err := writer.Write(append(encoded, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	var response map[string]any
+	if err := json.NewDecoder(reader).Decode(&response); err != nil || response["ok"] != true {
+		t.Fatalf("合成目标未成功: %v", err)
+	}
+	file := filepath.Join(h.server.cfg.DBRoot, "db_storage", "message", "message_0.db")
+	if err := os.Rename(file, file+".away"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("空闲来源失证后原生协议未退出")
 	}
 }
 func TestNotAloneHistoryProtocolRejectsScopeBeforeHistory(t *testing.T) {

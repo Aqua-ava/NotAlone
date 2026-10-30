@@ -152,6 +152,33 @@ func TestNotaloneGuardRejectsLinksAndClosesHandles(t *testing.T) {
 	}
 }
 
+func TestNotaloneGuardMonitorStopsBeforeDescriptorReuse(t *testing.T) {
+	directory, file := notaloneGuardFixture(t)
+	for i := 0; i < 30; i++ {
+		guard, err := newNotaloneSourceGuard(directory, []string{file})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = guard.StartMonitor(); err != nil {
+			t.Fatal(err)
+		}
+		if err = guard.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err = guard.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatalf("先前监听未退出导致新守卫失败: %v", err)
+	}
+	defer guard.Close()
+	if err = guard.Check(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNotaloneGuardFileFingerprintIgnoresOtherShards(t *testing.T) {
 	directory, file := notaloneGuardFixture(t)
 	guard, err := newNotaloneSourceGuard(directory, []string{file})
