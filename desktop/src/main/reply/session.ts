@@ -1123,7 +1123,7 @@ export class ReplySession {
       const items = before || automaticallyUpdated ? mergeReplyMessages(this.state.messages.items, page.messages) : page.messages;
       const nextCursor = automaticallyUpdated && (!before || this.state.messages.nextCursor !== before)
         ? this.state.messages.nextCursor : page.nextCursor;
-      if (this.state.targetMessageId && !items.some((item) => item.messageId === this.state.targetMessageId)) {
+      if (this.state.targetMessageId && !items.some((item) => item.messageId === this.state.targetMessageId && item.messageState !== 'recalled')) {
         this.invalidateInput();
         this.publish({ targetMessageId: null });
       }
@@ -1149,7 +1149,7 @@ export class ReplySession {
   selectMessage(selection: ReplyMessageSelection): ReplySessionState {
     this.assertScope(selection);
     if (this.candidateSourceCheck) throw new Error('请等待相关来源核验完成。');
-    if (this.state.mode !== 'reply_to_message' || !this.state.messages.items.some((item) => item.messageId === selection.messageId)) {
+    if (this.state.mode !== 'reply_to_message' || !this.state.messages.items.some((item) => item.messageId === selection.messageId && item.messageState !== 'recalled')) {
       throw new Error('待回复消息已失效，请重新选择。');
     }
     if (selection.messageId !== this.state.targetMessageId) {
@@ -1329,7 +1329,7 @@ export class ReplySession {
       skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) }, ...sceneSnapshot(this.state.scene || null) };
     if (this.state.mode === 'initiate_conversation') return { ...common, mode: 'initiate_conversation', purpose: this.state.purpose };
     const target = this.state.messages.items.find((item) => item.messageId === this.state.targetMessageId);
-    if (!target) throw new Error('待回应消息已失效。');
+    if (!target || target.messageState === 'recalled') throw new Error('待回应消息已失效。');
     return { ...common, mode: 'reply_to_message', target: structuredClone(target), direction: this.state.direction };
   }
   private async runStrategy(job: StrategyJob): Promise<void> {
@@ -1604,7 +1604,7 @@ export class ReplySession {
     const options = this.state.options;
     const target = this.state.messages.items.find((item) => item.messageId === this.state.targetMessageId);
     if (this.state.mode === 'rewrite_draft' ? !contactState.draft.trim() && !(options.inputKind === 'workspace' && options.workspaceAction === 'suggest')
-      : this.state.mode === 'initiate_conversation' ? !this.state.purpose.trim() : !target || !this.state.direction.trim()) return;
+      : this.state.mode === 'initiate_conversation' ? !this.state.purpose.trim() : !target || target.messageState === 'recalled' || !this.state.direction.trim()) return;
     if (this.state.mode === 'rewrite_draft' && options.inputKind === 'current_chat' && !options.pastedDirection?.trim()) return;
     this.notifyInputChanged();
     const common = { contactId: selection.contactId, contactDisplayName: contact.displayName, ...sceneSnapshot(this.state.scene || null),

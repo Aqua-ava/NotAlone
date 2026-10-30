@@ -41,6 +41,7 @@ export async function readReplyMessages(backend: Pick<BackendHost, 'requestJson'
   const messages: ReplyMessage[] = page.messages.map((item: unknown) => {
     if (!record(item) || !isUuid(item.message_id) || !['user', 'contact', 'system'].includes(item.speaker as string)
       || typeof item.message_type !== 'string' || item.message_type.length > 128
+      || (item.message_state !== undefined && !['normal', 'recalled'].includes(item.message_state as string))
       || !optionalText(item.text) || !optionalText(item.media_placeholder)
       || !(item.occurred_at === null || (typeof item.occurred_at === 'string' && Number.isFinite(Date.parse(item.occurred_at))))
       || !(item.quoted === null || (record(item.quoted) && typeof item.quoted.text === 'string' && item.quoted.text.length <= 65_536
@@ -52,6 +53,7 @@ export async function readReplyMessages(backend: Pick<BackendHost, 'requestJson'
     if (known.has(messageId)) throw new Error('消息列表格式无效。');
     known.add(messageId);
     return { messageId, speaker: item.speaker as ReplyMessage['speaker'], messageType: item.message_type,
+      ...(item.message_state !== undefined ? { messageState: item.message_state as 'normal' | 'recalled' } : {}),
       text: item.text, mediaPlaceholder: item.media_placeholder, occurredAt: item.occurred_at as string | null,
       ...(sqliteOrder ? { ordering: item.ordering as 'verified' | 'unknown', displayPosition: item.display_position as string } : {}),
       quoted: item.quoted === null ? null : { text: item.quoted.text as string,

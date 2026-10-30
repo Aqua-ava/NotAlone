@@ -84,6 +84,7 @@ export interface ReplyMessage {
   messageId: string;
   speaker: 'user' | 'contact' | 'system';
   messageType: string;
+  messageState?: 'normal' | 'recalled';
   text: string | null;
   mediaPlaceholder: string | null;
   occurredAt: string | null;

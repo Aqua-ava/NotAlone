@@ -25,7 +25,7 @@ test('正常开发入口默认创建同一新SQLite实例，重开沿用 databas
   const created = await probe.run(() => true);
   assert.equal(created.phase, 'ready');
   assert.equal(created.code, 'sqlite_ready');
-  assert.equal(created.schemaVersion, 19);
+  assert.equal(created.schemaVersion, 20);
   assert.deepEqual(created.capabilities, ['contacts', 'skills', 'history', 'discussions', 'memory']);
   const configuration = await readFile(path.join(f.userData, 'sqlite-development.json'), 'utf8');
   const parsed = JSON.parse(configuration);

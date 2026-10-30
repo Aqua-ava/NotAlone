@@ -134,30 +134,35 @@ test('渠道省略状态认证时不得把正文作为可信消息保存',async 
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:undefined,text:'不得保存的合成文字'})],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const result=await service.read(contact);assert.equal(result.replyEligibility,'history_incomplete');assert.equal(result.messages.length,0);
 });
-test('已认证撤回终态撤下旧正文，但不把已完整读取的历史永久判为未知',async t=>{
- const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+test('已认证撤回保留已同步正文供查看，但来源不再可用于派生',async t=>{
+ const {service,channel,saved,target,storage}=await fixture(t),contact=saved[0].contact_id;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const old=(await service.read(contact)).messages[0];
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'})],completedPartitions:['shard-a'],exhausted:true});
  const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.quarantinedCount,0);
- assert.equal((await service.read(contact)).messages.length,0);await assert.rejects(service.source(contact,old.sourceRecordIds[0]),{code:'history_source_not_found'});
+ const recalled=(await service.read(contact)).messages;assert.equal(recalled.length,1);assert.equal(recalled[0].text,old.text);assert.equal(recalled[0].messageState,'recalled');
+ await assert.rejects(service.source(contact,old.sourceRecordIds[0]),{code:'history_source_not_found'});
+ assert.equal((await storage.execute('history.read',{ownerId:owner,contactId:contact,limit:20})).messages.length,0);
+ const {createServer}=await import('node:http');const {SqliteHistoryHttp}=await import('../src/history/sqlite/http.ts');const handler=new SqliteHistoryHttp(service);
+ const server=createServer(async(req,res)=>{if(!await handler.handle(req,res))res.writeHead(404).end();});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const response=await fetch(`http://127.0.0.1:${server.address().port}/api/contacts/${contact}/messages`);const page=await response.json();assert.equal(page.messages[0].message_state,'recalled');assert.equal(page.messages[0].text,old.text);
  await service.synchronize(contact);assert.equal((await service.coverage(contact)).phase,'complete');
 });
 
-test('首次历史中的已认证撤回只保存排除位置，不成为可见消息',async t=>{
+test('首次看到已认证撤回时显示无正文占位',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'}),record('2')],completedPartitions:['shard-a'],exhausted:true});
- const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.messageCount,1);assert.equal(coverage.quarantinedCount,0);
- assert.deepEqual((await service.read(contact)).messages.map(row=>row.text),['合成正文2']);
+ const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.quarantinedCount,0);
+ const rows=(await service.read(contact)).messages;assert.equal(rows.length,2);assert.equal(rows.find(row=>row.messageState==='recalled').text,null);assert.ok(rows.some(row=>row.text==='合成正文2'));
 });
 
-test('完整增量扫描确认旧记录消失后撤下正文，缺少确认的未知记录仍保持隔离',async t=>{
+test('来源记录消失不删除已保存的消息及其正常使用资格',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const old=(await service.read(contact)).messages[0];
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{sender:'unknown',kind:'other',text:null,originalType:'unknown',status:null,messageState:'absent'})],completedPartitions:['shard-a'],exhausted:true});
  const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.quarantinedCount,0);
- assert.equal((await service.read(contact)).messages.length,0);await assert.rejects(service.source(contact,old.sourceRecordIds[0]),{code:'history_source_not_found'});
+ const retained=(await service.read(contact)).messages;assert.equal(retained.length,1);assert.equal(retained[0].text,old.text);assert.equal(retained[0].messageState,'normal');assert.equal((await service.source(contact,old.sourceRecordIds[0])).messageId,old.id);
 });
 
 test('缺少精确本地身份的终态记录不能撤下整位联系人历史',async t=>{
@@ -363,6 +368,7 @@ test('05真实删除注册封禁旧页，单来源删除保留其他合法来源
  const {service,saved,storage,contacts,channel,target}=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=saved[0].contact_id;
  channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('9007199254740993',{serverId:'45'}),record('998',{serverId:'45',text:'合成正文9007199254740993'}),record('2',{kind:'voice',text:null})],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const before=await service.read(contact);const source=before.messages.find(m=>m.kind==='text').sourceRecordIds[0];
+ const voiceSource=before.messages.find(m=>m.kind==='voice').sourceRecordIds[0];
  const old=await contacts.eligibility(contact);
  const planned=await storage.execute('deletion.plan',{ownerId:owner,requestKey:'synthetic-source-delete',scope:{kind:'source',contactId:contact,sourceId:source}});
  assert.ok(planned.targets.some(t=>t.target?.domain==='history'));await assert.rejects(contacts.validate(old),{code:'read_eligibility_stale'});
@@ -370,7 +376,8 @@ test('05真实删除注册封禁旧页，单来源删除保留其他合法来源
  const runner={ownerId:owner,operationId:planned.operationId,token:claimed.token,planRevision:claimed.planRevision};
  for(const item of claimed.targets)if(item.target?.kind==='row')await storage.execute('deletion.clearTarget',{...runner,targetNo:item.targetNo});
  const after=await service.read(contact);assert.equal(after.messages.length,2);assert.equal(after.messages.find(m=>m.kind==='text').sourceRecordIds.length,1);
- await service.synchronize(contact);assert.equal((await service.read(contact)).messages.find(m=>m.kind==='text').sourceRecordIds.length,1);
+ await service.synchronize(contact);const rescanned=await service.read(contact);assert.equal(rescanned.messages.find(m=>m.kind==='text').sourceRecordIds.length,1);
+ assert.deepEqual(rescanned.messages.find(m=>m.kind==='voice').sourceRecordIds,[voiceSource]);
 });
 test('已删除来源的表实例失证后，重试和重开都在读取正文前停读',async t=>{
  const f=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=f.saved[0].contact_id;
@@ -554,6 +561,7 @@ test('重复扫描同一消息时保留一份稳定来源',async t=>{
  await service.synchronize(contact);
  const first=(await service.read(contact)).messages.find(message=>message.kind==='text');
  assert.ok(first);
+ const source=await service.source(contact,first.sourceRecordIds[0]);assert.equal(source.raw.text,first.text);
  await service.synchronize(contact);
  const again=(await service.read(contact)).messages.find(message=>message.kind==='text');
  assert.equal(again.id,first.id);
@@ -567,4 +575,27 @@ test('重复扫描待核验来源不会重复累计待核验数量',async t=>{
  assert.equal((await service.coverage(contact)).quarantinedCount,1);
  await service.synchronize(contact);
  assert.equal((await service.coverage(contact)).quarantinedCount,1);
+});
+
+test('原本待核验的消息在可靠确认撤回后可以查看原文',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ let current=record('1');
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[current],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);
+ current=record('1',{stateAssurance:'unverified',sender:'unknown',text:null});await service.synchronize(contact);
+ assert.equal((await service.read(contact)).messages.length,0);
+ current=record('1',{sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'});await service.synchronize(contact);
+ const read=await service.read(contact);assert.equal(read.messages.length,1);assert.equal(read.messages[0].text,'合成正文1');assert.equal(read.messages[0].messageState,'recalled');
+});
+
+test('未同步正文的撤回占位可分页，重复扫描不会变成普通消息',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ let current=record('1',{sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'});
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[current,record('2')],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);await service.synchronize(contact);
+ const first=(await service.read(contact,{limit:1})).messages[0];
+ const second=(await service.read(contact,{limit:1,before:first.id})).messages[0];
+ assert.equal(first.text,'合成正文2');assert.equal(second.messageState,'recalled');assert.equal(second.text,null);
+ current=record('1');await service.synchronize(contact);
+ const all=(await service.read(contact)).messages;assert.equal(all.length,2);assert.equal(all.find(row=>row.id===second.id).messageState,'recalled');assert.ok(!all.some(row=>row.text==='合成正文1'));
 });

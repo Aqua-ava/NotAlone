@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 19,
+  "schemaVersion": 20,
   "migrationVersions": [
    1,
    2,
@@ -20,12 +20,13 @@
    16,
    17,
    18,
-   19
+   19,
+   20
   ],
-  "userVersion": 19,
+  "userVersion": 20,
   "sqliteVersion": "3.53.4",
   "tableCount": 86,
-  "fieldCount": 834,
+  "fieldCount": 835,
   "foreignKeyGroups": 178,
   "triggerCount": 92,
   "checkCount": 253,
@@ -405,6 +406,13 @@
      "notnull": 1,
      "dflt_value": "'available'",
      "pk": 0
+    },
+    {
+     "name": "display_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
     }
    ],
    "foreignKeys": [
@@ -470,6 +478,29 @@
     }
    ],
    "indexes": [
+    {
+     "name": "capture_record_recall_display",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "display_no"
+     ],
+     "sql": "CREATE UNIQUE INDEX capture_record_recall_display ON capture_record(display_no) WHERE display_no IS NOT NULL"
+    },
+    {
+     "name": "capture_record_excluded_identity",
+     "unique": 0,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "observed_key",
+      "reason_code"
+     ],
+     "sql": "CREATE INDEX capture_record_excluded_identity ON capture_record(owner_id,contact_id,observed_key,reason_code) WHERE state='excluded' AND availability='available'"
+    },
     {
      "name": "capture_record_quarantine_identity",
      "unique": 0,
@@ -544,7 +575,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE capture_record ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,capture_id TEXT NOT NULL,item_no INTEGER NOT NULL CHECK(item_no>=0 AND item_no<1000), state TEXT NOT NULL CHECK(state IN ('normalized','quarantined','excluded')),message_id TEXT,raw_payload TEXT, observed_scheme TEXT,observed_key TEXT,normalizer_version TEXT NOT NULL,reason_code TEXT,availability TEXT NOT NULL DEFAULT 'available' CHECK(availability IN ('available','deleting')), PRIMARY KEY(owner_id,id),UNIQUE(owner_id,capture_id,item_no),UNIQUE(owner_id,contact_id,id),UNIQUE(owner_id,contact_id,id,message_id), FOREIGN KEY(owner_id,contact_id,capture_id) REFERENCES sync_capture(owner_id,contact_id,id), FOREIGN KEY(owner_id,contact_id,message_id) REFERENCES message(owner_id,contact_id,id), CHECK((state='normalized' AND message_id IS NOT NULL AND reason_code IS NULL) OR (state IN ('quarantined','excluded') AND message_id IS NULL AND reason_code IS NOT NULL)) ) STRICT"
+   "sql": "CREATE TABLE capture_record ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,capture_id TEXT NOT NULL,item_no INTEGER NOT NULL CHECK(item_no>=0 AND item_no<1000), state TEXT NOT NULL CHECK(state IN ('normalized','quarantined','excluded')),message_id TEXT,raw_payload TEXT, observed_scheme TEXT,observed_key TEXT,normalizer_version TEXT NOT NULL,reason_code TEXT,availability TEXT NOT NULL DEFAULT 'available' CHECK(availability IN ('available','deleting')), display_no INTEGER, PRIMARY KEY(owner_id,id),UNIQUE(owner_id,capture_id,item_no),UNIQUE(owner_id,contact_id,id),UNIQUE(owner_id,contact_id,id,message_id), FOREIGN KEY(owner_id,contact_id,capture_id) REFERENCES sync_capture(owner_id,contact_id,id), FOREIGN KEY(owner_id,contact_id,message_id) REFERENCES message(owner_id,contact_id,id), CHECK((state='normalized' AND message_id IS NOT NULL AND reason_code IS NULL) OR (state IN ('quarantined','excluded') AND message_id IS NULL AND reason_code IS NOT NULL)) ) STRICT"
   },
   "channel_account": {
    "columns": [
