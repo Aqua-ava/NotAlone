@@ -1,5 +1,7 @@
 # 现行隐私、模型调用与删除
 
+> 微信撤回与删除的已采纳新目标见 [ADR-128](../adr/128-deduplicated-wechat-message-storage.md)：撤回前已保存正文可查看但不得用于新的回复或记忆；微信端删除不自动删除 NotAlone 消息。既有来源删除、联系人清空和备份删除边界保持；尚未实施。
+
 > 联系人身份与逐人授权按 [ADR-110](../adr/110-selected-sqlite-contact-read-grants.md)：不延续旧授权、不启用全部私聊，取消立即封禁旧资格；首用搁置不取消授权核验。
 
 > 业务资料现由受控本机 SQLite 保存；实例身份、事务及删除路径按 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)和[切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)实施。来源、范围、删除及 DSH 约束继续适用。

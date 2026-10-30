@@ -177,8 +177,11 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 - [ADR-113：SQLite 私聊历史、消息身份与实际来源](adr/113-sqlite-private-history-source-contract.md)
 - [ADR-127：SQLite 私聊历史正常重启后从头重扫](adr/127-sqlite-history-normal-use-restart-rescan.md)
+- [ADR-128：微信消息去重保存与撤回状态](adr/128-deduplicated-wechat-message-storage.md)
 
 ## 当前架构决策
+
+- 微信消息去重与撤回保留按 [ADR-128](adr/128-deduplicated-wechat-message-storage.md)调整，修订 ADR-113 的重复捕获及撤回正文规则；设计已确认，实施、迁移和验收尚未完成。
 
 - 完整本机首用及资料生命周期按 [ADR-101](adr/101-local-app-first-use-lifecycle.md)与[新票据](../.scratch/local-app-first-use/planning.md)落实：默认仅所选会话；联系人、SQLite 实例与本机资料按当前生命周期管理；完整独立交付仍待验收。
 

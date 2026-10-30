@@ -1,5 +1,7 @@
 # 现行领域与数据契约
 
+> 微信重复扫描按 [ADR-128](../adr/128-deduplicated-wechat-message-storage.md)改为消息去重、保留必要来源及撤回状态；这是已采纳、待实施的目标，不要求为每次观察保留正文副本。
+
 > 联系人身份与逐人授权按 [ADR-110](../adr/110-selected-sqlite-contact-read-grants.md)：不延续旧授权、不启用全部私聊，取消立即封禁旧资格；首用搁置不取消授权核验。
 
 > 当前业务存储为受控本机 SQLite，由 TypeScript 后台注册迁移并装配联系人、来源、消息、记忆和删除操作；具体实现状态与验收范围见 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)及切换记录。来源、范围、删除及 DSH 约束继续适用。
