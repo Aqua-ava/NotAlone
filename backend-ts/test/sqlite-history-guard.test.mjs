@@ -11,7 +11,7 @@ function guardedChannelFactory(state){
   return {guardSession:{loss},
    inspect:async scope=>({protocol:'private-history-v1',profileId:'synthetic-guarded',adapterVersion:'1',status:'supported',reason:null,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic',continuity:'synthetic-guard'}),
    target:async()=>({protocol:'private-history-v1',descriptor:'synthetic-guarded-target',partitions:['p'],tables:[{partition:'p',instance:'t'}],sourceGeneration:'source-1'}),
-   page:async(_scope,target,cursor)=>{await state.onPage?.();return {target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[{partition:'p',table:'t',localId:'1',serverId:'0',sender:'contact',kind:'text',text:'合成守卫消息',originalType:'1',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,stateAssurance:'verified'}],completedPartitions:['p'],exhausted:true};},
+   page:async(_scope,target,cursor,signal)=>{await state.onPage?.(signal);return {target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[{partition:'p',table:'t',localId:'1',serverId:'0',sender:'contact',kind:'text',text:'合成守卫消息',originalType:'1',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,stateAssurance:'verified'}],completedPartitions:['p'],exhausted:true};},
    close:async()=>{if(!closed){closed=true;state.closed++;lost();await state.onClose?.();}},
   };
  };
@@ -80,6 +80,17 @@ test('后台守卫意外退出后持久停读，不能凭新渠道自动恢复',
  const contact=f.saved[0].contact_id;await history.synchronize(contact);state.lose();
  await assert.rejects(history.synchronize(contact),{code:'history_source_continuity_unverified'});
  assert.equal(state.created,1);
+});
+
+test('守卫意外退出时立即中断在途读取，不等待失证写入',async t=>{
+ const f=await fixture(t),entered=Promise.withResolvers(),pageGate=Promise.withResolvers(),releaseGate=Promise.withResolvers();
+ let pageSignal;const state={created:0,closed:0,onPage:async signal=>{pageSignal=signal;entered.resolve();await pageGate.promise;}};
+ const proxy={status:f.storage.status,execute:async(name,input,...rest)=>{if(name==='history.guardRelease')await releaseGate.promise;return f.storage.execute(name,input,...rest);},close:()=>f.storage.close()};
+ const history=new SqliteHistoryService(proxy,f.contacts,guardedChannelFactory(state));t.after(async()=>{pageGate.resolve();releaseGate.resolve();await history.close().catch(()=>{});});
+ const contact=f.saved[0].contact_id,reading=history.synchronize(contact).then(()=>null,error=>error);await entered.promise;
+ state.lose();await Promise.resolve();
+ try{assert.equal(pageSignal.aborted,true);}finally{pageGate.resolve();releaseGate.resolve();}
+ assert.ok(await reading);assert.equal((await history.read(contact)).messages.length,0);
 });
 
 test('尚未读取时守卫已经退出，不能进入正文分页',async t=>{

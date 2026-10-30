@@ -13,7 +13,7 @@ export interface HistoryContactGateway {
  validate(token:ReadEligibility):Promise<unknown>;
 }
 interface ActiveHistoryRead { controller:AbortController; done:Promise<void>; stop():Promise<void> }
-interface RetainedGuard {channel:HistoryChannel; token:ReadEligibility; guardId:string; failed:boolean; lost:boolean; release:()=>Promise<void>}
+interface RetainedGuard {channel:HistoryChannel; token:ReadEligibility; guardId:string; failed:boolean; release:()=>Promise<void>}
 export const historyReaderHolderKey=(contactId:string,generation:string):string=>`history:read_${contactId}_${generation}`;
 /** 可认证的渠道跨批次保留守卫；删除、停读及finally等待真实读者释放。 */
 export class SqliteHistoryService {
@@ -57,9 +57,9 @@ export class SqliteHistoryService {
     if(!channel?.guardSession)return undefined;
     if(!(channel.guardSession.loss instanceof Promise))throw new StorageFailure('history_guard_invalid');
     const guardId=randomUUID();if(!await this.storage.execute<boolean>('history.guardAcquire',{token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
-    const entry:RetainedGuard={channel,token,guardId,failed:false,lost:false,release:async()=>{}};
+    const entry:RetainedGuard={channel,token,guardId,failed:false,release:async()=>{}};
     try{entry.release=this.holders.register({key:`history:guard_${contactId}_${token.data_generation}`,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources:true,close:async()=>{
-     entry.failed=true;if(!entry.lost)this.active.get(contactId)?.controller.abort();
+     entry.failed=true;this.active.get(contactId)?.controller.abort();
      try{
       if(!await this.storage.execute<boolean>('history.guardRelease',{token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
      }catch(error){await this.storage.close();throw error;}
@@ -67,7 +67,8 @@ export class SqliteHistoryService {
      if(this.guards.get(contactId)===entry)this.guards.delete(contactId);
     }});}catch(error){await this.storage.execute('history.guardRelease',{token,guardId});throw error;}
     this.guards.set(contactId,entry);retained=entry;
-    void channel.guardSession.loss.then(()=>{if(!entry.failed){entry.failed=true;entry.lost=true;void entry.release().catch(()=>{});}},()=>{if(!entry.failed){entry.failed=true;entry.lost=true;void entry.release().catch(()=>{});}});
+    const lost=()=>{if(!entry.failed){entry.failed=true;this.active.get(contactId)?.controller.abort();void entry.release().catch(()=>{});}};
+    void channel.guardSession.loss.then(lost,lost);
     return guardId;
    };
    try{const result=await run(scope,channel,controller,goalId=>register(`history:${goalId}`),armGuard);if(retained?.failed)throw new StorageFailure('history_source_continuity_unverified');successful=true;return result;}
