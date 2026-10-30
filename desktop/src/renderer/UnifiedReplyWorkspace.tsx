@@ -54,7 +54,8 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage, medi
     || state.savedSession?.phase === 'loading' || state.sessionCatalog?.phase === 'loading' || state.sessionCatalog?.selectionPending === true
     || state.sourceAvailability !== undefined || state.sessionDeletion === 'deleting';
   const draftDisabled = inputBlocked || !workspaceReady && !localDraftOnly;
-  const disabled = historyBlocked || inputBlocked || !workspaceReady || Boolean(state.generationBlock);
+  const disabled = historyBlocked || inputBlocked || !workspaceReady || Boolean(state.generationBlock)
+    || state.savedSession?.phase !== 'ready' || !state.savedSession.sessionId;
   const update = (value: Partial<RewriteOptions>) => {
     const next = { ...options, ...value }; setOptions(next); void replies.updateOptions(next);
   };
@@ -75,6 +76,15 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage, medi
     return time && (!value || Date.parse(time) > Date.parse(value)) ? time : value;
   }, null);
   const excluded = options.excludedMessageIds ?? [];
+  if (sameScope && state.savedSession?.phase === 'ready' && state.savedSession.sessionId === null) {
+    return <section className="compose-panel unified-workspace" aria-label="表达工作区">
+      <header className="compose-heading"><h2>有什么想说的？</h2><p>先开始这位联系人的助手会话，再生成候选。</p></header>
+      <HelperDraft key={`${state.contactId}:${state.scopeRevision}`} session={contacts} workspace disabled={inputBlocked} placeholder="写下你的想法或草稿…" />
+      {state.generationBlock && <p role="status">请先在上方确认本次联系人。</p>}
+      <button disabled={inputBlocked || Boolean(state.generationBlock)} onClick={() => void replies.newSavedSession()}>开始助手会话</button>
+      <p>已写下的想法会保留到新会话。</p>
+    </section>;
+  }
   return <section className="compose-panel unified-workspace" aria-label="表达工作区">
     <header className="compose-heading"><span className="section-eyebrow">一起想，把话说好</span>
       <h2>有什么想说的？</h2><p>写下想法、方向或草稿；没有思路，也可以让我帮你想。</p></header>
@@ -83,6 +93,8 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage, medi
       : <p role="status">正在恢复这位联系人的想法和聊天背景…</p>}
     {state.workspaceMigrationNotice && <p role="status" className="rewrite-privacy">{state.workspaceMigrationNotice}</p>}
     {state.generationBlock && <p role="status" className="rewrite-privacy">生成前，请先在上方确认本次联系人。</p>}
+    {state.savedSession?.phase === 'failed' && <p role="alert">助手会话暂时无法读取，请重新核对。
+      <button onClick={() => void replies.readSavedSession()}>重新读取助手会话</button></p>}
     {(historyCoverage === 'not_started' || historyCoverage === 'syncing') && <p role="status">历史尚未追平，请等待当前联系人历史同步完成后生成。</p>}
     {historyCoverage === 'incomplete' && <div role="alert"><p>历史覆盖不完整：只会使用已同步部分，可能缺少重要语境。此警告会保留在本次请求与对话中。</p>
       <label><input type="checkbox" checked={historyAccepted} disabled={inputBlocked}

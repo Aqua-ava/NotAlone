@@ -744,7 +744,12 @@ export class ReplySession {
       this.candidateSourceCheck?.pending.abort();
       this.lastAttempt = undefined;
       this.invalidateExploration(); this.derivedIntent = { direction: false, purpose: false };
-      this.notifyInputChanged(); this.retainedContent.delete(selection.contactId); this.contacts.clearDraft(selection);
+      this.notifyInputChanged(); this.retainedContent.delete(selection.contactId);
+      // 首次建立 SQLite 会话时保留尚未提交的本地想法；切换已有会话仍清空输入。
+      const preserveInitialDraft = !viewOnly && !selection.sessionId && !carry
+        && this.state.savedSession?.phase === 'ready' && this.state.savedSession.sessionId === null
+        && saved.discussionEntries !== undefined;
+      if (!preserveInitialDraft) this.contacts.clearDraft(selection);
       const catalog = viewOnly ? await listAssistantSessions(this.backend, selection.contactId, pending.signal) : undefined;
       if (!current() || catalog && catalog.generation !== generation) return;
       const currentSessionId = viewOnly ? catalog!.currentSessionId : saved.sessionId;
@@ -1518,6 +1523,10 @@ export class ReplySession {
     this.assertSessionSelection();
     this.refreshGenerationEligibility();
     if (this.state.generationBlock) throw new Error('请先确认本次联系人。');
+    if (this.state.savedSession?.phase !== 'ready' || !this.state.savedSession.sessionId
+      || this.state.savedSession.discussionEntries !== undefined) {
+      throw new Error('请先核对当前助手会话，再从当前会话生成候选。');
+    }
     // 点击动作与本次输入一起冻结，恢复旧场景也不再走选消息或确认方向的门禁。
     if (selection.workspaceAction !== undefined) {
       this.enterWorkspace(selection);

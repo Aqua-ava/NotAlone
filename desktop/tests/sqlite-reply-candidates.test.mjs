@@ -11,10 +11,10 @@ const pageData=(version=original(),phase='complete')=>({requests:[{requestId:ids
 const receipt=(request,replayed=false)=>({session_id:request.sessionId,request_key:request.requestKey,segmented:false,replayed});
 
 /** 仅IPC业务边界为显式替身；实际React、浏览器事件及渲染均执行。 */
-async function panel(t,execute){
+async function panel(t,execute,initialDraft=''){
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteReplyCandidatesPanel}from'./src/renderer/SqliteReplyCandidatesPanel';
   const listeners=new Set();const bridge={candidates:{execute:request=>window.__execute(request).finally(()=>{window.__settled=(window.__settled||0)+1;})},onInvalidated:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}};
-  const root=createRoot(document.getElementById('root'));let props={bridge,contactId:${JSON.stringify(ids.contact)},scopeRevision:1,sessionId:${JSON.stringify(ids.session)},onSubmitted:receipt=>window.__submitted(receipt)};
+  const root=createRoot(document.getElementById('root'));let props={bridge,contactId:${JSON.stringify(ids.contact)},scopeRevision:1,sessionId:${JSON.stringify(ids.session)},initialDraft:${JSON.stringify(initialDraft)},onSubmitted:receipt=>window.__submitted(receipt)};
   const render=()=>root.render(React.createElement(SqliteReplyCandidatesPanel,props));window.__invalidate=()=>{for(const listener of listeners)listener({revision:2,contactId:props.contactId,scopeRevision:props.scopeRevision});};
   window.__switch=()=>{props={...props,contactId:${JSON.stringify(ids.other)},scopeRevision:2,sessionId:${JSON.stringify(ids.otherSession)}};render();};render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end('<div id="root"></div>');});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
@@ -141,4 +141,15 @@ test('短暂读取失败后权威读取确认来源失效，仍撤下旧选稿�
  await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('短暂读失败后仍挂旧选稿的合成草稿');
  await read.click();await expect(region.getByRole('alert')).toContainText('尚未确认');await expect(draft).toHaveValue('短暂读失败后仍挂旧选稿的合成草稿');
  await read.click();await expect(region.getByText('这次候选的来源已失效，正文与依据已撤下。',{exact:true})).toBeVisible();await expect(draft).toHaveValue('');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
+});
+
+
+test('首次会话带入已有想法并通过 SQLite 候选接口提交', {timeout:30000}, async t => {
+ const f=await panel(t,async operation=>operation.action==='read'?pageData():receipt(operation),'合成的首次表达想法');
+ const region=f.page.getByRole('region',{name:'候选回复'}), draft=region.getByRole('textbox',{name:'本次想法',exact:true});
+ await expect(draft).toHaveValue('合成的首次表达想法');
+ await region.getByRole('button',{name:'生成候选',exact:true}).click();
+ await expect.poll(()=>f.submitted.length).toBe(1);
+ const request=f.commands.find(command=>command.action==='generate');
+ assert.equal(request.text,'合成的首次表达想法');assert.equal(request.contactId,ids.contact);assert.equal(request.sessionId,ids.session);
 });

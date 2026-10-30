@@ -104,7 +104,8 @@ export function App() {
     {replies.state.mode === 'rewrite_draft' && (replies.state.messageNotice.changed || replies.state.messageNotice.needsRefresh)
       && <button disabled={replies.state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button>}
     <div className="ime-status-line"><BackendBadge state={backend} compact /></div>
-    <ReplyCandidates replies={replies} currentDraft={contactSession.state.draft}
+    <ReplyCandidates replies={replies} currentDraft={replies.state.contactId === contactSession.state.selectedContactId && replies.state.scopeRevision === contactSession.state.scopeRevision ? contactSession.state.draft : ''}
+      onInitialDraftTaken={() => { if (replies.state.contactId === contactSession.state.selectedContactId && replies.state.scopeRevision === contactSession.state.scopeRevision) void contactSession.setDraft(''); }}
       historyCoverage={historyCoverage} />
     </div>
     <footer className="ime-footer">

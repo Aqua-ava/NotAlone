@@ -1,12 +1,13 @@
 import {useEffect,useRef,useState} from 'react';
 import type {SqliteDiscussionBridge,SqliteDiscussionReceipt} from '../shared/sqlite-discussion-bridge';
 import {readSqliteCandidatePage,readSqliteCandidateVersion,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation} from '../shared/sqlite-reply-candidates';
-interface Props {bridge:SqliteDiscussionBridge;contactId:string|null;scopeRevision:number;sessionId:string|null;disabled?:boolean;onSubmitted?:(receipt:SqliteDiscussionReceipt)=>void}
+interface Props {bridge:SqliteDiscussionBridge;contactId:string|null;scopeRevision:number;sessionId:string|null;disabled?:boolean;initialDraft?:string;onInitialDraftTaken?:()=>void;onSubmitted?:(receipt:SqliteDiscussionReceipt)=>void}
 /** 草稿、候选、依据和实际Skill快照共用同一失效边界；迟到回包不能重新挂回旧正文。 */
-export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessionId,disabled=false,onSubmitted}:Props){
+export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessionId,disabled=false,initialDraft='',onInitialDraftTaken,onSubmitted}:Props){
  const scopeKey=JSON.stringify([contactId,scopeRevision,sessionId]),latest=useRef({scopeKey,bridge,disabled});latest.current={scopeKey,bridge,disabled};
  const revision=useRef(0),mounted=useRef(false),operation=useRef<object|null>(null);
  const retry=useRef<{fingerprint:string;requestKey:string}|null>(null);
+ const seeded=useRef<string|null>(null);
  const qualifiedRequests=useRef<string[]>([]);
  const [page,setPage]=useState<SqliteCandidatePage|null>(null),[draft,setDraft]=useState(''),[partial,setPartial]=useState(false),[carry,setCarry]=useState<string|undefined>();
  const [selectedSkill,setSelectedSkill]=useState('');
@@ -14,8 +15,8 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const [edits,setEdits]=useState<Record<string,string[]>>({}),[inspected,setInspected]=useState<Record<string,SqliteCandidateVersion>>({});
  const available=!!bridge.candidates&&!!contactId&&!!sessionId&&!disabled;
  function clear(){++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setPartial(false);setCarry(undefined);setSelectedSkill('');setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
- useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(clear);return()=>{mounted.current=false;++revision.current;operation.current=null;off();};},[bridge]);
- useEffect(()=>{clear();if(available)void run({action:'read'});},[scopeKey,bridge,disabled]);
+ useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(()=>{seeded.current=scopeKey;clear();});return()=>{mounted.current=false;++revision.current;operation.current=null;off();};},[bridge,scopeKey]);
+ useEffect(()=>{clear();if(available){if(seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);if(initialDraft)onInitialDraftTaken?.();}void run({action:'read'});}},[scopeKey,bridge,disabled]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
  function showPage(next:SqliteCandidatePage){
   // 仅保留无正文的来源标识，短暂读取失败后仍能核对旧草稿的资格。

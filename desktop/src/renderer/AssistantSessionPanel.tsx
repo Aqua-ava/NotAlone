@@ -98,7 +98,7 @@ export function AssistantSessionBudgetNotice({ replies }: { replies: ReplySessio
     : <AssistantInputBudgetNotice budget={budget} />;
 }
 
-export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }) {
+export function AssistantSessionPanel({ replies, initialDraft = '', onInitialDraftTaken }: { replies: ReplySessionView; initialDraft?: string; onInitialDraftTaken?: () => void }) {
   const saved = replies.state.savedSession;
   const [confirmation, setConfirmation] = useState<AssistantSessionDeletion | null>(null);
   const [copyError, setCopyError] = useState(false);
@@ -203,7 +203,8 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       <SqliteDiscussionEntries entries={saved.discussionEntries!} recovery={saved.runtimeRecovery} />
       {catalog?.phase === 'ready' && !currentDiscussion && <p role="status">正在回看历史讨论，请先明确继续此会话后再提交。</p>}
       {window.notalone.sqliteDiscussion.candidates&&<SqliteReplyCandidatesPanel bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
-        scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled} onSubmitted={discussionSubmitted} />}
+        scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled} initialDraft={initialDraft}
+        onInitialDraftTaken={onInitialDraftTaken} onSubmitted={discussionSubmitted} />}
       <SqliteDiscussionComposer bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
         scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled}
         onSubmitted={discussionSubmitted} />
