@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 21,
+  "schemaVersion": 22,
   "migrationVersions": [
    1,
    2,
@@ -22,9 +22,10 @@
    18,
    19,
    20,
-   21
+   21,
+   22
   ],
-  "userVersion": 21,
+  "userVersion": 22,
   "sqliteVersion": "3.53.3",
   "tableCount": 87,
   "fieldCount": 843,

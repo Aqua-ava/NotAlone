@@ -24,7 +24,7 @@ test('77 表／778 字段／215 FK 逻辑目录逐项 disposition 与实现集�
   assert.equal(EXPECTED_TABLES.length, 87);
   assert.equal(IMPLEMENTED_DESIGN_TABLES.length + 20, EXPECTED_TABLES.length);
   assert.match(structure.metadata.sqliteVersion, /^\d+\.\d+\.\d+$/);
-  assert.deepEqual(structure.metadata, { schemaVersion: 21, migrationVersions: Array.from({ length: 21 }, (_, index) => index + 1), userVersion: 21,
+  assert.deepEqual(structure.metadata, { schemaVersion: 22, migrationVersions: Array.from({ length: 22 }, (_, index) => index + 1), userVersion: 22,
     sqliteVersion: structure.metadata.sqliteVersion, tableCount: 87, fieldCount: 843, foreignKeyGroups: 179, triggerCount: 96, checkCount: 257, viewCount: 0 });
 });
 
