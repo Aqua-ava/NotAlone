@@ -72,7 +72,7 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
       <h3>{selected ? selected.displayName : '请在顶部选择联系人'}</h3>
       {selected ? <><dl><div><dt>消息</dt><dd>{selected.messageCount} 条</dd></div></dl>
         <p className="contact-sync-status" role="status">{syncLabel(selected.contactId)}</p>
-        <ContactHistoryCoverage coverages={sync.report?.historyCoverages} contactId={selected.contactId} />
+        <ContactHistoryCoverage coverages={sync.report?.historyCoverages} contactId={selected.contactId} bodyAvailable={sync.report?.bodyAvailable} />
         <ContactHistoryClear session={session} />
         <p>关系资料独立处理，处理状态请到「关系资料」查看。</p>
         <ContactSyncDetails contactId={selected.contactId} consent={consent} onConnect={() => addWechat(selected.contactId)} allPrivate={allPrivate} />

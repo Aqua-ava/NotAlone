@@ -36,7 +36,7 @@ export function projectHistoryMessages(read: HistoryRead, limit: number) {
   };
 }
 /** 公共宿主负责实际渠道可用性；本函数只投影已持久化的覆盖，不发起读取。 */
-export function projectHistorySyncStatus(base: Record<string, unknown>, persistedCoverages: readonly HistoryCoverage[], runtime?:FirstHistoryCoordinatorState, incremental?:IncrementalHistoryCoordinatorState) {
+export function projectHistorySyncStatus(base: Record<string, unknown>, persistedCoverages: readonly HistoryCoverage[], runtime?:FirstHistoryCoordinatorState, incremental?:IncrementalHistoryCoordinatorState, bodyCapabilityVerified = false) {
   const blocked=new Set<string>();
   const globalFailure=runtime?.phase==='blocked'&&(runtime.contacts.length===0
     ||runtime.lastError==='history_first_directory_failed'||runtime.lastError==='history_first_stop_failed')?runtime.lastError:null;
@@ -69,6 +69,14 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, persiste
     : incrementalPhases.includes('syncing') ? 'active'
       : incrementalPhases.length > 0 && incrementalPhases.every(phase => phase === 'unavailable') ? 'unavailable'
         : incrementalPhases.includes('incomplete') || incrementalPhases.includes('invalidated') ? 'incomplete' : 'idle';
+  const specificFailure = coverages.find(row => row.failureCode !== null)?.failureCode ?? incrementalFailure;
+  const enabled = base.sync_enabled === true;
+  const boundCount = typeof base.cli_bound_count === 'number' ? base.cli_bound_count : rows.length;
+  const backgroundPhase = bodyCapabilityVerified
+    ? !enabled ? 'disabled' : boundCount === 0 ? 'waiting_bindings' : specificFailure || incomplete > 0 || incrementalOverallPhase === 'incomplete' ? 'degraded' : 'active'
+    : base.cli_sync_phase;
+  const backgroundFailure = specificFailure
+    ?? (bodyCapabilityVerified && base.cli_failure_code === 'wechat_body_unavailable' ? null : base.cli_failure_code ?? null);
   return { ...base,
     cli_history_authorization_state: coverages.some(row=>row.bindingId!==null)?'accepted':'unknown', cli_history_authorization_version: coverages.some(row=>row.bindingId!==null)?1:null, cli_history_authorization_current_version: 1,
     cli_history_coverages: coverages.filter(row => row.bindingId !== null).map(row => ({
@@ -83,6 +91,11 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, persiste
     cli_backfill_succeeded_contacts: completed, cli_backfill_skipped_contacts: 0, cli_backfill_failed_contacts: 0,
     cli_backfill_incomplete_contacts: incomplete, cli_backfill_pending_contacts: pending,
     cli_incremental_phase: incrementalOverallPhase, cli_incremental_failure_code: incrementalFailure,
+    // 即时能力必须由宿主传入当前资格范围的受信任支持核验结果；覆盖数量、进度和缓存错误均不能推导正文能力。
+    body_available: bodyCapabilityVerified === true,
+    cli_sync_phase: backgroundPhase,
+    // 具体会话错误优先；仅在新能力证据已经通过时清除旧通用占位错误。
+    cli_failure_code: backgroundFailure,
     cli_backfill_total_message_count: coverages.reduce((sum, row) => sum + textCount(row), 0),
     cli_backfill_total_non_text_count: coverages.reduce((sum, row) => sum + row.nonTextCount, 0),
   };

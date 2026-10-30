@@ -8,11 +8,11 @@ const bundled = await build({ stdin: { contents: `
   import { renderToStaticMarkup } from 'react-dom/server';
   import { ContactHistoryCoverage, HistoryCoverageStatus } from './src/renderer/HistoryCoverageStatus';
   export { parseSyncReport } from './src/main/sync/status';
-  export function renderContact(coverage) {
-    return renderToStaticMarkup(React.createElement(ContactHistoryCoverage, { coverages: [coverage], contactId: coverage.contactId }));
+  export function renderContact(coverage, bodyAvailable) {
+    return renderToStaticMarkup(React.createElement(ContactHistoryCoverage, { coverages: [coverage], contactId: coverage.contactId, bodyAvailable }));
   }
-  export function renderPage(coverages) {
-    return renderToStaticMarkup(React.createElement(HistoryCoverageStatus, { coverages, contacts: [] }));
+  export function renderPage(coverages, bodyAvailable) {
+    return renderToStaticMarkup(React.createElement(HistoryCoverageStatus, { coverages, contacts: [], bodyAvailable }));
   }`, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'node', format: 'cjs', write: false,
   loader: { '.css': 'empty' } });
 const loaded = { exports: {} };
@@ -66,4 +66,24 @@ test('界面单独展示增量已停止/不可用原因，不把不可用显示�
   const page = renderPage([coverage({ incrementalPhase: 'blocked', incrementalFailureCode: 'history_cursor_invalid' })]);
   assert.ok(page.includes('新消息同步已停止或不完整'));
   assert.ok(page.includes('重新授权后可重试'));
+});
+
+test('未建立覆盖的会话也显示首次历史支持核验阻断原因', () => {
+  const waiting = renderContact(coverage({ phase: 'not_started', failureCode: 'history_support_unverified', incrementalPhase: 'unavailable', incrementalFailureCode: 'history_support_unverified' }), false);
+  assert.ok(waiting.includes('读取能力核验受阻'));
+  assert.ok(waiting.includes('正文读取保持关闭'));
+});
+
+test('正文未开放时如实显示能力核验进度，失败联系人不计入等待队列', () => {
+  const markup = renderPage([
+    coverage({ phase: 'syncing', incrementalPhase: 'syncing' }),
+    coverage({ contactId: '20000000-0000-4000-8000-000000000002', phase: 'not_started', failureCode: 'history_support_unverified', incrementalPhase: 'unavailable', incrementalFailureCode: 'history_support_unverified' }),
+    coverage({ contactId: '30000000-0000-4000-8000-000000000003', phase: 'not_started', incrementalPhase: 'not_started' }),
+  ], false);
+  assert.ok(markup.includes('正在核验读取能力：1 个会话'));
+  assert.ok(markup.includes('等待核验：1 个 · 需要关注：1 个'));
+  assert.equal(markup.includes('正在读取 1 个'), false);
+  assert.equal(markup.includes('正在同步 1 个会话的新消息'), false);
+  assert.equal(markup.includes('查看正在读取和等待同步的会话（2）'), false);
+  assert.ok(markup.includes('当前微信读取能力尚未核验'));
 });

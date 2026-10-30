@@ -131,7 +131,7 @@ export async function apply(ctx: Context) {
     if(capabilities.capabilities.some(capability=>capability==='history')){
       history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionHolders);
       firstHistory=new FirstHistoryCoordinator(contacts,history);
-      incremental=new IncrementalHistoryCoordinator(contacts,history);
+      incremental=new IncrementalHistoryCoordinator(contacts,history,{firstHistoryManagedExternally:true});
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
       contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();});
     }
@@ -139,7 +139,8 @@ export async function apply(ctx: Context) {
     const historyStatus=async()=>{
       const directory=await contacts!.directory();
       const coverage=await Promise.all(directory.bindings.filter(binding=>binding.status==='active').map(async binding=>({...await history!.coverage(binding.contact_id),bindingId:binding.binding_id})));
-      return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState(),incremental?.getState());
+      return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState(),incremental?.getState(),
+        await history!.bodyAvailable(coverage.map(row=>row.contactId)));
     };
     const library=capabilities.skillPackageRoot?new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot):undefined;
     const skills=library?new SqliteSkillHttp(library,req=>authorizeSqliteRequest(req,token)):undefined;

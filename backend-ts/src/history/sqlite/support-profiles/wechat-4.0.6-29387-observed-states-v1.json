@@ -1,0 +1,72 @@
+{
+  "format": "wechat-observed-status-evidence-v1",
+  "revision": 1,
+  "profileId": "wechat-4.0.6-29387-observed-states-v1",
+  "program": {
+    "version": "4.0.6",
+    "build": "29387"
+  },
+  "status": "unverified",
+  "canReadHistory": false,
+  "stateEvidence": "observed_subset_only",
+  "observedRules": [
+    {
+      "localType": "1",
+      "sender": "owner",
+      "status": "2",
+      "state": "sent",
+      "requiresServerId": true
+    },
+    {
+      "localType": "1",
+      "sender": "contact",
+      "status": "3",
+      "state": "received",
+      "requiresServerId": true
+    },
+    {
+      "localType": "10000",
+      "sender": "unknown",
+      "status": "4",
+      "state": "recalled"
+    }
+  ],
+  "receivedObservation": {
+    "baselineLockedCount": 0,
+    "lockedCount": 1,
+    "currentChecks": 2,
+    "identityPreserved": true,
+    "serverIdAllocated": true,
+    "nativeBodyRead": false,
+    "confirmedInWechatUI": true,
+    "sourceCliSha256": "e42553aaf20a8114818b451ccffb08b7cbd66c9f61397a20b1a8d1fd7cf2f3c0"
+  },
+  "unverified": [
+    "unobservedStatusTuples",
+    "sourceLifecycle",
+    "restartContinuity",
+    "recoveryMapping",
+    "snapshotBarrier",
+    "partitionCoverage",
+    "normalHistory",
+    "incrementalTail"
+  ],
+  "implementationArtifact": {
+    "cliSha256": "b1eecd3302ffcdec7591e3f56f439028df9de83d9c30aeb6b35c41fa95297663",
+    "wcdbSha256": "4f05cafc4626a142afca1818f0a88c4092a13d5f4c83e30cd5125b558ba0417d",
+    "overlaySha256": "6edf22579e52adf08a7ad537496a29f59be957b38b2e7f9d32a710bf03453bf4",
+    "sourceCommit": "795071fa0591da5fc2c6ab94a70f22ccd93ef06c",
+    "sourceTree": "5d617ff3250c27fd9b33a60cb0182e153c521057",
+    "goVersion": "1.26.5",
+    "signing": "ad-hoc-development",
+    "realWechatVerified": false
+  },
+  "nativeSyntheticAssertions": {
+    "passed": 224,
+    "failed": 0,
+    "skipped": 1,
+    "race": true,
+    "packages": 2
+  },
+  "evidence": "docs/verification/sqlite-private-history-support-03.md"
+}

@@ -17,6 +17,43 @@ function guardedChannelFactory(state){
  };
 }
 
+test('正文可用性只来自当前授权下的已核验活守卫，状态查询不打开渠道或读取正文',async t=>{
+ const f=await fixture(t),state={created:0,closed:0},create=guardedChannelFactory(state);let inspections=0,pages=0;
+ const history=new SqliteHistoryService(f.storage,f.contacts,()=>{
+  const channel=create(),inspect=channel.inspect,page=channel.page;
+  channel.inspect=async(...args)=>{inspections++;return {...await inspect(...args),capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(key=>[key,'supported']))};};
+  channel.page=async(...args)=>{pages++;return page(...args);};return channel;
+ });
+ t.after(()=>history.close());const contact=f.saved[0].contact_id;
+ assert.equal(await history.bodyAvailable([contact]),false);assert.equal(state.created,0);
+ await history.synchronize(contact);const counts=[state.created,inspections,pages];
+ assert.equal(await history.bodyAvailable([contact]),true);assert.deepEqual([state.created,inspections,pages],counts);
+ assert.equal(await history.bodyAvailable([f.saved[1].contact_id]),false);
+ await f.contacts.setReading(false);assert.equal(await history.bodyAvailable([contact]),false);
+ await history.stop(contact);assert.equal(await history.bodyAvailable([contact]),false);
+});
+
+test('历史已入库但缺少明确正文能力证明时，状态不能声称正文可用',async t=>{
+ const f=await fixture(t),state={created:0,closed:0},history=new SqliteHistoryService(f.storage,f.contacts,guardedChannelFactory(state));
+ t.after(()=>history.close());const contact=f.saved[0].contact_id;
+ assert.equal((await history.synchronize(contact)).phase,'complete');
+ assert.equal(await history.bodyAvailable([contact]),false);
+ await history.close();
+});
+
+test('缺少正文必需能力时，已认证单次读取不能开启自动正文同步状态',async t=>{
+ for(const missing of ['statusColumn','automaticAllocation','incrementalTail','restartContinuity','recoveryMapping'])await t.test(missing,async t=>{
+  const f=await fixture(t),state={created:0,closed:0},create=guardedChannelFactory(state);
+  const history=new SqliteHistoryService(f.storage,f.contacts,()=>{
+   const channel=create(),inspect=channel.inspect;
+   channel.inspect=async(...args)=>({...await inspect(...args),capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(key=>[key,key===missing?'unverified':'supported']))});
+   return channel;
+  });
+  t.after(()=>history.close());const contact=f.saved[0].contact_id;
+  await history.synchronize(contact);assert.equal(await history.bodyAvailable([contact]),false);await history.close();
+ });
+});
+
 test('应用跨批次持有同一守卫，停读后释放并禁止自动续读',async t=>{
  const f=await fixture(t),state={created:0,closed:0},history=new SqliteHistoryService(f.storage,f.contacts,guardedChannelFactory(state));t.after(()=>history.close());
  const contact=f.saved[0].contact_id;await history.synchronize(contact);const source=(await history.read(contact)).messages[0].sourceRecordIds[0];await history.synchronize(contact);

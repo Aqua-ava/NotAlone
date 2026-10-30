@@ -112,10 +112,19 @@ func notalone40629387ExpectedShape() notaloneTableSchema {
 	return table
 }
 
+// 仅记录当前真实受控观察过的完整元组；同一原始 status 不跨消息类型或发送方推断。
+func notalone40629387ObservedStatusRules() []notaloneStatusRule {
+	return []notaloneStatusRule{
+		{LocalType: 1, Sender: "owner", Status: 2, State: notaloneMessageSent, RequiresServerID: true},
+		{LocalType: 1, Sender: "contact", Status: 3, State: notaloneMessageReceived, RequiresServerID: true},
+		{LocalType: 10000, Sender: "unknown", Status: 4, State: notaloneMessageRecalled},
+	}
+}
+
 // 仅可信的本机版本读取和受控结构检查调用此函数，RPC 不能提交 profile 或能力事实。
 // 真实匿名结构只认证结构；未知状态与来源生命周期不能被 opaque 原值策略放行。
 func certifyNotaloneProfile(program notaloneProgramVersion, tables []notaloneTableSchema) notaloneProfileCertification {
-	report := notaloneProfileCertification{Status: "unverified", Reason: "history_program_version_uncertified", ProfileID: "wechat-4.0.6-29387-structure-v1",
+	report := notaloneProfileCertification{Status: "unverified", Reason: "history_program_version_uncertified", ProfileID: "wechat-4.0.6-29387-observed-states-v1",
 		ProgramVersion: program.Version, Build: program.Build, DeclaredPrimaryKey: []string{}, StatusSemantics: "unverified", Continuity: "unverified",
 		Capabilities: map[string]string{}, Reasons: []string{"history_message_state_unverified", "history_source_lifecycle_unverified", "history_snapshot_runtime_proof_required", "history_partition_coverage_runtime_proof_required"}}
 	for _, capability := range []string{"programVersion", "exactSchema", "declaredLocalKey", "automaticAllocation", "serverIdUniqueConstraint", "statusColumn", "statusSemantics", "sourceLifecycle", "restartContinuity", "recoveryMapping", "snapshotBarrier", "partitionCoverage", "normalHistory"} {
@@ -144,7 +153,8 @@ func certifyNotaloneProfile(program notaloneProgramVersion, tables []notaloneTab
 	report.Capabilities["serverIdUniqueConstraint"] = "unsupported"
 	report.DeclaredPrimaryKey = []string{"local_id"}
 	report.SchemaShapeFingerprint = shape
-	report.ReadProfile = &notaloneReadProfile{SchemaShapeFingerprint: shape}
+	report.StatusSemantics = "observed_subset_only"
+	report.ReadProfile = &notaloneReadProfile{SchemaShapeFingerprint: shape, StatusSemanticsVerified: true, StatusRules: notalone40629387ObservedStatusRules()}
 	report.Reason = "history_message_state_unverified"
 	return report
 }

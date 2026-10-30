@@ -60,7 +60,7 @@ function createChannel(state) {
   };
   return factory;
 }
-async function fixture(t, names = ['a']) {
+async function fixture(t, names = ['a'], coordinatorOptions = { intervalMs: 0 }) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-incremental-controls-')));
   const state = { creates: 0, inspects: 0, targets: 0, pages: [], tails: [], closes: 0, supportOverrides: {}, tailSupported: true, capabilityDeclared: true,
     historyRecords: [], tailBatches: [], tailSerial: 0, resumeCursor: 'tail-1', targetDescriptor: null, pageHook: null, tailHook: null, closeHook: null };
@@ -73,7 +73,7 @@ async function fixture(t, names = ['a']) {
   f.contacts = new SqliteContactService(f.storage, owner, metadata());
   await f.contacts.initialize();
   f.history = new SqliteHistoryService(f.storage, f.contacts, createChannel(state));
-  f.coordinator = new IncrementalHistoryCoordinator(f.contacts, f.history, { intervalMs: 0 });
+  f.coordinator = new IncrementalHistoryCoordinator(f.contacts, f.history, coordinatorOptions);
   t.after(async () => {
     await f.coordinator.close(); await f.history.close(); await f.contacts.close(); await f.storage.close();
     await rm(root, { recursive: true, force: true });
@@ -124,6 +124,29 @@ test('读取四门禁：未选、总开关关闭、撤销/账号失效或协调�
   await f.coordinator.close();
   await wake(f);
   assertNoNewChannel(beforeRevoke, f.state);
+});
+
+test('宿主由首次历史协调器管理时，增量协调器等待首次历史完成后才读尾部', async t => {
+  const f = await fixture(t, ['a'], { intervalMs: 0, firstHistoryManagedExternally: true });
+  f.state.historyRecords = [record('1')];
+  const [binding] = await select(f);
+  await f.contacts.setReading(true);
+
+  await wake(f);
+  assert.deepEqual(channelCounts(f.state), { creates: 0, inspects: 0, targets: 0, pages: 0, tails: 0 }, '首次历史未完成时不与首次历史协调器争抢渠道');
+  assert.equal((await f.history.coverage(binding.contact_id)).phase, 'not_started');
+  const waiting = f.coordinator.getState().contacts.find(contact => contact.contactId === binding.contact_id);
+  assert.equal(waiting.phase, 'degraded');
+  assert.equal(waiting.lastError, 'history_incomplete');
+
+  await f.history.synchronize(binding.contact_id);
+  f.state.tailBatches.push(() => ({ records: [record('2')], caughtUp: true, cursorOut: 'tail-2' }));
+  const beforeTail = channelCounts(f.state);
+  await wake(f);
+  assert.equal(f.state.pages.length, beforeTail.pages, '首次历史已完成后不再重读历史页');
+  assert.equal(f.state.tails.length, beforeTail.tails + 1, '首次历史完成后由增量协调器读取尾部');
+  assert.equal(f.coordinator.getState().contacts.find(contact => contact.contactId === binding.contact_id).phase, 'caught_up');
+  assert.deepEqual((await f.history.read(binding.contact_id)).messages.map(message => message.text).sort(), ['合成1', '合成2']);
 });
 
 test('关闭总开关保留资料与选择/授权、不撤销手动处理资格；重开只恢复仍合法允许的读取', async t => {

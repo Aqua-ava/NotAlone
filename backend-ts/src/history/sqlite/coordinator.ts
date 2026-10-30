@@ -18,7 +18,8 @@ const allowedErrors = new Set(['history_source_continuity_unverified', 'history_
   'history_external_scope_changed', 'history_interrupted', 'history_page_budget_exhausted', 'history_cursor_invalid',
   'history_target_invalid', 'history_target_unverified', 'history_snapshot_closed', 'history_snapshot_unavailable',
   'history_native_timeout', 'history_native_cancelled', 'history_native_unavailable', 'history_source_changed',
-  'history_schema_changed', 'history_scope_changed', 'history_message_state_unverified', 'read_not_authorized',
+  'history_schema_changed', 'history_scope_changed', 'history_message_state_unverified', 'history_source_lifecycle_unverified',
+  'history_snapshot_runtime_proof_required', 'history_partition_coverage_runtime_proof_required', 'read_not_authorized',
   'read_eligibility_stale', 'history_contact_gateway_unavailable', 'history_contact_not_found', 'history_closed',
   'history_identity_conflict', 'history_identity_insufficient', 'history_partitions_missing', 'history_incomplete',
   'message_identity_conflict', 'message_identity_insufficient', 'history_first_read_failed', 'history_first_directory_failed']);

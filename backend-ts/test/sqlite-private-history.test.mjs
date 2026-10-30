@@ -320,6 +320,16 @@ test('能力三值分别保留，真实未认证适配器不读正文，不能�
  channel.inspect=async scope=>({...report,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,status:'unsupported'});
  await assert.rejects(service.synchronize(saved[0].contact_id),{code:'history_support_unsupported'});assert.equal(pages,0);
 });
+test('未认证支持档保留已知缺口原因，未知原因不泄露且不打开正文目标',async t=>{
+ const {service,channel,saved}=await fixture(t);let targets=0,pages=0;
+ channel.target=async()=>{targets++;throw new Error('不得打开正文目标');};
+ channel.page=async()=>{pages++;throw new Error('不得读取正文');};
+ for(const reason of ['history_message_state_unverified','history_source_lifecycle_unverified','history_snapshot_runtime_proof_required','history_partition_coverage_runtime_proof_required','private_internal_reason']){
+  channel.inspect=async scope=>({...report,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,status:'unverified',reason});
+  await assert.rejects(service.synchronize(saved[0].contact_id),{code:reason==='private_internal_reason'?'history_support_unverified':reason});
+ }
+ assert.equal(targets,0);assert.equal(pages,0);
+});
 test('source删除接收即撤下待删来源，旧删除refresh不误停新代次合法消息',async t=>{
  const {service,channel,saved,storage,target,root}=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=saved[0].contact_id;
  await service.synchronize(contact);const original=(await service.read(contact)).messages.find(m=>m.kind==='text');const source=original.sourceRecordIds[0];

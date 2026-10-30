@@ -26,7 +26,8 @@ const fatalCodes = new Set(['history_source_continuity_unverified', 'history_sup
 const transientCodes = new Set(['history_native_unavailable', 'history_native_timeout', 'history_native_cancelled',
   'history_interrupted', 'history_incremental_interrupted', 'history_closed', 'history_already_running',
   'history_page_budget_exhausted', 'history_first_read_failed', 'history_snapshot_closed', 'history_snapshot_unavailable',
-  'history_schema_changed', 'history_message_state_unverified', 'history_contact_gateway_unavailable', 'history_incomplete']);
+  'history_schema_changed', 'history_message_state_unverified', 'history_source_lifecycle_unverified',
+  'history_snapshot_runtime_proof_required', 'history_partition_coverage_runtime_proof_required', 'history_contact_gateway_unavailable', 'history_incomplete']);
 /** 只向界面投影已分类的可见错误码；未登记的内部失败统一收敛，避免泄露存储细节。 */
 const visibleCodes = new Set([...fatalCodes, ...transientCodes]);
 function safeError(error: unknown): string {
@@ -45,6 +46,7 @@ export class IncrementalHistoryCoordinator {
   readonly #directory: IncrementalHistoryDirectoryPort;
   readonly #history: SqliteHistoryService;
   readonly #intervalMs: number;
+  readonly #firstHistoryManagedExternally: boolean;
   readonly #queued = new Map<string, QueuedRead>();
   readonly #active = new Map<string, ActiveRead>();
   readonly #attempted = new Map<string, string>();
@@ -60,8 +62,9 @@ export class IncrementalHistoryCoordinator {
   #closeDone = false;
   #closing?: Promise<void>;
   #lastError: string | null = null;
-  constructor(directory: IncrementalHistoryDirectoryPort, history: SqliteHistoryService, options: { intervalMs?: number } = {}) {
+  constructor(directory: IncrementalHistoryDirectoryPort, history: SqliteHistoryService, options: { intervalMs?: number; firstHistoryManagedExternally?: boolean } = {}) {
     this.#directory = directory; this.#history = history; this.#intervalMs = options.intervalMs ?? 30_000;
+    this.#firstHistoryManagedExternally = options.firstHistoryManagedExternally ?? false;
   }
   /** 宿主在发布就绪后调用；定时只触发一次有界扫描，不改变持久资格。 */
   start(): void {
@@ -142,6 +145,8 @@ export class IncrementalHistoryCoordinator {
     active.done = (async () => {
       let coverage = await this.#history.coverage(job.contactId);
       if (coverage.phase !== 'complete') {
+        // 正式宿主有独立 FirstHistoryCoordinator；不能与它并发启动同一联系人的首次历史。
+        if (this.#firstHistoryManagedExternally) throw new StorageFailure('history_incomplete');
         coverage = await this.#history.synchronize(job.contactId, active.controller.signal);
         if (coverage.phase !== 'complete') throw new StorageFailure(coverage.failureCode ?? 'history_incomplete');
       }

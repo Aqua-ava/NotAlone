@@ -12,8 +12,11 @@ import { assertSourceContinuity, assertLiveGuard, fenceContinuity, preflightGene
 const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
 export const serializeSupport=(report:HistorySupportReport):string=>JSON.stringify(Object.fromEntries(Object.entries(report).sort(([a],[b])=>a.localeCompare(b))));
+const publicSupportReasons=new Set(['history_message_state_unverified','history_source_lifecycle_unverified',
+ 'history_snapshot_runtime_proof_required','history_partition_coverage_runtime_proof_required']);
 export function assertSupport(report:HistorySupportReport):void {
  if(report?.status==='unsupported')fail('history_support_unsupported');
+ if(report?.status==='unverified')fail(publicSupportReasons.has(report.reason??'')?report.reason!:'history_support_unverified');
  if(report?.status!=='supported'||report.protocol!=='private-history-v1'||report.identity!=='source-table-local-v1'
   ||!report.accountKey||!report.conversationKey||!report.sourceGeneration||!report.profileId||!report.adapterVersion||!report.programVersion||!report.build||!report.statusSemantics||!report.continuity
   ||!Array.isArray(report.declaredPrimaryKey)||!report.declaredPrimaryKey.length
