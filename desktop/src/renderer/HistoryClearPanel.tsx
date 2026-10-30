@@ -18,7 +18,7 @@ function clearSummary(clear: HistoryClearView) {
   if (clear.phase === 'boundary_pending') return `已停止清空前旧历史的写入并清理已保存的聊天。本机历史边界尚未建立${clear.boundaryReason ? `（${boundaryReasons[clear.boundaryReason] ?? clear.boundaryReason}）` : ''}，因此不会显示为清空完成。`;
   if (clear.phase === 'cleanup_blocked') return '历史边界已建立，但受管资料或存储面清理尚未全部完成；请稍后重试清空以继续原操作。';
   if (clear.phase === 'cleaning') return '历史边界已建立，正在清理已保存资料与依赖副本。';
-  return '清空会删除这位联系人在 NotAlone 中的全部聊天文字与非文字占位、来源和依赖资料，并截断此前未读的旧历史；不会删除联系人、同步选择或微信原消息。以后可明确选择重新同步历史。';
+  return null;
 }
 export function ContactHistoryClear({ session }: { session: ContactSessionView }) {
   const [state, setState] = useState(initial);
@@ -69,6 +69,7 @@ export function ContactHistoryClear({ session }: { session: ContactSessionView }
   const visible = state.contactId === selectedContactId && state.scopeRevision === scopeRevision;
   const clear = visible ? state.clear : null;
   const resync = visible ? state.resync : null;
+  const summary = clear ? clearSummary(clear) : null;
   if (resync?.completed) pendingResyncKey.current = null;
   const busy = visible ? state.busy : null;
   const contactName = session.state.contacts.find(entry => entry.contactId === selectedContactId)?.displayName;
@@ -76,7 +77,7 @@ export function ContactHistoryClear({ session }: { session: ContactSessionView }
     <h3>清空聊天与重新同步历史</h3>
     {visible && state.phase === 'loading' && <p role="status">正在核对清空与重读状态…</p>}
     {!visible && <p>选择联系人后，可查看其聊天清空与历史重读状态。</p>}
-    {clear && <><p role="status">{clearSummary(clear)}</p>
+    {clear && <>{summary && <p role="status">{summary}</p>}
       {clear.boundary?.state === 'verified' && <p>本机历史边界已接受：{clear.boundary.memberCount ?? 0} 条旧消息身份被持久排除；之后的新消息继续同步。</p>}
       {clear.failureCode && <p role="status">最近一次未完成原因：{boundaryReasons[clear.failureCode] ?? clear.failureCode}</p>}
       {resync && resync.state !== 'none' && <p role="status">{resync.completed
