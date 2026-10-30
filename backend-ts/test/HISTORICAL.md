@@ -25,18 +25,9 @@ npm run test:historical -- --list
 
 ```bash
 NOTALONE_HISTORICAL_PYTHON=/绝对路径/独立venv/bin/python npm run test:historical -- backend schema-prepare.test.mjs --test-name-pattern=隔离Python迁移比较器
-NOTALONE_HISTORICAL_PYTHON=/绝对路径/独立venv/bin/python npm run test:historical -- desktop-node tests/packaging/psycopg-rebuild.test.mjs
 NOTALONE_HISTORICAL_PYTHON=/绝对路径/独立venv/bin/python npm run test:historical -- desktop-pages --case memory-reading --timeout-seconds 60
 ```
 
 单次截止时间最长 600 秒。失败时保留本轮精确临时目录，原夹具负责清理自己创建的数据库和进程；不能清理未知测试库或据此修改现有用户资产。固定旧树也不包含当前未提交的修改。
 
 历史 App 入口沿用旧参数和租约门禁，不构成发布或打包授权；日常桌面开发与验收仍只使用 `npm run dev`。历史执行结果与当前业务、实际 App、模型质量及发行验收分别记录。
-
-## PostgreSQL 模块与测试退役
-
-`retired-postgres-inventory.json` 单独登记本轮删除的 PostgreSQL 测试、夹具及旧包验收，固定来源为 `a838de83c4825ae0c219cf6945ddc6cda4382273`。它与上面的 `23a76733` Python 历史树是两次不同的退役，不交给 `test:historical` 混跑；`npm test -- --list` 分别报告两份清单。当前入口发现被归档的根测试重新出现时会拒绝执行。
-
-需要核对旧 PG 实现时，在仓库外的独立工作树恢复该提交，并按其 `package.json`、`pnpm-lock.yaml` 准备专属依赖与明确授权的合成数据库。当前 workspace 已移除 `pg` / `@types/pg`，不能复用当前依赖目录来宣称旧 PG 测试可运行。历史树只用于显式调查，不连接用户资料，不自动安装或启动数据库，也不解除发布门禁。
-
-已实现的 SQLite 行为由当前 `sqlite-*.test.mjs` 和桌面回归验证。已停用能力不声明等价覆盖，旧 App／发布包验收也不由这些合成测试替代。

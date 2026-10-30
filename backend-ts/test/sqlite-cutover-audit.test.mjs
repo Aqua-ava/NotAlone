@@ -27,7 +27,7 @@ test('77 表／778 字段／215 FK 逻辑目录逐项 disposition 与实现集�
     sqliteVersion: '3.53.4', tableCount: 86, fieldCount: 834, foreignKeyGroups: 178, triggerCount: 92, checkCount: 253, viewCount: 0 });
 });
 
-test('115 个旧 PG 名称逐项 disposition 闭合且落点集合可核验', () => {
+test('115 个迁移来源名称逐项 disposition 闭合且落点集合可核验', () => {
   assert.equal(legacy.count, 115);
   assert.deepEqual(legacy.dispositionCounts, { implemented: 80, replacedEntryClosed: 1, deferredEntryClosed: 8, retiredManualImport: 1,
     outOfScopeEntryClosed: 16, derivedNoTable: 2, retired: 7 });

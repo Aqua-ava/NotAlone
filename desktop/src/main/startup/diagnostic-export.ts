@@ -7,9 +7,9 @@ import type { BackendState } from '../../shared/backend-bridge';
 
 const startupCodes = new Set(['sqlite_business_unavailable', 'sqlite_storage_failed', 'ready', 'launch_unconfigured', 'configuration_invalid', 'python_unavailable',
   'python_version_unsupported', 'backend_package_missing', 'project_unavailable', 'env_path_unavailable',
-  'info_path_unavailable', 'database_unconfigured', 'database_unavailable', 'baseline_missing', 'baseline_invalid',
+  'info_path_unavailable', 'baseline_missing', 'baseline_invalid',
   'migration_history_mismatch', 'migration_pending', 'schema_incomplete', 'migration_files_invalid', 'diagnostic_timeout',
-  'diagnostic_failed', 'database_writers_present', 'database_update_requires_local', 'migration_busy', 'migration_failed',
+  'diagnostic_failed', 'database_writers_present', 'migration_busy', 'migration_failed',
   'runtime_components_unavailable', 'runtime_configuration_invalid', 'runtime_cancelled', 'database_prepare_failed',
   'database_start_failed', 'database_already_running', 'local_setup_required', 'runtime_stop_unconfirmed']);
 const selected = (value: unknown, allowed: readonly string[]) => typeof value === 'string' && allowed.includes(value) ? value : null;

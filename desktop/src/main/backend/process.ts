@@ -16,7 +16,7 @@ export class OwnedBackendProcess {
     const { projectDirectory } = await validateLaunchConfiguration(config);
     // 路径核验含异步 I/O，最终 spawn 前再次检查退出/连接代际，不在退出后新建读取进程。
     if (!canStart()) throw new BackendFailure('backend_connection_failed');
-    // 唯一受支持的业务存储是受控 SQLite；没有切换控制面结果时不启动旧 PG 或空后台。
+    // 唯一受支持的业务存储是受控 SQLite；没有控制面结果时不启动后台。
     if (!config.sqlite) throw new BackendFailure('backend_launch_requires_sqlite');
     const environment: NodeJS.ProcessEnv = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, TZ: process.env.TZ, TMPDIR: process.env.TMPDIR };
     return launchDsh({ nodeExecutable: process.execPath, projectDirectory,

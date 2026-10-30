@@ -132,6 +132,7 @@
   "tests/packaging/build-history-cli.test.mjs",
   "tests/skill-learning/sqlite-library.test.mjs",
   "tests/sqlite-development.test.mjs",
+  "tests/sqlite-only-storage-startup.test.mjs",
   "tests/sqlite-discussion-bridge.test.mjs",
   "tests/sqlite-discussion-read.test.mjs",
   "tests/sqlite-discussion-session.test.mjs",

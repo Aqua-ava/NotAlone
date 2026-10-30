@@ -39,7 +39,7 @@ test('13偏好、15纠错诊断、18语音、19真实媒体与旧回复入口在
   for (const key of ['expressionPreferences', 'replies', 'skillLearning', 'imports', 'taskApi', 'taskManagement', 'tasks', 'mediaExtraction', 'foregroundLocation', 'contactContext']) {
     assert.equal(status.ownership[key], 'unavailable', `${key} 必须保持不可用`);
   }
-  // 旧 PG 回复生成、Skill 学习、手动导入、媒体提取与语音转换入口：路由返回 503 而不是启动旧 PG。
+  // 回复生成、Skill 学习、手动导入、媒体提取与语音转换入口：路由返回 503 且保持停用。
   for (const [route, options] of [
     ['/api/reply/generate', { method: 'POST' }],
     ['/api/skills', {}],

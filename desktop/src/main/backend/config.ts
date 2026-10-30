@@ -28,7 +28,7 @@ export interface BackendConfiguration {
   runtime?: 'dsh';
   // 仅由通过底座检查的显式开发能力配置注入，不从页面或路径配置接受。
   sqlite?: SqliteLaunchConfiguration;
-  // 默认业务只有 SQLite 一条启动路径；旧 managed／外置 PG 配置不再参与启动。
+  // 默认业务只有 SQLite 一条受控启动路径。
   source?: 'external';
   infoPath: string;
   envFilePath?: string;

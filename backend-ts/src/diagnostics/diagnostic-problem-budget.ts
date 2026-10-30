@@ -67,7 +67,7 @@ export function bindDiagnosticProblemBudget(environment:Readonly<NodeJS.ProcessE
  }
  return {reserve(){
   transaction(db=>{check(db,true);db.exec('UPDATE budget SET used=used+1');});
-  // PG 授权或发送前校验可能等待；再次检查停止条件，不重复扣费，也不退回预留。
+  // 存储授权或发送前校验可能等待；再次检查停止条件，不重复扣费，也不退回预留。
   return ()=>transaction(db=>check(db,false));
  }};
 }

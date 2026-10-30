@@ -1,6 +1,6 @@
 /** 已确认归属对象的精确清理；未知归属、符号链接或结构变化一律失败并保留现场。 */
-import { closeSync, fsyncSync, lstatSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeSync, mkdirSync, rmdirSync, constants } from 'node:fs';
-import { createHash, randomUUID } from 'node:crypto';
+import { closeSync, fsyncSync, lstatSync, openSync, readdirSync, readFileSync, unlinkSync, mkdirSync, rmdirSync, constants } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { LegacyTarget } from './contracts.ts';
 
@@ -56,22 +56,6 @@ function unlinkFile(location: string): void {
   if (entry(location) !== undefined) throw new CutoverCleanupError('target_still_present');
   fsyncDirectory(path.dirname(location));
 }
-/** 只去掉旧 PG 连接信息，保留模型密钥等用户配置行；不存在正文或迁移记录。 */
-function rewriteRuntimeEnv(location: string): void {
-  assertPrivateFile(location);
-  const text = readFileSync(location, 'utf8');
-  if (text.length > 65536) throw new CutoverCleanupError('runtime_env_too_large');
-  const lines = text.split('\n');
-  const removed = lines.filter(line => /^\s*(?:export\s+)?(?:NOTALONE_DATABASE_URL|PGPASSWORD|PGHOST|PGUSER|PGDATABASE)\s*=/.test(line)).length;
-  const kept = lines.filter(line => !/^\s*(?:export\s+)?(?:NOTALONE_DATABASE_URL|PGPASSWORD|PGHOST|PGUSER|PGDATABASE)\s*=/.test(line));
-  if (!removed) throw new CutoverCleanupError('runtime_env_without_database_configuration');
-  const directory = path.dirname(location);
-  const temporary = path.join(directory, `.${path.basename(location)}.${randomUUID()}.tmp`);
-  const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-  try { writeSync(fd, kept.join('\n')); fsyncSync(fd); } finally { closeSync(fd); }
-  renameSync(temporary, location);
-  fsyncDirectory(directory);
-}
 function verifyHash(location: string): string {
   assertPrivateFile(location);
   const value = lstatSync(location, { bigint: true });
@@ -85,8 +69,7 @@ export function cleanLegacyTarget(userData: string, target: LegacyTarget): strin
   const relative = path.relative(userData, location);
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new CutoverCleanupError('target_outside_user_data');
   switch (target.kind) {
-    case 'legacy_runtime_env': rewriteRuntimeEnv(location); return 'stripped_database_configuration';
-    case 'legacy_pg_state': case 'legacy_import_pending': case 'legacy_lifetime_lock': case 'legacy_startup_config':
+    case 'legacy_import_pending':
       unlinkFile(location); return 'removed_legacy_control_file';
     case 'legacy_writer_handshake': case 'legacy_launch_lock': case 'runtime_handshake': case 'runtime_launch_lock':
       unlinkFile(location); return 'removed_stale_runtime_handshake';
@@ -94,12 +77,6 @@ export function cleanLegacyTarget(userData: string, target: LegacyTarget): strin
       const hash = verifyHash(location); unlinkFile(location); return `removed_archive_payload:${hash.slice(0, 12)}`;
     }
     case 'legacy_assistant_runtime': removeTree(location); return 'removed_managed_session_copies';
-    case 'legacy_pg_cluster': {
-      const version = (() => { try { return readFileSync(path.join(location, 'PG_VERSION'), 'utf8').trim(); } catch { return ''; } })();
-      if (version !== '16') throw new CutoverCleanupError('pg_cluster_identity_changed');
-      for (const name of ['base', 'global']) assertPrivateDirectory(path.join(location, name));
-      removeTree(location); return 'removed_managed_postgres_cluster';
-    }
     default: throw new CutoverCleanupError('target_kind_unavailable');
   }
 }

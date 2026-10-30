@@ -10,16 +10,12 @@ export const CUTOVER_STARTUP_CONFIG = 'sqlite-development.json';
 
 export type CutoverPhase = 'identified' | 'fenced' | 'target_ready' | 'cleaned' | 'verified' | 'switched' | 'completed' | 'blocked';
 export type LegacyTargetKind =
-  | 'legacy_pg_cluster'
-  | 'legacy_pg_state'
-  | 'legacy_runtime_env'
+  | 'legacy_unrecognized_managed'
   | 'legacy_update_backup'
   | 'legacy_assistant_runtime'
   | 'legacy_writer_handshake'
   | 'legacy_launch_lock'
   | 'legacy_import_pending'
-  | 'legacy_lifetime_lock'
-  | 'legacy_startup_config'
   | 'runtime_handshake'
   | 'runtime_launch_lock';
 export type LegacyTargetState = 'pending' | 'cleaned' | 'retained' | 'failed';
@@ -48,7 +44,7 @@ export interface CutoverTargetIdentity {
 }
 
 export interface WriterCheckRecord {
-  name: 'legacy_app_handshake' | 'legacy_launch_lock' | 'legacy_postgres' | 'legacy_external_backend' | 'new_host_handshake';
+  name: 'legacy_app_handshake' | 'legacy_launch_lock' | 'runtime_launch_lock' | 'new_host_handshake';
   locator: string;
   state: 'stopped' | 'running' | 'unknown';
   detail?: string;

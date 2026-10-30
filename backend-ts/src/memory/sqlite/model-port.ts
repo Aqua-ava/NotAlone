@@ -1,4 +1,4 @@
-/** 固定范围提取的模型端口；沿正式 DSH provider 和许可合同，不连接 PG。 */
+/** 固定范围提取的模型端口；沿正式 DSH provider 和许可合同。 */
 import type {Context} from '@deepseek-ai/cordis';
 import {createHash} from 'node:crypto';
 import type {HostReplyConfiguration} from '../../host/host-reply-config.ts';

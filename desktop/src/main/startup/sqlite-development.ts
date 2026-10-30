@@ -52,7 +52,7 @@ export class SqliteDevelopmentProbe {
 
   private probe(allowSyntheticAuthorization: boolean): Promise<ReadyResult | MaintenanceResult> {
     const moduleUrl = pathToFileURL(path.join(this.projectDirectory, 'backend-ts/src/platform/cutover/startup.ts')).href;
-    // 与开发宿主同一 Node；切换检查只读写 SQLite 与受控目录，不启动 PG、DSH、微信或模型。
+    // 与开发宿主同一 Node；切换检查只读写 SQLite 与受控目录，不启动 DSH、微信或模型。
     const program = `(async()=>{ try {
       const {runDefaultDatabaseStartup}=await import(${JSON.stringify(moduleUrl)});
       const result=await runDefaultDatabaseStartup({userData:${JSON.stringify(this.userData)},allowSyntheticAuthorization:${allowSyntheticAuthorization}});

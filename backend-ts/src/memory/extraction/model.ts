@@ -47,7 +47,7 @@ function connect(endpoint:ExtractionPermitEndpoint, signal?:AbortSignal) {
   }
   return {socket,exchange,detachCancellation(){cancellable=false;signal?.removeEventListener('abort',abort);},close(){signal?.removeEventListener('abort',abort);socket.destroy();}};
 }
-/** 仅重发同一精确receipt的记账ACK；不得据PG已知解除journal未知或重发模型。 */
+/** 仅重发同一精确receipt的记账ACK；不得据存储已知解除journal未知或重发模型。 */
 export async function recordExtractionModelReceipt(endpoint:ExtractionPermitEndpoint,receipt:ModelLedgerReceipt):Promise<void> {
   validateModelLedgerReceipt(receipt);
   const connection=connect(endpoint);
@@ -57,7 +57,7 @@ export async function recordExtractionModelReceipt(endpoint:ExtractionPermitEndp
   } catch(error) {if(error instanceof ExtractionModelError&&error.receipt)throw error;throw new ExtractionModelError('extraction_model_ack_unknown',receipt);}
   finally {connection.close();}
 }
-/** 消费者恢复必须同时询问宿主journal/孤儿；PG known不足以证明可重放。 */
+/** 消费者恢复必须同时询问宿主journal/孤儿；存储 known不足以证明可重放。 */
 export async function extractionUnconfirmedRequests(endpoint:ExtractionPermitEndpoint,scope:{owner_id:string;contact_id:string|null}):Promise<string[]> {
   const result:string[]=[];let after:string|undefined;
   do {const connection=connect(endpoint);let state:State;
@@ -77,7 +77,7 @@ export interface ExtractionModelInput {
   /** 原stream退出后、terminal receipt前校验；仅显式invalid_output记原010校验拒绝。 */
   validateOutput?(blocks:readonly ContentBlock[]):void|Promise<void>;
   costForUsage?(usage:ModelLedgerUsage):ModelLedgerCost;
-  /** 原PG确认receipt后持久化最小关联；回调成功前不settle，失败保留journal未知。 */
+  /** 存储确认receipt后持久化最小关联；回调成功前不settle，失败保留journal未知。 */
   onReceipt?(receipt:ModelLedgerReceipt):Promise<void>;
 }
 export function createExtractionModelCaller(options:{ctx:Context;provider:ReturnType<typeof installModelProvider>;permit:ExtractionPermitEndpoint}) {

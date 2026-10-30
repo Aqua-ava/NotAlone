@@ -1,7 +1,7 @@
 export interface Scope { owner_id: string; contact_id: string }
 export interface Candidate { text: string; evidence: string }
 
-/** 本票只使用合成资料；不连接或替代权威 PostgreSQL。 */
+/** 合成范围验证夹具，不连接真实业务存储。 */
 const sources = new Map([
   ['owner-a/contact-1', 'source-a1'], ['owner-a/contact-2', 'source-a2'],
   ['owner-b/contact-1', 'source-b1'], ['owner-b/contact-2', 'source-b2'],

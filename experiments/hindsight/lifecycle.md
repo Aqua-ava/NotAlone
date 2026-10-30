@@ -1,6 +1,6 @@
 # Hindsight 生命周期与拒绝验证
 
-日期：2026-10-04。任务 03 已完成；这份结果只验证合成资料的生命周期，不评价中文召回收益。原始证据见 [lifecycle-result.json](lifecycle-result.json)，服务与模型版本沿用 [runtime.md](runtime.md) 和 [runtime-manifest.json](runtime-manifest.json)。
+日期：2026-10-04。任务 03 已完成；这份结果只验证合成资料的生命周期，不评价中文召回收益。原始证据见 [lifecycle-result.json](lifecycle-result.json)，服务与模型版本沿用冻结的 [runtime-manifest.json](runtime-manifest.json)。
 
 ## 本地拒绝与外部清除
 
@@ -49,20 +49,9 @@
 
 RSS 与 CPU 是运行后单点观测，不能称为峰值。数据库目录包含实验运行和日志等持久文件；SQL 清除不会把目录恢复至初始大小。首次下载与无缓存冷启动未在任务 03 重新测量。
 
-## 命令与证据范围
+## 历史命令与证据范围
 
-所有产品 Python 命令先激活 Conda `NotAlone`，显式 `PYTHONPATH=src`。本轮没有安装 Hindsight 到产品环境；格式工具固定 black 24.10.0 安装在独立 `/tmp/notalone-hindsight-black`。
-
-```sh
-source /Users/local-user/miniconda3/etc/profile.d/conda.sh
-conda activate NotAlone
-PYTHONPATH=src python -m notalone.experiments.hindsight_lifecycle --output experiments/hindsight/lifecycle-result.json
-PYTHONPATH=src python -m unittest tests.unit.experiments.test_hindsight_lifecycle tests.unit.experiments.test_hindsight_adapter tests.unit.experiments.test_hindsight_client tests.unit.reply.test_context_retrieval
-PYTHONPATH=src python -m mypy --follow-imports=silent src/notalone/experiments/hindsight_client.py src/notalone/experiments/hindsight_adapter.py src/notalone/experiments/hindsight_lifecycle.py src/notalone/experiments/hindsight_lifecycle_db.py src/notalone/experiments/hindsight_runtime.py
-git diff --check
-```
-
-Context7 当前无可用工具，SQL 参数绑定、连接参数与安全标识符组合改查 [Psycopg 官方连接文档](https://www.psycopg.org/psycopg3/docs/api/connections.html) 和 [SQL 组合文档](https://www.psycopg.org/psycopg3/docs/api/sql.html)，再与实际 psycopg 3.3.4 核对。HTTP 接口使用锁定 Hindsight 源码的 documents、retain 和 bank delete 契约，运行时额外核对 public schema、Alembic 版本和实际 CASCADE 外键。
+本轮曾在隔离 Python 环境中运行生命周期验证、单元回归、类型检查及格式检查；Hindsight 未安装到产品环境。验证脚本和服务运行手册已从当前树退役，因此这里不保留可执行命令。参数绑定与 SQL 组合当时参考 [Psycopg 连接文档](https://www.psycopg.org/psycopg3/docs/api/connections.html) 和 [SQL 组合文档](https://www.psycopg.org/psycopg3/docs/api/sql.html)，并与实际 psycopg 3.3.4 核对。HTTP 契约按锁定源码核验；当时的运行时还检查了 public schema、Alembic 版本和 CASCADE 外键。
 
 开发阶段一次真实空 bank 验证因 runner 将 tuple 与 list 比较而误报失败，已修正为判断集合为空；该失败检查与其 allowlist 留在 JSON 的 `development_runs`，并按原 allowlist 清理。它不是服务故障，不从正式质量或耗时组抽走样本。
 

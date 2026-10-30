@@ -42,11 +42,6 @@ function privateText(location: string, limit: number): string | undefined {
     return buffer.subarray(0, count).toString('utf8');
   } finally { closeSync(fd); }
 }
-function hasLines(location: string, limit: number, pattern: RegExp): boolean {
-  const text = privateText(location, limit);
-  return text !== undefined && pattern.test(text);
-}
-
 export function targetId(kind: LegacyTargetKind, locator: string): string {
   return createHash('sha256').update(`${kind}:${locator}`).digest('hex').slice(0, 32);
 }
@@ -59,29 +54,6 @@ function relative(userData: string, location: string): string | undefined {
   return value.split(path.sep).join('/');
 }
 
-/** 显式 PM 状态文件只核验形状，不复制密码字段。 */
-function managedStateOwnership(userData: string): Ownership | undefined {
-  const location = path.join(userData, 'managed/state.json');
-  const text = privateText(location, 4096);
-  if (text === undefined) return undefined;
-  let value: unknown;
-  try { value = JSON.parse(text); } catch { return 'unknown'; }
-  const record = value as Record<string, unknown>;
-  if (!record || typeof record !== 'object' || Array.isArray(record) || record.formatVersion !== 1
-    || typeof record.bootstrapComplete !== 'boolean' || typeof record.password !== 'string' || !/^[a-f0-9]{64}$/.test(record.password)) return 'unknown';
-  return 'confirmed';
-}
-function clusterOwnership(userData: string): Ownership | undefined {
-  const location = path.join(userData, 'managed/postgres');
-  const entry = privateStat(location, 'directory');
-  if (!entry) return undefined;
-  if (entry === 'unsafe') return 'unknown';
-  const version = privateText(path.join(location, 'PG_VERSION'), 32)?.trim();
-  const base = privateStat(path.join(location, 'base'), 'directory');
-  const global = privateStat(path.join(location, 'global'), 'directory');
-  if (version === '16' && base !== undefined && base !== 'unsafe' && global !== undefined && global !== 'unsafe') return 'confirmed';
-  return 'unknown';
-}
 function updateBackups(userData: string): LegacyTarget[] {
   const root = path.join(userData, 'managed/updates');
   const entry = privateStat(root, 'directory');
@@ -137,13 +109,6 @@ function assistantRuntime(userData: string): LegacyTarget[] {
   }
   return [target('legacy_assistant_runtime', 'assistant-runtime', 'confirmed', 'managed_session_tree')];
 }
-function runtimeEnv(userData: string): LegacyTarget[] {
-  const location = path.join(userData, 'managed/runtime.env');
-  const entry = privateStat(location, 'file');
-  if (!entry) return [];
-  if (entry === 'unsafe') return [target('legacy_runtime_env', 'managed/runtime.env', 'unknown', 'unsafe_file_state')];
-  return [target('legacy_runtime_env', 'managed/runtime.env', hasLines(location, 65536, /^\s*NOTALONE_DATABASE_URL\s*=/m) ? 'confirmed' : 'unknown', 'managed_runtime_environment')];
-}
 function importPending(userData: string): LegacyTarget[] {
   const location = path.join(userData, 'managed/import-pending.json');
   const entry = privateStat(location, 'file');
@@ -153,13 +118,18 @@ function importPending(userData: string): LegacyTarget[] {
   try { shape = JSON.parse(privateText(location, 256) ?? ''); } catch { shape = undefined; }
   return [target('legacy_import_pending', 'managed/import-pending.json', shape && typeof shape === 'object' ? 'confirmed' : 'unknown', 'legacy_import_marker')];
 }
-function lifetimeLocks(userData: string): LegacyTarget[] {
+/** 当前存储目录只接受已知 SQLite 与通用维护产物；未知对象保留现场，不解析或代为清除。 */
+export function unrecognizedManagedTargets(userData: string): LegacyTarget[] {
   const directory = path.join(userData, 'managed');
   const entry = privateStat(directory, 'directory');
   if (!entry) return [];
-  if (entry === 'unsafe') return [];
-  return readdirSync(directory).filter(name => /^\.postgres-lifetime-[a-f0-9-]{1,64}$/.test(name)).slice(0, 64)
-    .map(name => target('legacy_lifetime_lock', `managed/${name}`, 'confirmed', 'managed_postgres_lifetime_lock'));
+  if (entry === 'unsafe') return [target('legacy_unrecognized_managed', 'managed', 'unknown', 'unsafe_directory_state')];
+  const names = readdirSync(directory).sort();
+  if (names.length > 1024) return [target('legacy_unrecognized_managed', 'managed', 'unknown', 'unexpected_entry_count')];
+  const supported = new Set(['sqlite', 'media', 'runtime-copies', 'cache', 'updates', 'import-pending.json', 'backend.info', 'backend.info.dsh-lock',
+    'sqlite-backend.info', 'sqlite-backend.info.dsh-lock']);
+  return names.filter(name => !supported.has(name)).map(name =>
+    target('legacy_unrecognized_managed', `managed/${name}`, 'unknown', 'unsupported_managed_entry'));
 }
 function handshakeTargets(userData: string): LegacyTarget[] {
   const result: LegacyTarget[] = [];
@@ -185,12 +155,8 @@ function handshakeTargets(userData: string): LegacyTarget[] {
 /** 发现全部 userData 内可证明归属的旧对象；不读取正文，不跟随符号链接，不删除任何对象。 */
 export function discoverLegacyTargets(userData: string): LegacyTarget[] {
   const found: LegacyTarget[] = [];
-  const cluster = clusterOwnership(userData);
-  if (cluster !== undefined) found.push(target('legacy_pg_cluster', 'managed/postgres', cluster, 'managed_postgres_cluster'));
-  const state = managedStateOwnership(userData);
-  if (state !== undefined) found.push(target('legacy_pg_state', 'managed/state.json', state, 'managed_postgres_state'));
-  found.push(...runtimeEnv(userData), ...updateBackups(userData), ...assistantRuntime(userData), ...importPending(userData),
-    ...lifetimeLocks(userData), ...handshakeTargets(userData));
+  found.push(...unrecognizedManagedTargets(userData), ...updateBackups(userData), ...assistantRuntime(userData),
+    ...importPending(userData), ...handshakeTargets(userData));
   return found.sort((a, b) => a.id.localeCompare(b.id));
 }
 
@@ -227,36 +193,12 @@ export function checkLegacyWriters(userData: string): WriterCheckRecord[] {
     const pid = handshakePid(userData, locator);
     records.push({ name: 'legacy_app_handshake', locator, state: pid === undefined ? 'unknown' : pidAlive(pid) ? 'running' : 'stopped' });
   }
-  for (const locator of ['managed/backend.info.dsh-lock', 'backend.info.dsh-lock']) {
+  for (const locator of ['managed/backend.info.dsh-lock', 'backend.info.dsh-lock', 'managed/sqlite-backend.info.dsh-lock']) {
     if (item(path.join(userData, locator)) === undefined) continue;
     const pids = lockPids(userData, locator);
     const state = pids === undefined ? 'unknown' : (pids.parentPid !== undefined && pidAlive(pids.parentPid)) || (pids.childPid !== undefined && pidAlive(pids.childPid)) ? 'running' : 'stopped';
-    records.push({ name: 'legacy_launch_lock', locator, state });
+    records.push({ name: locator.includes('sqlite') ? 'runtime_launch_lock' : 'legacy_launch_lock', locator, state });
   }
-  const postmaster = path.join(userData, 'managed/postgres/postmaster.pid');
-  const entry = privateStat(postmaster, 'file');
-  if (entry !== undefined) {
-    if (entry === 'unsafe') records.push({ name: 'legacy_postgres', locator: 'managed/postgres/postmaster.pid', state: 'unknown' });
-    else {
-      const pid = (() => { const text = privateText(postmaster, 4096); const match = text === undefined ? null : /^([1-9][0-9]{0,9})$/m.exec(text); return match ? Number(match[1]) : undefined; })();
-      records.push({ name: 'legacy_postgres', locator: 'managed/postgres/postmaster.pid', state: pid === undefined ? 'unknown' : pidAlive(pid) ? 'running' : 'stopped' });
-    }
-  }
-  // 旧外置启动配置仍可能引用一个正在运行的旧 PG 后端；只读取握手 PID，不终止未知进程。
-  try {
-    const configured = privateText(path.join(userData, 'backend-launch.json'), 8192);
-    if (configured) {
-      const value = JSON.parse(configured) as Record<string, unknown>;
-      const infoPath = typeof value.backendInfoPath === 'string' && path.isAbsolute(value.backendInfoPath) ? value.backendInfoPath : undefined;
-      if (infoPath && !infoPath.endsWith('sqlite-backend.info') && path.resolve(infoPath) === infoPath) {
-        const info = privateText(infoPath, 4096);
-        const match = info === undefined ? null : /^pid=([1-9][0-9]{0,9})$/m.exec(info);
-        const pid = match ? Number(match[1]) : undefined;
-        records.push({ name: 'legacy_external_backend', locator: 'backend-launch.json#backend-info',
-          state: pid === undefined ? 'unknown' : pidAlive(pid) ? 'running' : 'stopped' });
-      }
-    }
-  } catch { /* 旧配置不可解析时由目标识别另行阻断。 */ }
   const hostHandshake = path.join(userData, 'managed/sqlite-backend.info');
   if (item(hostHandshake) !== undefined) {
     const pid = (() => { try { const text = privateText(hostHandshake, 4096); const match = text === undefined ? null : /^pid=([1-9][0-9]{0,9})$/m.exec(text); return match ? Number(match[1]) : undefined; } catch { return undefined; } })();

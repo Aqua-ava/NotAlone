@@ -1,8 +1,8 @@
 # 现行核心流程
 
-> SQLite 底座目标按 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)局部修订原 PG 保留条款；01 仅提供受控实例与存储合同，默认业务尚未切换。其余来源、范围、删除及 DSH 约束保持，完整结构和消费者在实施 20 切换前复核。
+> 当前 TypeScript 后台以受控本机 SQLite 承载业务写入和查询，迁移及具名事务动作见 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)与[切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。来源、范围、删除及 DSH 约束继续适用。
 
-> 2026-10-23 后端迁移决定：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)采纳精简 DSH 与 TypeScript 后端，最终替换 Python、LangChain／LangGraph／DeepAgents。当前代码已切换TypeScript／DSH，旧Python后端与框架执行分支退役；本轮开发验证范围及用户跳过项见迁移25／26记录。Electron 独立，TS 业务与 DSH 共用官方 profile 启动的后台进程，由薄插件装配普通业务模块；PostgreSQL、现有功能与数据保留。ADR-006／009／010 的框架选择由 ADR-102 替代，其范围、来源、预算、删除和人工发送约束保持。
+> 2026-10-23 后端迁移决定：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)采纳精简 DSH 与 TypeScript 后端，最终替换 Python、LangChain／LangGraph／DeepAgents。当前代码已切换TypeScript／DSH，旧Python后端与框架执行分支退役；本轮开发验证范围及用户跳过项见迁移25／26记录。Electron 独立，TS 业务与 DSH 共用官方 profile 启动的后台进程，由薄插件装配普通业务模块；现有产品边界与联系人隔离保持，业务读写使用 SQLite。ADR-006／009／010 的框架选择由 ADR-102 替代，其范围、来源、预算、删除和人工发送约束保持。
 
 > 首用交互与生命周期补充：[ADR-101](../adr/101-local-app-first-use-lifecycle.md)默认仅所选会话，保留明确选择全部私聊的分支；下文 ADR-095 全部范围原子提交仅用于该选择。列表访问先取得必要同意并丢弃夹带摘要，工具准备不授权正文读取。重装沿用留存资料，彻底删除需明确范围与二次确认；异常诊断脱敏且不自动上传。完整首用及独立交付仍待[新规格](../../.scratch/local-app-first-use/spec.md)验收。
 
@@ -390,7 +390,7 @@ API 创建 background_task 与固定 background_task_step
   -> 确定性验证通过后标记 succeeded
 ```
 
-- 不先引入 Airflow、Temporal 或独立消息队列；当前由TS业务代码管理Worker和任务，旧Python执行分支已退役；ADR-102规定TS业务代码管理任务，PostgreSQL 继续承担权威任务状态与领取协调，恢复不依赖 DSH 会话断点。
+- 不先引入 Airflow、Temporal 或独立消息队列；当前由TS业务代码管理Worker和任务，旧Python执行分支已退役；ADR-102规定TS业务代码管理任务，SQLite 继续承担权威任务状态与领取协调，恢复不依赖 DSH 会话断点。
 - 导入、级联删除和重建索引可拆为步骤；一次候选回复保持有界运行（当前TypeScript／DSH），观察消息按 ADR-041 合并为联系人级记忆任务，不为每条消息创建步骤清单。
 - `background_task_step` 是持久化工作记录，不是 Agent prompt 或模型 Todo；步骤及依赖由代码模板确定。
 - AI 只返回某个语义步骤的结构化结果。Worker 和确定性校验器拥有状态迁移权，AI 不得领取任务、修改状态或宣布成功。

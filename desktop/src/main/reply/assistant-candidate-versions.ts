@@ -32,7 +32,7 @@ function exact(value: unknown, keys: string[], optional: string[] = []): value i
   return isRecord(value) && keys.every((key) => Object.hasOwn(value, key))
     && Object.keys(value).every((key) => keys.includes(key) || optional.includes(key));
 }
-// 与 PostgreSQL length / Python len 的 Unicode 字符契约一致，避免拒绝合法完整正文。
+// 按 Unicode 码点计数，避免拒绝合法完整正文。
 const characterCount = (value: string): number => Array.from(value).length;
 function history(value: unknown, request: ReplyCandidateVersionRead): AssistantCandidateHistory {
   if (!exact(value, ['session_id', 'turn_id', 'candidate_id', 'candidate_group_id', 'candidate_number',

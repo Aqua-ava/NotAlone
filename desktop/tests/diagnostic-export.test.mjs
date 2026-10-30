@@ -14,7 +14,7 @@ test('先预览后显式本机导出，白名单排除正文、身份、路径�
   const canary = 'SENSITIVE_SYNTHETIC_CANARY';
   let choices = 0;
   const target = path.join(directory, 'report.json');
-  const controller = new DiagnosticExportController(() => ({ phase: 'blocked', mode: 'external', code: 'database_unavailable',
+  const controller = new DiagnosticExportController(() => ({ phase: 'blocked', mode: 'external', code: 'sqlite_storage_failed',
     revision: 9, helperWarnings: ['cli_unavailable', canary], raw: canary, path: `/home/${canary}`, api_key: canary, owner_id: canary }),
   () => ({ phase: 'disconnected', errorCode: canary, reused: false, revision: 4, canRetryConnection: true,
     canRetryShutdown: false, canSaveStartupPaths: true, canPrepareConfiguration: false, raw: canary }));
@@ -24,7 +24,7 @@ test('先预览后显式本机导出，白名单排除正文、身份、路径�
   const preview = controller.preview();
   const report = JSON.parse(preview.json);
   assert.equal(report.formatVersion, 1);
-  assert.equal(report.startup.code, 'database_unavailable');
+  assert.equal(report.startup.code, 'sqlite_storage_failed');
   assert.deepEqual(report.startup.helperWarnings, ['cli_unavailable']);
   assert.equal(report.backend.errorCode, null);
   assert.equal(report.automaticUpload, false);

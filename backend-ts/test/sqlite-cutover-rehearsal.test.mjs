@@ -20,14 +20,9 @@ async function directory(location) { await mkdir(location, { recursive: true, mo
 async function file(location, content) { await mkdir(path.dirname(location), { recursive: true, mode: 0o700 }); await writeFile(location, content, { mode: 0o600 }); }
 async function exists(location) { try { await lstat(location); return true; } catch (error) { if (error.code === 'ENOENT') return false; throw error; } }
 async function legacyLayout(root, { writerPid } = {}) {
-  await directory(path.join(root, 'managed/postgres/base'));
-  await directory(path.join(root, 'managed/postgres/global'));
-  await file(path.join(root, 'managed/postgres/PG_VERSION'), '16\n');
-  await file(path.join(root, 'managed/state.json'), JSON.stringify({ formatVersion: 1, password: 'a'.repeat(64), bootstrapComplete: true }) + '\n');
-  await file(path.join(root, 'managed/runtime.env'), 'NOTALONE_DATABASE_URL=postgresql://notalone:secret@127.0.0.1:5432/notalone\nNOTALONE_DEEPSEEK_API_KEY=synthetic-model-key\n');
   const archive = path.join(root, 'managed/updates', randomUUID());
   await directory(archive);
-  await file(path.join(archive, 'database.dump'), 'synthetic-old-pg-dump');
+  await file(path.join(archive, 'database.dump'), 'synthetic-legacy-backup');
   await file(path.join(archive, 'checkpoint.json'), '{"format_version":1}\n');
   const owner = randomUUID(), contact = randomUUID(), session = randomUUID();
   await directory(path.join(root, 'assistant-runtime', owner, contact, session));
@@ -72,7 +67,20 @@ test('空隔离根默认创建同一新SQLite实例，重开沿用 database_id �
   assert.ok(manifest.checks.every(check => check.state === 'passed'));
 });
 
-test('遗产业务目标未授权时保持维护态，不清理、不建新库、不写启动配置', async t => {
+test('已有SQLite实例与合法媒体目录可以安全重开', async t => {
+  const root = await fixture(t);
+  const first = await runDefaultDatabaseStartup({ userData: root });
+  assert.equal(first.phase, 'ready');
+  await file(path.join(root, 'managed/media/existing.bin'), 'synthetic-managed-media');
+  assert.equal(discoverLegacyTargets(root).some(target => target.kind === 'legacy_unrecognized_managed'), false);
+  const reopened = await runDefaultDatabaseStartup({ userData: root });
+  assert.equal(reopened.phase, 'ready');
+  assert.equal(reopened.code, 'sqlite_reopened');
+  assert.equal(reopened.databaseId, first.databaseId);
+  assert.equal(await readFile(path.join(root, 'managed/media/existing.bin'), 'utf8'), 'synthetic-managed-media');
+});
+
+test('遗留备份与会话副本未授权时保持维护态，不清理、不建新库、不写启动配置', async t => {
   const root = await fixture(t);
   const layout = await legacyLayout(root);
   const result = await runDefaultDatabaseStartup({ userData: root });
@@ -80,12 +88,13 @@ test('遗产业务目标未授权时保持维护态，不清理、不建新库�
   assert.equal(result.code, 'cutover_authorization_required');
   assert.equal(await exists(path.join(root, 'managed/sqlite/notalone.sqlite')), false);
   assert.equal(await exists(startupConfigPath(root)), false);
-  assert.equal(await exists(path.join(root, 'managed/postgres/PG_VERSION')), true);
   assert.equal(await exists(path.join(layout.archive, 'database.dump')), true);
   assert.equal(await exists(path.join(root, 'assistant-runtime', layout.owner, layout.contact, layout.session)), true);
   const manifest = inspectCutover(root).manifest;
   assert.equal(manifest.phase, 'blocked');
-  assert.ok(manifest.legacyTargets.some(target => target.kind === 'legacy_pg_cluster' && target.state === 'pending'));
+  assert.ok(manifest.legacyTargets.some(target => target.kind === 'legacy_update_backup' && target.state === 'pending'));
+  assert.ok(manifest.legacyTargets.some(target => target.kind === 'legacy_assistant_runtime' && target.state === 'pending'));
+  assert.ok(manifest.legacyTargets.some(target => target.kind === 'legacy_import_pending' && target.state === 'pending'));
 });
 
 test('无法证明归属的旧目标阻断切换，且不被删除', async t => {
@@ -99,7 +108,19 @@ test('无法证明归属的旧目标阻断切换，且不被删除', async t => 
   assert.equal(await exists(startupConfigPath(root)), false);
 });
 
-test('旧写入者仍存活时阻断；停写并授权后完成清理、保留模型密钥/Skill/外部原件并切配置', async t => {
+test('仅有活跃SQLite宿主锁且握手尚未出现时阻断，保留锁并且不建库', async t => {
+  const root = await fixture(t);
+  const lock = path.join(root, 'managed/sqlite-backend.info.dsh-lock');
+  await file(lock, JSON.stringify({ nonce: 'synthetic-launch', parentPid: process.pid }) + '\n');
+  const result = await runDefaultDatabaseStartup({ userData: root });
+  assert.equal(result.phase, 'maintenance');
+  assert.equal(result.code, 'cutover_legacy_writer_running');
+  assert.equal(await exists(lock), true);
+  assert.equal(await exists(path.join(root, 'managed/sqlite/notalone.sqlite')), false);
+  assert.equal(await exists(startupConfigPath(root)), false);
+});
+
+test('旧写入者仍存活时阻断；停写并授权后清理遗留副本并切换SQLite配置', async t => {
   const root = await fixture(t);
   const writer = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: ['ignore', 'ignore', 'ignore'] });
   t.after(() => { try { writer.kill('SIGKILL'); } catch { /* 已退出。 */ } });
@@ -107,7 +128,6 @@ test('旧写入者仍存活时阻断；停写并授权后完成清理、保留�
   const running = await runDefaultDatabaseStartup({ userData: root });
   assert.equal(running.phase, 'maintenance');
   assert.equal(running.code, 'cutover_legacy_writer_running');
-  assert.equal(await exists(path.join(root, 'managed/postgres/PG_VERSION')), true);
   writer.kill('SIGTERM');
   await new Promise(resolve => writer.once('exit', resolve));
   await authorizeBusinessTargets(root);
@@ -115,15 +135,10 @@ test('旧写入者仍存活时阻断；停写并授权后完成清理、保留�
   assert.equal(result.phase, 'ready', JSON.stringify(result));
   assert.equal(result.created, true);
   // 旧业务对象按已确认范围清理；控制面本身保留。
-  assert.equal(await exists(path.join(root, 'managed/postgres')), false);
-  assert.equal(await exists(path.join(root, 'managed/state.json')), false);
   assert.equal(await exists(path.join(layout.archive, 'database.dump')), false);
   assert.equal(await exists(path.join(root, 'assistant-runtime')), false);
   assert.equal(await exists(path.join(root, 'managed/import-pending.json')), false);
-  // 模型密钥保留；旧数据库连接与密码行去掉。
-  const environment = await readFile(path.join(root, 'managed/runtime.env'), 'utf8');
-  assert.match(environment, /NOTALONE_DEEPSEEK_API_KEY=synthetic-model-key/);
-  assert.doesNotMatch(environment, /NOTALONE_DATABASE_URL/);
+  assert.equal(await exists(path.join(root, 'managed/backend.info')), false);
   // 用户 Skill 原目录与微信外部原件保留，空库不触发孤儿删除或默认停用。
   assert.equal(await readFile(path.join(root, 'skill-packages/existing-skill/SKILL.md'), 'utf8'), '# synthetic skill\n');
   assert.equal(await readFile(path.join(root, 'originals/wechat-photo.jpg'), 'utf8'), 'external-original');
@@ -236,7 +251,6 @@ test('synthetic 授权不得清理非隔离根；真实根必须使用 confirmed
   const blocked = await runDefaultDatabaseStartup({ userData: root });
   assert.equal(blocked.phase, 'maintenance');
   assert.equal(blocked.code, 'cutover_authorization_invalid');
-  assert.equal(await exists(path.join(root, 'managed/postgres/PG_VERSION')), true);
   assert.equal(await exists(path.join(layout.archive, 'database.dump')), true);
   assert.equal(await exists(path.join(root, 'managed/sqlite/notalone.sqlite')), false);
   const manifest = JSON.parse(await readFile(manifestPath(root), 'utf8'));
@@ -246,7 +260,7 @@ test('synthetic 授权不得清理非隔离根；真实根必须使用 confirmed
     targets: discoverLegacyTargets(root).filter(target => BUSINESS_TARGETS.includes(target.kind)).map(target => ({ id: target.id, disposition: 'clean' })) }) + '\n');
   const ready = await runDefaultDatabaseStartup({ userData: root });
   assert.equal(ready.phase, 'ready', JSON.stringify(ready));
-  assert.equal(await exists(path.join(root, 'managed/postgres')), false);
+  assert.equal(await exists(path.join(layout.archive, 'database.dump')), false);
 });
 
 test('清理完成后目标创建失败保留维护态，不恢复旧writer也不建第二个空库', async t => {
@@ -266,7 +280,6 @@ test('清理完成后目标创建失败保留维护态，不恢复旧writer也�
   assert.equal(failed.phase, 'maintenance');
   assert.equal(failed.code, 'cutover_storage_failed');
   // 旧业务对象已在同一操作中清理；失败后不回退旧 writer、不写启动配置。
-  assert.equal(await exists(path.join(root, 'managed/postgres')), false);
   assert.equal(await exists(path.join(root, 'assistant-runtime')), false);
   assert.equal(await exists(startupConfigPath(root)), false);
   const retried = await runDefaultDatabaseStartup({ userData: root });

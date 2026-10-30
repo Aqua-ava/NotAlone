@@ -178,7 +178,7 @@ Skill Library 的权威数据归属于 Owner，使用 Owner 级 revision：
 | manifest.json（文件） | 保存版本描述、质量警告和资源清单；不含正文，资源内容仍按需读取。 |
 | reply_request | 保存实际使用的 Skill 版本、选择原因、目录修订和使用结果。 |
 
-目录文件是已发布 Skill 正文和资源的权威来源；PostgreSQL 仅管理身份、范围、启停、版本/哈希、受控文件定位、审核来源依赖及使用/删除状态。待审核业务草稿与对照继续受数据库事务管理，不因此自动发布。旧库在结构升级时先完整落盘核验，再删除旧正文列、重复内容元数据和资源表；失败可恢复，迁移前原数据不丢失。
+目录文件是已发布 Skill 正文和资源的权威来源；SQLite 事务管理身份、范围、启停、版本／哈希、受控文件定位、审核来源依赖、使用与删除状态。待审核业务草稿与对照不因此自动发布。受管文件与数据库状态在同一删除生命周期中核验；失败时保留未完成状态并支持重试。
 
 已发布方法的标题和指令同样属于运行内容，保存在隐藏版本目录的独立方法文件，由无正文的 `methods.json` 索引，只读取本轮允许的方法；方法身份、顺序、延续映射和停用政策保留在数据库。运行时不从待审策略或审核对照回退读取正文。
 
@@ -195,7 +195,7 @@ Skill Library 的权威数据归属于 Owner，使用 Owner 级 revision：
 
 ## 9. 当前实现状态与完成条件
 
-仓库已有以下 Skill Library 实现入口：领域模型见 [skills/models.py](../../backend/src/notalone/skills/models.py)，只读受控目录、版本与资源读取见 [skill_port.py](../../backend/src/notalone/persistence/skill_port.py)，管理接口 import/update/enable/disable/rollback/delete/export/preview 见 [skill_library.py](../../backend/src/notalone/persistence/skill_library.py)。运行时按需读取 SKILL.md 与受控 references/assets 的 Adapter 见 [langchain_runtime.py](../../backend/src/notalone/reply/adapters/langchain_runtime.py)，试用执行器见 [skill_preview.py](../../backend/src/notalone/reply/adapters/skill_preview.py)，运行记录与资源摘要见 [reply_store.py](../../backend/src/notalone/persistence/reply_store.py) 和 [024_skill_run_record.sql](../../backend-ts/database/migrations/024_skill_run_record.sql)，包导入校验见 [008_skill_port.sql](../../backend-ts/database/migrations/008_skill_port.sql) 与 [023_skill_library_resources.sql](../../backend-ts/database/migrations/023_skill_library_resources.sql)。
+当前 Skill 管理入口位于 `backend-ts/src/skills/sqlite/`；受控文件与目录生命周期由 `backend-ts/src/skills/sqlite/deletion.ts` 管理，底层存储合同见 [SQLite 存储说明](../../backend-ts/src/storage/sqlite/README.md)。
 
 需按实际执行记录核对的验证范围（此清单本身不代表全部通过）：
 

@@ -10,7 +10,6 @@
 | --- | --- |
 | [`src/`](src/README.md) | 正式业务源码，按联系人、导入、记忆、检索、回复、同步等职责分组。 |
 | [`src/storage/sqlite/`](src/storage/sqlite/README.md) | 当前 SQLite 存储、迁移注册与具名事务动作。 |
-| [`database/`](database/README.md) | 只供历史追溯的 PostgreSQL SQL 脚本，不参与当前启动。 |
 | `profile/` | DSH 插件装配与运行配置。 |
 | `test/` | 当前测试、合成夹具及历史测试登记。 |
 | [`diagnostic-problem-budget.md`](diagnostic-problem-budget.md) | 问题诊断期间的模型调用累计预算。 |
@@ -20,7 +19,7 @@
 
 使用 Node.js ≥24。在仓库根目录执行 `pnpm install --frozen-lockfile` 安装锁定依赖。
 
-日常运行从 `desktop/` 执行 `npm run dev:status`，复用已有开发实例；没有当前项目实例时才执行 `npm run dev`。开发沿用已确认的配置、SQLite 实例、身份和资料位置；启动失败不回退到 PostgreSQL 或另建空库。旧 `pythonExecutable` 配置兼容忽略。
+日常运行从 `desktop/` 执行 `npm run dev:status`，复用已有开发实例；没有当前项目实例时才执行 `npm run dev`。开发沿用已确认的配置、SQLite 实例、身份和资料位置；启动失败时保留已有资料。旧 `pythonExecutable` 配置兼容忽略。
 
 后台验证在本目录执行：
 
@@ -33,9 +32,9 @@ npm test
 
 协议、预算与取消用例中的测试插件仍显式覆盖输出额度（如 `256 tokens`）、上下文容量、调用次数、超时和合成提示词，以触发边界。这些用例验证程序行为；真实回复效果须从正常业务入口、使用用户实际模型配置另行验收，不能由模拟服务结果推断。
 
-默认入口运行当前 Node 业务与生命周期测试。旧 Python 与 PostgreSQL 实现及测试仅在固定 Git 树中显式恢复，使用方式见[历史测试说明](test/HISTORICAL.md)；历史结果不能计作当前版本通过。
+默认入口运行当前 Node 业务与生命周期测试。旧 Python 对照测试仅在固定 Git 树中显式运行，使用方式见[历史测试说明](test/HISTORICAL.md)；历史结果不能计作当前版本通过。
 
-当前数据库的连接、迁移和失败处理见 [SQLite 存储合同](src/storage/sqlite/README.md)；旧 PostgreSQL schema CLI 已退役。正常启动不会自动下载向量模型；显式准备使用仓库根目录的 `node scripts/prepare_memory_embedding.mjs`，`--offline` 验证已有固定缓存。
+当前数据库的连接、迁移和失败处理见 [SQLite 存储合同](src/storage/sqlite/README.md)。正常启动不会自动下载向量模型；显式准备使用仓库根目录的 `node scripts/prepare_memory_embedding.mjs`，`--offline` 验证已有固定缓存。
 
 ## 数据与验收边界
 

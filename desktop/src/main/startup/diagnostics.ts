@@ -6,7 +6,7 @@ import { configurationPaths, loadBackendConfiguration, saveBackendConfiguration,
 import { BackendFailure } from '../backend/connection';
 import { SqliteDevelopmentProbe } from './sqlite-development';
 
-/** 默认启动只有 SQLite 控制面：业务入口不再回退 managed／外置 PostgreSQL。 */
+/** 默认启动由 SQLite 控制面核验受控存储。 */
 export class StartupDiagnostics {
   private state: StartupState = { phase: 'idle', revision: 0, helperWarnings: [] };
   private readonly listeners = new Set<(state: StartupState) => void>();
@@ -70,7 +70,7 @@ export class StartupDiagnostics {
       }
       this.publish({ phase: 'blocked', mode: 'external', step: undefined, sqlite, helperWarnings: [],
         code: (sqlite.code as StartupCode) ?? 'cutover_storage_failed' });
-      // 维护态只保留现场与重试入口，不启动旧 PG、DSH 或双写后台。
+      // 维护态只保留现场与重试入口，不启动业务后台。
       throw new BackendFailure('backend_connection_failed');
     }
     this.publish({ phase: 'blocked', mode: 'external', step: undefined, sqlite: { phase: 'blocked', code: 'cutover_storage_failed', maintenance: true },

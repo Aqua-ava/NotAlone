@@ -55,15 +55,6 @@ query 由现行词法模块完成 NFKC/casefold 和 200 字符头尾有效采样
 
 改写多采用日常任务表达而不是重复记忆用词，并存在同主题竞争。A 的低覆盖是本合成压力组观测，不能解释为真实用户覆盖率，也不能据此决定生产接入。B 的正式对照现已完成，覆盖、误注入、完整 P95、资源和删除成本见 [COMPARISON.md](COMPARISON.md)；本节保留当时 A 的独立结果，未重写冻结数据、gold 或基线产物。
 
-## 复现与验证
+## 历史验证
 
-```bash
-conda activate NotAlone
-PYTHONPATH=src python -m notalone.experiments.hindsight_baseline --freeze-only
-PYTHONPATH=src python -m notalone.experiments.hindsight_baseline
-PYTHONPATH=src python -m unittest discover -s tests/unit/experiments -v
-PYTHONPATH=src python -m unittest tests.unit.retrieval.test_recall_evaluation tests.unit.retrieval.test_lexical tests.unit.reply.test_context_retrieval -v
-PYTHONPATH=src python -m mypy src/notalone/experiments --follow-imports=silent
-```
-
-实际验证：9 个实验测试和 66 个现有测试通过，后者包含旧 109 条召回评测的原门槛；mypy 对 4 个实验源码文件通过。red → green 包括真实 Context 正例、冻结拒绝错范围 gold、初检超时不能误记成功空结果。没有修改生产默认装配、评分阈值或 feature flag。
+当时的验证有 9 个实验测试和 66 个现有测试通过，后者包含旧 109 条召回评测的原门槛；mypy 对 4 个实验源码文件通过。red → green 包括真实 Context 正例、冻结拒绝错范围 gold、初检超时不能误记成功空结果。没有修改生产默认装配、评分阈值或 feature flag。对应 Python 实验源码及运行环境已退役，当前树不提供复现入口。

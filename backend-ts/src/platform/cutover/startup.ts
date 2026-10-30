@@ -11,12 +11,12 @@ import { CUTOVER_FORMAT_VERSION, CUTOVER_STARTUP_CONFIG } from './contracts.ts';
 import { authorizationDigest, cutoverDirectory, CutoverControlError, databaseFile, loadAuthorization, loadManifest, loadStartupConfiguration,
   saveManifest, saveStartupConfiguration, type StartupConfiguration } from './control.ts';
 import { cleanLegacyTarget, CutoverCleanupError, ensureSkillRoot } from './cleanup.ts';
-import { assertPrivateUserData, checkLegacyWriters, discoverLegacyTargets } from './targets.ts';
+import { assertPrivateUserData, checkLegacyWriters, discoverLegacyTargets, unrecognizedManagedTargets } from './targets.ts';
 
 const DEFAULT_CAPABILITIES: SqliteCapabilitiesConfiguration['capabilities'] = ['contacts', 'skills', 'history', 'discussions', 'memory'];
-const BUSINESS_TARGETS: readonly LegacyTargetKind[] = ['legacy_pg_cluster', 'legacy_pg_state', 'legacy_runtime_env', 'legacy_update_backup',
+const BUSINESS_TARGETS: readonly LegacyTargetKind[] = ['legacy_update_backup',
   'legacy_assistant_runtime', 'legacy_import_pending'];
-const RUNTIME_TARGETS: readonly LegacyTargetKind[] = ['legacy_writer_handshake', 'legacy_launch_lock', 'runtime_handshake', 'runtime_launch_lock', 'legacy_lifetime_lock'];
+const RUNTIME_TARGETS: readonly LegacyTargetKind[] = ['legacy_writer_handshake', 'legacy_launch_lock', 'runtime_handshake', 'runtime_launch_lock'];
 const REQUIRED_DELETION_SCOPES = ['source', 'contact', 'contact_history', 'account', 'media_result_clear', 'media_result_replace', 'discussion'] as const;
 const REQUIRED_EMPTY_MEDIA = (snapshot: CutoverSnapshot) => snapshot.media.message_media === 0 && snapshot.media.current_files === 0
   && snapshot.media.staged_files === 0 && snapshot.media.cleanup_pending === 0 && snapshot.media.attempts_running === 0;
@@ -65,7 +65,7 @@ function check(name: CutoverCheckRecord['name'], state: CutoverCheckRecord['stat
   return detail === undefined ? { name, state } : { name, state, detail };
 }
 
-/** 主要入口：返回 ready 或 maintenance；不启动旧 PG，不清理未授权对象，不创建第二个空库。 */
+/** 主要入口：返回 ready 或 maintenance；仅使用 SQLite，不清理未授权对象，不创建第二个空库。 */
 export async function runDefaultDatabaseStartup(options: DefaultDatabaseOptions): Promise<CutoverResult> {
   const userData = path.resolve(options.userData);
   const now = () => options.now?.() ?? Date.now();
@@ -74,6 +74,10 @@ export async function runDefaultDatabaseStartup(options: DefaultDatabaseOptions)
     assertPrivateUserData(userData);
     manifest = loadManifest(userData);
     if (manifest && manifest.configPath !== CUTOVER_STARTUP_CONFIG) throw new CutoverControlError('cutover_manifest_invalid');
+    // 新建与完成态重开都先阻断未知存储；不把观察结果写成删除任务，移除外来项后可继续原实例。
+    if (unrecognizedManagedTargets(userData).length) {
+      throw new Blocked('cutover_legacy_target_unclassified', 'unsupported_managed_entry', manifest ?? initialManifest(now()));
+    }
     if (manifest?.phase === 'completed') return await reopenCompleted(userData, manifest, options);
     return await switchDatabase(userData, manifest ?? initialManifest(now()), options);
   } catch (error) {
@@ -126,10 +130,11 @@ async function switchDatabase(userData: string, manifest: CutoverManifest, optio
   const runtime = legacyTargets.filter(runtimeArtifact);
   const businessTargets = legacyTargets.filter(business);
   const conflicting = legacyTargets.filter(target => !runtimeArtifact(target) && !business(target));
-  manifest = saveManifest(userData, { ...manifest, legacyTargets: mergeTargets(manifest.legacyTargets, legacyTargets), writerChecks,
+  manifest = saveManifest(userData, { ...manifest, legacyTargets: mergeTargets(manifest.legacyTargets.filter(target => target.kind !== 'legacy_unrecognized_managed'),
+    legacyTargets.filter(target => target.kind !== 'legacy_unrecognized_managed')), writerChecks,
     ...(digest ? { authorizationDigest: digest } : {}) });
 
-  // 运行产物（旧/新关闭握手、锁、生命周期锁）不承载业务资料，停写核验后可直接回收。
+  // 运行产物（旧/新关闭握手与锁）不承载业务资料，停写核验后可直接回收。
   const runningWriters = writerChecks.filter(record => record.state !== 'stopped');
   if (runningWriters.length) {
     manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_legacy_writer_running',

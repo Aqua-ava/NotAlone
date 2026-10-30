@@ -6,7 +6,7 @@ import type {SkillPackageState} from './contracts.ts';
 
 const enabledLabels={enabled:'已启用',disabled:'已停用',unknown:'待核验启停'};
 const verificationLabels={verified:'目录已核验',pending:'待核验',missing:'目录或文件缺失',conflict:'目录身份冲突',invalid:'文件校验失败'};
-/** 最小业务查询投影不含物理定位，也不冒充旧PG版本或本次实际加载证据。 */
+/** 最小业务查询投影不含物理定位，也不冒充本次实际加载证据。 */
 export function skillManagementView(item: SkillPackageState) {
  return {package_id:item.id,name:item.displayName,description:item.description,directory_name:item.directoryName,
   enabled_state:item.enabledState,verification_state:item.verificationState,verification_reason:item.verificationReason,

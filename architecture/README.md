@@ -1,12 +1,12 @@
 # NotAlone 架构文档
 
-> 2026-10-29 SQLite 底座：[ADR-109](adr/109-controlled-sqlite-storage-foundation.md)局部修订 ADR-101／102 的 PG 目标，按已确认规格从空 SQLite 分票重建。实施 01 只提供受控生命周期、Worker 与存储合同，默认业务仍为 PG；领域结构、正式切换和组合验收继续按实施任务推进。
+> 当前运行状态（2026-10-30）：SQLite 已成为 TypeScript 后台默认业务存储；受控实例、迁移、联系人、历史、记忆、回复与删除实现见[SQLite 底座 ADR](adr/109-controlled-sqlite-storage-foundation.md)和[切换验收](../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。本地 PostgreSQL 旧实现和数据已退役；其它历史架构决策保留原意，不代表当前运行入口。
 
 > 2026-10-26 助手会话决定：[ADR-106](adr/106-persistent-assistant-conversations.md)已采纳每位联系人独立的持久会话、空闲 12 小时分段和旧会话明确继续；数据库作为可见业务历史主记录，DSH 文件保存可恢复执行记录。新策略、持久化与删除链已实现并接入正常开发入口，局部修订 ADR-042／102，不改变已有来源与输入预算边界。隔离合成、实际热更新、性能与有界模型样例的结论及限制见 ADR-106，不据此宣称整体性能或质量提升。
 
 > 2026-10-26 记忆实现方向：[ADR-104](adr/104-tencent-source-memory-engine.md)中的生成与提示构建直接归入本地记忆模块，统一使用业务协议。合成检查与真实模型、桌面质量分别核验。
 
-> 2026-10-26 后端状态：[ADR-102](adr/102-dsh-typescript-backend-migration.md)的当前产品入口已切换为 DSH 与 TypeScript，Python 后台与历史测试退出当前工作树；原 PostgreSQL、资料、SQL 迁移及仍使用的合成夹具保留。历史对照通过固定 Git 树恢复，入口见[后台说明](../backend-ts/README.md)。这不代表全部等价或发行验收通过，实际证据与未测项见[执行交接](../.scratch/dsh-ts-migration/execution.md)。
+> 2026-10-26 后端状态：[ADR-102](adr/102-dsh-typescript-backend-migration.md)的当前产品入口已切换为 DSH 与 TypeScript，Python 后台与历史测试退出当前工作树；旧 PostgreSQL 数据和迁移 SQL 后续已清理，仍在使用的合成夹具已归入 TypeScript 后台。历史对照通过固定 Git 树恢复，入口见[后台说明](../backend-ts/README.md)。这不代表全部等价或发行验收通过，实际证据与未测项见[执行交接](../.scratch/dsh-ts-migration/execution.md)。
 
 > 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)保留真实微信来源建联与导入只补充已有联系人的规则；[ADR-089](adr/089-all-private-wechat-sync-scope.md)新增当前账号全部私聊的一次授权，包括以后新增会话。[ADR-095](adr/095-first-wechat-connection-and-account-grant.md)补充已有可用工具的首次账号连接与一次授权；[ADR-100](adr/100-authorized-private-history-sync.md)进一步要求每个授权私聊首次同步本机可读的全部既有文字，再持续增量。未配置机器的工具准备及新用户独立交付验收仍未完成。旧创建接口退役尚待完成；历史同步目标与实现边界见[规格](../.scratch/authorized-private-history-sync/spec.md)。
 
@@ -179,14 +179,14 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 ## 当前架构决策
 
-- 完整本机首用及资料生命周期按 [ADR-101](adr/101-local-app-first-use-lifecycle.md)与[新票据](../.scratch/local-app-first-use/planning.md)落实：保留 PostgreSQL，默认仅所选会话，复用原库与历史同步；完整独立交付仍待验收。
+- 完整本机首用及资料生命周期按 [ADR-101](adr/101-local-app-first-use-lifecycle.md)与[新票据](../.scratch/local-app-first-use/planning.md)落实：默认仅所选会话；联系人、SQLite 实例与本机资料按当前生命周期管理；完整独立交付仍待验收。
 
 - 已授权微信私聊按 [ADR-100](adr/100-authorized-private-history-sync.md)在首次进入同步范围时读取本机当前可读的全部既有文字，再持续增量；仅所选和全部私聊使用同一规则。聊天历史属于消息层，关系提取是独立后台派生任务，不阻塞首次历史同步。该决定的规格票01–07已记录完成，票08真实微信验收未完成；不能据合成或分项结果宣称完整集成可用。
 
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。当前代码为TypeScript／DSH后台与Mac原生探针；Python后端和旧框架已退役，原生能力继续复用；实际验证及跳过项见迁移25／26。
-- 独立桌面版按 ADR-061 采用本机受管后台与 PostgreSQL，资料保存在本机；新装交付与最终验收状态分别核验。按 ADR-066，已有安装保留原数据库连接与资料位置，仅原地执行缺少的版本化 SQL，取消普通启动中的强制备份与复制切换；没有既有配置的新安装正常初始化空受管库。云端工程已由用户于2026-10-29取消，产品以本机应用为目标，PostgreSQL 仍是联系人、消息、关系资料、任务和删除状态的权威业务库。
+- 独立桌面版采用本机受管后台与 SQLite，联系人、消息、关系资料、任务和删除状态存于本机受控实例。结构初始化与升级由当前迁移注册表管理，新实例按当前生命周期创建；新装交付与最终验收状态分别核验。云端工程已于2026-10-29取消。
 - 新联系人按 ADR-087／089 从真实微信会话加入，支持逐会话确认或全部私聊范围授权；ADR-095 补充已有可用外置工具的首次账号连接，无需先导入历史。已有联系人可手动表达，顶部选择器是唯一搜索入口；未配置机器的工具初始化与独立渠道验收仍未完成，ADR-065 的空目录无需微信首用承诺已被替代。资料更新按 ADR-066 原地补齐，历史副本删除清理、隐私与人工发送要求保持。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。

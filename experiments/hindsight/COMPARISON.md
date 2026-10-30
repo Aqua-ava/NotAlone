@@ -75,28 +75,10 @@ P50/P95 使用排序后第 `ceil(p*N)` 个值，全部尝试保留；成功分�
 
 本机实际为 macOS 15.7.5、Apple M2、8 个逻辑 CPU、16 GiB；产品 Python 3.12.13。API 最大抽样 RSS 939,120 KiB（约 917 MiB）、ps CPU 240.6%（多核进程口径）；runner OS 峰值 334,594,048 bytes（约 319 MiB），用户/系统 CPU 231.37/2.54 秒，包含全部 dev 阈值穷举和 final。独立目录 database/models/venv 分别 69,388/591,612/1,789,200 KiB。主 bank 310 条建索引为 5,665.67 ms，dev 75 条为 1,193.07 ms，两隔离 bank 各 2 条为 146.35/142.95 ms。更新/删除小量成本另见生命周期报告；不把初建大集成本和单文档更新混在一起。原始证据见 [资源抽样](comparison-v2-r2/resources.json)、[索引逐批成本](comparison-v2-r2/index-events.json)、[新缓存公开下载](comparison-v2-r2/download-cost-evidence.json)。
 
-## 运行、验证与清理
+## 历史验证与清理结果
 
-模型准备/启动方法见 [runtime.md](runtime.md)。下列复跑使用当前已复验的源码和已缓存模型；产物目录须是新目录，目标四个冻结 bank 若已占用会拒绝，不静默清空其他运行。
-
-```sh
-source /Users/local-user/miniconda3/etc/profile.d/conda.sh
-conda activate NotAlone
-PYTHONPATH=src python -m notalone.experiments.hindsight_runtime start
-curl --fail http://127.0.0.1:18888/health
-PYTHONPATH=src python -m notalone.experiments.hindsight_comparison run --output experiments/hindsight/reproduction-20261004 --preflight experiments/hindsight/comparison-v2-r2-preflight --cost-evidence experiments/hindsight/comparison-v2-r2/download-cost-evidence.json
-PYTHONPATH=src python -m notalone.experiments.hindsight_comparison cleanup --output experiments/hindsight/reproduction-20261004
-PYTHONPATH=src python -m unittest discover -s tests/unit/experiments -v
-PYTHONPATH=src python -m unittest tests.unit.retrieval.test_recall_evaluation tests.unit.retrieval.test_lexical tests.unit.reply.test_context_retrieval -v
-PYTHONPATH=src python -m mypy src/notalone/experiments --follow-imports=silent
-```
-
-实际首次失败命令为 `... hindsight_comparison run --output experiments/hindsight/comparison-v2 --cost-evidence /tmp/notalone-hindsight-cost-evidence.json`，该版本先运行 dev 后拒绝接受阈值。修复与重新复验之后使用 `--output experiments/hindsight/comparison-v2-r2 --preflight experiments/hindsight/comparison-v2-r2-preflight`；没有覆盖原数据。
-
-公开下载复现脚本 [download_cost.py](download_cost.py) 使用固定独立 runtime 的 Python 3.11 venv，命令为 `/tmp/notalone-hindsight-runtime-f7dd3f4/venv/bin/python experiments/hindsight/download_cost.py`；输出 `/tmp/notalone-hindsight-cost-evidence.json`，只处理本脚本创建的额外空缓存并在结束后清理。公开下载不携带 query、资料或 token。不要与正式性能测量同时运行。
-
-实际通过 36 个完整实验测试、66 个原有词法/召回/Context 回归，13 个实验源码模块 mypy 和 `git diff --check` 通过。最小 red→green 验证 dev 门的真实 Context 结果、超时保留分母、nullable metadata 不猜身份；分位数测试包含 6 个 1,500 ms 失败，不能以成功快样本替代全部 P95。
+报告下方记录的测试、重跑和成本测量是在当时的隔离 Python 环境及 PostgreSQL 服务上完成的。36 个实验测试、66 个词法／召回／Context 回归、13 个实验模块类型检查及 `git diff --check` 当时通过；dev 门、超时分母、nullable metadata 和失败样本均按原结果记录。相关服务启动与下载执行材料已退役，当前没有复跑入口。目录状态说明见 [README](README.md)。
 
 清理只读取本轮 owned manifest，核对四个精确 bank 和当前 internal_id 未被另一轮替换；首轮和正式轮均已验证删除后各活动表计数及作用域索引归零，见 [正式清理证据](comparison-v2-r2/cleanup.json)。原始证据保留在 Git。最终 API/pg0 已停止，独立数据库目录已移除，18888/18543 关闭、service.pid 不存在，额外 formatter venv 已删除；保留公开模型、独立 venv 缓存和纯合成 service.log。[收尾证据](finalization.json)记录实际检查，目录移除仍不证明介质物理擦除。
 
-根收尾执行 `NOTALONE_DISABLE_DOTENV=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=src python -m unittest discover -s tests/unit -t .`，697 项单元测试通过；`PYTHONPATH=src python -m mypy src/notalone/experiments --follow-imports=silent` 对 13 个模块通过。未连接业务库，也未把全仓单元测试称为产品渠道端到端验证。[两轴审查](review.md)完成：Standards 无硬性违规、2 处可选重复逻辑建议；Spec 无偏差。任务执行已完成，接入结论仍为未达到门槛。
+根收尾时另有 697 项单元测试及 13 个实验模块的 mypy 检查通过。未连接业务库，也未把全仓单元测试称为产品渠道端到端验证。[两轴审查](review.md)完成：Standards 无硬性违规、2 处可选重复逻辑建议；Spec 无偏差。任务执行已完成，接入结论仍为未达到门槛。

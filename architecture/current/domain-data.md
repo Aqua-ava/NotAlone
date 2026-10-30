@@ -1,12 +1,12 @@
 # 现行领域与数据契约
 
-> 本轮空 SQLite 的联系人身份与逐人授权按 [ADR-110](../adr/110-selected-sqlite-contact-read-grants.md)：不迁旧授权、不启用全部私聊，取消立即封禁旧资格。默认 PG 切换前仍遵循原合同；首用搁置不取消授权核验。
+> 联系人身份与逐人授权按 [ADR-110](../adr/110-selected-sqlite-contact-read-grants.md)：不延续旧授权、不启用全部私聊，取消立即封禁旧资格；首用搁置不取消授权核验。
 
-> SQLite 底座目标按 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)局部修订原 PG 保留条款；01 仅提供受控实例与存储合同，默认业务尚未切换。其余来源、范围、删除及 DSH 约束保持，完整结构和消费者在实施 20 切换前复核。
+> 当前业务存储为受控本机 SQLite，由 TypeScript 后台注册迁移并装配联系人、来源、消息、记忆和删除操作；具体实现状态与验收范围见 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)及切换记录。来源、范围、删除及 DSH 约束继续适用。
 
 > 2026-10-21 决定收敛：新增联系人按 [ADR-087](../adr/087-wechat-confirmed-contact-onboarding.md)及 [ADR-089](../adr/089-all-private-wechat-sync-scope.md)从真实微信会话加入，支持逐会话确认或全部私聊范围授权，独立创建与导入新建的旧接口待退役；历史 `manual_create` 记录保留读取与删除语义。默认自动采纳按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；下文标明的历史协议及评测不得当作默认流水线。
 
-> 状态：已采纳的产品约束；当前独立版采用本机 PostgreSQL 作为权威业务库，已有资料按 ADR-066 沿用原连接和资料位置。已实现表结构以[版本化迁移](../../backend-ts/database/migrations)为准；本文中的目标数据对象不代表都已落地，实际启用与验收分别核验。
+> 状态：已采纳的产品约束；当前独立版以本机 SQLite 作为业务存储，实例身份、迁移与具名动作见 [SQLite 存储合同](../../backend-ts/src/storage/sqlite/README.md)。本文描述关系数据边界，不代替代码与验收证明。
 
 > 后续目标：记忆时间状态、可追溯概览与自动 Skill 生命周期由[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)及[正式规格](../../.scratch/memory-skill-evolution/spec.md)局部细化；独立集成候选现已完成联系人与本人概览的合成验证，下方 v1 数据对象仍描述基础约束；真实模型质量与实际 App／微信另验。
 
@@ -222,7 +222,7 @@ L1 提取与批量裁决、L2 场景维护、L3 增量画像按 [ADR-104](../adr
 
 [正式集成02](../../.scratch/memory-skill-integration-preparation/issues/02-correction-and-erasure.md)已接入人工纠错与否决保护；后续主线工程签收见[演进任务索引](../../.scratch/memory-skill-evolution/planning.md)，原独立候选状态仅属阶段记录。相同规范消息上的旧证据不能因正文、分类、主题或主体改写而重新自动采纳；新增来源引用不等于新增规范消息。真正新消息只产生带原人工决定的待确认差异，确认时在范围锁事务中复验完整参与窗口、来源世代和完整决定标识。自动替代只作用于原先确切的自动版本，新版本写入与旧版本失效同事务提交，不追随新人工叶版本。
 
-此状态只说明历史合成HTTP、PostgreSQL和React验证到的工程行为；默认自动维护后续按ADR-070修订，旧资料升级已退役，真实模型语义质量与实际App/微信未据此验收。
+该记录只说明当时的合成 HTTP 与页面验证行为；自动维护由 ADR-070 后续修订，不能据此认证真实模型质量或最终 App／微信能力。
 
 ### 联系人记忆目录最小契约
 

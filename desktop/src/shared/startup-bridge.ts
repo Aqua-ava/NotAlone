@@ -1,9 +1,9 @@
 export type StartupCode = 'ready' | 'launch_unconfigured' | 'configuration_invalid' | 'python_unavailable'
   | 'python_version_unsupported' | 'backend_package_missing' | 'project_unavailable'
-  | 'env_path_unavailable' | 'info_path_unavailable' | 'database_unconfigured' | 'database_unavailable'
+  | 'env_path_unavailable' | 'info_path_unavailable'
   | 'baseline_missing' | 'baseline_invalid' | 'migration_history_mismatch' | 'migration_pending'
   | 'schema_incomplete' | 'migration_files_invalid' | 'diagnostic_timeout' | 'diagnostic_failed'
-  | 'database_writers_present' | 'database_update_requires_local' | 'migration_busy' | 'migration_failed'
+  | 'database_writers_present' | 'migration_busy' | 'migration_failed'
   | 'sqlite_business_unavailable' | 'sqlite_storage_failed'
   | 'runtime_components_unavailable' | 'runtime_configuration_invalid' | 'runtime_cancelled'
   | 'database_prepare_failed' | 'database_start_failed' | 'database_already_running' | 'local_setup_required' | 'runtime_stop_unconfirmed'
@@ -25,7 +25,7 @@ export interface SqliteDevelopmentState {
   code: string;
   schemaVersion?: number;
   sqliteVersion?: string;
-  /** 维护态：只保留现场与重试入口，不启动旧 PG 或双写后台。 */
+  /** 维护态：只保留现场与重试入口，不启动业务后台。 */
   maintenance?: boolean;
 }
 export interface StartupState {

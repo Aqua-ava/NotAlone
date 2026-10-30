@@ -164,7 +164,7 @@ test('管理页公开IPC必须先预览，取消与写失败可安全重试且�
       if (args.length) throw new Error('参数不可用');
       return { webContents: { getURL: () => `notalone://app/#${event.role}` } };
     }, publish() {} };
-    installStartupBridge(windows, { getState: () => ({ phase: 'blocked', code: 'database_unavailable', helperWarnings: [], revision: 0 }), onStateChanged() {} },
+    installStartupBridge(windows, { getState: () => ({ phase: 'blocked', code: 'sqlite_storage_failed', helperWarnings: [], revision: 0 }), onStateChanged() {} },
       { getState: () => ({ phase: 'disconnected', canRetryConnection: true }), connect() { connections++; } }, userData);
     const inspect = handlers.get('startup:preview-diagnostics');
     const save = handlers.get('startup:export-diagnostics');

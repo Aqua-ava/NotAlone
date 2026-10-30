@@ -61,7 +61,7 @@
 
 ### 从源码运行
 
-源码开发使用 macOS、Node.js ≥ 24 和 pnpm 11.25.0；原生探针开发另需 Xcode / Swift。后端统一使用 TypeScript 与 DSH，默认业务存储为 SQLite，**无需安装或启动 PostgreSQL 服务**。SQLite 使用 Node 的内置模块，不需要另外安装数据库服务器。
+源码开发使用 macOS、Node.js ≥ 24 和 pnpm 11.25.0；原生探针开发另需 Xcode / Swift。后端统一使用 TypeScript 与 DSH，默认业务存储为本机 SQLite；SQLite 使用 Node 的内置模块，不需要另装数据库服务。
 
 先确认 Node.js ≥ 24 和 pnpm 11.25.0 可用。若尚未安装 pnpm，可使用 `npm install --global pnpm@11.25.0`；已安装时无需执行。然后在仓库根目录运行：
 
@@ -96,9 +96,8 @@ pnpm install --frozen-lockfile
 
 该命令只准备 workspace 依赖。原生探针按[原生开发说明](native/macos/README.md)单独构建；模型配置另行保留。
 
-旧 PostgreSQL 安装器 `scripts/install.sh` 已从当前工作树退役。当前依赖使用 `pnpm install --frozen-lockfile` 安装，开发版在启动时执行受控 SQLite 初始化或重开，详见[默认切换与验证记录](docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。
+依赖使用 `pnpm install --frozen-lockfile` 安装，开发版启动时受控初始化或重开 SQLite 实例，详见[默认切换与验证记录](docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。
 
-当前 workspace 已移除 `pg` 和 `@types/pg` 依赖；旧 PostgreSQL 模块与相关测试保留在固定 Git 历史中，不由当前开发或测试入口加载。追溯方式见[历史测试说明](backend-ts/test/HISTORICAL.md#postgresql-模块与测试退役)。
 
 ### 3. 准备并启动桌面端
 
@@ -117,9 +116,9 @@ pnpm run dev
 
 ### 4. 首次连接与使用
 
-本机启动配置仍提供项目目录、模型配置与握手路径；SQLite 配置由开发启动探针交给正式宿主。默认启动只装配 SQLite 插件，缺少有效 SQLite 配置时停止连接，不回退 PostgreSQL。旧配置中的 `pythonExecutable` 仅作兼容读取并忽略。
+本机启动配置提供项目目录、模型配置与握手路径；SQLite 配置由开发启动探针交给正式宿主。默认启动只装配 SQLite 插件，缺少有效 SQLite 配置时停止连接。旧配置中的 `pythonExecutable` 仅作兼容读取并忽略。
 
-业务数据库位于当前 App `userData` 下的 `managed/sqlite/notalone.sqlite`。新实例创建、已有实例重开和结构升级由受控启动流程管理；发现旧业务对象、身份冲突或未确认清理时进入维护状态。SQLite 切换不自动迁入旧 PostgreSQL 的联系人、聊天或授权，也不以 `NOTALONE_DATABASE_URL` 配置 SQLite 位置。已有模型配置、Skill 与外部原始资料继续保留。
+业务数据库位于当前 App `userData` 下的 `managed/sqlite/notalone.sqlite`。实例创建、重开和结构升级由受控启动流程管理；发现冲突或未确认清理时进入维护状态。模型配置、Skill 与外部原始资料继续保留。
 
 微信渠道需要显式的外置 CLI 配置、联系人授权和能力认证。前台定位探针的屏幕录制权限及签名归属见[权限说明](docs/guides/macos-app-permissions-and-errors.md)；OCR 不作为后台 CLI 同步的门禁。当前真实微信未认证能力保持关闭，代码和合成验证的完成不代替真实支持档。
 
@@ -169,7 +168,6 @@ NotAlone/
 | 桌面运行、构建与验收 | [desktop/README.md](desktop/README.md) |
 | 后端安装、HTTP 与 CLI | [backend-ts/README.md](backend-ts/README.md) |
 | 当前 SQLite 初始化、切换与验证 | [默认切换记录](docs/verification/20-sqlite-cutover-and-legacy-cleanup.md) · [SQLite 架构](architecture/adr/109-controlled-sqlite-storage-foundation.md) |
-| 旧 PostgreSQL 迁移资料（历史路径） | [backend-ts/database/README.md](backend-ts/database/README.md) |
 | 原生探针与权限 | [native/macos/README.md](native/macos/README.md) · [权限与启动错误](docs/guides/macos-app-permissions-and-errors.md) |
 | 领域词汇与架构决策 | [CONTEXT.md](CONTEXT.md) · [架构索引](architecture/README.md) |
 | 记忆的来源、提取与删除 | [完整追踪](architecture/current/memory-extraction-trace.md) · [维度放行台账](docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md) |
@@ -214,8 +212,8 @@ npm test
 
 固定本地向量模型准备使用 `node scripts/prepare_memory_embedding.mjs`；已有缓存可用 `--offline` 验证，不读取聊天或业务配置。正常业务运行不会下载模型。
 
-SQLite 存储状态可在管理后台的“SQLite 存储诊断”查看。结构升级由当前注册的 SQLite 迁移和启动流程管理；旧 `schema-prepare-cli.ts` 已退役；`backend-ts/database/migrations` 仅保留历史 SQL，不用于初始化或升级当前业务库。
+SQLite 存储状态可在管理后台的“SQLite 存储诊断”查看。结构升级由当前注册的 SQLite 迁移和启动流程管理；旧 `schema-prepare-cli.ts` 已退役。
 
-历史 Python 后台及测试已从当前工作树清理，对照仍保存在固定 Git 提交与显式独立测试环境；登记及命令见 `backend-ts/test/historical-inventory.json`、`npm run test:historical -- --list`。`backend-ts/database/` 的 SQL 和 `backend-ts/test/fixtures/` 下的合成 JSON／JSONL 夹具保留原始字节，现已归入 TypeScript 后台；冻结历史清单中的原路径仅用于来源追溯。历史结果不表示当前源码通过，正常测试不依赖 Conda 或 Python 后端。
+历史 Python 后台及测试已从当前工作树清理，对照仍保存在固定 Git 提交与显式独立测试环境；登记及命令见 `backend-ts/test/historical-inventory.json`、`npm run test:historical -- --list`。`backend-ts/test/fixtures/` 下的合成 JSON／JSONL 夹具保留原始字节，现已归入 TypeScript 后台；冻结历史清单中的原路径仅用于来源追溯。历史结果不表示当前源码通过，正常测试不依赖 Conda 或 Python 后端。
 
 迁移本轮的固定采集为96/96成功、96次物理调用、0重试；用户明确跳过回复盲评和启动／内存对照，未评／未测不写为通过。详见[范围及实测记录](.scratch/dsh-ts-migration/final-acceptance-closeout/capture-summary.json)。当前源码开发验证与旧安装包、发布验收分别记录。
