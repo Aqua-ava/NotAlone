@@ -1,6 +1,6 @@
 # 21 三份规格组合验收记录
 
-日期：2026-10-30（初稿；2026-10-30 增补见 §11）。执行会话：`t21-integrated-acceptance`（共享任务 task-7）。验收基线：`codex/sqlite-rebuild-integration`@`ccf047b8`（初稿基于 `d8c55619`；中间复核 `d1068fbf`；随后票20/10 resolved 同步 `aff0366d`/`0fac4ada` 等经 `ccf047b8` 集成，本票已合并复核），本票工作树 `sqlite-rebuild-21`（同名分支，仅本地提交，不 push/PR）。
+日期：2026-10-30（初稿；2026-10-30 增补见 §11）。执行会话：`t21-integrated-acceptance`（共享任务 task-7）。验收基线：`codex/sqlite-rebuild-integration`@`ccf047b8`（初稿基于 `d8c55619`；中间复核 `d1068fbf`；随后票20/10 resolved 同步 `aff0366d`/`0fac4ada` 等经 `ccf047b8` 集成，本票已合并复核）。Round4（t10 产品补丁后）复核基线：`713c6d5f`（见 §12），本票工作树 `sqlite-rebuild-21`（同名分支，仅本地提交，不 push/PR）。
 
 本记录只做组合验收与证据收口，不补实现、不改其他票状态。已 resolved 票引用其既有有效证据并按未变化条件复用，未重跑其整套；本轮实际执行的组合批次与 App 交互单独记录。合成、实际开发 App、真实模型、真实微信分列记账；未认证项不得解释为通过。
 
@@ -11,6 +11,7 @@
 - 基线复核追加：票20 跨重启宿主回归与「跨重启 UI 复核限制」（20 verification §13）；本票在修复基线 `d1068fbf` 上复跑批 H **25/25**（含 restart-host 1/1），并跑修复回归批 I **45/45**（含新增 `sqlite-deletion-metadata-restart` 2 项）、批 J **21/21**（Electron 宿主）、批 K **27/27**（Electron 下 restart 回归 + 批 H 复跑）。
 - 本票报告的「重启后联系人同步状态/目录读取失败」已由 t20 定位为 **05×06 交互缺陷**（`deletion.metadataAvailable` 把清空内容类未完成删除误当身份删除），修复源 `154ac9e2` 经 `d1068fbf` 集成；本票用同构根按原顺序（source DELETE completed → 清空 boundary_pending → 正常退出 → 同根重启）完成 **App 级闭环复验**：`/api/contacts`、`/api/sync/cli-bindings`、`/api/sync/status`、`/api/setup/status`、`/api/deletions`、清空状态均 200，联系人页无读取失败（§4.5）。该修复不改变真实微信/真实模型门槛，相关列仍按未认证记录。
 - **2026-10-30 增补（票10/20 resolved 同步，见 §11）**：票20 经 `aff0366d`（集成 `3bae162a`）标 resolved，真实清理重评 **N/A（本机无清理对象）+ 只读证据**，最终 12/12＝11 通过+第 8 条 N/A；票10 经 `0fac4ada`（集成 `a731d471`）标 resolved，App 级环回供应商实机通过开始/暂停小批收尾/继续复用/退出重开/单人失败/共用故障固定原因/unknown，并修复在途 sending 误判与共用故障原因展示；证据见 20 verification §7/§10 与 `docs/verification/10-memory-processing-controls.md`。本票按条件变化仅最小复跑 `sqlite-memory-control` 16/16，未重跑组合批次。
+- **2026-10-30 Round4 后续复跑（t10 补丁后，见 §12）**：t10 产品补丁 `1c02305b`/`d2a1aee7` 在矩阵定稿后进入基线（改变记忆控制投影与桌面展示，并补 09 真实文档失败路径共用故障回归），按「条件变化扩大验证」在集成分支（merge 时 HEAD=`713c6d5f`）完整复跑 A–K **716/716 通过**（B 148/148、F 57/57、I 46/46、K 28/28 含补丁新增用例）；两端 tsc 0/0、inventory 通过、public check issues 0。矩阵结论不变，仍 claimed/受阻。
 - 实际开发 App（热更新 dev，隔离合成 userData）完成：默认 SQLite 自动创建（manifest `completed`，8/8 checks passed）、记忆/文档状态展示、认证来源删除后旧资料实际撤下、联系人清空进入 `boundary_pending` 且无成功文案、正常退出 `stopped/pids[]`、重开同 `databaseId`/结构 15/`integrity=ok`/`foreignKeys=ok`；重开后联系人目录与授权读取正常（原 05×06 缺陷修复后 App 闭环复验，§4.5）。
 - **未通过/受阻（关键）**：03 真实普通历史、状态语义与来源生命周期、跨启动连续性；04 真实增量尾部（重选/断线/微信非前台 CLI 同步未认证）；06 真实 observer/reader 边界协议与最终只读制品（生产保持 `boundary_pending`）；19 真实媒体唯一关联用户暂缓。20 真实清理已重评 **N/A（本机无清理对象）+ 只读证据**，10 已 resolved；真实模型仅 07/11 两次用户另行授权的受限真实调用，其余未测。
 - 因此本票**保持 claimed 并报告受阻**，不以已提交代码或已发布任务关闭规格；即使全部合成与 App 交互通过，也不能替代 03/04/06 的真实渠道认证（20 真实清理本机 N/A，其他机器另行核验）。
@@ -53,7 +54,7 @@
 
 ## 3. 组合行为实测
 
-执行环境：Node `/tmp/t09-node/bin/node` v24.21.0；Electron 44.7.0（44.7.0 / Node 24.21.0）；SQLite 3.53.4；锁定 TypeScript 7.0.2；隔离临时 SQLite `role=test` 与合成身份/消息，不读取真实微信、不调用真实模型、不发送外部消息、不打包。日志位于 `/tmp/t21-batch-*.log`、`/tmp/t21-typecheck.log`。两端 `pnpm run typecheck`（backend/desktop）均 0 错误。基线复核后新增批 H（票20 跨重启宿主回归 25/25，`/tmp/t21-batch-h-restart.log`）、批 I（修复回归 45/45，`/tmp/t21-batch-i-restartfix.log`）、批 J（Electron 宿主 21/21，`/tmp/t21-batch-j-host-fix.log`）、批 K（Electron 下 restart 回归 + 批 H 复跑 27/27，`/tmp/t21-batch-k-fix-verify.log`）。**2026-10-30 增补**：因票10/20 resolved 带来产品代码变化，按条件变化只最小复跑受影响的 `sqlite-memory-control.test.mjs`（Electron Node）16/16（`/tmp/t21-addendum-control.log`）；t10/t20 其余证据引用其 verification 文档，未重跑 A–K 组合批次。
+执行环境：Node `/tmp/t09-node/bin/node` v24.21.0；Electron 44.7.0（44.7.0 / Node 24.21.0）；SQLite 3.53.4；锁定 TypeScript 7.0.2；隔离临时 SQLite `role=test` 与合成身份/消息，不读取真实微信、不调用真实模型、不发送外部消息、不打包。日志位于 `/tmp/t21-batch-*.log`、`/tmp/t21-typecheck.log`。两端 `pnpm run typecheck`（backend/desktop）均 0 错误。基线复核后新增批 H（票20 跨重启宿主回归 25/25，`/tmp/t21-batch-h-restart.log`）、批 I（修复回归 45/45，`/tmp/t21-batch-i-restartfix.log`）、批 J（Electron 宿主 21/21，`/tmp/t21-batch-j-host-fix.log`）、批 K（Electron 下 restart 回归 + 批 H 复跑 27/27，`/tmp/t21-batch-k-fix-verify.log`）。**2026-10-30 增补**：因票10/20 resolved 带来产品代码变化，按条件变化只最小复跑受影响的 `sqlite-memory-control.test.mjs`（Electron Node）16/16（`/tmp/t21-addendum-control.log`）；t10/t20 其余证据引用其 verification 文档，当时未重跑 A–K 组合批次。**Round4（t10 产品补丁后）**：补丁进入基线后已按条件变化完整复跑 A–K **716/716**，详见 §12。
 
 ### 3.1 关闭读取、取消单人、独立暂停、来源删除的四种语义
 
@@ -292,3 +293,28 @@ node scripts/development-status.mjs --user-data-dir <realpath-root>   # 退出�
 增补后的最小复跑（条件变化的受影响项）：`ELECTRON_RUN_AS_NODE=1 <Electron> --test test/sqlite-memory-control.test.mjs` → **16/16**（`/tmp/t21-addendum-control.log`）；A–K 组合批次按条件未变复用既有结果，不重复执行。
 
 结论不变：本票仍 **claimed/受阻**——03 真实普通历史/状态语义/来源生命周期/跨启动连续性、04 真实增量/重选/断线、06 真实 observer/reader（依赖 04）未认证；19 用户暂缓、真实模型语义质量未认证。20/10 的 resolved 与本票 App/组合证据不构成对上述真实渠道门槛的替代。
+
+
+## 12. 后续复跑（t10 补丁后，2026-10-30 Round4）
+
+背景：t10 的产品补丁 `1c02305b`/`d2a1aee7` 在本矩阵定稿后进入基线，改变记忆控制投影（在途 sending 不再误投影 unknown）与桌面展示（共用故障固定原因 `sharedFaultCode`），并补充 09 真实文档失败路径的共用故障端到端回归；按「条件变化扩大验证」，在集成分支（merge 时 HEAD=`713c6d5f`，含 `65ab19db` 及 Round4 planning 记录）按原批次文件清单完整复跑 A–K：
+
+| 批次 | 本轮 | 原 | 变化 |
+| --- | ---: | ---: | --- |
+| A 同步/清空/删除 | 125/125 | 125 | — |
+| B 记忆/文档/控制 | **148/148** | 145 | +3（t10 补丁新增用例） |
+| C 媒体 | 68/68 | 68 | — |
+| D 切换/回复/讨论/Skill | 94/94 | 94 | — |
+| E Electron 宿主 | 30/30 | 30 | — |
+| F 桌面模块 | **57/57** | 56 | +1 |
+| G 裁决/迁移/共享结构 | 74/74 | 74 | — |
+| H 跨重启切换宿主 | 25/25 | 25 | — |
+| I 修复回归 | **46/46** | 45 | +1 |
+| J Electron 宿主修复 | 21/21 | 21 | — |
+| K 修复复跑 | **28/28** | 27 | +1 |
+| **合计** | **716/716（0 fail）** | — | 本轮新增 6 个用例 |
+
+- 环境与命令：Node v24.21.0；Electron 44.7.0 自带 Node；锁定 TypeScript 7.0.2；批次文件清单与 §9 的 A–K 完全一致，未新增/删减文件；日志 `/tmp/round4-batch-{a..k}.log`。
+- 同批复跑（Lead 在集成分支执行）：backend/desktop 锁定 `tsc --noEmit` **0/0**；`node scripts/test-inventory.mjs` 通过；`check_public_history --ref HEAD` issues 0。本会话在提交前与提交后各跑一次 `--ref HEAD --working-tree` 复核：均为 **issues 0**（提交后 currentFiles 1971 / historicalCommits 2921 / historicalBlobs 20703），与 §10 记录的历次检查口径一致；本记录仅追加文档，不改变检查口径。
+- 结果解读：本轮新增用例来自 t10 补丁回归；A–K 全通过说明补丁未破坏本矩阵既有组合行为，也未改变任何真实渠道/真实清理门槛。§1 矩阵、§7 未通过项与 §11 状态结论均不变；本票仍 **claimed/受阻**（03/04/06 真实渠道、19 暂缓、真实模型语义未认证）。
+- 证据链：§11 为票10/20 resolved 状态同步；§12 为补丁后复跑证据。两者共同构成本票最终证据链，不替代真实门槛。
