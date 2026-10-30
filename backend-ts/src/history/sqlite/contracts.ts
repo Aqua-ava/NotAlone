@@ -27,6 +27,8 @@ export interface HistoryRecord {
   status?: string | null;
   // 仅经过认证的渠道才可确认状态；未知状态不应带正文。
   stateAssurance: 'verified' | 'unverified';
+  // 渠道已核验的具体状态；撤回是无正文终态，不能仅凭原始状态数字推断。
+  messageState?: 'sent' | 'received' | 'recalled' | 'absent';
 }
 export interface HistoryPage {
   target: string; cursorIn: string | null; cursorOut: string | null;
@@ -42,7 +44,7 @@ export interface HistoryTailPage {
 }
 export interface HistoryChannel {
   // 仅已实现持续原生守卫的渠道可声明；loss 在守卫无法继续时结束。
-  readonly guardSession?: { readonly loss: Promise<void> };
+  readonly guardSession?: { readonly loss: Promise<void>; failureCode?():string|null };
   inspect(scope: HistoryScope, signal?: AbortSignal): Promise<HistorySupportReport>;
   target(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryTarget>;
   page(scope: HistoryScope, target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<HistoryPage>;
@@ -63,6 +65,8 @@ export interface HistoryCoverage {
   goalId: string | null; contactId: string; bindingId: string | null;
   phase: HistoryPhase; failureCode: string | null; cursor: string | null;
   messageCount: number; nonTextCount: number; pageCount: number; quarantinedCount: number;
+  // 固定目标已全部遍历；未知消息仍可使 phase=incomplete，不能据此宣称内容已全部核验。
+  traversalComplete?: boolean;
   incremental?: HistoryIncrementalCoverage;
 }
 export interface StoredMessage {

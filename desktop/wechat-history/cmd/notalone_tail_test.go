@@ -20,8 +20,8 @@ func notaloneSyntheticTailCertification(program notaloneProgramVersion, tables [
 	return notaloneProfileCertification{
 		Status: "supported", ProfileID: "synthetic-tail-profile", ProgramVersion: program.Version, Build: program.Build,
 		DeclaredPrimaryKey: []string{"local_id"}, StatusSemantics: "synthetic-final", Continuity: "synthetic-source",
-		Capabilities: map[string]string{"programVersion": "supported", "exactSchema": "supported", "declaredLocalKey": "supported"},
-		ReadProfile:  notaloneSyntheticTailProfilePtr(tables),
+		SchemaShapeFingerprint: notaloneSnapshotShape(tables), Capabilities: notaloneSyntheticRuntimeCapabilities(),
+		ReadProfile: notaloneSyntheticTailProfilePtr(tables),
 	}
 }
 
@@ -134,6 +134,10 @@ func TestNotAloneTailResumeDiffTombstoneReplayAndEmptyRecords(t *testing.T) {
 	}
 	if tombstone := byID["2"]; tombstone.Text != nil || tombstone.StateAssurance != "unverified" || tombstone.Status != nil || tombstone.Sender != "unknown" {
 		t.Fatalf("消失身份必须输出无正文未核验墓碑: %#v", tombstone)
+	}
+	verifiedAbsence := notaloneTailTombstone(notaloneTailIdentity{Partition: "partition", Table: "table", LocalID: "2"}, true)
+	if verifiedAbsence.MessageState != "absent" || verifiedAbsence.StateAssurance != "verified" || verifiedAbsence.Text != nil || verifiedAbsence.OriginalType != "unknown" {
+		t.Fatalf("仅获认证的完整重扫可输出verified absent终态：%#v", verifiedAbsence)
 	}
 	changedJSON, _ := json.Marshal(changed)
 	if strings.Contains(string(changedJSON), "删除正文") || strings.Contains(string(changedJSON), "未知状态正文不得读取") {

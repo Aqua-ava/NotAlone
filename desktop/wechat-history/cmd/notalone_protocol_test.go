@@ -44,11 +44,13 @@ func notaloneProtocolFixture(t *testing.T, supported bool) *notaloneHistorySessi
 	}
 	t.Cleanup(h.close)
 	h.program = func(context.Context) (notaloneProgramVersion, error) {
-		return notaloneProgramVersion{"synthetic", "1"}, nil
+		return notaloneProgramVersion{"4.0.6", "29387"}, nil
 	}
 	if supported {
 		h.certify = func(p notaloneProgramVersion, tables []notaloneTableSchema) notaloneProfileCertification {
-			return notaloneProfileCertification{Status: "supported", ProfileID: "synthetic-profile", ProgramVersion: p.Version, Build: p.Build, DeclaredPrimaryKey: []string{"local_id"}, StatusSemantics: "synthetic-final", Continuity: "synthetic-source", ReadProfile: notaloneSyntheticFinalReadProfilePtr(tables)}
+			return notaloneProfileCertification{Status: "supported", ProfileID: "synthetic-profile", ProgramVersion: p.Version, Build: p.Build,
+				DeclaredPrimaryKey: []string{"local_id"}, StatusSemantics: "synthetic-final", Continuity: "synthetic-source",
+				SchemaShapeFingerprint: notaloneSnapshotShape(tables), Capabilities: notaloneSyntheticRuntimeCapabilities(), ReadProfile: notaloneSyntheticFinalReadProfilePtr(tables)}
 		}
 	}
 	if _, err = h.handle(context.Background(), notaloneHistoryRequest{Operation: "resolve", DisplayName: "合成目标", Consent: "selected-metadata-v1"}); err != nil {
@@ -78,7 +80,9 @@ func TestNotAloneHistoryProtocolGateAndTypedSnapshot(t *testing.T) {
 		t.Fatalf("门禁失效:%v", err)
 	}
 	h.certify = func(p notaloneProgramVersion, tables []notaloneTableSchema) notaloneProfileCertification {
-		return notaloneProfileCertification{Status: "supported", ProfileID: "synthetic-profile", ProgramVersion: p.Version, Build: p.Build, DeclaredPrimaryKey: []string{"local_id"}, StatusSemantics: "synthetic-final", Continuity: "synthetic-source", ReadProfile: notaloneSyntheticFinalReadProfilePtr(tables)}
+		return notaloneProfileCertification{Status: "supported", ProfileID: "synthetic-profile", ProgramVersion: p.Version, Build: p.Build,
+			DeclaredPrimaryKey: []string{"local_id"}, StatusSemantics: "synthetic-final", Continuity: "synthetic-source",
+			SchemaShapeFingerprint: notaloneSnapshotShape(tables), Capabilities: notaloneSyntheticRuntimeCapabilities(), ReadProfile: notaloneSyntheticFinalReadProfilePtr(tables)}
 	}
 	value, err = h.handle(context.Background(), r)
 	if err != nil {
@@ -99,10 +103,47 @@ func TestNotAloneHistoryProtocolGateAndTypedSnapshot(t *testing.T) {
 	if len(page.Records) != 1 || page.Records[0].Text == nil || *page.Records[0].Text != "private-body-sentinel" || !page.Exhausted {
 		t.Fatal("合成正常消息或终页缺失")
 	}
-	held := h.snapshot
+	guard := h.messageGuard
 	h.close()
-	if held.Check() == nil {
-		t.Fatal("session关闭后reader仍活动")
+	if guard.Check() == nil {
+		t.Fatal("session关闭后来源守卫仍活动")
+	}
+}
+
+func notaloneSyntheticRuntimeCapabilities() map[string]string {
+	return map[string]string{
+		"programVersion": "supported", "exactSchema": "supported", "declaredLocalKey": "supported",
+		"automaticAllocation": "supported", "serverIdUniqueConstraint": "unsupported", "statusColumn": "supported",
+		"statusSemantics": "supported", "sourceLifecycle": "supported", "restartContinuity": "supported",
+		"recoveryMapping": "supported", "snapshotBarrier": "supported", "partitionCoverage": "supported", "normalHistory": "supported",
+	}
+}
+
+func TestNotAloneSupportPreparesAndTargetReusesProvenSnapshot(t *testing.T) {
+	h := notaloneProtocolFixture(t, true)
+	r := notaloneHistoryRequest{Operation: "support", Account: h.selected.Account, Conversation: h.selected.Conversation, Consent: "selected-schema-v1"}
+	value, err := h.handle(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	support := value.(notaloneSupportReport)
+	if support.Status != "supported" || support.Continuity != "same-source-instances-normal-use-v1" || h.snapshot == nil ||
+		!h.snapshot.profile.IncrementalTailVerified || h.snapshot.profile.VerifiedTerminalAbsence {
+		t.Fatalf("只有已证明并持有的固定快照才能提升支持状态：support=%#v snapshot=%v", support, h.snapshot != nil)
+	}
+	for _, capability := range []string{"statusSemantics", "sourceLifecycle", "restartContinuity", "recoveryMapping", "snapshotBarrier", "partitionCoverage", "normalHistory", "incrementalTail"} {
+		if support.Capabilities[capability] != "supported" {
+			t.Fatalf("运行时证明后能力未提升：%s=%s", capability, support.Capabilities[capability])
+		}
+	}
+	held := h.snapshot
+	r.Operation, r.Consent = "target", "selected-history-v1"
+	value, err = h.handle(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.snapshot != held || value.(notaloneSnapshotTarget).Descriptor != held.Target().Descriptor {
+		t.Fatal("target没有复用 support 实际证明并持有的snapshot")
 	}
 }
 

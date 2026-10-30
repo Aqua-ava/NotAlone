@@ -7,7 +7,7 @@ import './bindings.css';
 
 const initial: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 const backgroundLabels: Record<BackgroundSyncPhase, string> = { disabled: '后台读取已关闭', waiting_bindings: '等待确认会话授权',
-  active: '后台读取运行中', degraded: '自动同步暂时受阻，恢复后会继续同步' };
+  active: '后台读取运行中', degraded: '后台读取有待核验或中断的项目，请查看各会话状态' };
 const localHistoryNotices: Record<string, string> = {
   local_history_deleted: '部分已确认会话在本机微信有删除记录，当前没有可读历史。历史覆盖尚未确认；这些会话收到新消息后会再次检查。',
   local_history_empty: '部分已确认会话在本机微信暂未保存聊天记录。历史覆盖尚未确认；这些会话收到新消息后会再次检查。',
@@ -78,17 +78,16 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
   </section>;
   return <div className="bindings-page">
     <section className="bindings-explanation" aria-label="后台 CLI 同步">
-      <div className="bindings-toolbar"><h2>{bodyAvailable ? '自动同步总开关' : '授权范围读取总开关'}</h2><button className="button"
+      <div className="bindings-toolbar"><h2>自动同步总开关</h2><button className="button"
         disabled={state.phase === 'offline' || state.phase === 'loading' || state.busy !== null}
         onClick={() => void operate(() => bridge.refresh())}>刷新同步状态</button></div>
-      {!bodyAvailable && <p role="status">正文同步尚未开放</p>}
-      <p role="status">{bodyAvailable ? report ? report.enabled ? '后台正文同步已开启' : '后台正文同步已关闭' : '后台正文同步状态未确认'
-        : report?.enabled ? '已保存：允许授权范围读取' : '已保存：暂停授权范围读取'}</p>
-      <button className="button" disabled={!available} onClick={() => void switchSync()}>{bodyAvailable
-        ? state.busy === 'enable' ? '正在开启后台同步…' : state.busy === 'disable' ? '正在关闭后台同步…' : report?.enabled ? '关闭后台同步' : '开启后台同步'
-        : state.busy === 'enable' || state.busy === 'disable' ? '正在保存读取资格…' : report?.enabled ? '暂停授权范围读取' : '允许授权范围读取'}</button>
+      {!bodyAvailable && report?.enabled && <p role="status">正文读取正在核验或暂时不可用，请查看各会话状态。</p>}
+      <p role="status">{!report ? '后台正文同步状态未确认' : !report.enabled ? '后台正文同步已关闭'
+        : bodyAvailable ? '后台正文同步已开启' : '已开启同步，等待读取能力核验'}</p>
+      <button className="button" disabled={!available} onClick={() => void switchSync()}>{state.busy === 'enable' ? '正在开启后台同步…'
+        : state.busy === 'disable' ? '正在关闭后台同步…' : report?.enabled ? '关闭后台同步' : '开启后台同步'}</button>
       {bodyAvailable ? <p>{allPrivate ? '开启后自动关联并同步全部微信私聊的文字，包括以后新增的会话；已单独停止的会话保持排除。' : '开启后自动同步已授权联系人的文字。'}关闭或退出 App 会停止读取；重新开启后，会自动同步遗漏消息。</p>
-        : <p>总开关只保存已授权范围的读取资格；正文读取能力开放且应用运行时才会读取。关闭或退出 App 会停止读取。</p>}
+        : <p>开启后会先核验微信账号和聊天来源，通过后读取已授权会话的历史与新消息。关闭或退出 App 会停止读取。</p>}
       <section aria-label="微信私聊同步范围">
         <h3>同步范围</h3>
         <p role="status">{report ? allPrivate ? '当前范围：全部微信私聊（包括以后新增的会话）' : '当前范围：仅已关联并授权的会话' : '同步范围尚未确认'}</p>
@@ -123,7 +122,7 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
         {historyAuthorization === 'unknown' && <p>历史读取授权状态尚未确认，请刷新同步状态后重试。</p>}
         {state.busy === 'history' && <p role="status">正在保存历史读取授权…</p>}
       </section>}
-      {report && <p>{bodyAvailable ? `${backgroundLabels[report.backgroundPhase]}。` : '当前仅保存读取资格，未启动正文同步。'}已授权 {report.confirmedBindingCount} 个会话。</p>}
+      {report && <p>{!report.enabled ? '后台读取已关闭。' : bodyAvailable ? `${backgroundLabels[report.backgroundPhase]}。` : '正在核验读取能力，尚未开始正文同步。'}已授权 {report.confirmedBindingCount} 个会话。</p>}
       {scopeNotice && <p role="alert">部分已授权会话暂停读取：{scopeNotice}</p>}
       {state.phase === 'loading' && <p role="status">正在确认同步状态…</p>}
       {state.phase === 'offline' && <p>连接本机服务后查看与控制后台同步。</p>}

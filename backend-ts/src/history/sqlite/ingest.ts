@@ -3,7 +3,7 @@ import type { SQLInputValue } from 'node:sqlite';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryRecord, HistorySupportReport, HistoryTarget } from './contracts.ts';
-import { prepareRecord } from './normalize.ts';
+import { verifiedTerminalReason, prepareRecord } from './normalize.ts';
 
 /** 逐条排除判定：来源删除（05）与清空截断（06）分别记账，都不写回正文或原始载荷。 */
 export type IngestExclusion = 'source_excluded' | 'clear_excluded';
@@ -32,20 +32,47 @@ export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|
  let changed=false;
  for(const record of input.records){
   const systemTransition=record.stateAssurance==='verified'&&record.originalType==='10000'&&record.kind==='other';
-  if(record.stateAssurance==='verified'&&!systemTransition)continue;
+  const terminalReason=verifiedTerminalReason(record);
+  if(record.stateAssurance==='verified'&&!systemTransition&&!terminalReason)continue;
   const prepared=prepareRecord(record,token.source_generation,target);
+  // 终态必须精确定位一条来源；身份缺失不能扩大为整位联系人的失效。
+  if((record.messageState==='recalled'||record.messageState==='absent')&&!prepared.localKey)continue;
   const exclusion=prepared.localKey&&(sourceExcluded(tx,token,prepared,report)?'source_excluded':input.exclude?.({localKey:prepared.localKey,serverKey:prepared.serverKey})??null);
   const local=prepared.localKey?aliasMessage(tx,token,'local',prepared.localKey):undefined;
   const server=report.serverAliasSemantics==='verified_within_scope'&&prepared.serverKey?aliasMessage(tx,token,'server',prepared.serverKey):undefined;
   if(exclusion&&!local&&!server)continue;
   const affected=local||server?[...new Map([local,server].filter((v):v is StorageRow=>Boolean(v)).map(v=>[v.id,v])).values()]
    :prepared.localKey?[]:tx.all("SELECT * FROM message WHERE owner_id=? AND contact_id=? AND binding_id=? AND availability='available'",[token.owner_id,token.contact_id,token.binding_id]);
-  for(const old of affected)if((!systemTransition||old.kind==='text')&&!tx.get('SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,old.id])){
-   tx.run('INSERT INTO history_message_quarantine VALUES(?,?,?,?)',[token.owner_id,token.contact_id,old.id,'message_state_unverified']);
+  for(const old of affected)if((!systemTransition||terminalReason!==null||old.kind==='text')&&!tx.get('SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,old.id])){
+   tx.run('INSERT INTO history_message_quarantine VALUES(?,?,?,?)',[token.owner_id,token.contact_id,old.id,terminalReason??'message_state_unverified']);
    tx.run('UPDATE message SET interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,old.id]);changed=true;
   }
  }
  if(changed)tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);
+}
+/** 同一来源的完整重扫结束后才判断消失；不完整页、其他来源和其他联系人不受影响。 */
+export function reconcileMissingRecords(input:{tx:StorageTransaction;token:ReadEligibility;target:HistoryTarget;report:HistorySupportReport;goalId:string}):number{
+ const {tx,token,target,report,goalId}=input;
+ if(report.continuity!=='same-source-instances-normal-use-v1')return 0;
+ const seen=new Set(tx.all(`SELECT r.observed_key FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
+  WHERE r.owner_id=? AND r.contact_id=? AND c.goal_id=? AND r.observed_scheme='source-table-local-v1'`,[token.owner_id,token.contact_id,goalId]).map(row=>String(row.observed_key)));
+ const aliases=tx.all(`SELECT a.message_id,a.external_key FROM message_alias a JOIN message m ON m.owner_id=a.owner_id AND m.id=a.message_id
+  WHERE a.owner_id=? AND a.contact_id=? AND a.binding_id=? AND a.scheme='local' AND m.availability='available'
+  AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)`,[token.owner_id,token.contact_id,token.binding_id]);
+ const candidates=new Map<string,boolean>();
+ for(const alias of aliases){
+  let key:unknown;try{key=JSON.parse(String(alias.external_key));}catch{continue;}
+  if(!Array.isArray(key)||key.length!==4||key[0]!==token.source_generation
+    ||!target.tables.some(table=>table.partition===key[1]&&table.instance===key[2]))continue;
+  const id=String(alias.message_id);candidates.set(id,Boolean(candidates.get(id))||seen.has(String(alias.external_key)));
+ }
+ let changed=0;
+ for(const [id,present] of candidates)if(!present){
+  tx.run('INSERT INTO history_message_quarantine VALUES(?,?,?,?)',[token.owner_id,token.contact_id,id,'source_absent']);
+  tx.run('UPDATE message SET interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,id]);changed++;
+ }
+ if(changed)tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);
+ return changed;
 }
 /**
  * 同一页的逐条接受：先排除，再按稳定来源身份幂等建立消息，最后补可认证字段。
@@ -61,6 +88,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
     let reason: string | null = prepared.reason;
     let message: StorageRow | undefined;
     let excluded = false;
+    if(reason==='source_recalled'||reason==='source_absent')excluded=true;
     if (inputRecord.stateAssurance!=='verified') {
       const exclusion=prepared.localKey&&(sourceExcluded(tx,token,prepared,report)?'source_excluded':input.exclude?.({localKey:prepared.localKey,serverKey:prepared.serverKey})??null);
       if (exclusion) { reason=exclusion; excluded=true; }
@@ -100,7 +128,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
           if (key) tx.run('INSERT OR IGNORE INTO message_alias(owner_id,id,contact_id,binding_id,scheme,external_key,message_id) VALUES(?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, token.binding_id, scheme, key, message!.id]);
       }
     }
-    if (reason && reason !== 'source_excluded' && reason !== 'clear_excluded') quarantined = true;
+    if (reason && reason !== 'source_excluded' && reason !== 'clear_excluded' && reason !== 'source_recalled' && reason !== 'source_absent') quarantined = true;
     tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, captureId, index, excluded ? 'excluded' : reason ? 'quarantined' : 'normalized', reason ? null : message!.id, excluded ? null : prepared.raw, prepared.localKey ? 'source-table-local-v1' : null, prepared.localKey, '1', reason]);
   }
   return { quarantined };

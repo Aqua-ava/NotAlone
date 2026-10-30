@@ -25,7 +25,7 @@ function scopeIdentity(scope:HistoryScope):string {
 /** 每实例只绑定一个完整授权token；只经正式窄协议读取，不自动寻找工具或提升支持资格。 */
 class WechatHistoryChannel implements HistoryChannel {
  readonly #guardLoss=Promise.withResolvers<void>();
- readonly guardSession={loss:this.#guardLoss.promise};
+ readonly guardSession={loss:this.#guardLoss.promise,failureCode:()=>this.#native?.stoppedReason??null};
  readonly #executable?:string;
  #native?:NarrowWechatClient;
  #opening?:Promise<NarrowWechatClient>;

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -126,7 +128,7 @@ func TestNotAloneSnapshotReadsBodiesOnlyForAttestedSentOrReceivedStates(t *testi
 		INSERT INTO ` + quoteIdent(f.table) + `(local_id,server_id,local_type,real_sender_id,status,message_content) VALUES
 		(1,10,1,1,2,'合成已发送'),(2,11,1,2,3,'合成已接收'),
 		(3,0,1,1,8,'合成发送中'),(4,0,1,1,9,'合成发送失败'),
-		(5,0,1,1,4,'合成已撤回'),(6,0,1,1,5,'合成已删除'),
+		(5,99,10000,3,4,'合成已撤回'),(6,0,1,1,5,'合成已删除'),
 		(7,12,1,1,99,'合成未知状态'),(8,13,1,3,2,'合成未知发送人');`); err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +137,7 @@ func TestNotAloneSnapshotReadsBodiesOnlyForAttestedSentOrReceivedStates(t *testi
 		notaloneStatusRule{LocalType: 1, Sender: "contact", Status: 3, State: notaloneMessageReceived, RequiresServerID: true},
 		notaloneStatusRule{LocalType: 1, Sender: "owner", Status: 8, State: notaloneMessagePending},
 		notaloneStatusRule{LocalType: 1, Sender: "owner", Status: 9, State: notaloneMessageFailed},
-		notaloneStatusRule{LocalType: 1, Sender: "owner", Status: 4, State: notaloneMessageRecalled},
+		notaloneStatusRule{LocalType: 10000, Sender: "unknown", Status: 4, State: notaloneMessageRecalled},
 		notaloneStatusRule{LocalType: 1, Sender: "owner", Status: 5, State: notaloneMessageDeleted},
 	)
 	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, profile)
@@ -152,8 +154,15 @@ func TestNotAloneSnapshotReadsBodiesOnlyForAttestedSentOrReceivedStates(t *testi
 		if want && (record.StateAssurance != "verified" || record.Text == nil) {
 			t.Fatalf("sent/received文字应获准：%#v", record)
 		}
-		if !want && (record.StateAssurance != "unverified" || record.Text != nil) {
+		if record.LocalID != nil && *record.LocalID == "5" && (record.MessageState != "recalled" || record.StateAssurance != "verified" || record.Text != nil) {
+			t.Fatalf("实测撤回须作为已核验终态输出，但不得取正文：%#v", record)
+		}
+		if !want && (record.LocalID == nil || *record.LocalID != "5") && (record.StateAssurance != "unverified" || record.MessageState != "" || record.Text != nil) {
 			t.Fatalf("非最终或不明状态不得取正文：%#v", record)
 		}
+	}
+	encoded, _ := json.Marshal(page)
+	if strings.Contains(string(encoded), "合成已撤回") {
+		t.Fatal("已撤回正文不得进入结果")
 	}
 }

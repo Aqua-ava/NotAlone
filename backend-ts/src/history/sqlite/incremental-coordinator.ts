@@ -35,6 +35,7 @@ function safeError(error: unknown): string {
   return 'history_incremental_failed';
 }
 const bindingKey = (binding: IncrementalBinding) => JSON.stringify([binding.contact_id, binding.binding_id, binding.grant_id, binding.selection_generation]);
+const canContinueIncremental=(coverage:HistoryCoverage)=>coverage.phase==='complete'||Boolean(coverage.traversalComplete&&coverage.incremental?.cursorPresent&&['ready','incomplete'].includes(coverage.incremental.phase));
 function notification() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
 
 /**
@@ -144,11 +145,11 @@ export class IncrementalHistoryCoordinator {
     this.#active.set(job.contactId, active);
     active.done = (async () => {
       let coverage = await this.#history.coverage(job.contactId);
-      if (coverage.phase !== 'complete') {
+      if (!canContinueIncremental(coverage)) {
         // 正式宿主有独立 FirstHistoryCoordinator；不能与它并发启动同一联系人的首次历史。
         if (this.#firstHistoryManagedExternally) throw new StorageFailure('history_incomplete');
         coverage = await this.#history.synchronize(job.contactId, active.controller.signal);
-        if (coverage.phase !== 'complete') throw new StorageFailure(coverage.failureCode ?? 'history_incomplete');
+        if (!canContinueIncremental(coverage)) throw new StorageFailure(coverage.failureCode ?? 'history_incomplete');
       }
       // 交接不可证明（终页没有保守续读游标）时保持可见不可用，不发起渠道读取。
       if (coverage.incremental?.phase === 'unavailable') throw new StorageFailure(coverage.incremental.failureCode ?? 'history_incremental_unavailable');

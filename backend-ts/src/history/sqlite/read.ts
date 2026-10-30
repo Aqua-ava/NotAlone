@@ -27,22 +27,32 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
  const continuityBlocked=Boolean(tx.get(`SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=? UNION ALL
   SELECT 1 FROM history_guard_lease g JOIN database_instance d ON d.slot=1 WHERE g.owner_id=? AND g.contact_id=? AND (g.state<>'active' OR g.runtime_id<>d.runtime_id) LIMIT 1`,[owner,contact,owner,contact]));
  const blockedBinding=continuityBlocked&&!goal?tx.get("SELECT id FROM conversation_binding WHERE owner_id=? AND contact_id=? AND state='verified'",[owner,contact]):undefined;
- const counts=tx.get("SELECT count(*) AS messages,count(CASE WHEN kind<>'text' THEN 1 END) AS nontext FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available')",[owner,contact])!;
+ const counts=tx.get("SELECT count(*) AS messages,count(CASE WHEN kind<>'text' THEN 1 END) AS nontext FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available')",[owner,contact])!;
  const pages=goal?tx.get('SELECT count(*) AS n FROM sync_capture WHERE owner_id=? AND goal_id=?',[owner,goal.id])!.n:0n;
  const quarantined=tx.get("SELECT count(*) AS n FROM capture_record WHERE owner_id=? AND contact_id=? AND state='quarantined' AND availability='available'",[owner,contact])!.n;
- const stateQuarantined=safeCount(quarantined)>0||Boolean(tx.get('SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=?',[owner,contact]));
- return {goalId:goal?String(goal.id):null,contactId:contact,bindingId:goal?String(goal.binding_id):blockedBinding?String(blockedBinding.id):null,
+ const stateQuarantined=safeCount(quarantined)>0||Boolean(tx.get("SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND reason NOT IN ('source_recalled','source_absent')",[owner,contact]));
+ let traversalComplete=false;
+ if(!continuityBlocked&&goal?.cursor===null&&['complete','incomplete'].includes(String(goal.state))){
+  try{
+   const target=JSON.parse(String(goal.target_json)),completed=JSON.parse(String(goal.completed_partitions));
+   traversalComplete=Array.isArray(target.partitions)&&target.partitions.length>0&&Array.isArray(completed)
+    &&target.partitions.every((partition:unknown)=>completed.includes(partition));
+  }catch{/* 缺少可核验的目标或覆盖记录时不推断遍历已完成。 */}
+ }
+ let normalUseTraversal=false;
+ if(traversalComplete)try{normalUseTraversal=JSON.parse(String(goal?.support_json)).continuity==='same-source-instances-normal-use-v1';}catch{/* 未知支持档沿用保守状态。 */}
+ return {goalId:goal?String(goal.id):null,contactId:contact,bindingId:goal?String(goal.binding_id):blockedBinding?String(blockedBinding.id):null,traversalComplete,
   phase:continuityBlocked||stateQuarantined?'incomplete':!goal?'not_started':goal.state==='running'?'running':goal.state==='complete'?'complete':'incomplete',
   failureCode:continuityBlocked?'history_source_continuity_unverified':stateQuarantined?'history_identity_quarantined':goal?.failure_code?String(goal.failure_code):null,cursor:goal?.cursor?String(goal.cursor):null,
   messageCount:safeCount(counts.messages),nonTextCount:safeCount(counts.nontext),pageCount:safeCount(pages),quarantinedCount:safeCount(quarantined),
-  incremental:continuityBlocked?{...incrementalCoverage(historyGoal,incrementalGoal),phase:'invalidated',failureCode:'history_source_continuity_unverified'}:stateQuarantined?{...incrementalCoverage(historyGoal,incrementalGoal),phase:'incomplete',failureCode:'history_identity_quarantined'}:incrementalCoverage(historyGoal,incrementalGoal)};
+  incremental:continuityBlocked?{...incrementalCoverage(historyGoal,incrementalGoal),phase:'invalidated',failureCode:'history_source_continuity_unverified'}:stateQuarantined&&!normalUseTraversal?{...incrementalCoverage(historyGoal,incrementalGoal),phase:'incomplete',failureCode:'history_identity_quarantined'}:incrementalCoverage(historyGoal,incrementalGoal)};
 }
 export function readMessages(tx:StorageTransaction,owner:string,contact:string,limit=101,before?:string):HistoryRead {
  const coverage=readCoverage(tx,owner,contact);
  if(!Number.isSafeInteger(limit)||limit<1||limit>101)throw new StorageFailure('history_request_invalid');
  const cursor=before?tx.get('SELECT display_no FROM message WHERE owner_id=? AND contact_id=? AND id=?',[owner,contact,before]):undefined;
  if(before&&!cursor)throw new StorageFailure('history_cursor_invalid');
- const rows=tx.all(`SELECT * FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available')${cursor?' AND display_no<?':''} ORDER BY display_no DESC LIMIT ?`,cursor?[owner,contact,cursor.display_no,limit]:[owner,contact,limit]);
+ const rows=tx.all(`SELECT * FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available')${cursor?' AND display_no<?':''} ORDER BY display_no DESC LIMIT ?`,cursor?[owner,contact,cursor.display_no,limit]:[owner,contact,limit]);
  const messages=rows.map(r=>({id:String(r.id),contactId:contact,bindingId:String(r.binding_id),sender:r.sender_role,
   kind:r.kind,text:r.text_body,originalType:r.original_type,sentAt:r.sent_at===null?null:String(r.sent_at),timePrecision:r.time_precision,
   orderScheme:r.order_scheme,orderKey:r.order_key,status:r.status_code===null||r.status_code===undefined?null:String(r.status_code),

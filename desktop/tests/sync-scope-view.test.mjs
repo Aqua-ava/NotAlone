@@ -130,7 +130,7 @@ test('消息历史覆盖按联系人显示四态、当前进度和汇总，关�
  await expect(section.getByText('合成联系人2',{exact:true})).toBeVisible();
  await page.evaluate(()=>window.update());
  await expect(section.getByText('当前联系人：合成联系人2',{exact:true})).toBeVisible();
- await expect(section.getByText('本机历史已读完 · 已保存 250 条文字消息',{exact:true})).toBeVisible();
+ await expect(section.getByText('本机历史已读完 · 已保存 250 条文字消息、0 条非文字占位',{exact:true})).toBeVisible();
  await expect(section.getByText('已读完 2 / 4 个会话的本机历史',{exact:true})).toBeVisible();
  await expect(section.getByRole('progressbar')).toHaveAttribute('value','2');
  await section.getByText('查看已读完的会话（2）',{exact:true}).click();
@@ -181,6 +181,7 @@ test('联系人详情只显示当前联系人的覆盖进度，切换时不沿�
  {bindingId:'a1',contactId:'a',phase:'complete',messageCount:200,pageCount:2,nonTextCount:0,failureCode:null},
  {bindingId:'b1',contactId:'b',phase:'incomplete',messageCount:10,pageCount:1,nonTextCount:0,failureCode:'cli_timeout'}]}};
  window.notalone={bindings:{getState:async()=>bindings,onStateChanged:()=>()=>{},refreshSaved:async()=>{}},
+ historyClear:{getState:async()=>({revision:1,contactId:null,scopeRevision:1,phase:'idle',clear:null,resync:null,busy:null,error:null}),onStateChanged:()=>()=>{},refresh:async()=>{}},
  syncControl:{getState:async()=>sync,onStateChanged:()=>()=>{},refresh:async()=>{}}};
  const root=createRoot(document.getElementById('root'));
  const render=id=>root.render(<ContactsPage session={{state:{contacts,selectedContactId:id,directoryPhase:'ready'},refreshContacts:async()=>{}}} navigate={()=>{}}/>);
@@ -188,15 +189,15 @@ test('联系人详情只显示当前联系人的覆盖进度，切换时不沿�
  `);
  const summary=page.getByRole('complementary',{name:'本次联系人资料摘要'});
  await expect(summary.getByText('本机历史已读完',{exact:true})).toBeVisible();
- await expect(summary.getByText('本机历史已读完 · 已保存 200 条文字消息',{exact:true})).toBeVisible();
+ await expect(summary.getByText('本机历史已读完 · 已保存 200 条文字消息、0 条非文字占位',{exact:true})).toBeVisible();
  await page.evaluate(()=>window.select('b'));
- await expect(summary.getByText('历史尚未读完',{exact:true})).toBeVisible();
- await expect(summary.getByText('历史尚未读完 · 已保存 10 条文字消息',{exact:true})).toBeVisible();
+ await expect(summary.getByText('历史读取受阻',{exact:true})).toBeVisible();
+ await expect(summary.getByText('历史读取受阻 · 已保存 10 条文字消息、0 条非文字占位',{exact:true})).toBeVisible();
  await expect(summary.getByText('本机历史已读完',{exact:true})).toHaveCount(0);
 });
 
 
-test('SQLite总开关仅保存读取资格，不显示全部范围或跳过历史入口',async t=>{
+test('SQLite总开关先核验读取能力，关闭或未就绪时不误报功能尚未开放',async t=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page,`
@@ -208,12 +209,12 @@ test('SQLite总开关仅保存读取资格，不显示全部范围或跳过历�
  enable:async request=>{window.calls.push(request);state={...state,revision:state.revision+1,report:{...state.report,enabled:true}};for(const fn of listeners)fn(state);}};
  createRoot(document.getElementById('root')).render(<SyncControlPanel bridge={bridge}/>);
  `);
- await expect(page.getByText('正文同步尚未开放',{exact:true})).toBeVisible();
+ await expect(page.getByText('后台正文同步已关闭',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:/确认同步全部微信私聊|重试自动关联|允许读取历史|暂不读取/})).toHaveCount(0);
  await expect(page.getByText('请到「联系人」逐人确认私聊；每次确认包含该会话本机可读的历史文字和后续新消息，新私聊不会自动纳入。',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'允许授权范围读取',exact:true}).click();
+ await page.getByRole('button',{name:'开启后台同步',exact:true}).click();
  assert.deepEqual(await page.evaluate(()=>window.calls),[{scopeRevision:4}]);
- await expect(page.getByText('正文同步尚未开放',{exact:true})).toBeVisible();
- await expect(page.getByText('已保存：允许授权范围读取',{exact:true})).toBeVisible();
+ await expect(page.getByText('正文读取正在核验或暂时不可用，请查看各会话状态。',{exact:true})).toBeVisible();
+ await expect(page.getByText('已开启同步，等待读取能力核验',{exact:true})).toBeVisible();
  await expect(page.getByText('后台正文同步已开启',{exact:true})).toHaveCount(0);
 });

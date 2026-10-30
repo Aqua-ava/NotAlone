@@ -21,7 +21,7 @@ const allowedErrors = new Set(['history_source_continuity_unverified', 'history_
   'history_schema_changed', 'history_scope_changed', 'history_message_state_unverified', 'history_source_lifecycle_unverified',
   'history_snapshot_runtime_proof_required', 'history_partition_coverage_runtime_proof_required', 'read_not_authorized',
   'read_eligibility_stale', 'history_contact_gateway_unavailable', 'history_contact_not_found', 'history_closed',
-  'history_identity_conflict', 'history_identity_insufficient', 'history_partitions_missing', 'history_incomplete',
+  'history_identity_conflict', 'history_identity_insufficient', 'history_identity_quarantined', 'history_partitions_missing', 'history_incomplete',
   'message_identity_conflict', 'message_identity_insufficient', 'history_first_read_failed', 'history_first_directory_failed']);
 function safeError(error: unknown): string {
   return error instanceof StorageFailure && allowedErrors.has(error.code) ? error.code : 'history_first_read_failed';
@@ -109,6 +109,9 @@ export class FirstHistoryCoordinator {
         const coverage = await this.#history.coverage(contactId);
         if (this.#closed || revision !== this.#revision) return;
         if (coverage.phase === 'complete') { this.#state(contactId, 'complete'); continue; }
+        if(coverage.traversalComplete&&coverage.incremental?.cursorPresent&&['ready','incomplete'].includes(coverage.incremental.phase)){
+          this.#attempted.add(key);this.#state(contactId,'incomplete',coverage.failureCode??'history_incomplete');continue;
+        }
         this.#queued.set(contactId, { contactId, key }); this.#state(contactId, 'queued');
       } catch (error) { this.#attempted.add(key); this.#state(contactId, 'blocked', safeError(error)); }
     }

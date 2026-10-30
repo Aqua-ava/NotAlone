@@ -27,7 +27,7 @@ const incrementalReasons: Record<string, string> = {
   history_suppression_changed: '历史截断状态已变化，增量读取已停止。',
   history_page_invalid: '读取返回了不一致的分页，增量读取已停止。',
   history_deletion_in_progress: '相关消息正在删除，本次增量读取未提交。',
-  history_identity_quarantined: '部分新消息身份存在冲突，已隔离待核验。',
+  history_identity_quarantined: '部分新消息的身份、状态或内容尚未核验，已隔离；其他已核验消息继续同步。',
   history_native_unavailable: '暂时无法读取微信，稍后会自动重试。',
   history_native_timeout: '读取微信暂时超时，稍后会自动重试。',
   history_interrupted: '本次新消息读取已中断，稍后会自动重试。',
@@ -43,7 +43,7 @@ const reasons: Record<string, string> = {
   history_empty: '暂时没有读到聊天记录，还不能确认历史是否读完。',
   cli_message_table_missing: '暂时无法打开本机微信记录，开启同步时会自动重试。',
   history_page_stalled: '读取更早的聊天时暂时中断，开启同步时会自动重试。',
-  history_identity_quarantined: '部分消息身份或内容存在冲突，已隔离待核验，不作为聊天或回复依据。',
+  history_identity_quarantined: '部分消息的身份、状态或内容尚未核验，已隔离，不作为聊天或回复依据。已核验消息可正常读取。',
   history_support_unsupported: '当前微信结构明确不支持，正文读取保持关闭。',
   history_support_unverified: '当前微信读取能力尚未核验，正文读取保持关闭。',
   history_message_state_unverified: '微信仍有消息状态未核验，正文读取保持关闭。',
@@ -61,7 +61,8 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable }: 
   coverages?: HistoryCoverage[]; contactId: string; bodyAvailable?: boolean;
 }) {
   const rows = coverages?.filter(item => item.contactId === contactId);
-  const historyLabel = (row: HistoryCoverage) => row.failureCode || row.incrementalFailureCode
+  const historyLabel = (row: HistoryCoverage) => bodyAvailable !== false && row.failureCode === 'history_identity_quarantined'
+    ? '部分历史尚未核验' : row.failureCode || row.incrementalFailureCode
     ? bodyAvailable === false ? '读取能力核验受阻' : '历史读取受阻'
     : bodyAvailable === false && row.phase === 'syncing' ? '正在核验读取能力' : labels[row.phase];
   const incrementalLabel = (phase: HistoryIncrementalPhase) => bodyAvailable === false ? ({

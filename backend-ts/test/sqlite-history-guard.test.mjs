@@ -4,6 +4,33 @@ import {fixture} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
 import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
+import {preflightGeneration} from '../src/history/sqlite/continuity.ts';
+
+function emptyLegacyContinuityTx({tables=['history_continuity_fence','history_continuity_scope'],fenced=true,scope={
+ owner_id:'owner',contact_id:'contact',conversation_id:'conversation',source_generation:'source-1',tables_json:''
+}}={}){
+ const names=new Set(tables),queries=[],runs=[];let hasFence=fenced,currentScope=scope;
+ return {
+  queries,runs,
+  all(sql){assert.match(sql,/sqlite_schema/);return [...names].map(name=>({name}));},
+  get(sql){queries.push(sql);
+   if(sql.includes('FROM history_continuity_fence'))return hasFence?{present:1}:undefined;
+   if(sql.includes('FROM history_continuity_scope'))return currentScope;
+   if(sql.includes('FROM history_guard_lease')){assert.ok(names.has('history_guard_lease'),'must not query a guard table absent from this registry');return undefined;}
+   if(sql.includes('FROM database_instance'))return {runtime_id:'runtime'};
+   const artifact=[...names].find(name=>sql.includes(`FROM ${name} `));
+   if(artifact)return undefined;
+   throw new Error(`unexpected query: ${sql}`);
+  },
+  run(sql){runs.push(sql);
+   if(sql.startsWith('DELETE FROM history_continuity_fence'))hasFence=false;
+   else if(sql.startsWith('DELETE FROM history_continuity_scope'))currentScope=undefined;
+   else if(sql.startsWith('DELETE FROM history_guard_lease'))assert.ok(names.has('history_guard_lease'));
+   else throw new Error(`unexpected mutation: ${sql}`);
+   return {changes:1};
+  }
+ };
+}
 
 function guardedChannelFactory(state){
  return ()=>{
@@ -177,15 +204,73 @@ test('无法持久记录失证时关闭存储，重开后不能冒充守卫仍�
  assert.equal((await reopened.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact,limit:100})).replyEligibility,'history_incomplete');
 });
 
-test('守卫断开后永久停读，旧许可不能重新开启',async t=>{
+test('无守卫租约的预目标失败空范围只清除围栏与空范围元数据',async()=>{
+ const artifacts=['read_goal','sync_capture','capture_record','message','message_alias','history_message_quarantine',
+  'history_deletion_fence','history_source_exclusion','history_cutoff','history_cutoff_member','history_restore'];
+ const tx=emptyLegacyContinuityTx({tables:['history_continuity_fence','history_continuity_scope','history_guard_lease','database_instance',...artifacts]});
+ assert.equal(preflightGeneration(tx,{owner_id:'owner',contact_id:'contact',conversation_id:'conversation',source_generation:'source-1'}),true);
+ assert.deepEqual(tx.runs.map(sql=>sql.split(' WHERE ')[0]),[
+  'DELETE FROM history_guard_lease','DELETE FROM history_continuity_fence','DELETE FROM history_continuity_scope'
+ ]);
+ assert.match(tx.runs[0],/state='lost'/,'仅允许删除失效租约；本模型中没有租约行');
+ assert.equal(tx.queries.some(sql=>sql.includes('FROM history_guard_lease')),true,'只检查租约表，不要求必须存在租约');
+ assert.equal(preflightGeneration(tx,{owner_id:'owner',contact_id:'contact',conversation_id:'conversation',source_generation:'source-1'}),true);
+ assert.equal(tx.runs.length,3,'重试预检不重复清理或写入目标、历史数据');
+});
+
+test('较旧精简注册表缺少可选状态表时，空范围恢复仅查已存在表',async()=>{
+ const tx=emptyLegacyContinuityTx();
+ assert.equal(preflightGeneration(tx,{owner_id:'owner',contact_id:'contact',conversation_id:'conversation',source_generation:'source-1'}),true);
+ assert.deepEqual(tx.runs.map(sql=>sql.split(' WHERE ')[0]),[
+  'DELETE FROM history_continuity_fence','DELETE FROM history_continuity_scope'
+ ]);
+ assert.ok(tx.queries.every(sql=>!/(history_guard_lease|read_goal|sync_capture|capture_record|message_alias|message_quarantine|deletion_fence|source_exclusion|history_cutoff|history_restore)/.test(sql)),
+  '缺失于 schema 的表不应被直接查询');
+});
+
+test('空历史首次尝试的守卫断开后可安全重建连续性，旧守卫仍失效',async t=>{
  const f=await fixture(t),contact=f.saved[0].contact_id,token=await f.contacts.eligibility(contact);
  assert.equal(await f.storage.execute('history.preflightGeneration',{token}),true);
  assert.equal(await f.storage.execute('history.guardAcquire',{token,guardId:'synthetic-guard-1'}),true);
  assert.equal(await f.storage.execute('history.guardCheck',{token,guardId:'synthetic-guard-1'}),true);
  assert.equal(await f.storage.execute('history.guardRelease',{token,guardId:'synthetic-guard-1'}),true);
  assert.equal(await f.storage.execute('history.guardCheck',{token,guardId:'synthetic-guard-1'}),false);
- assert.equal(await f.storage.execute('history.guardAcquire',{token,guardId:'synthetic-guard-2'}),false);
- assert.equal(await f.storage.execute('history.preflightGeneration',{token}),false);
+ assert.equal((await f.service.coverage(contact)).phase,'incomplete','释放守卫先持久化围栏');
+ assert.equal(await f.storage.execute('history.preflightGeneration',{token}),true,'无历史和边界时，预检重建空的连续性基线');
+ assert.equal((await f.service.coverage(contact)).phase,'not_started','只清除了围栏元数据，没有制造历史覆盖');
+ assert.equal(await f.storage.execute('history.guardAcquire',{token,guardId:'synthetic-guard-2'}),true);
+ assert.equal(await f.storage.execute('history.guardCheck',{token,guardId:'synthetic-guard-1'}),false,'旧守卫凭证不能恢复');
+ assert.equal((await f.service.coverage(contact)).messageCount,0);
+});
+
+test('同范围活守卫的竞争申请失败但不毒化当前守卫',async t=>{
+ const f=await fixture(t),contact=f.saved[0].contact_id,token=await f.contacts.eligibility(contact);
+ assert.equal(await f.storage.execute('history.preflightGeneration',{token}),true);
+ assert.equal(await f.storage.execute('history.guardAcquire',{token,guardId:'synthetic-live-guard'}),true);
+ assert.equal(await f.storage.execute('history.guardAcquire',{token,guardId:'synthetic-competing-guard'}),false);
+ assert.equal(await f.storage.execute('history.preflightGeneration',{token}),true);
+ assert.equal(await f.storage.execute('history.guardCheck',{token,guardId:'synthetic-live-guard'}),true);
+});
+
+test('已观察目标即使无消息也不允许自动重建连续性基线',async t=>{
+ const f=await fixture(t),contact=f.saved[0].contact_id,token=await f.contacts.eligibility(contact);
+ assert.equal(await f.storage.execute('history.preflightGeneration',{token}),true);
+ assert.equal(await f.storage.execute('history.preflightContinuity',{token,target:f.target}),true);
+ await f.storage.execute('history.markContinuityLost',{token});
+ assert.equal(await f.storage.execute('history.preflightGeneration',{token}),false,'目标分片清单已经成为读取基线的一部分');
+ assert.equal((await f.service.coverage(contact)).messageCount,0);
+});
+
+test('仅有未完成目标且没有捕获正文时仍保留连续性围栏',async t=>{
+ const f=await fixture(t),state={created:0,closed:0},create=guardedChannelFactory(state),contact=f.saved[0].contact_id;
+ const history=new SqliteHistoryService(f.storage,f.contacts,()=>{
+  const channel=create();channel.page=async()=>{throw new StorageFailure('history_native_unavailable');};return channel;
+ });t.after(()=>history.close());
+ await assert.rejects(history.synchronize(contact),{code:'history_native_unavailable'});
+ const coverage=await history.coverage(contact);assert.equal(coverage.phase,'incomplete');assert.equal(coverage.messageCount,0);
+ const token=await f.contacts.eligibility(contact);
+ assert.equal(await f.storage.execute('history.preflightGeneration',{token}),false,'读目标自身也是受保护的续读资料');
+ assert.equal((await history.coverage(contact)).failureCode,'history_source_continuity_unverified');
 });
 
 test('实际数据库重开后的运行代次不同，未续证的旧守卫不能续读',async t=>{

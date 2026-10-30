@@ -26,6 +26,15 @@ export interface WechatAccountSchema {
   format: 'wechat-account-schema-v1'; status: 'unverified'; accountKey: string; sourceGeneration: string;
   schemaFingerprint: string; tables: (Omit<WechatTableSchema, 'role'> & {role: 'contact' | 'session'})[]; normalHistory: false;
 }
+/** 一次已经关闭的固定快照核验记录，不授予后续快照或正文读取资格。 */
+export interface WechatFixedSnapshotProof {
+  format: 'wechat-history-fixed-snapshot-proof-v1'; status: 'verified';
+  scopeDigest: string; sourceGeneration: string; schemaFingerprint: string;
+  expectedPartitionCount: number; completedPartitionCount: number;
+  namespaceContinuity: true; instanceContinuity: true; snapshotBarrier: true;
+  scope: 'single-fixed-snapshot'; authorizesSubsequentRead: false;
+  partitions: {partition:string;tablePresent:boolean;instance:string|null;preSample:string;postSample:string;readerPinned:true;sourceInstanceHeld:true}[];
+}
 export interface WechatAccountMetadata {
   format: 'wechat-account-metadata-v1'; status: 'verified' | 'unverified'; reason: string | null;
   accountKey: string; identityScheme: 'wechat.account.v1'; sourceGeneration: string; supportProfile: string;
@@ -91,7 +100,7 @@ const allowedErrors = new Set([
   'history_cursor_invalid', 'history_message_state_unverified', 'history_nonce_unavailable',
   'history_page_budget_exhausted', 'history_page_read_failed', 'history_shards_changed',
   'history_snapshot_cancelled', 'history_snapshot_closed', 'history_snapshot_unavailable',
-  'history_snapshot_window_changed', 'history_text_unknown', 'history_text_invalid',
+  'history_snapshot_window_changed', 'history_snapshot_proof_incomplete', 'history_text_unknown', 'history_text_invalid',
   'history_test_sender_unverified', 'history_test_sender_ambiguous', 'history_test_new_rows_ambiguous',
   'history_test_type_unverified', 'history_test_key_unverified',
   'history_tail_unsupported', 'history_tail_baseline_too_large', 'history_boundary_unsupported', 'history_boundary_candidate_too_large',
@@ -270,13 +279,17 @@ function historyTarget(value: unknown, scope: ResolvedWechatScope, schema?: Wech
 }
 function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | 'quarantine' = 'normal'): HistoryRecord {
   const quarantine = mode === 'quarantine';
-  const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status', 'stateAssurance']);
+  const hasMessageState=!!value&&typeof value==='object'&&Object.hasOwn(value,'messageState');
+  const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status', 'stateAssurance',...(hasMessageState?['messageState']:[])]);
   const partition = hash(row.partition), table = hash(row.table);
   if (!target.tables.some(candidate => candidate.partition === partition && candidate.instance === table)
     || !['owner', 'contact', 'unknown'].includes(row.sender as string)
     || !['text', 'image', 'voice', 'video', 'file', 'sticker', 'other'].includes(row.kind as string)
     || !['verified', 'unverified'].includes(row.stateAssurance as string) || quarantine && row.stateAssurance !== 'unverified'
     || !quarantine && row.stateAssurance === 'unverified' && row.text !== null) return fail();
+  if(hasMessageState&&(row.stateAssurance!=='verified'||!['sent','received','recalled','absent'].includes(row.messageState as string)
+    ||row.messageState==='sent'&&row.sender!=='owner'||row.messageState==='received'&&row.sender!=='contact'
+    ||['recalled','absent'].includes(row.messageState as string)&&(row.kind!=='other'||row.text!==null||row.localId===null)))return fail();
   let body: string | null = null;
   if (row.kind === 'text') {
     if (row.text !== null) {
@@ -294,7 +307,7 @@ function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | '
   if(quarantine && metadataKind(originalType==='unknown'?null:originalType)!==row.kind)return fail();
   return { partition, table, localId: row.localId === null ? null : exactInteger(row.localId), serverId: row.serverId === null ? null : exactInteger(row.serverId),
     sender: row.sender as HistoryRecord['sender'], kind: row.kind as HistoryRecord['kind'], text: body, originalType,
-    sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'] };
+    sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'],...(hasMessageState?{messageState:row.messageState as HistoryRecord['messageState']}:{}) };
 }
 function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, mode: 'normal' | 'quarantine' = 'normal'): HistoryPage {
   const hasResume = !!value && typeof value === 'object' && Object.hasOwn(value, 'resumeCursor');
@@ -352,6 +365,27 @@ function metadataKind(originalType: string | null): HistoryRecord['kind'] {
     case 47n: return 'sticker';
     default: return 'other';
   }
+}
+function fixedSnapshotProof(value:unknown,scope:ResolvedWechatScope,schema:WechatSchemaInspection):WechatFixedSnapshotProof{
+  const row=object(value,['format','status','scopeDigest','sourceGeneration','schemaFingerprint','expectedPartitionCount','completedPartitionCount',
+    'namespaceContinuity','instanceContinuity','snapshotBarrier','scope','authorizesSubsequentRead','partitions']);
+  if(row.format!=='wechat-history-fixed-snapshot-proof-v1'||row.status!=='verified'||row.scope!=='single-fixed-snapshot'
+    ||row.authorizesSubsequentRead!==false||row.namespaceContinuity!==true||row.instanceContinuity!==true||row.snapshotBarrier!==true
+    ||hash(row.scopeDigest)!==schema.scopeDigest||row.sourceGeneration!==scope.sourceGeneration||row.schemaFingerprint!==schema.schemaFingerprint)return fail();
+  const partitions=list(row.partitions,128,value=>{
+    const part=object(value,['partition','tablePresent','instance','preSample','postSample','readerPinned','sourceInstanceHeld']);
+    const partition=hash(part.partition),expected=schema.tables.find(table=>table.partition===partition);
+    const preSample=unsigned(part.preSample),postSample=unsigned(part.postSample);
+    if(!schema.checkedPartitions.includes(partition)||part.tablePresent!==Boolean(expected)
+      ||part.instance!==(expected?.target??null)||preSample!==postSample||part.readerPinned!==true||part.sourceInstanceHeld!==true)return fail();
+    return {partition,tablePresent:Boolean(expected),instance:expected?.target??null,preSample,postSample,readerPinned:true as const,sourceInstanceHeld:true as const};
+  },1);
+  unique(partitions.map(part=>part.partition));
+  const expectedPartitionCount=integer(row.expectedPartitionCount,128),completedPartitionCount=integer(row.completedPartitionCount,128);
+  if(expectedPartitionCount!==schema.checkedPartitions.length||completedPartitionCount!==expectedPartitionCount||partitions.length!==expectedPartitionCount)return fail();
+  return {format:'wechat-history-fixed-snapshot-proof-v1',status:'verified',scopeDigest:schema.scopeDigest,sourceGeneration:scope.sourceGeneration,
+    schemaFingerprint:schema.schemaFingerprint,expectedPartitionCount,completedPartitionCount,namespaceContinuity:true,instanceContinuity:true,snapshotBarrier:true,
+    scope:'single-fixed-snapshot',authorizesSubsequentRead:false,partitions};
 }
 function metadataRecord(value: unknown, schema: WechatSchemaInspection): WechatMessageMetadataRecord {
   const item = object(value, ['partition', 'table', 'localId', 'serverId', 'originalType', 'status', 'createTime', 'sender', 'statusSemantics', 'normalHistory', 'observationScope']);
@@ -470,6 +504,7 @@ export class NarrowWechatClient {
   #stopping?: Promise<void>;
   constructor(options: NarrowWechatClientOptions) { this.#options = validatedOptions(options); }
   get stopped():Promise<void>{return this.#stoppedSignal.promise;}
+  get stoppedReason():string|null{return this.#stopped?this.#failureCode:null;}
   inspectAccountSchema(signal?: AbortSignal): Promise<WechatAccountSchema> {
     try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
     return this.#enqueue(() => this.#request({op:'inspect-account-schema',consent:'account-schema-v1'}, value => {
@@ -531,6 +566,15 @@ export class NarrowWechatClient {
       return this.#request({ op: 'observe-metadata', account: scope.accountKey, conversation: scope.conversationKey,
         consent: 'selected-message-metadata-v1', kind }, value => metadataObservation(value, scope, schema, kind));
     }, signal);
+  }
+  verifySnapshotMetadataSelected(signal?:AbortSignal):Promise<WechatFixedSnapshotProof>{
+    try{signalValid(signal);}catch{return Promise.reject(new StorageFailure('history_request_invalid'));}
+    return this.#enqueue(async()=>{
+      const scope=this.#selected,schema=this.#schema;
+      if(!scope||!schema)return fail('history_scope_unverified');
+      return this.#request({op:'verify-snapshot-metadata',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-snapshot-metadata-v1'},
+        value=>fixedSnapshotProof(value,scope,schema));
+    },signal);
   }
   observeTestMetadataSelected(action: WechatTestMetadataAction, signal?: AbortSignal): Promise<WechatTestMetadataObservation> {
     try { signalValid(signal); if (!['arm', 'next', 'current'].includes(action)) fail('history_request_invalid'); }

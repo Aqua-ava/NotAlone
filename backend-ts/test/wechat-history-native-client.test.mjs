@@ -57,6 +57,17 @@ async function fixture(t,mode='normal') {
    if(mode==='wrong-target-generation')data={...data,sourceGeneration:'f'.repeat(64)};
    if(mode==='wrong-target-table')data={...data,tables:[{partition:'d'.repeat(64),instance:'f'.repeat(64)}]};
   }
+  if(r.op==='verify-snapshot-metadata'){
+   const partitions=schema.checkedPartitions.map(partition=>{const table=schema.tables.find(item=>item.partition===partition);return {partition,tablePresent:!!table,instance:table?.target??null,preSample:'7',postSample:'7',readerPinned:true,sourceInstanceHeld:true};});
+   data={format:'wechat-history-fixed-snapshot-proof-v1',status:'verified',scopeDigest:crypto.createHash('sha256').update('${account}'+'\\0'+currentConversation).digest('hex'),sourceGeneration:'${generation}',schemaFingerprint:schema.schemaFingerprint,expectedPartitionCount:partitions.length,completedPartitionCount:partitions.length,namespaceContinuity:true,instanceContinuity:true,snapshotBarrier:true,scope:'single-fixed-snapshot',authorizesSubsequentRead:false,partitions};
+   if(mode==='snapshot-proof-wrong-scope')data.scopeDigest='f'.repeat(64);
+   if(mode==='snapshot-proof-missing-partition')data.partitions=[];
+   if(mode==='snapshot-proof-window-changed')data.partitions[0].postSample='8';
+   if(mode==='snapshot-proof-wrong-instance')data.partitions[0].instance='f'.repeat(64);
+   if(mode==='snapshot-proof-promoted')data.authorizesSubsequentRead=true;
+   if(mode==='snapshot-proof-body')data.body='forbidden-sensitive-body';
+   if(mode==='snapshot-proof-cancel')return;
+  }
   if(r.op==='observe-metadata'){
    const rawType={text:'1',image:'3',voice:'34',video:'43',file:'49',sticker:'47',other:'1000'}[r.kind];
    const record={partition:schema.tables[0].partition,table:schema.tables[0].target,localId:'9223372036854775807',serverId:'9007199254740993',originalType:rawType,status:'-9223372036854775808',createTime:'1700000000',sender:'contact',statusSemantics:'unverified',normalHistory:false,observationScope:'single-fixed-snapshot'};
@@ -128,6 +139,11 @@ async function fixture(t,mode='normal') {
    if(mode==='overflow-status')data={...data,records:[{...row,status:'9223372036854775808'}]};
    if(mode==='unverified-with-body')data={...data,records:[{...row,stateAssurance:'unverified'}]};
    if(mode==='missing-state-assurance'){const {stateAssurance,...untrusted}=row;data={...data,records:[untrusted]};}
+   if(mode==='known-recall')data={...data,records:[{...row,sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'}]};
+   if(mode==='unlocated-recall')data={...data,records:[{...row,localId:null,sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'}]};
+   if(mode==='unverified-recall-marker')data={...data,records:[{...row,sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled',stateAssurance:'unverified'}]};
+   if(mode==='forged-recall-body')data={...data,records:[{...row,messageState:'recalled'}]};
+   if(mode==='unknown-message-state')data={...data,records:[{...row,messageState:'anything'}]};
    if(mode==='wrong-text-kind')data={...data,records:[{...row,kind:'image',text:'不能夹带正文'}]};
    if(mode==='oversized-text')data={...data,records:[{...row,text:'x'.repeat(65537)}]};
   }
@@ -159,6 +175,38 @@ async function waitForPid(file) {
  });
 }
 function noProcess(pid){assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});}
+
+test('固定快照核验覆盖全部分片且不授予后续正文读取',async t=>{
+ const f=await fixture(t,'sparse-partitions');
+ await assert.rejects(f.client.verifySnapshotMetadataSelected(),{code:'history_scope_unverified'});
+ await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+ const proof=await f.client.verifySnapshotMetadataSelected();
+ assert.equal(proof.expectedPartitionCount,8);assert.equal(proof.completedPartitionCount,8);
+ assert.equal(proof.partitions.filter(row=>row.tablePresent).length,2);
+ assert.equal(proof.partitions.filter(row=>!row.tablePresent&&row.instance===null).length,6);
+ assert.equal(proof.authorizesSubsequentRead,false);assert.equal(proof.scope,'single-fixed-snapshot');
+ await assert.rejects(f.client.targetSelected(),{code:'history_support_unverified'});
+ const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse);
+ assert.deepEqual(requests.at(-1),{op:'verify-snapshot-metadata',account,conversation,consent:'selected-snapshot-metadata-v1'});
+ assert.equal(requests.some(row=>['target','page','quarantine-target','quarantine-page'].includes(row.op)),false);
+});
+
+test('固定快照核验拒绝遗漏分片、变化窗口、越界身份及正文夹带',async t=>{
+ for(const mode of ['snapshot-proof-wrong-scope','snapshot-proof-missing-partition','snapshot-proof-window-changed','snapshot-proof-wrong-instance','snapshot-proof-promoted','snapshot-proof-body'])await t.test(mode,async t=>{
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+  await assert.rejects(f.client.verifySnapshotMetadataSelected(),{code:'history_protocol_invalid'});
+  const pid=Number(await readFile(f.pidFile,'utf8'));await f.client.close();noProcess(pid);
+ });
+});
+
+test('原生分页保留已认证撤回终态且拒绝撤回正文和未知状态标签',async t=>{
+ for(const mode of ['known-recall','unlocated-recall','unverified-recall-marker','forged-recall-body','unknown-message-state'])await t.test(mode,async t=>{
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+  if(mode==='known-recall'){
+   const page=await f.client.pageSelected(target,null);assert.equal(page.records[0].messageState,'recalled');assert.equal(page.records[0].text,null);
+  }else await assert.rejects(f.client.pageSelected(target,null),{code:'history_protocol_invalid'});
+ });
+});
 
 test('固定制品与argv，resolve后只按自身scope检查结构，两个并发请求串行',async t=>{
  const {client,logFile}=await fixture(t,'serial');

@@ -13,7 +13,9 @@ export interface HistoryContactGateway {
  validate(token:ReadEligibility):Promise<unknown>;
 }
 interface ActiveHistoryRead { controller:AbortController; done:Promise<void>; stop():Promise<void> }
-interface RetainedGuard {channel:HistoryChannel; token:ReadEligibility; guardId:string; failed:boolean; bodyVerified:boolean; release:()=>Promise<void>}
+interface RetainedGuard {channel:HistoryChannel; token:ReadEligibility; guardId:string; failed:boolean; sourceLost:boolean; normalUse:boolean; bodyVerified:boolean; release:()=>Promise<void>}
+interface GuardProof {report:HistorySupportReport;target:HistoryTarget}
+interface GuardResult {guardId?:string;revalidated:boolean}
 const bodyCapabilities=['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'] as const;
 export const historyReaderHolderKey=(contactId:string,generation:string):string=>`history:read_${contactId}_${generation}`;
 /** 可认证的渠道跨批次保留守卫；删除、停读及finally等待真实读者释放。 */
@@ -28,7 +30,7 @@ export class SqliteHistoryService {
  constructor(storage:SqliteStorage,contacts:HistoryContactGateway,channel:HistoryChannel|(()=>HistoryChannel),holders:ActiveHolders=new ActiveHolders()){
   this.storage=storage;this.contacts=contacts;this.createChannel=typeof channel==='function'?channel:()=>channel;this.holders=holders;
  }
- private async withChannel<T>(contactId:string,signal:AbortSignal|undefined,run:(scope:HistoryScope,channel:HistoryChannel,controller:AbortController,registerGoal:(goalId:string)=>void,armGuard:()=>Promise<string|undefined>)=>Promise<T>):Promise<T>{
+ private async withChannel<T>(contactId:string,signal:AbortSignal|undefined,run:(scope:HistoryScope,channel:HistoryChannel,controller:AbortController,registerGoal:(goalId:string)=>void,armGuard:(proof?:GuardProof)=>Promise<GuardResult>,metadataRevalidation:boolean,retainedGuardAvailable:boolean)=>Promise<T>):Promise<T>{
   if(this.closed)throw new StorageFailure('history_closed');
   if(this.active.has(contactId))throw new StorageFailure('history_already_running');
   const controller=new AbortController();
@@ -46,33 +48,41 @@ export class SqliteHistoryService {
   try{
    const previous=this.guards.get(contactId);if(previous?.failed)await previous.release();
    const token=await this.contacts.eligibility(contactId);const scope=await this.storage.execute<HistoryScope>('history.scope',{token});
-   if(!await this.storage.execute<boolean>('history.preflightGeneration',{token}))throw new StorageFailure('history_source_continuity_unverified');
+   const metadataRevalidation=await this.storage.execute<boolean>('history.normalUseRevalidationCandidate',{token});
+   if(!metadataRevalidation&&!await this.storage.execute<boolean>('history.preflightGeneration',{token}))throw new StorageFailure('history_source_continuity_unverified');
    await this.check(scope,controller);retained=this.guards.get(contactId);
    if(retained&&JSON.stringify(retained.token)!==JSON.stringify(token)){await retained.release();throw new StorageFailure('history_source_continuity_unverified');}
    channel=retained?.channel??this.createChannel();
    const register=(key:string,coversAllSources=false)=>releases.push(this.holders.register({key,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources,close:stop}));
    // target会打开固定快照；没有goal之前也必须先登记实际读者。
    register(historyReaderHolderKey(contactId,token.data_generation),true);
-   const armGuard=async():Promise<string|undefined>=>{
-    if(retained){if(retained.failed||!await this.storage.execute<boolean>('history.guardCheck',{token,guardId:retained.guardId}))throw new StorageFailure('history_source_continuity_unverified');return retained.guardId;}
-    if(!channel?.guardSession)return undefined;
-    if(!(channel.guardSession.loss instanceof Promise))throw new StorageFailure('history_guard_invalid');
-    const guardId=randomUUID();if(!await this.storage.execute<boolean>('history.guardAcquire',{token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
-    const entry:RetainedGuard={channel,token,guardId,failed:false,bodyVerified:false,release:async()=>{}};
+   const armGuard=async(proof?:GuardProof):Promise<GuardResult>=>{
+    if(retained){if(retained.failed||!await this.storage.execute<boolean>('history.guardCheck',{token,guardId:retained.guardId}))throw new StorageFailure('history_source_continuity_unverified');
+     if(proof){const checked=await this.storage.execute<{ok:boolean;revalidated:boolean}>('history.prepareNormalUseGuard',{token,target:proof.target,report:proof.report,guardId:retained.guardId});if(!checked.ok)throw new StorageFailure('history_source_continuity_unverified');return {guardId:retained.guardId,revalidated:checked.revalidated};}
+     return {guardId:retained.guardId,revalidated:false};}
+    if(!channel?.guardSession){if(proof)throw new StorageFailure('history_guard_invalid');return {revalidated:false};}
+    const guardSession=channel.guardSession;
+    if(!(guardSession.loss instanceof Promise))throw new StorageFailure('history_guard_invalid');
+    const guardId=randomUUID();let revalidated=false;
+    if(proof){const prepared=await this.storage.execute<{ok:boolean;revalidated:boolean}>('history.prepareNormalUseGuard',{token,target:proof.target,report:proof.report,guardId});if(!prepared.ok)throw new StorageFailure('history_source_continuity_unverified');revalidated=prepared.revalidated;}
+    else if(!await this.storage.execute<boolean>('history.guardAcquire',{token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
+    const entry:RetainedGuard={channel,token,guardId,failed:false,sourceLost:false,normalUse:proof!==undefined,bodyVerified:false,release:async()=>{}};
     try{entry.release=this.holders.register({key:`history:guard_${contactId}_${token.data_generation}`,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources:true,close:async()=>{
      entry.failed=true;this.active.get(contactId)?.controller.abort();
      try{
-      if(!await this.storage.execute<boolean>('history.guardRelease',{token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
+      if(!await this.storage.execute<boolean>('history.guardRelease',{token,guardId,normalUse:entry.normalUse,sourceLost:entry.sourceLost}))throw new StorageFailure('history_source_continuity_unverified');
      }catch(error){await this.storage.close();throw error;}
      finally{await entry.channel.close?.();}
      if(this.guards.get(contactId)===entry)this.guards.delete(contactId);
-    }});}catch(error){await this.storage.execute('history.guardRelease',{token,guardId});throw error;}
+    }});}catch(error){await this.storage.execute('history.guardRelease',{token,guardId,normalUse:entry.normalUse,sourceLost:entry.sourceLost});throw error;}
     this.guards.set(contactId,entry);retained=entry;
-    const lost=()=>{if(!entry.failed){entry.failed=true;this.active.get(contactId)?.controller.abort();void entry.release().catch(()=>{});}};
-    void channel.guardSession.loss.then(lost,lost);
-    return guardId;
+    const lost=()=>{if(!entry.failed){entry.failed=true;this.active.get(contactId)?.controller.abort();
+     const code=guardSession.failureCode?.();entry.sourceLost=typeof code==='string'&&isSourceContinuityLost(new StorageFailure(code));
+     const release=async()=>{if(entry.sourceLost)await this.storage.execute('history.markContinuityLost',{token});await entry.release();};void release().catch(()=>{});}};
+    void guardSession.loss.then(lost,lost);
+    return {guardId,revalidated};
    };
-   try{const result=await run(scope,channel,controller,goalId=>register(`history:${goalId}`),armGuard);if(retained?.failed)throw new StorageFailure('history_source_continuity_unverified');successful=true;return result;}
+   try{const result=await run(scope,channel,controller,goalId=>register(`history:${goalId}`),armGuard,metadataRevalidation,Boolean(retained));if(retained?.failed)throw new StorageFailure('history_source_continuity_unverified');successful=true;return result;}
    catch(error){if(isSourceContinuityLost(error))await this.storage.execute('history.markContinuityLost',{token});throw error;}
   }finally{
    let cleanupError:unknown;
@@ -112,7 +122,7 @@ export class SqliteHistoryService {
  }
  source(contactId:string,recordId:string):Promise<HistorySource>{return this.storage.execute('history.source',{ownerId:this.contacts.ownerId,contactId,recordId});}
  coverage(contactId:string):Promise<HistoryCoverage>{return this.storage.execute('history.coverage',{ownerId:this.contacts.ownerId,contactId});}
- synchronize(contactId:string,signal?:AbortSignal):Promise<HistoryCoverage>{return this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal,armGuard)=>{
+ synchronize(contactId:string,signal?:AbortSignal):Promise<HistoryCoverage>{return this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal,armGuard,metadataRevalidation,retainedGuardAvailable)=>{
   let goal:PendingGoal|undefined;
   const check=()=>this.check(scope,controller);
   try{
@@ -121,12 +131,28 @@ export class SqliteHistoryService {
     if(evidence.accountKey!==scope.accountKey||evidence.conversationKey!==scope.conversationKey||evidence.sourceGeneration!==scope.token.source_generation)throw new StorageFailure('history_external_scope_changed');
     return evidence;
    };
-   const report=await inspect();const guardId=await armGuard();await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
-   goal=await this.storage.execute<PendingGoal|null>('history.pending',{token:scope.token,report})??undefined;
-   if(!goal){const target=await channel.target(scope,controller.signal);await check();
-    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target}))throw new StorageFailure('history_source_continuity_unverified');
+   const report=await inspect();
+   const normalUse=report.continuity==='same-source-instances-normal-use-v1';
+   if(normalUse&&retainedGuardAvailable&&!metadataRevalidation){
+    const coverage=await this.coverage(contactId);
+    // 未核验旧行不使已经交接的固定快照复活；后续变化由独立增量目标跟进。
+    if(coverage.failureCode==='history_identity_quarantined'&&coverage.traversalComplete&&coverage.incremental?.cursorPresent
+      &&['ready','incomplete'].includes(coverage.incremental.phase)){
+     const armed=await armGuard();await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId:armed.guardId});
+     this.rememberBodySupport(contactId,report);return coverage;
+    }
+   }
+   const pendingOnRetainedGuard=normalUse&&retainedGuardAvailable&&!metadataRevalidation
+    ?await this.storage.execute<PendingGoal|null>('history.pending',{token:scope.token,report})??undefined:undefined;
+   const freshTarget=normalUse&&!pendingOnRetainedGuard?await channel.target(scope,controller.signal):undefined;
+   if(freshTarget)await check();
+   const armed=await armGuard(normalUse&&!pendingOnRetainedGuard?{report,target:freshTarget!}:undefined),guardId=armed.guardId;
+   await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
+   goal=armed.revalidated?undefined:pendingOnRetainedGuard??await this.storage.execute<PendingGoal|null>('history.pending',{token:scope.token,report})??undefined;
+   if(!goal){const target=freshTarget??await channel.target(scope,controller.signal);await check();
+    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
     goal=await this.storage.execute('history.begin',{token:scope.token,target,report,id:randomUUID(),at:Date.now()});}
-   if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target}))throw new StorageFailure('history_source_continuity_unverified');
+   if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target,report}))throw new StorageFailure('history_source_continuity_unverified');
    registerGoal(goal!.id);
    for(let index=0;index<1000;index++){
     await check();if(guardId&&!await this.storage.execute<boolean>('history.guardCheck',{token:scope.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');const page=await channel.page(scope,goal!.target,goal!.cursor,controller.signal);
@@ -143,7 +169,7 @@ export class SqliteHistoryService {
   }
  });}
  /** 增量只从已证明的完整作用域检查点续读；每页接受前由存储动作复验资格、代次与删除状态。 */
- synchronizeIncremental(contactId:string,signal?:AbortSignal):Promise<HistoryCoverage>{return this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal,armGuard)=>{
+ synchronizeIncremental(contactId:string,signal?:AbortSignal):Promise<HistoryCoverage>{return this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal,armGuard,metadataRevalidation,retainedGuardAvailable)=>{
   if(typeof channel.tail!=='function')throw new StorageFailure('history_tail_unsupported');
   let goal:{id:string;target:HistoryTarget;cursor:string}|undefined;
   const check=()=>this.check(scope,controller);
@@ -153,14 +179,23 @@ export class SqliteHistoryService {
     if(evidence.accountKey!==scope.accountKey||evidence.conversationKey!==scope.conversationKey||evidence.sourceGeneration!==scope.token.source_generation)throw new StorageFailure('history_external_scope_changed');
     return evidence;
    };
-   const report=await inspect();const guardId=await armGuard();await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
+   const report=await inspect();
+   const normalUse=report.continuity==='same-source-instances-normal-use-v1';
+   const freshTarget=normalUse&&(!retainedGuardAvailable||metadataRevalidation)?await channel.target(scope,controller.signal):undefined;
+   if(freshTarget)await check();
+   const armed=await armGuard(freshTarget?{report,target:freshTarget}:undefined),guardId=armed.guardId;
+   await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
+   if(armed.revalidated){
+    await this.storage.execute('history.begin',{token:scope.token,target:freshTarget,report,id:randomUUID(),at:Date.now()});
+    return await this.storage.execute<HistoryCoverage>('history.coverage',{ownerId:this.contacts.ownerId,contactId});
+   }
    // 只有支持档明确声明增量能力才继续；仅存在方法不等于认证通过。
    if(report.capabilities?.incrementalTail!=='supported')throw new StorageFailure('history_tail_unsupported');
    const continuityTarget=await this.storage.execute<HistoryTarget|null>('history.incrementalContinuityTarget',{token:scope.token,report});
-   if(continuityTarget&&!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:continuityTarget}))throw new StorageFailure('history_source_continuity_unverified');
+   if(continuityTarget&&!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:continuityTarget,report}))throw new StorageFailure('history_source_continuity_unverified');
    goal=await this.storage.execute<typeof goal|null>('history.incrementalPending',{token:scope.token,report})??undefined;
    if(!goal)goal=await this.storage.execute('history.beginIncremental',{token:scope.token,report,id:randomUUID(),at:Date.now()});
-   if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target}))throw new StorageFailure('history_source_continuity_unverified');
+   if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target,report}))throw new StorageFailure('history_source_continuity_unverified');
    registerGoal(goal!.id);
    for(let index=0;index<200;index++){
     await check();if(guardId&&!await this.storage.execute<boolean>('history.guardCheck',{token:scope.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');const page=await channel.tail(scope,goal!.target,goal!.cursor,controller.signal);

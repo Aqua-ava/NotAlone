@@ -6,7 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"testing"
+	"time"
+
+	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
 )
 
 func notaloneGuardFixture(t *testing.T) (string, string) {
@@ -44,8 +49,245 @@ func TestNotaloneGuardAllowsExistingContentWrites(t *testing.T) {
 	}
 }
 
+func TestNotaloneGuardAllowsSQLiteSidecarCreateAndRemove(t *testing.T) {
+	library := os.Getenv("NOTALONE_TEST_WCDB")
+	if library == "" {
+		t.Skip("未指定隔离测试使用的 WCDB 制品")
+	}
+	if err := wcdb.BootstrapBounded(library); err != nil {
+		t.Fatal(err)
+	}
+
+	directory := t.TempDir()
+	file := filepath.Join(directory, "message_0.db")
+	database, err := wcdb.OpenPlain(file, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := database.Query("PRAGMA journal_mode=WAL"); err != nil || len(rows) != 1 || rows[0]["journal_mode"] != "wal" {
+		database.Close()
+		t.Fatalf("合成数据库未进入WAL模式: rows=%v err=%v", rows, err)
+	}
+	if err := database.Exec("CREATE TABLE sample(value TEXT)"); err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
+	database.Close()
+
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	monitor, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer monitor.Close()
+	if err := monitor.StartMonitor(); err != nil {
+		t.Fatal(err)
+	}
+
+	database, err = wcdb.OpenPlain(file, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Exec("INSERT INTO sample(value) VALUES('synthetic')"); err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
+	for _, sidecar := range []string{file + "-wal", file + "-shm"} {
+		if _, err := os.Stat(sidecar); err != nil {
+			database.Close()
+			t.Fatalf("SQLite未创建预期旁车文件: %v", err)
+		}
+	}
+	if err := guard.Check(); err != nil {
+		database.Close()
+		t.Fatalf("SQLite创建WAL/SHM旁车后来源守卫失效: %v", err)
+	}
+	assertNotaloneGuardMonitorHealthy(t, monitor)
+	database.Close()
+	for _, sidecar := range []string{file + "-wal", file + "-shm"} {
+		if _, err := os.Stat(sidecar); !os.IsNotExist(err) {
+			t.Fatalf("SQLite关闭后仍保留旁车文件: path=%q err=%v", filepath.Base(sidecar), err)
+		}
+	}
+	if err := guard.Check(); err != nil {
+		t.Fatalf("SQLite删除WAL/SHM旁车后来源守卫失效: %v", err)
+	}
+	assertNotaloneGuardMonitorHealthy(t, monitor)
+}
+
+func assertNotaloneGuardMonitorHealthy(t *testing.T, monitor *notaloneSourceGuard) {
+	t.Helper()
+	select {
+	case <-monitor.Lost():
+		t.Fatal("SQLite WAL/SHM 旁车生命周期使持续监听失效")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestNotaloneGuardMonitorAllowsSidecarsAndRejectsNewShard(t *testing.T) {
+	directory, file := notaloneGuardFixture(t)
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	if err := guard.StartMonitor(); err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if err := os.WriteFile(file+suffix, []byte("合成旁车"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertNotaloneGuardMonitorHealthy(t, guard)
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if err := os.Remove(file + suffix); err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertNotaloneGuardMonitorHealthy(t, guard)
+	if err := os.WriteFile(filepath.Join(directory, "message_1.db"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-guard.Lost():
+	case <-time.After(2 * time.Second):
+		t.Fatal("持续监听未拒绝新增消息分片")
+	}
+	if err := guard.Check(); err == nil {
+		t.Fatal("持续监听失效状态未锁存")
+	}
+}
+
+func TestNotaloneGuardFingerprintIgnoresSidecarRoster(t *testing.T) {
+	directory, file := notaloneGuardFixture(t)
+	before, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer before.Close()
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if err := os.WriteFile(file+suffix, nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer after.Close()
+	if before.Fingerprint() != after.Fingerprint() {
+		t.Fatal("旁车名单改变了同一目录和消息文件的来源指纹")
+	}
+}
+
+func TestNotaloneGuardCheckRetriesInterruptedEventWait(t *testing.T) {
+	directory, file := notaloneGuardFixture(t)
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	interrupted := false
+	guard.kevent = func(queue int, changes, events []syscall.Kevent_t, timeout *syscall.Timespec) (int, error) {
+		if !interrupted {
+			interrupted = true
+			return -1, syscall.EINTR
+		}
+		return syscall.Kevent(queue, changes, events, timeout)
+	}
+	if err := guard.Check(); err != nil {
+		t.Fatalf("信号打断非阻塞事件核验使同一来源失效: %v", err)
+	}
+	if !interrupted {
+		t.Fatal("未覆盖被信号打断的原生等待")
+	}
+}
+
+func TestNotaloneGuardMonitorRetriesInterruptedEventWait(t *testing.T) {
+	directory, file := notaloneGuardFixture(t)
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	var interrupted atomic.Bool
+	injected := make(chan struct{})
+	guard.kevent = func(queue int, changes, events []syscall.Kevent_t, timeout *syscall.Timespec) (int, error) {
+		if timeout == nil && len(changes) == 0 && interrupted.CompareAndSwap(false, true) {
+			close(injected)
+			return -1, syscall.EINTR
+		}
+		return syscall.Kevent(queue, changes, events, timeout)
+	}
+	if err := guard.StartMonitor(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-injected:
+	case <-time.After(time.Second):
+		t.Fatal("持续监听未执行原生等待")
+	}
+	select {
+	case <-guard.Lost():
+		t.Fatal("信号打断持续监听使同一来源失效")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := os.WriteFile(filepath.Join(directory, "message_1.db"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-guard.Lost():
+	case <-time.After(2 * time.Second):
+		t.Fatal("信号重试后持续监听未拒绝新增分片")
+	}
+	if err := guard.Check(); err == nil {
+		t.Fatal("来源变化未锁存")
+	}
+}
+
+func TestNotaloneGuardRejectsEventWaitErrors(t *testing.T) {
+	directory, file := notaloneGuardFixture(t)
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	guard.kevent = func(int, []syscall.Kevent_t, []syscall.Kevent_t, *syscall.Timespec) (int, error) {
+		return -1, syscall.EBADF
+	}
+	if err := guard.Check(); err == nil {
+		t.Fatal("原生事件等待异常未使守卫失效")
+	}
+}
+
+func TestNotaloneGuardCannotDetectTransientShardCreation(t *testing.T) {
+	directory, file := notaloneGuardFixture(t)
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+
+	// kqueue 只报告目录变动，不包含文件名；短暂新增后删除与旁车生命周期无法区分。
+	added := filepath.Join(directory, "message_1.db")
+	if err := os.WriteFile(added, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(added); err != nil {
+		t.Fatal(err)
+	}
+	if err := guard.Check(); err != nil {
+		t.Fatalf("当前分片集合未变化，不应将无法区分的瞬态目录写入判为失效: %v", err)
+	}
+}
+
 func TestNotaloneGuardRejectsNamespaceChanges(t *testing.T) {
-	for _, change := range []string{"replace", "replace_and_restore", "add", "add_and_remove", "remove", "directory_replace", "directory_replace_and_restore"} {
+	for _, change := range []string{"replace", "replace_and_restore", "add", "add_symlink", "add_directory", "remove", "directory_replace", "directory_replace_and_restore"} {
 		t.Run(change, func(t *testing.T) {
 			directory, file := notaloneGuardFixture(t)
 			guard, err := newNotaloneSourceGuard(directory, []string{file})
@@ -68,12 +310,13 @@ func TestNotaloneGuardRejectsNamespaceChanges(t *testing.T) {
 					must(os.Remove(file))
 					must(os.Rename(old, file))
 				}
-			case "add", "add_and_remove":
+			case "add":
 				added := filepath.Join(directory, "message_1.db")
 				must(os.WriteFile(added, nil, 0600))
-				if change == "add_and_remove" {
-					must(os.Remove(added))
-				}
+			case "add_symlink":
+				must(os.Symlink(file, filepath.Join(directory, "message_1.db")))
+			case "add_directory":
+				must(os.Mkdir(filepath.Join(directory, "message_1.db"), 0700))
 			case "remove":
 				must(os.Remove(file))
 			case "directory_replace", "directory_replace_and_restore":

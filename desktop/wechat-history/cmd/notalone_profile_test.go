@@ -75,6 +75,28 @@ func TestNotAloneObservedStatusTuplesAreNarrow(t *testing.T) {
 	}
 }
 
+func TestNotAloneRuntimeCandidateRequiresExactObservedProfile(t *testing.T) {
+	table := notaloneProfileFixture(t)
+	tables := []notaloneTableSchema{table, table}
+	program := notaloneProgramVersion{Version: "4.0.6", Build: "29387"}
+	inspection := notaloneInspection{SchemaFingerprint: "schema-fingerprint", Tables: tables}
+	certification := certifyNotaloneProfile(program, tables)
+	if !notaloneRuntimeReadCandidate(program, inspection, certification) {
+		t.Fatal("固定版本、精确结构与三条已观察状态规则应可进入运行时快照证明")
+	}
+	broad := *certification.ReadProfile
+	broad.StatusRules = append(broad.StatusRules, notaloneStatusRule{LocalType: 1, Sender: "contact", Status: 4, State: notaloneMessageRecalled})
+	certification.ReadProfile = &broad
+	if notaloneRuntimeReadCandidate(program, inspection, certification) {
+		t.Fatal("未经观察的contact/status=4不得升级profile")
+	}
+	certification = certifyNotaloneProfile(program, tables)
+	certification.ProfileID = "other-profile"
+	if notaloneRuntimeReadCandidate(program, inspection, certification) {
+		t.Fatal("未知profile不能借用已观察规则")
+	}
+}
+
 func TestNotAloneProfileUnknownShapeOrVersionRemainsUnverified(t *testing.T) {
 	for _, mutation := range []string{"version", "build", "column_type", "hidden", "extra_trigger", "composite_key", "no_autoincrement", "unique_index", "partial_index", "different_role", "mixed_shards"} {
 		t.Run(mutation, func(t *testing.T) {

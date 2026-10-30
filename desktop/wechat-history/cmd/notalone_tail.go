@@ -179,12 +179,17 @@ func notaloneTailIdentityLess(left, right notaloneTailIdentity) bool {
 	return left.LocalID < right.LocalID
 }
 
-func notaloneTailTombstone(identity notaloneTailIdentity) notaloneSnapshotRecord {
+func notaloneTailTombstone(identity notaloneTailIdentity, verifiedAbsence bool) notaloneSnapshotRecord {
 	localID := identity.LocalID
-	return notaloneSnapshotRecord{
+	record := notaloneSnapshotRecord{
 		Partition: identity.Partition, Table: identity.Table, LocalID: &localID,
 		Sender: "unknown", Kind: "other", OriginalType: "unknown", StateAssurance: "unverified",
 	}
+	if verifiedAbsence {
+		record.MessageState = "absent"
+		record.StateAssurance = "verified"
+	}
+	return record
 }
 
 func cloneNotaloneTailPage(page notaloneTailPage) notaloneTailPage {
@@ -240,6 +245,15 @@ func (h *notaloneHistorySession) tailPage(ctx context.Context, request notaloneH
 		if openErr != nil {
 			h.resetTail()
 			return empty, openErr
+		}
+		proof, proofErr := snapshot.FixedSnapshotProof(*h.inspected)
+		if proofErr != nil || proof.Status != "verified" || proof.ExpectedPartitionCount == 0 || proof.ExpectedPartitionCount != proof.CompletedPartitionCount {
+			_ = snapshot.Close()
+			h.resetTail()
+			if proofErr != nil {
+				return empty, proofErr
+			}
+			return empty, notaloneFailure("history_snapshot_proof_incomplete")
 		}
 		if !notaloneSameSnapshotInstances(tail.target, snapshot.Target()) {
 			_ = snapshot.Close()
@@ -298,7 +312,7 @@ func (h *notaloneHistorySession) tailPage(ctx context.Context, request notaloneH
 		}
 	}
 	for scanDone && len(records) < 16 && tail.removedIndex < len(tail.removed) {
-		records = append(records, notaloneTailTombstone(tail.removed[tail.removedIndex]))
+		records = append(records, notaloneTailTombstone(tail.removed[tail.removedIndex], tail.profile.VerifiedTerminalAbsence))
 		tail.removedIndex++
 	}
 	caughtUp := scanDone && tail.removedIndex == len(tail.removed)

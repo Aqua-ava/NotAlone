@@ -121,6 +121,49 @@ func notalone40629387ObservedStatusRules() []notaloneStatusRule {
 	}
 }
 
+func notalone40629387ObservedStatusRulesMatch(rules []notaloneStatusRule) bool {
+	want := notalone40629387ObservedStatusRules()
+	if len(rules) != len(want) {
+		return false
+	}
+	for _, expected := range want {
+		matched := false
+		for _, actual := range rules {
+			if actual == expected {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+func notaloneRuntimeReadCandidate(program notaloneProgramVersion, inspected notaloneInspection, certification notaloneProfileCertification) bool {
+	if !notaloneValidProgramVersion(program) || certification.ProgramVersion != program.Version || certification.Build != program.Build ||
+		certification.SchemaShapeFingerprint == "" || certification.SchemaShapeFingerprint != notaloneSnapshotShape(inspected.Tables) ||
+		certification.ReadProfile == nil || certification.ReadProfile.SchemaShapeFingerprint != certification.SchemaShapeFingerprint ||
+		!certification.ReadProfile.StatusSemanticsVerified || !notaloneStatusRulesValid(certification.ReadProfile.StatusRules) ||
+		certification.ReadProfile.OpaqueStatusPolicy != "" || inspected.SchemaFingerprint == "" {
+		return false
+	}
+	for _, capability := range []string{"programVersion", "exactSchema", "declaredLocalKey", "automaticAllocation", "statusColumn"} {
+		if certification.Capabilities[capability] != "supported" {
+			return false
+		}
+	}
+	if certification.Capabilities["serverIdUniqueConstraint"] != "unsupported" {
+		return false
+	}
+	if certification.ProfileID == "wechat-4.0.6-29387-observed-states-v1" {
+		return program.Version == "4.0.6" && program.Build == "29387" && certification.Status == "unverified" &&
+			certification.StatusSemantics == "observed_subset_only" && notalone40629387ObservedStatusRulesMatch(certification.ReadProfile.StatusRules)
+	}
+	return certification.Status == "supported"
+}
+
 // 仅可信的本机版本读取和受控结构检查调用此函数，RPC 不能提交 profile 或能力事实。
 // 真实匿名结构只认证结构；未知状态与来源生命周期不能被 opaque 原值策略放行。
 func certifyNotaloneProfile(program notaloneProgramVersion, tables []notaloneTableSchema) notaloneProfileCertification {

@@ -75,7 +75,7 @@ func (guard *notaloneSourceGuard) WatchProcess(identity notaloneProcessIdentity)
 	event.Fflags = syscall.NOTE_EXIT | syscall.NOTE_EXEC
 	var events [1]syscall.Kevent_t
 	zero := syscall.Timespec{}
-	count, watchErr := syscall.Kevent(guard.queue, []syscall.Kevent_t{event}, events[:], &zero)
+	count, watchErr := guard.waitEvents(guard.queue, []syscall.Kevent_t{event}, events[:], &zero)
 	current, err = readNotaloneProcessIdentity(identity.pid, identity.path)
 	if watchErr != nil || count != 0 || err != nil || current != identity || !guard.checkEvents() {
 		guard.invalid = true

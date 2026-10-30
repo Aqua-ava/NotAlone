@@ -23,6 +23,7 @@ type notaloneReadProfile struct {
 	StatusSemanticsVerified   bool
 	IncrementalTailVerified   bool
 	BoundarySemanticsVerified bool
+	VerifiedTerminalAbsence   bool
 	StatusRules               []notaloneStatusRule
 	OpaqueStatusPolicy        string
 }
@@ -50,6 +51,7 @@ type notaloneStatusRule struct {
 type notaloneStatusDecision struct {
 	State           notaloneMessageState
 	RuleMatched     bool
+	StateVerified   bool
 	HistoryEligible bool
 }
 
@@ -110,10 +112,14 @@ func notaloneClassifyStatus(profile notaloneReadProfile, localType int64, sender
 			continue
 		}
 		decision.State, decision.RuleMatched = rule.State, true
-		if !profile.StatusSemanticsVerified || (rule.State != notaloneMessageSent && rule.State != notaloneMessageReceived) {
+		if !profile.StatusSemanticsVerified {
 			return decision
 		}
 		if rule.RequiresServerID && !notaloneAllocatedServerID(serverID) {
+			return decision
+		}
+		decision.StateVerified = true
+		if rule.State != notaloneMessageSent && rule.State != notaloneMessageReceived {
 			return decision
 		}
 		decision.HistoryEligible = true
@@ -151,6 +157,7 @@ type notaloneSnapshotRecord struct {
 	Text           *string `json:"text"`
 	OriginalType   string  `json:"originalType"`
 	Status         *string `json:"status"`
+	MessageState   string  `json:"messageState,omitempty"`
 	StateAssurance string  `json:"stateAssurance"`
 	SentAt         *string `json:"sentAt"`
 	TimePrecision  *string `json:"timePrecision"`
@@ -169,31 +176,36 @@ type notaloneSnapshotPage struct {
 type notaloneSnapshotShard struct {
 	reader       *wcdb.DB
 	observer     *wcdb.DB
+	path         string
 	partition    string
 	instance     string
 	observerPre  int64
 	observerPost int64
+	pinned       bool
 	present      bool
 	lastID       *int64
 	done         bool
 }
 type notaloneSnapshot struct {
-	mu              sync.Mutex
-	life            context.Context
-	cancel          context.CancelFunc
-	closed          bool
-	guard           *notaloneSourceGuard
-	shards          []*notaloneSnapshotShard
-	selected        notaloneResolved
-	senderOwner     string
-	profile         notaloneReadProfile
-	table           string
-	target          notaloneSnapshotTarget
-	identityDigests map[notaloneTailIdentity]notaloneTailBaselineEntry
-	shardIndex      int
-	expectedCursor  string
-	started         bool
-	pages           int
+	mu                sync.Mutex
+	life              context.Context
+	cancel            context.CancelFunc
+	closed            bool
+	closeErr          error
+	guard             *notaloneSourceGuard
+	shards            []*notaloneSnapshotShard
+	checkedPartitions []string
+	selected          notaloneResolved
+	senderOwner       string
+	profile           notaloneReadProfile
+	table             string
+	schemaFingerprint string
+	target            notaloneSnapshotTarget
+	identityDigests   map[notaloneTailIdentity]notaloneTailBaselineEntry
+	shardIndex        int
+	expectedCursor    string
+	started           bool
+	pages             int
 }
 
 // 结构能力只比较列、完整索引列组、自动主键和触发器数量；实例编号不构成schema。
@@ -264,7 +276,7 @@ func notaloneSnapshotInstanceMatches(schema notaloneTableSchema, table string) b
 }
 
 func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolved, inspected notaloneInspection, profile notaloneReadProfile) (snapshot *notaloneSnapshot, err error) {
-	if ctx == nil || s == nil || s.cfg == nil || selected.Account == "" || selected.Conversation == "" || selected.SourceGeneration == "" || selected.Account != s.cfg.Wxid || inspected.SourceGeneration != selected.SourceGeneration || inspected.ScopeDigest != notaloneHash(selected.Account, selected.Conversation) || len(inspected.Tables) == 0 || len(inspected.CheckedPartitions) == 0 {
+	if ctx == nil || s == nil || s.cfg == nil || selected.Account == "" || selected.Conversation == "" || selected.SourceGeneration == "" || selected.Account != s.cfg.Wxid || inspected.SourceGeneration != selected.SourceGeneration || inspected.ScopeDigest != notaloneHash(selected.Account, selected.Conversation) || inspected.SchemaFingerprint == "" || len(inspected.Tables) == 0 || len(inspected.CheckedPartitions) == 0 {
 		return nil, notaloneFailure("history_scope_unverified")
 	}
 	if profile.SchemaShapeFingerprint == "" || profile.SchemaShapeFingerprint != notaloneSnapshotShape(inspected.Tables) || !notaloneStatusProfileValid(profile) {
@@ -287,7 +299,7 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 	}
 	life, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	// 目录账号身份继续用于scope；sender使用锁定上游selfWxid的账号名规范。
-	n := &notaloneSnapshot{life: life, cancel: cancel, guard: guard, selected: selected, senderOwner: s.selfWxid(), profile: profile, table: "Msg_" + talkerHash(selected.Conversation)}
+	n := &notaloneSnapshot{life: life, cancel: cancel, guard: guard, selected: selected, senderOwner: s.selfWxid(), profile: profile, table: "Msg_" + talkerHash(selected.Conversation), schemaFingerprint: inspected.SchemaFingerprint, checkedPartitions: append([]string(nil), inspected.CheckedPartitions...)}
 	if profile.IncrementalTailVerified {
 		n.identityDigests = make(map[notaloneTailIdentity]notaloneTailBaselineEntry)
 	}
@@ -322,7 +334,7 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 		if e != nil {
 			return nil, notaloneFailure("history_shard_unavailable")
 		}
-		shard := &notaloneSnapshotShard{reader: reader, partition: partition}
+		shard := &notaloneSnapshotShard{reader: reader, path: file, partition: partition}
 		n.shards = append(n.shards, shard)
 		shard.observer, e = s.openDBNoRefresh("message", filepath.Base(file))
 		if e != nil {
@@ -377,6 +389,7 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 		if !shard.present && len(rows) != 0 {
 			return nil, notaloneFailure("history_schema_changed")
 		}
+		shard.pinned = true
 	}
 	for index, shard := range n.shards {
 		after, e := notaloneSnapshotDataVersion(life, shard.observer)
@@ -559,7 +572,9 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 	n.pages++
 	n.started = true
 	if page.Exhausted {
-		_ = n.closeLocked()
+		if closeErr := n.closeLocked(); closeErr != nil {
+			return page, closeErr
+		}
 	}
 	return page, nil
 }
@@ -595,8 +610,9 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 		}
 		allowed := decision.HistoryEligible
 		record.StateAssurance = "unverified"
-		if allowed {
+		if decision.StateVerified && (decision.State == notaloneMessageSent || decision.State == notaloneMessageReceived || decision.State == notaloneMessageRecalled) {
 			record.StateAssurance = "verified"
+			record.MessageState = string(decision.State)
 		}
 		if sent, ok := row["create_time"].(int64); ok && sent >= 0 && sent <= 253402300799 {
 			ms := strconv.FormatInt(sent*1000, 10)
@@ -666,10 +682,11 @@ func notaloneSnapshotKind(value int64) string {
 }
 func (n *notaloneSnapshot) closeLocked() error {
 	if n.closed {
-		return nil
+		return n.closeErr
 	}
 	n.closed = true
 	n.cancel()
+	failed := false
 	for _, shard := range n.shards {
 		if shard.reader != nil {
 			shard.reader.Close()
@@ -680,7 +697,13 @@ func (n *notaloneSnapshot) closeLocked() error {
 			shard.observer = nil
 		}
 	}
-	return n.guard.Close()
+	if n.guard.Close() != nil {
+		failed = true
+	}
+	if failed {
+		n.closeErr = notaloneFailure("history_snapshot_close_failed")
+	}
+	return n.closeErr
 }
 func (n *notaloneSnapshot) Close() error {
 	if n == nil {

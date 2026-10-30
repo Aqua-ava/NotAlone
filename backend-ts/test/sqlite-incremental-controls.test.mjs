@@ -9,11 +9,26 @@ import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 import { IncrementalHistoryCoordinator } from '../src/history/sqlite/incremental-coordinator.ts';
+import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 import { ActiveHolders } from '../src/storage/sqlite/deletion/holders.ts';
 import { DeletionService } from '../src/storage/sqlite/deletion/service.ts';
 import { ManagedFiles } from '../src/storage/sqlite/deletion/managed-files.ts';
 
 const owner = '00000000-0000-4000-8000-000000000085';
+
+test('已遍历但存在未核验消息的历史继续增量，不重复首次读取或假报完整',async t=>{
+ const binding={contact_id:'scope-a',binding_id:'binding-a',grant_id:'grant-a',selection_generation:'1',status:'active'};
+ const directory={directory:async()=>({read_enabled:true,bindings:[binding]})};
+ const coverage={contactId:'scope-a',phase:'incomplete',failureCode:'history_identity_quarantined',traversalComplete:true,
+  incremental:{phase:'ready',cursorPresent:true}};let firstReads=0,tailReads=0;
+ const history={coverage:async()=>coverage,synchronize:async()=>{firstReads++;throw new Error('不得重复已遍历的历史');},
+  synchronizeIncremental:async()=>{tailReads++;return coverage;},stop:async()=>{}};
+ const first=new FirstHistoryCoordinator(directory,history),incremental=new IncrementalHistoryCoordinator(directory,history,{intervalMs:0,firstHistoryManagedExternally:true});
+ t.after(async()=>{await first.close();await incremental.close();});
+ first.wake();incremental.wake();await Promise.all([first.waitForIdle(),incremental.waitForIdle()]);
+ assert.equal(firstReads,0);assert.equal(tailReads,1);assert.equal(coverage.phase,'incomplete');
+ assert.equal(first.getState().contacts[0].phase,'incomplete');
+});
 const evidence = { externalKey: 'synthetic-account', identityScheme: 'wechat.account.v1', sourceGeneration: 'source-1', assurance: 'verified', supportProfile: 'synthetic-metadata-v1' };
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 const record = (localId, changes = {}) => ({

@@ -69,6 +69,14 @@ test('未知支持档只有结构检查且不读正文，重复wake合并，失�
  assert.equal((await f.history.coverage((await f.contacts.directory()).bindings[0].contact_id)).phase,'complete');
 });
 
+test('历史遍历完成但存在未核验状态时保留准确原因，不误报首次读取失败',async t=>{
+ const f=await fixture(t);await select(f);await f.contacts.setReading(true);
+ f.state.pageHook=async(scope,target,cursor)=>{const result=page(scope,target,cursor);result.records[0].stateAssurance='unverified';result.records[0].text=null;return result;};
+ await wake(f);
+ assert.equal(f.coordinator.getState().contacts[0].phase,'incomplete');
+ assert.equal(f.coordinator.getState().lastError,'history_identity_quarantined');
+});
+
 test('并发最多两个联系人，同联系人duplicate wake不并发且消息来源不串人',async t=>{
  const f=await fixture(t);const bindings=await select(f,['a','b','c']);await f.contacts.setReading(true);
  const allEntered=[deferred(),deferred(),deferred()],gates=new Map();let active=0,maximum=0,count=0;

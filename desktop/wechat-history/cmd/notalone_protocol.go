@@ -68,6 +68,8 @@ type notaloneHistorySession struct {
 	guardLost            chan struct{}
 	guardLostOnce        sync.Once
 	inspected            *notaloneInspection
+	supportReport        *notaloneSupportReport
+	supportProfile       *notaloneReadProfile
 	program              func(context.Context) (notaloneProgramVersion, error)
 	sourceProcess        func(context.Context) (notaloneProcessIdentity, error)
 	certify              func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
@@ -354,6 +356,23 @@ func notaloneFileHash(file string) (string, error) {
 }
 func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportReport, *notaloneReadProfile, error) {
 	result := notaloneSupportReport{Protocol: "private-history-v1", AdapterVersion: "1", Status: "unverified", AccountKey: h.selected.Account, ConversationKey: h.selected.Conversation, SourceGeneration: h.selected.SourceGeneration, ServerAliasSemantics: "unverified", Identity: "source-table-local-v1", DeclaredPrimaryKey: []string{}}
+	if h.supportReport != nil && h.supportProfile != nil {
+		if err := h.currentAccount(); err != nil {
+			return result, nil, err
+		}
+		if err := h.ensureMessageGuard(); err != nil {
+			return result, nil, err
+		}
+		if h.snapshot != nil {
+			if err := h.snapshot.Check(); err != nil {
+				return result, nil, err
+			}
+		}
+		if h.inspected == nil || h.supportReport.SourceGeneration != h.selected.SourceGeneration || h.supportReport.AccountKey != h.selected.Account || h.supportReport.ConversationKey != h.selected.Conversation {
+			return result, nil, notaloneFailure("history_scope_changed")
+		}
+		return cloneNotaloneSupportReport(*h.supportReport), cloneNotaloneReadProfile(h.supportProfile), nil
+	}
 	inspected, err := h.inspect(ctx)
 	if err != nil {
 		return result, nil, err
@@ -366,12 +385,14 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 	result.ProfileID = certification.ProfileID
 	result.ProgramVersion = certification.ProgramVersion
 	result.Build = certification.Build
-	result.Status = certification.Status
+	if certification.Status == "unsupported" {
+		result.Status = "unsupported"
+	}
 	result.SchemaFingerprint = inspected.SchemaFingerprint
 	result.DeclaredPrimaryKey = certification.DeclaredPrimaryKey
 	result.StatusSemantics = certification.StatusSemantics
 	result.Continuity = certification.Continuity
-	result.Capabilities = certification.Capabilities
+	result.Capabilities = cloneNotaloneCapabilityMap(certification.Capabilities)
 	if certification.Reason != "" {
 		reason := certification.Reason
 		result.Reason = &reason
@@ -396,7 +417,7 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 		result.Capabilities["private-history-boundary-v1"] = "unverified"
 		return result, nil, nil
 	}
-	if h.inspected != nil && h.snapshot != nil && h.inspected.SchemaFingerprint != inspected.SchemaFingerprint {
+	if h.inspected != nil && h.inspected.SchemaFingerprint != inspected.SchemaFingerprint {
 		return result, nil, notaloneFailure("history_schema_changed")
 	}
 	if result.Capabilities == nil {
@@ -404,17 +425,83 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 	}
 	result.Capabilities["incrementalTail"] = "unverified"
 	result.Capabilities["private-history-boundary-v1"] = "unverified"
-	trustedCapabilities := certification.ReadProfile != nil && result.Status == "supported" &&
-		result.Capabilities["programVersion"] == "supported" && result.Capabilities["exactSchema"] == "supported" &&
-		result.Capabilities["declaredLocalKey"] == "supported"
-	if trustedCapabilities && certification.ReadProfile.IncrementalTailVerified {
-		result.Capabilities["incrementalTail"] = "supported"
-	}
-	if trustedCapabilities && certification.ReadProfile.BoundarySemanticsVerified {
-		result.Capabilities["private-history-boundary-v1"] = "supported"
-	}
 	h.inspected = &inspected
-	return result, certification.ReadProfile, nil
+	if !notaloneRuntimeReadCandidate(program, inspected, certification) {
+		return result, cloneNotaloneReadProfile(certification.ReadProfile), nil
+	}
+	if err := h.ensureMessageGuard(); err != nil {
+		return result, nil, err
+	}
+	profile := *certification.ReadProfile
+	profile.IncrementalTailVerified = true
+	profile.VerifiedTerminalAbsence = certification.ProfileID == "wechat-4.0.6-29387-observed-states-v1" &&
+		program.Version == "4.0.6" && program.Build == "29387" && notalone40629387ObservedStatusRulesMatch(profile.StatusRules)
+	snapshot, err := newNotaloneSnapshot(h.life, h.server, *h.selected, inspected, profile)
+	if err != nil {
+		return result, nil, err
+	}
+	proof, proofErr := snapshot.FixedSnapshotProof(inspected)
+	if proofErr != nil {
+		_ = snapshot.Close()
+		return result, nil, proofErr
+	}
+	if proof.Status != "verified" || proof.Format != notaloneFixedSnapshotProofFormat || proof.Scope != "single-fixed-snapshot" ||
+		proof.AuthorizesSubsequentRead || proof.ExpectedPartitionCount == 0 || proof.ExpectedPartitionCount != proof.CompletedPartitionCount {
+		_ = snapshot.Close()
+		return result, nil, notaloneFailure("history_snapshot_proof_incomplete")
+	}
+	if err := h.currentAccount(); err != nil {
+		_ = snapshot.Close()
+		return result, nil, err
+	}
+	if err := h.ensureMessageGuard(); err != nil {
+		_ = snapshot.Close()
+		return result, nil, err
+	}
+	for _, capability := range []string{"statusSemantics", "sourceLifecycle", "restartContinuity", "recoveryMapping", "snapshotBarrier", "partitionCoverage", "normalHistory", "incrementalTail"} {
+		result.Capabilities[capability] = "supported"
+	}
+	result.Status = "supported"
+	result.StatusSemantics = "observed_subset_only"
+	result.Continuity = "same-source-instances-normal-use-v1"
+	result.Reason = nil
+	h.snapshot = snapshot
+	h.snapshotMode = "normal"
+	h.supportReport = ptrNotaloneSupportReport(cloneNotaloneSupportReport(result))
+	h.supportProfile = &profile
+	return result, cloneNotaloneReadProfile(&profile), nil
+}
+
+func cloneNotaloneCapabilityMap(value map[string]string) map[string]string {
+	if value == nil {
+		return nil
+	}
+	clone := make(map[string]string, len(value))
+	for key, item := range value {
+		clone[key] = item
+	}
+	return clone
+}
+
+func cloneNotaloneSupportReport(value notaloneSupportReport) notaloneSupportReport {
+	value.DeclaredPrimaryKey = append([]string(nil), value.DeclaredPrimaryKey...)
+	value.Capabilities = cloneNotaloneCapabilityMap(value.Capabilities)
+	if value.Reason != nil {
+		reason := *value.Reason
+		value.Reason = &reason
+	}
+	return value
+}
+
+func ptrNotaloneSupportReport(value notaloneSupportReport) *notaloneSupportReport { return &value }
+
+func cloneNotaloneReadProfile(value *notaloneReadProfile) *notaloneReadProfile {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	clone.StatusRules = append([]notaloneStatusRule(nil), value.StatusRules...)
+	return &clone
 }
 func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRequest) (any, error) {
 	if r.Operation != "observe-metadata" && r.Operation != "observe-test-metadata" && r.Operation != "observe-received-test-metadata" && r.Kind != "" {
@@ -451,6 +538,10 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		}
 	case "observe-received-test-metadata":
 		if r.Consent != "selected-received-test-lifecycle-metadata-v1" || !validNotaloneTestMetadataAction(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
+	case "verify-snapshot-metadata":
+		if r.Consent != "selected-snapshot-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
 	case "inspect", "support", "target", "page", "tail", "quarantine-target", "quarantine-page":
@@ -500,6 +591,9 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	}
 	if r.Operation == "inspect" {
 		return h.inspect(ctx)
+	}
+	if r.Operation == "verify-snapshot-metadata" {
+		return h.verifyFixedSnapshotMetadata(ctx)
 	}
 	if r.Operation == "boundary-snapshot" {
 		return h.boundarySnapshot(ctx)
@@ -607,14 +701,32 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if err := h.ensureMessageGuard(); err != nil {
 			return nil, err
 		}
+		if mode == "normal" && h.snapshot != nil && h.snapshotMode == "normal" {
+			if err := h.snapshot.Check(); err != nil {
+				return nil, err
+			}
+			return h.snapshot.Target(), nil
+		}
 		if h.snapshot != nil {
-			_ = h.snapshot.Close()
+			if closeErr := h.snapshot.Close(); closeErr != nil {
+				return nil, notaloneFailure("history_snapshot_close_failed")
+			}
 			h.snapshot = nil
 		}
 		h.resetTail()
 		snapshot, err := newNotaloneSnapshot(h.life, h.server, *h.selected, *h.inspected, *profile)
 		if err != nil {
 			return nil, err
+		}
+		if mode == "normal" {
+			proof, proofErr := snapshot.FixedSnapshotProof(*h.inspected)
+			if proofErr != nil || proof.Status != "verified" || proof.ExpectedPartitionCount == 0 || proof.ExpectedPartitionCount != proof.CompletedPartitionCount {
+				_ = snapshot.Close()
+				if proofErr != nil {
+					return nil, proofErr
+				}
+				return nil, notaloneFailure("history_snapshot_proof_incomplete")
+			}
 		}
 		if err := h.ensureMessageGuard(); err != nil {
 			_ = snapshot.Close()
@@ -653,6 +765,11 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		}
 		h.resetTail()
 		h.tail = tail
+		if closeErr := h.snapshot.Close(); closeErr != nil {
+			h.resetTail()
+			h.snapshot = nil
+			return nil, notaloneFailure("history_snapshot_close_failed")
+		}
 		h.snapshot = nil
 		resume := tail.expectedCursor
 		page.ResumeCursor = &resume
