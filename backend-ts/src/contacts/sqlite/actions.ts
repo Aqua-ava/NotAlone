@@ -63,6 +63,17 @@ function eligibility(tx: StorageTransaction, owner: string, contact: string): Re
 export const identityActions: StorageAction[] = [
  action('identity.resolveOwner','write',(tx,i)=>{const owners=tx.all('SELECT owner_id FROM owner');if(owners.length>1)fail('owner_ambiguous');if(owners.length)return owners[0].owner_id;tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,?)',[text(i.proposedOwnerId),i.at]);return i.proposedOwnerId;}),
  action('identity.initialize','write',(tx,i)=>{text(i.ownerId);tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,?) ON CONFLICT(owner_id) DO NOTHING',[i.ownerId,i.at]);return i.ownerId;}),
+ action('identity.foregroundSnapshot','read',(tx,i)=>{
+  const owner=text(i.ownerId),row=tx.get("SELECT read_enabled,read_epoch FROM owner WHERE owner_id=? AND state='active'",[owner]);
+  const account=tx.get("SELECT id,external_key,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner]);
+  const verifiedDesktop=new Set(tx.all(`SELECT g.binding_id FROM read_grant g JOIN binding_verification v ON v.owner_id=g.owner_id AND v.id=g.verification_id AND v.binding_id=g.binding_id
+   JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id AND b.contact_id=g.contact_id
+   JOIN contact p ON p.owner_id=b.owner_id AND p.id=b.contact_id
+   WHERE g.owner_id=? AND g.revoked_at IS NULL AND v.method='foreground_confirmation' AND b.state='verified' AND p.state='active'
+   AND v.identity_generation=b.identity_generation AND g.selection_generation=p.selection_generation`,[owner]).map(b=>String(b.binding_id)));
+  return {enabled:row?.read_enabled===1n,readEpoch:String(row?.read_epoch??''),account:account?{id:String(account.id),key:String(account.external_key),sourceGeneration:String(account.source_generation),revision:String(account.scope_revision)}:null,
+   bindings:bindings(tx,owner).filter(b=>b.status==='active'&&b.account_id===account?.id).map(b=>({...b,desktopVerified:verifiedDesktop.has(b.binding_id)}))};
+ }),
  action('identity.directory','read',(tx,i)=>{
   const owner=text(i.ownerId),counts=visibleMessageCounts(tx,owner);
   return {contacts:tx.all("SELECT id AS contact_id,display_name,selection_generation,data_generation FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[owner]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:counts.get(String(c.contact_id))??0,source_count:0}})),bindings:bindings(tx,owner),account:tx.get("SELECT id,external_key,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};

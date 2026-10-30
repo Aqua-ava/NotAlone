@@ -234,3 +234,9 @@ test('会话元数据端口失败时暂停旧资格，不能只拒绝新名单',
  const b=(await service.confirm(snapshot.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings[0];const token=await service.eligibility(b.contact_id);
  channel.sessions=async()=>{throw new Error('合成外部端口失败');};await assert.rejects(service.candidates(true));await assert.rejects(service.validate(token),{code:'read_not_authorized'});
 });
+test('前台范围只返回当前有效绑定，不把渠道元数据当桌面确认',async t=>{
+ const {service}=await fixture(t);await connect(service);await service.setReading(true);const selected=await service.candidates(true);
+ const saved=(await service.confirm(selected.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings[0];
+ let view=await service.foregroundSnapshot();assert.equal(view.enabled,true);assert.equal(view.bindings.length,1);assert.equal(view.bindings[0].desktopVerified,false);assert.equal(view.bindings[0].binding_id,saved.binding_id);
+ await service.revoke(saved.contact_id,saved.binding_id,saved.selection_generation);view=await service.foregroundSnapshot();assert.equal(view.bindings.length,0);
+});

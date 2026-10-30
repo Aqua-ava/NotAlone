@@ -22,6 +22,7 @@ export class SqliteContactService {
  private execute<T=any>(name:string,input:object):Promise<T>{if(this.closed)fail('identity_closed');return this.storage.execute(name,{ownerId:this.ownerId,at:this.clock(),...input});}
  initialize(){return this.execute('identity.initialize',{});}
  directory(){return this.execute<Directory>('identity.directory',{});}
+ foregroundSnapshot(){return this.execute<import('../../foreground/sqlite-foreground.ts').ForegroundSnapshot>('identity.foregroundSnapshot',{});}
  private readMetadata<T>(read:()=>Promise<T>):Promise<T>{
   if(this.closed)fail('identity_closed');
   const pending=Promise.resolve().then(()=>{if(this.closed)fail('identity_closed');return read();})

@@ -35,6 +35,8 @@ import { createWechatHistoryChannel } from './history/sqlite/wechat-channel.ts';
 import { FirstHistoryCoordinator } from './history/sqlite/coordinator.ts';
 import { IncrementalHistoryCoordinator } from './history/sqlite/incremental-coordinator.ts';
 import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
+import {SqliteForeground} from './foreground/sqlite-foreground.ts';
+import {readWechatHttpBody} from './sync/wechat-http-body.ts';
 
 export const name = 'notalone-sqlite-host';
 export const inject = ['appReady', 'appExit','skills','llm'];
@@ -50,10 +52,10 @@ interface SqliteHostResource { close(): Promise<void> }
 /** 逐域尝试真实排空；任何业务所有者未释放时保留共享模型与SQLite，允许原操作续清。 */
 export async function closeSqliteHostResources(resources: {
   firstHistory?: SqliteHostResource; incremental?: SqliteHostResource; discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
-  historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; contacts?: SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
+  historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; contacts?: SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
 }): Promise<void> {
   const failures: unknown[] = [];
-  for (const resource of [resources.firstHistory, resources.incremental, resources.historyClear, resources.historyResync, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts]) {
+  for (const resource of [resources.firstHistory, resources.incremental, resources.historyClear, resources.historyResync, resources.foreground, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts]) {
     try { await resource?.close(); } catch (error) { failures.push(error); }
   }
   if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
@@ -79,6 +81,7 @@ export async function apply(ctx: Context) {
   let opening: Promise<SqliteStorage> | undefined;
   let contacts: ContactMetadataLifetime | undefined;
   let history: SqliteHistoryService | undefined;
+  let foreground: SqliteForeground | undefined;
   let firstHistory: FirstHistoryCoordinator | undefined;
   let incremental: IncrementalHistoryCoordinator | undefined;
   let historyClear: SqliteHistoryClearService | undefined;
@@ -99,7 +102,7 @@ export async function apply(ctx: Context) {
     state = 'stopping'; readyDispose(); models?.stopAccepting();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
-    await closeSqliteHostResources({firstHistory,incremental,historyClear,historyResync,discussions,memory,media,history,contacts,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
+    await closeSqliteHostResources({firstHistory,incremental,historyClear,historyResync,foreground,discussions,memory,media,history,contacts,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
     if (published) await rm(config.infoPath, { force: true });
     state = 'stopped';
   })().catch(error=>{stopping=undefined;throw error;});
@@ -135,6 +138,7 @@ export async function apply(ctx: Context) {
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
       contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();});
     }
+    if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot());
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
     const readHistoryStatus=async()=>{
@@ -177,7 +181,7 @@ export async function apply(ctx: Context) {
       deletion: 'typescript', media: 'typescript', mediaExtraction: 'unavailable', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
       taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'typescript',
       wechatBodySync: history?'typescript':'unavailable', wechatIncremental: history?'typescript':'unavailable', wechatHistory: history?'typescript':'unavailable',
-      foregroundLocation: 'unavailable', contactContext: 'unavailable', memory: memoryEnabled?'typescript':'unavailable', memoryManagement:memoryEnabled?'typescript':'unavailable', discussions:discussionsEnabled?'typescript':'unavailable',
+      foregroundLocation: foreground?'typescript':'unavailable', contactContext: 'unavailable', memory: memoryEnabled?'typescript':'unavailable', memoryManagement:memoryEnabled?'typescript':'unavailable', discussions:discussionsEnabled?'typescript':'unavailable',
       expressionPreferences: 'unavailable', replies: 'unavailable' };
     const handleRequest=async (req:IncomingMessage,res:ServerResponse):Promise<void> => {
       const respond = (status: number, value: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
@@ -186,7 +190,10 @@ export async function apply(ctx: Context) {
       try { url = new URL(req.url ?? '', 'http://localhost'); }
       catch { respond(400, { error: 'invalid_request' }); return; }
       if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)||memoryDocumentsHttp&&memoryDocumentsQueryAllowed(req.method,url)||historyClearHttp&&clearQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
+      let releaseForeground:(()=>void)|undefined;
       try {
+        const changesAuthority=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname)||/^\/api\/setup\/wechat\//.test(url.pathname));
+        if(changesAuthority&&foreground)releaseForeground=await foreground.beginChange();
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
           respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
         }
@@ -198,11 +205,21 @@ export async function apply(ctx: Context) {
         if(req.method==='GET'&&url.pathname==='/api/setup/status'){
           respond(200,{runtime_owner_configured:true,owner_id:ownerId,storage:'sqlite',capabilities:capabilities.capabilities});return;
         }
+        if(foreground&&url.pathname==='/api/sync/foreground/observe'){
+          if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}
+          let body:unknown;try{body=JSON.parse((await readWechatHttpBody(req,1024,3500)).toString('utf8')||'{}');}catch{respond(400,{error:'foreground_observation_invalid'});return;}
+          if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length){respond(400,{error:'foreground_observation_invalid'});return;}
+          const abort=new AbortController(),onAbort=()=>abort.abort();req.once('aborted',onAbort);
+          try{const result=await foreground.observe(abort.signal);const {recognized_name,recognition_confidence,...rest}=result;respond(200,{...rest,...(recognized_name===null?{}:{recognized_name,recognition_confidence})});}
+          catch(error){const code=(error as {code?:string}).code;respond(code==='foreground_observation_busy'?409:503,{error:code==='foreground_observation_busy'?code:'foreground_observation_unavailable'});}
+          finally{req.removeListener('aborted',onAbort);}return;
+        }
         if(history&&req.method==='GET'&&url.pathname==='/api/sync/status'){
           respond(200,await historyStatus());return;
         }
         if (!await deletions.handle(req,res)&&!await memoryManagementHttp?.handle(req,res)&&!await memoryDocumentsHttp?.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await historyClearHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!(discussionsEnabled&&await discussions!.http.handle(req,res))&&!(memoryEnabled&&await memory!.http.handle(req,res))&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
+      finally {releaseForeground?.();}
     };
     server=createServer((req,res)=>{
       const pending=handleRequest(req,res),lifecycle=req.url==='/api/runtime/status'||req.url==='/api/runtime/shutdown';
