@@ -7,8 +7,11 @@ import (
 	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -316,5 +319,135 @@ func TestNotAloneHistoryTestMetadataProtocolKeepsHistoryGate(t *testing.T) {
 	r.Consent = "selected-history-v1"
 	if _, err = h.handle(context.Background(), r); err == nil || err.Error() != "history_support_unverified" {
 		t.Fatalf("开发诊断不能授予正文资格:%v", err)
+	}
+}
+
+func TestNotAloneTestMetadataRejectsUnverifiedProcessBeforeArm(t *testing.T) {
+	h := notaloneProtocolFixture(t, false)
+	h.sourceProcess = func(context.Context) (notaloneProcessIdentity, error) {
+		return notaloneProcessIdentity{}, os.ErrNotExist
+	}
+	r := notaloneHistoryRequest{Operation: "observe-test-metadata", Account: h.selected.Account, Conversation: h.selected.Conversation,
+		Consent: "selected-test-lifecycle-metadata-v1", Kind: "arm"}
+	if _, err := h.handle(context.Background(), r); err == nil || err.Error() != "history_source_unverified" {
+		t.Fatalf("未确认源进程却开启状态观察: %v", err)
+	}
+	if h.testMetadata != nil || h.messageGuard != nil || h.messageMonitor != nil {
+		t.Fatal("源进程未认证时留下了观察器或守卫")
+	}
+}
+
+func TestNotAloneTestMetadataRejectsSamePIDWithStaleStartTime(t *testing.T) {
+	h := notaloneProtocolFixture(t, false)
+	identity, stopProcess := notaloneStartCatIdentity(t)
+	defer stopProcess()
+	stale := identity
+	if stale.startMicros > 0 {
+		stale.startMicros--
+	} else {
+		stale.startSeconds--
+	}
+	h.sourceProcess = func(context.Context) (notaloneProcessIdentity, error) { return stale, nil }
+	r := notaloneHistoryRequest{Operation: "observe-test-metadata", Account: h.selected.Account, Conversation: h.selected.Conversation,
+		Consent: "selected-test-lifecycle-metadata-v1", Kind: "arm"}
+	if _, err := h.handle(context.Background(), r); err == nil || err.Error() != "history_source_unverified" {
+		t.Fatalf("同PID的过期启动身份通过守卫: %v", err)
+	}
+	if h.testMetadata != nil || h.messageGuard != nil || h.messageMonitor != nil {
+		t.Fatal("过期启动身份留下了观察器或守卫")
+	}
+}
+
+func TestNotAloneTestMetadataProcessExitBetweenPhasesLatchesSession(t *testing.T) {
+	for _, action := range []string{"next", "current"} {
+		t.Run(action, func(t *testing.T) {
+			h := notaloneProtocolFixture(t, false)
+			identity, stopProcess := notaloneStartCatIdentity(t)
+			defer stopProcess()
+			h.sourceProcess = func(context.Context) (notaloneProcessIdentity, error) { return identity, nil }
+			r := notaloneHistoryRequest{Operation: "observe-test-metadata", Account: h.selected.Account, Conversation: h.selected.Conversation,
+				Consent: "selected-test-lifecycle-metadata-v1", Kind: "arm"}
+			if _, err := h.handle(context.Background(), r); err != nil {
+				t.Fatalf("合成arm失败: %v", err)
+			}
+			if h.messageGuard == nil || h.messageMonitor == nil {
+				t.Fatal("状态观察器没有绑定微信进程守卫")
+			}
+			stopProcess()
+			select {
+			case <-h.guardLost:
+			case <-time.After(2 * time.Second):
+				t.Fatal("进程退出未锁存来源失效")
+			}
+			r.Kind = action
+			if _, err := h.handle(context.Background(), r); err == nil || err.Error() != "history_source_changed" {
+				t.Fatalf("旧原生客户端在进程退出后继续观察: %v", err)
+			}
+		})
+	}
+}
+
+func TestNotAloneTestMetadataProcessExitDuringNextDoesNotReturnReport(t *testing.T) {
+	h := notaloneProtocolFixture(t, false)
+	identity, stopProcess := notaloneStartCatIdentity(t)
+	defer stopProcess()
+	h.sourceProcess = func(context.Context) (notaloneProcessIdentity, error) { return identity, nil }
+	r := notaloneHistoryRequest{Operation: "observe-test-metadata", Account: h.selected.Account, Conversation: h.selected.Conversation,
+		Consent: "selected-test-lifecycle-metadata-v1", Kind: "arm"}
+	if _, err := h.handle(context.Background(), r); err != nil {
+		t.Fatalf("合成arm失败: %v", err)
+	}
+	h.testMetadata.beforeCapture = func(context.Context, *notaloneSnapshot) error {
+		stopProcess()
+		return nil
+	}
+	r.Kind = "next"
+	if _, err := h.handle(context.Background(), r); err == nil || err.Error() != "history_source_changed" {
+		t.Fatalf("next期间源进程退出仍返回报告: %v", err)
+	}
+}
+
+func notaloneStartCatIdentity(t *testing.T) (notaloneProcessIdentity, func()) {
+	t.Helper()
+	command := exec.Command("/bin/cat")
+	stdin, err := command.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command.Stdout = io.Discard
+	if err = command.Start(); err != nil {
+		_ = stdin.Close()
+		t.Fatal(err)
+	}
+	var stopOnce sync.Once
+	stop := func() {
+		stopOnce.Do(func() {
+			_ = stdin.Close()
+			if command.Process != nil {
+				_ = command.Process.Signal(syscall.SIGTERM)
+			}
+			_ = command.Wait()
+		})
+	}
+	path, err := filepath.EvalSymlinks("/bin/cat")
+	if err != nil {
+		stop()
+		t.Fatal(err)
+	}
+	deadline := time.NewTimer(2 * time.Second)
+	tick := time.NewTicker(time.Millisecond)
+	defer deadline.Stop()
+	defer tick.Stop()
+	for {
+		identity, identityErr := readNotaloneProcessIdentity(command.Process.Pid, path)
+		if identityErr == nil {
+			return identity, stop
+		}
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			stop()
+			t.Fatalf("无法核对合成cat进程身份: %v", identityErr)
+		}
 	}
 }

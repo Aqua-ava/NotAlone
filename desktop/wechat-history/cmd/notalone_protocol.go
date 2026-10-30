@@ -469,18 +469,30 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		return h.inspect(ctx)
 	}
 	if r.Operation == "observe-test-metadata" {
+		if err := h.ensureMessageGuard(); err != nil {
+			return nil, err
+		}
 		inspection, err := h.inspect(ctx)
 		if err != nil {
+			return nil, err
+		}
+		if err := h.ensureMessageGuard(); err != nil {
 			return nil, err
 		}
 		if h.testMetadata == nil {
 			h.testMetadata = newNotaloneTestMetadataWatch()
 		}
-		report, err := h.testMetadata.observe(ctx, h.server, *h.selected, inspection, r.Kind)
-		if err != nil {
-			return nil, err
+		report, observeErr := h.testMetadata.observe(ctx, h.server, *h.selected, inspection, r.Kind)
+		if observeErr != nil {
+			if err := h.ensureMessageGuard(); err != nil {
+				return nil, err
+			}
+			return nil, observeErr
 		}
 		if err = h.currentAccount(); err != nil {
+			return nil, err
+		}
+		if err := h.ensureMessageGuard(); err != nil {
 			return nil, err
 		}
 		return report, nil
