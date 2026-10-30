@@ -7,7 +7,7 @@ import {SqliteMemoryManagement} from '../../../src/memory/sqlite/management/serv
 import {SqliteMemoryDocuments} from '../../../src/memory/sqlite/documents/service.ts';
 import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
 
-export async function documentFixture(t,{beforeCall}={}){
+export async function documentFixture(t,{beforeCall,documentModel}={}){
  const f=await fixture(t),contactId=f.saved[0].contact_id;
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期喜欢合成园艺。'})],completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(contactId);await f.contacts.setReading(false);
@@ -23,7 +23,7 @@ export async function documentFixture(t,{beforeCall}={}){
   throw new Error('unexpected synthetic document call');
  };
  const adjudication=new SqliteMemoryAdjudication(f.storage,owner,modelPort(()=>extraction.accounting,adjudicationSupplier()),holders);
- const documents=new SqliteMemoryDocuments(f.storage,owner,modelPort(()=>extraction.accounting,respond),holders);
+ const documents=new SqliteMemoryDocuments(f.storage,owner,documentModel==='unconfigured'?undefined:modelPort(()=>extraction.accounting,respond),holders);
  const extractionPort=modelPort(()=>extraction.accounting,supplier().respond);
  extraction=new SqliteMemoryExtraction(f.storage,owner,extractionPort,holders,async runId=>{await adjudication.publishRun(runId);await documents.publishRun(runId);});
  const management=new SqliteMemoryManagement(f.storage,owner);

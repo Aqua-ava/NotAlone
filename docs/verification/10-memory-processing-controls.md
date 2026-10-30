@@ -70,3 +70,13 @@ node scripts/test-inventory.mjs                       # 登记通过
    - `sharedFailureCodes` 纳入 09 文档阶段共用故障码（`document_model_unconfigured/configuration_invalid/credentials_unavailable/scope_invalid`），并补后端投影与桌面展示回归；非共用/未知占用类文档错误（budget/unknown/in_progress/closed）仍按各域状态处理。
 3. 测试证据更新：`sqlite-memory-control` 18/18、桌面固定处理相关 25/25；两端 typecheck 0、inventory 通过。
 4. 清理：审查提到的遗留测试进程已核实不存在（未发现本任务残留）；隔离根、dev supervisor、DSH/供应商进程与 socket 均无残留，工作树干净。
+
+## 补充：09 真实文档失败路径端到端回归（round3，2026-10-30）
+
+审查建议补一条不经 fixture 手工写入 `processing_task.error_code` 的端到端断言。已按真实产品路径补齐：
+
+- 方法：复用 `documentFixture` 的真实接线（真实 07 提取、真实 08 自动裁决发布、真实 `SqliteMemoryDocuments` 文档阶段），仅把文档模型端口改为产品在“模型未配置”时的真实形态（`SqliteMemoryDocuments(..., model=undefined)`，与 `runtime.ts` 同路径）。09 文档阶段在领取后由 `documents/service.ts` 的 `port()` 抛真实 `StorageFailure('document_model_unconfigured')`，经真实 `memoryDocuments.fail` / `noteFailure` 写入 `processing_task.error_code`。
+- 断言：`projectControl` 的 `sharedFaultCode` 与 `statusReason` 均为 `document_model_unconfigured`、`status=blocked`；`unknown=0`（不是未知回执）；`actions` 为空（不提供继续/重发）；任务 `errorCode` 来自真实 noteFailure；文档 `readTask.outcome` 非 completed；整轮不显示完成。
+- 桌面：固定处理面板对该共用原因只显示一处，且不出现“继续原任务/暂停”等错误动作（headless 断言）。
+- 验证：`sqlite-memory-control` 18/18、文档/管理相关 37/37（Electron Node）、桌面固定处理 25/25、两端 typecheck 0、inventory 通过、public check 0。
+- 未改产品代码：本轮只改测试夹具（`documentFixture` 增加 `documentModel` 选项）与测试/文档，未发现新的产品缺陷。
