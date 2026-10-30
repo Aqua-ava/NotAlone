@@ -8,6 +8,11 @@ function object(v:unknown):Record<string,unknown>{if(!v||typeof v!=='object'||Ar
 function exact(v:Record<string,unknown>,keys:string[]){if(Object.keys(v).length!==keys.length||keys.some(k=>!Object.hasOwn(v,k)))throw new StorageFailure('identity_request_invalid');}
 const result=(res:ServerResponse,status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value,(_k,v)=>typeof v==='bigint'?v.toString():v));};
 const setup=(state:string,account:string|null=null,token:string|null=null,code:string|null=null)=>({state,account_id:account,candidate_token:token,failure_code:code});
+// 只返回固定诊断码，底层错误文本可能包含本机路径或账号资料。
+const detectionFailures = new Set(['wechat_tool_unavailable', 'history_artifact_manifest_missing', 'history_artifact_unverified',
+ 'history_account_unavailable', 'history_program_version_uncertified', 'history_program_version_unavailable',
+ 'history_metadata_profile_unverified', 'metadata_identity_unverified', 'metadata_identity_conflict',
+ 'history_native_unavailable', 'history_native_timeout', 'history_protocol_invalid', 'history_source_unverified', 'history_source_changed', 'history_scope_changed']);
 /** 必须由宿主先执行唯一 Bearer/Origin 认证；不接收 owner、SQL 或适配器配置。 */
 export class SqliteContactHttp {
  private readonly service:SqliteContactService;
@@ -42,8 +47,11 @@ export class SqliteContactHttp {
    else if(path==='/api/setup/wechat'){const d=await this.service.directory();value=d.account?setup('connected',d.account.external_key):setup('needs_detection');}
    else if(path.endsWith('/wechat/detect')){
     exact(body,[]);
-    try{const c=await this.service.detectAccount(controller.signal);value=c.verified?setup('ready',c.account_id,c.candidate_token):setup('tool_not_ready',c.account_id,null,'metadata_identity_unverified');}
-    catch(error){value=setup((error as {code?:string}).code==='wechat_tool_unavailable'?'tool_unavailable':'tool_not_ready',null,null,'metadata_identity_unverified');}
+    try{const c=await this.service.detectAccount(controller.signal);value=c.verified?setup('ready',c.account_id,c.candidate_token):setup('tool_not_ready',c.account_id,null,c.failure_code&&detectionFailures.has(c.failure_code)?c.failure_code:'metadata_identity_unverified');}
+    catch(error){
+     const code=error instanceof StorageFailure&&detectionFailures.has(error.code)?error.code:'wechat_detection_failed';
+     value=setup(code==='wechat_tool_unavailable'?'tool_unavailable':'tool_not_ready',null,null,code);
+    }
    }else if(path.endsWith('/wechat/confirm')){
     exact(body,['candidate_token','confirmed','mode','history_authorized']);
     if(body.confirmed!==true||body.mode!=='selected'||typeof body.history_authorized!=='boolean'||typeof body.candidate_token!=='string')throw new StorageFailure('identity_request_invalid');

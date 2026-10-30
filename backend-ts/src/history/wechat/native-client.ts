@@ -715,6 +715,12 @@ export class NarrowWechatClient {
     await verifyArtifacts(this.#options);
     if (this.#stopped) return fail(this.#failureCode);
     const environment = this.#options.environment ?? Object.fromEntries(['HOME', 'PATH', 'TMPDIR', 'LANG', 'LC_ALL'].filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]]));
+    // 微信沿用主进程明确选定的账号配置；DSH 的 HOME 仍保持隔离，不继承其余宿主环境。
+    if (!this.#options.environment && process.env.NOTALONE_WECHAT_CONFIG !== undefined) {
+      const configPath = process.env.NOTALONE_WECHAT_CONFIG;
+      if (!path.isAbsolute(configPath) || configPath.length > 1024 || /[\0\r\n]/.test(configPath)) fail('history_account_unavailable');
+      environment.WECHAT_CLI_CONFIG = configPath;
+    }
     const child = spawn(this.#options.executable, ['notalone-history'], { stdio: ['pipe', 'pipe', 'pipe'], env: environment, shell: false });
     const exited = new Promise<void>(resolve => child.once('close', () => resolve()));
     const native: NativeProcess = { child, exited, output: Buffer.alloc(0), stderrBytes: 0 };

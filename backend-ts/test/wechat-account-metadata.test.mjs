@@ -10,6 +10,9 @@ import { loadNarrowWechatOptions } from '../src/history/wechat/artifacts.ts';
 import { createWechatContactMetadata } from '../src/contacts/sqlite/wechat-metadata.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
+import { createServer } from 'node:http';
+import { SqliteContactHttp } from '../src/contacts/sqlite/http.ts';
+import { authorizeSqliteRequest } from '../src/sqlite-host-plugin.ts';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const accountKey = 'synthetic-configured-owner_full', generation = 'a'.repeat(64);
@@ -27,6 +30,8 @@ const cli=hash(fs.readFileSync(process.argv[1])),wcdb=hash(fs.readFileSync(${JSO
 const account=s=>({format:'wechat-account-metadata-v1',status:s.mode==='unknown-version'?'unverified':'verified',reason:s.mode==='unknown-version'?'history_program_version_uncertified':null,accountKey:s.account,identityScheme:'wechat.account.v1',sourceGeneration:s.generation,supportProfile:'wechat-4.0.6-29387-account-session-metadata-v1',programVersion:s.mode==='unknown-version'?'9.9.9':'4.0.6',build:s.mode==='unknown-version'?'1':'29387',artifactSha256:cli,wcdbSha256:wcdb,configuredAccount:s.mode==='unknown-version'?'unverified':'verified',continuity:'held-contact-session-instances',normalHistory:false});
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),s=JSON.parse(fs.readFileSync(stateFile));fs.appendFileSync(logFile,JSON.stringify(r)+'\\n');let data;
 if(s.mode==='no-config'){console.log(JSON.stringify({ok:false,error:{code:'history_account_unavailable'}}));return;}
+if(s.mode==='unverified-source'){console.log(JSON.stringify({ok:false,error:{code:'history_source_unverified'}}));return;}
+if(s.mode==='explicit-config'&&(process.env.WECHAT_CLI_CONFIG!==stateFile||process.env.HOME!==s.expectedHome||process.env.NOTALONE_UNRELATED_SECRET)){console.log(JSON.stringify({ok:false,error:{code:'history_account_unavailable'}}));return;}
 if(r.op==='metadata-account'){data=account(s);if(s.mode==='account-body')data.body='BODY_SENTINEL';if(s.mode==='account-promoted')data.normalHistory=true;if(s.mode==='account-artifact')data.artifactSha256='f'.repeat(64);}
 if(r.op==='metadata-sessions'){
  if(s.mode==='cancel')return;
@@ -87,6 +92,43 @@ test('未知版本、缺配置和未配工具不认证metadata，也不读取名
   }
 });
 
+test('账号检测报告缺失的工具清单，恢复完整制品后可重试且不读取名单', async t => {
+  const f = await fixture(t), metadata = createWechatContactMetadata(f.executable);
+  await mkdir(join(f.root, 'storage'));
+  const storage = await SqliteStorage.open({userData: join(f.root, 'storage'), intent: 'create', role: 'test'});
+  const contacts = new SqliteContactService(storage, '00000000-0000-4000-8000-000000000083', metadata);
+  f.cleanups.push(async () => { await contacts.close(); await storage.close(); });
+  await contacts.initialize();
+  const api = new SqliteContactHttp(contacts), token = 'synthetic-account-detection';
+  const server = createServer((req, res) => {
+    if (!authorizeSqliteRequest(req, token)) { res.writeHead(401).end(); return; }
+    void api.handle(req, res);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const detect = async () => {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/setup/wechat/detect`, {method: 'POST', body: '{}', headers: {Authorization: `Bearer ${token}`}});
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const manifest = await readFile(join(f.root, 'manifest.json'));
+  await rm(join(f.root, 'manifest.json'));
+  assert.deepEqual(await detect(), {state: 'tool_not_ready', account_id: null, candidate_token: null, failure_code: 'history_artifact_manifest_missing'});
+  assert.deepEqual(await requests(f), [], '工具不完整时不启动读取进程');
+  await writeFile(join(f.root, 'manifest.json'), manifest);
+  assert.equal((await detect()).state, 'ready');
+  assert.ok((await requests(f)).every(row => row.op === 'metadata-account'));
+  assert.equal((await contacts.directory()).account, null, '检测不等于连接授权');
+  await f.update({mode: 'unknown-version'});
+  assert.equal((await detect()).failure_code, 'history_scope_changed');
+  assert.equal((await detect()).failure_code, 'history_program_version_uncertified');
+  await f.update({mode: 'no-config'});
+  assert.equal((await detect()).failure_code, 'history_account_unavailable');
+  await f.update({mode: 'unverified-source'});
+  assert.equal((await detect()).failure_code, 'history_source_unverified');
+  assert.ok((await requests(f)).every(row => row.op === 'metadata-account'));
+});
+
 test('factory失败后仅下一次显式检测重开同port，close保持终态',async t=>{
   const f=await fixture(t,'no-config'),port=createWechatContactMetadata(f.executable);f.cleanups.push(()=>port.close());
   await assert.rejects(port.account(),{code:'history_account_unavailable'});
@@ -98,6 +140,23 @@ test('factory失败后仅下一次显式检测重开同port，close保持终态'
   await port.close();noProcess(Number(await readFile(f.pidFile,'utf8')));
   await assert.rejects(port.account(),{code:'identity_closed'});
   assert.equal((await requests(f)).length,2,'close后不得复活');
+});
+
+test('隔离宿主为微信只传递明确账号配置路径，不恢复HOME或泄露其他环境', async t => {
+  const f = await fixture(t, 'explicit-config'), isolatedHome = join(f.root, 'isolated-home');
+  await mkdir(isolatedHome); await f.update({expectedHome: isolatedHome});
+  const prior = Object.fromEntries(['HOME', 'NOTALONE_WECHAT_CONFIG', 'NOTALONE_UNRELATED_SECRET'].map(key => [key, process.env[key]]));
+  const port = createWechatContactMetadata(f.executable);
+  try {
+    process.env.HOME = isolatedHome;
+    process.env.NOTALONE_WECHAT_CONFIG = f.stateFile;
+    process.env.NOTALONE_UNRELATED_SECRET = 'synthetic-secret-must-not-reach-reader';
+    assert.equal((await port.account()).assurance, 'verified');
+    assert.ok((await requests(f)).every(row => row.op === 'metadata-account'));
+  } finally {
+    await port.close();
+    for (const [key, value] of Object.entries(prior)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
 });
 
 test('同port修复配置后的显式检测不会恢复服务已撤销的旧grant',async t=>{

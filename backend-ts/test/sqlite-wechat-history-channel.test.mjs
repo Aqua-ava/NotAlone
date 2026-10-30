@@ -208,7 +208,8 @@ test('无显式制品保持unverified，manifest缺失/链接/过大或制品身
   if(mode==='bad-source')await writeFile(f.manifestPath,JSON.stringify({...f.manifest,sourceCommit:'0'.repeat(40)}));
   if(mode==='executable-link'){executable=join(f.artifact,'bin','linked-cli');await symlink(f.executable,executable);}
   if(mode==='relative')executable='relative-cli';
-  const channel=createWechatHistoryChannel(executable);await assert.rejects(channel.inspect(await f.scope()),error=>error.code==='history_artifact_unverified'&&error.message===error.code);await channel.close();
+  const expectedCode=mode==='missing'?'history_artifact_manifest_missing':'history_artifact_unverified';
+  const channel=createWechatHistoryChannel(executable);await assert.rejects(channel.inspect(await f.scope()),error=>error.code===expectedCode&&error.message===error.code);await channel.close();
   await assert.rejects(readFile(f.pidFile),{code:'ENOENT'});
  }
 });

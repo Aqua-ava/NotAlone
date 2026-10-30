@@ -110,12 +110,25 @@ test('历史读取授权报告拒绝非法状态与版本，旧报告按未确�
   {cli_history_authorization_state:'all',cli_history_authorization_version:1,cli_history_authorization_current_version:1},
   {cli_history_authorization_state:'accepted',cli_history_authorization_version:0,cli_history_authorization_current_version:1},
   {cli_history_authorization_state:'accepted',cli_history_authorization_version:1,cli_history_authorization_current_version:0},
+  {cli_history_authorization_state:'unknown',cli_history_authorization_version:1,cli_history_authorization_current_version:1},
  ]){
   f.control.data=report(extra);await f.sync.refresh();assert.equal(f.sync.getState().phase,'failed');
  }
  f.control.data=report({cli_history_authorization_state:'declined',cli_history_authorization_version:1,cli_history_authorization_current_version:1});
  await f.sync.refresh();
  assert.equal(f.sync.getState().report.historyAuthorizationState,'declined');
+});
+
+test('刚连接的SQLite账号接受明确未授权状态，不误报失败或显示全部私聊范围', async t => {
+ const f=fixture(t,{identity_protocol:'sqlite-selected-v1',body_available:false,sync_enabled:false,
+  sync_scope:'selected',cli_history_authorization_state:'unknown',cli_history_authorization_version:null,
+  cli_history_authorization_current_version:1});
+ await flush();
+ assert.equal(f.sync.getState().phase,'ready');
+ assert.equal(f.sync.getState().report.selectionOnly,true);
+ assert.equal(f.sync.getState().report.historyAuthorizationState,'unknown');
+ assert.equal(f.sync.getState().report.bodyAvailable,false);
+ assert.ok(f.requests.every(request=>request.method==='GET'));
 });
 
 test('新范围报告拒绝非法值，保留合法失败原因供界面重试',async t=>{

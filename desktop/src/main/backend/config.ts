@@ -108,12 +108,18 @@ export async function saveBackendConfiguration(userData: string, paths: unknown,
   } finally { await rm(temporary, { force: true }); }
 }
 
+export function wechatConfigurationPath(): string {
+  return process.env.WECHAT_CLI_CONFIG || process.env.WX_MCP_CONFIG || path.join(os.homedir(), '.config', 'wxcli', 'config.json');
+}
+
 export function backendEnvironment(config: BackendConfiguration, userData: string): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { ...process.env,
     NOTALONE_MANAGED_USER_DATA: userData,
     NOTALONE_BACKEND_INFO: config.infoPath,
     NOTALONE_ENV_FILE: config.envFilePath || path.join(config.projectDirectory!, '.env'),
     NOTALONE_WECHAT_CLI: config.wechatCliPath || path.join(userData, 'unconfigured-cli'),
+    // 在 DSH 隔离 HOME 前定位已有账号配置，只传路径，不复制密钥或账号资料。
+    NOTALONE_WECHAT_CONFIG: wechatConfigurationPath(),
     NOTALONE_SYNC_PROBE: config.syncProbePath || path.join(userData, 'unconfigured-probe'),
     NOTALONE_FOREGROUND_LAYOUT: path.join(userData, 'foreground-layout-profile.json') };
   return environment;

@@ -3,6 +3,23 @@ import type { WechatSetupBridge, WechatSetupState } from '../shared/wechat-setup
 import { FirstFrameError } from './FirstFrameError';
 import './bindings.css';
 const initial: WechatSetupState = { phase: 'offline', accountId: null, failureCode: null, revision: -1 };
+const toolFailureMessages: Record<string, string> = {
+  wechat_tool_unavailable: '未找到可用的微信读取工具。请配置完整的读取工具后重新检测。',
+  history_artifact_manifest_missing: '微信读取工具不完整，缺少校验清单。请修复读取工具后重新检测。',
+  history_artifact_unverified: '微信读取工具完整性校验失败，文件可能缺失、损坏或版本不匹配。请修复读取工具后重新检测。',
+  history_account_unavailable: '读取工具尚未配置可用的微信账号。请检查本机微信账号和读取工具配置后重新检测。',
+  history_program_version_uncertified: '当前微信版本尚未通过支持核验，暂时无法连接。请使用受支持的微信版本后重新检测。',
+  history_program_version_unavailable: '暂时无法确认微信版本。请确认微信正常运行后重新检测。',
+  history_native_unavailable: '微信读取工具无法启动。请检查工具路径与本机运行权限后重新检测。',
+  history_native_timeout: '微信账号检测超时。请确认微信正常运行后重新检测。',
+  history_protocol_invalid: '微信读取工具返回了不兼容的结果。请使用与当前 App 匹配的读取工具后重新检测。',
+  history_metadata_profile_unverified: '微信账号或数据来源尚未通过核验。请检查读取工具与当前微信版本是否匹配后重新检测。',
+  history_source_unverified: '当前微信数据来源未通过核验，暂时无法连接。请检查读取工具的数据位置与账号配置后重新检测。',
+  metadata_identity_unverified: '微信账号或数据来源尚未通过核验。请检查读取工具与当前微信版本是否匹配后重新检测。',
+  metadata_identity_conflict: '检测期间微信账号或数据来源不一致，请重新检测。',
+  history_source_changed: '检测期间微信数据来源发生变化，请重新检测。',
+  history_scope_changed: '检测期间微信账号或数据来源发生变化，请重新检测。',
+};
 export function WechatSetupPanel({ bridge, children, selectionOnly = false }: { bridge: WechatSetupBridge; children?: ReactNode; selectionOnly?: boolean }) {
   const [state, setState] = useState(initial);
   const [mode, setMode] = useState<'selected' | 'all_private'>('selected');
@@ -42,7 +59,9 @@ export function WechatSetupPanel({ bridge, children, selectionOnly = false }: { 
     {state.phase === 'needs_owner' && <p>请先到「设置」完成本机本人身份配置，再连接微信。</p>}
     {state.phase === 'needs_detection' && <p>先检测本机微信读取工具可访问的账号，再核对并授权同步范围。</p>}
     {canDetect && <>
-      {blocked && <p role="alert">微信读取工具尚未就绪。当前版本尚不能完成全新电脑的微信读取工具初始化；现在无法连接或开始同步。已有可用配置恢复后，可以重新检测。</p>}
+      {blocked && <p role="alert">{toolFailureMessages[state.failureCode ?? ''] ?? (state.phase === 'tool_unavailable'
+        ? toolFailureMessages.wechat_tool_unavailable
+        : '暂时无法完成微信账号核验。请重新检测；若仍失败，请查看「设置」中的本机诊断。')}</p>}
       {state.phase === 'conflict' && <p role="alert">微信账号与当前配置不一致，连接尚未完成。请核对本机微信读取配置后重新检测。</p>}
       {state.phase === 'failed' && <p role="alert">微信连接状态暂时无法核验，请刷新状态或重新检测。</p>}
       <p>检测只检查本机微信读取工具及配置账号，不读取会话列表或聊天正文，也不会开启同步。</p>

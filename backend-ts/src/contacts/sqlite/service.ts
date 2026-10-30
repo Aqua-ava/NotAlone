@@ -43,7 +43,7 @@ export class SqliteContactService {
   if(saved.account&&(evidence.assurance!=='verified'||saved.account.external_key!==evidence.externalKey||saved.account.source_generation!==evidence.sourceGeneration))await this.execute('identity.invalidateAccount',{accountId:saved.account.id});
   return evidence;
  }
- async detectAccount(signal?:AbortSignal){const evidence=await this.account(signal);if(this.closed)fail('identity_closed');this.candidate={token:randomUUID(),evidence,at:this.clock()};return {account_id:evidence.externalKey,candidate_token:this.candidate.token,verified:evidence.assurance==='verified'};}
+ async detectAccount(signal?:AbortSignal){const evidence=await this.account(signal);if(this.closed)fail('identity_closed');this.candidate={token:randomUUID(),evidence,at:this.clock()};return {account_id:evidence.externalKey,candidate_token:this.candidate.token,verified:evidence.assurance==='verified',failure_code:evidence.assurance==='unverified'?evidence.unverifiedReason??'metadata_identity_unverified':null};}
  async confirmAccount(token:string,signal?:AbortSignal){
   const c=this.candidate;if(!c||c.token!==token||this.clock()-c.at>120_000)fail('account_candidate_stale');
   const evidence=await this.account(signal);

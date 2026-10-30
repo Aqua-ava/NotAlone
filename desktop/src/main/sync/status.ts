@@ -5,7 +5,7 @@ import { isUuid } from '../uuid';
 const backgroundPhases: BackgroundSyncPhase[] = ['disabled', 'waiting_bindings', 'active', 'degraded'];
 const foregroundPhases: ForegroundReportPhase[] = ['sync_disabled', 'waiting_foreground', 'unavailable', 'active', 'failed'];
 const backfillPhases: SyncBackfillPhase[] = ['not_required', 'gap_detected', 'backfilling', 'complete', 'failed', 'incomplete', 'paused'];
-const historyAuthorizationStates: HistoryAuthorizationState[] = ['required', 'accepted', 'declined'];
+const historyAuthorizationStates: HistoryAuthorizationState[] = ['required', 'accepted', 'declined', 'unknown'];
 const historyIncrementalPhases: HistoryIncrementalPhase[] = ['not_started', 'ready', 'syncing', 'incomplete', 'blocked', 'invalidated', 'unavailable', 'stopped'];
 const backgroundIncrementalPhases: BackgroundIncrementalPhase[] = ['idle', 'active', 'incomplete', 'unavailable', 'closed', 'disabled'];
 // 旧后台没有授权版本字段；默认版本只用于把缺失报告标为未确认。
@@ -78,6 +78,7 @@ function historyAuthorization(fields: Record<string, unknown>) {
   const state = fields.cli_history_authorization_state;
   if (!historyAuthorizationStates.includes(state as HistoryAuthorizationState)) throw new Error('同步报告不可用。');
   const version = fields.cli_history_authorization_version;
+  if (state === 'unknown' && version !== null && version !== undefined) throw new Error('同步报告不可用。');
   if (version !== null && version !== undefined) positiveVersion(version);
   return {
     historyAuthorizationState: state as HistoryAuthorizationState,

@@ -25,7 +25,7 @@ export function useBackendState(): { state: BackendState; error: string; retry: 
 }
 
 export function BackendBadge({ state, compact = false }: { state: BackendState; compact?: boolean }) {
-  const label = state.phase === 'connected' ? '已连接'
+  const label = state.phase === 'connected' ? '本机服务已连接'
     : state.phase === 'connecting' ? '连接中' : state.phase === 'stopping' ? '正在停读'
       : state.phase === 'shutdown-failed' ? '停读未获确认' : state.phase === 'stopped' ? '已停读' : '尚未连接';
   return <span className={compact ? 'ime-status' : 'connection-status'} role="status"><span className="status-dot" />{label}</span>;

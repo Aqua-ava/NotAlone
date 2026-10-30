@@ -17,7 +17,11 @@ export async function loadNarrowWechatOptions(executable: string): Promise<Narro
   try {
     if (typeof executable !== 'string') return reject();
     await regular(executable);
-    const file = path.join(path.dirname(path.dirname(executable)), 'manifest.json'), before = await regular(file);
+    const file = path.join(path.dirname(path.dirname(executable)), 'manifest.json');
+    const before = await regular(file).catch(error => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new StorageFailure('history_artifact_manifest_missing');
+      throw error;
+    });
     if (before.size > manifestLimit) return reject();
     const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
@@ -39,5 +43,8 @@ export async function loadNarrowWechatOptions(executable: string): Promise<Narro
         || typeof row.wcdbSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.wcdbSha256)) return reject();
       return { executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256 };
     } finally { await handle.close(); }
-  } catch { return reject(); }
+  } catch (error) {
+    if (error instanceof StorageFailure && error.code === 'history_artifact_manifest_missing') throw error;
+    return reject();
+  }
 }

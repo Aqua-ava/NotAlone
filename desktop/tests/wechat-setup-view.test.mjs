@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
-async function pageFixture(t, phase='needs_detection', selectionOnly=false) {
+async function pageFixture(t, phase='needs_detection', selectionOnly=false, failureCode=null) {
  const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page=await browser.newPage();
  const bundle=await build({stdin:{contents:`
  import React from 'react';import {createRoot} from 'react-dom/client';import {WechatSetupPanel} from './src/renderer/WechatSetupPanel';
- let state={phase:${JSON.stringify(phase)},accountId:null,failureCode:null,revision:1};const listeners=new Set();window.calls=[];
+ let state={phase:${JSON.stringify(phase)},accountId:null,failureCode:${JSON.stringify(failureCode)},revision:1};const listeners=new Set();window.calls=[];
  window.update=value=>{state={...state,...value,revision:state.revision+1};for(const fn of listeners)fn(state);};
  const bridge={getState:async()=>state,refresh:async()=>window.calls.push('refresh'),onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},
  detect:async()=>{window.calls.push('detect');window.update({phase:'ready',accountId:'synthetic-account'});},
@@ -36,12 +36,29 @@ test('新用户主动检测并确认列表读取，默认仅所选且不读取�
 });
 test('未准备的工具不能伪装为连接成功，保存后只重试加载',async t=>{
  const page=await pageFixture(t,'tool_not_ready');
- await expect(page.getByText(/当前版本尚不能完成全新电脑的微信读取工具初始化/)).toBeVisible();
+ await expect(page.getByText(/暂时无法完成微信账号核验/)).toBeVisible();
  await expect(page.getByRole('button',{name:'确认连接并开启同步',exact:true})).toHaveCount(0);
  await page.evaluate(()=>window.update({phase:'restart-failed',accountId:'synthetic-account'}));
  await expect(page.getByText(/授权已保存/)).toBeVisible();
  await page.getByRole('button',{name:'重新加载连接',exact:true}).click();
  assert.deepEqual(await page.evaluate(()=>window.calls),['refresh','retry']);
+});
+
+test('工具清单缺失准确提示制品不完整，不误报全新电脑初始化', async t => {
+ const page = await pageFixture(t, 'tool_not_ready', false, 'history_artifact_manifest_missing');
+ await expect(page.getByRole('alert')).toContainText('微信读取工具不完整，缺少校验清单');
+ await expect(page.getByText(/全新电脑/)).toHaveCount(0);
+ await expect(page.getByRole('button', {name: '确认连接并开启同步', exact: true})).toHaveCount(0);
+ assert.deepEqual(await page.evaluate(() => window.calls), ['refresh']);
+ await page.evaluate(() => window.update({failureCode: 'history_account_unavailable'}));
+ await expect(page.getByRole('alert')).toContainText('尚未配置可用的微信账号');
+ await page.evaluate(() => window.update({failureCode: 'history_program_version_uncertified'}));
+ await expect(page.getByRole('alert')).toContainText('当前微信版本尚未通过支持核验');
+ await page.evaluate(() => window.update({failureCode: 'history_source_unverified'}));
+ await expect(page.getByRole('alert')).toContainText('当前微信数据来源未通过核验');
+ await page.evaluate(() => window.update({failureCode: 'unknown_internal_detail'}));
+ await expect(page.getByRole('alert')).toContainText('暂时无法完成微信账号核验');
+ await expect(page.getByText(/unknown_internal_detail|全新电脑/)).toHaveCount(0);
 });
 
 test('全部私聊及历史独立明确选择，扩大范围清除旧历史勾选',async t=>{

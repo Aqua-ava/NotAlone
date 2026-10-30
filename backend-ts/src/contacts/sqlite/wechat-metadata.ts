@@ -4,7 +4,9 @@ import { loadNarrowWechatOptions } from '../../history/wechat/artifacts.ts';
 import type { AccountEvidence, ContactMetadataPort } from './contracts.ts';
 
 const evidence = (account: WechatAccountMetadata): AccountEvidence => ({externalKey:account.accountKey, identityScheme:account.identityScheme,
-  sourceGeneration:account.sourceGeneration, assurance:account.status, supportProfile:account.supportProfile});
+  sourceGeneration:account.sourceGeneration, assurance:account.status, supportProfile:account.supportProfile,
+  ...(account.status === 'unverified' && (account.reason === 'history_program_version_uncertified' || account.reason === 'history_metadata_profile_unverified')
+    ? {unverifiedReason: account.reason} : {})});
 /** 只认证已配置工具账号的窄元数据支持档，不表示微信前台登录核验或正文资格。 */
 export function createWechatContactMetadata(executable?: string): ContactMetadataPort {
   let pending: Promise<NarrowWechatClient> | undefined, closed = false;

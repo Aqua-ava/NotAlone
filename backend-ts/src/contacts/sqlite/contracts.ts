@@ -5,6 +5,8 @@ export interface AccountEvidence {
   sourceGeneration: string;
   assurance: 'verified' | 'unverified';
   supportProfile: string;
+  /** 仅用于解释未通过的账号检测，不提升身份资格。 */
+  unverifiedReason?: 'history_program_version_uncertified' | 'history_metadata_profile_unverified';
 }
 export interface PrivateSessionMetadata { externalKey: string; displayName: string; kind: string; identityAssurance: 'verified' | 'unverified' }
 export interface ContactMetadataPort {
