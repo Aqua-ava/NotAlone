@@ -20,15 +20,19 @@ export function preflightGeneration(tx: StorageTransaction, token: ReadEligibili
   if(tx.get('SELECT 1 FROM read_goal WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id])
     ||tx.get('SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? LIMIT 1',[token.owner_id,token.conversation_id])
     ||tx.get('SELECT 1 FROM history_cutoff WHERE owner_id=? AND conversation_id=? LIMIT 1',[token.owner_id,token.conversation_id]))return fenceContinuity(tx,token);
+  tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,'']);
   return true;
 }
 export function preflightTarget(tx: StorageTransaction, token: ReadEligibility, target: HistoryTarget): boolean {
   if(!preflightGeneration(tx,token))return false;
   const existing=tx.get('SELECT tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
   const value=tables(target);
+  if(existing?.tables_json===''){
+    tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[value,token.owner_id,token.contact_id]);
+    return true;
+  }
   if(existing)return existing.tables_json===value?true:fenceContinuity(tx,token);
-  tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,value]);
-  return true;
+  return fenceContinuity(tx,token);
 }
 /** 接受页的事务复验不改变围栏；失证应由预检先行持久化。 */
 export function assertSourceContinuity(tx: StorageTransaction, token: ReadEligibility, target: HistoryTarget): void {
