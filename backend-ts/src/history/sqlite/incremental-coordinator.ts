@@ -17,7 +17,7 @@ interface QueuedRead { contactId: string; key: string }
 interface ActiveRead extends QueuedRead { controller: AbortController; done: Promise<void>; cancelledAtWake?: number }
 
 /** 范围/身份/语义变化不可自动重试；瞬时读取故障保留可见降级并在后续 tick 重试。 */
-const fatalCodes = new Set(['history_support_unverified', 'history_support_unsupported', 'history_support_changed',
+const fatalCodes = new Set(['history_source_continuity_unverified', 'history_support_unverified', 'history_support_unsupported', 'history_support_changed',
   'history_external_scope_changed', 'history_cursor_invalid', 'history_cursor_scope_changed', 'history_suppression_unverified',
   'history_suppression_changed', 'history_incremental_unavailable', 'history_incremental_not_ready', 'history_tail_unsupported',
   'history_target_unverified', 'history_target_invalid', 'history_scope_invalid', 'history_account_changed', 'history_source_changed',

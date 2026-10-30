@@ -3,6 +3,7 @@ import { StorageFailure, type StorageTransaction } from '../../storage/sqlite/co
 import type { DeletionDomain, DeletionOperation, RowDeletionTarget, CheckResult } from '../../storage/sqlite/deletion/contracts.ts';
 import { verifiedCutoffForOperation } from './clear-actions.ts';
 const rowKinds=Object.fromEntries(['capture_record','message_alias','message','sync_capture','read_goal'].map(kind=>[kind,{keys:['owner_id','id'],ownerKey:'owner_id'}]));
+rowKinds.history_continuity_fence={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const identity=(kind:string,key:Record<string,string>):string=>createHash('sha256').update(JSON.stringify([kind,Object.keys(key).sort().map(k=>[k,key[k]])])).digest('hex');
 const target=(kind:string,key:Record<string,string>):RowDeletionTarget=>({kind:'row',domain:'history',rowKind:kind,key,identity:identity(kind,key),holderKeys:[]});
@@ -13,6 +14,7 @@ function scopeRows(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget
  const clause=scope.kind==='account'?'r.owner_id=?':scope.kind==='source'?'r.owner_id=? AND r.contact_id=? AND r.id=?':'r.owner_id=? AND r.contact_id=?';
  const records=tx.all(`SELECT r.* FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE ${clause}${scope.kind==='account'?'':' AND g.accepted_data_generation<?'}`,scope.kind==='account'?args:[...args,op.acceptedGeneration]);
  const targets=records.map(r=>target('capture_record',{owner_id:ownerId,id:String(r.id)}));
+ if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_continuity_fence WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_continuity_fence',{owner_id:ownerId,contact_id:String(r.contact_id)}));
  const deleting=new Set(records.map(r=>String(r.id)));
  const messages=scope.kind==='source'?[...new Set(records.flatMap(r=>r.message_id?[String(r.message_id)]:[]))]:tx.all(`SELECT id FROM message WHERE owner_id=?${scope.kind==='account'?'':' AND contact_id=?'} AND availability='deleting'`,scope.kind==='account'?[ownerId]:[ownerId,scope.contactId]).map(r=>String(r.id));
  for(const id of messages){

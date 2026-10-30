@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 15,
+  "schemaVersion": 16,
   "migrationVersions": [
    1,
    2,
@@ -16,13 +16,14 @@
    12,
    13,
    14,
-   15
+   15,
+   16
   ],
-  "userVersion": 15,
+  "userVersion": 16,
   "sqliteVersion": "3.53.4",
-  "tableCount": 82,
-  "fieldCount": 814,
-  "foreignKeyGroups": 173,
+  "tableCount": 83,
+  "fieldCount": 817,
+  "foreignKeyGroups": 174,
   "triggerCount": 92,
   "checkCount": 252,
   "viewCount": 0
@@ -3398,6 +3399,67 @@
     }
    ],
    "sql": "CREATE TABLE execution_input ( owner_id TEXT NOT NULL,event_id TEXT NOT NULL,input_no INTEGER NOT NULL,role TEXT NOT NULL,presentation_no INTEGER NOT NULL, planned_step_id TEXT,planned_input_no INTEGER,reply_context_id TEXT,context_item_no INTEGER,producer_event_id TEXT, PRIMARY KEY(owner_id,event_id,input_no),FOREIGN KEY(owner_id,event_id) REFERENCES execution_event(owner_id,id) ON DELETE CASCADE, FOREIGN KEY(owner_id,planned_step_id,planned_input_no) REFERENCES step_input(owner_id,step_id,input_no), FOREIGN KEY(owner_id,reply_context_id,context_item_no) REFERENCES reply_context_item(owner_id,context_id,item_no), FOREIGN KEY(owner_id,producer_event_id) REFERENCES execution_event(owner_id,id) ON DELETE CASCADE, CHECK((planned_step_id IS NOT NULL AND planned_input_no IS NOT NULL AND reply_context_id IS NULL AND context_item_no IS NULL AND producer_event_id IS NULL) OR (planned_step_id IS NULL AND planned_input_no IS NULL AND reply_context_id IS NOT NULL AND context_item_no IS NOT NULL AND producer_event_id IS NULL) OR (planned_step_id IS NULL AND planned_input_no IS NULL AND reply_context_id IS NULL AND context_item_no IS NULL AND producer_event_id IS NOT NULL AND role='verified_contribution')) ) STRICT"
+  },
+  "history_continuity_fence": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "reason",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_history_continuity_fence_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE history_continuity_fence ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id), FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
   },
   "history_cutoff": {
    "columns": [

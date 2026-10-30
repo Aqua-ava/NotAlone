@@ -91,6 +91,25 @@ test('05真实删除注册封禁旧页，单来源删除保留其他合法来源
  const after=await service.read(contact);assert.equal(after.messages.length,2);assert.equal(after.messages.find(m=>m.kind==='text').sourceRecordIds.length,1);
  await service.synchronize(contact);assert.equal((await service.read(contact)).messages.find(m=>m.kind==='text').sourceRecordIds.length,1);
 });
+test('已删除来源的表实例失证后，重试和重开都在读取正文前停读',async t=>{
+ const f=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=f.saved[0].contact_id;
+ await f.service.synchronize(contact);
+ const source=(await f.service.read(contact)).messages.find(m=>m.kind==='text').sourceRecordIds[0];
+ const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
+ const deletion=new DeletionService(f.storage,f.service.holders,new ManagedFiles(f.root));
+ const plan=await deletion.plan({ownerId:owner,requestKey:'synthetic-source-continuity',scope:{kind:'source',contactId:contact,sourceId:source}});
+ assert.equal((await deletion.advance(plan)).state,'completed');
+ f.target.tables=[{partition:'shard-a',instance:'table-instance-replaced'}];let pages=0;
+ f.channel.page=async()=>{pages++;throw new Error('失证时不得读取正文');};
+ await assert.rejects(f.service.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(pages,0);
+ f.target.tables=[{partition:'shard-a',instance:'table-instance-1'}];
+ await assert.rejects(f.service.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(pages,0);
+ await f.service.close();const old=f.storage.status;await f.storage.close();
+ const reopened=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:old.databaseId,registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});t.after(()=>reopened.close());
+ const contacts=new SqliteContactService(reopened,owner,{account:async()=>{throw new Error('不访问渠道');},sessions:async()=>[]});
+ const history=new SqliteHistoryService(reopened,contacts,f.channel);t.after(()=>history.close());
+ await assert.rejects(history.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(pages,0);
+});
 test('删除等待在途读取释放，超时不得完成，迟到页不能提交',async t=>{
  const {service,channel,saved,storage,target,root}=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=saved[0].contact_id;
  await service.synchronize(contact);const source=(await service.read(contact)).messages[0].sourceRecordIds[0];

@@ -480,11 +480,11 @@ test('来源代次变化后旧B不放行普通读取，已清空旧成员不得�
   assert.equal(token.source_generation, 'source-2');
   assert.notEqual(token.barrier_generation, '0');
   f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2'), record('shard-b', '7')];
-  await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_suppression_unverified' });
+  await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_source_continuity_unverified' });
   assert.equal((await f.current.history.read(f.contactA)).messages.length, 0, '跨来源代次不能复活旧消息');
 });
 
-test('v12旧结构库升级到当前15后联系人、同步与清空重读仍可工作', async t => {
+test('v12旧结构库升级到当前16后联系人、同步与清空重读仍可工作', async t => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-clear-upgrade-')));
   t.after(() => rm(root, { recursive: true, force: true }));
   const legacy = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test',
@@ -496,7 +496,7 @@ test('v12旧结构库升级到当前15后联系人、同步与清空重读仍可
   await legacy.close();
   const upgraded = await SqliteStorage.open({ userData: root, intent: 'open', role: 'test', expectedDatabaseId: databaseId });
   t.after(() => upgraded.close());
-  assert.equal(upgraded.status.schemaVersion, 15);
+  assert.equal(upgraded.status.schemaVersion, 16);
   assert.deepEqual(await upgraded.check(), { integrity: 'ok', foreignKeys: 'ok' });
   const { channel, state } = createChannel();
   const holders = new (await import('../src/storage/sqlite/deletion/holders.ts')).ActiveHolders();

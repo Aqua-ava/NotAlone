@@ -14,7 +14,7 @@ export interface FirstHistoryCoordinatorState {
 }
 interface QueuedRead { contactId: string; key: string }
 interface ActiveRead extends QueuedRead { cancelledAtWake?: number; controller: AbortController; done: Promise<void> }
-const allowedErrors = new Set(['history_support_unverified', 'history_support_unsupported', 'history_support_changed',
+const allowedErrors = new Set(['history_source_continuity_unverified', 'history_support_unverified', 'history_support_unsupported', 'history_support_changed',
   'history_external_scope_changed', 'history_interrupted', 'history_page_budget_exhausted', 'history_cursor_invalid',
   'history_target_invalid', 'history_target_unverified', 'history_snapshot_closed', 'history_snapshot_unavailable',
   'history_native_timeout', 'history_native_cancelled', 'history_native_unavailable', 'history_source_changed',

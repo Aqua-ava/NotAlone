@@ -115,6 +115,7 @@ export class SqliteHistoryResyncService {
       if (!goal) {
         if (signal.aborted) fail('history_interrupted');
         const target = await channel.target(currentScope, signal);
+        if (!await this.storage.execute<boolean>('history.preflightContinuity', { token: current, target })) fail('history_source_continuity_unverified');
         const created = await this.storage.execute<{ id: string; target: HistoryTarget }>('history.begin',
           { token: current, target, report: currentReport, id: randomUUID(), at: Date.now() });
         const attached = await this.storage.execute<StoredRestore & { attached: boolean }>('history.restoreAttach',
@@ -126,6 +127,7 @@ export class SqliteHistoryResyncService {
         await this.storage.execute('history.restoreComplete', { ownerId: this.owner(), contactId, requestKey, at: Date.now() });
         return this.view(contactId, await this.stored(contactId), await this.coverage(contactId));
       }
+      if (!await this.storage.execute<boolean>('history.preflightContinuity', { token: current, target: goal.target })) fail('history_source_continuity_unverified');
       const coverage = await this.readGoal(contactId, current, goal, currentReport, signal, channel, currentScope);
       await this.storage.execute('history.restoreComplete', { ownerId: this.owner(), contactId, requestKey, at: Date.now() });
       return this.view(contactId, await this.stored(contactId), coverage);

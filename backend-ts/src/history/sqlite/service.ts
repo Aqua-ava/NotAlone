@@ -77,7 +77,10 @@ export class SqliteHistoryService {
    };
    const report=await inspect();
    goal=await this.storage.execute<PendingGoal|null>('history.pending',{token:scope.token,report})??undefined;
-   if(!goal){const target=await channel.target(scope,controller.signal);await check();goal=await this.storage.execute('history.begin',{token:scope.token,target,report,id:randomUUID(),at:Date.now()});}
+   if(!goal){const target=await channel.target(scope,controller.signal);await check();
+    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target}))throw new StorageFailure('history_source_continuity_unverified');
+    goal=await this.storage.execute('history.begin',{token:scope.token,target,report,id:randomUUID(),at:Date.now()});}
+   if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target}))throw new StorageFailure('history_source_continuity_unverified');
    registerGoal(goal!.id);
    for(let index=0;index<1000;index++){
     await check();const page=await channel.page(scope,goal!.target,goal!.cursor,controller.signal);await check();
@@ -105,8 +108,11 @@ export class SqliteHistoryService {
    const report=await inspect();
    // 只有支持档明确声明增量能力才继续；仅存在方法不等于认证通过。
    if(report.capabilities?.incrementalTail!=='supported')throw new StorageFailure('history_tail_unsupported');
+   const continuityTarget=await this.storage.execute<HistoryTarget|null>('history.incrementalContinuityTarget',{token:scope.token,report});
+   if(continuityTarget&&!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:continuityTarget}))throw new StorageFailure('history_source_continuity_unverified');
    goal=await this.storage.execute<typeof goal|null>('history.incrementalPending',{token:scope.token,report})??undefined;
    if(!goal)goal=await this.storage.execute('history.beginIncremental',{token:scope.token,report,id:randomUUID(),at:Date.now()});
+   if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target}))throw new StorageFailure('history_source_continuity_unverified');
    registerGoal(goal!.id);
    for(let index=0;index<200;index++){
     await check();const page=await channel.tail(scope,goal!.target,goal!.cursor,controller.signal);await check();

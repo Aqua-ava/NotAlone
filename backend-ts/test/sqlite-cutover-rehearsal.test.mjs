@@ -55,7 +55,7 @@ test('空隔离根默认创建同一新SQLite实例，重开沿用 database_id �
   assert.equal(first.phase, 'ready');
   assert.equal(first.code, 'sqlite_ready');
   assert.equal(first.created, true);
-  assert.equal(first.schemaVersion, 15);
+  assert.equal(first.schemaVersion, 16);
   assert.deepEqual(first.configuration.capabilities, ['contacts', 'skills', 'history', 'discussions', 'memory']);
   const config = JSON.parse(await readFile(startupConfigPath(root), 'utf8'));
   assert.equal(config.expectedDatabaseId, first.databaseId);
