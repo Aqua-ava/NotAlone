@@ -41,6 +41,11 @@ test('本机查看器不预渲染正文，token仅在URL fragment，匿名或跨
   assert.match(html, /textContent/);
   assert.match(html, /本次快照期间守卫有效/);
   assert.match(html, /本次快照失证/);
+  assert.match(html, /载入更多记录/);
+  assert.doesNotMatch(html, /window\.confirm/);
+  assert.match(html, /确认删除这条隔离文字/);
+  assert.match(html, /确认删除全部隔离文字/);
+  assert.match(html, /await load\(true, true\)/);
   assert.equal(html.includes('innerHTML'), false);
 
   const anonymous = await fetch(`${url.origin}/api/records`);

@@ -11,8 +11,9 @@ const page = `<!doctype html>
 <p id="notice" role="status">读取隔离仓状态中…</p>
 <p>所有消息状态均未核验。此处文字仅用于本机验收，不进入普通聊天、检索、记忆或回复生成。</p>
 <button id="delete-all" type="button">删除全部隔离文字</button>
+<button id="cancel-delete-all" type="button" hidden>取消删除</button>
 <section id="records" aria-label="未核验历史消息"></section>
-<button id="more" type="button" disabled>载入更早记录</button>
+<button id="more" type="button" disabled>载入更多记录</button>
 <p id="error" role="alert"></p></main>
 <script nonce="__NONCE__">
 (() => {
@@ -23,8 +24,10 @@ const page = `<!doctype html>
   const error = document.querySelector('#error');
   const more = document.querySelector('#more');
   const deleteAll = document.querySelector('#delete-all');
+  const cancelDeleteAll = document.querySelector('#cancel-delete-all');
   let cursor = null;
   let busy = false;
+  let deleteAllPending = false;
   async function api(path, init = {}) {
     const response = await fetch(path, { ...init, headers: { ...(init.headers || {}), Authorization: 'Bearer ' + token, Accept: 'application/json' } });
     const value = await response.json().catch(() => ({}));
@@ -47,19 +50,32 @@ const page = `<!doctype html>
     body.textContent = record.text;
     const remove = document.createElement('button');
     remove.type = 'button'; remove.textContent = '删除这条隔离文字';
+    const cancelRemove = document.createElement('button');
+    cancelRemove.type = 'button'; cancelRemove.textContent = '取消删除'; cancelRemove.hidden = true;
+    let deletePending = false;
     remove.addEventListener('click', async () => {
-      if (busy || !window.confirm('删除这条仅保存在本机隔离仓的文字？')) return;
-      busy = true; remove.disabled = true; error.textContent = '';
-      try { await api('/api/records/' + encodeURIComponent(record.id), { method: 'DELETE' }); article.remove(); await refreshStatus(); }
-      catch (failure) { error.textContent = failure.message; remove.disabled = false; }
-      finally { busy = false; }
+      if (busy) return;
+      if (!deletePending) {
+        deletePending = true;
+        remove.textContent = '确认删除这条隔离文字';
+        cancelRemove.hidden = false;
+        return;
+      }
+      busy = true; remove.disabled = true; cancelRemove.disabled = true; error.textContent = '';
+      try { await api('/api/records/' + encodeURIComponent(record.id), { method: 'DELETE' }); await load(true, true); }
+      catch (failure) { error.textContent = failure.message; }
+      finally { busy = false; remove.disabled = false; cancelRemove.disabled = false; }
     });
-    article.append(label, body, remove);
+    cancelRemove.addEventListener('click', () => {
+      if (busy) return;
+      deletePending = false; remove.textContent = '删除这条隔离文字'; cancelRemove.hidden = true;
+    });
+    article.append(label, body, remove, cancelRemove);
     list.append(article);
   }
   async function refreshStatus() { const value = await api('/api/status'); setStatus(value); }
-  async function load(reset) {
-    if (busy) return;
+  async function load(reset, afterDelete = false) {
+    if (busy && !afterDelete) return;
     busy = true; more.disabled = true; error.textContent = '';
     try {
       if (reset) { cursor = null; list.replaceChildren(); }
@@ -74,11 +90,19 @@ const page = `<!doctype html>
   }
   more.addEventListener('click', () => void load(false));
   deleteAll.addEventListener('click', async () => {
-    if (busy || !window.confirm('永久删除隔离仓中全部文字？')) return;
-    busy = true; deleteAll.disabled = true; error.textContent = '';
+    if (busy) return;
+    if (!deleteAllPending) {
+      deleteAllPending = true; deleteAll.textContent = '确认删除全部隔离文字'; cancelDeleteAll.hidden = false;
+      return;
+    }
+    busy = true; deleteAll.disabled = true; cancelDeleteAll.disabled = true; error.textContent = '';
     try { await api('/api/records', { method: 'DELETE' }); list.replaceChildren(); cursor = null; more.disabled = true; await refreshStatus(); }
     catch (failure) { error.textContent = failure.message; }
-    finally { busy = false; deleteAll.disabled = false; }
+    finally { busy = false; deleteAll.disabled = false; cancelDeleteAll.disabled = false; deleteAllPending = false; deleteAll.textContent = '删除全部隔离文字'; cancelDeleteAll.hidden = true; }
+  });
+  cancelDeleteAll.addEventListener('click', () => {
+    if (busy) return;
+    deleteAllPending = false; deleteAll.textContent = '删除全部隔离文字'; cancelDeleteAll.hidden = true;
   });
   void load(true);
 })();
