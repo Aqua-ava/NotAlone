@@ -107,3 +107,5 @@ Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-gran
 2026-10-30 隔离范围续验：开发 App 设置页已接入独立未核验历史窗口，支持查看与删除，管理页仅接收摘要。当前来源元数据摘要复核相符，原隔离仓89条与更新时间保持；不证明跨重启连续性、不改变消息状态、不归入正常联系人资料。目录和复核改用只读inspect，运行中仓禁止打开；后台相关26项、桌面5项和两端类型检查通过，实际App以合成仓核对2→1→0删除，真实仓仅核对89条状态。普通历史真实渠道验收仍未完成，State保持claimed。详见docs/verification/quarantine-history-import.md。
 
 2026-10-30 状态观察与源进程续验：07864e41修复受控metadata观察未接微信进程守卫。最终开发制品169项相关race通过、1既有跳过，后台持久守卫15项通过。已授权单条由Agent发送、用户手动撤回；同一本地/服务端身份的type/status从1/2变为10000/4。微信菜单退出后旧观察器停止，重新登录后旧客户端仍拒绝；新metadata摘要与原仓匹配，89条及更新时间不变。仅证明该状态转移与失证停读，不认证全部消息状态或跨重启正向续读；普通历史门禁和State claimed保持。详见docs/verification/sqlite-private-history-support-03.md。
+
+2026-10-30 接收方向续验：只读汇总既有隔离文字为75条owner/type1/status2与14条contact/type1/status4；分组不构成状态认证。新增独立received元数据观察op/许可/响应与TS入口，arm/next按对应方向复验唯一Name2Id映射，current保留锁定身份并允许未知/消失。最终开发制品190项相关native race通过、1既有跳过，TS客户端及owner生命周期34项通过，两端类型检查通过；修复预取消请求保留守卫的问题，独立复核无阻断。本轮按用户要求仅做代码与合成验证，真实接收样本未执行，89条与normalHistory门禁不变，State继续claimed。

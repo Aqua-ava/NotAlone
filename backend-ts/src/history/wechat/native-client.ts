@@ -53,6 +53,11 @@ export interface WechatTestMetadataObservation {
   sourceGeneration: string; schemaFingerprint: string; action: WechatTestMetadataAction;
   checkedPartitions: string[]; lockedCount: number; records: (WechatMessageMetadataRecord | null)[];
 }
+export interface WechatReceivedTestMetadataObservation {
+  format: 'wechat-received-test-metadata-observation-v1'; status: 'unverified'; scopeDigest: string;
+  sourceGeneration: string; schemaFingerprint: string; action: WechatTestMetadataAction;
+  checkedPartitions: string[]; lockedCount: number; records: (WechatMessageMetadataRecord | null)[];
+}
 export interface NarrowWechatClientOptions {
   executable: string; expectedCliSha256: string; expectedWcdbSha256: string;
   environment?: Record<string, string | undefined>;
@@ -331,6 +336,18 @@ function testMetadataObservation(value: unknown, scope: ResolvedWechatScope, sch
   return { format: 'wechat-test-metadata-observation-v1', status: 'unverified', scopeDigest: schema.scopeDigest,
     sourceGeneration: scope.sourceGeneration, schemaFingerprint: schema.schemaFingerprint, action, checkedPartitions, lockedCount, records };
 }
+function receivedTestMetadataObservation(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, action: WechatTestMetadataAction): WechatReceivedTestMetadataObservation {
+  const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'action', 'checkedPartitions', 'lockedCount', 'records']);
+  if (row.format !== 'wechat-received-test-metadata-observation-v1' || row.status !== 'unverified' || row.action !== action) return fail();
+  if (hash(row.scopeDigest) !== digest(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail();
+  if (hash(row.schemaFingerprint) !== schema.schemaFingerprint) return fail();
+  const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
+  if (JSON.stringify([...checkedPartitions].sort()) !== JSON.stringify([...schema.checkedPartitions].sort())) return fail();
+  const lockedCount = integer(row.lockedCount, 2), records = list(row.records, 2, value => value === null ? null : metadataRecord(value, schema));
+  if (records.length !== lockedCount) return fail();
+  return { format: 'wechat-received-test-metadata-observation-v1', status: 'unverified', scopeDigest: schema.scopeDigest,
+    sourceGeneration: scope.sourceGeneration, schemaFingerprint: schema.schemaFingerprint, action, checkedPartitions, lockedCount, records };
+}
 interface TestMetadataState { scopeDigest: string; sourceGeneration: string; schemaFingerprint: string; identities: string[] }
 function metadataIdentity(record: WechatMessageMetadataRecord): string { return JSON.stringify([record.partition, record.table, record.localId]); }
 function signalValid(signal?: AbortSignal): void {
@@ -392,6 +409,7 @@ export class NarrowWechatClient {
   #target?: HistoryTarget;
   #quarantineTarget?: HistoryTarget;
   #testMetadata?: TestMetadataState;
+  #receivedTestMetadata?: TestMetadataState;
   #pending?: PendingResponse;
   #stopped = false;
   #failureCode = 'history_native_closed';
@@ -490,6 +508,41 @@ export class NarrowWechatClient {
           }
         });
         this.#testMetadata = { scopeDigest: parsed.scopeDigest, sourceGeneration: parsed.sourceGeneration, schemaFingerprint: parsed.schemaFingerprint, identities };
+        return parsed;
+      });
+    }, signal);
+  }
+  observeReceivedTestMetadataSelected(action: WechatTestMetadataAction, signal?: AbortSignal): Promise<WechatReceivedTestMetadataObservation> {
+    try { signalValid(signal); if (!['arm', 'next', 'current'].includes(action)) fail('history_request_invalid'); }
+    catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(async () => {
+      const scope = this.#selected, schema = this.#schema, previous = this.#receivedTestMetadata;
+      if (!scope || !schema) return fail('history_scope_unverified');
+      if (action === 'arm' && previous) return fail('history_request_invalid');
+      if (action !== 'arm' && !previous) return fail('history_snapshot_closed');
+      if (previous && (previous.scopeDigest !== schema.scopeDigest || previous.sourceGeneration !== scope.sourceGeneration)) {
+        await this.#stop('history_source_changed'); return fail('history_source_changed');
+      }
+      if (previous && previous.schemaFingerprint !== schema.schemaFingerprint) {
+        await this.#stop('history_schema_changed'); return fail('history_schema_changed');
+      }
+      return this.#request({ op: 'observe-received-test-metadata', account: scope.accountKey, conversation: scope.conversationKey,
+        consent: 'selected-received-test-lifecycle-metadata-v1', kind: action }, value => {
+        const parsed = receivedTestMetadataObservation(value, scope, schema, action), identities = [...(previous?.identities ?? [])];
+        if (action === 'arm' ? parsed.lockedCount !== 0 : parsed.lockedCount < identities.length
+          || parsed.lockedCount > identities.length + (action === 'next' ? 1 : 0)
+          || action === 'current' && parsed.lockedCount !== identities.length) return fail('history_identity_ambiguous');
+        parsed.records.forEach((record, index) => {
+          if (index < identities.length) {
+            if (record !== null && metadataIdentity(record) !== identities[index]) fail('history_identity_ambiguous');
+          } else {
+            if (record === null || record.localId === null || record.sender !== 'contact' || metadataKind(record.originalType) !== 'text') return fail('history_identity_ambiguous');
+            const identity = metadataIdentity(record);
+            if (identities.includes(identity)) fail('history_identity_ambiguous');
+            identities.push(identity);
+          }
+        });
+        this.#receivedTestMetadata = { scopeDigest: parsed.scopeDigest, sourceGeneration: parsed.sourceGeneration, schemaFingerprint: parsed.schemaFingerprint, identities };
         return parsed;
       });
     }, signal);
@@ -638,7 +691,7 @@ export class NarrowWechatClient {
   }
   async #stop(code: string): Promise<void> {
     if (this.#stopped) { await this.#stopping; return; }
-    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#quarantineTarget=undefined; this.#testMetadata = undefined;
+    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#quarantineTarget=undefined; this.#testMetadata = undefined; this.#receivedTestMetadata = undefined;
     this.#stoppedSignal.resolve();
     const pending = this.#pending; this.#pending = undefined;
     this.#stopping = (async () => {

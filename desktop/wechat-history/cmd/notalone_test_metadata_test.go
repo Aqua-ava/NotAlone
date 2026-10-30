@@ -57,7 +57,7 @@ func TestNotAloneTestMetadataLocksOnlyUniqueNewRows(t *testing.T) {
 }
 
 func TestNotAloneTestMetadataRejectsAmbiguityBeforeCapture(t *testing.T) {
-	for _, mode := range []string{"two-shards", "two-same-shard", "contact", "non-text", "schema", "replace"} {
+	for _, mode := range []string{"two-shards", "two-same-shard", "contact", "non-text", "owner-mapping-changed", "schema", "replace"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newNotaloneSnapshotFixture(t, 2)
 			w := newNotaloneTestMetadataWatch()
@@ -83,6 +83,10 @@ func TestNotAloneTestMetadataRejectsAmbiguityBeforeCapture(t *testing.T) {
 				}
 			case "non-text":
 				if err := f.writers[0].Exec("INSERT INTO " + quoteIdent(f.table) + "(local_type,real_sender_id) VALUES(3,1)"); err != nil {
+					t.Fatal(err)
+				}
+			case "owner-mapping-changed":
+				if err := f.writers[0].Exec("INSERT INTO Name2Id(rowid,user_name) VALUES(4,'synthetic-owner');" + sql); err != nil {
 					t.Fatal(err)
 				}
 			case "schema":
@@ -130,6 +134,35 @@ func TestNotAloneTestMetadataRequiresArmAndFixedBudget(t *testing.T) {
 	}
 	if _, err := w.observe(context.Background(), f.server, f.selected, f.inspected, "current"); err == nil {
 		t.Fatal("close后不可读取")
+	}
+}
+
+func TestNotAloneTestMetadataPreCancelledRequestClosesBothDirections(t *testing.T) {
+	for _, direction := range []string{"owner", "contact"} {
+		t.Run(direction, func(t *testing.T) {
+			f := newNotaloneSnapshotFixture(t, 1)
+			w := newNotaloneTestMetadataWatch()
+			observe := w.observe
+			if direction == "contact" {
+				received := newNotaloneReceivedTestMetadataWatch()
+				w, observe = received.watch, received.observe
+			}
+			defer w.Close()
+			if _, err := observe(context.Background(), f.server, f.selected, f.inspected, "arm"); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			if _, err := observe(ctx, f.server, f.selected, f.inspected, "next"); err == nil || err.Error() != "history_snapshot_cancelled" {
+				t.Fatalf("预取消请求没有被拒绝: %v", err)
+			}
+			if !w.closed || w.life.Err() == nil || w.guard == nil || !w.guard.closed {
+				t.Fatal("预取消请求留下了观察器或来源守卫")
+			}
+			if _, err := observe(context.Background(), f.server, f.selected, f.inspected, "current"); err == nil || err.Error() != "history_snapshot_closed" {
+				t.Fatalf("取消后仍能复用观察: %v", err)
+			}
+		})
 	}
 }
 

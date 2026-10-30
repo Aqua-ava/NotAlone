@@ -289,6 +289,12 @@ func TestNotAloneHistoryMetadataProtocolRejectsBeforeSourceAccess(t *testing.T) 
 		{Operation: "observe-test-metadata", Account: "a", Conversation: "b", Consent: "wrong", Kind: "arm"},
 		{Operation: "observe-test-metadata", Account: "a", Conversation: "b", Consent: "selected-test-lifecycle-metadata-v1", Kind: "all"},
 		{Operation: "observe-test-metadata", Account: "a", Conversation: "b", Consent: "selected-test-lifecycle-metadata-v1", Kind: "arm", Target: "injected"},
+		{Operation: "observe-received-test-metadata", Account: "a", Conversation: "b", Consent: "wrong", Kind: "arm"},
+		{Operation: "observe-received-test-metadata", Account: "a", Conversation: "b", Consent: "selected-test-lifecycle-metadata-v1", Kind: "arm"},
+		{Operation: "observe-received-test-metadata", Account: "a", Conversation: "b", Consent: "selected-received-test-lifecycle-metadata-v1", Kind: "all"},
+		{Operation: "observe-received-test-metadata", Account: "a", Conversation: "b", Consent: "selected-received-test-lifecycle-metadata-v1", Kind: "arm", Target: "injected"},
+		{Operation: "observe-received-test-metadata", Account: "a", Conversation: "b", Consent: "selected-received-test-lifecycle-metadata-v1", Kind: "arm", Cursor: "injected"},
+		{Operation: "observe-received-test-metadata", Account: "a", Conversation: "b", Consent: "selected-received-test-lifecycle-metadata-v1", Kind: "arm", DisplayName: "injected"},
 	} {
 		h := newNotaloneHistorySession(&server{})
 		_, err := h.handle(context.Background(), request)
@@ -296,6 +302,98 @@ func TestNotAloneHistoryMetadataProtocolRejectsBeforeSourceAccess(t *testing.T) 
 		if err == nil || err.Error() != "history_request_invalid" {
 			t.Fatalf("错误许可/类型先访问了来源:%v", err)
 		}
+	}
+}
+
+func TestNotAloneReceivedTestMetadataProtocolUsesSeparateWatchAndKeepsHistoryGate(t *testing.T) {
+	h := notaloneProtocolFixture(t, false)
+	received := notaloneHistoryRequest{Operation: "observe-received-test-metadata", Account: h.selected.Account,
+		Conversation: h.selected.Conversation, Consent: "selected-received-test-lifecycle-metadata-v1", Kind: "arm"}
+	value, err := h.handle(context.Background(), received)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, ok := value.(notaloneTestMetadataReport)
+	if !ok || report.Format != "wechat-received-test-metadata-observation-v1" || report.Status != "unverified" || report.LockedCount != 0 || len(report.Records) != 0 {
+		t.Fatalf("接收观察报告不符合隔离合同: %#v", value)
+	}
+	if h.receivedTestMetadata == nil || h.testMetadata != nil || h.messageGuard == nil || h.messageMonitor == nil {
+		t.Fatal("接收模式没有独立watch或双队列来源守卫")
+	}
+
+	owner := notaloneHistoryRequest{Operation: "observe-test-metadata", Account: h.selected.Account,
+		Conversation: h.selected.Conversation, Consent: "selected-test-lifecycle-metadata-v1", Kind: "arm"}
+	value, err = h.handle(context.Background(), owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerReport := value.(notaloneTestMetadataReport)
+	if ownerReport.Format != "wechat-test-metadata-observation-v1" || h.testMetadata == nil || h.testMetadata == h.receivedTestMetadata.watch {
+		t.Fatal("owner与received协议状态或响应格式发生混用")
+	}
+
+	received.Kind = "next"
+	value, err = h.handle(context.Background(), received)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.(notaloneTestMetadataReport).Format != "wechat-received-test-metadata-observation-v1" {
+		t.Fatal("接收next误用了owner响应格式")
+	}
+	received.Kind = ""
+	received.Operation = "target"
+	received.Consent = "selected-history-v1"
+	if _, err = h.handle(context.Background(), received); err == nil || err.Error() != "history_support_unverified" {
+		t.Fatalf("接收观察绕过了正文门禁: %v", err)
+	}
+}
+
+func TestNotAloneReceivedTestMetadataProcessExitBetweenPhasesLatchesSession(t *testing.T) {
+	for _, action := range []string{"next", "current"} {
+		t.Run(action, func(t *testing.T) {
+			h := notaloneProtocolFixture(t, false)
+			identity, stopProcess := notaloneStartCatIdentity(t)
+			defer stopProcess()
+			h.sourceProcess = func(context.Context) (notaloneProcessIdentity, error) { return identity, nil }
+			r := notaloneHistoryRequest{Operation: "observe-received-test-metadata", Account: h.selected.Account, Conversation: h.selected.Conversation,
+				Consent: "selected-received-test-lifecycle-metadata-v1", Kind: "arm"}
+			if _, err := h.handle(context.Background(), r); err != nil {
+				t.Fatalf("合成arm失败: %v", err)
+			}
+			if h.messageGuard == nil || h.messageMonitor == nil || h.receivedTestMetadata == nil {
+				t.Fatal("接收观察器没有绑定双队列微信进程守卫")
+			}
+			stopProcess()
+			select {
+			case <-h.guardLost:
+			case <-time.After(2 * time.Second):
+				t.Fatal("进程退出未锁存来源失效")
+			}
+			r.Kind = action
+			if _, err := h.handle(context.Background(), r); err == nil || err.Error() != "history_source_changed" {
+				t.Fatalf("旧原生客户端在进程退出后继续接收观察: %v", err)
+			}
+		})
+	}
+}
+
+func TestNotAloneReceivedTestMetadataProcessExitDuringNextDoesNotReturnReport(t *testing.T) {
+	h := notaloneProtocolFixture(t, false)
+	identity, stopProcess := notaloneStartCatIdentity(t)
+	defer stopProcess()
+	h.sourceProcess = func(context.Context) (notaloneProcessIdentity, error) { return identity, nil }
+	r := notaloneHistoryRequest{Operation: "observe-received-test-metadata", Account: h.selected.Account, Conversation: h.selected.Conversation,
+		Consent: "selected-received-test-lifecycle-metadata-v1", Kind: "arm"}
+	if _, err := h.handle(context.Background(), r); err != nil {
+		t.Fatalf("合成arm失败: %v", err)
+	}
+	h.receivedTestMetadata.watch.beforeCapture = func(context.Context, *notaloneSnapshot) error {
+		stopProcess()
+		return nil
+	}
+	r.Kind = "next"
+	if _, err := h.handle(context.Background(), r); err == nil || err.Error() != "history_source_changed" {
+		t.Fatalf("next期间源进程退出仍返回报告: %v", err)
 	}
 }
 

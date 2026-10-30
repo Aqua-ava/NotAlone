@@ -55,23 +55,24 @@ type notaloneMetadataReport struct {
 	Record            *notaloneMetadataObservation `json:"record"`
 }
 type notaloneHistorySession struct {
-	server            *server
-	selected          *notaloneResolved
-	guards            []*notaloneSourceGuard
-	life              context.Context
-	cancel            context.CancelFunc
-	snapshot          *notaloneSnapshot
-	snapshotMode      string
-	messageGuard      *notaloneSourceGuard
-	messageMonitor    *notaloneSourceGuard
-	guardLost         chan struct{}
-	guardLostOnce     sync.Once
-	inspected         *notaloneInspection
-	program           func(context.Context) (notaloneProgramVersion, error)
-	sourceProcess     func(context.Context) (notaloneProcessIdentity, error)
-	certify           func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
-	testMetadata      *notaloneTestMetadataWatch
-	accountGeneration string
+	server               *server
+	selected             *notaloneResolved
+	guards               []*notaloneSourceGuard
+	life                 context.Context
+	cancel               context.CancelFunc
+	snapshot             *notaloneSnapshot
+	snapshotMode         string
+	messageGuard         *notaloneSourceGuard
+	messageMonitor       *notaloneSourceGuard
+	guardLost            chan struct{}
+	guardLostOnce        sync.Once
+	inspected            *notaloneInspection
+	program              func(context.Context) (notaloneProgramVersion, error)
+	sourceProcess        func(context.Context) (notaloneProcessIdentity, error)
+	certify              func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
+	testMetadata         *notaloneTestMetadataWatch
+	receivedTestMetadata *notaloneReceivedTestMetadataWatch
+	accountGeneration    string
 }
 
 func newNotaloneHistorySession(s *server) *notaloneHistorySession {
@@ -82,6 +83,9 @@ func (h *notaloneHistorySession) close() {
 	h.cancel()
 	if h.testMetadata != nil {
 		_ = h.testMetadata.Close()
+	}
+	if h.receivedTestMetadata != nil {
+		_ = h.receivedTestMetadata.Close()
 	}
 	if h.snapshot != nil {
 		_ = h.snapshot.Close()
@@ -392,7 +396,7 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 	return result, certification.ReadProfile, nil
 }
 func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRequest) (any, error) {
-	if r.Operation != "observe-metadata" && r.Operation != "observe-test-metadata" && r.Kind != "" {
+	if r.Operation != "observe-metadata" && r.Operation != "observe-test-metadata" && r.Operation != "observe-received-test-metadata" && r.Kind != "" {
 		return nil, notaloneFailure("history_request_invalid")
 	}
 	switch r.Operation {
@@ -418,6 +422,10 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		}
 	case "observe-test-metadata":
 		if r.Consent != "selected-test-lifecycle-metadata-v1" || !validNotaloneTestMetadataAction(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
+	case "observe-received-test-metadata":
+		if r.Consent != "selected-received-test-lifecycle-metadata-v1" || !validNotaloneTestMetadataAction(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
 	case "inspect", "support", "target", "page", "quarantine-target", "quarantine-page":
@@ -483,6 +491,35 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			h.testMetadata = newNotaloneTestMetadataWatch()
 		}
 		report, observeErr := h.testMetadata.observe(ctx, h.server, *h.selected, inspection, r.Kind)
+		if observeErr != nil {
+			if err := h.ensureMessageGuard(); err != nil {
+				return nil, err
+			}
+			return nil, observeErr
+		}
+		if err = h.currentAccount(); err != nil {
+			return nil, err
+		}
+		if err := h.ensureMessageGuard(); err != nil {
+			return nil, err
+		}
+		return report, nil
+	}
+	if r.Operation == "observe-received-test-metadata" {
+		if err := h.ensureMessageGuard(); err != nil {
+			return nil, err
+		}
+		inspection, err := h.inspect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := h.ensureMessageGuard(); err != nil {
+			return nil, err
+		}
+		if h.receivedTestMetadata == nil {
+			h.receivedTestMetadata = newNotaloneReceivedTestMetadataWatch()
+		}
+		report, observeErr := h.receivedTestMetadata.observe(ctx, h.server, *h.selected, inspection, r.Kind)
 		if observeErr != nil {
 			if err := h.ensureMessageGuard(); err != nil {
 				return nil, err

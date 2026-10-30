@@ -20,7 +20,7 @@ async function fixture(t,mode='normal') {
  const fs=require('node:fs'); const readline=require('node:readline');const crypto=require('node:crypto');
  fs.writeFileSync(process.env.PID_FILE,String(process.pid));
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
- const schema=${JSON.stringify(schema)};let busy=false,supportCount=0;let currentConversation='${conversation}';
+ const schema=${JSON.stringify(schema)};let busy=false,supportCount=0;let currentConversation='${conversation}';let receivedRecords=[];
  const target={protocol:'private-history-v1',descriptor:'synthetic-target-v1',partitions:['d'.repeat(64)],tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
  if(process.env.TEST_MODE==='sparse-partitions'){
   schema.checkedPartitions=Array.from({length:8},(_,i)=>(i+1).toString(16).repeat(64));
@@ -79,6 +79,37 @@ async function fixture(t,mode='normal') {
    if(mode==='metadata-promoted-status')data={...data,status:'supported'};
    if(mode==='metadata-exhausted')data={...data,exhausted:true};
    if(mode==='metadata-cancel')return;
+  }
+  if(r.op==='observe-test-metadata'){
+   const records=r.kind==='arm'?[]:[{partition:schema.tables[0].partition,table:schema.tables[0].target,localId:'9007199254740993',serverId:'100',originalType:'1',status:'0',createTime:'1700000000',sender:'owner',statusSemantics:'unverified',normalHistory:false,observationScope:'single-fixed-snapshot'}];
+   data={format:'wechat-test-metadata-observation-v1',status:'unverified',scopeDigest:crypto.createHash('sha256').update('${account}'+'\\0'+currentConversation).digest('hex'),sourceGeneration:'${generation}',schemaFingerprint:'b'.repeat(64),action:r.kind,checkedPartitions:schema.checkedPartitions,lockedCount:records.length,records};
+  }
+  if(r.op==='observe-received-test-metadata'){
+   const contactRecord={partition:schema.tables[0].partition,table:schema.tables[0].target,localId:'9007199254740993',serverId:'100',originalType:'4294967297',status:'0',createTime:'1700000000',sender:'contact',statusSemantics:'unverified',normalHistory:false,observationScope:'single-fixed-snapshot'};
+   if(r.kind==='arm')receivedRecords=[];
+   if(r.kind==='next'&&mode!=='received-test-next-empty')receivedRecords=[...receivedRecords,contactRecord];
+   let records=[...receivedRecords];
+   if(r.kind==='current'&&mode==='received-test-current-null')records=[null];
+   if(r.kind==='current'&&mode==='received-test-lifecycle')records=records.map(record=>({...record,sender:'unknown',originalType:null}));
+   if(r.kind==='current'&&mode==='received-test-current-other-type')records=records.map(record=>({...record,sender:'unknown',originalType:'10000'}));
+   if(r.kind==='current'&&mode==='received-test-current-changed-id')records=records.map(record=>({...record,localId:'9007199254740994'}));
+   if(r.kind==='current'&&mode==='received-test-current-unsafe-id')records=records.map(record=>({...record,localId:9007199254740993}));
+   data={format:'wechat-received-test-metadata-observation-v1',status:'unverified',scopeDigest:crypto.createHash('sha256').update('${account}'+'\\0'+currentConversation).digest('hex'),sourceGeneration:'${generation}',schemaFingerprint:'b'.repeat(64),action:r.kind,checkedPartitions:schema.checkedPartitions,lockedCount:records.length,records};
+   if(mode==='received-test-wrong-format')data={...data,format:'wechat-test-metadata-observation-v1'};
+   if(mode==='received-test-wrong-action')data={...data,action:r.kind==='arm'?'next':'current'};
+   if(mode==='received-test-wrong-scope')data={...data,scopeDigest:'f'.repeat(64)};
+   if(mode==='received-test-wrong-generation')data={...data,sourceGeneration:'f'.repeat(64)};
+   if(mode==='received-test-wrong-schema')data={...data,schemaFingerprint:'f'.repeat(64)};
+   if(mode==='received-test-wrong-partitions')data={...data,checkedPartitions:['f'.repeat(64)]};
+   if(mode==='received-test-wrong-count'&&r.kind==='arm')data={...data,lockedCount:1,records:[contactRecord]};
+   if(r.kind==='next'&&mode==='received-test-wrong-type')data={...data,records:[{...contactRecord,originalType:'3'}]};
+   if(r.kind==='next'&&mode==='received-test-wrong-sender')data={...data,records:[{...contactRecord,sender:'owner'}]};
+   if(r.kind==='next'&&mode==='received-test-null-local-id')data={...data,records:[{...contactRecord,localId:null}]};
+   if(r.kind==='next'&&mode==='received-test-unsafe-local-id')data={...data,records:[{...contactRecord,localId:9007199254740993}]};
+   if(r.kind==='next'&&mode==='received-test-body')data={...data,records:[{...contactRecord,body:'forbidden-sensitive-body'}]};
+   if(r.kind==='next'&&mode==='received-test-source')data={...data,records:[{...contactRecord,source:'forbidden-sensitive-XML'}]};
+   if(r.kind==='next'&&mode==='received-test-promoted')data={...data,records:[{...contactRecord,normalHistory:true}]};
+   if(r.kind==='next'&&mode==='received-test-promoted-status')data={...data,status:'supported'};
   }
   if(r.op==='page'){
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'合成分页文字',originalType:'1',sentAt:'1000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'};
@@ -343,4 +374,65 @@ test('取消metadata观察会等真实子进程退出，不接收迟到观察',a
  const f=await fixture(t,'metadata-cancel');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
  const controller=new AbortController();const pending=f.client.observeMetadataSelected('image',controller.signal);
  const rejected=assert.rejects(pending,{code:'history_native_cancelled'});await waitForRequest(f.logFile,'observe-metadata');controller.abort();await rejected;noProcess(await waitForPid(f.pidFile));
+});
+
+test('对方来信状态观察使用独立协议并锁定contact文字身份，撤回后仅保留未核验状态元数据',async t=>{
+ const f=await fixture(t,'received-test-lifecycle');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+ await assert.rejects(f.client.observeReceivedTestMetadataSelected('invalid'),{code:'history_request_invalid'});
+ const armed=await f.client.observeReceivedTestMetadataSelected('arm');assert.equal(armed.lockedCount,0);assert.deepEqual(armed.records,[]);
+ const received=await f.client.observeReceivedTestMetadataSelected('next');assert.equal(received.lockedCount,1);
+ assert.equal(received.records[0].sender,'contact');assert.equal(received.records[0].originalType,'4294967297');
+ const recalled=await f.client.observeReceivedTestMetadataSelected('current');assert.equal(recalled.lockedCount,1);
+ assert.equal(recalled.records[0].localId,received.records[0].localId);assert.equal(recalled.records[0].sender,'unknown');
+ assert.equal(recalled.records[0].originalType,null);assert.equal(recalled.records[0].normalHistory,false);
+ assert.equal(recalled.records[0].statusSemantics,'unverified');
+ const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse).slice(2);
+ assert.deepEqual(requests.map(row=>row.op),Array(3).fill('observe-received-test-metadata'));
+ assert.ok(requests.every(row=>row.consent==='selected-received-test-lifecycle-metadata-v1'));
+ assert.deepEqual(requests.map(row=>row.kind),['arm','next','current']);
+ await assert.rejects(f.client.targetSelected(),{code:'history_support_unverified'});
+});
+
+test('对方来信状态观察的锁定与owner状态互不借用',async t=>{
+ const owner=await fixture(t,'received-test-lifecycle');await owner.client.resolveSelected('合成目标');await owner.client.inspectSelected();
+ await owner.client.observeTestMetadataSelected('arm');
+ await assert.rejects(owner.client.observeReceivedTestMetadataSelected('next'),{code:'history_snapshot_closed'});
+ const ownerRequests=(await readFile(owner.logFile,'utf8')).trim().split('\n').map(JSON.parse);
+ assert.deepEqual(ownerRequests.map(row=>row.op),['resolve','inspect','observe-test-metadata']);
+ const received=await fixture(t,'received-test-lifecycle');await received.client.resolveSelected('合成目标');await received.client.inspectSelected();
+ await received.client.observeReceivedTestMetadataSelected('arm');
+ await assert.rejects(received.client.observeTestMetadataSelected('next'),{code:'history_snapshot_closed'});
+ const receivedRequests=(await readFile(received.logFile,'utf8')).trim().split('\n').map(JSON.parse);
+ assert.deepEqual(receivedRequests.map(row=>row.op),['resolve','inspect','observe-received-test-metadata']);
+});
+
+test('对方来信next无新增时只返回空锁定状态，不伪称已收到消息',async t=>{
+ const f=await fixture(t,'received-test-next-empty');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+ await f.client.observeReceivedTestMetadataSelected('arm');
+ const observed=await f.client.observeReceivedTestMetadataSelected('next');assert.equal(observed.lockedCount,0);assert.deepEqual(observed.records,[]);
+});
+
+test('对方来信观察拒绝错误响应格式、方向、类型、身份与资格升级并失败关闭',async t=>{
+ for(const mode of ['received-test-wrong-format','received-test-wrong-action','received-test-wrong-scope','received-test-wrong-generation','received-test-wrong-schema','received-test-wrong-partitions','received-test-wrong-type','received-test-wrong-sender','received-test-null-local-id','received-test-unsafe-local-id','received-test-body','received-test-source','received-test-promoted','received-test-promoted-status','received-test-wrong-count']){
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+  const action=mode==='received-test-wrong-count'?'arm':'next';
+  const pending=action==='next'?f.client.observeReceivedTestMetadataSelected('arm').then(()=>f.client.observeReceivedTestMetadataSelected('next')):f.client.observeReceivedTestMetadataSelected(action);
+  await assert.rejects(pending,error=>['history_protocol_invalid','history_identity_ambiguous'].includes(error.code)&&error.message===error.code);
+  noProcess(await waitForPid(f.pidFile));
+ }
+});
+
+test('对方来信current允许消失或撤回元数据变化但不能更换本地身份',async t=>{
+ for(const mode of ['received-test-current-changed-id','received-test-current-unsafe-id']){
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+  await f.client.observeReceivedTestMetadataSelected('arm');await f.client.observeReceivedTestMetadataSelected('next');
+  await assert.rejects(f.client.observeReceivedTestMetadataSelected('current'),error=>['history_protocol_invalid','history_identity_ambiguous'].includes(error.code)&&error.message===error.code);
+  noProcess(await waitForPid(f.pidFile));
+ }
+ const missing=await fixture(t,'received-test-current-null');await missing.client.resolveSelected('合成目标');await missing.client.inspectSelected();
+ await missing.client.observeReceivedTestMetadataSelected('arm');await missing.client.observeReceivedTestMetadataSelected('next');
+ const observed=await missing.client.observeReceivedTestMetadataSelected('current');assert.equal(observed.records[0],null);
+ const otherType=await fixture(t,'received-test-current-other-type');await otherType.client.resolveSelected('合成目标');await otherType.client.inspectSelected();
+ await otherType.client.observeReceivedTestMetadataSelected('arm');await otherType.client.observeReceivedTestMetadataSelected('next');
+ const changedType=await otherType.client.observeReceivedTestMetadataSelected('current');assert.equal(changedType.records[0].originalType,'10000');assert.equal(changedType.records[0].sender,'unknown');
 });

@@ -38,9 +38,29 @@ type notaloneTestMetadataWatch struct {
 	beforeCapture func(context.Context, *notaloneSnapshot) error
 }
 
+// 接收方向使用独立状态，不能继承或覆盖owner方向的baseline与锁定行。
+type notaloneReceivedTestMetadataWatch struct {
+	watch *notaloneTestMetadataWatch
+}
+
 func newNotaloneTestMetadataWatch() *notaloneTestMetadataWatch {
 	life, cancel := context.WithCancel(context.Background())
 	return &notaloneTestMetadataWatch{life: life, cancel: cancel}
+}
+func newNotaloneReceivedTestMetadataWatch() *notaloneReceivedTestMetadataWatch {
+	return &notaloneReceivedTestMetadataWatch{watch: newNotaloneTestMetadataWatch()}
+}
+func (w *notaloneReceivedTestMetadataWatch) Close() error {
+	if w == nil || w.watch == nil {
+		return nil
+	}
+	return w.watch.Close()
+}
+func (w *notaloneReceivedTestMetadataWatch) observe(ctx context.Context, s *server, selected notaloneResolved, inspection notaloneInspection, action string) (notaloneTestMetadataReport, error) {
+	if w == nil || w.watch == nil {
+		return notaloneTestMetadataReport{}, notaloneFailure("history_snapshot_closed")
+	}
+	return w.watch.observeAs(ctx, s, selected, inspection, action, "contact", "wechat-received-test-metadata-observation-v1")
 }
 func validNotaloneTestMetadataAction(action string) bool {
 	return action == "arm" || action == "next" || action == "current"
@@ -58,6 +78,10 @@ func (w *notaloneTestMetadataWatch) Close() error {
 
 // 开发验收仅以逐阶段唯一新增行建立时序关联，不读取正文，也不认证状态语义。
 func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, selected notaloneResolved, inspection notaloneInspection, action string) (report notaloneTestMetadataReport, err error) {
+	return w.observeAs(ctx, s, selected, inspection, action, "owner", "wechat-test-metadata-observation-v1")
+}
+
+func (w *notaloneTestMetadataWatch) observeAs(ctx context.Context, s *server, selected notaloneResolved, inspection notaloneInspection, action, expectedSender, format string) (report notaloneTestMetadataReport, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !validNotaloneTestMetadataAction(action) || (action == "arm" && !w.started.IsZero()) {
@@ -65,9 +89,6 @@ func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, sele
 	}
 	if w.closed || w.life.Err() != nil || (action != "arm" && w.baseline == nil) || w.calls >= 20 || (!w.started.IsZero() && time.Since(w.started) > 10*time.Minute) {
 		return report, notaloneFailure("history_snapshot_closed")
-	}
-	if ctx == nil || ctx.Err() != nil {
-		return report, notaloneFailure("history_snapshot_cancelled")
 	}
 	defer func() {
 		if err != nil {
@@ -78,6 +99,9 @@ func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, sele
 			}
 		}
 	}()
+	if ctx == nil || ctx.Err() != nil {
+		return report, notaloneFailure("history_snapshot_cancelled")
+	}
 	if action == "arm" {
 		w.started = time.Now()
 		owner := s.selfWxid()
@@ -128,13 +152,26 @@ func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, sele
 	stop := context.AfterFunc(snapshot.life, cancel)
 	defer func() { stop(); cancel() }()
 	if action == "arm" {
-		if err = snapshot.testMetadataSenderPreflight(op); err == nil {
+		if expectedSender == "contact" {
+			err = snapshot.testMetadataReceivedSenderPreflight(op)
+		} else {
+			err = snapshot.testMetadataSenderPreflight(op)
+		}
+		if err == nil {
 			w.baseline, err = snapshot.testMetadataBaseline(op)
 		}
 	}
 	if action == "next" {
 		if len(w.locked) >= 2 {
 			return report, notaloneFailure("history_request_invalid")
+		}
+		if expectedSender == "contact" {
+			err = snapshot.testMetadataReceivedSenderPreflight(op)
+		} else {
+			err = snapshot.testMetadataSenderPreflight(op)
+		}
+		if err != nil {
+			return report, err
 		}
 		if w.beforeCapture != nil {
 			if e := w.beforeCapture(op, snapshot); e != nil {
@@ -173,7 +210,7 @@ func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, sele
 			if record == nil || record.LocalID == nil {
 				return report, notaloneFailure("history_test_key_unverified")
 			}
-			if record.Sender != "owner" {
+			if record.Sender != expectedSender {
 				return report, notaloneFailure("history_test_sender_unverified")
 			}
 			if record.OriginalType == nil {
@@ -225,7 +262,7 @@ func (w *notaloneTestMetadataWatch) observe(ctx context.Context, s *server, sele
 	if w.guard.Check() != nil {
 		return report, notaloneFailure("history_source_changed")
 	}
-	return notaloneTestMetadataReport{"wechat-test-metadata-observation-v1", "unverified", inspection.ScopeDigest, inspection.SourceGeneration, inspection.SchemaFingerprint, action, inspection.CheckedPartitions, len(w.locked), records}, nil
+	return notaloneTestMetadataReport{format, "unverified", inspection.ScopeDigest, inspection.SourceGeneration, inspection.SchemaFingerprint, action, inspection.CheckedPartitions, len(w.locked), records}, nil
 }
 func notaloneTestMetadataAfter(id *int64) (string, []any) {
 	if id == nil {
@@ -321,6 +358,50 @@ func (n *notaloneSnapshot) testMetadataSenderPreflight(ctx context.Context) erro
 		}
 		if canonicalCount != 1 {
 			return notaloneFailure("history_test_sender_unverified")
+		}
+	}
+	return nil
+}
+
+// 接收方向必须唯一解析到所选会话身份；账号别名检查只用于排除owner映射冲突。
+func (n *notaloneSnapshot) testMetadataReceivedSenderPreflight(ctx context.Context) error {
+	owner, contact := n.senderOwner, n.selected.Conversation
+	if owner == "" || !notaloneIdentity.MatchString(owner) || !notaloneIdentity.MatchString(contact) || owner == contact || n.selected.Account == contact {
+		return notaloneFailure("history_test_sender_unverified")
+	}
+	for _, shard := range n.shards {
+		if !shard.present {
+			continue
+		}
+		count := func(name string) (int64, error) {
+			rows, err := shard.reader.QueryBounded(ctx, 1, "SELECT count(*) AS count FROM (SELECT 1 FROM Name2Id WHERE user_name=? LIMIT 2)", name)
+			if err != nil || len(rows) != 1 {
+				return 0, notaloneFailure("history_test_sender_unverified")
+			}
+			value, ok := rows[0]["count"].(int64)
+			if !ok || value < 0 || value > 2 {
+				return 0, notaloneFailure("history_test_sender_unverified")
+			}
+			return value, nil
+		}
+		contactCount, err := count(contact)
+		if err != nil {
+			return err
+		}
+		if contactCount > 1 {
+			return notaloneFailure("history_test_sender_ambiguous")
+		}
+		if contactCount != 1 {
+			return notaloneFailure("history_test_sender_unverified")
+		}
+		if owner != n.selected.Account {
+			accountAliasCount, err := count(n.selected.Account)
+			if err != nil {
+				return err
+			}
+			if accountAliasCount > 0 {
+				return notaloneFailure("history_test_sender_ambiguous")
+			}
 		}
 	}
 	return nil
