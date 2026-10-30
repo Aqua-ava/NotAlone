@@ -136,12 +136,15 @@ export async function apply(ctx: Context) {
       contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();});
     }
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
-    const historyStatus=async()=>{
+    let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
+    const readHistoryStatus=async()=>{
       const directory=await contacts!.directory();
       const coverage=await Promise.all(directory.bindings.filter(binding=>binding.status==='active').map(async binding=>({...await history!.coverage(binding.contact_id),bindingId:binding.binding_id})));
       return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState(),incremental?.getState(),
         await history!.bodyAvailable(coverage.map(row=>row.contactId)));
     };
+    // 多个界面同时刷新只共享在途读取；完成后下次查询仍重新核验，不保留状态缓存。
+    const historyStatus=()=>historyStatusInFlight??=(readHistoryStatus().finally(()=>{historyStatusInFlight=undefined;}));
     const library=capabilities.skillPackageRoot?new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot):undefined;
     const skills=library?new SqliteSkillHttp(library,req=>authorizeSqliteRequest(req,token)):undefined;
     const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData));
@@ -185,7 +188,7 @@ export async function apply(ctx: Context) {
       if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)||memoryDocumentsHttp&&memoryDocumentsQueryAllowed(req.method,url)||historyClearHttp&&clearQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
       try {
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
-          respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
+          respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
         }
         if (req.method === 'POST' && url.pathname === '/api/runtime/shutdown') {
           await stopResources();

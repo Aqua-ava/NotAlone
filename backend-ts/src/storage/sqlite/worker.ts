@@ -130,6 +130,8 @@ try {
   const actions = new Map(registry.actions.map(a => [a.name, a]));
   port.postMessage({value: status});
   port.on('message', ({id, name, input, lease}) => {
+    // 串行队列等待不消耗动作预算；主线程收到开始确认后监督本次同步执行。
+    port.postMessage({id, started: true});
     try {
       if (name === 'storage.close') { connection.close(); port.postMessage({id, value: null}); port.close(); return; }
       files.verify();
