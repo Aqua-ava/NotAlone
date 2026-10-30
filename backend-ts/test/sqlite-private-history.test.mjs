@@ -140,18 +140,22 @@ test('页返回时同步已关闭，已观察的未知状态仍保护旧消息',
 });
 test('失证来源影响跨联系人本人资料的实际依赖，不影响无关讨论',async t=>{
  const f=await fixture(t,{registryModule:new URL('./fixtures/history/quarantine-registry.mjs',import.meta.url).href}),[a,b]=f.saved;
- f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});
- await f.service.synchronize(a.contact_id);const message=(await f.service.read(a.contact_id)).messages[0];
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1'),record('2')],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(a.contact_id);const [message,secondMessage]=(await f.service.read(a.contact_id)).messages;
  const {SqliteDiscussionService}=await import('../src/reply/sqlite/service.ts'),{randomUUID}=await import('node:crypto');
  const discussion=new SqliteDiscussionService(f.storage,owner),d=await discussion.newDiscussion(b.contact_id),key='synthetic-cross-scope';
  const confirmationId=await f.contacts.manualConfirm(b.contact_id,key),attempt=(await discussion.begin(b.contact_id,key,'合成手写要求',{kind:'manual',confirmationId},d.id)).attempt,contextId=randomUUID();
  await f.storage.execute('discussion.freezeContext',{...attempt,contextId,skillRun:{packages:[],eligible:[]},items:[],at:Date.now()});
  await f.storage.execute('fixture.seedCrossContactInput',{ownerId:owner,contextId,sourceContactId:a.contact_id,messageId:message.id,recordId:message.sourceRecordIds[0]});
+ const d2=await discussion.newDiscussion(b.contact_id),key2='synthetic-cross-scope-2',confirmation2=await f.contacts.manualConfirm(b.contact_id,key2);
+ const attempt2=(await discussion.begin(b.contact_id,key2,'第二个合成要求',{kind:'manual',confirmationId:confirmation2},d2.id)).attempt,context2=randomUUID();
+ await f.storage.execute('discussion.freezeContext',{...attempt2,contextId:context2,skillRun:{packages:[],eligible:[]},items:[],at:Date.now()});
+ await f.storage.execute('fixture.seedCrossContactInput',{ownerId:owner,contextId:context2,sourceContactId:a.contact_id,messageId:secondMessage.id,recordId:secondMessage.sourceRecordIds[0]});
  const independent=await discussion.newDiscussion(b.contact_id),otherKey='synthetic-independent',otherConfirmation=await f.contacts.manualConfirm(b.contact_id,otherKey);
  const other=(await discussion.begin(b.contact_id,otherKey,'另一合成要求',{kind:'manual',confirmationId:otherConfirmation},independent.id)).attempt;
- f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:'unverified',status:'99',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:['1','2'].map(id=>record(id,{stateAssurance:'unverified',status:'99',sender:'unknown',text:null})),completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(a.contact_id);const impact=await f.storage.execute('fixture.quarantineImpact',{ownerId:owner});
- assert.ok(impact.requests.includes(attempt.requestId));assert.ok(!impact.requests.includes(other.requestId));
+ assert.ok(impact.requests.includes(attempt.requestId));assert.ok(impact.requests.includes(attempt2.requestId));assert.ok(!impact.requests.includes(other.requestId));
  await assert.rejects(discussion.trace(b.contact_id,d.id,attempt.requestId),{code:'discussion_unavailable'});
  assert.equal((await discussion.view(b.contact_id,independent.id)).entries[0].body,'另一合成要求');
 });

@@ -83,6 +83,46 @@ func TestNotAloneHistoryProtocolGateAndTypedSnapshot(t *testing.T) {
 		t.Fatal("session关闭后reader仍活动")
 	}
 }
+
+func TestNotAloneHistoryGuardSurvivesExhaustedSnapshot(t *testing.T) {
+	h := notaloneProtocolFixture(t, true)
+	r := notaloneHistoryRequest{Operation: "target", Account: h.selected.Account, Conversation: h.selected.Conversation, Consent: "selected-history-v1"}
+	value, err := h.handle(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := value.(notaloneSnapshotTarget)
+	r.Operation, r.Target = "page", target.Descriptor
+	value, err = h.handle(context.Background(), r)
+	if err != nil || !value.(notaloneSnapshotPage).Exhausted {
+		t.Fatalf("合成快照未结束: %v", err)
+	}
+	r.Operation, r.Target = "target", ""
+	value, err = h.handle(context.Background(), r)
+	if err != nil {
+		t.Fatalf("来源未变化时应允许下一快照: %v", err)
+	}
+	r.Operation, r.Target = "page", value.(notaloneSnapshotTarget).Descriptor
+	if _, err = h.handle(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(h.server.cfg.DBRoot, "db_storage", "message", "message_0.db")
+	if err = os.Rename(file, file+".away"); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Rename(file+".away", file); err != nil {
+		t.Fatal(err)
+	}
+	r.Operation, r.Target = "target", ""
+	if _, err = h.handle(context.Background(), r); err == nil || err.Error() != "history_source_changed" {
+		t.Fatalf("快照结束后替换来源未被持续守卫拒绝: %v", err)
+	}
+	guard := h.messageGuard
+	h.close()
+	if guard.Check() == nil {
+		t.Fatal("原生会话关闭后守卫仍活动")
+	}
+}
 func TestNotAloneHistoryProtocolRejectsScopeBeforeHistory(t *testing.T) {
 	h := notaloneProtocolFixture(t, true)
 	r := notaloneHistoryRequest{Operation: "target", Account: h.selected.Account, Conversation: "friend-b", Consent: "selected-history-v1"}

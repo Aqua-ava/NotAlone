@@ -60,6 +60,7 @@ type notaloneHistorySession struct {
 	life              context.Context
 	cancel            context.CancelFunc
 	snapshot          *notaloneSnapshot
+	messageGuard      *notaloneSourceGuard
 	inspected         *notaloneInspection
 	program           func(context.Context) (notaloneProgramVersion, error)
 	certify           func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
@@ -80,10 +81,35 @@ func (h *notaloneHistorySession) close() {
 		_ = h.snapshot.Close()
 		h.snapshot = nil
 	}
+	if h.messageGuard != nil {
+		_ = h.messageGuard.Close()
+		h.messageGuard = nil
+	}
 	for _, g := range h.guards {
 		_ = g.Close()
 	}
 	h.guards = nil
+}
+
+// 在一个原生会话内跨快照持有目录及分片守卫；进程结束后不声称连续。
+func (h *notaloneHistorySession) ensureMessageGuard() error {
+	if h.messageGuard != nil {
+		if h.messageGuard.Check() != nil {
+			return notaloneFailure("history_source_changed")
+		}
+		return nil
+	}
+	directory := filepath.Join(h.server.cfg.DBRoot, "db_storage", "message")
+	files, err := notaloneSnapshotFiles(directory)
+	if err != nil {
+		return err
+	}
+	guard, err := newNotaloneSourceGuard(directory, files)
+	if err != nil {
+		return notaloneFailure("history_source_unverified")
+	}
+	h.messageGuard = guard
+	return nil
 }
 
 var notaloneIdentity = regexp.MustCompile(`^[A-Za-z0-9_.@-]{1,255}$`)
@@ -432,6 +458,11 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		return notaloneMetadataReport{Format: "wechat-message-metadata-observation-v1", Status: "unverified", ScopeDigest: inspection.ScopeDigest, SourceGeneration: inspection.SourceGeneration, SchemaFingerprint: inspection.SchemaFingerprint, Kind: r.Kind, CheckedPartitions: inspection.CheckedPartitions, Record: observation}, nil
 	}
 
+	if (r.Operation == "target" || r.Operation == "page") && h.messageGuard != nil {
+		if err := h.ensureMessageGuard(); err != nil {
+			return nil, err
+		}
+	}
 	report, profile, err := h.support(ctx)
 	if err != nil {
 		return nil, err
@@ -443,12 +474,19 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		return nil, notaloneFailure("history_support_unverified")
 	}
 	if r.Operation == "target" {
+		if err := h.ensureMessageGuard(); err != nil {
+			return nil, err
+		}
 		if h.snapshot != nil {
 			_ = h.snapshot.Close()
 			h.snapshot = nil
 		}
 		snapshot, err := newNotaloneSnapshot(h.life, h.server, *h.selected, *h.inspected, *profile)
 		if err != nil {
+			return nil, err
+		}
+		if err := h.ensureMessageGuard(); err != nil {
+			_ = snapshot.Close()
 			return nil, err
 		}
 		h.snapshot = snapshot
@@ -459,6 +497,11 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	}
 	page, err := h.snapshot.Page(ctx, r.Cursor)
 	if err != nil {
+		_ = h.snapshot.Close()
+		h.snapshot = nil
+		return nil, err
+	}
+	if err := h.ensureMessageGuard(); err != nil {
 		_ = h.snapshot.Close()
 		h.snapshot = nil
 		return nil, err

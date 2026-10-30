@@ -35,10 +35,10 @@ function discussions(tx:StorageTransaction,op:DeletionOperation):StorageRow[]{
 }
 interface Closure {contexts:Set<string>;requests:Set<string>;copies:Set<string>}
 /** 反查实际输入；后续复用同副本的上下文也确实接触过先前输入，按纳入顺序传播。 */
-function closure(tx:StorageTransaction,op:DeletionOperation):Closure{
+function closure(tx:StorageTransaction,op:DeletionOperation,sourceKeys?:ReadonlySet<string>):Closure{
  const result:Closure={contexts:new Set(),requests:new Set(),copies:new Set()};
  if(!supported(op.scope))return result;
- const ds=new Set(discussions(tx,op).map(d=>String(d.id)));
+ const ds=new Set(sourceKeys?[]:discussions(tx,op).map(d=>String(d.id)));
  const contexts=tx.all('SELECT * FROM reply_context WHERE owner_id=?',[op.ownerId]);
  const requests=tx.all('SELECT * FROM reply_request WHERE owner_id=?',[op.ownerId]);
  const items=tx.all('SELECT * FROM reply_context_item WHERE owner_id=?',[op.ownerId]);
@@ -52,16 +52,16 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure{
   for(const c of tx.all("SELECT id,discussion_id FROM runtime_copy WHERE owner_id=? AND state<>'deleted'",[op.ownerId]))if(ds.has(String(c.discussion_id)))result.copies.add(String(c.id));
  }else{
   const scope=op.scope;
-  for(const item of items)if(item.kind==='message'&&'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId))result.contexts.add(String(item.context_id));
+  for(const item of items)if(item.kind==='message'&&(sourceKeys?sourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId)))result.contexts.add(String(item.context_id));
  }
  if(tx.get("SELECT 1 FROM sqlite_master WHERE name='reply_candidate_input_source'")){
   const scope=op.scope;
-  if(scope.kind==='source'||scope.kind==='contact_history'||scope.kind==='contact')for(const item of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=?',[op.ownerId]))if(item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId))result.contexts.add(String(item.context_id));
+  if(sourceKeys||scope.kind==='source'||scope.kind==='contact_history'||scope.kind==='contact')for(const item of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=?',[op.ownerId]))if(sourceKeys?sourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId))result.contexts.add(String(item.context_id));
  }
  // request_tombstone是05同操作持久闭包；清context后仍能找到尚待清理的请求。
- for(const r of tx.all(`SELECT r.id FROM reply_request r JOIN request_tombstone t ON t.owner_identity=r.owner_id AND t.request_key=r.request_key
+ if(!sourceKeys)for(const r of tx.all(`SELECT r.id FROM reply_request r JOIN request_tombstone t ON t.owner_identity=r.owner_id AND t.request_key=r.request_key
   WHERE r.owner_id=? AND t.deletion_operation_id=? AND t.request_namespace GLOB '*:discussion.begin'`,[op.ownerId,op.operationId]))result.requests.add(String(r.id));
- for(const c of tx.all('SELECT id FROM runtime_copy WHERE owner_id=? AND cleanup_operation_id=?',[op.ownerId,op.operationId]))result.copies.add(String(c.id));
+ if(!sourceKeys)for(const c of tx.all('SELECT id FROM runtime_copy WHERE owner_id=? AND cleanup_operation_id=?',[op.ownerId,op.operationId]))result.copies.add(String(c.id));
  let changed=true;
  while(changed){
   const count=result.contexts.size+result.requests.size+result.copies.size;
@@ -82,15 +82,13 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure{
 }
 /** 复用来源删除的依赖闭包，仅计算失证影响，不执行删除。 */
 export function quarantinedDiscussionImpact(tx:StorageTransaction,ownerId:string):Closure{
- const result:Closure={contexts:new Set(),requests:new Set(),copies:new Set()};
  const sources=tx.all(`SELECT DISTINCT r.contact_id,r.id FROM history_message_quarantine q JOIN capture_record r
   ON r.owner_id=q.owner_id AND r.contact_id=q.contact_id AND r.message_id=q.message_id
   WHERE q.owner_id=? AND r.state='normalized'`,[ownerId]);
- for(const source of sources){
-  const op:DeletionOperation={operationId:'',ownerId,scope:{kind:'source',contactId:String(source.contact_id),sourceId:String(source.id)},acceptedGeneration:0n,planRevision:0n,state:'fenced',createdAt:'',completedAt:null};
-  const affected=closure(tx,op);for(const id of affected.contexts)result.contexts.add(id);for(const id of affected.requests)result.requests.add(id);for(const id of affected.copies)result.copies.add(id);
- }
- return result;
+ if(!sources.length)return {contexts:new Set(),requests:new Set(),copies:new Set()};
+ const sourceKeys=new Set(sources.map(source=>JSON.stringify([source.contact_id,source.id])));
+ const op:DeletionOperation={operationId:'',ownerId,scope:{kind:'source',contactId:'',sourceId:''},acceptedGeneration:0n,planRevision:0n,state:'fenced',createdAt:'',completedAt:null};
+ return closure(tx,op,sourceKeys);
 }
 export interface DiscussionDeletionImpact {contextIds:string[];requestIds:string[];attemptIds:string[];entryIds:string[];runtimeCopyIds:string[];discussionIds:string[];holderKeys:string[]}
 /** 07复用的无正文影响清单；与本域完全相同的实际输入及后续复用闭包。 */
