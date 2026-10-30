@@ -11,6 +11,33 @@ export {BackendHost} from './src/main/backend/host';`,resolveDir:process.cwd()},
 const loaded={exports:{}};new Function('require','module','exports',output.outputFiles[0].text)(createRequire(import.meta.url),loaded,loaded.exports);
 const {AssistantGenerationJobs,recoverAssistantGenerationReceipt,interruptAssistantGeneration,BackendRequestFailure,BackendHost}=loaded.exports;
 
+test('SQLite宿主明确不支持旧回复时，未取得回执的旧请求可安全停止并退出',async()=>{
+ const identity={connectionGeneration:7,contactId:randomUUID(),sessionId:randomUUID(),requestKey:randomUUID()},calls=[];
+ const host=new BackendHost('/unused/synthetic-sqlite-recovery');host.generation=7;host.state={phase:'connected'};
+ host.target={requestJson:async request=>{calls.push(request.path);
+  if(request.path==='/api/runtime/status')return {state:'running',runtime:'dsh',hostRuntime:'typescript',storage:'sqlite',ownership:{replies:'unavailable'}};
+  if(request.path.endsWith(identity.sessionId))return {mode:'sqlite',session_id:identity.sessionId,entries:[],runtime_recovery:'none'};
+  throw new BackendRequestFailure('response',503,'sqlite_capability_unavailable');
+ }};
+ const captured=host.captureAssistantStoppingConnection(identity),jobs=new AssistantGenerationJobs();
+ await jobs.execute({identity,stopping:{recover:id=>recoverAssistantGenerationReceipt(captured,id),interrupt:()=>assert.fail('不得中断其他任务')},adapter:{async run(protocol){protocol.preparing();throw new BackendRequestFailure('response',503,'sqlite_capability_unavailable');}},consume:()=>assert.fail('不得生成'),failed:()=>{}});
+ assert.equal(await jobs.cancelUserGeneration(identity,null),true);
+ await jobs.beginClosing(()=>assert.fail('没有被接纳的旧生成'));
+ assert.deepEqual(jobs.pendingReceipts(),[]);assert.ok(calls.includes('/api/runtime/status'));
+});
+
+for(const damage of ['reply_available','wrong_runtime','stopping','wrong_storage','connection'])test(`SQLite旧任务恢复拒绝${damage}`,async()=>{
+ const identity={connectionGeneration:7,contactId:randomUUID(),sessionId:randomUUID(),requestKey:randomUUID()};let generation=7;
+ const backend={getConnectionGeneration:()=>generation,requestJson:async request=>{
+  if(request.path==='/api/runtime/status'){
+   if(damage==='connection')generation=8;
+   return {generation:7,data:{state:damage==='stopping'?'stopping':'running',runtime:'dsh',hostRuntime:damage==='wrong_runtime'?'other':'typescript',storage:damage==='wrong_storage'?'other':'sqlite',ownership:{replies:damage==='reply_available'?'typescript':'unavailable'}}};
+  }
+  return {generation:7,data:{mode:'sqlite',session_id:identity.sessionId,entries:[],runtime_recovery:'none'}};
+ }};
+ await assert.rejects(recoverAssistantGenerationReceipt(backend,identity));
+});
+
 test('明确重试收尾可找回分段丢失的全部准备回执，只中断真实段且不生成',async()=>{
  const identity={connectionGeneration:7,contactId:randomUUID(),sessionId:randomUUID(),requestKey:randomUUID()},fresh=randomUUID(),turn=randomUUID(),version=randomUUID(),calls=[];
  const receipt={session_id:fresh,previous_session_id:identity.sessionId,turn_id:turn,input_version_id:version,request_key:identity.requestKey,state:'running'};

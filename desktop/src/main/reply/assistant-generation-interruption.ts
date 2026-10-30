@@ -52,6 +52,16 @@ export async function recoverAssistantGenerationReceipt(backend: Pick<BackendHos
   try {
     const saved = await readAssistantSession(backend, identity.contactId, identity.sessionId, new AbortController().signal);
     foundSession = true;
+    if (saved.discussionEntries !== undefined) {
+      // SQLite 宿主不装配旧回复准备接口；同一认证连接的所有权状态须明确证明这一点。
+      const status = await backend.requestJson({ method: 'GET', path: '/api/runtime/status', maxResponseBytes: 4096 });
+      const value = status.data;
+      if (saved.generation !== identity.connectionGeneration || status.generation !== identity.connectionGeneration
+        || backend.getConnectionGeneration() !== identity.connectionGeneration || !isRecord(value)
+        || value.state !== 'running' || value.runtime !== 'dsh' || value.hostRuntime !== 'typescript' || value.storage !== 'sqlite'
+        || !isRecord(value.ownership) || value.ownership.replies !== 'unavailable') throw new Error('旧生成状态尚未确认。');
+      return null;
+    }
     const turns = saved.turns.filter((item) => item.requestKey === identity.requestKey);
     if (saved.generation !== identity.connectionGeneration || backend.getConnectionGeneration() !== identity.connectionGeneration || turns.length > 1) throw new Error('退出生成身份尚未读到。');
     if (turns.length === 0) {

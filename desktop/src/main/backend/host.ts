@@ -119,7 +119,8 @@ export class BackendHost {
         recovered.set(requestKey, accepted);
       }
       const allowedRead = options.method === 'GET' && options.body === undefined
-        && [path, ...Array.from(recovered.values(), value => value.path)].some(value => options.path === value || options.path.startsWith(`${value}?read_part=`));
+        && (options.path === '/api/runtime/status'
+          || [path, ...Array.from(recovered.values(), value => value.path)].some(value => options.path === value || options.path.startsWith(`${value}?read_part=`)));
       const allowedInterrupt = options.method === 'POST' && (options.path === `${path}/interrupt`
         || accepted && options.path === `${accepted.path}/interrupt` && body?.input_version_id === accepted.inputVersionId);
       if ((!allowedRead && !allowedInterrupt && !lookup) || (lookup && recovered.size >= 32 && !recovered.has(requestKey!))) {

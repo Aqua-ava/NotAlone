@@ -42,6 +42,9 @@ test('讨论正式profile从同一SQLite读取真实用户发言，重开与明�
   const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());const info=await ready(host,config.infoPath);
   const request=async(route,method='GET',body)=>{const response=await fetch('http://'+info.address+route,{method,headers:{Authorization:'Bearer '+info.token,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,data:await response.json()};};
   const prefix='/api/contacts/'+ids[0]+'/assistant-sessions';
+  const runtime=await request('/api/runtime/status');assert.equal(runtime.data.storage,'sqlite');assert.equal(runtime.data.ownership.replies,'unavailable');
+  const legacy=await request(prefix+'/'+first.id+'/replies/prepare','POST',{idempotency_key:randomUUID()});
+  assert.equal(legacy.status,503);assert.equal(legacy.data.error,'sqlite_capability_unavailable');
   const view=await request(prefix+'/'+first.id);assert.equal(view.status,200);assert.equal(view.data.mode,'sqlite');
   assert.equal(view.data.entries[0].text,'用于正式profile回看的合成用户发言');assert.equal(view.data.entries[0].role,'user');assert.equal(view.data.runtime_recovery,'none');
   assert.equal((await request('/api/contacts/'+ids[1]+'/assistant-sessions/'+first.id)).status,404);
