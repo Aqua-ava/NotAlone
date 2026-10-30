@@ -13,7 +13,7 @@ export interface IncrementalHistoryCoordinatorState {
   lastError: string | null;
   contacts: { contactId: string; phase: IncrementalContactPhase; lastError: string | null }[];
 }
-interface QueuedRead { contactId: string; key: string }
+interface QueuedRead { contactId: string; key: string; continuation?: true }
 interface ActiveRead extends QueuedRead { controller: AbortController; done: Promise<void>; cancelledAtWake?: number }
 
 /** 范围/身份/语义变化不可自动重试；瞬时读取故障保留可见降级并在后续 tick 重试。 */
@@ -142,6 +142,7 @@ export class IncrementalHistoryCoordinator {
   #run(job: QueuedRead): void {
     this.#queued.delete(job.contactId); this.#state(job.contactId, 'running');
     const active: ActiveRead = { ...job, controller: new AbortController(), done: Promise.resolve() };
+    let previousIncremental: HistoryCoverage['incremental'];
     this.#active.set(job.contactId, active);
     active.done = (async () => {
       let coverage = await this.#history.coverage(job.contactId);
@@ -153,6 +154,7 @@ export class IncrementalHistoryCoordinator {
       }
       // 交接不可证明（终页没有保守续读游标）时保持可见不可用，不发起渠道读取。
       if (coverage.incremental?.phase === 'unavailable') throw new StorageFailure(coverage.incremental.failureCode ?? 'history_incremental_unavailable');
+      previousIncremental = coverage.incremental;
       return await this.#history.synchronizeIncremental(job.contactId, active.controller.signal);
     })().then((coverage: HistoryCoverage) => {
       if (active.controller.signal.aborted) { this.#state(job.contactId, 'stopped'); return; }
@@ -162,7 +164,15 @@ export class IncrementalHistoryCoordinator {
         this.#attempted.set(job.contactId, job.key); this.#state(job.contactId, 'blocked', code); return;
       }
       if (incremental?.phase === 'incomplete') {
-        // 预算耗尽等可恢复中断保留降级，下一次 tick 从持久检查点继续。
+        // 存储只接受未完成且游标推进的页；已接受页数增加证明本轮有进展。
+        // 预算接续优先于尚未打开的会话，防止固定读者等待整个目录后空闲过期。
+        const acceptedBefore = previousIncremental?.goalId === incremental.goalId ? previousIncremental?.pagesAccepted ?? 0 : 0;
+        if (!this.#closed && incremental.failureCode === 'history_page_budget_exhausted' && incremental.cursorPresent
+          && incremental.goalId && incremental.pagesAccepted > acceptedBefore) {
+          this.#queued.set(job.contactId, { ...job, continuation: true });
+          this.#state(job.contactId, 'queued'); return;
+        }
+        // 无进展或其他可恢复中断保持可见降级，由后续 tick 重试。
         this.#state(job.contactId, 'degraded', incremental.failureCode ?? 'history_incomplete'); return;
       }
       this.#attempted.delete(job.contactId); this.#state(job.contactId, 'caught_up');
@@ -182,7 +192,8 @@ export class IncrementalHistoryCoordinator {
     while (!this.#closed) {
       if (this.#wakePending) { this.#wakePending = false; await this.#scan(); }
       if (this.#closed) break;
-      for (const job of [...this.#queued.values()]) { if (this.#active.size >= 2) break; this.#run(job); }
+      const queued = [...this.#queued.values()].sort((a, b) => Number(b.continuation === true) - Number(a.continuation === true));
+      for (const job of queued) { if (this.#active.size >= 2) break; this.#run(job); }
       if (this.#wakePending) continue;
       if (!this.#active.size && !this.#queued.size) break;
       await Promise.race([...this.#active.values()].map(active => active.done).concat(this.#changed.promise));

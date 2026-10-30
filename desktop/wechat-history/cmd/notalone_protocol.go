@@ -314,9 +314,6 @@ func (h *notaloneHistorySession) inspect(ctx context.Context) (notaloneInspectio
 		db.Close()
 		result.CheckedPartitions = append(result.CheckedPartitions, partition)
 	}
-	if len(result.Tables) == 0 {
-		return result, notaloneFailure("history_target_table_missing")
-	}
 	if guard.Check() != nil || h.currentAccount() != nil {
 		return result, notaloneFailure("history_source_changed")
 	}
@@ -433,7 +430,8 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 		return result, nil, err
 	}
 	profile := *certification.ReadProfile
-	profile.IncrementalTailVerified = true
+	emptyTarget := certification.ProfileID == notaloneAbsentPrivateTargetProfile
+	profile.IncrementalTailVerified = !emptyTarget
 	profile.VerifiedTerminalAbsence = certification.ProfileID == "wechat-4.0.6-29387-observed-states-v1" &&
 		program.Version == "4.0.6" && program.Build == "29387" && notalone40629387ObservedStatusRulesMatch(profile.StatusRules)
 	snapshot, err := newNotaloneSnapshot(h.life, h.server, *h.selected, inspected, profile)
@@ -463,6 +461,10 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 	}
 	result.Status = "supported"
 	result.StatusSemantics = "observed_subset_only"
+	if emptyTarget {
+		result.StatusSemantics = certification.StatusSemantics
+		result.Capabilities["incrementalTail"] = "unsupported"
+	}
 	result.Continuity = "same-source-instances-normal-use-v1"
 	result.Reason = nil
 	h.snapshot = snapshot
@@ -484,7 +486,7 @@ func cloneNotaloneCapabilityMap(value map[string]string) map[string]string {
 }
 
 func cloneNotaloneSupportReport(value notaloneSupportReport) notaloneSupportReport {
-	value.DeclaredPrimaryKey = append([]string(nil), value.DeclaredPrimaryKey...)
+	value.DeclaredPrimaryKey = append([]string{}, value.DeclaredPrimaryKey...)
 	value.Capabilities = cloneNotaloneCapabilityMap(value.Capabilities)
 	if value.Reason != nil {
 		reason := *value.Reason
@@ -773,6 +775,11 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		h.snapshot = nil
 		resume := tail.expectedCursor
 		page.ResumeCursor = &resume
+	}
+	if r.Operation == "page" && page.Exhausted && report.ProfileID == notaloneAbsentPrivateTargetProfile {
+		// 空终页已经释放固定读者；随后支持复验继续依赖活来源守卫，不保留关闭的快照。
+		h.snapshot = nil
+		h.snapshotMode = ""
 	}
 	return page, nil
 }

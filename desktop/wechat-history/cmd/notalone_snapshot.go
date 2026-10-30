@@ -188,6 +188,10 @@ type notaloneSnapshotShard struct {
 }
 type notaloneSnapshot struct {
 	mu                sync.Mutex
+	idleMu            sync.Mutex
+	idleTimeout       time.Duration
+	idleDeadline      time.Time
+	idleTimer         *time.Timer
 	life              context.Context
 	cancel            context.CancelFunc
 	closed            bool
@@ -276,7 +280,11 @@ func notaloneSnapshotInstanceMatches(schema notaloneTableSchema, table string) b
 }
 
 func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolved, inspected notaloneInspection, profile notaloneReadProfile) (snapshot *notaloneSnapshot, err error) {
-	if ctx == nil || s == nil || s.cfg == nil || selected.Account == "" || selected.Conversation == "" || selected.SourceGeneration == "" || selected.Account != s.cfg.Wxid || inspected.SourceGeneration != selected.SourceGeneration || inspected.ScopeDigest != notaloneHash(selected.Account, selected.Conversation) || inspected.SchemaFingerprint == "" || len(inspected.Tables) == 0 || len(inspected.CheckedPartitions) == 0 {
+	return newNotaloneSnapshotWithIdleTimeout(ctx, s, selected, inspected, profile, 2*time.Minute)
+}
+
+func newNotaloneSnapshotWithIdleTimeout(ctx context.Context, s *server, selected notaloneResolved, inspected notaloneInspection, profile notaloneReadProfile, idleTimeout time.Duration) (snapshot *notaloneSnapshot, err error) {
+	if ctx == nil || s == nil || s.cfg == nil || selected.Account == "" || selected.Conversation == "" || selected.SourceGeneration == "" || selected.Account != s.cfg.Wxid || inspected.SourceGeneration != selected.SourceGeneration || inspected.ScopeDigest != notaloneHash(selected.Account, selected.Conversation) || inspected.SchemaFingerprint == "" || len(inspected.CheckedPartitions) == 0 || idleTimeout <= 0 {
 		return nil, notaloneFailure("history_scope_unverified")
 	}
 	if profile.SchemaShapeFingerprint == "" || profile.SchemaShapeFingerprint != notaloneSnapshotShape(inspected.Tables) || !notaloneStatusProfileValid(profile) {
@@ -297,9 +305,10 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 	if err != nil {
 		return nil, notaloneFailure("history_source_unverified")
 	}
-	life, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	life, cancel := context.WithCancel(ctx)
 	// 目录账号身份继续用于scope；sender使用锁定上游selfWxid的账号名规范。
-	n := &notaloneSnapshot{life: life, cancel: cancel, guard: guard, selected: selected, senderOwner: s.selfWxid(), profile: profile, table: "Msg_" + talkerHash(selected.Conversation), schemaFingerprint: inspected.SchemaFingerprint, checkedPartitions: append([]string(nil), inspected.CheckedPartitions...)}
+	n := &notaloneSnapshot{life: life, cancel: cancel, idleTimeout: idleTimeout, idleDeadline: time.Now().Add(idleTimeout), guard: guard, selected: selected, senderOwner: s.selfWxid(), profile: profile, table: "Msg_" + talkerHash(selected.Conversation), schemaFingerprint: inspected.SchemaFingerprint, checkedPartitions: append([]string(nil), inspected.CheckedPartitions...)}
+	n.idleTimer = time.AfterFunc(idleTimeout, n.expireIdle)
 	if profile.IncrementalTailVerified {
 		n.identityDigests = make(map[notaloneTailIdentity]notaloneTailBaselineEntry)
 	}
@@ -428,8 +437,34 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 			shard.done = true
 		}
 	}
+	if len(n.target.Tables) == 0 {
+		n.target.Partitions = append([]string(nil), n.checkedPartitions...)
+	}
 	go func() { <-life.Done(); _ = n.Close() }()
 	return n, nil
+}
+
+// 空闲超时中止在途调用；旧定时器回调不得撤销已经成功续租的固定快照。
+func (n *notaloneSnapshot) expireIdle() {
+	n.idleMu.Lock()
+	defer n.idleMu.Unlock()
+	if !time.Now().Before(n.idleDeadline) {
+		n.cancel()
+	}
+}
+
+// 只有完整成功的有限页推进租约；状态查询和目标查询不能无限保留reader。
+func (n *notaloneSnapshot) renewIdle() error {
+	n.idleMu.Lock()
+	defer n.idleMu.Unlock()
+	now := time.Now()
+	if n.life.Err() != nil || !now.Before(n.idleDeadline) {
+		n.cancel()
+		return notaloneFailure("history_snapshot_cancelled")
+	}
+	n.idleDeadline = now.Add(n.idleTimeout)
+	n.idleTimer.Reset(n.idleTimeout)
+	return nil
 }
 func notaloneSnapshotDataVersion(ctx context.Context, db *wcdb.DB) (int64, error) {
 	rows, err := db.QueryBounded(ctx, 1, "PRAGMA data_version")
@@ -447,7 +482,7 @@ func (n *notaloneSnapshot) Target() notaloneSnapshotTarget {
 	defer n.mu.Unlock()
 	result := n.target
 	result.Partitions = append([]string(nil), result.Partitions...)
-	result.Tables = append([]notaloneSnapshotTable(nil), result.Tables...)
+	result.Tables = append([]notaloneSnapshotTable{}, result.Tables...)
 	return result
 }
 func (n *notaloneSnapshot) Check() error {
@@ -500,6 +535,9 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 	stop := context.AfterFunc(n.life, cancel)
 	defer func() { stop(); cancel() }()
 	page = notaloneSnapshotPage{Target: n.target.Descriptor, Records: []notaloneSnapshotRecord{}, CompletedPartitions: []string{}}
+	if len(n.target.Tables) == 0 {
+		page.CompletedPartitions = append([]string(nil), n.checkedPartitions...)
+	}
 	if cursor != "" {
 		value := cursor
 		page.CursorIn = &value
@@ -575,6 +613,8 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 		if closeErr := n.closeLocked(); closeErr != nil {
 			return page, closeErr
 		}
+	} else if err = n.renewIdle(); err != nil {
+		return page, err
 	}
 	return page, nil
 }
@@ -686,6 +726,9 @@ func (n *notaloneSnapshot) closeLocked() error {
 	}
 	n.closed = true
 	n.cancel()
+	n.idleMu.Lock()
+	n.idleTimer.Stop()
+	n.idleMu.Unlock()
 	failed := false
 	for _, shard := range n.shards {
 		if shard.reader != nil {

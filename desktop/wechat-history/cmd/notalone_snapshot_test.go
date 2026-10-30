@@ -349,6 +349,65 @@ func TestNotAloneSnapshotLifetimeContextClosesHeldReaders(t *testing.T) {
 	}
 }
 
+func TestNotAloneSnapshotProgressRenewsIdleLifetime(t *testing.T) {
+	f := newNotaloneSnapshotFixture(t, 1)
+	if err := f.writers[0].Exec(`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<33) INSERT INTO ` + quoteIdent(f.table) + `(local_id,server_id,local_type,real_sender_id,create_time,status,message_content) SELECT x,0,1,2,1700000000,0,'合成分页' FROM n;`); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := newNotaloneSnapshotWithIdleTimeout(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables), 400*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snapshot.Close()
+	cursor := ""
+	for index := 0; index < 3; index++ {
+		if index > 0 {
+			<-time.After(250 * time.Millisecond)
+		}
+		page, pageErr := snapshot.Page(context.Background(), cursor)
+		if pageErr != nil {
+			t.Fatalf("持续合法分页不得按创建时间关闭快照，第%d页：%v", index+1, pageErr)
+		}
+		if index < 2 {
+			if page.CursorOut == nil || page.Exhausted {
+				t.Fatal("合成固定目标应继续分页")
+			}
+			cursor = *page.CursorOut
+		} else if !page.Exhausted || len(page.Records) != 2 {
+			t.Fatal("续租后未读完原固定目标")
+		}
+	}
+}
+
+func TestNotAloneSnapshotChecksDoNotRenewIdleLifetime(t *testing.T) {
+	f := newNotaloneSnapshotFixture(t, 1)
+	snapshot, err := newNotaloneSnapshotWithIdleTimeout(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables), 400*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snapshot.Close()
+	<-time.After(250 * time.Millisecond)
+	if err = snapshot.Check(); err != nil {
+		t.Fatalf("空闲时限内的来源核验失败：%v", err)
+	}
+	snapshot.Target()
+	if _, err = snapshot.FixedSnapshotProof(f.inspected); err != nil {
+		t.Fatalf("空闲时限内的固定证明失败：%v", err)
+	}
+	select {
+	case <-snapshot.life.Done():
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("仅查询状态或固定证明不得延长reader寿命")
+	}
+	if err = snapshot.Check(); err == nil {
+		t.Fatal("空闲过期后不得宣称快照连续")
+	}
+	result, err := f.writers[0].QueryBounded(context.Background(), 1, "PRAGMA wal_checkpoint(TRUNCATE)")
+	if err != nil || len(result) != 1 || rowInt64(result[0], "busy") != 0 {
+		t.Fatalf("空闲过期未释放固定reader：%#v %v", result, err)
+	}
+}
+
 func TestNotAloneSnapshotSameShapeDDLRequiresFreshTableInstance(t *testing.T) {
 	for _, mode := range []string{"same-table-recreated", "unrelated-schema-change"} {
 		t.Run(mode, func(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 )
 
 const notaloneProgramPlist = "/Applications/WeChat.app/Contents/Info.plist"
+const notaloneAbsentPrivateTargetProfile = "wechat-4.0.6-29387-absent-private-target-v1"
 
 type notaloneProgramVersion struct {
 	Version string `json:"version"`
@@ -149,6 +150,12 @@ func notaloneRuntimeReadCandidate(program notaloneProgramVersion, inspected nota
 		certification.ReadProfile.OpaqueStatusPolicy != "" || inspected.SchemaFingerprint == "" {
 		return false
 	}
+	if certification.ProfileID == notaloneAbsentPrivateTargetProfile {
+		return program.Version == "4.0.6" && program.Build == "29387" && certification.Status == "unverified" &&
+			len(inspected.Tables) == 0 && len(inspected.CheckedPartitions) > 0 && len(certification.DeclaredPrimaryKey) == 0 &&
+			certification.StatusSemantics == "no-message-table-v1" && certification.Capabilities["programVersion"] == "supported" &&
+			certification.Capabilities["exactSchema"] == "supported" && notalone40629387ObservedStatusRulesMatch(certification.ReadProfile.StatusRules)
+	}
 	for _, capability := range []string{"programVersion", "exactSchema", "declaredLocalKey", "automaticAllocation", "statusColumn"} {
 		if certification.Capabilities[capability] != "supported" {
 			return false
@@ -178,7 +185,20 @@ func certifyNotaloneProfile(program notaloneProgramVersion, tables []notaloneTab
 	}
 	report.Capabilities["programVersion"] = "supported"
 	report.Reason = "history_schema_shape_uncertified"
-	if len(tables) == 0 || len(tables) > 128 {
+	if len(tables) == 0 {
+		// 这里只提供固定缺表证明的候选档；运行时仍须逐个固定全部分片后才能认证空历史。
+		report.ProfileID = notaloneAbsentPrivateTargetProfile
+		report.Reason = "history_snapshot_runtime_proof_required"
+		report.SchemaShapeFingerprint = notaloneSnapshotShape(tables)
+		report.StatusSemantics = "no-message-table-v1"
+		report.Capabilities["exactSchema"] = "supported"
+		for _, capability := range []string{"declaredLocalKey", "automaticAllocation", "serverIdUniqueConstraint", "statusColumn"} {
+			report.Capabilities[capability] = "unsupported"
+		}
+		report.ReadProfile = &notaloneReadProfile{SchemaShapeFingerprint: report.SchemaShapeFingerprint, StatusSemanticsVerified: true, StatusRules: notalone40629387ObservedStatusRules()}
+		return report
+	}
+	if len(tables) > 128 {
 		return report
 	}
 	for _, table := range tables {

@@ -67,12 +67,18 @@ export class SqliteHistoryService {
     if(proof){const prepared=await this.storage.execute<{ok:boolean;revalidated:boolean}>('history.prepareNormalUseGuard',{token,target:proof.target,report:proof.report,guardId});if(!prepared.ok)throw new StorageFailure('history_source_continuity_unverified');revalidated=prepared.revalidated;}
     else if(!await this.storage.execute<boolean>('history.guardAcquire',{token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
     const entry:RetainedGuard={channel,token,guardId,failed:false,sourceLost:false,normalUse:proof!==undefined,bodyVerified:false,release:async()=>{}};
+    let leaseReleased=false,releaseFailed=false,storageClosed=false;
     try{entry.release=this.holders.register({key:`history:guard_${contactId}_${token.data_generation}`,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources:true,close:async()=>{
      entry.failed=true;this.active.get(contactId)?.controller.abort();
-     try{
+     let failure:unknown;
+     if(!leaseReleased&&!releaseFailed)try{
       if(!await this.storage.execute<boolean>('history.guardRelease',{token,guardId,normalUse:entry.normalUse,sourceLost:entry.sourceLost}))throw new StorageFailure('history_source_continuity_unverified');
-     }catch(error){await this.storage.close();throw error;}
-     finally{await entry.channel.close?.();}
+      leaseReleased=true;
+     }catch(error){releaseFailed=true;failure=error;}
+     // 持久失证失败后先使存储失能；重试只排空尚未确认关闭的资源，不再访问旧库。
+     if(releaseFailed&&!storageClosed)try{await this.storage.close();storageClosed=true;}catch(error){failure??=error;}
+     try{await entry.channel.close?.();}catch(error){failure??=error;}
+     if(failure)throw failure;
      if(this.guards.get(contactId)===entry)this.guards.delete(contactId);
     }});}catch(error){await this.storage.execute('history.guardRelease',{token,guardId,normalUse:entry.normalUse,sourceLost:entry.sourceLost});throw error;}
     this.guards.set(contactId,entry);retained=entry;

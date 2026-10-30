@@ -9,6 +9,7 @@ import type { MessageStreamCallbacks } from './message-stream';
 import { readAssistantGenerationReceipt } from '../reply/assistant-generation-jobs';
 import { isRecord } from '../reply/result-read';
 import { isUuid } from '../uuid';
+import { sqliteStartupTimeoutMs } from '../../../../backend-ts/src/storage/sqlite/timeouts';
 
 export interface MediaPreviewConnection {status(): Promise<'active' | 'revoking'>; release(): Promise<void>}
 
@@ -322,7 +323,7 @@ export class BackendHost {
     if (this.ownedChild) throw new BackendFailure('backend_connection_failed');
     this.ownedChild = await OwnedBackendProcess.launch(config, canStart);
     // spawn 已完成的子进程仍须取得认证目标并收尾；取消检查只阻止新的 spawn。
-    const deadline = Date.now() + 12_000;
+    const deadline = Date.now() + sqliteStartupTimeoutMs;
     while (Date.now() < deadline && this.ownedChild.isRunning()) {
       const started = await readConnection(config.infoPath);
       if (started) {

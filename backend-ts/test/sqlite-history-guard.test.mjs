@@ -194,14 +194,35 @@ test('尚未读取时守卫已经退出，不能进入正文分页',async t=>{
 });
 
 test('无法持久记录失证时关闭存储，重开后不能冒充守卫仍在线',async t=>{
- const f=await fixture(t),state={created:0,closed:0};
- const proxy={status:f.storage.status,execute:(name,input,...rest)=>name==='history.guardRelease'?Promise.reject(new StorageFailure('storage_busy')):f.storage.execute(name,input,...rest),close:()=>f.storage.close()};
+ const f=await fixture(t),state={created:0,closed:0};let releases=0,storageCloses=0;
+ const proxy={status:f.storage.status,execute:(name,input,...rest)=>name==='history.guardRelease'?(releases++,Promise.reject(new StorageFailure('storage_busy'))):f.storage.execute(name,input,...rest),close:()=>{storageCloses++;return f.storage.close();}};
  const history=new SqliteHistoryService(proxy,f.contacts,guardedChannelFactory(state));t.after(()=>history.close().catch(()=>{}));
  const contact=f.saved[0].contact_id;await history.synchronize(contact);const databaseId=f.storage.status.databaseId;
  await assert.rejects(history.stop(contact),{code:'storage_busy'});assert.equal(state.closed,1);
  await assert.rejects(f.storage.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact}),{code:'worker_failed'});
+ await history.stop(contact);await history.close();
+ assert.equal(releases,1,'存储已关闭后的重试不得再执行守卫写入');assert.equal(storageCloses,1);
  const reopened=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId});t.after(()=>reopened.close());
  assert.equal((await reopened.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact,limit:100})).replyEligibility,'history_incomplete');
+});
+
+test('持久失证失败后的停读重试仍须排空未关闭的渠道',async t=>{
+ const f=await fixture(t),state={created:0,closed:0},create=guardedChannelFactory(state);let releases=0,closeAttempts=0;
+ const proxy={status:f.storage.status,execute:(name,input,...rest)=>name==='history.guardRelease'?(releases++,Promise.reject(new StorageFailure('storage_busy'))):f.storage.execute(name,input,...rest),close:()=>f.storage.close()};
+ const history=new SqliteHistoryService(proxy,f.contacts,()=>{const channel=create(),close=channel.close;channel.close=async()=>{if(++closeAttempts===1)throw new StorageFailure('history_native_unavailable');await close();};return channel;});
+ t.after(()=>history.close().catch(()=>{}));const contact=f.saved[0].contact_id;await history.synchronize(contact);
+ await assert.rejects(history.stop(contact),{code:'storage_busy'});assert.equal(state.closed,0);
+ await history.stop(contact);assert.equal(state.closed,1);assert.equal(closeAttempts,2);assert.equal(releases,1);
+ await history.stop(contact);assert.equal(closeAttempts,2,'真实排空完成后才结算并移除守卫');
+});
+
+test('存储关闭未获确认时保留守卫并在停读重试中继续关闭',async t=>{
+ const f=await fixture(t),state={created:0,closed:0};let releases=0,storageCloses=0;
+ const proxy={status:f.storage.status,execute:(name,input,...rest)=>name==='history.guardRelease'?(releases++,Promise.reject(new StorageFailure('storage_busy'))):f.storage.execute(name,input,...rest),close:async()=>{if(++storageCloses===1)throw new StorageFailure('storage_close_unconfirmed');await f.storage.close();}};
+ const history=new SqliteHistoryService(proxy,f.contacts,guardedChannelFactory(state));t.after(()=>history.close().catch(()=>{}));const contact=f.saved[0].contact_id;
+ await history.synchronize(contact);await assert.rejects(history.stop(contact),{code:'storage_busy'});assert.equal(storageCloses,1);
+ await history.stop(contact);assert.equal(storageCloses,2);assert.equal(releases,1);
+ await assert.rejects(f.storage.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact}),{code:'worker_failed'});
 });
 
 test('无守卫租约的预目标失败空范围只清除围栏与空范围元数据',async()=>{

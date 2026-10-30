@@ -23,7 +23,7 @@ const channel = () => ({
   target: async () => ({ protocol: 'private-history-v1', descriptor: 'synthetic-target', partitions: ['p'], tables: [{ partition: 'p', instance: 't' }], sourceGeneration: 'source-1' }),
   page: async (_scope, target, cursor) => ({ target: target.descriptor, cursorIn: cursor, cursorOut: null, completedPartitions: ['p'], exhausted: true,
     records: ['1', '2', '3'].map(localId => ({ partition: 'p', table: 't', localId, serverId: '0', sender: 'contact', kind: 'text', text: `合成来源${localId}`,
-      originalType: '1', sentAt: '1700000000000', timePrecision: 'second', orderScheme: null, orderKey: null, status: '0' })) }),
+      originalType: '1', sentAt: '1700000000000', timePrecision: 'second', orderScheme: null, orderKey: null, status: '0', stateAssurance: 'verified' })) }),
 });
 
 async function fixture(t) {

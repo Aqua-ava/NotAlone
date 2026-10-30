@@ -81,6 +81,7 @@ const stderrLimit = 64 * 1024;
 const digest = (input: string | Buffer) => createHash('sha256').update(input).digest('hex');
 const fail = (code = 'history_protocol_invalid'): never => { throw new StorageFailure(code); };
 const hashPattern = /^[a-f0-9]{64}$/;
+const absentPrivateTargetProfile = 'wechat-4.0.6-29387-absent-private-target-v1';
 // 系统会话不代表用户的真实关系对象，也不能成为单联系人读取目标。
 const systemConversations = new Set(['filehelper', 'notifymessage']);
 const allowedErrors = new Set([
@@ -138,7 +139,7 @@ function resolved(value: unknown): ResolvedWechatScope {
   const accountKey = text(row.accountKey), conversationKey = text(row.conversationKey);
   if (![accountKey, conversationKey].every(key => /^[A-Za-z0-9_.@-]{1,255}$/.test(key))) return fail();
   if (systemConversations.has(conversationKey)) return fail('history_target_not_private');
-  return { accountKey, conversationKey, displayName: text(row.displayName), sourceGeneration: hash(row.sourceGeneration) };
+  return { accountKey, conversationKey, displayName: metadataDisplayName(row.displayName, conversationKey), sourceGeneration: hash(row.sourceGeneration) };
 }
 function table(value: unknown): WechatTableSchema {
   const row = object(value, ['target', 'partition', 'role', 'columns', 'indexes', 'declaredPrimaryKey', 'autoIncrement', 'sqlFingerprint', 'triggerFingerprints', 'schemaVersion', 'rootPage']);
@@ -171,7 +172,7 @@ function inspection(value: unknown, scope: ResolvedWechatScope): WechatSchemaIns
   if (row.format !== 'wechat-message-schema-v1' || row.status !== 'unverified') return fail();
   if (hash(row.scopeDigest) !== digest(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail();
   const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
-  const tables = list(row.tables, 128, table, 1); unique(tables.map(item => item.target));
+  const tables = list(row.tables, 128, table); unique(tables.map(item => item.target));
   if (tables.some(item => !checkedPartitions.includes(item.partition))) return fail();
   return { format: 'wechat-message-schema-v1', status: 'unverified', scopeDigest: row.scopeDigest as string,
     sourceGeneration: scope.sourceGeneration, schemaFingerprint: hash(row.schemaFingerprint), tables, checkedPartitions };
@@ -245,7 +246,10 @@ function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: str
   const declaredPrimaryKey = list(row.declaredPrimaryKey, 128, value => text(value)); unique(declaredPrimaryKey);
   const statusSemantics = text(row.statusSemantics, 512, row.status !== 'supported');
   const continuity = text(row.continuity, 512, row.status !== 'supported');
-  if (row.status === 'supported' && (reason !== null || !declaredPrimaryKey.length)) return fail();
+  const absentTarget = row.profileId === absentPrivateTargetProfile && row.programVersion === '4.0.6' && row.build === '29387'
+    && row.statusSemantics === 'no-message-table-v1' && row.continuity === 'same-source-instances-normal-use-v1';
+  if (row.status === 'supported' && (reason !== null || !declaredPrimaryKey.length && !absentTarget
+    || row.profileId === absentPrivateTargetProfile && (!absentTarget || declaredPrimaryKey.length > 0))) return fail();
   let capabilities: Record<string, 'supported' | 'unsupported' | 'unverified'> | undefined;
   if (hasCapabilities) {
     const extras = ['incrementalTail', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
@@ -257,6 +261,9 @@ function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: str
       return [key, value];
     }));
   }
+  if (row.status === 'supported' && absentTarget && (!capabilities
+    || ['programVersion', 'exactSchema', 'statusSemantics', 'sourceLifecycle', 'restartContinuity', 'recoveryMapping', 'snapshotBarrier', 'partitionCoverage', 'normalHistory'].some(key => capabilities[key] !== 'supported')
+    || ['declaredLocalKey', 'automaticAllocation', 'serverIdUniqueConstraint', 'statusColumn', 'incrementalTail'].some(key => capabilities[key] !== 'unsupported'))) return fail();
 
   return { protocol: 'private-history-v1', profileId: text(row.profileId), adapterVersion: text(row.adapterVersion),
     status: row.status as HistorySupportReport['status'], reason, accountKey: scope.accountKey, conversationKey: scope.conversationKey,
@@ -270,10 +277,11 @@ function historyTarget(value: unknown, scope: ResolvedWechatScope, schema?: Wech
   const tables = list(row.tables, 128, value => {
     const table = object(value, ['partition', 'instance']);
     return { partition: hash(table.partition), instance: hash(table.instance) };
-  }, 1);
+  });
   unique(tables.map(table => table.instance));
   if (tables.some(table => !partitions.includes(table.partition))) return fail();
-  if (schema && (JSON.stringify([...partitions].sort()) !== JSON.stringify([...new Set(schema.tables.map(table => table.partition))].sort())
+  if (!tables.length && (!schema || schema.tables.length > 0)) return fail();
+  if (schema && (JSON.stringify([...partitions].sort()) !== JSON.stringify([...(schema.tables.length ? new Set(schema.tables.map(table => table.partition)) : schema.checkedPartitions)].sort())
     || JSON.stringify(tables.map(table => `${table.partition}:${table.instance}`).sort()) !== JSON.stringify(schema.tables.map(table => `${table.partition}:${table.target}`).sort()))) return fail();
   return { protocol: 'private-history-v1', descriptor: opaque(row.descriptor), partitions, tables, sourceGeneration: scope.sourceGeneration };
 }
@@ -652,6 +660,9 @@ export class NarrowWechatClient {
       if (!scope) return fail('history_scope_unverified');
       return this.#request({ op: 'support', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-schema-v1' }, value => {
         const parsed = supportReport(value, scope, this.#options.expectedCliSha256);
+        if (parsed.status === 'supported' && (parsed.profileId === absentPrivateTargetProfile
+          ? !this.#schema || this.#schema.tables.length > 0
+          : this.#schema?.tables.length === 0)) fail();
         if (parsed.status === 'supported' && this.#schema && this.#schema.tables.some(table => JSON.stringify(table.declaredPrimaryKey) !== JSON.stringify(parsed.declaredPrimaryKey))) fail();
         if (this.#schema && parsed.schemaFingerprint !== this.#schema.schemaFingerprint
           || this.#support && parsed.schemaFingerprint !== this.#support.schemaFingerprint

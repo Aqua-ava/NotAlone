@@ -49,7 +49,12 @@ func (n *notaloneSnapshot) FixedSnapshotProof(inspection notaloneInspection) (no
 	if err := n.checkLocked(); err != nil {
 		return empty, err
 	}
-	if len(n.target.Partitions) != len(n.target.Tables) || len(n.target.Tables) == 0 {
+	emptyTarget := len(inspection.Tables) == 0 && len(n.target.Tables) == 0
+	if emptyTarget {
+		if len(n.target.Partitions) != len(n.checkedPartitions) {
+			return empty, notaloneFailure("history_snapshot_proof_incomplete")
+		}
+	} else if len(n.target.Partitions) != len(n.target.Tables) || len(n.target.Tables) == 0 {
 		return empty, notaloneFailure("history_snapshot_proof_incomplete")
 	}
 	expected := make(map[string]bool, len(n.checkedPartitions))
@@ -116,7 +121,16 @@ func (n *notaloneSnapshot) FixedSnapshotProof(inspection notaloneInspection) (no
 			ReaderPinned: true, SourceInstanceHeld: true,
 		})
 	}
-	if len(seen) != len(expected) || len(targetInstances) != len(n.target.Partitions) {
+	if emptyTarget {
+		targetPartitions := map[string]bool{}
+		for _, partition := range n.target.Partitions {
+			if !expected[partition] || targetPartitions[partition] {
+				return empty, notaloneFailure("history_snapshot_proof_incomplete")
+			}
+			targetPartitions[partition] = true
+		}
+	}
+	if len(seen) != len(expected) || !emptyTarget && len(targetInstances) != len(n.target.Partitions) {
 		return empty, notaloneFailure("history_snapshot_proof_incomplete")
 	}
 	proof.CompletedPartitionCount = len(seen)

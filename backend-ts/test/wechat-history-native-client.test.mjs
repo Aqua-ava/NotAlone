@@ -22,6 +22,10 @@ async function fixture(t,mode='normal') {
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
  const schema=${JSON.stringify(schema)};let busy=false,supportCount=0;let currentConversation='${conversation}';let receivedRecords=[];
  const target={protocol:'private-history-v1',descriptor:'synthetic-target-v1',partitions:['d'.repeat(64)],tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
+ if(process.env.TEST_MODE.startsWith('empty-target')){
+  schema.checkedPartitions=Array.from({length:8},(_,i)=>(i+1).toString(16).repeat(64));schema.tables=[];
+  target.partitions=schema.checkedPartitions;target.tables=[];
+ }
  if(process.env.TEST_MODE==='sparse-partitions'){
   schema.checkedPartitions=Array.from({length:8},(_,i)=>(i+1).toString(16).repeat(64));
   schema.tables=[{...schema.tables[0],partition:schema.checkedPartitions[0]},{...schema.tables[0],partition:schema.checkedPartitions[7],target:'f'.repeat(64)}];
@@ -41,11 +45,15 @@ async function fixture(t,mode='normal') {
   if(mode==='known-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_account_changed'}})+'\\n');return;}
   if(r.op==='resolve')currentConversation=r.displayName==='另一位合成联系人'?'synthetic-other':'${conversation}';
   let data=r.op==='resolve'?{accountKey:'${account}',conversationKey:currentConversation,displayName:'合成目标',sourceGeneration:'${generation}'}:schema;
+  if(r.op==='resolve'&&mode==='display-control')data.displayName='合成\\t目标';
   if(r.op==='support'){
    supportCount++;data={protocol:'private-history-v1',profileId:'synthetic-profile-v1',adapterVersion:'1',status:'supported',reason:null,accountKey:'${account}',conversationKey:currentConversation,sourceGeneration:'${generation}',programVersion:'4.0.6',build:'29387',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-status-v1',continuity:'synthetic-current-source-v1'};
    if(mode==='unverified-support'||mode==='unsupported-support')data={...data,status:mode==='unverified-support'?'unverified':'unsupported',reason:'synthetic_unverified'};
    if(mode==='partial-capabilities')data={...data,status:'unverified',reason:'history_message_state_unverified',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(key=>[key,['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn'].includes(key)?'supported':key==='serverIdUniqueConstraint'?'unsupported':'unverified']))};
 
+   if(mode.startsWith('empty-target'))data={...data,profileId:'wechat-4.0.6-29387-absent-private-target-v1',declaredPrimaryKey:[],statusSemantics:'no-message-table-v1',continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','private-history-boundary-v1'].map(key=>[key,['declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','incrementalTail'].includes(key)?'unsupported':key==='private-history-boundary-v1'?'unverified':'supported']))};
+   if(mode==='empty-target-ordinary-profile')data={...data,profileId:'synthetic-profile-v1',declaredPrimaryKey:['local_id']};
+   if(mode==='empty-target-false-tail')data.capabilities.incrementalTail='supported';
    if(mode==='wrong-support-scope')data={...data,conversationKey:'synthetic-other'};
    if(mode==='wrong-support-key')data={...data,declaredPrimaryKey:['unrelated']};
    if(mode==='wrong-support-generation')data={...data,sourceGeneration:'f'.repeat(64)};
@@ -54,6 +62,8 @@ async function fixture(t,mode='normal') {
   }
   if(r.op==='target'){
    data={...target,descriptor:target.descriptor+':'+currentConversation};
+   if(mode==='empty-target-missing-partition')data={...data,partitions:data.partitions.slice(0,7)};
+   if(mode==='empty-target-fake-instance')data={...data,tables:[{partition:data.partitions[0],instance:'c'.repeat(64)}]};
    if(mode==='wrong-target-generation')data={...data,sourceGeneration:'f'.repeat(64)};
    if(mode==='wrong-target-table')data={...data,tables:[{partition:'d'.repeat(64),instance:'f'.repeat(64)}]};
   }
@@ -125,6 +135,7 @@ async function fixture(t,mode='normal') {
   if(r.op==='page'){
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'合成分页文字',originalType:'1',sentAt:'1000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row],completedPartitions:['d'.repeat(64)],exhausted:true};
+   if(mode==='empty-target')data={...data,records:[],completedPartitions:target.partitions};
    if(mode==='page-cancel')return;
    if(mode==='page-too-large'){process.stdout.write('x'.repeat(8*1024*1024+1));return;}
    if(mode==='page-large')data={...data,records:Array.from({length:16},(_,i)=>({...row,localId:String(i+1),text:'\\u0000'.repeat(65536)}))};
@@ -483,4 +494,28 @@ test('对方来信current允许消失或撤回元数据变化但不能更换本�
  const otherType=await fixture(t,'received-test-current-other-type');await otherType.client.resolveSelected('合成目标');await otherType.client.inspectSelected();
  await otherType.client.observeReceivedTestMetadataSelected('arm');await otherType.client.observeReceivedTestMetadataSelected('next');
  const changedType=await otherType.client.observeReceivedTestMetadataSelected('current');assert.equal(changedType.records[0].originalType,'10000');assert.equal(changedType.records[0].sender,'unknown');
+});
+
+
+test('选中会话展示名控制字符与账号列表采用相同清洗，稳定身份保持原值',async t=>{
+ const f=await fixture(t,'display-control');
+ const selected=await f.client.resolveSelected(conversation);
+ assert.equal(selected.conversationKey,conversation);assert.equal(selected.displayName,'合成 目标');
+});
+
+test('全部固定分片缺少目标表时接受命名空历史支持档与完整空终页',async t=>{
+ const f=await fixture(t,'empty-target');await f.client.resolveSelected(conversation);
+ const inspected=await f.client.inspectSelected();assert.equal(inspected.tables.length,0);assert.equal(inspected.checkedPartitions.length,8);
+ const support=await f.client.supportSelected();assert.equal(support.status,'supported');assert.deepEqual(support.declaredPrimaryKey,[]);
+ const target=await f.client.targetSelected();assert.deepEqual(target.partitions,inspected.checkedPartitions);assert.deepEqual(target.tables,[]);
+ const page=await f.client.pageSelected(target,null);assert.equal(page.exhausted,true);assert.deepEqual(page.records,[]);assert.deepEqual(page.completedPartitions,target.partitions);
+});
+
+
+test('空目标不得借用普通档、声称增量、遗漏固定分片或伪造表实例',async t=>{
+ for(const mode of ['empty-target-ordinary-profile','empty-target-false-tail','empty-target-missing-partition','empty-target-fake-instance'])await t.test(mode,async t=>{
+  const f=await fixture(t,mode);await f.client.resolveSelected(conversation);await f.client.inspectSelected();
+  if(['empty-target-ordinary-profile','empty-target-false-tail'].includes(mode))await assert.rejects(f.client.supportSelected(),{code:'history_protocol_invalid'});
+  else {await f.client.supportSelected();await assert.rejects(f.client.targetSelected(),{code:'history_protocol_invalid'});}
+ });
 });

@@ -61,7 +61,9 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable }: 
   coverages?: HistoryCoverage[]; contactId: string; bodyAvailable?: boolean;
 }) {
   const rows = coverages?.filter(item => item.contactId === contactId);
-  const historyLabel = (row: HistoryCoverage) => bodyAvailable !== false && row.failureCode === 'history_identity_quarantined'
+  const emptyHistory = (row: HistoryCoverage) => row.phase === 'complete' && row.messageCount === 0 && row.nonTextCount === 0;
+  const historyLabel = (row: HistoryCoverage) => row.phase === 'complete' ? emptyHistory(row) ? '当前范围内暂无可读历史' : labels.complete
+    : bodyAvailable !== false && row.failureCode === 'history_identity_quarantined'
     ? '部分历史尚未核验' : row.failureCode || row.incrementalFailureCode
     ? bodyAvailable === false ? '读取能力核验受阻' : '历史读取受阻'
     : bodyAvailable === false && row.phase === 'syncing' ? '正在核验读取能力' : labels[row.phase];
@@ -77,7 +79,9 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable }: 
         <strong>{incrementalLabel(row.incrementalPhase)}</strong>{bodyAvailable !== false && typeof row.incrementalPages === 'number' ? ` · 已跟进 ${row.incrementalPages} 次` : ''}
       </p>}
       {row.incrementalFailureCode && <p role="status">
-        {incrementalReasons[row.incrementalFailureCode] ?? reasons[row.incrementalFailureCode] ?? '新消息同步暂未继续，请稍后刷新状态或重新开启同步。'}
+        {emptyHistory(row) && ['history_incremental_unavailable', 'history_tail_unsupported'].includes(row.incrementalFailureCode)
+          ? '当前范围已核验无可读历史；出现新消息后需重新核验读取范围。'
+          : incrementalReasons[row.incrementalFailureCode] ?? reasons[row.incrementalFailureCode] ?? '新消息同步暂未继续，请稍后刷新状态或重新开启同步。'}
       </p>}
     </div>)}
   </div>;

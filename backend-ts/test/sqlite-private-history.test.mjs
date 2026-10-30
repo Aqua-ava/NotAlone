@@ -8,6 +8,8 @@ import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 const owner='00000000-0000-4000-8000-000000000001';
 const report={serverAliasSemantics:'verified_within_scope',protocol:'private-history-v1',profileId:'synthetic-v1',adapterVersion:'1',status:'supported',reason:null,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'synthetic-generation-1'};
+const absentReport=base=>({...base,profileId:'wechat-4.0.6-29387-absent-private-target-v1',declaredPrimaryKey:[],statusSemantics:'no-message-table-v1',continuity:'same-source-instances-normal-use-v1',
+ capabilities:{programVersion:'supported',exactSchema:'supported',declaredLocalKey:'unsupported',automaticAllocation:'unsupported',statusColumn:'unsupported',statusSemantics:'supported',sourceLifecycle:'supported',restartContinuity:'supported',recoveryMapping:'supported',snapshotBarrier:'supported',partitionCoverage:'supported',normalHistory:'supported',incrementalTail:'unsupported'}});
 const record=(id,extra={})=>({partition:'shard-a',table:'table-instance-1',localId:id,serverId:'0',sender:'contact',kind:'text',text:`合成正文${id}`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',...extra});
 async function fixture(t,options={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-history-')));
@@ -54,6 +56,39 @@ test('已授权单联系人历史正常入库，精确身份和非文字占位�
  assert.ok(result.messages.every(m=>m.ordering==='unknown'&&m.sourceRecordIds.length===1));
  assert.equal((await service.read(saved[1].contact_id)).messages.length,0);
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('命名空历史支持档须覆盖全部缺表分片，不伪造主键或增量能力',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
+ target.partitions=['shard-a','shard-b'];target.tables=[];
+ channel.guardSession={loss:new Promise(()=>{})};
+ channel.inspect=async(...args)=>absentReport(await inspect(...args));
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[],completedPartitions:[...target.partitions],exhausted:true});
+ const coverage=await service.synchronize(contact);
+ assert.equal(coverage.phase,'complete');assert.equal(coverage.traversalComplete,true);assert.equal(coverage.messageCount,0);
+ assert.equal(coverage.incremental.phase,'unavailable');assert.equal((await service.read(contact)).messages.length,0);
+ assert.equal(await service.bodyAvailable([contact]),false);
+ await service.close();
+});
+
+test('空历史证明不接受伪造正文、尾游标、主键事实或遗漏分片',async t=>{
+ for(const variant of ['ordinary-profile','tail-promoted','records','resume-cursor','present-table','missing-partition'])await t.test(variant,async t=>{
+  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
+  target.partitions=['shard-a','shard-b'];target.tables=[];channel.guardSession={loss:new Promise(()=>{})};
+  channel.inspect=async(...args)=>{
+   const value=absentReport(await inspect(...args));if(variant==='ordinary-profile')value.profileId='unverified-empty';
+   if(variant==='tail-promoted')value.capabilities.incrementalTail='supported';return value;
+  };
+  if(variant==='present-table')target.tables=[{partition:'shard-a',instance:'table-instance-1'}];
+  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:variant==='records'?[record('1')]:[],
+   completedPartitions:variant==='missing-partition'?['shard-a']:[...target.partitions],exhausted:true,...(variant==='resume-cursor'?{resumeCursor:'forged-tail'}:{})});
+  try{
+   if(variant==='missing-partition'){
+    const coverage=await service.synchronize(contact);assert.equal(coverage.traversalComplete,false);assert.equal(coverage.phase,'incomplete');
+   }else await assert.rejects(service.synchronize(contact),{code:['ordinary-profile','tail-promoted'].includes(variant)?'history_support_unverified':variant==='present-table'?'history_target_unverified':'history_page_invalid'});
+   assert.equal((await service.read(contact)).messages.length,0);
+  }finally{await service.close();}
+ });
 });
 test('联系人HTTP目录消息数等于当前可见规范消息，来源删除即时变7、删尽变0且隔离范围',async t=>{
  const {service,contacts,channel,saved,storage,root}=await fixture(t),[a,b]=saved;

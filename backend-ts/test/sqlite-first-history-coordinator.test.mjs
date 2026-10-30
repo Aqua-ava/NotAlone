@@ -77,6 +77,65 @@ test('历史遍历完成但存在未核验状态时保留准确原因，不误�
  assert.equal(f.coordinator.getState().lastError,'history_identity_quarantined');
 });
 
+test('历史页预算耗尽后自动接续当前目标，直到所有分片遍历结束',async t=>{
+ const f=await fixture(t);const [binding]=await select(f);await f.contacts.setReading(true);
+ f.state.pageHook=async(scope,target,cursor)=>{
+  const index=cursor===null?0:Number(cursor.slice('synthetic-page-'.length));
+  assert.equal(index,f.state.pages.length-1);
+  const final=index===1000;
+  return page(scope,target,cursor,{cursorOut:final?null:`synthetic-page-${index+1}`,records:final?page(scope,target,cursor).records:[],completedPartitions:final?['p']:[],exhausted:final});
+ };
+ await wake(f);
+ const coverage=await f.history.coverage(binding.contact_id);
+ assert.equal(coverage.phase,'complete');assert.equal(coverage.pageCount,1001);
+ assert.equal(f.state.pages.length,1001);assert.equal(f.state.pages[1000].cursor,'synthetic-page-1000');
+ assert.equal(f.coordinator.getState().contacts[0].phase,'complete');
+});
+
+test('未核验旧行不遮蔽页预算接续，自动读完后仍诚实标为历史不完整',async t=>{
+ const f=await fixture(t);const [binding]=await select(f);await f.contacts.setReading(true);
+ f.state.pageHook=async(scope,target,cursor)=>{
+  const index=cursor===null?0:Number(cursor.slice('synthetic-page-'.length)),final=index===1000;
+  const records=final?page(scope,target,cursor).records:index===0?[{...page(scope,target,cursor).records[0],localId:'2',stateAssurance:'unverified',text:null}]:[];
+  return page(scope,target,cursor,{cursorOut:final?null:`synthetic-page-${index+1}`,records,completedPartitions:final?['p']:[],exhausted:final});
+ };
+ await wake(f);const coverage=await f.history.coverage(binding.contact_id);
+ assert.equal(coverage.traversalComplete,true);assert.equal(coverage.pageCount,1001);assert.equal(coverage.phase,'incomplete');
+ assert.equal(coverage.failureCode,'history_identity_quarantined');assert.equal(coverage.messageCount,1);
+});
+
+test('预算接续没有推进游标时停止，不形成后台空转',async t=>{
+ const binding={contact_id:'synthetic-contact',binding_id:'synthetic-binding',grant_id:'synthetic-grant',selection_generation:'1',status:'active'};
+ let calls=0;
+ const history={coverage:async()=>({phase:'not_started'}),synchronize:async()=>{
+  if(++calls>2)throw new Error('不得再次空转');
+  return {phase:'incomplete',cursor:'unchanged-cursor',traversalComplete:false,failureCode:'history_page_budget_exhausted'};
+ },stop:async()=>{}};
+ const coordinator=new FirstHistoryCoordinator({directory:async()=>({read_enabled:true,bindings:[binding]})},history);
+ t.after(()=>coordinator.close());coordinator.wake();await coordinator.waitForIdle();
+ assert.equal(calls,2);assert.equal(coordinator.getState().contacts[0].phase,'incomplete');
+});
+
+test('大历史的预算接续优先于尚未打开的会话，避免固定快照在队尾过期',async t=>{
+ const f=await fixture(t);await select(f,['a','b','c']);await f.contacts.setReading(true);
+ await f.coordinator.close();f.coordinator=new FirstHistoryCoordinator({directory:async()=>{
+  const directory=await f.contacts.directory();return {...directory,bindings:directory.bindings.toSorted((a,b)=>a.conversation_locator.localeCompare(b.conversation_locator))};
+ }},f.history);
+ const otherActive=deferred();let pagesA=0,continuationBeforeQueuedContact=false;
+ f.state.pageHook=async(scope,target,cursor)=>{
+  if(scope.conversationKey==='friend-b')await otherActive.promise;
+  if(scope.conversationKey==='friend-c'){
+   continuationBeforeQueuedContact=pagesA===1001;otherActive.resolve();
+  }
+  if(scope.conversationKey!=='friend-a')return page(scope,target,cursor);
+  const final=++pagesA===1001;
+  return page(scope,target,cursor,{cursorOut:final?null:`synthetic-page-${pagesA}`,records:[],completedPartitions:final?['p']:[],exhausted:final});
+ };
+ await wake(f);
+ assert.equal(continuationBeforeQueuedContact,true,'已有固定目标必须先接续，再为新会话打开快照');
+ assert.equal(pagesA,1001);
+});
+
 test('并发最多两个联系人，同联系人duplicate wake不并发且消息来源不串人',async t=>{
  const f=await fixture(t);const bindings=await select(f,['a','b','c']);await f.contacts.setReading(true);
  const allEntered=[deferred(),deferred(),deferred()],gates=new Map();let active=0,maximum=0,count=0;

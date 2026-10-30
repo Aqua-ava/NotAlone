@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import { sqliteOpenTimeoutMs } from './timeouts.ts';
 import { StorageFailure, type OpenStorageOptions, type StorageLease, type StorageStatus } from './contracts.ts';
 export type { OpenStorageOptions, StorageStatus, StorageLease } from './contracts.ts';
 
@@ -24,7 +25,7 @@ export class SqliteStorage {
   static async open(options: OpenStorageOptions): Promise<SqliteStorage> {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), {workerData: options, execArgv: ['--experimental-strip-types']});
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { void worker.terminate(); reject(new StorageFailure('storage_timeout')); }, 15_000);
+      const timer = setTimeout(() => { void worker.terminate(); reject(new StorageFailure('storage_timeout')); }, sqliteOpenTimeoutMs);
       const fail = () => { clearTimeout(timer); reject(new StorageFailure('worker_failed')); };
       worker.once('error', fail); worker.once('exit', fail);
       worker.once('message', message => {

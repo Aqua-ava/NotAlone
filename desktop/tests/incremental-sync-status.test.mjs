@@ -74,6 +74,15 @@ test('未建立覆盖的会话也显示首次历史支持核验阻断原因', ()
   assert.ok(waiting.includes('正文读取保持关闭'));
 });
 
+test('已核验空历史与后续增量资格分开显示，不把空结果写成历史读取受阻',()=>{
+ for(const incrementalPhase of ['unavailable','blocked']){
+  const markup=renderContact(coverage({messageCount:0,nonTextCount:0,incrementalPhase,incrementalFailureCode:'history_incremental_unavailable'}),true);
+  assert.ok(markup.includes('当前范围内暂无可读历史'));
+  assert.equal(markup.includes('历史读取受阻'),false);
+  assert.ok(markup.includes('出现新消息后需重新核验'));
+ }
+});
+
 test('正文未开放时如实显示能力核验进度，失败联系人不计入等待队列', () => {
   const markup = renderPage([
     coverage({ phase: 'syncing', incrementalPhase: 'syncing' }),

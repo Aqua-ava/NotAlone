@@ -28,7 +28,7 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
   SELECT 1 FROM history_guard_lease g JOIN database_instance d ON d.slot=1 WHERE g.owner_id=? AND g.contact_id=? AND (g.state<>'active' OR g.runtime_id<>d.runtime_id) LIMIT 1`,[owner,contact,owner,contact]));
  const blockedBinding=continuityBlocked&&!goal?tx.get("SELECT id FROM conversation_binding WHERE owner_id=? AND contact_id=? AND state='verified'",[owner,contact]):undefined;
  const counts=tx.get("SELECT count(*) AS messages,count(CASE WHEN kind<>'text' THEN 1 END) AS nontext FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available')",[owner,contact])!;
- const pages=goal?tx.get('SELECT count(*) AS n FROM sync_capture WHERE owner_id=? AND goal_id=?',[owner,goal.id])!.n:0n;
+ const pages=goal?tx.get('SELECT count(*) AS n FROM sync_capture WHERE owner_id=? AND contact_id=? AND goal_id=?',[owner,contact,goal.id])!.n:0n;
  const quarantined=tx.get("SELECT count(*) AS n FROM capture_record WHERE owner_id=? AND contact_id=? AND state='quarantined' AND availability='available'",[owner,contact])!.n;
  const stateQuarantined=safeCount(quarantined)>0||Boolean(tx.get("SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND reason NOT IN ('source_recalled','source_absent')",[owner,contact]));
  let traversalComplete=false;

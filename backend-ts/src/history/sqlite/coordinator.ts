@@ -12,7 +12,7 @@ export interface FirstHistoryCoordinatorState {
   lastError: string | null;
   contacts: { contactId: string; phase: FirstHistoryContactPhase; lastError: string | null }[];
 }
-interface QueuedRead { contactId: string; key: string }
+interface QueuedRead { contactId: string; key: string; continuationCursor?: string }
 interface ActiveRead extends QueuedRead { cancelledAtWake?: number; controller: AbortController; done: Promise<void> }
 const allowedErrors = new Set(['history_source_continuity_unverified', 'history_support_unverified', 'history_support_unsupported', 'history_support_changed',
   'history_external_scope_changed', 'history_interrupted', 'history_page_budget_exhausted', 'history_cursor_invalid',
@@ -123,6 +123,12 @@ export class FirstHistoryCoordinator {
     active.done = Promise.resolve().then(() => this.#history.synchronize(job.contactId, active.controller.signal)).then(coverage => {
       if (active.controller.signal.aborted) this.#state(job.contactId, 'stopped');
       else if (coverage.phase === 'complete') this.#state(job.contactId, 'complete');
+      else if (!this.#closed && !coverage.traversalComplete && typeof coverage.cursor === 'string'
+        && coverage.cursor.length > 0 && coverage.cursor !== job.continuationCursor) {
+        // 单轮预算只让出执行权；已打开的固定快照优先接续，避免等待新会话时空闲过期。
+        this.#queued.set(job.contactId, { ...job, continuationCursor: coverage.cursor });
+        this.#state(job.contactId, 'queued');
+      }
       else this.#state(job.contactId, 'incomplete', safeError(new StorageFailure(coverage.failureCode ?? 'history_incomplete')));
     }).catch(error => {
       if (active.controller.signal.aborted) this.#state(job.contactId, 'stopped');
@@ -137,7 +143,8 @@ export class FirstHistoryCoordinator {
     while (!this.#closed) {
       if (this.#wakePending) { this.#wakePending = false; await this.#scan(); }
       if (this.#closed) break;
-      for (const job of [...this.#queued.values()]) { if (this.#active.size >= 2) break; this.#run(job); }
+      const queued = [...this.#queued.values()].sort((a, b) => Number(b.continuationCursor !== undefined) - Number(a.continuationCursor !== undefined));
+      for (const job of queued) { if (this.#active.size >= 2) break; this.#run(job); }
       if (this.#wakePending) continue;
       if (!this.#active.size && !this.#queued.size) break;
       await Promise.race([...this.#active.values()].map(active => active.done).concat(this.#changed.promise));

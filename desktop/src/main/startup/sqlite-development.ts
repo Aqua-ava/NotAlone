@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import type { SqliteLaunchConfiguration } from '../../../../backend-ts/src/launch';
 import {readSqliteCapabilities} from '../../../../backend-ts/src/sqlite-capabilities.ts';
 import type { SqliteDevelopmentState } from '../../shared/startup-bridge';
+import { sqliteStartupTimeoutMs } from '../../../../backend-ts/src/storage/sqlite/timeouts';
 
 type ReadyResult = { phase: 'ready'; code: 'sqlite_ready' | 'sqlite_reopened'; databaseId: string; ownerId: string; schemaVersion: number; sqliteVersion: string;
   created: boolean; configuration: { capabilities: SqliteLaunchConfiguration['capabilities']; skillPackageRoot?: string } };
@@ -72,7 +73,7 @@ export class SqliteDevelopmentProbe {
         killTimer = setTimeout(() => child.kill('SIGKILL'), 250);
       };
       this.cancelChild = stop;
-      const timer = setTimeout(stop, 30_000);
+      const timer = setTimeout(stop, sqliteStartupTimeoutMs);
       child.stdout.on('data', (data: Buffer) => {
         output += data.toString('utf8');
         if (Buffer.byteLength(output) > 8192) stop();

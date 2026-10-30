@@ -253,12 +253,11 @@ test('分页预算耗尽保留不完整与可见原因，下一轮从检查点�
     lastCursor = `tail-budget-${++pages}`;
     return { target: target.descriptor, cursorIn: cursor, cursorOut: lastCursor, caughtUp: false, records: [record(recordId, { text: `批量${pages}` })] };
   };
-  await wake(f);
+  await f.history.synchronizeIncremental(binding.contact_id);
   const exhausted = await f.history.coverage(binding.contact_id);
   assert.equal(exhausted.incremental.phase, 'incomplete');
   assert.equal(exhausted.incremental.failureCode, 'history_page_budget_exhausted');
   assert.equal(exhausted.incremental.pagesAccepted, 200);
-  assert.equal(f.coordinator.getState().contacts[0].phase, 'degraded', '预算耗尽属可恢复中断');
   f.state.tailHook = null;
   f.state.tailBatches.push(() => ({ records: [record('999', { text: '收尾' })], caughtUp: true, cursorOut: 'tail-done' }));
   await wake(f);
@@ -266,4 +265,38 @@ test('分页预算耗尽保留不完整与可见原因，下一轮从检查点�
   const resumed = await f.history.read(binding.contact_id);
   assert.equal(resumed.coverage.incremental.failureCode, null);
   assert.equal(resumed.messages.at(0).text, '收尾');
+});
+
+test('增量页预算耗尽后优先接续同一固定目标，不等待其他会话和下一次定时唤醒',async t=>{
+ const f=await fixture(t,['a','b','c']);const bindings=await select(f,['a','b','c']);await f.contacts.setReading(true);
+ await f.coordinator.close();f.coordinator=new IncrementalHistoryCoordinator({directory:async()=>{
+  const directory=await f.contacts.directory();return {...directory,bindings:directory.bindings.toSorted((a,b)=>a.conversation_locator.localeCompare(b.conversation_locator))};
+ }},f.history,{intervalMs:0});
+ for(const binding of bindings)await f.history.synchronize(binding.contact_id);
+ const otherActive=deferred();let pagesA=0,continuationBeforeQueuedContact=false;
+ f.state.tailHook=async(scope,target,cursor)=>{
+  if(scope.conversationKey==='friend-b')await otherActive.promise;
+  if(scope.conversationKey==='friend-c'){
+   continuationBeforeQueuedContact=pagesA===201;otherActive.resolve();
+  }
+  const isA=scope.conversationKey==='friend-a';
+  return {records:[],cursorOut:isA?`tail-a-${++pagesA}`:`tail-${scope.conversationKey}`,caughtUp:!isA||pagesA===201};
+ };
+ await wake(f);
+ assert.equal(pagesA,201,'一轮唤醒必须接续预算检查点直至固定扫描结束');
+ assert.equal(continuationBeforeQueuedContact,true,'已打开的增量目标优先接力，避免空闲超时');
+ const a=bindings.find(binding=>binding.conversation_locator==='friend-a');
+ const coverage=await f.history.coverage(a.contact_id);
+ assert.equal(coverage.incremental.phase,'ready');assert.equal(coverage.incremental.pagesAccepted,201);
+ assert.equal(f.coordinator.getState().contacts.find(row=>row.contactId===a.contact_id).phase,'caught_up');
+});
+
+test('增量预算响应没有接受新页时不自动空转',async t=>{
+ const binding={contact_id:'synthetic-contact',binding_id:'synthetic-binding',grant_id:'synthetic-grant',selection_generation:'1',status:'active'};
+ const coverage={phase:'complete',traversalComplete:true,incremental:{goalId:'synthetic-goal',phase:'incomplete',failureCode:'history_page_budget_exhausted',cursorPresent:true,pagesAccepted:0}};
+ let calls=0;
+ const history={coverage:async()=>coverage,synchronizeIncremental:async()=>{if(++calls>1)throw new Error('不得再次空转');return coverage;},stop:async()=>{}};
+ const coordinator=new IncrementalHistoryCoordinator({directory:async()=>({read_enabled:true,bindings:[binding]})},history,{intervalMs:0,firstHistoryManagedExternally:true});
+ t.after(()=>coordinator.close());coordinator.wake();await coordinator.waitForIdle();
+ assert.equal(calls,1);assert.equal(coordinator.getState().contacts[0].phase,'degraded');
 });
