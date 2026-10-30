@@ -451,9 +451,6 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 				}
 			}
 		}
-		if !allowed {
-			return nil, notaloneFailure("history_message_state_unverified")
-		}
 		rawType, knownType := row["local_type"].(int64)
 		originalType := "unknown"
 		kind := "other"
@@ -462,7 +459,8 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 			kind = notaloneSnapshotKind(rawType)
 		}
 		record := notaloneSnapshotRecord{Partition: shard.partition, Table: shard.instance, LocalID: notaloneSnapshotDecimal(row["local_id"]), ServerID: notaloneSnapshotDecimal(row["server_id"]), Sender: "unknown", Kind: kind, OriginalType: originalType, Status: notaloneSnapshotDecimal(row["status"])}
-		if senderID, ok := row["real_sender_id"].(int64); ok {
+		// 未认证状态只返回无正文的隔离记录，不能因为同页其他消息合法而读取其正文。
+		if senderID, ok := row["real_sender_id"].(int64); allowed && ok {
 			names, e := shard.reader.QueryBounded(ctx, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", senderID)
 			if e == nil && len(names) == 1 {
 				switch rowString(names[0], "user_name") {

@@ -66,6 +66,20 @@ test('未知身份与内容冲突隔离，非文字夹带正文不保存，覆�
  const contact=saved[0].contact_id;const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'incomplete');assert.equal(coverage.quarantinedCount,2);
  const result=await service.read(contact);assert.equal(result.messages.length,2);assert.equal(result.replyEligibility,'history_incomplete');assert.equal(result.messages.find(m=>m.kind==='other').text,null);
 });
+test('未知状态的无正文来源被隔离，合法文字仍可查看但历史不完整',async t=>{
+ const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',sender:'unknown',text:null}),record('2',{status:'0',text:'合成合法文字'})],completedPartitions:['shard-a'],exhausted:true});
+ const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'incomplete');assert.equal(coverage.quarantinedCount,1);
+ const result=await service.read(contact);assert.equal(result.replyEligibility,'history_incomplete');assert.deepEqual(result.messages.map(m=>m.text),['合成合法文字']);
+});
+test('已见消息后续状态未知时，旧正文不能继续作为可信聊天展示',async t=>{
+ const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'0',text:'合成旧文字'})],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);assert.equal((await service.read(contact)).messages[0].text,'合成旧文字');
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);const result=await service.read(contact);
+ assert.equal(result.replyEligibility,'history_incomplete');assert.ok(!result.messages.some(m=>m.text==='合成旧文字'));
+});
 test('部分分片和分页中断保持真实缺口，重试从已提交cursor继续',async t=>{
  const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
  let interrupted=false;channel.page=async(_s,_t,cursor)=>{if(cursor==='page-2'&&!interrupted){interrupted=true;throw new Error('synthetic interruption');}return {target:target.descriptor,cursorIn:cursor,cursorOut:cursor===null?'page-2':null,records:[record(cursor===null?'1':'2')],completedPartitions:cursor===null?['shard-a']:['shard-b'],exhausted:cursor!==null};};

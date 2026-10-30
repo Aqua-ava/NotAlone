@@ -196,7 +196,7 @@ func TestNotAloneSnapshotNonTextUnknownSenderAndOpaqueState(t *testing.T) {
 	}
 }
 
-func TestNotAloneSnapshotProfileRejectsUnknownStateBeforeBody(t *testing.T) {
+func TestNotAloneSnapshotProfileQuarantinesUnknownStateBeforeBody(t *testing.T) {
 	f := newNotaloneSnapshotFixture(t, 1)
 	if _, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{}); err == nil {
 		t.Fatal("空profile不得放行")
@@ -204,14 +204,22 @@ func TestNotAloneSnapshotProfileRejectsUnknownStateBeforeBody(t *testing.T) {
 	if err := f.writers[0].Exec(`UPDATE ` + quoteIdent(f.table) + ` SET status=99;`); err != nil {
 		t.Fatal(err)
 	}
+	if err := f.writers[0].Exec(`INSERT INTO ` + quoteIdent(f.table) + `(local_id,server_id,local_type,real_sender_id,create_time,status,message_content) VALUES(2,0,1,1,1700000000,0,'合成合法文字');`); err != nil {
+		t.Fatal(err)
+	}
 	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer snapshot.Close()
-	if _, err = snapshot.Page(context.Background(), ""); err == nil || err.Error() != "history_message_state_unverified" {
-		t.Fatalf("未知状态不得读取正文：%v", err)
+	page, err := snapshot.Page(context.Background(), "")
+	if err != nil || len(page.Records) != 2 { t.Fatalf("混合页应区分合法与未知状态：%v", err) }
+	for _, record := range page.Records {
+		if *record.Status == "99" && (record.Sender != "unknown" || record.Text != nil) { t.Fatal("未知状态不得读取或暴露正文") }
+		if *record.Status == "0" && (record.Sender != "owner" || record.Text == nil || *record.Text != "合成合法文字") { t.Fatal("合法状态应读取文字") }
 	}
+	encoded, _ := json.Marshal(page)
+	if strings.Contains(string(encoded), "合成正文") { t.Fatal("未知状态正文不得进入结果") }
 }
 
 func TestNotAloneSnapshotRejectsReplayOtherTargetAndCancelledPage(t *testing.T) {
