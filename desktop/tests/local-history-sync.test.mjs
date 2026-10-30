@@ -100,9 +100,9 @@ test('部分会话本机无历史时，其他会话仍在恢复的提示不能�
   assert.match(html, /部分旧消息在本机不可读取/);
 });
 
-test('正文渠道未开放时仍显示已保存覆盖、占位计数和缺口原因',()=>{
+test('正文能力核验期间仍显示已保存覆盖、占位计数和缺口原因',()=>{
  const current=state('history_interrupted',null);current.report.bodyAvailable=false;
  current.report.historyCoverages=[{bindingId:'synthetic-binding',contactId:'selected',phase:'incomplete',failureCode:'history_interrupted',messageCount:2,nonTextCount:6,pageCount:1}];
  const html=render(current);
- assert.match(html,/正文同步尚未开放/);assert.match(html,/聊天同步进度/);assert.match(html,/6 条非文字占位/);assert.match(html,/已保存部分不代表完整历史/);
+ assert.match(html,/正在核验读取能力，尚未开始正文同步/);assert.match(html,/聊天同步进度/);assert.match(html,/6 条非文字占位/);assert.match(html,/已保存部分不代表完整历史/);
 });

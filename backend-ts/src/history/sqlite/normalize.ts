@@ -11,7 +11,8 @@ export function verifiedTerminalReason(record:HistoryRecord):'source_recalled'|'
 export function prepareRecord(input:HistoryRecord,sourceGeneration:string,target:HistoryTarget):PreparedRecord {
  const r:HistoryRecord={partition:input?.partition,table:input?.table,localId:input?.localId,serverId:input?.serverId,
   sender:input?.sender,kind:input?.kind,text:input?.kind==='text'&&input?.stateAssurance==='verified'?input.text:null,originalType:input?.originalType,
-  sentAt:input?.sentAt,timePrecision:input?.timePrecision,orderScheme:input?.orderScheme,orderKey:input?.orderKey,...(input?.status!==undefined?{status:input.status}:{}),stateAssurance:input?.stateAssurance,...(input?.messageState!==undefined?{messageState:input.messageState}:{})};
+  sentAt:input?.sentAt,timePrecision:input?.timePrecision,orderScheme:input?.orderScheme,orderKey:input?.orderKey,...(input?.status!==undefined?{status:input.status}:{}),stateAssurance:input?.stateAssurance,...(input?.metadataOnly!==undefined?{metadataOnly:input.metadataOnly}:{}),...(input?.messageState!==undefined?{messageState:input.messageState}:{})};
+ const metadataOnly=r.metadataOnly===true&&r.stateAssurance==='unverified'&&r.messageState===undefined&&r.kind!=='text'&&input.text===null&&exactInteger(r.originalType)&&((BigInt(r.originalType)&0xffffffffn)!==1n);
  const identityValid=label(r.partition)&&target.partitions.includes(r.partition)&&label(r.table)&&exactInteger(r.localId)&&target.tables.some(t=>t.partition===r.partition&&t.instance===r.table);
  const terminalReason=verifiedTerminalReason(input);
  let reason:string|null=null;
@@ -19,11 +20,13 @@ export function prepareRecord(input:HistoryRecord,sourceGeneration:string,target
  else if(!target.tables.some(t=>t.partition===r.partition&&t.instance===r.table))reason='message_table_unverified';
  else if(terminalReason)reason=terminalReason;
  else if(r.messageState!==undefined&&!['sent','received'].includes(r.messageState))reason='message_state_unverified';
- else if(r.stateAssurance!=='verified')reason='message_state_unverified';
+ else if(r.metadataOnly!==undefined&&!metadataOnly)reason='message_content_unverified';
+ else if(r.stateAssurance!=='verified'&&!metadataOnly)reason='message_state_unverified';
  else if(r.status!==undefined&&r.status!==null&&(typeof r.status!=='string'||!/^-?(0|[1-9][0-9]{0,18})$/.test(r.status)||BigInt(r.status)<-9223372036854775808n||BigInt(r.status)>9223372036854775807n))reason='message_status_invalid';
  else if(r.serverId!==null&&!exactInteger(r.serverId))reason='message_alias_invalid';
- else if(!['owner','contact'].includes(r.sender)||!kinds.has(r.kind)||!label(r.originalType)||r.kind==='text'&&(typeof r.text!=='string'||r.text.length>1_000_000))reason='message_content_unverified';
+ else if(!['owner','contact',...(metadataOnly?['unknown']:[])].includes(r.sender)||!kinds.has(r.kind)||!label(r.originalType)||r.kind==='text'&&(typeof r.text!=='string'||r.text.length>1_000_000))reason='message_content_unverified';
  else if((r.sentAt===null)!==(r.timePrecision===null)||r.sentAt!==null&&(!exactInteger(r.sentAt)||BigInt(r.sentAt)>253402300799999n)||r.timePrecision!==null&&!['second','millisecond'].includes(r.timePrecision))reason='message_time_invalid';
  else if((r.orderScheme===null)!==(r.orderKey===null)||r.orderScheme!==null&&(!label(r.orderScheme)||!exactInteger(r.orderKey)))reason='message_order_invalid';
- return {raw:JSON.stringify(r),value:r,localKey:identityValid&&(!reason||reason==='message_state_unverified'||reason==='source_recalled'||reason==='source_absent')?JSON.stringify([sourceGeneration,r.partition,r.table,r.localId]):null,serverKey:r.serverId&&r.serverId!=='0'&&exactInteger(r.serverId)?r.serverId:null,reason};
+ else if(metadataOnly&&(r.sender==='unknown'||r.originalType==='10000'))reason='metadata_only';
+ return {raw:JSON.stringify(r),value:r,localKey:identityValid&&(!reason||reason==='message_state_unverified'||reason==='source_recalled'||reason==='source_absent'||reason==='metadata_only')?JSON.stringify([sourceGeneration,r.partition,r.table,r.localId]):null,serverKey:r.serverId&&r.serverId!=='0'&&exactInteger(r.serverId)?r.serverId:null,reason};
 }

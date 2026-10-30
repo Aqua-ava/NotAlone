@@ -6,6 +6,7 @@ const rowKinds=Object.fromEntries(['capture_record','message_alias','message','s
 rowKinds.history_continuity_fence={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
 rowKinds.history_continuity_scope={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
 rowKinds.history_guard_lease={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
+rowKinds.history_source_terminal={keys:['owner_id','id'],ownerKey:'owner_id'};
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const identity=(kind:string,key:Record<string,string>):string=>createHash('sha256').update(JSON.stringify([kind,Object.keys(key).sort().map(k=>[k,key[k]])])).digest('hex');
 const target=(kind:string,key:Record<string,string>):RowDeletionTarget=>({kind:'row',domain:'history',rowKind:kind,key,identity:identity(kind,key),holderKeys:[]});
@@ -14,8 +15,12 @@ function scopeRows(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget
  if(!['source','contact_history','contact','account'].includes(scope.kind))return [];
  const args=scope.kind==='account'?[ownerId]:scope.kind==='source'?[ownerId,scope.contactId,scope.sourceId]:[ownerId,scope.contactId];
  const clause=scope.kind==='account'?'r.owner_id=?':scope.kind==='source'?'r.owner_id=? AND r.contact_id=? AND r.id=?':'r.owner_id=? AND r.contact_id=?';
- const records=tx.all(`SELECT r.* FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE ${clause}${scope.kind==='account'?'':' AND g.accepted_data_generation<?'}`,scope.kind==='account'?args:[...args,op.acceptedGeneration]);
+ const records=tx.all(`SELECT r.*,g.binding_id source_binding_id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE ${clause}${scope.kind==='account'?'':' AND g.accepted_data_generation<?'}`,scope.kind==='account'?args:[...args,op.acceptedGeneration]);
  const targets=records.map(r=>target('capture_record',{owner_id:ownerId,id:String(r.id)}));
+ // 聊天清空保留无正文终态抑制；显式重读不能恢复撤回或已消失的来源。
+ if(scope.kind==='source')for(const record of records)if(record.observed_key)for(const terminal of tx.all(`SELECT id FROM history_source_terminal
+  WHERE owner_id=? AND contact_id=? AND binding_id=? AND external_key=? AND accepted_data_generation<?`,[ownerId,scope.contactId,record.source_binding_id,record.observed_key,op.acceptedGeneration]))targets.push(target('history_source_terminal',{owner_id:ownerId,id:String(terminal.id)}));
+ if(scope.kind==='contact'||scope.kind==='account')for(const terminal of tx.all(`SELECT id FROM history_source_terminal WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_source_terminal',{owner_id:ownerId,id:String(terminal.id)}));
  if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_continuity_fence WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_continuity_fence',{owner_id:ownerId,contact_id:String(r.contact_id)}));
  if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_continuity_scope WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_continuity_scope',{owner_id:ownerId,contact_id:String(r.contact_id)}));
  if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_guard_lease WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_guard_lease',{owner_id:ownerId,contact_id:String(r.contact_id)}));

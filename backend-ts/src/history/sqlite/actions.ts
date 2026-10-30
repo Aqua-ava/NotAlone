@@ -3,8 +3,10 @@ import { StorageFailure, type StorageAction, type StorageTransaction, type Stora
 import { assertReadEligibility } from '../../contacts/sqlite/actions.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryPage, HistoryTailPage, HistoryTarget, HistorySupportReport } from './contracts.ts';
-import { ingestRecords, quarantineUnverifiedRecords, reconcileMissingRecords } from './ingest.ts';
+import { ingestRecords, quarantineUnverifiedRecords } from './ingest.ts';
 import { readCoverage, readMessages } from './read.ts';
+import {unresolvedQuarantineCount} from './quarantine.ts';
+import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
@@ -50,7 +52,7 @@ function targetOf(value:unknown,token:ReadEligibility,report?:HistorySupportRepo
  return target;
 }
 function currentIncremental(tx:StorageTransaction,token:ReadEligibility,report:HistorySupportReport):StorageRow|undefined {
- const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete') AND eligibility_json=? ORDER BY created_at DESC,rowid DESC LIMIT 1",[token.owner_id,token.contact_id,JSON.stringify(token)]);
+ const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='incremental' AND creation_no IS NOT NULL AND state IN ('running','incomplete') AND eligibility_json=? ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1",[token.owner_id,token.contact_id,JSON.stringify(token)]);
  if(!goal)return undefined;
  if(goal.support_json!==serializeSupport(report))fail('history_support_changed');
  if(String(goal.accepted_barrier_generation)!==String(token.barrier_generation))fail('history_suppression_changed');
@@ -104,14 +106,19 @@ export const historyActions:StorageAction[]=[
   if(scope?.conversation_id===token.conversation_id&&scope.source_generation===token.source_generation)return fenceContinuity(tx,token);
   return false;}),
  action('history.preflightContinuity','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightTarget(tx,token,targetOf(i.target,token,i.report),i.report);}),
- action('history.pending','read',(tx,i)=>{assertReadEligibility(tx,i.token);const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='history' AND state IN ('running','incomplete') AND eligibility_json=? ORDER BY created_at DESC,rowid DESC LIMIT 1",[i.token.owner_id,i.token.contact_id,JSON.stringify(i.token)]);if(goal&&goal.support_json!==serializeSupport(i.report))fail('history_support_changed');return goal?{id:goal.id,target:JSON.parse(String(goal.target_json)),cursor:goal.cursor}:null;}),
+ action('history.pending','read',(tx,i)=>{assertReadEligibility(tx,i.token);const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='history' AND creation_no IS NOT NULL AND state IN ('running','incomplete') AND eligibility_json=? ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1",[i.token.owner_id,i.token.contact_id,JSON.stringify(i.token)]);if(goal&&goal.support_json!==serializeSupport(i.report))fail('history_support_changed');
+  // 已到终页的固定快照不能反复接收新的完整扫描，否则旧出现会伪装本次仍存在。
+  if(goal?.cursor===null&&goal.state==='incomplete')return null;
+  return goal?{id:goal.id,target:JSON.parse(String(goal.target_json)),cursor:goal.cursor}:null;}),
  action('history.incrementalContinuityTarget','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
-  const goal=currentIncremental(tx,token,i.report)??tx.get("SELECT target_json FROM read_goal WHERE owner_id=? AND contact_id=? AND cursor_scope_digest IS NOT NULL AND ((kind='incremental' AND cursor IS NOT NULL) OR (kind='history' AND resume_cursor IS NOT NULL AND state='complete')) ORDER BY created_at DESC,rowid DESC LIMIT 1",[token.owner_id,token.contact_id]);
+  const goal=currentIncremental(tx,token,i.report)??tx.get("SELECT target_json FROM read_goal WHERE owner_id=? AND contact_id=? AND creation_no IS NOT NULL AND cursor_scope_digest IS NOT NULL AND ((kind='incremental' AND cursor IS NOT NULL AND (failure_code IS NULL OR failure_code<>'history_snapshot_replaced')) OR (kind='history' AND resume_cursor IS NOT NULL AND state='complete')) ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1",[token.owner_id,token.contact_id]);
   return goal?targetOf(JSON.parse(String(goal.target_json)),token,i.report):null;}),
  action('history.begin','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
   const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);
-  tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?)`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at]);
+  // 新固定快照会替换原生读取器中的目标；旧目标的增量游标不能再交给该读取器。
+  tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
+  tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at,creation_no) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?,(SELECT coalesce(max(creation_no),0)+1 FROM read_goal WHERE creation_no IS NOT NULL))`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at]);
   return {id:i.id,target,cursor:null};
  }),
  action('history.quarantinePageStates','write',(tx,i)=>{
@@ -141,14 +148,13 @@ export const historyActions:StorageAction[]=[
   const resumeCursor=page.resumeCursor===undefined||page.resumeCursor===null?null:assertHistoryCursor(page.resumeCursor,'history_page_invalid');
   if(resumeCursor!==null&&!page.exhausted)fail('history_page_invalid');
   if(verifiedAbsentTarget(report)&&(page.records.length!==0||resumeCursor!==null))fail('history_page_invalid');
-  tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?)",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,page.cursorOut,digest]);
+  tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest,acceptance_no) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?,(SELECT coalesce(max(acceptance_no),0)+1 FROM sync_capture WHERE acceptance_no IS NOT NULL))",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,page.cursorOut,digest]);
   const restoreOperationId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
   const {quarantined}=ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
    exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId})?'clear_excluded':null});
   const partitions=new Set<string>([...JSON.parse(String(goal.completed_partitions)),...page.completedPartitions]);
   const traversalComplete=page.exhausted&&target.partitions.every(p=>partitions.has(p));
-  if(traversalComplete&&report.continuity===normalUseContinuity)reconcileMissingRecords({tx,token,target,report,goalId:String(goal.id)});
-  const unresolved=quarantined||Boolean(tx.get("SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id WHERE c.owner_id=? AND c.goal_id=? AND r.state='quarantined'",[token.owner_id,goal.id]));
+  const unresolved=quarantined||unresolvedQuarantineCount(tx,token.owner_id,token.contact_id)>0;
   const complete=traversalComplete&&!unresolved;
   const state=complete?'complete':page.exhausted?'incomplete':'running';const code=unresolved?'history_identity_quarantined':page.exhausted&&!complete?'history_partitions_missing':null;
   if(quarantined)tx.run("UPDATE sync_capture SET state='quarantined',error_code='history_identity_quarantined' WHERE owner_id=? AND id=?",[token.owner_id,i.captureId]);
@@ -157,8 +163,8 @@ export const historyActions:StorageAction[]=[
   if((complete||traversalComplete&&report.continuity===normalUseContinuity)&&resumeCursor!==null){
    const scopeDigest=historyCursorScopeDigest(token,report,target);
    tx.run('UPDATE read_goal SET resume_cursor=?,cursor_scope_digest=?,cursor_scheme=? WHERE owner_id=? AND id=?',[resumeCursor,scopeDigest,historyCursorScheme,token.owner_id,goal.id]);
-   const existing=tx.get("SELECT id FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete') ORDER BY created_at DESC,rowid DESC LIMIT 1",[token.owner_id,token.contact_id]);
-   if(!existing)tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,cursor,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,handoff_from_goal_id,pages_accepted) VALUES(?,?,?,?,?,?,?,'incremental',?,?,?,?,?,?,'running','ready',?,?,?,?,0)`,
+   const existing=tx.get("SELECT id FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='incremental' AND creation_no IS NOT NULL AND state IN ('running','incomplete') ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1",[token.owner_id,token.contact_id]);
+   if(!existing)tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,cursor,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,handoff_from_goal_id,pages_accepted,creation_no) VALUES(?,?,?,?,?,?,?,'incremental',?,?,?,?,?,?,'running','ready',?,?,?,?,0,(SELECT coalesce(max(creation_no),0)+1 FROM read_goal WHERE creation_no IS NOT NULL))`,
     [token.owner_id,randomUUID(),token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(report),resumeCursor,i.at,scopeDigest,historyCursorScheme,goal.id]);
   }
   if(complete)completeRestoreGoal(tx,token.owner_id,String(goal.id),i.at);
@@ -171,8 +177,11 @@ export const historyActions:StorageAction[]=[
   assertHistoryReadBoundary(tx,token,{kind:'incremental'});
   const existing=currentIncremental(tx,token,report);
   if(existing)return {id:String(existing.id),target:JSON.parse(String(existing.target_json)),cursor:String(existing.cursor)};
+  // 新历史目标尚未完成时，不能退回它已经替换的旧增量切面。
+  const latestHistory=tx.get("SELECT state,resume_cursor FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='history' AND creation_no IS NOT NULL ORDER BY creation_no DESC LIMIT 1",[token.owner_id,token.contact_id]);
+  if(latestHistory&&(latestHistory.state!=='complete'||latestHistory.resume_cursor===null))fail('history_incremental_not_ready');
   // 只从同一完整作用域的既有检查点续读；来源/账号/分片/目标/语义变化会失配并显式停止。
-  const resumable=tx.get(`SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND cursor_scope_digest IS NOT NULL AND ((kind='incremental' AND cursor IS NOT NULL) OR (kind='history' AND resume_cursor IS NOT NULL AND state='complete')) ORDER BY created_at DESC,rowid DESC LIMIT 1`,[token.owner_id,token.contact_id]);
+  const resumable=tx.get(`SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND creation_no IS NOT NULL AND cursor_scope_digest IS NOT NULL AND ((kind='incremental' AND cursor IS NOT NULL AND (failure_code IS NULL OR failure_code<>'history_snapshot_replaced')) OR (kind='history' AND resume_cursor IS NOT NULL AND state='complete')) ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id]);
   if(!resumable)fail('history_incremental_not_ready');
   const target=targetOf(JSON.parse(String(resumable.target_json)),token,report);
   assertSourceContinuity(tx,token,target,report.continuity===normalUseContinuity?report.accountKey:undefined);
@@ -181,9 +190,9 @@ export const historyActions:StorageAction[]=[
   if(String(resumable.accepted_barrier_generation)!==String(token.barrier_generation))fail('history_suppression_changed');
   const cursor=assertHistoryCursor(resumable.kind==='incremental'?resumable.cursor:resumable.resume_cursor,'history_cursor_invalid');
   // 旧执行不复活：旧增量目标标记失效，新资格建立新目标，检查点只作为续读位置。
-  tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_eligibility_changed' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
+  tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_eligibility_changed' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND creation_no IS NOT NULL AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
   const id=i.id as string;
-  tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,cursor,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,handoff_from_goal_id,pages_accepted) VALUES(?,?,?,?,?,?,?,'incremental',?,?,?,?,?,?,'running','partial',?,?,?,?,0)`,
+  tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,cursor,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,handoff_from_goal_id,pages_accepted,creation_no) VALUES(?,?,?,?,?,?,?,'incremental',?,?,?,?,?,?,'running','partial',?,?,?,?,0,(SELECT coalesce(max(creation_no),0)+1 FROM read_goal WHERE creation_no IS NOT NULL))`,
    [token.owner_id,id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(report),cursor,i.at,scopeDigest,historyCursorScheme,resumable.id]);
   return {id,target,cursor};
  }),
@@ -203,7 +212,7 @@ export const historyActions:StorageAction[]=[
   if(page?.target!==goal.target_descriptor||page.cursorIn!==goal.cursor||!Array.isArray(page.records)||page.records.length>1000||typeof page.cursorOut!=='string'||(page.cursorOut===page.cursorIn&&page.caughtUp===false)||typeof page.caughtUp!=='boolean')fail('history_page_invalid');
   const cursorOut=assertHistoryCursor(page.cursorOut,'history_page_invalid');
   if(historyCursorScopeDigest(token,report,target)!==goal.cursor_scope_digest)fail('history_cursor_scope_changed');
-  tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?)",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,cursorOut,digest]);
+  tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest,acceptance_no) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?,(SELECT coalesce(max(acceptance_no),0)+1 FROM sync_capture WHERE acceptance_no IS NOT NULL))",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,cursorOut,digest]);
   const incrementalRestoreId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
   const {quarantined}=ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
    exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId:incrementalRestoreId})?'clear_excluded':null});
@@ -220,17 +229,20 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.source','read',(tx,i)=>{
   readCoverage(tx,i.ownerId,i.contactId);
-  const row=tx.get(`SELECT r.*,c.goal_id,c.captured_at,c.adapter_version,c.cursor_in,c.cursor_out,g.support_json
+  const row=tx.get(`WITH ${currentSourceScopeCTE} SELECT r.*,m.text_body AS message_text,c.goal_id,c.captured_at,c.adapter_version,c.cursor_in,c.cursor_out,g.support_json
    FROM capture_record r JOIN message m ON m.owner_id=r.owner_id AND m.contact_id=r.contact_id AND m.id=r.message_id
    JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
    JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
    WHERE r.owner_id=? AND r.contact_id=? AND r.id=? AND r.state='normalized' AND r.availability='available' AND m.availability='available'
    AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
    AND NOT EXISTS (SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id)
-   AND NOT EXISTS (SELECT 1 FROM history_guard_lease l JOIN database_instance d ON d.slot=1 WHERE l.owner_id=m.owner_id AND l.contact_id=m.contact_id AND (l.state<>'active' OR l.runtime_id<>d.runtime_id))`,[i.ownerId,i.contactId,i.recordId])??fail('history_source_not_found');
+   AND NOT EXISTS (SELECT 1 FROM history_guard_lease l JOIN database_instance d ON d.slot=1 WHERE l.owner_id=m.owner_id AND l.contact_id=m.contact_id AND (l.state<>'active' OR l.runtime_id<>d.runtime_id))
+   AND ${currentSourcePredicate()}`,[i.ownerId,i.contactId,i.contactId,i.ownerId,i.contactId,i.recordId])??fail('history_source_not_found');
+  const raw=JSON.parse(String(row.raw_payload));
+  if(row.normalizer_version==='2'&&raw.kind==='text')raw.text=row.message_text;
   return {recordId:row.id,contactId:row.contact_id,messageId:row.message_id,captureId:row.capture_id,goalId:row.goal_id,
    itemNo:Number(row.item_no),capturedAt:String(row.captured_at),adapterVersion:row.adapter_version,normalizerVersion:row.normalizer_version,
-   cursorIn:row.cursor_in,cursorOut:row.cursor_out,raw:JSON.parse(String(row.raw_payload)),support:JSON.parse(String(row.support_json))};
+   cursorIn:row.cursor_in,cursorOut:row.cursor_out,raw,support:JSON.parse(String(row.support_json))};
  }),
  action('history.coverage','read',(tx,i)=>readCoverage(tx,i.ownerId,i.contactId)),
  action('history.read','read',(tx,i)=>readMessages(tx,i.ownerId,i.contactId,i.limit,i.before)),

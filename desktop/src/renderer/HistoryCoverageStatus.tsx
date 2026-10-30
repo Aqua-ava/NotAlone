@@ -61,7 +61,7 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable }: 
   coverages?: HistoryCoverage[]; contactId: string; bodyAvailable?: boolean;
 }) {
   const rows = coverages?.filter(item => item.contactId === contactId);
-  const emptyHistory = (row: HistoryCoverage) => row.phase === 'complete' && row.messageCount === 0 && row.nonTextCount === 0;
+  const emptyHistory = (row: HistoryCoverage) => row.phase === 'complete' && row.messageCount === 0 && row.nonTextCount === 0 && (row.metadataOnlyCount ?? 0) === 0;
   const historyLabel = (row: HistoryCoverage) => row.phase === 'complete' ? emptyHistory(row) ? '当前范围内暂无可读历史' : labels.complete
     : bodyAvailable !== false && row.failureCode === 'history_identity_quarantined'
     ? '部分历史尚未核验' : row.failureCode || row.incrementalFailureCode
@@ -74,6 +74,7 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable }: 
   return <div aria-label="当前联系人消息历史覆盖">
     {!rows?.length ? <p>暂时还不知道历史聊天是否读完。</p> : rows.map(row => <div key={row.bindingId}>
       <p><strong>{historyLabel(row)}</strong> · 已保存 {row.messageCount} 条文字消息、{row.nonTextCount} 条非文字占位</p>
+      {(row.metadataOnlyCount ?? 0) > 0 && <p>另保存 {row.metadataOnlyCount} 条系统等元数据记录，不含正文。</p>}
       {row.phase !== 'complete' && row.failureCode && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode] ?? '部分聊天暂时无法读取，开启同步时会自动重试。'}</p>}
       {row.incrementalPhase !== undefined && (row.incrementalPhase !== 'not_started' || row.incrementalFailureCode) && <p role="status">
         <strong>{incrementalLabel(row.incrementalPhase)}</strong>{bodyAvailable !== false && typeof row.incrementalPages === 'number' ? ` · 已跟进 ${row.incrementalPages} 次` : ''}

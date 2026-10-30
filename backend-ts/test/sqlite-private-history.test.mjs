@@ -115,7 +115,7 @@ test('跨分片同localId分别保存，server0不合并，补齐别名及排序
  let turn=0;channel.page=async(_s,_t,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:turn++===0?[record('1'),record('1',{partition:'shard-b'})]:[record('1',{serverId:'18446744073709551615',orderScheme:'synthetic-seq',orderKey:'100'}),record('2',{serverId:'18446744073709551615',text:'合成正文1'})],completedPartitions:target.partitions,exhausted:true});
  const contact=saved[0].contact_id;await service.synchronize(contact);assert.equal((await service.read(contact)).messages.length,2);
  await service.synchronize(contact);const result=await service.read(contact);assert.equal(result.messages.length,2);assert.equal(result.coverage.quarantinedCount,0);
- assert.equal(result.messages.find(m=>m.text==='合成正文1'&&m.sourceRecordIds.length===3)?.sourceRecordIds.length,3);
+ assert.equal(result.messages.find(m=>m.text==='合成正文1'&&m.sourceRecordIds.length===2)?.sourceRecordIds.length,2);
 });
 test('未知身份与内容冲突隔离，非文字夹带正文不保存，覆盖不能完整',async t=>{
  const {service,channel,saved,target}=await fixture(t);
@@ -150,14 +150,28 @@ test('首次历史中的已认证撤回只保存排除位置，不成为可见�
  const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.messageCount,1);assert.equal(coverage.quarantinedCount,0);
  assert.deepEqual((await service.read(contact)).messages.map(row=>row.text),['合成正文2']);
 });
+test('首次终态及未知状态升级的撤回记录不会被后续正常记录复活',async t=>{
+ for(const terminal of ['recalled'])for(const prior of ['none','unverified'])await t.test(`${prior}-${terminal}`,async t=>{
+  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+  let records=[];channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true});
+  if(prior==='unverified'){
+   records=[record('1')];await service.synchronize(contact);
+   records=[record('1',{stateAssurance:'unverified',sender:'unknown',text:null})];await service.synchronize(contact);
+  }
+  records=[record('1',{sender:'unknown',kind:'other',text:null,originalType:terminal==='recalled'?'10000':'unknown',messageState:terminal})];
+  await service.synchronize(contact);assert.equal((await service.read(contact)).messages.length,0);
+  records=[record('1')];await service.synchronize(contact);const result=await service.read(contact);
+  assert.equal(result.messages.length,0);assert.equal(result.coverage.phase,'complete');assert.equal(result.coverage.quarantinedCount,0);
+ });
+});
 
-test('完整增量扫描确认旧记录消失后撤下正文，缺少确认的未知记录仍保持隔离',async t=>{
+test('来源消失后保留已同步消息及正常使用资格',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const old=(await service.read(contact)).messages[0];
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{sender:'unknown',kind:'other',text:null,originalType:'unknown',status:null,messageState:'absent'})],completedPartitions:['shard-a'],exhausted:true});
  const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.quarantinedCount,0);
- assert.equal((await service.read(contact)).messages.length,0);await assert.rejects(service.source(contact,old.sourceRecordIds[0]),{code:'history_source_not_found'});
+ assert.equal((await service.read(contact)).messages[0].text,old.text);assert.equal((await service.source(contact,old.sourceRecordIds[0])).messageId,old.id);
 });
 
 test('缺少精确本地身份的终态记录不能撤下整位联系人历史',async t=>{
@@ -170,7 +184,7 @@ test('缺少精确本地身份的终态记录不能撤下整位联系人历史',
  }
 });
 
-test('同一来源完整重扫后，已消失的旧消息撤下而现存消息保持身份',async t=>{
+test('同一来源完整重扫后，已保存但未再次出现的消息仍保留',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
  channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1'});
  channel.guardSession={loss:new Promise(()=>{})};
@@ -178,9 +192,46 @@ test('同一来源完整重扫后，已消失的旧消息撤下而现存消息�
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:after?[record('2')]:[record('1'),record('2')],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const before=(await service.read(contact)).messages;const retained=before.find(row=>row.text==='合成正文2');
  after=true;const coverage=await service.synchronize(contact);const rows=(await service.read(contact)).messages;
- assert.equal(coverage.phase,'complete');assert.equal(rows.length,1);assert.equal(rows[0].id,retained.id);
- const missing=before.find(row=>row.text==='合成正文1');await assert.rejects(service.source(contact,missing.sourceRecordIds[0]),{code:'history_source_not_found'});
+ assert.equal(coverage.phase,'complete');assert.equal(rows.length,2);assert.equal(rows.find(row=>row.text==='合成正文2').id,retained.id);
+ const missing=before.find(row=>row.text==='合成正文1');assert.equal(rows.find(row=>row.text==='合成正文1').id,missing.id);assert.equal((await service.source(contact,missing.sourceRecordIds[0])).messageId,missing.id);
  await service.close();
+});
+test('未知状态的旧消息不会因完整重扫未出现而推断消失',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
+ target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
+ channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1'});channel.guardSession={loss:new Promise(()=>{})};
+ let records=[record('1'),record('2')],completedPartitions=[...target.partitions];
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions,exhausted:true});
+ await service.synchronize(contact);
+ records=[record('1',{stateAssurance:'unverified',sender:'unknown',text:null}),record('2')];await service.synchronize(contact);
+ records=[record('2')];completedPartitions=['shard-a'];
+ assert.equal((await service.synchronize(contact)).phase,'incomplete');assert.equal((await service.coverage(contact)).quarantinedCount,1);
+ completedPartitions=[...target.partitions];const complete=await service.synchronize(contact);
+ assert.equal(complete.phase,'incomplete');assert.equal(complete.quarantinedCount,1);
+ records=[record('1'),record('2')];await service.synchronize(contact);
+ assert.deepEqual((await service.read(contact)).messages.map(row=>row.text).sort(),['合成正文1','合成正文2']);await service.close();
+});
+test('仅隔离出现键未再次出现时保持待核验，之后可经同源确认恢复',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
+ channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1'});channel.guardSession={loss:new Promise(()=>{})};
+ let records=[record('1',{stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions=['shard-a'];
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions,exhausted:true});
+ await service.synchronize(contact);assert.equal((await service.coverage(contact)).quarantinedCount,1);
+ records=[];completedPartitions=[];await service.synchronize(contact);assert.equal((await service.coverage(contact)).quarantinedCount,1);
+ completedPartitions=['shard-a'];const complete=await service.synchronize(contact);
+ assert.equal(complete.phase,'incomplete');assert.equal(complete.quarantinedCount,1);
+ records=[record('1'),record('2')];await service.synchronize(contact);
+ assert.deepEqual((await service.read(contact)).messages.map(message=>message.text).sort(),['合成正文1','合成正文2']);assert.equal((await service.coverage(contact)).phase,'complete');await service.close();
+});
+test('终态来源的长精确出现键不阻断正常来源删除',async t=>{
+ const f=await fixture(t),contact=f.saved[0].contact_id,table='terminal-table-'+ 'x'.repeat(480);f.target.tables[0].instance=table;
+ let records=[record('1',{table})];f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contact);const source=(await f.service.read(contact)).messages[0].sourceRecordIds[0];
+ records=[record('1',{table,sender:'unknown',kind:'other',text:null,originalType:'10000',messageState:'recalled'})];await f.service.synchronize(contact);
+ const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
+ const deletion=new DeletionService(f.storage,f.service.holders,new ManagedFiles(f.root));
+ const plan=await deletion.plan({ownerId:owner,requestKey:'long-terminal-source',scope:{kind:'source',contactId:contact,sourceId:source}});
+ assert.equal((await deletion.advance(plan)).state,'completed');assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 test('普通续读范围中未知历史保持不完整，但已成功追平的新消息状态可独立就绪',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
@@ -195,6 +246,17 @@ test('普通续读范围中未知历史保持不完整，但已成功追平的�
  channel.page=async()=>{throw new Error('已完成遍历的未知历史不得复用已交接的快照');};
  assert.equal((await service.synchronize(contact)).incremental.phase,'ready');
  await service.close();
+});
+test('增量重新认证历史未知出现后恢复完整覆盖，不重新打开已交接快照',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
+ channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:{incrementalTail:'supported'}});
+ channel.guardSession={loss:new Promise(()=>{})};
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:'unverified',sender:'unknown',text:null}),record('2')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
+ await service.synchronize(contact);assert.equal((await service.coverage(contact)).phase,'incomplete');
+ channel.page=async()=>{throw new Error('不能重读已交接历史快照');};
+ channel.tail=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:'tail-2',records:[record('1')],caughtUp:true});
+ const coverage=await service.synchronizeIncremental(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.failureCode,null);assert.equal(coverage.quarantinedCount,0);
+ assert.equal(coverage.incremental.phase,'ready');assert.equal((await service.read(contact)).messages.length,2);await service.close();
 });
 test('日常重启先复验完整来源，再以新目标从头重扫并重建增量检查点',async t=>{
  const f=await fixture(t),contact=f.saved[0].contact_id,state={created:0,closeCount:0,pages:[],tails:[],records:[record('1')],resumeCursor:'resume-after-history-1'};
@@ -273,11 +335,128 @@ test('已见消息后续状态未知时，旧正文不能继续作为可信聊�
  await assert.rejects(storage.execute('discussion.messages',{ownerId:owner,contactId:contact,discussionId:d.id,messageIds:[old.id]}),{code:'discussion_source_unavailable'});
  assert.equal((await discussion.view(contact,d.id)).entries[0].body,'用户手写的合成内容');
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'0',text:'合成旧文字'})],completedPartitions:['shard-a'],exhausted:true});
- await service.synchronize(contact);assert.ok(!(await service.read(contact)).messages.some(m=>m.text==='合成旧文字'));
+ await service.synchronize(contact);assert.equal((await service.read(contact)).messages.find(m=>m.text==='合成旧文字').id,old.id);
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
  const deletion=new DeletionService(storage,service.holders,new ManagedFiles(root));
  const plan=await deletion.plan({ownerId:owner,requestKey:'synthetic-quarantined-delete',scope:{kind:'source',contactId:contact,sourceId:old.sourceRecordIds[0]}});
  assert.equal((await deletion.advance(plan)).state,'completed');assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+test('同源文字状态重新认证后恢复原消息，旧未知捕获不再阻挡历史覆盖',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ let records=[record('1')];channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);const original=(await service.read(contact)).messages[0],source=await service.source(contact,original.sourceRecordIds[0]);
+ records=[record('1',{stateAssurance:'unverified',status:'99',sender:'unknown',text:null})];
+ await service.synchronize(contact);assert.equal((await service.read(contact)).messages.length,0);
+ records=[record('1')];await service.synchronize(contact);const restored=await service.read(contact);
+ assert.equal(restored.coverage.phase,'complete');assert.equal(restored.coverage.quarantinedCount,0);
+ assert.equal(restored.messages.length,1);assert.equal(restored.messages[0].id,original.id);assert.equal(restored.messages[0].sourceRecordIds.length,2);
+ assert.deepEqual(await service.source(contact,original.sourceRecordIds[0]),source);
+});
+test('同一接受页的状态观察按出现顺序生效，较早正常记录不能解除较晚未知状态',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
+ channel.inspect=async(...args)=>({...await inspect(...args),capabilities:{incrementalTail:'supported'}});
+ let records=[record('1')];channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
+ await service.synchronize(contact);const unknown=record('1',{stateAssurance:'unverified',sender:'unknown',text:null});
+ records=[record('1'),unknown];await service.synchronize(contact);assert.equal((await service.read(contact)).messages.length,0);
+ records=[unknown,record('1')];await service.synchronize(contact);assert.equal((await service.read(contact)).messages.length,1);
+ assert.equal((await service.coverage(contact)).phase,'complete');
+ channel.tail=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:'tail-2',records,caughtUp:true});
+ assert.equal((await service.synchronizeIncremental(contact)).incremental.phase,'ready');
+});
+test('无正文非文字占位与系统观察独立计数，系统同源位置不能恢复成普通文字',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ const metadata=(id,extra={})=>record(id,{sender:'unknown',kind:'other',text:null,originalType:'10000',stateAssurance:'unverified',metadataOnly:true,...extra});
+ let records=[record('1'),metadata('2',{sender:'contact',kind:'image',originalType:'3'}),metadata('3',{sender:'contact'}),metadata('4',{originalType:'10002'})];
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);const first=await service.read(contact),text=first.messages.find(row=>row.kind==='text');
+ assert.equal(first.coverage.phase,'complete');assert.equal(first.coverage.quarantinedCount,0);assert.equal(first.coverage.metadataOnlyCount,2);
+ assert.equal(first.coverage.nonTextCount,1);assert.equal(first.messages.length,2);assert.equal(first.messages.find(row=>row.kind==='image').text,null);
+ await service.synchronize(contact);assert.equal((await service.coverage(contact)).metadataOnlyCount,2);
+ records=[metadata('1',{sender:'contact'}),records[1],records[2],records[3]];await service.synchronize(contact);
+ assert.equal((await service.read(contact)).messages.some(row=>row.kind==='text'),false);
+ await assert.rejects(service.source(contact,text.sourceRecordIds[0]),{code:'history_source_not_found'});
+ records=[record('1'),records[1],record('3'),record('5')];await service.synchronize(contact);const final=await service.read(contact);
+ assert.deepEqual(final.messages.filter(row=>row.kind==='text').map(row=>row.text),['合成正文5']);
+ assert.equal(final.coverage.phase,'complete');assert.equal(final.coverage.quarantinedCount,0);
+});
+test('状态恢复隔离联系人与分片，无身份观察不能被正常出现静默消除',async t=>{
+ const {service,channel,saved,target}=await fixture(t),[a,b]=saved;
+ target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
+ let records=[record('1'),record('1',{partition:'shard-b',text:'乙分片独立文字'})];
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:target.partitions,exhausted:true});
+ await service.synchronize(a.contact_id);await service.synchronize(b.contact_id);const original=(await service.read(a.contact_id)).messages;
+ records=[record('1',{stateAssurance:'unverified',sender:'unknown',text:null}),records[1]];
+ await service.synchronize(a.contact_id);await service.synchronize(b.contact_id);
+ records=[record('1'),records[1]];await service.synchronize(a.contact_id);
+ const restored=await service.read(a.contact_id);assert.equal(restored.coverage.phase,'complete');assert.deepEqual(new Set(restored.messages.map(row=>row.id)),new Set(original.map(row=>row.id)));
+ assert.deepEqual((await service.read(b.contact_id)).messages.map(row=>row.text),['乙分片独立文字']);assert.equal((await service.coverage(b.contact_id)).quarantinedCount,1);
+ records=[record(null,{stateAssurance:'unverified',sender:'unknown',text:null})];await service.synchronize(a.contact_id);
+ records=[record('1'),record('1',{partition:'shard-b',text:'乙分片独立文字'})];await service.synchronize(a.contact_id);
+ const unresolved=await service.read(a.contact_id);assert.equal(unresolved.messages.length,2);assert.equal(unresolved.coverage.phase,'incomplete');assert.equal(unresolved.coverage.quarantinedCount,1);
+});
+test('不合法或没有精确身份的元数据标记不能扩大为整位联系人的失效',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ let records=[record('1'),record('2')];channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);
+ records=[record(null,{sender:'unknown',kind:'other',text:'不得留存的伪元数据正文',originalType:'10000',stateAssurance:'unverified',metadataOnly:true})];
+ await service.synchronize(contact);const result=await service.read(contact);
+ assert.equal(result.messages.length,2);assert.equal(result.coverage.phase,'incomplete');assert.equal(result.coverage.metadataOnlyCount,0);
+});
+test('捕获时间相同或倒退时，未知与重新认证仍按实际接受顺序生效',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
+ channel.inspect=async(...args)=>({...await inspect(...args),capabilities:{incrementalTail:'supported'}});
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
+ await service.synchronize(contact);let now=1800000000000,records=[],sequence=1;t.mock.method(Date,'now',()=>now);
+ channel.tail=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:`tail-${++sequence}`,records,caughtUp:true});
+ const unknown=record('1',{stateAssurance:'unverified',sender:'unknown',text:null});
+ for(const [time,recordValue,visible] of [[now,unknown,false],[now,record('1'),true],[now-1000,unknown,false],[now-2000,record('1'),true]]){
+  now=time;records=[recordValue];await service.synchronizeIncremental(contact);const result=await service.read(contact);
+  assert.equal(result.messages.length,visible?1:0);assert.equal(result.coverage.quarantinedCount,visible?0:1);
+ }
+});
+test('旧代次或旧表实例的审计不阻挡当前覆盖，旧实际来源与派生依据不借新来源复活',async t=>{
+ for(const otherTable of [false,true])await t.test(otherTable?'旧表实例':'旧来源代次',async t=>{
+  const f=await fixture(t,{registryModule:new URL('./fixtures/history/legacy-scope-registry.mjs',import.meta.url).href}),[a,b]=f.saved;
+  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});
+  await f.service.synchronize(a.contact_id);const current=(await f.service.read(a.contact_id)).messages[0];
+  const legacy=await f.storage.execute('fixture.seedLegacyScope',{ownerId:owner,contactId:a.contact_id,recordId:current.sourceRecordIds[0],otherTable,oldOnly:true});
+  assert.equal((await f.service.coverage(a.contact_id)).phase,'complete');
+  assert.deepEqual((await f.service.read(a.contact_id)).messages[0].sourceRecordIds,current.sourceRecordIds);
+  await assert.rejects(f.service.source(a.contact_id,legacy.recordId),{code:'history_source_not_found'});
+  await assert.rejects(f.storage.execute('fixture.assertSource',{owner_id:owner,contact_id:a.contact_id,message_id:legacy.messageId,record_id:legacy.recordId}),{code:'history_source_not_available'});
+  const {SqliteDiscussionService}=await import('../src/reply/sqlite/service.ts'),{randomUUID}=await import('node:crypto');
+  const forCurrent=new SqliteDiscussionService(f.storage,owner),currentDiscussion=await forCurrent.newDiscussion(a.contact_id);
+  const selected=await f.storage.execute('discussion.messages',{ownerId:owner,contactId:a.contact_id,discussionId:currentDiscussion.id,messageIds:[current.id]});
+  assert.ok(current.sourceRecordIds.includes(selected[0].record_id));
+  assert.equal((await f.contacts.directory()).contacts.find(contact=>contact.contact_id===a.contact_id).data_status.message_count,1);
+  const discussion=new SqliteDiscussionService(f.storage,owner),d=await discussion.newDiscussion(b.contact_id),key='synthetic-legacy-source';
+  const confirmationId=await f.contacts.manualConfirm(b.contact_id,key),attempt=(await discussion.begin(b.contact_id,key,'独立手写要求',{kind:'manual',confirmationId},d.id)).attempt,contextId=randomUUID();
+  await f.storage.execute('discussion.freezeContext',{...attempt,contextId,skillRun:{packages:[],eligible:[]},items:[],at:Date.now()});
+  await f.storage.execute('fixture.seedCrossContactInput',{ownerId:owner,contextId,sourceContactId:a.contact_id,messageId:legacy.messageId,recordId:legacy.recordId});
+  await assert.rejects(discussion.trace(b.contact_id,d.id,attempt.requestId),{code:'discussion_unavailable'});
+ });
+});
+test('接受顺序在隐式行号重排、VACUUM及重开后保持，旧未知仍需精确新认证',async t=>{
+ const f=await fixture(t,{registryModule:new URL('./fixtures/history/legacy-scope-registry.mjs',import.meta.url).href}),contact=f.saved[0].contact_id,inspect=f.channel.inspect;
+ f.channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:{incrementalTail:'supported'}});
+ f.channel.guardSession={loss:new Promise(()=>{})};
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
+ await f.service.synchronize(contact);
+ f.channel.tail=async(_scope,_target,cursor)=>({target:f.target.descriptor,cursorIn:cursor,cursorOut:'tail-2',records:[record('1')],caughtUp:true});
+ await f.service.synchronizeIncremental(contact);assert.equal((await f.service.coverage(contact)).phase,'complete');
+ await f.storage.execute('fixture.reorderImplicitRows',{ownerId:owner,contactId:contact});
+ assert.equal((await f.service.coverage(contact)).phase,'complete');
+ await f.storage.execute('fixture.compact',{});assert.equal((await f.service.coverage(contact)).phase,'complete');
+ const current=(await f.service.read(contact)).messages[0];
+ await f.storage.execute('fixture.seedLegacyScope',{ownerId:owner,contactId:contact,recordId:current.sourceRecordIds[0],currentScope:true});
+ assert.equal((await f.service.coverage(contact)).quarantinedCount,1);
+ f.channel.tail=async(_scope,_target,cursor)=>({target:f.target.descriptor,cursorIn:cursor,cursorOut:'tail-3',records:[record('500')],caughtUp:true});
+ await f.service.synchronizeIncremental(contact);assert.equal((await f.service.coverage(contact)).quarantinedCount,0);
+ await f.service.close();await f.storage.close();const reopened=await reopenHistory(t,f.root,f.storage.status.databaseId);t.after(()=>reopened.storage.close());
+ const channel={...f.channel,guardSession:{loss:new Promise(()=>{})},page:async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1'),record('500')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-4'})};
+ const service=new SqliteHistoryService(reopened.storage,reopened.contacts,channel);t.after(()=>service.close());
+ await service.synchronize(contact);assert.equal((await service.coverage(contact)).phase,'complete');assert.equal((await service.read(contact)).messages.length,2);
+ await service.close();await reopened.storage.close();
 });
 test('未知状态通过已认证服务端别名或缺失本地身份出现时，旧正文不能继续可见',async t=>{
  for(const localId of ['2',null]){
@@ -345,6 +524,12 @@ test('失证来源影响跨联系人本人资料的实际依赖，不影响无�
  assert.ok(impact.requests.includes(attempt.requestId));assert.ok(impact.requests.includes(attempt2.requestId));assert.ok(!impact.requests.includes(other.requestId));
  await assert.rejects(discussion.trace(b.contact_id,d.id,attempt.requestId),{code:'discussion_unavailable'});
  assert.equal((await discussion.view(b.contact_id,independent.id)).entries[0].body,'另一合成要求');
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1'),record('2')],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(a.contact_id);assert.equal((await f.service.read(a.contact_id)).messages.length,2);
+ const recoveredImpact=await f.storage.execute('fixture.quarantineImpact',{ownerId:owner});
+ assert.ok(recoveredImpact.requests.includes(attempt.requestId));assert.ok(recoveredImpact.requests.includes(attempt2.requestId));assert.ok(!recoveredImpact.requests.includes(other.requestId));
+ await assert.rejects(discussion.trace(b.contact_id,d.id,attempt.requestId),{code:'discussion_unavailable'});
+ assert.equal((await discussion.view(b.contact_id,independent.id)).entries[0].body,'另一合成要求');
 });
 test('部分分片和分页中断保持真实缺口，重试从已提交cursor继续',async t=>{
  const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
@@ -360,8 +545,10 @@ test('读取前未授权不调用正文，停读拒绝迟到页',async t=>{
  await assert.rejects(service.synchronize(a.contact_id),{code:'read_not_authorized'});assert.equal(pages,1);assert.equal((await service.read(a.contact_id)).messages.length,0);assert.notEqual((await service.coverage(a.contact_id)).phase,'complete');
 });
 test('05真实删除注册封禁旧页，单来源删除保留其他合法来源且不会自动恢复',async t=>{
- const {service,saved,storage,contacts}=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=saved[0].contact_id;
- await service.synchronize(contact);await service.synchronize(contact);const before=await service.read(contact);const source=before.messages.find(m=>m.kind==='text').sourceRecordIds[0];
+ const {service,saved,storage,contacts,channel,target}=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=saved[0].contact_id;
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('9007199254740993',{serverId:'45'}),record('998',{serverId:'45',text:'合成正文9007199254740993'}),record('2',{kind:'voice',text:null})],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);const before=await service.read(contact);const source=before.messages.find(m=>m.kind==='text').sourceRecordIds[0];
+ const voiceSource=before.messages.find(m=>m.kind==='voice').sourceRecordIds[0];
  const old=await contacts.eligibility(contact);
  const planned=await storage.execute('deletion.plan',{ownerId:owner,requestKey:'synthetic-source-delete',scope:{kind:'source',contactId:contact,sourceId:source}});
  assert.ok(planned.targets.some(t=>t.target?.domain==='history'));await assert.rejects(contacts.validate(old),{code:'read_eligibility_stale'});
@@ -369,7 +556,8 @@ test('05真实删除注册封禁旧页，单来源删除保留其他合法来源
  const runner={ownerId:owner,operationId:planned.operationId,token:claimed.token,planRevision:claimed.planRevision};
  for(const item of claimed.targets)if(item.target?.kind==='row')await storage.execute('deletion.clearTarget',{...runner,targetNo:item.targetNo});
  const after=await service.read(contact);assert.equal(after.messages.length,2);assert.equal(after.messages.find(m=>m.kind==='text').sourceRecordIds.length,1);
- await service.synchronize(contact);assert.equal((await service.read(contact)).messages.find(m=>m.kind==='text').sourceRecordIds.length,1);
+ await service.synchronize(contact);const rescanned=await service.read(contact);assert.equal(rescanned.messages.find(m=>m.kind==='text').sourceRecordIds.length,1);
+ assert.deepEqual(rescanned.messages.find(m=>m.kind==='voice').sourceRecordIds,[voiceSource]);
 });
 test('已删除来源的表实例失证后，重试和重开都在读取正文前停读',async t=>{
  const f=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=f.saved[0].contact_id;
@@ -494,7 +682,7 @@ test('可靠排序后补保留内部身份与旧来源，未知时间可合法�
  const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;let turn=0;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',turn++===0?{sentAt:null,timePrecision:null}:{serverId:'5',orderScheme:'synthetic-seq',orderKey:'9007199254740993'})],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const before=(await service.read(contact)).messages[0];const provenance=await service.source(contact,before.sourceRecordIds[0]);
- await service.synchronize(contact);const after=(await service.read(contact)).messages[0];assert.equal(after.id,before.id);assert.equal(after.orderKey,'9007199254740993');assert.equal(after.ordering,'unknown');assert.equal(after.sentAt,'1700000000000');assert.equal(after.sourceRecordIds.length,2);assert.deepEqual(await service.source(contact,provenance.recordId),provenance);
+ await service.synchronize(contact);const after=(await service.read(contact)).messages[0];assert.equal(after.id,before.id);assert.equal(after.orderKey,'9007199254740993');assert.equal(after.ordering,'unknown');assert.equal(after.sentAt,'1700000000000');assert.equal(after.sourceRecordIds.length,1);assert.deepEqual(await service.source(contact,provenance.recordId),provenance);
 });
 test('能力三值分别保留，真实未认证适配器不读正文，不能冒充正常路径',async t=>{
  const {createWechatHistoryChannel}=await import('../src/history/sqlite/wechat-channel.ts');const unavailable=createWechatHistoryChannel();
@@ -545,4 +733,103 @@ test('未核验服务端别名唯一性时不凭相同正文合并不同本地�
  channel.inspect=async scope=>({...await inspect(scope),serverAliasSemantics:'unverified'});
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{serverId:'55',text:'同文同秒'}),record('2',{serverId:'55',text:'同文同秒'})],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(saved[0].contact_id);assert.equal((await service.read(saved[0].contact_id)).messages.length,2);
+});
+
+
+test('重复扫描同一消息时保留一份稳定来源',async t=>{
+ const {service,saved}=await fixture(t),contact=saved[0].contact_id;
+ await service.synchronize(contact);
+ const first=(await service.read(contact)).messages.find(message=>message.kind==='text');
+ assert.ok(first);
+ const source=await service.source(contact,first.sourceRecordIds[0]);assert.equal(source.raw.text,first.text);
+ await service.synchronize(contact);
+ const again=(await service.read(contact)).messages.find(message=>message.kind==='text');
+ assert.equal(again.id,first.id);
+ assert.deepEqual(again.sourceRecordIds,first.sourceRecordIds);
+});
+
+test('重复扫描待核验来源不会重复累计待核验数量',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('7',{stateAssurance:'unverified',text:null})],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);
+ assert.equal((await service.coverage(contact)).quarantinedCount,1);
+ await service.synchronize(contact);
+ assert.equal((await service.coverage(contact)).quarantinedCount,1);
+});
+
+test('同一来源的未知状态经确认后正常入库且不再显示缺口',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ let current=record('1',{stateAssurance:'unverified',sender:'unknown',text:null,status:'4',serverId:'55'});
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[current],completedPartitions:['shard-a'],exhausted:true});
+ assert.equal((await service.synchronize(contact)).phase,'incomplete');
+ current=record('1',{status:'4',serverId:'55'});const coverage=await service.synchronize(contact);
+ assert.equal(coverage.quarantinedCount,0);assert.equal(coverage.phase,'complete');assert.equal((await service.read(contact)).messages[0].text,'合成正文1');
+});
+
+test('无正文的已识别系统记录不阻挡正常文字同步',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ const system=record('99',{kind:'other',sender:'unknown',text:null,originalType:'10000',status:'4',stateAssurance:'unverified',metadataOnly:true});
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1',{status:'4',serverId:'55'}),system],completedPartitions:['shard-a'],exhausted:true});
+ const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.quarantinedCount,0);
+ assert.deepEqual((await service.read(contact)).messages.map(m=>m.text),['合成正文1']);
+ await service.synchronize(contact);assert.equal((await service.coverage(contact)).phase,'complete');
+});
+
+test('伪装成非文字元数据的文字不得进入消息',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1',{stateAssurance:'unverified',metadataOnly:true})],completedPartitions:['shard-a'],exhausted:true});
+ const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'incomplete');assert.equal((await service.read(contact)).messages.length,0);
+});
+
+test('系统元数据与已保存文字身份相同时仍保留旧正文的使用保护',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;let current=record('1');
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[current],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);const old=(await service.read(contact)).messages[0];
+ current=record('1',{kind:'other',sender:'unknown',text:null,originalType:'10000',status:'4',stateAssurance:'unverified',metadataOnly:true});await service.synchronize(contact);
+ assert.equal((await service.read(contact)).messages.length,0);await assert.rejects(service.source(contact,old.sourceRecordIds[0]),{code:'history_source_not_found'});
+});
+
+test('同一来源在正常和未知状态间切换时，以最后一次观察为准',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ let current=record('1');channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[current],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);
+ current=record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null});assert.equal((await service.synchronize(contact)).phase,'incomplete');
+ current=record('1');assert.equal((await service.synchronize(contact)).phase,'complete');
+ current=record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null});assert.equal((await service.synchronize(contact)).phase,'incomplete');assert.equal((await service.read(contact)).messages.length,0);
+ current=record('1');assert.equal((await service.synchronize(contact)).phase,'complete');assert.equal((await service.read(contact)).messages.length,1);
+});
+
+test('重复完整同步后增量继续使用新目标，已保存消息不会因旧游标被停读',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
+ let serial=0,currentTarget='';channel.guardSession={loss:new Promise(()=>{})};
+ channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(k=>[k,'supported']))});
+ channel.target=async()=>({...target,descriptor:currentTarget=`snapshot-${++serial}`});
+ channel.page=async(_scope,used,cursor)=>({target:used.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:`resume-${serial}`});
+ channel.tail=async(_scope,used,cursor)=>{if(used.descriptor!==currentTarget){const {StorageFailure}=await import('../src/storage/sqlite/contracts.ts');throw new StorageFailure('history_target_unverified');}return {target:used.descriptor,cursorIn:cursor,cursorOut:`tail-${serial}`,records:[],caughtUp:true};};
+ assert.equal((await service.synchronize(contact)).phase,'complete');
+ assert.equal((await service.synchronizeIncremental(contact)).incremental.phase,'ready');
+ assert.equal((await service.synchronize(contact)).phase,'complete');
+ const tail=await service.synchronizeIncremental(contact);assert.equal(tail.incremental.phase,'ready');assert.equal(tail.phase,'complete');
+ assert.equal((await service.read(contact)).messages[0].sourceRecordIds.length,1);
+});
+
+
+test('新历史目标没有续读凭据时不能复用旧目标的增量游标',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;let serial=0,currentTarget='',canResume=true;channel.guardSession={loss:new Promise(()=>{})};
+ channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(k=>[k,'supported']))});
+ channel.target=async()=>({...target,descriptor:currentTarget=`snapshot-${++serial}`});
+ channel.page=async(_scope,used,cursor)=>({target:used.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true,...(canResume?{resumeCursor:`resume-${serial}`}:{})});
+ let tailCalls=0;channel.tail=async(_scope,used,cursor)=>{tailCalls++;return {target:used.descriptor,cursorIn:cursor,cursorOut:`tail-${serial}`,records:[],caughtUp:true};};
+ await service.synchronize(contact);await service.synchronizeIncremental(contact);canResume=false;await service.synchronize(contact);
+ await assert.rejects(service.synchronizeIncremental(contact),{code:'history_incremental_not_ready'});assert.equal(tailCalls,1);assert.equal((await service.read(contact)).messages.length,1);
+});
+
+
+test('明确来源消失即使沿用系统类型也不撤下已同步正文',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;let current=record('1');
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[current],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);const savedMessage=(await service.read(contact)).messages[0];
+ current=record('1',{kind:'other',sender:'unknown',text:null,originalType:'10000',messageState:'absent'});await service.synchronize(contact);
+ assert.equal((await service.read(contact)).messages[0].id,savedMessage.id);assert.equal((await service.source(contact,savedMessage.sourceRecordIds[0])).messageId,savedMessage.id);
+ current=record('1');await service.synchronize(contact);assert.equal((await service.read(contact)).messages[0].id,savedMessage.id);
 });

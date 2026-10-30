@@ -154,8 +154,8 @@ func TestNotAloneSnapshotReadsBodiesOnlyForAttestedSentOrReceivedStates(t *testi
 		if want && (record.StateAssurance != "verified" || record.Text == nil) {
 			t.Fatalf("sent/received文字应获准：%#v", record)
 		}
-		if record.LocalID != nil && *record.LocalID == "5" && (record.MessageState != "recalled" || record.StateAssurance != "verified" || record.Text != nil) {
-			t.Fatalf("实测撤回须作为已核验终态输出，但不得取正文：%#v", record)
+		if record.LocalID != nil && *record.LocalID == "5" && (!record.MetadataOnly || record.MessageState != "" || record.StateAssurance != "unverified" || record.Text != nil) {
+			t.Fatalf("系统记录只作无正文类型观察，不直接推断撤回：%#v", record)
 		}
 		if !want && (record.LocalID == nil || *record.LocalID != "5") && (record.StateAssurance != "unverified" || record.MessageState != "" || record.Text != nil) {
 			t.Fatalf("非最终或不明状态不得取正文：%#v", record)
@@ -164,5 +164,11 @@ func TestNotAloneSnapshotReadsBodiesOnlyForAttestedSentOrReceivedStates(t *testi
 	encoded, _ := json.Marshal(page)
 	if strings.Contains(string(encoded), "合成已撤回") {
 		t.Fatal("已撤回正文不得进入结果")
+	}
+}
+
+func TestNotAloneSnapshotDistinguishesAppMessagesFromFiles(t *testing.T) {
+	if notaloneSnapshotKind(49) != "other" || notaloneSnapshotKind(int64(6)<<32|49) != "file" {
+		t.Fatal("引用和链接不应被猜成文件")
 	}
 }

@@ -63,6 +63,7 @@ export class ContactMetadataLifetime {
   async eligibility(contactId:string){return (await this.current()).eligibility(contactId);}
   async validate(token:ReadEligibility){return (await this.current()).validate(token);}
   async directory(){return (await this.current()).directory();}
+  async foregroundSnapshot(){return (await this.current()).foregroundSnapshot();}
   async syncStatus(){await this.current();return this.http!.syncStatus();}
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     await this.refresh();

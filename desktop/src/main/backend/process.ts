@@ -19,7 +19,7 @@ export class OwnedBackendProcess {
     // 唯一受支持的业务存储是受控 SQLite；没有控制面结果时不启动后台。
     if (!config.sqlite) throw new BackendFailure('backend_launch_requires_sqlite');
     const environment: NodeJS.ProcessEnv = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, TZ: process.env.TZ, TMPDIR: process.env.TMPDIR,
-      NOTALONE_WECHAT_CONFIG: wechatConfigurationPath() };
+      NOTALONE_WECHAT_CONFIG: wechatConfigurationPath(), ...(config.syncProbePath ? { NOTALONE_SYNC_PROBE: config.syncProbePath } : {}) };
     return launchDsh({ nodeExecutable: process.execPath, projectDirectory,
       envFilePath: config.envFilePath || path.join(projectDirectory, '.env'), infoPath: config.infoPath,
       environment, businessHome: config.sqlite.userData, sqlite: config.sqlite }, canStart);

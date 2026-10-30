@@ -6,10 +6,10 @@ import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {adjudicationFixture,adjudicationSupplier} from './fixtures/memory-management/adjudication-support.mjs';
 
-async function prepared(t){
- const f=await fixture(t,{registryModule:new URL('./fixtures/memory-management/registry.mjs',import.meta.url).href}),[a,b]=f.saved.map(x=>x.contact_id);
+async function prepared(t,options={}){
+ const f=await fixture(t,{registryModule:options.registryModule??new URL('./fixtures/memory-management/registry.mjs',import.meta.url).href}),[a,b]=f.saved.map(x=>x.contact_id);
  f.channel.page=async scope=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:scope.token.contact_id===a?'我长期住在高雄。':'我长期住在台南。'}),record('2',{sender:'owner',text:'我长期偏好绿茶。'})],completedPartitions:['shard-a'],exhausted:true});
- for(const id of [a,b])await f.service.synchronize(id);await f.contacts.setReading(false);
+ for(const id of [a,b])await f.service.synchronize(id);await options.afterHistory?.(f,a,b);await f.contacts.setReading(false);
  let extraction;const external=supplier();extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,external.respond));t.after(()=>extraction.close());
  const started=await extraction.start('management-normal-output');await extraction.waitForIdle();
  const done=await extraction.read(started.runId);assert.equal(done.succeeded,4,JSON.stringify(done.tasks));
@@ -95,6 +95,29 @@ test('正式知识读取只返回当前版，未确认独立标注并复验头�
  await assert.rejects(f.storage.execute('fixture.memoryRequireCurrent',{scope:discussion,item}),{code:'memory_knowledge_stale'});
  const rejected=(await f.management.read({scopeKind:'contact',contactId:f.b})).candidates[0];await f.management.decide({requestKey:'reject-b',action:'reject',candidateIds:[rejected.id],candidateRevisions:[rejected.stateRevision]});
  assert.equal((await f.storage.execute('fixture.memoryKnowledge',{...discussion,contactId:f.b})).filter(k=>k.scopeKind==='contact').length,0);
+});
+test('历史状态重新认证不会复活旧候选或旧记忆的冻结来源资格',async t=>{
+ const f=await prepared(t);await f.management.importRun(f.runId);const scope={scopeKind:'contact',contactId:f.a};
+ const candidate=(await f.management.read(scope)).candidates[0];
+ const adopted=await f.management.decide({requestKey:'before-state-change',action:'accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
+ const discussion={ownerId:owner,contactId:f.a,discussionId:'synthetic-state-recovery'};
+ const before=await f.storage.execute('fixture.memoryKnowledge',discussion);assert.ok(before.some(item=>item.id===adopted.memoryId));
+ await f.contacts.setReading(true);const old=(await f.service.read(f.a)).messages.find(message=>message.sender==='contact');
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:'unverified',sender:'unknown',text:null}),record('2',{sender:'owner',text:'我长期偏好绿茶。'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(f.a);assert.equal((await f.storage.execute('fixture.memoryKnowledge',discussion)).some(item=>item.id===adopted.memoryId),false);
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期住在高雄。'}),record('2',{sender:'owner',text:'我长期偏好绿茶。'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(f.a);assert.equal((await f.service.read(f.a)).messages.find(message=>message.sender==='contact').id,old.id);
+ const after=await f.storage.execute('fixture.memoryKnowledge',discussion);assert.equal(after.some(item=>item.id===adopted.memoryId||item.id===candidate.id),false);
+ assert.equal((await f.management.read(scope)).memories.find(memory=>memory.id===adopted.memoryId).current,null);
+ assert.ok((await f.storage.execute('fixture.memoryKnowledge',{...discussion,contactId:f.b})).some(item=>item.scopeKind==='contact'));
+});
+test('新的关系资料提取固定当前来源，不选择同消息的旧代次实际捕获',async t=>{
+ let legacy;
+ const f=await prepared(t,{registryModule:new URL('./fixtures/memory-management/legacy-scope-registry.mjs',import.meta.url).href,
+  afterHistory:async(f,a)=>{const current=(await f.service.read(a)).messages.find(message=>message.sender==='contact');
+   legacy=await f.storage.execute('fixture.seedLegacyScope',{ownerId:owner,contactId:a,recordId:current.sourceRecordIds[0],oldOnly:true});}});
+ await f.management.importRun(f.runId);const view=await f.management.read({scopeKind:'contact',contactId:f.a});
+ assert.equal(view.candidates.length,1);assert.ok(view.candidates[0].sources.every(source=>source.recordId!==legacy.recordId));
 });
 
 test('本人完整授权归属与实际消息依赖分开，删除未参与来源保留合法修正版本',async t=>{

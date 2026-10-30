@@ -1,5 +1,6 @@
 import { StorageFailure, type StorageAction, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { ReadEligibility, SavedContactBinding } from './contracts.ts';
+import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 const fail = (code: string): never => { throw new StorageFailure(code); };
 const one = (tx: StorageTransaction, sql: string, args: any[]): StorageRow => tx.get(sql,args) ?? fail('identity_not_found');
 const text = (value: unknown): string => typeof value==='string' && value.length>0 && value.length<=512 ? value : fail('identity_request_invalid');
@@ -10,8 +11,9 @@ function visibleMessageCounts(tx:StorageTransaction,owner:string):Map<string,num
  // 仅身份存储可能尚未安装历史域；目录统计不要求历史表或正文读取能力。
  if(tx.all("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('message','capture_record')").length!==2)return new Map();
  const quarantine=Boolean(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='history_message_quarantine'"));
- return new Map(tx.all(`SELECT m.contact_id,count(*) AS n FROM message m WHERE m.owner_id=? AND m.availability='available'
-  AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available') ${quarantine?"AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)":''} GROUP BY m.contact_id`,[owner]).map(row=>{
+ return new Map(tx.all(`WITH ${currentSourceScopeCTE} SELECT m.contact_id,count(*) AS n FROM message m WHERE m.owner_id=? AND m.availability='available'
+  AND EXISTS (SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
+   WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()}) ${quarantine?"AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)":''} GROUP BY m.contact_id`,[owner,null,null,owner]).map(row=>{
    if(typeof row.n!=='bigint'||row.n<0n||row.n>BigInt(Number.MAX_SAFE_INTEGER))return fail('identity_count_out_of_range');
    return [String(row.contact_id),Number(row.n)];
   }));
@@ -61,6 +63,17 @@ function eligibility(tx: StorageTransaction, owner: string, contact: string): Re
 export const identityActions: StorageAction[] = [
  action('identity.resolveOwner','write',(tx,i)=>{const owners=tx.all('SELECT owner_id FROM owner');if(owners.length>1)fail('owner_ambiguous');if(owners.length)return owners[0].owner_id;tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,?)',[text(i.proposedOwnerId),i.at]);return i.proposedOwnerId;}),
  action('identity.initialize','write',(tx,i)=>{text(i.ownerId);tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,?) ON CONFLICT(owner_id) DO NOTHING',[i.ownerId,i.at]);return i.ownerId;}),
+ action('identity.foregroundSnapshot','read',(tx,i)=>{
+  const owner=text(i.ownerId),row=tx.get("SELECT read_enabled,read_epoch FROM owner WHERE owner_id=? AND state='active'",[owner]);
+  const account=tx.get("SELECT id,external_key,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner]);
+  const verifiedDesktop=new Set(tx.all(`SELECT g.binding_id FROM read_grant g JOIN binding_verification v ON v.owner_id=g.owner_id AND v.id=g.verification_id AND v.binding_id=g.binding_id
+   JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id AND b.contact_id=g.contact_id
+   JOIN contact p ON p.owner_id=b.owner_id AND p.id=b.contact_id
+   WHERE g.owner_id=? AND g.revoked_at IS NULL AND v.method='foreground_confirmation' AND b.state='verified' AND p.state='active'
+   AND v.identity_generation=b.identity_generation AND g.selection_generation=p.selection_generation`,[owner]).map(b=>String(b.binding_id)));
+  return {enabled:row?.read_enabled===1n,readEpoch:String(row?.read_epoch??''),account:account?{id:String(account.id),key:String(account.external_key),sourceGeneration:String(account.source_generation),revision:String(account.scope_revision)}:null,
+   bindings:bindings(tx,owner).filter(b=>b.status==='active'&&b.account_id===account?.id).map(b=>({...b,desktopVerified:verifiedDesktop.has(b.binding_id)}))};
+ }),
  action('identity.directory','read',(tx,i)=>{
   const owner=text(i.ownerId),counts=visibleMessageCounts(tx,owner);
   return {contacts:tx.all("SELECT id AS contact_id,display_name,selection_generation,data_generation FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[owner]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:counts.get(String(c.contact_id))??0,source_count:0}})),bindings:bindings(tx,owner),account:tx.get("SELECT id,external_key,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};

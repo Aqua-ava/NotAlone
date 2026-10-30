@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageTransaction,StorageRow} from '../../storage/sqlite/contracts.ts';
 import {assertContribution,assertInputs,assertTaskContributions,fail,inputRows,textId} from './qualification.ts';
 import {assertSourceEligibility} from '../../history/sqlite/source.ts';
+import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 import {laterStagesState} from './documents/actions.ts';
 import {projectControl} from './control.ts';
 const number=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_count_invalid');return Number(v);};
@@ -89,12 +90,18 @@ export const runActions:StorageAction[]=[{name:'memoryExtraction.findRequest',mo
  WHERE c.owner_id=? AND c.state='active' AND b.state='verified' AND a.identity_state='verified' ORDER BY c.id`,[ownerId]);
  let inputNo=0;const contributing:string[]=[];
  for(const c of contacts){
-  const rows=tx.all(`SELECT m.*,r.id AS record_id,p.id AS item_id,p.extraction_state,p.pipeline_state FROM message m
- JOIN capture_record r ON r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available'
+  const rows=tx.all(`WITH ${currentSourceScopeCTE},current_records AS MATERIALIZED (
+ SELECT source.message_id,min(source.id) record_id FROM capture_record source
+ JOIN sync_capture capture ON capture.owner_id=source.owner_id AND capture.id=source.capture_id
+ JOIN read_goal g ON g.owner_id=capture.owner_id AND g.id=capture.goal_id
+ WHERE source.owner_id=? AND source.contact_id=? AND source.state='normalized' AND source.availability='available'
+ AND ${currentSourcePredicate('source','g')} GROUP BY source.message_id
+ ) SELECT m.*,r.record_id,p.id AS item_id,p.extraction_state,p.pipeline_state FROM message m
+ JOIN current_records r ON r.message_id=m.id
  LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'
  WHERE m.owner_id=? AND m.contact_id=? AND m.kind='text' AND length(trim(m.text_body))>0 AND m.availability='available'
  AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
- AND r.id=(SELECT min(rr.id) FROM capture_record rr WHERE rr.owner_id=m.owner_id AND rr.message_id=m.id AND rr.state='normalized' AND rr.availability='available') ORDER BY m.display_no`,[ownerId,c.id]);
+ ORDER BY m.display_no`,[ownerId,c.id,c.id,ownerId,c.id,ownerId,c.id]);
   // 只有接线了后续文档阶段的正常宿主才复用已有提取证明；仅提取入口保持“已成功目标不重做”。
   const canReuse=i.followupStages===true&&!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();
   if(canReuse)for(const row of rows){const proof=reusableExtraction(tx,ownerId,String(c.id),row);if(proof)reused.set(String(row.id),proof);}

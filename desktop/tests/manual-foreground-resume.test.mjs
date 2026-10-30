@@ -313,3 +313,17 @@ test('失败后经过未绑定和群聊仍阻止生成，新的可靠私聊绑�
   assert.equal(f.foreground.getGenerationBlock(), null);
  }
 });
+
+test('离开群聊后等待重新识别时不再把旧群聊当成当前会话', async t => {
+ const f = fixture(t);
+ f.setObservation(async () => observationResponse('paused', 'group_chat_suspected'));
+ await f.foreground.observeBeforeShow();
+ f.setObservation(async () => observationResponse('paused', 'wechat_not_in_front'));
+ await f.foreground.observeBeforeShow();
+ const state = f.foreground.getState();
+ assert.equal(state.unsupportedConversation, true, '未确认新私聊前仍阻止生成');
+ assert.notEqual(f.foreground.getGenerationBlock(), null);
+ const panel = JSON.stringify(ports.ForegroundPanel({ state, session: { state: f.state } }));
+ assert.match(panel, /等待微信切到前台/);
+ assert.doesNotMatch(panel, /群聊暂不支持/);
+});

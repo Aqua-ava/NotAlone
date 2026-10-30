@@ -184,3 +184,18 @@ test('正常DSH运行中账号DELETE真实compact并公开复核，Skill元数�
   finally{await reopened.close();}
  }
 });
+
+test('SQLite宿主开放前台观察入口，关闭同步时不运行探针且返回暂停',async t=>{
+ const {writeFile,chmod}=await import('node:fs/promises');
+ const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-foreground-host-')));t.after(()=>rm(root,{recursive:true,force:true}));
+ const probe=path.join(root,'probe');await writeFile(probe,'#!/bin/sh\nexit 99\n');await chmod(probe,0o700);
+ const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'}),databaseId=storage.status.databaseId;await storage.close();
+ const infoPath=path.join(root,'managed/sqlite-backend.info'),config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{NOTALONE_SYNC_PROBE:probe},sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history']}};
+ const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());const info=await handshake(host,infoPath),headers={Authorization:`Bearer ${info.token}`,'content-type':'application/json'};
+ assert.equal((await fetch(`http://${info.address}/api/sync/foreground/observe`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,401);
+ assert.equal((await fetch(`http://${info.address}/api/sync/foreground/observe`,{headers})).status,405);
+ assert.equal((await fetch(`http://${info.address}/api/sync/foreground/observe`,{method:'POST',headers,body:'{"contact":"injected"}'})).status,400);
+ const response=await fetch(`http://${info.address}/api/sync/foreground/observe`,{method:'POST',headers,body:'{}'});
+ assert.equal(response.status,200);const value=await response.json();assert.equal(value.phase,'paused');assert.equal(value.reason,'sync_disabled');
+ await fetch(`http://${info.address}/api/runtime/shutdown`,{method:'POST',headers});assert.equal(await host.waitForExit(15000),true);
+});
