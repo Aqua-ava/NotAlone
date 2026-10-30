@@ -1,7 +1,8 @@
 import {SqliteMemoryManagement} from './memory/sqlite/management/service.ts';
 import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from './memory/sqlite/management/http.ts';
 import {createSqliteModelRuntime} from './host/sqlite-model-runtime.ts';
-import {readSqliteModelEnvironment} from './host/sqlite-model-config.ts';
+import {SqliteModelSetup} from './host/sqlite-model-setup.ts';
+import {readWechatHttpBody} from './sync/wechat-http-body.ts';
 import {createSqliteMemoryRuntime} from './memory/sqlite/runtime.ts';
 import {SqliteMemoryDocumentsHttp,memoryDocumentsQueryAllowed} from './memory/sqlite/documents/http.ts';
 import {createSqliteDiscussionHost} from './reply/sqlite/host-runtime.ts';
@@ -158,8 +159,9 @@ export async function apply(ctx: Context) {
     await media.initialize();
     contacts.setReadStop(async contactId=>{await Promise.all([firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);});
     const mediaHttp = new SqliteMediaHttp(media);
+    const modelSetup=await SqliteModelSetup.open(config.envFilePath,process.env);
     const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');
-    const modelEnvironment=discussionsEnabled||memoryEnabled?await readSqliteModelEnvironment(config.envFilePath,process.env):{};
+    const modelEnvironment=modelSetup.runtimeEnvironment();
     if(discussionsEnabled||memoryEnabled)models=await createSqliteModelRuntime({ctx,environment:modelEnvironment,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,
       accounting:{reserve:async(receipt,claim)=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.reserve(receipt,claim);},
         recordReserved:async receipt=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.recordReserved(receipt);},
@@ -196,7 +198,18 @@ export async function apply(ctx: Context) {
         }
         if (state !== 'running') { respond(503, { error: 'runtime_stopping' }); return; }
         if(req.method==='GET'&&url.pathname==='/api/setup/status'){
-          respond(200,{runtime_owner_configured:true,owner_id:ownerId,storage:'sqlite',capabilities:capabilities.capabilities});return;
+          respond(200,{...modelSetup.status(),owner_id:ownerId,storage:'sqlite',capabilities:capabilities.capabilities});return;
+        }
+        if(req.method==='POST'&&(url.pathname==='/api/setup/credentials'||url.pathname==='/api/setup/official-deepseek')){
+          try {
+            const body=await readWechatHttpBody(req,16384,10000);
+            const payload=JSON.parse(body.toString('utf8')),official=url.pathname==='/api/setup/official-deepseek';
+            if(!payload||typeof payload!=='object'||Array.isArray(payload)||typeof payload.api_key!=='string'||
+              (official?(payload.confirm_official_defaults!==true||Object.keys(payload).some(key=>!['api_key','confirm_official_defaults'].includes(key))):
+                (payload.provider!=='deepseek'||Object.keys(payload).some(key=>!['provider','api_key'].includes(key)))))throw new StorageFailure('setup_request_invalid');
+            await modelSetup.save(payload.api_key,official);
+            respond(200,{provider:'deepseek',configured:true,restart_required:true,...(official?{official_deepseek_defaults:true}:{})});
+          }catch(error){respond(400,{error:error instanceof StorageFailure?error.code:'setup_request_invalid'});}return;
         }
         if(history&&req.method==='GET'&&url.pathname==='/api/sync/status'){
           respond(200,await historyStatus());return;
