@@ -1,0 +1,228 @@
+import {SqliteMemoryManagement} from './memory/sqlite/management/service.ts';
+import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from './memory/sqlite/management/http.ts';
+import {createSqliteModelRuntime} from './host/sqlite-model-runtime.ts';
+import {readSqliteModelEnvironment} from './host/sqlite-model-config.ts';
+import {createSqliteMemoryRuntime} from './memory/sqlite/runtime.ts';
+import {SqliteMemoryDocumentsHttp,memoryDocumentsQueryAllowed} from './memory/sqlite/documents/http.ts';
+import {createSqliteDiscussionHost} from './reply/sqlite/host-runtime.ts';
+import { SqliteMediaService } from './media/sqlite/service.ts';
+import { SqliteMediaHttp } from './media/sqlite/http.ts';
+import { StorageFailure } from './storage/sqlite/contracts.ts';
+import type { Context } from '@deepseek-ai/cordis';
+import { exitOnStdinEnd } from '@deepseek-ai/dsh-cmdline';
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { link, readFile, rm, writeFile } from 'node:fs/promises';
+import { rmSync } from 'node:fs';
+import path from 'node:path';
+import { SqliteStorage } from './storage/sqlite/client.ts';
+import type { SqliteLaunchConfiguration } from './launch.ts';
+import { createWechatContactMetadata } from './contacts/sqlite/wechat-metadata.ts';
+import { ContactMetadataLifetime } from './storage/sqlite/deletion/contact-metadata.ts';
+import {readSqliteCapabilities} from './sqlite-capabilities.ts';
+import {SqliteSkillLibrary} from './skills/sqlite/library.ts';
+import {SqliteSkillHttp} from './skills/sqlite/http.ts';
+import { DeletionService } from './storage/sqlite/deletion/service.ts';
+import { ActiveHolders } from './storage/sqlite/deletion/holders.ts';
+import { ManagedFiles } from './storage/sqlite/deletion/managed-files.ts';
+import { SqliteDeletionHttp, deletionQueryAllowed } from './storage/sqlite/deletion/http.ts';
+import { SqliteHistoryService } from './history/sqlite/service.ts';
+import { SqliteHistoryHttp, historyQueryAllowed, projectHistorySyncStatus } from './history/sqlite/http.ts';
+import { SqliteHistoryClearService } from './history/sqlite/clear.ts';
+import { SqliteHistoryResyncService } from './history/sqlite/resync.ts';
+import { SqliteHistoryClearHttp, clearQueryAllowed } from './history/sqlite/clear-http.ts';
+import { createWechatHistoryChannel } from './history/sqlite/wechat-channel.ts';
+import { FirstHistoryCoordinator } from './history/sqlite/coordinator.ts';
+import { IncrementalHistoryCoordinator } from './history/sqlite/incremental-coordinator.ts';
+import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
+
+export const name = 'notalone-sqlite-host';
+export const inject = ['appReady', 'appExit','skills','llm'];
+
+export function authorizeSqliteRequest(req: IncomingMessage, token: string): boolean {
+  const authCount = req.rawHeaders.filter((value, index) => index % 2 === 0 && value.toLowerCase() === 'authorization').length;
+  const supplied = Buffer.from(typeof req.headers.authorization === 'string' ? req.headers.authorization : '');
+  const expected = Buffer.from(`Bearer ${token}`);
+  return req.headers.origin === undefined && authCount === 1 && supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+interface SqliteHostResource { close(): Promise<void> }
+/** 逐域尝试真实排空；任何业务所有者未释放时保留共享模型与SQLite，允许原操作续清。 */
+export async function closeSqliteHostResources(resources: {
+  firstHistory?: SqliteHostResource; incremental?: SqliteHostResource; discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
+  historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; contacts?: SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
+}): Promise<void> {
+  const failures: unknown[] = [];
+  for (const resource of [resources.firstHistory, resources.incremental, resources.historyClear, resources.historyResync, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts]) {
+    try { await resource?.close(); } catch (error) { failures.push(error); }
+  }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
+  try { await resources.models?.close(); } catch (error) { failures.push(error); }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
+  try { await resources.storage?.close(); } catch (error) { failures.push(error); }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
+}
+
+/** 显式开发能力分支；领域事实及资格仍由联系人服务与受控动作负责。 */
+export async function apply(ctx: Context) {
+  const config = JSON.parse(await readFile(process.env.NOTALONE_HOST_CONFIG!, 'utf8'));
+  const sqlite = config.sqlite as SqliteLaunchConfiguration | undefined;
+  const capabilities=sqlite&&typeof sqlite.userData==='string'?readSqliteCapabilities(sqlite.capabilities,sqlite.skillPackageRoot,sqlite.userData):undefined;
+  if (process.ppid !== config.parentPid || !sqlite || sqlite.role !== 'test'
+    || !path.isAbsolute(sqlite.userData) || !/^[A-Za-z0-9_-]{1,128}$/.test(sqlite.expectedDatabaseId)
+    || !capabilities
+    || sqlite.wechatCliPath !== undefined && !path.isAbsolute(sqlite.wechatCliPath)
+    || config.infoPath !== path.join(sqlite.userData, 'managed/sqlite-backend.info')) throw new Error('SQLITE_HOST_CONFIGURATION_INVALID');
+  const token = randomBytes(32).toString('base64url');
+  let state: 'running' | 'stopping' | 'stopped' = 'running';
+  let storage: SqliteStorage | undefined;
+  let opening: Promise<SqliteStorage> | undefined;
+  let contacts: ContactMetadataLifetime | undefined;
+  let history: SqliteHistoryService | undefined;
+  let firstHistory: FirstHistoryCoordinator | undefined;
+  let incremental: IncrementalHistoryCoordinator | undefined;
+  let historyClear: SqliteHistoryClearService | undefined;
+  let historyResync: SqliteHistoryResyncService | undefined;
+  let media: SqliteMediaService | undefined;
+  let models: Awaited<ReturnType<typeof createSqliteModelRuntime>> | undefined;
+  let memory: Awaited<ReturnType<typeof createSqliteMemoryRuntime>> | undefined;
+  let discussions: Awaited<ReturnType<typeof createSqliteDiscussionHost>> | undefined;
+  const requests=new Set<Promise<void>>();
+  let server: Server | undefined;
+  let published = false;
+  let readyDispose = () => {};
+  let publication: Promise<void> | undefined;
+  let stopping: Promise<void> | undefined;
+  let serverClosing: Promise<void> | undefined;
+  let closing: Promise<void> | undefined;
+  const stopResources = () => stopping ??= (async () => {
+    state = 'stopping'; readyDispose(); models?.stopAccepting();
+    await publication?.catch(() => {});
+    if (opening) { try { storage ??= await opening; } catch {} }
+    await closeSqliteHostResources({firstHistory,incremental,historyClear,historyResync,discussions,memory,media,history,contacts,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
+    if (published) await rm(config.infoPath, { force: true });
+    state = 'stopped';
+  })().catch(error=>{stopping=undefined;throw error;});
+  const closeServer = () => serverClosing ??= (async () => {
+    if (server) { server.closeAllConnections(); await new Promise<void>(resolve => server!.close(() => resolve())); }
+  })();
+  const close = () => closing ??= (async () => {
+    await stopResources();
+    await closeServer(); process.stdin.pause();
+  })().catch(error=>{closing=undefined;throw error;});
+  ctx.effect(() => close, 'notalone-sqlite-resources');
+  // 官方 EOF 绑定在 appReady 之后请求有界退出，不掩盖启动失败。
+  exitOnStdinEnd(ctx, 'notalone-sqlite-parent');
+  process.stdin.resume();
+  const exitCleanup = () => { if (process.ppid !== config.parentPid) rmSync(config.home, { recursive: true, force: true }); };
+  process.once('exit', exitCleanup);
+  ctx.effect(() => () => { if (process.ppid === config.parentPid) process.removeListener('exit', exitCleanup); }, 'notalone-sqlite-exit');
+  try {
+    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    opening = SqliteStorage.open({ userData: sqlite.userData, intent: 'open', expectedDatabaseId: sqlite.expectedDatabaseId, role: sqlite.role });
+    storage = await opening;
+    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), at: Date.now() });
+    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    const deletionHolders = new ActiveHolders();
+    contacts = new ContactMetadataLifetime(storage, ownerId, deletionHolders, () => createWechatContactMetadata(sqlite.wechatCliPath));
+    await contacts.initialize();
+    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    if(capabilities.capabilities.some(capability=>capability==='history')){
+      history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionHolders);
+      firstHistory=new FirstHistoryCoordinator(contacts,history);
+      incremental=new IncrementalHistoryCoordinator(contacts,history);
+      // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
+      contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();});
+    }
+    const historyHttp=history?new SqliteHistoryHttp(history):undefined;
+    const historyStatus=async()=>{
+      const directory=await contacts!.directory();
+      const coverage=await Promise.all(directory.bindings.filter(binding=>binding.status==='active').map(async binding=>({...await history!.coverage(binding.contact_id),bindingId:binding.binding_id})));
+      return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState(),incremental?.getState());
+    };
+    const library=capabilities.skillPackageRoot?new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot):undefined;
+    const skills=library?new SqliteSkillHttp(library,req=>authorizeSqliteRequest(req,token)):undefined;
+    const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData));
+    if(history){historyClear=new SqliteHistoryClearService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionService,deletionHolders);
+      historyResync=new SqliteHistoryResyncService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionHolders);}
+    const historyClearHttp=historyClear&&historyResync?new SqliteHistoryClearHttp(historyClear,historyResync):undefined;
+    // 语音保存与格式转换本轮暂缓；受管资料和共同删除服务继续运行。
+    media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
+      if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
+    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:[]});
+    await media.initialize();
+    contacts.setReadStop(async contactId=>{await Promise.all([firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);});
+    const mediaHttp = new SqliteMediaHttp(media);
+    const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');
+    const modelEnvironment=discussionsEnabled||memoryEnabled?await readSqliteModelEnvironment(config.envFilePath,process.env):{};
+    if(discussionsEnabled||memoryEnabled)models=await createSqliteModelRuntime({ctx,environment:modelEnvironment,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,
+      accounting:{reserve:async(receipt,claim)=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.reserve(receipt,claim);},
+        recordReserved:async receipt=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.recordReserved(receipt);},
+        unconfirmedRequests:async scope=>{if(scope.owner_id!==ownerId)throw new StorageFailure('sqlite_model_owner_invalid');return [...new Set([...(memory?await memory.service.accounting.unconfirmedRequests!(scope):[]),...await storage!.execute<string[]>('discussion.unconfirmed',scope)])];}}});
+    const memoryManagement=new SqliteMemoryManagement(storage,ownerId);
+    const memoryManagementHttp=memoryEnabled?new SqliteMemoryManagementHttp(memoryManagement,req=>authorizeSqliteRequest(req,token)):undefined;
+    // 即使入口未开启，也恢复并持有旧副本的清理所有者，避免资料删除遗漏持久副本。
+    memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,
+      ...(models?.shared?{sharedModel:models.shared}:{}),holders:deletionHolders,authorize:req=>authorizeSqliteRequest(req,token),adjudicationEnabled:memoryEnabled});
+    const memoryDocumentsHttp=memoryEnabled&&memory.documents?new SqliteMemoryDocumentsHttp(memory.documents,req=>authorizeSqliteRequest(req,token)):undefined;
+    discussions=await createSqliteDiscussionHost({ctx,storage,ownerId,userData:sqlite.userData,holders:deletionHolders,library,authorizeRequest:req=>authorizeSqliteRequest(req,token),
+      ...(models?.shared?{model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}}:{})});
+    const deletions = new SqliteDeletionHttp(deletionService, ownerId);
+    const ownership = { contacts: 'typescript', wechat: 'typescript',
+      deletion: 'typescript', media: 'typescript', mediaExtraction: 'unavailable', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
+      taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'typescript',
+      wechatBodySync: history?'typescript':'unavailable', wechatIncremental: history?'typescript':'unavailable', wechatHistory: history?'typescript':'unavailable',
+      foregroundLocation: 'unavailable', contactContext: 'unavailable', memory: memoryEnabled?'typescript':'unavailable', memoryManagement:memoryEnabled?'typescript':'unavailable', discussions:discussionsEnabled?'typescript':'unavailable',
+      expressionPreferences: 'unavailable', replies: 'unavailable' };
+    const handleRequest=async (req:IncomingMessage,res:ServerResponse):Promise<void> => {
+      const respond = (status: number, value: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
+      if (!authorizeSqliteRequest(req, token)) { respond(401, { error: 'unauthorized' }); return; }
+      let url: URL;
+      try { url = new URL(req.url ?? '', 'http://localhost'); }
+      catch { respond(400, { error: 'invalid_request' }); return; }
+      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)||memoryDocumentsHttp&&memoryDocumentsQueryAllowed(req.method,url)||historyClearHttp&&clearQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
+      try {
+        if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
+          respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
+        }
+        if (req.method === 'POST' && url.pathname === '/api/runtime/shutdown') {
+          await stopResources();
+          res.once('finish', () => ctx.appExit!(0)); respond(200, { state, runtime: 'dsh' }); return;
+        }
+        if (state !== 'running') { respond(503, { error: 'runtime_stopping' }); return; }
+        if(req.method==='GET'&&url.pathname==='/api/setup/status'){
+          respond(200,{runtime_owner_configured:true,owner_id:ownerId,storage:'sqlite',capabilities:capabilities.capabilities});return;
+        }
+        if(history&&req.method==='GET'&&url.pathname==='/api/sync/status'){
+          respond(200,await historyStatus());return;
+        }
+        if (!await deletions.handle(req,res)&&!await memoryManagementHttp?.handle(req,res)&&!await memoryDocumentsHttp?.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await historyClearHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!(discussionsEnabled&&await discussions!.http.handle(req,res))&&!(memoryEnabled&&await memory!.http.handle(req,res))&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
+      } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
+    };
+    server=createServer((req,res)=>{
+      const pending=handleRequest(req,res),lifecycle=req.url==='/api/runtime/status'||req.url==='/api/runtime/shutdown';
+      if(!lifecycle){requests.add(pending);const release=()=>requests.delete(pending);pending.then(release,release);}
+      void pending.catch(()=>{if(!res.headersSent){res.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'sqlite_operation_unavailable'}));}else res.destroy();});
+    });
+    server.requestTimeout = 15_000; server.headersTimeout = 10_000;
+    await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', () => { server!.removeListener('error', reject); resolve(); }); });
+    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('SQLITE_HOST_LISTEN_FAILED');
+    readyDispose = ctx.appReady!.onReady(() => {
+      if (state !== 'running') return;
+      publication = (async () => {
+        const pending = `${config.infoPath}.${randomUUID()}.pending`;
+        try {
+          await writeFile(pending, `address=127.0.0.1:${address.port}\ntoken=${token}\npid=${process.pid}\n`, { mode: 0o600, flag: 'wx' });
+          await link(pending, config.infoPath); published = true;
+        } finally { await rm(pending, { force: true }); }
+      })();
+      void publication.then(()=>{if(state==='running'){firstHistory?.wake();incremental?.wake();incremental?.start();}}).catch(() => ctx.appExit!(1));
+    });
+  } catch {
+    await close();
+    throw new Error('SQLITE_HOST_START_FAILED');
+  }
+}

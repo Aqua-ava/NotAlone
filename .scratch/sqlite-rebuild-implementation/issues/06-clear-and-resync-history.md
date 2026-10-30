@@ -1,12 +1,12 @@
 # 06：清空聊天与明确重读历史
 
 Triage: ready-for-agent
-State: open
+State: resolved
 Type: task
 Parent: [同步与记忆规格](../../sync-memory-behavior/spec.md)；[SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)
 Blocked by: [04 增量同步与读取控制](04-incremental-sync-controls.md)；[05 统一来源删除与清理流程](05-source-deletion-and-cleanup.md)
 
-> 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
+> 本轮完成（2026-10-30）：已补齐正式窄协议的元数据边界操作、客户端校验及SQLite清空接线，完成代码与合成验证。按用户要求，03的真实状态认证、跨重启来源续证和正式真实导入验收不再阻塞本轮；本票resolved仅表示该缩减范围完成，真实渠道未认证项继续如实保留，运行门禁不放宽。最新结果见[组合收尾记录](../../../docs/verification/21-three-specs-integrated-acceptance.md#2026-10-30-后续实现与本轮收尾)。
 
 ## 交付行为
 
@@ -40,3 +40,19 @@ Blocked by: [04 增量同步与读取控制](04-incremental-sync-controls.md)；
 本轮仅发布，尚未开始实现。`ready-for-agent`表示任务描述可供后续安排，不能据此自动领取、改代码、建业务库、读取微信或发起模型调用；须在用户后续明确要求实现时才开始并将State改为claimed。
 
 后续开发及桌面验收只用`pnpm run dev`，先`dev:status`核验并复用热更新实例；不得自行打包、运行打包版、改发布门禁、push或创建PR。只处理必要的合成或已获准资料，不提交私人聊天、身份、凭据、截图或真实媒体。App首次使用继续搁置，迁移／恢复实验不纳入本轮。
+
+## Comments
+
+- 2026-10-30：已在独立工作树 `sqlite-rebuild-06` 完成实现并合并集成分支（迁移 13=memoryDocuments、14=historyIncremental、15=historyClear）。新增 `history/sqlite/{boundary,clear-schema,clear-actions,clear,resync,clear-http}.ts`；按 04 落地的固定接缝替换 `suppression.ts` 函数体、在 `actions.ts` 两处接受页传入 `exclude`（`clear_excluded`），并接线宿主路由、迁移 15 与桌面联系人页面板。`history` 域 `contact_history` 的 `scope_suppression` 仅在该操作完整 B 被原子接受后通过。
+- 2026-10-30：t03 只读双轴审查（fixed 0e9f51d3）提出 1 阻断 + 2 缺口。已修：取消/中断后候选调用 `boundaryInvalidate` 失效且不接受（B1，附 stop/abort 用例）；verified B 与 `source_generation` 绑定，来源换代价不再放行普通读取（B3，附用例）；`restoreBegin` 交叉核验 live account/conversation；每分片成员数=实际成员复核；删除无调用方 helper 与永不产生的 restore failed 状态。B2（真实 observer/reader 协议与最终制品未认证）保持如实记录，生产 `wechat-channel` 不实现 `boundarySnapshot`，真实清空只封禁+清理并 `boundary_pending`，不显示成功。
+- 2026-10-30：合成验收含首次历史未完成、从未读入旧页、同秒/乱序、清空中新消息、取消候选、已接受 B 后重启/慢清理、来源代次变化、v12→15 升级与重开；真实微信正文/媒体、模型、App 与打包均未执行，桌面实际交互待串行窗口。
+
+## Answer
+
+已完成票 06 范围内实现与合成验收，最终迁移为 15，证据见 [06 实施与验证记录](../../../docs/verification/sqlite-clear-and-resync-06.md)。
+
+实现合同：清空经 05 立即推进单调数据代次并封禁旧历史目标/处理/文件结果；S(B) 以完整目标分片身份元数据构建，完整 manifest 与逐条成员持久化后原子接受，pending/blocked 候选不生效、B 接受后不可后移；读取前/分段/接受前复验资格，关闭或撤销后不偷读元数据并保持 `boundary_pending`；B 后新消息按新资格进入，旧成员在历史与增量两条接受路径都按身份排除；显式重读重新核验账号/身份、建立新 verification/grant 与独立请求键，幂等处理重叠消息且不恢复旧记忆/会话/媒体/证明，不触发模型或媒体。
+
+验证：后端锁定 tsc 0；清空/重读 17/17、清空 HTTP 4/4、相关历史/删除/增量模块 107/107；宿主 28/28（Electron Node v24.21.0）；桌面 typecheck 0、测试清单通过、清空重读契约 2/2；公开历史检查 0 问题。数据仅使用隔离临时 SQLite 与合成身份，未读真实微信、未调用模型、未外发、未启动 App。
+
+限制：真实 WCDB observer/reader 协议、完整分片/命名空间连续性与最终只读制品仍未认证，生产当前不读取真实边界并明确 `boundary_pending`；票第 2/3/4 条的真实渠道部分未通过。非空记忆/助手/媒体闭包组合与桌面实际 App 交互分别留 20/21 与串行桌面窗口复核。

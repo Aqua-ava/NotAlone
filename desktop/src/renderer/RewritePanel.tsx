@@ -239,6 +239,7 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage }: { re
     void window.notalone.candidateProvenance.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
       replyRequestId, candidateId, text }).catch(() => setCopyNoticeError('复制来源记录未保存，已复制的文字仍可使用；再次复制会重试记录。'));
   }
+  if(state.savedSession?.discussionEntries!==undefined)return <AssistantSessionPanel replies={replies} />;
   return <><section ref={resultRegion} className={`reply-candidates compact-replies${detailsOpen ? ' show-candidate-details' : ''}`} aria-label="候选回复">
     <header className="reply-results-heading"><h2>候选回复</h2>
       {candidates.length > 0 && <span>{candidates.length} 种说法 · 可直接编辑</span>}</header>

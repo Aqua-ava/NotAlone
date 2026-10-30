@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,realpath,mkdir,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createServer} from 'node:http';
+import {once} from 'node:events';
+import {SqliteStorage} from '../src/storage/sqlite/client.ts';
+import {SqliteSkillLibrary} from '../src/skills/sqlite/library.ts';
+import {SqliteSkillHttp} from '../src/skills/sqlite/http.ts';
+
+test('正常Skill业务HTTP适配：认证、状态查询与CAS启停，旧清理/学习入口不可回落PG',async t=>{
+ const dir=await realpath(await mkdtemp(join(tmpdir(),'notalone-skill-http-14-')));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const root=join(dir,'originals');await mkdir(join(root,'gentle'),{recursive:true});await writeFile(join(root,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 用于合成\n---\n先回应。\n');
+ const storage=await SqliteStorage.open({userData:dir,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});t.after(()=>storage.close());
+ await storage.execute('fixture.owner',{ownerId:'owner-a'});const library=new SqliteSkillLibrary(storage,'owner-a',root);
+ const http=new SqliteSkillHttp(library,req=>req.headers.authorization==='Bearer synthetic-only'&&!req.headers.origin);
+ let fallbacks=0;const server=createServer(async(req,res)=>{if(!await http.handle(req,res)){fallbacks++;res.writeHead(404).end();}});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(r=>{server.closeAllConnections();server.close(r);}));
+ const base=`http://127.0.0.1:${server.address().port}`;
+ const request=async(path,body,headers={authorization:'Bearer synthetic-only'})=>{const res=await fetch(base+path,{method:body?'POST':'GET',headers:{...headers,'content-type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:res.status,body:await res.json()};};
+ assert.equal((await request('/api/skills',null,{})).status,401);
+ assert.equal((await request('/api/skills',null,{authorization:'Bearer synthetic-only',origin:'https://example.invalid'})).status,401);
+ assert.deepEqual((await request('/api/skills')).body.skills,[]);
+ let item=(await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).body.skill;
+ assert.equal(item.enabled_state,'unknown');assert.match(item.state_label,/待核验启停/);
+ const stale=item.head_revision;
+ item=(await request(`/api/skills/${item.package_id}/enable`,{expected_head_revision:stale,confirmed:true})).body.skill;
+ assert.equal(item.enabled_state,'enabled');assert.match(item.state_label,/已启用/);
+ assert.equal((await request(`/api/skills/${item.package_id}/disable`,{expected_head_revision:stale,confirmed:true})).status,409);
+ assert.equal((await request('/api/skills/discover',{directory_name:'gentle',confirmed:true,owner_id:'other'})).status,400);
+ assert.equal((await request(`/api/skills/${item.package_id}/delete`,{confirmed:true})).status,503);
+ assert.equal((await request('/api/contacts/contact-a/skill-learning',{confirmed:true})).status,503);
+ assert.equal((await request('/api/skills?owner_id=other')).status,400);
+ assert.equal(fallbacks,0);
+});

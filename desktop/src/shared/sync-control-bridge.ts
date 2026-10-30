@@ -1,4 +1,6 @@
 export type HistoryCoveragePhase = 'not_started' | 'syncing' | 'complete' | 'incomplete';
+/** 增量检查点/控制的可见阶段；不可用与受阻必须区别于已同步。 */
+export type HistoryIncrementalPhase = 'not_started' | 'ready' | 'syncing' | 'incomplete' | 'blocked' | 'invalidated' | 'unavailable' | 'stopped';
 export interface HistoryCoverage {
   bindingId: string;
   contactId: string;
@@ -7,12 +9,17 @@ export interface HistoryCoverage {
   messageCount: number;
   nonTextCount: number;
   pageCount: number;
+  incrementalPhase?: HistoryIncrementalPhase;
+  incrementalFailureCode?: string | null;
+  incrementalLastAcceptedAt?: number | null;
+  incrementalPages?: number;
 }
 
 export type SyncScope = 'selected' | 'all_private';
 export type HistoryAuthorizationDecision = 'accepted' | 'declined';
 export type HistoryAuthorizationState = HistoryAuthorizationDecision | 'required' | 'unknown';
 export type BackgroundSyncPhase = 'disabled' | 'waiting_bindings' | 'active' | 'degraded';
+export type BackgroundIncrementalPhase = 'idle' | 'active' | 'incomplete' | 'unavailable' | 'closed' | 'disabled';
 export type ForegroundReportPhase = 'sync_disabled' | 'waiting_foreground' | 'unavailable' | 'active' | 'failed';
 export type SyncBackfillPhase = 'not_required' | 'gap_detected' | 'backfilling' | 'complete' | 'failed' | 'incomplete' | 'paused';
 
@@ -43,6 +50,7 @@ export interface SyncPriorityReport {
 
 // 只展示最近循环的最小报告，不提供微信定位标识、观察身份或正文。
 export interface SyncStatusReport {
+  selectionOnly?: boolean; bodyAvailable?: boolean;
   enabled: boolean;
   syncScope?: SyncScope;
   syncScopeFailureCode?: string | null;
@@ -60,6 +68,8 @@ export interface SyncStatusReport {
   wechatInFront: boolean;
   backfill: SyncBackfillReport;
   priority?: SyncPriorityReport;
+  incrementalPhase?: BackgroundIncrementalPhase;
+  incrementalFailureCode?: string | null;
 }
 export interface SyncControlState {
   revision: number;

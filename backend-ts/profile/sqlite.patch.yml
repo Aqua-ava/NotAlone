@@ -1,0 +1,8 @@
+# SQLite领域由官方profile装配；模型仅在明确请求中调用，讨论Agent由受管副本官方插件创建。
+- insert:
+    - id: shared-llm
+      name: '@deepseek-ai/dsh-llm'
+    - id: reply-skill-registry
+      name: '@deepseek-ai/dsh-skill'
+    - id: notalone-sqlite-host
+      name: PLUGIN_PATH

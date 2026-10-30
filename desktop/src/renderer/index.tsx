@@ -1,3 +1,4 @@
+import type { BindingConsentState } from '../shared/binding-consent-bridge';
 import { UsagePanel } from './UsagePanel';
 import { historyReplyEligibility } from '../shared/history-reply-eligibility';
 import type { HistoryCoveragePhase, SyncControlState } from '../shared/sync-control-bridge';
@@ -20,7 +21,6 @@ import { SetupPanel } from './SetupPanel';
 import { StartupReadiness, StartupSettings, useStartupState } from './StartupSettings';
 import { ContactPicker, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
-import { ImportPage } from './ImportPage';
 import { ReplyCandidates, useReplySession } from './RewritePanel';
 import { UnifiedReplyWorkspace } from './UnifiedReplyWorkspace';
 import { MemoryPage } from './MemoryPage';
@@ -28,6 +28,7 @@ import { SyncControlPanel } from './SyncControlPanel';
 import { SkillLearningPage } from './SkillLearningPage';
 import { PrioritySyncStatus } from './PrioritySyncStatus';
 import { DeveloperTraces } from './DeveloperTraces';
+import { QuarantinePanel } from './QuarantinePanel';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -40,6 +41,8 @@ export function App() {
   const permission = useScreenPermission();
   const contactSession = useContactSession();
   const replies = useReplySession(helper);
+  const { state: consent } = useRevisionedSession<BindingConsentState>({ revision: -1, scopeRevision: 0, phase: 'offline',
+    sessions: [], bindings: [], syncEnabled: null, sessionIssue: 'not-requested', busy: null, errorCode: null, notice: null }, window.notalone.bindings, !helper);
   const { state: historySync } = useRevisionedSession<SyncControlState>({ revision: -1, scopeRevision: 0,
     phase: 'offline', report: null, busy: null, errorCode: null }, window.notalone.syncControl, helper);
   useEffect(() => { if (helper) void window.notalone.syncControl.refresh().catch(() => {}); }, [contactSession.state.selectedContactId]);
@@ -71,7 +74,7 @@ export function App() {
     catch { setError('窗口暂时无法打开，请从“窗口”菜单重试。'); }
   }
   const currentPage = managerPages[page];
-  const navigationPage = page === 'import' ? 'config' : page;
+  const navigationPage = page;
   return helper ? <main className="ime-pane">
     <header className="ime-header">
       <img className="ime-logo" src={logo} alt="NotAlone" />
@@ -87,8 +90,8 @@ export function App() {
       && replies.state.savedSession?.phase === 'loading' && <p role="status" className="rewrite-privacy">
         已切换联系人，正在恢复这位联系人的历史讨论与回复…
       </p>}
-    <UnifiedReplyWorkspace contacts={contactSession} replies={replies}
-      historyCoverage={historyCoverage} />
+    {replies.state.savedSession?.discussionEntries===undefined&&<UnifiedReplyWorkspace contacts={contactSession} replies={replies}
+      historyCoverage={historyCoverage} media={window.notalone.media} />}
     <PrioritySyncStatus contactId={contactSession.state.selectedContactId} bridge={window.notalone.syncControl} />
     {replies.state.messageNotice.phase === 'connected' && <>
       {replies.state.messageNotice.needsRefresh && <p role="status">消息提醒有待核对，请主动刷新消息。生成依据仍是原快照。</p>}
@@ -117,7 +120,7 @@ export function App() {
       <div className="admin-brand"><img src={logo} alt="NotAlone" /><small>让每一次表达，更像你自己</small></div>
       <span className="sidebar-label">关系与表达</span>
       <nav aria-label="管理导航">
-        {(Object.keys(managerPages) as ManagerPage[]).filter((key) => key !== 'import').map((key) => <button key={key}
+        {(Object.keys(managerPages) as ManagerPage[]).map((key) => <button key={key}
           className={navigationPage === key ? 'active' : ''} aria-current={navigationPage === key ? 'page' : undefined}
           onClick={() => setPage(key)}><Icon name={managerPages[key].icon} />{managerPages[key].title}</button>)}
       </nav>
@@ -125,36 +128,33 @@ export function App() {
     </aside>
     <div className="admin-workspace">
       <header className="admin-topbar">
-        <span>管理后台 <i>／</i> {page === 'import' && <>设置 <i>／</i> 高级 <i>／</i> </>}{currentPage.title}</span>
+        <span>管理后台 <i>／</i> {currentPage.title}</span>
         <div><ContactPicker session={contactSession}
-          onSelect={startup.mode === 'managed' ? contactSession.confirmManualContact : contactSession.selectContact} /><BackendBadge state={backend} />
+          onSelect={contactSession.selectContact} /><BackendBadge state={backend} />
           <button className="button primary" onClick={() => void operate(window.notalone.openHelper)}><Icon name="write" size={15} />打开输入小窗</button></div>
       </header>
       <ShortcutWarning />
       {contactSession.error && <p className="operation-error" role="alert">{contactSession.error}<button className="button" onClick={() => void contactSession.retryRead()}>重试读取</button></p>}
       <main className="manager-content">
-        {page === 'import' && <button className="button" onClick={() => { setAdvancedOpen(true); setPage('config'); }}>返回设置 · 高级</button>}
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
         <BackendConnectionNote state={backend} startup={startup} onDiagnose={showDiagnostics} />
         <FirstFrameError message={backendRead.error} retry={backendRead.retry} />
         <FirstFrameError message={startupRead.error} retry={startupRead.retry} />
-        {!(page === 'config' && advancedOpen && diagnosticsOpen && startup.mode !== 'managed')
+        {!(page === 'config' && advancedOpen && diagnosticsOpen)
           && <StartupReadiness state={startup} backend={backend} onConfigure={showDiagnostics} />}
-        {(page === 'config' || startup.mode === 'managed' && backend.phase === 'connected') && <SetupPanel />}
-        {page === 'config' && <><UsagePanel /><ScreenPermissionPanel view={permission} /><DesktopControls />
+        {page === 'config' && <SetupPanel />}
+        {page === 'config' && <><QuarantinePanel /><UsagePanel /><ScreenPermissionPanel view={permission} /><DesktopControls />
           <details className="startup-settings" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
             <summary>高级</summary>
-            <p>从文件补充旧记录，或管理已导入资料。已通过自动同步获取的记录，无需重复导入。</p>
-            <button className="button" onClick={() => setPage('import')}>从文件导入</button>
+            <p>手动文件导入入口已退役；已通过自动同步获取的资料无需重复导入。</p>
             <div ref={diagnostics}><StartupSettings state={startup} backend={backend} open={diagnosticsOpen} onOpenChange={setDiagnosticsOpen} /></div>
             {advancedOpen && <DeveloperTraces session={contactSession} />}
           </details></>}
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} />}
-        {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
-        {page === 'sync' && <WechatSetupPanel bridge={window.notalone.wechatSetup}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>}
-        {page !== 'config' && page !== 'contacts' && page !== 'import' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
+        {page === 'sync' && <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>}
+        {page !== 'config' && page !== 'contacts' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>
           <button className="button" disabled>{currentPage.action}</button>

@@ -1,5 +1,7 @@
 # 助手运行副本
 
+> 历史 PostgreSQL 实现记录：对应源码与专属测试已退役，最后保留于提交 `a838de83c4825ae0c219cf6945ddc6cda4382273`。当前实现分别见 `memory/sqlite/` 与 `reply/sqlite/`，本页旧命令、迁移编号和路由不作为当前运行入口。
+
 `AssistantRuntime` 只管理候选回复的本机 DSH 副本。可见讨论、候选、版本及来源继续由 PostgreSQL 裁定。
 
 - `history` 通过官方 JSONL 只读句柄取回已提交事件；真实事件作为零 HTTP 预检的 seed，正式生成使用官方 `agents.resume`。

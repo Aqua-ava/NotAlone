@@ -8,7 +8,7 @@ import {once} from 'node:events';
 import {createInterface} from 'node:readline';
 import {ModelPermitArbiter} from '../src/platform/models/model-permits.ts';
 import {startModelPermitServer} from '../src/platform/models/model-permit-server.ts';
-import {ModelLedgerError} from '../src/platform/models/model-ledger.ts';
+import {ModelLedgerError} from '../src/platform/models/model-ledger-contract.ts';
 
 // 隔离协议测试：故障由宿主记账端口注入，不代表数据库删除全链。
 const privateText='合成内部正文，不得出现在协议中';

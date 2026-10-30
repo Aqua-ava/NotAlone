@@ -1,0 +1,22 @@
+--- a/cmd/wechat-cli/main.go
++++ b/cmd/wechat-cli/main.go
+@@ -517,7 +517,7 @@
+ 	// 仅开放已确认联系人读取适配器需要的命令，不开放维护、Keychain 或通用调用。
+ 	if len(os.Args) > 1 {
+ 		switch os.Args[1] {
+-		case "status", "sessions", "resolve-chat", "tail", "watch", "help", "--help", "-h", "version", "--version", "-v":
++		case "notalone-history", "status", "sessions", "resolve-chat", "tail", "watch", "help", "--help", "-h", "version", "--version", "-v":
+ 		default:
+ 			fmt.Fprintln(os.Stderr, "notalone_command_disabled")
+ 			os.Exit(2)
+@@ -527,6 +527,10 @@
+ 	os.Setenv("WX_MCP_STRICT_READ_ONLY", "1")
+ 	os.Setenv("WECHAT_CLI_DISABLE_AUTO_REFRESH", "1")
+ 	os.Setenv("WX_MCP_DISABLE_AUTO_REFRESH", "1")
++	if len(os.Args) == 2 && os.Args[1] == "notalone-history" {
++		runNotaloneHistory(os.Stdin, os.Stdout)
++		return
++	}
+ 	if maybeRunCLI(os.Args[1:]) {
+ 		return
+ 	}

@@ -1,32 +1,25 @@
 # 后台源码入口
 
-业务文件按职责归组，目录内文件名省略重复的业务前缀；测试仍在 [`../test/`](../test/)。记忆模块的入口和内部划分见 [memory/README.md](memory/README.md)。
+当前后台由 SQLite 宿主装配。业务文件按职责归组，测试在 [`../test/`](../test/)；旧 PostgreSQL 宿主、存储与专属业务模块保留于固定 Git 历史，恢复方式见[历史测试说明](../test/HISTORICAL.md)。
 
 ## 启动与装配
 
-根目录保留外部启动或插件入口：[launch.ts](launch.ts)、[host-plugin.ts](host-plugin.ts)、[plugin.ts](plugin.ts)、[schema-prepare-cli.ts](schema-prepare-cli.ts)、[managed-postgres.ts](managed-postgres.ts)。运行时装配代码位于 [host/](host/)。
+正式入口为 [launch.ts](launch.ts) 与 [sqlite-host-plugin.ts](sqlite-host-plugin.ts)，使用 [`profile/sqlite.patch.yml`](../profile/sqlite.patch.yml)。宿主装配位于 [host/](host/)，存储迁移与具名事务统一注册在 [storage/sqlite/registry.ts](storage/sqlite/registry.ts)。
 
 ## 按业务查找
 
 | 职责 | 目录 |
 | --- | --- |
-| 联系人、身份与绑定 | [contacts/](contacts/) |
-| 历史导入与格式解析 | [imports/](imports/) |
-| 记忆提取与来源核验 | [memory/extraction/](memory/extraction/) |
-| 记忆裁决、去重与自动采纳 | [memory/adoption/](memory/adoption/) |
-| 已存记忆与生成资料的查询、修改和删除 | [memory/records/](memory/records/) |
-| 概览与记忆目录 | [memory/overview/](memory/overview/) |
-| L2 场景整理 | [memory/scenarios/](memory/scenarios/) |
-| L3 长期背景生成 | [memory/profiles/](memory/profiles/) |
-| 检索与排序 | [retrieval/](retrieval/) |
-| 回复上下文、生成、讨论与探索 | [reply/](reply/) |
-| Skill 文件、执行、学习与审核 | [skills/](skills/) |
-| 表达偏好 | [preferences/](preferences/) |
-| 微信接入、授权范围、历史与增量同步 | [sync/](sync/) |
-| 前台会话定位与探针适配 | [foreground/](foreground/) |
-| 通用后台任务控制 | [tasks/](tasks/) |
-| 跨业务删除协调 | [deletion/](deletion/) |
-| 追踪、质量诊断与用量 | [diagnostics/](diagnostics/) |
-| 数据库、模型调用与进程支持 | [platform/](platform/) |
+| 联系人、稳定身份与绑定 | [contacts/sqlite/](contacts/sqlite/) |
+| 历史导入、来源连续性与增量同步 | [history/sqlite/](history/sqlite/) |
+| 记忆提取及执行 | [memory/sqlite/](memory/sqlite/) |
+| 记忆裁决与管理 | [memory/sqlite/management/](memory/sqlite/management/) |
+| 文档、来源与发布 | [memory/sqlite/documents/](memory/sqlite/documents/) |
+| 候选回复、讨论与生成运行时 | [reply/sqlite/](reply/sqlite/) |
+| Skill 注册与执行 | [skills/sqlite/](skills/sqlite/) |
+| 媒体资料与处理状态 | [media/sqlite/](media/sqlite/) |
+| 微信外置工具适配及前台定位 | [sync/](sync/)、[foreground/](foreground/) |
+| 存储、事务与统一删除 | [storage/sqlite/](storage/sqlite/) |
+| 模型调用、切换与进程支持 | [platform/](platform/) |
 
-业务专属的 HTTP、存储和 worker 文件跟随对应业务。源码身份计算仍以实际文件字节及依赖为依据，目录和引用调整会产生新的源码版本摘要。
+目录存在不代表所有功能已开放；能力以 SQLite 宿主的 ownership 和实际端到端验证为准。13 表达偏好、15 纠错诊断、18 语音保存转换和 19 真实媒体验收仍按原范围暂缓。

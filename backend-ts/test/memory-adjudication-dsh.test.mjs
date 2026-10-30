@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {DshMemoryAdjudicationRuntime} from '../src/memory/adoption/adjudication-dsh.ts';
+import {DshMemoryAdjudicationRuntime,parseAdjudications} from '../src/memory/adoption/adjudication-dsh.ts';
 
 const scope={owner_id:randomUUID(),contact_id:randomUUID()},memory=randomUUID(),candidateMessage=randomUUID(),priorMessage=randomUUID();
 const item={candidate_index:0,
@@ -19,6 +19,25 @@ const relation={kind:'state_change',related_memory_ids:[memory],explanation:'合
  evidence:[{message_id:priorMessage,quote:'合成联系人喜欢周三散步'},{message_id:candidateMessage,quote:'合成联系人改为周四散步'}],
  claim_changed:true,condition_changed:false};
 const decision={candidate_index:0,action:'update',replaced_memory_id:memory,merged_memory_ids:[],merged_text:null,duplicate_memory_id:null,relation};
+
+test('每种裁决动作的目标字段互斥，矛盾结构不得伪装为合法决定',()=>{
+ const parse=value=>parseAdjudications([{type:'tool-call',name:'BatchMemoryAdjudicationOutput',arguments:JSON.stringify({decisions:[value]})}]);
+ const empty={...decision,replaced_memory_id:null,merged_memory_ids:[],merged_text:null,duplicate_memory_id:null};
+ const legal=[{...empty,action:'add'},{...empty,action:'keep'},decision,{...empty,action:'noop',duplicate_memory_id:memory},
+  {...empty,action:'merge',merged_memory_ids:[memory,randomUUID()],merged_text:'合并后的完整资料'}];
+ for(const value of legal)assert.equal(parse(value)[0].action,value.action);
+ for(const value of legal){
+  const invalid=value.action==='update'?{...value,duplicate_memory_id:memory}:value.action==='merge'?{...value,replaced_memory_id:memory}:{...value,replaced_memory_id:memory};
+  assert.throws(()=>parse(invalid),/adjudication_model_output_invalid/,value.action);
+ }
+ for(const invalid of [{...empty,action:'noop',duplicate_memory_id:memory,merged_memory_ids:[memory]},
+  {...empty,action:'noop',duplicate_memory_id:memory,merged_text:'夹带正文'},
+  {...decision,merged_text:'夹带正文'},
+  {...empty,action:'merge',merged_memory_ids:[memory,memory],merged_text:'重复父资料'},
+  {...empty,action:'merge',merged_memory_ids:[memory,randomUUID()],merged_text:'   '},
+  {...empty,action:'noop'},
+  {...empty,action:'update'}])assert.throws(()=>parse(invalid),/adjudication_model_output_invalid/);
+});
 
 test('DSH结构化裁决：批量、独立关系核验与合并核验各自独立调用并保留usage',async()=>{
  const prompts=[];let calls=0;
@@ -41,7 +60,8 @@ test('DSH结构化裁决：批量、独立关系核验与合并核验各自独�
  const verified=await runtime.verifyRelations([item],decisions,signal);
  assert.deepEqual({supported:verified[0].supported,receipt:verified[0].source_receipt,usage:verified[0].usage.purpose},
   {supported:true,receipt:'relation-receipt',usage:'relation_verification'});
- const merged=await runtime.verifyMerge(item,{...decision,action:'merge',replaced_memory_id:null,merged_memory_ids:[memory]},
+ const second={...item.similar[0],memory_id:randomUUID()},mergeItem={...item,similar:[...item.similar,second]};
+ const merged=await runtime.verifyMerge(mergeItem,{...decision,action:'merge',replaced_memory_id:null,merged_memory_ids:[memory,second.memory_id],merged_text:'合成联系人喜欢周三散步，现在改为周四散步'},
   [candidateMessage,priorMessage],'merge-receipt',signal);
  assert.deepEqual({supported:merged.supported,receipt:merged.source_receipt,usage:merged.usage.purpose},
   {supported:true,receipt:'merge-receipt',usage:'merge_verification'});

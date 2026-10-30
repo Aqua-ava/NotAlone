@@ -1,0 +1,54 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,realpath,mkdir,writeFile,readFile,rename,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {createSyntheticProfile} from './profile-support.mjs';
+
+test('正式profile隔离回归：Skill最小管理与官方加载、原目录保护及拒绝扩权',{timeout:20000},async t=>{
+ const dir=await realpath(await mkdtemp(join(tmpdir(),'notalone-skill-profile-14-')));
+ t.after(()=>rm(dir,{recursive:true,force:true}));
+ const root=join(dir,'originals'),profile=join(dir,'profiles/notalone');await mkdir(profile,{recursive:true});
+ await mkdir(join(root,'gentle'),{recursive:true});
+ const bytes='---\nname: gentle\ndescription: 用于合成场景\n---\n先回应感受。\n说明情况。\n保留选择。\n';
+ await writeFile(join(root,'gentle/SKILL.md'),bytes);
+ await writeFile(join(profile,'package.json'),JSON.stringify({private:true,dsh:{profile:{bundles:[]}}}));
+ await writeFile(join(profile,'cordis.patch.yml'),await createSyntheticProfile(resolve('test/fixtures/sqlite-skills/profile-plugin.ts'),'http://127.0.0.1:1/anthropic'));
+ const child=spawn(process.execPath,['--import',resolve('test/observe.mjs'),resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','notalone'],{
+  cwd:dir,env:{PATH:process.env.PATH,HOME:dir,DSH_HOME:dir,DSH_TELEMETRY_DISABLED:'1',DEEPSEEK_API_KEY:'synthetic-only',NOTALONE_SKILL_TEST_DIR:dir},stdio:['ignore','pipe','pipe']});
+ const exited=once(child,'exit');let output='';
+ t.after(async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');await exited;assert.doesNotMatch(output,/VALIDATION_NETWORK /);});
+ child.stderr.on('data',b=>{output+=b;});
+ const base=await new Promise((resolveReady,reject)=>{
+  const timer=setTimeout(()=>reject(new Error('官方profile启动超时：'+output.slice(-2500))),10000);
+  child.once('exit',()=>{clearTimeout(timer);reject(new Error('官方profile提前退出：'+output.slice(-2500)));});
+  child.stdout.on('data',b=>{output+=b;const match=output.match(/SQLITE_SKILL_READY (http:\/\/127\.0\.0\.1:\d+)/);if(match){clearTimeout(timer);resolveReady(match[1]);}});
+ });
+ const request=async(path,input)=>{const response=await fetch(base+path,{method:input?'POST':'GET',headers:{'content-type':'application/json',authorization:'Bearer profile-only'},body:input?JSON.stringify(input):undefined});return {status:response.status,body:await response.json()};};
+ assert.deepEqual((await request('/state')).body,[]);
+ assert.deepEqual((await request('/api/skills')).body.skills,[]);
+ const discovered=await request('/api/skills/discover',{directory_name:'gentle',confirmed:true});
+ assert.equal(discovered.body.skill.enabled_state,'unknown');assert.match(discovered.body.skill.state_label,/待核验启停/);
+ let item=(await request('/discover',{name:'gentle'})).body;
+ assert.equal(item.enabledState,'unknown');assert.equal((await request('/load',{id:item.id})).status,409);
+ item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'enabled'})).body;
+ const loaded=await request('/load',{id:item.id});assert.equal(loaded.status,200);assert.match(loaded.body.content,/先回应感受/);
+ assert.equal(loaded.body.input.text,loaded.body.content);assert.equal(loaded.body.input.package_id,item.id);assert.equal(loaded.body.hostCatalog,0);
+ assert.equal((await request('/load',{id:item.id,contactId:'other'})).status,409);
+ assert.equal((await request('/discover',{name:'../gentle'})).status,409);
+ assert.equal((await request('/late-load',{id:item.id})).body.code,'skill_run_invalidated');
+ item=(await request('/state')).body[0];assert.equal(item.enabledState,'disabled');
+ item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'enabled'})).body;
+ const stale=item.headRevision;item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'disabled'})).body;
+ assert.equal((await request('/verify',{id:item.id,head:stale})).status,409);assert.equal((await request('/load',{id:item.id})).status,409);
+ await writeFile(join(root,'gentle/SKILL.md'),bytes+'新的合成步骤。\n');
+ const changed=(await request('/state')).body[0];assert.equal(changed.enabledState,'disabled');assert.equal(changed.verificationState,'pending');
+ item=(await request('/verify',{id:item.id,head:changed.headRevision})).body;assert.equal(item.currentRevisionNo,'2');
+ await rename(join(root,'gentle'),join(root,'original-retained'));await mkdir(join(root,'gentle'));await writeFile(join(root,'gentle/SKILL.md'),bytes);
+ assert.equal((await request('/state')).body[0].verificationState,'conflict');
+ await rm(join(root,'gentle'),{recursive:true});assert.equal((await request('/state')).body[0].verificationState,'missing');
+ assert.equal(await readFile(join(root,'original-retained/SKILL.md'),'utf8'),bytes+'新的合成步骤。\n');
+ assert.deepEqual((await request('/check')).body,{integrity:'ok',foreignKeys:'ok'});
+});

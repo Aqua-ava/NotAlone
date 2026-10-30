@@ -1,4 +1,4 @@
-import type { HistoryCoverage, HistoryCoveragePhase, BackgroundSyncPhase, ForegroundReportPhase, HistoryAuthorizationDecision, HistoryAuthorizationState, SyncBackfillPhase, SyncBackfillReport, SyncPriorityReport, SyncStatusReport, SyncScope } from '../../shared/sync-control-bridge';
+import type { HistoryCoverage, HistoryCoveragePhase, HistoryIncrementalPhase, BackgroundIncrementalPhase, BackgroundSyncPhase, ForegroundReportPhase, HistoryAuthorizationDecision, HistoryAuthorizationState, SyncBackfillPhase, SyncBackfillReport, SyncPriorityReport, SyncStatusReport, SyncScope } from '../../shared/sync-control-bridge';
 import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
 
@@ -6,6 +6,8 @@ const backgroundPhases: BackgroundSyncPhase[] = ['disabled', 'waiting_bindings',
 const foregroundPhases: ForegroundReportPhase[] = ['sync_disabled', 'waiting_foreground', 'unavailable', 'active', 'failed'];
 const backfillPhases: SyncBackfillPhase[] = ['not_required', 'gap_detected', 'backfilling', 'complete', 'failed', 'incomplete', 'paused'];
 const historyAuthorizationStates: HistoryAuthorizationState[] = ['required', 'accepted', 'declined'];
+const historyIncrementalPhases: HistoryIncrementalPhase[] = ['not_started', 'ready', 'syncing', 'incomplete', 'blocked', 'invalidated', 'unavailable', 'stopped'];
+const backgroundIncrementalPhases: BackgroundIncrementalPhase[] = ['idle', 'active', 'incomplete', 'unavailable', 'closed', 'disabled'];
 // 旧后台没有授权版本字段；默认版本只用于把缺失报告标为未确认。
 const DEFAULT_HISTORY_AUTHORIZATION_VERSION = 1;
 // 全部私聊覆盖报告有界读取，超过预算整份失败，不截断为完整状态。
@@ -52,6 +54,17 @@ function backfillReport(fields: Record<string, unknown>): SyncBackfillReport {
     pendingContacts: count(fields.cli_backfill_pending_contacts), messageCount: count(fields.cli_backfill_total_message_count),
     nonTextCount: count(fields.cli_backfill_total_non_text_count) };
 }
+/** 可选增量字段：后端未报告时不推断为已同步，报告了非法值则整份失败。 */
+function optionalIncrementalPhase(value: unknown): HistoryIncrementalPhase | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !historyIncrementalPhases.includes(value as HistoryIncrementalPhase)) throw new Error('同步报告不可用。');
+  return value as HistoryIncrementalPhase;
+}
+function optionalBackgroundIncrementalPhase(value: unknown): BackgroundIncrementalPhase | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !backgroundIncrementalPhases.includes(value as BackgroundIncrementalPhase)) throw new Error('同步报告不可用。');
+  return value as BackgroundIncrementalPhase;
+}
 function positiveVersion(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) throw new Error('同步报告不可用。');
   return value;
@@ -78,12 +91,20 @@ function historyCoverages(value: unknown): HistoryCoverage[] | undefined {
   return value.map((item) => {
     if (!item || typeof item !== 'object' || !isUuid(item.binding_id) || !isUuid(item.contact_id)
       || !['not_started', 'syncing', 'complete', 'incomplete'].includes(item.phase)) throw new Error('同步报告不可用。');
+    const incrementalPhase = optionalIncrementalPhase(item.incremental_phase);
+    const incrementalFailureCode = item.incremental_failure_code === undefined ? undefined : failureCode(item.incremental_failure_code);
+    const incrementalLastAcceptedAt = item.incremental_last_accepted_at === undefined || item.incremental_last_accepted_at === null ? null : count(item.incremental_last_accepted_at);
+    const incrementalPages = item.incremental_pages === undefined ? undefined : count(item.incremental_pages);
     return { bindingId: item.binding_id.toLowerCase(), contactId: item.contact_id.toLowerCase(),
       phase: item.phase as HistoryCoveragePhase, failureCode: failureCode(item.failure_code),
-      messageCount: count(item.message_count), nonTextCount: count(item.non_text_count), pageCount: count(item.page_count) };
+      messageCount: count(item.message_count), nonTextCount: count(item.non_text_count), pageCount: count(item.page_count),
+      ...(incrementalPhase === undefined ? {} : { incrementalPhase }),
+      ...(incrementalFailureCode === undefined ? {} : { incrementalFailureCode }),
+      ...(item.incremental_last_accepted_at === undefined ? {} : { incrementalLastAcceptedAt }),
+      ...(incrementalPages === undefined ? {} : { incrementalPages }) };
   });
 }
-function parseSyncReport(value: unknown): SyncStatusReport {
+export function parseSyncReport(value: unknown): SyncStatusReport {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('同步报告不可用。');
   const fields = value as Record<string, unknown>;
   if (fields.sync_mode !== 'cli_background' || typeof fields.sync_enabled !== 'boolean'
@@ -94,7 +115,7 @@ function parseSyncReport(value: unknown): SyncStatusReport {
     || typeof fields.cli_bound_count !== 'number' || !Number.isSafeInteger(fields.cli_bound_count)
     || fields.cli_bound_count < 0) throw new Error('同步报告不可用。');
   if ('sync_scope' in fields && fields.sync_scope !== 'all_private' && fields.sync_scope !== 'selected') throw new Error('同步报告不可用。');
-  return { syncScope: (fields.sync_scope ?? 'selected') as SyncScope,
+  return { ...(fields.identity_protocol === 'sqlite-selected-v1' ? { selectionOnly: true, bodyAvailable: fields.body_available === true } : {}), syncScope: (fields.sync_scope ?? 'selected') as SyncScope,
     syncScopeFailureCode: 'sync_scope_failure_code' in fields ? failureCode(fields.sync_scope_failure_code) : null,
     ...historyAuthorization(fields),
     historyCoverages: historyCoverages(fields.cli_history_coverages),
@@ -103,7 +124,14 @@ function parseSyncReport(value: unknown): SyncStatusReport {
     confirmedBindingCount: fields.cli_bound_count, foregroundPhase: fields.foreground_phase as ForegroundReportPhase,
     foregroundFailureCode: failureCode(fields.foreground_failure_code), probeAvailable: fields.probe_available,
     wechatInFront: fields.wechat_in_front, backfill: backfillReport(fields),
-    ...('cli_priority_contact_id' in fields ? { priority: priorityReport(fields) } : {}) };
+    ...('cli_priority_contact_id' in fields ? { priority: priorityReport(fields) } : {}),
+    ...(() => {
+      const incrementalPhase = optionalBackgroundIncrementalPhase(fields.cli_incremental_phase);
+      return {
+        ...(incrementalPhase === undefined ? {} : { incrementalPhase }),
+        ...('cli_incremental_failure_code' in fields ? { incrementalFailureCode: failureCode(fields.cli_incremental_failure_code) } : {}),
+      };
+    })() };
 }
 
 export async function readSyncStatus(backend: BackendHost, signal: AbortSignal) {

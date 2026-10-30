@@ -1,0 +1,59 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {build} from 'esbuild';
+const output=await build({stdin:{contents:"export {ContactSession} from './src/main/contacts/session';export {ReplySession} from './src/main/reply/session';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
+const {ContactSession,ReplySession}=await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+
+test('既有ReplySession来源失效同步擦除实际发言快照，旧快照不能继续持有正文',async t=>{
+ const contactId=randomUUID(),sessionId=randomUUID(),requestId=randomUUID(),body='必须从旧快照撤下的合成发言';
+ let messageGate;
+ const backend={getConnectionGeneration:()=>7,onStateChanged:()=>()=>{},subscribeMessages:()=>{},requestJson:async request=>{
+  let data;
+  if(request.path.startsWith('/api/deletions?'))data={operations:[]};
+  else if(request.path.endsWith('/assistant-sessions'))data={sessions:[{session_id:sessionId,is_current:true}],current_session_id:sessionId};
+  else if(request.path.endsWith('/assistant-session/default'))data={session_id:sessionId};
+  else if(request.path.endsWith('/assistant-session/binding'))data={confirmed:true};
+  else if(request.path.includes('/messages?')){if(messageGate)await messageGate;data={messages:[],next_cursor:null};}
+  else if(request.path.endsWith('/assistant-sessions/'+sessionId)){
+   data={mode:'sqlite',session_id:sessionId,runtime_recovery:'ready',entries:[{entry_id:randomUUID(),position:'1',role:'user',text:body,request_id:requestId,call_id:null,content_state:'available'}]};
+  }else throw new Error('未安排的合成端口');return {generation:7,data};
+ }};
+ const contacts=new ContactSession(async()=>({generation:7,contacts:[{contactId,displayName:'合成联系人',messageCount:0,sourceCount:0}]}));
+ contacts.setConnection(7);await contacts.refreshContacts();const session=new ReplySession(contacts,backend);t.after(()=>contacts.setConnection(undefined));
+ contacts.selectContact({contactId,scopeRevision:contacts.getState().scopeRevision});const scope={contactId,scopeRevision:contacts.getState().scopeRevision};
+ await session.readSavedSession(scope);assert.equal(session.getState().savedSession.discussionEntries[0].text,body);
+ const release=Promise.withResolvers();messageGate=release.promise;
+ const invalidating=session.revalidateDeletedSource(contactId);
+ assert.equal(JSON.stringify(session.getState()).includes(body),false);
+ release.resolve();await invalidating;assert.equal(JSON.stringify(session.getState()).includes(body),false);
+});
+
+test('SQLite讨论切换甲乙再回甲不读取旧候选选择端口，独立草稿仍按原联系人恢复',async t=>{
+ const contactIds=[randomUUID(),randomUUID()],sessionIds=contactIds.map(()=>randomUUID()),requests=[],emptySessions=new Set();
+ const backend={getConnectionGeneration:()=>7,onStateChanged:()=>()=>{},subscribeMessages:()=>{},requestJson:async request=>{
+  requests.push(request.path);const index=contactIds.findIndex(id=>request.path.includes(id));let data;
+  if(request.path.startsWith('/api/deletions?'))data={operations:[]};
+  else if(request.path.endsWith('/assistant-sessions')&&request.method==='POST'){sessionIds[index]=randomUUID();emptySessions.add(sessionIds[index]);data={session_id:sessionIds[index]};}
+  else if(request.path.endsWith('/assistant-sessions'))data={sessions:[{session_id:sessionIds[index],is_current:true}],current_session_id:sessionIds[index]};
+  else if(request.path.endsWith('/select')||request.path.endsWith('/resume'))data={session_id:sessionIds[index]};
+  else if(request.path.endsWith('/assistant-session/binding'))data={confirmed:true};
+  else if(request.path.includes('/messages?'))data={messages:[],next_cursor:null};
+  else if(request.path.endsWith('/assistant-sessions/'+sessionIds[index]))data={mode:'sqlite',session_id:sessionIds[index],runtime_recovery:'ready',entries:emptySessions.has(sessionIds[index])?[]:[
+   {entry_id:randomUUID(),position:'1',role:'user',text:index===0?'合成甲用户发言':'合成乙用户发言',request_id:randomUUID(),call_id:null,content_state:'available'}]};
+  else throw new Error('SQLite讨论不提供旧候选选择端口');
+  return {generation:7,data};
+ }};
+ const contacts=new ContactSession(async()=>({generation:7,contacts:contactIds.map((contactId,index)=>({contactId,displayName:'合成联系人'+index,messageCount:0,sourceCount:0}))}));
+ contacts.setConnection(7);await contacts.refreshContacts();const session=new ReplySession(contacts,backend);t.after(()=>contacts.setConnection(undefined));
+ const select=async index=>{contacts.selectContact({contactId:contactIds[index],scopeRevision:contacts.getState().scopeRevision});await session.readSavedSession({contactId:contactIds[index],scopeRevision:contacts.getState().scopeRevision});};
+ await select(0);contacts.setDraft({contactId:contactIds[0],scopeRevision:contacts.getState().scopeRevision,text:'甲的独立合成草稿'});
+ await select(1);assert.equal(session.getState().savedSession.discussionEntries[0].text,'合成乙用户发言');
+ await select(0);assert.equal(session.getState().savedSession.phase,'ready');assert.equal(session.getState().savedSession.discussionEntries[0].text,'合成甲用户发言');
+ assert.equal(contacts.getState().draft,'甲的独立合成草稿');
+ const scope={contactId:contactIds[0],scopeRevision:contacts.getState().scopeRevision};
+ await session.viewSavedSession({...scope,sessionId:sessionIds[0]});assert.equal(session.getState().savedSession.phase,'ready');
+ await session.resumeSavedSession({...scope,sessionId:sessionIds[0]});assert.equal(session.getState().sessionCatalog.selectionPending,false);
+ await session.newSavedSession(scope);assert.equal(session.getState().savedSession.phase,'ready');assert.deepEqual(session.getState().savedSession.discussionEntries,[]);
+ assert.equal(session.getState().sessionCatalog.selectionPending,false);assert.equal(requests.some(path=>path.endsWith('/selections')),false);
+});

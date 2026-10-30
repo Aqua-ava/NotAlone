@@ -1,5 +1,8 @@
 {
   "formatVersion": 1,
+  "status": "retired",
+  "retiredAtCommit": "a838de83",
+  "retirementNote": "历史 PG/Python 受管运行时来源锁，不是当前 SQLite 应用的活动依赖或打包输入。",
   "sources": [
     {
       "name": "postgresql",

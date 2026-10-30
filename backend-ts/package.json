@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/cordis-plugin-loader": "1.0.6",
     "@deepseek-ai/dsh": "0.2.1-rc.2",
     "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
     "@deepseek-ai/dsh-agent-loop": "0.2.1-rc.2",
@@ -23,12 +24,11 @@
     "@huggingface/tokenizers": "0.2.0",
     "node-addon-require-builtin-darwin-arm64": "0.1.9",
     "onnxruntime-node": "1.30.0",
-    "pg": "8.16.3",
+    "silk-wasm": "3.7.1",
     "yaml": "2.9.1"
   },
   "devDependencies": {
     "@types/node": "26.6.4",
-    "@types/pg": "8.15.5",
     "typescript": "7.0.2"
   },
   "scripts": {

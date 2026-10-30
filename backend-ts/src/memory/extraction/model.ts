@@ -6,7 +6,7 @@ import {createConnection} from 'node:net';
 import {createInterface} from 'node:readline';
 import {randomUUID} from 'node:crypto';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
-import {modelLedgerInputBudget, validateModelLedgerReceipt, type ModelLedgerReceipt, type ModelLedgerCost, type ModelLedgerUsage} from '../../platform/models/model-ledger.ts';
+import {modelLedgerInputBudget, validateModelLedgerReceipt, type ModelLedgerReceipt, type ModelLedgerCost, type ModelLedgerUsage} from '../../platform/models/model-ledger-contract.ts';
 import type {MessagesBudgetBinding, MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
 import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
 import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from './verification/deepseek-strict.ts';
@@ -71,7 +71,7 @@ export async function extractionUnconfirmedRequests(endpoint:ExtractionPermitEnd
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface ExtractionModelInput {
   /** 由原task/batch UUIDv5计算；每次物理调用另传新attempt_id。 */
-  request_id:string;attempt_id:string;owner_id:string;contact_id:string;ledger_entry_id?:string;
+  request_id:string;attempt_id:string;owner_id:string;contact_id:string|null;ledger_entry_id?:string;
   claim:ModelTaskClaim;binding:MessagesBudgetBinding;profile:MessagesBudgetProfile;
   messages:GenerateOptions['messages'];system?:GenerateOptions['system'];tools?:GenerateOptions['tools'];signal:AbortSignal;requireCurrent():Promise<void>;
   /** 原stream退出后、terminal receipt前校验；仅显式invalid_output记原010校验拒绝。 */
@@ -85,7 +85,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
     input={...input,claim:structuredClone(input.claim),binding:structuredClone(input.binding),profile:structuredClone(input.profile),messages:structuredClone(input.messages),tools:structuredClone(input.tools)};
     const keys=['task_id','step_id','step_name','worker_id','lease_generation'];
     if(!input.claim||Object.keys(input.claim).sort().join()!==keys.sort().join()||['task_id','step_id','worker_id'].some(key=>!uuid.test(String(input.claim[key as keyof ModelTaskClaim])))||!input.claim.step_name||!Number.isSafeInteger(input.claim.lease_generation)||input.claim.lease_generation<0)throw new ExtractionModelError('extraction_model_claim_invalid');
-    for(const id of [input.request_id,input.attempt_id,input.owner_id,input.contact_id,...(input.ledger_entry_id?[input.ledger_entry_id]:[])])if(!uuid.test(id))throw new ExtractionModelError('extraction_model_identity_invalid');
+    for(const id of [input.request_id,input.attempt_id,input.owner_id,...(input.contact_id===null?[]:[input.contact_id]),...(input.ledger_entry_id?[input.ledger_entry_id]:[])])if(!uuid.test(id))throw new ExtractionModelError('extraction_model_identity_invalid');
     input.signal.throwIfAborted();await input.requireCurrent();
     if((await extractionUnconfirmedRequests(options.permit,input)).includes(input.request_id))throw new ExtractionModelError('extraction_model_recovery_unknown');
     const selectedTools=input.tools??[],verificationTools=selectedTools.filter(tool=>tool.name===DEEPSEEK_STRICT_VERIFICATION_TOOL);
@@ -112,7 +112,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       connection.detachCancellation();
       const sessionId=SessionId(randomUUID());
       // 预约只保存110物理身份；确认HTTP后的终态才由既有账本事务建立010外键。
-      const base:ModelLedgerReceipt={attempt_id:input.attempt_id,permit_id:granted.permit_id,request_id:input.request_id,owner_id:input.owner_id,contact_id:input.contact_id,scope_kind:'contact',provider:input.binding.provider,model:input.binding.model,called_at:new Date(started).toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}};
+      const base:ModelLedgerReceipt={attempt_id:input.attempt_id,permit_id:granted.permit_id,request_id:input.request_id,owner_id:input.owner_id,contact_id:input.contact_id,scope_kind:input.contact_id===null?'owner_memory':'contact',provider:input.binding.provider,model:input.binding.model,called_at:new Date(started).toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}};
       const registration={sessionId,attempt_id:input.attempt_id,permit_id:granted.permit_id,binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,beforeDispatch:async(value:{attempt_id:string;permit_id:string;budget:Parameters<typeof modelLedgerInputBudget>[0];dispatch:'authorized_unconfirmed'})=>{
         receipt={...base,input_budget:modelLedgerInputBudget(value.budget)};
         uncertain=true;const state=await connection.exchange({op:'reserve',receipt,claim:input.claim});

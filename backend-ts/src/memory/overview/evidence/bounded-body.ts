@@ -1,4 +1,4 @@
-import { sha, type Evidence } from './sources.ts';
+import { sha, type Evidence } from '../../evidence/canonical-json.ts';
 export type Message = Evidence & { message_id: string; text: string; sender: string; occurred_at: string | null };
 export type Unit = { message: Message; start: number; end: number; text: string };
 export type Representation = { target: Message; main: Unit[]; contexts: { unit: Unit; start: number; end: number }[]; quote_start: number; quote_end: number; author_start: number; author: string; observation_end: number };

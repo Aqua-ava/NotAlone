@@ -19,6 +19,8 @@ export interface JsonRequest {
   acceptAssistantContinuationClarification?: true;
   acceptAssistantNoGenerationProof?: true;
   manualContactId?: string;
+  metadataConsent?: true;
+  idempotencyKey?: string;
 }
 
 // 只携带安全分类；业务模块自行映射已知错误，不把响应原文转给界面。
@@ -122,9 +124,14 @@ export class JsonClient {
     const { method, path, signal } = options;
     const timeout = options.timeoutMs ?? 8000;
     const limit = options.maxResponseBytes ?? 1_048_576;
+    // 大响应仅供固定单消息预览，不扩大其他业务或任意路径的运输预算。
+    const previewRoute = /^\/api\/contacts\/([a-f0-9-]+)\/messages\/([a-f0-9-]+)\/media\/files\/([a-f0-9-]+)\/preview$/i.exec(path);
+    const preview = method === 'POST' && previewRoute?.slice(1).every(isUuid)
+      && options.body !== null && typeof options.body === 'object' && !Array.isArray(options.body) && Object.keys(options.body).length === 0;
     if (!/^\/api\/[A-Za-z0-9_/?=&.%:-]+$/.test(path) || path.includes('..')
       || !Number.isFinite(timeout) || timeout < 1 || timeout > 120_000
-      || !Number.isSafeInteger(limit) || limit < 1 || limit > 8_388_608) {
+      || options.idempotencyKey !== undefined && !isUuid(options.idempotencyKey)
+      || !Number.isSafeInteger(limit) || limit < 1 || limit > (preview ? 45 * 1024 * 1024 : 8_388_608)) {
       return Promise.reject(new BackendRequestFailure('response'));
     }
     let body: Buffer;
@@ -138,6 +145,8 @@ export class JsonClient {
       const req = request({
         hostname: '127.0.0.1', port: this.connection.port, method, path,
         headers: { Authorization: `Bearer ${this.connection.token}`, Accept: 'application/json',
+          ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
+          ...(options.metadataConsent ? { 'X-NotAlone-Metadata-Consent': 'selected-list' } : {}),
           ...(options.manualContactId ? { 'X-NotAlone-Manual-Contact': options.manualContactId } : {}),
           ...(options.asyncPreparation ? { Prefer: 'respond-async' } : {}),
           'Content-Type': 'application/json', 'Content-Length': String(body.length) },

@@ -1,0 +1,557 @@
+{
+ "source": {
+  "artifact": "consolidated-schema.json",
+  "sha256": "39d0e992668c82e62aec7777d5477e904fbafbb51f64fb9b745320be28395814"
+ },
+ "counts": {
+  "tables": 77,
+  "fields": 778,
+  "foreignKeys": 215
+ },
+ "dispositionCounts": {
+  "implemented": 67,
+  "deferredEntryClosed": 9,
+  "replaced": 1
+ },
+ "tables": [
+  {
+   "name": "owner",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 10,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "contact",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 12,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "channel_account",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 9,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "channel_conversation",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 7,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "conversation_binding",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 6,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "binding_verification",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 8,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "read_grant",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 9,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "read_goal",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 15,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "history_cutoff",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 8,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "read_exclusion",
+   "group": "身份与来源",
+   "disposition": "replaced",
+   "fieldCount": 8,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "sync_capture",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 12,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "capture_record",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 12,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "message",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 16,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "manual_confirmation",
+   "group": "身份与来源",
+   "disposition": "implemented",
+   "fieldCount": 8,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "processing_run",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 9,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "run_contact",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 8,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "processing_item",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 8,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "run_input",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 15,
+   "foreignKeyCount": 8
+  },
+  {
+   "name": "processing_task",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 12,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "task_contribution",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 4,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "processing_step",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 9,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "step_input",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 13,
+   "foreignKeyCount": 6
+  },
+  {
+   "name": "step_attempt",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 12,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "model_operation",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 12,
+   "foreignKeyCount": 4
+  },
+  {
+   "name": "operation_item",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 5,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "operation_scope",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 6,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "model_call",
+   "group": "处理与调用",
+   "disposition": "implemented",
+   "fieldCount": 20,
+   "foreignKeyCount": 5
+  },
+  {
+   "name": "execution_event",
+   "group": "实际追踪",
+   "disposition": "implemented",
+   "fieldCount": 13,
+   "foreignKeyCount": 5
+  },
+  {
+   "name": "execution_input",
+   "group": "实际追踪",
+   "disposition": "implemented",
+   "fieldCount": 22,
+   "foreignKeyCount": 11
+  },
+  {
+   "name": "event_source",
+   "group": "实际追踪",
+   "disposition": "implemented",
+   "fieldCount": 4,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "memory_candidate",
+   "group": "记忆与裁决",
+   "disposition": "implemented",
+   "fieldCount": 9,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "memory",
+   "group": "记忆与裁决",
+   "disposition": "implemented",
+   "fieldCount": 9,
+   "foreignKeyCount": 4
+  },
+  {
+   "name": "memory_version",
+   "group": "记忆与裁决",
+   "disposition": "implemented",
+   "fieldCount": 12,
+   "foreignKeyCount": 4
+  },
+  {
+   "name": "memory_decision",
+   "group": "记忆与裁决",
+   "disposition": "implemented",
+   "fieldCount": 13,
+   "foreignKeyCount": 5
+  },
+  {
+   "name": "decision_candidate",
+   "group": "记忆与裁决",
+   "disposition": "implemented",
+   "fieldCount": 5,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "memory_required_message",
+   "group": "记忆与裁决",
+   "disposition": "implemented",
+   "fieldCount": 7,
+   "foreignKeyCount": 4
+  },
+  {
+   "name": "memory_citation",
+   "group": "记忆与裁决",
+   "disposition": "implemented",
+   "fieldCount": 11,
+   "foreignKeyCount": 4
+  },
+  {
+   "name": "assistant_discussion",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 6,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "discussion_entry",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 10,
+   "foreignKeyCount": 4
+  },
+  {
+   "name": "reply_request",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 13,
+   "foreignKeyCount": 7
+  },
+  {
+   "name": "reply_attempt",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 10,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "reply_context",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 15,
+   "foreignKeyCount": 6
+  },
+  {
+   "name": "reply_context_item",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 23,
+   "foreignKeyCount": 11
+  },
+  {
+   "name": "reply_candidate",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 4,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "reply_candidate_version",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 8,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "reply_version_part",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 5,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "reply_basis",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 9,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "reply_selection",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 7,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "runtime_copy",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 12,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "runtime_context",
+   "group": "助手与副本",
+   "disposition": "implemented",
+   "fieldCount": 7,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "expression_preference",
+   "group": "偏好与文档",
+   "disposition": "deferred_entry_closed",
+   "fieldCount": 5,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "expression_preference_version",
+   "group": "偏好与文档",
+   "disposition": "deferred_entry_closed",
+   "fieldCount": 12,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "preference_source",
+   "group": "偏好与文档",
+   "disposition": "deferred_entry_closed",
+   "fieldCount": 11,
+   "foreignKeyCount": 5
+  },
+  {
+   "name": "memory_document",
+   "group": "偏好与文档",
+   "disposition": "implemented",
+   "fieldCount": 6,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "memory_document_version",
+   "group": "偏好与文档",
+   "disposition": "implemented",
+   "fieldCount": 8,
+   "foreignKeyCount": 3
+  },
+  {
+   "name": "document_block",
+   "group": "偏好与文档",
+   "disposition": "implemented",
+   "fieldCount": 6,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "document_statement",
+   "group": "偏好与文档",
+   "disposition": "implemented",
+   "fieldCount": 12,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "document_basis",
+   "group": "偏好与文档",
+   "disposition": "implemented",
+   "fieldCount": 10,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "document_publication",
+   "group": "偏好与文档",
+   "disposition": "implemented",
+   "fieldCount": 10,
+   "foreignKeyCount": 4
+  },
+  {
+   "name": "publication_member",
+   "group": "偏好与文档",
+   "disposition": "implemented",
+   "fieldCount": 4,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "skill_package",
+   "group": "Skill最小关联",
+   "disposition": "implemented",
+   "fieldCount": 9,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "skill_package_revision",
+   "group": "Skill最小关联",
+   "disposition": "implemented",
+   "fieldCount": 9,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "deletion_operation",
+   "group": "删除与元数据",
+   "disposition": "implemented",
+   "fieldCount": 14,
+   "foreignKeyCount": 0
+  },
+  {
+   "name": "deletion_target",
+   "group": "删除与元数据",
+   "disposition": "implemented",
+   "fieldCount": 11,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "deletion_check",
+   "group": "删除与元数据",
+   "disposition": "implemented",
+   "fieldCount": 8,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "request_tombstone",
+   "group": "删除与元数据",
+   "disposition": "implemented",
+   "fieldCount": 7,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "database_instance",
+   "group": "删除与元数据",
+   "disposition": "implemented",
+   "fieldCount": 5,
+   "foreignKeyCount": 0
+  },
+  {
+   "name": "schema_migration",
+   "group": "删除与元数据",
+   "disposition": "implemented",
+   "fieldCount": 3,
+   "foreignKeyCount": 0
+  },
+  {
+   "name": "organization_feedback",
+   "group": "纠错与诊断",
+   "disposition": "deferred_entry_closed",
+   "fieldCount": 16,
+   "foreignKeyCount": 4
+  },
+  {
+   "name": "feedback_input",
+   "group": "纠错与诊断",
+   "disposition": "deferred_entry_closed",
+   "fieldCount": 9,
+   "foreignKeyCount": 4
+  },
+  {
+   "name": "quality_case",
+   "group": "纠错与诊断",
+   "disposition": "deferred_entry_closed",
+   "fieldCount": 15,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "quality_case_input",
+   "group": "纠错与诊断",
+   "disposition": "deferred_entry_closed",
+   "fieldCount": 11,
+   "foreignKeyCount": 5
+  },
+  {
+   "name": "quality_run",
+   "group": "纠错与诊断",
+   "disposition": "deferred_entry_closed",
+   "fieldCount": 8,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "quality_attempt",
+   "group": "纠错与诊断",
+   "disposition": "deferred_entry_closed",
+   "fieldCount": 9,
+   "foreignKeyCount": 2
+  },
+  {
+   "name": "message_media",
+   "group": "媒体提取",
+   "disposition": "implemented",
+   "fieldCount": 7,
+   "foreignKeyCount": 1
+  },
+  {
+   "name": "media_extraction_attempt",
+   "group": "媒体提取",
+   "disposition": "implemented",
+   "fieldCount": 28,
+   "foreignKeyCount": 5
+  },
+  {
+   "name": "media_file",
+   "group": "媒体提取",
+   "disposition": "implemented",
+   "fieldCount": 18,
+   "foreignKeyCount": 3
+  }
+ ]
+}

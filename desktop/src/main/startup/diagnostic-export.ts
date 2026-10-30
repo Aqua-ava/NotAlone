@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { DiagnosticPreview, DiagnosticExportResult, StartupState } from '../../shared/startup-bridge';
 import type { BackendState } from '../../shared/backend-bridge';
 
-const startupCodes = new Set(['ready', 'launch_unconfigured', 'configuration_invalid', 'python_unavailable',
+const startupCodes = new Set(['sqlite_business_unavailable', 'sqlite_storage_failed', 'ready', 'launch_unconfigured', 'configuration_invalid', 'python_unavailable',
   'python_version_unsupported', 'backend_package_missing', 'project_unavailable', 'env_path_unavailable',
   'info_path_unavailable', 'database_unconfigured', 'database_unavailable', 'baseline_missing', 'baseline_invalid',
   'migration_history_mismatch', 'migration_pending', 'schema_incomplete', 'migration_files_invalid', 'diagnostic_timeout',

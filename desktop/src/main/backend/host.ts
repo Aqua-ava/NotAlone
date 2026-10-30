@@ -10,6 +10,8 @@ import { readAssistantGenerationReceipt } from '../reply/assistant-generation-jo
 import { isRecord } from '../reply/result-read';
 import { isUuid } from '../uuid';
 
+export interface MediaPreviewConnection {status(): Promise<'active' | 'revoking'>; release(): Promise<void>}
+
 export class BackendHost {
   private state: BackendState = { phase: 'disconnected', reused: false, revision: 0, canRetryConnection: true, canRetryShutdown: false,
     canSaveStartupPaths: true, canPrepareConfiguration: false };
@@ -27,6 +29,8 @@ export class BackendHost {
   private pollTimer: NodeJS.Timeout | undefined;
   private readonly listeners = new Set<(state: BackendState) => void>();
   private readonly manualContacts = new Map<string, number>();
+  private readonly unreleasedMediaPreviews = new Set<MediaPreviewConnection>();
+  private mediaReleaseDrain: Promise<void> | undefined;
   private connectionChangePreparation: (() => Promise<void>) | undefined;
 
   setConnectionChangePreparation(prepare: () => Promise<void>): void { this.connectionChangePreparation = prepare; }
@@ -127,6 +131,48 @@ export class BackendHost {
       }
       return { generation, data };
     } });
+  }
+  // 预览只保留原认证目标的同一session状态/释放能力，连接换代后仍可确认撤下。
+  captureMediaPreviewConnection(input: {sessionId: string; connectionGeneration: number}):
+    MediaPreviewConnection | undefined {
+    const target = this.target;
+    if (!target || input.connectionGeneration !== this.getConnectionGeneration() || !isUuid(input.sessionId)) return undefined;
+    return this.mediaPreviewConnection(target, input.sessionId);
+  }
+  private mediaPreviewConnection(target: RuntimeClient, sessionId: string): MediaPreviewConnection {
+    const path = `/api/media/previews/${sessionId.toLowerCase()}`;
+    return Object.freeze({
+      status: async () => {
+        const value = await target.requestJson({method: 'GET', path, maxResponseBytes: 4096});
+        if (!isRecord(value) || (value.state !== 'active' && value.state !== 'revoking')) throw new BackendRequestFailure('response');
+        return value.state;
+      },
+      release: async () => { await target.requestJson({method: 'DELETE', path, maxResponseBytes: 4096}); },
+    });
+  }
+  async openMediaPreview(input: {contactId: string; messageId: string; fileId: string; connectionGeneration: number}):
+    Promise<{generation: number; data: unknown; connection: MediaPreviewConnection}> {
+    const target = this.target, generation = this.getConnectionGeneration();
+    if (!target || generation === undefined || input.connectionGeneration !== generation
+      || ![input.contactId, input.messageId, input.fileId].every(isUuid)) throw new BackendRequestFailure('cancelled');
+    const path = `/api/contacts/${input.contactId}/messages/${input.messageId}/media/files/${input.fileId}/preview`;
+    const data = await target.requestJson({method: 'POST', path, body: {}, maxResponseBytes: 45 * 1024 * 1024, timeoutMs: 15_000});
+    if (!isRecord(data) || !isUuid(data.sessionId)) throw new BackendRequestFailure('response');
+    const connection = this.mediaPreviewConnection(target, data.sessionId);
+    if (target !== this.target || generation !== this.getConnectionGeneration()) {
+      // 字节尚未交给页面，主进程可直接确认释放；失败保留同一目标供后续显式排空重试。
+      this.unreleasedMediaPreviews.add(connection);
+      await this.releaseUnhandedMediaPreviews();
+      throw new BackendRequestFailure('cancelled');
+    }
+    return {generation, data, connection};
+  }
+  releaseUnhandedMediaPreviews(): Promise<void> {
+    return this.mediaReleaseDrain ??= (async () => {
+      for (const connection of this.unreleasedMediaPreviews) {
+        await connection.release(); this.unreleasedMediaPreviews.delete(connection);
+      }
+    })().finally(() => { this.mediaReleaseDrain = undefined; });
   }
   onStateChanged(listener: (state: BackendState) => void): () => void {
     this.listeners.add(listener);
@@ -276,8 +322,7 @@ export class BackendHost {
     if (this.ownedChild) throw new BackendFailure('backend_connection_failed');
     this.ownedChild = await OwnedBackendProcess.launch(config, canStart);
     // spawn 已完成的子进程仍须取得认证目标并收尾；取消检查只阻止新的 spawn。
-    // 独立包冷导入的实测接近旧开发期预算，受管后台保留一次有界余量。
-    const deadline = Date.now() + (config.source === 'managed' ? 30_000 : 12_000);
+    const deadline = Date.now() + 12_000;
     while (Date.now() < deadline && this.ownedChild.isRunning()) {
       const started = await readConnection(config.infoPath);
       if (started) {

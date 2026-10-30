@@ -1,5 +1,5 @@
 /** nullable-proof-v3 的受限提案解析；语义完全由现有六类有限图复验。 */
-import {canonicalJSON,digest,type Evidence} from '../../overview/evidence/sources.ts';
+import {canonicalJSON,digest,type Evidence} from '../../evidence/canonical-json.ts';
 import {boundedContract} from '../../overview/evidence/bounded-contract.ts';
 import {boundedBasisResult} from '../../overview/evidence/bounded-graph.ts';
 import {length,type Message} from '../../overview/evidence/bounded-body.ts';

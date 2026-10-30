@@ -1,0 +1,138 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {mkdtemp,realpath,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {SqliteStorage} from '../src/storage/sqlite/client.ts';
+import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
+import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
+import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
+const owner='00000000-0000-4000-8000-000000000001';
+async function fixture(t){
+ const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-candidates-')));
+ const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'});
+ t.after(async()=>{await storage.close();await rm(root,{recursive:true,force:true});});
+ const contacts=new SqliteContactService(storage,owner,{account:async()=>({externalKey:'synthetic',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-v1'}),sessions:async()=>['a','b'].map(externalKey=>({externalKey,displayName:'合成联系人',kind:'private',identityAssurance:'verified'}))});
+ await contacts.initialize();await contacts.confirmAccount((await contacts.detectAccount()).candidate_token);
+ const snap=await contacts.candidates(true);await contacts.confirm(snap.snapshot_token,['a','b'].map(locator=>({locator,observed_display_name:'合成联系人',expected_selection_generation:'0'})));
+ const ids=(await contacts.directory()).contacts.map(c=>c.contact_id),discussions=new SqliteDiscussionService(storage,owner);
+ return {root,storage,contacts,ids,discussions,candidates:new SqliteReplyCandidateService(storage,owner)};
+}
+test('首次历史未完成时后端阻止候选受理，手动联系人确认不授予读取',async t=>{
+ const f=await fixture(t),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),requestKey=randomUUID();
+ const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
+ await assert.rejects(f.candidates.begin({contactId,discussionId:discussion.id,requestKey,text:'帮我自然地回应',identity:{kind:'manual',confirmationId},acceptIncomplete:true}),{code:'reply_history_syncing'});
+ assert.equal((await f.discussions.view(contactId,discussion.id)).entries.length,0);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('正常模型输入产生v1多条消息，编辑追加v2且选择固定版本，历史回看不重新调用',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');
+ const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const content=JSON.stringify({candidates:[{parts:['我理解你的意思。','我们晚点再聊。'],basis:[1]}]});
+ const f=await realFixture(t,{content}),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
+ const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const input={contactId,discussionId:discussion.id,requestKey:randomUUID(),text:'帮我自然地回应',confirmedContact:true};
+ await turns.generate(input);
+ const view=(await service.view(contactId,discussion.id))[0],first=view.candidates[0];
+ assert.deepEqual(first.parts,['我理解你的意思。','我们晚点再聊。']);assert.equal(first.versionNo,1);assert.equal(first.origin,'model');assert.equal(first.basis[0].verification,'actual_input');
+ const scope={contactId,discussionId:discussion.id,candidateId:first.candidateId};
+ const edited=await service.edit({...scope,versionNo:1,parts:['我明白啦。','我们明天再聊。']});
+ assert.equal(edited.versionNo,2);assert.equal(edited.parentVersionNo,1);assert.equal(edited.basis[0].verification,'inherited_unverified');
+ const one=await service.select({...scope,versionNo:1}),two=await service.select({...scope,versionNo:2});assert.equal(one.selectionNo,1);assert.equal(two.selectionNo,2);
+ assert.deepEqual((await service.version({...scope,versionNo:1})).parts,first.parts);
+ await assert.rejects(service.edit({...scope,versionNo:1,parts:['过期改稿']}),{code:'reply_version_stale'});
+ await assert.rejects(service.version({...scope,contactId:f.ids[1],versionNo:1}),{code:'discussion_unavailable'});
+ const replay=await turns.generate(input);assert.equal(replay.replayed,true);assert.equal(f.requests.length,1);
+ assert.equal((await f.discussions.view(contactId,discussion.id)).entries.filter(e=>e.role==='assistant').length,0);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('显式选稿才携入后续候选；删除完整输入窗口清候选、选择、追踪与非当前副本并保留另一联系人',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
+ const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['合成候选正文'],basis:[2]}]})}),contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
+ const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'本轮表达要求',confirmedContact:true});
+ const first=(await service.view(contactId,d.id))[0].candidates[0],selection=await service.select({contactId,discussionId:d.id,candidateId:first.candidateId,versionNo:1});
+ await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'继续改得简洁',confirmedContact:true,carriedSelectionId:selection.id});
+ assert.match(JSON.stringify(f.requests[1]),/用户明确选择继续的候选/);assert.equal(f.requests.length,2);
+ const deletion=new DeletionService(f.storage,f.holders,new ManagedFiles(f.root)),op=await deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'source',contactId,sourceId:f.messages[0][0].sourceRecordIds[0]}});
+ assert.equal((await service.view(contactId,d.id)).flatMap(r=>r.candidates).length,0);
+ const done=await deletion.advance(op);assert.equal(done.state,'completed',JSON.stringify(done.checks));
+ assert.deepEqual(await service.view(contactId,d.id),[]);assert.equal((await f.contacts.directory()).contacts.length,2);
+ assert.equal((await f.history.read(f.ids[1])).messages.length,1);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('认证HTTP提供生成、编辑、选稿与精确依据回看，拒绝owner和任意额外能力',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {SqliteReplyCandidateHttp}=await import('../src/reply/sqlite/candidates/http.ts');const {createServer}=await import('node:http');
+ const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['合成HTTP候选'],basis:[1]}]})}),contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const http=new SqliteReplyCandidateHttp({storage:f.storage,service,turns,authorize:req=>req.headers.authorization==='Bearer synthetic'}),server=createServer(async(req,res)=>{if(!await http.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const url=`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${d.id}/reply-candidates`;
+ assert.equal((await fetch(url)).status,401);
+ const request=async(path='',method='GET',body)=>{const res=await fetch(url+path,{method,headers:{authorization:'Bearer synthetic','content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:res.status,body:await res.json()};};
+ assert.equal((await request('','POST',{owner_id:f.owner})).status,400);
+ const made=await request('','POST',{request_key:randomUUID(),text:'本次写得自然',confirmed_contact:true});assert.equal(made.status,200);
+ const view=await request();assert.equal(view.body.coverage.phase,'complete');const v=view.body.requests[0].candidates[0];
+ const edited=await request(`/${v.candidateId}/edit`,'POST',{version_no:1,parts:['手工HTTP版本']});assert.equal(edited.body.versionNo,2);
+ assert.equal((await request(`/${v.candidateId}/select`,'POST',{version_no:2})).body.versionNo,2);
+ assert.equal((await request(`/${v.candidateId}/versions/1`)).body.parts[0],'合成HTTP候选');
+ assert.equal(f.requests.length,1);assert.equal(JSON.stringify(view.body).includes('managed_locator'),false);
+});
+
+test('覆盖不完整必须本次确认，警告同时保留在模型实际输入与候选依据',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const f=await realFixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['仅基于已有资料的候选'],basis:[2]}]})});
+ f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[],completedPartitions:[],exhausted:true});await f.contacts.setReading(true);await f.history.synchronize(f.ids[0]);
+ const d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'只根据现有部分帮我表达',confirmedContact:true};
+ await assert.rejects(turns.generate(input),{code:'reply_history_incomplete'});assert.equal(f.requests.length,0);
+ await turns.generate({...input,acceptIncomplete:true});const view=(await service.view(f.ids[0],d.id))[0];assert.match(view.coverageWarning,/历史覆盖不完整/);assert.match(view.candidates[0].basis[0].text,/历史覆盖不完整/);assert.match(JSON.stringify(f.requests[0]),/历史覆盖不完整/);
+});
+
+
+
+test('供应商断线保存unknown，原请求及新请求键均不能绕过后重复物理调用',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const f=await realFixture(t,{onRequest:async(_req,res)=>{res.destroy();return true;}}),d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'断线合成请求',confirmedContact:true};await assert.rejects(turns.generate(input),{code:'discussion_generation_failed'});
+ assert.equal((await service.view(f.ids[0],d.id))[0].generationState,'unknown');await assert.rejects(turns.generate(input),{code:'discussion_request_stale'});await assert.rejects(turns.generate({...input,requestKey:randomUUID()}),{code:'discussion_call_unknown'});assert.equal(f.requests.length,1);
+});
+
+test('真实Skill加载独立于选择记录，资格失效后候选正文、依据和实际Skill快照一起撤下',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {mkdir,writeFile}=await import('node:fs/promises');
+ const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['合成Skill候选'],basis:[1]}]})});await mkdir(join(f.skillRoot,'gentle'));await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成温和表达\n---\n先回应感受，再说明情况。\n');let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');
+ const d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ await turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'用本次方法回应',confirmedContact:true,selectedPackageId:skill.id});let view=(await service.view(f.ids[0],d.id))[0];assert.equal(view.loadedSkills.length,1);assert.match(view.loadedSkills[0].text,/先回应感受/);assert.match(JSON.stringify(f.requests[0]),/先回应感受/);
+ const trace=await f.discussions.trace(f.ids[0],d.id,view.requestId);assert.equal(trace.events.filter(e=>e.kind==='skill_selection').length,1);assert.equal(trace.events.filter(e=>e.kind==='skill_input').length,1);
+ const id=view.candidates[0].candidateId;await f.library.setEnabled(skill.id,skill.headRevision,'disabled');view=(await service.view(f.ids[0],d.id))[0];assert.deepEqual(view.candidates,[]);assert.deepEqual(view.loadedSkills,[]);await assert.rejects(service.edit({contactId:f.ids[0],discussionId:d.id,candidateId:id,versionNo:1,parts:['不能洗回']}));
+});
+
+test('来源在模型在途时删除立即撤销资格，迟到响应不产生候选并清理受管文件',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
+ const entered=Promise.withResolvers(),release=Promise.withResolvers(),f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['迟到的合成候选'],basis:[1]}]}),onRequest:async()=>{entered.resolve();await release.promise;}}),d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const pending=turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'在途来源检查',confirmedContact:true}),rejected=assert.rejects(pending);await entered.promise;
+ const deletion=new DeletionService(f.storage,f.holders,new ManagedFiles(f.root)),op=await deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'source',contactId:f.ids[0],sourceId:f.messages[0][0].sourceRecordIds[0]}});release.resolve();await rejected;
+ assert.equal((await service.view(f.ids[0],d.id)).flatMap(r=>r.candidates).length,0);const done=await deletion.advance(op);assert.equal(done.state,'completed',JSON.stringify(done.checks));assert.deepEqual(await service.view(f.ids[0],d.id),[]);assert.equal(f.requests.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+const knowledgeRegistry=new URL('./fixtures/sqlite-reply-candidates/knowledge-registry.mjs',import.meta.url).href;
+
+
+test('发布集合错误时不出站，正确精确文档版可消费且资格变更后不能编辑或选用旧稿',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const f=await realFixture(t,{registryModule:knowledgeRegistry,content:JSON.stringify({candidates:[{parts:['合成文档候选'],basis:[3]}]})}),contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ await f.storage.execute('synthetic.publishReplyKnowledge',{ownerId:f.owner,contactId,sourceContactId:contactId,mode:'document_wrong_publication'});await assert.rejects(turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'不准使用错误发布集合',confirmedContact:true}),{code:'synthetic_publication_unavailable'});assert.equal(f.requests.length,0);
+ await f.storage.execute('synthetic.publishReplyKnowledge',{ownerId:f.owner,contactId,sourceContactId:contactId,mode:'document'});await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'使用真实冻结的发布资料',confirmedContact:true});let view=await service.view(contactId,d.id),candidate=view.flatMap(r=>r.candidates)[0];assert.ok(candidate);assert.match(JSON.stringify(f.requests[0]),/合成已发布场景/);
+ await f.storage.execute('synthetic.invalidateReplyKnowledge',{ownerId:f.owner});assert.equal((await service.view(contactId,d.id)).flatMap(r=>r.candidates).length,0);await assert.rejects(service.edit({contactId,discussionId:d.id,candidateId:candidate.candidateId,versionNo:1,parts:['旧版不能恢复']}),{code:'reply_input_stale'});assert.equal(f.requests.length,1);
+});
+
+test('缺失任意短消息正文的版本不能选用、编辑或携入后续任务',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const f=await realFixture(t,{registryModule:knowledgeRegistry,content:JSON.stringify({candidates:[{parts:['第一条完整正文','第二条待擦除正文'],basis:[1]}]})}),contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'完整正文资格测试',confirmedContact:true});const candidate=(await service.view(contactId,d.id))[0].candidates[0],scope={contactId,discussionId:d.id,candidateId:candidate.candidateId,versionNo:1};const selected=await service.select(scope);
+ await f.storage.execute('synthetic.eraseReplyPart',{ownerId:f.owner,candidateId:candidate.candidateId,versionNo:1,partNo:2});await assert.rejects(service.select(scope),{code:'reply_content_unavailable'});await assert.rejects(service.edit({...scope,parts:['不得恢复缺失原文']}),{code:'reply_content_unavailable'});
+ await assert.rejects(turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'旧稿继续',confirmedContact:true,carriedSelectionId:selected.id}),{code:'reply_content_unavailable'});assert.equal(f.requests.length,1);
+});

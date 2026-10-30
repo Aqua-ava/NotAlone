@@ -34,8 +34,7 @@ test('启动公开接口只保留原库连接与首次初始化，不提供备�
     assert.equal(name in bridge, false, `不应暴露 ${name}`);
   }
   await bridge.retry();
-  await bridge.beginLocalSetup();
-  assert.deepEqual(calls, [['startup:retry'], ['startup:begin-local-setup']]);
+  assert.deepEqual(calls, [['startup:retry']]);
 });
 
 test('历史副本清理恢复说明直接显示，无需预先生成说明文件', () => {
@@ -67,7 +66,7 @@ test('高级故障排查默认折叠，明确展开后才展示诊断与路径�
   assert.doesNotMatch(closed, /本机启动路径|机器环境已就绪|停止服务以修改路径/);
   const opened = renderToStaticMarkup(React.createElement(StartupSettings, { ...props, open: true }));
   assert.match(opened, /机器环境已就绪/);
-  assert.match(opened, /停止服务以修改路径/);
+  assert.doesNotMatch(opened, /停止服务以修改路径/);
   assert.match(opened, /disabled=""[^>]*>保存启动路径/);
   assert.equal(renderToStaticMarkup(React.createElement(BackendConnectionNote, { state: props.backend, startup: props.state })), '');
 });
@@ -105,25 +104,26 @@ test('配置读取在诊断前失败时仍提供恢复入口，不会一直显�
   assert.doesNotMatch(html, /正在连接/);
 });
 
-test('已有本机库结构尚待补齐时提供原库重试，不要求备份或另迁数据库', () => {
+test('旧数据库维护态提供重试与诊断入口，不提供本机设置或备份操作', () => {
   const html = renderToStaticMarkup(React.createElement(StartupReadiness, {
-    state: { mode: 'managed', phase: 'blocked', code: 'migration_pending', revision: 1, helperWarnings: [] },
+    state: { mode: 'external', phase: 'blocked', code: 'cutover_authorization_required', revision: 1, helperWarnings: [] },
   }));
-  assert.doesNotMatch(html, /备份|搬库/);
-  assert.match(html, /重试本机设置/);
+  assert.doesNotMatch(html, /备份|搬库|本机设置/);
+  assert.match(html, /重试连接/);
+  assert.match(html, /旧数据库/);
 });
 
-test('外置库的结构补齐进度直接显示，首次安装保留本机设置入口', () => {
+test('默认 SQLite 启动进度直接显示，不再出现首次本机设置流程', () => {
   const existing = renderToStaticMarkup(React.createElement(StartupReadiness, {
     state: { mode: 'external', phase: 'preparing', step: 'updating-schema', revision: 1, helperWarnings: [] },
   }));
   assert.match(existing, /正在准备本机资料/);
   assert.doesNotMatch(existing, /备份|搬库|首次设置/);
-  const firstRun = renderToStaticMarkup(React.createElement(StartupReadiness, {
-    state: { mode: 'managed', phase: 'first-run', code: 'local_setup_required', revision: 1, helperWarnings: [] },
+  const maintenance = renderToStaticMarkup(React.createElement(StartupReadiness, {
+    state: { mode: 'external', phase: 'blocked', code: 'database_cutover_required', revision: 1, helperWarnings: [] },
   }));
-  assert.match(firstRun, /开始本机设置/);
-  assert.doesNotMatch(firstRun, /备份|搬库|兼容更新/);
+  assert.doesNotMatch(maintenance, /开始本机设置|取消本次设置/);
+  assert.match(maintenance, /维护态|旧数据库/);
 });
 
 test('历史副本恢复入口只打开既有固定位置，不创建备份、目录或覆盖启动配置', async () => {

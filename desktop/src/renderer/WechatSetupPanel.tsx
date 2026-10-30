@@ -3,7 +3,7 @@ import type { WechatSetupBridge, WechatSetupState } from '../shared/wechat-setup
 import { FirstFrameError } from './FirstFrameError';
 import './bindings.css';
 const initial: WechatSetupState = { phase: 'offline', accountId: null, failureCode: null, revision: -1 };
-export function WechatSetupPanel({ bridge, children }: { bridge: WechatSetupBridge; children?: ReactNode }) {
+export function WechatSetupPanel({ bridge, children, selectionOnly = false }: { bridge: WechatSetupBridge; children?: ReactNode; selectionOnly?: boolean }) {
   const [state, setState] = useState(initial);
   const [mode, setMode] = useState<'selected' | 'all_private'>('selected');
   const [historyAuthorized, setHistoryAuthorized] = useState(false);
@@ -26,7 +26,7 @@ export function WechatSetupPanel({ bridge, children }: { bridge: WechatSetupBrid
     // 换账号或重新核验后重新作出选择，旧页面选择不能扩大新候选的授权。
     setMode('selected');
     setHistoryAuthorized(false);
-  }, [state.accountId, state.phase]);
+  }, [state.accountId, state.phase, selectionOnly]);
   async function operate(action: () => Promise<void>) {
     setError('');
     try { await action(); }
@@ -49,20 +49,23 @@ export function WechatSetupPanel({ bridge, children }: { bridge: WechatSetupBrid
       <button className="button" onClick={() => void operate(() => bridge.detect())}>检测微信账号</button>
     </>}
     {state.phase === 'ready' && <>
-      <p>请确认这是你要连接的微信账号；此检测不代表当前微信前台的登录账号。确认连接表示允许读取该账号的会话列表以核验可读性并供你选择联系人；列表附带的消息摘要会立即丢弃，不保存或用于回复。</p>
+      <p>{selectionOnly ? '请确认这是你的微信账号；此检测不代表当前微信前台的登录账号。账号身份和来源资格仍需核验，连接本身不读取聊天或授予联系人授权。' : '请确认这是你要连接的微信账号；此检测不代表当前微信前台的登录账号。确认连接表示允许读取该账号的会话列表以核验可读性并供你选择联系人；列表附带的消息摘要会立即丢弃，不保存或用于回复。'}</p>
       <fieldset><legend>同步范围</legend>
-        <label><input type="radio" name="wechat-setup-scope" checked={mode === 'selected'} onChange={() => { setMode('selected'); setHistoryAuthorized(false); }} />仅我选择的私聊</label>
-        <label><input type="radio" name="wechat-setup-scope" checked={mode === 'all_private'} onChange={() => { setMode('all_private'); setHistoryAuthorized(false); }} />当前账号的全部私聊</label>
+        <label><input type="radio" name="wechat-setup-scope" checked={selectionOnly || mode === 'selected'} onChange={() => { setMode('selected'); setHistoryAuthorized(false); }} />仅我选择的私聊</label>
+        {!selectionOnly && <label><input type="radio" name="wechat-setup-scope" checked={mode === 'all_private'} onChange={() => { setMode('all_private'); setHistoryAuthorized(false); }} />当前账号的全部私聊</label>}
       </fieldset>
-      <p>{mode === 'selected' ? '连接后到「联系人」选择私聊并确认绑定；列表默认不选，不会自动授权其他会话。' : '确认后，会为此账号现有及以后新增的微信私聊自动建立对应联系人，并开启后台文字同步，无需逐个添加。'}</p>
+      <p>{selectionOnly || mode === 'selected' ? '连接后到「联系人」选择私聊并确认绑定；列表默认不选，不会自动授权其他会话。' : '确认后，会为此账号现有及以后新增的微信私聊自动建立对应联系人，并开启后台文字同步，无需逐个添加。'}</p>
       <p>昵称和备注只用于展示；按微信稳定身份关联，不按同名合并。群聊不在范围内，已单独停止或删除的会话不会自动恢复。</p>
-      <label><input type="checkbox" disabled={mode === 'selected'} checked={historyAuthorized} onChange={event => setHistoryAuthorized(event.target.checked)} />同时读取所选范围在本机可用的历史消息</label>
-      {mode === 'selected' && <p>选择会话时再确认历史范围：连接账号本身不授权未知会话的历史，请在添加联系人时选择会话并单独确认。</p>}
-      <p>未开启历史读取时，仅从本次绑定起同步。扩大范围或新发现的会话不会沿用仅所选范围的历史授权；可在同步设置中另行确认。</p>
-      <p>应用运行时才读取；关闭总开关或退出 App 会停止读取。候选回复仍由你亲自发送。</p>
-      <button className="button primary" onClick={() => void operate(() => bridge.confirm({ revision: state.revision, confirmed: true, mode, historyAuthorized }))}>确认连接并开启同步</button>
+      {selectionOnly ? <p>连接账号本身不授权聊天读取。请到「联系人」逐人确认私聊；每次确认包含该会话本机可读的历史文字和后续新消息。</p> : <>
+        <label><input type="checkbox" disabled={mode === 'selected'} checked={historyAuthorized} onChange={event => setHistoryAuthorized(event.target.checked)} />同时读取所选范围在本机可用的历史消息</label>
+        {mode === 'selected' && <p>选择会话时再确认历史范围：连接账号本身不授权未知会话的历史，请在添加联系人时选择会话并单独确认。</p>}
+        <p>未开启历史读取时，仅从本次绑定起同步。扩大范围或新发现的会话不会沿用仅所选范围的历史授权；可在同步设置中另行确认。</p>
+      </>}
+      <p>{selectionOnly ? '读取还须满足已确认会话、当前账号资格、正文读取能力和总开关；候选回复仍由你亲自发送。' : '应用运行时才读取；关闭总开关或退出 App 会停止读取。候选回复仍由你亲自发送。'}</p>
+      <button className="button primary" onClick={() => void operate(() => bridge.confirm({ revision: state.revision, confirmed: true,
+        mode: selectionOnly ? 'selected' : mode, historyAuthorized: selectionOnly ? false : historyAuthorized }))}>{selectionOnly ? '确认微信账号' : '确认连接并开启同步'}</button>
     </>}
-    {state.phase === 'connected' && <p>账号关联已保存；当前同步范围与总开关见下方设置。仅所选范围需要到「联系人」逐个确认；全部私聊范围会自动关联，联系人出现后可在顶部搜索并切换。</p>}
+    {state.phase === 'connected' && <p>{selectionOnly ? '账号关联已保存。请到「联系人」逐人核验并确认读取范围；连接账号本身不会授权未知会话，也不会自动纳入新私聊。' : '账号关联已保存；当前同步范围与总开关见下方设置。仅所选范围需要到「联系人」逐个确认；全部私聊范围会自动关联，联系人出现后可在顶部搜索并切换。'}</p>}
     {(['restart_required', 'restart-failed'].includes(state.phase) || state.phase === 'offline' && state.failureCode === 'reload_failed') && <>
       <p role="status">授权已保存，需要重新加载本机服务以完成连接；无需再次授权。</p>
       <button className="button" onClick={() => void operate(() => bridge.retryRestart())}>重新加载连接</button>

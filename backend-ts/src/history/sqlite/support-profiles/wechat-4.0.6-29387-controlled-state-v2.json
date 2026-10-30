@@ -1,0 +1,56 @@
+{
+  "format": "wechat-controlled-state-observation-v2",
+  "date": "2026-10-29",
+  "program": {
+    "version": "4.0.6",
+    "build": "29387"
+  },
+  "artifacts": {
+    "cliSha256": "d555fdcedf100eba62e8dbc4dbcde50901b3f1b8198f6a6a44e62cfb66c26327",
+    "wcdbSha256": "4f05cafc4626a142afca1818f0a88c4092a13d5f4c83e30cd5125b558ba0417d",
+    "overlaySha256": "35e8b4864182ed3b21fa601e1559e70a9aba99fc80b93be018cac33ed03d3f3c"
+  },
+  "scope": {
+    "checkedPartitions": 8,
+    "presentTables": 2,
+    "configuredToolAccountVerified": true,
+    "selectedPrivateConversationOnly": true,
+    "bodyRead": false,
+    "sourceXmlRead": false,
+    "mediaRead": false,
+    "rawIdentitiesPersisted": false
+  },
+  "observation": {
+    "operator": "human",
+    "priorFirstMessageUntouched": true,
+    "secondFixedMessageSentOnce": true,
+    "humanReportedSentWithoutRecall": true,
+    "armSucceeded": true,
+    "baselineLockedCount": 0,
+    "lockedCount": 1,
+    "sender": "owner",
+    "originalType": "1",
+    "rawStatus": "2",
+    "serverIdAssigned": true,
+    "localPrimaryKeyExact": true,
+    "observationScope": "single-fixed-snapshot",
+    "followupCurrentRead": false,
+    "recallPerformed": false,
+    "resendPerformed": false,
+    "recallTestSkippedByHuman": true,
+    "readerAndChildClosed": true,
+    "observerExitCode": 0,
+    "observerAndNativeProcessesAbsent": true
+  },
+  "conclusion": {
+    "observedOwnerTextRawState": "verified-for-this-snapshot-only",
+    "pendingState": "unverified",
+    "recallState": "unverified",
+    "statusSemantics": "unverified",
+    "serverAliasLifecycle": "unverified",
+    "sourceLifecycle": "unverified",
+    "normalHistory": "unverified",
+    "noGeneralUnsupportedClaim": true,
+    "noGateRelaxation": true
+  }
+}

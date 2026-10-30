@@ -1,4 +1,5 @@
 import { ContactHistoryCoverage } from './HistoryCoverageStatus';
+import { ContactHistoryClear } from './HistoryClearPanel';
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './contacts.css';
@@ -19,7 +20,8 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
     void window.notalone.bindings.refreshSaved().catch(() => {});
     void window.notalone.syncControl.refresh().catch(() => {});
   }, []);
-  const allPrivate = sync.report?.syncScope === 'all_private';
+  const selectionOnly = consent.state.selectionOnly === true;
+  const allPrivate = !selectionOnly && sync.report?.syncScope === 'all_private';
   const bindingCount = sync.report?.confirmedBindingCount;
   useEffect(() => {
     if (allPrivate && bindingCount !== undefined) void window.notalone.bindings.refreshSaved().catch(() => {});
@@ -29,6 +31,7 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
   function syncLabel(contactId: string) {
     if (!scopeKnown) return '同步状态待确认';
     if (consent.state.bindings.some((binding) => binding.contactId === contactId)) {
+      if (selectionOnly && sync.report?.bodyAvailable === false) return '已授权 · 正文同步尚未开放';
       return enabled === false ? '已授权 · 全部同步已暂停' : enabled === true ? '自动同步已开启' : '已授权 · 总开关状态待确认';
     }
     return consent.state.knownBindings?.some((binding) => binding.contactId === contactId) ? '自动同步未开启' : '仅手动资料';
@@ -57,7 +60,7 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
       <button className="button" onClick={() => navigate('config')}>前往设置</button></div>}
     {state.directoryPhase === 'error' && <p className="contacts-note" role="alert">联系人目录读取失败，请刷新重试。</p>}
     {state.directoryPhase === 'ready' && state.contacts.length === 0 && <div className="contacts-empty"><h3>还没有联系人</h3>
-      <p>{allPrivate ? '开启后台同步后会自动关联微信私聊；联系人出现后，可在顶部搜索本次对象。' : '首次使用可到同步设置连接微信，默认仅同步你选择并确认的私聊；也可以明确选择全部私聊。'}</p><button className="button primary" onClick={() => navigate('sync')}>前往同步设置连接微信</button></div>}
+      <p>{selectionOnly ? '逐人确认微信私聊后加入联系人；未选中的会话和以后新增的私聊不会获得读取授权。' : allPrivate ? '开启后台同步后会自动关联微信私聊；联系人出现后，可在顶部搜索本次对象。' : '首次使用可到同步设置连接微信，默认仅同步你选择并确认的私聊；也可以明确选择全部私聊。'}</p><button className="button primary" onClick={() => navigate('sync')}>前往同步设置连接微信</button></div>}
     {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="联系人同步状态">
       {state.contacts.map((contact) => <li key={contact.contactId}>
         <div className="contact-row" data-current={state.selectedContactId === contact.contactId}>
@@ -70,15 +73,16 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
       {selected ? <><dl><div><dt>消息</dt><dd>{selected.messageCount} 条</dd></div></dl>
         <p className="contact-sync-status" role="status">{syncLabel(selected.contactId)}</p>
         <ContactHistoryCoverage coverages={sync.report?.historyCoverages} contactId={selected.contactId} />
+        <ContactHistoryClear session={session} />
         <p>关系资料独立处理，处理状态请到「关系资料」查看。</p>
         <ContactSyncDetails contactId={selected.contactId} consent={consent} onConnect={() => addWechat(selected.contactId)} allPrivate={allPrivate} />
         <p>本次文字和候选对应这位联系人。切换后清空编辑输入，已生成候选与编辑按联系人保留。</p>
         <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>手动输入本次聊天</button>
-        <p>如需从文件补充旧记录，可前往「设置 → 高级 → 从文件导入」。</p></>
+        {!selectionOnly && <p>如需从文件补充旧记录，可前往「设置 → 高级 → 从文件导入」。</p>}</>
         : <p>在顶部选择后，主窗口和输入小窗会同步为同一位联系人。</p>}
     </aside></div>}
-    <BindingPrivacyNotice allPrivate={allPrivate} />
-    <p className="contacts-note">支持手动输入和单联系人文件导入；本机已配置微信识别时，可在输入小窗恢复微信会话识别。候选由你编辑并亲自发送。</p>
+    <BindingPrivacyNotice allPrivate={allPrivate} selectionOnly={selectionOnly} />
+    <p className="contacts-note">{selectionOnly ? '联系人身份和微信读取授权分别核验；手动输入只确认本次资料归属，不建立微信身份或授予读取。候选由你编辑并亲自发送。' : '支持手动输入和单联系人文件导入；本机已配置微信识别时，可在输入小窗恢复微信会话识别。候选由你编辑并亲自发送。'}</p>
     {session.error && <p className="contacts-note" role="alert">{session.error}</p>}
   </section>;
 }

@@ -3,3 +3,7 @@
 .skill-tabs button[aria-selected="true"] { border-color: #afc4cd; background: #e1edf0; color: #355f7c; }
 .skill-tabs button:hover { background: #e8efed; }
 .skill-tabs button:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
+.skill-library-form { display: grid; gap: 12px; margin-top: 24px; max-width: 640px; }
+.skill-library-form label { display: grid; gap: 6px; }
+.skill-library-form label:has(input[type="checkbox"]) { display: flex; align-items: center; gap: 8px; }
+.skill-revision-digest { overflow-wrap: anywhere; font-size: 12px; }

@@ -1,4 +1,6 @@
-# PostgreSQL 16.15 源码构建
+> **已退役（历史记录）**：PG/Python 受管运行时链已移除。本文仅对应 Git 快照 `a838de83`；其中描述的构建、验证与发布命令已失效，不适用于当前 SQLite 实现。
+
+# PostgreSQL 16.15 源码构建（历史）
 
 新运行时使用 PostgreSQL 官方 16.15 源码，SHA256 为 `c1575341fa7bd40f5274ea465b34390f4dc64cdd0770af327005caaeb9f6b7ed`。完整上游归档随包保存为 `licenses/attribution/sources/source-postgresql-16.15.tar.bz2`，根 `COPYRIGHT` 原文在 `postgres/COPYRIGHT` 与 `licenses/postgresql-COPYRIGHT`，源码文件中的原始通知保留在归档中。
 

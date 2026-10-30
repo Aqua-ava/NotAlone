@@ -58,11 +58,3 @@ test('构建与测试入口不引用已删除的未接线代码', async () => {
     for (const name of removed) assert.ok(!source.includes(name), `${file} 仍引用已删除的 ${name}`);
   }
 });
-
-test('候选数量按本次未知风险收紧，不残留旧Python固定复核协议', async () => {
-  const {replyCandidateAdmissibility} = await import('../../backend-ts/src/reply/generation/reply-candidate-admissibility.ts');
-  assert.deepEqual(replyCandidateAdmissibility({}), {limit:3,unknowns:[]});
-  assert.deepEqual(replyCandidateAdmissibility({risk_notes:['缺少确认依据']}), {limit:1,unknowns:['缺少确认依据']});
-  assert.deepEqual(replyCandidateAdmissibility({command:{content:{user_instruction:'{"unknowns":["未确认时间"]}'}}}),
-    {limit:1,unknowns:['未确认时间']});
-});

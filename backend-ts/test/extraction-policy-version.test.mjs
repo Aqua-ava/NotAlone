@@ -22,6 +22,13 @@ test('旧v1模式必须是字符串，不能借数组或对象强制转换通过
     assert.throws(() => validateExtractionRuntimeConfig({version:1,mode,rule_set_sha256:'a'.repeat(64)}), /runtime_config_invalid/);
 });
 
+test('生产提取策略来源身份锚定当前SQLite服务闭包', async () => {
+  const policy=await createExtractionPolicyVersion();
+  const config=policy.newTaskConfig();
+  assert.equal(policy.resolve(config).verification.id,'complete-claim-v1');
+  await assert.doesNotReject(policy.assertCurrent());
+});
+
 test('sourceStamp跟踪实际传递依赖及vendor，冻结后变更保守失败', async () => {
   const root=await mkdtemp(join(tmpdir(),'notalone-policy-'));
   try {

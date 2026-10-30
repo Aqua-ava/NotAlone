@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `safe-node` | Node 内存/SSR、合成文件、回环假 HTTP 或合成子进程。部分既有用例在 macOS 编译和签名仓库探针或空程序，但不执行探针、不启动 App，不构建产品包。 | `npm test` 默认运行全部已核准文件。 |
 | `headless` | 真实无头 Chromium 与 React；测试自行提供内存数据。 | 明确指定文件并核对浏览器准备；当前组合按登记的文件执行；旧 `test:pages --case` 仅提供历史复现指引。 |
-| `isolated-http-pg` | 生产 HTTP／自有合成 PostgreSQL 夹具或显式外部证据（依文件而异）。 | 核对文件夹具后明确指定文件；不得直接对整目录 glob 执行。 |
+| `isolated-http` | 生产 HTTP 边界或显式外部证据（依文件而异）；夹具应使用合成资料。 | 核对文件夹具后明确指定文件；不得直接对整目录 glob 执行。 |
 | `native` | 执行原生探针、真实微信 CLI 或需要本机权限/现场；条件分支也按真实执行能力分类。 | `npm run test:native` 运行 Swift 合成套件及 CLI 诊断入口回归；真实原生/微信项另行协调现场、权限及资源。开发验收遵循 `npm run dev` 约束。 |
 | `app` | Electron 或产品打包前置条件。 | 日常实际 App 验收只用 `npm run dev`；发布相关测试仍受发布门禁约束。 |
 

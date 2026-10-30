@@ -1,5 +1,5 @@
 /** 准备一次来源核验；请求、指纹、幂等解码和准入封装在同一 Interface。 */
-import {digest} from '../../overview/evidence/sources.ts';
+import {digest} from '../../evidence/canonical-json.ts';
 import {readExtractionToolArguments} from '../arguments.ts';
 import {verificationFailureDiagnostic} from './diagnostics.ts';
 import {buildSourceVerificationContract,buildSourceVerificationPayload} from '../contract.ts';
@@ -159,6 +159,65 @@ function checkClaim(value:unknown,fact:ExtractedFact,evidence:SourceVerification
  return {verdict:statuses.includes('unsupported')?'unsupported':statuses.includes('uncertain')?'uncertain':'supported',issues:[...issues]};
 }
 
+function verificationPayload(window:ExtractionWindow,facts:ExtractedFact[],modern:boolean):Row{
+ const payload=buildSourceVerificationPayload(window,facts);
+ if(modern){
+  payload.candidates=(payload.candidates as Row[]).map((candidate,index)=>{
+   const fact=facts[index]!;
+   return {...candidate,scene_name:fact._scene_name,alternatives:fact.alternatives,
+    interpretation_reason:fact.interpretation_reason,confidence:fact.confidence,risk_flags:fact.risk_flags,
+    requires_all_sources:fact.requires_all_sources,source_dependency_mode:fact.source_dependency_mode,
+    timing:fact.timing,event:candidate.event??null,conditions:candidate.conditions??null};
+  });
+  payload.claim_scope=facts.map((fact,candidate_index)=>({candidate_index,codepoint_length:[...fact.text].length,scope_subject:fact.subject==='self'?'self':'contact'}));
+ }
+ return payload;
+}
+
+function decodeVerificationRows(raw:Row,window:ExtractionWindow,facts:ExtractedFact[],policy:PreparedVerificationPolicy,fingerprint:string):VerificationAdmission[]{
+ const modern=policy.id==='complete-claim-v1';
+ if(modern&&raw.request_fingerprint!==fingerprint)fail('fingerprint_mismatch');
+ if(modern)object(raw,['results','request_fingerprint']);
+ const rows=Array.isArray(raw.results)?raw.results:fail('results_invalid');
+ const baseRows=rows.map((entry:unknown)=>{
+  if(!modern||!entry||typeof entry!=='object'||Array.isArray(entry))return entry;
+  const {claim_check,...base}=entry as Row;return base;
+ });
+ const results=parseSourceVerification({results:baseRows},window,facts,
+  {isolate_items:true,...(policy.id==='nullable-proof-v3'?{mode:'nullable-proof-v3' as const}:{})});
+ return results.map((original,index)=>{
+  let result=original;
+  const fact=facts[index]!;
+  if(policy.id!=='nullable-proof-v3'&&result.verdict==='supported'&&fact.requires_all_sources){
+   const cited=new Set(result.evidence.map(reference=>reference.message_id));
+   if(fact.source_message_ids.some(source=>!cited.has(source)))result={...result,verdict:'unsupported',issues:[...new Set([...result.issues,'insufficient_evidence'])]};
+  }
+  if(!modern)return {candidate_index:index,admitted:result.verdict!=='unsupported',result};
+  const matches=rows.filter((row:Row)=>row&&row.candidate_index===index),modelClaim=matches.length===1?matches[0].claim_check:null;
+  let state:'checked'|'invalid'='checked',reason='complete',support:Support=result.verdict;
+  try{
+   const checked=checkClaim(modelClaim,fact,result.evidence,window);
+   support=result.verdict==='unsupported'||checked.verdict==='unsupported'?'unsupported'
+    :result.verdict==='uncertain'||checked.verdict==='uncertain'?'uncertain':'supported';
+   result={...result,verdict:support,issues:[...new Set([...result.issues,...checked.issues])]};
+  }catch(error){
+   if(!(error instanceof ExtractionProtocolError))throw error;
+   state='invalid';reason='structure_invalid';support='unsupported';
+   result={...result,verdict:support,issues:[...new Set([...result.issues,'insufficient_evidence'])]};
+  }
+  result={...result,verification_mode:'complete-claim-v1',proof:null,proof_verification:null,model_claim_check:structuredClone(modelClaim),
+   claim_validation:{status:state,policy_fingerprint:fingerprint,reason,semantic_support:support}};
+  return {candidate_index:index,admitted:state==='checked'&&support==='supported',result};
+ });
+}
+
+/** 存档消费者重放原模型回复的同一确定性校验，不能以JSON准入标志代替。 */
+export function replayCompleteClaimVerification(window:ExtractionWindow,facts:ExtractedFact[],blocks:readonly unknown[],fingerprint:string,requestBody:unknown):VerificationAdmission[]{
+ if(digest(requestBody)!==digest({...verificationPayload(window,facts,true),request_fingerprint:fingerprint}))fail('stored_request_mismatch');
+ const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:true,field_names:repairFields,root_array_key:'results'}).value as Row;
+ return decodeVerificationRows(raw,window,facts,{id:'complete-claim-v1'},fingerprint);
+}
+
 export function prepareSourceVerification(options:{
  window:ExtractionWindow;facts:readonly ExtractedFact[];policy?:PreparedVerificationPolicy;
  requireCurrent():Promise<void>;
@@ -176,20 +235,12 @@ export function prepareSourceVerification(options:{
  const contract=buildSourceVerificationContract(facts,policy.id==='nullable-proof-v3'?'nullable-proof-v3':'legacy-v4',
   {require_complete_evidence:policy.id!=='nullable-proof-v3'});
  const schema=structuredClone(contract.schema),system=contract.prompt+(modern?claimInstructions:'');
- const payload=buildSourceVerificationPayload(window,facts);
+ const payload=verificationPayload(window,facts,modern);
  if(modern){
-  payload.candidates=(payload.candidates as Row[]).map((candidate,index)=>{
-   const fact=facts[index]!;
-   return {...candidate,scene_name:fact._scene_name,alternatives:fact.alternatives,
-    interpretation_reason:fact.interpretation_reason,confidence:fact.confidence,risk_flags:fact.risk_flags,
-    requires_all_sources:fact.requires_all_sources,source_dependency_mode:fact.source_dependency_mode,
-    timing:fact.timing,event:candidate.event??null,conditions:candidate.conditions??null};
-  });
   schema.properties.results.items.properties.claim_check=claimSchema;
   schema.properties.results.items.required.push('claim_check');
   schema.properties.request_fingerprint={type:'string',pattern:'^[a-f0-9]{64}$'};
   schema.required.push('request_fingerprint');
-  payload.claim_scope=facts.map((fact,candidate_index)=>({candidate_index,codepoint_length:[...fact.text].length,scope_subject:fact.subject==='self'?'self':'contact'}));
  }
  const fingerprint=digest({policy,window_sha256:windowSha,allFacts,selection,system,schema,payload});
  if(modern){schema.properties.request_fingerprint.enum=[fingerprint];payload.request_fingerprint=fingerprint;}
@@ -206,39 +257,7 @@ export function prepareSourceVerification(options:{
   if(!decoded){
    responseDigest=currentDigest;
    decoded=Promise.resolve().then(()=>{
-    if(modern&&raw.request_fingerprint!==fingerprint)fail('fingerprint_mismatch');
-    if(modern)object(raw,['results','request_fingerprint']);
-    const rows=Array.isArray(raw.results)?raw.results:fail('results_invalid');
-    const baseRows=rows.map((entry:unknown)=>{
-     if(!modern||!entry||typeof entry!=='object'||Array.isArray(entry))return entry;
-     const {claim_check,...base}=entry as Row;return base;
-    });
-    const results=parseSourceVerification({results:baseRows},window,facts,
-     {isolate_items:true,...(policy.id==='nullable-proof-v3'?{mode:'nullable-proof-v3' as const}:{})});
-    const selected=results.map((original,index)=>{
-     let result=original;
-     const fact=facts[index]!;
-     if(policy.id!=='nullable-proof-v3'&&result.verdict==='supported'&&fact.requires_all_sources){
-      const cited=new Set(result.evidence.map(reference=>reference.message_id));
-      if(fact.source_message_ids.some(source=>!cited.has(source)))result={...result,verdict:'unsupported',issues:[...new Set([...result.issues,'insufficient_evidence'])]};
-     }
-     if(!modern)return {candidate_index:index,admitted:result.verdict!=='unsupported',result};
-     const matches=rows.filter((row:Row)=>row&&row.candidate_index===index),modelClaim=matches.length===1?matches[0].claim_check:null;
-     let state:'checked'|'invalid'='checked',reason='complete',support:Support=result.verdict;
-     try{
-      const checked=checkClaim(modelClaim,fact,result.evidence,window);
-      support=result.verdict==='unsupported'||checked.verdict==='unsupported'?'unsupported'
-       :result.verdict==='uncertain'||checked.verdict==='uncertain'?'uncertain':'supported';
-      result={...result,verdict:support,issues:[...new Set([...result.issues,...checked.issues])]};
-     }catch(error){
-      if(!(error instanceof ExtractionProtocolError))throw error;
-      state='invalid';reason='structure_invalid';support='unsupported';
-      result={...result,verdict:support,issues:[...new Set([...result.issues,'insufficient_evidence'])]};
-     }
-     result={...result,verification_mode:'complete-claim-v1',proof:null,proof_verification:null,model_claim_check:structuredClone(modelClaim),
-      claim_validation:{status:state,policy_fingerprint:fingerprint,reason,semantic_support:support}};
-     return {candidate_index:index,admitted:state==='checked'&&support==='supported',result};
-    });
+    const selected=decodeVerificationRows(raw,window,facts,policy,fingerprint);
     const mapped=new Map(selection.map((index,local)=>[index,{...selected[local]!,candidate_index:index}]));
     return {items:allFacts.map((_,index)=>mapped.get(index)??{candidate_index:index,admitted:true,result:null})};
    });

@@ -12,12 +12,13 @@ await writeFile(path.join(directory, 'controller.mjs'), result.outputFiles[0].te
 const { BindingConsentController, installBindingConsentBridge, createBindingConsentBridge } = await import(path.join(directory, 'controller.mjs'));
 after(() => rm(directory, { recursive: true, force: true }));
 
-function fixture({ withBinding = false, revokeFails = false } = {}) {
+function fixture({ withBinding = false, revokeFails = false, sqlite = false } = {}) {
+  let snapshotNumber = 0;
   let generation, listener;
   const calls = [], requests = [];
   const binding = { binding_id: '11111111-1111-4111-8111-111111111111',
     contact_id: '22222222-2222-4222-8222-222222222222',
-    conversation_locator: 'wxid_synthetic', display_name: '合成联系人', status: 'active' };
+    conversation_locator: 'wxid_synthetic', display_name: '合成联系人', status: 'active', ...(sqlite ? { selection_generation: '7' } : {}) };
   let active = withBinding ? [binding] : [];
   let revoked = [];
   const backend = {
@@ -33,8 +34,8 @@ function fixture({ withBinding = false, revokeFails = false } = {}) {
         return { generation, data: revoked[0] };
       }
       const data = path === '/api/setup/status' ? { runtime_owner_configured: true }
-        : path === '/api/sync/cli-bindings' ? { bindings: active, revoked_bindings: revoked }
-        : path === '/api/sync/cli-sessions' ? { sessions: [{ username: 'wxid_synthetic', display_name: '合成联系人', last_timestamp: null, bound_contact_id: null }] }
+        : path === '/api/sync/cli-bindings' ? { bindings: active, revoked_bindings: revoked, ...(sqlite ? { identity_protocol: 'sqlite-selected-v1' } : {}) }
+        : path === '/api/sync/cli-sessions' ? { ...(sqlite ? { snapshot_token: `snapshot-${++snapshotNumber}` } : {}), sessions: [{ username: 'wxid_synthetic', display_name: '合成联系人', last_timestamp: null, bound_contact_id: null, ...(sqlite ? { selection_generation: snapshotNumber === 1 ? '0' : '2', known_contact_id: null } : {}) }] }
         : { sync_enabled: false };
       return { generation, data };
     },
@@ -185,4 +186,18 @@ test('绑定IPC与预加载拒绝非布尔历史字段，保留旧缺省调用',
     await assert.rejects(handlers.get('bindings:confirm-selections')(value),/本次授权选择已失效/);
   }
   assert.deepEqual(calls.map(call=>call[1]),[request,{...request,historyAuthorized:false},{...request,historyAuthorized:true}]);
+});
+test('SQLite确认保留用户勾选时的名单代次，不把提交前刷新自动升级成新授权',async()=>{
+ const f=fixture({sqlite:true});await f.connect(1);await f.controller.refresh();
+ await f.controller.confirmSelections({scopeRevision:f.controller.getState().scopeRevision,historyAuthorized:true,selections:[{locator:'wxid_synthetic',displayName:'合成联系人',contactId:null}]});
+ const request=f.requests.find(r=>r.path==='/api/sync/cli-bindings/confirm');
+ assert.equal(request.body.snapshot_token,'snapshot-1');
+ assert.equal(request.body.selections[0].expected_selection_generation,'0');
+ assert.equal(f.requests.filter(r=>r.path==='/api/sync/cli-sessions').every(r=>r.metadataConsent===true),true);
+});
+test('SQLite撤销携带持久授权代次，直接撤销不补读微信列表',async()=>{
+ const f=fixture({sqlite:true,withBinding:true});await f.connect(1);const state=f.controller.getState();
+ await f.controller.revokeBinding({scopeRevision:state.scopeRevision,contactId:state.bindings[0].contactId,bindingId:state.bindings[0].bindingId});
+ const request=f.requests.find(r=>r.path==='/api/sync/cli-bindings/revoke');assert.equal(request.body.expected_selection_generation,'7');
+ assert.equal(f.requests.some(r=>r.path==='/api/sync/cli-sessions'),false);
 });

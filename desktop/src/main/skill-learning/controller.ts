@@ -9,6 +9,7 @@ import { BackendRequestFailure } from '../backend/json-client';
 import { readComparison, readPublication, readPublicationScope, readReviewForm, readReviewInput, readStrategyEdit, sameInput, sameScope, sameStrategy } from './review-validation';
 import { SkillHistorySession } from './history';
 import { SkillPolicySession, readPolicyScope } from './policies';
+import { SkillLibraryController } from './library';
 
 type Scope = ContactSelection & { generation: number };
 type ReviewAction = 'edit' | 'compare' | 'approve' | 'decision';
@@ -17,6 +18,7 @@ export class SkillLearningController {
     enabled: false, settingRevision: 0, drafts: [], task: null, recentOutcomes: [], error: null, review: null, history: null, policies: null };
   private readonly history: SkillHistorySession;
   private readonly policies: SkillPolicySession;
+  private readonly library: SkillLibraryController;
   private scope: Scope | undefined;
   private operation = 0;
   private pending: AbortController | undefined;
@@ -31,6 +33,7 @@ export class SkillLearningController {
   private readonly deletions = new Set<object>();
   private readonly listeners = new Set<(state: SkillLearningState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {
+    this.library = new SkillLibraryController(backend);
     this.history = new SkillHistorySession(backend, () => this.scope, history => this.publish({ history }));
     this.policies = new SkillPolicySession(backend, () => this.scope, policies => this.publish({ policies }));
     contacts.onStateChanged(() => this.synchronize());
@@ -38,6 +41,10 @@ export class SkillLearningController {
     this.synchronize();
   }
   getState() { return structuredClone(this.state); }
+  readLibrary() { return this.library.read(); }
+  discoverLibrary(input: unknown) { return this.library.discover(input); }
+  verifyLibrary(input: unknown) { return this.library.verify(input); }
+  changeLibraryEnabled(input: unknown) { return this.library.changeEnabled(input); }
   onStateChanged(listener: (state: SkillLearningState) => void) {
     this.listeners.add(listener); return () => { this.listeners.delete(listener); };
   }

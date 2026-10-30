@@ -4,6 +4,8 @@ import type { SkillComparisonSide, SkillDraft, SkillDraftReview, SkillLearningSt
 import { useRevisionedSession } from './use-revisioned-session';
 import { SkillHistoryPanel } from './SkillHistoryPanel';
 import { SkillPolicyPanel } from './SkillPolicyPanel';
+import { SqliteSkillLibraryPage } from './SqliteSkillLibraryPage';
+import type { SkillLibrarySnapshot } from '../shared/skill-library-bridge';
 import './skill.css';
 
 const initial: SkillLearningState = { revision: -1, contactId: null, scopeRevision: 0, phase: 'idle', enabled: false, settingRevision: 0,
@@ -14,6 +16,21 @@ const materials: Record<string, string> = { assistant_discussion: '助手讨论'
   candidate_edit: '用户修改与纠正', candidate_selection: '明确候选选择', followup_observation: '任务后的有限观察' };
 
 export function SkillLearningPage({ session }: { session: ContactSessionView }) {
+  const [library,setLibrary]=useState<SkillLibrarySnapshot|null>(null),[failure,setFailure]=useState(''),[attempt,setAttempt]=useState(0);
+  const bridge=window.notalone.skillLearning;
+  useEffect(()=>{
+    let active=true,request=0;
+    const read=()=>{const current=++request;setLibrary(null);setFailure('');void bridge.readLibrary().then(value=>{if(active&&current===request)setLibrary(value);},()=>{if(active&&current===request)setFailure('Skill 状态暂不可用，请重新读取。');});};
+    read();
+    const unsubscribe=window.notalone.backend?.onStateChanged(state=>{if(state.phase==='connected')read();else{++request;setLibrary(null);setFailure('本机连接已变化，请重新读取 Skill 状态。');}});
+    return()=>{active=false;unsubscribe?.();};
+  },[bridge,attempt]);
+  if(library?.mode==='sqlite')return <SqliteSkillLibraryPage initial={library} bridge={bridge} onModeChange={setLibrary} onUnavailable={()=>{setLibrary(null);setFailure('Skill 状态暂不可用，请重新读取。');}}/>;
+  if(library?.mode==='legacy')return <LegacySkillLearningPage session={session}/>;
+  return <section aria-label="Skill管理"><h2>已有 Skill</h2>{failure?<><p role="alert">{failure}</p><button className="button" onClick={()=>setAttempt(value=>value+1)}>重新读取 Skill 状态</button></>:<p role="status">正在核对 Skill 状态…</p>}</section>;
+}
+
+function LegacySkillLearningPage({ session }: { session: ContactSessionView }) {
   const bridge = window.notalone.skillLearning;
   const { state, error, setError, retry } = useRevisionedSession(initial, bridge);
   // 用户动作失败统一走这里落到可见错误，不静默吞掉。
