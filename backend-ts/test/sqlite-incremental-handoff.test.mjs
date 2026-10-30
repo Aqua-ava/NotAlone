@@ -42,12 +42,12 @@ function createChannel(state) {
     };
   };
 }
-async function fixture(t) {
+async function fixture(t, names = ['a']) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-incremental-handoff-')));
   const state = { creates: 0, supportOverrides: {}, historyRecords: [], resumeCursor: 'tail-1', targetDescriptor: null };
   const metadata = () => ({
     account: async () => ({ ...evidence }),
-    sessions: async () => [{ externalKey: 'friend-a', displayName: '合成a', kind: 'private', identityAssurance: 'verified' }],
+    sessions: async () => names.map(name => ({ externalKey: `friend-${name}`, displayName: `合成${name}`, kind: 'private', identityAssurance: 'verified' })),
   });
   const f = { root, state };
   f.storage = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test' });
@@ -161,6 +161,96 @@ test('增量响应重放幂等：同捕获同页不重复推进，同捕获不�
   assert.equal((await f.history.read(binding.contact_id)).messages.length, 2);
   await assert.rejects(f.storage.execute('history.acceptIncrementalPage', { ...input, page: { ...page, records: [record('3')] } }), { code: 'history_capture_replay_conflict' });
   assert.equal((await f.history.read(binding.contact_id)).messages.length, 2);
+});
+
+test('捕获回执绑定联系人和目标：同响应不可跨 goal 或联系人冒充幂等重放', async t => {
+  const f = await fixture(t, ['a', 'b']);
+  await select(f);
+  const bindings = (await f.contacts.directory()).bindings;
+  const [a, b] = bindings;
+  const target = { protocol: 'private-history-v1', descriptor: 'synthetic:shared-target', partitions: ['p'], tables: [{ partition: 'p', instance: 't' }], sourceGeneration: 'source-1' };
+  const begin = async contactId => {
+    const token = await f.contacts.eligibility(contactId);
+    const scope = await f.storage.execute('history.scope', { token });
+    const report = support(scope);
+    await f.storage.execute('history.preflightContinuity', { token, target });
+    const goal = await f.storage.execute('history.begin', { token, target, report, id: randomUUID(), at: Date.now() });
+    return { token, report, goal };
+  };
+  const first = await begin(a.contact_id);
+  const captureId = randomUUID();
+  const page = { target: target.descriptor, cursorIn: null, cursorOut: null, completedPartitions: ['p'], exhausted: true, records: [record('shared')] };
+  const firstInput = { token: first.token, goalId: first.goal.id, captureId, page, at: Date.now(), runtimeToken: f.storage.status.runtimeId };
+  await f.storage.execute('history.acceptPage', firstInput);
+  await f.storage.execute('history.acceptPage', firstInput);
+
+  const secondGoal = await begin(a.contact_id);
+  await assert.rejects(f.storage.execute('history.acceptPage', { ...firstInput, token: secondGoal.token, goalId: secondGoal.goal.id }), { code: 'history_capture_replay_conflict' });
+
+  const otherContact = await begin(b.contact_id);
+  await assert.rejects(f.storage.execute('history.acceptPage', { ...firstInput, token: otherContact.token, goalId: otherContact.goal.id }), { code: 'history_capture_replay_conflict' });
+  await assert.rejects(f.storage.execute('history.acceptIncrementalPage', firstInput), { code: 'history_goal_kind_invalid' });
+});
+
+test('增量捕获回执不能通过历史接口重放', async t => {
+  const f = await fixture(t);
+  f.state.historyRecords = [record('1')];
+  const binding = await select(f);
+  await f.history.synchronize(binding.contact_id);
+  const token = await f.contacts.eligibility(binding.contact_id);
+  const incremental = await f.history.coverage(binding.contact_id);
+  assert.ok(incremental.incremental.goalId);
+  const page = { target: f.state.targetDescriptor, cursorIn: 'tail-1', cursorOut: 'tail-2', caughtUp: true, records: [record('2')] };
+  const captureId = randomUUID();
+  const input = { token, goalId: incremental.incremental.goalId, captureId, page, at: Date.now(), runtimeToken: f.storage.status.runtimeId };
+  await f.storage.execute('history.acceptIncrementalPage', input);
+  await assert.rejects(f.storage.execute('history.acceptPage', input), { code: 'history_goal_kind_invalid' });
+});
+
+test('增量捕获回执绑定联系人和目标：不能跨新目标或联系人跳过写入', async t => {
+  const f = await fixture(t, ['a', 'b']);
+  const a = await select(f);
+  const b = (await f.contacts.directory()).bindings.find(binding => binding.contact_id !== a.contact_id);
+  assert.ok(b);
+  f.state.historyRecords = [record('1')];
+  await f.history.synchronize(a.contact_id);
+  await f.history.synchronize(b.contact_id);
+  const firstToken = await f.contacts.eligibility(a.contact_id);
+  const firstCoverage = await f.history.coverage(a.contact_id);
+  const firstGoalId = firstCoverage.incremental.goalId;
+  assert.ok(firstGoalId, JSON.stringify(firstCoverage));
+  const firstScope = await f.storage.execute('history.scope', { token: firstToken });
+  const firstPage = { target: `synthetic:${firstScope.conversationKey}`, cursorIn: 'tail-1', cursorOut: 'tail-2', caughtUp: true, records: [record('incremental-shared')] };
+  const captureId = randomUUID();
+  const firstInput = { token: firstToken, goalId: firstGoalId, captureId, page: firstPage, at: Date.now(), runtimeToken: f.storage.status.runtimeId };
+  await f.storage.execute('history.acceptIncrementalPage', firstInput);
+
+  await f.contacts.setReading(false); await f.contacts.setReading(true);
+  const beginNewGoal = async contactId => {
+    const token = await f.contacts.eligibility(contactId);
+    const scope = await f.storage.execute('history.scope', { token });
+    const goal = await f.storage.execute('history.beginIncremental', { token, report: support(scope), id: randomUUID(), at: Date.now() });
+    return { token, goal };
+  };
+  const newGoalA = await beginNewGoal(a.contact_id);
+  await assert.rejects(f.storage.execute('history.acceptIncrementalPage', { ...firstInput, token: newGoalA.token, goalId: newGoalA.goal.id }), { code: 'history_capture_replay_conflict' });
+
+  const newGoalB = await beginNewGoal(b.contact_id);
+  await assert.rejects(f.storage.execute('history.acceptIncrementalPage', { ...firstInput, token: newGoalB.token, goalId: newGoalB.goal.id }), { code: 'history_capture_replay_conflict' });
+});
+
+test('增量页的旧 cursor_in 无法覆盖已提交检查点', async t => {
+  const f = await fixture(t);
+  f.state.historyRecords = [record('1')];
+  const binding = await select(f);
+  await f.history.synchronize(binding.contact_id);
+  const token = await f.contacts.eligibility(binding.contact_id);
+  const goalId = (await f.history.coverage(binding.contact_id)).incremental.goalId;
+  const stale = { target: f.state.targetDescriptor, cursorIn: 'tail-before-checkpoint', cursorOut: 'tail-stale', caughtUp: true, records: [record('2')] };
+  await assert.rejects(f.storage.execute('history.acceptIncrementalPage', { token, goalId, captureId: randomUUID(), page: stale, at: Date.now(), runtimeToken: f.storage.status.runtimeId }), { code: 'history_page_invalid' });
+  const coverage = await f.history.coverage(binding.contact_id);
+  assert.equal(coverage.incremental.pagesAccepted, 0);
+  assert.equal((await f.history.read(binding.contact_id)).messages.length, 1);
 });
 
 test('清空代次与删除围栏下读取边界保持拒绝，不因重试放开', () => {

@@ -48,7 +48,7 @@ func notaloneProtocolFixture(t *testing.T, supported bool) *notaloneHistorySessi
 	}
 	if supported {
 		h.certify = func(p notaloneProgramVersion, tables []notaloneTableSchema) notaloneProfileCertification {
-			return notaloneProfileCertification{Status: "supported", ProfileID: "synthetic-profile", ProgramVersion: p.Version, Build: p.Build, DeclaredPrimaryKey: []string{"local_id"}, StatusSemantics: "synthetic-final", Continuity: "synthetic-source", ReadProfile: &notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(tables), AllowedStatuses: []int64{0}}}
+			return notaloneProfileCertification{Status: "supported", ProfileID: "synthetic-profile", ProgramVersion: p.Version, Build: p.Build, DeclaredPrimaryKey: []string{"local_id"}, StatusSemantics: "synthetic-final", Continuity: "synthetic-source", ReadProfile: notaloneSyntheticFinalReadProfilePtr(tables)}
 		}
 	}
 	if _, err = h.handle(context.Background(), notaloneHistoryRequest{Operation: "resolve", DisplayName: "合成目标", Consent: "selected-metadata-v1"}); err != nil {
@@ -72,7 +72,7 @@ func TestNotAloneHistoryProtocolGateAndTypedSnapshot(t *testing.T) {
 		t.Fatalf("门禁失效:%v", err)
 	}
 	h.certify = func(p notaloneProgramVersion, tables []notaloneTableSchema) notaloneProfileCertification {
-		return notaloneProfileCertification{Status: "supported", ProfileID: "synthetic-profile", ProgramVersion: p.Version, Build: p.Build, DeclaredPrimaryKey: []string{"local_id"}, StatusSemantics: "synthetic-final", Continuity: "synthetic-source", ReadProfile: &notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(tables), AllowedStatuses: []int64{0}}}
+		return notaloneProfileCertification{Status: "supported", ProfileID: "synthetic-profile", ProgramVersion: p.Version, Build: p.Build, DeclaredPrimaryKey: []string{"local_id"}, StatusSemantics: "synthetic-final", Continuity: "synthetic-source", ReadProfile: notaloneSyntheticFinalReadProfilePtr(tables)}
 	}
 	value, err = h.handle(context.Background(), r)
 	if err != nil {

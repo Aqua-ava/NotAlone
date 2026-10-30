@@ -34,7 +34,7 @@ func TestNotAloneSenderDeviceSuffixKeepsScopeAndMapsThreeProjections(t *testing.
 			var sender string
 			switch projection {
 			case "page":
-				snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
+				snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 				if err != nil {
 					t.Fatal(err)
 				}

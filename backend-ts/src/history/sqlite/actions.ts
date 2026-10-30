@@ -25,6 +25,10 @@ function currentGoal(tx:StorageTransaction,token:ReadEligibility,id:string):Stor
  if(goal.eligibility_json!==JSON.stringify(token)||goal.contact_id!==token.contact_id||goal.binding_id!==token.binding_id)fail('history_goal_stale');
  return goal;
 }
+function assertCaptureReplay(prior:StorageRow,token:ReadEligibility,goal:StorageRow,digest:string,cursorIn:unknown,cursorOut:unknown):void {
+ if(prior.response_digest!==digest||prior.contact_id!==token.contact_id||String(prior.goal_id)!==String(goal.id)
+  ||String(prior.read_epoch)!==String(token.read_epoch)||prior.cursor_in!==cursorIn||prior.cursor_out!==cursorOut)fail('history_capture_replay_conflict');
+}
 function targetOf(value:unknown,token:ReadEligibility):HistoryTarget {
  const target=value as HistoryTarget;
  if(target?.protocol!=='private-history-v1'||target.sourceGeneration!==token.source_generation||typeof target.descriptor!=='string'||!target.descriptor||target.descriptor.length>64_000||!Array.isArray(target.partitions)||!target.partitions.length||target.partitions.length>10_000||target.partitions.some(p=>typeof p!=='string'||!p||p.length>512)||new Set(target.partitions).size!==target.partitions.length)fail('history_target_unverified');
@@ -101,10 +105,10 @@ export const historyActions:StorageAction[]=[
  action('history.acceptPage','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const goal=currentGoal(tx,token,i.goalId);const page=i.page as HistoryPage;
   assertLiveGuard(tx,token,i.guardId);
-  const digest=createHash('sha256').update(JSON.stringify(page)).digest('hex');
-  const prior=tx.get('SELECT response_digest FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
-  if(prior){if(prior.response_digest!==digest)fail('history_capture_replay_conflict');return readCoverage(tx,token.owner_id,token.contact_id);}
   if(goal.kind!=='history')fail('history_goal_kind_invalid');
+  const digest=createHash('sha256').update(JSON.stringify(page)).digest('hex');
+  const prior=tx.get('SELECT response_digest,contact_id,goal_id,read_epoch,cursor_in,cursor_out FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
+  if(prior){assertCaptureReplay(prior,token,goal,digest,page?.cursorIn,page?.cursorOut);return readCoverage(tx,token.owner_id,token.contact_id);}
   if(goal.state!=='running'&&goal.state!=='incomplete')fail('history_goal_closed');
   assertHistoryReadBoundary(tx,token,{kind:'history'});
   const target=JSON.parse(String(goal.target_json)) as HistoryTarget;
@@ -160,10 +164,10 @@ export const historyActions:StorageAction[]=[
  action('history.acceptIncrementalPage','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const goal=currentGoal(tx,token,i.goalId);const page=i.page as HistoryTailPage;
   assertLiveGuard(tx,token,i.guardId);
-  const digest=createHash('sha256').update(JSON.stringify(page)).digest('hex');
-  const prior=tx.get('SELECT response_digest FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
-  if(prior){if(prior.response_digest!==digest)fail('history_capture_replay_conflict');return readCoverage(tx,token.owner_id,token.contact_id);}
   if(goal.kind!=='incremental')fail('history_goal_kind_invalid');
+  const digest=createHash('sha256').update(JSON.stringify(page)).digest('hex');
+  const prior=tx.get('SELECT response_digest,contact_id,goal_id,read_epoch,cursor_in,cursor_out FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
+  if(prior){const cursorOut=assertHistoryCursor(page?.cursorOut,'history_page_invalid');assertCaptureReplay(prior,token,goal,digest,page?.cursorIn,cursorOut);return readCoverage(tx,token.owner_id,token.contact_id);}
   if(goal.state!=='running'&&goal.state!=='incomplete')fail('history_goal_closed');
   assertHistoryReadBoundary(tx,token,{kind:'incremental'});
   if(String(goal.accepted_barrier_generation)!==String(token.barrier_generation))fail('history_suppression_changed');

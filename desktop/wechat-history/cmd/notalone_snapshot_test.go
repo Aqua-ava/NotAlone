@@ -61,7 +61,7 @@ func newNotaloneSnapshotFixture(t *testing.T, shards int) notaloneSnapshotFixtur
 }
 func TestNotAloneSnapshotFixedSelectedShards(t *testing.T) {
 	f := newNotaloneSnapshotFixture(t, 2)
-	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
+	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestNotAloneSnapshotPagesHoldCutWhileWriterContinues(t *testing.T) {
 	if err := f.writers[0].Exec(`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<205) INSERT INTO ` + quoteIdent(f.table) + `(local_id,server_id,local_type,sort_seq,real_sender_id,create_time,status,message_content) SELECT x,0,1,206-x,2,1700000000,0,'合成分页' FROM n;`); err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
+	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestNotAloneSnapshotNonTextUnknownSenderAndOpaqueState(t *testing.T) {
 	if err := f.writers[0].Exec(`INSERT INTO ` + quoteIdent(f.table) + `(local_id,server_id,local_type,real_sender_id,create_time,status,message_content) VALUES(1,0,34,2,1700000000,987,'非文字正文不得读取'),(2,0,1,3,1700000000,987,'其他发送人正文不得读取'),(3,0,4294967297,1,1700000000,987,'低32位文字');`); err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0, 987}})
+	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestNotAloneSnapshotProfileQuarantinesUnknownStateBeforeBody(t *testing.T) 
 	if err := f.writers[0].Exec(`INSERT INTO ` + quoteIdent(f.table) + `(local_id,server_id,local_type,real_sender_id,create_time,status,message_content) VALUES(2,0,1,1,1700000000,0,'合成合法文字');`); err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
+	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestNotAloneSnapshotProfileQuarantinesUnknownStateBeforeBody(t *testing.T) 
 		t.Fatalf("混合页应区分合法与未知状态：%v", err)
 	}
 	for _, record := range page.Records {
-		if *record.Status == "99" && (record.StateAssurance != "unverified" || record.Sender != "unknown" || record.Text != nil) {
+		if *record.Status == "99" && (record.StateAssurance != "unverified" || record.Text != nil) {
 			t.Fatal("未知状态不得读取或暴露正文")
 		}
 		if *record.Status == "0" && (record.StateAssurance != "verified" || record.Sender != "owner" || record.Text == nil || *record.Text != "合成合法文字") {
@@ -237,7 +237,7 @@ func TestNotAloneSnapshotRejectsReplayOtherTargetAndCancelledPage(t *testing.T) 
 			if err := f.writers[0].Exec(`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<101) INSERT INTO ` + quoteIdent(f.table) + `(local_id,server_id,local_type,real_sender_id,create_time,status,message_content) SELECT x,0,1,2,1700000000,0,'合成' FROM n;`); err != nil {
 				t.Fatal(err)
 			}
-			snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
+			snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -282,7 +282,7 @@ func TestNotAloneSnapshotMissingShardOrKeyDoesNotAcceptPartial(t *testing.T) {
 			} else {
 				delete(f.server.cfg.Keys, fmt.Sprintf("%032x", 2))
 			}
-			snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
+			snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 			if err == nil {
 				snapshot.Close()
 				t.Fatal("部分打开不能成为完整快照")
@@ -305,7 +305,7 @@ func TestNotAloneSnapshotCloseCancelsInflightNativeBeforeClosingConnection(t *te
 	if inspectErr != nil {
 		t.Fatal(inspectErr)
 	}
-	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
+	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,7 @@ func TestNotAloneSnapshotLifetimeContextClosesHeldReaders(t *testing.T) {
 	f := newNotaloneSnapshotFixture(t, 1)
 	life, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	snapshot, err := newNotaloneSnapshot(life, f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
+	snapshot, err := newNotaloneSnapshot(life, f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,7 +379,7 @@ func TestNotAloneSnapshotSameShapeDDLRequiresFreshTableInstance(t *testing.T) {
 			if before.SchemaVersion == after.SchemaVersion || before.Target == after.Target {
 				t.Fatal("同shape的DDL没有改变完整实例证明")
 			}
-			profile := notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}}
+			profile := notaloneSyntheticFinalReadProfile(f.inspected.Tables)
 			stale, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, profile)
 			if err == nil {
 				stale.Close()
@@ -414,7 +414,7 @@ func TestNotAloneSnapshotRejectsLegacyOrIncompleteTableProof(t *testing.T) {
 			case "missing-root-page":
 				proof.RootPage = ""
 			}
-			snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0}})
+			snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables))
 			if err == nil {
 				snapshot.Close()
 				t.Fatal("旧或不完整的实例证明不得放行")

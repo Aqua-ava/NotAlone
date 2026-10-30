@@ -150,6 +150,26 @@ test('乱序、迟到和更小 local_id 的新消息不会因单一水位漏掉�
   assert.equal(read.coverage.incremental.pagesAccepted, 2);
 });
 
+test('删除排除的历史来源在旧游标重放时不会复活', async t => {
+  const f = await fixture(t);
+  f.state.historyRecords = [record('1', { text: '被删除的合成历史' })];
+  const [binding] = await select(f); await f.contacts.setReading(true);
+  await f.history.synchronize(binding.contact_id);
+  const sourceId = (await f.history.read(binding.contact_id)).messages[0].sourceRecordIds[0];
+  const { DeletionService } = await import('../src/storage/sqlite/deletion/service.ts');
+  const { ManagedFiles } = await import('../src/storage/sqlite/deletion/managed-files.ts');
+  const deletion = new DeletionService(f.storage, f.history.holders, new ManagedFiles(f.root));
+  const plan = await deletion.plan({ ownerId: owner, requestKey: 'synthetic-incremental-source-exclusion', scope: { kind: 'source', contactId: binding.contact_id, sourceId } });
+  assert.equal((await deletion.advance(plan)).state, 'completed');
+
+  f.state.tailBatches.push(() => ({ records: [record('1', { text: '重放的合成旧历史' }), record('2', { text: '新的合成消息' })], caughtUp: true, cursorOut: 'tail-2' }));
+  await f.history.synchronizeIncremental(binding.contact_id);
+  const read = await f.history.read(binding.contact_id);
+  assert.deepEqual(read.messages.map(message => message.text), ['新的合成消息']);
+  assert.equal(read.coverage.incremental.pagesAccepted, 1);
+  assert.equal(f.state.tails.at(-1).cursor, 'tail-1', '从删除前的可靠检查点重放时仍应用来源排除');
+});
+
 test('发送状态补齐与可认证更新分别处理：不重复建消息、未知状态不猜完成、冲突进入隔离', async t => {
   const f = await fixture(t);
   f.state.historyRecords = [record('5', { sender: 'owner', text: '你好', sentAt: null, timePrecision: null, status: '0' })];

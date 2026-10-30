@@ -10,6 +10,8 @@
 
 状态原值捕获和真实消息资格分开。`snapshot-opaque-v1` 只用于明确的合成原语验证或无正文的单条元数据诊断，不构成真实 status、恢复或跨启动连续性认证；正式支持档缺证时保持 unverified，不读取真实正文或启动正常历史。
 
+普通读取的状态规则由本机受版本管理的 profile 提供，同时精确匹配完整 `local_type`、发送方向和原始状态；高位类型不会自动继承低32位类型的资格。规则值与 `StatusSemanticsVerified` 认证分开，只有已认证的 sent/received 规则和必要的服务端身份条件全部满足时才取文字正文。pending、failed、recalled、deleted、unknown 均不取普通正文。当前真实 profile 未启用这些认证规则，合成测试的状态数字不代表微信状态码约定。
+
 定向原生测试需设置 `NOTALONE_TEST_WCDB` 指向被核验的现存 dylib，测试只创建合成临时数据库。验收证据见 `docs/verification/sqlite-private-history-support-03.md`；最终产品字节必须另行核对，开发构建 manifest 不宣称真实微信通过。
 
 

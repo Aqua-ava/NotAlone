@@ -19,10 +19,115 @@ import (
 
 // 仅由受版本管理且有真实结构依据的profile装配；RPC不能提供此结构。
 type notaloneReadProfile struct {
-	SchemaShapeFingerprint string
-	AllowedStatuses        []int64
-	OpaqueStatusPolicy     string
+	SchemaShapeFingerprint  string
+	StatusSemanticsVerified bool
+	StatusRules             []notaloneStatusRule
+	OpaqueStatusPolicy      string
 }
+type notaloneMessageState string
+
+const (
+	notaloneMessageSent     notaloneMessageState = "sent"
+	notaloneMessageReceived notaloneMessageState = "received"
+	notaloneMessagePending  notaloneMessageState = "pending"
+	notaloneMessageFailed   notaloneMessageState = "failed"
+	notaloneMessageRecalled notaloneMessageState = "recalled"
+	notaloneMessageDeleted  notaloneMessageState = "deleted"
+	notaloneMessageUnknown  notaloneMessageState = "unknown"
+)
+
+// 规则由可信的本机profile编译；local_type按完整整数匹配，未登记的高位不会继承低32位kind。
+type notaloneStatusRule struct {
+	LocalType        int64
+	Sender           string
+	Status           int64
+	State            notaloneMessageState
+	RequiresServerID bool
+}
+
+type notaloneStatusDecision struct {
+	State           notaloneMessageState
+	RuleMatched     bool
+	HistoryEligible bool
+}
+
+func notaloneKnownMessageState(state notaloneMessageState) bool {
+	switch state {
+	case notaloneMessageSent, notaloneMessageReceived, notaloneMessagePending, notaloneMessageFailed, notaloneMessageRecalled, notaloneMessageDeleted:
+		return true
+	default:
+		return false
+	}
+}
+
+func notaloneStatusRulesValid(rules []notaloneStatusRule) bool {
+	if len(rules) == 0 || len(rules) > 256 {
+		return false
+	}
+	type tuple struct {
+		localType int64
+		sender    string
+		status    int64
+	}
+	seen := make(map[tuple]struct{}, len(rules))
+	for _, rule := range rules {
+		if !notaloneKnownMessageState(rule.State) {
+			return false
+		}
+		if rule.State == notaloneMessageSent && rule.Sender != "owner" || rule.State == notaloneMessageReceived && rule.Sender != "contact" {
+			return false
+		}
+		if rule.Sender != "owner" && rule.Sender != "contact" && !(rule.Sender == "unknown" && rule.State != notaloneMessageSent && rule.State != notaloneMessageReceived) {
+			return false
+		}
+		key := tuple{localType: rule.LocalType, sender: rule.Sender, status: rule.Status}
+		if _, exists := seen[key]; exists {
+			return false
+		}
+		seen[key] = struct{}{}
+	}
+	return true
+}
+
+func notaloneStatusProfileValid(profile notaloneReadProfile) bool {
+	hasRules := len(profile.StatusRules) > 0
+	if hasRules != profile.StatusSemanticsVerified {
+		return false
+	}
+	if hasRules {
+		return profile.OpaqueStatusPolicy == "" && notaloneStatusRulesValid(profile.StatusRules)
+	}
+	return !profile.StatusSemanticsVerified && (profile.OpaqueStatusPolicy == "snapshot-opaque-v1" || profile.OpaqueStatusPolicy == "quarantine-text-v1")
+}
+
+// 状态值分类与来源证据分开：命中规则只给出候选语义；未经认证的规则永远没有普通历史资格。
+func notaloneClassifyStatus(profile notaloneReadProfile, localType int64, sender string, status int64, serverID *string) notaloneStatusDecision {
+	decision := notaloneStatusDecision{State: notaloneMessageUnknown}
+	for _, rule := range profile.StatusRules {
+		if rule.LocalType != localType || rule.Sender != sender || rule.Status != status {
+			continue
+		}
+		decision.State, decision.RuleMatched = rule.State, true
+		if !profile.StatusSemanticsVerified || (rule.State != notaloneMessageSent && rule.State != notaloneMessageReceived) {
+			return decision
+		}
+		if rule.RequiresServerID && !notaloneAllocatedServerID(serverID) {
+			return decision
+		}
+		decision.HistoryEligible = true
+		return decision
+	}
+	return decision
+}
+
+func notaloneAllocatedServerID(serverID *string) bool {
+	if serverID == nil {
+		return false
+	}
+	value, err := strconv.ParseInt(*serverID, 10, 64)
+	return err == nil && value > 0
+}
+
 type notaloneSnapshotTable struct {
 	Partition string `json:"partition"`
 	Instance  string `json:"instance"`
@@ -156,8 +261,7 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 	if ctx == nil || s == nil || s.cfg == nil || selected.Account == "" || selected.Conversation == "" || selected.SourceGeneration == "" || selected.Account != s.cfg.Wxid || inspected.SourceGeneration != selected.SourceGeneration || inspected.ScopeDigest != notaloneHash(selected.Account, selected.Conversation) || len(inspected.Tables) == 0 || len(inspected.CheckedPartitions) == 0 {
 		return nil, notaloneFailure("history_scope_unverified")
 	}
-	quarantine := profile.OpaqueStatusPolicy == "quarantine-text-v1"
-	if profile.SchemaShapeFingerprint == "" || profile.SchemaShapeFingerprint != notaloneSnapshotShape(inspected.Tables) || (len(profile.AllowedStatuses) == 0 && profile.OpaqueStatusPolicy != "snapshot-opaque-v1" && !quarantine) || (profile.OpaqueStatusPolicy != "" && profile.OpaqueStatusPolicy != "snapshot-opaque-v1" && !quarantine) || (quarantine && len(profile.AllowedStatuses) != 0) {
+	if profile.SchemaShapeFingerprint == "" || profile.SchemaShapeFingerprint != notaloneSnapshotShape(inspected.Tables) || !notaloneStatusProfileValid(profile) {
 		return nil, notaloneFailure("history_support_unverified")
 	}
 	if ctx.Err() != nil {
@@ -446,14 +550,6 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 	bodyIndexes := map[int64]int{}
 	for _, row := range rows {
 		status, knownStatus := row["status"].(int64)
-		allowed := false
-		if knownStatus {
-			for _, value := range n.profile.AllowedStatuses {
-				if status == value {
-					allowed = true
-				}
-			}
-		}
 		rawType, knownType := row["local_type"].(int64)
 		originalType := "unknown"
 		kind := "other"
@@ -462,12 +558,7 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 			kind = notaloneSnapshotKind(rawType)
 		}
 		record := notaloneSnapshotRecord{Partition: shard.partition, Table: shard.instance, LocalID: notaloneSnapshotDecimal(row["local_id"]), ServerID: notaloneSnapshotDecimal(row["server_id"]), Sender: "unknown", Kind: kind, OriginalType: originalType, Status: notaloneSnapshotDecimal(row["status"])}
-		record.StateAssurance = "unverified"
-		if allowed {
-			record.StateAssurance = "verified"
-		}
-		// 普通历史的未知状态不取正文；独立隔离入口可保存获准文字，仍不认证状态。
-		if senderID, ok := row["real_sender_id"].(int64); (allowed || quarantine) && ok {
+		if senderID, ok := row["real_sender_id"].(int64); (n.profile.StatusSemanticsVerified || quarantine) && ok {
 			names, e := shard.reader.QueryBounded(ctx, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", senderID)
 			if e == nil && len(names) == 1 {
 				switch rowString(names[0], "user_name") {
@@ -478,6 +569,15 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 				}
 			}
 		}
+		decision := notaloneStatusDecision{State: notaloneMessageUnknown}
+		if knownType && knownStatus {
+			decision = notaloneClassifyStatus(n.profile, rawType, record.Sender, status, record.ServerID)
+		}
+		allowed := decision.HistoryEligible
+		record.StateAssurance = "unverified"
+		if allowed {
+			record.StateAssurance = "verified"
+		}
 		if sent, ok := row["create_time"].(int64); ok && sent >= 0 && sent <= 253402300799 {
 			ms := strconv.FormatInt(sent*1000, 10)
 			precision := "second"
@@ -485,7 +585,8 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 			record.TimePrecision = &precision
 		}
 		records = append(records, record)
-		if kind == "text" && knownType && record.LocalID != nil && (record.Sender != "unknown" || quarantine) {
+		// 正文列表必须同时符合已认证的最终状态；隔离入口仅保留其独立授权的文字路径。
+		if kind == "text" && knownType && record.LocalID != nil && (allowed || quarantine) {
 			id := row["local_id"].(int64)
 			bodyIDs = append(bodyIDs, id)
 			bodyIndexes[id] = len(records) - 1

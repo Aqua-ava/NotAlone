@@ -26,6 +26,28 @@ test('应用跨批次持有同一守卫，停读后释放并禁止自动续读',
  await assert.rejects(history.synchronize(contact),{code:'history_source_continuity_unverified'});
 });
 
+test('页预算用尽后在同一活守卫和目标内从已提交游标续读',async t=>{
+ const f=await fixture(t),state={created:0,closed:0},create=guardedChannelFactory(state),cursors=[];let targets=0;
+ const history=new SqliteHistoryService(f.storage,f.contacts,()=>{
+  const channel=create(),target=channel.target;
+  channel.target=async(...args)=>{targets++;return target(...args);};
+  channel.page=async(scope,target,cursor)=>{
+   const index=cursors.length;cursors.push(cursor);assert.equal(cursor,index===0?null:`page-${index}`);
+   const final=index===1000;
+   return {target:target.descriptor,cursorIn:cursor,cursorOut:final?null:`page-${index+1}`,
+    records:index===0||final?[{partition:'p',table:'t',localId:final?'2':'1',serverId:'0',sender:'contact',kind:'text',text:`合成续读消息${index}`,originalType:'1',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,stateAssurance:'verified'}]:[],
+    completedPartitions:final?['p']:[],exhausted:final};
+  };
+  return channel;
+ });
+ t.after(()=>history.close().catch(()=>{}));const contact=f.saved[0].contact_id;
+ const paused=await history.synchronize(contact);assert.equal(paused.phase,'incomplete');assert.equal(paused.failureCode,'history_page_budget_exhausted');assert.equal(paused.pageCount,1000);
+ assert.equal(cursors.length,1000);assert.equal(state.created,1);assert.equal(state.closed,0);
+ const complete=await history.synchronize(contact);assert.equal(complete.phase,'complete');assert.equal(complete.pageCount,1001);
+ assert.equal(cursors.length,1001);assert.equal(cursors[1000],'page-1000');assert.equal(targets,1);assert.equal(state.created,1);assert.equal(state.closed,0);
+ assert.equal((await history.read(contact)).messages.length,2);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});await history.close();
+});
+
 test('停读等待在途守卫真正关闭，迟到页不能保存',async t=>{
  const f=await fixture(t),entered=Promise.withResolvers(),closeEntered=Promise.withResolvers(),release=Promise.withResolvers(),page=Promise.withResolvers();
  const state={created:0,closed:0,onPage:async()=>{entered.resolve();await page.promise;},onClose:async()=>{closeEntered.resolve();await release.promise;page.resolve();}};
@@ -48,6 +70,13 @@ test('未正常关闭即重开数据库时，覆盖立即不完整且来源不�
  const reopened=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId});t.after(()=>reopened.close());
  const read=await reopened.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact,limit:100});assert.equal(read.replyEligibility,'history_incomplete');
  await assert.rejects(reopened.execute('history.source',{ownerId:f.contacts.ownerId,contactId:contact,recordId:source}),{code:'history_source_not_found'});
+ const contacts={ownerId:f.contacts.ownerId,
+  eligibility:contactId=>reopened.execute('identity.eligibility',{ownerId:f.contacts.ownerId,contactId}),
+  validate:token=>reopened.execute('identity.validate',{ownerId:f.contacts.ownerId,token})};
+ let channels=0,pages=0;
+ const resumed=new SqliteHistoryService(reopened,contacts,()=>{channels++;const channel=guardedChannelFactory({created:0,closed:0})();channel.page=async()=>{pages++;throw new Error('不得读取');};return channel;});
+ t.after(()=>resumed.close());
+ await assert.rejects(resumed.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(channels,0);assert.equal(pages,0);
 });
 
 test('删除来源会排空空闲守卫，并使该来源不能自动续读',async t=>{
