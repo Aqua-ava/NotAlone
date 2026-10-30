@@ -81,10 +81,13 @@ test('正式清空/重读HTTP端点走正常服务入口，非法请求不触发
   assert.equal((await getClear()).completed, true);
 });
 
-test('正式微信适配器不提供边界能力，未认证能力保持拒绝', async () => {
+test('正式微信适配器未配置读取工具时，正文目标和边界能力均保持拒绝', async t => {
   const channel = createWechatHistoryChannel();
-  assert.equal(typeof channel.boundarySnapshot, 'undefined');
-  const report = await channel.inspect({ token: {}, accountKey: 'unverified', conversationKey: 'unverified' });
+  t.after(() => channel.close());
+  const scope = { token: {}, accountKey: 'unverified', conversationKey: 'unverified' };
+  const report = await channel.inspect(scope);
   assert.equal(report.status, 'unverified');
-  await assert.rejects(channel.target({ token: {}, accountKey: 'unverified', conversationKey: 'unverified' }), { code: 'history_support_unverified' });
+  await assert.rejects(channel.target(scope), { code: 'history_support_unverified' });
+  assert.equal(typeof channel.boundarySnapshot, 'function');
+  await assert.rejects(channel.boundarySnapshot(scope), { code: 'history_support_unverified' });
 });

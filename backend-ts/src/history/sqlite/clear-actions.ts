@@ -213,7 +213,7 @@ export const historyClearActions: StorageAction[] = [
     const cutoff = operation ? cutoffFor(tx, ownerId, String(operation.operation_id)) : undefined;
     const boundary = cutoffView(cutoff);
     const messageCount = Number((tx.get(`SELECT count(*) AS n FROM message WHERE owner_id=? AND contact_id=? AND availability='available'
-      AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=message.owner_id AND r.message_id=message.id AND r.state='normalized' AND r.availability='available')`, [ownerId, contactId])!.n as bigint));
+      AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=message.owner_id AND r.contact_id=message.contact_id AND r.message_id=message.id AND r.state='normalized' AND r.availability='available')`, [ownerId, contactId])!.n as bigint));
     const sourceCount = Number((tx.get('SELECT count(*) AS n FROM capture_record WHERE owner_id=? AND contact_id=?', [ownerId, contactId])!.n as bigint));
     const goalCount = Number((tx.get('SELECT count(*) AS n FROM read_goal WHERE owner_id=? AND contact_id=?', [ownerId, contactId])!.n as bigint));
     const failure = operation ? tx.get("SELECT minimal_proof FROM deletion_check WHERE operation_id=? AND plan_revision=? AND result='blocked' ORDER BY check_kind LIMIT 1", [operation.operation_id, operation.plan_revision]) : undefined;
