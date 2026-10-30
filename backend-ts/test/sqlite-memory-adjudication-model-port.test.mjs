@@ -10,7 +10,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawn} from 'node:child_process';
 import {startModelHost} from '../src/platform/models/model-host.ts';
-import {validateModelLedgerReceipt} from '../src/platform/models/model-ledger.ts';
+import {validateModelLedgerReceipt} from '../src/platform/models/model-ledger-contract.ts';
 
 const tools={adjudication:'BatchMemoryAdjudicationOutput',relation_verification:'BatchMemoryRelationVerificationOutput',merge_verification:'MergedMemoryVerificationOutput'};
 const request=(purpose='adjudication')=>({purpose,system:'合成裁决提示',user:'合成候选',

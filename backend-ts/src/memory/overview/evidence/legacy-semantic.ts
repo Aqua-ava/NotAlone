@@ -1,5 +1,5 @@
 /** 原v1/v2来源证明的只读重解析；规则摘要不替代当前全文和完整关系核验。 */
-import { canonicalJSON, digest, sha, type Evidence } from './sources.ts';
+import { canonicalJSON, digest, sha, type Evidence } from '../../evidence/canonical-json.ts';
 import { legacyGrammar } from './legacy-grammar.ts';
 type Span = [number,number];
 type Parsed = {rule: string;variant: string;frame: string;values: Evidence;spans: Record<string,Span>;whole: Span};

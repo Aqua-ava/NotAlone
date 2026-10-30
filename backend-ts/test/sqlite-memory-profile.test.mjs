@@ -10,7 +10,7 @@ import {launchDsh} from '../src/launch.ts';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
-import {positiveSupplier} from './fixtures/sqlite-memory-profile-supplier.mjs';
+import {documentProfileSupplier} from './fixtures/memory-documents/profile-supplier.mjs';
 
 /** 一条有界事件等待；就绪依据是握手或真实SQLite提交，不用sleep循环。 */
 function changed(directory,probe,accept,{timeoutMs=12000,label='正式SQLite记忆宿主'}={}){
@@ -38,8 +38,9 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
  t.after(async()=>{
   if(host?.isRunning()){
    if(info)await fetch(`http://${info.address}/api/runtime/shutdown`,{method:'POST',headers:{Authorization:`Bearer ${info.token}`},signal:AbortSignal.timeout(2000)}).catch(()=>{});
-   if(!await host.waitForExit(5000))await host.terminate();
+   if(!await host.waitForExit(5000))assert.equal(await host.terminate(),true,'正式profile未退出时保留合成目录');
   }
+  assert.ok(!host?.isRunning(),'正式profile退出后才能清理合成资料');
   await reopened?.close();
   if(provider){provider.closeAllConnections();await new Promise(done=>provider.close(done));}
   await f.service.close();await f.contacts.close();for(const cleanup of cleanups.reverse())await cleanup();
@@ -79,7 +80,7 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
  await writeFile(auditPath,'',{mode:0o600,flag:'wx'});await writeFile(stderrPath,'',{mode:0o600,flag:'wx'});
  const guard=new URL('./fixtures/sqlite-memory-profile-network-guard.mjs',import.meta.url).pathname;
  await writeFile(wrapper,`#!/bin/sh\nexec ${quote(process.execPath)} --import ${quote(guard)} "$@" 2>> ${quote(stderrPath)}\n`,{mode:0o700,flag:'wx'});
- const supplier=positiveSupplier();provider=createServer(supplier.handler);provider.listen(0,'127.0.0.1');await once(provider,'listening');
+ const supplier=documentProfileSupplier();provider=createServer(supplier.handler);provider.listen(0,'127.0.0.1');await once(provider,'listening');
  const supplierOrigin=`http://127.0.0.1:${provider.address().port}`;
  host=await launchDsh({nodeExecutable:wrapper,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,
   environment:{NOTALONE_SYNTHETIC_PROVIDER_URL:supplierOrigin,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},
@@ -87,7 +88,9 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
  try{info=await changed(dirname(infoPath),async()=>Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const n=line.indexOf('=');return [line.slice(0,n),line.slice(n+1)];})),value=>Boolean(value.address&&value.token),{timeoutMs:8000,label:'正式profile握手'});}
  catch(error){throw new Error(`${error.message}; ${await readFile(stderrPath,'utf8').then(text=>text.slice(-1600))}`);}
  const api=async(route,{body,method=body===undefined?'GET':'POST',auth=true,extra={}}={})=>{
-  const response=await fetch(`http://${info.address}${route}`,{method,headers:{...(auth?{Authorization:`Bearer ${info.token}`}:{})},...extra,...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(3000)});
+  const response=await fetch(`http://${info.address}${route}`,{method,
+   headers:{...(auth?{Authorization:`Bearer ${info.token}`}:{}) ,...(body===undefined?{}:{'content-type':'application/json'}),...extra},
+   ...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(3000)});
   return {status:response.status,data:await response.json()};
  };
  const launchRecord=JSON.parse(await readFile(infoPath+'.dsh-lock','utf8'));
@@ -105,15 +108,17 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
  assert.ok(first.data.inputs.every(input=>preparedByMessage.get(input.messageId).sourceRecordIds.includes(input.recordId)&&contactForRecord.get(input.recordId)===input.contactId));
  assert.equal((await api('/api/memory-processing/runs',{body:{request_key:requestKey}})).data.runId,first.data.runId);
  let runResponse;
- try{runResponse=await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api(`/api/memory-processing/runs/${first.data.runId}`),value=>value.status!==200||['incomplete','failed','paused','revoked'].includes(value.data.state),{timeoutMs:10000,label:'正式记忆轮次'});}
+ try{runResponse=await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api(`/api/memory-processing/runs/${first.data.runId}`),value=>value.status!==200||['completed','incomplete','failed','paused','revoked'].includes(value.data.state),{timeoutMs:10000,label:'正式记忆轮次'});}
  catch(error){const observed=await api(`/api/memory-processing/runs/${first.data.runId}`);throw new Error(`${error.message}; ${JSON.stringify({http:observed.status,state:observed.data.state,succeeded:observed.data.succeeded,tasks:observed.data.tasks?.map(task=>({scope:task.scopeKind,state:task.state,error:task.errorCode})),requests:{extraction:supplier.windows.length,verification:supplier.verifications.length},guard:(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)),stderr:(await readFile(stderrPath,'utf8')).slice(-1200)})}`);}
  assert.equal(runResponse.status,200);const run=runResponse.data;
  try{await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api('/api/memory-management?scope_kind=self'),value=>value.status!==200||value.data.memories?.filter(memory=>memory.current?.adoptionMode==='auto').length===2,{timeoutMs:10000,label:'正式08裁决发布'});}catch(error){const trace=await Promise.all(run.tasks.map(task=>api(`/api/memory-processing/tasks/${task.taskId}/events`)));throw new Error(`${error.message}; ${JSON.stringify({self:(await api('/api/memory-management?scope_kind=self')).data,supplierErrors:supplier.errors,adjudications:supplier.adjudications.length,trace:trace.map(value=>({calls:value.data.calls,events:value.data.events?.filter(e=>['adjudication_result','adjudication_failure'].includes(e.kind)).map(e=>e.payload)})),stderr:(await readFile(stderrPath,'utf8')).slice(-2000)})}`);}
+ const finalRun=await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api(`/api/memory-processing/runs/${run.runId}`),value=>value.status!==200||value.data.laterStages==='completed',{timeoutMs:10000,label:'正式09文档阶段'});
+ assert.equal(finalRun.status,200);Object.assign(run,finalRun.data);
  const traces=await Promise.all(run.tasks.map(async task=>({task,trace:(await api(`/api/memory-processing/tasks/${task.taskId}/events`)).data})));
  assert.deepEqual(supplier.errors,[]);assert.equal(run.succeeded,4,JSON.stringify(traces.map(({task,trace})=>({scope:task.scopeKind,state:task.state,errorCode:task.errorCode,calls:trace.calls,events:trace.events?.map(event=>event.kind)}))));assert.equal(run.failed,0);assert.equal(run.unknown,0);assert.equal(run.candidates.length,4);
  assert.deepEqual(run.candidates.filter(candidate=>candidate.scopeKind==='contact').map(candidate=>[candidate.contactId,candidate.body]).sort(),contactIds.map(contactId=>[contactId,expectedByContact.get(contactId).contactBody]).sort());
  assert.deepEqual(run.candidates.filter(candidate=>candidate.scopeKind==='self').map(candidate=>candidate.body).sort(),['用户长期偏好绿茶。','用户长期偏好红茶。'].sort());
- assert.ok(run.candidates.every(candidate=>candidate.origin==='auto'&&candidate.state==='verified_pending_decision'));assert.equal(run.laterStages,'pending');assert.notEqual(run.state,'completed');
+ assert.ok(run.candidates.every(candidate=>candidate.origin==='auto'&&candidate.state==='verified_pending_decision'));assert.equal(run.laterStages,'completed');assert.equal(run.state,'completed');
  assert.equal(supplier.windows.length,2);assert.equal(supplier.verifications.length,2);
  const normal=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});assert.equal(normal.status,'configured');
  const extractionContacts=[],verificationContacts=[],extractionOutputs=new Map(),verificationOutputs=new Map();
@@ -132,9 +137,10 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
  }
  assert.deepEqual(extractionContacts.sort(),[...contactIds].sort());assert.deepEqual(verificationContacts.sort(),[...contactIds].sort());
  for(const {task,trace} of traces.filter(item=>item.task.scopeKind==='contact')){
-  assert.equal(trace.calls.length,2);assert.ok(trace.calls.every(call=>call.state==='succeeded'));assert.deepEqual(new Set(trace.calls.map(call=>call.purpose)),new Set(['extraction','verification']));
+  const extractionCalls=trace.calls.filter(call=>['extraction','verification'].includes(call.purpose));
+  assert.equal(extractionCalls.length,2);assert.ok(extractionCalls.every(call=>call.state==='succeeded'));assert.deepEqual(new Set(extractionCalls.map(call=>call.purpose)),new Set(['extraction','verification']));
   for(const [purpose,name,expected] of [['extraction','DirectMemoryExtractionOutput',extractionOutputs.get(task.contactId)],['verification','SourceVerificationOutput',verificationOutputs.get(task.contactId)]]){
-   assert.ok(expected);const calls=trace.calls.filter(call=>call.purpose===purpose);assert.equal(calls.length,1);
+   assert.ok(expected);const calls=extractionCalls.filter(call=>call.purpose===purpose);assert.equal(calls.length,1);
    const returns=trace.events.filter(event=>event.kind==='model_output'&&event.callId===calls[0].callId);assert.equal(returns.length,1);
    const tools=returns[0].payload.blocks.filter(block=>block.type==='tool-call');assert.equal(tools.length,1);assert.equal(tools[0].name,name);assert.deepEqual(JSON.parse(tools[0].arguments),expected);
   }
@@ -148,21 +154,23 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
    assert.equal(event.payload.contactId,event.kind==='verified_output'?task.contactId:null);assert.deepEqual(new Set(event.sources.map(source=>source.recordId)),new Set(messagesForContact(task.contactId).flatMap(message=>message.sourceRecordIds)));
   }
  }
- const self=traces.find(item=>item.task.scopeKind==='self');assert.equal(self.trace.calls.length,2);assert.deepEqual(new Set(self.trace.calls.map(call=>call.purpose)),new Set(['adjudication','relation_verification']));assert.equal(self.trace.events.filter(event=>event.kind==='verified_output').length,2);
+ const self=traces.find(item=>item.task.scopeKind==='self'),adjudicationCalls=self.trace.calls.filter(call=>['adjudication','relation_verification'].includes(call.purpose));assert.equal(adjudicationCalls.length,2);assert.deepEqual(new Set(adjudicationCalls.map(call=>call.purpose)),new Set(['adjudication','relation_verification']));assert.equal(self.trace.events.filter(event=>event.kind==='verified_output').length,2);
  for(const event of self.trace.events.filter(event=>event.kind==='verified_output')){
   const fact=event.payload.fact;assert.equal(fact.source_message_ids.length,1);assert.equal(fact.subject,'self');assert.equal(event.payload.contactId,null);assert.deepEqual({subject:fact.subject,text:fact.text},expectedFact(fact.source_message_ids[0]));
   const contactId=contactForMessage.get(fact.source_message_ids[0]);assert.ok(event.sources.every(source=>source.contactId===contactId&&contactForRecord.get(source.recordId)===contactId));assert.deepEqual(new Set(event.sources.map(source=>source.recordId)),new Set(messagesForContact(contactId).flatMap(message=>message.sourceRecordIds)));
  }
+ assert.ok(supplier.documents.some(call=>call.names.includes('ScenarioVerificationOutput')));assert.ok(supplier.documents.some(call=>call.names.includes('ProfileVerificationOutput')));
  assert.equal((await api('/api/memory-processing/runs',{body:{request_key:requestKey}})).data.runId,run.runId);assert.equal(supplier.windows.length+supplier.verifications.length+supplier.adjudications.length,6);
  const permits=await readdir(join(root,'model-permits'));assert.equal(permits.length,1,'记忆与已安装讨论所有者共用唯一模型宿主');
- const redirects=(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.equal(redirects.length,6);assert.ok(redirects.every(item=>item.kind==='redirect'&&item.syntheticAuthentication));assert.deepEqual(redirects.map(item=>item.officialPath).sort(),['/anthropic/v1/messages','/anthropic/v1/messages','/anthropic/v1/messages','/anthropic/v1/messages','/beta/chat/completions','/beta/chat/completions'].sort());
+ const redirects=(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.equal(redirects.length,6+supplier.documents.length);assert.ok(redirects.every(item=>item.kind==='redirect'&&item.syntheticAuthentication));assert.equal(redirects.filter(item=>item.officialPath==='/beta/chat/completions').length,2);
  const stop=await api('/api/runtime/shutdown',{method:'POST'});assert.equal(stop.status,200);assert.equal(stop.data.state,'stopped');assert.equal(await host.waitForExit(5000),true);assert.equal(host.isRunning(),false);
  for(const owned of [infoPath,infoPath+'.dsh-lock',launchRecord.home])await assert.rejects(access(owned),error=>error.code==='ENOENT');
  const socketIdentity=createHash('sha256').update(JSON.stringify([resolve(infoPath),resolve(envFilePath)])).digest('hex').slice(0,24);
  await assert.rejects(access(join('/tmp',`na-model-${process.getuid?.()??'local'}-${socketIdentity}`)),error=>error.code==='ENOENT');
  reopened=await SqliteStorage.open({userData:root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:new URL('./fixtures/sqlite-memory-profile-store.mjs',import.meta.url).href});
  assert.deepEqual(await reopened.check(),{integrity:'ok',foreignKeys:'ok'});
- const evidence=await reopened.execute('fixture.memoryProfileEvidence',{ownerId:owner,runId:run.runId});assert.equal(evidence.runCount,1);assert.equal(evidence.formalMemoryRows,12);assert.equal(evidence.ownerInputs.length,2);assert.ok(evidence.ownerInputs.every(input=>input.role==='verified_contribution'&&input.consumerScope==='self'&&input.producerScope==='contact'&&input.sameRun&&input.samePayload));assert.equal(evidence.calls.length,6);
+ const evidence=await reopened.execute('fixture.memoryProfileEvidence',{ownerId:owner,runId:run.runId});assert.equal(evidence.runCount,1);assert.equal(evidence.formalMemoryRows,12);assert.equal(evidence.ownerInputs.length,2);assert.ok(evidence.ownerInputs.every(input=>input.role==='verified_contribution'&&input.consumerScope==='self'&&input.producerScope==='contact'&&input.sameRun&&input.samePayload));
+ const primaryCalls=evidence.calls.filter(call=>['extraction','verification','adjudication','relation_verification'].includes(call.purpose));assert.equal(primaryCalls.length,6);assert.equal(evidence.calls.length,6+supplier.documents.length);
  assert.ok(evidence.calls.every(call=>call.state==='succeeded'&&call.settlement==='settled'&&call.model===normal.model.model&&call.maxOutputTokens===normal.model.maxTokens&&call.contextWindowTokens===normal.model.budgetProfile.context_window_tokens&&call.safetyMarginTokens===normal.model.budgetProfile.safety_margin_tokens&&call.serializedBytes>0&&call.inputTokens+call.maxOutputTokens+call.safetyMarginTokens<=call.contextWindowTokens));
  assert.equal(await readFile(envFilePath,'utf8'),'NOTALONE_DEEPSEEK_API_KEY=synthetic-only\n');
 });
@@ -176,7 +184,7 @@ test('正式SQLite profile的unknown保持可读和幂等，暂停后关闭排�
  const socketDirectory=join('/tmp',`na-model-${process.getuid?.()??'local'}-${socketIdentity}`);
  const exists=async path=>{try{await access(path);return true;}catch(error){if(error.code==='ENOENT')return false;throw error;}};
  const api=async(route,{body,method=body===undefined?'GET':'POST',auth=true,timeoutMs=3000}={})=>{
-  const response=await fetch(`http://${info.address}${route}`,{method,headers:auth?{Authorization:`Bearer ${info.token}`}:{},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(timeoutMs)});
+  const response=await fetch(`http://${info.address}${route}`,{method,headers:{...(auth?{Authorization:`Bearer ${info.token}`}:{}) ,...(body===undefined?{}:{'content-type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(timeoutMs)});
   return {status:response.status,data:await response.json()};
  };
  t.after(async()=>{
@@ -240,8 +248,9 @@ test('正式SQLite profile的unknown保持可读和幂等，暂停后关闭排�
  const normal=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});assert.equal(normal.status,'configured');assert.equal(requests[0].body.model,normal.model.model);assert.equal(requests[0].body.max_tokens,normal.model.maxTokens);
  assert.deepEqual(new Set(requests[0].payload.messages.map(message=>contactForMessage.get(message.message_id))),new Set([uncertain.task.contactId]));
  assert.equal((await api('/api/memory-processing/runs',{body:{request_key:requestKey}})).data.runId,first.data.runId);
- assert.equal((await api(`/api/memory-processing/runs/${first.data.runId}/continue`,{body:{}})).status,200);
- const paused=await api(`/api/memory-processing/runs/${first.data.runId}/pause`,{body:{}});assert.equal(paused.status,200);assert.equal(paused.data.state,'paused');assert.equal(paused.data.unknown,1);
+ const continued=await api(`/api/memory-processing/runs/${first.data.runId}/continue`,{body:{action_version:observed.run.controlVersion,operation_id:randomUUID()}});assert.equal(continued.status,200);
+ const beforePause=await api(`/api/memory-processing/runs/${first.data.runId}`);assert.equal(beforePause.status,200);
+ const paused=await api(`/api/memory-processing/runs/${first.data.runId}/pause`,{body:{action_version:beforePause.data.controlVersion,operation_id:randomUUID()}});assert.equal(paused.status,200);assert.equal(paused.data.state,'paused');assert.equal(paused.data.unknown,1);
  assert.equal((await api('/api/memory-processing/runs',{body:{request_key:requestKey}})).data.runId,first.data.runId);assert.equal(requests.length,1,'unknown同key与继续均不盲目重发');
  assert.equal((await readdir(join(root,'model-permits'))).length,1);
  const redirects=(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.equal(redirects.length,1);assert.deepEqual(redirects[0],{kind:'redirect',officialPath:'/anthropic/v1/messages',syntheticAuthentication:true});

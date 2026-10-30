@@ -62,7 +62,7 @@ const architectureNodes = {
  model: ['外部模型', '选定上下文 ⇄ 候选与引用', '本次模型请求会跨出本机边界，模型结果返回生成运行时。此图不代表全部处理都在本地。'],
  check: ['校验与保存', '校验依据 · 保存候选 · 调用台账', '检查结果结构、引用和资料有效性，保存候选与上下文快照，记录调用元数据；失败时返回错误状态。'],
  result: ['回到桌面端', '查看依据 → 修改 → 复制', '候选回到桌面端供用户选择、修改和复制。发送始终由用户亲自完成，不存在后台发送工具。'],
- database: ['PostgreSQL', '来源 · 消息 · 记忆 · 任务 · 回复记录', '各业务模块通过持久化适配器共用数据库。联系人范围数据按 owner_id + contact_id 隔离；存储并非生成流程的一个顺序步骤。']
+ database: ['SQLite', '来源 · 消息 · 记忆 · 任务 · 回复记录', '各业务模块通过持久化适配器共用本机 SQLite 数据库。联系人范围数据按 owner_id + contact_id 隔离；存储并非生成流程的一个顺序步骤。']
 };
 const graph = document.querySelector('#architecture-diagram');
 function architectureNode(key, extra = '') {

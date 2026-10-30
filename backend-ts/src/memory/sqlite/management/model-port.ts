@@ -2,7 +2,7 @@
 import type {Context} from '@deepseek-ai/cordis';
 import {createHash} from 'node:crypto';
 import type {HostReplyConfiguration} from '../../../host/host-reply-config.ts';
-import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger.ts';
+import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
 import type {installModelProvider} from '../../../platform/models/model-provider.ts';
 import {createExtractionModelCaller,type ExtractionPermitEndpoint} from '../../extraction/model.ts';

@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {resolve,dirname,extname,relative,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {canonicalJSON,digest} from '../overview/evidence/sources.ts';
+import {canonicalJSON,digest} from '../evidence/canonical-json.ts';
 import type {PreparedVerificationPolicy} from './verification/complete-claim.ts';
 
 export interface CompleteClaimRuntimeConfig {
@@ -81,7 +81,7 @@ function dependencies(source:string):string[]{
 }
 export async function createExtractionPolicyVersion(options:{rootDirectory?:string;entrypoints?:readonly string[]}={}):Promise<ExtractionPolicyVersion>{
  const root=resolve(options.rootDirectory??resolve(dirname(fileURLToPath(import.meta.url)),'../..'));
- const entries=options.entrypoints??['memory/extraction/service.ts','memory/extraction/verification/deepseek-strict.ts','memory/extraction/policy-version.ts'];
+ const entries=options.entrypoints??['memory/sqlite/service.ts','memory/extraction/verification/deepseek-strict.ts','memory/extraction/policy-version.ts'];
  const metadata=[resolve(root,'../package.json'),resolve(root,'../../pnpm-lock.yaml')];
  async function capture():Promise<string>{
   const visited=new Set<string>(),files:{path:string;sha256:string}[]=[];

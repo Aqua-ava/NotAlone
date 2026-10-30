@@ -67,9 +67,6 @@ importers:
       onnxruntime-node:
         specifier: 1.30.0
         version: 1.30.0
-      pg:
-        specifier: 8.16.3
-        version: 8.16.3
       silk-wasm:
         specifier: 3.7.1
         version: 3.7.1
@@ -80,9 +77,6 @@ importers:
       "@types/node":
         specifier: 26.6.4
         version: 26.6.4
-      "@types/pg":
-        specifier: 8.15.5
-        version: 8.15.5
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -5031,10 +5025,6 @@ packages:
     resolution:
       integrity: sha512-L3LgimLHXtGkWikKnsPg0/VFx9OGZaC+eN1u4r+OB1XRqH3meBIAVC2zr1WdMH+RHmnRkqliQAOHNJ/E0j/e0Q==
       tarball: https://registry.npmjs.org/@types/http-cache-semantics/-/http-cache-semantics-4.2.0.tgz
-  "@types/pg@8.15.5":
-    resolution:
-      integrity: sha512-LF7lF6zWEKxuT3/OR8wAZGzkg4ENGXFNyiV/JeOt9z5B+0ZVwbql9McqX5c/WStFq1GaGso7H1AzP/qSzmlCKQ==
-      tarball: https://registry.npmjs.org/@types/pg/-/pg-8.15.5.tgz
   "@types/retry@0.12.0":
     resolution:
       integrity: sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA==
@@ -5949,81 +5939,12 @@ packages:
       tarball: https://registry.npmjs.org/path-key/-/path-key-4.0.0.tgz
     engines:
       node: ">=12"
-  pg-cloudflare@1.4.1:
-    resolution:
-      integrity: sha512-6PQbsFWZcp9EmJEwy5cGQ2La+AMWpP46lgbb8X+U/XsHIUweYDNCpeuKck5RxL2MdVFi7krbbEi5nX4Zh7JhrQ==
-      tarball: https://registry.npmjs.org/pg-cloudflare/-/pg-cloudflare-1.4.1.tgz
-  pg-connection-string@2.14.1:
-    resolution:
-      integrity: sha512-qR3kGNPBLpCNtz0evbKA0Y/MRFXwSSdT+pTJvYp/bXTcReZbvX1kzF0IyTc1QnxqF7AZbOeBhNL8R5mYQZV/MA==
-      tarball: https://registry.npmjs.org/pg-connection-string/-/pg-connection-string-2.14.1.tgz
-  pg-int8@1.0.1:
-    resolution:
-      integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==
-      tarball: https://registry.npmjs.org/pg-int8/-/pg-int8-1.0.1.tgz
-    engines:
-      node: ">=4.0.0"
-  pg-pool@3.14.0:
-    resolution:
-      integrity: sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw==
-      tarball: https://registry.npmjs.org/pg-pool/-/pg-pool-3.14.0.tgz
-    peerDependencies:
-      pg: ">=8.0"
-  pg-protocol@1.16.1:
-    resolution:
-      integrity: sha512-p9VOFMiHB/ZbJATetbg+99PxssTVSQRnyuPSQ67mN1+1KBOjZaZ83ZQzltnxPhJwSsC3nwVjJ10DVJlerbFzLg==
-      tarball: https://registry.npmjs.org/pg-protocol/-/pg-protocol-1.16.1.tgz
-  pg-types@2.2.0:
-    resolution:
-      integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==
-      tarball: https://registry.npmjs.org/pg-types/-/pg-types-2.2.0.tgz
-    engines:
-      node: ">=4"
-  pg@8.16.3:
-    resolution:
-      integrity: sha512-enxc1h0jA/aq5oSDMvqyW3q89ra6XIIDZgCX9vkMrnz5DFTw/Ny3Li2lFQ+pt3L6MCgm/5o2o8HW9hiJji+xvw==
-      tarball: https://registry.npmjs.org/pg/-/pg-8.16.3.tgz
-    engines:
-      node: ">= 16.0.0"
-    peerDependencies:
-      pg-native: ">=3.0.1"
-    peerDependenciesMeta:
-      pg-native:
-        optional: true
-  pgpass@1.0.5:
-    resolution:
-      integrity: sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==
-      tarball: https://registry.npmjs.org/pgpass/-/pgpass-1.0.5.tgz
   pkce-challenge@5.0.1:
     resolution:
       integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==
       tarball: https://registry.npmjs.org/pkce-challenge/-/pkce-challenge-5.0.1.tgz
     engines:
       node: ">=16.20.0"
-  postgres-array@2.0.0:
-    resolution:
-      integrity: sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==
-      tarball: https://registry.npmjs.org/postgres-array/-/postgres-array-2.0.0.tgz
-    engines:
-      node: ">=4"
-  postgres-bytea@1.0.1:
-    resolution:
-      integrity: sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==
-      tarball: https://registry.npmjs.org/postgres-bytea/-/postgres-bytea-1.0.1.tgz
-    engines:
-      node: ">=0.10.0"
-  postgres-date@1.0.7:
-    resolution:
-      integrity: sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==
-      tarball: https://registry.npmjs.org/postgres-date/-/postgres-date-1.0.7.tgz
-    engines:
-      node: ">=0.10.0"
-  postgres-interval@1.2.0:
-    resolution:
-      integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==
-      tarball: https://registry.npmjs.org/postgres-interval/-/postgres-interval-1.2.0.tgz
-    engines:
-      node: ">=0.10.0"
   powershell-utils@0.2.1:
     resolution:
       integrity: sha512-C+y9x90UElAddDZmV4qOx9W53B61PO7cIqWz2dQsWlwswuq4mr8NEwytdGKboYbQlGZ3awrkTeNvcZiZNHnQ8A==
@@ -6210,12 +6131,6 @@ packages:
       tarball: https://registry.npmjs.org/signal-exit/-/signal-exit-4.1.0.tgz
     engines:
       node: ">=14"
-  split2@4.2.0:
-    resolution:
-      integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==
-      tarball: https://registry.npmjs.org/split2/-/split2-4.2.0.tgz
-    engines:
-      node: ">= 10.x"
   standardwebhooks@1.1.1:
     resolution:
       integrity: sha512-bCbX9ZEyFkWPsRz7Bl3NuQUJohmwGSev/yhr7vhaGPlc4AfIrspIRa6cPTBuI1ItmrTDJ4d/S2hCsfe4+vQGnQ==
@@ -6336,12 +6251,6 @@ packages:
     resolution:
       integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==
       tarball: https://registry.npmjs.org/xmlchars/-/xmlchars-2.2.0.tgz
-  xtend@4.0.2:
-    resolution:
-      integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==
-      tarball: https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz
-    engines:
-      node: ">=0.4"
   yocto-queue@1.2.2:
     resolution:
       integrity: sha512-4LCcse/U2MHZ63HAJVE+v71o7yOdIe4cZ70Wpf8D/IyjDKYQLV5GD46B+hSTjJsvV5PztjvHoU580EftxjDZFQ==
@@ -10263,11 +10172,6 @@ snapshots:
     dependencies:
       tslib: 2.8.1
   "@types/http-cache-semantics@4.2.0": {}
-  "@types/pg@8.15.5":
-    dependencies:
-      "@types/node": 26.6.4
-      pg-protocol: 1.16.1
-      pg-types: 2.2.0
   "@types/retry@0.12.0": {}
   "@vscode/ripgrep-darwin-arm64@1.18.0":
     optional: true
@@ -10712,40 +10616,7 @@ snapshots:
   parseurl@1.3.3: {}
   partial-json@0.1.7: {}
   path-key@4.0.0: {}
-  pg-cloudflare@1.4.1:
-    optional: true
-  pg-connection-string@2.14.1: {}
-  pg-int8@1.0.1: {}
-  pg-pool@3.14.0(pg@8.16.3):
-    dependencies:
-      pg: 8.16.3
-  pg-protocol@1.16.1: {}
-  pg-types@2.2.0:
-    dependencies:
-      pg-int8: 1.0.1
-      postgres-array: 2.0.0
-      postgres-bytea: 1.0.1
-      postgres-date: 1.0.7
-      postgres-interval: 1.2.0
-  pg@8.16.3:
-    dependencies:
-      pg-connection-string: 2.14.1
-      pg-pool: 3.14.0(pg@8.16.3)
-      pg-protocol: 1.16.1
-      pg-types: 2.2.0
-      pgpass: 1.0.5
-    optionalDependencies:
-      pg-cloudflare: 1.4.1
-  pgpass@1.0.5:
-    dependencies:
-      split2: 4.2.0
   pkce-challenge@5.0.1: {}
-  postgres-array@2.0.0: {}
-  postgres-bytea@1.0.1: {}
-  postgres-date@1.0.7: {}
-  postgres-interval@1.2.0:
-    dependencies:
-      xtend: 4.0.2
   powershell-utils@0.2.1: {}
   pretty-ms@9.3.1:
     dependencies:
@@ -10860,7 +10731,6 @@ snapshots:
   sherpa-onnx-win-x64@1.13.8:
     optional: true
   signal-exit@4.1.0: {}
-  split2@4.2.0: {}
   standardwebhooks@1.1.1:
     dependencies:
       "@stablelib/base64": 1.0.1
@@ -10896,7 +10766,6 @@ snapshots:
       is-wsl: 3.1.1
       powershell-utils: 0.2.1
   xmlchars@2.2.0: {}
-  xtend@4.0.2: {}
   yocto-queue@1.2.2: {}
   yoctocolors@2.2.0: {}
   zod@4.4.3: {}

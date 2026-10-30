@@ -2,7 +2,7 @@ import {candidateAdmission,type CandidateVerificationReference} from './manageme
 import {finalizeOwnerContributions} from './owner-contribution.ts';
 import {createHash,randomUUID} from 'node:crypto';
 import type {StorageAction,StorageTransaction,StorageRow,StorageLease} from '../../storage/sqlite/contracts.ts';
-import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../platform/models/model-ledger.ts';
+import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
 import {assertContribution,assertInputs,currentAttempt,inputRows,fail,textId} from './qualification.ts';
 import {applyControl,takeOverExpiredAttempt} from './control.ts';

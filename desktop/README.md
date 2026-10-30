@@ -1,8 +1,10 @@
 # 桌面端
 
+当前默认业务存储为 SQLite，旧 PostgreSQL 安装、构建及捆绑脚本已退役。本文带日期的旧验收记录保留当时结果；其中 PostgreSQL／Python 测试命令仅供历史追溯，当前可运行测试以 `tests/inventory.json` 为准，恢复旧测试见 [历史测试说明](../backend-ts/test/HISTORICAL.md)。
+
 当前源码后台统一为 TypeScript／DSH，正常开发只需 Node.js ≥24，不需要 Python／Conda 或 runtime选择标记；原配置的Python字段兼容忽略。沿用原数据库和资料；本次只做开发运行，未执行打包或发行验收。
 
-当前独立交付目标为 **macOS 15+、Apple Silicon（arm64）**。App 的 `LSMinimumSystemVersion` 和 PostgreSQL 编译部署目标统一读取 `scripts/runtime/component-sources.lock.json` 的 `minimumMacOS`；打包在签名前写入，并复查最终 App，避免外壳仍声明支持 macOS 13／14 而包内后台要求更高版本。2026-10-17 官方 ZIP 静态打包回归先实际复现 `13.0` 对 `15.0` 的失败，修复后为 `15.0` 且严格签名通过；本轮没有在旧系统运行或启动 GUI／数据库，不扩展 x86／universal 支持。
+当前独立交付目标为 **macOS 15+、Apple Silicon（arm64）**。App 的 `LSMinimumSystemVersion` 读取 `scripts/app-platform.json` 的 `minimumMacOS`；打包在签名前写入并复查最终 App。旧 PostgreSQL 编译、捆绑和运行时准备入口已退役。历史签名记录不代表当前版本已完成发行验收，不扩展 x86／universal 支持。
 
 ## 手动首版使用
 
@@ -95,15 +97,11 @@ B负责人工作树的 `reply-strategy-dialogue` 和 `reply-strategy-invalidatio
 
 ## 数据库沿用与结构补齐
 
-已有安装继续使用已配置的本机数据库和资料目录。App 先只读核对真实版本账本；结构就绪时直接连接，存在缺少版本时才在原库逐版本执行受信任 SQL，再复验并连接。执行前须确认本 App 原后台已认证停读、生成已结算、目标库没有其他连接，并持有同一迁移锁；旧 App 或其他程序仍连接时，正常退出后重试。原连接与资料位置保持不变，不再显示“备份并完成更新”，也不自动备份、恢复到临时库或复制切换数据库。
+当前业务资料位于 App `userData/managed/sqlite/notalone.sqlite`。受控启动沿用已确认的 `database_id`、配置与资料目录；连接时核对实例身份、迁移校验和、结构与完整性，再执行已注册的后续 SQLite 迁移。缺失、损坏或未知结构会停止连接，不以新空库替代。
 
-没有既有配置的新安装仍通过“开始本机设置”创建 App 自带 PostgreSQL 的空库和完整结构；以后重开沿用同一目录。已有配置连接失败不能触发新空库替代。联系人、聊天、关系资料、来源、绑定、同步开关和暂停状态继续属于原库，不重新生成。
+无旧业务对象的新目录由切换控制面创建 SQLite 实例并保存身份。发现旧 PostgreSQL 库、会话副本或其他无法确认归属的资料时保持维护态，按原有归属和授权核验处理；清理旧源码或依赖不会删除这些数据，也不会自动迁入旧资料。模型配置、用户 Skill 与外部原件继续保留。
 
-仅支持具有正式版本账本，或已核验035基线并有后续真实版本记录的本机库。文件或账本漂移、未知基线、账本与受信任 SQL 不一致的开发分叉和其他连接均停止并显示固定原因；不猜历史、不改写成功记录、不自动覆盖恢复。中断后保留已成功版本，修正问题再由正常启动入口补齐剩余版本，不重复执行成功 SQL。
-
-旧流程已经生成的备份或未完成现场会保留。用户确认删除来源、过程、关系资料或助手会话时，仍按原归属核验清除本 App 管理的完整更新快照，避免通过恢复找回已删除内容。未知、损坏、未完成或清理失败时不显示删除成功；可查看固定本机目录及清理恢复说明，核对后处理，不能因新流程停用就清空旧目录。外置原库、自行导出的文件及模型供应商副本继续由各自删除路径处理，App 不擅自删除。
-
-本次决定见 [ADR-066](../architecture/adr/066-in-place-schema-updates-and-database-reuse.md)，实施与实际验证见[原库结构补齐与正常首启](../.scratch/in-place-database-startup/spec.md)。旧备份搬库用例仅为[历史实现记录](../.scratch/standalone-app-delivery/data-update-validation.md)，不证明新流程、最终安装包或微信集成已验收。
+启动与隔离演练的证据及限制见[SQLite 切换验证记录](../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。旧 PostgreSQL 原库升级说明按 [ADR-066](../architecture/adr/066-in-place-schema-updates-and-database-reuse.md) 保留历史来源，不再作为当前启动流程。
 
 ## 本机运行与构建
 
@@ -118,7 +116,7 @@ pnpm run dev:status
 pnpm run dev
 ```
 
-React 界面和 CSS 保存后直接更新；兼容的组件修改会保留当前页面和组件状态，修改 Hook 结构或入口 HTML 时仍可能重新挂载或刷新页面。main、preload 和被引用的共享 TypeScript 编译成功后自动重启；后端 `backend-ts/src/` 的 TypeScript 与原迁移 SQL 变化也会请求重启。重启前沿用正式的认证停读和生成结算流程；未确认停止时保留原 App 及恢复提示，不强杀，也不启动第二份。主进程重启会清除尚未保存的界面临时状态。首次显式启动正常显示管理后台；之后源码触发或终端 `r` 请求的重启只在后台预加载窗口，不自动显示或抢焦点。需要查看时点击 Dock 图标或“窗口 → 管理后台”，输入小窗仍可由原快捷键唤出。
+React 界面和 CSS 保存后直接更新；兼容的组件修改会保留当前页面和组件状态，修改 Hook 结构或入口 HTML 时仍可能重新挂载或刷新页面。main、preload 和被引用的共享 TypeScript 编译成功后自动重启；后端 `backend-ts/src/` 的 TypeScript 变化也会请求重启，SQLite 迁移随受控启动检查。重启前沿用正式的认证停读和生成结算流程；未确认停止时保留原 App 及恢复提示，不强杀，也不启动第二份。主进程重启会清除尚未保存的界面临时状态。首次显式启动正常显示管理后台；之后源码触发或终端 `r` 请求的重启只在后台预加载窗口，不自动显示或抢焦点。需要查看时点击 Dock 图标或“窗口 → 管理后台”，输入小窗仍可由原快捷键唤出。
 
 开发版顶部变化加速源固定读取 `desktop/.dev/resources/notalone-probe`，使用仓库准备工具生成的整组探针、独立辅助源、核心库和清单，并复用正式资源的完整性与签名身份核验。只在已验证的开发入口启用；资源缺失或损坏时退回周期识别，不搜索配置探针旁的文件，也不改变后端资料位置或运行模式。此目录中的辅助源仅提示顶部变化，联系人仍由正式观察核验。
 
@@ -130,7 +128,7 @@ React 界面和 CSS 保存后直接更新；兼容的组件修改会保留当前
 
 打包缺省仍使用本地 ad-hoc 签名。需要固定证书身份时，显式执行 `npm run package -- --with-probe --signing-identity "$NOTALONE_SIGNING_IDENTITY"`；该变量由操作者事先设置为已选身份名称或完整证书摘要，不保存到仓库。App 与自研探针使用同一参数；单独准备探针可用 `node scripts/prepare-probe.mjs --destination <绝对路径> --signing-identity "$NOTALONE_SIGNING_IDENTITY"`。参数无效或签名失败立即停止，不自动选择或回退。输出按实际签名检查区分 ad-hoc 与证书签名，权限延续、正式分发及公证仍须另验，见[权限记录](../docs/guides/macos-app-permissions-and-errors.md)。
 
-Psycopg专属wheel、重建和替换工具随Python后端退役。旧验证记录保留为历史材料；当前受管组件为TypeScript项目与PostgreSQL，后台使用Electron内置Node，打包搬动和签名可用性需另行发布验收。
+Psycopg专属wheel、重建和替换工具随Python后端退役。旧验证记录保留为历史材料；当前后台为 TypeScript 与 SQLite，使用 Electron 内置 Node，不再捆绑 PostgreSQL，打包搬动和签名可用性需另行发布验收。
 
 任务18于2026-10-10 17:06–17:16（UTC+8）由主Agent直接操作当前微信与隔离App，公开坐标表单成功保存五处pending几何，但唯一布局校验未形成profile，实际1场失败，原因尚未定位。自有进程/目录及精确租约已核验收尾，未自动重启。现已补0600固定阶段/错误码结果和对应公开断言，原始画面不保存；新诊断未再实机验证，真实最小采集、成功自动定位和权限归属继续待验。后端两名质量解析及旧匹配入口的统一资格门禁在新建隔离库38/38通过，不能代替现场green。
 
@@ -172,7 +170,7 @@ pnpm run dev:status --user-data-dir "$sqlite_test_root"
 
 隔离根不得包含真实用户资料；`synthetic.env` 只放合成供应商配置，不写真实模型 key。普通重开沿用同一数据库身份；目标缺失、损坏、结构漂移或控制面记录不符时保留现场并显示固定诊断代码，不自动换空库。升级由同一实例的存储迁移执行；界面不提供重置按钮。旧对象的真实清理只在精确归属、明确授权并核验停写后执行，本轮不执行真实清理。
 
-实施票02与14还提供显式业务开发能力：控制文件设置 `capabilities: ["contacts", "skills"]`，并设置绝对路径 `skillPackageRoot` 为该隔离用户目录内独立的 `skill-packages` 目录。包由开发者自行创建，页面只关联明确填写的直接子目录；不推断旧账号、复制配置或扫描真实 Skill 目录。根目录不得与 `managed` 受管区重叠。配置成功后由官方 DSH profile 开放联系人和 Skill 管理，现有 Skill 页显示启停、待核验、缺失和身份冲突，支持明确核验及启停；正文同步、记忆、学习和回复仍不可用。控制文件保存能力与根目录供重开使用；握手写入 `managed/sqlite-backend.info`，不混入数据库目录。
+默认能力由受控配置保存，当前包含 `contacts`、`skills`、`history`、`discussions` 与 `memory`；重开沿用原配置，不擅自扩权。Skill 使用隔离用户目录内的 `skill-packages`，不扫描或复制真实 Skill 目录；握手写入 `managed/sqlite-backend.info`。各功能是否已验收以对应记录为准，表达偏好、纠错诊断、语音保存转换和真实媒体验收仍按原范围暂缓。
 
 ## 屏幕录制授权
 
@@ -454,7 +452,7 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 
 未保存时，`envFilePath` 默认使用所选项目根目录 `.env`，`backendInfoPath` 默认使用 `~/.notalone/backend.info`；受控运行可用 `NOTALONE_ENV_FILE` / `NOTALONE_BACKEND_INFO` 提供初始值。已保存路径优先于这些初始环境变量。CLI/探针可留空，显示对应渠道不可用；诊断只检查可执行文件，不运行 helper，缺 helper 不阻塞独立的后端配置能力。保存文件只含路径，不含配置内容、模型密钥或握手 token。
 
-诊断通过 Electron 内置 Node 的独立子进程加载所选项目的 `backend-ts/src/platform/database/host-storage.ts`，读取 `backend-ts/database/migrations` 并检查数据库兼容性；就绪后通过 `launchDsh` 启动唯一的 TypeScript／DSH 后台。两者不依赖 Python／Conda 或 Finder 的 PATH。只读入口使用有界连接和 READ ONLY 事务，仅核对必要 schema 元数据、审计基线与迁移账本，不读取联系人/聊天正文、不迁移或接管业务库、不创建参考库。只读结果为 `migration_pending` 时，另一个受控步骤按[原库结构补齐](#数据库沿用与结构补齐)执行缺少版本并复验；诊断本身保持只读。缺基线、文件或账本漂移、必要结构缺失继续阻止连接，不用新空库绕过。机器就绪与本人身份/模型首启分开显示。
+诊断通过 Electron 内置 Node 检查当前受控 SQLite 配置、数据库实例身份、结构与完整性；就绪后通过 `launchDsh` 启动唯一的 TypeScript／DSH 后台。旧 PostgreSQL 连接、schema 准备与迁移目录已退出正常入口。缺失、损坏、未知结构或未完成切换显示固定原因，不以新空库绕过；机器就绪与本人身份、模型配置分别显示。
 
 主进程确认没有持有运行时或未完成的启动任务时，才允许直接保存。连接查询失败产生的“尚未连接”仍可能持有原服务；此时先点击“停止服务以修改路径”，通过原已验证目标认证确认停读并等待服务退场，才恢复路径编辑。失败保留旧目标、原路径和停读恢复入口，不能保存新路径或另起后端。保存与新连接串行，落盘前再次核验资格；保存不会自动连接。点击“重新检查并连接”重新经过只读门禁，重复重试不会启动多个后端。
 

@@ -24,17 +24,23 @@ const createMetadata=()=>({account:async()=>evidence,sessions:async()=>['a','b',
 function createChannel(options={}){
  return {inspect:async scope=>({protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:'supported',reason:null,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'source-1',serverAliasSemantics:'unverified'}),
  target:async()=>({protocol:'private-history-v1',descriptor:'synthetic-target',partitions:['p'],tables:[{partition:'p',instance:'t'}],sourceGeneration:'source-1'}),
- page:async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,completedPartitions:['p'],exhausted:true,records:[['1','text','合成历史'],['2','voice',null]].map(([localId,kind,text])=>({partition:'p',table:'t',localId,serverId:'0',sender:'contact',kind,text,originalType:kind==='text'?'1':'34',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0'}))})};
+  page:async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,completedPartitions:['p'],exhausted:true,records:[['1','text','合成历史'],['2','voice',null]].map(([localId,kind,text])=>({partition:'p',table:'t',localId,serverId:'0',sender:'contact',kind,text,originalType:kind==='text'?'1':'34',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'}))})};
 }
 async function seed(t,options={}){
- const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-history-host-')));t.after(()=>rm(root,{recursive:true,force:true}));
- const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'});const databaseId=storage.status.databaseId;
- const contacts=new SqliteContactService(storage,owner,createMetadata());await contacts.initialize();const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);
+  const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-history-host-')));let storage,contacts,history;
+  t.after(async()=>{
+   const failures=[];
+   for(const close of [()=>history?.close(),()=>contacts?.close(),()=>storage?.close()])try{await close();}catch(error){failures.push(error);}
+   if(failures.length)throw new AggregateError(failures,'history seed resource close failed; preserve synthetic root for diagnosis');
+   await rm(root,{recursive:true,force:true});
+  });
+  storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'});const databaseId=storage.status.databaseId;
+  contacts=new SqliteContactService(storage,owner,createMetadata());await contacts.initialize();const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);
  const snapshot=await contacts.candidates(true);await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(row=>({locator:row.username,observed_display_name:row.display_name,expected_selection_generation:'0'})));
  const bindings=(await contacts.directory()).bindings;
- const history=new SqliteHistoryService(storage,contacts,createChannel(options));for(const binding of bindings)await history.synchronize(binding.contact_id);
+  history=new SqliteHistoryService(storage,contacts,createChannel(options));for(const binding of bindings)await history.synchronize(binding.contact_id);
  const source=(await history.read(bindings[0].contact_id)).messages.find(message=>message.kind==='text').sourceRecordIds[0];
- await history.close();await contacts.close();await storage.close();return {root,databaseId,bindings,source};
+  await history.close();history=undefined;await contacts.close();contacts=undefined;await storage.close();storage=undefined;return {root,databaseId,bindings,source};
 }
 async function handshake(infoPath){
  return new Promise((resolve,reject)=>{

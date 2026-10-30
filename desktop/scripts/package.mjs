@@ -8,9 +8,8 @@ import { promisify } from 'node:util';
 import { prepareRepositoryProbe } from './prepare-probe.mjs';
 import { inspectRuntime, requireUnchangedFiles, runtimeLayout } from './probe-runtime.mjs';
 import { requireBuildSpace } from './build-space.mjs';
-import { inspectManagedRuntime, runtimeDirectoryName } from './managed-runtime.mjs';
 import { prepareElectronNotices, verifyElectronArchive, verifyElectronNotices, verifyFrontendNotices } from './distribution-notices.mjs';
-import { runtimeMinimumMacOS } from './runtime-platform.mjs';
+import { appMinimumMacOS } from './app-platform.mjs';
 import { validateSigningIdentity, packageWithSigning, requireSigningMode } from './package-signing.mjs';
 
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
@@ -32,7 +31,7 @@ for (let index = 0; index < packageArguments.length; index++) {
     signingIdentity = validateSigningIdentity(value); continue;
   }
   if (typeof value !== 'string' || !value || /[\0\r\n]/.test(value)) throw new Error('helper_check_arguments');
-  if (key === '--output-directory' || key === '--electron-zip-directory' || key === '--runtime-directory') {
+  if (key === '--output-directory' || key === '--electron-zip-directory') {
     if (key in packagePaths || !path.isAbsolute(value)) throw new Error('helper_check_arguments');
     packagePaths[key] = path.resolve(value);
   } else { throw new Error('helper_check_arguments'); }
@@ -43,7 +42,7 @@ const electronCache = path.join(homedir(), 'Library/Caches/electron');
 await requireBuildSpace([packagePaths['--output-directory'] || path.resolve('out'), tmpdir(),
   ...(!packagePaths['--electron-zip-directory'] ? [electronCache] : [])]);
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
-const minimumMacOS = runtimeMinimumMacOS(JSON.parse(await readFile(new URL('./runtime/component-sources.lock.json', import.meta.url), 'utf8')));
+const minimumMacOS = appMinimumMacOS(JSON.parse(await readFile(new URL('./app-platform.json', import.meta.url), 'utf8')));
 let staging; let outputDirectory; let ownedOutput; let completed = false;
 try {
   if (packagePaths['--output-directory']) {
@@ -66,24 +65,10 @@ try {
   await cp('dist/licenses/frontend', path.join(licensesDirectory, 'frontend'), { recursive: true });
   const probeDirectory = path.join(staging, 'notalone-probe');
   const preparedProbe = withProbe ? await prepareRepositoryProbe(probeDirectory, { signingIdentity }) : undefined;
-  let preparedManaged;
-  let managedDirectory = packagePaths['--runtime-directory'];
-  if (managedDirectory) {
-    if (path.basename(managedDirectory) !== runtimeDirectoryName) throw new Error('package_runtime_directory_name');
-    preparedManaged = await inspectManagedRuntime(managedDirectory);
-    const stagedManaged = path.join(staging, runtimeDirectoryName);
-    // 仅对已核验的包内普通文件链接解引用，避免复制库改写为构建目录绝对链接。
-    await cp(managedDirectory, stagedManaged, { recursive: true, dereference: true });
-    await inspectManagedRuntime(stagedManaged); managedDirectory = stagedManaged;
-  }
-  const resources = [licensesDirectory, ...(preparedProbe ? [probeDirectory] : []), ...(preparedManaged ? [managedDirectory] : [])];
+  const resources = [licensesDirectory, ...(preparedProbe ? [probeDirectory] : [])];
   const verifyResources = async (resources) => {
     await verifyFrontendNotices({ directory: path.join(resources, 'licenses/frontend') });
     await verifyElectronNotices({ directory: path.join(resources, 'licenses/electron'), version: manifest.devDependencies.electron });
-    if (preparedManaged) {
-      const copiedManaged = await inspectManagedRuntime(path.join(resources, runtimeDirectoryName));
-      if (JSON.stringify(copiedManaged) !== JSON.stringify(preparedManaged)) throw new Error('package_runtime_changed');
-    }
     if (!preparedProbe) return;
     const copied = await inspectRuntime({ directory: path.join(resources, runtimeLayout().directory),
       arch: preparedProbe.architecture, version: preparedProbe.versionDeclaration, runtimeKind: preparedProbe.runtimeKind });
@@ -152,8 +137,7 @@ try {
       preAutoEntitlements: false,
       preEmbedProvisioningProfile: false,
       // 自研探针保留已核查的签名，不注入 Electron 的 JIT entitlement。
-      ignore: (file) => Boolean((preparedProbe && file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeLayout().directory}${path.sep}`)) ||
-        (preparedManaged && file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeDirectoryName}${path.sep}`))),
+      ignore: (file) => Boolean(preparedProbe && file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeLayout().directory}${path.sep}`)),
       optionsForFile: () => ({
         entitlements,
         hardenedRuntime: false,
@@ -171,8 +155,7 @@ try {
     const signingMode = await requireSigningMode(app, signingIdentity, run);
     console.log(`本机 App 已构建并通过${signingMode === 'ad-hoc' ? '本地 ad-hoc' : '显式证书'}签名校验：${app}`);
     console.log('实际权限身份延续与正式分发／公证状态仍须单独验证。');
-    if (preparedManaged) console.log('包内提供TypeScript后台与受管PostgreSQL；首启与搬动可用性须另行实测。');
-    else console.log('当前包使用外置后台运行环境。');
+    console.log('当前包使用外置后台运行环境。');
     console.log('微信工具与授权接入尚未通过独立交付验收。');
     if (preparedProbe) console.log('仓库探针/核心库静态构建与随包复核通过；未运行探针，不证明定位或权限验收。');
   }

@@ -1,8 +1,8 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
-import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger.ts';
-import {validateModelLedgerReceipt} from '../../../platform/models/model-ledger.ts';
+import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
+import {validateModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
 import type {L2ScenarioMemory} from '../../scenarios/workspace.ts';
 import {actualInputSources,memoryBasis,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,sourceStillValid} from './basis.ts';

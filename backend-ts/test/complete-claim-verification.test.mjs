@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {parseDirectExtraction} from '../src/memory/extraction/protocol.ts';
 import {prepareSourceVerification} from '../src/memory/extraction/verification/complete-claim.ts';
 import {attachVerifiedSourceReceipt} from '../src/memory/extraction/verification/evidence.ts';
-import {parseStoredJSON} from '../src/memory/overview/evidence/sources.ts';
+import {parseStoredJSON} from '../src/memory/evidence/canonical-json.ts';
 
 const mechanism = JSON.parse(readFileSync(new URL('./fixtures/complete-claim-mechanism.json', import.meta.url)));
 const owner = '11111111-1111-4111-8111-111111111111';

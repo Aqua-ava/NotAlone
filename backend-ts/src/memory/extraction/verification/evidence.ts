@@ -1,5 +1,5 @@
 /** 原legacy-v4核验的version1依据：摘要绑定真实候选和完整窗口，不把来源核验当采纳门槛。 */
-import {canonicalJSON,digest,parseStoredJSON,sha} from '../../overview/evidence/sources.ts';
+import {canonicalJSON,digest,parseStoredJSON,sha} from '../../evidence/canonical-json.ts';
 import {instantMicros,uuid,when,validateExtractionWindow,type ExtractedFact,type ExtractionWindow,type ExtractionMessage,type SourceVerificationResult,type MemoryEvent} from '../protocol.ts';
 import {boundedMessages,normalizeBoundedWindow,validateBoundedBodySources} from '../bounded.ts';
 import {verifyBoundedProof} from './bounded-proof.ts';

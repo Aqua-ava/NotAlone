@@ -1,4 +1,4 @@
-import { canonicalJSON, type Evidence } from './sources.ts';
+import { canonicalJSON, type Evidence } from '../../evidence/canonical-json.ts';
 import { length, representations, validateBody, type Message } from './bounded-body.ts';
 
 /** 来源窗口已由调用者复核；这里继续按已存协议重解析全文与语义定位。 */

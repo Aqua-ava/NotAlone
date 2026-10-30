@@ -51,6 +51,6 @@
 
 - [固定源码的 SkillProvider / SkillProviderControl / registerProvider / get](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/skill/skill/src/index.ts#L247)：provider工厂同步注册，list/get异步；scope限定、控制器失效与释放；本地源码HEAD不同，使用 `git show` 固定提交阅读。
 - 锁定安装制品 `lib/types/index.d.ts:188,247,280` 和 `lib/index.js:147,250`：registerProvider生命周期、缓存失效、官方get调用provider、调用方取消。
-- 正式 `profile/host.patch.yml` 与 SQLite 的 `profile/sqlite.patch.yml` 均使用官方registry；SQLite profile 仅增加官方registry与薄宿主接线，不修改DSH核心，也不启用filesystem插件、通用读文件、Shell、网络下载或任意插件安装。
+- 正式 `profile/sqlite.patch.yml` 使用官方 registry；该 profile 仅增加官方registry与薄宿主接线，不修改DSH核心，也不启用filesystem插件、通用读文件、Shell、网络下载或任意插件安装。
 
 安装包无gitHead，未完成固定源码树对npm制品的全量可复现构建比对；本次只核验所用公开合同及实际安装行为。`sqlite-skill-profile.test.mjs` 复用正式patch，通过官方CLI启动隔离profile，仅替换业务宿主认证／追踪和模型配置（本机环回假地址，无模型请求）；`sqlite-host-launch.test.mjs` 验证实际 SQLite profile 的认证管理、关闭及重开。实际 App 证据只覆盖上述管理行为，不覆盖真实模型、微信或完整回复链。

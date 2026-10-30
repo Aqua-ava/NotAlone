@@ -2,7 +2,7 @@
 import {readExtractionToolArguments} from '../extraction/arguments.ts';
 import type {
  AdjudicationDecision,AdjudicationItem,AdjudicationRelation,AdjudicationRuntime,EvolutionKind,MergeVerification,ModelUsage,RelationVerification,
-} from './engine.ts';
+} from './contracts.ts';
 
 export interface StructuredAdjudicationCallInput {
  purpose:ModelUsage['purpose'];

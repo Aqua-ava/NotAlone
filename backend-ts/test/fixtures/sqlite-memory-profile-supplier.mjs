@@ -20,7 +20,9 @@ export function positiveSupplier(){
     res.setHeader('Content-Type','application/json');res.end(JSON.stringify({id:`synthetic-v-${verifications.length}`,object:'chat.completion',model:body.model,choices:[{index:0,message:{role:'assistant',content:null,tool_calls:[{id:`synthetic-v-tool-${verifications.length}`,type:'function',function:{name:'SourceVerificationOutput',arguments:JSON.stringify(output)}}]},finish_reason:'tool_calls'}],usage:{prompt_tokens:5,completion_tokens:9,prompt_cache_hit_tokens:0}}));return;
    }
    assert.equal(req.headers['x-api-key'],'synthetic-only');
-   const toolName=body.tools[0].name;
+   const toolNames=Array.isArray(body.tools)?body.tools.map(tool=>tool?.name):[];
+   const toolName=toolNames.find(name=>['DirectMemoryExtractionOutput','BatchMemoryAdjudicationOutput','BatchMemoryRelationVerificationOutput'].includes(name));
+   assert.ok(toolName,`unexpected SQLite model tool list: ${JSON.stringify(toolNames)}`);
    if(['BatchMemoryAdjudicationOutput','BatchMemoryRelationVerificationOutput'].includes(toolName)){
     const payload=JSON.parse(body.messages.find(message=>message.role==='user').content.find(block=>block.type==='text').text);
     let output;

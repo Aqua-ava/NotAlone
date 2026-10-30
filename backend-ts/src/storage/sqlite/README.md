@@ -1,6 +1,6 @@
-# SQLite 存储扩展合同（实施 01）
+# SQLite 存储扩展合同
 
-当前仅提供底座，不切换默认 PG、不开放未完成业务。正式业务切换、重置和清理由实施 20 负责。桌面开发诊断仅使用独立合成目录。
+SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`，迁移与具名动作由 `registry.ts` 聚合；切换、重置和旧资料清理由独立控制面负责，见[切换验证记录](../../../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。本文说明底层存储合同，不代表所有业务能力均已开放。
 
 ## 实例与连接
 
@@ -12,7 +12,7 @@
 
 ## 02 / 05 / 14 的扩展位置
 
-在 `registry.ts` 导入本票模块，并向 `registry.migrations` 追加连续 `{version,sql}`；已发布 SQL 不修改。`schema_migration(version,checksum,applied_at)` 使用 SHA-256，所有待升级 DDL、账本与 `user_version` 在同一事务提交。未知高版本、checksum 或结构摘要漂移拒绝打开。01 当前版本为 1，只建 `database_instance`、`schema_migration` 两表；后续领域 DDL 必须按统一设计分票加入。
+在 `registry.ts` 导入本票模块，并向 `registry.migrations` 追加连续 `{version,sql}`；已发布 SQL 不修改。`schema_migration(version,checksum,applied_at)` 使用 SHA-256，所有待升级 DDL、账本与 `user_version` 在同一事务提交。未知高版本、checksum 或结构摘要漂移拒绝打开。初始版本 1 建立 `database_instance`、`schema_migration`；后续领域 DDL 按 `registry.ts` 的连续迁移追加，当前版本以注册表为准。
 
 向 `registry.actions` 注册 `{name,mode:'read'|'write'|'maintenance',retryBusy,execute(tx,input,lease)}`，名称例如 `capture.commitPage`、`deletion.plan`、`skills.registerPackage`。动作是受版本管理的代码，不接受 renderer、HTTP 或 Tool 提供 SQL、回调或模块地址。`registryModule` 只供受信任构建装配和隔离测试加载扩展注册模块，不是产品配置或 RPC 字段。
 

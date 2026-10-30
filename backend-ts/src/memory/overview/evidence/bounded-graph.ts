@@ -1,7 +1,7 @@
-import { canonicalJSON, digest, type Evidence } from './sources.ts';
+import { canonicalJSON, digest, type Evidence } from '../../evidence/canonical-json.ts';
 import { boundedContract as contract } from './bounded-contract.ts';
 import { length, slice, textSpan, messageSpan, representationPayload, type Message, type Representation } from './bounded-body.ts';
-import { pythonISO } from '../projection/time.ts';
+import { pythonISO } from '../../temporal/iso.ts';
 
 type Part = { message: Message; text: string; start: number; order: [number,number]; sender: string };
 type Location = [Part,number,number];

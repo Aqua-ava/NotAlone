@@ -3,7 +3,7 @@ import {positiveSupplier} from '../sqlite-memory-profile-supplier.mjs';
 
 /** 正常DSH模型协议的唯一外部替身，只接受本轮合成资料。 */
 export function documentProfileSupplier(){
- const base=positiveSupplier(),documents=[],replies=[],errors=[];let serial=0;
+ const base=positiveSupplier(),documents=[],replies=[],errors=base.errors;let serial=0;
  function respond(res,tool,value){
   const id=`synthetic-document-${++serial}`,events=[{type:'message_start',message:{id,type:'message',role:'assistant',model:'synthetic',content:[],usage:{input_tokens:3,output_tokens:0}}}];
   if(tool){events.push({type:'content_block_start',index:0,content_block:{type:'tool_use',id:`${id}-tool`,name:tool,input:{}}},{type:'content_block_delta',index:0,delta:{type:'input_json_delta',partial_json:JSON.stringify(value)}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:7}});}
@@ -14,7 +14,8 @@ export function documentProfileSupplier(){
   let raw='';for await(const chunk of req)raw+=chunk;let body;
   try{body=JSON.parse(raw);}catch{res.writeHead(400);res.end();return;}
   const names=(body.tools??[]).map(tool=>tool.name??tool.function?.name);
-  const document=names.includes('ScenarioVerificationOutput')||names.includes('ProfileVerificationOutput')||names.includes('ProfileProposalComplete')||names.includes('read')&&names.includes('write')&&names.includes('edit');
+  const core=names.some(name=>['DirectMemoryExtractionOutput','SourceVerificationOutput','BatchMemoryAdjudicationOutput','BatchMemoryRelationVerificationOutput'].includes(name));
+  const document=names.includes('ScenarioVerificationOutput')||names.includes('ProfileVerificationOutput')||names.includes('ProfileProposalComplete')||!core&&names.includes('read')&&names.includes('write')&&names.includes('edit');
   if(!document){
    if(!names.length&&req.url!=='/beta/chat/completions'){
     const text=body.messages.flatMap(message=>Array.isArray(message.content)?message.content.filter(block=>block.type==='text').map(block=>block.text):[message.content??'']).join('\n');
@@ -38,5 +39,5 @@ export function documentProfileSupplier(){
    documents.push({names,layer:payload.layer??'verify',tool});respond(res,tool,value);
   }catch(error){errors.push(error instanceof Error?error.message:'synthetic_document_supplier_failed');res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'synthetic_document_supplier_failed'}));}
  };
- return {handler,documents,replies,errors,base};
+ return {...base,handler,documents,replies,errors,base};
 }

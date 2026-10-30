@@ -7,7 +7,7 @@ import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 import {randomUUID} from 'node:crypto';
 import {measureSerializedMessages} from '../src/platform/models/model-input-budget.ts';
-import {modelLedgerInputBudget} from '../src/platform/models/model-ledger.ts';
+import {modelLedgerInputBudget} from '../src/platform/models/model-ledger-contract.ts';
 
 const registryModule=new URL('./fixtures/sqlite-memory-deletion/registry.mjs',import.meta.url).href;
 function syntheticModel(accounting,options={}){

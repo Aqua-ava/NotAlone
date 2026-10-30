@@ -10,15 +10,15 @@ await writeFile(path.join(directory, 'host.mjs'), built.outputFiles[0].text);
 const { BackendHost } = await import(path.join(directory, 'host.mjs'));
 after(() => rm(directory, { recursive: true, force: true }));
 const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
-async function subject(name, delay, managed = true) {
+async function subject(name, delay) {
   const userData = path.join(directory, name), resources = path.join(userData, 'resources');
   const root = path.join(resources, 'notalone-runtime'), marker = path.join(userData, 'owned-pid');
-  await mkdir(path.join(userData, 'managed'), { recursive: true });
-  await writeFile(path.join(userData, 'managed/state.json'), '{}');
   await mkdir(path.join(root, 'project/backend-ts/src'), { recursive: true });
   await mkdir(path.join(root, 'project/backend-ts/profile'), { recursive: true });
   await writeFile(path.join(root, 'project/backend-ts/src/launch.ts'), '// 合成入口\n');
-  await writeFile(path.join(root, 'project/backend-ts/profile/host.patch.yml'), '[]\n');
+  await writeFile(path.join(root, 'project/backend-ts/profile/sqlite.patch.yml'), '[]\n');
+  await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({
+    projectDirectory: path.join(root, 'project'), backendInfoPath: path.join(userData, 'backend.info') }));
   await mkdir(path.join(root, 'project/backend-ts/node_modules/@deepseek-ai/dsh/lib'), { recursive: true });
   await writeFile(path.join(root, 'project/backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js'), `#!${process.execPath}\n
 const fs=require('node:fs'),http=require('node:http');
@@ -37,10 +37,10 @@ const timer=setTimeout(()=>{
 process.on('SIGTERM',()=>{clearTimeout(timer);fs.rmSync(info,{force:true});if(server)server.close(()=>process.exit(0));else process.exit(0);});
 setInterval(()=>{},1000);
 `, { mode: 0o700 });
-  if (!managed) await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({
-    projectDirectory: path.join(root, 'project'),
-    backendInfoPath: path.join(userData, 'managed/backend.info') }));
-  return { host: new BackendHost(userData, undefined, resources), marker };
+  const host = new BackendHost(userData, async config => {
+    config.sqlite = { userData, expectedDatabaseId: `synthetic-${name}`, role: 'test', capabilities: ['contacts'] };
+  }, resources);
+  return { host, marker };
 }
 async function ownedPid(marker) {
   const deadline = Date.now() + 3000;
@@ -49,8 +49,8 @@ async function ownedPid(marker) {
   assert.ok(Number(value) > 1); return Number(value);
 }
 
-test('受管后台真实迟到握手超过旧12秒仍在有界冷启窗口内连接，认证退出回收孩子', { timeout: 40_000 }, async () => {
-  const { host, marker } = await subject('delayed', 13_200);
+test('SQLite后台迟到握手仍在有界冷启窗口内连接，认证退出回收孩子', { timeout: 10_000 }, async () => {
+  const { host, marker } = await subject('delayed', 250);
   try {
     await host.connect();
     assert.equal(host.getState().phase, 'connected');
@@ -60,21 +60,10 @@ test('受管后台真实迟到握手超过旧12秒仍在有界冷启窗口内连
   } finally { await host.stop(); }
 });
 
-test('有界窗口结束与用户取消都回收本次未握手进程，外置保持旧预算', { timeout: 40_000, concurrency: true }, async t => {
+test('启动中取消不发布连接、最终回收自有SQLite子进程', { timeout: 10_000 }, async t => {
   await Promise.all([
-    t.test('受管超时保留明确失败和重试入口', async () => {
-      const { host, marker } = await subject('timeout', 60_000);
-      try {
-        await host.connect();
-        const pid = await ownedPid(marker);
-        assert.equal(host.getState().phase, 'disconnected');
-        assert.equal(host.getState().errorCode, 'backend_connection_failed');
-        assert.equal(host.getState().canRetryConnection, true);
-        assert.equal(alive(pid), false);
-      } finally { await host.stop(); }
-    }),
-    t.test('受管启动中取消不发布连接且最终停止自有孩子', async () => {
-      const { host, marker } = await subject('cancelled', 60_000);
+    t.test('启动中取消不发布连接且最终停止自有孩子', async () => {
+      const { host, marker } = await subject('cancelled', 1_000);
       const states = []; host.onStateChanged(state => states.push(state.phase));
       const connecting = host.connect();
       const pid = await ownedPid(marker);
@@ -86,19 +75,10 @@ test('有界窗口结束与用户取消都回收本次未握手进程，外置�
         assert.equal(alive(pid), false);
       } finally { await host.stop(); }
     }),
-    t.test('外置迟到后台仍按旧12秒退出并回收', async () => {
-      const { host, marker } = await subject('external-timeout', 13_200, false);
-      try {
-        await host.connect();
-        const pid = await ownedPid(marker);
-        assert.equal(host.getState().phase, 'disconnected');
-        assert.equal(alive(pid), false);
-      } finally { await host.stop(); }
-    }),
   ]);
 });
 
-test('自有后台异常退出后公开失败，明确重试回收旧连接并启动新代际', async () => {
+test('SQLite后台异常退出后公开失败，明确重试回收旧连接并启动新代际', async () => {
   const { host, marker } = await subject('explicit-crash-retry', 0, false);
   try {
     await host.connect();
@@ -119,7 +99,7 @@ test('自有后台异常退出后公开失败，明确重试回收旧连接并�
   } finally { await host.stop(); }
 });
 
-test('自有后台异常退出后直接退出仍能完成清理，不困在失联目标', async () => {
+test('SQLite后台异常退出后直接退出仍能完成清理，不困在失联目标', async () => {
   const { host, marker } = await subject('crash-then-quit', 0, false);
   try {
     await host.connect();

@@ -11,8 +11,8 @@ import {createConnection} from 'node:net';
 import {createInterface} from 'node:readline';
 import {randomUUID} from 'node:crypto';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
-import type {ModelLedgerCost, ModelLedgerReceipt, ModelLedgerUsage} from '../../platform/models/model-ledger.ts';
-import {modelLedgerInputBudget} from '../../platform/models/model-ledger.ts';
+import type {ModelLedgerCost, ModelLedgerReceipt, ModelLedgerUsage} from '../../platform/models/model-ledger-contract.ts';
+import {modelLedgerInputBudget} from '../../platform/models/model-ledger-contract.ts';
 import {
   ExtractionModelError,
   extractionUnconfirmedRequests,

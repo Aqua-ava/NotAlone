@@ -80,14 +80,12 @@
   "tests/memory-evolution.test.mjs",
   "tests/memory-processing/bridge.test.mjs",
   "tests/memory-ui-wiring.test.mjs",
+  "tests/packaging/app-platform.test.mjs",
   "tests/packaging/arguments.test.mjs",
-  "tests/packaging/backend-workspace-runtime.test.mjs",
   "tests/packaging/distribution-notices.test.mjs",
   "tests/packaging/finder-isolation.test.mjs",
-  "tests/packaging/managed-runtime.test.mjs",
   "tests/packaging/native-focus-diagnostic.test.mjs",
   "tests/packaging/native-shortcut-feedback.test.mjs",
-  "tests/packaging/postgres-source.test.mjs",
   "tests/packaging/signing-identity.test.mjs",
   "tests/page-role-scope.test.mjs",
   "tests/real-foreground-credential.test.mjs",
@@ -125,8 +123,9 @@
   "tests/wechat-setup.test.mjs",
   "tests/dead-code-removal.test.mjs",
   "tests/reply-generation-transport.test.mjs",
+  "tests/reply-contract.test.mjs",
+  "tests/pure-ts-startup.test.mjs",
   "tests/packaging/build-space.test.mjs",
-  "tests/packaging/runtime-attribution.test.mjs",
   "tests/message-media-bridge.test.mjs",
   "tests/message-media-controller.test.mjs",
   "tests/message-media-transport.test.mjs",
@@ -176,12 +175,8 @@
   "tests/sqlite-reply-candidates.test.mjs",
   "tests/sqlite-memory-management-view.test.mjs"
  ],
- "isolated-http-pg": [
-  "tests/overview-reply-retrieval.test.mjs",
-  "tests/reply-contract.test.mjs",
-  "tests/pure-ts-startup.test.mjs",
-  "tests/memory-processing/http-pg.test.mjs",
-  "tests/memory-processing/round-http-pg.test.mjs"
+ "isolated-http": [
+  "tests/overview-reply-retrieval.test.mjs"
  ],
  "native": [
   "tests/header-change-native-acceptance.spec.ts",
@@ -198,8 +193,6 @@
   "tests/app-test-expiry.spec.ts",
   "tests/desktop-controls.spec.ts",
   "tests/errors.spec.ts",
-  "tests/managed-first-run.spec.ts",
-  "tests/manual-first-release.spec.ts",
   "tests/native-focus-acceptance.spec.ts",
   "tests/native-foreground-calibration.spec.ts",
   "tests/native-foreground-layout.spec.ts",

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseJson, stringifyJson } from '../src/host/host-json.ts';
 
-test('公开JSON整数往返保留PostgreSQL bigint修订号，不改成字符串', () => {
+test('公开JSON整数往返精确保留大整数，不改成字符串', () => {
   const source = '{"revision":9223372036854775807,"nested":[-9223372036854775808,9007199254740991,9007199254740993],"text":"9223372036854775807"}';
   const value = parseJson(source);
   assert.equal(value.revision, 9223372036854775807n);

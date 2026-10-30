@@ -51,26 +51,22 @@ function reachable(entries) {
   return seen;
 }
 const graph = new Map();
+const pgImports = [];
 const pgValueImports = [];
 for (const file of fileSet) {
   const source = await readFile(path.join(root, file), 'utf8');
   const dependencies = [];
   for (const { specifier, isType } of importsOf(source)) {
-    if (specifier === 'pg') { if (!isType) pgValueImports.push(file); continue; }
+    if (specifier === 'pg') { pgImports.push(file); if (!isType) pgValueImports.push(file); continue; }
     const resolved = resolveImport(file, specifier);
     if (resolved && !isType) dependencies.push(resolved);
   }
   graph.set(file, dependencies);
 }
 
-test('产品运行入口的运行时 import 图不含 pg 值导入，旧 PG 宿主与 schema 准备不可达', () => {
-  // 精确快照：全仓仅 4 个遗留文件仍有 pg 值导入（含动态导入），均不可从产品入口到达。
-  assert.deepEqual([...new Set(pgValueImports)].sort(), [
-    'backend-ts/src/platform/database/host-storage.ts',
-    'backend-ts/src/reply/discussion/assistant-generation-lifecycle.ts',
-    'backend-ts/src/skills/skill-learning-http.ts',
-    'backend-ts/src/skills/skill-source-proof.ts',
-  ], 'pg 值导入快照变化必须重新做消费者映射');
+test('产品源码不导入 PostgreSQL 驱动，旧 PG 宿主与 schema 准备不可达', () => {
+  assert.deepEqual([...new Set(pgImports)].sort(), [], '产品源码不得保留 pg 值、类型或动态导入');
+  assert.deepEqual([...new Set(pgValueImports)].sort(), [], '产品源码不得保留 pg 值导入');
   for (const entry of productEntries) {
     const files = reachable([entry]);
     assert.ok(files.has(entry), `入口 ${entry} 必须存在`);

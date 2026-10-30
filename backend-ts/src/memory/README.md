@@ -1,22 +1,14 @@
 # 记忆模块
 
-按业务职责查找代码。模块内部文件可以直接引用，不通过额外的转发入口隐藏依赖。
+当前业务由 SQLite 模块承载，模型调用、来源核验和事务提交分开处理。
 
-| 要处理的问题 | 从哪里开始 | 内部实现 |
-| --- | --- | --- |
-| 从聊天提取有来源的候选 | [extraction/service.ts](extraction/service.ts) | [flow.ts](extraction/flow.ts) 编排单批提取与核验；[prompts.ts](extraction/prompts.ts) 定义模型指令与输出协议；`verification/` 保存来源核验，`tasks/` 保存调度、分批、进度与恢复。 |
-| 决定新增、更新、合并或忽略候选 | [adoption/service.ts](adoption/service.ts) | [engine.ts](adoption/engine.ts) 负责采纳与事务规则；[adjudication-dsh.ts](adoption/adjudication-dsh.ts) 负责模型裁决。 |
-| 查询、人工补充、修改和删除记忆 | [records/service.ts](records/service.ts) | `mutations/` 保存候选版本、保护和删除逻辑；`documents/` 管理场景与长期背景的共同事务、纠错和清除。 |
-| 将记忆整理为持续主题 | [scenarios/service.ts](scenarios/service.ts) | [workspace.ts](scenarios/workspace.ts) 提供 L2 内存文档工具和生成流程，服务负责核验与发布。 |
-| 生成或更新人物长期背景 | [profiles/service.ts](profiles/service.ts) | [workspace.ts](profiles/workspace.ts) 提供 L3 文档协议、工具和显式完成流程。 |
-| 查看关系概览或重建记忆目录 | [overview/service.ts](overview/service.ts)、[catalog.ts](overview/catalog.ts) | `projection/` 处理资料投影、时间和版本；`evidence/` 重核已存来源证明，也供其他模块复用。 |
+| 要处理的问题 | 从哪里开始 |
+| --- | --- |
+| 提取、执行回执与恢复 | [sqlite/README.md](sqlite/README.md) |
+| 候选裁决、采纳与管理 | [sqlite/management/README.md](sqlite/management/README.md) |
+| 场景、长期背景及发布 | [sqlite/documents/README.md](sqlite/documents/README.md) |
+| 底层实例、迁移与具名事务 | [../storage/sqlite/README.md](../storage/sqlite/README.md) |
 
-## 阅读顺序
+`extraction/` 保留被当前 SQLite 流程使用的纯提取和来源核验组件；`adoption/` 保留裁决合同及 DSH 适配。旧 PostgreSQL service/store/worker 已退役，旧统一处理合同和执行记录仅供历史追溯，不代表当前开放路由。来源、规范消息、候选与确认记忆继续分层保存，并受联系人隔离和统一删除约束。
 
-自动处理从 `extraction/tasks/runner.ts` 串起提取与采纳；理解单批逻辑时先读 `extraction/flow.ts` 和 `adoption/service.ts`。采纳后的场景与长期背景整理分别进入 `scenarios/` 和 `profiles/`。
-
-人工查询和修改从 `records/service.ts` 进入；场景及长期背景的共同管理入口为 [records/documents/service.ts](records/documents/service.ts)。这些管理操作与模型生成分开，不在两个生成模块重复维护。
-
-场景组织某个持续主题的经历，长期背景汇总跨主题的人物资料，概览负责读取、展示和导航。来源核验、联系人隔离、人工保护及删除约束以现有业务协议为准。
-
-源码版本身份仍按实际文件路径、依赖和内容计算。目录调整会产生新指纹，旧任务与质量证据按既有版本规则核验，不伪装成旧实现继续执行。
+源码路径调整会产生新指纹；旧任务和质量证据按原版本核验，不伪装成旧实现继续执行。

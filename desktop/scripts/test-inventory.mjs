@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const groups = ['safe-node', 'headless', 'isolated-http-pg', 'native', 'app', 'historical'];
+const groups = ['safe-node', 'headless', 'isolated-http', 'native', 'app', 'historical'];
 const testName = /\.(?:test\.mjs|test\.ts|spec\.ts)$/;
 const pythonAsset = /\.py$/;
 

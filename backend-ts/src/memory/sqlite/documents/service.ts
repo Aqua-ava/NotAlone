@@ -3,7 +3,7 @@ import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {ActiveHolders} from '../../../storage/sqlite/deletion/holders.ts';
 import type {MemoryScope} from '../management/contracts.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
-import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger.ts';
+import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {SqliteExtractionModelPreparation} from '../model-port.ts';
 import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioDocumentWorkspace,runScenarioDocumentAgent,verifyScenarioProposal,type ScenarioDocumentCallPort} from '../../scenarios/workspace.ts';
 import {L3ProfileWorkspace,runProfileDocumentAgent,verifyProfileProposal} from '../../profiles/workspace.ts';

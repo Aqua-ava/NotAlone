@@ -96,9 +96,9 @@ pnpm install --frozen-lockfile
 
 该命令只准备 workspace 依赖。原生探针按[原生开发说明](native/macos/README.md)单独构建；模型配置另行保留。
 
-`scripts/install.sh` 仍是旧 PostgreSQL 安装流程，会安装或启动 PostgreSQL、创建旧开发库并运行旧 SQL 迁移，**不用于当前 SQLite 开发环境初始化**。当前开发版在启动时执行受控 SQLite 初始化或重开，详见[默认切换与验证记录](docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。
+旧 PostgreSQL 安装器 `scripts/install.sh` 已从当前工作树退役。当前依赖使用 `pnpm install --frozen-lockfile` 安装，开发版在启动时执行受控 SQLite 初始化或重开，详见[默认切换与验证记录](docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。
 
-仓库中的 `pg` npm 包仍被旧模块和测试引用；卸载本机 PostgreSQL 服务与清理这项代码依赖是两件事，当前默认业务启动不依赖该服务。
+当前 workspace 已移除 `pg` 和 `@types/pg` 依赖；旧 PostgreSQL 模块与相关测试保留在固定 Git 历史中，不由当前开发或测试入口加载。追溯方式见[历史测试说明](backend-ts/test/HISTORICAL.md#postgresql-模块与测试退役)。
 
 ### 3. 准备并启动桌面端
 
@@ -214,7 +214,7 @@ npm test
 
 固定本地向量模型准备使用 `node scripts/prepare_memory_embedding.mjs`；已有缓存可用 `--offline` 验证，不读取聊天或业务配置。正常业务运行不会下载模型。
 
-SQLite 存储状态可在管理后台的“SQLite 存储诊断”查看。结构升级由当前注册的 SQLite 迁移和启动流程管理；`backend-ts/src/schema-prepare-cli.ts` 与 `backend-ts/database/migrations` 属于旧 PostgreSQL 路径，不用于初始化或升级当前业务库。
+SQLite 存储状态可在管理后台的“SQLite 存储诊断”查看。结构升级由当前注册的 SQLite 迁移和启动流程管理；旧 `schema-prepare-cli.ts` 已退役；`backend-ts/database/migrations` 仅保留历史 SQL，不用于初始化或升级当前业务库。
 
 历史 Python 后台及测试已从当前工作树清理，对照仍保存在固定 Git 提交与显式独立测试环境；登记及命令见 `backend-ts/test/historical-inventory.json`、`npm run test:historical -- --list`。`backend-ts/database/` 的 SQL 和 `backend-ts/test/fixtures/` 下的合成 JSON／JSONL 夹具保留原始字节，现已归入 TypeScript 后台；冻结历史清单中的原路径仅用于来源追溯。历史结果不表示当前源码通过，正常测试不依赖 Conda 或 Python 后端。
 

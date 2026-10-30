@@ -1,5 +1,5 @@
 /** 准备一次来源核验；请求、指纹、幂等解码和准入封装在同一 Interface。 */
-import {digest} from '../../overview/evidence/sources.ts';
+import {digest} from '../../evidence/canonical-json.ts';
 import {readExtractionToolArguments} from '../arguments.ts';
 import {verificationFailureDiagnostic} from './diagnostics.ts';
 import {buildSourceVerificationContract,buildSourceVerificationPayload} from '../contract.ts';

@@ -1,5 +1,5 @@
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
-import {canonicalJSON} from '../../overview/evidence/sources.ts';
+import {canonicalJSON} from '../../evidence/canonical-json.ts';
 import {replayCompleteClaimVerification} from '../../extraction/verification/complete-claim.ts';
 
 export interface CandidateVerificationReference {eventId:string;candidateTraceId:string;policyFingerprint:string;callId:string;inputEventId:string;}

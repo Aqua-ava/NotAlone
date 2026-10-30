@@ -37,10 +37,10 @@ test('固定官方离线归档打包保留原始通知，自研探针签名保�
       '打包返回后应清理本轮临时文件，不能只依赖测试夹具的最终清理。');
     assert.equal(await readFile(path.join(buildTemporary, 'keep-existing/sentinel'), 'utf8'), 'synthetic_existing_temporary');
     const app = path.join(output, `NotAlone-darwin-${process.arch}/NotAlone.app`);
-    const componentLock = JSON.parse(await readFile(path.join(project, 'scripts/runtime/component-sources.lock.json'), 'utf8'));
+    const appPlatform = JSON.parse(await readFile(path.join(project, 'scripts/app-platform.json'), 'utf8'));
     const minimumSystem = spawnSync('/usr/bin/plutil', ['-extract', 'LSMinimumSystemVersion', 'raw', path.join(app, 'Contents/Info.plist')], { encoding: 'utf8', timeout: 10_000 });
     assert.equal(minimumSystem.status, 0);
-    assert.equal(minimumSystem.stdout.trim(), componentLock.minimumMacOS, 'Finder最低系统必须与固定运行时一致。');
+    assert.equal(minimumSystem.stdout.trim(), appPlatform.minimumMacOS, 'Finder最低系统必须与应用平台配置一致。');
     const resources = path.join(app, 'Contents/Resources');
     await verifyFrontendNotices({ directory: path.join(resources, 'licenses/frontend') });
     await verifyElectronNotices({ directory: path.join(resources, 'licenses/electron'), version });

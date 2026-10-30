@@ -1,5 +1,7 @@
 # 20 默认切换 SQLite 与旧业务清理：验证与审计记录
 
+> 后续变更：旧 PG 模块、专属测试与驱动依赖已继续退役，见 [2026-10-30 清理记录](20261030-postgresql-retirement.md)。本文的遗留源码、PG 测试数量和切换结果保留当时口径，不代表清理后的当前树。
+
 > 本文件是实施票 20 的端侧验证证据，记录结构核对、消费者改接／退役、切换控制面、隔离演练与真实清理受阻事实。真实切库、drop、真实旧业务清理、打包与远端操作均未执行；不据此宣称真实微信、真实模型或发布包通过验收。
 >
 > 依据：父规格 `.scratch/sqlite-database-rebuild/spec.md`、结构唯一依据 `.scratch/sqlite-database-rebuild/greenfield-design.md`、旧业务清点工件 `consolidated-legacy-check.*`／`legacy-coverage.*`／`consolidated-schema.json`。数量只是查漏基线，不是建表目标。

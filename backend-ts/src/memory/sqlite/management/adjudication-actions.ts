@@ -1,13 +1,13 @@
-import {canonicalJSON} from '../../overview/evidence/sources.ts';
+import {canonicalJSON} from '../../evidence/canonical-json.ts';
 /** 裁决只消费被冻结的候选、正式版本和消息；模型结果本身不授予写入资格。 */
 import {createHash,randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageLease,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertSourceEligibility} from '../../../history/sqlite/source.ts';
 import {assertTaskContributions} from '../qualification.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
-import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../../platform/models/model-ledger.ts';
+import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
-import type {AdjudicationItem,SimilarMemory} from '../../adoption/engine.ts';
+import type {AdjudicationItem,SimilarMemory} from '../../adoption/contracts.ts';
 import {parseAdjudications,parseRelations,mergeResult} from '../../adoption/adjudication-dsh.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {applyDecision,retireMergedParents} from './actions.ts';
