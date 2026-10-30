@@ -72,6 +72,8 @@ const stderrLimit = 64 * 1024;
 const digest = (input: string | Buffer) => createHash('sha256').update(input).digest('hex');
 const fail = (code = 'history_protocol_invalid'): never => { throw new StorageFailure(code); };
 const hashPattern = /^[a-f0-9]{64}$/;
+// 系统会话不代表用户的真实关系对象，也不能成为单联系人读取目标。
+const systemConversations = new Set(['filehelper', 'notifymessage']);
 const allowedErrors = new Set([
   'history_metadata_profile_unverified', 'history_program_version_uncertified',
   'history_request_invalid', 'history_operation_unsupported', 'history_scope_unverified',
@@ -126,6 +128,7 @@ function resolved(value: unknown): ResolvedWechatScope {
   const row = object(value, ['accountKey', 'conversationKey', 'displayName', 'sourceGeneration']);
   const accountKey = text(row.accountKey), conversationKey = text(row.conversationKey);
   if (![accountKey, conversationKey].every(key => /^[A-Za-z0-9_.@-]{1,255}$/.test(key))) return fail();
+  if (systemConversations.has(conversationKey)) return fail('history_target_not_private');
   return { accountKey, conversationKey, displayName: text(row.displayName), sourceGeneration: hash(row.sourceGeneration) };
 }
 function table(value: unknown): WechatTableSchema {
@@ -197,6 +200,11 @@ function accountMetadata(value: unknown, options: NarrowWechatClientOptions): We
     programVersion: row.programVersion, build: row.build, artifactSha256: row.artifactSha256 as string, wcdbSha256: row.wcdbSha256 as string,
     configuredAccount: row.configuredAccount as WechatAccountMetadata['configuredAccount'], continuity: 'held-contact-session-instances', normalHistory: false };
 }
+function metadataDisplayName(value: unknown, username: string): string {
+  if (typeof value !== 'string' || !value.isWellFormed() || !value.length || Buffer.byteLength(value, 'utf8') > 255 || /[\0\r\n]/.test(value)) return fail();
+  // 名称只作展示；规整渠道标签中的控制字符，稳定身份仍严格取 username。
+  return text(value.replace(/[\u0001-\u001f\u007f-\u009f]/g, ' ').trim() || username);
+}
 function privateSessionMetadata(value: unknown, expected: WechatAccountMetadata, options: NarrowWechatClientOptions): WechatPrivateSessionMetadata {
   const row = object(value, ['format', 'account', 'sessions']);
   const account = accountMetadata(row.account, options);
@@ -207,10 +215,10 @@ function privateSessionMetadata(value: unknown, expected: WechatAccountMetadata,
     if (item.kind !== 'private' || item.identityAssurance !== 'verified' || username.startsWith('@') || username.startsWith('gh_') || username.startsWith('biz_')
       || ['@chatroom', '@weclaw', '@openim', '@stranger'].some(suffix => username.endsWith(suffix))
       || ['brandsessionholder', 'brandservicesessionholder'].includes(username)) return fail();
-    return {username, displayName: text(item.displayName), kind: 'private' as const, identityAssurance: 'verified' as const};
+    return {username, displayName: metadataDisplayName(item.displayName, username), kind: 'private' as const, identityAssurance: 'verified' as const};
   });
   unique(sessions.map(item => item.username));
-  return {format: 'wechat-private-session-metadata-v1', account, sessions};
+  return {format: 'wechat-private-session-metadata-v1', account, sessions: sessions.filter(item => !systemConversations.has(item.username))};
 }
 function opaque(value: unknown): string { return text(value, 64_000); }
 function unsigned(value: unknown): string {

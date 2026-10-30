@@ -35,9 +35,17 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
     <p>{selectionOnly ? '确认后允许读取本次所选会话在本机可读的历史文字和后续新消息；非文字消息只保留占位，不自动下载媒体。' : '更早的历史消息需独立确认；本次历史选择仅覆盖本次所选会话，后续新增会话不会继承。已有明确历史授权仍按其原范围执行。'}</p>
     {state.phase === 'ready' && <section aria-label="可添加的微信会话">
       <div className="bindings-toolbar"><h3>{allPrivateMode ? '待处理或已停止同步的会话' : '可添加的微信会话'}</h3><span>已选 {Object.keys(selection).length} 个</span></div>
-      {state.sessionIssue === 'not-requested' ? <p>点击“刷新微信会话”后读取列表，系统可能请求访问微信数据。</p> : unbound.length === 0 && <p>当前没有可添加的微信会话。</p>}
+      {state.sessionIssue === 'not-requested' ? <p>点击“刷新微信会话”后读取列表，系统可能请求访问微信数据。</p>
+        : state.sessionIssue ? <p>会话名单读取失败，请刷新重试；当前不能判断是否有可添加的联系人。</p>
+        : unbound.length === 0 && <p>当前没有可添加的微信会话。</p>}
+      {selectionOnly && !targetContactId && !state.sessionIssue && unbound.length > 0 && <div className="bindings-toolbar">
+        <button className="button" disabled={!!state.busy} onClick={() => setSelection((previous) => Object.fromEntries(unbound.map((session) =>
+          [session.locator, {displayName: session.displayName, target: previous[session.locator]?.target || session.knownContactId || 'new'}])))}>全选当前列表</button>
+        <button className="button" disabled={!!state.busy || !Object.keys(selection).length} onClick={() => setSelection({})}>清空选择</button>
+        <span>仅选择本次列表中的私聊，新增会话仍需另行确认。</span>
+      </div>}
       <div className="binding-session-list">{unbound.map((session) => <div className="binding-row" key={session.locator}>
-        <label className="binding-choice"><input type="checkbox" disabled={!!state.busy} aria-label={`选择会话 ${session.locator}`} checked={!!selection[session.locator]}
+        <label className="binding-choice"><input type="checkbox" disabled={!!state.busy || !!state.sessionIssue} aria-label={`选择会话 ${session.locator}`} checked={!!selection[session.locator]}
           onChange={(event) => setSelection((previous) => {
             const next = { ...previous }; if (event.target.checked) next[session.locator] = { displayName: session.displayName, target: targetContactId ?? '' }; else delete next[session.locator]; return next;
           })} /><span><b>{session.displayName}</b><code>{session.locator}</code></span></label>
@@ -51,7 +59,7 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
         onChange={event => consent.setHistoryAuthorized(event.target.checked)} />同时读取本次所选会话在本机可用的历史消息</label>
       <p>默认不读取绑定以前的历史。更改所选会话、对应联系人或刷新列表后，需要重新勾选历史授权。</p></>}
       <div className="bindings-submit"><span>{selectionOnly ? '同名联系人请核对稳定会话与联系人标识；停止已有同步请在联系人详情中撤销授权。' : '同名联系人请核对会话与联系人标识。取消勾选不会撤销已有授权。'}</span><button className="button primary"
-        disabled={!!state.busy || !Object.keys(selection).length || Object.values(selection).some((item) => !item.target)} onClick={() => void consent.confirm()}>确认并授权所选会话</button></div>
+        disabled={!!state.busy || !!state.sessionIssue || !Object.keys(selection).length || Object.values(selection).some((item) => !item.target)} onClick={() => void consent.confirm()}>确认并授权所选会话</button></div>
     </section>}
     {state.phase === 'unavailable' && <div><h3>微信同步尚未就绪</h3>{selectionOnly ? <p>当前无法核验微信账号或会话身份，尚不能读取聊天正文。请核对已有微信读取组件与账号状态后重试。</p> : <><p>请先完成本人渠道身份与本机微信读取配置。可继续使用手动联系人；手动文件导入入口已退役。</p></>}</div>}
   </section>;

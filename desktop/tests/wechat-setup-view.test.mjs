@@ -16,6 +16,32 @@ async function pageFixture(t, phase='needs_detection', selectionOnly=false, fail
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
  await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});return page;
 }
+
+test('名单失败不显示空列表，明确全选只覆盖当前未添加私聊', async t => {
+ const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page=await browser.newPage();
+ const bundle=await build({stdin:{contents:`
+ import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {BindingConsentPage} from './src/renderer/BindingConsentPage';
+ window.calls=[];function App(){const [selection,setSelection]=useState({});const [state,setState]=useState({selectionOnly:true,revision:1,scopeRevision:1,phase:'ready',sessions:[],bindings:[],knownBindings:[],syncEnabled:false,sessionIssue:'failed',busy:null,errorCode:null,notice:null});
+ window.publish=values=>setState(previous=>({...previous,...values}));
+ return <BindingConsentPage contacts={{state:{contacts:[]}}} consent={{state,selection,setSelection,refresh:async()=>{},confirm:async()=>window.calls.push(selection)}} navigate={()=>{}} onClose={()=>{}}/>;}
+ createRoot(document.getElementById('root')).render(<App/>);
+ `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
+ await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await expect(page.getByText('当前没有可添加的微信会话。',{exact:true})).toHaveCount(0);
+ await expect(page.getByText(/会话名单读取失败/)).toBeVisible();
+ await page.evaluate(()=>window.publish({sessionIssue:null,sessions:['a','b'].map(locator=>({locator,displayName:'合成'+locator,boundContactId:null}))}));
+ await expect(page.getByRole('checkbox',{name:'选择会话 a',exact:true})).not.toBeChecked();
+ await page.getByRole('button',{name:'全选当前列表',exact:true}).click();
+ await expect(page.getByRole('checkbox',{name:'选择会话 b',exact:true})).toBeChecked();
+ assert.deepEqual(await page.evaluate(()=>window.calls),[]);
+ await page.getByRole('button',{name:'确认并授权所选会话',exact:true}).click();
+ assert.deepEqual(await page.evaluate(()=>window.calls),[{a:{displayName:'合成a',target:'new'},b:{displayName:'合成b',target:'new'}}]);
+ await page.evaluate(()=>window.publish({sessions:['a','b','c'].map(locator=>({locator,displayName:'合成'+locator,boundContactId:null}))}));
+ await expect(page.getByRole('checkbox',{name:'选择会话 c',exact:true})).not.toBeChecked();
+ await page.getByRole('button',{name:'清空选择',exact:true}).click();
+ await expect(page.getByRole('checkbox',{name:'选择会话 a',exact:true})).not.toBeChecked();
+});
 test('新用户主动检测并确认列表读取，默认仅所选且不读取历史',async t=>{
  const page=await pageFixture(t);
  await expect(page.getByRole('button',{name:'检测微信账号',exact:true})).toBeVisible();

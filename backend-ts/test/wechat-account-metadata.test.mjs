@@ -36,10 +36,17 @@ if(r.op==='metadata-account'){data=account(s);if(s.mode==='account-body')data.bo
 if(r.op==='metadata-sessions'){
  if(s.mode==='cancel')return;
  data={format:'wechat-private-session-metadata-v1',account:account(s),sessions:[{username:'friend-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},{username:'friend-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}]};
+ if(s.mode==='control-name')data.sessions[0].displayName='合\\t成甲\\u007f';
+ if(s.mode==='blank-name')data.sessions[0].displayName='\\t \\u007f\\u0085';
+ if(s.mode==='nul-name')data.sessions[0].displayName='合\\u0000成甲';
+ if(s.mode==='newline-name')data.sessions[0].displayName='合\\n成甲';
+ if(s.mode==='long-name')data.sessions[0].displayName='中'.repeat(86);
+ if(s.mode==='surrogate-name')data.sessions[0].displayName='\\ud800';
+ if(s.mode==='system-sessions')data.sessions.push(...['filehelper','notifymessage'].map(username=>({username,displayName:'合成系统会话',kind:'private',identityAssurance:'verified'})));
  if(s.mode==='duplicate')data.sessions.push(data.sessions[0]);if(s.mode==='false-group')data.sessions[0].username='synthetic@chatroom';if(s.mode==='sessions-body')data.sessions[0].summary='BODY_SENTINEL';if(s.mode==='overflow')data.sessions=Array.from({length:5001},(_,i)=>({...data.sessions[0],username:'synthetic-'+i}));
  if(s.mode==='changed-after-list'){s.account='different-configured-owner';fs.writeFileSync(stateFile,JSON.stringify(s));}
 }
-if(r.op==='resolve')data={accountKey:s.account,conversationKey:'friend-a',displayName:'合成甲',sourceGeneration:s.generation};
+if(r.op==='resolve')data={accountKey:s.account,conversationKey:s.mode.startsWith('system-target:')?s.mode.slice(14):'friend-a',displayName:'合成甲',sourceGeneration:s.generation};
 if(r.op==='inspect-account-schema'){
  const table=(role,n)=>({target:String(n).repeat(64),partition:String(n+2).repeat(64),role,columns:[{name:'username',type:'TEXT',notNull:false,primaryKey:1,hidden:0}],indexes:[],declaredPrimaryKey:['username'],autoIncrement:false,sqlFingerprint:'e'.repeat(64),triggerFingerprints:[],schemaVersion:'1',rootPage:String(n)});
  data={format:'wechat-account-schema-v1',status:'unverified',accountKey:s.account,sourceGeneration:s.generation,schemaFingerprint:'b'.repeat(64),tables:[table('session',1),table('contact',2)],normalHistory:false};if(s.mode==='schema-body')data.records=['BODY_SENTINEL'];
@@ -89,6 +96,34 @@ test('未知版本、缺配置和未配工具不认证metadata，也不读取名
     if(mode==='unknown-version'){const account=await port.account();assert.equal(account.assurance,'unverified');await assert.rejects(port.sessions(account),{code:'metadata_identity_unverified'});}
     else await assert.rejects(port.account(),{code:'history_account_unavailable'});
     assert.ok((await requests(f)).every(row=>row.op==='metadata-account'));
+  }
+});
+
+test('名单中显示名称的控制字符不会阻断其他有效私聊，渠道身份保持不变', async t => {
+  const f = await fixture(t, 'control-name');
+  const account = await f.client.accountMetadata();
+  const result = await f.client.privateSessionMetadata(account);
+  assert.deepEqual(result.sessions.map(row => ({username: row.username, displayName: row.displayName})), [
+    {username: 'friend-a', displayName: '合 成甲'}, {username: 'friend-b', displayName: '合成乙'},
+  ]);
+});
+
+test('显示名仅规整合法控制字符，空白回退稳定身份，非法原始字段继续拒绝', async t => {
+  const f = await fixture(t, 'blank-name');
+  const account = await f.client.accountMetadata();
+  assert.equal((await f.client.privateSessionMetadata(account)).sessions[0].displayName, 'friend-a');
+  for (const mode of ['nul-name', 'newline-name', 'long-name', 'surrogate-name']) {
+    const bad = await fixture(t, mode), owner = await bad.client.accountMetadata();
+    await assert.rejects(bad.client.privateSessionMetadata(owner), {code: 'history_protocol_invalid'});
+  }
+});
+
+test('文件传输助手和服务通知不进入联系人名单或单会话读取', async t => {
+  const f = await fixture(t, 'system-sessions'), account = await f.client.accountMetadata();
+  assert.deepEqual((await f.client.privateSessionMetadata(account)).sessions.map(row => row.username), ['friend-a', 'friend-b']);
+  for (const username of ['filehelper', 'notifymessage']) {
+    const target = await fixture(t, `system-target:${username}`);
+    await assert.rejects(target.client.resolveSelected('合成系统会话'), {code: 'history_target_not_private'});
   }
 });
 
