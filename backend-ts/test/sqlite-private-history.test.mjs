@@ -580,3 +580,26 @@ test('同一来源的未知状态经确认后正常入库且不再显示缺口',
  current=record('1',{status:'4',serverId:'55'});const coverage=await service.synchronize(contact);
  assert.equal(coverage.quarantinedCount,0);assert.equal(coverage.phase,'complete');assert.equal((await service.read(contact)).messages[0].text,'合成正文1');
 });
+
+test('无正文的已识别系统记录不阻挡正常文字同步',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ const system=record('99',{kind:'other',sender:'unknown',text:null,originalType:'10000',status:'4',stateAssurance:'unverified',metadataOnly:true});
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1',{status:'4',serverId:'55'}),system],completedPartitions:['shard-a'],exhausted:true});
+ const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.quarantinedCount,0);
+ assert.deepEqual((await service.read(contact)).messages.map(m=>m.text),['合成正文1']);
+ await service.synchronize(contact);assert.equal((await service.coverage(contact)).phase,'complete');
+});
+
+test('伪装成非文字元数据的文字不得进入消息',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1',{stateAssurance:'unverified',metadataOnly:true})],completedPartitions:['shard-a'],exhausted:true});
+ const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'incomplete');assert.equal((await service.read(contact)).messages.length,0);
+});
+
+test('系统元数据与已保存文字身份相同时仍保留旧正文的使用保护',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;let current=record('1');
+ channel.page=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[current],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);const old=(await service.read(contact)).messages[0];
+ current=record('1',{kind:'other',sender:'unknown',text:null,originalType:'10000',status:'4',stateAssurance:'unverified',metadataOnly:true});await service.synchronize(contact);
+ assert.equal((await service.read(contact)).messages.length,0);await assert.rejects(service.source(contact,old.sourceRecordIds[0]),{code:'history_source_not_found'});
+});

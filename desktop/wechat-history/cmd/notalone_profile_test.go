@@ -38,7 +38,7 @@ func TestNotAloneProfileAnonymousShapeDoesNotGrantHistory(t *testing.T) {
 	if report.Status != "unverified" || report.StatusSemantics != "observed_subset_only" || report.Capabilities["statusSemantics"] != "unverified" || report.Capabilities["normalHistory"] != "unverified" {
 		t.Fatal("部分实测状态不能提升整体状态语义或正常历史资格")
 	}
-	if report.CanReadHistory || len(report.ReadProfile.StatusRules) != 3 || !report.ReadProfile.StatusSemanticsVerified || report.ReadProfile.IncrementalTailVerified || report.ReadProfile.BoundarySemanticsVerified || report.ReadProfile.OpaqueStatusPolicy != "" || report.SchemaShapeFingerprint == "" {
+	if report.CanReadHistory || len(report.ReadProfile.StatusRules) != 4 || !report.ReadProfile.StatusSemanticsVerified || report.ReadProfile.IncrementalTailVerified || report.ReadProfile.BoundarySemanticsVerified || report.ReadProfile.OpaqueStatusPolicy != "" || report.SchemaShapeFingerprint == "" {
 		t.Fatal("profile应仅包含已实测的精确状态元组，其他能力继续关闭")
 	}
 }
@@ -59,12 +59,16 @@ func TestNotAloneObservedStatusTuplesAreNarrow(t *testing.T) {
 		eligible  bool
 	}{
 		{name: "observed sent tuple", localType: 1, sender: "owner", status: 2, serverID: &allocated, state: notaloneMessageSent, matched: true, eligible: true},
+		{name: "observed historical sent tuple", localType: 1, sender: "owner", status: 3, serverID: &allocated, state: notaloneMessageSent, matched: true, eligible: true},
 		{name: "observed received tuple", localType: 1, sender: "contact", status: 3, serverID: &allocated, state: notaloneMessageReceived, matched: true, eligible: true},
-		{name: "observed recalled tuple", localType: 10000, sender: "unknown", status: 4, serverID: &allocated, state: notaloneMessageRecalled, matched: true},
-		{name: "unobserved received status four", localType: 1, sender: "contact", status: 4, serverID: &allocated, state: notaloneMessageUnknown},
-		{name: "owner cannot use recall tuple", localType: 10000, sender: "owner", status: 4, serverID: &allocated, state: notaloneMessageUnknown},
+		{name: "observed historical received tuple", localType: 1, sender: "contact", status: 4, serverID: &allocated, state: notaloneMessageReceived, matched: true, eligible: true},
+		{name: "system metadata does not prove recall", localType: 10000, sender: "unknown", status: 4, serverID: &allocated, state: notaloneMessageUnknown},
+		{name: "owner system metadata does not prove recall", localType: 10000, sender: "owner", status: 4, serverID: &allocated, state: notaloneMessageUnknown},
+		{name: "contact system metadata does not prove recall", localType: 10000, sender: "contact", status: 4, serverID: &allocated, state: notaloneMessageUnknown},
 		{name: "sent without allocated server id", localType: 1, sender: "owner", status: 2, state: notaloneMessageSent, matched: true},
+		{name: "historical sent without allocated server id", localType: 1, sender: "owner", status: 3, state: notaloneMessageSent, matched: true},
 		{name: "received without allocated server id", localType: 1, sender: "contact", status: 3, state: notaloneMessageReceived, matched: true},
+		{name: "historical received without allocated server id", localType: 1, sender: "contact", status: 4, state: notaloneMessageReceived, matched: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			decision := notaloneClassifyStatus(profile, tc.localType, tc.sender, tc.status, tc.serverID)
@@ -82,7 +86,7 @@ func TestNotAloneRuntimeCandidateRequiresExactObservedProfile(t *testing.T) {
 	inspection := notaloneInspection{SchemaFingerprint: "schema-fingerprint", Tables: tables}
 	certification := certifyNotaloneProfile(program, tables)
 	if !notaloneRuntimeReadCandidate(program, inspection, certification) {
-		t.Fatal("固定版本、精确结构与三条已观察状态规则应可进入运行时快照证明")
+		t.Fatal("固定版本、精确结构与四条已观察文字状态规则应可进入运行时快照证明")
 	}
 	broad := *certification.ReadProfile
 	broad.StatusRules = append(broad.StatusRules, notaloneStatusRule{LocalType: 1, Sender: "contact", Status: 4, State: notaloneMessageRecalled})

@@ -31,11 +31,13 @@ export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|
  const {tx,token,report,target}=input;
  let changed=false;
  for(const record of input.records){
-  const systemTransition=record.stateAssurance==='verified'&&record.originalType==='10000'&&record.kind==='other';
+  const prepared=prepareRecord(record,token.source_generation,target);
+  const metadataOnly=record.metadataOnly===true&&(!prepared.reason||prepared.reason==='metadata_only');
+  const systemTransition=(record.stateAssurance==='verified'||metadataOnly)&&record.originalType==='10000'&&record.kind==='other';
   const terminalReason=verifiedTerminalReason(record);
   if(terminalReason==='source_absent')continue;
-  if(record.stateAssurance==='verified'&&!systemTransition&&!terminalReason)continue;
-  const prepared=prepareRecord(record,token.source_generation,target);
+  if(record.metadataOnly!==undefined&&!prepared.localKey)continue;
+  if((record.stateAssurance==='verified'||metadataOnly)&&!systemTransition&&!terminalReason)continue;
   // 终态必须精确定位一条来源；身份缺失不能扩大为整位联系人的失效。
   if((record.messageState==='recalled'||record.messageState==='absent')&&!prepared.localKey)continue;
   const exclusion=prepared.localKey&&(sourceExcluded(tx,token,prepared,report)?'source_excluded':input.exclude?.({localKey:prepared.localKey,serverKey:prepared.serverKey})??null);
@@ -65,7 +67,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
     let reason: string | null = prepared.reason;
     let message: StorageRow | undefined;
     let excluded = false;
-    if(reason==='source_recalled'||reason==='source_absent')excluded=true;
+    if(reason==='source_recalled'||reason==='source_absent'||reason==='metadata_only')excluded=true;
     if (inputRecord.stateAssurance!=='verified') {
       const exclusion=prepared.localKey&&(sourceExcluded(tx,token,prepared,report)?'source_excluded':input.exclude?.({localKey:prepared.localKey,serverKey:prepared.serverKey})??null);
       if (exclusion) { reason=exclusion; excluded=true; }
@@ -138,7 +140,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
         AND r.reason_code=? AND r.availability='available'
         AND g.binding_id=? AND g.accepted_data_generation<=? LIMIT 1`,
       [token.owner_id,token.contact_id,prepared.localKey,reason,token.binding_id,BigInt(token.data_generation)])) continue;
-    if (reason && reason !== 'source_excluded' && reason !== 'clear_excluded' && reason !== 'source_recalled' && reason !== 'source_absent') {
+    if (reason && reason !== 'source_excluded' && reason !== 'clear_excluded' && reason !== 'source_recalled' && reason !== 'source_absent' && reason !== 'metadata_only') {
       quarantined = true;
       if (prepared.localKey && tx.get(`SELECT 1 FROM capture_record r
         JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id

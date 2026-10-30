@@ -136,6 +136,13 @@ async function fixture(t,mode='normal') {
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'合成分页文字',originalType:'1',sentAt:'1000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row],completedPartitions:['d'.repeat(64)],exhausted:true};
    if(mode==='empty-target')data={...data,records:[],completedPartitions:target.partitions};
+   if(mode.startsWith('metadata-only'))data.records=[{...row,kind:'other',sender:'unknown',text:null,originalType:'10000',stateAssurance:'unverified',metadataOnly:true}];
+   if(mode==='metadata-only-app')data.records[0]={...data.records[0],originalType:'49'};
+   if(mode==='metadata-only-file')data.records[0]={...data.records[0],originalType:'25769803825',kind:'file'};
+   if(mode==='metadata-only-kind-conflict')data.records[0]={...data.records[0],originalType:'49',kind:'file'};
+   if(mode==='metadata-only-forged-text')data.records[0]={...data.records[0],kind:'text',originalType:'1'};
+   if(mode==='metadata-only-forged-body')data.records[0].text='不得夹带的文字';
+   if(mode==='metadata-only-false')data.records[0].metadataOnly=false;
    if(mode==='page-cancel')return;
    if(mode==='page-too-large'){process.stdout.write('x'.repeat(8*1024*1024+1));return;}
    if(mode==='page-large')data={...data,records:Array.from({length:16},(_,i)=>({...row,localId:String(i+1),text:'\\u0000'.repeat(65536)}))};
@@ -517,5 +524,14 @@ test('空目标不得借用普通档、声称增量、遗漏固定分片或伪�
   const f=await fixture(t,mode);await f.client.resolveSelected(conversation);await f.client.inspectSelected();
   if(['empty-target-ordinary-profile','empty-target-false-tail'].includes(mode))await assert.rejects(f.client.supportSelected(),{code:'history_protocol_invalid'});
   else {await f.client.supportSelected();await assert.rejects(f.client.targetSelected(),{code:'history_protocol_invalid'});}
+ });
+});
+
+
+test('原生读取只接受无正文、类型一致的非文字元数据',async t=>{
+ for(const mode of ['metadata-only','metadata-only-app','metadata-only-file','metadata-only-kind-conflict','metadata-only-forged-text','metadata-only-forged-body','metadata-only-false'])await t.test(mode,async t=>{
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+  if(['metadata-only','metadata-only-app','metadata-only-file'].includes(mode)){const page=await f.client.pageSelected(target,null);assert.equal(page.records[0].metadataOnly,true);assert.equal(page.records[0].text,null);}
+  else await assert.rejects(f.client.pageSelected(target,null),{code:'history_protocol_invalid'});
  });
 });

@@ -288,7 +288,8 @@ function historyTarget(value: unknown, scope: ResolvedWechatScope, schema?: Wech
 function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | 'quarantine' = 'normal'): HistoryRecord {
   const quarantine = mode === 'quarantine';
   const hasMessageState=!!value&&typeof value==='object'&&Object.hasOwn(value,'messageState');
-  const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status', 'stateAssurance',...(hasMessageState?['messageState']:[])]);
+  const hasMetadataOnly=!!value&&typeof value==='object'&&Object.hasOwn(value,'metadataOnly');
+  const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status', 'stateAssurance',...(hasMessageState?['messageState']:[]),...(hasMetadataOnly?['metadataOnly']:[])]);
   const partition = hash(row.partition), table = hash(row.table);
   if (!target.tables.some(candidate => candidate.partition === partition && candidate.instance === table)
     || !['owner', 'contact', 'unknown'].includes(row.sender as string)
@@ -312,10 +313,15 @@ function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | '
   const orderKey = row.orderKey === null ? null : exactInteger(row.orderKey);
   if ((orderScheme === null) !== (orderKey === null)) return fail();
   const originalType = row.originalType === 'unknown' && row.kind === 'other' ? 'unknown' : exactInteger(row.originalType);
-  if(quarantine && metadataKind(originalType==='unknown'?null:originalType)!==row.kind)return fail();
+  if(hasMetadataOnly&&(quarantine||row.metadataOnly!==true||row.kind==='text'||row.text!==null||row.stateAssurance!=='unverified'||hasMessageState
+    ||originalType==='unknown'||BigInt(originalType)<0n||(BigInt(originalType)&0xffffffffn)===1n||row.kind!==historyMetadataKind(originalType)))return fail();
+  if(quarantine && (originalType==='unknown'?'other':historyMetadataKind(originalType))!==row.kind)return fail();
   return { partition, table, localId: row.localId === null ? null : exactInteger(row.localId), serverId: row.serverId === null ? null : exactInteger(row.serverId),
     sender: row.sender as HistoryRecord['sender'], kind: row.kind as HistoryRecord['kind'], text: body, originalType,
-    sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'],...(hasMessageState?{messageState:row.messageState as HistoryRecord['messageState']}:{}) };
+    sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'],...(hasMetadataOnly?{metadataOnly:true as const}:{}),...(hasMessageState?{messageState:row.messageState as HistoryRecord['messageState']}:{}) };
+}
+function historyMetadataKind(originalType:string):HistoryRecord['kind'] {
+  return (BigInt(originalType)&0xffffffffn)===49n ? BigInt(originalType)>>32n===6n?'file':'other' : metadataKind(originalType);
 }
 function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, mode: 'normal' | 'quarantine' = 'normal'): HistoryPage {
   const hasResume = !!value && typeof value === 'object' && Object.hasOwn(value, 'resumeCursor');
