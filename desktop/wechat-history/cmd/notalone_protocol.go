@@ -61,12 +61,14 @@ type notaloneHistorySession struct {
 	life              context.Context
 	cancel            context.CancelFunc
 	snapshot          *notaloneSnapshot
+	snapshotMode      string
 	messageGuard      *notaloneSourceGuard
 	messageMonitor    *notaloneSourceGuard
 	guardLost         chan struct{}
 	guardLostOnce     sync.Once
 	inspected         *notaloneInspection
 	program           func(context.Context) (notaloneProgramVersion, error)
+	sourceProcess     func(context.Context) (notaloneProcessIdentity, error)
 	certify           func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
 	testMetadata      *notaloneTestMetadataWatch
 	accountGeneration string
@@ -74,7 +76,7 @@ type notaloneHistorySession struct {
 
 func newNotaloneHistorySession(s *server) *notaloneHistorySession {
 	life, cancel := context.WithCancel(context.Background())
-	return &notaloneHistorySession{server: s, life: life, cancel: cancel, program: readNotaloneProgramVersion, certify: certifyNotaloneProfile, guardLost: make(chan struct{})}
+	return &notaloneHistorySession{server: s, life: life, cancel: cancel, program: readNotaloneProgramVersion, sourceProcess: selectedNotaloneWechatProcess, certify: certifyNotaloneProfile, guardLost: make(chan struct{})}
 }
 func (h *notaloneHistorySession) close() {
 	h.cancel()
@@ -107,6 +109,13 @@ func (h *notaloneHistorySession) ensureMessageGuard() error {
 		}
 		return nil
 	}
+	if h.sourceProcess == nil {
+		return notaloneFailure("history_source_unverified")
+	}
+	process, err := h.sourceProcess(h.life)
+	if err != nil {
+		return notaloneFailure("history_source_unverified")
+	}
 	directory := filepath.Join(h.server.cfg.DBRoot, "db_storage", "message")
 	files, err := notaloneSnapshotFiles(directory)
 	if err != nil {
@@ -122,7 +131,7 @@ func (h *notaloneHistorySession) ensureMessageGuard() error {
 		_ = guard.Close()
 		return notaloneFailure("history_source_unverified")
 	}
-	if monitor.StartMonitor() != nil || guard.Check() != nil {
+	if guard.WatchProcess(process) != nil || monitor.WatchProcess(process) != nil || monitor.StartMonitor() != nil || guard.Check() != nil {
 		_ = monitor.Close()
 		_ = guard.Close()
 		return notaloneFailure("history_source_unverified")
@@ -411,12 +420,16 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if r.Consent != "selected-test-lifecycle-metadata-v1" || !validNotaloneTestMetadataAction(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
-	case "inspect", "support", "target", "page":
+	case "inspect", "support", "target", "page", "quarantine-target", "quarantine-page":
 		consent := "selected-schema-v1"
 		if r.Operation == "target" || r.Operation == "page" {
 			consent = "selected-history-v1"
 		}
-		if r.Consent != consent || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || (r.Operation != "page" && (r.Target != "" || r.Cursor != "")) || (r.Operation == "page" && r.Target == "") {
+		if r.Operation == "quarantine-target" || r.Operation == "quarantine-page" {
+			consent = "selected-quarantine-history-v1"
+		}
+		isPage := r.Operation == "page" || r.Operation == "quarantine-page"
+		if r.Consent != consent || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || (!isPage && (r.Target != "" || r.Cursor != "")) || (isPage && r.Target == "") {
 			return nil, notaloneFailure("history_request_invalid")
 		}
 	default:
@@ -487,7 +500,7 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		return notaloneMetadataReport{Format: "wechat-message-metadata-observation-v1", Status: "unverified", ScopeDigest: inspection.ScopeDigest, SourceGeneration: inspection.SourceGeneration, SchemaFingerprint: inspection.SchemaFingerprint, Kind: r.Kind, CheckedPartitions: inspection.CheckedPartitions, Record: observation}, nil
 	}
 
-	if (r.Operation == "target" || r.Operation == "page") && h.messageGuard != nil {
+	if (r.Operation == "target" || r.Operation == "page" || r.Operation == "quarantine-target" || r.Operation == "quarantine-page") && h.messageGuard != nil {
 		if err := h.ensureMessageGuard(); err != nil {
 			return nil, err
 		}
@@ -499,10 +512,18 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	if r.Operation == "support" {
 		return report, nil
 	}
-	if report.Status != "supported" || profile == nil {
+	mode := "normal"
+	if r.Operation == "quarantine-target" || r.Operation == "quarantine-page" {
+		// 独立、明确同意的隔离读取只依赖已核验结构，不授予普通历史或状态语义。
+		if profile == nil || report.Capabilities["programVersion"] != "supported" || report.Capabilities["exactSchema"] != "supported" || report.Capabilities["declaredLocalKey"] != "supported" {
+			return nil, notaloneFailure("history_support_unverified")
+		}
+		profile = &notaloneReadProfile{SchemaShapeFingerprint: profile.SchemaShapeFingerprint, OpaqueStatusPolicy: "quarantine-text-v1"}
+		mode = "quarantine"
+	} else if report.Status != "supported" || profile == nil {
 		return nil, notaloneFailure("history_support_unverified")
 	}
-	if r.Operation == "target" {
+	if r.Operation == "target" || r.Operation == "quarantine-target" {
 		if err := h.ensureMessageGuard(); err != nil {
 			return nil, err
 		}
@@ -519,9 +540,10 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			return nil, err
 		}
 		h.snapshot = snapshot
+		h.snapshotMode = mode
 		return snapshot.Target(), nil
 	}
-	if h.snapshot == nil || r.Target != h.snapshot.Target().Descriptor {
+	if h.snapshot == nil || h.snapshotMode != mode || r.Target != h.snapshot.Target().Descriptor {
 		return nil, notaloneFailure("history_target_invalid")
 	}
 	page, err := h.snapshot.Page(ctx, r.Cursor)

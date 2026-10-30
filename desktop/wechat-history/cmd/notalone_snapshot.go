@@ -156,7 +156,8 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 	if ctx == nil || s == nil || s.cfg == nil || selected.Account == "" || selected.Conversation == "" || selected.SourceGeneration == "" || selected.Account != s.cfg.Wxid || inspected.SourceGeneration != selected.SourceGeneration || inspected.ScopeDigest != notaloneHash(selected.Account, selected.Conversation) || len(inspected.Tables) == 0 || len(inspected.CheckedPartitions) == 0 {
 		return nil, notaloneFailure("history_scope_unverified")
 	}
-	if profile.SchemaShapeFingerprint == "" || profile.SchemaShapeFingerprint != notaloneSnapshotShape(inspected.Tables) || (len(profile.AllowedStatuses) == 0 && profile.OpaqueStatusPolicy != "snapshot-opaque-v1") || (profile.OpaqueStatusPolicy != "" && profile.OpaqueStatusPolicy != "snapshot-opaque-v1") {
+	quarantine := profile.OpaqueStatusPolicy == "quarantine-text-v1"
+	if profile.SchemaShapeFingerprint == "" || profile.SchemaShapeFingerprint != notaloneSnapshotShape(inspected.Tables) || (len(profile.AllowedStatuses) == 0 && profile.OpaqueStatusPolicy != "snapshot-opaque-v1" && !quarantine) || (profile.OpaqueStatusPolicy != "" && profile.OpaqueStatusPolicy != "snapshot-opaque-v1" && !quarantine) || (quarantine && len(profile.AllowedStatuses) != 0) {
 		return nil, notaloneFailure("history_support_unverified")
 	}
 	if ctx.Err() != nil {
@@ -439,6 +440,7 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 	return page, nil
 }
 func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnapshotShard, rows []wcdb.Row) ([]notaloneSnapshotRecord, error) {
+	quarantine := n.profile.OpaqueStatusPolicy == "quarantine-text-v1"
 	records := make([]notaloneSnapshotRecord, 0, len(rows))
 	bodyIDs := []any{}
 	bodyIndexes := map[int64]int{}
@@ -464,8 +466,8 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 		if allowed {
 			record.StateAssurance = "verified"
 		}
-		// 未认证状态只返回无正文的隔离记录，不能因为同页其他消息合法而读取其正文。
-		if senderID, ok := row["real_sender_id"].(int64); allowed && ok {
+		// 普通历史的未知状态不取正文；独立隔离入口可保存获准文字，仍不认证状态。
+		if senderID, ok := row["real_sender_id"].(int64); (allowed || quarantine) && ok {
 			names, e := shard.reader.QueryBounded(ctx, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", senderID)
 			if e == nil && len(names) == 1 {
 				switch rowString(names[0], "user_name") {
@@ -483,7 +485,7 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 			record.TimePrecision = &precision
 		}
 		records = append(records, record)
-		if kind == "text" && knownType && record.LocalID != nil && record.Sender != "unknown" {
+		if kind == "text" && knownType && record.LocalID != nil && (record.Sender != "unknown" || quarantine) {
 			id := row["local_id"].(int64)
 			bodyIDs = append(bodyIDs, id)
 			bodyIndexes[id] = len(records) - 1

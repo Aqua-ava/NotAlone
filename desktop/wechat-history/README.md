@@ -14,3 +14,6 @@
 
 
 `observe-metadata` 只在同一已解析目标及显式 `selected-message-metadata-v1` 下执行。每次固定全分片reader，仅按指定类型选择一条元数据；固定切面探针只投影常量，不额外取任意消息ID。输出不含正文、source/XML或媒体，字段、类型低32位与全部作用域均严格核验。无匹配返回NULL，未知状态始终unverified；观察不写正常捕获、不授予target/page或完整覆盖资格。取消、超时和Close仍等待真实读者释放。
+
+
+`quarantine-target` / `quarantine-page` 是另行明确授权的一次性隔离快照，consent 固定为 `selected-quarantine-history-v1`。它要求所选私聊、固定版本结构、声明主键、来源文件及微信进程守卫均可核验，允许将未知文字交给独立本机隔离仓；状态始终 unverified，非文字载荷不读取，不能供普通聊天、检索、记忆或生成使用。普通 target/page 的认证门禁保持独立。来源守卫使用固定微信路径、启动时刻和内核退出/exec事件；这只检测本次持有期间的相应变化，不承诺跨重启连续性或恢复映射。

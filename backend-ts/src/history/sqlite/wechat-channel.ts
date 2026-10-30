@@ -62,7 +62,11 @@ class WechatHistoryChannel implements HistoryChannel {
   if(signal!==undefined&&!(signal instanceof AbortSignal))return reject('history_request_invalid');
   const abort=()=>{void this.close().catch(()=>{});};signal?.addEventListener('abort',abort,{once:true});
   try{return await work(await this.#client(scope,signal));}
-  catch(error){if(signal?.aborted)return reject('history_native_cancelled');throw error;}
+  catch(error){
+   // 守卫会因协议失败主动中断当前读取，不能把原始故障改写成用户取消。
+   if(signal?.aborted&&(!(error instanceof StorageFailure)||error.code==='history_native_closed'))return reject('history_native_cancelled');
+   throw error;
+  }
   finally{signal?.removeEventListener('abort',abort);if(signal?.aborted)await this.close();}
  }
  async inspect(scope:HistoryScope,signal?:AbortSignal):Promise<HistorySupportReport>{

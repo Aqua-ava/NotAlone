@@ -28,6 +28,17 @@ func notaloneProtocolFixture(t *testing.T, supported bool) *notaloneHistorySessi
 	}
 	writer.Close()
 	h := newNotaloneHistorySession(s)
+	h.sourceProcess = func(context.Context) (notaloneProcessIdentity, error) {
+		path, err := os.Executable()
+		if err != nil {
+			return notaloneProcessIdentity{}, err
+		}
+		path, err = filepath.EvalSymlinks(path)
+		if err != nil {
+			return notaloneProcessIdentity{}, err
+		}
+		return readNotaloneProcessIdentity(os.Getpid(), path)
+	}
 	t.Cleanup(h.close)
 	h.program = func(context.Context) (notaloneProgramVersion, error) {
 		return notaloneProgramVersion{"synthetic", "1"}, nil

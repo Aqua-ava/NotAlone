@@ -248,13 +248,15 @@ function historyTarget(value: unknown, scope: ResolvedWechatScope, schema?: Wech
     || JSON.stringify(tables.map(table => `${table.partition}:${table.instance}`).sort()) !== JSON.stringify(schema.tables.map(table => `${table.partition}:${table.target}`).sort()))) return fail();
   return { protocol: 'private-history-v1', descriptor: opaque(row.descriptor), partitions, tables, sourceGeneration: scope.sourceGeneration };
 }
-function historyRecord(value: unknown, target: HistoryTarget): HistoryRecord {
+function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | 'quarantine' = 'normal'): HistoryRecord {
+  const quarantine = mode === 'quarantine';
   const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status', 'stateAssurance']);
   const partition = hash(row.partition), table = hash(row.table);
   if (!target.tables.some(candidate => candidate.partition === partition && candidate.instance === table)
     || !['owner', 'contact', 'unknown'].includes(row.sender as string)
     || !['text', 'image', 'voice', 'video', 'file', 'sticker', 'other'].includes(row.kind as string)
-    || !['verified', 'unverified'].includes(row.stateAssurance as string) || row.stateAssurance === 'unverified' && row.text !== null) return fail();
+    || !['verified', 'unverified'].includes(row.stateAssurance as string) || quarantine && row.stateAssurance !== 'unverified'
+    || !quarantine && row.stateAssurance === 'unverified' && row.text !== null) return fail();
   let body: string | null = null;
   if (row.kind === 'text') {
     if (row.text !== null) {
@@ -268,18 +270,20 @@ function historyRecord(value: unknown, target: HistoryTarget): HistoryRecord {
   const orderScheme = row.orderScheme === null ? null : text(row.orderScheme, 512);
   const orderKey = row.orderKey === null ? null : exactInteger(row.orderKey);
   if ((orderScheme === null) !== (orderKey === null)) return fail();
+  const originalType = row.originalType === 'unknown' && row.kind === 'other' ? 'unknown' : exactInteger(row.originalType);
+  if(quarantine && metadataKind(originalType==='unknown'?null:originalType)!==row.kind)return fail();
   return { partition, table, localId: row.localId === null ? null : exactInteger(row.localId), serverId: row.serverId === null ? null : exactInteger(row.serverId),
-    sender: row.sender as HistoryRecord['sender'], kind: row.kind as HistoryRecord['kind'], text: body, originalType: row.originalType === 'unknown' && row.kind === 'other' ? 'unknown' : exactInteger(row.originalType),
+    sender: row.sender as HistoryRecord['sender'], kind: row.kind as HistoryRecord['kind'], text: body, originalType,
     sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'] };
 }
-function historyPage(value: unknown, target: HistoryTarget, cursor: string | null): HistoryPage {
+function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, mode: 'normal' | 'quarantine' = 'normal'): HistoryPage {
   const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'completedPartitions', 'exhausted']);
   if (row.target !== target.descriptor || row.cursorIn !== cursor) return fail();
   const cursorOut = row.cursorOut === null ? null : opaque(row.cursorOut), exhausted = bool(row.exhausted);
   if (exhausted ? cursorOut !== null : cursorOut === null || cursorOut === cursor) return fail();
   const completedPartitions = list(row.completedPartitions, 128, hash); unique(completedPartitions);
   if (completedPartitions.some(partition => !target.partitions.includes(partition))) return fail();
-  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target)), completedPartitions, exhausted };
+  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, mode)), completedPartitions, exhausted };
 }
 function metadataKind(originalType: string | null): HistoryRecord['kind'] {
   switch (originalType === null ? null : BigInt(originalType) & 0xffffffffn) {
@@ -386,6 +390,7 @@ export class NarrowWechatClient {
   #schema?: WechatSchemaInspection;
   #support?: HistorySupportReport;
   #target?: HistoryTarget;
+  #quarantineTarget?: HistoryTarget;
   #testMetadata?: TestMetadataState;
   #pending?: PendingResponse;
   #stopped = false;
@@ -430,7 +435,7 @@ export class NarrowWechatClient {
         if (this.#account && (parsed.accountKey !== this.#account.accountKey || parsed.sourceGeneration !== this.#account.sourceGeneration)) return fail('history_scope_changed');
         return parsed;
       });
-      this.#selected = { ...scope }; this.#schema = undefined; this.#support = undefined; this.#target = undefined; return scope;
+      this.#selected = { ...scope }; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#quarantineTarget = undefined; return scope;
     }, signal);
   }
   inspectSelected(signal?: AbortSignal): Promise<WechatSchemaInspection> {
@@ -510,7 +515,7 @@ export class NarrowWechatClient {
     return this.#enqueue(async () => {
       const scope = this.#readableScope();
       return this.#request({ op: 'target', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1' }, value => {
-        const parsed = historyTarget(value, scope, this.#schema); this.#target = structuredClone(parsed); return parsed;
+        const parsed = historyTarget(value, scope, this.#schema); this.#target = structuredClone(parsed); this.#quarantineTarget=undefined; return parsed;
       });
     }, signal);
   }
@@ -525,6 +530,27 @@ export class NarrowWechatClient {
       const accepted = this.#target;
       return this.#request({ op: 'page', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1', target: accepted.descriptor, cursor: cursor ?? '' }, value => historyPage(value, accepted, cursor), pageResponseLimit);
     }, signal);
+  }
+  /** 明确同意的单次隔离快照；不提升普通历史支持档，不提供自动重试或续读。 */
+  quarantineTargetSelected(signal?: AbortSignal): Promise<HistoryTarget> {
+    try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(() => {
+      const scope = this.#selected;
+      if (!scope || !this.#schema || this.#support?.capabilities?.programVersion !== 'supported' || this.#support.capabilities.exactSchema !== 'supported'
+        || this.#support.capabilities.declaredLocalKey !== 'supported') return fail('history_support_unverified');
+      return this.#request({op:'quarantine-target',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-quarantine-history-v1'},value=>{
+        const parsed=historyTarget(value,scope,this.#schema);this.#quarantineTarget=structuredClone(parsed);this.#target=undefined;return parsed;
+      });
+    },signal);
+  }
+  quarantinePageSelected(target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<{kind:'quarantine';page:HistoryPage}> {
+    try { signalValid(signal); if(cursor!==null)opaque(cursor); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(() => {
+      const scope=this.#selected,accepted=this.#quarantineTarget;
+      if(!scope||!accepted||JSON.stringify(target)!==JSON.stringify(accepted))return fail('history_target_unverified');
+      if(cursor!==null)opaque(cursor);
+      return this.#request({op:'quarantine-page',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-quarantine-history-v1',target:accepted.descriptor,cursor:cursor??''},value=>({kind:'quarantine' as const,page:historyPage(value,accepted,cursor,'quarantine')}),pageResponseLimit);
+    },signal);
   }
   #readableScope(): ResolvedWechatScope {
     if (!this.#selected) return fail('history_scope_unverified');
@@ -612,7 +638,7 @@ export class NarrowWechatClient {
   }
   async #stop(code: string): Promise<void> {
     if (this.#stopped) { await this.#stopping; return; }
-    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#testMetadata = undefined;
+    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#quarantineTarget=undefined; this.#testMetadata = undefined;
     this.#stoppedSignal.resolve();
     const pending = this.#pending; this.#pending = undefined;
     this.#stopping = (async () => {

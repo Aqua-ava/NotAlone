@@ -26,6 +26,7 @@ type notaloneSourceGuard struct {
 	mu          sync.Mutex
 	queue       int
 	watches     []notaloneWatchedSource
+	processes   []notaloneProcessIdentity
 	fingerprint string
 	invalid     bool
 	closed      bool
@@ -155,6 +156,13 @@ func (guard *notaloneSourceGuard) Check() error {
 		return errors.New("source_guard_changed")
 	}
 	valid := guard.checkEvents()
+	for _, identity := range guard.processes {
+		current, err := readNotaloneProcessIdentity(identity.pid, identity.path)
+		if err != nil || current != identity {
+			valid = false
+			break
+		}
+	}
 	for _, watched := range guard.watches {
 		var pathStat, openStat syscall.Stat_t
 		if syscall.Lstat(watched.path, &pathStat) != nil || syscall.Fstat(watched.fd, &openStat) != nil || !notaloneSameInstance(watched.stat, pathStat) || !notaloneSameInstance(watched.stat, openStat) {
