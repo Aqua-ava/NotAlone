@@ -39,7 +39,7 @@ test('正常处理接续08新记忆，主题与长期背景验证后作为同一
  const {supplier}=await import('./fixtures/memory-management/supplier.mjs');
  const {adjudicationSupplier}=await import('./fixtures/memory-management/adjudication-support.mjs');
  const f=await fixture(t);f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[{
-  partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:'我长期喜欢合成园艺。',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,
+  partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:'我长期喜欢合成园艺。',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',
  }],completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(f.saved[0].contact_id);await f.contacts.setReading(false);
  const holders=new ActiveHolders(),seen=[];let extraction;
@@ -140,7 +140,7 @@ test('正式SQLite profile共享模型宿主并经认证HTTP贯通08到09到12',
   if(provider){provider.closeAllConnections();await new Promise(done=>provider.close(done));}
   await f.service.close();await f.contacts.close();for(const cleanup of cleanups.reverse())await cleanup();await assert.rejects(access(root),{code:'ENOENT'});
  });
- f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[{partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:'我长期喜欢合成园艺。',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null}],completedPartitions:['shard-a'],exhausted:true});
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[{partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:'我长期喜欢合成园艺。',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified'}],completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(contactId);await f.contacts.setReading(false);const databaseId=f.storage.status.databaseId;
  await f.service.close();await f.contacts.close();await f.storage.close();
  const infoPath=join(root,'managed/sqlite-backend.info'),envFile=join(root,'synthetic.env'),audit=join(root,'synthetic-network.jsonl'),stderr=join(root,'synthetic-host.stderr'),wrapper=join(root,'synthetic-node');

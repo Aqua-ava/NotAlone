@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 16,
+  "schemaVersion": 17,
   "migrationVersions": [
    1,
    2,
@@ -17,13 +17,14 @@
    13,
    14,
    15,
-   16
+   16,
+   17
   ],
-  "userVersion": 16,
+  "userVersion": 17,
   "sqliteVersion": "3.53.4",
-  "tableCount": 84,
-  "fieldCount": 822,
-  "foreignKeyGroups": 176,
+  "tableCount": 85,
+  "fieldCount": 826,
+  "foreignKeyGroups": 177,
   "triggerCount": 92,
   "checkCount": 252,
   "viewCount": 0
@@ -3976,6 +3977,85 @@
     }
    ],
    "sql": "CREATE TABLE history_deletion_fence ( owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,operation_id TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
+  },
+  "history_message_quarantine": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 3
+    },
+    {
+     "name": "reason",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "message",
+     "from": "contact_id",
+     "to": "contact_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 2,
+     "table": "message",
+     "from": "message_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_history_message_quarantine_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "message_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE history_message_quarantine ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, message_id TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id,message_id), FOREIGN KEY(owner_id,contact_id,message_id) REFERENCES message(owner_id,contact_id,id) ON DELETE CASCADE ) STRICT"
   },
   "history_restore": {
    "columns": [

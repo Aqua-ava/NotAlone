@@ -30,7 +30,7 @@ const instanceFor = partition => target.tables.find(table => table.partition ===
 export function record(partition, localId, extra = {}) {
   return { partition, table: instanceFor(partition), localId: String(localId), serverId: '0', sender: 'contact',
     kind: 'text', text: `合成正文${localId}`, originalType: '1', sentAt: '1700000000000', timePrecision: 'second',
-    orderScheme: null, orderKey: null, ...extra };
+    orderScheme: null, orderKey: null, stateAssurance: 'verified', ...extra };
 }
 export const identity = (partition, localId) => ({ partition, localId: String(localId) });
 export const identities = list => list.map(([partition, localId]) => identity(partition, localId));

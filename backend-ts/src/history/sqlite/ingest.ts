@@ -26,12 +26,33 @@ function sourceExcluded(tx: StorageTransaction, token: ReadEligibility, prepared
   if (!prepared.localKey) return false;
   return Boolean(tx.get("SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? AND ((scheme='local' AND external_key=?) OR (scheme='server' AND external_key=?))", [token.owner_id, token.conversation_id, prepared.localKey, report.serverAliasSemantics === 'verified_within_scope' ? prepared.serverKey : null]));
 }
+/** 未知状态的消息先失效；调用方可在单独事务中先执行，以免后续页写入失败撤销保护。 */
+export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|'token'|'report'|'target'|'records'|'exclude'>): void {
+ const {tx,token,report,target}=input;
+ let changed=false;
+ for(const record of input.records){
+  if(record.stateAssurance==='verified')continue;
+  const prepared=prepareRecord(record,token.source_generation,target);
+  const exclusion=prepared.localKey&&(sourceExcluded(tx,token,prepared,report)?'source_excluded':input.exclude?.({localKey:prepared.localKey,serverKey:prepared.serverKey})??null);
+  const local=prepared.localKey?aliasMessage(tx,token,'local',prepared.localKey):undefined;
+  const server=report.serverAliasSemantics==='verified_within_scope'&&prepared.serverKey?aliasMessage(tx,token,'server',prepared.serverKey):undefined;
+  if(exclusion&&!local&&!server)continue;
+  const affected=local||server?[...new Map([local,server].filter((v):v is StorageRow=>Boolean(v)).map(v=>[v.id,v])).values()]
+   :prepared.localKey?[]:tx.all("SELECT * FROM message WHERE owner_id=? AND contact_id=? AND binding_id=? AND availability='available'",[token.owner_id,token.contact_id,token.binding_id]);
+  for(const old of affected)if(!tx.get('SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,old.id])){
+   tx.run('INSERT INTO history_message_quarantine VALUES(?,?,?,?)',[token.owner_id,token.contact_id,old.id,'message_state_unverified']);
+   tx.run('UPDATE message SET interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,old.id]);changed=true;
+  }
+ }
+ if(changed)tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);
+}
 /**
  * 同一页的逐条接受：先排除，再按稳定来源身份幂等建立消息，最后补可认证字段。
  * 调用者必须已在同一事务复验读资格、游标和固定目标；本函数不发起任何外部读取。
  */
 export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean } {
   const { tx, token, report, target, captureId, at, records } = input;
+  quarantineUnverifiedRecords(input);
   let quarantined = false;
   for (const [index, inputRecord] of records.entries()) {
     const prepared = prepareRecord(inputRecord, token.source_generation, target);
@@ -39,6 +60,10 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
     let reason: string | null = prepared.reason;
     let message: StorageRow | undefined;
     let excluded = false;
+    if (inputRecord.stateAssurance!=='verified') {
+      const exclusion=prepared.localKey&&(sourceExcluded(tx,token,prepared,report)?'source_excluded':input.exclude?.({localKey:prepared.localKey,serverKey:prepared.serverKey})??null);
+      if (exclusion) { reason=exclusion; excluded=true; }
+    }
     if (!reason) {
       const exclusion = sourceExcluded(tx, token, prepared, report) ? 'source_excluded' as const : input.exclude?.({ localKey: prepared.localKey, serverKey: prepared.serverKey }) ?? null;
       if (exclusion) { reason = exclusion; excluded = true; }
@@ -50,6 +75,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
       else {
         message = local ?? server;
         if (message && !sameMessage(message, record)) reason = 'message_identity_conflict';
+        else if (message && tx.get('SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,message.id])) reason = 'message_state_unverified';
       }
       if (!reason) {
         if (!message) {

@@ -52,7 +52,7 @@ export async function fixture(t,options={}){
  const channel={
   inspect:async scope=>({...report,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation}),
   target:async scope=>({protocol:'private-history-v1',descriptor:`synthetic-target-${scope.conversationKey}`,partitions:['shard-a'],tables:[{partition:'shard-a',instance:'table-instance-1'}],sourceGeneration:'source-1'}),
-  page:async(scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[{partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:`合成会话${scope.conversationKey}的已保存聊天`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null}],completedPartitions:['shard-a'],exhausted:true}),
+  page:async(scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[{partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:`合成会话${scope.conversationKey}的已保存聊天`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified'}],completedPartitions:['shard-a'],exhausted:true}),
  };
  history=new SqliteHistoryService(storage,contacts,channel,holders);
  if(options.synchronizeHistory!==false){

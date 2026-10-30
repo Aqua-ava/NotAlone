@@ -93,6 +93,7 @@ export const runActions:StorageAction[]=[{name:'memoryExtraction.findRequest',mo
  JOIN capture_record r ON r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available'
  LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'
  WHERE m.owner_id=? AND m.contact_id=? AND m.kind='text' AND length(trim(m.text_body))>0 AND m.availability='available'
+ AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
  AND r.id=(SELECT min(rr.id) FROM capture_record rr WHERE rr.owner_id=m.owner_id AND rr.message_id=m.id AND rr.state='normalized' AND rr.availability='available') ORDER BY m.display_no`,[ownerId,c.id]);
   // 只有接线了后续文档阶段的正常宿主才复用已有提取证明；仅提取入口保持“已成功目标不重做”。
   const canReuse=i.followupStages===true&&!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();

@@ -162,7 +162,7 @@ func TestNotAloneSnapshotNonTextUnknownSenderAndOpaqueState(t *testing.T) {
 	if err := f.writers[0].Exec(`INSERT INTO ` + quoteIdent(f.table) + `(local_id,server_id,local_type,real_sender_id,create_time,status,message_content) VALUES(1,0,34,2,1700000000,987,'非文字正文不得读取'),(2,0,1,3,1700000000,987,'其他发送人正文不得读取'),(3,0,4294967297,1,1700000000,987,'低32位文字');`); err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), OpaqueStatusPolicy: "snapshot-opaque-v1"})
+	snapshot, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneReadProfile{SchemaShapeFingerprint: notaloneSnapshotShape(f.inspected.Tables), AllowedStatuses: []int64{0, 987}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,13 +213,21 @@ func TestNotAloneSnapshotProfileQuarantinesUnknownStateBeforeBody(t *testing.T) 
 	}
 	defer snapshot.Close()
 	page, err := snapshot.Page(context.Background(), "")
-	if err != nil || len(page.Records) != 2 { t.Fatalf("混合页应区分合法与未知状态：%v", err) }
+	if err != nil || len(page.Records) != 2 {
+		t.Fatalf("混合页应区分合法与未知状态：%v", err)
+	}
 	for _, record := range page.Records {
-		if *record.Status == "99" && (record.Sender != "unknown" || record.Text != nil) { t.Fatal("未知状态不得读取或暴露正文") }
-		if *record.Status == "0" && (record.Sender != "owner" || record.Text == nil || *record.Text != "合成合法文字") { t.Fatal("合法状态应读取文字") }
+		if *record.Status == "99" && (record.StateAssurance != "unverified" || record.Sender != "unknown" || record.Text != nil) {
+			t.Fatal("未知状态不得读取或暴露正文")
+		}
+		if *record.Status == "0" && (record.StateAssurance != "verified" || record.Sender != "owner" || record.Text == nil || *record.Text != "合成合法文字") {
+			t.Fatal("合法状态应读取文字")
+		}
 	}
 	encoded, _ := json.Marshal(page)
-	if strings.Contains(string(encoded), "合成正文") { t.Fatal("未知状态正文不得进入结果") }
+	if strings.Contains(string(encoded), "合成正文") {
+		t.Fatal("未知状态正文不得进入结果")
+	}
 }
 
 func TestNotAloneSnapshotRejectsReplayOtherTargetAndCancelledPage(t *testing.T) {

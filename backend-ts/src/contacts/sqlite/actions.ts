@@ -9,8 +9,9 @@ const action = (name: string, mode: 'read'|'write', execute: (tx: StorageTransac
 function visibleMessageCounts(tx:StorageTransaction,owner:string):Map<string,number> {
  // 仅身份存储可能尚未安装历史域；目录统计不要求历史表或正文读取能力。
  if(tx.all("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('message','capture_record')").length!==2)return new Map();
+ const quarantine=Boolean(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='history_message_quarantine'"));
  return new Map(tx.all(`SELECT m.contact_id,count(*) AS n FROM message m WHERE m.owner_id=? AND m.availability='available'
-  AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available') GROUP BY m.contact_id`,[owner]).map(row=>{
+  AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available') ${quarantine?"AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)":''} GROUP BY m.contact_id`,[owner]).map(row=>{
    if(typeof row.n!=='bigint'||row.n<0n||row.n>BigInt(Number.MAX_SAFE_INTEGER))return fail('identity_count_out_of_range');
    return [String(row.contact_id),Number(row.n)];
   }));

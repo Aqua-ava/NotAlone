@@ -14,7 +14,7 @@ const evidence={externalKey:'synthetic-account',identityScheme:'wechat.account.v
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
 function page(scope,target,cursor,changes={}) {
  return {target:target.descriptor,cursorIn:cursor,cursorOut:null,completedPartitions:['p'],exhausted:true,
- records:[{partition:'p',table:'t',localId:'1',serverId:'0',sender:'contact',kind:'text',text:`合成${scope.conversationKey}`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0'}],...changes};
+ records:[{partition:'p',table:'t',localId:'1',serverId:'0',sender:'contact',kind:'text',text:`合成${scope.conversationKey}`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',status:'0'}],...changes};
 }
 async function fixture(t,names=['a','b','c']) {
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-first-history-')));

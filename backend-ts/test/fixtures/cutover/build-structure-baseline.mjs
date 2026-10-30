@@ -1,4 +1,4 @@
-/** 结构基线生成器：从迁移 1..16 的真实隔离实例导出可复现的 SQLite 结构快照。
+/** 结构基线生成器：从迁移 1..17 的真实隔离实例导出可复现的 SQLite 结构快照。
  *
  * 用法（backend-ts 目录）：
  *   node test/fixtures/cutover/build-structure-baseline.mjs

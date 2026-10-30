@@ -86,7 +86,9 @@ export class SqliteHistoryService {
    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target}))throw new StorageFailure('history_source_continuity_unverified');
    registerGoal(goal!.id);
    for(let index=0;index<1000;index++){
-    await check();const page=await channel.page(scope,goal!.target,goal!.cursor,controller.signal);await check();
+    await check();const page=await channel.page(scope,goal!.target,goal!.cursor,controller.signal);
+    if(page.records?.some(record=>record?.stateAssurance!=='verified'))await this.storage.execute('history.quarantinePageStates',{token:scope.token,goalId:goal!.id,page});
+    await check();
     if(serializeSupport(await inspect())!==serializeSupport(report))throw new StorageFailure('history_support_changed');
     const coverage=await this.storage.execute<HistoryCoverage>('history.acceptPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId});
     if(page.exhausted)return coverage;goal!.cursor=page.cursorOut;
@@ -118,7 +120,9 @@ export class SqliteHistoryService {
    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target}))throw new StorageFailure('history_source_continuity_unverified');
    registerGoal(goal!.id);
    for(let index=0;index<200;index++){
-    await check();const page=await channel.tail(scope,goal!.target,goal!.cursor,controller.signal);await check();
+    await check();const page=await channel.tail(scope,goal!.target,goal!.cursor,controller.signal);
+    if(page.records?.some(record=>record?.stateAssurance!=='verified'))await this.storage.execute('history.quarantinePageStates',{token:scope.token,goalId:goal!.id,page});
+    await check();
     if(serializeSupport(await inspect())!==serializeSupport(report))throw new StorageFailure('history_support_changed');
     const coverage=await this.storage.execute<HistoryCoverage>('history.acceptIncrementalPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId});
     if(page.caughtUp)return coverage;goal!.cursor=page.cursorOut;

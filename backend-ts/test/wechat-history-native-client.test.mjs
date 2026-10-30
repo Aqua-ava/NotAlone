@@ -81,7 +81,7 @@ async function fixture(t,mode='normal') {
    if(mode==='metadata-cancel')return;
   }
   if(r.op==='page'){
-   const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'合成分页文字',originalType:'1',sentAt:'1000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0'};
+   const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'合成分页文字',originalType:'1',sentAt:'1000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row],completedPartitions:['d'.repeat(64)],exhausted:true};
    if(mode==='page-cancel')return;
    if(mode==='page-too-large'){process.stdout.write('x'.repeat(8*1024*1024+1));return;}
@@ -95,6 +95,8 @@ async function fixture(t,mode='normal') {
    if(mode==='negative-record')data={...data,records:[{...row,localId:'-1',serverId:'-9223372036854775808',originalType:'-1',status:'-9223372036854775808',orderScheme:'synthetic-order',orderKey:'-9'}]};
    if(mode==='numeric-local-id')data={...data,records:[{...row,localId:9007199254740993}]};
    if(mode==='overflow-status')data={...data,records:[{...row,status:'9223372036854775808'}]};
+   if(mode==='unverified-with-body')data={...data,records:[{...row,stateAssurance:'unverified'}]};
+   if(mode==='missing-state-assurance'){const {stateAssurance,...untrusted}=row;data={...data,records:[untrusted]};}
    if(mode==='wrong-text-kind')data={...data,records:[{...row,kind:'image',text:'不能夹带正文'}]};
    if(mode==='oversized-text')data={...data,records:[{...row,text:'x'.repeat(65537)}]};
   }
@@ -238,7 +240,7 @@ test('typed支持/目标的错scope、制品、代次和schema变化均拒绝且
  }
 });
 test('typed页拒绝错target/分片/表实例、失真身份、状态溢出与非文字夹带正文',async t=>{
- for(const mode of ['wrong-page-target','wrong-page-partition','wrong-page-table','overflow-local-id','oversigned-local-id','numeric-local-id','overflow-status','wrong-text-kind','oversized-text']){
+ for(const mode of ['wrong-page-target','wrong-page-partition','wrong-page-table','overflow-local-id','oversigned-local-id','numeric-local-id','overflow-status','unverified-with-body','missing-state-assurance','wrong-text-kind','oversized-text']){
   const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.supportSelected();const target=await f.client.targetSelected();
   await assert.rejects(f.client.pageSelected(target,null),{code:'history_protocol_invalid'});noProcess(await waitForPid(f.pidFile));
  }

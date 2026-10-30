@@ -249,11 +249,12 @@ function historyTarget(value: unknown, scope: ResolvedWechatScope, schema?: Wech
   return { protocol: 'private-history-v1', descriptor: opaque(row.descriptor), partitions, tables, sourceGeneration: scope.sourceGeneration };
 }
 function historyRecord(value: unknown, target: HistoryTarget): HistoryRecord {
-  const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status']);
+  const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status', 'stateAssurance']);
   const partition = hash(row.partition), table = hash(row.table);
   if (!target.tables.some(candidate => candidate.partition === partition && candidate.instance === table)
     || !['owner', 'contact', 'unknown'].includes(row.sender as string)
-    || !['text', 'image', 'voice', 'video', 'file', 'sticker', 'other'].includes(row.kind as string)) return fail();
+    || !['text', 'image', 'voice', 'video', 'file', 'sticker', 'other'].includes(row.kind as string)
+    || !['verified', 'unverified'].includes(row.stateAssurance as string) || row.stateAssurance === 'unverified' && row.text !== null) return fail();
   let body: string | null = null;
   if (row.kind === 'text') {
     if (row.text !== null) {
@@ -269,7 +270,7 @@ function historyRecord(value: unknown, target: HistoryTarget): HistoryRecord {
   if ((orderScheme === null) !== (orderKey === null)) return fail();
   return { partition, table, localId: row.localId === null ? null : exactInteger(row.localId), serverId: row.serverId === null ? null : exactInteger(row.serverId),
     sender: row.sender as HistoryRecord['sender'], kind: row.kind as HistoryRecord['kind'], text: body, originalType: row.originalType === 'unknown' && row.kind === 'other' ? 'unknown' : exactInteger(row.originalType),
-    sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status) };
+    sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'] };
 }
 function historyPage(value: unknown, target: HistoryTarget, cursor: string | null): HistoryPage {
   const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'completedPartitions', 'exhausted']);

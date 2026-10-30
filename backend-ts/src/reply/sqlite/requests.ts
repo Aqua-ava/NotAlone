@@ -1,3 +1,4 @@
+import {quarantinedDiscussionImpact} from './deletion.ts';
 import {randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import {requireSkillRun} from '../../skills/sqlite/storage.ts';
@@ -69,10 +70,11 @@ export const discussionRequestActions:StorageAction[]=[
   for(const [index,item] of i.items.entries()){
    const values=[i.ownerId,i.contextId,index+1,item.kind,'context',index+1];
    if(item.kind==='message'){
-    if(item.sourceContactId!==i.contactId||!tx.get("SELECT 1 FROM capture_record r JOIN message m ON m.owner_id=r.owner_id AND m.id=r.message_id AND m.contact_id=r.contact_id WHERE r.owner_id=? AND r.contact_id=? AND r.id=? AND r.message_id=? AND r.availability='available' AND m.availability='available' AND m.interpretation_revision=?",[i.ownerId,item.sourceContactId,item.recordId,item.messageId,item.acceptedRevision]))fail('discussion_source_unavailable');
+    if(item.sourceContactId!==i.contactId||!tx.get("SELECT 1 FROM capture_record r JOIN message m ON m.owner_id=r.owner_id AND m.id=r.message_id AND m.contact_id=r.contact_id WHERE r.owner_id=? AND r.contact_id=? AND r.id=? AND r.message_id=? AND r.availability='available' AND m.availability='available' AND m.interpretation_revision=? AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)",[i.ownerId,item.sourceContactId,item.recordId,item.messageId,item.acceptedRevision]))fail('discussion_source_unavailable');
     tx.run('INSERT INTO reply_context_item VALUES(?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL)',[...values,item.sourceContactId,item.messageId,item.recordId,item.acceptedRevision]);
    }else if(item.kind==='entry'){
-    if(!tx.get("SELECT 1 FROM discussion_entry e JOIN reply_request r ON r.owner_id=e.owner_id AND r.id=e.origin_request_id WHERE e.owner_id=? AND e.contact_id=? AND e.discussion_id=? AND e.id=? AND e.content_state='available' AND r.state<>'invalidated'",[i.ownerId,i.contactId,i.discussionId,item.entryId]))fail('discussion_source_unavailable');
+    const entry=tx.get("SELECT e.role,e.origin_request_id FROM discussion_entry e JOIN reply_request r ON r.owner_id=e.owner_id AND r.id=e.origin_request_id WHERE e.owner_id=? AND e.contact_id=? AND e.discussion_id=? AND e.id=? AND e.content_state='available' AND r.state<>'invalidated'",[i.ownerId,i.contactId,i.discussionId,item.entryId]);
+    if(!entry||entry.role==='assistant'&&quarantinedDiscussionImpact(tx,i.ownerId).requests.has(String(entry.origin_request_id)))fail('discussion_source_unavailable');
     tx.run('INSERT INTO reply_context_item VALUES(?,?,?,?,?,?,NULL,NULL,NULL,NULL,?,NULL,NULL)',[...values,item.entryId]);
    }else if(item.kind==='skill'){
     if(!i.skillRun.eligible.some((a:any)=>a.packageId===item.packageId&&a.revisionNo===item.packageRevisionNo))fail('discussion_source_unavailable');

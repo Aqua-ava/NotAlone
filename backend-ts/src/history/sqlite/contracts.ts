@@ -25,6 +25,8 @@ export interface HistoryRecord {
   sentAt: string | null; timePrecision: 'millisecond' | 'second' | null;
   orderScheme: string | null; orderKey: string | null;
   status?: string | null;
+  // 仅经过认证的渠道才可确认状态；未知状态不应带正文。
+  stateAssurance: 'verified' | 'unverified';
 }
 export interface HistoryPage {
   target: string; cursorIn: string | null; cursorOut: string | null;

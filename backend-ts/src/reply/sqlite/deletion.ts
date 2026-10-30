@@ -80,6 +80,18 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure{
  }
  return result;
 }
+/** 复用来源删除的依赖闭包，仅计算失证影响，不执行删除。 */
+export function quarantinedDiscussionImpact(tx:StorageTransaction,ownerId:string):Closure{
+ const result:Closure={contexts:new Set(),requests:new Set(),copies:new Set()};
+ const sources=tx.all(`SELECT DISTINCT r.contact_id,r.id FROM history_message_quarantine q JOIN capture_record r
+  ON r.owner_id=q.owner_id AND r.contact_id=q.contact_id AND r.message_id=q.message_id
+  WHERE q.owner_id=? AND r.state='normalized'`,[ownerId]);
+ for(const source of sources){
+  const op:DeletionOperation={operationId:'',ownerId,scope:{kind:'source',contactId:String(source.contact_id),sourceId:String(source.id)},acceptedGeneration:0n,planRevision:0n,state:'fenced',createdAt:'',completedAt:null};
+  const affected=closure(tx,op);for(const id of affected.contexts)result.contexts.add(id);for(const id of affected.requests)result.requests.add(id);for(const id of affected.copies)result.copies.add(id);
+ }
+ return result;
+}
 export interface DiscussionDeletionImpact {contextIds:string[];requestIds:string[];attemptIds:string[];entryIds:string[];runtimeCopyIds:string[];discussionIds:string[];holderKeys:string[]}
 /** 07复用的无正文影响清单；与本域完全相同的实际输入及后续复用闭包。 */
 export function collectDiscussionDeletionImpact(tx:StorageTransaction,op:DeletionOperation):DiscussionDeletionImpact{

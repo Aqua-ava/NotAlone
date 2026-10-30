@@ -3,7 +3,7 @@ import { StorageFailure, type StorageAction, type StorageTransaction, type Stora
 import { assertReadEligibility } from '../../contacts/sqlite/actions.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryPage, HistoryTailPage, HistoryTarget, HistorySupportReport } from './contracts.ts';
-import { ingestRecords } from './ingest.ts';
+import { ingestRecords, quarantineUnverifiedRecords } from './ingest.ts';
 import { readCoverage, readMessages } from './read.ts';
 import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
@@ -60,6 +60,17 @@ export const historyActions:StorageAction[]=[
   const target=targetOf(i.target,token);assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target);
   tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?)`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at]);
   return {id:i.id,target,cursor:null};
+ }),
+ action('history.quarantinePageStates','write',(tx,i)=>{
+  const token=i.token as ReadEligibility,goal=goalFor(tx,token.owner_id,i.goalId),page=i.page as HistoryPage|HistoryTailPage;
+  if(goal.eligibility_json!==JSON.stringify(token)||goal.contact_id!==token.contact_id||goal.binding_id!==token.binding_id||!['history','incremental'].includes(String(goal.kind)))fail('history_goal_stale');
+  const scope=tx.get('SELECT conversation_id,source_generation FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  if(scope?.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation)fail('history_source_continuity_unverified');
+  const target=JSON.parse(String(goal.target_json)) as HistoryTarget;
+  if(page?.target!==goal.target_descriptor||page.cursorIn!==goal.cursor||!Array.isArray(page.records)||page.records.length>1000)fail('history_page_invalid');
+  const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
+  const restoreOperationId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
+  quarantineUnverifiedRecords({tx,token,target,report,records:page.records,exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId})?'clear_excluded':null});
  }),
  action('history.acceptPage','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const goal=currentGoal(tx,token,i.goalId);const page=i.page as HistoryPage;
@@ -136,10 +147,11 @@ export const historyActions:StorageAction[]=[
   if(historyCursorScopeDigest(token,report,target)!==goal.cursor_scope_digest)fail('history_cursor_scope_changed');
   tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?)",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,cursorOut,digest]);
   const incrementalRestoreId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
-  ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
+  const {quarantined}=ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
    exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId:incrementalRestoreId})?'clear_excluded':null});
+  if(quarantined)tx.run("UPDATE sync_capture SET state='quarantined',error_code='history_identity_quarantined' WHERE owner_id=? AND id=?",[token.owner_id,i.captureId]);
   // 成功接受的一页同时恢复目标为运行态：此前的中断原因不再代表当前状态。
-  tx.run("UPDATE read_goal SET cursor=?,pages_accepted=pages_accepted+1,last_accepted_at=?,coverage_state=?,state='running',failure_code=NULL WHERE owner_id=? AND id=?",[cursorOut,BigInt(i.at),page.caughtUp?'caught_up':'partial',token.owner_id,goal.id]);
+  tx.run("UPDATE read_goal SET cursor=?,pages_accepted=pages_accepted+1,last_accepted_at=?,coverage_state=?,state=?,failure_code=? WHERE owner_id=? AND id=?",[cursorOut,BigInt(i.at),quarantined?'partial':page.caughtUp?'caught_up':'partial',quarantined?'incomplete':'running',quarantined?'history_identity_quarantined':null,token.owner_id,goal.id]);
   return readCoverage(tx,token.owner_id,token.contact_id);
  }),
  action('history.incrementalInterrupt','write',(tx,i)=>{
@@ -154,7 +166,8 @@ export const historyActions:StorageAction[]=[
    FROM capture_record r JOIN message m ON m.owner_id=r.owner_id AND m.contact_id=r.contact_id AND m.id=r.message_id
    JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
    JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
-   WHERE r.owner_id=? AND r.contact_id=? AND r.id=? AND r.state='normalized' AND r.availability='available' AND m.availability='available'`,[i.ownerId,i.contactId,i.recordId])??fail('history_source_not_found');
+   WHERE r.owner_id=? AND r.contact_id=? AND r.id=? AND r.state='normalized' AND r.availability='available' AND m.availability='available'
+   AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)`,[i.ownerId,i.contactId,i.recordId])??fail('history_source_not_found');
   return {recordId:row.id,contactId:row.contact_id,messageId:row.message_id,captureId:row.capture_id,goalId:row.goal_id,
    itemNo:Number(row.item_no),capturedAt:String(row.captured_at),adapterVersion:row.adapter_version,normalizerVersion:row.normalizer_version,
    cursorIn:row.cursor_in,cursorOut:row.cursor_out,raw:JSON.parse(String(row.raw_payload)),support:JSON.parse(String(row.support_json))};

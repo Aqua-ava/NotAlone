@@ -21,10 +21,10 @@ test('77 表／778 字段／215 FK 逻辑目录逐项 disposition 与实现集�
   assert.deepEqual(replaced, [...REPLACED_DESIGN_TABLES]);
   // 实际结构基线只含实现逻辑表与 17 张实现关联表，不建暂缓／替代表。
   assert.deepEqual(Object.keys(structure.tables), EXPECTED_TABLES);
-  assert.equal(EXPECTED_TABLES.length, 84);
-  assert.equal(IMPLEMENTED_DESIGN_TABLES.length + 17, EXPECTED_TABLES.length);
-  assert.deepEqual(structure.metadata, { schemaVersion: 16, migrationVersions: Array.from({ length: 16 }, (_, index) => index + 1), userVersion: 16,
-    sqliteVersion: '3.53.4', tableCount: 84, fieldCount: 822, foreignKeyGroups: 176, triggerCount: 92, checkCount: 252, viewCount: 0 });
+  assert.equal(EXPECTED_TABLES.length, 85);
+  assert.equal(IMPLEMENTED_DESIGN_TABLES.length + 18, EXPECTED_TABLES.length);
+  assert.deepEqual(structure.metadata, { schemaVersion: 17, migrationVersions: Array.from({ length: 17 }, (_, index) => index + 1), userVersion: 17,
+    sqliteVersion: '3.53.4', tableCount: 85, fieldCount: 826, foreignKeyGroups: 177, triggerCount: 92, checkCount: 252, viewCount: 0 });
 });
 
 test('115 个旧 PG 名称逐项 disposition 闭合且落点集合可核验', () => {

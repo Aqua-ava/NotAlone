@@ -40,7 +40,7 @@ test('过期记忆及其文档不进入页面、回复材料或后续整理',{ti
    return JSON.stringify({candidates:[{parts:['合成候选'],basis:[Number(match?.[1]??1)]}]});
   }});
  await f.storage.execute('fixture.setTime',{time:initial});
- const contactId=f.ids[0];let records=[{partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:first,originalType:'1',sentAt:String(initial),timePrecision:'second',orderScheme:null,orderKey:null}];
+ const contactId=f.ids[0];let records=[{partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:first,originalType:'1',sentAt:String(initial),timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified'}];
  f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true});
  await f.contacts.setReading(true);await f.history.synchronize(contactId);await f.contacts.setReading(false);
  const base=supplier(),documentCalls=[],adjudicationCalls=[];let extraction;
@@ -106,7 +106,7 @@ test('待确认候选按半开有效期进入回复材料，未知时间保持�
  t.mock.timers.enable({apis:['Date'],now:initial});
  const f=await fixture(t,{registryModule:new URL('./fixtures/memory-documents-expiry/registry.mjs',import.meta.url).href,synchronizeHistory:false});
  await f.storage.execute('fixture.setTime',{time:initial});
- const contactId=f.ids[0],baseRecord={partition:'shard-a',table:'table-instance-1',serverId:'0',sender:'contact',kind:'text',originalType:'1',sentAt:String(initial),timePrecision:'second',orderScheme:null,orderKey:null};
+ const contactId=f.ids[0],baseRecord={partition:'shard-a',table:'table-instance-1',serverId:'0',sender:'contact',kind:'text',originalType:'1',sentAt:String(initial),timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified'};
  f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[
   {...baseRecord,localId:'1',text:first},
   {...baseRecord,localId:'2',text:'我喜欢合成红茶。'},
@@ -150,7 +150,7 @@ for(const action of ['correct','change'])test(`有时间限制的记忆经${acti
   content:async()=>JSON.stringify({candidates:[{parts:['合成候选'],basis:[1]}]})});
  await f.storage.execute('fixture.setTime',{time:initial});
  const contactId=f.ids[0],scope={scopeKind:'contact',contactId};
- let records=[{partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:first,originalType:'1',sentAt:String(initial),timePrecision:'second',orderScheme:null,orderKey:null}];
+ let records=[{partition:'shard-a',table:'table-instance-1',localId:'1',serverId:'0',sender:'contact',kind:'text',text:first,originalType:'1',sentAt:String(initial),timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified'}];
  f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true});
  await f.contacts.setReading(true);await f.history.synchronize(contactId);await f.contacts.setReading(false);
  const base=supplier(),calls=[];let extraction;

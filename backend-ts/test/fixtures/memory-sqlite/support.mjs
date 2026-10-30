@@ -8,7 +8,7 @@ import { SqliteContactService } from '../../../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../../../src/history/sqlite/service.ts';
 export const owner='00000000-0000-4000-8000-000000000001';
 const report={protocol:'private-history-v1',profileId:'synthetic-v1',adapterVersion:'1',status:'supported',reason:null,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'synthetic-generation-1'};
-export const record=(id,extra={})=>({partition:'shard-a',table:'table-instance-1',localId:id,serverId:'0',sender:'contact',kind:'text',text:`合成正文${id}`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,...extra});
+export const record=(id,extra={})=>({partition:'shard-a',table:'table-instance-1',localId:id,serverId:'0',sender:'contact',kind:'text',text:`合成正文${id}`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',...extra});
 export async function fixture(t,options={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-history-')));
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',...options});

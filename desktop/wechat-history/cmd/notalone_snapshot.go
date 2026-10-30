@@ -35,19 +35,20 @@ type notaloneSnapshotTarget struct {
 	SourceGeneration string                  `json:"sourceGeneration"`
 }
 type notaloneSnapshotRecord struct {
-	Partition     string  `json:"partition"`
-	Table         string  `json:"table"`
-	LocalID       *string `json:"localId"`
-	ServerID      *string `json:"serverId"`
-	Sender        string  `json:"sender"`
-	Kind          string  `json:"kind"`
-	Text          *string `json:"text"`
-	OriginalType  string  `json:"originalType"`
-	Status        *string `json:"status"`
-	SentAt        *string `json:"sentAt"`
-	TimePrecision *string `json:"timePrecision"`
-	OrderScheme   *string `json:"orderScheme"`
-	OrderKey      *string `json:"orderKey"`
+	Partition      string  `json:"partition"`
+	Table          string  `json:"table"`
+	LocalID        *string `json:"localId"`
+	ServerID       *string `json:"serverId"`
+	Sender         string  `json:"sender"`
+	Kind           string  `json:"kind"`
+	Text           *string `json:"text"`
+	OriginalType   string  `json:"originalType"`
+	Status         *string `json:"status"`
+	StateAssurance string  `json:"stateAssurance"`
+	SentAt         *string `json:"sentAt"`
+	TimePrecision  *string `json:"timePrecision"`
+	OrderScheme    *string `json:"orderScheme"`
+	OrderKey       *string `json:"orderKey"`
 }
 type notaloneSnapshotPage struct {
 	Target              string                   `json:"target"`
@@ -443,7 +444,7 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 	bodyIndexes := map[int64]int{}
 	for _, row := range rows {
 		status, knownStatus := row["status"].(int64)
-		allowed := n.profile.OpaqueStatusPolicy == "snapshot-opaque-v1"
+		allowed := false
 		if knownStatus {
 			for _, value := range n.profile.AllowedStatuses {
 				if status == value {
@@ -459,6 +460,10 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 			kind = notaloneSnapshotKind(rawType)
 		}
 		record := notaloneSnapshotRecord{Partition: shard.partition, Table: shard.instance, LocalID: notaloneSnapshotDecimal(row["local_id"]), ServerID: notaloneSnapshotDecimal(row["server_id"]), Sender: "unknown", Kind: kind, OriginalType: originalType, Status: notaloneSnapshotDecimal(row["status"])}
+		record.StateAssurance = "unverified"
+		if allowed {
+			record.StateAssurance = "verified"
+		}
 		// 未认证状态只返回无正文的隔离记录，不能因为同页其他消息合法而读取其正文。
 		if senderID, ok := row["real_sender_id"].(int64); allowed && ok {
 			names, e := shard.reader.QueryBounded(ctx, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", senderID)

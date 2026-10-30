@@ -15,7 +15,7 @@ const evidence = { externalKey: 'synthetic-account', identityScheme: 'wechat.acc
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 const record = (localId, changes = {}) => ({
   partition: 'p', table: 't', localId, serverId: '0', sender: 'contact', kind: 'text', text: `合成${localId}`,
-  originalType: '1', sentAt: '1700000000000', timePrecision: 'second', orderScheme: null, orderKey: null, status: '0', ...changes,
+  originalType: '1', sentAt: '1700000000000', timePrecision: 'second', orderScheme: null, orderKey: null, status: '0', stateAssurance:'verified', ...changes,
 });
 function support(scope, state) {
   return {
@@ -89,6 +89,21 @@ async function select(f, names = ['a']) {
   return (await f.contacts.directory()).bindings.filter(binding => binding.status === 'active');
 }
 async function wake(f) { f.coordinator.wake(); await f.coordinator.waitForIdle(); }
+
+test('增量出现未知状态后不能继续宣称历史完整',async t=>{
+ const f=await fixture(t);f.state.historyRecords=[record('1')];const [binding]=await select(f);await f.contacts.setReading(true);
+ await f.history.synchronize(binding.contact_id);
+ f.state.tailBatches.push(()=>({records:[record('1',{stateAssurance:'unverified',status:'99',sender:'unknown',text:null})],caughtUp:true,cursorOut:'tail-2'}));
+ await f.history.synchronizeIncremental(binding.contact_id);
+ const result=await f.history.read(binding.contact_id);assert.equal(result.replyEligibility,'history_incomplete');assert.equal(result.coverage.incremental.phase,'incomplete');assert.equal(result.messages.length,0);
+});
+test('增量未知身份即使后续有正常页也不能恢复完整状态',async t=>{
+ const f=await fixture(t);const [binding]=await select(f);await f.contacts.setReading(true);await f.history.synchronize(binding.contact_id);
+ f.state.tailBatches.push(()=>({records:[record(null,{stateAssurance:'unverified',status:'99',sender:'unknown',text:null})],caughtUp:true,cursorOut:'tail-2'}));
+ await f.history.synchronizeIncremental(binding.contact_id);
+ f.state.tailBatches.push(()=>({records:[],caughtUp:true,cursorOut:'tail-3'}));await f.history.synchronizeIncremental(binding.contact_id);
+ assert.equal((await f.history.read(binding.contact_id)).replyEligibility,'history_incomplete');
+});
 
 test('历史终页与增量交接无缺口，重叠重复读取幂等，续读从持久检查点而不是从头', async t => {
   const f = await fixture(t);

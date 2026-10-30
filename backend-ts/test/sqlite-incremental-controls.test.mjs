@@ -18,7 +18,7 @@ const evidence = { externalKey: 'synthetic-account', identityScheme: 'wechat.acc
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 const record = (localId, changes = {}) => ({
   partition: 'p', table: 't', localId, serverId: '0', sender: 'contact', kind: 'text', text: `合成${localId}`,
-  originalType: '1', sentAt: '1700000000000', timePrecision: 'second', orderScheme: null, orderKey: null, status: '0', ...changes,
+  originalType: '1', sentAt: '1700000000000', timePrecision: 'second', orderScheme: null, orderKey: null, stateAssurance: 'verified', status: '0', ...changes,
 });
 function support(scope, state) {
   return {

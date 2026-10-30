@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import { fixture,owner,record } from './fixtures/memory-sqlite/support.mjs';
 import { SqliteMemoryExtraction } from '../src/memory/sqlite/service.ts';
 const none={invoke:async()=>({blocks:[{type:'tool_use',id:'synthetic',name:'extract_relationship_memories',input:{scenes:[]}}]})};
+test('消息状态失证后，旧正文不能进入新的记忆提取范围',async t=>{
+ const f=await fixture(t),contact=f.saved[0].contact_id;
+ await f.service.synchronize(contact);
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('9007199254740993',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contact);await f.contacts.setReading(false);
+ let calls=0;const memory=new SqliteMemoryExtraction(f.storage,owner,{invoke:async()=>{calls++;throw new Error('不应调用');}});t.after(()=>memory.close());
+ const run=await memory.start('quarantined-source');await memory.waitForIdle();assert.equal(run.total,0);assert.equal(calls,0);
+});
 test('关闭读取后原子冻结已勾选联系人全部合法文字，同请求只建立原轮次且后到消息不追加',async t=>{
  const f=await fixture(t);for(const c of f.saved)await f.service.synchronize(c.contact_id);
  await f.contacts.setReading(false);

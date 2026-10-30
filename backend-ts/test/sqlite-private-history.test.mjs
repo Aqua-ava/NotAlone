@@ -8,7 +8,7 @@ import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 const owner='00000000-0000-4000-8000-000000000001';
 const report={serverAliasSemantics:'verified_within_scope',protocol:'private-history-v1',profileId:'synthetic-v1',adapterVersion:'1',status:'supported',reason:null,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'synthetic-generation-1'};
-const record=(id,extra={})=>({partition:'shard-a',table:'table-instance-1',localId:id,serverId:'0',sender:'contact',kind:'text',text:`合成正文${id}`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,...extra});
+const record=(id,extra={})=>({partition:'shard-a',table:'table-instance-1',localId:id,serverId:'0',sender:'contact',kind:'text',text:`合成正文${id}`,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',...extra});
 async function fixture(t,options={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-history-')));
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',...options});
@@ -68,17 +68,92 @@ test('未知身份与内容冲突隔离，非文字夹带正文不保存，覆�
 });
 test('未知状态的无正文来源被隔离，合法文字仍可查看但历史不完整',async t=>{
  const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;
- channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',sender:'unknown',text:null}),record('2',{status:'0',text:'合成合法文字'})],completedPartitions:['shard-a'],exhausted:true});
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null}),record('2',{status:'0',text:'合成合法文字'})],completedPartitions:['shard-a'],exhausted:true});
  const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'incomplete');assert.equal(coverage.quarantinedCount,1);
  const result=await service.read(contact);assert.equal(result.replyEligibility,'history_incomplete');assert.deepEqual(result.messages.map(m=>m.text),['合成合法文字']);
 });
-test('已见消息后续状态未知时，旧正文不能继续作为可信聊天展示',async t=>{
+test('渠道省略状态认证时不得把正文作为可信消息保存',async t=>{
  const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:undefined,text:'不得保存的合成文字'})],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);const result=await service.read(contact);assert.equal(result.replyEligibility,'history_incomplete');assert.equal(result.messages.length,0);
+});
+test('已见消息后续状态未知时，旧正文不能继续作为可信聊天展示',async t=>{
+ const {service,channel,saved,target,storage,root,contacts}=await fixture(t);const contact=saved[0].contact_id;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'0',text:'合成旧文字'})],completedPartitions:['shard-a'],exhausted:true});
- await service.synchronize(contact);assert.equal((await service.read(contact)).messages[0].text,'合成旧文字');
- channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);const old=(await service.read(contact)).messages[0];assert.equal(old.text,'合成旧文字');
+ const {SqliteDiscussionService}=await import('../src/reply/sqlite/service.ts');const discussion=new SqliteDiscussionService(storage,owner);const d=await discussion.newDiscussion(contact);
+ const key='synthetic-quarantine-request',confirmationId=await contacts.manualConfirm(contact,key);
+ await discussion.begin(contact,key,'用户手写的合成内容',{kind:'manual',confirmationId},d.id);
+ assert.equal((await storage.execute('discussion.messages',{ownerId:owner,contactId:contact,discussionId:d.id,messageIds:[old.id]}))[0].text_body,'合成旧文字');
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const result=await service.read(contact);
  assert.equal(result.replyEligibility,'history_incomplete');assert.ok(!result.messages.some(m=>m.text==='合成旧文字'));
+ await assert.rejects(service.source(contact,old.sourceRecordIds[0]),error=>error.code==='history_source_not_found');
+ await assert.rejects(storage.execute('discussion.messages',{ownerId:owner,contactId:contact,discussionId:d.id,messageIds:[old.id]}),{code:'discussion_source_unavailable'});
+ assert.equal((await discussion.view(contact,d.id)).entries[0].body,'用户手写的合成内容');
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'0',text:'合成旧文字'})],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);assert.ok(!(await service.read(contact)).messages.some(m=>m.text==='合成旧文字'));
+ const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
+ const deletion=new DeletionService(storage,service.holders,new ManagedFiles(root));
+ const plan=await deletion.plan({ownerId:owner,requestKey:'synthetic-quarantined-delete',scope:{kind:'source',contactId:contact,sourceId:old.sourceRecordIds[0]}});
+ assert.equal((await deletion.advance(plan)).state,'completed');assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+test('未知状态通过已认证服务端别名或缺失本地身份出现时，旧正文不能继续可见',async t=>{
+ for(const localId of ['2',null]){
+  const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;
+  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{serverId:'55',text:'合成别名旧正文'})],completedPartitions:['shard-a'],exhausted:true});
+  await service.synchronize(contact);
+  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record(localId,{serverId:'55',status:'99',stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});
+  await service.synchronize(contact);assert.equal((await service.read(contact)).messages.length,0);
+ }
+});
+test('已认证的新来源状态未知时，不隐藏没有关联的旧消息',async t=>{
+ const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});await service.synchronize(contact);
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('2',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});await service.synchronize(contact);
+ assert.deepEqual((await service.read(contact)).messages.map(m=>m.text),['合成正文1']);
+});
+test('已排除本地编号与其他消息的已认证别名冲突时仍隔离关联消息',async t=>{
+ const {service,channel,saved,target,storage,root}=await fixture(t);const contact=saved[0].contact_id;
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{serverId:'11'}),record('2',{serverId:'55'})],completedPartitions:['shard-a'],exhausted:true});await service.synchronize(contact);
+ const source=(await service.read(contact)).messages.find(m=>m.text==='合成正文1').sourceRecordIds[0];
+ const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');const deletion=new DeletionService(storage,service.holders,new ManagedFiles(root));
+ const plan=await deletion.plan({ownerId:owner,requestKey:'synthetic-excluded-alias',scope:{kind:'source',contactId:contact,sourceId:source}});assert.equal((await deletion.advance(plan)).state,'completed');
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{serverId:'55',status:'99',stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});await service.synchronize(contact);
+ assert.equal((await service.read(contact)).messages.length,0);
+});
+test('页后续校验失败或重开也不能撤销已观察的未知状态隔离',async t=>{
+ const {service,channel,saved,target,storage,root}=await fixture(t);const contact=saved[0].contact_id;
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});
+ await service.synchronize(contact);
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:'不合法的终页游标',records:[record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});
+ await assert.rejects(service.synchronize(contact),{code:'history_page_invalid'});assert.equal((await service.read(contact)).messages.length,0);
+ const databaseId=storage.status.databaseId;await service.close();await storage.close();
+ const reopened=await SqliteStorage.open({userData:root,intent:'open',role:'test',expectedDatabaseId:databaseId});t.after(()=>reopened.close());
+ assert.equal((await reopened.execute('history.read',{ownerId:owner,contactId:contact,limit:100})).messages.length,0);
+});
+test('页返回时同步已关闭，已观察的未知状态仍保护旧消息',async t=>{
+ const {service,channel,saved,target,contacts}=await fixture(t);const contact=saved[0].contact_id;
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});await service.synchronize(contact);
+ channel.page=async()=>{await contacts.setReading(false);return {target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true};};
+ await assert.rejects(service.synchronize(contact),{code:'read_not_authorized'});assert.equal((await service.read(contact)).messages.length,0);
+});
+test('失证来源影响跨联系人本人资料的实际依赖，不影响无关讨论',async t=>{
+ const f=await fixture(t,{registryModule:new URL('./fixtures/history/quarantine-registry.mjs',import.meta.url).href}),[a,b]=f.saved;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(a.contact_id);const message=(await f.service.read(a.contact_id)).messages[0];
+ const {SqliteDiscussionService}=await import('../src/reply/sqlite/service.ts'),{randomUUID}=await import('node:crypto');
+ const discussion=new SqliteDiscussionService(f.storage,owner),d=await discussion.newDiscussion(b.contact_id),key='synthetic-cross-scope';
+ const confirmationId=await f.contacts.manualConfirm(b.contact_id,key),attempt=(await discussion.begin(b.contact_id,key,'合成手写要求',{kind:'manual',confirmationId},d.id)).attempt,contextId=randomUUID();
+ await f.storage.execute('discussion.freezeContext',{...attempt,contextId,skillRun:{packages:[],eligible:[]},items:[],at:Date.now()});
+ await f.storage.execute('fixture.seedCrossContactInput',{ownerId:owner,contextId,sourceContactId:a.contact_id,messageId:message.id,recordId:message.sourceRecordIds[0]});
+ const independent=await discussion.newDiscussion(b.contact_id),otherKey='synthetic-independent',otherConfirmation=await f.contacts.manualConfirm(b.contact_id,otherKey);
+ const other=(await discussion.begin(b.contact_id,otherKey,'另一合成要求',{kind:'manual',confirmationId:otherConfirmation},independent.id)).attempt;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:'unverified',status:'99',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(a.contact_id);const impact=await f.storage.execute('fixture.quarantineImpact',{ownerId:owner});
+ assert.ok(impact.requests.includes(attempt.requestId));assert.ok(!impact.requests.includes(other.requestId));
+ await assert.rejects(discussion.trace(b.contact_id,d.id,attempt.requestId),{code:'discussion_unavailable'});
+ assert.equal((await discussion.view(b.contact_id,independent.id)).entries[0].body,'另一合成要求');
 });
 test('部分分片和分页中断保持真实缺口，重试从已提交cursor继续',async t=>{
  const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
