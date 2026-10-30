@@ -1,5 +1,6 @@
 {
  "safe-node": [
+    "tests/quarantine-controller.test.mjs",
   "tests/diagnostic-export.test.mjs",
   "tests/usage/bridge.test.mjs",
   "tests/usage/controller.test.mjs",

@@ -5,11 +5,15 @@ import { QuarantineVault, QuarantineVaultError } from './quarantine-vault.ts';
 
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const page = `<!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>本机隔离历史验收</title></head><body>
-<main><h1>本机隔离历史验收</h1>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NotAlone · 未核验历史</title>
+<style nonce="__NONCE__">
+body{margin:0;background:#f7f7f4;color:#273b3b;font:15px/1.65 system-ui,sans-serif}main{max-width:780px;margin:36px auto;padding:0 24px 40px}h1{font-size:26px;margin-bottom:12px}p{margin:10px 0}#notice{padding:16px;background:#e9efeb;border-radius:12px}button{font:inherit;padding:8px 14px;background:white;border:1px solid #afc1b5;border-radius:8px;cursor:pointer;margin:5px 8px 5px 0}button:disabled{opacity:.5;cursor:default}article{background:white;border:1px solid #dce3dc;border-radius:12px;padding:16px 20px;margin:18px 0}article p{color:#586a63;font-size:13px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;margin:12px 0 18px}#error{color:#a63732}
+</style></head><body>
+<main><h1>未核验历史</h1>
 <p id="notice" role="status">读取隔离仓状态中…</p>
-<p>所有消息状态均未核验。此处文字仅用于本机验收，不进入普通聊天、检索、记忆或回复生成。</p>
+<p>所有消息状态均未核验。此处文字仅保存在本机隔离区，不进入普通聊天、检索、记忆或回复生成。</p>
+<p>来源守卫只覆盖当次快照读取，不证明微信重启后的连续性；这些记录尚未归入 App 联系人资料。</p>
 <button id="delete-all" type="button">删除全部隔离文字</button>
 <button id="cancel-delete-all" type="button" hidden>取消删除</button>
 <section id="records" aria-label="未核验历史消息"></section>
@@ -45,7 +49,7 @@ const page = `<!doctype html>
     const article = document.createElement('article');
     const label = document.createElement('p');
     label.textContent = '未核验文字 · 类型 ' + record.originalType + ' · 原始状态 ' + (record.status ?? '未知')
-      + ' · 发送方 ' + record.sender + ' · 时间 ' + (record.sentAt ?? '未知');
+      + ' · 发送方 ' + ({owner:'本人',contact:'对方',unknown:'未知'}[record.sender] || '未知') + ' · 时间 ' + (record.sentAt ?? '未知');
     const body = document.createElement('pre');
     body.textContent = record.text;
     const remove = document.createElement('button');
@@ -119,7 +123,7 @@ function sendPage(res: ServerResponse): void {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
     'Cross-Origin-Resource-Policy': 'same-origin',
-    'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` });
+    'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` });
   res.end(html);
 }
 function loopback(req: IncomingMessage): boolean {

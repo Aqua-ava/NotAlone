@@ -130,6 +130,35 @@ test('重开时将遗留运行快照变为来源失效的不完整状态并核�
   assert.equal(vault.list({ limit: 10 }).records[0].text, '合成隔离文字');
 });
 
+test('只读inspect保留运行状态、权限和mtime，原写入者可以继续分页', async t => {
+  const { root, vault } = await create(t);
+  vault.begin({ expectedPartitions: ['part-1'] });
+  vault.appendPage([textRecord()]);
+  await chmod(root, 0o755);
+  await chmod(join(root, 'vault.sqlite'), 0o644);
+  try {
+    const rootBefore = await lstat(root);
+    const databaseBefore = await lstat(join(root, 'vault.sqlite'));
+    const status = await QuarantineVault.inspect(root, { scopeDigest: digest });
+    const rootAfter = await lstat(root);
+    const databaseAfter = await lstat(join(root, 'vault.sqlite'));
+    assert.equal(status.snapshotState, 'running');
+    assert.equal(status.recordCount, 1);
+    assert.equal(rootAfter.mode & 0o777, rootBefore.mode & 0o777);
+    assert.equal(databaseAfter.mode & 0o777, databaseBefore.mode & 0o777);
+    assert.equal(rootAfter.mtimeMs, rootBefore.mtimeMs);
+    assert.equal(databaseAfter.mtimeMs, databaseBefore.mtimeMs);
+  } finally {
+    await chmod(join(root, 'vault.sqlite'), 0o600);
+    await chmod(root, 0o700);
+  }
+
+  vault.appendPage([textRecord({ localId: '18' })]);
+  assert.equal(vault.summary().snapshotState, 'running');
+  assert.equal(vault.summary().recordCount, 2);
+  vault.complete({ scopeDigest: digest, sourceContinuity: 'held', snapshotComplete: true, completedPartitions: ['part-1'] });
+});
+
 test('拒绝符号链接根目录', async t => {
   const parentPath = await parent(t);
   const target = join(parentPath, 'target');

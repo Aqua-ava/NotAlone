@@ -5,11 +5,12 @@ import {NarrowWechatClient} from './wechat/native-client.ts';
 import {importSelectedQuarantine} from './quarantine-import.ts';
 import {QuarantineVault} from './quarantine-vault.ts';
 import {QuarantineViewer} from './quarantine-viewer.ts';
+import {verifyQuarantineIdentity} from './quarantine-identity.ts';
 
 /** 单联系人开发验收命令；不注册为产品运行时工具或后台同步任务。 */
 export async function runQuarantineCli(args:string[]):Promise<void> {
  const [command,...rest]=args;
- if(!['import','view'].includes(command??''))throw new Error('quarantine_arguments_invalid');
+ if(!['import','view','verify'].includes(command??''))throw new Error('quarantine_arguments_invalid');
  const options:Record<string,string>={};
  for(let index=0;index<rest.length;index+=2){
   const key=rest[index],value=rest[index+1];
@@ -23,9 +24,13 @@ export async function runQuarantineCli(args:string[]):Promise<void> {
   const client=new NarrowWechatClient(await loadNarrowWechatOptions(options['--executable']));
   const vault=await importSelectedQuarantine(client,{root,displayName:options['--contact']});
   try{const summary=vault.summary();console.log(JSON.stringify({snapshotComplete:summary.snapshotComplete,normalHistory:false,recordCount:summary.recordCount,pageCount:summary.pageCount,failureCode:summary.failureCode}));}finally{vault.close();}
+ }else if(command==='verify'){
+  if(Object.keys(options).length!==2||!options['--executable'])throw new Error('quarantine_arguments_invalid');
+  const client=new NarrowWechatClient(await loadNarrowWechatOptions(options['--executable']));
+  console.log(JSON.stringify(await verifyQuarantineIdentity(client,root)));
  }else{
   if(Object.keys(options).length!==1)throw new Error('quarantine_arguments_invalid');
-  const vault=await QuarantineVault.open(root);
+  const vault=await QuarantineVault.open(root,{rejectActive:true});
   let viewer:QuarantineViewer;
   try{viewer=await QuarantineViewer.start(vault);}catch(error){vault.close();throw error;}
   const shutdown=()=>{void viewer.close().finally(()=>{vault.close();process.exitCode=0;});};

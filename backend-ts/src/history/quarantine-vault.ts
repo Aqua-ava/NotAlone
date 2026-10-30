@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open as openFile, readdir, rm } from 'node:fs/promises';
+import type { Stats } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { join, resolve } from 'node:path';
 
@@ -119,6 +120,76 @@ function normalizePartitions(values: readonly string[], allowed?: readonly strin
 function allowedVaultFiles(entries: string[]): boolean {
   return entries.every(name => [databaseName, `${databaseName}-journal`, `${databaseName}-wal`, `${databaseName}-shm`].includes(name));
 }
+function validateScopeDigest(scopeDigest?: string): void {
+  if (scopeDigest !== undefined && (typeof scopeDigest !== 'string' || !digestPattern.test(scopeDigest))) fail('quarantine_scope_digest_invalid');
+}
+function readVaultMeta(database: DatabaseSync): VaultMeta {
+  const row = database.prepare('SELECT * FROM vault_meta WHERE singleton=1').get() as DatabaseRow | undefined;
+  if (!row || Number(row.schema_version) !== schemaVersion) fail('quarantine_vault_corrupt');
+  return { scopeDigest: String(row.scope_digest), displayName: String(row.display_name), snapshotState: String(row.snapshot_state) as SnapshotState,
+    sourceContinuity: String(row.source_continuity) as SourceContinuity,
+    failureCode: row.failure_code === null ? null : String(row.failure_code),
+    expectedPartitions: parsePartitions(row.expected_partitions), completedPartitions: parsePartitions(row.completed_partitions),
+    pageCount: Number(row.page_count), unavailableTextCount: Number(row.unavailable_text_count),
+    createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) };
+}
+function readVaultStatus(database: DatabaseSync): QuarantineVaultStatus {
+  const row = readVaultMeta(database);
+  const count = database.prepare('SELECT count(*) AS n FROM quarantine_record').get() as DatabaseRow;
+  return { displayName: row.displayName, snapshotState: row.snapshotState,
+    snapshotComplete: row.snapshotState === 'complete', normalHistory: false,
+    sourceContinuity: row.sourceContinuity, failureCode: row.failureCode,
+    expectedPartitions: row.expectedPartitions, completedPartitions: row.completedPartitions,
+    pageCount: row.pageCount, recordCount: Number(count.n), unavailableTextCount: row.unavailableTextCount,
+    createdAt: row.createdAt, updatedAt: row.updatedAt };
+}
+interface VerifiedVaultDatabase {
+  root: string;
+  databasePath: string;
+  rootStat: Stats;
+  databaseStat: Stats;
+  database: DatabaseSync;
+  status: QuarantineVaultStatus;
+}
+async function verifyVaultDatabase(root: string, scopeDigest?: string): Promise<VerifiedVaultDatabase> {
+  validateScopeDigest(scopeDigest);
+  const secured = await secureRoot(root, false);
+  const databasePath = join(secured.path, databaseName);
+  const rootStat = await lstat(secured.path).catch(() => fail('quarantine_root_invalid'));
+  const databaseStat = await lstat(databasePath).catch(() => fail('quarantine_database_missing'));
+  if (databaseStat.isSymbolicLink() || !databaseStat.isFile()) fail('quarantine_database_invalid');
+  let database: DatabaseSync;
+  try { database = new DatabaseSync(databasePath, { readOnly: true }); }
+  catch { fail('quarantine_database_invalid'); }
+  try {
+    const appId = Number(database.prepare('PRAGMA application_id').get()?.application_id);
+    const version = Number(database.prepare('PRAGMA user_version').get()?.user_version);
+    if (appId !== applicationId || version !== schemaVersion) fail('quarantine_database_invalid');
+    const journalMode = String(database.prepare('PRAGMA journal_mode').get()?.journal_mode ?? '').toLowerCase();
+    const integrity = database.prepare('PRAGMA integrity_check').all() as DatabaseRow[];
+    if (journalMode !== 'delete' || integrity.length !== 1 || integrity[0]?.integrity_check !== 'ok') fail('quarantine_database_invalid');
+    const objects = database.prepare("SELECT type,name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all() as DatabaseRow[];
+    const objectNames = objects.map(row => `${row.type}:${row.name}`).sort().join(',');
+    if (objectNames !== 'index:quarantine_record_page,table:quarantine_record,table:vault_meta') fail('quarantine_database_invalid');
+    const metaColumns = (database.prepare('PRAGMA table_info(vault_meta)').all() as DatabaseRow[]).map(row => String(row.name)).join(',');
+    if (metaColumns !== 'singleton,schema_version,scope_digest,display_name,created_at,updated_at,snapshot_state,source_continuity,failure_code,expected_partitions,completed_partitions,page_count,unavailable_text_count') fail('quarantine_database_invalid');
+    const recordColumns = (database.prepare('PRAGMA table_info(quarantine_record)').all() as DatabaseRow[]).map(row => String(row.name)).join(',');
+    if (recordColumns !== 'sequence,id,page_number,item_number,kind,text_body,status,original_type,sender,sent_at,partition_name,table_instance,local_id,server_id,assurance,created_at') fail('quarantine_database_invalid');
+    const status = readVaultStatus(database);
+    const scope = database.prepare('SELECT scope_digest FROM vault_meta WHERE singleton=1').get() as DatabaseRow | undefined;
+    if (!scope) fail('quarantine_database_corrupt');
+    if (scopeDigest !== undefined && scope.scope_digest !== scopeDigest.toLowerCase()) fail('quarantine_scope_mismatch');
+    const rootVerified = await lstat(secured.path).catch(() => fail('quarantine_root_invalid'));
+    const databaseVerified = await lstat(databasePath).catch(() => fail('quarantine_database_missing'));
+    if (rootVerified.isSymbolicLink() || !rootVerified.isDirectory() || rootStat.dev !== rootVerified.dev || rootStat.ino !== rootVerified.ino
+      || databaseVerified.isSymbolicLink() || !databaseVerified.isFile() || databaseStat.dev !== databaseVerified.dev || databaseStat.ino !== databaseVerified.ino) fail('quarantine_path_changed');
+    return { root: secured.path, databasePath, rootStat, databaseStat, database, status };
+  } catch (error) {
+    try { database.close(); } catch { /* 只读预检失败后关闭数据库 */ }
+    if (error instanceof QuarantineVaultError) throw error;
+    fail('quarantine_database_corrupt');
+  }
+}
 async function secureRoot(root: string, create: boolean): Promise<{ path: string }> {
   if (typeof root !== 'string' || !root.trim()) fail('quarantine_root_invalid');
   const path = resolve(root);
@@ -228,48 +299,22 @@ export class QuarantineVault {
     }
   }
 
-  static async open(root: string, options?: { scopeDigest?: string }): Promise<QuarantineVault> {
-    if (options?.scopeDigest !== undefined && (typeof options.scopeDigest !== 'string' || !digestPattern.test(options.scopeDigest))) fail('quarantine_scope_digest_invalid');
-    const secured = await secureRoot(root, false);
-    const databasePath = join(secured.path, databaseName);
-    const rootBefore = await lstat(secured.path).catch(() => fail('quarantine_root_invalid'));
-    const dbStat = await lstat(databasePath).catch(() => fail('quarantine_database_missing'));
-    if (dbStat.isSymbolicLink() || !dbStat.isFile()) fail('quarantine_database_invalid');
-    let preflight: DatabaseSync;
-    try {
-      preflight = new DatabaseSync(databasePath, { readOnly: true });
-    } catch { fail('quarantine_database_invalid'); }
-    try {
-      const appId = Number(preflight.prepare('PRAGMA application_id').get()?.application_id);
-      const version = Number(preflight.prepare('PRAGMA user_version').get()?.user_version);
-      if (appId !== applicationId || version !== schemaVersion) fail('quarantine_database_invalid');
-      const journalMode = String(preflight.prepare('PRAGMA journal_mode').get()?.journal_mode ?? '').toLowerCase();
-      const integrity = preflight.prepare('PRAGMA integrity_check').all() as DatabaseRow[];
-      if (journalMode !== 'delete' || integrity.length !== 1 || integrity[0]?.integrity_check !== 'ok') fail('quarantine_database_invalid');
-      const objects = preflight.prepare("SELECT type,name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all() as DatabaseRow[];
-      const objectNames = objects.map(row => `${row.type}:${row.name}`).sort().join(',');
-      if (objectNames !== 'index:quarantine_record_page,table:quarantine_record,table:vault_meta') fail('quarantine_database_invalid');
-      const metaColumns = (preflight.prepare('PRAGMA table_info(vault_meta)').all() as DatabaseRow[]).map(row => String(row.name)).join(',');
-      if (metaColumns !== 'singleton,schema_version,scope_digest,display_name,created_at,updated_at,snapshot_state,source_continuity,failure_code,expected_partitions,completed_partitions,page_count,unavailable_text_count') fail('quarantine_database_invalid');
-      const recordColumns = (preflight.prepare('PRAGMA table_info(quarantine_record)').all() as DatabaseRow[]).map(row => String(row.name)).join(',');
-      if (recordColumns !== 'sequence,id,page_number,item_number,kind,text_body,status,original_type,sender,sent_at,partition_name,table_instance,local_id,server_id,assurance,created_at') fail('quarantine_database_invalid');
-      const meta = preflight.prepare('SELECT scope_digest FROM vault_meta WHERE singleton=1').get() as DatabaseRow | undefined;
-      if (!meta) fail('quarantine_database_corrupt');
-      if (options?.scopeDigest !== undefined && meta.scope_digest !== options.scopeDigest.toLowerCase()) fail('quarantine_scope_mismatch');
-    } catch (error) {
-      try { preflight.close(); } catch { /* validation failure */ }
-      if (error instanceof QuarantineVaultError) throw error;
-      fail('quarantine_database_corrupt');
-    }
-    preflight.close();
-    const rootVerified = await lstat(secured.path).catch(() => fail('quarantine_root_invalid'));
-    const dbVerified = await lstat(databasePath).catch(() => fail('quarantine_database_missing'));
-    if (rootVerified.isSymbolicLink() || !rootVerified.isDirectory() || rootBefore.dev !== rootVerified.dev || rootBefore.ino !== rootVerified.ino
-      || dbVerified.isSymbolicLink() || !dbVerified.isFile() || dbStat.dev !== dbVerified.dev || dbStat.ino !== dbVerified.ino) fail('quarantine_path_changed');
-    await chmod(secured.path, 0o700);
+  static async inspect(root: string, options?: { scopeDigest?: string }): Promise<QuarantineVaultStatus> {
+    const checked = await verifyVaultDatabase(root, options?.scopeDigest);
+    try { return checked.status; }
+    finally { checked.database.close(); }
+  }
+
+  static async open(root: string, options?: { scopeDigest?: string; rejectActive?: boolean }): Promise<QuarantineVault> {
+    const checked = await verifyVaultDatabase(root, options?.scopeDigest);
+    const { root: securedRoot, databasePath, rootStat, databaseStat } = checked;
+    checked.database.close();
+    const isActive = (status: QuarantineVaultStatus) => status.snapshotState === 'ready' || status.snapshotState === 'running';
+    if (options?.rejectActive && isActive(checked.status)) fail('quarantine_snapshot_busy');
+    await chmod(securedRoot, 0o700);
     await chmod(databasePath, 0o600);
     const dbAfterChmod = await lstat(databasePath).catch(() => fail('quarantine_database_missing'));
-    if (dbAfterChmod.isSymbolicLink() || dbStat.dev !== dbAfterChmod.dev || dbStat.ino !== dbAfterChmod.ino) fail('quarantine_path_changed');
+    if (dbAfterChmod.isSymbolicLink() || databaseStat.dev !== dbAfterChmod.dev || databaseStat.ino !== dbAfterChmod.ino) fail('quarantine_path_changed');
     let database: DatabaseSync;
     try { database = new DatabaseSync(databasePath); }
     catch { fail('quarantine_database_invalid'); }
@@ -277,10 +322,14 @@ export class QuarantineVault {
       database.exec('PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON; PRAGMA foreign_keys=ON; PRAGMA synchronous=FULL; PRAGMA temp_store=MEMORY; PRAGMA trusted_schema=OFF;');
       const vault = new QuarantineVault(database);
       const status = vault.summary();
+      if (options?.rejectActive && isActive(status)) {
+        database.close();
+        fail('quarantine_snapshot_busy');
+      }
       if (status.snapshotState === 'running') vault.abort('snapshot_interrupted');
       return vault;
     } catch (error) {
-      try { database.close(); } catch { /* validation failure */ }
+      try { database.close(); } catch { /* 打开隔离仓失败后关闭数据库 */ }
       if (error instanceof QuarantineVaultError) throw error;
       fail('quarantine_database_corrupt');
     }
@@ -377,14 +426,7 @@ export class QuarantineVault {
 
   summary(): QuarantineVaultStatus {
     this.#assertOpen();
-    const row = this.#meta();
-    const count = this.#database.prepare('SELECT count(*) AS n FROM quarantine_record').get() as DatabaseRow;
-    return { displayName: String(row.displayName), snapshotState: row.snapshotState as SnapshotState,
-      snapshotComplete: row.snapshotState === 'complete', normalHistory: false,
-      sourceContinuity: row.sourceContinuity as SourceContinuity, failureCode: row.failureCode === null ? null : String(row.failureCode),
-      expectedPartitions: row.expectedPartitions as string[], completedPartitions: row.completedPartitions as string[],
-      pageCount: Number(row.pageCount), recordCount: Number(count.n), unavailableTextCount: Number(row.unavailableTextCount),
-      createdAt: Number(row.createdAt), updatedAt: Number(row.updatedAt) };
+    return readVaultStatus(this.#database);
   }
 
   list(input: { limit?: number; after?: string | null } = {}): QuarantineListResult {
@@ -456,14 +498,7 @@ export class QuarantineVault {
   }
 
   #meta(): VaultMeta {
-    const row = this.#database.prepare('SELECT * FROM vault_meta WHERE singleton=1').get() as DatabaseRow | undefined;
-    if (!row || Number(row.schema_version) !== schemaVersion) fail('quarantine_vault_corrupt');
-    return { scopeDigest: String(row.scope_digest), displayName: String(row.display_name), snapshotState: String(row.snapshot_state) as SnapshotState,
-      sourceContinuity: String(row.source_continuity) as SourceContinuity,
-      failureCode: row.failure_code === null ? null : String(row.failure_code),
-      expectedPartitions: parsePartitions(row.expected_partitions), completedPartitions: parsePartitions(row.completed_partitions),
-      pageCount: Number(row.page_count), unavailableTextCount: Number(row.unavailable_text_count),
-      createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) };
+    return readVaultMeta(this.#database);
   }
 
   #record(row: DatabaseRow): QuarantineRecord {

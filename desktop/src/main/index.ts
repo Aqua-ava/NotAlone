@@ -46,6 +46,10 @@ import { StartupDiagnostics } from './startup/diagnostics';
 import { installStartupBridge } from './startup/bridge';
 import { configureDevelopmentProject, loadBackendConfiguration } from './backend/config';
 import { installBackgroundTaskBridge } from './background-tasks/bridge';
+import { QuarantineLibrary } from '../../../backend-ts/src/history/quarantine-library.ts';
+import { QuarantineController } from './quarantine/controller';
+import { installQuarantineBridge } from './quarantine/bridge';
+import { presentQuarantine } from './quarantine/window';
 
 app.setName('NotAlone');
 const selectedDataPath = app.commandLine.getSwitchValue('user-data-dir');
@@ -82,6 +86,8 @@ void app.whenReady().then(async () => {
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory);
   installUsageBridge(windows, new UsageController(backend));
   const commands = electronPageCommands(windows);
+  const quarantine = new QuarantineController(new QuarantineLibrary(path.join(app.getPath('appData'), 'NotAlone-Quarantine')),presentQuarantine);
+  installQuarantineBridge(commands, quarantine);
   const contacts = installContactSessionBridge(commands, backend);
   const media = installMessageMediaBridge(commands, backend, contacts);
   const foreground = installForegroundBridge(commands, backend, contacts);
@@ -181,6 +187,7 @@ void app.whenReady().then(async () => {
   app.on('before-quit', () => { fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize(); sqliteDiscussion.synchronize(true); foreground.stopContinuous(); diagnostics.cancel(); });
   app.on('will-quit', () => sqliteDiscussion.close());
   installQuitLifecycle(backend, windows, async () => {
+    await quarantine.close();
     await media.prepareClosing();
     await syncPriority.dispose();
     await headerChanges.shutdown();
