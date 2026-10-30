@@ -490,7 +490,7 @@ test('来源代次变化后旧B不放行普通读取，已清空旧成员不得�
   await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_source_continuity_unverified' });
 });
 
-test('v12旧结构库升级到当前20后联系人、同步与清空重读仍可工作', async t => {
+test('v12旧结构库升级到当前19后联系人、同步与清空重读仍可工作', async t => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-clear-upgrade-')));
   t.after(() => rm(root, { recursive: true, force: true }));
   const legacy = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test',
@@ -502,7 +502,7 @@ test('v12旧结构库升级到当前20后联系人、同步与清空重读仍可
   await legacy.close();
   const upgraded = await SqliteStorage.open({ userData: root, intent: 'open', role: 'test', expectedDatabaseId: databaseId });
   t.after(() => upgraded.close());
-  assert.equal(upgraded.status.schemaVersion, 20);
+  assert.equal(upgraded.status.schemaVersion, 19);
   assert.deepEqual(await upgraded.check(), { integrity: 'ok', foreignKeys: 'ok' });
   const { channel, state } = createChannel();
   const holders = new (await import('../src/storage/sqlite/deletion/holders.ts')).ActiveHolders();
@@ -535,13 +535,4 @@ test('v12旧结构库升级到当前20后联系人、同步与清空重读仍可
   const restored = await resync.resync(contact, { requestKey: 'upgrade-resync-1' });
   assert.equal(restored.state, 'completed');
   assert.equal((await history.read(contact)).messages.length, 1);
-});
-
-test('清空聊天后未同步正文的撤回占位不被后台重新导入',async t=>{
- const f=await fixture(t);const {history,clear}=f.current;
- f.state.pageRecords=[record('shard-a','1',{sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'})];
- f.state.boundaryMembers=identities([['shard-a','1']]);
- await history.synchronize(f.contactA);assert.equal((await history.read(f.contactA)).messages[0].messageState,'recalled');
- assert.equal((await clear.clear(f.contactA)).phase,'completed');assert.equal((await history.read(f.contactA)).messages.length,0);
- await history.synchronize(f.contactA);assert.equal((await history.read(f.contactA)).messages.length,0);
 });

@@ -147,7 +147,7 @@ export const historyActions:StorageAction[]=[
    exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId})?'clear_excluded':null});
   const partitions=new Set<string>([...JSON.parse(String(goal.completed_partitions)),...page.completedPartitions]);
   const traversalComplete=page.exhausted&&target.partitions.every(p=>partitions.has(p));
-  const unresolved=quarantined||goal.failure_code==='history_identity_quarantined'||Boolean(tx.get("SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id WHERE c.owner_id=? AND c.goal_id=? AND r.state='quarantined'",[token.owner_id,goal.id]));
+  const unresolved=quarantined||Boolean(tx.get("SELECT 1 FROM capture_record r WHERE r.owner_id=? AND r.contact_id=? AND r.state='quarantined' AND r.availability='available'",[token.owner_id,token.contact_id]));
   const complete=traversalComplete&&!unresolved;
   const state=complete?'complete':page.exhausted?'incomplete':'running';const code=unresolved?'history_identity_quarantined':page.exhausted&&!complete?'history_partitions_missing':null;
   if(quarantined)tx.run("UPDATE sync_capture SET state='quarantined',error_code='history_identity_quarantined' WHERE owner_id=? AND id=?",[token.owner_id,i.captureId]);
@@ -234,5 +234,5 @@ export const historyActions:StorageAction[]=[
    cursorIn:row.cursor_in,cursorOut:row.cursor_out,raw,support:JSON.parse(String(row.support_json))};
  }),
  action('history.coverage','read',(tx,i)=>readCoverage(tx,i.ownerId,i.contactId)),
- action('history.read','read',(tx,i)=>readMessages(tx,i.ownerId,i.contactId,i.limit,i.before,i.includeRecalled===true)),
+ action('history.read','read',(tx,i)=>readMessages(tx,i.ownerId,i.contactId,i.limit,i.before)),
 ];

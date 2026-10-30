@@ -70,8 +70,7 @@ export interface HistoryCoverage {
   incremental?: HistoryIncrementalCoverage;
 }
 export interface StoredMessage {
-  id: string; contactId: string; bindingId: string; sender: 'owner' | 'contact' | 'unknown';
-  messageState: 'normal' | 'recalled';
+  id: string; contactId: string; bindingId: string; sender: 'owner' | 'contact';
   kind: HistoryRecord['kind']; text: string | null; originalType: string;
   sentAt: string | null; timePrecision: HistoryRecord['timePrecision'];
   orderScheme: string | null; orderKey: string | null;

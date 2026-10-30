@@ -22,9 +22,6 @@ function sameMessage(row: StorageRow, record: ReturnType<typeof prepareRecord>['
 function aliasMessage(tx: StorageTransaction, token: ReadEligibility, scheme: string, key: string): StorageRow | undefined {
   return tx.get('SELECT m.* FROM message_alias a JOIN message m ON m.owner_id=a.owner_id AND m.id=a.message_id WHERE a.owner_id=? AND a.contact_id=? AND a.binding_id=? AND a.scheme=? AND a.external_key=?', [token.owner_id, token.contact_id, token.binding_id, scheme, key]);
 }
-function nextDisplayPosition(tx:StorageTransaction):bigint {
-  return tx.get('SELECT max(coalesce((SELECT max(display_no) FROM message),0),coalesce((SELECT max(display_no) FROM capture_record),0))+1 AS n')!.n as bigint;
-}
 function sourceExcluded(tx: StorageTransaction, token: ReadEligibility, prepared: ReturnType<typeof prepareRecord>, report: HistorySupportReport): boolean {
   if (!prepared.localKey) return false;
   return Boolean(tx.get("SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? AND ((scheme='local' AND external_key=?) OR (scheme='server' AND external_key=?))", [token.owner_id, token.conversation_id, prepared.localKey, report.serverAliasSemantics === 'verified_within_scope' ? prepared.serverKey : null]));
@@ -45,15 +42,10 @@ export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|
   const local=prepared.localKey?aliasMessage(tx,token,'local',prepared.localKey):undefined;
   const server=report.serverAliasSemantics==='verified_within_scope'&&prepared.serverKey?aliasMessage(tx,token,'server',prepared.serverKey):undefined;
   if(exclusion&&!local&&!server)continue;
-  const recallVerified=terminalReason==='source_recalled'&&!(local&&server&&local.id!==server.id);
   const affected=local||server?[...new Map([local,server].filter((v):v is StorageRow=>Boolean(v)).map(v=>[v.id,v])).values()]
    :prepared.localKey?[]:tx.all("SELECT * FROM message WHERE owner_id=? AND contact_id=? AND binding_id=? AND availability='available'",[token.owner_id,token.contact_id,token.binding_id]);
-  for(const old of affected){
-   if(systemTransition&&terminalReason===null&&old.kind!=='text')continue;
-   const existing=tx.get('SELECT reason FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,old.id]);
-   if(!existing)tx.run('INSERT INTO history_message_quarantine VALUES(?,?,?,?)',[token.owner_id,token.contact_id,old.id,recallVerified?'source_recalled':'message_state_unverified']);
-   else if(recallVerified&&existing.reason!=='source_recalled')tx.run("UPDATE history_message_quarantine SET reason='source_recalled' WHERE owner_id=? AND contact_id=? AND message_id=?",[token.owner_id,token.contact_id,old.id]);
-   else continue;
+  for(const old of affected)if((!systemTransition||terminalReason!==null||old.kind==='text')&&!tx.get('SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,old.id])){
+   tx.run('INSERT INTO history_message_quarantine VALUES(?,?,?,?)',[token.owner_id,token.contact_id,old.id,terminalReason??'message_state_unverified']);
    tx.run('UPDATE message SET interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,old.id]);changed=true;
   }
  }
@@ -74,10 +66,6 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
     let message: StorageRow | undefined;
     let excluded = false;
     if(reason==='source_recalled'||reason==='source_absent')excluded=true;
-    if(excluded&&prepared.localKey){
-      const exclusion=sourceExcluded(tx,token,prepared,report)?'source_excluded':input.exclude?.({localKey:prepared.localKey,serverKey:prepared.serverKey})??null;
-      if(exclusion)reason=exclusion;
-    }
     if (inputRecord.stateAssurance!=='verified') {
       const exclusion=prepared.localKey&&(sourceExcluded(tx,token,prepared,report)?'source_excluded':input.exclude?.({localKey:prepared.localKey,serverKey:prepared.serverKey})??null);
       if (exclusion) { reason=exclusion; excluded=true; }
@@ -86,12 +74,6 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
       const exclusion = sourceExcluded(tx, token, prepared, report) ? 'source_excluded' as const : input.exclude?.({ localKey: prepared.localKey, serverKey: prepared.serverKey }) ?? null;
       if (exclusion) { reason = exclusion; excluded = true; }
     }
-    if (!reason && prepared.localKey && tx.get(`SELECT 1 FROM capture_record r
-      JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
-      JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
-      WHERE r.owner_id=? AND r.contact_id=? AND r.observed_key=? AND r.reason_code='source_recalled'
-        AND r.display_no IS NOT NULL AND r.availability='available' AND g.binding_id=? LIMIT 1`,
-      [token.owner_id,token.contact_id,prepared.localKey,token.binding_id])) { reason='source_recalled';excluded=true; }
     if (!reason) {
       const local = aliasMessage(tx, token, 'local', prepared.localKey!);
       const server = report.serverAliasSemantics === 'verified_within_scope' && prepared.serverKey ? aliasMessage(tx, token, 'server', prepared.serverKey) : undefined;
@@ -104,7 +86,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
       if (!reason) {
         if (!message) {
           const id = randomUUID();
-          const display = nextDisplayPosition(tx);
+          const display = (tx.get('SELECT coalesce(max(display_no),0)+1 AS n FROM message')!.n as bigint);
           tx.run(`INSERT INTO message(owner_id,id,contact_id,binding_id,identity_scheme,external_key,sender_role,kind,text_body,original_type,sent_at,time_precision,order_scheme,order_key,display_no) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [token.owner_id, id, token.contact_id, token.binding_id, 'source-table-local-v1', prepared.localKey, record.sender, record.kind, record.text, record.originalType, record.sentAt === null ? null : BigInt(record.sentAt), record.timePrecision, record.orderScheme, record.orderKey, display]);
           message = tx.get('SELECT * FROM message WHERE owner_id=? AND id=?', [token.owner_id, id]);
         } else if (message.availability !== 'available') {
@@ -122,6 +104,25 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
         for (const [scheme, key] of [['local', prepared.localKey], ['server', report.serverAliasSemantics === 'verified_within_scope' ? prepared.serverKey : null]] as const)
           if (key) tx.run('INSERT OR IGNORE INTO message_alias(owner_id,id,contact_id,binding_id,scheme,external_key,message_id) VALUES(?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, token.binding_id, scheme, key, message!.id]);
       }
+    }
+    if(!reason&&prepared.localKey&&record.stateAssurance==='verified'){
+      // 仅清理同一绑定、代次、状态和服务端身份的无正文未知状态；有任何下游引用时保留。
+      tx.run(`DELETE FROM capture_record WHERE owner_id=? AND contact_id=? AND id IN (
+        SELECT r.id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
+        JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
+        WHERE r.owner_id=? AND r.contact_id=? AND r.observed_key=? AND r.state='quarantined'
+          AND r.reason_code='message_state_unverified' AND r.availability='available'
+          AND g.binding_id=? AND g.accepted_data_generation=? AND json_valid(r.raw_payload)
+          AND json_extract(r.raw_payload,'$.text') IS NULL AND json_extract(r.raw_payload,'$.status') IS ?
+          AND json_extract(r.raw_payload,'$.serverId') IS ?
+          AND NOT EXISTS (SELECT 1 FROM event_source x WHERE x.owner_id=r.owner_id AND x.record_id=r.id)
+          AND NOT EXISTS (SELECT 1 FROM run_input x WHERE x.owner_id=r.owner_id AND x.record_id=r.id)
+          AND NOT EXISTS (SELECT 1 FROM step_input x WHERE x.owner_id=r.owner_id AND x.record_id=r.id)
+          AND NOT EXISTS (SELECT 1 FROM memory_citation x WHERE x.owner_id=r.owner_id AND x.record_id=r.id)
+          AND NOT EXISTS (SELECT 1 FROM reply_context_item x WHERE x.owner_id=r.owner_id AND x.record_id=r.id)
+          AND NOT EXISTS (SELECT 1 FROM reply_candidate_input_source x WHERE x.owner_id=r.owner_id AND x.record_id=r.id)
+          AND NOT EXISTS (SELECT 1 FROM media_extraction_attempt x WHERE x.owner_id=r.owner_id AND x.record_id=r.id))`,
+        [token.owner_id,token.contact_id,token.owner_id,token.contact_id,prepared.localKey,token.binding_id,BigInt(token.data_generation),record.status??null,record.serverId]);
     }
     if (!reason && message && prepared.localKey && tx.get(`SELECT 1 FROM capture_record r
       JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
@@ -147,13 +148,10 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
           AND g.binding_id=? AND g.accepted_data_generation=? LIMIT 1`,
         [token.owner_id,token.contact_id,prepared.localKey,reason,prepared.raw,token.binding_id,BigInt(token.data_generation)])) continue;
     }
-    // 已规范化文字的正文只存于消息表；来源记录保留不含正文的必要渠道字段。
+    // 正文存于消息表，来源记录仅保留渠道信息。
     const singleTextCopy=!reason&&record.kind==='text';
     const sourcePayload=singleTextCopy?JSON.stringify({...record,text:null}):prepared.raw;
-    const noKnownMessage=reason==='source_recalled'&&prepared.localKey&&!aliasMessage(tx,token,'local',prepared.localKey)
-      &&!(report.serverAliasSemantics==='verified_within_scope'&&prepared.serverKey&&aliasMessage(tx,token,'server',prepared.serverKey));
-    const displayNo=noKnownMessage?nextDisplayPosition(tx):null;
-    tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code,display_no) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, captureId, index, excluded ? 'excluded' : reason ? 'quarantined' : 'normalized', reason ? null : message!.id, excluded ? null : sourcePayload, prepared.localKey ? 'source-table-local-v1' : null, prepared.localKey, singleTextCopy?'2':'1', reason,displayNo]);
+    tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, captureId, index, excluded ? 'excluded' : reason ? 'quarantined' : 'normalized', reason ? null : message!.id, excluded ? null : sourcePayload, prepared.localKey ? 'source-table-local-v1' : null, prepared.localKey, singleTextCopy?'2':'1', reason]);
   }
   return { quarantined };
 }

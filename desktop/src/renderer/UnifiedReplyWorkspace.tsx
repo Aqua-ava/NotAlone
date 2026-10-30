@@ -111,10 +111,10 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage, medi
           <div className="workspace-message-list" role="group" aria-label="最近聊天材料">
             {state.messages.items.map(message => <div className="reply-message workspace-message-row" key={message.messageId}><label className="reply-message-selection">
               <input type="checkbox" aria-label={`使用消息：${message.text ?? message.mediaPlaceholder ?? '无文字内容'}`}
-                checked={message.messageState !== 'recalled' && !excluded.includes(message.messageId)} disabled={disabled || !options.includeRelationshipContext || message.messageState === 'recalled'}
+                checked={!excluded.includes(message.messageId)} disabled={disabled || !options.includeRelationshipContext}
                 onChange={event => update({ excludedMessageIds: event.target.checked
                   ? excluded.filter(id => id !== message.messageId) : [...excluded, message.messageId] })} />
-              <span><small>{message.speaker === 'contact' ? '对方' : message.speaker === 'user' ? '我' : '系统'} · {message.occurredAt ? new Date(message.occurredAt).toLocaleString('zh-CN') : '时间未知'}{message.ordering === 'unknown' ? ' · 顺序未核验' : ''}{message.messageState === 'recalled' ? ' · 已撤回' : ''}</small>
+              <span><small>{message.speaker === 'contact' ? '对方' : message.speaker === 'user' ? '我' : '系统'} · {message.occurredAt ? new Date(message.occurredAt).toLocaleString('zh-CN') : '时间未知'}{message.ordering === 'unknown' ? ' · 顺序未核验' : ''}</small>
                 <span className="reply-message-text">{message.text ?? message.mediaPlaceholder ?? '无文字内容'}</span></span>
             </label>{state.contactId&&<MessageMediaPanel bridge={media} selection={{contactId:state.contactId,messageId:message.messageId,scopeRevision:state.scopeRevision}} messageType={message.messageType}/>}
             </div>)}

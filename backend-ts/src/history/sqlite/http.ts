@@ -26,9 +26,9 @@ export function projectHistoryMessages(read: HistoryRead, limit: number) {
   const selected = read.messages.slice(0, limit);
   return {
     messages: selected.map(message => ({
-      message_id: message.id, speaker: message.sender === 'owner' ? 'user' : message.sender === 'contact' ? 'contact' : 'system',
-      message_type: message.kind, message_state: message.messageState, text: message.kind === 'text' ? message.text : null,
-      media_placeholder: message.messageState==='recalled' && message.text===null ? '[已撤回]' : placeholders[message.kind], occurred_at: isoTime(message), quoted: null,
+      message_id: message.id, speaker: message.sender === 'owner' ? 'user' : 'contact',
+      message_type: message.kind, text: message.kind === 'text' ? message.text : null,
+      media_placeholder: placeholders[message.kind], occurred_at: isoTime(message), quoted: null,
       ordering: message.ordering, display_position: message.displayPosition, source_record_ids: message.sourceRecordIds,
     })),
     next_cursor: read.messages.length > limit ? selected.at(-1)!.id : null,

@@ -38,9 +38,3 @@ test('已保存历史可独立刷新，不要求助手生成资格',()=>{
  const html=render([], {generationBlock:'contact_unconfirmed',savedSession:{phase:'failed',sessionId:null}});
  assert.match(html,/<button>刷新最近聊天<\/button>/);
 });
-test('已撤回的消息显示原文和状态但不能选为回复依据',async()=>{
- const read=await readReplyMessages(backend([wire({message_type:'text',text:'合成已撤回正文',media_placeholder:null,message_state:'recalled'})]),id,null,new AbortController().signal);
- assert.equal(read.messages[0].messageState,'recalled');
- const html=render(read.messages);
- assert.match(html,/合成已撤回正文/);assert.match(html,/已撤回/);assert.match(html,/<input[^>]*disabled/);
-});
