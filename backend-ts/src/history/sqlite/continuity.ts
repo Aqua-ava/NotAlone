@@ -94,6 +94,22 @@ export function preflightTarget(tx: StorageTransaction, token: ReadEligibility, 
   if(existing)return matchesStored(String(existing.tables_json),target,named?report?.accountKey:undefined,named)?true:fenceContinuity(tx,token);
   return fenceContinuity(tx,token);
 }
+/** 有明确顺序时使用最新支持档；旧目标无顺序时只使用已核验的账号和来源基线。 */
+function priorNormalUse(tx:StorageTransaction,token:ReadEligibility,stored:string):boolean {
+ const previous=tx.get("SELECT creation_no,support_json FROM read_goal WHERE owner_id=? AND contact_id=? ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1",[token.owner_id,token.contact_id]);
+ if(previous?.creation_no!==null&&previous?.creation_no!==undefined){
+  try{return JSON.parse(String(previous.support_json)).continuity===normalUseContinuity;}catch{return false;}
+ }
+ const account=tx.get("SELECT external_key FROM channel_account WHERE owner_id=? AND id=? AND identity_state='verified'",[token.owner_id,token.account_id]);
+ try{
+  const value=JSON.parse(stored) as {accountKey?:unknown;partitions?:unknown;tables?:unknown};
+  if(typeof account?.external_key!=='string'||!account.external_key||value.accountKey!==account.external_key||!Array.isArray(value.partitions)||!Array.isArray(value.tables)
+   ||!value.partitions.length||value.partitions.some((p:unknown)=>typeof p!=='string'||!p)
+   ||value.tables.some((row:unknown)=>!Array.isArray(row)||row.length!==2||row.some((v:unknown)=>typeof v!=='string'||!v)))return false;
+  const target={protocol:'private-history-v1' as const,descriptor:'',sourceGeneration:token.source_generation,partitions:value.partitions as string[],tables:value.tables.map(([partition,instance]:string[])=>({partition,instance}))};
+  return matchesStored(stored,target,account.external_key,true);
+ }catch{return false;}
+}
 /** 仅允许已知 normal-use 支持档对旧 runtime/clean loss 走 metadata-only 重验。 */
 export function normalUseRevalidationCandidate(tx:StorageTransaction,token:ReadEligibility):boolean {
  if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))return false;
@@ -103,8 +119,7 @@ export function normalUseRevalidationCandidate(tx:StorageTransaction,token:ReadE
  if(lease.binding_id!==token.binding_id||lease.conversation_id!==token.conversation_id||lease.source_generation!==token.source_generation)return false;
  const scope=tx.get('SELECT conversation_id,source_generation,tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
  if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!scope.tables_json)return false;
- const previous=tx.get("SELECT support_json FROM read_goal WHERE owner_id=? AND contact_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1",[token.owner_id,token.contact_id]);
- try{return JSON.parse(String(previous?.support_json)).continuity===normalUseContinuity;}catch{return false;}
+ return priorNormalUse(tx,token,String(scope.tables_json));
 }
 /** 用当前报告与新目标完成跨运行代次的来源握手；成功后才租约续期并废弃旧游标。 */
 export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,accountKey:string,guardId:string):{ok:boolean;revalidated:boolean} {
@@ -124,8 +139,7 @@ export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibili
   if(scope)tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[value,token.owner_id,token.contact_id]);
   else tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,value]);
  }
- const previous=tx.get("SELECT support_json FROM read_goal WHERE owner_id=? AND contact_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1",[token.owner_id,token.contact_id]);
- const previousWasNormal=(()=>{try{return JSON.parse(String(previous?.support_json)).continuity===normalUseContinuity;}catch{return false;}})();
+ const previousWasNormal=priorNormalUse(tx,token,String(scope?.tables_json??''));
  if(lease){
   if(lease.state==='active'&&lease.runtime_id===runtime.runtime_id){
    if(lease.guard_id!==guardId)return {ok:false,revalidated:false};

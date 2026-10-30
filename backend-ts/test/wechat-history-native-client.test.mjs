@@ -49,7 +49,7 @@ async function fixture(t,mode='normal') {
   if(r.op==='support'){
    supportCount++;data={protocol:'private-history-v1',profileId:'synthetic-profile-v1',adapterVersion:'1',status:'supported',reason:null,accountKey:'${account}',conversationKey:currentConversation,sourceGeneration:'${generation}',programVersion:'4.0.6',build:'29387',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-status-v1',continuity:'synthetic-current-source-v1'};
    if(mode==='unverified-support'||mode==='unsupported-support')data={...data,status:mode==='unverified-support'?'unverified':'unsupported',reason:'synthetic_unverified'};
-   if(mode==='partial-capabilities')data={...data,status:'unverified',reason:'history_message_state_unverified',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(key=>[key,['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn'].includes(key)?'supported':key==='serverIdUniqueConstraint'?'unsupported':'unverified']))};
+   if(mode==='partial-capabilities'||mode.startsWith('quarantine-kind-'))data={...data,status:'unverified',reason:'history_message_state_unverified',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(key=>[key,['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn'].includes(key)?'supported':key==='serverIdUniqueConstraint'?'unsupported':'unverified']))};
 
    if(mode.startsWith('empty-target'))data={...data,profileId:'wechat-4.0.6-29387-absent-private-target-v1',declaredPrimaryKey:[],statusSemantics:'no-message-table-v1',continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','private-history-boundary-v1'].map(key=>[key,['declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','incrementalTail'].includes(key)?'unsupported':key==='private-history-boundary-v1'?'unverified':'supported']))};
    if(mode==='empty-target-ordinary-profile')data={...data,profileId:'synthetic-profile-v1',declaredPrimaryKey:['local_id']};
@@ -60,7 +60,7 @@ async function fixture(t,mode='normal') {
    if(mode==='wrong-support-artifact')data={...data,artifactSha256:'f'.repeat(64)};
    if(mode==='schema-change-support'&&supportCount>1)data={...data,schemaFingerprint:'f'.repeat(64)};
   }
-  if(r.op==='target'){
+  if(r.op==='target'||r.op==='quarantine-target'){
    data={...target,descriptor:target.descriptor+':'+currentConversation};
    if(mode==='empty-target-missing-partition')data={...data,partitions:data.partitions.slice(0,7)};
    if(mode==='empty-target-fake-instance')data={...data,tables:[{partition:data.partitions[0],instance:'c'.repeat(64)}]};
@@ -132,9 +132,10 @@ async function fixture(t,mode='normal') {
    if(r.kind==='next'&&mode==='received-test-promoted')data={...data,records:[{...contactRecord,normalHistory:true}]};
    if(r.kind==='next'&&mode==='received-test-promoted-status')data={...data,status:'supported'};
   }
-  if(r.op==='page'){
+  if(r.op==='page'||r.op==='quarantine-page'){
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'合成分页文字',originalType:'1',sentAt:'1000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row],completedPartitions:['d'.repeat(64)],exhausted:true};
+   if(mode.startsWith('quarantine-kind-')){const originalType=mode.slice('quarantine-kind-'.length);data.records=[{...row,originalType,kind:originalType==='25769803825'?'file':'other',text:null,stateAssurance:'unverified'}];}
    if(mode==='empty-target')data={...data,records:[],completedPartitions:target.partitions};
    if(mode==='page-cancel')return;
    if(mode==='page-too-large'){process.stdout.write('x'.repeat(8*1024*1024+1));return;}
@@ -149,6 +150,15 @@ async function fixture(t,mode='normal') {
    if(mode==='numeric-local-id')data={...data,records:[{...row,localId:9007199254740993}]};
    if(mode==='overflow-status')data={...data,records:[{...row,status:'9223372036854775808'}]};
    if(mode==='unverified-with-body')data={...data,records:[{...row,stateAssurance:'unverified'}]};
+   if(mode.startsWith('metadata-only'))data={...data,records:[{...row,kind:'other',text:null,originalType:'244813135921',stateAssurance:'unverified',metadataOnly:true}]};
+   if(mode==='metadata-only-system')data.records[0]={...data.records[0],sender:'unknown',originalType:'10000'};
+   if(mode==='metadata-only-app')data.records[0].originalType='49';
+   if(mode==='metadata-only-file')data.records[0]={...data.records[0],originalType:'25769803825',kind:'file'};
+   if(mode==='metadata-only-forged-text')data.records[0]={...data.records[0],kind:'text',originalType:'1'};
+   if(mode==='metadata-only-forged-body')data.records[0].text='不可夹带正文';
+   if(mode==='metadata-only-false')data.records[0].metadataOnly=false;
+   if(mode==='metadata-only-negative')data.records[0].originalType='-1';
+   if(mode==='metadata-only-kind-conflict')data.records[0].kind='image';
    if(mode==='missing-state-assurance'){const {stateAssurance,...untrusted}=row;data={...data,records:[untrusted]};}
    if(mode==='known-recall')data={...data,records:[{...row,sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'}]};
    if(mode==='unlocated-recall')data={...data,records:[{...row,localId:null,sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'}]};
@@ -207,6 +217,24 @@ test('固定快照核验拒绝遗漏分片、变化窗口、越界身份及正�
   const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
   await assert.rejects(f.client.verifySnapshotMetadataSelected(),{code:'history_protocol_invalid'});
   const pid=Number(await readFile(f.pidFile,'utf8'));await f.client.close();noProcess(pid);
+ });
+});
+
+test('原生分页保留无正文元数据观察且拒绝借此放行文字或正文',async t=>{
+ for(const mode of ['metadata-only','metadata-only-system','metadata-only-forged-text','metadata-only-forged-body','metadata-only-false','metadata-only-negative','metadata-only-kind-conflict'])await t.test(mode,async t=>{
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+  if(['metadata-only','metadata-only-system'].includes(mode)){
+   const page=await f.client.pageSelected(target,null);const row=page.records[0];assert.equal(row.metadataOnly,true);assert.equal(row.stateAssurance,'unverified');assert.equal(row.text,null);assert.equal(row.messageState,undefined);
+  }else await assert.rejects(f.client.pageSelected(target,null),{code:'history_protocol_invalid'});
+ });
+});
+
+test('独立隔离页保留引用与链接的其他类型占位，仅文件子类型为文件',async t=>{
+ for(const raw of ['49','244813135921','21474836529','25769803825'])await t.test(raw,async t=>{
+  const f=await fixture(t,'quarantine-kind-'+raw);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();
+  const target=await f.client.quarantineTargetSelected();const result=await f.client.quarantinePageSelected(target,null);
+  assert.equal(result.kind,'quarantine');assert.equal(result.page.records[0].originalType,raw);assert.equal(result.page.records[0].kind,raw==='25769803825'?'file':'other');assert.equal(result.page.records[0].text,null);assert.equal(result.page.records[0].stateAssurance,'unverified');
+  await assert.rejects(f.client.targetSelected(),{code:'history_support_unverified'});
  });
 });
 
@@ -517,5 +545,14 @@ test('空目标不得借用普通档、声称增量、遗漏固定分片或伪�
   const f=await fixture(t,mode);await f.client.resolveSelected(conversation);await f.client.inspectSelected();
   if(['empty-target-ordinary-profile','empty-target-false-tail'].includes(mode))await assert.rejects(f.client.supportSelected(),{code:'history_protocol_invalid'});
   else {await f.client.supportSelected();await assert.rejects(f.client.targetSelected(),{code:'history_protocol_invalid'});}
+ });
+});
+
+
+test('原生读取只接受无正文、类型一致的非文字元数据',async t=>{
+ for(const mode of ['metadata-only','metadata-only-app','metadata-only-file','metadata-only-kind-conflict','metadata-only-forged-text','metadata-only-forged-body','metadata-only-false'])await t.test(mode,async t=>{
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+  if(['metadata-only','metadata-only-app','metadata-only-file'].includes(mode)){const page=await f.client.pageSelected(target,null);assert.equal(page.records[0].metadataOnly,true);assert.equal(page.records[0].text,null);}
+  else await assert.rejects(f.client.pageSelected(target,null),{code:'history_protocol_invalid'});
  });
 });

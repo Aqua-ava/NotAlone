@@ -8,6 +8,7 @@ export interface HistoryCoverage {
   failureCode: string | null;
   messageCount: number;
   nonTextCount: number;
+  metadataOnlyCount?: number;
   pageCount: number;
   incrementalPhase?: HistoryIncrementalPhase;
   incrementalFailureCode?: string | null;

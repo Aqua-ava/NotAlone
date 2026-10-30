@@ -27,6 +27,8 @@ export interface HistoryRecord {
   status?: string | null;
   // 仅经过认证的渠道才可确认状态；未知状态不应带正文。
   stateAssurance: 'verified' | 'unverified';
+  // 仅认证非文字的来源和类型，不推断消息送达或撤回。
+  metadataOnly?: true;
   // 渠道已核验的具体状态；撤回是无正文终态，不能仅凭原始状态数字推断。
   messageState?: 'sent' | 'received' | 'recalled' | 'absent';
 }
@@ -65,6 +67,8 @@ export interface HistoryCoverage {
   goalId: string | null; contactId: string; bindingId: string | null;
   phase: HistoryPhase; failureCode: string | null; cursor: string | null;
   messageCount: number; nonTextCount: number; pageCount: number; quarantinedCount: number;
+  // 无法归属发送方的独立系统等元数据观察，不作为聊天正文或派生依据。
+  metadataOnlyCount?: number;
   // 固定目标已全部遍历；未知消息仍可使 phase=incomplete，不能据此宣称内容已全部核验。
   traversalComplete?: boolean;
   incremental?: HistoryIncrementalCoverage;

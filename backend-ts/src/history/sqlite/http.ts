@@ -81,7 +81,7 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, persiste
     cli_history_authorization_state: coverages.some(row=>row.bindingId!==null)?'accepted':'unknown', cli_history_authorization_version: coverages.some(row=>row.bindingId!==null)?1:null, cli_history_authorization_current_version: 1,
     cli_history_coverages: coverages.filter(row => row.bindingId !== null).map(row => ({
       binding_id: row.bindingId, contact_id: row.contactId, phase: row.phase === 'running' ? 'syncing' : row.phase,
-      failure_code: row.failureCode, message_count: textCount(row), non_text_count: row.nonTextCount, page_count: row.pageCount,
+      failure_code: row.failureCode, message_count: textCount(row), non_text_count: row.nonTextCount, metadata_only_count: row.metadataOnlyCount ?? 0, page_count: row.pageCount,
       incremental_phase: incrementalPhase(row), incremental_failure_code: incrementalRuntime(row.contactId)?.lastError ?? row.incremental?.failureCode ?? null,
       incremental_last_accepted_at: row.incremental?.lastAcceptedAt ?? null, incremental_pages: row.incremental?.pagesAccepted ?? 0,
     })),

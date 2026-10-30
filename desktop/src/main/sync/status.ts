@@ -99,6 +99,7 @@ function historyCoverages(value: unknown): HistoryCoverage[] | undefined {
     return { bindingId: item.binding_id.toLowerCase(), contactId: item.contact_id.toLowerCase(),
       phase: item.phase as HistoryCoveragePhase, failureCode: failureCode(item.failure_code),
       messageCount: count(item.message_count), nonTextCount: count(item.non_text_count), pageCount: count(item.page_count),
+      ...(item.metadata_only_count === undefined ? {} : { metadataOnlyCount: count(item.metadata_only_count) }),
       ...(incrementalPhase === undefined ? {} : { incrementalPhase }),
       ...(incrementalFailureCode === undefined ? {} : { incrementalFailureCode }),
       ...(item.incremental_last_accepted_at === undefined ? {} : { incrementalLastAcceptedAt }),

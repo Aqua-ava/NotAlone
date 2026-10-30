@@ -1,5 +1,6 @@
 import { StorageFailure, type StorageAction, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { ReadEligibility, SavedContactBinding } from './contracts.ts';
+import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 const fail = (code: string): never => { throw new StorageFailure(code); };
 const one = (tx: StorageTransaction, sql: string, args: any[]): StorageRow => tx.get(sql,args) ?? fail('identity_not_found');
 const text = (value: unknown): string => typeof value==='string' && value.length>0 && value.length<=512 ? value : fail('identity_request_invalid');
@@ -10,8 +11,9 @@ function visibleMessageCounts(tx:StorageTransaction,owner:string):Map<string,num
  // 仅身份存储可能尚未安装历史域；目录统计不要求历史表或正文读取能力。
  if(tx.all("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('message','capture_record')").length!==2)return new Map();
  const quarantine=Boolean(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='history_message_quarantine'"));
- return new Map(tx.all(`SELECT m.contact_id,count(*) AS n FROM message m WHERE m.owner_id=? AND m.availability='available'
-  AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available') ${quarantine?"AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)":''} GROUP BY m.contact_id`,[owner]).map(row=>{
+ return new Map(tx.all(`WITH ${currentSourceScopeCTE} SELECT m.contact_id,count(*) AS n FROM message m WHERE m.owner_id=? AND m.availability='available'
+  AND EXISTS (SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
+   WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()}) ${quarantine?"AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)":''} GROUP BY m.contact_id`,[owner,null,null,owner]).map(row=>{
    if(typeof row.n!=='bigint'||row.n<0n||row.n>BigInt(Number.MAX_SAFE_INTEGER))return fail('identity_count_out_of_range');
    return [String(row.contact_id),Number(row.n)];
   }));

@@ -159,6 +159,7 @@ type notaloneSnapshotRecord struct {
 	Status         *string `json:"status"`
 	MessageState   string  `json:"messageState,omitempty"`
 	StateAssurance string  `json:"stateAssurance"`
+	MetadataOnly   bool    `json:"metadataOnly,omitempty"`
 	SentAt         *string `json:"sentAt"`
 	TimePrecision  *string `json:"timePrecision"`
 	OrderScheme    *string `json:"orderScheme"`
@@ -645,7 +646,9 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 			}
 		}
 		decision := notaloneStatusDecision{State: notaloneMessageUnknown}
-		if knownType && knownStatus {
+		// 非文字只提供无正文类型信息，不能以系统状态推断撤回。
+		record.MetadataOnly = !quarantine && n.profile.StatusSemanticsVerified && knownType && rawType >= 0 && kind != "text"
+		if knownType && knownStatus && kind == "text" {
 			decision = notaloneClassifyStatus(n.profile, rawType, record.Sender, status, record.ServerID)
 		}
 		allowed := decision.HistoryEligible
@@ -715,7 +718,11 @@ func notaloneSnapshotKind(value int64) string {
 	case 47:
 		return "sticker"
 	case 49:
-		return "file"
+		// 引用、链接等共享类型号，只有文件子类型可标为文件。
+		if value == int64(6)<<32|49 {
+			return "file"
+		}
+		return "other"
 	default:
 		return "other"
 	}

@@ -117,8 +117,9 @@ func notalone40629387ExpectedShape() notaloneTableSchema {
 func notalone40629387ObservedStatusRules() []notaloneStatusRule {
 	return []notaloneStatusRule{
 		{LocalType: 1, Sender: "owner", Status: 2, State: notaloneMessageSent, RequiresServerID: true},
+		{LocalType: 1, Sender: "owner", Status: 3, State: notaloneMessageSent, RequiresServerID: true},
 		{LocalType: 1, Sender: "contact", Status: 3, State: notaloneMessageReceived, RequiresServerID: true},
-		{LocalType: 10000, Sender: "unknown", Status: 4, State: notaloneMessageRecalled},
+		{LocalType: 1, Sender: "contact", Status: 4, State: notaloneMessageReceived, RequiresServerID: true},
 	}
 }
 

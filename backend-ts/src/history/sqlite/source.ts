@@ -1,9 +1,10 @@
 import { StorageFailure, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { MessageSourceReference } from './contracts.ts';
+import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 
 /** 派生写者必须在自身接受结果的同一短事务复验实际来源，不能只核历史查询结果。 */
 export function assertSourceEligibility(tx:StorageTransaction,ref:MessageSourceReference):void {
- const valid=tx.get(`SELECT r.id FROM capture_record r
+ const valid=tx.get(`WITH ${currentSourceScopeCTE} SELECT r.id FROM capture_record r
  JOIN message m ON m.owner_id=r.owner_id AND m.contact_id=r.contact_id AND m.id=r.message_id
  JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
  JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
@@ -14,6 +15,6 @@ export function assertSourceEligibility(tx:StorageTransaction,ref:MessageSourceR
  AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
  AND NOT EXISTS (SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id)
  AND NOT EXISTS (SELECT 1 FROM history_guard_lease g JOIN database_instance d ON d.slot=1 WHERE g.owner_id=m.owner_id AND g.contact_id=m.contact_id AND (g.state<>'active' OR g.runtime_id<>d.runtime_id))
- AND m.binding_id=g.binding_id AND p.state='active' AND o.state='active'`,[ref.owner_id,ref.contact_id,ref.record_id,ref.message_id]);
+ AND m.binding_id=g.binding_id AND p.state='active' AND o.state='active' AND ${currentSourcePredicate()}`,[ref.owner_id,ref.contact_id,ref.contact_id,ref.owner_id,ref.contact_id,ref.record_id,ref.message_id]);
  if(!valid)throw new StorageFailure('history_source_not_available');
 }
