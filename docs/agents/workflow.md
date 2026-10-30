@@ -9,15 +9,13 @@
 
 ### 决策模式
 
-以下情况需要暂停并询问用户：
+只有影响结果的选择无法从用户指令、已有授权和项目上下文可靠判断时，才暂停受影响的步骤并询问；不依赖该决定的工作继续推进：
 
-- 功能范围或用户意图不明确
-- Module 的 Interface 或 Seam 会影响整体架构，但尚未确定
-- 方案涉及删除或迁移数据、外部发送、正式环境或 push
-- 实际实现需要超出当前 spec 或 ticket
-- 测试失败要求改变原定方案
+- 功能范围或用户意图无法推断，或实际实现需要超出当前 spec／ticket。
+- Module 的 Interface 或 Seam 会影响整体架构，且尚未确定。
+- 真实用户数据的删除或迁移、外部发送、正式环境操作或 push 尚无明确授权。
 
-用户作出决策后继续当前流程，不把一次决策解释成对其他范围的授权。
+用户已经明确授权的动作按其范围继续；测试失败后的常规修复和不改变约定行为、范围的实现调整自行决定。用户作出决策后继续当前流程，不把一次决策解释成对其他范围的授权。
 
 ## 子 Agent 协作
 
@@ -41,54 +39,44 @@
 
 ## 主流程
 
-### 1. 明确问题
+### 1. 明确问题和约束
 
-在工作目录中处理功能或架构工作时，先使用 `grill-with-docs` 明确问题、范围和决策。
+结合用户请求、现有代码和相关文档确定目标、范围与约束。有实质设计或范围疑问时使用 `grill-with-docs`；已明确的简单工作直接继续。难以定位的故障使用 `diagnosing-bugs`，先建立能复现故障的反馈回路。
 
-完成条件：问题、目标、约束和主要取舍已经足够明确，可以判断下一条路径。
+完成条件：能够判断哪些行为需要改变、哪些边界必须保留，以及下一步是否需要用户决策。
 
-### 2. 处理设计不确定性
+### 2. 按不确定性与规模分支
 
-- 需要通过可运行答案确定状态、业务逻辑或界面时，使用 `handoff` -> `prototype` -> `handoff` 回到原工作流。
-- Module、Interface 或 Seam 的设计不清楚时，使用 `codebase-design`。
-- 这两个 skill 只在对应问题出现时进入，不是每个任务的固定阶段。
+- 需要通过可运行答案确定状态、业务逻辑或界面时，使用 `handoff` → `prototype` → `handoff` 回到原工作流；Module、Interface 或 Seam 不清楚时使用 `codebase-design`。
+- 范围明确、可在当前会话完成的任务，直接进入实现；不强制创建 spec 或 ticket。
+- 多会话工作使用 `to-spec` 和 `to-tickets`。目标过大且路径不清楚时先使用 `wayfinder`；原始外部 Bug 或请求需要形成可执行任务时使用 `triage`。
 
-完成条件：关键 Interface、Seam 或可验证的行为已经确定；如果仍有重大未知，不进入实现。
+完成条件：实现所需的关键 Interface、Seam 和可验证行为已明确；重大未知按决策模式处理。
 
-### 3. 选择工作规模
+### 3. 按需形成 spec 和 tickets
 
-- 多会话工作使用 `to-spec`，再使用 `to-tickets`。
-- 单会话的小任务可以从 `grill-with-docs` 直接进入 `implement`。
-- 目标过大且路径不清楚时，先使用 `wayfinder`；地图清晰后回到 `to-spec`，不要直接跳到 `implement`。
+`to-spec` 将讨论结果按[任务约定](issue-tracker.md)发布为 spec，记录用户问题、解决方案、Implementation Decisions、Testing Decisions、测试 Seam 和 Out of Scope。
 
-### 4. 形成 spec
+`to-tickets` 将 spec 拆成可独立验证的 tracer-bullet tickets，记录真实的 `Blocked by` 关系。用户已授权拆分和发布时，按已确认范围完成；需要新的产品范围取舍时按决策模式处理。已由 `to-spec` 产生的 tickets 不再经过 `triage`。
 
-`to-spec` 将已经讨论的内容整理成 spec。写入前确认测试所依赖的 Seam；spec 应记录用户问题、解决方案、Implementation Decisions、Testing Decisions 和 Out of Scope。
+完成条件：每个 ticket 在新上下文中有足够信息交付完整行为，阻塞关系正确并已按依赖顺序发布。
 
-完成条件：spec 已按 [任务约定](issue-tracker.md) 发布，测试 Seam、范围和排除项清楚。
+### 4. 实现与收尾
 
-### 5. 拆分 tickets
+1. 有 ticket 时按[任务约定](issue-tracker.md)读取 ticket 和 spec；按[领域文档](domain.md)及[工程工作流](engineering.md)核对适用约束。
+2. 实质功能或 Bug 的 ticket 在已约定的 Seam 上使用 `tdd`，以 red → green 的垂直切片推进；文档或低影响修改按实际风险选择验证。
+3. 从最小相关检查开始，按影响范围扩大；复用仍有效的结果。
+4. ticket 完成后使用 `code-review` 检查 Standards 和 Spec；无 spec 时按技能说明处理。其他任务按风险选择审查方式。
+5. 按工程工作流完成仅含本任务变更的本地提交，报告实际变更、验证结果、数据影响和剩余风险。
 
-`to-tickets` 将 spec 拆成可独立验证的 tracer-bullet tickets。每个 ticket 说明交付的完整行为，并记录真实的 `Blocked by` 关系。
+完成条件：约定范围内的行为和相关修复已完成，验证与审查的结果及缺口有据可查。
 
-先展示 ticket 粒度和 blocking edges；用户认可拆分后再发布。已由 `to-spec` 产生的 tickets 不再经过 `triage`。
+## 技能不可用时
 
-完成条件：每个 ticket 都能在一个新上下文中完成，阻塞关系正确，并已按依赖顺序发布。
-
-### 6. 实现 ticket
-
-`implement` 一次处理一个 ticket，并在独立上下文中工作：
-
-1. 按 [任务约定](issue-tracker.md) 读取 ticket 和 spec，按 [领域文档](domain.md) 核对 `CONTEXT.md`、相关规格和 ADR。
-2. 在已约定的 Seam 上使用 `tdd`，以一个 red -> green 的垂直切片推进。
-3. 定期运行类型检查和单文件测试，最后运行完整相关测试。
-4. 完成后使用 `code-review`，分别检查 Standards 和 Spec。
-5. 按 [工程工作流](engineering.md) 完成本地提交，并报告实际变更、验证结果、数据影响和剩余风险。
+以上技能按任务触发；先查看当前可用技能及本机已知技能目录并读取对应说明。确实不可用时，按相应步骤和完成条件继续，并说明缺口；无法独立完成的审查不能标为独立审查。用户明确指定技能且找不到时，按上层指令报告，不能冒称已使用。
 
 ## 其他入口
 
-- 原始外部 Bug 或请求先使用 `triage`，生成 agent-ready ticket 后再进入 `implement`。
-- 难以直接定位的故障使用 `diagnosing-bugs`，先建立会失败的反馈回路，再修复并补回归测试。
 - `diagnosing-bugs` 发现没有可测试的 Seam 时，转入 `improve-codebase-architecture` 或 `codebase-design`。
 
 ## 阶段边界

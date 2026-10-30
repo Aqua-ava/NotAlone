@@ -17,7 +17,7 @@
 
 ## 总账兼容与起点
 
-直接读写既有 `notalone.problem_budget.ProblemBudget` 的 `budget` / `rounds`，不新增表或迁移。Python 管理 CLI 的 `create`、`start`、`status`、`finish` 与客户端 `reserve` 继续可用；SQLite 写锁同时约束 Python 与 TS 进程。TS 产品执行不启动 Python、Conda 或子进程。
+直接读写既有 `notalone.problem_budget.ProblemBudget` 的 `budget` / `rounds`，不新增表或迁移。管理 CLI 已移出当前工作树；按[质量诊断工作流](../docs/agents/quality-diagnosis.md#准备总账管理工具)从固定历史提交隔离恢复。SQLite 写锁用于约束共用账本的 Python 与 TS 进程；TS 产品执行不启动 Python、Conda 或子进程。
 
 默认按工作流在发送前准备 `8` 次、`30` 分钟的账本。SQLite 内只有原有计数与轮次；**新统计起点及此前次数 unknown 须由执行者在同一问题的私有启动记录中明确写下**，并关联固定问题 ID 与绝对路径。`used=0` 只表示本账本创建以来没有预留，不能描述此前历史调用总数。账本准备与管理命令沿用上述工作流，不在产品中增加审批 UI 或任意执行工具。
 
@@ -38,11 +38,11 @@ PG `HostModelAccounting` 继续校验真实任务 claim、请求身份、原任�
 在 `backend-ts/` 使用项目 Node 环境执行：
 
 ```sh
-node --test --test-concurrency=1 test/diagnostic-model-budget.test.mjs test/diagnostic-problem-budget.test.mjs
+node --test --test-concurrency=1 test/diagnostic-model-budget.test.mjs
 npm run typecheck
 ```
 
-专用用例只使用随机合成 PG、私有临时账本、本机 HTTP 假 provider 与原管理 CLI。覆盖两种实际发送路径、真实 L2/L3 `ScenarioDocumentCallPort`、跨 permit／进程／重启／目录总额、并发第九次零出站、失败／取消不退款、授权期间截止、旧 unknown、轮次停止、未启用兼容和 Python／TS 并发互操作。本机 Unix 代理还在 PG 真正提交后破坏有效预约 ACK，验证其不会被误结算；旧观测缺字段同样按未知处理。
+当前专用用例使用合成 PG、私有临时账本和本机 HTTP 假 provider，覆盖两种发送路径、跨进程累计、预算停止与旧 unknown 等场景。Python／TS 并发互操作的旧用例保存在固定历史树，按[历史测试说明](test/HISTORICAL.md)显式运行；历史结果不代表当前版本通过。当前用例、历史用例与真实外部模型验收须分别报告。
 
 此入口只覆盖通过本模块安装的 TS provider。旧 Python 发送仍须走其已绑定总账的边界；它不是全局网络防火墙。启用方负责把同一逻辑问题固定到同一 ID、路径及启动配置；模块无法识别恶意更换 env、手工清零 SQLite 或重新起问题名的语义绕过。已有旧 unknown 的任务仍须先由原写入方核对，预算可用不等于获准重放。
 
