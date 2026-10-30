@@ -482,6 +482,9 @@ test('来源代次变化后旧B不放行普通读取，已清空旧成员不得�
   f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2'), record('shard-b', '7')];
   await assert.rejects(f.current.history.synchronizeIncremental(f.contactA), { code: 'history_source_continuity_unverified' });
   await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_source_continuity_unverified' });
+  const blockedCoverage=await f.current.history.coverage(f.contactA);
+  assert.equal(blockedCoverage.phase,'incomplete');assert.equal(blockedCoverage.failureCode,'history_source_continuity_unverified');
+  assert.ok(blockedCoverage.bindingId,'删除旧目标后仍须显示持久失证状态');
   assert.equal((await f.current.history.read(f.contactA)).messages.length, 0, '跨来源代次不能复活旧消息');
   await f.current.storage.execute('fixture.changeSourceGeneration', { ownerId: owner, sourceGeneration: 'source-1' });
   await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_source_continuity_unverified' });

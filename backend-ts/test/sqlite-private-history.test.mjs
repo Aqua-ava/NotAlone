@@ -128,6 +128,14 @@ test('渠道报告来源失证后，即使恢复原读者也必须持续停读',
  await assert.rejects(f.service.synchronize(contact),{code:'history_source_continuity_unverified'});
  assert.equal(pages,0);assert.equal((await f.service.coverage(contact)).failureCode,'history_source_continuity_unverified');
 });
+test('失证与关闭同步交错时仍持久停读，重新开启不能恢复',async t=>{
+ const f=await fixture(t);const contact=f.saved[0].contact_id;await f.service.synchronize(contact);
+ const inspect=f.channel.inspect;let lost=true,pages=0;
+ f.channel.inspect=async scope=>{if(lost){await f.contacts.setReading(false);const {StorageFailure}=await import('../src/storage/sqlite/contracts.ts');throw new StorageFailure('history_source_changed');}return inspect(scope);};
+ f.channel.page=async()=>{pages++;throw new Error('失证时不得读取正文');};
+ await assert.rejects(f.service.synchronize(contact),{code:'history_source_changed'});lost=false;await f.contacts.setReading(true);
+ await assert.rejects(f.service.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(pages,0);
+});
 test('删除等待在途读取释放，超时不得完成，迟到页不能提交',async t=>{
  const {service,channel,saved,storage,target,root}=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=saved[0].contact_id;
  await service.synchronize(contact);const source=(await service.read(contact)).messages[0].sourceRecordIds[0];

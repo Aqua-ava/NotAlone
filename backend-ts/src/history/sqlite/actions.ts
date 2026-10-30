@@ -46,7 +46,10 @@ function currentIncremental(tx:StorageTransaction,token:ReadEligibility,report:H
 export const historyActions:StorageAction[]=[
  action('history.scope','read',(tx,i)=>{assertReadEligibility(tx,i.token);const row=tx.get(`SELECT a.external_key AS account_key,c.external_key AS conversation_key FROM channel_account a JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id WHERE a.owner_id=? AND a.id=? AND c.id=?`,[i.token.owner_id,i.token.account_id,i.token.conversation_id])??fail('history_scope_invalid');return {token:i.token,accountKey:row.account_key,conversationKey:row.conversation_key};}),
  action('history.preflightGeneration','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightGeneration(tx,token);}),
- action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return fenceContinuity(tx,token);}),
+ action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;
+  const scope=tx.get('SELECT conversation_id,source_generation FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  if(scope?.conversation_id===token.conversation_id&&scope.source_generation===token.source_generation)return fenceContinuity(tx,token);
+  return false;}),
  action('history.preflightContinuity','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightTarget(tx,token,targetOf(i.target,token));}),
  action('history.pending','read',(tx,i)=>{assertReadEligibility(tx,i.token);const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='history' AND state IN ('running','incomplete') AND eligibility_json=? ORDER BY created_at DESC,rowid DESC LIMIT 1",[i.token.owner_id,i.token.contact_id,JSON.stringify(i.token)]);if(goal&&goal.support_json!==serializeSupport(i.report))fail('history_support_changed');return goal?{id:goal.id,target:JSON.parse(String(goal.target_json)),cursor:goal.cursor}:null;}),
  action('history.incrementalContinuityTarget','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);

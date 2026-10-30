@@ -25,10 +25,11 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
  const incrementalGoal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='incremental' ORDER BY created_at DESC,rowid DESC LIMIT 1",[owner,contact]);
  const goal=historyGoal;
  const continuityBlocked=Boolean(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[owner,contact]));
+ const blockedBinding=continuityBlocked&&!goal?tx.get("SELECT id FROM conversation_binding WHERE owner_id=? AND contact_id=? AND state='verified'",[owner,contact]):undefined;
  const counts=tx.get("SELECT count(*) AS messages,count(CASE WHEN kind<>'text' THEN 1 END) AS nontext FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=m.owner_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available')",[owner,contact])!;
  const pages=goal?tx.get('SELECT count(*) AS n FROM sync_capture WHERE owner_id=? AND goal_id=?',[owner,goal.id])!.n:0n;
  const quarantined=tx.get("SELECT count(*) AS n FROM capture_record WHERE owner_id=? AND contact_id=? AND state='quarantined' AND availability='available'",[owner,contact])!.n;
- return {goalId:goal?String(goal.id):null,contactId:contact,bindingId:goal?String(goal.binding_id):null,
+ return {goalId:goal?String(goal.id):null,contactId:contact,bindingId:goal?String(goal.binding_id):blockedBinding?String(blockedBinding.id):null,
   phase:continuityBlocked?'incomplete':!goal?'not_started':goal.state==='running'?'running':goal.state==='complete'?'complete':'incomplete',
   failureCode:continuityBlocked?'history_source_continuity_unverified':goal?.failure_code?String(goal.failure_code):null,cursor:goal?.cursor?String(goal.cursor):null,
   messageCount:safeCount(counts.messages),nonTextCount:safeCount(counts.nontext),pageCount:safeCount(pages),quarantinedCount:safeCount(quarantined),
