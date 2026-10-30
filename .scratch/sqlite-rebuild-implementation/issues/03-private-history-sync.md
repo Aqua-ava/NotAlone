@@ -3,14 +3,14 @@
 > 2026-10-30 新决定：用户已暂停本轮工作。微信消息去重、撤回保留及旧扫描清理改按 [ADR-128](../../../architecture/adr/128-deduplicated-wechat-message-storage.md)；下文冲突的旧要求和验收仅为历史记录，新方案尚未实现或验收。
 
 Triage: ready-for-agent
-State: resolved
+State: claimed
 Type: task
 Parent: [同步与记忆规格](../../sync-memory-behavior/spec.md)；[SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)
 Blocked by: [02 联系人绑定与同步授权](02-contact-binding-and-read-grants.md)
 
 > 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
 
-> 当前安排（2026-10-30最终收尾）：原5个会话及全范围285个授权会话均完成本机历史遍历，真实大联系人状态查询瓶颈已修复，交互和持续读取复验通过，State为resolved。未知状态隔离、删除排除与ADR-127边界保留，见最新Answer。
+> 当前安排（2026-10-30重新打开）：用户要求正常历史文字完整同步、撤回及特殊记录正确处理，并以实机结果验收。此前285个会话只完成物理遍历，尚有正常文字被状态规则误隔离；旧收尾结论不满足当前完成条件。修复和全部实机核验结束前保持claimed。
 
 ## 交付行为
 
