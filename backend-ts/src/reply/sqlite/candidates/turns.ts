@@ -46,7 +46,7 @@ export class SqliteReplyTurns {
   if(accepted.replayed)return {discussionId:attempt.discussionId,replayed:true,segmented:false};
   try{
    const callId=randomUUID(),contextId=randomUUID();
-   const catalog=o.library?await o.library.list():await o.storage.execute<any[]>('skills.list',{ownerId});
+   const catalog=o.library?await o.library.refresh():await o.storage.execute<any[]>('skills.list',{ownerId});
    const eligible=catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
    if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
    const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?eligible.map(skillAnchor):[]};
@@ -66,8 +66,8 @@ export class SqliteReplyTurns {
     async recordSelection(scope,selected,signal){await assertInput();await base.recordSelection(scope,selected,signal);},
     async recordInput(value,signal){await assertInput();await base.recordInput(value,signal);},
    };
-   const skillRun=o.library?await openSqliteSkillRun(o.library,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):null;
-   await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',signal:input.signal});
+   const openSkillRun=o.library?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):undefined;
+   await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};
   }catch(error){await o.storage.execute('discussion.cancel',{...attempt,at:Date.now()}).catch(()=>{});throw error;}
  }

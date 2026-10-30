@@ -1,5 +1,5 @@
 import {readdir,readFile} from 'node:fs/promises';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {dirname,resolve} from 'node:path';
 
@@ -19,6 +19,7 @@ const args=process.argv.slice(2);
 if(args[0]==='--list'){
  console.log(JSON.stringify({current:files.length,historical:historical.size,sourceCommit:manifest.sourceCommit,executed:false}));
 }else{
+ execFileSync('bash',[resolve(root,'native/skill-read/build.sh')],{stdio:'inherit'});
  const selected=args.filter(arg=>arg.endsWith('.test.mjs'));
  if(selected.some(file=>!files.includes(file.replace(/^test\//,''))))throw new Error('历史测试只能通过 npm run test:historical 显式执行');
  const flags=args.filter(arg=>!arg.endsWith('.test.mjs'));

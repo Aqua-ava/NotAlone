@@ -53,10 +53,10 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
   return {...item,itemNo};
  });
 }
-export function requireReplyInput(tx:StorageTransaction,scope:DiscussionScope,contextId:string,reader:ReplyKnowledgeReader):void{
+export function requireReplyInput(tx:StorageTransaction,scope:DiscussionScope,contextId:string,reader:ReplyKnowledgeReader,options:{ignoreSkill?:boolean}={}):void{
  requireDiscussion(tx,scope);
  const context=tx.get("SELECT * FROM reply_context WHERE owner_id=? AND id=? AND contact_id=? AND discussion_id=? AND state='active'",[scope.ownerId,contextId,scope.contactId,scope.discussionId])??fail('reply_source_unavailable');
- requireSkillRun(tx,scope.ownerId,decode<SkillRunRevision>(String(context.skill_run_json)));
+ if(!options.ignoreSkill)requireSkillRun(tx,scope.ownerId,decode<SkillRunRevision>(String(context.skill_run_json)));
  const frozen=tx.get('SELECT * FROM reply_candidate_context WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId])??fail('reply_source_unavailable');
  const owner=tx.get('SELECT memory_revision,document_revision FROM owner WHERE owner_id=?',[scope.ownerId])!,contact=tx.get('SELECT memory_revision,document_revision FROM contact WHERE owner_id=? AND id=?',[scope.ownerId,scope.contactId])!;
  if(frozen.owner_memory_revision!==owner.memory_revision||frozen.owner_document_revision!==owner.document_revision||frozen.contact_memory_revision!==contact.memory_revision||frozen.contact_document_revision!==contact.document_revision)fail('reply_input_stale');

@@ -203,7 +203,11 @@ export const discussionDeletionDomain:DeletionDomain={
    else tx.run('UPDATE assistant_discussion SET current_runtime_id=NULL,is_current=0 WHERE owner_id=? AND id=?',[op.ownerId,d.id]);
   }
   for(const c of copies(tx,op)){
-   if(c.cleanup_operation_id!==null&&c.cleanup_operation_id!==op.operationId)fail('discussion_runtime_cleanup_conflict');
+   // 未提交Skill运行的技术清理没有独立删除授权；正式删除接管其已冻结清单与逐项进度。
+   const skillDiscard=c.state==='blocked'&&c.committed_request_id===null&&c.committed_event_boundary===null
+    &&c.manifest_complete===1n&&typeof c.preparing_attempt_id==='string'&&c.preparing_attempt_id.length>0
+    &&c.cleanup_operation_id==='skill-discard:'+c.preparing_attempt_id;
+   if(c.cleanup_operation_id!==null&&c.cleanup_operation_id!==op.operationId&&!skillDiscard)fail('discussion_runtime_cleanup_conflict');
    tx.run("UPDATE assistant_discussion SET current_runtime_id=NULL WHERE owner_id=? AND current_runtime_id=?",[op.ownerId,c.id]);
    tx.run("UPDATE runtime_copy SET state='deleting',cleanup_operation_id=?,committed_request_id=NULL,committed_event_boundary=NULL,configuration_digest=NULL,preparing_attempt_id=NULL WHERE owner_id=? AND id=?",[op.operationId,op.ownerId,c.id]);
    tx.run("UPDATE runtime_context SET provenance_state='invalidated' WHERE owner_id=? AND copy_id=?",[op.ownerId,c.id]);

@@ -10,6 +10,21 @@ const original=()=>({candidateId:ids.candidate,versionNo:1,origin:'model',parent
 const pageData=(version=original(),phase='complete')=>({requests:[{requestId:ids.request,coverageWarning:null,sourceState:'available',candidates:[version],selections:[],loadedSkills:[{packageId:ids.skill,revisionNo:1,relativePath:'SKILL.md',text:'本次实际加载的合成Skill正文'}]}],coverage:{phase}});
 const receipt=(request,replayed=false)=>({session_id:request.sessionId,request_key:request.requestKey,segmented:false,replayed});
 
+test('Skill自动选择无需手选，仅展示实际名称或不可用提示',{timeout:30000},async t=>{
+ let data={...pageData(),availableSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1}]};
+ data.requests[0].loadedSkills[0].name='合成安慰策略';data.requests[0].loadedSkills.push({packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'references/large.md',text:'large'.repeat(25000)});
+ const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'候选回复'});
+ await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toBeVisible();
+ await expect(region.getByRole('combobox')).toHaveCount(0);
+ await expect(region.getByText('本次策略：合成安慰策略',{exact:true})).toBeVisible();
+ data={...data,requests:[{...data.requests[0],loadedSkills:[],skillWarning:'回复策略暂不可用'}]};
+ await region.getByRole('button',{name:'重新读取候选',exact:true}).click();
+ await expect(region.getByText('回复策略暂不可用',{exact:true})).toBeVisible();
+ await expect(region.getByText('本次策略：合成安慰策略',{exact:true})).toHaveCount(0);
+ await region.getByRole('textbox',{name:'候选第1条',exact:true}).fill('失效策略后的候选仍可编辑');
+ await expect(region.getByRole('button',{name:'保存修改',exact:true})).toBeEnabled();
+});
+
 /** 仅IPC业务边界为显式替身；实际React、浏览器事件及渲染均执行。 */
 async function panel(t,execute,initialDraft=''){
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteReplyCandidatesPanel}from'./src/renderer/SqliteReplyCandidatesPanel';
@@ -55,11 +70,11 @@ test('覆盖不完整须本次确认，失败核对沿同请求键且显式选�
  });
  const region=f.page.getByRole('region',{name:'候选回复'}),draft=region.getByRole('textbox',{name:'本次想法',exact:true}),generate=region.getByRole('button',{name:'生成候选',exact:true});
  await expect(region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true})).toBeVisible();await draft.fill('合成本次表达要求');await expect(generate).toBeDisabled();assert.equal(generated,0);
- await region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true}).check();await expect(generate).toBeEnabled();await region.getByRole('combobox',{name:'本次回复Skill',exact:true}).selectOption(ids.skill);
+ await region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true}).check();await expect(generate).toBeEnabled();
  await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('status')).toContainText('下一次明确请求');assert.equal(generated,0);
  await generate.click();await expect(region.getByRole('alert').filter({hasText:'候选结果尚未确认'})).toBeVisible();await expect(draft).toHaveValue('合成本次表达要求');
  await region.getByRole('button',{name:'重试核对候选',exact:true}).click();await expect.poll(()=>f.submitted.length).toBe(1);
- const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.equal(requests[0].acceptIncomplete,true);assert.equal(requests[0].selectedPackageId,ids.skill);assert.equal(requests[1].selectedPackageId,ids.skill);assert.equal(requests[0].carriedSelectionId,ids.selection);assert.equal(requests[1].requestKey,requests[0].requestKey);assert.equal(requests[1].text,requests[0].text);assert.equal(requests[1].carriedSelectionId,ids.selection);
+ const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.equal(requests[0].acceptIncomplete,true);assert.equal(requests[0].selectedPackageId,undefined);assert.equal(requests[1].selectedPackageId,undefined);assert.equal(requests[0].carriedSelectionId,ids.selection);assert.equal(requests[1].requestKey,requests[0].requestKey);assert.equal(requests[1].text,requests[0].text);assert.equal(requests[1].carriedSelectionId,ids.selection);
  await expect(draft).toHaveValue('');await expect(region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true})).not.toBeChecked();
 });
 
@@ -104,7 +119,7 @@ test('切换联系人撤下旧草稿与快照，旧读取迟到不能跨范围�
  const generated=f.commands.find(c=>c.action==='generate');assert.equal(generated.contactId,ids.other);assert.equal(generated.scopeRevision,2);assert.equal(generated.sessionId,ids.otherSession);assert.equal(generated.text,'乙联系人的本次想法');assert.equal(generated.acceptIncomplete,false);assert.equal(generated.carriedSelectionId,undefined);
 });
 
-test('候选继续被后端判定失效时同时清草稿、旧携入及Skill选择快照',{timeout:30000},async t=>{
+test('候选继续被后端判定失效时同时清草稿、旧携入及实际Skill快照',{timeout:30000},async t=>{
  let selected=0;const f=await panel(t,async operation=>{
   if(operation.action==='read')return {...pageData(),availableSkills:[{packageId:ids.skill,name:'将失效的合成方法',revisionNo:1}]};
   if(operation.action==='select'){if(++selected===1)return {id:ids.selection};throw new Error('本次候选来源已失效，请重新读取。');}
@@ -112,7 +127,7 @@ test('候选继续被后端判定失效时同时清草稿、旧携入及Skill选
  });
  const region=f.page.getByRole('region',{name:'候选回复'}),draft=region.getByRole('textbox',{name:'本次想法',exact:true});
  await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
- await draft.fill('资格失效时必须清掉的合成草稿');await region.getByRole('combobox',{name:'本次回复Skill',exact:true}).selectOption(ids.skill);await region.getByRole('button',{name:'以此版本继续',exact:true}).click();
+ await draft.fill('资格失效时必须清掉的合成草稿');await region.getByRole('button',{name:'以此版本继续',exact:true}).click();
  await expect(region.getByRole('alert')).toContainText('已失效');await expect(draft).toHaveValue('');await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('combobox',{name:'本次回复Skill',exact:true})).toHaveCount(0);await expect(region.getByText('本次实际载入的 Skill',{exact:true})).toHaveCount(0);
 });
 

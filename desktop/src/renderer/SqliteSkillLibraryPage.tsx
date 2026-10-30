@@ -36,10 +36,10 @@ export function SqliteSkillLibraryPage({initial,bridge,onModeChange,onUnavailabl
    </details>
   </article>)}
   <form className="skill-library-form" aria-label="关联 Skill 目录" onSubmit={event=>{event.preventDefault();if(confirmed&&directoryName&&!busy&&!stale)void perform(()=>bridge.discoverLibrary({directoryName,connectionGeneration:view.connectionGeneration,confirmed:true}));}}>
-   <h3>关联已有目录</h3><p>填写已配置包父目录内的一个目录名。首次关联只登记目录与修订，启用需要明确选择。</p>
+   <h3>关联已有目录</h3><p>填写已配置包父目录内的一个目录名。首次关联仅显示目录名，确认启用后再读取并校验策略内容。</p>
    <label>包目录名称<input value={directoryName} onChange={event=>{setDirectoryName(event.target.value);setConfirmed(false);}} placeholder="例如 gentle-response" maxLength={64} disabled={busy}/></label>
    <label><input type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)} disabled={busy}/>确认关联这个 Skill 目录</label>
-   <button className="button" disabled={busy||stale||!confirmed||!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(directoryName)} type="submit">核验并关联目录</button>
+   <button className="button" disabled={busy||stale||!confirmed||!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(directoryName)} type="submit">关联目录</button>
   </form>
  </section>;
 }

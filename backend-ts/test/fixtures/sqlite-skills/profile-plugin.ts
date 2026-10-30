@@ -28,7 +28,7 @@ export async function apply(ctx: Context): Promise<void> {
    else if(req.url==='/enabled')result=await library.setEnabled(input.id,BigInt(input.head),input.state);
    else if(req.url==='/verify')result=await library.verify(input.id,BigInt(input.head));
    else if(req.url==='/check')result=await storage.check();
-   else if(req.url==='/load'||req.url==='/late-load'){
+   else if(req.url==='/load'||req.url==='/late-load'||req.url==='/load-resource'){
     const scope={ownerId:'owner-a',contactId:input.contactId??'contact-a',callId:`profile-${++sequence}`};
     if(scope.contactId==='contact-a')await storage.execute('fixture.scope',scope);
     const key={},layer=createScope(ctx,key);
@@ -42,7 +42,11 @@ export async function apply(ctx: Context): Promise<void> {
      },input.id);
      run.mount(layer.ctx);
      const content=await ctx.get('skills')!.get('gentle',{scope:key});
-     result={content:content?.content,input:(await storage.execute<any[]>('fixture.inputs',scope))[0],hostCatalog:(await ctx.get('skills')!.snapshot()).skills.length};
+     if(req.url==='/load-resource'){
+      const resource=await run.readLoadedResource(input.path);
+      const loaded=run.loaded!;
+      result={content:content?.content,resource,loaded:{name:loaded.name,packageId:loaded.anchor.packageId,revisionNo:loaded.anchor.revisionNo,resources:loaded.resources},inputs:await storage.execute('fixture.inputs',scope),hostCatalog:(await ctx.get('skills')!.snapshot()).skills.length};
+     }else result={content:content?.content,input:(await storage.execute<any[]>('fixture.inputs',scope))[0],hostCatalog:(await ctx.get('skills')!.snapshot()).skills.length};
     }finally{await layer.dispose();}
    }else throw new Error('fixture_route_denied');
    res.end(JSON.stringify(result,(_key,value)=>typeof value==='bigint'?value.toString():value));

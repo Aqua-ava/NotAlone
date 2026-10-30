@@ -91,6 +91,15 @@ export const skillActions: StorageAction[] = [
     return tx.all('SELECT id FROM skill_package WHERE owner_id=? ORDER BY directory_name',[ownerId]).map(row=>state(tx,ownerId,row.id as string));
   }},
   {name:'skills.get',mode:'read',retryBusy:false,execute(tx,input){const i=key(input);return state(tx,i.ownerId,i.id);}},
+  {name:'skills.associate',mode:'write',retryBusy:false,execute(tx,input){
+    const i=key(input) as Key & {directoryName:string;directoryIdentity:string};
+    requireSkillOwner(tx,i.ownerId);text(i.directoryName);text(i.directoryIdentity);
+    const existing=tx.get('SELECT id FROM skill_package WHERE owner_id=? AND directory_name=?',[i.ownerId,i.directoryName]);
+    if(existing)return state(tx,i.ownerId,existing.id as string);
+    // 目录名是可展示元数据；发现不会读取正文，也不会发布可运行修订。
+    tx.run(`INSERT INTO skill_package VALUES(?,?,?,?,?,?,'unknown',NULL,'pending',NULL,NULL,1)`,[i.ownerId,i.id,i.directoryName,i.directoryIdentity,i.directoryName,'启用后校验策略说明']);
+    return state(tx,i.ownerId,i.id);
+  }},
   {name:'skills.observe',mode:'write',retryBusy:false,execute(tx,input){
     const i=key(input) as SkillObservation;
     requireSkillOwner(tx,i.ownerId);

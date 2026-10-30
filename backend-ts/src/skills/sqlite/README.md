@@ -54,3 +54,13 @@
 - 正式 `profile/sqlite.patch.yml` 使用官方 registry；该 profile 仅增加官方registry与薄宿主接线，不修改DSH核心，也不启用filesystem插件、通用读文件、Shell、网络下载或任意插件安装。
 
 安装包无gitHead，未完成固定源码树对npm制品的全量可复现构建比对；本次只核验所用公开合同及实际安装行为。`sqlite-skill-profile.test.mjs` 复用正式patch，通过官方CLI启动隔离profile，仅替换业务宿主认证／追踪和模型配置（本机环回假地址，无模型请求）；`sqlite-host-launch.test.mjs` 验证实际 SQLite profile 的认证管理、关闭及重开。实际 App 证据只覆盖上述管理行为，不覆盖真实模型、微信或完整回复链。
+
+## 2026-10-31 受控发现与更新修订
+
+按 [ADR-129](../../../../architecture/adr/129-controlled-dsh-reply-skill-discovery.md)，`discover` 仅关联授权根的直接子目录名/身份，初态为 `unknown + pending`、零可用修订，不再为了发现读取正文。`refresh` 与 `inspect` 自动发现新目录，仅对已启用包核验技术更新；未知/停用仅查目录身份，用户启用时才核验最新正文。显式管理 `verify` 不隐式启用，来源撤销/身份冲突不经扫描恢复；应用核验的合法变化建立新修订，保留用户启停决定。
+
+SQLite 正常读取改用 [原生窄只读器](../../../../native/skill-read/README.md)及 `secure-directory.ts`。根身份在实例构造固定，读取前核包身份，逐段无链接目录 FD 读取和最终快照复验，实际返回字节参与摘要；服务缺失安全拒绝，不回落 Node。原 `skill-package.ts` 继续负责纯格式/大小/安全校验，未改变原目录只读和业务删除边界。
+
+本轮核验 `dsh-skill` 声明、安装锁及实际制品均为 `0.2.1-rc.2`，Cordis `4.0.5`；官方参考仍固定 `687f282e8625c6b8d11ff58211a90524be2e4317`，本机相邻源码 HEAD 不同，未完成全量可复现构建比对。官方 filesystem 的发现 `discoverRoot` 会对每个子目录调用 `parseSkillFile`，服务缺失/`trustedHost` 有 Node 分支，watcher 独立接触宿主路径，不能只凭返回目录过滤满足读取前边界。因此正式产品继续使用官方 registry 的业务 `registerProvider`，不装配 filesystem/default roots/bundled roots/watcher；刷新与每次读取复验承接变更处理。本轮测试证明这一替代路径，不宣称已经验证自定义 `ctx.fs` 生产组合。
+
+合成验证命令及边界见任务 01 与原生只读器说明；自动选择、失败降级、资源加载和实际 App 的最终验收由同组任务分别记录。上文“管理查询不接受新版本”和“discover 首次已经完整核验”的旧描述由本节替代。

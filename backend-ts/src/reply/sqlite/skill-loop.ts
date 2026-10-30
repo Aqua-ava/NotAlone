@@ -1,0 +1,46 @@
+/** 每轮仅开放官方 Skill 加载与本版本静态资料；不提供任意文件能力。 */
+import type {Context} from '@deepseek-ai/cordis';
+import {defineTool} from '@deepseek-ai/dsh-tools';
+import type {SqliteSkillRun} from '../../skills/sqlite/provider.ts';
+import {StorageFailure} from '../../storage/sqlite/contracts.ts';
+
+export const REPLY_MODEL_CALL_LIMIT=5;
+export class ReplySkillUnavailable extends Error {
+ constructor(){super('reply_skill_unavailable');}
+}
+export function isSkillReadFailure(error:unknown):boolean{
+ const code=(error as {code?:string})?.code;
+ return typeof code==='string'&&/^skill_(reader_unavailable|directory_unavailable|directory_conflict|content_changed|package_invalid|run_invalidated|revision_unavailable|unverified|source_verification_required)$/.test(code);
+}
+export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void):void{
+ const allowed=!!run&&run.revision.eligible.length>0;
+ ctx.tools.restrict({allow:allowed?['skill']:[]});
+ let bodies=0,resources=0;
+ ctx.tools.guard(exec=>{
+  if(!allowed)return 'discussion_tools_forbidden';
+  if(exec.name==='skill'){
+   if(++bodies>1){failed(new StorageFailure('discussion_skill_limit'));return 'discussion_skill_limit';}
+  }else if(exec.name==='skill_resource'){
+   if(!run.loaded||++resources>2){failed(new StorageFailure('discussion_resource_limit'));return 'discussion_resource_limit';}
+  }else{failed(new StorageFailure('discussion_tools_forbidden'));return 'discussion_tools_forbidden';}
+ });
+ if(!allowed)return;
+ ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
+  parameters:{path:{type:'string',required:true,description:'已加载Skill资源目录中的准确references/或assets/相对路径。'}},
+  async execute(args,exec){await check();return {text:await run.readLoadedResource(args.path,exec.signal)};},
+  output:{schema:{type:'object',additionalProperties:false,properties:{text:{type:'string',required:true}}},render:(_args,value)=>[{type:'text',text:value.text}]},
+ }));
+ ctx.on('tools/pre-execute',async(_exec,next)=>{await check();return next();});
+ ctx.on('tools/post-execute',async(exec,result,next)=>{
+  if(result.isError){
+   failed(isSkillReadFailure(run.failure)?new ReplySkillUnavailable():run.failure??new StorageFailure('discussion_skill_tool_failed'));
+   return next();
+  }
+  await check();
+  if(exec.name==='skill'&&run.loaded){
+   const decision=await next();if(decision.kind!=='accept')return decision;
+   return {kind:'accept',content:[...result.content,{type:'text',text:'本版本可按需读取的静态资料：'+JSON.stringify(run.loaded.resources.map(r=>({path:r.relativePath,bytes:r.bytes}))) }]};
+  }
+  return next();
+ });
+}

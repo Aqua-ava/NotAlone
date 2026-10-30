@@ -9,6 +9,7 @@ import type {AgentHandle,CreateAgentOptions,ResumeAgentOptions} from '@deepseek-
 import {SESSION_FORMAT_VERSION,type Session,type SessionEvent,type SessionId} from '@deepseek-ai/dsh-session';
 import type {SessionHandle} from '@deepseek-ai/dsh-session-persistence';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
+import {SkillDirectory,skillWorkingDirectory} from './skill-directory.ts';
 
 export interface DshEventBoundary {
  formatVersion:number;eventCount:number;lastSeq:number|null;eventSha256:string;
@@ -54,8 +55,8 @@ export async function createDshRuntime(parent:Context,options:{root:string}):Pro
  const loader=parent.get('loader') as Loader|undefined;
  if(!loader)throw failure();
  const plugins:Fiber[]=[],handles=new Set<SessionHandle>(),agents=new Set<AgentHandle>(),operations=new Set<Promise<unknown>>();
- const deps=['sessions','agents','sessionProjections','sessionPersistence','systemPrompt','tools'];
- const isolated=[...deps,'agentLoop'];
+ const deps=['sessions','agents','sessionProjections','sessionPersistence','systemPrompt','tools','skills','workingDirectory'];
+ const isolated=[...deps,'agentLoop','fs'];
  const builtin='notalone-discussion-'+randomUUID(),consumerBuiltin=builtin+'-consumer';
  let groupId:string|undefined,groupFiber:Fiber|undefined,consumer:Context|undefined,agentContext:Context|undefined,sdkFailed=false;
  // Cordis会把部分scope释放错误转为日志；只看本域的级别和fiber，不读或保存正文参数。
@@ -69,6 +70,7 @@ export async function createDshRuntime(parent:Context,options:{root:string}):Pro
  }});
  let loop:Promise<void>|undefined,closing:Promise<void>|undefined,stopping=false;
  loader.builtins[builtin]=Group;
+ loader.builtins[builtin+'-directory']=SkillDirectory;
  loader.builtins[consumerBuiltin]={name:'notalone-sqlite-discussion-runtime',inject:deps,apply(current:Context){consumer=current;}};
  async function mount(name:string,config?:unknown,inject?:string[]){
   const id=await loader!.create({name,config,inject},groupId);
@@ -83,7 +85,7 @@ export async function createDshRuntime(parent:Context,options:{root:string}):Pro
    try{await group.fiber?.dispose();}catch(error){errors.push(error);}
    loader!.remove(groupId);
   }
-  delete loader!.builtins[consumerBuiltin];delete loader!.builtins[builtin];
+  delete loader!.builtins[consumerBuiltin];delete loader!.builtins[builtin];delete loader!.builtins[builtin+'-directory'];
   await removeExporter();
   if(errors.length||sdkFailed)throw failure();
  }
@@ -97,6 +99,10 @@ export async function createDshRuntime(parent:Context,options:{root:string}):Pro
   await mount(import.meta.resolve('@deepseek-ai/dsh-session-projection'));
   await mount(import.meta.resolve('@deepseek-ai/dsh-system-prompt'),{includeHarnessIdentity:false,includeRuntimeContext:false});
   await mount(import.meta.resolve('@deepseek-ai/dsh-tools'),{mode:'native'});
+  await mount(import.meta.resolve('@deepseek-ai/dsh-skill'));
+  await mount('cordis:'+builtin+'-directory');
+  await mount(import.meta.resolve('@deepseek-ai/dsh-working-directory'),{defaultDirectory:skillWorkingDirectory});
+  await mount(import.meta.resolve('@deepseek-ai/dsh-tool-skill'));
   await mount(import.meta.resolve('@deepseek-ai/dsh-session-persistence-jsonl'),{root,compression:'none'});
   await mount('cordis:'+consumerBuiltin);
   if(!consumer)throw failure();

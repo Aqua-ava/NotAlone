@@ -35,12 +35,12 @@ export function versionView(tx:StorageTransaction,ownerId:string,candidateId:str
   parts:tx.all('SELECT text_body FROM reply_version_part WHERE owner_id=? AND candidate_id=? AND version_no=? ORDER BY part_no',[ownerId,candidateId,versionNo]).map(p=>String(p.text_body)),
   basis:tx.all('SELECT b.*,x.kind,x.text_body FROM reply_basis b JOIN reply_candidate_input x ON x.owner_id=b.owner_id AND x.context_id=b.context_id AND x.item_no=b.item_no WHERE b.owner_id=? AND b.candidate_id=? AND b.version_no=? ORDER BY basis_no',[ownerId,candidateId,versionNo]).map(b=>({itemNo:Number(b.item_no),kind:String(b.kind),text:String(b.text_body),verification:b.verification_state as 'actual_input'|'inherited_unverified'}))};
 }
-export function insertModelCandidates(tx:StorageTransaction,i:{ownerId:string;requestId:string;contextId:string;callId:string;text:string}):void{
- const output=parseReplyOutput(i.text);
+export function insertModelCandidates(tx:StorageTransaction,i:{ownerId:string;requestId:string;contextId:string;callId:string;physicalCallId?:string;text:string}):void{
+ const output=parseReplyOutput(i.text),physicalCallId=i.physicalCallId??i.callId;
  for(const [index,c] of output.entries()){
-  for(const itemNo of c.basis)if(!tx.get(`SELECT 1 FROM reply_execution_input x JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id WHERE x.owner_id=? AND x.context_id=? AND x.item_no=? AND e.kind='model_request' AND e.originated_call_id=?`,[i.ownerId,i.contextId,itemNo,i.callId]))fail('reply_basis_not_actual_input');
+  for(const itemNo of c.basis)if(!tx.get(`SELECT 1 FROM reply_execution_input x JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id WHERE x.owner_id=? AND x.context_id=? AND x.item_no=? AND e.kind='model_request' AND e.originated_call_id=?`,[i.ownerId,i.contextId,itemNo,physicalCallId]))fail('reply_basis_not_actual_input');
   const id=randomUUID();tx.run('INSERT INTO reply_candidate VALUES(?,?,?,?)',[i.ownerId,id,i.requestId,index+1]);
-  tx.run("INSERT INTO reply_candidate_version VALUES(?,?,1,'model',NULL,?,?,'available',?)",[i.ownerId,id,i.callId,index+1,c.parts.length]);
+  tx.run("INSERT INTO reply_candidate_version VALUES(?,?,1,'model',NULL,?,?,'available',?)",[i.ownerId,id,physicalCallId,index+1,c.parts.length]);
   for(const [partNo,part] of c.parts.entries())tx.run('INSERT INTO reply_version_part VALUES(?,?,1,?,?)',[i.ownerId,id,partNo+1,part]);
   for(const [basisNo,itemNo] of c.basis.entries())tx.run("INSERT INTO reply_basis VALUES(?,?,1,?,?,?,'actual_input')",[i.ownerId,id,basisNo+1,i.contextId,itemNo]);
  }

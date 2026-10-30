@@ -20,7 +20,7 @@ test('正常Skill业务HTTP适配：认证、状态查询与CAS启停，旧清�
  const request=async(path,body,headers={authorization:'Bearer synthetic-only'})=>{const res=await fetch(base+path,{method:body?'POST':'GET',headers:{...headers,'content-type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:res.status,body:await res.json()};};
  assert.equal((await request('/api/skills',null,{})).status,401);
  assert.equal((await request('/api/skills',null,{authorization:'Bearer synthetic-only',origin:'https://example.invalid'})).status,401);
- assert.deepEqual((await request('/api/skills')).body.skills,[]);
+ assert.equal((await request('/api/skills')).body.skills[0].enabled_state,'unknown');
  let item=(await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).body.skill;
  assert.equal(item.enabled_state,'unknown');assert.match(item.state_label,/待核验启停/);
  const stale=item.head_revision;

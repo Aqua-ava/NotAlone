@@ -90,8 +90,13 @@ test('SQLite正式宿主接通显式合成Skill父目录，状态与CAS管理可
   const status=(await request('/api/runtime/status')).body;assert.deepEqual(status.capabilities,['contacts','skills']);assert.equal(status.ownership.skills,'typescript');assert.equal(status.ownership.skillLearning,'unavailable');
   let view=(await request('/api/skills')).body;assert.equal(view.mode,'minimal');
   if(!attempt){
-   assert.deepEqual(view.skills,[]);let item=(await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).body.skill;packageId=item.package_id;assert.equal(item.enabled_state,'unknown');
-   item=(await request(`/api/skills/${packageId}/enable`,{expected_head_revision:item.head_revision,confirmed:true})).body.skill;assert.equal(item.enabled_state,'enabled');
+   assert.equal(view.skills.length,1);const automatic=view.skills[0];
+   assert.equal(automatic.name,'gentle');assert.equal(automatic.enabled_state,'unknown');assert.equal(automatic.verification_state,'pending');
+   assert.equal(automatic.current_revision_no,null);assert.deepEqual(automatic.revisions,[]);
+   let item=(await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).body.skill;packageId=item.package_id;
+   assert.equal(packageId,automatic.package_id);assert.equal(item.head_revision,automatic.head_revision);assert.equal(item.enabled_state,'unknown');
+   item=(await request(`/api/skills/${packageId}/enable`,{expected_head_revision:item.head_revision,confirmed:true})).body.skill;
+   assert.equal(item.enabled_state,'enabled');assert.equal(item.verification_state,'verified');assert.equal(item.current_revision_no,'1');
   }else{assert.equal(view.skills[0].package_id,packageId);assert.equal(view.skills[0].enabled_state,'enabled');}
   assert.equal((await request('/api/contacts/11111111-1111-4111-8111-111111111111/skill-learning',{})).status,503);
   assert.equal((await request('/api/reply/generate',{})).status,503);

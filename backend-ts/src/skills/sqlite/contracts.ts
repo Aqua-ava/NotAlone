@@ -33,6 +33,12 @@ export interface SkillPackageState {
   revisions: SkillRevision[];
 }
 export interface SkillRunScope { ownerId: string; contactId: string; callId: string }
+/** 仅表示本轮已返回的策略及清单，不授予物理文件访问权限。 */
+export interface LoadedSkill {
+  anchor: SkillAnchor;
+  name: string;
+  resources: {relativePath: string; mediaType: string; bytes: number; payloadDigest: string}[];
+}
 export interface SkillRunRevision {
   packages: {id: string; headRevision: bigint}[];
   eligible: SkillAnchor[];

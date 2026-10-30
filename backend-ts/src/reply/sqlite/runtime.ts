@@ -12,7 +12,7 @@ import type {DiscussionAttempt,RuntimeCopy} from './contracts.ts';
 import {createDshRuntime,type DshRuntimeDriver,type DshEventBoundary} from './dsh-runtime.ts';
 interface HeldCopy {copy:RuntimeCopy;controller:AbortController;driver?:DshRuntimeDriver;workDone:Promise<void>;finish:()=>void;release:()=>Promise<void>;busy:boolean}
 export interface RuntimeWork {copy:RuntimeCopy;driver:DshRuntimeDriver;sessionId:SessionId;restoring:boolean;signal:AbortSignal}
-type Fault=(point:'beforeDirectory'|'afterDirectory'|'beforeIdentity'|'afterIdentity'|'afterBusinessCommit'|'beforeClose'|'afterClose'|'beforeReady')=>void|Promise<void>;
+type Fault=(point:'beforeDirectory'|'afterDirectory'|'beforeIdentity'|'afterIdentity'|'afterBusinessCommit'|'beforeClose'|'afterClose'|'beforeReady'|'afterDiscardFile'|'beforeDiscardCommit')=>void|Promise<void>;
 function fail(code:string):never{throw new StorageFailure(code);}
 const same=(a:ManagedAddress,b:ManagedAddress)=>JSON.stringify(a)===JSON.stringify(b);
 /** 每副本独占所有者；所有文件操作均在SQLite短事务外进行。 */
@@ -21,7 +21,7 @@ export class SqliteDiscussionRuntime {
  constructor(options:{storage:SqliteStorage;ownerId:string;userData:string;ctx:Context;holders:ActiveHolders;fault?:Fault}){this.storage=options.storage;this.ownerId=options.ownerId;this.userData=options.userData;this.ctx=options.ctx;this.holders=options.holders;this.files=new ManagedFiles(options.userData);this.fault=options.fault;}
  private location(copy:RuntimeCopy){return path.join(this.userData,'managed/runtime-copies',copy.managedLocator);}
  private execute<T=any>(name:string,copy:RuntimeCopy,input:object={}):Promise<T>{return this.storage.execute(`runtime.${name}`,{ownerId:this.ownerId,contactId:copy.contactId,discussionId:copy.discussionId,copyId:copy.id,...input});}
- async initialize():Promise<void>{this.files.prepareArea('runtime');for(const copy of await this.storage.execute<RuntimeCopy[]>('runtime.inventory',{ownerId:this.ownerId}))this.bind(copy);}
+ async initialize():Promise<void>{this.files.prepareArea('runtime');for(const copy of await this.storage.execute<RuntimeCopy[]>('runtime.inventory',{ownerId:this.ownerId})){if(copy.state==='blocked'&&copy.cleanupOperationId?.startsWith('skill-discard:'))await this.finishDiscard(copy);else this.bind(copy);}}
  private marker(copy:RuntimeCopy){return JSON.stringify({format:1,databaseId:this.storage.status.databaseId,copyId:copy.id,sessionId:copy.sdkInstanceId,contactId:copy.contactId,discussionId:copy.discussionId,writeGeneration:String(copy.writeGeneration)});}
  private async syncDirectory(location:string){const fd=await open(location,'r');try{await fd.sync();}finally{await fd.close();}}
  private async capture(copy:RuntimeCopy):Promise<void>{
@@ -66,7 +66,25 @@ export class SqliteDiscussionRuntime {
   const pending=work();this.pending.add(pending);pending.then(()=>this.pending.delete(pending),()=>this.pending.delete(pending));return pending;
  }
  inspect(contactId:string,discussionId:string,copyId:string,configurationDigest:string){return this.track(()=>this.inspectOwned(contactId,discussionId,copyId,configurationDigest));}
- run<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal):Promise<T>{return this.track(()=>this.runOwned(attempt,configurationDigest,work,signal));}
+ run<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal,fresh=false):Promise<T>{return this.track(()=>this.runOwned(attempt,configurationDigest,work,signal,fresh));}
+ /** 仅销毁本次尚未提交且已排空的运行副本；原Skill目录不在受管区。 */
+ discard(attempt:DiscussionAttempt,copyId:string):Promise<void>{return this.track(async()=>{
+  if(this.held.has(copyId))fail('discussion_runtime_busy');
+  const copy=(await this.storage.execute<RuntimeCopy[]>('runtime.inventory',{ownerId:this.ownerId})).find(c=>c.id===copyId);
+  if(!copy||copy.contactId!==attempt.contactId||copy.discussionId!==attempt.discussionId||copy.state!=='dirty'||copy.committedRequestId!==null||!copy.manifestComplete)fail('discussion_runtime_discard_forbidden');
+  await this.capture(copy);
+  await this.storage.execute('runtime.beginDiscard',{...attempt,copyId});
+  await this.finishDiscard(copy);
+ });}
+ private async finishDiscard(copy:RuntimeCopy):Promise<void>{
+  const files=await this.execute<{fileId:string;address:ManagedAddress}[]>('discardManifest',copy);
+  for(const file of files.sort((a,b)=>b.address.locator.split('/').length-a.address.locator.split('/').length)){
+   await this.execute('discardCurrent',copy);this.files.erase(file.address);await this.fault?.('afterDiscardFile');
+   if(!this.files.verifyAbsent(file.address))fail('discussion_runtime_discard_failed');
+   await this.execute('discardFile',copy,{fileId:file.fileId});
+  }
+  await this.fault?.('beforeDiscardCommit');await this.execute('discard',copy);
+ }
  private async inspectOwned(contactId:string,discussionId:string,copyId:string,configurationDigest:string):Promise<{copy:RuntimeCopy;boundary:DshEventBoundary}>{
   if(this.stopping)fail('discussion_runtime_closed');
   const copy=await this.storage.execute<RuntimeCopy>('runtime.inspect',{ownerId:this.ownerId,contactId,discussionId,copyId});
@@ -83,11 +101,11 @@ export class SqliteDiscussionRuntime {
    await this.execute('inspect',copy);return {copy,boundary:history.boundary};
   }finally{done.resolve();await held.release();}
  }
- private async runOwned<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal):Promise<T>{
+ private async runOwned<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal,fresh=false):Promise<T>{
   if(this.stopping)fail('discussion_runtime_closed');signal?.throwIfAborted();
   const discussion=await this.storage.execute<any>('discussion.view',attempt);if(this.stopping)fail('discussion_runtime_closed');
   let copy:RuntimeCopy|undefined;
-  if(discussion.discussion.currentRuntimeId){
+  if(!fresh&&discussion.discussion.currentRuntimeId){
    try{
     const candidate=await this.storage.execute<RuntimeCopy>('runtime.inspect',{...attempt,copyId:discussion.discussion.currentRuntimeId});
     if(candidate.state==='ready'&&candidate.configurationDigest===configurationDigest){await this.inspect(attempt.contactId,attempt.discussionId,candidate.id,configurationDigest);copy=candidate;}

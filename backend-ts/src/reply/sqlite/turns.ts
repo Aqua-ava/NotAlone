@@ -24,7 +24,7 @@ export class SqliteDiscussionTurns {
   const view=await this.discussions.view(contactId,discussionId),last=[...view.entries].reverse().find((e:any)=>e.role==='assistant'&&e.content_state==='available');
   let selected:string|undefined;
   if(last){const trace=await this.discussions.trace(contactId,discussionId,last.origin_request_id);const selection=trace.events.find((e:any)=>e.kind==='skill_selection');if(selection)selected=JSON.parse(selection.payload).selected?.packageId;}
-  const catalog=this.library?await this.library.list():await this.storage.execute<any[]>('skills.list',{ownerId:this.discussions.ownerId});
+  const catalog=this.library?await this.library.refresh():await this.storage.execute<any[]>('skills.list',{ownerId:this.discussions.ownerId});
   const eligible=this.library?catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!selected||p.id===selected)).map(skillAnchor):[];
   for(const anchor of eligible)await this.library!.assertAnchor(anchor);
   return this.digest({packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible});
@@ -51,7 +51,7 @@ export class SqliteDiscussionTurns {
   if(accepted.replayed)return {replayed:true,discussionId:attempt.discussionId,segmented:false};
   try{
   const callId=randomUUID(),contextId=randomUUID();
-  const catalog=this.library?await this.library.list():await this.storage.execute<any[]>('skills.list',{ownerId});
+  const catalog=this.library?await this.library.refresh():await this.storage.execute<any[]>('skills.list',{ownerId});
   const eligible=catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
   if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
   const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:this.library?eligible.map(skillAnchor):[]};
@@ -64,10 +64,10 @@ export class SqliteDiscussionTurns {
   await this.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:this.model.provider,requestKey:callId,inputSeal,
    model:this.model.model,configurationId:configurationDigest,inputCap:this.model.budgetProfile.context_window_tokens-this.model.maxTokens-this.model.budgetProfile.safety_margin_tokens,outputCap:this.model.maxTokens});
   const protection=new SqliteDiscussionSkillProtection({storage:this.storage,attempt,contextId,callId,authorize:()=>this.authorize(input.contactId)});
-  const skillRun=this.library?await openSqliteSkillRun(this.library,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):null;
+  const openSkillRun=this.library?()=>openSqliteSkillRun(this.library!,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):undefined;
   const background=messages.length?'本次明确引用的聊天资料：\n'+messages.map(m=>`${m.sender_role==='owner'?'我':'对方'}：${m.text_body}`).join('\n')+'\n\n':'';
   const rebuilt=background+entries.map((e:any)=>`${e.role==='user'?'用户':'助手'}：${e.body}`).join('\n\n');
-  await runSingleDiscussionTurn({runtime:this.runtime,storage:this.storage,attempt,contextId,callId,configurationDigest,prompt:background+input.text,rebuildPrompt:rebuilt,systemPrompt,model:this.model,provider:this.provider,arbiter:this.arbiter,skillRun,skillProtection:protection,skillRevision:revision,signal:input.signal});
+  await runSingleDiscussionTurn({runtime:this.runtime,storage:this.storage,attempt,contextId,callId,configurationDigest,prompt:background+input.text,rebuildPrompt:rebuilt,systemPrompt,model:this.model,provider:this.provider,arbiter:this.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,configurationForRevision:revision=>this.digest(revision),assertAuthorized:()=>this.authorize(input.contactId),signal:input.signal});
   return {replayed:false,discussionId:attempt.discussionId,segmented:accepted.segmented};
   }catch(error){
    await this.storage.execute('discussion.cancel',{...attempt,at:Date.now()}).catch(()=>{});

@@ -56,10 +56,10 @@
 
 ## 回复 Skill 指令安全
 
-- 回复 Skill 包是不可信指令。按 ADR-096，用户明确导入或把独立包放入本人管理目录后，经完整校验才发布；候选回复 Agent 不得自行搜索、下载、更新、启用或删除 Skill。未来网络安装也必须是独立用户操作。
+- 回复 Skill 包是不可信指令。按 [ADR-129](../adr/129-controlled-dsh-reply-skill-discovery.md)，已授权根仅发现未知包目录名，用户明确启用才核验正文并发布；应用自动核验已启用包的有效更新，保留停用、来源撤销和删除决定。候选回复 Agent 不得自行搜索、下载、写入、启用或删除 Skill。未来网络安装也必须是独立用户操作。
 - 导入器必须校验格式、大小、路径、资源类型和内容摘要，拒绝路径遍历与符号链接逃逸。经校验的 `SKILL.md`、references 和允许的静态 assets 与不可变版本绑定；scripts 不进入可运行版本，`allowed-tools` 等能力声明被忽略且不进入模型目录。
 - Skill 正文不能注册或授权 Tool、MCP、Shell、文件写入、外部网络或聊天发送能力；即使正文提出这些要求，实际 Tool 注册表和应用层 permission policy 仍具有唯一执行权。
-- `SkillsMiddleware` 的 backend 只暴露当前已验证 owner/contact 可用的 Skill 虚拟路径；受控 `read_file` 只允许读取该版本列出的 `SKILL.md` 和辅助资源，不得读取任意服务器文件、外部 URL 或其他用户、其他联系人的 Skill。
+- DSH 官方 registry 的业务受控 provider 只暴露当前已验证 owner/contact 可用的 Skill 虚拟路径；只读 Skill 工具只允许读取该版本列出的 `SKILL.md` 和辅助资源，不得读取任意服务器文件、外部 URL 或其他用户、其他联系人的 Skill。
 - `skills_metadata`、Skill Tool 结果和相关摘要必须绑定 `owner_id + contact_id + skill_library_revision`。联系人变化或 Skill 导入、更新、禁用、删除后，旧运行状态必须失效，不能从 checkpoint 恢复旧目录、正文或辅助资源。
 - `skill_library_revision` 按 owner 管理；同一 owner 的任一 Skill 发生导入、更新、启用、禁用或删除时都必须递增，避免其他联系人范围继续复用旧目录。Skill 名称在同一 owner 内唯一。
 - 用户删除回复 Skill 时，所有版本正文、辅助资源和来源定位必须清除。历史请求只可保留内部标识、名称、简述、内容摘要、删除时间与删除凭证形成的最小删除记录，不得借审计或复现名义保留可恢复正文或资源。

@@ -30,6 +30,27 @@ function address(value:ManagedAddress,row:StorageRow,root=false):void{
  for(const id of [value.identity,...value.ancestors])if(!id||!['dev','ino','birthtimeNs','uid'].every(k=>/^\d+$/.test((id as any)[k])))fail('discussion_runtime_identity_conflict');
 }
 export const runtimeActions:StorageAction[]=[
+ action('beginDiscard','write',(tx,i)=>{
+  requireAttempt(tx,i);const row=copy(tx,i);
+  if(row.state!=='dirty'||row.preparing_attempt_id!==i.attemptId||row.cleanup_operation_id!==null||row.manifest_complete!==1n||row.committed_request_id!==null)fail('discussion_runtime_discard_forbidden');
+  tx.run("UPDATE runtime_copy SET state='blocked',cleanup_operation_id=? WHERE owner_id=? AND id=?",['skill-discard:'+i.attemptId,i.ownerId,i.copyId]);
+  tx.run('UPDATE assistant_discussion SET current_runtime_id=NULL WHERE owner_id=? AND id=? AND current_runtime_id=?',[i.ownerId,i.discussionId,i.copyId]);
+ }),
+ action('discardCurrent','read',(tx,i)=>{const row=copy(tx,i);if(row.state!=='blocked'||row.cleanup_operation_id!=='skill-discard:'+row.preparing_attempt_id)fail('discussion_runtime_discard_taken_over');return true;}),
+ action('discardManifest','read',(tx,i)=>{
+  const row=copy(tx,i);if(row.state!=='blocked'||row.cleanup_operation_id!=='skill-discard:'+row.preparing_attempt_id||row.manifest_complete!==1n||row.committed_request_id!==null)fail('discussion_runtime_discard_forbidden');
+  return tx.all('SELECT file_id,address_json FROM runtime_file WHERE owner_id=? AND copy_id=? AND cleared=0',[i.ownerId,i.copyId]).map(f=>({fileId:String(f.file_id),address:JSON.parse(String(f.address_json))}));
+ }),
+ action('discardFile','write',(tx,i)=>{
+  const row=copy(tx,i);if(row.state!=='blocked'||row.cleanup_operation_id!=='skill-discard:'+row.preparing_attempt_id)fail('discussion_runtime_discard_forbidden');
+  tx.run('UPDATE runtime_file SET cleared=1 WHERE owner_id=? AND copy_id=? AND file_id=?',[i.ownerId,i.copyId,i.fileId]);
+ }),
+ action('discard','write',(tx,i)=>{
+  const row=copy(tx,i);if(row.state!=='blocked'||row.cleanup_operation_id!=='skill-discard:'+row.preparing_attempt_id||row.manifest_complete!==1n||tx.get('SELECT 1 FROM runtime_file WHERE owner_id=? AND copy_id=? AND cleared=0',[i.ownerId,i.copyId]))fail('discussion_runtime_discard_forbidden');
+  tx.run('DELETE FROM runtime_context WHERE owner_id=? AND copy_id=?',[i.ownerId,i.copyId]);
+  tx.run('DELETE FROM runtime_file WHERE owner_id=? AND copy_id=?',[i.ownerId,i.copyId]);
+  tx.run("UPDATE runtime_copy SET state='deleted',address_json=NULL,committed_request_id=NULL,committed_event_boundary=NULL,configuration_digest=NULL,preparing_attempt_id=NULL,cleanup_operation_id=NULL WHERE owner_id=? AND id=?",[i.ownerId,i.copyId]);
+ }),
  action('inventory','read',(tx,i)=>tx.all("SELECT * FROM runtime_copy WHERE owner_id=? AND state<>'deleted'",[identifier(i.ownerId)]).map(runtimeView)),
  action('inspect','read',(tx,i)=>runtimeView(requireRuntimeCurrent(tx,i))),
  action('prepare','write',(tx,i)=>{

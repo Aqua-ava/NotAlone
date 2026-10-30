@@ -7,7 +7,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import electron from 'electron';
 import { requireBuildSpace } from './build-space.mjs';
@@ -40,6 +40,8 @@ async function develop() {
   }
   const appDirectory = path.join(project, '.dev/app');
   await requireBuildSpace([appDirectory, tmpdir()]);
+  // 固定用途 Skill 只读器按源码时间复用；产品读取时从不临时编译或回落 Node。
+  execFileSync('bash', [path.resolve(project, '../native/skill-read/build.sh')], { stdio: 'inherit' });
   await mkdir(appDirectory, { recursive: true });
   await writeFile(path.join(appDirectory, 'package.json'), JSON.stringify({ name: 'notalone-development', version: '0.1.0', main: 'dist/main/index.cjs' }));
   let builder, renderer, running, input, timer, signature, stopping = false;

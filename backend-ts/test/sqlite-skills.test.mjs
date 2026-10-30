@@ -21,8 +21,8 @@ test('空库只建立未知启停及目录锚点，明确启停独立保存，�
  const {library,root,bytes,storage}=await fixture(t);
  assert.deepEqual(await library.list(),[]);
  let item=await library.discover('gentle');
- assert.equal(item.enabledState,'unknown');assert.equal(item.verificationState,'verified');
- assert.equal(item.currentRevisionNo,1n);assert.equal(item.revisions[0].availability,'current');
+ assert.equal(item.enabledState,'unknown');assert.equal(item.verificationState,'pending');
+ assert.equal(item.currentRevisionNo,null);assert.deepEqual(item.revisions,[]);
  item=await library.setEnabled(item.id,item.headRevision,'enabled');
  assert.equal(item.enabledState,'enabled');
  item=await library.setEnabled(item.id,item.headRevision,'disabled');
@@ -74,7 +74,7 @@ test('内容变化先使旧修订不可用，重新核验生成新锚点且保�
 });
 
 test('目录替换或缺失不会删除原件或洗成新身份，迟到核验不覆盖更晚停用',async t=>{
- const {library,root,bytes,storage}=await fixture(t);let item=await library.discover('gentle');
+ const {library,root,bytes,storage}=await fixture(t);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
  const stale=item.headRevision;item=await library.setEnabled(item.id,item.headRevision,'disabled');
  await assert.rejects(library.verify(item.id,stale),{code:'skill_revision_conflict'});
  const previous=item.revisions[0];
@@ -101,14 +101,16 @@ test('目录/资源越界与指令扩权被拒绝，owner查询隔离，未知�
  assert.match(await readFile(join(root,'gentle','SKILL.md'),'utf8'),/读取其他/);
 });
 
-test('业务管理查询重新核验缺失/冲突与内容变化，已知停用保持可见',async t=>{
- const {library,root}=await fixture(t);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'disabled');
+test('业务管理自动核验已启用内容，停用只查目录身份并保留用户决定',async t=>{
+ const {library,root}=await fixture(t);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');item=await library.setEnabled(item.id,item.headRevision,'disabled');
  await rename(join(root,'gentle'),join(root,'retained-original'));
  const [missing]=await library.inspect();assert.equal(missing.enabledState,'disabled');assert.equal(missing.verificationState,'missing');
  await rename(join(root,'retained-original'),join(root,'gentle'));
  item=await library.verify(item.id,missing.headRevision);assert.equal(item.revisions.length,2);assert.equal(item.enabledState,'disabled');
  await writeFile(join(root,'gentle','SKILL.md'),'---\nname: gentle\ndescription: 用于新合成\n---\n新正文。');
- const [changed]=await library.inspect();assert.equal(changed.verificationState,'pending');assert.equal(changed.currentRevisionNo,null);
+ const [changed]=await library.inspect();assert.equal(changed.verificationState,'verified');assert.equal(changed.currentRevisionNo,2n);
+ item=await library.setEnabled(item.id,changed.headRevision,'enabled');await writeFile(join(root,'gentle','SKILL.md'),'---\nname: gentle\ndescription: 用于更新合成\n---\n再次更新正文。');
+ const [updated]=await library.inspect();assert.equal(updated.verificationState,'verified');assert.equal(updated.currentRevisionNo,4n);
 });
 
 test('来源资格失效后不能仅凭相同文件重新核验恢复',async t=>{
@@ -188,7 +190,7 @@ test('材料核验期间来源撤销时返回前再次核资格，不能放行�
 });
 
 test('数据库拒绝缺启用来历的NULL分支及不可变锚点改写',async t=>{
- const {library,storage}=await fixture(t);const item=await library.discover('gentle');
+ const {library,storage}=await fixture(t);let item=await library.discover('gentle');item=await library.verify(item.id,item.headRevision);
  await assert.rejects(storage.execute('fixture.invalidEnabledOrigin',{ownerId:'owner-a',id:item.id}));
  await assert.rejects(storage.execute('fixture.mutateAnchor',{ownerId:'owner-a',id:item.id}));
  assert.equal((await library.get(item.id)).enabledState,'unknown');
@@ -232,7 +234,7 @@ test('账号fence后拒绝迟到管理写入和空目录运行资格，其他own
 });
 
 test('账号元数据删除合同清两表并可重试，拒绝越owner且原目录字节保留',async t=>{
- const {library,storage,root,bytes}=await fixture(t);const item=await library.discover('gentle');
+ const {library,storage,root,bytes}=await fixture(t);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
  const account={ownerId:'owner-a',operationId:'account-delete',scope:{kind:'account'}};
  await assert.rejects(storage.execute('fixture.skillFence',account),{code:'skill_deletion_not_fenced'});
  const source={...account,scope:{kind:'source',contactId:'contact-a',sourceId:'source-a'}};
@@ -247,4 +249,28 @@ test('账号元数据删除合同清两表并可重试，拒绝越owner且原目
  const verified=await storage.execute('fixture.skillVerify',account);assert.equal(verified.database_rows.result,'passed');assert.equal(verified.derived_eligibility.result,'passed');assert.equal(verified.trace_payloads.result,'not_applicable');
  assert.equal(await readFile(join(root,'gentle/SKILL.md'),'utf8'),bytes);
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+
+test('发现与刷新未知/停用包不读取正文，启用后自动技术更新且来源撤销不可恢复',async t=>{
+ const {library,root,bytes}=await fixture(t);
+ // 没有正文仍可发现目录；扫描不能把读取内容当作发现名称的前提。
+ await rm(join(root,'gentle/SKILL.md'));
+ let item=await library.discover('gentle');
+ assert.equal(item.enabledState,'unknown');assert.equal(item.verificationState,'pending');assert.equal(item.currentRevisionNo,null);
+ await writeFile(join(root,'gentle/SKILL.md'),bytes);
+ item=await library.setEnabled(item.id,item.headRevision,'enabled');
+ const old=skillAnchor(item);await writeFile(join(root,'gentle/SKILL.md'),bytes+'新增合成方法。\n');
+ item=(await library.refresh())[0];assert.equal(item.currentRevisionNo,2n);assert.equal(item.enabledState,'enabled');
+ await assert.rejects(library.assertAnchor(old),{code:'skill_run_invalidated'});
+ item=await library.setEnabled(item.id,item.headRevision,'disabled');
+ await rm(join(root,'gentle/SKILL.md'));
+ item=(await library.refresh())[0];assert.equal(item.enabledState,'disabled');assert.equal(item.verificationState,'verified');
+ await writeFile(join(root,'gentle/SKILL.md'),bytes);
+ item=await library.setEnabled(item.id,item.headRevision,'enabled');
+ item=await library.requireVerification(item.id,item.headRevision);
+ await library.refresh();await library.discover('gentle');
+ assert.equal((await library.get(item.id)).verificationReason,'source_qualification_changed');
+ assert.equal((await library.get(item.id)).currentRevisionNo,null);
+ await assert.rejects(library.setEnabled(item.id,item.headRevision,'enabled'),{code:'skill_source_verification_required'});
 });

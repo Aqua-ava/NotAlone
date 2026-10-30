@@ -52,6 +52,39 @@ async function fixture(t,reply){
  return {options,requests,actions,checks,arbiter,ctx};
 }
 
+test('自动Skill经官方加载工具按需读取，后续实际请求才含策略且逐次记录出站',async t=>{
+ const f=await fixture(t,(_req,res)=>{
+  const tool=f.requests.length===1;
+  const content=tool?{type:'tool_use',id:'skill-call',name:'skill',input:{name:'gentle'}}:{type:'text',text:'按实际策略生成的合成候选。'};
+  const events=[{type:'message_start',message:{id:'synthetic',model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},
+   {type:'content_block_start',index:0,content_block:content},{type:'content_block_stop',index:0},
+   {type:'message_delta',delta:{stop_reason:tool?'tool_use':'end_turn'},usage:{output_tokens:8}},{type:'message_stop'}];
+  res.setHeader('content-type','text/event-stream');res.end(events.map(e=>`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''));
+ });
+ const {writeFile}=await import('node:fs/promises');
+ const {SqliteStorage}=await import('../src/storage/sqlite/client.ts');
+ const {SqliteContactService}=await import('../src/contacts/sqlite/service.ts');
+ const {SqliteSkillLibrary,skillAnchor}=await import('../src/skills/sqlite/library.ts');
+ const {openSqliteSkillRun}=await import('../src/skills/sqlite/provider.ts');
+ const home=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-auto-skill-'))),original=path.join(home,'originals');
+ await mkdir(path.join(original,'gentle'),{recursive:true});await writeFile(path.join(original,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 安慰时使用的合成沟通方法\n---\n先回应感受，再说明情况。\n');
+ const database=await SqliteStorage.open({userData:home,intent:'create',role:'test'});
+ t.after(async()=>{await database.close();await rm(home,{recursive:true,force:true});});
+ await new SqliteContactService(database,f.options.attempt.ownerId,{account:async()=>{throw Error('不得读取渠道');},sessions:async()=>[]}).initialize();
+ const library=new SqliteSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
+ const selections=[],inputs=[],protection={assertCurrent:async(scope,revision)=>{if(revision)await database.execute('skills.assertRun',{ownerId:scope.ownerId,revision});},recordSelection:async(_scope,value)=>{selections.push(value);},recordInput:async value=>{inputs.push(value);}};
+ f.options.skillRun=await openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection);
+ f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)]};
+ const result=await runSingleDiscussionTurn(f.options);
+ assert.equal(result.text,'按实际策略生成的合成候选。');assert.equal(f.requests.length,2);
+ assert.deepEqual(f.requests[0].tools.map(tool=>tool.name).sort(),['skill','skill_resource']);
+ assert.ok(!JSON.stringify(f.requests[0]).includes('先回应感受，再说明情况。'));
+ assert.ok(JSON.stringify(f.requests[1]).includes('先回应感受，再说明情况。'));
+ assert.equal(inputs.length,1);assert.equal(inputs[0].relativePath,'SKILL.md');assert.ok(selections.at(-1));
+ assert.equal(f.actions.filter(a=>a.name==='discussion.dispatchCall').length,2);
+ assert.equal(f.actions.filter(a=>a.name==='discussion.settleStep').length,2);
+});
+
 test('单次讨论经真实官方DSH/Adapter/环回HTTP后只提交真实assistant事件',async t=>{
  const f=await fixture(t);const result=await runSingleDiscussionTurn(f.options);
  assert.equal(result.text,'这是实际环回模型返回的合成讨论发言。');assert.equal(f.requests.length,1);assert.equal((f.requests[0].tools??[]).length,0);

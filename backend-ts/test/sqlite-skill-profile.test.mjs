@@ -27,8 +27,8 @@ test('正式profile隔离回归：Skill最小管理与官方加载、原目录�
   child.stdout.on('data',b=>{output+=b;const match=output.match(/SQLITE_SKILL_READY (http:\/\/127\.0\.0\.1:\d+)/);if(match){clearTimeout(timer);resolveReady(match[1]);}});
  });
  const request=async(path,input)=>{const response=await fetch(base+path,{method:input?'POST':'GET',headers:{'content-type':'application/json',authorization:'Bearer profile-only'},body:input?JSON.stringify(input):undefined});return {status:response.status,body:await response.json()};};
- assert.deepEqual((await request('/state')).body,[]);
- assert.deepEqual((await request('/api/skills')).body.skills,[]);
+ assert.equal((await request('/state')).body[0].enabledState,'unknown');
+ assert.equal((await request('/api/skills')).body.skills[0].current_revision_no,null);
  const discovered=await request('/api/skills/discover',{directory_name:'gentle',confirmed:true});
  assert.equal(discovered.body.skill.enabled_state,'unknown');assert.match(discovered.body.skill.state_label,/待核验启停/);
  let item=(await request('/discover',{name:'gentle'})).body;
@@ -44,7 +44,7 @@ test('正式profile隔离回归：Skill最小管理与官方加载、原目录�
  const stale=item.headRevision;item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'disabled'})).body;
  assert.equal((await request('/verify',{id:item.id,head:stale})).status,409);assert.equal((await request('/load',{id:item.id})).status,409);
  await writeFile(join(root,'gentle/SKILL.md'),bytes+'新的合成步骤。\n');
- const changed=(await request('/state')).body[0];assert.equal(changed.enabledState,'disabled');assert.equal(changed.verificationState,'pending');
+ const changed=(await request('/state')).body[0];assert.equal(changed.enabledState,'disabled');assert.equal(changed.verificationState,'verified');
  item=(await request('/verify',{id:item.id,head:changed.headRevision})).body;assert.equal(item.currentRevisionNo,'2');
  await rename(join(root,'gentle'),join(root,'original-retained'));await mkdir(join(root,'gentle'));await writeFile(join(root,'gentle/SKILL.md'),bytes);
  assert.equal((await request('/state')).body[0].verificationState,'conflict');

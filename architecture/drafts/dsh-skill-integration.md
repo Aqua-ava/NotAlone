@@ -1,5 +1,7 @@
 # DSH Skill 接入与业务校验草案
 
+> 后续正式入口：发现、技术更新与启用已由 [ADR-129](../adr/129-controlled-dsh-reply-skill-discovery.md)及 [DSH 回复 Skill 接入规格](../../.scratch/dsh-reply-skill-integration/spec.md)收敛；下方实验保留历史，不替代当前实现与验收记录。
+
 > 状态：讨论与隔离实验记录，不代表已实现或替代现行规格。自动学习的具体规则暂不讨论。现行 Skill 范围和生命周期见 [Skill Library](../current/skill-library.md)，DSH 接入约束见 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)。
 
 ## 目标和职责

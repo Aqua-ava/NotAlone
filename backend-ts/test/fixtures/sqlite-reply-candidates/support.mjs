@@ -85,7 +85,7 @@ export async function fixture(t,options={}){
  const model={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}};
  const skillRoot=join(root,'user-skills');await mkdir(skillRoot,{mode:0o700});
  const discussions=new SqliteDiscussionService(storage,owner,options.clock??Date.now);
- runtime=new SqliteDiscussionRuntime({storage,ownerId:owner,userData:root,ctx,holders});await runtime.initialize();
+ runtime=new SqliteDiscussionRuntime({storage,ownerId:owner,userData:root,ctx,holders,fault:options.runtimeFault});await runtime.initialize();
  const arbiter=new ModelPermitArbiter(),library=new SqliteSkillLibrary(storage,owner,skillRoot);
  return {root,storage,contacts,ids,discussions,runtime,model,provider,arbiter,library,requests,owner,ctx,holders,history,channel,messages,skillRoot,supplierErrors,close};
 }
