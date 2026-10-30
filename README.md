@@ -159,7 +159,7 @@ NotAlone/
 ├── backend-ts/       TypeScript 业务、DSH profile、SQL 迁移与 Node 测试
 ├── native/macos/     Swift 原生截图、OCR 与会话定位探针
 ├── website/          独立静态官网
-├── scripts/          安装、部署与公开前检查
+├── scripts/          安装与公开前检查
 ├── docs/             工程、操作与验证说明
 └── architecture/     现行规格、设计草案与 ADR
 ```
@@ -174,7 +174,7 @@ NotAlone/
 | 领域词汇与架构决策 | [CONTEXT.md](CONTEXT.md) · [架构索引](architecture/README.md) |
 | 记忆的来源、提取与删除 | [完整追踪](architecture/current/memory-extraction-trace.md) · [维度放行台账](docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md) |
 | 开发约定与任务工作流 | [AGENTS.md](AGENTS.md) · [工程工作流](docs/agents/engineering.md) |
-| 官网预览与部署 | [website/README.md](website/README.md) |
+| 官网本地预览 | [website/README.md](website/README.md) |
 
 TypeScript 后台、桌面端与原生探针分别管理依赖、构建和测试；领域逻辑留在普通后台模块。根目录 `.env` 和私人导入目录 `chat_exports/` 已由 Git 忽略。
 
