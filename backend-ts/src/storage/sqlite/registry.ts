@@ -21,6 +21,7 @@ import { memoryExtractionMigration } from '../../memory/sqlite/schema.ts';
 import { mediaMigration } from '../../media/sqlite/schema.ts';
 import { createMediaActions } from '../../media/sqlite/actions.ts';
 import { historyMigration } from '../../history/sqlite/schema.ts';
+import { historyObservationIndexMigration } from '../../history/sqlite/observation-index-schema.ts';
 import { historyIncrementalMigration } from '../../history/sqlite/incremental-schema.ts';
 import { historyClearMigration } from '../../history/sqlite/clear-schema.ts';
 import { historyContinuityMigration } from '../../history/sqlite/continuity-schema.ts';
@@ -55,7 +56,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12), memoryDocumentsMigration(13), historyIncrementalMigration(14), historyClearMigration(15), historyContinuityMigration(16), historyStateMigration(17),historyGuardMigration(18),{version:19,sql:`CREATE INDEX capture_record_quarantine_identity ON capture_record(owner_id,contact_id,observed_key,reason_code) WHERE state='quarantined' AND availability='available';
-CREATE INDEX capture_record_excluded_identity ON capture_record(owner_id,contact_id,observed_key,reason_code) WHERE state='excluded' AND availability='available';`}],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12), memoryDocumentsMigration(13), historyIncrementalMigration(14), historyClearMigration(15), historyContinuityMigration(16), historyStateMigration(17),historyGuardMigration(18),historyObservationIndexMigration(19)],
   actions: [...memoryDocumentsActions, ...memoryDocumentsStageActions, ...memoryDocumentsPublicationActions, ...memoryAdjudicationActions, ...memoryManagementActions, ...createReplyCandidateActions(combinedKnowledgeReader), ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...historyClearActions, ...createMediaActions(installedDeletionRegistration), ...cutoverActions],
 };

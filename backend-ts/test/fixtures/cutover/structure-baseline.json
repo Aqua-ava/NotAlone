@@ -471,7 +471,7 @@
    ],
    "indexes": [
     {
-     "name": "capture_record_excluded_identity",
+     "name": "capture_record_quarantined_source",
      "unique": 0,
      "partial": 1,
      "origin": "c",
@@ -479,22 +479,23 @@
       "owner_id",
       "contact_id",
       "observed_key",
+      "capture_id",
+      "item_no",
       "reason_code"
      ],
-     "sql": "CREATE INDEX capture_record_excluded_identity ON capture_record(owner_id,contact_id,observed_key,reason_code) WHERE state='excluded' AND availability='available'"
+     "sql": "CREATE INDEX capture_record_quarantined_source ON capture_record(owner_id,contact_id,observed_key,capture_id,item_no,reason_code) WHERE state='quarantined' AND availability='available'"
     },
     {
-     "name": "capture_record_quarantine_identity",
+     "name": "capture_record_observed_source",
      "unique": 0,
      "partial": 1,
      "origin": "c",
      "columns": [
       "owner_id",
       "contact_id",
-      "observed_key",
-      "reason_code"
+      "observed_key"
      ],
-     "sql": "CREATE INDEX capture_record_quarantine_identity ON capture_record(owner_id,contact_id,observed_key,reason_code) WHERE state='quarantined' AND availability='available'"
+     "sql": "CREATE INDEX capture_record_observed_source ON capture_record(owner_id,contact_id,observed_key) WHERE availability='available'"
     },
     {
      "name": "capture_record_message",
