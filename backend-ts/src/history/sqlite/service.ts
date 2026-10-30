@@ -111,7 +111,7 @@ export class SqliteHistoryService {
    registerGoal(goal!.id);
    for(let index=0;index<1000;index++){
     await check();if(guardId&&!await this.storage.execute<boolean>('history.guardCheck',{token:scope.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');const page=await channel.page(scope,goal!.target,goal!.cursor,controller.signal);
-    if(page.records?.some(record=>record?.stateAssurance!=='verified'))await this.storage.execute('history.quarantinePageStates',{token:scope.token,goalId:goal!.id,page});
+    if(page.records?.some(record=>record?.stateAssurance!=='verified'||record?.originalType==='10000'&&record?.kind==='other'))await this.storage.execute('history.quarantinePageStates',{token:scope.token,goalId:goal!.id,page});
     await check();
     if(serializeSupport(await inspect())!==serializeSupport(report))throw new StorageFailure('history_support_changed');
     const coverage=await this.storage.execute<HistoryCoverage>('history.acceptPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId,guardId});
@@ -145,7 +145,7 @@ export class SqliteHistoryService {
    registerGoal(goal!.id);
    for(let index=0;index<200;index++){
     await check();if(guardId&&!await this.storage.execute<boolean>('history.guardCheck',{token:scope.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');const page=await channel.tail(scope,goal!.target,goal!.cursor,controller.signal);
-    if(page.records?.some(record=>record?.stateAssurance!=='verified'))await this.storage.execute('history.quarantinePageStates',{token:scope.token,goalId:goal!.id,page});
+    if(page.records?.some(record=>record?.stateAssurance!=='verified'||record?.originalType==='10000'&&record?.kind==='other'))await this.storage.execute('history.quarantinePageStates',{token:scope.token,goalId:goal!.id,page});
     await check();
     if(serializeSupport(await inspect())!==serializeSupport(report))throw new StorageFailure('history_support_changed');
     const coverage=await this.storage.execute<HistoryCoverage>('history.acceptIncrementalPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId,guardId});

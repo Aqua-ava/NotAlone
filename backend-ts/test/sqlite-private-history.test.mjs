@@ -132,6 +132,12 @@ test('页后续校验失败或重开也不能撤销已观察的未知状态隔�
  const reopened=await SqliteStorage.open({userData:root,intent:'open',role:'test',expectedDatabaseId:databaseId});t.after(()=>reopened.close());
  assert.equal((await reopened.execute('history.read',{ownerId:owner,contactId:contact,limit:100})).messages.length,0);
 });
+test('已认证的同编号文字变为系统消息时撤下旧文字，页失败后也保持撤下',async t=>{
+ const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{serverId:'55'}),record('2')],completedPartitions:['shard-a'],exhausted:true});await service.synchronize(contact);
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:'不合法的终页游标',records:[record('1',{serverId:'55',kind:'other',originalType:'10000',status:'4',text:null})],completedPartitions:['shard-a'],exhausted:true});
+ await assert.rejects(service.synchronize(contact),{code:'history_page_invalid'});assert.deepEqual((await service.read(contact)).messages.map(m=>m.text),['合成正文2']);
+});
 test('页返回时同步已关闭，已观察的未知状态仍保护旧消息',async t=>{
  const {service,channel,saved,target,contacts}=await fixture(t);const contact=saved[0].contact_id;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});await service.synchronize(contact);

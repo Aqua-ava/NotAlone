@@ -153,7 +153,7 @@ export class SqliteHistoryResyncService {
       for (let index = 0; index < this.options.maxPages; index++) {
         if (signal.aborted) fail('history_interrupted');
         const page = await channel.page(scope, goal.target, cursor, signal);
-        if(page.records?.some(record=>record?.stateAssurance!=='verified'))await this.storage.execute('history.quarantinePageStates',{token,goalId:goal.id,page});
+        if(page.records?.some(record=>record?.stateAssurance!=='verified'||record?.originalType==='10000'&&record?.kind==='other'))await this.storage.execute('history.quarantinePageStates',{token,goalId:goal.id,page});
         if (page.target !== goal.target.descriptor) fail('history_page_invalid');
         // 分段期间再次核验支持档；边界变化时不能把旧快照结果当作新资格。
         if (serializeSupport(await this.inspect(channel, scope, signal)) !== serializeSupport(report)) fail('history_support_changed');

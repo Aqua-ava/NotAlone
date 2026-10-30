@@ -26,12 +26,13 @@ function sourceExcluded(tx: StorageTransaction, token: ReadEligibility, prepared
   if (!prepared.localKey) return false;
   return Boolean(tx.get("SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? AND ((scheme='local' AND external_key=?) OR (scheme='server' AND external_key=?))", [token.owner_id, token.conversation_id, prepared.localKey, report.serverAliasSemantics === 'verified_within_scope' ? prepared.serverKey : null]));
 }
-/** 未知状态的消息先失效；调用方可在单独事务中先执行，以免后续页写入失败撤销保护。 */
+/** 未知状态及文字变为系统消息时先失效；后续页写入失败也不能撤销保护。 */
 export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|'token'|'report'|'target'|'records'|'exclude'>): void {
  const {tx,token,report,target}=input;
  let changed=false;
  for(const record of input.records){
-  if(record.stateAssurance==='verified')continue;
+  const systemTransition=record.stateAssurance==='verified'&&record.originalType==='10000'&&record.kind==='other';
+  if(record.stateAssurance==='verified'&&!systemTransition)continue;
   const prepared=prepareRecord(record,token.source_generation,target);
   const exclusion=prepared.localKey&&(sourceExcluded(tx,token,prepared,report)?'source_excluded':input.exclude?.({localKey:prepared.localKey,serverKey:prepared.serverKey})??null);
   const local=prepared.localKey?aliasMessage(tx,token,'local',prepared.localKey):undefined;
@@ -39,7 +40,7 @@ export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|
   if(exclusion&&!local&&!server)continue;
   const affected=local||server?[...new Map([local,server].filter((v):v is StorageRow=>Boolean(v)).map(v=>[v.id,v])).values()]
    :prepared.localKey?[]:tx.all("SELECT * FROM message WHERE owner_id=? AND contact_id=? AND binding_id=? AND availability='available'",[token.owner_id,token.contact_id,token.binding_id]);
-  for(const old of affected)if(!tx.get('SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,old.id])){
+  for(const old of affected)if((!systemTransition||old.kind==='text')&&!tx.get('SELECT 1 FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,old.id])){
    tx.run('INSERT INTO history_message_quarantine VALUES(?,?,?,?)',[token.owner_id,token.contact_id,old.id,'message_state_unverified']);
    tx.run('UPDATE message SET interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,old.id]);changed=true;
   }
