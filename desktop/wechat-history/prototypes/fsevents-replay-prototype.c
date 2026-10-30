@@ -12,16 +12,18 @@
 static FSEventStreamEventId latest;
 static int observed, history_done, untrusted;
 static FSEventStreamEventFlags event_mask;
+static int capture_mode;
 static void callback(ConstFSEventStreamRef stream, void *context, size_t count, void *paths,
                      const FSEventStreamEventFlags flags[], const FSEventStreamEventId ids[]) {
-    (void)stream; (void)context; (void)paths;
+    (void)stream; (void)context;
     for(size_t i=0;i<count;i++){
+        CFStringRef path=CFArrayGetValueAtIndex((CFArrayRef)paths,(CFIndex)i);
         if(flags[i] & kFSEventStreamEventFlagHistoryDone) history_done=1;
         event_mask |= flags[i];
         if(flags[i] & (kFSEventStreamEventFlagMustScanSubDirs|kFSEventStreamEventFlagUserDropped|
                        kFSEventStreamEventFlagKernelDropped|kFSEventStreamEventFlagEventIdsWrapped|
                        kFSEventStreamEventFlagRootChanged)) untrusted=1;
-        if(!(flags[i] & kFSEventStreamEventFlagHistoryDone)){observed++;if(ids[i]>latest)latest=ids[i];}
+        if(!(flags[i] & kFSEventStreamEventFlagHistoryDone) && (!capture_mode || CFStringHasSuffix(path,CFSTR("/marker")))){observed++;if(ids[i]>latest)latest=ids[i];}
     }
 }
 int main(int argc, char **argv) {
@@ -38,7 +40,8 @@ int main(int argc, char **argv) {
     CFRelease(uuidText);CFRelease(uuid);
     CFStringRef cfPath=CFStringCreateWithCString(NULL,relative,kCFStringEncodingUTF8);
     const void *values[]={cfPath};CFArrayRef paths=CFArrayCreate(NULL,values,1,&kCFTypeArrayCallBacks);
-    FSEventStreamEventId since=strcmp(argv[1],"capture")==0?kFSEventStreamEventIdSinceNow:strtoull(argv[3],NULL,10);
+    capture_mode=!strcmp(argv[1],"capture");
+    FSEventStreamEventId since=capture_mode?kFSEventStreamEventIdSinceNow:strtoull(argv[3],NULL,10);
     FSEventStreamRef stream=FSEventStreamCreateRelativeToDevice(NULL,callback,NULL,st.st_dev,paths,since,0.05,
       kFSEventStreamCreateFlagFileEvents|kFSEventStreamCreateFlagWatchRoot|kFSEventStreamCreateFlagUseCFTypes);
     CFRelease(paths);CFRelease(cfPath);if(!stream)return 8;
