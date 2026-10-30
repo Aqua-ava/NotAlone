@@ -1,12 +1,12 @@
 # 21：三份规格组合验收
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Type: task
 Parent: [SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)；[同步与记忆规格](../../sync-memory-behavior/spec.md)；[媒体规格](../../wechat-media-extraction/spec.md)
 Blocked by: [20 默认切换 SQLite 与旧业务清理](20-sqlite-cutover-and-legacy-cleanup.md)
 
-> 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
+> 本轮完成（2026-10-30）：已完成本轮代码与合成组合收口，复用未变更的既有开发App证据并补跑受影响路径。按用户要求，03的真实状态认证、跨重启来源续证和正式真实导入验收不再阻塞本轮；本票resolved仅表示该缩减范围完成，真实渠道未认证项继续如实保留，运行门禁不放宽。最新结果见[组合收尾记录](../../../docs/verification/21-three-specs-integrated-acceptance.md#2026-10-30-后续实现与本轮收尾)。
 
 > 2026-10-29范围修订：本轮有效17项；13、15、18、19记为用户暂缓，不记作通过，不再作为硬依赖，也不在本票补做真实媒体验收或语音转换。18历史实现证据保留但不计当前交付，真实关联未认证保持不可用；已有媒体访问／清理和必要隔离删除保护仍核验。撤回测试已暂停，不要求用户继续操作。
 

@@ -7,6 +7,8 @@ State: claimed
 
 ## 范围与规格
 
+> 2026-10-30 最新调整：用户将03剩余的真实状态认证、跨重启来源续证和正式导入验收按本轮跳过处理，要求继续后续任务。03按缩减范围resolved；后续04/06的正式窄协议接线与21受影响组合验证现已补齐，三票一并按本轮代码与合成范围resolved。本轮有效17项已收口；真实能力仍未认证，相关运行门禁、资料隔离和下方其他四项暂缓范围不变。
+
 > 2026-10-29用户最新范围：13表达偏好、15纠错诊断、18语音保存／转换、19媒体真实关联组合验收均本轮暂缓；保留原21项编号，本轮有效17项。18的既有实现与历史验收证据保留，不计本轮交付完成；仅做必要的入口停用。13、15、19不派发，不将19拆入其他任务继续验收。真实媒体唯一关联未验证时继续关闭对应入口；既有数据访问、隔离和删除保护保留，不据此删除用户资料。
 
 本索引是原21项实施任务的统一入口，不另写一套规格。以下三份已定稿规格按上述本轮范围执行；暂缓条款不记为通过：
@@ -27,10 +29,10 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | --- | --- | --- | --- |
 | [01 SQLite 基础与生命周期](issues/01-sqlite-runtime-lifecycle.md) | 无 | ready-for-agent | resolved |
 | [02 联系人绑定与同步授权](issues/02-contact-binding-and-read-grants.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
-| [03 首次历史同步与消息展示](issues/03-private-history-sync.md) | [02](issues/02-contact-binding-and-read-grants.md) | needs-info | claimed |
-| [04 增量同步与读取控制](issues/04-incremental-sync-controls.md) | [03](issues/03-private-history-sync.md) | ready-for-agent | claimed |
+| [03 首次历史同步与消息展示](issues/03-private-history-sync.md) | [02](issues/02-contact-binding-and-read-grants.md) | ready-for-agent | resolved |
+| [04 增量同步与读取控制](issues/04-incremental-sync-controls.md) | [03](issues/03-private-history-sync.md) | ready-for-agent | resolved |
 | [05 统一来源删除与清理流程](issues/05-source-deletion-and-cleanup.md) | [01](issues/01-sqlite-runtime-lifecycle.md) | ready-for-agent | resolved |
-| [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | claimed |
+| [06 清空聊天与明确重读历史](issues/06-clear-and-resync-history.md) | [04](issues/04-incremental-sync-controls.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
 | [07 固定范围的记忆提取与核验](issues/07-fixed-scope-memory-extraction.md) | [02](issues/02-contact-binding-and-read-grants.md)、[05](issues/05-source-deletion-and-cleanup.md) | ready-for-agent | resolved |
 | [08 记忆候选、版本与修正](issues/08-memory-candidates-and-versions.md) | [07](issues/07-fixed-scope-memory-extraction.md) | ready-for-agent | resolved |
 | [09 主题资料与长期概览](issues/09-memory-documents-publication.md) | [08](issues/08-memory-candidates-and-versions.md) | ready-for-agent | resolved |
@@ -45,7 +47,7 @@ App首次使用不属于本轮执行范围：首用向导、微信组件准备/�
 | [18 语音保存与转换（本轮暂缓）](issues/18-voice-save-and-conversion.md) | [16](issues/16-single-message-media-lifecycle.md) | wontfix | resolved |
 | [19 媒体真实关联与组合验收（本轮暂缓）](issues/19-media-integration-acceptance.md) | [03](issues/03-private-history-sync.md)、[17](issues/17-image-video-extraction.md)、[18](issues/18-voice-save-and-conversion.md) | wontfix | open |
 | [20 默认切换 SQLite 与旧业务清理](issues/20-sqlite-cutover-and-legacy-cleanup.md) | [06](issues/06-clear-and-resync-history.md)、[10](issues/10-memory-processing-controls.md)、[14](issues/14-official-skill-loading.md)、[16](issues/16-single-message-media-lifecycle.md) | ready-for-agent | resolved |
-| [21 三份规格组合验收](issues/21-three-specs-integrated-acceptance.md) | [20](issues/20-sqlite-cutover-and-legacy-cleanup.md) | ready-for-agent | claimed |
+| [21 三份规格组合验收](issues/21-three-specs-integrated-acceptance.md) | [20](issues/20-sqlite-cutover-and-legacy-cleanup.md) | ready-for-agent | resolved |
 
 ## 依赖图
 
@@ -102,7 +104,7 @@ flowchart TD
 
 ## 当前总进度
 
-2026-10-30 最终状态：17项中13项 resolved（01、02、05、07、08、09、10、11、12、14、16、17、20）；03/04/06/21 均已实现并实际集成但 State=claimed：03真实普通历史/状态语义/来源生命周期/跨重启连续性未认证；04真实增量/重选/断线/微信不在前台CLI同步未认证（受控dev实机部分通过）；06真实observer/reader边界协议与最终只读制品未认证（生产保持boundary_pending）；10已通过App级环回供应商实机验收（开始/处理中/暂停小批收尾/继续复用/退出重开/单人失败/共用故障/unknown，14/14）并resolved（真实模型语义仍单独记录）；20真实清理经只读盘点重评：本机无旧业务对象（N/A+只读证据，未执行任何删除、未读.env内容），12/12通过并已resolved；21组合验收矩阵已产出（17项矩阵+四项暂缓+组合592/592+App闭环）但上述真实门槛未过、保持受阻抗。13/15/18/19用户暂缓（wontfix，入口关闭，不计通过）。本批全部变更已本地提交于集成分支 2bdec8c6，无push/PR/打包；工作区仅保留用户原有.gitignore修改与未跟踪资料，以及本批本地协调文件（.scratch手写handoff/report，未跟踪、不发布）。
+2026-10-30 先前检查点（本轮后续收尾前）：17项中13项 resolved（01、02、05、07、08、09、10、11、12、14、16、17、20）；03/04/06/21 均已实现并实际集成但 State=claimed：03真实普通历史/状态语义/来源生命周期/跨重启连续性未认证；04真实增量/重选/断线/微信不在前台CLI同步未认证（受控dev实机部分通过）；06真实observer/reader边界协议与最终只读制品未认证（生产保持boundary_pending）；10已通过App级环回供应商实机验收（开始/处理中/暂停小批收尾/继续复用/退出重开/单人失败/共用故障/unknown，14/14）并resolved（真实模型语义仍单独记录）；20真实清理经只读盘点重评：本机无旧业务对象（N/A+只读证据，未执行任何删除、未读.env内容），12/12通过并已resolved；21组合验收矩阵已产出（17项矩阵+四项暂缓+组合592/592+App闭环）但上述真实门槛未过、保持受阻抗。13/15/18/19用户暂缓（wontfix，入口关闭，不计通过）。本批全部变更已本地提交于集成分支 2bdec8c6，无push/PR/打包；工作区仅保留用户原有.gitignore修改与未跟踪资料，以及本批本地协调文件（.scratch手写handoff/report，未跟踪、不发布）。
 
 历史（2026-10-29）：本轮有效17项：已集成且当前验收通过10项（01、02、05、07、08、11、12、14、16、17）；03因真实状态语义及来源生命周期未认证受阻；09独立会话执行中；04、06、10、20、21等待依赖。08、12已在独立工作树核验前置后实施。18历史实现完成但本轮不交付，最小停用已集成。撤回测试已按用户要求暂停，B保持现状；03实现及合成／实际App已完成的部分复用证据，不重新执行。
 

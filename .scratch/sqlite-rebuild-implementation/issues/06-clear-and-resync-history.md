@@ -1,12 +1,12 @@
 # 06：清空聊天与明确重读历史
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Type: task
 Parent: [同步与记忆规格](../../sync-memory-behavior/spec.md)；[SQLite 数据库重建规格](../../sqlite-database-rebuild/spec.md)
 Blocked by: [04 增量同步与读取控制](04-incremental-sync-controls.md)；[05 统一来源删除与清理流程](05-source-deletion-and-cleanup.md)
 
-> 2026-10-29已批准发布，未开始实现。[任务索引与共同约定](../planning.md)。
+> 本轮完成（2026-10-30）：已补齐正式窄协议的元数据边界操作、客户端校验及SQLite清空接线，完成代码与合成验证。按用户要求，03的真实状态认证、跨重启来源续证和正式真实导入验收不再阻塞本轮；本票resolved仅表示该缩减范围完成，真实渠道未认证项继续如实保留，运行门禁不放宽。最新结果见[组合收尾记录](../../../docs/verification/21-three-specs-integrated-acceptance.md#2026-10-30-后续实现与本轮收尾)。
 
 ## 交付行为
 

@@ -10,9 +10,14 @@ import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 import { createWechatHistoryChannel } from '../src/history/sqlite/wechat-channel.ts';
 import { NarrowWechatClient } from '../src/history/wechat/native-client.ts';
+import { SqliteHistoryClearService } from '../src/history/sqlite/clear.ts';
+import { DeletionService } from '../src/storage/sqlite/deletion/service.ts';
+import { ManagedFiles } from '../src/storage/sqlite/deletion/managed-files.ts';
 
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const owner='00000000-0000-4000-8000-000000000091',account='synthetic-owner',conversation='synthetic-friend',generation='a'.repeat(64);
+const statusCapabilityKeys=['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'];
+const capabilities=extra=>Object.fromEntries([...statusCapabilityKeys,...Object.keys(extra)].map(key=>[key,extra[key]??'unverified']));
 const schema={format:'wechat-message-schema-v1',status:'unverified',scopeDigest:hash(`${account}\0${conversation}`),sourceGeneration:generation,schemaFingerprint:'b'.repeat(64),
  tables:[{target:'c'.repeat(64),partition:'d'.repeat(64),role:'private_message',columns:[{name:'local_id',type:'INTEGER',notNull:false,primaryKey:1,hidden:0}],indexes:[],declaredPrimaryKey:['local_id'],autoIncrement:true,sqlFingerprint:'e'.repeat(64),triggerFingerprints:[],schemaVersion:'1',rootPage:'2'}],checkedPartitions:['d'.repeat(64)]};
 async function fixture(t){
@@ -23,18 +28,26 @@ async function fixture(t){
  const script=`#!${process.execPath}
  const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline');
  const schema=${JSON.stringify(schema)},planFile=${JSON.stringify(planFile)},logFile=${JSON.stringify(logFile)};
+ let tailSerial=2;
  fs.writeFileSync(${JSON.stringify(pidFile)},String(process.pid));
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
  readline.createInterface({input:process.stdin}).on('line',line=>{
   const r=JSON.parse(line),plan=JSON.parse(fs.readFileSync(planFile));fs.appendFileSync(logFile,JSON.stringify(r)+'\\n');let data;
   if(r.op==='resolve')data={accountKey:plan.mode==='wrong-account'?'synthetic-other':'${account}',conversationKey:plan.mode==='wrong-conversation'?'synthetic-other':'${conversation}',displayName:'只作展示',sourceGeneration:plan.mode==='wrong-generation'?'f'.repeat(64):'${generation}'};
   else if(r.op==='inspect')data=schema;
-  else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'unverified':'supported',reason:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'history_message_state_unverified':null,accountKey:'${account}',conversationKey:'${conversation}',sourceGeneration:'${generation}',programVersion:'synthetic',build:'1',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:'synthetic-fixed-source',...(plan.mode.startsWith('quarantine')?{capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(k=>[k,['programVersion','exactSchema','declaredLocalKey'].includes(k)?'supported':'unverified']))}:{})};
+  else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'unverified':'supported',reason:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'history_message_state_unverified':null,accountKey:'${account}',conversationKey:'${conversation}',sourceGeneration:'${generation}',programVersion:'synthetic',build:'1',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:'synthetic-fixed-source',...(plan.capabilities?{capabilities:plan.capabilities}:plan.mode.startsWith('quarantine')?{capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(k=>[k,['programVersion','exactSchema','declaredLocalKey'].includes(k)?'supported':'unverified']))}:{})};
   else if((r.op==='target'||r.op==='quarantine-target'))data={protocol:'private-history-v1',descriptor:'synthetic-target',partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
   else if((r.op==='page'||r.op==='quarantine-page')){
    if(plan.mode==='blocked')return;
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:plan.serverId,sender:'contact',kind:'text',text:'合成历史正文',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:plan.mode==='quarantine'?'unverified':'verified'};
-   data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row,{...row,localId:'2',serverId:'0',kind:'voice',text:plan.mode==='malicious'?'forbidden-body':null,originalType:'34'}],completedPartitions:schema.checkedPartitions,exhausted:true};
+   data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row,{...row,localId:'2',serverId:'0',kind:'voice',text:plan.mode==='malicious'?'forbidden-body':null,originalType:'34'}],completedPartitions:schema.checkedPartitions,exhausted:true,...(plan.resumeCursor?{resumeCursor:plan.resumeCursor}:{})};
+  }else if(r.op==='tail')data={target:r.target,cursorIn:r.cursor,cursorOut:plan.tailCursorOut||'tail-'+tailSerial++,records:plan.tailRows||[],caughtUp:true,...(plan.tailExtra?{unexpectedBody:'forbidden'}:{})};
+  else if(r.op==='boundary-snapshot'){
+   data={format:'wechat-history-boundary-v1',scopeDigest:schema.scopeDigest,sourceGeneration:schema.sourceGeneration,schemaFingerprint:schema.schemaFingerprint,
+    target:{protocol:'private-history-v1',descriptor:'synthetic-target',partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:schema.sourceGeneration},
+    boundaryToken:'synthetic-boundary-token',members:[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'1'}],
+    partitions:[{partition:'d'.repeat(64),instance:'c'.repeat(64),preSample:'sample-before',postSample:plan.boundaryMismatch?'sample-after':'sample-before',readerCompleted:true,memberCount:1}],
+    namespaceContinuity:true,instanceContinuity:true,observedAt:'2026-10-30T00:00:00.000Z',...(plan.boundaryExtra?{messageContent:'forbidden'}:{})};
   }else process.exit(92);
   process.stdout.write(JSON.stringify({ok:true,data})+'\\n');
  });
@@ -69,6 +82,113 @@ test('正式受控渠道驱动联系人历史服务入库，非文字空正文�
  assert.deepEqual(rows.slice(0,4).map(row=>row.op),['resolve','inspect','support','target']);
  const pid=Number(await readFile(f.pidFile,'utf8'));assert.equal(f.channels.length,1);assert.doesNotThrow(()=>process.kill(pid,0));
  await f.history.stop(contact);noProcess(pid);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('正式历史终页游标交接到同scope增量尾部并原子写入更新与新消息',async t=>{
+ const f=await fixture(t),contact=f.binding.contact_id;
+ await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'})});
+ assert.equal((await f.history.synchronize(contact)).phase,'complete');
+ const before=(await f.history.read(contact)).messages.find(message=>message.kind==='text');assert.equal(before.status,'0');
+ await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailRows:[
+  {partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'77',sender:'contact',kind:'text',text:'合成历史正文',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'2',stateAssurance:'verified'},
+  {partition:'d'.repeat(64),table:'c'.repeat(64),localId:'3',serverId:'0',sender:'contact',kind:'text',text:'合成增量新消息',originalType:'1',sentAt:'1700000001000',timePrecision:'second',orderScheme:null,orderKey:null,status:'3',stateAssurance:'verified'}]});
+ const coverage=await f.history.synchronizeIncremental(contact);assert.equal(coverage.incremental.phase,'ready');assert.equal(coverage.incremental.pagesAccepted,1);
+ const after=(await f.history.read(contact)).messages,texts=after.filter(message=>message.kind==='text');
+ assert.equal(after.length,3);assert.equal(texts.length,2);assert.equal(texts.find(message=>message.id===before.id).status,'2');assert.ok(texts.some(message=>message.text==='合成增量新消息'));
+ const rows=await requests(f.logFile);assert.equal(rows.filter(row=>row.op==='resolve').length,1);assert.equal(rows.filter(row=>row.op==='target').length,1);
+ const tail=rows.find(row=>row.op==='tail');assert.ok(tail);assert.equal(tail.consent,'selected-history-v1');assert.equal(tail.account,account);assert.equal(tail.conversation,conversation);assert.equal(tail.target,'synthetic-target');assert.equal(tail.cursor,'tail-1');
+ assert.equal(f.channels.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});await f.history.stop(contact);
+});
+
+test('增量消失记录的未知墓碑隔离旧文字并降低历史覆盖资格',async t=>{
+ const f=await fixture(t),contact=f.binding.contact_id;
+ await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'})});
+ assert.equal((await f.history.synchronize(contact)).phase,'complete');
+ const before=(await f.history.read(contact)).messages.find(message=>message.kind==='text');
+ assert.ok(before);assert.equal(before.text,'合成历史正文');
+ const source=await f.history.source(contact,before.sourceRecordIds[0]);
+ assert.equal(source.raw.localId,'9007199254740993');assert.equal(source.raw.stateAssurance,'verified');
+
+ await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailCursorOut:'tail-2',tailRows:[
+  {partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'unknown',kind:'other',text:null,originalType:'unknown',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,status:null,stateAssurance:'unverified'}]});
+ const coverage=await f.history.synchronizeIncremental(contact);
+ const after=await f.history.read(contact);
+ assert.equal(after.messages.some(message=>message.id===before.id||message.text==='合成历史正文'),false);
+ assert.equal(after.messages.length,1);assert.equal(after.messages[0].kind,'voice');
+ assert.equal(after.replyEligibility,'history_incomplete');
+ assert.equal(coverage.phase,'incomplete');assert.equal(coverage.failureCode,'history_identity_quarantined');
+ assert.equal(coverage.messageCount,1);assert.equal(coverage.quarantinedCount,1);
+ assert.equal(coverage.incremental.phase,'incomplete');assert.equal(coverage.incremental.failureCode,'history_identity_quarantined');
+ await assert.rejects(f.history.source(contact,before.sourceRecordIds[0]),{code:'history_source_not_found'});
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});await f.history.stop(contact);
+});
+
+test('增量上一页可经原生复验后重放，改变的缓存响应拒绝且旧游标不跨页恢复',async t=>{
+ const f=await fixture(t),channel=createWechatHistoryChannel(f.executable),scope=await f.scope();
+ await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailCursorOut:'tail-2'});
+ await channel.inspect(scope);const target=await channel.target(scope);await channel.page(scope,target,null);
+ const first=await channel.tail(scope,target,'tail-1');assert.deepEqual(await channel.tail(scope,target,'tail-1'),first);
+ assert.equal((await requests(f.logFile)).filter(request=>request.op==='tail').length,2);
+ await assert.rejects(channel.tail(scope,target,'never-issued'),{code:'history_cursor_invalid'});
+ assert.equal((await requests(f.logFile)).filter(request=>request.op==='tail').length,2);
+ await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailCursorOut:'tail-changed'});
+ await assert.rejects(channel.tail(scope,target,'tail-1'),{code:'history_protocol_invalid'});
+ await channel.close();noProcess(Number(await readFile(f.pidFile,'utf8')));
+});
+
+test('增量能力未认证时正式渠道不发送tail RPC',async t=>{
+ const f=await fixture(t),channel=createWechatHistoryChannel(f.executable),scope=await f.scope();await f.setPlan({capabilities:capabilities({incrementalTail:'unverified'})});
+ await channel.inspect(scope);const target=await channel.target(scope);
+ await assert.rejects(channel.tail(scope,target,'synthetic-tail-cursor'),{code:'history_tail_unsupported'});
+ assert.equal((await requests(f.logFile)).some(request=>request.op==='tail'),false);await channel.close();noProcess(Number(await readFile(f.pidFile,'utf8')));
+});
+
+test('正式渠道边界接口验证支持并返回完整候选与计算后的manifest',async t=>{
+ const f=await fixture(t),channel=createWechatHistoryChannel(f.executable),scope=await f.scope();
+ await f.setPlan({capabilities:capabilities({'private-history-boundary-v1':'supported'})});
+ const report=await channel.inspect(scope);assert.equal(report.capabilities['private-history-boundary-v1'],'supported');
+ const candidate=await channel.boundarySnapshot(scope);assert.equal(candidate.protocol,'private-history-boundary-v1');assert.equal(candidate.support.capabilities['private-history-boundary-v1'],'supported');
+ assert.deepEqual(candidate.members,[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'1'}]);assert.equal(candidate.partitions[0].readerCompleted,true);
+ assert.match(candidate.manifestSha256,/^[a-f0-9]{64}$/);assert.equal(candidate.boundaryToken,'synthetic-boundary-token');
+ const row=(await requests(f.logFile)).find(request=>request.op==='boundary-snapshot');assert.ok(row);assert.equal(row.consent,'selected-history-boundary-v1');assert.equal(row.account,account);assert.equal(row.conversation,conversation);assert.equal('target' in row,false);
+ await channel.close();noProcess(Number(await readFile(f.pidFile,'utf8')));
+});
+
+test('边界能力未认证时正式清空保持boundary_pending且零boundary RPC',async t=>{
+ const f=await fixture(t),contact=f.binding.contact_id;await f.setPlan({capabilities:capabilities({'private-history-boundary-v1':'unverified'})});
+ const deletion=new DeletionService(f.storage,f.history.holders,new ManagedFiles(join(f.root,'state')));
+ const clear=new SqliteHistoryClearService(f.storage,f.contacts,()=>createWechatHistoryChannel(f.executable),deletion,f.history.holders);
+ const status=await clear.clear(contact);assert.equal(status.phase,'boundary_pending');assert.equal(status.completed,false);assert.ok(status.boundary);
+ assert.equal((await requests(f.logFile)).some(request=>request.op==='boundary-snapshot'),false);await f.history.close();
+});
+
+test('合成边界能力经正式渠道进入清空服务并持久化后完成SQLite清理',async t=>{
+ const f=await fixture(t),contact=f.binding.contact_id;
+ await f.setPlan({capabilities:capabilities({'private-history-boundary-v1':'supported'})});
+ const deletion=new DeletionService(f.storage,f.history.holders,new ManagedFiles(join(f.root,'state')));
+ const clear=new SqliteHistoryClearService(f.storage,f.contacts,()=>createWechatHistoryChannel(f.executable),deletion,f.history.holders);
+ const status=await clear.clear(contact);assert.equal(status.phase,'completed');assert.equal(status.completed,true);
+ assert.equal(status.boundary.state,'verified');assert.equal(status.boundary.memberCount,1);assert.match(status.boundary.manifestSha256,/^[a-f0-9]{64}$/);
+ const boundary=(await requests(f.logFile)).find(request=>request.op==='boundary-snapshot');assert.ok(boundary);assert.equal(boundary.consent,'selected-history-boundary-v1');
+ const stored=await f.storage.execute('history.cutoffStatus',{ownerId:owner,operationId:status.operationId});assert.equal(stored.state,'verified');assert.equal(stored.memberCount,1);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});await f.history.close();
+});
+
+test('正式渠道拒绝带额外字段的边界结果及超限tail，且坏页不入库',async t=>{
+ {
+  const f=await fixture(t),channel=createWechatHistoryChannel(f.executable),scope=await f.scope();
+  await f.setPlan({capabilities:capabilities({'private-history-boundary-v1':'supported'}),boundaryExtra:true});await channel.inspect(scope);
+  await assert.rejects(channel.boundarySnapshot(scope),{code:'history_protocol_invalid'});await channel.close();noProcess(Number(await readFile(f.pidFile,'utf8')));
+ }
+ {
+  const f=await fixture(t),contact=f.binding.contact_id;
+  await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'})});await f.history.synchronize(contact);
+  const excessive=Array.from({length:17},(_,index)=>({partition:'d'.repeat(64),table:'c'.repeat(64),localId:String(index+10),serverId:'0',sender:'contact',kind:'text',text:'超限合成记录',originalType:'1',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,status:'3',stateAssurance:'verified'}));
+  await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailRows:excessive});
+  await assert.rejects(f.history.synchronizeIncremental(contact),{code:'history_protocol_invalid'});assert.equal((await f.history.read(contact)).messages.length,2);
+  const rows=await requests(f.logFile);assert.equal(rows.filter(request=>request.op==='tail').length,1);assert.equal(f.channels.length,1);noProcess(Number(await readFile(f.pidFile,'utf8')));
+  await assert.rejects(f.history.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(f.channels.length,1);
+ }
 });
 
 test('合成原生进程意外退出后，持久停读且不启动新进程',async t=>{

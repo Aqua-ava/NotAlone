@@ -35,8 +35,8 @@ func TestNotAloneProfileAnonymousShapeDoesNotGrantHistory(t *testing.T) {
 			t.Fatalf("缺证能力被伪认证: %s=%s", capability, report.Capabilities[capability])
 		}
 	}
-	if report.CanReadHistory || len(report.ReadProfile.StatusRules) != 0 || report.ReadProfile.StatusSemanticsVerified || report.ReadProfile.OpaqueStatusPolicy != "" || report.SchemaShapeFingerprint == "" {
-		t.Fatal("结构认证绕过真实消息状态资格")
+	if report.CanReadHistory || len(report.ReadProfile.StatusRules) != 0 || report.ReadProfile.StatusSemanticsVerified || report.ReadProfile.IncrementalTailVerified || report.ReadProfile.BoundarySemanticsVerified || report.ReadProfile.OpaqueStatusPolicy != "" || report.SchemaShapeFingerprint == "" {
+		t.Fatal("真实profile不得仅凭结构自动获得状态、增量或边界语义")
 	}
 }
 

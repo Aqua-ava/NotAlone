@@ -62,6 +62,7 @@ type notaloneHistorySession struct {
 	cancel               context.CancelFunc
 	snapshot             *notaloneSnapshot
 	snapshotMode         string
+	tail                 *notaloneTailSession
 	messageGuard         *notaloneSourceGuard
 	messageMonitor       *notaloneSourceGuard
 	guardLost            chan struct{}
@@ -81,6 +82,7 @@ func newNotaloneHistorySession(s *server) *notaloneHistorySession {
 }
 func (h *notaloneHistorySession) close() {
 	h.cancel()
+	h.resetTail()
 	if h.testMetadata != nil {
 		_ = h.testMetadata.Close()
 	}
@@ -387,10 +389,29 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 		reason := "history_artifact_unverified"
 		result.Status = "unverified"
 		result.Reason = &reason
+		if result.Capabilities == nil {
+			result.Capabilities = map[string]string{}
+		}
+		result.Capabilities["incrementalTail"] = "unverified"
+		result.Capabilities["private-history-boundary-v1"] = "unverified"
 		return result, nil, nil
 	}
 	if h.inspected != nil && h.snapshot != nil && h.inspected.SchemaFingerprint != inspected.SchemaFingerprint {
 		return result, nil, notaloneFailure("history_schema_changed")
+	}
+	if result.Capabilities == nil {
+		result.Capabilities = map[string]string{}
+	}
+	result.Capabilities["incrementalTail"] = "unverified"
+	result.Capabilities["private-history-boundary-v1"] = "unverified"
+	trustedCapabilities := certification.ReadProfile != nil && result.Status == "supported" &&
+		result.Capabilities["programVersion"] == "supported" && result.Capabilities["exactSchema"] == "supported" &&
+		result.Capabilities["declaredLocalKey"] == "supported"
+	if trustedCapabilities && certification.ReadProfile.IncrementalTailVerified {
+		result.Capabilities["incrementalTail"] = "supported"
+	}
+	if trustedCapabilities && certification.ReadProfile.BoundarySemanticsVerified {
+		result.Capabilities["private-history-boundary-v1"] = "supported"
 	}
 	h.inspected = &inspected
 	return result, certification.ReadProfile, nil
@@ -416,6 +437,10 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if r.Consent != "selected-metadata-v1" || r.DisplayName == "" || r.Account != "" || r.Conversation != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
+	case "boundary-snapshot":
+		if r.Consent != "selected-history-boundary-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
 	case "observe-metadata":
 		if r.Consent != "selected-message-metadata-v1" || !validNotaloneMetadataKind(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
@@ -428,15 +453,15 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if r.Consent != "selected-received-test-lifecycle-metadata-v1" || !validNotaloneTestMetadataAction(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
-	case "inspect", "support", "target", "page", "quarantine-target", "quarantine-page":
+	case "inspect", "support", "target", "page", "tail", "quarantine-target", "quarantine-page":
 		consent := "selected-schema-v1"
-		if r.Operation == "target" || r.Operation == "page" {
+		if r.Operation == "target" || r.Operation == "page" || r.Operation == "tail" {
 			consent = "selected-history-v1"
 		}
 		if r.Operation == "quarantine-target" || r.Operation == "quarantine-page" {
 			consent = "selected-quarantine-history-v1"
 		}
-		isPage := r.Operation == "page" || r.Operation == "quarantine-page"
+		isPage := r.Operation == "page" || r.Operation == "quarantine-page" || r.Operation == "tail"
 		if r.Consent != consent || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || (!isPage && (r.Target != "" || r.Cursor != "")) || (isPage && r.Target == "") {
 			return nil, notaloneFailure("history_request_invalid")
 		}
@@ -475,6 +500,9 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	}
 	if r.Operation == "inspect" {
 		return h.inspect(ctx)
+	}
+	if r.Operation == "boundary-snapshot" {
+		return h.boundarySnapshot(ctx)
 	}
 	if r.Operation == "observe-test-metadata" {
 		if err := h.ensureMessageGuard(); err != nil {
@@ -549,7 +577,7 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		return notaloneMetadataReport{Format: "wechat-message-metadata-observation-v1", Status: "unverified", ScopeDigest: inspection.ScopeDigest, SourceGeneration: inspection.SourceGeneration, SchemaFingerprint: inspection.SchemaFingerprint, Kind: r.Kind, CheckedPartitions: inspection.CheckedPartitions, Record: observation}, nil
 	}
 
-	if (r.Operation == "target" || r.Operation == "page" || r.Operation == "quarantine-target" || r.Operation == "quarantine-page") && h.messageGuard != nil {
+	if (r.Operation == "target" || r.Operation == "page" || r.Operation == "tail" || r.Operation == "quarantine-target" || r.Operation == "quarantine-page") && h.messageGuard != nil {
 		if err := h.ensureMessageGuard(); err != nil {
 			return nil, err
 		}
@@ -560,6 +588,9 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	}
 	if r.Operation == "support" {
 		return report, nil
+	}
+	if r.Operation == "tail" {
+		return h.tailPage(ctx, r, report, profile)
 	}
 	mode := "normal"
 	if r.Operation == "quarantine-target" || r.Operation == "quarantine-page" {
@@ -580,6 +611,7 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			_ = h.snapshot.Close()
 			h.snapshot = nil
 		}
+		h.resetTail()
 		snapshot, err := newNotaloneSnapshot(h.life, h.server, *h.selected, *h.inspected, *profile)
 		if err != nil {
 			return nil, err
@@ -605,6 +637,25 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		_ = h.snapshot.Close()
 		h.snapshot = nil
 		return nil, err
+	}
+	if r.Operation == "page" && page.Exhausted && profile.IncrementalTailVerified && report.Capabilities["incrementalTail"] == "supported" {
+		if h.snapshot.identityDigests == nil {
+			_ = h.snapshot.Close()
+			h.snapshot = nil
+			return nil, notaloneFailure("history_tail_unsupported")
+		}
+		target := h.snapshot.Target()
+		tail, tailErr := newNotaloneTailSession(target, *h.selected, *h.inspected, *profile, h.snapshot.identityDigests)
+		if tailErr != nil {
+			_ = h.snapshot.Close()
+			h.snapshot = nil
+			return nil, tailErr
+		}
+		h.resetTail()
+		h.tail = tail
+		h.snapshot = nil
+		resume := tail.expectedCursor
+		page.ResumeCursor = &resume
 	}
 	return page, nil
 }

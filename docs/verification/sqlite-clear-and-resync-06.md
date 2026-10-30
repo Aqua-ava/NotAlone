@@ -1,5 +1,13 @@
 # 06 清空聊天与明确重读历史：实施与验证记录
 
+> 本轮代码与合成验证已收口；最终开发制品、216项原生race与受影响组合结果见[最新组合收尾](21-three-specs-integrated-acceptance.md#2026-10-30-后续实现与本轮收尾)。真实未认证能力保持关闭。
+
+## 2026-10-30 后续补齐：正式窄协议边界路径
+
+本次补齐此前缺失的 `boundary-snapshot` 原生操作、TypeScript 严格解析和 `WechatHistoryChannel.boundarySnapshot`。只查询所选会话的本地主键，返回完整分片身份清单、实际 observer pre/post、固定 reader 完成标记与来源守卫结果；客户端重新核对范围、计数、去重与实例，并计算供SQLite原子接受的manifest。上限10万身份，超限、取消或失证拒绝结果，窗口变化仅在原生内部有界重试。
+
+独立边界 capability 与 profile 标志仍控制是否可调用，当前真实支持档保持未认证；实际清空继续显示 `boundary_pending`。用户跳过的是本轮真实认证阻塞，未授权把未知边界写成成功。下方早期“未实现原生操作”的记录保留为历史阶段，不再描述当前代码。
+
 日期：2026-10-30。工作树 `sqlite-rebuild-06`，分支 `sqlite-rebuild-06`，已合并集成分支（迁移 13=memoryDocuments、14=historyIncremental、15=historyClear）。本票完成清空/边界/显式重读的存储与产品接线、合成验证与桌面状态投影；真实微信 observer/reader 协议与最终制品仍未认证，生产适配器继续拒绝并按 `boundary_pending` 展示。
 
 ## 交付范围

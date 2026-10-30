@@ -2,6 +2,7 @@ import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { loadNarrowWechatOptions } from '../wechat/artifacts.ts';
 import { NarrowWechatClient } from '../wechat/native-client.ts';
 import type { HistoryChannel, HistoryScope, HistorySupportReport, HistoryTarget } from './contracts.ts';
+import { prepareBoundaryCandidate } from './boundary.ts';
 
 function unavailableReport():HistorySupportReport {
  const report:HistorySupportReport={protocol:'private-history-v1',profileId:'wechat-private-history-unverified-v1',adapterVersion:'1',
@@ -82,6 +83,18 @@ class WechatHistoryChannel implements HistoryChannel {
   return this.#run(scope,signal,async native=>{
    try{return await native.pageSelected(target,cursor,signal);}
    catch(error){if(!this.#targetIssued&&error instanceof StorageFailure&&error.code==='history_target_unverified')return reject('history_cursor_invalid');throw error;}
+  });
+ }
+ async tail(scope:HistoryScope,target:HistoryTarget,cursor:string,signal?:AbortSignal){
+  if(!this.#executable)return reject('history_support_unverified');
+  return this.#run(scope,signal,native=>native.tailSelected(target,cursor,signal));
+ }
+ async boundarySnapshot(scope:HistoryScope,signal?:AbortSignal){
+  if(!this.#executable)return reject('history_support_unverified');
+  return this.#run(scope,signal,async native=>{
+   await native.inspectSelected(signal);await native.supportSelected(signal);
+   const candidate=await native.boundarySnapshotSelected(signal);
+   prepareBoundaryCandidate(scope,candidate);return candidate;
   });
  }
  async close():Promise<void>{

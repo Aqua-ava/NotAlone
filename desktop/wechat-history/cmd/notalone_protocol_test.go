@@ -63,8 +63,14 @@ func TestNotAloneHistoryProtocolGateAndTypedSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value.(notaloneSupportReport).Status != "unverified" {
+	support := value.(notaloneSupportReport)
+	if support.Status != "unverified" {
 		t.Fatal("未知真实状态不可升级")
+	}
+	for _, capability := range []string{"incrementalTail", "private-history-boundary-v1"} {
+		if support.Capabilities[capability] != "unverified" {
+			t.Fatalf("真实profile缺少增量/边界认证时必须保持unverified: %s=%s", capability, support.Capabilities[capability])
+		}
 	}
 	r.Operation = "target"
 	r.Consent = "selected-history-v1"

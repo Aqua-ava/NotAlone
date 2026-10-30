@@ -4,7 +4,8 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
-import type { HistoryPage, HistoryRecord, HistorySupportReport, HistoryTarget } from '../sqlite/contracts.ts';
+import type { HistoryPage, HistoryRecord, HistorySupportReport, HistoryTarget, HistoryTailPage } from '../sqlite/contracts.ts';
+import { boundaryProtocol, maxBoundaryMembers, membersManifestSha256, sourceLocalKey, type HistoryBoundaryCandidate } from '../sqlite/boundary.ts';
 
 export interface ResolvedWechatScope {
   accountKey: string; conversationKey: string; displayName: string; sourceGeneration: string;
@@ -64,6 +65,7 @@ export interface NarrowWechatClientOptions {
 }
 const responseLimit = 2 * 1024 * 1024;
 const pageResponseLimit = 8 * 1024 * 1024;
+const boundaryResponseLimit = 32 * 1024 * 1024;
 // 16×65536×最坏6倍JSON转义为6MiB，为有界元数据及游标保留2MiB。
 const pageRecordLimit = 16;
 const stderrLimit = 64 * 1024;
@@ -90,6 +92,10 @@ const allowedErrors = new Set([
   'history_snapshot_window_changed', 'history_text_unknown', 'history_text_invalid',
   'history_test_sender_unverified', 'history_test_sender_ambiguous', 'history_test_new_rows_ambiguous',
   'history_test_type_unverified', 'history_test_key_unverified',
+  'history_tail_unsupported', 'history_tail_baseline_too_large', 'history_boundary_unsupported', 'history_boundary_candidate_too_large',
+  'history_boundary_scope_invalid', 'history_boundary_support_unverified', 'history_boundary_candidate_incomplete',
+  'history_boundary_member_limit', 'history_boundary_member_invalid', 'history_boundary_read_failed',
+  'history_boundary_instance_changed', 'history_snapshot_close_failed',
 ]);
 function object(value: unknown, keys: readonly string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();
@@ -225,7 +231,8 @@ function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: str
   if (row.status === 'supported' && (reason !== null || !declaredPrimaryKey.length)) return fail();
   let capabilities: Record<string, 'supported' | 'unsupported' | 'unverified'> | undefined;
   if (hasCapabilities) {
-    const keys = ['programVersion', 'exactSchema', 'declaredLocalKey', 'automaticAllocation', 'serverIdUniqueConstraint', 'statusColumn', 'statusSemantics', 'sourceLifecycle', 'restartContinuity', 'recoveryMapping', 'snapshotBarrier', 'partitionCoverage', 'normalHistory'];
+    const extras = ['incrementalTail', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
+    const keys = ['programVersion', 'exactSchema', 'declaredLocalKey', 'automaticAllocation', 'serverIdUniqueConstraint', 'statusColumn', 'statusSemantics', 'sourceLifecycle', 'restartContinuity', 'recoveryMapping', 'snapshotBarrier', 'partitionCoverage', 'normalHistory', ...extras];
     const reported = object(row.capabilities, keys);
     capabilities = Object.fromEntries(keys.map(key => {
       const value = reported[key];
@@ -282,13 +289,50 @@ function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | '
     sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'] };
 }
 function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, mode: 'normal' | 'quarantine' = 'normal'): HistoryPage {
-  const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'completedPartitions', 'exhausted']);
+  const hasResume = !!value && typeof value === 'object' && Object.hasOwn(value, 'resumeCursor');
+  const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'completedPartitions', 'exhausted', ...(hasResume ? ['resumeCursor'] : [])]);
   if (row.target !== target.descriptor || row.cursorIn !== cursor) return fail();
   const cursorOut = row.cursorOut === null ? null : opaque(row.cursorOut), exhausted = bool(row.exhausted);
   if (exhausted ? cursorOut !== null : cursorOut === null || cursorOut === cursor) return fail();
   const completedPartitions = list(row.completedPartitions, 128, hash); unique(completedPartitions);
   if (completedPartitions.some(partition => !target.partitions.includes(partition))) return fail();
-  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, mode)), completedPartitions, exhausted };
+  if (hasResume && (mode !== 'normal' || !exhausted || row.resumeCursor === null)) return fail();
+  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, mode)), completedPartitions, exhausted,
+    ...(hasResume ? { resumeCursor: opaque(row.resumeCursor) } : {}) };
+}
+function historyTailPage(value: unknown, target: HistoryTarget, cursor: string): HistoryTailPage {
+  const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'caughtUp']);
+  const cursorOut = opaque(row.cursorOut);
+  if (row.target !== target.descriptor || row.cursorIn !== cursor || cursorOut === cursor) return fail();
+  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target)), caughtUp: bool(row.caughtUp) };
+}
+function historyBoundary(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, support: HistorySupportReport): HistoryBoundaryCandidate {
+  const row = object(value, ['format', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'target', 'boundaryToken', 'members', 'partitions', 'namespaceContinuity', 'instanceContinuity', 'observedAt']);
+  if (row.format !== 'wechat-history-boundary-v1' || row.scopeDigest !== schema.scopeDigest || row.sourceGeneration !== scope.sourceGeneration
+    || row.schemaFingerprint !== schema.schemaFingerprint || row.namespaceContinuity !== true || row.instanceContinuity !== true) return fail();
+  const target = historyTarget(row.target, scope, schema);
+  const members = list(row.members, maxBoundaryMembers, value => {
+    const member = object(value, ['partition', 'table', 'localId']);
+    const partition = hash(member.partition), table = hash(member.table), localId = exactInteger(member.localId, true);
+    if (!target.tables.some(item => item.partition === partition && item.instance === table)) return fail();
+    return { partition, table, localId };
+  });
+  const keys = members.map(member => sourceLocalKey(scope.sourceGeneration, member.partition, member.table, member.localId)); unique(keys);
+  const counts = new Map<string, number>();
+  for (const member of members) counts.set(member.partition, (counts.get(member.partition) ?? 0) + 1);
+  const partitions = list(row.partitions, 128, value => {
+    const entry = object(value, ['partition', 'instance', 'preSample', 'postSample', 'readerCompleted', 'memberCount']);
+    const partition = hash(entry.partition), instance = hash(entry.instance), preSample = opaque(entry.preSample), postSample = opaque(entry.postSample), memberCount = integer(entry.memberCount, maxBoundaryMembers);
+    if (preSample !== postSample || entry.readerCompleted !== true || !target.tables.some(item => item.partition === partition && item.instance === instance)
+      || (counts.get(partition) ?? 0) !== memberCount) return fail();
+    return { partition, instance, preSample, postSample, readerCompleted: true, memberCount };
+  });
+  unique(partitions.map(entry => entry.partition));
+  if (partitions.length !== target.partitions.length) return fail();
+  const observedAt = text(row.observedAt, 64); if (!Number.isFinite(Date.parse(observedAt))) return fail();
+  const normalized = members.map(member => ({ partition: member.partition, tableInstance: member.table, localKey: sourceLocalKey(scope.sourceGeneration, member.partition, member.table, member.localId) })).sort((a, b) => a.localKey.localeCompare(b.localKey));
+  return { protocol: boundaryProtocol, target, support, accountKey: scope.accountKey, conversationKey: scope.conversationKey, sourceGeneration: scope.sourceGeneration,
+    boundaryToken: opaque(row.boundaryToken), manifestSha256: membersManifestSha256(target.descriptor, normalized), members, partitions, namespaceContinuity: true, instanceContinuity: true, observedAt };
 }
 function metadataKind(originalType: string | null): HistoryRecord['kind'] {
   switch (originalType === null ? null : BigInt(originalType) & 0xffffffffn) {
@@ -407,6 +451,8 @@ export class NarrowWechatClient {
   #schema?: WechatSchemaInspection;
   #support?: HistorySupportReport;
   #target?: HistoryTarget;
+  #tailCursor?: string;
+  #lastTail?: { input: string; page: HistoryTailPage };
   #quarantineTarget?: HistoryTarget;
   #testMetadata?: TestMetadataState;
   #receivedTestMetadata?: TestMetadataState;
@@ -453,7 +499,7 @@ export class NarrowWechatClient {
         if (this.#account && (parsed.accountKey !== this.#account.accountKey || parsed.sourceGeneration !== this.#account.sourceGeneration)) return fail('history_scope_changed');
         return parsed;
       });
-      this.#selected = { ...scope }; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#quarantineTarget = undefined; return scope;
+      this.#selected = { ...scope }; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget = undefined; return scope;
     }, signal);
   }
   inspectSelected(signal?: AbortSignal): Promise<WechatSchemaInspection> {
@@ -558,7 +604,7 @@ export class NarrowWechatClient {
         if (this.#schema && parsed.schemaFingerprint !== this.#schema.schemaFingerprint
           || this.#support && parsed.schemaFingerprint !== this.#support.schemaFingerprint
           || this.#support?.status === 'supported' && parsed.status === 'supported' && JSON.stringify(parsed) !== JSON.stringify(this.#support)) fail('history_support_changed');
-        if (parsed.status !== 'supported') this.#target = undefined;
+        if (parsed.status !== 'supported') { this.#target = undefined; this.#tailCursor = undefined; this.#lastTail = undefined; }
         this.#support = structuredClone(parsed); return parsed;
       });
     }, signal);
@@ -568,7 +614,7 @@ export class NarrowWechatClient {
     return this.#enqueue(async () => {
       const scope = this.#readableScope();
       return this.#request({ op: 'target', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1' }, value => {
-        const parsed = historyTarget(value, scope, this.#schema); this.#target = structuredClone(parsed); this.#quarantineTarget=undefined; return parsed;
+        const parsed = historyTarget(value, scope, this.#schema); this.#target = structuredClone(parsed); this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget=undefined; return parsed;
       });
     }, signal);
   }
@@ -581,7 +627,42 @@ export class NarrowWechatClient {
       try { parsed = historyTarget(target, scope, this.#schema); } catch { return fail('history_target_unverified'); }
       if (!this.#target || JSON.stringify(parsed) !== JSON.stringify(this.#target)) return fail('history_target_unverified');
       const accepted = this.#target;
-      return this.#request({ op: 'page', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1', target: accepted.descriptor, cursor: cursor ?? '' }, value => historyPage(value, accepted, cursor), pageResponseLimit);
+      return this.#request({ op: 'page', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1', target: accepted.descriptor, cursor: cursor ?? '' }, value => {
+        const page = historyPage(value, accepted, cursor);
+        if (page.resumeCursor && this.#support?.capabilities?.incrementalTail !== 'supported') return fail();
+        if (page.resumeCursor) this.#tailCursor = page.resumeCursor;
+        return page;
+      }, pageResponseLimit);
+    }, signal);
+  }
+  /** 同一活守卫的固定切面检查点；不接受由调用方拼接或跨进程恢复的游标。 */
+  tailSelected(target: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTailPage> {
+    try { signalValid(signal); opaque(cursor); }
+    catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(() => {
+      const scope = this.#readableScope();
+      if (this.#support?.capabilities?.incrementalTail !== 'supported') return fail('history_tail_unsupported');
+      const parsed = historyTarget(target, scope, this.#schema);
+      if (!this.#target || JSON.stringify(parsed) !== JSON.stringify(this.#target)) return fail('history_target_unverified');
+      const replay = this.#lastTail?.input === cursor;
+      if (cursor !== this.#tailCursor && !replay) return fail('history_cursor_invalid');
+      return this.#request({ op: 'tail', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1', target: parsed.descriptor, cursor }, value => {
+        const page = historyTailPage(value, parsed, cursor);
+        // 重放仍交给原生守卫复验，只接受上一页的相同响应，不能改变已交付检查点。
+        if (replay) { if (JSON.stringify(page) !== JSON.stringify(this.#lastTail!.page)) return fail('history_protocol_invalid'); }
+        else { this.#tailCursor = page.cursorOut; this.#lastTail = { input: cursor, page: structuredClone(page) }; }
+        return page;
+      }, pageResponseLimit);
+    }, signal);
+  }
+  /** 返回元数据边界，正文/媒体不属于此协议；能力未经认证时零RPC拒绝。 */
+  boundarySnapshotSelected(signal?: AbortSignal): Promise<HistoryBoundaryCandidate> {
+    try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(() => {
+      const scope = this.#readableScope(), schema = this.#schema, support = this.#support!;
+      if (!schema) return fail('history_scope_unverified');
+      if (support.capabilities?.[boundaryProtocol] !== 'supported') return fail('history_boundary_unsupported');
+      return this.#request({ op: 'boundary-snapshot', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-boundary-v1' }, value => historyBoundary(value, scope, schema, structuredClone(support)), boundaryResponseLimit);
     }, signal);
   }
   /** 明确同意的单次隔离快照；不提升普通历史支持档，不提供自动重试或续读。 */
@@ -592,7 +673,7 @@ export class NarrowWechatClient {
       if (!scope || !this.#schema || this.#support?.capabilities?.programVersion !== 'supported' || this.#support.capabilities.exactSchema !== 'supported'
         || this.#support.capabilities.declaredLocalKey !== 'supported') return fail('history_support_unverified');
       return this.#request({op:'quarantine-target',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-quarantine-history-v1'},value=>{
-        const parsed=historyTarget(value,scope,this.#schema);this.#quarantineTarget=structuredClone(parsed);this.#target=undefined;return parsed;
+        const parsed=historyTarget(value,scope,this.#schema);this.#quarantineTarget=structuredClone(parsed);this.#target=undefined;this.#tailCursor=undefined;this.#lastTail=undefined;return parsed;
       });
     },signal);
   }
@@ -691,7 +772,7 @@ export class NarrowWechatClient {
   }
   async #stop(code: string): Promise<void> {
     if (this.#stopped) { await this.#stopping; return; }
-    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#quarantineTarget=undefined; this.#testMetadata = undefined; this.#receivedTestMetadata = undefined;
+    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget=undefined; this.#testMetadata = undefined; this.#receivedTestMetadata = undefined;
     this.#stoppedSignal.resolve();
     const pending = this.#pending; this.#pending = undefined;
     this.#stopping = (async () => {

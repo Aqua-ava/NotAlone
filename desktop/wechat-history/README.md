@@ -12,6 +12,10 @@
 
 普通读取的状态规则由本机受版本管理的 profile 提供，同时精确匹配完整 `local_type`、发送方向和原始状态；高位类型不会自动继承低32位类型的资格。规则值与 `StatusSemanticsVerified` 认证分开，只有已认证的 sent/received 规则和必要的服务端身份条件全部满足时才取文字正文。pending、failed、recalled、deleted、unknown 均不取普通正文。当前真实 profile 未启用这些认证规则，合成测试的状态数字不代表微信状态码约定。
 
+增量使用同一守卫会话内的不透明检查点：历史终页交付 `resumeCursor`，`tail` 按完整固定快照重扫并比较记录摘要，覆盖较小编号的新行和已有行变化，不把最大编号或时间当作水位。每页有界，未完成的一轮通过检查点继续；只有完整扫描结束后才能判断旧身份消失，消失项仅输出未核验、无正文的记录。会话退出、来源或表实例变化后旧游标不可恢复。该路径需独立的 `incrementalTail` 能力认证，当前真实 profile 不启用。
+
+`boundary-snapshot` 使用 `selected-history-boundary-v1` 许可，只枚举所选会话的完整本地身份集合，不查询正文或媒体。每分片保留独立 observer/reader 的实际 pre/post 取样和读完成证据，窗口变化只在有界次数内重新取样；集合超过上限或来源失证时拒绝返回完整边界。客户端复核范围、分片、精确成员及计数，并计算供 SQLite 原子接受的 manifest。此操作由独立的 `private-history-boundary-v1` 能力控制，未认证的真实清空仍显示边界待确认。
+
 定向原生测试需设置 `NOTALONE_TEST_WCDB` 指向被核验的现存 dylib，测试只创建合成临时数据库。验收证据见 `docs/verification/sqlite-private-history-support-03.md`；最终产品字节必须另行核对，开发构建 manifest 不宣称真实微信通过。
 
 

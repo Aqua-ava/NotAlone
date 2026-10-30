@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { HistoryRecord, HistoryScope, HistorySupportReport, HistoryTarget } from './contracts.ts';
 
-/** 由已认证只读适配器提供的固定源快照边界；真实制品未认证时不得实现。 */
+/** 由只读适配器提供的固定源快照边界；真实制品未认证时不得返回已认证候选。 */
 export const boundaryProtocol = 'private-history-boundary-v1' as const;
 /** 最大成员数：完整身份集合必须逐条持久化，不按最大号/时间/摘要替代。 */
 export const maxBoundaryMembers = 100_000;
@@ -26,9 +26,9 @@ export interface HistoryBoundaryCandidate {
   namespaceContinuity: boolean; instanceContinuity: boolean;
   observedAt: string;
 }
-/** 可选能力：只有认证过边界协议的适配器才实现；正式微信适配器未认证时保持缺席。 */
+/** 可选能力：适配器实现必须在认证不足时拒绝读取，不能凭方法存在认定支持。 */
 export interface HistoryBoundaryCapability {
-  /** 与 04 的 HistoryChannel 可选能力同名；只有认证过边界协议的适配器实现。 */
+  /** 与 04 的 HistoryChannel 可选能力同名；能力支持档仍单独校验。 */
   boundarySnapshot(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryBoundaryCandidate>;
 }
 /** 04 在 contracts.ts 只声明 Promise<unknown>；这里是受信任适配器边界的唯一收窄点。 */

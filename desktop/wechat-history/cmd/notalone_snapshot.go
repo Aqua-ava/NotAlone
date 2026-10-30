@@ -19,10 +19,12 @@ import (
 
 // 仅由受版本管理且有真实结构依据的profile装配；RPC不能提供此结构。
 type notaloneReadProfile struct {
-	SchemaShapeFingerprint  string
-	StatusSemanticsVerified bool
-	StatusRules             []notaloneStatusRule
-	OpaqueStatusPolicy      string
+	SchemaShapeFingerprint    string
+	StatusSemanticsVerified   bool
+	IncrementalTailVerified   bool
+	BoundarySemanticsVerified bool
+	StatusRules               []notaloneStatusRule
+	OpaqueStatusPolicy        string
 }
 type notaloneMessageState string
 
@@ -159,35 +161,39 @@ type notaloneSnapshotPage struct {
 	Target              string                   `json:"target"`
 	CursorIn            *string                  `json:"cursorIn"`
 	CursorOut           *string                  `json:"cursorOut"`
+	ResumeCursor        *string                  `json:"resumeCursor,omitempty"`
 	Records             []notaloneSnapshotRecord `json:"records"`
 	CompletedPartitions []string                 `json:"completedPartitions"`
 	Exhausted           bool                     `json:"exhausted"`
 }
 type notaloneSnapshotShard struct {
-	reader    *wcdb.DB
-	observer  *wcdb.DB
-	partition string
-	instance  string
-	present   bool
-	lastID    *int64
-	done      bool
+	reader       *wcdb.DB
+	observer     *wcdb.DB
+	partition    string
+	instance     string
+	observerPre  int64
+	observerPost int64
+	present      bool
+	lastID       *int64
+	done         bool
 }
 type notaloneSnapshot struct {
-	mu             sync.Mutex
-	life           context.Context
-	cancel         context.CancelFunc
-	closed         bool
-	guard          *notaloneSourceGuard
-	shards         []*notaloneSnapshotShard
-	selected       notaloneResolved
-	senderOwner    string
-	profile        notaloneReadProfile
-	table          string
-	target         notaloneSnapshotTarget
-	shardIndex     int
-	expectedCursor string
-	started        bool
-	pages          int
+	mu              sync.Mutex
+	life            context.Context
+	cancel          context.CancelFunc
+	closed          bool
+	guard           *notaloneSourceGuard
+	shards          []*notaloneSnapshotShard
+	selected        notaloneResolved
+	senderOwner     string
+	profile         notaloneReadProfile
+	table           string
+	target          notaloneSnapshotTarget
+	identityDigests map[notaloneTailIdentity]notaloneTailBaselineEntry
+	shardIndex      int
+	expectedCursor  string
+	started         bool
+	pages           int
 }
 
 // 结构能力只比较列、完整索引列组、自动主键和触发器数量；实例编号不构成schema。
@@ -282,6 +288,9 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 	life, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	// 目录账号身份继续用于scope；sender使用锁定上游selfWxid的账号名规范。
 	n := &notaloneSnapshot{life: life, cancel: cancel, guard: guard, selected: selected, senderOwner: s.selfWxid(), profile: profile, table: "Msg_" + talkerHash(selected.Conversation)}
+	if profile.IncrementalTailVerified {
+		n.identityDigests = make(map[notaloneTailIdentity]notaloneTailBaselineEntry)
+	}
 	defer func() {
 		if err != nil {
 			_ = n.Close()
@@ -348,6 +357,7 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 		if e != nil {
 			return nil, e
 		}
+		shard.observerPre = version
 		before[index] = version
 	}
 	for _, shard := range n.shards {
@@ -373,6 +383,7 @@ func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolv
 		if e != nil || after != before[index] {
 			return nil, notaloneFailure("history_snapshot_window_changed")
 		}
+		shard.observerPost = after
 	}
 	// 获取窗口前的结构检查不能代替reader实际固定后的表实例；同名DDL也要失效。
 	for _, shard := range n.shards {
@@ -462,7 +473,11 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 	if ctx == nil || ctx.Err() != nil {
 		return page, notaloneFailure("history_snapshot_cancelled")
 	}
-	if n.pages >= 1000 {
+	pageLimit := 1000
+	if n.profile.IncrementalTailVerified {
+		pageLimit = (notaloneTailIdentityLimit+15)/16 + len(n.shards) + 1
+	}
+	if n.pages >= pageLimit {
 		return page, notaloneFailure("history_page_budget_exhausted")
 	}
 	if (!n.started && cursor != "") || (n.started && (cursor == "" || cursor != n.expectedCursor)) {
@@ -502,6 +517,11 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 		records, e := n.projectRows(op, shard, rows)
 		if e != nil {
 			return page, e
+		}
+		if n.identityDigests != nil {
+			if err := n.recordIdentityDigests(shard, records); err != nil {
+				return page, err
+			}
 		}
 		page.Records = append(page.Records, records...)
 		if len(rows) > 0 {
@@ -670,4 +690,47 @@ func (n *notaloneSnapshot) Close() error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return n.closeLocked()
+}
+
+// boundaryEvidence 要求调用者持有 n.mu；统一从已固定的observer和reader中返回获取窗口证据。
+func (n *notaloneSnapshot) boundaryEvidence() ([]notaloneBoundaryPartition, bool, bool, error) {
+	if err := n.checkLocked(); err != nil {
+		return nil, false, false, err
+	}
+	evidence := make([]notaloneBoundaryPartition, 0, len(n.target.Tables))
+	instances := make(map[string]string, len(n.target.Tables))
+	for _, table := range n.target.Tables {
+		if table.Partition == "" || table.Instance == "" || instances[table.Partition] != "" {
+			return nil, false, false, notaloneFailure("history_boundary_instance_changed")
+		}
+		instances[table.Partition] = table.Instance
+	}
+	namespaceContinuity := n.guard != nil && n.guard.Check() == nil
+	instanceContinuity := true
+	for _, shard := range n.shards {
+		instance, inTarget := instances[shard.partition]
+		if !shard.present {
+			if inTarget {
+				instanceContinuity = false
+			}
+			continue
+		}
+		if !inTarget || instance != shard.instance || shard.reader == nil || shard.observer == nil || shard.observerPre < 0 || shard.observerPost < 0 {
+			instanceContinuity = false
+			continue
+		}
+		actual, err := inspectNotaloneTable(n.life, shard.reader, n.table, shard.partition)
+		if err != nil || actual.Target != instance {
+			instanceContinuity = false
+		}
+		evidence = append(evidence, notaloneBoundaryPartition{
+			Partition: shard.partition, Instance: instance,
+			PreSample: strconv.FormatInt(shard.observerPre, 10), PostSample: strconv.FormatInt(shard.observerPost, 10),
+			ReaderCompleted: false,
+		})
+	}
+	if err := n.checkLocked(); err != nil {
+		return nil, false, false, err
+	}
+	return evidence, namespaceContinuity && n.guard.Check() == nil, instanceContinuity, nil
 }
