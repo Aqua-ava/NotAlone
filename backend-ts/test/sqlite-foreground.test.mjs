@@ -1,4 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';import {SqliteForeground} from '../src/foreground/sqlite-foreground.ts';
+import {NativeForegroundProbe} from '../src/foreground/foreground-location-probe.ts';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';
 function fixture(){
  const owner=randomUUID(),contact=randomUUID(),binding=randomUUID(),account={id:randomUUID(),key:'synthetic-account',sourceGeneration:'generation-1',revision:'1'};
  const snapshot={enabled:true,readEpoch:'1',account,bindings:[{binding_id:binding,contact_id:contact,account_id:account.id,conversation_locator:'synthetic-person',display_name:'合成联系人',status:'active',selection_generation:'1',grant_id:randomUUID(),desktopVerified:true}]};
@@ -24,4 +26,20 @@ test('仅渠道元数据不能冒充桌面绑定，需用户选择当前联系�
 
 test('名单中群聊名称缺失时不把同名私聊自动确认',async()=>{
  const f=fixture();f.rows.push({username:'missing@chatroom',display_name:'missing@chatroom',chat_type:'group'});try{const result=await f.foreground.observe();assert.equal(result.phase,'manual-required');assert.equal(result.contact_id,null);}finally{await f.foreground.close();}
+});
+
+test('权限恢复后重试真实探针，但仍由新观察决定联系人',async()=>{
+ const dir=await mkdtemp(path.join(tmpdir(),'notalone-permission-recovery-')),marker=path.join(dir,'granted');
+ const worker=fileURLToPath(new URL('./foreground-location-probe.fixture.mjs',import.meta.url));
+ const probe=new NativeForegroundProbe({executable:process.execPath,args:[worker,'permission-recover',marker]});
+ const account={id:randomUUID(),key:'synthetic-account',sourceGeneration:'synthetic',revision:'1'};
+ const foreground=new SqliteForeground({ownerId:randomUUID(),probe,snapshot:async()=>({enabled:true,readEpoch:'1',account,bindings:[]}),sessions:async()=>[],closeSessions:async()=>{}});
+ try{
+  assert.equal((await foreground.observe()).reason,'screen_capture_permission_missing');
+  await writeFile(marker,'');
+  assert.equal((await foreground.observe()).reason,'screen_capture_permission_missing');
+  await foreground.screenPermissionRestored();
+  const result=await foreground.observe();
+  assert.notEqual(result.reason,'screen_capture_permission_missing');assert.equal(result.contact_id,null);
+ }finally{await foreground.close();await rm(dir,{recursive:true,force:true});}
 });

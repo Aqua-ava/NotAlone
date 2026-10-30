@@ -95,7 +95,7 @@ void app.whenReady().then(async () => {
     inspect: (request, signal) => inspectConfiguredScreenPermission(
       app.getPath('userData'), resourcesDirectory, request, signal),
     openSettings: () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'),
-    onGranted: () => foreground.observeBeforeShow(),
+    onGranted: () => foreground.screenPermissionRestored(),
   });
   installScreenPermissionBridge(commands, screenPermission);
   foreground.onStateChanged((state) => {

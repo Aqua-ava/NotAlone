@@ -227,6 +227,15 @@ export class ForegroundController {
     }, delay);
     this.scheduled = handle;
   }
+  async screenPermissionRestored(): Promise<void> {
+    const generation = this.backend.getConnectionGeneration();
+    if (this.disposed || this.stopped || generation === undefined) return;
+    const response = await this.backend.requestJson({ method: 'POST', path: '/api/sync/foreground/permission-restored', body: {}, timeoutMs: 3500, maxResponseBytes: 4096 });
+    if (response.generation !== generation || this.backend.getConnectionGeneration() !== generation
+      || !response.data || typeof response.data !== 'object' || Object.keys(response.data).length !== 1
+      || !('ok' in response.data) || response.data.ok !== true) throw new Error('前台权限恢复未完成。');
+    await this.observeBeforeShow();
+  }
   observeBeforeShow(): Promise<void> {
     if (this.disposed || this.stopped || this.state.manualInput || this.state.suspendedByHelperFocus) return Promise.resolve();
     if (this.readingScopeChanges > 0) {

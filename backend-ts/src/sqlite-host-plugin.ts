@@ -217,6 +217,12 @@ export async function apply(ctx: Context) {
             respond(200,{provider:'deepseek',configured:true,restart_required:true,...(official?{official_deepseek_defaults:true}:{})});
           }catch(error){respond(400,{error:error instanceof StorageFailure?error.code:'setup_request_invalid'});}return;
         }
+        if(foreground&&url.pathname==='/api/sync/foreground/permission-restored'){
+          if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}
+          let body:unknown;try{body=JSON.parse((await readWechatHttpBody(req,1024,3500)).toString('utf8')||'{}');}catch{respond(400,{error:'foreground_observation_invalid'});return;}
+          if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length){respond(400,{error:'foreground_observation_invalid'});return;}
+          await foreground.screenPermissionRestored();respond(200,{ok:true});return;
+        }
         if(foreground&&url.pathname==='/api/sync/foreground/observe'){
           if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}
           let body:unknown;try{body=JSON.parse((await readWechatHttpBody(req,1024,3500)).toString('utf8')||'{}');}catch{respond(400,{error:'foreground_observation_invalid'});return;}

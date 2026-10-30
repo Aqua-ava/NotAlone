@@ -11,6 +11,7 @@ export interface ForegroundProbeObservation {
 }
 export interface ForegroundProbe {
   start?(options?:{timeoutMs?:number}):Promise<void>;
+  resetPermissionGate?():void;
   observe(options:{signal?:AbortSignal;timeoutMs:number}):Promise<ForegroundProbeObservation>;
   close():Promise<void>;
   dispose():Promise<void>;

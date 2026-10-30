@@ -50,6 +50,15 @@ function buttons(node) {
  return [...(node.type === 'button' ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap(buttons)];
 }
 
+test('权限恢复通知后台清除旧阻断，手动模式下不启动前台采集', async t => {
+ const f=fixture(t),calls=[];
+ await f.enterManual();
+ f.setObservation(async request=>{calls.push(request.path);return {generation:1,data:{ok:true}};});
+ await f.foreground.screenPermissionRestored();
+ assert.deepEqual(calls,['/api/sync/foreground/permission-restored']);
+ assert.equal(f.foreground.getState().manualInput,true);
+});
+
 test('手动确认后通过公开恢复按钮退出手动模式，保留草稿与聚焦暂停', async t => {
  const f = fixture(t); f.foreground.startContinuous(); f.foreground.notifyHelperLifecycle('focused');
  await f.enterManual(); assert.equal(f.isManual(), true);

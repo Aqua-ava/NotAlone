@@ -1,4 +1,5 @@
 import readline from 'node:readline';
+import {existsSync} from 'node:fs';
 const mode=process.argv[2];
 const emit=value=>process.stdout.write(JSON.stringify(value)+'\n');
 if(mode==='ready-delay') await new Promise(resolve=>setTimeout(resolve,500));
@@ -9,6 +10,7 @@ for await(const line of readline.createInterface({input:process.stdin})) {
  const request=JSON.parse(line);ordinal++;
  if(mode==='hang'){await new Promise(resolve=>setTimeout(resolve,500));}
  if(mode==='permission'){emit({version:1,request_id:request.request_id,result:{ok:false,error:'screen_capture_permission_missing'}});continue;}
+ if(mode==='permission-recover'&&!existsSync(process.argv[3])){emit({version:1,request_id:request.request_id,result:{ok:false,error:'screen_capture_permission_missing'}});continue;}
  if(mode==='old-id'){request.request_id='00000000-0000-4000-8000-000000000000';}
  if(mode==='float-version'){process.stdout.write('{"version":1.0,"request_id":"'+request.request_id+'","result":{}}\n');continue;}
  if(mode==='duplicate'){process.stdout.write('{"version":1,"version":1,"request_id":"'+request.request_id+'","result":{}}\n');continue;}

@@ -192,6 +192,11 @@ test('SQLite宿主开放前台观察入口，关闭同步时不运行探针且�
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'}),databaseId=storage.status.databaseId;await storage.close();
  const infoPath=path.join(root,'managed/sqlite-backend.info'),config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{NOTALONE_SYNC_PROBE:probe},sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history']}};
  const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());const info=await handshake(host,infoPath),headers={Authorization:`Bearer ${info.token}`,'content-type':'application/json'};
+ const recovery=`http://${info.address}/api/sync/foreground/permission-restored`;
+ assert.equal((await fetch(recovery,{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,401);
+ assert.equal((await fetch(recovery,{headers})).status,405);
+ assert.equal((await fetch(recovery,{method:'POST',headers,body:'{"contact":"injected"}'})).status,400);
+ const recovered=await fetch(recovery,{method:'POST',headers,body:'{}'});assert.equal(recovered.status,200);assert.deepEqual(await recovered.json(),{ok:true});
  assert.equal((await fetch(`http://${info.address}/api/sync/foreground/observe`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,401);
  assert.equal((await fetch(`http://${info.address}/api/sync/foreground/observe`,{headers})).status,405);
  assert.equal((await fetch(`http://${info.address}/api/sync/foreground/observe`,{method:'POST',headers,body:'{"contact":"injected"}'})).status,400);

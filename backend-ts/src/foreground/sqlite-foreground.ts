@@ -73,6 +73,12 @@ export class SqliteForeground {
   })();this.active=work;void work.finally(()=>{if(this.active===work)this.active=undefined;}).catch(()=>{});return work;
  }
  async invalidate(){await this.locator?.invalidate();if(this.active)await Promise.allSettled([this.active]);await this.options.invalidateSessions?.();}
+ async screenPermissionRestored(){
+  if(this.closed)throw new ForegroundLocationError('foreground_observation_cancelled');
+  const release=await this.beginChange();
+  try{if(this.closed)throw new ForegroundLocationError('foreground_observation_cancelled');this.options.probe.resetPermissionGate?.();}
+  finally{release();}
+ }
  async beginChange(){this.changing++;try{await this.invalidate();}catch(e){this.changing--;throw e;}let done=false;return ()=>{if(!done){done=true;this.changing--;}};}
  async close(){this.closed=true;await this.invalidate();if(this.locator)await this.locator.close();else await this.options.probe.dispose();await this.options.closeSessions();}
 }
