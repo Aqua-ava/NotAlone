@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 18,
+  "schemaVersion": 19,
   "migrationVersions": [
    1,
    2,
@@ -19,9 +19,10 @@
    15,
    16,
    17,
-   18
+   18,
+   19
   ],
-  "userVersion": 18,
+  "userVersion": 19,
   "sqliteVersion": "3.53.4",
   "tableCount": 86,
   "fieldCount": 834,
@@ -469,6 +470,19 @@
     }
    ],
    "indexes": [
+    {
+     "name": "capture_record_quarantine_identity",
+     "unique": 0,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "observed_key",
+      "reason_code"
+     ],
+     "sql": "CREATE INDEX capture_record_quarantine_identity ON capture_record(owner_id,contact_id,observed_key,reason_code) WHERE state='quarantined' AND availability='available'"
+    },
     {
      "name": "capture_record_message",
      "unique": 0,

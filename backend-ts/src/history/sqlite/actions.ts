@@ -3,7 +3,7 @@ import { StorageFailure, type StorageAction, type StorageTransaction, type Stora
 import { assertReadEligibility } from '../../contacts/sqlite/actions.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryPage, HistoryTailPage, HistoryTarget, HistorySupportReport } from './contracts.ts';
-import { ingestRecords, quarantineUnverifiedRecords, reconcileMissingRecords } from './ingest.ts';
+import { ingestRecords, quarantineUnverifiedRecords } from './ingest.ts';
 import { readCoverage, readMessages } from './read.ts';
 import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
@@ -147,8 +147,7 @@ export const historyActions:StorageAction[]=[
    exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId})?'clear_excluded':null});
   const partitions=new Set<string>([...JSON.parse(String(goal.completed_partitions)),...page.completedPartitions]);
   const traversalComplete=page.exhausted&&target.partitions.every(p=>partitions.has(p));
-  if(traversalComplete&&report.continuity===normalUseContinuity)reconcileMissingRecords({tx,token,target,report,goalId:String(goal.id)});
-  const unresolved=quarantined||Boolean(tx.get("SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id WHERE c.owner_id=? AND c.goal_id=? AND r.state='quarantined'",[token.owner_id,goal.id]));
+  const unresolved=quarantined||goal.failure_code==='history_identity_quarantined'||Boolean(tx.get("SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id WHERE c.owner_id=? AND c.goal_id=? AND r.state='quarantined'",[token.owner_id,goal.id]));
   const complete=traversalComplete&&!unresolved;
   const state=complete?'complete':page.exhausted?'incomplete':'running';const code=unresolved?'history_identity_quarantined':page.exhausted&&!complete?'history_partitions_missing':null;
   if(quarantined)tx.run("UPDATE sync_capture SET state='quarantined',error_code='history_identity_quarantined' WHERE owner_id=? AND id=?",[token.owner_id,i.captureId]);

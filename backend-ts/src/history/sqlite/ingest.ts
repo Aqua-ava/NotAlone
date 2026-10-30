@@ -50,30 +50,6 @@ export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|
  }
  if(changed)tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);
 }
-/** 同一来源的完整重扫结束后才判断消失；不完整页、其他来源和其他联系人不受影响。 */
-export function reconcileMissingRecords(input:{tx:StorageTransaction;token:ReadEligibility;target:HistoryTarget;report:HistorySupportReport;goalId:string}):number{
- const {tx,token,target,report,goalId}=input;
- if(report.continuity!=='same-source-instances-normal-use-v1')return 0;
- const seen=new Set(tx.all(`SELECT r.observed_key FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
-  WHERE r.owner_id=? AND r.contact_id=? AND c.goal_id=? AND r.observed_scheme='source-table-local-v1'`,[token.owner_id,token.contact_id,goalId]).map(row=>String(row.observed_key)));
- const aliases=tx.all(`SELECT a.message_id,a.external_key FROM message_alias a JOIN message m ON m.owner_id=a.owner_id AND m.id=a.message_id
-  WHERE a.owner_id=? AND a.contact_id=? AND a.binding_id=? AND a.scheme='local' AND m.availability='available'
-  AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)`,[token.owner_id,token.contact_id,token.binding_id]);
- const candidates=new Map<string,boolean>();
- for(const alias of aliases){
-  let key:unknown;try{key=JSON.parse(String(alias.external_key));}catch{continue;}
-  if(!Array.isArray(key)||key.length!==4||key[0]!==token.source_generation
-    ||!target.tables.some(table=>table.partition===key[1]&&table.instance===key[2]))continue;
-  const id=String(alias.message_id);candidates.set(id,Boolean(candidates.get(id))||seen.has(String(alias.external_key)));
- }
- let changed=0;
- for(const [id,present] of candidates)if(!present){
-  tx.run('INSERT INTO history_message_quarantine VALUES(?,?,?,?)',[token.owner_id,token.contact_id,id,'source_absent']);
-  tx.run('UPDATE message SET interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,id]);changed++;
- }
- if(changed)tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);
- return changed;
-}
 /**
  * 同一页的逐条接受：先排除，再按稳定来源身份幂等建立消息，最后补可认证字段。
  * 调用者必须已在同一事务复验读资格、游标和固定目标；本函数不发起任何外部读取。
@@ -128,7 +104,23 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
           if (key) tx.run('INSERT OR IGNORE INTO message_alias(owner_id,id,contact_id,binding_id,scheme,external_key,message_id) VALUES(?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, token.binding_id, scheme, key, message!.id]);
       }
     }
-    if (reason && reason !== 'source_excluded' && reason !== 'clear_excluded' && reason !== 'source_recalled' && reason !== 'source_absent') quarantined = true;
+    if (!reason && message && prepared.localKey && tx.get(`SELECT 1 FROM capture_record r
+      JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
+      JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
+      WHERE r.owner_id=? AND r.contact_id=? AND r.message_id=? AND r.observed_key=?
+        AND r.state='normalized' AND r.availability='available'
+        AND g.binding_id=? AND g.accepted_data_generation=? LIMIT 1`,
+      [token.owner_id,token.contact_id,message.id,prepared.localKey,token.binding_id,BigInt(token.data_generation)])) continue;
+    if (reason && reason !== 'source_excluded' && reason !== 'clear_excluded' && reason !== 'source_recalled' && reason !== 'source_absent') {
+      quarantined = true;
+      if (prepared.localKey && tx.get(`SELECT 1 FROM capture_record r
+        JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
+        JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
+        WHERE r.owner_id=? AND r.contact_id=? AND r.observed_key=? AND r.state='quarantined'
+          AND r.reason_code=? AND r.raw_payload=? AND r.availability='available'
+          AND g.binding_id=? AND g.accepted_data_generation=? LIMIT 1`,
+        [token.owner_id,token.contact_id,prepared.localKey,reason,prepared.raw,token.binding_id,BigInt(token.data_generation)])) continue;
+    }
     tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, captureId, index, excluded ? 'excluded' : reason ? 'quarantined' : 'normalized', reason ? null : message!.id, excluded ? null : prepared.raw, prepared.localKey ? 'source-table-local-v1' : null, prepared.localKey, '1', reason]);
   }
   return { quarantined };

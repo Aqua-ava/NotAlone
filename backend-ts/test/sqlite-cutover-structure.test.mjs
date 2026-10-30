@@ -30,8 +30,8 @@ test('实际 DDL 与 86 表结构基线逐表一致（含 CHECK、触发器 body
   assert.deepEqual(actualStable, baselineStable, '结构元数据与基线不一致');
   assert.equal(actual.metadata.checkCount, 253);
   assert.equal(actual.metadata.triggerCount, 92);
-  assert.deepEqual(actual.metadata.migrationVersions, Array.from({ length: 18 }, (_, index) => index + 1));
-  assert.equal(actual.metadata.userVersion, 18);
+  assert.deepEqual(actual.metadata.migrationVersions, Array.from({ length: 19 }, (_, index) => index + 1));
+  assert.equal(actual.metadata.userVersion, 19);
   assert.deepEqual(Object.keys(actual.tables), EXPECTED_TABLES, '实际表集合必须等于实现表基线');
   for (const [name, expected] of Object.entries(baseline.tables)) {
     const table = actual.tables[name];
@@ -64,14 +64,14 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
   const db = new DatabaseSync(f.database, { readOnly: true });
   try {
     const ledger = db.prepare('SELECT version FROM schema_migration ORDER BY version').all().map(row => Number(row.version));
-    assert.deepEqual(ledger, Array.from({ length: 18 }, (_, index) => index + 1));
-    assert.equal(Number(db.prepare('PRAGMA user_version').all()[0].user_version), 18);
+    assert.deepEqual(ledger, Array.from({ length: 19 }, (_, index) => index + 1));
+    assert.equal(Number(db.prepare('PRAGMA user_version').all()[0].user_version), 19);
     assert.equal(Number(db.prepare('SELECT COUNT(*) AS n FROM database_instance').all()[0].n), 1);
   } finally { db.close(); }
   const reopened = await SqliteStorage.open({ userData: f.root, intent: 'open', expectedDatabaseId: f.status.databaseId, role: 'test' });
   try {
     assert.equal(reopened.status.databaseId, f.status.databaseId);
-    assert.equal(reopened.status.schemaVersion, 18);
+    assert.equal(reopened.status.schemaVersion, 19);
     assert.deepEqual(await reopened.check(), { integrity: 'ok', foreignKeys: 'ok' });
     const snapshot = await reopened.execute('cutover.snapshot', { ownerId: await reopened.execute('identity.resolveOwner', { proposedOwnerId: '11111111-1111-4111-8111-111111111111', at: 1 }) });
     assert.deepEqual(snapshot.missingTables, []);
