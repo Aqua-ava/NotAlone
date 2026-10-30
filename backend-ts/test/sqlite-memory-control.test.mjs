@@ -504,16 +504,18 @@ test('发送中崩溃重开显示未知回执且不提供继续、不自动提�
  assert.equal((await calls(f,run.runId)).filter(row=>row.state==='unknown'||row.state==='sending').length,0);
 });
 
-test('文档阶段共用模型故障归入整轮固定原因，不显示完成',async t=>{
- const f=await fixtureWithMessages(t,{a:['我长期住在高雄。']});
- const x=extractionFixture(f);t.after(()=>x.service.close());
- const run=await x.service.start('control-document-shared');await x.service.waitForIdle(run.runId);
- const before=await x.service.read(run.runId);
- assert.equal(before.sharedFaultCode,null);
- // 09 文档阶段 noteFailure 只写任务 error_code；此处按该合同注入固定原因验证整轮投影。
- await f.storage.execute('fixture.setTaskError',{ownerId:owner,runId:run.runId,scopeKind:'contact',code:'document_model_unconfigured'});
- const view=await x.service.read(run.runId);
+test('09真实文档阶段共用故障经noteFailure投影固定原因且不提供错误动作',async t=>{
+ const f=await documentFixture(t,{documentModel:'unconfigured'});
+ const run=await f.extraction.start('control-document-shared-real');await f.extraction.waitForIdle(run.runId);
+ const view=await f.extraction.read(run.runId);
+ // 真实路径：09 文档服务在模型未配置时由 port 抛 document_model_unconfigured，经 stages.noteFailure 写入任务 error_code。
+ const task=view.tasks.find(item=>item.scopeKind==='contact');
+ assert.equal(task.errorCode,'document_model_unconfigured','真实noteFailure写入了固定原因');
+ const document=await f.documents.readTask(task.taskId);
+ assert.notEqual(document.outcome,'completed');
  assert.equal(view.sharedFaultCode,'document_model_unconfigured');
  assert.equal(view.status,'blocked');assert.equal(view.statusReason,'document_model_unconfigured');
+ assert.equal(view.unknown,0,'文档共用故障不是未知回执');
+ assert.deepEqual(view.actions,[],'文档共用故障不提供重发/继续类动作');
  assert.notEqual(view.status,'completed');
 });

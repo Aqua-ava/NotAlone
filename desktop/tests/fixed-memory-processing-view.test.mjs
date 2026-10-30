@@ -111,6 +111,8 @@ test('共用故障固定原因只显示一处，未知回执可附原因但不�
   const blockedText=await panel.innerText();
   assert.equal((blockedText.match(/模型配置或服务不可用/g)??[]).length,1,'共用故障原因不得同屏重复');
   assert.equal(blockedText.includes('修复后可继续原任务'),true);
+  assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0,'文档共用故障不提供继续');
+  assert.equal(await panel.getByRole('button',{name:'暂停记忆处理',exact:true}).count(),0);
  });
 });
 
