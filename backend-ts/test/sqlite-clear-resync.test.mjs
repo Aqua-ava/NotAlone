@@ -480,8 +480,11 @@ test('来源代次变化后旧B不放行普通读取，已清空旧成员不得�
   assert.equal(token.source_generation, 'source-2');
   assert.notEqual(token.barrier_generation, '0');
   f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2'), record('shard-b', '7')];
+  await assert.rejects(f.current.history.synchronizeIncremental(f.contactA), { code: 'history_source_continuity_unverified' });
   await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_source_continuity_unverified' });
   assert.equal((await f.current.history.read(f.contactA)).messages.length, 0, '跨来源代次不能复活旧消息');
+  await f.current.storage.execute('fixture.changeSourceGeneration', { ownerId: owner, sourceGeneration: 'source-1' });
+  await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_source_continuity_unverified' });
 });
 
 test('v12旧结构库升级到当前16后联系人、同步与清空重读仍可工作', async t => {

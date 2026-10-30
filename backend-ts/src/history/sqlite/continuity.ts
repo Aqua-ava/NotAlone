@@ -2,21 +2,37 @@ import { StorageFailure, type StorageTransaction } from '../../storage/sqlite/co
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryTarget } from './contracts.ts';
 
-/** 排除记录只可在原来源代次和表实例内比较；无法比较时保留持久停读。 */
-export function sourceExclusionsMatch(tx: StorageTransaction, token: ReadEligibility, target: HistoryTarget): boolean {
-  const rows = tx.all(`SELECT external_key FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? AND scheme='local'
-    UNION ALL SELECT m.external_key FROM history_cutoff_member m JOIN history_cutoff c ON c.owner_id=m.owner_id AND c.conversation_id=m.conversation_id AND c.barrier_generation=m.barrier_generation
-    WHERE m.owner_id=? AND m.conversation_id=? AND c.state='verified'`, [token.owner_id, token.conversation_id, token.owner_id, token.conversation_id]);
-  for (const row of rows) {
-    let key: unknown;
-    try { key = JSON.parse(String(row.external_key)); } catch { return false; }
-    if (!Array.isArray(key) || key.length !== 4 || key.some(value => typeof value !== 'string')
-      || key[0] !== target.sourceGeneration || !target.tables.some(table => table.partition === key[1] && table.instance === key[2])) return false;
-  }
+const reason = 'history_source_continuity_unverified';
+const lostCodes=new Set(['history_source_changed','history_source_unverified','history_external_scope_changed','history_scope_changed','history_schema_changed','history_shards_changed','history_cursor_scope_changed']);
+export const isSourceContinuityLost=(error:unknown):boolean=>error instanceof StorageFailure&&lostCodes.has(error.code);
+function tables(target: HistoryTarget): string {
+  return JSON.stringify({partitions:[...target.partitions].sort(),tables:target.tables.map(t=>[t.partition,t.instance]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))});
+}
+export function fenceContinuity(tx: StorageTransaction, token: ReadEligibility): false {
+  tx.run('INSERT OR IGNORE INTO history_continuity_fence VALUES(?,?,?)',[token.owner_id,token.contact_id,reason]);
+  return false;
+}
+/** 在可能读取正文前独立提交失证状态；旧数据无可证明基线时也停读。 */
+export function preflightGeneration(tx: StorageTransaction, token: ReadEligibility): boolean {
+  if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))return false;
+  const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  if(scope)return scope.conversation_id===token.conversation_id&&scope.source_generation===token.source_generation?true:fenceContinuity(tx,token);
+  if(tx.get('SELECT 1 FROM read_goal WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id])
+    ||tx.get('SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? LIMIT 1',[token.owner_id,token.conversation_id])
+    ||tx.get('SELECT 1 FROM history_cutoff WHERE owner_id=? AND conversation_id=? LIMIT 1',[token.owner_id,token.conversation_id]))return fenceContinuity(tx,token);
   return true;
 }
-
+export function preflightTarget(tx: StorageTransaction, token: ReadEligibility, target: HistoryTarget): boolean {
+  if(!preflightGeneration(tx,token))return false;
+  const existing=tx.get('SELECT tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  const value=tables(target);
+  if(existing)return existing.tables_json===value?true:fenceContinuity(tx,token);
+  tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,value]);
+  return true;
+}
+/** 接受页的事务复验不改变围栏；失证应由预检先行持久化。 */
 export function assertSourceContinuity(tx: StorageTransaction, token: ReadEligibility, target: HistoryTarget): void {
-  if (tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?', [token.owner_id, token.contact_id])
-    || !sourceExclusionsMatch(tx, token, target)) throw new StorageFailure('history_source_continuity_unverified');
+  if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))throw new StorageFailure(reason);
+  const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||scope.tables_json!==tables(target))throw new StorageFailure(reason);
 }

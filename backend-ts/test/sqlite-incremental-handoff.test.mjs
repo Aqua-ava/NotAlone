@@ -125,6 +125,7 @@ test('同一响应重放幂等，不同响应用同一捕获id被拒绝', async 
   const token = await f.contacts.eligibility(binding.contact_id);
   const report = support({ token, accountKey: 'synthetic-account', conversationKey: 'friend-a' });
   const target = { protocol: 'private-history-v1', descriptor: 'synthetic:friend-a', partitions: ['p'], tables: [{ partition: 'p', instance: 't' }], sourceGeneration: 'source-1' };
+  await f.storage.execute('history.preflightContinuity', { token, target });
   const goal = await f.storage.execute('history.begin', { token, target, report, id: randomUUID(), at: Date.now() });
   const page = { target: target.descriptor, cursorIn: null, cursorOut: null, completedPartitions: ['p'], exhausted: true, records: [record('9')] };
   const captureId = randomUUID();

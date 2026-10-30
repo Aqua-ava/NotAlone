@@ -5,6 +5,7 @@ import type { SqliteStorage } from '../../storage/sqlite/client.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryChannel, HistorySource, HistoryCoverage, HistoryRead, HistoryScope, HistoryTarget, HistorySupportReport } from './contracts.ts';
 import { assertSupport, serializeSupport } from './actions.ts';
+import { isSourceContinuityLost } from './continuity.ts';
 interface PendingGoal { id:string; target:HistoryTarget; cursor:string|null }
 export interface HistoryContactGateway {
  readonly ownerId:string;
@@ -41,11 +42,13 @@ export class SqliteHistoryService {
   const abort=()=>{controller.abort();void closeChannel().catch(()=>{});};signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
   try{
    const token=await this.contacts.eligibility(contactId);const scope=await this.storage.execute<HistoryScope>('history.scope',{token});
+   if(!await this.storage.execute<boolean>('history.preflightGeneration',{token}))throw new StorageFailure('history_source_continuity_unverified');
    await this.check(scope,controller);channel=this.createChannel();
    const register=(key:string,coversAllSources=false)=>releases.push(this.holders.register({key,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources,close:stop}));
    // target会打开固定快照；没有goal之前也必须先登记实际读者。
    register(historyReaderHolderKey(contactId,token.data_generation),true);
-   return await run(scope,channel,controller,goalId=>register(`history:${goalId}`));
+   try{return await run(scope,channel,controller,goalId=>register(`history:${goalId}`));}
+   catch(error){if(isSourceContinuityLost(error))await this.storage.execute('history.markContinuityLost',{token});throw error;}
   }finally{
    let cleanupError:unknown;
    try{await closeChannel();}catch(error){cleanupError=error;}

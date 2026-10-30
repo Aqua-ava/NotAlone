@@ -19,7 +19,7 @@ async function fixture(t) {
   return { root, database: path.join(root, 'managed/sqlite/notalone.sqlite'), status };
 }
 
-test('实际 DDL 与 83 表结构基线逐表一致（含 CHECK、触发器 body、FK action、索引 SQL 与视图）', async t => {
+test('实际 DDL 与 84 表结构基线逐表一致（含 CHECK、触发器 body、FK action、索引 SQL 与视图）', async t => {
   const f = await fixture(t);
   const actual = dumpSchema(f.database);
   // sqliteVersion 随运行构建的 SQLite 版本变化，不参与结构等价；其余元数据必须逐项一致。
@@ -76,7 +76,7 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
     const snapshot = await reopened.execute('cutover.snapshot', { ownerId: await reopened.execute('identity.resolveOwner', { proposedOwnerId: '11111111-1111-4111-8111-111111111111', at: 1 }) });
     assert.deepEqual(snapshot.missingTables, []);
     assert.deepEqual(snapshot.unexpectedTables, []);
-    assert.equal(snapshot.tables.length, 83);
+    assert.equal(snapshot.tables.length, 84);
     assert.deepEqual(snapshot.media, { message_media: 0, current_files: 0, staged_files: 0, cleanup_pending: 0, attempts_running: 0 });
     assert.deepEqual(snapshot.skills, { packages: 0, revisions: 0, enabled: 0, unknown: 0 });
   } finally { await reopened.close(); }

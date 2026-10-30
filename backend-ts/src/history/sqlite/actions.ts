@@ -8,7 +8,7 @@ import { readCoverage, readMessages } from './read.ts';
 import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
-import { assertSourceContinuity, sourceExclusionsMatch } from './continuity.ts';
+import { assertSourceContinuity, fenceContinuity, preflightGeneration, preflightTarget } from './continuity.ts';
 const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
 export const serializeSupport=(report:HistorySupportReport):string=>JSON.stringify(Object.fromEntries(Object.entries(report).sort(([a],[b])=>a.localeCompare(b))));
@@ -45,9 +45,9 @@ function currentIncremental(tx:StorageTransaction,token:ReadEligibility,report:H
 }
 export const historyActions:StorageAction[]=[
  action('history.scope','read',(tx,i)=>{assertReadEligibility(tx,i.token);const row=tx.get(`SELECT a.external_key AS account_key,c.external_key AS conversation_key FROM channel_account a JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id WHERE a.owner_id=? AND a.id=? AND c.id=?`,[i.token.owner_id,i.token.account_id,i.token.conversation_id])??fail('history_scope_invalid');return {token:i.token,accountKey:row.account_key,conversationKey:row.conversation_key};}),
- action('history.preflightContinuity','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);const target=targetOf(i.target,token);
-  if(!sourceExclusionsMatch(tx,token,target))tx.run('INSERT OR IGNORE INTO history_continuity_fence VALUES(?,?,?)',[token.owner_id,token.contact_id,'source_exclusion_instance_changed']);
-  return !tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);}),
+ action('history.preflightGeneration','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightGeneration(tx,token);}),
+ action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return fenceContinuity(tx,token);}),
+ action('history.preflightContinuity','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightTarget(tx,token,targetOf(i.target,token));}),
  action('history.pending','read',(tx,i)=>{assertReadEligibility(tx,i.token);const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='history' AND state IN ('running','incomplete') AND eligibility_json=? ORDER BY created_at DESC,rowid DESC LIMIT 1",[i.token.owner_id,i.token.contact_id,JSON.stringify(i.token)]);if(goal&&goal.support_json!==serializeSupport(i.report))fail('history_support_changed');return goal?{id:goal.id,target:JSON.parse(String(goal.target_json)),cursor:goal.cursor}:null;}),
  action('history.incrementalContinuityTarget','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
   const goal=currentIncremental(tx,token,i.report)??tx.get("SELECT target_json FROM read_goal WHERE owner_id=? AND contact_id=? AND cursor_scope_digest IS NOT NULL AND ((kind='incremental' AND cursor IS NOT NULL) OR (kind='history' AND resume_cursor IS NOT NULL AND state='complete')) ORDER BY created_at DESC,rowid DESC LIMIT 1",[token.owner_id,token.contact_id]);

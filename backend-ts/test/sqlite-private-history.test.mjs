@@ -109,6 +109,24 @@ test('已删除来源的表实例失证后，重试和重开都在读取正文�
  const contacts=new SqliteContactService(reopened,owner,{account:async()=>{throw new Error('不访问渠道');},sessions:async()=>[]});
  const history=new SqliteHistoryService(reopened,contacts,f.channel);t.after(()=>history.close());
  await assert.rejects(history.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(pages,0);
+ assert.equal((await history.coverage(contact)).failureCode,'history_source_continuity_unverified');
+ assert.equal((await history.read(contact)).replyEligibility,'history_incomplete');
+});
+test('原表仍在但新增未经认证的表时，不能读取可能复现旧来源的正文',async t=>{
+ const f=await fixture(t);const contact=f.saved[0].contact_id;await f.service.synchronize(contact);
+ f.target.partitions.push('shard-b');f.target.tables.push({partition:'shard-b',instance:'new-table'});let pages=0;
+ f.channel.page=async()=>{pages++;throw new Error('失证时不得读取正文');};
+ await assert.rejects(f.service.synchronize(contact),{code:'history_source_continuity_unverified'});
+ assert.equal(pages,0);
+});
+test('渠道报告来源失证后，即使恢复原读者也必须持续停读',async t=>{
+ const f=await fixture(t);const contact=f.saved[0].contact_id;await f.service.synchronize(contact);
+ const inspect=f.channel.inspect;let lost=true,pages=0;
+ f.channel.inspect=async scope=>{if(lost){const {StorageFailure}=await import('../src/storage/sqlite/contracts.ts');throw new StorageFailure('history_source_changed');}return inspect(scope);};
+ f.channel.page=async()=>{pages++;throw new Error('失证时不得读取正文');};
+ await assert.rejects(f.service.synchronize(contact),{code:'history_source_changed'});lost=false;
+ await assert.rejects(f.service.synchronize(contact),{code:'history_source_continuity_unverified'});
+ assert.equal(pages,0);assert.equal((await f.service.coverage(contact)).failureCode,'history_source_continuity_unverified');
 });
 test('删除等待在途读取释放，超时不得完成，迟到页不能提交',async t=>{
  const {service,channel,saved,storage,target,root}=await fixture(t,{registryModule:new URL('./fixtures/history/registry.mjs',import.meta.url).href});const contact=saved[0].contact_id;
@@ -163,7 +181,7 @@ test('正式HTTP消息路径可分页且只读，跨联系人游标与owner不�
 test('来源消息游标覆盖同事务回滚，响应重放幂等且身份正文受约束',async t=>{
  const {service,saved,storage,contacts,channel,target}=await fixture(t,{registryModule:new URL('./fixtures/history/atomic-registry.mjs',import.meta.url).href});const a=saved[0],b=saved[1];
  const token=await contacts.eligibility(a.contact_id);const scope=await storage.execute('history.scope',{token});const support=await channel.inspect(scope);
- const {randomUUID}=await import('node:crypto');const goalId=randomUUID();await storage.execute('history.begin',{token,target,report:support,id:goalId,at:Date.now()});
+ const {randomUUID}=await import('node:crypto');const goalId=randomUUID();await storage.execute('history.preflightContinuity',{token,target});await storage.execute('history.begin',{token,target,report:support,id:goalId,at:Date.now()});
  const input={token,goalId,captureId:randomUUID(),runtimeToken:storage.status.runtimeId,at:Date.now(),page:await channel.page(scope,target,null)};
  await assert.rejects(storage.execute('fixture.acceptThenFail',input));assert.equal((await service.read(a.contact_id)).messages.length,0);assert.equal((await service.coverage(a.contact_id)).pageCount,0);
  await storage.execute('history.acceptPage',input);await storage.execute('history.acceptPage',input);assert.equal((await service.coverage(a.contact_id)).pageCount,1);

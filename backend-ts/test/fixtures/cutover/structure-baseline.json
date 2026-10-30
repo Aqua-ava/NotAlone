@@ -21,9 +21,9 @@
   ],
   "userVersion": 16,
   "sqliteVersion": "3.53.4",
-  "tableCount": 83,
-  "fieldCount": 817,
-  "foreignKeyGroups": 174,
+  "tableCount": 84,
+  "fieldCount": 822,
+  "foreignKeyGroups": 176,
   "triggerCount": 92,
   "checkCount": 252,
   "viewCount": 0
@@ -3460,6 +3460,101 @@
     }
    ],
    "sql": "CREATE TABLE history_continuity_fence ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id), FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
+  },
+  "history_continuity_scope": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "conversation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "source_generation",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "tables_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "channel_conversation",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "channel_conversation",
+     "from": "conversation_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_history_continuity_scope_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE history_continuity_scope ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, conversation_id TEXT NOT NULL, source_generation TEXT NOT NULL, tables_json TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id), FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id), FOREIGN KEY(owner_id,conversation_id) REFERENCES channel_conversation(owner_id,id) ) STRICT"
   },
   "history_cutoff": {
    "columns": [

@@ -4,6 +4,7 @@ import type { SqliteStorage } from '../../storage/sqlite/client.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import { ActiveHolders } from '../../storage/sqlite/deletion/holders.ts';
 import { assertSupport, serializeSupport } from './actions.ts';
+import { isSourceContinuityLost } from './continuity.ts';
 import type { HistoryChannel, HistoryCoverage, HistoryScope, HistorySupportReport, HistoryTarget } from './contracts.ts';
 import type { HistoryClearContactGateway, HistoryClearChannelFactory } from './clear.ts';
 
@@ -81,6 +82,7 @@ export class SqliteHistoryResyncService {
     this.active.set(contactId, { controller, done });
     const channel = this.createChannel();
     let release: (() => Promise<void>) | undefined;
+    let currentToken: ReadEligibility | undefined;
     try {
       const before = await this.stored(contactId);
       if (before && before.requestKey === requestKey && before.state === 'completed') {
@@ -92,6 +94,8 @@ export class SqliteHistoryResyncService {
       const token = await this.contacts.eligibility(contactId).catch(error => {
         throw error instanceof StorageFailure ? error : new StorageFailure('read_not_authorized');
       });
+      currentToken = token;
+      if (!await this.storage.execute<boolean>('history.preflightGeneration', { token })) fail('history_source_continuity_unverified');
       const scope = await this.storage.execute<HistoryScope>('history.scope', { token });
       release = this.holders.register({ key: `history:restore_${contactId}`, ownerId: this.owner(), contactId,
         coversAllSources: false, generation: BigInt(token.data_generation),
@@ -107,6 +111,7 @@ export class SqliteHistoryResyncService {
       }
       // 新许可生效后重新取当前资格；旧许可已撤销，旧请求不能继续使用。
       const current = await this.contacts.eligibility(contactId);
+      currentToken = current;
       const currentScope = await this.storage.execute<HistoryScope>('history.scope', { token: current });
       const currentReport = await this.inspect(channel, currentScope, signal);
       let goal = resume ?? authorization?.goal ?? null;
@@ -131,6 +136,9 @@ export class SqliteHistoryResyncService {
       const coverage = await this.readGoal(contactId, current, goal, currentReport, signal, channel, currentScope);
       await this.storage.execute('history.restoreComplete', { ownerId: this.owner(), contactId, requestKey, at: Date.now() });
       return this.view(contactId, await this.stored(contactId), coverage);
+    } catch (error) {
+      if (currentToken && isSourceContinuityLost(error)) await this.storage.execute('history.markContinuityLost', { token: currentToken });
+      throw error;
     } finally {
       try { if (release) await release(); } finally { try { await channel.close?.(); } catch { /* 已由 holder 关闭。 */ } }
       this.active.delete(contactId); finish();
