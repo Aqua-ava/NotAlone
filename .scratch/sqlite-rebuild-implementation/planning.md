@@ -1,5 +1,7 @@
 # 本机 SQLite 重建：21项实施任务索引
 
+> 2026-10-30 新决定：03/04 当前已暂停；微信消息去重、撤回保留及旧扫描清理改按 [ADR-128](../../architecture/adr/128-deduplicated-wechat-message-storage.md)。下方冲突的旧要求和验收保留作历史记录，不代表新方案已实现或验收。
+
 Triage: ready-for-agent
 State: claimed
 

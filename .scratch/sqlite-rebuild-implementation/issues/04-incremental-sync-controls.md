@@ -1,5 +1,7 @@
 # 04：增量同步与读取控制
 
+> 2026-10-30 新决定：用户已暂停本轮工作。微信消息去重、撤回保留及旧扫描清理改按 [ADR-128](../../../architecture/adr/128-deduplicated-wechat-message-storage.md)；下文冲突的旧要求和验收仅为历史记录，新方案尚未实现或验收。
+
 Triage: ready-for-agent
 State: resolved
 Type: task
