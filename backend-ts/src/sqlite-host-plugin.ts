@@ -36,6 +36,7 @@ import { FirstHistoryCoordinator } from './history/sqlite/coordinator.ts';
 import { IncrementalHistoryCoordinator } from './history/sqlite/incremental-coordinator.ts';
 import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 import {SqliteForeground} from './foreground/sqlite-foreground.ts';
+import {readStatusCoverages} from './history/sqlite/status-coverage.ts';
 import {readWechatHttpBody} from './sync/wechat-http-body.ts';
 
 export const name = 'notalone-sqlite-host';
@@ -143,7 +144,7 @@ export async function apply(ctx: Context) {
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
     const readHistoryStatus=async()=>{
       const directory=await contacts!.directory();
-      const coverage=await Promise.all(directory.bindings.filter(binding=>binding.status==='active').map(async binding=>({...await history!.coverage(binding.contact_id),bindingId:binding.binding_id})));
+      const coverage=await readStatusCoverages(directory.bindings,contactId=>history!.coverage(contactId));
       return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState(),incremental?.getState(),
         await history!.bodyAvailable(coverage.map(row=>row.contactId)));
     };
