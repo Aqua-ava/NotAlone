@@ -98,7 +98,10 @@ export function AssistantSessionBudgetNotice({ replies }: { replies: ReplySessio
     : <AssistantInputBudgetNotice budget={budget} />;
 }
 
-export function AssistantSessionPanel({ replies, initialDraft = '', onInitialDraftTaken }: { replies: ReplySessionView; initialDraft?: string; onInitialDraftTaken?: () => void }) {
+export function AssistantSessionPanel({ replies, initialDraft = '', onDraftChange }: {
+  replies: ReplySessionView; initialDraft?: string; onInitialDraftTaken?: () => void;
+  onDraftChange?: (text: string, scope: { contactId: string; scopeRevision: number }) => void;
+}) {
   const saved = replies.state.savedSession;
   const [confirmation, setConfirmation] = useState<AssistantSessionDeletion | null>(null);
   const [copyError, setCopyError] = useState(false);
@@ -162,7 +165,7 @@ export function AssistantSessionPanel({ replies, initialDraft = '', onInitialDra
       .then(() => { if (currentCopyScope.current === copyScopeKey) setCopyError(false); })
       .catch(() => { if (currentCopyScope.current === copyScopeKey) setCopyError(true); });
   }
-  return <section className="assistant-session-panel" aria-label="助手会话">
+  return <section className={`assistant-session-panel${sqliteDiscussion ? ' assistant-session-panel-sqlite' : ''}`} aria-label="助手会话">
     {replies.state.idleRollover?.sessionId === saved?.sessionId && replies.state.contactId && <p role="status">已开启新讨论
       <button disabled={busy} onClick={() => void replies.resumeSavedSession(replies.state.idleRollover!.previousSessionId)}>继续上一段</button>
     </p>}
@@ -200,14 +203,17 @@ export function AssistantSessionPanel({ replies, initialDraft = '', onInitialDra
     {saved?.phase === 'failed' && <p role="alert">已保存讨论暂不可用，请重试读取。</p>}
     {copyError && <p role="alert">复制来源暂不可确认，请重新读取讨论后核对。</p>}
     {sqliteDiscussion && <>
-      <SqliteDiscussionEntries entries={saved.discussionEntries!} recovery={saved.runtimeRecovery} />
-      {catalog?.phase === 'ready' && !currentDiscussion && <p role="status">正在回看历史讨论，请先明确继续此会话后再提交。</p>}
       {window.notalone.sqliteDiscussion.candidates&&<SqliteReplyCandidatesPanel bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
         scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled} initialDraft={initialDraft}
-        onInitialDraftTaken={onInitialDraftTaken} onSubmitted={discussionSubmitted} />}
-      <SqliteDiscussionComposer bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
-        scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled}
-        onSubmitted={discussionSubmitted} />
+        onDraftChange={onDraftChange} onSubmitted={discussionSubmitted} />}
+      <details className="sqlite-discussion-details">
+        <summary>与助手讨论</summary>
+        <SqliteDiscussionEntries entries={saved.discussionEntries!} recovery={saved.runtimeRecovery} />
+        {catalog?.phase === 'ready' && !currentDiscussion && <p role="status">正在回看历史讨论，请先明确继续此会话后再提交。</p>}
+        <SqliteDiscussionComposer bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
+          scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled}
+          onSubmitted={discussionSubmitted} />
+      </details>
     </>}
     <details className="session-browser">
       <summary><span>历史讨论</span><small>新开、切换或回看助手讨论</small>

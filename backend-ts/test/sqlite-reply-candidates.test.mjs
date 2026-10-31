@@ -142,6 +142,45 @@ test('来源在模型在途时删除立即撤销资格，迟到响应不产生�
  assert.equal((await service.view(f.ids[0],d.id)).flatMap(r=>r.candidates).length,0);const done=await deletion.advance(op);assert.equal(done.state,'completed',JSON.stringify(done.checks));assert.deepEqual(await service.view(f.ids[0],d.id),[]);assert.equal(f.requests.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
+test('工作区suggest允许空草稿且关闭关系背景时只冻结本次输入，不因参数重试重复调用',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const f=await realFixture(t,{registryModule:knowledgeRegistry,synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成的可选说法'],basis:[1,2,3]}]})}),contactId=f.ids[0];
+ const originalPage=f.channel.page;f.channel.page=async(...args)=>{const page=await originalPage(...args);return {...page,records:[...page.records,{...page.records[0],localId:'2',text:'合成的另一条最近聊天'}]};};
+ await f.contacts.setReading(true);await f.history.synchronize(contactId);
+ await f.storage.execute('synthetic.publishReplyKnowledge',{ownerId:f.owner,contactId,sourceContactId:contactId,mode:'owner'});
+ const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const base={contactId,discussionId:d.id,requestKey:randomUUID(),confirmedContact:true};
+ await turns.generate({...base,text:'旧讨论里的用户原话',requestKey:randomUUID()});
+ const workspace={action:'suggest',draftText:'',tone:'warm',instruction:'不要替我答应',contextText:'补充背景：周五有考试',includeRelationshipContext:false,excludedMessageIds:[]};
+ const input={...base,text:'',workspace};await assert.rejects(turns.generate({...base,text:'',workspace:{...workspace,action:'express'}}),{code:'reply_input_invalid'});
+ await turns.generate(input);const request=JSON.stringify(f.requests[1]);
+ assert.match(request,/用户请求帮我想想/);assert.match(request,/尚未确认任何立场/);assert.match(request,/补充背景：周五有考试/);assert.match(request,/不要替我答应/);
+ const historyEntries=(await f.discussions.view(contactId,d.id)).entries,workspaceEntry=historyEntries.find(entry=>entry.body.includes('本次补充背景：'));
+ assert.ok(workspaceEntry);assert.match(workspaceEntry.body,/工作区动作：帮我想想/);assert.match(workspaceEntry.body,/本次语气：温和自然/);assert.doesNotMatch(workspaceEntry.body,/参数指纹|[a-f0-9]{64}/);
+ const recent=(await f.history.read(contactId)).messages.filter(m=>m.kind==='text');assert.doesNotMatch(request,/旧讨论里的用户原话|合成本人已采纳资料/);assert.ok(recent.every(m=>!request.includes(m.text)));
+ const result=(await service.view(contactId,d.id))[1];assert.ok(result.candidates[0].basis.some(b=>/本次补充背景/.test(b.text)));
+ const excluded=recent[0],included=recent[1];assert.ok(excluded&&included);
+ const partial={...input,requestKey:randomUUID(),workspace:{...workspace,includeRelationshipContext:true,excludedMessageIds:[excluded.id]}};
+ await turns.generate(partial);const partialRequest=JSON.stringify(f.requests[2]);
+ assert.ok(partialRequest.includes(included.text));assert.ok(!partialRequest.includes(excluded.text));
+ assert.doesNotMatch(partialRequest,/合成本人已采纳资料|旧讨论里的用户原话/);assert.match(partialRequest,/本次补充背景（独立于想法\/草稿，仅作用本次）/);
+ assert.equal((await turns.generate(input)).replayed,true);assert.equal(f.requests.length,3);
+ await assert.rejects(turns.generate({...input,workspace:{...workspace,tone:'polite'}}),{code:'discussion_request_conflict'});assert.equal(f.requests.length,3);
+ await assert.rejects(turns.generate({...input,workspace:{...workspace,excludedMessageIds:[randomUUID()]}}),{code:'discussion_request_conflict'});assert.equal(f.requests.length,3);
+});
+
+test('候选HTTP接受明确的空suggest，要求express草稿与工作区输入一致',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {SqliteReplyCandidateHttp}=await import('../src/reply/sqlite/candidates/http.ts');const {createServer}=await import('node:http');
+ const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const http=new SqliteReplyCandidateHttp({storage:f.storage,service,turns,authorize:req=>req.headers.authorization==='Bearer synthetic'}),server=createServer(async(req,res)=>{if(!await http.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const url=`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${d.id}/reply-candidates`,request=body=>fetch(url,{method:'POST',headers:{authorization:'Bearer synthetic','content-type':'application/json'},body:JSON.stringify(body)});
+ const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:false,excludedMessageIds:[]};
+ const accepted=await request({request_key:randomUUID(),text:'',confirmed_contact:true,workspace});assert.equal(accepted.status,200);
+ const stored=(await f.history.read(contactId)).messages.find(m=>m.kind==='text'),page=await fetch(url,{headers:{authorization:'Bearer synthetic'}}),pageBody=await page.json();assert.equal(page.status,200);assert.equal(pageBody.recentMessages.length,1);assert.equal(pageBody.recentMessages[0].sender,'contact');assert.equal(pageBody.recentMessages[0].text,stored.text);
+ const express=await request({request_key:randomUUID(),text:'',confirmed_contact:true,workspace:{...workspace,action:'express'}});assert.equal(express.status,400);
+ const mismatch=await request({request_key:randomUUID(),text:'伪造立场',confirmed_contact:true,workspace});assert.equal(mismatch.status,400);assert.equal(f.requests.length,1);
+});
+
 const knowledgeRegistry=new URL('./fixtures/sqlite-reply-candidates/knowledge-registry.mjs',import.meta.url).href;
 
 

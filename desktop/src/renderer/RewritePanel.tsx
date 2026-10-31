@@ -180,7 +180,7 @@ function replyMethodText(usedSkill: ReplyUsedSkill | null | undefined, version?:
   return `本次实际回复方法：${usedSkill.name} · 版本 ${shownVersion}${loadState}${scope}`;
 }
 
-export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInitialDraftTaken }: { replies: ReplySessionView; currentDraft?: string; historyCoverage?: HistoryCoveragePhase; onInitialDraftTaken?: () => void }) {
+export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInitialDraftTaken, onDraftChange }: { replies: ReplySessionView; currentDraft?: string; historyCoverage?: HistoryCoveragePhase; onInitialDraftTaken?: () => void; onDraftChange?: (text:string,scope:{contactId:string;scopeRevision:number})=>void }) {
   const { state } = replies;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const evidence = useReplyEvidence();
@@ -239,7 +239,7 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInit
     void window.notalone.candidateProvenance.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
       replyRequestId, candidateId, text }).catch(() => setCopyNoticeError('复制来源记录未保存，已复制的文字仍可使用；再次复制会重试记录。'));
   }
-  if(state.savedSession?.discussionEntries!==undefined)return <AssistantSessionPanel replies={replies} initialDraft={currentDraft} onInitialDraftTaken={onInitialDraftTaken} />;
+  if(state.savedSession?.discussionEntries!==undefined)return <AssistantSessionPanel onDraftChange={onDraftChange} replies={replies} initialDraft={currentDraft} onInitialDraftTaken={onInitialDraftTaken} />;
   return <><section ref={resultRegion} className={`reply-candidates compact-replies${detailsOpen ? ' show-candidate-details' : ''}`} aria-label="候选回复">
     <header className="reply-results-heading"><h2>候选回复</h2>
       {candidates.length > 0 && <span>{candidates.length} 种说法 · 可直接编辑</span>}</header>
@@ -346,7 +346,7 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInit
       replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
     <AssistantMessageNoticeActions replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
   </section>
-    <AssistantSessionPanel replies={replies} />
+    <AssistantSessionPanel onDraftChange={onDraftChange} replies={replies} />
     <section className="reply-expression-settings" aria-label="表达设置">
       <header><h2>表达设置</h2><p>管理长期表达偏好，不影响本次已生成的文字。</p></header>
       <ExpressionPreferences replies={replies} />

@@ -13,10 +13,10 @@ function modules(){return loaded??=(async()=>{
  await build({stdin:{contents:"export * from './src/main/reply/sqlite-discussion-bridge';export * from './src/preload/sqlite-discussion';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',outfile,logLevel:'silent'});
  return import(pathToFileURL(outfile).href);
 })();}
-const ids={contact:'11111111-1111-4111-8111-111111111111',other:'22222222-2222-4222-8222-222222222222',session:'33333333-3333-4333-8333-333333333333',candidate:'44444444-4444-4444-8444-444444444444',request:'55555555-5555-4555-8555-555555555555',selection:'66666666-6666-4666-8666-666666666666',skill:'77777777-7777-4777-8777-777777777777'};
+const ids={contact:'11111111-1111-4111-8111-111111111111',other:'22222222-2222-4222-8222-222222222222',session:'33333333-3333-4333-8333-333333333333',candidate:'44444444-4444-4444-8444-444444444444',request:'55555555-5555-4555-8555-555555555555',selection:'66666666-6666-4666-8666-666666666666',skill:'77777777-7777-4777-8777-777777777777',message:'88888888-8888-4888-8888-888888888888'};
 const scope={contactId:ids.contact,scopeRevision:1,sessionId:ids.session};
 const version=()=>({candidateId:ids.candidate,versionNo:1,origin:'model',parentVersionNo:null,parts:['合成候选第一条','合成候选第二条'],basis:[{itemNo:1,kind:'message',text:'合成同联系人依据',verification:'actual_input'}]});
-const pageData=()=>({requests:[{requestId:ids.request,generationState:'committed',coverageWarning:null,sourceState:'available',candidates:[version()],selections:[],loadedSkills:[{packageId:ids.skill,revisionNo:1,relativePath:'SKILL.md',text:'合成实际载入Skill正文'}]}],coverage:{phase:'complete'}});
+const pageData=()=>({requests:[{requestId:ids.request,generationState:'committed',coverageWarning:null,sourceState:'available',candidates:[version()],selections:[],loadedSkills:[{packageId:ids.skill,revisionNo:1,relativePath:'SKILL.md',text:'合成实际载入Skill正文'}]}],recentMessages:[{messageId:ids.message,sender:'contact',text:'合成最近聊天',occurredAt:'2026-10-31T10:00:00.000Z',timePrecision:'second',displayPosition:'2',ordering:'unknown'}],coverage:{phase:'complete'}});
 function fixture(api){
  let generation=3,selected=ids.contact,scopeRevision=1,confirmed=true;const contactListeners=new Set(),backendListeners=new Set(),requests=[],handlers=new Map(),invocations=[];
  let respond=async()=>({generation,data:pageData()});
@@ -36,13 +36,14 @@ test('候选preload与主进程将五种操作映射到固定SQLite HTTP路径',
  const base=`/api/contacts/${ids.contact}/assistant-sessions/${ids.session}/reply-candidates`;
  f.respond(async request=>({generation:3,data:request.path.endsWith('/edit')?{...version(),versionNo:2,parentVersionNo:1,origin:'manual'}:request.path.endsWith('/select')?{id:ids.selection,candidateId:ids.candidate,versionNo:1,selectionNo:1}:request.path.includes('/versions/')?version():request.method==='POST'?{session_id:ids.session,request_key:ids.request,segmented:false,replayed:false}:pageData()}));
  assert.deepEqual(await f.bridge.candidates.execute({...scope,action:'read'}),pageData());
- await f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'本次合成表达要求',acceptIncomplete:true,carriedSelectionId:ids.selection});
+ const workspace={action:'express',draftText:'本次合成表达要求',tone:'warm',instruction:'简洁些',contextText:'本次补充情况',includeRelationshipContext:true,excludedMessageIds:[ids.message]};
+ await f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:workspace.draftText,acceptIncomplete:true,workspace});
  assert.equal((await f.bridge.candidates.execute({...scope,action:'edit',candidateId:ids.candidate,versionNo:1,parts:['手改第一条','手改第二条']})).versionNo,2);
  assert.equal((await f.bridge.candidates.execute({...scope,action:'select',candidateId:ids.candidate,versionNo:1})).id,ids.selection);
  assert.deepEqual((await f.bridge.candidates.execute({...scope,action:'version',candidateId:ids.candidate,versionNo:1})).parts,['合成候选第一条','合成候选第二条']);
  assert.deepEqual(f.requests.map(({method,path,body})=>({method,path,body})),[
   {method:'GET',path:base,body:undefined},
-  {method:'POST',path:base,body:{request_key:ids.request,text:'本次合成表达要求',confirmed_contact:true,accept_incomplete:true,carried_selection_id:ids.selection}},
+  {method:'POST',path:base,body:{request_key:ids.request,text:'本次合成表达要求',confirmed_contact:true,accept_incomplete:true,workspace}},
   {method:'POST',path:`${base}/${ids.candidate}/edit`,body:{version_no:1,parts:['手改第一条','手改第二条']}},
   {method:'POST',path:`${base}/${ids.candidate}/select`,body:{version_no:1}},
   {method:'GET',path:`${base}/${ids.candidate}/versions/1`,body:undefined},
@@ -58,6 +59,9 @@ test('preload及主进程均拒绝通用owner、路径、SQL字段和额外参�
   await assert.rejects(handler({...read,...extra}),/无效/);
  }
  await assert.rejects(f.bridge.candidates.execute(read,'extra'),/无效/);await assert.rejects(handler(read,'extra'),/无效/);
+ const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:false,excludedMessageIds:[]};
+ await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'伪造的既定立场',acceptIncomplete:false,workspace}),/无效/);
+ await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,tone:'firm'}}),/无效/);
  await assert.rejects(f.bridge.candidates.execute({...read,contactId:ids.other}),/失效/);
  assert.equal(f.requests.length,0);assert.equal(f.invocations.length,1,'只有格式合法但范围错误的请求可到达主进程');
 });
@@ -83,6 +87,8 @@ test('已知失败按安全中文状态映射，未知错误不将供应商正�
   ['reply_history_incomplete','历史状态已变化，请重新读取当前会话后重试。'],
   ['reply_model_unavailable','现有模型配置尚未就绪。'],
   ['discussion_call_unknown','已有模型调用结果未知，请先核对原请求，不能换请求重发。'],
+  ['discussion_request_conflict','本次输入或设置已改变，请用新请求重新生成。'],
+  ['reply_input_invalid','本次工作区设置无效，请检查本次想法和背景内容。'],
   ['reply_input_stale','资料版本已变化，请重新读取。'],
   ['reply_source_unavailable','本次候选来源已失效，请重新读取。'],
   ['skill_run_invalidated','本次Skill资格已失效，请重新读取。'],
@@ -93,6 +99,12 @@ test('已知失败按安全中文状态映射，未知错误不将供应商正�
   await assert.rejects(f.bridge.candidates.execute(input),error=>{assert.equal(error.message,expected);assert.equal(error.message.includes('供应商'),false);assert.equal(error.message.includes('私密正文'),false);return true;});
  }
  assert.equal(f.requests.every(request=>request.body.request_key===ids.request),true);
+});
+
+test('最近聊天投影只接受当前联系人范围内的有限文字材料',async t=>{
+ const f=fixture(await modules());t.after(()=>f.controller.close());
+ f.respond(async()=>({generation:3,data:{...pageData(),recentMessages:[{messageId:ids.message,sender:'other',text:'越权联系人消息',occurredAt:null,timePrecision:null,displayPosition:'1',ordering:'unknown'}]}}));
+ await assert.rejects(f.bridge.candidates.execute({...scope,action:'read'}),/候选结果尚未确认/);assert.equal(f.requests.length,1);
 });
 
 

@@ -1,53 +1,66 @@
 import {useEffect,useRef,useState} from 'react';
+import {Icon} from './icons';
+import type {RewriteTone} from '../shared/reply-bridge';
 import type {SqliteDiscussionBridge,SqliteDiscussionReceipt} from '../shared/sqlite-discussion-bridge';
 import {readSqliteCandidatePage,readSqliteCandidateVersion,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation} from '../shared/sqlite-reply-candidates';
-interface Props {bridge:SqliteDiscussionBridge;contactId:string|null;scopeRevision:number;sessionId:string|null;disabled?:boolean;initialDraft?:string;onInitialDraftTaken?:()=>void;onSubmitted?:(receipt:SqliteDiscussionReceipt)=>void}
+type WorkspaceInput={action:'express'|'suggest';draftText:string;tone:RewriteTone;instruction:string;contextText:string;includeRelationshipContext:boolean;excludedMessageIds:string[]};
+const defaultOptions=()=>({tone:'original' as RewriteTone,instruction:'',contextText:'',includeRelationshipContext:true,excludedMessageIds:[] as string[]});
+interface Props {bridge:SqliteDiscussionBridge;contactId:string|null;scopeRevision:number;sessionId:string|null;disabled?:boolean;initialDraft?:string;onInitialDraftTaken?:()=>void;onDraftChange?:(text:string,scope:{contactId:string;scopeRevision:number})=>void;onSubmitted?:(receipt:SqliteDiscussionReceipt)=>void}
 /** 草稿、候选、依据和实际Skill快照共用同一失效边界；迟到回包不能重新挂回旧正文。 */
-export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessionId,disabled=false,initialDraft='',onInitialDraftTaken,onSubmitted}:Props){
+export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessionId,disabled=false,initialDraft='',onDraftChange,onSubmitted}:Props){
  const scopeKey=JSON.stringify([contactId,scopeRevision,sessionId]),latest=useRef({scopeKey,bridge,disabled});latest.current={scopeKey,bridge,disabled};
  const revision=useRef(0),mounted=useRef(false),operation=useRef<object|null>(null);
- const retry=useRef<{fingerprint:string;requestKey:string}|null>(null);
+ const retry=useRef<{fingerprint:string;requestKey:string;text:string;workspace:WorkspaceInput;carry?:string}|null>(null);
  const seeded=useRef<string|null>(null);
  const qualifiedRequests=useRef<string[]>([]);
  const [page,setPage]=useState<SqliteCandidatePage|null>(null),[draft,setDraft]=useState(''),[carry,setCarry]=useState<string|undefined>();
+ const [options,setOptions]=useState(defaultOptions);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [edits,setEdits]=useState<Record<string,string[]>>({}),[inspected,setInspected]=useState<Record<string,SqliteCandidateVersion>>({});
  const available=!!bridge.candidates&&!!contactId&&!!sessionId&&!disabled;
- function clear(){++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
- useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(()=>{seeded.current=scopeKey;clear();});return()=>{mounted.current=false;++revision.current;operation.current=null;off();};},[bridge,scopeKey]);
- useEffect(()=>{clear();if(available){if(seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);if(initialDraft)onInitialDraftTaken?.();}void run({action:'read'});}},[scopeKey,bridge,disabled]);
+ function clear(){++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setOptions(defaultOptions());setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
+ useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(()=>{seeded.current=scopeKey;clear();if(contactId)onDraftChange?.('',{contactId,scopeRevision});});return()=>{mounted.current=false;++revision.current;operation.current=null;off();};},[bridge,scopeKey]);
+ useEffect(()=>{clear();if(available){if(seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);}void run({action:'read'});}},[scopeKey,bridge]);
+ useEffect(()=>{if(disabled){++revision.current;operation.current=null;setBusy(false);setPage(null);setEdits({});setInspected({});}else if(available){if(seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);}void run({action:'read'});}},[disabled]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
- function showPage(next:SqliteCandidatePage){
+ function showPage(next:SqliteCandidatePage,preserveEdits=false){
   // 仅保留无正文的来源标识，短暂读取失败后仍能核对旧草稿的资格。
   const readable=qualifiedRequests.current;
   if(readable.some(id=>!next.requests.some(r=>r.requestId===id&&r.sourceState==='available'))){
-   setDraft('');setCarry(undefined);retry.current=null;setNotice('');
+   setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;setNotice('');
   }
   qualifiedRequests.current=next.requests.filter(r=>r.sourceState==='available'&&r.candidates.length).map(r=>r.requestId);
-  setPage(next);setEdits({});setInspected({});
+  setPage(next);
+  if(!preserveEdits){setEdits({});setInspected({});}
+  else{
+   const previous=new Map(page?.requests.flatMap(r=>r.candidates.map(c=>[c.candidateId,c.versionNo] as const))??[]);
+   const unchanged=new Set(next.requests.filter(r=>r.sourceState==='available').flatMap(r=>r.candidates.filter(c=>previous.get(c.candidateId)===c.versionNo).map(c=>c.candidateId)));
+   setEdits(old=>Object.fromEntries(Object.entries(old).filter(([id])=>unchanged.has(id))));
+   setInspected(old=>Object.fromEntries(Object.entries(old).filter(([id])=>unchanged.has(id))));
+  }
  }
  function rejectOperation(error:unknown){
   const text=error instanceof Error?error.message:'候选结果尚未确认，请重新读取。';
   setEdits({});setInspected({});setNotice('');
   if(/失效|已变化|已不可用|请先确认/.test(text)){
-   qualifiedRequests.current=[];setPage(null);setDraft('');setCarry(undefined);retry.current=null;
+   qualifiedRequests.current=[];setPage(null);setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;
   }else setPage(old=>old?{coverage:old.coverage,requests:[]}:null);
   setError(text);
  }
- async function run(command:Command){
+ async function run(command:Command,refreshContext=false){
   if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
   const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
   const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge&&!latest.current.disabled;
   const scope={contactId,scopeRevision,sessionId};
   try{
    const response=await bridge.candidates.execute({...scope,...command} as SqliteCandidateOperation);if(!current())return;
-   if(command.action==='read'){showPage(readSqliteCandidatePage(response));}
+   if(command.action==='read'){showPage(readSqliteCandidatePage(response),refreshContext);}
    else if(command.action==='version')setInspected(v=>({...v,[command.candidateId]:readSqliteCandidateVersion(response)}));
    else{
     if(command.action==='generate'){
      const r=response as {session_id:string;request_key:string;segmented:boolean;replayed:boolean};
      if(r.request_key!==command.requestKey||typeof r.session_id!=='string'||typeof r.segmented!=='boolean'||typeof r.replayed!=='boolean')throw new Error('候选结果尚未确认，请保留原请求重试核对。');
-     retry.current=null;setDraft('');setCarry(undefined);setNotice(r.replayed?'已定位原请求，候选已重新核对。':'候选已保存，最终消息请自行发送。');
+     retry.current=null;if(draft===command.text){setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});}setCarry(undefined);setNotice(r.replayed?'已定位原请求，候选已重新核对。':'候选已保存，最终消息请自行发送。');
      onSubmitted?.({sessionId:r.session_id,requestKey:r.request_key,segmented:r.segmented,replayed:r.replayed});
      if(r.session_id!==sessionId)return;
     }else if(command.action==='select'){
@@ -59,12 +72,25 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   }catch(e){if(current())rejectOperation(e);}
   finally{if(current()){operation.current=null;setBusy(false);}}
  }
- async function generate(){
-  if(!draft.trim()||!page)return;
-  const fingerprint=JSON.stringify({draft,carry}),requestKey=retry.current?.fingerprint===fingerprint?retry.current.requestKey:crypto.randomUUID();retry.current={fingerprint,requestKey};
-  await run({action:'generate',requestKey,text:draft,acceptIncomplete:false,...(carry?{carriedSelectionId:carry}:{})});
+ function changeOptions(update:Partial<ReturnType<typeof defaultOptions>>){
+  setOptions(value=>({...value,...update}));
+  if(carry&&(update.includeRelationshipContext===false||!!update.excludedMessageIds?.length)){
+   setCarry(undefined);setNotice('本次只使用当前输入和已选聊天，已取消旧候选继续。');
+  }
+ }
+ async function generate(action:'express'|'suggest'){
+  if(action==='express'&&!draft.trim()||!page)return;
+  const workspace:WorkspaceInput={action,draftText:draft,...options};
+  const fingerprint=JSON.stringify({workspace,carry}),requestKey=retry.current?.fingerprint===fingerprint?retry.current.requestKey:crypto.randomUUID();
+  retry.current={fingerprint,requestKey,text:draft,workspace,carry};
+  await run({action:'generate',requestKey,text:draft,workspace,acceptIncomplete:false,...(carry?{carriedSelectionId:carry}:{})});
+ }
+ async function retryOriginal(){
+  const original=retry.current;if(!original)return;
+  await run({action:'generate',requestKey:original.requestKey,text:original.text,workspace:original.workspace,acceptIncomplete:false,...(original.carry?{carriedSelectionId:original.carry}:{})});
  }
  async function continueVersion(v:SqliteCandidateVersion){
+  if(!options.includeRelationshipContext||options.excludedMessageIds.length)return;
   if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
   const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
   const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge&&!latest.current.disabled;
@@ -72,12 +98,36 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   catch(e){if(current())rejectOperation(e);}
   finally{if(current()){operation.current=null;setBusy(false);}}
  }
- return <section aria-label="候选回复" className="sqlite-reply-candidates">
-  <h3>候选回复</h3><p>写下本次想法，查看依据后选择或修改。最终消息由你亲自发送。</p>
-  {!available&&<p role="status">请先确认联系人并明确继续当前助手讨论。</p>}
-  <label>本次想法<textarea aria-label="本次想法" value={draft} maxLength={100000} disabled={!available||busy} onChange={e=>setDraft(e.target.value)} /></label>
-  <button disabled={!available||busy||!page||!draft.trim()} onClick={()=>void generate()}>{busy?'正在处理候选…':retry.current?'重试核对候选':'生成候选'}</button>
-  <button disabled={!available||busy} onClick={()=>void run({action:'read'})}>重新读取候选</button>
+ return <section aria-label="表达工作区" className="compose-panel unified-workspace sqlite-reply-candidates">
+  <header className="compose-heading"><span className="section-eyebrow">一起想，把话说好</span><h2>有什么想说的？</h2><p>写下想法、方向或草稿；没有思路，也可以让我帮你想。</p></header>
+  {!available&&<p role="status">请先选择本次联系人并打开当前助手会话。</p>}
+  <textarea aria-label="有什么想说的" rows={3} maxLength={65536} value={draft} placeholder="写下你的想法或草稿，也可以留空，点击「帮我想想」…" disabled={!available||busy} onChange={e=>{setDraft(e.target.value);if(contactId)onDraftChange?.(e.target.value,{contactId,scopeRevision});}} />
+  <div className="workspace-actions">
+    <button className="generate-button" aria-label="帮我表达" disabled={!available||busy||!page||!draft.trim()} onClick={()=>void generate('express')}><Icon name="write" size={18}/>帮我表达</button>
+    <button className="compose-primary workspace-suggest" aria-label="帮我想想" disabled={!available||busy||!page} onClick={()=>void generate('suggest')}><Icon name="sparkle" size={18}/>帮我想想</button>
+  </div>
+  <p className="workspace-action-hint">有想法，帮你组织表达；没思路，给你几种说法和建议理由。</p>
+  <details className="workspace-context"><summary>最近聊天 · 查看／补充</summary><div className="workspace-context-body">
+    <label className="rewrite-context"><input type="checkbox" checked={options.includeRelationshipContext} disabled={!available||busy} onChange={e=>changeOptions({includeRelationshipContext:e.target.checked})}/>参考最近聊天和相关关系资料</label>
+    <p className="rewrite-privacy">使用这位联系人当前可用的资料，具体依据会随候选展示。</p>
+    <button disabled={!available||busy} onClick={()=>void run({action:'read'},true)}>刷新最近聊天</button>
+    {!page?.recentMessages?.length&&<p>暂无可用的最近聊天。可以补充上下文，或先写下想法。</p>}
+    {!!page?.recentMessages?.length&&<><p className="rewrite-privacy">以下按保存位置展示，部分先后尚未核验；取消勾选可从本次生成中排除。</p>
+      {options.excludedMessageIds.length>0&&<p className="rewrite-privacy">已排除 {options.excludedMessageIds.length} 条消息。本次只参考未排除的聊天和补充内容，避免关系资料带回已排除内容。</p>}
+      <div className="workspace-message-list" role="group" aria-label="最近聊天材料">{page.recentMessages.map(message=><div className="reply-message workspace-message-row" key={message.messageId}><label className="reply-message-selection">
+        <input type="checkbox" aria-label={`使用消息：${message.text}`} checked={!options.excludedMessageIds.includes(message.messageId)} disabled={!available||busy||!options.includeRelationshipContext} onChange={e=>changeOptions({excludedMessageIds:e.target.checked?options.excludedMessageIds.filter(id=>id!==message.messageId):[...options.excludedMessageIds,message.messageId]})}/>
+        <span><small>{message.sender==='owner'?'我':message.sender==='contact'?'对方':'角色未核验'} · {message.occurredAt?new Date(message.occurredAt).toLocaleString('zh-CN'):'时间未知'}</small><span className="reply-message-text">{message.text}</span></span>
+      </label></div>)}</div></>}
+    <label>补充聊天上下文<textarea aria-label="补充聊天上下文" rows={3} maxLength={65536} value={options.contextText} disabled={!available||busy} placeholder="只粘贴这位联系人的聊天内容，建议标明是谁说的话。" onChange={e=>setOptions(v=>({...v,contextText:e.target.value}))}/></label>
+    <p className="rewrite-privacy">补充内容只作为本次聊天背景，不会被当成你的表达意图。</p>
+  </div></details>
+  <details className="compose-settings"><summary>语气和本次要求</summary><div className="rewrite-options">
+    <label>本次语气<select aria-label="本次语气" value={options.tone} disabled={!available||busy} onChange={e=>setOptions(v=>({...v,tone:e.target.value as RewriteTone}))}><option value="original">自然表达</option><option value="warm">自然温和</option><option value="concise">简洁直接</option><option value="polite">礼貌克制</option></select></label>
+    <label>本次要求<textarea aria-label="本次要求" rows={2} maxLength={4096} value={options.instruction} disabled={!available||busy} placeholder="例如：不要催促、简短一些…" onChange={e=>setOptions(v=>({...v,instruction:e.target.value}))}/></label>
+  </div></details>
+  {busy&&<p className="rewrite-privacy" aria-live="polite">正在处理本次候选…</p>}
+  {retry.current&&!busy&&<button onClick={()=>void retryOriginal()}>重试核对候选</button>}
+  <button disabled={!available||busy} onClick={()=>void run({action:'read'})}>刷新候选</button>
   {carry&&<button disabled={busy} onClick={()=>{setCarry(undefined);setNotice('已取消本次候选继续。');}}>取消候选继续</button>}
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {page?.requests.map(request=><div key={request.requestId} className="sqlite-candidate-request">
@@ -92,7 +142,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     {parts.map((part,index)=><label key={index}>第{index+1}条<textarea aria-label={`候选第${index+1}条`} value={part} disabled={busy||!available} onChange={e=>setEdits(old=>({...old,[v.candidateId]:parts.map((p,n)=>n===index?e.target.value:p)}))} /></label>)}
     <button disabled={busy||!available||!edits[v.candidateId]} onClick={()=>void run({action:'edit',candidateId:v.candidateId,versionNo:v.versionNo,parts})}>保存修改</button>
     <button disabled={busy||!available} onClick={()=>void run({action:'select',candidateId:v.candidateId,versionNo:v.versionNo})}>选用此版本</button>
-    <button disabled={busy||!available} onClick={()=>void continueVersion(v)}>以此版本继续</button>
+    <button disabled={busy||!available||!options.includeRelationshipContext||options.excludedMessageIds.length>0} onClick={()=>void continueVersion(v)}>以此版本继续</button>
     {v.versionNo>1&&<button disabled={busy} onClick={()=>void run({action:'version',candidateId:v.candidateId,versionNo:v.versionNo-1})}>查看上一版</button>}
     {v.versionNo!==candidate.versionNo&&<button disabled={busy} onClick={()=>{setInspected(old=>{const next={...old};delete next[v.candidateId];return next;});setEdits({});}}>回到最新版本</button>}
     <details><summary>依据</summary>{v.basis.map(b=><div key={b.itemNo}><p>{b.verification==='inherited_unverified'?'继承原依据，手工修改尚未重新核验':'产生此模型版本的实际输入'} · {({message:'聊天原文',entry:'本次讨论',memory:'已采纳记忆',memory_candidate:'未确认记忆',document:'已发布资料',selection:'明确选稿',coverage:'历史覆盖'} as Record<string,string>)[b.kind]??'实际资料'}</p><p className="discussion-entry-text">{b.text}</p></div>)}</details>

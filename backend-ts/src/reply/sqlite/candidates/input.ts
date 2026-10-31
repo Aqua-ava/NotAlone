@@ -7,7 +7,10 @@ import {invalidHistoryDiscussionImpact} from '../deletion.ts';
 import {decode,encode} from '../requests.ts';
 import type {DiscussionScope} from '../contracts.ts';
 import type {ReplyKnowledgeItem,ReplyKnowledgeReader,ReplySource} from './contracts.ts';
+import type {ReplyWorkspaceSnapshot} from './workspace.ts';
+import {toneLabel} from './workspace.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
+function coverageSnapshot(value:string):unknown{const parsed=JSON.parse(value);return parsed?.kind==='reply_candidate_request_v1'?parsed.coverage:parsed;}
 export interface FrozenReplyInput {itemNo:number;kind:string;text:string;identity:object;sources:ReplySource[]}
 function source(tx:StorageTransaction,ownerId:string,s:ReplySource):void{
  assertSourceEligibility(tx,{owner_id:ownerId,contact_id:s.contactId,record_id:s.recordId,message_id:s.messageId});
@@ -24,21 +27,32 @@ function knowledge(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowled
  if(item.scopeKind==='contact'&&item.sources.some(s=>s.contactId!==scope.contactId))fail('reply_knowledge_scope');
  reader.requireCurrent(tx,scope,item);for(const s of item.sources)source(tx,scope.ownerId,s);
 }
-export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
+export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
+ const includeRelatedData=!i.workspace||i.workspace.includeRelationshipContext&&i.workspace.excludedMessageIds.length===0;
  const items:Omit<FrozenReplyInput,'itemNo'>[]=[];
  for(const row of tx.all('SELECT x.*,e.body,m.text_body,m.sender_role FROM reply_context_item x LEFT JOIN discussion_entry e ON e.owner_id=x.owner_id AND e.id=x.entry_id LEFT JOIN message m ON m.owner_id=x.owner_id AND m.id=x.message_id WHERE x.owner_id=? AND x.context_id=? ORDER BY x.item_no',[i.ownerId,i.contextId])){
   if(row.kind==='skill')continue;
+  if(i.workspace&&row.kind==='entry')continue;
   const sources:ReplySource[]=row.kind==='message'?[{contactId:String(row.source_contact_id),messageId:String(row.message_id),recordId:String(row.record_id),acceptedRevision:row.accepted_revision as bigint}]:[];
   items.push({kind:String(row.kind),identity:{contextItemNo:row.item_no},text:String(row.kind==='message'?`${row.sender_role==='owner'?'我':'对方'}：${row.text_body}`:row.body),sources});
  }
- for(const item of reader.read(tx,i)){
+ if(i.workspace){
+  const w=i.workspace;
+  items.push({kind:'entry',identity:{workspaceItem:'request',action:w.action,tone:w.tone,includeRelationshipContext:w.includeRelationshipContext,excludedMessageIds:w.excludedMessageIds,selectedPackageId:w.selectedPackageId,carriedSelectionId:w.carriedSelectionId},
+   text:`本次工作区请求：${w.action==='suggest'?'用户请求帮我想想；尚未确认任何立场，候选只是可选建议。':'用户请求帮我表达；请忠实组织本次想法，不补写未提供的立场。'}\n语气要求：${toneLabel(w.tone)}\n关系背景：${w.includeRelationshipContext?'已启用':'已关闭；不依据自动聊天、旧讨论或关系资料'}`,
+   sources:[]});
+  if(w.draftText.trim())items.push({kind:'entry',identity:{workspaceItem:'draft'},text:`本次想法/草稿（独立于补充背景）：\n${w.draftText}`,sources:[]});
+  if(w.instruction.trim())items.push({kind:'entry',identity:{workspaceItem:'instruction'},text:`本次一次性写作要求：\n${w.instruction}`,sources:[]});
+  if(w.contextText.trim())items.push({kind:'entry',identity:{workspaceItem:'supplemental_context'},text:`本次补充背景（独立于想法/草稿，仅作用本次）：\n${w.contextText}`,sources:[]});
+ }
+ for(const item of includeRelatedData?reader.read(tx,i):[]){
   knowledge(tx,i,item,reader);
   items.push({kind:item.kind,identity:item,text:(item.qualification==='unconfirmed'?'【未确认候选，仅供参考】':'')+item.text,sources:item.sources});
  }
  const details=tx.get('SELECT * FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,i.requestId])??fail('reply_request_unavailable');
- if(details.coverage_warning)items.push({kind:'coverage',identity:{coverage:JSON.parse(String(details.coverage_json))},text:String(details.coverage_warning),sources:[]});
- if(details.carried_selection_id){
+ if(details.coverage_warning&&includeRelatedData)items.push({kind:'coverage',identity:{coverage:coverageSnapshot(String(details.coverage_json))},text:String(details.coverage_warning),sources:[]});
+ if(details.carried_selection_id&&includeRelatedData){
   const selection=requireSelection(tx,i,String(details.carried_selection_id),reader);
   const sources=tx.all(`SELECT DISTINCT s.* FROM reply_candidate_input_source s JOIN reply_context c ON c.owner_id=s.owner_id AND c.id=s.context_id WHERE c.owner_id=? AND c.request_id=?`,[i.ownerId,selection.request_id]).map(s=>({contactId:String(s.source_contact_id),recordId:String(s.record_id),messageId:String(s.message_id),acceptedRevision:s.accepted_revision as bigint}));
   const parts=tx.all('SELECT text_body FROM reply_version_part WHERE owner_id=? AND candidate_id=? AND version_no=? ORDER BY part_no',[i.ownerId,selection.candidate_id,selection.version_no]);

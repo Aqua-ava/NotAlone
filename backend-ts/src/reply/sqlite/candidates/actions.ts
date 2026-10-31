@@ -9,6 +9,12 @@ import {freezeReplyInput,requireReplyInput,requireSelection} from './input.ts';
 import {insertModelCandidates,parseReplyOutput,readParts,requireCandidate,versionView} from './versions.ts';
 export const INCOMPLETE_HISTORY_WARNING='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
 function fail(code:string):never{throw new StorageFailure(code);}
+function storedWorkspaceFingerprint(value:string):string|null{const parsed=JSON.parse(value);return parsed?.kind==='reply_candidate_request_v1'&&typeof parsed.workspaceFingerprint==='string'?parsed.workspaceFingerprint:null;}
+function requestCoverageJson(coverage:unknown,workspaceFingerprint:unknown):string{
+ if(workspaceFingerprint===undefined)return JSON.stringify(coverage);
+ if(typeof workspaceFingerprint!=='string'||!/^[a-f0-9]{64}$/.test(workspaceFingerprint))fail('reply_input_invalid');
+ return JSON.stringify({kind:'reply_candidate_request_v1',coverage,workspaceFingerprint});
+}
 function snapshotReplyCoverage(tx:StorageTransaction,ownerId:string,contactId:string){
  const coverage=readCoverage(tx,ownerId,contactId);
  return {coverage,warning:coverage.phase!=='complete'?INCOMPLETE_HISTORY_WARNING:null};
@@ -21,14 +27,15 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
  const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:any)=>unknown):StorageAction=>({name:`reply.${name}`,mode,retryBusy:mode==='write',execute});
  return [
  action('begin','write',(tx,i,lease)=>{
-  const {coverage,warning}=snapshotReplyCoverage(tx,i.ownerId,i.contactId);
+  const {coverage,warning:capturedWarning}=snapshotReplyCoverage(tx,i.ownerId,i.contactId),warning=i.includeRelationshipContext===false?null:capturedWarning;
+  const coverageJson=requestCoverageJson(coverage,i.workspaceFingerprint);
   if(i.carriedSelectionId)requireSelection(tx,i,i.carriedSelectionId,reader);
   const accepted=begin.execute(tx,{...i,kind:'reply',discussionId:randomUUID(),requestId:randomUUID(),entryId:randomUUID(),attemptId:randomUUID(),leaseToken:randomUUID()},lease) as any;
   const old=tx.get('SELECT * FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,accepted.attempt.requestId]);
-  if(accepted.replayed){if(!old||old.carried_selection_id!==(i.carriedSelectionId??null))fail('reply_request_conflict');}
+  if(accepted.replayed){if(!old||old.carried_selection_id!==(i.carriedSelectionId??null))fail('reply_request_conflict');if(storedWorkspaceFingerprint(String(old.coverage_json))!==(i.workspaceFingerprint??null))fail('discussion_request_conflict');}
   else{
    if(i.carriedSelectionId&&accepted.attempt.discussionId!==i.discussionId)fail('reply_selection_scope');
-   tx.run('INSERT INTO reply_candidate_request VALUES(?,?,?,?,?)',[i.ownerId,accepted.attempt.requestId,JSON.stringify(coverage),warning,i.carriedSelectionId??null]);
+   tx.run('INSERT INTO reply_candidate_request VALUES(?,?,?,?,?)',[i.ownerId,accepted.attempt.requestId,coverageJson,warning,i.carriedSelectionId??null]);
   }
   return {...accepted,coverageWarning:accepted.replayed?old!.coverage_warning:warning};
  }),

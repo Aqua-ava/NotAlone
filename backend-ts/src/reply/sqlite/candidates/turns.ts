@@ -15,8 +15,9 @@ import {runSingleDiscussionTurn} from '../generation.ts';
 import {encode} from '../requests.ts';
 import type {FrozenReplyInput} from './input.ts';
 import type {SqliteReplyCandidateService} from './service.ts';
-const systemPrompt='你是面向用户真实联系人的中文关系沟通回复助手。只围绕本次已确认联系人。依据用户本次想法和资料生成1至3组可编辑候选，不虚构经历、情绪、立场或承诺。事实、推测和未确认候选必须区分。一次性写作要求仅作用本次，不读取或形成长期表达偏好。最终消息始终由用户选择、修改并亲自发送。只输出JSON：{"candidates":[{"parts":["第一条短消息","可选的第二条"],"basis":[实际输入材料编号]}]}。basis只能引用本次编号材料，必须至少一项；不得臆造资料或把Skill选择当作已加载。';
-export interface ReplyGenerationInput {contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;acceptIncomplete?:boolean;carriedSelectionId?:string;selectedPackageId?:string;contextMessageIds?:string[];signal?:AbortSignal}
+import {readReplyWorkspace,replyWorkspaceEntryText,replyWorkspaceFingerprint,type ReplyWorkspace,type ReplyWorkspaceSnapshot} from './workspace.ts';
+const systemPrompt='你是面向用户真实联系人的中文关系沟通回复助手。只围绕本次已确认联系人。依据本次输入和获准资料生成1至3组可编辑候选，不虚构经历、情绪、立场或承诺。事实、推测和未确认候选必须区分。workspace suggest动作只代表用户要可选思路；未提供或未确认的草稿、立场和关系意图保持未知，候选不得写成用户已采纳的主张或承诺。workspace express动作只围绕本次想法组织表达；草稿是用户对助手的任务描述，不一定是要逐句发送的私聊原文。补充背景、写作要求和最近聊天各自标注，不相互冒充。一次性写作要求仅作用本次，不读取或形成长期表达偏好。最终消息始终由用户选择、修改并亲自发送。只输出JSON：{"candidates":[{"parts":["第一条短消息","可选的第二条"],"basis":[实际输入材料编号]}]}。basis只能引用本次编号材料，必须至少一项；不得臆造资料或把Skill选择当作已加载。';
+export interface ReplyGenerationInput {contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;acceptIncomplete?:boolean;carriedSelectionId?:string;selectedPackageId?:string;contextMessageIds?:string[];workspace?:ReplyWorkspace;signal?:AbortSignal}
 interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>}
 /** 与11共享实际DSH执行、provider和arbiter；候选不创建第二套调用身份或账本。 */
 export class SqliteReplyTurns {
@@ -40,9 +41,14 @@ export class SqliteReplyTurns {
  private async generateOwned(input:ReplyGenerationInput){
   const o=this.options,ownerId=o.service.ownerId;
   if(input.confirmedContact!==true)throw new StorageFailure('discussion_identity_required');
+  const workspace=input.workspace===undefined?undefined:readReplyWorkspace(input.workspace);
+  if(workspace&&(input.text!==workspace.draftText||input.contextMessageIds!==undefined||input.carriedSelectionId!==undefined&&(!workspace.includeRelationshipContext||workspace.excludedMessageIds.length>0)))throw new StorageFailure('reply_input_invalid');
   await o.authorize(input.contactId);input.signal?.throwIfAborted();
   const confirmationId=await o.storage.execute<string>('identity.manualConfirm',{ownerId,contactId:input.contactId,contextToken:input.requestKey,id:randomUUID(),at:Date.now()});
-  const accepted=await o.service.begin({...input,identity:{kind:'manual',confirmationId}}),attempt=accepted.attempt as DiscussionAttempt;
+  const requestText=workspace?replyWorkspaceEntryText(workspace):input.text;
+  const workspaceFingerprint=workspace?replyWorkspaceFingerprint(workspace,input.selectedPackageId,input.carriedSelectionId):undefined;
+  const workspaceSnapshot:ReplyWorkspaceSnapshot|undefined=workspace?{...workspace,selectedPackageId:input.selectedPackageId??null,carriedSelectionId:input.carriedSelectionId??null}:undefined;
+  const accepted=await o.service.begin({contactId:input.contactId,discussionId:input.discussionId,requestKey:input.requestKey,text:requestText,acceptIncomplete:input.acceptIncomplete,carriedSelectionId:input.carriedSelectionId,includeRelationshipContext:workspace?workspace.includeRelationshipContext&&workspace.excludedMessageIds.length===0:undefined,workspaceFingerprint,identity:{kind:'manual',confirmationId}}),attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {discussionId:attempt.discussionId,replayed:true,segmented:false};
   try{
    const callId=randomUUID(),contextId=randomUUID();
@@ -50,12 +56,14 @@ export class SqliteReplyTurns {
    const eligible=catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
    if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
    const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?eligible.map(skillAnchor):[]};
-   const view=await o.discussions.view(input.contactId,attempt.discussionId),entries=view.entries.filter((e:any)=>e.content_state==='available');
-   const history=await o.storage.execute<any>('history.read',{ownerId,contactId:input.contactId,limit:20});
-   const messageIds=input.contextMessageIds??history.messages.filter((m:any)=>m.kind==='text').map((m:any)=>m.id);
+   const entries=workspace?[]:(await o.discussions.view(input.contactId,attempt.discussionId)).entries.filter((e:any)=>e.content_state==='available');
+   const history=workspace&&!workspace.includeRelationshipContext?null:await o.storage.execute<any>('history.read',{ownerId,contactId:input.contactId,limit:20});
+   const recentIds=history?.messages.filter((m:any)=>m.kind==='text'&&!workspace?.excludedMessageIds.includes(m.id)).map((m:any)=>m.id)??[];
+   const messageIds=workspace?recentIds:input.contextMessageIds??recentIds;
    const messages=await o.storage.execute<any[]>('discussion.messages',{...attempt,messageIds});
-   const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items:[...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))],at:Date.now()});
-   const prompt='本次明确请求：'+input.text+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
+   const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items:[...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))],workspace:workspaceSnapshot,at:Date.now()});
+   const requestIntent=workspace?workspace.action==='suggest'?'本次工作区动作：帮我想想。用户没有提供草稿时尚未确认任何立场，所有说法都只是可选思路。':'本次工作区动作：帮我表达。只按本次想法整理，不添加用户未确认的立场。':'本次明确请求：'+input.text;
+   const prompt=requestIntent+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
    // 每次候选任务重建独立副本；旧候选只有显式选择才进入新输入。
    const configurationDigest=this.digest(attempt.requestId,revision);
    await o.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:o.model.provider,requestKey:callId,inputSeal:createHash('sha256').update(prompt).digest('hex'),model:o.model.model,configurationId:configurationDigest,inputCap:o.model.budgetProfile.context_window_tokens-o.model.maxTokens-o.model.budgetProfile.safety_margin_tokens,outputCap:o.model.maxTokens});
