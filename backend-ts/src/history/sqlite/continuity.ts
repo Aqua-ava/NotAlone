@@ -1,13 +1,18 @@
 import { StorageFailure, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
-import type { HistoryTarget } from './contracts.ts';
+import type { HistorySupportReport, HistoryTarget } from './contracts.ts';
+import { historyTargetTransition, isPartitionGrowthTargetChange, type HistoryTargetTransition } from '../partition-growth.ts';
 
 const reason = 'history_source_continuity_unverified';
 export const normalUseContinuity = 'same-source-instances-normal-use-v1';
 const lostCodes=new Set(['history_source_changed','history_source_unverified','history_external_scope_changed','history_scope_changed','history_schema_changed','history_shards_changed','history_cursor_scope_changed','history_support_changed','history_target_unverified']);
 export const isSourceContinuityLost=(error:unknown):boolean=>error instanceof StorageFailure&&lostCodes.has(error.code);
 function tables(target: HistoryTarget): string {
-  return JSON.stringify({partitions:[...target.partitions].sort(),tables:target.tables.map(t=>[t.partition,t.instance]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))});
+ const value:{partitions:string[];tables:[string,string][];checkedPartitions?:string[]}={
+  partitions:[...target.partitions].sort(),tables:target.tables.map(t=>[t.partition,t.instance] as [string,string]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),
+ };
+ if(target.checkedPartitions!==undefined)value.checkedPartitions=[...target.checkedPartitions].sort();
+ return JSON.stringify(value);
 }
 function identity(target:HistoryTarget,accountKey?:string):string {
  const value=JSON.parse(tables(target)) as {partitions:string[];tables:[string,string][]};
@@ -15,11 +20,28 @@ function identity(target:HistoryTarget,accountKey?:string):string {
 }
 function matchesStored(stored:string,target:HistoryTarget,accountKey?:string,requireAccountKey=false):boolean {
  try{
-  const value=JSON.parse(stored) as {accountKey?:unknown;partitions?:unknown;tables?:unknown};
-  if(!Array.isArray(value.partitions)||!Array.isArray(value.tables))return false;
-  if(JSON.stringify({partitions:value.partitions,tables:value.tables})!==tables(target))return false;
-  return accountKey===undefined?!requireAccountKey:value.accountKey===accountKey;
+  const value=JSON.parse(stored) as {accountKey?:unknown;partitions?:unknown;tables?:unknown;checkedPartitions?:unknown};
+  if(!Array.isArray(value.partitions)||!Array.isArray(value.tables)
+    ||value.partitions.some(partition=>typeof partition!=='string'||!partition)
+    ||value.tables.some(row=>!Array.isArray(row)||row.length!==2||row.some(item=>typeof item!=='string'||!item)))return false;
+  if(requireAccountKey&&value.accountKey!==accountKey||accountKey!==undefined&&value.accountKey!==undefined&&value.accountKey!==accountKey)return false;
+  const previous:HistoryTarget={protocol:'private-history-v1',descriptor:'stored',sourceGeneration:target.sourceGeneration,
+   partitions:value.partitions as string[],tables:(value.tables as [string,string][]).map(([partition,instance])=>({partition,instance})),
+   ...(value.checkedPartitions===undefined?{}:{checkedPartitions:Array.isArray(value.checkedPartitions)?value.checkedPartitions as string[]:[]})};
+  const transition=historyTargetTransition(previous,target,false);
+  return transition==='same'||transition==='legacy-exact-upgrade';
  }catch{return false;}
+}
+function storedTarget(stored:string,sourceGeneration:string):{target:HistoryTarget;accountKey?:unknown}|null {
+ try{
+  const value=JSON.parse(stored) as {accountKey?:unknown;partitions?:unknown;tables?:unknown;checkedPartitions?:unknown};
+  if(!Array.isArray(value.partitions)||!Array.isArray(value.tables)||value.partitions.some(item=>typeof item!=='string'||!item)
+    ||value.tables.some(row=>!Array.isArray(row)||row.length!==2||row.some(item=>typeof item!=='string'||!item))
+    ||value.checkedPartitions!==undefined&&(!Array.isArray(value.checkedPartitions)||value.checkedPartitions.some(item=>typeof item!=='string'||!item)))return null;
+  return {accountKey:value.accountKey,target:{protocol:'private-history-v1',descriptor:'stored',sourceGeneration,
+   partitions:value.partitions as string[],tables:(value.tables as [string,string][]).map(([partition,instance])=>({partition,instance})),
+   ...(value.checkedPartitions===undefined?{}:{checkedPartitions:value.checkedPartitions as string[]})}};
+ }catch{return null;}
 }
 export function fenceContinuity(tx: StorageTransaction, token: ReadEligibility): false {
   if(!tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id])){
@@ -91,7 +113,18 @@ export function preflightTarget(tx: StorageTransaction, token: ReadEligibility, 
     tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[value,token.owner_id,token.contact_id]);
     return true;
   }
-  if(existing)return matchesStored(String(existing.tables_json),target,named?report?.accountKey:undefined,named)?true:fenceContinuity(tx,token);
+  if(existing){
+   const previous=storedTarget(String(existing.tables_json),token.source_generation);
+   const accountKey=named?report?.accountKey:undefined;
+   const transition=previous&&(accountKey===undefined||previous.accountKey===accountKey)
+    ?historyTargetTransition(previous.target,target,false):null;
+   if(transition==='same')return true;
+   if(transition==='legacy-exact-upgrade'&&target.checkedPartitions!==undefined){
+    tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[identity(target,accountKey),token.owner_id,token.contact_id]);
+    return true;
+   }
+   return fenceContinuity(tx,token);
+  }
   return fenceContinuity(tx,token);
 }
 /** 有明确顺序时使用最新支持档；旧目标无顺序时只使用已核验的账号和来源基线。 */
@@ -106,7 +139,8 @@ function priorNormalUse(tx:StorageTransaction,token:ReadEligibility,stored:strin
   if(typeof account?.external_key!=='string'||!account.external_key||value.accountKey!==account.external_key||!Array.isArray(value.partitions)||!Array.isArray(value.tables)
    ||!value.partitions.length||value.partitions.some((p:unknown)=>typeof p!=='string'||!p)
    ||value.tables.some((row:unknown)=>!Array.isArray(row)||row.length!==2||row.some((v:unknown)=>typeof v!=='string'||!v)))return false;
-  const target={protocol:'private-history-v1' as const,descriptor:'',sourceGeneration:token.source_generation,partitions:value.partitions as string[],tables:value.tables.map(([partition,instance]:string[])=>({partition,instance}))};
+ const target={protocol:'private-history-v1' as const,descriptor:'',sourceGeneration:token.source_generation,partitions:value.partitions as string[],tables:value.tables.map(([partition,instance]:string[])=>({partition,instance})),
+  ...(Array.isArray((value as {checkedPartitions?:unknown}).checkedPartitions)?{checkedPartitions:(value as {checkedPartitions:string[]}).checkedPartitions}:{})};
   return matchesStored(stored,target,account.external_key,true);
  }catch{return false;}
 }
@@ -122,33 +156,42 @@ export function normalUseRevalidationCandidate(tx:StorageTransaction,token:ReadE
  return priorNormalUse(tx,token,String(scope.tables_json));
 }
 /** 用当前报告与新目标完成跨运行代次的来源握手；成功后才租约续期并废弃旧游标。 */
-export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,accountKey:string,guardId:string):{ok:boolean;revalidated:boolean} {
+export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,guardId:string):{ok:boolean;revalidated:boolean} {
+ const accountKey=report.accountKey;
  const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
  if(!runtime?.runtime_id||typeof accountKey!=='string'||!accountKey||!guardId)return {ok:false,revalidated:false};
  if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))return {ok:false,revalidated:false};
  const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
  const lease=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
  let revalidated=false;
+ let storedTransition:HistoryTargetTransition|null=null;
+ let nextScopeValue:string|undefined;
  if(lease&&(lease.binding_id!==token.binding_id||lease.conversation_id!==token.conversation_id||lease.source_generation!==token.source_generation))return {ok:fenceContinuity(tx,token),revalidated:false};
  if(scope&&(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation))return {ok:fenceContinuity(tx,token),revalidated:false};
  if(scope?.tables_json){
-  if(!matchesStored(String(scope.tables_json),target,accountKey,true))return {ok:fenceContinuity(tx,token),revalidated:false};
+  const previous=storedTarget(String(scope.tables_json),token.source_generation);
+  if(!previous||previous.accountKey!==accountKey)return {ok:fenceContinuity(tx,token),revalidated:false};
+  storedTransition=historyTargetTransition(previous.target,target,priorPartitionGrowth(tx,token,report));
+  if(storedTransition===null)return {ok:fenceContinuity(tx,token),revalidated:false};
+  if(storedTransition==='growth'||storedTransition==='legacy-exact-upgrade')nextScopeValue=identity(target,accountKey);
  }else{
   if(hasHistoryOrSuppression(tx,token,existingTables(tx)))return {ok:fenceContinuity(tx,token),revalidated:false};
-  const value=identity(target,accountKey);
-  if(scope)tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[value,token.owner_id,token.contact_id]);
-  else tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,value]);
+  nextScopeValue=identity(target,accountKey);
  }
  const previousWasNormal=priorNormalUse(tx,token,String(scope?.tables_json??''));
  if(lease){
   if(lease.state==='active'&&lease.runtime_id===runtime.runtime_id){
    if(lease.guard_id!==guardId)return {ok:false,revalidated:false};
   }else{
-   if(!previousWasNormal||!matchesStored(String(scope?.tables_json??''),target,accountKey,true))return {ok:fenceContinuity(tx,token),revalidated:false};
+   if(!previousWasNormal||storedTransition===null)return {ok:fenceContinuity(tx,token),revalidated:false};
    revalidated=true;
   }
  }else if(tx.get('SELECT 1 FROM read_goal WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id])){
   return {ok:fenceContinuity(tx,token),revalidated:false};
+ }
+ if(nextScopeValue!==undefined){
+  if(scope)tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[nextScopeValue,token.owner_id,token.contact_id]);
+  else tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,nextScopeValue]);
  }
  if(revalidated){
   tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
@@ -157,6 +200,12 @@ export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibili
   tx.run("INSERT INTO history_guard_lease VALUES(?,?,?,?,?,?,?,'active')",[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,guardId,runtime.runtime_id]);
  }
  return {ok:true,revalidated};
+}
+function priorPartitionGrowth(tx:StorageTransaction,token:ReadEligibility,current:HistorySupportReport):boolean {
+ const previous=tx.get(`SELECT support_json FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND grant_id=?
+  AND accepted_data_generation=? AND accepted_barrier_generation=? AND creation_no IS NOT NULL
+  ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation)]);
+ try{return isPartitionGrowthTargetChange(JSON.parse(String(previous?.support_json)) as HistorySupportReport,current);}catch{return false;}
 }
 /** 接受页的事务复验不改变围栏；失证应由预检先行持久化。 */
 export function assertSourceContinuity(tx: StorageTransaction, token: ReadEligibility, target: HistoryTarget,accountKey?:string): void {

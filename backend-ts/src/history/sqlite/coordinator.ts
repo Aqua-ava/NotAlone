@@ -27,6 +27,9 @@ function safeError(error: unknown): string {
   return error instanceof StorageFailure && allowedErrors.has(error.code) ? error.code : 'history_first_read_failed';
 }
 const bindingKey = (binding: FirstHistoryBinding) => JSON.stringify([binding.contact_id, binding.binding_id, binding.grant_id, binding.selection_generation]);
+function keyContact(key:string):string|null {
+ try{const value=JSON.parse(key);return Array.isArray(value)&&typeof value[0]==='string'?value[0]:null;}catch{return null;}
+}
 function notification() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
 
 /** 仅由启动、明确确认或开启操作唤醒；首次历史结束后不派发增量，也不轮询。 */
@@ -42,6 +45,7 @@ export class FirstHistoryCoordinator {
   readonly #states = new Map<string, FirstHistoryCoordinatorState['contacts'][number]>();
   #changed = notification();
   #wakePending = false;
+  #resetAttemptsOnStart = false;
   #revision = 0;
   #pump?: Promise<void>;
   #closed = false;
@@ -54,7 +58,16 @@ export class FirstHistoryCoordinator {
     ++this.#wakeSerial;
     for (const key of this.#cancelledKeys) this.#attempted.delete(key);
     this.#cancelledKeys.clear(); this.#stoppedContacts.clear();
+    this.#resetAttemptsOnStart = true;
     this.#wakePending = true; this.#notify(); this.#startPump();
+  }
+  /** 新增的delta历史仅重试指定联系人，不重试其他失败/已停止联系人。 */
+  wakeContact(contactId:string):void {
+    if(this.#closed||typeof contactId!=='string'||!contactId)return;
+    for(const key of this.#attempted)if(keyContact(key)===contactId)this.#attempted.delete(key);
+    for(const key of this.#cancelledKeys)if(keyContact(key)===contactId){this.#cancelledKeys.delete(key);this.#attempted.delete(key);}
+    this.#stoppedContacts.delete(contactId);++this.#wakeSerial;
+    this.#wakePending=true;this.#notify();this.#startPump();
   }
   getState(): FirstHistoryCoordinatorState {
     return { phase: this.#closed ? this.#closeDone ? 'closed' : 'closing' : this.#pump ? this.#active.size ? 'running' : 'scheduled' : this.#lastError ? 'blocked' : 'idle',
@@ -67,7 +80,7 @@ export class FirstHistoryCoordinator {
   }
   #startPump(): void {
     if (this.#pump || this.#closed) return;
-    this.#attempted.clear(); this.#lastError = null;
+    if(this.#resetAttemptsOnStart){this.#attempted.clear();this.#lastError=null;this.#resetAttemptsOnStart=false;}
     this.#pump = Promise.resolve().then(() => this.#drain()).catch(() => { this.#lastError = 'history_first_directory_failed'; }).finally(() => {
       this.#pump = undefined;
       if (this.#wakePending && !this.#closed) this.#startPump();
