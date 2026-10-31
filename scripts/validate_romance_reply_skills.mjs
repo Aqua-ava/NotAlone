@@ -3,7 +3,7 @@ import {readFile, readdir} from 'node:fs/promises';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {join, resolve} from 'node:path';
 import {readBounded, readPackage, validateName} from '../backend-ts/src/skills/skill-package.ts';
-import {openRomanceEvidence, renderRomanceSourceSkill, romanceSourceRoot} from './romance-source-material.mjs';
+import {openRomanceEvidence, renderRomanceSourceSkill, renderRomanceLicenseAppendix, romanceSourceRoot} from './romance-source-material.mjs';
 
 export const romanceBundleRoot = fileURLToPath(new URL('../reply-skills/romance/', import.meta.url));
 
@@ -14,6 +14,8 @@ export async function validateRomanceBundle(root = romanceBundleRoot, {sourceRoo
   assert.equal(catalog.content_policy, 'upstream-extracts-only');
   const provenance = JSON.parse(await readFile(join(root, 'provenance.json'), 'utf8'));
   const evidence = openRomanceEvidence(provenance, sourceRoot);
+  const sourcesDocument = readBounded(join(root, 'SOURCES.md')).toString('utf8');
+  assert.ok(sourcesDocument.endsWith(renderRomanceLicenseAppendix(provenance, evidence)), '来源总文档缺少原作者许可声明或内容有变');
   assert.equal(catalog.entries.length, 92, '须保留用户确认的 92 个独立场景');
   assert.equal(provenance.skills.length, 92);
   assert.equal(new Set(provenance.skills.map(item => item.id)).size, 92);

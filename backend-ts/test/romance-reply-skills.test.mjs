@@ -21,6 +21,7 @@ test('92 个恋爱包通过真实校验器，完整目录只加载一个正文�
   t.after(() => rm(directory, {recursive:true, force:true}));
   const root = join(directory, 'packages'); await mkdir(root);
   for (const entry of catalog.entries) await cp(join(romanceBundleRoot, entry.name), join(root, entry.name), {recursive:true});
+  await cp(join(romanceBundleRoot, 'SOURCES.md'), join(root, 'SOURCES.md'));
   const storage = await SqliteStorage.open({userData:directory, intent:'create', role:'test', registryModule:new URL('./fixtures/sqlite-skills/registry.mjs', import.meta.url).href});
   t.after(() => storage.close());
   await storage.execute('fixture.owner', {ownerId:'romance-fixture-owner'});

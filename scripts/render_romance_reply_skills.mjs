@@ -1,7 +1,7 @@
-import {readFile, mkdir, writeFile} from 'node:fs/promises';
+import {readFile, mkdir, writeFile, rm} from 'node:fs/promises';
 import {join, dirname} from 'node:path';
 import {checkNoLinks} from '../backend-ts/src/skills/skill-package.ts';
-import {openRomanceEvidence, renderRomanceSourceSkill} from './romance-source-material.mjs';
+import {openRomanceEvidence, renderRomanceSourceSkill, renderRomanceLicenseAppendix, romanceLicenseHeading} from './romance-source-material.mjs';
 import {romanceBundleRoot} from './validate_romance_reply_skills.mjs';
 
 // 仅从已登记的原文件行段生成；不调用模型，不接受自由编写的教学正文。
@@ -18,5 +18,13 @@ for (const entry of catalog.entries) {
     await mkdir(dirname(path),{recursive:true});
     await writeFile(path,bytes);
   }
+  const legacyLicense = join(romanceBundleRoot, entry.name, 'references/LICENSES.txt');
+  checkNoLinks(legacyLicense);
+  await rm(legacyLicense, {force:true});
 }
+const sourcesPath = join(romanceBundleRoot, 'SOURCES.md');
+checkNoLinks(sourcesPath);
+const sourcesText = await readFile(sourcesPath, 'utf8');
+const beforeAppendix = sourcesText.split(romanceLicenseHeading)[0].trimEnd();
+await writeFile(sourcesPath, beforeAppendix + renderRomanceLicenseAppendix(provenance, evidence));
 console.log(JSON.stringify({rendered:catalog.entries.length,policy:provenance.policy}));

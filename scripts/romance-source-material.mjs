@@ -95,6 +95,17 @@ function materialBlock(material, index, label) {
 
 const exampleLabels = Object.freeze({dialogue:'教学对话', phrase:'话术片段', template:'表达模板', scenario:'情境示例'});
 
+export const romanceLicenseHeading = '\n\n## 原作者许可声明\n\n';
+
+/** 整套材料的许可集中保存在包外来源文档，单个包不携带重复副本。 */
+export function renderRomanceLicenseAppendix(provenance, evidence) {
+  const refs = [...provenance.common_methods, ...provenance.skills.flatMap(item => [...item.methods, ...item.examples])];
+  const sources = [...new Set(refs.map(ref => ref.source))].sort();
+  return romanceLicenseHeading + '以下保留本套材料所用来源的许可声明，统一随整套材料保存。\n\n' + sources.map(source =>
+    `### ${source} · ${allowedRomanceSources[source].repository}\n\n\`\`\`text\n${evidence.license(source).trimEnd()}\n\`\`\`\n`
+  ).join('\n');
+}
+
 /** 仅编排标题和读取提示；出处单独返回写入溯源文档，方法与示例不改写。 */
 export function renderRomanceSourceSkill(entry, selection, evidence, commonReferences = []) {
   validateName(entry.name);
@@ -124,10 +135,7 @@ export function renderRomanceSourceSkill(entry, selection, evidence, commonRefer
   cases += examples.length ? examples.map((item,i) => materialBlock(item,i,exampleLabels[item.reference.kind])).join('\n') : '本项暂无单列示例。方法中的例句仍随相应方法保留。\n';
   const references = {schema_version:1, policy:'upstream-extracts-only', name:entry.name, support:selection.support,
     common:common.map(item => item.reference), methods:methods.map(item => item.reference), examples:examples.map(item => item.reference)};
-  const sourceIds = [...new Set([...common,...methods,...examples].map(item => item.reference.source))].sort();
-  const notices = sourceIds.map(source => evidence.license(source).trimEnd()).join('\n\n');
   return {document:serializeSkillDocument(entry.name,description,content), resources:new Map([
     ['references/cases.md', Buffer.from(cases.trimEnd()+'\n')],
-    ['references/LICENSES.txt', Buffer.from(notices.trimEnd()+'\n')],
   ]), references};
 }
