@@ -71,15 +71,15 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
             <small>{contact.messageCount} 条消息</small><small className="contact-sync-status">{syncLabel(contact.contactId)}</small>
           </div>
         </div>
-        {selected?.contactId === contact.contactId && <details className="contact-management">
-          <summary>同步与资料管理</summary>
-          <ContactSyncDetails contactId={selected.contactId} consent={consent} onConnect={() => addWechat(selected.contactId)} allPrivate={allPrivate} />
-          <ContactHistoryClear session={session} />
-          <button className="button" onClick={() => navigate('memory')}>查看关系资料</button>
-          <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>手动输入本次聊天</button>
-        </details>}
       </li>)}
-    </ul><ContactChatHistory session={session} /></div>}
+    </ul><ContactChatHistory session={session} settings={selected && <>
+      <ContactSyncDetails contactId={selected.contactId} consent={consent} onConnect={() => addWechat(selected.contactId)} allPrivate={allPrivate} />
+      <ContactHistoryClear session={session} />
+      <div className="contact-management-shortcuts">
+        <button className="button" onClick={() => navigate('memory')}>查看关系资料</button>
+        <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>手动输入本次聊天</button>
+      </div>
+    </>} /></div>}
     {session.error && <p className="contacts-note" role="alert">{session.error}</p>}
   </section>;
 }

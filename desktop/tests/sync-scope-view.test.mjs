@@ -188,11 +188,13 @@ test('联系人详情隐藏同步技术明细，切换后仍可管理当前联�
  window.select=render;render('a');
  `);
  const directory=page.getByRole('region',{name:'联系人目录'});
- await directory.getByText('同步与资料管理',{exact:true}).click();
+ const settingsButton=directory.getByRole('button',{name:'同步与资料管理',exact:true});
+ await settingsButton.click();
  await expect(directory.getByRole('button',{name:'停止合成甲的自动同步',exact:true})).toBeVisible();
  await expect(directory.getByRole('button',{name:'查看关系资料',exact:true})).toBeVisible();
  await page.evaluate(()=>window.select('b'));
- await directory.getByText('同步与资料管理',{exact:true}).click();
+ await expect(settingsButton).toHaveAttribute('aria-expanded','false');
+ await settingsButton.click();
  await expect(directory.getByRole('button',{name:'停止合成乙的自动同步',exact:true})).toBeVisible();
  await expect(directory.getByRole('button',{name:'停止合成甲的自动同步',exact:true})).toHaveCount(0);
  for(const text of ['历史读取受阻','本机历史已读完','非文字占位','系统等元数据','已跟进','新消息同步暂未继续','图片：','微信关联与同步','已关联微信','核对会话标识','联系人标识','synthetic-a','synthetic-b']) {

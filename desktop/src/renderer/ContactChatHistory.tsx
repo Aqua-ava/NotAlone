@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { ContactSessionView } from './contact-session';
 import type { ContactHistoryState } from '../shared/contact-history-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
@@ -6,11 +6,16 @@ import { useRevisionedSession } from './use-revisioned-session';
 const initialHistory: ContactHistoryState = { revision: -1, contactId: null, scopeRevision: 0,
   messages: { phase: 'idle', items: [], nextCursor: null }, error: null };
 
-export function ContactChatHistory({ session }: { session: ContactSessionView }) {
+export function ContactChatHistory({ session, settings }: { session: ContactSessionView; settings?: ReactNode }) {
   const bridge = window.notalone.contactHistory;
   const { state, error, setError, latest, active, retry } = useRevisionedSession(initialHistory, bridge);
   const contactId = session.state.selectedContactId;
   const scopeRevision = session.state.scopeRevision;
+  const settingsId = useId();
+  const settingsButton = useRef<HTMLButtonElement>(null);
+  const [settingsScope, setSettingsScope] = useState<{ contactId: string; scopeRevision: number } | null>(null);
+  const settingsOpen = settingsScope !== null && settingsScope.contactId === contactId && settingsScope.scopeRevision === scopeRevision;
+  useEffect(() => { setSettingsScope(null); }, [contactId, scopeRevision]);
   const selected = session.state.contacts.find(contact => contact.contactId === contactId);
   const sameScope = Boolean(selected) && state.contactId === contactId && state.scopeRevision === scopeRevision;
   const messages = sameScope ? state.messages : initialHistory.messages;
@@ -29,10 +34,29 @@ export function ContactChatHistory({ session }: { session: ContactSessionView })
     if (sameScope && messages.phase === 'idle' && !error) void load();
   }, [sameScope, contactId, scopeRevision, messages.phase, error]);
   const unknownOrder = messages.items.some(message => message.ordering === 'unknown');
-  return <section className="contact-chat" aria-label="联系人聊天记录">
+  return <section className="contact-chat" aria-label="联系人聊天记录" onKeyDown={(event) => {
+    if (event.key === 'Escape' && settingsOpen) {
+      setSettingsScope(null); settingsButton.current?.focus(); event.stopPropagation();
+    }
+  }}>
     <header className="contact-chat-header"><div><h3>聊天记录</h3><p>{selected?.displayName ?? '请在顶部选择联系人'}</p></div>
-      <button className="button" disabled={!sameScope || loading} onClick={() => void load()}>刷新记录</button>
+      <div className="contact-chat-actions">
+        <button className="button" disabled={!sameScope || loading} onClick={() => void load()}>刷新记录</button>
+        {selected && settings && <button ref={settingsButton} className="button contact-chat-settings-toggle" type="button"
+          aria-label="同步与资料管理" title="同步与资料管理" aria-expanded={settingsOpen} aria-controls={settingsId}
+          onClick={() => setSettingsScope(settingsOpen ? null : { contactId: selected.contactId, scopeRevision })}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m9 3-.6 3a7 7 0 0 0-1.5.9L4 6l-3 5 2.3 2a7 7 0 0 0 0 1.8L1 17l3 5 2.9-.9a7 7 0 0 0 1.5.9l.6 3h6l.6-3a7 7 0 0 0 1.5-.9l2.9.9 3-5-2.3-2.2a7 7 0 0 0 0-1.8L23 11l-3-5-2.9.9a7 7 0 0 0-1.5-.9L15 3Z" transform="translate(2 0) scale(.83)" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>}
+      </div>
     </header>
+    {/* 收起时保留操作状态，避免丢失结果尚未确认的重新同步请求。 */}
+    {selected && settings && <section key={selected.contactId} id={settingsId} className="contact-management contact-chat-settings" aria-label="当前联系人设置" hidden={!settingsOpen}>
+      <h3>同步与资料管理</h3>
+      {settings}
+    </section>}
     {!selected ? <div className="contact-chat-empty"><p>在顶部选择联系人后，查看你们已保存的聊天记录。</p></div>
       : <div className="contact-chat-body" aria-busy={loading}>
         {messages.items.length > 0 && <p className="contact-chat-note">{unknownOrder
