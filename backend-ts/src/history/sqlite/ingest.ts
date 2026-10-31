@@ -61,9 +61,9 @@ function quarantineMessage(tx:StorageTransaction,token:ReadEligibility,id:unknow
  tx.run('UPDATE message SET interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,id as string]);return true;
 }
 /** 未知状态及文字变为系统消息时先失效；后续页写入失败也不能撤销保护。 */
-export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|'token'|'report'|'target'|'records'|'exclude'>,terminals=sourceTerminals(input)): void {
+export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|'token'|'report'|'target'|'records'|'exclude'>,terminals=sourceTerminals(input)): string[] {
  const {tx,token,report,target}=input;
- let changed=false;
+ let changed=false;const updatedMessageIds=new Set<string>();
  for(const record of input.records){
   const prepared=prepareRecord(record,token.source_generation,target);
   const metadataOnly=record.metadataOnly===true&&(!prepared.reason||prepared.reason==='metadata_only');
@@ -80,22 +80,27 @@ export function quarantineUnverifiedRecords(input: Pick<IngestRecordsInput,'tx'|
   if(exclusion&&!local&&!server)continue;
   const affected=local||server?[...new Map([local,server].filter((v):v is StorageRow=>Boolean(v)).map(v=>[v.id,v])).values()]
    :prepared.localKey?[]:tx.all("SELECT * FROM message WHERE owner_id=? AND contact_id=? AND binding_id=? AND availability='available'",[token.owner_id,token.contact_id,token.binding_id]);
-  for(const old of affected)if(!systemTransition||terminalReason!==null||old.kind==='text')changed=quarantineMessage(tx,token,old.id,terminalReason??'message_state_unverified')||changed;
+  for(const old of affected)if(!systemTransition||terminalReason!==null||old.kind==='text'){
+   const updated=quarantineMessage(tx,token,old.id,terminalReason??'message_state_unverified');changed=updated||changed;
+   if(updated)updatedMessageIds.add(String(old.id));
+  }
  }
  if(changed)tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);
+ return [...updatedMessageIds];
 }
 /**
  * 同一页的逐条接受：先排除，再按稳定来源身份幂等建立消息，最后补可认证字段。
  * 调用者必须已在同一事务复验读资格、游标和固定目标；本函数不发起任何外部读取。
  */
-export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean } {
+export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean; createdMessageIds: string[]; updatedMessageIds: string[] } {
   const { tx, token, report, target, captureId, at, records } = input;
-  const terminals=sourceTerminals(input);quarantineUnverifiedRecords(input,terminals);
-  let quarantined = false;const pendingStates=new Set<string>();
+  const terminals=sourceTerminals(input),updatedMessageIds=new Set(quarantineUnverifiedRecords(input,terminals));
+  let quarantined = false;const pendingStates=new Set<string>(),createdMessageIds:string[]=[];
   for (const [index, inputRecord] of records.entries()) {
     const prepared = prepareRecord(inputRecord, token.source_generation, target);
     // 页前保护不能被本页较早的正常出现解除；逐项重放保持真实观察顺序。
-    if(inputRecord.stateAssurance!=='verified'||inputRecord.originalType==='10000'&&inputRecord.kind==='other')quarantineUnverifiedRecords({...input,records:[inputRecord]},terminals);
+    if(inputRecord.stateAssurance!=='verified'||inputRecord.originalType==='10000'&&inputRecord.kind==='other')
+      for(const id of quarantineUnverifiedRecords({...input,records:[inputRecord]},terminals))updatedMessageIds.add(id);
     const record = prepared.value;
     let reason: string | null = prepared.reason;
     let message: StorageRow | undefined;
@@ -126,6 +131,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
               tx.run('DELETE FROM history_message_quarantine WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,message.id]);
               tx.run('UPDATE message SET interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,message.id]);
               tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);
+              updatedMessageIds.add(String(message.id));
             }else reason='message_state_unverified';
           }
         }
@@ -136,6 +142,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
           const display = (tx.get('SELECT coalesce(max(display_no),0)+1 AS n FROM message')!.n as bigint);
           tx.run(`INSERT INTO message(owner_id,id,contact_id,binding_id,identity_scheme,external_key,sender_role,kind,text_body,original_type,sent_at,time_precision,order_scheme,order_key,display_no) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [token.owner_id, id, token.contact_id, token.binding_id, 'source-table-local-v1', prepared.localKey, record.sender, record.kind, record.text, record.originalType, record.sentAt === null ? null : BigInt(record.sentAt), record.timePrecision, record.orderScheme, record.orderKey, display]);
           message = tx.get('SELECT * FROM message WHERE owner_id=? AND id=?', [token.owner_id, id]);
+          createdMessageIds.push(id);
         } else if (message.availability !== 'available') {
           // 删除中的消息不接收迟到补写，整页随事务回滚且检查点不推进。
           throw new StorageFailure('history_deletion_in_progress');
@@ -146,7 +153,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
           if (record.orderScheme !== null && (message.order_scheme !== record.orderScheme || message.order_key !== record.orderKey)) { updates.push('order_scheme=?', 'order_key=?'); args.push(record.orderScheme, record.orderKey); }
           // 状态只记录渠道给出的原始值；未知或缺失不猜测完成，也不清除已有观察。
           if (record.status !== undefined && record.status !== null && String(record.status) !== String(message.status_code ?? '')) { updates.push('status_code=?', 'status_observed_at=?'); args.push(String(record.status), BigInt(at)); }
-          if (updates.length) tx.run(`UPDATE message SET ${updates.join(',')},interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND id=?`, [...args, token.owner_id, message.id]);
+          if (updates.length) {tx.run(`UPDATE message SET ${updates.join(',')},interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND id=?`, [...args, token.owner_id, message.id]);updatedMessageIds.add(String(message.id));}
         }
         for (const [scheme, key] of [['local', prepared.localKey], ['server', report.serverAliasSemantics === 'verified_within_scope' ? prepared.serverKey : null]] as const)
           if (key) tx.run('INSERT OR IGNORE INTO message_alias(owner_id,id,contact_id,binding_id,scheme,external_key,message_id) VALUES(?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, token.binding_id, scheme, key, message!.id]);
@@ -212,5 +219,5 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
     const sourcePayload=singleTextCopy?JSON.stringify({...record,text:null}):prepared.raw;
     tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, captureId, index, excluded ? 'excluded' : reason ? 'quarantined' : 'normalized', reason ? null : message!.id, excluded ? null : sourcePayload, prepared.localKey ? 'source-table-local-v1' : null, prepared.localKey, singleTextCopy?'2':'1', reason]);
   }
-  return { quarantined:quarantined||pendingStates.size>0 };
+  return { quarantined:quarantined||pendingStates.size>0, createdMessageIds, updatedMessageIds:[...updatedMessageIds] };
 }

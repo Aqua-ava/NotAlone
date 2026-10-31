@@ -38,6 +38,7 @@ import { installedDeletionScopes } from './storage/sqlite/deletion/registration.
 import {SqliteForeground} from './foreground/sqlite-foreground.ts';
 import {readStatusCoverages} from './history/sqlite/status-coverage.ts';
 import {readWechatHttpBody} from './sync/wechat-http-body.ts';
+import {PureTsEvents} from './host/pure-ts-events.ts';
 
 export const name = 'notalone-sqlite-host';
 export const inject = ['appReady', 'appExit','skills','llm'];
@@ -80,6 +81,7 @@ export async function apply(ctx: Context) {
   let state: 'running' | 'stopping' | 'stopped' = 'running';
   let storage: SqliteStorage | undefined;
   let opening: Promise<SqliteStorage> | undefined;
+  let events: PureTsEvents | undefined;
   let contacts: ContactMetadataLifetime | undefined;
   let history: SqliteHistoryService | undefined;
   let foreground: SqliteForeground | undefined;
@@ -100,7 +102,7 @@ export async function apply(ctx: Context) {
   let serverClosing: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   const stopResources = () => stopping ??= (async () => {
-    state = 'stopping'; readyDispose(); models?.stopAccepting();
+    state = 'stopping'; readyDispose(); models?.stopAccepting(); events?.close();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
     await closeSqliteHostResources({firstHistory,incremental,historyClear,historyResync,foreground,discussions,memory,media,history,contacts,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
@@ -128,12 +130,14 @@ export async function apply(ctx: Context) {
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), at: Date.now() });
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    events = new PureTsEvents(ownerId);
     const deletionHolders = new ActiveHolders();
     contacts = new ContactMetadataLifetime(storage, ownerId, deletionHolders, () => createWechatContactMetadata(sqlite.wechatCliPath));
     await contacts.initialize();
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     if(capabilities.capabilities.some(capability=>capability==='history')){
-      history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionHolders);
+      history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionHolders,
+        (contactId,messageId,kind)=>events?.publish(`message.${kind}`,contactId,{message_id:messageId}));
       firstHistory=new FirstHistoryCoordinator(contacts,history);
       incremental=new IncrementalHistoryCoordinator(contacts,history,{firstHistoryManagedExternally:true});
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
@@ -198,6 +202,11 @@ export async function apply(ctx: Context) {
         if(changesAuthority&&foreground)releaseForeground=await foreground.beginChange();
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
           respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
+        }
+        if (url.pathname === '/api/events') {
+          if (req.method!=='GET') { respond(405,{error:'method_not_allowed'});return; }
+          if (!req.headers.accept?.split(',').some(value=>value.trim().split(';')[0].toLowerCase()==='text/event-stream')) { respond(406,{error:'event_stream_required'});return; }
+          events?.open(req,res);return;
         }
         if (req.method === 'POST' && url.pathname === '/api/runtime/shutdown') {
           await stopResources();

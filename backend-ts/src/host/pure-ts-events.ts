@@ -8,7 +8,7 @@ export class PureTsEvents {
  private hints=new Map<string,string>();
  private readonly owner:string|undefined;
  constructor(owner:string|undefined){this.owner=owner;}
- publish(type:'message.created'|'sync.status_changed'|'task.progress',contact:string,payload:Record<string,unknown>,occurredAt=new Date().toISOString()){
+ publish(type:'message.created'|'message.updated'|'sync.status_changed'|'task.progress',contact:string,payload:Record<string,unknown>,occurredAt=new Date().toISOString()){
   if(this.closed||!this.owner)return;
   const id=randomUUID();
   const body=stringifyJson({id,type,owner_id:this.owner,contact_id:contact,occurred_at:occurredAt,payload});
