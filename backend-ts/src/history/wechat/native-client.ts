@@ -108,6 +108,7 @@ const allowedErrors = new Set([
   'history_delta_wal_frame_limit', 'history_delta_wal_frame_missing', 'history_delta_wal_header_checksum_invalid',
   'history_delta_wal_header_invalid', 'history_delta_wal_magic_invalid', 'history_delta_wal_page_size_invalid',
   'history_delta_wal_version_invalid',
+  'history_delta_wal_index_invalid',
   'history_metadata_profile_unverified', 'history_program_version_uncertified',
   'history_request_invalid', 'history_operation_unsupported', 'history_scope_unverified',
   'history_account_unavailable', 'history_account_changed', 'history_native_unavailable',

@@ -45,6 +45,7 @@ async function fixture(t,mode='normal') {
   if(mode==='invalid-utf8'){process.stdout.write(Buffer.from([0x7b,0xff,0x7d,0x0a]));return;}
   if(mode==='unknown-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'sensitive-arbitrary-native-value'}})+'\\n');return;}
   if(mode==='known-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_account_changed'}})+'\\n');return;}
+  if(mode==='known-wal-index-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_delta_wal_index_invalid'}})+'\\n');return;}
   if(mode==='known-growth-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_target_growth_required'}})+'\\n');return;}
   if(r.op==='resolve')currentConversation=r.displayName==='另一位合成联系人'?'synthetic-other':'${conversation}';
   let data=r.op==='resolve'?{accountKey:'${account}',conversationKey:currentConversation,displayName:'合成目标',sourceGeneration:'${generation}'}:schema;
@@ -320,9 +321,9 @@ test('未知字段、非法JSON/UTF8、额外响应与超限输出全部失败�
  }
 });
 test('仅保留明确白名单渠道错误，账号/来源范围与schema整数精度严格校验',async t=>{
- for(const mode of ['known-code','unsafe-integer','unsafe-version','wrong-scope','wrong-generation']){
-  const f=await fixture(t,mode);const code=mode==='known-code'?'history_account_changed':'history_protocol_invalid';
-  if(mode==='known-code')await assert.rejects(f.client.resolveSelected('合成目标'),{code});
+ for(const mode of ['known-code','known-wal-index-code','unsafe-integer','unsafe-version','wrong-scope','wrong-generation']){
+  const f=await fixture(t,mode);const code=mode==='known-code'?'history_account_changed':mode==='known-wal-index-code'?'history_delta_wal_index_invalid':'history_protocol_invalid';
+  if(mode.startsWith('known-'))await assert.rejects(f.client.resolveSelected('合成目标'),{code});
   else {await f.client.resolveSelected('合成目标');await assert.rejects(f.client.inspectSelected(),{code});}
   noProcess(await waitForPid(f.pidFile));
  }
