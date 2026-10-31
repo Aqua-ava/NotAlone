@@ -22,8 +22,8 @@ export function useStartupState(): { state: StartupState; error: string; retry: 
   return { state, error, retry: () => setReadAttempt((value) => value + 1) };
 }
 
-export function StartupReadiness({ state, backend, onConfigure }: {
-  state: StartupState; backend?: BackendState; onConfigure?: () => void;
+export function StartupReadiness({ state, backend, onConfigure, showStorageDiagnostics = false }: {
+  state: StartupState; backend?: BackendState; onConfigure?: () => void; showStorageDiagnostics?: boolean;
 }) {
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState('');
@@ -34,7 +34,7 @@ export function StartupReadiness({ state, backend, onConfigure }: {
     catch { setError('暂时无法重新连接，请稍后重试或查看诊断。'); }
     finally { setRetrying(false); }
   }
-  if (state.sqlite) return <section className="startup-readiness" aria-label="SQLite 存储诊断">
+  if (state.sqlite && showStorageDiagnostics) return <section className="startup-readiness" aria-label="SQLite 存储诊断">
     <h2>SQLite 存储诊断</h2>
     <p role={state.sqlite.phase === 'ready' ? 'status' : 'alert'}>{state.sqlite.phase === 'ready'
       ? state.sqlite.capabilities?.includes('history') ? 'SQLite 联系人与历史消息存储已就绪。' : state.sqlite.capabilities?.includes('skills') ? 'SQLite 联系人与 Skill 管理已就绪。' : state.sqlite.capabilities?.includes('contacts') ? 'SQLite 联系人存储已就绪。' : 'SQLite 底座已就绪，业务功能尚未切换。' : 'SQLite 底座检查未通过，已有资料现场已保留。'}</p>
@@ -80,7 +80,7 @@ export function StartupSettings({ state, backend, open = false, onOpenChange }: 
 }) {
   return <details className="startup-troubleshooting" open={open} onToggle={(event) => onOpenChange?.(event.currentTarget.open)}>
     <summary>故障排查</summary>
-    {open && <>{state.sqlite ? <StartupDiagnostics state={state} /> : <StartupPathSettings state={state} backend={backend} />}<DiagnosticExport /></>}
+    {open && <>{state.sqlite ? <><StartupReadiness state={state} backend={backend} showStorageDiagnostics /><StartupDiagnostics state={state} /></> : <StartupPathSettings state={state} backend={backend} />}<DiagnosticExport /></>}
   </details>;
 }
 

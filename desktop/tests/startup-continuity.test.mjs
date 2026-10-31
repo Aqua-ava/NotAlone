@@ -54,6 +54,13 @@ test('运行就绪后不再展示环境检查卡，工具缺失也不阻挡普�
     }));
     assert.equal(html, '');
   }
+  const sqlite = { phase: 'ready', revision: 1, helperWarnings: [], sqlite: { phase: 'ready', schemaVersion: 24, sqliteVersion: '3.53.4', capabilities: ['contacts', 'skills', 'history'] } };
+  assert.equal(renderToStaticMarkup(React.createElement(StartupReadiness, { state: sqlite })), '');
+  const props = { state: sqlite, backend: { phase: 'connected', canRetryConnection: false } };
+  assert.doesNotMatch(renderToStaticMarkup(React.createElement(StartupSettings, props)), /SQLite 存储诊断/);
+  const settings = renderToStaticMarkup(React.createElement(StartupSettings, { ...props, open: true }));
+  assert.match(settings, /SQLite 存储诊断/);
+  assert.match(settings, /结构版本 24/);
 });
 
 test('高级故障排查默认折叠，明确展开后才展示诊断与路径操作', () => {
