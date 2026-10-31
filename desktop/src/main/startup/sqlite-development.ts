@@ -56,7 +56,7 @@ export class SqliteDevelopmentProbe {
     // 与开发宿主同一 Node；切换检查只读写 SQLite 与受控目录，不启动 DSH、微信或模型。
     const program = `(async()=>{ try {
       const {runDefaultDatabaseStartup}=await import(${JSON.stringify(moduleUrl)});
-      const result=await runDefaultDatabaseStartup({userData:${JSON.stringify(this.userData)},allowSyntheticAuthorization:${allowSyntheticAuthorization}});
+      const result=await runDefaultDatabaseStartup({userData:${JSON.stringify(this.userData)},skillPackageRoot:${JSON.stringify(path.join(this.projectDirectory, 'reply-skills/romance'))},allowSyntheticAuthorization:${allowSyntheticAuthorization}});
       console.log(JSON.stringify(result));
     } catch(error) { console.log(JSON.stringify({phase:'maintenance',code:'cutover_storage_failed',detail:'probe_failed'})); } })();`;
     return new Promise((resolve, reject) => {

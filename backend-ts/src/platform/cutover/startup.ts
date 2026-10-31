@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { SqliteCapabilitiesConfiguration } from '../../sqlite-capabilities.ts';
 import { installedDeletionScopes } from '../../storage/sqlite/deletion/registration.ts';
+import { recoverSkillRootRelocation } from '../../skills/sqlite/root-relocation.ts';
 import { SqliteStorage } from '../../storage/sqlite/client.ts';
 import type { CutoverCheckRecord, CutoverCode, CutoverManifest, CutoverResult, CutoverStorage, CutoverStorageFactory,
   LegacyTarget, LegacyTargetKind } from './contracts.ts';
@@ -78,7 +79,11 @@ export async function runDefaultDatabaseStartup(options: DefaultDatabaseOptions)
     if (unrecognizedManagedTargets(userData).length) {
       throw new Blocked('cutover_legacy_target_unclassified', 'unsupported_managed_entry', manifest ?? initialManifest(now()));
     }
-    if (manifest?.phase === 'completed') return await reopenCompleted(userData, manifest, options);
+    if (manifest?.phase === 'completed') {
+      try { await recoverSkillRootRelocation(userData); }
+      catch { return {phase:'maintenance',code:'cutover_configuration_conflict',detail:'skill_root_relocation_pending',manifestRevision:manifest.revision}; }
+      return await reopenCompleted(userData, manifest, options);
+    }
     return await switchDatabase(userData, manifest ?? initialManifest(now()), options);
   } catch (error) {
     if (error instanceof Blocked) return { phase: 'maintenance', code: error.code, detail: error.detail, manifestRevision: error.manifest.revision };
@@ -255,8 +260,9 @@ async function ensureTargetInstance(userData: string, manifest: CutoverManifest,
     manifest = saveManifest(userData, { ...current(), targetCreatePending: true, phase: 'blocked', blockedCode: 'cutover_target_unrecorded' });
     throw new Blocked('cutover_target_unrecorded', 'target_file_without_identity', manifest);
   }
-  const skillPackageRoot = path.join(userData, 'skill-packages');
-  ensureSkillRoot(userData, skillPackageRoot);
+  const capabilities = options.capabilities ?? DEFAULT_CAPABILITIES;
+  const skillPackageRoot = options.skillPackageRoot ?? path.join(userData, 'skill-packages');
+  if (capabilities.includes('skills') && !options.skillPackageRoot) ensureSkillRoot(userData, skillPackageRoot);
   manifest = saveManifest(userData, { ...current(), targetCreatePending: true });
   let storage: CutoverStorage;
   try {
@@ -270,8 +276,7 @@ async function ensureTargetInstance(userData: string, manifest: CutoverManifest,
     manifest = saveManifest(userData, { ...current(), targetCreatePending: false, phase: 'blocked', blockedCode: 'cutover_storage_failed' });
     throw error;
   }
-  const capabilities = options.capabilities ?? DEFAULT_CAPABILITIES;
-  const root = options.skillPackageRoot ?? skillPackageRoot;
+  const root = skillPackageRoot;
   const configuration: StartupConfiguration = { formatVersion: 1, intent: 'open', role: 'test', expectedDatabaseId: storage.status.databaseId,
     capabilities, ...(capabilities.includes('skills') ? { skillPackageRoot: root } : {}) };
   manifest = saveManifest(userData, { ...current(), targetOrigin: 'created', target: { databaseFile: 'managed/sqlite/notalone.sqlite', databaseId: storage.status.databaseId,

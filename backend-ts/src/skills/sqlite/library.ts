@@ -18,6 +18,12 @@ export interface DirectorySnapshot {
   contentDigest: string;
   pkg: SkillPackage;
 }
+/** 管理核验与显式根迁移共用同一原生快照和摘要规则。 */
+export function readSkillDirectorySnapshot(directory: SecureSkillDirectory,name: string,expectedIdentity: string): DirectorySnapshot {
+  const snapshot=directory.snapshot(name,expectedIdentity),{document,pkg}=snapshot;
+  const manifest=[['SKILL.md',document.length,sha256(document)],...pkg.resources.map(r=>[r.relative_path,r.content.length,r.content_sha256])];
+  return {directoryName:name,directoryIdentity:snapshot.directoryIdentity,manifestDigest:sha256(JSON.stringify(manifest)),contentDigest:pkg.package_sha256,pkg};
+}
 export function skillAnchor(item: SkillPackageState): SkillAnchor {
   const revision=item.revisions.find(r=>r.revisionNo===item.currentRevisionNo);
   if(!revision || revision.availability!=='current' || revision.verificationState!=='verified' || item.verificationState!=='verified')throw new SqliteSkillError('skill_unverified');
@@ -116,10 +122,7 @@ export class SqliteSkillLibrary {
     return new SqliteSkillError(code==='ENOENT'||code==='EACCES'||code==='file_unavailable'?'skill_directory_unavailable':'skill_package_invalid');
   }
   private readDirectorySnapshot(directoryName: string,expectedIdentity:string): DirectorySnapshot {
-    const snapshot=this.directory.snapshot(directoryName,expectedIdentity),{document,pkg}=snapshot;
-    // 清单与正文/资源来自同一个原生 FD 快照；摘要逐项覆盖实际返回字节。
-    const manifest=[['SKILL.md',document.length,sha256(document)],...pkg.resources.map(r=>[r.relative_path,r.content.length,r.content_sha256])];
-    return {directoryName,directoryIdentity:snapshot.directoryIdentity,manifestDigest:sha256(JSON.stringify(manifest)),contentDigest:pkg.package_sha256,pkg};
+    return readSkillDirectorySnapshot(this.directory,directoryName,expectedIdentity);
   }
   private async recordProblem(item: SkillPackageState,error: unknown): Promise<void> {
     let code=(error as {code?:string})?.code;

@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {StorageFailure, type StorageAction, type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {SkillAnchor, SkillEnabledState, SkillPackageState, SkillRunRevision, SkillVerificationState} from './contracts.ts';
 
@@ -37,6 +38,11 @@ export interface SkillObservation extends Expected {
   directoryName: string; directoryIdentity: string; displayName: string; description: string;
   manifestDigest: string; contentDigest: string; verifiedAt: bigint;
 }
+interface SkillRootRelocationPackage {
+  id: string; directoryName: string; expectedHead: bigint; expectedDirectoryIdentity: string;
+  directoryIdentity: string; manifestDigest: string; contentDigest: string;
+}
+interface SkillRootRelocation {ownerId: string; packages: SkillRootRelocationPackage[]}
 function fail(code: string): never { throw new StorageFailure(code); }
 function text(value: unknown): string {
   if (typeof value !== 'string' || !value.trim() || value.length>4096 || value.includes('\0')) fail('skill_input_invalid');
@@ -66,6 +72,26 @@ function expected(tx: StorageTransaction, input: unknown): SkillPackageState {
   const i=key(input) as Expected, item=state(tx,i.ownerId,i.id);
   if (typeof i.expectedHead!=='bigint' || i.expectedHead!==item.headRevision) fail('skill_revision_conflict');
   return item;
+}
+function relocation(input: unknown): SkillRootRelocation {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) fail('skill_input_invalid');
+  const value=input as Partial<SkillRootRelocation>;
+  const ownerId=text(value.ownerId);
+  if (!Array.isArray(value.packages)) fail('skill_input_invalid');
+  const ids=new Set<string>(),names=new Set<string>(),identities=new Set<string>();
+  const packages=value.packages.map((entry):SkillRootRelocationPackage=>{
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) fail('skill_input_invalid');
+    const item=entry as Partial<SkillRootRelocationPackage>;
+    const id=text(item.id),directoryName=text(item.directoryName),expectedDirectoryIdentity=text(item.expectedDirectoryIdentity),directoryIdentity=text(item.directoryIdentity);
+    if (typeof item.expectedHead!=='bigint' || item.expectedHead<1n
+      || typeof item.manifestDigest!=='string' || !/^[a-f0-9]{64}$/.test(item.manifestDigest)
+      || typeof item.contentDigest!=='string' || !/^[a-f0-9]{64}$/.test(item.contentDigest)) fail('skill_input_invalid');
+    if (ids.has(id) || names.has(directoryName) || identities.has(directoryIdentity)) fail('skill_root_relocation_conflict');
+    ids.add(id);names.add(directoryName);identities.add(directoryIdentity);
+    return {id,directoryName,expectedHead:item.expectedHead,expectedDirectoryIdentity,directoryIdentity,
+      manifestDigest:item.manifestDigest,contentDigest:item.contentDigest};
+  });
+  return {ownerId,packages};
 }
 /** 供 11/12 实际输入提交事务复用；不接受 SQL 或事务外资格证明。 */
 export function requireSkillRevision(tx: StorageTransaction, ownerId: string, anchor: SkillAnchor): void {
@@ -99,6 +125,38 @@ export const skillActions: StorageAction[] = [
     // 目录名是可展示元数据；发现不会读取正文，也不会发布可运行修订。
     tx.run(`INSERT INTO skill_package VALUES(?,?,?,?,?,?,'unknown',NULL,'pending',NULL,NULL,1)`,[i.ownerId,i.id,i.directoryName,i.directoryIdentity,i.directoryName,'启用后校验策略说明']);
     return state(tx,i.ownerId,i.id);
+  }},
+  {name:'skills.relocateRoot',mode:'write',retryBusy:false,execute(tx,input){
+    const i=relocation(input);requireSkillOwner(tx,i.ownerId);
+    const rows=tx.all('SELECT id,directory_name,directory_identity,head_revision FROM skill_package WHERE owner_id=? ORDER BY id',[i.ownerId]);
+    if (rows.length!==i.packages.length) fail('skill_root_relocation_conflict');
+    const byId=new Map(i.packages.map(item=>[item.id,item]));
+    for(const row of rows){
+      const item=byId.get(row.id as string);
+      if(!item)fail('skill_root_relocation_conflict');
+      if(row.head_revision!==item.expectedHead)fail('skill_revision_conflict');
+      if(row.directory_name!==item.directoryName || row.directory_identity!==item.expectedDirectoryIdentity)fail('skill_directory_conflict');
+      const packageState=state(tx,i.ownerId,item.id);
+      const current=packageState.revisions.find(revision=>revision.revisionNo===packageState.currentRevisionNo);
+      if(packageState.verificationState==='verified' && current?.availability==='current' && current.verificationState==='verified'
+        && (current.manifestDigest!==item.manifestDigest || current.contentDigest!==item.contentDigest))fail('skill_content_changed');
+    }
+    // 先使用事务内唯一临时身份，避免合法身份交换触发表级唯一约束。
+    const occupied=new Set([...rows.map(row=>row.directory_identity as string),...i.packages.map(item=>item.directoryIdentity)]);
+    const temporary=i.packages.map(()=>{
+      let identity:string;
+      do {identity=`relocation:${randomUUID()}`;} while(occupied.has(identity));
+      occupied.add(identity);return identity;
+    });
+    for(let index=0;index<i.packages.length;index++){
+      const item=i.packages[index];
+      tx.run('UPDATE skill_package SET directory_identity=? WHERE owner_id=? AND id=?',[temporary[index],i.ownerId,item.id]);
+    }
+    for(const item of i.packages){
+      tx.run('UPDATE skill_package SET directory_identity=?,head_revision=head_revision+1 WHERE owner_id=? AND id=?',[item.directoryIdentity,i.ownerId,item.id]);
+    }
+    return tx.all('SELECT id FROM skill_package WHERE owner_id=? ORDER BY directory_name',[i.ownerId])
+      .map(row=>state(tx,i.ownerId,row.id as string));
   }},
   {name:'skills.observe',mode:'write',retryBusy:false,execute(tx,input){
     const i=key(input) as SkillObservation;

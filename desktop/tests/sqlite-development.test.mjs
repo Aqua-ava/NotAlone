@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, after } from 'node:test';
-import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { build } from 'esbuild';
@@ -32,6 +32,8 @@ test('正常开发入口默认创建同一新SQLite实例，重开沿用 databas
   assert.equal(parsed.formatVersion, 1);
   assert.equal(parsed.intent, 'open');
   assert.equal(parsed.role, 'test');
+  assert.equal(parsed.skillPackageRoot, path.join(project, 'reply-skills/romance'));
+  await assert.rejects(access(path.join(f.userData, 'skill-packages')), { code: 'ENOENT' });
   assert.match(parsed.expectedDatabaseId, /^[a-zA-Z0-9_-]{1,128}$/);
   const contacts = probe.getContactConfiguration();
   assert.equal(contacts.expectedDatabaseId, parsed.expectedDatabaseId);
@@ -64,4 +66,5 @@ test('正常开发入口接受App数据目录外的Skill根，重开保留配置
   assert.equal(reopened.getContactConfiguration().expectedDatabaseId, configuration.expectedDatabaseId);
   assert.equal(reopened.getContactConfiguration().skillPackageRoot, skillPackageRoot);
   assert.equal(JSON.parse(await readFile(configurationPath, 'utf8')).skillPackageRoot, skillPackageRoot);
+  await assert.rejects(access(path.join(f.userData, 'skill-packages')), { code: 'ENOENT' });
 });
