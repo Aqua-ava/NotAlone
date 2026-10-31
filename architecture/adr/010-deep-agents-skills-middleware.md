@@ -1,12 +1,14 @@
 # ADR-010：使用 Deep Agents SkillsMiddleware 加载回复 Skill
 
-> 后续修订（2026-10-23）：[ADR-102](102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TS 后端迁移。必须采用 SkillsMiddleware 的实现选择由 ADR-102 替代；受控目录、零或一个批准版本、失效和读取规则保持，存储沿 ADR-096／098。 当前代码仍为旧实现，迁移及验收未完成。
+> 局部替代：[ADR-136](136-multi-skill-reply-composition.md)取消每轮只可使用一个 Skill 的数量限制；本 ADR 其余受控只读、缓存修订与禁止扩权边界继续有效。
+
+> 后续修订（2026-10-23）：[ADR-102](102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TS 后端迁移。必须采用 SkillsMiddleware 的实现选择由 ADR-102 替代；受控目录、按包固定修订、失效和读取规则保持；每轮零或一个的上限由 ADR-136 替代，存储沿 ADR-096／098。 当前代码仍为旧实现，迁移及验收未完成。
 
 > 后续局部替代：[ADR-096](096-directory-backed-reply-skills.md)采用目录文件保存已发布正文与资源，自动发现新增和修改；数据库只管理业务元数据。本文旧存储及仅手动导入表述保留历史，范围、审核、预算、删除和权限约束继续有效。
 
 > 后续修订：[ADR-091](091-retire-runtime-todos-and-auto-summary.md)明确不增加运行计划和自动过程摘要；本文对 ADR-009 单次运行机制的保留不再包含 Todo／摘要中间件要求。框架、Skill、预算、持续讨论与删除边界保持。
 
-> 2026-10-21 设计审查：下文“自动 Skill 尚未实现”为早期阶段状态；后续授权草稿、审核与发布已出现主线装配，见 [ADR-048](048-memory-skill-evolution-lifecycle.md)及[演进任务索引](../../.scratch/memory-skill-evolution/planning.md)。模型不能自行发布、每次零或一个受控版本、Middleware 不扩大 Tool 权限等约束保持，工程接线不等于质量或 App 验收。
+> 2026-10-21 设计审查：下文“自动 Skill 尚未实现”为早期阶段状态；后续授权草稿、审核与发布已出现主线装配，见 [ADR-048](048-memory-skill-evolution-lifecycle.md)及[演进任务索引](../../.scratch/memory-skill-evolution/planning.md)。模型不能自行发布、Middleware 不扩大 Tool 权限等约束保持；自动使用数量由 ADR-136 更新，工程接线不等于质量或 App 验收。
 
 > 状态：已采纳
 > 2026-10-11 局部修订见 [ADR-043](043-conversation-scenarios-and-direction-exploration.md)；不改变既有只读、联系人隔离和禁止发送边界。

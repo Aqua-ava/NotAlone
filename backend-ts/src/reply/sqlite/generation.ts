@@ -127,7 +127,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
       skillText='\n\n'+renderSkillContent(loaded);
      }
     }
-    agentCtx.systemPrompt.section({name:'notalone-discussion',order:0,complete:true,interpolate:false,text:options.systemPrompt+' 本轮可按需使用零或一个Skill；Skill只影响表达方式，不提供联系人事实。最多读取两份静态辅助资料。'+skillText});
+    agentCtx.systemPrompt.section({name:'notalone-discussion',order:0,complete:true,interpolate:false,text:options.systemPrompt+' 本轮可按需组合多个相关Skill，也可以不用；Skill只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已加载Skill的准确名称和路径，本轮最多读取两份。'+skillText});
    };
    const cancel=()=>handle?.agent.cancel({kind:'disposed'});combined.addEventListener('abort',cancel,{once:true});
    try{

@@ -37,24 +37,21 @@ export async function openSqliteSkillRun(library: SqliteSkillLibrary,request: {c
 export class SqliteSkillRun {
   readonly scope: SkillRunScope;
   private readonly selected: SkillAnchor | null;
-  private chosenAnchor: SkillAnchor | null;
-  private selectionRecorded?: Promise<void>;
-  private loadedSkill: LoadedSkill | null=null;
+  private readonly loadedByName=new Map<string,LoadedSkill>();
   private failureReason: unknown=null;
   private readonly library: SqliteSkillLibrary;
   private readonly protection: SkillRunProtection;
   private readonly catalog: SkillPackageState[];
   private readonly catalogIdentity: string;
   private readonly controller=new AbortController();
-  private reserved: string | null=null;
-  private bodyLoaded=false;
   private unregister?: ()=>void;
   constructor(library: SqliteSkillLibrary,scope: SkillRunScope,protection: SkillRunProtection,items: SkillPackageState[],selected: SkillAnchor|null,signal?: AbortSignal) {
-    this.library=library;this.scope=scope;this.protection=protection;this.catalog=structuredClone(items);this.catalogIdentity=catalogRevision(items);this.selected=selected?Object.freeze({...selected}):null;this.chosenAnchor=this.selected;
+    this.library=library;this.scope=scope;this.protection=protection;this.catalog=structuredClone(items);this.catalogIdentity=catalogRevision(items);this.selected=selected?Object.freeze({...selected}):null;
     if(signal?.aborted)this.close();else signal?.addEventListener('abort',()=>this.close(),{once:true,signal:this.controller.signal});
   }
-  get selection(): SkillAnchor|null {return this.chosenAnchor?{...this.chosenAnchor}:null;}
-  get loaded(): LoadedSkill|null {return this.loadedSkill?structuredClone(this.loadedSkill):null;}
+  /** 显式兼容入口的定向选择；自动加载的每份策略分别写入选择和实际输入事件。 */
+  get selection(): SkillAnchor|null {return this.selected?{...this.selected}:null;}
+  get loadedSkills(): LoadedSkill[] {return structuredClone([...this.loadedByName.values()]);}
   get revision(): SkillRunRevision {return this.frozenRevision();}
   /** 官方 Tool 可能归一化异常；保留原始失败供宿主区分授权失效和策略不可读。 */
   get failure(): unknown|null {return this.failureReason;}
@@ -80,9 +77,10 @@ export class SqliteSkillRun {
     try{
       const item=this.eligible().find(item=>item.id===anchor.packageId);
       if(!item || JSON.stringify(skillAnchor(item),bigintJson)!==JSON.stringify(anchor,bigintJson))throw new SqliteSkillError('skill_candidate_invalid');
-      if(this.reserved!==item.id || !this.bodyLoaded)throw new SqliteSkillError('skill_body_required');
+      const loaded=this.loadedByName.get(item.displayName);
+      if(!loaded || JSON.stringify(loaded.anchor,bigintJson)!==JSON.stringify(anchor,bigintJson))throw new SqliteSkillError('skill_body_required');
       try{validateResourcePath(relativePath);}catch{throw new SqliteSkillError('skill_path_invalid');}
-      if(!this.loadedSkill?.resources.some(resource=>resource.relativePath===relativePath))throw new SqliteSkillError('skill_path_invalid');
+      if(!loaded.resources.some(resource=>resource.relativePath===relativePath))throw new SqliteSkillError('skill_path_invalid');
       await this.validate(signal);
       const snapshot=await this.library.assertAnchor(anchor);
       const resource=snapshot.pkg.resources.find(r=>r.relative_path===relativePath);
@@ -90,9 +88,10 @@ export class SqliteSkillRun {
       return await this.record(anchor,relativePath,resource.content.toString('utf8'),signal);
     }catch(error){this.rememberFailure(error);throw error;}
   }
-  async readLoadedResource(relativePath: string,signal?: AbortSignal): Promise<string> {
-    if(!this.loadedSkill){const error=new SqliteSkillError('skill_body_required');this.rememberFailure(error);throw error;}
-    return this.readResource(this.loadedSkill.anchor,relativePath,signal);
+  async readLoadedResource(name: string,relativePath: string,signal?: AbortSignal): Promise<string> {
+    const loaded=this.loadedByName.get(name);
+    if(!loaded){const error=new SqliteSkillError('skill_body_required');this.rememberFailure(error);throw error;}
+    return this.readResource(loaded.anchor,relativePath,signal);
   }
   close(): void {
     if(!this.controller.signal.aborted)this.controller.abort(new SqliteSkillError('skill_run_invalidated'));
@@ -117,22 +116,15 @@ export class SqliteSkillRun {
           const trusted=candidates.find(item=>item===candidate);
           const item=this.eligible().find(item=>item.id===trusted?.locator);
           if(!trusted || !item)throw new SqliteSkillError('skill_candidate_invalid');
-          if(this.reserved!==null && this.reserved!==item.id)throw new SqliteSkillError('second_skill_load');
-          this.reserved=item.id;
           await this.validate(options.signal);
           const anchor=skillAnchor(item),snapshot=await this.library.assertAnchor(anchor);
-          if(!this.chosenAnchor){
-            this.chosenAnchor=Object.freeze({...anchor});
-            this.selectionRecorded=(async()=>{
-              try{await abortable(this.protection.recordSelection(this.scope,this.selection,this.signal(options.signal)),this.signal(options.signal));}
-              catch(error){this.close();throw error;}
-            })();
+          if(!this.selected){
+            try{await abortable(this.protection.recordSelection(this.scope,anchor,this.signal(options.signal)),this.signal(options.signal));}
+            catch(error){this.close();throw error;}
           }
-          await this.selectionRecorded;
           const content=await this.record(anchor,'SKILL.md',snapshot.pkg.content,options.signal);
           this.signal(options.signal).throwIfAborted();
-          this.bodyLoaded=true;
-          this.loadedSkill={anchor:{...anchor},name:trusted.name,resources:snapshot.pkg.resources.map(resource=>({relativePath:resource.relative_path,mediaType:resource.media_type,bytes:resource.content.length,payloadDigest:resource.content_sha256}))};
+          this.loadedByName.set(trusted.name,{anchor:{...anchor},name:trusted.name,resources:snapshot.pkg.resources.map(resource=>({relativePath:resource.relative_path,mediaType:resource.media_type,bytes:resource.content.length,payloadDigest:resource.content_sha256}))});
           return {name:trusted.name,description:trusted.description,provider:providerName,source:'notalone',path:trusted.path,resourceBase:trusted.resourceBase,invocation:trusted.invocation,content};
         }catch(error){this.rememberFailure(error);throw error;}
       }};
@@ -141,7 +133,7 @@ export class SqliteSkillRun {
     try {
       await this.validate(signal);
       const combined=this.signal(signal);
-      await abortable(this.protection.recordInput({scope:this.scope,runRevision:this.frozenRevision(),selected:this.selection,loaded:{...anchor},relativePath,text,payloadDigest:sha256(text)},combined),combined);
+      await abortable(this.protection.recordInput({scope:this.scope,runRevision:this.frozenRevision(),selected:{...anchor},loaded:{...anchor},relativePath,text,payloadDigest:sha256(text)},combined),combined);
       await this.validate(signal);
       return text;
     }catch(error){this.rememberFailure(error);this.close();throw error;}

@@ -36,16 +36,32 @@ async function fixture(t){
 
 test('自动选择单个 Skill 后公开真实加载名称与版本资源清单，选择和正文分别记录',async t=>{
  const f=await fixture(t),run=await openSqliteSkillRun(f.library,f.scope,f.protection);run.mount(f.layer.ctx);
- assert.equal(run.loaded,null);assert.equal(run.selection,null);
+ assert.deepEqual(run.loadedSkills,[]);assert.equal(run.selection,null);
  await f.ctx.skills.get('gentle',{scope:f.key});
- assert.equal(run.loaded.name,'gentle');assert.deepEqual(run.loaded.anchor,skillAnchor(f.items[0]));
- assert.equal(run.loaded.resources.length,1);assert.equal(run.loaded.resources[0].relativePath,'references/guide.md');
- assert.equal(run.loaded.resources[0].mediaType,'text/markdown');assert.match(run.loaded.resources[0].payloadDigest,/^[a-f0-9]{64}$/);
- assert.deepEqual(run.selection,skillAnchor(f.items[0]));assert.deepEqual(f.selections.at(-1).selected,skillAnchor(f.items[0]));
+ assert.equal(run.loadedSkills[0].name,'gentle');assert.deepEqual(run.loadedSkills[0].anchor,skillAnchor(f.items[0]));
+ assert.equal(run.loadedSkills[0].resources.length,1);assert.equal(run.loadedSkills[0].resources[0].relativePath,'references/guide.md');
+ assert.equal(run.loadedSkills[0].resources[0].mediaType,'text/markdown');assert.match(run.loadedSkills[0].resources[0].payloadDigest,/^[a-f0-9]{64}$/);
+ assert.equal(run.selection,null);assert.deepEqual(f.selections.at(-1).selected,skillAnchor(f.items[0]));
  const inputs=await f.storage.execute('fixture.inputs',f.scope);assert.equal(inputs.length,1);assert.equal(inputs[0].relative_path,'SKILL.md');
  const revision=run.revision;assert.equal(revision.eligible.length,2);revision.eligible.length=0;assert.equal(run.revision.eligible.length,2);
- const loaded=run.loaded;loaded.resources.length=0;assert.equal(run.loaded.resources.length,1);
- assert.equal(await run.readLoadedResource('references/guide.md'),'gentle 的合成辅助说明。');
+ const loaded=run.loadedSkills[0];loaded.resources.length=0;assert.equal(run.loadedSkills[0].resources.length,1);
+ assert.equal(await run.readLoadedResource('gentle','references/guide.md'),'gentle 的合成辅助说明。');
+ run.close();
+});
+
+test('同轮可加载多个 Skill，并按名称读取各自同名资源及记录对应来源',async t=>{
+ const f=await fixture(t),run=await openSqliteSkillRun(f.library,f.scope,f.protection);run.mount(f.layer.ctx);
+ await f.ctx.skills.get('gentle',{scope:f.key});
+ await f.ctx.skills.get('clear',{scope:f.key});
+ assert.deepEqual(run.loadedSkills.map(skill=>skill.name),['gentle','clear']);
+ assert.equal(await run.readLoadedResource('gentle','references/guide.md'),'gentle 的合成辅助说明。');
+ assert.equal(await run.readLoadedResource('clear','references/guide.md'),'clear 的合成辅助说明。');
+ const rows=await f.storage.execute('fixture.inputs',f.scope);
+ assert.deepEqual(rows.map(row=>[row.package_id,row.relative_path]),[
+  [f.items[0].id,'SKILL.md'],[f.items[1].id,'SKILL.md'],
+  [f.items[0].id,'references/guide.md'],[f.items[1].id,'references/guide.md'],
+ ]);
+ assert.deepEqual(f.selections.slice(1).map(event=>event.selected.packageId),f.items.map(item=>item.id));
  run.close();
 });
 
@@ -53,21 +69,20 @@ test('自动选择记录失败后关闭本轮，重复读取不能跳过失败�
  const f=await fixture(t);f.protection.recordSelection=async(_scope,selected)=>{if(selected)throw Object.assign(new Error('selection unavailable'),{code:'fixture_selection_unavailable'});};
  const run=await openSqliteSkillRun(f.library,f.scope,f.protection);run.mount(f.layer.ctx);
  await assert.rejects(f.ctx.skills.get('gentle',{scope:f.key}),{code:'fixture_selection_unavailable'});
- assert.equal(run.loaded,null);
+ assert.deepEqual(run.loadedSkills,[]);
  await assert.rejects(run.validate(),{code:'skill_run_invalidated'});
  assert.deepEqual(await f.storage.execute('fixture.inputs',f.scope),[]);
 });
 
-test('辅助读取只接受已加载版本清单，拒绝第二 Skill、未列路径、遍历、脚本和URL',async t=>{
+test('辅助读取只接受已加载版本清单，拒绝未加载 Skill、未列路径、遍历、脚本和URL',async t=>{
  const f=await fixture(t),run=await openSqliteSkillRun(f.library,f.scope,f.protection);run.mount(f.layer.ctx);
- await assert.rejects(run.readLoadedResource('references/guide.md'),{code:'skill_body_required'});
+ await assert.rejects(run.readLoadedResource('gentle','references/guide.md'),{code:'skill_body_required'});
  await f.ctx.skills.get('gentle',{scope:f.key});
- await assert.rejects(f.ctx.skills.get('clear',{scope:f.key}),{code:'second_skill_load'});
  await assert.rejects(run.readResource(skillAnchor(f.items[1]),'references/guide.md'),{code:'skill_body_required'});
  for(const path of ['references/missing.md','../clear/references/guide.md','/tmp/outside.txt','references/../../SKILL.md','references/tool.sh','https://example.test/guide.md']){
-  await assert.rejects(run.readLoadedResource(path),{code:'skill_path_invalid'});
+  await assert.rejects(run.readLoadedResource('gentle',path),{code:'skill_path_invalid'});
  }
- assert.equal(await run.readLoadedResource('references/guide.md'),'gentle 的合成辅助说明。');
+ assert.equal(await run.readLoadedResource('gentle','references/guide.md'),'gentle 的合成辅助说明。');
  const rows=await f.storage.execute('fixture.inputs',f.scope);assert.equal(rows.length,2);assert.equal(rows[1].package_id,f.items[0].id);
  run.close();
 });
@@ -79,7 +94,7 @@ test('资源变更或链接替换使版本失效，旧缓存不得返回文字',
   const path=join(f.root,'gentle/references/guide.md');
   if(replacement==='content')await writeFile(path,'已替换的合成内容。');
   else{await rm(path);await symlink(join(f.root,'clear/references/guide.md'),path);}
-  await assert.rejects(run.readLoadedResource('references/guide.md'));
+  await assert.rejects(run.readLoadedResource('gentle','references/guide.md'));
   await assert.rejects(run.validate(),{code:'skill_run_invalidated'});
   const rows=await f.storage.execute('fixture.inputs',f.scope);assert.equal(rows.length,1);
  });
@@ -92,7 +107,7 @@ test('停用、来源撤销或切换联系人后不能继续辅助读取',async 
   if(action==='disable')await f.library.setEnabled(f.items[0].id,f.items[0].headRevision,'disabled');
   else if(action==='source')await f.library.requireVerification(f.items[0].id,f.items[0].headRevision);
   else await f.storage.execute('fixture.revoke',f.scope);
-  await assert.rejects(run.readLoadedResource('references/guide.md'));
+  await assert.rejects(run.readLoadedResource('gentle','references/guide.md'));
   if(action==='contact'){
    assert.deepEqual(await f.storage.execute('fixture.inputs',f.scope),[]);
    await assert.rejects(openSqliteSkillRun(f.library,{...f.scope,contactId:'contact-b'},f.protection),{code:'fixture_scope_revoked'});
@@ -111,7 +126,7 @@ test('资源读取中取消或来源删除拒绝迟到结果，释放scope不保
   };
   const controller=new AbortController(),run=await openSqliteSkillRun(f.library,f.scope,f.protection,undefined,controller.signal);run.mount(f.layer.ctx);
   await f.ctx.skills.get('gentle',{scope:f.key});
-  const pending=assert.rejects(run.readLoadedResource('references/guide.md'));
+  const pending=assert.rejects(run.readLoadedResource('gentle','references/guide.md'));
   await waiting;
   if(action==='cancel')controller.abort();
   else if(action==='source')await f.storage.execute('fixture.revoke',f.scope);
@@ -128,7 +143,7 @@ test('provider 保留首次真实失败，关闭产生的失效原因不能覆�
  await f.ctx.skills.get('gentle',{scope:f.key});
  await f.storage.execute('fixture.revoke',f.scope);
  let reason;
- await assert.rejects(run.readLoadedResource('references/guide.md'),error=>{reason=error;assert.equal(error.code,'fixture_scope_revoked');return true;});
+ await assert.rejects(run.readLoadedResource('gentle','references/guide.md'),error=>{reason=error;assert.equal(error.code,'fixture_scope_revoked');return true;});
  assert.equal(run.failure,reason);
  run.close();await assert.rejects(run.validate(),{code:'skill_run_invalidated'});
  assert.equal(run.failure,reason);

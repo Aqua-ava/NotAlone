@@ -1,6 +1,6 @@
 # SQLite Skill 自动发现与受控读取
 
-使用官方 DSH Skill provider、包／修订身份和业务查询，不创建学习、审核发布或方法级策略表。应用在授权根自动发现 Skill，核验成功后默认启用；用户可明确启用或停用，回复时自动判断零或一个可用版本。管理页不提供手动添加、填写目录名或安装路径；原 Skill 目录始终只读。
+使用官方 DSH Skill provider、包／修订身份和业务查询，不创建学习、审核发布或方法级策略表。应用在授权根自动发现 Skill，核验成功后默认启用；用户可明确启用或停用，回复时在可用范围内按需组合零个或多个相关版本；每包使用本轮固定的当前修订。管理页不提供手动添加、填写目录名或安装路径；原 Skill 目录始终只读。
 
 ## 迁移与查询
 
@@ -27,13 +27,13 @@
 
 ## 官方加载与实际输入
 
-`openSqliteSkillRun(library, {contactId,callId}, protection, selectedPackageId?, signal?)` 冻结 owner/contact/call、目录修订及明确选择。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。每轮零或一个 Skill，正文经官方 `ctx.skills.get` 读取；资源只能经 `run.readResource(anchor, relativePath)` 读取本修订清单内路径，正文成功前不能读资源。只显示虚拟路径，不暴露物理文件能力。
+`openSqliteSkillRun(library, {contactId,callId}, protection, selectedPackageId?, signal?)` 冻结 owner/contact/call、目录修订及明确选择。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。正常自动回复可通过重复的官方 `ctx.skills.get` 按需读取多个 Skill；每个包固定一个当时当前的不可变修订。显式 `selectedPackageId` 兼容入口仍只定向并预加载一个包。辅助资源须在对应 Skill 正文成功读取后，按准确 Skill 名称和相对路径读取本修订清单内路径；一轮回复总计最多读取两份。只显示虚拟路径，不暴露物理文件能力。
 
 必需的 `SkillRunProtection` 是05/11/12受信任宿主边界，缺失时拒绝打开：
 
 1. `assertCurrent(scope, frozenRevision|null, signal)` 在同一短事务调用 `requireSkillRun(tx, scope.ownerId, frozenRevision)`（非null时）并复验已确认联系人、调用、读取／资料／来源／删除代次、模型用途和出站范围；Skill不能赋予这些资格。
-2. `recordSelection(scope, selected)` 分别记显式选择或 null；此事件不表示已加载或模型已使用。
-3. `recordInput(input, signal)` 保存实际返回的正文或资源文字、payloadDigest、selected/loaded 精确包修订、相对路径及 scope，登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
+2. `recordSelection(scope, selected)` 记录每次实际选中的包修订；自动模式对各包分别记录，显式定向预加载则记录其指定修订。事件本身不表示正文已读取或内容已进入模型。
+3. `recordInput(input, signal)` 分别保存每份实际返回的正文或资源文字、payloadDigest、selected/loaded 精确包修订、Skill 名称、相对路径及 scope，登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
 
 12必须在物理模型发送和业务提交前再次 `run.validate()`，记录真正发出的完整模型输入和模型回执。本票的读取事件仅证明官方provider读取了该正文，不能当作模型实际发送或成功回复的证据。DSH目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
 

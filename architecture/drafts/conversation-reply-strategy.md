@@ -1,5 +1,8 @@
 # 聊天回复策略草图
 
+> 2026-10-31 后续决定：[ADR-136](../adr/136-multi-skill-reply-composition.md)替代 Q20 的“每次至多一个 Skill”限制；按当前主要任务匹配仍有效，相关 Skill 可以按需组合。原 Q20 保留为第一版讨论记录。
+
+
 > 2026-10-21 设计审查：下文“待实现／尚未开工”是草案编写时状态，后续工程与验收分别见对应正式规格和任务索引；正常回复入口由 [ADR-079](../adr/079-unified-expression-workspace.md)统一，主动收藏样本由 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役。旧交互和样本条款仅历史，持续讨论、真实表达、来源与人工发送边界保持。
 
 > 后续正式入口：本草图的回应／主动联系划分及先确认方向步骤，已由 [ADR-079](../adr/079-unified-expression-workspace.md) 修订为统一表达工作区。历史讨论保留，不作为现行入口要求。

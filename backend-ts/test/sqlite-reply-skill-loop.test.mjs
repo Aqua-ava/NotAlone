@@ -8,8 +8,9 @@ import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/servic
 import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
 const answer=JSON.stringify({candidates:[{parts:['合成候选仍可编辑。'],basis:[1]}]});
 function stream(res,name,args){
- const tool=!!name,content=tool?{type:'tool_use',id:randomUUID(),name,input:args}:{type:'text',text:answer};
- const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:content},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:tool?'tool_use':'end_turn'},usage:{output_tokens:8}},{type:'message_stop'}];
+ const calls=Array.isArray(name)?name:name?[{name,args}]:[],tool=calls.length>0;
+ const content=tool?calls.map(call=>({type:'tool_use',id:randomUUID(),name:call.name,input:call.args})):[{type:'text',text:answer}];
+ const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},...content.flatMap((content_block,index)=>[{type:'content_block_start',index,content_block},{type:'content_block_stop',index}]),{type:'message_delta',delta:{stop_reason:tool?'tool_use':'end_turn'},usage:{output_tokens:8}},{type:'message_stop'}];
  res.setHeader('content-type','text/event-stream');res.end(events.map(e=>`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''));
 }
 async function setup(t,onRequest,options={}){
@@ -23,14 +24,57 @@ async function setup(t,onRequest,options={}){
  const input={contactId,discussionId:d.id,requestKey:randomUUID(),text:'帮我安慰这位联系人',confirmedContact:true};
  return {...f,service,turns,input,skill,view:async()=>(await service.view(contactId,d.id))[0],trace:async()=>{const v=await service.view(contactId,d.id);return f.discussions.trace(contactId,d.id,v[0].requestId);}};
 }
+async function addClearSkill(f){
+ await mkdir(join(f.skillRoot,'clear/references'),{recursive:true});
+ await writeFile(join(f.skillRoot,'clear/SKILL.md'),'---\nname: clear\ndescription: 表达边界时可用的合成策略\n---\n清晰说明边界，参考 references/example.md。\n');
+ await writeFile(join(f.skillRoot,'clear/references/example.md'),'clear 的独立合成案例。');
+ const skill=await f.library.discover('clear');return f.library.setEnabled(skill.id,skill.headRevision,'enabled');
+}
 
 test('正常回复可自动选择正文再按需读取同修订资源，实际输入和逐次用量可回看',async t=>{
- const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,'skill',{name:'gentle'}):n===2?stream(res,'skill_resource',{path:'references/example.md'}):stream(res));
+ const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,'skill',{name:'gentle'}):n===2?stream(res,'skill_resource',{name:'gentle',path:'references/example.md'}):stream(res));
  await f.turns.generate(f.input);const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.loadedSkills[0].name,'gentle');
  assert.deepEqual(view.loadedSkills.map(s=>s.relativePath),['SKILL.md','references/example.md']);
  assert.ok(!JSON.stringify(f.requests[0]).includes('辅助资料的唯一合成教学句。'));assert.ok(JSON.stringify(f.requests[2]).includes('辅助资料的唯一合成教学句。'));
  const trace=await f.trace();assert.equal(trace.calls.length,3);assert.ok(trace.calls.every(c=>c.state==='succeeded'&&c.actual_budget_units===11n));
  assert.equal(trace.events.filter(e=>e.kind==='model_request').length,3);assert.deepEqual(f.supplierErrors,[]);
+});
+
+test('同次回复可组合多个 Skill，分别读取同名案例并在候选与调用依据中保留所有实际输入',async t=>{
+ const names=['gentle','clear'];
+ const f=await setup(t,(_f,res,_request,n)=>n===1
+  ?stream(res,names.map(name=>({name:'skill',args:{name}})))
+  :n===2?stream(res,names.map(name=>({name:'skill_resource',args:{name,path:'references/example.md'}}))):stream(res));
+ const clear=await addClearSkill(f);
+ await f.turns.generate(f.input);
+ const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.skillWarning,null);
+ assert.deepEqual(view.loadedSkills.map(skill=>[skill.name,skill.relativePath]),[
+  ['gentle','SKILL.md'],['clear','SKILL.md'],['gentle','references/example.md'],['clear','references/example.md'],
+ ]);
+ assert.equal(view.loadedSkills[2].text,'辅助资料的唯一合成教学句。');assert.equal(view.loadedSkills[3].text,'clear 的独立合成案例。');
+ assert.equal(view.loadedSkills[2].packageId,f.skill.id);assert.equal(view.loadedSkills[3].packageId,clear.id);
+ assert.ok(!JSON.stringify(f.requests[0]).includes('清晰说明边界，参考'));
+ assert.ok(JSON.stringify(f.requests[1]).includes('先回应感受，再参考'));assert.ok(JSON.stringify(f.requests[1]).includes('清晰说明边界，参考'));
+ assert.ok(JSON.stringify(f.requests[2]).includes('辅助资料的唯一合成教学句。'));assert.ok(JSON.stringify(f.requests[2]).includes('clear 的独立合成案例。'));
+ const trace=await f.trace();assert.equal(trace.calls.length,3);assert.equal(trace.events.filter(event=>event.kind==='skill_input').length,4);
+ assert.deepEqual(trace.events.filter(event=>event.kind==='skill_selection').map(event=>JSON.parse(event.payload).selected?.packageId??null),[null,f.skill.id,clear.id]);
+ assert.equal(await f.turns.configurationFor(f.input.contactId,f.input.discussionId),(await f.storage.execute('runtime.inventory',{ownerId:f.owner}))[0].configurationDigest);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});assert.deepEqual(f.supplierErrors,[]);
+});
+
+test('已组合多个 Skill 后任一版本失效，降级清除所有旧正文、案例目录和实际输入',async t=>{
+ const f=await setup(t,async(f,res,_request,n)=>{
+  if(n===1)stream(res,['gentle','clear'].map(name=>({name:'skill',args:{name}})));
+  else if(n===2){await unlink(join(f.skillRoot,'clear/SKILL.md'));stream(res,'skill_resource',{name:'gentle',path:'references/example.md'});}
+  else stream(res);
+ });
+ await addClearSkill(f);await f.turns.generate(f.input);
+ const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.skillWarning,'回复策略暂不可用');assert.deepEqual(view.loadedSkills,[]);
+ assert.equal(f.requests.length,3);assert.ok(JSON.stringify(f.requests[1]).includes('清晰说明边界'));
+ const fallback=JSON.stringify(f.requests[2]);for(const text of ['gentle','clear','先回应感受','清晰说明边界','references/example.md','tool_result'])assert.ok(!fallback.includes(text));
+ const trace=await f.trace();assert.ok(!trace.events.some(event=>event.kind==='skill_input'||event.kind==='skill_selection'));
+ assert.equal(trace.events.filter(event=>event.kind==='model_request').length,1);assert.equal(trace.calls.length,3);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});assert.deepEqual(f.supplierErrors,[]);
 });
 
 test('Skill在模型选中后缺失时清理旧会话与失效载荷，再用无Skill上下文继续',async t=>{
@@ -49,7 +93,7 @@ test('模型可不选择Skill，候选不展示策略名称或不可用提示',a
 
 
 test('资源部分加载后失效会销毁包含旧正文的会话，降级请求不含旧Skill或工具结果',async t=>{
- const f=await setup(t,async(f,res,_request,n)=>{if(n===1)stream(res,'skill',{name:'gentle'});else if(n===2){await writeFile(join(f.skillRoot,'gentle/references/example.md'),'替换后的不可信资料。');stream(res,'skill_resource',{path:'references/example.md'});}else stream(res);});
+ const f=await setup(t,async(f,res,_request,n)=>{if(n===1)stream(res,'skill',{name:'gentle'});else if(n===2){await writeFile(join(f.skillRoot,'gentle/references/example.md'),'替换后的不可信资料。');stream(res,'skill_resource',{name:'gentle',path:'references/example.md'});}else stream(res);});
  await f.turns.generate(f.input);const view=await f.view();assert.equal(view.skillWarning,'回复策略暂不可用');assert.deepEqual(view.loadedSkills,[]);assert.equal(f.requests.length,3);
  const last=JSON.stringify(f.requests.at(-1));assert.ok(!last.includes('先回应感受'));assert.ok(!last.includes('references/example.md'));assert.ok(!last.includes('tool_result'));
  const trace=await f.trace();assert.equal(trace.calls.length,3);assert.ok(!trace.events.some(e=>e.payload.includes('先回应感受')));assert.equal(trace.events.filter(e=>e.kind==='model_request').length,1);
@@ -79,7 +123,7 @@ test('只读helper暂不可用时仅降级Skill，干净上下文继续且记录
 });
 
 test('合法大资源沿1MiB导入限制和完整模型输入预算参与回复及回看',async t=>{
- const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,'skill',{name:'gentle'}):n===2?stream(res,'skill_resource',{path:'references/example.md'}):stream(res));
+ const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,'skill',{name:'gentle'}):n===2?stream(res,'skill_resource',{name:'gentle',path:'references/example.md'}):stream(res));
  const text='large-resource-template '.repeat(6000);assert.ok(text.length>100000);await writeFile(join(f.skillRoot,'gentle/references/example.md'),text);
  f.model.budgetProfile.context_window_tokens=1_048_576;
  await f.turns.generate(f.input);const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.loadedSkills[1].text,text);assert.ok(JSON.stringify(f.requests[2]).includes(text));

@@ -15,19 +15,19 @@ export function isSkillReadFailure(error:unknown):boolean{
 export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void):void{
  const allowed=!!run&&run.revision.eligible.length>0;
  ctx.tools.restrict({allow:allowed?['skill']:[]});
- let bodies=0,resources=0;
+ let resources=0;
  ctx.tools.guard(exec=>{
   if(!allowed)return 'discussion_tools_forbidden';
-  if(exec.name==='skill'){
-   if(++bodies>1){failed(new StorageFailure('discussion_skill_limit'));return 'discussion_skill_limit';}
-  }else if(exec.name==='skill_resource'){
-   if(!run.loaded||++resources>2){failed(new StorageFailure('discussion_resource_limit'));return 'discussion_resource_limit';}
+  if(exec.name==='skill_resource'){
+   if(!run.loadedSkills.length||++resources>2){failed(new StorageFailure('discussion_resource_limit'));return 'discussion_resource_limit';}
+  }else if(exec.name==='skill'){
+   return;
   }else{failed(new StorageFailure('discussion_tools_forbidden'));return 'discussion_tools_forbidden';}
  });
  if(!allowed)return;
  ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
-  parameters:{path:{type:'string',required:true,description:'已加载Skill资源目录中的准确references/或assets/相对路径。'}},
-  async execute(args,exec){await check();return {text:await run.readLoadedResource(args.path,exec.signal)};},
+  parameters:{name:{type:'string',required:true,description:'已成功加载正文的准确Skill名称。'},path:{type:'string',required:true,description:'该Skill资源目录中的准确references/或assets/相对路径。'}},
+  async execute(args,exec){await check();return {text:await run.readLoadedResource(args.name,args.path,exec.signal)};},
   output:{schema:{type:'object',additionalProperties:false,properties:{text:{type:'string',required:true}}},render:(_args,value)=>[{type:'text',text:value.text}]},
  }));
  ctx.on('tools/pre-execute',async(_exec,next)=>{await check();return next();});
@@ -37,9 +37,10 @@ export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check
    return next();
   }
   await check();
-  if(exec.name==='skill'&&run.loaded){
+  const loaded=exec.name==='skill'?run.loadedSkills.find(skill=>skill.name===(exec.arguments as {name?:unknown})?.name):undefined;
+  if(loaded){
    const decision=await next();if(decision.kind!=='accept')return decision;
-   return {kind:'accept',content:[...result.content,{type:'text',text:'本版本可按需读取的静态资料：'+JSON.stringify(run.loaded.resources.map(r=>({path:r.relativePath,bytes:r.bytes}))) }]};
+   return {kind:'accept',content:[...result.content,{type:'text',text:'本版本可按需读取的静态资料：'+JSON.stringify({name:loaded.name,resources:loaded.resources.map(r=>({path:r.relativePath,bytes:r.bytes}))}) }]};
   }
   return next();
  });

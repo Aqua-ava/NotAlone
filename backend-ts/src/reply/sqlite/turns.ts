@@ -23,6 +23,7 @@ export class SqliteDiscussionTurns {
  async configurationFor(contactId:string,discussionId:string):Promise<string>{
   const view=await this.discussions.view(contactId,discussionId),last=[...view.entries].reverse().find((e:any)=>e.role==='assistant'&&e.content_state==='available');
   let selected:string|undefined;
+  // 首条记录表示显式定向入口或自动目录（null）；后续自动选择不能缩窄恢复范围。
   if(last){const trace=await this.discussions.trace(contactId,discussionId,last.origin_request_id);const selection=trace.events.find((e:any)=>e.kind==='skill_selection');if(selection)selected=JSON.parse(selection.payload).selected?.packageId;}
   const catalog=this.library?await this.library.refresh():await this.storage.execute<any[]>('skills.list',{ownerId:this.discussions.ownerId});
   const eligible=this.library?catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!selected||p.id===selected)).map(skillAnchor):[];

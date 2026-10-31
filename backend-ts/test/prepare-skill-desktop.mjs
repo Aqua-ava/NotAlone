@@ -57,7 +57,7 @@ export async function prepareSkillDesktop({mode='resource'}={}){
     counts.skill++;stream(res,body,{tool:'skill',args:{name:'gentle'}});return;
    }
    if(choice==='resource'&&available.has('skill_resource')&&results.length&&lastCall==='skill'){
-    counts.resource++;stream(res,body,{tool:'skill_resource',args:{path:'references/guide.md'}});return;
+    counts.resource++;stream(res,body,{tool:'skill_resource',args:{name:'gentle',path:'references/guide.md'}});return;
    }
    counts.final++;
    const text=choice==='resource'?'合成资源候选：我愿意听你说，也想先确认一下周末安排。':choice==='none'?'合成普通候选：可以呀，我们先约一个方便的时间。':choice==='readfail'?'合成降级候选：我看到你的消息了，我们找个合适的时间聊聊。':'合成策略候选：听起来你想找人聊聊，我愿意听。';

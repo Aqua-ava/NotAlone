@@ -43,8 +43,8 @@ export async function apply(ctx: Context): Promise<void> {
      run.mount(layer.ctx);
      const content=await ctx.get('skills')!.get('gentle',{scope:key});
      if(req.url==='/load-resource'){
-      const resource=await run.readLoadedResource(input.path);
-      const loaded=run.loaded!;
+      const resource=await run.readLoadedResource('gentle',input.path);
+      const loaded=run.loadedSkills[0]!;
       result={content:content?.content,resource,loaded:{name:loaded.name,packageId:loaded.anchor.packageId,revisionNo:loaded.anchor.revisionNo,resources:loaded.resources},inputs:await storage.execute('fixture.inputs',scope),hostCatalog:(await ctx.get('skills')!.snapshot()).skills.length};
      }else result={content:content?.content,input:(await storage.execute<any[]>('fixture.inputs',scope))[0],hostCatalog:(await ctx.get('skills')!.snapshot()).skills.length};
     }finally{await layer.dispose();}

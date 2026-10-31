@@ -28,17 +28,17 @@
 
 ## 有界回复与 Skill 工具（2026-10-31）
 
-`runSingleDiscussionTurn` 保留宿主准备的请求和逻辑调用身份，最多执行 5 次物理模型请求。官方 `skill` 工具最多读取一个正文，业务 `skill_resource` 工具最多读取两份当前正文所列的静态资料；剩余步骤用于最终候选与至多一次无 Skill 继续。模型/工具/继续共用原请求截止时间，供应商适配器不自动重试；每次物理发送都重新核验范围、固定资料、来源、Skill 修订和完整请求预算，逐次保存实际输入及各自用量。没有可用 Skill 时工具表为空。
+`runSingleDiscussionTurn` 保留宿主准备的请求和逻辑调用身份，最多执行 5 次物理模型请求。自动模式可重复调用官方 `skill` 工具，按需加载多个当前有效 Skill，每个包固定一个本轮修订；每轮最多读取两份静态辅助资源，按准确 Skill 名称与相对路径定位，业务端再核对包身份及修订。模型请求、工具和继续共用原请求截止时间，供应商适配器不自动重试；每次物理发送都重新核验范围、固定资料、来源、所有 Skill 修订和完整请求预算，逐次保存实际输入及各自用量。Skill 正文和资源一同计入原模型上下文预算，不扩大输入上限。没有可用 Skill 时工具表为空。
 
 直接依赖、锁文件及实际安装的 `dsh-tool-skill`、`dsh-working-directory`、`dsh-fs` 均为 `0.2.1-rc.2`。固定官方源码仍为上文 commit，所用合同与安装制品逐项核对；未作全量可复现制品比对：
 
 - [tool-skill 的公开 inject/apply、模型工具及会话目录](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/skill/tool-skill/src/index.ts#L24)，安装 `lib/index.js:762,784`。工具经 `ctx.skills.list/get`、`scope=exec.agent` 读取本轮 provider；其官方目录与工具可见性一致。provider 在 `setup` 中绑定独占 Agent scope，目录不包含未启用 Skill 或能力声明。
 - [working-directory 的 ensure](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/session/working-directory/src/index.ts#L133) 仅需 `fs.resolve/stat` 验证目录；业务 `SkillDirectory extends FileSystem` 只提供 `/notalone` 纯虚拟目录，所有文件读取、枚举、写入与监听均拒绝，不接触宿主目录。复用官方 working-directory 插件，不启用本地 fs provider 或目录扫描插件。
 - [FileSystem 的公开实现合同](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/fs/fs/src/index.ts#L87)。`createDshRuntime` 通过官方 Loader Group 隔离 fs、Skill registry、working-directory、tools、session 等服务；逐项挂载、排空和卸载，不修改 DSH 核心。
-- `dsh-tools/lib/types/index.d.ts:640-656` 与安装 `lib/index.js:2991-3019`：`restrict` 仅限制全局工具，作用域内注册仍可见；因此本轮仅保留全局 `skill`，按需注册 scoped `skill_resource` 并加单调 `guard`。不存在 Shell、通用文件、网络或外部消息发送工具。`tools/pre-execute/post-execute` 复验业务资格并检查真实读取结果；附加资源目录只投影允许的相对路径与大小。
+- `dsh-tools/lib/types/index.d.ts:640-656` 与安装 `lib/index.js:2991-3019`：`restrict` 仅限制全局工具，作用域内注册仍可见；因此本轮仅保留全局 `skill`，按需注册 scoped `skill_resource` 并加单调 `guard`。不存在 Shell、通用文件、网络或外部消息发送工具。`tools/pre-execute/post-execute` 复验业务资格并检查真实读取结果；附加资源目录按准确 Skill 名称关联允许的相对路径与大小；不同 Skill 中同名路径不得串读。
 
-选择尝试由实际工具调用和 `skill_selection` 区分，`skill_input` 只记录真实返回正文或资源。候选名称仅由实际加载的正文投影。显式版本 API 仍经同一 provider 预加载，正常 UI 不要求手选。含 Skill 的本轮总是从合法业务资料建立新运行副本，避免另一轮已加载正文混入当前策略。
+每个包的选择尝试由实际工具调用和对应 `skill_selection` 区分；`skill_input` 逐项记录真实返回的正文或资源及包修订。候选所示 Skill 名称仅由实际加载的正文投影。显式版本 API 仍经同一 provider 预加载，正常 UI 不要求手选。含 Skill 的本轮总是从合法业务资料建立新运行副本，避免另一轮已加载正文混入当前策略。
 
-Skill 纯读取故障后先停止并排空旧 Agent，登记未提交副本的持久清理意图，逐项核对 `ManagedAddress` 后擦除，恢复时继续该意图。旧运行副本完全清除后，正式事务重新核验所有非 Skill 输入并建立无 Skill 新 context，清旧目录、正文和工具请求载荷；只保留无正文调用回执及不可用标记。新副本的配置摘要按新 revision 计算，可正常回看/恢复；联系人资料、授权或来源失效时不降级。
+任一 Skill 纯读取故障后先停止并排空旧 Agent，登记未提交副本的持久清理意图，逐项核对 `ManagedAddress` 后擦除，恢复时继续该意图。旧运行副本完全清除后，正式事务重新核验所有非 Skill 输入并建立无 Skill 新 context，清除本轮所有 Skill 目录、正文和工具请求载荷，避免部分 Skill 内容残留；只保留无正文调用回执及不可用标记。新副本的配置摘要按新 revision 计算，可正常回看/恢复；联系人资料、授权或来源失效时不降级。
 
 验证入口：`sqlite-discussion-generation.test.mjs` 使用真实 DSH/HTTP/SSE，部分业务端口为明确替身；`sqlite-reply-skill-loop.test.mjs` 使用真实 SQLite、联系人、历史、回复入口及运行副本，仅供应商为环回合成替身，覆盖自动选择、无 Skill、资源、读取前/部分读取后失效、helper 故障、授权撤销、取消、大资源、清理中断恢复与实际输入/用量。正式 profile 及隔离 `pnpm run dev` 的实际 App 验收另见任务记录；没有真实模型质量或微信渠道声明。

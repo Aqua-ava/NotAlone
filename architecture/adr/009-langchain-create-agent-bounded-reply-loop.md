@@ -1,5 +1,7 @@
 # ADR-009：使用 LangChain create_agent 实现有界候选回复循环
 
+> 历史范围提示：[ADR-136](136-multi-skill-reply-composition.md)局部替代本文每轮最多使用一个 Skill 的规则；LangChain 实现路径已由后续 DSH 决策取代，其余回复、权限与有界执行约束按后续 ADR 适用。
+
 > 后续修订（2026-10-23）：[ADR-102](102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TS 后端迁移。LangChain／LangGraph 实现选择由 ADR-102 替代；有界循环、确定性外壳、来源、预算及禁止外部发送保持。 当前代码仍为旧实现，迁移及验收未完成。
 
 > 后续决定：[ADR-091](091-retire-runtime-todos-and-auto-summary.md)取消第 4 节的 Todo／自动过程摘要强制要求及相关 UI／测试要求；下文保留历史设计，不再作为待补功能。[ADR-092](092-defer-time-calendar-web-tools.md)已将时间／日历／网络工具改为未来可选方向，取消当前版本强制接入及相应验收要求。持续讨论不压缩按 ADR-042／045 保持。
