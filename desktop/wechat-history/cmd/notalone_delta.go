@@ -89,6 +89,14 @@ func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior
 			f.Close()
 			return e
 		}
+		shm, shmSize, e := notaloneOpenDeltaFile(shard.path+"-shm", true)
+		if e != nil {
+			f.Close()
+			if wal != nil {
+				wal.Close()
+			}
+			return e
+		}
 		header := make([]byte, 16)
 		_, e = f.ReadAt(header, 0)
 		var key []byte
@@ -99,6 +107,9 @@ func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior
 				if wal != nil {
 					wal.Close()
 				}
+				if shm != nil {
+					shm.Close()
+				}
 				return notaloneFailure("history_delta_key_unavailable")
 			}
 		}
@@ -106,9 +117,14 @@ func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior
 		if wal != nil {
 			walReader = wal
 		}
+		var walIndexReader io.ReaderAt
+		if shm != nil {
+			walIndexReader = shm
+		}
 		var result *notaloneDeltaPageResult
 		if e == nil {
-			result, e = readNotaloneDeltaPages(ctx, f, size, walReader, walSize, uint32(root), key, previous)
+			result, e = readNotaloneDeltaPages(ctx, f, size, walReader, walSize, uint32(root), key, previous,
+				notaloneDeltaWALIndexReader{Reader: walIndexReader, Size: shmSize})
 		}
 		for index := range key {
 			key[index] = 0
@@ -116,6 +132,9 @@ func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior
 		f.Close()
 		if wal != nil {
 			wal.Close()
+		}
+		if shm != nil {
+			shm.Close()
 		}
 		after, versionErr := notaloneSnapshotDataVersion(ctx, shard.observer)
 		if versionErr != nil || after != before {
