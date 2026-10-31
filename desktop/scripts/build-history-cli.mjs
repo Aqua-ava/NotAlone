@@ -152,7 +152,7 @@ export async function buildHistoryCli(input) {
     goVersion: go.version, goArchiveSha256: go.sha256, readonlyPatchSha256: digest(plan.readonlyPatch),
     historyPatchSha256: digest(plan.historyPatch), overlaySha256: digest(JSON.stringify(plan.overlays.map(item => [item.destination, digest(item.bytes)]))),
     wcdbSha256, cliSha256: await hashWechatFile(executable), signing: 'ad-hoc-development', realWechatVerified: false,
-    originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-cdn-big-hd-exact-content-v3' };
+    originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-cdn-big-hd-exact-content-v4' };
   await writeFile(path.join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   return manifest;
 }

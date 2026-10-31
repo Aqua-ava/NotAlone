@@ -10,6 +10,7 @@ export function createMessageMediaBridge(transport: PageTransport): MessageMedia
     retry: (...args:[MessageMediaSelection]) => single('media:retry',args),
     clear: (...args:[MessageMediaSelection]) => single('media:clear',args),
     openPreview: (...args:[MessageMediaSelection & {fileId:string}]) => single('media:open-preview',args),
+    openHistoryImagePreview: (...args:[MessageMediaSelection & {fileId:string;mimeType:string}]) => single('media:open-history-image-preview',args),
     releasePreview: (...args:[string]) => single('media:release-preview',args),
     onStateChanged: (listener:(state:MessageMediaState)=>void) => {
       if(typeof listener!=='function')throw new Error('媒体操作不可用。');

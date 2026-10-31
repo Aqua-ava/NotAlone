@@ -20,9 +20,21 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
     };
     const message = (id,text,speaker='contact') => ({messageId:id,text,speaker,messageType:'text',
       mediaPlaceholder:null,occurredAt:'2026-01-01T12:00:00Z',quoted:null,ordering:'unknown',displayPosition:'1'});
-    const page = [message('one','合成聊天正文\\n第二行'),{...message('two',null,'user'),messageType:'image',mediaPlaceholder:'[图片]'}];
+    const originalFile='00000000-0000-4000-8000-000000000011';
+    const image=(id,state,fileId=null)=>({...message(id,null,'user'),messageType:'image',mediaPlaceholder:'[图片]',
+      imageMedia:{state,fileId:state==='original'?fileId:null,mimeType:state==='original'?'image/gif':null}});
+    const page = [message('one','合成聊天正文\\n第二行'),image('00000000-0000-4000-8000-000000000012','original',originalFile),
+      image('00000000-0000-4000-8000-000000000013','thumbnail_only')];
     const noop = async () => {};
     const subscription = state => ({getState:async()=>state,onStateChanged:()=>()=>{},refresh:noop,refreshSaved:noop});
+    const mediaListeners = new Set(); window.mediaCalls=[]; window.mediaReleases=[]; window.previewSequence=0;
+    const media = { openHistoryImagePreview:async request=>{window.mediaCalls.push(request);return {sessionId:'00000000-0000-4000-8000-'+String(++window.previewSequence).padStart(12,'0'),
+        mimeType:'image/gif',dataBase64:'R0lGODlhAQABAIAAAP8AAP///yH5BAEAAAEALAAAAAABAAEAAAICTAEAOw=='};},
+      releasePreview:async sessionId=>{window.mediaReleases.push({sessionId,src:document.querySelector('.contact-chat-image')?.getAttribute('src')??null});},
+      onPreviewRevoking:listener=>{mediaListeners.add(listener);return()=>mediaListeners.delete(listener);} };
+    window.revokeImagePreview = id=>mediaListeners.forEach(listener=>listener(id));
+    window.updateImage = (id,state)=>{const items=history.messages.items.map(item=>item.messageId===id?{...item,imageMedia:{state,
+        fileId:state==='original'?originalFile:null,mimeType:state==='original'?'image/gif':null}}:item);window.publishHistory({messages:{...history.messages,items}});};
     window.notalone = {
       contactHistory: {getState:async()=>history,onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
         load:async request=>{
@@ -38,6 +50,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
         historyCoverages:[{bindingId:'binding-a',contactId:'a',phase:'complete',messageCount:22,nonTextCount:1,pageCount:2}]}}),
       historyClear:subscription({revision:0,scopeRevision:1,contactId:'a',phase:'ready',clear:null,resync:null,busy:null,error:null})
     };
+    window.notalone.media=media;
     const root = createRoot(document.getElementById('root'));
     function render() { root.render(<ContactsPage session={{state:selection,refreshContacts:noop}} navigate={()=>{}}/>); }
     window.selectContact = () => { selection={...selection,selectedContactId:'b',scopeRevision:2,revision:2};render(); };
@@ -47,7 +60,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   const browser = await chromium.launch({ headless: true, channel: 'chrome' });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
-  await page.setContent(`<style>
+  await page.setContent(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline';"><style>
     * { box-sizing:border-box; } body { margin:0;padding:24px;font-family:sans-serif; }
     :root { --panel-border:#c4d3d6;--panel-radius:12px;--panel-background:#fffdf5;--panel-heading:#354d59; }
   </style><div id="root"></div>`);
@@ -55,7 +68,33 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js')).text });
   const chat = page.getByRole('region', { name: '联系人聊天记录' });
   await expect(chat.getByText('合成聊天正文\n第二行', { exact: true })).toBeVisible();
-  await expect(chat.getByText('[图片]', { exact: true })).toBeVisible();
+  const image = chat.getByRole('img', { name: '聊天图片' });
+  await expect(image).toBeVisible();
+  await expect(chat.getByText('仅有缩略图，原图未取得', { exact: true })).toBeVisible();
+  await expect.poll(() => image.evaluate(element => element.naturalWidth)).toBe(1);
+  assert.match(await image.getAttribute('src'), /^blob:/);
+  assert.equal((await page.evaluate(() => window.mediaCalls)).length, 1);
+  await page.evaluate(() => window.revokeImagePreview('00000000-0000-4000-8000-000000000001'));
+  await expect(image).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.mediaReleases.length)).toBe(1);
+  assert.equal((await page.evaluate(() => window.mediaReleases[0])).src, null);
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','thumbnail_only'));
+  await expect(image).toHaveCount(0);
+  await expect(chat.getByText('仅有缩略图，原图未取得', { exact: true })).toHaveCount(2);
+  await expect.poll(() => page.evaluate(() => window.mediaReleases.length)).toBe(1);
+  assert.equal((await page.evaluate(() => window.mediaReleases[0])).src, null);
+  assert.equal((await page.evaluate(() => window.mediaCalls)).length, 1);
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','unavailable'));
+  await expect(chat.getByText('图片资源不可用', { exact: true })).toBeVisible();
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','failed'));
+  await expect(chat.getByText('图片暂不可用', { exact: true })).toBeVisible();
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','cleared'));
+  await expect(chat.getByText('[图片已清除]', { exact: true })).toBeVisible();
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','pending'));
+  await expect(chat.getByText('图片加载中', { exact: true })).toBeVisible();
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','original'));
+  await expect(image).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.mediaCalls.length)).toBe(2);
   await expect(chat.getByText('按保存位置展示，消息先后尚未核验。')).toBeVisible();
   await expect(page.locator('.contact-history-status')).toHaveCount(0);
   const settingsButton = chat.getByRole('button', { name: '同步与资料管理', exact: true });
@@ -99,11 +138,15 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await page.evaluate(() => { window.failLoad = false; });
   await chat.getByRole('button', { name: '刷新记录' }).click();
   await expect(chat.getByText('合成聊天正文\n第二行', { exact: true })).toBeVisible();
+  await expect(image).toBeVisible();
   await settingsButton.click();
   await page.evaluate(() => window.selectContact());
   await expect(settingsButton).toHaveAttribute('aria-expanded', 'false');
   await expect(settings).toBeHidden();
   await expect(chat.getByText('合成聊天正文\n第二行', { exact: true })).toHaveCount(0);
+  await expect(image).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.mediaReleases.length)).toBe(3);
+  assert.equal((await page.evaluate(() => window.mediaReleases[2])).src, null);
   await expect(chat.getByRole('button', { name: '刷新记录' })).toBeDisabled();
   await page.evaluate(() => window.publishHistory({contactId:'b',scopeRevision:2,messages:{phase:'idle',items:[],nextCursor:null},error:null}));
   await expect(chat.getByText('还没有已保存的聊天记录', { exact: true })).toBeVisible();

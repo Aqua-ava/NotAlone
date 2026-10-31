@@ -2,9 +2,10 @@ import {createHash} from 'node:crypto';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
 import type {HistorySource} from '../../history/sqlite/contracts.ts';
-import {loadNarrowWechatOptions} from '../../history/wechat/artifacts.ts';
+import {loadNarrowWechatOptions,supportsWechatImageKeyChannel} from '../../history/wechat/artifacts.ts';
 import {NarrowWechatClient, type WechatImageOpenResult, type WechatImageSourceIdentity} from '../../history/wechat/native-client.ts';
 import type {VisualRequest, VisualResource, VisualResourcePort} from './contracts.ts';
+import {enrichImageToolOptions,prepareImageRuntimeKey} from './image-tools.ts';
 
 const eligibilityKeys=['owner_id','contact_id','account_id','conversation_id','binding_id','grant_id','verification_id','read_epoch',
   'selection_generation','data_generation','identity_generation','scope_revision','barrier_generation','source_generation'] as const;
@@ -46,6 +47,9 @@ function mapped(error:unknown):unknown {
     history_image_metadata_invalid:'media_metadata_invalid',
     history_image_local_file_missing:'media_local_file_missing',
     history_image_key_unavailable:'needs_image_key',
+    history_image_thumbnail_only:'media_thumbnail_only',
+    history_image_format_unsupported:'media_format_unsupported',
+    history_image_decoder_unavailable:'media_validator_unavailable',
     history_image_quality_unverified:'media_quality_unverified',
     history_image_source_changed:'media_association_unverified',
     history_image_resource_invalid:'media_original_unavailable',
@@ -70,7 +74,10 @@ async function checked(request:VisualRequest):Promise<void> {
 }
 function qualityProofString(opened:WechatImageOpenResult):string {
   const proof=opened.qualityProof;
-  const serialized=proof.kind==='wechat-cdn-big-hd-exact-content-v3'
+  const serialized=proof.kind==='wechat-cdn-big-hd-exact-content-v4'
+    ?JSON.stringify([proof.kind,proof.messageMd5,proof.hdLength,proof.hdWidth,proof.hdHeight,proof.contentWidth,proof.contentHeight,
+      proof.resourceInfoId,proof.matchingResourceIds,proof.bigImageUrlPresent,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,proof.sourceSha256,proof.conversion])
+    :proof.kind==='wechat-cdn-big-hd-exact-content-v3'
     ?JSON.stringify([proof.kind,proof.messageMd5,proof.hdLength,proof.hdWidth,proof.hdHeight,proof.contentWidth,proof.contentHeight,
       proof.resourceInfoId,proof.matchingResourceIds,proof.bigImageUrlPresent,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256])
     :proof.kind==='wechat-cdn-big-hd-exact-content-v2'
@@ -82,7 +89,10 @@ function qualityProofString(opened:WechatImageOpenResult):string {
 }
 function association(opened:WechatImageOpenResult,source:HistorySource,messageId:string) {
   const proof=opened.qualityProof;
-  const identitySource=proof.kind==='wechat-cdn-big-hd-exact-content-v3'
+  const identitySource=proof.kind==='wechat-cdn-big-hd-exact-content-v4'
+    ?[opened.resourceSourceGeneration,proof.resourceInfoId,proof.matchingResourceIds,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,
+      proof.sourceSha256,proof.conversion,opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt]
+    :proof.kind==='wechat-cdn-big-hd-exact-content-v3'
     ?[opened.resourceSourceGeneration,proof.resourceInfoId,proof.matchingResourceIds,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,
       opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt]
     :[opened.resourceSourceGeneration,opened.resourceTable,opened.resourceId,opened.resourceTypeRaw,opened.variantCode,
@@ -137,7 +147,10 @@ export function createWechatImageResourcePort(executable?:string):VisualResource
     let client:NarrowWechatClient|undefined,opened:WechatImageOpenResult|undefined,transferred=false;
     try{
       await checked(request);
-      const options=await loadNarrowWechatOptions(executable);
+      const imageKeyChannel=await supportsWechatImageKeyChannel(executable);
+      if(!imageKeyChannel)reject('history_support_unverified');
+      const loadedOptions=await loadNarrowWechatOptions(executable);
+      const options=await enrichImageToolOptions({...loadedOptions,imageKeyChannel:true});
       if(request.signal.aborted)throw new StorageFailure('media_interrupted');
       client=new NarrowWechatClient(options);
       const selectedScope=await client.resolveSelected(source.support.conversationKey,request.signal);
@@ -153,7 +166,16 @@ export function createWechatImageResourcePort(executable?:string):VisualResource
       if(target.sourceGeneration!==expectedToken.source_generation
         ||!target.tables.some(item=>item.partition===selected.partition&&item.instance===selected.table))reject();
       await checked(request);
-      opened=await client.openImageSelected(target,selected,request.signal);
+      try{opened=await client.openImageSelected(target,selected,request.signal);}
+      catch(error){
+        if(!(error instanceof StorageFailure)||error.code!=='history_image_key_unavailable')throw error;
+        let runtimeKey:Awaited<ReturnType<typeof prepareImageRuntimeKey>>;
+        try{runtimeKey=await prepareImageRuntimeKey(executable,source.support.accountKey,request.signal);}
+        catch(providerError){await client.supplyImageRuntimeKey(null,request.signal).catch(()=>{});throw providerError;}
+        await client.supplyImageRuntimeKey(runtimeKey,request.signal);
+        if(!runtimeKey)throw error;
+        opened=await client.openImageSelected(target,selected,request.signal);
+      }
       if(opened.sourceGeneration!==expectedToken.source_generation||opened.sourceGeneration!==target.sourceGeneration
         ||!hashPattern.test(opened.resourceSourceGeneration))reject();
       await checked(request);

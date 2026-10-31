@@ -175,7 +175,7 @@ export async function apply(ctx: Context) {
     const originalImages=history&&await supportsWechatOriginalImages(sqlite.wechatCliPath);
     media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
-    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath))]:[]});
+    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,changed:(contactId,messageId)=>events?.publish('message.updated',contactId,{message_id:messageId}),adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath))]:[]});
     await media.initialize();
     if(originalImages)imageSync=new SqliteImageSyncCoordinator(storage,contacts,media);
     contacts.setReadStop(async contactId=>{await Promise.all([imageSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);});

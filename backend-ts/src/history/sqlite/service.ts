@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { SqliteStorage } from '../../storage/sqlite/client.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
-import type { HistoryChannel, HistorySource, HistoryCoverage, HistoryRead, HistoryScope, HistoryTarget, HistorySupportReport, HistoryPage, HistoryTailPage } from './contracts.ts';
+import type { HistoryChannel, HistorySource, HistoryCoverage, HistoryImageMedia, HistoryRead, HistoryScope, HistoryTarget, HistorySupportReport, HistoryPage, HistoryTailPage } from './contracts.ts';
 import { assertSupport, serializeSupport } from './actions.ts';
 import { isSourceContinuityLost } from './continuity.ts';
 import { isPartitionGrowthTargetChange } from '../partition-growth.ts';
@@ -151,6 +151,35 @@ export class SqliteHistoryService {
  read(contactId:string,options:{limit?:number;before?:string}={}):Promise<HistoryRead>{
   if(this.closed)throw new StorageFailure('history_closed');
   return this.storage.execute('history.read',{ownerId:this.contacts.ownerId,contactId,limit:options.limit??101,before:options.before});
+ }
+ async imageMedia(contactId:string,messageIds:readonly string[]):Promise<ReadonlyMap<string,HistoryImageMedia>>{
+  if(this.closed)throw new StorageFailure('history_closed');
+  const rows=await this.storage.execute<{message_id:string;media_state:string|null;attempt_state:string|null;error_code:string|null;file_id:string|null;mime_type:string|null}[]>(
+   'history.imageMedia',{ownerId:this.contacts.ownerId,contactId,messageIds:[...messageIds]});
+  const summaries=new Map<string,HistoryImageMedia>();
+  for(const row of rows){
+   if(row.media_state==='cleared'||row.media_state==='deleting'){
+    summaries.set(row.message_id,{state:'cleared',fileId:null,mimeType:null});continue;
+   }
+   if(row.media_state==='invalidated'){
+    summaries.set(row.message_id,{state:'unavailable',fileId:null,mimeType:null,errorCode:'media_source_invalidated'});continue;
+   }
+   if(row.file_id&&typeof row.mime_type==='string'&&row.mime_type.startsWith('image/')){
+    summaries.set(row.message_id,{state:'original',fileId:row.file_id,mimeType:row.mime_type});continue;
+   }
+   const errorCode=typeof row.error_code==='string'&&/^[-a-z0-9_]{1,80}$/.test(row.error_code)?row.error_code:null;
+   if(row.attempt_state==='pending'||row.attempt_state==='running'||!row.attempt_state){
+    summaries.set(row.message_id,{state:'pending',fileId:null,mimeType:null,...(errorCode?{errorCode}:{})});continue;
+   }
+   if(errorCode==='media_thumbnail_only'){
+    summaries.set(row.message_id,{state:'thumbnail_only',fileId:null,mimeType:null,errorCode});continue;
+   }
+   if(errorCode==='media_local_file_missing'||errorCode==='media_original_unavailable'){
+    summaries.set(row.message_id,{state:'unavailable',fileId:null,mimeType:null,errorCode});continue;
+   }
+   summaries.set(row.message_id,{state:'failed',fileId:null,mimeType:null,...(errorCode?{errorCode}:{})});
+  }
+  return summaries;
  }
  source(contactId:string,recordId:string):Promise<HistorySource>{return this.storage.execute('history.source',{ownerId:this.contacts.ownerId,contactId,recordId});}
  coverage(contactId:string):Promise<HistoryCoverage>{return this.storage.execute('history.coverage',{ownerId:this.contacts.ownerId,contactId});}

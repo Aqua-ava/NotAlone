@@ -26,3 +26,14 @@ test('原图经实际解码保存，预览读取副本并保留来源',async t=>
  const preview=await f.media.openPreview(f.contact,image.id,saved.files[0].fileId);assert.deepEqual(Buffer.from(preview.dataBase64,'base64'),png);
  await f.media.releasePreview(preview.sessionId);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
+
+
+test('原图保存和清除通过同条消息更新通知聊天占位',async t=>{
+ const updates=[];
+ const f=await fixture(t,new OriginalImageMediaAdapter(resourcePort({quality:{kind:'original',proof:'synthetic-original'}})),{onMediaChanged:(contactId,messageId)=>updates.push({contactId,messageId})});
+ const image=f.messages.find(m=>m.kind==='image');
+ await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});
+ assert.deepEqual(updates,[{contactId:f.contact,messageId:image.id}]);
+ await f.media.clear(f.contact,image.id,randomUUID());
+ assert.deepEqual(updates,[{contactId:f.contact,messageId:image.id},{contactId:f.contact,messageId:image.id}]);
+});

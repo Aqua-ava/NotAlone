@@ -1,5 +1,6 @@
 {
  "safe-node": [
+    "tests/history-image-message.test.mjs",
     "tests/quarantine-controller.test.mjs",
   "tests/diagnostic-export.test.mjs",
   "tests/usage/bridge.test.mjs",

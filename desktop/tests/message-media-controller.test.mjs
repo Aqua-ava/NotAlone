@@ -19,6 +19,29 @@ test('明确选定一条消息只读状态，未接线类型不触发提取',asy
  await assert.rejects(f.controller.extract({...selection,goal:'extract'}));assert.equal(f.calls.length,1);
  await assert.rejects(f.controller.inspect({...selection,contactId:'00000000-0000-4000-8000-000000000003'}));
 });
+test('聊天图片可并行预览，不切换单条媒体状态，联系人变更时共同撤下',async()=>{
+ const first='00000000-0000-4000-8000-000000000021',second='00000000-0000-4000-8000-000000000022';let next=0,revoked=[];
+ const f=fixture(()=>({sessionId:`00000000-0000-4000-8000-${String(++next).padStart(12,'0')}`,mimeType:'image/png',dataBase64:'iVBORw0KGgo='}));
+ f.backend.captureMediaPreviewConnection=()=>({status:async()=>'active',release:async()=>{}});
+ f.controller.onPreviewRevoking(id=>revoked.push(id));
+ const a=await f.controller.openHistoryImagePreview({...selection,messageId:first,fileId:'00000000-0000-4000-8000-000000000031',mimeType:'image/png'});
+ const b=await f.controller.openHistoryImagePreview({...selection,messageId:second,fileId:'00000000-0000-4000-8000-000000000032',mimeType:'image/png'});
+ assert.equal(f.controller.getState().messageId,null);
+ assert.equal(revoked.length,0);
+ f.changeContact({selectedContactId:null,scopeRevision:2,directoryPhase:'ready',contacts:[]});
+ assert.deepEqual(new Set(revoked),new Set([a.sessionId,b.sessionId]));
+ await f.controller.releasePreview(a.sessionId);await f.controller.releasePreview(b.sessionId);
+});
+test('清除期间尚未完成的聊天图片预览会在返回页面前释放',async()=>{
+ let resolveOpen,releaseCount=0;const pending=new Promise(resolve=>{resolveOpen=resolve;});
+ const f=fixture(input=>input.method==='POST'?pending:snapshot());
+ f.backend.captureMediaPreviewConnection=()=>({status:async()=>'active',release:async()=>{releaseCount++;}});
+ const opening=f.controller.openHistoryImagePreview({...selection,fileId:'00000000-0000-4000-8000-000000000041',mimeType:'image/png'});
+ await f.controller.clear(selection);
+ resolveOpen({sessionId:'00000000-0000-4000-8000-000000000042',mimeType:'image/png',dataBase64:'iVBORw0KGgo='});
+ await assert.rejects(opening,/范围已变化/);
+ assert.equal(releaseCount,1);
+});
 test('读取失败撤下旧快照，切换联系人后的迟到结果不得重新展示',async()=>{
  let fail=false,resolveRead;
  const f=fixture(()=>{if(fail)throw new Error('source_unavailable');return snapshot();});await f.controller.inspect(selection);

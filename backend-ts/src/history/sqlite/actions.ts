@@ -323,5 +323,27 @@ export const historyActions:StorageAction[]=[
    return i.contactIds.map((contactId:string)=>readCoverage(tx,i.ownerId,contactId));
   }),
  action('history.read','read',(tx,i)=>readMessages(tx,i.ownerId,i.contactId,i.limit,i.before)),
+ action('history.imageMedia','read',(tx,i)=>{
+  if(typeof i.ownerId!=='string'||!i.ownerId||typeof i.contactId!=='string'||!i.contactId||!Array.isArray(i.messageIds)
+   ||i.messageIds.length>100||i.messageIds.some((value:unknown)=>typeof value!=='string'||!/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(value))
+   ||new Set(i.messageIds).size!==i.messageIds.length)fail('history_request_invalid');
+  if(!i.messageIds.length)return [];
+  return tx.all(`WITH ${currentSourceScopeCTE} SELECT m.id message_id,mm.state media_state,a.state attempt_state,a.error_code,
+   f.id file_id,f.mime_type FROM message m
+   JOIN contact active_contact ON active_contact.owner_id=m.owner_id AND active_contact.id=m.contact_id AND active_contact.state='active'
+   JOIN owner active_owner ON active_owner.owner_id=m.owner_id AND active_owner.state='active'
+   LEFT JOIN message_media mm ON mm.owner_id=m.owner_id AND mm.contact_id=m.contact_id AND mm.message_id=m.id
+   LEFT JOIN media_extraction_attempt a ON a.owner_id=m.owner_id AND a.contact_id=m.contact_id AND a.message_id=m.id
+    AND a.attempt_no=(SELECT max(last.attempt_no) FROM media_extraction_attempt last WHERE last.owner_id=m.owner_id AND last.contact_id=m.contact_id AND last.message_id=m.id)
+   LEFT JOIN media_file f ON f.owner_id=m.owner_id AND f.contact_id=m.contact_id AND f.message_id=m.id AND f.role='image_display'
+    AND f.image_quality='original' AND f.publish_state='current' AND f.content_state='present' AND f.container_valid=1 AND f.viewable=1
+   WHERE m.owner_id=? AND m.contact_id=? AND m.kind='image' AND m.availability='available'
+    AND m.id IN (${i.messageIds.map(()=>'?').join(',')})
+    AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
+    AND EXISTS(SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
+      JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id
+      AND r.message_id=m.id AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()})
+   ORDER BY m.display_no DESC`,[i.ownerId,i.contactId,i.contactId,i.ownerId,i.contactId,...i.messageIds]);
+ }),
  action('history.readRecent','read',(tx,i)=>readRecentMessages(tx,i.ownerId,i.contactId,i.limit)),
 ];

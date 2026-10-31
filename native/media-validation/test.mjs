@@ -1,20 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, readFile, writeFile, rm, symlink} from 'node:fs/promises';
+import {mkdtemp, mkdir, open, readFile, writeFile, rm, symlink, unlink, readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
+import {constants as fileConstants} from 'node:fs';
 import {createVisualValidator} from '../../backend-ts/src/media/visual/native.ts';
 const directory=await mkdtemp(join(tmpdir(),'notalone-visual-'));
 const nativeRoot=fileURLToPath(new URL('.',import.meta.url));
 const binary=join(nativeRoot,'.build/media-validation');
 const validate=createVisualValidator(binary);
+test.after(async()=>{await rm(directory,{recursive:true,force:true});});
 const signal=()=>new AbortController().signal;
+async function decodeWxgf(file){
+ const handle=await open(file,fileConstants.O_RDONLY|fileConstants.O_NOFOLLOW);
+ try{return spawnSync(binary,['wxgf'],{encoding:null,timeout:12_000,maxBuffer:32*1024*1024+4096,stdio:['ignore','pipe','pipe',handle.fd]});}
+ finally{await handle.close();}
+}
+async function decodeUnlinkedWxgf(file){
+ const handle=await open(file,fileConstants.O_RDONLY|fileConstants.O_NOFOLLOW);
+ try{
+  await unlink(file);
+  assert.equal((await handle.stat()).nlink,0);
+  const result=spawnSync(binary,['wxgf'],{encoding:null,timeout:12_000,maxBuffer:32*1024*1024+4096,stdio:['ignore','pipe','pipe',handle.fd]});
+  assert.deepEqual(await readdir(dirname(file)),[]);
+  return result;
+ }finally{await handle.close();}
+}
 // 有界、明确的测试准备；产品不编译或自动下载资产。
 execFileSync('bash',[join(nativeRoot,'build.sh')],{stdio:'pipe'});
-execFileSync('bash',[join(nativeRoot,'build-fixtures.sh'),directory],{stdio:'pipe'});
-test.after(async()=>{await rm(directory,{recursive:true,force:true});});
+execFileSync('bash',[join(nativeRoot,'build-fixtures.sh'),directory],{stdio:'pipe',timeout:60_000});
 test('实际原生探针按内容解码PNG，不按扩展名或尺寸宣称原图',async()=>{
  const file=join(directory,'picture.media');
  await writeFile(file,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64'));
@@ -38,6 +54,38 @@ test('支持PNG JPEG BMP及完整GIF每帧，明确拒绝未支持容器',async(
  const corrupt=await readFile(join(directory,'png'));corrupt[corrupt.length-1]^=1;
  await writeFile(join(directory,'bad-crc'),corrupt);
  await assert.rejects(validate(join(directory,'bad-crc'),'image',signal()),{code:'media_image_invalid'});
+});
+test('WXGF中的HEVC原图完整解码为同尺寸PNG',async()=>{
+ const input=join(directory,'wxgf');
+ const result=await decodeWxgf(input);
+ assert.equal(result.status,0,result.stderr?.toString());
+ assert.deepEqual([...result.stdout.subarray(0,8)],[137,80,78,71,13,10,26,10]);
+ const output=join(directory,'wxgf.png');await writeFile(output,result.stdout);
+ assert.deepEqual(await validate(output,'image',signal()),{format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false});
+});
+test('WXGF可从已unlink的继承fd3解码且不创建临时文件',async()=>{
+ const scratch=join(directory,'wxgf-unlinked');await mkdir(scratch);
+ const input=join(scratch,'input');await writeFile(input,await readFile(join(directory,'wxgf')));
+ const result=await decodeUnlinkedWxgf(input);
+ assert.equal(result.status,0,result.stderr?.toString());
+ assert.deepEqual([...result.stdout.subarray(0,8)],[137,80,78,71,13,10,26,10]);
+ assert.deepEqual(await readdir(scratch),[]);
+});
+test('WXGF内嵌JPEG与PNG保留内容并转成经过校验的PNG',async()=>{
+ for(const name of ['jpeg','png']){
+  const input=join(directory,'wxgf-'+name);await writeFile(input,Buffer.concat([Buffer.from('wxgf'),await readFile(join(directory,name))]));
+  const result=await decodeWxgf(input);assert.equal(result.status,0,result.stderr?.toString());
+  const output=join(directory,'wxgf-'+name+'.png');await writeFile(output,result.stdout);
+  assert.deepEqual(await validate(output,'image',signal()),{format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false});
+ }
+});
+test('拒绝损坏或无法完整解码的WXGF，不输出部分图片',async()=>{
+ const source=await readFile(join(directory,'wxgf'));
+ for(const [name,bytes] of [['truncated',source.subarray(0,-8)],['unknown',Buffer.from('wxgfnot-an-image')],['multiframe',await readFile(join(directory,'wxgf.multiframe'))]]){
+  const input=join(directory,'wxgf-'+name);await writeFile(input,bytes);
+  const result=await decodeWxgf(input);assert.equal(result.status,1,name);assert.equal(result.stdout.length,0,name);
+  assert.match(result.stderr.toString(),/^media_(image_invalid|format_unsupported)\n$/);
+ }
 });
 test('MP4 H264及AAC实际解码全轨，拒绝HEVC、截断与外部引用',async()=>{
  for(const name of ['h264.mp4','h264-aac.mp4'])assert.deepEqual(await validate(join(directory,name),'video',signal()),{format:'mp4',mimeType:'video/mp4',containerValid:true,viewable:false,playable:true});

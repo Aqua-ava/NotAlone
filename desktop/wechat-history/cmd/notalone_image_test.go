@@ -118,7 +118,7 @@ func TestNotAloneOriginalImageProofRequiresExplicitHighDefinitionXML(t *testing.
 	if marshalErr == nil {
 		marshalErr = json.Unmarshal(proofJSON, &proofWire)
 	}
-	if err != nil || mimeType != "image/png" || proof.Kind != "wechat-cdn-big-hd-exact-content-v3" ||
+	if err != nil || mimeType != "image/png" || proof.Kind != "wechat-cdn-big-hd-exact-content-v4" ||
 		proof.HDLength != int64(len(data)) || marshalErr != nil || proofWire["hdWidth"] != float64(3) || proofWire["hdHeight"] != float64(2) ||
 		proofWire["contentWidth"] != float64(3) || proofWire["contentHeight"] != float64(2) ||
 		proof.VerifiedBytes != int64(len(data)) || proof.VerifiedSHA256 != fmt.Sprintf("%x", sha256.Sum256(data)) {
@@ -353,7 +353,7 @@ func TestNotAloneImageOpenBindsCacheKeyAndAliasesToDecodedOriginal(t *testing.T)
 		t.Fatal(err)
 	}
 	ids, _ := proof["matchingResourceIds"].([]any)
-	if opened.QualityProof.Kind != "wechat-cdn-big-hd-exact-content-v3" || opened.ResourceID != "10" ||
+	if opened.QualityProof.Kind != "wechat-cdn-big-hd-exact-content-v4" || opened.ResourceID != "10" ||
 		opened.ResourceTypeRaw != 65537 || opened.SourceEnvelope != "wechat_dat" || opened.Envelope != "plain" ||
 		proof["resourceInfoId"] != "5" || proof["resourceSize"] != float64(len(storage)) ||
 		proof["verifiedBytes"] != float64(len(imageBytes)) || proof["hdLength"] != float64(len(imageBytes)) ||
@@ -435,7 +435,7 @@ func TestNotAloneImageOpenDecodesBoundedZstdXMLAndStreamsOriginal(t *testing.T) 
 		t.Fatalf("zstd-compressed selected message XML should open: %v", err)
 	}
 	opened := value.(notaloneImageOpenResponse)
-	if opened.QualityProof.Kind != "wechat-cdn-big-hd-exact-content-v3" || opened.Quality != "original" ||
+	if opened.QualityProof.Kind != "wechat-cdn-big-hd-exact-content-v4" || opened.Quality != "original" ||
 		opened.QualityProof.HDWidth != nil || opened.QualityProof.HDHeight != nil ||
 		opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
 		t.Fatalf("unexpected v2 image proof: %#v", opened.QualityProof)
@@ -640,5 +640,40 @@ func TestNotAloneImageOpenRejectsCrossRecordIdentityAndUnverifiedThumbnail(t *te
 	}
 	if err == nil {
 		t.Fatal("same-sized ordinary display image must not be marked original")
+	}
+}
+
+func TestNotAloneImageOpenConvertsVerifiedWXGFWithoutConfusingSourceDigest(t *testing.T) {
+	png := notaloneTinyPNG(t, 3, 2)
+	source := append([]byte("wxgf"), png...)
+	fixture := newNotaloneImageProtocolFixtureWithImage(t, notaloneImageXML(source, len(source), 3, 2, true), source)
+	helper := os.Getenv("NOTALONE_TEST_IMAGE_DECODER")
+	bytes, err := os.ReadFile(helper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NOTALONE_IMAGE_DECODER", helper)
+	t.Setenv("NOTALONE_IMAGE_DECODER_SHA256", fmt.Sprintf("%x", sha256.Sum256(bytes)))
+	value, err := fixture.history.handle(context.Background(), fixture.request)
+	if err != nil {
+		t.Fatalf("原图WXGF应经真实解码器保存可查看结果: %v", err)
+	}
+	opened := value.(notaloneImageOpenResponse)
+	raw, _ := json.Marshal(opened.QualityProof)
+	var proof map[string]any
+	_ = json.Unmarshal(raw, &proof)
+	if proof["kind"] != "wechat-cdn-big-hd-exact-content-v4" || proof["conversion"] != "wxgf-to-png-v1" || proof["sourceSha256"] != fmt.Sprintf("%x", sha256.Sum256(source)) || proof["verifiedSha256"] == proof["sourceSha256"] || opened.MimeType != "image/png" || opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
+		t.Fatalf("转换证明须分别保留源与输出: %#v", proof)
+	}
+}
+
+func TestNotAloneImageOpenMarksOnlyThumbnailWithoutReadingItsBytes(t *testing.T) {
+	source := notaloneTinyPNG(t, 3, 2)
+	fixture := newNotaloneImageProtocolFixtureWithImage(t, notaloneImageXML(source, len(source), 3, 2, true), source)
+	if err := os.Rename(fixture.path, strings.TrimSuffix(fixture.path, ".dat")+"_t.dat"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_thumbnail_only" {
+		t.Fatalf("仅缩略图必须明确分类而不保存: %v", err)
 	}
 }

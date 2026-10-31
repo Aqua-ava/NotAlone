@@ -9,11 +9,13 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/xml"
 	"hash"
 	"image"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -34,7 +36,7 @@ const (
 	notaloneImageMaxPixelCount       = 100_000_000
 	notaloneImagePackedInfoByteLimit = 4096
 	notaloneImageResourceTableID     = "wechat-message-resource-v1"
-	notaloneImageQualityProofKind    = "wechat-cdn-big-hd-exact-content-v3"
+	notaloneImageQualityProofKind    = "wechat-cdn-big-hd-exact-content-v4"
 	notaloneImageXMLZstdContentType  = int64(4)
 )
 
@@ -77,6 +79,8 @@ type notaloneImageQualityProof struct {
 	VerifiedSHA256      string   `json:"verifiedSha256"`
 	ContentWidth        int      `json:"contentWidth"`
 	ContentHeight       int      `json:"contentHeight"`
+	SourceSHA256        string   `json:"sourceSha256"`
+	Conversion          string   `json:"conversion"`
 }
 
 type notaloneImageOpenResponse struct {
@@ -247,8 +251,7 @@ func notaloneParseOriginalImageXML(raw []byte) (notaloneOriginalImageMetadata, e
 	}
 	img := parsed.Images[0]
 	md5Value := strings.ToLower(strings.TrimSpace(img.MD5))
-	if !md5LikeRe.MatchString(md5Value) || img.HDLength <= 0 || img.HDLength > notaloneImageMaxBytes ||
-		strings.TrimSpace(img.CdnBigURL) == "" || (img.CdnHDWidth == nil) != (img.CdnHDHeight == nil) {
+	if !md5LikeRe.MatchString(md5Value) || img.HDLength < 0 || img.HDLength > notaloneImageMaxBytes || (img.CdnHDWidth == nil) != (img.CdnHDHeight == nil) {
 		return result, notaloneFailure("history_image_metadata_invalid")
 	}
 	var hdWidth, hdHeight *int
@@ -265,7 +268,7 @@ func notaloneParseOriginalImageXML(raw []byte) (notaloneOriginalImageMetadata, e
 		}
 	}
 	result = notaloneOriginalImageMetadata{MD5: md5Value, Length: img.Length, HDLength: img.HDLength,
-		HDWidth: hdWidth, HDHeight: hdHeight, BigURLFound: true}
+		HDWidth: hdWidth, HDHeight: hdHeight, BigURLFound: strings.TrimSpace(img.CdnBigURL) != ""}
 	return result, nil
 }
 
@@ -411,11 +414,15 @@ func notaloneImageDimensions(data []byte) (int, int, error) {
 }
 
 func notaloneVerifyOriginalImage(metadata notaloneOriginalImageMetadata, data []byte) (notaloneImageQualityProof, string, error) {
+	return notaloneVerifyOriginalImageContent(metadata, data, data, "none")
+}
+
+func notaloneVerifyOriginalImageContent(metadata notaloneOriginalImageMetadata, source, data []byte, conversion string) (notaloneImageQualityProof, string, error) {
 	proof := notaloneImageQualityProof{}
 	fail := func() (notaloneImageQualityProof, string, error) {
 		return proof, "", notaloneFailure("history_image_quality_unverified")
 	}
-	if !metadata.BigURLFound || !md5LikeRe.MatchString(metadata.MD5) || metadata.HDLength <= 0 || int64(len(data)) != metadata.HDLength ||
+	if !metadata.BigURLFound || !md5LikeRe.MatchString(metadata.MD5) || metadata.HDLength <= 0 || int64(len(source)) != metadata.HDLength ||
 		(metadata.HDWidth == nil) != (metadata.HDHeight == nil) || len(data) == 0 || int64(len(data)) > notaloneImageMaxBytes {
 		return fail()
 	}
@@ -432,14 +439,16 @@ func notaloneVerifyOriginalImage(metadata notaloneOriginalImageMetadata, data []
 		(width != *metadata.HDWidth || height != *metadata.HDHeight) {
 		return fail()
 	}
-	md5Sum := md5.Sum(data)
+	md5Sum := md5.Sum(source)
 	if !strings.EqualFold(hex.EncodeToString(md5Sum[:]), metadata.MD5) {
 		return fail()
 	}
 	sha := sha256.Sum256(data)
+	sourceSHA := sha256.Sum256(source)
 	proof = notaloneImageQualityProof{Kind: notaloneImageQualityProofKind, MessageMD5: metadata.MD5, HDLength: metadata.HDLength,
 		HDWidth: metadata.HDWidth, HDHeight: metadata.HDHeight, BigImageURLFound: true, ResourceSize: metadata.HDLength,
-		VerifiedBytes: int64(len(data)), VerifiedSHA256: hex.EncodeToString(sha[:]), ContentWidth: width, ContentHeight: height}
+		VerifiedBytes: int64(len(data)), VerifiedSHA256: hex.EncodeToString(sha[:]), ContentWidth: width, ContentHeight: height,
+		SourceSHA256: hex.EncodeToString(sourceSHA[:]), Conversion: conversion}
 	return proof, mimeType, nil
 }
 
@@ -481,6 +490,11 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 			_ = resourceGuard.Close()
 		}
 	}()
+	if request.ImageKeySupplied && h.imageRuntimeConfig == nil {
+		if err = h.acceptImageRuntimeKey(); err != nil {
+			return failed, err
+		}
+	}
 	imageData, sourceEnvelope, imageGuard, proof, mimeType, err := h.readOriginalImage(ctx, message, metadata, &resource)
 	if err != nil {
 		return failed, err
@@ -726,7 +740,7 @@ func (h *notaloneHistorySession) findOriginalImageResource(ctx context.Context, 
 	for _, row := range detailRows {
 		id, rawType := rowInt64(row, "resource_id"), rowInt64(row, "resource_type_raw")
 		size := rowInt64(row, "resource_size")
-		if id <= 0 || id <= previousID || rawType&0xffff != 1 || size <= 0 || size > notaloneImageSourceByteLimit {
+		if id <= 0 || id <= previousID || rawType&0xffff != 1 || size < 0 || size > notaloneImageSourceByteLimit {
 			return notaloneImageResourceRecord{}, nil, notaloneFailure("history_image_association_unverified")
 		}
 		previousID = id
@@ -772,6 +786,7 @@ func (h *notaloneHistorySession) readOriginalImage(ctx context.Context, message 
 	}
 	var verified []verifiedCandidate
 	var foundCandidate, foundAssociation, associationUnverified, qualityUnverified, keyUnavailable bool
+	var decoderFailure string
 	for _, suffix := range []string{".dat", "_h.dat"} {
 		if err := ctx.Err(); err != nil {
 			for _, candidate := range verified {
@@ -825,7 +840,11 @@ func (h *notaloneHistorySession) readOriginalImage(ctx context.Context, message 
 			_ = guard.Close()
 			continue
 		}
-		decoded, envelope, err := notaloneDecodeLocalImage(data, h.server.cfg)
+		imageConfig := h.server.cfg
+		if h.imageRuntimeConfig != nil {
+			imageConfig = h.imageRuntimeConfig
+		}
+		decoded, envelope, err := notaloneDecodeLocalImage(data, imageConfig)
 		if err != nil {
 			_ = guard.Close()
 			if err.Error() == "history_image_key_unavailable" {
@@ -835,7 +854,13 @@ func (h *notaloneHistorySession) readOriginalImage(ctx context.Context, message 
 			}
 			continue
 		}
-		proof, mimeType, err := notaloneVerifyOriginalImage(metadata, decoded)
+		viewable, conversion, decodeErr := notaloneDecodeOriginalContent(ctx, metadata, decoded)
+		if decodeErr != nil {
+			_ = guard.Close()
+			decoderFailure = decodeErr.Error()
+			continue
+		}
+		proof, mimeType, err := notaloneVerifyOriginalImageContent(metadata, decoded, viewable, conversion)
 		if err != nil {
 			_ = guard.Close()
 			qualityUnverified = true
@@ -854,7 +879,7 @@ func (h *notaloneHistorySession) readOriginalImage(ctx context.Context, message 
 			proof.MatchingResourceIDs = append(proof.MatchingResourceIDs, strconv.FormatInt(detail.ID, 10))
 		}
 		proof.ResourceSize = int64(len(data))
-		verified = append(verified, verifiedCandidate{data: decoded, envelope: envelope, guard: guard, proof: proof,
+		verified = append(verified, verifiedCandidate{data: viewable, envelope: envelope, guard: guard, proof: proof,
 			mimeType: mimeType, record: matching[0], matching: matching})
 	}
 	if len(verified) > 1 {
@@ -878,6 +903,9 @@ func (h *notaloneHistorySession) readOriginalImage(ctx context.Context, message 
 		resource.MatchingDetails = selected.matching
 		return selected.data, selected.envelope, selected.guard, selected.proof, selected.mimeType, nil
 	}
+	if decoderFailure != "" {
+		return nil, "", nil, emptyProof, "", notaloneFailure(decoderFailure)
+	}
 	if keyUnavailable {
 		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_key_unavailable")
 	}
@@ -889,6 +917,9 @@ func (h *notaloneHistorySession) readOriginalImage(ctx context.Context, message 
 	}
 	if foundCandidate {
 		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_quality_unverified")
+	}
+	if h.hasOnlyThumbnail(baseDir, resource) {
+		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_thumbnail_only")
 	}
 	return nil, "", nil, emptyProof, "", notaloneFailure("history_image_local_file_missing")
 }
@@ -968,7 +999,7 @@ func notaloneDecodeLocalImage(data []byte, cfg *config.Config) ([]byte, string, 
 	if len(data) == 0 || int64(len(data)) > notaloneImageSourceByteLimit {
 		return nil, "", notaloneFailure("history_image_quality_unverified")
 	}
-	if mime := imageMIMEForExt(imageExtForData(data)); mime != "" {
+	if mime := imageMIMEForExt(imageExtForData(data)); mime != "" || bytes.HasPrefix(data, []byte("wxgf")) {
 		return data, "plain", nil
 	}
 	if bytes.HasPrefix(data, wechatV4ImageHeader1) || bytes.HasPrefix(data, wechatV4ImageHeader2) {
@@ -985,7 +1016,7 @@ func notaloneDecodeLocalImage(data []byte, cfg *config.Config) ([]byte, string, 
 			}
 		}
 		decoded, err := decodeWechatV4ImageData(data, aesKey, byte(*cfg.ImageXORKey))
-		if err != nil || imageMIMEForExt(imageExtForData(decoded)) == "" {
+		if err != nil || imageMIMEForExt(imageExtForData(decoded)) == "" && !bytes.HasPrefix(decoded, []byte("wxgf")) {
 			return nil, "", notaloneFailure("history_image_quality_unverified")
 		}
 		return decoded, "wechat_dat", nil
@@ -996,6 +1027,149 @@ func notaloneDecodeLocalImage(data []byte, cfg *config.Config) ([]byte, string, 
 		}
 	}
 	return nil, "", notaloneFailure("history_image_quality_unverified")
+}
+
+// 密钥走独立继承管道，绝不经普通 JSON 回执、日志、命令行或配置写入。
+func (h *notaloneHistorySession) acceptImageRuntimeKey() error {
+	fail := func() error { return notaloneFailure("history_image_key_unavailable") }
+	if os.Getenv("NOTALONE_IMAGE_KEY_FD") != "3" || h.server.cfg == nil || h.selected == nil {
+		return fail()
+	}
+	file := os.NewFile(3, "notalone-image-key")
+	if file == nil {
+		return fail()
+	}
+	defer file.Close()
+	_ = file.SetReadDeadline(time.Now().Add(2 * time.Second))
+	data, err := io.ReadAll(io.LimitReader(file, 4097))
+	if err != nil || len(data) == 0 || len(data) > 4096 {
+		return fail()
+	}
+	defer func() {
+		for i := range data {
+			data[i] = 0
+		}
+	}()
+	var supplied struct {
+		Account    string `json:"accountKey"`
+		RootSHA256 string `json:"rootSha256"`
+		AESKey     string `json:"aesKey"`
+		XORKey     *int   `json:"xorKey"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&supplied) != nil {
+		return fail()
+	}
+	var extra any
+	if decoder.Decode(&extra) != io.EOF {
+		return fail()
+	}
+	root, err := filepath.EvalSymlinks(h.server.cfg.DBRoot)
+	rootSHA := sha256.Sum256([]byte(root))
+	if err != nil || supplied.Account != h.selected.Account || supplied.Account != h.server.cfg.Wxid || supplied.RootSHA256 != hex.EncodeToString(rootSHA[:]) || supplied.XORKey == nil || *supplied.XORKey < 0 || *supplied.XORKey > 255 {
+		return fail()
+	}
+	key, err := base64.StdEncoding.Strict().DecodeString(supplied.AESKey)
+	if err != nil || len(key) != 16 {
+		return fail()
+	}
+	defer func() {
+		for i := range key {
+			key[i] = 0
+		}
+	}()
+	copyConfig := *h.server.cfg
+	copyConfig.ImageKey = hex.EncodeToString(key)
+	xor := *supplied.XORKey
+	copyConfig.ImageXORKey = &xor
+	h.imageRuntimeConfig = &copyConfig
+	return nil
+}
+
+// 缩略图仅检查已绑定缓存键的存在性和资源长度，不打开或返回其内容。
+func (h *notaloneHistorySession) hasOnlyThumbnail(base string, resource *notaloneImageResourceRecord) bool {
+	for _, suffix := range []string{".dat", "_h.dat"} {
+		if _, err := os.Lstat(filepath.Join(base, resource.CacheMD5+suffix)); !os.IsNotExist(err) {
+			return false
+		}
+	}
+	name := filepath.Join(base, resource.CacheMD5+"_t.dat")
+	resolved, err := filepath.EvalSymlinks(name)
+	baseResolved, baseErr := filepath.EvalSymlinks(base)
+	if err != nil || baseErr != nil || resolved != filepath.Join(baseResolved, resource.CacheMD5+"_t.dat") {
+		return false
+	}
+	info, err := os.Lstat(name)
+	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > notaloneImageSourceByteLimit {
+		return false
+	}
+	for _, detail := range resource.Details {
+		if detail.Size == info.Size() && detail.PackedInfoValid && (len(detail.PackedMD5s) == 0 || len(detail.PackedMD5s) == 1 && detail.PackedMD5s[0] == resource.CacheMD5) {
+			return true
+		}
+	}
+	return false
+}
+
+type notaloneImageOutput struct {
+	bytes.Buffer
+	limit int
+}
+
+func (b *notaloneImageOutput) Write(data []byte) (int, error) {
+	if len(data) > b.limit-b.Len() {
+		return 0, notaloneFailure("history_image_too_large")
+	}
+	return b.Buffer.Write(data)
+}
+
+func notaloneDecodeOriginalContent(ctx context.Context, metadata notaloneOriginalImageMetadata, source []byte) ([]byte, string, error) {
+	if !bytes.HasPrefix(source, []byte("wxgf")) {
+		return source, "none", nil
+	}
+	sum := md5.Sum(source)
+	if !metadata.BigURLFound || metadata.HDLength != int64(len(source)) || metadata.MD5 != hex.EncodeToString(sum[:]) {
+		return nil, "", notaloneFailure("history_image_quality_unverified")
+	}
+	helper, expected := os.Getenv("NOTALONE_IMAGE_DECODER"), os.Getenv("NOTALONE_IMAGE_DECODER_SHA256")
+	info, err := os.Lstat(helper)
+	if err != nil || !filepath.IsAbs(helper) || filepath.Clean(helper) != helper || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 || info.Mode().Perm()&0111 == 0 || info.Size() > 32<<20 || !notaloneImageDigestPattern.MatchString(expected) {
+		return nil, "", notaloneFailure("history_image_decoder_unavailable")
+	}
+	binary, err := os.ReadFile(helper)
+	if err != nil {
+		return nil, "", notaloneFailure("history_image_decoder_unavailable")
+	}
+	digest := sha256.Sum256(binary)
+	if hex.EncodeToString(digest[:]) != expected {
+		return nil, "", notaloneFailure("history_image_decoder_unavailable")
+	}
+	file, err := os.CreateTemp("", "notalone-image-decode-*")
+	if err != nil {
+		return nil, "", notaloneFailure("history_image_read_failed")
+	}
+	defer file.Close()
+	if os.Remove(file.Name()) != nil {
+		return nil, "", notaloneFailure("history_image_read_failed")
+	}
+	if _, err = file.Write(source); err != nil {
+		return nil, "", notaloneFailure("history_image_read_failed")
+	}
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return nil, "", notaloneFailure("history_image_read_failed")
+	}
+	bounded, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	command := exec.CommandContext(bounded, helper, "wxgf")
+	command.ExtraFiles = []*os.File{file}
+	command.Env = []string{"PATH=/usr/bin:/bin"}
+	output := &notaloneImageOutput{limit: notaloneImageMaxBytes}
+	command.Stdout = output
+	if command.Run() != nil || bounded.Err() != nil || output.Len() == 0 || !bytes.HasPrefix(output.Bytes(), []byte{137, 80, 78, 71, 13, 10, 26, 10}) {
+		return nil, "", notaloneFailure("history_image_format_unsupported")
+	}
+	return output.Bytes(), "wxgf-to-png-v1", nil
 }
 
 func notaloneConfiguredImageAESKey(value string) []byte {

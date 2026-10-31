@@ -33,6 +33,7 @@ export interface MessageMediaBridge {
   retry(selection: MessageMediaSelection): Promise<void>;
   clear(selection: MessageMediaSelection): Promise<void>;
   openPreview(request: MessageMediaSelection & { fileId: string }): Promise<MediaPreview>;
+  openHistoryImagePreview(request: MessageMediaSelection & { fileId: string; mimeType: string }): Promise<MediaPreview>;
   // 页面先停止播放、移除src并释放Blob，再调用此操作作为撤下确认。
   releasePreview(sessionId: string): Promise<void>;
   onStateChanged(listener: (state: MessageMediaState) => void): () => void;

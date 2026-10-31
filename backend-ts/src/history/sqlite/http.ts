@@ -1,13 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
-import type { HistoryCoverage, HistoryRead, StoredMessage } from './contracts.ts';
+import type { HistoryCoverage, HistoryImageMedia, HistoryRead, StoredMessage } from './contracts.ts';
 import type { FirstHistoryCoordinatorState } from './coordinator.ts';
 import type { IncrementalHistoryCoordinatorState } from './incremental-coordinator.ts';
 import { displayMessageType, messagePlaceholder } from './message-types.ts';
 
 interface HistoryHttpService {
   read(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
+  imageMedia(contactId: string, messageIds: readonly string[]): Promise<ReadonlyMap<string, HistoryImageMedia>>;
   coverage(contactId: string): Promise<HistoryCoverage>;
   synchronize(contactId: string, signal?: AbortSignal): Promise<HistoryCoverage>;
 }
@@ -20,15 +21,22 @@ function isoTime(message: StoredMessage): string | null {
   return Number.isFinite(date.valueOf()) ? date.toISOString() : null;
 }
 /** 展示位置只服务稳定分页；未知顺序不得由时间或位置补造为已核验。 */
-export function projectHistoryMessages(read: HistoryRead, limit: number) {
+export function projectHistoryMessages(read: HistoryRead, limit: number, imageMedia?: ReadonlyMap<string, HistoryImageMedia>) {
   const selected = read.messages.slice(0, limit);
   return {
-    messages: selected.map(message => ({
-      message_id: message.id, speaker: message.sender === 'owner' ? 'user' : 'contact',
-      message_type: displayMessageType(message), text: message.kind === 'text' ? message.text : null,
-      media_placeholder: messagePlaceholder(displayMessageType(message)), occurred_at: isoTime(message), quoted: null,
-      ordering: message.ordering, display_position: message.displayPosition, source_record_ids: message.sourceRecordIds,
-    })),
+    messages: selected.map(message => {
+      const image = imageMedia && message.kind === 'image' ? imageMedia.get(message.id) ?? {state:'pending' as const,fileId:null,mimeType:null} : null;
+      const safeImage = image?.state === 'original' && uuid.test(image.fileId??'') && image.mimeType && /^image\/[a-z0-9.+-]{1,64}$/.test(image.mimeType)
+        ? image : image ? {...image,fileId:null,mimeType:null} : null;
+      return {
+        message_id: message.id, speaker: message.sender === 'owner' ? 'user' : 'contact',
+        message_type: displayMessageType(message), text: message.kind === 'text' ? message.text : null,
+        media_placeholder: messagePlaceholder(displayMessageType(message)), occurred_at: isoTime(message), quoted: null,
+        ordering: message.ordering, display_position: message.displayPosition, source_record_ids: message.sourceRecordIds,
+        ...(safeImage ? {image_media:{state:safeImage.state,file_id:safeImage.fileId,mime_type:safeImage.mimeType,
+          ...('errorCode' in safeImage&&safeImage.errorCode?{error_code:safeImage.errorCode}:{})}} : {}),
+      };
+    }),
     next_cursor: read.messages.length > limit ? selected.at(-1)!.id : null,
     reply_eligibility: read.replyEligibility,
   };
@@ -118,7 +126,7 @@ function send(res: ServerResponse, status: number, value: unknown): void {
 }
 /** 全局查询门只放行现有消息分页形状，具体值仍由本处理器验证。 */
 export function historyQueryAllowed(method:string|undefined,url:URL):boolean {
- if(method!=='GET'||!/^\/api\/contacts\/[a-f0-9-]{36}\/messages$/.test(url.pathname))return false;
+ if(method!=='GET'||!/^\/api\/contacts\/[a-f0-9-]{36}\/(messages|history-messages)$/.test(url.pathname))return false;
  return [...url.searchParams.keys()].every(key=>['limit','before'].includes(key))&&url.searchParams.getAll('limit').length<=1&&url.searchParams.getAll('before').length<=1;
 }
 /** 宿主先做唯一Bearer/无Origin认证；所有范围由已绑定的服务owner确定。 */
@@ -127,7 +135,7 @@ export class SqliteHistoryHttp {
   constructor(service: HistoryHttpService) { this.service = service; }
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url ?? '/', 'http://localhost');
-    const route = /^\/api\/contacts\/([a-f0-9-]{36})\/(messages|history|history\/sync)$/.exec(url.pathname);
+    const route = /^\/api\/contacts\/([a-f0-9-]{36})\/(messages|history-messages|history|history\/sync)$/.exec(url.pathname);
     if (!route) return false;
     if (!uuid.test(route[1]!)) { send(res, 400, { error: 'history_request_invalid' }); return true; }
     const contactId = route[1]!.toLowerCase();
@@ -139,7 +147,7 @@ export class SqliteHistoryHttp {
     const abort = () => controller.abort(); req.once('aborted', abort);
     try {
       let value: unknown;
-      if (operation === 'messages') {
+      if (operation === 'messages'||operation==='history-messages') {
         const parameters = url.searchParams;
         if ([...parameters.keys()].some(key => !['limit', 'before'].includes(key))
           || parameters.getAll('limit').length > 1 || parameters.getAll('before').length > 1) throw new StorageFailure('history_request_invalid');
@@ -147,7 +155,12 @@ export class SqliteHistoryHttp {
         const before = parameters.get('before');
         if (!/^[1-9][0-9]{0,2}$/.test(rawLimit) || Number(rawLimit) > 100 || before !== null && !uuid.test(before)) throw new StorageFailure('history_request_invalid');
         const limit = Number(rawLimit);
-        value = projectHistoryMessages(await this.service.read(contactId, { limit: limit + 1, ...(before ? { before: before.toLowerCase() } : {}) }), limit);
+        const read = await this.service.read(contactId, { limit: limit + 1, ...(before ? { before: before.toLowerCase() } : {}) });
+        if(operation==='history-messages'){
+          const imageIds = read.messages.slice(0,limit).filter(message=>message.kind==='image').map(message=>message.id);
+          const imageMedia = imageIds.length ? await this.service.imageMedia(contactId,imageIds) : new Map();
+          value = projectHistoryMessages(read, limit, imageMedia);
+        } else value = projectHistoryMessages(read,limit);
       } else {
         if (url.search) throw new StorageFailure('history_request_invalid');
         if (operation === 'history') value = await this.service.coverage(contactId);

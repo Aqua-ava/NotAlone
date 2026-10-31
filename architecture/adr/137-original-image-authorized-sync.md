@@ -1,5 +1,7 @@
 # ADR-137：授权会话同步中的原图保存
 
+> 后续修订：[ADR-138](138-chat-image-original-extraction-and-placeholder.md)将用户明确要求的当前账号图片密钥准备及 WXGF 解码接回聊天图片提取，并规定占位替换；下文“不自动探测密钥”按其限定范围修订。此前独立开发取图已有成功记录，本页旧实机失败仅描述当时的同步入口。
+
 > 状态：已采纳（2026-10-31）。真实复查发现压缩元数据、缓存标识及封装长度处理缺陷，已修复并升级开发组件；285 个既有授权会话身份保持一致。当前账户的真实图片在解密处返回 `needs_image_key`，尚无真实原图成功保存的证据。最新范围见[解码修复验收](../../docs/verification/original-image-decoding-fix-20261031.md)，早期记录见[实施记录](../../docs/verification/original-image-authorized-sync-20261031.md)。
 > 局部替代：[ADR-125](125-image-video-byte-decoding-and-validation.md)中授权会话同步图片仍须逐条手动触发、允许保存缩略图并主动补提原图的条款。ADR-125关于唯一消息—资源关联、读取授权、应用受管文件、删除及迟到结果拒绝的边界继续适用；视频及语音的单条媒体操作不变。
 

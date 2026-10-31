@@ -185,9 +185,9 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
    AND NOT EXISTS(SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id)
    AND NOT EXISTS(SELECT 1 FROM history_guard_lease l JOIN database_instance d ON d.slot=1 WHERE l.owner_id=m.owner_id AND l.contact_id=m.contact_id AND (l.state<>'active' OR l.runtime_id<>d.runtime_id))
    AND NOT EXISTS(SELECT 1 FROM media_file f WHERE f.owner_id=m.owner_id AND f.message_id=m.id AND f.publish_state='current' AND f.content_state='present' AND f.image_quality='original')
-   AND NOT EXISTS(SELECT 1 FROM media_extraction_attempt a WHERE a.owner_id=m.owner_id AND a.message_id=m.id AND a.request_key='image_sync_v2_'||m.id||'_'||coalesce(h.media_generation,0))
+   AND NOT EXISTS(SELECT 1 FROM media_extraction_attempt a WHERE a.owner_id=m.owner_id AND a.message_id=m.id AND a.request_key='image_sync_v3_'||m.id||'_'||coalesce(h.media_generation,0))
    ORDER BY m.display_no LIMIT 64`,[ownerId,contactId,BigInt(i.after)]);
-  return rows.map(row=>({messageId:String(row.id),displayNo:String(row.display_no),requestKey:`image_sync_v2_${row.id}_${row.media_generation}`}));
+  return rows.map(row=>({messageId:String(row.id),displayNo:String(row.display_no),requestKey:`image_sync_v3_${row.id}_${row.media_generation}`}));
  }),
  action('currentFiles','read',(tx,i)=>tx.all("SELECT contact_id,message_id,id FROM media_file WHERE owner_id=? AND publish_state='current' AND content_state='present'",[id(i.ownerId)]).map(f=>({contactId:String(f.contact_id),messageId:String(f.message_id),fileId:String(f.id)}))),
  action('fileUnavailable','write',(tx,i)=>{

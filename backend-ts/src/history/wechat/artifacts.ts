@@ -41,7 +41,8 @@ async function readNarrowWechatManifest(executable: string): Promise<{options:Na
       const row = manifest as Record<string, unknown>;
       if (typeof row.cliSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.cliSha256)
         || typeof row.wcdbSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.wcdbSha256)) return reject();
-      return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256 },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof};
+      const imageKeyChannel=row.originalImageProtocol==='wechat-original-image-v1'&&row.originalImageQualityProof==='wechat-cdn-big-hd-exact-content-v4';
+      return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256,...(imageKeyChannel?{imageKeyChannel:true as const}:{}) },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof};
     } finally { await handle.close(); }
   } catch (error) {
     if (error instanceof StorageFailure && error.code === 'history_artifact_manifest_missing') throw error;
@@ -57,6 +58,14 @@ export async function loadNarrowWechatOptions(executable:string):Promise<NarrowW
 export async function supportsWechatOriginalImages(executable?:string):Promise<boolean>{
  if(!executable)return false;
  try{const manifest=await readNarrowWechatManifest(executable);return manifest.originalImageProtocol==='wechat-original-image-v1'
-  &&manifest.originalImageQualityProof==='wechat-cdn-big-hd-exact-content-v3';}
+  &&manifest.originalImageQualityProof==='wechat-cdn-big-hd-exact-content-v4';}
+ catch{return false;}
+}
+
+/** fd3只为明确声明v4的真实图片制品启用，旧图片证明和历史客户端不创建密钥通道。 */
+export async function supportsWechatImageKeyChannel(executable?:string):Promise<boolean>{
+ if(!executable)return false;
+ try{const manifest=await readNarrowWechatManifest(executable);return manifest.originalImageProtocol==='wechat-original-image-v1'
+  &&manifest.originalImageQualityProof==='wechat-cdn-big-hd-exact-content-v4';}
  catch{return false;}
 }

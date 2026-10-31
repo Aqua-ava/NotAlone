@@ -1,16 +1,38 @@
-import type { ReplyMessagesState } from './reply-bridge';
-
 export interface ContactHistoryRequest {
   contactId: string;
   scopeRevision: number;
   older: boolean;
 }
 
+export interface ContactHistoryImageMedia {
+  state: 'pending' | 'original' | 'thumbnail_only' | 'unavailable' | 'failed' | 'cleared';
+  fileId: string | null;
+  mimeType: string | null;
+  errorCode?: string | null;
+}
+export interface ContactHistoryMessage {
+  messageId: string;
+  speaker: 'user' | 'contact' | 'system';
+  messageType: string;
+  text: string | null;
+  mediaPlaceholder: string | null;
+  occurredAt: string | null;
+  ordering?: 'verified' | 'unknown';
+  displayPosition?: string;
+  quoted: { text: string; targetMessageId: string | null } | null;
+  imageMedia?: ContactHistoryImageMedia;
+}
+export interface ContactHistoryMessagesState {
+  phase: 'idle' | 'loading' | 'ready' | 'failed';
+  items: ContactHistoryMessage[];
+  nextCursor: string | null;
+}
+
 export interface ContactHistoryState {
   revision: number;
   contactId: string | null;
   scopeRevision: number;
-  messages: ReplyMessagesState;
+  messages: ContactHistoryMessagesState;
   error: string | null;
 }
 

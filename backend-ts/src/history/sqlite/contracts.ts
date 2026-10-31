@@ -97,6 +97,10 @@ export interface HistoryRead {
   messages: StoredMessage[]; coverage: HistoryCoverage;
   replyEligibility: 'ready' | 'history_syncing' | 'history_incomplete';
 }
+export type HistoryImageMediaState = 'pending' | 'original' | 'thumbnail_only' | 'unavailable' | 'failed' | 'cleared';
+export interface HistoryImageMedia {
+  state: HistoryImageMediaState; fileId: string | null; mimeType: string | null; errorCode?: string | null;
+}
 /** 仅供受信任派生服务固定实际来源；隔离记录不从此入口流出。 */
 export interface HistorySource {
   recordId: string; contactId: string; messageId: string; captureId: string; goalId: string;

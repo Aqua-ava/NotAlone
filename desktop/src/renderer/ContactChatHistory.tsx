@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { ContactSessionView } from './contact-session';
 import type { ContactHistoryState } from '../shared/contact-history-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
+import { HistoryImageBubble } from './HistoryImageBubble';
 
 const initialHistory: ContactHistoryState = { revision: -1, contactId: null, scopeRevision: 0,
   messages: { phase: 'idle', items: [], nextCursor: null }, error: null };
@@ -70,7 +71,9 @@ export function ContactChatHistory({ session, settings }: { session: ContactSess
               {message.occurredAt ? <time dateTime={message.occurredAt}>{new Date(message.occurredAt).toLocaleString('zh-CN')}</time> : <span>时间未知</span>}</div>
             <div className="contact-chat-bubble">
               {message.quoted && <blockquote aria-label="引用内容">{message.quoted.text}</blockquote>}
-              <p>{message.text ?? message.mediaPlaceholder ?? '无文字内容'}</p>
+              {message.messageType === 'image' ? <HistoryImageBubble media={window.notalone.media}
+                imageMedia={message.imageMedia} selection={{ contactId: contactId!, messageId: message.messageId, scopeRevision }} />
+                : <p>{message.text ?? message.mediaPlaceholder ?? '无文字内容'}</p>}
             </div>
           </li>)}
         </ol>

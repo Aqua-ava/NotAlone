@@ -3,6 +3,7 @@ import ImageIO
 import CoreGraphics
 import AVFoundation
 import CoreMedia
+import VideoToolbox
 import Darwin
 
 struct Failure: Error { let code: String; init(_ code: String) {self.code=code} }
@@ -11,9 +12,10 @@ func emit(_ object: [String:Any], status: Int32=0) -> Never {
     exit(status)
 }
 let maxBytes=32*1024*1024
-func inputData() throws -> Data {
+func inputData(allowUnlinked: Bool = false) throws -> Data {
     var info=stat()
-    guard fstat(3,&info)==0, (info.st_mode&S_IFMT)==S_IFREG, info.st_nlink==1, info.st_size>0 else {throw Failure("media_image_invalid")}
+    guard fstat(3,&info)==0, (info.st_mode&S_IFMT)==S_IFREG,
+          info.st_nlink==1 || (allowUnlinked && info.st_nlink==0), info.st_size>0 else {throw Failure("media_image_invalid")}
     guard info.st_size<=maxBytes else {throw Failure("media_resource_too_large")}
     let file=FileHandle(fileDescriptor:3,closeOnDealloc:false)
     var data=Data()
@@ -176,13 +178,24 @@ func video(_ data:Data) async throws -> [String:Any] {
 }
 @main struct Main {
     static func main() async {
+        guard CommandLine.arguments.count==2 else {emit(["error":"media_format_unsupported"],status:1)}
+        let operation=CommandLine.arguments[1]
         do {
-            guard CommandLine.arguments.count==2 else {throw Failure("media_format_unsupported")}
-            let data=try inputData()
-            if CommandLine.arguments[1]=="image" {emit(try image(data))}
-            if CommandLine.arguments[1]=="video" {emit(try await video(data))}
+            let data=try inputData(allowUnlinked: operation=="wxgf")
+            if operation=="image" {emit(try image(data))}
+            if operation=="video" {emit(try await video(data))}
+            if operation=="wxgf" {
+                let png=try decodeWxgf(data)
+                FileHandle.standardOutput.write(png)
+                exit(0)
+            }
             throw Failure("media_format_unsupported")
-        } catch let failure as Failure {emit(["error":failure.code],status:1)}
-        catch {emit(["error":"media_validation_failed"],status:1)}
+        } catch let failure as Failure {
+            if operation=="wxgf" {FileHandle.standardError.write(Data((failure.code+"\n").utf8));exit(1)}
+            emit(["error":failure.code],status:1)
+        } catch {
+            if operation=="wxgf" {FileHandle.standardError.write(Data("media_validation_failed\n".utf8));exit(1)}
+            emit(["error":"media_validation_failed"],status:1)
+        }
     }
 }

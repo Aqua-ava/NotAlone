@@ -241,3 +241,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 136. [ADR-136：回复生成按需组合多个 Skill](adr/136-multi-skill-reply-composition.md)
 
 137. [ADR-137：授权会话同步中的原图保存](adr/137-original-image-authorized-sync.md)
+138. [ADR-138：聊天图片原图提取与占位替换](adr/138-chat-image-original-extraction-and-placeholder.md)

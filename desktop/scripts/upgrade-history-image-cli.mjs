@@ -247,6 +247,18 @@ const decodingFixPolicy = Object.freeze({
   identityAlgorithmSha256:'1b46174417812d86bfeeaaf68b37ddd87af5f8b7647314663716375979daa821',
 });
 
+// 当前账号图片密钥及 WXGF 解码的固定升级配对，不修改来源身份算法。
+const wxgfImagePolicy = Object.freeze({
+ ...decodingFixPolicy,oldName:'original-image-20261031-v2',newName:'original-image-20261031-v3',
+ oldCliSha256:'286452d82c06e33971d2996e1c69389f2557e681bcf73f9cce208b899a86d76b',newCliSha256:'9d6da5197d410b8727386863eac45fd6ad12f61ce484b0ee17ba9e6b6fd6d893',
+ oldOverlaySha256:'40a7192ca2f2a0edb555e9a3026202306a69179020a0ca9b68c510bba3882220',newOverlaySha256:'001b643bd04fbc97706aeb8618ca33b4ad50708ede61fdfc3ce44b228a5ccf15',
+ oldImageQualityProof:'wechat-cdn-big-hd-exact-content-v3',newImageQualityProof:'wechat-cdn-big-hd-exact-content-v4',
+ protocolOldSha256:'1831b96e81c2d9229ef7c7b651106b2d8660dbf1173b6f315069a0f1ab2a0b5a',protocolNewSha256:'dde1590bf04f1c407f371c9a89dc6e6df24fc6ffa0534694fb316ca0d5c3744d',
+ oldImageSha256:'eea3a6853093b92b6e5c45be304a7d4767afbc7ca157c0f4df966f3a5fb231f2',oldImageTestSha256:'be12ac930763045c4e870bf078b54cf626860c192cbd31dbccbee0bc30c94619',
+ imageSha256:'b6fa04c71f3c1b50c8062d0022a306020b0ad4e4612123a9c3e01ef8123f211e',imageTestSha256:'b6bc9ff5aad59b4d59d8d4625b2be4778ba3970552da990f6ca8d66f5955e89e',
+ identityAlgorithmSha256:'0d74d4ccd82206f5ff1f14281e3b76564b4368b9458001837dab379de18555d2',
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -633,6 +645,9 @@ export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceip
 const repositoryRoot = path.dirname(fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/, ''));
 const productionTools = createUpgradeImageCliTools({ repositoryRoot, policy: productionPolicy });
 const decodingFixTools = createUpgradeImageCliTools({ repositoryRoot, policy: decodingFixPolicy });
-export const prepareAliases = input => input?.fromRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',decodingFixPolicy.oldName)
+const wxgfImageTools = createUpgradeImageCliTools({repositoryRoot,policy:wxgfImagePolicy});
+export const prepareAliases = input => input?.fromRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',wxgfImagePolicy.oldName)
+ && input?.toRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',wxgfImagePolicy.newName)
+ ? wxgfImageTools.prepareAliases(input) : input?.fromRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',decodingFixPolicy.oldName)
   && input?.toRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',decodingFixPolicy.newName)
   ? decodingFixTools.prepareAliases(input) : productionTools.prepareAliases(input);

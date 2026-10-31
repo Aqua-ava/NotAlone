@@ -20,21 +20,22 @@ import (
 )
 
 type notaloneHistoryRequest struct {
-	Operation     string `json:"op"`
-	Account       string `json:"account,omitempty"`
-	Conversation  string `json:"conversation,omitempty"`
-	DisplayName   string `json:"displayName,omitempty"`
-	Consent       string `json:"consent,omitempty"`
-	Target        string `json:"target,omitempty"`
-	Cursor        string `json:"cursor,omitempty"`
-	Kind          string `json:"kind,omitempty"`
-	Partition     string `json:"partition,omitempty"`
-	Table         string `json:"table,omitempty"`
-	LocalID       string `json:"localId,omitempty"`
-	ServerID      string `json:"serverId,omitempty"`
-	SentAt        string `json:"sentAt,omitempty"`
-	ResourceToken string `json:"resourceToken,omitempty"`
-	Offset        int64  `json:"offset,omitempty"`
+	Operation        string `json:"op"`
+	Account          string `json:"account,omitempty"`
+	Conversation     string `json:"conversation,omitempty"`
+	DisplayName      string `json:"displayName,omitempty"`
+	Consent          string `json:"consent,omitempty"`
+	Target           string `json:"target,omitempty"`
+	Cursor           string `json:"cursor,omitempty"`
+	Kind             string `json:"kind,omitempty"`
+	Partition        string `json:"partition,omitempty"`
+	Table            string `json:"table,omitempty"`
+	LocalID          string `json:"localId,omitempty"`
+	ServerID         string `json:"serverId,omitempty"`
+	SentAt           string `json:"sentAt,omitempty"`
+	ResourceToken    string `json:"resourceToken,omitempty"`
+	Offset           int64  `json:"offset,omitempty"`
+	ImageKeySupplied bool   `json:"imageKeySupplied,omitempty"`
 }
 type notaloneResolved struct {
 	Account          string `json:"accountKey"`
@@ -84,6 +85,7 @@ type notaloneHistorySession struct {
 	receivedTestMetadata *notaloneReceivedTestMetadataWatch
 	imageMu              sync.Mutex
 	openImages           map[string]*notaloneOpenImage
+	imageRuntimeConfig   *config.Config
 	accountGeneration    string
 	checkpointDirectory  string
 	supportTargetChanged bool
@@ -97,6 +99,11 @@ func (h *notaloneHistorySession) close() {
 	h.cancel()
 	h.resetTail()
 	h.closeAllImages()
+	if h.imageRuntimeConfig != nil {
+		h.imageRuntimeConfig.ImageKey = ""
+		h.imageRuntimeConfig.ImageXORKey = nil
+		h.imageRuntimeConfig = nil
+	}
 	if h.testMetadata != nil {
 		_ = h.testMetadata.Close()
 	}

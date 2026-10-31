@@ -7,7 +7,7 @@ import type {ManagedAddress,DeletionSnapshot} from '../../storage/sqlite/deletio
 import {MediaFiles} from './files.ts';
 import type {AttemptHandle} from './actions.ts';
 import type {MediaAdapter,MediaGoal,MediaSnapshot,MediaPreview,MediaValidation,MediaContactPort,MediaSourcePort,MediaFileInput,MediaAttemptView} from './contracts.ts';
-export interface MediaServiceOptions {storage:SqliteStorage;contacts:MediaContactPort;history:MediaSourcePort;userData:string;adapters:readonly MediaAdapter[];holders?:ActiveHolders;deletion?:DeletionService}
+export interface MediaServiceOptions {storage:SqliteStorage;contacts:MediaContactPort;history:MediaSourcePort;userData:string;adapters:readonly MediaAdapter[];holders?:ActiveHolders;deletion?:DeletionService;changed?:(contactId:string,messageId:string)=>void}
 interface FileReference {fileId:string;generation:string;dataGeneration:string;address:ManagedAddress;mimeType:string;byteSize:string;digest:string;viewable:boolean;playable:boolean}
 interface Begin {reused:boolean;cleanupRequired?:boolean;attemptId:string;dataGeneration:string;leaseToken?:string;recordId?:string;inputFile?:{fileId:string;address:ManagedAddress;byteSize:string;digest:string}|null;token?:any}
 interface PreviewSession {state:'active'|'revoking';release:()=>Promise<void>;ack:()=>void;contactId:string;messageId:string;fileId:string}
@@ -86,6 +86,7 @@ export class SqliteMediaService {
   }catch(error){failure=error;acceptingSaves=false;controller.abort();await Promise.allSettled(saves);try{await this.options.storage.execute('media.fail',{...handle,interrupted:failure instanceof StorageFailure&&['media_closed','media_interrupted'].includes(failure.code)||this.closed,code:error instanceof StorageFailure?error.code:'media_execution_failed'});}catch{/* 旧执行不能修改删除已固定的资格；保持原计划可复核。 */}}
   finally{settle();try{await release?.();}finally{this.active.delete(begin.attemptId);signal?.removeEventListener('abort',abort);}}
   await this.resumeCleanup();
+  this.options.changed?.(contactId,messageId);
   if(failure)throw failure instanceof StorageFailure?failure:new StorageFailure('media_execution_failed');
   return this.requestResult(contactId,messageId,input);
  }
@@ -96,7 +97,7 @@ export class SqliteMediaService {
  private async runClear(contactId:string,messageId:string,requestKey:string):Promise<MediaSnapshot>{
   this.available();await this.read(contactId,messageId);
   const op=await this.deletion.plan({ownerId:this.ownerId,requestKey,scope:{kind:'media_result_clear',contactId,messageId}});
-  await this.deletion.advance({ownerId:this.ownerId,operationId:op.operationId});return this.read(contactId,messageId);
+  await this.deletion.advance({ownerId:this.ownerId,operationId:op.operationId});this.options.changed?.(contactId,messageId);return this.read(contactId,messageId);
  }
  resumeCleanup():Promise<void>{return this.track(this.runCleanup());}
  private async runCleanup():Promise<void>{
