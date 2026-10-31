@@ -20,7 +20,7 @@ async function fixture(t,mode='normal') {
  const fs=require('node:fs'); const readline=require('node:readline');const crypto=require('node:crypto');
  fs.writeFileSync(process.env.PID_FILE,String(process.pid));
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
- const schema=${JSON.stringify(schema)};let busy=false,supportCount=0,inspectCount=0;let currentConversation='${conversation}';let receivedRecords=[];
+ const schema=${JSON.stringify(schema)};const initialTable=structuredClone(schema.tables[0]);let busy=false,supportCount=0,inspectCount=0;let currentConversation='${conversation}';let receivedRecords=[];
  const target={protocol:'private-history-v1',descriptor:'synthetic-target-v1',partitions:['d'.repeat(64)],tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
  if(process.env.TEST_MODE.startsWith('empty-target')){
   schema.checkedPartitions=Array.from({length:8},(_,i)=>(i+1).toString(16).repeat(64));schema.tables=[];
@@ -33,6 +33,7 @@ async function fixture(t,mode='normal') {
  }
 
  if(process.env.TEST_MODE.startsWith('growth-')){schema.checkedPartitions.push('f'.repeat(64));target.checkedPartitions=[...schema.checkedPartitions];}
+ if(process.env.TEST_MODE==='growth-empty'){schema.tables=[];target.partitions=[...schema.checkedPartitions];target.tables=[];}
  readline.createInterface({input:process.stdin}).on('line',line=>{
   const r=JSON.parse(line);fs.appendFileSync(process.env.LOG_FILE,JSON.stringify(r)+'\\n');
   if(busy){process.stdout.write(JSON.stringify({ok:false,error:{code:'synthetic_parallel'}})+'\\n');return;}busy=true;
@@ -49,10 +50,10 @@ async function fixture(t,mode='normal') {
   let data=r.op==='resolve'?{accountKey:'${account}',conversationKey:currentConversation,displayName:'合成目标',sourceGeneration:'${generation}'}:schema;
   if(r.op==='resolve'&&mode==='display-control')data.displayName='合成\\t目标';
   if(r.op==='inspect'&&mode.startsWith('growth-')&&++inspectCount===2){
-   schema.tables[0].schemaVersion='9007199254740994';
+   if(schema.tables[0])schema.tables[0].schemaVersion='9007199254740994';
    if(mode!=='growth-version-only'){
     schema.schemaFingerprint='1'.repeat(64);
-    schema.tables.push({...schema.tables[0],partition:'f'.repeat(64),target:'2'.repeat(64)});
+    schema.tables.push({...initialTable,partition:'f'.repeat(64),target:'2'.repeat(64)});
     if(mode==='growth-structural')schema.tables[0].columns[0].type='TEXT';
     if(mode==='growth-replaced')schema.tables[0].target='3'.repeat(64);
     if(mode==='growth-unknown-file')schema.checkedPartitions.push('4'.repeat(64));
@@ -73,6 +74,14 @@ async function fixture(t,mode='normal') {
     data.schemaFingerprint=schema.schemaFingerprint;
     data.capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental','partitionGrowth'].map(key=>[key,'supported']));
     if(mode==='growth-report-change'&&supportCount>1)data.adapterVersion='2';
+    if(mode==='growth-empty'){
+     data.continuity='same-source-instances-normal-use-v1';
+     if(!schema.tables.length){
+      data.profileId='wechat-4.0.6-29387-absent-private-target-v1';data.statusSemantics='no-message-table-v1';data.declaredPrimaryKey=[];
+      for(const key of ['declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','incrementalTail','durableIncremental'])data.capabilities[key]='unsupported';
+     }else data.profileId='wechat-4.0.6-29387-observed-states-v1';
+    }
+
    }
    if(mode==='wrong-support-scope')data={...data,conversationKey:'synthetic-other'};
    if(mode==='wrong-support-key')data={...data,declaredPrimaryKey:['unrelated']};
@@ -625,4 +634,13 @@ test('旧目标没有已检查文件证据时不能跨新增表恢复检查点',
 test('原生已核验的表增长交接码保留给协调器，不改成协议损坏',async t=>{
  const f=await fixture(t,'known-growth-code');
  await assert.rejects(f.client.resolveSelected('合成目标'),{code:'history_target_growth_required'});
+});
+
+
+test('空目标出现首张聊天表时可建立新认证目标，不借旧空档检查点',async t=>{
+ const f=await fixture(t,'growth-empty');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();
+ const before=await f.client.supportSelected();assert.equal(before.capabilities.incrementalTail,'unsupported');
+ const old=await f.client.targetSelected();assert.equal(old.tables.length,0);
+ await f.client.inspectSelected();const after=await f.client.supportSelected();assert.equal(after.profileId,'wechat-4.0.6-29387-observed-states-v1');
+ const current=await f.client.targetSelected();assert.equal(current.tables.length,1);assert.deepEqual(current.checkedPartitions,old.checkedPartitions);
 });

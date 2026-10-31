@@ -144,6 +144,7 @@ export async function apply(ctx: Context) {
       history=new SqliteHistoryService(storage,contacts,createHistoryChannel,deletionHolders,
         (contactId,messageId,kind)=>events?.publish(`message.${kind}`,contactId,{message_id:messageId}));
       firstHistory=new FirstHistoryCoordinator(contacts,history);
+      history.setFirstHistoryWake(contactId=>firstHistory?.wakeContact(contactId));
       incremental=new IncrementalHistoryCoordinator(contacts,history,{firstHistoryManagedExternally:true});
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
       contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();});
