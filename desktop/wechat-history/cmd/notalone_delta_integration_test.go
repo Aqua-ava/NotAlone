@@ -64,6 +64,38 @@ func TestNotAloneDeltaIdleAndOldRowChangeDoNotReplayHistory(t *testing.T) {
 		t.Fatal("历史交接应保存唯一检查点")
 	}
 	initialStat, _ := initialFiles[0].Info()
+	checkpointFile := filepath.Join(h.checkpointDirectory, initialFiles[0].Name())
+	trustedBytes, readErr := os.ReadFile(checkpointFile)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var forged notaloneSignedCheckpoint
+	if json.Unmarshal(trustedBytes, &forged) != nil {
+		t.Fatal("签名检查点不可解析")
+	}
+	forged.MAC = strings.Repeat("0", 64)
+	forgedBytes, _ := json.Marshal(forged)
+	if err = os.WriteFile(checkpointFile, forgedBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	resumeProbe := notaloneHistoryRequest{Operation: "resume-target", Account: r.Account, Conversation: r.Conversation, Consent: r.Consent, Target: target.Descriptor, Cursor: *last.ResumeCursor}
+	if _, err = h.handle(context.Background(), resumeProbe); err == nil || err.Error() != "history_checkpoint_invalid" {
+		t.Fatal("篡改检查点必须拒绝")
+	}
+	if err = os.WriteFile(checkpointFile, trustedBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(checkpointFile, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.handle(context.Background(), resumeProbe); err == nil || err.Error() != "history_checkpoint_invalid" {
+		t.Fatal("宽松权限检查点必须拒绝")
+	}
+	if err = os.Chmod(checkpointFile, 0600); err != nil {
+		t.Fatal(err)
+	}
+	initialStat, _ = os.Stat(checkpointFile)
+
 	cursor := *last.ResumeCursor
 	r.Operation = "tail"
 	r.Cursor = cursor
@@ -98,6 +130,14 @@ func TestNotAloneDeltaIdleAndOldRowChangeDoNotReplayHistory(t *testing.T) {
 	// 响应持久检查点已经建立，丢掉全部内存尾部仍能接续同一已接受点。
 	cursor = changed.CursorOut
 	h.resetTail()
+	h.server.cfg.Keys[strings.Repeat("ff", 16)] = strings.Repeat("aa", 32) // 无关密钥缓存更新不得使本会话检查点失效。
+	configBytes, marshalErr := json.Marshal(h.server.cfg)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	if err = os.WriteFile(os.Getenv("WECHAT_CLI_CONFIG"), configBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if err = writer.Exec("INSERT INTO " + table + "(local_id,server_id,local_type,real_sender_id,create_time,status,message_content) VALUES(0,0,1,1,1700000000,0,'低编号离线新增');DELETE FROM " + table + " WHERE local_id=500"); err != nil {
 		t.Fatal(err)
 	}

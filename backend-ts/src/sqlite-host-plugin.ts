@@ -39,6 +39,7 @@ import {SqliteForeground} from './foreground/sqlite-foreground.ts';
 import {readStatusCoverages} from './history/sqlite/status-coverage.ts';
 import {readWechatHttpBody} from './sync/wechat-http-body.ts';
 import {PureTsEvents} from './host/pure-ts-events.ts';
+import {WechatHistoryCheckpointCache} from './history/wechat/checkpoint-cache.ts';
 
 export const name = 'notalone-sqlite-host';
 export const inject = ['appReady', 'appExit','skills','llm'];
@@ -84,6 +85,7 @@ export async function apply(ctx: Context) {
   let events: PureTsEvents | undefined;
   let contacts: ContactMetadataLifetime | undefined;
   let history: SqliteHistoryService | undefined;
+  let checkpointCache:WechatHistoryCheckpointCache|undefined;
   let foreground: SqliteForeground | undefined;
   let firstHistory: FirstHistoryCoordinator | undefined;
   let incremental: IncrementalHistoryCoordinator | undefined;
@@ -135,8 +137,11 @@ export async function apply(ctx: Context) {
     contacts = new ContactMetadataLifetime(storage, ownerId, deletionHolders, () => createWechatContactMetadata(sqlite.wechatCliPath));
     await contacts.initialize();
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    const createHistoryChannel=()=>createWechatHistoryChannel(sqlite.wechatCliPath,scope=>checkpointCache?.track(scope)??Promise.resolve());
     if(capabilities.capabilities.some(capability=>capability==='history')){
-      history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionHolders,
+      checkpointCache=new WechatHistoryCheckpointCache(storage,ownerId,deletionHolders,sqlite.wechatCliPath,contactId=>history?.stop(contactId)??Promise.resolve());
+      await checkpointCache.initialize();
+      history=new SqliteHistoryService(storage,contacts,createHistoryChannel,deletionHolders,
         (contactId,messageId,kind)=>events?.publish(`message.${kind}`,contactId,{message_id:messageId}));
       firstHistory=new FirstHistoryCoordinator(contacts,history);
       incremental=new IncrementalHistoryCoordinator(contacts,history,{firstHistoryManagedExternally:true});
@@ -148,7 +153,7 @@ export async function apply(ctx: Context) {
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
     const readHistoryStatus=async()=>{
       const directory=await contacts!.directory();
-      const coverage=await readStatusCoverages(directory.bindings,contactId=>history!.coverage(contactId));
+      const coverage=await readStatusCoverages(directory.bindings,contactId=>history!.coverage(contactId),contactIds=>history!.coverages(contactIds));
       return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState(),incremental?.getState(),
         await history!.bodyAvailable(coverage.map(row=>row.contactId)));
     };
@@ -157,15 +162,15 @@ export async function apply(ctx: Context) {
     const library=capabilities.skillPackageRoot?new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot):undefined;
     const skills=library?new SqliteSkillHttp(library,req=>authorizeSqliteRequest(req,token)):undefined;
     const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData));
-    if(history){historyClear=new SqliteHistoryClearService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionService,deletionHolders);
-      historyResync=new SqliteHistoryResyncService(storage,contacts,()=>createWechatHistoryChannel(sqlite.wechatCliPath),deletionHolders);}
+    if(history){historyClear=new SqliteHistoryClearService(storage,contacts,createHistoryChannel,deletionService,deletionHolders);
+      historyResync=new SqliteHistoryResyncService(storage,contacts,createHistoryChannel,deletionHolders);}
     const historyClearHttp=historyClear&&historyResync?new SqliteHistoryClearHttp(historyClear,historyResync):undefined;
     // 语音保存与格式转换本轮暂缓；受管资料和共同删除服务继续运行。
     media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
     }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,adapters:[]});
     await media.initialize();
-    contacts.setReadStop(async contactId=>{await Promise.all([firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);});
+    contacts.setReadStop(async contactId=>{await Promise.all([firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);});
     const mediaHttp = new SqliteMediaHttp(media);
     const modelSetup=await SqliteModelSetup.open(config.envFilePath,process.env);
     const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');

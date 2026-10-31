@@ -48,10 +48,28 @@ func (h *notaloneHistorySession) checkpointBinding(report notaloneSupportReport,
 	p, _ := json.Marshal(profile)
 	return notaloneCheckpoint{Format: "notalone-delta-checkpoint-v1", Scope: notaloneHash(h.selected.Account, h.selected.Conversation), Root: notaloneHash(filepath.Clean(h.server.cfg.DBRoot)), Generation: h.selected.SourceGeneration, Schema: h.inspected.SchemaFingerprint, Profile: notaloneHash(string(p)), Artifact: report.ArtifactSHA256}
 }
-func (h *notaloneHistorySession) checkpointMAC(data []byte) string {
-	salts := make([]string, 0, len(h.server.cfg.Keys))
+func (h *notaloneHistorySession) checkpointMAC(data []byte, states map[string]notaloneDeltaShardState) string {
+	// 只绑定本会话实际使用的来源密钥；缓存加入其他数据库密钥不使既有检查点失效。
+	needed := map[string]bool{}
+	for _, state := range states {
+		needed[state.Pages.SaltDigest] = true
+	}
+	found := map[string]bool{}
+	salts := []string{}
 	for salt := range h.server.cfg.Keys {
-		salts = append(salts, salt)
+		raw, err := hex.DecodeString(salt)
+		if err != nil || len(raw) != 16 || salt != strings.ToLower(salt) {
+			continue
+		}
+		sum := sha256.Sum256(raw)
+		digest := hex.EncodeToString(sum[:])
+		if needed[digest] {
+			salts = append(salts, salt)
+			found[digest] = true
+		}
+	}
+	if len(needed) == 0 || len(found) != len(needed) {
+		return ""
 	}
 	sort.Strings(salts)
 	key := sha256.New()
@@ -147,15 +165,15 @@ func (h *notaloneHistorySession) loadCheckpoint(report notaloneSupportReport, pr
 	if decoder.Decode(&signed) != nil {
 		return nil, notaloneFailure("history_checkpoint_invalid")
 	}
-	computed, _ := hex.DecodeString(h.checkpointMAC(signed.Data))
-	provided, e := hex.DecodeString(signed.MAC)
-	if e != nil || !hmac.Equal(computed, provided) {
-		return nil, notaloneFailure("history_checkpoint_invalid")
-	}
 	var value notaloneCheckpoint
 	decoder = json.NewDecoder(bytes.NewReader(signed.Data))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&value) != nil {
+		return nil, notaloneFailure("history_checkpoint_invalid")
+	}
+	computed, _ := hex.DecodeString(h.checkpointMAC(signed.Data, value.States))
+	provided, e := hex.DecodeString(signed.MAC)
+	if e != nil || len(computed) != 32 || !hmac.Equal(computed, provided) {
 		return nil, notaloneFailure("history_checkpoint_invalid")
 	}
 	if value.Format != expected.Format || value.Scope != expected.Scope || value.Root != expected.Root || value.Generation != expected.Generation || value.Schema != expected.Schema || value.Profile != expected.Profile || value.Artifact != expected.Artifact || value.Cursor != token || value.Target.Descriptor != target || len(value.Baseline) > notaloneTailIdentityLimit || len(value.States) > 128 {
@@ -201,7 +219,11 @@ func (h *notaloneHistorySession) saveCheckpoint(report notaloneSupportReport, pr
 	if e != nil {
 		return notaloneFailure("history_checkpoint_invalid")
 	}
-	encoded, e := json.Marshal(notaloneSignedCheckpoint{Data: data, MAC: h.checkpointMAC(data)})
+	signature := h.checkpointMAC(data, states)
+	if len(signature) != 64 {
+		return notaloneFailure("history_checkpoint_invalid")
+	}
+	encoded, e := json.Marshal(notaloneSignedCheckpoint{Data: data, MAC: signature})
 	if e != nil || len(encoded) > notaloneCheckpointLimit {
 		return notaloneFailure("history_checkpoint_too_large")
 	}

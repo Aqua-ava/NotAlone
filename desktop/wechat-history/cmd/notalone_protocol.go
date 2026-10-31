@@ -847,11 +847,7 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	return page, nil
 }
 func runNotaloneHistoryWithServer(s *server, input io.Reader, output io.Writer) {
-	session := newNotaloneHistorySession(s)
-	if executable, err := os.Executable(); err == nil {
-		session.checkpointDirectory = filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(executable))), "wechat-history-checkpoints")
-	}
-	runNotaloneHistorySession(session, input, output)
+	runNotaloneHistorySession(newNotaloneHistorySession(s), input, output)
 }
 func runNotaloneHistorySession(session *notaloneHistorySession, input io.Reader, output io.Writer) {
 	defer session.close()
@@ -934,5 +930,9 @@ func runNotaloneHistory(input io.Reader, output io.Writer) {
 		return
 	}
 	notaloneSourceIdentityAliases = aliases
-	runNotaloneHistoryWithServer(&server{}, input, output)
+	session := newNotaloneHistorySession(&server{})
+	if executable, err := os.Executable(); err == nil {
+		session.checkpointDirectory = filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(executable))), "wechat-history-checkpoints")
+	}
+	runNotaloneHistorySession(session, input, output)
 }

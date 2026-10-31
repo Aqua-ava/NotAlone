@@ -33,7 +33,7 @@ export class WechatHistoryCheckpointCache {
    const st=await f.stat();if(!st.isFile()||(st.mode&0o777)!==0o600||st.uid!==process.getuid?.()||st.size>16384)fail();
    const bytes=Buffer.alloc(16385);let count=0;for(;;){const r=await f.read(bytes,count,bytes.length-count,count);count+=r.bytesRead;if(!r.bytesRead||count===bytes.length)break;}
    const after=await f.stat();if(count>16384||count!==st.size||after.size!==st.size||after.mtimeMs!==st.mtimeMs)fail();
-   const row=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(0,count))) as Binding;
+   const text=new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(0,count)),row=JSON.parse(text) as Binding;if(JSON.stringify(row)!==text)fail();
    if(!row||row.format!=='notalone-checkpoint-binding-v1'||!uuid.test(row.ownerId)||!uuid.test(row.contactId)||typeof row.generation!=='string'||!/^[0-9]+$/.test(row.generation)||!Array.isArray(row.scopes)||row.scopes.length>128||row.scopes.some(s=>!digest.test(s))||new Set(row.scopes).size!==row.scopes.length||Object.keys(row).sort().join(',')!=='contactId,format,generation,ownerId,scopes')fail();
    if(path.basename(file)!==hash(row.ownerId,row.contactId)+'.json')fail();return row;
   }finally{await f.close();}
