@@ -2,10 +2,10 @@ import { request } from 'node:http';
 import type { BackendConnection } from './connection';
 import { isUuid } from '../uuid';
 
-export interface MessageCreated { contactId: string; messageId: string; }
+export interface MessageStreamChange { contactId: string; messageId: string; change: 'created' | 'updated'; }
 export interface MessageStreamCallbacks {
   connected(): void;
-  message(event: MessageCreated): void;
+  message(event: MessageStreamChange): void;
   interrupted(): void;
 }
 
@@ -29,17 +29,18 @@ export function openMessageStream(connection: BackendConnection, callbacks: Mess
   const dispatch = () => {
     const frame = lines; lines = []; frameSize = 0;
     const eventType = frame.filter((line) => line.startsWith('event:')).at(-1)?.slice(6).trimStart();
-    if (eventType !== 'message.created') return;
+    if (eventType !== 'message.created' && eventType !== 'message.updated') return;
     const eventId = frame.filter((line) => line.startsWith('id:')).at(-1)?.slice(3).trimStart();
     const data = frame.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).replace(/^ /, '')).join('\n');
     try {
       const event = JSON.parse(data);
       if (!event || typeof event !== 'object' || Array.isArray(event) || !isUuid(event.id) || event.id !== eventId
-        || event.type !== 'message.created' || !isUuid(event.owner_id) || !isUuid(event.contact_id)
+        || event.type !== eventType || !isUuid(event.owner_id) || !isUuid(event.contact_id)
         || typeof event.occurred_at !== 'string' || !Number.isFinite(Date.parse(event.occurred_at))
         || !event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)
-        || !isUuid(event.payload.message_id)) return;
-      callbacks.message({ contactId: event.contact_id.toLowerCase(), messageId: event.payload.message_id.toLowerCase() });
+        || Object.keys(event.payload).length !== 1 || !isUuid(event.payload.message_id)) return;
+      callbacks.message({ contactId: event.contact_id.toLowerCase(), messageId: event.payload.message_id.toLowerCase(),
+        change: eventType === 'message.created' ? 'created' : 'updated' });
     } catch { /* 损坏帧不能成为新消息提示，也不显示原始错误。 */ }
   };
   const stream = request({ hostname: '127.0.0.1', port: connection.port, method: 'GET', path: '/api/events', agent: false,

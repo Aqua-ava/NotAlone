@@ -35,6 +35,17 @@ test('显式SQLite联系人使用官方DSH最小profile，认证、关闭和重�
     const request=(route,options={})=>fetch(url+route,{...options,headers:{Authorization:`Bearer ${info.token}`,...options.headers}});
     assert.equal((await fetch(url+'/api/runtime/status')).status,401);
     assert.equal((await request('/api/runtime/status',{headers:{Origin:'http://localhost'}})).status,401);
+    assert.equal((await fetch(url+'/api/events',{headers:{Accept:'text/event-stream'}})).status,401);
+    assert.equal((await request('/api/events')).status,406);
+    assert.equal((await request('/api/events',{method:'POST',headers:{Accept:'text/event-stream'}})).status,405);
+    const firstEvents=await request('/api/events',{headers:{Accept:'text/event-stream'}});
+    assert.equal(firstEvents.status,200);assert.match(firstEvents.headers.get('content-type')??'',/^text\/event-stream/);
+    const firstReader=firstEvents.body.getReader();
+    assert.match(new TextDecoder().decode((await firstReader.read()).value),/: connected/);
+    await firstReader.cancel();
+    const nextEvents=await request('/api/events',{headers:{Accept:'text/event-stream'}});
+    assert.equal(nextEvents.status,200);const nextReader=nextEvents.body.getReader();
+    assert.match(new TextDecoder().decode((await nextReader.read()).value),/: connected/);
     const status=await (await request('/api/runtime/status')).json();
     assert.equal(status.state,'running');assert.equal(status.runtime,'dsh');assert.equal(status.storage,'sqlite');
     assert.deepEqual(status.capabilities,['contacts']);assert.equal(status.ownership.contacts,'typescript');assert.equal(status.ownership.replies,'unavailable');
@@ -44,6 +55,7 @@ test('显式SQLite联系人使用官方DSH最小profile，认证、关闭和重�
     assert.equal((await request('/api/reply/generate',{method:'POST'})).status,503);
     const shutdown=await request('/api/runtime/shutdown',{method:'POST'});assert.equal(shutdown.status,200);
     assert.equal((await shutdown.json()).state,'stopped');
+    assert.deepEqual(await nextReader.read(),{done:true,value:undefined});
     assert.equal(await host.waitForExit(15000),true);
     await assert.rejects(access(infoPath),{code:'ENOENT'});await assert.rejects(access(infoPath+'.dsh-lock'),{code:'ENOENT'});
   }

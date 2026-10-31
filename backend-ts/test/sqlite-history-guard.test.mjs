@@ -5,6 +5,16 @@ import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
 import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
 import {preflightGeneration} from '../src/history/sqlite/continuity.ts';
+import {EventEmitter} from 'node:events';
+import {PureTsEvents} from '../src/host/pure-ts-events.ts';
+
+class EventRequest extends EventEmitter {}
+class EventResponse extends EventEmitter {
+ statusCode=0;headers={};chunks=[];writableLength=0;destroyed=false;
+ writeHead(status,headers){this.statusCode=status;this.headers=headers;return this;}
+ write(chunk){this.chunks.push(String(chunk));return true;}
+ end(){this.destroyed=true;this.emit('close');}
+}
 
 function emptyLegacyContinuityTx({tables=['history_continuity_fence','history_continuity_scope'],fenced=true,scope={
  owner_id:'owner',contact_id:'contact',conversation_id:'conversation',source_generation:'source-1',tables_json:''
@@ -38,11 +48,59 @@ function guardedChannelFactory(state){
   return {guardSession:{loss},
    inspect:async scope=>({protocol:'private-history-v1',profileId:'synthetic-guarded',adapterVersion:'1',status:'supported',reason:null,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic',continuity:'synthetic-guard'}),
    target:async()=>({protocol:'private-history-v1',descriptor:'synthetic-guarded-target',partitions:['p'],tables:[{partition:'p',instance:'t'}],sourceGeneration:'source-1'}),
-   page:async(_scope,target,cursor,signal)=>{await state.onPage?.(signal);return {target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[{partition:'p',table:'t',localId:'1',serverId:'0',sender:'contact',kind:'text',text:'合成守卫消息',originalType:'1',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,stateAssurance:'verified'}],completedPartitions:['p'],exhausted:true};},
+   page:async(_scope,target,cursor,signal)=>{await state.onPage?.(signal);return {target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[{partition:'p',table:'t',localId:'1',serverId:'0',sender:'contact',kind:'text',text:'合成守卫消息',originalType:'1',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,stateAssurance:'verified'}],completedPartitions:['p'],exhausted:true,...(state.resumeCursor?{resumeCursor:state.resumeCursor}:{})};},
+   tail:async(_scope,target,cursor)=>{state.tailCalls=(state.tailCalls??0)+1;const records=state.tailRecords??[{partition:'p',table:'t',localId:'2',serverId:'0',sender:'contact',kind:'text',text:'合成增量守卫消息',originalType:'1',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,stateAssurance:'verified'}];return {target:target.descriptor,cursorIn:cursor,cursorOut:state.tailCursorOut??'tail-2',records,caughtUp:true};},
    close:async()=>{if(!closed){closed=true;state.closed++;lost();await state.onClose?.();}},
   };
  };
 }
+
+test('增量新增与旧消息变化只发无正文ID事件，隔离联系人且不重复提醒',async t=>{
+ const f=await fixture(t),state={created:0,closed:0,resumeCursor:'tail-1'},create=guardedChannelFactory(state),events=new PureTsEvents(f.contacts.ownerId);
+ const eventRequest=new EventRequest(),eventResponse=new EventResponse();events.open(eventRequest,eventResponse);
+ t.after(()=>events.close());let inspections=0,pages=0;
+ const history=new SqliteHistoryService(f.storage,f.contacts,()=>{
+  const channel=create(),inspect=channel.inspect,page=channel.page;
+  channel.inspect=async(...args)=>{inspections++;return {...await inspect(...args),capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(key=>[key,'supported']))};};
+  channel.page=async(...args)=>{pages++;return page(...args);};return channel;
+ },undefined,(contactId,messageId,change='created')=>events.publish(`message.${change}`,contactId,{message_id:messageId}));
+ t.after(()=>history.close());const contact=f.saved[0].contact_id;
+ assert.equal(await history.bodyAvailable([contact]),false);assert.equal(state.created,0);
+ await history.synchronize(contact);
+ assert.equal(eventResponse.chunks.join('').includes('event: message.created'),false,'历史补齐本身不触发新消息提醒');
+ await history.synchronizeIncremental(contact);
+ const counts=[state.created,inspections,pages];
+ const firstFrame=eventResponse.chunks.join('');assert.match(firstFrame,/event: message\.created/);
+ const firstPayload=JSON.parse(firstFrame.split('data: ')[1].split('\n')[0]);
+ assert.equal(firstPayload.owner_id,f.contacts.ownerId);assert.equal(firstPayload.contact_id,contact);
+ assert.equal(typeof firstPayload.payload.message_id,'string');assert.equal(firstFrame.includes('合成增量守卫消息'),false);
+ assert.equal((await history.read(contact)).messages[0].id,firstPayload.payload.message_id);
+ assert.equal(await history.bodyAvailable([contact]),true);assert.deepEqual([state.created,inspections,pages],counts);
+ assert.equal(await history.bodyAvailable([f.saved[1].contact_id]),false);
+ await history.synchronizeIncremental(contact);
+ assert.equal(eventResponse.chunks.join('').split('event: message.created').length-1,1,'重复入库不得重复提醒');
+ state.tailRecords=[{partition:'p',table:'t',localId:'2',serverId:'0',sender:'contact',kind:'text',text:'合成增量守卫消息',originalType:'1',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,status:'1',stateAssurance:'verified'}];
+ await history.synchronizeIncremental(contact);
+ const updatedFrames=eventResponse.chunks.join('').split('event: message.updated').slice(1);
+ assert.equal(updatedFrames.length,1,'已入库消息的可见字段更新要通知当前联系人刷新');
+ const updatedPayload=JSON.parse(updatedFrames[0].split('data: ')[1].split('\n')[0]);
+ assert.equal(updatedPayload.owner_id,f.contacts.ownerId);assert.equal(updatedPayload.contact_id,contact);
+ assert.equal(updatedPayload.payload.message_id,firstPayload.payload.message_id);assert.equal(updatedFrames[0].includes('合成增量守卫消息'),false);
+ assert.equal(eventResponse.chunks.join('').split('event: message.created').length-1,1,'旧消息变化不能伪装成新消息提醒');
+ state.tailRecords=[{partition:'p',table:'t',localId:'2',serverId:'0',sender:'unknown',kind:'other',text:null,originalType:'10000',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,messageState:'recalled',stateAssurance:'verified'}];
+ await history.synchronizeIncremental(contact);
+ const recallFrames=eventResponse.chunks.join('').split('event: message.updated').slice(1);
+ assert.equal(recallFrames.length,2,'旧消息撤回提交后要通知小窗清除已撤回正文');
+ const recallPayload=JSON.parse(recallFrames[1].split('data: ')[1].split('\n')[0]);
+ assert.equal(recallPayload.payload.message_id,firstPayload.payload.message_id);assert.equal(recallFrames[1].includes('合成增量守卫消息'),false);
+ assert.equal((await history.read(contact)).messages.some(message=>message.id===firstPayload.payload.message_id),false);
+ state.tailRecords=undefined;
+ await history.synchronize(f.saved[1].contact_id);await history.synchronizeIncremental(f.saved[1].contact_id);
+ const otherFrames=eventResponse.chunks.join('').split('event: message.created').slice(1);
+ assert.equal(otherFrames.length,2);assert.match(otherFrames[1],new RegExp(`contact_id\\":\\"${f.saved[1].contact_id}`));
+ await f.contacts.setReading(false);assert.equal(await history.bodyAvailable([contact]),false);
+ await history.stop();assert.equal(await history.bodyAvailable([contact]),false);
+});
 
 test('正文可用性只来自当前授权下的已核验活守卫，状态查询不打开渠道或读取正文',async t=>{
  const f=await fixture(t),state={created:0,closed:0},create=guardedChannelFactory(state);let inspections=0,pages=0;

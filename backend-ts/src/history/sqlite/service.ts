@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { SqliteStorage } from '../../storage/sqlite/client.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
-import type { HistoryChannel, HistorySource, HistoryCoverage, HistoryRead, HistoryScope, HistoryTarget, HistorySupportReport } from './contracts.ts';
+import type { HistoryChannel, HistorySource, HistoryCoverage, HistoryRead, HistoryScope, HistoryTarget, HistorySupportReport, HistoryPage, HistoryTailPage } from './contracts.ts';
 import { assertSupport, serializeSupport } from './actions.ts';
 import { isSourceContinuityLost } from './continuity.ts';
 interface PendingGoal { id:string; target:HistoryTarget; cursor:string|null }
@@ -16,6 +16,8 @@ interface ActiveHistoryRead { controller:AbortController; done:Promise<void>; st
 interface RetainedGuard {channel:HistoryChannel; token:ReadEligibility; guardId:string; failed:boolean; sourceLost:boolean; normalUse:boolean; bodyVerified:boolean; release:()=>Promise<void>}
 interface GuardProof {report:HistorySupportReport;target:HistoryTarget}
 interface GuardResult {guardId?:string;revalidated:boolean}
+type MessageChangeKind='created'|'updated';
+type AcceptedPage=HistoryCoverage&{createdMessageIds?:string[];updatedMessageIds?:string[]};
 const bodyCapabilities=['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'] as const;
 export const historyReaderHolderKey=(contactId:string,generation:string):string=>`history:read_${contactId}_${generation}`;
 /** 可认证的渠道跨批次保留守卫；删除、停读及finally等待真实读者释放。 */
@@ -24,11 +26,27 @@ export class SqliteHistoryService {
  private readonly contacts:HistoryContactGateway;
  private readonly createChannel:()=>HistoryChannel;
  readonly holders:ActiveHolders;
+ private readonly onMessageChange?: (contactId:string,messageId:string,kind:MessageChangeKind)=>void;
  private readonly active=new Map<string,ActiveHistoryRead>();
  private readonly guards=new Map<string,RetainedGuard>();
  private closed=false;
- constructor(storage:SqliteStorage,contacts:HistoryContactGateway,channel:HistoryChannel|(()=>HistoryChannel),holders:ActiveHolders=new ActiveHolders()){
-  this.storage=storage;this.contacts=contacts;this.createChannel=typeof channel==='function'?channel:()=>channel;this.holders=holders;
+ constructor(storage:SqliteStorage,contacts:HistoryContactGateway,channel:HistoryChannel|(()=>HistoryChannel),holders:ActiveHolders=new ActiveHolders(),onMessageChange?:(contactId:string,messageId:string,kind:MessageChangeKind)=>void){
+  this.storage=storage;this.contacts=contacts;this.createChannel=typeof channel==='function'?channel:()=>channel;this.holders=holders;this.onMessageChange=onMessageChange;
+ }
+ private publishMessageChanges(contactId:string,ids:readonly string[]|undefined,kind:MessageChangeKind):void{
+  if(this.onMessageChange)for(const messageId of ids??[])try{this.onMessageChange(contactId,messageId,kind);}catch{/* 通知失败不能回滚已提交的历史页。 */}
+ }
+ private publishAcceptedMessages(contactId:string,accepted:AcceptedPage,includeCreated:boolean):HistoryCoverage{
+  const {createdMessageIds,updatedMessageIds,...coverage}=accepted;
+  if(includeCreated)this.publishMessageChanges(contactId,createdMessageIds,'created');
+  const created=new Set(createdMessageIds??[]);
+  this.publishMessageChanges(contactId,updatedMessageIds?.filter(messageId=>!created.has(messageId)),'updated');
+  return coverage;
+ }
+ private async quarantinePageStates(contactId:string,scope:HistoryScope,goal:PendingGoal|{id:string;target:HistoryTarget;cursor:string},page:HistoryPage|HistoryTailPage):Promise<void>{
+  if(!page.records?.some(record=>record?.stateAssurance!=='verified'||record?.originalType==='10000'&&record?.kind==='other'))return;
+  const changed=await this.storage.execute<{updatedMessageIds?:string[]}>('history.quarantinePageStates',{token:scope.token,goalId:goal.id,page});
+  this.publishMessageChanges(contactId,changed.updatedMessageIds,'updated');
  }
  private async withChannel<T>(contactId:string,signal:AbortSignal|undefined,run:(scope:HistoryScope,channel:HistoryChannel,controller:AbortController,registerGoal:(goalId:string)=>void,armGuard:(proof?:GuardProof)=>Promise<GuardResult>,metadataRevalidation:boolean,retainedGuardAvailable:boolean)=>Promise<T>):Promise<T>{
   if(this.closed)throw new StorageFailure('history_closed');
@@ -162,10 +180,11 @@ export class SqliteHistoryService {
    registerGoal(goal!.id);
    for(let index=0;index<1000;index++){
     await check();if(guardId&&!await this.storage.execute<boolean>('history.guardCheck',{token:scope.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');const page=await channel.page(scope,goal!.target,goal!.cursor,controller.signal);
-    if(page.records?.some(record=>record?.stateAssurance!=='verified'||record?.originalType==='10000'&&record?.kind==='other'))await this.storage.execute('history.quarantinePageStates',{token:scope.token,goalId:goal!.id,page});
+    await this.quarantinePageStates(contactId,scope,goal!,page);
     await check();
     if(serializeSupport(await inspect())!==serializeSupport(report))throw new StorageFailure('history_support_changed');
-    const coverage=await this.storage.execute<HistoryCoverage>('history.acceptPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId,guardId});
+    const accepted=await this.storage.execute<AcceptedPage>('history.acceptPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId,guardId,notifyMessageChanges:true});
+    const coverage=this.publishAcceptedMessages(contactId,accepted,false);
     if(page.exhausted)return coverage;goal!.cursor=page.cursorOut;
    }
    return await this.storage.execute('history.interrupt',{token:scope.token,goalId:goal!.id,code:'history_page_budget_exhausted'});
@@ -205,10 +224,11 @@ export class SqliteHistoryService {
    registerGoal(goal!.id);
    for(let index=0;index<200;index++){
     await check();if(guardId&&!await this.storage.execute<boolean>('history.guardCheck',{token:scope.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');const page=await channel.tail(scope,goal!.target,goal!.cursor,controller.signal);
-    if(page.records?.some(record=>record?.stateAssurance!=='verified'||record?.originalType==='10000'&&record?.kind==='other'))await this.storage.execute('history.quarantinePageStates',{token:scope.token,goalId:goal!.id,page});
+    await this.quarantinePageStates(contactId,scope,goal!,page);
     await check();
     if(serializeSupport(await inspect())!==serializeSupport(report))throw new StorageFailure('history_support_changed');
-    const coverage=await this.storage.execute<HistoryCoverage>('history.acceptIncrementalPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId,guardId});
+    const accepted=await this.storage.execute<AcceptedPage>('history.acceptIncrementalPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId,guardId,notifyMessageChanges:true});
+    const coverage=this.publishAcceptedMessages(contactId,accepted,true);
     if(page.caughtUp)return coverage;goal!.cursor=page.cursorOut;
    }
    return await this.storage.execute('history.incrementalInterrupt',{ownerId:this.contacts.ownerId,contactId,goalId:goal!.id,code:'history_page_budget_exhausted'});

@@ -128,9 +128,9 @@ export class AssistantMessageNotices {
     this.backend.subscribeMessages({
       connected: () => {
         if (!current()) return;
-        this.phase = 'connected'; this.emit();
-        // 重连只核对最新一页；不扫描历史，也不因缺口自动创建生成任务。
-        if (this.needsRefresh) void this.verify();
+        this.phase = 'connected'; this.needsRefresh = true; this.emit();
+        // 首次连接与重连都只核对最近20条；不扫描历史，也不因缺口自动创建生成任务。
+        queueMicrotask(() => { if (current() && this.needsRefresh) void this.verify(); });
       },
       interrupted: () => {
         if (!current()) return;
@@ -138,6 +138,12 @@ export class AssistantMessageNotices {
       },
       message: (event) => {
         if (!current()) return;
+        if (event.change === 'updated') {
+          if (event.contactId !== contactId) return;
+          if (this.candidate) this.candidate = { ...this.candidate, explore: false };
+          this.needsRefresh = true; this.emit(); void this.verify();
+          return;
+        }
         if (event.contactId !== contactId) {
           for (const sessionId of this.knownSessions(event.contactId, connectionGeneration)) {
             this.retain({ ...event, sessionId, revision: ++this.revision });

@@ -13,16 +13,21 @@ const second = '00000000-0000-4000-8000-000000000012';
 const third = '00000000-0000-4000-8000-000000000013';
 const scope = { connectionGeneration: 7, contactId: a, scopeRevision: 3, sessionId: 'session-a' };
 function fixture() {
-  const requests = [], streams = [], effects = [], sessions = new Map();
+  const requests = [], streams = [], effects = [], pages = [], sessions = new Map();
   let generation = 7;
   const notices = new AssistantMessageNotices({
     getConnectionGeneration: () => generation,
     subscribeMessages: (callbacks, signal) => streams.push({ ...callbacks, signal }),
     requestJson: (request) => new Promise((resolve, reject) => requests.push({ ...request, resolve, reject })),
-  }, (contactId) => sessions.get(contactId) ?? [], (state, effect) => effects.push({ state, effect }));
-  notices.setScope(scope); streams[0].connected();
-  return { notices, requests, streams, effects, sessions,
-    event: (messageId = first, contactId = a) => streams.at(-1).message({ contactId, messageId }),
+  }, (contactId) => sessions.get(contactId) ?? [], (state, effect, page) => { effects.push({ state, effect }); if (page) pages.push(page); });
+  notices.setScope(scope);
+  let connectedStream;
+  return { notices, requests, streams, effects, pages, sessions,
+    connect: () => { const stream = streams.at(-1); if (stream && stream !== connectedStream) { connectedStream = stream; stream.connected(); } },
+    event: (messageId = first, contactId = a) => { const stream = streams.at(-1); if (stream !== connectedStream) { connectedStream = stream; stream.connected(); }
+      stream.message({ contactId, messageId, change: 'created' }); },
+    update: (messageId = first, contactId = a) => { const stream = streams.at(-1); if (stream !== connectedStream) { connectedStream = stream; stream.connected(); }
+      stream.message({ contactId, messageId, change: 'updated' }); },
     generation: (value) => { generation = value; },
     page: async (index, ids, speaker = 'contact') => {
       requests[index].resolve({ generation, data: { messages: ids.map((message_id) => ({ message_id,
@@ -39,6 +44,38 @@ test('确认刷新同时确认私有提醒，完整恢复和切回都不复活',
   f.notices.setScope({ ...scope, contactId: b, sessionId: 'session-b', scopeRevision: 4 });
   f.notices.setScope({ ...scope, scopeRevision: 5 }); await f.notices.restore();
   assert.equal(f.notices.getState().changed, false); assert.equal(f.requests.length, 1);
+});
+
+test('事件流首次连接自动核对最近消息，不生成新消息提醒', async () => {
+  const f = fixture(); f.connect(); await setImmediate();
+  assert.equal(f.requests.length, 1);
+  assert.deepEqual(f.notices.getState(), { phase: 'connected', changed: false, needsRefresh: true });
+  await f.page(0, [first]);
+  assert.deepEqual(f.notices.getState(), { phase: 'connected', changed: false, needsRefresh: false });
+  assert.deepEqual(f.pages.at(-1).messages.map((message) => message.messageId), [first]);
+  assert.equal(f.effects.some((entry) => entry.effect === 'verified'), false);
+});
+
+test('事件流重连自动核对离线消息变化，不生成新消息提醒', async () => {
+  const f = fixture(); f.connect(); await setImmediate(); await f.page(0, []);
+  f.streams[0].interrupted(); f.notices.reconnect(); f.connect(); await setImmediate();
+  assert.equal(f.requests.length, 2);
+  assert.deepEqual(f.notices.getState(), { phase: 'connected', changed: false, needsRefresh: true });
+  await f.page(1, [first]);
+  assert.deepEqual(f.notices.getState(), { phase: 'connected', changed: false, needsRefresh: false });
+  assert.deepEqual(f.pages.at(-1).messages.map((message) => message.messageId), [first]);
+  assert.equal(f.effects.some((entry) => entry.effect === 'verified'), false);
+});
+
+test('旧消息更新刷新当前联系人最近消息，但不作为新消息提醒', async () => {
+  const f = fixture(); f.connect(); await setImmediate(); await f.page(0, []);
+  f.update(first); await setImmediate();
+  assert.equal(f.requests.length, 2);
+  assert.equal(f.notices.getState().changed, false);
+  await f.page(1, [first]);
+  assert.equal(f.notices.getState().changed, false);
+  assert.deepEqual(f.pages.at(-1).messages.map((message) => message.messageId), [first]);
+  assert.equal(f.effects.some((entry) => entry.effect === 'verified'), false);
 });
 
 test('旧刷新只能确认原提醒，断流重连产生的新缺口保留', async () => {
