@@ -9,6 +9,7 @@ import {unresolvedQuarantineCount} from './quarantine.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
+import { isPartitionGrowthReportChange, isPartitionGrowthTargetChange } from '../partition-growth.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
 import { assertSourceContinuity, assertLiveGuard, fenceContinuity, normalUseContinuity, normalUseRevalidationCandidate, prepareNormalUseTarget, preflightGeneration, preflightTarget } from './continuity.ts';
 const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
@@ -48,7 +49,10 @@ function targetOf(value:unknown,token:ReadEligibility,report?:HistorySupportRepo
  if(target?.protocol!=='private-history-v1'||target.sourceGeneration!==token.source_generation||typeof target.descriptor!=='string'||!target.descriptor||target.descriptor.length>64_000||!Array.isArray(target.partitions)||!target.partitions.length||target.partitions.length>10_000||target.partitions.some(p=>typeof p!=='string'||!p||p.length>512)||new Set(target.partitions).size!==target.partitions.length)fail('history_target_unverified');
  if(!Array.isArray(target.tables)||target.tables.length>10_000||absent&&target.tables.length!==0||!absent&&target.partitions.some(p=>!target.tables.some(t=>t.partition===p))
   ||target.tables.some(t=>!target.partitions.includes(t.partition)||typeof t.instance!=='string'||!t.instance||t.instance.length>512)
-  ||new Set(target.tables.map(t=>JSON.stringify([t.partition,t.instance]))).size!==target.tables.length)fail('history_target_unverified');
+  ||new Set(target.tables.map(t=>JSON.stringify([t.partition,t.instance]))).size!==target.tables.length
+  ||target.checkedPartitions!==undefined&&(!Array.isArray(target.checkedPartitions)||!target.checkedPartitions.length||target.checkedPartitions.length>128
+    ||target.checkedPartitions.some(p=>typeof p!=='string'||!p||p.length>512)||new Set(target.checkedPartitions).size!==target.checkedPartitions.length
+    ||target.tables.some(t=>!target.checkedPartitions!.includes(t.partition))||target.partitions.some(p=>!target.checkedPartitions!.includes(p))))fail('history_target_unverified');
  return target;
 }
 function currentIncremental(tx:StorageTransaction,token:ReadEligibility,report:HistorySupportReport):StorageRow|undefined {
@@ -70,7 +74,7 @@ export const historyActions:StorageAction[]=[
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
   if(i.report.continuity!==normalUseContinuity||typeof i.guardId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(i.guardId))return {ok:false,revalidated:false};
   const target=targetOf(i.target,token,i.report);
-  return prepareNormalUseTarget(tx,token,target,String(i.report.accountKey??''),i.guardId);
+  return prepareNormalUseTarget(tx,token,target,i.report as HistorySupportReport,i.guardId);
  }),
  action('history.guardAcquire','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
@@ -120,20 +124,35 @@ export const historyActions:StorageAction[]=[
   const goal=tx.get(`SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND grant_id=?
    AND accepted_data_generation=? AND accepted_barrier_generation=? AND creation_no IS NOT NULL AND cursor_scope_digest IS NOT NULL
    AND ((kind='incremental' AND cursor IS NOT NULL AND state IN ('running','incomplete'))
-    OR (kind='history' AND state='complete' AND resume_cursor IS NOT NULL))
+   OR (kind='history' AND state='complete' AND resume_cursor IS NOT NULL)
+   OR (kind='history' AND state IN ('running','incomplete') AND cursor IS NOT NULL))
    ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation)]);
-  if(!goal||goal.support_json!==serializeSupport(i.report))return null;
-  const target=targetOf(JSON.parse(String(goal.target_json)),token,i.report);
+  if(!goal)return null;
+  let previousReport:HistorySupportReport;
+  try{previousReport=JSON.parse(String(goal.support_json)) as HistorySupportReport;}catch{return null;}
+  const supportSame=goal.support_json===serializeSupport(i.report);
+  const supportGrowth=!supportSame&&isPartitionGrowthReportChange(previousReport,i.report);
+  if(!supportSame&&!supportGrowth)return null;
+  const target=targetOf(JSON.parse(String(goal.target_json)),token,previousReport);
+  if(supportGrowth&&target.checkedPartitions===undefined)return null;
   assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target,i.report.accountKey);
-  if(historyCursorScopeDigest(token,i.report,target)!==goal.cursor_scope_digest)return null;
-  return {target,cursor:assertHistoryCursor(goal.kind==='history'?goal.resume_cursor:goal.cursor,'history_cursor_invalid')};
+  if(historyCursorScopeDigest(token,previousReport,target)!==goal.cursor_scope_digest)return null;
+  return {target,cursor:assertHistoryCursor(goal.kind==='history'&&goal.state==='complete'?goal.resume_cursor:goal.cursor,'history_cursor_invalid')};
+ }),
+ action('history.partitionGrowthCandidate','read',(tx,i)=>{
+  const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
+  const previous=tx.get(`SELECT support_json FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND grant_id=?
+   AND accepted_data_generation=? AND accepted_barrier_generation=? AND creation_no IS NOT NULL
+   ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation)]);
+  try{return isPartitionGrowthTargetChange(JSON.parse(String(previous?.support_json)) as HistorySupportReport,i.report as HistorySupportReport);}catch{return false;}
  }),
  action('history.begin','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
   const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);
   // 新固定快照会替换原生读取器中的目标；旧目标的增量游标不能再交给该读取器。
   tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
-  tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at,creation_no) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?,(SELECT coalesce(max(creation_no),0)+1 FROM read_goal WHERE creation_no IS NOT NULL))`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at]);
+  const scopeDigest=historyCursorScopeDigest(token,i.report,target);
+  tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,creation_no) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?,?,?,(SELECT coalesce(max(creation_no),0)+1 FROM read_goal WHERE creation_no IS NOT NULL))`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at,scopeDigest,historyCursorScheme]);
   return {id:i.id,target,cursor:null};
  }),
  action('history.quarantinePageStates','write',(tx,i)=>{

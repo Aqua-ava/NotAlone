@@ -33,6 +33,7 @@ export function historyCursorScopeDigest(token: ReadEligibility, report: History
     targetProtocol: target.protocol, targetDescriptor: target.descriptor,
     partitions: [...target.partitions].sort(),
     tables: target.tables.map(table => `${table.partition}\u0000${table.instance}`).sort(),
+    ...(target.checkedPartitions===undefined?{}:{checkedPartitions:[...target.checkedPartitions].sort()}),
     adapterVersion: report.adapterVersion, programVersion: report.programVersion, build: report.build,
     artifactSha256: report.artifactSha256, schemaFingerprint: report.schemaFingerprint,
     declaredPrimaryKey: [...report.declaredPrimaryKey],

@@ -18,10 +18,10 @@ function page(scope,target,cursor,changes={}) {
 }
 async function fixture(t,names=['a','b','c']) {
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-first-history-')));
- const state={creates:0,inspects:0,targets:0,pages:[],closes:0,support:'supported',pageHook:null,closeHook:null};
+ const state={creates:0,inspects:0,inspectedContacts:[],targets:0,pages:[],closes:0,support:'supported',pageHook:null,closeHook:null};
  const createMetadata=()=>({account:async()=>({...evidence}),sessions:async()=>names.map(name=>({externalKey:`friend-${name}`,displayName:`合成${name}`,kind:'private',identityAssurance:'verified'}))});
  const createChannel=()=>{state.creates++;let closed=false,heldContact;
-  return {inspect:async scope=>{heldContact=scope.token.contact_id;state.inspects++;return {protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:state.support,reason:state.support==='supported'?null:'synthetic_unverified',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:'source-1',serverAliasSemantics:'unverified'};},
+  return {inspect:async scope=>{heldContact=scope.token.contact_id;state.inspects++;state.inspectedContacts.push(scope.token.contact_id);return {protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:state.support,reason:state.support==='supported'?null:'synthetic_unverified',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:'source-1',serverAliasSemantics:'unverified'};},
   target:async scope=>{state.targets++;return {protocol:'private-history-v1',descriptor:`synthetic:${scope.conversationKey}`,partitions:['p'],tables:[{partition:'p',instance:'t'}],sourceGeneration:'source-1'};},
   page:async(scope,target,cursor,signal)=>{state.pages.push({contactId:scope.token.contact_id,conversation:scope.conversationKey,cursor});return state.pageHook?state.pageHook(scope,target,cursor,signal):page(scope,target,cursor);},
   close:async()=>{if(closed)return;closed=true;state.closes++;await state.closeHook?.(heldContact);}};
@@ -67,6 +67,17 @@ test('未知支持档只有结构检查且不读正文，重复wake合并，失�
  const attempts=f.state.pages.length;await f.coordinator.waitForIdle();assert.equal(f.state.pages.length,attempts);
  f.state.pageHook=null;await wake(f);assert.equal(f.coordinator.getState().lastError,null);
  assert.equal((await f.history.coverage((await f.contacts.directory()).bindings[0].contact_id)).phase,'complete');
+});
+
+test('wakeContact 只重试指定联系人的首次历史',async t=>{
+ const f=await fixture(t);const bindings=await select(f,['a','b']);await f.contacts.setReading(true);f.state.support='unverified';
+ f.coordinator.wake();await f.coordinator.waitForIdle();assert.equal(f.state.inspectedContacts.length,2);
+ const target=bindings.find(binding=>binding.conversation_locator==='friend-a');assert.ok(target);
+ const other=bindings.find(binding=>binding.contact_id!==target.contact_id);assert.ok(other);
+ f.coordinator.wakeContact(target.contact_id);await f.coordinator.waitForIdle();
+ assert.equal(f.state.inspectedContacts.length,3);
+ assert.equal(f.state.inspectedContacts[2],target.contact_id);
+ assert.equal(f.state.inspectedContacts.filter(id=>id===other.contact_id).length,1);
 });
 
 test('历史遍历完成但存在未核验状态时保留准确原因，不误报首次读取失败',async t=>{
