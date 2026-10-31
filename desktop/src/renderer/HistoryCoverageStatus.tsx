@@ -4,6 +4,7 @@ import { syncScopeNotice } from './sync-scope-notice';
 const labels: Record<HistoryCoveragePhase, string> = {
   not_started: '等待同步', syncing: '正在读取历史', complete: '本机历史已读完', incomplete: '历史尚未读完',
 };
+const unknownNonTextTypeLabel = '其他消息（未识别）';
 const incrementalLabels: Record<HistoryIncrementalPhase, string> = {
   not_started: '新消息同步尚未开始', ready: '新消息同步待继续', syncing: '正在同步新消息',
   incomplete: '新消息同步暂时受阻', blocked: '新消息同步已停止', invalidated: '新消息同步检查点已失效',
@@ -74,6 +75,9 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable }: 
   return <div aria-label="当前联系人消息历史覆盖">
     {!rows?.length ? <p>暂时还不知道历史聊天是否读完。</p> : rows.map(row => <div key={row.bindingId}>
       <p><strong>{historyLabel(row)}</strong> · 已保存 {row.messageCount} 条文字消息、{row.nonTextCount} 条非文字占位</p>
+      {!!row.nonTextTypes?.length && <ul aria-label="非文字消息类型数量">
+        {row.nonTextTypes.map(item => <li key={item.messageType}>{item.messageType === 'other' ? unknownNonTextTypeLabel : item.label}：{item.count} 条</li>)}
+      </ul>}
       {(row.metadataOnlyCount ?? 0) > 0 && <p>另保存 {row.metadataOnlyCount} 条系统等元数据记录，不含正文。</p>}
       {row.phase !== 'complete' && row.failureCode && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode] ?? '部分聊天暂时无法读取，开启同步时会自动重试。'}</p>}
       {row.incrementalAwaitingMessages === true && <p role="status">这台电脑上当前没有可读聊天记录，系统会等待新消息并定期检查。</p>}

@@ -3,6 +3,7 @@ import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryCoverage, HistoryIncrementalCoverage, HistoryRead, HistorySupportReport, HistoryTarget, StoredMessage } from './contracts.ts';
 import {quarantineSummary} from './quarantine.ts';
 import {currentSourceScopeCTE,currentSourcePredicate,currentGoalPredicate} from './current-scope.ts';
+import { displayMessageType, messageTypeLabels, type HistoryMessageType, type NonTextTypeCount } from './message-types.ts';
 const currentMessageSource=`EXISTS (SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
  JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id
  AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()})`;
@@ -81,7 +82,20 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
  const continuityBlocked=Boolean(tx.get(`SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=? UNION ALL
   SELECT 1 FROM history_guard_lease g JOIN database_instance d ON d.slot=1 WHERE g.owner_id=? AND g.contact_id=? AND (g.state<>'active' OR g.runtime_id<>d.runtime_id) LIMIT 1`,[owner,contact,owner,contact]));
  const blockedBinding=continuityBlocked&&!goal?tx.get("SELECT id FROM conversation_binding WHERE owner_id=? AND contact_id=? AND state='verified'",[owner,contact]):undefined;
- const counts=tx.get(`WITH ${currentSourceScopeCTE} SELECT count(*) AS messages,count(CASE WHEN kind<>'text' THEN 1 END) AS nontext FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND ${currentMessageSource}`,[owner,contact,contact,owner,contact])!;
+ const typeRows=tx.all(`WITH ${currentSourceScopeCTE} SELECT m.kind,m.original_type,count(*) AS n FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND ${currentMessageSource} GROUP BY m.kind,m.original_type`,[owner,contact,contact,owner,contact]);
+ const counts={messages:0n,nontext:0n},typeCounts=new Map<HistoryMessageType,bigint>();
+ for(const row of typeRows){
+  const n=row.n as bigint;counts.messages+=n;
+  if(row.kind==='text')continue;
+  counts.nontext+=n;
+  const type=displayMessageType({kind:row.kind as StoredMessage['kind'],originalType:String(row.original_type)});
+  typeCounts.set(type,(typeCounts.get(type)??0n)+n);
+ }
+ const nonTextTypes:NonTextTypeCount[]=[];
+ for(const type of Object.keys(messageTypeLabels) as HistoryMessageType[]){
+  if(type==='text'||!typeCounts.has(type))continue;
+  nonTextTypes.push({messageType:type,label:messageTypeLabels[type],count:safeCount(typeCounts.get(type))});
+ }
  const pages=goal?tx.get('SELECT count(*) AS n FROM sync_capture WHERE owner_id=? AND contact_id=? AND goal_id=?',[owner,contact,goal.id])!.n:0n;
  const summary=quarantineSummary(tx,owner,contact),quarantined=summary.unresolved;
  const stateQuarantined=quarantined>0||Boolean(tx.get(`WITH ${currentSourceScopeCTE} SELECT 1 FROM history_message_quarantine q JOIN message m
@@ -116,7 +130,7 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
  return {goalId:goal?String(goal.id):null,contactId:contact,bindingId:goal?String(goal.binding_id):blockedBinding?String(blockedBinding.id):null,traversalComplete,
   phase:effectiveContinuityBlocked||stateQuarantined?'incomplete':!resolvedGoal?'not_started':resolvedGoal.state==='running'?'running':resolvedGoal.state==='complete'?'complete':'incomplete',
   failureCode:effectiveContinuityBlocked?'history_source_continuity_unverified':stateQuarantined?'history_identity_quarantined':resolvedGoal?.failure_code?String(resolvedGoal.failure_code):null,cursor:goal?.cursor?String(goal.cursor):null,
-  messageCount:safeCount(counts.messages),nonTextCount:safeCount(counts.nontext),pageCount:safeCount(pages),quarantinedCount:quarantined,metadataOnlyCount:summary.metadataOnly,
+  messageCount:safeCount(counts.messages),nonTextCount:safeCount(counts.nontext),nonTextTypes,pageCount:safeCount(pages),quarantinedCount:quarantined,metadataOnlyCount:summary.metadataOnly,
   incremental:effectiveContinuityBlocked?{...incrementalCoverage(resolvedGoal,safeIncremental),phase:'invalidated',failureCode:'history_source_continuity_unverified'}:stateQuarantined&&!normalUseTraversal?{...incrementalCoverage(resolvedGoal,safeIncremental),phase:'incomplete',failureCode:'history_identity_quarantined'}:incrementalCoverage(resolvedGoal,safeIncremental,emptyTargetAwaitingMessages)};
 }
 function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:HistoryCoverage,rows:StorageRow[]):HistoryRead {

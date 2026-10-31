@@ -17,6 +17,33 @@ test('消息HTTP投影保留非文字占位、未知顺序与精确显示位置�
  assert.equal(voice.messages[0].text,null);assert.equal(voice.messages[0].media_placeholder,'[语音]');
  assert.deepEqual(voice.messages[0].source_record_ids,[id]);
 });
+test('已保存消息按精确原始类型显示21类，未知类型不猜测正文或引用内容',()=>{
+ const cases=[
+  ['text','1','text',null],['image','3','image','[图片]'],['voice','34','voice','[语音]'],
+  ['video','43','video','[视频]'],['file','25769803825','file','[文件]'],['sticker','47','sticker','[表情]'],
+  ['other','244813135921','quote','[引用回复]'],['other','21474836529','link','[链接]'],
+  ['other','141733920817','miniprogram','[小程序]'],['other','81604378673','forward_chat','[合并转发聊天记录]'],
+  ['other','12884901937','music','[音乐]'],['other','219043332145','channel_video','[视频号]'],
+  ['other','227633266737','solitaire','[接龙]'],['other','266287972401','pat','[拍一拍]'],
+  ['other','373662154801','announcement','[群公告]'],['other','8589934592049','transfer','[转账]'],
+  ['other','8594229559345','red_packet','[红包]'],['other','42','card','[名片]'],
+  ['other','48','location','[位置]'],['other','50','voip','[通话记录]'],['other','10000','system','[系统消息]'],
+  ['other','34359738417','file','[文件]'],['other','103079215153','file','[文件]'],
+  ['other','154618822705','miniprogram','[小程序]'],['other','210453397553','link','[链接]'],
+  ['other','326417514545','music','[音乐]'],
+  ['other','4294967338','card','[名片]'],['other','999','other','[其他消息（未识别）]'],
+  ['other','4294968295','other','[其他消息（未识别）]'],['other','429496729649','other','[其他消息（未识别）]'],
+  ['other','9007199254740993','other','[其他消息（未识别）]'],['other','-1','other','[其他消息（未识别）]'],
+ ];
+ for(const [kind,originalType,type,placeholder] of cases){
+  const stored=message({kind,originalType,text:kind==='text'?'合成文字':null});
+  const projected=projectHistoryMessages({messages:[stored],coverage,replyEligibility:'history_incomplete'},20).messages[0];
+  assert.equal(projected.message_type,type,originalType);assert.equal(projected.media_placeholder,placeholder,originalType);
+  assert.equal(projected.text,kind==='text'?'合成文字':null);assert.equal(projected.quoted,null);
+  assert.deepEqual(projected.source_record_ids,[id]);assert.equal(projected.ordering,'unknown');
+  assert.equal('original_type' in projected,false,'展示分类不暴露渠道原始编号');
+ }
+});
 test('同步HTTP投影映射运行状态并报告文字与占位，不把部分读取标成完整',()=>{
  const projected=projectHistorySyncStatus({sync_enabled:true},[coverage]);
  assert.equal(projected.cli_history_authorization_state,'accepted');

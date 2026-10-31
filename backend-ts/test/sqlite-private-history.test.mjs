@@ -25,6 +25,29 @@ async function fixture(t,options={}){
  const service=new SqliteHistoryService(storage,contacts,channel);
  return {storage,contacts,channel,service,saved:saved.bindings,target,root};
 }
+test('已有占位按原始类型细分计数，联系人与系统元数据保持隔离且不改变正文资格',async t=>{
+ const {service,channel,saved,target}=await fixture(t);const [a,b]=saved;
+ const items=[record('1'),record('2',{kind:'image',text:null,originalType:'3'}),
+  ...['244813135921','244813135921','21474836529','999'].map((originalType,index)=>record(String(index+3),{
+   kind:'other',text:null,originalType,stateAssurance:'unverified',metadataOnly:true})),
+  record('7',{kind:'other',text:null,originalType:'10000',sender:'unknown',stateAssurance:'unverified',metadataOnly:true})];
+ channel.page=async(scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,
+  records:scope.token.contact_id===a.contact_id?items:[record('8',{kind:'sticker',text:null,originalType:'47'})],
+  completedPartitions:target.partitions,exhausted:true});
+ await service.synchronize(a.contact_id);await service.synchronize(b.contact_id);
+ const read=await service.read(a.contact_id),other=await service.coverage(b.contact_id);
+ assert.equal(read.coverage.messageCount,6);assert.equal(read.coverage.nonTextCount,5);assert.equal(read.coverage.metadataOnlyCount,1);
+ assert.deepEqual(read.coverage.nonTextTypes,[
+  {messageType:'image',label:'图片',count:1},{messageType:'quote',label:'引用回复',count:2},
+  {messageType:'link',label:'链接',count:1},{messageType:'other',label:'其他消息（未识别）',count:1}]);
+ assert.deepEqual(other.nonTextTypes,[{messageType:'sticker',label:'表情包',count:1}]);
+ const quotes=read.messages.filter(row=>row.originalType==='244813135921');
+ assert.equal(quotes.length,2);assert.ok(quotes.every(row=>row.kind==='other'&&row.text===null));
+ const {projectHistorySyncStatus}=await import('../src/history/sqlite/http.ts');
+ assert.deepEqual(projectHistorySyncStatus({},[read.coverage]).cli_history_coverages[0].non_text_types,[
+  {message_type:'image',label:'图片',count:1},{message_type:'quote',label:'引用回复',count:2},
+  {message_type:'link',label:'链接',count:1},{message_type:'other',label:'其他消息（未识别）',count:1}]);
+});
 function normalUseChannelFactory(state){
  const capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(key=>[key,'supported']));
  return ()=>{

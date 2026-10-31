@@ -54,6 +54,48 @@ test('增量状态解析：缺失字段不推断已同步，非法枚举整份�
   assert.throws(() => parseSyncReport({ ...base, cli_history_coverages: [{ ...base.cli_history_coverages[0], incremental_phase: 'done' }] }));
 });
 
+test('非文字类型明细校验计数并只展示中文标签，兼容旧宿主缺字段', () => {
+  const rawCoverage = { ...base.cli_history_coverages[0], non_text_count: 4, non_text_types: [
+    { message_type: 'image', label: '图片', count: 3 },
+    { message_type: 'other', label: '后端标签不用于兜底显示', count: 1 },
+  ] };
+  const parsed = parseSyncReport({ ...base, cli_history_coverages: [rawCoverage] }).historyCoverages[0];
+  assert.deepEqual(parsed.nonTextTypes, [
+    { messageType: 'image', label: '图片', count: 3 },
+    { messageType: 'other', label: '后端标签不用于兜底显示', count: 1 },
+  ]);
+  const markup = renderContact(parsed);
+  assert.ok(markup.includes('图片：3 条'));
+  assert.ok(markup.includes('其他消息（未识别）：1 条'));
+  assert.ok(!markup.includes('image'));
+  assert.ok(!markup.includes('other'));
+
+  const legacy = parseSyncReport({ ...base, cli_history_coverages: [{ ...base.cli_history_coverages[0] }] });
+  assert.equal(legacy.historyCoverages[0].nonTextTypes, undefined);
+  assert.equal(renderContact(coverage({ nonTextTypes: undefined })).includes('非文字消息类型数量'), false);
+});
+
+test('非文字类型明细拒绝不完整、不唯一、超界或计数不一致的报告', () => {
+  const row = { ...base.cli_history_coverages[0], non_text_count: 2, non_text_types: [
+    { message_type: 'image', label: '图片', count: 2 },
+  ] };
+  const invalidRows = [
+    { ...row, non_text_types: 'image' },
+    { ...row, non_text_types: Array.from({ length: 33 }, (_, i) => ({ message_type: `type_${i}`, label: '类型', count: 1 })), non_text_count: 33 },
+    { ...row, non_text_types: [{ message_type: 'type with spaces', label: '类型', count: 2 }] },
+    { ...row, non_text_types: [{ message_type: 'text', label: '文字', count: 2 }] },
+    { ...row, non_text_types: [{ message_type: 'image', label: '   ', count: 2 }] },
+    { ...row, non_text_types: [{ message_type: 'image', label: '图'.repeat(65), count: 2 }] },
+    { ...row, non_text_types: [{ message_type: 'image', label: '图片', count: 0 }] },
+    { ...row, non_text_types: [{ message_type: 'image', label: '图片', count: Number.MAX_SAFE_INTEGER + 1 }] },
+    { ...row, non_text_types: [
+      { message_type: 'image', label: '图片', count: 1 }, { message_type: 'image', label: '图片', count: 1 },
+    ] },
+    { ...row, non_text_count: 3 },
+  ];
+  for (const invalid of invalidRows) assert.throws(() => parseSyncReport({ ...base, cli_history_coverages: [invalid] }));
+});
+
 test('界面单独展示增量已停止/不可用原因，不把不可用显示成已同步', () => {
   const blocked = renderContact(coverage({ incrementalPhase: 'blocked', incrementalFailureCode: 'history_tail_unsupported' }));
   assert.ok(blocked.includes('新消息同步已停止'));

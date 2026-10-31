@@ -12,6 +12,8 @@ const backgroundIncrementalPhases: BackgroundIncrementalPhase[] = ['idle', 'acti
 const DEFAULT_HISTORY_AUTHORIZATION_VERSION = 1;
 // 全部私聊覆盖报告有界读取，超过预算整份失败，不截断为完整状态。
 const SYNC_REPORT_MAX_BYTES = 4_194_304;
+const MAX_NON_TEXT_TYPES = 32;
+const MESSAGE_TYPE_IDENTIFIER = /^[a-z][a-z0-9_]{0,31}$/;
 
 function failureCode(value: unknown): string | null {
   if (value === null) return null;
@@ -21,6 +23,30 @@ function failureCode(value: unknown): string | null {
 function count(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('同步报告不可用。');
   return value;
+}
+function nonTextTypes(value: unknown, nonTextCount: number): HistoryCoverage['nonTextTypes'] {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > MAX_NON_TEXT_TYPES) throw new Error('同步报告不可用。');
+  const seen = new Set<string>();
+  let total = 0;
+  const types = value.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('同步报告不可用。');
+    const fields = item as Record<string, unknown>;
+    const messageType = fields.message_type;
+    const label = fields.label;
+    const amount = fields.count;
+    if (typeof messageType !== 'string' || !MESSAGE_TYPE_IDENTIFIER.test(messageType) || messageType === 'text'
+      || seen.has(messageType) || typeof label !== 'string' || !label.trim() || [...label].length > 64) {
+      throw new Error('同步报告不可用。');
+    }
+    const typeCount = count(amount);
+    if (typeCount <= 0 || !Number.isSafeInteger(total + typeCount)) throw new Error('同步报告不可用。');
+    seen.add(messageType);
+    total += typeCount;
+    return { messageType, label, count: typeCount };
+  });
+  if (total !== nonTextCount) throw new Error('同步报告不可用。');
+  return types;
 }
 function priorityReport(fields: Record<string, unknown>): SyncPriorityReport | undefined {
   // 旧后台没有优先读取指标；不把未测量的数据填成零。
@@ -98,9 +124,13 @@ function historyCoverages(value: unknown): HistoryCoverage[] | undefined {
     const incrementalAwaitingMessages=item.incremental_waiting_for_messages as boolean|undefined;
     const incrementalLastAcceptedAt = item.incremental_last_accepted_at === undefined || item.incremental_last_accepted_at === null ? null : count(item.incremental_last_accepted_at);
     const incrementalPages = item.incremental_pages === undefined ? undefined : count(item.incremental_pages);
+    const messageCount = count(item.message_count);
+    const nonTextCount = count(item.non_text_count);
+    const parsedNonTextTypes = nonTextTypes(item.non_text_types, nonTextCount);
     return { bindingId: item.binding_id.toLowerCase(), contactId: item.contact_id.toLowerCase(),
       phase: item.phase as HistoryCoveragePhase, failureCode: failureCode(item.failure_code),
-      messageCount: count(item.message_count), nonTextCount: count(item.non_text_count), pageCount: count(item.page_count),
+      messageCount, nonTextCount, pageCount: count(item.page_count),
+      ...(parsedNonTextTypes === undefined ? {} : { nonTextTypes: parsedNonTextTypes }),
       ...(item.metadata_only_count === undefined ? {} : { metadataOnlyCount: count(item.metadata_only_count) }),
       ...(incrementalPhase === undefined ? {} : { incrementalPhase }),
       ...(incrementalFailureCode === undefined ? {} : { incrementalFailureCode }),

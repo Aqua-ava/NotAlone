@@ -1,4 +1,5 @@
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
+import type { NonTextTypeCount } from './message-types.ts';
 
 /** 只由受信任渠道适配器提供；HTTP/renderer 不得注入支持档或原始消息。 */
 export interface HistorySupportReport {
@@ -75,6 +76,8 @@ export interface HistoryCoverage {
   goalId: string | null; contactId: string; bindingId: string | null;
   phase: HistoryPhase; failureCode: string | null; cursor: string | null;
   messageCount: number; nonTextCount: number; pageCount: number; quarantinedCount: number;
+  // 由已保存的原始类型码生成，不读取XML、展开引用或提升正文资格。
+  nonTextTypes?: NonTextTypeCount[];
   // 无法归属发送方的独立系统等元数据观察，不作为聊天正文或派生依据。
   metadataOnlyCount?: number;
   // 固定目标已全部遍历；未知消息仍可使 phase=incomplete，不能据此宣称内容已全部核验。

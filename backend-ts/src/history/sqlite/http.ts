@@ -4,6 +4,7 @@ import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-
 import type { HistoryCoverage, HistoryRead, StoredMessage } from './contracts.ts';
 import type { FirstHistoryCoordinatorState } from './coordinator.ts';
 import type { IncrementalHistoryCoordinatorState } from './incremental-coordinator.ts';
+import { displayMessageType, messagePlaceholder } from './message-types.ts';
 
 interface HistoryHttpService {
   read(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
@@ -11,9 +12,6 @@ interface HistoryHttpService {
   synchronize(contactId: string, signal?: AbortSignal): Promise<HistoryCoverage>;
 }
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const placeholders: Record<StoredMessage['kind'], string | null> = {
-  text: null, image: '[图片]', voice: '[语音]', video: '[视频]', file: '[文件]', sticker: '[表情]', other: '[非文字消息]',
-};
 function isoTime(message: StoredMessage): string | null {
   if (message.sentAt === null) return null;
   const timestamp = Number(message.sentAt);
@@ -27,8 +25,8 @@ export function projectHistoryMessages(read: HistoryRead, limit: number) {
   return {
     messages: selected.map(message => ({
       message_id: message.id, speaker: message.sender === 'owner' ? 'user' : 'contact',
-      message_type: message.kind, text: message.kind === 'text' ? message.text : null,
-      media_placeholder: placeholders[message.kind], occurred_at: isoTime(message), quoted: null,
+      message_type: displayMessageType(message), text: message.kind === 'text' ? message.text : null,
+      media_placeholder: messagePlaceholder(displayMessageType(message)), occurred_at: isoTime(message), quoted: null,
       ordering: message.ordering, display_position: message.displayPosition, source_record_ids: message.sourceRecordIds,
     })),
     next_cursor: read.messages.length > limit ? selected.at(-1)!.id : null,
@@ -94,6 +92,7 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, persiste
     cli_history_coverages: coverages.filter(row => row.bindingId !== null).map(row => ({
       binding_id: row.bindingId, contact_id: row.contactId, phase: row.phase === 'running' ? 'syncing' : row.phase,
       failure_code: row.failureCode, message_count: textCount(row), non_text_count: row.nonTextCount, metadata_only_count: row.metadataOnlyCount ?? 0, page_count: row.pageCount,
+      ...(row.nonTextTypes === undefined ? {} : { non_text_types: row.nonTextTypes.map(item => ({ message_type: item.messageType, label: item.label, count: item.count })) }),
       incremental_phase: incrementalPhase(row), incremental_failure_code: incrementalFailure(row),
       ...(enabled&&row.incremental?.emptyTargetAwaitingMessages===true&&incrementalFailure(row)===null?{incremental_waiting_for_messages:true}:{}),
       incremental_last_accepted_at: row.incremental?.lastAcceptedAt ?? null, incremental_pages: row.incremental?.pagesAccepted ?? 0,
