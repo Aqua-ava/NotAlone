@@ -29,8 +29,8 @@ test('正式profile隔离回归：Skill最小管理与官方加载、原目录�
  const request=async(path,input)=>{const response=await fetch(base+path,{method:input?'POST':'GET',headers:{'content-type':'application/json',authorization:'Bearer profile-only'},body:input?JSON.stringify(input):undefined});return {status:response.status,body:await response.json()};};
  assert.equal((await request('/state')).body[0].enabledState,'unknown');
  assert.equal((await request('/api/skills')).body.skills[0].current_revision_no,null);
- const discovered=await request('/api/skills/discover',{directory_name:'gentle',confirmed:true});
- assert.equal(discovered.body.skill.enabled_state,'unknown');assert.match(discovered.body.skill.state_label,/待核验启停/);
+ assert.equal((await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).status,503);
+ const discovered=(await request('/api/skills')).body.skills[0];assert.equal(discovered.enabled_state,'unknown');assert.match(discovered.state_label,/待核验启停/);
  let item=(await request('/discover',{name:'gentle'})).body;
  assert.equal(item.enabledState,'unknown');assert.equal((await request('/load',{id:item.id})).status,409);
  item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'enabled'})).body;

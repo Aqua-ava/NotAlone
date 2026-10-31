@@ -23,6 +23,6 @@ test('最小DTO区分未知状态并保留精确head，明确启用带原CAS而�
 test('重连后旧页面写入在出站前拒绝，renderer不能传owner/根路径/旧删除动作',async t=>{
  const {controller,item,calls,changeGeneration}=await fixture(t);changeGeneration();
  await assert.rejects(controller.verify({packageId:item.package_id,expectedHeadRevision:'1',connectionGeneration:1,confirmed:true}));assert.equal(calls.length,0);
- await assert.rejects(controller.discover({directoryName:'../private',connectionGeneration:2,confirmed:true}));assert.equal(calls.length,0);
- await assert.rejects(controller.discover({directoryName:'gentle',connectionGeneration:2,confirmed:true,ownerId:'other'}));assert.equal(calls.length,0);
+ assert.equal('discover' in controller,false);
+ await assert.rejects(controller.verify({packageId:item.package_id,expectedHeadRevision:'1',connectionGeneration:2,confirmed:true,ownerId:'other'}));assert.equal(calls.length,0);
 });

@@ -1,7 +1,7 @@
 /** 最小Skill管理适配；只走具名路径，旧学习与回滚不进入此合同。 */
 import type {BackendHost} from '../backend/host';
 import {isUuid} from '../uuid';
-import type {SkillDirectoryCommand,SkillLibraryCommand,SkillLibraryItem,SkillLibrarySnapshot,SqliteSkillLibrarySnapshot} from '../../shared/skill-library-bridge';
+import type {SkillLibraryCommand,SkillLibraryItem,SkillLibrarySnapshot,SqliteSkillLibrarySnapshot} from '../../shared/skill-library-bridge';
 const invalid=()=>new Error('Skill 状态尚未核对，请刷新后再操作。');
 const decimal=(value:unknown):value is string=>typeof value==='string'&&/^[1-9][0-9]{0,18}$/.test(value)&&BigInt(value)<=9223372036854775807n;
 function row(value: unknown):Record<string,unknown>{if(!value||typeof value!=='object'||Array.isArray(value))throw invalid();return value as Record<string,unknown>;}
@@ -32,11 +32,6 @@ export class SkillLibraryController {
   const skills=data.skills.map(readItem);if(new Set(skills.map(i=>i.packageId)).size!==skills.length)throw invalid();
   return {mode:'sqlite',connectionGeneration:generation,skills};
  }
- async discover(input:unknown):Promise<SqliteSkillLibrarySnapshot>{
-  const i=row(input);exact(i,['directoryName','connectionGeneration','confirmed']);
-  if(typeof i.directoryName!=='string'||i.directoryName.length>64||!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(i.directoryName))throw invalid();
-  return this.write(i as unknown as SkillDirectoryCommand,'/api/skills/discover',{directory_name:i.directoryName,confirmed:true});
- }
  async verify(input:unknown):Promise<SqliteSkillLibrarySnapshot>{const i=this.command(input);return this.write(i,`/api/skills/${i.packageId}/verify`,{expected_head_revision:i.expectedHeadRevision,confirmed:true});}
  async changeEnabled(input:unknown):Promise<SqliteSkillLibrarySnapshot>{
   const raw=row(input);exact(raw,['packageId','expectedHeadRevision','connectionGeneration','confirmed','enabled']);if(typeof raw.enabled!=='boolean')throw invalid();
@@ -47,14 +42,14 @@ export class SkillLibraryController {
   const i=row(input);exact(i,['packageId','expectedHeadRevision','connectionGeneration','confirmed']);
   if(!isUuid(i.packageId)||!decimal(i.expectedHeadRevision))throw invalid();return i as unknown as SkillLibraryCommand;
  }
- private async write(command:SkillDirectoryCommand|SkillLibraryCommand,path:string,body:unknown):Promise<SqliteSkillLibrarySnapshot>{
+ private async write(command:SkillLibraryCommand,path:string,body:unknown):Promise<SqliteSkillLibrarySnapshot>{
   if(command.confirmed!==true||!Number.isSafeInteger(command.connectionGeneration)||this.backend.getConnectionGeneration()!==command.connectionGeneration)throw invalid();
   const current=await this.read();if(current.mode!=='sqlite'||current.connectionGeneration!==command.connectionGeneration||this.backend.getConnectionGeneration()!==command.connectionGeneration)throw invalid();
   try {
    const result=await this.backend.requestJson({method:'POST',path,body,timeoutMs:10_000});
    if(result.generation!==command.connectionGeneration||this.backend.getConnectionGeneration()!==command.connectionGeneration)throw invalid();
    const receipt=readItem(row(result.data).skill);
-   if('packageId' in command&&receipt.packageId!==command.packageId||'directoryName' in command&&receipt.directoryName!==command.directoryName
+   if(receipt.packageId!==command.packageId
     ||path.endsWith('/enable')&&receipt.enabledState!=='enabled'||path.endsWith('/disable')&&receipt.enabledState!=='disabled')throw invalid();
    const next=await this.read();if(next.mode!=='sqlite'||next.connectionGeneration!==command.connectionGeneration)throw invalid();return next;
   }catch{throw new Error('操作结果尚未核对，请刷新 Skill 状态后再操作。');}

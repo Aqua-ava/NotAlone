@@ -4,7 +4,6 @@ import type { SkillLearningBridge, SkillLearningState } from '../shared/skill-le
 export function createSkillLearningBridge(transport: PageTransport): SkillLearningBridge {
   return Object.freeze({
     readLibrary: (...args: unknown[]) => args.length ? Promise.reject(new Error('Skill 查询无效。')) : transport.invoke('skill-library:read'),
-    discoverLibrary: (...args: unknown[]) => transport.invoke('skill-library:discover', ...args),
     verifyLibrary: (...args: unknown[]) => transport.invoke('skill-library:verify', ...args),
     changeLibraryEnabled: (...args: unknown[]) => transport.invoke('skill-library:enabled', ...args),
     getState: (...args: unknown[]) => args.length ? Promise.reject(new Error('经验整理操作无效。')) : transport.invoke('skill-learning:get-state'),

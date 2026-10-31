@@ -42,7 +42,6 @@ export class SkillLearningController {
   }
   getState() { return structuredClone(this.state); }
   readLibrary() { return this.library.read(); }
-  discoverLibrary(input: unknown) { return this.library.discover(input); }
   verifyLibrary(input: unknown) { return this.library.verify(input); }
   changeLibraryEnabled(input: unknown) { return this.library.changeEnabled(input); }
   onStateChanged(listener: (state: SkillLearningState) => void) {

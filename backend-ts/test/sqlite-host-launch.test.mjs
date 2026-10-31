@@ -93,7 +93,7 @@ test('SQLite正式宿主接通显式合成Skill父目录，状态与CAS管理可
    assert.equal(view.skills.length,1);const automatic=view.skills[0];
    assert.equal(automatic.name,'gentle');assert.equal(automatic.enabled_state,'unknown');assert.equal(automatic.verification_state,'pending');
    assert.equal(automatic.current_revision_no,null);assert.deepEqual(automatic.revisions,[]);
-   let item=(await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).body.skill;packageId=item.package_id;
+   let item=automatic;packageId=item.package_id;
    assert.equal(packageId,automatic.package_id);assert.equal(item.head_revision,automatic.head_revision);assert.equal(item.enabled_state,'unknown');
    item=(await request(`/api/skills/${packageId}/enable`,{expected_head_revision:item.head_revision,confirmed:true})).body.skill;
    assert.equal(item.enabled_state,'enabled');assert.equal(item.verification_state,'verified');assert.equal(item.current_revision_no,'1');
@@ -146,7 +146,7 @@ test('正常DSH运行中账号DELETE真实compact并公开复核，Skill元数�
   const discussion=await request('/api/contacts/11111111-1111-4111-8111-111111111111/assistant-sessions/22222222-2222-4222-8222-222222222222','DELETE',{confirmed:true});
   assert.equal(discussion.status,400);assert.equal((await discussion.json()).error,'discussion_deletion_scope_invalid');
   if(withSkill){
-   let item=await (await request('/api/skills/discover','POST',{directory_name:'gentle',confirmed:true})).json();
+   const discovered=await (await request('/api/skills')).json();let item={skill:discovered.skills[0]};
    assert.equal(typeof item.skill.package_id,'string');
    const enabled=await request(`/api/skills/${item.skill.package_id}/enable`,'POST',{expected_head_revision:item.skill.head_revision,confirmed:true});
    assert.equal(enabled.status,200);
@@ -175,7 +175,7 @@ test('正常DSH运行中账号DELETE真实compact并公开复核，Skill元数�
   assert.equal((await (await request('/api/account','DELETE',{confirmed:true,confirm_scope:'account'},{'Idempotency-Key':'synthetic-account-delete'})).json()).operation_id,accepted.operation_id);
   if(withSkill){
    assert.equal(await readFile(path.join(skillPackageRoot,'gentle/SKILL.md'),'utf8'),document);
-   const late=await request('/api/skills/discover','POST',{directory_name:'gentle',confirmed:true});assert.equal(late.status,409);
+   const late=await request('/api/skills');assert.equal(late.status,409);
   }
   await request('/api/runtime/shutdown','POST');assert.equal(await host.waitForExit(15000),true);
   const reopened=await SqliteStorage.open({userData:root,intent:'open',expectedDatabaseId:databaseId,role:'test'});

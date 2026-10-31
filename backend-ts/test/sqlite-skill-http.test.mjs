@@ -21,13 +21,14 @@ test('正常Skill业务HTTP适配：认证、状态查询与CAS启停，旧清�
  assert.equal((await request('/api/skills',null,{})).status,401);
  assert.equal((await request('/api/skills',null,{authorization:'Bearer synthetic-only',origin:'https://example.invalid'})).status,401);
  assert.equal((await request('/api/skills')).body.skills[0].enabled_state,'unknown');
- let item=(await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).body.skill;
+ assert.equal((await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).status,503);
+ let item=(await request('/api/skills')).body.skills[0];
  assert.equal(item.enabled_state,'unknown');assert.match(item.state_label,/待核验启停/);
  const stale=item.head_revision;
  item=(await request(`/api/skills/${item.package_id}/enable`,{expected_head_revision:stale,confirmed:true})).body.skill;
  assert.equal(item.enabled_state,'enabled');assert.match(item.state_label,/已启用/);
  assert.equal((await request(`/api/skills/${item.package_id}/disable`,{expected_head_revision:stale,confirmed:true})).status,409);
- assert.equal((await request('/api/skills/discover',{directory_name:'gentle',confirmed:true,owner_id:'other'})).status,400);
+ assert.equal((await request('/api/skills/discover',{directory_name:'gentle',confirmed:true,owner_id:'other'})).status,503);
  assert.equal((await request(`/api/skills/${item.package_id}/delete`,{confirmed:true})).status,503);
  assert.equal((await request('/api/contacts/contact-a/skill-learning',{confirmed:true})).status,503);
  assert.equal((await request('/api/skills?owner_id=other')).status,400);

@@ -44,24 +44,18 @@ export class SqliteSkillHttp {
    if(raw!==path)throw new SqliteSkillError('skill_request_invalid');
    if(legacyLearning){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
    const match=/^\/api\/skills\/([a-f0-9-]{36})\/(verify|enable|disable)$/.exec(path);
-   const query=path==='/api/skills';const discover=path==='/api/skills/discover';
-   if(!query && !discover && !match){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
+   const query=path==='/api/skills';
+   if(!query && !match){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
    if(req.method!==(query?'GET':'POST')){respond(res,405,{error:'method_not_allowed'});return true;}
    if(query){respond(res,200,{storage:'sqlite',mode:'minimal',skills:(await this.library.inspect()).map(skillManagementView)});return true;}
    let parsed: unknown;
    try {parsed=JSON.parse((await readWechatHttpBody(req,16_384,10_000)).toString('utf8'));}
    catch(error){if(error instanceof WechatHttpBodyError)throw error;throw new SqliteSkillError('skill_request_invalid');}
    const body=object(parsed);
-   exact(body,discover?['directory_name','confirmed']:['expected_head_revision','confirmed']);
+   exact(body,['expected_head_revision','confirmed']);
    if(body.confirmed!==true)throw new SqliteSkillError('skill_request_invalid');
-   let item: SkillPackageState;
-   if(discover){
-    if(typeof body.directory_name!=='string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(body.directory_name))throw new SqliteSkillError('skill_request_invalid');
-    item=await this.library.discover(body.directory_name);
-   }else{
-    const [,id,action]=match!;const expectedHead=head(body.expected_head_revision);
-    item=action==='verify'?await this.library.verify(id,expectedHead):await this.library.setEnabled(id,expectedHead,action==='enable'?'enabled':'disabled');
-   }
+   const [,id,action]=match!;const expectedHead=head(body.expected_head_revision);
+   const item=action==='verify'?await this.library.verify(id,expectedHead):await this.library.setEnabled(id,expectedHead,action==='enable'?'enabled':'disabled');
    respond(res,200,{skill:skillManagementView(item)});
   }catch(error){
    const code=error instanceof StorageFailure || error instanceof SqliteSkillError?error.code:error instanceof WechatHttpBodyError?error.code:'skill_operation_failed';

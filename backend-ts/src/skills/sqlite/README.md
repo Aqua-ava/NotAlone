@@ -1,14 +1,14 @@
-# SQLite Skill 最小关联（实施14）
+# SQLite Skill 自动发现与受控读取
 
-仅接回官方 DSH Skill provider、包／修订身份和业务查询；不创建学习、审核发布或方法级策略表。原 Skill 目录始终只读。显式 SQLite 开发配置已接通官方 profile、认证 HTTP 和现有 Skill 管理页；默认 PG 宿主尚未切换，05/11/12真实删除与回复链另行组合验收。
+使用官方 DSH Skill provider、包／修订身份和业务查询，不创建学习、审核发布或方法级策略表。应用在授权根自动发现 Skill，用户明确启用或停用，回复时自动判断零或一个可用版本。管理页不提供手动添加、填写目录名或安装路径；原 Skill 目录始终只读。
 
 ## 迁移与查询
 
 `storage.ts` 导出 `skillSchemaSql` 和 `skillActions`，公共 registry 在02身份迁移后追加版本4并注册动作，不改已发布 SQL。仅建立 `skill_package`、`skill_package_revision` 两张表；测试夹具的 owner、scope、input 表不进入生产。包复合主键和修订复合外键隔离 owner，revision 锚点字段有不可变触发器。公开调用只有固定动作，不接受 SQL。
 
-`SqliteSkillLibrary(storage, runtimeOwnerId, authorizedRoot)` 的 owner 和目录由已认证宿主配置提供，不能取自模型、任意 HTTP 请求或 Skill 文本。`discover(directoryName)` 仅处理明确指定的直接子目录，首次为 `unknown`；不查旧 PG、不从 `.versions` 猜审核或启用历史，不批量扫描真实目录作为测试。
+`SqliteSkillLibrary(storage, runtimeOwnerId, authorizedRoot)` 的 owner 和目录由已认证宿主配置提供，不能取自模型、任意 HTTP 请求或 Skill 文本。`refresh`/`inspect` 自动发现授权根中的直接子目录；内部 `discover(directoryName)` 仅供这一受控流程登记目录身份，不是用户管理、IPC 或 HTTP 添加入口。新包首次为 `unknown + pending`、零可用修订，不读取正文，不查旧 PG，也不从 `.versions` 猜审核或启用历史。
 
-- `list/get` 查询已记录状态；`inspect` 作为管理业务查询重验文件现状，显示 unknown/enabled/disabled 与 verified/pending/missing/conflict/invalid 两组状态。查询不接受新内容为新版本。
+- `list/get` 查询已记录状态；`refresh`/`inspect` 自动发现并核验已启用包的有效更新，显示 unknown/enabled/disabled 与 verified/pending/missing/conflict/invalid 两组状态。未知或停用包只检查目录身份，不读取正文。
 - `setEnabled(id, expectedHead, state)` 只供明确用户操作，保留 `user_action` 来历并推进 head；不因技术核验、空库或缺审核自动启停。
 - `verify(id, expectedHead)` 显式核验目录及内容，以 CAS 提交当前修订。目录身份为规范化物理定位和 dev/ino，拒绝任何路径段的符号链接；替换身份保持 conflict，不猜测关联。
 - `requireVerification(id, expectedHead)` 供来源资格失效时封禁，标为 pending、撤销当前指针和旧修订可用性，但保留启停和原目录。此状态不允许只凭相同字节 `verify` 恢复；真实来源恢复合同待05接入。
@@ -17,11 +17,11 @@
 
 ## 正常业务 HTTP 适配
 
-`SqliteSkillHttp(library, authorize).handle(req,res)` 已由 `sqlite-host-plugin.ts` 装配，复用原 `/api/skills` 路径；authorize注入宿主唯一 Bearer/Origin 认证，owner由身份域解析，目录根由显式 test 配置指定，两者不接受请求传入。GET返回含中文state_label的最小状态投影，不含物理路径。POST `/api/skills/discover` 明确确认配置根内的目录名；`/:id/verify|enable|disable` 以十进制expected_head_revision做CAS，均要求confirmed=true。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。现有SkillLearningPage提供最小DTO分支和manager具名桥接，以精确CAS管理中文状态。
+`SqliteSkillHttp(library, authorize).handle(req,res)` 已由 `sqlite-host-plugin.ts` 装配，复用原 `/api/skills` 路径；authorize注入宿主唯一 Bearer/Origin 认证，owner由身份域解析，目录根由显式 test 配置指定，两者不接受请求传入。GET 自动刷新发现，返回含中文state_label的最小状态投影，不含物理路径。`/:id/verify|enable|disable` 对已自动发现的项目以十进制expected_head_revision做CAS，均要求confirmed=true。管理接口不接收手动新增目录或安装路径。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。现有SkillLearningPage提供最小DTO分支和manager具名桥接，以精确CAS管理中文状态。
 
-正常 `launchDsh` 使用 `profile/sqlite.patch.yml` 的官方 registry 和薄宿主；仅显式 `capabilities: [contacts, skills]` 配合隔离 userData 内的 `skillPackageRoot` 开放管理，缺失或无效配置拒绝启动。握手位于 `managed/sqlite-backend.info`，与数据库维护目录分开。该 profile 不装配模型、Agent 或 Tool；管理页状态不宣称回复已经加载 Skill。
+正常 `launchDsh` 使用 `profile/sqlite.patch.yml` 的官方 registry 和薄宿主；仅显式 `capabilities: [contacts, skills]` 配合隔离 userData 内的 `skillPackageRoot` 开放管理，缺失或无效配置拒绝启动。握手位于 `managed/sqlite-backend.info`，与数据库维护目录分开。管理能力本身不产生模型请求，管理页状态不宣称回复已经加载 Skill。
 
-2026-10-29 通过 `pnpm run dev` 对合成包完成实际 App 验收：空库、明确关联为 unknown、启用、内容变化 pending、重新核验切换修订、停用、目录缺失、同字节换目录的身份冲突及正常退出重开后的停用／冲突持久化。卡片、按钮和摘要换行已检查；两次正常退出均停止开发 App 与后端并移除握手文件，原件字节保持。未读取真实微信或调用模型。
+2026-10-29 的合成包管理页 App 验收是历史证据，覆盖启停、核验、目录缺失、身份冲突及重开持久化，不证明当前已取消的手动添加入口仍可用。当前界面与自动发现的验收以本轮任务记录为准；历史验收未读取真实微信或调用模型。
 
 ## 官方加载与实际输入
 
@@ -57,10 +57,10 @@
 
 ## 2026-10-31 受控发现与更新修订
 
-按 [ADR-129](../../../../architecture/adr/129-controlled-dsh-reply-skill-discovery.md)，`discover` 仅关联授权根的直接子目录名/身份，初态为 `unknown + pending`、零可用修订，不再为了发现读取正文。`refresh` 与 `inspect` 自动发现新目录，仅对已启用包核验技术更新；未知/停用仅查目录身份，用户启用时才核验最新正文。显式管理 `verify` 不隐式启用，来源撤销/身份冲突不经扫描恢复；应用核验的合法变化建立新修订，保留用户启停决定。
+按 [ADR-129](../../../../architecture/adr/129-controlled-dsh-reply-skill-discovery.md)，内部 `discover` 仅由自动刷新登记授权根的直接子目录名/身份，初态为 `unknown + pending`、零可用修订，不再为了发现读取正文。`refresh` 与 `inspect` 自动发现新目录，仅对已启用包核验技术更新；未知/停用仅查目录身份，用户启用时才核验最新正文。显式管理 `verify` 不隐式启用，来源撤销/身份冲突不经扫描恢复；应用核验的合法变化建立新修订，保留用户启停决定。
 
 SQLite 正常读取改用 [原生窄只读器](../../../../native/skill-read/README.md)及 `secure-directory.ts`。根身份在实例构造固定，读取前核包身份，逐段无链接目录 FD 读取和最终快照复验，实际返回字节参与摘要；服务缺失安全拒绝，不回落 Node。原 `skill-package.ts` 继续负责纯格式/大小/安全校验，未改变原目录只读和业务删除边界。
 
 本轮核验 `dsh-skill` 声明、安装锁及实际制品均为 `0.2.1-rc.2`，Cordis `4.0.5`；官方参考仍固定 `687f282e8625c6b8d11ff58211a90524be2e4317`，本机相邻源码 HEAD 不同，未完成全量可复现构建比对。官方 filesystem 的发现 `discoverRoot` 会对每个子目录调用 `parseSkillFile`，服务缺失/`trustedHost` 有 Node 分支，watcher 独立接触宿主路径，不能只凭返回目录过滤满足读取前边界。因此正式产品继续使用官方 registry 的业务 `registerProvider`，不装配 filesystem/default roots/bundled roots/watcher；刷新与每次读取复验承接变更处理。本轮测试证明这一替代路径，不宣称已经验证自定义 `ctx.fs` 生产组合。
 
-合成验证命令及边界见任务 01 与原生只读器说明；自动选择、失败降级、资源加载和实际 App 的最终验收由同组任务分别记录。上文“管理查询不接受新版本”和“discover 首次已经完整核验”的旧描述由本节替代。
+合成验证命令及边界见任务 01 与原生只读器说明；自动选择、失败降级、资源加载和实际 App 的最终验收由同组任务分别记录。

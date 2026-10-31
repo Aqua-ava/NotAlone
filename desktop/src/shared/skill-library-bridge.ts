@@ -8,10 +8,8 @@ export interface SkillLibraryItem {
 export interface SqliteSkillLibrarySnapshot {mode:'sqlite';connectionGeneration:number;skills:SkillLibraryItem[]}
 export type SkillLibrarySnapshot = SqliteSkillLibrarySnapshot | {mode:'legacy';connectionGeneration:number};
 export interface SkillLibraryCommand {packageId:string;expectedHeadRevision:string;connectionGeneration:number;confirmed:true}
-export interface SkillDirectoryCommand {directoryName:string;connectionGeneration:number;confirmed:true}
 export interface SkillLibraryBridge {
  readLibrary(): Promise<SkillLibrarySnapshot>;
- discoverLibrary(command: SkillDirectoryCommand): Promise<SqliteSkillLibrarySnapshot>;
  verifyLibrary(command: SkillLibraryCommand): Promise<SqliteSkillLibrarySnapshot>;
  changeLibraryEnabled(command: SkillLibraryCommand & {enabled:boolean}): Promise<SqliteSkillLibrarySnapshot>;
 }
