@@ -319,6 +319,73 @@ func TestNotAloneDeltaPagesRejectsCorruptWALAndIgnoresPartialTail(t *testing.T) 
 	}
 }
 
+func TestNotAloneDeltaPagesReindexesOverflowPageReusedAsBtreeChild(t *testing.T) {
+	dbPath, key, rootPage, writer := notaloneDeltaPageFixture(t)
+	db, dbSize, wal, walSize := notaloneDeltaReaders(t, dbPath)
+	baseline, err := readNotaloneDeltaPages(context.Background(), db, dbSize, wal, walSize, rootPage, key, nil)
+	if err != nil {
+		t.Fatalf("index baseline with overflow chain: %v", err)
+	}
+	priorOverflow := notaloneDeltaOverflowPageNumbers(baseline.State)
+	if len(priorOverflow) == 0 {
+		t.Fatal("synthetic baseline has no overflow page to recycle")
+	}
+	beforeIDs := notaloneDeltaReadIDs(t, writer)
+	if err = writer.Exec("BEGIN IMMEDIATE; UPDATE Msg_delta_fixture SET body=zeroblob(64) WHERE local_id=1300; WITH RECURSIVE seq(id) AS (VALUES(2001) UNION ALL SELECT id+1 FROM seq WHERE id<10000) INSERT INTO Msg_delta_fixture(local_id,body) SELECT id,zeroblob(128) FROM seq; COMMIT"); err != nil {
+		t.Fatal("shrink overflow row and split B-tree in one synthetic commit")
+	}
+	currentBtreePages := notaloneDeltaReadDBStatPages(t, writer)
+	var reused []uint32
+	for _, number := range priorOverflow {
+		if kind, ok := currentBtreePages[number]; ok && (kind == "leaf" || kind == "internal") {
+			reused = append(reused, number)
+		}
+	}
+	if len(reused) == 0 {
+		t.Fatalf("fixture did not reuse old overflow page as a B-tree child; prior=%v current tree pages=%d", priorOverflow, len(currentBtreePages))
+	}
+
+	currentDB, currentSize, currentWAL, currentWALSize := notaloneDeltaReaders(t, dbPath)
+	delta, err := readNotaloneDeltaPages(context.Background(), currentDB, currentSize, currentWAL, currentWALSize, rootPage, key, &baseline.State)
+	if err != nil {
+		t.Fatalf("track page reused from overflow as B-tree child: %v", err)
+	}
+	currentIDs := notaloneDeltaReadIDs(t, writer)
+	added := notaloneDeltaIDDifference(currentIDs, beforeIDs)
+	assertNotaloneDeltaContainsAll(t, delta.ChangedIDs, added, "overflow-page reuse")
+	if notaloneDeltaPriorValid(delta.State, rootPage, delta.State.SaltDigest, delta.State.Format, delta.State.ReserveSize) != true {
+		t.Fatal("overflow-page reuse produced a state rejected by the next checkpoint validation")
+	}
+}
+
+func notaloneDeltaOverflowPageNumbers(state notaloneDeltaPageState) []uint32 {
+	var result []uint32
+	for _, page := range state.Pages {
+		if page.Kind == notaloneDeltaPageOverflow {
+			result = append(result, page.Number)
+		}
+	}
+	return result
+}
+
+func notaloneDeltaReadDBStatPages(t *testing.T, db *wcdb.DB) map[uint32]string {
+	t.Helper()
+	rows, err := db.QueryBounded(context.Background(), 20000, "SELECT pageno,pagetype FROM dbstat WHERE name=?", "Msg_delta_fixture")
+	if err != nil {
+		t.Fatalf("read synthetic B-tree page ownership: %v", err)
+	}
+	pages := make(map[uint32]string, len(rows))
+	for _, row := range rows {
+		page, pageOK := row["pageno"].(int64)
+		kind, kindOK := row["pagetype"].(string)
+		if !pageOK || !kindOK || page <= 0 || page > int64(^uint32(0)) {
+			t.Fatalf("unexpected synthetic dbstat row shape: %#v", row)
+		}
+		pages[uint32(page)] = kind
+	}
+	return pages
+}
+
 func notaloneDeltaReadIDs(t *testing.T, db *wcdb.DB) map[int64]struct{} {
 	t.Helper()
 	rows, err := db.QueryBounded(context.Background(), 12000, "SELECT local_id FROM Msg_delta_fixture ORDER BY local_id")

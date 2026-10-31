@@ -106,6 +106,9 @@ func notaloneDeltaApplyWALFrames(ctx context.Context, reader *notaloneDeltaPageR
 	if len(state.Pages) == 0 {
 		return notaloneDeltaPageState{}, nil, errors.New("history_delta_tree_empty")
 	}
+	if !notaloneDeltaPriorValid(state, root, state.SaltDigest, reader.format, reader.reserveSize) {
+		return notaloneDeltaPageState{}, nil, errors.New("history_delta_state_invalid_after_delta")
+	}
 	return state, changed, nil
 }
 
@@ -156,6 +159,20 @@ func notaloneDeltaApplyTreePage(ctx context.Context, reader *notaloneDeltaPageRe
 		for _, child := range node.children {
 			childPage, exists := pages[child]
 			if exists {
+				if childPage.Kind == notaloneDeltaPageOverflow {
+					notaloneDeltaAddPageOwners(childPage, changed)
+					if _, hasFrame := reader.walFrames[child]; !hasFrame {
+						return errors.New("history_delta_reused_overflow_frame_missing")
+					}
+					delete(pages, child)
+					if err := notaloneDeltaAddTreePage(ctx, reader, pages, changed, child, number, visiting); err != nil {
+						return err
+					}
+					continue
+				}
+				if childPage.Kind != notaloneDeltaPageLeaf && childPage.Kind != notaloneDeltaPageInterior {
+					return errors.New("history_delta_btree_child_kind_invalid")
+				}
 				childPage.Parent = number
 				pages[child] = childPage
 				continue
@@ -191,13 +208,20 @@ func notaloneDeltaAddTreePage(ctx context.Context, reader *notaloneDeltaPageRead
 	if visiting[number] {
 		return errors.New("history_delta_btree_cycle")
 	}
-	if _, exists := pages[number]; exists {
-		page := pages[number]
-		if page.Parent != parent {
-			page.Parent = parent
-			pages[number] = page
+	if existing, exists := pages[number]; exists {
+		if existing.Kind == notaloneDeltaPageOverflow {
+			notaloneDeltaAddPageOwners(existing, changed)
+			if _, hasFrame := reader.walFrames[number]; !hasFrame {
+				return errors.New("history_delta_reused_overflow_frame_missing")
+			}
+			delete(pages, number)
+		} else if existing.Kind == notaloneDeltaPageLeaf || existing.Kind == notaloneDeltaPageInterior {
+			existing.Parent = parent
+			pages[number] = existing
+			return nil
+		} else {
+			return errors.New("history_delta_btree_child_kind_invalid")
 		}
-		return nil
 	}
 	visiting[number] = true
 	defer delete(visiting, number)
@@ -311,19 +335,23 @@ func notaloneDeltaSweepUnreachable(ctx context.Context, pages map[uint32]notalon
 	if _, ok := pages[root]; !ok {
 		return errors.New("history_delta_root_missing")
 	}
-	seen := make(map[uint32]bool, len(pages))
+	treeSeen := make(map[uint32]bool, len(pages))
+	overflowSeen := make(map[uint32]bool, len(pages))
 	var visit func(uint32) error
 	visit = func(number uint32) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if seen[number] {
+		if treeSeen[number] {
 			return errors.New("history_delta_btree_cycle")
 		}
-		seen[number] = true
+		treeSeen[number] = true
 		page, ok := pages[number]
 		if !ok {
 			return errors.New("history_delta_btree_child_missing")
+		}
+		if page.Kind != notaloneDeltaPageInterior && page.Kind != notaloneDeltaPageLeaf {
+			return errors.New("history_delta_btree_child_kind_invalid")
 		}
 		for _, child := range page.ChildPages {
 			if err := visit(child); err != nil {
@@ -331,10 +359,11 @@ func notaloneDeltaSweepUnreachable(ctx context.Context, pages map[uint32]notalon
 			}
 		}
 		for _, overflow := range page.OverflowPages {
-			if _, exists := pages[overflow]; !exists {
+			_, exists := pages[overflow]
+			if !exists {
 				return errors.New("history_delta_overflow_page_missing")
 			}
-			seen[overflow] = true
+			overflowSeen[overflow] = true
 		}
 		return nil
 	}
@@ -342,7 +371,7 @@ func notaloneDeltaSweepUnreachable(ctx context.Context, pages map[uint32]notalon
 		return err
 	}
 	for number, page := range pages {
-		if seen[number] {
+		if treeSeen[number] || overflowSeen[number] {
 			continue
 		}
 		notaloneDeltaAddPageOwners(page, changed)
