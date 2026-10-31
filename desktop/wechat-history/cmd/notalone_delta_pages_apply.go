@@ -42,6 +42,12 @@ func notaloneDeltaApplyWALFrames(ctx context.Context, reader *notaloneDeltaPageR
 			return notaloneDeltaPageState{}, nil, err
 		}
 	}
+	// A merge can recycle a prior leaf page as a freelist page before the
+	// transaction's remaining frames are visited. Remove pages detached by the
+	// new interior pointers first, preserving their old row IDs for deletion.
+	if err := notaloneDeltaSweepUnreachable(ctx, pages, changed, root); err != nil {
+		return notaloneDeltaPageState{}, nil, err
+	}
 	for _, number := range framePages {
 		if err := ctx.Err(); err != nil {
 			return notaloneDeltaPageState{}, nil, err
