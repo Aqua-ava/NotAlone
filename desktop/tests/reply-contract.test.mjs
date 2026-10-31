@@ -50,6 +50,9 @@ test('回复失败码映射集中一处：已知码分类明确，未知码显�
   });
   const { replyFailureDecision } = await import(`data:text/javascript;base64,${Buffer.from(generatedReply.outputFiles[0].text).toString('base64')}`);
   const decide = (evidence) => replyFailureDecision(evidence);
+  for (const reason of ['history_sync_pending', 'history_incomplete_confirmation_required']) {
+    assert.deepEqual(decide({ reason }), { errorCode: reason, canRetry: true, known: true });
+  }
   assert.deepEqual(decide({ kind: 'connection' }), { errorCode: 'connection', canRetry: true, known: true });
   assert.deepEqual(decide({ code: 'reply_candidates_rejected' }), { errorCode: 'candidates_rejected', canRetry: false, known: true });
   assert.deepEqual(decide({ code: 'input_budget_exceeded', inputBudgetState: 'exceeded' }),

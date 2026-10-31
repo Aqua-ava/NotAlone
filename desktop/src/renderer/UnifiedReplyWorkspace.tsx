@@ -14,14 +14,8 @@ const workspaceOptions = (options: RewriteOptions): RewriteOptions => ({ ...opti
 
 interface WorkspaceSubmission { contactId: string | null; scopeRevision: number; sessionId: string | null | undefined; }
 
-export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage, media }: { contacts: ContactSessionView; replies: ReplySessionView; historyCoverage?: HistoryCoveragePhase; media?:MessageMediaBridge }) {
+export function UnifiedReplyWorkspace({ contacts, replies, media }: { contacts: ContactSessionView; replies: ReplySessionView; historyCoverage?: HistoryCoveragePhase; media?:MessageMediaBridge }) {
   const { state } = replies;
-  const [historyConfirmation, setHistoryConfirmation] = useState<string | null>(null);
-  const historyKey = `${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${historyCoverage}`;
-  const historyAccepted = historyCoverage === 'incomplete' && historyConfirmation === historyKey;
-  useEffect(() => { setHistoryConfirmation(null); }, [historyKey]);
-  const historyBlocked = historyCoverage === 'not_started' || historyCoverage === 'syncing'
-    || historyCoverage === 'incomplete' && !historyAccepted;
   const [options, setOptions] = useState(() => workspaceOptions(state.options));
   const [submission, setSubmission] = useState<WorkspaceSubmission | null>(null);
   const submitting = submission !== null && submission.contactId === state.contactId
@@ -54,7 +48,7 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage, medi
     || state.savedSession?.phase === 'loading' || state.sessionCatalog?.phase === 'loading' || state.sessionCatalog?.selectionPending === true
     || state.sourceAvailability !== undefined || state.sessionDeletion === 'deleting';
   const draftDisabled = inputBlocked || !workspaceReady && !localDraftOnly;
-  const disabled = historyBlocked || inputBlocked || !workspaceReady || Boolean(state.generationBlock)
+  const disabled = inputBlocked || !workspaceReady || Boolean(state.generationBlock)
     || state.savedSession?.phase !== 'ready' || !state.savedSession.sessionId;
   const update = (value: Partial<RewriteOptions>) => {
     const next = { ...options, ...value }; setOptions(next); void replies.updateOptions(next);
@@ -63,8 +57,7 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage, medi
     const pending = { contactId: state.contactId, scopeRevision: state.scopeRevision, sessionId: state.savedSession?.sessionId };
     setSubmission(pending);
     try {
-      await replies.generateWorkspace(action, options, historyAccepted);
-      setHistoryConfirmation(null);
+      await replies.generateWorkspace(action, options);
     } finally {
       // 旧范围的迟到完成只能解除自己的提交，不能影响用户切换后的新提交。
       setSubmission(current => current === pending ? null : current);
@@ -95,10 +88,6 @@ export function UnifiedReplyWorkspace({ contacts, replies, historyCoverage, medi
     {state.generationBlock && <p role="status" className="rewrite-privacy">生成前，请先在上方确认本次联系人。</p>}
     {state.savedSession?.phase === 'failed' && <p role="alert">助手会话暂时无法读取，请重新核对。
       <button onClick={() => void replies.readSavedSession()}>重新读取助手会话</button></p>}
-    {(historyCoverage === 'not_started' || historyCoverage === 'syncing') && <p role="status">历史尚未追平，请等待当前联系人历史同步完成后生成。</p>}
-    {historyCoverage === 'incomplete' && <div role="alert"><p>历史覆盖不完整：只会使用已同步部分，可能缺少重要语境。此警告会保留在本次请求与对话中。</p>
-      <label><input type="checkbox" checked={historyAccepted} disabled={inputBlocked}
-        onChange={event => setHistoryConfirmation(event.target.checked ? historyKey : null)} />基于已同步部分继续</label></div>}
     <div className="workspace-actions">
       <button className="generate-button" aria-label="帮我表达" disabled={disabled || !contacts.state.draft.trim()}
         onClick={() => void generate('express')}><Icon name="write" size={18} />帮我表达</button>

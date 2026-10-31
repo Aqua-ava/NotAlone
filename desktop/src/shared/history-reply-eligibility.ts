@@ -1,8 +1,9 @@
 import type { HistoryCoveragePhase, SyncStatusReport } from './sync-control-bridge';
 
-// 旧账号拒绝历史时保持增量回复；已接受账号缺任务/覆盖时必须视为尚未开始。
+// 只投影当前联系人的覆盖事实；缺少联系人不推断状态，覆盖不再作为生成门槛。
 export function historyReplyEligibility(report: Pick<SyncStatusReport, 'historyCoverages' | 'historyAuthorizationState'> | null,
   contactId: string | null, previous?: HistoryCoveragePhase): HistoryCoveragePhase | undefined {
+  if (!contactId) return undefined;
   if (!report) return previous;
   const accepted = report.historyAuthorizationState === 'accepted';
   if (!report.historyCoverages) return accepted ? 'not_started' : previous;

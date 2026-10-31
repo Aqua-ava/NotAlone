@@ -26,7 +26,8 @@ const view = await import(pathToFileURL(entry).href);
 function render({ draft = '', contactId = 'synthetic-contact', historyCoverage, ...overrides } = {}) {
   const state = { contactId, scopeRevision: 1, phase: 'idle', mode: 'rewrite_draft', options: {
     tone: 'original', instruction: '', includeRelationshipContext: true, inputKind: 'workspace',
-  }, messages: { phase: 'ready', items: [], nextCursor: null }, exploration: { phase: 'idle' }, ...overrides };
+  }, savedSession: { phase: 'ready', sessionId: 'synthetic-session' },
+  messages: { phase: 'ready', items: [], nextCursor: null }, exploration: { phase: 'idle' }, ...overrides };
   return view.renderToStaticMarkup(view.createElement(view.UnifiedReplyWorkspace, {
     contacts: { state: { selectedContactId: contactId, draft, scopeRevision: 1 } }, replies: { state }, historyCoverage,
   }));
@@ -112,15 +113,19 @@ test('当前与重开候选都直接展示实际Skill版本或通用流程', () 
   assert.match(renderCandidates(undefined, true), /aria-label="本次回复方法"[^>]*>本次快照未记录回复方法/);
 });
 
-test('历史同步中阻止新候选，不完整状态显示显式继续且不能静默消失', () => {
-  const pending = render({ historyCoverage: 'syncing', draft: '合成想法' });
-  assert.match(pending, /历史尚未追平/);
-  assert.match(pending, /aria-label="帮我想想"[^>]*disabled/);
-  const incomplete = render({ historyCoverage: 'incomplete', draft: '合成想法' });
-  assert.match(incomplete, /历史覆盖不完整/);
-  assert.match(incomplete, /基于已同步部分继续/);
-  assert.match(incomplete, /aria-label="帮我想想"[^>]*disabled/);
-  assert.doesNotMatch(render({ historyCoverage: 'complete' }), /历史覆盖不完整/);
+test('联系人已确认即可生成，历史未开始、同步中或不完整均不要求等待或额外确认', () => {
+  for (const historyCoverage of ['not_started', 'syncing', 'incomplete']) {
+    const html = render({ historyCoverage, draft: '本次合成想法' });
+    assert.doesNotMatch(html, /aria-label="帮我想想"[^>]*disabled/);
+    assert.doesNotMatch(html, /aria-label="帮我表达"[^>]*disabled/);
+    assert.doesNotMatch(html, /历史尚未追平|等待当前联系人历史同步|基于已同步部分继续/);
+  }
+});
+
+test('没有联系人时不产生历史同步资格或沿用旧联系人覆盖', () => {
+  for (const report of [null, { historyAuthorizationState: 'accepted', historyCoverages: [] }]) {
+    assert.equal(view.historyReplyEligibility(report, null, 'syncing'), undefined);
+  }
 });
 
 test('状态读取失败保留原警告，明确完整才清除，旧增量不误阻', () => {

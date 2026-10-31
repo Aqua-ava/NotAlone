@@ -19,11 +19,13 @@ async function fixture(t){
  const ids=(await contacts.directory()).contacts.map(c=>c.contact_id),discussions=new SqliteDiscussionService(storage,owner);
  return {root,storage,contacts,ids,discussions,candidates:new SqliteReplyCandidateService(storage,owner)};
 }
-test('首次历史未完成时后端阻止候选受理，手动联系人确认不授予读取',async t=>{
+test('已确认联系人可立即受理候选，历史未开始不阻塞也不授予读取',async t=>{
  const f=await fixture(t),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),requestKey=randomUUID();
  const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
- await assert.rejects(f.candidates.begin({contactId,discussionId:discussion.id,requestKey,text:'帮我自然地回应',identity:{kind:'manual',confirmationId},acceptIncomplete:true}),{code:'reply_history_syncing'});
- assert.equal((await f.discussions.view(contactId,discussion.id)).entries.length,0);
+ const result=await f.candidates.begin({contactId,discussionId:discussion.id,requestKey,text:'帮我自然地回应',identity:{kind:'manual',confirmationId}});
+ assert.match(result.coverageWarning,/历史覆盖不完整/);
+ assert.equal((await f.discussions.view(contactId,discussion.id)).entries.length,1);
+ assert.equal((await f.contacts.directory()).read_enabled,false);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -66,30 +68,52 @@ test('显式选稿才携入后续候选；删除完整输入窗口清候选、�
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('认证HTTP提供生成、编辑、选稿与精确依据回看，拒绝owner和任意额外能力',async t=>{
+test('认证HTTP不等待历史即可生成、编辑和选稿，拒绝owner和任意额外能力',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {SqliteReplyCandidateHttp}=await import('../src/reply/sqlite/candidates/http.ts');const {createServer}=await import('node:http');
- const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['合成HTTP候选'],basis:[1]}]})}),contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const f=await realFixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成HTTP候选'],basis:[1]}]})}),contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
  const http=new SqliteReplyCandidateHttp({storage:f.storage,service,turns,authorize:req=>req.headers.authorization==='Bearer synthetic'}),server=createServer(async(req,res)=>{if(!await http.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  const url=`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${d.id}/reply-candidates`;
  assert.equal((await fetch(url)).status,401);
  const request=async(path='',method='GET',body)=>{const res=await fetch(url+path,{method,headers:{authorization:'Bearer synthetic','content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:res.status,body:await res.json()};};
  assert.equal((await request('','POST',{owner_id:f.owner})).status,400);
+ assert.equal((await request('','POST',{request_key:randomUUID(),text:'未确认联系人不能生成',confirmed_contact:false})).status,400);
+ assert.equal(f.requests.length,0);
  const made=await request('','POST',{request_key:randomUUID(),text:'本次写得自然',confirmed_contact:true});assert.equal(made.status,200);
- const view=await request();assert.equal(view.body.coverage.phase,'complete');const v=view.body.requests[0].candidates[0];
+ const view=await request();assert.equal(view.body.coverage.phase,'not_started');assert.match(view.body.requests[0].coverageWarning,/历史覆盖不完整/);const v=view.body.requests[0].candidates[0];
  const edited=await request(`/${v.candidateId}/edit`,'POST',{version_no:1,parts:['手工HTTP版本']});assert.equal(edited.body.versionNo,2);
  assert.equal((await request(`/${v.candidateId}/select`,'POST',{version_no:2})).body.versionNo,2);
  assert.equal((await request(`/${v.candidateId}/versions/1`)).body.parts[0],'合成HTTP候选');
  assert.equal(f.requests.length,1);assert.equal(JSON.stringify(view.body).includes('managed_locator'),false);
 });
 
-test('覆盖不完整必须本次确认，警告同时保留在模型实际输入与候选依据',async t=>{
+test('覆盖不完整可直接生成，覆盖事实保留在模型实际输入与候选依据',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
  const f=await realFixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['仅基于已有资料的候选'],basis:[2]}]})});
  f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[],completedPartitions:[],exhausted:true});await f.contacts.setReading(true);await f.history.synchronize(f.ids[0]);
  const d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
  const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'只根据现有部分帮我表达',confirmedContact:true};
- await assert.rejects(turns.generate(input),{code:'reply_history_incomplete'});assert.equal(f.requests.length,0);
- await turns.generate({...input,acceptIncomplete:true});const view=(await service.view(f.ids[0],d.id))[0];assert.match(view.coverageWarning,/历史覆盖不完整/);assert.match(view.candidates[0].basis[0].text,/历史覆盖不完整/);assert.match(JSON.stringify(f.requests[0]),/历史覆盖不完整/);
+ await turns.generate(input);const view=(await service.view(f.ids[0],d.id))[0];assert.match(view.coverageWarning,/历史覆盖不完整/);assert.match(view.candidates[0].basis[0].text,/历史覆盖不完整/);assert.match(JSON.stringify(f.requests[0]),/历史覆盖不完整/);
+});
+
+test('历史正在后台同步时可生成与继续改写，追平后的原请求重试不重复调用',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const f=await realFixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['直接使用当前资料的合成候选'],basis:[1]}]})});
+ const d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const original=f.channel.page,entered=Promise.withResolvers(),release=Promise.withResolvers();
+ f.channel.page=async(...args)=>{entered.resolve();await release.promise;return original(...args);};
+ await f.contacts.setReading(true);const sync=f.history.synchronize(f.ids[0]);sync.catch(()=>{});
+ try{
+  await entered.promise;assert.equal((await f.history.read(f.ids[0])).coverage.phase,'running');
+  const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'无需等待历史，先帮我表达',confirmedContact:true};
+  await turns.generate(input);assert.equal(f.requests.length,1);
+  const first=(await service.view(f.ids[0],d.id))[0];assert.match(first.coverageWarning,/历史覆盖不完整/);
+  const selected=await service.select({contactId:f.ids[0],discussionId:d.id,candidateId:first.candidates[0].candidateId,versionNo:1});
+  await turns.generate({...input,requestKey:randomUUID(),text:'基于这版继续简短一点',carriedSelectionId:selected.id});
+  assert.equal(f.requests.length,2);assert.match(JSON.stringify(f.requests[1]),/用户明确选择继续的候选/);
+  release.resolve();await sync;assert.equal((await f.history.read(f.ids[0])).coverage.phase,'complete');
+  assert.equal((await turns.generate(input)).replayed,true);assert.equal(f.requests.length,2);
+  assert.equal((await service.view(f.ids[0],d.id))[0].coverageWarning,first.coverageWarning);
+ }finally{release.resolve();await sync;}
 });
 
 

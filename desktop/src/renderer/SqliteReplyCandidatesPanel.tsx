@@ -9,11 +9,11 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const retry=useRef<{fingerprint:string;requestKey:string}|null>(null);
  const seeded=useRef<string|null>(null);
  const qualifiedRequests=useRef<string[]>([]);
- const [page,setPage]=useState<SqliteCandidatePage|null>(null),[draft,setDraft]=useState(''),[partial,setPartial]=useState(false),[carry,setCarry]=useState<string|undefined>();
+ const [page,setPage]=useState<SqliteCandidatePage|null>(null),[draft,setDraft]=useState(''),[carry,setCarry]=useState<string|undefined>();
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [edits,setEdits]=useState<Record<string,string[]>>({}),[inspected,setInspected]=useState<Record<string,SqliteCandidateVersion>>({});
  const available=!!bridge.candidates&&!!contactId&&!!sessionId&&!disabled;
- function clear(){++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setPartial(false);setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
+ function clear(){++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
  useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(()=>{seeded.current=scopeKey;clear();});return()=>{mounted.current=false;++revision.current;operation.current=null;off();};},[bridge,scopeKey]);
  useEffect(()=>{clear();if(available){if(seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);if(initialDraft)onInitialDraftTaken?.();}void run({action:'read'});}},[scopeKey,bridge,disabled]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
@@ -21,7 +21,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   // 仅保留无正文的来源标识，短暂读取失败后仍能核对旧草稿的资格。
   const readable=qualifiedRequests.current;
   if(readable.some(id=>!next.requests.some(r=>r.requestId===id&&r.sourceState==='available'))){
-   setDraft('');setCarry(undefined);setPartial(false);retry.current=null;setNotice('');
+   setDraft('');setCarry(undefined);retry.current=null;setNotice('');
   }
   qualifiedRequests.current=next.requests.filter(r=>r.sourceState==='available'&&r.candidates.length).map(r=>r.requestId);
   setPage(next);setEdits({});setInspected({});
@@ -30,7 +30,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   const text=error instanceof Error?error.message:'候选结果尚未确认，请重新读取。';
   setEdits({});setInspected({});setNotice('');
   if(/失效|已变化|已不可用|请先确认/.test(text)){
-   qualifiedRequests.current=[];setPage(null);setDraft('');setCarry(undefined);setPartial(false);retry.current=null;
+   qualifiedRequests.current=[];setPage(null);setDraft('');setCarry(undefined);retry.current=null;
   }else setPage(old=>old?{coverage:old.coverage,requests:[]}:null);
   setError(text);
  }
@@ -47,7 +47,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     if(command.action==='generate'){
      const r=response as {session_id:string;request_key:string;segmented:boolean;replayed:boolean};
      if(r.request_key!==command.requestKey||typeof r.session_id!=='string'||typeof r.segmented!=='boolean'||typeof r.replayed!=='boolean')throw new Error('候选结果尚未确认，请保留原请求重试核对。');
-     retry.current=null;setDraft('');setPartial(false);setCarry(undefined);setNotice(r.replayed?'已定位原请求，候选已重新核对。':'候选已保存，最终消息请自行发送。');
+     retry.current=null;setDraft('');setCarry(undefined);setNotice(r.replayed?'已定位原请求，候选已重新核对。':'候选已保存，最终消息请自行发送。');
      onSubmitted?.({sessionId:r.session_id,requestKey:r.request_key,segmented:r.segmented,replayed:r.replayed});
      if(r.session_id!==sessionId)return;
     }else if(command.action==='select'){
@@ -61,8 +61,8 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  }
  async function generate(){
   if(!draft.trim()||!page)return;
-  const fingerprint=JSON.stringify({draft,partial,carry}),requestKey=retry.current?.fingerprint===fingerprint?retry.current.requestKey:crypto.randomUUID();retry.current={fingerprint,requestKey};
-  await run({action:'generate',requestKey,text:draft,acceptIncomplete:partial,...(carry?{carriedSelectionId:carry}:{})});
+  const fingerprint=JSON.stringify({draft,carry}),requestKey=retry.current?.fingerprint===fingerprint?retry.current.requestKey:crypto.randomUUID();retry.current={fingerprint,requestKey};
+  await run({action:'generate',requestKey,text:draft,acceptIncomplete:false,...(carry?{carriedSelectionId:carry}:{})});
  }
  async function continueVersion(v:SqliteCandidateVersion){
   if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
@@ -72,14 +72,11 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   catch(e){if(current())rejectOperation(e);}
   finally{if(current()){operation.current=null;setBusy(false);}}
  }
- const phase=page?.coverage.phase,historyBlocked=phase!=='complete'&&!(phase==='incomplete'&&partial);
  return <section aria-label="候选回复" className="sqlite-reply-candidates">
   <h3>候选回复</h3><p>写下本次想法，查看依据后选择或修改。最终消息由你亲自发送。</p>
   {!available&&<p role="status">请先确认联系人并明确继续当前助手讨论。</p>}
-  {page&&(phase==='not_started'||phase==='running')&&<p role="status">历史尚未完成，完成后才能生成候选。</p>}
-  {phase==='incomplete'&&<div role="alert"><p>历史覆盖不完整：仅使用已同步部分，可能缺少重要语境。警告会保存到本次依据。</p><label><input type="checkbox" checked={partial} disabled={busy||!available} onChange={e=>setPartial(e.target.checked)} />使用已同步部分继续</label></div>}
   <label>本次想法<textarea aria-label="本次想法" value={draft} maxLength={100000} disabled={!available||busy} onChange={e=>setDraft(e.target.value)} /></label>
-  <button disabled={!available||busy||historyBlocked||!draft.trim()} onClick={()=>void generate()}>{busy?'正在处理候选…':retry.current?'重试核对候选':'生成候选'}</button>
+  <button disabled={!available||busy||!page||!draft.trim()} onClick={()=>void generate()}>{busy?'正在处理候选…':retry.current?'重试核对候选':'生成候选'}</button>
   <button disabled={!available||busy} onClick={()=>void run({action:'read'})}>重新读取候选</button>
   {carry&&<button disabled={busy} onClick={()=>{setCarry(undefined);setNotice('已取消本次候选继续。');}}>取消候选继续</button>}
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}

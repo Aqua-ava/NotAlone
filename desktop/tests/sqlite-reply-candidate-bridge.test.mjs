@@ -79,8 +79,8 @@ test('已知失败按安全中文状态映射，未知错误不将供应商正�
  const f=fixture(await modules());t.after(()=>f.controller.close());
  const input={...scope,action:'generate',requestKey:ids.request,text:'仅用于本次的合成要求',acceptIncomplete:false};
  for(const [code,expected] of [
-  ['reply_history_syncing','历史尚未完成，请等待同步完成。'],
-  ['reply_history_incomplete','历史覆盖不完整，请明确确认使用已有部分。'],
+  ['reply_history_syncing','历史状态已变化，请重新读取当前会话后重试。'],
+  ['reply_history_incomplete','历史状态已变化，请重新读取当前会话后重试。'],
   ['reply_model_unavailable','现有模型配置尚未就绪。'],
   ['discussion_call_unknown','已有模型调用结果未知，请先核对原请求，不能换请求重发。'],
   ['reply_input_stale','资料版本已变化，请重新读取。'],

@@ -50,16 +50,12 @@ function RequirementDecisions({ clarification, disabled, confirm }: {
   </fieldset>;
 }
 
-export function AssistantContinuationControls({ replies, hasUnsavedEdits = false, historyCoverage }: {
+export function AssistantContinuationControls({ replies, hasUnsavedEdits = false }: {
   replies: ReplySessionView;
   hasUnsavedEdits?: boolean;
   historyCoverage?: HistoryCoveragePhase;
 }) {
   const { state } = replies;
-  const [historyConfirmed, setHistoryConfirmed] = useState(false);
-  useEffect(() => { setHistoryConfirmed(false); }, [historyCoverage, state.contactId, state.savedSession?.sessionId]);
-  const historyBlocked = historyCoverage === 'syncing' || historyCoverage === 'not_started'
-    || historyCoverage === 'incomplete' && !historyConfirmed;
   const [instruction, setInstruction] = useState('');
   const [intention, setIntention] = useState('');
   const submitted = useRef<{ instruction: string; intention: string } | null>(null);
@@ -74,20 +70,16 @@ export function AssistantContinuationControls({ replies, hasUnsavedEdits = false
   const saved = state.savedSession;
   const hasCompleted = saved?.phase === 'ready' && saved.turns.some((turn) => turn.state === 'completed' && turn.reply);
   if (!hasCompleted || !state.contactId) return null;
-  const disabled = historyBlocked || state.phase === 'waiting' || state.exploration.phase === 'waiting' || Boolean(state.generationBlock)
+  const disabled = state.phase === 'waiting' || state.exploration.phase === 'waiting' || Boolean(state.generationBlock)
     || state.sourceAvailability !== undefined || state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.candidateVersions?.phase !== 'ready' || hasUnsavedEdits;
   function submit() {
     if (disabled || textTooLong || !instruction.trim() && !intention.trim()) return;
     submitted.current = { instruction, intention };
-    void replies.continueSession(instruction.trim() || '继续', intention.trim() || undefined, historyConfirmed);
-    setHistoryConfirmed(false);
+    void replies.continueSession(instruction.trim() || '继续', intention.trim() || undefined);
   }
   return <section aria-label="连续修改" className="assistant-continuation-controls">
     <header><h3>继续调整这组回复</h3><p>不满意的地方写在这里，助手会接着修改。</p></header>
-    {(historyCoverage === 'not_started' || historyCoverage === 'syncing') && <p role="status">历史尚未追平，暂不能继续生成。</p>}
-    {historyCoverage === 'incomplete' && <div role="alert"><p>历史覆盖不完整，本次连续修改只使用已同步部分。</p>
-      <label><input type="checkbox" checked={historyConfirmed} onChange={event => setHistoryConfirmed(event.target.checked)} />本次连续修改基于已同步部分继续</label></div>}
     <p>编号指向当前展示的整组说法。正文编辑结束后自动保存，保存完成即可继续调整。</p>
     <label>继续修改要求<textarea aria-label="继续修改要求" value={instruction} disabled={disabled}
       placeholder="例如：第二条简短一点" onChange={(event) => setInstruction(event.target.value)} /></label>
