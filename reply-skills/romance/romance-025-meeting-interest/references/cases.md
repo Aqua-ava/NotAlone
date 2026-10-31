@@ -1,22 +1,33 @@
-以下为原创合成的虚构案例，仅作处理示例。
+# 试探对方是否愿意见面：示例
 
-## 案例一：借共同兴趣邀请一次见面
-背景：两人讨论过新开的展览，对方表示喜欢摄影。用户也想去看，但没有证据显示对方已经计划同行。
-当前对话：对方：“这个展的布置看起来挺特别。”
-用户意图：邀请她一起看展，允许她拒绝或改提别的安排。
-候选回复：“我也想去看看。你愿意这周末一起逛展吗？如果你想自己去也完全可以。”
-坏例：“你都说喜欢了，那就周六下午，我到时来接你。”原因：把兴趣当成同意见面，还单方面决定时间和接送。
-后续接法：若她答应，问她哪天方便；若她说这周末不行并提出别的日期，确认双方都能否参加；若只说“有空再说”，回“好，等你有明确安排再聊”，不再塞入多个日期。
+### 表达模板 1
 
-## 案例二：需要澄清是约会还是普通活动
-背景：用户与对方认识一阵子，想单独约她吃饭，且希望她知道这不是朋友群聚。对方从未表示过恋爱意愿。
-当前对话：对方：“你说去吃饭，是大家一起还是就我们俩？”
-用户意图：坦白想单独了解她，不给她猜。
-候选回复：“我原本想约你单独吃饭，当作一次约会来认识彼此。如果你更想朋友一起，或不想这样见面，也可以直接告诉我。”
-坏例：“当然是单独，你还需要问吗？”原因：把澄清说成对方多疑，压低了她拒绝的空间。
-后续接法：若她愿意，具体协调时间；若她改为朋友群聚，用户确认自己是否接受普通朋友活动；若她拒绝约会，感谢说明并停止说服。
+### When She's Clearly Interested:
+> "Okay, I like you. We should meet before one of us says something weird and ruins this. Coffee this week?"
 
-## 案例延伸
-清楚邀请比暗示更尊重双方。若意图是约会，就可以说明；若用户只想普通活动，也不必自称约会。拒绝没有隐藏的补考环节，答复之后不再把同一邀请换词重发。
+### When You've Been Texting a While:
+> "We've been texting for [time] and I still don't know what your laugh sounds like in person. That's a problem. When are you free?"
 
-补充：邀请可先说活动和大致时间，详细地址等对方同意后再协调。若用户只想表达兴趣而并未准备见面，应先确认自己真正的请求，不用邀约套取肯定答复。
+### The Callback Close:
+> "You mentioned you love [thing]. I know the perfect [related place]. Let's go this weekend."
+
+### The Casual:
+> "Want to grab a drink this week? Nothing fancy, just vibes."
+
+### The Confident:
+> "I'm taking you for coffee on [day]. Does [time] work?"
+
+### The Creative:
+> "I have a challenge for you. [Related to something from the conversation]. Loser buys coffee. Friday?"
+
+### The Low-Pressure:
+> "I feel like we'd have a way better conversation in person. No pressure — just coffee and good conversation."
+
+### The Foodie:
+> "There's this place I've been wanting to try. Want to be my plus-one taste tester?"
+
+### The Activity:
+> "I've been meaning to check out [event/place]. Want to come? Could be fun."
+
+### The Honest:
+> "I'll be real — I'm enjoying this conversation but I'd enjoy it way more in person. When are you free this week?"

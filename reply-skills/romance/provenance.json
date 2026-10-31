@@ -1,0 +1,3716 @@
+{
+  "schema_version": 1,
+  "policy": "upstream-extracts-only",
+  "files": [
+    {
+      "source": "D",
+      "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+      "commit": "af0897f4b55897624a19de48374d436906e26461",
+      "path": ".claude/skills/dating-coach/references/lifecycle.md",
+      "blob_sha": "0a7b351238a1676c5fcaea08a219a2aaafdad03c",
+      "sha256": "5b6245458a43d18661e4a1144052360e4ef4eaef8decd5677c3827d625fe121e"
+    },
+    {
+      "source": "D",
+      "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+      "commit": "af0897f4b55897624a19de48374d436906e26461",
+      "path": ".claude/skills/dating-coach/references/knowledge-base.md",
+      "blob_sha": "bdb24bdacd1155d6059ad9b1a1fdaecba8c1e83a",
+      "sha256": "c64245c1b3448262181b3aa3124e40de1dd5d9dabd6b4e29ac248b061f57305b"
+    },
+    {
+      "source": "D",
+      "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+      "commit": "af0897f4b55897624a19de48374d436906e26461",
+      "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+      "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+      "sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348"
+    },
+    {
+      "source": "E",
+      "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+      "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+      "path": "docs/date-planning.md",
+      "blob_sha": "fc38b311f98a56790e829e3228a01466161af031",
+      "sha256": "f34621b85b72b80276fc09de45865db7c99ff36cd30a4cf9bcac587d5735e1f3"
+    },
+    {
+      "source": "E",
+      "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+      "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+      "path": "docs/conversation-mastery.md",
+      "blob_sha": "bd69a07a579ea83da07f89940a5ca8853f0754aa",
+      "sha256": "02d32e17c882c2e186f12b65a437703f4425bf48d32834fc2df5a63cc5e547d9"
+    },
+    {
+      "source": "D",
+      "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+      "commit": "af0897f4b55897624a19de48374d436906e26461",
+      "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+      "blob_sha": "30dd9dbcfea478933aab5c49a78ce1a0188bb006",
+      "sha256": "0d2066becb3a302b9aaf16cd66dfe55b13857e9dddbd0a1b1b7949f2d1eb12ce"
+    },
+    {
+      "source": "E",
+      "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+      "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+      "path": "SKILL.md",
+      "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+      "sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966"
+    },
+    {
+      "source": "E",
+      "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+      "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+      "path": "docs/crisis-management.md",
+      "blob_sha": "50503257ade651e54483b12cc6c9f8292fda4efc",
+      "sha256": "b4a0ac59b0ad72219bf649c0bc499d59f4f04d400289038bf7bc593ca6269a85"
+    },
+    {
+      "source": "E",
+      "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+      "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+      "path": "examples/conversation-examples.md",
+      "blob_sha": "7b297e72d500941434d39bc45e0848d1cc2b4152",
+      "sha256": "7251a2c291e42156a8534d44494b898a633155630a0708fc8464cb7f3552c2a2"
+    },
+    {
+      "source": "E",
+      "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+      "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+      "path": "docs/relationship-phases.md",
+      "blob_sha": "65ade04192b0ed984b63b6d92439ad86a9d820fe",
+      "sha256": "af22711328eeffc99cbdd37af5d13b6c33c35a0b5a7e06c96fa874c64130d295"
+    },
+    {
+      "source": "E",
+      "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+      "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+      "path": "LICENSE",
+      "blob_sha": "685f23e52ec2716202878b8eac849f21fde87516",
+      "sha256": "8b2ca390922d3036bfdb5358022f03b920b8891cbbdf82d362b568db54a18a21"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "SKILL.md",
+      "blob_sha": "f9c34540c1440ae1a4de8c6790ba107ba4d40a3b",
+      "sha256": "825edd66bed33ce514c12d0cd3f2f002417c7aa357b58a6aae658cad26f6e083"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/03-依恋理论与情绪调节.md",
+      "blob_sha": "5aaa98debc5d9f211c1140eb3ca86b84092a0e6a",
+      "sha256": "3a23188ca0f199676a3aa8908562457f1aee59d244fb00fe0e3780b98f689f24"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/08-同意边界性与亲密.md",
+      "blob_sha": "15bc38658e2e4757931ce008b9bf51fb2e7d4bd2",
+      "sha256": "51688890c32a4f134f770d09c210e39361c50fa3753119836fd41b2d5b17c9b4"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/07-沟通冲突与修复.md",
+      "blob_sha": "565b825180656a0385b651f4546ad2f810a38a10",
+      "sha256": "440fadf71455dac36fbe291bffa2246e035f5dd0d9d7167cd9a129443375828b"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/06-吸引约会与关系启动.md",
+      "blob_sha": "cbf463e2ca73ca76628eba597758e83ac3d611c2",
+      "sha256": "27168cba7b73b128e6db6b860dde92ea52a9cfe6ff0cfbcde78c1be25500b825"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/09-在线约会与数字关系.md",
+      "blob_sha": "e68b7bd2f1411a6584663831c0f344b6a624110c",
+      "sha256": "8c46faff08e601591e12c92df99a0d224b3440a2586660ce70f36ae79479d9d5"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+      "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+      "sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/11-婚姻家庭与生命周期.md",
+      "blob_sha": "f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0",
+      "sha256": "644755f2e98ca18bd26e86cd8845fecf43cc122c16e5756ebc3166cb8bd7de6c"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/15-分手背叛与关系修复.md",
+      "blob_sha": "c5f7f3932420e56ac21342e3064593b565478e7f",
+      "sha256": "95532db79ce3119774956f2c2f8cfccde1a84c35c15f5963057389ad6cec1f05"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/16-多元关系与反刻板印象.md",
+      "blob_sha": "f360966269747905dc88d2df8accbf450a432325",
+      "sha256": "8276f70a42d3dccb53c9015b2519761eec3743e696f7572e2c6d8d60b77dc446"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/万能吵架技巧：理性冲突处理指南.md",
+      "blob_sha": "920c33943a84827487e51c8a97367ba63a5e4e37",
+      "sha256": "ea8305e07aa5a4c58b3e15ce28950a6cc8da4862704aae70a4483f4639fa0a5e"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/万能夸人的话术技巧：真诚认可的实用指南.md",
+      "blob_sha": "eca39e353f4c6941d43b639ec9ba62e8d1fefb2f",
+      "sha256": "fca5a133a09588de697883792e8024d6effd7dd229d41956b0542101242f2d77"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/knowledge/18-实用练习与对话卡.md",
+      "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+      "sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+      "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+      "sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/主动表达、第一次见面与自然接触.md",
+      "blob_sha": "906713d0d7ca6aeb54c19b96c85f408498550cf9",
+      "sha256": "bd52dec6e84d0e986b5c56edd1320e23254d48d00be5dc249a555063d071abff"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/场景感、松弛感与社交校准：从接话到关系推进.md",
+      "blob_sha": "c31631916a1c754fdf7e594cf00d2316f1b9d72f",
+      "sha256": "01864b3713a8b25bd310a3678b44d2e937ce3a2817c381090d8ba71ab534c4d5"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+      "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+      "sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/关系投入失衡：互惠判断、降级投入与退出决策.md",
+      "blob_sha": "fb83bf2c6fcc98d5f698467871d0d38f9cf5a65b",
+      "sha256": "4e724e9a5b272ad1a6833ddbb9d84eeb86c3b2e395e5f241d90f8655930c77c3"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+      "blob_sha": "6b408aa1945c737a6b98d229932e31e0b9618f3b",
+      "sha256": "e87b3e90c1c3fbe17708d1b7bcc43549f8d042d7653c7fd48d7dbb5b0b7c5fcb"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/巧妙接话技巧：让沟通更流畅的实用指南.md",
+      "blob_sha": "d32be229b6b7af93c379362e37a784bac8696efc",
+      "sha256": "62c4a2e3d479e1e41fbeb34d7dda7d477c742bf172fd67567ea1af53ee5b71f5"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/托人办事的高效话术指南.md",
+      "blob_sha": "cca288c5c8b341399b0927a1255e5fede03d273f",
+      "sha256": "dc07cde003b5a9b0993d27086fa1bcada85d1ff689a977a60af20c5d96523191"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "LICENSE",
+      "blob_sha": "bfc9d99fb47f85bc00ca9231383b4fe097a5a9e1",
+      "sha256": "f336b7d0101d93b47ec1964aaf3c4ab12dc582638be9501fc883801a51ed0367"
+    },
+    {
+      "source": "G",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+      "path": "references/practical/聊天化被动为主动：引导互动的实用指南.md",
+      "blob_sha": "a8201024cd229aacbb5779e14a2844ea9aa55483",
+      "sha256": "bf18a460fc97ac45d14abeaf6a84f92b7c8f9afaaee914f30bb1fd162f96a585"
+    },
+    {
+      "source": "C",
+      "repository": "Mowon0303/LoveHelper.skill",
+      "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+      "path": "LICENSE",
+      "blob_sha": "acded3a39c1dd66c9bef1e22ee2e4d4ace6b4905",
+      "sha256": "0ed684b53dde1aa88f3758b9c2faaa8ef4acdf19d4ecc6b5a4e41a0b308c1317"
+    },
+    {
+      "source": "C",
+      "repository": "Mowon0303/LoveHelper.skill",
+      "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+      "path": "relationship-copilot/references/human-progression-playbook.md",
+      "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+      "sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9"
+    },
+    {
+      "source": "T",
+      "repository": "hotcoffeeshake/tong-jincheng-skill",
+      "commit": "c9caaa9a6576f581c29d016c60bbe935908e20d5",
+      "path": "README.md",
+      "blob_sha": "9140e0bb2eb689e1c2abc50e42303a0f1907b753",
+      "sha256": "bc7ad5e771ff12a2e32d72d4b7dde9ae96610774361a5530886adb526e96fee4"
+    },
+    {
+      "source": "T",
+      "repository": "hotcoffeeshake/tong-jincheng-skill",
+      "commit": "c9caaa9a6576f581c29d016c60bbe935908e20d5",
+      "path": "LICENSE",
+      "blob_sha": "b29a22645c9f92d128e4e1d6ff8f1ee10cca0aea",
+      "sha256": "21db15ef124354f23c9dc62ece01d0f36f3675c3684da37b6e8a823586595860"
+    },
+    {
+      "source": "D",
+      "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+      "commit": "af0897f4b55897624a19de48374d436906e26461",
+      "path": "README.md",
+      "blob_sha": "05b4c75cf6dcf205d2df4e9e240f1fa1ad2c21b7",
+      "sha256": "eb2c9bf7fe7fd9b7655cb9431cacc240243180233cfe0ae17a911e5cf0f3205c"
+    }
+  ],
+  "common_methods": [
+    {
+      "source": "G",
+      "path": "SKILL.md",
+      "start_line": 44,
+      "end_line": 46,
+      "excerpt_sha256": "6cf58aef497822e55b274e77e0114d4e3f87da75c0f3b3740bbaff1d258ad4c0",
+      "source_sha256": "825edd66bed33ce514c12d0cd3f2f002417c7aa357b58a6aae658cad26f6e083",
+      "blob_sha": "f9c34540c1440ae1a4de8c6790ba107ba4d40a3b",
+      "repository": "shengjidaguai-china/goutoujunshi",
+      "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+    }
+  ],
+  "skills": [
+    {
+      "id": 1,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 111,
+          "end_line": 116,
+          "excerpt_sha256": "8a48ab407eb3267cbf96df9b7e6e11a928731cd574f5a0a43bd8ef7b37a4a9f1",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/场景感、松弛感与社交校准：从接话到关系推进.md",
+          "start_line": 22,
+          "end_line": 33,
+          "excerpt_sha256": "0a20649a978dfeb77a26443c9b0fc982595e15a60591475388fd93c97378db34",
+          "source_sha256": "01864b3713a8b25bd310a3678b44d2e937ce3a2817c381090d8ba71ab534c4d5",
+          "blob_sha": "c31631916a1c754fdf7e594cf00d2316f1b9d72f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "examples/conversation-examples.md",
+          "start_line": 7,
+          "end_line": 40,
+          "excerpt_sha256": "d92f03c6c7f159ad47d5ed60abab536d27f22583a376357cdcd49ad157b90b11",
+          "source_sha256": "7251a2c291e42156a8534d44494b898a633155630a0708fc8464cb7f3552c2a2",
+          "blob_sha": "7b297e72d500941434d39bc45e0848d1cc2b4152",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "E 的观察—发挥—邀请和 G 的现场取材都直接对应从已知细节开聊。",
+      "name": "romance-001-first-contact"
+    },
+    {
+      "id": 2,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 66,
+          "end_line": 70,
+          "excerpt_sha256": "f4a549819c55c476631467c005d873b662b75a2896790c586c4b1eb479bd1031",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [],
+      "notes": "只保留轻量自我线索、低风险动机和轻问题的方法；不据慢热断言对方在防御或观察。源文示例把该判断写入话术，本项不选该例；这是可借用的轻量开聊方法，未单列不预设动机的慢热场景。",
+      "name": "romance-002-slow-warmup"
+    },
+    {
+      "id": 3,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/聊天化被动为主动：引导互动的实用指南.md",
+          "start_line": 32,
+          "end_line": 37,
+          "excerpt_sha256": "7ba1d848db2340408b006f2501c40ac99cb698683e6bcf6b871cf41229122a05",
+          "source_sha256": "bf18a460fc97ac45d14abeaf6a84f92b7c8f9afaaee914f30bb1fd162f96a585",
+          "blob_sha": "a8201024cd229aacbb5779e14a2844ea9aa55483",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/聊天化被动为主动：引导互动的实用指南.md",
+          "start_line": 62,
+          "end_line": 68,
+          "excerpt_sha256": "bbdf1971ff397e0029134e96c897002792a76aba2d3decae9e53045e94663b0f",
+          "source_sha256": "bf18a460fc97ac45d14abeaf6a84f92b7c8f9afaaee914f30bb1fd162f96a585",
+          "blob_sha": "a8201024cd229aacbb5779e14a2844ea9aa55483",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/聊天化被动为主动：引导互动的实用指南.md",
+          "start_line": 66,
+          "end_line": 68,
+          "excerpt_sha256": "a14cc7d413f4c01e603d752161c778c8b386a7cb30deee715757b22ca24646b8",
+          "source_sha256": "bf18a460fc97ac45d14abeaf6a84f92b7c8f9afaaee914f30bb1fd162f96a585",
+          "blob_sha": "a8201024cd229aacbb5779e14a2844ea9aa55483",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "G29 对很久没见的熟人给出共同回忆接到当前兴趣的场景。",
+      "name": "romance-003-reconnect-after-gap"
+    },
+    {
+      "id": 4,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/knowledge-base.md",
+          "start_line": 36,
+          "end_line": 37,
+          "excerpt_sha256": "a02a5b53865a60f0bcf42202163022fb19021cf98fddbc3591d97dd9d723188f",
+          "source_sha256": "c64245c1b3448262181b3aa3124e40de1dd5d9dabd6b4e29ac248b061f57305b",
+          "blob_sha": "bdb24bdacd1155d6059ad9b1a1fdaecba8c1e83a",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [],
+      "notes": "D12 的平淡期推进方案含刻意降频和推拉，本项改用 D 聊天总则中交替分享与提问的通用节奏；可围绕用户已提供的真实细节换话题，源文未单列流水账重启案例，也不填具体经历。",
+      "name": "romance-004-refresh-routine-chat"
+    },
+    {
+      "id": 5,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 17,
+          "end_line": 29,
+          "excerpt_sha256": "e6b0d25e60d28eceb5ddf273ea268a911cdd3af873a03825263e9293561031b2",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 49,
+          "end_line": 53,
+          "excerpt_sha256": "e506b48b4ea25b7d4bb994921ee041bed8edc788a7bd17267cb9778ae5b76a4d",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 103,
+          "end_line": 115,
+          "excerpt_sha256": "211f604febe9e945ec5708828faab9604b0628b8a70211344fd79232be56c94e",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G01 有该质疑的三种原文回复，并提供本轮目标与积极、含糊、拒绝后的通用分支。",
+      "name": "romance-005-why-contact-now"
+    },
+    {
+      "id": 6,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/巧妙接话技巧：让沟通更流畅的实用指南.md",
+          "start_line": 33,
+          "end_line": 49,
+          "excerpt_sha256": "64a8fc1d58288a90d4792ef907dfde5d97df69391a60a3699832a47efd69678a",
+          "source_sha256": "62c4a2e3d479e1e41fbeb34d7dda7d477c742bf172fd67567ea1af53ee5b71f5",
+          "blob_sha": "d32be229b6b7af93c379362e37a784bac8696efc",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/巧妙接话技巧：让沟通更流畅的实用指南.md",
+          "start_line": 39,
+          "end_line": 42,
+          "excerpt_sha256": "f3ac85d54e2e7d9722e2d3897f1adb3154a9edfc3519617334e06d151e077f80",
+          "source_sha256": "62c4a2e3d479e1e41fbeb34d7dda7d477c742bf172fd67567ea1af53ee5b71f5",
+          "blob_sha": "d32be229b6b7af93c379362e37a784bac8696efc",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "G07 直接讲关键词延伸、选择细节并以提问或分享承接，附有完整示例。",
+      "name": "romance-006-topic-expansion"
+    },
+    {
+      "id": 7,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "docs/conversation-mastery.md",
+          "start_line": 114,
+          "end_line": 129,
+          "excerpt_sha256": "c97093b46adceb7aeb0c8d879ea4cb492dcca5c9a9cbc7af10dea4fa5ed53dd2",
+          "source_sha256": "02d32e17c882c2e186f12b65a437703f4425bf48d32834fc2df5a63cc5e547d9",
+          "blob_sha": "bd69a07a579ea83da07f89940a5ca8853f0754aa",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 87,
+          "end_line": 101,
+          "excerpt_sha256": "3b6c9337b51ac0ecfa308d88a0455496df11344704bdd4119edb5fafaf907d7c",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        },
+        {
+          "source": "E",
+          "path": "examples/conversation-examples.md",
+          "start_line": 44,
+          "end_line": 89,
+          "excerpt_sha256": "f1f01a58794c108548afcc1de82b1beddd5fc61161513e8ae9b9118f2af36678",
+          "source_sha256": "7251a2c291e42156a8534d44494b898a633155630a0708fc8464cb7f3552c2a2",
+          "blob_sha": "7b297e72d500941434d39bc45e0848d1cc2b4152",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "E05 区分能量变化及不追发的处理；G01 有针对只回哈哈或表情的收束话术。",
+      "name": "romance-007-short-reply"
+    },
+    {
+      "id": 8,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 205,
+          "end_line": 213,
+          "excerpt_sha256": "a2b6f80d404ae5d683089222fa578f5ca5136bf78c13410178c76c3c0ada3f97",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 215,
+          "end_line": 225,
+          "excerpt_sha256": "53db698e20e4d0ca070846658050c87c0396a89dc15e5bd1fee7bc3d20cf1ecb",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "C14 直接提出接对方一句、补自己的经历或态度、再留轻问题，并给了采访式与分享式对照。",
+      "name": "romance-008-interview-to-sharing"
+    },
+    {
+      "id": 9,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 84,
+          "end_line": 94,
+          "excerpt_sha256": "5fda7b8281b827a1f8eea69a866938ebe03d9532aa47029291f295345de24a7e",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 96,
+          "end_line": 101,
+          "excerpt_sha256": "f61d11112163e873ed90f68ce8c2e39c10ba4df99701c4c2a588d9b7848e1128",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "C10 原文直接讨论愿意聊但不主动的情况，并提供接住对方可调侃点的例句。",
+      "name": "romance-009-passive-chat"
+    },
+    {
+      "id": 10,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 17,
+          "end_line": 29,
+          "excerpt_sha256": "e6b0d25e60d28eceb5ddf273ea268a911cdd3af873a03825263e9293561031b2",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 49,
+          "end_line": 53,
+          "excerpt_sha256": "e506b48b4ea25b7d4bb994921ee041bed8edc788a7bd17267cb9778ae5b76a4d",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 87,
+          "end_line": 101,
+          "excerpt_sha256": "3b6c9337b51ac0ecfa308d88a0455496df11344704bdd4119edb5fafaf907d7c",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "源文未单列正常聊天中的主动结束，只能借用 G 的收线策略及短回复、低能量时结束当轮的示例。",
+      "name": "romance-010-close-chat"
+    },
+    {
+      "id": 11,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+          "start_line": 31,
+          "end_line": 36,
+          "excerpt_sha256": "83f5fca3fd741c701517dc8e105f26c830f9581bf2849ddd20f3a79e35ed3fcd",
+          "source_sha256": "e87b3e90c1c3fbe17708d1b7bcc43549f8d042d7653c7fd48d7dbb5b0b7c5fcb",
+          "blob_sha": "6b408aa1945c737a6b98d229932e31e0b9618f3b",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+          "start_line": 37,
+          "end_line": 38,
+          "excerpt_sha256": "6abe900bf8fe5f077244ca90aade34193b59a78bc30cdfcd9292df5e7253e539",
+          "source_sha256": "e87b3e90c1c3fbe17708d1b7bcc43549f8d042d7653c7fd48d7dbb5b0b7c5fcb",
+          "blob_sha": "6b408aa1945c737a6b98d229932e31e0b9618f3b",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "G25 直接处理话题断层，方法是从刚聊过的关键词找关联角度，再用提问或分享转场。",
+      "name": "romance-011-topic-reset"
+    },
+    {
+      "id": 12,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 205,
+          "end_line": 213,
+          "excerpt_sha256": "a2b6f80d404ae5d683089222fa578f5ca5136bf78c13410178c76c3c0ada3f97",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 221,
+          "end_line": 225,
+          "excerpt_sha256": "78287824ba4cd98cb21221e171f9fc8cf244b037a21b04e33a9528c631cd7e61",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "C14 直接覆盖用自己的经历、偏好和态度形成双向聊天；仅抽取源文分享示例，不补用户背景。",
+      "name": "romance-012-share-experience"
+    },
+    {
+      "id": 13,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+          "start_line": 331,
+          "end_line": 332,
+          "excerpt_sha256": "402ca8222ab74ebb3e7bb743f3037f97acc6e93e0374ffd917b1199f4cceca2c",
+          "source_sha256": "0d2066becb3a302b9aaf16cd66dfe55b13857e9dddbd0a1b1b7949f2d1eb12ce",
+          "blob_sha": "30dd9dbcfea478933aab5c49a78ce1a0188bb006",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+          "start_line": 339,
+          "end_line": 341,
+          "excerpt_sha256": "d9bd832a7453942d6fd3cc2fd03905df4d49f208ac2a57c869d52e101d267497",
+          "source_sha256": "0d2066becb3a302b9aaf16cd66dfe55b13857e9dddbd0a1b1b7949f2d1eb12ce",
+          "blob_sha": "30dd9dbcfea478933aab5c49a78ce1a0188bb006",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "template"
+        }
+      ],
+      "notes": "仅选“真诚但别交底、展示原则而非细节”的应对方法，避开对提问动机的推断。表格例句是原作者模板，不代表用户经历；只在“性格不合、和平分手”符合真实情况时才能使用。",
+      "name": "romance-013-past-relationships"
+    },
+    {
+      "id": 14,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+          "start_line": 331,
+          "end_line": 332,
+          "excerpt_sha256": "402ca8222ab74ebb3e7bb743f3037f97acc6e93e0374ffd917b1199f4cceca2c",
+          "source_sha256": "0d2066becb3a302b9aaf16cd66dfe55b13857e9dddbd0a1b1b7949f2d1eb12ce",
+          "blob_sha": "30dd9dbcfea478933aab5c49a78ce1a0188bb006",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+          "start_line": 339,
+          "end_line": 342,
+          "excerpt_sha256": "9cc00e799c5f4c50022db5f737c633931c442e7e4aeaf9f43a0e3861af6ce29f",
+          "source_sha256": "0d2066becb3a302b9aaf16cd66dfe55b13857e9dddbd0a1b1b7949f2d1eb12ce",
+          "blob_sha": "30dd9dbcfea478933aab5c49a78ce1a0188bb006",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "template"
+        }
+      ],
+      "notes": "仅选真诚表达原则的通用方法，不推断提问动机。表格中的择偶观回答是原作者模板，不代表用户价值观；只有符合用户真实想法时才能采用。",
+      "name": "romance-014-dating-values"
+    },
+    {
+      "id": 15,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+          "start_line": 81,
+          "end_line": 84,
+          "excerpt_sha256": "867275adab38549ff15e6276cba84b866498dd3a8231351f1196a0e5110b8603",
+          "source_sha256": "e87b3e90c1c3fbe17708d1b7bcc43549f8d042d7653c7fd48d7dbb5b0b7c5fcb",
+          "blob_sha": "6b408aa1945c737a6b98d229932e31e0b9618f3b",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+          "start_line": 82,
+          "end_line": 84,
+          "excerpt_sha256": "c9117e2b724ab02fde2d882e1204f92cae5891ab53c1cd41760dc155e5b387bb",
+          "source_sha256": "e87b3e90c1c3fbe17708d1b7bcc43549f8d042d7653c7fd48d7dbb5b0b7c5fcb",
+          "blob_sha": "6b408aa1945c737a6b98d229932e31e0b9618f3b",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "G26 的隐私问题示例来自被问工资的通用场景，不是恋爱对象提问；可借用回避具体隐私并转话题的方法，源文未给恋爱场景案例。",
+      "name": "romance-015-private-question"
+    },
+    {
+      "id": 16,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 168,
+          "end_line": 184,
+          "excerpt_sha256": "c20921aa1cd5f16b5b2710a57192a1d6391bd510502d39727209f209d098d824",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 176,
+          "end_line": 182,
+          "excerpt_sha256": "3d28e7c2a70b30d739a9c32d1fb21fff7cc8ebcabe14f61e5eab2fd6d8cab6c7",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "E 的 Art of Banter 直接列出玩笑挑战、callback、角色反转、夸张升级和自嘲，并附尊重边界的护栏；只选原表例句，不把示例细节当作用户事实。",
+      "name": "romance-016-playful-banter"
+    },
+    {
+      "id": 17,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 361,
+          "end_line": 370,
+          "excerpt_sha256": "87b1f6a96298a3585a38b294b8b1ae37fba09d73f5c578c96d3b2716df73fa63",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 177,
+          "end_line": 189,
+          "excerpt_sha256": "6b5b678f3a1ebaeaef4d240a1959097be5b8cf364dda1dd6126fcffc86dfc320",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        },
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 363,
+          "end_line": 370,
+          "excerpt_sha256": "ea780d3a41319edaf76b080fde1f5c9ef63251c99517fad44445c2b06084d05c",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "E05/G01 明确覆盖“你对谁都这样吗”的真诚质疑；例句引用原文，不额外证明用户真诚。",
+      "name": "romance-017-sincerity-challenge"
+    },
+    {
+      "id": 18,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/万能夸人的话术技巧：真诚认可的实用指南.md",
+          "start_line": 23,
+          "end_line": 32,
+          "excerpt_sha256": "35369b44a74da73d0b8fb2968e0ebe78947f5fbc7b17b86ec67924e917d5e7bb",
+          "source_sha256": "fca5a133a09588de697883792e8024d6effd7dd229d41956b0542101242f2d77",
+          "blob_sha": "eca39e353f4c6941d43b639ec9ba62e8d1fefb2f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/万能夸人的话术技巧：真诚认可的实用指南.md",
+          "start_line": 79,
+          "end_line": 81,
+          "excerpt_sha256": "9a21d801e4881f88a1a902567329c94ff9002fc5782fc8271654c457a3bd6a0e",
+          "source_sha256": "fca5a133a09588de697883792e8024d6effd7dd229d41956b0542101242f2d77",
+          "blob_sha": "eca39e353f4c6941d43b639ec9ba62e8d1fefb2f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G09 给出从具体行为提炼优点并说明带来感受的步骤；示例是新认识者聊天细节，不涉及外貌或未给出的个人事实。",
+      "name": "romance-018-specific-compliment"
+    },
+    {
+      "id": 19,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 41,
+          "end_line": 53,
+          "excerpt_sha256": "a1e652f02ad88691f21f154c35eb96987127d48da4016049fe6ede2112853efd",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 191,
+          "end_line": 205,
+          "excerpt_sha256": "ab39639e84ac842ca36f8cb94ef850f231de182fc3e8c18ddddbc67b22536f62",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G08/C05 的 G01 原文直接设有“把玩笑转成一点暧昧”场景；例句后附否认或转移时回到轻话题的分支，与普通接梗区分。",
+      "name": "romance-019-light-flirting"
+    },
+    {
+      "id": 20,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 49,
+          "end_line": 53,
+          "excerpt_sha256": "e506b48b4ea25b7d4bb994921ee041bed8edc788a7bd17267cb9778ae5b76a4d",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 163,
+          "end_line": 175,
+          "excerpt_sha256": "18de8db3263ef1a035cd60d437a610cf5695eba20460840fa474d9f77b7c3735",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G10 有轻松表达想念的稳健、会撩和直接原文；方法只补充通用后续反馈分支。",
+      "name": "romance-020-miss-you"
+    },
+    {
+      "id": 21,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 109,
+          "end_line": 117,
+          "excerpt_sha256": "693a8f1a842d6dc2e906743a2dd87363412e57abdfe78a90fb2b60a9041dd4bc",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 119,
+          "end_line": 129,
+          "excerpt_sha256": "8b496b10b49fceabbcf2cd8da361f075a1b7d2ff5e30ba5500aa9ef80e4c2e06",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "C11 直接要求在已有温度时表达非普通朋友方向的兴趣并避免对抗拒者硬推；示例保留原作者的性别化措辞，主Agent需注意适用边界。",
+      "name": "romance-021-friend-to-romance"
+    },
+    {
+      "id": 22,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 165,
+          "end_line": 173,
+          "excerpt_sha256": "b01769851244f8ac04af05539dbe7eda9166d0d8a53e3f697c7d33901b6f6ef8",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 175,
+          "end_line": 203,
+          "excerpt_sha256": "755f67a0c27e0667888359bdc814534aec2616d83a74049cc39dc3b5c511e571",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "C13 有专门的游戏搭子/缺人位辨识、承认真实借口并点明想相处后收住的方法，以及积极、拒绝和不接分支。",
+      "name": "romance-022-gaming-to-personal"
+    },
+    {
+      "id": 23,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 255,
+          "end_line": 269,
+          "excerpt_sha256": "eecde9d8c3461fde06af113073ef0ecd27d0d7854e940dd536b4e411ab5a70a9",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 277,
+          "end_line": 299,
+          "excerpt_sha256": "99afeeda542157518353b2610817d311c840c5940976bef9efa588cdb556f7e0",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "C16/C04 在表达或轻推进之后强调收住，并分别给继续调侃与不接时的原文接法；没有补入额外情绪事实。",
+      "name": "romance-023-after-showing-interest"
+    },
+    {
+      "id": 24,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/场景感、松弛感与社交校准：从接话到关系推进.md",
+          "start_line": 77,
+          "end_line": 85,
+          "excerpt_sha256": "359e4594bc8cc478defad4086be8f56bfe87f7f5474a88fe79f964a6928855e0",
+          "source_sha256": "01864b3713a8b25bd310a3678b44d2e937ce3a2817c381090d8ba71ab534c4d5",
+          "blob_sha": "c31631916a1c754fdf7e594cf00d2316f1b9d72f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [],
+      "notes": "源文未单列调情过头后的修复或道歉话术；只选基于反馈降低张力、对不适信号立即停止的通用校准方法，作为shared_method，不提供原例。",
+      "name": "romance-024-flirt-repair"
+    },
+    {
+      "id": 25,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "docs/conversation-mastery.md",
+          "start_line": 155,
+          "end_line": 163,
+          "excerpt_sha256": "e4bbe50846bbfed49d8863977ae3125dd158f08a35dd43cfeb1bc047c9c5e7d5",
+          "source_sha256": "02d32e17c882c2e186f12b65a437703f4425bf48d32834fc2df5a63cc5e547d9",
+          "blob_sha": "bd69a07a579ea83da07f89940a5ca8853f0754aa",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "docs/conversation-mastery.md",
+          "start_line": 157,
+          "end_line": 185,
+          "excerpt_sha256": "f65dc7b728f52252a69f895acbcd8b1fdd982ab738c0de11be25404849a4a83a",
+          "source_sha256": "02d32e17c882c2e186f12b65a437703f4425bf48d32834fc2df5a63cc5e547d9",
+          "blob_sha": "bd69a07a579ea83da07f89940a5ca8853f0754aa",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "template"
+        }
+      ],
+      "notes": "E08 直接覆盖有兴趣、聊了一段时间及共同细节等不同邀约入口；保留原文模板，不据此推断对方意愿。",
+      "name": "romance-025-meeting-interest"
+    },
+    {
+      "id": 26,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/主动表达、第一次见面与自然接触.md",
+          "start_line": 21,
+          "end_line": 28,
+          "excerpt_sha256": "2af6dc0f568f717b0f33e87f4ff8a21e74906260f8894c36c7de56157a2c9e7e",
+          "source_sha256": "bd52dec6e84d0e986b5c56edd1320e23254d48d00be5dc249a555063d071abff",
+          "blob_sha": "906713d0d7ca6aeb54c19b96c85f408498550cf9",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 117,
+          "end_line": 131,
+          "excerpt_sha256": "477f82d1c72b678be1d4bfd3f776219a2ef5892b5f763d1dc40a7d2b2237b72e",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 119,
+          "end_line": 131,
+          "excerpt_sha256": "b8b9f9722beb4e464698f0fa022f547daadc98b19448fcd91c3d9cd1f3496549",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "G11/C07 对应具体活动、时间与反馈后细化安排；含糊忙碌且无新信息时不连环追问。",
+      "name": "romance-026-concrete-date-plan"
+    },
+    {
+      "id": 27,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "docs/conversation-mastery.md",
+          "start_line": 147,
+          "end_line": 149,
+          "excerpt_sha256": "345e7fb8f9fa13ac0bee229420db931249d90f30b129dd1788bee33d74dcdbad",
+          "source_sha256": "02d32e17c882c2e186f12b65a437703f4425bf48d32834fc2df5a63cc5e547d9",
+          "blob_sha": "bd69a07a579ea83da07f89940a5ca8853f0754aa",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "docs/conversation-mastery.md",
+          "start_line": 150,
+          "end_line": 152,
+          "excerpt_sha256": "6834e29e2836d962e2dc0960071f1be4004270dbdeddfd74f523df0824e64346",
+          "source_sha256": "02d32e17c882c2e186f12b65a437703f4425bf48d32834fc2df5a63cc5e547d9",
+          "blob_sha": "bd69a07a579ea83da07f89940a5ca8853f0754aa",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "E08 有直接的视频通话桥接说明和建议短时通话的原文句子。",
+      "name": "romance-027-call-video-invite"
+    },
+    {
+      "id": 28,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 196,
+          "end_line": 207,
+          "excerpt_sha256": "65e7c678a83617ef39a86fc20ba342cd31d88eb7771ea5e1c677150a05f47eaa",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 49,
+          "end_line": 53,
+          "excerpt_sha256": "e506b48b4ea25b7d4bb994921ee041bed8edc788a7bd17267cb9778ae5b76a4d",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 133,
+          "end_line": 145,
+          "excerpt_sha256": "025067d1bcb7c040e83bd8e0678e5f832f117b8b221f5dbdd6ad5eb46e013bf7",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G11/E10 明确区分只说忙与给替代时间，并分别示范不追问和等待具体安排。",
+      "name": "romance-028-vague-invite-response"
+    },
+    {
+      "id": 29,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 196,
+          "end_line": 207,
+          "excerpt_sha256": "65e7c678a83617ef39a86fc20ba342cd31d88eb7771ea5e1c677150a05f47eaa",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 117,
+          "end_line": 131,
+          "excerpt_sha256": "477f82d1c72b678be1d4bfd3f776219a2ef5892b5f763d1dc40a7d2b2237b72e",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 201,
+          "end_line": 202,
+          "excerpt_sha256": "43614481e38c2300bb9c57f4cf2551fec69487d3ad3d6001908e8a8903bc4736",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G11/E08 原文有时间冲突但提供替代时间的情形，建议接住替代窗口并细化，而非把冲突误作拒绝。",
+      "name": "romance-029-schedule-conflict"
+    },
+    {
+      "id": 30,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 147,
+          "end_line": 161,
+          "excerpt_sha256": "553e404f00cb1cb42c65fee378282052f9b5206502904e99a8e7378b56a67551",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 149,
+          "end_line": 161,
+          "excerpt_sha256": "7c2b99e4fe5c15fc024463d8ebf6844b6e71dff2a4f2e4b6be149595ac3265a9",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G11 有稳健、轻调侃和明确交还新时间的原文，并提醒紧急状况先关心安全与实际困难。",
+      "name": "romance-030-last-minute-cancel"
+    },
+    {
+      "id": 31,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/主动表达、第一次见面与自然接触.md",
+          "start_line": 40,
+          "end_line": 43,
+          "excerpt_sha256": "2354be977be4b96e7ac5bc1e9d7465de91f4d56d8ff8a9c1aa8d726c2552ffe6",
+          "source_sha256": "bd52dec6e84d0e986b5c56edd1320e23254d48d00be5dc249a555063d071abff",
+          "blob_sha": "906713d0d7ca6aeb54c19b96c85f408498550cf9",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [],
+      "notes": "D15 也只谈约会地点、流程和结束时铺垫下次，没有见面前复核时间地点的原文话术；G12 仅提供公开场所、时间及活动安排原则，故维持 shared_method。",
+      "name": "romance-031-pre-date-confirmation"
+    },
+    {
+      "id": 32,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 244,
+          "end_line": 258,
+          "excerpt_sha256": "e0d39a67dc5e0ca09840a6f7dc3cb570bfb803132d333021d603d5124c95ece6",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 288,
+          "end_line": 300,
+          "excerpt_sha256": "3b5eabd4d19ca7f529834046856b8d87d158606ba4929b43dff955d70290ae44",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 247,
+          "end_line": 253,
+          "excerpt_sha256": "7cb47eb55323d3f4d580f5f44b84b6f136e8908a54cc2f06facb4548481f43e6",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "dialogue"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 288,
+          "end_line": 295,
+          "excerpt_sha256": "cca3c41d99c0c35ab10712a7ffa3c7849723c1a219c17e73107edb489f20bcd6",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "D直接讨论约会时对方带朋友，提供接纳同行者的当场回应和提出下次单独见面的原话；没有带入周围文本中的动机推断或三七分配注意力。",
+      "name": "romance-032-extra-companion"
+    },
+    {
+      "id": 33,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 151,
+          "end_line": 179,
+          "excerpt_sha256": "dd17bb11bbf8d96b678c681a06eb3bc488fd529ab55cd7a2febab3732b6ddaad",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 183,
+          "end_line": 215,
+          "excerpt_sha256": "1ef0bb3ff101b9134189394b97585eb0e4e8b94c679314fa0c0d07cbb15438f8",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 167,
+          "end_line": 169,
+          "excerpt_sha256": "2dac1ab228514da6cf4b365b441c227d8686b1e6612d2b2f54453aceab6d2f5d",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "dialogue"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 188,
+          "end_line": 193,
+          "excerpt_sha256": "50e0f8852ee6a947a27d40d46531532365422afb9213d062424913c87aad62bb",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "scenario"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 203,
+          "end_line": 210,
+          "excerpt_sha256": "2fa6ed2d83e492974d9090054d914f592aeeb3becc45399ffd05d7dc161b1313",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "D直接覆盖约会冷场：先用活动转场、降低对话密度，仍无法改善时体面结束；选段包含原场景与退出示例。",
+      "name": "romance-033-in-person-silence"
+    },
+    {
+      "id": 34,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+          "start_line": 23,
+          "end_line": 30,
+          "excerpt_sha256": "08fec6bb1e9cca2b6103801ce73d551ad48359fdf38777ed05aaf6de6d9ba9a9",
+          "source_sha256": "e87b3e90c1c3fbe17708d1b7bcc43549f8d042d7653c7fd48d7dbb5b0b7c5fcb",
+          "blob_sha": "6b408aa1945c737a6b98d229932e31e0b9618f3b",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+          "start_line": 28,
+          "end_line": 30,
+          "excerpt_sha256": "175b80e74e3f9a60bb16b50f8eb8c8b56546e0b1c6b5cbcb5765219693fcebee",
+          "source_sha256": "e87b3e90c1c3fbe17708d1b7bcc43549f8d042d7653c7fd48d7dbb5b0b7c5fcb",
+          "blob_sha": "6b408aa1945c737a6b98d229932e31e0b9618f3b",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "原文提供自嘲承认失误的方法和说错话示例，但例子是通用社交情形，没有恋爱专属话术。",
+      "name": "romance-034-date-awkwardness"
+    },
+    {
+      "id": 35,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "docs/date-planning.md",
+          "start_line": 200,
+          "end_line": 201,
+          "excerpt_sha256": "a97314f2840daf19adb1d8f95ac1b88d0b65f75586a914b2aa489b0272ee44d3",
+          "source_sha256": "f34621b85b72b80276fc09de45865db7c99ff36cd30a4cf9bcac587d5735e1f3",
+          "blob_sha": "fc38b311f98a56790e829e3228a01466161af031",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "examples/conversation-examples.md",
+          "start_line": 167,
+          "end_line": 174,
+          "excerpt_sha256": "6ab3d1f06fc8224e76fd62157a8c686eecc3234f79b6c221dd8c8d1a32621835",
+          "source_sha256": "7251a2c291e42156a8534d44494b898a633155630a0708fc8464cb7f3552c2a2",
+          "blob_sha": "7b297e72d500941434d39bc45e0848d1cc2b4152",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "template"
+        }
+      ],
+      "notes": "E分别给出约会结束当晚的首次跟进和次日再次邀约；本项只选当晚、两小时内的原文模板。",
+      "name": "romance-035-first-date-followup"
+    },
+    {
+      "id": 36,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "docs/date-planning.md",
+          "start_line": 203,
+          "end_line": 204,
+          "excerpt_sha256": "f43224efaa77a9f13abf91199513fb3f5c68bd6dee2ff8e6b6b23844e4061f6a",
+          "source_sha256": "f34621b85b72b80276fc09de45865db7c99ff36cd30a4cf9bcac587d5735e1f3",
+          "blob_sha": "fc38b311f98a56790e829e3228a01466161af031",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "examples/conversation-examples.md",
+          "start_line": 176,
+          "end_line": 183,
+          "excerpt_sha256": "ecf858ba73c9d22803d648ff7b84910f9d0a84d3699bf14ee3998bf1ed7cbe0d",
+          "source_sha256": "7251a2c291e42156a8534d44494b898a633155630a0708fc8464cb7f3552c2a2",
+          "blob_sha": "7b297e72d500941434d39bc45e0848d1cc2b4152",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "template"
+        }
+      ],
+      "notes": "只选次日承接具体共同话题、提出第二次见面的原文模板，不把一次见面解释为双方已承诺继续发展。",
+      "name": "romance-036-next-date-invite"
+    },
+    {
+      "id": 37,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "docs/crisis-management.md",
+          "start_line": 155,
+          "end_line": 161,
+          "excerpt_sha256": "f1999afe6333573fe1467af137c63ff7286662054084157a65c7de738b17638b",
+          "source_sha256": "b4a0ac59b0ad72219bf649c0bc499d59f4f04d400289038bf7bc593ca6269a85",
+          "blob_sha": "50503257ade651e54483b12cc6c9f8292fda4efc",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        },
+        {
+          "source": "E",
+          "path": "docs/crisis-management.md",
+          "start_line": 166,
+          "end_line": 172,
+          "excerpt_sha256": "1f646a6db2f952520869691b5e03c7d504d798c308a36bbb452ba3a8de0b088f",
+          "source_sha256": "b4a0ac59b0ad72219bf649c0bc499d59f4f04d400289038bf7bc593ca6269a85",
+          "blob_sha": "50503257ade651e54483b12cc6c9f8292fda4efc",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [],
+      "notes": "E明确区分普通不合拍与不安全：普通约会不匆忙离开，按原约定时长结束；不安全时可立即离开。原文给出的具体消息是约会后的拒绝继续发展，不能当成结束当次见面的台词，所以本项不单列示例。",
+      "name": "romance-037-end-date"
+    },
+    {
+      "id": 38,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+          "start_line": 30,
+          "end_line": 37,
+          "excerpt_sha256": "91dabbac01dab6c39d3188d5a1efd988471d505a90013d42fb9eff3d4c5b5073",
+          "source_sha256": "0d2066becb3a302b9aaf16cd66dfe55b13857e9dddbd0a1b1b7949f2d1eb12ce",
+          "blob_sha": "30dd9dbcfea478933aab5c49a78ce1a0188bb006",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+          "start_line": 32,
+          "end_line": 35,
+          "excerpt_sha256": "7f6a5a72e63b5761337439755d707189493d1e67e6af2319bdd99d884a277c40",
+          "source_sha256": "0d2066becb3a302b9aaf16cd66dfe55b13857e9dddbd0a1b1b7949f2d1eb12ce",
+          "blob_sha": "30dd9dbcfea478933aab5c49a78ce1a0188bb006",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "D明确区分一次回复慢和持续趋势，单次延迟可能是忙；没有找到针对一条未回消息的原始跟进话术，不借用长期无回复后的ghosting模板。",
+      "name": "romance-038-unanswered-message"
+    },
+    {
+      "id": 39,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "docs/crisis-management.md",
+          "start_line": 90,
+          "end_line": 107,
+          "excerpt_sha256": "561ad4f363b9e08fa4be7364ccb43a3ec749cf55771f619fff45e67e2f9a4f8c",
+          "source_sha256": "b4a0ac59b0ad72219bf649c0bc499d59f4f04d400289038bf7bc593ca6269a85",
+          "blob_sha": "50503257ade651e54483b12cc6c9f8292fda4efc",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "docs/crisis-management.md",
+          "start_line": 99,
+          "end_line": 107,
+          "excerpt_sha256": "7b2065cfd1979f8979705a303fdfca0ac4ff313dff6514af135b3a25b6212c76",
+          "source_sha256": "b4a0ac59b0ad72219bf649c0bc499d59f4f04d400289038bf7bc593ca6269a85",
+          "blob_sha": "50503257ade651e54483b12cc6c9f8292fda4efc",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "E单列slow fade，包含回复变慢、变短、停止提问和计划推迟等多轮信号，并给澄清或停止过度投入的选项；不选邻近表格的动机推断。",
+      "name": "romance-039-fading-interaction"
+    },
+    {
+      "id": 40,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 233,
+          "end_line": 247,
+          "excerpt_sha256": "e787bf321a1f7857b7f614b5e1e643bbf196be4abdc599c65e2eaee0fb180a57",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 249,
+          "end_line": 253,
+          "excerpt_sha256": "99b6b7a9f500963419e42363fa14d4da1585ddd7fe81b03db07a11ccb2d18473",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "template"
+        }
+      ],
+      "notes": "C直接讨论对方冷热变化时保持自身节奏，并保留原文“示例话术”标签及完整代码围栏；不将冷热互动统一归因为依恋类型。",
+      "name": "romance-040-hot-cold-contact"
+    },
+    {
+      "id": 41,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 23,
+          "end_line": 28,
+          "excerpt_sha256": "d774eb5da3fd9d041379cc3e0a1936ea34197968c6ed80fe25070b05e137e22b",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 249,
+          "end_line": 253,
+          "excerpt_sha256": "99b6b7a9f500963419e42363fa14d4da1585ddd7fe81b03db07a11ccb2d18473",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "C直接把对方忙、累、冷或用户解释过多列为收住的信号，并提供先忙、晚些再续话题的原句；没有更细的休息场景分支。",
+      "name": "romance-041-busy-tired-exit"
+    },
+    {
+      "id": 42,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 23,
+          "end_line": 28,
+          "excerpt_sha256": "d774eb5da3fd9d041379cc3e0a1936ea34197968c6ed80fe25070b05e137e22b",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [],
+      "notes": "C明确把用户已补充过多解释列为降压信号，要求停止追加并留出空间；未找到专门针对连发后的完整原始对话案例。",
+      "name": "romance-042-after-overexplaining"
+    },
+    {
+      "id": 43,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 141,
+          "end_line": 157,
+          "excerpt_sha256": "433eec8613bb01c51df52d60f1c8811029d55a0adbb548c29eb581e7c58d7416",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [],
+      "notes": "C直接列出对方只在无聊、难受或需要帮助时联系的陪聊信号及停止无限供给的方法；不能仅凭一次求助判断关系位置。",
+      "name": "romance-043-help-only-contact"
+    },
+    {
+      "id": 44,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 137,
+          "end_line": 157,
+          "excerpt_sha256": "39172c7ab38e75aaa9a25ae2fd447524c8ce46d5681b3d5a654481a66e0f823d",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 159,
+          "end_line": 163,
+          "excerpt_sha256": "195de5e8a028cc86f2ca4fac6d7ba17a29fb65d6f435a6e9f04f22ec491b4e55",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "C直接讨论持续陪聊与单向支持，并有夜间倾诉的具体表达；原文没有描述双方轮流分享的案例。",
+      "name": "romance-044-one-sided-venting"
+    },
+    {
+      "id": 45,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 308,
+          "end_line": 315,
+          "excerpt_sha256": "64fb598b9aa6b7ca1edecae21eb4aecceb390f328326df0ebdae07ade43d5bed",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 323,
+          "end_line": 327,
+          "excerpt_sha256": "cd113a0d9ad5c18d9e8285b3a69b0b7e68f9cda02ec4d29c05298f59502ce877",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "C直接处理以达到条件交换关系的条件式认可；只选原文的判断与拒绝表达，不扩写对方动机。",
+      "name": "romance-045-conditional-affection"
+    },
+    {
+      "id": 46,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 23,
+          "end_line": 28,
+          "excerpt_sha256": "d774eb5da3fd9d041379cc3e0a1936ea34197968c6ed80fe25070b05e137e22b",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "docs/crisis-management.md",
+          "start_line": 123,
+          "end_line": 128,
+          "excerpt_sha256": "c860ee09bf179f129916390efa0b70e503b054adb8e7a053d9e9ee2e54a81875",
+          "source_sha256": "b4a0ac59b0ad72219bf649c0bc499d59f4f04d400289038bf7bc593ca6269a85",
+          "blob_sha": "50503257ade651e54483b12cc6c9f8292fda4efc",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "C和E提供信息矛盾时只问一个关键点的通用澄清方法；不支持从取消或回避直接推断喜欢程度、承诺意愿或动机。",
+      "name": "romance-046-mixed-signals"
+    },
+    {
+      "id": 47,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 23,
+          "end_line": 31,
+          "excerpt_sha256": "4e5353ebc16404ff584a7728cbe7d036539dfde4b46db3eeb7bb908d3f36b324",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 48,
+          "end_line": 54,
+          "excerpt_sha256": "a09bc336c234b1d0d14f65c9837f4daf5a7d1e96ea207edfca4c9cb1fc12d0b6",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "G直接提供负面情绪的倾听、确认和留白步骤，并以工作受挫及考试失利作原例；不添加对方未提供的原因。",
+      "name": "romance-047-sadness-support"
+    },
+    {
+      "id": 48,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 38,
+          "end_line": 41,
+          "excerpt_sha256": "25ac7443aa0d6eb5680a6d4716a83e8544c7e4409d4fb11e28d35b646cdc0ab4",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 55,
+          "end_line": 61,
+          "excerpt_sha256": "a61aaa2df5bf621482247245ad2c009de8f3eb96365a19900b7350f3626c5422",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "G直接讲焦虑拆分与具体担忧，并给毕业选择、述职压力的原例；不替对方决定职业选择。",
+      "name": "romance-048-anxiety-support"
+    },
+    {
+      "id": 49,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 38,
+          "end_line": 41,
+          "excerpt_sha256": "25ac7443aa0d6eb5680a6d4716a83e8544c7e4409d4fb11e28d35b646cdc0ab4",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 69,
+          "end_line": 75,
+          "excerpt_sha256": "8dd1454f830c629b845b071cabcb52f7b555151c5ec32be8e0c041bc15635c10",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "G有同事推活及家人催婚的抱怨原例，方法要求先接情绪而不跟着攻击第三人；不判断第三人的动机。",
+      "name": "romance-049-venting-about-others"
+    },
+    {
+      "id": 50,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 32,
+          "end_line": 37,
+          "excerpt_sha256": "e17f13bc39dda17f001eda18d17bc9080ada0b8ca32a79805184d2f81792ed25",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 62,
+          "end_line": 68,
+          "excerpt_sha256": "84ec292a94fb6a091c4472d9b46024a59a729c1021fe81b4aa491c9713fa7a8e",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "G明确要求对成果作具体、关联过程的积极回应，并提供考三次拿驾照与养花开花的原例。",
+      "name": "romance-050-celebrate-good-news"
+    },
+    {
+      "id": 51,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 15,
+          "end_line": 17,
+          "excerpt_sha256": "fcc887fb5560e5c463e43a3a28eea80bcdf47b8b29e1f87242bc764e9cb9b1a8",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 42,
+          "end_line": 46,
+          "excerpt_sha256": "ff1e78b78e325cf792995f7fb28870be7ccdd3228ea999f354129e27fdbaa126",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/为他人提供情绪价值：温暖且有效的回应指南.md",
+          "start_line": 15,
+          "end_line": 15,
+          "excerpt_sha256": "4096b653250f2f7589f978e6fd017134f6f861d3e76a1de67bd2553ed401492f",
+          "source_sha256": "565c7b4b9e27993a92de6339e403f9f82ededa87dc1e205d4602742ad6693c8b",
+          "blob_sha": "0d52128312b2def237e675b92629eb79e3212758",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G提供一般疲惫时的共情和日常关怀。D仅有一句生病话题提示，未提供具体步骤或原例；不补医学建议或具体送药安排。",
+      "name": "romance-051-illness-fatigue-care"
+    },
+    {
+      "id": 52,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 438,
+          "end_line": 445,
+          "excerpt_sha256": "26fac7918685ce07ede5f3caf43f139738f17c00259acda23cd7bbaaabdf4006",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/万能夸人的话术技巧：真诚认可的实用指南.md",
+          "start_line": 23,
+          "end_line": 38,
+          "excerpt_sha256": "14910960e3a686880cfb3f0798a487c8ee7e917957b3776031504f42cd518dfa",
+          "source_sha256": "fca5a133a09588de697883792e8024d6effd7dd229d41956b0542101242f2d77",
+          "blob_sha": "eca39e353f4c6941d43b639ec9ba62e8d1fefb2f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/万能夸人的话术技巧：真诚认可的实用指南.md",
+          "start_line": 44,
+          "end_line": 45,
+          "excerpt_sha256": "dae67e388853deaef6d931083e0f0c1971256c3489167aa4342d1b42eaba79e7",
+          "source_sha256": "fca5a133a09588de697883792e8024d6effd7dd229d41956b0542101242f2d77",
+          "blob_sha": "eca39e353f4c6941d43b639ec9ba62e8d1fefb2f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "E提供关系中的具体感谢模板，G提供行为—特质—实际价值的原例及伴侣记得饮食偏好的表达；不添加未确认的帮助效果。",
+      "name": "romance-052-specific-gratitude"
+    },
+    {
+      "id": 53,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "docs/relationship-phases.md",
+          "start_line": 414,
+          "end_line": 432,
+          "excerpt_sha256": "f73cf37e89d8068e96243c8b41fb11d6cb666e4348f042c376499a01ce073cee",
+          "source_sha256": "af22711328eeffc99cbdd37af5d13b6c33c35a0b5a7e06c96fa874c64130d295",
+          "blob_sha": "65ade04192b0ed984b63b6d92439ad86a9d820fe",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 453,
+          "end_line": 457,
+          "excerpt_sha256": "73d1caf76b2bacc580baf8cee315922fe55b6c6d9354be77ce48093bca387161",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "template"
+        }
+      ],
+      "notes": "E有长期关系保持共同体验与个人性的建议，以及疏远后表达想念并安排相处时间的模板。",
+      "name": "romance-053-couple-reconnection"
+    },
+    {
+      "id": 54,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/托人办事的高效话术指南.md",
+          "start_line": 14,
+          "end_line": 21,
+          "excerpt_sha256": "f3859a9a8f5ab4815b09750b93231c7d930b26854ad7e06a21ddf16a601c0d7f",
+          "source_sha256": "dc07cde003b5a9b0993d27086fa1bcada85d1ff689a977a60af20c5d96523191",
+          "blob_sha": "cca288c5c8b341399b0927a1255e5fede03d273f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/托人办事的高效话术指南.md",
+          "start_line": 29,
+          "end_line": 45,
+          "excerpt_sha256": "cb16ef7206813aec50526ade5db16c1ed014c41c485d8263c9e98f32e8a3c4de",
+          "source_sha256": "dc07cde003b5a9b0993d27086fa1bcada85d1ff689a977a60af20c5d96523191",
+          "blob_sha": "cca288c5c8b341399b0927a1255e5fede03d273f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/托人办事的高效话术指南.md",
+          "start_line": 37,
+          "end_line": 45,
+          "excerpt_sha256": "9aeec0f6b389aa0985dab0f7e26706456f185d142b136cca87c88b5eb770ea63",
+          "source_sha256": "dc07cde003b5a9b0993d27086fa1bcada85d1ff689a977a60af20c5d96523191",
+          "blob_sha": "cca288c5c8b341399b0927a1255e5fede03d273f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "G给出具体说明事项、时限、任务并允许拒绝的通用求助方法，例子来自熟人和工作情境；没有情侣求助的专门方法或案例。",
+      "name": "romance-054-couple-help-request"
+    },
+    {
+      "id": 55,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "T",
+          "path": "README.md",
+          "start_line": 91,
+          "end_line": 101,
+          "excerpt_sha256": "c48da34a4d4a068be8bf72302775fd8031520b3a4a517705742898065fc9a7c3",
+          "source_sha256": "bc7ad5e771ff12a2e32d72d4b7dde9ae96610774361a5530886adb526e96fee4",
+          "blob_sha": "9140e0bb2eb689e1c2abc50e42303a0f1907b753",
+          "repository": "hotcoffeeshake/tong-jincheng-skill",
+          "commit": "c9caaa9a6576f581c29d016c60bbe935908e20d5"
+        }
+      ],
+      "examples": [
+        {
+          "source": "T",
+          "path": "README.md",
+          "start_line": 88,
+          "end_line": 104,
+          "excerpt_sha256": "3f13091d5138cea6b71e5edb69e138c1363392dd8223cdb226bc525bb337fba9",
+          "source_sha256": "bc7ad5e771ff12a2e32d72d4b7dde9ae96610774361a5530886adb526e96fee4",
+          "blob_sha": "9140e0bb2eb689e1c2abc50e42303a0f1907b753",
+          "repository": "hotcoffeeshake/tong-jincheng-skill",
+          "commit": "c9caaa9a6576f581c29d016c60bbe935908e20d5",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "T04确有事业初期与伴侣时间冲突的原对话；原文是男性对女性的视角，并要求给出时间与承诺但未说明怎样落成具体日程，不能擅自补安排。",
+      "name": "romance-055-work-busy-relationship"
+    },
+    {
+      "id": 56,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/practical/主动表达、第一次见面与自然接触.md",
+          "start_line": 21,
+          "end_line": 28,
+          "excerpt_sha256": "2af6dc0f568f717b0f33e87f4ff8a21e74906260f8894c36c7de56157a2c9e7e",
+          "source_sha256": "bd52dec6e84d0e986b5c56edd1320e23254d48d00be5dc249a555063d071abff",
+          "blob_sha": "906713d0d7ca6aeb54c19b96c85f408498550cf9",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 37,
+          "end_line": 53,
+          "excerpt_sha256": "e58cb8c1419ca303a573d24f2fb891ef280c77e6e6691951ff8c2b3af01b039f",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/主动表达、第一次见面与自然接触.md",
+          "start_line": 25,
+          "end_line": 26,
+          "excerpt_sha256": "e14a6055b07581661bf0dd26efa1d63eab60cf763c5446d1f7ee5f9c5fb0de1a",
+          "source_sha256": "bd52dec6e84d0e986b5c56edd1320e23254d48d00be5dc249a555063d071abff",
+          "blob_sha": "906713d0d7ca6aeb54c19b96c85f408498550cf9",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 39,
+          "end_line": 47,
+          "excerpt_sha256": "50f38f6bfdcac95be690ba47bd869ceae2d6978e99d732b805b1acb7fa6b8bac",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "G提供表达好感且不索取即时承诺的方法；D提供表白被拒时的当场回应原话。没有找到接受表白的正向回应示例。",
+      "name": "romance-056-confession"
+    },
+    {
+      "id": 57,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 106,
+          "end_line": 131,
+          "excerpt_sha256": "e52b6aa7236cfcb9fb23dec3ae85aa6a6acc70a3da542973cc8072c3281ceb09",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 120,
+          "end_line": 126,
+          "excerpt_sha256": "bd76914f051a59daf0899e8a68c3e0f229663f10211ac6e2d6bfceb00b6b326e",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "D直接覆盖关系尚未建立就过早表白后的当场回应：承认着急、降低压力并转开话题；没有选入之后的价值展示或概率判断。",
+      "name": "romance-057-premature-confession"
+    },
+    {
+      "id": 58,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/06-吸引约会与关系启动.md",
+          "start_line": 45,
+          "end_line": 53,
+          "excerpt_sha256": "6f12c8bc1b2173824ad33e160312d382e96e9a14aa4d516752836ec51550a5ab",
+          "source_sha256": "27168cba7b73b128e6db6b860dde92ea52a9cfe6ff0cfbcde78c1be25500b825",
+          "blob_sha": "cbf463e2ca73ca76628eba597758e83ac3d611c2",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 23,
+          "end_line": 28,
+          "excerpt_sha256": "d774eb5da3fd9d041379cc3e0a1936ea34197968c6ed80fe25070b05e137e22b",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+          "start_line": 207,
+          "end_line": 212,
+          "excerpt_sha256": "4f1a1010be163be76985b5c875a912ea9cd0e1eed603ed8deb5954f90ef00df2",
+          "source_sha256": "83014b57788a4d6cfe4cb82fe224d81ee5e9ac6d6e84f7ac67097d06828cb7fe",
+          "blob_sha": "393a2fe5a903929290960ee73ea51e5fb1b96136",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G明确把排他性、称谓、联系节奏和期待列为关系定义议题；C只问一个关键事实，G另有直接询问关系想法的原句。",
+      "name": "romance-058-define-relationship"
+    },
+    {
+      "id": 59,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/06-吸引约会与关系启动.md",
+          "start_line": 47,
+          "end_line": 53,
+          "excerpt_sha256": "094dcc809afdec8703d07649b529876f9d3468ca0302ad10e5c4c52ecda1fe7e",
+          "source_sha256": "27168cba7b73b128e6db6b860dde92ea52a9cfe6ff0cfbcde78c1be25500b825",
+          "blob_sha": "cbf463e2ca73ca76628eba597758e83ac3d611c2",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "E",
+          "path": "docs/relationship-phases.md",
+          "start_line": 342,
+          "end_line": 353,
+          "excerpt_sha256": "8913365fa9e3e122d1710a7b53c6f8f8cee08640b6cb524c472444555179ab50",
+          "source_sha256": "af22711328eeffc99cbdd37af5d13b6c33c35a0b5a7e06c96fa874c64130d295",
+          "blob_sha": "65ade04192b0ed984b63b6d92439ad86a9d820fe",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "docs/relationship-phases.md",
+          "start_line": 346,
+          "end_line": 353,
+          "excerpt_sha256": "d9daf9b293202b7f211bb9cb361bc74974a24d0e8501041690ab25151a1363b3",
+          "source_sha256": "af22711328eeffc99cbdd37af5d13b6c33c35a0b5a7e06c96fa874c64130d295",
+          "blob_sha": "65ade04192b0ed984b63b6d92439ad86a9d820fe",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "template"
+        }
+      ],
+      "notes": "E原句是说明自己的排他立场，不表示对方已同意；这里只取定义协议的范围，不引入其里程碑时间作为规定。",
+      "name": "romance-059-exclusivity-commitment"
+    },
+    {
+      "id": 60,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/03-依恋理论与情绪调节.md",
+          "start_line": 31,
+          "end_line": 42,
+          "excerpt_sha256": "85464a2c3af0c03b52ff016d668bbaaa364475fd3f60c24a39a1ef1894ca2c63",
+          "source_sha256": "3a23188ca0f199676a3aa8908562457f1aee59d244fb00fe0e3780b98f689f24",
+          "blob_sha": "5aaa98debc5d9f211c1140eb3ca86b84092a0e6a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/06-吸引约会与关系启动.md",
+          "start_line": 47,
+          "end_line": 53,
+          "excerpt_sha256": "094dcc809afdec8703d07649b529876f9d3468ca0302ad10e5c4c52ecda1fe7e",
+          "source_sha256": "27168cba7b73b128e6db6b860dde92ea52a9cfe6ff0cfbcde78c1be25500b825",
+          "blob_sha": "cbf463e2ca73ca76628eba597758e83ac3d611c2",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/03-依恋理论与情绪调节.md",
+          "start_line": 31,
+          "end_line": 35,
+          "excerpt_sha256": "fac3d94613b86e975c9e923701b1f3b6f11e09ba7711b8f7f57ab1f44740c128",
+          "source_sha256": "3a23188ca0f199676a3aa8908562457f1aee59d244fb00fe0e3780b98f689f24",
+          "blob_sha": "5aaa98debc5d9f211c1140eb3ca86b84092a0e6a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "G支持把联系焦虑转换为具体、有限的请求，并将联系节奏列入关系期待；未规定每天必须联系或即时回复。",
+      "name": "romance-060-contact-frequency"
+    },
+    {
+      "id": 61,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/03-依恋理论与情绪调节.md",
+          "start_line": 44,
+          "end_line": 49,
+          "excerpt_sha256": "eb6575e1e65a46e25f3125cd670d2e4ab01ae6fab41c3a89c8b3e2653f905083",
+          "source_sha256": "3a23188ca0f199676a3aa8908562457f1aee59d244fb00fe0e3780b98f689f24",
+          "blob_sha": "5aaa98debc5d9f211c1140eb3ca86b84092a0e6a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "E",
+          "path": "docs/relationship-phases.md",
+          "start_line": 414,
+          "end_line": 432,
+          "excerpt_sha256": "f73cf37e89d8068e96243c8b41fb11d6cb666e4348f042c376499a01ce073cee",
+          "source_sha256": "af22711328eeffc99cbdd37af5d13b6c33c35a0b5a7e06c96fa874c64130d295",
+          "blob_sha": "65ade04192b0ed984b63b6d92439ad86a9d820fe",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [],
+      "notes": "G直接说明需要空间时可协商独处并保持最低连接，E提出长期关系中保留彼此生活与共同体验；未找到具体朋友安排或查阅聊天记录的对话原例。",
+      "name": "romance-061-personal-space"
+    },
+    {
+      "id": 62,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/08-同意边界性与亲密.md",
+          "start_line": 5,
+          "end_line": 20,
+          "excerpt_sha256": "5f9b853c698f154b481e7892467906afa5dbb782706ab1a8f6112da40a3023e7",
+          "source_sha256": "51688890c32a4f134f770d09c210e39361c50fa3753119836fd41b2d5b17c9b4",
+          "blob_sha": "15bc38658e2e4757931ce008b9bf51fb2e7d4bd2",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/08-同意边界性与亲密.md",
+          "start_line": 17,
+          "end_line": 20,
+          "excerpt_sha256": "52dfb2ef87aeeb7e25a48ed4147a10296343c524878a9074c2c3f807dfd4b708",
+          "source_sha256": "51688890c32a4f134f770d09c210e39361c50fa3753119836fd41b2d5b17c9b4",
+          "blob_sha": "15bc38658e2e4757931ce008b9bf51fb2e7d4bd2",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "G明确说明同意按具体行为区分、持续有效且可撤回，并给出确认和停止表达；不把此前亲密、沉默或关系身份当成同意。",
+      "name": "romance-062-physical-consent"
+    },
+    {
+      "id": 63,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/09-在线约会与数字关系.md",
+          "start_line": 61,
+          "end_line": 68,
+          "excerpt_sha256": "5de11455e528849ead64899f9a9af87bae668b6fc0de6496a384453fd8e265dc",
+          "source_sha256": "8c46faff08e601591e12c92df99a0d224b3440a2586660ce70f36ae79479d9d5",
+          "blob_sha": "e68b7bd2f1411a6584663831c0f344b6a624110c",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 24,
+          "end_line": 30,
+          "excerpt_sha256": "f6aacdb93801ab8cb492124b9ec08d903cec82f2227c0ef5eeb534fefc306256",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G43。原文直接列出关系公开与发布照片前询问；无具体对话示例，练习卡仅提供绿黄红边界分类模板。",
+      "name": "romance-063-public-relationship-photos"
+    },
+    {
+      "id": 64,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/09-在线约会与数字关系.md",
+          "start_line": 63,
+          "end_line": 71,
+          "excerpt_sha256": "64481af09c198e7f200d560836f4b0bc950a7f7ed8a2b11a2106fdebec66a9e3",
+          "source_sha256": "8c46faff08e601591e12c92df99a0d224b3440a2586660ce70f36ae79479d9d5",
+          "blob_sha": "e68b7bd2f1411a6584663831c0f344b6a624110c",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 24,
+          "end_line": 30,
+          "excerpt_sha256": "f6aacdb93801ab8cb492124b9ec08d903cec82f2227c0ef5eeb534fefc306256",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G43。原文明列手机、密码、定位与线上互动边界，并区分自愿协商和数字控制；没有具体对话示例。",
+      "name": "romance-064-digital-privacy"
+    },
+    {
+      "id": 65,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/09-在线约会与数字关系.md",
+          "start_line": 63,
+          "end_line": 71,
+          "excerpt_sha256": "64481af09c198e7f200d560836f4b0bc950a7f7ed8a2b11a2106fdebec66a9e3",
+          "source_sha256": "8c46faff08e601591e12c92df99a0d224b3440a2586660ce70f36ae79479d9d5",
+          "blob_sha": "e68b7bd2f1411a6584663831c0f344b6a624110c",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 393,
+          "end_line": 405,
+          "excerpt_sha256": "d3a1b3cb31505a8ae8b61a84b93fa2aee420d0de854430f74a237749b24a86d5",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 24,
+          "end_line": 30,
+          "excerpt_sha256": "f6aacdb93801ab8cb492124b9ec08d903cec82f2227c0ef5eeb534fefc306256",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：E13、G43。原文覆盖线上互动边界、数字监控和过度嫉妒风险，但未单列吃醋对话流程；所选练习是通用边界分类模板。",
+      "name": "romance-065-jealousy-conversation"
+    },
+    {
+      "id": 66,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/07-沟通冲突与修复.md",
+          "start_line": 23,
+          "end_line": 51,
+          "excerpt_sha256": "4bf63067c6bf38b44ec9aca5b14d83b22dc5b000886d7dfd275e3359594f7475",
+          "source_sha256": "440fadf71455dac36fbe291bffa2246e035f5dd0d9d7167cd9a129443375828b",
+          "blob_sha": "565b825180656a0385b651f4546ad2f810a38a10",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/万能吵架技巧：理性冲突处理指南.md",
+          "start_line": 31,
+          "end_line": 38,
+          "excerpt_sha256": "fa7f4f539c630598010cdb7ae3e11e0aee97eb38eb53cff09b1d5e794cca7a88",
+          "source_sha256": "ea8305e07aa5a4c58b3e15ce28950a6cc8da4862704aae70a4483f4639fa0a5e",
+          "blob_sha": "920c33943a84827487e51c8a97367ba63a5e4e37",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "dialogue"
+        }
+      ],
+      "notes": "源候选：D19、G22。所选 G22 原文提供倾听拆解、我句式、单一问题与共情回应；D19仅作候选且未引用。",
+      "name": "romance-066-express-dissatisfaction"
+    },
+    {
+      "id": 67,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/09-在线约会与数字关系.md",
+          "start_line": 36,
+          "end_line": 45,
+          "excerpt_sha256": "52bc60d66e3d657aca649454742f4bc75f41efc6bdf6379f26053096cd16f538",
+          "source_sha256": "8c46faff08e601591e12c92df99a0d224b3440a2586660ce70f36ae79479d9d5",
+          "blob_sha": "e68b7bd2f1411a6584663831c0f344b6a624110c",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "C",
+          "path": "relationship-copilot/references/human-progression-playbook.md",
+          "start_line": 28,
+          "end_line": 28,
+          "excerpt_sha256": "435e96cd2aaf82f84ddb8e687c2c7b70a0e246f3109bed5a12b1e34a28795bd5",
+          "source_sha256": "ae977de196442149df516b3a1962b6267499aea4602065fcf5953785bb092ec9",
+          "blob_sha": "4e6e1260c3dbd7c36d6172f9afa1330f5c0022f6",
+          "repository": "Mowon0303/LoveHelper.skill",
+          "commit": "1e391e26fd1c1bfee06e4daa9b439086a098a49b"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 7,
+          "end_line": 14,
+          "excerpt_sha256": "4efa6a1f363978ee9aecd1bd8f0cd7d3ee11efd33649d97b0af8cbb902fb99b0",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "源候选：C08、G03、G19。原文练习区分可观察事实、解释和待确认问题，C08明确建议信息矛盾时只问一个关键问题；未引用其他候选段。",
+      "name": "romance-067-conflicting-statements"
+    },
+    {
+      "id": 68,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/09-在线约会与数字关系.md",
+          "start_line": 28,
+          "end_line": 32,
+          "excerpt_sha256": "1ee87cc7c697287427c44519b96331122cce0a5b11b2a991bfe082622f31b63b",
+          "source_sha256": "8c46faff08e601591e12c92df99a0d224b3440a2586660ce70f36ae79479d9d5",
+          "blob_sha": "e68b7bd2f1411a6584663831c0f344b6a624110c",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "E",
+          "path": "docs/conversation-mastery.md",
+          "start_line": 203,
+          "end_line": 206,
+          "excerpt_sha256": "ff2240cd62cf827d326b8156c2d07d866de86d9786af983cbb37e3643ebdfefb",
+          "source_sha256": "02d32e17c882c2e186f12b65a437703f4425bf48d32834fc2df5a63cc5e547d9",
+          "blob_sha": "bd69a07a579ea83da07f89940a5ca8853f0754aa",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "docs/conversation-mastery.md",
+          "start_line": 207,
+          "end_line": 207,
+          "excerpt_sha256": "b3c2f43531ae0e241d4b8da21896fdcd905a6e854f4f1228ce50da526f6c3556",
+          "source_sha256": "02d32e17c882c2e186f12b65a437703f4425bf48d32834fc2df5a63cc5e547d9",
+          "blob_sha": "bd69a07a579ea83da07f89940a5ca8853f0754aa",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：E16、G22。E16给出误解时直接轻量澄清的模板，G原文说明文字沟通的语气局限及复杂分歧的媒介选择。",
+      "name": "romance-068-text-misunderstanding"
+    },
+    {
+      "id": 69,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/07-沟通冲突与修复.md",
+          "start_line": 74,
+          "end_line": 84,
+          "excerpt_sha256": "4fcab903bd8a2ad0746be38943f782f916c7a66949c92dc2c13444e2f0ef026c",
+          "source_sha256": "440fadf71455dac36fbe291bffa2246e035f5dd0d9d7167cd9a129443375828b",
+          "blob_sha": "565b825180656a0385b651f4546ad2f810a38a10",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/practical/万能吵架技巧：理性冲突处理指南.md",
+          "start_line": 48,
+          "end_line": 48,
+          "excerpt_sha256": "25e39adfb97a2e26f2d300eaf54e9ea3a61f9671d93e28e503d951f96bf045ed",
+          "source_sha256": "ea8305e07aa5a4c58b3e15ce28950a6cc8da4862704aae70a4483f4639fa0a5e",
+          "blob_sha": "920c33943a84827487e51c8a97367ba63a5e4e37",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "源候选：E16、G23。G23直接说明承认行为与影响、表达遗憾、询问修补且不强求原谅，并含说错话后的即时纠正原句；未选 E16 的通用尴尬场景。",
+      "name": "romance-069-hurtful-words-apology"
+    },
+    {
+      "id": 70,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/07-沟通冲突与修复.md",
+          "start_line": 76,
+          "end_line": 84,
+          "excerpt_sha256": "5604e13b2d4e6846e2fd489bc3518e324feaae46aa583995f74a819d85fa5a93",
+          "source_sha256": "440fadf71455dac36fbe291bffa2246e035f5dd0d9d7167cd9a129443375828b",
+          "blob_sha": "565b825180656a0385b651f4546ad2f810a38a10",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 75,
+          "end_line": 83,
+          "excerpt_sha256": "ab0402a59d364477fdb071da4cea34e0d12502e535e37ee576f5db1588fffd01",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G23。原文只提供通用道歉与修复清单，能借用承担影响、提出修补和检查改变的方法；没有失约/失信专属流程或原作者案例。",
+      "name": "romance-070-broken-promise-repair"
+    },
+    {
+      "id": 71,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/07-沟通冲突与修复.md",
+          "start_line": 53,
+          "end_line": 64,
+          "excerpt_sha256": "2780f7fb38cf3a5467a9dbdbb752a9deb43a9011a096ce4f872299394d7b2157",
+          "source_sha256": "440fadf71455dac36fbe291bffa2246e035f5dd0d9d7167cd9a129443375828b",
+          "blob_sha": "565b825180656a0385b651f4546ad2f810a38a10",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/07-沟通冲突与修复.md",
+          "start_line": 62,
+          "end_line": 62,
+          "excerpt_sha256": "c0736233e7d04a25673c44bcb660ca4dde1a1000b6c3fd65c4eb4d2e49036d96",
+          "source_sha256": "440fadf71455dac36fbe291bffa2246e035f5dd0d9d7167cd9a129443375828b",
+          "blob_sha": "565b825180656a0385b651f4546ad2f810a38a10",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "源候选：G22。原文列出暂停的返回时间、降唤醒和按约返回要素，并给出完整暂停原句。",
+      "name": "romance-071-conflict-pause"
+    },
+    {
+      "id": 72,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/07-沟通冲突与修复.md",
+          "start_line": 66,
+          "end_line": 72,
+          "excerpt_sha256": "a1604527b46c54ef091e4c70b3e2442016c989d07d631b74ce7a7cf672edca17",
+          "source_sha256": "440fadf71455dac36fbe291bffa2246e035f5dd0d9d7167cd9a129443375828b",
+          "blob_sha": "565b825180656a0385b651f4546ad2f810a38a10",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "SKILL.md",
+          "start_line": 453,
+          "end_line": 457,
+          "excerpt_sha256": "73d1caf76b2bacc580baf8cee315922fe55b6c6d9354be77ce48093bca387161",
+          "source_sha256": "89b2d75e46417bdc51f23caedd1b758eae68bf10fe7f0fd52d8186293a9b1966",
+          "blob_sha": "3819452703e3d06ece60b1631fe25c9da93b7154",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：E16、E17。原文分别讨论追退循环和疏远后的重新连接，但没有专门针对冷战结束的流程；所选句式只是一般疏远后的联系模板。",
+      "name": "romance-072-reopen-after-silence"
+    },
+    {
+      "id": 73,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/07-沟通冲突与修复.md",
+          "start_line": 41,
+          "end_line": 51,
+          "excerpt_sha256": "5b0c582d16bac45d4cd13c287e36a7b11548ff6f6c6f935e48800e096de8b7b0",
+          "source_sha256": "440fadf71455dac36fbe291bffa2246e035f5dd0d9d7167cd9a129443375828b",
+          "blob_sha": "565b825180656a0385b651f4546ad2f810a38a10",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/07-沟通冲突与修复.md",
+          "start_line": 43,
+          "end_line": 45,
+          "excerpt_sha256": "67788b1ced5c4ae2aab84a241b7323358e21dbe454cd1b58684038f46d2b275a",
+          "source_sha256": "440fadf71455dac36fbe291bffa2246e035f5dd0d9d7167cd9a129443375828b",
+          "blob_sha": "565b825180656a0385b651f4546ad2f810a38a10",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 44,
+          "end_line": 51,
+          "excerpt_sha256": "b93d54c3297d8023643b57a618bf9afb09b0cc3e4c38280a83383b9243ed2ce9",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G22、G34。原文说明共同定义问题、各提方案、低成本试行并约定复盘；关系会议模板可承接重复议题。",
+      "name": "romance-073-recurring-conflict"
+    },
+    {
+      "id": 74,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 335,
+          "end_line": 338,
+          "excerpt_sha256": "2ee1e80c5fbdeabe796c144c6cec50c4410d9e5edfccf0b7c5552cdc5aa9cb7d",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 385,
+          "end_line": 387,
+          "excerpt_sha256": "2c27418f4ad56df70afb50bae5b55698c1b6a187cea12cd890f93ac4c1d932c0",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 327,
+          "end_line": 330,
+          "excerpt_sha256": "a3b972a9e17641e869c3457d4f5777e9a9b58687fd0e0f3d141b1fd5beabde36",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "dialogue"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 374,
+          "end_line": 374,
+          "excerpt_sha256": "3ae76c1af6b4d9c6b3c0d31028212bbb8a900e1bec5b4cb1e16aec3662e78710",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "源候选：D27、G24。D场景直接覆盖“不合适”和“不想恋爱”；仅选不追问、不施压的原文处理与原句，未选判断拒绝真假的内容；G24方向相反。",
+      "name": "romance-074-romantic-rejection"
+    },
+    {
+      "id": 75,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "E",
+          "path": "docs/crisis-management.md",
+          "start_line": 157,
+          "end_line": 162,
+          "excerpt_sha256": "583d4483c277296e76768d6a640e5119ede6a91c47f53d62f0eb712cfbc81951",
+          "source_sha256": "b4a0ac59b0ad72219bf649c0bc499d59f4f04d400289038bf7bc593ca6269a85",
+          "blob_sha": "50503257ade651e54483b12cc6c9f8292fda4efc",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7"
+        }
+      ],
+      "examples": [
+        {
+          "source": "E",
+          "path": "docs/crisis-management.md",
+          "start_line": 163,
+          "end_line": 164,
+          "excerpt_sha256": "c44bc3b0de12bc79da63f51f632323a4b604a2f9ec8732b8f5549c543c46244d",
+          "source_sha256": "b4a0ac59b0ad72219bf649c0bc499d59f4f04d400289038bf7bc593ca6269a85",
+          "blob_sha": "50503257ade651e54483b12cc6c9f8292fda4efc",
+          "repository": "merchantmoh-debug/EROS-AI-Dating-Repository",
+          "commit": "0753f76f6683e5094456fb5c6342391c7de1b2f7",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "源候选：E23。原文直接提供约会后坦诚表达没有浪漫感觉的处理原则与原句。",
+      "name": "romance-075-end-dating-interest"
+    },
+    {
+      "id": 76,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 49,
+          "end_line": 62,
+          "excerpt_sha256": "4d30bf3c54103ab89f5d27a8db14fbbb79064104578aca7b7351dffd24623f14",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 66,
+          "end_line": 72,
+          "excerpt_sha256": "c4972f105e9c0643326456e0b69247f877ccafdb1f1d68064c93a666f61aecc3",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 73,
+          "end_line": 85,
+          "excerpt_sha256": "715f5f3792644ab9b9b84c3a8c0af566f26f87975ddefb8fd9f9c760ac6aea2a",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "dialogue"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 462,
+          "end_line": 465,
+          "excerpt_sha256": "370e03703c7a5b2006d8d63ed3a64a2165c37b4c3e88e5a01bdc98ceacbdc4b3",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461",
+          "kind": "scenario"
+        }
+      ],
+      "notes": "源候选：D23。D原文直接覆盖被拒后仍需在同事、同学或共同圈子往来的情景，含冷静期、再次见面分支和原对话；场景8作为同圈相处补充。",
+      "name": "romance-076-after-rejection-coworkers"
+    },
+    {
+      "id": 77,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 408,
+          "end_line": 411,
+          "excerpt_sha256": "de47f156fd76cc54eadf447c6951bfb8cc39f049007a3b9d1d57328b783a72e2",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 424,
+          "end_line": 427,
+          "excerpt_sha256": "21c2e6b4913259d07b09ce564620aa4dcb3d8ea7aceda73343498046abb96960",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        },
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/realistic-scenarios.md",
+          "start_line": 431,
+          "end_line": 435,
+          "excerpt_sha256": "ff357ccc322dad9fc9b877c8be34451fe5d523eb20a9bbf9107404881338c9e9",
+          "source_sha256": "9d26cb5580f6b3b669ee9b2e277acbe450f7213f8e8d7fe503f9811502b3b348",
+          "blob_sha": "2203d15ea6d01830a1d6c4ce23992c90ae975d39",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        }
+      ],
+      "examples": [],
+      "notes": "源候选：D28。D原文场景和处理方法直接相关；保留心态准备、自然互动与注意力安排方法，不选初次招呼及他人起哄的原句示例。",
+      "name": "romance-077-meet-new-partner"
+    },
+    {
+      "id": 78,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/15-分手背叛与关系修复.md",
+          "start_line": 7,
+          "end_line": 11,
+          "excerpt_sha256": "c9e7f078539048b901fb1a70189e0af367c47d089a84f990d93c8e0fd282a4e8",
+          "source_sha256": "95532db79ce3119774956f2c2f8cfccde1a84c35c15f5963057389ad6cec1f05",
+          "blob_sha": "c5f7f3932420e56ac21342e3064593b565478e7f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/15-分手背叛与关系修复.md",
+          "start_line": 13,
+          "end_line": 18,
+          "excerpt_sha256": "8bcd9284bd88ed5677c40ffb65d3447d8aa74537553b8609d1d89daa9a5d82b9",
+          "source_sha256": "95532db79ce3119774956f2c2f8cfccde1a84c35c15f5963057389ad6cec1f05",
+          "blob_sha": "c5f7f3932420e56ac21342e3064593b565478e7f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/15-分手背叛与关系修复.md",
+          "start_line": 12,
+          "end_line": 12,
+          "excerpt_sha256": "2385b281d48afda5d99bcf43767f960a48f78505366138182c49b58712b5905a",
+          "source_sha256": "95532db79ce3119774956f2c2f8cfccde1a84c35c15f5963057389ad6cec1f05",
+          "blob_sha": "c5f7f3932420e56ac21342e3064593b565478e7f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "phrase"
+        }
+      ],
+      "notes": "源候选：G39。原文提供分手结论、原因、边界及必要事务的结构，并含清楚表达决定的原句。",
+      "name": "romance-078-breakup-conversation"
+    },
+    {
+      "id": 79,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/15-分手背叛与关系修复.md",
+          "start_line": 11,
+          "end_line": 18,
+          "excerpt_sha256": "502935a32ac33d5227af6ce309d6592b4d8a27ddd4fe5591a64410618ab8d4cc",
+          "source_sha256": "95532db79ce3119774956f2c2f8cfccde1a84c35c15f5963057389ad6cec1f05",
+          "blob_sha": "c5f7f3932420e56ac21342e3064593b565478e7f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 104,
+          "end_line": 111,
+          "excerpt_sha256": "8ad4643b4035445ff4569439a5fb8f8223a82a41450978d5dd297b8be0688b1c",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G39。原文将分手后的物品、住房、财务和后续联系列入必要收尾，并有数字权限与共同物品交接清单。",
+      "name": "romance-079-breakup-logistics"
+    },
+    {
+      "id": 80,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/15-分手背叛与关系修复.md",
+          "start_line": 33,
+          "end_line": 43,
+          "excerpt_sha256": "1943b01997db5749540d2a720b9f77113d6aa977f1ee3fabc014bf4962c0a958",
+          "source_sha256": "95532db79ce3119774956f2c2f8cfccde1a84c35c15f5963057389ad6cec1f05",
+          "blob_sha": "c5f7f3932420e56ac21342e3064593b565478e7f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/practical/关系投入失衡：互惠判断、降级投入与退出决策.md",
+          "start_line": 71,
+          "end_line": 71,
+          "excerpt_sha256": "72f3d4df0d697040865c9e5721705034a5c95997bd24126fe190c439fedf938d",
+          "source_sha256": "4e724e9a5b272ad1a6833ddbb9d84eeb86c3b2e395e5f241d90f8655930c77c3",
+          "blob_sha": "fb83bf2c6fcc98d5f698467871d0d38f9cf5a65b",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [],
+      "notes": "源候选：G41。原文明确讨论复联前的变化证据、自由意愿、停止线和轻量联系条件；没有提供分手后第一条联系的具体原作者示例。",
+      "name": "romance-080-reconnect-after-breakup"
+    },
+    {
+      "id": 81,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/15-分手背叛与关系修复.md",
+          "start_line": 45,
+          "end_line": 64,
+          "excerpt_sha256": "37b05b35891256700dc46dc11290a9940102a21034ee09fc47b4bdbb0f8737b6",
+          "source_sha256": "95532db79ce3119774956f2c2f8cfccde1a84c35c15f5963057389ad6cec1f05",
+          "blob_sha": "c5f7f3932420e56ac21342e3064593b565478e7f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 5,
+          "end_line": 16,
+          "excerpt_sha256": "136c58c092acc90fe48f602f6ff768059ae24c245a3db635671e1a6df9ff8149",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [],
+      "notes": "源候选：G42。原文针对背叛说明先厘清关系期待和边界如何被违反、区分解释与开脱，并可用事实与解释区分法；没有背叛事实核对的具体对话例。",
+      "name": "romance-081-betrayal-clarification"
+    },
+    {
+      "id": 82,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/15-分手背叛与关系修复.md",
+          "start_line": 62,
+          "end_line": 72,
+          "excerpt_sha256": "224efb7df6d0c93f66e24a6977c8df61ed4afa44dccb8e5e6f00588872b03369",
+          "source_sha256": "95532db79ce3119774956f2c2f8cfccde1a84c35c15f5963057389ad6cec1f05",
+          "blob_sha": "c5f7f3932420e56ac21342e3064593b565478e7f",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 75,
+          "end_line": 83,
+          "excerpt_sha256": "ab0402a59d364477fdb071da4cea34e0d12502e535e37ee576f5db1588fffd01",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G42。原文区分修复与宽恕、继续关系，并列出诚实、承担影响、重新协商边界和可观察改变；练习卡提供修复清单模板。",
+      "name": "romance-082-trust-repair-conditions"
+    },
+    {
+      "id": 83,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/lifecycle.md",
+          "start_line": 85,
+          "end_line": 90,
+          "excerpt_sha256": "a03cf942ea0ad2fe91a95381ec055f7ccd3896ce1bc9739f950f3da5ba7a0ead",
+          "source_sha256": "5b6245458a43d18661e4a1144052360e4ef4eaef8decd5677c3827d625fe121e",
+          "blob_sha": "0a7b351238a1676c5fcaea08a219a2aaafdad03c",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/11-婚姻家庭与生命周期.md",
+          "start_line": 21,
+          "end_line": 26,
+          "excerpt_sha256": "f8e9b646da027afe30380112afdfb0f3b53f29470382faf38cd391d98edf5557",
+          "source_sha256": "644755f2e98ca18bd26e86cd8845fecf43cc122c16e5756ebc3166cb8bd7de6c",
+          "blob_sha": "f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [],
+      "notes": "源候选：D20。D原文把见家长列为长期关系节点并提到后续规划，G原文列出双方家庭、探访与隐私议题；两者都没有见家长前确认意愿和分寸的专门流程或示例，故仅共享议题框架。",
+      "name": "romance-083-meet-family"
+    },
+    {
+      "id": 84,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "D",
+          "path": ".claude/skills/dating-coach/references/lifecycle.md",
+          "start_line": 85,
+          "end_line": 90,
+          "excerpt_sha256": "a03cf942ea0ad2fe91a95381ec055f7ccd3896ce1bc9739f950f3da5ba7a0ead",
+          "source_sha256": "5b6245458a43d18661e4a1144052360e4ef4eaef8decd5677c3827d625fe121e",
+          "blob_sha": "0a7b351238a1676c5fcaea08a219a2aaafdad03c",
+          "repository": "Mayuqi-crypto/HowToGetAlongWithGirls",
+          "commit": "af0897f4b55897624a19de48374d436906e26461"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/11-婚姻家庭与生命周期.md",
+          "start_line": 15,
+          "end_line": 26,
+          "excerpt_sha256": "aecffb9220726083d68e65d237cea64831ace4ff999a3b69b291dd2d06951fcc",
+          "source_sha256": "644755f2e98ca18bd26e86cd8845fecf43cc122c16e5756ebc3166cb8bd7de6c",
+          "blob_sha": "f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 85,
+          "end_line": 96,
+          "excerpt_sha256": "3a5d123874cfc18ba0e3be27065d8183e71a103eaa391afcbbdf3986655cca64",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：D20、G33。D仅将婚姻节奏列入未来规划，G仅提供婚前主题盘点与十题清单；可共享议题框架，原文没有讨论是否结婚或时间分歧的专门方法或示例。",
+      "name": "romance-084-marriage-timing"
+    },
+    {
+      "id": 85,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/11-婚姻家庭与生命周期.md",
+          "start_line": 34,
+          "end_line": 38,
+          "excerpt_sha256": "19d07920a69bf6290340a9ff9b7b9a32f5871750f49c2c07217e3cf02f3663a5",
+          "source_sha256": "644755f2e98ca18bd26e86cd8845fecf43cc122c16e5756ebc3166cb8bd7de6c",
+          "blob_sha": "f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 52,
+          "end_line": 64,
+          "excerpt_sha256": "b356dca5e0bae2a21a69cefc80b153f6edfab45fdb8601a9881944f4dd6bf2a7",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 85,
+          "end_line": 96,
+          "excerpt_sha256": "3a5d123874cfc18ba0e3be27065d8183e71a103eaa391afcbbdf3986655cca64",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G33、G37。原文列出成为父母前的夜间照护、收入与职业、祖辈参与、休息和心理支持议题，并有婚前十题清单。",
+      "name": "romance-085-parenthood-intentions"
+    },
+    {
+      "id": 86,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/11-婚姻家庭与生命周期.md",
+          "start_line": 22,
+          "end_line": 26,
+          "excerpt_sha256": "ed2eb4158c70c45f6183ced2c89db17fc23702724f18694da617e2f7ed05be2f",
+          "source_sha256": "644755f2e98ca18bd26e86cd8845fecf43cc122c16e5756ebc3166cb8bd7de6c",
+          "blob_sha": "f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 88,
+          "end_line": 88,
+          "excerpt_sha256": "e5efb43bcff8a72e64fd05a6ca88a989bd28d0ba137a0f7034db32294dde1a38",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：D20、G33。G33直接列出职业与城市冲突时的决策议题，练习卡含对应问题；D20未引用。",
+      "name": "romance-086-city-future-life"
+    },
+    {
+      "id": 87,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 9,
+          "end_line": 16,
+          "excerpt_sha256": "2271aaf8015a8696f3cb52ef632851adc207af451ba1be5c3e0aba9553605c90",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 28,
+          "end_line": 28,
+          "excerpt_sha256": "2e0f91f553ace3657ab2988f639b3d4e38e10255a4ea9cc8dee77ff636dc3a99",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 18,
+          "end_line": 26,
+          "excerpt_sha256": "c5c5bad409eccfa3975cb77f508a8578f2d75f449df961af3cf4b2774210c610",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G35。原文提供共同财务四层结构、可选制度、预算会议字段及自主边界；示例为预算会议模板。",
+      "name": "romance-087-shared-expenses"
+    },
+    {
+      "id": 88,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 30,
+          "end_line": 39,
+          "excerpt_sha256": "890706d2e29b56dc6ce4d9a3c41e891480855cc99fb2526489b89e6eb58875b1",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 45,
+          "end_line": 50,
+          "excerpt_sha256": "4a5a1ea6370160f2e98d414daef2662f80ef689c8258dd2fd6fd186f736e3e3f",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 43,
+          "end_line": 43,
+          "excerpt_sha256": "48a60943a8b14f718de6f412703680b1f9272148fb7aa36a109dcf31a47fce24",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G36。原文区分执行、认知、情绪和责任劳动，并提供标注频率、标准、负责人和替补及定期复盘的方法；无完整对话示例。",
+      "name": "romance-088-housework-care"
+    },
+    {
+      "id": 89,
+      "support": "shared_method",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/11-婚姻家庭与生命周期.md",
+          "start_line": 34,
+          "end_line": 46,
+          "excerpt_sha256": "be4bc021f7999166c92d7e8db52bd306a00efc32f7a5e6caedb3d00898d863bf",
+          "source_sha256": "644755f2e98ca18bd26e86cd8845fecf43cc122c16e5756ebc3166cb8bd7de6c",
+          "blob_sha": "f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 41,
+          "end_line": 50,
+          "excerpt_sha256": "7f32d7ef5d7df9e1b5d3eb243b4bf0a1d666828bf530bc4a8704d371b5705dce",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 52,
+          "end_line": 64,
+          "excerpt_sha256": "b356dca5e0bae2a21a69cefc80b153f6edfab45fdb8601a9881944f4dd6bf2a7",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 44,
+          "end_line": 51,
+          "excerpt_sha256": "b93d54c3297d8023643b57a618bf9afb09b0cc3e4c38280a83383b9243ed2ce9",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G37。原文讨论育儿与照护转变、负担变化和分工检查，但没有单列阶段变化后的协商流程；关系会议模板属于通用复盘方法。",
+      "name": "romance-089-caregiving-transition"
+    },
+    {
+      "id": 90,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/12-金钱家务育儿与双方家庭.md",
+          "start_line": 65,
+          "end_line": 75,
+          "excerpt_sha256": "8a4f4a2b2a2d659606a35b156df30f7b0af9265a7bc2a1914058a03009fc21bb",
+          "source_sha256": "9395c909149b552fbd860f57b11cc1a6175d9e2d9518220cf660c38ca7da362c",
+          "blob_sha": "77a2619392de698b184df73f952a101466e24d01",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/11-婚姻家庭与生命周期.md",
+          "start_line": 52,
+          "end_line": 59,
+          "excerpt_sha256": "4b8d43552d4e9664371e9c6b586da23849bdcfa2d7c05670c0aa4c1fa42d98bd",
+          "source_sha256": "644755f2e98ca18bd26e86cd8845fecf43cc122c16e5756ebc3166cb8bd7de6c",
+          "blob_sha": "f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 91,
+          "end_line": 91,
+          "excerpt_sha256": "a4b1cae61f97dfadbe04f6c0a764dc356783bbe8033ec6dafffe5dd87f2f8725",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G38。原文明确列出探访、备用钥匙、隐私、经济支持和决定权议题，也说明边界与支持不等于控制；练习卡含双方家庭问题。",
+      "name": "romance-090-parents-boundaries"
+    },
+    {
+      "id": 91,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/16-多元关系与反刻板印象.md",
+          "start_line": 45,
+          "end_line": 53,
+          "excerpt_sha256": "5a13036cf8dd08c39d4a39772761dab72b2874b862b0bd6b972842d8c60a6071",
+          "source_sha256": "8276f70a42d3dccb53c9015b2519761eec3743e696f7572e2c6d8d60b77dc446",
+          "blob_sha": "f360966269747905dc88d2df8accbf450a432325",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [],
+      "notes": "源候选：G38。原文直接覆盖再婚、继亲、前伴侣和孩子协作边界，但没有具体沟通对话或场景示例。",
+      "name": "romance-091-blended-family"
+    },
+    {
+      "id": 92,
+      "support": "direct",
+      "methods": [
+        {
+          "source": "G",
+          "path": "references/knowledge/11-婚姻家庭与生命周期.md",
+          "start_line": 61,
+          "end_line": 66,
+          "excerpt_sha256": "250aa77ae58f19500a2475d5bfce7299380cc6553a69506982bfd0360f846cea",
+          "source_sha256": "644755f2e98ca18bd26e86cd8845fecf43cc122c16e5756ebc3166cb8bd7de6c",
+          "blob_sha": "f57284bc4e1b261dca21d5fdbd8ca9a5b9d5bbc0",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f"
+        }
+      ],
+      "examples": [
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 44,
+          "end_line": 51,
+          "excerpt_sha256": "b93d54c3297d8023643b57a618bf9afb09b0cc3e4c38280a83383b9243ed2ce9",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        },
+        {
+          "source": "G",
+          "path": "references/knowledge/18-实用练习与对话卡.md",
+          "start_line": 98,
+          "end_line": 102,
+          "excerpt_sha256": "ad883c78c43d06f936a5c4cdf6940f33f17e0c561b5c03361a7a8dba711a2edd",
+          "source_sha256": "b4040cf5de8fd505380518df8982e92d140954d05bc5c305694a7212630e69a7",
+          "blob_sha": "c850d5ba7f63a117e0f1a38b1e57148eef9fd40a",
+          "repository": "shengjidaguai-china/goutoujunshi",
+          "commit": "6c32b8dbe28268e26d6cd0bb7de1e28ff5dd203f",
+          "kind": "template"
+        }
+      ],
+      "notes": "源候选：G34。原文明确给出每日、每周、每月和年度关系维护节奏，并提供每周关系会议与关系健康月检模板。",
+      "name": "romance-092-relationship-checkin"
+    }
+  ]
+}

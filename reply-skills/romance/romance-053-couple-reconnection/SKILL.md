@@ -1,36 +1,43 @@
 ---
 name: romance-053-couple-reconnection
-description: "稳定关系中疏远后的重新亲近：用于伴侣因忙碌或日常单调减少了交流，帮用户提出一项小而具体的共同活动或联系安排。"
+description: "稳定关系中疏远后的重新亲近：用于该恋爱沟通场景，参考相应处理方法及表达示例。"
 ---
 
 # 稳定关系中疏远后的重新亲近
 
-来源候选：E17、E14。
+## 处理边界
 
-**适用：**双方已处于稳定关系，最近共同交流减少，用户希望恢复亲近而非要求对方证明感情。
+### 共用规则 1
 
-**边界：**若对方明确想结束关系，不把重新亲近当作挽回技巧；重大冲突需先解决冲突，不用约会安排跳过伤害。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-**信息不全时：**优先使用用户本轮表达的目的、已提供的原话和当前可用的背景。缺少会改变候选的关键事实时，只问一个必要问题；否则写条件清楚的候选，不补造经历、情绪、约定或对方动机。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 处理步骤
+## 具体方法
 
-1. 确认用户怀念的是哪种具体相处，例如一起散步、做饭或分享日常，而不假定对方也有同样感受。
+### 方法 1
 
-2. 指出近期可观察的变化，不用“你变了”或“我们像室友”开头定罪。
+**The fix:** Deliberately maintain *separateness* within togetherness.
 
-3. 提出一个低成本、可选的共同安排，给出具体时间或时长，降低重新开始的负担。
+### Maintaining Eroticism
 
-4. 如果对方不便，邀请其提出替代方式；没有回应时，不将一次提议变成检验关系的最后通牒。
+Eroticism dies in three conditions:
+1. **Over-familiarity** — When your partner becomes a roommate
+2. **Emotional debt** — When resentment accumulates undiscussed
+3. **Loss of self** — When you stop being *you* and become only *us*
 
-## 按实际反馈选择下一步
+**Practical ways to maintain erotic energy:**
 
-- 对方愿意：确认活动并把注意力放回共同相处。
-- 对方想改计划：按双方时间重新选一项小活动。
-- 对方不想或连续回避：改为找合适时机谈双方对现状的感受。
+| Practice | Frequency | Why It Works |
+|----------|-----------|-------------|
+| Date nights (real ones, planned) | Weekly | Recreates pursuit energy |
+| Time apart with separate friends | Weekly | Generates stories and mystery |
+| Physical touch that isn't goal-oriented | Daily | Maintains body awareness |
+| Flirting — actual flirting, like you just met | Daily | Keeps playful energy alive |
+| Trying something new together | Monthly | Novelty triggers dopamine |
+| Verbal desire — "You look incredible right now" | Spontaneously | Explicit appreciation prevents invisible-partner syndrome |
 
-## 完成条件
 
-提议真实表达用户想靠近的愿望，并且是双方可协商的具体行动。候选保持可编辑，由用户选择、改写后自行决定是否使用。
+## 按需查看示例
 
-**案例指针：**只有在需要比较本场景的常见与困难情形、或用户明确要求演练时，才读取 `references/cases.md`；普通单次回复依本文件步骤处理。
+需要参考具体表达时读取 `references/cases.md`。

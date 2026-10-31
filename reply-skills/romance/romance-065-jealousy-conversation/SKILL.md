@@ -1,27 +1,48 @@
 ---
 name: romance-065-jealousy-conversation
-description: "吃醋或对异性交往不安时的沟通：用于用户想表达嫉妒、询问具体互动或回应伴侣不安的场景，帮助区分观察与推测，提出一项清楚且可协商的请求。"
+description: "吃醋或对异性交往不安时的沟通：用于该恋爱沟通场景，参考通用沟通方法及表达示例。"
 ---
 
 # 吃醋或对异性交往不安时的沟通
 
-## 适用与边界
-用于表达吃醋、讨论伴侣与异性朋友或前任的互动、回应对方的不安。嫉妒是一种感受，不自动证明背叛；也不该被嘲笑、审讯或转成限制正常交友。若已有明确越界事实，转向核实事实和关系约定；若存在威胁、跟踪或强迫，先保护安全，不用普通话术协商替代求助。
+## 处理边界
 
-## 输入不足
-只询问本次不安对应的具体行为、用户希望怎样改变，以及是否已有双方约定。把“我看到/听到”与“我担心”分开；没有事实时不替用户断定对方暧昧或出轨。
+### 共用规则 1
 
-## 方法
-1. 选一件可核实的互动作开头，避免把数月积累的猜测一次倾倒出来。
-2. 用“观察—感受—担忧—请求”表达：说明看见了什么、自己的感受、仍不确定的解释，再提出一项可执行请求。
-3. 如果对方主动表达嫉妒，先复述其担忧，再问最想澄清哪件事；不立刻辩解，也不承诺放弃朋友或交出设备。
-4. 一起区分双方都愿意遵守的行为约定，例如不隐瞒单独约见、提前说明改变安排；范围应具体、双向，不扩张成随时查验。
-5. 按回应调整：对方提供背景时复述并核对；对方不确定时约定之后再谈；对方否认感受或用指控升级时，暂时缩小议题，必要时暂停。
-6. 最后检查用户是否真正愿意提出这项请求。若只是想获得绝对保证，改成表达需要和能观察的行为，不索要“永远不会”。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-## 完成条件
-候选能说清事实、感受和一项可协商请求，并为对方保留解释或拒绝的空间；不以嫉妒为名检查、孤立或限制社交。复杂反馈分支按需读取references/cases.md。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 来源候选
-- E13：SKILL.md；docs/relationship-phases.md
-- G43：references/knowledge/09-在线约会与数字关系.md
+## 具体方法
+
+### 方法 1
+
+需明确协商：
+
+- 是否公开关系，发照片前是否询问。
+- 手机、密码、定位是否共享；拒绝共享不自动等于不忠。
+- 与前任、朋友、陌生人的线上互动边界。
+- 私密影像默认不拍、不备份、不传播。
+- 分手后社交媒体、共同相册、设备和账号权限如何处理。
+
+强迫开定位、查手机、索要密码、冒充登录、用设备监控，是数字控制而非“安全感需求”的合理满足。
+
+### 方法 2
+
+### 5.4 Red Flags to Watch For
+
+Help the user identify genuinely concerning patterns:
+
+| Red Flag | What It Looks Like | Why It Matters |
+|----------|-------------------|---------------|
+| **Love Bombing** | Overwhelming intensity way too fast ("You're my soulmate" on date 2) | Often precedes controlling behavior |
+| **Boundary Testing** | Gets upset when you say no to small things | Escalates to larger boundary violations |
+| **Isolation** | Discourages you from seeing friends/family | Classic control tactic |
+| **Inconsistency** | Actions don't match words | Unreliable people don't become reliable |
+| **Zero Accountability** | Nothing is ever their fault, every ex was "crazy" | Pattern of blaming others |
+| **Excessive Jealousy** | Monitoring your social media, questioning your friendships | Trust issues that escalate |
+
+
+## 按需查看示例
+
+需要参考具体表达时读取 `references/cases.md`。

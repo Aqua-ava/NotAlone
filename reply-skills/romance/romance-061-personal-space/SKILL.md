@@ -1,36 +1,52 @@
 ---
 name: romance-061-personal-space
-description: "表达独处、朋友或个人生活的空间需要：用于用户需要保留独处时间、友谊或私人安排的场景，帮用户讲清边界并协商相处方式。"
+description: "表达独处、朋友或个人生活的空间需要：用于该恋爱沟通场景，参考相应处理方法。"
 ---
 
 # 表达独处、朋友或个人生活的空间需要
 
-来源候选：D19、E14、G14。
+## 处理边界
 
-**适用：**稳定交往中用户希望安排独处、朋友活动或个人爱好，同时需要减少伴侣将其理解为拒绝关系。
+### 共用规则 1
 
-**边界：**短暂疲惫时可先收住当前聊天；长期关系冲突需要另约认真讨论；被跟踪或控制时优先处理现实安全。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-**信息不全时：**优先使用用户本轮表达的目的、已提供的原话和当前可用的背景。缺少会改变候选的关键事实时，只问一个必要问题；否则写条件清楚的候选，不补造经历、情绪、约定或对方动机。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 处理步骤
+## 具体方法
 
-1. 把空间需要具体化为一段时间或一类活动，不用“我需要自由”迫使伴侣猜测。
+### 方法 1
 
-2. 肯定真实关系意愿只在用户确实如此时说；不能用虚假保证换取对方立刻同意。
+## 五、对回避方的建议
 
-3. 说明哪些安排会分享、哪些个人空间希望保留，并邀请对方说出具体担心。
+- 不必先完全理解情绪才回应；先确认影响，再讨论事实。
+- 需要空间时给出返回时间，避免无限期冷处理。
+- 用小剂量披露建立耐受：“我现在紧张，怕说错，所以想慢一点。”
+- 自主和亲密不是零和；可以协商独处时间，同时保持最低连接。
 
-4. 达成的只是本次可执行安排；持续冲突再约时间讨论，不用每次外出都重新审判关系。
+### 方法 2
 
-## 按实际反馈选择下一步
+**The fix:** Deliberately maintain *separateness* within togetherness.
 
-- 对方理解：确认时间和必要的联络安排。
-- 对方担心被疏远：倾听具体担心，再讨论用户真实能提供的联系。
-- 对方要求放弃所有个人活动或监控行踪：清楚重申界限，评估是否需要现实支持。
+### Maintaining Eroticism
 
-## 完成条件
+Eroticism dies in three conditions:
+1. **Over-familiarity** — When your partner becomes a roommate
+2. **Emotional debt** — When resentment accumulates undiscussed
+3. **Loss of self** — When you stop being *you* and become only *us*
 
-用户的空间请求具体且可执行，同时没有承诺自己无法保证的联系或透明度。候选保持可编辑，由用户选择、改写后自行决定是否使用。
+**Practical ways to maintain erotic energy:**
 
-**案例指针：**只有在需要比较本场景的常见与困难情形、或用户明确要求演练时，才读取 `references/cases.md`；普通单次回复依本文件步骤处理。
+| Practice | Frequency | Why It Works |
+|----------|-----------|-------------|
+| Date nights (real ones, planned) | Weekly | Recreates pursuit energy |
+| Time apart with separate friends | Weekly | Generates stories and mystery |
+| Physical touch that isn't goal-oriented | Daily | Maintains body awareness |
+| Flirting — actual flirting, like you just met | Daily | Keeps playful energy alive |
+| Trying something new together | Monthly | Novelty triggers dopamine |
+| Verbal desire — "You look incredible right now" | Spontaneously | Explicit appreciation prevents invisible-partner syndrome |
+
+
+## 按需查看示例
+
+需要参考具体表达时读取 `references/cases.md`。

@@ -2,15 +2,21 @@ import assert from 'node:assert/strict';
 import {readFile, readdir} from 'node:fs/promises';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {join, resolve} from 'node:path';
-import {readPackage, validateName} from '../backend-ts/src/skills/skill-package.ts';
+import {readBounded, readPackage, validateName} from '../backend-ts/src/skills/skill-package.ts';
+import {openRomanceEvidence, renderRomanceSourceSkill, romanceSourceRoot} from './romance-source-material.mjs';
 
 export const romanceBundleRoot = fileURLToPath(new URL('../reply-skills/romance/', import.meta.url));
 
 /** 使用产品实际校验器核对内容包，仅读仓库内的教学材料。 */
-export async function validateRomanceBundle(root = romanceBundleRoot) {
+export async function validateRomanceBundle(root = romanceBundleRoot, {sourceRoot = romanceSourceRoot} = {}) {
   const catalog = JSON.parse(await readFile(join(root, 'catalog.json'), 'utf8'));
-  assert.equal(catalog.schema_version, 1);
+  assert.equal(catalog.schema_version, 2);
+  assert.equal(catalog.content_policy, 'upstream-extracts-only');
+  const provenance = JSON.parse(await readFile(join(root, 'provenance.json'), 'utf8'));
+  const evidence = openRomanceEvidence(provenance, sourceRoot);
   assert.equal(catalog.entries.length, 92, '须保留用户确认的 92 个独立场景');
+  assert.equal(provenance.skills.length, 92);
+  assert.equal(new Set(provenance.skills.map(item => item.id)).size, 92);
   assert.equal(new Set(catalog.entries.map(entry => entry.name)).size, 92);
   assert.equal(new Set(catalog.entries.map(entry => entry.title)).size, 92);
   const folders = (await readdir(root, {withFileTypes:true})).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
@@ -20,7 +26,16 @@ export async function validateRomanceBundle(root = romanceBundleRoot) {
     assert.equal(entry.id, index + 1);
     validateName(entry.name);
     assert.ok(entry.name.startsWith(`romance-${String(entry.id).padStart(3, '0')}-`));
-    assert.ok(entry.category && entry.title && entry.source_candidates.length);
+    assert.ok(entry.category && entry.title && entry.inventory_candidates.length);
+    const selection = provenance.skills.find(item => item.id === entry.id);
+    assert.ok(selection);
+    const expected = renderRomanceSourceSkill(entry, selection, evidence, provenance.common_methods);
+    assert.deepEqual(selection.methods, expected.references.methods, `${entry.name} 的方法出处不完整`);
+    assert.deepEqual(selection.examples, expected.references.examples, `${entry.name} 的示例出处不完整`);
+    assert.deepEqual(provenance.common_methods, expected.references.common, '共用规则的出处不完整');
+    assert.equal(entry.provenance_status, selection.support);
+    assert.equal(entry.source_method_count, selection.methods.length);
+    assert.equal(entry.source_example_count, selection.examples.length);
     let pkg;
     try { pkg = readPackage(join(root, entry.name)); }
     catch (error) { throw new Error(`${entry.name}: ${error.code ?? error.message}`, {cause:error}); }
@@ -29,27 +44,31 @@ export async function validateRomanceBundle(root = romanceBundleRoot) {
     assert.ok(!descriptions.has(pkg.description), `${entry.name} 的描述与其他场景相同`);
     descriptions.add(pkg.description);
     assert.ok(pkg.content.includes('references/cases.md'), `${entry.name} 缺少案例读取指针`);
-    const cases = pkg.resources.find(resource => resource.relative_path === 'references/cases.md');
-    assert.ok(cases, `${entry.name} 缺少案例资源`);
-    const caseText = cases.content.toString('utf8');
-    assert.ok((caseText.match(/^#{1,6}\s*(?:案例|示例)\s*[一二三四五六七八九十\d]/gm) ?? []).length >= 2, `${entry.name} 须有两则明确分开的案例`);
-    assert.match(caseText, /虚构|合成/, `${entry.name} 须标明示例性质`);
-    for (const id of entry.source_candidates) {
+    assert.ok(readBounded(join(root,entry.name,'SKILL.md')).equals(expected.document), `${entry.name} 的方法正文不是已核对原文的编排结果`);
+    assert.deepEqual(pkg.resources.map(item => item.relative_path).sort(), [...expected.resources.keys()].sort(), `${entry.name} 存在未登记的资源`);
+    for (const resource of pkg.resources) assert.ok(resource.content.equals(expected.resources.get(resource.relative_path)), `${entry.name}/${resource.relative_path} 出现无来源改写或新增内容`);
+    for (const id of entry.inventory_candidates) {
       assert.match(id, /^[DEGCT]\d{2}$/);
       assert.ok(Number(id.slice(1)) >= 1 && Number(id.slice(1)) <= {D:33, E:28, G:43, C:17, T:6}[id[0]], `${entry.name} 的来源编号超出固定盘点范围`);
-      assert.ok(`${pkg.content}\n${caseText}`.includes(id), `${entry.name} 缺少来源 ${id}`);
     }
-    packages.push({entry, pkg});
+    packages.push({entry, pkg, selection});
   }
   const summary = {
     packages: packages.length,
     resources: packages.reduce((sum, item) => sum + item.pkg.resources.length, 0),
-    cases: packages.reduce((sum, item) => sum + (item.pkg.resources.find(resource => resource.relative_path === 'references/cases.md').content.toString('utf8').match(/^#{1,6}\s*(?:案例|示例)\s*[一二三四五六七八九十\d]/gm) ?? []).length, 0),
+    direct: packages.filter(item => item.selection.support === 'direct').length,
+    sharedMethod: packages.filter(item => item.selection.support === 'shared_method').length,
+    unsupported: packages.filter(item => item.selection.support === 'unsupported').length,
+    methodExcerpts: packages.reduce((sum,item) => sum + item.selection.methods.length, 0),
+    exampleExcerpts: packages.reduce((sum,item) => sum + item.selection.examples.length, 0),
+    uniqueExampleExcerpts: new Set(packages.flatMap(item => item.selection.examples.map(ref => `${ref.source}/${ref.path}:${ref.start_line}-${ref.end_line}`))).size,
+    withoutSeparateExamples: packages.filter(item => item.selection.examples.length === 0).length,
+    verifiedSourceFiles: evidence.files.size,
     bodyBytes: packages.reduce((sum, item) => sum + Buffer.byteLength(item.pkg.content), 0),
     resourceBytes: packages.reduce((sum, item) => sum + item.pkg.resources.reduce((n, resource) => n + resource.content.length, 0), 0),
     warnings: packages.reduce((sum, item) => sum + item.pkg.warnings.length, 0),
   };
-  return {catalog, packages, summary};
+  return {catalog, provenance, packages, summary};
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

@@ -1,22 +1,11 @@
-以下为原创合成的虚构案例，仅作处理示例。
+# 接住对方的玩笑、调侃和轻挑战：示例
 
-## 案例一：接对方对用户迟到的玩笑
-背景：用户和对方已一起参加过几次活动。今天用户提前到场，对方拿用户上次迟到的事开玩笑。对方说话带笑，彼此都把准时当作轻松话题。
-当前对话：对方：“今天居然没让大家等，太阳是不是从西边出来了？”
-用户意图：接住玩笑，不想把以前迟到的事辩解成一场争论。
-候选回复：“我已经和闹钟签了短期和平协议，今天算试运行成功。”
-坏例：“你自己不也迟到过，有什么资格说我？”原因：从互相玩笑转成翻旧账，制造防御和输赢。
-后续接法：若对方继续逗，用户可回“先观察一个月再给我发证书”；若对方笑完转到活动安排，跟着安排走；若对方认真指出曾被用户迟到影响，就停止玩笑，承认当时让她等待并说明今后可提前通知。
+### 话术片段 1
 
-## 案例二：玩笑可能碰到用户不舒服的点
-背景：对方拿用户刚换工作的事开玩笑。用户确实不喜欢被称为“混不下去才换”，但希望先判断她是否知道这让人不舒服。
-当前对话：对方：“是不是在原公司待不下去才跑路的？”
-用户意图：不急着攻击，也不强迫自己装作没事。
-候选回复：“换工作的原因没这么戏剧化，不过‘跑路’这个说法我不太喜欢。我是想换个更适合的方向。”
-坏例：“你这种人就是情商低。”原因：给对方人格贴标签，没有讲明自己的感受和界限。
-后续接法：若对方道歉，接受后转回工作事实；若她说只是开玩笑，重复“我知道你可能没恶意，但这个词我不舒服”；若她继续取笑，结束这段话题并减少互动。
-
-## 案例延伸
-两种案例都允许幽默出现，也都保留认真回应的路径。笑点若落到真实伤害，应优先修复；接梗的成功不是让对方输掉一句，而是双方都能舒适地继续。
-
-补充：若用户想回应的是实际批评而非玩笑，先承认事实或询问具体影响。幽默不能替代解决问题，也不能被用来让对方撤回已经表达的不满。
+| Technique | What It Is | Example |
+|-----------|-----------|---------|
+| **Playful Challenge** | Gently question something | "You put pineapple on pizza? This might be a dealbreaker." |
+| **Callback** | Reference something from earlier | "Okay, Miss 'I never watch reality TV' — explain your Love Island knowledge then" |
+| **Role Reversal** | Flip the dynamic playfully | "Slow down, I haven't even decided if I like YOU yet" |
+| **Absurd Escalation** | Take something to a funny extreme | "At this rate we'll be arguing about pizza toppings at our wedding" |
+| **Self-Deprecation** | Light joke at your own expense | "I'd try to impress you with my cooking but my smoke alarm counts as a kitchen timer" |

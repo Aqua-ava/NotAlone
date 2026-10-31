@@ -1,36 +1,41 @@
 ---
 name: romance-037-end-date
-description: "约会不合拍时结束当次见面：用于用户在线下见面后感到不舒服、疲惫或不合适并想提前离开的场景，帮用户清楚、安全地收尾。"
+description: "约会不合拍时结束当次见面：用于该恋爱沟通场景，参考相应处理方法。"
 ---
 
 # 约会不合拍时结束当次见面
 
-来源候选：E25。
+## 处理边界
 
-**适用：**正在见面，用户已决定想提前结束；原因可能是不合拍、身体不舒服或感到不安全。先辨别是否需要立即离开。
+### 共用规则 1
 
-**边界：**用户只需要正常结束一场愉快约会时，使用一般收尾；若存在威胁、纠缠或无法安全离场，优先联系可信任的人和现实支持。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-**信息不全时：**优先使用用户本轮表达的目的、已提供的原话和当前可用的背景。缺少会改变候选的关键事实时，只问一个必要问题；否则写条件清楚的候选，不补造经历、情绪、约定或对方动机。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 处理步骤
+## 具体方法
 
-1. 确认用户已决定离开，或询问最小必要事项以判断是否存在安全问题；不要求用户先证明理由充分。
+### 方法 1
 
-2. 若只是合不来，给一条诚实简短的话和自然离开的动作；不要编造事故或承诺下次。
+## 6. Handling a Bad Date
 
-3. 若对方不接受离开，重复决定，不进入辩论；把交通、同行支持、公共场所等现实安排放在前面。
+### When You're Not Feeling It
 
-4. 离开后按用户愿意的程度决定是否补发说明；不要求当场完成关系评估或安抚对方。
+**Rule 1:** Be kind. She showed up. That took courage.
+**Rule 2:** Stay for the planned duration (coffee = finish the coffee). Don't rush out.
+**Rule 3:** Follow up honestly within 24 hours.
 
-## 按实际反馈选择下一步
+### 方法 2
 
-- 对方接受：简短道谢并离开；后续再决定是否联系。
-- 对方询问原因：只分享用户愿意说的部分，不为结束见面辩护。
-- 对方阻拦、跟随或威胁：停止说服，前往有人处并联络现实支持。
+### When You Feel Unsafe
 
-## 完成条件
+This is different. If at any point you feel uncomfortable or unsafe:
+- **You are allowed to leave immediately.** No explanation required.
+- Text a friend your location.
+- Call someone if you need to.
+- Trust your gut. It's usually right.
 
-用户能按自己的意愿结束当次见面，并有可执行的离开方案；候选不承诺再约。候选保持可编辑，由用户选择、改写后自行决定是否使用。
 
-**案例指针：**只有在需要比较本场景的常见与困难情形、或用户明确要求演练时，才读取 `references/cases.md`；普通单次回复依本文件步骤处理。
+## 按需查看示例
+
+需要参考具体表达时读取 `references/cases.md`。

@@ -1,31 +1,40 @@
 ---
 name: romance-007-short-reply
-description: "对方只回“哈哈”、表情或短词：用于对方只回“哈哈”、表情或一个短词的场景，结合上一句判断是否有真实接点，再决定轻接、转题或停下。"
+description: "对方只回“哈哈”、表情或短词：用于该恋爱沟通场景，参考相应处理方法及表达示例。"
 ---
 
 # 对方只回“哈哈”、表情或短词
 
-## 使用边界
-只处理一条短回复后的下一步，不凭一个表情判定兴趣、礼貌或拒绝。先看它回应的是笑点、确认问题还是结束话题；再参考最近一两轮节奏。若对方已明确说不想聊，直接尊重，不试图把每个短回复“救活”。
+## 处理边界
 
-## 处理步骤
-1. 找到短回复对应的上一句话，判断它是否回答了问题、表示同意、回应笑点，或没有提供新信息。缺少上一句时先向用户索取，不盲写。
-2. 识别用户本来想做什么：继续轻松聊天、确认安排、表达感受，还是结束。把回复目标限制在一个，避免借短回复拐进关系审问。
-3. 如果有具体线索，接一处细节并加一个低负担延伸；如果没有线索，可用一句轻松自嘲收尾，或直接停。不要连续抛新问题。
-4. 保持与上下文相称的长度。候选不需要刻意制造悬念，也不用“回得比她更冷”来惩罚对方；让用户按真实意图选择继续或暂止。
+### 共用规则 1
 
-## 按反馈接
-- 对方补充解释或反问：回应她新增的内容，再决定是否继续同一话题。
-- 对方继续只发短词：收住对话，不新增追问或连续补充。
-- 短回复其实确认了具体事项：直接完成确认，不把务实答复误判成冷淡。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-## 场景补充判断
-不要从表情数量、回复间隔或单个“哈哈”给兴趣打分。短回复若已经解决了当前问题，就直接确认；若没有新线索，停下来也是完成任务，不必保证每轮都有精彩话题。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 完成条件
-候选只回应当前可见信息，提供一个轻量接点或自然停点；不替短回复编造隐藏意思。
+## 具体方法
 
-## 案例读取
-上一句有具体笑点时读 references/cases.md 的案例一；短回复其实是在确认安排时读 references/cases.md 的案例二。
+### 方法 1
 
-来源候选编号：G01、E05。
+### How to Respond to Each Energy Level
+
+**High Energy (She's Engaged):**
+- Match it. Don't play it too cool.
+- This is your green light to suggest meeting.
+- Ask deeper questions. She's ready.
+
+**Medium Energy (She's Lukewarm):**
+- Change the topic or energy. Ask something unexpected.
+- Share something interesting about yourself.
+- Don't over-invest — match her energy level.
+
+**Low Energy (She's Fading):**
+- Don't chase. Don't send multiple messages.
+- One of two moves: inject something high-value, or suggest meeting.
+- If she responds to neither, let it go.
+
+
+## 按需查看示例
+
+需要参考具体表达时读取 `references/cases.md`。
