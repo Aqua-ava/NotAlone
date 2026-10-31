@@ -29,7 +29,7 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
  window.failedLibraryCommands=0;window.notalone={backend:{onStateChanged:listener=>{window.libraryConnectionChanged=listener;return()=>{};}},skillLearning:new Proxy({},{get:(_,key)=>(...args)=>window.libraryCommand(methods[key]??key,...args).catch(error=>{window.failedLibraryCommands++;throw error;})})};
  createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{selectedContactId:null,scopeRevision:0}}}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
  await page.route('http://127.0.0.1/skill-minimal',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/skill-minimal');await page.addScriptTag({content:compiled.outputFiles[0].text});
- const gentle=page.getByRole('article',{name:`回复场景：${firstTitle}`,exact:true});await expect(gentle).toContainText('待核验启停 · 目录已核验');
+ const gentle=page.getByRole('article',{name:`回复场景：${firstTitle}`,exact:true});await expect(gentle).not.toContainText('目录已核验');
  await expect(gentle.getByRole('heading',{name:firstTitle,exact:true})).toBeVisible();
  await expect(page.getByRole('switch',{name:`启用「${firstTitle}」`})).toHaveAttribute('aria-checked','false');
  await expect(page.getByRole('button',{name:'重新核验',exact:true})).toHaveCount(0);
@@ -37,24 +37,24 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
  const missing=page.getByRole('article',{name:'回复场景：轻量接话与延展话题',exact:true});
  const conflict=page.getByRole('article',{name:'回复场景：拒绝后维持日常往来',exact:true});
  const changed=page.getByRole('article',{name:'回复场景：商量长期关系与未来安排',exact:true});
- await expect(missing).toContainText('已启用 · 目录或文件缺失');
- await expect(conflict).toContainText('已停用 · 目录身份冲突');
+ await expect(missing).toContainText('目录或文件缺失');
+ await expect(conflict).toContainText('目录身份冲突');
  await expect(changed).toContainText('待核验');
  assert.equal(calls.filter(c=>c.method==='POST').length,0);
  await expect(page.getByRole('button',{name:'待审核',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:/回滚|删除|经验整理/})).toHaveCount(0);
  await page.getByRole('button',{name:'接话与相互了解'}).click();
  await expect(missing).toBeVisible();await expect(gentle).toHaveCount(0);await expect(page.getByRole('article')).toHaveCount(1);
  await page.getByRole('button',{name:'全部'}).click();
- await page.getByRole('switch',{name:`启用「${firstTitle}」`}).click();await expect(gentle).toContainText('已启用 · 目录已核验');
+ await page.getByRole('switch',{name:`启用「${firstTitle}」`}).click();await expect(gentle).toContainText('已开启');
  await expect(page.getByRole('switch',{name:`停用「${firstTitle}」`})).toHaveAttribute('aria-checked','true');
  assert.equal(calls.find(c=>c.method==='POST').body.expected_head_revision,'9007199254740993');
- await page.getByRole('switch',{name:`停用「${firstTitle}」`}).click();await expect(gentle).toContainText('已停用 · 目录已核验');
+ await page.getByRole('switch',{name:`停用「${firstTitle}」`}).click();await expect(gentle).toContainText('已关闭');
  // 自动核验结果随列表读取返回，页面不再发送逐包 verify 请求。
  items[3].verification_state='verified';items[3].current_revision_no='1';items[3].revisions[0].availability='current';
- await page.getByRole('button',{name:'刷新状态',exact:true}).click();await expect(changed).toContainText('目录已核验');
+ await page.getByRole('button',{name:'刷新状态',exact:true}).click();await expect(changed).toContainText('已开启');await expect(changed.getByRole('status')).toHaveCount(0);
  assert.ok(!calls.some(c=>c.path.endsWith('/verify')));
  const discovered=make(5,'new-skill','新的合成回复场景',['接话与相互了解'],'unknown','pending');discovered.revisions=[];items.push(discovered);
- await page.getByRole('button',{name:'刷新状态',exact:true}).click();await expect(page.getByRole('article',{name:'回复场景：新的合成回复场景',exact:true})).toContainText('待核验启停');
+ await page.getByRole('button',{name:'刷新状态',exact:true}).click();await expect(page.getByRole('article',{name:'回复场景：新的合成回复场景',exact:true})).toContainText('待核验');
  assert.ok(!calls.some(c=>c.path==='/api/skills/discover'));
  assert.ok(calls.every(c=>c.path.startsWith('/api/skills')));
  // 账号删除后读取拒绝，当前页面必须释放已显示的包资料，再允许显式重读。
@@ -62,7 +62,7 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
  await expect(page.getByRole('article')).toHaveCount(0);
  await expect(page.getByRole('alert')).toHaveText('Skill 状态暂不可用，请重新读取。');
  unavailable=false;await page.getByRole('button',{name:'重新读取 Skill 状态',exact:true}).click();
- await expect(gentle).toContainText('已停用 · 目录已核验');
+ await expect(gentle).toContainText('已关闭');
  // 旧页请求失败不能撤下连接变化后已重新读取的新快照。
  holdRead=true;await page.getByRole('button',{name:'刷新状态',exact:true}).click();
  await expect.poll(()=>typeof rejectHeldRead).toBe('function');holdRead=false;

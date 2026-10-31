@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SkillLibraryBridge, SkillLibraryItem, SkillLibrarySnapshot, SqliteSkillLibrarySnapshot } from '../shared/skill-library-bridge';
 
-const enabledLabels = { enabled: '已启用', disabled: '已停用', unknown: '待核验启停' };
-const verificationLabels = { verified: '目录已核验', pending: '待核验', missing: '目录或文件缺失', conflict: '目录身份冲突', invalid: '文件校验失败' };
+const verificationLabels = { pending: '待核验', missing: '目录或文件缺失', conflict: '目录身份冲突', invalid: '文件校验失败' };
 
 export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavailable }: {
   initial: SqliteSkillLibrarySnapshot;
@@ -94,9 +93,9 @@ export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavai
                 <div className="sqlite-skill-tags" aria-label="场景标签">
                   {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
                 </div>
-                <span className="sqlite-skill-verification" role="status">
-                  {enabledLabels[item.enabledState]} · {verificationLabels[item.verificationState]}
-                </span>
+                {item.verificationState !== 'verified' && <span className="sqlite-skill-verification" role="status">
+                  {verificationLabels[item.verificationState]}
+                </span>}
               </div>
               {item.verificationReason === 'source_qualification_changed' && <p className="sqlite-skill-note">来源资格待核验，不能仅凭相同文件恢复使用。</p>}
             </div>
