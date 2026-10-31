@@ -57,7 +57,9 @@ export class SqliteReplyTurns {
    if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
    const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?eligible.map(skillAnchor):[]};
    const entries=workspace?[]:(await o.discussions.view(input.contactId,attempt.discussionId)).entries.filter((e:any)=>e.content_state==='available');
-   const history=workspace&&!workspace.includeRelationshipContext?null:await o.storage.execute<any>('history.read',{ownerId,contactId:input.contactId,limit:20});
+   const history=workspace
+    ?workspace.includeRelationshipContext?await o.storage.execute<any>('history.readRecent',{ownerId,contactId:input.contactId,limit:50}):null
+    :await o.storage.execute<any>('history.read',{ownerId,contactId:input.contactId,limit:20});
    const recentIds=history?.messages.filter((m:any)=>m.kind==='text'&&!workspace?.excludedMessageIds.includes(m.id)).map((m:any)=>m.id)??[];
    const messageIds=workspace?recentIds:input.contextMessageIds??recentIds;
    const messages=await o.storage.execute<any[]>('discussion.messages',{...attempt,messageIds});

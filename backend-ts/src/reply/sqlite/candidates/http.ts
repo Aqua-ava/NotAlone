@@ -22,8 +22,8 @@ export class SqliteReplyCandidateHttp {
    if(req.method==='GET'&&!candidateId){
     const requests=await o.service.view(contactId,discussionId),coverage=await o.storage.execute('history.coverage',{ownerId:o.service.ownerId,contactId});
     const skills=await o.storage.execute<any[]>('skills.list',{ownerId:o.service.ownerId});
-    const history=await o.storage.execute<any>('history.read',{ownerId:o.service.ownerId,contactId,limit:20});
-    const recentMessages=history.messages.filter((m:any)=>m.kind==='text'&&typeof m.text==='string'&&m.text.length>0).slice(0,20).map((m:any)=>({messageId:m.id,sender:m.sender,text:m.text,occurredAt:occurredAt(m.sentAt),timePrecision:m.timePrecision,displayPosition:m.displayPosition,ordering:m.ordering}));
+    const history=await o.storage.execute<any>('history.readRecent',{ownerId:o.service.ownerId,contactId,limit:50});
+    const recentMessages=history.messages.map((m:any)=>({messageId:m.id,sender:m.sender,text:m.text,occurredAt:occurredAt(m.sentAt),timePrecision:m.timePrecision,displayPosition:m.displayPosition,ordering:m.ordering}));
     respond(res,200,{requests:requests.map(({ownerId:_owner,...r})=>r),coverage,recentMessages,availableSkills:skills.filter(s=>s.enabledState==='enabled'&&s.verificationState==='verified'&&s.currentRevisionNo!==null).map(s=>({packageId:s.id,name:s.displayName,revisionNo:Number(s.currentRevisionNo)}))});
    }else if(req.method==='GET'&&command.startsWith('versions/'))respond(res,200,await o.service.version({...scope,candidateId,versionNo:Number(version)}));
    else if(req.method==='POST'){

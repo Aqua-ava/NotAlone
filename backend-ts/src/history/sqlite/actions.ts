@@ -4,7 +4,7 @@ import { assertReadEligibility } from '../../contacts/sqlite/actions.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryPage, HistoryTailPage, HistoryTarget, HistorySupportReport } from './contracts.ts';
 import { ingestRecords, quarantineUnverifiedRecords } from './ingest.ts';
-import { readCoverage, readMessages } from './read.ts';
+import { readCoverage, readMessages, readRecentMessages } from './read.ts';
 import {unresolvedQuarantineCount} from './quarantine.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
@@ -246,4 +246,5 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.coverage','read',(tx,i)=>readCoverage(tx,i.ownerId,i.contactId)),
  action('history.read','read',(tx,i)=>readMessages(tx,i.ownerId,i.contactId,i.limit,i.before)),
+ action('history.readRecent','read',(tx,i)=>readRecentMessages(tx,i.ownerId,i.contactId,i.limit)),
 ];
