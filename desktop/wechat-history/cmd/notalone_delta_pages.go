@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -17,6 +18,7 @@ import (
 const (
 	notaloneDeltaPageSize     = 4096
 	notaloneDeltaReserveSize  = 80
+	notaloneDeltaPlainFormat  = "sqlite-wal-rowid-page-v1"
 	notaloneDeltaIVSize       = 16
 	notaloneDeltaHMACSize     = 64
 	notaloneDeltaMaxPages     = 131072
@@ -98,17 +100,20 @@ type notaloneDeltaCrypto struct {
 	key     []byte
 	hmacKey []byte
 	salt    [16]byte
+	plain   bool
 }
 
 type notaloneDeltaPageReader struct {
-	ctx       context.Context
-	db        io.ReaderAt
-	dbSize    int64
-	wal       io.ReaderAt
-	walSize   int64
-	walFrames map[uint32]notaloneDeltaFrame
-	pageCount uint32
-	crypto    notaloneDeltaCrypto
+	ctx         context.Context
+	db          io.ReaderAt
+	dbSize      int64
+	wal         io.ReaderAt
+	walSize     int64
+	walFrames   map[uint32]notaloneDeltaFrame
+	pageCount   uint32
+	reserveSize uint32
+	format      string
+	crypto      notaloneDeltaCrypto
 }
 
 type notaloneDeltaNode struct {
@@ -121,7 +126,7 @@ type notaloneDeltaNode struct {
 
 func readNotaloneDeltaPages(ctx context.Context, db io.ReaderAt, dbSize int64, wal io.ReaderAt, walSize int64,
 	rootPage uint32, rawKey []byte, prior *notaloneDeltaPageState) (*notaloneDeltaPageResult, error) {
-	if ctx == nil || db == nil || rootPage < 2 || len(rawKey) != 32 || dbSize < 0 || dbSize%notaloneDeltaPageSize != 0 {
+	if ctx == nil || db == nil || rootPage < 2 || (len(rawKey) != 0 && len(rawKey) != 32) || dbSize < 0 || dbSize%notaloneDeltaPageSize != 0 {
 		return nil, errors.New("history_delta_request_invalid")
 	}
 	if dbSize/notaloneDeltaPageSize > notaloneDeltaMaxPages || walSize < 0 || walSize > notaloneDeltaMaxWALBytes {
@@ -154,17 +159,34 @@ func readNotaloneDeltaPages(ctx context.Context, db io.ReaderAt, dbSize int64, w
 		return nil, err
 	}
 	copy(pageReader.crypto.salt[:], page1[:16])
-	clear(page1)
-	if allZero(pageReader.crypto.salt[:]) {
-		return nil, errors.New("history_delta_salt_invalid")
+	if bytes.Equal(page1[:16], []byte("SQLite format 3\x00")) {
+		if len(key) != 0 || binary.BigEndian.Uint16(page1[16:18]) != notaloneDeltaPageSize {
+			clear(page1)
+			return nil, errors.New("history_delta_plain_header_invalid")
+		}
+		pageReader.reserveSize = uint32(page1[20])
+		if pageReader.reserveSize > notaloneDeltaPageSize-35 {
+			clear(page1)
+			return nil, errors.New("history_delta_plain_reserve_invalid")
+		}
+		pageReader.format = notaloneDeltaPlainFormat
+		pageReader.crypto.plain = true
+	} else {
+		if len(key) != 32 || allZero(pageReader.crypto.salt[:]) {
+			clear(page1)
+			return nil, errors.New("history_delta_salt_invalid")
+		}
+		pageReader.reserveSize = notaloneDeltaReserveSize
+		pageReader.format = notaloneDeltaFormat
+		pageReader.crypto.key = key
+		pageReader.crypto.hmacKey = notaloneDeltaHMACKey(key, pageReader.crypto.salt[:])
+		defer clear(pageReader.crypto.hmacKey)
 	}
-	pageReader.crypto.key = key
-	pageReader.crypto.hmacKey = notaloneDeltaHMACKey(key, pageReader.crypto.salt[:])
-	defer clear(pageReader.crypto.hmacKey)
+	clear(page1)
 	saltDigest := sha256.Sum256(pageReader.crypto.salt[:])
 	newSaltDigest := hex.EncodeToString(saltDigest[:])
 
-	if prior != nil && !notaloneDeltaPriorValid(*prior, rootPage, newSaltDigest) {
+	if prior != nil && !notaloneDeltaPriorValid(*prior, rootPage, newSaltDigest, pageReader.format, pageReader.reserveSize) {
 		return nil, errors.New("history_delta_checkpoint_invalid")
 	}
 	continuous := prior != nil && walScan.HasWAL && walScan.Continuous && prior.WAL.HeaderDigest == walScan.State.HeaderDigest &&
@@ -192,8 +214,8 @@ func readNotaloneDeltaPages(ctx context.Context, db io.ReaderAt, dbSize int64, w
 	if err != nil {
 		return nil, err
 	}
-	state := notaloneDeltaPageState{Format: notaloneDeltaFormat, PageSize: notaloneDeltaPageSize,
-		ReserveSize: notaloneDeltaReserveSize, RootPage: rootPage, SaltDigest: newSaltDigest,
+	state := notaloneDeltaPageState{Format: pageReader.format, PageSize: notaloneDeltaPageSize,
+		ReserveSize: pageReader.reserveSize, RootPage: rootPage, SaltDigest: newSaltDigest,
 		PageCount: pageCount, WAL: walScan.State, Pages: notaloneDeltaSortedPages(pages)}
 	changed := map[int64]struct{}{}
 	if prior == nil {
@@ -210,8 +232,8 @@ func readNotaloneDeltaPages(ctx context.Context, db io.ReaderAt, dbSize int64, w
 	return &notaloneDeltaPageResult{State: state, ChangedIDs: notaloneDeltaSortIDs(changed), FullAudit: prior != nil, Baseline: prior == nil}, nil
 }
 
-func notaloneDeltaPriorValid(prior notaloneDeltaPageState, rootPage uint32, saltDigest string) bool {
-	if prior.Format != notaloneDeltaFormat || prior.PageSize != notaloneDeltaPageSize || prior.ReserveSize != notaloneDeltaReserveSize ||
+func notaloneDeltaPriorValid(prior notaloneDeltaPageState, rootPage uint32, saltDigest, format string, reserveSize uint32) bool {
+	if prior.Format != format || prior.PageSize != notaloneDeltaPageSize || prior.ReserveSize != reserveSize ||
 		prior.RootPage != rootPage || prior.SaltDigest != saltDigest || prior.PageCount == 0 || prior.PageCount > notaloneDeltaMaxPages ||
 		len(prior.Pages) == 0 || len(prior.Pages) > notaloneDeltaMaxPages {
 		return false
@@ -499,7 +521,13 @@ func notaloneDeltaPBKDF2SHA512(password, salt []byte, iterations, length int) []
 }
 
 func notaloneDeltaDecryptPage(raw []byte, page uint32, cryptoState *notaloneDeltaCrypto) ([]byte, error) {
-	if len(raw) != notaloneDeltaPageSize || page == 0 || cryptoState == nil || len(cryptoState.key) != 32 || len(cryptoState.hmacKey) != 32 {
+	if len(raw) != notaloneDeltaPageSize || page == 0 || cryptoState == nil {
+		return nil, errors.New("history_delta_cipher_page_invalid")
+	}
+	if cryptoState.plain {
+		return append([]byte(nil), raw...), nil
+	}
+	if len(cryptoState.key) != 32 || len(cryptoState.hmacKey) != 32 {
 		return nil, errors.New("history_delta_cipher_page_invalid")
 	}
 	start := 0

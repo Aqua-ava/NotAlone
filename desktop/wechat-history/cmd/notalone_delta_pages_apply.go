@@ -88,9 +88,9 @@ func notaloneDeltaApplyWALFrames(ctx context.Context, reader *notaloneDeltaPageR
 		}
 	}
 	state := notaloneDeltaPageState{
-		Format:      notaloneDeltaFormat,
+		Format:      reader.format,
 		PageSize:    notaloneDeltaPageSize,
-		ReserveSize: notaloneDeltaReserveSize,
+		ReserveSize: reader.reserveSize,
 		RootPage:    root,
 		SaltDigest:  prior.SaltDigest,
 		PageCount:   reader.pageCount,

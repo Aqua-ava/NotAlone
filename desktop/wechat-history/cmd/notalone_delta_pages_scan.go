@@ -248,7 +248,7 @@ func notaloneDeltaReadNode(reader *notaloneDeltaPageReader, number uint32) (nota
 		return notaloneDeltaNode{}, notaloneDeltaTrackedPage{}, err
 	}
 	defer clear(plain)
-	node, err := notaloneDeltaParseBtreeNode(plain, number, reader.pageCount)
+	node, err := notaloneDeltaParseBtreeNode(plain, number, reader.pageCount, reader.reserveSize)
 	if err != nil {
 		return notaloneDeltaNode{}, notaloneDeltaTrackedPage{}, err
 	}
@@ -304,15 +304,18 @@ func notaloneDeltaReadOverflowChain(reader *notaloneDeltaPageReader, pages map[u
 	return chain, nil
 }
 
-func notaloneDeltaParseBtreeNode(page []byte, number, pageCount uint32) (notaloneDeltaNode, error) {
+func notaloneDeltaParseBtreeNode(page []byte, number, pageCount, reserveSize uint32) (notaloneDeltaNode, error) {
 	if len(page) != notaloneDeltaPageSize || number == 0 {
 		return notaloneDeltaNode{}, errors.New("history_delta_btree_page_invalid")
+	}
+	if reserveSize > notaloneDeltaPageSize-35 {
+		return notaloneDeltaNode{}, errors.New("history_delta_btree_reserve_invalid")
 	}
 	header := 0
 	if number == 1 {
 		header = 100
 	}
-	if header+8 > len(page)-notaloneDeltaReserveSize {
+	if header+8 > len(page)-int(reserveSize) {
 		return notaloneDeltaNode{}, errors.New("history_delta_btree_header_invalid")
 	}
 	kind := page[header]
@@ -326,7 +329,7 @@ func notaloneDeltaParseBtreeNode(page []byte, number, pageCount uint32) (notalon
 	cellCount := int(binary.BigEndian.Uint16(page[header+3 : header+5]))
 	cellStart := header + headerSize
 	pointerEnd := cellStart + cellCount*2
-	usableEnd := len(page) - notaloneDeltaReserveSize
+	usableEnd := len(page) - int(reserveSize)
 	if cellCount > notaloneDeltaMaxRowIDs || pointerEnd > usableEnd {
 		return notaloneDeltaNode{}, errors.New("history_delta_btree_cells_invalid")
 	}
@@ -379,7 +382,7 @@ func notaloneDeltaParseBtreeNode(page []byte, number, pageCount uint32) (notalon
 		}
 		seenIDs[rowID] = struct{}{}
 		node.rowIDs = append(node.rowIDs, rowID)
-		local := notaloneDeltaLocalPayloadSize(payloadSize, uint64(len(page)-notaloneDeltaReserveSize))
+		local := notaloneDeltaLocalPayloadSize(payloadSize, uint64(len(page)-int(reserveSize)))
 		cellPayloadStart := ptr + payloadVarint + rowVarint
 		if local > uint64(usableEnd-cellPayloadStart) {
 			return notaloneDeltaNode{}, errors.New("history_delta_btree_payload_invalid")
@@ -391,7 +394,7 @@ func notaloneDeltaParseBtreeNode(page []byte, number, pageCount uint32) (notalon
 			}
 			head := binary.BigEndian.Uint32(page[overflowPtr : overflowPtr+4])
 			remaining := payloadSize - local
-			perPage := uint64(len(page)-notaloneDeltaReserveSize) - 4
+			perPage := uint64(len(page)-int(reserveSize)) - 4
 			count := (remaining + perPage - 1) / perPage
 			if count == 0 || count > notaloneDeltaMaxPages || head == 0 || head > pageCount {
 				return notaloneDeltaNode{}, errors.New("history_delta_overflow_pointer_invalid")

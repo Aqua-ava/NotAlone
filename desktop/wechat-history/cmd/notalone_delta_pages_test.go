@@ -183,6 +183,46 @@ func TestNotAloneDeltaPagesAuditsSelectedTreeAfterWALReset(t *testing.T) {
 	}
 }
 
+func TestNotAloneDeltaPagesTracksPlainSQLitePages(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "plain.db")
+	writer, err := wcdb.OpenPlain(dbPath, true)
+	if err != nil {
+		t.Fatal("create synthetic plain SQLite fixture")
+	}
+	t.Cleanup(func() { writer.Close() })
+	if err = writer.Exec("CREATE TABLE Msg_plain(local_id INTEGER PRIMARY KEY, body BLOB); INSERT INTO Msg_plain VALUES(1,zeroblob(64)),(2,zeroblob(9000)); PRAGMA journal_mode=WAL; UPDATE Msg_plain SET body=zeroblob(65) WHERE local_id=1"); err != nil {
+		t.Fatal("seed synthetic plain SQLite table and WAL")
+	}
+	rows, err := writer.QueryBounded(context.Background(), 1, "SELECT rootpage FROM sqlite_master WHERE type='table' AND name=?", "Msg_plain")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("read plain fixture root page: %v", err)
+	}
+	rootPage, ok := rows[0]["rootpage"].(int64)
+	if !ok || rootPage < 2 {
+		t.Fatalf("invalid plain fixture root page: %#v", rows[0]["rootpage"])
+	}
+	db, dbSize, wal, walSize := notaloneDeltaReaders(t, dbPath)
+	baseline, err := readNotaloneDeltaPages(context.Background(), db, dbSize, wal, walSize, uint32(rootPage), nil, nil)
+	if err != nil {
+		t.Fatalf("index plain SQLite table pages: %v", err)
+	}
+	if baseline.State.Format != notaloneDeltaPlainFormat || baseline.State.ReserveSize != 0 || !containsInt64(baseline.ChangedIDs, 2) {
+		t.Fatalf("plain SQLite baseline format or row IDs invalid: %#v", baseline)
+	}
+	if err = writer.Exec("INSERT INTO Msg_plain(local_id,body) VALUES(0,zeroblob(48))"); err != nil {
+		t.Fatal("insert low rowid into plain fixture")
+	}
+	db2, dbSize2, wal2, walSize2 := notaloneDeltaReaders(t, dbPath)
+	delta, err := readNotaloneDeltaPages(context.Background(), db2, dbSize2, wal2, walSize2, uint32(rootPage), nil, &baseline.State)
+	if err != nil {
+		t.Fatalf("track plain SQLite WAL update: %v", err)
+	}
+	if delta.FullAudit || !containsInt64(delta.ChangedIDs, 0) {
+		t.Fatalf("plain SQLite low-ID append was not incremental: %#v", delta)
+	}
+}
+
 func containsInt64(values []int64, target int64) bool {
 	for _, value := range values {
 		if value == target {
