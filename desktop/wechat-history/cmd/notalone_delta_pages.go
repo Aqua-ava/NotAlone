@@ -217,6 +217,9 @@ func readNotaloneDeltaPages(ctx context.Context, db io.ReaderAt, dbSize int64, w
 	state := notaloneDeltaPageState{Format: pageReader.format, PageSize: notaloneDeltaPageSize,
 		ReserveSize: pageReader.reserveSize, RootPage: rootPage, SaltDigest: newSaltDigest,
 		PageCount: pageCount, WAL: walScan.State, Pages: notaloneDeltaSortedPages(pages)}
+	if !notaloneDeltaPriorValid(state, rootPage, newSaltDigest, pageReader.format, pageReader.reserveSize) {
+		return nil, errors.New("history_delta_state_invalid_after_audit")
+	}
 	changed := map[int64]struct{}{}
 	if prior == nil {
 		for _, page := range state.Pages {
