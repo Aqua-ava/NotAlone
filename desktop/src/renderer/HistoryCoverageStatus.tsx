@@ -134,7 +134,7 @@ export function HistoryCoverageStatus({ coverages, contacts = [], currentContact
             {incrementalAttention[0]?.incrementalFailureCode && <p>{incrementalReasons[incrementalAttention[0].incrementalFailureCode] ?? '请刷新状态查看原因。'}</p>}
           </div>}
         </>}
-      <p>只读取这台电脑上微信能提供的文字与非文字占位；不下载媒体，已删除或仅在其他设备上的记录不包含在内。</p>
+      <p>只读取这台电脑上微信能提供的聊天记录；图片只保存可确认的本机原图，取不到就保留记录，不保存缩略图、不驱动微信下载。已删除或仅在其他设备上的记录不包含在内。</p>
       {currentContactId && !ids.includes(currentContactId) && <p>当前联系人的同步进度暂时未知。</p>}
       {incomplete.length > 0 && <div><h4>需要关注的会话（{incomplete.length}）</h4>{renderContacts(incomplete)}</div>}
       {pending.length > 0 && <details className="sync-backfill-details">

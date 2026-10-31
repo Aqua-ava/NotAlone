@@ -86,7 +86,7 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
         : bodyAvailable ? '后台正文同步已开启' : '已开启同步，等待读取能力核验'}</p>
       <button className="button" disabled={!available} onClick={() => void switchSync()}>{state.busy === 'enable' ? '正在开启后台同步…'
         : state.busy === 'disable' ? '正在关闭后台同步…' : report?.enabled ? '关闭后台同步' : '开启后台同步'}</button>
-      {bodyAvailable ? <p>{allPrivate ? '开启后自动关联并同步全部微信私聊的文字，包括以后新增的会话；已单独停止的会话保持排除。' : '开启后自动同步已授权联系人的文字。'}关闭或退出 App 会停止读取；重新开启后，会自动同步遗漏消息。</p>
+      {bodyAvailable ? <p>{allPrivate ? '开启后自动关联并同步全部微信私聊的聊天记录，包括以后新增的会话；已单独停止的会话保持排除。' : '开启后自动同步已授权联系人的聊天记录。'}图片只保存本机可读取的原图；取不到就保留消息和处理状态，不保存缩略图。关闭或退出 App 会停止读取；重新开启后，会自动同步遗漏消息。</p>
         : <p>开启后会先核验微信账号和聊天来源，通过后读取已授权会话的历史与新消息。关闭或退出 App 会停止读取。</p>}
       <section aria-label="微信私聊同步范围">
         <h3>同步范围</h3>

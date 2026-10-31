@@ -1,0 +1,316 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { compareUpgradeScopeEvidence, createUpgradeImageCliTools } from '../../scripts/upgrade-history-image-cli.mjs';
+
+const digest = value => createHash('sha256').update(value).digest('hex');
+const hash = digest;
+
+function scopeEvidence(artifactSha256) {
+  const accountKey = 'synthetic-account';
+  const sourceGeneration = 'a'.repeat(64);
+  const scopes = ['conversation-a', 'conversation-b', 'conversation-empty'].map((conversationKey, index) => {
+    const partition = String(index + 1).repeat(64);
+    const instance = String(index + 3).repeat(64);
+    const schemaFingerprint = `${index}`.repeat(64);
+    const scope = { accountKey, conversationKey, displayName: `联系人${index}`, sourceGeneration };
+    const inspection = { format: 'wechat-message-schema-v1', status: 'unverified',
+      scopeDigest: digest(`${accountKey}\0${conversationKey}`), sourceGeneration, schemaFingerprint,
+      tables: index === 2 ? [] : [{ target: instance, partition, role: 'private_message', columns: [], indexes: [],
+        declaredPrimaryKey: ['local_id'], autoIncrement: false, schemaVersion: '1', rootPage: '2',
+        sqlFingerprint: 'b'.repeat(64), triggerFingerprints: [] },
+      ...(index === 0 ? [{ target: '4'.repeat(64), partition, role: 'private_message', columns: [], indexes: [],
+        declaredPrimaryKey: ['local_id'], autoIncrement: false, schemaVersion: '1', rootPage: '3',
+        sqlFingerprint: 'c'.repeat(64), triggerFingerprints: [] }] : [])], checkedPartitions: [partition] };
+    const support = { protocol: 'private-history-v1', profileId: 'synthetic-profile', adapterVersion: '1',
+      status: 'supported', reason: null, accountKey, conversationKey, sourceGeneration,
+      programVersion: '4.0.6', build: '29387', artifactSha256,
+      schemaFingerprint, declaredPrimaryKey: ['local_id'], serverAliasSemantics: 'verified',
+      identity: 'source-table-local-v1', statusSemantics: 'known', continuity: 'same-source-instances-normal-use-v1',
+      capabilities: { history: 'supported', incrementalTail: 'supported' } };
+    const target = { protocol: 'private-history-v1', descriptor: `dynamic-${artifactSha256.slice(0, 8)}`,
+      sourceGeneration, partitions: [partition], tables: index === 2 ? [] : [{ partition, instance },
+        ...(index === 0 ? [{ partition, instance: '4'.repeat(64) }] : [])], checkedPartitions: [partition] };
+    return { scope, inspection, support, target };
+  });
+  return { account: { format: 'wechat-account-metadata-v1', status: 'verified', reason: null,
+    accountKey, identityScheme: 'wechat.account.v1', sourceGeneration, supportProfile: 'synthetic-profile',
+    programVersion: '4.0.6', build: '29387', artifactSha256, wcdbSha256: 'c'.repeat(64),
+    configuredAccount: 'verified', continuity: 'held-contact-session-instances', normalHistory: false }, scopes };
+}
+
+const syntheticFileHashes = {
+  'cmd/wechat-cli/notalone_identity_aliases.go': 'identity-aliases',
+  'cmd/wechat-cli/notalone_watch_darwin.go': 'source-watch',
+  'cmd/wechat-cli/notalone_history.go': 'history-identity',
+  'cmd/wechat-cli/notalone_snapshot.go': 'snapshot-identity',
+  'cmd/wechat-cli/notalone_account_metadata.go': 'account-identity',
+  'cmd/wechat-cli/notalone_readonly_test.go': 'readonly-overlay-test',
+  'cmd/wechat-cli/notalone_protocol.go': 'protocol-before',
+  'internal/wcdb/notalone_read.go': 'wcdb-read',
+  'internal/wcdb/notalone_read_test.go': 'wcdb-read-test',
+  'cmd/wechat-cli/main.go': 'same-upstream-main',
+  'go.mod': 'same-upstream-module',
+};
+
+function overlaySha(files) {
+  const rows = [['cmd/wechat-cli/notalone_readonly_test.go', hash('readonly-overlay-test')]];
+  for (const name of Object.keys(files).filter(name => name.startsWith('cmd/wechat-cli/notalone_')
+    && name.endsWith('.go') && name !== 'cmd/wechat-cli/notalone_readonly_test.go').sort()) {
+    rows.push([name, hash(files[name])]);
+  }
+  for (const name of Object.keys(files).filter(name => name.startsWith('internal/wcdb/notalone_') && name.endsWith('.go')).sort()) {
+    rows.push([name, hash(files[name])]);
+  }
+  return hash(JSON.stringify(rows));
+}
+
+async function syntheticUpgradeFixture() {
+  const repositoryRoot = await mkdtemp(path.join(process.cwd(), '.tmp-notalone-image-upgrade-'));
+  const buildsRoot = path.join(repositoryRoot, 'local-tools/wx-cli/.notalone-builds');
+  const fromRoot = path.join(buildsRoot, 'true-delta-20261031-c2');
+  const toRoot = path.join(buildsRoot, 'original-image-20261031-v1');
+  const dbRoot = path.join(repositoryRoot, 'synthetic-wechat-root');
+  const accountKey = 'synthetic-account';
+  const historyPatch = 'synthetic history patch\n';
+  const readonlyPatch = 'synthetic readonly patch\n';
+  const readonlyTest = 'readonly-overlay-test';
+  const wcdbBytes = 'synthetic WCDB library bytes';
+  const wcdbSha256 = hash(wcdbBytes);
+  const sourceCommit = 'synthetic-commit';
+  const sourceTree = 'synthetic-tree';
+  const goArchiveSha256 = '1'.repeat(64);
+  const goVersion = 'synthetic-go';
+  const commonLock = { gitSources: [{ name: 'wechat-cli', version: 'synthetic-version', commit: sourceCommit, tree: sourceTree }],
+    archives: [{ name: 'go', version: goVersion, sha256: goArchiveSha256 }],
+    cliPatch: { file: 'wechat-patches/readonly-cli.patch', sha256: hash(readonlyPatch),
+      testFile: 'wechat-patches/readonly-cli-test.go', testSha256: hash(readonlyTest) } };
+  const sourceLockBytes = `${JSON.stringify(commonLock, null, 2)}\n`;
+  const common = { formatVersion: 1, kind: 'notalone-history-cli-development', architecture: 'arm64', version: 'synthetic-version',
+    sourceCommit, sourceTree, sourceLockSha256: hash(sourceLockBytes), goVersion, goArchiveSha256,
+    readonlyPatchSha256: hash(readonlyPatch), historyPatchSha256: hash(historyPatch), wcdbSha256,
+    signing: 'ad-hoc-development', realWechatVerified: false };
+  const oldCliBytes = 'synthetic old CLI';
+  const newCliBytes = 'synthetic new CLI';
+  const oldCliSha256 = hash(oldCliBytes);
+  const newCliSha256 = hash(newCliBytes);
+  const newProtocol = 'protocol with original image operation';
+  const newImage = 'original image reader';
+  const newImageTest = 'synthetic original image test';
+  const oldFiles = { ...syntheticFileHashes };
+  const newFiles = { ...syntheticFileHashes,
+    'cmd/wechat-cli/notalone_protocol.go': newProtocol,
+    'cmd/wechat-cli/notalone_image.go': newImage,
+    'cmd/wechat-cli/notalone_image_test.go': newImageTest };
+  const write = async (file, data, mode = 0o600) => {
+    await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+    await writeFile(file, data, { mode });
+  };
+  await write(path.join(repositoryRoot, 'desktop/wechat-sources.lock.json'), sourceLockBytes);
+  await write(path.join(repositoryRoot, 'desktop/wechat-history/history-cli.patch'), historyPatch);
+  await write(path.join(repositoryRoot, 'desktop/wechat-patches/readonly-cli.patch'), readonlyPatch);
+  await write(path.join(repositoryRoot, 'desktop/wechat-patches/readonly-cli-test.go'), readonlyTest);
+  for (const [root, files, cliBytes, cliSha256, imageProtocol] of [
+    [fromRoot, oldFiles, oldCliBytes, oldCliSha256, undefined],
+    [toRoot, newFiles, newCliBytes, newCliSha256, 'wechat-original-image-v1'],
+  ]) {
+    await mkdir(root, { recursive: true, mode: 0o700 });
+    for (const [name, content] of Object.entries(files)) await write(path.join(root, 'source', name), content);
+    await write(path.join(root, 'history-cli.patch'), historyPatch);
+    await write(path.join(root, 'readonly-cli.patch'), readonlyPatch);
+    await write(path.join(root, 'lib/libWCDB.dylib'), wcdbBytes);
+    await write(path.join(root, 'bin/wechat-cli'), cliBytes, 0o700);
+    const manifest = { ...common, overlaySha256: overlaySha(files), cliSha256,
+      ...(imageProtocol ? { originalImageProtocol: imageProtocol } : {}) };
+    await write(path.join(root, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  }
+  const rootScope = hash(`${accountKey}\0${path.resolve(dbRoot)}`);
+  const aliases = { ['a'.repeat(64)]: 'b'.repeat(64) };
+  const oldRecord = { format: 'notalone-source-identity-aliases-v1', accountKey,
+    artifactSha256: oldCliSha256, rootScope, aliases };
+  const oldAliasPath = path.join(fromRoot, 'source-identity-aliases.json');
+  await write(oldAliasPath, `${JSON.stringify(oldRecord)}\n`);
+  await write(path.join(dbRoot, 'business.sqlite'), 'must remain unchanged');
+  const identityFileNames = ['notalone_identity_aliases.go', 'notalone_watch_darwin.go', 'notalone_history.go',
+    'notalone_snapshot.go', 'notalone_account_metadata.go'];
+  const identityFiles = Object.fromEntries(identityFileNames.map(name => [`cmd/wechat-cli/${name}`, hash(oldFiles[`cmd/wechat-cli/${name}`])]));
+  const protocolOldSha256 = hash(oldFiles['cmd/wechat-cli/notalone_protocol.go']);
+  const protocolNewSha256 = hash(newProtocol);
+  const identityAlgorithmSha256 = hash(JSON.stringify({ files: Object.entries(identityFiles).sort((left, right) => left[0].localeCompare(right[0])),
+    protocol: [protocolOldSha256, protocolNewSha256] }));
+  const policy = { oldName: 'true-delta-20261031-c2', newName: 'original-image-20261031-v1', commonManifest: common,
+    oldCliSha256, newCliSha256, oldOverlaySha256: overlaySha(oldFiles), newOverlaySha256: overlaySha(newFiles),
+    newImageProtocol: 'wechat-original-image-v1', identityFiles, identityAlgorithmSha256,
+    protocolOldSha256, protocolNewSha256, imageSha256: hash(newImage), imageTestSha256: hash(newImageTest),
+    sourceLockSha256: hash(sourceLockBytes), historyPatchSha256: hash(historyPatch), readonlyPatchSha256: hash(readonlyPatch),
+    readonlyTestSha256: hash(readonlyTest), wcdbSha256 };
+  return { repositoryRoot, buildsRoot, fromRoot, toRoot, dbRoot, accountKey, oldAliasPath, oldRecord,
+    oldAliasBytes: await readFile(oldAliasPath), policy, aliases, tools: createUpgradeImageCliTools({ repositoryRoot, policy }) };
+}
+
+test('升级前后全部授权scope身份相同才通过，允许 artifact 摘要和动态快照descriptor变化', () => {
+  const before = scopeEvidence('d'.repeat(64));
+  const after = scopeEvidence('e'.repeat(64));
+  assert.deepEqual(compareUpgradeScopeEvidence(before, after), { status: 'verified', scopeCount: 3 });
+
+  after.scopes[0].target.tables.reverse();
+  assert.deepEqual(compareUpgradeScopeEvidence(before, after), { status: 'verified', scopeCount: 3 });
+
+  const changed = after.scopes[1];
+  changed.target.tables[0].instance = 'f'.repeat(64);
+  changed.inspection.tables[0].target = 'f'.repeat(64);
+  changed.inspection.schemaFingerprint = '9'.repeat(64);
+  changed.support.schemaFingerprint = '9'.repeat(64);
+  assert.throws(() => compareUpgradeScopeEvidence(before, after), /history_image_upgrade_scope_mismatch/);
+});
+
+test('拒绝scope缺失或重复、缺失身份字段，以及零表scope的target分区不一致', () => {
+  const before = scopeEvidence('d'.repeat(64));
+  const after = scopeEvidence('e'.repeat(64));
+  assert.throws(() => compareUpgradeScopeEvidence({ ...before, scopes: [] }, after), /history_image_upgrade_scope_mismatch/);
+  assert.throws(() => compareUpgradeScopeEvidence(before, { ...after, scopes: after.scopes.slice(0, 2) }), /history_image_upgrade_scope_mismatch/);
+
+  const duplicate = structuredClone(after);
+  duplicate.scopes[1].scope.conversationKey = duplicate.scopes[0].scope.conversationKey;
+  assert.throws(() => compareUpgradeScopeEvidence(before, duplicate), /history_image_upgrade_evidence_invalid/);
+
+  const wrongEmptyPartition = structuredClone(after);
+  wrongEmptyPartition.scopes[2].target.partitions = ['f'.repeat(64)];
+  assert.throws(() => compareUpgradeScopeEvidence(before, wrongEmptyPartition), /history_image_upgrade_evidence_invalid/);
+
+  const incomplete = structuredClone(after);
+  delete incomplete.scopes[0].inspection.tables[0].sqlFingerprint;
+  assert.throws(() => compareUpgradeScopeEvidence(before, incomplete), /history_image_upgrade_evidence_invalid/);
+
+  const changedGeneration = structuredClone(after);
+  const generation = '9'.repeat(64);
+  changedGeneration.account.sourceGeneration = generation;
+  for (const item of changedGeneration.scopes) {
+    item.scope.sourceGeneration = generation;
+    item.inspection.sourceGeneration = generation;
+    item.support.sourceGeneration = generation;
+    item.target.sourceGeneration = generation;
+  }
+  assert.throws(() => compareUpgradeScopeEvidence(before, changedGeneration), /history_image_upgrade_scope_mismatch/);
+});
+
+test('从已核验旧alias签发新制品独立sidecar与receipt，不改旧sidecar或业务数据库', async t => {
+  const fixture = await syntheticUpgradeFixture();
+  t.after(() => rm(fixture.repositoryRoot, { recursive: true, force: true }));
+  const businessFile = path.join(fixture.dbRoot, 'business.sqlite');
+  const businessBefore = await readFile(businessFile);
+  const oldAliasBefore = await readFile(fixture.oldAliasPath);
+  const previousUmask = process.umask(0o777);
+  let result;
+  try {
+    result = await fixture.tools.prepareAliases({ fromRoot: fixture.fromRoot, toRoot: fixture.toRoot,
+      accountKey: fixture.accountKey, dbRoot: fixture.dbRoot });
+  } finally { process.umask(previousUmask); }
+
+  assert.equal(result.status, 'prepared');
+  const newAliasPath = path.join(fixture.toRoot, 'source-identity-aliases.json');
+  const receiptPath = path.join(fixture.toRoot, 'source-identity-upgrade-receipt.json');
+  const newAliasBytes = await readFile(newAliasPath);
+  const newAlias = JSON.parse(newAliasBytes);
+  const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
+  assert.equal(newAlias.artifactSha256, fixture.policy.newCliSha256);
+  assert.deepEqual(newAlias.aliases, fixture.oldRecord.aliases);
+  assert.equal(newAlias.rootScope, fixture.oldRecord.rootScope);
+  assert.equal(receipt.format, 'notalone-source-identity-upgrade-receipt-v1');
+  assert.equal(receipt.fromArtifactSha256, fixture.policy.oldCliSha256);
+  assert.equal(receipt.toArtifactSha256, fixture.policy.newCliSha256);
+  assert.equal(receipt.sourceIdentityAlgorithmSha256, fixture.policy.identityAlgorithmSha256);
+  assert.equal(receipt.priorAliasFileSha256, hash(oldAliasBefore));
+  assert.equal(receipt.newAliasFileSha256, hash(newAliasBytes));
+  assert.equal(receipt.checkpointPolicy, 'recreate-with-new-artifact');
+  assert.equal(JSON.stringify(receipt).includes(fixture.dbRoot), false);
+  assert.equal((await lstat(newAliasPath)).mode & 0o777, 0o600);
+  assert.equal((await lstat(receiptPath)).mode & 0o777, 0o600);
+  assert.equal((await readdir(fixture.toRoot)).some(name => name.endsWith('.tmp')), false);
+  assert.deepEqual(await readFile(fixture.oldAliasPath), oldAliasBefore);
+  assert.deepEqual(await readFile(businessFile), businessBefore);
+});
+
+test('receipt发布后遇错只清理本次新文件，不碰旧sidecar和业务数据库', async t => {
+  const fixture = await syntheticUpgradeFixture();
+  t.after(() => rm(fixture.repositoryRoot, { recursive: true, force: true }));
+  const businessFile = path.join(fixture.dbRoot, 'business.sqlite');
+  const businessBefore = await readFile(businessFile);
+  const oldAliasBefore = await readFile(fixture.oldAliasPath);
+  const tools = createUpgradeImageCliTools({ repositoryRoot: fixture.repositoryRoot, policy: fixture.policy,
+    afterReceiptPublished: async () => { throw new Error('synthetic write interruption'); } });
+  await assert.rejects(() => tools.prepareAliases({ fromRoot: fixture.fromRoot, toRoot: fixture.toRoot,
+    accountKey: fixture.accountKey, dbRoot: fixture.dbRoot }), /history_image_upgrade_write_failed/);
+  for (const name of ['source-identity-aliases.json', 'source-identity-upgrade-receipt.json']) {
+    await assert.rejects(() => lstat(path.join(fixture.toRoot, name)), { code: 'ENOENT' });
+  }
+  assert.equal((await readdir(fixture.toRoot)).some(name => name.includes('.tmp')), false);
+  assert.deepEqual(await readFile(fixture.oldAliasPath), oldAliasBefore);
+  assert.deepEqual(await readFile(businessFile), businessBefore);
+});
+
+test('拒绝不匹配的来源、构建制品和旧alias证据', async t => {
+  const cases = [
+    ['身份算法源文件被改', async f => {
+      const file = path.join(f.toRoot, 'source/cmd/wechat-cli/notalone_identity_aliases.go');
+      await writeFile(file, `${await readFile(file, 'utf8')}\n// tampered`);
+    }],
+    ['新增未锁定源码差异', async f => {
+      const file = path.join(f.toRoot, 'source/cmd/wechat-cli/notalone_extra.go');
+      await writeFile(file, 'package main\n', { mode: 0o600 });
+    }],
+    ['manifest字段被改', async f => {
+      const file = path.join(f.toRoot, 'manifest.json');
+      const manifest = JSON.parse(await readFile(file, 'utf8'));
+      manifest.originalImageProtocol = 'unreviewed';
+      await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`);
+    }],
+    ['CLI摘要不匹配', async f => writeFile(path.join(f.toRoot, 'bin/wechat-cli'), 'tampered executable')],
+    ['WCDB摘要不匹配', async f => writeFile(path.join(f.toRoot, 'lib/libWCDB.dylib'), 'tampered library')],
+    ['alias账户不匹配', async f => {
+      const record = JSON.parse(await readFile(f.oldAliasPath, 'utf8'));
+      record.accountKey = 'another-account';
+      await writeFile(f.oldAliasPath, `${JSON.stringify(record)}\n`);
+    }],
+    ['alias root不匹配', async f => {
+      const record = JSON.parse(await readFile(f.oldAliasPath, 'utf8'));
+      record.rootScope = 'f'.repeat(64);
+      await writeFile(f.oldAliasPath, `${JSON.stringify(record)}\n`);
+    }],
+    ['alias制品不匹配', async f => {
+      const record = JSON.parse(await readFile(f.oldAliasPath, 'utf8'));
+      record.artifactSha256 = 'f'.repeat(64);
+      await writeFile(f.oldAliasPath, `${JSON.stringify(record)}\n`);
+    }],
+    ['alias循环', async f => {
+      const record = JSON.parse(await readFile(f.oldAliasPath, 'utf8'));
+      record.aliases['b'.repeat(64)] = 'a'.repeat(64);
+      await writeFile(f.oldAliasPath, `${JSON.stringify(record)}\n`);
+    }],
+    ['alias重复JSON键', async f => {
+      const bytes = await readFile(f.oldAliasPath, 'utf8');
+      await writeFile(f.oldAliasPath, bytes.replace('"accountKey":"synthetic-account"',
+        '"accountKey":"synthetic-account","accountKey":"synthetic-account"'));
+    }],
+    ['alias权限过宽', async f => chmod(f.oldAliasPath, 0o644)],
+  ];
+  for (const [name, mutate] of cases) await t.test(name, async t => {
+    const fixture = await syntheticUpgradeFixture();
+    t.after(() => rm(fixture.repositoryRoot, { recursive: true, force: true }));
+    await mutate(fixture);
+    await assert.rejects(() => fixture.tools.prepareAliases({ fromRoot: fixture.fromRoot, toRoot: fixture.toRoot,
+      accountKey: fixture.accountKey, dbRoot: fixture.dbRoot }), /history_image_upgrade_/);
+  });
+});
+
+test('拒绝预先存在的输出sidecar', async t => {
+  const fixture = await syntheticUpgradeFixture();
+  t.after(() => rm(fixture.repositoryRoot, { recursive: true, force: true }));
+  const existing = path.join(fixture.toRoot, 'source-identity-aliases.json');
+  await writeFile(existing, 'preexisting', { mode: 0o600 });
+  await assert.rejects(() => fixture.tools.prepareAliases({ fromRoot: fixture.fromRoot, toRoot: fixture.toRoot,
+    accountKey: fixture.accountKey, dbRoot: fixture.dbRoot }), /history_image_upgrade_output_exists/);
+  assert.equal(await readFile(existing, 'utf8'), 'preexisting');
+});

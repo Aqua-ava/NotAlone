@@ -31,6 +31,8 @@ node desktop/scripts/build-history-cli.mjs \
 
 App 使用的完整运行目录也保存在 `local-tools/wx-cli/.notalone-builds/` 下。当前 SQLite 开发模式不展示路径编辑表单：正常退出 App 后，修改本机 `backend-launch.json` 中的 `wechatCliPath`，指向选定运行目录的 `bin/wechat-cli`，再通过 `pnpm run dev` 启动。移动运行目录时须保留 `manifest.json`、同字节 WCDB 库及已有 `source-identity-aliases.json` 的内容和权限，并核对摘要。不把已有来源兼容文件复制给不同摘要的新 CLI；新构建的支持资格与兼容迁移仍须另行核验。完整源码和运行目录均不纳入 Git，源码子仓库也应在 `.git/info/exclude` 忽略 `.notalone-builds/`。
 
+原图开发组件的兼容升级使用 `desktop/scripts/upgrade-history-image-cli.mjs` 的 `prepareAliases`。它只接受已经审查的固定旧／新源码配对：复验构建链、二进制与 WCDB、完整源码树差异和身份算法，以及旧别名的账号、来源目录和制品绑定；通过后为新制品签发独立别名与升级凭证，拒绝覆盖已有输出。旧别名、业务数据库、读取授权和停读围栏均不修改。`prepared` 只表示制品与别名证明完成，不代表可以启用；仍须通过正式窄客户端，对现有授权范围逐项核验新旧账号、来源代次、结构、支持档及分片／表实例完全相同，再切换本机配置并重启开发宿主。只允许制品摘要和随机目标描述符变化，不复用旧制品游标，也不枚举或授权其他会话。
+
 原生查询通过精确整数、有界行数和真实 sqlite3_interrupt 收敛；取消等待本次查询结束后才允许关闭连接。来源守卫核验直接子文件身份并监听目录及文件命名空间变化。结构检查只投影目标 schema、声明主键、索引与触发器指纹，实例身份包含 schema_version/rootpage/建表 SQL 摘要。正常使用重启按 ADR-127 重新核验账号、数据库文件、来源分片及表实例；只有支持报告明确给出 `continuity='same-source-instances-normal-use-v1'` 且全部身份相同时，新进程才从头完整重扫，保留已删除或排除的本地出现键，不复用旧进程的不透明游标。任何已检测变化、缺项或失证都持久停读。相同身份标识下无法辨认的原位回滚不在连续性保证内。
 
 快照原语在观察连接的共同 data_version 窗口内固定所有分片 reader，再通过声明的主键分页；持有期间的新提交不进入原快照。快照两分钟到期，关闭及取消先中断真实查询，再回收 reader。排序字段始终不冒充先后证据，server_id 非唯一时不签发别名。
