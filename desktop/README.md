@@ -190,6 +190,8 @@ pnpm run dev:status --user-data-dir "$sqlite_test_root"
 
 App 与本仓库不提供第三方 `wechat-cli`、WCDB 二进制或独立 CLI 源码。微信同步使用用户自行准备的本机工具；在“设置 → 高级 → 故障排查”填写外置 CLI 的绝对路径，或显式设置 `NOTALONE_WECHAT_CLI`。已保存路径优先于环境变量；未配置时不自动搜索 PATH 或旧包内 CLI，同步不可用不妨碍独立后端配置。外置工具所需 WCDB 库由该工具自己的安装及环境负责，NotAlone 不注入包内库。
 
+本机开发时，完整 `wx-cli` 源码放在仓库根目录的 `local-tools/wx-cli/`，由 `.gitignore` 排除，不随仓库提交或推送。历史读取器与旧组件构建均默认使用此目录，并核验来源锁。历史读取器的构建产物和 App 运行版本统一放在其中的 `.notalone-builds/`；App 的外置 CLI 路径指向选定运行目录的 `bin/wechat-cli`。具体构建和切换方法见[私聊历史开发适配层](wechat-history/README.md)。
+
 第三方工具的 `check:helpers`、`prepare:helpers` 与 `--helper-directory/version/source` 打包入口已移除，旧打包参数在读取输入或创建输出前拒绝。CLI 只读适配器、联系人确认、总开关及停读行为保留。自研探针可按下文 `--with-probe` 附带。
 
 ### 已退役分发路径的历史记录

@@ -7,11 +7,11 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { requireBuildSpace } from './build-space.mjs';
-import { hashWechatFile } from './wechat-components.mjs';
+import { hashWechatFile, wechatCliSourceDirectory } from './wechat-components.mjs';
 
 const desktop = fileURLToPath(new URL('../', import.meta.url));
 const repository = path.dirname(desktop.replace(/\/$/, ''));
-export const historyCliBuildRoot = path.join(repository, '.scratch/sqlite-history-cli');
+export const historyCliBuildRoot = path.join(wechatCliSourceDirectory, '.notalone-builds');
 const wcdbSha256 = '4f05cafc4626a142afca1818f0a88c4092a13d5f4c83e30cd5125b558ba0417d';
 const run = promisify(execFile);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -29,8 +29,8 @@ export function parseHistoryBuildArguments(args) {
     if (!name || options[name] !== undefined || !absolute(value)) fail('history_cli_arguments_invalid');
     options[name] = value;
   }
-  if (['sourceDirectory', 'goArchive', 'wcdbLibrary', 'outputDirectory'].some(name => !options[name])) fail('history_cli_arguments_invalid');
-  return options;
+  if (['goArchive', 'wcdbLibrary', 'outputDirectory'].some(name => !options[name])) fail('history_cli_arguments_invalid');
+  return { sourceDirectory: wechatCliSourceDirectory, ...options };
 }
 
 export async function validateHistoryOutputDirectory(output) {
@@ -64,7 +64,7 @@ export async function applyHistoryBuildPatch(sourceOutput, patch) {
 }
 
 export async function validateHistoryBuildInputs(input) {
-  const options = { moduleCache: path.join(homedir(), 'go/pkg/mod'), ...input };
+  const options = { sourceDirectory: wechatCliSourceDirectory, moduleCache: path.join(homedir(), 'go/pkg/mod'), ...input };
   options.buildCache ??= path.join(options.outputDirectory ?? '', 'build-cache');
   if (['sourceDirectory', 'goArchive', 'wcdbLibrary', 'outputDirectory', 'moduleCache', 'buildCache'].some(name => !absolute(options[name]))) fail('history_cli_arguments_invalid');
   await validateHistoryOutputDirectory(options.outputDirectory);

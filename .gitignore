@@ -25,5 +25,8 @@ __pycache__/
 .dsh-computer-use/
 /model-permits/
 
+# 仅供本机构建的完整微信工具源码
+/local-tools/wx-cli/
+
 # pnpm workspace 安装产物
 node_modules/

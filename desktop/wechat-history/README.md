@@ -16,7 +16,20 @@
 
 该层叠加在锁定的官方 CLI 源码和既有严格只读补丁上，提供选定联系人元数据、目标结构检查、受状态与来源能力报告门控的普通历史及增量读取和受控快照诊断；不开放 SQL、任意路径、发送或密钥扫描。`notalone-history` 使用有界 JSONL，未知操作及未确认范围在打开来源前拒绝。
 
-构建入口为 `desktop/scripts/build-history-cli.mjs`。输入必须是锁定源码、经摘要核验的 Go 归档及既有 WCDB 字节，输出只能是 `.scratch/sqlite-history-cli/` 的一个新直接子目录；不会替换用户工具或配置。构建先核验剩余空间，复制自有源码、补丁与测试，离线构建后只对新 CLI 作开发签名，并写入不含私人路径的 manifest。
+构建入口为 `desktop/scripts/build-history-cli.mjs`。输入必须是锁定源码、经摘要核验的 Go 归档及既有 WCDB 字节，输出只能是 `local-tools/wx-cli/.notalone-builds/` 的一个新直接子目录。构建先核验剩余空间，复制自有源码、补丁与测试，离线构建后只对新 CLI 作开发签名，并写入不含私人路径的 manifest。
+
+完整上游源码统一放在仓库根目录的 `local-tools/wx-cli/`，该目录由 Git 忽略，仅供本机使用，不提交或推送。历史 CLI 构建的命令行及程序调用均默认读取这里；需要隔离对照时仍可显式传入 `--source-directory`。旧组件构建入口 `prepare-wechat.mjs` 也从这里读取 CLI 源码，`--source-cache` 仅保留其他来源和依赖缓存；本地源码缺失时直接报错，不退回旧缓存或自动下载。两个入口继续核验锁定的 commit/tree，并从固定 Git 对象归档，工作副本中的未提交编辑不会进入构建；本项目扩展仍在 `desktop/wechat-history/` 维护。
+
+从仓库根目录构建时无需再传源码路径；Go 归档和 WCDB 库仍须显式指定，输出目录须尚不存在：
+
+```bash
+node desktop/scripts/build-history-cli.mjs \
+  --go-archive "/绝对路径/go1.26.5.darwin-arm64.tar.gz" \
+  --wcdb-library "/绝对路径/libWCDB.dylib" \
+  --output-directory "$(pwd)/local-tools/wx-cli/.notalone-builds/dev-local-source"
+```
+
+App 使用的完整运行目录也保存在 `local-tools/wx-cli/.notalone-builds/` 下。当前 SQLite 开发模式不展示路径编辑表单：正常退出 App 后，修改本机 `backend-launch.json` 中的 `wechatCliPath`，指向选定运行目录的 `bin/wechat-cli`，再通过 `pnpm run dev` 启动。移动运行目录时须保留 `manifest.json`、同字节 WCDB 库及已有 `source-identity-aliases.json` 的内容和权限，并核对摘要。不把已有来源兼容文件复制给不同摘要的新 CLI；新构建的支持资格与兼容迁移仍须另行核验。完整源码和运行目录均不纳入 Git，源码子仓库也应在 `.git/info/exclude` 忽略 `.notalone-builds/`。
 
 原生查询通过精确整数、有界行数和真实 sqlite3_interrupt 收敛；取消等待本次查询结束后才允许关闭连接。来源守卫核验直接子文件身份并监听目录及文件命名空间变化。结构检查只投影目标 schema、声明主键、索引与触发器指纹，实例身份包含 schema_version/rootpage/建表 SQL 摘要。正常使用重启按 ADR-127 重新核验账号、数据库文件、来源分片及表实例；只有支持报告明确给出 `continuity='same-source-instances-normal-use-v1'` 且全部身份相同时，新进程才从头完整重扫，保留已删除或排除的本地出现键，不复用旧进程的不透明游标。任何已检测变化、缺项或失证都持久停读。相同身份标识下无法辨认的原位回滚不在连续性保证内。
 
