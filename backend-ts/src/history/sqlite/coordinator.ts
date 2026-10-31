@@ -15,6 +15,7 @@ export interface FirstHistoryCoordinatorState {
 interface QueuedRead { contactId: string; key: string; continuationCursor?: string }
 interface ActiveRead extends QueuedRead { cancelledAtWake?: number; controller: AbortController; done: Promise<void> }
 const allowedErrors = new Set(['history_source_continuity_unverified', 'history_support_unverified', 'history_support_unsupported', 'history_support_changed',
+  'history_snapshot_window_changed',
   'history_external_scope_changed', 'history_interrupted', 'history_page_budget_exhausted', 'history_cursor_invalid',
   'history_target_invalid', 'history_target_unverified', 'history_snapshot_closed', 'history_snapshot_unavailable',
   'history_native_timeout', 'history_native_cancelled', 'history_native_unavailable', 'history_source_changed',
@@ -31,8 +32,10 @@ function keyContact(key:string):string|null {
  try{const value=JSON.parse(key);return Array.isArray(value)&&typeof value[0]==='string'?value[0]:null;}catch{return null;}
 }
 function notification() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
+const retryableErrors=new Set(['history_native_timeout','history_native_unavailable','history_native_cancelled',
+  'history_snapshot_closed','history_snapshot_unavailable','history_snapshot_window_changed']);
 
-/** 仅由启动、明确确认或开启操作唤醒；首次历史结束后不派发增量，也不轮询。 */
+/** 启动、确认或开启发起首次历史；瞬时失败退避重试，完成后不轮询历史。 */
 export class FirstHistoryCoordinator {
   readonly #directory: FirstHistoryDirectoryPort;
   readonly #history: SqliteHistoryService;
@@ -52,9 +55,35 @@ export class FirstHistoryCoordinator {
   #closeDone = false;
   #closing?: Promise<void>;
   #lastError: string | null = null;
-  constructor(directory: FirstHistoryDirectoryPort, history: SqliteHistoryService) { this.#directory = directory; this.#history = history; }
+  readonly #retryTimers=new Map<string,{timer:ReturnType<typeof setTimeout>;key:string}>();
+  readonly #retryAttempts=new Map<string,number>();
+  readonly #retryMinMs:number;readonly #retryMaxMs:number;
+  constructor(directory: FirstHistoryDirectoryPort, history: SqliteHistoryService,options:{retryMinMs?:number;retryMaxMs?:number}={}) {
+    this.#directory = directory; this.#history = history;
+    this.#retryMinMs=options.retryMinMs??1000;this.#retryMaxMs=options.retryMaxMs??60_000;
+    if(!Number.isSafeInteger(this.#retryMinMs)||this.#retryMinMs<1||!Number.isSafeInteger(this.#retryMaxMs)
+      ||this.#retryMaxMs<this.#retryMinMs||this.#retryMaxMs>60_000)throw new StorageFailure('history_request_invalid');
+  }
+  #clearRetry(contactId?:string):void {
+    for(const [id,entry] of this.#retryTimers)if(!contactId||id===contactId){clearTimeout(entry.timer);this.#retryTimers.delete(id);}
+    if(contactId)this.#retryAttempts.delete(contactId);else this.#retryAttempts.clear();
+  }
+  #retry(job:QueuedRead,code:string):boolean {
+    if(!retryableErrors.has(code)||this.#closed||this.#stoppedContacts.has(job.contactId))return false;
+    const attempt=(this.#retryAttempts.get(job.contactId)??0)+1;this.#retryAttempts.set(job.contactId,attempt);
+    const previous=this.#retryTimers.get(job.contactId);if(previous)clearTimeout(previous.timer);
+    const delay=Math.min(this.#retryMaxMs,this.#retryMinMs*2**Math.min(attempt-1,16));
+    const entry={key:job.key,timer:setTimeout(()=>{
+      if(this.#retryTimers.get(job.contactId)!==entry)return;this.#retryTimers.delete(job.contactId);
+      if(this.#closed||this.#stoppedContacts.has(job.contactId))return;
+      // 每次重探重新读取目录与授权；不复活其他已停止联系人或旧原生游标。
+      this.#attempted.delete(job.key);this.#wakePending=true;this.#notify();this.#startPump();
+    },delay)};
+    entry.timer.unref();this.#retryTimers.set(job.contactId,entry);return true;
+  }
   wake(): void {
     if (this.#closed) return;
+    this.#clearRetry();
     ++this.#wakeSerial;
     for (const key of this.#cancelledKeys) this.#attempted.delete(key);
     this.#cancelledKeys.clear(); this.#stoppedContacts.clear();
@@ -64,19 +93,22 @@ export class FirstHistoryCoordinator {
   /** 新增的delta历史仅重试指定联系人，不重试其他失败/已停止联系人。 */
   wakeContact(contactId:string):void {
     if(this.#closed||typeof contactId!=='string'||!contactId)return;
+    this.#clearRetry(contactId);
     for(const key of this.#attempted)if(keyContact(key)===contactId)this.#attempted.delete(key);
     for(const key of this.#cancelledKeys)if(keyContact(key)===contactId){this.#cancelledKeys.delete(key);this.#attempted.delete(key);}
     this.#stoppedContacts.delete(contactId);++this.#wakeSerial;
     this.#wakePending=true;this.#notify();this.#startPump();
   }
   getState(): FirstHistoryCoordinatorState {
-    return { phase: this.#closed ? this.#closeDone ? 'closed' : 'closing' : this.#pump ? this.#active.size ? 'running' : 'scheduled' : this.#lastError ? 'blocked' : 'idle',
+    return { phase: this.#closed ? this.#closeDone ? 'closed' : 'closing' : this.#pump ? this.#active.size ? 'running' : 'scheduled' : this.#retryTimers.size?'scheduled':this.#lastError ? 'blocked' : 'idle',
       lastError: this.#lastError, contacts: [...this.#states.values()].map(state => ({ ...state })) };
   }
   async waitForIdle(): Promise<void> { while (this.#pump) await this.#pump; }
   #notify(): void { this.#changed.resolve(); this.#changed = notification(); }
   #state(contactId: string, phase: FirstHistoryContactPhase, error: string | null = null): void {
+    const previous=this.#states.get(contactId)?.lastError;
     this.#states.set(contactId, { contactId, phase, lastError: error }); if (error) this.#lastError = error;
+    else if(previous===this.#lastError)this.#lastError=[...this.#states.values()].find(state=>state.lastError!==null)?.lastError??null;
   }
   #startPump(): void {
     if (this.#pump || this.#closed) return;
@@ -135,17 +167,17 @@ export class FirstHistoryCoordinator {
     this.#active.set(job.contactId, active);
     active.done = Promise.resolve().then(() => this.#history.synchronize(job.contactId, active.controller.signal)).then(coverage => {
       if (active.controller.signal.aborted) this.#state(job.contactId, 'stopped');
-      else if (coverage.phase === 'complete') this.#state(job.contactId, 'complete');
+      else if (coverage.phase === 'complete') {this.#clearRetry(job.contactId);this.#state(job.contactId, 'complete');}
       else if (!this.#closed && !coverage.traversalComplete && typeof coverage.cursor === 'string'
         && coverage.cursor.length > 0 && coverage.cursor !== job.continuationCursor) {
         // 单轮预算只让出执行权；已打开的固定快照优先接续，避免等待新会话时空闲过期。
         this.#queued.set(job.contactId, { ...job, continuationCursor: coverage.cursor });
         this.#state(job.contactId, 'queued');
       }
-      else this.#state(job.contactId, 'incomplete', safeError(new StorageFailure(coverage.failureCode ?? 'history_incomplete')));
+      else {const code=safeError(new StorageFailure(coverage.failureCode??'history_incomplete'));this.#retry(job,code);this.#state(job.contactId,'incomplete',code);}
     }).catch(error => {
       if (active.controller.signal.aborted) this.#state(job.contactId, 'stopped');
-      else this.#state(job.contactId, 'blocked', safeError(error));
+      else {const code=safeError(error);this.#state(job.contactId,this.#retry(job,code)?'incomplete':'blocked',code);}
     }).finally(() => {
       this.#active.delete(job.contactId);
       if (!this.#closed && active.cancelledAtWake !== undefined && this.#wakeSerial > active.cancelledAtWake) this.#wakePending = true;
@@ -164,6 +196,7 @@ export class FirstHistoryCoordinator {
     }
   }
   async #cancel(contactId?: string): Promise<void> {
+    this.#clearRetry(contactId);
     ++this.#revision;
     for (const queued of [...this.#queued.values()]) if (!contactId || queued.contactId === contactId) {
       this.#attempted.add(queued.key); this.#cancelledKeys.add(queued.key); this.#queued.delete(queued.contactId); this.#state(queued.contactId, 'stopped');

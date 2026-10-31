@@ -8,6 +8,7 @@ import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const owner='00000000-0000-4000-8000-000000000083';
 const evidence={externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1'};
@@ -18,10 +19,10 @@ function page(scope,target,cursor,changes={}) {
 }
 async function fixture(t,names=['a','b','c']) {
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-first-history-')));
- const state={creates:0,inspects:0,inspectedContacts:[],targets:0,pages:[],closes:0,support:'supported',pageHook:null,closeHook:null};
+ const state={creates:0,inspects:0,inspectedContacts:[],targets:0,pages:[],closes:0,support:'supported',continuity:'source-1',pageHook:null,closeHook:null};
  const createMetadata=()=>({account:async()=>({...evidence}),sessions:async()=>names.map(name=>({externalKey:`friend-${name}`,displayName:`合成${name}`,kind:'private',identityAssurance:'verified'}))});
  const createChannel=()=>{state.creates++;let closed=false,heldContact;
-  return {inspect:async scope=>{heldContact=scope.token.contact_id;state.inspects++;state.inspectedContacts.push(scope.token.contact_id);return {protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:state.support,reason:state.support==='supported'?null:'synthetic_unverified',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:'source-1',serverAliasSemantics:'unverified'};},
+  return {...(state.continuity==='same-source-instances-normal-use-v1'?{guardSession:{loss:new Promise(()=>{})}}:{}),inspect:async scope=>{heldContact=scope.token.contact_id;state.inspects++;state.inspectedContacts.push(scope.token.contact_id);return {protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:state.support,reason:state.support==='supported'?null:'synthetic_unverified',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:state.continuity,serverAliasSemantics:'unverified'};},
   target:async scope=>{state.targets++;return {protocol:'private-history-v1',descriptor:`synthetic:${scope.conversationKey}`,partitions:['p'],tables:[{partition:'p',instance:'t'}],sourceGeneration:'source-1'};},
   page:async(scope,target,cursor,signal)=>{state.pages.push({contactId:scope.token.contact_id,conversation:scope.conversationKey,cursor});return state.pageHook?state.pageHook(scope,target,cursor,signal):page(scope,target,cursor);},
   close:async()=>{if(closed)return;closed=true;state.closes++;await state.closeHook?.(heldContact);}};
@@ -280,4 +281,34 @@ test('新wake发现active A撤销且C新授权时，扫描内部取消A后仍派
  for(const binding of updated)assert.equal((await f.history.coverage(binding.contact_id)).phase,'complete');
  assert.equal((await f.history.read(added.contact_id)).messages[0].text,'合成friend-c');
  assert.equal(f.state.pages.length,3);assert.equal(f.state.pages.filter(row=>row.contactId===targetId).length,1);
+});
+
+
+test('已认证来源的瞬时快照窗口失败会退避重试并清除旧失败，无需用户wake',{timeout:3000},async t=>{
+ const f=await fixture(t);await f.coordinator.close();f.coordinator=new FirstHistoryCoordinator(f.contacts,f.history,{retryMinMs:10,retryMaxMs:20});
+ f.state.continuity='same-source-instances-normal-use-v1';const [binding]=await select(f);await f.contacts.setReading(true);
+ const retried=deferred();let initial=true;
+ f.state.pageHook=async(scope,target,cursor)=>{if(initial){initial=false;throw new StorageFailure('history_snapshot_window_changed');}retried.resolve();return page(scope,target,cursor);};
+ f.coordinator.wake();await retried.promise;await f.coordinator.waitForIdle();
+ assert.equal((await f.history.coverage(binding.contact_id)).phase,'complete');assert.equal((await f.history.read(binding.contact_id)).messages.length,1);
+ assert.equal(f.state.pages.length,2);assert.equal(f.coordinator.getState().lastError,null);
+});
+
+test('停读或关闭会取消待重试的瞬时失败，不再创建读取者',async t=>{
+ for(const action of ['stop','close'])await t.test(action,async t=>{
+  const f=await fixture(t);await f.coordinator.close();f.coordinator=new FirstHistoryCoordinator(f.contacts,f.history,{retryMinMs:30,retryMaxMs:60});
+  f.state.continuity='same-source-instances-normal-use-v1';await select(f);await f.contacts.setReading(true);
+  f.state.pageHook=async()=>{throw new StorageFailure('history_snapshot_unavailable');};await wake(f);
+  assert.equal(f.coordinator.getState().phase,'scheduled');const creates=f.state.creates;
+  if(action==='stop')await f.coordinator.stop();else await f.coordinator.close();
+  await delay(80);assert.equal(f.state.creates,creates);
+ });
+});
+
+test('实际来源变化不进入瞬时失败重试',async t=>{
+ const f=await fixture(t);await f.coordinator.close();f.coordinator=new FirstHistoryCoordinator(f.contacts,f.history,{retryMinMs:10,retryMaxMs:20});
+ f.state.continuity='same-source-instances-normal-use-v1';await select(f);await f.contacts.setReading(true);
+ f.state.pageHook=async()=>{throw new StorageFailure('history_source_changed');};await wake(f);
+ assert.equal(f.coordinator.getState().phase,'blocked');const creates=f.state.creates;
+ await delay(40);assert.equal(f.state.creates,creates);
 });
