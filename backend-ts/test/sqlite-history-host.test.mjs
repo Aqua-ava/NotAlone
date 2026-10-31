@@ -14,6 +14,17 @@ import {mkdtemp,realpath,rm,readFile} from 'node:fs/promises';
 import {watch} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+
+test('Skill根允许位于App数据目录外，仍拒绝受管区与无效路径',()=>{
+ const userData=path.join(tmpdir(),'notalone-synthetic-app');
+ const skillPackageRoot=path.join(tmpdir(),'notalone-synthetic-repository','reply-skills');
+ const capabilities=['contacts','skills'];
+ assert.deepEqual(readSqliteCapabilities(capabilities,skillPackageRoot,userData),{capabilities,skillPackageRoot});
+ for(const root of [userData,path.join(userData,'managed'),path.join(userData,'managed','skills'),'relative/skills',path.join(userData,'skills')+'/../other']){
+  assert.equal(readSqliteCapabilities(capabilities,root,userData),undefined);
+ }
+});
+
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';

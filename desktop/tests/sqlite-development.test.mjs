@@ -47,3 +47,21 @@ test('取消或非开发项目时不启动存储子进程', async t => {
   assert.deepEqual(cancelled, { phase: 'blocked', code: 'sqlite_cancelled', maintenance: true });
   assert.equal(await exists(path.join(f.userData, 'managed/sqlite/notalone.sqlite')), false);
 });
+
+test('正常开发入口接受App数据目录外的Skill根，重开保留配置与数据库身份', async t => {
+  const f = await fixture('external-skills');
+  t.after(f.cleanup);
+  const skillPackageRoot = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-skill-originals-')));
+  t.after(() => rm(skillPackageRoot, { recursive:true, force:true }));
+  const initial = new SqliteDevelopmentProbe(f.userData, project);
+  assert.equal((await initial.run(() => true)).phase, 'ready');
+  const configurationPath = path.join(f.userData, 'sqlite-development.json');
+  const configuration = JSON.parse(await readFile(configurationPath, 'utf8'));
+  configuration.skillPackageRoot = skillPackageRoot;
+  await writeFile(configurationPath, JSON.stringify(configuration));
+  const reopened = new SqliteDevelopmentProbe(f.userData, project);
+  assert.equal((await reopened.run(() => true)).phase, 'ready');
+  assert.equal(reopened.getContactConfiguration().expectedDatabaseId, configuration.expectedDatabaseId);
+  assert.equal(reopened.getContactConfiguration().skillPackageRoot, skillPackageRoot);
+  assert.equal(JSON.parse(await readFile(configurationPath, 'utf8')).skillPackageRoot, skillPackageRoot);
+});

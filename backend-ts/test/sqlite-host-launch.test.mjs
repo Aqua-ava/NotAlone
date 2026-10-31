@@ -86,10 +86,11 @@ test('SQLite官方profile随父宿主EOF退出并清理握手和临时home', asy
   await assert.rejects(access(record.home),{code:'ENOENT'});
 });
 
-test('SQLite正式宿主接通显式合成Skill父目录，状态与CAS管理可重开且原件不改',async t=>{
+test('SQLite正式宿主读取App数据目录外的Skill根，状态与CAS管理可重开且原件不改',async t=>{
  const {mkdir,writeFile}=await import('node:fs/promises');
  const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-sqlite-skills-host-')));t.after(()=>rm(root,{recursive:true,force:true}));
- const skillPackageRoot=path.join(root,'skill-packages');await mkdir(path.join(skillPackageRoot,'gentle'),{recursive:true});
+ const skillPackageRoot=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-sqlite-skill-originals-')));t.after(()=>rm(skillPackageRoot,{recursive:true,force:true}));
+ await mkdir(path.join(skillPackageRoot,'gentle'),{recursive:true});
  const document='---\nname: gentle\ndescription: 用于合成表达\n---\n先回应感受。\n说明情况。\n保留选择。\n';await writeFile(path.join(skillPackageRoot,'gentle/SKILL.md'),document);
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'});const databaseId=storage.status.databaseId;await storage.close();
  const infoPath=path.join(root,'managed/sqlite-backend.info');

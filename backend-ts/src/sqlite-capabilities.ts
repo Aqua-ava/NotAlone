@@ -11,8 +11,9 @@ export function readSqliteCapabilities(value:unknown,skillPackageRoot:unknown,us
  const capabilities=value.slice() as SqliteCapabilitiesConfiguration['capabilities'];
  if(!value.includes('skills'))return skillPackageRoot===undefined?{capabilities}:undefined;
  if(typeof skillPackageRoot!=='string'||!path.isAbsolute(skillPackageRoot)||path.resolve(skillPackageRoot)!==skillPackageRoot)return undefined;
+ // 宿主可配置外部Skill根；原件仍与App受管删除区隔离。
  const relative=path.relative(userData,skillPackageRoot);
- if(!relative||relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))return undefined;
+ if(!relative)return undefined;
  if(relative.split(path.sep)[0].toLowerCase()==='managed')return undefined;
  return {capabilities,skillPackageRoot};
 }
