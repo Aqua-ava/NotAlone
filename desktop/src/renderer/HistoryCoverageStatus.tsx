@@ -58,8 +58,8 @@ const reasons: Record<string, string> = {
   history_interrupted: '本次历史读取已中断，已保存部分不代表完整历史。',
 };
 
-export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable }: {
-  coverages?: HistoryCoverage[]; contactId: string; bodyAvailable?: boolean;
+export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable, compact = false }: {
+  coverages?: HistoryCoverage[]; contactId: string; bodyAvailable?: boolean; compact?: boolean;
 }) {
   const rows = coverages?.filter(item => item.contactId === contactId);
   const emptyHistory = (row: HistoryCoverage) => row.phase === 'complete' && row.messageCount === 0 && row.nonTextCount === 0 && (row.metadataOnlyCount ?? 0) === 0;
@@ -72,6 +72,11 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable }: 
     not_started: '尚未核验读取能力', ready: '等待读取能力核验', syncing: '正在核验读取能力', incomplete: '读取能力核验未完成',
     blocked: '读取能力核验受阻', invalidated: '读取能力核验已失效', unavailable: '正文同步能力不可用', stopped: '读取能力核验已停止',
   } satisfies Record<HistoryIncrementalPhase, string>)[phase] : incrementalLabels[phase];
+  if (compact) return <small className="contact-history-status">
+    {!rows?.length ? '历史覆盖待确认' : rows.map(row => <span key={row.bindingId}>
+      {historyLabel(row)}{row.incrementalPhase && row.incrementalPhase !== 'not_started' ? ` · ${incrementalLabel(row.incrementalPhase)}` : ''}
+    </span>)}
+  </small>;
   return <div aria-label="当前联系人消息历史覆盖">
     {!rows?.length ? <p>暂时还不知道历史聊天是否读完。</p> : rows.map(row => <div key={row.bindingId}>
       <p><strong>{historyLabel(row)}</strong> · 已保存 {row.messageCount} 条文字消息、{row.nonTextCount} 条非文字占位</p>

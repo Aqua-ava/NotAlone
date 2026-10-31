@@ -3,25 +3,53 @@
 .contacts-toolbar h2 { color: var(--panel-heading); font-size: 15px; font-weight: 500; }
 .contacts-toolbar p, .contacts-note { margin-top: 8px; color: #737e80; font-size: 12px; line-height: 1.8; }
 .contacts-note[role="alert"] { color: #99594e; }
-.contacts-columns { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(200px, .8fr); gap: 20px; }
+.contacts-columns { display: grid; grid-template-columns: minmax(210px, 31%) minmax(0, 1fr); gap: 20px; align-items: start; }
 .contact-list { list-style: none; margin: 0; padding: 0; display: grid; align-content: start; gap: 9px; }
-.contact-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 15px 12px; text-align: left; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
-.contact-row[data-current="true"] { background: #e9f2f3; border-color: #8cabbe; }
+.contact-card { min-width: 0; padding: 14px 12px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
+.contact-card[data-current="true"] { background: #e9f2f3; border-color: #8cabbe; }
+.contact-row { display: flex; align-items: flex-start; gap: 12px; text-align: left; }
 .contact-avatar { flex-shrink: 0; display: grid; place-items: center; width: 35px; height: 37px; border-radius: 5px; background: #d9e8e9; color: #547b8c; }
-.contact-row-copy { min-width: 0; display: grid; gap: 8px; }
+.contact-row-copy { min-width: 0; flex: 1; display: grid; gap: 6px; }
+.contact-row-name { display: flex; align-items: baseline; gap: 8px; }
 .contact-row-copy b { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
-.contact-row-copy small { font-size: 11px; color: #758184; }
+.contact-row-copy small { font-size: 11px; color: #758184; line-height: 1.6; }
+.contact-history-status span { display: block; }
 .contact-row-choice { margin-left: auto; flex-shrink: 0; color: #4e758a; font-size: 11px; }
-.contact-summary { padding: 20px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
-.contact-summary h3, .contacts-empty h3 { margin: 0; color: var(--panel-heading); font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
-.contact-summary p, .contacts-empty p { font-size: 12px; color: #78807d; line-height: 1.9; margin-top: 15px; }
-.contact-summary dl { display: flex; gap: 30px; margin: 24px 0 10px; }
-.contact-summary dt { color: #7f8882; font-size: 11px; }
-.contact-summary dd { color: #396784; font-size: 17px; margin: 8px 0 0; }
+.contacts-empty h3 { margin: 0; color: var(--panel-heading); font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.contacts-empty p { font-size: 12px; color: #78807d; line-height: 1.9; margin-top: 15px; }
 .contacts-empty { padding: 25px 0; text-align: center; }
 .contacts-empty p { margin: 13px auto 21px; max-width: 440px; }
 .contacts-empty > div { display: flex; justify-content: center; gap: 12px; }
-.contact-summary button { margin: 8px 8px 0 0; }
+.contact-management { margin-top: 12px; padding-top: 10px; border-top: 1px solid #c3cfcf; font-size: 11px; overflow-wrap: anywhere; }
+.contact-management p { color: #78807d; line-height: 1.8; margin: 10px 0; }
+.contact-management h3 { font-size: 12px; }
+.contact-management ul { padding-left: 18px; line-height: 1.8; }
+.contact-management .memory-section { margin-top: 12px; padding: 12px 0 0; border: 0; border-top: 1px solid #c3cfcf; border-radius: 0; background: transparent; }
+.contact-management .button { max-width: 100%; margin-top: 8px; padding: 7px 9px; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
+.contact-chat { min-width: 0; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); overflow: hidden; }
+.contact-chat-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--panel-border); }
+.contact-chat-header > div { min-width: 0; }
+.contact-chat-header h3 { margin: 0; color: var(--panel-heading); font-size: 14px; font-weight: 500; }
+.contact-chat-header p { margin: 6px 0 0; color: #758184; font-size: 12px; overflow-wrap: anywhere; }
+.contact-chat-header .button { flex-shrink: 0; }
+.contact-chat-body { height: clamp(320px, 60vh, 680px); overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 20px; scrollbar-width: thin; }
+.contact-chat-note { margin: 14px 0; color: #758184; font-size: 11px; line-height: 1.8; }
+.contact-chat > .contact-chat-note { padding: 0 20px; }
+.contact-chat-empty { min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; color: #758184; font-size: 12px; line-height: 1.8; }
+.contact-chat-empty p { margin: 0 0 8px; }
+.contact-chat-empty small { font-size: 11px; }
+.contact-chat-messages { display: flex; flex-direction: column; gap: 18px; list-style: none; margin: 18px 0; padding: 0; }
+.contact-chat-message { max-width: 88%; align-self: flex-start; min-width: 0; }
+.contact-chat-message[data-speaker="user"] { align-self: flex-end; }
+.contact-chat-message[data-speaker="system"] { align-self: center; }
+.contact-chat-meta { display: flex; flex-wrap: wrap; gap: 5px 10px; margin-bottom: 6px; color: #758184; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.contact-chat-message[data-speaker="user"] .contact-chat-meta { justify-content: flex-end; }
+.contact-chat-bubble { padding: 10px 13px; border: 1px solid #d4dedd; border-radius: 3px 11px 11px; background: #f5f6ef; color: #354d59; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; white-space: pre-wrap; }
+.contact-chat-bubble p { margin: 0; }
+.contact-chat-message[data-speaker="user"] .contact-chat-bubble { background: #e5eff0; border-color: #c7d9df; border-radius: 11px 3px 11px 11px; }
+.contact-chat-message[data-speaker="system"] .contact-chat-bubble { background: transparent; border: 0; color: #758184; font-size: 11px; text-align: center; }
+.contact-chat-bubble blockquote { margin: 0 0 8px; padding-left: 9px; border-left: 2px solid #aabec6; color: #758184; font-size: 11px; }
+.contact-chat-more { display: block; margin: 16px auto 0; }
 .contact-picker-container { position: relative; width: 280px; max-width: 100%; min-width: 0; -webkit-app-region: no-drag; }
 .contact-picker { display: block; box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 14px; font: inherit; font-size: 12px; line-height: 1.5; color: #456b87; background: #fffdf6; border: 1px solid #b8c5cc; border-radius: 3px 6px 4px 5px; text-overflow: ellipsis; cursor: text; }
 .contact-picker:disabled { color: #808b8b; cursor: default; }
@@ -44,12 +72,9 @@
 .ime-input textarea { height: 80px; }
 .ime-contact-note { padding: 0 6px 7px; color: #7a807b; font-size: 10px; }
 .ime-status-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-@media (max-width: 900px) { .contacts-columns { grid-template-columns: 1fr; } }
-
 .contacts-toolbar > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
 .contact-list { max-height: 65vh; overflow-y: auto; padding: 3px; scrollbar-width: none; }
 .contact-list::-webkit-scrollbar { display: none; }
-.contact-summary { align-self: start; }
 .contact-row-copy .contact-sync-status { color: #355f7c; }
 .contact-sync-details { margin: 18px 0; padding: 16px 0; border-top: 1px solid #c3cfcf; border-bottom: 1px solid #c3cfcf; }
 .contact-binding details { margin-top: 12px; font-size: 12px; overflow-wrap: anywhere; }
@@ -58,4 +83,9 @@
 .contacts-panel summary:focus-visible { outline: 2px solid #527b94; outline-offset: 3px; }
 .contacts-panel > .bindings-explanation { margin-top: 22px; }
 .binding-session-list { max-height: 45vh; overflow-y: auto; }
-@media (max-width: 760px) { .contacts-columns { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .contacts-columns { grid-template-columns: 1fr; }
+  .contacts-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .contact-list { max-height: 36vh; }
+  .contact-chat-body { height: 55vh; }
+}

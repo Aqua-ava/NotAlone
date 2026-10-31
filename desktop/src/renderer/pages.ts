@@ -6,7 +6,7 @@ export const managerPages = {
   },
   contacts: {
     title: '联系人', icon: 'contacts',
-    description: '查看每个人的同步状态，管理微信关联与读取授权。',
+    description: '查看聊天记录，管理每个人的同步状态与微信关联。',
     emptyTitle: '联系人暂不可用',
     emptyDescription: '连接完成后，这里会显示你的联系人与消息、来源摘要。',
     action: '选择联系人',

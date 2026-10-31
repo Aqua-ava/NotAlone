@@ -39,6 +39,7 @@ import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
 import { installSyncControlBridge } from './sync/bridge';
 import { installHistoryClearBridge } from './history-clear/bridge';
+import { installContactHistoryBridge } from './contact-history/bridge';
 import { SyncPriorityController } from './sync/priority';
 import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
@@ -136,9 +137,20 @@ void app.whenReady().then(async () => {
   };
   installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange);
   const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange);
+  const contactHistory = installContactHistoryBridge(commands, backend, contacts);
   const historyClear = installHistoryClearBridge(commands, backend, contacts);
+  let historyClearInProgress = false;
+  let resyncWasComplete = false;
+  historyClear.onStateChanged(state => {
+    const clearing = state.busy === 'clear';
+    if (clearing && !historyClearInProgress) contactHistory.invalidate('聊天记录正在清空，完成后可重新同步并刷新。');
+    historyClearInProgress = clearing;
+    const completed = state.resync?.completed === true;
+    if (completed && !resyncWasComplete && !clearing) void contactHistory.refreshCurrent();
+    resyncWasComplete = completed;
+  });
   const syncPriority = new SyncPriorityController(backend, contacts, sync);
-  app.on('before-quit', () => { sync.dispose(); historyClear.dispose(); void syncPriority.dispose(); });
+  app.on('before-quit', () => { sync.dispose(); historyClear.dispose(); contactHistory.dispose(); void syncPriority.dispose(); });
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
@@ -166,12 +178,13 @@ void app.whenReady().then(async () => {
     const memoryChecking = memory.revalidateDeletedSource(contactId);
     const preferenceChecking = preferences.invalidateSource(contactId);
     await Promise.all([checking, memoryChecking, preferenceChecking]);
+    await contactHistory.refreshCurrent(contactId);
   });
   coordinateSourceContextChanges(sources, replies);
   coordinateSkillLearningSourceDeletion(skillLearning, sources);
   sources.onDeletion((phase) => {
     memory.sourceDeletionChanged(phase);
-    if (phase === 'started') { media.invalidate(); sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize(); }
+    if (phase === 'started') { contactHistory.invalidate('聊天记录来源正在删除，删除完成后会重新读取。'); media.invalidate(); sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize(); }
   });
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => candidateProvenance.recordCopied(selection, text)));

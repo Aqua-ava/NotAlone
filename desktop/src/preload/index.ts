@@ -24,6 +24,7 @@ import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 import { createBackgroundTaskBridge } from './background-tasks';
 import { createHistoryClearBridge } from './history-clear';
+import { createContactHistoryBridge } from './contact-history';
 import { createQuarantineBridge } from './quarantine';
 
 const bridge: AppBridge = {
@@ -51,6 +52,7 @@ const bridge: AppBridge = {
   foreground: createForegroundBridge(ipcRenderer),
   syncControl: createSyncControlBridge(ipcRenderer),
   historyClear: createHistoryClearBridge(ipcRenderer),
+  contactHistory: createContactHistoryBridge(ipcRenderer),
   quarantine: createQuarantineBridge(ipcRenderer),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),

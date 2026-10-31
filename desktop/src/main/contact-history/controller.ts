@@ -1,0 +1,109 @@
+import type { ContactHistoryRequest, ContactHistoryState } from '../../shared/contact-history-bridge';
+import type { BackendHost } from '../backend/host';
+import type { ContactSession } from '../contacts/session';
+import { mergeReplyMessages, readReplyMessages } from '../reply/messages';
+
+type Scope = { generation: number; contactId: string; scopeRevision: number };
+const emptyMessages = (): ContactHistoryState['messages'] => ({ phase: 'idle', items: [], nextCursor: null });
+
+/** 管理窗口的联系人历史只读分页，不依赖回复会话或助手会话生命周期。 */
+export class ContactHistoryController {
+  private state: ContactHistoryState = { revision: 0, contactId: null, scopeRevision: 0, messages: emptyMessages(), error: null };
+  private scope: Scope | undefined;
+  private pending: AbortController | undefined;
+  private operation = 0;
+  private disposed = false;
+  private readonly listeners = new Set<(state: ContactHistoryState) => void>();
+  private readonly unsubscribeContacts: () => void;
+  private readonly unsubscribeBackend: () => void;
+
+  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {
+    this.unsubscribeContacts = contacts.onStateChanged(() => this.synchronizeScope());
+    this.unsubscribeBackend = backend.onStateChanged(() => this.synchronizeScope());
+    this.synchronizeScope();
+  }
+
+  getState(): ContactHistoryState { this.synchronizeScope(); return structuredClone(this.state); }
+  onStateChanged(listener: (state: ContactHistoryState) => void): () => void {
+    this.listeners.add(listener); return () => { this.listeners.delete(listener); };
+  }
+
+  dispose(): void {
+    this.disposed = true; this.cancel(); this.unsubscribeContacts(); this.unsubscribeBackend(); this.listeners.clear();
+  }
+
+  /** 在正文来源删除或聊天清空开始时立即撤下旧正文，避免它留在页面上。 */
+  invalidate(error = '聊天记录已变化，请刷新后核对。'): void {
+    this.synchronizeScope();
+    this.cancel();
+    this.publish({ messages: { phase: 'failed', items: [], nextCursor: null }, error });
+  }
+
+  /** 当前有效联系人经过删除复验后重读第一页。 */
+  async refreshCurrent(contactId?: string): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    if (!scope || (contactId !== undefined && contactId !== scope.contactId)) return;
+    await this.load({ contactId: scope.contactId, scopeRevision: scope.scopeRevision, older: false });
+  }
+
+  private publish(patch: Partial<ContactHistoryState>): void {
+    if (this.disposed) return;
+    this.state = { ...this.state, ...patch, revision: this.state.revision + 1 };
+    const next = this.getStateWithoutSync();
+    for (const listener of this.listeners) listener(next);
+  }
+
+  private getStateWithoutSync(): ContactHistoryState { return structuredClone(this.state); }
+
+  private cancel(): void { this.pending?.abort(); this.pending = undefined; this.operation += 1; }
+
+  private synchronizeScope(): void {
+    if (this.disposed) return;
+    const generation = this.backend.getConnectionGeneration();
+    const contact = this.contacts.getState();
+    const contactId = contact.selectedContactId;
+    const valid = generation !== undefined && contactId !== null && contact.directoryPhase === 'ready'
+      && contact.contacts.some(entry => entry.contactId === contactId);
+    const next = valid ? { generation, contactId: contactId!, scopeRevision: contact.scopeRevision } : undefined;
+    const unchangedScope = next === undefined && this.scope === undefined && this.state.contactId === null
+      && this.state.scopeRevision === contact.scopeRevision;
+    const unchangedSelection = next !== undefined && this.scope !== undefined
+      && next.generation === this.scope.generation && next.contactId === this.scope.contactId
+      && next.scopeRevision === this.scope.scopeRevision;
+    if (unchangedScope || unchangedSelection) return;
+    this.cancel(); this.scope = next;
+    this.publish({ contactId: next?.contactId ?? null, scopeRevision: contact.scopeRevision, messages: emptyMessages(), error: null });
+  }
+
+  private assertScope(request: ContactHistoryRequest): Scope {
+    this.synchronizeScope();
+    const scope = this.scope;
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
+      || scope.generation !== this.backend.getConnectionGeneration()) throw new Error('联系人范围已变化，请重新确认联系人。');
+    return scope;
+  }
+
+  async load(request: ContactHistoryRequest): Promise<void> {
+    const scope = this.assertScope(request);
+    if (this.state.messages.phase === 'loading') return;
+    const before = request.older ? this.state.messages.nextCursor : null;
+    if (request.older && (!before || this.state.messages.phase !== 'ready')) return;
+
+    this.cancel();
+    const operation = this.operation, pending = new AbortController(); this.pending = pending;
+    const current = () => !this.disposed && this.operation === operation && this.scope === scope
+      && this.pending === pending && scope.generation === this.backend.getConnectionGeneration();
+    this.publish({ messages: { ...this.state.messages, phase: 'loading' }, error: null });
+    try {
+      const page = await readReplyMessages(this.backend, scope.contactId, before, pending.signal);
+      if (!current() || page.generation !== scope.generation) return;
+      this.publish({ messages: { phase: 'ready',
+        items: before ? mergeReplyMessages(this.state.messages.items, page.messages) : page.messages,
+        nextCursor: page.nextCursor }, error: null });
+    } catch {
+      if (current()) this.publish({ messages: { phase: 'failed', items: [], nextCursor: null },
+        error: '暂时无法读取这位联系人的聊天记录，请重试。' });
+    } finally { if (this.pending === pending) this.pending = undefined; }
+  }
+}
