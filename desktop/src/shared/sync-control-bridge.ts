@@ -12,6 +12,7 @@ export interface HistoryCoverage {
   pageCount: number;
   incrementalPhase?: HistoryIncrementalPhase;
   incrementalFailureCode?: string | null;
+  incrementalAwaitingMessages?: boolean;
   incrementalLastAcceptedAt?: number | null;
   incrementalPages?: number;
 }

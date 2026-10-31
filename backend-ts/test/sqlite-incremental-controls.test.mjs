@@ -29,6 +29,35 @@ test('已遍历但存在未核验消息的历史继续增量，不重复首次�
  assert.equal(firstReads,0);assert.equal(tailReads,1);assert.equal(coverage.phase,'incomplete');
  assert.equal(first.getState().contacts[0].phase,'incomplete');
 });
+
+test('旧empty目标在两协调器启动竞态中仅由新持久证明解除不可用阻断',async t=>{
+ const binding={contact_id:'scope-empty-race',binding_id:'binding-empty-race',grant_id:'grant-empty-race',selection_generation:'1',status:'active'};
+ const directory={directory:async()=>({read_enabled:true,bindings:[binding]})};
+ let coverage={goalId:'old-empty-goal',contactId:binding.contact_id,phase:'complete',failureCode:null,traversalComplete:true,
+  incremental:{goalId:null,phase:'unavailable',failureCode:'history_incremental_unavailable',cursorPresent:false}};
+ let metadataProbes=0,coverageReads=0,firstRuns=0;
+ const history={coverage:async()=>{coverageReads++;return coverage;},synchronize:async()=>{firstRuns++;coverage={...coverage,goalId:'new-certified-empty-goal',phase:'complete',failureCode:null,
+   incremental:{...coverage.incremental,emptyTargetAwaitingMessages:true}};return coverage;},
+  synchronizeIncremental:async()=>{metadataProbes++;return coverage;},stop:async()=>{}};
+ const now=()=>1_800_000_000_000;
+ const first=new FirstHistoryCoordinator(directory,history);
+ const incremental=new IncrementalHistoryCoordinator(directory,history,{intervalMs:10,firstHistoryManagedExternally:true,now});
+ t.after(async()=>{await incremental.close();await first.close();});
+ incremental.start();incremental.wake();await incremental.waitForIdle();
+ assert.equal(incremental.getState().contacts[0].phase,'blocked');
+ assert.equal(metadataProbes,0,'旧目标缺少认证证明时不触碰native metadata');
+ const oldCoverageReads=coverageReads;
+ await new Promise(resolve=>setTimeout(resolve,35));await incremental.waitForIdle();
+ assert.equal(metadataProbes,0,'旧证明不变时每次只读本机coverage');
+ assert.ok(coverageReads>oldCoverageReads);
+ coverage={...coverage,phase:'incomplete',failureCode:'history_first_read_failed'};
+ first.wake();await first.waitForIdle();
+ assert.equal(firstRuns,1,'首次历史协调器完成新C2空目标并持久化证明');
+ await new Promise(resolve=>setTimeout(resolve,35));await incremental.waitForIdle();
+ assert.equal(metadataProbes,1,'观察到新证明后允许一次metadata-only重探');
+ assert.equal(incremental.getState().contacts[0].phase,'waiting_new_messages');
+ assert.equal(incremental.getState().contacts[0].lastError,null);
+});
 const evidence = { externalKey: 'synthetic-account', identityScheme: 'wechat.account.v1', sourceGeneration: 'source-1', assurance: 'verified', supportProfile: 'synthetic-metadata-v1' };
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 const record = (localId, changes = {}) => ({
@@ -36,6 +65,7 @@ const record = (localId, changes = {}) => ({
   originalType: '1', sentAt: '1700000000000', timePrecision: 'second', orderScheme: null, orderKey: null, stateAssurance: 'verified', status: '0', ...changes,
 });
 function support(scope, state) {
+  if (state.supportFactory) return state.supportFactory(scope, state);
   return {
     protocol: 'private-history-v1', profileId: 'synthetic-history-v1', adapterVersion: '1', status: 'supported', reason: null,
     accountKey: scope.accountKey, conversationKey: scope.conversationKey, sourceGeneration: scope.token.source_generation,
@@ -50,15 +80,18 @@ function createChannel(state) {
   const factory = () => {
     state.creates++; let closed = false, heldScope;
     return {
+      ...(state.guardSession ? { guardSession: { loss: new Promise(() => {}) } } : {}),
       inspect: async scope => { heldScope = scope; state.inspects++; return support(scope, state); },
       target: async scope => {
         state.targets++; state.targetDescriptor = `synthetic:${scope.conversationKey}`;
+        if (state.targetFactory) return state.targetFactory(scope, state);
         return { protocol: 'private-history-v1', descriptor: state.targetDescriptor, partitions: ['p'], tables: [{ partition: 'p', instance: 't' }], sourceGeneration: 'source-1' };
       },
       page: async (scope, target, cursor) => {
         state.pages.push({ contactId: scope.token.contact_id, cursor });
         if (state.pageHook) return state.pageHook(scope, target, cursor);
-        return { target: target.descriptor, cursorIn: cursor, cursorOut: null, completedPartitions: ['p'], exhausted: true, records: state.historyRecords, ...(state.resumeCursor === null ? {} : { resumeCursor: state.resumeCursor }) };
+        if (state.pageFactory) return state.pageFactory(scope, target, cursor, state);
+        return { target: target.descriptor, cursorIn: cursor, cursorOut: null, completedPartitions: target.partitions, exhausted: true, records: state.historyRecords, ...(state.resumeCursor === null ? {} : { resumeCursor: state.resumeCursor }) };
       },
       ...(state.tailSupported ? {
         tail: async (scope, target, cursor) => {
@@ -78,7 +111,8 @@ function createChannel(state) {
 async function fixture(t, names = ['a'], coordinatorOptions = { intervalMs: 0 }) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-incremental-controls-')));
   const state = { creates: 0, inspects: 0, targets: 0, pages: [], tails: [], closes: 0, supportOverrides: {}, tailSupported: true, capabilityDeclared: true,
-    historyRecords: [], tailBatches: [], tailSerial: 0, resumeCursor: 'tail-1', targetDescriptor: null, pageHook: null, tailHook: null, closeHook: null };
+    historyRecords: [], tailBatches: [], tailSerial: 0, resumeCursor: 'tail-1', targetDescriptor: null, pageHook: null, tailHook: null, closeHook: null,
+    supportFactory: null, targetFactory: null, pageFactory: null, guardSession: false };
   const metadata = () => ({
     account: async () => ({ ...evidence }),
     sessions: async () => names.map(name => ({ externalKey: `friend-${name}`, displayName: `合成${name}`, kind: 'private', identityAssurance: 'verified' })),
@@ -316,6 +350,92 @@ test('账号变化、支持语义变化、游标失效、目标不连续或交�
     const state = f.coordinator.getState();
     assert.equal(state.lastError, 'history_incremental_unavailable');
   });
+  await t.test('未认证的空历史保持不可用且不重探渠道', async t => {
+    const f = await fixture(t, ['a'], { intervalMs: 0, firstHistoryManagedExternally: true });
+    f.state.resumeCursor = null;
+    const [binding] = await select(f); await f.contacts.setReading(true);
+    const first = new FirstHistoryCoordinator(f.contacts, f.history);
+    t.after(async () => first.close());
+    first.wake(); await first.waitForIdle();
+    const before = channelCounts(f.state);
+    await wake(f);
+    assert.deepEqual(channelCounts(f.state), before, '未知空目标不得触发metadata/page/tail重探');
+    const coverage = await f.history.coverage(binding.contact_id);
+    assert.equal(coverage.incremental.emptyTargetAwaitingMessages, undefined);
+    assert.equal(f.coordinator.getState().contacts.find(contact => contact.contactId === binding.contact_id).phase, 'blocked');
+  });
+});
+
+test('已认证空目标低频只重探元数据，首次表出现后无需用户唤醒即可由首次历史入库', async t => {
+  const f = await fixture(t, ['a'], { intervalMs: 10, firstHistoryManagedExternally: true, now: () => now });
+  const [binding] = await select(f); await f.contacts.setReading(true);
+  const fileA = 'file-a-stable-id', fileB = 'file-b-stable-id';
+  const absentTarget = { protocol: 'private-history-v1', descriptor: 'empty-v1', sourceGeneration: 'source-1',
+    partitions: [fileA, fileB], tables: [], checkedPartitions: [fileA, fileB] };
+  const tableTarget = { protocol: 'private-history-v1', descriptor: 'table-v2', sourceGeneration: 'source-1',
+    partitions: [fileA], tables: [{ partition: fileA, instance: 'table-v2' }], checkedPartitions: [fileA, fileB] };
+  let now = 1_800_000_000_000;
+  let tableAppeared = false;
+  let resolveFirstTable;
+  const firstTableRead = new Promise(resolve => { resolveFirstTable = resolve; });
+  const absentReport = scope => ({ protocol: 'private-history-v1', profileId: 'wechat-4.0.6-29387-absent-private-target-v1', adapterVersion: '1',
+    status: 'supported', reason: null, accountKey: scope.accountKey, conversationKey: scope.conversationKey, sourceGeneration: 'source-1',
+    programVersion: 'wechat', build: '29387', artifactSha256: 'a'.repeat(64), schemaFingerprint: 'b'.repeat(64), declaredPrimaryKey: [],
+    identity: 'source-table-local-v1', statusSemantics: 'no-message-table-v1', continuity: 'same-source-instances-normal-use-v1',
+    capabilities: { normalHistory: 'supported', snapshotBarrier: 'supported', partitionCoverage: 'supported', sourceLifecycle: 'supported',
+      restartContinuity: 'supported', recoveryMapping: 'supported', incrementalTail: 'unsupported', partitionGrowth: 'supported' } });
+  const observedReport = scope => ({ ...absentReport(scope), profileId: 'wechat-4.0.6-29387-observed-states-v1', schemaFingerprint: 'c'.repeat(64),
+    declaredPrimaryKey: ['local_id'], statusSemantics: 'verified-message-state-v1',
+    capabilities: { ...absentReport(scope).capabilities, incrementalTail: 'supported' } });
+  f.state.resumeCursor = null;
+  f.state.guardSession = true;
+  f.state.supportFactory = scope => tableAppeared ? observedReport(scope) : absentReport(scope);
+  f.state.targetFactory = () => tableAppeared ? structuredClone(tableTarget) : structuredClone(absentTarget);
+  f.state.pageFactory = async (scope, target, cursor, state) => {
+    if (target.tables.length) {
+      resolveFirstTable();
+      return { target: target.descriptor, cursorIn: cursor, cursorOut: null, completedPartitions: [...target.partitions], exhausted: true,
+        records: [record('42', { partition: fileA, table: 'table-v2' })] };
+    }
+    return { target: target.descriptor, cursorIn: cursor, cursorOut: null, completedPartitions: [...target.partitions], exhausted: true, records: [] };
+  };
+  const first = new FirstHistoryCoordinator(f.contacts, f.history);
+  f.history.setFirstHistoryWake(contactId => first.wakeContact(contactId));
+  t.after(async () => first.close());
+  first.wake(); await first.waitForIdle();
+  assert.equal((await f.history.coverage(binding.contact_id)).phase, 'complete', JSON.stringify({ first: first.getState(), counts: channelCounts(f.state) }));
+  const initialPages = f.state.pages.length;
+  const initialTails = f.state.tails.length;
+  const initialTargets = f.state.targets;
+  const initialHistoryGoals = (await f.storage.execute('history.coverage', { ownerId: owner, contactId: binding.contact_id })).goalId;
+
+  await f.coordinator.close();
+  f.coordinator = new IncrementalHistoryCoordinator(f.contacts, f.history,
+    { intervalMs: 10, firstHistoryManagedExternally: true, now: () => now });
+  f.coordinator.start(); f.coordinator.wake(); await f.coordinator.waitForIdle();
+  const empty = f.coordinator.getState().contacts.find(contact => contact.contactId === binding.contact_id);
+  assert.equal(empty.phase, 'waiting_new_messages');
+  assert.equal(empty.lastError, null);
+  assert.equal((await f.history.coverage(binding.contact_id)).incremental.emptyTargetAwaitingMessages,true,
+    '等待状态来自持久认证证明，不由零消息计数推断');
+  assert.equal(f.state.pages.length, initialPages, '空目标metadata探测不能调用page');
+  assert.equal(f.state.tails.length, initialTails, '空目标metadata探测不能调用tail');
+  assert.equal(f.state.targets, initialTargets + 1, '初次受控探测只读取一次target metadata');
+  assert.equal((await f.storage.execute('history.coverage', { ownerId: owner, contactId: binding.contact_id })).goalId, initialHistoryGoals,
+    '仍为空时不得创建重复历史目标');
+
+  await new Promise(resolve => setTimeout(resolve, 40)); await f.coordinator.waitForIdle();
+  assert.equal(f.state.targets, initialTargets + 1, '五分钟窗口内不重复探测');
+  tableAppeared = true;
+  now += 300_000;
+  await Promise.race([firstTableRead, new Promise((_, reject) => setTimeout(() => reject(new Error(JSON.stringify({
+    message:'首表出现后未由定时探测唤醒首次历史',incremental:f.coordinator.getState(),first:first.getState(),counts:channelCounts(f.state),
+  }))), 1500))]);
+  await first.waitForIdle();
+  const read = await f.history.read(binding.contact_id);
+  assert.deepEqual(read.messages.map(message => message.text), ['合成42']);
+  assert.notEqual(read.coverage.goalId, initialHistoryGoals, '发现首表后会创建新的历史目标');
+  assert.equal(f.state.tails.length, initialTails, '新历史目标通过首次历史协调器消费，不走旧target tail');
 });
 
 test('关闭协调器取消在途增量读取，迟到页不提交且关闭不被挂起',async t=>{
@@ -342,11 +462,11 @@ test('瞬时故障降级后恢复成功时清除可见错误，不残留旧失�
   const [binding]=await select(f); await f.contacts.setReading(true);
   await f.history.synchronize(binding.contact_id);
   let attempts=0;
-  f.state.tailHook=async(scope,target,cursor)=>{ if(++attempts===1)throw new StorageFailure('history_native_unavailable'); return {records:[record('2')],caughtUp:true,cursorOut:'tail-2'}; };
+  f.state.tailHook=async(scope,target,cursor)=>{ if(++attempts===1)throw new StorageFailure('history_snapshot_window_changed'); return {records:[record('2')],caughtUp:true,cursorOut:'tail-2'}; };
   await wake(f);
   let state=f.coordinator.getState();
   assert.equal(state.contacts[0].phase,'degraded');
-  assert.equal(state.lastError,'history_native_unavailable');
+  assert.equal(state.lastError,'history_snapshot_window_changed');
   await wake(f);
   state=f.coordinator.getState();
   assert.equal(state.contacts[0].phase,'caught_up');

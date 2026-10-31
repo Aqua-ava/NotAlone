@@ -83,6 +83,20 @@ test('已核验空历史与后续增量资格分开显示，不把空结果写�
  }
 });
 
+test('已认证空目标显示等待新消息且不计入需要关注',()=>{
+ const raw={...base,cli_sync_phase:'active',cli_failure_code:null,cli_incremental_phase:'idle',cli_incremental_failure_code:null,
+  cli_history_coverages:[{binding_id:id,contact_id:id,phase:'complete',failure_code:null,message_count:0,non_text_count:0,page_count:1,
+   incremental_phase:'not_started',incremental_failure_code:null,incremental_waiting_for_messages:true}]};
+ const parsed=parseSyncReport(raw);
+ assert.equal(parsed.historyCoverages[0].incrementalAwaitingMessages,true);
+ assert.equal(parsed.historyCoverages[0].incrementalFailureCode,null);
+ const markup=renderPage(parsed.historyCoverages,false);
+ assert.ok(markup.includes('等待新消息并定期检查'));
+ assert.ok(markup.includes('需要关注：0 个'));
+ assert.ok(!markup.includes('新消息同步不可用'));
+ assert.throws(()=>parseSyncReport({...raw,cli_history_coverages:[{...raw.cli_history_coverages[0],incremental_waiting_for_messages:'yes'}]}));
+});
+
 test('正文未开放时如实显示能力核验进度，失败联系人不计入等待队列', () => {
   const markup = renderPage([
     coverage({ phase: 'syncing', incrementalPhase: 'syncing' }),

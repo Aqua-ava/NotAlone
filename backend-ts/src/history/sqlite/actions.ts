@@ -4,7 +4,7 @@ import { assertReadEligibility } from '../../contacts/sqlite/actions.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryPage, HistoryTailPage, HistoryTarget, HistorySupportReport } from './contracts.ts';
 import { ingestRecords, quarantineUnverifiedRecords } from './ingest.ts';
-import { readCoverage, readMessages, readRecentMessages } from './read.ts';
+import { isCertifiedEmptyTarget, readCoverage, readMessages, readRecentMessages } from './read.ts';
 import {unresolvedQuarantineCount} from './quarantine.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
@@ -64,6 +64,33 @@ function currentIncremental(tx:StorageTransaction,token:ReadEligibility,report:H
  if(historyCursorScopeDigest(token,report,target)!==goal.cursor_scope_digest)fail('history_cursor_scope_changed');
  if(!goal.cursor)fail('history_cursor_invalid');
  return goal;
+}
+function sameStringSet(left:unknown,right:unknown):boolean {
+ if(!Array.isArray(left)||!Array.isArray(right)||left.length!==right.length
+  ||left.some(value=>typeof value!=='string'||!value)||right.some(value=>typeof value!=='string'||!value))return false;
+ const a=[...left].sort(),b=[...right].sort();return a.every((value,index)=>value===b[index]);
+}
+function certifiedEmptyGoal(tx:StorageTransaction,token:ReadEligibility):{goalId:string;report:HistorySupportReport;target:HistoryTarget}|null {
+ const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='history' AND creation_no IS NOT NULL ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1",[token.owner_id,token.contact_id]);
+ if(!goal||goal.state!=='complete'||goal.failure_code!==null||goal.resume_cursor!==null||String(goal.binding_id)!==token.binding_id
+  ||String(goal.grant_id)!==token.grant_id||String(goal.accepted_data_generation)!==token.data_generation
+  ||String(goal.accepted_barrier_generation)!==token.barrier_generation)return null;
+ try{
+  const storedToken=JSON.parse(String(goal.eligibility_json)) as ReadEligibility;
+  if(!storedToken||Object.keys(token).some(key=>key!=='read_epoch'&&String(storedToken[key as keyof ReadEligibility])!==token[key as keyof ReadEligibility]))return null;
+  const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
+  const target=JSON.parse(String(goal.target_json)) as HistoryTarget;
+  const completed=JSON.parse(String(goal.completed_partitions)) as unknown;
+  if(!Array.isArray(completed)||!sameStringSet(completed,target.partitions)||!isCertifiedEmptyTarget(tx,storedToken,report,target))return null;
+  const coverage=readCoverage(tx,token.owner_id,token.contact_id);
+  if(coverage.goalId!==String(goal.id)||coverage.incremental?.emptyTargetAwaitingMessages!==true)return null;
+  return {goalId:String(goal.id),report,target};
+ }catch{return null;}
+}
+function sameEmptyTargetGeometry(left:HistoryTarget,right:HistoryTarget):boolean {
+ return left.protocol==='private-history-v1'&&right.protocol==='private-history-v1'&&left.sourceGeneration===right.sourceGeneration
+  &&Array.isArray(left.tables)&&left.tables.length===0&&Array.isArray(right.tables)&&right.tables.length===0
+  &&sameStringSet(left.partitions,right.partitions)&&sameStringSet(left.checkedPartitions,right.checkedPartitions);
 }
 export const historyActions:StorageAction[]=[
  action('history.checkpointContacts','read',(tx,i)=>tx.all("SELECT id,data_generation FROM contact WHERE owner_id=? AND state='active'",[i.ownerId]).map(row=>({contactId:String(row.id),generation:String(row.data_generation)}))),
@@ -282,6 +309,15 @@ export const historyActions:StorageAction[]=[
    cursorIn:row.cursor_in,cursorOut:row.cursor_out,raw,support:JSON.parse(String(row.support_json))};
  }),
  action('history.coverage','read',(tx,i)=>readCoverage(tx,i.ownerId,i.contactId)),
+ action('history.emptyTargetProbeCandidate','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertHistoryReadBoundary(tx,token,{kind:'history'});return certifiedEmptyGoal(tx,token);}),
+ action('history.emptyTargetProbeVerify','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
+  assertHistoryReadBoundary(tx,token,{kind:'history'});
+  const candidate=certifiedEmptyGoal(tx,token);if(!candidate||candidate.goalId!==i.goalId||serializeSupport(candidate.report)!==serializeSupport(i.report as HistorySupportReport))return false;
+  const target=targetOf(i.target,token,i.report as HistorySupportReport);
+  if(sameEmptyTargetGeometry(candidate.target,target)&&isCertifiedEmptyTarget(tx,token,i.report as HistorySupportReport,target))return true;
+  preflightTarget(tx,token,target,i.report as HistorySupportReport);
+  return false;
+ }),
   action('history.coverages','read',(tx,i)=>{
    if(!Array.isArray(i.contactIds)||i.contactIds.length>16||i.contactIds.some((id:unknown)=>typeof id!=='string'||!id||id.length>128)||new Set(i.contactIds).size!==i.contactIds.length)fail('history_request_invalid');
    return i.contactIds.map((contactId:string)=>readCoverage(tx,i.ownerId,contactId));

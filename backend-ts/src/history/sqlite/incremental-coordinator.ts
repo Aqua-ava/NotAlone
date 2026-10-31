@@ -7,7 +7,7 @@ type IncrementalBinding = Pick<SavedContactBinding, 'contact_id' | 'binding_id' 
 export interface IncrementalHistoryDirectoryPort {
   directory(): Promise<{ read_enabled: boolean; bindings: readonly IncrementalBinding[] }>;
 }
-export type IncrementalContactPhase = 'queued' | 'running' | 'caught_up' | 'degraded' | 'blocked' | 'stopped';
+export type IncrementalContactPhase = 'queued' | 'running' | 'caught_up' | 'waiting_new_messages' | 'degraded' | 'blocked' | 'stopped';
 export interface IncrementalHistoryCoordinatorState {
   phase: 'idle' | 'scheduled' | 'running' | 'blocked' | 'closing' | 'closed';
   lastError: string | null;
@@ -26,10 +26,12 @@ const fatalCodes = new Set(['history_source_continuity_unverified', 'history_sup
 const transientCodes = new Set(['history_native_unavailable', 'history_native_timeout', 'history_native_cancelled',
   'history_interrupted', 'history_incremental_interrupted', 'history_closed', 'history_already_running',
   'history_page_budget_exhausted', 'history_first_read_failed', 'history_snapshot_closed', 'history_snapshot_unavailable',
+  'history_snapshot_window_changed',
   'history_schema_changed', 'history_message_state_unverified', 'history_source_lifecycle_unverified',
   'history_snapshot_runtime_proof_required', 'history_partition_coverage_runtime_proof_required', 'history_contact_gateway_unavailable', 'history_incomplete']);
 /** 只向界面投影已分类的可见错误码；未登记的内部失败统一收敛，避免泄露存储细节。 */
 const visibleCodes = new Set([...fatalCodes, ...transientCodes]);
+const emptyTargetProbeIntervalMs=300_000;
 function safeError(error: unknown): string {
   if (error instanceof StorageFailure && /^[a-z][a-z0-9_]{0,79}$/.test(error.code) && visibleCodes.has(error.code)) return error.code;
   return 'history_incremental_failed';
@@ -47,10 +49,12 @@ export class IncrementalHistoryCoordinator {
   readonly #directory: IncrementalHistoryDirectoryPort;
   readonly #history: SqliteHistoryService;
   readonly #intervalMs: number;
+  readonly #now: () => number;
   readonly #firstHistoryManagedExternally: boolean;
   readonly #queued = new Map<string, QueuedRead>();
   readonly #active = new Map<string, ActiveRead>();
   readonly #attempted = new Map<string, string>();
+  readonly #emptyProbeAt = new Map<string, { key: string; timestamp: number }>();
   readonly #stoppedContacts = new Set<string>();
   readonly #states = new Map<string, IncrementalHistoryCoordinatorState['contacts'][number]>();
   #wakeSerial = 0;
@@ -63,8 +67,9 @@ export class IncrementalHistoryCoordinator {
   #closeDone = false;
   #closing?: Promise<void>;
   #lastError: string | null = null;
-  constructor(directory: IncrementalHistoryDirectoryPort, history: SqliteHistoryService, options: { intervalMs?: number; firstHistoryManagedExternally?: boolean } = {}) {
+  constructor(directory: IncrementalHistoryDirectoryPort, history: SqliteHistoryService, options: { intervalMs?: number; firstHistoryManagedExternally?: boolean; now?: () => number } = {}) {
     this.#directory = directory; this.#history = history; this.#intervalMs = options.intervalMs ?? 30_000;
+    this.#now = options.now ?? Date.now;
     this.#firstHistoryManagedExternally = options.firstHistoryManagedExternally ?? false;
   }
   /** 宿主在发布就绪后调用；定时只触发一次有界扫描，不改变持久资格。 */
@@ -80,7 +85,7 @@ export class IncrementalHistoryCoordinator {
   wake(): void {
     if (this.#closed) return;
     ++this.#wakeSerial;
-    this.#attempted.clear(); this.#stoppedContacts.clear();
+    this.#attempted.clear(); this.#emptyProbeAt.clear(); this.#stoppedContacts.clear();
     this.#lastError = null; this.#wakePending = true; this.#notify(); this.#startPump();
   }
   getState(): IncrementalHistoryCoordinatorState {
@@ -135,7 +140,23 @@ export class IncrementalHistoryCoordinator {
     for (const binding of selected.values()) {
       if (this.#closed || revision !== this.#revision) return;
       const key = bindingKey(binding), contactId = binding.contact_id;
-      if (this.#attempted.get(contactId) === key || this.#active.has(contactId) || this.#queued.has(contactId)) continue;
+      const attemptedKey=this.#attempted.get(contactId);
+      if(attemptedKey!==undefined&&attemptedKey!==key){this.#attempted.delete(contactId);this.#emptyProbeAt.delete(contactId);}
+      if(attemptedKey===key){
+        const deadline=this.#emptyProbeAt.get(contactId);
+        if(deadline?.key===key){
+          if(this.#now()<deadline.timestamp)continue;
+          this.#emptyProbeAt.delete(contactId);this.#attempted.delete(contactId);
+        }else if(this.#states.get(contactId)?.phase==='blocked'&&this.#states.get(contactId)?.lastError==='history_incremental_unavailable'){
+          // 只读本机持久覆盖，接住启动时旧empty目标先被看见、随后FirstHistory完成新证明的竞态。
+          // 未出现明确证明时不触碰渠道，也不清除阻断。
+          let coverage:HistoryCoverage;
+          try{coverage=await this.#history.coverage(contactId);}catch{continue;}
+          if(coverage.incremental?.emptyTargetAwaitingMessages!==true)continue;
+          this.#attempted.delete(contactId);
+        }else continue;
+      }
+      if (this.#active.has(contactId) || this.#queued.has(contactId)) continue;
       this.#queued.set(contactId, { contactId, key }); this.#state(contactId, 'queued');
     }
   }
@@ -144,6 +165,7 @@ export class IncrementalHistoryCoordinator {
     const active: ActiveRead = { ...job, controller: new AbortController(), done: Promise.resolve() };
     let previousIncremental: HistoryCoverage['incremental'];
     this.#active.set(job.contactId, active);
+    let certifiedEmptyProbe=false;
     active.done = (async () => {
       let coverage = await this.#history.coverage(job.contactId);
       if (!canContinueIncremental(coverage)) {
@@ -153,12 +175,20 @@ export class IncrementalHistoryCoordinator {
         if (!canContinueIncremental(coverage)) throw new StorageFailure(coverage.failureCode ?? 'history_incomplete');
       }
       // 交接不可证明（终页没有保守续读游标）时保持可见不可用，不发起渠道读取。
-      if (coverage.incremental?.phase === 'unavailable') throw new StorageFailure(coverage.incremental.failureCode ?? 'history_incremental_unavailable');
+      if (coverage.incremental?.phase === 'unavailable') {
+        if(coverage.incremental.emptyTargetAwaitingMessages===true)certifiedEmptyProbe=true;
+        else throw new StorageFailure(coverage.incremental.failureCode ?? 'history_incremental_unavailable');
+      }
       previousIncremental = coverage.incremental;
       return await this.#history.synchronizeIncremental(job.contactId, active.controller.signal);
     })().then((coverage: HistoryCoverage) => {
       if (active.controller.signal.aborted) { this.#state(job.contactId, 'stopped'); return; }
       const incremental = coverage.incremental;
+      if(incremental?.phase==='unavailable'&&incremental.emptyTargetAwaitingMessages===true){
+        this.#attempted.set(job.contactId,job.key);
+        this.#emptyProbeAt.set(job.contactId,{key:job.key,timestamp:this.#now()+emptyTargetProbeIntervalMs});
+        this.#state(job.contactId,'waiting_new_messages');return;
+      }
       if (incremental?.phase === 'unavailable' || incremental?.phase === 'invalidated') {
         const code = incremental.failureCode ?? 'history_incremental_unavailable';
         this.#attempted.set(job.contactId, job.key); this.#state(job.contactId, 'blocked', code); return;
@@ -179,9 +209,13 @@ export class IncrementalHistoryCoordinator {
     }).catch((error: unknown) => {
       if (active.controller.signal.aborted) { this.#state(job.contactId, 'stopped'); return; }
       const code = safeError(error);
-      if (transientCodes.has(code)) { this.#state(job.contactId, 'degraded', code); return; }
+      if (transientCodes.has(code)) {
+        if(certifiedEmptyProbe){this.#attempted.set(job.contactId,job.key);this.#emptyProbeAt.set(job.contactId,{key:job.key,timestamp:this.#now()+emptyTargetProbeIntervalMs});}
+        this.#state(job.contactId, 'degraded', code); return;
+      }
       // 未分类与范围失效都保守停止自动重试，保留可见错误，等待下一次明确唤醒。
       this.#attempted.set(job.contactId, job.key); this.#state(job.contactId, 'blocked', code);
+      if(certifiedEmptyProbe)this.#emptyProbeAt.set(job.contactId,{key:job.key,timestamp:this.#now()+emptyTargetProbeIntervalMs});
     }).finally(() => {
       this.#active.delete(job.contactId);
       if (!this.#closed && active.cancelledAtWake !== undefined && this.#wakeSerial > active.cancelledAtWake) this.#wakePending = true;
@@ -212,8 +246,8 @@ export class IncrementalHistoryCoordinator {
   async stop(contactId?: string): Promise<void> {
     // 关闭流程也必须能取消在途读取：close() 先置 #closed，再调用本方法排空。
     if (this.#closeDone) return;
-    if (contactId) { this.#stoppedContacts.add(contactId); this.#state(contactId, 'stopped'); }
-    else this.#wakePending = false;
+    if (contactId) { this.#stoppedContacts.add(contactId); this.#emptyProbeAt.delete(contactId); this.#state(contactId, 'stopped'); }
+    else { this.#wakePending = false; this.#emptyProbeAt.clear(); }
     try { await this.#cancel(contactId); }
     catch { this.#lastError = 'history_incremental_stop_failed'; throw new StorageFailure('history_incremental_stop_failed'); }
     finally {
