@@ -21,7 +21,7 @@ function validWorkspace(value:unknown):value is SqliteReplyWorkspace{
   ||w.draftText.length+(typeof w.instruction==='string'?w.instruction.length:0)+(typeof w.contextText==='string'?w.contextText.length:0)>99744
   ||w.action==='express'&&!w.draftText.trim()||!['original','warm','concise','polite'].includes(String(w.tone))
   ||typeof w.instruction!=='string'||w.instruction.length>100000||typeof w.contextText!=='string'||w.contextText.length>100000
-  ||typeof w.includeRelationshipContext!=='boolean'||!Array.isArray(w.excludedMessageIds)||w.excludedMessageIds.length>20
+  ||typeof w.includeRelationshipContext!=='boolean'||!Array.isArray(w.excludedMessageIds)||w.excludedMessageIds.length>50
   ||w.excludedMessageIds.some(id=>!uuid(id))||new Set(w.excludedMessageIds).size!==w.excludedMessageIds.length)return false;
  return true;
 }
@@ -45,7 +45,7 @@ export function readSqliteCandidatePage(value:unknown):SqliteCandidatePage{
  if(!value||typeof value!=='object')invalid();const v=value as SqliteCandidatePage;
  if(!Array.isArray(v.requests)||!v.coverage||!['not_started','running','incomplete','complete'].includes(v.coverage.phase))invalid();
  if(v.availableSkills!==undefined&&(!Array.isArray(v.availableSkills)||v.availableSkills.some(s=>!s||!uuid(s.packageId)||typeof s.name!=='string'||s.name.length>4096||!Number.isSafeInteger(s.revisionNo)||s.revisionNo<1)))invalid();
- if(v.recentMessages!==undefined&&(!Array.isArray(v.recentMessages)||v.recentMessages.length>20||v.recentMessages.some(m=>!m||!uuid(m.messageId)||!['owner','contact','unknown'].includes(m.sender)||typeof m.text!=='string'||!m.text.trim()||m.text.length>100000||!(m.occurredAt===null||typeof m.occurredAt==='string'&&m.occurredAt.length<=64)||!(m.timePrecision===null||['second','millisecond'].includes(m.timePrecision))||typeof m.displayPosition!=='string'||m.displayPosition.length>64||!['verified','unknown'].includes(m.ordering))))invalid();
+ if(v.recentMessages!==undefined&&(!Array.isArray(v.recentMessages)||v.recentMessages.length>50||v.recentMessages.some(m=>!m||!uuid(m.messageId)||!['owner','contact','unknown'].includes(m.sender)||typeof m.text!=='string'||!m.text.trim()||m.text.length>100000||!(m.occurredAt===null||typeof m.occurredAt==='string'&&m.occurredAt.length<=64)||!(m.timePrecision===null||['second','millisecond'].includes(m.timePrecision))||typeof m.displayPosition!=='string'||m.displayPosition.length>64||!['verified','unknown'].includes(m.ordering))))invalid();
  for(const r of v.requests){if(!r||r.skillWarning!==undefined&&r.skillWarning!==null&&r.skillWarning!=='回复策略暂不可用'||!uuid(r.requestId)||!(r.coverageWarning===null||typeof r.coverageWarning==='string')||!['available','unavailable'].includes(r.sourceState)||!Array.isArray(r.candidates)||!Array.isArray(r.selections)||!Array.isArray(r.loadedSkills))invalid();r.candidates.forEach(readSqliteCandidateVersion);for(const s of r.selections)if(!uuid(s.id)||!uuid(s.candidateId)||!Number.isSafeInteger(s.versionNo)||!Number.isSafeInteger(s.selectionNo))invalid();for(const s of r.loadedSkills)if(s.name!==undefined&&(typeof s.name!=='string'||s.name.length>4096)||!uuid(s.packageId)||!Number.isSafeInteger(s.revisionNo)||typeof s.relativePath!=='string'||typeof s.text!=='string'||new TextEncoder().encode(s.text).byteLength>1024*1024)invalid();}
  return v;
 }

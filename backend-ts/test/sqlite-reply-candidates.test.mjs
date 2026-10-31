@@ -181,6 +181,20 @@ test('候选HTTP接受明确的空suggest，要求express草稿与工作区输�
  const mismatch=await request({request_key:randomUUID(),text:'伪造立场',confirmed_contact:true,workspace});assert.equal(mismatch.status,400);assert.equal(f.requests.length,1);
 });
 
+test('统一工作区预览与生成按消息时间使用最新50条，不把旧位置当作新消息',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {SqliteReplyCandidateHttp}=await import('../src/reply/sqlite/candidates/http.ts');const {createServer}=await import('node:http');
+ const f=await realFixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0];await f.contacts.setReading(true);
+ const rows=[...Array.from({length:50},(_,index)=>({localId:String(index+1),text:`合成最近-${index}`,sentAt:String(1800000000000+index*1000)})),{localId:'51',text:'合成旧消息但保存位置较新',sentAt:'1600000000000'}];
+ f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:rows.map(row=>({partition:'shard-a',table:'table-instance-1',localId:row.localId,serverId:'0',sender:'contact',kind:'text',text:row.text,originalType:'1',sentAt:row.sentAt,timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified'})),completedPartitions:['shard-a'],exhausted:true});
+ await f.history.synchronize(contactId);const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const http=new SqliteReplyCandidateHttp({storage:f.storage,service,turns,authorize:req=>req.headers.authorization==='Bearer synthetic'}),server=createServer(async(req,res)=>{if(!await http.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const url=`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${d.id}/reply-candidates`,headers={authorization:'Bearer synthetic','content-type':'application/json'};
+ const page=await fetch(url,{headers}),pageBody=await page.json(),recent=pageBody.recentMessages;assert.equal(page.status,200);assert.equal(recent.length,50);assert.equal(recent[0].text,'合成最近-49');assert.equal(recent.at(-1).text,'合成最近-0');assert.ok(recent.every(message=>message.ordering==='unknown'));for(let index=1;index<recent.length;index++)assert.ok(Date.parse(recent[index-1].occurredAt)>Date.parse(recent[index].occurredAt));
+ const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true,excludedMessageIds:[recent[0].messageId]};
+ const accepted=await fetch(url,{method:'POST',headers,body:JSON.stringify({request_key:randomUUID(),text:'',confirmed_contact:true,workspace})}),acceptedBody=await accepted.json();assert.equal(accepted.status,200,JSON.stringify(acceptedBody));
+ const request=JSON.stringify(f.requests[0]);assert.ok(request.includes('合成最近-48'));assert.ok(!request.includes('合成最近-49'));assert.ok(!request.includes('合成旧消息但保存位置较新'));
+});
+
 const knowledgeRegistry=new URL('./fixtures/sqlite-reply-candidates/knowledge-registry.mjs',import.meta.url).href;
 
 

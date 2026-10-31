@@ -59,12 +59,7 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
   messageCount:safeCount(counts.messages),nonTextCount:safeCount(counts.nontext),pageCount:safeCount(pages),quarantinedCount:quarantined,metadataOnlyCount:summary.metadataOnly,
   incremental:continuityBlocked?{...incrementalCoverage(resolvedGoal,safeIncremental),phase:'invalidated',failureCode:'history_source_continuity_unverified'}:stateQuarantined&&!normalUseTraversal?{...incrementalCoverage(resolvedGoal,safeIncremental),phase:'incomplete',failureCode:'history_identity_quarantined'}:incrementalCoverage(resolvedGoal,safeIncremental)};
 }
-export function readMessages(tx:StorageTransaction,owner:string,contact:string,limit=101,before?:string):HistoryRead {
- const coverage=readCoverage(tx,owner,contact);
- if(!Number.isSafeInteger(limit)||limit<1||limit>101)throw new StorageFailure('history_request_invalid');
- const cursor=before?tx.get('SELECT display_no FROM message WHERE owner_id=? AND contact_id=? AND id=?',[owner,contact,before]):undefined;
- if(before&&!cursor)throw new StorageFailure('history_cursor_invalid');
- const rows=tx.all(`WITH ${currentSourceScopeCTE} SELECT * FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND ${currentMessageSource}${cursor?' AND display_no<?':''} ORDER BY display_no DESC LIMIT ?`,cursor?[owner,contact,contact,owner,contact,cursor.display_no,limit]:[owner,contact,contact,owner,contact,limit]);
+function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:HistoryCoverage,rows:StorageRow[]):HistoryRead {
  const sources=new Map<string,string[]>();
  if(rows.length)for(const source of tx.all(`WITH ${currentSourceScopeCTE} SELECT r.id,r.message_id FROM capture_record r
   JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
@@ -78,4 +73,22 @@ export function readMessages(tx:StorageTransaction,owner:string,contact:string,l
   displayPosition:String(r.display_no),ordering:'unknown',
   sourceRecordIds:sources.get(String(r.id))??[]})) as StoredMessage[];
  return {messages,coverage,replyEligibility:coverage.phase==='complete'?'ready':coverage.phase==='incomplete'?'history_incomplete':'history_syncing'};
+}
+export function readMessages(tx:StorageTransaction,owner:string,contact:string,limit=101,before?:string):HistoryRead {
+ const coverage=readCoverage(tx,owner,contact);
+ if(!Number.isSafeInteger(limit)||limit<1||limit>101)throw new StorageFailure('history_request_invalid');
+ const cursor=before?tx.get('SELECT display_no FROM message WHERE owner_id=? AND contact_id=? AND id=?',[owner,contact,before]):undefined;
+ if(before&&!cursor)throw new StorageFailure('history_cursor_invalid');
+ const rows=tx.all(`WITH ${currentSourceScopeCTE} SELECT * FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND ${currentMessageSource}${cursor?' AND display_no<?':''} ORDER BY display_no DESC LIMIT ?`,cursor?[owner,contact,contact,owner,contact,cursor.display_no,limit]:[owner,contact,contact,owner,contact,limit]);
+ return readRows(tx,owner,contact,coverage,rows);
+}
+/** 候选工作区按有时间的文字消息选最新材料；不改变历史页的 display_no 游标语义。 */
+export function readRecentMessages(tx:StorageTransaction,owner:string,contact:string,limit=50):HistoryRead {
+ const coverage=readCoverage(tx,owner,contact);
+ if(!Number.isSafeInteger(limit)||limit<1||limit>50)throw new StorageFailure('history_request_invalid');
+ const rows=tx.all(`WITH ${currentSourceScopeCTE} SELECT * FROM message m WHERE owner_id=? AND contact_id=? AND availability='available'
+  AND kind='text' AND text_body IS NOT NULL AND length(text_body)>0 AND sent_at IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
+  AND ${currentMessageSource} ORDER BY sent_at DESC,display_no DESC LIMIT ?`,[owner,contact,contact,owner,contact,limit]);
+ return readRows(tx,owner,contact,coverage,rows);
 }

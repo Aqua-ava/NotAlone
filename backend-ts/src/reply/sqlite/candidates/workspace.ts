@@ -19,7 +19,7 @@ export function readReplyWorkspace(value:unknown):ReplyWorkspace{
   ||!['express','suggest'].includes(String(w.action))||typeof w.draftText!=='string'||w.draftText.length>100000
   ||w.action==='express'&&!w.draftText.trim()||!['original','warm','concise','polite'].includes(String(w.tone))
   ||typeof w.instruction!=='string'||w.instruction.length>100000||typeof w.contextText!=='string'||w.contextText.length>100000
-  ||typeof w.includeRelationshipContext!=='boolean'||!Array.isArray(w.excludedMessageIds)||w.excludedMessageIds.length>20
+  ||typeof w.includeRelationshipContext!=='boolean'||!Array.isArray(w.excludedMessageIds)||w.excludedMessageIds.length>50
   ||w.excludedMessageIds.some(id=>!uuid(id))||new Set(w.excludedMessageIds).size!==w.excludedMessageIds.length)return invalid();
  const workspace={action:w.action as ReplyWorkspace['action'],draftText:w.draftText,tone:w.tone as ReplyWorkspaceTone,instruction:w.instruction,
   contextText:w.contextText,includeRelationshipContext:w.includeRelationshipContext,excludedMessageIds:[...(w.excludedMessageIds as string[])].sort()};

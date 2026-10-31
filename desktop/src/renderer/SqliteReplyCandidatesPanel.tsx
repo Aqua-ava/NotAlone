@@ -112,7 +112,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     <p className="rewrite-privacy">使用这位联系人当前可用的资料，具体依据会随候选展示。</p>
     <button disabled={!available||busy} onClick={()=>void run({action:'read'},true)}>刷新最近聊天</button>
     {!page?.recentMessages?.length&&<p>暂无可用的最近聊天。可以补充上下文，或先写下想法。</p>}
-    {!!page?.recentMessages?.length&&<><p className="rewrite-privacy">以下按保存位置展示，部分先后尚未核验；取消勾选可从本次生成中排除。</p>
+    {!!page?.recentMessages?.length&&<><p className="rewrite-privacy">以下最多50条，按消息时间从新到旧选取；聊天先后仍未核验。取消勾选可从本次生成中排除。</p>
       {options.excludedMessageIds.length>0&&<p className="rewrite-privacy">已排除 {options.excludedMessageIds.length} 条消息。本次只参考未排除的聊天和补充内容，避免关系资料带回已排除内容。</p>}
       <div className="workspace-message-list" role="group" aria-label="最近聊天材料">{page.recentMessages.map(message=><div className="reply-message workspace-message-row" key={message.messageId}><label className="reply-message-selection">
         <input type="checkbox" aria-label={`使用消息：${message.text}`} checked={!options.excludedMessageIds.includes(message.messageId)} disabled={!available||busy||!options.includeRelationshipContext} onChange={e=>changeOptions({excludedMessageIds:e.target.checked?options.excludedMessageIds.filter(id=>id!==message.messageId):[...options.excludedMessageIds,message.messageId]})}/>
