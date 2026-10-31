@@ -43,6 +43,10 @@ function mapped(error:unknown):unknown {
   const codes:Record<string,string>={
     history_image_association_unverified:'media_association_unverified',
     history_image_original_unavailable:'media_original_unavailable',
+    history_image_metadata_invalid:'media_metadata_invalid',
+    history_image_local_file_missing:'media_local_file_missing',
+    history_image_key_unavailable:'needs_image_key',
+    history_image_quality_unverified:'media_quality_unverified',
     history_image_source_changed:'media_association_unverified',
     history_image_resource_invalid:'media_original_unavailable',
     history_image_token_invalid:'media_association_unverified',
@@ -66,15 +70,24 @@ async function checked(request:VisualRequest):Promise<void> {
 }
 function qualityProofString(opened:WechatImageOpenResult):string {
   const proof=opened.qualityProof;
-  const serialized=JSON.stringify([proof.kind,proof.messageMd5,proof.hdLength,proof.hdWidth,proof.hdHeight,proof.bigImageUrlPresent,
-    proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256]);
+  const serialized=proof.kind==='wechat-cdn-big-hd-exact-content-v3'
+    ?JSON.stringify([proof.kind,proof.messageMd5,proof.hdLength,proof.hdWidth,proof.hdHeight,proof.contentWidth,proof.contentHeight,
+      proof.resourceInfoId,proof.matchingResourceIds,proof.bigImageUrlPresent,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256])
+    :proof.kind==='wechat-cdn-big-hd-exact-content-v2'
+    ?JSON.stringify([proof.kind,proof.messageMd5,proof.hdLength,proof.hdWidth,proof.hdHeight,proof.contentWidth,proof.contentHeight,
+      proof.bigImageUrlPresent,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256])
+    :JSON.stringify([proof.kind,proof.messageMd5,proof.hdLength,proof.hdWidth,proof.hdHeight,proof.bigImageUrlPresent,
+      proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256]);
   return proof.kind+':'+createHash('sha256').update(serialized).digest('hex');
 }
 function association(opened:WechatImageOpenResult,source:HistorySource,messageId:string) {
-  const identity=createHash('sha256').update(JSON.stringify([
-    opened.resourceSourceGeneration,opened.resourceTable,opened.resourceId,opened.resourceTypeRaw,opened.variantCode,
-    opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt,
-  ])).digest('hex');
+  const proof=opened.qualityProof;
+  const identitySource=proof.kind==='wechat-cdn-big-hd-exact-content-v3'
+    ?[opened.resourceSourceGeneration,proof.resourceInfoId,proof.matchingResourceIds,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,
+      opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt]
+    :[opened.resourceSourceGeneration,opened.resourceTable,opened.resourceId,opened.resourceTypeRaw,opened.variantCode,
+      opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt];
+  const identity=createHash('sha256').update(JSON.stringify(identitySource)).digest('hex');
   return Object.freeze({protocol:'media-association-v1' as const,profileId:'wechat-image-original-v1',recordId:source.recordId,
     messageId,resourceIdentity:'wechat-image-original-v1:'+identity});
 }

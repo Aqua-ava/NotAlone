@@ -235,6 +235,18 @@ const productionPolicy = Object.freeze({
   identityAlgorithmSha256: 'cce943757bee0fbdfa1215924094a586917d6bf474325162fd7cd8462bc3c461',
 });
 
+// 已审查的图片解码修复配对；来源身份实现保持逐字一致。
+const decodingFixPolicy = Object.freeze({
+  ...productionPolicy,oldName:'original-image-20261031-v1',newName:'original-image-20261031-v2',
+  oldCliSha256:'703d233c2bd858a34d1bc6086d8f033839a8563d7701c237cbc9bbeb3a68dbde',newCliSha256:'286452d82c06e33971d2996e1c69389f2557e681bcf73f9cce208b899a86d76b',
+  oldOverlaySha256:'43283d2ce078bb4cbf9166ad4c5620f33492f992b4a1978d286037625bc9b052',newOverlaySha256:'40a7192ca2f2a0edb555e9a3026202306a69179020a0ca9b68c510bba3882220',
+  oldImageProtocol:'wechat-original-image-v1',newImageQualityProof:'wechat-cdn-big-hd-exact-content-v3',
+  protocolOldSha256:'1831b96e81c2d9229ef7c7b651106b2d8660dbf1173b6f315069a0f1ab2a0b5a',protocolNewSha256:'1831b96e81c2d9229ef7c7b651106b2d8660dbf1173b6f315069a0f1ab2a0b5a',
+  oldImageSha256:productionPolicy.imageSha256,oldImageTestSha256:productionPolicy.imageTestSha256,
+  imageSha256:'eea3a6853093b92b6e5c45be304a7d4767afbc7ca157c0f4df966f3a5fb231f2',imageTestSha256:'be12ac930763045c4e870bf078b54cf626860c192cbd31dbccbee0bc30c94619',
+  identityAlgorithmSha256:'1b46174417812d86bfeeaaf68b37ddd87af5f8b7647314663716375979daa821',
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -395,7 +407,7 @@ function assertSourcePair(oldFiles, newFiles, policy) {
   const image = 'cmd/wechat-cli/notalone_image.go';
   const imageTest = 'cmd/wechat-cli/notalone_image_test.go';
   if (oldFiles.get(protocol) !== policy.protocolOldSha256 || newFiles.get(protocol) !== policy.protocolNewSha256
-    || oldFiles.has(image) || oldFiles.has(imageTest) || newFiles.get(image) !== policy.imageSha256
+    || oldFiles.get(image) !== policy.oldImageSha256 || oldFiles.get(imageTest) !== policy.oldImageTestSha256 || newFiles.get(image) !== policy.imageSha256
     || newFiles.get(imageTest) !== policy.imageTestSha256) fail('history_image_upgrade_source_mismatch');
   for (const [file, sha] of Object.entries(policy.identityFiles)) {
     if (oldFiles.get(file) !== sha || newFiles.get(file) !== sha) fail('history_image_upgrade_source_mismatch');
@@ -406,11 +418,8 @@ function assertSourcePair(oldFiles, newFiles, policy) {
     if (permitted.has(name)) continue;
     if (oldFiles.get(name) !== newFiles.get(name)) fail('history_image_upgrade_source_mismatch');
   }
-  for (const name of [protocol, image, imageTest]) {
-    const actualChange = oldFiles.get(name) !== newFiles.get(name);
-    const expectedChange = name === protocol || name === image || name === imageTest;
-    if (!actualChange || !expectedChange) fail('history_image_upgrade_source_mismatch');
-  }
+  // 后续图片修复允许协议保持逐字相同；允许变化的每份源码仍分别绑定旧、新摘要。
+  if (![protocol, image, imageTest].some(name => oldFiles.get(name) !== newFiles.get(name))) fail('history_image_upgrade_source_mismatch');
 }
 
 function validateAliasRecord(record, { artifactSha256, accountKey, rootScope }) {
@@ -477,7 +486,10 @@ function manifestForSide(policy, side) {
   return { ...policy.commonManifest,
     overlaySha256: isNew ? policy.newOverlaySha256 : policy.oldOverlaySha256,
     cliSha256: isNew ? policy.newCliSha256 : policy.oldCliSha256,
-    ...(isNew ? { originalImageProtocol: policy.newImageProtocol } : {}) };
+    ...((isNew ? policy.newImageProtocol : policy.oldImageProtocol)
+      ? { originalImageProtocol: isNew ? policy.newImageProtocol : policy.oldImageProtocol } : {}),
+    ...((isNew ? policy.newImageQualityProof : policy.oldImageQualityProof)
+      ? { originalImageQualityProof: isNew ? policy.newImageQualityProof : policy.oldImageQualityProof } : {}) };
 }
 
 export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceiptPublished } = {}) {
@@ -620,4 +632,7 @@ export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceip
 
 const repositoryRoot = path.dirname(fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/, ''));
 const productionTools = createUpgradeImageCliTools({ repositoryRoot, policy: productionPolicy });
-export const prepareAliases = input => productionTools.prepareAliases(input);
+const decodingFixTools = createUpgradeImageCliTools({ repositoryRoot, policy: decodingFixPolicy });
+export const prepareAliases = input => input?.fromRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',decodingFixPolicy.oldName)
+  && input?.toRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',decodingFixPolicy.newName)
+  ? decodingFixTools.prepareAliases(input) : productionTools.prepareAliases(input);

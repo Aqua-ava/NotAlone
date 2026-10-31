@@ -67,11 +67,13 @@ function overlaySha(files) {
   return hash(JSON.stringify(rows));
 }
 
-async function syntheticUpgradeFixture() {
+async function syntheticUpgradeFixture({ existingImage = false } = {}) {
   const repositoryRoot = await mkdtemp(path.join(process.cwd(), '.tmp-notalone-image-upgrade-'));
   const buildsRoot = path.join(repositoryRoot, 'local-tools/wx-cli/.notalone-builds');
-  const fromRoot = path.join(buildsRoot, 'true-delta-20261031-c2');
-  const toRoot = path.join(buildsRoot, 'original-image-20261031-v1');
+  const oldName = existingImage ? 'original-image-20261031-v1' : 'true-delta-20261031-c2';
+  const newName = existingImage ? 'original-image-20261031-v2' : 'original-image-20261031-v1';
+  const fromRoot = path.join(buildsRoot, oldName);
+  const toRoot = path.join(buildsRoot, newName);
   const dbRoot = path.join(repositoryRoot, 'synthetic-wechat-root');
   const accountKey = 'synthetic-account';
   const historyPatch = 'synthetic history patch\n';
@@ -99,7 +101,11 @@ async function syntheticUpgradeFixture() {
   const newProtocol = 'protocol with original image operation';
   const newImage = 'original image reader';
   const newImageTest = 'synthetic original image test';
-  const oldFiles = { ...syntheticFileHashes };
+  const oldFiles = { ...syntheticFileHashes, ...(existingImage ? {
+    'cmd/wechat-cli/notalone_protocol.go': newProtocol,
+    'cmd/wechat-cli/notalone_image.go': 'old original image reader',
+    'cmd/wechat-cli/notalone_image_test.go': 'old original image regression test',
+  } : {}) };
   const newFiles = { ...syntheticFileHashes,
     'cmd/wechat-cli/notalone_protocol.go': newProtocol,
     'cmd/wechat-cli/notalone_image.go': newImage,
@@ -113,7 +119,7 @@ async function syntheticUpgradeFixture() {
   await write(path.join(repositoryRoot, 'desktop/wechat-patches/readonly-cli.patch'), readonlyPatch);
   await write(path.join(repositoryRoot, 'desktop/wechat-patches/readonly-cli-test.go'), readonlyTest);
   for (const [root, files, cliBytes, cliSha256, imageProtocol] of [
-    [fromRoot, oldFiles, oldCliBytes, oldCliSha256, undefined],
+    [fromRoot, oldFiles, oldCliBytes, oldCliSha256, existingImage ? 'wechat-original-image-v1' : undefined],
     [toRoot, newFiles, newCliBytes, newCliSha256, 'wechat-original-image-v1'],
   ]) {
     await mkdir(root, { recursive: true, mode: 0o700 });
@@ -123,7 +129,8 @@ async function syntheticUpgradeFixture() {
     await write(path.join(root, 'lib/libWCDB.dylib'), wcdbBytes);
     await write(path.join(root, 'bin/wechat-cli'), cliBytes, 0o700);
     const manifest = { ...common, overlaySha256: overlaySha(files), cliSha256,
-      ...(imageProtocol ? { originalImageProtocol: imageProtocol } : {}) };
+      ...(imageProtocol ? { originalImageProtocol: imageProtocol } : {}),
+      ...(existingImage && root === toRoot ? { originalImageQualityProof: 'wechat-cdn-big-hd-exact-content-v3' } : {}) };
     await write(path.join(root, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   }
   const rootScope = hash(`${accountKey}\0${path.resolve(dbRoot)}`);
@@ -140,12 +147,15 @@ async function syntheticUpgradeFixture() {
   const protocolNewSha256 = hash(newProtocol);
   const identityAlgorithmSha256 = hash(JSON.stringify({ files: Object.entries(identityFiles).sort((left, right) => left[0].localeCompare(right[0])),
     protocol: [protocolOldSha256, protocolNewSha256] }));
-  const policy = { oldName: 'true-delta-20261031-c2', newName: 'original-image-20261031-v1', commonManifest: common,
+  const policy = { oldName, newName, commonManifest: common,
     oldCliSha256, newCliSha256, oldOverlaySha256: overlaySha(oldFiles), newOverlaySha256: overlaySha(newFiles),
     newImageProtocol: 'wechat-original-image-v1', identityFiles, identityAlgorithmSha256,
     protocolOldSha256, protocolNewSha256, imageSha256: hash(newImage), imageTestSha256: hash(newImageTest),
     sourceLockSha256: hash(sourceLockBytes), historyPatchSha256: hash(historyPatch), readonlyPatchSha256: hash(readonlyPatch),
-    readonlyTestSha256: hash(readonlyTest), wcdbSha256 };
+    readonlyTestSha256: hash(readonlyTest), wcdbSha256,
+    ...(existingImage ? { oldImageProtocol: 'wechat-original-image-v1',newImageQualityProof:'wechat-cdn-big-hd-exact-content-v3',
+      oldImageSha256: hash(oldFiles['cmd/wechat-cli/notalone_image.go']),
+      oldImageTestSha256: hash(oldFiles['cmd/wechat-cli/notalone_image_test.go']) } : {}) };
   return { repositoryRoot, buildsRoot, fromRoot, toRoot, dbRoot, accountKey, oldAliasPath, oldRecord,
     oldAliasBytes: await readFile(oldAliasPath), policy, aliases, tools: createUpgradeImageCliTools({ repositoryRoot, policy }) };
 }
@@ -231,6 +241,17 @@ test('从已核验旧alias签发新制品独立sidecar与receipt，不改旧side
   assert.equal((await readdir(fixture.toRoot)).some(name => name.endsWith('.tmp')), false);
   assert.deepEqual(await readFile(fixture.oldAliasPath), oldAliasBefore);
   assert.deepEqual(await readFile(businessFile), businessBefore);
+});
+
+test('原图修复组件仅图片源码变化，沿用相同协议和身份实现也须独立签发', async t => {
+  const fixture = await syntheticUpgradeFixture({ existingImage: true });
+  t.after(() => rm(fixture.repositoryRoot, { recursive: true, force: true }));
+  const result = await fixture.tools.prepareAliases(fixture);
+  assert.equal(result.status, 'prepared');
+  assert.deepEqual(await readFile(fixture.oldAliasPath), fixture.oldAliasBytes);
+  const record = JSON.parse(await readFile(path.join(fixture.toRoot, 'source-identity-aliases.json')));
+  assert.equal(record.artifactSha256, fixture.policy.newCliSha256);
+  assert.deepEqual(record.aliases, fixture.aliases);
 });
 
 test('receipt发布后遇错只清理本次新文件，不碰旧sidecar和业务数据库', async t => {

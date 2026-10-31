@@ -13,6 +13,8 @@ const processingErrors:Record<string,string>={
   media_video_invalid:'视频容器不完整或无法完整解码，本次未保存新结果。',
   media_resource_incomplete:'资源完整读取或复制证明不符，本次未保存新结果。',
   media_original_unavailable:'未取得经过质量验证的原图；消息记录和先前合法文件仍保留。',
+  media_metadata_invalid:'图片元数据或标记无法核验，未保存该文件；消息记录仍保留。',
+  media_local_file_missing:'本机没有找到对应图片文件，未取得原图；消息记录仍保留。',
   media_quality_unverified:'图片质量无法核验，未保存该文件；消息记录仍保留。',
   media_validation_timeout:'媒体校验超时，本次未完成；先前合法文件保留。',
   media_resource_limit:'媒体超过当前尺寸、帧数或时长上限，本次未保存新结果。',

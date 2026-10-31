@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
@@ -13,12 +14,14 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
 )
 
@@ -110,8 +113,14 @@ func TestNotAloneOriginalImageProofRequiresExplicitHighDefinitionXML(t *testing.
 		t.Fatal(err)
 	}
 	proof, mimeType, err := notaloneVerifyOriginalImage(meta, data)
-	if err != nil || mimeType != "image/png" || proof.Kind != "wechat-cdn-big-hd-exact-content-v1" ||
-		proof.HDLength != int64(len(data)) || proof.HDWidth != 3 || proof.HDHeight != 2 ||
+	proofJSON, marshalErr := json.Marshal(proof)
+	var proofWire map[string]any
+	if marshalErr == nil {
+		marshalErr = json.Unmarshal(proofJSON, &proofWire)
+	}
+	if err != nil || mimeType != "image/png" || proof.Kind != "wechat-cdn-big-hd-exact-content-v3" ||
+		proof.HDLength != int64(len(data)) || marshalErr != nil || proofWire["hdWidth"] != float64(3) || proofWire["hdHeight"] != float64(2) ||
+		proofWire["contentWidth"] != float64(3) || proofWire["contentHeight"] != float64(2) ||
 		proof.VerifiedBytes != int64(len(data)) || proof.VerifiedSHA256 != fmt.Sprintf("%x", sha256.Sum256(data)) {
 		t.Fatalf("strict original-image proof mismatch: proof=%#v mime=%q err=%v", proof, mimeType, err)
 	}
@@ -120,15 +129,39 @@ func TestNotAloneOriginalImageProofRequiresExplicitHighDefinitionXML(t *testing.
 	for _, xml := range []string{
 		notaloneImageXML(data, len(data), 3, 2, false),
 		notaloneImageXML(data, 0, 3, 2, true),
-		notaloneImageXML(data, len(data), 0, 2, true),
-		notaloneImageXML(data, len(data), 3, 0, true),
+		notaloneImageXML(data, len(data), -1, 2, true),
+		notaloneImageXML(data, len(data), 3, -1, true),
 	} {
 		meta, parseErr := notaloneParseOriginalImageXML([]byte(xml))
 		if parseErr == nil {
 			if _, _, verifyErr := notaloneVerifyOriginalImage(meta, data); verifyErr == nil {
-				t.Fatal("普通显示图、缺hdlength或缺HD尺寸不能证明原图")
+				t.Fatal("普通显示图、缺hdlength或负HD尺寸不能证明原图")
 			}
 		}
+	}
+	zeroDimensions := notaloneImageXML(data, len(data), 0, 0, true)
+	meta, err = notaloneParseOriginalImageXML([]byte(zeroDimensions))
+	if err != nil {
+		t.Fatalf("缺失HD尺寸不应抹掉其余原图证据: %v", err)
+	}
+	proof, _, err = notaloneVerifyOriginalImage(meta, data)
+	proofJSON, marshalErr = json.Marshal(proof)
+	proofWire = nil
+	if marshalErr != nil || json.Unmarshal(proofJSON, &proofWire) != nil || err != nil || proofWire["hdWidth"] != nil ||
+		proofWire["hdHeight"] != nil || proofWire["contentWidth"] != float64(3) || proofWire["contentHeight"] != float64(2) {
+		t.Fatalf("应区分缺失的XML尺寸与实际内容尺寸: proof=%#v err=%v", proof, err)
+	}
+	oneDimensionMissing := strings.Replace(notaloneImageXML(data, len(data), 3, 2, true), ` cdnhdheight="2"`, "", 1)
+	if _, err = notaloneParseOriginalImageXML([]byte(oneDimensionMissing)); err == nil {
+		t.Fatal("只提供一侧HD尺寸时不能建立原图证明")
+	}
+	wrongDeclared := notaloneImageXML(data, len(data), 2, 2, true)
+	meta, err = notaloneParseOriginalImageXML([]byte(wrongDeclared))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = notaloneVerifyOriginalImage(meta, data); err == nil {
+		t.Fatal("显式声明的HD尺寸与内容不一致时必须拒绝")
 	}
 	meta, err = notaloneParseOriginalImageXML([]byte(notaloneImageXML(data, len(data), 3, 2, true)))
 	if err != nil {
@@ -151,11 +184,42 @@ type notaloneImageProtocolFixture struct {
 	path    string
 }
 
+type notaloneImageTestResourceDetail struct {
+	id         int64
+	typeRaw    int64
+	size       int64
+	packedInfo []byte
+}
+
 func newNotaloneImageProtocolFixture(t *testing.T, imageXML string) notaloneImageProtocolFixture {
 	return newNotaloneImageProtocolFixtureWithImage(t, imageXML, notaloneTinyPNG(t, 3, 2))
 }
 
 func newNotaloneImageProtocolFixtureWithImage(t *testing.T, imageXML string, imageBytes []byte) notaloneImageProtocolFixture {
+	return newNotaloneImageProtocolFixtureWithMessageContent(t, []byte(imageXML), 0, imageBytes)
+}
+
+func newNotaloneImageProtocolFixtureWithMessageContent(t *testing.T, messageContent []byte, contentType int64, imageBytes []byte) notaloneImageProtocolFixture {
+	const cacheMD5 = "f71dbe52628a3f83a77ab494817525c6"
+	detail := notaloneImageTestResourceDetail{id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: notaloneTestPackedInfo(cacheMD5)}
+	return newNotaloneImageProtocolFixtureWithResourceData(t, messageContent, contentType, imageBytes, imageBytes,
+		cacheMD5, notaloneTestPackedInfo(cacheMD5), notaloneTestPackedInfo(cacheMD5), []notaloneImageTestResourceDetail{detail})
+}
+
+func notaloneTestPackedInfo(md5Values ...string) []byte {
+	var nested []byte
+	for _, value := range md5Values {
+		nested = append(nested, 0x0a, 0x20)
+		nested = append(nested, []byte(value)...)
+	}
+	if len(nested) == 0 || len(nested) > 127 {
+		return nil
+	}
+	return append([]byte{0x12, byte(len(nested))}, nested...)
+}
+
+func newNotaloneImageProtocolFixtureWithResourceData(t *testing.T, messageContent []byte, contentType int64, imageBytes, storageBytes []byte,
+	cacheMD5 string, messagePackedInfo, infoPackedInfo []byte, details []notaloneImageTestResourceDetail) notaloneImageProtocolFixture {
 	t.Helper()
 	h := notaloneProtocolFixture(t, true)
 	const localID, serverID, createTime = int64(1), int64(7710666891970547832), int64(1700000000)
@@ -163,22 +227,34 @@ func newNotaloneImageProtocolFixtureWithImage(t *testing.T, imageXML string, ima
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = writer.Exec(fmt.Sprintf(`UPDATE %s SET server_id=%d,local_type=3,create_time=%d,status=0,message_content='%s' WHERE local_id=%d`,
-		quoteIdent("Msg_"+talkerHash(h.selected.Conversation)), serverID, createTime, strings.ReplaceAll(imageXML, "'", "''"), localID)); err != nil {
+	messageTable := quoteIdent("Msg_" + talkerHash(h.selected.Conversation))
+	if err = writer.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN WCDB_CT_message_content INTEGER`, messageTable)); err != nil {
+		writer.Close()
+		t.Fatal(err)
+	}
+	if err = writer.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN packed_info_data BLOB`, messageTable)); err != nil {
+		writer.Close()
+		t.Fatal(err)
+	}
+	if err = writer.Exec(fmt.Sprintf(`UPDATE %s SET server_id=%d,local_type=3,create_time=%d,status=0,message_content=X'%x',WCDB_CT_message_content=%d,packed_info_data=X'%x' WHERE local_id=%d`,
+		messageTable, serverID, createTime, messageContent, contentType, messagePackedInfo, localID)); err != nil {
 		writer.Close()
 		t.Fatal(err)
 	}
 	writer.Close()
 
 	// The resource DB remains an encrypted WCDB fixture; only this selected message is represented.
-	md5Value := md5.Sum(imageBytes)
-	packedMD5 := "12220A20" + hex.EncodeToString(md5Value[:])
+	var resourceRows strings.Builder
+	for _, detail := range details {
+		resourceRows.WriteString(fmt.Sprintf(`INSERT INTO MessageResourceDetail VALUES(%d,5,%d,%d,1700000000,1700000000,1,'0',X'%x');`,
+			detail.id, detail.typeRaw, detail.size, detail.packedInfo))
+	}
 	notaloneTestDB(t, h.server.cfg.DBRoot, h.server.cfg, "message", "message_resource.db",
 		`CREATE TABLE ChatName2Id(user_name TEXT);INSERT INTO ChatName2Id(rowid,user_name) VALUES(1,'`+h.selected.Conversation+`');`+
 			`CREATE TABLE MessageResourceInfo(message_id INTEGER,chat_id INTEGER,message_local_type INTEGER,message_create_time INTEGER,message_local_id INTEGER,message_svr_id INTEGER,message_origin_source INTEGER,packed_info BLOB);`+
-			`INSERT INTO MessageResourceInfo VALUES(5,1,3,1700000000,1,7710666891970547832,0,X'`+packedMD5+`');`+
+			`INSERT INTO MessageResourceInfo VALUES(5,1,3,1700000000,1,7710666891970547832,0,X'`+hex.EncodeToString(infoPackedInfo)+`');`+
 			`CREATE TABLE MessageResourceDetail(resource_id INTEGER,message_id INTEGER,type INTEGER,size INTEGER,create_time INTEGER,access_time INTEGER,status INTEGER,data_index TEXT,packed_info BLOB);`+
-			`INSERT INTO MessageResourceDetail VALUES(11,5,65537,`+fmt.Sprint(len(imageBytes))+`,1700000000,1700000000,1,'0',X'`+packedMD5+`');`,
+			resourceRows.String(),
 		strings.Repeat("66", 16))
 	configFile := os.Getenv("WECHAT_CLI_CONFIG")
 	data, err := json.Marshal(h.server.cfg)
@@ -190,11 +266,11 @@ func newNotaloneImageProtocolFixtureWithImage(t *testing.T, imageXML string, ima
 	}
 
 	month := time.Unix(createTime, 0).Format("2006-01")
-	path := filepath.Join(h.server.cfg.DBRoot, "msg", "attach", talkerHash(h.selected.Conversation), month, "Img", fmt.Sprintf("%x.dat", md5Value))
+	path := filepath.Join(h.server.cfg.DBRoot, "msg", "attach", talkerHash(h.selected.Conversation), month, "Img", cacheMD5+".dat")
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(path, imageBytes, 0600); err != nil {
+	if err = os.WriteFile(path, storageBytes, 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -215,6 +291,221 @@ func newNotaloneImageProtocolFixtureWithImage(t *testing.T, imageXML string, ima
 		Target: target.Descriptor, Partition: target.Tables[0].Partition, Table: target.Tables[0].Instance,
 		LocalID: fmt.Sprint(localID), ServerID: fmt.Sprint(serverID), SentAt: fmt.Sprint(createTime * 1000),
 	}}
+}
+
+func notaloneCompressImageXML(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer encoder.Close()
+	return encoder.EncodeAll(raw, nil)
+}
+
+func notaloneTestV4ImageDAT(t *testing.T, key, plain []byte) []byte {
+	t.Helper()
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	padding := aes.BlockSize - len(plain)%aes.BlockSize
+	padded := append(append([]byte(nil), plain...), bytes.Repeat([]byte{byte(padding)}, padding)...)
+	encrypted := make([]byte, len(padded))
+	for offset := 0; offset < len(padded); offset += aes.BlockSize {
+		block.Encrypt(encrypted[offset:offset+aes.BlockSize], padded[offset:offset+aes.BlockSize])
+	}
+	header := make([]byte, 15)
+	copy(header, wechatV4ImageHeader2)
+	binary.LittleEndian.PutUint32(header[6:10], uint32(len(plain)))
+	header[14] = 1
+	return append(header, encrypted...)
+}
+
+func TestNotAloneImageOpenBindsCacheKeyAndAliasesToDecodedOriginal(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	const cacheMD5 = "a71dbe52628a3f83a77ab494817525c6"
+	key := []byte("0123456789abcdef")
+	storage := notaloneTestV4ImageDAT(t, key, imageBytes)
+	message := []byte(notaloneImageXML(imageBytes, len(imageBytes), 0, 0, true))
+	packed := notaloneTestPackedInfo(cacheMD5)
+	fixture := newNotaloneImageProtocolFixtureWithResourceData(t, message, 0, imageBytes, storage, cacheMD5, packed, packed,
+		[]notaloneImageTestResourceDetail{
+			{id: 7, typeRaw: 262145, size: int64(len(storage) - 1), packedInfo: notaloneTestPackedInfo("b71dbe52628a3f83a77ab494817525c6")},
+			{id: 12, typeRaw: 131073, size: int64(len(storage)), packedInfo: packed},
+			{id: 10, typeRaw: 65537, size: int64(len(storage)), packedInfo: packed},
+		})
+	xorKey := 0
+	fixture.history.server.cfg.ImageKey = hex.EncodeToString(key)
+	fixture.history.server.cfg.ImageXORKey = &xorKey
+
+	value, err := fixture.history.handle(context.Background(), fixture.request)
+	if err != nil {
+		t.Fatalf("verified cache entity with V4 envelope and same-sized aliases should open: %v", err)
+	}
+	opened := value.(notaloneImageOpenResponse)
+	proofJSON, err := json.Marshal(opened.QualityProof)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var proof map[string]any
+	if err = json.Unmarshal(proofJSON, &proof); err != nil {
+		t.Fatal(err)
+	}
+	ids, _ := proof["matchingResourceIds"].([]any)
+	if opened.QualityProof.Kind != "wechat-cdn-big-hd-exact-content-v3" || opened.ResourceID != "10" ||
+		opened.ResourceTypeRaw != 65537 || opened.SourceEnvelope != "wechat_dat" || opened.Envelope != "plain" ||
+		proof["resourceInfoId"] != "5" || proof["resourceSize"] != float64(len(storage)) ||
+		proof["verifiedBytes"] != float64(len(imageBytes)) || proof["hdLength"] != float64(len(imageBytes)) ||
+		len(ids) != 2 || ids[0] != "10" || ids[1] != "12" {
+		t.Fatalf("V4 stored bytes and matching detail aliases were not represented accurately: open=%#v proof=%s", opened, proofJSON)
+	}
+	chunkValue, err := fixture.history.handle(context.Background(), notaloneHistoryRequest{Operation: "image-read", ResourceToken: opened.ResourceToken, Offset: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunk := chunkValue.(notaloneImageReadResponse)
+	decoded, err := base64.StdEncoding.DecodeString(chunk.ChunkBase64)
+	if err != nil || !bytes.Equal(decoded, imageBytes) || !chunk.EOF || chunk.VerifiedSHA256 != opened.ExpectedSHA256 {
+		t.Fatalf("image stream did not return exact HD content: err=%v eof=%t", err, chunk.EOF)
+	}
+}
+
+func TestNotAloneImageOpenRejectsUnprovenCacheIdentityAndSize(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	const cacheMD5 = "a71dbe52628a3f83a77ab494817525c6"
+	const otherMD5 = "b71dbe52628a3f83a77ab494817525c6"
+	packed := notaloneTestPackedInfo(cacheMD5)
+	validMessage := []byte(notaloneImageXML(imageBytes, len(imageBytes), 0, 0, true))
+	cases := []struct {
+		name          string
+		message       []byte
+		messagePacked []byte
+		infoPacked    []byte
+		details       []notaloneImageTestResourceDetail
+		wantCode      string
+	}{
+		{name: "multiple message cache keys", message: validMessage, messagePacked: notaloneTestPackedInfo(cacheMD5, otherMD5), infoPacked: packed,
+			details: []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed}}, wantCode: "history_image_association_unverified"},
+		{name: "multiple info cache keys", message: validMessage, messagePacked: packed, infoPacked: notaloneTestPackedInfo(cacheMD5, otherMD5),
+			details: []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed}}, wantCode: "history_image_association_unverified"},
+		{name: "message and info keys differ", message: validMessage, messagePacked: notaloneTestPackedInfo(otherMD5), infoPacked: packed,
+			details: []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed}}, wantCode: "history_image_association_unverified"},
+		{name: "no detail matches stored length", message: validMessage, messagePacked: packed, infoPacked: packed,
+			details: []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes) + 1), packedInfo: packed}}, wantCode: "history_image_association_unverified"},
+		{name: "matching detail declares another cache key", message: validMessage, messagePacked: packed, infoPacked: packed,
+			details: []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: notaloneTestPackedInfo(otherMD5)}}, wantCode: "history_image_association_unverified"},
+		{name: "HD content digest is wrong", message: []byte(strings.Replace(notaloneImageXML(imageBytes, len(imageBytes), 0, 0, true), fmt.Sprintf("%x", md5.Sum(imageBytes)), otherMD5, 1)),
+			messagePacked: packed, infoPacked: packed, details: []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed}}, wantCode: "history_image_quality_unverified"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newNotaloneImageProtocolFixtureWithResourceData(t, test.message, 0, imageBytes, imageBytes, cacheMD5,
+				test.messagePacked, test.infoPacked, test.details)
+			if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != test.wantCode {
+				t.Fatalf("unproven image resource should fail with %s, got %v", test.wantCode, err)
+			}
+		})
+	}
+}
+
+func TestNotAloneImageOpenReportsMissingConfiguredV4Key(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	const cacheMD5 = "a71dbe52628a3f83a77ab494817525c6"
+	packed := notaloneTestPackedInfo(cacheMD5)
+	storage := notaloneTestV4ImageDAT(t, []byte("0123456789abcdef"), imageBytes)
+	fixture := newNotaloneImageProtocolFixtureWithResourceData(t, []byte(notaloneImageXML(imageBytes, len(imageBytes), 0, 0, true)), 0,
+		imageBytes, storage, cacheMD5, packed, packed,
+		[]notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(storage)), packedInfo: packed}})
+	if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_key_unavailable" {
+		t.Fatalf("encrypted local candidate without a configured key should be reported as unavailable, got %v", err)
+	}
+}
+
+func TestNotAloneImageOpenDecodesBoundedZstdXMLAndStreamsOriginal(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	rawXML := []byte(notaloneImageXML(imageBytes, len(imageBytes), 0, 0, true))
+	compressedXML := notaloneCompressImageXML(t, rawXML)
+	if len(compressedXML) >= len(rawXML) {
+		t.Fatalf("fixture should exercise compressed message_content: compressed=%d plain=%d", len(compressedXML), len(rawXML))
+	}
+	fixture := newNotaloneImageProtocolFixtureWithMessageContent(t, compressedXML, 4, imageBytes)
+	value, err := fixture.history.handle(context.Background(), fixture.request)
+	if err != nil {
+		t.Fatalf("zstd-compressed selected message XML should open: %v", err)
+	}
+	opened := value.(notaloneImageOpenResponse)
+	if opened.QualityProof.Kind != "wechat-cdn-big-hd-exact-content-v3" || opened.Quality != "original" ||
+		opened.QualityProof.HDWidth != nil || opened.QualityProof.HDHeight != nil ||
+		opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
+		t.Fatalf("unexpected v2 image proof: %#v", opened.QualityProof)
+	}
+	chunkValue, err := fixture.history.handle(context.Background(), notaloneHistoryRequest{Operation: "image-read", ResourceToken: opened.ResourceToken, Offset: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunk := chunkValue.(notaloneImageReadResponse)
+	decoded, err := base64.StdEncoding.DecodeString(chunk.ChunkBase64)
+	if err != nil || !bytes.Equal(decoded, imageBytes) || !chunk.EOF || chunk.VerifiedSHA256 != opened.ExpectedSHA256 {
+		t.Fatalf("compressed XML changed original image bytes: err=%v eof=%t", err, chunk.EOF)
+	}
+}
+
+func TestNotAloneImageXMLDecoderRejectsInvalidOrUnboundedZstd(t *testing.T) {
+	validXML := []byte(`<msg><img /></msg>`)
+	valid := notaloneCompressImageXML(t, validXML)
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	randomBytes := make([]byte, notaloneImageXMLByteLimit+1)
+	if _, err := rand.New(rand.NewSource(20261031)).Read(randomBytes); err != nil {
+		t.Fatal(err)
+	}
+	compressedInputOverLimit := notaloneCompressImageXML(t, randomBytes)
+	if len(compressedInputOverLimit) <= notaloneImageXMLByteLimit {
+		t.Fatalf("fixture must exceed compressed input bound: got %d bytes", len(compressedInputOverLimit))
+	}
+	for name, input := range map[string]struct {
+		bytes       []byte
+		contentType int64
+	}{
+		"bad frame":                     {bytes: append([]byte{0x28, 0xb5, 0x2f, 0xfd}, 0xff, 0xff), contentType: 4},
+		"compressed type without frame": {bytes: validXML, contentType: 4},
+		"frame with plain type":         {bytes: valid, contentType: 0},
+		"compressed input over limit":   {bytes: compressedInputOverLimit, contentType: 4},
+		"expanded output over limit":    {bytes: notaloneCompressImageXML(t, bytes.Repeat([]byte("x"), notaloneImageXMLByteLimit+1)), contentType: 4},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newNotaloneImageProtocolFixtureWithMessageContent(t, input.bytes, input.contentType, imageBytes)
+			if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_metadata_invalid" {
+				t.Fatalf("invalid zstd XML should fail closed with metadata code, got %v", err)
+			}
+		})
+	}
+}
+
+func TestNotAloneImageErrorsDistinguishMissingLocalFileKeyAndQuality(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	imageXML := notaloneImageXML(imageBytes, len(imageBytes), 3, 2, true)
+	metadata, err := notaloneParseOriginalImageXML([]byte(imageXML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongBytes := append([]byte(nil), imageBytes...)
+	wrongBytes[len(wrongBytes)-1] ^= 1
+	if _, _, err = notaloneVerifyOriginalImage(metadata, wrongBytes); err == nil || err.Error() != "history_image_quality_unverified" {
+		t.Fatalf("mismatched complete bytes need quality code, got %v", err)
+	}
+
+	fixture := newNotaloneImageProtocolFixture(t, imageXML)
+	encrypted := append(append([]byte(nil), wechatV4ImageHeader2...), make([]byte, 32)...)
+	if _, _, err = notaloneDecodeLocalImage(encrypted, fixture.history.server.cfg); err == nil || err.Error() != "history_image_key_unavailable" {
+		t.Fatalf("recognized encrypted container without configured key needs key code, got %v", err)
+	}
+	if err = os.Remove(fixture.path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_local_file_missing" {
+		t.Fatalf("absent local original needs missing-file code, got %v", err)
+	}
 }
 
 func TestNotAloneImageOpenStreamsOnlyVerifiedOriginalFromSelectedSnapshot(t *testing.T) {

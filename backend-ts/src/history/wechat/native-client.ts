@@ -76,10 +76,21 @@ export interface NarrowWechatClientOptions {
 export interface WechatImageSourceIdentity {
   partition: string; table: string; localId: string; serverId: string; sentAt: string;
 }
-export interface WechatImageQualityProof {
+export interface WechatImageQualityProofV1 {
   kind: 'wechat-cdn-big-hd-exact-content-v1'; messageMd5: string; hdLength: number; hdWidth: number; hdHeight: number;
   bigImageUrlPresent: true; resourceSize: number; verifiedBytes: number; verifiedSha256: string;
 }
+export interface WechatImageQualityProofV2 {
+  kind: 'wechat-cdn-big-hd-exact-content-v2'; messageMd5: string; hdLength: number; hdWidth: number | null; hdHeight: number | null;
+  bigImageUrlPresent: true; resourceSize: number; verifiedBytes: number; verifiedSha256: string;
+  contentWidth: number; contentHeight: number;
+}
+export interface WechatImageQualityProofV3 {
+  kind: 'wechat-cdn-big-hd-exact-content-v3'; messageMd5: string; hdLength: number; hdWidth: number | null; hdHeight: number | null;
+  bigImageUrlPresent: true; resourceSize: number; verifiedBytes: number; verifiedSha256: string;
+  contentWidth: number; contentHeight: number; resourceInfoId: string; matchingResourceIds: string[];
+}
+export type WechatImageQualityProof = WechatImageQualityProofV1 | WechatImageQualityProofV2 | WechatImageQualityProofV3;
 export interface WechatImageOpenResult {
   protocol: 'wechat-original-image-v1'; resourceToken: string; sourceGeneration: string; resourceSourceGeneration: string;
   target: string; partition: string; table: string; localId: string; serverId: string; sentAt: string;
@@ -133,6 +144,7 @@ const allowedErrors = new Set([
   'history_image_association_unverified', 'history_image_original_unavailable', 'history_image_source_changed',
   'history_image_resource_invalid', 'history_image_token_invalid', 'history_image_offset_invalid',
   'history_image_too_large', 'history_image_read_failed', 'history_image_request_invalid',
+  'history_image_metadata_invalid', 'history_image_local_file_missing', 'history_image_key_unavailable', 'history_image_quality_unverified',
   'history_account_unavailable', 'history_account_changed', 'history_native_unavailable',
   'history_metadata_unavailable', 'history_identity_unverified', 'history_identity_ambiguous',
   'history_source_changed', 'history_source_unverified', 'history_shards_unavailable',
@@ -184,19 +196,46 @@ function imageIdentity(value: WechatImageSourceIdentity): WechatImageSourceIdent
   const partition=hash(value.partition),table=hash(value.table),localId=exactInteger(value.localId),serverId=exactInteger(value.serverId),sentAt=unsigned(value.sentAt);
   return {partition,table,localId,serverId,sentAt};
 }
-function imageQualityProof(value: unknown, expectedBytes: number, expectedSha256: string): WechatImageQualityProof {
+function imageResourceId(value: unknown): string {
+  const id=unsigned(value);
+  return BigInt(id)>0n?id:fail('history_image_quality_unverified');
+}
+function imageQualityProof(value: unknown, expectedBytes: number, expectedSha256: string, representativeId:string): WechatImageQualityProof {
   try{
-    const row=object(value,['kind','messageMd5','hdLength','hdWidth','hdHeight','bigImageUrlPresent','resourceSize','verifiedBytes','verifiedSha256']);
-    const proof:WechatImageQualityProof={
-      kind:row.kind as WechatImageQualityProof['kind'],messageMd5:text(row.messageMd5,32),hdLength:integer(row.hdLength,32*1024*1024),
-      hdWidth:integer(row.hdWidth,1_000_000),hdHeight:integer(row.hdHeight,1_000_000),
-      bigImageUrlPresent:row.bigImageUrlPresent as true,resourceSize:integer(row.resourceSize,32*1024*1024),
-      verifiedBytes:integer(row.verifiedBytes,32*1024*1024),verifiedSha256:hash(row.verifiedSha256),
-    };
-    if(proof.kind!=='wechat-cdn-big-hd-exact-content-v1'||!/^[a-f0-9]{32}$/.test(proof.messageMd5)||!proof.hdLength||!proof.hdWidth||!proof.hdHeight
-      ||proof.bigImageUrlPresent!==true||proof.resourceSize!==expectedBytes||proof.verifiedBytes!==expectedBytes||proof.verifiedSha256!==expectedSha256)return fail('history_image_original_unavailable');
-    return proof;
-  }catch{return fail('history_image_original_unavailable');}
+    if(!value||typeof value!=='object'||Array.isArray(value))return fail('history_image_quality_unverified');
+    const kind=(value as Record<string,unknown>).kind;
+    const proofRow=kind==='wechat-cdn-big-hd-exact-content-v1'
+      ?object(value,['kind','messageMd5','hdLength','hdWidth','hdHeight','bigImageUrlPresent','resourceSize','verifiedBytes','verifiedSha256'])
+      :kind==='wechat-cdn-big-hd-exact-content-v2'
+        ?object(value,['kind','messageMd5','hdLength','hdWidth','hdHeight','bigImageUrlPresent','resourceSize','verifiedBytes','verifiedSha256','contentWidth','contentHeight'])
+        :kind==='wechat-cdn-big-hd-exact-content-v3'
+          ?object(value,['kind','messageMd5','hdLength','hdWidth','hdHeight','bigImageUrlPresent','resourceSize','verifiedBytes','verifiedSha256','contentWidth','contentHeight','resourceInfoId','matchingResourceIds'])
+          :fail('history_image_quality_unverified');
+    const messageMd5=text(proofRow.messageMd5,32),hdLength=integer(proofRow.hdLength,32*1024*1024);
+    const resourceSize=integer(proofRow.resourceSize,kind==='wechat-cdn-big-hd-exact-content-v3'?64*1024*1024:32*1024*1024);
+    const verifiedBytes=integer(proofRow.verifiedBytes,32*1024*1024),verifiedSha256=hash(proofRow.verifiedSha256);
+    if(!/^[a-f0-9]{32}$/.test(messageMd5)||!hdLength||hdLength!==expectedBytes||proofRow.bigImageUrlPresent!==true||!resourceSize
+      ||kind!=='wechat-cdn-big-hd-exact-content-v3'&&resourceSize!==expectedBytes
+      ||verifiedBytes!==expectedBytes||verifiedSha256!==expectedSha256)return fail('history_image_quality_unverified');
+    if(kind==='wechat-cdn-big-hd-exact-content-v1'){
+      const hdWidth=integer(proofRow.hdWidth,1_000_000),hdHeight=integer(proofRow.hdHeight,1_000_000);
+      if(!hdWidth||!hdHeight)return fail('history_image_quality_unverified');
+      return {kind:'wechat-cdn-big-hd-exact-content-v1',messageMd5,hdLength,hdWidth,hdHeight,bigImageUrlPresent:true,resourceSize,verifiedBytes,verifiedSha256};
+    }
+    const dimension=(input:unknown):number|null=>input===null?null:integer(input,100_000);
+    const hdWidth=dimension(proofRow.hdWidth),hdHeight=dimension(proofRow.hdHeight);
+    const contentWidth=integer(proofRow.contentWidth,100_000),contentHeight=integer(proofRow.contentHeight,100_000);
+    if(!contentWidth||!contentHeight||contentWidth*contentHeight>100_000_000
+      ||(hdWidth===null)!==(hdHeight===null)
+      ||hdWidth!==null&&(!hdWidth||!hdHeight||hdWidth!==contentWidth||hdHeight!==contentHeight))return fail('history_image_quality_unverified');
+    if(kind==='wechat-cdn-big-hd-exact-content-v2')
+      return {kind:'wechat-cdn-big-hd-exact-content-v2',messageMd5,hdLength,hdWidth,hdHeight,bigImageUrlPresent:true,resourceSize,verifiedBytes,verifiedSha256,contentWidth,contentHeight};
+    const resourceInfoId=imageResourceId(proofRow.resourceInfoId),matchingResourceIds=list(proofRow.matchingResourceIds,32,imageResourceId,1);
+    if(matchingResourceIds.some((id,index)=>index>0&&BigInt(matchingResourceIds[index-1])>=BigInt(id))||matchingResourceIds[0]!==representativeId)
+      return fail('history_image_quality_unverified');
+    return {kind:'wechat-cdn-big-hd-exact-content-v3',messageMd5,hdLength,hdWidth,hdHeight,bigImageUrlPresent:true,resourceSize,verifiedBytes,verifiedSha256,contentWidth,contentHeight,
+      resourceInfoId,matchingResourceIds};
+  }catch{return fail('history_image_quality_unverified');}
 }
 function imageOpen(value: unknown, scope: ResolvedWechatScope, target: HistoryTarget, source: WechatImageSourceIdentity, expectedBytesMaximum:number): WechatImageOpenResult {
   const row=object(value,['protocol','resourceToken','sourceGeneration','resourceSourceGeneration','target','partition','table','localId','serverId','sentAt',
@@ -213,11 +252,11 @@ function imageOpen(value: unknown, scope: ResolvedWechatScope, target: HistoryTa
   if(row.resourceTable!=='wechat-message-resource-v1'
     ||row.envelope!=='plain'||row.sourceEnvelope!=='plain'&&row.sourceEnvelope!=='wechat_dat'
     ||typeof mimeType!=='string'||!['image/jpeg','image/png','image/gif','image/bmp'].includes(mimeType))return fail('history_image_resource_invalid');
-  const qualityProof=imageQualityProof(row.qualityProof,expectedBytes,expectedSha256);
+  const resourceId=unsigned(row.resourceId),qualityProof=imageQualityProof(row.qualityProof,expectedBytes,expectedSha256,resourceId);
   return {protocol:'wechat-original-image-v1',resourceToken:imageToken(row.resourceToken),sourceGeneration:scope.sourceGeneration,
     resourceSourceGeneration:hash(row.resourceSourceGeneration),target:target.descriptor,partition:source.partition,table:source.table,
     localId:source.localId,serverId:source.serverId,sentAt:source.sentAt,resourceTable:row.resourceTable as WechatImageOpenResult['resourceTable'],
-    resourceId:unsigned(row.resourceId),resourceTypeRaw:integer(row.resourceTypeRaw,0x7fffffff),variantCode:integer(row.variantCode,0x7fffffff),
+    resourceId,resourceTypeRaw:integer(row.resourceTypeRaw,0x7fffffff),variantCode:integer(row.variantCode,0x7fffffff),
     complete:true,quality:'original',qualityProof,expectedBytes,expectedSha256,mimeType:mimeType as WechatImageOpenResult['mimeType'],
     envelope:'plain',sourceEnvelope:row.sourceEnvelope as WechatImageOpenResult['sourceEnvelope']};
 }
