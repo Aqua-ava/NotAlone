@@ -3,8 +3,10 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const wechatDirectoryName = 'notalone-wechat';
+export const wechatCliSourceDirectory = fileURLToPath(new URL('../../local-tools/wx-cli', import.meta.url));
 export const wechatLockedComponents = Object.freeze([
   ...lockedSources.gitSources.map(({ name, version, source, commit }) => Object.freeze({ name, version, source, commit, role: name === 'wxkey' ? 'source-evidence' : 'runtime' })),
   ...lockedSources.archives.filter(item => ['wcdb','codelldb-lldb','cpython'].includes(item.name)).map(({ name, version, source, sha256 }) => Object.freeze({ name, version, source, sha256, role: 'runtime' })),

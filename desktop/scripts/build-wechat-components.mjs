@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { requireBuildSpace } from './build-space.mjs';
-import { hashWechatFile, inspectWechatComponents, wechatAcceptance, wechatCapabilities, wechatDirectoryName, wechatInventory, wechatLockedComponents, wechatPaths } from './wechat-components.mjs';
+import { hashWechatFile, inspectWechatComponents, wechatAcceptance, wechatCapabilities, wechatCliSourceDirectory, wechatDirectoryName, wechatInventory, wechatLockedComponents, wechatPaths } from './wechat-components.mjs';
 const run = promisify(execFile);
 const desktop = new URL('../', import.meta.url).pathname;
 const lockFile = path.join(desktop, 'wechat-sources.lock.json');
@@ -30,9 +30,10 @@ async function checkedSource(cache, item, allowDownload) {
   return selected;
 }
 async function gitSource(cache, item, allowDownload, staging) {
-  const selected = path.join(cache, item.directory);
+  const selected = item.name === 'wechat-cli' ? wechatCliSourceDirectory : path.join(cache, item.directory);
   if (!(await lstat(selected).catch(() => undefined))) {
-    if (!allowDownload) throw new Error(`wechat_source_missing:${item.directory}`);
+    // 完整 CLI 源码由开发者在项目内准备，不退回旧缓存或自动重建此目录。
+    if (item.name === 'wechat-cli' || !allowDownload) throw new Error(`wechat_source_missing:${item.directory}`);
     await run('/usr/bin/git', ['clone', '--filter=blob:none', '--no-checkout', '--depth', '1', '--branch', item.ref, item.source, selected], { timeout: 180_000, maxBuffer: 1024 * 1024 });
     // 部分克隆的需要对象仅在显式联网构建中取得。
     await run('/usr/bin/git', ['-C', selected, 'sparse-checkout', 'set', '--no-cone', ...(item.paths || ['/*'])], { timeout: 180_000 });

@@ -4,15 +4,18 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   historyCliBuildRoot, parseHistoryBuildArguments, validateHistoryOutputDirectory,
   verifyHistoryBuildFile, validateHistoryBuildInputs, applyHistoryBuildPatch,
 } from '../../scripts/build-history-cli.mjs';
 
-test('历史CLI开发构建拒绝缺失、未知、重复与非绝对路径参数', () => {
+test('历史CLI开发构建默认使用项目内源码，拒绝缺失、未知、重复与非绝对路径参数', () => {
   const valid = ['--source-directory', '/synthetic/source', '--go-archive', '/synthetic/go.tar.gz',
     '--wcdb-library', '/synthetic/libWCDB.dylib', '--output-directory', path.join(historyCliBuildRoot, 'synthetic-new')];
   assert.equal(parseHistoryBuildArguments(valid).sourceDirectory, '/synthetic/source');
+  assert.equal(parseHistoryBuildArguments(valid.slice(2)).sourceDirectory,
+    fileURLToPath(new URL('../../../local-tools/wx-cli', import.meta.url)));
   for (const args of [[], ['--help'], [...valid, '--download'], [...valid, '--go-archive', '/another'],
     ['--source-directory', 'relative', ...valid.slice(2)]]) {
     assert.throws(() => parseHistoryBuildArguments(args), /history_cli_arguments_invalid/);

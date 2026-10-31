@@ -9,6 +9,7 @@ export interface WechatManifest {
   files: WechatFile[];
 }
 export const wechatDirectoryName: 'notalone-wechat';
+export const wechatCliSourceDirectory: string;
 export const wechatLockedComponents: Readonly<WechatManifest['components']>;
 export const wechatPaths: WechatManifest['paths'];
 export const wechatCapabilities: WechatManifest['capabilities'];
