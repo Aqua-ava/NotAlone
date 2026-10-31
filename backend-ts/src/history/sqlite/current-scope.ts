@@ -3,8 +3,12 @@ export const currentSourceScopeCTE=`history_scope_request AS MATERIALIZED (
  SELECT ? owner_id,? contact_scope,? contact_id
 ), current_history_ranked AS MATERIALIZED (
  SELECT h.owner_id,h.contact_id,h.binding_id,h.target_json,row_number() OVER(PARTITION BY h.owner_id,h.contact_id ORDER BY h.creation_no DESC) position
- FROM read_goal h JOIN history_scope_request q ON q.owner_id=h.owner_id
- WHERE (q.contact_scope IS NULL OR h.contact_id=q.contact_id) AND h.kind='history' AND h.creation_no IS NOT NULL
+ FROM read_goal h JOIN history_scope_request q ON q.owner_id=h.owner_id AND q.contact_scope IS NOT NULL AND h.contact_id=q.contact_id
+ WHERE h.kind='history' AND h.creation_no IS NOT NULL
+ UNION ALL
+ SELECT h.owner_id,h.contact_id,h.binding_id,h.target_json,row_number() OVER(PARTITION BY h.owner_id,h.contact_id ORDER BY h.creation_no DESC) position
+ FROM read_goal h JOIN history_scope_request q ON q.owner_id=h.owner_id AND q.contact_scope IS NULL
+ WHERE h.kind='history' AND h.creation_no IS NOT NULL
 ), current_history_scope AS MATERIALIZED (
  SELECT owner_id,contact_id,binding_id,target_json FROM current_history_ranked WHERE position=1
  UNION ALL

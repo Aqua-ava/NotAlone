@@ -128,6 +128,10 @@ export class SqliteHistoryService {
  }
  source(contactId:string,recordId:string):Promise<HistorySource>{return this.storage.execute('history.source',{ownerId:this.contacts.ownerId,contactId,recordId});}
  coverage(contactId:string):Promise<HistoryCoverage>{return this.storage.execute('history.coverage',{ownerId:this.contacts.ownerId,contactId});}
+ coverages(contactIds:readonly string[]):Promise<HistoryCoverage[]>{
+  if(contactIds.length>16)throw new StorageFailure('history_request_invalid');
+  return this.storage.execute('history.coverages',{ownerId:this.contacts.ownerId,contactIds});
+ }
  synchronize(contactId:string,signal?:AbortSignal):Promise<HistoryCoverage>{return this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal,armGuard,metadataRevalidation,retainedGuardAvailable)=>{
   let goal:PendingGoal|undefined;
   const check=()=>this.check(scope,controller);

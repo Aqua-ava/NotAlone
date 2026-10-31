@@ -245,6 +245,10 @@ export const historyActions:StorageAction[]=[
    cursorIn:row.cursor_in,cursorOut:row.cursor_out,raw,support:JSON.parse(String(row.support_json))};
  }),
  action('history.coverage','read',(tx,i)=>readCoverage(tx,i.ownerId,i.contactId)),
+  action('history.coverages','read',(tx,i)=>{
+   if(!Array.isArray(i.contactIds)||i.contactIds.length>16||i.contactIds.some((id:unknown)=>typeof id!=='string'||!id||id.length>128)||new Set(i.contactIds).size!==i.contactIds.length)fail('history_request_invalid');
+   return i.contactIds.map((contactId:string)=>readCoverage(tx,i.ownerId,contactId));
+  }),
  action('history.read','read',(tx,i)=>readMessages(tx,i.ownerId,i.contactId,i.limit,i.before)),
  action('history.readRecent','read',(tx,i)=>readRecentMessages(tx,i.ownerId,i.contactId,i.limit)),
 ];
