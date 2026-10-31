@@ -16,7 +16,7 @@ test('原文不足时保留空示例，并将出处放在包外', async () => {
     assert.match(text, /暂无单列示例/);
   }
   for (const {pkg} of packages) {
-    assert.deepEqual(pkg.resources.map(item => item.relative_path).sort(), ['references/LICENSES.txt', 'references/cases.md']);
+    assert.deepEqual(pkg.resources.map(item => item.relative_path), ['references/cases.md']);
     assert.doesNotMatch(pkg.content, /github\.com|excerpt_sha256|start_line/);
     assert.doesNotMatch(pkg.resources.find(item => item.relative_path === 'references/cases.md').content.toString(), /github\.com|excerpt_sha256|start_line/);
   }
