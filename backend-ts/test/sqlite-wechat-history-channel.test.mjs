@@ -77,7 +77,7 @@ test('正式受控渠道驱动联系人历史服务入库，非文字空正文�
  assert.equal(before.length,2);assert.equal(before.find(row=>row.kind==='voice').text,null);const text=before.find(row=>row.kind==='text');assert.equal(text.text,'合成历史正文');
  const source=await f.history.source(contact,text.sourceRecordIds[0]);assert.equal(source.raw.serverId,'0');assert.equal(source.support.serverAliasSemantics,'unverified');
  await f.setPlan({serverId:'9223372036854775807'});assert.equal((await f.history.synchronize(contact)).phase,'complete');
- const after=(await f.history.read(contact)).messages;assert.equal(after.length,2);assert.equal(after.find(row=>row.kind==='text').id,text.id);assert.equal(after.find(row=>row.kind==='text').sourceRecordIds.length,2);
+ const after=(await f.history.read(contact)).messages;assert.equal(after.length,2);assert.equal(after.find(row=>row.kind==='text').id,text.id);assert.equal(after.find(row=>row.kind==='text').sourceRecordIds.length,1,'同一来源重复观察不再累计来源记录');
  const rows=await requests(f.logFile);assert.ok(rows.filter(row=>row.op==='resolve').every(row=>row.displayName===conversation));
  assert.deepEqual(rows.slice(0,4).map(row=>row.op),['resolve','inspect','support','target']);
  const pid=Number(await readFile(f.pidFile,'utf8'));assert.equal(f.channels.length,1);assert.doesNotThrow(()=>process.kill(pid,0));
