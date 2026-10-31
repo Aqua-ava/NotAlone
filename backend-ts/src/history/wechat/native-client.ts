@@ -73,6 +73,25 @@ export interface NarrowWechatClientOptions {
   executable: string; expectedCliSha256: string; expectedWcdbSha256: string;
   environment?: Record<string, string | undefined>;
 }
+export interface WechatImageSourceIdentity {
+  partition: string; table: string; localId: string; serverId: string; sentAt: string;
+}
+export interface WechatImageQualityProof {
+  kind: 'wechat-cdn-big-hd-exact-content-v1'; messageMd5: string; hdLength: number; hdWidth: number; hdHeight: number;
+  bigImageUrlPresent: true; resourceSize: number; verifiedBytes: number; verifiedSha256: string;
+}
+export interface WechatImageOpenResult {
+  protocol: 'wechat-original-image-v1'; resourceToken: string; sourceGeneration: string; resourceSourceGeneration: string;
+  target: string; partition: string; table: string; localId: string; serverId: string; sentAt: string;
+  resourceTable: 'wechat-message-resource-v1'; resourceId: string;
+  resourceTypeRaw: number; variantCode: number; complete: true; quality: 'original'; qualityProof: WechatImageQualityProof;
+  expectedBytes: number; expectedSha256: string; mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/bmp';
+  envelope: 'plain'; sourceEnvelope: 'plain' | 'wechat_dat';
+}
+export interface WechatImageReadResult {
+  resourceToken: string; sourceGeneration: string; offset: number; bytesRead: number; totalBytes: number;
+  chunkBase64: string; eof: boolean; verifiedSha256?: string;
+}
 const responseLimit = 2 * 1024 * 1024;
 const pageResponseLimit = 8 * 1024 * 1024;
 const boundaryResponseLimit = 32 * 1024 * 1024;
@@ -111,6 +130,9 @@ const allowedErrors = new Set([
   'history_delta_wal_index_invalid',
   'history_metadata_profile_unverified', 'history_program_version_uncertified',
   'history_request_invalid', 'history_operation_unsupported', 'history_scope_unverified',
+  'history_image_association_unverified', 'history_image_original_unavailable', 'history_image_source_changed',
+  'history_image_resource_invalid', 'history_image_token_invalid', 'history_image_offset_invalid',
+  'history_image_too_large', 'history_image_read_failed', 'history_image_request_invalid',
   'history_account_unavailable', 'history_account_changed', 'history_native_unavailable',
   'history_metadata_unavailable', 'history_identity_unverified', 'history_identity_ambiguous',
   'history_source_changed', 'history_source_unverified', 'history_shards_unavailable',
@@ -152,6 +174,67 @@ function exactInteger(value: unknown, nonnegative = false): string {
 function bool(value: unknown): boolean { return typeof value === 'boolean' ? value : fail(); }
 function integer(value: unknown, maximum: number): number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= maximum ? value : fail();
+}
+function imageToken(value: unknown): string {
+  const parsed=text(value,128);
+  return /^[A-Za-z0-9_.:-]{16,128}$/.test(parsed)?parsed:fail('history_image_token_invalid');
+}
+function imageIdentity(value: WechatImageSourceIdentity): WechatImageSourceIdentity {
+  if(!value||typeof value!=='object'||Object.keys(value).length!==5||!['partition','table','localId','serverId','sentAt'].every(key=>Object.hasOwn(value,key)))return fail('history_image_request_invalid');
+  const partition=hash(value.partition),table=hash(value.table),localId=exactInteger(value.localId),serverId=exactInteger(value.serverId),sentAt=unsigned(value.sentAt);
+  return {partition,table,localId,serverId,sentAt};
+}
+function imageQualityProof(value: unknown, expectedBytes: number, expectedSha256: string): WechatImageQualityProof {
+  try{
+    const row=object(value,['kind','messageMd5','hdLength','hdWidth','hdHeight','bigImageUrlPresent','resourceSize','verifiedBytes','verifiedSha256']);
+    const proof:WechatImageQualityProof={
+      kind:row.kind as WechatImageQualityProof['kind'],messageMd5:text(row.messageMd5,32),hdLength:integer(row.hdLength,32*1024*1024),
+      hdWidth:integer(row.hdWidth,1_000_000),hdHeight:integer(row.hdHeight,1_000_000),
+      bigImageUrlPresent:row.bigImageUrlPresent as true,resourceSize:integer(row.resourceSize,32*1024*1024),
+      verifiedBytes:integer(row.verifiedBytes,32*1024*1024),verifiedSha256:hash(row.verifiedSha256),
+    };
+    if(proof.kind!=='wechat-cdn-big-hd-exact-content-v1'||!/^[a-f0-9]{32}$/.test(proof.messageMd5)||!proof.hdLength||!proof.hdWidth||!proof.hdHeight
+      ||proof.bigImageUrlPresent!==true||proof.resourceSize!==expectedBytes||proof.verifiedBytes!==expectedBytes||proof.verifiedSha256!==expectedSha256)return fail('history_image_original_unavailable');
+    return proof;
+  }catch{return fail('history_image_original_unavailable');}
+}
+function imageOpen(value: unknown, scope: ResolvedWechatScope, target: HistoryTarget, source: WechatImageSourceIdentity, expectedBytesMaximum:number): WechatImageOpenResult {
+  const row=object(value,['protocol','resourceToken','sourceGeneration','resourceSourceGeneration','target','partition','table','localId','serverId','sentAt',
+    'resourceTable','resourceId','resourceTypeRaw','variantCode','complete','quality','qualityProof','expectedBytes','expectedSha256','mimeType','envelope','sourceEnvelope']);
+  const expectedBytes=integer(row.expectedBytes,Number.MAX_SAFE_INTEGER),expectedSha256=hash(row.expectedSha256);
+  if(expectedBytes>expectedBytesMaximum)return fail('history_image_too_large');
+  if(expectedBytes<1)return fail('history_image_resource_invalid');
+  const mimeType=row.mimeType;
+  if(row.protocol!=='wechat-original-image-v1'||scope.sourceGeneration!==target.sourceGeneration)return fail('history_image_association_unverified');
+  if(row.sourceGeneration!==scope.sourceGeneration)return fail('history_image_source_changed');
+  if(row.target!==target.descriptor||row.partition!==source.partition||row.table!==source.table||row.localId!==source.localId||row.serverId!==source.serverId||row.sentAt!==source.sentAt
+    ||!target.tables.some(item=>item.partition===source.partition&&item.instance===source.table))return fail('history_image_association_unverified');
+  if(row.complete!==true||row.quality!=='original')return fail('history_image_original_unavailable');
+  if(row.resourceTable!=='wechat-message-resource-v1'
+    ||row.envelope!=='plain'||row.sourceEnvelope!=='plain'&&row.sourceEnvelope!=='wechat_dat'
+    ||typeof mimeType!=='string'||!['image/jpeg','image/png','image/gif','image/bmp'].includes(mimeType))return fail('history_image_resource_invalid');
+  const qualityProof=imageQualityProof(row.qualityProof,expectedBytes,expectedSha256);
+  return {protocol:'wechat-original-image-v1',resourceToken:imageToken(row.resourceToken),sourceGeneration:scope.sourceGeneration,
+    resourceSourceGeneration:hash(row.resourceSourceGeneration),target:target.descriptor,partition:source.partition,table:source.table,
+    localId:source.localId,serverId:source.serverId,sentAt:source.sentAt,resourceTable:row.resourceTable as WechatImageOpenResult['resourceTable'],
+    resourceId:unsigned(row.resourceId),resourceTypeRaw:integer(row.resourceTypeRaw,0x7fffffff),variantCode:integer(row.variantCode,0x7fffffff),
+    complete:true,quality:'original',qualityProof,expectedBytes,expectedSha256,mimeType:mimeType as WechatImageOpenResult['mimeType'],
+    envelope:'plain',sourceEnvelope:row.sourceEnvelope as WechatImageOpenResult['sourceEnvelope']};
+}
+function imageRead(value: unknown, active:{token:string;sourceGeneration:string;expectedBytes:number;expectedSha256:string;nextOffset:number}, requestedOffset:number):WechatImageReadResult {
+  const hasHash=!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.hasOwn(value,'verifiedSha256');
+  const row=object(value,['resourceToken','sourceGeneration','offset','bytesRead','totalBytes','chunkBase64','eof',...(hasHash?['verifiedSha256']:[])]);
+  const offset=integer(row.offset,active.expectedBytes),bytesRead=integer(row.bytesRead,65536),totalBytes=integer(row.totalBytes,32*1024*1024);
+  const chunkBase64=text(row.chunkBase64,90_000),eof=bool(row.eof);
+  if(row.resourceToken!==active.token)return fail('history_image_token_invalid');
+  if(row.sourceGeneration!==active.sourceGeneration||totalBytes!==active.expectedBytes)return fail('history_image_source_changed');
+  if(offset!==requestedOffset||offset!==active.nextOffset)return fail('history_image_offset_invalid');
+  if(bytesRead<1||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(chunkBase64))return fail('history_image_read_failed');
+  const chunk=Buffer.from(chunkBase64,'base64');
+  if(chunk.toString('base64')!==chunkBase64||chunk.length!==bytesRead||offset+bytesRead>totalBytes
+    ||eof!==(offset+bytesRead===totalBytes)||hasHash!==eof||hasHash&&hash(row.verifiedSha256)!==active.expectedSha256)return fail('history_image_read_failed');
+  active.nextOffset+=bytesRead;
+  return {resourceToken:active.token,sourceGeneration:active.sourceGeneration,offset,bytesRead,totalBytes,chunkBase64,eof,...(hasHash?{verifiedSha256:active.expectedSha256}:{})};
 }
 function list<T>(value: unknown, maximum: number, parse: (value: unknown) => T, minimum = 0): T[] {
   if (!Array.isArray(value) || value.length < minimum || value.length > maximum) return fail();
@@ -524,6 +607,7 @@ function validatedOptions(options: NarrowWechatClientOptions): NarrowWechatClien
 }
 interface NativeProcess { child: ChildProcessWithoutNullStreams; exited: Promise<void>; output: Buffer; stderrBytes: number }
 interface PendingResponse { limit: number; parse(value: unknown): unknown; resolve(value: unknown): void; reject(error: StorageFailure): void }
+interface ActiveImage { token: string; sourceGeneration: string; expectedBytes: number; expectedSha256: string; nextOffset: number }
 /** 只提供已选目标的固定协议；正文分页另需当前支持认证，不提供通用命令、SQL或路径RPC。 */
 export class NarrowWechatClient {
   readonly #stoppedSignal=Promise.withResolvers<void>();
@@ -536,6 +620,7 @@ export class NarrowWechatClient {
   #support?: HistorySupportReport;
   #growthFromSchema?: string;
   #target?: HistoryTarget;
+  #activeImage?: ActiveImage;
   #tailCursor?: string;
   #lastTail?: { input: string; page: HistoryTailPage };
   #quarantineTarget?: HistoryTarget;
@@ -721,6 +806,48 @@ export class NarrowWechatClient {
       });
     }, signal);
   }
+  openImageSelected(target: HistoryTarget, identity: WechatImageSourceIdentity, signal?: AbortSignal): Promise<WechatImageOpenResult> {
+    let source:WechatImageSourceIdentity;
+    try { signalValid(signal); source=imageIdentity(identity); }
+    catch { return Promise.reject(new StorageFailure('history_image_request_invalid')); }
+    return this.#enqueue(async()=>{
+      const scope=this.#readableScope(),accepted=this.#target;
+      const parsed=historyTarget(target,scope,this.#schema);
+      if(!accepted||JSON.stringify(parsed)!==JSON.stringify(accepted))return fail('history_target_unverified');
+      if(this.#activeImage)return fail('history_image_request_invalid');
+      if(!accepted.tables.some(item=>item.partition===source.partition&&item.instance===source.table))return fail('history_image_association_unverified');
+      const opened=await this.#request({op:'image-open',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-image-v1',
+        target:accepted.descriptor,partition:source.partition,table:source.table,localId:source.localId,serverId:source.serverId,sentAt:source.sentAt},
+        value=>imageOpen(value,scope,accepted,source,32*1024*1024));
+      this.#activeImage={token:opened.resourceToken,sourceGeneration:opened.sourceGeneration,expectedBytes:opened.expectedBytes,expectedSha256:opened.expectedSha256,nextOffset:0};
+      return opened;
+    },signal);
+  }
+  readImageSelected(resourceToken:string, offset:number, signal?:AbortSignal):Promise<WechatImageReadResult> {
+    let token:string;
+    try {signalValid(signal);token=imageToken(resourceToken);integer(offset,32*1024*1024);}
+    catch {return Promise.reject(new StorageFailure('history_image_request_invalid'));}
+    return this.#enqueue(async()=>{
+      const active=this.#activeImage;
+      if(!active||active.token!==token)return fail('history_image_token_invalid');
+      if(offset!==active.nextOffset||offset>=active.expectedBytes)return fail('history_image_offset_invalid');
+      return this.#request({op:'image-read',resourceToken:active.token,offset},
+        value=>imageRead(value,active,offset));
+    },signal);
+  }
+  closeImageSelected(resourceToken:string, signal?:AbortSignal):Promise<void> {
+    let token:string;
+    try {signalValid(signal);token=imageToken(resourceToken);}
+    catch {return Promise.reject(new StorageFailure('history_image_request_invalid'));}
+    return this.#enqueue(async()=>{
+      const active=this.#activeImage;
+      if(!active||active.token!==token)return fail('history_image_token_invalid');
+      await this.#request({op:'image-close',resourceToken:active.token},value=>{
+        const row=object(value,['closed']);if(row.closed!==true)return fail('history_image_token_invalid');return true;
+      });
+      this.#activeImage=undefined;
+    },signal);
+  }
   resumeTargetSelected(previous: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTarget | null> {
     try { signalValid(signal); opaque(cursor); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
     return this.#enqueue(async () => {
@@ -857,7 +984,7 @@ export class NarrowWechatClient {
     });
     return native;
   }
-  async #request<T>(request: Record<string, string>, parse: (value: unknown) => T, limit = responseLimit): Promise<T> {
+  async #request<T>(request: Record<string, string | number>, parse: (value: unknown) => T, limit = responseLimit): Promise<T> {
     let native: NativeProcess;
     try { native = await this.#start(); }
     catch (error) { const code = error instanceof StorageFailure ? error.code : 'history_native_unavailable'; await this.#stop(code); return fail(code); }
@@ -897,7 +1024,7 @@ export class NarrowWechatClient {
   }
   async #stop(code: string): Promise<void> {
     if (this.#stopped) { await this.#stopping; return; }
-    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget=undefined; this.#testMetadata = undefined; this.#receivedTestMetadata = undefined;
+    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#activeImage=undefined; this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget=undefined; this.#testMetadata = undefined; this.#receivedTestMetadata = undefined;
     this.#stoppedSignal.resolve();
     const pending = this.#pending; this.#pending = undefined;
     this.#stopping = (async () => {

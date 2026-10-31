@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import {closeSqliteHostResources} from '../src/sqlite-host-plugin.ts';
 
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
+test('图片同步先排空，再关闭媒体文件服务和SQLite',async()=>{
+ const gate=deferred(),started=deferred(),calls=[];
+ const closing=closeSqliteHostResources({imageSync:{close:async()=>{calls.push('image-start');started.resolve();await gate.promise;calls.push('image-done');}},media:{close:async()=>{calls.push('media');}},storage:{close:async()=>{calls.push('storage');}}});
+ await started.promise;assert.deepEqual(calls,['image-start']);gate.resolve();await closing;
+ assert.deepEqual(calls,['image-start','image-done','media','storage']);
+});
 test('退出先排空首次派发器，再关闭历史和共享存储',async()=>{
  const gate=deferred(),started=deferred(),calls=[];
  const closing=closeSqliteHostResources({firstHistory:{close:async()=>{calls.push('first-start');started.resolve();await gate.promise;calls.push('first-done');}},history:{close:async()=>{calls.push('history');}},contacts:{close:async()=>{calls.push('contacts');}},models:{close:async()=>{calls.push('models');}},storage:{close:async()=>{calls.push('storage');}}});

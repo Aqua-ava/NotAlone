@@ -239,3 +239,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 135. [ADR-135：Skill 默认启用与中文场景管理](adr/135-default-enabled-localized-skill-library.md)
 
 136. [ADR-136：回复生成按需组合多个 Skill](adr/136-multi-skill-reply-composition.md)
+
+137. [ADR-137：授权会话同步中的原图保存](adr/137-original-image-authorized-sync.md)

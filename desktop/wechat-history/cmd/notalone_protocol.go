@@ -20,14 +20,21 @@ import (
 )
 
 type notaloneHistoryRequest struct {
-	Operation    string `json:"op"`
-	Account      string `json:"account,omitempty"`
-	Conversation string `json:"conversation,omitempty"`
-	DisplayName  string `json:"displayName,omitempty"`
-	Consent      string `json:"consent,omitempty"`
-	Target       string `json:"target,omitempty"`
-	Cursor       string `json:"cursor,omitempty"`
-	Kind         string `json:"kind,omitempty"`
+	Operation     string `json:"op"`
+	Account       string `json:"account,omitempty"`
+	Conversation  string `json:"conversation,omitempty"`
+	DisplayName   string `json:"displayName,omitempty"`
+	Consent       string `json:"consent,omitempty"`
+	Target        string `json:"target,omitempty"`
+	Cursor        string `json:"cursor,omitempty"`
+	Kind          string `json:"kind,omitempty"`
+	Partition     string `json:"partition,omitempty"`
+	Table         string `json:"table,omitempty"`
+	LocalID       string `json:"localId,omitempty"`
+	ServerID      string `json:"serverId,omitempty"`
+	SentAt        string `json:"sentAt,omitempty"`
+	ResourceToken string `json:"resourceToken,omitempty"`
+	Offset        int64  `json:"offset,omitempty"`
 }
 type notaloneResolved struct {
 	Account          string `json:"accountKey"`
@@ -75,6 +82,8 @@ type notaloneHistorySession struct {
 	certify              func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
 	testMetadata         *notaloneTestMetadataWatch
 	receivedTestMetadata *notaloneReceivedTestMetadataWatch
+	imageMu              sync.Mutex
+	openImages           map[string]*notaloneOpenImage
 	accountGeneration    string
 	checkpointDirectory  string
 	supportTargetChanged bool
@@ -87,6 +96,7 @@ func newNotaloneHistorySession(s *server) *notaloneHistorySession {
 func (h *notaloneHistorySession) close() {
 	h.cancel()
 	h.resetTail()
+	h.closeAllImages()
 	if h.testMetadata != nil {
 		_ = h.testMetadata.Close()
 	}
@@ -578,6 +588,23 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if r.Consent != "selected-received-test-lifecycle-metadata-v1" || !validNotaloneTestMetadataAction(r.Kind) || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
+	case "image-open":
+		if r.Consent != "selected-image-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) ||
+			r.DisplayName != "" || r.Target == "" || len(r.Target) > 64000 || r.Cursor != "" || r.Kind != "" ||
+			!notaloneImageDigestPattern.MatchString(r.Partition) || !notaloneImageDigestPattern.MatchString(r.Table) ||
+			!notaloneCanonicalDecimal(r.LocalID, true) || !notaloneCanonicalDecimal(r.ServerID, false) || !notaloneCanonicalDecimal(r.SentAt, true) || r.ResourceToken != "" || r.Offset != 0 {
+			return nil, notaloneFailure("history_image_request_invalid")
+		}
+	case "image-read":
+		if r.Account != "" || r.Conversation != "" || r.DisplayName != "" || r.Consent != "" || r.Target != "" || r.Cursor != "" || r.Kind != "" || r.Partition != "" || r.Table != "" || r.LocalID != "" || r.ServerID != "" || r.SentAt != "" ||
+			!notaloneImageTokenValid(r.ResourceToken) || r.Offset < 0 || r.Offset > notaloneImageMaxBytes {
+			return nil, notaloneFailure("history_image_request_invalid")
+		}
+	case "image-close":
+		if r.Account != "" || r.Conversation != "" || r.DisplayName != "" || r.Consent != "" || r.Target != "" || r.Cursor != "" || r.Kind != "" || r.Partition != "" || r.Table != "" || r.LocalID != "" || r.ServerID != "" || r.SentAt != "" ||
+			!notaloneImageTokenValid(r.ResourceToken) || r.Offset != 0 {
+			return nil, notaloneFailure("history_image_request_invalid")
+		}
 	case "verify-snapshot-metadata":
 		if r.Consent != "selected-snapshot-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
@@ -601,11 +628,20 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	default:
 		return nil, notaloneFailure("history_operation_unsupported")
 	}
+	if r.Operation == "image-close" {
+		return h.closeImage(r.ResourceToken), nil
+	}
 	if err := h.initialize(); err != nil {
 		return nil, err
 	}
 	if err := h.currentAccount(); err != nil {
 		return nil, err
+	}
+	if r.Operation == "image-read" {
+		if h.selected == nil {
+			return nil, notaloneFailure("history_image_token_invalid")
+		}
+		return h.readImage(ctx, r.ResourceToken, r.Offset)
 	}
 	if r.Operation == "inspect-account-schema" {
 		return h.inspectAccountSchema(ctx)
@@ -630,6 +666,9 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	}
 	if _, err := h.bindMetadata(ctx, h.selected.Conversation); err != nil {
 		return nil, err
+	}
+	if r.Operation == "image-open" {
+		return h.openImage(ctx, r)
 	}
 	if r.Operation == "inspect" {
 		return h.inspect(ctx)

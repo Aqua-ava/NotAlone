@@ -28,12 +28,13 @@ export class SqliteHistoryService {
  private readonly createChannel:()=>HistoryChannel;
  readonly holders:ActiveHolders;
  private readonly onMessageChange?: (contactId:string,messageId:string,kind:MessageChangeKind)=>void;
+ private readonly onAcceptedPage?: (contactId:string)=>void;
  private firstHistoryWake?: (contactId:string)=>void;
  private readonly active=new Map<string,ActiveHistoryRead>();
  private readonly guards=new Map<string,RetainedGuard>();
  private closed=false;
- constructor(storage:SqliteStorage,contacts:HistoryContactGateway,channel:HistoryChannel|(()=>HistoryChannel),holders:ActiveHolders=new ActiveHolders(),onMessageChange?:(contactId:string,messageId:string,kind:MessageChangeKind)=>void){
-  this.storage=storage;this.contacts=contacts;this.createChannel=typeof channel==='function'?channel:()=>channel;this.holders=holders;this.onMessageChange=onMessageChange;
+ constructor(storage:SqliteStorage,contacts:HistoryContactGateway,channel:HistoryChannel|(()=>HistoryChannel),holders:ActiveHolders=new ActiveHolders(),onMessageChange?:(contactId:string,messageId:string,kind:MessageChangeKind)=>void,onAcceptedPage?:(contactId:string)=>void){
+  this.storage=storage;this.contacts=contacts;this.createChannel=typeof channel==='function'?channel:()=>channel;this.holders=holders;this.onMessageChange=onMessageChange;this.onAcceptedPage=onAcceptedPage;
  }
  setFirstHistoryWake(callback:(contactId:string)=>void):void {this.firstHistoryWake=callback;}
  private wakeFirstHistory(contactId:string):void {try{this.firstHistoryWake?.(contactId);}catch{/* 唤醒失败不回滚已持久化的历史目标。 */}}
@@ -45,6 +46,7 @@ export class SqliteHistoryService {
   if(includeCreated)this.publishMessageChanges(contactId,createdMessageIds,'created');
   const created=new Set(createdMessageIds??[]);
   this.publishMessageChanges(contactId,updatedMessageIds?.filter(messageId=>!created.has(messageId)),'updated');
+  try{this.onAcceptedPage?.(contactId);}catch{/* 图片同步失败不回滚已保存的消息和覆盖。 */}
   return coverage;
  }
  private async quarantinePageStates(contactId:string,scope:HistoryScope,goal:PendingGoal|{id:string;target:HistoryTarget;cursor:string},page:HistoryPage|HistoryTailPage):Promise<void>{

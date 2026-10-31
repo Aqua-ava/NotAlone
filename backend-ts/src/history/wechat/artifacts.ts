@@ -13,7 +13,7 @@ async function regular(file: string) {
   return stat;
 }
 /** 只读取显式制品旁的固定manifest；版本、补丁与实际制品hash仍由窄客户端复验。 */
-export async function loadNarrowWechatOptions(executable: string): Promise<NarrowWechatClientOptions> {
+async function readNarrowWechatManifest(executable: string): Promise<{options:NarrowWechatClientOptions;originalImageProtocol:unknown}> {
   try {
     if (typeof executable !== 'string') return reject();
     await regular(executable);
@@ -41,10 +41,21 @@ export async function loadNarrowWechatOptions(executable: string): Promise<Narro
       const row = manifest as Record<string, unknown>;
       if (typeof row.cliSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.cliSha256)
         || typeof row.wcdbSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.wcdbSha256)) return reject();
-      return { executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256 };
+      return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256 },originalImageProtocol:row.originalImageProtocol};
     } finally { await handle.close(); }
   } catch (error) {
     if (error instanceof StorageFailure && error.code === 'history_artifact_manifest_missing') throw error;
     return reject();
   }
+}
+
+export async function loadNarrowWechatOptions(executable:string):Promise<NarrowWechatClientOptions>{
+ return (await readNarrowWechatManifest(executable)).options;
+}
+
+/** 旧组件继续使用原消息同步能力，不把不支持的新协议误记成某张图片缺失。 */
+export async function supportsWechatOriginalImages(executable?:string):Promise<boolean>{
+ if(!executable)return false;
+ try{return (await readNarrowWechatManifest(executable)).originalImageProtocol==='wechat-original-image-v1';}
+ catch{return false;}
 }

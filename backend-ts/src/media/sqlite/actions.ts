@@ -157,6 +157,7 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
   if(kind==='voice'){const original=combination.find(f=>f.role==='audio_source');const originalId=original?.id??fail('media_audio_source_required');if(combination.some(f=>f.role==='audio_playback'&&f.parent_file_id!==originalId))fail('media_audio_parent_invalid');}
   const full=(files:StorageRow[])=>kind==='image'?files.some(f=>f.image_quality==='original'&&f.viewable===1n):kind==='video'?files.some(f=>f.role==='video_playback'&&f.playable===1n):files.some(f=>f.role==='audio_source')&&files.some(f=>f.role==='audio_playback'&&f.playable===1n);
   if(full(current)&&!full(combination))fail('media_result_would_degrade');
+  if(kind==='image'&&a.goal==='original_upgrade'&&!full(combination))fail('media_original_unavailable');
   const outcome=full(combination)?'full':kind==='image'&&combination.some(f=>f.image_quality==='unknown')?'quality_unknown':'limited';
   const keepIds=new Set(keep.map(f=>f.id));
   for(const f of current)if(!keepIds.has(f.id))tx.run("UPDATE media_file SET publish_state='cleanup_pending' WHERE owner_id=? AND id=?",[i.ownerId,f.id]);
@@ -170,6 +171,23 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
   const a=tx.get('SELECT * FROM media_extraction_attempt WHERE owner_id=? AND id=? AND runtime_id=?',[i.ownerId,i.attemptId,lease.runtimeId]);if(!a)return;
   if(['pending','running'].includes(String(a.state)))tx.run("UPDATE media_extraction_attempt SET state=?,result_outcome='no_result',lease_token=NULL,lease_expires_at=NULL,finished_at=?,error_code=? WHERE owner_id=? AND id=?",[i.interrupted?'interrupted':'failed',Date.now(),/^[-a-z0-9_]{1,80}$/.test(i.code)?i.code:'media_execution_failed',i.ownerId,i.attemptId]);
   cleanup(tx,lease,registration,a);
+ }),
+ action('imageSyncTargets','read',(tx,i)=>{
+  const ownerId=id(i.ownerId),contactId=id(i.contactId);
+  if(typeof i.after!=='string'||!/^\d{1,20}$/.test(i.after))fail('media_request_invalid');
+  const rows=tx.all(`SELECT m.id,m.display_no,coalesce(h.media_generation,0) media_generation FROM message m
+   JOIN contact c ON c.owner_id=m.owner_id AND c.id=m.contact_id AND c.state='active'
+   JOIN owner o ON o.owner_id=m.owner_id AND o.state='active'
+   LEFT JOIN message_media h ON h.owner_id=m.owner_id AND h.message_id=m.id
+   WHERE m.owner_id=? AND m.contact_id=? AND m.kind='image' AND m.availability='available' AND m.display_no>?
+   AND (h.state IS NULL OR h.state='active')
+   AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
+   AND NOT EXISTS(SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id)
+   AND NOT EXISTS(SELECT 1 FROM history_guard_lease l JOIN database_instance d ON d.slot=1 WHERE l.owner_id=m.owner_id AND l.contact_id=m.contact_id AND (l.state<>'active' OR l.runtime_id<>d.runtime_id))
+   AND NOT EXISTS(SELECT 1 FROM media_file f WHERE f.owner_id=m.owner_id AND f.message_id=m.id AND f.publish_state='current' AND f.content_state='present' AND f.image_quality='original')
+   AND NOT EXISTS(SELECT 1 FROM media_extraction_attempt a WHERE a.owner_id=m.owner_id AND a.message_id=m.id AND a.request_key='image_sync_'||m.id||'_'||coalesce(h.media_generation,0))
+   ORDER BY m.display_no LIMIT 64`,[ownerId,contactId,BigInt(i.after)]);
+  return rows.map(row=>({messageId:String(row.id),displayNo:String(row.display_no),requestKey:`image_sync_${row.id}_${row.media_generation}`}));
  }),
  action('currentFiles','read',(tx,i)=>tx.all("SELECT contact_id,message_id,id FROM media_file WHERE owner_id=? AND publish_state='current' AND content_state='present'",[id(i.ownerId)]).map(f=>({contactId:String(f.contact_id),messageId:String(f.message_id),fileId:String(f.id)}))),
  action('fileUnavailable','write',(tx,i)=>{
