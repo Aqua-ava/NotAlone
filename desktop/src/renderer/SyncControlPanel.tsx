@@ -1,13 +1,11 @@
 import { HistoryCoverageStatus } from './HistoryCoverageStatus';
 import { syncScopeNotice } from './sync-scope-notice';
 import { useEffect, useState } from 'react';
-import type { BackgroundSyncPhase, SyncControlBridge, SyncControlState, SyncStatusReport } from '../shared/sync-control-bridge';
+import type { SyncControlBridge, SyncControlState, SyncStatusReport } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import './bindings.css';
 
 const initial: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
-const backgroundLabels: Record<BackgroundSyncPhase, string> = { disabled: '后台读取已关闭', waiting_bindings: '等待确认会话授权',
-  active: '后台读取运行中', degraded: '后台读取有待核验或中断的项目，请查看各会话状态' };
 const localHistoryNotices: Record<string, string> = {
   local_history_deleted: '部分已确认会话在本机微信有删除记录，当前没有可读历史。历史覆盖尚未确认；这些会话收到新消息后会再次检查。',
   local_history_empty: '部分已确认会话在本机微信暂未保存聊天记录。历史覆盖尚未确认；这些会话收到新消息后会再次检查。',
@@ -81,7 +79,6 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
       <div className="bindings-toolbar"><h2>自动同步总开关</h2><button className="button"
         disabled={state.phase === 'offline' || state.phase === 'loading' || state.busy !== null}
         onClick={() => void operate(() => bridge.refresh())}>刷新同步状态</button></div>
-      {!bodyAvailable && report?.enabled && <p role="status">正文读取正在核验或暂时不可用，请查看各会话状态。</p>}
       <p role="status">{!report ? '后台正文同步状态未确认' : !report.enabled ? '后台正文同步已关闭'
         : bodyAvailable ? '后台正文同步已开启' : '已开启同步，等待读取能力核验'}</p>
       <button className="button" disabled={!available} onClick={() => void switchSync()}>{state.busy === 'enable' ? '正在开启后台同步…'
@@ -122,7 +119,6 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
         {historyAuthorization === 'unknown' && <p>历史读取授权状态尚未确认，请刷新同步状态后重试。</p>}
         {state.busy === 'history' && <p role="status">正在保存历史读取授权…</p>}
       </section>}
-      {report && <p>{!report.enabled ? '后台读取已关闭。' : bodyAvailable ? `${backgroundLabels[report.backgroundPhase]}。` : '正在核验读取能力，尚未开始正文同步。'}已授权 {report.confirmedBindingCount} 个会话。</p>}
       {scopeNotice && <p role="alert">部分已授权会话暂停读取：{scopeNotice}</p>}
       {state.phase === 'loading' && <p role="status">正在确认同步状态…</p>}
       {state.phase === 'offline' && <p>连接本机服务后查看与控制后台同步。</p>}

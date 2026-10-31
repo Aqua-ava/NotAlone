@@ -218,7 +218,6 @@ test('SQLite总开关先核验读取能力，关闭或未就绪时不误报功�
  await expect(page.getByText('请到「联系人」逐人确认私聊；每次确认包含该会话本机可读的历史文字和后续新消息，新私聊不会自动纳入。',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'开启后台同步',exact:true}).click();
  assert.deepEqual(await page.evaluate(()=>window.calls),[{scopeRevision:4}]);
- await expect(page.getByText('正文读取正在核验或暂时不可用，请查看各会话状态。',{exact:true})).toBeVisible();
  await expect(page.getByText('已开启同步，等待读取能力核验',{exact:true})).toBeVisible();
  await expect(page.getByText('后台正文同步已开启',{exact:true})).toHaveCount(0);
 });
