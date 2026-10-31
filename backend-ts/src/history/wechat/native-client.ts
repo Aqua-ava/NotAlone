@@ -6,6 +6,7 @@ import path from 'node:path';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { HistoryPage, HistoryRecord, HistorySupportReport, HistoryTarget, HistoryTailPage } from '../sqlite/contracts.ts';
 import { boundaryProtocol, maxBoundaryMembers, membersManifestSha256, sourceLocalKey, type HistoryBoundaryCandidate } from '../sqlite/boundary.ts';
+import { isPartitionGrowthTargetChange, isSafePartitionGrowth, historyTargetTransition } from '../partition-growth.ts';
 
 export interface ResolvedWechatScope {
   accountKey: string; conversationKey: string; displayName: string; sourceGeneration: string;
@@ -273,7 +274,7 @@ function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: str
     || row.profileId === absentPrivateTargetProfile && (!absentTarget || declaredPrimaryKey.length > 0))) return fail();
   let capabilities: Record<string, 'supported' | 'unsupported' | 'unverified'> | undefined;
   if (hasCapabilities) {
-    const extras = ['incrementalTail', 'durableIncremental', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
+    const extras = ['incrementalTail', 'durableIncremental', 'partitionGrowth', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
     const keys = ['programVersion', 'exactSchema', 'declaredLocalKey', 'automaticAllocation', 'serverIdUniqueConstraint', 'statusColumn', 'statusSemantics', 'sourceLifecycle', 'restartContinuity', 'recoveryMapping', 'snapshotBarrier', 'partitionCoverage', 'normalHistory', ...extras];
     const reported = object(row.capabilities, keys);
     capabilities = Object.fromEntries(keys.map(key => {
@@ -292,7 +293,8 @@ function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: str
     schemaFingerprint: hash(row.schemaFingerprint), declaredPrimaryKey, serverAliasSemantics: 'unverified', identity: 'source-table-local-v1', statusSemantics, continuity, ...(capabilities ? { capabilities } : {}) };
 }
 function historyTarget(value: unknown, scope: ResolvedWechatScope, schema?: WechatSchemaInspection): HistoryTarget {
-  const row = object(value, ['protocol', 'descriptor', 'partitions', 'tables', 'sourceGeneration']);
+  const hasChecked=!!value&&typeof value==='object'&&Object.hasOwn(value,'checkedPartitions');
+  const row = object(value, ['protocol', 'descriptor', 'partitions', 'tables', 'sourceGeneration',...(hasChecked?['checkedPartitions']:[])]);
   if (row.protocol !== 'private-history-v1' || row.sourceGeneration !== scope.sourceGeneration) return fail();
   const partitions = list(row.partitions, 128, hash, 1); unique(partitions);
   const tables = list(row.tables, 128, value => {
@@ -300,11 +302,14 @@ function historyTarget(value: unknown, scope: ResolvedWechatScope, schema?: Wech
     return { partition: hash(table.partition), instance: hash(table.instance) };
   });
   unique(tables.map(table => table.instance));
+  const checkedPartitions=hasChecked?list(row.checkedPartitions,128,hash,1):undefined;
+  if(checkedPartitions){unique(checkedPartitions);if(partitions.some(partition=>!checkedPartitions.includes(partition)))return fail();}
   if (tables.some(table => !partitions.includes(table.partition))) return fail();
   if (!tables.length && (!schema || schema.tables.length > 0)) return fail();
   if (schema && (JSON.stringify([...partitions].sort()) !== JSON.stringify([...(schema.tables.length ? new Set(schema.tables.map(table => table.partition)) : schema.checkedPartitions)].sort())
     || JSON.stringify(tables.map(table => `${table.partition}:${table.instance}`).sort()) !== JSON.stringify(schema.tables.map(table => `${table.partition}:${table.target}`).sort()))) return fail();
-  return { protocol: 'private-history-v1', descriptor: opaque(row.descriptor), partitions, tables, sourceGeneration: scope.sourceGeneration };
+  if(schema&&checkedPartitions&&JSON.stringify([...checkedPartitions].sort())!==JSON.stringify([...schema.checkedPartitions].sort()))return fail();
+  return { protocol: 'private-history-v1', descriptor: opaque(row.descriptor), partitions, tables, sourceGeneration: scope.sourceGeneration,...(checkedPartitions?{checkedPartitions}:{}) };
 }
 function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | 'quarantine' = 'normal'): HistoryRecord {
   const quarantine = mode === 'quarantine';
@@ -527,6 +532,7 @@ export class NarrowWechatClient {
   #account?: WechatAccountMetadata;
   #schema?: WechatSchemaInspection;
   #support?: HistorySupportReport;
+  #growthFromSchema?: string;
   #target?: HistoryTarget;
   #tailCursor?: string;
   #lastTail?: { input: string; page: HistoryTailPage };
@@ -577,7 +583,7 @@ export class NarrowWechatClient {
         if (this.#account && (parsed.accountKey !== this.#account.accountKey || parsed.sourceGeneration !== this.#account.sourceGeneration)) return fail('history_scope_changed');
         return parsed;
       });
-      this.#selected = { ...scope }; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget = undefined; return scope;
+      this.#selected = { ...scope }; this.#schema = undefined; this.#support = undefined; this.#growthFromSchema=undefined; this.#target = undefined; this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget = undefined; return scope;
     }, signal);
   }
   inspectSelected(signal?: AbortSignal): Promise<WechatSchemaInspection> {
@@ -587,7 +593,11 @@ export class NarrowWechatClient {
       if (!scope) return fail('history_scope_unverified');
       return this.#request({ op: 'inspect', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-schema-v1' }, value => {
         const parsed = inspection(value, scope);
-        if (this.#schema && this.#schema.schemaFingerprint !== parsed.schemaFingerprint || this.#support && this.#support.schemaFingerprint !== parsed.schemaFingerprint) fail('history_support_changed');
+        if(this.#schema&&this.#schema.schemaFingerprint!==parsed.schemaFingerprint){
+          if(this.#growthFromSchema||this.#support?.capabilities?.partitionGrowth!=='supported'||!isSafePartitionGrowth(this.#schema,parsed))fail('history_support_changed');
+          this.#growthFromSchema=this.#schema.schemaFingerprint;
+        }
+        if(this.#support&&this.#support.schemaFingerprint!==parsed.schemaFingerprint&&this.#growthFromSchema!==this.#support.schemaFingerprint)fail('history_support_changed');
         this.#schema = structuredClone(parsed); return parsed;
       });
     }, signal);
@@ -691,11 +701,12 @@ export class NarrowWechatClient {
           ? !this.#schema || this.#schema.tables.length > 0
           : this.#schema?.tables.length === 0)) fail();
         if (parsed.status === 'supported' && this.#schema && this.#schema.tables.some(table => JSON.stringify(table.declaredPrimaryKey) !== JSON.stringify(parsed.declaredPrimaryKey))) fail();
+        const growth=this.#support&&this.#growthFromSchema===this.#support.schemaFingerprint&&isPartitionGrowthTargetChange(this.#support,parsed);
         if (this.#schema && parsed.schemaFingerprint !== this.#schema.schemaFingerprint
-          || this.#support && parsed.schemaFingerprint !== this.#support.schemaFingerprint
-          || this.#support?.status === 'supported' && parsed.status === 'supported' && JSON.stringify(parsed) !== JSON.stringify(this.#support)) fail('history_support_changed');
+          || this.#support && parsed.schemaFingerprint !== this.#support.schemaFingerprint&&!growth
+          || this.#support?.status === 'supported' && parsed.status === 'supported' && JSON.stringify(parsed) !== JSON.stringify(this.#support)&&!growth) fail('history_support_changed');
         if (parsed.status !== 'supported') { this.#target = undefined; this.#tailCursor = undefined; this.#lastTail = undefined; }
-        this.#support = structuredClone(parsed); return parsed;
+        this.#support = structuredClone(parsed);this.#growthFromSchema=undefined; return parsed;
       });
     }, signal);
   }
@@ -713,7 +724,11 @@ export class NarrowWechatClient {
     return this.#enqueue(async () => {
       const scope=this.#readableScope();
       if(this.#support?.capabilities?.durableIncremental!=='supported')return fail('history_tail_unsupported');
-      const old=historyTarget(previous,scope,this.#schema);
+      const old=historyTarget(previous,scope);
+      const current=this.#schema&&{protocol:'private-history-v1' as const,descriptor:'current-schema',sourceGeneration:scope.sourceGeneration,
+        partitions:this.#schema.tables.length?[...new Set(this.#schema.tables.map(table=>table.partition))]:this.#schema.checkedPartitions,
+        tables:this.#schema.tables.map(table=>({partition:table.partition,instance:table.target})),checkedPartitions:this.#schema.checkedPartitions};
+      if(!current||!historyTargetTransition(old,current,this.#support.capabilities?.partitionGrowth==='supported'))return fail('history_target_unverified');
       return this.#request({op:'resume-target',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-history-v1',target:old.descriptor,cursor},value=>{
         if(value===null)return null;
         const parsed=historyTarget(value,scope,this.#schema);this.#target=structuredClone(parsed);this.#tailCursor=undefined;this.#lastTail=undefined;return parsed;
