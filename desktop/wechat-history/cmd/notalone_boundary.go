@@ -286,6 +286,7 @@ func notaloneBoundaryMembers(ctx context.Context, snapshot *notaloneSnapshot, sc
 	target := snapshot.target
 	target.Partitions = append([]string(nil), snapshot.target.Partitions...)
 	target.Tables = append([]notaloneSnapshotTable(nil), snapshot.target.Tables...)
+	target.CheckedPartitions = append([]string(nil), snapshot.target.CheckedPartitions...)
 	return notaloneBoundarySnapshotReport{
 		Format:              notaloneBoundaryFormat,
 		ScopeDigest:         notaloneHash(snapshot.selected.Account, snapshot.selected.Conversation),

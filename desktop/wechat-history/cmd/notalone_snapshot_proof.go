@@ -44,6 +44,9 @@ func (n *notaloneSnapshot) FixedSnapshotProof(inspection notaloneInspection) (no
 	if len(inspection.CheckedPartitions) != len(n.checkedPartitions) {
 		return empty, notaloneFailure("history_snapshot_proof_incomplete")
 	}
+	if !notaloneSameOrderedStrings(n.target.CheckedPartitions, n.checkedPartitions) {
+		return empty, notaloneFailure("history_snapshot_proof_incomplete")
+	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if err := n.checkLocked(); err != nil {

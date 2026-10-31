@@ -238,6 +238,125 @@ func TestNotAloneDeltaIdleAndOldRowChangeDoNotReplayHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestNotAloneCheckpointResumesOnlySafeSelectedTableGrowth(t *testing.T) {
+	h := notaloneProtocolFixture(t, true)
+	h.certify = notaloneSyntheticTailCertification
+	h.checkpointDirectory = t.TempDir()
+	if err := os.Chmod(h.checkpointDirectory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// 第二个消息文件从一开始就在完整检查白名单内，但起初没有当前联系人表。
+	notaloneTestDB(t, h.server.cfg.DBRoot, h.server.cfg, "message", "message_1.db",
+		"CREATE TABLE Name2Id(user_name TEXT);INSERT INTO Name2Id(rowid,user_name) VALUES(1,'friend-a'),(2,'synthetic-owner');", strings.Repeat("55", 16))
+	configBytes, err := json.Marshal(h.server.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(os.Getenv("WECHAT_CLI_CONFIG"), configBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	request := notaloneHistoryRequest{Operation: "target", Account: h.selected.Account, Conversation: h.selected.Conversation, Consent: "selected-history-v1"}
+	value, err := h.handle(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldTarget := value.(notaloneSnapshotTarget)
+	if len(oldTarget.Tables) != 1 || len(oldTarget.CheckedPartitions) != 2 {
+		t.Fatalf("初始目标必须保留完整白名单且只含一个已存在联系人表：%#v", oldTarget)
+	}
+	request.Operation, request.Target = "page", oldTarget.Descriptor
+	value, err = h.handle(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	basePage := value.(notaloneSnapshotPage)
+	if !basePage.Exhausted || basePage.ResumeCursor == nil || len(basePage.Records) != 1 {
+		t.Fatalf("合成基线未完成：%#v", basePage)
+	}
+	oldCursor := *basePage.ResumeCursor
+	oldSchemaFingerprint := h.inspected.SchemaFingerprint
+
+	writer0, err := wcdb.OpenWithKeyMapWritable(filepath.Join(h.server.cfg.DBRoot, "db_storage/message/message_0.db"), h.server.cfg.Keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer0.Close()
+	if err = writer0.Exec("CREATE TABLE unrelated_schema(id INTEGER)"); err != nil {
+		t.Fatal(err)
+	}
+	request.Operation, request.Consent, request.Target, request.Cursor = "support", "selected-schema-v1", "", ""
+	value, err = h.handle(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unchangedReport := value.(notaloneSupportReport)
+	if unchangedReport.SchemaFingerprint != oldSchemaFingerprint || h.tail == nil || h.tail.target.Descriptor != oldTarget.Descriptor {
+		t.Fatal("无关表CREATE不应改变选定目标、fingerprint或当前tail")
+	}
+
+	writer1, err := wcdb.OpenWithKeyMapWritable(filepath.Join(h.server.cfg.DBRoot, "db_storage/message/message_1.db"), h.server.cfg.Keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer1.Close()
+	if err = writer0.Exec("UPDATE " + quoteIdent("Msg_"+talkerHash("friend-a")) + " SET message_content='旧分片更新' WHERE local_id=1"); err != nil {
+		t.Fatal(err)
+	}
+	newTable := quoteIdent("Msg_" + talkerHash("friend-a"))
+	if err = writer1.Exec(`CREATE TABLE ` + newTable + `(local_id INTEGER PRIMARY KEY AUTOINCREMENT,server_id INTEGER,local_type INTEGER,sort_seq INTEGER,real_sender_id INTEGER,create_time INTEGER,status INTEGER,message_content BLOB,source BLOB);INSERT INTO ` + newTable + `(local_id,server_id,local_type,real_sender_id,create_time,status,message_content) VALUES(1,0,1,1,1700000000,0,'新增联系人表记录')`); err != nil {
+		t.Fatal(err)
+	}
+	request.Operation, request.Consent, request.Target, request.Cursor = "support", "selected-schema-v1", "", ""
+	value, err = h.handle(context.Background(), request)
+	if err != nil {
+		t.Fatalf("已知分片内新增所选联系人表应刷新support：%v", err)
+	}
+	grownReport := value.(notaloneSupportReport)
+	if grownReport.SchemaFingerprint == oldSchemaFingerprint || h.tail != nil {
+		t.Fatal("安全扩张必须发布新schema fingerprint并丢弃旧内存tail")
+	}
+	request.Operation, request.Target, request.Cursor, request.Consent = "resume-target", oldTarget.Descriptor, oldCursor, "selected-history-v1"
+	value, err = h.handle(context.Background(), request)
+	if err != nil {
+		t.Fatalf("安全目标扩张应从旧checkpoint交接新target：%v", err)
+	}
+	resumed := value.(notaloneSnapshotTarget)
+	if len(resumed.Tables) != 2 || !notaloneSameOrderedStrings(oldTarget.CheckedPartitions, resumed.CheckedPartitions) {
+		t.Fatalf("恢复目标扩张或白名单错误：%#v", resumed)
+	}
+	request.Operation, request.Target, request.Cursor = "page", resumed.Descriptor, ""
+	records := []notaloneSnapshotRecord{}
+	var last notaloneSnapshotPage
+	for index := 0; index < 8; index++ {
+		value, err = h.handle(context.Background(), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		last = value.(notaloneSnapshotPage)
+		records = append(records, last.Records...)
+		if last.Exhausted {
+			break
+		}
+		request.Cursor = *last.CursorOut
+	}
+	if !last.Exhausted || last.ResumeCursor == nil || len(records) != 2 {
+		t.Fatalf("恢复应读取新增表全体及旧表实际变化行：exhausted=%v records=%d", last.Exhausted, len(records))
+	}
+	seenOld, seenNew := false, false
+	for _, record := range records {
+		switch {
+		case record.Text != nil && *record.Text == "旧分片更新":
+			seenOld = true
+		case record.Text != nil && *record.Text == "新增联系人表记录":
+			seenNew = true
+		}
+	}
+	if !seenOld || !seenNew {
+		t.Fatalf("旧表delta或新增表基线缺失：%#v", records)
+	}
+}
 func mustReadNotaloneCheckpointDirectory(t *testing.T, dir string) []os.DirEntry {
 	t.Helper()
 	entries, err := os.ReadDir(dir)

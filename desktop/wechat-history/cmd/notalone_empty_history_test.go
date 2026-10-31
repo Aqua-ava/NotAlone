@@ -57,7 +57,7 @@ func TestNotAloneEmptyHistoryRequiresEveryPinnedAbsentPartition(t *testing.T) {
 	if tables, ok := targetWire["tables"].([]any); !ok || len(tables) != 0 {
 		t.Fatal("空目标wire必须返回tables:[]，不能变成null")
 	}
-	if len(target.Partitions) != 8 || len(target.Tables) != 0 {
+	if len(target.Partitions) != 8 || len(target.Tables) != 0 || !notaloneSameOrderedStrings(target.CheckedPartitions, inspected.CheckedPartitions) {
 		t.Fatal("空目标必须保留经过证明的全部分片")
 	}
 	page, err := snapshot.Page(context.Background(), "")
@@ -102,7 +102,7 @@ func TestNotAloneEmptyHistorySupportDoesNotInventIncrementalCapability(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Status != "supported" || report.ProfileID != notaloneAbsentPrivateTargetProfile || report.StatusSemantics != "no-message-table-v1" || len(report.DeclaredPrimaryKey) != 0 || report.Capabilities["incrementalTail"] != "unsupported" || profile.IncrementalTailVerified {
+	if report.Status != "supported" || report.ProfileID != notaloneAbsentPrivateTargetProfile || report.StatusSemantics != "no-message-table-v1" || len(report.DeclaredPrimaryKey) != 0 || report.Capabilities["incrementalTail"] != "unsupported" || report.Capabilities["partitionGrowth"] != "supported" || profile.IncrementalTailVerified {
 		t.Fatalf("空目标不能伪造主键或增量能力：%#v", report)
 	}
 	cached, _, err := session.support(context.Background())

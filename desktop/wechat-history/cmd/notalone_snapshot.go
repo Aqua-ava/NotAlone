@@ -141,11 +141,12 @@ type notaloneSnapshotTable struct {
 	Instance  string `json:"instance"`
 }
 type notaloneSnapshotTarget struct {
-	Protocol         string                  `json:"protocol"`
-	Descriptor       string                  `json:"descriptor"`
-	Partitions       []string                `json:"partitions"`
-	Tables           []notaloneSnapshotTable `json:"tables"`
-	SourceGeneration string                  `json:"sourceGeneration"`
+	Protocol          string                  `json:"protocol"`
+	Descriptor        string                  `json:"descriptor"`
+	Partitions        []string                `json:"partitions"`
+	Tables            []notaloneSnapshotTable `json:"tables"`
+	SourceGeneration  string                  `json:"sourceGeneration"`
+	CheckedPartitions []string                `json:"checkedPartitions,omitempty"`
 }
 type notaloneSnapshotRecord struct {
 	Partition      string  `json:"partition"`
@@ -281,10 +282,9 @@ func notaloneSnapshotFiles(directory string) ([]string, error) {
 
 // 实例身份必须与结构检查使用同一完整公式，旧版的文件+表名摘要不能升级为新证明。
 func notaloneSnapshotInstanceMatches(schema notaloneTableSchema, table string) bool {
-	_, versionErr := strconv.ParseUint(schema.SchemaVersion, 10, 32)
 	rootPage, rootErr := strconv.ParseUint(schema.RootPage, 10, 32)
-	return versionErr == nil && rootErr == nil && rootPage > 0 && len(schema.SQLFingerprint) == 64 &&
-		schema.Target == notaloneHash(schema.Partition, table, schema.SchemaVersion, schema.RootPage, schema.SQLFingerprint)
+	return rootErr == nil && rootPage > 0 && strconv.FormatUint(rootPage, 10) == schema.RootPage && notaloneCheckpointDigest(schema.SQLFingerprint) &&
+		schema.Target == notaloneAliasedFingerprint(notaloneHash("source-table-instance-v2", schema.Partition, table, schema.RootPage, schema.SQLFingerprint), notaloneSourceIdentityAliases)
 }
 
 func newNotaloneSnapshot(ctx context.Context, s *server, selected notaloneResolved, inspected notaloneInspection, profile notaloneReadProfile) (snapshot *notaloneSnapshot, err error) {
@@ -371,9 +371,7 @@ func newNotaloneSnapshotWithIdleTimeout(ctx context.Context, s *server, selected
 			if e != nil {
 				return nil, e
 			}
-			a, _ := json.Marshal(actual)
-			b, _ := json.Marshal(schema)
-			if string(a) != string(b) {
+			if !notaloneSameTableSchema(actual, schema) {
 				return nil, notaloneFailure("history_schema_changed")
 			}
 			shard.instance = actual.Target
@@ -422,9 +420,7 @@ func newNotaloneSnapshotWithIdleTimeout(ctx context.Context, s *server, selected
 			if e != nil {
 				return nil, e
 			}
-			a, _ := json.Marshal(actual)
-			b, _ := json.Marshal(expected[shard.partition])
-			if string(a) != string(b) {
+			if !notaloneSameTableSchema(actual, expected[shard.partition]) {
 				return nil, notaloneFailure("history_schema_changed")
 			}
 		}
@@ -436,7 +432,7 @@ func newNotaloneSnapshotWithIdleTimeout(ctx context.Context, s *server, selected
 	if e != nil {
 		return nil, e
 	}
-	n.target = notaloneSnapshotTarget{Protocol: "private-history-v1", Descriptor: descriptor, Partitions: []string{}, Tables: []notaloneSnapshotTable{}, SourceGeneration: selected.SourceGeneration}
+	n.target = notaloneSnapshotTarget{Protocol: "private-history-v1", Descriptor: descriptor, Partitions: []string{}, Tables: []notaloneSnapshotTable{}, SourceGeneration: selected.SourceGeneration, CheckedPartitions: append([]string(nil), n.checkedPartitions...)}
 	for _, shard := range n.shards {
 		if shard.present {
 			n.target.Partitions = append(n.target.Partitions, shard.partition)
@@ -491,6 +487,7 @@ func (n *notaloneSnapshot) Target() notaloneSnapshotTarget {
 	result := n.target
 	result.Partitions = append([]string(nil), result.Partitions...)
 	result.Tables = append([]notaloneSnapshotTable{}, result.Tables...)
+	result.CheckedPartitions = append([]string(nil), result.CheckedPartitions...)
 	return result
 }
 func (n *notaloneSnapshot) Check() error {

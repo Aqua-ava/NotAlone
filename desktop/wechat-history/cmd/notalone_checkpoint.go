@@ -21,17 +21,18 @@ type notaloneCheckpointIdentity struct {
 	Entry    notaloneTailBaselineEntry `json:"entry"`
 }
 type notaloneCheckpoint struct {
-	Format     string                             `json:"format"`
-	Scope      string                             `json:"scope"`
-	Root       string                             `json:"root"`
-	Generation string                             `json:"generation"`
-	Schema     string                             `json:"schema"`
-	Profile    string                             `json:"profile"`
-	Artifact   string                             `json:"artifact"`
-	Target     notaloneSnapshotTarget             `json:"target"`
-	Cursor     string                             `json:"cursor"`
-	Baseline   []notaloneCheckpointIdentity       `json:"baseline"`
-	States     map[string]notaloneDeltaShardState `json:"states"`
+	Format       string                             `json:"format"`
+	Scope        string                             `json:"scope"`
+	Root         string                             `json:"root"`
+	Generation   string                             `json:"generation"`
+	Schema       string                             `json:"schema"`
+	Profile      string                             `json:"profile"`
+	Artifact     string                             `json:"artifact"`
+	Target       notaloneSnapshotTarget             `json:"target"`
+	Cursor       string                             `json:"cursor"`
+	Baseline     []notaloneCheckpointIdentity       `json:"baseline"`
+	States       map[string]notaloneDeltaShardState `json:"states"`
+	TableSchemas map[string]string                  `json:"tableSchemas,omitempty"`
 }
 
 type notaloneSignedCheckpoint struct {
@@ -112,7 +113,7 @@ func notaloneCheckpointDirectorySafe(directory string, create bool) error {
 	}
 	return nil
 }
-func (h *notaloneHistorySession) loadCheckpoint(report notaloneSupportReport, profile notaloneReadProfile, target, cursor string) (*notaloneCheckpoint, error) {
+func (h *notaloneHistorySession) loadCheckpoint(report notaloneSupportReport, profile notaloneReadProfile, target string, currentTarget notaloneSnapshotTarget, cursor string) (*notaloneCheckpoint, error) {
 	if h.checkpointDirectory == "" {
 		return nil, nil
 	}
@@ -176,12 +177,31 @@ func (h *notaloneHistorySession) loadCheckpoint(report notaloneSupportReport, pr
 	if e != nil || len(computed) != 32 || !hmac.Equal(computed, provided) {
 		return nil, notaloneFailure("history_checkpoint_invalid")
 	}
-	if value.Format != expected.Format || value.Scope != expected.Scope || value.Root != expected.Root || value.Generation != expected.Generation || value.Schema != expected.Schema || value.Profile != expected.Profile || value.Artifact != expected.Artifact || value.Cursor != token || value.Target.Descriptor != target || len(value.Baseline) > notaloneTailIdentityLimit || len(value.States) > 128 {
+	if value.Format != expected.Format || value.Scope != expected.Scope || value.Root != expected.Root || value.Generation != expected.Generation || value.Profile != expected.Profile || value.Artifact != expected.Artifact || value.Cursor != token || value.Target.Descriptor != target || len(value.Baseline) > notaloneTailIdentityLimit || len(value.States) > 128 || len(value.TableSchemas) > 128 {
+		return nil, notaloneFailure("history_checkpoint_invalid")
+	}
+	added, growthOK := notaloneSafeTargetGrowth(value.Target, currentTarget, value.TableSchemas, h.inspected.Tables)
+	if value.Schema != expected.Schema {
+		if !growthOK || len(added) == 0 {
+			return nil, notaloneFailure("history_checkpoint_invalid")
+		}
+	} else if !notaloneSameSnapshotInstances(value.Target, currentTarget) && (!growthOK || len(added) == 0) {
 		return nil, notaloneFailure("history_checkpoint_invalid")
 	}
 	tables := map[string]string{}
 	for _, table := range value.Target.Tables {
 		tables[table.Partition] = table.Instance
+	}
+	if len(value.States) != len(tables) {
+		return nil, notaloneFailure("history_checkpoint_invalid")
+	}
+	for partition := range tables {
+		if _, exists := value.States[partition]; !exists {
+			return nil, notaloneFailure("history_checkpoint_invalid")
+		}
+	}
+	if len(value.TableSchemas) > 0 && len(value.TableSchemas) != len(tables) {
+		return nil, notaloneFailure("history_checkpoint_invalid")
 	}
 	seen := map[notaloneTailIdentity]bool{}
 	for _, item := range value.Baseline {
@@ -208,6 +228,29 @@ func (h *notaloneHistorySession) saveCheckpoint(report notaloneSupportReport, pr
 	value.Target = target
 	value.Cursor = cursor
 	value.States = states
+	var schemasOK bool
+	value.TableSchemas, schemasOK = notaloneTableSchemaDigests(h.inspected.Tables)
+	if !schemasOK || len(value.TableSchemas) != len(target.Tables) || len(target.CheckedPartitions) == 0 ||
+		!notaloneSameOrderedStrings(target.CheckedPartitions, h.inspected.CheckedPartitions) || len(states) != len(target.Tables) {
+		return notaloneFailure("history_checkpoint_invalid")
+	}
+	tableInstances := map[string]string{}
+	for _, table := range target.Tables {
+		if table.Partition == "" || table.Instance == "" || tableInstances[table.Partition] != "" || value.TableSchemas[table.Partition] == "" {
+			return notaloneFailure("history_checkpoint_invalid")
+		}
+		tableInstances[table.Partition] = table.Instance
+	}
+	for partition := range value.TableSchemas {
+		if tableInstances[partition] == "" {
+			return notaloneFailure("history_checkpoint_invalid")
+		}
+	}
+	for partition := range states {
+		if tableInstances[partition] == "" {
+			return notaloneFailure("history_checkpoint_invalid")
+		}
+	}
 	value.Baseline = []notaloneCheckpointIdentity{}
 	for identity, entry := range baseline {
 		value.Baseline = append(value.Baseline, notaloneCheckpointIdentity{identity, entry})
