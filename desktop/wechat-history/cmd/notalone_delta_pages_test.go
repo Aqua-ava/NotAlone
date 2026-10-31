@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -84,6 +86,24 @@ func notaloneDeltaReaders(t *testing.T, dbPath string) (*os.File, int64, *os.Fil
 		}
 	})
 	return db, dbInfo.Size(), wal, walSize
+}
+
+func notaloneDeltaReadIndexFile(t *testing.T, dbPath string) (*os.File, int64) {
+	t.Helper()
+	shm, err := os.Open(dbPath + "-shm")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, 0
+		}
+		t.Fatal("open synthetic WAL-index")
+	}
+	info, err := shm.Stat()
+	if err != nil {
+		shm.Close()
+		t.Fatal("stat synthetic WAL-index")
+	}
+	t.Cleanup(func() { _ = shm.Close() })
+	return shm, info.Size()
 }
 
 func TestNotAloneDeltaPagesTracksChangedEncryptedPagesWithoutPayload(t *testing.T) {
@@ -267,12 +287,177 @@ func TestNotAloneDeltaPagesTracksBtreeSplitAndMergeWithoutMissingRowIDs(t *testi
 	}
 }
 
+func TestNotAloneDeltaPagesIgnoresStaleWALGenerationSuffix(t *testing.T) {
+	dbPath, key, rootPage, writer := notaloneDeltaPageFixture(t)
+	if err := writer.Exec("WITH RECURSIVE sequence(id) AS (VALUES(2001) UNION ALL SELECT id+1 FROM sequence WHERE id<3000) INSERT INTO Msg_delta_fixture(local_id,body) SELECT id,zeroblob(512) FROM sequence"); err != nil {
+		t.Fatal("grow synthetic WAL before restart")
+	}
+	db, dbSize, wal, walSize := notaloneDeltaReaders(t, dbPath)
+	baseline, err := readNotaloneDeltaPages(context.Background(), db, dbSize, wal, walSize, rootPage, key, nil)
+	if err != nil {
+		t.Fatalf("index encrypted synthetic table pages: %v", err)
+	}
+	if err := writer.Exec("PRAGMA wal_checkpoint(RESTART)"); err != nil {
+		t.Fatal("checkpoint synthetic WAL before restart")
+	}
+	if err := writer.Exec("UPDATE Msg_delta_fixture SET body=zeroblob(52) WHERE local_id=44"); err != nil {
+		t.Fatal("write synthetic transaction after WAL restart")
+	}
+	changedDB, changedSize, changedWAL, changedWALSize := notaloneDeltaReaders(t, dbPath)
+	shm, shmSize := notaloneDeltaReadIndexFile(t, dbPath)
+	index := notaloneDeltaWALIndexReader{Reader: shm, Size: shmSize}
+	frameSize := int64(notaloneDeltaWALFrameHeaderSize + notaloneDeltaPageSize)
+	if changedWALSize <= notaloneDeltaWALHeaderSize+frameSize {
+		t.Fatalf("SQLite did not preserve a stale suffix in the synthetic WAL: before=%d after=%d", walSize, changedWALSize)
+	}
+	counted := &notaloneDeltaCountingReaderAt{reader: changedWAL}
+	boundedScan, err := notaloneDeltaScanWAL(context.Background(), counted, changedWALSize, &baseline.State, index)
+	if err != nil {
+		t.Fatalf("bound current WAL generation from SQLite index: %v", err)
+	}
+	if boundedScan.FramesRead == 0 || int64(counted.bytesRead) != int64(notaloneDeltaWALHeaderSize)+int64(boundedScan.FramesRead)*frameSize {
+		t.Fatalf("scan crossed SQLite mxFrame into stale WAL suffix: frames=%d bytes=%d physical=%d", boundedScan.FramesRead, counted.bytesRead, changedWALSize)
+	}
+	delta, err := readNotaloneDeltaPages(context.Background(), changedDB, changedSize, changedWAL, changedWALSize, rootPage, key, &baseline.State, index)
+	if err != nil {
+		t.Fatalf("accept SQLite stale-generation WAL suffix: %v", err)
+	}
+	if !delta.FullAudit || !containsInt64(delta.ChangedIDs, 44) || delta.State.WAL.CommitOffset >= changedWALSize {
+		t.Fatalf("WAL generation reset did not audit the committed prefix and changed row: fullAudit=%v changed=%v commitOffset=%d walSize=%d", delta.FullAudit, delta.ChangedIDs, delta.State.WAL.CommitOffset, changedWALSize)
+	}
+}
+
+func TestNotAloneDeltaWALIndexAcceptsRetainedFieldsWhenMXFrameIsZero(t *testing.T) {
+	dbPath, _, _, _ := notaloneDeltaPageFixture(t)
+	_, _, wal, walSize := notaloneDeltaReaders(t, dbPath)
+	shm, shmSize := notaloneDeltaReadIndexFile(t, dbPath)
+	if shmSize < notaloneDeltaWALIndexDoubleHeaderSize {
+		t.Fatal("synthetic SQLite WAL index is missing")
+	}
+	var walHeader [notaloneDeltaWALHeaderSize]byte
+	if _, err := wal.ReadAt(walHeader[:], 0); err != nil {
+		t.Fatal("read synthetic WAL header")
+	}
+	var raw [notaloneDeltaWALIndexDoubleHeaderSize]byte
+	if _, err := shm.ReadAt(raw[:], 0); err != nil {
+		t.Fatal("read synthetic SQLite WAL index")
+	}
+	committedFrames := binary.NativeEndian.Uint32(raw[16:20])
+	if committedFrames == 0 || binary.NativeEndian.Uint32(raw[20:24]) == 0 {
+		t.Fatal("synthetic WAL index does not contain a committed frame and page count")
+	}
+	keptPageCount := binary.NativeEndian.Uint32(raw[20:24])
+	keptChecksum1 := binary.NativeEndian.Uint32(raw[24:28])
+	keptChecksum2 := binary.NativeEndian.Uint32(raw[28:32])
+	var endianProbe [2]byte
+	binary.NativeEndian.PutUint16(endianProbe[:], 1)
+	for _, test := range []struct {
+		name      string
+		mxFrame   uint32
+		indexSize uint16
+		wantError string
+	}{
+		{name: "retained page size and frame fields", mxFrame: 0, indexSize: uint16(notaloneDeltaPageSize)},
+		{name: "zero page size and retained frame fields", mxFrame: 0, indexSize: 0},
+		{name: "unknown nonzero page size remains rejected", mxFrame: 0, indexSize: 512, wantError: "history_snapshot_window_changed"},
+		{name: "zero page size with committed frames remains rejected", mxFrame: committedFrames, indexSize: 0, wantError: "history_snapshot_window_changed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := raw
+			binary.NativeEndian.PutUint16(candidate[14:16], test.indexSize)
+			binary.NativeEndian.PutUint32(candidate[16:20], test.mxFrame)
+			check1, check2, checksumErr := notaloneDeltaChecksum(candidate[:40], endianProbe[0] == 1, 0, 0)
+			if checksumErr != nil {
+				t.Fatalf("checksum synthetic WAL index: %v", checksumErr)
+			}
+			binary.NativeEndian.PutUint32(candidate[40:44], check1)
+			binary.NativeEndian.PutUint32(candidate[44:48], check2)
+			copy(candidate[notaloneDeltaWALIndexHeaderSize:], candidate[:notaloneDeltaWALIndexHeaderSize])
+			state, parseErr := notaloneDeltaReadWALIndex(context.Background(), bytes.NewReader(candidate[:]), int64(len(candidate)), walHeader[:], walSize)
+			if test.wantError != "" {
+				if parseErr == nil || !strings.Contains(parseErr.Error(), test.wantError) {
+					t.Fatalf("index page-size mismatch was not rejected as %s: %v", test.wantError, parseErr)
+				}
+				return
+			}
+			if parseErr != nil {
+				t.Fatalf("accept empty WAL-index fields supported by SQLite: %v", parseErr)
+			}
+			if state.MXFrame != 0 || state.PageCount != keptPageCount || state.Checksum1 != keptChecksum1 || state.Checksum2 != keptChecksum2 || state.PageSize != notaloneDeltaPageSize {
+				t.Fatalf("WAL-index reset fields were not preserved: got mxFrame=%d pageCount=%d checksum=(%d,%d) pageSize=%d, want pageCount=%d checksum=(%d,%d) pageSize=%d", state.MXFrame, state.PageCount, state.Checksum1, state.Checksum2, state.PageSize, keptPageCount, keptChecksum1, keptChecksum2, notaloneDeltaPageSize)
+			}
+		})
+	}
+}
+
+func TestNotAloneDeltaWALIndexLeavesUncommittedFramesOutOfDelta(t *testing.T) {
+	dbPath, key, rootPage, writer := notaloneDeltaPageFixture(t)
+	db, dbSize, wal, walSize := notaloneDeltaReaders(t, dbPath)
+	shm, shmSize := notaloneDeltaReadIndexFile(t, dbPath)
+	index := notaloneDeltaWALIndexReader{Reader: shm, Size: shmSize}
+	baseline, err := readNotaloneDeltaPages(context.Background(), db, dbSize, wal, walSize, rootPage, key, nil, index)
+	if err != nil {
+		t.Fatalf("index committed synthetic baseline: %v", err)
+	}
+	if err := writer.Exec("BEGIN IMMEDIATE"); err != nil {
+		t.Fatal("begin synthetic uncommitted transaction")
+	}
+	defer func() { _ = writer.Exec("ROLLBACK") }()
+	if err := writer.Exec("UPDATE Msg_delta_fixture SET body=zeroblob(51) WHERE local_id=44"); err != nil {
+		t.Fatal("write uncommitted synthetic row")
+	}
+	uncommittedDB, uncommittedDBSize, uncommittedWAL, uncommittedWALSize := notaloneDeltaReaders(t, dbPath)
+	uncommittedSHM, uncommittedSHMSize := notaloneDeltaReadIndexFile(t, dbPath)
+	uncommittedIndex := notaloneDeltaWALIndexReader{Reader: uncommittedSHM, Size: uncommittedSHMSize}
+	uncommitted, err := readNotaloneDeltaPages(context.Background(), uncommittedDB, uncommittedDBSize, uncommittedWAL, uncommittedWALSize, rootPage, key, &baseline.State, uncommittedIndex)
+	if err != nil {
+		t.Fatalf("ignore uncommitted WAL frames using mxFrame: %v", err)
+	}
+	if uncommitted.FullAudit || len(uncommitted.ChangedIDs) != 0 || uncommitted.State.WAL.CommitOffset != baseline.State.WAL.CommitOffset {
+		t.Fatalf("uncommitted frame advanced the committed delta: fullAudit=%t changed=%v before=%d after=%d", uncommitted.FullAudit, uncommitted.ChangedIDs, baseline.State.WAL.CommitOffset, uncommitted.State.WAL.CommitOffset)
+	}
+	if err := writer.Exec("COMMIT"); err != nil {
+		t.Fatal("commit synthetic row")
+	}
+	committedDB, committedDBSize, committedWAL, committedWALSize := notaloneDeltaReaders(t, dbPath)
+	committedSHM, committedSHMSize := notaloneDeltaReadIndexFile(t, dbPath)
+	committedIndex := notaloneDeltaWALIndexReader{Reader: committedSHM, Size: committedSHMSize}
+	committed, err := readNotaloneDeltaPages(context.Background(), committedDB, committedDBSize, committedWAL, committedWALSize, rootPage, key, &baseline.State, committedIndex)
+	if err != nil {
+		t.Fatalf("track committed WAL frames: %v", err)
+	}
+	if committed.FullAudit || !containsInt64(committed.ChangedIDs, 44) || committed.State.WAL.CommitOffset <= baseline.State.WAL.CommitOffset {
+		t.Fatalf("committed frame not delivered as an incremental delta: fullAudit=%t changed=%v before=%d after=%d", committed.FullAudit, committed.ChangedIDs, baseline.State.WAL.CommitOffset, committed.State.WAL.CommitOffset)
+	}
+}
+
 func TestNotAloneDeltaPagesRejectsCorruptWALAndIgnoresPartialTail(t *testing.T) {
 	dbPath, key, rootPage, writer := notaloneDeltaPageFixture(t)
 	db, dbSize, wal, walSize := notaloneDeltaReaders(t, dbPath)
 	baseline, err := readNotaloneDeltaPages(context.Background(), db, dbSize, wal, walSize, rootPage, key, nil)
 	if err != nil {
 		t.Fatalf("index baseline before WAL fault injection: %v", err)
+	}
+	shm, shmSize := notaloneDeltaReadIndexFile(t, dbPath)
+	index := notaloneDeltaWALIndexReader{Reader: shm, Size: shmSize}
+	for _, test := range []struct {
+		name      string
+		reader    io.ReaderAt
+		wantError string
+	}{
+		{name: "committed frame salt", reader: &notaloneDeltaXORReaderAt{reader: wal, offset: notaloneDeltaWALHeaderSize + 8, xor: 1}, wantError: "history_delta_wal_frame_header_invalid"},
+		{name: "committed frame page checksum", reader: &notaloneDeltaXORReaderAt{reader: wal, offset: notaloneDeltaWALHeaderSize + notaloneDeltaWALFrameHeaderSize + 17, xor: 1}, wantError: "history_delta_wal_frame_checksum_invalid"},
+	} {
+		t.Run("wal-index-bound-"+test.name, func(t *testing.T) {
+			_, scanErr := readNotaloneDeltaPages(context.Background(), db, dbSize, test.reader, walSize, rootPage, key, nil, index)
+			if scanErr == nil || !strings.Contains(scanErr.Error(), test.wantError) {
+				t.Fatalf("corrupt committed WAL frame was not rejected as %s: %v", test.wantError, scanErr)
+			}
+		})
+	}
+	badIndex := notaloneDeltaWALIndexReader{Reader: &notaloneDeltaXORReaderAt{reader: shm, offset: notaloneDeltaWALIndexHeaderSize, xor: 1}, Size: shmSize}
+	if _, err := readNotaloneDeltaPages(context.Background(), db, dbSize, wal, walSize, rootPage, key, nil, badIndex); err == nil || !strings.Contains(err.Error(), "history_snapshot_window_changed") {
+		t.Fatalf("inconsistent double wal-index header was not rejected: %v", err)
 	}
 	if walSize < notaloneDeltaWALHeaderSize+notaloneDeltaWALFrameHeaderSize+notaloneDeltaPageSize {
 		t.Fatalf("synthetic fixture has no complete WAL frame: size=%d", walSize)

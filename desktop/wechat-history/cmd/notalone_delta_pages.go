@@ -125,7 +125,7 @@ type notaloneDeltaNode struct {
 }
 
 func readNotaloneDeltaPages(ctx context.Context, db io.ReaderAt, dbSize int64, wal io.ReaderAt, walSize int64,
-	rootPage uint32, rawKey []byte, prior *notaloneDeltaPageState) (*notaloneDeltaPageResult, error) {
+	rootPage uint32, rawKey []byte, prior *notaloneDeltaPageState, walIndex ...notaloneDeltaWALIndexReader) (*notaloneDeltaPageResult, error) {
 	if ctx == nil || db == nil || rootPage < 2 || (len(rawKey) != 0 && len(rawKey) != 32) || dbSize < 0 || dbSize%notaloneDeltaPageSize != 0 {
 		return nil, errors.New("history_delta_request_invalid")
 	}
@@ -141,7 +141,7 @@ func readNotaloneDeltaPages(ctx context.Context, db io.ReaderAt, dbSize int64, w
 	if basePageCount > notaloneDeltaMaxPages {
 		return nil, errors.New("history_delta_source_limit")
 	}
-	walScan, err := notaloneDeltaScanWAL(ctx, wal, walSize, prior)
+	walScan, err := notaloneDeltaScanWAL(ctx, wal, walSize, prior, walIndex...)
 	if err != nil {
 		return nil, err
 	}

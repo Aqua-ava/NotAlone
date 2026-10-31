@@ -10,7 +10,7 @@ import (
 const notaloneDeltaWALHeaderSize = 32
 const notaloneDeltaWALFrameHeaderSize = 24
 
-func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, prior *notaloneDeltaPageState) (notaloneDeltaWALScan, error) {
+func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, prior *notaloneDeltaPageState, walIndex ...notaloneDeltaWALIndexReader) (notaloneDeltaWALScan, error) {
 	result := notaloneDeltaWALScan{
 		Frames:    map[uint32]notaloneDeltaFrame{},
 		AllFrames: map[uint32]notaloneDeltaFrame{},
@@ -67,10 +67,25 @@ func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, p
 	result.LastCommitEnd = scanStart
 	result.LastChecksum1 = check1
 	result.LastChecksum2 = check2
+	frameSize := int64(notaloneDeltaWALFrameHeaderSize + notaloneDeltaPageSize)
+	maxFrameCount := uint64((walSize - notaloneDeltaWALHeaderSize) / frameSize)
+	var indexState *notaloneDeltaWALIndexState
+	if len(walIndex) > 1 {
+		return result, errors.New("history_delta_wal_index_invalid")
+	}
+	if len(walIndex) == 1 {
+		indexState, err = notaloneDeltaReadWALIndex(ctx, walIndex[0].Reader, walIndex[0].Size, header[:], walSize)
+		if err != nil {
+			return result, err
+		}
+		maxFrameCount = uint64(indexState.MXFrame)
+	}
 	if prior != nil && prior.WAL.HeaderDigest == headerDigest && prior.WAL.Salt1 == salt1 && prior.WAL.Salt2 == salt2 {
 		priorOffset := prior.WAL.CommitOffset
-		frameSize := int64(notaloneDeltaWALFrameHeaderSize + notaloneDeltaPageSize)
 		aligned := priorOffset >= notaloneDeltaWALHeaderSize && (priorOffset-notaloneDeltaWALHeaderSize)%frameSize == 0
+		if !aligned || uint64((priorOffset-notaloneDeltaWALHeaderSize)/frameSize) > maxFrameCount {
+			return result, errors.New("history_delta_checkpoint_invalid")
+		}
 		if aligned && priorOffset <= walSize {
 			validBoundary := false
 			if priorOffset == notaloneDeltaWALHeaderSize {
@@ -84,6 +99,7 @@ func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, p
 					}
 				} else {
 					validBoundary = binary.BigEndian.Uint32(previous[4:8]) != 0 &&
+						binary.BigEndian.Uint32(previous[0:4]) != 0 && binary.BigEndian.Uint32(previous[0:4]) <= notaloneDeltaMaxPages &&
 						binary.BigEndian.Uint32(previous[8:12]) == salt1 && binary.BigEndian.Uint32(previous[12:16]) == salt2
 					stored1, stored2 := notaloneDeltaChecksumFields(previous[16:24])
 					validBoundary = validBoundary && stored1 == prior.WAL.Checksum1 && stored2 == prior.WAL.Checksum2
@@ -99,8 +115,11 @@ func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, p
 			}
 		}
 	}
-	frameSize := int64(notaloneDeltaWALFrameHeaderSize + notaloneDeltaPageSize)
-	frameCount := (walSize - scanStart) / frameSize
+	scanStartFrame := uint64((scanStart - notaloneDeltaWALHeaderSize) / frameSize)
+	if maxFrameCount < scanStartFrame {
+		return result, errors.New("history_delta_checkpoint_invalid")
+	}
+	frameCount := int64(maxFrameCount - scanStartFrame)
 	if frameCount > notaloneDeltaMaxWALBytes/frameSize {
 		return result, errors.New("history_delta_wal_frame_limit")
 	}
@@ -153,6 +172,16 @@ func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, p
 			result.LastChecksum2 = rolling2
 			result.AllFrames = cloneNotaloneDeltaFrames(latest)
 			result.Frames = cloneNotaloneDeltaFrames(latest)
+		}
+	}
+	if indexState != nil {
+		if indexState.MXFrame == 0 {
+			if result.LastCommitEnd != notaloneDeltaWALHeaderSize {
+				return result, errors.New("history_delta_wal_index_invalid")
+			}
+		} else if result.LastCommitEnd != int64(notaloneDeltaWALHeaderSize)+int64(indexState.MXFrame)*frameSize ||
+			result.PageCount != indexState.PageCount || result.LastChecksum1 != indexState.Checksum1 || result.LastChecksum2 != indexState.Checksum2 {
+			return result, errors.New("history_delta_wal_index_invalid")
 		}
 	}
 	if walSize > scanStart && (walSize-scanStart)%frameSize != 0 {
