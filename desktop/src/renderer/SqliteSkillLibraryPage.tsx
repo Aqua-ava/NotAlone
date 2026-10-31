@@ -22,17 +22,12 @@ export function SqliteSkillLibraryPage({initial,bridge,onModeChange,onUnavailabl
   {view.skills.map(item=><article className="memory-card" key={item.packageId} aria-label={`Skill ${item.name}`}>
    <h3>{item.name}</h3><p>{item.description}</p>
    <p role="status">{enabledLabels[item.enabledState]} · {verificationLabels[item.verificationState]}</p>
-   <p>{item.currentRevisionNo?`当前修订 ${item.currentRevisionNo}`:'暂无可用修订'}</p>
    {item.verificationReason==='source_qualification_changed'&&<p>来源资格待核验，不能仅凭相同文件恢复使用。</p>}
    <div className="button-row">
     <button className="button" disabled={busy||stale||item.verificationReason==='source_qualification_changed'} onClick={()=>void perform(()=>bridge.verifyLibrary(command(item)))}>重新核验</button>
     {item.enabledState!=='enabled'&&<button className="button" disabled={busy||stale} onClick={()=>void perform(()=>bridge.changeLibraryEnabled({...command(item),enabled:true}))}>确认启用</button>}
     {item.enabledState!=='disabled'&&<button className="button" disabled={busy||stale} onClick={()=>void perform(()=>bridge.changeLibraryEnabled({...command(item),enabled:false}))}>{item.enabledState==='unknown'?'确认停用':'停用'}</button>}
    </div>
-   <details><summary>查看修订锚点</summary>
-    {item.revisions.map(revision=><div key={revision.revisionNo}><p>修订 {revision.revisionNo} · {revision.availability==='current'?'当前可核验':'历史正文不可据此读取'}</p>
-     <p className="skill-revision-digest">清单摘要：{revision.manifestDigest}</p><p className="skill-revision-digest">内容摘要：{revision.contentDigest}</p></div>)}
-   </details>
   </article>)}
  </section>;
 }
