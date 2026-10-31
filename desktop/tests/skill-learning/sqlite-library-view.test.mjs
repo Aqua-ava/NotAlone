@@ -7,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
 
-test('Skill页自动发现并管理启停，不提供手动添加目录入口',{timeout:20000},async t=>{
+test('Skill页自动核验更新并管理启停，不提供手动核验或添加目录入口',{timeout:20000},async t=>{
  const dir=await mkdtemp(path.join(tmpdir(),'notalone-skill-ui-14-'));t.after(()=>rm(dir,{recursive:true,force:true}));
  const output=path.join(dir,'controller.mjs');await build({entryPoints:['src/main/skill-learning/library.ts'],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
  const {SkillLibraryController}=await import(pathToFileURL(output).href);
@@ -29,6 +29,7 @@ test('Skill页自动发现并管理启停，不提供手动添加目录入口',{
  createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{selectedContactId:null,scopeRevision:0}}}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
  await page.route('http://127.0.0.1/skill-minimal',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/skill-minimal');await page.addScriptTag({content:compiled.outputFiles[0].text});
  const gentle=page.getByRole('article',{name:'Skill gentle',exact:true});await expect(gentle).toContainText('待核验启停 · 目录已核验');
+ await expect(page.getByRole('button',{name:'重新核验',exact:true})).toHaveCount(0);
  await expect(page.getByRole('form',{name:'关联 Skill 目录'})).toHaveCount(0);await expect(page.getByLabel('包目录名称',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('article',{name:'Skill missing',exact:true})).toContainText('已启用 · 目录或文件缺失');
  await expect(page.getByRole('article',{name:'Skill conflict',exact:true})).toContainText('已停用 · 目录身份冲突');
@@ -38,7 +39,10 @@ test('Skill页自动发现并管理启停，不提供手动添加目录入口',{
  await gentle.getByRole('button',{name:'确认启用',exact:true}).click();await expect(gentle).toContainText('已启用 · 目录已核验');
  assert.equal(calls.find(c=>c.method==='POST').body.expected_head_revision,'9007199254740993');
  await gentle.getByRole('button',{name:'停用',exact:true}).click();await expect(gentle).toContainText('已停用 · 目录已核验');
- await page.getByRole('article',{name:'Skill changed',exact:true}).getByRole('button',{name:'重新核验',exact:true}).click();await expect(page.getByRole('article',{name:'Skill changed',exact:true})).toContainText('目录已核验');
+ // 自动核验结果随列表读取返回，页面不再发送逐包 verify 请求。
+ items[3].verification_state='verified';items[3].current_revision_no='1';items[3].revisions[0].availability='current';
+ await page.getByRole('button',{name:'刷新 Skill 状态',exact:true}).click();await expect(page.getByRole('article',{name:'Skill changed',exact:true})).toContainText('目录已核验');
+ assert.ok(!calls.some(c=>c.path.endsWith('/verify')));
  const discovered=make(5,'new-skill','unknown','pending');discovered.revisions=[];items.push(discovered);
  await page.getByRole('button',{name:'刷新 Skill 状态',exact:true}).click();await expect(page.getByRole('article',{name:'Skill new-skill',exact:true})).toContainText('待核验启停');
  assert.ok(!calls.some(c=>c.path==='/api/skills/discover'));

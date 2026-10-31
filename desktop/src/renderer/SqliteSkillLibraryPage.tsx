@@ -15,7 +15,7 @@ export function SqliteSkillLibraryPage({initial,bridge,onModeChange,onUnavailabl
  const command=(item:SkillLibraryItem)=>({packageId:item.packageId,expectedHeadRevision:item.headRevision,connectionGeneration:view.connectionGeneration,confirmed:true as const});
  return <section aria-label="Skill管理">
   <h2>已有 Skill</h2>
-  <p>启停决定与文件核验分别显示。这里的状态不代表本次回复已加载。</p>
+  <p>已启用的 Skill 会自动检查文件更新，并在回复时按需加载。</p>
   <button className="button" disabled={busy} onClick={()=>void perform(()=>bridge.readLibrary())}>{busy?'正在核对…':'刷新 Skill 状态'}</button>
   {error&&<p role="alert">{error}</p>}
   {!view.skills.length&&<p role="status">暂无 Skill。</p>}
@@ -24,7 +24,6 @@ export function SqliteSkillLibraryPage({initial,bridge,onModeChange,onUnavailabl
    <p role="status">{enabledLabels[item.enabledState]} · {verificationLabels[item.verificationState]}</p>
    {item.verificationReason==='source_qualification_changed'&&<p>来源资格待核验，不能仅凭相同文件恢复使用。</p>}
    <div className="button-row">
-    <button className="button" disabled={busy||stale||item.verificationReason==='source_qualification_changed'} onClick={()=>void perform(()=>bridge.verifyLibrary(command(item)))}>重新核验</button>
     {item.enabledState!=='enabled'&&<button className="button" disabled={busy||stale} onClick={()=>void perform(()=>bridge.changeLibraryEnabled({...command(item),enabled:true}))}>确认启用</button>}
     {item.enabledState!=='disabled'&&<button className="button" disabled={busy||stale} onClick={()=>void perform(()=>bridge.changeLibraryEnabled({...command(item),enabled:false}))}>{item.enabledState==='unknown'?'确认停用':'停用'}</button>}
    </div>
