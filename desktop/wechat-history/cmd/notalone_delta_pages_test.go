@@ -223,6 +223,204 @@ func TestNotAloneDeltaPagesTracksPlainSQLitePages(t *testing.T) {
 	}
 }
 
+func TestNotAloneDeltaPagesTracksBtreeSplitAndMergeWithoutMissingRowIDs(t *testing.T) {
+	dbPath, key, rootPage, writer := notaloneDeltaPageFixture(t)
+	db, dbSize, wal, walSize := notaloneDeltaReaders(t, dbPath)
+	baseline, err := readNotaloneDeltaPages(context.Background(), db, dbSize, wal, walSize, rootPage, key, nil)
+	if err != nil {
+		t.Fatalf("index baseline tree: %v", err)
+	}
+	baselineIDs := notaloneDeltaReadIDs(t, writer)
+	baseLeaves, _ := notaloneDeltaTreeShape(baseline.State)
+	if err = writer.Exec("WITH RECURSIVE seq(id) AS (VALUES(2001) UNION ALL SELECT id+1 FROM seq WHERE id<10000) INSERT INTO Msg_delta_fixture(local_id,body) SELECT id,zeroblob(128) FROM seq"); err != nil {
+		t.Fatal("insert synthetic rows to split the B-tree")
+	}
+	splitDB, splitSize, splitWAL, splitWALSize := notaloneDeltaReaders(t, dbPath)
+	split, err := readNotaloneDeltaPages(context.Background(), splitDB, splitSize, splitWAL, splitWALSize, rootPage, key, &baseline.State)
+	if err != nil {
+		t.Fatalf("track B-tree split: %v", err)
+	}
+	splitIDs := notaloneDeltaReadIDs(t, writer)
+	added := notaloneDeltaIDDifference(splitIDs, baselineIDs)
+	assertNotaloneDeltaContainsAll(t, split.ChangedIDs, added, "split")
+	assertNotaloneDeltaSubset(t, split.ChangedIDs, notaloneDeltaIDUnion(baselineIDs, splitIDs), "split")
+	splitLeaves, _ := notaloneDeltaTreeShape(split.State)
+	if split.FullAudit || len(added) < 8000 || splitLeaves <= baseLeaves {
+		t.Fatalf("insert batch did not exercise incremental B-tree growth: added=%d leaves=%d->%d fullAudit=%t", len(added), baseLeaves, splitLeaves, split.FullAudit)
+	}
+
+	if err = writer.Exec("DELETE FROM Msg_delta_fixture WHERE local_id<>1"); err != nil {
+		t.Fatal("delete synthetic rows to merge the B-tree")
+	}
+	mergeDB, mergeSize, mergeWAL, mergeWALSize := notaloneDeltaReaders(t, dbPath)
+	merged, err := readNotaloneDeltaPages(context.Background(), mergeDB, mergeSize, mergeWAL, mergeWALSize, rootPage, key, &split.State)
+	if err != nil {
+		t.Fatalf("track B-tree merge: %v", err)
+	}
+	mergedIDs := notaloneDeltaReadIDs(t, writer)
+	deleted := notaloneDeltaIDDifference(splitIDs, mergedIDs)
+	assertNotaloneDeltaContainsAll(t, merged.ChangedIDs, deleted, "merge")
+	assertNotaloneDeltaSubset(t, merged.ChangedIDs, notaloneDeltaIDUnion(splitIDs, mergedIDs), "merge")
+	mergedLeaves, mergedInteriors := notaloneDeltaTreeShape(merged.State)
+	if merged.FullAudit || len(deleted) < 8000 || mergedLeaves >= splitLeaves || mergedInteriors > 1 {
+		t.Fatalf("delete batch did not exercise incremental B-tree shrink: deleted=%d leaves=%d->%d interiors=%d fullAudit=%t", len(deleted), splitLeaves, mergedLeaves, mergedInteriors, merged.FullAudit)
+	}
+}
+
+func TestNotAloneDeltaPagesRejectsCorruptWALAndIgnoresPartialTail(t *testing.T) {
+	dbPath, key, rootPage, writer := notaloneDeltaPageFixture(t)
+	db, dbSize, wal, walSize := notaloneDeltaReaders(t, dbPath)
+	baseline, err := readNotaloneDeltaPages(context.Background(), db, dbSize, wal, walSize, rootPage, key, nil)
+	if err != nil {
+		t.Fatalf("index baseline before WAL fault injection: %v", err)
+	}
+	if walSize < notaloneDeltaWALHeaderSize+notaloneDeltaWALFrameHeaderSize+notaloneDeltaPageSize {
+		t.Fatalf("synthetic fixture has no complete WAL frame: size=%d", walSize)
+	}
+	for _, test := range []struct {
+		name      string
+		offset    int64
+		wantError string
+	}{
+		{name: "header checksum", offset: 24, wantError: "history_delta_wal_header_checksum_invalid"},
+		{name: "frame checksum", offset: notaloneDeltaWALHeaderSize + notaloneDeltaWALFrameHeaderSize + 17, wantError: "history_delta_wal_frame_checksum_invalid"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			corrupt := &notaloneDeltaXORReaderAt{reader: wal, offset: test.offset, xor: 1}
+			_, scanErr := notaloneDeltaScanWAL(context.Background(), corrupt, walSize, nil)
+			if scanErr == nil || !strings.Contains(scanErr.Error(), test.wantError) {
+				t.Fatalf("corrupt WAL was not rejected as %s: %v", test.wantError, scanErr)
+			}
+		})
+	}
+
+	if err = writer.Exec("UPDATE Msg_delta_fixture SET body=zeroblob(72) WHERE local_id=1"); err != nil {
+		t.Fatal("write synthetic transaction for partial tail")
+	}
+	partialDB, partialDBSize, partialWAL, partialWALSize := notaloneDeltaReaders(t, dbPath)
+	frameSize := int64(notaloneDeltaWALFrameHeaderSize + notaloneDeltaPageSize)
+	partialSize := baseline.State.WAL.CommitOffset + frameSize - 1
+	if partialSize <= baseline.State.WAL.CommitOffset || partialSize >= partialWALSize {
+		t.Fatalf("synthetic WAL lacks append tail for truncation: prior=%d partial=%d actual=%d", baseline.State.WAL.CommitOffset, partialSize, partialWALSize)
+	}
+	partial, err := readNotaloneDeltaPages(context.Background(), partialDB, partialDBSize, partialWAL, partialSize, rootPage, key, &baseline.State)
+	if err != nil {
+		t.Fatalf("ignore uncommitted partial WAL frame: %v", err)
+	}
+	if partial.FullAudit || len(partial.ChangedIDs) != 0 || partial.State.WAL.CommitOffset != baseline.State.WAL.CommitOffset {
+		t.Fatalf("partial uncommitted WAL tail advanced the accepted state: changed=%v oldOffset=%d newOffset=%d", partial.ChangedIDs, baseline.State.WAL.CommitOffset, partial.State.WAL.CommitOffset)
+	}
+	complete, err := readNotaloneDeltaPages(context.Background(), partialDB, partialDBSize, partialWAL, partialWALSize, rootPage, key, &baseline.State)
+	if err != nil {
+		t.Fatalf("read completed synthetic WAL transaction: %v", err)
+	}
+	if complete.FullAudit || !containsInt64(complete.ChangedIDs, 1) {
+		t.Fatalf("completed transaction was not reported after partial-tail retry: %v", complete.ChangedIDs)
+	}
+}
+
+func notaloneDeltaReadIDs(t *testing.T, db *wcdb.DB) map[int64]struct{} {
+	t.Helper()
+	rows, err := db.QueryBounded(context.Background(), 12000, "SELECT local_id FROM Msg_delta_fixture ORDER BY local_id")
+	if err != nil {
+		t.Fatalf("read synthetic row IDs: %v", err)
+	}
+	ids := make(map[int64]struct{}, len(rows))
+	for _, row := range rows {
+		id, ok := row["local_id"].(int64)
+		if !ok {
+			t.Fatalf("unexpected row ID type: %T", row["local_id"])
+		}
+		ids[id] = struct{}{}
+	}
+	return ids
+}
+
+func notaloneDeltaIDDifference(left, right map[int64]struct{}) map[int64]struct{} {
+	result := map[int64]struct{}{}
+	for id := range left {
+		if _, ok := right[id]; !ok {
+			result[id] = struct{}{}
+		}
+	}
+	return result
+}
+
+func notaloneDeltaIDUnion(left, right map[int64]struct{}) map[int64]struct{} {
+	result := make(map[int64]struct{}, len(left)+len(right))
+	for id := range left {
+		result[id] = struct{}{}
+	}
+	for id := range right {
+		result[id] = struct{}{}
+	}
+	return result
+}
+
+func notaloneDeltaTreeShape(state notaloneDeltaPageState) (leaves, interiors int) {
+	for _, page := range state.Pages {
+		switch page.Kind {
+		case notaloneDeltaPageLeaf:
+			leaves++
+		case notaloneDeltaPageInterior:
+			interiors++
+		}
+	}
+	return leaves, interiors
+}
+
+func assertNotaloneDeltaContainsAll(t *testing.T, changed []int64, expected map[int64]struct{}, phase string) {
+	t.Helper()
+	changedSet := make(map[int64]struct{}, len(changed))
+	for _, id := range changed {
+		changedSet[id] = struct{}{}
+	}
+	missing := 0
+	var sample []int64
+	for id := range expected {
+		if _, ok := changedSet[id]; !ok {
+			missing++
+			if len(sample) < 5 {
+				sample = append(sample, id)
+			}
+		}
+	}
+	if missing > 0 {
+		t.Errorf("%s missed %d changed row IDs (sample %v)", phase, missing, sample)
+	}
+}
+
+func assertNotaloneDeltaSubset(t *testing.T, changed []int64, allowed map[int64]struct{}, phase string) {
+	t.Helper()
+	extra := 0
+	var sample []int64
+	for _, id := range changed {
+		if _, ok := allowed[id]; !ok {
+			extra++
+			if len(sample) < 5 {
+				sample = append(sample, id)
+			}
+		}
+	}
+	if extra > 0 {
+		t.Errorf("%s returned %d row IDs absent from both SQL snapshots (sample %v)", phase, extra, sample)
+	}
+}
+
+type notaloneDeltaXORReaderAt struct {
+	reader io.ReaderAt
+	offset int64
+	xor    byte
+}
+
+func (reader *notaloneDeltaXORReaderAt) ReadAt(buffer []byte, offset int64) (int, error) {
+	count, err := reader.reader.ReadAt(buffer, offset)
+	if reader.offset >= offset && reader.offset < offset+int64(count) {
+		buffer[reader.offset-offset] ^= reader.xor
+	}
+	return count, err
+}
+
 func containsInt64(values []int64, target int64) bool {
 	for _, value := range values {
 		if value == target {
