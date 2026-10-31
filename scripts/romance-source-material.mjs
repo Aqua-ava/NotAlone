@@ -14,6 +14,37 @@ export const allowedRomanceSources = Object.freeze({
 });
 export const sourceDigest = text => createHash('sha256').update(text).digest('hex');
 export const gitBlobDigest = bytes => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+const hasEnglishNarrativeLine = text => text.split('\n').some(line =>
+  !/^\s*```/.test(line) && !/[\u3400-\u9fff]/u.test(line)
+  && /\b(?:the|you|your|she|he|her|his|what|when|how|why|we|they|it|this|that|and|but|not|with|for|from|are|is|was|were|be|do|does|don't|can|will|if|than|because|about|would|should|could|have|has|had|their|them|who|one|just|only|more|less|into|over|after|before|without|while|within|between|each|some|every|often|always|never|much|very|really|still|then|so|also|than|as|at|on|in|of|to|a|an|or|by|up|out)\b/i.test(line));
+
+/** 将中文译文逐条绑定到来源摘录哈希，并要求所有完整英文句段均有译文。 */
+export function readRomanceTranslations(document, provenance, evidence) {
+  const parsed = JSON.parse(document);
+  assert.equal(parsed.schema_version, 1);
+  assert.equal(parsed.locale, 'zh-CN');
+  assert.equal(parsed.policy, 'pinned-source-excerpts-with-source-bound-chinese-translation');
+  assert.ok(Array.isArray(parsed.entries));
+  const references = [...provenance.common_methods, ...provenance.skills.flatMap(item => [...item.methods, ...item.examples])];
+  const byDigest = new Map();
+  for (const ref of references) if (!byDigest.has(ref.excerpt_sha256)) byDigest.set(ref.excerpt_sha256, ref);
+  const translations = new Map();
+  for (const entry of parsed.entries) {
+    assert.ok(entry && typeof entry === 'object' && typeof entry.excerpt_sha256 === 'string' && typeof entry.text === 'string');
+    const source = byDigest.get(entry.excerpt_sha256);
+    assert.ok(source, `译文没有对应的锁定来源摘录：${entry.excerpt_sha256}`);
+    assert.deepEqual(entry.source, {source:source.source,path:source.path,start_line:source.start_line,end_line:source.end_line,excerpt_sha256:source.excerpt_sha256},
+      '引用片段哈希不一致：译文与固定来源行号不匹配');
+    assert.ok(entry.text.trim(), `来源摘录译文为空：${entry.excerpt_sha256}`);
+    assert.ok(!translations.has(entry.excerpt_sha256), `来源摘录存在重复译文：${entry.excerpt_sha256}`);
+    translations.set(entry.excerpt_sha256, entry.text);
+  }
+  for (const [digest, ref] of byDigest) if (hasEnglishNarrativeLine(evidence.excerpt(ref).text)) {
+    assert.ok(translations.has(digest), `英文摘录缺少中文译文：${keyOf(ref)}:${ref.start_line}-${ref.end_line}`);
+  }
+  for (const [digest, text] of translations) assert.ok(!hasEnglishNarrativeLine(text), `译文仍含完整英文句段：${digest}`);
+  return translations;
+}
 const keyOf = ref => `${ref.source}/${ref.path}`;
 // 与可替换的来源表和快照分开锁定；测试传入的 sourceRoot 不能覆盖此表。
 const sourceLock = JSON.parse(readBounded(fileURLToPath(new URL('../reply-skills/romance-sources.lock.json', import.meta.url))));
@@ -107,7 +138,7 @@ export function renderRomanceLicenseAppendix(provenance, evidence) {
 }
 
 /** 仅编排标题和读取提示；出处单独返回写入溯源文档，方法与示例不改写。 */
-export function renderRomanceSourceSkill(entry, selection, evidence, commonReferences = []) {
+export function renderRomanceSourceSkill(entry, selection, evidence, commonReferences = [], translations = new Map()) {
   validateName(entry.name);
   assert.equal(selection.id, entry.id);
   assert.equal(selection.name, entry.name);
@@ -118,12 +149,16 @@ export function renderRomanceSourceSkill(entry, selection, evidence, commonRefer
     assert.equal(selection.examples.length, 0);
   }
   else assert.ok(selection.methods.length > 0, `${entry.name} 缺少方法依据`);
-  const methods = selection.methods.map(evidence.excerpt);
+  const localize = item => {
+    const translation = translations.get(item.reference.excerpt_sha256);
+    return translation === undefined ? item : {...item, text:translation};
+  };
+  const methods = selection.methods.map(evidence.excerpt).map(localize);
   const examples = selection.examples.map(ref => {
     assert.ok(['dialogue','phrase','template','scenario'].includes(ref.kind));
     return evidence.excerpt(ref);
-  });
-  const common = commonReferences.map(evidence.excerpt);
+  }).map(localize);
+  const common = commonReferences.map(evidence.excerpt).map(localize);
   const description = selection.support === 'unsupported'
     ? `${entry.title}：当前没有足够可用的方法，暂不参与回复策略选择。`
     : `${entry.title}：用于该恋爱沟通场景，参考${selection.support === 'shared_method' ? '通用沟通方法' : '相应处理方法'}${examples.length ? '及表达示例' : ''}。`;
@@ -133,7 +168,7 @@ export function renderRomanceSourceSkill(entry, selection, evidence, commonRefer
   content += '## 按需查看示例\n\n需要参考具体表达时读取 `references/cases.md`。\n';
   let cases = `# ${entry.title}：示例\n\n`;
   cases += examples.length ? examples.map((item,i) => materialBlock(item,i,exampleLabels[item.reference.kind])).join('\n') : '本项暂无单列示例。方法中的例句仍随相应方法保留。\n';
-  const references = {schema_version:1, policy:'upstream-extracts-only', name:entry.name, support:selection.support,
+  const references = {schema_version:1, policy:'pinned-source-excerpts-with-source-bound-chinese-translation', name:entry.name, support:selection.support,
     common:common.map(item => item.reference), methods:methods.map(item => item.reference), examples:examples.map(item => item.reference)};
   return {document:serializeSkillDocument(entry.name,description,content), resources:new Map([
     ['references/cases.md', Buffer.from(cases.trimEnd()+'\n')],

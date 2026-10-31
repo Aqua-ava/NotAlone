@@ -10,6 +10,7 @@ function text(value:unknown):value is string{return typeof value==='string'&&val
 function readItem(value:unknown):SkillLibraryItem {
  const i=row(value);
  if(!isUuid(i.package_id)||!text(i.name)||!text(i.description)||!text(i.directory_name)
+  ||!text(i.title)||!i.title.trim()||!Array.isArray(i.tags)||i.tags.length>20||i.tags.some(tag=>!text(tag)||!tag.trim())||new Set(i.tags).size!==i.tags.length
   ||!['enabled','disabled','unknown'].includes(i.enabled_state as string)||!['verified','pending','missing','conflict','invalid'].includes(i.verification_state as string)
   ||!(i.verification_reason===null||text(i.verification_reason))||!decimal(i.head_revision)||!(i.current_revision_no===null||decimal(i.current_revision_no))||!Array.isArray(i.revisions))throw invalid();
  const revisions=i.revisions.map(value=>{const r=row(value);if(!decimal(r.revision_no)||!['current','unavailable'].includes(r.availability as string)
@@ -17,7 +18,7 @@ function readItem(value:unknown):SkillLibraryItem {
   return {revisionNo:r.revision_no,availability:r.availability as 'current'|'unavailable',manifestDigest:r.manifest_digest,contentDigest:r.content_digest};});
  if(new Set(revisions.map(r=>r.revisionNo)).size!==revisions.length||revisions.filter(r=>r.availability==='current').length!==(i.current_revision_no===null?0:1)
   ||i.current_revision_no!==null&&!revisions.some(r=>r.revisionNo===i.current_revision_no&&r.availability==='current'))throw invalid();
- return {packageId:i.package_id,name:i.name,description:i.description,directoryName:i.directory_name,enabledState:i.enabled_state as SkillLibraryItem['enabledState'],verificationState:i.verification_state as SkillLibraryItem['verificationState'],verificationReason:i.verification_reason as string|null,headRevision:i.head_revision,currentRevisionNo:i.current_revision_no,revisions};
+ return {packageId:i.package_id,name:i.name,title:i.title,tags:i.tags as string[],description:i.description,directoryName:i.directory_name,enabledState:i.enabled_state as SkillLibraryItem['enabledState'],verificationState:i.verification_state as SkillLibraryItem['verificationState'],verificationReason:i.verification_reason as string|null,headRevision:i.head_revision,currentRevisionNo:i.current_revision_no,revisions};
 }
 export class SkillLibraryController {
  private readonly backend:Pick<BackendHost,'getConnectionGeneration'|'requestJson'>;

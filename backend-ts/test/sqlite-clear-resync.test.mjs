@@ -490,7 +490,7 @@ test('来源代次变化后旧B不放行普通读取，已清空旧成员不得�
   await assert.rejects(f.current.history.synchronize(f.contactA), { code: 'history_source_continuity_unverified' });
 });
 
-test('v12旧结构库升级到当前22后联系人、同步与清空重读仍可工作', async t => {
+test('v12旧结构库升级到当前24后联系人、同步与清空重读仍可工作', async t => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-clear-upgrade-')));
   t.after(() => rm(root, { recursive: true, force: true }));
   const legacy = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test',
@@ -502,7 +502,7 @@ test('v12旧结构库升级到当前22后联系人、同步与清空重读仍可
   await legacy.close();
   const upgraded = await SqliteStorage.open({ userData: root, intent: 'open', role: 'test', expectedDatabaseId: databaseId });
   t.after(() => upgraded.close());
-  assert.equal(upgraded.status.schemaVersion, 22);
+  assert.equal(upgraded.status.schemaVersion, 24);
   assert.deepEqual(await upgraded.check(), { integrity: 'ok', foreignKeys: 'ok' });
   const { channel, state } = createChannel();
   const holders = new (await import('../src/storage/sqlite/deletion/holders.ts')).ActiveHolders();

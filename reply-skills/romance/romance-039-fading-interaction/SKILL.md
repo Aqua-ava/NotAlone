@@ -17,24 +17,24 @@ description: "多轮互动逐渐变冷：用于该恋爱沟通场景，参考相
 
 ### 方法 1
 
-The slow fade is different from ghosting. It's a gradual withdrawal:
-- Response times get longer and longer
-- Messages get shorter and less engaged
-- She stops asking questions
-- Plans keep getting pushed back
-- The energy just... deflates
+慢慢淡出和突然消失不同。慢慢淡出是逐渐减少投入：
+- 回复间隔越来越长
+- 消息越来越短，互动也越来越少
+- 对方不再主动提问
+- 约好的计划一再往后推
+- 聊天的热度一点点降下来
 
-### What to Do
+### 可以怎么做
 
-**Option 1: Call it out directly (recommended)**
-> "Hey, I've noticed our conversations have kind of slowed down. No judgment — but I'd rather know where we stand than guess. Are you still feeling this?"
+**方式 1：坦率问清楚（推荐）**
+> “最近感觉我们聊得少了些。我不怪你，只是不想一直猜我们现在是什么状态。你还想继续了解彼此吗？”
 
-**Option 2: Match her energy and let it fade**
-- Sometimes the fade is the answer. Not every connection needs a formal ending.
-- Stop over-investing in someone who's under-investing in you.
+**方式 2：跟随对方的节奏，让联系自然淡下来**
+- 有时关系逐渐淡下来本身就是答案，不是每段联系都需要郑重结束。
+- 如果对方投入很少，也别让自己一直单方面过度投入。
 
-**Option 3: Make one genuine effort**
-> "I feel like we were vibing earlier and something shifted. If there's something on your mind, I'm open to hearing it. If not, no hard feelings."
+**方式 3：认真主动一次**
+> “我感觉我们之前聊得挺投缘，后来好像有些变化。如果你有什么想法，我愿意听；如果没有也没关系。”
 
 
 ## 按需查看示例

@@ -27,12 +27,12 @@ test('正式profile隔离回归：Skill最小管理与官方加载、原目录�
   child.stdout.on('data',b=>{output+=b;const match=output.match(/SQLITE_SKILL_READY (http:\/\/127\.0\.0\.1:\d+)/);if(match){clearTimeout(timer);resolveReady(match[1]);}});
  });
  const request=async(path,input)=>{const response=await fetch(base+path,{method:input?'POST':'GET',headers:{'content-type':'application/json',authorization:'Bearer profile-only'},body:input?JSON.stringify(input):undefined});return {status:response.status,body:await response.json()};};
- assert.equal((await request('/state')).body[0].enabledState,'unknown');
- assert.equal((await request('/api/skills')).body.skills[0].current_revision_no,null);
+ assert.equal((await request('/state')).body[0].enabledState,'enabled');
+ assert.equal((await request('/api/skills')).body.skills[0].enabled_state,'enabled');
  assert.equal((await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).status,503);
- const discovered=(await request('/api/skills')).body.skills[0];assert.equal(discovered.enabled_state,'unknown');assert.match(discovered.state_label,/待核验启停/);
+ const discovered=(await request('/api/skills')).body.skills[0];assert.equal(discovered.enabled_state,'enabled');assert.match(discovered.state_label,/已启用 · 目录已核验/);
  let item=(await request('/discover',{name:'gentle'})).body;
- assert.equal(item.enabledState,'unknown');assert.equal((await request('/load',{id:item.id})).status,409);
+ assert.equal(item.enabledState,'enabled');assert.equal((await request('/load',{id:item.id})).status,200);
  item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'enabled'})).body;
  const loaded=await request('/load',{id:item.id});assert.equal(loaded.status,200);assert.match(loaded.body.content,/先回应感受/);
  assert.equal(loaded.body.input.text,loaded.body.content);assert.equal(loaded.body.input.package_id,item.id);assert.equal(loaded.body.hostCatalog,0);

@@ -17,13 +17,12 @@ description: "感谢对方为自己做的具体事情：用于该恋爱沟通场
 
 ### 方法 1
 
-### 6.3 Communication Templates for Relationships
+### 6.3 关系中的表达模板
 
-**Expressing Appreciation:**
+**表达感谢：**
 ```
-"I noticed you [specific thing they did], and it made me feel
-[specific feeling]. I just wanted you to know I don't take that
-for granted."
+“我注意到你做了[某件具体的事]，这让我觉得[某种具体感受]。
+只是想让你知道，我很珍惜，也没有把它当成理所当然。”
 ```
 
 ### 方法 2

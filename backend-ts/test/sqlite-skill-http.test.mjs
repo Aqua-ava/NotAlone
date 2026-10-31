@@ -7,7 +7,7 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteSkillLibrary} from '../src/skills/sqlite/library.ts';
-import {SqliteSkillHttp} from '../src/skills/sqlite/http.ts';
+import {SqliteSkillHttp,skillManagementView} from '../src/skills/sqlite/http.ts';
 
 test('正常Skill业务HTTP适配：认证、状态查询与CAS启停，旧清理/学习入口不可回落PG',async t=>{
  const dir=await realpath(await mkdtemp(join(tmpdir(),'notalone-skill-http-14-')));t.after(()=>rm(dir,{recursive:true,force:true}));
@@ -20,10 +20,10 @@ test('正常Skill业务HTTP适配：认证、状态查询与CAS启停，旧清�
  const request=async(path,body,headers={authorization:'Bearer synthetic-only'})=>{const res=await fetch(base+path,{method:body?'POST':'GET',headers:{...headers,'content-type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:res.status,body:await res.json()};};
  assert.equal((await request('/api/skills',null,{})).status,401);
  assert.equal((await request('/api/skills',null,{authorization:'Bearer synthetic-only',origin:'https://example.invalid'})).status,401);
- assert.equal((await request('/api/skills')).body.skills[0].enabled_state,'unknown');
+ assert.equal((await request('/api/skills')).body.skills[0].enabled_state,'enabled');
  assert.equal((await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).status,503);
  let item=(await request('/api/skills')).body.skills[0];
- assert.equal(item.enabled_state,'unknown');assert.match(item.state_label,/待核验启停/);
+ assert.equal(item.enabled_state,'enabled');assert.match(item.state_label,/已启用/);
  const stale=item.head_revision;
  item=(await request(`/api/skills/${item.package_id}/enable`,{expected_head_revision:stale,confirmed:true})).body.skill;
  assert.equal(item.enabled_state,'enabled');assert.match(item.state_label,/已启用/);
@@ -33,4 +33,11 @@ test('正常Skill业务HTTP适配：认证、状态查询与CAS启停，旧清�
  assert.equal((await request('/api/contacts/contact-a/skill-learning',{confirmed:true})).status,503);
  assert.equal((await request('/api/skills?owner_id=other')).status,400);
  assert.equal(fallbacks,0);
+});
+
+test('恋爱Skill使用中文名称与场景标签，稳定协议名称保持不变',()=>{
+ const item={id:'synthetic-id',directoryName:'romance-001-first-contact',displayName:'romance-001-first-contact',description:'合成说明',enabledState:'enabled',verificationState:'verified',verificationReason:null,headRevision:1n,currentRevisionNo:1n,revisions:[]};
+ const view=skillManagementView(item);
+ assert.equal(view.name,'romance-001-first-contact');assert.equal(view.title,'初次开聊：承接共同经历或已知兴趣');assert.deepEqual(view.tags,['初识与重新开聊']);
+ const other=skillManagementView({...item,directoryName:'custom-skill',displayName:'自定义表达'});assert.equal(other.title,'自定义表达');assert.deepEqual(other.tags,[]);
 });

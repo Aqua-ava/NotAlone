@@ -17,23 +17,23 @@ description: "约会不合拍时结束当次见面：用于该恋爱沟通场景
 
 ### 方法 1
 
-## 6. Handling a Bad Date
+## 6. 如何应对一次不合适的约会
 
-### When You're Not Feeling It
+### 如果你没有继续发展的感觉
 
-**Rule 1:** Be kind. She showed up. That took courage.
-**Rule 2:** Stay for the planned duration (coffee = finish the coffee). Don't rush out.
-**Rule 3:** Follow up honestly within 24 hours.
+**规则 1：**保持友善。对方愿意赴约，本身需要勇气。
+**规则 2：**按原计划相处一段合理的时间（约好喝咖啡，就把咖啡喝完），不要突然匆匆离场。
+**规则 3：**在 24 小时内诚实地跟进。
 
 ### 方法 2
 
-### When You Feel Unsafe
+### 如果你感到不安全
 
-This is different. If at any point you feel uncomfortable or unsafe:
-- **You are allowed to leave immediately.** No explanation required.
-- Text a friend your location.
-- Call someone if you need to.
-- Trust your gut. It's usually right.
+情况不同。如果任何时候让你感到不舒服或不安全：
+- **你可以立刻离开，不必解释。**
+- 把自己的位置发给朋友。
+- 需要时给别人打电话。
+- 相信自己的直觉。
 
 
 ## 按需查看示例

@@ -25,10 +25,10 @@ description: "文字或语气被误解后的澄清：用于该恋爱沟通场景
 
 ### 方法 2
 
-### When There's a Misunderstanding
+### 聊天产生误会时
 
-**Don't:** Escalate or assume the worst
-**Do:** Clarify directly but lightly:
+**避免：**把语气升级，或直接认定最坏的情况。
+**可以：**轻轻地把意思说清楚：
 
 
 ## 按需查看示例

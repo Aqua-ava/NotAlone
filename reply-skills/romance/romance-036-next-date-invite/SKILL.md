@@ -17,8 +17,8 @@ description: "承接上次体验提出再次见面：用于该恋爱沟通场景
 
 ### 方法 1
 
-**Next-day text (to set up date 2):**
-> "Still thinking about [thing she said or did]. When can I see you again? I'm thinking [activity] this [day]."
+**第二天发出的消息（为第二次约会做安排）：**
+> “我还在想你说／做的[某件事]。什么时候再见？我在想这[某一天]可以一起去[某项活动]。”
 
 
 ## 按需查看示例

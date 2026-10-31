@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
+import { SqliteSkillLibrary } from '../src/skills/sqlite/library.ts';
 import { EXPECTED_TABLES, FORBIDDEN_TABLES, DEFERRED_DESIGN_TABLES, REPLACED_DESIGN_TABLES } from '../src/platform/cutover/structure.ts';
 import { dumpSchema, readBaseline } from './fixtures/cutover/build-structure-baseline.mjs';
 
@@ -28,10 +29,10 @@ test('实际 DDL 与 87 表结构基线逐表一致（含 CHECK、触发器 body
   assert.match(actualSqliteVersion, /^\d+\.\d+\.\d+$/);
   if (baselineSqliteVersion !== undefined) assert.match(baselineSqliteVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(actualStable, baselineStable, '结构元数据与基线不一致');
-  assert.equal(actual.metadata.checkCount, 257);
-  assert.equal(actual.metadata.triggerCount, 96);
-  assert.deepEqual(actual.metadata.migrationVersions, Array.from({ length: 22 }, (_, index) => index + 1));
-  assert.equal(actual.metadata.userVersion, 22);
+  assert.equal(actual.metadata.checkCount, 258);
+  assert.equal(actual.metadata.triggerCount, 98);
+  assert.deepEqual(actual.metadata.migrationVersions, Array.from({ length: 24 }, (_, index) => index + 1));
+  assert.equal(actual.metadata.userVersion, 24);
   assert.deepEqual(Object.keys(actual.tables), EXPECTED_TABLES, '实际表集合必须等于实现表基线');
   for (const [name, expected] of Object.entries(baseline.tables)) {
     const table = actual.tables[name];
@@ -64,21 +65,29 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
   const db = new DatabaseSync(f.database, { readOnly: true });
   try {
     const ledger = db.prepare('SELECT version FROM schema_migration ORDER BY version').all().map(row => Number(row.version));
-    assert.deepEqual(ledger, Array.from({ length: 22 }, (_, index) => index + 1));
-    assert.equal(Number(db.prepare('PRAGMA user_version').all()[0].user_version), 22);
+    assert.deepEqual(ledger, Array.from({ length: 24 }, (_, index) => index + 1));
+    assert.equal(Number(db.prepare('PRAGMA user_version').all()[0].user_version), 24);
     assert.equal(Number(db.prepare('SELECT COUNT(*) AS n FROM database_instance').all()[0].n), 1);
   } finally { db.close(); }
   const reopened = await SqliteStorage.open({ userData: f.root, intent: 'open', expectedDatabaseId: f.status.databaseId, role: 'test' });
   try {
     assert.equal(reopened.status.databaseId, f.status.databaseId);
-    assert.equal(reopened.status.schemaVersion, 22);
+    assert.equal(reopened.status.schemaVersion, 24);
     assert.deepEqual(await reopened.check(), { integrity: 'ok', foreignKeys: 'ok' });
-    const snapshot = await reopened.execute('cutover.snapshot', { ownerId: await reopened.execute('identity.resolveOwner', { proposedOwnerId: '11111111-1111-4111-8111-111111111111', at: 1 }) });
+    const ownerId = await reopened.execute('identity.resolveOwner', { proposedOwnerId: '11111111-1111-4111-8111-111111111111', at: 1 });
+    const skillRoot = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-cutover-skill-root-')));
+    t.after(() => rm(skillRoot, { recursive: true, force: true }));
+    await mkdir(path.join(skillRoot, 'default-on'), { recursive: true });
+    await writeFile(path.join(skillRoot, 'default-on/SKILL.md'), '---\nname: default-on\ndescription: 合成默认项目\n---\n保持表达自然。\n');
+    const library = new SqliteSkillLibrary(reopened, ownerId, skillRoot);
+    const [skill] = await library.refresh();
+    assert.equal(skill.enabledOrigin, 'default');
+    const snapshot = await reopened.execute('cutover.snapshot', { ownerId });
     assert.deepEqual(snapshot.missingTables, []);
     assert.deepEqual(snapshot.unexpectedTables, []);
     assert.equal(snapshot.tables.length, 87);
     assert.deepEqual(snapshot.media, { message_media: 0, current_files: 0, staged_files: 0, cleanup_pending: 0, attempts_running: 0 });
-    assert.deepEqual(snapshot.skills, { packages: 0, revisions: 0, enabled: 0, unknown: 0 });
+    assert.deepEqual(snapshot.skills, { packages: 1, revisions: 1, enabled: 1, unknown: 0 });
   } finally { await reopened.close(); }
 });
 

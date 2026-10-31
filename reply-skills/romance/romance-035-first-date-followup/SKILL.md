@@ -17,8 +17,8 @@ description: "见面结束后的第一条跟进：用于该恋爱沟通场景，
 
 ### 方法 1
 
-**Same-night text (within 2 hours of parting):**
-> "I had a really great time. Also — you were right about [specific callback]. I'm not over it."
+**当晚发送的消息（分别后两小时内）：**
+> “今晚和你相处得很开心。还有，你说[某件事]时确实说对了——我到现在还记得呢。”
 
 
 ## 按需查看示例

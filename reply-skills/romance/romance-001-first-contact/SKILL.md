@@ -17,12 +17,12 @@ description: "初次开聊：承接共同经历或已知兴趣：用于该恋爱
 
 ### 方法 1
 
-**The Anatomy of a Great Opener:**
-1. **Observation** — Something specific from their profile (proves you actually looked)
-2. **Playful Assumption** — A fun guess about them (invites them to correct you / play along)
-3. **Implicit Invitation** — Gives them an easy, fun way to respond
+**优质开场的构成：**
+1. **具体观察**——提及对方资料中的一个具体细节，让对方知道你认真看过
+2. **轻松猜想**——提出一个有趣的猜测，给对方纠正或接梗的空间
+3. **顺势邀请**——留一个轻松、有趣又容易回应的入口
 
-**Framework: Observe → Riff → Invite**
+**思路：观察 → 发挥 → 邀请**
 
 ### 方法 2
 

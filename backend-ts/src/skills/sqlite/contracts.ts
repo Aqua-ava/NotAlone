@@ -25,7 +25,7 @@ export interface SkillPackageState {
   displayName: string;
   description: string;
   enabledState: SkillEnabledState;
-  enabledOrigin: 'user_action' | null;
+  enabledOrigin: 'user_action' | 'default' | null;
   verificationState: SkillVerificationState;
   verificationReason: string | null;
   currentRevisionNo: bigint | null;

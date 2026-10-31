@@ -2,11 +2,11 @@
 
 ### 表达模板 1
 
-**The Same-Night Text (send within 2 hours of parting):**
-> "I had a great time tonight. Also I was right about the pasta — you owe me an apology."
+**当晚的消息（分别后两小时内）：**
+> “今晚很开心。还有，意面这件事我说得没错吧——你得为此向我道个歉。”
 
-**Why it works:**
-- Confirms you enjoyed it (no games)
-- Callback to something specific from the date (personal, not generic)
-- Light humor (not heavy or clingy)
-- Short and confident
+**为什么有效：**
+- 明确表达你享受这次见面，不玩猜心游戏
+- 回扣约会中的具体细节，显得真诚而非套话
+- 带一点轻松的幽默，不沉重也不黏人
+- 表达简短、自然又有自信

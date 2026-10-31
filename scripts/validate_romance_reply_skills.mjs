@@ -3,7 +3,7 @@ import {readFile, readdir} from 'node:fs/promises';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {join, resolve} from 'node:path';
 import {readBounded, readPackage, validateName} from '../backend-ts/src/skills/skill-package.ts';
-import {openRomanceEvidence, renderRomanceSourceSkill, renderRomanceLicenseAppendix, romanceSourceRoot} from './romance-source-material.mjs';
+import {openRomanceEvidence, readRomanceTranslations, renderRomanceSourceSkill, renderRomanceLicenseAppendix, romanceSourceRoot} from './romance-source-material.mjs';
 
 export const romanceBundleRoot = fileURLToPath(new URL('../reply-skills/romance/', import.meta.url));
 
@@ -11,9 +11,10 @@ export const romanceBundleRoot = fileURLToPath(new URL('../reply-skills/romance/
 export async function validateRomanceBundle(root = romanceBundleRoot, {sourceRoot = romanceSourceRoot} = {}) {
   const catalog = JSON.parse(await readFile(join(root, 'catalog.json'), 'utf8'));
   assert.equal(catalog.schema_version, 2);
-  assert.equal(catalog.content_policy, 'upstream-extracts-only');
+  assert.equal(catalog.content_policy, 'pinned-source-excerpts-with-source-bound-chinese-translation');
   const provenance = JSON.parse(await readFile(join(root, 'provenance.json'), 'utf8'));
   const evidence = openRomanceEvidence(provenance, sourceRoot);
+  const translations = readRomanceTranslations(readBounded(join(root, 'translations.json')).toString('utf8'), provenance, evidence);
   const sourcesDocument = readBounded(join(root, 'SOURCES.md')).toString('utf8');
   assert.ok(sourcesDocument.endsWith(renderRomanceLicenseAppendix(provenance, evidence)), '来源总文档缺少原作者许可声明或内容有变');
   assert.equal(catalog.entries.length, 92, '须保留用户确认的 92 个独立场景');
@@ -31,7 +32,7 @@ export async function validateRomanceBundle(root = romanceBundleRoot, {sourceRoo
     assert.ok(entry.category && entry.title && entry.inventory_candidates.length);
     const selection = provenance.skills.find(item => item.id === entry.id);
     assert.ok(selection);
-    const expected = renderRomanceSourceSkill(entry, selection, evidence, provenance.common_methods);
+    const expected = renderRomanceSourceSkill(entry, selection, evidence, provenance.common_methods, translations);
     assert.deepEqual(selection.methods, expected.references.methods, `${entry.name} 的方法出处不完整`);
     assert.deepEqual(selection.examples, expected.references.examples, `${entry.name} 的示例出处不完整`);
     assert.deepEqual(provenance.common_methods, expected.references.common, '共用规则的出处不完整');
@@ -69,6 +70,7 @@ export async function validateRomanceBundle(root = romanceBundleRoot, {sourceRoo
     bodyBytes: packages.reduce((sum, item) => sum + Buffer.byteLength(item.pkg.content), 0),
     resourceBytes: packages.reduce((sum, item) => sum + item.pkg.resources.reduce((n, resource) => n + resource.content.length, 0), 0),
     warnings: packages.reduce((sum, item) => sum + item.pkg.warnings.length, 0),
+    localizedExcerpts: translations.size,
   };
   return {catalog, provenance, packages, summary};
 }

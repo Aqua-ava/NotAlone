@@ -17,15 +17,15 @@ description: "试探对方是否愿意见面：用于该恋爱沟通场景，参
 
 ### 方法 1
 
-## 6. Transitioning to Meeting — 10 Scripts
+## 6. 顺势从聊天聊到见面：10 种说法
 
-### When She's Clearly Interested:
-> "Okay, I like you. We should meet before one of us says something weird and ruins this. Coffee this week?"
+### 对方已经表现出明确兴趣时
+> “好吧，我挺喜欢你的。趁我们还没聊出什么奇怪的话题把气氛搞砸，不如见一面？这周喝咖啡吗？”
 
-### When You've Been Texting a While:
-> "We've been texting for [time] and I still don't know what your laugh sounds like in person. That's a problem. When are you free?"
+### 已经聊了一阵时
+> “我们聊了[一段时间]，我还不知道你当面笑起来是什么样。得找机会补上。你什么时候有空？”
 
-### The Callback Close:
+### 回扣前文的邀约
 
 
 ## 按需查看示例

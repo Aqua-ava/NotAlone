@@ -29,18 +29,18 @@ description: "吃醋或对异性交往不安时的沟通：用于该恋爱沟通
 
 ### 方法 2
 
-### 5.4 Red Flags to Watch For
+### 5.4 值得留意的危险信号
 
-Help the user identify genuinely concerning patterns:
+帮助用户识别确实值得关注的相处模式：
 
-| Red Flag | What It Looks Like | Why It Matters |
-|----------|-------------------|---------------|
-| **Love Bombing** | Overwhelming intensity way too fast ("You're my soulmate" on date 2) | Often precedes controlling behavior |
-| **Boundary Testing** | Gets upset when you say no to small things | Escalates to larger boundary violations |
-| **Isolation** | Discourages you from seeing friends/family | Classic control tactic |
-| **Inconsistency** | Actions don't match words | Unreliable people don't become reliable |
-| **Zero Accountability** | Nothing is ever their fault, every ex was "crazy" | Pattern of blaming others |
-| **Excessive Jealousy** | Monitoring your social media, questioning your friendships | Trust issues that escalate |
+| 危险信号 | 可能表现 | 值得关注的原因 |
+|----------|---------------|---------------|
+| **过度示爱** | 关系刚开始就迅速表现出压倒性的强烈感情（例如第二次约会就说“你是我的灵魂伴侣”） | 之后可能出现控制行为 |
+| **试探边界** | 你对小事说“不”时，对方就生气 | 之后可能升级为更严重的越界 |
+| **切断社交** | 不鼓励你和朋友、家人来往 | 这是常见的控制方式 |
+| **言行不一** | 行动与承诺对不上 | 一直不可靠的人，通常不会自然变得可靠 |
+| **从不担责** | 从来不是自己的错，每个前任都“有问题” | 反复把责任推给别人 |
+| **过度嫉妒** | 监控你的社交媒体、质疑你的朋友关系 | 信任问题可能逐渐升级 |
 
 
 ## 按需查看示例

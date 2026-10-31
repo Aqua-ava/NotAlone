@@ -2,5 +2,5 @@
 
 ### 话术片段 1
 
-**The Honest-But-Kind Text:**
-> "Hey, I really enjoyed meeting you. I want to be honest — I didn't feel a romantic connection, but I think you're genuinely great. I hope you find what you're looking for!"
+**坦诚但友善地表达：**
+> “嗨，很高兴认识你。我想坦诚一点：我没有感受到恋爱方面的心动，但我觉得你人很好。希望你能遇到适合自己的那个人！”

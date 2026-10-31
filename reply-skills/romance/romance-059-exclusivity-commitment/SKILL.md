@@ -27,17 +27,16 @@ description: "明确排他性、称谓和承诺范围：用于该恋爱沟通场
 
 ### 方法 2
 
-**When to have the conversation:** When you feel it's already true and you just want to name it.
+**什么时候谈：**当你觉得彼此已经在认真交往，只是想把关系说清楚时。
 
-**How to have it:**
+**可以这样谈：**
 
 ```
-❌ "So... what are we?"
-   (Puts all vulnerability on one side, feels like a trap)
+❌ “所以……我们现在算什么？”
+   （把所有表达脆弱的压力都放在对方身上，也容易让人觉得被逼着表态）
 
-✅ "I want you to know — I'm not seeing anyone else,
-    and I don't want to. I'm all in on this."
-   (Statement of position, not a demand for one)
+✅ “我想让你知道，我没有在和别人约会，也不想这样做。我是认真想和你继续发展的。”
+   （先说明自己的立场，不要求对方立刻作出承诺）
 ```
 
 

@@ -2,37 +2,37 @@
 
 ### 教学对话 1
 
-## Example 1: The Profile-Based Opener
+## 示例 1：从个人资料里的细节开场
 
-### The Scenario
-You matched with someone on Hinge. Her profile says she's a nurse who loves hiking and has a photo with a golden retriever named "Captain."
+### 场景
+你在 Hinge 上和一位女生匹配。她的资料写着自己是护士、喜欢徒步；其中一张照片里有一只叫 Captain 的金毛。
 
-### ❌ What Most Guys Send
+### 常见但平淡的开场
 ```
-"Hey how are you?"
-"You're really pretty"
-"I like hiking too!"
+“嗨，最近怎么样？”
+“你真好看。”
+“我也喜欢徒步！”
 ```
 
-### ✅ The EROS Approach
+### EROS 式开场
 
-**Your opener:**
-> "Okay but I need to know — does Captain approve of your dating choices? Because his opinion is the only one that matters here."
+**你可以这样开口：**
+> “不过我得先问问——Captain 认可你的择偶眼光吗？毕竟这里它的意见最重要。”
 
-**Why it works:**
-- Specific to HER profile (not copy-paste)
-- Playful and fun (not serious or try-hard)
-- Easy for her to respond to (she just talks about her dog)
-- Shows personality without showing off
+**为什么有效：**
+- 针对她资料里的具体细节，而不是复制粘贴
+- 轻松有趣，没有端着或刻意表现
+- 她很容易接话，只要聊聊自己的狗狗
+- 展现个性，但没有刻意炫耀
 
-**Her response:**
-> "Haha Captain is very picky actually. He only likes people who bring treats 😂"
+**她回复：**
+> “哈哈，Captain 挑剔得很。它只喜欢会带零食的人 😂”
 
-**Your follow-up:**
-> "Bold of you to assume I wouldn't show up with a full charcuterie board for him. What about you though — are you as high-maintenance as Captain or can I win you over with personality alone?"
+**你可以接着说：**
+> “你倒是很笃定我不会带一大盘冷切肉拼盘来讨好它。那你呢，和 Captain 一样难搞吗？还是我只靠性格就能把你说服？”
 
-**What's happening here:**
-- Callback humor (continuing the Captain joke)
-- Absurd escalation (charcuterie board for a dog)
-- Smooth transition to learning about HER
-- Playful challenge ("can I win you over")
+**这段对话在做什么：**
+- 回扣前文的笑点，接着 Captain 的梗聊
+- 把玩笑夸张升级，例如给狗狗准备一大盘冷切拼盘
+- 顺势从狗狗聊到了解她本人
+- 用轻松的挑战式表达邀请她接梗

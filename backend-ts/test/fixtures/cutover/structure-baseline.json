@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 22,
+  "schemaVersion": 24,
   "migrationVersions": [
    1,
    2,
@@ -23,15 +23,17 @@
    19,
    20,
    21,
-   22
+   22,
+   23,
+   24
   ],
-  "userVersion": 22,
-  "sqliteVersion": "3.53.3",
+  "userVersion": 24,
+  "sqliteVersion": "3.53.4",
   "tableCount": 87,
-  "fieldCount": 843,
+  "fieldCount": 844,
   "foreignKeyGroups": 179,
-  "triggerCount": 96,
-  "checkCount": 257,
+  "triggerCount": 98,
+  "checkCount": 258,
   "viewCount": 0
  },
  "tables": {
@@ -12620,6 +12622,13 @@
      "notnull": 1,
      "dflt_value": null,
      "pk": 0
+    },
+    {
+     "name": "default_enabled",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": "0",
+     "pk": 0
     }
    ],
    "foreignKeys": [
@@ -12699,7 +12708,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE skill_package ( owner_id TEXT NOT NULL REFERENCES owner(owner_id), id TEXT NOT NULL, directory_name TEXT NOT NULL, directory_identity TEXT NOT NULL, display_name TEXT NOT NULL, description TEXT NOT NULL, enabled_state TEXT NOT NULL CHECK(enabled_state IN ('enabled','disabled','unknown')), enabled_origin TEXT CHECK(enabled_origin='user_action'), verification_state TEXT NOT NULL CHECK(verification_state IN ('verified','pending','missing','conflict','invalid')), verification_reason TEXT, current_revision_no INTEGER, head_revision INTEGER NOT NULL CHECK(head_revision>=1), PRIMARY KEY(owner_id,id), UNIQUE(owner_id,directory_identity), UNIQUE(owner_id,directory_name), CHECK((enabled_state='unknown' AND enabled_origin IS NULL) OR (enabled_state<>'unknown' AND enabled_origin IS 'user_action')), FOREIGN KEY(owner_id,id,current_revision_no) REFERENCES skill_package_revision(owner_id,package_id,revision_no) ) STRICT"
+   "sql": "CREATE TABLE skill_package ( owner_id TEXT NOT NULL REFERENCES owner(owner_id), id TEXT NOT NULL, directory_name TEXT NOT NULL, directory_identity TEXT NOT NULL, display_name TEXT NOT NULL, description TEXT NOT NULL, enabled_state TEXT NOT NULL CHECK(enabled_state IN ('enabled','disabled','unknown')), enabled_origin TEXT CHECK(enabled_origin='user_action'), verification_state TEXT NOT NULL CHECK(verification_state IN ('verified','pending','missing','conflict','invalid')), verification_reason TEXT, current_revision_no INTEGER, head_revision INTEGER NOT NULL CHECK(head_revision>=1), default_enabled INTEGER NOT NULL DEFAULT 0 CHECK(default_enabled IN (0,1)), PRIMARY KEY(owner_id,id), UNIQUE(owner_id,directory_identity), UNIQUE(owner_id,directory_name), CHECK((enabled_state='unknown' AND enabled_origin IS NULL) OR (enabled_state<>'unknown' AND enabled_origin IS 'user_action')), FOREIGN KEY(owner_id,id,current_revision_no) REFERENCES skill_package_revision(owner_id,package_id,revision_no) ) STRICT"
   },
   "skill_package_revision": {
    "columns": [
@@ -14089,6 +14098,16 @@
    "name": "runtime_scope_immutable",
    "table": "runtime_copy",
    "sql": "CREATE TRIGGER runtime_scope_immutable BEFORE UPDATE OF owner_id,id,contact_id,discussion_id,sdk_instance_id,managed_locator,write_generation,accepted_data_generation,source_revision ON runtime_copy BEGIN SELECT RAISE(ABORT,'runtime_scope_immutable'); END"
+  },
+  {
+   "name": "skill_default_enabled_insert_guard",
+   "table": "skill_package",
+   "sql": "CREATE TRIGGER skill_default_enabled_insert_guard BEFORE INSERT ON skill_package WHEN NEW.default_enabled=1 AND (NEW.enabled_state<>'unknown' OR NEW.enabled_origin IS NOT NULL OR NEW.verification_state<>'verified' OR NEW.current_revision_no IS NULL OR NEW.verification_reason IS NOT NULL OR NOT EXISTS (SELECT 1 FROM skill_package_revision r WHERE r.owner_id=NEW.owner_id AND r.package_id=NEW.id AND r.revision_no=NEW.current_revision_no AND r.verification_state='verified' AND r.availability='current')) BEGIN SELECT RAISE(ABORT,'skill_default_enable_requires_unknown'); END"
+  },
+  {
+   "name": "skill_default_enabled_update_guard",
+   "table": "skill_package",
+   "sql": "CREATE TRIGGER skill_default_enabled_update_guard BEFORE UPDATE OF default_enabled,enabled_state,enabled_origin ON skill_package WHEN NEW.default_enabled=1 AND (NEW.enabled_state<>'unknown' OR NEW.enabled_origin IS NOT NULL OR NEW.verification_state<>'verified' OR NEW.current_revision_no IS NULL OR NEW.verification_reason IS NOT NULL OR NOT EXISTS (SELECT 1 FROM skill_package_revision r WHERE r.owner_id=NEW.owner_id AND r.package_id=NEW.id AND r.revision_no=NEW.current_revision_no AND r.verification_state='verified' AND r.availability='current')) BEGIN SELECT RAISE(ABORT,'skill_default_enable_requires_unknown'); END"
   },
   {
    "name": "skill_revision_anchor_immutable",

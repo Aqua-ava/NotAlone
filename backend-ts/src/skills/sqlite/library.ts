@@ -38,15 +38,21 @@ export class SqliteSkillLibrary {
     this.storage=storage;this.ownerId=ownerId;this.directory=new SecureSkillDirectory(root);
   }
   list(): Promise<SkillPackageState[]> {return this.storage.execute('skills.list',{ownerId:this.ownerId});}
-  /** 管理刷新与运行前共用；只在明确配置的根内发现目录，不读取未启用正文。 */
+  /** 管理刷新与运行前共用；在授权根中发现、核验并默认启用合格项目，保留用户停用。 */
   async refresh(): Promise<SkillPackageState[]> {
     await this.list(); // 在接触文件前拒绝已删除或不可用的账号。
     for(const name of this.directory.names())await this.discover(name);
     for(const item of await this.list()) {
       try {
         if(this.directory.directoryIdentity(item.directoryName)!==item.directoryIdentity)throw new SqliteSkillError('skill_directory_conflict');
-        // 停用/未知仅检查目录身份；来源撤销和身份冲突不能由扫描重新发布。
-        if(item.enabledState==='enabled' && item.verificationReason!=='source_qualification_changed' && item.verificationState!=='conflict') {
+        if(item.enabledState==='unknown') {
+          // 默认开启只适用于授权根内完整校验通过的目录；CAS 保留并发显式停用优先级。
+          if(item.verificationReason==='source_qualification_changed' || item.verificationState==='conflict')continue;
+          const verified=await this.verify(item.id,item.headRevision);
+          if(verified.enabledState==='unknown')await this.storage.execute('skills.defaultEnable',{
+            ownerId:this.ownerId,id:item.id,expectedHead:verified.headRevision,
+          });
+        } else if(item.enabledState==='enabled' && item.verificationReason!=='source_qualification_changed' && item.verificationState!=='conflict') {
           const snapshot=this.readDirectory(item.directoryName,item.directoryIdentity);
           if(snapshot.directoryIdentity!==item.directoryIdentity)throw new SqliteSkillError('skill_directory_conflict');
           await this.commitObservation(item.id,item.headRevision,snapshot);

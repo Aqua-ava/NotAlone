@@ -2,9 +2,9 @@
 
 ### 话术片段 1
 
-### The Universal Solution
+### 直接沟通
 
-When in doubt: **ask directly.**
-> "I'm getting mixed signals and I'd rather just ask than assume. Where are you at with this?"
+拿不准时，可以直接询问。
+> “我有点读不懂你的信号。与其自己猜，我更想直接问问：你现在怎么看我们之间的关系？”
 
-Yes, it's vulnerable. Yes, it's scary. But it's 100x better than weeks of guessing. And the person who can handle directness is the person worth dating.
+这样表达会让人觉得脆弱，也可能有点紧张。但比起好几个星期反复猜测，坦诚沟通通常更清楚。也能看出对方是否愿意认真回应。

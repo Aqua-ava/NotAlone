@@ -2,5 +2,5 @@
 
 ### 话术片段 1
 
-**How to suggest it:**
-> "Texting is terrible for actually knowing someone. Quick FaceTime? 5 minutes, I promise I don't have crazy eyes."
+**可以这样提出：**
+> “光打字其实不太容易真正了解一个人。要不要 FaceTime 聊五分钟？我保证不做鬼脸。”

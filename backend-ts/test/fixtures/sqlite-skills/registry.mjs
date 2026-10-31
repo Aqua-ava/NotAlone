@@ -1,6 +1,6 @@
 import {StorageFailure} from '../../../src/storage/sqlite/contracts.ts';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
-import {skillActions,skillSchemaSql,requireSkillRevision,requireSkillRun} from '../../../src/skills/sqlite/storage.ts';
+import {skillActions,skillSchemaSql,skillDefaultEnablementMigration,skillDefaultQualificationMigration,requireSkillRevision,requireSkillRun} from '../../../src/skills/sqlite/storage.ts';
 import {skillMetadataDeletionDomain} from '../../../src/skills/sqlite/deletion.ts';
 const skillDeletion=skillMetadataDeletionDomain();
 // 仅隔离测试合同替身；生产 owner DDL 由实施02提供。
@@ -12,7 +12,7 @@ export const registry={migrations:[foundation,
  {version:version+2,sql:skillSchemaSql+`
 CREATE TABLE fixture_scope(owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,call_id TEXT NOT NULL,active INTEGER NOT NULL, PRIMARY KEY(owner_id,contact_id,call_id)) STRICT;
 CREATE TABLE fixture_input(owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,call_id TEXT NOT NULL,input_no INTEGER NOT NULL,text TEXT NOT NULL,package_id TEXT NOT NULL,revision_no INTEGER NOT NULL,relative_path TEXT NOT NULL,PRIMARY KEY(owner_id,contact_id,call_id,input_no),FOREIGN KEY(owner_id,contact_id,call_id) REFERENCES fixture_scope(owner_id,contact_id,call_id)) STRICT;
-`}],actions:[...skillActions,
+`}, {version:version+3,sql:skillDefaultEnablementMigration.sql}, {version:version+4,sql:skillDefaultQualificationMigration.sql}],actions:[...skillActions,
  {name:'fixture.owner',mode:'write',retryBusy:false,execute(tx,i){tx.run('INSERT INTO owner(owner_id) VALUES(?)',[i.ownerId]);}},
  {name:'fixture.skillFence',mode:'write',retryBusy:false,execute(tx,i){return skillDeletion.fence(tx,i);}},
  {name:'fixture.skillTargets',mode:'read',retryBusy:false,execute(tx,i){return skillDeletion.collect(tx,i);}},
@@ -21,6 +21,7 @@ CREATE TABLE fixture_input(owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,call_
  {name:'fixture.skillCounts',mode:'read',retryBusy:false,execute(tx,i){return tx.get('SELECT (SELECT count(*) FROM skill_package WHERE owner_id=?)+(SELECT count(*) FROM skill_package_revision WHERE owner_id=?) AS n',[i.ownerId,i.ownerId]).n;}},
  {name:'fixture.ownerState',mode:'write',retryBusy:false,execute(tx,i){tx.run('UPDATE owner SET state=? WHERE owner_id=?',[i.state,i.ownerId]);}},
  {name:'fixture.invalidEnabledOrigin',mode:'write',retryBusy:false,execute(tx,i){tx.run("UPDATE skill_package SET enabled_state='enabled',enabled_origin=NULL WHERE owner_id=? AND id=?",[i.ownerId,i.id]);}},
+ {name:'fixture.forceDefaultEnable',mode:'write',retryBusy:false,execute(tx,i){tx.run('UPDATE skill_package SET default_enabled=1 WHERE owner_id=? AND id=?',[i.ownerId,i.id]);}},
  {name:'fixture.mutateAnchor',mode:'write',retryBusy:false,execute(tx,i){tx.run("UPDATE skill_package_revision SET content_digest=? WHERE owner_id=? AND package_id=?",['0'.repeat(64),i.ownerId,i.id]);}},
  {name:'fixture.scope',mode:'write',retryBusy:false,execute(tx,i){tx.run('INSERT INTO fixture_scope VALUES(?,?,?,1)',[i.ownerId,i.contactId,i.callId]);}},
  {name:'fixture.checkScope',mode:'read',retryBusy:false,execute(tx,i){checkScope(tx,i.scope??i);if(i.revision)requireSkillRun(tx,(i.scope??i).ownerId,i.revision);}},

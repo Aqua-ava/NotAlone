@@ -1,5 +1,5 @@
 export interface SkillLibraryItem {
- packageId: string; name: string; description: string; directoryName: string;
+ packageId: string; name: string; title: string; tags: string[]; description: string; directoryName: string;
  enabledState: 'enabled' | 'disabled' | 'unknown';
  verificationState: 'verified' | 'pending' | 'missing' | 'conflict' | 'invalid';
  verificationReason: string | null; headRevision: string; currentRevisionNo: string | null;

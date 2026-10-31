@@ -2,4 +2,4 @@
 
 ### 表达模板 1
 
-> "Wait, I think that landed wrong. What I meant was [clarification]. I'm not as smooth over text as I'd like to be 😅"
+> “等一下，我觉得我刚才表达得不太对。我想说的是[澄清内容]。打字时我没法把语气拿捏得那么好 😅”

@@ -62,8 +62,9 @@ function state(tx: StorageTransaction, ownerId: string, id: string): SkillPackag
   if (!row) fail('skill_missing');
   const revisions = tx.all('SELECT * FROM skill_package_revision WHERE owner_id=? AND package_id=? ORDER BY revision_no',[ownerId,id]);
   return {id:row.id as string,directoryName:row.directory_name as string,directoryIdentity:row.directory_identity as string,
-    displayName:row.display_name as string,description:row.description as string,enabledState:row.enabled_state as SkillEnabledState,
-    enabledOrigin:row.enabled_origin as 'user_action'|null,verificationState:row.verification_state as SkillVerificationState,
+    displayName:row.display_name as string,description:row.description as string,
+    enabledState: row.default_enabled===1n?'enabled':row.enabled_state as SkillEnabledState,
+     enabledOrigin: row.default_enabled===1n?'default':row.enabled_origin as 'user_action'|null,verificationState:row.verification_state as SkillVerificationState,
     verificationReason:row.verification_reason as string|null,currentRevisionNo:row.current_revision_no as bigint|null,headRevision:row.head_revision as bigint,
     revisions:revisions.map(r=>({revisionNo:r.revision_no as bigint,manifestDigest:r.manifest_digest as string,contentDigest:r.content_digest as string,
       sourceKind:'user_directory',verificationState:r.verification_state as 'verified'|'pending',verifiedAt:r.verified_at as bigint,availability:r.availability as 'current'|'unavailable'}))};
@@ -123,7 +124,7 @@ export const skillActions: StorageAction[] = [
     const existing=tx.get('SELECT id FROM skill_package WHERE owner_id=? AND directory_name=?',[i.ownerId,i.directoryName]);
     if(existing)return state(tx,i.ownerId,existing.id as string);
     // 目录名是可展示元数据；发现不会读取正文，也不会发布可运行修订。
-    tx.run(`INSERT INTO skill_package VALUES(?,?,?,?,?,?,'unknown',NULL,'pending',NULL,NULL,1)`,[i.ownerId,i.id,i.directoryName,i.directoryIdentity,i.directoryName,'启用后校验策略说明']);
+    tx.run(`INSERT INTO skill_package(owner_id,id,directory_name,directory_identity,display_name,description,enabled_state,enabled_origin,verification_state,verification_reason,current_revision_no,head_revision) VALUES(?,?,?,?,?,?,'unknown',NULL,'pending',NULL,NULL,1)`,[i.ownerId,i.id,i.directoryName,i.directoryIdentity,i.directoryName,'启用后校验策略说明']);
     return state(tx,i.ownerId,i.id);
   }},
   {name:'skills.relocateRoot',mode:'write',retryBusy:false,execute(tx,input){
@@ -166,7 +167,7 @@ export const skillActions: StorageAction[] = [
     const exists=tx.get('SELECT id FROM skill_package WHERE owner_id=? AND id=?',[i.ownerId,i.id]);
     if(!exists){
       if(i.expectedHead!==0n) fail('skill_revision_conflict');
-      tx.run(`INSERT INTO skill_package VALUES(?,?,?,?,?,?,'unknown',NULL,'pending',NULL,NULL,1)`,[i.ownerId,i.id,i.directoryName,i.directoryIdentity,i.displayName,i.description]);
+      tx.run(`INSERT INTO skill_package(owner_id,id,directory_name,directory_identity,display_name,description,enabled_state,enabled_origin,verification_state,verification_reason,current_revision_no,head_revision) VALUES(?,?,?,?,?,?,'unknown',NULL,'pending',NULL,NULL,1)`,[i.ownerId,i.id,i.directoryName,i.directoryIdentity,i.displayName,i.description]);
     }
     const item=exists?expected(tx,i):state(tx,i.ownerId,i.id);
     if(item.verificationReason==='source_qualification_changed')fail('skill_source_verification_required');
@@ -183,7 +184,14 @@ export const skillActions: StorageAction[] = [
   {name:'skills.setEnabled',mode:'write',retryBusy:false,execute(tx,input){
     const i=key(input) as Expected & {enabledState:SkillEnabledState};expected(tx,i);
     if(!['enabled','disabled'].includes(i.enabledState)) fail('skill_input_invalid');
-    tx.run("UPDATE skill_package SET enabled_state=?,enabled_origin='user_action',head_revision=head_revision+1 WHERE owner_id=? AND id=?",[i.enabledState,i.ownerId,i.id]);
+    tx.run("UPDATE skill_package SET enabled_state=?,enabled_origin='user_action',default_enabled=0,head_revision=head_revision+1 WHERE owner_id=? AND id=?",[i.enabledState,i.ownerId,i.id]);
+    return state(tx,i.ownerId,i.id);
+  }},
+  {name:'skills.defaultEnable',mode:'write',retryBusy:false,execute(tx,input){
+    const i=key(input) as Expected,item=expected(tx,input);
+    if(item.enabledState!=='unknown' || item.verificationState!=='verified' || item.verificationReason!==null || item.currentRevisionNo===null)
+      fail('skill_default_enable_not_qualified');
+    tx.run('UPDATE skill_package SET default_enabled=1,head_revision=head_revision+1 WHERE owner_id=? AND id=?',[i.ownerId,i.id]);
     return state(tx,i.ownerId,i.id);
   }},
   {name:'skills.invalidate',mode:'write',retryBusy:false,execute(tx,input){
@@ -201,3 +209,39 @@ export const skillActions: StorageAction[] = [
     const i=input as {ownerId:string;revision:SkillRunRevision};requireSkillRun(tx,i.ownerId,i.revision);return true;
   }},
 ];
+
+
+/** v23 用独立字段记录系统默认启用，保留用户明确启停及 v4 原表约束。 */
+export const skillDefaultEnablementMigration = {
+  version: 23,
+  sql: `
+ALTER TABLE skill_package ADD COLUMN default_enabled INTEGER NOT NULL DEFAULT 0 CHECK(default_enabled IN (0,1));
+CREATE TRIGGER skill_default_enabled_insert_guard BEFORE INSERT ON skill_package
+WHEN NEW.default_enabled=1 AND (NEW.enabled_state<>'unknown' OR NEW.enabled_origin IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'skill_default_enable_requires_unknown'); END;
+CREATE TRIGGER skill_default_enabled_update_guard BEFORE UPDATE OF default_enabled,enabled_state,enabled_origin ON skill_package
+WHEN NEW.default_enabled=1 AND (NEW.enabled_state<>'unknown' OR NEW.enabled_origin IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'skill_default_enable_requires_unknown'); END;
+`,
+} as const;
+
+/** v24 仅补强默认启用资格检查，不改写已应用的 v23。 */
+export const skillDefaultQualificationMigration = {
+  version: 24,
+  sql: `
+DROP TRIGGER skill_default_enabled_insert_guard;
+DROP TRIGGER skill_default_enabled_update_guard;
+CREATE TRIGGER skill_default_enabled_insert_guard BEFORE INSERT ON skill_package
+WHEN NEW.default_enabled=1 AND (NEW.enabled_state<>'unknown' OR NEW.enabled_origin IS NOT NULL
+ OR NEW.verification_state<>'verified' OR NEW.current_revision_no IS NULL OR NEW.verification_reason IS NOT NULL
+ OR NOT EXISTS (SELECT 1 FROM skill_package_revision r WHERE r.owner_id=NEW.owner_id AND r.package_id=NEW.id
+   AND r.revision_no=NEW.current_revision_no AND r.verification_state='verified' AND r.availability='current'))
+BEGIN SELECT RAISE(ABORT,'skill_default_enable_requires_unknown'); END;
+CREATE TRIGGER skill_default_enabled_update_guard BEFORE UPDATE OF default_enabled,enabled_state,enabled_origin ON skill_package
+WHEN NEW.default_enabled=1 AND (NEW.enabled_state<>'unknown' OR NEW.enabled_origin IS NOT NULL
+ OR NEW.verification_state<>'verified' OR NEW.current_revision_no IS NULL OR NEW.verification_reason IS NOT NULL
+ OR NOT EXISTS (SELECT 1 FROM skill_package_revision r WHERE r.owner_id=NEW.owner_id AND r.package_id=NEW.id
+   AND r.revision_no=NEW.current_revision_no AND r.verification_state='verified' AND r.availability='current'))
+BEGIN SELECT RAISE(ABORT,'skill_default_enable_requires_unknown'); END;
+`,
+} as const;

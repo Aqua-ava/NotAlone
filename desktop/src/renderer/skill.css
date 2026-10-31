@@ -3,3 +3,43 @@
 .skill-tabs button[aria-selected="true"] { border-color: #afc4cd; background: #e1edf0; color: #355f7c; }
 .skill-tabs button:hover { background: #e8efed; }
 .skill-tabs button:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
+
+.sqlite-skill-library { display: grid; gap: 20px; }
+.sqlite-skill-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.sqlite-skill-heading h2 { margin-bottom: 8px; }
+.sqlite-skill-heading p { margin: 0; color: #697c85; }
+.sqlite-skill-filters { display: flex; flex-wrap: wrap; gap: 9px; padding: 4px 0; }
+.sqlite-skill-filters button { display: inline-flex; align-items: center; gap: 9px; min-height: 40px; padding: 7px 13px; border: 1px solid #c7d2d2; border-radius: 999px; background: #fffdf7; color: #465f6d; font: inherit; cursor: pointer; }
+.sqlite-skill-filters button[aria-pressed="true"] { border-color: #6c96a9; background: #e1edf0; color: #2f5d76; }
+.sqlite-skill-filters button:hover { border-color: #87a8b5; }
+.sqlite-skill-filters button:focus-visible, .sqlite-skill-switch:focus-visible { outline: 2px solid #426f8a; outline-offset: 3px; }
+.sqlite-skill-filters button span { min-width: 1.5em; padding: 1px 5px; border-radius: 999px; background: #edf0eb; color: #536a73; text-align: center; font-size: .82em; }
+.sqlite-skill-list { display: grid; gap: 20px; }
+.sqlite-skill-card { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 25px 28px; border: 1px solid #ccd6d4; border-radius: 18px; background: #fffdf7; box-shadow: 0 3px 9px rgb(56 74 78 / 5%); }
+.sqlite-skill-card-main { min-width: 0; flex: 1; }
+.sqlite-skill-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.sqlite-skill-title-row h3 { margin: 0; color: #344758; font-size: 1.35rem; line-height: 1.45; overflow-wrap: anywhere; }
+.sqlite-skill-enabled-label { padding: 3px 10px; border-radius: 999px; background: #f1eee5; color: #6b6e67; font-size: .88rem; white-space: nowrap; }
+.sqlite-skill-enabled-label.is-enabled { background: #e5f1e8; color: #477056; }
+.sqlite-skill-card-main > p { margin: 10px 0 0; color: #596b73; line-height: 1.7; }
+.sqlite-skill-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 16px; }
+.sqlite-skill-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+.sqlite-skill-tags span { padding: 4px 10px; border-radius: 999px; background: #edf2f1; color: #526e75; font-size: .88rem; }
+.sqlite-skill-verification { color: #778286; font-size: .88rem; }
+.sqlite-skill-note { color: #865c36 !important; }
+.sqlite-skill-switch { position: relative; flex: 0 0 auto; width: 58px; height: 34px; padding: 0; border: 0; border-radius: 999px; background: #c4cbca; cursor: pointer; transition: background-color 160ms ease; }
+.sqlite-skill-switch.is-on { background: #4f8a70; }
+.sqlite-skill-switch:disabled { cursor: not-allowed; opacity: .58; }
+.sqlite-skill-switch-thumb { position: absolute; top: 4px; left: 4px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 20%); transition: transform 160ms ease; }
+.sqlite-skill-switch.is-on .sqlite-skill-switch-thumb { transform: translateX(24px); }
+
+@media (max-width: 700px) {
+  .sqlite-skill-heading { flex-direction: column; align-items: stretch; }
+  .sqlite-skill-heading > .button { align-self: flex-start; }
+  .sqlite-skill-card { align-items: flex-start; gap: 16px; padding: 20px; }
+  .sqlite-skill-card-meta { align-items: flex-start; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sqlite-skill-switch, .sqlite-skill-switch-thumb { transition: none; }
+}

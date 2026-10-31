@@ -285,7 +285,9 @@ async function ensureTargetInstance(userData: string, manifest: CutoverManifest,
 }
 
 async function verifyTarget(userData: string, manifest: CutoverManifest, storage: CutoverStorage, ownerId: string): Promise<CutoverManifest> {
-  const created = manifest.targetOrigin === 'created';
+  // 已保存且身份一致的启动配置说明该目标通过过首次核验；重开恢复不能再要求业务库为空。
+  const established = loadStartupConfiguration(userData)?.expectedDatabaseId === manifest.target?.databaseId;
+  const created = manifest.targetOrigin === 'created' && !established;
   const checks: CutoverCheckRecord[] = [];
   const snapshot = await storage.execute<CutoverSnapshot>('cutover.snapshot', { ownerId });
   const target = manifest.target!;

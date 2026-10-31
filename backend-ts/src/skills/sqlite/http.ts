@@ -3,12 +3,16 @@ import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {readWechatHttpBody,WechatHttpBodyError} from '../../sync/wechat-http-body.ts';
 import {SqliteSkillLibrary,SqliteSkillError} from './library.ts';
 import type {SkillPackageState} from './contracts.ts';
+import romanceCatalog from '../../../../reply-skills/romance/catalog.json' with {type:'json'};
+
+const romancePresentation=new Map(romanceCatalog.entries.map(item=>[item.name,{title:item.title,tags:[item.category]}]));
 
 const enabledLabels={enabled:'已启用',disabled:'已停用',unknown:'待核验启停'};
 const verificationLabels={verified:'目录已核验',pending:'待核验',missing:'目录或文件缺失',conflict:'目录身份冲突',invalid:'文件校验失败'};
 /** 最小业务查询投影不含物理定位，也不冒充本次实际加载证据。 */
 export function skillManagementView(item: SkillPackageState) {
- return {package_id:item.id,name:item.displayName,description:item.description,directory_name:item.directoryName,
+ const presentation=romancePresentation.get(item.directoryName);
+ return {package_id:item.id,name:item.displayName,title:presentation?.title??item.displayName,tags:presentation?.tags??[],description:item.description,directory_name:item.directoryName,
   enabled_state:item.enabledState,verification_state:item.verificationState,verification_reason:item.verificationReason,
   head_revision:item.headRevision.toString(),current_revision_no:item.currentRevisionNo?.toString()??null,
   state_label:`${enabledLabels[item.enabledState]} · ${verificationLabels[item.verificationState]}`,

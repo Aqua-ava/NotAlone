@@ -17,22 +17,22 @@ description: "对方只回“哈哈”、表情或短词：用于该恋爱沟通
 
 ### 方法 1
 
-### How to Respond to Each Energy Level
+### 根据对话能量调整回应
 
-**High Energy (She's Engaged):**
-- Match it. Don't play it too cool.
-- This is your green light to suggest meeting.
-- Ask deeper questions. She's ready.
+**能量高（她投入聊天）：**
+- 跟上她的节奏，不必故意装冷淡。
+- 可以顺势提出见面。
+- 可以问得更深入一些，说明她愿意聊。
 
-**Medium Energy (She's Lukewarm):**
-- Change the topic or energy. Ask something unexpected.
-- Share something interesting about yourself.
-- Don't over-invest — match her energy level.
+**能量中等（她回应平淡）：**
+- 换个话题或调整聊天节奏，问个出乎意料但轻松的问题。
+- 分享一件自己的有趣经历。
+- 别投入过多，保持和她相近的节奏。
 
-**Low Energy (She's Fading):**
-- Don't chase. Don't send multiple messages.
-- One of two moves: inject something high-value, or suggest meeting.
-- If she responds to neither, let it go.
+**能量低（她逐渐疏远）：**
+- 不要追着发，也不要连发多条消息。
+- 可以尝试一次有内容的互动，或提出见面。
+- 如果两种方式她都没有回应，就先放下。
 
 
 ## 按需查看示例

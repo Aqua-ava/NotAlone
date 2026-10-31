@@ -2,11 +2,11 @@
 
 ### 表达模板 1
 
-**The Next-Day Follow-Up (next morning):**
-> "Still thinking about that thing you said about [specific topic]. Want to continue the debate over drinks this weekend?"
+**隔天的跟进（第二天早上）：**
+> “我还在想你昨天提到的[某个具体话题]。这周末要不要边喝点东西边把这个话题聊完？”
 
-**Why it works:**
-- Shows you actually listened
-- Seamless transition into date #2
-- Specific enough that she knows you care
-- Confident ask with a clear plan
+**为什么有效：**
+- 让对方知道你认真听过
+- 自然地把话题接到第二次约会
+- 细节具体，对方能感受到你有在意
+- 邀约清楚、直接，方便对方答复

@@ -1,16 +1,17 @@
 import {readFile, mkdir, writeFile, rm} from 'node:fs/promises';
 import {join, dirname} from 'node:path';
 import {checkNoLinks} from '../backend-ts/src/skills/skill-package.ts';
-import {openRomanceEvidence, renderRomanceSourceSkill, renderRomanceLicenseAppendix, romanceLicenseHeading} from './romance-source-material.mjs';
+import {openRomanceEvidence, readRomanceTranslations, renderRomanceSourceSkill, renderRomanceLicenseAppendix, romanceLicenseHeading} from './romance-source-material.mjs';
 import {romanceBundleRoot} from './validate_romance_reply_skills.mjs';
 
 // 仅从已登记的原文件行段生成；不调用模型，不接受自由编写的教学正文。
 const catalog = JSON.parse(await readFile(join(romanceBundleRoot,'catalog.json'),'utf8'));
 const provenance = JSON.parse(await readFile(join(romanceBundleRoot,'provenance.json'),'utf8'));
 const evidence = openRomanceEvidence(provenance);
+const translations = readRomanceTranslations(await readFile(join(romanceBundleRoot,'translations.json'),'utf8'),provenance,evidence);
 for (const entry of catalog.entries) {
   const selection = provenance.skills.find(item => item.id === entry.id);
-  const expected = renderRomanceSourceSkill(entry,selection,evidence,provenance.common_methods);
+  const expected = renderRomanceSourceSkill(entry,selection,evidence,provenance.common_methods,translations);
   const files = new Map([['SKILL.md',expected.document],...expected.resources]);
   for (const [relative,bytes] of files) {
     const path = join(romanceBundleRoot,entry.name,relative);
@@ -27,4 +28,4 @@ checkNoLinks(sourcesPath);
 const sourcesText = await readFile(sourcesPath, 'utf8');
 const beforeAppendix = sourcesText.split(romanceLicenseHeading)[0].trimEnd();
 await writeFile(sourcesPath, beforeAppendix + renderRomanceLicenseAppendix(provenance, evidence));
-console.log(JSON.stringify({rendered:catalog.entries.length,policy:provenance.policy}));
+console.log(JSON.stringify({rendered:catalog.entries.length,localizedExcerpts:translations.size,policy:catalog.content_policy}));

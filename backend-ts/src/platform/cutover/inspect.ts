@@ -36,8 +36,8 @@ export const cutoverActions: StorageAction[] = [{
       skills: {
         packages: count(tx, 'skill_package'),
         revisions: count(tx, 'skill_package_revision'),
-        enabled: count(tx, 'skill_package', " WHERE enabled_state='enabled'"),
-        unknown: count(tx, 'skill_package', " WHERE enabled_state='unknown'"),
+        enabled: count(tx, 'skill_package', " WHERE enabled_state='enabled' OR default_enabled=1"),
+        unknown: count(tx, 'skill_package', " WHERE enabled_state='unknown' AND default_enabled=0"),
       },
       deletions: {
         running_operations: count(tx, 'deletion_operation', " WHERE state NOT IN ('completed')"),

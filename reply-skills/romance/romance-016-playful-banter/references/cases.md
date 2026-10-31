@@ -2,10 +2,10 @@
 
 ### 话术片段 1
 
-| Technique | What It Is | Example |
+| 方式 | 做法 | 示例 |
 |-----------|-----------|---------|
-| **Playful Challenge** | Gently question something | "You put pineapple on pizza? This might be a dealbreaker." |
-| **Callback** | Reference something from earlier | "Okay, Miss 'I never watch reality TV' — explain your Love Island knowledge then" |
-| **Role Reversal** | Flip the dynamic playfully | "Slow down, I haven't even decided if I like YOU yet" |
-| **Absurd Escalation** | Take something to a funny extreme | "At this rate we'll be arguing about pizza toppings at our wedding" |
-| **Self-Deprecation** | Light joke at your own expense | "I'd try to impress you with my cooking but my smoke alarm counts as a kitchen timer" |
+| **轻松挑战** | 温和地调侃某个选择 | “你披萨放菠萝？这事我得重新考虑一下了。” |
+| **回扣前文** | 接住之前聊过的细节 | “等等，你不是说从不看真人秀吗？那你怎么这么懂《爱情岛》？” |
+| **角色反转** | 用玩笑暂时倒转互动位置 | “慢点，我还没决定自己喜不喜欢你呢。” |
+| **夸张升级** | 把一个小话题夸张成有趣的场景 | “照这样下去，我们婚礼上都要争论披萨配料了。” |
+| **自嘲** | 轻轻拿自己的小糗事开玩笑 | “我本来想用厨艺让你刮目相看，可我家的烟雾报警器更像厨房计时器。” |

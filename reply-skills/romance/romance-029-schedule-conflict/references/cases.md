@@ -2,5 +2,7 @@
 
 ### 话术片段 1
 
-| "I'm busy this week" (no counter-offer) | Soft no / low priority | Respect it: "Totally get it. Let me know when things calm down." Don't chase. |
-| "I'm busy this week but next week works!" | Genuine interest + schedule conflict | She's investing. Lock it down: "Perfect. Thursday or Friday? I'll plan something fun." |
+| 对方的消息 | 可能的含义 | 可以怎样回应 |
+|-------------|---------------|-------------------|
+| “这周很忙”（没有提出别的时间） | 可能是在委婉拒绝，或暂时兴趣不高 | 尊重她的安排：“理解。等你忙完了再告诉我。”不要追问。 |
+| “这周很忙，不过下周可以！” | 有兴趣，但时间安排冲突 | 她也在推进安排。可以落实时间：“好啊，周四还是周五？我来安排点有趣的。” |

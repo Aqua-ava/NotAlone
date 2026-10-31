@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
+import { SqliteSkillLibrary } from '../src/skills/sqlite/library.ts';
 import { runDefaultDatabaseStartup } from '../src/platform/cutover/startup.ts';
 import { inspectCutover, BUSINESS_TARGETS } from '../src/platform/cutover/startup.ts';
 import { discoverLegacyTargets } from '../src/platform/cutover/targets.ts';
@@ -50,7 +51,7 @@ test('空隔离根默认创建同一新SQLite实例，重开沿用 database_id �
   assert.equal(first.phase, 'ready');
   assert.equal(first.code, 'sqlite_ready');
   assert.equal(first.created, true);
-  assert.equal(first.schemaVersion, 22);
+  assert.equal(first.schemaVersion, 24);
   assert.deepEqual(first.configuration.capabilities, ['contacts', 'skills', 'history', 'discussions', 'memory']);
   const config = JSON.parse(await readFile(startupConfigPath(root), 'utf8'));
   assert.equal(config.expectedDatabaseId, first.databaseId);
@@ -315,4 +316,30 @@ test('清理后配置切换前重新出现旧写入者时停止切换', async t 
   const ready = await runDefaultDatabaseStartup({ userData: root });
   assert.equal(ready.phase, 'ready', JSON.stringify(ready));
   assert.equal(await exists(startupConfigPath(root)), true);
+});
+
+test('已完成初始化且已有Skill的库在短暂重开失败后沿用原实例恢复', async t => {
+  const root = await fixture(t);
+  const first = await runDefaultDatabaseStartup({ userData: root });
+  assert.equal(first.phase, 'ready');
+  await file(path.join(root, 'skill-packages/gentle/SKILL.md'), '---\nname: gentle\ndescription: 合成的温和表达方法\n---\n先回应对方的具体感受。\n');
+  const storage = await openStorage(root);
+  const library = new SqliteSkillLibrary(storage, first.ownerId, path.join(root, 'skill-packages'));
+  const [skill] = await library.refresh();
+  assert.equal(skill.enabledState, 'enabled');
+  await storage.close();
+  const failed = await runDefaultDatabaseStartup({ userData: root, storageFactory: {open: async () => {
+    throw Object.assign(new Error('合成临时故障'), {code: 'storage_integrity_failed'});
+  }} });
+  assert.equal(failed.phase, 'maintenance');
+  const recovered = await runDefaultDatabaseStartup({ userData: root });
+  assert.equal(recovered.phase, 'ready', recovered.code);
+  assert.equal(recovered.databaseId, first.databaseId);
+  assert.equal(recovered.ownerId, first.ownerId);
+  const reopened = await openStorage(root);
+  try {
+    const current = await new SqliteSkillLibrary(reopened, first.ownerId, path.join(root, 'skill-packages')).get(skill.id);
+    assert.equal(current.enabledState, 'enabled');
+    assert.equal(current.directoryIdentity, skill.directoryIdentity);
+  } finally { await reopened.close(); }
 });

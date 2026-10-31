@@ -235,3 +235,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 130. [ADR-130：同账号本机来源变化后的明确重新关联](adr/130-explicit-wechat-source-reconfirmation.md)
 131. [ADR-131：联系人确认后使用当前可用资料生成](adr/131-available-context-without-history-wait.md)
 132. [ADR-132：按会话名称关联已有联系人](adr/132-existing-contact-name-matching.md)
+
+135. [ADR-135：Skill 默认启用与中文场景管理](adr/135-default-enabled-localized-skill-library.md)

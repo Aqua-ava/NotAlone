@@ -17,8 +17,8 @@ description: "通话或视频聊天的邀约：用于该恋爱沟通场景，参
 
 ### 方法 1
 
-### The Video Call Bridge
-Video is the ultimate bridge between text and meeting. It eliminates catfish risk and lets personality shine.
+### 视频通话作为过渡
+视频通话可以衔接文字聊天和线下见面。它能降低遇到虚假身份的风险，也能让双方更容易感受到彼此的个性。
 
 
 ## 按需查看示例

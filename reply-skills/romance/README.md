@@ -2,7 +2,7 @@
 
 按已确认的 92 个细分沟通场景保留独立包。92 是整理后的目录数量，不表示原仓库已有 92 个独立 Skill 文件。
 
-方法、表达模板、话术片段及教学情境只取原文件的连续行段，不另写人物、背景、用户意图、反例或后续对话。编排仅增加场景名称、description、章节及按需读取提示，去除片段首尾空行与行尾空白；原有字句不改写。原文模板中的假设和占位符不能当作用户事实。
+方法、表达模板、话术片段及教学情境只取原文件的连续行段，不另写人物、背景、用户意图、反例或后续对话。登记在 `translations.json` 的完整英文摘录以中文译文显示，逐条绑定固定来源行号和摘要；其它原文保持不变。编排仅增加场景名称、description、章节及按需读取提示，去除片段首尾空行与行尾空白。原文模板中的假设和占位符不能当作用户事实。
 
 本版包含 128 段方法摘录、89 段单列示例摘录，其中 80 段示例的引用范围不同；重复引用不算新的案例。76 项有对应场景的方法，16 项借用相关通用方法；13 项没有合适的单列示例，明确留空，不凑数。旧版自行编写的 184 则案例已撤回。
 
@@ -18,16 +18,18 @@
 node scripts/render_romance_reply_skills.mjs
 node scripts/validate_romance_reply_skills.mjs
 cd backend-ts
-node --test test/romance-source-material.test.mjs test/romance-reply-skills.test.mjs test/sqlite-skill-profile.test.mjs test/sqlite-skill-resource-profile.test.mjs
+node --test test/romance-source-material.test.mjs test/romance-chinese-localization.test.mjs test/romance-reply-skills.test.mjs test/sqlite-skill-profile.test.mjs test/sqlite-skill-resource-profile.test.mjs
 ```
 
-生成器只接受登记的原文行段。校验器核对固定仓库与提交、源文件 Git blob／SHA-256、引用行号和片段哈希，并与另存的[源文件锁表](../romance-sources.lock.json)匹配，再逐字节比较方法正文、示例及来源总文档中的许可声明；无来源增写、改写或额外资源都会失败。源快照和来源表是本次核对后留存的本地依据，校验不联网复查远端，也不验证原作者观点或教学情境的真实性。场景匹配、引用上下文和方法范围由选段与交叉审阅核对，不能由哈希校验自动判定。
+生成器只接受登记的原文行段及绑定来源摘要的中文翻译。校验器核对固定仓库与提交、源文件 Git blob／SHA-256、引用行号和片段哈希，并与另存的[源文件锁表](../romance-sources.lock.json)匹配；逐字节核对翻译清单、方法正文、案例和来源总文档中的许可声明。没有来源对应关系的译文、方法和示例都会校验失败。源快照和来源表是本次核对后留存的本地依据，校验不联网复查远端，也不验证原作者观点或教学情境的真实性。场景匹配、引用上下文和译文语义须人工判断，不能由哈希校验自动判定。
 
 技术加载回归使用隔离 SQLite、官方 DSH scoped registry 与产品 Skill provider，不调用外部模型，不改真实聊天或记忆。结构校验与加载成功不代表 92 个场景的实际回复效果均已验收。
 
 ## 本轮验证
 
 2026-10-31：92 个包通过产品实际解析及内容安全校验；128 段方法和 89 段单列示例均与登记原文一致，39 个源文件符合独立锁表，零告警。
+
+2026-10-31 中文适配：为 33 段锁定英文摘录登记来源绑定的中文译文，渲染至 21 个 Skill 正文或案例；`romance-001-first-contact` 的方法、示例和常见回复均以自然中文呈现。原文快照、引用行号、英文 Skill 名称及包目录身份保持稳定。
 
 来源约束的 6 项测试通过：允许缺少单列示例、出处留在包外，拒绝额外编写的方法或示例、篡改行号，以及同时伪造源正文和全部自报哈希。另 3 项 SQLite／官方 DSH 回归通过：在隔离账号加载完整目录，每轮只加载一个正文及其同版本示例资源，拒绝第二个包及扩权读取。
 

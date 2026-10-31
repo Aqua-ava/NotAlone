@@ -17,25 +17,25 @@ description: "稳定关系中疏远后的重新亲近：用于该恋爱沟通场
 
 ### 方法 1
 
-**The fix:** Deliberately maintain *separateness* within togetherness.
+**相处亲近，也保留各自空间：**有意在亲密关系中维护彼此的独立性。
 
-### Maintaining Eroticism
+### 保持亲密与吸引力
 
-Eroticism dies in three conditions:
-1. **Over-familiarity** — When your partner becomes a roommate
-2. **Emotional debt** — When resentment accumulates undiscussed
-3. **Loss of self** — When you stop being *you* and become only *us*
+以下三种情况容易让亲密和吸引力消退：
+1. **过度熟悉**——伴侣相处得像室友
+2. **情绪积账**——不满不断累积，却从未谈开
+3. **失去自我**——不再做自己，只剩“我们”
 
-**Practical ways to maintain erotic energy:**
+**可以尝试的做法：**
 
-| Practice | Frequency | Why It Works |
+| 做法 | 频率 | 可能的作用 |
 |----------|-----------|-------------|
-| Date nights (real ones, planned) | Weekly | Recreates pursuit energy |
-| Time apart with separate friends | Weekly | Generates stories and mystery |
-| Physical touch that isn't goal-oriented | Daily | Maintains body awareness |
-| Flirting — actual flirting, like you just met | Daily | Keeps playful energy alive |
-| Trying something new together | Monthly | Novelty triggers dopamine |
-| Verbal desire — "You look incredible right now" | Spontaneously | Explicit appreciation prevents invisible-partner syndrome |
+| 提前安排真正的约会 | 每周 | 重新创造主动靠近的感觉 |
+| 和各自的朋友相处，留一点独处时间 | 每周 | 带来新的经历和话题，也保留新鲜感 |
+| 不以性或其他目标为前提的身体接触 | 每天 | 保持对彼此身体感受的关注 |
+| 像刚认识时那样互相调情 | 每天 | 让互动中的轻松感继续存在 |
+| 一起尝试新事物 | 每月 | 新鲜体验带来兴奋感 |
+| 直接表达欣赏，例如“你现在看起来真迷人” | 自然而然时 | 说出欣赏，避免让伴侣觉得自己被忽视 |
 
 
 ## 按需查看示例

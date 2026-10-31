@@ -2,32 +2,32 @@
 
 ### 表达模板 1
 
-### When She's Clearly Interested:
-> "Okay, I like you. We should meet before one of us says something weird and ruins this. Coffee this week?"
+### 对方已经表现出明确兴趣时
+> “好吧，我挺喜欢你的。趁我们还没聊出什么奇怪的话题把气氛搞砸，不如见一面？这周喝咖啡吗？”
 
-### When You've Been Texting a While:
-> "We've been texting for [time] and I still don't know what your laugh sounds like in person. That's a problem. When are you free?"
+### 已经聊了一阵时
+> “我们聊了[一段时间]，我还不知道你当面笑起来是什么样。得找机会补上。你什么时候有空？”
 
-### The Callback Close:
-> "You mentioned you love [thing]. I know the perfect [related place]. Let's go this weekend."
+### 回扣前文的邀约
+> “你之前说喜欢[某件事]，我知道一家很合适的[相关地点]。这周末一起去吧。”
 
-### The Casual:
-> "Want to grab a drink this week? Nothing fancy, just vibes."
+### 随意一点
+> “这周要不要一起喝一杯？不用安排得很正式，轻松见见就好。”
 
-### The Confident:
-> "I'm taking you for coffee on [day]. Does [time] work?"
+### 直接提出时间
+> “我想约你这周[某一天]喝咖啡。[某个时间]合适吗？”
 
-### The Creative:
-> "I have a challenge for you. [Related to something from the conversation]. Loser buys coffee. Friday?"
+### 用小游戏式挑战邀约
+> “我想和你比一比。[接一个之前聊过的话题]，输的人请咖啡。周五怎么样？”
 
-### The Low-Pressure:
-> "I feel like we'd have a way better conversation in person. No pressure — just coffee and good conversation."
+### 降低压力
+> “感觉我们当面聊会更自在些。不用有压力，就是喝杯咖啡、聊聊天。”
 
-### The Foodie:
-> "There's this place I've been wanting to try. Want to be my plus-one taste tester?"
+### 美食邀约
+> “有家店我一直想去试试。你愿意来当我的试吃搭档吗？”
 
-### The Activity:
-> "I've been meaning to check out [event/place]. Want to come? Could be fun."
+### 活动邀约
+> “我一直想去看看[某个活动／地点]。要不要一起？感觉会挺有意思。”
 
-### The Honest:
-> "I'll be real — I'm enjoying this conversation but I'd enjoy it way more in person. When are you free this week?"
+### 坦诚表达
+> “说实话，我挺享受和你聊天的；要是能当面聊，应该更开心。这周你什么时候有空？”

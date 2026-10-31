@@ -17,16 +17,15 @@ async function fixture(t){
  return {dir,root,storage,bytes,library:new SqliteSkillLibrary(storage,'owner-a',root)};
 }
 
-test('空库只建立未知启停及目录锚点，明确启停独立保存，原目录字节保持',async t=>{
+test('授权根中核验通过的 Skill 默认启用，用户停用持续优先，原目录字节保持',async t=>{
  const {library,root,bytes,storage}=await fixture(t);
  assert.deepEqual(await library.list(),[]);
- let item=await library.discover('gentle');
- assert.equal(item.enabledState,'unknown');assert.equal(item.verificationState,'pending');
- assert.equal(item.currentRevisionNo,null);assert.deepEqual(item.revisions,[]);
- item=await library.setEnabled(item.id,item.headRevision,'enabled');
- assert.equal(item.enabledState,'enabled');
+ let [item]=await library.refresh();
+ assert.equal(item.enabledState,'enabled');assert.equal(item.enabledOrigin,'default');
+ assert.equal(item.verificationState,'verified');assert.equal(item.currentRevisionNo,1n);
  item=await library.setEnabled(item.id,item.headRevision,'disabled');
- assert.equal(item.enabledState,'disabled');
+ assert.equal(item.enabledState,'disabled');assert.equal(item.enabledOrigin,'user_action');
+ [item]=await library.refresh();assert.equal(item.enabledState,'disabled');assert.equal(item.enabledOrigin,'user_action');
  assert.equal(await readFile(join(root,'gentle','SKILL.md'),'utf8'),bytes);
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
@@ -44,6 +43,20 @@ function protection(storage){
   async recordInput(input){await storage.execute('skills.assertRevision',{ownerId:input.scope.ownerId,anchor:input.loaded});inputs.push(structuredClone(input));},
  };
 }
+test('默认启用来历与后续用户停用在 SQLite 重开后保持',async t=>{
+ const {library,storage,dir,root}=await fixture(t);
+ let [item]=await library.refresh();assert.equal(item.enabledState,'enabled');assert.equal(item.enabledOrigin,'default');
+ const databaseId=storage.status.databaseId;await storage.close();
+ const reopened=await SqliteStorage.open({userData:dir,intent:'open',expectedDatabaseId:databaseId,role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});t.after(()=>reopened.close());
+ const same=new SqliteSkillLibrary(reopened,'owner-a',root);
+ item=await same.get(item.id);assert.equal(item.enabledState,'enabled');assert.equal(item.enabledOrigin,'default');
+ item=await same.setEnabled(item.id,item.headRevision,'disabled');assert.equal(item.enabledOrigin,'user_action');
+ await reopened.close();
+ const reopenedAgain=await SqliteStorage.open({userData:dir,intent:'open',expectedDatabaseId:databaseId,role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});t.after(()=>reopenedAgain.close());
+ const final=new SqliteSkillLibrary(reopenedAgain,'owner-a',root);
+ item=await final.get(item.id);assert.equal(item.enabledState,'disabled');assert.equal(item.enabledOrigin,'user_action');
+});
+
 test('官方 scoped provider 只加载已启用修订，选择与真实载入分开追踪',async t=>{
  const {library,storage}=await fixture(t);let item=await library.discover('gentle');
  const ctx=new Context();await ctx.plugin(SkillRegistry);const key={},layer=createScope(ctx,key);t.after(()=>layer.dispose());t.after(()=>ctx.fiber.dispose());
@@ -189,8 +202,11 @@ test('材料核验期间来源撤销时返回前再次核资格，不能放行�
  await assert.rejects(run.validate(),{code:'fixture_scope_revoked'});
 });
 
-test('数据库拒绝缺启用来历的NULL分支及不可变锚点改写',async t=>{
- const {library,storage}=await fixture(t);let item=await library.discover('gentle');item=await library.verify(item.id,item.headRevision);
+test('默认启用要求先通过完整核验，数据库保留原启用约束及不可变锚点',async t=>{
+ const {library,storage}=await fixture(t);let item=await library.discover('gentle');
+ await assert.rejects(storage.execute('skills.defaultEnable',{ownerId:'owner-a',id:item.id,expectedHead:item.headRevision}),{code:'skill_default_enable_not_qualified'});
+ await assert.rejects(storage.execute('fixture.forceDefaultEnable',{ownerId:'owner-a',id:item.id}));
+ item=await library.verify(item.id,item.headRevision);
  await assert.rejects(storage.execute('fixture.invalidEnabledOrigin',{ownerId:'owner-a',id:item.id}));
  await assert.rejects(storage.execute('fixture.mutateAnchor',{ownerId:'owner-a',id:item.id}));
  assert.equal((await library.get(item.id)).enabledState,'unknown');
@@ -252,7 +268,7 @@ test('账号元数据删除合同清两表并可重试，拒绝越owner且原目
 });
 
 
-test('发现与刷新未知/停用包不读取正文，启用后自动技术更新且来源撤销不可恢复',async t=>{
+test('新包仅在完整核验后默认启用，停用不恢复，来源撤销持续封禁',async t=>{
  const {library,root,bytes}=await fixture(t);
  // 没有正文仍可发现目录；扫描不能把读取内容当作发现名称的前提。
  await rm(join(root,'gentle/SKILL.md'));
@@ -265,7 +281,7 @@ test('发现与刷新未知/停用包不读取正文，启用后自动技术更�
  await assert.rejects(library.assertAnchor(old),{code:'skill_run_invalidated'});
  item=await library.setEnabled(item.id,item.headRevision,'disabled');
  await rm(join(root,'gentle/SKILL.md'));
- item=(await library.refresh())[0];assert.equal(item.enabledState,'disabled');assert.equal(item.verificationState,'verified');
+ item=(await library.refresh())[0];assert.equal(item.enabledState,'disabled');assert.equal(item.enabledOrigin,'user_action');assert.equal(item.verificationState,'verified');
  await writeFile(join(root,'gentle/SKILL.md'),bytes);
  item=await library.setEnabled(item.id,item.headRevision,'enabled');
  item=await library.requireVerification(item.id,item.headRevision);

@@ -2,8 +2,8 @@
 
 ### 表达模板 1
 
-**Reconnecting After Distance:**
+**疏远后重新靠近：**
 ```
-"I feel like we've been in our own worlds lately, and I miss you.
-Can we carve out time this week that's just for us?"
+“我感觉我们最近各忙各的，我有点想你了。
+这周能不能留点时间，只属于我们俩？”
 ```

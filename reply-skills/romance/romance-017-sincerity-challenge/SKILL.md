@@ -17,16 +17,16 @@ description: "回应“你对谁都这样吗”的真诚质疑：用于该恋爱
 
 ### 方法 1
 
-Sometimes people test confidence with playful (or pointed) questions. The key: don't take it seriously.
+有时，对方会用轻松甚至带点锋芒的问题试探你的自信。关键是别把它当成严肃审问。
 
-| The Test | What She's Checking | How to Respond |
+| 对方的问题 | 她可能在观察什么 | 可以怎样回应 |
 |----------|-------------------|---------------|
-| "Why are you single?" | Are you insecure about it? | "I'm actually three toddlers in a trench coat. Don't tell anyone." |
-| "Do you say that to all the girls?" | Are you genuine? | "Only the ones who [callback to something specific about her]." |
-| "Buy me a drink" | Do you have boundaries? | "Sure, you can get the second round. Seems fair." |
-| "You're too nice" | Are you a pushover? | "Give it time. I have layers." |
+| “你怎么还是单身？” | 你会不会因此不自在？ | “其实我是三个穿着风衣的幼儿叠在一起。别告诉别人。” |
+| “你对谁都这么说吗？” | 你是不是说真的？ | “只对会让我想起某个具体细节的人这么说。” |
+| “请我喝一杯。” | 你有没有自己的分寸？ | “好啊，第二杯你请，挺公平的。” |
+| “你人也太好了吧。” | 你会不会没有原则？ | “你再观察观察，我还有好几面呢。” |
 
-**The Universal Formula:** Acknowledge + Deflect with Humor + Redirect
+**通用思路：**接住问题 + 幽默化解 + 自然转回对话
 
 
 ## 按需查看示例
