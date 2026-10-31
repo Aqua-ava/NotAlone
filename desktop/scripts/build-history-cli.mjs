@@ -11,7 +11,7 @@ import { hashWechatFile, wechatCliSourceDirectory } from './wechat-components.mj
 
 const desktop = fileURLToPath(new URL('../', import.meta.url));
 const repository = path.dirname(desktop.replace(/\/$/, ''));
-export const historyCliBuildRoot = path.join(repository, '.scratch/sqlite-history-cli');
+export const historyCliBuildRoot = path.join(wechatCliSourceDirectory, '.notalone-builds');
 const wcdbSha256 = '4f05cafc4626a142afca1818f0a88c4092a13d5f4c83e30cd5125b558ba0417d';
 const run = promisify(execFile);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
