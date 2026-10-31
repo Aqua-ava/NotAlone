@@ -115,6 +115,7 @@ func newNotaloneTailSession(target notaloneSnapshotTarget, selected notaloneReso
 	cloneTarget := target
 	cloneTarget.Partitions = append([]string(nil), target.Partitions...)
 	cloneTarget.Tables = append([]notaloneSnapshotTable(nil), target.Tables...)
+	cloneTarget.CheckedPartitions = append([]string(nil), target.CheckedPartitions...)
 	return &notaloneTailSession{
 		target: cloneTarget, scopeDigest: notaloneHash(selected.Account, selected.Conversation),
 		sourceGeneration: selected.SourceGeneration, schemaFingerprint: inspection.SchemaFingerprint,
@@ -153,6 +154,12 @@ func notaloneSameSnapshotInstances(expected, actual notaloneSnapshotTarget) bool
 	if len(expectedPartitions) != 0 {
 		return false
 	}
+	if len(actual.CheckedPartitions) == 0 && len(expected.CheckedPartitions) > 0 {
+		return false
+	}
+	if len(expected.CheckedPartitions) > 0 && len(actual.CheckedPartitions) > 0 && !notaloneSameOrderedStrings(expected.CheckedPartitions, actual.CheckedPartitions) {
+		return false
+	}
 	expectedTables := make(map[string]string, len(expected.Tables))
 	for _, table := range expected.Tables {
 		if table.Partition == "" || table.Instance == "" || expectedTables[table.Partition] != "" {
@@ -167,6 +174,18 @@ func notaloneSameSnapshotInstances(expected, actual notaloneSnapshotTarget) bool
 		delete(expectedTables, table.Partition)
 	}
 	return len(expectedTables) == 0
+}
+
+func notaloneSameOrderedStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] == "" || left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func notaloneTailIdentityLess(left, right notaloneTailIdentity) bool {
@@ -268,7 +287,7 @@ func (h *notaloneHistorySession) tailPage(ctx context.Context, request notaloneH
 			h.resetTail()
 			return empty, notaloneFailure("history_source_changed")
 		}
-		if initErr := snapshot.initializeDelta(ctx, h.server, tail.states, tail.baseline, false); initErr != nil {
+		if initErr := snapshot.initializeDelta(ctx, h.server, tail.states, tail.baseline, false, nil); initErr != nil {
 			_ = snapshot.Close()
 			return empty, initErr
 		}

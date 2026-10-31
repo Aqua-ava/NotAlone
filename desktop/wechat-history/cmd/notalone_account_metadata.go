@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,8 +122,7 @@ func (h *notaloneHistorySession) inspectAccountSchema(ctx context.Context) (repo
 	if err = h.currentAccount(); err != nil {
 		return report, err
 	}
-	encoded, _ := json.Marshal(tables)
-	return notaloneAccountSchemaReport{"wechat-account-schema-v1", "unverified", h.server.cfg.Wxid, generation, notaloneHash(string(encoded)), tables, false}, nil
+	return notaloneAccountSchemaReport{"wechat-account-schema-v1", "unverified", h.server.cfg.Wxid, generation, notaloneSchemaFingerprint(tables, nil), tables, false}, nil
 }
 
 // 只固定显式schema2账号的两个元数据实例；不证明微信进程当前登录态或跨恢复连续性。

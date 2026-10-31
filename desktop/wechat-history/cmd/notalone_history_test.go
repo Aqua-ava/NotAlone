@@ -114,7 +114,7 @@ func TestNotAloneHistorySchemaAutoincrementIsNotAComment(t *testing.T) {
 	}
 }
 
-func TestNotAloneHistoryTableInstanceChangesAfterSameNameRecreate(t *testing.T) {
+func TestNotAloneHistoryTableInstanceUsesOnlyStableFileSQLIdentity(t *testing.T) {
 	db, err := wcdb.OpenPlain(filepath.Join(t.TempDir(), "instance.db"), true)
 	if err != nil {
 		t.Fatal(err)
@@ -128,6 +128,10 @@ func TestNotAloneHistoryTableInstanceChangesAfterSameNameRecreate(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	canonical := notaloneHash("source-table-instance-v2", "same-file", "Msg_same", before.RootPage, before.SQLFingerprint)
+	if before.Target != canonical {
+		t.Fatal("表实例摘要没有使用固定v2字段顺序")
+	}
 	if err = db.Exec(`DROP TABLE Msg_same;` + ddl); err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +139,20 @@ func TestNotAloneHistoryTableInstanceChangesAfterSameNameRecreate(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if before.Target == after.Target {
-		t.Fatal("同名重建不得沿用表实例身份")
+	if before.RootPage == after.RootPage && before.SQLFingerprint == after.SQLFingerprint {
+		if before.Target != after.Target {
+			t.Fatal("同root与SQL的同名重建不得因数据库级schema_version改变实例身份")
+		}
+	} else if before.Target == after.Target {
+		t.Fatal("root或SQL改变必须改变表实例身份")
+	}
+	canonical = notaloneHash("source-table-instance-v2", "same-file", "Msg_same", after.RootPage, after.SQLFingerprint)
+	oldIdentity := notaloneHash("same-file", "Msg_same", after.SchemaVersion, after.RootPage, after.SQLFingerprint)
+	previousAliases := notaloneSourceIdentityAliases
+	notaloneSourceIdentityAliases = map[string]string{canonical: oldIdentity}
+	defer func() { notaloneSourceIdentityAliases = previousAliases }()
+	bridged, err := inspectNotaloneTable(context.Background(), db, "Msg_same", "same-file")
+	if err != nil || bridged.Target != oldIdentity {
+		t.Fatalf("固定旧C1作用域别名未承接v2实例：%v", err)
 	}
 }

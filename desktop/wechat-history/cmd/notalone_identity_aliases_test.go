@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,24 @@ func TestNotaloneIdentityAliasesRequireExactAccountAndArtifact(t *testing.T) {
 	write()
 	if _, err := loadNotaloneIdentityAliases(path, "synthetic-owner", artifact); err == nil {
 		t.Fatal("可重叠的实例别名未拒绝")
+	}
+	large := make(map[string]string, notaloneIdentityAliasesLimit)
+	for index := 1; index <= notaloneIdentityAliasesLimit; index++ {
+		large[fmt.Sprintf("%064x", index)] = fmt.Sprintf("%064x", index+notaloneIdentityAliasesLimit*2)
+	}
+	record["aliases"] = large
+	write()
+	info, err := os.Stat(path)
+	if err != nil || info.Size() > notaloneIdentityAliasesByteLimit {
+		t.Fatalf("合成大映射fixture超过既定1MiB上限：%v", err)
+	}
+	if aliases, err := loadNotaloneIdentityAliases(path, "synthetic-owner", artifact); err != nil || len(aliases) != notaloneIdentityAliasesLimit {
+		t.Fatalf("4096条opaque映射必须可加载：count=%d err=%v", len(aliases), err)
+	}
+	record["padding"] = strings.Repeat("x", notaloneIdentityAliasesByteLimit)
+	write()
+	if _, err := loadNotaloneIdentityAliases(path, "synthetic-owner", artifact); err == nil {
+		t.Fatal("超过1MiB的别名清单未拒绝")
 	}
 }
 

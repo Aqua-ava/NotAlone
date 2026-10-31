@@ -77,6 +77,7 @@ type notaloneHistorySession struct {
 	receivedTestMetadata *notaloneReceivedTestMetadataWatch
 	accountGeneration    string
 	checkpointDirectory  string
+	supportTargetChanged bool
 }
 
 func newNotaloneHistorySession(s *server) *notaloneHistorySession {
@@ -318,8 +319,7 @@ func (h *notaloneHistorySession) inspect(ctx context.Context) (notaloneInspectio
 	if guard.Check() != nil || h.currentAccount() != nil {
 		return result, notaloneFailure("history_source_changed")
 	}
-	encoded, _ := json.Marshal(result.Tables)
-	result.SchemaFingerprint = notaloneHash(string(encoded), strings.Join(result.CheckedPartitions, "|"))
+	result.SchemaFingerprint = notaloneSchemaFingerprint(result.Tables, result.CheckedPartitions)
 	return result, nil
 }
 
@@ -353,6 +353,10 @@ func notaloneFileHash(file string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportReport, *notaloneReadProfile, error) {
+	return h.supportWithRefresh(ctx, false)
+}
+
+func (h *notaloneHistorySession) supportWithRefresh(ctx context.Context, refreshSchema bool) (notaloneSupportReport, *notaloneReadProfile, error) {
 	result := notaloneSupportReport{Protocol: "private-history-v1", AdapterVersion: "1", Status: "unverified", AccountKey: h.selected.Account, ConversationKey: h.selected.Conversation, SourceGeneration: h.selected.SourceGeneration, ServerAliasSemantics: "unverified", Identity: "source-table-local-v1", DeclaredPrimaryKey: []string{}}
 	if h.supportReport != nil && h.supportProfile != nil {
 		if err := h.currentAccount(); err != nil {
@@ -368,6 +372,31 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 		}
 		if h.inspected == nil || h.supportReport.SourceGeneration != h.selected.SourceGeneration || h.supportReport.AccountKey != h.selected.Account || h.supportReport.ConversationKey != h.selected.Conversation {
 			return result, nil, notaloneFailure("history_scope_changed")
+		}
+		if refreshSchema {
+			fresh, err := h.inspect(ctx)
+			if err != nil {
+				return result, nil, err
+			}
+			if fresh.SchemaFingerprint != h.inspected.SchemaFingerprint {
+				if !notaloneSafeInspectionGrowth(*h.inspected, fresh) {
+					return result, nil, notaloneFailure("history_schema_changed")
+				}
+				if h.snapshot != nil {
+					_ = h.snapshot.Close()
+					h.snapshot = nil
+				}
+				h.resetTail()
+				h.inspected = &fresh
+				h.supportReport = nil
+				h.supportProfile = nil
+				report, profile, refreshErr := h.support(ctx)
+				if refreshErr == nil {
+					h.supportTargetChanged = true
+				}
+				return report, profile, refreshErr
+			}
+			h.inspected = &fresh
 		}
 		return cloneNotaloneSupportReport(*h.supportReport), cloneNotaloneReadProfile(h.supportProfile), nil
 	}
@@ -416,7 +445,9 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 		return result, nil, nil
 	}
 	if h.inspected != nil && h.inspected.SchemaFingerprint != inspected.SchemaFingerprint {
-		return result, nil, notaloneFailure("history_schema_changed")
+		if !notaloneSafeInspectionGrowth(*h.inspected, inspected) {
+			return result, nil, notaloneFailure("history_schema_changed")
+		}
 	}
 	if result.Capabilities == nil {
 		result.Capabilities = map[string]string{}
@@ -465,6 +496,7 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 	if emptyTarget {
 		result.StatusSemantics = certification.StatusSemantics
 		result.Capabilities["incrementalTail"] = "unsupported"
+		result.Capabilities["partitionGrowth"] = "supported"
 	}
 	result.Continuity = "same-source-instances-normal-use-v1"
 	if !emptyTarget && h.checkpointDirectory != "" {
@@ -686,25 +718,52 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			return nil, err
 		}
 	}
-	report, profile, err := h.support(ctx)
+	refreshSchema := r.Operation == "support" || r.Operation == "target" || r.Operation == "resume-target" || r.Operation == "tail"
+	report, profile, err := h.supportWithRefresh(ctx, refreshSchema)
 	if err != nil {
 		return nil, err
 	}
 	if r.Operation == "support" {
+		h.supportTargetChanged = false
 		return report, nil
 	}
 	if r.Operation == "tail" {
+		if h.supportTargetChanged {
+			h.supportTargetChanged = false
+			return nil, notaloneFailure("history_target_growth_required")
+		}
 		return h.tailPage(ctx, r, report, profile)
 	}
 	if r.Operation == "resume-target" {
 		if report.Status != "supported" || profile == nil || report.Capabilities["durableIncremental"] != "supported" {
 			return nil, notaloneFailure("history_tail_unsupported")
 		}
-		checkpoint, loadErr := h.loadCheckpoint(report, *profile, r.Target, r.Cursor)
+		if h.snapshot == nil || h.snapshotMode != "normal" {
+			if h.snapshot != nil {
+				_ = h.snapshot.Close()
+				h.snapshot = nil
+			}
+			snapshot, openErr := newNotaloneSnapshot(h.life, h.server, *h.selected, *h.inspected, *profile)
+			if openErr != nil {
+				return nil, openErr
+			}
+			proof, proofErr := snapshot.FixedSnapshotProof(*h.inspected)
+			if proofErr != nil || proof.Status != "verified" || proof.ExpectedPartitionCount == 0 || proof.ExpectedPartitionCount != proof.CompletedPartitionCount {
+				_ = snapshot.Close()
+				if proofErr != nil {
+					return nil, proofErr
+				}
+				return nil, notaloneFailure("history_snapshot_proof_incomplete")
+			}
+			h.snapshot = snapshot
+			h.snapshotMode = "normal"
+		}
+		checkpoint, loadErr := h.loadCheckpoint(report, *profile, r.Target, h.snapshot.Target(), r.Cursor)
 		if loadErr != nil {
 			return nil, loadErr
 		}
 		if checkpoint == nil {
+			h.supportTargetChanged = false
 			return nil, nil
 		}
 		if h.snapshot != nil {
@@ -716,7 +775,8 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if openErr != nil {
 			return nil, openErr
 		}
-		if !notaloneSameSnapshotInstances(checkpoint.Target, snapshot.Target()) {
+		newTablePartitions, growthOK := notaloneSafeTargetGrowth(checkpoint.Target, snapshot.Target(), checkpoint.TableSchemas, h.inspected.Tables)
+		if !notaloneSameSnapshotInstances(checkpoint.Target, snapshot.Target()) && (!growthOK || len(newTablePartitions) == 0) {
 			_ = snapshot.Close()
 			return nil, notaloneFailure("history_source_changed")
 		}
@@ -724,12 +784,13 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		for _, item := range checkpoint.Baseline {
 			baseline[item.Identity] = item.Entry
 		}
-		if initErr := snapshot.initializeDelta(ctx, h.server, checkpoint.States, baseline, true); initErr != nil {
+		if initErr := snapshot.initializeDelta(ctx, h.server, checkpoint.States, baseline, true, newTablePartitions); initErr != nil {
 			_ = snapshot.Close()
 			return nil, initErr
 		}
 		h.snapshot = snapshot
 		h.snapshotMode = "normal"
+		h.supportTargetChanged = false
 		return snapshot.Target(), nil
 	}
 	mode := "normal"
@@ -752,12 +813,13 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 				return nil, err
 			}
 			if h.snapshot.deltaStates == nil {
-				if err := h.snapshot.initializeDelta(ctx, h.server, nil, nil, false); err != nil {
+				if err := h.snapshot.initializeDelta(ctx, h.server, nil, nil, false, nil); err != nil {
 					_ = h.snapshot.Close()
 					h.snapshot = nil
 					return nil, err
 				}
 			}
+			h.supportTargetChanged = false
 			return h.snapshot.Target(), nil
 		}
 		if h.snapshot != nil {
@@ -786,7 +848,7 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			return nil, err
 		}
 		if mode == "normal" {
-			if initErr := snapshot.initializeDelta(ctx, h.server, nil, nil, false); initErr != nil {
+			if initErr := snapshot.initializeDelta(ctx, h.server, nil, nil, false, nil); initErr != nil {
 				_ = snapshot.Close()
 				return nil, initErr
 			}

@@ -35,7 +35,7 @@ func notaloneOpenDeltaFile(path string, optional bool) (*os.File, int64, error) 
 }
 
 // 固定读者已打开；原始页只解析所选表的键与页归属，不把载荷作为正文使用。
-func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior map[string]notaloneDeltaShardState, baseline map[notaloneTailIdentity]notaloneTailBaselineEntry, emitAbsent bool) error {
+func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior map[string]notaloneDeltaShardState, baseline map[notaloneTailIdentity]notaloneTailBaselineEntry, emitAbsent bool, newTablePartitions map[string]bool) error {
 	if !n.profile.IncrementalTailVerified {
 		return nil
 	}
@@ -74,7 +74,7 @@ func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior
 		namesHash := notaloneHash(string(encoded))
 		var previous *notaloneDeltaPageState
 		old, hasOld := prior[shard.partition]
-		if n.deltaOnly && !hasOld {
+		if n.deltaOnly && !hasOld && !newTablePartitions[shard.partition] {
 			return notaloneFailure("history_checkpoint_invalid")
 		}
 		if hasOld {

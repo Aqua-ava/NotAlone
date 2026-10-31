@@ -408,7 +408,7 @@ func TestNotAloneSnapshotChecksDoNotRenewIdleLifetime(t *testing.T) {
 	}
 }
 
-func TestNotAloneSnapshotSameShapeDDLRequiresFreshTableInstance(t *testing.T) {
+func TestNotAloneSnapshotIgnoresSchemaVersionOnlyChanges(t *testing.T) {
 	for _, mode := range []string{"same-table-recreated", "unrelated-schema-change"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newNotaloneSnapshotFixture(t, 1)
@@ -433,43 +433,50 @@ func TestNotAloneSnapshotSameShapeDDLRequiresFreshTableInstance(t *testing.T) {
 				t.Fatal(err)
 			}
 			if before.SQLFingerprint != after.SQLFingerprint || notaloneSnapshotShape([]notaloneTableSchema{before}) != notaloneSnapshotShape([]notaloneTableSchema{after}) {
-				t.Fatal("反例必须保持目标表结构shape相同")
+				t.Fatal("版本cookie变化场景必须保持选定表SQL和shape不变")
 			}
-			if before.SchemaVersion == after.SchemaVersion || before.Target == after.Target {
-				t.Fatal("同shape的DDL没有改变完整实例证明")
+			if before.SchemaVersion == after.SchemaVersion {
+				t.Fatal("合成DDL没有改变诊断cookie")
+			}
+			stableIdentity := before.RootPage == after.RootPage && before.SQLFingerprint == after.SQLFingerprint
+			if stableIdentity != (before.Target == after.Target) {
+				t.Fatal("v2表实例必须且只依赖partition、table、rootpage和SQL fingerprint")
+			}
+			freshInspectionSession := newNotaloneHistorySession(f.server)
+			freshInspectionSession.selected = &f.selected
+			current, err := freshInspectionSession.inspect(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stableIdentity != (current.SchemaFingerprint == f.inspected.SchemaFingerprint) {
+				t.Fatal("SchemaFingerprint应只在目标表身份实际变化时改变")
 			}
 			profile := notaloneSyntheticFinalReadProfile(f.inspected.Tables)
-			stale, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, profile)
-			if err == nil {
-				stale.Close()
-				t.Fatal("旧检查不能接受DDL后的新实例")
-			}
-			if err.Error() != "history_schema_changed" {
-				t.Fatalf("旧实例应被明确拒绝：%v", err)
-			}
-			f.inspected.Tables[0] = after
 			fresh, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, profile)
-			if err != nil {
-				t.Fatalf("同shape的新实例重新检查后应可正常固定：%v", err)
+			if stableIdentity && err != nil {
+				t.Fatalf("忽略版本cookie后原目标应可正常固定：%v", err)
 			}
-			defer fresh.Close()
-			if fresh.Target().Tables[0].Instance != after.Target {
-				t.Fatal("目标没有使用最新的完整实例身份")
+			if stableIdentity {
+				defer fresh.Close()
+				if fresh.Target().Tables[0].Instance != before.Target || !notaloneSameOrderedStrings(fresh.Target().CheckedPartitions, current.CheckedPartitions) {
+					t.Fatal("目标实例或完整分片白名单不稳定")
+				}
+			} else if err == nil {
+				fresh.Close()
+				t.Fatal("可核验root或SQL变更必须拒绝旧目标")
 			}
 		})
 	}
 }
 
 func TestNotAloneSnapshotRejectsLegacyOrIncompleteTableProof(t *testing.T) {
-	for _, mode := range []string{"legacy-hash", "missing-schema-version", "missing-root-page"} {
+	for _, mode := range []string{"legacy-hash", "missing-root-page"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newNotaloneSnapshotFixture(t, 1)
 			proof := &f.inspected.Tables[0]
 			switch mode {
 			case "legacy-hash":
 				proof.Target = notaloneHash(proof.Partition, f.table)
-			case "missing-schema-version":
-				proof.SchemaVersion = ""
 			case "missing-root-page":
 				proof.RootPage = ""
 			}
@@ -482,5 +489,13 @@ func TestNotAloneSnapshotRejectsLegacyOrIncompleteTableProof(t *testing.T) {
 				t.Fatalf("身份错误分类不明确：%v", err)
 			}
 		})
+	}
+	f := newNotaloneSnapshotFixture(t, 1)
+	f.inspected.Tables[0].SchemaVersion = "stale-diagnostic-cookie"
+	if !notaloneSnapshotInstanceMatches(f.inspected.Tables[0], f.table) {
+		t.Fatal("SchemaVersion诊断字段不得成为表实例校验条件")
+	}
+	if _, err := newNotaloneSnapshot(context.Background(), f.server, f.selected, f.inspected, notaloneSyntheticFinalReadProfile(f.inspected.Tables)); err != nil {
+		t.Fatalf("快照结构比较应忽略SchemaVersion：%v", err)
 	}
 }

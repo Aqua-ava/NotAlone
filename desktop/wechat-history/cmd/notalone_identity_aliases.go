@@ -18,6 +18,11 @@ import (
 // 仅在命令开始、任何来源守卫创建前装配；运行期间不改变。
 var notaloneSourceIdentityAliases map[string]string
 
+const (
+	notaloneIdentityAliasesLimit     = 4096
+	notaloneIdentityAliasesByteLimit = 1 << 20
+)
+
 func notaloneAliasedFingerprint(canonical string, aliases map[string]string) string {
 	if legacy, ok := aliases[canonical]; ok {
 		return legacy
@@ -63,15 +68,15 @@ func loadNotaloneIdentityAliases(path, account, artifact string, sourceRoot ...s
 	file := os.NewFile(uintptr(fd), path)
 	defer file.Close()
 	before, err := file.Stat()
-	if err != nil || !before.Mode().IsRegular() || before.Mode().Perm() != 0600 || before.Size() > 65536 {
+	if err != nil || !before.Mode().IsRegular() || before.Mode().Perm() != 0600 || before.Size() > notaloneIdentityAliasesByteLimit {
 		return fail()
 	}
 	stat, ok := before.Sys().(*syscall.Stat_t)
 	if !ok || stat.Uid != uint32(os.Geteuid()) {
 		return fail()
 	}
-	data, err := io.ReadAll(io.LimitReader(file, 65537))
-	if err != nil || len(data) > 65536 || !utf8.Valid(data) {
+	data, err := io.ReadAll(io.LimitReader(file, notaloneIdentityAliasesByteLimit+1))
+	if err != nil || len(data) > notaloneIdentityAliasesByteLimit || !utf8.Valid(data) {
 		return fail()
 	}
 	after, err := file.Stat()
@@ -97,7 +102,7 @@ func loadNotaloneIdentityAliases(path, account, artifact string, sourceRoot ...s
 	if decoder.Decode(&record) != nil {
 		return fail()
 	}
-	if record.Format != "notalone-source-identity-aliases-v1" || record.AccountKey != account || record.Artifact != artifact || len(record.Aliases) == 0 || len(record.Aliases) > 128 {
+	if record.Format != "notalone-source-identity-aliases-v1" || record.AccountKey != account || record.Artifact != artifact || len(record.Aliases) == 0 || len(record.Aliases) > notaloneIdentityAliasesLimit {
 		return fail()
 	}
 	if len(sourceRoot) > 0 && record.RootScope != notaloneHash(account, filepath.Clean(sourceRoot[0])) {

@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
+	"sort"
 	"strings"
 )
 
@@ -25,6 +27,7 @@ type notaloneIndexColumn struct {
 }
 type notaloneIndex struct {
 	ID      string                `json:"id"`
+	name    string                `json:"-"`
 	Unique  bool                  `json:"unique"`
 	Origin  string                `json:"origin"`
 	Partial bool                  `json:"partial"`
@@ -50,6 +53,83 @@ func notaloneHash(parts ...string) string {
 }
 func notaloneFailure(code string) error { return fmt.Errorf("%s", code) }
 
+// SchemaVersion 是数据库级诊断cookie，不是目标表的结构或实例身份。
+// 统一在结构摘要与跨读者比较前清空它，保留其余字段的严格比较。
+func notaloneComparableTableSchema(schema notaloneTableSchema) notaloneTableSchema {
+	schema.SchemaVersion = ""
+	return schema
+}
+
+func notaloneComparableTableSchemas(schemas []notaloneTableSchema) []notaloneTableSchema {
+	result := make([]notaloneTableSchema, len(schemas))
+	for index, schema := range schemas {
+		result[index] = notaloneComparableTableSchema(schema)
+	}
+	return result
+}
+
+func notaloneSchemaFingerprint(schemas []notaloneTableSchema, checkedPartitions []string) string {
+	encoded, _ := json.Marshal(notaloneComparableTableSchemas(schemas))
+	if checkedPartitions == nil {
+		return notaloneHash(string(encoded))
+	}
+	return notaloneHash(string(encoded), strings.Join(checkedPartitions, "|"))
+}
+
+func notaloneTableSchemaDigest(schema notaloneTableSchema) string {
+	encoded, _ := json.Marshal(notaloneComparableTableSchema(schema))
+	return notaloneHash("source-table-schema-v1", string(encoded))
+}
+
+func notaloneTableStructureDigest(schema notaloneTableSchema) string {
+	type indexStructure struct {
+		Name    string
+		Unique  bool
+		Origin  string
+		Partial bool
+		Columns []notaloneIndexColumn
+	}
+	indexes := make([]indexStructure, 0, len(schema.Indexes))
+	for _, index := range schema.Indexes {
+		indexes = append(indexes, indexStructure{Name: index.name, Unique: index.Unique, Origin: index.Origin, Partial: index.Partial, Columns: index.Columns})
+	}
+	sort.Slice(indexes, func(i, j int) bool {
+		left, _ := json.Marshal(indexes[i])
+		right, _ := json.Marshal(indexes[j])
+		return string(left) < string(right)
+	})
+	triggers := append([]string(nil), schema.TriggerFingerprints...)
+	sort.Strings(triggers)
+	shape := struct {
+		Role           string
+		SQLFingerprint string
+		Columns        []notaloneColumn
+		PrimaryKey     []string
+		AutoIncrement  bool
+		Indexes        []indexStructure
+		Triggers       []string
+	}{schema.Role, schema.SQLFingerprint, schema.Columns, schema.DeclaredPrimaryKey, schema.AutoIncrement, indexes, triggers}
+	encoded, _ := json.Marshal(shape)
+	return notaloneHash("source-table-structure-v1", string(encoded))
+}
+
+func notaloneTableSchemaDigests(schemas []notaloneTableSchema) (map[string]string, bool) {
+	result := make(map[string]string, len(schemas))
+	for _, schema := range schemas {
+		if schema.Partition == "" || result[schema.Partition] != "" || schema.Target == "" {
+			return nil, false
+		}
+		result[schema.Partition] = notaloneTableSchemaDigest(schema)
+	}
+	return result, true
+}
+
+func notaloneSameTableSchema(left, right notaloneTableSchema) bool {
+	a, _ := json.Marshal(notaloneComparableTableSchema(left))
+	b, _ := json.Marshal(notaloneComparableTableSchema(right))
+	return string(a) == string(b)
+}
+
 // 只投影目标表结构，不读取消息行、正文、source或其他表的数据。
 func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition string) (notaloneTableSchema, error) {
 	result := notaloneTableSchema{Target: notaloneHash(partition, table), Partition: partition, Role: "private_message", Columns: []notaloneColumn{}, Indexes: []notaloneIndex{}, DeclaredPrimaryKey: []string{}, TriggerFingerprints: []string{}}
@@ -65,6 +145,8 @@ func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition str
 	result.RootPage = fmt.Sprint(definitions[0]["rootpage"])
 	definition := rowString(definitions[0], "sql")
 	result.SQLFingerprint = notaloneHash(definition)
+	canonicalTarget := notaloneHash("source-table-instance-v2", partition, table, result.RootPage, result.SQLFingerprint)
+	result.Target = notaloneAliasedFingerprint(canonicalTarget, notaloneSourceIdentityAliases)
 	result.AutoIncrement = notaloneSQLHasKeyword(definition, "AUTOINCREMENT")
 	columns, err := db.QueryBounded(ctx, 128, "PRAGMA table_xinfo("+quoteIdent(table)+")")
 	if err != nil || len(columns) == 0 {
@@ -87,7 +169,7 @@ func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition str
 	}
 	for _, r := range indexes {
 		name := rowString(r, "name")
-		index := notaloneIndex{ID: notaloneHash(result.Target, name), Unique: rowInt64(r, "unique") != 0, Origin: rowString(r, "origin"), Partial: rowInt64(r, "partial") != 0, Columns: []notaloneIndexColumn{}}
+		index := notaloneIndex{ID: notaloneHash(result.Target, name), name: name, Unique: rowInt64(r, "unique") != 0, Origin: rowString(r, "origin"), Partial: rowInt64(r, "partial") != 0, Columns: []notaloneIndexColumn{}}
 		parts, e := db.QueryBounded(ctx, 128, "PRAGMA index_xinfo("+quoteIdent(name)+")")
 		if e != nil {
 			return result, notaloneFailure("history_index_unavailable")
@@ -108,7 +190,6 @@ func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition str
 	if e != nil || len(after) != 1 || fmt.Sprint(after[0]["schema_version"]) != result.SchemaVersion {
 		return result, notaloneFailure("history_schema_changed")
 	}
-	result.Target = notaloneHash(partition, table, result.SchemaVersion, result.RootPage, result.SQLFingerprint)
 	return result, nil
 }
 
