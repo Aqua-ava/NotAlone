@@ -81,7 +81,6 @@
 .contact-binding code { display: block; margin-top: 10px; }
 .contacts-panel summary { cursor: pointer; color: #496e88; }
 .contacts-panel summary:focus-visible { outline: 2px solid #527b94; outline-offset: 3px; }
-.contacts-panel > .bindings-explanation { margin-top: 22px; }
 .binding-session-list { max-height: 45vh; overflow-y: auto; }
 @media (max-width: 760px) {
   .contacts-columns { grid-template-columns: 1fr; }

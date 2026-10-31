@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import type { SyncControlState } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import { useBindingConsent } from './use-binding-consent';
-import { BindingConsentPage, BindingFeedback, BindingPrivacyNotice, ContactSyncDetails } from './BindingConsentPage';
+import { BindingConsentPage, BindingFeedback, ContactSyncDetails } from './BindingConsentPage';
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 
@@ -86,8 +86,6 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
         </details>}
       </li>)}
     </ul><ContactChatHistory session={session} /></div>}
-    <BindingPrivacyNotice allPrivate={allPrivate} selectionOnly={selectionOnly} />
-    <p className="contacts-note">{selectionOnly ? '联系人身份和微信读取授权分别核验；手动输入只确认本次资料归属，不建立微信身份或授予读取。候选由你编辑并亲自发送。' : '支持手动输入和单联系人文件导入；本机已配置微信识别时，可在输入小窗恢复微信会话识别。候选由你编辑并亲自发送。'}</p>
     {session.error && <p className="contacts-note" role="alert">{session.error}</p>}
   </section>;
 }

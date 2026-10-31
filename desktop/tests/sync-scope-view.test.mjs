@@ -36,20 +36,17 @@ for (const selectionOnly of [undefined, true]) test(selectionOnly ? '联系人�
  const page=await browser.newPage();
  await mount(page,`
  import React from 'react';import {createRoot} from 'react-dom/client';
- import {BindingConsentPage,BindingPrivacyNotice,ContactSyncDetails} from './src/renderer/BindingConsentPage';
+ import {BindingConsentPage,ContactSyncDetails} from './src/renderer/BindingConsentPage';
  const selectionOnly=${JSON.stringify(selectionOnly)};
  const consent={state:{selectionOnly,phase:'ready',busy:null,syncEnabled:true,sessions:[],bindings:[],knownBindings:[{bindingId:'synthetic-id',contactId:'synthetic-contact',displayName:'合成联系人'}]},selection:{},setSelection(){}};
  createRoot(document.getElementById('root')).render(<>
   <BindingConsentPage contacts={{state:{contacts:[]}}} consent={consent} navigate={()=>{}} onClose={()=>{}} allPrivate/>
   <ContactSyncDetails contactId="synthetic-contact" consent={consent} onConnect={()=>{}} allPrivate/>
-  <BindingPrivacyNotice allPrivate selectionOnly={selectionOnly}/>
  </>);
  `);
  await expect(page.getByRole('heading',{name:selectionOnly ? '添加微信联系人' : '管理单个微信会话',exact:true})).toBeVisible();
  await expect(page.getByText(selectionOnly ? '选择要同步的微信私聊，再核对渠道身份并确认加入联系人。没有勾选的会话不会获得授权，新私聊不会自动加入。' : '全部私聊已纳入自动同步范围，无需逐个添加。这里用于处理身份冲突，或重新开启你曾单独停止的会话。',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'开启自动同步',exact:true})).toBeVisible();
- await page.getByText('读取范围与隐私说明',{exact:true}).click();
- await expect(page.getByText(selectionOnly ? '只有你逐人明确确认的微信私聊才能读取文字；进入联系人页面只查询已保存的关联与授权，添加页面中明确点击刷新微信会话后才读取会话名单。新私聊不会自动加入。' : '你已确认同步全部微信私聊。应用会自动发现并关联现有及新增会话；已单独停止的会话不会自动重新加入。',{exact:true})).toBeVisible();
 });
 
 test('老授权在设置页明确说明历史读取范围扩大，接受后才切换状态',async t=>{

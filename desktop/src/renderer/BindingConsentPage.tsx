@@ -4,15 +4,6 @@ import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './bindings.css';
 
-export function BindingPrivacyNotice({ allPrivate = false, selectionOnly = false }: { allPrivate?: boolean; selectionOnly?: boolean }) {
-  return <details className="bindings-explanation"><summary>读取范围与隐私说明</summary>
-    <p>{selectionOnly ? '只有你逐人明确确认的微信私聊才能读取文字；进入联系人页面只查询已保存的关联与授权，添加页面中明确点击刷新微信会话后才读取会话名单。新私聊不会自动加入。' : allPrivate ? '你已确认同步全部微信私聊。应用会自动发现并关联现有及新增会话；已单独停止的会话不会自动重新加入。' : '只有你明确确认的微信会话才能读取文字；进入联系人页面只查询已保存的关联与授权，添加页面中明确点击刷新微信会话后才读取会话名单。'}</p>
-    <p>应用运行且总开关开启时，可以在微信不在前台时同步已授权会话。关闭总开关或正常退出会停读；重新开启后按检查点继续。{selectionOnly ? '确认所选会话包含读取它在本机可读的历史文字，再持续同步新消息。非文字消息只保留占位，不自动下载媒体。' : '新绑定默认仅从本次绑定起同步；读取更早历史需要独立明确授权。'}</p>
-    <p>{selectionOnly ? '停止某个联系人的同步会立即撤销新读取、记忆处理和本地媒体转换资格，已保存的资料仍保留。重新选择不会恢复旧请求，也不会解除已清空资料的排除。删除资料需单独操作。' : '停止某个联系人的同步会撤销该会话的读取授权，已保存的资料仍保留。删除资料需使用独立的来源删除流程。'}</p>
-    <p>前台识别只在本机内存分析微信窗口并识别会话名称，不读取聊天正文，画面不保存、不上传。候选由你修改并亲自发送。</p>
-  </details>;
-}
-
 export function BindingConsentPage({ contacts, consent, navigate, onClose, targetContactId, allPrivate = false }: {
   contacts: ContactSessionView; consent: BindingConsentView; navigate: (page: ManagerPage) => void;
   onClose(): void; targetContactId?: string; allPrivate?: boolean;
