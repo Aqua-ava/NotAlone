@@ -8,7 +8,9 @@ export interface HistorySupportReport {
   programVersion: string; build: string; artifactSha256: string;
   schemaFingerprint: string; declaredPrimaryKey: readonly string[];
   serverAliasSemantics?: 'verified_within_scope' | 'unverified' | 'unsupported';
-  capabilities?: Readonly<Record<string, 'supported' | 'unsupported' | 'unverified'>>;
+  capabilities?: Readonly<Record<string, 'supported' | 'unsupported' | 'unverified'>> & {
+    partitionGrowth?: 'supported' | 'unsupported' | 'unverified';
+  };
   identity: 'source-table-local-v1'; statusSemantics: string; continuity: string;
 }
 export interface HistoryScope {
@@ -17,6 +19,8 @@ export interface HistoryScope {
 export interface HistoryTarget {
   protocol: 'private-history-v1'; descriptor: string;
   partitions: readonly string[]; tables: readonly {partition:string;instance:string}[]; sourceGeneration: string;
+  // 全部已检查来源文件的稳定身份；只在明确认证分片表增长能力时用于恢复边界。
+  checkedPartitions?: readonly string[];
 }
 export interface HistoryRecord {
   partition: string; table: string; localId: string | null; serverId: string | null;

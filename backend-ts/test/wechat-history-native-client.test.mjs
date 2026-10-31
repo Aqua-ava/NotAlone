@@ -20,7 +20,7 @@ async function fixture(t,mode='normal') {
  const fs=require('node:fs'); const readline=require('node:readline');const crypto=require('node:crypto');
  fs.writeFileSync(process.env.PID_FILE,String(process.pid));
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
- const schema=${JSON.stringify(schema)};let busy=false,supportCount=0;let currentConversation='${conversation}';let receivedRecords=[];
+ const schema=${JSON.stringify(schema)};let busy=false,supportCount=0,inspectCount=0;let currentConversation='${conversation}';let receivedRecords=[];
  const target={protocol:'private-history-v1',descriptor:'synthetic-target-v1',partitions:['d'.repeat(64)],tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
  if(process.env.TEST_MODE.startsWith('empty-target')){
   schema.checkedPartitions=Array.from({length:8},(_,i)=>(i+1).toString(16).repeat(64));schema.tables=[];
@@ -32,6 +32,7 @@ async function fixture(t,mode='normal') {
   target.partitions=schema.tables.map(table=>table.partition);target.tables=schema.tables.map(table=>({partition:table.partition,instance:table.target}));
  }
 
+ if(process.env.TEST_MODE.startsWith('growth-')){schema.checkedPartitions.push('f'.repeat(64));target.checkedPartitions=[...schema.checkedPartitions];}
  readline.createInterface({input:process.stdin}).on('line',line=>{
   const r=JSON.parse(line);fs.appendFileSync(process.env.LOG_FILE,JSON.stringify(r)+'\\n');
   if(busy){process.stdout.write(JSON.stringify({ok:false,error:{code:'synthetic_parallel'}})+'\\n');return;}busy=true;
@@ -46,6 +47,18 @@ async function fixture(t,mode='normal') {
   if(r.op==='resolve')currentConversation=r.displayName==='另一位合成联系人'?'synthetic-other':'${conversation}';
   let data=r.op==='resolve'?{accountKey:'${account}',conversationKey:currentConversation,displayName:'合成目标',sourceGeneration:'${generation}'}:schema;
   if(r.op==='resolve'&&mode==='display-control')data.displayName='合成\\t目标';
+  if(r.op==='inspect'&&mode.startsWith('growth-')&&++inspectCount===2){
+   schema.tables[0].schemaVersion='9007199254740994';
+   if(mode!=='growth-version-only'){
+    schema.schemaFingerprint='1'.repeat(64);
+    schema.tables.push({...schema.tables[0],partition:'f'.repeat(64),target:'2'.repeat(64)});
+    if(mode==='growth-structural')schema.tables[0].columns[0].type='TEXT';
+    if(mode==='growth-replaced')schema.tables[0].target='3'.repeat(64);
+    if(mode==='growth-unknown-file')schema.checkedPartitions.push('4'.repeat(64));
+    target.partitions=schema.tables.map(table=>table.partition);target.tables=schema.tables.map(table=>({partition:table.partition,instance:table.target}));
+    target.checkedPartitions=[...schema.checkedPartitions];
+   }
+  }
   if(r.op==='support'){
    supportCount++;data={protocol:'private-history-v1',profileId:'synthetic-profile-v1',adapterVersion:'1',status:'supported',reason:null,accountKey:'${account}',conversationKey:currentConversation,sourceGeneration:'${generation}',programVersion:'4.0.6',build:'29387',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-status-v1',continuity:'synthetic-current-source-v1'};
    if(mode==='unverified-support'||mode==='unsupported-support')data={...data,status:mode==='unverified-support'?'unverified':'unsupported',reason:'synthetic_unverified'};
@@ -55,6 +68,11 @@ async function fixture(t,mode='normal') {
    if(mode==='empty-target-ordinary-profile')data={...data,profileId:'synthetic-profile-v1',declaredPrimaryKey:['local_id']};
    if(mode==='empty-target-false-tail')data.capabilities.incrementalTail='supported';
    if(mode.startsWith('durable-'))data.capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental'].map(key=>[key,'supported']));
+   if(mode.startsWith('growth-')){
+    data.schemaFingerprint=schema.schemaFingerprint;
+    data.capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental','partitionGrowth'].map(key=>[key,'supported']));
+    if(mode==='growth-report-change'&&supportCount>1)data.adapterVersion='2';
+   }
    if(mode==='wrong-support-scope')data={...data,conversationKey:'synthetic-other'};
    if(mode==='wrong-support-key')data={...data,declaredPrimaryKey:['unrelated']};
    if(mode==='wrong-support-generation')data={...data,sourceGeneration:'f'.repeat(64)};
@@ -63,6 +81,7 @@ async function fixture(t,mode='normal') {
   }
   if(r.op==='target'||r.op==='quarantine-target'){
    data={...target,descriptor:target.descriptor+':'+currentConversation};
+   if(mode==='growth-legacy-no-whitelist')delete data.checkedPartitions;
    if(mode==='empty-target-missing-partition')data={...data,partitions:data.partitions.slice(0,7)};
    if(mode==='empty-target-fake-instance')data={...data,tables:[{partition:data.partitions[0],instance:'c'.repeat(64)}]};
    if(mode==='wrong-target-generation')data={...data,sourceGeneration:'f'.repeat(64)};
@@ -567,4 +586,37 @@ test('持久增量目标只接受当前作用域和明确可用的检查点',asy
   else {const value=await f.client.resumeTargetSelected(old,'accepted-cursor');assert.equal(value?.descriptor??null,mode==='durable-missing'?null:'durable-resumed');}
   const request=JSON.parse((await readFile(f.logFile,'utf8')).trim().split('\n').at(-1));assert.deepEqual(request,{op:'resume-target',account,conversation,consent:'selected-history-v1',target:old.descriptor,cursor:'accepted-cursor'});
  });
+});
+
+
+test('真实表增长先复核全部旧结构，再认证新支持档并交接持久增量目标',async t=>{
+ const f=await fixture(t,'growth-safe');await f.client.resolveSelected('合成目标');
+ const original=await f.client.inspectSelected();await f.client.supportSelected();const old=await f.client.targetSelected();
+ assert.deepEqual(old.checkedPartitions,original.checkedPartitions);
+ const grown=await f.client.inspectSelected();assert.equal(grown.tables.length,2);
+ const report=await f.client.supportSelected();assert.equal(report.capabilities.partitionGrowth,'supported');
+ const resumed=await f.client.resumeTargetSelected(old,'accepted-cursor');assert.equal(resumed.tables.length,2);
+ await assert.rejects(f.client.pageSelected(old,null),{code:'history_target_unverified'});
+});
+
+test('全库结构计数变化不阻断；旧表改变、实例替换及未知文件仍拒绝',async t=>{
+ for(const mode of ['growth-version-only','growth-structural','growth-replaced','growth-unknown-file'])await t.test(mode,async t=>{
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();
+  if(mode==='growth-version-only'){await f.client.inspectSelected();await f.client.supportSelected();}
+  else await assert.rejects(f.client.inspectSelected(),{code:'history_support_changed'});
+ });
+});
+
+test('安全新增表不能掩盖读取规则或制品支持档变化',async t=>{
+ const f=await fixture(t,'growth-report-change');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();
+ await f.client.inspectSelected();await assert.rejects(f.client.supportSelected(),{code:'history_support_changed'});
+});
+
+
+test('旧目标没有已检查文件证据时不能跨新增表恢复检查点',async t=>{
+ const f=await fixture(t,'growth-legacy-no-whitelist');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();
+ const old=await f.client.targetSelected();assert.equal(old.checkedPartitions,undefined);
+ await f.client.inspectSelected();await f.client.supportSelected();
+ await assert.rejects(f.client.resumeTargetSelected(old,'accepted-cursor'),{code:'history_target_unverified'});
+ const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(line=>JSON.parse(line));assert.equal(requests.some(row=>row.op==='resume-target'),false);
 });
