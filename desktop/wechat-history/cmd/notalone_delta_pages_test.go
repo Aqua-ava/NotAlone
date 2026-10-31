@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,6 +107,11 @@ func TestNotAloneDeltaPagesTracksChangedEncryptedPagesWithoutPayload(t *testing.
 	if noChanges.FullAudit || len(noChanges.ChangedIDs) != 0 {
 		t.Fatalf("unchanged WAL should yield an empty delta: %#v", noChanges)
 	}
+	countedNoChange := &notaloneDeltaCountingReaderAt{reader: wal}
+	noChangeScan, err := notaloneDeltaScanWAL(context.Background(), countedNoChange, walSize, &baseline.State)
+	if err != nil || !noChangeScan.Continuous || noChangeScan.FramesRead != 0 || countedNoChange.bytesRead > notaloneDeltaWALHeaderSize+notaloneDeltaWALFrameHeaderSize {
+		t.Fatalf("idle WAL resume reread old frame bodies: frames=%d bytes=%d err=%v", noChangeScan.FramesRead, countedNoChange.bytesRead, err)
+	}
 	if err := writer.Exec("UPDATE Msg_delta_fixture SET body=substr(body,1,5000)||zeroblob(7000) WHERE local_id=1300"); err != nil {
 		t.Fatal("mutate only overflow bytes in synthetic fixture")
 	}
@@ -116,6 +122,16 @@ func TestNotAloneDeltaPagesTracksChangedEncryptedPagesWithoutPayload(t *testing.
 	}
 	if pageOnlyDelta.FullAudit || !containsInt64(pageOnlyDelta.ChangedIDs, 1300) {
 		t.Fatalf("overflow-only change was not reported incrementally: %#v", pageOnlyDelta.ChangedIDs)
+	}
+	countedAppend := &notaloneDeltaCountingReaderAt{reader: pageOnlyWAL}
+	appendScan, err := notaloneDeltaScanWAL(context.Background(), countedAppend, pageOnlyWALSize, &noChanges.State)
+	if err != nil {
+		t.Fatalf("scan appended WAL frames: %v", err)
+	}
+	allFrameCount := (pageOnlyWALSize - notaloneDeltaWALHeaderSize) / (notaloneDeltaWALFrameHeaderSize + notaloneDeltaPageSize)
+	bytesExpected := int64(notaloneDeltaWALHeaderSize+notaloneDeltaWALFrameHeaderSize) + int64(appendScan.FramesRead)*(notaloneDeltaWALFrameHeaderSize+notaloneDeltaPageSize)
+	if !appendScan.Continuous || appendScan.FramesRead == 0 || int64(appendScan.FramesRead) >= allFrameCount || countedAppend.bytesRead != bytesExpected {
+		t.Fatalf("WAL resume read bytes beyond appended frames: appended=%d total=%d bytes=%d expected=%d", appendScan.FramesRead, allFrameCount, countedAppend.bytesRead, bytesExpected)
 	}
 
 	if err = writer.Exec("UPDATE Msg_delta_fixture SET body=zeroblob(9000) WHERE local_id=2; DELETE FROM Msg_delta_fixture WHERE local_id=9; INSERT INTO Msg_delta_fixture(local_id,body) VALUES(0,zeroblob(64)),(2000,zeroblob(5000))"); err != nil {
@@ -174,4 +190,15 @@ func containsInt64(values []int64, target int64) bool {
 		}
 	}
 	return false
+}
+
+type notaloneDeltaCountingReaderAt struct {
+	reader    io.ReaderAt
+	bytesRead int64
+}
+
+func (reader *notaloneDeltaCountingReaderAt) ReadAt(buffer []byte, offset int64) (int, error) {
+	count, err := reader.reader.ReadAt(buffer, offset)
+	reader.bytesRead += int64(count)
+	return count, err
 }

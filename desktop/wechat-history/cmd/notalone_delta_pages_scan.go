@@ -62,26 +62,49 @@ func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, p
 		Checksum1:    check1,
 		Checksum2:    check2,
 	}
-	result.LastCommitEnd = notaloneDeltaWALHeaderSize
+	scanStart := int64(notaloneDeltaWALHeaderSize)
+	rolling1, rolling2 := check1, check2
+	result.LastCommitEnd = scanStart
 	result.LastChecksum1 = check1
 	result.LastChecksum2 = check2
-
-	priorOffset := int64(-1)
-	priorChecksum1, priorChecksum2 := uint32(0), uint32(0)
-	if prior != nil && prior.WAL.HeaderDigest == headerDigest {
-		priorOffset = prior.WAL.CommitOffset
-		priorChecksum1, priorChecksum2 = prior.WAL.Checksum1, prior.WAL.Checksum2
+	if prior != nil && prior.WAL.HeaderDigest == headerDigest && prior.WAL.Salt1 == salt1 && prior.WAL.Salt2 == salt2 {
+		priorOffset := prior.WAL.CommitOffset
+		frameSize := int64(notaloneDeltaWALFrameHeaderSize + notaloneDeltaPageSize)
+		aligned := priorOffset >= notaloneDeltaWALHeaderSize && (priorOffset-notaloneDeltaWALHeaderSize)%frameSize == 0
+		if aligned && priorOffset <= walSize {
+			validBoundary := false
+			if priorOffset == notaloneDeltaWALHeaderSize {
+				validBoundary = prior.WAL.Checksum1 == check1 && prior.WAL.Checksum2 == check2
+			} else {
+				var previous [notaloneDeltaWALFrameHeaderSize]byte
+				readErr := notaloneDeltaReadAt(ctx, wal, previous[:], priorOffset-frameSize)
+				if readErr != nil {
+					if ctx.Err() != nil {
+						return result, ctx.Err()
+					}
+				} else {
+					validBoundary = binary.BigEndian.Uint32(previous[4:8]) != 0 &&
+						binary.BigEndian.Uint32(previous[8:12]) == salt1 && binary.BigEndian.Uint32(previous[12:16]) == salt2
+					stored1, stored2 := notaloneDeltaChecksumFields(previous[16:24])
+					validBoundary = validBoundary && stored1 == prior.WAL.Checksum1 && stored2 == prior.WAL.Checksum2
+				}
+			}
+			if validBoundary {
+				result.Continuous = true
+				scanStart = priorOffset
+				rolling1, rolling2 = prior.WAL.Checksum1, prior.WAL.Checksum2
+				result.LastCommitEnd = priorOffset
+				result.LastChecksum1, result.LastChecksum2 = rolling1, rolling2
+				result.PageCount = prior.PageCount
+			}
+		}
 	}
 	frameSize := int64(notaloneDeltaWALFrameHeaderSize + notaloneDeltaPageSize)
-	frameCount := (walSize - notaloneDeltaWALHeaderSize) / frameSize
+	frameCount := (walSize - scanStart) / frameSize
 	if frameCount > notaloneDeltaMaxWALBytes/frameSize {
 		return result, errors.New("history_delta_wal_frame_limit")
 	}
 	latest := make(map[uint32]notaloneDeltaFrame)
-	sincePrior := make(map[uint32]notaloneDeltaFrame)
-	commitOffsets := map[int64][2]uint32{
-		notaloneDeltaWALHeaderSize: {check1, check2},
-	}
 	var frameHeader [notaloneDeltaWALFrameHeaderSize]byte
 	page := make([]byte, notaloneDeltaPageSize)
 	defer clear(page)
@@ -90,7 +113,7 @@ func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, p
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		offset := int64(notaloneDeltaWALHeaderSize) + index*frameSize
+		offset := scanStart + index*frameSize
 		if err := notaloneDeltaReadAt(ctx, wal, frameHeader[:], offset); err != nil {
 			return result, err
 		}
@@ -103,7 +126,7 @@ func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, p
 		if err := notaloneDeltaReadAt(ctx, wal, page, offset+notaloneDeltaWALFrameHeaderSize); err != nil {
 			return result, err
 		}
-		sum1, sum2, checksumErr := notaloneDeltaChecksum(frameHeader[:8], little, check1, check2)
+		sum1, sum2, checksumErr := notaloneDeltaChecksum(frameHeader[:8], little, rolling1, rolling2)
 		if checksumErr != nil {
 			return result, checksumErr
 		}
@@ -115,12 +138,9 @@ func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, p
 		if sum1 != frameCheck1 || sum2 != frameCheck2 {
 			return result, errors.New("history_delta_wal_frame_checksum_invalid")
 		}
-		check1, check2 = sum1, sum2
+		rolling1, rolling2 = sum1, sum2
 		frame := notaloneDeltaFrame{Page: pageNumber, Offset: offset}
 		latest[pageNumber] = frame
-		if priorOffset >= 0 && offset >= priorOffset {
-			sincePrior[pageNumber] = frame
-		}
 		result.FramesRead++
 
 		if dbSizeAfter != 0 {
@@ -129,29 +149,24 @@ func notaloneDeltaScanWAL(ctx context.Context, wal io.ReaderAt, walSize int64, p
 			}
 			result.PageCount = dbSizeAfter
 			result.LastCommitEnd = offset + frameSize
-			result.LastChecksum1 = check1
-			result.LastChecksum2 = check2
-			commitOffsets[result.LastCommitEnd] = [2]uint32{check1, check2}
+			result.LastChecksum1 = rolling1
+			result.LastChecksum2 = rolling2
 			result.AllFrames = cloneNotaloneDeltaFrames(latest)
-			result.Frames = cloneNotaloneDeltaFrames(sincePrior)
+			result.Frames = cloneNotaloneDeltaFrames(latest)
 		}
 	}
-	if walSize > notaloneDeltaWALHeaderSize && (walSize-notaloneDeltaWALHeaderSize)%frameSize != 0 {
+	if walSize > scanStart && (walSize-scanStart)%frameSize != 0 {
 		// A partial trailing frame is an uncommitted WAL append. Only complete,
 		// checksum-valid commits above are visible to the SQLite reader.
 	}
 	result.State.CommitOffset = result.LastCommitEnd
 	result.State.Checksum1 = result.LastChecksum1
 	result.State.Checksum2 = result.LastChecksum2
-	if priorOffset >= 0 {
-		if priorOffset <= walSize {
-			if boundary, ok := commitOffsets[priorOffset]; ok && boundary[0] == priorChecksum1 && boundary[1] == priorChecksum2 {
-				result.Continuous = true
-				if priorOffset == result.LastCommitEnd {
-					result.Frames = map[uint32]notaloneDeltaFrame{}
-				}
-			}
-		}
+	if result.Continuous {
+		result.AllFrames = cloneNotaloneDeltaFrames(result.Frames)
+	} else if len(result.Frames) == 0 {
+		// A full tree audit below needs the latest effective WAL page image set.
+		result.AllFrames = map[uint32]notaloneDeltaFrame{}
 	}
 	return result, nil
 }
