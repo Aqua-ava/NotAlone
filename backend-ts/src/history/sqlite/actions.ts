@@ -62,6 +62,7 @@ function currentIncremental(tx:StorageTransaction,token:ReadEligibility,report:H
  return goal;
 }
 export const historyActions:StorageAction[]=[
+ action('history.checkpointContacts','read',(tx,i)=>tx.all("SELECT id,data_generation FROM contact WHERE owner_id=? AND state='active'",[i.ownerId]).map(row=>({contactId:String(row.id),generation:String(row.data_generation)}))),
  action('history.scope','read',(tx,i)=>{assertReadEligibility(tx,i.token);const row=tx.get(`SELECT a.external_key AS account_key,c.external_key AS conversation_key FROM channel_account a JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id WHERE a.owner_id=? AND a.id=? AND c.id=?`,[i.token.owner_id,i.token.account_id,i.token.conversation_id])??fail('history_scope_invalid');return {token:i.token,accountKey:row.account_key,conversationKey:row.conversation_key};}),
  action('history.preflightGeneration','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightGeneration(tx,token);}),
  action('history.normalUseRevalidationCandidate','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return normalUseRevalidationCandidate(tx,token);}),
@@ -113,6 +114,20 @@ export const historyActions:StorageAction[]=[
  action('history.incrementalContinuityTarget','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
   const goal=currentIncremental(tx,token,i.report)??tx.get("SELECT target_json FROM read_goal WHERE owner_id=? AND contact_id=? AND creation_no IS NOT NULL AND cursor_scope_digest IS NOT NULL AND ((kind='incremental' AND cursor IS NOT NULL AND (failure_code IS NULL OR failure_code<>'history_snapshot_replaced')) OR (kind='history' AND resume_cursor IS NOT NULL AND state='complete')) ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1",[token.owner_id,token.contact_id]);
   return goal?targetOf(JSON.parse(String(goal.target_json)),token,i.report):null;}),
+ action('history.resumeCheckpoint','read',(tx,i)=>{
+  const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
+  if(i.report.continuity!==normalUseContinuity||i.report.capabilities?.durableIncremental!=='supported')return null;
+  const goal=tx.get(`SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND grant_id=?
+   AND accepted_data_generation=? AND accepted_barrier_generation=? AND creation_no IS NOT NULL AND cursor_scope_digest IS NOT NULL
+   AND ((kind='incremental' AND cursor IS NOT NULL AND state IN ('running','incomplete'))
+    OR (kind='history' AND state='complete' AND resume_cursor IS NOT NULL))
+   ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation)]);
+  if(!goal||goal.support_json!==serializeSupport(i.report))return null;
+  const target=targetOf(JSON.parse(String(goal.target_json)),token,i.report);
+  assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target,i.report.accountKey);
+  if(historyCursorScopeDigest(token,i.report,target)!==goal.cursor_scope_digest)return null;
+  return {target,cursor:assertHistoryCursor(goal.kind==='history'?goal.resume_cursor:goal.cursor,'history_cursor_invalid')};
+ }),
  action('history.begin','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
   const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);

@@ -179,6 +179,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 - [ADR-113：SQLite 私聊历史、消息身份与实际来源](adr/113-sqlite-private-history-source-contract.md)
 - [ADR-127：SQLite 私聊历史正常重启后从头重扫](adr/127-sqlite-history-normal-use-restart-rescan.md)
+- [ADR-133：按变化页持续同步与持久检查点](adr/133-page-delta-private-history-sync.md)
 - [ADR-128：微信消息去重保存与撤回状态](adr/128-deduplicated-wechat-message-storage.md)
 
 ## 当前架构决策
@@ -188,7 +189,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - 完整本机首用及资料生命周期按 [ADR-101](adr/101-local-app-first-use-lifecycle.md)与[新票据](../.scratch/local-app-first-use/planning.md)落实：默认仅所选会话；联系人、SQLite 实例与本机资料按当前生命周期管理；完整独立交付仍待验收。
 
 - 已授权微信私聊按 [ADR-100](adr/100-authorized-private-history-sync.md)在首次进入同步范围时读取本机当前可读的全部既有文字，再持续增量；仅所选和全部私聊使用同一规则。聊天历史属于消息层，关系提取是独立后台派生任务，不阻塞首次历史同步。该决定的规格票01–07已记录完成，票08真实微信验收未完成；不能据合成或分项结果宣称完整集成可用。
-- 正常 App 重启后的同来源恢复按 [ADR-127](adr/127-sqlite-history-normal-use-restart-rescan.md)限定为账号、数据库文件及表实例身份精确一致，并先从头重扫、继续保留本地删除排除；官方 622 原生路径已实机验证，App 集成验收仍在进行。
+- 正常 App 重启后的同来源恢复按 [ADR-127](adr/127-sqlite-history-normal-use-restart-rescan.md)限定为账号、数据库文件及表实例身份精确一致；[ADR-133](adr/133-page-delta-private-history-sync.md)进一步改为变化页与已接受持久检查点，不再要求每次完整重扫，继续保留删除／排除边界。新路径实施和验收进行中，旧重扫验收不证明新路径可用。
 
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。
 

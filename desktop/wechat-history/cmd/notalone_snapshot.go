@@ -211,6 +211,13 @@ type notaloneSnapshot struct {
 	expectedCursor    string
 	started           bool
 	pages             int
+	deltaStates       map[string]notaloneDeltaShardState
+	deltaOnly         bool
+	deltaIDs          map[string][]int64
+	deltaMissing      map[notaloneTailIdentity]bool
+	deltaEmitAbsent   bool
+	deltaRemoved      []notaloneTailIdentity
+	deltaRemovedIndex int
 }
 
 // 结构能力只比较列、完整索引列组、自动主键和触发器数量；实例编号不构成schema。
@@ -543,16 +550,42 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 		value := cursor
 		page.CursorIn = &value
 	}
-	for n.shardIndex < len(n.shards) && len(page.Records) < 16 {
+	deltaReadBudget := 16
+	for n.shardIndex < len(n.shards) && len(page.Records) < 16 && (!n.deltaOnly || deltaReadBudget > 0) {
 		shard := n.shards[n.shardIndex]
 		if shard.done {
 			n.shardIndex++
 			continue
 		}
 		remaining := 16 - len(page.Records)
+		if n.deltaOnly && remaining > deltaReadBudget {
+			remaining = deltaReadBudget
+		}
 		query := "SELECT local_id,server_id,local_type,real_sender_id,create_time,status FROM " + quoteIdent(n.table)
 		args := []any{}
-		if shard.lastID != nil {
+		var deltaEnd int
+		if n.deltaOnly {
+			ids := n.deltaIDs[shard.partition]
+			start := 0
+			if shard.lastID != nil {
+				start = sort.Search(len(ids), func(index int) bool { return ids[index] > *shard.lastID })
+			}
+			if start == len(ids) {
+				shard.done = true
+				page.CompletedPartitions = append(page.CompletedPartitions, shard.partition)
+				n.shardIndex++
+				continue
+			}
+			deltaEnd = start + remaining
+			if deltaEnd > len(ids) {
+				deltaEnd = len(ids)
+			}
+			deltaReadBudget -= deltaEnd - start
+			query += " WHERE local_id IN (" + strings.TrimSuffix(strings.Repeat("?,", deltaEnd-start), ",") + ")"
+			for _, id := range ids[start:deltaEnd] {
+				args = append(args, id)
+			}
+		} else if shard.lastID != nil {
 			query += " WHERE local_id>?"
 			args = append(args, *shard.lastID)
 		}
@@ -563,6 +596,9 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 			return page, notaloneFailure("history_page_read_failed")
 		}
 		exhausted := len(rows) <= remaining
+		if n.deltaOnly {
+			exhausted = deltaEnd == len(n.deltaIDs[shard.partition])
+		}
 		if !exhausted {
 			rows = rows[:remaining]
 		}
@@ -576,11 +612,22 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 			}
 		}
 		page.Records = append(page.Records, records...)
+		if n.deltaOnly {
+			for _, record := range records {
+				if record.LocalID != nil {
+					delete(n.deltaMissing, notaloneTailIdentity{Partition: record.Partition, Table: record.Table, LocalID: *record.LocalID})
+				}
+			}
+		}
 		if len(rows) > 0 {
 			id, ok := rows[len(rows)-1]["local_id"].(int64)
 			if !ok {
 				return page, notaloneFailure("history_identity_unverified")
 			}
+			shard.lastID = &id
+		}
+		if n.deltaOnly {
+			id := n.deltaIDs[shard.partition][deltaEnd-1]
 			shard.lastID = &id
 		}
 		if exhausted {
@@ -593,6 +640,20 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 		n.shardIndex++
 	}
 	page.Exhausted = n.shardIndex == len(n.shards)
+	if page.Exhausted && n.deltaOnly && n.deltaEmitAbsent {
+		if n.deltaRemoved == nil {
+			n.deltaRemoved = []notaloneTailIdentity{}
+			for identity := range n.deltaMissing {
+				n.deltaRemoved = append(n.deltaRemoved, identity)
+			}
+			sort.Slice(n.deltaRemoved, func(i, j int) bool { return notaloneTailIdentityLess(n.deltaRemoved[i], n.deltaRemoved[j]) })
+		}
+		for len(page.Records) < 16 && n.deltaRemovedIndex < len(n.deltaRemoved) {
+			page.Records = append(page.Records, notaloneTailTombstone(n.deltaRemoved[n.deltaRemovedIndex], n.profile.VerifiedTerminalAbsence))
+			n.deltaRemovedIndex++
+		}
+		page.Exhausted = n.deltaRemovedIndex == len(n.deltaRemoved)
+	}
 	if !page.Exhausted {
 		nonce, e := notaloneSnapshotNonce()
 		if e != nil {

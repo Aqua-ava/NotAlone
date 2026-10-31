@@ -49,6 +49,8 @@ export interface HistoryChannel {
   readonly guardSession?: { readonly loss: Promise<void>; failureCode?():string|null };
   inspect(scope: HistoryScope, signal?: AbortSignal): Promise<HistorySupportReport>;
   target(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryTarget>;
+  // 只接续业务事务已接受且作用域未变的本机检查点；缺失返回 null，不能猜测水位。
+  resumeTarget?(scope: HistoryScope, previous: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTarget | null>;
   page(scope: HistoryScope, target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<HistoryPage>;
   // 可选增量尾部能力：只由支持档声明 incrementalTail=supported 的已认证适配器提供。
   tail?(scope: HistoryScope, target: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTailPage>;

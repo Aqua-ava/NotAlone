@@ -27,13 +27,14 @@ class WechatHistoryChannel implements HistoryChannel {
  readonly #guardLoss=Promise.withResolvers<void>();
  readonly guardSession={loss:this.#guardLoss.promise,failureCode:()=>this.#native?.stoppedReason??null};
  readonly #executable?:string;
+ readonly #checkpointScope?:(scope:HistoryScope)=>Promise<void>;
  #native?:NarrowWechatClient;
  #opening?:Promise<NarrowWechatClient>;
  #identity?:string;
  #scope?:HistoryScope;
  #targetIssued=false;
  #closed=false;
- constructor(executable?:string){this.#executable=executable;}
+ constructor(executable?:string,checkpointScope?:(scope:HistoryScope)=>Promise<void>){this.#executable=executable;this.#checkpointScope=checkpointScope;}
  async #open(signal?:AbortSignal):Promise<NarrowWechatClient>{
   try{
    const options=await loadNarrowWechatOptions(this.#executable!);
@@ -44,6 +45,7 @@ class WechatHistoryChannel implements HistoryChannel {
    if(resolved.accountKey!==scope.accountKey)return reject('history_account_changed');
    if(resolved.conversationKey!==scope.conversationKey)return reject('history_scope_changed');
    if(resolved.sourceGeneration!==scope.token.source_generation)return reject('history_source_changed');
+   await this.#checkpointScope?.(scope);
    return native;
   }catch(error){
    this.#closed=true;await this.#native?.close();
@@ -78,6 +80,10 @@ class WechatHistoryChannel implements HistoryChannel {
   if(!this.#executable)return reject('history_support_unverified');
   return this.#run(scope,signal,async native=>{const target=await native.targetSelected(signal);this.#targetIssued=true;return target;});
  }
+ async resumeTarget(scope:HistoryScope,previous:HistoryTarget,cursor:string,signal?:AbortSignal):Promise<HistoryTarget|null>{
+  if(!this.#executable)return reject('history_support_unverified');
+  return this.#run(scope,signal,async native=>{const target=await native.resumeTargetSelected(previous,cursor,signal);if(target)this.#targetIssued=true;return target;});
+ }
  async page(scope:HistoryScope,target:HistoryTarget,cursor:string|null,signal?:AbortSignal){
   if(!this.#executable)return reject('history_support_unverified');
   return this.#run(scope,signal,async native=>{
@@ -103,4 +109,4 @@ class WechatHistoryChannel implements HistoryChannel {
   await this.#native?.close();
  }
 }
-export function createWechatHistoryChannel(executable?:string):HistoryChannel{return new WechatHistoryChannel(executable);}
+export function createWechatHistoryChannel(executable?:string,checkpointScope?:(scope:HistoryScope)=>Promise<void>):HistoryChannel{return new WechatHistoryChannel(executable,checkpointScope);}

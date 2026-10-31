@@ -128,6 +128,13 @@ export class SqliteHistoryService {
  }
  source(contactId:string,recordId:string):Promise<HistorySource>{return this.storage.execute('history.source',{ownerId:this.contacts.ownerId,contactId,recordId});}
  coverage(contactId:string):Promise<HistoryCoverage>{return this.storage.execute('history.coverage',{ownerId:this.contacts.ownerId,contactId});}
+ private async resumeOrTarget(scope:HistoryScope,channel:HistoryChannel,report:HistorySupportReport,signal:AbortSignal):Promise<HistoryTarget>{
+  if(channel.resumeTarget&&report.capabilities?.durableIncremental==='supported'){
+   const checkpoint=await this.storage.execute<{target:HistoryTarget;cursor:string}|null>('history.resumeCheckpoint',{token:scope.token,report});
+   if(checkpoint){const resumed=await channel.resumeTarget(scope,checkpoint.target,checkpoint.cursor,signal);await this.contacts.validate(scope.token);if(resumed)return resumed;}
+  }
+  return channel.target(scope,signal);
+ }
  synchronize(contactId:string,signal?:AbortSignal):Promise<HistoryCoverage>{return this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal,armGuard,metadataRevalidation,retainedGuardAvailable)=>{
   let goal:PendingGoal|undefined;
   const check=()=>this.check(scope,controller);
@@ -150,7 +157,7 @@ export class SqliteHistoryService {
    }
    const pendingOnRetainedGuard=normalUse&&retainedGuardAvailable&&!metadataRevalidation
     ?await this.storage.execute<PendingGoal|null>('history.pending',{token:scope.token,report})??undefined:undefined;
-   const freshTarget=normalUse&&!pendingOnRetainedGuard?await channel.target(scope,controller.signal):undefined;
+   const freshTarget=normalUse&&!pendingOnRetainedGuard?await this.resumeOrTarget(scope,channel,report,controller.signal):undefined;
    if(freshTarget)await check();
    const armed=await armGuard(normalUse&&!pendingOnRetainedGuard?{report,target:freshTarget!}:undefined),guardId=armed.guardId;
    await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
@@ -187,11 +194,11 @@ export class SqliteHistoryService {
    };
    const report=await inspect();
    const normalUse=report.continuity==='same-source-instances-normal-use-v1';
-   const freshTarget=normalUse&&(!retainedGuardAvailable||metadataRevalidation)?await channel.target(scope,controller.signal):undefined;
+   const freshTarget=normalUse&&(!retainedGuardAvailable||metadataRevalidation)?await this.resumeOrTarget(scope,channel,report,controller.signal):undefined;
    if(freshTarget)await check();
    const armed=await armGuard(freshTarget?{report,target:freshTarget}:undefined),guardId=armed.guardId;
    await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
-   if(armed.revalidated){
+   if(armed.revalidated||freshTarget){
     await this.storage.execute('history.begin',{token:scope.token,target:freshTarget,report,id:randomUUID(),at:Date.now()});
     return await this.storage.execute<HistoryCoverage>('history.coverage',{ownerId:this.contacts.ownerId,contactId});
    }

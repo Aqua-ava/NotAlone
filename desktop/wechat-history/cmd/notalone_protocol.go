@@ -76,6 +76,7 @@ type notaloneHistorySession struct {
 	testMetadata         *notaloneTestMetadataWatch
 	receivedTestMetadata *notaloneReceivedTestMetadataWatch
 	accountGeneration    string
+	checkpointDirectory  string
 }
 
 func newNotaloneHistorySession(s *server) *notaloneHistorySession {
@@ -466,6 +467,9 @@ func (h *notaloneHistorySession) support(ctx context.Context) (notaloneSupportRe
 		result.Capabilities["incrementalTail"] = "unsupported"
 	}
 	result.Continuity = "same-source-instances-normal-use-v1"
+	if !emptyTarget && h.checkpointDirectory != "" {
+		result.Capabilities["durableIncremental"] = "supported"
+	}
 	result.Reason = nil
 	h.snapshot = snapshot
 	h.snapshotMode = "normal"
@@ -544,6 +548,10 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		}
 	case "verify-snapshot-metadata":
 		if r.Consent != "selected-snapshot-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
+	case "resume-target":
+		if r.Consent != "selected-history-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target == "" || len(r.Target) > 64000 || r.Cursor == "" || len(r.Cursor) > 65536 || strings.ContainsAny(r.Cursor, "\x00\r\n") {
 			return nil, notaloneFailure("history_request_invalid")
 		}
 	case "inspect", "support", "target", "page", "tail", "quarantine-target", "quarantine-page":
@@ -673,7 +681,7 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		return notaloneMetadataReport{Format: "wechat-message-metadata-observation-v1", Status: "unverified", ScopeDigest: inspection.ScopeDigest, SourceGeneration: inspection.SourceGeneration, SchemaFingerprint: inspection.SchemaFingerprint, Kind: r.Kind, CheckedPartitions: inspection.CheckedPartitions, Record: observation}, nil
 	}
 
-	if (r.Operation == "target" || r.Operation == "page" || r.Operation == "tail" || r.Operation == "quarantine-target" || r.Operation == "quarantine-page") && h.messageGuard != nil {
+	if (r.Operation == "target" || r.Operation == "resume-target" || r.Operation == "page" || r.Operation == "tail" || r.Operation == "quarantine-target" || r.Operation == "quarantine-page") && h.messageGuard != nil {
 		if err := h.ensureMessageGuard(); err != nil {
 			return nil, err
 		}
@@ -687,6 +695,42 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	}
 	if r.Operation == "tail" {
 		return h.tailPage(ctx, r, report, profile)
+	}
+	if r.Operation == "resume-target" {
+		if report.Status != "supported" || profile == nil || report.Capabilities["durableIncremental"] != "supported" {
+			return nil, notaloneFailure("history_tail_unsupported")
+		}
+		checkpoint, loadErr := h.loadCheckpoint(report, *profile, r.Target, r.Cursor)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		if checkpoint == nil {
+			return nil, nil
+		}
+		if h.snapshot != nil {
+			_ = h.snapshot.Close()
+			h.snapshot = nil
+		}
+		h.resetTail()
+		snapshot, openErr := newNotaloneSnapshot(h.life, h.server, *h.selected, *h.inspected, *profile)
+		if openErr != nil {
+			return nil, openErr
+		}
+		if !notaloneSameSnapshotInstances(checkpoint.Target, snapshot.Target()) {
+			_ = snapshot.Close()
+			return nil, notaloneFailure("history_source_changed")
+		}
+		baseline := make(map[notaloneTailIdentity]notaloneTailBaselineEntry, len(checkpoint.Baseline))
+		for _, item := range checkpoint.Baseline {
+			baseline[item.Identity] = item.Entry
+		}
+		if initErr := snapshot.initializeDelta(ctx, h.server, checkpoint.States, baseline, true); initErr != nil {
+			_ = snapshot.Close()
+			return nil, initErr
+		}
+		h.snapshot = snapshot
+		h.snapshotMode = "normal"
+		return snapshot.Target(), nil
 	}
 	mode := "normal"
 	if r.Operation == "quarantine-target" || r.Operation == "quarantine-page" {
@@ -706,6 +750,13 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if mode == "normal" && h.snapshot != nil && h.snapshotMode == "normal" {
 			if err := h.snapshot.Check(); err != nil {
 				return nil, err
+			}
+			if h.snapshot.deltaStates == nil {
+				if err := h.snapshot.initializeDelta(ctx, h.server, nil, nil, false); err != nil {
+					_ = h.snapshot.Close()
+					h.snapshot = nil
+					return nil, err
+				}
 			}
 			return h.snapshot.Target(), nil
 		}
@@ -733,6 +784,12 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if err := h.ensureMessageGuard(); err != nil {
 			_ = snapshot.Close()
 			return nil, err
+		}
+		if mode == "normal" {
+			if initErr := snapshot.initializeDelta(ctx, h.server, nil, nil, false); initErr != nil {
+				_ = snapshot.Close()
+				return nil, initErr
+			}
 		}
 		h.snapshot = snapshot
 		h.snapshotMode = mode
@@ -765,6 +822,12 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			h.snapshot = nil
 			return nil, tailErr
 		}
+		tail.states = h.snapshot.deltaStates
+		if saveErr := h.saveCheckpoint(report, *profile, target, tail.expectedCursor, tail.baseline, tail.states); saveErr != nil {
+			_ = h.snapshot.Close()
+			h.snapshot = nil
+			return nil, saveErr
+		}
 		h.resetTail()
 		h.tail = tail
 		if closeErr := h.snapshot.Close(); closeErr != nil {
@@ -784,7 +847,11 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	return page, nil
 }
 func runNotaloneHistoryWithServer(s *server, input io.Reader, output io.Writer) {
-	runNotaloneHistorySession(newNotaloneHistorySession(s), input, output)
+	session := newNotaloneHistorySession(s)
+	if executable, err := os.Executable(); err == nil {
+		session.checkpointDirectory = filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(executable))), "wechat-history-checkpoints")
+	}
+	runNotaloneHistorySession(session, input, output)
 }
 func runNotaloneHistorySession(session *notaloneHistorySession, input io.Reader, output io.Writer) {
 	defer session.close()

@@ -54,6 +54,7 @@ async function fixture(t,mode='normal') {
    if(mode.startsWith('empty-target'))data={...data,profileId:'wechat-4.0.6-29387-absent-private-target-v1',declaredPrimaryKey:[],statusSemantics:'no-message-table-v1',continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','private-history-boundary-v1'].map(key=>[key,['declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','incrementalTail'].includes(key)?'unsupported':key==='private-history-boundary-v1'?'unverified':'supported']))};
    if(mode==='empty-target-ordinary-profile')data={...data,profileId:'synthetic-profile-v1',declaredPrimaryKey:['local_id']};
    if(mode==='empty-target-false-tail')data.capabilities.incrementalTail='supported';
+   if(mode.startsWith('durable-'))data.capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental'].map(key=>[key,'supported']));
    if(mode==='wrong-support-scope')data={...data,conversationKey:'synthetic-other'};
    if(mode==='wrong-support-key')data={...data,declaredPrimaryKey:['unrelated']};
    if(mode==='wrong-support-generation')data={...data,sourceGeneration:'f'.repeat(64)};
@@ -67,6 +68,7 @@ async function fixture(t,mode='normal') {
    if(mode==='wrong-target-generation')data={...data,sourceGeneration:'f'.repeat(64)};
    if(mode==='wrong-target-table')data={...data,tables:[{partition:'d'.repeat(64),instance:'f'.repeat(64)}]};
   }
+  if(r.op==='resume-target')data=mode==='durable-missing'?null:{...target,descriptor:'durable-resumed',...(mode==='durable-wrong-source'?{sourceGeneration:'f'.repeat(64)}:{})};
   if(r.op==='verify-snapshot-metadata'){
    const partitions=schema.checkedPartitions.map(partition=>{const table=schema.tables.find(item=>item.partition===partition);return {partition,tablePresent:!!table,instance:table?.target??null,preSample:'7',postSample:'7',readerPinned:true,sourceInstanceHeld:true};});
    data={format:'wechat-history-fixed-snapshot-proof-v1',status:'verified',scopeDigest:crypto.createHash('sha256').update('${account}'+'\\0'+currentConversation).digest('hex'),sourceGeneration:'${generation}',schemaFingerprint:schema.schemaFingerprint,expectedPartitionCount:partitions.length,completedPartitionCount:partitions.length,namespaceContinuity:true,instanceContinuity:true,snapshotBarrier:true,scope:'single-fixed-snapshot',authorizesSubsequentRead:false,partitions};
@@ -554,5 +556,15 @@ test('原生读取只接受无正文、类型一致的非文字元数据',async 
   const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
   if(['metadata-only','metadata-only-app','metadata-only-file'].includes(mode)){const page=await f.client.pageSelected(target,null);assert.equal(page.records[0].metadataOnly,true);assert.equal(page.records[0].text,null);}
   else await assert.rejects(f.client.pageSelected(target,null),{code:'history_protocol_invalid'});
+ });
+});
+
+
+test('持久增量目标只接受当前作用域和明确可用的检查点',async t=>{
+ for(const mode of ['durable-available','durable-missing','durable-wrong-source'])await t.test(mode,async t=>{
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const old=await f.client.targetSelected();
+  if(mode==='durable-wrong-source')await assert.rejects(f.client.resumeTargetSelected(old,'accepted-cursor'),{code:'history_protocol_invalid'});
+  else {const value=await f.client.resumeTargetSelected(old,'accepted-cursor');assert.equal(value?.descriptor??null,mode==='durable-missing'?null:'durable-resumed');}
+  const request=JSON.parse((await readFile(f.logFile,'utf8')).trim().split('\n').at(-1));assert.deepEqual(request,{op:'resume-target',account,conversation,consent:'selected-history-v1',target:old.descriptor,cursor:'accepted-cursor'});
  });
 });

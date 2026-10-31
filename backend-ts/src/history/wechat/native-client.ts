@@ -85,6 +85,27 @@ const absentPrivateTargetProfile = 'wechat-4.0.6-29387-absent-private-target-v1'
 // 系统会话不代表用户的真实关系对象，也不能成为单联系人读取目标。
 const systemConversations = new Set(['filehelper', 'notifymessage']);
 const allowedErrors = new Set([
+  'history_checkpoint_invalid', 'history_checkpoint_too_large', 'history_checkpoint_unavailable',
+  'history_delta_btree_cell_invalid', 'history_delta_btree_cells_invalid', 'history_delta_btree_child_invalid',
+  'history_delta_btree_child_missing', 'history_delta_btree_cycle', 'history_delta_btree_duplicate_rowid',
+  'history_delta_btree_header_invalid', 'history_delta_btree_kind_invalid', 'history_delta_btree_page_invalid',
+  'history_delta_btree_payload_invalid', 'history_delta_btree_reserve_invalid', 'history_delta_btree_rightmost_invalid',
+  'history_delta_checkpoint_invalid', 'history_delta_cipher_hmac_invalid', 'history_delta_cipher_layout_invalid',
+  'history_delta_cipher_page_invalid', 'history_delta_cipher_salt_mismatch', 'history_delta_cipher_unavailable',
+  'history_delta_key_unavailable', 'history_delta_new_child_frame_missing', 'history_delta_new_child_kind_invalid',
+  'history_delta_new_overflow_frame_missing', 'history_delta_overflow_cycle', 'history_delta_overflow_header_invalid',
+  'history_delta_overflow_leaf_missing', 'history_delta_overflow_length_mismatch', 'history_delta_overflow_link_invalid',
+  'history_delta_overflow_owner_missing', 'history_delta_overflow_page_missing', 'history_delta_overflow_pointer_invalid',
+  'history_delta_overflow_shared', 'history_delta_page_count_invalid', 'history_delta_page_invalid',
+  'history_delta_page_missing', 'history_delta_plain_header_invalid', 'history_delta_plain_reserve_invalid',
+  'history_delta_read_invalid', 'history_delta_request_invalid', 'history_delta_root_missing',
+  'history_delta_salt_invalid', 'history_delta_short_read', 'history_delta_source_limit',
+  'history_delta_source_unavailable', 'history_delta_tree_empty', 'history_delta_tree_page_kind_invalid',
+  'history_delta_varint_bounds', 'history_delta_varint_truncated', 'history_delta_wal_checksum_length',
+  'history_delta_wal_database_size_invalid', 'history_delta_wal_frame_checksum_invalid', 'history_delta_wal_frame_header_invalid',
+  'history_delta_wal_frame_limit', 'history_delta_wal_frame_missing', 'history_delta_wal_header_checksum_invalid',
+  'history_delta_wal_header_invalid', 'history_delta_wal_magic_invalid', 'history_delta_wal_page_size_invalid',
+  'history_delta_wal_version_invalid',
   'history_metadata_profile_unverified', 'history_program_version_uncertified',
   'history_request_invalid', 'history_operation_unsupported', 'history_scope_unverified',
   'history_account_unavailable', 'history_account_changed', 'history_native_unavailable',
@@ -252,7 +273,7 @@ function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: str
     || row.profileId === absentPrivateTargetProfile && (!absentTarget || declaredPrimaryKey.length > 0))) return fail();
   let capabilities: Record<string, 'supported' | 'unsupported' | 'unverified'> | undefined;
   if (hasCapabilities) {
-    const extras = ['incrementalTail', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
+    const extras = ['incrementalTail', 'durableIncremental', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
     const keys = ['programVersion', 'exactSchema', 'declaredLocalKey', 'automaticAllocation', 'serverIdUniqueConstraint', 'statusColumn', 'statusSemantics', 'sourceLifecycle', 'restartContinuity', 'recoveryMapping', 'snapshotBarrier', 'partitionCoverage', 'normalHistory', ...extras];
     const reported = object(row.capabilities, keys);
     capabilities = Object.fromEntries(keys.map(key => {
@@ -686,6 +707,18 @@ export class NarrowWechatClient {
         const parsed = historyTarget(value, scope, this.#schema); this.#target = structuredClone(parsed); this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget=undefined; return parsed;
       });
     }, signal);
+  }
+  resumeTargetSelected(previous: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTarget | null> {
+    try { signalValid(signal); opaque(cursor); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(async () => {
+      const scope=this.#readableScope();
+      if(this.#support?.capabilities?.durableIncremental!=='supported')return fail('history_tail_unsupported');
+      const old=historyTarget(previous,scope,this.#schema);
+      return this.#request({op:'resume-target',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-history-v1',target:old.descriptor,cursor},value=>{
+        if(value===null)return null;
+        const parsed=historyTarget(value,scope,this.#schema);this.#target=structuredClone(parsed);this.#tailCursor=undefined;this.#lastTail=undefined;return parsed;
+      });
+    },signal);
   }
   pageSelected(target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<HistoryPage> {
     try { signalValid(signal); if (cursor !== null) opaque(cursor); }

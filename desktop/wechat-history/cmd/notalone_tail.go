@@ -47,6 +47,10 @@ type notaloneTailSession struct {
 	expectedCursor    string
 	lastInput         string
 	lastResponse      *notaloneTailPage
+	states            map[string]notaloneDeltaShardState
+	nextStates        map[string]notaloneDeltaShardState
+	checkpointToken   string
+	changed           bool
 }
 
 func notaloneSnapshotRecordDigest(record notaloneSnapshotRecord) (notaloneTailIdentity, notaloneTailBaselineEntry, error) {
@@ -115,6 +119,7 @@ func newNotaloneTailSession(target notaloneSnapshotTarget, selected notaloneReso
 		target: cloneTarget, scopeDigest: notaloneHash(selected.Account, selected.Conversation),
 		sourceGeneration: selected.SourceGeneration, schemaFingerprint: inspection.SchemaFingerprint,
 		profile: profile, baseline: baselineCopy, expectedCursor: cursor,
+		checkpointToken: cursor,
 	}, nil
 }
 
@@ -233,12 +238,15 @@ func (h *notaloneHistorySession) tailPage(ctx context.Context, request notaloneH
 	}
 	if tail.pendingCommit {
 		tail.baseline = tail.candidate
+		tail.states = tail.nextStates
+		tail.nextStates = nil
 		tail.candidate = nil
 		tail.pendingCommit = false
 		tail.snapshotCursor = ""
 		tail.removed = nil
 		tail.removedIndex = 0
 		tail.deletionsReady = false
+		tail.changed = false
 	}
 	if tail.snapshot == nil && !tail.deletionsReady {
 		snapshot, openErr := newNotaloneSnapshot(h.life, h.server, *h.selected, *h.inspected, *profile)
@@ -260,8 +268,18 @@ func (h *notaloneHistorySession) tailPage(ctx context.Context, request notaloneH
 			h.resetTail()
 			return empty, notaloneFailure("history_source_changed")
 		}
+		if initErr := snapshot.initializeDelta(ctx, h.server, tail.states, tail.baseline, false); initErr != nil {
+			_ = snapshot.Close()
+			return empty, initErr
+		}
 		tail.snapshot = snapshot
-		tail.candidate = make(map[notaloneTailIdentity]notaloneTailBaselineEntry)
+		tail.candidate = make(map[notaloneTailIdentity]notaloneTailBaselineEntry, len(tail.baseline))
+		for identity, entry := range tail.baseline {
+			tail.candidate[identity] = entry
+		}
+		for identity := range snapshot.deltaMissing {
+			delete(tail.candidate, identity)
+		}
 	}
 	records := make([]notaloneSnapshotRecord, 0, 16)
 	scanDone := tail.deletionsReady
@@ -285,9 +303,11 @@ func (h *notaloneHistorySession) tailPage(ctx context.Context, request notaloneH
 			old, existed := tail.baseline[identity]
 			if !existed || old.Digest != entry.Digest {
 				records = append(records, record)
+				tail.changed = true
 			}
 		}
 		if page.Exhausted {
+			tail.nextStates = tail.snapshot.deltaStates
 			tail.snapshot = nil // Page 已关闭固定reader；候选仅保留身份与摘要。
 			if len(tail.candidate) != len(tail.baseline) && len(tail.candidate) > notaloneTailIdentityLimit {
 				h.resetTail()
@@ -312,12 +332,25 @@ func (h *notaloneHistorySession) tailPage(ctx context.Context, request notaloneH
 		}
 	}
 	for scanDone && len(records) < 16 && tail.removedIndex < len(tail.removed) {
+		tail.changed = true
 		records = append(records, notaloneTailTombstone(tail.removed[tail.removedIndex], tail.profile.VerifiedTerminalAbsence))
 		tail.removedIndex++
 	}
 	caughtUp := scanDone && tail.removedIndex == len(tail.removed)
 	if caughtUp {
+		if !tail.changed && tail.checkpointToken != "" {
+			cursorOut = tail.checkpointToken + "." + cursorOut
+		} else {
+			if saveErr := h.saveCheckpoint(support, *profile, tail.target, cursorOut, tail.candidate, tail.nextStates); saveErr != nil {
+				h.resetTail()
+				return empty, saveErr
+			}
+			tail.checkpointToken = cursorOut
+		}
 		tail.pendingCommit = true
+	}
+	if !caughtUp && tail.checkpointToken != "" {
+		cursorOut = tail.checkpointToken + "." + cursorOut
 	}
 	result := notaloneTailPage{Target: tail.target.Descriptor, CursorIn: request.Cursor, CursorOut: cursorOut, Records: records, CaughtUp: caughtUp}
 	tail.lastInput = request.Cursor
