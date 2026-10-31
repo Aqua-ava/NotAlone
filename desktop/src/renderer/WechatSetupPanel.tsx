@@ -20,10 +20,12 @@ const toolFailureMessages: Record<string, string> = {
   history_source_changed: '检测期间微信数据来源发生变化，请重新检测。',
   history_scope_changed: '检测期间微信账号或数据来源发生变化，请重新检测。',
 };
-export function WechatSetupPanel({ bridge, children, selectionOnly = false }: { bridge: WechatSetupBridge; children?: ReactNode; selectionOnly?: boolean }) {
+export function WechatSetupPanel({ bridge, children, selectionOnly: configuredSelectionOnly = false }: { bridge: WechatSetupBridge; children?: ReactNode; selectionOnly?: boolean }) {
   const [state, setState] = useState(initial);
+  const selectionOnly = configuredSelectionOnly || state.sourceReconfirmationRequired === true;
   const [mode, setMode] = useState<'selected' | 'all_private'>('selected');
   const [historyAuthorized, setHistoryAuthorized] = useState(false);
+  const [sourceReconfirmed, setSourceReconfirmed] = useState(false);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
   const [readAttempt, setReadAttempt] = useState(0);
@@ -43,7 +45,9 @@ export function WechatSetupPanel({ bridge, children, selectionOnly = false }: { 
     // 换账号或重新核验后重新作出选择，旧页面选择不能扩大新候选的授权。
     setMode('selected');
     setHistoryAuthorized(false);
-  }, [state.accountId, state.phase, selectionOnly]);
+  }, [state.accountId, state.phase, selectionOnly, state.sourceReconfirmationRequired]);
+  // 即使仍是同账号的 ready 候选，新发布代次也必须重新核对来源。
+  useEffect(() => { setSourceReconfirmed(false); }, [state.revision]);
   async function operate(action: () => Promise<void>) {
     setError('');
     try { await action(); }
@@ -71,6 +75,10 @@ export function WechatSetupPanel({ bridge, children, selectionOnly = false }: { 
     </>}
     {state.phase === 'ready' && <>
       <p>{selectionOnly ? '请确认这是你的微信账号；此检测不代表当前微信前台的登录账号。账号身份和来源资格仍需核验，连接本身不读取聊天或授予联系人授权。' : '请确认这是你要连接的微信账号；此检测不代表当前微信前台的登录账号。确认连接表示允许读取该账号的会话列表以核验可读性并供你选择联系人；列表附带的消息摘要会立即丢弃，不保存或用于回复。'}</p>
+      {state.sourceReconfirmationRequired && <>
+        <p role="alert">本机微信资料来源与原关联不同。当前资料会作为新的来源核验，已有资料保留；旧读取授权不会恢复，连接后仍需逐个确认会话。</p>
+        <label><input type="checkbox" checked={sourceReconfirmed} onChange={event => setSourceReconfirmed(event.target.checked)} />我已核对当前微信账号，重新关联当前本机资料</label>
+      </>}
       <fieldset><legend>同步范围</legend>
         <label><input type="radio" name="wechat-setup-scope" checked={selectionOnly || mode === 'selected'} onChange={() => { setMode('selected'); setHistoryAuthorized(false); }} />仅我选择的私聊</label>
         {!selectionOnly && <label><input type="radio" name="wechat-setup-scope" checked={mode === 'all_private'} onChange={() => { setMode('all_private'); setHistoryAuthorized(false); }} />当前账号的全部私聊</label>}
@@ -83,8 +91,13 @@ export function WechatSetupPanel({ bridge, children, selectionOnly = false }: { 
         <p>未开启历史读取时，仅从本次绑定起同步。扩大范围或新发现的会话不会沿用仅所选范围的历史授权；可在同步设置中另行确认。</p>
       </>}
       <p>{selectionOnly ? '读取还须满足已确认会话、当前账号资格、正文读取能力和总开关；候选回复仍由你亲自发送。' : '应用运行时才读取；关闭总开关或退出 App 会停止读取。候选回复仍由你亲自发送。'}</p>
-      <button className="button primary" onClick={() => void operate(() => bridge.confirm({ revision: state.revision, confirmed: true,
-        mode: selectionOnly ? 'selected' : mode, historyAuthorized: selectionOnly ? false : historyAuthorized }))}>{selectionOnly ? '确认微信账号' : '确认连接并开启同步'}</button>
+      <button className="button primary" disabled={state.sourceReconfirmationRequired && !sourceReconfirmed}
+        onClick={() => void operate(() => bridge.confirm({ revision: state.revision, confirmed: true,
+          mode: selectionOnly || state.sourceReconfirmationRequired ? 'selected' : mode,
+          historyAuthorized: selectionOnly || state.sourceReconfirmationRequired ? false : historyAuthorized,
+          ...(state.sourceReconfirmationRequired && sourceReconfirmed ? { sourceReconfirmed: true } : {}) }))}>
+        {state.sourceReconfirmationRequired ? '重新核验并连接当前来源' : selectionOnly ? '确认微信账号' : '确认连接并开启同步'}
+      </button>
     </>}
     {state.phase === 'connected' && <p>{selectionOnly ? '账号关联已保存。请到「联系人」逐人核验并确认读取范围；连接账号本身不会授权未知会话，也不会自动纳入新私聊。' : '账号关联已保存；当前同步范围与总开关见下方设置。仅所选范围需要到「联系人」逐个确认；全部私聊范围会自动关联，联系人出现后可在顶部搜索并切换。'}</p>}
     {(['restart_required', 'restart-failed'].includes(state.phase) || state.phase === 'offline' && state.failureCode === 'reload_failed') && <>

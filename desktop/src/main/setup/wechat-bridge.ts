@@ -4,7 +4,8 @@ import type { WechatSetupController } from './wechat-controller';
 function confirmation(args: unknown[]): WechatSetupConfirmation {
   const value = args[0];
   if (args.length !== 1 || !validWechatSetupConfirmation(value)) throw new Error('微信连接需要明确确认');
-  return { revision: value.revision, confirmed: true, mode: value.mode, historyAuthorized: value.historyAuthorized };
+  return { revision: value.revision, confirmed: true, mode: value.mode, historyAuthorized: value.historyAuthorized,
+    ...(value.sourceReconfirmed ? { sourceReconfirmed: true } : {}) };
 }
 export function installWechatSetupBridge(commands: PageCommands, controller: WechatSetupController): void {
   commands.handle('wechat-setup:get-state', (...args) => { noArguments(args); return controller.getState(); }, 'manager');

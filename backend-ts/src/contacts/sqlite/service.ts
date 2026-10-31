@@ -5,11 +5,13 @@ import type { AccountEvidence, ContactMetadataPort, ContactSelection, ReadEligib
 function fail(code:string):never {throw new StorageFailure(code);}
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 const identity=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9_.@-]{1,255}$/.test(v);
-interface Directory { contacts: {contact_id:string;display_name:string;selection_generation:string;data_generation:string;data_status:{message_count:number;source_count:number}}[]; bindings:SavedContactBinding[];account:{id:string;external_key:string;source_generation:string;scope_revision:bigint}|null;read_enabled:boolean }
+function assertAccountEvidence(evidence:AccountEvidence):void {if(!identity(evidence.externalKey)||!identity(evidence.identityScheme)||!identity(evidence.sourceGeneration)||!identity(evidence.supportProfile)||!['verified','unverified'].includes(evidence.assurance))fail('metadata_identity_unverified');}
+interface Directory { contacts: {contact_id:string;display_name:string;selection_generation:string;data_generation:string;data_status:{message_count:number;source_count:number}}[]; bindings:SavedContactBinding[];account:{id:string;external_key:string;identity_scheme:string;source_generation:string;scope_revision:bigint}|null;read_enabled:boolean }
+interface SourceReconfirmation {accountId:string;sourceGeneration:string;scopeRevision:string}
 interface Snapshot {at:number; evidence:AccountEvidence;accountId:string;scopeRevision:string;rows:Map<string,{displayName:string;generation:string;contactId?:string;verificationId:string;grantId:string;bindingId:string;conversationId:string;newContactId:string}>}
 /** 所有渠道 I/O 在事务外；身份和提交资格在具名短事务内复验。 */
 export class SqliteContactService {
- private candidate?:{token:string;evidence:AccountEvidence;at:number};
+ private candidate?:{token:string;evidence:AccountEvidence;at:number;sourceReconfirmation?:SourceReconfirmation};
  private readonly snapshots=new Map<string,Snapshot>();
  private closed=false;
  private readonly pendingMetadata=new Set<Promise<unknown>>();
@@ -40,18 +42,30 @@ export class SqliteContactService {
    throw error;
   }
   if(signal?.aborted||this.closed)fail('identity_cancelled');
-  if(!identity(evidence.externalKey)||!identity(evidence.identityScheme)||!identity(evidence.sourceGeneration)||!identity(evidence.supportProfile)||!['verified','unverified'].includes(evidence.assurance))fail('metadata_identity_unverified');
+  assertAccountEvidence(evidence);
   const saved=await this.directory();
-  if(saved.account&&(evidence.assurance!=='verified'||saved.account.external_key!==evidence.externalKey||saved.account.source_generation!==evidence.sourceGeneration))await this.execute('identity.invalidateAccount',{accountId:saved.account.id});
+  if(saved.account&&(evidence.assurance!=='verified'||saved.account.external_key!==evidence.externalKey||saved.account.identity_scheme!==evidence.identityScheme||saved.account.source_generation!==evidence.sourceGeneration))await this.execute('identity.invalidateAccount',{accountId:saved.account.id});
   return evidence;
  }
- async detectAccount(signal?:AbortSignal){const evidence=await this.account(signal);if(this.closed)fail('identity_closed');this.candidate={token:randomUUID(),evidence,at:this.clock()};return {account_id:evidence.externalKey,candidate_token:this.candidate.token,verified:evidence.assurance==='verified',failure_code:evidence.assurance==='unverified'?evidence.unverifiedReason??'metadata_identity_unverified':null};}
- async confirmAccount(token:string,signal?:AbortSignal){
-  const c=this.candidate;if(!c||c.token!==token||this.clock()-c.at>120_000)fail('account_candidate_stale');
+ async detectAccount(signal?:AbortSignal){
   const evidence=await this.account(signal);
-  if(JSON.stringify(evidence)!==JSON.stringify(c.evidence))fail('account_candidate_stale');
+  const sourceReconfirmation=evidence.assurance==='verified'?await this.execute<SourceReconfirmation|undefined>('identity.sourceReconfirmation',{evidence}):undefined;
+  if(this.closed)fail('identity_closed');
+  this.candidate={token:randomUUID(),evidence,at:this.clock(),sourceReconfirmation};
+  return {account_id:evidence.externalKey,candidate_token:this.candidate.token,verified:evidence.assurance==='verified',failure_code:evidence.assurance==='unverified'?evidence.unverifiedReason??'metadata_identity_unverified':null,...(sourceReconfirmation?{source_reconfirmation_required:true}:{})};
+ }
+ async confirmAccount(token:string,signal?:AbortSignal,sourceReconfirmed=false){
+  const c=this.candidate;if(!c||c.token!==token||this.clock()-c.at>120_000)fail('account_candidate_stale');
+  if(sourceReconfirmed&&!c.sourceReconfirmation)fail('identity_request_invalid');
+  // 重确认只读回候选证据，较晚选中的其他账号必须留给写事务核验，不能先撤销。
+  let evidence:AccountEvidence;
+  try { evidence=sourceReconfirmed?await this.readMetadata(()=>this.metadata.account(signal)):await this.account(signal); }
+  catch(error){if(signal?.aborted||this.closed)fail('identity_cancelled');throw error;}
+  if(signal?.aborted||this.closed)fail('identity_cancelled');
+  if(sourceReconfirmed)assertAccountEvidence(evidence);
+  if(this.candidate!==c||this.clock()-c.at>120_000||JSON.stringify(evidence)!==JSON.stringify(c.evidence))fail('account_candidate_stale');
   if(evidence.assurance!=='verified')fail('metadata_identity_unverified');
-  return this.execute<string>('identity.connect',{evidence,accountId:randomUUID()});
+  return this.execute<string>('identity.connect',{evidence,accountId:randomUUID(),...(sourceReconfirmed?{sourceReconfirmation:c.sourceReconfirmation}:{})});
  }
  private async observe(evidence:AccountEvidence,sessions?:{externalKey:string;displayName:string}[]){
   const current=await this.execute<{current:boolean;accountId:string;scopeRevision:string}>('identity.observe',{evidence,sessions});

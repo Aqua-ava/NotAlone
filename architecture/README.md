@@ -231,3 +231,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 118. [ADR-118：SQLite 场景资料与长期概览的完整发布](adr/118-sqlite-memory-documents-and-publication.md)
 
 129. [ADR-129：DSH 回复 Skill 的受控发现与启用](adr/129-controlled-dsh-reply-skill-discovery.md)
+130. [ADR-130：同账号本机来源变化后的明确重新关联](adr/130-explicit-wechat-source-reconfirmation.md)

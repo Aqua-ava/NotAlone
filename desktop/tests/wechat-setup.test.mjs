@@ -11,7 +11,7 @@ function fixture(){
  const connect=value=>{generation=value;for(const listener of listeners)listener();};
  const backend={getConnectionGeneration:()=>generation,onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},
   async requestJson(request){requests.push(request);const captured=generation;
-   if(request.path==='/api/setup/wechat/detect'){control.status=status();}
+   if(request.path==='/api/setup/wechat/detect'){control.status=control.detectResult??status();}
    else if(request.method==='POST'){if(control.postBarrier)await control.postBarrier;if(control.confirmError)throw control.confirmError;control.status=control.confirmResult??status('restart_required');if(control.postLost)throw new Error('lost');}
    else if(control.readBarrier)await control.readBarrier;
    return {generation:captured,data:control.status};},
@@ -125,6 +125,38 @@ test('同一账号来源换代被明确拒绝时保留连续性原因，不被�
  assert.equal(f.controller.getState().phase,'conflict');
  assert.equal(f.controller.getState().failureCode,'identity_continuity_unverified');
  assert.equal(f.requests.length,count+1);assert.equal(f.control.restarts,0);
+});
+
+test('来源换代候选只在本次明确重确认后连接，不将普通确认升级为恢复授权',async()=>{
+ const f=fixture();f.control.detectResult={...status(),source_reconfirmation_required:true};await f.controller.detect();
+ assert.equal(f.controller.getState().sourceReconfirmationRequired,true);
+ const request={revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false};
+ const count=f.requests.length;
+ await assert.rejects(f.controller.confirm(request));assert.equal(f.requests.length,count);
+ await f.controller.confirm({...request,sourceReconfirmed:true});
+ assert.deepEqual(f.requests.find(r=>r.path.endsWith('/confirm')).body,{candidate_token:'synthetic-token',confirmed:true,
+  mode:'selected',history_authorized:false,source_reconfirmed:true});
+ assert.equal(f.controller.getState().phase,'connected');
+ assert.equal(f.controller.getState().sourceReconfirmationRequired,false);
+});
+
+test('来源重确认经过预加载与正式IPC仍完整传给控制器和后端',async()=>{
+ const f=fixture();f.control.detectResult={...status(),source_reconfirmation_required:true};
+ const handlers=new Map();installWechatSetupBridge({handle:(name,handler)=>handlers.set(name,handler),publish(){}},f.controller);
+ const preload=createWechatSetupBridge({invoke:(name,...args)=>handlers.get(name)(...args)});
+ await preload.detect();
+ await preload.confirm({revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false,sourceReconfirmed:true});
+ assert.equal(f.requests.find(r=>r.path.endsWith('/confirm')).body.source_reconfirmed,true);
+ assert.equal(f.controller.getState().phase,'connected');
+});
+
+test('来源重确认不能出现在普通候选或扩大为全部私聊与历史读取',async()=>{
+ const f=fixture();await f.controller.detect();
+ const request={revision:f.controller.getState().revision,confirmed:true,mode:'selected',historyAuthorized:false,sourceReconfirmed:true};
+ await assert.rejects(f.controller.confirm(request));
+ const calls=[];const bridge=createWechatSetupBridge({invoke:async(...args)=>calls.push(args)});
+ for(const invalid of [{...request,mode:'all_private'},{...request,historyAuthorized:true},{...request,sourceReconfirmed:false}])await assert.rejects(bridge.confirm(invalid));
+ assert.deepEqual(calls,[]);assert.equal(f.requests.filter(r=>r.path.endsWith('/confirm')).length,0);
 });
 
 test('全部私聊与历史必须显式传递，非法或缺省字段不能越过控制器和预加载桥接',async()=>{

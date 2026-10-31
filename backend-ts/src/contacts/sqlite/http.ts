@@ -47,15 +47,17 @@ export class SqliteContactHttp {
    else if(path==='/api/setup/wechat'){const d=await this.service.directory();value=d.account?setup('connected',d.account.external_key):setup('needs_detection');}
    else if(path.endsWith('/wechat/detect')){
     exact(body,[]);
-    try{const c=await this.service.detectAccount(controller.signal);value=c.verified?setup('ready',c.account_id,c.candidate_token):setup('tool_not_ready',c.account_id,null,c.failure_code&&detectionFailures.has(c.failure_code)?c.failure_code:'metadata_identity_unverified');}
+    try{const c=await this.service.detectAccount(controller.signal);value=c.verified?{...setup('ready',c.account_id,c.candidate_token),...(c.source_reconfirmation_required?{source_reconfirmation_required:true}:{})}:setup('tool_not_ready',c.account_id,null,c.failure_code&&detectionFailures.has(c.failure_code)?c.failure_code:'metadata_identity_unverified');}
     catch(error){
      const code=error instanceof StorageFailure&&detectionFailures.has(error.code)?error.code:'wechat_detection_failed';
      value=setup(code==='wechat_tool_unavailable'?'tool_unavailable':'tool_not_ready',null,null,code);
     }
    }else if(path.endsWith('/wechat/confirm')){
-    exact(body,['candidate_token','confirmed','mode','history_authorized']);
+    const reconfirmed=Object.hasOwn(body,'source_reconfirmed');
+    exact(body,['candidate_token','confirmed','mode','history_authorized',...(reconfirmed?['source_reconfirmed']:[])]);
+    if(reconfirmed&&(body.source_reconfirmed!==true||body.history_authorized!==false))throw new StorageFailure('identity_request_invalid');
     if(body.confirmed!==true||body.mode!=='selected'||typeof body.history_authorized!=='boolean'||typeof body.candidate_token!=='string')throw new StorageFailure('identity_request_invalid');
-    await this.service.confirmAccount(body.candidate_token,controller.signal);const d=await this.service.directory();value=setup('connected',d.account!.external_key);
+    await this.service.confirmAccount(body.candidate_token,controller.signal,reconfirmed);const d=await this.service.directory();value=setup('connected',d.account!.external_key);
    }else if(path==='/api/sync/cli-bindings'){
     const d=await this.service.directory();value={identity_protocol:'sqlite-selected-v1',bindings:d.bindings.filter(b=>b.status==='active'),revoked_bindings:d.bindings.filter(b=>b.status==='revoked')};
    }else if(path==='/api/sync/cli-sessions'){

@@ -24,6 +24,21 @@ test('同账号来源连续性失效明确说明来源变化，不误报为微�
  await expect(page.getByRole('alert')).not.toContainText('微信账号与当前配置不一致');
 });
 
+test('来源换代显示明确重确认且默认不勾选，连接本身不恢复旧读取授权',async t=>{
+ const page=await pageFixture(t,'needs_detection',false);
+ await page.evaluate(()=>window.update({phase:'ready',accountId:'synthetic-account',sourceReconfirmationRequired:true}));
+ const confirmation=page.getByRole('checkbox',{name:'我已核对当前微信账号，重新关联当前本机资料',exact:true});
+ const connect=page.getByRole('button',{name:'重新核验并连接当前来源',exact:true});
+ await expect(page.getByRole('radio',{name:'当前账号的全部私聊',exact:true})).toHaveCount(0);
+ await expect(confirmation).not.toBeChecked();await expect(connect).toBeDisabled();
+ await expect(page.getByText(/当前资料会作为新的来源核验/)).toBeVisible();
+ await confirmation.check();await expect(connect).toBeEnabled();
+ await page.evaluate(()=>window.update({phase:'ready',accountId:'synthetic-account',sourceReconfirmationRequired:true}));
+ await expect(confirmation).not.toBeChecked();await expect(connect).toBeDisabled();
+ await confirmation.check();await connect.click();
+ assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{revision:3,confirmed:true,mode:'selected',historyAuthorized:false,sourceReconfirmed:true});
+});
+
 test('名单失败不显示空列表，明确全选只覆盖当前未添加私聊', async t => {
  const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page=await browser.newPage();

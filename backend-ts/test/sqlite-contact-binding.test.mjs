@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
+import {fixture as historyFixture} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteForeground} from '../src/foreground/sqlite-foreground.ts';
 const owner='00000000-0000-4000-8000-000000000001';
 async function fixture(t,options={}){
@@ -162,6 +163,30 @@ test('认证HTTP按旧页面合同读回选择及撤销，缺同意/跨owner字�
  const manual=await request(`/api/contacts/${binding.contact_id}/manual-confirmation`,{});assert.equal(manual.status,200);assert.equal(manual.body.confirmed,true);
  const directory=(await request('/api/sync/cli-bindings')).body;assert.equal(directory.bindings.length,0);assert.equal(directory.revoked_bindings[0].binding_id,binding.binding_id);
 });
+test('来源重确认HTTP只暴露确认要求，必须明确同意且不能扩大读取范围',async t=>{
+ const {service,channel}=await fixture(t);await connect(service);
+ const api=new SqliteContactHttp(service),server=createServer(async(req,res)=>{if(!await api.handle(req,res))res.writeHead(404).end();});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const request=async(path,body)=>{const response=await fetch(`http://127.0.0.1:${server.address().port}${path}`,{method:'POST',body:JSON.stringify(body)});return {status:response.status,body:await response.json()};};
+ const ordinary=(await request('/api/setup/wechat/detect',{})).body;
+ assert.equal(ordinary.source_reconfirmation_required,undefined);
+ const input={candidate_token:ordinary.candidate_token,confirmed:true,mode:'selected',history_authorized:false};
+ assert.equal((await request('/api/setup/wechat/confirm',{...input,source_reconfirmed:true})).status,400);
+ channel.account=async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-2',assurance:'verified',supportProfile:'synthetic-metadata-v1'});
+ const detected=await request('/api/setup/wechat/detect',{});
+ assert.equal(detected.status,200);assert.equal(detected.body.state,'ready');assert.equal(detected.body.source_reconfirmation_required,true);
+ assert.deepEqual(Object.keys(detected.body).sort(),['account_id','candidate_token','failure_code','source_reconfirmation_required','state']);
+ const body={...input,candidate_token:detected.body.candidate_token};
+ assert.deepEqual(await request('/api/setup/wechat/confirm',body),{status:503,body:{error:'identity_continuity_unverified'}});
+ for(const invalid of [{source_reconfirmed:false},{source_reconfirmed:'true'},{source_reconfirmed:true,mode:'all_private'},{source_reconfirmed:true,history_authorized:true},{source_reconfirmed:true,source_generation:'source-2'}]){
+  assert.equal((await request('/api/setup/wechat/confirm',{...body,...invalid})).status,400);
+ }
+ assert.equal((await service.directory()).account,null);
+ assert.equal((await request('/api/setup/wechat/confirm',{...body,source_reconfirmed:true})).status,200);
+ const recovered=await service.directory();assert.equal(recovered.account.source_generation,'source-2');assert.equal(recovered.read_enabled,false);
+ assert.equal((await request('/api/setup/wechat/confirm',{...body,source_reconfirmed:true})).status,200);
+ assert.deepEqual(await service.directory(),recovered);
+});
 test('已授权会话出现低置信度证据时旧读取令牌立即失效',async t=>{
  const {service,channel}=await fixture(t);await connect(service);await service.setReading(true);const snapshot=await service.candidates(true);
  const b=(await service.confirm(snapshot.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings[0];const token=await service.eligibility(b.contact_id);
@@ -175,6 +200,119 @@ test('检测或确认时发现来源换代也须撤销旧资格，拒绝结果�
  channel.account=async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-2',assurance:'verified',supportProfile:'synthetic-metadata-v1'});
  const candidate=await service.detectAccount();await assert.rejects(service.confirmAccount(candidate.candidate_token),{code:'identity_continuity_unverified'});
  await assert.rejects(service.validate(token),{code:'read_not_authorized'});
+});
+test('同账号来源换代须明确重确认，只恢复账号且保持旧许可失效与关闭决定',async t=>{
+ const {service,channel}=await fixture(t);await connect(service);await service.setReading(true);
+ const snapshot=await service.candidates(true);
+ await service.confirm(snapshot.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'},{locator:'friend-b',observed_display_name:'同名',expected_selection_generation:'0'}]);
+ const before=await service.directory(),binding=before.bindings.find(b=>b.conversation_locator==='friend-a');
+ const old=await service.eligibility(binding.contact_id);
+ await service.confirmForeground({contactId:old.contact_id,bindingId:old.binding_id,accountId:old.account_id,sourceGeneration:old.source_generation,
+  scopeRevision:old.scope_revision,readEpoch:old.read_epoch,grantId:old.grant_id,selectionGeneration:old.selection_generation,dataGeneration:old.data_generation,barrierGeneration:old.barrier_generation,
+  observationId:'00000000-0000-4000-8000-000000000099',observedAt:new Date().toISOString()});
+ assert.equal((await service.foregroundSnapshot()).bindings.find(b=>b.contact_id===binding.contact_id).desktopVerified,true);
+ await service.revoke(before.bindings.find(b=>b.conversation_locator==='friend-b').contact_id,before.bindings.find(b=>b.conversation_locator==='friend-b').binding_id,'1');
+ await service.setReading(false);
+ channel.account=async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-2',assurance:'verified',supportProfile:'synthetic-metadata-v1'});
+ const candidate=await service.detectAccount();
+ assert.equal(candidate.source_reconfirmation_required,true);
+ await assert.rejects(service.confirmAccount(candidate.candidate_token),{code:'identity_continuity_unverified'});
+ assert.equal(await service.confirmAccount(candidate.candidate_token,undefined,true),before.account.id);
+ const recovered=await service.directory();
+ assert.equal(recovered.account.id,before.account.id);assert.equal(recovered.account.source_generation,'source-2');
+ assert.equal(recovered.read_enabled,false);assert.equal(recovered.bindings.filter(b=>b.status==='active').length,0);
+ assert.deepEqual(recovered.contacts.map(c=>c.contact_id),before.contacts.map(c=>c.contact_id));
+ await service.confirmAccount(candidate.candidate_token,undefined,true);
+ assert.deepEqual(await service.directory(),recovered);
+ await service.setReading(true);
+ const fresh=await service.candidates(true),row=fresh.sessions.find(s=>s.username==='friend-a');
+ await service.confirm(fresh.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:row.selection_generation}]);
+ assert.equal((await service.directory()).bindings.filter(b=>b.status==='active').length,1);
+ assert.equal((await service.directory()).bindings.find(b=>b.conversation_locator==='friend-b').status,'revoked');
+ assert.notEqual((await service.eligibility(binding.contact_id)).grant_id,old.grant_id);
+ assert.equal((await service.foregroundSnapshot()).bindings.find(b=>b.contact_id===binding.contact_id).desktopVerified,false);
+ await assert.rejects(service.validate(old),{code:'read_eligibility_stale'});
+ await assert.rejects(service.confirm(snapshot.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}]),{code:'account_identity_changed'});
+});
+test('来源重确认不能越过候选后账号、来源或认证证据变化',async t=>{
+ for(const change of [{sourceGeneration:'source-3'},{externalKey:'other-account'},{identityScheme:'wechat.other.v1'},{assurance:'unverified'}])await t.test(JSON.stringify(change),async t=>{
+  const {service,channel}=await fixture(t);await connect(service);
+  const next={externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-2',assurance:'verified',supportProfile:'synthetic-metadata-v1'};
+  channel.account=async()=>next;const candidate=await service.detectAccount();
+  channel.account=async()=>({...next,...change});
+  await assert.rejects(service.confirmAccount(candidate.candidate_token,undefined,true),{code:'account_candidate_stale'});
+  assert.equal((await service.directory()).account,null);
+ });
+});
+test('来源重确认拒绝候选后范围修订及整账号撤销，不复活删除墓碑',async t=>{
+ const {service,channel,storage}=await fixture(t,{registryModule:new URL('./fixtures/contacts/registry.mjs',import.meta.url).href});await connect(service);
+ const source1=await channel.account(),source2={...source1,sourceGeneration:'source-2'};
+ channel.account=async()=>source2;const candidate=await service.detectAccount();
+ channel.account=async()=>source1;
+ const other=new SqliteContactService(storage,owner,channel);await connect(other);const before=await other.directory();
+ channel.account=async()=>source2;
+ await assert.rejects(service.confirmAccount(candidate.candidate_token,undefined,true),{code:'account_candidate_stale'});
+ assert.deepEqual(await service.directory(),before);
+ const next=await service.detectAccount();
+ const operation=await storage.execute('fixture.fenceIdentity',{ownerId:owner,scope:{kind:'account'}});
+ await assert.rejects(service.confirmAccount(next.candidate_token,undefined,true),{code:'identity_not_found'});
+ assert.equal((await service.directory()).account,null);
+ await storage.execute('fixture.cleanIdentity',operation);
+ const deleted=await service.detectAccount();
+ await assert.rejects(service.confirmAccount(deleted.candidate_token,undefined,true));
+ await assert.rejects(service.confirmAccount(deleted.candidate_token),{code:'identity_not_found'});
+ assert.equal((await service.directory()).read_enabled,false);
+});
+test('旧来源重确认不得覆盖另一服务的新账号选择，metadata等待窗口也保持新账号许可',async t=>{
+ for(const when of ['确认前','metadata等待期间'])await t.test(when,async t=>{
+  const {service,channel,storage}=await fixture(t);await connect(service);
+  const source1=await channel.account(),source2={...source1,sourceGeneration:'source-2'};
+  channel.account=async()=>source2;const candidate=await service.detectAccount();
+  const other=new SqliteContactService(storage,owner,{...channel,account:async()=>({...source1,externalKey:'other-account',sourceGeneration:'other-source'})});
+  const entered=Promise.withResolvers(),released=Promise.withResolvers();let pending;
+  if(when==='metadata等待期间'){
+   channel.account=async()=>{entered.resolve();return released.promise;};
+   pending=service.confirmAccount(candidate.candidate_token,undefined,true);await entered.promise;
+  }
+  await connect(other);await other.setReading(true);
+  const snapshot=await other.candidates(true);
+  const binding=(await other.confirm(snapshot.snapshot_token,[{locator:'friend-b',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings.find(b=>b.status==='active');
+  const token=await other.eligibility(binding.contact_id),before=await other.directory();
+  if(!pending)pending=service.confirmAccount(candidate.candidate_token,undefined,true);
+  const rejected=assert.rejects(pending,{code:'account_candidate_stale'});released.resolve(source2);await rejected;
+  assert.deepEqual(await other.directory(),before);
+  assert.deepEqual(await other.validate(token),{valid:true});
+ });
+});
+test('来源重确认候选被新检测替换或过期后拒绝，同候选并发重试只推进一次',async t=>{
+ const {service,channel,storage}=await fixture(t);await connect(service);
+ const source1=await channel.account();channel.account=async()=>({...source1,sourceGeneration:'source-2'});
+ let now=1000;const timed=new SqliteContactService(storage,owner,channel,()=>now);
+ const expired=await timed.detectAccount();now+=120001;
+ await assert.rejects(timed.confirmAccount(expired.candidate_token,undefined,true),{code:'account_candidate_stale'});
+ const replaced=await timed.detectAccount(),candidate=await timed.detectAccount();
+ await assert.rejects(timed.confirmAccount(replaced.candidate_token,undefined,true),{code:'account_candidate_stale'});
+ const results=await Promise.all([timed.confirmAccount(candidate.candidate_token,undefined,true),timed.confirmAccount(candidate.candidate_token,undefined,true)]);
+ assert.equal(results[0],results[1]);const recovered=await timed.directory();
+ await timed.confirmAccount(candidate.candidate_token,undefined,true);assert.deepEqual(await timed.directory(),recovered);
+});
+test('来源重确认保留既有历史资料，旧历史范围不能交给新来源继续读取',async t=>{
+ const f=await historyFixture(t),contact=f.saved.find(b=>b.conversation_locator==='friend-a').contact_id;
+ await f.service.synchronize(contact);
+ const before=await f.service.read(contact),sourceId=before.messages[0].sourceRecordIds[0],source=await f.service.source(contact,sourceId);
+ let bodyReads=0;const page=f.channel.page;f.channel.page=async(...args)=>{bodyReads++;return page(...args);};
+ const metadata={account:async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-2',assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[{externalKey:'friend-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},{externalKey:'friend-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}]};
+ const recovered=new SqliteContactService(f.storage,owner,metadata),candidate=await recovered.detectAccount();
+ await recovered.confirmAccount(candidate.candidate_token,undefined,true);
+ assert.deepEqual((await f.service.read(contact)).messages,before.messages);
+ assert.deepEqual(await f.service.source(contact,sourceId),source);
+ assert.equal((await recovered.directory()).contacts.find(c=>c.contact_id===contact).data_status.message_count,2);
+ const next=await recovered.candidates(true),row=next.sessions.find(s=>s.username==='friend-a');
+ await recovered.confirm(next.snapshot_token,[{locator:row.username,observed_display_name:row.display_name,expected_selection_generation:row.selection_generation}]);
+ await assert.rejects(f.service.synchronize(contact),{code:'history_source_continuity_unverified'});
+ assert.equal(bodyReads,0);
+ const retained=await f.service.read(contact);assert.deepEqual(retained.messages,before.messages);assert.equal(retained.coverage.phase,'incomplete');
+ assert.equal(retained.coverage.failureCode,'history_source_continuity_unverified');
 });
 test('已授权稳定身份改为非私聊时必须撤销旧资格',async t=>{
  const {service,channel}=await fixture(t);await connect(service);await service.setReading(true);const snapshot=await service.candidates(true);

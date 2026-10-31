@@ -98,13 +98,29 @@ export const identityActions: StorageAction[] = [
  }),
  action('identity.directory','read',(tx,i)=>{
   const owner=text(i.ownerId),counts=visibleMessageCounts(tx,owner);
-  return {contacts:tx.all("SELECT id AS contact_id,display_name,selection_generation,data_generation FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[owner]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:counts.get(String(c.contact_id))??0,source_count:0}})),bindings:bindings(tx,owner),account:tx.get("SELECT id,external_key,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};
+  return {contacts:tx.all("SELECT id AS contact_id,display_name,selection_generation,data_generation FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[owner]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:counts.get(String(c.contact_id))??0,source_count:0}})),bindings:bindings(tx,owner),account:tx.get("SELECT id,external_key,identity_scheme,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};
+ }),
+ action('identity.sourceReconfirmation','read',(tx,i)=>{
+  const old=tx.get("SELECT id,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_scheme=? AND external_key=? AND identity_state<>'revoked'",[i.ownerId,text(i.evidence.identityScheme),text(i.evidence.externalKey)]);
+  return old&&old.source_generation!==i.evidence.sourceGeneration?{accountId:String(old.id),sourceGeneration:String(old.source_generation),scopeRevision:String(old.scope_revision)}:undefined;
  }),
  action('identity.connect','write',(tx,i)=>{
   one(tx,"SELECT owner_id FROM owner WHERE owner_id=? AND state='active'",[i.ownerId]);
   if(i.evidence.assurance!=='verified') fail('metadata_identity_unverified');
   const current=tx.get("SELECT * FROM channel_account WHERE owner_id=? AND identity_state='verified'",[i.ownerId]);
   const old=tx.get('SELECT * FROM channel_account WHERE owner_id=? AND identity_scheme=? AND external_key=?',[i.ownerId,text(i.evidence.identityScheme),text(i.evidence.externalKey)]);
+  if(old?.identity_state==='revoked')fail('identity_continuity_unverified');
+  if(i.sourceReconfirmation){
+   const prior=i.sourceReconfirmation,revision=generation(prior.scopeRevision);
+   if(!old||old.id!==prior.accountId)return fail('account_candidate_stale');
+   // 丢响应后的同候选重试只读回已完成结果，不能再次撤销新授权或覆盖开关。
+   if(current?.id===old.id&&old.source_generation===i.evidence.sourceGeneration&&old.scope_revision===revision+1n)return String(old.id);
+   if(old.source_generation!==prior.sourceGeneration||old.source_generation===i.evidence.sourceGeneration||old.scope_revision!==revision)fail('account_candidate_stale');
+   if(current&&current.id!==old.id)fail('account_candidate_stale');
+   invalidateAccount(tx,i.ownerId,String(old.id),i.at);
+   tx.run("UPDATE channel_account SET source_generation=?,identity_state='verified',scope_revision=scope_revision+1 WHERE owner_id=? AND id=?",[text(i.evidence.sourceGeneration),i.ownerId,old.id]);
+   return String(old.id);
+  }
   if(old && old.source_generation!==i.evidence.sourceGeneration) fail('identity_continuity_unverified');
   if(current?.id===old?.id && old) return String(old.id);
   if(current) invalidateAccount(tx,i.ownerId,String(current.id),i.at);

@@ -3,7 +3,7 @@ import { BackendRequestFailure } from '../backend/json-client';
 import { validWechatSetupConfirmation, type WechatSetupConfirmation, type WechatSetupState } from '../../shared/wechat-setup-bridge';
 
 type Operation = { generation: number; epoch: number };
-type Report = { state: WechatSetupState['phase']; account_id: string | null; candidate_token: string | null; failure_code: string | null };
+type Report = { state: WechatSetupState['phase']; account_id: string | null; candidate_token: string | null; failure_code: string | null; source_reconfirmation_required?: boolean };
 const serverStates = new Set(['needs_detection', 'needs_owner', 'tool_unavailable', 'tool_not_ready', 'ready', 'connected', 'restart_required', 'conflict']);
 function report(data: unknown): Report {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('微信连接状态无效');
@@ -12,6 +12,8 @@ function report(data: unknown): Report {
     || !(value.account_id === null || typeof value.account_id === 'string' && value.account_id.length > 0 && value.account_id.length <= 256 && !/[\u0000-\u001f]/.test(value.account_id))
     || !(value.candidate_token === null || typeof value.candidate_token === 'string' && value.candidate_token.length > 0 && value.candidate_token.length <= 512)
     || !(value.failure_code === null || typeof value.failure_code === 'string' && /^[a-z][a-z0-9_]{0,99}$/.test(value.failure_code))
+    || value.source_reconfirmation_required !== undefined && typeof value.source_reconfirmation_required !== 'boolean'
+    || value.source_reconfirmation_required === true && value.state !== 'ready'
     || value.state === 'ready' && (!value.account_id || !value.candidate_token)
     || ['connected', 'restart_required'].includes(value.state) && !value.account_id) throw new Error('微信连接状态无效');
   return value;
@@ -36,7 +38,7 @@ export class WechatSetupController {
       this.token = null;
       if (this.busy && this.state.phase === 'restarting') return;
       this.pendingRestart = false;
-      this.publish({ phase: 'offline', accountId: null, failureCode: null });
+      this.publish({ phase: 'offline', accountId: null, failureCode: null, sourceReconfirmationRequired: false });
       if (generation !== undefined) void this.refresh();
     });
   }
@@ -87,10 +89,12 @@ export class WechatSetupController {
   private accept(value: Report): void {
     this.token = value.state === 'ready' ? value.candidate_token : null;
     this.pendingRestart = value.state === 'restart_required';
-    this.publish({ phase: value.state, accountId: value.account_id, failureCode: value.failure_code });
+    this.publish({ phase: value.state, accountId: value.account_id, failureCode: value.failure_code,
+      sourceReconfirmationRequired: value.source_reconfirmation_required === true });
   }
   async confirm(request: WechatSetupConfirmation): Promise<void> {
     if (!validWechatSetupConfirmation(request) || request.revision !== this.state.revision) throw new Error('微信连接页面已变化，请重新核对');
+    if (Boolean(request.sourceReconfirmed) !== Boolean(this.state.sourceReconfirmationRequired)) throw new Error('请明确核对本次微信资料来源');
     if (this.busy || this.state.phase !== 'ready' || !this.token) return;
     const operation = this.begin();
     if (!operation) return;
@@ -102,7 +106,8 @@ export class WechatSetupController {
     try {
       try {
         const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/wechat/confirm',
-          body: { candidate_token: token, confirmed: true, mode: request.mode, history_authorized: request.historyAuthorized }, timeoutMs: 30_000, maxResponseBytes: 4096 });
+          body: { candidate_token: token, confirmed: true, mode: request.mode, history_authorized: request.historyAuthorized,
+            ...(request.sourceReconfirmed ? { source_reconfirmed: true } : {}) }, timeoutMs: 30_000, maxResponseBytes: 4096 });
         const value = report(result.data);
         if (!this.current(operation)) return;
         if (['connected', 'restart_required'].includes(value.state) && value.account_id !== accountId) throw new Error('account changed');
