@@ -861,5 +861,11 @@ func runNotaloneHistorySession(session *notaloneHistorySession, input io.Reader,
 	}
 }
 func runNotaloneHistory(input io.Reader, output io.Writer) {
+	aliases, err := loadDefaultNotaloneIdentityAliases()
+	if err != nil {
+		_ = json.NewEncoder(output).Encode(map[string]any{"ok": false, "error": map[string]string{"code": "history_source_unverified"}})
+		return
+	}
+	notaloneSourceIdentityAliases = aliases
 	runNotaloneHistoryWithServer(&server{}, input, output)
 }

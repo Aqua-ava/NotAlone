@@ -86,7 +86,7 @@ func newNotaloneSourceGuard(directory string, files []string) (*notaloneSourceGu
 	if err := guard.Check(); err != nil {
 		return nil, err
 	}
-	guard.fingerprint = notaloneSourceFingerprint(guard.watches)
+	guard.fingerprint = notaloneAliasedFingerprint(notaloneSourceFingerprint(guard.watches), notaloneSourceIdentityAliases)
 	accepted = true
 	return guard, nil
 }
@@ -321,7 +321,7 @@ func (guard *notaloneSourceGuard) FileFingerprint(file string) (string, error) {
 	}
 	for _, watched := range guard.watches {
 		if !watched.directory && watched.path == file {
-			return notaloneSourceFingerprint([]notaloneWatchedSource{watched}), nil
+			return notaloneAliasedFingerprint(notaloneSourceFingerprint([]notaloneWatchedSource{watched}), notaloneSourceIdentityAliases), nil
 		}
 	}
 	return "", errors.New("source_guard_file_not_selected")
