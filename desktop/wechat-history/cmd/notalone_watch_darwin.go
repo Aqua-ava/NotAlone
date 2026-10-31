@@ -105,7 +105,7 @@ func notaloneSourceFingerprint(watches []notaloneWatchedSource) string {
 		if watched.directory {
 			linkCount = 0
 		}
-		for _, value := range []uint64{uint64(watched.stat.Dev), watched.stat.Ino, uint64(watched.stat.Birthtimespec.Sec), uint64(watched.stat.Birthtimespec.Nsec), linkCount} {
+		for _, value := range []uint64{watched.stat.Ino, uint64(watched.stat.Birthtimespec.Sec), uint64(watched.stat.Birthtimespec.Nsec), linkCount} {
 			_ = binary.Write(hash, binary.BigEndian, value)
 		}
 	}
@@ -113,7 +113,7 @@ func notaloneSourceFingerprint(watches []notaloneWatchedSource) string {
 }
 
 func notaloneSameInstance(a, b syscall.Stat_t) bool {
-	return a.Dev == b.Dev && a.Ino == b.Ino && a.Birthtimespec == b.Birthtimespec && (a.Nlink == b.Nlink || a.Mode&syscall.S_IFMT == syscall.S_IFDIR) && a.Mode&syscall.S_IFMT == b.Mode&syscall.S_IFMT
+	return a.Ino == b.Ino && a.Birthtimespec == b.Birthtimespec && (a.Nlink == b.Nlink || a.Mode&syscall.S_IFMT == syscall.S_IFDIR) && a.Mode&syscall.S_IFMT == b.Mode&syscall.S_IFMT
 }
 
 func (guard *notaloneSourceGuard) add(path string, directory bool) error {

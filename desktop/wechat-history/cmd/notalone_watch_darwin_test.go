@@ -185,6 +185,26 @@ func TestNotaloneGuardFingerprintIgnoresSidecarRoster(t *testing.T) {
 	}
 }
 
+func TestNotaloneGuardIgnoresDeviceNumber(t *testing.T) {
+	directory, file := notaloneGuardFixture(t)
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	before := guard.Fingerprint()
+	// 模拟同一目录和文件在重新挂载后只改变系统设备号。
+	for i := range guard.watches {
+		guard.watches[i].stat.Dev++
+	}
+	if notaloneSourceFingerprint(guard.watches) != before {
+		t.Error("仅设备号变化不应改变来源指纹")
+	}
+	if err := guard.Check(); err != nil {
+		t.Errorf("仅设备号变化不应使同一文件实例失效: %v", err)
+	}
+}
+
 func TestNotaloneGuardCheckRetriesInterruptedEventWait(t *testing.T) {
 	directory, file := notaloneGuardFixture(t)
 	guard, err := newNotaloneSourceGuard(directory, []string{file})
